@@ -40,6 +40,11 @@ class GeoPoint {
  public:
   using T = uint64_t;
 
+  template <typename H>
+  friend H AbslHashValue(H h, const std::same_as<GeoPoint> auto& g) {
+    return H::combine(std::move(h), g.lat_, g.lng_);
+  }
+
   // A GeoPoint has to store two values (lat and lng).
   // For simplicity in the binary encoding each uses half of the available bits.
   static constexpr T numDataBits = 60;
@@ -77,9 +82,12 @@ class GeoPoint {
   // Construct a GeoPoint from a Literal if this Literal represents a WKT POINT,
   // otherwise return nothing.
   static std::optional<GeoPoint> parseFromLiteral(
-      const ad_utility::triple_component::Literal& value);
+      const ad_utility::triple_component::Literal& value,
+      bool checkDatatype = true);
 
   std::string toStringRepresentation() const;
 
   std::pair<std::string, const char*> toStringAndType() const;
+
+  bool operator==(const GeoPoint& other) const;
 };

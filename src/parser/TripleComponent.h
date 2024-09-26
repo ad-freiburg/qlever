@@ -45,8 +45,9 @@ class TripleComponent {
 
  private:
   // The underlying variant type.
-  using Variant = std::variant<Id, std::string, double, int64_t, bool, UNDEF,
-                               Variable, Literal, Iri, DateYearOrDuration>;
+  using Variant =
+      std::variant<Id, std::string, double, int64_t, bool, UNDEF, Variable,
+                   Literal, Iri, DateYearOrDuration, GeoPoint>;
   Variant _variant;
 
  public:
