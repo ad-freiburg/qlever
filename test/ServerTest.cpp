@@ -64,7 +64,7 @@ TEST(ServerTest, parseHttpRequest) {
       ParsedRequest("/", {{"action", "csv_export"}}, "SELECT * WHERE {}"));
   EXPECT_THAT(
       parse(MakePostRequest("/", URLENCODED,
-                            "query=SELECT%20%2A%20WHERE%20%7B%7D&send=100")),
+                            "query=SELECT+%2A%20WHERE%20%7B%7D&send=100")),
       ParsedRequest("/", {{"send", "100"}}, "SELECT * WHERE {}"));
   EXPECT_THAT(
       parse(MakePostRequest("/", "application/x-www-form-urlencoded",
