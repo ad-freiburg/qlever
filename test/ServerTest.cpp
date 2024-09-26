@@ -66,6 +66,10 @@ TEST(ServerTest, parseHttpRequest) {
       parse(MakePostRequest("/", URLENCODED,
                             "query=SELECT+%2A%20WHERE%20%7B%7D&send=100")),
       ParsedRequest("/", {{"send", "100"}}, "SELECT * WHERE {}"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      parse(MakePostRequest("/", URLENCODED,
+                            "ääär y=SELECT+%2A%20WHERE%20%7B%7D&send=100")),
+      ::testing::HasSubstr("Invalid URL-encoded POST request"));
   EXPECT_THAT(
       parse(MakePostRequest("/", "application/x-www-form-urlencoded",
                             "query=SELECT%20%2A%20WHERE%20%7B%7D&send=100")),
