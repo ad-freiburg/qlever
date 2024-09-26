@@ -1127,8 +1127,7 @@ TEST(QueryPlanner, DatasetClause) {
   auto g2 = Graphs{"<g2>"};
   h::expect(
       "SELECT * FROM <g1> { <a> ?p <x>. {<b> ?p <y>} GRAPH <g2> { <c> ?p <z> "
-      "{SELECT "
-      "* {<d> ?p <z2>}}} <e> ?p <z3> }",
+      "{SELECT * {<d> ?p <z2>}}} <e> ?p <z3> }",
       h::UnorderedJoins(
           scan("<a>", "?p", "<x>", {}, g1), scan("<b>", "?p", "<y>", {}, g1),
           scan("<c>", "?p", "<z>", {}, g2), scan("<d>", "?p", "<z2>", {}, g2),

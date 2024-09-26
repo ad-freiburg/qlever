@@ -1013,10 +1013,10 @@ TEST(SparqlParser, GroupGraphPattern) {
   // graphGraphPattern is currently only supported with a fixed graph IRI, not
   // with a variable.
   expectGroupGraphPatternFails("{ GRAPH ?a { } }");
-  expectGraphPattern("{ GRAPH <foo> { ?x <is-a> <Actor> }}",
-                     m::GraphPattern(m::GroupGraphPatternWithGraph(
-                         TripleComponent::Iri::fromIriref("<foo>"),
-                         m::Triples({{Var{"?x"}, "<is-a>", iri("<Actor>")}}))));
+  expectGraphPattern(
+      "{ GRAPH <foo> { ?x <is-a> <Actor> }}",
+      m::GraphPattern(m::GroupGraphPatternWithGraph(
+          iri("<foo>"), m::Triples({{Var{"?x"}, "<is-a>", iri("<Actor>")}}))));
 }
 
 TEST(SparqlParser, RDFLiteral) {
@@ -1045,7 +1045,7 @@ TEST(SparqlParser, SelectQuery) {
       m::GraphPattern(m::Triples({{Var{"?x"}, "?y", Var{"?z"}}}));
   using Graphs = ScanSpecificationAsTripleComponent::Graphs;
 
-  // A matcher that matches the query `SELECT* { ?a <bar> ?foo}`, where the
+  // A matcher that matches the query `SELECT * { ?a <bar> ?foo}`, where the
   // FROM and FROM NAMED clauses can still be specified via arguments.
   auto selectABarFooMatcher = [](Graphs defaultGraphs = std::nullopt,
                                  Graphs namedGraphs = std::nullopt) {
@@ -1238,11 +1238,11 @@ TEST(SparqlParser, ConstructQuery) {
                        m::ConstructQuery({{Var{"?a"}, Iri{"<foo>"}, Var{"?b"}}},
                                          m::GraphPattern()));
   // CONSTRUCT with datasets.
-  using Gs = ad_utility::HashSet<TripleComponent>;
+  using Graphs = ad_utility::HashSet<TripleComponent>;
   expectConstructQuery(
       "CONSTRUCT { } FROM <foo> FROM NAMED <foo2> FROM NAMED <foo3> WHERE { }",
-      m::ConstructQuery({}, ::testing::_, Gs{iri("<foo>")},
-                        Gs{iri("<foo2>"), iri("<foo3>")}));
+      m::ConstructQuery({}, m::GraphPattern(), Graphs{iri("<foo>")},
+                        Graphs{iri("<foo2>"), iri("<foo3>")}));
   // GROUP BY and ORDER BY, but the ordered variable is not grouped
   expectConstructQueryFails(
       "CONSTRUCT {?a <b> <c> } WHERE { ?a ?b ?c } GROUP BY ?a ORDER BY ?b",
