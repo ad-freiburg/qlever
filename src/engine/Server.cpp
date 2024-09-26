@@ -219,7 +219,7 @@ ad_utility::url_parser::ParsedRequest Server::parseHttpRequest(
             "URL-encoded POST requests must not contain query parameters in "
             "the URL.");
       }
-      
+
       // Set the url-encoded parameters from the request body.
       // Note: previously we used `boost::urls::parse_query`, but that function
       // doesn't unescape the `+` which encodes a space character. The following

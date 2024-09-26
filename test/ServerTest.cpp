@@ -60,7 +60,7 @@ TEST(ServerTest, parseHttpRequest) {
               ParsedRequest("/", {{"cmd", "stats"}}, std::nullopt));
   EXPECT_THAT(
       parse(MakeGetRequest(
-          "/?query=SELECT%20%2A%20WHERE%20%7B%7D&action=csv_export")),
+          "/?query=SELECT+%2A%20WHERE%20%7B%7D&action=csv_export")),
       ParsedRequest("/", {{"action", "csv_export"}}, "SELECT * WHERE {}"));
   EXPECT_THAT(
       parse(MakePostRequest("/", URLENCODED,
