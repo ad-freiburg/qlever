@@ -1010,10 +1010,13 @@ TEST(SparqlParser, GroupGraphPattern) {
   // SERVICE with a variable endpoint is not yet supported.
   expectGroupGraphPatternFails("{ SERVICE ?endpoint { ?s ?p ?o } }");
 
-  // graphGraphPattern is not supported.
-  // TODO<joka921> Implement the one case and test the other.
+  // graphGraphPattern is currently only supported with a fixed graph IRI, not
+  // with a variable.
   expectGroupGraphPatternFails("{ GRAPH ?a { } }");
-  // expectGroupGraphPatternFails("{ GRAPH <foo> { } }");
+  expectGraphPattern("{ GRAPH <foo> { ?x <is-a> <Actor> }}",
+                     m::GraphPattern(m::GroupGraphPatternWithGraph(
+                         TripleComponent::Iri::fromIriref("<foo>"),
+                         m::Triples({{Var{"?x"}, "<is-a>", iri("<Actor>")}}))));
 }
 
 TEST(SparqlParser, RDFLiteral) {
@@ -1234,17 +1237,12 @@ TEST(SparqlParser, ConstructQuery) {
   expectConstructQuery("CONSTRUCT WHERE { ?a <foo> ?b }",
                        m::ConstructQuery({{Var{"?a"}, Iri{"<foo>"}, Var{"?b"}}},
                                          m::GraphPattern()));
-  // Datasets are not supported.
-  // TODO<joka921> These are now supported
-  /*
-  expectConstructQueryFails(
-      "CONSTRUCT { } FROM <foo> WHERE { ?a ?b ?c }",
-      contains("FROM clauses are currently not supported by QLever."));
-  expectConstructQueryFails(
-      "CONSTRUCT FROM <foo> WHERE { }",
-      contains("FROM clauses are currently not supported by QLever."));
-      */
-
+  // CONSTRUCT with datasets.
+  using Gs = ad_utility::HashSet<TripleComponent>;
+  expectConstructQuery(
+      "CONSTRUCT { } FROM <foo> FROM NAMED <foo2> FROM NAMED <foo3> WHERE { }",
+      m::ConstructQuery({}, ::testing::_, Gs{iri("<foo>")},
+                        Gs{iri("<foo2>"), iri("<foo3>")}));
   // GROUP BY and ORDER BY, but the ordered variable is not grouped
   expectConstructQueryFails(
       "CONSTRUCT {?a <b> <c> } WHERE { ?a ?b ?c } GROUP BY ?a ORDER BY ?b",
