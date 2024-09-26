@@ -5,11 +5,14 @@
 #include <absl/strings/str_cat.h>
 #include <gtest/gtest.h>
 
+#include <vector>
+
 #include "global/Constants.h"
 #include "parser/GeoPoint.h"
 #include "util/GTestHelpers.h"
 #include "util/GeoSparqlHelpers.h"
 
+// _____________________________________________________________________________
 TEST(GeoPoint, GeoPoint) {
   GeoPoint g = GeoPoint(70.5, 130.2);
 
@@ -68,6 +71,7 @@ TEST(GeoPoint, GeoPoint) {
   ASSERT_DOUBLE_EQ(g.getLng(), 0);
 }
 
+// _____________________________________________________________________________
 TEST(GeoPoint, string) {
   GeoPoint g = GeoPoint(-70.5, -130.2);
   ASSERT_EQ(g.toStringRepresentation(), "POINT(-130.200000 -70.500000)");
@@ -84,6 +88,7 @@ TEST(GeoPoint, string) {
   ASSERT_EQ(strpair.second, GEO_WKT_LITERAL);
 }
 
+// _____________________________________________________________________________
 TEST(GeoPoint, bitRepresentation) {
   GeoPoint g = GeoPoint(-70.5, -130.2);
   constexpr double lat = ((-70.5 + 90) / (2 * 90)) * (1 << 30);
@@ -116,6 +121,7 @@ TEST(GeoPoint, bitRepresentation) {
   ASSERT_DOUBLE_EQ(g.getLng(), -180);
 }
 
+// _____________________________________________________________________________
 TEST(GeoPoint, parseFromLiteral) {
   constexpr auto testParseFromLiteral = [](const char* input, bool hasVal,
                                            double lng = 0.0, double lat = 0.0) {
@@ -164,4 +170,39 @@ TEST(GeoPoint, parseFromLiteral) {
           ad_utility::triple_component::Literal::fromStringRepresentation(
               "\"hi\"@en"))
           .has_value());
+}
+
+// _____________________________________________________________________________
+TEST(GeoPoint, equal) {
+  auto g1 = GeoPoint(-70.5, -130.2);
+  auto g2 = GeoPoint(90, 180);
+  auto g3 = GeoPoint(-90, -180);
+  auto g4 = GeoPoint(-90, 180);
+  auto g5 = GeoPoint::fromBitRepresentation(0);
+  auto g6 = GeoPoint(-70.5, -130.2);
+  auto g7 = GeoPoint(0, 0);
+  auto g8 = GeoPoint(0, 0);
+  auto g9 = GeoPoint(-90, -180);
+
+  std::vector<GeoPoint> f = {g1, g2, g3, g4, g7};
+  for (size_t i = 0; i < f.size(); i++) {
+    for (size_t j = 0; j < f.size(); j++) {
+      if (i != j) {
+        ASSERT_FALSE(f[i] == f[j]);
+      }
+    }
+  }
+
+  ASSERT_TRUE(g1 == g6);
+  ASSERT_TRUE(g7 == g8);
+  ASSERT_TRUE(g5 == g3);
+  ASSERT_TRUE(g3 == g9);
+}
+
+// _____________________________________________________________________________
+TEST(GeoPoint, Hashing) {
+  GeoPoint g1{50.0, 50.0};
+  GeoPoint g2{10.5, 80.5};
+  ad_utility::HashSet<GeoPoint> set{g1, g2};
+  EXPECT_THAT(set, ::testing::UnorderedElementsAre(g1, g2));
 }
