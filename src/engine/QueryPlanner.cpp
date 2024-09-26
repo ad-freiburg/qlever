@@ -210,8 +210,8 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq,
 
 // _____________________________________________________________________
 std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
-    ParsedQuery::GraphPattern* rootPattern, const GraphIri& graphIri) {
-  QueryPlanner::GraphPatternPlanner optimizer{*this, rootPattern, graphIri};
+    ParsedQuery::GraphPattern* rootPattern) {
+  QueryPlanner::GraphPatternPlanner optimizer{*this, rootPattern};
   for (auto& child : rootPattern->_graphPatterns) {
     child.visit([&optimizer](auto& arg) {
       return optimizer.graphPatternOperationVisitor(arg);
@@ -221,7 +221,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
   // one last pass in case the last one was not an optional
   // if the last child was not an optional clause we still have unjoined
   // candidates. Do one last pass over them.
-  optimizer.optimizeCommutatively(graphIri);
+  optimizer.optimizeCommutatively();
   auto& candidatePlans = optimizer.candidatePlans_;
 
   // it might be, that we have not yet applied all the filters
@@ -672,7 +672,7 @@ void QueryPlanner::seedFromOrdinaryTriple(
 auto QueryPlanner::seedWithScansAndText(
     const QueryPlanner::TripleGraph& tg,
     const vector<vector<QueryPlanner::SubtreePlan>>& children,
-    TextLimitMap& textLimits, const GraphIri& graphIri) -> PlansAndFilters {
+    TextLimitMap& textLimits) -> PlansAndFilters {
   PlansAndFilters result;
   vector<SubtreePlan>& seeds = result.plans_;
   // add all child plans as seeds
@@ -687,15 +687,6 @@ auto QueryPlanner::seedWithScansAndText(
       seeds.emplace_back(newIdPlan);
     }
     idShift++;
-  }
-
-  // If this group has an explicit graph specified (because it is a `GRAPH
-  // <graphIri> {...}` clause), use that graph, else use the default graphs.
-  auto relevantGraphs = activeDatasetClauses_.defaultGraphs_;
-  if (graphIri.has_value()) {
-    relevantGraphs.reset();
-    relevantGraphs.emplace();
-    relevantGraphs.value().insert(graphIri.value());
   }
 
   for (size_t i = 0; i < tg._nodeMap.size(); ++i) {
@@ -732,17 +723,18 @@ auto QueryPlanner::seedWithScansAndText(
       continue;
     }
 
-    auto addIndexScan = [this, pushPlan, node, &relevantGraphs](
-                            Permutation::Enum permutation,
-                            std::optional<SparqlTripleSimple> triple =
-                                std::nullopt) {
-      if (!triple.has_value()) {
-        triple = node.triple_.getSimple();
-      }
+    auto addIndexScan =
+        [this, pushPlan, node,
+         &relevantGraphs = activeDatasetClauses_.defaultGraphs_](
+            Permutation::Enum permutation,
+            std::optional<SparqlTripleSimple> triple = std::nullopt) {
+          if (!triple.has_value()) {
+            triple = node.triple_.getSimple();
+          }
 
-      pushPlan(makeSubtreePlan<IndexScan>(
-          _qec, permutation, std::move(triple.value()), relevantGraphs));
-    };
+          pushPlan(makeSubtreePlan<IndexScan>(
+              _qec, permutation, std::move(triple.value()), relevantGraphs));
+        };
 
     auto addFilter = [&filters = result.filters_](SparqlFilter filter) {
       filters.push_back(std::move(filter));
@@ -1269,10 +1261,9 @@ QueryPlanner::runDynamicProgrammingOnConnectedComponent(
 vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
     const QueryPlanner::TripleGraph& tg, vector<SparqlFilter> filters,
     TextLimitMap& textLimits,
-    const vector<vector<QueryPlanner::SubtreePlan>>& children,
-    const GraphIri& graphIri) {
+    const vector<vector<QueryPlanner::SubtreePlan>>& children) {
   auto [initialPlans, additionalFilters] =
-      seedWithScansAndText(tg, children, textLimits, graphIri);
+      seedWithScansAndText(tg, children, textLimits);
   std::ranges::move(additionalFilters, std::back_inserter(filters));
   if (filters.size() > 64) {
     AD_THROW("At most 64 filters allowed at the moment.");
@@ -2015,9 +2006,7 @@ void QueryPlanner::GraphPatternPlanner::visitGroupOptionalOrMinus(
   // For OPTIONAL or MINUS, optimization "across" the OPTIONAL or MINUS is
   // forbidden. Optimize all previously collected candidates, and then perform
   // an optional or minus join.
-  // Note: OPTIONAL or MINUS can never have a graph specified, hence the
-  // `nullopt`.
-  optimizeCommutatively(std::nullopt);
+  optimizeCommutatively();
   AD_CORRECTNESS_CHECK(candidatePlans_.size() == 1);
   std::vector<SubtreePlan> nextCandidates;
   // For each candidate plan, and each plan from the OPTIONAL or MINUS, create
@@ -2052,18 +2041,28 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
   using SubtreePlan = QueryPlanner::SubtreePlan;
   if constexpr (std::is_same_v<T, p::Optional> ||
                 std::is_same_v<T, p::GroupGraphPattern>) {
-    std::optional<TripleComponent::Iri> graphIri = std::nullopt;
+    // If this is a `GRAPH <graph> {...}` clause, then we have to overwrite the
+    // default graphs while planning this clause, and reset them when leaving
+    // the clause.
+    std::optional<ParsedQuery::DatasetClauses> datasetBackup;
     if constexpr (std::is_same_v<T, p::GroupGraphPattern>) {
-      graphIri = arg._graphIri;
+      if (arg._graphIri.has_value()) {
+        datasetBackup = planner_.activeDatasetClauses_;
+        planner_.activeDatasetClauses_.defaultGraphs_.emplace(
+            {arg._graphIri.value()});
+      }
     }
 
-    auto candidates = planner_.optimize(&arg._child, graphIri);
+    auto candidates = planner_.optimize(&arg._child);
     if constexpr (std::is_same_v<T, p::Optional>) {
       for (auto& c : candidates) {
         c.type = SubtreePlan::OPTIONAL;
       }
     }
     visitGroupOptionalOrMinus(std::move(candidates));
+    if (datasetBackup.has_value()) {
+      planner_.activeDatasetClauses_ = std::move(datasetBackup.value());
+    }
   } else if constexpr (std::is_same_v<T, p::Union>) {
     visitUnion(arg);
   } else if constexpr (std::is_same_v<T, p::Subquery>) {
@@ -2134,7 +2133,7 @@ void QueryPlanner::GraphPatternPlanner::visitBind(const parsedQuery::Bind& v) {
   boundVariables_.insert(v._target);
 
   // Assumption for now: BIND does not commute. This is always safe.
-  optimizeCommutatively(std::nullopt);
+  optimizeCommutatively();
   AD_CORRECTNESS_CHECK(candidatePlans_.size() == 1);
   auto lastRow = std::move(candidatePlans_.at(0));
   candidatePlans_.at(0).clear();
@@ -2233,14 +2232,12 @@ void QueryPlanner::GraphPatternPlanner::visitSubquery(
 // _______________________________________________________________
 
 // _______________________________________________________________
-void QueryPlanner::GraphPatternPlanner::optimizeCommutatively(
-    const GraphIri& graphIri) {
+void QueryPlanner::GraphPatternPlanner::optimizeCommutatively() {
   auto tg = planner_.createTripleGraph(&candidateTriples_);
-  auto lastRow =
-      planner_
-          .fillDpTab(tg, rootPattern_->_filters, rootPattern_->textLimits_,
-                     candidatePlans_, graphIri)
-          .back();
+  auto lastRow = planner_
+                     .fillDpTab(tg, rootPattern_->_filters,
+                                rootPattern_->textLimits_, candidatePlans_)
+                     .back();
   candidateTriples_._triples.clear();
   candidatePlans_.clear();
   candidatePlans_.push_back(std::move(lastRow));

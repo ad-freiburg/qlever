@@ -230,10 +230,8 @@ class QueryPlanner {
 
   std::optional<size_t> textLimit_ = std::nullopt;
 
-  using GraphIri = std::optional<TripleComponent::Iri>;
   [[nodiscard]] std::vector<QueryPlanner::SubtreePlan> optimize(
-      ParsedQuery::GraphPattern* rootPattern,
-      const GraphIri& graphIri = std::nullopt);
+      ParsedQuery::GraphPattern* rootPattern);
 
   // Add all the possible index scans for the triple represented by the node.
   // The triple is "ordinary" in the sense that it is neither a text triple with
@@ -272,7 +270,7 @@ class QueryPlanner {
   [[nodiscard]] PlansAndFilters seedWithScansAndText(
       const TripleGraph& tg,
       const vector<vector<QueryPlanner::SubtreePlan>>& children,
-      TextLimitMap& textLimits, const GraphIri& graphIri);
+      TextLimitMap& textLimits);
 
   /**
    * @brief Returns a parsed query for the property path.
@@ -446,8 +444,7 @@ class QueryPlanner {
    */
   [[nodiscard]] vector<vector<SubtreePlan>> fillDpTab(
       const TripleGraph& graph, std::vector<SparqlFilter> fs,
-      TextLimitMap& textLimits, const vector<vector<SubtreePlan>>& children,
-      const GraphIri& graphIri);
+      TextLimitMap& textLimits, const vector<vector<SubtreePlan>>& children);
 
   // Internal subroutine of `fillDpTab` that  only works on a single connected
   // component of the input. Throws if the subtrees in the `connectedComponent`
@@ -473,7 +470,6 @@ class QueryPlanner {
     QueryPlanner& planner_;
     ParsedQuery::GraphPattern* rootPattern_;
     QueryExecutionContext* qec_;
-    QueryPlanner::GraphIri graphIri_;
 
     // Used to store the set of candidate plans for the already processed parts
     // of the graph pattern. Each row stores different plans for the same graph
@@ -493,12 +489,8 @@ class QueryPlanner {
 
     // ________________________________________________________________________
     GraphPatternPlanner(QueryPlanner& planner,
-                        ParsedQuery::GraphPattern* rootPattern,
-                        QueryPlanner::GraphIri graphIri)
-        : planner_{planner},
-          rootPattern_{rootPattern},
-          qec_{planner._qec},
-          graphIri_{std::move(graphIri)} {}
+                        ParsedQuery::GraphPattern* rootPattern)
+        : planner_{planner}, rootPattern_{rootPattern}, qec_{planner._qec} {}
 
     // This function is called for each of the graph patterns that are contained
     // in the `rootPattern_`. It dispatches to the various `visit...`functions
@@ -530,7 +522,7 @@ class QueryPlanner {
     // It is called when a non-commuting pattern (like OPTIONAL or BIND) is
     // encountered. We then first optimize the previous candidates using this
     // function, and then combine the result with the OPTIONAL etc. clause.
-    void optimizeCommutatively(const GraphIri& graphIri);
+    void optimizeCommutatively();
 
     // Find a single best candidate for a given graph pattern.
     SubtreePlan optimizeSingle(const auto& pattern) {
