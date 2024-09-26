@@ -23,7 +23,7 @@ auto PT = [](const auto& c1, const auto& c2, const auto& c3) {
   return CompressedBlockMetadata::PermutedTriple{V(c1), V(c2), V(c3)};
 };
 auto CBM = [](const auto firstTriple, const auto lastTriple) {
-  return CompressedBlockMetadata{{}, 0, firstTriple, lastTriple};
+  return CompressedBlockMetadata{{}, 0, firstTriple, lastTriple, {}, false};
 };
 
 auto numBlocks =
