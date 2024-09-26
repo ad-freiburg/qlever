@@ -93,10 +93,10 @@ constexpr auto IndexScan =
   return RootOperation<::IndexScan>(
       AllOf(AD_PROPERTY(IndexScan, permutation, permutationMatcher),
             AD_PROPERTY(IndexScan, getResultWidth, Eq(numVariables)),
-            AD_PROPERTY(IndexScan, getSubject, Eq(subject)),
-            AD_PROPERTY(IndexScan, getPredicate, Eq(predicate)),
-            AD_PROPERTY(IndexScan, getObject, Eq(object)),
-            AD_PROPERTY(IndexScan, getGraphs, Eq(graphs))));
+            AD_PROPERTY(IndexScan, subject, Eq(subject)),
+            AD_PROPERTY(IndexScan, predicate, Eq(predicate)),
+            AD_PROPERTY(IndexScan, object, Eq(object)),
+            AD_PROPERTY(IndexScan, graphsToFilter, Eq(graphs))));
 };
 
 // Match the `NeutralElementOperation`.
