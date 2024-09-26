@@ -21,6 +21,7 @@
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
+#include "engine/sparqlExpressions/SampleExpression.h"
 #include "global/RuntimeParameters.h"
 #include "gtest/gtest.h"
 #include "index/ConstantsIndexBuilding.h"
@@ -470,6 +471,12 @@ struct GroupByOptimizations : ::testing::Test {
         "GROUP_CONCAT(?someVariable)"};
   }
 
+  static SparqlExpressionPimpl makeSamplePimpl(const Variable& var) {
+    return SparqlExpressionPimpl{
+        std::make_unique<SampleExpression>(false, makeVariableExpression(var)),
+        "SAMPLE(?someVariable)"};
+  }
+
   static SparqlExpressionPimpl makeAvgCountPimpl(const Variable& var) {
     auto countExpression =
         std::make_unique<CountExpression>(false, makeVariableExpression(var));
@@ -634,6 +641,7 @@ TEST_F(GroupByOptimizations, checkIfHashMapOptimizationPossible) {
   SparqlExpressionPimpl minXPimpl = makeMinPimpl(varX);
   SparqlExpressionPimpl maxXPimpl = makeMaxPimpl(varX);
   SparqlExpressionPimpl sumXPimpl = makeSumPimpl(varX);
+  SparqlExpressionPimpl sampleXPimpl = makeSamplePimpl(varX);
 
   std::vector<Alias> aliasesAvgX{Alias{avgXPimpl, Variable{"?avg"}}};
   std::vector<Alias> aliasesAvgDistinctX{
@@ -643,6 +651,7 @@ TEST_F(GroupByOptimizations, checkIfHashMapOptimizationPossible) {
   std::vector<Alias> aliasesMinX{Alias{minXPimpl, Variable{"?minX"}}};
   std::vector<Alias> aliasesMaxX{Alias{maxXPimpl, Variable{"?maxX"}}};
   std::vector<Alias> aliasesSumX{Alias{sumXPimpl, Variable{"?sumX"}}};
+  std::vector<Alias> aliasesSampleX{Alias{sampleXPimpl, Variable{"?sampleX"}}};
 
   std::vector<GroupBy::Aggregate> countAggregate = {{countXPimpl, 1}};
   std::vector<GroupBy::Aggregate> avgAggregate = {{avgXPimpl, 1}};
@@ -652,6 +661,7 @@ TEST_F(GroupByOptimizations, checkIfHashMapOptimizationPossible) {
   std::vector<GroupBy::Aggregate> minAggregate = {{minXPimpl, 1}};
   std::vector<GroupBy::Aggregate> maxAggregate = {{maxXPimpl, 1}};
   std::vector<GroupBy::Aggregate> sumAggregate = {{sumXPimpl, 1}};
+  std::vector<GroupBy::Aggregate> sampleAggregate = {{sampleXPimpl, 1}};
 
   // Enable optimization
   RuntimeParameters().set<"group-by-hash-map-enabled">(true);
@@ -674,6 +684,7 @@ TEST_F(GroupByOptimizations, checkIfHashMapOptimizationPossible) {
   testSuccess(variablesOnlyX, aliasesMaxX, subtreeWithSort, maxAggregate);
   testSuccess(variablesOnlyX, aliasesMinX, subtreeWithSort, minAggregate);
   testSuccess(variablesOnlyX, aliasesSumX, subtreeWithSort, sumAggregate);
+  testSuccess(variablesOnlyX, aliasesSampleX, subtreeWithSort, sampleAggregate);
 
   // Check details of data structure are correct.
   GroupBy groupBy{qec, variablesOnlyX, aliasesAvgX, subtreeWithSort};

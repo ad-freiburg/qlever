@@ -16,6 +16,7 @@
 #include "engine/sparqlExpressions/AggregateExpression.h"
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
+#include "engine/sparqlExpressions/SampleExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "global/RuntimeParameters.h"
@@ -1024,6 +1025,7 @@ GroupBy::isSupportedAggregate(sparqlExpression::SparqlExpression* expr) {
   if (auto val = dynamic_cast<GroupConcatExpression*>(expr)) {
     return H{GROUP_CONCAT, val->getSeparator()};
   }
+  if (dynamic_cast<SampleExpression*>(expr)) return H{SAMPLE};
 
   // `expr` is an unsupported aggregate
   return std::nullopt;
