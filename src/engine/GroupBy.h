@@ -234,7 +234,15 @@ class GroupBy : public Operation {
   };
 
   // Used to store the kind of aggregate.
-  enum class HashMapAggregateType { AVG, COUNT, MIN, MAX, SUM, GROUP_CONCAT };
+  enum class HashMapAggregateType {
+    AVG,
+    COUNT,
+    MIN,
+    MAX,
+    SUM,
+    GROUP_CONCAT,
+    SAMPLE
+  };
 
   // `GROUP_CONCAT` requires additional data.
   struct HashMapAggregateTypeWithData {
@@ -313,7 +321,7 @@ class GroupBy : public Operation {
   using AggregationData =
       std::variant<AvgAggregationData, CountAggregationData, MinAggregationData,
                    MaxAggregationData, SumAggregationData,
-                   GroupConcatAggregationData>;
+                   GroupConcatAggregationData, SampleAggregationData>;
 
   using AggregationDataVectors =
       ad_utility::LiftedVariant<AggregationData,
@@ -355,6 +363,7 @@ class GroupBy : public Operation {
           addIf(ti<MaxAggregationData>, MAX);
           addIf(ti<SumAggregationData>, SUM);
           addIf(ti<GroupConcatAggregationData>, GROUP_CONCAT);
+          addIf(ti<SampleAggregationData>, SAMPLE);
 
           AD_CORRECTNESS_CHECK(aggregationData_.size() ==
                                aggregationDataSize + 1);
