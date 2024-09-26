@@ -29,8 +29,8 @@ pre-filter w.r.t. blocks that contain relevant data for the actual evaluation of
 those expressions to make the evaluation procedure more efficient.
 
 The block-filtering is applied with the following operations:
-Relational Expressions - `<=`, `>=`, `<`, `>`, `==` and `!=`
-Logical Operations - `and` and `or`
+Relational Expressions - `<=`, `>=`, `<`, `>`, `==` and `!=`.
+Logical Operations - `and`, `or` and `not`.
 */
 
 class PrefilterExpression {
@@ -41,7 +41,11 @@ class PrefilterExpression {
 
   // The respective metadata to the blocks is expected to be provided in
   // a sorted order (w.r.t. the relevant column).
-  virtual std::vector<BlockMetadata> evaluate(
+  std::vector<BlockMetadata> evaluate(const std::vector<BlockMetadata>& input,
+                                      size_t evaluationColumn) const;
+
+ private:
+  virtual std::vector<BlockMetadata> evaluateImpl(
       const std::vector<BlockMetadata>& input,
       size_t evaluationColumn) const = 0;
 };
@@ -67,41 +71,59 @@ class RelationalExpression : public PrefilterExpression {
 
   std::unique_ptr<PrefilterExpression> logicalComplement() const override;
 
-  std::vector<BlockMetadata> evaluate(const std::vector<BlockMetadata>& input,
-                                      size_t evaluationColumn) const override;
+ private:
+  std::vector<BlockMetadata> evaluateImpl(
+      const std::vector<BlockMetadata>& input,
+      size_t evaluationColumn) const override;
 };
 
 //______________________________________________________________________________
 // Helper struct for a compact class implementation regarding the logical
-// operations `AND`, `OR` and `NOT`.
-enum struct LogicalOperators { AND, OR, NOT };
+// operations `AND` and `OR`. `NOT` is implemented separately given that the
+// expression is unary (single child expression).
+enum struct LogicalOperators { AND, OR };
 
 //______________________________________________________________________________
 template <LogicalOperators Operation>
 class LogicalExpression : public PrefilterExpression {
  private:
   std::unique_ptr<PrefilterExpression> child1_;
-  std::optional<std::unique_ptr<PrefilterExpression>> child2_;
+  std::unique_ptr<PrefilterExpression> child2_;
 
  public:
   // AND and OR
   explicit LogicalExpression(std::unique_ptr<PrefilterExpression> child1,
                              std::unique_ptr<PrefilterExpression> child2)
       : child1_(std::move(child1)), child2_(std::move(child2)) {}
-  // NOT
-  explicit LogicalExpression(std::unique_ptr<PrefilterExpression> child1)
-      : child1_(child1->logicalComplement()), child2_(nullptr) {}
 
   std::unique_ptr<PrefilterExpression> logicalComplement() const override;
 
-  std::vector<BlockMetadata> evaluate(const std::vector<BlockMetadata>& input,
-                                      size_t evaluationColumn) const override;
-
  private:
   // Introduce a helper method for the specification LogicalOperators::OR
-  std::vector<BlockMetadata> evaluateOr(const std::vector<BlockMetadata>& input,
-                                        size_t evaluationColumn) const
+  std::vector<BlockMetadata> evaluateOrImpl(
+      const std::vector<BlockMetadata>& input, size_t evaluationColumn) const
       requires(Operation == LogicalOperators::OR);
+
+  std::vector<BlockMetadata> evaluateImpl(
+      const std::vector<BlockMetadata>& input,
+      size_t evaluationColumn) const override;
+};
+
+//______________________________________________________________________________
+class NotExpression : public PrefilterExpression {
+ private:
+  std::unique_ptr<PrefilterExpression> child_;
+
+ public:
+  explicit NotExpression(std::unique_ptr<PrefilterExpression> child)
+      : child_(child->logicalComplement()) {}
+
+  std::unique_ptr<PrefilterExpression> logicalComplement() const;
+
+ private:
+  std::vector<BlockMetadata> evaluateImpl(
+      const std::vector<BlockMetadata>& input,
+      size_t evaluationColumn) const override;
 };
 
 //______________________________________________________________________________
@@ -125,7 +147,5 @@ using AndExpression = prefilterExpressions::LogicalExpression<
     prefilterExpressions::LogicalOperators::AND>;
 using OrExpression = prefilterExpressions::LogicalExpression<
     prefilterExpressions::LogicalOperators::OR>;
-using NotExpression = prefilterExpressions::LogicalExpression<
-    prefilterExpressions::LogicalOperators::NOT>;
 
 }  // namespace prefilterExpressions
