@@ -6,9 +6,11 @@
 
 #include <ranges>
 
+#include "engine/Engine.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "engine/idTable/IdTable.h"
 #include "global/RuntimeParameters.h"
+#include "index/ConstantsIndexBuilding.h"
 #include "util/Cache.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/ConcurrentCache.h"
@@ -18,6 +20,7 @@
 #include "util/ProgressBar.h"
 #include "util/ThreadSafeQueue.h"
 #include "util/Timer.h"
+#include "util/TransparentFunctors.h"
 #include "util/TypeTraits.h"
 
 using namespace std::chrono_literals;
@@ -52,40 +55,50 @@ static void pruneBlock(auto& block, LimitOffsetClause& limitOffset) {
 CompressedRelationReader::IdTableGenerator
 CompressedRelationReader::asyncParallelBlockGenerator(
     auto beginBlock, auto endBlock, ColumnIndices columnIndices,
-    CancellationHandle cancellationHandle,
-    LimitOffsetClause& limitOffset) const {
+    CancellationHandle cancellationHandle, LimitOffsetClause& limitOffset,
+    FilterDuplicatesAndGraphs blockGraphFilter) const {
   LazyScanMetadata& details = co_await cppcoro::getDetails;
   if (beginBlock == endBlock) {
     co_return;
   }
+  std::atomic<size_t> numBlocksPostprocessed = 0;
   const size_t queueSize =
       RuntimeParameters().get<"lazy-index-scan-queue-size">();
-  auto blockIterator = beginBlock;
+  auto blockMetadataIterator = beginBlock;
   std::mutex blockIteratorMutex;
-  auto readAndDecompressBlock =
-      [&]() -> std::optional<std::pair<size_t, DecompressedBlock>> {
+  auto readAndDecompressBlock = [&]()
+      -> std::optional<std::pair<size_t, std::optional<DecompressedBlock>>> {
     cancellationHandle->throwIfCancelled();
     std::unique_lock lock{blockIteratorMutex};
-    if (blockIterator == endBlock) {
+    if (blockMetadataIterator == endBlock) {
       return std::nullopt;
     }
     // Note: taking a copy here is probably not necessary (the lifetime of
     // all the blocks is long enough, so a `const&` would suffice), but the
     // copy is cheap and makes the code more robust.
-    auto block = *blockIterator;
+    auto blockMetadata = *blockMetadataIterator;
     // Note: The order of the following two lines is important: The index
-    // of the current block depends on the current value of `blockIterator`,
-    // so we have to compute it before incrementing the iterator.
-    auto myIndex = static_cast<size_t>(blockIterator - beginBlock);
-    ++blockIterator;
-    // Note: the reading of the block could also happen without holding the
-    // lock. We still perform it inside the lock to avoid contention of the
+    // of the current blockMetadata depends on the current value of
+    // `blockMetadataIterator`, so we have to compute it before incrementing the
+    // iterator.
+    auto myIndex = static_cast<size_t>(blockMetadataIterator - beginBlock);
+    ++blockMetadataIterator;
+    if (blockGraphFilter.canBlockBeSkipped(blockMetadata)) {
+      return std::pair{myIndex, std::nullopt};
+    }
+    // Note: the reading of the blockMetadata could also happen without holding
+    // the lock. We still perform it inside the lock to avoid contention of the
     // file. On a fast SSD we could possibly change this, but this has to be
     // investigated.
     CompressedBlock compressedBlock =
-        readCompressedBlockFromFile(block, columnIndices);
+        readCompressedBlockFromFile(blockMetadata, columnIndices);
     lock.unlock();
-    return std::pair{myIndex, decompressBlock(compressedBlock, block.numRows_)};
+    auto decompressedBlock =
+        decompressBlock(compressedBlock, blockMetadata.numRows_);
+    if (blockGraphFilter.postprocessBlock(decompressedBlock, blockMetadata)) {
+      numBlocksPostprocessed++;
+    }
+    return std::pair{myIndex, std::optional{std::move(decompressedBlock)}};
   };
   const size_t numThreads =
       RuntimeParameters().get<"lazy-index-scan-num-threads">();
@@ -97,26 +110,116 @@ CompressedRelationReader::asyncParallelBlockGenerator(
       [&details, &popTimer]() { details.blockingTime_ = popTimer.msecs(); });
 
   auto queue = ad_utility::data_structures::queueManager<
-      ad_utility::data_structures::OrderedThreadSafeQueue<IdTable>>(
-      queueSize, numThreads, readAndDecompressBlock);
-  for (IdTable& block : queue) {
+      ad_utility::data_structures::OrderedThreadSafeQueue<
+          std::optional<IdTable>>>(queueSize, numThreads,
+                                   readAndDecompressBlock);
+  for (std::optional<IdTable>& optBlock : queue) {
     popTimer.stop();
     cancellationHandle->throwIfCancelled();
-    ++details.numBlocksRead_;
-    details.numElementsRead_ += block.numRows();
-    pruneBlock(block, limitOffset);
-    details.numElementsYielded_ += block.numRows();
-    if (!block.empty()) {
-      co_yield block;
-    }
-    if (limitOffset._limit.value_or(1) == 0) {
-      co_return;
+    if (optBlock.has_value()) {
+      auto& block = optBlock.value();
+      ++details.numBlocksRead_;
+      details.numElementsRead_ += block.numRows();
+      pruneBlock(block, limitOffset);
+      details.numElementsYielded_ += block.numRows();
+      details.numBlocksPostprocessed_ = numBlocksPostprocessed;
+      if (!block.empty()) {
+        co_yield block;
+      }
+      if (limitOffset._limit.value_or(1) == 0) {
+        co_return;
+      }
+    } else {
+      ++details.numBlocksSkippedBecauseOfGraph_;
     }
     popTimer.cont();
   }
   // The `OnDestruction...` above might be called too late, so we manually stop
   // the timer here in case it wasn't already.
   popTimer.stop();
+}
+
+// _____________________________________________________________________________
+bool CompressedRelationReader::FilterDuplicatesAndGraphs::
+    blockNeedsFilteringByGraph(const CompressedBlockMetadata& metadata) const {
+  if (!desiredGraphs_.has_value()) {
+    return false;
+  }
+  if (!metadata.graphInfo_.has_value()) {
+    return true;
+  }
+  return !std::ranges::all_of(
+      metadata.graphInfo_.value(),
+      [&wantedGraphs = desiredGraphs_.value()](Id containedGraph) {
+        return wantedGraphs.contains(containedGraph);
+      });
+}
+
+// _____________________________________________________________________________
+bool CompressedRelationReader::FilterDuplicatesAndGraphs::
+    filterByGraphIfNecessary(
+        IdTable& block, const CompressedBlockMetadata& blockMetadata) const {
+  bool needsFilteringByGraph = blockNeedsFilteringByGraph(blockMetadata);
+  [[maybe_unused]] auto graphIdFromRow = [graphColumn =
+                                              graphColumn_](const auto& row) {
+    return row[graphColumn];
+  };
+  [[maybe_unused]] auto isDesiredGraphId = [this]() {
+    return [&wantedGraphs = desiredGraphs_.value()](Id id) {
+      return wantedGraphs.contains(id);
+    };
+  };
+  if (needsFilteringByGraph) {
+    auto [beginOfRemoved, _] = std::ranges::remove_if(
+        block, std::not_fn(isDesiredGraphId()), graphIdFromRow);
+    block.erase(beginOfRemoved, block.end());
+  } else {
+    AD_EXPENSIVE_CHECK(
+        !desiredGraphs_.has_value() ||
+        std::ranges::all_of(block, isDesiredGraphId(), graphIdFromRow));
+  }
+  return needsFilteringByGraph;
+}
+
+// _____________________________________________________________________________
+bool CompressedRelationReader::FilterDuplicatesAndGraphs::
+    filterDuplicatesIfNecessary(IdTable& block,
+                                const CompressedBlockMetadata& blockMetadata) {
+  if (!blockMetadata.containsDuplicatesWithDifferentGraphs_) {
+    AD_EXPENSIVE_CHECK(std::ranges::unique(block).begin() == block.end());
+    return false;
+  }
+  auto [endUnique, _] = std::ranges::unique(block);
+  block.erase(endUnique, block.end());
+  return true;
+}
+
+// _____________________________________________________________________________
+bool CompressedRelationReader::FilterDuplicatesAndGraphs::postprocessBlock(
+    IdTable& block, const CompressedBlockMetadata& blockMetadata) const {
+  bool filteredByGraph = filterByGraphIfNecessary(block, blockMetadata);
+  if (deleteGraphColumn_) {
+    block.deleteColumn(graphColumn_);
+  }
+
+  bool filteredByDuplicates = filterDuplicatesIfNecessary(block, blockMetadata);
+  return filteredByGraph || filteredByDuplicates;
+}
+
+// ______________________________________________________________________________
+bool CompressedRelationReader::FilterDuplicatesAndGraphs::canBlockBeSkipped(
+    const CompressedBlockMetadata& block) const {
+  if (!desiredGraphs_.has_value()) {
+    return false;
+  }
+  if (!block.graphInfo_.has_value()) {
+    return false;
+  }
+  const auto& containedGraphs = block.graphInfo_.value();
+  return std::ranges::none_of(
+      desiredGraphs_.value(), [&containedGraphs](const auto& desiredGraph) {
+        return ad_utility::contains(containedGraphs, desiredGraph);
+      });
 }
 
 // _____________________________________________________________________________
@@ -130,16 +233,43 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
   const auto originalLimit = limitOffset;
   AD_CONTRACT_CHECK(cancellationHandle);
   auto relevantBlocks = getRelevantBlocks(scanSpec, blockMetadata);
-  auto [beginBlock, endBlock] = getBeginAndEnd(relevantBlocks);
+  auto [beginBlockMetadata, endBlockMetadata] = getBeginAndEnd(relevantBlocks);
 
   LazyScanMetadata& details = co_await cppcoro::getDetails;
-  size_t numBlocksTotal = endBlock - beginBlock;
+  size_t numBlocksTotal = endBlockMetadata - beginBlockMetadata;
 
-  if (beginBlock == endBlock) {
+  if (beginBlockMetadata == endBlockMetadata) {
     co_return;
   }
 
   auto columnIndices = prepareColumnIndices(scanSpec, additionalColumns);
+
+  // If we need to filter by the graph ID of the triples, then we need to add
+  // the graph column to the scan. If the graph column is not needed as an
+  // output anyway, then we have to delete it after the filtering. The following
+  // lambda determines the column index in which the graph column will reside
+  // (and adds it if necessary), and also determines whether we have to delete
+  // this column.
+  auto [graphColumnIndex,
+        deleteGraphColumn] = [&]() -> std::pair<ColumnIndex, bool> {
+    if (!scanSpec.graphsToFilter().has_value()) {
+      // No filtering required, these are dummy values that are ignored by the
+      // filtering logic.
+      return {0, false};
+    }
+    auto idx = static_cast<size_t>(
+        std::ranges::find(columnIndices, ADDITIONAL_COLUMN_GRAPH_ID) -
+        columnIndices.begin());
+    bool deleteColumn = false;
+    if (idx == columnIndices.size()) {
+      columnIndices.push_back(ADDITIONAL_COLUMN_GRAPH_ID);
+      deleteColumn = true;
+    }
+    return {idx, deleteColumn};
+  }();
+
+  auto filterDuplicatesAndGraphs = FilterDuplicatesAndGraphs{
+      scanSpec.graphsToFilter(), graphColumnIndex, deleteGraphColumn};
 
   auto getIncompleteBlock = [&](auto it) {
     auto result = readPossiblyIncompleteBlock(scanSpec, *it, std::ref(details),
@@ -148,8 +278,15 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
     return result;
   };
 
-  if (beginBlock < endBlock) {
-    auto block = getIncompleteBlock(beginBlock);
+  if (beginBlockMetadata < endBlockMetadata) {
+    auto block = getIncompleteBlock(beginBlockMetadata);
+    if (filterDuplicatesAndGraphs.postprocessBlock(block,
+                                                   *beginBlockMetadata)) {
+      ++details.numBlocksPostprocessed_;
+    }
+    // TODO<joka921> Can we merge this `pruneBlock` with the above `postprocess`
+    // method? And can /should we include the skipped blocks into the
+    // `limitOffset` calculation?
     pruneBlock(block, limitOffset);
     details.numElementsYielded_ += block.numRows();
     if (!block.empty()) {
@@ -157,17 +294,21 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
     }
   }
 
-  if (beginBlock + 1 < endBlock) {
+  if (beginBlockMetadata + 1 < endBlockMetadata) {
     // We copy the cancellationHandle because it is still captured by reference
     // inside the `getIncompleteBlock` lambda.
-    auto blockGenerator =
-        asyncParallelBlockGenerator(beginBlock + 1, endBlock - 1, columnIndices,
-                                    cancellationHandle, limitOffset);
+    auto blockGenerator = asyncParallelBlockGenerator(
+        beginBlockMetadata + 1, endBlockMetadata - 1, columnIndices,
+        cancellationHandle, limitOffset, filterDuplicatesAndGraphs);
     blockGenerator.setDetailsPointer(&details);
     for (auto& block : blockGenerator) {
       co_yield block;
     }
-    auto lastBlock = getIncompleteBlock(endBlock - 1);
+    auto lastBlock = getIncompleteBlock(endBlockMetadata - 1);
+    if (filterDuplicatesAndGraphs.postprocessBlock(lastBlock,
+                                                   *(endBlockMetadata - 1))) {
+      ++details.numBlocksPostprocessed_;
+    }
     pruneBlock(lastBlock, limitOffset);
     if (!lastBlock.empty()) {
       details.numElementsYielded_ += lastBlock.numRows();
@@ -177,8 +318,10 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
   const auto& limit = originalLimit._limit;
   AD_CORRECTNESS_CHECK(!limit.has_value() ||
                        details.numElementsYielded_ <= limit.value());
-  AD_CORRECTNESS_CHECK(numBlocksTotal == details.numBlocksRead_ ||
-                       !limitOffset.isUnconstrained());
+  AD_CORRECTNESS_CHECK(
+      numBlocksTotal ==
+          (details.numBlocksRead_ + details.numBlocksSkippedBecauseOfGraph_) ||
+      !limitOffset.isUnconstrained());
 }
 
 namespace {
@@ -668,31 +811,63 @@ CompressedRelationWriter::compressAndWriteColumn(std::span<const Id> column) {
   return {offsetInFile, compressedSize};
 };
 
+// Find out whether the sorted `block` contains duplicates and whether it
+// contains only a few distinct graphs such that we can store this information
+// in the block metadata.
+static std::pair<bool, std::optional<std::vector<Id>>> getGraphInfo(
+    const std::shared_ptr<IdTable>& block) {
+  bool hasDuplicates = false;
+  std::optional<std::vector<Id>> containedGraphs;
+  if (block->numColumns() > ADDITIONAL_COLUMN_GRAPH_ID) {
+    using C = ColumnIndex;
+    auto withoutGraphAndAdditionalPayload =
+        block->asColumnSubsetView(std::array{C{0}, C{1}, C{2}});
+    size_t numDistinct = Engine::countDistinct(withoutGraphAndAdditionalPayload,
+                                               ad_utility::noop);
+    hasDuplicates = numDistinct != block->numRows();
+
+    std::vector<Id> graphColumn;
+    std::ranges::copy(block->getColumn(ADDITIONAL_COLUMN_GRAPH_ID),
+                      std::back_inserter(graphColumn));
+    std::ranges::sort(graphColumn);
+    auto [beginOfUnique, _] = std::ranges::unique(graphColumn);
+    graphColumn.erase(beginOfUnique, graphColumn.end());
+    containedGraphs =
+        graphColumn.size() < MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA
+            ? std::optional{std::move(graphColumn)}
+            : std::nullopt;
+  }
+  return {hasDuplicates, std::move(containedGraphs)};
+}
+
 // _____________________________________________________________________________
 void CompressedRelationWriter::compressAndWriteBlock(
     Id firstCol0Id, Id lastCol0Id, std::shared_ptr<IdTable> block,
     bool invokeCallback) {
   auto timer = blockWriteQueueTimer_.startMeasurement();
-  blockWriteQueue_.push([this, buf = std::move(block), firstCol0Id, lastCol0Id,
-                         invokeCallback]() mutable {
+  blockWriteQueue_.push([this, block = std::move(block), firstCol0Id,
+                         lastCol0Id, invokeCallback]() mutable {
     std::vector<CompressedBlockMetadata::OffsetAndCompressedSize> offsets;
-    for (const auto& column : buf->getColumns()) {
+    for (const auto& column : block->getColumns()) {
       offsets.push_back(compressAndWriteColumn(column));
     }
     AD_CORRECTNESS_CHECK(!offsets.empty());
-    auto numRows = buf->numRows();
-    const auto& first = (*buf)[0];
-    const auto& last = (*buf)[numRows - 1];
+    auto numRows = block->numRows();
+    const auto& first = (*block)[0];
+    const auto& last = (*block)[numRows - 1];
     AD_CORRECTNESS_CHECK(firstCol0Id == first[0]);
     AD_CORRECTNESS_CHECK(lastCol0Id == last[0]);
 
+    auto [hasDuplicates, graphInfo] = getGraphInfo(block);
     blockBuffer_.wlock()->push_back(
         CompressedBlockMetadata{std::move(offsets),
                                 numRows,
                                 {first[0], first[1], first[2]},
-                                {last[0], last[1], last[2]}});
+                                {last[0], last[1], last[2]},
+                                std::move(graphInfo),
+                                hasDuplicates});
     if (invokeCallback && smallBlocksCallback_) {
-      std::invoke(smallBlocksCallback_, std::move(buf));
+      std::invoke(smallBlocksCallback_, std::move(block));
     }
   });
   timer.stop();

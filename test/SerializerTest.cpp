@@ -2,17 +2,19 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include "../src/util/Random.h"
-#include "../src/util/Serializer/ByteBufferSerializer.h"
-#include "../src/util/Serializer/FileSerializer.h"
-#include "../src/util/Serializer/SerializeArrayOrTuple.h"
-#include "../src/util/Serializer/SerializeHashMap.h"
-#include "../src/util/Serializer/SerializePair.h"
-#include "../src/util/Serializer/SerializeString.h"
-#include "../src/util/Serializer/SerializeVector.h"
-#include "../src/util/Serializer/Serializer.h"
+#include "util/Random.h"
+#include "util/Serializer/ByteBufferSerializer.h"
+#include "util/Serializer/FileSerializer.h"
+#include "util/Serializer/SerializeArrayOrTuple.h"
+#include "util/Serializer/SerializeHashMap.h"
+#include "util/Serializer/SerializeOptional.h"
+#include "util/Serializer/SerializePair.h"
+#include "util/Serializer/SerializeString.h"
+#include "util/Serializer/SerializeVector.h"
+#include "util/Serializer/Serializer.h"
 
 using namespace ad_utility;
 using ad_utility::serialization::ByteBufferReadSerializer;
@@ -539,4 +541,20 @@ TEST(VectorIncrementalSerializer, SerializeInTheMiddle) {
   testIncrementalSerialization(ints);
   testIncrementalSerialization(strings);
   ad_utility::deleteFile(filename);
+}
+
+// _____________________________________________________________________________
+TEST(Serializer, serializeOptional) {
+  std::optional<std::string> s = "hallo";
+  std::optional<std::string> nil = std::nullopt;
+  ByteBufferWriteSerializer writer;
+  writer << s;
+  writer << nil;
+  std::optional<std::string> sExpected;
+  std::optional<std::string> nilExpected = "bye";
+  ByteBufferReadSerializer reader{std::move(writer).data()};
+  reader >> sExpected;
+  reader >> nilExpected;
+  EXPECT_THAT(sExpected, ::testing::Optional(std::string("hallo")));
+  EXPECT_EQ(nilExpected, std::nullopt);
 }
