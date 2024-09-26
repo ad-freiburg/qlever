@@ -27,6 +27,7 @@ enum class TurtleTokenId : int {
   Exponent,
   Double,
   Iriref,
+  IrirefRelaxed,
   PnameNS,
   PnameLN,
   PnLocal,

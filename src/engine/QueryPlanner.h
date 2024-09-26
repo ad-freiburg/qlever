@@ -329,9 +329,15 @@ class QueryPlanner {
       SubtreePlan a, SubtreePlan b,
       const std::vector<std::array<ColumnIndex, 2>>& jcs);
 
+  // The following two functions are used to provide a Service-operation with
+  // it's siblingTree, allowing us to optimize the service-query.
   [[nodiscard]] static std::optional<SubtreePlan> createJoinWithService(
       const SubtreePlan& a, const SubtreePlan& b,
       const std::vector<std::array<ColumnIndex, 2>>& jcs);
+
+  template <typename Operation>
+  [[nodiscard]] static std::optional<SubtreePlan> createSubtreeWithService(
+      const SubtreePlan& a, const SubtreePlan& b);
 
   [[nodiscard]] vector<SubtreePlan> getOrderByRow(
       const ParsedQuery& pq,

@@ -93,7 +93,8 @@ class LocaleManager {
 
   /// Default constructor. Use the settings from "../global/Constants.h"
   LocaleManager()
-      : LocaleManager(LOCALE_DEFAULT_LANG, LOCALE_DEFAULT_COUNTRY,
+      : LocaleManager(std::string{LOCALE_DEFAULT_LANG},
+                      std::string{LOCALE_DEFAULT_COUNTRY},
                       LOCALE_DEFAULT_IGNORE_PUNCTUATION){};
 
   /**

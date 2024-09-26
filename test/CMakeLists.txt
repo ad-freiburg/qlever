@@ -151,7 +151,7 @@ else ()
     linkAndDiscoverTest(TokenTest parser re2 util)
 endif ()
 
-addLinkAndDiscoverTestSerial(TurtleParserTest parser re2)
+addLinkAndDiscoverTestSerial(RdfParserTest parser re2)
 
 addLinkAndDiscoverTest(MultiColumnJoinTest engine)
 
@@ -273,7 +273,7 @@ addLinkAndDiscoverTestSerial(ValuesTest engine)
 
 addLinkAndDiscoverTestSerial(ServiceTest engine)
 
-addLinkAndDiscoverTest(HttpTest Boost::iostreams http)
+addLinkAndDiscoverTestSerial(HttpTest Boost::iostreams http)
 
 addLinkAndDiscoverTest(CallFixedSizeTest)
 
@@ -394,3 +394,17 @@ addLinkAndDiscoverTest(ChunkedForLoopTest)
 addLinkAndDiscoverTest(FsstCompressorTest fsst)
 
 addLinkAndDiscoverTest(CopyableSynchronizationTest)
+
+addLinkAndDiscoverTest(LazyJsonParserTest)
+
+addLinkAndDiscoverTest(CacheableGeneratorTest)
+
+addLinkAndDiscoverTest(FilterTest engine)
+
+addLinkAndDiscoverTest(ResultTest engine)
+
+addLinkAndDiscoverTest(SparqlExpressionGeneratorsTest)
+
+addLinkAndDiscoverTest(UrlParserTest)
+
+addLinkAndDiscoverTest(ServerTest engine)

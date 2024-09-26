@@ -22,27 +22,39 @@
 
 class CacheValue {
  private:
-  std::shared_ptr<const Result> _resultTable;
-  RuntimeInformation _runtimeInfo;
+  std::shared_ptr<Result> result_;
+  RuntimeInformation runtimeInfo_;
 
  public:
-  explicit CacheValue(Result resultTable, RuntimeInformation runtimeInfo)
-      : _resultTable(std::make_shared<const Result>(std::move(resultTable))),
-        _runtimeInfo(std::move(runtimeInfo)) {}
+  explicit CacheValue(Result result, RuntimeInformation runtimeInfo)
+      : result_{std::make_shared<Result>(std::move(result))},
+        runtimeInfo_{std::move(runtimeInfo)} {}
 
-  const std::shared_ptr<const Result>& resultTable() const {
-    return _resultTable;
+  CacheValue(CacheValue&&) = default;
+  CacheValue(const CacheValue&) = delete;
+  CacheValue& operator=(CacheValue&&) = default;
+  CacheValue& operator=(const CacheValue&) = delete;
+
+  const Result& resultTable() const noexcept { return *result_; }
+
+  std::shared_ptr<const Result> resultTablePtr() const noexcept {
+    return result_;
   }
 
-  const RuntimeInformation& runtimeInfo() const { return _runtimeInfo; }
+  const RuntimeInformation& runtimeInfo() const noexcept {
+    return runtimeInfo_;
+  }
+
+  static ad_utility::MemorySize getSize(const IdTable& idTable) {
+    return ad_utility::MemorySize::bytes(idTable.size() * idTable.numColumns() *
+                                         sizeof(Id));
+  }
 
   // Calculates the `MemorySize` taken up by an instance of `CacheValue`.
   struct SizeGetter {
     ad_utility::MemorySize operator()(const CacheValue& cacheValue) const {
-      if (const auto& tablePtr = cacheValue._resultTable; tablePtr) {
-        return ad_utility::MemorySize::bytes(tablePtr->idTable().size() *
-                                             tablePtr->idTable().numColumns() *
-                                             sizeof(Id));
+      if (const auto& resultPtr = cacheValue.result_; resultPtr) {
+        return getSize(resultPtr->idTable());
       } else {
         return 0_B;
       }
@@ -87,7 +99,7 @@ class QueryExecutionContext {
     return _sortPerformanceEstimator;
   }
 
-  [[nodiscard]] double getCostFactor(const string& key) const {
+  [[nodiscard]] double getCostFactor(const std::string& key) const {
     return _costFactors.getCostFactor(key);
   };
 

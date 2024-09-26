@@ -1065,9 +1065,7 @@ TEST(QueryPlanner, CancellationCancelsQueryPlanning) {
 // ___________________________________________________________________________
 TEST(QueryPlanner, JoinWithService) {
   auto scan = h::IndexScanFromStrings;
-
   auto sibling = scan("?x", "<is-a>", "?y");
-
   std::string_view graphPatternAsString = "{ ?x <is-a> ?z . }";
 
   h::expect(
@@ -1086,4 +1084,29 @@ TEST(QueryPlanner, JoinWithService) {
       h::MultiColumnJoin(
           sibling,
           h::Sort(h::Service(sibling, "{ ?x <is-a> ?z . ?y <is-a> ?a . }"))));
+}
+
+// ___________________________________________________________________________
+TEST(QueryPlanner, SubtreeWithService) {
+  auto scan = h::IndexScanFromStrings;
+  auto sibling = scan("?x", "<is-a>", "?y");
+
+  h::expect(
+      "SELECT * WHERE { ?x <is-a> ?y ."
+      "OPTIONAL{SERVICE <https://endpoint.com> { ?x <is-a> ?z . }}}",
+      h::OptionalJoin(sibling,
+                      h::Sort(h::Service(sibling, "{ ?x <is-a> ?z . }"))));
+
+  h::expect(
+      "SELECT * WHERE { ?x <is-a> ?y . "
+      "OPTIONAL{"
+      "SERVICE <https://endpoint.com> { ?x <is-a> ?z . ?y <is-a> ?a . }}}",
+      h::OptionalJoin(
+          sibling,
+          h::Sort(h::Service(sibling, "{ ?x <is-a> ?z . ?y <is-a> ?a . }"))));
+
+  h::expect(
+      "SELECT * WHERE { ?x <is-a> ?y MINUS{SERVICE <https://endpoint.com> { ?x "
+      "<is-a> ?z . }}}",
+      h::Minus(sibling, h::Sort(h::Service(sibling, "{ ?x <is-a> ?z . }"))));
 }

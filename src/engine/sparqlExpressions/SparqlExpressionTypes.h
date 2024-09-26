@@ -3,8 +3,7 @@
 
 // Several helper types needed for the SparqlExpression module
 
-#ifndef QLEVER_SPARQLEXPRESSIONTYPES_H
-#define QLEVER_SPARQLEXPRESSIONTYPES_H
+#pragma once
 
 #include <vector>
 
@@ -21,9 +20,9 @@
 
 namespace sparqlExpression {
 
-/// A std::vector<T, AllocatorWithLimit> with deleted copy constructor
-/// and copy assignment. Used in the SparqlExpression module, where we want
-/// no accidental copies of large intermediate results.
+// A std::vector<T, AllocatorWithLimit> with deleted copy constructor
+// and copy assignment. Used in the SparqlExpression module, where we want
+// no accidental copies of large intermediate results.
 template <typename T>
 class VectorWithMemoryLimit
     : public std::vector<T, ad_utility::AllocatorWithLimit<T>> {
@@ -319,20 +318,27 @@ std::optional<ExpressionResult> evaluateOnSpecializedFunctionsIfPossible(
   return result;
 }
 
-/// An Operation that consists of a `FunctionAndValueGetters` that takes
-/// `NumOperands` parameters. The `FunctionForSetOfIntervalsType` is a function,
-/// that can efficiently perform the operation when all the operands are
-/// `SetOfInterval`s.
-/// It is necessary to use the `FunctionAndValueGetters` struct to allow for
-/// multiple `ValueGetters` (a parameter pack, that has to appear at the end of
-/// the template declaration) and the default parameter for the
-/// `FunctionForSetOfIntervals` (which also has to appear at the end).
+// Class for an operation used in a `SparqlExpression`, consisting of the
+// function for computing the operation and the value getters for the operands.
+// The number of operands is fixed.
+//
+// NOTE: This class is defined in the namespace `sparqlExpression` and is
+// different from the class with the same name defined in `Operation.h`
+//
+// An Operation that consists of a `FunctionAndValueGetters` that takes
+// `NumOperands` parameters. The `SpecializedFunction`s can be used to choose a
+// more efficient implementation given the types of the operands. For example,
+// expressions like `logical-or` or `logical-and` can be implemented more
+// efficiently if all the inputs are `SetOfInterval`s`.
+// Note: It is necessary to use the `FunctionAndValueGetters` struct to allow
+// for multiple `ValueGetters` because there can be multiple `ValueGetters` as
+// well as zero or more `SpezializedFunctions`, but there can only be a single
+// parameter pack in C++.
 template <
     size_t NumOperands,
     ad_utility::isInstantiation<FunctionAndValueGetters>
         FunctionAndValueGettersT,
     ad_utility::isInstantiation<SpecializedFunction>... SpecializedFunctions>
-
 struct Operation {
  private:
   using OriginalValueGetters = typename FunctionAndValueGettersT::ValueGetters;
@@ -367,5 +373,3 @@ size_t getResultSize(const EvaluationContext& context, const Inputs&...) {
 
 }  // namespace detail
 }  // namespace sparqlExpression
-
-#endif  // QLEVER_SPARQLEXPRESSIONTYPES_H

@@ -73,8 +73,8 @@ cppcoro::generator<typename Range::value_type> runStreamAsync(
   }
   ifTiming([&t] {
     t->stop();
-    LOG(INFO) << "Waiting time for async stream was " << t->msecs().count()
-              << "ms" << std::endl;
+    LOG(TRACE) << "Waiting time for async stream was " << t->msecs().count()
+               << "ms" << std::endl;
   });
 }
 }  // namespace ad_utility::streams
