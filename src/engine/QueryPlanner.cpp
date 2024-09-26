@@ -653,6 +653,9 @@ auto QueryPlanner::seedWithScansAndText(
   // add all child plans as seeds
   uint64_t idShift = tg._nodeMap.size();
   for (const auto& vec : children) {
+    AD_CONTRACT_CHECK(idShift < 64,
+                      "QLever currently supports at most 64 elements (etc. "
+                      "triples) per group.");
     for (const SubtreePlan& plan : vec) {
       SubtreePlan newIdPlan = plan;
       // give the plan a unique id bit
@@ -1041,8 +1044,7 @@ bool QueryPlanner::connected(const QueryPlanner::SubtreePlan& a,
 
 // _____________________________________________________________________________
 std::vector<std::array<ColumnIndex, 2>> QueryPlanner::getJoinColumns(
-    const QueryPlanner::SubtreePlan& a,
-    const QueryPlanner::SubtreePlan& b) const {
+    const QueryPlanner::SubtreePlan& a, const QueryPlanner::SubtreePlan& b) {
   AD_CORRECTNESS_CHECK(a._qet && b._qet);
   return QueryExecutionTree::getJoinColumns(*a._qet, *b._qet);
 }
@@ -1240,6 +1242,77 @@ QueryPlanner::runDynamicProgrammingOnConnectedComponent(
   return std::move(dpTab.back());
 }
 
+using Vertex = const QueryPlanner::SubtreePlan*;
+using Vertices = ad_utility::HashSet<Vertex>;
+using Graph = std::vector<Vertex>;
+
+size_t QueryPlanner::countSubgraphs(Graph graph, size_t budget) {
+  auto getId = [](const Vertex& v) { return v->_idsOfIncludedNodes; };
+  std::ranges::sort(graph, std::ranges::less{}, getId);
+  graph.erase(
+      std::ranges::unique(graph, std::ranges::equal_to{}, getId).begin(),
+      graph.end());
+  // TODO<joka921> precompute which of the subgraphs are already connected,
+  // Then the counting can be done much cheaper.
+  size_t c = 0;
+  for (size_t i = 0; i < graph.size(); ++i) {
+    ++c;
+    if (c > budget) {
+      return c;
+    }
+    Vertices subgraph{graph[i]};
+    Vertices ignored;
+    for (size_t k = 0; k < i; ++k) {
+      ignored.insert(graph[k]);
+    }
+    c = countSubgraphsRecursively(graph, subgraph, ignored, c, budget);
+  }
+  return c;
+}
+size_t QueryPlanner::countSubgraphsRecursively(const Graph& graph,
+                                               Vertices& subgraph,
+                                               Vertices& ignored, size_t c,
+                                               size_t budget) {
+  std::vector<Vertex> NeighborsOfS;
+  for (const auto& v : graph) {
+    if (ignored.contains(v)) {
+      continue;
+    }
+    if (ad_utility::contains_if(subgraph, [&v](const auto& el) {
+          return !QueryPlanner::getJoinColumns(*v, *el).empty();
+        })) {
+      NeighborsOfS.push_back(v);
+    }
+  }
+  if (NeighborsOfS.size() > 60) {
+    return budget + 1;
+  }
+  size_t upperBound = 1ull << NeighborsOfS.size();
+
+  auto newIgnored = ignored;
+  for (const auto& el : NeighborsOfS) {
+    newIgnored.insert(el);
+  }
+  LOG(INFO) << "Num Neighbors: " << upperBound << std::endl;
+  // TODO<joka921> iterate over all Subsets.
+  // TODO<joka921> (0, 1, ?)
+  for (size_t i = 1; i < upperBound; ++i) {
+    ++c;
+    if (c > budget) {
+      return c;
+    }
+    // TODO<joka921> This can probably be done more efficiently...
+    auto newSubgraph = subgraph;
+    for (size_t k = 0; k < NeighborsOfS.size(); ++k) {
+      if (1 << k & i) {
+        newSubgraph.insert(NeighborsOfS[i]);
+      }
+    }
+    c = countSubgraphsRecursively(graph, newSubgraph, newIgnored, c, budget);
+  }
+  return c;
+}
+
 // _____________________________________________________________________________
 std::vector<QueryPlanner::SubtreePlan>
 QueryPlanner::runGreedyPlanningOnConnectedComponent(
@@ -1289,8 +1362,15 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
     components[componentIndices.at(i)].push_back(std::move(initialPlans.at(i)));
   }
   vector<vector<SubtreePlan>> lastDpRowFromComponents;
-  bool useGreedyPlanning = RuntimeParameters().get<"use-greedy-planning">();
   for (auto& component : components | std::views::values) {
+    Graph g;
+    for (const auto& plan : component) {
+      g.push_back(&plan);
+    }
+    static constexpr size_t budget = 10'000;
+    bool useGreedyPlanning = RuntimeParameters().get<"use-greedy-planning">() ||
+                             countSubgraphs(g, budget) >= budget;
+    AD_CONTRACT_CHECK(!useGreedyPlanning, "only for debugging");
     auto impl = useGreedyPlanning
                     ? &QueryPlanner::runGreedyPlanningOnConnectedComponent
                     : &QueryPlanner::runDynamicProgrammingOnConnectedComponent;
