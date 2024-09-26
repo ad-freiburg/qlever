@@ -95,12 +95,14 @@ GeoPoint GeoPoint::fromBitRepresentation(T bits) {
   return {lat, lng};
 };
 
+// _____________________________________________________________________________
 std::string GeoPoint::toStringRepresentation() const {
   // Extra conversion using std::to_string to get more decimals
   return absl::StrCat("POINT(", std::to_string(getLng()), " ",
                       std::to_string(getLat()), ")");
 };
 
+// _____________________________________________________________________________
 std::pair<std::string, const char*> GeoPoint::toStringAndType() const {
   return std::pair(toStringRepresentation(), GEO_WKT_LITERAL);
 };

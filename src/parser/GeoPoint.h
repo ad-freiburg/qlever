@@ -9,6 +9,7 @@
 #include <string>
 
 #include "parser/Literal.h"
+#include "util/BitUtils.h"
 #include "util/SourceLocation.h"
 
 /// Exception type for construction of GeoPoints that have invalid values
@@ -43,13 +44,14 @@ class GeoPoint {
   // For simplicity in the binary encoding each uses half of the available bits.
   static constexpr T numDataBits = 60;
   static constexpr T numDataBitsCoordinate = numDataBits / 2;
-  static constexpr T coordinateMaskLng = (1ULL << numDataBitsCoordinate) - 1;
+  static constexpr T coordinateMaskLng =
+      ad_utility::bitMaskForLowerBits(numDataBitsCoordinate);
   static constexpr T coordinateMaskLat = coordinateMaskLng
                                          << numDataBitsCoordinate;
   static constexpr T coordinateMaskFreeBits =
-      ~(coordinateMaskLat | coordinateMaskLng);
+      ad_utility::bitMaskForHigherBits(sizeof(T) * 8 - numDataBits);
   static constexpr double maxCoordinateEncoded =
-      (double)((1 << numDataBitsCoordinate) - 1);
+      static_cast<double>(coordinateMaskLng);
 
   // Construct GeoPoint and ensure valid coordinate values
   GeoPoint(double lat, double lng);
@@ -61,14 +63,15 @@ class GeoPoint {
   // Convert the value of this GeoPoint object to a single bitstring.
   // The conversion will reduce the precision and thus change the value.
   // However the lost precision should only be in the range of centimeters.
-  // Guarantees to only use the lower numDataBits (currently 60 bits),
+  // Guarantees to only use the lower `numDataBits` (currently 60 bits),
   // with lng stored in the lower 30 and lat stored in the upper 30 bits of
   // the lower 60.
   T toBitRepresentation() const;
 
   // Restore a GeoPoint object from a single bitstring produced by the above
   // function. Due to the reduction of precision this object will not have the
-  // identical value. Ignores the upper 4 bits (only uses the lower numDataBits)
+  // identical value. Ignores the upper 4 bits (only uses the lower
+  // `numDataBits`)
   static GeoPoint fromBitRepresentation(T bits);
 
   // Construct a GeoPoint from a Literal if this Literal represents a WKT POINT,
