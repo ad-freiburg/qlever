@@ -801,7 +801,7 @@ inline auto SubSelect =
 };
 
 // Return a matcher that matches a `DatasetClause` with given
-auto datasetClausesMatcher(
+inline auto datasetClausesMatcher(
     ScanSpecificationAsTripleComponent::Graphs defaultGraphs = std::nullopt,
     ScanSpecificationAsTripleComponent::Graphs namedGraphs = std::nullopt)
     -> Matcher<const ::ParsedQuery::DatasetClauses&> {
