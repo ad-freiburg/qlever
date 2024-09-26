@@ -118,7 +118,7 @@ class NotExpression : public PrefilterExpression {
   explicit NotExpression(std::unique_ptr<PrefilterExpression> child)
       : child_(child->logicalComplement()) {}
 
-  std::unique_ptr<PrefilterExpression> logicalComplement() const;
+  std::unique_ptr<PrefilterExpression> logicalComplement() const override;
 
  private:
   std::vector<BlockMetadata> evaluateImpl(
