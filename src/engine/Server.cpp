@@ -221,18 +221,14 @@ ad_utility::url_parser::ParsedRequest Server::parseHttpRequest(
       }
 
       // Set the url-encoded parameters from the request body.
-      // Note: previously we used `boost::urls::parse_query`, but that function
-      // doesn't unescape the `+` which encodes a space character. The following
-      // workaround of making the url-encoded parameters a complete relative url
-      // and parsing this URL seems to work.
-      auto query =
-          boost::urls::parse_origin_form(absl::StrCat("/?", request.body()));
-      if (!query) {
-        throw std::runtime_error(
-            "Invalid URL-endoded POST request, body was: " + request.body());
-      }
+      // Note: The `parse_query` function below for some reason doesn't handle
+      // the `+` sign correctly as an encoding of a space character, so we first
+      // replace it by the corresponding percent encoding.
+      auto body = absl::StrReplaceAll(request.body(), {{"+", "%20"}});
+      auto query = boost::urls::parse_query(body).value();
+
       parsedRequest.parameters_ =
-          ad_utility::url_parser::paramsToMap(query->params());
+          ad_utility::url_parser::paramsToMap(boost::urls::params_view{query});
 
       extractQueryFromParameters();
 
