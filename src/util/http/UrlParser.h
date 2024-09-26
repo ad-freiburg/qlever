@@ -6,60 +6,46 @@
 #ifndef QLEVER_URLPARSER_H
 #define QLEVER_URLPARSER_H
 
+#include <boost/url.hpp>
 #include <optional>
 #include <string>
 #include <string_view>
 
 #include "../HashMap.h"
 
-namespace ad_utility {
 /**
- * /brief A simple parser for urls/uris. It does NOT provide the full
- * URI specification, but only a small subset of it.
- *
- * TODO<joka921> Replace by a suitable third-party library when we have
- * chosen one. My current favourite is Boost::Url by Vinnie Falco, but there
- * exists no stable release yet.
+ * /brief Some helpers to parse request URLs in QLever.
  */
-class UrlParser {
- public:
-  /// Representation of the "path" and "query" of a URL. For a GET request, the
-  /// "path" is the part before the "?" (or everything if there is no "?"), and
-  /// the "query" is the part after the "?" (empty if there is no "?"). The
-  /// key-value pairs of the "query" are stored in a hash map.
-  struct UrlPathAndParameters {
-    std::string _path;
-    ad_utility::HashMap<std::string, std::string> _parameters;
-  };
+namespace ad_utility::url_parser {
+// TODO: There can be multiple values for a HTTP query parameter. Some SPARQL
+// features require setting a parameter multiple times. Change the interface
+// s.t. this is supported.
 
-  // URL-decode the given (part of a) URL. If the second argument is false, do
-  // nothing except converting the given `std::string_view` to `std::string`.
-  static std::string applyPercentDecoding(std::string_view url,
-                                          bool urlDecode = true);
-
-  /// Parse the `target` part of an HTTP GET Request, for example,
-  /// `/api.html?someKey=some+val%0Fue`. The second argument specifies whether
-  /// the key-value pairs of the query string should be URL-decoded (default:
-  /// yes).
-  static UrlPathAndParameters parseGetRequestTarget(std::string_view target,
-                                                    bool urlDecode = true);
-
-  ///  From the `target` part of an HTTP GET request, only extract the path,
-  ///  with percent decoding applied. E.g. `/target.html?key=value` will become
-  ///  `/target.html`. Additionally the following checks are applied:
-  ///  - The path must not contain `..` to escape from the document root.
-  ///  - The path must be absolute (start with a slash `/`).
-  ///  If the parsing or one of the checks fails, std::nullopt is returned.
-  static std::optional<std::string> getDecodedPathAndCheck(
-      std::string_view target) noexcept;
-
- private:
-  // Helper function that parses a single key-value pair from a URL query
-  // string. The second argument specifies whether the key and value should be
-  // URL-decoded (default: yes).
-  static std::pair<std::string, std::string> parseSingleKeyValuePair(
-      std::string_view input, bool urlDecode = true);
+// A parsed URL.
+// - `path_` is the URL path
+// - `parameters_` is a hashmap of the HTTP Query parameters
+struct ParsedUrl {
+  std::string path_;
+  ad_utility::HashMap<std::string, std::string> parameters_;
 };
-}  // namespace ad_utility
+
+// Representation of parsed HTTP request.
+// - `path_` is the URL path
+// - `parameters_` is a hashmap of the parameters
+// - `query_` contains the Query
+struct ParsedRequest {
+  std::string path_;
+  ad_utility::HashMap<std::string, std::string> parameters_;
+  std::optional<std::string> query_;
+};
+
+// Parse the URL path and the URL query parameters of a HTTP Request target.
+ParsedUrl parseRequestTarget(std::string_view target);
+
+// Convert the HTTP Query parameters `params` to a hashmap. Throw an error
+// if a key is included twice.
+ad_utility::HashMap<std::string, std::string> paramsToMap(
+    boost::urls::params_view params);
+}  // namespace ad_utility::url_parser
 
 #endif  // QLEVER_URLPARSER_H
