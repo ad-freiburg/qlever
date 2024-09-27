@@ -506,6 +506,7 @@ TripleComponent TurtleParser<T>::literalAndDatatypeToTripleComponentImpl(
       if (geopoint.has_value()) {
         parser->lastParseResult_ = geopoint.value();
       } else {
+        literal.addDatatype(typeIri);
         parser->lastParseResult_ = std::move(literal);
       }
     } else {
