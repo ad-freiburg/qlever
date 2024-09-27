@@ -676,11 +676,11 @@ inline auto Optional =
 
 inline auto Group =
     [](auto&& subMatcher,
-       std::optional<TripleComponent::Iri> graphIri =
-           std::nullopt) -> Matcher<const p::GraphPatternOperation&> {
+       p::GroupGraphPattern::GraphSpec graphSpec =
+           std::monostate{}) -> Matcher<const p::GraphPatternOperation&> {
   return detail::GraphPatternOperation<p::GroupGraphPattern>(::testing::AllOf(
       AD_FIELD(p::GroupGraphPattern, _child, subMatcher),
-      AD_FIELD(p::GroupGraphPattern, _graphIri, ::testing::Eq(graphIri))));
+      AD_FIELD(p::GroupGraphPattern, graphSpec_, ::testing::Eq(graphSpec))));
 };
 
 inline auto Union =
