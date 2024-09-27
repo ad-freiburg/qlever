@@ -99,8 +99,6 @@ class BinSearchWrapper {
 };
 }  // namespace pathSearch
 
-using namespace pathSearch;
-
 struct PathSearchConfiguration {
   PathSearchAlgorithm algorithm_;
   SearchSide sources_;
@@ -132,10 +130,8 @@ struct PathSearchConfiguration {
 
   std::string toString() const {
     std::ostringstream os;
-    switch (algorithm_) {
-      case PathSearchAlgorithm::ALL_PATHS:
-        os << "Algorithm: All paths" << '\n';
-        break;
+    if (algorithm_ == PathSearchAlgorithm::ALL_PATHS) {
+      os << "Algorithm: All paths" << '\n';
     }
 
     os << "Source: " << searchSideToString(sources_) << '\n';
@@ -259,17 +255,17 @@ class PathSearch : public Operation {
    * @brief Finds paths based on the configured algorithm.
    * @return A vector of paths.
    */
-  std::vector<Path> findPaths(const Id source,
+  std::vector<pathSearch::Path> findPaths(const Id source,
                               const std::unordered_set<uint64_t>& targets,
-                              const BinSearchWrapper& binSearch) const;
+                              const pathSearch::BinSearchWrapper& binSearch) const;
 
   /**
    * @brief Finds all paths in the graph.
    * @return A vector of all paths.
    */
-  std::vector<Path> allPaths(std::span<const Id> sources,
+  std::vector<pathSearch::Path> allPaths(std::span<const Id> sources,
                              std::span<const Id> targets,
-                             BinSearchWrapper& binSearch, bool cartesian) const;
+                             const pathSearch::BinSearchWrapper& binSearch, bool cartesian) const;
 
   /**
    * @brief Converts paths to a result table with a specified width.
@@ -278,5 +274,5 @@ class PathSearch : public Operation {
    * @param paths The vector of paths to convert.
    */
   template <size_t WIDTH>
-  void pathsToResultTable(IdTable& tableDyn, std::vector<Path>& paths) const;
+  void pathsToResultTable(IdTable& tableDyn, std::vector<pathSearch::Path>& paths) const;
 };

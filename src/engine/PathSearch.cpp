@@ -331,7 +331,7 @@ std::vector<Path> PathSearch::findPaths(
       result.push_back(currentPath);
     }
 
-    for (auto outgoingEdge : binSearch.outgoingEdes(edge.end_)) {
+    for (const auto& outgoingEdge : binSearch.outgoingEdes(edge.end_)) {
       if (!visited.contains(outgoingEdge.end_.getBits())) {
         edgeStack.push_back(outgoingEdge);
       }
@@ -344,7 +344,7 @@ std::vector<Path> PathSearch::findPaths(
 // _____________________________________________________________________________
 std::vector<Path> PathSearch::allPaths(std::span<const Id> sources,
                                        std::span<const Id> targets,
-                                       BinSearchWrapper& binSearch,
+                                       const BinSearchWrapper& binSearch,
                                        bool cartesian) const {
   std::vector<Path> paths;
   Path path;
@@ -359,13 +359,13 @@ std::vector<Path> PathSearch::allPaths(std::span<const Id> sources,
       targetSet.insert(target.getBits());
     }
     for (auto source : sources) {
-      for (auto path : findPaths(source, targetSet, binSearch)) {
+      for (const auto& path : findPaths(source, targetSet, binSearch)) {
         paths.push_back(path);
       }
     }
   } else {
     for (size_t i = 0; i < sources.size(); i++) {
-      for (auto path :
+      for (const auto& path :
            findPaths(sources[i], {targets[i].getBits()}, binSearch)) {
         paths.push_back(path);
       }

@@ -1898,7 +1898,7 @@ auto QueryPlanner::createJoinWithPathSearch(
 
   // A join on an edge property column should not create any candidates
   auto isJoinOnSourceOrTarget = [sourceColumn,
-                                 targetColumn](size_t joinColumn) -> bool {
+                                 targetColumn](size_t joinColumn) {
     return ((sourceColumn && sourceColumn.value() == joinColumn) ||
             (targetColumn && targetColumn.value() == joinColumn));
   };
