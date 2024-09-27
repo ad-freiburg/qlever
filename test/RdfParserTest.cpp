@@ -260,6 +260,10 @@ TEST(RdfParserTest, literalAndDatatypeToTripleComponent) {
   auto vid = result.toValueIdIfNotString();
   ASSERT_TRUE(vid.has_value() &&
               vid.value().getDatatype() == Datatype::GeoPoint);
+  auto result2 = ladttc("POLYGON(7.8 47.9, 40.0 40.5, 10.9 20.5)",
+                        fromIri(GEO_WKT_LITERAL));
+  auto vid2 = result2.toValueIdIfNotString();
+  ASSERT_FALSE(vid2.has_value());
 }
 
 TEST(RdfParserTest, blankNode) {

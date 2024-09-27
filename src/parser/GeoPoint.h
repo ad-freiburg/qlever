@@ -89,5 +89,5 @@ class GeoPoint {
 
   std::pair<std::string, const char*> toStringAndType() const;
 
-  bool operator==(const GeoPoint& other) const;
+  bool operator==(const GeoPoint& other) const = default;
 };
