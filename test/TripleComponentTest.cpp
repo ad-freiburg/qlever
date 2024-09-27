@@ -7,6 +7,9 @@
 
 #include "./util/IdTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
+#include "global/ValueId.h"
+#include "parser/GeoPoint.h"
+#include "parser/Literal.h"
 #include "parser/TripleComponent.h"
 #include "util/IndexTestHelpers.h"
 
@@ -122,6 +125,14 @@ TEST(TripleComponent, toValueIdIfNotString) {
   ASSERT_EQ(tc.toValueIdIfNotString().value(), I(42));
   tc = 131.4;
   ASSERT_EQ(tc.toValueIdIfNotString().value(), D(131.4));
+
+  tc = TripleComponent{GeoPoint(47.9, 7.8)};
+  ASSERT_EQ(tc.toValueIdIfNotString().value().getDatatype(),
+            Datatype::GeoPoint);
+  ASSERT_FLOAT_EQ(tc.toValueIdIfNotString().value().getGeoPoint().getLat(),
+                  47.9);
+  ASSERT_FLOAT_EQ(tc.toValueIdIfNotString().value().getGeoPoint().getLng(),
+                  7.8);
 
   DateYearOrDuration date{123456, DateYearOrDuration::Type::Year};
   tc = date;

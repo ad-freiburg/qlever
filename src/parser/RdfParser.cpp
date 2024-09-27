@@ -9,6 +9,8 @@
 
 #include <cstring>
 
+#include "global/Constants.h"
+#include "parser/GeoPoint.h"
 #include "parser/NormalizedString.h"
 #include "parser/RdfEscaping.h"
 #include "util/Conversions.h"
@@ -498,6 +500,14 @@ TripleComponent TurtleParser<T>::literalAndDatatypeToTripleComponentImpl(
     } else if (type == XSD_DAYTIME_DURATION_TYPE) {
       parser->lastParseResult_ =
           DateYearOrDuration::parseXsdDayTimeDuration(normalizedLiteralContent);
+    } else if (type == GEO_WKT_LITERAL) {
+      // Not all WKT literals represent points (we can only fold points)
+      auto geopoint = GeoPoint::parseFromLiteral(literal, false);
+      if (geopoint.has_value()) {
+        parser->lastParseResult_ = geopoint.value();
+      } else {
+        parser->lastParseResult_ = std::move(literal);
+      }
     } else {
       literal.addDatatype(typeIri);
       parser->lastParseResult_ = std::move(literal);

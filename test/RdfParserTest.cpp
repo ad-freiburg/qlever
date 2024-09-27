@@ -7,9 +7,12 @@
 
 #include "./util/GTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
+#include "global/Constants.h"
+#include "global/ValueId.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "parser/RdfParser.h"
+#include "parser/TripleComponent.h"
 #include "util/Conversions.h"
 
 using std::string;
@@ -253,6 +256,14 @@ TEST(RdfParserTest, literalAndDatatypeToTripleComponent) {
   ASSERT_EQ(ladttc("+144321", fromIri(XSD_INTEGER_TYPE)), +144321);
   ASSERT_EQ(ladttc("true", fromIri(XSD_BOOLEAN_TYPE)), true);
   ASSERT_EQ(ladttc("false", fromIri(XSD_BOOLEAN_TYPE)), false);
+  auto result = ladttc("POINT(7.8 47.9)", fromIri(GEO_WKT_LITERAL));
+  auto vid = result.toValueIdIfNotString();
+  ASSERT_TRUE(vid.has_value() &&
+              vid.value().getDatatype() == Datatype::GeoPoint);
+  auto result2 = ladttc("POLYGON(7.8 47.9, 40.0 40.5, 10.9 20.5)",
+                        fromIri(GEO_WKT_LITERAL));
+  auto vid2 = result2.toValueIdIfNotString();
+  ASSERT_FALSE(vid2.has_value());
 }
 
 TEST(RdfParserTest, blankNode) {

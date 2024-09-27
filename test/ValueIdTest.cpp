@@ -326,6 +326,8 @@ TEST_F(ValueIdTest, toDebugString) {
   test(ValueId::makeFromDate(
            DateYearOrDuration{123456, DateYearOrDuration::Type::Year}),
        "D:123456");
+  test(ValueId::makeFromGeoPoint(GeoPoint{50.0, 50.0}),
+       "G:POINT(50.000000 50.000000)");
   // make an ID with an invalid datatype
   ASSERT_ANY_THROW(test(ValueId::max(), "blim"));
 }
