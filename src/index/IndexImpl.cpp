@@ -1354,35 +1354,6 @@ std::string_view IndexImpl::indexToString(WordVocabIndex id) const {
 }
 
 // ___________________________________________________________________________
-std::optional<Id> IndexImpl::getIdImpl(const auto& element) const {
-  VocabIndex vocabIndex;
-  auto success =
-      getVocab().getId(element.toStringRepresentation(), &vocabIndex);
-  if (!success) {
-    return std::nullopt;
-  }
-  return Id::makeFromVocabIndex(vocabIndex);
-}
-
-// ___________________________________________________________________________
-std::optional<Id> IndexImpl::getId(
-    const ad_utility::triple_component::LiteralOrIri& element) const {
-  return getIdImpl(element);
-}
-
-// ___________________________________________________________________________
-std::optional<Id> IndexImpl::getId(
-    const ad_utility::triple_component::Literal& element) const {
-  return getIdImpl(element);
-}
-
-// ___________________________________________________________________________
-std::optional<Id> IndexImpl::getId(
-    const ad_utility::triple_component::Iri& element) const {
-  return getIdImpl(element);
-}
-
-// ___________________________________________________________________________
 Index::Vocab::PrefixRanges IndexImpl::prefixRanges(
     std::string_view prefix) const {
   // TODO<joka921> Do we need prefix ranges for numbers?

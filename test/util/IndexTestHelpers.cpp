@@ -280,15 +280,15 @@ QueryExecutionContext* getQec(std::optional<std::string> turtleInput,
 // ___________________________________________________________
 std::function<Id(const std::string&)> makeGetId(const Index& index) {
   return [&index](const std::string& el) {
-    auto literalOrIri = [&el]() {
+    auto literalOrIri = [&el]() -> TripleComponent {
       if (el.starts_with('<') || el.starts_with('@')) {
-        return triple_component::LiteralOrIri::iriref(el);
+        return TripleComponent::Iri::fromIriref(el);
       } else {
         AD_CONTRACT_CHECK(el.starts_with('\"'));
-        return triple_component::LiteralOrIri::fromStringRepresentation(el);
+        return TripleComponent::Literal::fromStringRepresentation(el);
       }
     }();
-    auto id = index.getId(literalOrIri);
+    auto id = literalOrIri.toValueId(index.getVocab());
     AD_CONTRACT_CHECK(id.has_value());
     return id.value();
   };

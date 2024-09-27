@@ -7,6 +7,10 @@
 
 #include "absl/strings/str_cat.h"
 #include "engine/ExportQueryExecutionTrees.h"
+#include "global/Constants.h"
+#include "parser/GeoPoint.h"
+#include "parser/NormalizedString.h"
+#include "util/GeoSparqlHelpers.h"
 
 // ____________________________________________________________________________
 std::ostream& operator<<(std::ostream& stream, const TripleComponent& obj) {
@@ -42,8 +46,8 @@ std::ostream& operator<<(std::ostream& stream, const TripleComponent& obj) {
 // ____________________________________________________________________________
 std::optional<Id> TripleComponent::toValueIdIfNotString() const {
   auto visitor = []<typename T>(const T& value) -> std::optional<Id> {
-    if constexpr (std::is_same_v<T, std::string> ||
-                  std::is_same_v<T, Literal> || std::is_same_v<T, Iri>) {
+    if constexpr (std::is_same_v<T, std::string> || std::is_same_v<T, Iri> ||
+                  std::is_same_v<T, Literal>) {
       return std::nullopt;
     } else if constexpr (std::is_same_v<T, int64_t>) {
       return Id::makeFromInt(value);
@@ -57,6 +61,8 @@ std::optional<Id> TripleComponent::toValueIdIfNotString() const {
       return Id::makeUndefined();
     } else if constexpr (std::is_same_v<T, DateYearOrDuration>) {
       return Id::makeFromDate(value);
+    } else if constexpr (std::is_same_v<T, GeoPoint>) {
+      return Id::makeFromGeoPoint(value);
     } else if constexpr (std::is_same_v<T, Variable>) {
       // Cannot turn a variable into a ValueId.
       AD_FAIL();

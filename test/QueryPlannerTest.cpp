@@ -1110,3 +1110,31 @@ TEST(QueryPlanner, SubtreeWithService) {
       "<is-a> ?z . }}}",
       h::Minus(sibling, h::Sort(h::Service(sibling, "{ ?x <is-a> ?z . }"))));
 }
+
+TEST(QueryPlanner, DatasetClause) {
+  auto scan = h::IndexScanFromStrings;
+  using Graphs = ad_utility::HashSet<std::string>;
+  h::expect("SELECT * FROM <x> FROM <y> WHERE { ?x ?y ?z}",
+            scan("?x", "?y", "?z", {}, Graphs{"<x>", "<y>"}));
+
+  h::expect("SELECT * FROM <x> FROM <y> { SELECT * {?x ?y ?z}}",
+            scan("?x", "?y", "?z", {}, Graphs{"<x>", "<y>"}));
+
+  h::expect("SELECT * FROM <x> WHERE { GRAPH <z> {?x ?y ?z}}",
+            scan("?x", "?y", "?z", {}, Graphs{"<z>"}));
+
+  auto g1 = Graphs{"<g1>"};
+  auto g2 = Graphs{"<g2>"};
+  h::expect(
+      "SELECT * FROM <g1> { <a> ?p <x>. {<b> ?p <y>} GRAPH <g2> { <c> ?p <z> "
+      "{SELECT * {<d> ?p <z2>}}} <e> ?p <z3> }",
+      h::UnorderedJoins(
+          scan("<a>", "?p", "<x>", {}, g1), scan("<b>", "?p", "<y>", {}, g1),
+          scan("<c>", "?p", "<z>", {}, g2), scan("<d>", "?p", "<z2>", {}, g2),
+          scan("<e>", "?p", "<z3>", {}, g1)));
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("SELECT * FROM <x> FROM NAMED <y> WHERE { ?x ?y ?z}",
+                ::testing::_),
+      ::testing::HasSubstr("FROM NAMED clauses are not yet supported"));
+}

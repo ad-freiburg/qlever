@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "parser/TripleComponent.h"
 #include "parser/data/SparqlFilter.h"
 
 namespace parsedQuery {
@@ -46,6 +47,7 @@ class GraphPattern {
                          const std::string& languageInQuotes);
 
   bool _optional;
+  std::optional<TripleComponent::Iri> graphIri_;
 
   // Filters always apply to the complete GraphPattern, no matter where
   // they appear. For VALUES and Triples, the order matters, so they
