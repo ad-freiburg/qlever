@@ -1133,8 +1133,11 @@ TEST(QueryPlanner, DatasetClause) {
           scan("<c>", "?p", "<z>", {}, g2), scan("<d>", "?p", "<z2>", {}, g2),
           scan("<e>", "?p", "<z3>", {}, g1)));
 
+  // TODO<joka921> this works now, test it.
+  /*
   AD_EXPECT_THROW_WITH_MESSAGE(
       h::expect("SELECT * FROM <x> FROM NAMED <y> WHERE { ?x ?y ?z}",
                 ::testing::_),
       ::testing::HasSubstr("FROM NAMED clauses are not yet supported"));
+      */
 }

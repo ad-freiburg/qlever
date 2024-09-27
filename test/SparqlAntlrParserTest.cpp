@@ -1012,7 +1012,8 @@ TEST(SparqlParser, GroupGraphPattern) {
 
   // graphGraphPattern is currently only supported with a fixed graph IRI, not
   // with a variable.
-  expectGroupGraphPatternFails("{ GRAPH ?a { } }");
+  // TOIDO<joka921> These work now! test them.
+  //expectGroupGraphPatternFails("{ GRAPH ?a { } }");
   expectGraphPattern(
       "{ GRAPH <foo> { ?x <is-a> <Actor> }}",
       m::GraphPattern(m::GroupGraphPatternWithGraph(
