@@ -78,22 +78,6 @@ std::string_view Index::indexToString(WordVocabIndex id) const {
 }
 
 // ____________________________________________________________________________
-std::optional<Id> Index::getId(
-    const ad_utility::triple_component::LiteralOrIri& element) const {
-  return pimpl_->getId(element);
-}
-// ____________________________________________________________________________
-std::optional<Id> Index::getId(
-    const ad_utility::triple_component::Iri& element) const {
-  return pimpl_->getId(element);
-}
-// ____________________________________________________________________________
-std::optional<Id> Index::getId(
-    const ad_utility::triple_component::Literal& element) const {
-  return pimpl_->getId(element);
-}
-
-// ____________________________________________________________________________
 Index::Vocab::PrefixRanges Index::prefixRanges(std::string_view prefix) const {
   return pimpl_->prefixRanges(prefix);
 }

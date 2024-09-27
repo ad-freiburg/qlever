@@ -380,6 +380,30 @@ TEST(IndexScan, additionalColumn) {
   EXPECT_THAT(res.idTable(), ::testing::ElementsAreArray(exp));
 }
 
+// Test that the graphs by which an `IndexScan` is to be filtered is correctly
+// reflected in its cache key and its `ScanSpecification`.
+TEST(IndexScan, namedGraphs) {
+  auto qec = getQec("<x> <y> <z>.");
+  using V = Variable;
+  SparqlTriple triple{V{"?x"}, "<y>", V{"?z"}};
+  ad_utility::HashSet<TripleComponent> graphs{
+      TripleComponent::Iri::fromIriref("<graph1>"),
+      TripleComponent::Iri::fromIriref("<graph2>")};
+  auto scan = IndexScan{qec, Permutation::PSO, triple, graphs};
+  using namespace testing;
+  EXPECT_THAT(scan.graphsToFilter(), Optional(graphs));
+  EXPECT_THAT(scan.getCacheKey(),
+              HasSubstr("Filtered by Graphs:<graph1> <graph2>"));
+  EXPECT_THAT(scan.getScanSpecificationTc().graphsToFilter(), Optional(graphs));
+
+  auto scanNoGraphs = IndexScan{qec, Permutation::PSO, triple};
+  EXPECT_EQ(scanNoGraphs.graphsToFilter(), std::nullopt);
+  EXPECT_THAT(scanNoGraphs.getCacheKey(),
+              Not(HasSubstr("Filtered by Graphs:")));
+  EXPECT_THAT(scanNoGraphs.getScanSpecificationTc().graphsToFilter(),
+              Eq(std::nullopt));
+}
+
 TEST(IndexScan, getResultSizeOfScan) {
   auto qec = getQec("<x> <p> <s1>, <s2>. <x> <p2> <s1>.");
   auto getId = makeGetId(qec->getIndex());

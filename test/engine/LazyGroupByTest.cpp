@@ -43,16 +43,15 @@ class LazyGroupByTest : public ::testing::Test {
           std::make_shared<ValuesForTesting>(
               qec_, IdTable{2, ad_utility::makeAllocatorWithLimit<Id>(0_B)},
               std::vector{std::optional{xVar_}, std::optional{yVar_}}));
-  GroupBy groupBy_{qec_, {yVar_}, {}, subtree_};
 
   std::vector<GroupBy::Aggregate> aggregates_{
       {std::move(sparqlExpression_), 1}};
   LocalVocab localVocab_{};
   LazyGroupBy lazyGroupBy_{
       localVocab_,
-      groupBy_.computeUnsequentialProcessingMetadata(aggregates_)
+      GroupBy::computeUnsequentialProcessingMetadata(aggregates_, {yVar_})
           ->aggregateAliases_,
-      groupBy_.allocator(), 1};
+      ua, 1};
 
   sparqlExpression::EvaluationContext makeEvaluationContext(
       const IdTable& idTable) const {
@@ -60,7 +59,7 @@ class LazyGroupByTest : public ::testing::Test {
         *qec_,
         subtree_->getVariableColumns(),
         idTable,
-        groupBy_.allocator(),
+        ua,
         localVocab_,
         std::make_shared<ad_utility::CancellationHandle<>>(),
         std::chrono::steady_clock::time_point::max()};
@@ -80,13 +79,13 @@ TEST_F(LazyGroupByTest, verifyEmptyGroupsAreAggregatedCorrectly) {
   auto evaluationContext = makeEvaluationContext(idTable);
 
   lazyGroupBy_.processBlock(evaluationContext, 0, 0);
-  lazyGroupBy_.commitRow(resultTable, evaluationContext, block, groupBy_);
+  lazyGroupBy_.commitRow(resultTable, evaluationContext, block);
 
   // The grouped variable has the value 7 here + 0 is still 7.
   EXPECT_EQ(resultTable, makeIdTableFromVector({{7, 7}}, I));
 
   block.at(0).second = I(9);
-  lazyGroupBy_.commitRow(resultTable, evaluationContext, block, groupBy_);
+  lazyGroupBy_.commitRow(resultTable, evaluationContext, block);
 
   // The grouped variable has the value 9 here + 0 is still 9.
   EXPECT_EQ(resultTable, makeIdTableFromVector({{7, 7}, {9, 9}}, I));
@@ -100,7 +99,7 @@ TEST_F(LazyGroupByTest, verifyGroupsAreAggregatedCorrectly) {
   auto evaluationContext = makeEvaluationContext(idTable);
 
   lazyGroupBy_.processBlock(evaluationContext, 1, 3);
-  lazyGroupBy_.commitRow(resultTable, evaluationContext, block, groupBy_);
+  lazyGroupBy_.commitRow(resultTable, evaluationContext, block);
 
   // The `7` is the current group, and the aggregate computes the SUM between
   // the elements at index 1 and 2, which is  7 + 3 + 5 = 15.
@@ -112,7 +111,7 @@ TEST_F(LazyGroupByTest, verifyGroupsAreAggregatedCorrectly) {
   lazyGroupBy_.processBlock(evaluationContext, 3, 4);  // add 7 -> 17
   lazyGroupBy_.processBlock(evaluationContext, 4, 4);  // add 0 (empty) -> 17
   block.at(0).second = I(9);                           // add 9 -> 26
-  lazyGroupBy_.commitRow(resultTable, evaluationContext, block, groupBy_);
+  lazyGroupBy_.commitRow(resultTable, evaluationContext, block);
 
   EXPECT_EQ(resultTable, makeIdTableFromVector({{7, 15}, {9, 26}}, I));
 }
@@ -129,7 +128,7 @@ TEST_F(LazyGroupByTest, verifyCommitWorksWhenOriginalIdTableIsGone) {
   }
   IdTable idTable = makeIdTableFromVector({}, I);
   auto evaluationContext = makeEvaluationContext(idTable);
-  lazyGroupBy_.commitRow(resultTable, evaluationContext, block, groupBy_);
+  lazyGroupBy_.commitRow(resultTable, evaluationContext, block);
 
   // 3 + 3 + 5 = 11
   EXPECT_EQ(resultTable, makeIdTableFromVector({{3, 11}}, I));
@@ -149,14 +148,13 @@ TEST(LazyGroupBy, verifyGroupConcatIsCorrectlyInitialized) {
       qec, std::make_shared<ValuesForTesting>(
                qec, IdTable{1, ad_utility::makeAllocatorWithLimit<Id>(0_B)},
                std::vector{std::optional{variable}}));
-  GroupBy groupBy{qec, {variable}, {}, subtree};
   std::vector<GroupBy::Aggregate> aggregates{{std::move(sparqlExpression), 0}};
   LocalVocab localVocab{};
   LazyGroupBy lazyGroupBy{
       localVocab,
-      groupBy.computeUnsequentialProcessingMetadata(aggregates)
+      GroupBy::computeUnsequentialProcessingMetadata(aggregates, {variable})
           ->aggregateAliases_,
-      groupBy.allocator(), 1};
+      qec->getAllocator(), 1};
   using namespace ::testing;
   using Gc = GroupConcatAggregationData;
   EXPECT_THAT(lazyGroupBy.aggregationData_.getAggregationDataVariant(0),

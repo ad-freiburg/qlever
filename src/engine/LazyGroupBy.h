@@ -12,6 +12,7 @@
 class LazyGroupBy {
   LocalVocab& localVocab_;
   std::vector<GroupBy::HashMapAliasInformation> aggregateAliases_;
+  const ad_utility::AllocatorWithLimit<Id>& allocator_;
   GroupBy::HashMapAggregationData<0> aggregationData_;
 
  public:
@@ -30,8 +31,7 @@ class LazyGroupBy {
   // into the `resultTable` and reset the aggregation data for the next group.
   void commitRow(IdTable& resultTable,
                  sparqlExpression::EvaluationContext& evaluationContext,
-                 const GroupBy::GroupBlock& currentGroupBlock,
-                 const GroupBy& groupBy);
+                 const GroupBy::GroupBlock& currentGroupBlock);
 
   // Process the next potentially partial group as a block of rows. This
   // modifies the state of `aggregateData_`. Call `commitRow` to write the final
