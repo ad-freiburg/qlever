@@ -242,11 +242,6 @@ Id SpatialJoin::computeDist(const IdTable* resLeft, const IdTable* resRight,
   if (!point1.has_value() || !point2.has_value()) {
     return Id::makeUndefined();
   }
-  auto dist = ad_utility::detail::wktDistImpl(point1.value(), point2.value());
-
-  /*
-  std::cerr << "dist " << dist << std::endl;
-   */
   return Id::makeFromInt(
       ad_utility::detail::wktDistImpl(point1.value(), point2.value()) * 1000);
 }
