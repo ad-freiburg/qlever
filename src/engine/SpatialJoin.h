@@ -86,17 +86,16 @@ class SpatialJoin : public Operation {
 
   // helper function, which computes the distance of two points, where each
   // point comes from a different result table
-  long long computeDist(const IdTable* resLeft, const IdTable* resRight,
-                        size_t rowLeft, size_t rowRight,
-                        ColumnIndex leftPointCol,
-                        ColumnIndex rightPointCol) const;
+  Id computeDist(const IdTable* resLeft, const IdTable* resRight,
+                 size_t rowLeft, size_t rowRight, ColumnIndex leftPointCol,
+                 ColumnIndex rightPointCol) const;
 
   // Helper function, which adds a row, which belongs to the result to the
   // result table. As inputs it uses a row of the left and a row of the right
   // child result table.
   void addResultTableEntry(IdTable* result, const IdTable* resultLeft,
                            const IdTable* resultRight, size_t rowLeft,
-                           size_t rowRight, long long distance) const;
+                           size_t rowRight, Id distance) const;
 
   // the baseline algorithm, which just checks every combination
   Result baselineAlgorithm();

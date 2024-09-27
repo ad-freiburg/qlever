@@ -222,22 +222,33 @@ std::string SpatialJoin::betweenQuotes(std::string extractFrom) const {
 }
 
 // ____________________________________________________________________________
-long long SpatialJoin::computeDist(const IdTable* resLeft,
-                                   const IdTable* resRight, size_t rowLeft,
-                                   size_t rowRight, ColumnIndex leftPointCol,
-                                   ColumnIndex rightPointCol) const {
-  auto getPoint = [&](const IdTable* restable, size_t row, ColumnIndex col) {
-    return betweenQuotes(
-        ExportQueryExecutionTrees::idToStringAndType(
-            getExecutionContext()->getIndex(), restable->at(row, col), {})
-            .value()
-            .first);
+Id SpatialJoin::computeDist(const IdTable* resLeft, const IdTable* resRight,
+                            size_t rowLeft, size_t rowRight,
+                            ColumnIndex leftPointCol,
+                            ColumnIndex rightPointCol) const {
+  auto getPoint = [&](const IdTable* restable, size_t row,
+                      ColumnIndex col) -> std::optional<GeoPoint> {
+    auto id = restable->at(row, col);
+    /*
+    std::cerr << "id is " << id << std::endl;
+     */
+    return id.getDatatype() == Datatype::GeoPoint
+               ? std::optional{id.getGeoPoint()}
+               : std::nullopt;
   };
 
-  std::string point1 = getPoint(resLeft, rowLeft, leftPointCol);
-  std::string point2 = getPoint(resRight, rowRight, rightPointCol);
-  double dist = ad_utility::detail::wktDistImpl(point1, point2);
-  return static_cast<long long>(dist * 1000);  // convert to meters
+  auto point1 = getPoint(resLeft, rowLeft, leftPointCol);
+  auto point2 = getPoint(resRight, rowRight, rightPointCol);
+  if (!point1.has_value() || !point2.has_value()) {
+    return Id::makeUndefined();
+  }
+  auto dist = ad_utility::detail::wktDistImpl(point1.value(), point2.value());
+
+  /*
+  std::cerr << "dist " << dist << std::endl;
+   */
+  return Id::makeFromInt(
+      ad_utility::detail::wktDistImpl(point1.value(), point2.value()) * 1000);
 }
 
 // ____________________________________________________________________________
@@ -245,7 +256,7 @@ void SpatialJoin::addResultTableEntry(IdTable* result,
                                       const IdTable* resultLeft,
                                       const IdTable* resultRight,
                                       size_t rowLeft, size_t rowRight,
-                                      long long distance) const {
+                                      Id distance) const {
   // this lambda function copies elements from copyFrom
   // into the table res. It copies them into the row
   // rowIndRes and column column colIndRes. It returns the column number
@@ -269,7 +280,7 @@ void SpatialJoin::addResultTableEntry(IdTable* result,
   rescol = addColumns(result, resultRight, resrow, rescol, rowRight);
 
   if (addDistToResult_) {
-    result->at(resrow, rescol) = ValueId::makeFromInt(distance);
+    result->at(resrow, rescol) = distance;
     // rescol isn't used after that in this function, but future updates,
     // which add additional columns, would need to remember to increase
     // rescol at this place otherwise. If they forget to do this, the
@@ -305,9 +316,9 @@ Result SpatialJoin::baselineAlgorithm() {
   // objects
   for (size_t rowLeft = 0; rowLeft < resLeft->size(); rowLeft++) {
     for (size_t rowRight = 0; rowRight < resRight->size(); rowRight++) {
-      long long dist = computeDist(resLeft, resRight, rowLeft, rowRight,
-                                   leftJoinCol, rightJoinCol);
-      if (dist <= maxDist_) {
+      Id dist = computeDist(resLeft, resRight, rowLeft, rowRight, leftJoinCol,
+                            rightJoinCol);
+      if (dist.getDatatype() == Datatype::Int && dist.getInt() <= maxDist_) {
         addResultTableEntry(&result, resLeft, resRight, rowLeft, rowRight,
                             dist);
       }
