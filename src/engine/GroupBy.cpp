@@ -581,7 +581,8 @@ std::optional<IdTable> GroupBy::computeGroupByForSingleIndexScan() const {
     return std::nullopt;
   }
 
-  if (indexScan->getResultWidth() <= 1 || !_groupByVariables.empty()) {
+  if (indexScan->getResultWidth() <= 1 ||
+      indexScan->graphsToFilter().has_value() || !_groupByVariables.empty()) {
     return std::nullopt;
   }
 
@@ -625,7 +626,8 @@ std::optional<IdTable> GroupBy::computeGroupByObjectWithCount() const {
   // The child must be an `IndexScan` with exactly two variables.
   auto indexScan =
       std::dynamic_pointer_cast<IndexScan>(_subtree->getRootOperation());
-  if (!indexScan || indexScan->numVariables() != 2) {
+  if (!indexScan || indexScan->graphsToFilter().has_value() ||
+      indexScan->numVariables() != 2) {
     return std::nullopt;
   }
   const auto& permutedTriple = indexScan->getPermutedTriple();
@@ -742,22 +744,23 @@ std::optional<Permutation::Enum> GroupBy::getPermutationForThreeVariableTriple(
   auto indexScan =
       std::dynamic_pointer_cast<const IndexScan>(tree.getRootOperation());
 
-  if (!indexScan || indexScan->getResultWidth() != 3) {
+  if (!indexScan || indexScan->graphsToFilter().has_value() ||
+      indexScan->getResultWidth() != 3) {
     return std::nullopt;
   }
   {
     auto v = variableThatMustBeContained;
-    if (v != indexScan->getSubject() && v != indexScan->getPredicate() &&
-        v != indexScan->getObject()) {
+    if (v != indexScan->subject() && v != indexScan->predicate() &&
+        v != indexScan->object()) {
       return std::nullopt;
     }
   }
 
-  if (variableByWhichToSort == indexScan->getSubject()) {
+  if (variableByWhichToSort == indexScan->subject()) {
     return Permutation::SPO;
-  } else if (variableByWhichToSort == indexScan->getPredicate()) {
+  } else if (variableByWhichToSort == indexScan->predicate()) {
     return Permutation::POS;
-  } else if (variableByWhichToSort == indexScan->getObject()) {
+  } else if (variableByWhichToSort == indexScan->object()) {
     return Permutation::OSP;
   } else {
     return std::nullopt;

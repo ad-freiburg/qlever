@@ -33,6 +33,8 @@
 #include "engine/TransitivePathBase.h"
 #include "engine/Union.h"
 #include "engine/Values.h"
+#include "engine/sparqlExpressions/LiteralExpression.h"
+#include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "parser/Alias.h"
 #include "parser/SparqlParserHelpers.h"
 
@@ -78,11 +80,26 @@ QueryPlanner::QueryPlanner(QueryExecutionContext* qec,
 
 // _____________________________________________________________________________
 std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createExecutionTrees(
-    ParsedQuery& pq) {
+    ParsedQuery& pq, bool isSubquery) {
+  // Store the dataset clause (FROM and FROM NAMED clauses), s.t. we have access
+  // to them down the callstack. Subqueries can't have their own dataset clause,
+  // but inherit it from the parent query.
+  auto datasetClauseIsEmpty = [](const auto& datasetClause) {
+    return !datasetClause.defaultGraphs_.has_value() &&
+           !datasetClause.namedGraphs_.has_value();
+  };
+  if (!isSubquery) {
+    AD_CORRECTNESS_CHECK(datasetClauseIsEmpty(activeDatasetClauses_));
+    activeDatasetClauses_ = pq.datasetClauses_;
+  } else {
+    AD_CORRECTNESS_CHECK(datasetClauseIsEmpty(pq.datasetClauses_));
+  }
+
   // Look for ql:has-predicate to determine if the pattern trick should be used.
   // If the pattern trick is used, the ql:has-predicate triple will be removed
   // from the list of where clause triples. Otherwise, the ql:has-predicate
   // triple will be handled using a `HasPredicateScan`.
+
   using checkUsePatternTrick::PatternTrickTuple;
   const auto patternTrickTuple =
       _enablePatternTrick ? checkUsePatternTrick::checkUsePatternTrick(&pq)
@@ -166,13 +183,22 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createExecutionTrees(
   }
 
   checkCancellation();
+
+  const auto& fromNamed = pq.datasetClauses_.namedGraphs_;
+  if (fromNamed.has_value()) {
+    AD_CORRECTNESS_CHECK(!fromNamed.value().empty());
+    throw std::runtime_error(
+        "FROM NAMED clauses are not yet supported by QLever");
+  }
+
   return lastRow;
 }
 
 // _____________________________________________________________________
-QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) {
+QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq,
+                                                     bool isSubquery) {
   try {
-    auto lastRow = createExecutionTrees(pq);
+    auto lastRow = createExecutionTrees(pq, isSubquery);
     auto minInd = findCheapestExecutionTree(lastRow);
     LOG(DEBUG) << "Done creating execution plan.\n";
     return *lastRow[minInd]._qet;
@@ -662,6 +688,7 @@ auto QueryPlanner::seedWithScansAndText(
     }
     idShift++;
   }
+
   for (size_t i = 0; i < tg._nodeMap.size(); ++i) {
     const TripleGraph::Node& node = *tg._nodeMap.find(i)->second;
 
@@ -696,18 +723,18 @@ auto QueryPlanner::seedWithScansAndText(
       continue;
     }
 
-    auto addIndexScan = [this, pushPlan, node](
-                            Permutation::Enum permutation,
-                            std::optional<SparqlTripleSimple> triple =
-                                std::nullopt) {
-      if (!triple.has_value()) {
-        pushPlan(makeSubtreePlan<IndexScan>(_qec, permutation,
-                                            node.triple_.getSimple()));
-      } else {
-        pushPlan(makeSubtreePlan<IndexScan>(_qec, permutation,
-                                            std::move(triple.value())));
-      }
-    };
+    auto addIndexScan =
+        [this, pushPlan, node,
+         &relevantGraphs = activeDatasetClauses_.defaultGraphs_](
+            Permutation::Enum permutation,
+            std::optional<SparqlTripleSimple> triple = std::nullopt) {
+          if (!triple.has_value()) {
+            triple = node.triple_.getSimple();
+          }
+
+          pushPlan(makeSubtreePlan<IndexScan>(
+              _qec, permutation, std::move(triple.value()), relevantGraphs));
+        };
 
     auto addFilter = [&filters = result.filters_](SparqlFilter filter) {
       filters.push_back(std::move(filter));
@@ -2014,6 +2041,18 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
   using SubtreePlan = QueryPlanner::SubtreePlan;
   if constexpr (std::is_same_v<T, p::Optional> ||
                 std::is_same_v<T, p::GroupGraphPattern>) {
+    // If this is a `GRAPH <graph> {...}` clause, then we have to overwrite the
+    // default graphs while planning this clause, and reset them when leaving
+    // the clause.
+    std::optional<ParsedQuery::DatasetClauses> datasetBackup;
+    if constexpr (std::is_same_v<T, p::GroupGraphPattern>) {
+      if (arg._graphIri.has_value()) {
+        datasetBackup = planner_.activeDatasetClauses_;
+        planner_.activeDatasetClauses_.defaultGraphs_.emplace(
+            {arg._graphIri.value()});
+      }
+    }
+
     auto candidates = planner_.optimize(&arg._child);
     if constexpr (std::is_same_v<T, p::Optional>) {
       for (auto& c : candidates) {
@@ -2021,6 +2060,9 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
       }
     }
     visitGroupOptionalOrMinus(std::move(candidates));
+    if (datasetBackup.has_value()) {
+      planner_.activeDatasetClauses_ = std::move(datasetBackup.value());
+    }
   } else if constexpr (std::is_same_v<T, p::Union>) {
     visitUnion(arg);
   } else if constexpr (std::is_same_v<T, p::Subquery>) {
@@ -2173,7 +2215,7 @@ void QueryPlanner::GraphPatternPlanner::visitSubquery(
 
   // For a subquery, make sure that one optimal result for each ordering
   // of the result (by a single column) is contained.
-  auto candidatesForSubquery = planner_.createExecutionTrees(subquery);
+  auto candidatesForSubquery = planner_.createExecutionTrees(subquery, true);
   // Make sure that variables that are not selected by the subquery are
   // not visible.
   auto setSelectedVariables = [&](SubtreePlan& plan) {

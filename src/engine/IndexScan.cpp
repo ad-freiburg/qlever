@@ -80,6 +80,16 @@ string IndexScan::getCacheKeyImpl() const {
     os << " Additional Columns: ";
     os << absl::StrJoin(additionalColumns(), " ");
   }
+  if (graphsToFilter_.has_value()) {
+    // The graphs are stored as a hash set, but we need a deterministic order.
+    std::vector<std::string> graphIdVec;
+    std::ranges::transform(graphsToFilter_.value(),
+                           std::back_inserter(graphIdVec),
+                           &TripleComponent::toRdfLiteral);
+    std::ranges::sort(graphIdVec);
+    os << "\nFiltered by Graphs:";
+    os << absl::StrJoin(graphIdVec, " ");
+  }
   return std::move(os).str();
 }
 
@@ -151,7 +161,7 @@ ProtoResult IndexScan::computeResult(bool requestLaziness) {
   using enum Permutation::Enum;
   idTable.setNumColumns(numVariables_);
   const auto& index = _executionContext->getIndex();
-  if (numVariables_ < 3) {
+  if (numVariables_ < 3 || !additionalColumns().empty()) {
     idTable = index.scan(getScanSpecification(), permutation_,
                          additionalColumns(), cancellationHandle_, getLimit());
   } else {
