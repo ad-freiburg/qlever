@@ -15,6 +15,7 @@
 
 #include "absl/strings/str_cat.h"
 #include "global/Constants.h"
+#include "global/SpecialIds.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "parser/ParallelBuffer.h"
 #include "parser/Tokenizer.h"

@@ -542,6 +542,38 @@ TEST(ExportQueryExecutionTrees, Dates) {
 }
 
 // ____________________________________________________________________________
+TEST(ExportQueryExecutionTrees, GeoPoints) {
+  std::string kg =
+      "<s> <p> "
+      "\"POINT(50.0 "
+      "50.0)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>.";
+  std::string query = "SELECT ?o WHERE {?s ?p ?o} ORDER BY ?o";
+  std::string expectedXml = makeXMLHeader({"o"}) +
+                            R"(
+  <result>
+    <binding name="o"><literal datatype="http://www.opengis.net/ont/geosparql#wktLiteral">POINT(50.000000 50.000000)</literal></binding>
+  </result>)" + xmlTrailer;
+  TestCaseSelectQuery testCase{
+      kg, query, 1,
+      // TSV
+      "?o\n"
+      "POINT(50.000000 50.000000)\n",
+      // should be
+      // "\"POINT(50.000000 50.000000)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>\n",
+      // but that is a bug in the TSV export for another PR. Note: the duplicate
+      // quotes are due to the escaping for CSV.
+      "o\n"
+      "POINT(50.000000 50.000000)\n",
+      makeExpectedQLeverJSON(
+          {"\"POINT(50.000000 50.000000)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>"s}),
+      makeExpectedSparqlJSON(
+          {makeJSONBinding("http://www.opengis.net/ont/geosparql#wktLiteral",
+                           "literal", "POINT(50.000000 50.000000)")}),
+      expectedXml};
+  runSelectQueryTestCase(testCase);
+}
+
+// ____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, Entities) {
   std::string kg = "PREFIX qlever: <http://qlever.com/> \n <s> <p> qlever:o";
   std::string query = "SELECT ?o WHERE {?s ?p ?o} ORDER BY ?o";

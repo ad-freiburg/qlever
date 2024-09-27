@@ -45,8 +45,9 @@ class TripleComponent {
 
  private:
   // The underlying variant type.
-  using Variant = std::variant<Id, std::string, double, int64_t, bool, UNDEF,
-                               Variable, Literal, Iri, DateYearOrDuration>;
+  using Variant =
+      std::variant<Id, std::string, double, int64_t, bool, UNDEF, Variable,
+                   Literal, Iri, DateYearOrDuration, GeoPoint>;
   Variant _variant;
 
  public:
@@ -189,19 +190,17 @@ class TripleComponent {
   [[nodiscard]] std::optional<Id> toValueId(
       const Vocabulary& vocabulary) const {
     AD_CONTRACT_CHECK(!isString());
-    if (isLiteral() || isIri()) {
-      VocabIndex idx;
-      const std::string& content = isLiteral()
-                                       ? getLiteral().toStringRepresentation()
-                                       : getIri().toStringRepresentation();
-      if (vocabulary.getId(content, &idx)) {
-        return Id::makeFromVocabIndex(idx);
-      } else {
-        return std::nullopt;
-      }
-    } else {
-      return toValueIdIfNotString();
+    std::optional<Id> vid = toValueIdIfNotString();
+    if (vid != std::nullopt) return vid;
+    AD_CORRECTNESS_CHECK(isLiteral() || isIri());
+    VocabIndex idx;
+    const std::string& content = isLiteral()
+                                     ? getLiteral().toStringRepresentation()
+                                     : getIri().toStringRepresentation();
+    if (vocabulary.getId(content, &idx)) {
+      return Id::makeFromVocabIndex(idx);
     }
+    return std::nullopt;
   }
 
   // Same as the above, but also consider the given local vocabulary. If the
