@@ -190,10 +190,10 @@ ProtoResult Service::computeResultImpl([[maybe_unused]] bool requestLaziness) {
                                        localVocabPtr, !requestLaziness);
 
   return requestLaziness
-             ? (ProtoResult){std::move(generator), resultSortedOn(),
-                             std::move(localVocabPtr)}
-             : (ProtoResult){cppcoro::getSingleElement(generator),
-                             resultSortedOn(), std::move(*localVocabPtr)};
+             ? ProtoResult{std::move(generator), resultSortedOn(),
+                           std::move(localVocabPtr)}
+             : ProtoResult{cppcoro::getSingleElement(std::move(generator)),
+                           resultSortedOn(), std::move(*localVocabPtr)};
 }
 
 template <size_t I>

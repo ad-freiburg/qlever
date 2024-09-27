@@ -273,7 +273,7 @@ fmap(FUNC func, generator<T> source) {
 
 // Get the first element of a generator and verify that it's the only one.
 template <typename T, typename Details>
-T getSingleElement(generator<T, Details>& g) {
+T getSingleElement(generator<T, Details> g) {
   auto it = g.begin();
   AD_CORRECTNESS_CHECK(it != g.end());
   T t = std::move(*it);

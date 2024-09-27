@@ -391,10 +391,10 @@ ProtoResult GroupBy::computeResult(bool requestLaziness) {
         std::move(groupByCols), localVocabPointer, !requestLaziness);
 
     return requestLaziness
-               ? (ProtoResult){std::move(generator), resultSortedOn(),
-                               std::move(localVocabPointer)}
-               : (ProtoResult){cppcoro::getSingleElement(generator),
-                               resultSortedOn(), std::move(*localVocabPointer)};
+               ? ProtoResult{std::move(generator), resultSortedOn(),
+                             std::move(localVocabPointer)}
+               : ProtoResult{cppcoro::getSingleElement(std::move(generator)),
+                             resultSortedOn(), std::move(*localVocabPointer)};
   }
 
   AD_CORRECTNESS_CHECK(subresult->idTable().numColumns() == inWidth);
