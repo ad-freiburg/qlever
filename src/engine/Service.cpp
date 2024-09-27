@@ -182,21 +182,18 @@ ProtoResult Service::computeResultImpl([[maybe_unused]] bool requestLaziness) {
   auto body = ad_utility::LazyJsonParser::parse(std::move(response.body_),
                                                 {"results", "bindings"});
 
+  // Note: The `body`-generator also keeps the complete response connection
+  // alive, so we have no lifetime issue here(see `HttpRequest::send` for
+  // details).
   auto localVocabPtr = std::make_shared<LocalVocab>();
   auto generator = computeResultLazily(expVariableKeys, std::move(body),
                                        localVocabPtr, !requestLaziness);
 
-  if (requestLaziness) {
-    return {std::move(generator), resultSortedOn(), std::move(localVocabPtr)};
-  }
-
-  // For the non-lazy case the generator is supposed to yield exactly one
-  // idTable.
-  auto iterator = generator.begin();
-  AD_CORRECTNESS_CHECK(iterator != generator.end());
-  IdTable idTable = std::move(*iterator);
-  AD_CORRECTNESS_CHECK(++iterator == generator.end());
-  return {std::move(idTable), resultSortedOn(), std::move(*localVocabPtr)};
+  return requestLaziness
+             ? (ProtoResult){std::move(generator), resultSortedOn(),
+                             std::move(localVocabPtr)}
+             : (ProtoResult){cppcoro::getSingleElement(generator),
+                             resultSortedOn(), std::move(*localVocabPtr)};
 }
 
 template <size_t I>
