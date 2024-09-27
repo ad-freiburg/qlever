@@ -76,7 +76,10 @@ struct Values {
 /// `GraphPattern`.
 struct GroupGraphPattern {
   GraphPattern _child;
-  std::optional<TripleComponent::Iri> _graphIri = std::nullopt;
+  // If not `nullopt`, then this group is a `GRAPH` clause, either with a fixed
+  // graph IRI, or with a variable.
+  std::variant<std::nullopt_t, TripleComponent::Iri, Variable> graphSpec_ =
+      std::nullopt;
 };
 
 /// An `OPTIONAL` clause.

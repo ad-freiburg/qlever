@@ -47,7 +47,11 @@ class GraphPattern {
                          const std::string& languageInQuotes);
 
   bool _optional;
-  std::optional<TripleComponent::Iri> graphIri_;
+  // If not `nullopt`, then this group is a `GRAPH` clause, either with a fixed
+  // graph IRI, or with a variable.
+  // TODO<joka921> is this even used?
+  std::variant<std::nullopt_t, TripleComponent::Iri, Variable> graphIri_ =
+      std::nullopt;
 
   // Filters always apply to the complete GraphPattern, no matter where
   // they appear. For VALUES and Triples, the order matters, so they
