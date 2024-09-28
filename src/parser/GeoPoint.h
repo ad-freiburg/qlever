@@ -12,24 +12,6 @@
 #include "util/BitUtils.h"
 #include "util/SourceLocation.h"
 
-/// Exception type for construction of GeoPoints that have invalid values
-struct CoordinateOutOfRangeException : public std::exception {
- private:
-  std::string errorMessage_;
-
- public:
-  explicit CoordinateOutOfRangeException(
-      double value, bool isLat,
-      ad_utility::source_location s = ad_utility::source_location::current()) {
-    errorMessage_ =
-        absl::StrCat(s.file_name(), ", line ", s.line(), ": The given value ",
-                     value, " is out of range for ",
-                     isLat ? "latitude" : "longitude", " coordinates.");
-  }
-
-  const char* what() const noexcept override { return errorMessage_.c_str(); }
-};
-
 /// A GeoPoint represents a pair of geographical coordinates on earth consisting
 /// of latitude (lat) and longitude (lng).
 class GeoPoint {

@@ -19,34 +19,43 @@ TEST(GeoPoint, GeoPoint) {
   ASSERT_DOUBLE_EQ(g.getLat(), 70.5);
   ASSERT_DOUBLE_EQ(g.getLng(), 130.2);
 
-  ASSERT_THROW(GeoPoint(-99.5, 1.0), CoordinateOutOfRangeException);
-  ASSERT_THROW(GeoPoint(99.5, 1.0), CoordinateOutOfRangeException);
-  ASSERT_THROW(GeoPoint(9.5, -185.0), CoordinateOutOfRangeException);
-  ASSERT_THROW(GeoPoint(9.5, 185.0), CoordinateOutOfRangeException);
-  ASSERT_THROW(GeoPoint(0, 185.0), CoordinateOutOfRangeException);
-  ASSERT_THROW(GeoPoint(90.1, 180.0), CoordinateOutOfRangeException);
-  ASSERT_THROW(GeoPoint(90.1, 180.0), CoordinateOutOfRangeException);
-  ASSERT_THROW(GeoPoint(ad_utility::detail::invalidCoordinate, 20.0),
-               CoordinateOutOfRangeException);
-  ASSERT_THROW(GeoPoint(20.0, ad_utility::detail::invalidCoordinate),
-               CoordinateOutOfRangeException);
-  ASSERT_THROW(GeoPoint(ad_utility::detail::invalidCoordinate,
-                        ad_utility::detail::invalidCoordinate),
-               CoordinateOutOfRangeException);
-  AD_EXPECT_THROW_WITH_MESSAGE(GeoPoint(100, 200),
-                               ::testing::ContainsRegex("out of range"));
-
-  ASSERT_NO_THROW(GeoPoint(0, 180));
-  ASSERT_NO_THROW(GeoPoint(0, -180));
-  ASSERT_NO_THROW(GeoPoint(90, 0));
-  ASSERT_NO_THROW(GeoPoint(90, 180));
-  ASSERT_NO_THROW(GeoPoint(90, -180));
-  ASSERT_NO_THROW(GeoPoint(-90, 0));
-  ASSERT_NO_THROW(GeoPoint(-90, 180));
-  ASSERT_NO_THROW(GeoPoint(-90, -180));
-  ASSERT_NO_THROW(GeoPoint(0, 1.0));
-  ASSERT_NO_THROW(GeoPoint(1.0, -180.0));
-  ASSERT_NO_THROW(GeoPoint(0, 0));
+  // Check that we get warnings only when either the latitude or the longitude
+  // is out of range.
+  auto isOutOfRangeWarning =
+      ::testing::MatchesRegex(".*WARN.*out of range, clamped to POINT.*");
+  auto invalidCoordinate = ad_utility::detail::invalidCoordinate;
+  auto capturedOutputForGeoPoint = [](double lat, double lng) -> std::string {
+    testing::internal::CaptureStdout();
+    GeoPoint(lat, lng);
+    return testing::internal::GetCapturedStdout();
+  };
+  EXPECT_THAT(capturedOutputForGeoPoint(-99.5, 1.0), isOutOfRangeWarning);
+  EXPECT_THAT(capturedOutputForGeoPoint(99.5, 1.0), isOutOfRangeWarning);
+  EXPECT_THAT(capturedOutputForGeoPoint(9.5, -185.0), isOutOfRangeWarning);
+  EXPECT_THAT(capturedOutputForGeoPoint(9.5, 185.0), isOutOfRangeWarning);
+  EXPECT_THAT(capturedOutputForGeoPoint(0, 185.0), isOutOfRangeWarning);
+  EXPECT_THAT(capturedOutputForGeoPoint(90.1, 180.0), isOutOfRangeWarning);
+  EXPECT_THAT(capturedOutputForGeoPoint(90.1, -180.0), isOutOfRangeWarning);
+  EXPECT_THAT(capturedOutputForGeoPoint(-90.1, 180.0), isOutOfRangeWarning);
+  EXPECT_THAT(capturedOutputForGeoPoint(-90.1, -180.0), isOutOfRangeWarning);
+  EXPECT_THAT(capturedOutputForGeoPoint(invalidCoordinate, 20.0),
+              isOutOfRangeWarning);
+  EXPECT_THAT(capturedOutputForGeoPoint(20.0, invalidCoordinate),
+              isOutOfRangeWarning);
+  EXPECT_THAT(capturedOutputForGeoPoint(invalidCoordinate, invalidCoordinate),
+              isOutOfRangeWarning);
+  ASSERT_TRUE(capturedOutputForGeoPoint(0, 0).empty());
+  ASSERT_TRUE(capturedOutputForGeoPoint(0, 180).empty());
+  ASSERT_TRUE(capturedOutputForGeoPoint(0, -180).empty());
+  ASSERT_TRUE(capturedOutputForGeoPoint(90, 0).empty());
+  ASSERT_TRUE(capturedOutputForGeoPoint(90, 180).empty());
+  ASSERT_TRUE(capturedOutputForGeoPoint(90, -180).empty());
+  ASSERT_TRUE(capturedOutputForGeoPoint(-90, 0).empty());
+  ASSERT_TRUE(capturedOutputForGeoPoint(-90, 180).empty());
+  ASSERT_TRUE(capturedOutputForGeoPoint(-90, -180).empty());
+  ASSERT_TRUE(capturedOutputForGeoPoint(0, 1.0).empty());
+  ASSERT_TRUE(capturedOutputForGeoPoint(1.0, -180.0).empty());
+  ASSERT_TRUE(capturedOutputForGeoPoint(0, 0).empty());
 
   g = GeoPoint(0, 0);
   ASSERT_DOUBLE_EQ(g.getLat(), 0);

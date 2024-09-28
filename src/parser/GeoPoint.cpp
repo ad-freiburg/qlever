@@ -13,12 +13,14 @@
 #include "util/GeoSparqlHelpers.h"
 
 // _____________________________________________________________________________
-GeoPoint::GeoPoint(double lat, double lng) : lat_{lat}, lng_{lng} {
-  // Ensure valid lat and lng values
-  if (lat < -COORDINATE_LAT_MAX || lat > COORDINATE_LAT_MAX || std::isnan(lat))
-    throw CoordinateOutOfRangeException(lat, true);
-  if (lng < -COORDINATE_LNG_MAX || lng > COORDINATE_LNG_MAX || std::isnan(lng))
-    throw CoordinateOutOfRangeException(lng, false);
+GeoPoint::GeoPoint(double lat, double lng) {
+  // Clamp latitudes and longitudes to valid ranges.
+  lat_ = std::clamp(lat, -COORDINATE_LAT_MAX, COORDINATE_LAT_MAX);
+  lng_ = std::clamp(lng, -COORDINATE_LNG_MAX, COORDINATE_LNG_MAX);
+  if (lat_ != lat || lng_ != lng) {
+    LOG(WARN) << "POINT(" << lng << " " << lat << ") out of range, "
+              << "clamped to POINT(" << lng_ << " " << lat_ << ")" << std::endl;
+  }
 };
 
 // _____________________________________________________________________________
