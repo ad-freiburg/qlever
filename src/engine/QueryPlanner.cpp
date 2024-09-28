@@ -27,6 +27,7 @@
 #include "engine/OrderBy.h"
 #include "engine/Service.h"
 #include "engine/Sort.h"
+#include "engine/SpatialJoin.h"
 #include "engine/TextIndexScanForEntity.h"
 #include "engine/TextIndexScanForWord.h"
 #include "engine/TextLimit.h"
@@ -716,6 +717,14 @@ auto QueryPlanner::seedWithScansAndText(
           "and POS permutations were loaded. Rerun the server without "
           "the option --only-pso-and-pos-permutations and if "
           "necessary also rebuild the index.");
+    }
+
+    const auto& input = node.triple_.p_._iri;
+    if (input.starts_with(MAX_DIST_IN_METERS) &&
+        input[input.size() - 1] == '>') {
+      pushPlan(makeSubtreePlan<SpatialJoin>(_qec, node.triple_, std::nullopt,
+                                            std::nullopt));
+      continue;
     }
 
     if (node.triple_.p_._iri == HAS_PREDICATE_PREDICATE) {
@@ -1647,6 +1656,17 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
     return candidates;
   }
 
+  // if one of the inputs is the spatial join and the other input is compatible
+  // with the SpatialJoin, add it as a child to the spatialJoin. As unbound
+  // SpatialJoin operations are incompatible with normal join operations, we
+  // return immediately instead of creating a normal join below as well.
+  // Note, that this if statement should be evaluated first, such that no other
+  // join options get considered, when one of the candidates is a SpatialJoin.
+  if (auto opt = createSpatialJoin(a, b, jcs)) {
+    candidates.push_back(std::move(opt.value()));
+    return candidates;
+  }
+
   if (a.type == SubtreePlan::MINUS) {
     AD_THROW(
         "MINUS can only appear after"
@@ -1725,6 +1745,50 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
   candidates.push_back(std::move(plan));
 
   return candidates;
+}
+
+// _____________________________________________________________________________
+auto QueryPlanner::createSpatialJoin(
+    const SubtreePlan& a, const SubtreePlan& b,
+    const std::vector<std::array<ColumnIndex, 2>>& jcs)
+    -> std::optional<SubtreePlan> {
+  auto aIsSpatialJoin =
+      std::dynamic_pointer_cast<const SpatialJoin>(a._qet->getRootOperation());
+  auto bIsSpatialJoin =
+      std::dynamic_pointer_cast<const SpatialJoin>(b._qet->getRootOperation());
+
+  auto aIs = static_cast<bool>(aIsSpatialJoin);
+  auto bIs = static_cast<bool>(bIsSpatialJoin);
+
+  // Ecactly one of the inputs must be a SpatialJoin.
+  if ((aIs && bIs) || (!aIs && !bIs)) {
+    return std::nullopt;
+  }
+
+  const SubtreePlan& spatialSubtreePlan = aIsSpatialJoin ? a : b;
+  const SubtreePlan& otherSubtreePlan = aIsSpatialJoin ? b : a;
+
+  std::shared_ptr<Operation> op = spatialSubtreePlan._qet->getRootOperation();
+  auto spatialJoin = static_cast<SpatialJoin*>(op.get());
+
+  if (spatialJoin->isConstructed()) {
+    return std::nullopt;
+  }
+
+  if (jcs.size() > 1) {
+    AD_THROW(
+        "Currently, if both sides of a SpatialJoin are variables, then the"
+        "SpatialJoin must be the only connection between these variables");
+  }
+  ColumnIndex ind = aIsSpatialJoin ? jcs[0][1] : jcs[0][0];
+  const Variable& var =
+      otherSubtreePlan._qet->getVariableAndInfoByColumnIndex(ind).first;
+
+  auto newSpatialJoin = spatialJoin->addChild(otherSubtreePlan._qet, var);
+
+  SubtreePlan plan = makeSubtreePlan<SpatialJoin>(std::move(newSpatialJoin));
+  mergeSubtreePlanIds(plan, a, b);
+  return plan;
 }
 
 // __________________________________________________________________________________________________________________

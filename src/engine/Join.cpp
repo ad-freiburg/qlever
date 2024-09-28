@@ -302,7 +302,6 @@ void Join::computeSizeEstimateAndMultiplicities() {
     }
     _multiplicities.emplace_back(m);
   }
-
   assert(_multiplicities.size() == getResultWidth());
 }
 

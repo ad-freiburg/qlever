@@ -23,6 +23,7 @@
 #include "engine/QueryPlanner.h"
 #include "engine/Service.h"
 #include "engine/Sort.h"
+#include "engine/SpatialJoin.h"
 #include "engine/TextIndexScanForEntity.h"
 #include "engine/TextIndexScanForWord.h"
 #include "engine/TextLimit.h"
@@ -274,6 +275,16 @@ inline auto TransitivePath =
                             TransitivePathSideMatcher(left)),
                 AD_PROPERTY(TransitivePathBase, getRight,
                             TransitivePathSideMatcher(right))));
+    };
+
+// Match a SpatialJoin operation
+inline auto SpatialJoin =
+    [](long long maxDist,
+       const std::same_as<QetMatcher> auto&... childMatchers) {
+      return RootOperation<::SpatialJoin>(
+          AllOf(Property("getChildren", &Operation::getChildren,
+                         ElementsAre(Pointee(childMatchers)...)),
+                AD_PROPERTY(SpatialJoin, getMaxDist, Eq(maxDist))));
     };
 
 // Match a sort operation. Currently, this is only required by the binary search

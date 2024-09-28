@@ -8,6 +8,7 @@
 #pragma once
 
 #include <chrono>
+#include <ctre.hpp>
 #include <limits>
 #include <stdexcept>
 #include <string>
@@ -95,6 +96,15 @@ constexpr inline std::string_view MATCHINGWORD_VARIABLE_PREFIX =
 
 constexpr inline std::string_view LANGUAGE_PREDICATE =
     makeInternalIriConst<"langtag">();
+
+// this predicate is the identifier for the SpatialJoin class. It joins the two
+// objects, if their distance is smaller or equal to the maximum distance, which
+// needs to be given in the predicate as well. The syntax for the predicate
+// needs to be like this: <max-distance-in-meters:XXXX>, where XXXX needs to be
+// replaced by an integer number.
+static const std::string MAX_DIST_IN_METERS = "<max-distance-in-meters:";
+static constexpr auto MAX_DIST_IN_METERS_REGEX =
+    ctll::fixed_string{"<max-distance-in-meters:[0-9]+>"};
 
 // TODO<joka921> Move them to their own file, make them strings, remove
 // duplications, etc.
