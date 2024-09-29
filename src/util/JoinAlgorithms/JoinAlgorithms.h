@@ -775,7 +775,7 @@ struct BlockZipperJoinImpl {
       return side.projection_(side.currentBlocks_.front().back());
     };
     return std::min(getFirst(leftSide_), getFirst(rightSide_), lessThan_);
-  };
+  }
 
   // Fill `side.currentBlocks_` with blocks from the range `[side.it_,
   // side.end_)` and advance `side.it_` for each read buffer until all elements
@@ -839,7 +839,7 @@ struct BlockZipperJoinImpl {
     } else {
       return BlockStatus::allFilled;
     }
-  };
+  }
 
   // Remove all elements from `blocks` (either `leftSide_.currentBlocks_` or
   // `rightSide_.currentBlocks`) s.t. only elements `> lastProcessedElement`
@@ -864,7 +864,7 @@ struct BlockZipperJoinImpl {
     if (blocks.at(0).empty()) {
       blocks.clear();
     }
-  };
+  }
 
   // For one of the inputs (`leftSide_.currentBlocks_` or
   // `rightSide_.currentBlocks_`) obtain a tuple of the following elements:
@@ -876,7 +876,7 @@ struct BlockZipperJoinImpl {
     const auto& first = currentBlocks.at(0);
     auto it = std::ranges::lower_bound(first.subrange(), currentEl, lessThan_);
     return std::tuple{std::ref(first.fullBlock()), first.subrange(), it};
-  };
+  }
 
   // Call `compatibleRowAction` for all pairs of elements in the Cartesian
   // product of the blocks in `blocksLeft` and `blocksRight`.
@@ -970,7 +970,7 @@ struct BlockZipperJoinImpl {
                           std::back_inserter(rightSide_.undefBlocks_));
       }
     }
-  };
+  }
 
   // Return a vector of subranges of all elements in `blocks` that are equal to
   // `currentEl`. Effectively, these subranges cover all the blocks completely
@@ -985,7 +985,7 @@ struct BlockZipperJoinImpl {
     last.setSubrange(
         std::ranges::equal_range(last.subrange(), currentEl, lessThan_));
     return result;
-  };
+  }
 
   // Join the first block in `currentBlocksLeft` with the first block in
   // `currentBlocksRight`, but ignore all elements that are `>= currentEl`
@@ -1087,7 +1087,7 @@ struct BlockZipperJoinImpl {
     // Remove the joined elements.
     currentBlocksLeft.at(0).setSubrange(currentElItL, subrangeLeft.end());
     currentBlocksRight.at(0).setSubrange(currentElItR, subrangeRight.end());
-  };
+  }
 
   // If the `targetBuffer` is empty, read the next nonempty block from `[it,
   // end)` if there is one.
@@ -1103,7 +1103,7 @@ struct BlockZipperJoinImpl {
       }
       ++it;
     }
-  };
+  }
 
   // Fill both buffers (left and right) until they contain at least one block.
   // Then recompute the `currentEl()` and keep on filling the buffers until at
