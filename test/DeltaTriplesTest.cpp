@@ -16,7 +16,7 @@
 #include "parser/RdfParser.h"
 
 namespace Matchers {
-inline auto InAllPermutations = [](auto InnerMatcher) {
+auto InAllPermutations = [](auto InnerMatcher) {
   return testing::AllOfArray(ad_utility::transform(
       Permutation::ALL, [&InnerMatcher](const Permutation::Enum& perm) {
         return testing::ResultOf(
@@ -28,19 +28,17 @@ inline auto InAllPermutations = [](auto InnerMatcher) {
             InnerMatcher);
       }));
 };
-inline auto NumTriplesInAllPermutations =
+auto NumTriplesInAllPermutations =
     [](size_t expectedNumTriples) -> testing::Matcher<const DeltaTriples&> {
-  return InAllPermutations(AD_PROPERTY(LocatedTriplesPerBlock,
-                                       LocatedTriplesPerBlock::numTriples,
+  return InAllPermutations(AD_PROPERTY(LocatedTriplesPerBlock, numTriples,
                                        testing::Eq(expectedNumTriples)));
 };
-inline auto NumTriples =
+auto NumTriples =
     [](size_t inserted, size_t deleted,
        size_t inAllPermutations) -> testing::Matcher<const DeltaTriples&> {
   return testing::AllOf(
-      AD_PROPERTY(DeltaTriples, DeltaTriples::numInserted,
-                  testing::Eq(inserted)),
-      AD_PROPERTY(DeltaTriples, DeltaTriples::numDeleted, testing::Eq(deleted)),
+      AD_PROPERTY(DeltaTriples, numInserted, testing::Eq(inserted)),
+      AD_PROPERTY(DeltaTriples, numDeleted, testing::Eq(deleted)),
       NumTriplesInAllPermutations(inAllPermutations));
 };
 }  // namespace Matchers
@@ -72,9 +70,8 @@ class DeltaTriplesTest : public ::testing::Test {
 
   // Make `TurtleTriple` from given Turtle input.
   std::vector<TurtleTriple> makeTurtleTriples(
-      std::vector<std::string> turtles) {
+      const std::vector<std::string>& turtles) {
     RdfStringParser<TurtleParser<Tokenizer>> parser;
-    // turtles is copied here
     std::ranges::for_each(turtles, [&parser](const std::string& turtle) {
       parser.parseUtf8String(turtle);
     });
@@ -82,11 +79,11 @@ class DeltaTriplesTest : public ::testing::Test {
     return parser.getTriples();
   }
 
-  // Make `IdTriple` from given Turtle input (the first argument is not `const`
-  // because we might change the local vocabulary).
-  std::vector<IdTriple<0>> makeIdTriples(const Index::Vocab& vocab,
-                                         LocalVocab& localVocab,
-                                         std::vector<std::string> turtles) {
+  // Make `IdTriple` from given Turtle input (the LocalVocab is not `const`
+  // because we might change it).
+  std::vector<IdTriple<0>> makeIdTriples(
+      const Index::Vocab& vocab, LocalVocab& localVocab,
+      const std::vector<std::string>& turtles) {
     auto toID = [&localVocab, &vocab](TurtleTriple triple) {
       std::array<Id, 3> ids{
           std::move(triple.subject_).toValueId(vocab, localVocab),
@@ -96,7 +93,7 @@ class DeltaTriplesTest : public ::testing::Test {
       return IdTriple<0>(ids);
     };
     return ad_utility::transform(
-        makeTurtleTriples(std::move(turtles)),
+        makeTurtleTriples(turtles),
         [&toID](TurtleTriple triple) { return toID(std::move(triple)); });
   }
 };
