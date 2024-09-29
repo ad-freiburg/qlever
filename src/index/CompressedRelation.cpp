@@ -858,7 +858,9 @@ void CompressedRelationWriter::compressAndWriteBlock(
     AD_CORRECTNESS_CHECK(firstCol0Id == first[0]);
     AD_CORRECTNESS_CHECK(lastCol0Id == last[0]);
 
-    auto [hasDuplicates, graphInfo] = getGraphInfo(block);
+    // auto [hasDuplicates, graphInfo] = getGraphInfo(block);
+    bool hasDuplicates = false;
+    std::optional<std::vector<Id>> graphInfo = std::vector<Id>{};
     blockBuffer_.wlock()->push_back(
         CompressedBlockMetadata{std::move(offsets),
                                 numRows,
