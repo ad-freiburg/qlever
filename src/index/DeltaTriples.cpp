@@ -14,16 +14,15 @@
 // ____________________________________________________________________________
 LocatedTriples::iterator& DeltaTriples::LocatedTripleHandles::forPermutation(
     Permutation::Enum permutation) {
-  return handles_[static_cast<int>(permutation)];
+  return handles_[static_cast<size_t>(permutation)];
 }
 
 // ____________________________________________________________________________
 void DeltaTriples::clear() {
   triplesInserted_.clear();
   triplesDeleted_.clear();
-  for (auto& perm : Permutation::ALL) {
-    locatedTriplesPerBlock_[static_cast<int>(perm)].clear();
-  }
+  std::ranges::for_each(locatedTriplesPerBlock_,
+                        &LocatedTriplesPerBlock::clear);
 }
 
 // ____________________________________________________________________________
@@ -31,7 +30,7 @@ std::vector<DeltaTriples::LocatedTripleHandles>
 DeltaTriples::locateAndAddTriples(
     ad_utility::SharedCancellationHandle cancellationHandle,
     std::span<const IdTriple<0>> idTriples, bool shouldExist) {
-  ad_utility::HashMap<Permutation::Enum, std::vector<LocatedTriples::iterator>>
+  std::array<std::vector<LocatedTriples::iterator>, Permutation::ALL.size()>
       intermediateHandles;
   for (auto permutation : Permutation::ALL) {
     auto& perm = index_.getImpl().getPermutation(permutation);
@@ -41,8 +40,8 @@ DeltaTriples::locateAndAddTriples(
         idTriples, perm.metaData().blockData(), perm.keyOrder(), shouldExist,
         cancellationHandle);
     cancellationHandle->throwIfCancelled();
-    intermediateHandles[permutation] =
-        locatedTriplesPerBlock_[static_cast<int>(permutation)].add(
+    intermediateHandles[static_cast<size_t>(permutation)] =
+        locatedTriplesPerBlock_[static_cast<size_t>(permutation)].add(
             locatedTriples);
     cancellationHandle->throwIfCancelled();
   }
@@ -50,7 +49,7 @@ DeltaTriples::locateAndAddTriples(
   for (auto permutation : Permutation::ALL) {
     for (size_t i = 0; i < idTriples.size(); i++) {
       handles[i].forPermutation(permutation) =
-          intermediateHandles[permutation][i];
+          intermediateHandles[static_cast<size_t>(permutation)][i];
     }
   }
   return handles;

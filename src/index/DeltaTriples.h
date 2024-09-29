@@ -6,12 +6,12 @@
 
 #pragma once
 
-#include "Permutation.h"
 #include "engine/LocalVocab.h"
 #include "global/IdTriple.h"
 #include "index/Index.h"
 #include "index/IndexBuilderTypes.h"
 #include "index/LocatedTriples.h"
+#include "index/Permutation.h"
 
 // A class for maintaining triples that are inserted or deleted after index
 // building, we call these delta triples. How it works in principle:
@@ -64,8 +64,10 @@ class DeltaTriples {
     LocatedTriples::iterator& forPermutation(Permutation::Enum permutation);
   };
 
-  // The sets of triples added to and subtracted from the original index. In
-  // particular, no triple can be in both of these sets.
+  // The sets of triples added to and subtracted from the original index. Any
+  // triple can be at most in one of the sets. The information whether a triple
+  // is in the index is missing. This means that a triple that is in the index
+  // may still be in the inserted set and vice versa.
   ad_utility::HashMap<IdTriple<0>, LocatedTripleHandles> triplesInserted_;
   ad_utility::HashMap<IdTriple<0>, LocatedTripleHandles> triplesDeleted_;
 
@@ -103,8 +105,9 @@ class DeltaTriples {
  private:
   // Find the position of the given triple in the given permutation and add it
   // to each of the six `LocatedTriplesPerBlock` maps (one per permutation).
-  // Return the iterators of where it was added (so that we can easily delete it
-  // again from these maps later).
+  // `shouldExist` specifies the action: insert or delete. Return the iterators
+  // of where it was added (so that we can easily delete it again from these
+  // maps later).
   std::vector<LocatedTripleHandles> locateAndAddTriples(
       ad_utility::SharedCancellationHandle cancellationHandle,
       std::span<const IdTriple<0>> idTriples, bool shouldExist);
@@ -133,9 +136,3 @@ class DeltaTriples {
 //
 // Changes to the DeltaTriples invalidate all cache results that have an index
 // scan in their subtree, which is almost all entries in practice.
-//
-// We could generally not cache the results of index scans anymore. This
-// would have various advantages, in particular, joining with something like
-// `rdf:type` would then be possible without storing the whole relation in
-// RAM. However, we need a faster decompression then and maybe a smaller block
-// size (currently 8 MB).
