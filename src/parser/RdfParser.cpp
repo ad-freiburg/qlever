@@ -545,6 +545,15 @@ TripleComponent TurtleParser<T>::literalAndDatatypeToTripleComponentImpl(
                   "instead"
                << std::endl;
     parser->lastParseResult_ = std::move(literal);
+  } catch (const CoordinateOutOfRangeException& ex) {
+    LOG(DEBUG) << normalizedLiteralContent
+               << " could not be parsed as GeoPoint object for the following "
+                  "reason: "
+               << ex.what()
+               << ". It is treated as a plain string literal without datatype "
+                  "instead"
+               << std::endl;
+    parser->lastParseResult_ = std::move(literal);
   } catch (const std::exception& e) {
     parser->raise(e.what());
   }
