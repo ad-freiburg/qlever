@@ -1054,10 +1054,10 @@ struct BlockZipperJoinImpl {
             begR = fullBlockRight.get().begin();
             auto it = currentUndefBlocks.get().begin();
             auto end = currentUndefBlocks.get().end();
-            if (it != end && !self->isUndefined_(*it)) {
-              co_return;
-            }
             for (; it != end; ++it) {
+              if (!self->isUndefined_(*it)) {
+                co_return;
+              }
               co_yield it;
             }
           };
