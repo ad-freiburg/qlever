@@ -212,7 +212,8 @@ void Service::writeJsonResult(const std::vector<std::string>& vars,
       for (size_t colIdx = 0; colIdx < vars.size(); ++colIdx) {
         TripleComponent tc =
             binding.contains(vars[colIdx])
-                ? bindingToTripleComponent(binding[vars[colIdx]], blankNodeMap)
+                ? bindingToTripleComponent(binding[vars[colIdx]], blankNodeMap,
+                                           localVocab)
                 : TripleComponent::UNDEF();
 
         Id id = std::move(tc).toValueId(getIndex().getVocab(), *localVocab);
@@ -337,7 +338,8 @@ std::optional<std::string> Service::getSiblingValuesClause() const {
 // ____________________________________________________________________________
 TripleComponent Service::bindingToTripleComponent(
     const nlohmann::json& binding,
-    ad_utility::HashMap<std::string, Id>& blankNodeMap) const {
+    ad_utility::HashMap<std::string, Id>& blankNodeMap,
+    LocalVocab* localVocab) const {
   if (!binding.contains("type") || !binding.contains("value")) {
     throw std::runtime_error(absl::StrCat(
         "Missing type or value field in binding. The binding is: '",
@@ -367,8 +369,7 @@ TripleComponent Service::bindingToTripleComponent(
     auto optEmplace = blankNodeMap.try_emplace(value, Id());
     if (optEmplace.second) {
       optEmplace.first->second =
-          Id::makeFromLocalBlankNodeIndex(LocalBlankNodeIndex::make(
-              getExecutionContext()->getNextLocalBlankNodeIndex()));
+          Id::makeFromLocalBlankNodeIndex(localVocab->getBlankNodeIndex());
     }
     tc = optEmplace.first->second;
   } else {

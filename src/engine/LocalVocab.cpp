@@ -77,3 +77,8 @@ std::vector<LocalVocab::LiteralOrIri> LocalVocab::getAllWordsForTesting()
   }
   return result;
 }
+
+// _____________________________________________________________________________
+LocalBlankNodeIndex LocalVocab::getBlankNodeIndex() {
+  return LocalBlankNodeIndex::make(blankNodeManager_.getId());
+}

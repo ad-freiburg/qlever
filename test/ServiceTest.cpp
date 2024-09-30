@@ -481,10 +481,11 @@ TEST_F(ServiceTest, bindingToTripleComponent) {
       "{ }",
       false};
   Service service{testQec, parsedServiceClause};
+  LocalVocab localVocab{};
 
-  auto bTTC = [&service, &blankNodeMap](
-                  const nlohmann::json& binding) -> TripleComponent {
-    return service.bindingToTripleComponent(binding, blankNodeMap);
+  auto bTTC = [&service, &blankNodeMap,
+               &localVocab](const nlohmann::json& binding) -> TripleComponent {
+    return service.bindingToTripleComponent(binding, blankNodeMap, &localVocab);
   };
 
   // Missing type or value.
@@ -520,15 +521,19 @@ TEST_F(ServiceTest, bindingToTripleComponent) {
 
   // Blank Nodes.
   EXPECT_EQ(blankNodeMap.size(), 0);
-  EXPECT_EQ(bTTC({{"type", "bnode"}, {"value", "A"}}),
-            Id::makeFromLocalBlankNodeIndex(LocalBlankNodeIndex::make(0)));
-  EXPECT_EQ(bTTC({{"type", "bnode"}, {"value", "B"}}),
-            Id::makeFromLocalBlankNodeIndex(LocalBlankNodeIndex::make(1)));
+
+  Id a =
+      bTTC({{"type", "bnode"}, {"value", "A"}}).toValueIdIfNotString().value();
+  Id b =
+      bTTC({{"type", "bnode"}, {"value", "B"}}).toValueIdIfNotString().value();
+  EXPECT_NE(a, b);
+
   EXPECT_EQ(blankNodeMap.size(), 2);
 
   // BlankNode exists already, known Id will be used.
-  EXPECT_EQ(bTTC({{"type", "bnode"}, {"value", "A"}}),
-            Id::makeFromLocalBlankNodeIndex(LocalBlankNodeIndex::make(0)));
+  Id a2 =
+      bTTC({{"type", "bnode"}, {"value", "A"}}).toValueIdIfNotString().value();
+  EXPECT_EQ(a, a2);
 
   // Invalid type -> throw.
   AD_EXPECT_THROW_WITH_MESSAGE(
