@@ -244,6 +244,17 @@ FetchContent_Declare(
         GIT_TAG 93ac3a4f9ee7792af399cebd873ee99ce15aed08  # 2024-05-16
 )
 
+################################
+# S2 Geometry
+################################
+SET (BUILD_TESTS OFF)
+FetchContent_Declare(
+        s2
+        GIT_REPOSITORY https://github.com/google/s2geometry.git
+        GI_TAG 5b5eccd54a08ae03b4467e79ffbb076d0b5f221e  #version 0.11.1
+)
+
+
 if (USE_PARALLEL)
     include(FindOpenMP)
     if (OPENMP_FOUND)
@@ -321,8 +332,9 @@ FetchContent_Declare(
 ################################
 # Apply FetchContent
 ################################
-FetchContent_MakeAvailable(googletest ctre abseil re2 stxxl fsst)
+FetchContent_MakeAvailable(googletest ctre abseil re2 stxxl fsst s2)
 # Disable some warnings in RE2, STXXL, and GTEST
+target_compile_options(s2 PRIVATE -Wno-sign-compare -Wno-unused-parameter)
 target_compile_options(re2 PRIVATE -Wno-unused-parameter)
 target_compile_options(stxxl PRIVATE -Wno-deprecated-declarations)
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")

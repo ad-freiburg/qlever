@@ -8,6 +8,13 @@
 #include "util/GeoSparqlHelpers.h"
 #include "util/MemorySize/MemorySize.h"
 
+#include "s2/s2point.h"
+
+void SpatialJoin::testLinkingOfS2() {
+  S2Point p;
+  std::cerr << p.IsNaN();
+}
+
 // ____________________________________________________________________________
 SpatialJoin::SpatialJoin(
     QueryExecutionContext* qec, SparqlTriple triple,
