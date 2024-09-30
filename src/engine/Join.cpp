@@ -168,6 +168,7 @@ ProtoResult Join::computeResult(bool requestLaziness) {
     // cache". So effectively, this returns the result if it is small, contains
     // UNDEF values, or is contained in the cache, otherwise `nullptr`.
     // TODO<joka921> Add a unit test that checks the correct conditions
+    // TODO<RobinTF> check if containsUndef condition still makes sense.
     return tree.getRootOperation()->getResult(
         false, (isSmall || containsUndef) ? ComputationMode::FULLY_MATERIALIZED
                                           : ComputationMode::ONLY_IF_CACHED);

@@ -792,6 +792,10 @@ struct BlockZipperJoinImpl {
         if (isUndefined_(currentEl) || !otherSide.undefBlocks_.empty()) {
           return std::numeric_limits<size_t>::max();
         }
+      } else {
+        (void)this;
+        (void)currentEl;
+        (void)otherSide;
       }
       return 3;
     }();
