@@ -1346,4 +1346,29 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
   impl.template runJoin<DoOptionalJoin>();
 }
 
+template <typename LeftBlocks, typename RightBlocks, typename LessThan,
+          typename LeftProjection = std::identity,
+          typename RightProjection = std::identity,
+          typename DoOptionalJoinTag = std::false_type>
+void zipperJoinForBlocksWithPotentialUndef(LeftBlocks&& leftBlocks,
+                                           RightBlocks&& rightBlocks,
+                                           const LessThan& lessThan,
+                                           auto& compatibleRowAction,
+                                           LeftProjection leftProjection = {},
+                                           RightProjection rightProjection = {},
+                                           DoOptionalJoinTag = {}) {
+  static constexpr bool DoOptionalJoin = DoOptionalJoinTag::value;
+
+  auto leftSide = detail::makeJoinSide(leftBlocks, leftProjection);
+  auto rightSide = detail::makeJoinSide(rightBlocks, rightProjection);
+
+  detail::BlockZipperJoinImpl<decltype(leftSide), decltype(rightSide),
+                              decltype(lessThan), decltype(compatibleRowAction),
+                              decltype([](const Id& id) {
+                                return id.isUndefined();
+                              })>
+      impl{leftSide, rightSide, lessThan, compatibleRowAction};
+  impl.template runJoin<DoOptionalJoin>();
+}
+
 }  // namespace ad_utility

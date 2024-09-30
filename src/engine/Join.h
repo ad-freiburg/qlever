@@ -95,6 +95,10 @@ class Join : public Operation {
   void join(const IdTable& a, ColumnIndex jc1, const IdTable& b,
             ColumnIndex jc2, IdTable* result) const;
 
+  ProtoResult lazyJoin(std::shared_ptr<const Result> a, ColumnIndex jc1,
+                       std::shared_ptr<const Result> b, ColumnIndex jc2,
+                       bool requestLaziness) const;
+
   /**
    * @brief Joins IdTables dynA and dynB on join column jc2, returning
    * the result in dynRes. Creates a cross product for matching rows by putting
@@ -115,7 +119,7 @@ class Join : public Operation {
   virtual string getCacheKeyImpl() const override;
 
  private:
-  ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override;
+  ProtoResult computeResult(bool requestLaziness) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 
