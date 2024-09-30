@@ -262,8 +262,11 @@ TEST(RdfParserTest, literalAndDatatypeToTripleComponent) {
               vid.value().getDatatype() == Datatype::GeoPoint);
   auto result2 = ladttc("POLYGON(7.8 47.9, 40.0 40.5, 10.9 20.5)",
                         fromIri(GEO_WKT_LITERAL));
-  auto vid2 = result2.toValueIdIfNotString();
-  ASSERT_FALSE(vid2.has_value());
+  ASSERT_TRUE(result2.isLiteral());
+  EXPECT_EQ(asStringViewUnsafe(result2.getLiteral().getContent()),
+            "POLYGON(7.8 47.9, 40.0 40.5, 10.9 20.5)");
+  EXPECT_EQ(asStringViewUnsafe(result2.getLiteral().getDatatype()),
+            GEO_WKT_LITERAL);
 }
 
 TEST(RdfParserTest, blankNode) {
