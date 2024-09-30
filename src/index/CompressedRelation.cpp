@@ -816,28 +816,43 @@ CompressedRelationWriter::compressAndWriteColumn(std::span<const Id> column) {
 // in the block metadata.
 static std::pair<bool, std::optional<std::vector<Id>>> getGraphInfo(
     const std::shared_ptr<IdTable>& block) {
-  bool hasDuplicates = false;
-  std::optional<std::vector<Id>> containedGraphs;
-  if (block->numColumns() > ADDITIONAL_COLUMN_GRAPH_ID) {
+  // Early bailout if the graph column doesn't exist (should only happen in
+  // unit tests).
+  if (block->numColumns() <= ADDITIONAL_COLUMN_GRAPH_ID) {
+    return {false, std::nullopt};
+  }
+
+  // Return true iff the block contains duplicates when only considering the
+  // actual triple of S, P, and O.
+  auto hasDuplicates = [&block]() {
     using C = ColumnIndex;
     auto withoutGraphAndAdditionalPayload =
         block->asColumnSubsetView(std::array{C{0}, C{1}, C{2}});
     size_t numDistinct = Engine::countDistinct(withoutGraphAndAdditionalPayload,
                                                ad_utility::noop);
-    hasDuplicates = numDistinct != block->numRows();
+    return numDistinct != block->numRows();
+  };
 
+  // Return the contained graphs, or  `nullopt` if there are too many of them.
+  auto graphInfo = [&block]() -> std::optional<std::vector<Id>> {
     std::vector<Id> graphColumn;
     std::ranges::copy(block->getColumn(ADDITIONAL_COLUMN_GRAPH_ID),
                       std::back_inserter(graphColumn));
     std::ranges::sort(graphColumn);
-    auto [beginOfUnique, _] = std::ranges::unique(graphColumn);
-    graphColumn.erase(beginOfUnique, graphColumn.end());
-    containedGraphs =
-        graphColumn.size() < MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA
-            ? std::optional{std::move(graphColumn)}
-            : std::nullopt;
-  }
-  return {hasDuplicates, std::move(containedGraphs)};
+    auto [endOfUnique, _] = std::ranges::unique(graphColumn);
+    size_t numGraphs = endOfUnique - graphColumn.begin();
+    if (numGraphs > MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA) {
+      return std::nullopt;
+    }
+    // Note: we cannot simply resize `graphColumn`, as this doesn't free
+    // the memory that is not needed anymore. We can do either `resize +
+    // shrink_to_fit`, which is not guaranteed by the standard, but works in
+    // practice. We choose the alternative of simply returning a new vector
+    // with the correct capacity.
+    return std::vector<Id>(graphColumn.begin(),
+                           graphColumn.begin() + numGraphs);
+  };
+  return {hasDuplicates(), graphInfo()};
 }
 
 // _____________________________________________________________________________
