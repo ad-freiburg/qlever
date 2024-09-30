@@ -247,7 +247,7 @@ FetchContent_Declare(
 ################################
 # S2 Geometry
 ################################
-SET (BUILD_TESTS OFF)
+SET (BUILD_TESTS OFF CACHE BOOL "no tests for s2")
 FetchContent_Declare(
         s2
         GIT_REPOSITORY https://github.com/google/s2geometry.git
