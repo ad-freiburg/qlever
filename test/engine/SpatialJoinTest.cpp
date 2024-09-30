@@ -15,6 +15,8 @@
 #include "engine/SpatialJoin.h"
 #include "parser/data/Variable.h"
 
+// TODO<ullingerc> update
+
 namespace {  // anonymous namespace to avoid linker problems
 
 using namespace ad_utility::testing;

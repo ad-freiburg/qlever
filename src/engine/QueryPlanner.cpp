@@ -720,7 +720,8 @@ auto QueryPlanner::seedWithScansAndText(
     }
 
     const auto& input = node.triple_.p_._iri;
-    if (input.starts_with(MAX_DIST_IN_METERS) &&
+    if ((input.starts_with(MAX_DIST_IN_METERS) ||
+         input.starts_with(NEAREST_NEIGHBORS)) &&
         input[input.size() - 1] == '>') {
       pushPlan(makeSubtreePlan<SpatialJoin>(_qec, node.triple_, std::nullopt,
                                             std::nullopt));
@@ -1760,7 +1761,7 @@ auto QueryPlanner::createSpatialJoin(
   auto aIs = static_cast<bool>(aIsSpatialJoin);
   auto bIs = static_cast<bool>(bIsSpatialJoin);
 
-  // Ecactly one of the inputs must be a SpatialJoin.
+  // Exactly one of the inputs must be a SpatialJoin.
   if ((aIs && bIs) || (!aIs && !bIs)) {
     return std::nullopt;
   }
@@ -1920,9 +1921,8 @@ auto QueryPlanner::createJoinWithService(
 
 // _____________________________________________________________________
 template <typename Operation>
-auto QueryPlanner::createSubtreeWithService(const SubtreePlan& a,
-                                            const SubtreePlan& b)
-    -> std::optional<SubtreePlan> {
+auto QueryPlanner::createSubtreeWithService(
+    const SubtreePlan& a, const SubtreePlan& b) -> std::optional<SubtreePlan> {
   // The right subtree has to be a Service.
   auto bRootOp = std::dynamic_pointer_cast<Service>(b._qet->getRootOperation());
   if (!static_cast<bool>(bRootOp)) {

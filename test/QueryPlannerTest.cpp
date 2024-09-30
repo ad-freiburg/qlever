@@ -774,6 +774,7 @@ TEST(QueryPlanner, TransitivePathBindRight) {
 }
 
 TEST(QueryPlanner, SpatialJoin) {
+  // TODO<ullingerc> update
   auto scan = h::IndexScanFromStrings;
   h::expect(
       "SELECT ?x ?y WHERE {"

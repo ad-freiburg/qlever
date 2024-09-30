@@ -1,3 +1,8 @@
+//  Copyright 2024, University of Freiburg,
+//  Chair of Algorithms and Data Structures.
+//  Author: @Jonathan24680
+//  Author: Christoph Ullinger <ullingec@informatik.uni-freiburg.de>
+
 #pragma once
 
 #include "engine/Operation.h"
@@ -61,7 +66,11 @@ class SpatialJoin : public Operation {
   bool isConstructed() const;
 
   // this function is used to give the maximum distance for testing purposes
-  long long getMaxDist() const;
+  long long getMaxDist() const { return maxDist_; }
+
+  // this function is used to give the maximum number of results for testing
+  // purposes
+  long long getMaxResults() const { return maxResults_; }
 
   std::shared_ptr<QueryExecutionTree> onlyForTestingGetLeftChild() const {
     return childLeft_;
@@ -76,13 +85,21 @@ class SpatialJoin : public Operation {
   }
 
  private:
-  // helper function, which parses the max distance triple into a long long
-  // distance
+  // helper function, which parses a max distance triple and populates maxDist_
   void parseMaxDistance();
+
+  // helper function, which parses a nearest neighbor triple and populates
+  // maxResults_ and maxDist_
+  void parseNearestNeighbors();
 
   // helper function which gets the coordinates from the coordinates string
   // (usually the object of a triple)
   std::string betweenQuotes(std::string extractFrom) const;
+
+  // helper function which returns a GeoPoint if the element of the given table
+  // represents a GeoPoint
+  std::optional<GeoPoint> getPoint(const IdTable* restable, size_t row,
+                                   ColumnIndex col) const;
 
   // helper function, which computes the distance of two points, where each
   // point comes from a different result table
@@ -100,16 +117,25 @@ class SpatialJoin : public Operation {
   // the baseline algorithm, which just checks every combination
   Result baselineAlgorithm();
 
+  // the improved algorithm, which constructs a S2PointIndex, which is usually
+  // much faster, however requires that the right relation fits into memory
+  Result s2geometryAlgorithm();
+
   SparqlTriple triple_;
   Variable leftChildVariable_;
   Variable rightChildVariable_;
   std::shared_ptr<QueryExecutionTree> childLeft_ = nullptr;
   std::shared_ptr<QueryExecutionTree> childRight_ = nullptr;
-  long long maxDist_ = 0;  // max distance in meters
+
+  // If these constraints are set to -1, they are deactivated.
+  long long maxDist_ = -1;     // max distance in meters
+  long long maxResults_ = -1;  // max number of nearest neighbors to find
 
   // adds an extra column to the result, which contains the actual distance,
   // between the two objects
   bool addDistToResult_ = true;
   const string nameDistanceInternal_ = "?distOfTheTwoObjectsAddedInternally";
-  bool useBaselineAlgorithm_ = true;
+
+  // TODO<ullingerc> We should decide based on data if we need to use baseline
+  bool useBaselineAlgorithm_ = false;
 };
