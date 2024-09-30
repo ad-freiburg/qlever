@@ -477,7 +477,7 @@ std::optional<std::string> Service::idToValueForValuesClause(
       return value;
     default:
       if (xsdType) {
-        return absl::StrCat("\"", value, "\"^^", xsdType);
+        return absl::StrCat("\"", value, "\"^^<", xsdType, ">");
       } else if (value.starts_with('<')) {
         return value;
       } else {

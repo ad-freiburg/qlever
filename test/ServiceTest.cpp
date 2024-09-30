@@ -632,4 +632,10 @@ TEST_F(ServiceTest, idToValueForValuesClause) {
           "a\"b\"c"));
   EXPECT_EQ(idToVc(index, Id::makeFromLocalVocabIndex(&str), localVocab),
             "\"a\\\"b\\\"c\"");
+
+  // value with xsd-type
+  EXPECT_EQ(
+      idToVc(index, Id::makeFromGeoPoint(GeoPoint(70.5, 130.2)), localVocab)
+          .value(),
+      absl::StrCat("\"POINT(130.200000 70.500000)\"^^<", GEO_WKT_LITERAL, ">"));
 }
