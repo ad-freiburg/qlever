@@ -76,8 +76,8 @@ struct Values {
 /// `GraphPattern`.
 struct GroupGraphPattern {
   GraphPattern _child;
-  // If not `nullopt`, then this group is a `GRAPH` clause, either with a fixed
-  // graph IRI, or with a variable.
+  // If not `monostate`, then this group is a `GRAPH` clause, either with a
+  // fixed graph IRI, or with a variable.
   using GraphSpec =
       std::variant<std::monostate, TripleComponent::Iri, Variable>;
   GraphSpec graphSpec_ = std::monostate{};

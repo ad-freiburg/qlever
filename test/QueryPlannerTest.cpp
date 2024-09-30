@@ -1198,9 +1198,9 @@ TEST(QueryPlanner, DatasetClause) {
       "SELECT * FROM <x> FROM NAMED <g1> FROM NAMED <g2> WHERE { GRAPH ?g {<a> "
       "<b> <c>}}",
       scan("<a>", "<b>", "<c>", {}, g12, varG, graphCol));
+
   h::expect("SELECT * FROM <x> WHERE { GRAPH ?g {<a> <b> <c>}}",
-            scan("<a>", "<b>", "<c>", {}, std::nullopt, {Variable{"?g"}},
-                 {ADDITIONAL_COLUMN_GRAPH_ID}));
+            scan("<a>", "<b>", "<c>", {}, std::nullopt, varG, graphCol));
 
   // A complex example with graph variables.
   h::expect(
