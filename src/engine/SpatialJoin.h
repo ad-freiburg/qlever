@@ -9,8 +9,7 @@
 // result table.
 class SpatialJoin : public Operation {
  public:
-
-   static void testLinkingOfS2();
+  static void testLinkingOfS2();
   // creates a SpatialJoin operation. The triple is needed, to get the
   // variable names. Those are the names of the children, which get added
   // later. In addition to that, the SpatialJoin operation needs a maximum
