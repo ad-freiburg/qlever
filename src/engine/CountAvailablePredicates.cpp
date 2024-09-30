@@ -122,12 +122,12 @@ ProtoResult CountAvailablePredicates::computeResult(
     if (!indexScan) {
       return false;
     }
-    if (!indexScan->getSubject().isVariable() ||
-        !indexScan->getObject().isVariable()) {
+    if (!indexScan->subject().isVariable() ||
+        !indexScan->object().isVariable()) {
       return false;
     }
 
-    return indexScan->getPredicate() == HAS_PATTERN_PREDICATE;
+    return indexScan->predicate() == HAS_PATTERN_PREDICATE;
   }();
 
   if (isPatternTrickForAllEntities) {
@@ -164,8 +164,7 @@ void CountAvailablePredicates::computePatternTrickAllEntities(
       ScanSpecificationAsTripleComponent{
           TripleComponent::Iri::fromIriref(HAS_PATTERN_PREDICATE), std::nullopt,
           std::nullopt}
-          .toScanSpecification(index)
-          .value();
+          .toScanSpecification(index);
   auto fullHasPattern =
       index.getPermutation(Permutation::Enum::PSO)
           .lazyScan(scanSpec, std::nullopt, {}, cancellationHandle_);

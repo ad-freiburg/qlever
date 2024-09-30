@@ -258,24 +258,27 @@ std::optional<nlohmann::json> LazyJsonParser::constructResultFromParsedChunk(
   }
   if (nextChunkStart == 0) {
     return std::nullopt;
+  } else {
+    AD_CORRECTNESS_CHECK(!std::holds_alternative<BeforeArrayPath>(state_));
   }
 
   std::string resStr = yieldCount_ > 0 ? prefixInArray_ : "";
   ++yieldCount_;
 
+  bool parsingCompletelyDone =
+      std::holds_alternative<AfterArrayPath>(state_) &&
+      (std::get<AfterArrayPath>(state_).remainingBraces_ == 0);
+  bool endsWithComma =
+      materializeEnd < input_.size() && input_[materializeEnd] == ',';
+
   // materializeEnd either holds the index to a `,` between two elements in the
   // arrayPath or the (non-existent) first-character after the input.
-  AD_CORRECTNESS_CHECK(
-      (std::holds_alternative<InArrayPath>(state_) &&
-       input_[materializeEnd] == ',') ||
-      (std::holds_alternative<AfterArrayPath>(state_) &&
-       std::get<AfterArrayPath>(state_).remainingBraces_ == 0 &&
-       input_.size() == materializeEnd));
+  AD_CORRECTNESS_CHECK(endsWithComma || parsingCompletelyDone);
 
   absl::StrAppend(&resStr, input_.substr(0, materializeEnd));
   input_ = input_.substr(nextChunkStart);
 
-  if (std::holds_alternative<InArrayPath>(state_)) {
+  if (!parsingCompletelyDone) {
     absl::StrAppend(&resStr, suffixInArray_);
   }
 

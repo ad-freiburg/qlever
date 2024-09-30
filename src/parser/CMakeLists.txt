@@ -15,6 +15,7 @@ add_library(parser
         ParallelBuffer.cpp
         SparqlParserHelpers.cpp
         TripleComponent.cpp
+        GeoPoint.cpp
         GraphPatternOperation.cpp
         PropertyPath.cpp
         data/SparqlFilter.cpp

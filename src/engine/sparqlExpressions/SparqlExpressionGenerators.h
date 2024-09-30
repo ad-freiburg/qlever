@@ -3,8 +3,7 @@
 
 // Several templated helper functions that are used for the Expression module
 
-#ifndef QLEVER_SPARQLEXPRESSIONGENERATORS_H
-#define QLEVER_SPARQLEXPRESSIONGENERATORS_H
+#pragma once
 
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "util/Generator.h"
@@ -157,6 +156,22 @@ auto applyOperation(size_t numElements, Operation&&, EvaluationContext* context,
   return std::apply(getResultFromValueGetters, ValueGetters{});
 }
 
-}  // namespace sparqlExpression::detail
+// Return a lambda that takes a `LiteralOrIri` and converts it to an `Id` by
+// adding it to the `localVocab`.
+inline auto makeStringResultGetter(LocalVocab* localVocab) {
+  return [localVocab](const ad_utility::triple_component::LiteralOrIri& str) {
+    auto localVocabIndex = localVocab->getIndexAndAddIfNotContained(str);
+    return ValueId::makeFromLocalVocabIndex(localVocabIndex);
+  };
+}
 
-#endif  // QLEVER_SPARQLEXPRESSIONGENERATORS_H
+// Return the `Id` if the passed `value` contains one, alternatively add the
+// literal or iri in the `value` to the `localVocab` and return the newly
+// created `Id` instead.
+inline Id idOrLiteralOrIriToId(const IdOrLiteralOrIri& value, LocalVocab* localVocab) {
+  return std::visit(ad_utility::OverloadCallOperator{[](ValueId id) { return id; },
+                                                     makeStringResultGetter(localVocab)},
+                    value);
+}
+
+}  // namespace sparqlExpression::detail

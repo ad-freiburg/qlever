@@ -6,6 +6,7 @@
 
 #include "engine/ExportQueryExecutionTrees.h"
 #include "global/Constants.h"
+#include "global/ValueId.h"
 #include "util/Conversions.h"
 
 using namespace sparqlExpression::detail;
@@ -29,6 +30,7 @@ NumericValue NumericValueGetter::operator()(
     case Datatype::TextRecordIndex:
     case Datatype::WordVocabIndex:
     case Datatype::Date:
+    case Datatype::GeoPoint:
     case Datatype::BlankNodeIndex:
     case Datatype::LocalBlankNodeIndex:
       return NotNumeric{};
@@ -70,6 +72,7 @@ auto EffectiveBooleanValueGetter::operator()(
     case Datatype::WordVocabIndex:
     case Datatype::TextRecordIndex:
     case Datatype::Date:
+    case Datatype::GeoPoint:
       return True;
   }
   AD_FAIL();
@@ -146,6 +149,8 @@ IntDoubleStr ToNumericValueGetter::operator()(
       return id.getDouble();
     case Datatype::Bool:
       return static_cast<int>(id.getBool());
+    case Datatype::GeoPoint:
+      return id.getGeoPoint().toStringRepresentation();
     case Datatype::VocabIndex:
     case Datatype::LocalVocabIndex:
     case Datatype::TextRecordIndex:
@@ -183,6 +188,8 @@ OptIri DatatypeValueGetter::operator()(ValueId id,
       return Iri::fromIrirefWithoutBrackets(XSD_DOUBLE_TYPE);
     case Int:
       return Iri::fromIrirefWithoutBrackets(XSD_INT_TYPE);
+    case GeoPoint:
+      return Iri::fromIrirefWithoutBrackets(GEO_WKT_LITERAL);
     case Date: {
       auto dateType = id.getDate().toStringAndType().second;
       AD_CORRECTNESS_CHECK(dateType != nullptr);
@@ -255,6 +262,7 @@ T getValue(ValueId id, const sparqlExpression::EvaluationContext* context,
     case Int:
     case Double:
     case Date:
+    case GeoPoint:
     case Undefined:
       if constexpr (std::is_same_v<T, sparqlExpression::IdOrLiteralOrIri>) {
         return Id::makeUndefined();
