@@ -2048,7 +2048,7 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
     // default graphs while planning this clause, and reset them when leaving
     // the clause.
     std::optional<ParsedQuery::DatasetClauses> datasetBackup;
-    std::optional<Variable> graphVariableBackup;
+    std::optional<Variable> graphVariableBackup = planner_.activeGraphVariable_;
     if constexpr (std::is_same_v<T, p::GroupGraphPattern>) {
       if (std::holds_alternative<TripleComponent::Iri>(arg.graphSpec_)) {
         datasetBackup = planner_.activeDatasetClauses_;
@@ -2065,8 +2065,8 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
         datasetBackup = planner_.activeDatasetClauses_;
         planner_.activeDatasetClauses_.defaultGraphs_ =
             planner_.activeDatasetClauses_.namedGraphs_;
-        graphVariableBackup = std::exchange(planner_.activeGraphVariable_,
-                                            std::get<Variable>(arg.graphSpec_));
+        // We already have backed up the graph variable
+        planner_.activeGraphVariable_ = std::get<Variable>(arg.graphSpec_);
       }
     }
 
@@ -2080,9 +2080,7 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
     if (datasetBackup.has_value()) {
       planner_.activeDatasetClauses_ = std::move(datasetBackup.value());
     }
-    if (graphVariableBackup.has_value()) {
-      planner_.activeGraphVariable_ = std::move(graphVariableBackup.value());
-    }
+    planner_.activeGraphVariable_ = std::move(graphVariableBackup);
   } else if constexpr (std::is_same_v<T, p::Union>) {
     visitUnion(arg);
   } else if constexpr (std::is_same_v<T, p::Subquery>) {

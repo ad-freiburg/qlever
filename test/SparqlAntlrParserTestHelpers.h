@@ -764,9 +764,9 @@ inline auto GroupGraphPattern = [](vector<std::string>&& filters,
   return Group(detail::GraphPattern(false, filters, childMatchers...));
 };
 
-inline auto GroupGraphPatternWithGraph = [](vector<std::string>&& filters,
-                                            const TripleComponent::Iri& graph,
-                                            const auto&... childMatchers)
+inline auto GroupGraphPatternWithGraph =
+    [](vector<std::string>&& filters, p::GroupGraphPattern::GraphSpec graph,
+       const auto&... childMatchers)
     -> Matcher<const p::GraphPatternOperation&> {
   return Group(detail::GraphPattern(false, filters, childMatchers...), graph);
 };
