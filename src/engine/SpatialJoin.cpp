@@ -163,7 +163,7 @@ string SpatialJoin::getDescriptor() const {
   }
   if (maxResults_ >= 0) {
     properties = absl::StrCat(properties, " with max number of results of ",
-                              std::to_string(maxDist_));
+                              std::to_string(maxResults_));
   }
   return absl::StrCat("SpatialJoin: ", properties);
 }
