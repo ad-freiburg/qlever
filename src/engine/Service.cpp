@@ -323,19 +323,18 @@ std::optional<std::string> Service::getSiblingValuesClause() const {
   checkCancellation();
 
   ad_utility::HashSet<std::string> rowSet;
-
   std::string values = " { ";
   for (size_t rowIndex = 0; rowIndex < siblingResult->idTable().size();
        ++rowIndex) {
     std::string row = "(";
     for (const auto& columnIdx : commonColumnIndices) {
-      const auto& optionalString = ExportQueryExecutionTrees::idToStringAndType(
+      const auto& optionalString = idToValueForValuesClause(
           siblingTree_->getRootOperation()->getIndex(),
           siblingResult->idTable()(rowIndex, columnIdx),
           siblingResult->localVocab());
 
       if (optionalString.has_value()) {
-        absl::StrAppend(&row, optionalString.value().first, " ");
+        absl::StrAppend(&row, optionalString.value(), " ");
       }
     }
     row.back() = ')';
@@ -454,4 +453,35 @@ void Service::throwErrorWithContext(std::string_view msg,
       ">: ", msg, ". First 100 bytes of the response: '", first100,
       (last100.empty() ? "'"
                        : absl::StrCat(", last 100 bytes: '", last100, "'"))));
+}
+
+// ____________________________________________________________________________
+std::optional<std::string> Service::idToValueForValuesClause(
+    const Index& index, Id id, const LocalVocab& localVocab) {
+  using enum Datatype;
+  const auto& optionalStringAndXsdType =
+      ExportQueryExecutionTrees::idToStringAndType(index, id, localVocab);
+  if (!optionalStringAndXsdType.has_value()) {
+    return std::nullopt;
+  }
+  const auto& [value, xsdType] = optionalStringAndXsdType.value();
+
+  switch (id.getDatatype()) {
+    case BlankNodeIndex:
+      // Blank nodes can be used in a VALUES-clause, however we don't have
+      // knowledge about the blank nodes used by the endpoint.
+      return std::nullopt;
+    case Int:
+    case Double:
+    case Bool:
+      return value;
+    default:
+      if (xsdType) {
+        return absl::StrCat("\"", value, "\"^^", xsdType);
+      } else if (value.starts_with('<')) {
+        return value;
+      } else {
+        return RdfEscaping::validRDFLiteralFromNormalized(value);
+      }
+  }
 }

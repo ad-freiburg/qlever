@@ -593,6 +593,10 @@ TEST_F(ServiceTest, bindingToTripleComponent) {
                                                       "@de"));
 
   EXPECT_EQ(Service::bindingToTripleComponent(
+                {{"type", "literal"}, {"value", "a\"b\"c"}}),
+            TripleComponent::Literal::fromEscapedRdfLiteral("\"a\\\"b\\\"c\""));
+
+  EXPECT_EQ(Service::bindingToTripleComponent(
                 {{"type", "uri"}, {"value", "http://doof.org"}}),
             TripleComponent::Iri::fromIrirefWithoutBrackets("http://doof.org"));
 
@@ -604,4 +608,28 @@ TEST_F(ServiceTest, bindingToTripleComponent) {
       Service::bindingToTripleComponent(
           {{"type", "INVALID_TYPE"}, {"value", "v"}}),
       ::testing::HasSubstr("Type INVALID_TYPE is undefined"));
+}
+
+TEST_F(ServiceTest, idToValueForValuesClause) {
+  auto idToVc = Service::idToValueForValuesClause;
+  LocalVocab localVocab{};
+  auto index = ad_utility::testing::makeIndexWithTestSettings();
+
+  // undefined, blanknode -> nullopt
+  EXPECT_EQ(idToVc(index, Id::makeFromBlankNodeIndex(BlankNodeIndex::make(0)),
+                   localVocab),
+            std::nullopt);
+  EXPECT_EQ(idToVc(index, Id::makeUndefined(), localVocab), std::nullopt);
+
+  // simple datatypes -> implicit string representation
+  EXPECT_EQ(idToVc(index, Id::makeFromInt(42), localVocab), "42");
+  EXPECT_EQ(idToVc(index, Id::makeFromDouble(3.14), localVocab), "3.14");
+  EXPECT_EQ(idToVc(index, Id::makeFromBool(true), localVocab), "true");
+
+  // Escape Quotes within literals.
+  auto str = LocalVocabEntry(
+      ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes(
+          "a\"b\"c"));
+  EXPECT_EQ(idToVc(index, Id::makeFromLocalVocabIndex(&str), localVocab),
+            "\"a\\\"b\\\"c\"");
 }
