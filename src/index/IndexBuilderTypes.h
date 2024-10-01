@@ -263,13 +263,7 @@ auto getIdMapLambdas(
    */
   const auto itemMapLamdaCreator = [&itemArray, indexPtr](const size_t idx) {
     auto& map = *itemArray[idx];
-    // Resolve the special IDs of the default and internal graph to their actual
-    // IDs. This is precomputed for efficiency gains.
-    auto internalGraphId =
-        map.getId(qlever::specialIds().at(INTERNAL_GRAPH_IRI));
-    auto defaultGraphId = map.getId(qlever::specialIds().at(DEFAULT_GRAPH_IRI));
-    return [&map = *itemArray[idx], indexPtr, internalGraphId,
-            defaultGraphId](ad_utility::Rvalue auto&& tr) {
+    return [&map = *itemArray[idx], indexPtr](ad_utility::Rvalue auto&& tr) {
       auto lt = indexPtr->tripleToInternalRepresentation(AD_FWD(tr));
       OptionalIds res;
       // get Ids for the actual triple and store them in the result.
@@ -296,7 +290,7 @@ auto getIdMapLambdas(
         // The additional triples have the same graph ID as the original triple.
         // This makes optimizations such as language filters also work with
         // named graphs. Note that we have a different mechanism in place to
-        // distinguish betweend normal and internal triples.
+        // distinguish between normal and internal triples.
         auto tripleGraphId = res[0].value()[ADDITIONAL_COLUMN_GRAPH_ID];
         res[1].emplace(
             Arr{spoIds[0], langTaggedPredId, spoIds[2], tripleGraphId});
