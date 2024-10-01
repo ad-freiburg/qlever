@@ -16,6 +16,8 @@ class IndexScan final : public Operation {
   TripleComponent subject_;
   TripleComponent predicate_;
   TripleComponent object_;
+  using Graphs = ScanSpecificationAsTripleComponent::Graphs;
+  Graphs graphsToFilter_;
   size_t numVariables_;
   size_t sizeEstimate_;
   vector<float> multiplicity_;
@@ -28,15 +30,21 @@ class IndexScan final : public Operation {
 
  public:
   IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
-            const SparqlTriple& triple);
+            const SparqlTriple& triple, Graphs graphsToFilter = std::nullopt);
   IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
-            const SparqlTripleSimple& triple);
+            const SparqlTripleSimple& triple,
+            Graphs graphsToFilter = std::nullopt);
 
   ~IndexScan() override = default;
 
-  const TripleComponent& getPredicate() const { return predicate_; }
-  const TripleComponent& getSubject() const { return subject_; }
-  const TripleComponent& getObject() const { return object_; }
+  // Const getters for testing.
+  const TripleComponent& predicate() const { return predicate_; }
+  const TripleComponent& subject() const { return subject_; }
+  const TripleComponent& object() const { return object_; }
+  const auto& graphsToFilter() const { return graphsToFilter_; }
+  const std::vector<Variable>& additionalVariables() const {
+    return additionalVariables_;
+  }
 
   const std::vector<ColumnIndex>& additionalColumns() const {
     return additionalColumns_;
