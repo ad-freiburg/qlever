@@ -469,18 +469,19 @@ Result SpatialJoin::s2geometryAlgorithm() {
   // Performs a nearest neighbor search on the index containing the right table
   // for each row in the left table and returns the closest points that satisfy
   // the criteria given by `maxDist_` and `maxResults_`.
+
+  // TODO<ullingerc> can this query be reused without problems?
+  auto s2query = S2ClosestPointQuery<size_t>{&s2index};
+
+  if (maxResults_ >= 0) {
+    s2query.mutable_options()->set_max_results(maxResults_);
+  }
+  if (maxDist_ >= 0) {
+    s2query.mutable_options()->set_max_distance(
+        S2Earth::ToAngle(util::units::Meters(maxDist_)));
+  }
+
   for (size_t rowLeft = 0; rowLeft < resLeft->size(); rowLeft++) {
-    // TODO<ullingerc> can this query be reused without problems?
-    auto s2query = S2ClosestPointQuery<size_t>{&s2index};
-
-    if (maxResults_ >= 0) {
-      s2query.mutable_options()->set_max_results(maxResults_);
-    }
-    if (maxDist_ >= 0) {
-      s2query.mutable_options()->set_max_distance(
-          S2Earth::ToAngle(util::units::Meters(maxDist_)));
-    }
-
     auto p = getPoint(resLeft, rowLeft, leftJoinCol);
     if (!p.has_value()) {
       continue;
