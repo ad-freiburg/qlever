@@ -450,17 +450,11 @@ Result SpatialJoin::s2geometryAlgorithm() {
   // --- TODO<ullingerc> avoid redundant code
 
   // Helper function to convert `GeoPoint` to `S2Point`
-  auto constexpr toS2Point = [](GeoPoint& p) {
+  auto constexpr toS2Point = [](const GeoPoint& p) {
     auto lat = p.getLat();
     auto lng = p.getLng();
     auto latlng = S2LatLng::FromDegrees(lat, lng);
     return S2Point{latlng};
-  };
-
-  // Helper function to convert `S2Point` to `GeoPoint`
-  auto constexpr fromS2Point = [](S2Point& p) {
-    auto latlng = S2LatLng{p};
-    return GeoPoint(latlng.lat().degrees(), latlng.lng().degrees());
   };
 
   // Build an index that contains all elements of the right table
