@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.28)
+cmake_minimum_required(VERSION 3.27)
 project(QLever C CXX)
 
 # C/C++ Versions
@@ -252,6 +252,7 @@ FetchContent_Declare(
         s2
         GIT_REPOSITORY https://github.com/google/s2geometry.git
         GI_TAG 5b5eccd54a08ae03b4467e79ffbb076d0b5f221e  #version 0.11.1
+        SYSTEM
 )
 
 
