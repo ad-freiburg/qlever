@@ -37,10 +37,14 @@ class IndexScan final : public Operation {
 
   ~IndexScan() override = default;
 
+  // Const getters for testing.
   const TripleComponent& predicate() const { return predicate_; }
   const TripleComponent& subject() const { return subject_; }
   const TripleComponent& object() const { return object_; }
   const auto& graphsToFilter() const { return graphsToFilter_; }
+  const std::vector<Variable>& additionalVariables() const {
+    return additionalVariables_;
+  }
 
   const std::vector<ColumnIndex>& additionalColumns() const {
     return additionalColumns_;
