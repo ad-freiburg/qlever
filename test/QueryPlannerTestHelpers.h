@@ -290,7 +290,6 @@ inline auto TransitivePath =
                             TransitivePathSideMatcher(right))));
     };
 
-<<<<<<< HEAD
 inline auto PathSearchConfigMatcher = [](PathSearchConfiguration config) {
   auto sourceMatcher =
       AD_FIELD(PathSearchConfiguration, sources_, Eq(config.sources_));
@@ -324,8 +323,6 @@ inline auto ValuesClause = [](string cacheKey) {
       AllOf(AD_PROPERTY(Values, getCacheKey, cacheKey)));
 };
 
-||||||| bed8b297
-=======
 // Match a SpatialJoin operation
 inline auto SpatialJoin =
     [](long long maxDist,
@@ -336,7 +333,6 @@ inline auto SpatialJoin =
                 AD_PROPERTY(SpatialJoin, getMaxDist, Eq(maxDist))));
     };
 
->>>>>>> master
 // Match a sort operation. Currently, this is only required by the binary search
 // version of the transitive path operation. This matcher checks only the
 // children of the sort operation.
