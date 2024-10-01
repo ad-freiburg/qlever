@@ -1,5 +1,11 @@
+//  Copyright 2024, University of Freiburg,
+//  Chair of Algorithms and Data Structures.
+//  Author: @Jonathan24680
+
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
+#include <s2/s2earth.h>
+#include <s2/s2point.h>
 
 #include <cstdlib>
 #include <fstream>
@@ -14,8 +20,6 @@
 #include "engine/QueryExecutionTree.h"
 #include "engine/SpatialJoin.h"
 #include "parser/data/Variable.h"
-
-// TODO<ullingerc> update
 
 namespace {  // anonymous namespace to avoid linker problems
 
@@ -250,7 +254,7 @@ void createAndTestSpatialJoin(
 //   ?point1 <max-distance-in-meters:XXXX> ?point2 .
 // }
 void buildAndTestSmallTestSetLargeChildren(
-    std::string maxDistanceInMetersString, bool addLeftChildFirst,
+    std::string specialPredicate, bool addLeftChildFirst,
     std::vector<std::vector<std::string>> expectedOutput,
     std::vector<std::string> columnNames) {
   auto qec = localTestHelpers::buildTestQEC();
@@ -268,12 +272,11 @@ void buildAndTestSmallTestSetLargeChildren(
       {"?obj2", std::string{"<hasGeometry>"}, "?geo2"},
       {"?geo2", std::string{"<asWKT>"}, "?point2"}, "?obj2", "?geo2");
 
-  createAndTestSpatialJoin(qec,
-                           SparqlTriple{TripleComponent{Variable{"?point1"}},
-                                        maxDistanceInMetersString,
-                                        TripleComponent{Variable{"?point2"}}},
-                           leftChild, rightChild, addLeftChildFirst,
-                           expectedOutput, columnNames);
+  createAndTestSpatialJoin(
+      qec,
+      SparqlTriple{TripleComponent{Variable{"?point1"}}, specialPredicate,
+                   TripleComponent{Variable{"?point2"}}},
+      leftChild, rightChild, addLeftChildFirst, expectedOutput, columnNames);
 }
 
 // build the test using the small dataset. Let the SpatialJoin operation.
@@ -285,7 +288,7 @@ void buildAndTestSmallTestSetLargeChildren(
 //   ?point1 <max-distance-in-meters:XXXX> ?point2 .
 // }
 void buildAndTestSmallTestSetSmallChildren(
-    std::string maxDistanceInMetersString, bool addLeftChildFirst,
+    std::string specialPredicate, bool addLeftChildFirst,
     std::vector<std::vector<std::string>> expectedOutput,
     std::vector<std::string> columnNames) {
   auto qec = localTestHelpers::buildTestQEC();
@@ -299,9 +302,9 @@ void buildAndTestSmallTestSetSmallChildren(
   auto rightChild =
       buildIndexScan(qec, {"?obj2", std::string{"<asWKT>"}, "?point2"});
 
-  createAndTestSpatialJoin(
-      qec, SparqlTriple{point1, maxDistanceInMetersString, point2}, leftChild,
-      rightChild, addLeftChildFirst, expectedOutput, columnNames);
+  createAndTestSpatialJoin(qec, SparqlTriple{point1, specialPredicate, point2},
+                           leftChild, rightChild, addLeftChildFirst,
+                           expectedOutput, columnNames);
 }
 
 // build the test using the small dataset. Let the SpatialJoin operation be the
@@ -316,7 +319,7 @@ void buildAndTestSmallTestSetSmallChildren(
 //   ?point1 <max-distance-in-meters:XXXX> ?point2 .
 // }
 void buildAndTestSmallTestSetDiffSizeChildren(
-    std::string maxDistanceInMetersString, bool addLeftChildFirst,
+    std::string specialPredicate, bool addLeftChildFirst,
     std::vector<std::vector<std::string>> expectedOutput,
     std::vector<std::string> columnNames, bool bigChildLeft) {
   auto qec = localTestHelpers::buildTestQEC();
@@ -341,8 +344,7 @@ void buildAndTestSmallTestSetDiffSizeChildren(
       bigChildLeft ? point2 : TripleComponent{Variable{"?point1"}};
 
   createAndTestSpatialJoin(
-      qec,
-      SparqlTriple{firstVariable, maxDistanceInMetersString, secondVariable},
+      qec, SparqlTriple{firstVariable, specialPredicate, secondVariable},
       firstChild, secondChild, addLeftChildFirst, expectedOutput, columnNames);
 }
 
@@ -384,77 +386,75 @@ std::vector<std::vector<std::string>> unordered_rows_small{
 // distance from the object to itself should be zero
 std::vector<std::string> expectedDistSelf{"0"};
 
-// distance from Uni Freiburg to Freiburger Müsnster is 2,33 km according to
-// google maps
+// helper functions
 auto P = [](double x, double y) { return GeoPoint(y, x); };
 
-std::vector<std::string> expectedDistUniMun{std::to_string(
-    static_cast<int>(ad_utility::detail::wktDistImpl(P(7.83505, 48.01267),
-                                                     P(7.85298, 47.99557)) *
-                     1000))};
+auto expectedDistBaseline = [](const GeoPoint& p1, const GeoPoint& p2) {
+  return std::to_string(
+      static_cast<int>(ad_utility::detail::wktDistImpl(p1, p2) * 1000));
+};
+
+auto expectedDistS2 = [](const GeoPoint& p1, const GeoPoint& p2) {
+  auto p1_ = S2Point{S2LatLng::FromDegrees(p1.getLat(), p1.getLng())};
+  auto p2_ = S2Point{S2LatLng::FromDegrees(p2.getLat(), p2.getLng())};
+
+  return std::to_string(static_cast<int>(S2Earth::ToMeters(S1Angle(p1_, p2_))));
+};
+
+auto expectedDist = [](const GeoPoint& p1, const GeoPoint& p2) {
+  // TODO<ullingerc> decision baseline vs s2
+  return expectedDistS2(p1, p2);
+};
+
+// distance from Uni Freiburg to Freiburger Münster is 2,33 km according to
+// google maps
+std::vector<std::string> expectedDistUniMun{
+    expectedDist(P(7.83505, 48.01267), P(7.85298, 47.99557))};
 
 // distance from Uni Freiburg to Eiffel Tower is 419,32 km according to
 // google maps
-std::vector<std::string> expectedDistUniEif{std::to_string(
-    static_cast<int>(ad_utility::detail::wktDistImpl(P(7.83505, 48.01267),
-                                                     P(2.29451, 48.85825)) *
-                     1000))};
+std::vector<std::string> expectedDistUniEif{
+    expectedDist(P(7.83505, 48.01267), P(2.29451, 48.85825))};
 
 // distance from Minster Freiburg to eiffel tower is 421,09 km according to
 // google maps
-std::vector<std::string> expectedDistMunEif{std::to_string(
-    static_cast<int>(ad_utility::detail::wktDistImpl(P(7.85298, 47.99557),
-                                                     P(2.29451, 48.85825)) *
-                     1000))};
+std::vector<std::string> expectedDistMunEif{
+    expectedDist(P(7.85298, 47.99557), P(2.29451, 48.85825))};
 
 // distance from london eye to eiffel tower is 340,62 km according to
 // google maps
-std::vector<std::string> expectedDistEyeEif{std::to_string(
-    static_cast<int>(ad_utility::detail::wktDistImpl(P(-0.11957, 51.50333),
-                                                     P(2.29451, 48.85825)) *
-                     1000))};
+std::vector<std::string> expectedDistEyeEif{
+    expectedDist(P(-0.11957, 51.50333), P(2.29451, 48.85825))};
 
 // distance from Uni Freiburg to London Eye is 690,18 km according to
 // google maps
-std::vector<std::string> expectedDistUniEye{std::to_string(
-    static_cast<int>(ad_utility::detail::wktDistImpl(P(7.83505, 48.01267),
-                                                     P(-0.11957, 51.50333)) *
-                     1000))};
+std::vector<std::string> expectedDistUniEye{
+    expectedDist(P(7.83505, 48.01267), P(-0.11957, 51.50333))};
 
 // distance from Minster Freiburg to London Eye is 692,39 km according to
 // google maps
-std::vector<std::string> expectedDistMunEye{std::to_string(
-    static_cast<int>(ad_utility::detail::wktDistImpl(P(7.85298, 47.99557),
-                                                     P(-0.11957, 51.50333)) *
-                     1000))};
+std::vector<std::string> expectedDistMunEye{
+    expectedDist(P(7.85298, 47.99557), P(-0.11957, 51.50333))};
 
 // distance from Uni Freiburg to Statue of Liberty is 6249,55 km according to
 // google maps
-std::vector<std::string> expectedDistUniLib{std::to_string(
-    static_cast<int>(ad_utility::detail::wktDistImpl(P(7.83505, 48.01267),
-                                                     P(-74.04454, 40.68925)) *
-                     1000))};
+std::vector<std::string> expectedDistUniLib{
+    expectedDist(P(7.83505, 48.01267), P(-74.04454, 40.68925))};
 
 // distance from Minster Freiburg to Statue of Liberty is 6251,58 km
 // according to google maps
-std::vector<std::string> expectedDistMunLib{std::to_string(
-    static_cast<int>(ad_utility::detail::wktDistImpl(P(7.85298, 47.99557),
-                                                     P(-74.04454, 40.68925)) *
-                     1000))};
+std::vector<std::string> expectedDistMunLib{
+    expectedDist(P(7.85298, 47.99557), P(-74.04454, 40.68925))};
 
 // distance from london eye to statue of liberty is 5575,08 km according to
 // google maps
-std::vector<std::string> expectedDistEyeLib{std::to_string(
-    static_cast<int>(ad_utility::detail::wktDistImpl(P(-0.11957, 51.50333),
-                                                     P(-74.04454, 40.68925)) *
-                     1000))};
+std::vector<std::string> expectedDistEyeLib{
+    expectedDist(P(-0.11957, 51.50333), P(-74.04454, 40.68925))};
 
 // distance from eiffel tower to Statue of liberty is 5837,42 km according to
 // google maps
-std::vector<std::string> expectedDistEifLib{std::to_string(
-    static_cast<int>(ad_utility::detail::wktDistImpl(P(2.29451, 48.85825),
-                                                     P(-74.04454, 40.68925)) *
-                     1000))};
+std::vector<std::string> expectedDistEifLib{
+    expectedDist(P(2.29451, 48.85825), P(-74.04454, 40.68925))};
 
 std::vector<std::vector<std::string>> expectedMaxDist1_rows{
     mergeToRow(unordered_rows.at(0), unordered_rows.at(0), expectedDistSelf),
