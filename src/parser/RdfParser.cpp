@@ -472,12 +472,10 @@ TripleComponent TurtleParser<T>::literalAndDatatypeToTripleComponentImpl(
   auto makeNormalLiteral = [parser, literal, normalizedLiteralContent,
                             type](std::optional<std::exception> error =
                                       std::nullopt) {
-    std::string errorMsg = "";
-    if (error.has_value()) {
-      errorMsg = error.value().what();
-    }
+    std::string_view errorMsg = error.value_or("");
+    std::string_view sep = error.has_value() ? ": " : "";
     LOG(DEBUG) << normalizedLiteralContent
-               << " could not be parsed as an object of type " << type << ":"
+               << " could not be parsed as an object of type " << type << sep
                << errorMsg
                << ". It is treated as a plain string literal without datatype "
                   "instead."
