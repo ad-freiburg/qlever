@@ -490,7 +490,8 @@ Result SpatialJoin::s2geometryAlgorithm() {
     if (!p.has_value()) {
       continue;
     }
-    auto s2target = S2ClosestPointQuery<int>::PointTarget{toS2Point(p.value())};
+    auto s2target =
+        S2ClosestPointQuery<size_t>::PointTarget{toS2Point(p.value())};
 
     for (const auto& neighbor : s2query.FindClosestPoints(&s2target)) {
       // In this loop we only receive points that already satisfy the given
