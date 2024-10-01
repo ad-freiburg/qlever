@@ -262,7 +262,6 @@ auto getIdMapLambdas(
    * - All Ids are assigned according to itemArray[idx]
    */
   const auto itemMapLamdaCreator = [&itemArray, indexPtr](const size_t idx) {
-    auto& map = *itemArray[idx];
     return [&map = *itemArray[idx], indexPtr](ad_utility::Rvalue auto&& tr) {
       auto lt = indexPtr->tripleToInternalRepresentation(AD_FWD(tr));
       OptionalIds res;

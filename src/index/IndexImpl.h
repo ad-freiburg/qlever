@@ -477,7 +477,7 @@ class IndexImpl {
 
   FirstPermutationSorterAndInternalTriplesAsPso convertPartialToGlobalIds(
       TripleVec& data, const vector<size_t>& actualLinesPerPartial,
-      size_t linesPerPartial, auto isQleverInternalTriple);
+      size_t linesPerPartial, auto isQLeverInternalTriple);
 
   // Generator that returns all words in the given context file (if not empty)
   // and then all words in all literals (if second argument is true).
@@ -739,10 +739,6 @@ class IndexImpl {
 
   // Functions to create the pairs of permutations during the index build. Each
   // of them takes the following arguments:
-  // * `isQleverInternalTriple` a callable that takes an `Id` and returns true
-  // iff
-  //    the corresponding IRI was internally added by QLever and not part of the
-  //    knowledge graph.
   // * `sortedInput`  The input, must be sorted by the first permutation in the
   //    function name.
   // * `nextSorter` A callback that is invoked for each row in each of the
@@ -755,13 +751,13 @@ class IndexImpl {
   template <typename... NextSorter>
   requires(sizeof...(NextSorter) <= 1)
   std::optional<PatternCreator::TripleSorter> createSPOAndSOP(
-      size_t numColumns, auto& isInternalTriple, BlocksOfTriples sortedTriples,
+      size_t numColumns, BlocksOfTriples sortedTriples,
       NextSorter&&... nextSorter);
   // Create the OSP and OPS permutations. Additionally, count the number of
   // distinct objects and write it to the metadata.
   template <typename... NextSorter>
   requires(sizeof...(NextSorter) <= 1)
-  void createOSPAndOPS(size_t numColumns, auto& isInternalTriple,
+  void createOSPAndOPS(size_t numColumns,
                        BlocksOfTriples sortedTriples,
                        NextSorter&&... nextSorter);
 
@@ -770,7 +766,7 @@ class IndexImpl {
   // metadata.
   template <typename... NextSorter>
   requires(sizeof...(NextSorter) <= 1)
-  void createPSOAndPOS(size_t numColumns, auto& isInternalTriple,
+  void createPSOAndPOS(size_t numColumns,
                        BlocksOfTriples sortedTriples,
                        NextSorter&&... nextSorter);
 
@@ -827,5 +823,5 @@ class IndexImpl {
   // PSO and POS permutations.
   std::unique_ptr<ExternalSorter<SortByPSO, NumColumnsIndexBuilding + 2>>
   buildOspWithPatterns(PatternCreator::TripleSorter sortersFromPatternCreator,
-                       auto& internalTripleSorter, auto isQleverInternalTriple);
+                       auto& internalTripleSorter);
 };
