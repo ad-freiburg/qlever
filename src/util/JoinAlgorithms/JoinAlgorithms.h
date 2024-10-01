@@ -1288,6 +1288,7 @@ struct BlockZipperJoinImpl {
             }
             ++rightSide_.it_;
           }
+          compatibleRowAction_.flush();
         }
         if constexpr (DoOptionalJoin) {
           if (!rightHasUndef) {
