@@ -392,6 +392,7 @@ TEST_F(ServiceTest, computeResult) {
     // Check 5: When a siblingTree with variables common to the Service
     // Clause is passed, the Service Operation shall use the siblings result
     // to reduce its Query complexity by injecting them as Values Clause
+
     auto iri = ad_utility::testing::iri;
     using TC = TripleComponent;
     auto siblingTree = std::make_shared<QueryExecutionTree>(
@@ -402,7 +403,11 @@ TEST_F(ServiceTest, computeResult) {
                 {Variable{"?x"}, Variable{"?y"}, Variable{"?z"}},
                 {{TC(iri("<x>")), TC(iri("<y>")), TC(iri("<z>"))},
                  {TC(iri("<x>")), TC(iri("<y>")), TC(iri("<z2>"))},
-                 {TC(iri("<blu>")), TC(iri("<bla>")), TC(iri("<blo>"))}}}));
+                 {TC(iri("<blu>")), TC(iri("<bla>")), TC(iri("<blo>"))},
+                 // This row will be ignored in the created Values Clause as it
+                 // contains a blank node.
+                 {TC(Id::makeFromBlankNodeIndex(BlankNodeIndex::make(0))),
+                  TC(iri("<bl>")), TC(iri("<ank>"))}}}));
 
     auto parsedServiceClause5 = parsedServiceClause;
     parsedServiceClause5.graphPatternAsString_ =
@@ -610,16 +615,18 @@ TEST_F(ServiceTest, bindingToTripleComponent) {
       ::testing::HasSubstr("Type INVALID_TYPE is undefined"));
 }
 
+// ____________________________________________________________________________
 TEST_F(ServiceTest, idToValueForValuesClause) {
   auto idToVc = Service::idToValueForValuesClause;
   LocalVocab localVocab{};
   auto index = ad_utility::testing::makeIndexWithTestSettings();
 
-  // undefined, blanknode -> nullopt
+  // blanknode -> nullopt
   EXPECT_EQ(idToVc(index, Id::makeFromBlankNodeIndex(BlankNodeIndex::make(0)),
                    localVocab),
             std::nullopt);
-  EXPECT_EQ(idToVc(index, Id::makeUndefined(), localVocab), std::nullopt);
+
+  EXPECT_EQ(idToVc(index, Id::makeUndefined(), localVocab), "UNDEF");
 
   // simple datatypes -> implicit string representation
   EXPECT_EQ(idToVc(index, Id::makeFromInt(42), localVocab), "42");

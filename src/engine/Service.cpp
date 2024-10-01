@@ -322,30 +322,35 @@ std::optional<std::string> Service::getSiblingValuesClause() const {
 
   checkCancellation();
 
-  ad_utility::HashSet<std::string> rowSet;
-  std::string values = " { ";
-  for (size_t rowIndex = 0; rowIndex < siblingResult->idTable().size();
-       ++rowIndex) {
+  // Creates a single row of the values clause or an empty string on error.
+  auto createValueRow = [&](size_t rowIndex) -> std::string {
     std::string row = "(";
     for (const auto& columnIdx : commonColumnIndices) {
-      const auto& optionalString = idToValueForValuesClause(
+      const auto& optStr = idToValueForValuesClause(
           siblingTree_->getRootOperation()->getIndex(),
           siblingResult->idTable()(rowIndex, columnIdx),
           siblingResult->localVocab());
 
-      if (optionalString.has_value()) {
-        absl::StrAppend(&row, optionalString.value(), " ");
+      if (!optStr.has_value()) {
+        return "";
       }
+      absl::StrAppend(&row, optStr.value(), " ");
     }
     row.back() = ')';
+    return row;
+  };
 
-    if (rowSet.contains(row)) {
+  ad_utility::HashSet<std::string> rowSet;
+  std::string values = " { ";
+  for (size_t rowIndex = 0; rowIndex < siblingResult->idTable().size();
+       ++rowIndex) {
+    std::string row = createValueRow(rowIndex);
+    if (row.empty() || rowSet.contains(row)) {
       continue;
     }
-
     rowSet.insert(row);
-    absl::StrAppend(&values, row, " ");
 
+    absl::StrAppend(&values, row, " ");
     checkCancellation();
   }
 
@@ -462,14 +467,17 @@ std::optional<std::string> Service::idToValueForValuesClause(
   const auto& optionalStringAndXsdType =
       ExportQueryExecutionTrees::idToStringAndType(index, id, localVocab);
   if (!optionalStringAndXsdType.has_value()) {
-    return std::nullopt;
+    AD_CORRECTNESS_CHECK(id.getDatatype() == Undefined);
+    return "UNDEF";
   }
   const auto& [value, xsdType] = optionalStringAndXsdType.value();
 
   switch (id.getDatatype()) {
     case BlankNodeIndex:
-      // Blank nodes can be used in a VALUES-clause, however we don't have
-      // knowledge about the blank nodes used by the endpoint.
+      // Blank nodes are not allowed in a values clause. Additionally blank
+      // nodes across a SERVICE endpoint are disjoint anyway, so rows that
+      // contain blank nodes will never create matches and we can safely omit
+      // them.
       return std::nullopt;
     case Int:
     case Double:
