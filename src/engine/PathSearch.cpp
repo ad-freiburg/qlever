@@ -4,6 +4,7 @@
 
 #include "PathSearch.h"
 
+#include <optional>
 #include <ranges>
 #include <variant>
 #include <vector>
@@ -380,9 +381,26 @@ void PathSearch::pathsToResultTable(IdTable& tableDyn,
                                     std::vector<Path>& paths) const {
   IdTableStatic<WIDTH> table = std::move(tableDyn).toStatic<WIDTH>();
 
+  std::vector<size_t> edgePropertyCols;
+  for (const auto& edgeVar: config_.edgeProperties_) {
+    auto edgePropertyCol = variableColumns_.at(edgeVar).columnIndex_;
+    edgePropertyCols.push_back(edgePropertyCol);
+  }
+
   size_t rowIndex = 0;
   for (size_t pathIndex = 0; pathIndex < paths.size(); pathIndex++) {
     auto path = paths[pathIndex];
+
+    std::optional<Id> sourceId = std::nullopt;
+    if (config_.sourceIsVariable()) {
+      sourceId = path.edges_.front().start_;
+    }
+
+    std::optional<Id> targetId = std::nullopt;
+    if (config_.targetIsVariable()) {
+      targetId = path.edges_.back().end_;
+    }
+
     for (size_t edgeIndex = 0; edgeIndex < path.size(); edgeIndex++) {
       auto edge = path.edges_[edgeIndex];
       table.emplace_back();
@@ -391,10 +409,18 @@ void PathSearch::pathsToResultTable(IdTable& tableDyn,
       table(rowIndex, getPathIndex()) = Id::makeFromInt(pathIndex);
       table(rowIndex, getEdgeIndex()) = Id::makeFromInt(edgeIndex);
 
+      if (sourceId) {
+        table(rowIndex, getSourceIndex().value()) = sourceId.value();
+      }
+
+      if (targetId) {
+        table(rowIndex, getTargetIndex().value()) = targetId.value();
+      }
+
       for (size_t edgePropertyIndex = 0;
            edgePropertyIndex < edge.edgeProperties_.size();
            edgePropertyIndex++) {
-        table(rowIndex, 4 + edgePropertyIndex) =
+        table(rowIndex, edgePropertyCols[edgePropertyIndex]) =
             edge.edgeProperties_[edgePropertyIndex];
       }
 

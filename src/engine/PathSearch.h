@@ -5,6 +5,7 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 #include <span>
 #include <variant>
 #include <vector>
@@ -175,6 +176,20 @@ class PathSearch : public Operation {
   }
   ColumnIndex getEdgeIndex() const {
     return variableColumns_.at(config_.edgeColumn_).columnIndex_;
+  }
+  std::optional<ColumnIndex> getSourceIndex() const {
+    if (!config_.sourceIsVariable()) {
+      return std::nullopt;
+    }
+    auto sourceVar = std::get<Variable>(config_.sources_);
+    return variableColumns_.at(sourceVar).columnIndex_;
+  }
+  std::optional<ColumnIndex> getTargetIndex() const {
+    if (!config_.targetIsVariable()) {
+      return std::nullopt;
+    }
+    auto targetVar = std::get<Variable>(config_.targets_);
+    return variableColumns_.at(targetVar).columnIndex_;
   }
 
   string getCacheKeyImpl() const override;
