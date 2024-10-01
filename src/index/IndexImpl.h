@@ -78,6 +78,8 @@ struct IndexBuilderDataAsStxxlVector : IndexBuilderDataBase {
   std::vector<size_t> actualPartialSizes;
 };
 
+// Store the "normal" triples sorted by the first permutation, together with
+// the additional "internal" triples, sorted by PSO.
 struct FirstPermutationSorterAndInternalTriplesAsPso {
   using SorterPtr =
       std::unique_ptr<ad_utility::CompressedExternalIdTableSorterTypeErased>;

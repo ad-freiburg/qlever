@@ -52,13 +52,11 @@ IndexBuilderDataAsFirstPermutationSorter IndexImpl::createIdTriplesAndVocab(
   auto indexBuilderData =
       passFileForVocabulary(std::move(parser), numTriplesPerBatch_);
 
-  auto isQleverInternalId = [&indexBuilderData](const auto& id) {
-    return indexBuilderData.vocabularyMetaData_.isQleverInternalId(id);
-  };
-
-  auto isQleverInternalTriple = [isQleverInternalId](const auto& triple) {
-    const auto& i = isQleverInternalId;
-    return i(triple[0]) || i(triple[1]) || i(triple[2]);
+  auto isQleverInternalTriple = [&indexBuilderData](const auto& triple) {
+    auto internal = [&indexBuilderData](Id id) {
+      return indexBuilderData.vocabularyMetaData_.isQleverInternalId(id);
+    };
+    return internal(triple[0]) || internal(triple[1]) || internal(triple[2]);
   };
 
   auto firstSorter = convertPartialToGlobalIds(
@@ -264,7 +262,9 @@ IndexImpl::buildOspWithPatterns(
                 "When adding additional payload columns, the following code "
                 "has to be changed");
   Id internalGraph = idOfInternalGraphDuringIndexBuilding_.value();
-  // TODO<joka921> We don't actually need the sorted output again here.
+  // Note: We are getting the patterns sorted by PSO and then sorting them again
+  // by PSO.
+  // TODO<joka921> Simply get the output unsorted (should be cheaper).
   for (const auto& row : hasPatternPredicateSortedByPSO->sortedView()) {
     internalTripleSorter.push(
         std::array{row[0], row[1], row[2], internalGraph});
@@ -294,11 +294,15 @@ void IndexImpl::createFromFile(const string& filename, Index::Filetype type) {
 
   auto createInternalPSOAndPOS = [&]() {
     auto onDiskBaseBackup = onDiskBase_;
+    // TODO<joka921> rename this suffix to ".internal",
+    // and make it a global constant. (no magic numbers or strings).
     onDiskBase_ += ".internalTriples";
-    createPSOAndPOS(NumColumnsIndexBuilding,
-                    std::move(*indexBuilderData.sorter_.internalTriplesPso_)
-                        .getSortedBlocks<0>());
+    auto internalTriplesUnique = ad_utility::uniqueBlockView(
+        indexBuilderData.sorter_.internalTriplesPso_->getSortedBlocks<0>());
+    createPSOAndPOS(NumColumnsIndexBuilding, std::move(internalTriplesUnique));
     onDiskBase_ = std::move(onDiskBaseBackup);
+    // TODO<joka921> The above code currently writes a `metadata.json` for the
+    // internal triples, this should be deleted or not created at all.
   };
   // For the first permutation, perform a unique.
   auto firstSorterWithUnique =
@@ -311,7 +315,7 @@ void IndexImpl::createFromFile(const string& filename, Index::Filetype type) {
     createFirstPermutationPair(NumColumnsIndexBuilding,
                                std::move(firstSorterWithUnique));
     configurationJson_["has-all-permutations"] = false;
-  } else if (loadAllPermutations_ && !usePatterns_) {
+  } else if (!usePatterns_) {
     createInternalPSOAndPOS();
     // Without patterns we explicitly have to pass in the next sorters to all
     // permutation creating functions.
@@ -603,6 +607,10 @@ auto IndexImpl::convertPartialToGlobalIds(
               });
           IdTableStatic<NumColumnsIndexBuilding> internalTriples(
               triples->getAllocator());
+          // TODO<joka921> We could leave the partitioned complete block as is,
+          // and change the interface of the compressed sorters s.t. we can
+          // push only a part of a block. We then would safe the copy of the
+          // internal triples here, but I am not sure whether this is worth it.
           internalTriples.insertAtEnd(beginInternal, endInternal);
           triples->resize(beginInternal - triples->begin());
 

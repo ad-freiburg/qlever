@@ -184,15 +184,15 @@ const Permutation& Permutation::getActualPermutation(
   if (!isInternalScan) {
     return *this;
   }
-  AD_CORRECTNESS_CHECK(internalPermutation_ != nullptr);
+  AD_CORRECTNESS_CHECK(internalPermutation_ != nullptr, [this]() {
+    return absl::StrCat("No internal triples were loaded for the permutation ",
+                        readableName_);
+  });
   return *internalPermutation_;
 }
 
 // ______________________________________________________________________
 const Permutation& Permutation::getActualPermutation(Id id) const {
-  if (!isInternalId_(id)) {
-    return *this;
-  }
-  AD_CORRECTNESS_CHECK(internalPermutation_ != nullptr);
-  return *internalPermutation_;
+  return getActualPermutation(
+      ScanSpecification{id, std::nullopt, std::nullopt});
 }
