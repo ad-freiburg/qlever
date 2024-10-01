@@ -773,15 +773,14 @@ TEST(QueryPlanner, TransitivePathBindRight) {
       ad_utility::testing::getQec("<x> <p> <o>. <x2> <p> <o2>"));
 }
 
-TEST(QueryPlanner, SpatialJoin) {
-  // TODO<ullingerc> update
+TEST(QueryPlanner, SpatialJoinViaMaxDistPredicate) {
   auto scan = h::IndexScanFromStrings;
   h::expect(
       "SELECT ?x ?y WHERE {"
       "?x <p> ?y."
       "?a <p> ?b."
       "?y <max-distance-in-meters:1> ?b }",
-      h::SpatialJoin(1, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+      h::SpatialJoin(1, -1, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
 
   AD_EXPECT_THROW_WITH_MESSAGE(
       h::expect("SELECT ?x ?y WHERE {"
@@ -830,6 +829,99 @@ TEST(QueryPlanner, SpatialJoin) {
                 ::testing::_),
       ::testing::ContainsRegex("parsing of the maximum distance for the "
                                "SpatialJoin operation was not possible"));
+}
+
+// __________________________________________________________________________
+TEST(QueryPlanner, SpatialJoinViaNearestNeighborsPredicate) {
+  auto scan = h::IndexScanFromStrings;
+  h::expect(
+      "SELECT ?x ?y WHERE {"
+      "?x <p> ?y."
+      "?a <p> ?b."
+      "?y <nearest-neighbors:2:500> ?b }",
+      h::SpatialJoin(500, 2, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+  h::expect(
+      "SELECT ?x ?y WHERE {"
+      "?x <p> ?y."
+      "?a <p> ?b."
+      "?y <nearest-neighbors:20> ?b }",
+      h::SpatialJoin(-1, 20, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+  h::expect(
+      "SELECT ?x ?y WHERE {"
+      "?x <p> ?y."
+      "?a <p> ?b."
+      "?y <nearest-neighbors:0> ?b }",
+      h::SpatialJoin(-1, 0, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("SELECT ?x ?y WHERE {"
+                "?x <p> ?y."
+                "?a <p> ?b."
+                "?y <nearest-neighbors:2:500> ?b ."
+                "?y <a> ?b}",
+                ::testing::_),
+      ::testing::ContainsRegex(
+          "Currently, if both sides of a SpatialJoin are variables, then the"
+          "SpatialJoin must be the only connection between these variables"));
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("SELECT ?x ?y WHERE {"
+                "?y <p> ?b."
+                "?y <nearest-neighbors:1> ?b }",
+                ::testing::_),
+      ::testing::ContainsRegex(
+          "Currently, if both sides of a SpatialJoin are variables, then the"
+          "SpatialJoin must be the only connection between these variables"));
+
+  EXPECT_ANY_THROW(
+      h::expect("SELECT ?x ?y WHERE {"
+                "?x <p> ?y."
+                "?y <nearest-neighbors:2:500> <a> }",
+                ::testing::_));
+
+  EXPECT_ANY_THROW(
+      h::expect("SELECT ?x ?y WHERE {"
+                "?x <p> ?y."
+                "<a> <nearest-neighbors:2:500> ?y }",
+                ::testing::_));
+
+  EXPECT_ANY_THROW(
+      h::expect("SELECT ?x ?y WHERE {"
+                "?x <p> ?y."
+                "?a <p> ?b."
+                "?y <nearest-neighbors:> ?b }",
+                ::testing::_));
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("SELECT ?x ?y WHERE {"
+                "?y <nearest-neighbors:2:500> ?b }",
+                ::testing::_),
+      ::testing::ContainsRegex(
+          "SpatialJoin needs two children, but at least one is missing"));
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("SELECT ?x ?y WHERE {"
+                "?x <p> ?y."
+                "?a <p> ?b."
+                "?y <nearest-neighbors:-50:500> ?b }",
+                ::testing::_),
+      ::testing::ContainsRegex("invalid arguments for <nearest-neighbors>"));
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("SELECT ?x ?y WHERE {"
+                "?x <p> ?y."
+                "?a <p> ?b."
+                "?y <nearest-neighbors:1:-200> ?b }",
+                ::testing::_),
+      ::testing::ContainsRegex("invalid arguments for <nearest-neighbors>"));
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("SELECT ?x ?y WHERE {"
+                "?x <p> ?y."
+                "?a <p> ?b."
+                "?y <nearest-neighbors:0:-1> ?b }",
+                ::testing::_),
+      ::testing::ContainsRegex("invalid arguments for <nearest-neighbors>"));
 }
 
 // __________________________________________________________________________

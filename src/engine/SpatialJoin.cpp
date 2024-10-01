@@ -61,9 +61,6 @@ SpatialJoin::SpatialJoin(
 // ____________________________________________________________________________
 void SpatialJoin::parseMaxDistance() {
   const std::string& input = triple_.p_._iri;
-  std::string errormessage =
-      "parsing of the maximum distance for the "
-      "SpatialJoin operation was not possible";
 
   if (ctre::match<MAX_DIST_IN_METERS_REGEX>(input)) {
     std::string number = input.substr(
@@ -71,7 +68,9 @@ void SpatialJoin::parseMaxDistance() {
         input.size() - MAX_DIST_IN_METERS.size() - 1);  // -1: compensate for >
     maxDist_ = std::stoll(number);
   } else {
-    AD_THROW(errormessage);
+    AD_THROW(
+        "parsing of the maximum distance for the "
+        "SpatialJoin operation was not possible");
   }
 
   if (maxDist_ < 0) {

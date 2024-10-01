@@ -279,14 +279,14 @@ inline auto TransitivePath =
     };
 
 // Match a SpatialJoin operation
-// TODO<ullingerc> update
 inline auto SpatialJoin =
-    [](long long maxDist,
+    [](long long maxDist, long long maxResults,
        const std::same_as<QetMatcher> auto&... childMatchers) {
       return RootOperation<::SpatialJoin>(
           AllOf(Property("getChildren", &Operation::getChildren,
                          ElementsAre(Pointee(childMatchers)...)),
-                AD_PROPERTY(SpatialJoin, getMaxDist, Eq(maxDist))));
+                AD_PROPERTY(SpatialJoin, getMaxDist, Eq(maxDist)),
+                AD_PROPERTY(SpatialJoin, getMaxResults, Eq(maxResults))));
     };
 
 // Match a sort operation. Currently, this is only required by the binary search
