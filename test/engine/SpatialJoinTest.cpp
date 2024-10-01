@@ -823,6 +823,66 @@ std::vector<std::vector<std::string>> expectedMaxDist10000000_rows_diff{
     mergeToRow(unordered_rows.at(4), unordered_rows_small.at(3),
                expectedDistEifLib)};
 
+std::vector<std::vector<std::string>> expectedNearestNeighbors1{
+    mergeToRow(unordered_rows.at(0), unordered_rows.at(0), expectedDistSelf),
+    mergeToRow(unordered_rows.at(1), unordered_rows.at(1), expectedDistSelf),
+    mergeToRow(unordered_rows.at(2), unordered_rows.at(2), expectedDistSelf),
+    mergeToRow(unordered_rows.at(3), unordered_rows.at(3), expectedDistSelf),
+    mergeToRow(unordered_rows.at(4), unordered_rows.at(4), expectedDistSelf)};
+
+std::vector<std::vector<std::string>> expectedNearestNeighbors2{
+    mergeToRow(unordered_rows.at(0), unordered_rows.at(0), expectedDistSelf),
+    mergeToRow(unordered_rows.at(1), unordered_rows.at(1), expectedDistSelf),
+    mergeToRow(unordered_rows.at(2), unordered_rows.at(2), expectedDistSelf),
+    mergeToRow(unordered_rows.at(3), unordered_rows.at(3), expectedDistSelf),
+    mergeToRow(unordered_rows.at(4), unordered_rows.at(4), expectedDistSelf),
+    mergeToRow(unordered_rows.at(0), unordered_rows.at(1), expectedDistUniMun),
+    mergeToRow(unordered_rows.at(1), unordered_rows.at(0), expectedDistUniMun),
+    mergeToRow(unordered_rows.at(2), unordered_rows.at(4), expectedDistEyeEif),
+    mergeToRow(unordered_rows.at(3), unordered_rows.at(2), expectedDistEyeLib),
+    mergeToRow(unordered_rows.at(4), unordered_rows.at(2), expectedDistEyeEif)};
+
+std::vector<std::vector<std::string>> expectedNearestNeighbors2_400000{
+    mergeToRow(unordered_rows.at(0), unordered_rows.at(0), expectedDistSelf),
+    mergeToRow(unordered_rows.at(1), unordered_rows.at(1), expectedDistSelf),
+    mergeToRow(unordered_rows.at(2), unordered_rows.at(2), expectedDistSelf),
+    mergeToRow(unordered_rows.at(3), unordered_rows.at(3), expectedDistSelf),
+    mergeToRow(unordered_rows.at(4), unordered_rows.at(4), expectedDistSelf),
+    mergeToRow(unordered_rows.at(0), unordered_rows.at(1), expectedDistUniMun),
+    mergeToRow(unordered_rows.at(1), unordered_rows.at(0), expectedDistUniMun),
+    mergeToRow(unordered_rows.at(2), unordered_rows.at(4), expectedDistEyeEif),
+    mergeToRow(unordered_rows.at(4), unordered_rows.at(2), expectedDistEyeEif)};
+
+std::vector<std::vector<std::string>> expectedNearestNeighbors2_4000{
+    mergeToRow(unordered_rows.at(0), unordered_rows.at(0), expectedDistSelf),
+    mergeToRow(unordered_rows.at(1), unordered_rows.at(1), expectedDistSelf),
+    mergeToRow(unordered_rows.at(2), unordered_rows.at(2), expectedDistSelf),
+    mergeToRow(unordered_rows.at(3), unordered_rows.at(3), expectedDistSelf),
+    mergeToRow(unordered_rows.at(4), unordered_rows.at(4), expectedDistSelf),
+    mergeToRow(unordered_rows.at(0), unordered_rows.at(1), expectedDistUniMun),
+    mergeToRow(unordered_rows.at(1), unordered_rows.at(0), expectedDistUniMun)};
+
+std::vector<std::vector<std::string>> expectedNearestNeighbors2_40{
+    mergeToRow(unordered_rows.at(0), unordered_rows.at(0), expectedDistSelf),
+    mergeToRow(unordered_rows.at(1), unordered_rows.at(1), expectedDistSelf),
+    mergeToRow(unordered_rows.at(2), unordered_rows.at(2), expectedDistSelf),
+    mergeToRow(unordered_rows.at(3), unordered_rows.at(3), expectedDistSelf),
+    mergeToRow(unordered_rows.at(4), unordered_rows.at(4), expectedDistSelf)};
+
+std::vector<std::vector<std::string>> expectedNearestNeighbors3_500000{
+    mergeToRow(unordered_rows.at(0), unordered_rows.at(0), expectedDistSelf),
+    mergeToRow(unordered_rows.at(1), unordered_rows.at(1), expectedDistSelf),
+    mergeToRow(unordered_rows.at(2), unordered_rows.at(2), expectedDistSelf),
+    mergeToRow(unordered_rows.at(3), unordered_rows.at(3), expectedDistSelf),
+    mergeToRow(unordered_rows.at(4), unordered_rows.at(4), expectedDistSelf),
+    mergeToRow(unordered_rows.at(0), unordered_rows.at(1), expectedDistUniMun),
+    mergeToRow(unordered_rows.at(1), unordered_rows.at(0), expectedDistUniMun),
+    mergeToRow(unordered_rows.at(1), unordered_rows.at(4), expectedDistMunEif),
+    mergeToRow(unordered_rows.at(0), unordered_rows.at(4), expectedDistUniEif),
+    mergeToRow(unordered_rows.at(2), unordered_rows.at(4), expectedDistEyeEif),
+    mergeToRow(unordered_rows.at(4), unordered_rows.at(2), expectedDistEyeEif),
+    mergeToRow(unordered_rows.at(4), unordered_rows.at(0), expectedDistUniEif)};
+
 // test the compute result method on small examples
 TEST(SpatialJoin, computeResultSmallDatasetLargeChildren) {
   std::vector<std::string> columnNames = {
@@ -854,6 +914,22 @@ TEST(SpatialJoin, computeResultSmallDatasetLargeChildren) {
                                         columnNames);
   buildAndTestSmallTestSetLargeChildren("<max-distance-in-meters:10000000>",
                                         false, expectedMaxDist10000000_rows,
+                                        columnNames);
+  buildAndTestSmallTestSetLargeChildren("<nearest-neighbors:1>", true,
+                                        expectedNearestNeighbors1, columnNames);
+  buildAndTestSmallTestSetLargeChildren("<nearest-neighbors:2>", true,
+                                        expectedNearestNeighbors2, columnNames);
+  buildAndTestSmallTestSetLargeChildren("<nearest-neighbors:2:400000>", true,
+                                        expectedNearestNeighbors2_400000,
+                                        columnNames);
+  buildAndTestSmallTestSetLargeChildren("<nearest-neighbors:2:4000>", true,
+                                        expectedNearestNeighbors2_4000,
+                                        columnNames);
+  buildAndTestSmallTestSetLargeChildren("<nearest-neighbors:2:40>", true,
+                                        expectedNearestNeighbors2_40,
+                                        columnNames);
+  buildAndTestSmallTestSetLargeChildren("<nearest-neighbors:3:500000>", true,
+                                        expectedNearestNeighbors3_500000,
                                         columnNames);
 }
 
