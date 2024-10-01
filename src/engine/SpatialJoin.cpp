@@ -355,26 +355,22 @@ void SpatialJoin::addResultTableEntry(IdTable* result,
 }
 
 // ____________________________________________________________________________
-std::pair<const IdTable*, std::shared_ptr<const Result>>
-SpatialJoin::getIdTable(std::shared_ptr<QueryExecutionTree> child) {
-  std::shared_ptr<const Result> resTable = child->getResult();
-  auto idTablePtr = &resTable->idTable();
-  return std::pair{idTablePtr, std::move(resTable)};
-}
-
-// ____________________________________________________________________________
-ColumnIndex SpatialJoin::getJoinCol(
-    const std::shared_ptr<const QueryExecutionTree>& child,
-    const Variable& childVariable) {
-  auto varColMap =
-      child->getRootOperation()->getExternallyVisibleVariableColumns();
-  return varColMap[childVariable].columnIndex_;
-}
-
-// ____________________________________________________________________________
 std::tuple<const IdTable* const, const IdTable* const, unsigned long,
-           unsigned long, IdTable*>
+           unsigned long, size_t>
 SpatialJoin::prepareJoin() {
+  auto getIdTable = [](std::shared_ptr<QueryExecutionTree> child) {
+    std::shared_ptr<const Result> resTable = child->getResult();
+    auto idTablePtr = &resTable->idTable();
+    return std::pair{idTablePtr, std::move(resTable)};
+  };
+
+  auto getJoinCol = [](const std::shared_ptr<const QueryExecutionTree>& child,
+                       const Variable& childVariable) {
+    auto varColMap =
+        child->getRootOperation()->getExternallyVisibleVariableColumns();
+    return varColMap[childVariable].columnIndex_;
+  };
+
   // Input tables
   const auto [resLeft, keepAliveLeft] = getIdTable(childLeft_);
   const auto [resRight, keepAliveRight] = getIdTable(childRight_);
@@ -383,17 +379,17 @@ SpatialJoin::prepareJoin() {
   ColumnIndex leftJoinCol = getJoinCol(childLeft_, leftChildVariable_);
   ColumnIndex rightJoinCol = getJoinCol(childRight_, rightChildVariable_);
 
-  // Output table
+  // Size of output table
   size_t numColumns = getResultWidth();
-  IdTable result{numColumns, _executionContext->getAllocator()};
-
-  return std::make_tuple(resLeft, resRight, leftJoinCol, rightJoinCol, &result);
+  return std::make_tuple(resLeft, resRight, leftJoinCol, rightJoinCol,
+                         numColumns);
 }
 
 // ____________________________________________________________________________
 Result SpatialJoin::baselineAlgorithm() {
-  const auto [resLeft, resRight, leftJoinCol, rightJoinCol, result] =
+  const auto [resLeft, resRight, leftJoinCol, rightJoinCol, numColumns] =
       prepareJoin();
+  IdTable result{numColumns, _executionContext->getAllocator()};
 
   // cartesian product between the two tables, pairs are restricted according to
   // `maxDistance_` and `maxResults_`
@@ -422,7 +418,8 @@ Result SpatialJoin::baselineAlgorithm() {
       }
       // Ensure `maxResults_` constraint
       if (maxResults_ < 0) {
-        addResultTableEntry(result, resLeft, resRight, rowLeft, rowRight, dist);
+        addResultTableEntry(&result, resLeft, resRight, rowLeft, rowRight,
+                            dist);
       } else {
         intermediate.push(std::pair{rowRight, dist.getInt()});
         // Too many results? Drop the worst one
@@ -440,18 +437,19 @@ Result SpatialJoin::baselineAlgorithm() {
         auto [rowRight, dist] = intermediate.top();
         intermediate.pop();
 
-        addResultTableEntry(result, resLeft, resRight, rowLeft, rowRight,
+        addResultTableEntry(&result, resLeft, resRight, rowLeft, rowRight,
                             Id::makeFromInt(dist));
       }
     }
   }
-  return Result(std::move(*result), std::vector<ColumnIndex>{}, LocalVocab{});
+  return Result(std::move(result), std::vector<ColumnIndex>{}, LocalVocab{});
 }
 
 // ____________________________________________________________________________
 Result SpatialJoin::s2geometryAlgorithm() {
-  const auto [resLeft, resRight, leftJoinCol, rightJoinCol, result] =
+  const auto [resLeft, resRight, leftJoinCol, rightJoinCol, numColumns] =
       prepareJoin();
+  IdTable result{numColumns, _executionContext->getAllocator()};
 
   // Helper function to convert `GeoPoint` to `S2Point`
   auto constexpr toS2Point = [](const GeoPoint& p) {
@@ -498,12 +496,12 @@ Result SpatialJoin::s2geometryAlgorithm() {
       // criteria
       auto rowRight = neighbor.data();
       auto dist = static_cast<int64_t>(S2Earth::ToMeters(neighbor.distance()));
-      addResultTableEntry(result, resLeft, resRight, rowLeft, rowRight,
+      addResultTableEntry(&result, resLeft, resRight, rowLeft, rowRight,
                           Id::makeFromInt(dist));
     }
   }
 
-  return Result(std::move(*result), std::vector<ColumnIndex>{}, LocalVocab{});
+  return Result(std::move(result), std::vector<ColumnIndex>{}, LocalVocab{});
 }
 
 // ____________________________________________________________________________

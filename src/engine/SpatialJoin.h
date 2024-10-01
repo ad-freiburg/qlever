@@ -9,9 +9,8 @@
 #include "parser/ParsedQuery.h"
 
 // This class is implementing a SpatialJoin operation. This operations joins
-// two tables, using their positional column. If the distance of the two
-// positions is less than a given maximum distance, the pair will be in the
-// result table.
+// two tables, using their positional column. It supports nearest neighbor
+// search as well as search of all points within a given range.
 class SpatialJoin : public Operation {
  public:
   // creates a SpatialJoin operation. The triple is needed, to get the
@@ -119,18 +118,9 @@ class SpatialJoin : public Operation {
                            const IdTable* resultRight, size_t rowLeft,
                            size_t rowRight, Id distance) const;
 
-  // helper function, to retrieve an id table of either left or right child
-  std::pair<const IdTable*, std::shared_ptr<const Result>> getIdTable(
-      std::shared_ptr<QueryExecutionTree> child);
-
-  // helper function, to retrieve on which column from the given table the
-  // join will operate
-  ColumnIndex getJoinCol(const std::shared_ptr<const QueryExecutionTree>& child,
-                         const Variable& childVariable);
-
   // helper function, to initialize various required objects for both algorithms
   std::tuple<const IdTable* const, const IdTable* const, unsigned long,
-             unsigned long, IdTable*>
+             unsigned long, size_t>
   prepareJoin();
 
   // the baseline algorithm, which just checks every combination
