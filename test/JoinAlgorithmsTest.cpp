@@ -276,7 +276,7 @@ void testDynamicJoinWithUndef(const std::vector<std::vector<FakeId>>& a,
 
   {
     RowAdderWithUndef adder{};
-    zipperJoinForBlocksWithoutUndef(b, a, compare, adder);
+    zipperJoinForBlocksWithPotentialUndef(b, a, compare, adder);
     const auto& result = adder.getOutput();
     EXPECT_TRUE(
         std::ranges::is_sorted(result, std::less<>{}, validationProjection));
