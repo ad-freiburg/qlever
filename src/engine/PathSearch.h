@@ -40,26 +40,7 @@ struct Path {
 
   void pop_back() { edges_.pop_back(); }
 
-  void reverse() { std::ranges::reverse(edges_); }
-
-  Path concat(const Path& other) const {
-    Path path;
-    path.edges_ = edges_;
-    path.edges_.insert(path.edges_.end(), other.edges_.begin(),
-                       other.edges_.end());
-    return path;
-  }
-
   const Id& end() { return edges_.back().end_; }
-  const Id& first() { return edges_.front().start_; }
-
-  Path startingAt(size_t index) const {
-    std::vector<Edge> edges;
-    for (size_t i = index; i < edges_.size(); i++) {
-      edges.push_back(edges_[i]);
-    }
-    return Path{edges};
-  }
 };
 
 /**
