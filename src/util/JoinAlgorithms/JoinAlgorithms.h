@@ -156,7 +156,7 @@ auto zipperJoinWithUndef(
     if constexpr (isSimilar<FindSmallerUndefRangesLeft, Noop> &&
                   isSimilar<FindSmallerUndefRangesRight, Noop>) {
       return true;
-    } else if constexpr (std::is_same_v<T, Id>) {
+    } else if constexpr (std::is_convertible_v<T, Id>) {
       return row != Id::makeUndefined();
     } else {
       return (std::ranges::none_of(
@@ -896,8 +896,18 @@ struct BlockZipperJoinImpl {
         }
         return side.projection_(blocks.back().back());
       };
+      auto hasChanged = [this](const std::optional<ProjectedEl>& left,
+                               const std::optional<ProjectedEl>& right) {
+        if (left.has_value() != right.has_value()) {
+          return true;
+        }
+        if (!left.has_value() && !right.has_value()) {
+          return false;
+        }
+        return lessThan_(left.value(), right.value());
+      };
       auto lastLeft = getLast(leftSide_, blocksLeft);
-      if (lastElementLeft_ != lastLeft) {
+      if (hasChanged(lastElementLeft_, lastLeft)) {
         if (lastLeft.has_value()) {
           lastElementLeft_ = lastLeft;
         }
@@ -915,7 +925,7 @@ struct BlockZipperJoinImpl {
         }
       }
       auto lastRight = getLast(rightSide_, blocksRight);
-      if (lastElementRight_ != lastRight) {
+      if (hasChanged(lastElementRight_, lastRight)) {
         if (lastRight.has_value()) {
           lastElementRight_ = lastRight;
         }
@@ -1298,6 +1308,10 @@ template <typename LHS, typename RHS, typename LessThan,
           typename CompatibleRowAction>
 BlockZipperJoinImpl(LHS&, RHS&, const LessThan&, CompatibleRowAction&)
     -> BlockZipperJoinImpl<LHS, RHS, LessThan, CompatibleRowAction>;
+template <typename LHS, typename RHS, typename LessThan,
+          typename CompatibleRowAction, typename IsUndef>
+BlockZipperJoinImpl(LHS&, RHS&, const LessThan&, CompatibleRowAction&, IsUndef)
+    -> BlockZipperJoinImpl<LHS, RHS, LessThan, CompatibleRowAction, IsUndef>;
 
 }  // namespace detail
 
@@ -1366,12 +1380,9 @@ void zipperJoinForBlocksWithPotentialUndef(LeftBlocks&& leftBlocks,
   auto leftSide = detail::makeJoinSide(leftBlocks, leftProjection);
   auto rightSide = detail::makeJoinSide(rightBlocks, rightProjection);
 
-  detail::BlockZipperJoinImpl<decltype(leftSide), decltype(rightSide),
-                              decltype(lessThan), decltype(compatibleRowAction),
-                              decltype([](const Id& id) {
-                                return id.isUndefined();
-                              })>
-      impl{leftSide, rightSide, lessThan, compatibleRowAction};
+  detail::BlockZipperJoinImpl impl{
+      leftSide, rightSide, lessThan, compatibleRowAction,
+      [](const Id& id) { return id.isUndefined(); }};
   impl.template runJoin<DoOptionalJoin>();
 }
 
