@@ -405,7 +405,7 @@ addLinkAndDiscoverTest(FilterTest engine)
 
 addLinkAndDiscoverTest(ResultTest engine)
 
-addLinkAndDiscoverTest(SparqlExpressionGeneratorsTest)
+addLinkAndDiscoverTest(SparqlExpressionGeneratorsTest engine)
 
 addLinkAndDiscoverTest(UrlParserTest)
 

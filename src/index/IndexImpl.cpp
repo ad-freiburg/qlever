@@ -19,7 +19,6 @@
 #include "engine/AddCombinedRowToTable.h"
 #include "engine/CallFixedSize.h"
 #include "index/IndexFormatVersion.h"
-#include "index/PrefixHeuristic.h"
 #include "index/TriplesView.h"
 #include "index/VocabularyMerger.h"
 #include "parser/ParallelParseBuffer.h"
@@ -54,9 +53,21 @@ IndexBuilderDataAsFirstPermutationSorter IndexImpl::createIdTriplesAndVocab(
   auto indexBuilderData =
       passFileForVocabulary(std::move(parser), numTriplesPerBatch_);
 
+  auto isQleverInternalId = [&indexBuilderData](const auto& id) {
+    // The special internal IDs like `ql:has-pattern` (see `SpecialIds.h`)
+    // have the datatype `UNDEFINED`.
+    return indexBuilderData.vocabularyMetaData_.isQleverInternalId(id) ||
+           id.getDatatype() == Datatype::Undefined;
+  };
+
+  auto isQleverInternalTriple = [isQleverInternalId](const auto& triple) {
+    const auto& i = isQleverInternalId;
+    return i(triple[0]) || i(triple[1]) || i(triple[2]);
+  };
+
   auto firstSorter = convertPartialToGlobalIds(
       *indexBuilderData.idTriples, indexBuilderData.actualPartialSizes,
-      NUM_TRIPLES_PER_PARTIAL_VOCAB);
+      NUM_TRIPLES_PER_PARTIAL_VOCAB, isQleverInternalTriple);
 
   return {indexBuilderData, std::move(firstSorter)};
 }
@@ -166,7 +177,7 @@ auto fixBlockAfterPatternJoin(auto block) {
 std::unique_ptr<ExternalSorter<SortByPSO, NumColumnsIndexBuilding + 2>>
 IndexImpl::buildOspWithPatterns(
     PatternCreator::TripleSorter sortersFromPatternCreator,
-    auto isQleverInternalTriple) {
+    auto& internalTripleSorter, auto isQleverInternalTriple) {
   auto&& [hasPatternPredicateSortedByPSO, secondSorter] =
       sortersFromPatternCreator;
   // We need the patterns twice: once for the additional column, and once for
@@ -254,16 +265,14 @@ IndexImpl::buildOspWithPatterns(
             << " triples to the POS and PSO permutation for "
                "the internal `ql:has-pattern` ..."
             << std::endl;
-  auto noPattern = Id::makeFromInt(NO_PATTERN);
   static_assert(NumColumnsIndexBuilding == 4,
                 "When adding additional payload columns, the following code "
                 "has to be changed");
   Id internalGraph = idOfInternalGraphDuringIndexBuilding_.value();
+  // TODO<joka921> We don't actually need the sorted output again here.
   for (const auto& row : hasPatternPredicateSortedByPSO->sortedView()) {
-    // The repetition of the pattern index (`row[2]`) for the fifth column is
-    // useful for generic unit testing, but not needed otherwise.
-    thirdSorter->push(
-        std::array{row[0], row[1], row[2], internalGraph, row[2], noPattern});
+    internalTripleSorter.push(
+        std::array{row[0], row[1], row[2], internalGraph});
   }
   hasPatternPredicateSortedByPSO->clear();
   return thirdSorter;
@@ -298,18 +307,30 @@ void IndexImpl::createFromFile(const string& filename, Index::Filetype type) {
     return i(triple[0]) || i(triple[1]) || i(triple[2]);
   };
 
-  auto& firstSorter = *indexBuilderData.sorter_;
+  auto& firstSorter = *indexBuilderData.sorter_.firstPermutationSorter_;
+  // TODO<joka921> also handle the added triples from the `sorter_`
+
+  auto createInternalPSOAndPOS = [&]() {
+    auto onDiskBaseBackup = onDiskBase_;
+    onDiskBase_ += ".internalTriples";
+    createPSOAndPOS(NumColumnsIndexBuilding, isQleverInternalTriple,
+                    std::move(*indexBuilderData.sorter_.internalTriplesPso_)
+                        .getSortedBlocks<0>());
+    onDiskBase_ = std::move(onDiskBaseBackup);
+  };
   // For the first permutation, perform a unique.
   auto firstSorterWithUnique =
       ad_utility::uniqueBlockView(firstSorter.getSortedOutput());
 
   if (!loadAllPermutations_) {
+    createInternalPSOAndPOS();
     // Only two permutations, no patterns, in this case the `firstSorter` is a
     // PSO sorter, and `createPermutationPair` creates PSO/POS permutations.
     createFirstPermutationPair(NumColumnsIndexBuilding, isQleverInternalTriple,
                                std::move(firstSorterWithUnique));
     configurationJson_["has-all-permutations"] = false;
   } else if (loadAllPermutations_ && !usePatterns_) {
+    createInternalPSOAndPOS();
     // Without patterns we explicitly have to pass in the next sorters to all
     // permutation creating functions.
     auto secondSorter = makeSorter<SecondPermutation>("second");
@@ -332,8 +353,10 @@ void IndexImpl::createFromFile(const string& filename, Index::Filetype type) {
         NumColumnsIndexBuilding, isQleverInternalTriple,
         std::move(firstSorterWithUnique));
     firstSorter.clearUnderlying();
-    auto thirdSorterPtr = buildOspWithPatterns(std::move(patternOutput.value()),
-                                               isQleverInternalTriple);
+    auto thirdSorterPtr = buildOspWithPatterns(
+        std::move(patternOutput.value()),
+        *indexBuilderData.sorter_.internalTriplesPso_, isQleverInternalTriple);
+    createInternalPSOAndPOS();
     createThirdPermutationPair(NumColumnsIndexBuilding + 2,
                                isQleverInternalTriple,
                                thirdSorterPtr->template getSortedBlocks<0>());
@@ -500,10 +523,10 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
 }
 
 // _____________________________________________________________________________
-std::unique_ptr<ad_utility::CompressedExternalIdTableSorterTypeErased>
-IndexImpl::convertPartialToGlobalIds(
+auto IndexImpl::convertPartialToGlobalIds(
     TripleVec& data, const vector<size_t>& actualLinesPerPartial,
-    size_t linesPerPartial) {
+    size_t linesPerPartial, auto isQLeverInternalTriple)
+    -> FirstPermutationSorterAndInternalTriplesAsPso {
   LOG(INFO) << "Converting triples from local IDs to global IDs ..."
             << std::endl;
   LOG(DEBUG) << "Triples per partial vocabulary: " << linesPerPartial
@@ -519,10 +542,17 @@ IndexImpl::convertPartialToGlobalIds(
       return makeSorterPtr<SortByPSO>("first");
     }
   }();
+  auto internalTriplesPtr =
+      makeSorterPtr<SortByPSO, NumColumnsIndexBuilding>("internalTriples");
   auto& result = *resultPtr;
+  auto& internalResult = *internalTriplesPtr;
   auto triplesGenerator = data.getRows();
   auto it = triplesGenerator.begin();
   using Buffer = IdTableStatic<NumColumnsIndexBuilding>;
+  struct Buffers {
+    IdTableStatic<NumColumnsIndexBuilding> triples_;
+    IdTableStatic<NumColumnsIndexBuilding> internalTriples_;
+  };
   using Map = ad_utility::HashMap<Id, Id>;
 
   ad_utility::TaskQueue<true> lookupQueue(30, 10,
@@ -555,13 +585,18 @@ IndexImpl::convertPartialToGlobalIds(
   size_t numTriplesConverted = 0;
   ad_utility::ProgressBar progressBar{numTriplesConverted,
                                       "Triples converted: "};
-  auto getWriteTask = [&result, &numTriplesConverted,
-                       &progressBar](Buffer triples) {
-    return [&result, &numTriplesConverted, &progressBar,
+  auto getWriteTask = [&result, &internalResult, &numTriplesConverted,
+                       &progressBar](Buffers buffers) {
+    return [&result, &internalResult, &numTriplesConverted, &progressBar,
             triples = std::make_shared<IdTableStatic<0>>(
-                std::move(triples).toDynamic())] {
+                std::move(buffers.triples_).toDynamic()),
+            internalTriples = std::make_shared<IdTableStatic<0>>(
+                std::move(buffers.internalTriples_).toDynamic())] {
       result.pushBlock(*triples);
+      internalResult.pushBlock(*internalTriples);
+
       numTriplesConverted += triples->size();
+      numTriplesConverted += internalTriples->size();
       if (progressBar.update()) {
         LOG(INFO) << progressBar.getProgressString() << std::flush;
       }
@@ -571,15 +606,28 @@ IndexImpl::convertPartialToGlobalIds(
   // Return a lambda that for each of the `triples` transforms its partial to
   // global IDs using the `idMap`. The map is passed as a `shared_ptr` because
   // multiple batches need access to the same map.
-  auto getLookupTask = [&writeQueue, &transformTriple, &getWriteTask](
-                           Buffer triples, std::shared_ptr<Map> idMap) {
+  auto getLookupTask = [&isQLeverInternalTriple, &writeQueue, &transformTriple,
+                        &getWriteTask](Buffer triples,
+                                       std::shared_ptr<Map> idMap) {
     return
-        [&writeQueue, triples = std::make_shared<Buffer>(std::move(triples)),
+        [&isQLeverInternalTriple, &writeQueue,
+         triples = std::make_shared<Buffer>(std::move(triples)),
          idMap = std::move(idMap), &getWriteTask, &transformTriple]() mutable {
           for (Buffer::row_reference triple : *triples) {
             transformTriple(triple, *idMap);
           }
-          writeQueue.push(getWriteTask(std::move(*triples)));
+          auto [beginInternal, endInternal] = std::ranges::partition(
+              *triples, [&isQLeverInternalTriple](const auto& row) {
+                return !isQLeverInternalTriple(row);
+              });
+          IdTableStatic<NumColumnsIndexBuilding> internalTriples(
+              triples->getAllocator());
+          internalTriples.insertAtEnd(beginInternal, endInternal);
+          triples->resize(beginInternal - triples->begin());
+
+          Buffers buffers{std::move(*triples), std::move(internalTriples)};
+
+          writeQueue.push(getWriteTask(std::move(buffers)));
         };
   };
 
@@ -638,7 +686,7 @@ IndexImpl::convertPartialToGlobalIds(
   lookupQueue.finish();
   writeQueue.finish();
   LOG(INFO) << progressBar.getFinalProgressString() << std::flush;
-  return resultPtr;
+  return {std::move(resultPtr), std::move(internalTriplesPtr)};
 }
 
 // _____________________________________________________________________________
@@ -751,14 +799,27 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
   LOG(DEBUG) << "Number of words in internal and external vocabulary: "
              << vocab_.size() << std::endl;
 
-  pso_.loadFromDisk(onDiskBase_);
-  pos_.loadFromDisk(onDiskBase_);
+  auto range1 =
+      vocab_.prefixRanges(absl::StrCat("<", INTERNAL_PREDICATE_PREFIX));
+  auto range2 = vocab_.prefixRanges("@");
+  auto isInternalId = [range1, range2](Id id) {
+    // TODO<joka921> What about internal vocab stuff for update queries? this
+    // has to be added also to the external permutation.
+    if (id.getDatatype() != Datatype::VocabIndex) {
+      return false;
+    }
+    return range1.contain(id.getVocabIndex()) ||
+           range2.contain(id.getVocabIndex());
+  };
+
+  pso_.loadFromDisk(onDiskBase_, isInternalId, true);
+  pos_.loadFromDisk(onDiskBase_, isInternalId, true);
 
   if (loadAllPermutations_) {
-    ops_.loadFromDisk(onDiskBase_);
-    osp_.loadFromDisk(onDiskBase_);
-    spo_.loadFromDisk(onDiskBase_);
-    sop_.loadFromDisk(onDiskBase_);
+    ops_.loadFromDisk(onDiskBase_, isInternalId);
+    osp_.loadFromDisk(onDiskBase_, isInternalId);
+    spo_.loadFromDisk(onDiskBase_, isInternalId);
+    sop_.loadFromDisk(onDiskBase_, isInternalId);
   } else {
     LOG(INFO) << "Only the PSO and POS permutation were loaded, SPARQL queries "
                  "with predicate variables will therefore not work"

@@ -78,11 +78,17 @@ struct IndexBuilderDataAsStxxlVector : IndexBuilderDataBase {
   std::vector<size_t> actualPartialSizes;
 };
 
+struct FirstPermutationSorterAndInternalTriplesAsPso {
+  using SorterPtr =
+      std::unique_ptr<ad_utility::CompressedExternalIdTableSorterTypeErased>;
+  SorterPtr firstPermutationSorter_;
+  std::unique_ptr<ExternalSorter<SortByPSO, NumColumnsIndexBuilding>>
+      internalTriplesPso_;
+};
 // All the data from IndexBuilderDataBase and a ExternalSorter that stores all
 // ID triples sorted by the first permutation.
 struct IndexBuilderDataAsFirstPermutationSorter : IndexBuilderDataBase {
-  using SorterPtr =
-      std::unique_ptr<ad_utility::CompressedExternalIdTableSorterTypeErased>;
+  using SorterPtr = FirstPermutationSorterAndInternalTriplesAsPso;
   SorterPtr sorter_;
   IndexBuilderDataAsFirstPermutationSorter(const IndexBuilderDataBase& base,
                                            SorterPtr sorter)
@@ -469,10 +475,9 @@ class IndexImpl {
   std::unique_ptr<RdfParserBase> makeRdfParser(const std::string& filename,
                                                Index::Filetype type) const;
 
-  std::unique_ptr<ad_utility::CompressedExternalIdTableSorterTypeErased>
-  convertPartialToGlobalIds(TripleVec& data,
-                            const vector<size_t>& actualLinesPerPartial,
-                            size_t linesPerPartial);
+  FirstPermutationSorterAndInternalTriplesAsPso convertPartialToGlobalIds(
+      TripleVec& data, const vector<size_t>& actualLinesPerPartial,
+      size_t linesPerPartial, auto isQleverInternalTriple);
 
   // Generator that returns all words in the given context file (if not empty)
   // and then all words in all literals (if second argument is true).
@@ -822,5 +827,5 @@ class IndexImpl {
   // PSO and POS permutations.
   std::unique_ptr<ExternalSorter<SortByPSO, NumColumnsIndexBuilding + 2>>
   buildOspWithPatterns(PatternCreator::TripleSorter sortersFromPatternCreator,
-                       auto isQleverInternalTriple);
+                       auto& internalTripleSorter, auto isQleverInternalTriple);
 };

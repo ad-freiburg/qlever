@@ -37,6 +37,7 @@ ScanSpecification ScanSpecificationAsTripleComponent::toScanSpecification(
       graphsToFilter->insert(getId(graph).value());
     }
   }
+  // TODO<joka921> Correctly assign the `isInternal` flag.
   return {col0Id, col1Id, col2Id, std::move(localVocab),
           std::move(graphsToFilter)};
 }

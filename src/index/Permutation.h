@@ -49,7 +49,9 @@ class Permutation {
   explicit Permutation(Enum permutation, Allocator allocator);
 
   // everything that has to be done when reading an index from disk
-  void loadFromDisk(const std::string& onDiskBase);
+  void loadFromDisk(const std::string& onDiskBase,
+                    std::function<bool(Id)> isInternalId,
+                    bool loadAdditional = false);
 
   // For a given ID for the col0, retrieve all IDs of the col1 and col2.
   // If `col1Id` is specified, only the col2 is returned for triples that
@@ -127,6 +129,10 @@ class Permutation {
   // _______________________________________________________
   const bool& isLoaded() const { return isLoaded_; }
 
+  // _______________________________________________________
+  const Permutation& getActualPermutation(const ScanSpecification& spec) const;
+  const Permutation& getActualPermutation(Id id) const;
+
  private:
   // for Log output, e.g. "POS"
   std::string readableName_;
@@ -145,4 +151,9 @@ class Permutation {
   Allocator allocator_;
 
   bool isLoaded_ = false;
+
+  Enum permutation_;
+  std::unique_ptr<Permutation> internalPermutation_ = nullptr;
+
+  std::function<bool(Id)> isInternalId_;
 };
