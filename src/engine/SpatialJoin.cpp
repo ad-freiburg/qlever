@@ -470,6 +470,7 @@ Result SpatialJoin::s2geometryAlgorithm() {
   // for each row in the left table and returns the closest points that satisfy
   // the criteria given by `maxDist_` and `maxResults_`.
   for (size_t rowLeft = 0; rowLeft < resLeft->size(); rowLeft++) {
+    // TODO<ullingerc> can this query be reused without problems?
     auto s2query = S2ClosestPointQuery<size_t>{&s2index};
 
     if (maxResults_ >= 0) {
