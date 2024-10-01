@@ -15,9 +15,11 @@
 #include <ctre-unicode.hpp>
 #include <limits>
 #include <queue>
+#include <tuple>
 
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/VariableToColumnMap.h"
+#include "engine/idTable/IdTable.h"
 #include "global/Constants.h"
 #include "global/ValueId.h"
 #include "parser/ParsedQuery.h"
@@ -354,33 +356,53 @@ void SpatialJoin::addResultTableEntry(IdTable* result,
 }
 
 // ____________________________________________________________________________
-Result SpatialJoin::baselineAlgorithm() {
-  auto getIdTable = [](std::shared_ptr<QueryExecutionTree> child) {
-    std::shared_ptr<const Result> resTable = child->getResult();
-    auto idTablePtr = &resTable->idTable();
-    return std::pair{idTablePtr, std::move(resTable)};
-  };
+std::pair<const IdTable*, std::shared_ptr<const Result>>
+SpatialJoin::getIdTable(std::shared_ptr<QueryExecutionTree> child) {
+  std::shared_ptr<const Result> resTable = child->getResult();
+  auto idTablePtr = &resTable->idTable();
+  return std::pair{idTablePtr, std::move(resTable)};
+}
 
-  auto getJoinCol = [](const std::shared_ptr<const QueryExecutionTree>& child,
-                       const Variable& childVariable) {
-    auto varColMap =
-        child->getRootOperation()->getExternallyVisibleVariableColumns();
-    return varColMap[childVariable].columnIndex_;
-  };
+// ____________________________________________________________________________
+ColumnIndex SpatialJoin::getJoinCol(
+    const std::shared_ptr<const QueryExecutionTree>& child,
+    const Variable& childVariable) {
+  auto varColMap =
+      child->getRootOperation()->getExternallyVisibleVariableColumns();
+  return varColMap[childVariable].columnIndex_;
+}
 
+// ____________________________________________________________________________
+std::tuple<const IdTable* const, const IdTable* const, unsigned long,
+           unsigned long, IdTable*>
+SpatialJoin::prepareJoin() {
+  // Input tables
   const auto [resLeft, keepAliveLeft] = getIdTable(childLeft_);
   const auto [resRight, keepAliveRight] = getIdTable(childRight_);
+
+  // Input table columns for the join
   ColumnIndex leftJoinCol = getJoinCol(childLeft_, leftChildVariable_);
   ColumnIndex rightJoinCol = getJoinCol(childRight_, rightChildVariable_);
+
+  // Output table
   size_t numColumns = getResultWidth();
   IdTable result{numColumns, _executionContext->getAllocator()};
 
+  return std::make_tuple(resLeft, resRight, leftJoinCol, rightJoinCol, &result);
+}
+
+// ____________________________________________________________________________
+Result SpatialJoin::baselineAlgorithm() {
+  const auto [resLeft, resRight, leftJoinCol, rightJoinCol, result] =
+      prepareJoin();
+
   // cartesian product between the two tables, pairs are restricted according to
-  // max distance and max results
+  // `maxDistance_` and `maxResults_`
   for (size_t rowLeft = 0; rowLeft < resLeft->size(); rowLeft++) {
-    // This priority queue stores the intermediate best results if max results
-    // is used Each intermediate result is stored as a pair of its rowRight and
-    // distance.
+    // This priority queue stores the intermediate best results if `maxResults_`
+    // is used. Each intermediate result is stored as a pair of its `rowRight`
+    // and distance. Since the queue will hold at most `maxResults_ + 1` items,
+    // it is not a memory concern.
     auto compare = [](std::pair<size_t, int64_t> a,
                       std::pair<size_t, int64_t> b) {
       return a.second > b.second;
@@ -390,18 +412,18 @@ Result SpatialJoin::baselineAlgorithm() {
                         decltype(compare)>
         intermediate(compare);
 
+    // Inner loop of cartesian product
     for (size_t rowRight = 0; rowRight < resRight->size(); rowRight++) {
       Id dist = computeDist(resLeft, resRight, rowLeft, rowRight, leftJoinCol,
                             rightJoinCol);
-      // Ensure max dist constraint
+      // Ensure `maxDist_` constraint
       if (dist.getDatatype() != Datatype::Int || maxDist_ < 0 ||
           dist.getInt() > maxDist_) {
         continue;
       }
-      // Ensure max results
+      // Ensure `maxResults_` constraint
       if (maxResults_ < 0) {
-        addResultTableEntry(&result, resLeft, resRight, rowLeft, rowRight,
-                            dist);
+        addResultTableEntry(result, resLeft, resRight, rowLeft, rowRight, dist);
       } else {
         intermediate.push(std::pair{rowRight, dist.getInt()});
         // Too many results? Drop the worst one
@@ -415,39 +437,22 @@ Result SpatialJoin::baselineAlgorithm() {
     // inner loop, so we do it now.
     if (maxResults_ >= 0) {
       for (size_t item = 0; item < intermediate.size(); item++) {
+        // Get and remove largest item from priority queue
         auto [rowRight, dist] = intermediate.top();
         intermediate.pop();
-        addResultTableEntry(&result, resLeft, resRight, rowLeft, rowRight,
+
+        addResultTableEntry(result, resLeft, resRight, rowLeft, rowRight,
                             Id::makeFromInt(dist));
       }
     }
   }
-  return Result(std::move(result), std::vector<ColumnIndex>{}, LocalVocab{});
+  return Result(std::move(*result), std::vector<ColumnIndex>{}, LocalVocab{});
 }
 
 // ____________________________________________________________________________
 Result SpatialJoin::s2geometryAlgorithm() {
-  // TODO<ullingerc> avoid redundant code
-  auto getIdTable = [](std::shared_ptr<QueryExecutionTree> child) {
-    std::shared_ptr<const Result> resTable = child->getResult();
-    auto idTablePtr = &resTable->idTable();
-    return std::pair{idTablePtr, std::move(resTable)};
-  };
-
-  auto getJoinCol = [](const std::shared_ptr<const QueryExecutionTree>& child,
-                       const Variable& childVariable) {
-    auto varColMap =
-        child->getRootOperation()->getExternallyVisibleVariableColumns();
-    return varColMap[childVariable].columnIndex_;
-  };
-
-  const auto [resLeft, keepAliveLeft] = getIdTable(childLeft_);
-  const auto [resRight, keepAliveRight] = getIdTable(childRight_);
-  ColumnIndex leftJoinCol = getJoinCol(childLeft_, leftChildVariable_);
-  ColumnIndex rightJoinCol = getJoinCol(childRight_, rightChildVariable_);
-  size_t numColumns = getResultWidth();
-  IdTable result{numColumns, _executionContext->getAllocator()};
-  // --- TODO<ullingerc> avoid redundant code
+  const auto [resLeft, resRight, leftJoinCol, rightJoinCol, result] =
+      prepareJoin();
 
   // Helper function to convert `GeoPoint` to `S2Point`
   auto constexpr toS2Point = [](const GeoPoint& p) {
@@ -470,7 +475,7 @@ Result SpatialJoin::s2geometryAlgorithm() {
   // for each row in the left table and returns the closest points that satisfy
   // the criteria given by `maxDist_` and `maxResults_`.
 
-  // TODO<ullingerc> can this query be reused without problems?
+  // Construct a query object with the given constraints
   auto s2query = S2ClosestPointQuery<size_t>{&s2index};
 
   if (maxResults_ >= 0) {
@@ -494,11 +499,12 @@ Result SpatialJoin::s2geometryAlgorithm() {
       // criteria
       auto rowRight = neighbor.data();
       auto dist = static_cast<int64_t>(S2Earth::ToMeters(neighbor.distance()));
-      addResultTableEntry(&result, resLeft, resRight, rowLeft, rowRight,
+      addResultTableEntry(result, resLeft, resRight, rowLeft, rowRight,
                           Id::makeFromInt(dist));
     }
   }
-  return Result(std::move(result), std::vector<ColumnIndex>{}, LocalVocab{});
+
+  return Result(std::move(*result), std::vector<ColumnIndex>{}, LocalVocab{});
 }
 
 // ____________________________________________________________________________

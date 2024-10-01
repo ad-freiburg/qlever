@@ -72,6 +72,11 @@ class SpatialJoin : public Operation {
   // purposes
   long long getMaxResults() const { return maxResults_; }
 
+  // this function allows to switch between the two algorithms available
+  void selectAlgorithm(bool useBaselineAlgorithm) {
+    useBaselineAlgorithm_ = useBaselineAlgorithm;
+  }
+
   std::shared_ptr<QueryExecutionTree> onlyForTestingGetLeftChild() const {
     return childLeft_;
   }
@@ -114,6 +119,20 @@ class SpatialJoin : public Operation {
                            const IdTable* resultRight, size_t rowLeft,
                            size_t rowRight, Id distance) const;
 
+  // helper function, to retrieve an id table of either left or right child
+  std::pair<const IdTable*, std::shared_ptr<const Result>> getIdTable(
+      std::shared_ptr<QueryExecutionTree> child);
+
+  // helper function, to retrieve on which column from the given table the
+  // join will operate
+  ColumnIndex getJoinCol(const std::shared_ptr<const QueryExecutionTree>& child,
+                         const Variable& childVariable);
+
+  // helper function, to initialize various required objects for both algorithms
+  std::tuple<const IdTable* const, const IdTable* const, unsigned long,
+             unsigned long, IdTable*>
+  prepareJoin();
+
   // the baseline algorithm, which just checks every combination
   Result baselineAlgorithm();
 
@@ -135,7 +154,5 @@ class SpatialJoin : public Operation {
   // between the two objects
   bool addDistToResult_ = true;
   const string nameDistanceInternal_ = "?distOfTheTwoObjectsAddedInternally";
-
-  // TODO<ullingerc> We should decide based on data if we need to use baseline
   bool useBaselineAlgorithm_ = false;
 };
