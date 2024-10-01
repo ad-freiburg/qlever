@@ -293,24 +293,19 @@ auto getIdMapLambdas(
                       " The following lines probably have to be changed when "
                       "the number of payload columns changes");
         // extra triple <subject> @language@<predicate> <object>
-        // The additional triples have the graph ID of the internal graph if the
-        // triple was in the default/fallback graph, else they keep their graph
-        // ID.
-        // TODO<joka921> Maybe we should have an `internalGraph` per graph, but
-        // this requires further work. The current approach at least keeps the
-        // language filters working in combination with named graphs and doesn't
-        // add further inconsistencies.
+        // The additional triples have the same graph ID as the original triple.
+        // This makes optimizations such as language filters also work with
+        // named graphs. Note that we have a different mechanism in place to
+        // distinguish betweend normal and internal triples.
         auto tripleGraphId = res[0].value()[ADDITIONAL_COLUMN_GRAPH_ID];
-        auto addedTripleGraphId =
-            tripleGraphId == defaultGraphId ? internalGraphId : tripleGraphId;
         res[1].emplace(
-            Arr{spoIds[0], langTaggedPredId, spoIds[2], addedTripleGraphId});
+            Arr{spoIds[0], langTaggedPredId, spoIds[2], tripleGraphId});
         // extra triple <object> ql:language-tag <@language>
         res[2].emplace(Arr{spoIds[2],
                            map.getId(TripleComponent{
                                ad_utility::triple_component::Iri::fromIriref(
                                    LANGUAGE_PREDICATE)}),
-                           langTagId, addedTripleGraphId});
+                           langTagId, tripleGraphId});
       }
       return res;
     };
