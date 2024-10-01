@@ -19,7 +19,6 @@
 #include "engine/AddCombinedRowToTable.h"
 #include "engine/CallFixedSize.h"
 #include "index/IndexFormatVersion.h"
-#include "index/TriplesView.h"
 #include "index/VocabularyMerger.h"
 #include "parser/ParallelParseBuffer.h"
 #include "util/BatchedPipeline.h"
@@ -253,8 +252,7 @@ IndexImpl::buildOspWithPatterns(
   auto thirdSorter =
       makeSorterPtr<ThirdPermutation, NumColumnsIndexBuilding + 2>("third");
   createSecondPermutationPair(NumColumnsIndexBuilding + 2,
-                              std::move(blockGenerator),
-                              *thirdSorter);
+                              std::move(blockGenerator), *thirdSorter);
   secondSorter->clear();
   // Add the `ql:has-pattern` predicate to the sorter such that it will become
   // part of the PSO and POS permutation.
@@ -334,12 +332,11 @@ void IndexImpl::createFromFile(const string& filename, Index::Filetype type) {
     // `createFirstPermutationPair` function returns the next sorter, already
     // enriched with the patterns of the subjects in the triple.
     auto patternOutput = createFirstPermutationPair(
-        NumColumnsIndexBuilding,
-        std::move(firstSorterWithUnique));
+        NumColumnsIndexBuilding, std::move(firstSorterWithUnique));
     firstSorter.clearUnderlying();
-    auto thirdSorterPtr = buildOspWithPatterns(
-        std::move(patternOutput.value()),
-        *indexBuilderData.sorter_.internalTriplesPso_);
+    auto thirdSorterPtr =
+        buildOspWithPatterns(std::move(patternOutput.value()),
+                             *indexBuilderData.sorter_.internalTriplesPso_);
     createInternalPSOAndPOS();
     createThirdPermutationPair(NumColumnsIndexBuilding + 2,
 
@@ -1472,17 +1469,16 @@ namespace {
 // triple. This is used to count the number of distinct subjects, objects,
 // and predicates during the index building.
 template <size_t idx>
-constexpr auto makeNumDistinctIdsCounter =
-    [](size_t& numDistinctIds) {
-      return [lastId = std::optional<Id>{}, &numDistinctIds
-                  ](const auto& triple) mutable {
-        const auto& id = triple[idx];
-        if (id != lastId) {
-          numDistinctIds++;
-          lastId = id;
-        }
-      };
-    };
+constexpr auto makeNumDistinctIdsCounter = [](size_t& numDistinctIds) {
+  return [lastId = std::optional<Id>{},
+          &numDistinctIds](const auto& triple) mutable {
+    const auto& id = triple[idx];
+    if (id != lastId) {
+      numDistinctIds++;
+      lastId = id;
+    }
+  };
+};
 }  // namespace
 
 // _____________________________________________________________________________
@@ -1495,14 +1491,13 @@ void IndexImpl::createPSOAndPOS(size_t numColumns,
 {
   size_t numTriplesNormal = 0;
   size_t numTriplesTotal = 0;
-  auto countTriplesNormal = [&numTriplesNormal, &numTriplesTotal
-                             ](const auto& triple) mutable {
+  auto countTriplesNormal = [&numTriplesNormal, &numTriplesTotal](
+                                [[maybe_unused]] const auto& triple) mutable {
     ++numTriplesTotal;
     ++numTriplesNormal;
   };
   size_t numPredicatesNormal = 0;
-  auto predicateCounter =
-      makeNumDistinctIdsCounter<1>(numPredicatesNormal);
+  auto predicateCounter = makeNumDistinctIdsCounter<1>(numPredicatesNormal);
   size_t numPredicatesTotal =
       createPermutationPair(numColumns, AD_FWD(sortedTriples), pso_, pos_,
                             nextSorter.makePushCallback()...,
@@ -1523,8 +1518,7 @@ std::optional<PatternCreator::TripleSorter> IndexImpl::createSPOAndSOP(
     NextSorter&&... nextSorter) {
   size_t numSubjectsNormal = 0;
   size_t numSubjectsTotal = 0;
-  auto numSubjectCounter =
-      makeNumDistinctIdsCounter<0>(numSubjectsNormal);
+  auto numSubjectCounter = makeNumDistinctIdsCounter<0>(numSubjectsNormal);
   std::optional<PatternCreator::TripleSorter> result;
   if (usePatterns_) {
     // We will return the next sorter.
@@ -1577,8 +1571,7 @@ void IndexImpl::createOSPAndOPS(size_t numColumns,
   // For the last pair of permutations we don't need a next sorter, so we
   // have no fourth argument.
   size_t numObjectsNormal = 0;
-  auto objectCounter =
-      makeNumDistinctIdsCounter<2>(numObjectsNormal);
+  auto objectCounter = makeNumDistinctIdsCounter<2>(numObjectsNormal);
   size_t numObjectsTotal = createPermutationPair(
       numColumns, AD_FWD(sortedTriples), osp_, ops_,
       nextSorter.makePushCallback()..., std::ref(objectCounter));

@@ -400,6 +400,7 @@ TEST(IndexTest, TripleToInternalRepresentation) {
   }
 }
 
+/*
 TEST(IndexTest, getIgnoredIdRanges) {
   const Index& indexNoImpl = getQec()->getIndex();
   const IndexImpl& index = indexNoImpl.getImpl();
@@ -493,6 +494,7 @@ TEST(IndexTest, getIgnoredIdRanges) {
     EXPECT_THAT(ranges, UnorderedElementsAre(internalEntities, specialIds));
   }
 }
+ */
 
 TEST(IndexTest, NumDistinctEntities) {
   std::string turtleInput =

@@ -652,89 +652,6 @@ class IndexImpl {
   // the input).
   NumNormalAndInternal numTriples() const;
 
-  // The index contains several triples that are not part of the "actual"
-  // knowledge graph, but are added by QLever for internal reasons (e.g. for an
-  // efficient implementation of language filters). For a given
-  // `Permutation::Enum`, returns the following `std::pair`:
-  //
-  // first:  A `vector<pair<Id, Id>>` that denotes ranges in the first column
-  //         of the permutation that imply that a triple is added. For example
-  //         in the `SPO` and `SOP` permutation a literal subject means that the
-  //         triple was added (literals are not legal subjects in RDF), so the
-  //         pair `(idOfFirstLiteral, idOfLastLiteral + 1)` will be contained
-  //         in the vector.
-  // second: A lambda that checks for a triple *that is not already excluded
-  //         by the ignored ranges from the first argument* whether it still
-  //         is an added triple. For example in the `Sxx` and `Oxx` permutation
-  //         a triple where the predicate starts with '@' (instead of the usual
-  //         '<' is an added triple from the language filter implementation.
-  //
-  // Note: A triple from a given permutation is an added triple if and only if
-  //       it's first column is contained in any of the ranges from `first` OR
-  //       the lambda `second` returns true for that triple.
-  //
-  // For example usages see `IndexScan.cpp` (the implementation of the full
-  // index scan) and `GroupBy.cpp`.
-  auto getIgnoredIdRanges(const Permutation::Enum permutation) const {
-    std::vector<std::pair<Id, Id>> ignoredRanges;
-    ignoredRanges.emplace_back(qlever::getBoundsForSpecialIds());
-
-    auto literalRanges =
-        getVocab().prefixRanges(ad_utility::triple_component::literalPrefix);
-    auto taggedPredicatesRanges =
-        getVocab().prefixRanges(ad_utility::languageTaggedPredicatePrefix);
-    std::string internal{INTERNAL_ENTITIES_URI_PREFIX};
-    internal[0] = ad_utility::triple_component::iriPrefixChar;
-    auto internalEntitiesRanges = getVocab().prefixRanges(internal);
-
-    auto pushIgnoredRange = [&ignoredRanges](const auto& ranges) {
-      for (const auto& range : ranges.ranges()) {
-        ignoredRanges.emplace_back(Id::makeFromVocabIndex(range.first),
-                                   Id::makeFromVocabIndex(range.second));
-      }
-    };
-    pushIgnoredRange(internalEntitiesRanges);
-    using enum Permutation::Enum;
-    if (permutation == SPO || permutation == SOP) {
-      pushIgnoredRange(literalRanges);
-    } else if (permutation == PSO || permutation == POS) {
-      pushIgnoredRange(taggedPredicatesRanges);
-    }
-
-    // A lambda that checks whether the `predicateId` is an internal ID like
-    // `ql:has-pattern` or `@en@rdfs:label`.
-    auto isInternalPredicateId = [internalEntitiesRanges,
-                                  taggedPredicatesRanges](Id predicateId) {
-      if (predicateId.getDatatype() == Datatype::Undefined) {
-        return true;
-      }
-      AD_CORRECTNESS_CHECK(predicateId.getDatatype() == Datatype::VocabIndex);
-      auto index = predicateId.getVocabIndex();
-      return (internalEntitiesRanges.contain(index) ||
-              taggedPredicatesRanges.contain(index));
-    };
-
-    auto isTripleIgnored = [permutation,
-                            isInternalPredicateId](const auto& triple) {
-      // TODO<joka921, everybody in the future>:
-      // A lot of code (especially for statistical queries in `GroupBy.cpp` and
-      // the pattern trick) relies on this function being a noop for the `PSO`
-      // and `POS` permutations, meaning that it suffices to check the
-      // `ignoredRanges` for them. Should this ever change (which means that we
-      // add internal triples that use predicates that are actually contained in
-      // the knowledge graph), then all the code that uses this function has to
-      // be thoroughly reviewed.
-      if (permutation == SPO || permutation == OPS) {
-        // Predicates are always entities from the vocabulary.
-        return isInternalPredicateId(triple[1]);
-      } else if (permutation == SOP || permutation == OSP) {
-        return isInternalPredicateId(triple[2]);
-      }
-      return false;
-    };
-
-    return std::pair{std::move(ignoredRanges), std::move(isTripleIgnored)};
-  }
   using BlocksOfTriples = cppcoro::generator<IdTableStatic<0>>;
 
   // Functions to create the pairs of permutations during the index build. Each
@@ -757,8 +674,7 @@ class IndexImpl {
   // distinct objects and write it to the metadata.
   template <typename... NextSorter>
   requires(sizeof...(NextSorter) <= 1)
-  void createOSPAndOPS(size_t numColumns,
-                       BlocksOfTriples sortedTriples,
+  void createOSPAndOPS(size_t numColumns, BlocksOfTriples sortedTriples,
                        NextSorter&&... nextSorter);
 
   // Create the PSO and POS permutations. Additionally, count the number of
@@ -766,8 +682,7 @@ class IndexImpl {
   // metadata.
   template <typename... NextSorter>
   requires(sizeof...(NextSorter) <= 1)
-  void createPSOAndPOS(size_t numColumns,
-                       BlocksOfTriples sortedTriples,
+  void createPSOAndPOS(size_t numColumns, BlocksOfTriples sortedTriples,
                        NextSorter&&... nextSorter);
 
   // Set up one of the permutation sorters with the appropriate memory limit.
