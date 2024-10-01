@@ -133,6 +133,68 @@ TEST(PathSearchTest, singlePathWithProperties) {
               ::testing::UnorderedElementsAreArray(expected));
 }
 
+TEST(PathSearchTest, singlePathAllSources) {
+  auto sub = makeIdTableFromVector({{0, 1}, {1, 2}, {2, 3}, {3, 4}});
+  auto expected = makeIdTableFromVector({
+      {V(0), V(1), I(0), I(0), V(0)},
+      {V(1), V(2), I(0), I(1), V(0)},
+      {V(2), V(3), I(0), I(2), V(0)},
+      {V(3), V(4), I(0), I(3), V(0)},
+      {V(1), V(2), I(1), I(0), V(1)},
+      {V(2), V(3), I(1), I(1), V(1)},
+      {V(3), V(4), I(1), I(2), V(1)},
+      {V(2), V(3), I(2), I(0), V(2)},
+      {V(3), V(4), I(2), I(1), V(2)},
+      {V(3), V(4), I(3), I(0), V(3)},
+  });
+
+  std::vector<Id> targets{V(4)};
+  Vars vars = {Variable{"?start"}, Variable{"?end"}};
+  PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
+                                 Var{"?sources"},
+                                 targets,
+                                 Var{"?start"},
+                                 Var{"?end"},
+                                 Var{"?edgeIndex"},
+                                 Var{"?pathIndex"},
+                                 {}};
+
+  auto resultTable = performPathSearch(config, std::move(sub), vars);
+  ASSERT_THAT(resultTable.idTable(),
+              ::testing::UnorderedElementsAreArray(expected));
+}
+
+TEST(PathSearchTest, singlePathAllTargets) {
+  auto sub = makeIdTableFromVector({{0, 1}, {1, 2}, {2, 3}, {3, 4}});
+  auto expected = makeIdTableFromVector({
+      {V(0), V(1), I(0), I(0), V(1)},
+      {V(0), V(1), I(1), I(0), V(2)},
+      {V(1), V(2), I(1), I(1), V(2)},
+      {V(0), V(1), I(2), I(0), V(3)},
+      {V(1), V(2), I(2), I(1), V(3)},
+      {V(2), V(3), I(2), I(2), V(3)},
+      {V(0), V(1), I(3), I(0), V(4)},
+      {V(1), V(2), I(3), I(1), V(4)},
+      {V(2), V(3), I(3), I(2), V(4)},
+      {V(3), V(4), I(3), I(3), V(4)},
+  });
+
+  std::vector<Id> sources{V(0)};
+  Vars vars = {Variable{"?start"}, Variable{"?end"}};
+  PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
+                                 sources,
+                                 Var{"?targets"},
+                                 Var{"?start"},
+                                 Var{"?end"},
+                                 Var{"?edgeIndex"},
+                                 Var{"?pathIndex"},
+                                 {}};
+
+  auto resultTable = performPathSearch(config, std::move(sub), vars);
+  ASSERT_THAT(resultTable.idTable(),
+              ::testing::UnorderedElementsAreArray(expected));
+}
+
 /**
  * Graph:
  *      0
@@ -212,17 +274,16 @@ TEST(PathSearchTest, twoPathsTwoTargets) {
 TEST(PathSearchTest, cycle) {
   auto sub = makeIdTableFromVector({{0, 1}, {1, 2}, {2, 0}});
   auto expected = makeIdTableFromVector({
-      {V(0), V(1), I(0), I(0)},
-      {V(0), V(1), I(1), I(0)},
-      {V(1), V(2), I(1), I(1)},
+      {V(0), V(1), I(0), I(0), V(1)},
+      {V(0), V(1), I(1), I(0), V(2)},
+      {V(1), V(2), I(1), I(1), V(2)},
   });
 
   std::vector<Id> sources{V(0)};
-  std::vector<Id> targets{};
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
   PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
                                  sources,
-                                 targets,
+                                 Var{"?targets"},
                                  Var{"?start"},
                                  Var{"?end"},
                                  Var{"?edgeIndex"},
@@ -245,19 +306,18 @@ TEST(PathSearchTest, cycle) {
 TEST(PathSearchTest, twoCycle) {
   auto sub = makeIdTableFromVector({{0, 1}, {1, 2}, {2, 0}, {1, 3}, {3, 0}});
   auto expected = makeIdTableFromVector({
-      {V(0), V(1), I(0), I(0)},
-      {V(0), V(1), I(1), I(0)},
-      {V(1), V(3), I(1), I(1)},
-      {V(0), V(1), I(2), I(0)},
-      {V(1), V(2), I(2), I(1)},
+      {V(0), V(1), I(0), I(0), V(1)},
+      {V(0), V(1), I(1), I(0), V(3)},
+      {V(1), V(3), I(1), I(1), V(3)},
+      {V(0), V(1), I(2), I(0), V(2)},
+      {V(1), V(2), I(2), I(1), V(2)}
   });
 
   std::vector<Id> sources{V(0)};
-  std::vector<Id> targets{};
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
   PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
                                  sources,
-                                 targets,
+                                 Var{"?targets"},
                                  Var{"?start"},
                                  Var{"?end"},
                                  Var{"?edgeIndex"},
@@ -281,22 +341,21 @@ TEST(PathSearchTest, twoCycle) {
 TEST(PathSearchTest, allPaths) {
   auto sub = makeIdTableFromVector({{0, 1}, {0, 2}, {1, 3}, {2, 3}, {2, 4}});
   auto expected = makeIdTableFromVector({
-      {V(0), V(2), I(0), I(0)},
-      {V(0), V(2), I(1), I(0)},
-      {V(2), V(4), I(1), I(1)},
-      {V(0), V(2), I(2), I(0)},
-      {V(2), V(3), I(2), I(1)},
-      {V(0), V(1), I(3), I(0)},
-      {V(0), V(1), I(4), I(0)},
-      {V(1), V(3), I(4), I(1)},
+      {V(0), V(2), I(0), I(0), V(2)},
+      {V(0), V(2), I(1), I(0), V(4)},
+      {V(2), V(4), I(1), I(1), V(4)},
+      {V(0), V(2), I(2), I(0), V(3)},
+      {V(2), V(3), I(2), I(1), V(3)},
+      {V(0), V(1), I(3), I(0), V(1)},
+      {V(0), V(1), I(4), I(0), V(3)},
+      {V(1), V(3), I(4), I(1), V(3)},
   });
 
   std::vector<Id> sources{V(0)};
-  std::vector<Id> targets{};
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
   PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
                                  sources,
-                                 targets,
+                                 Var{"?targets"},
                                  Var{"?start"},
                                  Var{"?end"},
                                  Var{"?edgeIndex"},
@@ -315,24 +374,23 @@ TEST(PathSearchTest, allPathsWithPropertiesSwitched) {
                                     {2, 3, 40, 41},
                                     {2, 4, 50, 51}});
   auto expected = makeIdTableFromVector({
-      {V(0), V(2), I(0), I(0), V(31), V(30)},
-      {V(0), V(2), I(1), I(0), V(31), V(30)},
-      {V(2), V(4), I(1), I(1), V(51), V(50)},
-      {V(0), V(2), I(2), I(0), V(31), V(30)},
-      {V(2), V(3), I(2), I(1), V(41), V(40)},
-      {V(0), V(1), I(3), I(0), V(11), V(10)},
-      {V(0), V(1), I(4), I(0), V(11), V(10)},
-      {V(1), V(3), I(4), I(1), V(21), V(20)},
+      {V(0), V(2), I(0), I(0), V(2), V(31), V(30)},
+      {V(0), V(2), I(1), I(0), V(4), V(31), V(30)},
+      {V(2), V(4), I(1), I(1), V(4), V(51), V(50)},
+      {V(0), V(2), I(2), I(0), V(3), V(31), V(30)},
+      {V(2), V(3), I(2), I(1), V(3), V(41), V(40)},
+      {V(0), V(1), I(3), I(0), V(1), V(11), V(10)},
+      {V(0), V(1), I(4), I(0), V(3), V(11), V(10)},
+      {V(1), V(3), I(4), I(1), V(3), V(21), V(20)},
   });
 
   std::vector<Id> sources{V(0)};
-  std::vector<Id> targets{};
   Vars vars = {Variable{"?start"}, Variable{"?end"}, Variable{"?edgeProperty1"},
                Variable{"?edgeProperty2"}};
   PathSearchConfiguration config{
       PathSearchAlgorithm::ALL_PATHS,
       sources,
-      targets,
+      Var{"?targets"},
       Var{"?start"},
       Var{"?end"},
       Var{"?edgeIndex"},
@@ -352,25 +410,53 @@ TEST(PathSearchTest, allPathsWithPropertiesSwitched) {
  *     | \
  *     1->2->3
  */
-TEST(PathSearchTest, allPathsPartial) {
+TEST(PathSearchTest, allPathsPartialAllTargets) {
   auto sub = makeIdTableFromVector({{0, 1}, {1, 2}, {0, 2}, {2, 3}});
   auto expected = makeIdTableFromVector({
-      {V(0), V(2), I(0), I(0)},
-      {V(0), V(2), I(1), I(0)},
-      {V(2), V(3), I(1), I(1)},
-      {V(0), V(1), I(2), I(0)},
-      {V(0), V(1), I(3), I(0)},
-      {V(1), V(2), I(3), I(1)},
-      {V(0), V(1), I(4), I(0)},
-      {V(1), V(2), I(4), I(1)},
-      {V(2), V(3), I(4), I(2)},
+      {V(0), V(2), I(0), I(0), V(2)},
+      {V(0), V(2), I(1), I(0), V(3)},
+      {V(2), V(3), I(1), I(1), V(3)},
+      {V(0), V(1), I(2), I(0), V(1)},
+      {V(0), V(1), I(3), I(0), V(2)},
+      {V(1), V(2), I(3), I(1), V(2)},
+      {V(0), V(1), I(4), I(0), V(3)},
+      {V(1), V(2), I(4), I(1), V(3)},
+      {V(2), V(3), I(4), I(2), V(3)},
   });
 
   std::vector<Id> sources{V(0)};
-  std::vector<Id> targets{};
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
   PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
                                  sources,
+                                 Var{"?targets"},
+                                 Var{"?start"},
+                                 Var{"?end"},
+                                 Var{"?edgeIndex"},
+                                 Var{"?pathIndex"},
+                                 {}};
+
+  auto resultTable = performPathSearch(config, std::move(sub), vars);
+  ASSERT_THAT(resultTable.idTable(),
+              ::testing::UnorderedElementsAreArray(expected));
+}
+
+TEST(PathSearchTest, allPathsPartialAllSources) {
+  auto sub = makeIdTableFromVector({{0, 1}, {1, 2}, {0, 2}, {2, 3}});
+  auto expected = makeIdTableFromVector({
+      {V(0), V(2), I(0), I(0), V(0)},
+      {V(2), V(3), I(0), I(1), V(0)},
+      {V(0), V(1), I(1), I(0), V(0)},
+      {V(1), V(2), I(1), I(1), V(0)},
+      {V(2), V(3), I(1), I(2), V(0)},
+      {V(1), V(2), I(2), I(0), V(1)},
+      {V(2), V(3), I(2), I(1), V(1)},
+      {V(2), V(3), I(3), I(0), V(2)},
+  });
+
+  std::vector<Id> targets{V(3)};
+  Vars vars = {Variable{"?start"}, Variable{"?end"}};
+  PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
+                                 Var{"?sources"},
                                  targets,
                                  Var{"?start"},
                                  Var{"?end"},

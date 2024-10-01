@@ -245,13 +245,13 @@ class PathSearch : public Operation {
   VariableToColumnMap computeVariableToColumnMap() const override;
 
  private:
-  std::pair<std::span<const Id>, std::span<const Id>> handleSearchSides() const;
+  std::pair<std::span<const Id>, std::span<const Id>> handleSearchSides(const pathSearch::BinSearchWrapper& binSearch) const;
 
   /**
    * @brief Finds paths based on the configured algorithm.
    * @return A vector of paths.
    */
-  std::vector<pathSearch::Path> findPaths(const Id source,
+  std::vector<pathSearch::Path> findPaths(const Id& source,
                               const std::unordered_set<uint64_t>& targets,
                               const pathSearch::BinSearchWrapper& binSearch) const;
 

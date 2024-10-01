@@ -40,20 +40,7 @@ std::vector<Edge> BinSearchWrapper::outgoingEdes(const Id node) const {
 
 // _____________________________________________________________________________
 std::span<const Id> BinSearchWrapper::getSources() const {
-  auto startIds = table_.getColumn(startCol_);
-  std::vector<Id> sources;
-
-  size_t index = 0;
-  Id lastId;
-  while (index < startIds.size()) {
-    lastId = startIds[index];
-    sources.push_back(lastId);
-    while (lastId == startIds[index]) {
-      index++;
-    }
-  }
-
-  return sources;
+  return table_.getColumn(startCol_);
 }
 
 // _____________________________________________________________________________
@@ -232,7 +219,7 @@ Result PathSearch::computeResult([[maybe_unused]] bool requestLaziness) {
     auto buildingTime = timer.msecs();
     timer.start();
 
-    auto [sources, targets] = handleSearchSides();
+    auto [sources, targets] = handleSearchSides(binSearch);
 
     timer.stop();
     auto sideTime = timer.msecs();
@@ -268,7 +255,7 @@ VariableToColumnMap PathSearch::computeVariableToColumnMap() const {
 
 // _____________________________________________________________________________
 std::pair<std::span<const Id>, std::span<const Id>>
-PathSearch::handleSearchSides() const {
+PathSearch::handleSearchSides(const BinSearchWrapper& binSearch) const {
   std::span<const Id> sourceIds;
   std::span<const Id> targetIds;
 
@@ -283,7 +270,7 @@ PathSearch::handleSearchSides() const {
     sourceIds = sourceTree_.value()->getResult()->idTable().getColumn(
         sourceCol_.value());
   } else if (config_.sourceIsVariable()) {
-    sourceIds = {};
+    sourceIds = binSearch.getSources();
   } else {
     sourceIds = std::get<std::vector<Id>>(config_.sources_);
   }
@@ -302,7 +289,7 @@ PathSearch::handleSearchSides() const {
 
 // _____________________________________________________________________________
 std::vector<Path> PathSearch::findPaths(
-    const Id source, const std::unordered_set<uint64_t>& targets,
+    const Id& source, const std::unordered_set<uint64_t>& targets,
     const BinSearchWrapper& binSearch) const {
   std::vector<Edge> edgeStack;
   Path currentPath;
@@ -349,10 +336,6 @@ std::vector<Path> PathSearch::allPaths(std::span<const Id> sources,
                                        bool cartesian) const {
   std::vector<Path> paths;
   Path path;
-
-  if (sources.empty()) {
-    sources = binSearch.getSources();
-  }
 
   if (cartesian || sources.size() != targets.size()) {
     std::unordered_set<uint64_t> targetSet;
