@@ -159,8 +159,8 @@ string SpatialJoin::getDescriptor() const {
   std::string properties = absl::StrCat(triple_.s_.getVariable().name(), " to ",
                                         triple_.o_.getVariable().name());
   if (maxDist_ >= 0) {
-    properties =
-        absl::StrCat(" with max distance of ", std::to_string(maxDist_), " ");
+    properties = absl::StrCat(properties, " with max distance of ",
+                              std::to_string(maxDist_), " ");
   }
   if (maxResults_ >= 0) {
     properties = absl::StrCat(properties, " with max number of results of ",
