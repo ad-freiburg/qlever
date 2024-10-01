@@ -12,6 +12,7 @@
 #include "./util/IdTableHelpers.h"
 #include "./util/IdTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
+#include "global/Constants.h"
 #include "global/Pattern.h"
 #include "index/Index.h"
 #include "index/IndexImpl.h"
@@ -582,4 +583,18 @@ TEST(IndexTest, trivialGettersAndSetters) {
   index.memoryLimitIndexBuilding() = 7_kB;
   EXPECT_EQ(index.memoryLimitIndexBuilding(), 7_kB);
   EXPECT_EQ(std::as_const(index).memoryLimitIndexBuilding(), 7_kB);
+}
+
+TEST(IndexTest, allPrefixes) {
+  char firstChar = 'a';
+  char lastChar = 'z';
+  std::string expectedPrefix(MIN_WORD_PREFIX_SIZE, firstChar);
+  auto prefixGenerator = IndexImpl::allPrefixes();
+  auto prefixIt = prefixGenerator.begin();
+  EXPECT_EQ(*prefixIt, expectedPrefix);
+  for (char c = firstChar; c < lastChar; ++c) {
+    ++prefixIt;
+  }
+  expectedPrefix[MIN_WORD_PREFIX_SIZE - 1] = lastChar;
+  EXPECT_EQ(*prefixIt, expectedPrefix);
 }

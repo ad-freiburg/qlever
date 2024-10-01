@@ -129,6 +129,11 @@ class IndexImpl {
   vector<WordIndex> blockBoundaries_;
   off_t currenttOffset_;
   mutable ad_utility::File textIndexFile_;
+  // Generate all possible sequences of length `MIN_WORD_PREFIX_SIZE` over the
+  // alphabet {a, b, ..., z}.
+  static cppcoro::generator<std::string> allPrefixes();
+  static bool areAllPrefixesSorted(auto comparator);
+  FRIEND_TEST(IndexTest, allPrefixes);
 
   // If false, only PSO and POS permutations are loaded and expected.
   bool loadAllPermutations_ = true;
