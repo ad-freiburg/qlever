@@ -244,7 +244,7 @@ Result PathSearch::computeResult([[maybe_unused]] bool requestLaziness) {
     auto sideTime = timer.msecs();
     timer.start();
 
-    std::vector<Path> paths;
+    PathsLimited paths{allocator()};
     if (sources.empty()) {
       paths = allPaths(binSearch.getSources(), targets, binSearch, config_.cartesian_);
     } else {
@@ -313,13 +313,13 @@ PathSearch::handleSearchSides() const {
 }
 
 // _____________________________________________________________________________
-std::vector<Path> PathSearch::findPaths(
+PathsLimited PathSearch::findPaths(
     const Id& source, const std::unordered_set<uint64_t>& targets,
     const BinSearchWrapper& binSearch) const {
   std::vector<Edge> edgeStack;
-  Path currentPath;
+  Path currentPath{EdgesLimited(allocator())};
   std::unordered_map<uint64_t, std::vector<Path>> pathCache;
-  std::vector<Path> result;
+  PathsLimited result{allocator()};
   std::unordered_set<uint64_t> visited;
 
   visited.insert(source.getBits());
@@ -355,12 +355,12 @@ std::vector<Path> PathSearch::findPaths(
 }
 
 // _____________________________________________________________________________
-std::vector<Path> PathSearch::allPaths(std::span<const Id> sources,
+PathsLimited PathSearch::allPaths(std::span<const Id> sources,
                                        std::span<const Id> targets,
                                        const BinSearchWrapper& binSearch,
                                        bool cartesian) const {
-  std::vector<Path> paths;
-  Path path;
+  PathsLimited paths{allocator()};
+  Path path{EdgesLimited(allocator())};
 
   if (cartesian || sources.size() != targets.size()) {
     std::unordered_set<uint64_t> targetSet;
@@ -386,7 +386,7 @@ std::vector<Path> PathSearch::allPaths(std::span<const Id> sources,
 // _____________________________________________________________________________
 template <size_t WIDTH>
 void PathSearch::pathsToResultTable(IdTable& tableDyn,
-                                    std::vector<Path>& paths) const {
+                                    PathsLimited& paths) const {
   IdTableStatic<WIDTH> table = std::move(tableDyn).toStatic<WIDTH>();
 
   std::vector<size_t> edgePropertyCols;

@@ -12,6 +12,7 @@
 
 #include "engine/Operation.h"
 #include "global/Id.h"
+#include "util/AllocatorWithLimit.h"
 
 enum class PathSearchAlgorithm { ALL_PATHS };
 
@@ -30,8 +31,10 @@ struct Edge {
   std::vector<Id> edgeProperties_;
 };
 
+using EdgesLimited = std::vector<Edge, ad_utility::AllocatorWithLimit<Edge>>;
+
 struct Path {
-  std::vector<Edge> edges_;
+  EdgesLimited edges_;
 
   bool empty() const { return edges_.empty(); }
 
@@ -43,6 +46,8 @@ struct Path {
 
   const Id& end() { return edges_.back().end_; }
 };
+
+using PathsLimited = std::vector<Path, ad_utility::AllocatorWithLimit<Path>>;
 
 /**
  * @class BinSearchWrapper
@@ -251,7 +256,7 @@ class PathSearch : public Operation {
    * @brief Finds paths based on the configured algorithm.
    * @return A vector of paths.
    */
-  std::vector<pathSearch::Path> findPaths(const Id& source,
+  pathSearch::PathsLimited findPaths(const Id& source,
                               const std::unordered_set<uint64_t>& targets,
                               const pathSearch::BinSearchWrapper& binSearch) const;
 
@@ -259,7 +264,7 @@ class PathSearch : public Operation {
    * @brief Finds all paths in the graph.
    * @return A vector of all paths.
    */
-  std::vector<pathSearch::Path> allPaths(std::span<const Id> sources,
+  pathSearch::PathsLimited allPaths(std::span<const Id> sources,
                              std::span<const Id> targets,
                              const pathSearch::BinSearchWrapper& binSearch, bool cartesian) const;
 
@@ -270,5 +275,5 @@ class PathSearch : public Operation {
    * @param paths The vector of paths to convert.
    */
   template <size_t WIDTH>
-  void pathsToResultTable(IdTable& tableDyn, std::vector<pathSearch::Path>& paths) const;
+  void pathsToResultTable(IdTable& tableDyn, pathSearch::PathsLimited& paths) const;
 };
