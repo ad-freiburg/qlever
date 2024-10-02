@@ -4,9 +4,15 @@
 #include "engine/VariableToColumnMap.h"
 #include "global/ValueId.h"
 #include "parser/ParsedQuery.h"
+#include "s2/s2point.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/GeoSparqlHelpers.h"
 #include "util/MemorySize/MemorySize.h"
+
+void SpatialJoin::testLinkingOfS2() {
+  S2Point p;
+  std::cerr << p.IsNaN();
+}
 
 // ____________________________________________________________________________
 SpatialJoin::SpatialJoin(
