@@ -63,13 +63,17 @@ class DeltaTriples {
 
     LocatedTriples::iterator& forPermutation(Permutation::Enum permutation);
   };
+  using TriplesToHandlesMap =
+      ad_utility::HashMap<IdTriple<0>, LocatedTripleHandles>;
+  using Triples = std::vector<IdTriple<0>>;
+  using CancellationHandle = ad_utility::SharedCancellationHandle;
 
   // The sets of triples added to and subtracted from the original index. Any
   // triple can be at most in one of the sets. The information whether a triple
   // is in the index is missing. This means that a triple that is in the index
   // may still be in the inserted set and vice versa.
-  ad_utility::HashMap<IdTriple<0>, LocatedTripleHandles> triplesInserted_;
-  ad_utility::HashMap<IdTriple<0>, LocatedTripleHandles> triplesDeleted_;
+  TriplesToHandlesMap triplesInserted_;
+  TriplesToHandlesMap triplesDeleted_;
 
  public:
   // Construct for given index.
@@ -91,12 +95,10 @@ class DeltaTriples {
   size_t numDeleted() const { return triplesDeleted_.size(); }
 
   // Insert triples.
-  void insertTriples(ad_utility::SharedCancellationHandle cancellationHandle,
-                     std::vector<IdTriple<0>> triples);
+  void insertTriples(CancellationHandle cancellationHandle, Triples triples);
 
   // Delete triples.
-  void deleteTriples(ad_utility::SharedCancellationHandle cancellationHandle,
-                     std::vector<IdTriple<0>> triples);
+  void deleteTriples(CancellationHandle cancellationHandle, Triples triples);
 
   // Get `TripleWithPosition` objects for given permutation.
   const LocatedTriplesPerBlock& getLocatedTriplesPerBlock(
@@ -109,18 +111,17 @@ class DeltaTriples {
   // of where it was added (so that we can easily delete it again from these
   // maps later).
   std::vector<LocatedTripleHandles> locateAndAddTriples(
-      ad_utility::SharedCancellationHandle cancellationHandle,
+      CancellationHandle cancellationHandle,
       std::span<const IdTriple<0>> idTriples, bool shouldExist);
 
-  // Implementation to actually insert triples. `shouldExist` specifies the
-  // action: insert or delete. `targetMap` contains triples for the current
-  // action. `inverseMap` contains triples for the inverse action. These are
-  // then used to resolve idempotent actions and update the corresponding maps.
-  void modifyTriplesImpl(
-      ad_utility::SharedCancellationHandle cancellationHandle,
-      std::vector<IdTriple<0>> triples, bool shouldExist,
-      ad_utility::HashMap<IdTriple<0>, LocatedTripleHandles>& targetMap,
-      ad_utility::HashMap<IdTriple<0>, LocatedTripleHandles>& inverseMap);
+  // Common implementation for `insertTriples` and `deleteTriples`.
+  // `shouldExist` specifies the action: insert or delete. `targetMap` contains
+  // triples for the current action. `inverseMap` contains triples for the
+  // inverse action. These are then used to resolve idempotent actions and
+  // update the corresponding maps.
+  void modifyTriplesImpl(CancellationHandle cancellationHandle, Triples triples,
+                         bool shouldExist, TriplesToHandlesMap& targetMap,
+                         TriplesToHandlesMap& inverseMap);
 
   // Erase `LocatedTriple` object from each `LocatedTriplesPerBlock` list. The
   // argument are iterators for each list, as returned by the method

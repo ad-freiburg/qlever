@@ -15,8 +15,12 @@
 #include "index/Permutation.h"
 #include "parser/RdfParser.h"
 
-namespace Matchers {
-auto InAllPermutations = [](auto InnerMatcher) {
+namespace {
+// A matcher that applies `InnerMatcher` to all `LocatedTriplesPerBlock` of a
+// `DeltaTriples`.
+auto InAllPermutations =
+    [](testing::Matcher<const LocatedTriplesPerBlock&> InnerMatcher)
+    -> testing::Matcher<const DeltaTriples&> {
   return testing::AllOfArray(ad_utility::transform(
       Permutation::ALL, [&InnerMatcher](const Permutation::Enum& perm) {
         return testing::ResultOf(
@@ -28,11 +32,15 @@ auto InAllPermutations = [](auto InnerMatcher) {
             InnerMatcher);
       }));
 };
+// A matcher that checks `numTriples()` for all `LocatedTriplesPerBlock` of a
+// `DeltaTriples`.
 auto NumTriplesInAllPermutations =
     [](size_t expectedNumTriples) -> testing::Matcher<const DeltaTriples&> {
   return InAllPermutations(AD_PROPERTY(LocatedTriplesPerBlock, numTriples,
                                        testing::Eq(expectedNumTriples)));
 };
+// A matcher that checks `numInserted()` and `numDeleted()` of a `DeltaTriples`
+// and `numTriples()` for all `LocatedTriplesPerBlock` of the `DeltaTriples`.
 auto NumTriples =
     [](size_t inserted, size_t deleted,
        size_t inAllPermutations) -> testing::Matcher<const DeltaTriples&> {
@@ -41,8 +49,7 @@ auto NumTriples =
       AD_PROPERTY(DeltaTriples, numDeleted, testing::Eq(deleted)),
       NumTriplesInAllPermutations(inAllPermutations));
 };
-}  // namespace Matchers
-namespace m = Matchers;
+}  // namespace
 
 // Fixture that sets up a test index.
 class DeltaTriplesTest : public ::testing::Test {
@@ -107,31 +114,31 @@ TEST_F(DeltaTriplesTest, clear) {
   auto& vocab = testQec->getIndex().getVocab();
   auto& localVocab = deltaTriples.localVocab();
 
-  EXPECT_THAT(deltaTriples, m::NumTriples(0, 0, 0));
+  EXPECT_THAT(deltaTriples, NumTriples(0, 0, 0));
 
   // Insert then clear.
   deltaTriples.insertTriples(
       cancellationHandle, makeIdTriples(vocab, localVocab, {"<a> <UPP> <A>"}));
 
-  EXPECT_THAT(deltaTriples, m::NumTriples(1, 0, 1));
+  EXPECT_THAT(deltaTriples, NumTriples(1, 0, 1));
 
   deltaTriples.clear();
 
-  EXPECT_THAT(deltaTriples, m::NumTriples(0, 0, 0));
+  EXPECT_THAT(deltaTriples, NumTriples(0, 0, 0));
 
   // Delete, insert and then clear.
   deltaTriples.deleteTriples(
       cancellationHandle, makeIdTriples(vocab, localVocab, {"<A> <low> <a>"}));
-  EXPECT_THAT(deltaTriples, m::NumTriples(0, 1, 1));
+  EXPECT_THAT(deltaTriples, NumTriples(0, 1, 1));
 
   deltaTriples.insertTriples(
       cancellationHandle, makeIdTriples(vocab, localVocab, {"<a> <UPP> <A>"}));
 
-  EXPECT_THAT(deltaTriples, m::NumTriples(1, 1, 2));
+  EXPECT_THAT(deltaTriples, NumTriples(1, 1, 2));
 
   deltaTriples.clear();
 
-  EXPECT_THAT(deltaTriples, m::NumTriples(0, 0, 0));
+  EXPECT_THAT(deltaTriples, NumTriples(0, 0, 0));
 }
 
 TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
@@ -146,26 +153,29 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
     return ad_utility::transform(map,
                                  [](const auto& item) { return item.first; });
   };
-  auto UnorderedTriplesAre = [&mapKeys, this, &vocab,
-                              &localVocab](std::vector<std::string> triples)
+  auto UnorderedTriplesAre = [&mapKeys, this, &vocab, &localVocab](
+                                 const std::vector<std::string>& triples)
       -> testing::Matcher<const ad_utility::HashMap<
           IdTriple<0>, DeltaTriples::LocatedTripleHandles>&> {
     return testing::ResultOf(
         "mapKeys(...)", [&mapKeys](const auto map) { return mapKeys(map); },
         testing::UnorderedElementsAreArray(
-            makeIdTriples(vocab, localVocab, std::move(triples))));
+            makeIdTriples(vocab, localVocab, triples)));
   };
-  auto StateIs = [&UnorderedTriplesAre](size_t numInserted, size_t numDeleted,
-                                        size_t numTriplesInAllPermutations,
-                                        std::vector<std::string> inserted,
-                                        std::vector<std::string> deleted)
+  // A matcher that checks the state of a `DeltaTriples`:
+  // - `numInserted()` and `numDeleted()`
+  // - `numTriples()` for all `LocatedTriplesPerBlock`
+  // - the inserted and deleted triples (unordered)
+  auto StateIs = [&UnorderedTriplesAre](
+                     size_t numInserted, size_t numDeleted,
+                     size_t numTriplesInAllPermutations,
+                     const std::vector<std::string>& inserted,
+                     const std::vector<std::string>& deleted)
       -> testing::Matcher<const DeltaTriples&> {
-    return testing::AllOf(
-        m::NumTriples(numInserted, numDeleted, numTriplesInAllPermutations),
-        AD_FIELD(DeltaTriples, DeltaTriples::triplesInserted_,
-                 UnorderedTriplesAre(std::move(inserted))),
-        AD_FIELD(DeltaTriples, DeltaTriples::triplesDeleted_,
-                 UnorderedTriplesAre(std::move(deleted))));
+    return AllOf(
+        NumTriples(numInserted, numDeleted, numTriplesInAllPermutations),
+        AD_FIELD(DeltaTriples, triplesInserted_, UnorderedTriplesAre(inserted)),
+        AD_FIELD(DeltaTriples, triplesDeleted_, UnorderedTriplesAre(deleted)));
   };
 
   EXPECT_THAT(deltaTriples, StateIs(0, 0, 0, {}, {}));
