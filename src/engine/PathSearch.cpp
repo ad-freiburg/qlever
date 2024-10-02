@@ -5,6 +5,8 @@
 #include "PathSearch.h"
 
 #include <optional>
+#include <algorithm>
+#include <iterator>
 #include <ranges>
 #include <variant>
 #include <vector>
@@ -39,8 +41,25 @@ std::vector<Edge> BinSearchWrapper::outgoingEdes(const Id node) const {
 }
 
 // _____________________________________________________________________________
-std::span<const Id> BinSearchWrapper::getSources() const {
-  return table_.getColumn(startCol_);
+std::vector<Id> BinSearchWrapper::getSources() const {
+  auto startIds = table_.getColumn(startCol_);
+  // std::vector<Id> sources;
+  // std::ranges::unique_copy(startIds, std::back_inserter(sources));
+  //
+  // return sources;  auto startIds = table_.getColumn(startCol_);
+  std::vector<Id> sources;
+
+  size_t index = 0;
+  Id lastId;
+  while (index < startIds.size()) {
+    lastId = startIds[index];
+    sources.push_back(lastId);
+    while (lastId == startIds[index]) {
+      index++;
+    }
+  }
+
+  return sources;
 }
 
 // _____________________________________________________________________________
@@ -219,13 +238,19 @@ Result PathSearch::computeResult([[maybe_unused]] bool requestLaziness) {
     auto buildingTime = timer.msecs();
     timer.start();
 
-    auto [sources, targets] = handleSearchSides(binSearch);
+    auto [sources, targets] = handleSearchSides();
 
     timer.stop();
     auto sideTime = timer.msecs();
     timer.start();
 
-    auto paths = allPaths(sources, targets, binSearch, config_.cartesian_);
+    std::vector<Path> paths;
+    if (sources.empty()) {
+      paths = allPaths(binSearch.getSources(), targets, binSearch, config_.cartesian_);
+    } else {
+      paths = allPaths(sources, targets, binSearch, config_.cartesian_);
+    }
+
 
     timer.stop();
     auto searchTime = timer.msecs();
@@ -255,7 +280,7 @@ VariableToColumnMap PathSearch::computeVariableToColumnMap() const {
 
 // _____________________________________________________________________________
 std::pair<std::span<const Id>, std::span<const Id>>
-PathSearch::handleSearchSides(const BinSearchWrapper& binSearch) const {
+PathSearch::handleSearchSides() const {
   std::span<const Id> sourceIds;
   std::span<const Id> targetIds;
 
@@ -270,7 +295,7 @@ PathSearch::handleSearchSides(const BinSearchWrapper& binSearch) const {
     sourceIds = sourceTree_.value()->getResult()->idTable().getColumn(
         sourceCol_.value());
   } else if (config_.sourceIsVariable()) {
-    sourceIds = binSearch.getSources();
+    sourceIds = {};
   } else {
     sourceIds = std::get<std::vector<Id>>(config_.sources_);
   }

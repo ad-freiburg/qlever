@@ -74,7 +74,7 @@ class BinSearchWrapper {
    * the search starts from all possible sources (i.e. all
    * start nodes). Returns only unique start nodes.
    */
-  std::span<const Id> getSources() const;
+  std::vector<Id> getSources() const;
 
  private:
   Edge makeEdgeFromRow(size_t row) const;
@@ -245,7 +245,7 @@ class PathSearch : public Operation {
   VariableToColumnMap computeVariableToColumnMap() const override;
 
  private:
-  std::pair<std::span<const Id>, std::span<const Id>> handleSearchSides(const pathSearch::BinSearchWrapper& binSearch) const;
+  std::pair<std::span<const Id>, std::span<const Id>> handleSearchSides() const;
 
   /**
    * @brief Finds paths based on the configured algorithm.
