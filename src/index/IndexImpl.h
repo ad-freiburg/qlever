@@ -281,19 +281,7 @@ class IndexImpl {
   // ___________________________________________________________________________
   std::string_view indexToString(WordVocabIndex id) const;
 
- private:
-  // ___________________________________________________________________________
-  std::optional<Id> getIdImpl(const auto& element) const;
-
  public:
-  // ___________________________________________________________________________
-  std::optional<Id> getId(
-      const ad_utility::triple_component::LiteralOrIri& element) const;
-  std::optional<Id> getId(
-      const ad_utility::triple_component::Literal& element) const;
-  std::optional<Id> getId(
-      const ad_utility::triple_component::Iri& element) const;
-
   // ___________________________________________________________________________
   Index::Vocab::PrefixRanges prefixRanges(std::string_view prefix) const;
 
@@ -437,9 +425,8 @@ class IndexImpl {
                const LimitOffsetClause& limitOffset = {}) const;
 
   // _____________________________________________________________________________
-  size_t getResultSizeOfScan(
-      const ScanSpecificationAsTripleComponent& scanSpecification,
-      const Permutation::Enum& permutation) const;
+  size_t getResultSizeOfScan(const ScanSpecification& scanSpecification,
+                             const Permutation::Enum& permutation) const;
 
  private:
   // Private member functions

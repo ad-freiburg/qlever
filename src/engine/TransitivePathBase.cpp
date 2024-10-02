@@ -179,7 +179,7 @@ std::string TransitivePathBase::getDescriptor() const {
   auto scanOperation =
       std::dynamic_pointer_cast<IndexScan>(subtree_->getRootOperation());
   if (scanOperation != nullptr) {
-    os << " " << scanOperation->getPredicate() << " ";
+    os << " " << scanOperation->predicate() << " ";
   } else {
     // Escaped the question marks to avoid a warning about ignored trigraphs.
     os << R"( <???> )";

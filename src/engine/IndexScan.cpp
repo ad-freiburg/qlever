@@ -18,12 +18,13 @@ using std::string;
 
 // _____________________________________________________________________________
 IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
-                     const SparqlTripleSimple& triple)
+                     const SparqlTripleSimple& triple, Graphs graphsToFilter)
     : Operation(qec),
       permutation_(permutation),
       subject_(triple.s_),
       predicate_(triple.p_),
       object_(triple.o_),
+      graphsToFilter_{std::move(graphsToFilter)},
       numVariables_(static_cast<size_t>(subject_.isVariable()) +
                     static_cast<size_t>(predicate_.isVariable()) +
                     static_cast<size_t>(object_.isVariable())) {
@@ -51,8 +52,9 @@ IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
 
 // _____________________________________________________________________________
 IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
-                     const SparqlTriple& triple)
-    : IndexScan(qec, permutation, triple.getSimple()) {}
+                     const SparqlTriple& triple, Graphs graphsToFilter)
+    : IndexScan(qec, permutation, triple.getSimple(),
+                std::move(graphsToFilter)) {}
 
 // _____________________________________________________________________________
 string IndexScan::getCacheKeyImpl() const {
@@ -77,6 +79,16 @@ string IndexScan::getCacheKeyImpl() const {
   if (!additionalColumns_.empty()) {
     os << " Additional Columns: ";
     os << absl::StrJoin(additionalColumns(), " ");
+  }
+  if (graphsToFilter_.has_value()) {
+    // The graphs are stored as a hash set, but we need a deterministic order.
+    std::vector<std::string> graphIdVec;
+    std::ranges::transform(graphsToFilter_.value(),
+                           std::back_inserter(graphIdVec),
+                           &TripleComponent::toRdfLiteral);
+    std::ranges::sort(graphIdVec);
+    os << "\nFiltered by Graphs:";
+    os << absl::StrJoin(graphIdVec, " ");
   }
   return std::move(os).str();
 }
@@ -149,7 +161,7 @@ ProtoResult IndexScan::computeResult(bool requestLaziness) {
   using enum Permutation::Enum;
   idTable.setNumColumns(numVariables_);
   const auto& index = _executionContext->getIndex();
-  if (numVariables_ < 3) {
+  if (numVariables_ < 3 || !additionalColumns().empty()) {
     idTable = index.scan(getScanSpecification(), permutation_,
                          additionalColumns(), cancellationHandle_, getLimit());
   } else {
@@ -259,19 +271,21 @@ std::array<const TripleComponent* const, 3> IndexScan::getPermutedTriple()
 }
 
 // ___________________________________________________________________________
-ScanSpecificationAsTripleComponent IndexScan::getScanSpecification() const {
+ScanSpecification IndexScan::getScanSpecification() const {
+  const IndexImpl& index = getIndex().getImpl();
+  return getScanSpecificationTc().toScanSpecification(index);
+}
+
+// ___________________________________________________________________________
+ScanSpecificationAsTripleComponent IndexScan::getScanSpecificationTc() const {
   auto permutedTriple = getPermutedTriple();
-  return {*permutedTriple[0], *permutedTriple[1], *permutedTriple[2]};
+  return {*permutedTriple[0], *permutedTriple[1], *permutedTriple[2],
+          graphsToFilter_};
 }
 
 // ___________________________________________________________________________
 Permutation::IdTableGenerator IndexScan::getLazyScan(
     std::vector<CompressedBlockMetadata> blocks) const {
-  const IndexImpl& index = getIndex().getImpl();
-  auto scanSpecification = getScanSpecification().toScanSpecification(index);
-  if (!scanSpecification.has_value()) {
-    return {};
-  }
   // If there is a LIMIT or OFFSET clause that constrains the scan
   // (which can happen with an explicit subquery), we cannot use the prefiltered
   // blocks, as we currently have no mechanism to include limits and offsets
@@ -280,8 +294,10 @@ Permutation::IdTableGenerator IndexScan::getLazyScan(
                           ? std::optional{std::move(blocks)}
                           : std::nullopt;
 
-  return index.getPermutation(permutation())
-      .lazyScan(std::move(scanSpecification).value(), std::move(actualBlocks),
+  return getIndex()
+      .getImpl()
+      .getPermutation(permutation())
+      .lazyScan(getScanSpecification(), std::move(actualBlocks),
                 additionalColumns(), cancellationHandle_, getLimit());
 };
 
@@ -289,12 +305,8 @@ Permutation::IdTableGenerator IndexScan::getLazyScan(
 std::optional<Permutation::MetadataAndBlocks> IndexScan::getMetadataForScan()
     const {
   const auto& index = getExecutionContext()->getIndex().getImpl();
-  auto scanSpec = getScanSpecification().toScanSpecification(index);
-  if (!scanSpec.has_value()) {
-    return std::nullopt;
-  }
   return index.getPermutation(permutation())
-      .getMetadataAndBlocks(scanSpec.value());
+      .getMetadataAndBlocks(getScanSpecification());
 };
 
 // ________________________________________________________________

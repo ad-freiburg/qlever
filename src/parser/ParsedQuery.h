@@ -11,6 +11,7 @@
 
 #include "engine/ResultType.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
+#include "index/ScanSpecification.h"
 #include "parser/Alias.h"
 #include "parser/ConstructClause.h"
 #include "parser/GraphPattern.h"
@@ -35,6 +36,16 @@
 
 using std::string;
 using std::vector;
+
+namespace parsedQuery {
+// A struct for the FROM and FROM NAMED clauses;
+struct DatasetClauses {
+  // FROM clauses.
+  ScanSpecificationAsTripleComponent::Graphs defaultGraphs_{};
+  // FROM NAMED clauses.
+  ScanSpecificationAsTripleComponent::Graphs namedGraphs_{};
+};
+}  // namespace parsedQuery
 
 // Data container for prefixes
 class SparqlPrefix {
@@ -68,6 +79,8 @@ class ParsedQuery {
 
   using UpdateClause = parsedQuery::UpdateClause;
 
+  using DatasetClauses = parsedQuery::DatasetClauses;
+
   ParsedQuery() = default;
 
   GraphPattern _rootGraphPattern;
@@ -85,6 +98,9 @@ class ParsedQuery {
   // of SelectClause is private
   std::variant<SelectClause, ConstructClause, UpdateClause> _clause{
       SelectClause{}};
+
+  // The IRIs from the FROM and FROM NAMED clauses.
+  DatasetClauses datasetClauses_;
 
   [[nodiscard]] bool hasSelectClause() const {
     return std::holds_alternative<SelectClause>(_clause);

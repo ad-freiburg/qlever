@@ -123,13 +123,6 @@ class Index {
   std::string indexToString(VocabIndex id) const;
   std::string_view indexToString(WordVocabIndex id) const;
 
-  std::optional<Id> getId(
-      const ad_utility::triple_component::LiteralOrIri& element) const;
-  std::optional<Id> getId(
-      const ad_utility::triple_component::Literal& element) const;
-  std::optional<Id> getId(
-      const ad_utility::triple_component::Iri& element) const;
-
   [[nodiscard]] Vocab::PrefixRanges prefixRanges(std::string_view prefix) const;
 
   [[nodiscard]] const CompactVectorOfStrings<Id>& getPatterns() const;
@@ -252,9 +245,8 @@ class Index {
 
   // Similar to the previous overload of `scan`, but only get the exact size of
   // the scan result.
-  size_t getResultSizeOfScan(
-      const ScanSpecificationAsTripleComponent& scanSpecification,
-      const Permutation::Enum& permutation) const;
+  size_t getResultSizeOfScan(const ScanSpecification& scanSpecification,
+                             const Permutation::Enum& permutation) const;
 
   // Get access to the implementation. This should be used rarely as it
   // requires including the rather expensive `IndexImpl.h` header
