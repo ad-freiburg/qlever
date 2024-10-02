@@ -422,8 +422,7 @@ TEST(IndexTest, NumDistinctEntities) {
   // The added numPredicates are `ql:has-pattern`, `ql:langtag`, and one added
   // predicate for each combination of predicate+language that is actually used
   // (e.g. `@en@label`).
-  // TODO<joka921> Those can be tested in principle
-  // EXPECT_EQ(numPredicates.internal, 3);
+  EXPECT_EQ(numPredicates.internal, 3);
   EXPECT_EQ(numPredicates, index.numDistinctCol0(Permutation::PSO));
   EXPECT_EQ(numPredicates, index.numDistinctCol0(Permutation::POS));
 
@@ -436,8 +435,7 @@ TEST(IndexTest, NumDistinctEntities) {
   EXPECT_EQ(numTriples.normal, 7);
   // Two added triples for each triple that has an object with a language tag
   // and one triple per subject for the pattern.
-  // TODO<joka921> Reinstate those.
-  // EXPECT_EQ(numTriples.internal, 5);
+  EXPECT_EQ(numTriples.internal, 5);
 
   auto multiplicities = index.getMultiplicities(Permutation::SPO);
   // 7 triples, three distinct numSubjects, 2 distinct numPredicates, 7 distinct

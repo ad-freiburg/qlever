@@ -292,18 +292,33 @@ void IndexImpl::createFromFile(const string& filename, Index::Filetype type) {
 
   auto& firstSorter = *indexBuilderData.sorter_.firstPermutationSorter_;
 
+  size_t numTriplesInternal = 0;
+  size_t numPredicatesInternal = 0;
+
+  // Create the internal PSO and POS permutations. This has to be called AFTER
+  // all triples have been added to the `internalTriplesPso_` sorter, in
+  // particular, after the patterns have been created.
   auto createInternalPSOAndPOS = [&]() {
     auto onDiskBaseBackup = onDiskBase_;
-    // TODO<joka921> rename this suffix to ".internal",
-    // and make it a global constant. (no magic numbers or strings).
-    onDiskBase_ += ".internalTriples";
+    auto configurationJsonBackup = configurationJson_;
+    onDiskBase_.append(INTERNAL_INDEX_SUFFIX);
     auto internalTriplesUnique = ad_utility::uniqueBlockView(
         indexBuilderData.sorter_.internalTriplesPso_->getSortedBlocks<0>());
-    createPSOAndPOS(NumColumnsIndexBuilding, std::move(internalTriplesUnique));
+    createPSOAndPOSImpl(NumColumnsIndexBuilding,
+                        std::move(internalTriplesUnique), false);
     onDiskBase_ = std::move(onDiskBaseBackup);
-    // TODO<joka921> The above code currently writes a `metadata.json` for the
-    // internal triples, this should be deleted or not created at all.
+    // The "normal" triples from the "internal" index builder are actually
+    // internal.
+    NumNormalAndInternal normalAndInternal;
+    normalAndInternal =
+        static_cast<NumNormalAndInternal>(configurationJson_["num-triples"]);
+    numTriplesInternal = normalAndInternal.normal;
+    normalAndInternal =
+        static_cast<NumNormalAndInternal>(configurationJson_["num-predicates"]);
+    numPredicatesInternal = normalAndInternal.normal;
+    configurationJson_ = std::move(configurationJsonBackup);
   };
+
   // For the first permutation, perform a unique.
   auto firstSorterWithUnique =
       ad_utility::uniqueBlockView(firstSorter.getSortedOutput());
@@ -348,6 +363,16 @@ void IndexImpl::createFromFile(const string& filename, Index::Filetype type) {
     configurationJson_["has-all-permutations"] = true;
   }
 
+  // Combine the number of normal triples and predicates with their internal
+  // counterparts.
+  auto numTriples =
+      static_cast<NumNormalAndInternal>(configurationJson_["num-triples"]);
+  auto numPredicates =
+      static_cast<NumNormalAndInternal>(configurationJson_["num-predicates"]);
+  numTriples.internal = numTriplesInternal;
+  numPredicates.internal = numPredicatesInternal;
+  configurationJson_["num-triples"] = numTriples;
+  configurationJson_["num-predicates"] = numPredicates;
   // Dump the configuration again in case the permutations have added some
   // information.
   writeConfiguration();
@@ -1427,11 +1452,10 @@ vector<float> IndexImpl::getMultiplicities(
 vector<float> IndexImpl::getMultiplicities(
     Permutation::Enum permutation) const {
   const auto& p = getPermutation(permutation);
-  auto numTriples = static_cast<float>(this->numTriples().normalAndInternal_());
-  std::array<float, 3> m{
-      numTriples / numDistinctSubjects().normalAndInternal_(),
-      numTriples / numDistinctPredicates().normalAndInternal_(),
-      numTriples / numDistinctObjects().normalAndInternal_()};
+  auto numTriples = static_cast<float>(this->numTriples().normal);
+  std::array<float, 3> m{numTriples / numDistinctSubjects().normal,
+                         numTriples / numDistinctPredicates().normal,
+                         numTriples / numDistinctObjects().normal};
   return {m[p.keyOrder()[0]], m[p.keyOrder()[1]], m[p.keyOrder()[2]]};
 }
 
@@ -1492,9 +1516,10 @@ constexpr auto makeNumDistinctIdsCounter = [](size_t& numDistinctIds) {
 // _____________________________________________________________________________
 template <typename... NextSorter>
 requires(sizeof...(NextSorter) <= 1)
-void IndexImpl::createPSOAndPOS(size_t numColumns,
-                                BlocksOfTriples sortedTriples,
-                                NextSorter&&... nextSorter)
+void IndexImpl::createPSOAndPOSImpl(size_t numColumns,
+                                    BlocksOfTriples sortedTriples,
+                                    bool doWriteConfiguration,
+                                    NextSorter&&... nextSorter)
 
 {
   size_t numTriplesNormal = 0;
@@ -1515,7 +1540,9 @@ void IndexImpl::createPSOAndPOS(size_t numColumns,
                                                numPredicatesTotal);
   configurationJson_["num-triples"] = NumNormalAndInternal::fromNormalAndTotal(
       numTriplesNormal, numTriplesTotal);
-  writeConfiguration();
+  if (doWriteConfiguration) {
+    writeConfiguration();
+  }
 };
 
 // _____________________________________________________________________________

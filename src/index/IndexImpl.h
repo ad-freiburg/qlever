@@ -684,8 +684,15 @@ class IndexImpl {
   // metadata.
   template <typename... NextSorter>
   requires(sizeof...(NextSorter) <= 1)
+  void createPSOAndPOSImpl(size_t numColumns, BlocksOfTriples sortedTriples,
+                           bool writeConfiguration, NextSorter&&... nextSorter);
+  template <typename... NextSorter>
+  requires(sizeof...(NextSorter) <= 1)
   void createPSOAndPOS(size_t numColumns, BlocksOfTriples sortedTriples,
-                       NextSorter&&... nextSorter);
+                       NextSorter&&... nextSorter) {
+    createPSOAndPOSImpl(numColumns, std::move(sortedTriples), true,
+                        AD_FWD(nextSorter)...);
+  }
 
   // Set up one of the permutation sorters with the appropriate memory limit.
   // The `permutationName` is used to determine the filename and must be unique

@@ -172,19 +172,7 @@ ProtoResult IndexScan::computeResult(bool requestLaziness) {
 // _____________________________________________________________________________
 size_t IndexScan::computeSizeEstimate() const {
   AD_CORRECTNESS_CHECK(_executionContext);
-  // We have to do a simple scan anyway so might as well do it now
-  if (numVariables_ < 3) {
-    return getIndex().getResultSizeOfScan(getScanSpecification(), permutation_);
-  } else {
-    // The triple consists of three variables.
-    // TODO<joka921> As soon as all implementations of a full index scan
-    // (Including the "dummy joins" in Join.cpp) consistently exclude the
-    // internal triples, this estimate should be changed to only return
-    // the number of triples in the actual knowledge graph (excluding the
-    // internal triples).
-    AD_CORRECTNESS_CHECK(numVariables_ == 3);
-    return getIndex().numTriples().normalAndInternal_();
-  }
+  return getIndex().getResultSizeOfScan(getScanSpecification(), permutation_);
 }
 
 // _____________________________________________________________________________
