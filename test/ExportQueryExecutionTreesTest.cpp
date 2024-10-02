@@ -1054,6 +1054,53 @@ TEST(ExportQueryExecutionTrees, MultipleVariables) {
 }
 
 // ____________________________________________________________________________
+TEST(ExportQueryExecutionTrees, LimitOffset) {
+  std::string kg = "<a> <b> <c> . <d> <e> <f> . <g> <h> <i> . <j> <k> <l>";
+  std::string objectQuery =
+      "SELECT ?s WHERE { ?s ?p ?o } ORDER BY ?s LIMIT 2 OFFSET 1";
+  std::string expectedXml = makeXMLHeader({"s"}) +
+                            R"(
+  <result>
+    <binding name="s"><uri>d</uri></binding>
+  </result>
+  <result>
+    <binding name="s"><uri>g</uri></binding>
+  </result>)" + xmlTrailer;
+  TestCaseSelectQuery testCaseLimitOffset{
+      kg, objectQuery, 2,
+      // TSV
+      "?s\n"
+      "<d>\n"
+      "<g>\n",
+      // CSV
+      "s\n"
+      "d\n"
+      "g\n",
+      []() {
+        nlohmann::json j;
+        j.push_back(std::vector{
+            "<d>"s,
+        });
+        j.push_back(std::vector{
+            "<g>"s,
+        });
+        return j;
+      }(),
+      []() {
+        nlohmann::json j;
+        j["head"]["vars"].push_back("s");
+        auto& bindings = j["results"]["bindings"];
+        bindings.emplace_back();
+        bindings.back()["s"] = makeJSONBinding(std::nullopt, "uri", "d");
+        bindings.emplace_back();
+        bindings.back()["s"] = makeJSONBinding(std::nullopt, "uri", "g");
+        return j;
+      }(),
+      expectedXml};
+  runSelectQueryTestCase(testCaseLimitOffset);
+}
+
+// ____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, BinaryExport) {
   std::string kg = "<s> <p> 31 . <s> <o> 42";
   std::string query = "SELECT ?p ?o WHERE {<s> ?p ?o } ORDER BY ?p ?o";
