@@ -1008,9 +1008,7 @@ struct BlockZipperJoinImpl {
   template <bool DoOptionalJoin>
   void joinAndRemoveLessThanCurrentEl(auto& currentBlocksLeft,
                                       auto& currentBlocksRight,
-                                      const auto& currentEl,
-                                      const auto& undefBlocksLeft,
-                                      const auto& undefBlocksRight) {
+                                      const auto& currentEl) {
     // Get the first blocks.
     auto [fullBlockLeft, subrangeLeft, currentElItL] =
         getFirstBlock(currentBlocksLeft, currentEl);
@@ -1036,17 +1034,14 @@ struct BlockZipperJoinImpl {
     }();
     if constexpr (potentiallyHasUndef) {
       auto findUndefValues = [this, &fullBlockLeft, &fullBlockRight, &begL,
-                              &begR, &undefBlocksLeft,
-                              &undefBlocksRight](bool left) {
-        return [this, left, &fullBlockLeft, &fullBlockRight, &begL, &begR,
-                &undefBlocksLeft, &undefBlocksRight](const auto&, const auto&,
-                                                     const auto&, const auto&) {
-          auto makeGenerator =
-              []<bool left, typename T>(
-                  const auto* self, const auto& fullBlockLeft,
-                  const auto& fullBlockRight, T& begL, T& begR,
-                  const auto& undefBlocks,
-                  const auto& currentUndefBlocks) -> cppcoro::generator<T> {
+                              &begR](bool left) {
+        return [this, left, &fullBlockLeft, &fullBlockRight, &begL, &begR](
+                   const auto&, auto it, auto end, bool) {
+          auto makeGenerator = []<bool left, typename T>(
+                                   const auto* self, const auto& fullBlockLeft,
+                                   const auto& fullBlockRight, T& begL, T& begR,
+                                   const auto& undefBlocks, auto it,
+                                   auto end) -> cppcoro::generator<T> {
             for (const auto& undefBlock : undefBlocks) {
               if constexpr (left) {
                 begL = undefBlock.fullBlock().begin();
@@ -1066,8 +1061,6 @@ struct BlockZipperJoinImpl {
                                                 fullBlockRight.get());
             begL = fullBlockLeft.get().begin();
             begR = fullBlockRight.get().begin();
-            auto it = currentUndefBlocks.get().begin();
-            auto end = currentUndefBlocks.get().end();
             for (; it != end; ++it) {
               if (!self->isUndefined_(*it)) {
                 co_return;
@@ -1078,11 +1071,11 @@ struct BlockZipperJoinImpl {
           if (left) {
             return makeGenerator.template operator()<true>(
                 this, fullBlockLeft, fullBlockRight, begL, begR,
-                undefBlocksLeft, fullBlockLeft);
+                leftSide_.undefBlocks_, std::move(it), std::move(end));
           }
           return makeGenerator.template operator()<false>(
-              this, fullBlockLeft, fullBlockRight, begL, begR, undefBlocksRight,
-              fullBlockRight);
+              this, fullBlockLeft, fullBlockRight, begL, begR,
+              rightSide_.undefBlocks_, std::move(it), std::move(end));
         };
       };
       zipperJoinWithUndef(
@@ -1097,6 +1090,23 @@ struct BlockZipperJoinImpl {
           addRowIndex, noop, noop, addNotFoundRowIndex);
     }
     compatibleRowAction_.flush();
+
+    if constexpr (potentiallyHasUndef) {
+      if (subrangeLeft.begin() != currentElItL &&
+          isUndefined_(subrangeLeft.front())) {
+        leftSide_.undefBlocks_.push_back(currentBlocksLeft.at(0));
+        auto& back = leftSide_.undefBlocks_.back();
+        back.setSubrange(std::ranges::equal_range(
+            back.subrange(), subrangeLeft.front(), lessThan_));
+      }
+      if (subrangeRight.begin() != currentElItR &&
+          isUndefined_(subrangeRight.front())) {
+        rightSide_.undefBlocks_.push_back(currentBlocksRight.at(0));
+        auto& back = rightSide_.undefBlocks_.back();
+        back.setSubrange(std::ranges::equal_range(
+            back.subrange(), subrangeRight.front(), lessThan_));
+      }
+    }
 
     // Remove the joined elements.
     currentBlocksLeft.at(0).setSubrange(currentElItL, subrangeLeft.end());
@@ -1151,8 +1161,7 @@ struct BlockZipperJoinImpl {
     auto& currentBlocksRight = rightSide_.currentBlocks_;
     ProjectedEl currentEl = getCurrentEl();
     joinAndRemoveLessThanCurrentEl<DoOptionalJoin>(
-        currentBlocksLeft, currentBlocksRight, currentEl,
-        leftSide_.undefBlocks_, rightSide_.undefBlocks_);
+        currentBlocksLeft, currentBlocksRight, currentEl);
 
     // At this point the `currentBlocksLeft/Right` only consist of elements `>=
     // currentEl`. We now obtain a view on the elements `== currentEl` which are

@@ -377,3 +377,17 @@ TEST(JoinAlgorithms, JoinWithBlocksOneSideSingleUndef) {
   };
   testDynamicJoinWithUndef(a, b, expectedResult);
 }
+
+// ________________________________________________________________________________________
+TEST(JoinAlgorithms, JoinWithBlocksOneUndefinedValueMixedWithOtherValues) {
+  auto U = Id::makeUndefined();
+  std::vector<std::vector<FakeId>> a{{{U, "a0"}, {I(1), "a1"}, {I(2), "a2"}}};
+  std::vector<std::vector<FakeId>> b{{{U, "b0"}, {I(2), "b1"}, {I(3), "b2"}}};
+
+  std::vector<std::array<FakeId, 2>> expectedResult{
+      {F{U, "a0"}, F{U, "b0"}},       {F{I(1), "a1"}, F{U, "b0"}},
+      {F{U, "a0"}, F{I(2), "b1"}},    {F{I(2), "a2"}, F{U, "b0"}},
+      {F{I(2), "a2"}, F{I(2), "b1"}}, {F{U, "a0"}, F{I(3), "b2"}},
+  };
+  testDynamicJoinWithUndef(a, b, expectedResult);
+}
