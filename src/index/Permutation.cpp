@@ -20,12 +20,12 @@ Permutation::Permutation(Enum permutation, Allocator allocator)
 void Permutation::loadFromDisk(const std::string& onDiskBase,
                                std::function<bool(Id)> isInternalId,
                                bool loadInternalPermutation) {
-  isInternalId_ = isInternalId;
+  isInternalId_ = std::move(isInternalId);
   if (loadInternalPermutation) {
     internalPermutation_ =
         std::make_unique<Permutation>(permutation_, allocator_);
     internalPermutation_->loadFromDisk(
-        absl::StrCat(onDiskBase, INTERNAL_INDEX_SUFFIX), isInternalId, false);
+        absl::StrCat(onDiskBase, INTERNAL_INDEX_SUFFIX), isInternalId_, false);
   }
   if constexpr (MetaData::isMmapBased_) {
     meta_.setup(onDiskBase + ".index" + fileSuffix_ + MMAP_FILE_SUFFIX,

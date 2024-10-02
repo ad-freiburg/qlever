@@ -694,6 +694,11 @@ class IndexImpl {
                         AD_FWD(nextSorter)...);
   }
 
+  // Create the internal PSO and POS permutations from the sorted internal
+  // triples. Return `(numInternalTriples, numInternalPredicates)`.
+  std::pair<size_t, size_t> createInternalPSOandPOS(
+      auto&& internalTriplesPsoSorter);
+
   // Set up one of the permutation sorters with the appropriate memory limit.
   // The `permutationName` is used to determine the filename and must be unique
   // for each call during one index build.
@@ -748,4 +753,9 @@ class IndexImpl {
   std::unique_ptr<ExternalSorter<SortByPSO, NumColumnsIndexBuilding + 2>>
   buildOspWithPatterns(PatternCreator::TripleSorter sortersFromPatternCreator,
                        auto& internalTripleSorter);
+
+  // During the index building add the number of internal triples and internal
+  // predicates to the configuration.
+  void addInternalStatisticsToConfiguration(size_t numTriplesInternal,
+                                            size_t numPredicatesInternal);
 };

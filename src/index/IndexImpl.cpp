@@ -272,6 +272,30 @@ IndexImpl::buildOspWithPatterns(
   hasPatternPredicateSortedByPSO->clear();
   return thirdSorter;
 }
+
+// _____________________________________________________________________________
+std::pair<size_t, size_t> IndexImpl::createInternalPSOandPOS(
+    auto&& internalTriplesPsoSorter) {
+  auto onDiskBaseBackup = onDiskBase_;
+  auto configurationJsonBackup = configurationJson_;
+  onDiskBase_.append(INTERNAL_INDEX_SUFFIX);
+  auto internalTriplesUnique = ad_utility::uniqueBlockView(
+      internalTriplesPsoSorter.template getSortedBlocks<0>());
+  createPSOAndPOSImpl(NumColumnsIndexBuilding, std::move(internalTriplesUnique),
+                      false);
+  onDiskBase_ = std::move(onDiskBaseBackup);
+  // The "normal" triples from the "internal" index builder are actually
+  // internal.
+  size_t numTriplesInternal =
+      static_cast<NumNormalAndInternal>(configurationJson_["num-triples"])
+          .normal;
+  size_t numPredicatesInternal =
+      static_cast<NumNormalAndInternal>(configurationJson_["num-predicates"])
+          .normal;
+  configurationJson_ = std::move(configurationJsonBackup);
+  return {numTriplesInternal, numPredicatesInternal};
+}
+
 // _____________________________________________________________________________
 void IndexImpl::createFromFile(const string& filename, Index::Filetype type) {
   if (!loadAllPermutations_ && usePatterns_) {
@@ -298,25 +322,10 @@ void IndexImpl::createFromFile(const string& filename, Index::Filetype type) {
   // Create the internal PSO and POS permutations. This has to be called AFTER
   // all triples have been added to the `internalTriplesPso_` sorter, in
   // particular, after the patterns have been created.
-  auto createInternalPSOAndPOS = [&]() {
-    auto onDiskBaseBackup = onDiskBase_;
-    auto configurationJsonBackup = configurationJson_;
-    onDiskBase_.append(INTERNAL_INDEX_SUFFIX);
-    auto internalTriplesUnique = ad_utility::uniqueBlockView(
-        indexBuilderData.sorter_.internalTriplesPso_->getSortedBlocks<0>());
-    createPSOAndPOSImpl(NumColumnsIndexBuilding,
-                        std::move(internalTriplesUnique), false);
-    onDiskBase_ = std::move(onDiskBaseBackup);
-    // The "normal" triples from the "internal" index builder are actually
-    // internal.
-    NumNormalAndInternal normalAndInternal;
-    normalAndInternal =
-        static_cast<NumNormalAndInternal>(configurationJson_["num-triples"]);
-    numTriplesInternal = normalAndInternal.normal;
-    normalAndInternal =
-        static_cast<NumNormalAndInternal>(configurationJson_["num-predicates"]);
-    numPredicatesInternal = normalAndInternal.normal;
-    configurationJson_ = std::move(configurationJsonBackup);
+  auto createInternalPxx = [this, &numTriplesInternal, &numPredicatesInternal,
+                            &indexBuilderData]() {
+    std::tie(numTriplesInternal, numPredicatesInternal) =
+        createInternalPSOandPOS(*indexBuilderData.sorter_.internalTriplesPso_);
   };
 
   // For the first permutation, perform a unique.
@@ -324,15 +333,15 @@ void IndexImpl::createFromFile(const string& filename, Index::Filetype type) {
       ad_utility::uniqueBlockView(firstSorter.getSortedOutput());
 
   if (!loadAllPermutations_) {
-    createInternalPSOAndPOS();
+    createInternalPxx();
     // Only two permutations, no patterns, in this case the `firstSorter` is a
     // PSO sorter, and `createPermutationPair` creates PSO/POS permutations.
     createFirstPermutationPair(NumColumnsIndexBuilding,
                                std::move(firstSorterWithUnique));
     configurationJson_["has-all-permutations"] = false;
   } else if (!usePatterns_) {
-    createInternalPSOAndPOS();
-    // Without patterns we explicitly have to pass in the next sorters to all
+    createInternalPxx();
+    // Without patterns, we explicitly have to pass in the next sorters to all
     // permutation creating functions.
     auto secondSorter = makeSorter<SecondPermutation>("second");
     createFirstPermutationPair(NumColumnsIndexBuilding,
@@ -356,13 +365,21 @@ void IndexImpl::createFromFile(const string& filename, Index::Filetype type) {
     auto thirdSorterPtr =
         buildOspWithPatterns(std::move(patternOutput.value()),
                              *indexBuilderData.sorter_.internalTriplesPso_);
-    createInternalPSOAndPOS();
+    createInternalPxx();
     createThirdPermutationPair(NumColumnsIndexBuilding + 2,
 
                                thirdSorterPtr->template getSortedBlocks<0>());
     configurationJson_["has-all-permutations"] = true;
   }
 
+  addInternalStatisticsToConfiguration(numTriplesInternal,
+                                       numPredicatesInternal);
+  LOG(INFO) << "Index build completed" << std::endl;
+}
+
+// _____________________________________________________________________________
+void IndexImpl::addInternalStatisticsToConfiguration(
+    size_t numTriplesInternal, size_t numPredicatesInternal) {
   // Combine the number of normal triples and predicates with their internal
   // counterparts.
   auto numTriples =
@@ -373,10 +390,7 @@ void IndexImpl::createFromFile(const string& filename, Index::Filetype type) {
   numPredicates.internal = numPredicatesInternal;
   configurationJson_["num-triples"] = numTriples;
   configurationJson_["num-predicates"] = numPredicates;
-  // Dump the configuration again in case the permutations have added some
-  // information.
   writeConfiguration();
-  LOG(INFO) << "Index build completed" << std::endl;
 }
 
 // _____________________________________________________________________________
