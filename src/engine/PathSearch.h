@@ -256,17 +256,17 @@ class PathSearch : public Operation {
    * @brief Finds paths based on the configured algorithm.
    * @return A vector of paths.
    */
-  pathSearch::PathsLimited findPaths(const Id& source,
-                              const std::unordered_set<uint64_t>& targets,
-                              const pathSearch::BinSearchWrapper& binSearch) const;
+  pathSearch::PathsLimited findPaths(
+      const Id& source, const std::unordered_set<uint64_t>& targets,
+      const pathSearch::BinSearchWrapper& binSearch) const;
 
   /**
    * @brief Finds all paths in the graph.
    * @return A vector of all paths.
    */
-  pathSearch::PathsLimited allPaths(std::span<const Id> sources,
-                             std::span<const Id> targets,
-                             const pathSearch::BinSearchWrapper& binSearch, bool cartesian) const;
+  pathSearch::PathsLimited allPaths(
+      std::span<const Id> sources, std::span<const Id> targets,
+      const pathSearch::BinSearchWrapper& binSearch, bool cartesian) const;
 
   /**
    * @brief Converts paths to a result table with a specified width.
@@ -275,5 +275,6 @@ class PathSearch : public Operation {
    * @param paths The vector of paths to convert.
    */
   template <size_t WIDTH>
-  void pathsToResultTable(IdTable& tableDyn, pathSearch::PathsLimited& paths) const;
+  void pathsToResultTable(IdTable& tableDyn,
+                          pathSearch::PathsLimited& paths) const;
 };

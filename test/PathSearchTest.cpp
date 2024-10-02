@@ -305,13 +305,11 @@ TEST(PathSearchTest, cycle) {
  */
 TEST(PathSearchTest, twoCycle) {
   auto sub = makeIdTableFromVector({{0, 1}, {1, 2}, {2, 0}, {1, 3}, {3, 0}});
-  auto expected = makeIdTableFromVector({
-      {V(0), V(1), I(0), I(0), V(1)},
-      {V(0), V(1), I(1), I(0), V(3)},
-      {V(1), V(3), I(1), I(1), V(3)},
-      {V(0), V(1), I(2), I(0), V(2)},
-      {V(1), V(2), I(2), I(1), V(2)}
-  });
+  auto expected = makeIdTableFromVector({{V(0), V(1), I(0), I(0), V(1)},
+                                         {V(0), V(1), I(1), I(0), V(3)},
+                                         {V(1), V(3), I(1), I(1), V(3)},
+                                         {V(0), V(1), I(2), I(0), V(2)},
+                                         {V(1), V(2), I(2), I(1), V(2)}});
 
   std::vector<Id> sources{V(0)};
   Vars vars = {Variable{"?start"}, Variable{"?end"}};

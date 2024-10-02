@@ -4,9 +4,9 @@
 
 #include "PathSearch.h"
 
-#include <optional>
 #include <algorithm>
 #include <iterator>
+#include <optional>
 #include <ranges>
 #include <variant>
 #include <vector>
@@ -246,11 +246,11 @@ Result PathSearch::computeResult([[maybe_unused]] bool requestLaziness) {
 
     PathsLimited paths{allocator()};
     if (sources.empty()) {
-      paths = allPaths(binSearch.getSources(), targets, binSearch, config_.cartesian_);
+      paths = allPaths(binSearch.getSources(), targets, binSearch,
+                       config_.cartesian_);
     } else {
       paths = allPaths(sources, targets, binSearch, config_.cartesian_);
     }
-
 
     timer.stop();
     auto searchTime = timer.msecs();
@@ -313,9 +313,9 @@ PathSearch::handleSearchSides() const {
 }
 
 // _____________________________________________________________________________
-PathsLimited PathSearch::findPaths(
-    const Id& source, const std::unordered_set<uint64_t>& targets,
-    const BinSearchWrapper& binSearch) const {
+PathsLimited PathSearch::findPaths(const Id& source,
+                                   const std::unordered_set<uint64_t>& targets,
+                                   const BinSearchWrapper& binSearch) const {
   std::vector<Edge> edgeStack;
   Path currentPath{EdgesLimited(allocator())};
   std::unordered_map<uint64_t, std::vector<Path>> pathCache;
@@ -356,9 +356,9 @@ PathsLimited PathSearch::findPaths(
 
 // _____________________________________________________________________________
 PathsLimited PathSearch::allPaths(std::span<const Id> sources,
-                                       std::span<const Id> targets,
-                                       const BinSearchWrapper& binSearch,
-                                       bool cartesian) const {
+                                  std::span<const Id> targets,
+                                  const BinSearchWrapper& binSearch,
+                                  bool cartesian) const {
   PathsLimited paths{allocator()};
   Path path{EdgesLimited(allocator())};
 
@@ -390,7 +390,7 @@ void PathSearch::pathsToResultTable(IdTable& tableDyn,
   IdTableStatic<WIDTH> table = std::move(tableDyn).toStatic<WIDTH>();
 
   std::vector<size_t> edgePropertyCols;
-  for (const auto& edgeVar: config_.edgeProperties_) {
+  for (const auto& edgeVar : config_.edgeProperties_) {
     auto edgePropertyCol = variableColumns_.at(edgeVar).columnIndex_;
     edgePropertyCols.push_back(edgePropertyCol);
   }
