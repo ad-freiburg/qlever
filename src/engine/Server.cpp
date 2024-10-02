@@ -639,7 +639,8 @@ nlohmann::json Server::executeUpdateQuery(
   step.start();
 
   auto& vocab = qet.getQec()->getIndex().getVocab();
-  LocalVocab& localVocab = index.deltaTriples().localVocab();
+  const auto& deltaTriples = index.deltaTriples();
+  const LocalVocab& localVocab = deltaTriples.localVocab();
   using IdOrVariable = std::variant<Id, Variable>;
 
   auto transformSparqlTripleComponent =
@@ -647,7 +648,11 @@ nlohmann::json Server::executeUpdateQuery(
     if (component.isVariable()) {
       return std::move(component.getVariable());
     } else {
-      return std::move(component).toValueId(vocab, localVocab);
+      auto idFromDeltaLocalVocab = component.toValueIdNoAdd(vocab, localVocab);
+      if (!idFromDeltaLocalVocab.has_value()) {
+        AD_THROW("Failed to retrieve ID in Vocab or DeltaTriples LocalVocab");
+      }
+      return idFromDeltaLocalVocab.value();
     }
   };
   auto transformSparqlTripleSimple =

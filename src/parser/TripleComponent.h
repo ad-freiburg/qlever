@@ -214,16 +214,14 @@ class TripleComponent {
       const std::string& content = isLiteral()
                                        ? getLiteral().toStringRepresentation()
                                        : getIri().toStringRepresentation();
-      const ad_utility::triple_component::LiteralOrIri contentLOI =
-          isLiteral() ? ad_utility::triple_component::LiteralOrIri(getLiteral())
-                      : ad_utility::triple_component::LiteralOrIri(getIri());
+      using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
+      const LiteralOrIri contentLOI =
+          isLiteral() ? LiteralOrIri(getLiteral()) : LiteralOrIri(getIri());
       const auto localVocabIndexOpt = localVocab.getIndexOrNullopt(contentLOI);
       if (vocabulary.getId(content, &idx)) {
         return Id::makeFromVocabIndex(idx);
       } else if (localVocabIndexOpt.has_value()) {
         return Id::makeFromLocalVocabIndex(localVocabIndexOpt.value());
-      } else if (qlever::specialIds().contains(content)) {
-        return qlever::specialIds().at(content);
       } else {
         return std::nullopt;
       }
