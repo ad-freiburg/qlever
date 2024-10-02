@@ -591,7 +591,7 @@ class CompressedRelationReader {
   // and end of incomplete blocks.
   std::optional<ScanSpecAndBlocksAndBounds::FirstAndLastTriple>
   getFirstAndLastTriple(
-      const ScanSpecAndBlocksAndBounds& metadataAndBlocks,
+      const ScanSpecAndBlocks& metadataAndBlocks,
       const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
 
   // Get access to the underlying allocator

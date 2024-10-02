@@ -136,8 +136,7 @@ std::optional<Permutation::MetadataAndBlocks> Permutation::getMetadataAndBlocks(
     const ScanSpecification& scanSpec) const {
   auto relevantBlocks = CompressedRelationReader::getRelevantBlocks(
       scanSpec, locatedTriplesPerBlock_.getAugmentedMetadata());
-  CompressedRelationReader::ScanSpecAndBlocks mb{scanSpec, relevantBlocks,
-                                                 std::nullopt};
+  CompressedRelationReader::ScanSpecAndBlocks mb{scanSpec, relevantBlocks};
 
   auto firstAndLastTriple =
       reader().getFirstAndLastTriple(mb, locatedTriplesPerBlock_);

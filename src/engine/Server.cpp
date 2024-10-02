@@ -458,13 +458,13 @@ Awaitable<void> Server::process(
   }
 
   // Process "update" only if updates are enabled.
-  if (auto update = checkParameter("update", std::nullopt) && useUpdates_) {
+  if (parsedHttpRequest.query_.has_value() && useUpdates_) {
     if (auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
             checkParameter("timeout", std::nullopt), accessTokenOk, request,
             send)) {
-      co_return co_await processQuery(parameters, requestTimer,
-                                      std::move(request), send,
-                                      timeLimit.value());
+      co_return co_await processQuery(
+          parameters, parsedHttpRequest.query_.value(), requestTimer,
+          std::move(request), send, timeLimit.value());
 
     } else {
       // If the optional is empty, this indicates an error response has been

@@ -315,11 +315,13 @@ TEST(CompressedRelationWriter, getFirstAndLastTriple) {
   auto filename = "getFirstAndLastTriple.dat";
   auto [blocks, metaData, readerPtr] =
       writeAndOpenRelations(inputs, filename, 40_B);
+  auto ltpb = LocatedTriplesPerBlock{};
 
   // Test that the result of calling `getFirstAndLastTriple` for the index from
   // above with the given `ScanSpecification` matches the given `matcher`.
   auto testFirstAndLastBlock = [&](ScanSpecification spec, auto matcher) {
-    auto firstAndLastTriple = readerPtr->getFirstAndLastTriple({spec, blocks});
+    auto firstAndLastTriple =
+        readerPtr->getFirstAndLastTriple({spec, blocks}, ltpb);
     EXPECT_THAT(firstAndLastTriple, matcher);
   };
 
@@ -705,7 +707,7 @@ TEST(CompressedRelationReader, completeColumnIndices) {
 TEST(CompressedRelationReader, filterDuplicatesAndGraphs) {
   auto table = makeIdTableFromVector({{3}, {4}, {5}});
   CompressedBlockMetadata metadata{
-      {}, 0, {V(16), V(0), V(0)}, {V(38), V(4), V(12)}, {}, false};
+      0, {}, 0, {V(16), V(0), V(0)}, {V(38), V(4), V(12)}, {}, false};
   using Filter = CompressedRelationReader::FilterDuplicatesAndGraphs;
   ScanSpecification::Graphs graphs = std::nullopt;
   Filter f{graphs, 43, false};
@@ -742,7 +744,7 @@ TEST(CompressedRelationReader, filterDuplicatesAndGraphs) {
 
 TEST(CompressedRelationReader, makeCanBeSkippedForBlock) {
   CompressedBlockMetadata metadata{
-      {}, 0, {V(16), V(0), V(0)}, {V(38), V(4), V(12)}, {}, false};
+      0, {}, 0, {V(16), V(0), V(0)}, {V(38), V(4), V(12)}, {}, false};
 
   using Graphs = ScanSpecification::Graphs;
   Graphs graphs = std::nullopt;
@@ -834,6 +836,7 @@ TEST(CompressedRelationWriter, scanWithGraphs) {
                                   {8, 5, 1},
                                   {9, 4, 1},
                                   {9, 5, 1}}});
+  auto ltpb = LocatedTriplesPerBlock{};
   using namespace ::testing;
   for (auto blocksize : std::array{8_B, 16_B, 32_B, 64_B, 128_B}) {
     auto [blocks, metadata, reader] =
@@ -841,14 +844,14 @@ TEST(CompressedRelationWriter, scanWithGraphs) {
     ad_utility::HashSet<Id> graphs{V(0)};
     ScanSpecification spec{V(42), std::nullopt, std::nullopt, {}, graphs};
     auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
-    auto res = reader->scan(spec, blocks, {}, handle);
+    auto res = reader->scan(spec, blocks, {}, handle, ltpb);
     EXPECT_THAT(res,
                 matchesIdTableFromVector({{3, 4}, {7, 4}, {8, 4}, {8, 5}}));
 
     graphs.clear();
     graphs.insert(V(1));
     spec = ScanSpecification{V(42), std::nullopt, std::nullopt, {}, graphs};
-    res = reader->scan(spec, blocks, {}, handle);
+    res = reader->scan(spec, blocks, {}, handle, ltpb);
     EXPECT_THAT(res,
                 matchesIdTableFromVector({{3, 4}, {8, 5}, {9, 4}, {9, 5}}));
   }
