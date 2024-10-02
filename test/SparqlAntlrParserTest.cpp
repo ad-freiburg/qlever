@@ -1010,9 +1010,10 @@ TEST(SparqlParser, GroupGraphPattern) {
   // SERVICE with a variable endpoint is not yet supported.
   expectGroupGraphPatternFails("{ SERVICE ?endpoint { ?s ?p ?o } }");
 
-  // graphGraphPattern is currently only supported with a fixed graph IRI, not
-  // with a variable.
-  expectGroupGraphPatternFails("{ GRAPH ?a { } }");
+  expectGraphPattern("{ GRAPH ?g { ?x <is-a> <Actor> }}",
+                     m::GraphPattern(m::GroupGraphPatternWithGraph(
+                         Variable("?g"),
+                         m::Triples({{Var{"?x"}, "<is-a>", iri("<Actor>")}}))));
   expectGraphPattern(
       "{ GRAPH <foo> { ?x <is-a> <Actor> }}",
       m::GraphPattern(m::GroupGraphPatternWithGraph(

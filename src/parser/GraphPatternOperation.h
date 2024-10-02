@@ -76,7 +76,11 @@ struct Values {
 /// `GraphPattern`.
 struct GroupGraphPattern {
   GraphPattern _child;
-  std::optional<TripleComponent::Iri> _graphIri = std::nullopt;
+  // If not `monostate`, then this group is a `GRAPH` clause, either with a
+  // fixed graph IRI, or with a variable.
+  using GraphSpec =
+      std::variant<std::monostate, TripleComponent::Iri, Variable>;
+  GraphSpec graphSpec_ = std::monostate{};
 };
 
 /// An `OPTIONAL` clause.

@@ -179,25 +179,28 @@ ProtoResult Service::computeResultImpl([[maybe_unused]] bool requestLaziness) {
                          std::back_inserter(expVariableKeys),
                          [](const Variable& v) { return v.name().substr(1); });
 
-  // Set basic properties of the result table.
-  IdTable idTable{getResultWidth(), getExecutionContext()->getAllocator()};
-  LocalVocab localVocab{};
-
   auto body = ad_utility::LazyJsonParser::parse(std::move(response.body_),
                                                 {"results", "bindings"});
 
-  // Fill the result table using the `writeJsonResult` method below.
-  CALL_FIXED_SIZE(getResultWidth(), &Service::writeJsonResult, this,
-                  expVariableKeys, body, &idTable, &localVocab);
+  // Note: The `body`-generator also keeps the complete response connection
+  // alive, so we have no lifetime issue here(see `HttpRequest::send` for
+  // details).
+  auto localVocabPtr = std::make_shared<LocalVocab>();
+  auto generator = computeResultLazily(expVariableKeys, std::move(body),
+                                       localVocabPtr, !requestLaziness);
 
-  return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
+  return requestLaziness
+             ? ProtoResult{std::move(generator), resultSortedOn(),
+                           std::move(localVocabPtr)}
+             : ProtoResult{cppcoro::getSingleElement(std::move(generator)),
+                           resultSortedOn(), std::move(*localVocabPtr)};
 }
 
-// ____________________________________________________________________________
 template <size_t I>
 void Service::writeJsonResult(const std::vector<std::string>& vars,
-                              ad_utility::LazyJsonParser::Generator& body,
-                              IdTable* idTablePtr, LocalVocab* localVocab) {
+                              const nlohmann::json& partJson,
+                              IdTable* idTablePtr, LocalVocab* localVocab,
+                              size_t& rowIdx) {
   IdTableStatic<I> idTable = std::move(*idTablePtr).toStatic<I>();
   checkCancellation();
   std::vector<size_t> numLocalVocabPerColumn(idTable.numColumns());
@@ -222,22 +225,42 @@ void Service::writeJsonResult(const std::vector<std::string>& vars,
     }
   };
 
+  // The LazyJsonParser only yields partJsons containing the "bindings" array,
+  // therefore we can assume its existence here.
+  AD_CORRECTNESS_CHECK(partJson.contains("results") &&
+                       partJson["results"].contains("bindings") &&
+                       partJson["results"]["bindings"].is_array());
+  writeBindings(partJson["results"]["bindings"], rowIdx);
+
+  *idTablePtr = std::move(idTable).toDynamic();
+  checkCancellation();
+}
+
+// ____________________________________________________________________________
+cppcoro::generator<IdTable> Service::computeResultLazily(
+    const std::vector<std::string> vars,
+    ad_utility::LazyJsonParser::Generator body,
+    std::shared_ptr<LocalVocab> localVocab, bool singleIdTable) {
+  IdTable idTable{getResultWidth(), getExecutionContext()->getAllocator()};
+
   size_t rowIdx = 0;
-  bool resultExists{false};
   bool varsChecked{false};
+  bool resultExists{false};
   try {
-    for (const nlohmann::json& part : body) {
-      if (part.contains("head")) {
+    for (const nlohmann::json& partJson : body) {
+      if (partJson.contains("head")) {
         AD_CORRECTNESS_CHECK(!varsChecked);
-        verifyVariables(part["head"], body.details());
+        verifyVariables(partJson["head"], body.details());
         varsChecked = true;
       }
-      // The LazyJsonParser only yields parts containing the "bindings" array,
-      // therefore we can assume its existence here.
-      AD_CORRECTNESS_CHECK(part.contains("results") &&
-                           part["results"].contains("bindings") &&
-                           part["results"]["bindings"].is_array());
-      writeBindings(part["results"]["bindings"], rowIdx);
+
+      CALL_FIXED_SIZE(getResultWidth(), &Service::writeJsonResult, this, vars,
+                      partJson, &idTable, localVocab.get(), rowIdx);
+      if (!singleIdTable) {
+        co_yield idTable;
+        idTable.clear();
+        rowIdx = 0;
+      }
       resultExists = true;
     }
   } catch (const ad_utility::LazyJsonParser::Error& e) {
@@ -246,28 +269,28 @@ void Service::writeJsonResult(const std::vector<std::string>& vars,
         body.details().first100_, body.details().last100_);
   }
 
-  // As the LazyJsonParser only passes parts of the result that match the
-  // expected structure, no result implies an unexpected structure.
+  // As the LazyJsonParser only passes parts of the result that match
+  // the expected structure, no result implies an unexpected
+  // structure.
   if (!resultExists) {
     throwErrorWithContext(
-        "JSON result does not have the expected structure (results section "
+        "JSON result does not have the expected structure (results "
+        "section "
         "missing)",
         body.details().first100_, body.details().last100_);
   }
 
   if (!varsChecked) {
     throwErrorWithContext(
-        "JSON result does not have the expected structure (head section "
+        "JSON result does not have the expected structure (head "
+        "section "
         "missing)",
         body.details().first100_, body.details().last100_);
   }
 
-  AD_CORRECTNESS_CHECK(rowIdx == idTable.size());
-  LOG(INFO) << "Number of rows in result: " << idTable.size() << std::endl;
-  LOG(INFO) << "Number of entries in local vocabulary per column: "
-            << absl::StrJoin(numLocalVocabPerColumn, ", ") << std::endl;
-  *idTablePtr = std::move(idTable).toDynamic();
-  checkCancellation();
+  if (singleIdTable) {
+    co_yield idTable;
+  }
 }
 
 // ____________________________________________________________________________
@@ -360,8 +383,10 @@ TripleComponent Service::bindingToTripleComponent(
     tc = TripleComponent::Iri::fromIrirefWithoutBrackets(value);
   } else if (type == "bnode") {
     throw std::runtime_error(
-        "Blank nodes in the result of a SERVICE are currently not supported. "
-        "For now, consider filtering them out using the ISBLANK function or "
+        "Blank nodes in the result of a SERVICE are currently not "
+        "supported. "
+        "For now, consider filtering them out using the ISBLANK function "
+        "or "
         "converting them via the STR function.");
   } else {
     throw std::runtime_error(absl::StrCat("Type ", type,

@@ -21,6 +21,7 @@ class QueryPlanner {
   using vector = std::vector<T>;
 
   ParsedQuery::DatasetClauses activeDatasetClauses_;
+  std::optional<Variable> activeGraphVariable_;
 
  public:
   explicit QueryPlanner(QueryExecutionContext* qec,

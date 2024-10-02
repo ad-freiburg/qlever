@@ -390,18 +390,12 @@ ProtoResult GroupBy::computeResult(bool requestLaziness) {
         std::move(subresult), std::move(aggregates),
         std::move(metadataForUnsequentialData).value().aggregateAliases_,
         std::move(groupByCols), localVocabPointer, !requestLaziness);
-    if (requestLaziness) {
-      return {std::move(generator), resultSortedOn(),
-              std::move(localVocabPointer)};
-    }
-    // In this case we expect the generator to yield exactly one `IdTable`.
-    auto iterator = generator.begin();
-    AD_CORRECTNESS_CHECK(iterator != generator.end());
-    IdTable idTable = std::move(*iterator);
-    // Only one result is expected
-    AD_CORRECTNESS_CHECK(++iterator == generator.end());
-    return {std::move(idTable), resultSortedOn(),
-            std::move(*localVocabPointer)};
+
+    return requestLaziness
+               ? ProtoResult{std::move(generator), resultSortedOn(),
+                             std::move(localVocabPointer)}
+               : ProtoResult{cppcoro::getSingleElement(std::move(generator)),
+                             resultSortedOn(), std::move(*localVocabPointer)};
   }
 
   AD_CORRECTNESS_CHECK(subresult->idTable().numColumns() == inWidth);
