@@ -47,6 +47,7 @@ int main(int argc, char** argv) {
   bool noPatterns;
   bool noPatternTrick;
   bool onlyPsoAndPosPermutations;
+  bool enableUpdates;
 
   ad_utility::MemorySize memoryMaxSize;
 
@@ -107,6 +108,9 @@ int main(int argc, char** argv) {
       optionFactory.getProgramOption<"default-query-timeout">(),
       "Set the default timeout in seconds after which queries are cancelled"
       "automatically.");
+  add("enable-updates,u", po::bool_switch(&enableUpdates),
+      "Enable Updates "
+      "at runtime via SPARQL 1.1 Update.");
   po::variables_map optionsMap;
 
   try {
@@ -128,7 +132,7 @@ int main(int argc, char** argv) {
 
   try {
     Server server(port, numSimultaneousQueries, memoryMaxSize,
-                  std::move(accessToken), !noPatternTrick);
+                  std::move(accessToken), !noPatternTrick, enableUpdates);
     server.run(indexBasename, text, !noPatterns, !onlyPsoAndPosPermutations);
   } catch (const std::exception& e) {
     // This code should never be reached as all exceptions should be handled

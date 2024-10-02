@@ -27,6 +27,8 @@
 // Forward declaration of the `IdTable` class.
 class IdTable;
 
+class LocatedTriplesPerBlock;
+
 // This type is used to buffer small relations that will be stored in the same
 // block.
 using SmallRelationsBuffer = IdTable;
@@ -50,6 +52,8 @@ using CompressedBlock = std::vector<std::vector<char>>;
 
 // The metadata of a compressed block of ID triples in an index permutation.
 struct CompressedBlockMetadata {
+  // Index of the block in the permutation.
+  size_t blockIndex_;
   // Since we have column-based indices, the two columns of each block are
   // stored separately (but adjacently).
   struct OffsetAndCompressedSize {
@@ -85,7 +89,7 @@ struct CompressedBlockMetadata {
     friend std::ostream& operator<<(std::ostream& str,
                                     const PermutedTriple& trip) {
       str << "Triple: " << trip.col0Id_ << ' ' << trip.col1Id_ << ' '
-          << trip.col2Id_ << std::endl;
+          << trip.col2Id_;
       return str;
     }
 
@@ -115,6 +119,7 @@ AD_SERIALIZE_FUNCTION(CompressedBlockMetadata::OffsetAndCompressedSize) {
 
 // Serialization of the block metadata.
 AD_SERIALIZE_FUNCTION(CompressedBlockMetadata) {
+  serializer | arg.blockIndex_;
   serializer | arg.offsetsAndCompressedSize_;
   serializer | arg.numRows_;
   serializer | arg.firstTriple_;
@@ -257,6 +262,9 @@ class CompressedRelationWriter {
       return std::tie(bl.firstTriple_.col0Id_, bl.firstTriple_.col1Id_,
                       bl.firstTriple_.col2Id_);
     });
+    for (size_t i = 0; i < blocks.size(); i++) {
+      blocks[i].blockIndex_ = i;
+    }
     return blocks;
   }
 
@@ -341,6 +349,11 @@ class CompressedRelationWriter {
   CompressedRelationMetadata addCompleteLargeRelation(Id col0Id,
                                                       auto&& sortedBlocks);
 
+  // Generates the `CompressedBlockMetadata` for an empty sentinel block that is
+  // after all normal index blocks. All that would otherwise not belong to an
+  // index block will belong to this block.
+  CompressedBlockMetadata generateSentinelBlockMetadata(size_t numColumns);
+
   // This is a function in `CompressedRelationsTest.cpp` that tests the
   // internals of this class and therefore needs private access.
   friend std::pair<std::vector<CompressedBlockMetadata>,
@@ -351,6 +364,9 @@ class CompressedRelationWriter {
 };
 
 using namespace std::string_view_literals;
+
+std::ostream& operator<<(std::ostream& os,
+                         const std::optional<ValueId>& scanSpec);
 
 /// Manage the reading of relations from disk that have been previously written
 /// using the `CompressedRelationWriter`.
@@ -464,6 +480,8 @@ class CompressedRelationReader {
   // The file that stores the actual permutations.
   ad_utility::File file_;
 
+  bool useUpdates_ = false;
+
  public:
   explicit CompressedRelationReader(Allocator allocator, ad_utility::File file)
       : allocator_{std::move(allocator)}, file_{std::move(file)} {}
@@ -512,6 +530,7 @@ class CompressedRelationReader {
                std::span<const CompressedBlockMetadata> blocks,
                ColumnIndicesRef additionalColumns,
                const CancellationHandle& cancellationHandle,
+               const LocatedTriplesPerBlock& locatedTriplesPerBlock,
                const LimitOffsetClause& limitOffset = {}) const;
 
   // Similar to `scan` (directly above), but the result of the scan is lazily
@@ -521,6 +540,7 @@ class CompressedRelationReader {
       ScanSpecification scanSpec,
       std::vector<CompressedBlockMetadata> blockMetadata,
       ColumnIndices additionalColumns, CancellationHandle cancellationHandle,
+      const LocatedTriplesPerBlock& locatedTriplesPerBlock,
       LimitOffsetClause limitOffset = {}) const;
 
   // Only get the size of the result for a given permutation XYZ for a given X
@@ -530,23 +550,26 @@ class CompressedRelationReader {
   // directly.
   size_t getResultSizeOfScan(
       const ScanSpecification& scanSpec,
-      const vector<CompressedBlockMetadata>& blocks) const;
+      const vector<CompressedBlockMetadata>& blocks,
+      const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
 
   // For a given relation, determine the `col1Id`s and their counts. This is
   // used for `computeGroupByObjectWithCount`.
   IdTable getDistinctCol1IdsAndCounts(
       Id col0Id, const std::vector<CompressedBlockMetadata>& allBlocksMetadata,
-      const CancellationHandle& cancellationHandle) const;
+      const CancellationHandle& cancellationHandle,
+      const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
 
   // For all `col0Ids` determine their counts. This is
   // used for `computeGroupByForFullScan`.
   IdTable getDistinctCol0IdsAndCounts(
       const std::vector<CompressedBlockMetadata>& allBlocksMetadata,
-      const CancellationHandle& cancellationHandle) const;
+      const CancellationHandle& cancellationHandle,
+      const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
 
   std::optional<CompressedRelationMetadata> getMetadataForSmallRelation(
-      const std::vector<CompressedBlockMetadata>& allBlocksMetadata,
-      Id col0Id) const;
+      const std::vector<CompressedBlockMetadata>& allBlocksMetadata, Id col0Id,
+      const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
 
   // Get the contiguous subrange of the given `blockB` for the blocks
   // that contain the triples that have the relationId/col0Id that was specified
@@ -567,10 +590,15 @@ class CompressedRelationReader {
   // index scans between joining them to get better estimates for the beginning
   // and end of incomplete blocks.
   std::optional<ScanSpecAndBlocksAndBounds::FirstAndLastTriple>
-  getFirstAndLastTriple(const ScanSpecAndBlocks& metadataAndBlocks) const;
+  getFirstAndLastTriple(
+      const ScanSpecAndBlocks& metadataAndBlocks,
+      const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
 
   // Get access to the underlying allocator
   const Allocator& allocator() const { return allocator_; }
+
+  // Enable/disable the use of triples gathered from Updates when querying.
+  void enableUpdates(bool enable);
 
  private:
   // Read the block that is identified by the `blockMetaData` from the `file`.
@@ -586,6 +614,10 @@ class CompressedRelationReader {
   DecompressedBlock decompressBlock(const CompressedBlock& compressedBlock,
                                     size_t numRowsToRead) const;
 
+  DecompressedBlock addUpdateTriples(
+      DecompressedBlock block, const LocatedTriplesPerBlock& locatedTriples,
+      size_t blockIndex, size_t numIndexColumns) const;
+
   // Helper function used by `decompressBlock` and
   // `decompressBlockToExistingIdTable`. Decompress the `compressedColumn` and
   // store the result at the `iterator`. For the `numRowsToRead` argument, see
@@ -594,13 +626,21 @@ class CompressedRelationReader {
   static void decompressColumn(const std::vector<char>& compressedColumn,
                                size_t numRowsToRead, Iterator iterator);
 
+  static std::pair<ColumnIndices, ColumnIndices> completeColumnIndices(
+      ColumnIndicesRef columnIndices, size_t numIndexColumns);
+  FRIEND_TEST(CompressedRelationReader, completeColumnIndices);
+
+ public:
   // Read the block that is identified by the `blockMetaData` from the `file`,
   // decompress and return it. Only the columns specified by the `columnIndices`
   // are returned.
   DecompressedBlock readAndDecompressBlock(
       const CompressedBlockMetadata& blockMetaData,
-      ColumnIndicesRef columnIndices) const;
+      ColumnIndicesRef columnIndices,
+      const LocatedTriplesPerBlock& locatedTriples,
+      size_t numIndexColumns) const;
 
+ private:
   // Read the block identified by `blockMetadata` from disk, decompress it, and
   // return the part that matches `col1Id` (or the whole block if `col1Id` is
   // `nullopt`). The block must contain triples from the relation identified by
@@ -614,7 +654,8 @@ class CompressedRelationReader {
       const ScanSpecification& scanSpec,
       const CompressedBlockMetadata& blockMetadata,
       std::optional<std::reference_wrapper<LazyScanMetadata>> scanMetadata,
-      ColumnIndicesRef columnIndices) const;
+      ColumnIndicesRef columnIndices,
+      const LocatedTriplesPerBlock& locatedTriples) const;
 
   // Yield all the blocks in the range `[beginBlock, endBlock)`. If the
   // `columnIndices` are set, only the specified columns from the blocks
@@ -624,7 +665,9 @@ class CompressedRelationReader {
 
   IdTableGenerator asyncParallelBlockGenerator(
       auto beginBlock, auto endBlock, ColumnIndices columnIndices,
-      CancellationHandle cancellationHandle, LimitOffsetClause& limitOffset,
+      CancellationHandle cancellationHandle,
+      const LocatedTriplesPerBlock& locatedTriplesPerBlock,
+      size_t numIndexColumns, LimitOffsetClause& limitOffset,
       FilterDuplicatesAndGraphs blockGraphFilter) const;
 
   // Return a vector that consists of the concatenation of `baseColumns` and
@@ -647,7 +690,8 @@ class CompressedRelationReader {
           Id, const CompressedBlockMetadata::PermutedTriple&> auto idGetter,
       const ScanSpecification& scanSpec,
       const std::vector<CompressedBlockMetadata>& allBlocksMetadata,
-      const CancellationHandle& cancellationHandle) const;
+      const CancellationHandle& cancellationHandle,
+      const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
 };
 
 // TODO<joka921>

@@ -14,7 +14,10 @@
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/QueryPlanner.h"
 #include "global/RuntimeParameters.h"
+#include "index/IndexImpl.h"
+#include "index/LocatedTriples.h"
 #include "util/AsioHelpers.h"
+#include "util/CancellationHandle.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/ParseableDuration.h"
@@ -30,7 +33,7 @@ using ad_utility::MediaType;
 // __________________________________________________________________________
 Server::Server(unsigned short port, size_t numThreads,
                ad_utility::MemorySize maxMem, std::string accessToken,
-               bool usePatternTrick)
+               bool usePatternTrick, bool useUpdates)
     : numThreads_(numThreads),
       port_(port),
       accessToken_(std::move(accessToken)),
@@ -43,6 +46,7 @@ Server::Server(unsigned short port, size_t numThreads,
       enablePatternTrick_(usePatternTrick),
       // The number of server threads currently also is the number of queries
       // that can be processed simultaneously.
+      useUpdates_(useUpdates),
       threadPool_{numThreads} {
   // This also directly triggers the update functions and propagates the
   // values of the parameters to the cache.
@@ -69,6 +73,8 @@ void Server::initialize(const string& indexBaseName, bool useText,
   if (useText) {
     index_.addTextFromOnDiskIndex();
   }
+
+  index_.enableUpdates(useUpdates_);
 
   sortPerformanceEstimator_.computeEstimatesExpensively(
       allocator_, index_.numTriples().normalAndInternal_() *
@@ -204,6 +210,8 @@ ad_utility::url_parser::ParsedRequest Server::parseHttpRequest(
         "application/x-www-form-urlencoded";
     static constexpr std::string_view contentTypeSparqlQuery =
         "application/sparql-query";
+    static constexpr std::string_view contentTypeSparqlUpdate =
+        "application/sparql-update";
 
     // Note: For simplicity we only check via `starts_with`. This ignores
     // additional parameters like `application/sparql-query;charset=utf8`. We
@@ -241,7 +249,14 @@ ad_utility::url_parser::ParsedRequest Server::parseHttpRequest(
 
       return parsedRequest;
     }
+    // Note: Updates and Queries are processed regardless of the content
+    // type. I.e. an update sent with the content type for query will be
+    // processed.
     if (contentType.starts_with(contentTypeSparqlQuery)) {
+      parsedRequest.query_ = request.body();
+      return parsedRequest;
+    }
+    if (contentType.starts_with(contentTypeSparqlUpdate)) {
       parsedRequest.query_ = request.body();
       return parsedRequest;
     }
@@ -363,6 +378,10 @@ Awaitable<void> Server::process(
     logCommand(cmd, "clear cache completely (including unpinned elements)");
     cache_.clearAll();
     response = createJsonResponse(composeCacheStatsJson(), request);
+  } else if (auto cmd = checkParameter("cmd", "clear-updates")) {
+    logCommand(cmd, "clear updates");
+    index_.deltaTriples().clear();
+    response = createJsonResponse(nlohmann::json{}, request);
   } else if (auto cmd = checkParameter("cmd", "get-settings")) {
     logCommand(cmd, "get server settings");
     response = createJsonResponse(RuntimeParameters().toMap(), request);
@@ -420,8 +439,26 @@ Awaitable<void> Server::process(
     }
   }
 
-  // If "query" parameter is given, process query.
+  // TODO<qup42> Updates can currently be smuggled as a Query. `processQuery`
+  // will simply execute everything it gets - queries and updates. If "query"
+  // parameter is given, process query.
   if (parsedHttpRequest.query_.has_value()) {
+    if (auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
+            checkParameter("timeout", std::nullopt), accessTokenOk, request,
+            send)) {
+      co_return co_await processQuery(
+          parameters, parsedHttpRequest.query_.value(), requestTimer,
+          std::move(request), send, timeLimit.value());
+
+    } else {
+      // If the optional is empty, this indicates an error response has been
+      // sent to the client already. We can stop here.
+      co_return;
+    }
+  }
+
+  // Process "update" only if updates are enabled.
+  if (parsedHttpRequest.query_.has_value() && useUpdates_) {
     if (auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
             checkParameter("timeout", std::nullopt), accessTokenOk, request,
             send)) {
@@ -627,6 +664,169 @@ Awaitable<void> Server::sendStreamableResponse(
   }
 }
 
+// _____________________________________________________________________________
+// TODO: move somewhere else?
+nlohmann::json Server::executeUpdateQuery(
+    const ParsedQuery& query, const QueryExecutionTree& qet,
+    const ad_utility::Timer& requestTimer,
+    SharedCancellationHandle cancellationHandle, Index& index) {
+  AD_CONTRACT_CHECK(query.hasUpdateClause());
+  parsedQuery::UpdateClause update = query.updateClause();
+
+  ad_utility::Timer step{ad_utility::Timer::Started};
+
+  std::shared_ptr<const Result> res = qet.getResult();
+  auto timeQueryBodyExecution = step.msecs();
+  step.start();
+
+  auto& vocab = qet.getQec()->getIndex().getVocab();
+  const auto& deltaTriples = index.deltaTriples();
+  const LocalVocab& localVocab = deltaTriples.localVocab();
+  using IdOrVariable = std::variant<Id, Variable>;
+
+  auto transformSparqlTripleComponent =
+      [&vocab, &localVocab](TripleComponent component) -> IdOrVariable {
+    if (component.isVariable()) {
+      return std::move(component.getVariable());
+    } else {
+      auto idFromDeltaLocalVocab = component.toValueIdNoAdd(vocab, localVocab);
+      if (!idFromDeltaLocalVocab.has_value()) {
+        AD_THROW("Failed to retrieve ID in Vocab or DeltaTriples LocalVocab");
+      }
+      return idFromDeltaLocalVocab.value();
+    }
+  };
+  auto transformSparqlTripleSimple =
+      [&transformSparqlTripleComponent](SparqlTripleSimple triple) {
+        return std::array<IdOrVariable, 3>{
+            transformSparqlTripleComponent(std::move(triple.s_)),
+            transformSparqlTripleComponent(std::move(triple.p_)),
+            transformSparqlTripleComponent(std::move(triple.o_))};
+      };
+  std::vector<std::array<IdOrVariable, 3>> toInsertTemplates =
+      ad_utility::transform(std::move(update.toInsert_),
+                            transformSparqlTripleSimple);
+  std::vector<std::array<IdOrVariable, 3>> toDeleteTemplates =
+      ad_utility::transform(std::move(update.toDelete_),
+                            transformSparqlTripleSimple);
+  auto timeTemplatePrepration = step.msecs();
+  step.start();
+
+  auto resolveVariable = [&res](const size_t& row,
+                                const VariableToColumnMap& variableColumns,
+                                IdOrVariable idOrVar) -> std::optional<Id> {
+    if (std::holds_alternative<Variable>(idOrVar)) {
+      auto var = std::get<Variable>(std::move(idOrVar));
+      if (!variableColumns.contains(var)) {
+        return std::nullopt;
+      } else {
+        return res->idTable().operator()(row,
+                                         variableColumns.at(var).columnIndex_);
+      }
+    } else if (std::holds_alternative<Id>(idOrVar)) {
+      return std::get<Id>(idOrVar);
+    } else {
+      AD_FAIL();
+    }
+  };
+
+  std::vector<IdTriple<0>> toInsert;
+  std::vector<IdTriple<0>> toDelete;
+  toInsert.reserve(res->idTable().size() * toInsertTemplates.size());
+  toDelete.reserve(res->idTable().size() * toDeleteTemplates.size());
+  // Result size is size(query result) x num template rows
+  // TODO: use ExportQueryExecutionTrees::getRowIndices as iterator
+  for (size_t i : std::views::iota((size_t)0, res->idTable().size())) {
+    for (const auto& [s, p, o] : toInsertTemplates) {
+      auto subject = resolveVariable(i, qet.getVariableColumns(), s);
+      auto predicate = resolveVariable(i, qet.getVariableColumns(), p);
+      auto object = resolveVariable(i, qet.getVariableColumns(), o);
+      if (!subject.has_value() || !predicate.has_value() ||
+          !object.has_value()) {
+        continue;
+      }
+
+      toInsert.emplace_back(std::array<Id, 3>{
+          subject.value(), predicate.value(), object.value()});
+      cancellationHandle->throwIfCancelled();
+    }
+
+    for (const auto& [s, p, o] : toDeleteTemplates) {
+      auto subject = resolveVariable(i, qet.getVariableColumns(), s);
+      auto predicate = resolveVariable(i, qet.getVariableColumns(), p);
+      auto object = resolveVariable(i, qet.getVariableColumns(), o);
+      if (!subject.has_value() || !predicate.has_value() ||
+          !object.has_value()) {
+        continue;
+      }
+
+      toDelete.emplace_back(std::array<Id, 3>{
+          subject.value(), predicate.value(), object.value()});
+      cancellationHandle->throwIfCancelled();
+    }
+  }
+
+  auto timeMaterializeUpdateTriples = step.msecs();
+  step.start();
+
+  index.deltaTriples().insertTriples(cancellationHandle, std::move(toInsert));
+  index.deltaTriples().deleteTriples(cancellationHandle, std::move(toDelete));
+  auto timeDeltaTriples = step.msecs();
+  step.start();
+
+  nlohmann::json j;
+  j["query"] = query._originalString;
+  j["status"] = "OK";
+  j["res"] = nlohmann::json::array();
+  j["selected"] = nlohmann::json::array();
+  j["resultsize"] = 0;
+  auto warnings = qet.collectWarnings();
+  warnings.emplace_back("SPARQL 1.1 Update for QLever is highly experimental.");
+  j["warnings"] = warnings;
+
+  j["runtimeInformation"]["meta"] = nlohmann::ordered_json(
+      qet.getRootOperation()->getRuntimeInfoWholeQuery());
+  RuntimeInformation runtimeInformation = qet.getRootOperation()->runtimeInfo();
+  runtimeInformation.addLimitOffsetRow(query._limitOffset, false);
+  runtimeInformation.addDetail("executed-implicitly-during-query-export", true);
+  j["runtimeInformation"]["query_execution_tree"] =
+      nlohmann::ordered_json(runtimeInformation);
+
+  j["time"]["total"] = std::to_string(requestTimer.msecs().count()) + "ms";
+  j["time"]["queryBody"] =
+      std::to_string(timeQueryBodyExecution.count()) + "ms";
+  j["time"]["computeResult"] = j["time"]["total"];
+  j["time"]["templatePreparation"] =
+      std::to_string(timeTemplatePrepration.count()) + "ms";
+  j["time"]["updateTripleMaterialization"] =
+      std::to_string(timeMaterializeUpdateTriples.count()) + "ms";
+  j["time"]["deltaTriples"] = std::to_string(timeDeltaTriples.count()) + "ms";
+
+  return j;
+}
+
+// ____________________________________________________________________________
+std::optional<MediaType> Server::determineMediatype(
+    auto& containsParam, std::string_view acceptHeader) {
+  // The explicit `action=..._export` parameter have precedence over the
+  // `Accept:...` header field
+  if (containsParam("action", "csv_export")) {
+    return MediaType::csv;
+  } else if (containsParam("action", "tsv_export")) {
+    return MediaType::tsv;
+  } else if (containsParam("action", "qlever_json_export")) {
+    return MediaType::qleverJson;
+  } else if (containsParam("action", "sparql_json_export")) {
+    return MediaType::sparqlJson;
+  } else if (containsParam("action", "turtle_export")) {
+    return MediaType::turtle;
+  } else if (containsParam("action", "binary_export")) {
+    return MediaType::octetStream;
+  } else {
+    return ad_utility::getMediaTypeFromAcceptHeader(acceptHeader);
+  }
+}
+
 // ____________________________________________________________________________
 boost::asio::awaitable<void> Server::processQuery(
     const ParamValueMap& params, const string& query,
@@ -666,44 +866,9 @@ boost::asio::awaitable<void> Server::processQuery(
               << (pinSubtrees ? " [pin subresults]" : "") << "\n"
               << query << std::endl;
 
-    // The following code block determines the media type to be used for the
-    // result. The media type is either determined by the "Accept:" header of
-    // the request or by the URL parameter "action=..." (for TSV and CSV export,
-    // for QLever-historical reasons).
-
-    std::optional<MediaType> mediaType = std::nullopt;
-
-    // The explicit `action=..._export` parameter have precedence over the
-    // `Accept:...` header field
-    if (containsParam("action", "csv_export")) {
-      mediaType = MediaType::csv;
-    } else if (containsParam("action", "tsv_export")) {
-      mediaType = MediaType::tsv;
-    } else if (containsParam("action", "qlever_json_export")) {
-      mediaType = MediaType::qleverJson;
-    } else if (containsParam("action", "sparql_json_export")) {
-      mediaType = MediaType::sparqlJson;
-    } else if (containsParam("action", "turtle_export")) {
-      mediaType = MediaType::turtle;
-    } else if (containsParam("action", "binary_export")) {
-      mediaType = MediaType::octetStream;
-    }
-
     std::string_view acceptHeader = request.base()[http::field::accept];
-
-    if (!mediaType.has_value()) {
-      mediaType = ad_utility::getMediaTypeFromAcceptHeader(acceptHeader);
-    }
-
-    std::optional<uint64_t> maxSend =
-        params.contains("send") ? std::optional{std::stoul(params.at("send"))}
-                                : std::nullopt;
-    // Limit JSON requests by default
-    if (!maxSend.has_value() && (mediaType == MediaType::sparqlJson ||
-                                 mediaType == MediaType::qleverJson)) {
-      maxSend = MAX_NOF_ROWS_IN_RESULT;
-    }
-
+    std::optional<MediaType> mediaType =
+        determineMediatype(containsParam, acceptHeader);
     if (!mediaType.has_value()) {
       co_return co_await send(createBadRequestResponse(
           absl::StrCat("Did not find any supported media type "
@@ -715,6 +880,15 @@ boost::asio::awaitable<void> Server::processQuery(
     AD_CONTRACT_CHECK(mediaType.has_value());
     LOG(INFO) << "Requested media type of result is \""
               << ad_utility::toString(mediaType.value()) << "\"" << std::endl;
+
+    std::optional<uint64_t> maxSend =
+        params.contains("send") ? std::optional{std::stoul(params.at("send"))}
+                                : std::nullopt;
+    // Limit JSON requests by default
+    if (!maxSend.has_value() && (mediaType == MediaType::sparqlJson ||
+                                 mediaType == MediaType::qleverJson)) {
+      maxSend = MAX_NOF_ROWS_IN_RESULT;
+    }
 
     auto queryHub = queryHub_.lock();
     AD_CORRECTNESS_CHECK(queryHub);
@@ -760,6 +934,49 @@ boost::asio::awaitable<void> Server::processQuery(
     // then the exporter can safely apply it during export.
     plannedQuery.value().parsedQuery_._limitOffset._offset -=
         qet.getRootOperation()->getLimit()._offset;
+
+    // TODO: the handling of queries and updates should be separated. Ideally
+    // into `processQuery` and `processUpdate`. These are then called by
+    // `process`. This has one big benefit. We might want to constrain who can
+    // run updates. With this structure it is much easier to control than doing
+    // it in `processQuery`. This would also remove the need for have an
+    // additional grammar rule to unify update and query.
+    if (plannedQuery.value().parsedQuery_.hasUpdateClause()) {
+      nlohmann::basic_json resp = Server::executeUpdateQuery(
+          plannedQuery.value().parsedQuery_, qet, requestTimer,
+          std::move(cancellationHandle), index_);
+      switch (mediaType.value()) {
+        using enum MediaType;
+        case csv:
+        case tsv:
+        case octetStream:
+        case sparqlXml:
+        case turtle: {
+          auto response = ad_utility::httpUtils::createOkResponse(
+              "id", request, mediaType.value());
+          try {
+            co_await send(std::move(response));
+            co_return;
+          } catch (const boost::system::system_error& e) {
+            if (e.code().value() == EPIPE) {
+              co_return;
+            }
+            LOG(ERROR) << "Unexpected error while sending response: "
+                       << e.what() << std::endl;
+          } catch (const std::exception& e) {
+            LOG(ERROR) << e.what() << std::endl;
+          }
+        } break;
+        case qleverJson:
+        case sparqlJson: {
+          co_return co_await sendJson(std::move(resp), responseStatus);
+        } break;
+        default:
+          // This should never happen, because we have carefully restricted the
+          // subset of mediaTypes that can occur here.
+          AD_FAIL();
+      }
+    }
 
     // This actually processes the query and sends the result in the requested
     // format.

@@ -43,8 +43,9 @@ using namespace ad_utility::memory_literals;
 static constexpr size_t NUM_EXTERNAL_SORTERS_AT_SAME_TIME = 2u;
 
 // _____________________________________________________________________________
-IndexImpl::IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator)
-    : allocator_{std::move(allocator)} {
+IndexImpl::IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator,
+                     std::unique_ptr<DeltaTriples> deltaTriples)
+    : deltaTriples_(std::move(deltaTriples)), allocator_{std::move(allocator)} {
   globalSingletonIndex_ = this;
 };
 
@@ -752,13 +753,25 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
              << vocab_.size() << std::endl;
 
   pso_.loadFromDisk(onDiskBase_);
+  deltaTriples_->setOriginalMetadata(Permutation::PSO,
+                                     pso_.metaData().blockData());
   pos_.loadFromDisk(onDiskBase_);
+  deltaTriples_->setOriginalMetadata(Permutation::POS,
+                                     pos_.metaData().blockData());
 
   if (loadAllPermutations_) {
     ops_.loadFromDisk(onDiskBase_);
+    deltaTriples_->setOriginalMetadata(Permutation::OPS,
+                                       ops_.metaData().blockData());
     osp_.loadFromDisk(onDiskBase_);
+    deltaTriples_->setOriginalMetadata(Permutation::OSP,
+                                       osp_.metaData().blockData());
     spo_.loadFromDisk(onDiskBase_);
+    deltaTriples_->setOriginalMetadata(Permutation::SPO,
+                                       spo_.metaData().blockData());
     sop_.loadFromDisk(onDiskBase_);
+    deltaTriples_->setOriginalMetadata(Permutation::SOP,
+                                       sop_.metaData().blockData());
   } else {
     LOG(INFO) << "Only the PSO and POS permutation were loaded, SPARQL queries "
                  "with predicate variables will therefore not work"
@@ -1573,4 +1586,11 @@ template <typename Comparator, size_t I>
 std::unique_ptr<ExternalSorter<Comparator, I>> IndexImpl::makeSorterPtr(
     std::string_view permutationName) const {
   return makeSorterImpl<Comparator, I, true>(permutationName);
+}
+
+// _____________________________________________________________________________
+void IndexImpl::enableUpdates(bool enable) {
+  for (auto permutation : Permutation::ALL) {
+    getPermutation(permutation).enableUpdates(enable);
+  }
 }

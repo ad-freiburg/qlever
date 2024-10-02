@@ -34,7 +34,7 @@ class Server {
  public:
   explicit Server(unsigned short port, size_t numThreads,
                   ad_utility::MemorySize maxMem, std::string accessToken,
-                  bool usePatternTrick = true);
+                  bool usePatternTrick = true, bool useUpdates = false);
 
   virtual ~Server() = default;
 
@@ -71,6 +71,7 @@ class Server {
   ad_utility::websocket::QueryRegistry queryRegistry_{};
 
   bool enablePatternTrick_;
+  bool useUpdates_;
 
   /// Non-owning reference to the `QueryHub` instance living inside
   /// the `WebSocketHandler` created for `HttpServer`.
@@ -144,6 +145,13 @@ class Server {
   json composeStatsJson() const;
 
   json composeCacheStatsJson() const;
+
+  // Determines the media type to be used for the
+  // result. The media type is either determined by the "Accept:" header of
+  // the request or by the URL parameter "action=..." (for TSV and CSV export,
+  // for QLever-historical reasons).
+  std::optional<ad_utility::MediaType> determineMediatype(
+      auto& containsParam, std::string_view acceptHeader);
 
   /// Invoke `function` on `threadPool_`, and return an awaitable to wait for
   /// it's completion, wrapping the result.
@@ -235,4 +243,10 @@ class Server {
       ad_utility::MediaType mediaType, const PlannedQuery& plannedQuery,
       const QueryExecutionTree& qet, ad_utility::Timer& requestTimer,
       SharedCancellationHandle cancellationHandle) const;
+
+  nlohmann::json executeUpdateQuery(const ParsedQuery& query,
+                                    const QueryExecutionTree& qet,
+                                    const ad_utility::Timer& requestTimer,
+                                    SharedCancellationHandle cancellationHandle,
+                                    Index& index);
 };

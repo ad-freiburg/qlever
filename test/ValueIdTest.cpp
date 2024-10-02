@@ -312,6 +312,7 @@ TEST_F(ValueIdTest, toDebugString) {
       ValueId::IntegerType::fromNBit(100) |
       (static_cast<ValueId::T>(Datatype::Undefined) << ValueId::numDataBits));
   test(customUndefined, "U:100");
+  test(ValueId::makeFromInt(-42), "I:-42");
   test(ValueId::makeFromDouble(42.0), "D:42.000000");
   test(ValueId::makeFromBool(false), "B:false");
   test(ValueId::makeFromBool(true), "B:true");

@@ -29,6 +29,7 @@ struct LocatedTriple {
   // The `Id`s of the triple in the order of the permutation. For example,
   // for an object pertaining to the OPS permutation: `id1` is the object,
   // `id2` is the predicate, and `id3` is the subject.
+  // TODO<qup42> this is not an `IdTriple` but a `PermutedTriple`.
   IdTriple<0> triple_;
 
   // Flag that is true if the given triple is inserted and false if it

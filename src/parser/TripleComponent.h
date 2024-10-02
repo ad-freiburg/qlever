@@ -203,6 +203,32 @@ class TripleComponent {
     return std::nullopt;
   }
 
+  // Same as the above, but also consider the given local vocabulary.
+  template <typename Vocabulary>
+  [[nodiscard]] std::optional<Id> toValueIdNoAdd(
+      const Vocabulary& vocabulary, const LocalVocab& localVocab) const {
+    AD_CONTRACT_CHECK(!isString());
+    if (isLiteral() || isIri()) {
+      VocabIndex idx;
+      const std::string& content = isLiteral()
+                                       ? getLiteral().toStringRepresentation()
+                                       : getIri().toStringRepresentation();
+      using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
+      const LiteralOrIri contentLOI =
+          isLiteral() ? LiteralOrIri(getLiteral()) : LiteralOrIri(getIri());
+      const auto localVocabIndexOpt = localVocab.getIndexOrNullopt(contentLOI);
+      if (vocabulary.getId(content, &idx)) {
+        return Id::makeFromVocabIndex(idx);
+      } else if (localVocabIndexOpt.has_value()) {
+        return Id::makeFromLocalVocabIndex(localVocabIndexOpt.value());
+      } else {
+        return std::nullopt;
+      }
+    } else {
+      return toValueIdIfNotString();
+    }
+  }
+
   // Same as the above, but also consider the given local vocabulary. If the
   // string is neither in `vocabulary` nor in `localVocab`, it will be added to
   // `localVocab`. Therefore, we get a valid `Id` in any case. The modifier is

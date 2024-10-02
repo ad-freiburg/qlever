@@ -8,11 +8,14 @@
 #include "util/StringUtils.h"
 
 // _____________________________________________________________________
-Permutation::Permutation(Enum permutation, Allocator allocator)
+Permutation::Permutation(Enum permutation,
+                         const LocatedTriplesPerBlock& locatedTriplesPerBlock,
+                         Allocator allocator)
     : readableName_(toString(permutation)),
       fileSuffix_(absl::StrCat(".", ad_utility::utf8ToLower(readableName_))),
       keyOrder_(toKeyOrder(permutation)),
-      allocator_{std::move(allocator)} {}
+      allocator_{std::move(allocator)},
+      locatedTriplesPerBlock_{locatedTriplesPerBlock} {}
 
 // _____________________________________________________________________
 void Permutation::loadFromDisk(const std::string& onDiskBase) {
@@ -48,28 +51,33 @@ IdTable Permutation::scan(const ScanSpecification& scanSpec,
                              readableName_ + ", which was not loaded");
   }
 
-  return reader().scan(scanSpec, meta_.blockData(), additionalColumns,
-                       cancellationHandle, limitOffset);
+  return reader().scan(scanSpec, locatedTriplesPerBlock_.getAugmentedMetadata(),
+                       additionalColumns, cancellationHandle,
+                       locatedTriplesPerBlock_, limitOffset);
 }
 
 // _____________________________________________________________________
 size_t Permutation::getResultSizeOfScan(
     const ScanSpecification& scanSpec) const {
-  return reader().getResultSizeOfScan(scanSpec, meta_.blockData());
+  return reader().getResultSizeOfScan(
+      scanSpec, locatedTriplesPerBlock_.getAugmentedMetadata(),
+      locatedTriplesPerBlock_);
 }
 
 // ____________________________________________________________________________
 IdTable Permutation::getDistinctCol1IdsAndCounts(
     Id col0Id, const CancellationHandle& cancellationHandle) const {
-  return reader().getDistinctCol1IdsAndCounts(col0Id, meta_.blockData(),
-                                              cancellationHandle);
+  return reader().getDistinctCol1IdsAndCounts(
+      col0Id, locatedTriplesPerBlock_.getAugmentedMetadata(),
+      cancellationHandle, locatedTriplesPerBlock_);
 }
 
 // ____________________________________________________________________________
 IdTable Permutation::getDistinctCol0IdsAndCounts(
     const CancellationHandle& cancellationHandle) const {
-  return reader().getDistinctCol0IdsAndCounts(meta_.blockData(),
-                                              cancellationHandle);
+  return reader().getDistinctCol0IdsAndCounts(
+      locatedTriplesPerBlock_.getAugmentedMetadata(), cancellationHandle,
+      locatedTriplesPerBlock_);
 }
 
 // _____________________________________________________________________
@@ -118,17 +126,20 @@ std::optional<CompressedRelationMetadata> Permutation::getMetadata(
   if (meta_.col0IdExists(col0Id)) {
     return meta_.getMetaData(col0Id);
   }
-  return reader().getMetadataForSmallRelation(meta_.blockData(), col0Id);
+  return reader().getMetadataForSmallRelation(
+      locatedTriplesPerBlock_.getAugmentedMetadata(), col0Id,
+      locatedTriplesPerBlock_);
 }
 
 // _____________________________________________________________________
 std::optional<Permutation::MetadataAndBlocks> Permutation::getMetadataAndBlocks(
     const ScanSpecification& scanSpec) const {
-  CompressedRelationReader::ScanSpecAndBlocks mb{
-      scanSpec,
-      CompressedRelationReader::getRelevantBlocks(scanSpec, meta_.blockData())};
+  auto relevantBlocks = CompressedRelationReader::getRelevantBlocks(
+      scanSpec, locatedTriplesPerBlock_.getAugmentedMetadata());
+  CompressedRelationReader::ScanSpecAndBlocks mb{scanSpec, relevantBlocks};
 
-  auto firstAndLastTriple = reader().getFirstAndLastTriple(mb);
+  auto firstAndLastTriple =
+      reader().getFirstAndLastTriple(mb, locatedTriplesPerBlock_);
   if (!firstAndLastTriple.has_value()) {
     return std::nullopt;
   }
@@ -145,11 +156,21 @@ Permutation::IdTableGenerator Permutation::lazyScan(
     const LimitOffsetClause& limitOffset) const {
   if (!blocks.has_value()) {
     auto blockSpan = CompressedRelationReader::getRelevantBlocks(
-        scanSpec, meta_.blockData());
+        scanSpec, locatedTriplesPerBlock_.getAugmentedMetadata());
     blocks = std::vector(blockSpan.begin(), blockSpan.end());
   }
   ColumnIndices columns{additionalColumns.begin(), additionalColumns.end()};
+  LOG(INFO) << "scanning " << readableName() << std::endl;
   return reader().lazyScan(scanSpec, std::move(blocks.value()),
                            std::move(columns), std::move(cancellationHandle),
-                           limitOffset);
+                           locatedTriplesPerBlock_, limitOffset);
+}
+const vector<CompressedBlockMetadata>& Permutation::augmentedBlockData() const {
+  return locatedTriplesPerBlock_.getAugmentedMetadata();
+}
+
+// _____________________________________________________________________
+void Permutation::enableUpdates(bool enable) {
+  AD_CORRECTNESS_CHECK(reader_.has_value());
+  reader_.value().enableUpdates(enable);
 }

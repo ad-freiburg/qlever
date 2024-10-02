@@ -68,6 +68,12 @@ class ScanSpecification {
     col1Id_ = col1Id;
     validate();
   }
+
+  // friend std::ostream& operator<<(std::ostream& os,
+  //                                 const ScanSpecification& scanSpec) {
+  //   return os << "ScanSpec(" << scanSpec.col0Id_ << ", " << scanSpec.col1Id_
+  //             << ", " << scanSpec.col2Id_ << ")";
+  // }
 };
 
 // Same as `ScanSpecification` (see above), but stores `TripleComponent`s
