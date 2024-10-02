@@ -196,6 +196,7 @@ class TurtleParser : public RdfParserBase {
   std::string activePrefix_;
   TripleComponent activeSubject_;
   TripleComponent::Iri activePredicate_;
+  TripleComponent defaultGraphIri_ = qlever::specialIds().at(DEFAULT_GRAPH_IRI);
   size_t numBlankNodes_ = 0;
 
   bool currentTripleIgnoredBecauseOfInvalidLiteral_ = false;
@@ -207,6 +208,8 @@ class TurtleParser : public RdfParserBase {
 
  public:
   TurtleParser() = default;
+  TurtleParser(TripleComponent defaultGraphIri)
+      : defaultGraphIri_{std::move(defaultGraphIri)} {}
   TurtleParser(TurtleParser&& rhs) noexcept = default;
   TurtleParser& operator=(TurtleParser&& rhs) noexcept = default;
 
@@ -348,7 +351,8 @@ class TurtleParser : public RdfParserBase {
   // ______________________________________________________________________________________
   void emitTriple() {
     if (!currentTripleIgnoredBecauseOfInvalidLiteral_) {
-      triples_.emplace_back(activeSubject_, activePredicate_, lastParseResult_);
+      triples_.emplace_back(activeSubject_, activePredicate_, lastParseResult_,
+                            defaultGraphIri_);
     }
     currentTripleIgnoredBecauseOfInvalidLiteral_ = false;
   }
@@ -407,11 +411,15 @@ class TurtleParser : public RdfParserBase {
 
 template <class Tokenizer_T>
 class NQuadParser : public TurtleParser<Tokenizer_T> {
-  static inline const TripleComponent defaultGraphId_ =
-      qlever::specialIds().at(DEFAULT_GRAPH_IRI);
+  TripleComponent defaultGraphId_ = qlever::specialIds().at(DEFAULT_GRAPH_IRI);
   TripleComponent activeObject_;
   TripleComponent activeGraphLabel_;
   using Base = TurtleParser<Tokenizer_T>;
+
+ public:
+  NQuadParser() = default;
+  NQuadParser(TripleComponent defaultGraphId)
+      : defaultGraphId_{std::move(defaultGraphId)} {}
 
  protected:
   bool statement() override;
@@ -555,8 +563,11 @@ class RdfStreamParser : public Parser {
  public:
   // Default construction needed for tests
   RdfStreamParser() = default;
-  explicit RdfStreamParser(const string& filename) {
-    LOG(DEBUG) << "Initialize turtle parsing from uncompressed file or stream "
+  explicit RdfStreamParser(const string& filename,
+                           TripleComponent defaultGraphIri =
+                               qlever::specialIds().at(DEFAULT_GRAPH_IRI))
+      : Parser{std::move(defaultGraphIri)} {
+    LOG(DEBUG) << "Initialize RDF parsing from uncompressed file or stream "
                << filename << std::endl;
     initialize(filename);
   }
@@ -725,5 +736,6 @@ class RdfMultifileParser : public RdfParserBase {
   // TODO<joka921> get rid of magic constants.
   ad_utility::TaskQueue<false> parsingQueue{10, 5};
   ad_utility::data_structures::ThreadSafeQueue<std::vector<TurtleTriple>>
-      finishedBatchQueue{10};
+      finishedBatchQueue_{10};
+  std::atomic<size_t> numActiveParsers_ = 0;
 };

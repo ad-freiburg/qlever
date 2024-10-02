@@ -95,6 +95,8 @@ int main(int argc, char** argv) {
       "The format of the input file with the knowledge graph data. Must be one "
       "of [nt|ttl|nq]. If not set, QLever will try to deduce it from the "
       "filename suffix.");
+  add("default-graph,g", po::value(&defaultGraphs),
+      "The default graph Iri for the k-th file");
   add("kg-index-name,K", po::value(&kbIndexName),
       "The name of the knowledge graph index (default: basename of "
       "`kg-input-file`).");
@@ -158,7 +160,7 @@ int main(int argc, char** argv) {
 
   // If no index name was specified, take the part of the input file name after
   // the last slash.
-  if (kbIndexName.empty()){
+  if (kbIndexName.empty()) {
     kbIndexName = "no index name specified";
   }
 
@@ -182,68 +184,106 @@ int main(int argc, char** argv) {
     index.setKeepTempFiles(keepTemporaryFiles);
     index.setSettingsFile(settingsFile);
     index.loadAllPermutations() = !onlyPsoAndPos;
-    // NOTE: If `onlyAddTextIndex` is true, we do not want to construct an
-    // index, but we assume that it already exists. In particular, we then need
-    // the vocabulary from the KB index for building the text index.
-    if (!onlyAddTextIndex) {
-      if (inputFile.empty() || inputFile == "-") {
-        inputFile = "/dev/stdin";
-      }
-
-      if (!filetype.empty()) {
-        LOG(INFO) << "You specified the input format: "
-                  << ad_utility::getUppercase(filetype) << std::endl;
+    auto getFiletype = [](std::string_view filetype) {
+      if (filetype == "ttl" || filetype == "nt") {
+        return qlever::Filetype::Turtle;
+      } else if (filetype == "nq") {
+        return qlever::Filetype::NQuad;
       } else {
-        bool filetypeDeduced = false;
-        if (inputFile.ends_with(".nt")) {
-          filetype = "nt";
-          filetypeDeduced = true;
-        } else if (inputFile.ends_with(".ttl")) {
-          filetype = "ttl";
-          filetypeDeduced = true;
-        } else if (inputFile.ends_with(".nq")) {
-          filetype = "nq";
-          filetypeDeduced = true;
-        } else {
-          LOG(INFO) << "Unknown or missing extension of input file, assuming: "
-                       "TTL"
-                    << std::endl;
-        }
-        if (filetypeDeduced) {
-          LOG(INFO) << "Format of input file deduced from extension: "
-                    << ad_utility::getUppercase(filetype) << std::endl;
-        }
-        LOG(INFO) << "If this is not correct, start again using the option "
-                     "--file-format (-F)"
+        // todo proper message
+        AD_CONTRACT_CHECK(false, "wrong filetype");
+      }
+    };
+    auto fileSpecifications = [&]() {
+      // TODO<joka921> proper exception messages etc.
+      AD_CONTRACT_CHECK(filetype.size() == 1 ||
+                        filetype.size() == inputFile.size());
+      AD_CONTRACT_CHECK(defaultGraphs.size() <= 1 ||
+                        defaultGraphs.size() == inputFile.size());
+      std::vector<qlever::InputFileSpecification> fileSpecs;
+      for (size_t i = 0; i < inputFile.size(); ++i) {
+        std::string_view type =
+            filetype.size() == 1 ? filetype.at(0) : filetype.at(i);
+        auto defaultGraph = [&]() -> std::optional<string> {
+          if (defaultGraphs.empty()) {
+            return std::nullopt;
+          }
+          return defaultGraphs.size() == 1 ? defaultGraphs.at(0)
+                                           : defaultGraphs.at(i);
+        }();
+        fileSpecs.emplace_back(inputFile.at(i), getFiletype(type),
+                               std::move(defaultGraph));
+      }
+      return fileSpecs;
+    }();
+
+    // TODO<joka921> Reinstate the building of text indices etc.
+    AD_CONTRACT_CHECK(!fileSpecifications.empty());
+    index.createFromFiles(fileSpecifications);
+    /*
+  // NOTE: If `onlyAddTextIndex` is true, we do not want to construct an
+  // index, but we assume that it already exists. In particular, we then need
+  // the vocabulary from the KB index for building the text index.
+  if (!onlyAddTextIndex) {
+    if (inputFile.empty() || inputFile == "-") {
+      inputFile = "/dev/stdin";
+    }
+
+    if (!filetype.empty()) {
+      LOG(INFO) << "You specified the input format: "
+                << ad_utility::getUppercase(filetype) << std::endl;
+    } else {
+      bool filetypeDeduced = false;
+      if (inputFile.ends_with(".nt")) {
+        filetype = "nt";
+        filetypeDeduced = true;
+      } else if (inputFile.ends_with(".ttl")) {
+        filetype = "ttl";
+        filetypeDeduced = true;
+      } else if (inputFile.ends_with(".nq")) {
+        filetype = "nq";
+        filetypeDeduced = true;
+      } else {
+        LOG(INFO) << "Unknown or missing extension of input file, assuming: "
+                     "TTL"
                   << std::endl;
       }
-
-      if (filetype == "ttl") {
-        LOG(DEBUG) << "Parsing uncompressed TTL from: " << inputFile
-                   << std::endl;
-        index.createFromFile(inputFile, Index::Filetype::Turtle);
-      } else if (filetype == "nt") {
-        LOG(DEBUG) << "Parsing uncompressed N-Triples from: " << inputFile
-                   << " (using the Turtle parser)" << std::endl;
-        index.createFromFile(inputFile, Index::Filetype::Turtle);
-      } else if (filetype == "nq") {
-        LOG(DEBUG) << "Parsing uncompressed N-Quads from: " << inputFile
-                   << std::endl;
-        index.createFromFile(inputFile, Index::Filetype::NQuad);
-      } else {
-        LOG(ERROR) << "File format must be one of: nt ttl nq" << std::endl;
-        std::cerr << boostOptions << std::endl;
-        exit(1);
+      if (filetypeDeduced) {
+        LOG(INFO) << "Format of input file deduced from extension: "
+                  << ad_utility::getUppercase(filetype) << std::endl;
       }
+      LOG(INFO) << "If this is not correct, start again using the option "
+                   "--file-format (-F)"
+                << std::endl;
     }
 
-    if (!wordsfile.empty() || addWordsFromLiterals) {
-      index.addTextFromContextFile(wordsfile, addWordsFromLiterals);
+    if (filetype == "ttl") {
+      LOG(DEBUG) << "Parsing uncompressed TTL from: " << inputFile
+                 << std::endl;
+      index.createFromFile(inputFile, Index::Filetype::Turtle);
+    } else if (filetype == "nt") {
+      LOG(DEBUG) << "Parsing uncompressed N-Triples from: " << inputFile
+                 << " (using the Turtle parser)" << std::endl;
+      index.createFromFile(inputFile, Index::Filetype::Turtle);
+    } else if (filetype == "nq") {
+      LOG(DEBUG) << "Parsing uncompressed N-Quads from: " << inputFile
+                 << std::endl;
+      index.createFromFile(inputFile, Index::Filetype::NQuad);
+    } else {
+      LOG(ERROR) << "File format must be one of: nt ttl nq" << std::endl;
+      std::cerr << boostOptions << std::endl;
+      exit(1);
     }
+  }
 
-    if (!docsfile.empty()) {
-      index.buildDocsDB(docsfile);
-    }
+  if (!wordsfile.empty() || addWordsFromLiterals) {
+    index.addTextFromContextFile(wordsfile, addWordsFromLiterals);
+  }
+
+  if (!docsfile.empty()) {
+    index.buildDocsDB(docsfile);
+  }
+     */
     ad_utility::deleteFile(stxxlFileName, false);
   } catch (std::exception& e) {
     LOG(ERROR) << e.what() << std::endl;

@@ -11,10 +11,10 @@
 
 #include "global/Id.h"
 #include "index/CompressedString.h"
+#include "index/InputFileSpecification.h"
 #include "index/Permutation.h"
 #include "index/StringSortComparator.h"
 #include "index/Vocabulary.h"
-#include "index/InputFileSpecification.h"
 #include "parser/TripleComponent.h"
 #include "util/CancellationHandle.h"
 #include "util/json.h"
@@ -64,7 +64,7 @@ class Index {
     vector<Score> scores_;
   };
 
-  using enum qlever::Filetype;
+  using Filetype = qlever::Filetype;
   using InputFileSpecification = qlever::InputFileSpecification;
 
   /// Forbid copy and assignment.
@@ -85,7 +85,7 @@ class Index {
   // setup by `createFromOnDiskIndex` after this call.
   void createFromFile(const std::string& filename,
                       Filetype filetype = Filetype::Turtle);
-  void createFromFiles(const std::vector<InputFileSpecification&> files);
+  void createFromFiles(const std::vector<InputFileSpecification>& files);
 
   // Create an index object from an on-disk index that has previously been
   // constructed using the `createFromFile` method which is typically called via

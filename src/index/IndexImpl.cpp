@@ -91,8 +91,7 @@ std::unique_ptr<RdfParserBase> IndexImpl::makeRdfParser(
 std::unique_ptr<RdfParserBase> IndexImpl::makeRdfParser(
     const std::vector<Index::InputFileSpecification>& files) const {
   auto makeRdfParserImpl =
-      [&files]<int useCtre>()
-      -> std::unique_ptr<RdfParserBase> {
+      [&files]<int useCtre>() -> std::unique_ptr<RdfParserBase> {
     using TokenizerT =
         std::conditional_t<useCtre == 1, TokenizerCtre, Tokenizer>;
     // TODO<joka921> parallelism etc.
@@ -365,18 +364,21 @@ void IndexImpl::createFromFile(const string& filename, Index::Filetype type) {
 }
 
 // _____________________________________________________________________________
-void IndexImpl::createFromFiles(const std::vector<Index::InputFileSpecification>& files) {
+void IndexImpl::createFromFiles(
+    const std::vector<Index::InputFileSpecification>& files) {
   if (!loadAllPermutations_ && usePatterns_) {
     throw std::runtime_error{
         "The patterns can only be built when all 6 permutations are created"};
   }
+  /*
   LOG(INFO) << "Processing input triples from " << filename << " ..."
             << std::endl;
+            */
 
   readIndexBuilderSettingsFromFile();
 
   IndexBuilderDataAsFirstPermutationSorter indexBuilderData =
-      createIdTriplesAndVocab(makeRdfParser(filename, type));
+      createIdTriplesAndVocab(makeRdfParser(files));
 
   // Write the configuration already at this point, so we have it available in
   // case any of the permutations fail.

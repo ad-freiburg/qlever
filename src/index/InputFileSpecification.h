@@ -4,8 +4,8 @@
 
 #pragma once
 
-#include <string>
 #include <optional>
+#include <string>
 namespace qlever {
 enum class Filetype { Turtle, NQuad };
 struct InputFileSpecification {
@@ -13,4 +13,4 @@ struct InputFileSpecification {
   Filetype filetype_;
   std::optional<std::string> defaultGraph_;
 };
-}
+}  // namespace qlever

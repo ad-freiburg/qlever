@@ -1098,6 +1098,66 @@ RdfParallelParser<T>::~RdfParallelParser() {
       "During the destruction of a RdfParallelParser");
 }
 
+// ______________________________________________________________
+template <typename T>
+RdfMultifileParser<T>::RdfMultifileParser(
+    const std::vector<qlever::InputFileSpecification>& files) {
+  using namespace qlever;
+  auto makeParser =
+      [](const InputFileSpecification& file) -> std::unique_ptr<RdfParserBase> {
+    auto defaultGraph = [file]() -> TripleComponent {
+      if (file.defaultGraph_.has_value()) {
+        return TripleComponent::Iri::fromIrirefWithoutBrackets(
+            file.defaultGraph_.value());
+      } else {
+        return qlever::specialIds().at(DEFAULT_GRAPH_IRI);
+      }
+    }();
+    if (file.filetype_ == Filetype::Turtle) {
+      return std::make_unique<RdfStreamParser<TurtleParser<T>>>(
+          file.filename_, std::move(defaultGraph));
+    } else {
+      AD_CORRECTNESS_CHECK(file.filetype_ == Filetype::NQuad);
+      return std::make_unique<RdfStreamParser<NQuadParser<T>>>(
+          file.filename_, std::move(defaultGraph));
+    }
+  };
+
+  auto parseFile = [this, makeParser](const InputFileSpecification& file) {
+    auto parser = makeParser(file);
+    // TODO<joka921> handle exceptions.
+    while (auto batch = parser->getBatch()) {
+      finishedBatchQueue_.push(std::move(batch.value()));
+    }
+    if (numActiveParsers_.fetch_sub(1) == 1) {
+      // We are the last parser, we have to notify the downstream code.
+      finishedBatchQueue_.finish();
+    }
+  };
+
+  auto makeParsers = [files, this, parseFile]() {
+    for (const auto& file : files) {
+      numActiveParsers_++;
+      parsingQueue.push(std::bind_front(parseFile, file));
+    }
+    parsingQueue.finish();
+  };
+  feederThread_ = ad_utility::JThread{makeParsers};
+}
+
+// TODO<joka921> check if there is anything to be done here.
+template <typename T>
+RdfMultifileParser<T>::~RdfMultifileParser() {}
+
+template <typename T>
+bool RdfMultifileParser<T>::getLine(TurtleTriple*) {
+  AD_FAIL();
+}
+template <typename T>
+std::optional<std::vector<TurtleTriple>> RdfMultifileParser<T>::getBatch() {
+  return finishedBatchQueue_.pop();
+}
+
 // Explicit instantiations
 template class TurtleParser<Tokenizer>;
 template class TurtleParser<TokenizerCtre>;
@@ -1109,3 +1169,5 @@ template class RdfStreamParser<NQuadParser<Tokenizer>>;
 template class RdfStreamParser<NQuadParser<TokenizerCtre>>;
 template class RdfParallelParser<NQuadParser<Tokenizer>>;
 template class RdfParallelParser<NQuadParser<TokenizerCtre>>;
+template class RdfMultifileParser<Tokenizer>;
+template class RdfMultifileParser<TokenizerCtre>;
