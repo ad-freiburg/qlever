@@ -50,7 +50,8 @@ class ValuesForTesting : public Operation {
   explicit ValuesForTesting(QueryExecutionContext* ctx,
                             std::vector<IdTable> tables,
                             std::vector<std::optional<Variable>> variables,
-                            bool unlikelyToFitInCache = false)
+                            bool unlikelyToFitInCache = false,
+                            std::vector<ColumnIndex> sortedColumns = {})
       : Operation{ctx},
         tables_{std::move(tables)},
         variables_{std::move(variables)},
@@ -58,7 +59,7 @@ class ValuesForTesting : public Operation {
         sizeEstimate_{0},
         costEstimate_{0},
         unlikelyToFitInCache_{unlikelyToFitInCache},
-        resultSortedColumns_{},
+        resultSortedColumns_{std::move(sortedColumns)},
         localVocab_{LocalVocab{}},
         multiplicity_{std::nullopt} {
     AD_CONTRACT_CHECK(

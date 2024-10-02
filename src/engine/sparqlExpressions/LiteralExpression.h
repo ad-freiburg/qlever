@@ -48,7 +48,8 @@ class LiteralExpression : public SparqlExpression {
       if (auto ptr = cachedResult_.load(std::memory_order_relaxed)) {
         return *ptr;
       }
-      auto id = context->_qec.getIndex().getId(s);
+      TripleComponent tc{s};
+      std::optional<Id> id = tc.toValueId(context->_qec.getIndex().getVocab());
       IdOrLiteralOrIri result =
           id.has_value()
               ? IdOrLiteralOrIri{id.value()}

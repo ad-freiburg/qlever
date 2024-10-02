@@ -8,6 +8,7 @@
 #pragma once
 
 #include <chrono>
+#include <ctre.hpp>
 #include <limits>
 #include <stdexcept>
 #include <string>
@@ -96,6 +97,15 @@ constexpr inline std::string_view MATCHINGWORD_VARIABLE_PREFIX =
 constexpr inline std::string_view LANGUAGE_PREDICATE =
     makeInternalIriConst<"langtag">();
 
+// this predicate is the identifier for the SpatialJoin class. It joins the two
+// objects, if their distance is smaller or equal to the maximum distance, which
+// needs to be given in the predicate as well. The syntax for the predicate
+// needs to be like this: <max-distance-in-meters:XXXX>, where XXXX needs to be
+// replaced by an integer number.
+static const std::string MAX_DIST_IN_METERS = "<max-distance-in-meters:";
+static constexpr auto MAX_DIST_IN_METERS_REGEX =
+    ctll::fixed_string{"<max-distance-in-meters:[0-9]+>"};
+
 // TODO<joka921> Move them to their own file, make them strings, remove
 // duplications, etc.
 constexpr inline char XSD_STRING[] = "http://www.w3.org/2001/XMLSchema#string";
@@ -143,6 +153,9 @@ constexpr inline char RDF_PREFIX[] =
     "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
 constexpr inline char RDF_LANGTAG_STRING[] =
     "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString";
+
+constexpr inline char GEO_WKT_LITERAL[] =
+    "http://www.opengis.net/ont/geosparql#wktLiteral";
 
 constexpr inline std::string_view VOCAB_SUFFIX = ".vocabulary";
 constexpr inline std::string_view MMAP_FILE_SUFFIX = ".meta";
@@ -245,3 +258,7 @@ constexpr inline size_t NUM_SORT_THREADS = 4;
 constexpr inline std::string_view EMPH_ON = "\033[1m";
 /// ANSI escape sequence to print "normal" text again in the console.
 constexpr inline std::string_view EMPH_OFF = "\033[22m";
+
+// Allowed range for geographical coordinates from WTK Text
+constexpr inline double COORDINATE_LAT_MAX = 90.0;
+constexpr inline double COORDINATE_LNG_MAX = 180.0;

@@ -24,7 +24,8 @@ auto PT = [](const auto& c1, const auto& c2, const auto& c3) {
 };
 auto CBM = [](size_t blockIndex, const auto firstTriple,
               const auto lastTriple) {
-  return CompressedBlockMetadata{blockIndex, {}, 0, firstTriple, lastTriple};
+  return CompressedBlockMetadata{blockIndex, {}, 0,    firstTriple,
+                                 lastTriple, {}, false};
 };
 
 auto numBlocks =

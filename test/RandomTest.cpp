@@ -195,6 +195,38 @@ TEST(RandomNumberGeneratorTest, RandomDoubleGenerator) {
   testRange<RandomDoubleGenerator>(ranges);
 }
 
+// Test for the performance of `FastRandomIntGenerator` and
+// `RandomDoubleGenerator`.
+// NOTE: This does not actually test anything. It's just here to measure the
+// performance of the random number generators.
+TEST(RandomNumberGeneratorTest, PerformanceTes) {
+  // Create random number generators.
+  FastRandomIntGenerator<size_t> fastIntGenerator;
+  RandomDoubleGenerator doubleGenerator(0.0, 1.0);
+  size_t n = 1'000'000;
+  // Lambda for measuring the speed of a given random number generator.
+  auto measureAndShowSpeed = [&n](auto& generator, std::string name) {
+    auto start = std::chrono::high_resolution_clock::now();
+    decltype(generator()) sum = 0;
+    for (size_t i = 0; i < n; i++) {
+      sum += generator();
+    }
+    // Show in ns per number with one digit after the comma.
+    std::cout << "Speed of " << name << ": " << std::fixed
+              << std::setprecision(1)
+              << (static_cast<double>(
+                      std::chrono::duration_cast<std::chrono::nanoseconds>(
+                          std::chrono::high_resolution_clock::now() - start)
+                          .count()) /
+                  n)
+              << " ns per number" << std::setprecision(4)
+              << " [average value: " << (sum / n) << "]" << std::endl;
+  };
+  // Measure the time of our two random number generators.
+  measureAndShowSpeed(fastIntGenerator, "FastRandomIntGenerator");
+  measureAndShowSpeed(doubleGenerator, "RandomDoubleGenerator");
+}
+
 // Small test, if `randomShuffle` shuffles things the same way, if given the
 // same seed.
 TEST(RandomShuffleTest, Seed) {

@@ -7,19 +7,20 @@
 #include "engine/sparqlExpressions/NaryExpression.h"
 
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
+#include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "util/GeoSparqlHelpers.h"
 
 namespace sparqlExpression {
 namespace detail {
-NARY_EXPRESSION(LongitudeExpression, 1,
-                FV<NumericIdWrapper<decltype(ad_utility::wktLongitude), true>,
-                   LiteralFromIdGetter>);
-NARY_EXPRESSION(LatitudeExpression, 1,
-                FV<NumericIdWrapper<decltype(ad_utility::wktLatitude), true>,
-                   LiteralFromIdGetter>);
+NARY_EXPRESSION(
+    LongitudeExpression, 1,
+    FV<NumericIdWrapper<ad_utility::WktLongitude, true>, GeoPointValueGetter>);
+NARY_EXPRESSION(
+    LatitudeExpression, 1,
+    FV<NumericIdWrapper<ad_utility::WktLatitude, true>, GeoPointValueGetter>);
 NARY_EXPRESSION(DistExpression, 2,
-                FV<NumericIdWrapper<decltype(ad_utility::wktDist), true>,
-                   LiteralFromIdGetter>);
+                FV<NumericIdWrapper<ad_utility::WktDistGeoPoints, true>,
+                   GeoPointValueGetter>);
 
 }  // namespace detail
 

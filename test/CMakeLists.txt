@@ -243,6 +243,8 @@ addLinkAndDiscoverTest(BitUtilsTest)
 
 addLinkAndDiscoverTest(NBitIntegerTest)
 
+addLinkAndDiscoverTest(GeoPointTest)
+
 addLinkAndDiscoverTest(GeoSparqlHelpersTest util)
 
 addLinkAndDiscoverTest(HttpUtilsTest util http)
@@ -275,7 +277,7 @@ addLinkAndDiscoverTestSerial(ValuesTest engine)
 
 addLinkAndDiscoverTestSerial(ServiceTest engine)
 
-addLinkAndDiscoverTest(HttpTest Boost::iostreams http)
+addLinkAndDiscoverTestSerial(HttpTest Boost::iostreams http)
 
 addLinkAndDiscoverTest(CallFixedSizeTest)
 
@@ -404,3 +406,9 @@ addLinkAndDiscoverTest(CacheableGeneratorTest)
 addLinkAndDiscoverTest(FilterTest engine)
 
 addLinkAndDiscoverTest(ResultTest engine)
+
+addLinkAndDiscoverTest(SparqlExpressionGeneratorsTest)
+
+addLinkAndDiscoverTest(UrlParserTest)
+
+addLinkAndDiscoverTest(ServerTest engine)

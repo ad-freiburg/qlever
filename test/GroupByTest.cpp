@@ -13,7 +13,6 @@
 #include "engine/GroupBy.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
-#include "engine/NeutralElementOperation.h"
 #include "engine/QueryPlanner.h"
 #include "engine/Sort.h"
 #include "engine/Values.h"
@@ -22,6 +21,7 @@
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
+#include "engine/sparqlExpressions/SampleExpression.h"
 #include "global/RuntimeParameters.h"
 #include "gtest/gtest.h"
 #include "index/ConstantsIndexBuilding.h"
@@ -471,6 +471,12 @@ struct GroupByOptimizations : ::testing::Test {
         "GROUP_CONCAT(?someVariable)"};
   }
 
+  static SparqlExpressionPimpl makeSamplePimpl(const Variable& var) {
+    return SparqlExpressionPimpl{
+        std::make_unique<SampleExpression>(false, makeVariableExpression(var)),
+        "SAMPLE(?someVariable)"};
+  }
+
   static SparqlExpressionPimpl makeAvgCountPimpl(const Variable& var) {
     auto countExpression =
         std::make_unique<CountExpression>(false, makeVariableExpression(var));
@@ -635,6 +641,7 @@ TEST_F(GroupByOptimizations, checkIfHashMapOptimizationPossible) {
   SparqlExpressionPimpl minXPimpl = makeMinPimpl(varX);
   SparqlExpressionPimpl maxXPimpl = makeMaxPimpl(varX);
   SparqlExpressionPimpl sumXPimpl = makeSumPimpl(varX);
+  SparqlExpressionPimpl sampleXPimpl = makeSamplePimpl(varX);
 
   std::vector<Alias> aliasesAvgX{Alias{avgXPimpl, Variable{"?avg"}}};
   std::vector<Alias> aliasesAvgDistinctX{
@@ -644,6 +651,7 @@ TEST_F(GroupByOptimizations, checkIfHashMapOptimizationPossible) {
   std::vector<Alias> aliasesMinX{Alias{minXPimpl, Variable{"?minX"}}};
   std::vector<Alias> aliasesMaxX{Alias{maxXPimpl, Variable{"?maxX"}}};
   std::vector<Alias> aliasesSumX{Alias{sumXPimpl, Variable{"?sumX"}}};
+  std::vector<Alias> aliasesSampleX{Alias{sampleXPimpl, Variable{"?sampleX"}}};
 
   std::vector<GroupBy::Aggregate> countAggregate = {{countXPimpl, 1}};
   std::vector<GroupBy::Aggregate> avgAggregate = {{avgXPimpl, 1}};
@@ -653,6 +661,7 @@ TEST_F(GroupByOptimizations, checkIfHashMapOptimizationPossible) {
   std::vector<GroupBy::Aggregate> minAggregate = {{minXPimpl, 1}};
   std::vector<GroupBy::Aggregate> maxAggregate = {{maxXPimpl, 1}};
   std::vector<GroupBy::Aggregate> sumAggregate = {{sumXPimpl, 1}};
+  std::vector<GroupBy::Aggregate> sampleAggregate = {{sampleXPimpl, 1}};
 
   // Enable optimization
   RuntimeParameters().set<"group-by-hash-map-enabled">(true);
@@ -675,6 +684,7 @@ TEST_F(GroupByOptimizations, checkIfHashMapOptimizationPossible) {
   testSuccess(variablesOnlyX, aliasesMaxX, subtreeWithSort, maxAggregate);
   testSuccess(variablesOnlyX, aliasesMinX, subtreeWithSort, minAggregate);
   testSuccess(variablesOnlyX, aliasesSumX, subtreeWithSort, sumAggregate);
+  testSuccess(variablesOnlyX, aliasesSampleX, subtreeWithSort, sampleAggregate);
 
   // Check details of data structure are correct.
   GroupBy groupBy{qec, variablesOnlyX, aliasesAvgX, subtreeWithSort};
@@ -1911,4 +1921,281 @@ TEST(GroupBy, Descriptor) {
   EXPECT_EQ(groupBy.getDescriptor(), "GroupBy on ?a");
   GroupBy groupBy2{qec, {}, {}, subtree};
   EXPECT_EQ(groupBy2.getDescriptor(), "GroupBy (implicit)");
+}
+
+namespace {
+class GroupByLazyFixture : public ::testing::TestWithParam<bool> {
+ protected:
+  using V = Variable;
+  QueryExecutionContext* qec_ = getQec();
+
+  // ___________________________________________________________________________
+  static std::vector<std::optional<Variable>> vars(
+      std::convertible_to<std::string> auto&&... strings) {
+    std::vector<std::optional<Variable>> result;
+    result.reserve(sizeof...(strings));
+    (result.emplace_back(V{AD_FWD(strings)}), ...);
+    return result;
+  }
+
+  // ___________________________________________________________________________
+  static std::unique_ptr<SumExpression> makeSum(std::string name) {
+    return std::make_unique<SumExpression>(
+        false, std::make_unique<VariableExpression>(V{std::move(name)}));
+  }
+
+  // ___________________________________________________________________________
+  template <size_t N>
+  static void expectReturningIdTables(
+      GroupBy& groupBy, const std::array<IdTable, N>& idTables,
+      ad_utility::source_location sourceLocation =
+          ad_utility::source_location::current()) {
+    auto l = generateLocationTrace(sourceLocation);
+    bool lazyResult = GetParam();
+    auto result = groupBy.computeResultOnlyForTesting(lazyResult);
+    ASSERT_NE(result.isFullyMaterialized(), lazyResult);
+    if (lazyResult) {
+      size_t counter = 0;
+      for (const IdTable& idTable : result.idTables()) {
+        ASSERT_LT(counter, idTables.size())
+            << "Too many idTables yielded. Expected: " << idTables.size();
+        EXPECT_EQ(idTables.at(counter), idTable);
+        ++counter;
+      }
+      EXPECT_EQ(counter, idTables.size())
+          << "Not enough idTables yielded. Expected: " << idTables.size();
+    } else {
+      IdTable aggregatedTable{groupBy.getResultWidth(), groupBy.allocator()};
+      for (const IdTable& idTable : idTables) {
+        aggregatedTable.insertAtEnd(idTable);
+      }
+      EXPECT_EQ(result.idTable(), aggregatedTable);
+    }
+  }
+
+  static IdTable makeIntTable(const std::vector<std::vector<IntOrId>>& data) {
+    return makeIdTableFromVector(data, IntId);
+  }
+
+  GroupBy makeSumXGroupByY(std::vector<IdTable> idTables) {
+    auto subtree = makeExecutionTree<ValuesForTesting>(
+        qec_, std::move(idTables), vars("?x", "?y"), true,
+        std::vector<ColumnIndex>{1});
+    Alias alias{SparqlExpressionPimpl{makeSum("?x"), "SUM(?x)"}, V{"?sum"}};
+    return {qec_, {V{"?y"}}, {std::move(alias)}, std::move(subtree)};
+  }
+};
+}  // namespace
+
+INSTANTIATE_TEST_SUITE_P(FalseTrue, GroupByLazyFixture, testing::Bool());
+
+// _____________________________________________________________________________
+TEST_P(GroupByLazyFixture, emptyGeneratorYieldsEmptyResult) {
+  auto subtree = makeExecutionTree<ValuesForTesting>(
+      qec_, std::vector<IdTable>{}, vars("?x"), true,
+      std::vector<ColumnIndex>{0});
+  GroupBy groupBy{qec_, {V{"?x"}}, {}, std::move(subtree)};
+
+  expectReturningIdTables<0>(groupBy, {});
+}
+
+// _____________________________________________________________________________
+TEST_P(GroupByLazyFixture, generatorWithEmptyTablesYieldsEmptyResult) {
+  std::vector<IdTable> idTables;
+  // Arbitrary count, could be anything greater than 0
+  for (size_t i = 0; i < 7; ++i) {
+    idTables.emplace_back(1, qec_->getAllocator());
+  }
+
+  auto subtree = makeExecutionTree<ValuesForTesting>(
+      qec_, std::move(idTables), vars("?x"), true, std::vector<ColumnIndex>{0});
+  GroupBy groupBy{qec_, {V{"?x"}}, {}, std::move(subtree)};
+
+  expectReturningIdTables<0>(groupBy, {});
+}
+
+// _____________________________________________________________________________
+TEST_P(GroupByLazyFixture, emptyIdTableIsSkipped) {
+  // SELECT (SUM(?x) as ?sum) WHERE { ... } GROUP BY ?y
+  // The first column is ?x, the second is ?y
+  std::vector<IdTable> idTables;
+  idTables.emplace_back(2, qec_->getAllocator());
+  idTables.push_back(makeIntTable({{1, 0}}));
+  idTables.emplace_back(2, qec_->getAllocator());
+  idTables.emplace_back(2, qec_->getAllocator());
+  idTables.push_back(makeIntTable({{2, 0}}));
+  idTables.emplace_back(2, qec_->getAllocator());
+  idTables.push_back(makeIntTable({{4, 1}}));
+  idTables.emplace_back(2, qec_->getAllocator());
+
+  GroupBy groupBy = makeSumXGroupByY(std::move(idTables));
+
+  expectReturningIdTables<2>(groupBy,
+                             {makeIntTable({{0, 3}}), makeIntTable({{1, 4}})});
+}
+
+// _____________________________________________________________________________
+TEST_P(GroupByLazyFixture, implicitGroupByWithNonEmptyInput) {
+  std::vector<IdTable> idTables;
+  idTables.push_back(makeIntTable({{1}}));
+  idTables.push_back(makeIntTable({{2}}));
+  idTables.push_back(makeIntTable({{4}}));
+
+  auto subtree = makeExecutionTree<ValuesForTesting>(
+      qec_, std::move(idTables), vars("?x"), true, std::vector<ColumnIndex>{0});
+  Alias alias{SparqlExpressionPimpl{makeSum("?x"), "SUM(?x)"}, V{"?sum"}};
+  GroupBy groupBy{qec_, {}, {std::move(alias)}, std::move(subtree)};
+
+  expectReturningIdTables<1>(groupBy, {makeIntTable({{7}})});
+}
+
+// _____________________________________________________________________________
+TEST_P(GroupByLazyFixture, groupsSpanningOverMultipleIdTables) {
+  std::vector<IdTable> idTables;
+  idTables.push_back(makeIntTable({{1, 0}, {2, 1}}));
+  idTables.push_back(makeIntTable({{4, 1}, {8, 1}}));
+  idTables.push_back(makeIntTable({{16, 1}, {32, 2}}));
+  idTables.push_back(makeIntTable({{64, 2}, {128, 2}}));
+  idTables.push_back(makeIntTable({{256, 3}}));
+  idTables.push_back(makeIntTable({{512, 3}}));
+
+  GroupBy groupBy = makeSumXGroupByY(std::move(idTables));
+
+  expectReturningIdTables<4>(
+      groupBy, {makeIntTable({{0, 1}}), makeIntTable({{1, 30}}),
+                makeIntTable({{2, 224}}), makeIntTable({{3, 768}})});
+}
+
+// _____________________________________________________________________________
+TEST_P(GroupByLazyFixture, groupsAtTableBoundariesAreAggregatedCorrectly) {
+  std::vector<IdTable> idTables;
+  idTables.push_back(makeIntTable({{1, 0}}));
+  idTables.push_back(makeIntTable({{2, 1}, {4, 1}}));
+  idTables.push_back(makeIntTable({{8, 2}, {16, 2}}));
+
+  GroupBy groupBy = makeSumXGroupByY(std::move(idTables));
+
+  expectReturningIdTables<3>(groupBy,
+                             {makeIntTable({{0, 1}}), makeIntTable({{1, 6}}),
+                              makeIntTable({{2, 24}})});
+}
+
+// _____________________________________________________________________________
+TEST_P(GroupByLazyFixture, implicitGroupByWithEmptyInput) {
+  std::vector<IdTable> idTables;
+  idTables.emplace_back(1, qec_->getAllocator());
+
+  auto subtree = makeExecutionTree<ValuesForTesting>(
+      qec_, std::move(idTables), vars("?x"), true, std::vector<ColumnIndex>{0});
+  Alias alias{SparqlExpressionPimpl{makeSum("?x"), "SUM(?x)"}, V{"?sum"}};
+  GroupBy groupBy{qec_, {}, {std::move(alias)}, std::move(subtree)};
+
+  expectReturningIdTables<1>(groupBy, {makeIntTable({{0}})});
+}
+
+// _____________________________________________________________________________
+TEST_P(GroupByLazyFixture, groupsOfSize1AreAggregatedCorrectly) {
+  std::vector<IdTable> idTables;
+  idTables.push_back(makeIntTable({{1, 0}}));
+  idTables.push_back(makeIntTable({{2, 1}, {4, 2}, {8, 3}}));
+  idTables.push_back(makeIntTable({{16, 4}}));
+  idTables.push_back(makeIntTable({{32, 5}, {64, 6}}));
+
+  GroupBy groupBy = makeSumXGroupByY(std::move(idTables));
+
+  expectReturningIdTables<4>(
+      groupBy, {makeIntTable({{0, 1}, {1, 2}, {2, 4}}), makeIntTable({{3, 8}}),
+                makeIntTable({{4, 16}, {5, 32}}), makeIntTable({{6, 64}})});
+}
+
+// _____________________________________________________________________________
+TEST_P(GroupByLazyFixture, nestedAggregateFunctionsWork) {
+  // Test queries of the class `SELECT (CONCAT(SUM(?x), "---") as ?result) ...`
+  // where the aggregate function is not on top of the expression tree.
+  using L = TripleComponent::Literal;
+  std::vector<IdTable> idTables;
+  idTables.push_back(makeIntTable({{1, 0}}));
+  idTables.push_back(makeIntTable({{2, 1}, {4, 1}, {8, 2}}));
+  auto subtree = makeExecutionTree<ValuesForTesting>(
+      qec_, std::move(idTables), vars("?x", "?y"), true,
+      std::vector<ColumnIndex>{1});
+
+  std::vector<std::unique_ptr<SparqlExpression>> children;
+  children.push_back(makeSum("?x"));
+  children.push_back(std::make_unique<StringLiteralExpression>(
+      L::fromStringRepresentation("\"---\"")));
+  Alias alias{SparqlExpressionPimpl{makeConcatExpression(std::move(children)),
+                                    "CONCAT(SUM(?x), \"---\")"},
+              V{"?result"}};
+  GroupBy groupBy{qec_, {V{"?y"}}, {std::move(alias)}, std::move(subtree)};
+  // From here the code is similar to `expectReturningIdTables`, but checks the
+  // local vocab state during consumption of the generator and uses it to
+  // extract the required local vocab ids to match the result table against.
+  auto result = groupBy.computeResultOnlyForTesting(GetParam());
+
+  // Acquire the local vocab index for a given string representation if present.
+  auto makeEntry = [&result](std::string string) {
+    return result.localVocab().getIndexOrNullopt(
+        sparqlExpression::detail::LiteralOrIri{
+            L::fromStringRepresentation(std::move(string))});
+  };
+
+  auto entryToId = [](std::optional<LocalVocabIndex> entry) {
+    return Id::makeFromLocalVocabIndex(entry.value());
+  };
+
+  ASSERT_NE(result.isFullyMaterialized(), GetParam());
+  auto i = IntId;
+
+  if (GetParam()) {
+    EXPECT_EQ(result.localVocab().size(), 0);
+
+    auto& generator = result.idTables();
+
+    auto iterator = generator.begin();
+    ASSERT_NE(iterator, generator.end());
+    EXPECT_EQ(result.localVocab().size(), 2);
+    auto entry1 = makeEntry("\"1---\"");
+    auto entry2 = makeEntry("\"6---\"");
+    EXPECT_EQ(*iterator, makeIdTableFromVector({{i(0), entryToId(entry1)},
+                                                {i(1), entryToId(entry2)}}));
+    ++iterator;
+    ASSERT_NE(iterator, generator.end());
+    EXPECT_EQ(result.localVocab().size(), 3);
+    auto entry3 = makeEntry("\"8---\"");
+    EXPECT_EQ(*iterator, makeIdTableFromVector({{i(2), entryToId(entry3)}}));
+
+    EXPECT_EQ(++iterator, generator.end());
+
+  } else {
+    EXPECT_EQ(result.localVocab().size(), 3);
+    auto entry1 = makeEntry("\"1---\"");
+    auto entry2 = makeEntry("\"6---\"");
+    auto entry3 = makeEntry("\"8---\"");
+
+    ASSERT_TRUE(entry1.has_value());
+    ASSERT_TRUE(entry2.has_value());
+    ASSERT_TRUE(entry3.has_value());
+
+    EXPECT_EQ(result.idTable(),
+              makeIdTableFromVector({{i(0), entryToId(entry1)},
+                                     {i(1), entryToId(entry2)},
+                                     {i(2), entryToId(entry3)}}));
+  }
+}
+
+// _____________________________________________________________________________
+TEST_P(GroupByLazyFixture, aliasRenameWorks) {
+  std::vector<IdTable> idTables;
+  idTables.push_back(makeIntTable({{1}}));
+  idTables.push_back(makeIntTable({{2}, {4}, {8}}));
+  auto subtree = makeExecutionTree<ValuesForTesting>(
+      qec_, std::move(idTables), vars("?x"), true, std::vector<ColumnIndex>{0});
+  Alias alias{SparqlExpressionPimpl{
+                  std::make_unique<VariableExpression>(V{"?x"}), "?x as ?y"},
+              V{"?y"}};
+  GroupBy groupBy{qec_, {V{"?x"}}, {std::move(alias)}, std::move(subtree)};
+
+  expectReturningIdTables<2>(groupBy, {makeIntTable({{1, 1}, {2, 2}, {4, 4}}),
+                                       makeIntTable({{8, 8}})});
 }

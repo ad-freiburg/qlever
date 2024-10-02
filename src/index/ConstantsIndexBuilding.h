@@ -103,3 +103,7 @@ constexpr inline ad_utility::MemorySize
     UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN = 250_kB;
 
 constexpr inline size_t NumColumnsIndexBuilding = 4;
+
+// The maximal number of distinct graphs in a block such that this information
+// is stored in the metadata of the block.
+constexpr inline size_t MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA = 20;
