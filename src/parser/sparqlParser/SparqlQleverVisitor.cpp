@@ -731,7 +731,7 @@ GraphPatternOperation Visitor::visitPathQuery(
       throw parsedQuery::PathSearchException(
           "Unsupported element in pathSearch."
           "PathQuery may only consist of triples for configuration"
-          "And a subquery specifying edges.");
+          "And a { group graph pattern } specifying edges.");
     }
   };
 
