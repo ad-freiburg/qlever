@@ -882,32 +882,34 @@ struct BlockZipperJoinImpl {
     return std::tuple{std::ref(first.fullBlock()), first.subrange(), it};
   }
 
-  // Call `compatibleRowAction` for all pairs of elements in the Cartesian
-  // product of the blocks in `blocksLeft` and `blocksRight`.
-  template <bool DoOptionalJoin>
-  void addAll(const auto& blocksLeft, const auto& blocksRight) {
+  bool optionalHasChanged(const std::optional<ProjectedEl>& left,
+                          const std::optional<ProjectedEl>& right) {
+    if (left.has_value() != right.has_value()) {
+      return true;
+    }
+    if (!left.has_value() && !right.has_value()) {
+      return false;
+    }
+    return lessThan_(left.value(), right.value());
+  }
+
+  std::optional<ProjectedEl> getLast(const auto& side, const auto& blocks) {
+    if (blocks.back().empty()) {
+      return std::nullopt;
+    }
+    return side.projection_(blocks.back().back());
+  };
+
+  // Process undef blocks that have been stored in `leftSide_.undefBlocks_` or
+  // in `rightSide_.undefBlocks_` and match them against every element in the
+  // respective other side. This is only done if the `currentEl` has changed.
+  // Return true if the right side contains an UNDEF value and was able to make
+  // a pair with it.
+  bool addPreviousUndefPairs(const auto& blocksLeft, const auto& blocksRight) {
     bool hasRightUndef = false;
-    // Process undef blocks
     if constexpr (potentiallyHasUndef) {
-      auto getLast = [](const auto& side,
-                        const auto& blocks) -> std::optional<ProjectedEl> {
-        if (blocks.back().empty()) {
-          return std::nullopt;
-        }
-        return side.projection_(blocks.back().back());
-      };
-      auto hasChanged = [this](const std::optional<ProjectedEl>& left,
-                               const std::optional<ProjectedEl>& right) {
-        if (left.has_value() != right.has_value()) {
-          return true;
-        }
-        if (!left.has_value() && !right.has_value()) {
-          return false;
-        }
-        return lessThan_(left.value(), right.value());
-      };
       auto lastLeft = getLast(leftSide_, blocksLeft);
-      if (hasChanged(lastElementLeft_, lastLeft)) {
+      if (optionalHasChanged(lastElementLeft_, lastLeft)) {
         if (lastLeft.has_value()) {
           lastElementLeft_ = lastLeft;
         }
@@ -925,7 +927,7 @@ struct BlockZipperJoinImpl {
         }
       }
       auto lastRight = getLast(rightSide_, blocksRight);
-      if (hasChanged(lastElementRight_, lastRight)) {
+      if (optionalHasChanged(lastElementRight_, lastRight)) {
         if (lastRight.has_value()) {
           lastElementRight_ = lastRight;
         }
@@ -942,6 +944,14 @@ struct BlockZipperJoinImpl {
         }
       }
     }
+    return hasRightUndef;
+  }
+
+  // Call `compatibleRowAction` for all pairs of elements in the Cartesian
+  // product of the blocks in `blocksLeft` and `blocksRight`.
+  template <bool DoOptionalJoin>
+  void addAll(const auto& blocksLeft, const auto& blocksRight) {
+    bool hasRightUndef = addPreviousUndefPairs(blocksLeft, blocksRight);
     if constexpr (DoOptionalJoin) {
       if (!hasRightUndef &&
           std::ranges::all_of(
@@ -970,17 +980,20 @@ struct BlockZipperJoinImpl {
     }
     compatibleRowAction_.flush();
 
+    storeNewlyFoundUndefBlocks(blocksLeft, blocksRight);
+  }
+
+  void storeNewlyFoundUndefBlocks(const auto& blocksLeft,
+                                  const auto& blocksRight) {
     if constexpr (potentiallyHasUndef) {
       if (isUndefined_(blocksLeft.front().subrange().front())) {
         AD_CORRECTNESS_CHECK(isUndefined_(blocksLeft.back().back()));
-        std::ranges::copy(std::ranges::begin(blocksLeft),
-                          std::ranges::end(blocksLeft),
+        std::ranges::copy(blocksLeft,
                           std::back_inserter(leftSide_.undefBlocks_));
       }
       if (isUndefined_(blocksRight.front().subrange().front())) {
         AD_CORRECTNESS_CHECK(isUndefined_(blocksRight.back().back()));
-        std::ranges::copy(std::ranges::begin(blocksRight),
-                          std::ranges::end(blocksRight),
+        std::ranges::copy(blocksRight,
                           std::back_inserter(rightSide_.undefBlocks_));
       }
     }
@@ -999,6 +1012,59 @@ struct BlockZipperJoinImpl {
     last.setSubrange(
         std::ranges::equal_range(last.subrange(), currentEl, lessThan_));
     return result;
+  }
+
+  // Create a generator that yields iterators to all undefined values that have
+  // been found so far. Note that because of limitations of the
+  // `zipperJoinWithUndef` interface we need to set `begL` and `begR` to the
+  // beginning of the full blocks of the left and right side respectively so
+  // that they can be used within `zipperJoinWithUndef` to compute the distance
+  // from the yielded iterator to the beginning of the block.
+  template <bool left, typename T>
+  auto findUndefValues(const auto& fullBlockLeft, const auto& fullBlockRight,
+                       T& begL, T& begR) {
+    return [this, &fullBlockLeft, &fullBlockRight, &begL, &begR](
+               const auto&, auto it, auto end, bool) {
+      auto currentSide = [this]() {
+        if constexpr (left) {
+          return std::cref(leftSide_);
+        } else {
+          return std::cref(rightSide_);
+        }
+      }();
+      return [](const auto* self, const auto& fullBlockLeft,
+                const auto& fullBlockRight, T& begL, T& begR,
+                const auto& undefBlocks, auto it,
+                auto end) -> cppcoro::generator<T> {
+        for (const auto& undefBlock : undefBlocks) {
+          if constexpr (left) {
+            begL = undefBlock.fullBlock().begin();
+            self->compatibleRowAction_.setInput(undefBlock.fullBlock(),
+                                                fullBlockRight.get());
+          } else {
+            begR = undefBlock.fullBlock().begin();
+            self->compatibleRowAction_.setInput(fullBlockLeft.get(),
+                                                undefBlock.fullBlock());
+          }
+          const auto& subrange = undefBlock.subrange();
+          for (auto subIt = subrange.begin(); subIt < subrange.end(); ++subIt) {
+            co_yield subIt;
+          }
+        }
+        self->compatibleRowAction_.setInput(fullBlockLeft.get(),
+                                            fullBlockRight.get());
+        begL = fullBlockLeft.get().begin();
+        begR = fullBlockRight.get().begin();
+        for (; it != end; ++it) {
+          if (!self->isUndefined_(*it)) {
+            co_return;
+          }
+          co_yield it;
+        }
+      }(this, fullBlockLeft, fullBlockRight, begL, begR,
+                          currentSide.get().undefBlocks_, std::move(it),
+                          std::move(end));
+    };
   }
 
   // Join the first block in `currentBlocksLeft` with the first block in
@@ -1024,7 +1090,14 @@ struct BlockZipperJoinImpl {
 
     auto addNotFoundRowIndex = [&]() {
       if constexpr (DoOptionalJoin) {
-        return [begL = fullBlockLeft.get().begin(), this](auto itFromL) {
+        return [this, begL = fullBlockLeft.get().begin(),
+                &subrangeRight](auto itFromL) {
+          if constexpr (potentiallyHasUndef) {
+            AD_CORRECTNESS_CHECK(!isUndefined_(subrangeRight.front()) &&
+                                 rightSide_.undefBlocks_.empty());
+          } else {
+            (void)subrangeRight;
+          }
           compatibleRowAction_.addOptionalRow(itFromL - begL);
         };
 
@@ -1033,55 +1106,12 @@ struct BlockZipperJoinImpl {
       }
     }();
     if constexpr (potentiallyHasUndef) {
-      auto findUndefValues = [this, &fullBlockLeft, &fullBlockRight, &begL,
-                              &begR](bool left) {
-        return [this, left, &fullBlockLeft, &fullBlockRight, &begL, &begR](
-                   const auto&, auto it, auto end, bool) {
-          auto makeGenerator = []<bool left, typename T>(
-                                   const auto* self, const auto& fullBlockLeft,
-                                   const auto& fullBlockRight, T& begL, T& begR,
-                                   const auto& undefBlocks, auto it,
-                                   auto end) -> cppcoro::generator<T> {
-            for (const auto& undefBlock : undefBlocks) {
-              if constexpr (left) {
-                begL = undefBlock.fullBlock().begin();
-                self->compatibleRowAction_.setInput(undefBlock.fullBlock(),
-                                                    fullBlockRight.get());
-              } else {
-                begR = undefBlock.fullBlock().begin();
-                self->compatibleRowAction_.setInput(fullBlockLeft.get(),
-                                                    undefBlock.fullBlock());
-              }
-              const auto& subrange = undefBlock.subrange();
-              for (auto it = subrange.begin(); it < subrange.end(); ++it) {
-                co_yield it;
-              }
-            }
-            self->compatibleRowAction_.setInput(fullBlockLeft.get(),
-                                                fullBlockRight.get());
-            begL = fullBlockLeft.get().begin();
-            begR = fullBlockRight.get().begin();
-            for (; it != end; ++it) {
-              if (!self->isUndefined_(*it)) {
-                co_return;
-              }
-              co_yield it;
-            }
-          };
-          if (left) {
-            return makeGenerator.template operator()<true>(
-                this, fullBlockLeft, fullBlockRight, begL, begR,
-                leftSide_.undefBlocks_, std::move(it), std::move(end));
-          }
-          return makeGenerator.template operator()<false>(
-              this, fullBlockLeft, fullBlockRight, begL, begR,
-              rightSide_.undefBlocks_, std::move(it), std::move(end));
-        };
-      };
       zipperJoinWithUndef(
           std::ranges::subrange{subrangeLeft.begin(), currentElItL},
           std::ranges::subrange{subrangeRight.begin(), currentElItR}, lessThan_,
-          addRowIndex, findUndefValues(true), findUndefValues(false),
+          addRowIndex,
+          findUndefValues<true>(fullBlockLeft, fullBlockRight, begL, begR),
+          findUndefValues<false>(fullBlockLeft, fullBlockRight, begL, begR),
           addNotFoundRowIndex);
     } else {
       zipperJoinWithUndef(
@@ -1091,6 +1121,8 @@ struct BlockZipperJoinImpl {
     }
     compatibleRowAction_.flush();
 
+    // Store the undefined values that have been processed by
+    // `zipperJoinWithUndef` in the undefBlocks for later use.
     if constexpr (potentiallyHasUndef) {
       if (subrangeLeft.begin() != currentElItL &&
           isUndefined_(subrangeLeft.front())) {
@@ -1185,6 +1217,8 @@ struct BlockZipperJoinImpl {
         blockStatus = BlockStatus::allFilled;
       }
     };
+    // We are only guaranteed to have all relevant blocks from one side, so we
+    // also need to pass through the remaining blocks from the other side.
     while (!equalToCurrentElLeft.empty() && !equalToCurrentElRight.empty()) {
       addAll<DoOptionalJoin>(equalToCurrentElLeft, equalToCurrentElRight);
       switch (blockStatus) {
@@ -1238,6 +1272,64 @@ struct BlockZipperJoinImpl {
     compatibleRowAction_.flush();
   }
 
+  // If one of the sides is exhausted and has no values to match the pairs left,
+  // we need to pair the remaining values with the undef values we have left.
+  bool addRemainingUndefPairs() {
+    bool rightHasUndef = false;
+    if constexpr (potentiallyHasUndef) {
+      for (const auto& lBlock : leftSide_.currentBlocks_) {
+        for (const auto& rBlock : rightSide_.undefBlocks_) {
+          compatibleRowAction_.setInput(lBlock.fullBlock(), rBlock.fullBlock());
+          for (size_t i : lBlock.getIndexRange()) {
+            for (size_t j : rBlock.getIndexRange()) {
+              rightHasUndef = true;
+              compatibleRowAction_.addRow(i, j);
+            }
+          }
+        }
+      }
+      while (leftSide_.it_ != leftSide_.end_) {
+        const auto& lBlock = *leftSide_.it_;
+        for (const auto& rBlock : rightSide_.undefBlocks_) {
+          compatibleRowAction_.setInput(lBlock, rBlock.fullBlock());
+          for (size_t i : ad_utility::integerRange(lBlock.size())) {
+            for (size_t j : rBlock.getIndexRange()) {
+              rightHasUndef = true;
+              compatibleRowAction_.addRow(i, j);
+            }
+          }
+        }
+        ++leftSide_.it_;
+      }
+
+      for (const auto& rBlock : rightSide_.currentBlocks_) {
+        for (const auto& lBlock : leftSide_.undefBlocks_) {
+          compatibleRowAction_.setInput(lBlock.fullBlock(), rBlock.fullBlock());
+          for (size_t i : lBlock.getIndexRange()) {
+            for (size_t j : rBlock.getIndexRange()) {
+              compatibleRowAction_.addRow(i, j);
+            }
+          }
+        }
+      }
+
+      while (rightSide_.it_ != rightSide_.end_) {
+        const auto& rBlock = *rightSide_.it_;
+        for (const auto& lBlock : leftSide_.undefBlocks_) {
+          compatibleRowAction_.setInput(lBlock.fullBlock(), rBlock);
+          for (size_t i : lBlock.getIndexRange()) {
+            for (size_t j : ad_utility::integerRange(rBlock.size())) {
+              compatibleRowAction_.addRow(i, j);
+            }
+          }
+        }
+        ++rightSide_.it_;
+      }
+      compatibleRowAction_.flush();
+    }
+    return rightHasUndef;
+  }
+
   // The actual join routine that combines all the previous functions.
   template <bool DoOptionalJoin>
   void runJoin() {
@@ -1245,60 +1337,7 @@ struct BlockZipperJoinImpl {
       BlockStatus blockStatus = fillBuffer();
       if (leftSide_.currentBlocks_.empty() ||
           rightSide_.currentBlocks_.empty()) {
-        bool rightHasUndef = false;
-        if constexpr (potentiallyHasUndef) {
-          for (const auto& lBlock : leftSide_.currentBlocks_) {
-            for (const auto& rBlock : rightSide_.undefBlocks_) {
-              compatibleRowAction_.setInput(lBlock.fullBlock(),
-                                            rBlock.fullBlock());
-              for (size_t i : lBlock.getIndexRange()) {
-                for (size_t j : rBlock.getIndexRange()) {
-                  rightHasUndef = true;
-                  compatibleRowAction_.addRow(i, j);
-                }
-              }
-            }
-          }
-          while (leftSide_.it_ != leftSide_.end_) {
-            const auto& lBlock = *leftSide_.it_;
-            for (const auto& rBlock : rightSide_.undefBlocks_) {
-              compatibleRowAction_.setInput(lBlock, rBlock.fullBlock());
-              for (size_t i : ad_utility::integerRange(lBlock.size())) {
-                for (size_t j : rBlock.getIndexRange()) {
-                  rightHasUndef = true;
-                  compatibleRowAction_.addRow(i, j);
-                }
-              }
-            }
-            ++leftSide_.it_;
-          }
-
-          for (const auto& rBlock : rightSide_.currentBlocks_) {
-            for (const auto& lBlock : leftSide_.undefBlocks_) {
-              compatibleRowAction_.setInput(lBlock.fullBlock(),
-                                            rBlock.fullBlock());
-              for (size_t i : lBlock.getIndexRange()) {
-                for (size_t j : rBlock.getIndexRange()) {
-                  compatibleRowAction_.addRow(i, j);
-                }
-              }
-            }
-          }
-
-          while (rightSide_.it_ != rightSide_.end_) {
-            const auto& rBlock = *rightSide_.it_;
-            for (const auto& lBlock : leftSide_.undefBlocks_) {
-              compatibleRowAction_.setInput(lBlock.fullBlock(), rBlock);
-              for (size_t i : lBlock.getIndexRange()) {
-                for (size_t j : ad_utility::integerRange(rBlock.size())) {
-                  compatibleRowAction_.addRow(i, j);
-                }
-              }
-            }
-            ++rightSide_.it_;
-          }
-          compatibleRowAction_.flush();
-        }
+        bool rightHasUndef = addRemainingUndefPairs();
         if constexpr (DoOptionalJoin) {
           if (!rightHasUndef) {
             fillWithAllFromLeft();

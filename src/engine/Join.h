@@ -11,7 +11,6 @@
 #include "engine/QueryExecutionTree.h"
 #include "util/HashMap.h"
 #include "util/HashSet.h"
-#include "util/JoinAlgorithms/JoinAlgorithms.h"
 
 class Join : public Operation {
  private:

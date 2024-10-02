@@ -198,6 +198,8 @@ TEST(JoinAlgorithms, JoinWithBlocksMultipleBlocksPerElementBothSides) {
 
 namespace {
 
+// Replacement for `Id`, but with an additional tag to distinguish between ids
+// with the same value for testing.
 struct FakeId {
   Id value_;
   std::string_view tag_;
@@ -212,6 +214,7 @@ struct FakeId {
   }
 };
 
+// RowAdder implementation that works with FakeIds and can handle undefined.
 struct RowAdderWithUndef {
   const std::vector<FakeId>* left_ = nullptr;
   const std::vector<FakeId>* right_ = nullptr;

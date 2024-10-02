@@ -19,6 +19,7 @@
 #include "global/RuntimeParameters.h"
 #include "util/Exception.h"
 #include "util/HashMap.h"
+#include "util/JoinAlgorithms/JoinAlgorithms.h"
 
 using std::endl;
 using std::string;
