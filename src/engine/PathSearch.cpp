@@ -43,21 +43,8 @@ std::vector<Edge> BinSearchWrapper::outgoingEdes(const Id node) const {
 // _____________________________________________________________________________
 std::vector<Id> BinSearchWrapper::getSources() const {
   auto startIds = table_.getColumn(startCol_);
-  // std::vector<Id> sources;
-  // std::ranges::unique_copy(startIds, std::back_inserter(sources));
-  //
-  // return sources;  auto startIds = table_.getColumn(startCol_);
   std::vector<Id> sources;
-
-  size_t index = 0;
-  Id lastId;
-  while (index < startIds.size()) {
-    lastId = startIds[index];
-    sources.push_back(lastId);
-    while (lastId == startIds[index]) {
-      index++;
-    }
-  }
+  std::ranges::unique_copy(startIds, std::back_inserter(sources));
 
   return sources;
 }
@@ -245,12 +232,12 @@ Result PathSearch::computeResult([[maybe_unused]] bool requestLaziness) {
     timer.start();
 
     PathsLimited paths{allocator()};
+    std::vector<Id> allSources;
     if (sources.empty()) {
-      paths = allPaths(binSearch.getSources(), targets, binSearch,
-                       config_.cartesian_);
-    } else {
-      paths = allPaths(sources, targets, binSearch, config_.cartesian_);
+      allSources = binSearch.getSources();
+      sources = allSources;
     }
+    paths = allPaths(sources, targets, binSearch, config_.cartesian_);
 
     timer.stop();
     auto searchTime = timer.msecs();
