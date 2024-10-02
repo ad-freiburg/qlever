@@ -27,9 +27,9 @@ void DeltaTriples::clear() {
 
 // ____________________________________________________________________________
 std::vector<DeltaTriples::LocatedTripleHandles>
-DeltaTriples::locateAndAddTriples(
-    ad_utility::SharedCancellationHandle cancellationHandle,
-    std::span<const IdTriple<0>> idTriples, bool shouldExist) {
+DeltaTriples::locateAndAddTriples(CancellationHandle cancellationHandle,
+                                  std::span<const IdTriple<0>> idTriples,
+                                  bool shouldExist) {
   std::array<std::vector<LocatedTriples::iterator>, Permutation::ALL.size()>
       intermediateHandles;
   for (auto permutation : Permutation::ALL) {
@@ -54,8 +54,7 @@ DeltaTriples::locateAndAddTriples(
 }
 
 // ____________________________________________________________________________
-void DeltaTriples::eraseTripleInAllPermutations(
-    DeltaTriples::LocatedTripleHandles& handles) {
+void DeltaTriples::eraseTripleInAllPermutations(LocatedTripleHandles& handles) {
   // Erase for all permutations.
   for (auto permutation : Permutation::ALL) {
     auto ltIter = handles.forPermutation(permutation);
@@ -65,9 +64,8 @@ void DeltaTriples::eraseTripleInAllPermutations(
 }
 
 // ____________________________________________________________________________
-void DeltaTriples::insertTriples(
-    ad_utility::SharedCancellationHandle cancellationHandle,
-    std::vector<IdTriple<0>> triples) {
+void DeltaTriples::insertTriples(CancellationHandle cancellationHandle,
+                                 Triples triples) {
   LOG(DEBUG) << "Inserting"
              << " " << triples.size()
              << " triples (including idempotent triples)." << std::endl;
@@ -76,9 +74,8 @@ void DeltaTriples::insertTriples(
 }
 
 // ____________________________________________________________________________
-void DeltaTriples::deleteTriples(
-    ad_utility::SharedCancellationHandle cancellationHandle,
-    std::vector<IdTriple<0>> triples) {
+void DeltaTriples::deleteTriples(CancellationHandle cancellationHandle,
+                                 Triples triples) {
   LOG(DEBUG) << "Deleting"
              << " " << triples.size()
              << " triples (including idempotent triples)." << std::endl;
@@ -87,11 +84,10 @@ void DeltaTriples::deleteTriples(
 }
 
 // ____________________________________________________________________________
-void DeltaTriples::modifyTriplesImpl(
-    ad_utility::SharedCancellationHandle cancellationHandle,
-    std::vector<IdTriple<0>> triples, bool shouldExist,
-    ad_utility::HashMap<IdTriple<0>, LocatedTripleHandles>& targetMap,
-    ad_utility::HashMap<IdTriple<0>, LocatedTripleHandles>& inverseMap) {
+void DeltaTriples::modifyTriplesImpl(CancellationHandle cancellationHandle,
+                                     Triples triples, bool shouldExist,
+                                     TriplesToHandlesMap& targetMap,
+                                     TriplesToHandlesMap& inverseMap) {
   std::ranges::sort(triples);
   auto [first, last] = std::ranges::unique(triples);
   triples.erase(first, last);
