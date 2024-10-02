@@ -17,6 +17,7 @@
 #include "global/Constants.h"
 #include "global/SpecialIds.h"
 #include "index/ConstantsIndexBuilding.h"
+#include "index/InputFileSpecification.h"
 #include "parser/ParallelBuffer.h"
 #include "parser/Tokenizer.h"
 #include "parser/TokenizerCtre.h"
@@ -684,4 +685,45 @@ class RdfParallelParser : public Parser {
   std::atomic<size_t> numBatchesTotal_ = 0;
 
   std::chrono::milliseconds sleepTimeForTesting_;
+};
+/**
+ * This class is a TurtleParser that always assumes that
+ * its input file is an uncompressed .ttl file that will be read in
+ * chunks. Input file can also be a stream like stdin.
+ */
+template <typename Tokenizer>
+class RdfMultifileParser : public RdfParserBase {
+ public:
+  using Triple = std::array<string, 3>;
+  // Default construction needed for tests
+  RdfMultifileParser() = default;
+
+  // If the `sleepTimeForTesting` is set, then after the initialization the
+  // parser will sleep for the specified time before parsing each batch s.t.
+  // certain corner cases can be tested.
+  explicit RdfMultifileParser(
+      const std::vector<qlever::InputFileSpecification>& files);
+
+  bool getLine(TurtleTriple* triple) override;
+
+  std::optional<std::vector<TurtleTriple>> getBatch() override;
+
+  size_t getParsePosition() const override {
+    // TODO: can we really define this position here?
+    return 0;
+  }
+
+  // The destructor has to clean up all the parallel structures that might be
+  // still running in the background, especially when it is called before the
+  // parsing has finished (e.g. in case of an exception in the code that uses
+  // the parser).
+  ~RdfMultifileParser() override;
+
+ private:
+  ad_utility::JThread feederThread_;
+  std::vector<ad_utility::JThread> workerThreads_;
+  // TODO<joka921> get rid of magic constants.
+  ad_utility::TaskQueue<false> parsingQueue{10, 5};
+  ad_utility::data_structures::ThreadSafeQueue<std::vector<TurtleTriple>>
+      finishedBatchQueue{10};
 };

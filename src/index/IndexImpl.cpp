@@ -87,6 +87,24 @@ std::unique_ptr<RdfParserBase> IndexImpl::makeRdfParser(
       makeRdfParserImpl);
 }
 
+// _____________________________________________________________________________
+std::unique_ptr<RdfParserBase> IndexImpl::makeRdfParser(
+    const std::vector<Index::InputFileSpecification>& files) const {
+  auto makeRdfParserImpl =
+      [&files]<int useCtre>()
+      -> std::unique_ptr<RdfParserBase> {
+    using TokenizerT =
+        std::conditional_t<useCtre == 1, TokenizerCtre, Tokenizer>;
+    // TODO<joka921> parallelism etc.
+    return std::make_unique<RdfMultifileParser<Tokenizer>>(files);
+  };
+
+  // `callFixedSize` litfts runtime integers to compile time integers. We use it
+  // here to create the correct combinations of template arguments.
+  return ad_utility::callFixedSize(std::array{onlyAsciiTurtlePrefixes_ ? 1 : 0},
+                                   makeRdfParserImpl);
+}
+
 // Several helper functions for joining the OSP permutation with the patterns.
 namespace {
 // Return an input range of the blocks that are returned by the external sorter
@@ -270,6 +288,84 @@ IndexImpl::buildOspWithPatterns(
 }
 // _____________________________________________________________________________
 void IndexImpl::createFromFile(const string& filename, Index::Filetype type) {
+  if (!loadAllPermutations_ && usePatterns_) {
+    throw std::runtime_error{
+        "The patterns can only be built when all 6 permutations are created"};
+  }
+  LOG(INFO) << "Processing input triples from " << filename << " ..."
+            << std::endl;
+
+  readIndexBuilderSettingsFromFile();
+
+  IndexBuilderDataAsFirstPermutationSorter indexBuilderData =
+      createIdTriplesAndVocab(makeRdfParser(filename, type));
+
+  // Write the configuration already at this point, so we have it available in
+  // case any of the permutations fail.
+  writeConfiguration();
+
+  auto isQleverInternalId = [&indexBuilderData](const auto& id) {
+    // The special internal IDs like `ql:has-pattern` (see `SpecialIds.h`)
+    // have the datatype `UNDEFINED`.
+    return indexBuilderData.vocabularyMetaData_.isQleverInternalId(id) ||
+           id.getDatatype() == Datatype::Undefined;
+  };
+
+  auto isQleverInternalTriple = [isQleverInternalId](const auto& triple) {
+    const auto& i = isQleverInternalId;
+    return i(triple[0]) || i(triple[1]) || i(triple[2]);
+  };
+
+  auto& firstSorter = *indexBuilderData.sorter_;
+  // For the first permutation, perform a unique.
+  auto firstSorterWithUnique =
+      ad_utility::uniqueBlockView(firstSorter.getSortedOutput());
+
+  if (!loadAllPermutations_) {
+    // Only two permutations, no patterns, in this case the `firstSorter` is a
+    // PSO sorter, and `createPermutationPair` creates PSO/POS permutations.
+    createFirstPermutationPair(NumColumnsIndexBuilding, isQleverInternalTriple,
+                               std::move(firstSorterWithUnique));
+    configurationJson_["has-all-permutations"] = false;
+  } else if (loadAllPermutations_ && !usePatterns_) {
+    // Without patterns we explicitly have to pass in the next sorters to all
+    // permutation creating functions.
+    auto secondSorter = makeSorter<SecondPermutation>("second");
+    createFirstPermutationPair(NumColumnsIndexBuilding, isQleverInternalTriple,
+                               std::move(firstSorterWithUnique), secondSorter);
+    firstSorter.clearUnderlying();
+
+    auto thirdSorter = makeSorter<ThirdPermutation>("third");
+    createSecondPermutationPair(NumColumnsIndexBuilding, isQleverInternalTriple,
+                                secondSorter.getSortedBlocks<0>(), thirdSorter);
+    secondSorter.clear();
+    createThirdPermutationPair(NumColumnsIndexBuilding, isQleverInternalTriple,
+                               thirdSorter.getSortedBlocks<0>());
+    configurationJson_["has-all-permutations"] = true;
+  } else {
+    // Load all permutations and also load the patterns. In this case the
+    // `createFirstPermutationPair` function returns the next sorter, already
+    // enriched with the patterns of the subjects in the triple.
+    auto patternOutput = createFirstPermutationPair(
+        NumColumnsIndexBuilding, isQleverInternalTriple,
+        std::move(firstSorterWithUnique));
+    firstSorter.clearUnderlying();
+    auto thirdSorterPtr = buildOspWithPatterns(std::move(patternOutput.value()),
+                                               isQleverInternalTriple);
+    createThirdPermutationPair(NumColumnsIndexBuilding + 2,
+                               isQleverInternalTriple,
+                               thirdSorterPtr->template getSortedBlocks<0>());
+    configurationJson_["has-all-permutations"] = true;
+  }
+
+  // Dump the configuration again in case the permutations have added some
+  // information.
+  writeConfiguration();
+  LOG(INFO) << "Index build completed" << std::endl;
+}
+
+// _____________________________________________________________________________
+void IndexImpl::createFromFiles(const std::vector<Index::InputFileSpecification>& files) {
   if (!loadAllPermutations_ && usePatterns_) {
     throw std::runtime_error{
         "The patterns can only be built when all 6 permutations are created"};

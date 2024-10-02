@@ -67,8 +67,9 @@ int main(int argc, char** argv) {
   string textIndexName;
   string kbIndexName;
   string settingsFile;
-  string filetype;
-  string inputFile;
+  std::vector<string> filetype;
+  std::vector<string> inputFile;
+  std::vector<string> defaultGraphs;
   bool noPatterns = false;
   bool onlyAddTextIndex = false;
   bool keepTemporaryFiles = false;
@@ -157,8 +158,8 @@ int main(int argc, char** argv) {
 
   // If no index name was specified, take the part of the input file name after
   // the last slash.
-  if (kbIndexName.empty() && !inputFile.empty()) {
-    kbIndexName = ad_utility::getLastPartOfString(inputFile, '/');
+  if (kbIndexName.empty()){
+    kbIndexName = "no index name specified";
   }
 
   LOG(INFO) << EMPH_ON << "QLever IndexBuilder, compiled on "

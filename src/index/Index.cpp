@@ -283,3 +283,9 @@ size_t Index::getResultSizeOfScan(const ScanSpecification& scanSpecification,
                                   const Permutation::Enum& permutation) const {
   return pimpl_->getResultSizeOfScan(scanSpecification, permutation);
 }
+
+// ____________________________________________________________________________
+void Index::createFromFiles(const std::vector<InputFileSpecification&> files) {
+  return pimpl_->createFromFiles(files);
+
+}

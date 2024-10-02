@@ -226,6 +226,7 @@ class IndexImpl {
   // !! The index can not directly be used after this call, but has to be setup
   // by createFromOnDiskIndex after this call.
   void createFromFile(const string& filename, Index::Filetype type);
+  void createFromFiles(const std::vector<Index::InputFileSpecification>& files);
 
   // Creates an index object from an on disk index that has previously been
   // constructed. Read necessary meta data into memory and opens file handles.
@@ -468,6 +469,8 @@ class IndexImpl {
   // corresponding member variables.
   std::unique_ptr<RdfParserBase> makeRdfParser(const std::string& filename,
                                                Index::Filetype type) const;
+  std::unique_ptr<RdfParserBase> makeRdfParser(
+      const std::vector<Index::InputFileSpecification>& files) const;
 
   std::unique_ptr<ad_utility::CompressedExternalIdTableSorterTypeErased>
   convertPartialToGlobalIds(TripleVec& data,
