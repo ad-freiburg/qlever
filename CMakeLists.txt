@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.28)
+cmake_minimum_required(VERSION 3.27)
 project(QLever C CXX)
 
 # C/C++ Versions
@@ -252,6 +252,7 @@ FetchContent_Declare(
         s2
         GIT_REPOSITORY https://github.com/google/s2geometry.git
         GI_TAG 5b5eccd54a08ae03b4467e79ffbb076d0b5f221e  #version 0.11.1
+        SYSTEM
 )
 
 
@@ -334,7 +335,7 @@ FetchContent_Declare(
 ################################
 FetchContent_MakeAvailable(googletest ctre abseil re2 stxxl fsst s2)
 # Disable some warnings in RE2, STXXL, and GTEST
-target_compile_options(s2 PRIVATE -Wno-sign-compare -Wno-unused-parameter -Wno-class-memaccess -Wno-comment -Wno-redundant-move)
+target_compile_options(s2 PRIVATE -Wno-sign-compare -Wno-unused-parameter -Wno-class-memaccess -Wno-comment -Wno-redundant-move -Wno-unknown-warning-option -Wno-maybe-uninitialized -Wno-class-memaccess)
 target_compile_options(re2 PRIVATE -Wno-unused-parameter)
 target_compile_options(stxxl PRIVATE -Wno-deprecated-declarations)
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
