@@ -122,7 +122,7 @@ class SpatialJoin : public Operation {
   // helper function, to initialize various required objects for both algorithms
   std::tuple<const IdTable* const, const IdTable* const, unsigned long,
              unsigned long, size_t>
-  prepareJoin();
+  prepareJoin() const;
 
   // the baseline algorithm, which just checks every combination
   Result baselineAlgorithm();

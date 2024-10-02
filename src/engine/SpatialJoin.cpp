@@ -226,7 +226,6 @@ size_t SpatialJoin::getCostEstimate() {
 
 // ____________________________________________________________________________
 uint64_t SpatialJoin::getSizeEstimateBeforeLimit() {
-  // TODO<ullingerc> Is this correct?
   if (childLeft_ && childRight_) {
     return childLeft_->getSizeEstimate() * childRight_->getSizeEstimate();
   }
@@ -363,7 +362,7 @@ void SpatialJoin::addResultTableEntry(IdTable* result,
 // ____________________________________________________________________________
 std::tuple<const IdTable* const, const IdTable* const, unsigned long,
            unsigned long, size_t>
-SpatialJoin::prepareJoin() {
+SpatialJoin::prepareJoin() const {
   auto getIdTable = [](std::shared_ptr<QueryExecutionTree> child) {
     std::shared_ptr<const Result> resTable = child->getResult();
     auto idTablePtr = &resTable->idTable();
@@ -417,28 +416,33 @@ Result SpatialJoin::baselineAlgorithm() {
     for (size_t rowRight = 0; rowRight < resRight->size(); rowRight++) {
       Id dist = computeDist(resLeft, resRight, rowLeft, rowRight, leftJoinCol,
                             rightJoinCol);
+
       // Ensure `maxDist_` constraint
       if (dist.getDatatype() != Datatype::Int || maxDist_ < 0 ||
           dist.getInt() > maxDist_) {
         continue;
       }
-      // Ensure `maxResults_` constraint
+
+      // If there is no `maxResults_` we can add the result row immediately
       if (maxResults_ < 0) {
         addResultTableEntry(&result, resLeft, resRight, rowLeft, rowRight,
                             dist);
-      } else {
-        intermediate.push(std::pair{rowRight, dist.getInt()});
-        // Too many results? Drop the worst one
-        if (intermediate.size() > static_cast<size_t>(maxResults_)) {
-          intermediate.pop();
-        }
+        continue;
+      }
+
+      // Ensure `maxResults_` constraint using priority queue
+      intermediate.push(std::pair{rowRight, dist.getInt()});
+      // Too many results? Drop the worst one
+      if (intermediate.size() > static_cast<size_t>(maxResults_)) {
+        intermediate.pop();
       }
     }
 
     // If we are using the priority queue, we didn't add the results in the
     // inner loop, so we do it now.
     if (maxResults_ >= 0) {
-      for (size_t item = 0; item < intermediate.size(); item++) {
+      size_t numResults = intermediate.size();
+      for (size_t item = 0; item < numResults; item++) {
         // Get and remove largest item from priority queue
         auto [rowRight, dist] = intermediate.top();
         intermediate.pop();
@@ -482,11 +486,11 @@ Result SpatialJoin::s2geometryAlgorithm() {
   auto s2query = S2ClosestPointQuery<size_t>{&s2index};
 
   if (maxResults_ >= 0) {
-    s2query.mutable_options()->set_max_results(maxResults_);
+    s2query.mutable_options()->set_max_results(static_cast<int>(maxResults_));
   }
   if (maxDist_ >= 0) {
     s2query.mutable_options()->set_max_distance(
-        S2Earth::ToAngle(util::units::Meters(maxDist_)));
+        S2Earth::ToAngle(util::units::Meters(static_cast<float>(maxDist_))));
   }
 
   for (size_t rowLeft = 0; rowLeft < resLeft->size(); rowLeft++) {
