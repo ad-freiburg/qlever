@@ -751,7 +751,7 @@ struct BlockZipperJoinImpl {
   const LessThan& lessThan_;
   // The callback that is called for each pair of matching rows.
   CompatibleRowAction& compatibleRowAction_;
-  IsUndef isUndefined_{};
+  [[no_unique_address]] IsUndef isUndefined_{};
 
   // Type alias for the result of the projection. Elements from the left and
   // right input must be projected to the same type.
@@ -900,6 +900,23 @@ struct BlockZipperJoinImpl {
     return side.projection_(blocks.back().back());
   };
 
+  bool addCartesianProduct(const auto& blocksLeft, const auto& blocksRight) {
+    bool valueProcessed = false;
+    // TODO<C++23> use `std::views::cartesian_product`.
+    for (const auto& lBlock : blocksLeft) {
+      for (const auto& rBlock : blocksRight) {
+        compatibleRowAction_.setInput(lBlock.fullBlock(), rBlock.fullBlock());
+        for (size_t i : lBlock.getIndexRange()) {
+          for (size_t j : rBlock.getIndexRange()) {
+            valueProcessed = true;
+            compatibleRowAction_.addRow(i, j);
+          }
+        }
+      }
+    }
+    return valueProcessed;
+  }
+
   // Process undef blocks that have been stored in `leftSide_.undefBlocks_` or
   // in `rightSide_.undefBlocks_` and match them against every element in the
   // respective other side. This is only done if the `currentEl` has changed.
@@ -913,35 +930,14 @@ struct BlockZipperJoinImpl {
         if (lastLeft.has_value()) {
           lastElementLeft_ = lastLeft;
         }
-        for (const auto& lBlock : blocksLeft) {
-          for (const auto& rBlock : rightSide_.undefBlocks_) {
-            compatibleRowAction_.setInput(lBlock.fullBlock(),
-                                          rBlock.fullBlock());
-            for (size_t i : lBlock.getIndexRange()) {
-              for (size_t j : rBlock.getIndexRange()) {
-                hasRightUndef = true;
-                compatibleRowAction_.addRow(i, j);
-              }
-            }
-          }
-        }
+        addCartesianProduct(blocksLeft, rightSide_.undefBlocks_);
       }
       auto lastRight = getLast(rightSide_, blocksRight);
       if (optionalHasChanged(lastElementRight_, lastRight)) {
         if (lastRight.has_value()) {
           lastElementRight_ = lastRight;
         }
-        for (const auto& rBlock : blocksRight) {
-          for (const auto& lBlock : leftSide_.undefBlocks_) {
-            compatibleRowAction_.setInput(lBlock.fullBlock(),
-                                          rBlock.fullBlock());
-            for (size_t i : lBlock.getIndexRange()) {
-              for (size_t j : rBlock.getIndexRange()) {
-                compatibleRowAction_.addRow(i, j);
-              }
-            }
-          }
-        }
+        addCartesianProduct(leftSide_.undefBlocks_, blocksRight);
       }
     }
     return hasRightUndef;
@@ -967,17 +963,7 @@ struct BlockZipperJoinImpl {
         }
       }
     }
-    // TODO<C++23> use `std::views::cartesian_product`.
-    for (const auto& lBlock : blocksLeft) {
-      for (const auto& rBlock : blocksRight) {
-        compatibleRowAction_.setInput(lBlock.fullBlock(), rBlock.fullBlock());
-        for (size_t i : lBlock.getIndexRange()) {
-          for (size_t j : rBlock.getIndexRange()) {
-            compatibleRowAction_.addRow(i, j);
-          }
-        }
-      }
-    }
+    addCartesianProduct(blocksLeft, blocksRight);
     compatibleRowAction_.flush();
 
     storeNewlyFoundUndefBlocks(blocksLeft, blocksRight);
@@ -1277,17 +1263,10 @@ struct BlockZipperJoinImpl {
   bool addRemainingUndefPairs() {
     bool rightHasUndef = false;
     if constexpr (potentiallyHasUndef) {
-      for (const auto& lBlock : leftSide_.currentBlocks_) {
-        for (const auto& rBlock : rightSide_.undefBlocks_) {
-          compatibleRowAction_.setInput(lBlock.fullBlock(), rBlock.fullBlock());
-          for (size_t i : lBlock.getIndexRange()) {
-            for (size_t j : rBlock.getIndexRange()) {
-              rightHasUndef = true;
-              compatibleRowAction_.addRow(i, j);
-            }
-          }
-        }
-      }
+      rightHasUndef = addCartesianProduct(leftSide_.currentBlocks_,
+                                          rightSide_.undefBlocks_);
+      // Process blocks that have not been consumed yet and match them against
+      // undef blocks.
       while (leftSide_.it_ != leftSide_.end_) {
         const auto& lBlock = *leftSide_.it_;
         for (const auto& rBlock : rightSide_.undefBlocks_) {
@@ -1302,17 +1281,10 @@ struct BlockZipperJoinImpl {
         ++leftSide_.it_;
       }
 
-      for (const auto& rBlock : rightSide_.currentBlocks_) {
-        for (const auto& lBlock : leftSide_.undefBlocks_) {
-          compatibleRowAction_.setInput(lBlock.fullBlock(), rBlock.fullBlock());
-          for (size_t i : lBlock.getIndexRange()) {
-            for (size_t j : rBlock.getIndexRange()) {
-              compatibleRowAction_.addRow(i, j);
-            }
-          }
-        }
-      }
+      addCartesianProduct(leftSide_.undefBlocks_, rightSide_.currentBlocks_);
 
+      // Process blocks that have not been consumed yet and match them against
+      // undef blocks.
       while (rightSide_.it_ != rightSide_.end_) {
         const auto& rBlock = *rightSide_.it_;
         for (const auto& lBlock : leftSide_.undefBlocks_) {

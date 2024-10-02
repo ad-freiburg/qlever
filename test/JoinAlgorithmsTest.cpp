@@ -368,7 +368,7 @@ TEST(JoinAlgorithms, JoinWithBlocksWithUndefOnBothSides) {
   testDynamicJoinWithUndef(a, b, expectedResult);
 }
 
-// ________________________________________________________________________________________
+// _____________________________________________________________________________
 TEST(JoinAlgorithms, JoinWithBlocksOneSideSingleUndef) {
   auto U = Id::makeUndefined();
   std::vector<std::vector<FakeId>> a{{{U, "a0"}}};
@@ -381,7 +381,7 @@ TEST(JoinAlgorithms, JoinWithBlocksOneSideSingleUndef) {
   testDynamicJoinWithUndef(a, b, expectedResult);
 }
 
-// ________________________________________________________________________________________
+// _____________________________________________________________________________
 TEST(JoinAlgorithms, JoinWithBlocksOneUndefinedValueMixedWithOtherValues) {
   auto U = Id::makeUndefined();
   std::vector<std::vector<FakeId>> a{{{U, "a0"}, {I(1), "a1"}, {I(2), "a2"}}};
@@ -393,4 +393,20 @@ TEST(JoinAlgorithms, JoinWithBlocksOneUndefinedValueMixedWithOtherValues) {
       {F{I(2), "a2"}, F{I(2), "b1"}}, {F{U, "a0"}, F{I(3), "b2"}},
   };
   testDynamicJoinWithUndef(a, b, expectedResult);
+}
+
+// _____________________________________________________________________________
+TEST(JoinAlgorithm, DefaultIsUndefinedFunctionAlwaysReturnsFalse) {
+  // This test is mostly for coverage purposes.
+  RowAdderWithUndef adder{};
+  std::vector<std::vector<FakeId>> dummyBlocks{};
+  auto compare = [](auto l, auto r) { return static_cast<Id>(l) < r; };
+  auto joinSide =
+      ad_utility::detail::makeJoinSide(dummyBlocks, std::identity{});
+  ad_utility::detail::BlockZipperJoinImpl impl{joinSide, joinSide, compare,
+                                               adder};
+  EXPECT_FALSE(impl.isUndefined_("Something"));
+  EXPECT_FALSE(impl.isUndefined_(1));
+  EXPECT_FALSE(impl.isUndefined_(I(1)));
+  EXPECT_FALSE(impl.isUndefined_(Id::makeUndefined()));
 }

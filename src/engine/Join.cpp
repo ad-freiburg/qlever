@@ -206,7 +206,7 @@ ProtoResult Join::computeResult(bool requestLaziness) {
   std::shared_ptr<const Result> leftRes =
       leftResIfCached ? leftResIfCached : _left->getResult(true);
   checkCancellation();
-  if (leftRes->isFullyMaterialized() && leftRes->idTable().size() == 0) {
+  if (leftRes->isFullyMaterialized() && leftRes->idTable().empty()) {
     _right->getRootOperation()->updateRuntimeInformationWhenOptimizedOut();
     // TODO<joka921, hannahbast, SPARQL update> When we add triples to the
     // index, the vocabularies of index scans will not necessarily be empty and
