@@ -496,17 +496,34 @@ ProtoResult Join::lazyJoin(std::shared_ptr<const Result> a, ColumnIndex jc1,
   auto rowAdder = std::make_unique<ad_utility::AddCombinedRowToIdTable>(
       1, IdTable{getResultWidth(), getExecutionContext()->getAllocator()},
       cancellationHandle_);
-  auto performJoin = [&rowAdder, requestLaziness](auto leftBlocks,
-                                                  auto rightBlocks) {
-    // TODO<RobinTF> check variable to column map and check if non-undef variant
-    // can be used instead.
-    /*auto undefStatus =
-        tree.getVariableAndInfoByColumnIndex(joinCol).second.mightContainUndef_;
-    bool containsUndef =
-        undefStatus == ColumnIndexAndTypeInfo::UndefStatus::PossiblyUndefined;*/
-    return ad_utility::zipperJoinForBlocksWithPotentialUndef(
-        !requestLaziness, std::move(leftBlocks), std::move(rightBlocks),
-        std::less{}, *rowAdder);
+  auto performJoin = [this, &rowAdder, requestLaziness, jc1, jc2](
+                         auto leftBlocks, auto rightBlocks) {
+    auto couldContainUndef = [](const auto& blocks, const auto& tree,
+                                ColumnIndex joinColumn) {
+      if constexpr (std::is_same_v<
+                        decltype(blocks),
+                        const std::span<
+                            ad_utility::IdTableAndFirstCol<IdTable>>&>) {
+        return !blocks.empty() && !blocks[0].empty() &&
+               blocks[0][0].isUndefined();
+      } else {
+        auto undefStatus = tree->getVariableAndInfoByColumnIndex(joinColumn)
+                               .second.mightContainUndef_;
+        return undefStatus ==
+               ColumnIndexAndTypeInfo::UndefStatus::PossiblyUndefined;
+      }
+    };
+    bool containsUndef = couldContainUndef(leftBlocks, _left, jc1) ||
+                         couldContainUndef(rightBlocks, _right, jc2);
+    if (containsUndef) {
+      return ad_utility::zipperJoinForBlocksWithPotentialUndef(
+          !requestLaziness, std::move(leftBlocks), std::move(rightBlocks),
+          std::less{}, *rowAdder);
+    } else {
+      return ad_utility::zipperJoinForBlocksWithoutUndef(
+          !requestLaziness, std::move(leftBlocks), std::move(rightBlocks),
+          std::less{}, *rowAdder);
+    }
   };
   std::optional<cppcoro::generator<std::monostate>> resultGenerator =
       std::nullopt;
