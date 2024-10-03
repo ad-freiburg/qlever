@@ -1309,25 +1309,22 @@ struct BlockZipperJoinImpl {
     return rightHasUndef;
   }
 
-  // The actual join routine that combines all the previous functions.
+  // The actual join routine that combines all the previous functions. Needs to
+  // be called until it returns false.
   template <bool DoOptionalJoin>
-  void runJoin() {
-    while (true) {
-      BlockStatus blockStatus = fillBuffer();
-      if (leftSide_.currentBlocks_.empty() ||
-          rightSide_.currentBlocks_.empty()) {
-        bool rightHasUndef = addRemainingUndefPairs();
-        if constexpr (DoOptionalJoin) {
-          if (!rightHasUndef) {
-            fillWithAllFromLeft();
-          }
+  bool singleJoin() {
+    BlockStatus blockStatus = fillBuffer();
+    if (leftSide_.currentBlocks_.empty() || rightSide_.currentBlocks_.empty()) {
+      bool rightHasUndef = addRemainingUndefPairs();
+      if constexpr (DoOptionalJoin) {
+        if (!rightHasUndef) {
+          fillWithAllFromLeft();
         }
-        return;
       }
-      joinBuffers<DoOptionalJoin, ProjectedEl>(blockStatus);
-      // TODO<RobinTF> extract contents of while loop into a separate function
-      // so a generator can keep calling the inner function.
+      return false;
     }
+    joinBuffers<DoOptionalJoin, ProjectedEl>(blockStatus);
+    return true;
   }
 };
 
@@ -1375,13 +1372,11 @@ template <typename LeftBlocks, typename RightBlocks, typename LessThan,
           typename LeftProjection = std::identity,
           typename RightProjection = std::identity,
           typename DoOptionalJoinTag = std::false_type>
-void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
-                                     RightBlocks&& rightBlocks,
-                                     const LessThan& lessThan,
-                                     auto& compatibleRowAction,
-                                     LeftProjection leftProjection = {},
-                                     RightProjection rightProjection = {},
-                                     DoOptionalJoinTag = {}) {
+cppcoro::generator<std::monostate> zipperJoinForBlocksWithoutUndef(
+    bool dontYield, LeftBlocks&& leftBlocks, RightBlocks&& rightBlocks,
+    const LessThan& lessThan, auto& compatibleRowAction,
+    LeftProjection leftProjection = {}, RightProjection rightProjection = {},
+    DoOptionalJoinTag = {}) {
   static constexpr bool DoOptionalJoin = DoOptionalJoinTag::value;
 
   auto leftSide = detail::makeJoinSide(leftBlocks, leftProjection);
@@ -1389,20 +1384,22 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
 
   detail::BlockZipperJoinImpl impl{leftSide, rightSide, lessThan,
                                    compatibleRowAction};
-  impl.template runJoin<DoOptionalJoin>();
+  while (impl.template singleJoin<DoOptionalJoin>()) {
+    if (!dontYield) {
+      co_yield std::monostate{};
+    }
+  }
 }
 
 template <typename LeftBlocks, typename RightBlocks, typename LessThan,
           typename LeftProjection = std::identity,
           typename RightProjection = std::identity,
           typename DoOptionalJoinTag = std::false_type>
-void zipperJoinForBlocksWithPotentialUndef(LeftBlocks&& leftBlocks,
-                                           RightBlocks&& rightBlocks,
-                                           const LessThan& lessThan,
-                                           auto& compatibleRowAction,
-                                           LeftProjection leftProjection = {},
-                                           RightProjection rightProjection = {},
-                                           DoOptionalJoinTag = {}) {
+cppcoro::generator<std::monostate> zipperJoinForBlocksWithPotentialUndef(
+    bool dontYield, LeftBlocks&& leftBlocks, RightBlocks&& rightBlocks,
+    const LessThan& lessThan, auto& compatibleRowAction,
+    LeftProjection leftProjection = {}, RightProjection rightProjection = {},
+    DoOptionalJoinTag = {}) {
   static constexpr bool DoOptionalJoin = DoOptionalJoinTag::value;
 
   auto leftSide = detail::makeJoinSide(leftBlocks, leftProjection);
@@ -1411,7 +1408,11 @@ void zipperJoinForBlocksWithPotentialUndef(LeftBlocks&& leftBlocks,
   detail::BlockZipperJoinImpl impl{
       leftSide, rightSide, lessThan, compatibleRowAction,
       [](const Id& id) { return id.isUndefined(); }};
-  impl.template runJoin<DoOptionalJoin>();
+  while (impl.template singleJoin<DoOptionalJoin>()) {
+    if (!dontYield) {
+      co_yield std::monostate{};
+    }
+  }
 }
 
 }  // namespace ad_utility

@@ -66,10 +66,18 @@ void testJoin(const NestedBlock& a, const NestedBlock& b, JoinResult expected,
   auto compare = [](auto l, auto r) { return l[0] < r[0]; };
   auto adder = makeRowAdder(result);
   if constexpr (DoOptionalJoin) {
-    zipperJoinForBlocksWithoutUndef(a, b, compare, adder, std::identity{},
-                                    std::identity{}, std::true_type{});
+    auto generator = zipperJoinForBlocksWithoutUndef(
+        true, a, b, compare, adder, std::identity{}, std::identity{},
+        std::true_type{});
+    for ([[maybe_unused]] std::monostate& _ : generator) {
+      AD_FAIL();
+    }
   } else {
-    zipperJoinForBlocksWithoutUndef(a, b, compare, adder);
+    auto generator =
+        zipperJoinForBlocksWithoutUndef(true, a, b, compare, adder);
+    for ([[maybe_unused]] std::monostate& _ : generator) {
+      AD_FAIL();
+    }
   }
   // The result must be sorted on the first column
   EXPECT_TRUE(std::ranges::is_sorted(result, std::less<>{}, ad_utility::first));
@@ -87,7 +95,11 @@ void testJoin(const NestedBlock& a, const NestedBlock& b, JoinResult expected,
 
   {
     auto adder = makeRowAdder(result);
-    zipperJoinForBlocksWithoutUndef(b, a, compare, adder);
+    auto generator =
+        zipperJoinForBlocksWithoutUndef(true, b, a, compare, adder);
+    for ([[maybe_unused]] std::monostate& _ : generator) {
+      AD_FAIL();
+    }
     EXPECT_TRUE(
         std::ranges::is_sorted(result, std::less<>{}, ad_utility::first));
     EXPECT_THAT(result, ::testing::UnorderedElementsAreArray(expected));
@@ -262,7 +274,11 @@ void testDynamicJoinWithUndef(const std::vector<std::vector<FakeId>>& a,
   };
   {
     RowAdderWithUndef adder{};
-    zipperJoinForBlocksWithPotentialUndef(a, b, compare, adder);
+    auto generator =
+        zipperJoinForBlocksWithPotentialUndef(true, a, b, compare, adder);
+    for ([[maybe_unused]] std::monostate& _ : generator) {
+      AD_FAIL();
+    }
     const auto& result = adder.getOutput();
     // The result must be sorted on the first column
     EXPECT_TRUE(
@@ -279,7 +295,11 @@ void testDynamicJoinWithUndef(const std::vector<std::vector<FakeId>>& a,
 
   {
     RowAdderWithUndef adder{};
-    zipperJoinForBlocksWithPotentialUndef(b, a, compare, adder);
+    auto generator =
+        zipperJoinForBlocksWithPotentialUndef(true, b, a, compare, adder);
+    for ([[maybe_unused]] std::monostate& _ : generator) {
+      AD_FAIL();
+    }
     const auto& result = adder.getOutput();
     EXPECT_TRUE(
         std::ranges::is_sorted(result, std::less<>{}, validationProjection));

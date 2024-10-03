@@ -94,6 +94,11 @@ class Join : public Operation {
   void join(const IdTable& a, ColumnIndex jc1, const IdTable& b,
             ColumnIndex jc2, IdTable* result) const;
 
+  ProtoResult monostateGeneratorToResult(
+      bool requestedLaziness, cppcoro::generator<std::monostate> generator,
+      std::shared_ptr<const Result> a, std::shared_ptr<const Result> b,
+      auto rowAdder, auto joinColMap) const;
+
   ProtoResult lazyJoin(std::shared_ptr<const Result> a, ColumnIndex jc1,
                        std::shared_ptr<const Result> b, ColumnIndex jc2,
                        bool requestLaziness) const;
@@ -136,8 +141,6 @@ class Join : public Operation {
                                               ColumnIndex joinColTable,
                                               IndexScan& scan,
                                               ColumnIndex joinColScan);
-
-  using ScanMethodType = std::function<IdTable(Id)>;
 
   /*
    * @brief Combines 2 rows like in a join and inserts the result in the

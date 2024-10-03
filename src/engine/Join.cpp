@@ -445,49 +445,91 @@ void Join::join(const IdTable& a, ColumnIndex jc1, const IdTable& b,
              << ", size = " << result->size() << "\n";
 }
 
+// _____________________________________________________________________________
+ProtoResult Join::monostateGeneratorToResult(
+    bool requestedLaziness, cppcoro::generator<std::monostate> generator,
+    std::shared_ptr<const Result> a, std::shared_ptr<const Result> b,
+    auto rowAdder, auto joinColMap) const {
+  if (requestedLaziness) {
+    auto localVocabPointer = std::make_shared<LocalVocab>();
+    auto result = [](const Join* self, auto originalGenerator, auto rowAdder,
+                     auto localVocab, auto a, auto b,
+                     auto joinColMap) -> cppcoro::generator<IdTable> {
+      for ([[maybe_unused]] std::monostate& _ : originalGenerator) {
+        auto result = std::move(rowAdder->resultTable());
+        result.setColumnSubset(joinColMap.permutationResult());
+        co_yield result;
+        result = IdTable{self->getResultWidth(),
+                         self->getExecutionContext()->getAllocator()};
+      }
+      if (!rowAdder->resultTable().empty()) {
+        auto result = std::move(*rowAdder).resultTable();
+        result.setColumnSubset(joinColMap.permutationResult());
+        co_yield result;
+      }
+      std::vector<const LocalVocab*> vocabs{&a->localVocab(), &b->localVocab()};
+      *localVocab = LocalVocab::merge(vocabs);
+    }(this, std::move(generator), std::move(rowAdder), localVocabPointer,
+                                      std::move(a), std::move(b),
+                                      std::move(joinColMap));
+    return {std::move(result), resultSortedOn(), std::move(localVocabPointer)};
+  } else {
+    for ([[maybe_unused]] std::monostate& _ : generator) {
+      // Generator should never yield, just consume everything in one go.
+      AD_FAIL();
+    }
+    auto result = std::move(*rowAdder).resultTable();
+    result.setColumnSubset(joinColMap.permutationResult());
+    return {std::move(result), resultSortedOn(),
+            Result::getMergedLocalVocab(*a, *b)};
+  }
+}
+
 // ______________________________________________________________________________
 ProtoResult Join::lazyJoin(std::shared_ptr<const Result> a, ColumnIndex jc1,
                            std::shared_ptr<const Result> b, ColumnIndex jc2,
                            bool requestLaziness) const {
-  /*auto undefStatus =
-      tree.getVariableAndInfoByColumnIndex(joinCol).second.mightContainUndef_;
-  bool containsUndef =
-      undefStatus == ColumnIndexAndTypeInfo::UndefStatus::PossiblyUndefined;*/
   auto joinColMap = ad_utility::JoinColumnMapping{
       {{jc1, jc2}},
       _left->getRootOperation()->getResultWidth(),
       _right->getRootOperation()->getResultWidth()};
-  ad_utility::AddCombinedRowToIdTable rowAdder{
+  auto rowAdder = std::make_unique<ad_utility::AddCombinedRowToIdTable>(
       1, IdTable{getResultWidth(), getExecutionContext()->getAllocator()},
-      cancellationHandle_};
-  // TODO<RobinTF> check variable to column map and check if non-undef variant
-  // can be used instead.
+      cancellationHandle_);
+  auto performJoin = [&rowAdder, requestLaziness](auto leftBlocks,
+                                                  auto rightBlocks) {
+    // TODO<RobinTF> check variable to column map and check if non-undef variant
+    // can be used instead.
+    /*auto undefStatus =
+        tree.getVariableAndInfoByColumnIndex(joinCol).second.mightContainUndef_;
+    bool containsUndef =
+        undefStatus == ColumnIndexAndTypeInfo::UndefStatus::PossiblyUndefined;*/
+    return ad_utility::zipperJoinForBlocksWithPotentialUndef(
+        !requestLaziness, std::move(leftBlocks), std::move(rightBlocks),
+        std::less{}, *rowAdder);
+  };
+  std::optional<cppcoro::generator<std::monostate>> resultGenerator =
+      std::nullopt;
   if (a->isFullyMaterialized() && !b->isFullyMaterialized()) {
     ad_utility::IdTableAndFirstCol permutationIdTable{
         a->idTable().asColumnSubsetView(joinColMap.permutationLeft())};
-    ad_utility::zipperJoinForBlocksWithPotentialUndef(
-        std::span{&permutationIdTable, 1},
-        convertGenerator(std::move(b->idTables())), std::less{}, rowAdder);
+    resultGenerator = performJoin(std::span{&permutationIdTable, 1},
+                                  convertGenerator(std::move(b->idTables())));
   } else if (!a->isFullyMaterialized() && b->isFullyMaterialized()) {
     ad_utility::IdTableAndFirstCol permutationIdTable{
         b->idTable().asColumnSubsetView(joinColMap.permutationRight())};
-    ad_utility::zipperJoinForBlocksWithPotentialUndef(
-        convertGenerator(std::move(a->idTables())),
-        std::span{&permutationIdTable, 1}, std::less{}, rowAdder);
+    resultGenerator = performJoin(convertGenerator(std::move(a->idTables())),
+                                  std::span{&permutationIdTable, 1});
   } else if (!a->isFullyMaterialized() && !b->isFullyMaterialized()) {
-    ad_utility::zipperJoinForBlocksWithPotentialUndef(
-        convertGenerator(std::move(a->idTables())),
-        convertGenerator(std::move(b->idTables())), std::less{}, rowAdder);
+    resultGenerator = performJoin(convertGenerator(std::move(a->idTables())),
+                                  convertGenerator(std::move(b->idTables())));
   } else {
     // If both inputs are fully materialized, we can join them more efficiently.
     AD_FAIL();
   }
-  // TODO<RobinTF> return generator if laziness is requested.
-  (void)requestLaziness;
-  auto result = std::move(rowAdder).resultTable();
-  result.setColumnSubset(joinColMap.permutationResult());
-  return {std::move(result), resultSortedOn(),
-          Result::getMergedLocalVocab(*a, *b)};
+  return monostateGeneratorToResult(
+      requestLaziness, std::move(resultGenerator).value(), std::move(a),
+      std::move(b), std::move(rowAdder), std::move(joinColMap));
 }
 
 // ______________________________________________________________________________
@@ -644,8 +686,12 @@ IdTable Join::computeResultForTwoIndexScans() const {
   auto leftBlocks = convertGenerator(std::move(leftBlocksInternal));
   auto rightBlocks = convertGenerator(std::move(rightBlocksInternal));
 
-  ad_utility::zipperJoinForBlocksWithoutUndef(leftBlocks, rightBlocks,
-                                              std::less{}, rowAdder);
+  auto generator = ad_utility::zipperJoinForBlocksWithoutUndef(
+      true, leftBlocks, rightBlocks, std::less{}, rowAdder);
+
+  for ([[maybe_unused]] std::monostate& _ : generator) {
+    AD_FAIL();
+  }
 
   updateRuntimeInfoForLazyScan(*leftScan, leftBlocks.details());
   updateRuntimeInfoForLazyScan(*rightScan, rightBlocks.details());
@@ -710,12 +756,13 @@ IdTable Join::computeResultForIndexScanAndIdTable(const IdTable& idTable,
 
   runtimeInfo().addDetail("time-for-filtering-blocks", timer.msecs());
   auto doJoin = [&rowAdder, idTableHasUndef](auto& left, auto& right) mutable {
-    if (idTableHasUndef) {
-      ad_utility::zipperJoinForBlocksWithPotentialUndef(left, right,
-                                                        std::less{}, rowAdder);
-    } else {
-      ad_utility::zipperJoinForBlocksWithoutUndef(left, right, std::less{},
-                                                  rowAdder);
+    auto generator = idTableHasUndef
+                         ? ad_utility::zipperJoinForBlocksWithPotentialUndef(
+                               true, left, right, std::less{}, rowAdder)
+                         : ad_utility::zipperJoinForBlocksWithoutUndef(
+                               true, left, right, std::less{}, rowAdder);
+    for ([[maybe_unused]] std::monostate& _ : generator) {
+      AD_FAIL();
     }
   };
   auto blockForIdTable = std::span{&permutationIdTable, 1};
