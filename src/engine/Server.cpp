@@ -168,34 +168,40 @@ ad_utility::url_parser::ParsedRequest Server::parseHttpRequest(
     const ad_utility::httpUtils::HttpRequest auto& request) {
   // For an HTTP request, `request.target()` yields the HTTP Request-URI.
   // This is a concatenation of the URL path and the query strings.
+  using namespace ad_utility::url_parser;
   auto parsedUrl = ad_utility::url_parser::parseRequestTarget(request.target());
-  ad_utility::url_parser::ParsedRequest parsedRequest{
-      std::move(parsedUrl.path_), std::move(parsedUrl.parameters_),
-      std::nullopt};
+  ParsedRequest parsedRequest{std::move(parsedUrl.path_),
+                              std::move(parsedUrl.parameters_), UndefinedOp{}};
   auto extractQueryFromParameters = [&parsedRequest]() {
     // Some valid requests (e.g. QLever's custom commands like retrieving index
     // statistics) don't have a query.
     if (parsedRequest.parameters_.contains("query")) {
-      parsedRequest.query_ = parsedRequest.parameters_["query"];
+      parsedRequest.operation_ = QueryOp{parsedRequest.parameters_["query"]};
       parsedRequest.parameters_.erase("query");
     }
   };
 
   if (request.method() == http::verb::get) {
     extractQueryFromParameters();
+    if (parsedRequest.parameters_.contains("update")) {
+      throw std::runtime_error("SPARQL Update is not allowed as GET request.");
+    }
     return parsedRequest;
   }
   if (request.method() == http::verb::post) {
     // For a POST request, the content type *must* be either
-    // "application/x-www-form-urlencoded" (1) or "application/sparql-query"
-    // (2).
+    // "application/x-www-form-urlencoded" (1), "application/sparql-query"
+    // (2) or "application/sparql-update" (3).
     //
     // (1) Section 2.1.2: The body of the POST request contains *all* parameters
-    // (including the query) in an encoded form (just like in the part of a GET
-    // request after the "?").
+    // (including the query or update) in an encoded form (just like in the part
+    // of a GET request after the "?").
     //
     // (2) Section 2.1.3: The body of the POST request contains *only* the
     // unencoded SPARQL query. There may be additional HTTP query parameters.
+    //
+    // (3) Section 2.2.2: The body of the POST request contains *only* the
+    // unencoded SPARQL update. There may be additional HTTP query parameters.
     //
     // Reference: https://www.w3.org/TR/2013/REC-sparql11-protocol-20130321
     std::string_view contentType = request.base()[http::field::content_type];
@@ -204,6 +210,8 @@ ad_utility::url_parser::ParsedRequest Server::parseHttpRequest(
         "application/x-www-form-urlencoded";
     static constexpr std::string_view contentTypeSparqlQuery =
         "application/sparql-query";
+    static constexpr std::string_view contentTypeSparqlUpdate =
+        "application/sparql-update";
 
     // Note: For simplicity we only check via `starts_with`. This ignores
     // additional parameters like `application/sparql-query;charset=utf8`. We
@@ -237,12 +245,26 @@ ad_utility::url_parser::ParsedRequest Server::parseHttpRequest(
       parsedRequest.parameters_ =
           ad_utility::url_parser::paramsToMap(query->params());
 
+      if (parsedRequest.parameters_.contains("query") &&
+          parsedRequest.parameters_.contains("update")) {
+        throw std::runtime_error(
+            R"(Request must only contain one of "query" and "update".)");
+      }
       extractQueryFromParameters();
+      if (parsedRequest.parameters_.contains("update")) {
+        parsedRequest.operation_ =
+            UpdateOp{parsedRequest.parameters_["update"]};
+        parsedRequest.parameters_.erase("update");
+      }
 
       return parsedRequest;
     }
     if (contentType.starts_with(contentTypeSparqlQuery)) {
-      parsedRequest.query_ = request.body();
+      parsedRequest.operation_ = QueryOp{request.body()};
+      return parsedRequest;
+    }
+    if (contentType.starts_with(contentTypeSparqlUpdate)) {
+      parsedRequest.operation_ = UpdateOp{request.body()};
       return parsedRequest;
     }
     throw std::runtime_error(
@@ -420,20 +442,28 @@ Awaitable<void> Server::process(
     }
   }
 
-  // If "query" parameter is given, process query.
-  if (parsedHttpRequest.query_.has_value()) {
+  // Process the two operation types.
+  if (std::holds_alternative<ad_utility::url_parser::QueryOp>(
+          parsedHttpRequest.operation_)) {
     if (auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
             checkParameter("timeout", std::nullopt), accessTokenOk, request,
             send)) {
-      co_return co_await processQuery(
-          parameters, parsedHttpRequest.query_.value(), requestTimer,
-          std::move(request), send, timeLimit.value());
+      co_return co_await processQuery(parameters,
+                                      std::get<ad_utility::url_parser::QueryOp>(
+                                          parsedHttpRequest.operation_)
+                                          .query_,
+                                      requestTimer, std::move(request), send,
+                                      timeLimit.value());
 
     } else {
       // If the optional is empty, this indicates an error response has been
       // sent to the client already. We can stop here.
       co_return;
     }
+  } else if (std::holds_alternative<ad_utility::url_parser::UpdateOp>(
+                 parsedHttpRequest.operation_)) {
+    throw std::runtime_error(
+        "SPARQL 1.1 Update is  currently not supported by QLever.");
   }
 
   // If there was no "query", but any of the URL parameters processed before

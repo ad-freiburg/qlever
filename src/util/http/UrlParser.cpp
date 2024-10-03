@@ -2,6 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
+//          Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
 
 #include "UrlParser.h"
 

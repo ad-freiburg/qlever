@@ -2,12 +2,12 @@
 // Chair of Algorithms and Data Structures.
 // Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
+//          Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
 
 #ifndef QLEVER_URLPARSER_H
 #define QLEVER_URLPARSER_H
 
 #include <boost/url.hpp>
-#include <optional>
 #include <string>
 #include <string_view>
 
@@ -29,6 +29,22 @@ struct ParsedUrl {
   ad_utility::HashMap<std::string, std::string> parameters_;
 };
 
+struct QueryOp {
+  std::string query_;
+
+  bool operator==(const QueryOp& rhs) const = default;
+};
+
+struct UpdateOp {
+  std::string update_;
+
+  bool operator==(const UpdateOp& rhs) const = default;
+};
+
+struct UndefinedOp {
+  bool operator==(const UndefinedOp& rhs) const = default;
+};
+
 // Representation of parsed HTTP request.
 // - `path_` is the URL path
 // - `parameters_` is a hashmap of the parameters
@@ -36,7 +52,7 @@ struct ParsedUrl {
 struct ParsedRequest {
   std::string path_;
   ad_utility::HashMap<std::string, std::string> parameters_;
-  std::optional<std::string> query_;
+  std::variant<QueryOp, UpdateOp, UndefinedOp> operation_;
 };
 
 // Parse the URL path and the URL query parameters of a HTTP Request target.
