@@ -168,15 +168,15 @@ ad_utility::url_parser::ParsedRequest Server::parseHttpRequest(
     const ad_utility::httpUtils::HttpRequest auto& request) {
   // For an HTTP request, `request.target()` yields the HTTP Request-URI.
   // This is a concatenation of the URL path and the query strings.
-  using namespace ad_utility::url_parser;
+  using namespace ad_utility::url_parser::Operation;
   auto parsedUrl = ad_utility::url_parser::parseRequestTarget(request.target());
-  ParsedRequest parsedRequest{std::move(parsedUrl.path_),
-                              std::move(parsedUrl.parameters_), UndefinedOp{}};
+  ad_utility::url_parser::ParsedRequest parsedRequest{
+      std::move(parsedUrl.path_), std::move(parsedUrl.parameters_), None{}};
   auto extractQueryFromParameters = [&parsedRequest]() {
     // Some valid requests (e.g. QLever's custom commands like retrieving index
     // statistics) don't have a query.
     if (parsedRequest.parameters_.contains("query")) {
-      parsedRequest.operation_ = QueryOp{parsedRequest.parameters_["query"]};
+      parsedRequest.operation_ = Query{parsedRequest.parameters_["query"]};
       parsedRequest.parameters_.erase("query");
     }
   };
@@ -252,19 +252,18 @@ ad_utility::url_parser::ParsedRequest Server::parseHttpRequest(
       }
       extractQueryFromParameters();
       if (parsedRequest.parameters_.contains("update")) {
-        parsedRequest.operation_ =
-            UpdateOp{parsedRequest.parameters_["update"]};
+        parsedRequest.operation_ = Update{parsedRequest.parameters_["update"]};
         parsedRequest.parameters_.erase("update");
       }
 
       return parsedRequest;
     }
     if (contentType.starts_with(contentTypeSparqlQuery)) {
-      parsedRequest.operation_ = QueryOp{request.body()};
+      parsedRequest.operation_ = Query{request.body()};
       return parsedRequest;
     }
     if (contentType.starts_with(contentTypeSparqlUpdate)) {
-      parsedRequest.operation_ = UpdateOp{request.body()};
+      parsedRequest.operation_ = Update{request.body()};
       return parsedRequest;
     }
     throw std::runtime_error(
@@ -443,24 +442,24 @@ Awaitable<void> Server::process(
   }
 
   // Process the two operation types.
-  if (std::holds_alternative<ad_utility::url_parser::QueryOp>(
+  if (std::holds_alternative<ad_utility::url_parser::Operation::Query>(
           parsedHttpRequest.operation_)) {
     if (auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
             checkParameter("timeout", std::nullopt), accessTokenOk, request,
             send)) {
-      co_return co_await processQuery(parameters,
-                                      std::get<ad_utility::url_parser::QueryOp>(
-                                          parsedHttpRequest.operation_)
-                                          .query_,
-                                      requestTimer, std::move(request), send,
-                                      timeLimit.value());
+      co_return co_await processQuery(
+          parameters,
+          std::get<ad_utility::url_parser::Operation::Query>(
+              parsedHttpRequest.operation_)
+              .query_,
+          requestTimer, std::move(request), send, timeLimit.value());
 
     } else {
       // If the optional is empty, this indicates an error response has been
       // sent to the client already. We can stop here.
       co_return;
     }
-  } else if (std::holds_alternative<ad_utility::url_parser::UpdateOp>(
+  } else if (std::holds_alternative<ad_utility::url_parser::Operation::Update>(
                  parsedHttpRequest.operation_)) {
     throw std::runtime_error(
         "SPARQL 1.1 Update is  currently not supported by QLever.");

@@ -29,30 +29,37 @@ struct ParsedUrl {
   ad_utility::HashMap<std::string, std::string> parameters_;
 };
 
-struct QueryOp {
+// The different SPARQL operations that a `ParsedRequest` can represent.
+namespace Operation {
+// A SPARQL 1.1 Query
+struct Query {
   std::string query_;
 
-  bool operator==(const QueryOp& rhs) const = default;
+  bool operator==(const Query& rhs) const = default;
 };
 
-struct UpdateOp {
+// A SPARQL 1.1 Update
+struct Update {
   std::string update_;
 
-  bool operator==(const UpdateOp& rhs) const = default;
+  bool operator==(const Update& rhs) const = default;
 };
 
-struct UndefinedOp {
-  bool operator==(const UndefinedOp& rhs) const = default;
+// No operation. This can happen for QLever's custom operations (e.g.
+// `cache-stats`). These requests have no operation but are still valid.
+struct None {
+  bool operator==(const None& rhs) const = default;
 };
+}  // namespace Operation
 
 // Representation of parsed HTTP request.
 // - `path_` is the URL path
 // - `parameters_` is a hashmap of the parameters
-// - `query_` contains the Query
+// - `operation_` the operation that should be performed
 struct ParsedRequest {
   std::string path_;
   ad_utility::HashMap<std::string, std::string> parameters_;
-  std::variant<QueryOp, UpdateOp, UndefinedOp> operation_;
+  std::variant<Operation::Query, Operation::Update, Operation::None> operation_;
 };
 
 // Parse the URL path and the URL query parameters of a HTTP Request target.

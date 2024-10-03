@@ -13,12 +13,13 @@
 #include "util/http/UrlParser.h"
 
 using namespace ad_utility::url_parser;
+using namespace ad_utility::url_parser::Operation;
 
 namespace {
 auto ParsedRequestIs =
     [](const std::string& path,
        const ad_utility::HashMap<std::string, std::string>& parameters,
-       const std::variant<QueryOp, UpdateOp, UndefinedOp>& operation)
+       const std::variant<Query, Update, None>& operation)
     -> testing::Matcher<const ParsedRequest> {
   return testing::AllOf(
       AD_FIELD(ad_utility::url_parser::ParsedRequest, path_, testing::Eq(path)),
@@ -55,20 +56,19 @@ TEST(ServerTest, parseHttpRequest) {
       "application/x-www-form-urlencoded;charset=UTF-8";
   const std::string QUERY = "application/sparql-query";
   const std::string UPDATE = "application/sparql-update";
-  EXPECT_THAT(parse(MakeGetRequest("/")),
-              ParsedRequestIs("/", {}, UndefinedOp{}));
+  EXPECT_THAT(parse(MakeGetRequest("/")), ParsedRequestIs("/", {}, None{}));
   EXPECT_THAT(parse(MakeGetRequest("/ping")),
-              ParsedRequestIs("/ping", {}, UndefinedOp{}));
+              ParsedRequestIs("/ping", {}, None{}));
   EXPECT_THAT(parse(MakeGetRequest("/?cmd=stats")),
-              ParsedRequestIs("/", {{"cmd", "stats"}}, UndefinedOp{}));
+              ParsedRequestIs("/", {{"cmd", "stats"}}, None{}));
   EXPECT_THAT(parse(MakeGetRequest(
                   "/?query=SELECT+%2A%20WHERE%20%7B%7D&action=csv_export")),
               ParsedRequestIs("/", {{"action", "csv_export"}},
-                              QueryOp{"SELECT * WHERE {}"}));
+                              Query{"SELECT * WHERE {}"}));
   EXPECT_THAT(
       parse(MakePostRequest("/", URLENCODED,
                             "query=SELECT+%2A%20WHERE%20%7B%7D&send=100")),
-      ParsedRequestIs("/", {{"send", "100"}}, QueryOp{"SELECT * WHERE {}"}));
+      ParsedRequestIs("/", {{"send", "100"}}, Query{"SELECT * WHERE {}"}));
   AD_EXPECT_THROW_WITH_MESSAGE(
       parse(MakePostRequest("/", URLENCODED,
                             "ääär y=SELECT+%2A%20WHERE%20%7B%7D&send=100")),
@@ -76,22 +76,22 @@ TEST(ServerTest, parseHttpRequest) {
   EXPECT_THAT(
       parse(MakePostRequest("/", "application/x-www-form-urlencoded",
                             "query=SELECT%20%2A%20WHERE%20%7B%7D&send=100")),
-      ParsedRequestIs("/", {{"send", "100"}}, QueryOp{"SELECT * WHERE {}"}));
+      ParsedRequestIs("/", {{"send", "100"}}, Query{"SELECT * WHERE {}"}));
   EXPECT_THAT(parse(MakePostRequest("/", URLENCODED,
                                     "query=SELECT%20%2A%20WHERE%20%7B%7D")),
-              ParsedRequestIs("/", {}, QueryOp{"SELECT * WHERE {}"}));
+              ParsedRequestIs("/", {}, Query{"SELECT * WHERE {}"}));
   AD_EXPECT_THROW_WITH_MESSAGE(
       parse(MakePostRequest("/?send=100", URLENCODED,
                             "query=SELECT%20%2A%20WHERE%20%7B%7D")),
       testing::StrEq("URL-encoded POST requests must not contain query "
                      "parameters in the URL."));
   EXPECT_THAT(parse(MakePostRequest("/", URLENCODED, "cmd=clear-cache")),
-              ParsedRequestIs("/", {{"cmd", "clear-cache"}}, UndefinedOp{}));
+              ParsedRequestIs("/", {{"cmd", "clear-cache"}}, None{}));
   EXPECT_THAT(parse(MakePostRequest("/", QUERY, "SELECT * WHERE {}")),
-              ParsedRequestIs("/", {}, QueryOp{"SELECT * WHERE {}"}));
+              ParsedRequestIs("/", {}, Query{"SELECT * WHERE {}"}));
   EXPECT_THAT(
       parse(MakePostRequest("/?send=100", QUERY, "SELECT * WHERE {}")),
-      ParsedRequestIs("/", {{"send", "100"}}, QueryOp{"SELECT * WHERE {}"}));
+      ParsedRequestIs("/", {{"send", "100"}}, Query{"SELECT * WHERE {}"}));
   AD_EXPECT_THROW_WITH_MESSAGE(
       parse(MakeBasicRequest(http::verb::patch, "/")),
       testing::StrEq(
@@ -100,11 +100,11 @@ TEST(ServerTest, parseHttpRequest) {
       parse(MakeGetRequest("/?update=DELETE%20%2A%20WHERE%20%7B%7D")),
       testing::StrEq("SPARQL Update is not allowed as GET request."));
   EXPECT_THAT(parse(MakePostRequest("/", UPDATE, "DELETE * WHERE {}")),
-              ParsedRequestIs("/", {}, UpdateOp{"DELETE * WHERE {}"}));
+              ParsedRequestIs("/", {}, Update{"DELETE * WHERE {}"}));
   EXPECT_THAT(parse(MakePostRequest("/", URLENCODED,
                                     "update=DELETE%20%2A%20WHERE%20%7B%7D")),
-              ParsedRequestIs("/", {}, UpdateOp{"DELETE * WHERE {}"}));
+              ParsedRequestIs("/", {}, Update{"DELETE * WHERE {}"}));
   EXPECT_THAT(parse(MakePostRequest("/", URLENCODED,
                                     "update=DELETE+%2A+WHERE%20%7B%7D")),
-              ParsedRequestIs("/", {}, UpdateOp{"DELETE * WHERE {}"}));
+              ParsedRequestIs("/", {}, Update{"DELETE * WHERE {}"}));
 }
