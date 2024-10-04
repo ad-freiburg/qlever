@@ -105,7 +105,7 @@ constexpr inline std::string_view LANGUAGE_PREDICATE =
 // number.
 static const std::string MAX_DIST_IN_METERS = "<max-distance-in-meters:";
 static constexpr auto MAX_DIST_IN_METERS_REGEX =
-    ctll::fixed_string{"<max-distance-in-meters:[0-9]+>"};
+    ctll::fixed_string{"<max-distance-in-meters:(?<dist>[0-9]+)>"};
 
 // This predicate is one of the supported identifiers for the SpatialJoin class.
 // For a given triple of the form ?a <nearest-neighbors:XXXX:YYYY> ?b, it will

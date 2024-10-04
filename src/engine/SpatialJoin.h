@@ -6,7 +6,17 @@
 #pragma once
 
 #include "engine/Operation.h"
+#include "global/Id.h"
 #include "parser/ParsedQuery.h"
+
+// Configuration to restrict the results provided by the SpatialJoin
+struct NearestNeighborsConfig {
+  int maxResults_;
+  std::optional<int> maxDist_;
+};
+struct MaxDistanceConfig {
+  int maxDist_;
+};
 
 // This class is implementing a SpatialJoin operation. This operations joins
 // two tables, using their positional column. It supports nearest neighbor
@@ -64,17 +74,12 @@ class SpatialJoin : public Operation {
   // already constructed
   bool isConstructed() const;
 
-  // this function is used to give the maximum distance for testing purposes
-  long long getMaxDist() const { return maxDist_; }
+  // this function is used to give the maximum distance for internal purposes
+  std::optional<int> getMaxDist() const;
 
-  // this function is used to give the maximum number of results for testing
+  // this function is used to give the maximum number of results for internal
   // purposes
-  long long getMaxResults() const { return maxResults_; }
-
-  // this function allows to switch between the two algorithms available
-  void selectAlgorithm(bool useBaselineAlgorithm) {
-    useBaselineAlgorithm_ = useBaselineAlgorithm;
-  }
+  std::optional<int> getMaxResults() const;
 
   std::shared_ptr<QueryExecutionTree> onlyForTestingGetLeftChild() const {
     return childLeft_;
@@ -89,12 +94,8 @@ class SpatialJoin : public Operation {
   }
 
  private:
-  // helper function, which parses a max distance triple and populates maxDist_
-  void parseMaxDistance();
-
-  // helper function, which parses a nearest neighbor triple and populates
-  // maxResults_ and maxDist_
-  void parseNearestNeighbors();
+  // helper function, which parses a triple and populates config_
+  void parseConfigFromTriple();
 
   // helper function which gets the coordinates from the coordinates string
   // (usually the object of a triple)
@@ -118,10 +119,19 @@ class SpatialJoin : public Operation {
                            const IdTable* resultRight, size_t rowLeft,
                            size_t rowRight, Id distance) const;
 
+  // helper struct to improve readability in prepareJoin()
+  struct PreparedJoinParams {
+    const IdTable* const resLeft;
+    std::shared_ptr<const Result> keepAliveLeft;
+    const IdTable* const resRight;
+    std::shared_ptr<const Result> keepAliveRight;
+    ColumnIndex leftJoinCol;
+    ColumnIndex rightJoinCol;
+    size_t numColumns;
+  };
+
   // helper function, to initialize various required objects for both algorithms
-  std::tuple<const IdTable* const, const IdTable* const, unsigned long,
-             unsigned long, size_t>
-  prepareJoin() const;
+  PreparedJoinParams prepareJoin() const;
 
   // the baseline algorithm, which just checks every combination
   Result baselineAlgorithm();
@@ -136,9 +146,7 @@ class SpatialJoin : public Operation {
   std::shared_ptr<QueryExecutionTree> childLeft_ = nullptr;
   std::shared_ptr<QueryExecutionTree> childRight_ = nullptr;
 
-  // If these constraints are set to -1, they are deactivated.
-  long long maxDist_ = -1;     // max distance in meters
-  long long maxResults_ = -1;  // max number of nearest neighbors to find
+  std::variant<NearestNeighborsConfig, MaxDistanceConfig> config_;
 
   // adds an extra column to the result, which contains the actual distance,
   // between the two objects
