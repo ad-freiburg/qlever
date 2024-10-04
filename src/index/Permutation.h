@@ -31,6 +31,8 @@ class Permutation {
   static constexpr auto SOP = Enum::SOP;
   static constexpr auto OPS = Enum::OPS;
   static constexpr auto OSP = Enum::OSP;
+  static constexpr auto ALL = {Enum::PSO, Enum::POS, Enum::SPO,
+                               Enum::SOP, Enum::OPS, Enum::OSP};
 
   using MetaData = IndexMetaDataMmapView;
   using Allocator = ad_utility::AllocatorWithLimit<Id>;
@@ -130,6 +132,9 @@ class Permutation {
   const bool& isLoaded() const { return isLoaded_; }
 
   // _______________________________________________________
+  const MetaData& metaData() const { return meta_; }
+
+  // _______________________________________________________
   const Permutation& getActualPermutation(const ScanSpecification& spec) const;
   const Permutation& getActualPermutation(Id id) const;
 
@@ -142,7 +147,6 @@ class Permutation {
   // sorted, for example {1, 0, 2} for PSO.
   array<size_t, 3> keyOrder_;
 
-  const MetaData& metaData() const { return meta_; }
   MetaData meta_;
 
   // This member is `optional` because we initialize it in a deferred way in the
