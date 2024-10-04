@@ -79,6 +79,17 @@ TEST(ServerTest, parseHttpRequest) {
   EXPECT_THAT(parse(MakePostRequest("/", URLENCODED,
                                     "query=SELECT%20%2A%20WHERE%20%7B%7D")),
               ParsedRequestIs("/", {}, Query{"SELECT * WHERE {}"}));
+  EXPECT_THAT(
+      parse(MakePostRequest(
+          "/", URLENCODED,
+          "query=SELECT%20%2A%20WHERE%20%7B%7D&default-graph-uri=https%3A%2F%"
+          "2Fw3.org%2Fdefault&named-graph-uri=https%3A%2F%2Fw3.org%2F1&named-"
+          "graph-uri=https%3A%2F%2Fw3.org%2F2")),
+      ParsedRequestIs(
+          "/",
+          {{"default-graph-uri", {"https://w3.org/default"}},
+           {"named-graph-uri", {"https://w3.org/1", "https://w3.org/2"}}},
+          Query{"SELECT * WHERE {}"}));
   AD_EXPECT_THROW_WITH_MESSAGE(
       parse(MakePostRequest("/?send=100", URLENCODED,
                             "query=SELECT%20%2A%20WHERE%20%7B%7D")),

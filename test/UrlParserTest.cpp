@@ -26,6 +26,14 @@ TEST(UrlParserTest, paramsToMap) {
   EXPECT_THAT(parseParams("?&"), HashMapEq({{"", {"", ""}}}));
   EXPECT_THAT(parseParams("?query=SELECT%20%2A%20WHERE%20%7B%7D"),
               HashMapEq({{"query", {"SELECT * WHERE {}"}}}));
+  EXPECT_THAT(
+      parseParams("?query=SELECT%20%2A%20WHERE%20%7B%7D&default-graph-uri="
+                  "https%3A%2F%2Fw3.org%2Fdefault&named-graph-uri=https%3A%2F%"
+                  "2Fw3.org%2F1&named-graph-uri=https%3A%2F%2Fw3.org%2F2"),
+      HashMapEq(
+          {{"query", {"SELECT * WHERE {}"}},
+           {"default-graph-uri", {"https://w3.org/default"}},
+           {"named-graph-uri", {"https://w3.org/1", "https://w3.org/2"}}}));
   EXPECT_THAT(parseParams("?cmd=stats"), HashMapEq({{"cmd", {"stats"}}}));
   EXPECT_THAT(parseParams("/ping"), HashMapEq({}));
   EXPECT_THAT(parseParams(""), HashMapEq({}));
