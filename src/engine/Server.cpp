@@ -900,27 +900,9 @@ Awaitable<T> Server::computeInNewThread(Function function,
       std::move(handle), std::move(cancelTimerPromise));
 }
 
-// TODO<qup42> duplicated from SparqlQleverVisitor
-namespace {
-// Add the `datasetClauses` to the `targetClauses`.
-void addDatasetClauses(
-    ParsedQuery::DatasetClauses& targetClauses,
-    const std::vector<SparqlQleverVisitor::DatasetClause>& datasetClauses) {
-  for (auto& [dataset, isNamed] : datasetClauses) {
-    auto& graphs =
-        isNamed ? targetClauses.namedGraphs_ : targetClauses.defaultGraphs_;
-    if (!graphs.has_value()) {
-      graphs.emplace();
-    }
-    graphs.value().insert(dataset);
-  }
-}
-}  // namespace
-
 // _____________________________________________________________________________
 net::awaitable<std::optional<Server::PlannedQuery>> Server::parseAndPlan(
-    const std::string& query,
-    const vector<SparqlQleverVisitor::DatasetClause>& additionalDatasets,
+    const std::string& query, const vector<DatasetClause>& additionalDatasets,
     QueryExecutionContext& qec, SharedCancellationHandle handle,
     TimeLimit timeLimit) {
   auto handleCopy = handle;
@@ -936,7 +918,7 @@ net::awaitable<std::optional<Server::PlannedQuery>> Server::parseAndPlan(
        &additionalDatasets]() mutable -> std::optional<PlannedQuery> {
         auto pq = SparqlParser::parseQuery(query);
         handle->throwIfCancelled();
-        addDatasetClauses(pq.datasetClauses_, additionalDatasets);
+        pq.datasetClauses_.addClauses(additionalDatasets);
         QueryPlanner qp(&qec, handle);
         qp.setEnablePatternTrick(enablePatternTrick);
         auto qet = qp.createExecutionTree(pq);

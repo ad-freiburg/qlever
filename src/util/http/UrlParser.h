@@ -72,8 +72,7 @@ ParsedUrl parseRequestTarget(std::string_view target);
 ParamValueMap paramsToMap(boost::urls::params_view params);
 
 // Parse default and named graphs URIs from the parameters.
-std::vector<SparqlQleverVisitor::DatasetClause> parseDatasetClauses(
-    const ParamValueMap& params);
+std::vector<DatasetClause> parseDatasetClauses(const ParamValueMap& params);
 }  // namespace ad_utility::url_parser
 
 #endif  // QLEVER_URLPARSER_H

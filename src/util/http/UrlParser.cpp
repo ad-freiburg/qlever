@@ -38,9 +38,9 @@ ParamValueMap ad_utility::url_parser::paramsToMap(
 }
 
 // _____________________________________________________________________________
-std::vector<SparqlQleverVisitor::DatasetClause>
-ad_utility::url_parser::parseDatasetClauses(const ParamValueMap& params) {
-  std::vector<SparqlQleverVisitor::DatasetClause> datasetClauses;
+std::vector<DatasetClause> ad_utility::url_parser::parseDatasetClauses(
+    const ParamValueMap& params) {
+  std::vector<DatasetClause> datasetClauses;
   auto readDatasetClauses = [&params, &datasetClauses](const std::string& key,
                                                        bool isNamed) {
     if (params.contains(key)) {

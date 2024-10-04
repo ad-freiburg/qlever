@@ -37,6 +37,9 @@
 using std::string;
 using std::vector;
 
+// Forward declaration
+struct DatasetClause;
+
 namespace parsedQuery {
 // A struct for the FROM and FROM NAMED clauses;
 struct DatasetClauses {
@@ -44,6 +47,8 @@ struct DatasetClauses {
   ScanSpecificationAsTripleComponent::Graphs defaultGraphs_{};
   // FROM NAMED clauses.
   ScanSpecificationAsTripleComponent::Graphs namedGraphs_{};
+
+  void addClauses(const std::vector<DatasetClause>& clauses);
 };
 }  // namespace parsedQuery
 
