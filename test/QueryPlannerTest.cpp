@@ -842,7 +842,8 @@ TEST(QueryPlanner, PathSearchMultipleTargets) {
 
 TEST(QueryPlanner, PathSearchMultipleSourcesAndTargets) {
   auto scan = h::IndexScanFromStrings;
-  auto qec = ad_utility::testing::getQec("<x1> <p> <y>. <x2> <p> <y>. <y> <p> <z>");
+  auto qec =
+      ad_utility::testing::getQec("<x1> <p> <y>. <x2> <p> <y>. <y> <p> <z>");
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
 
   std::vector<Id> sources{getId("<x1>"), getId("<x2>")};
@@ -876,7 +877,8 @@ TEST(QueryPlanner, PathSearchMultipleSourcesAndTargets) {
 
 TEST(QueryPlanner, PathSearchMultipleSourcesAndTargetsCartesian) {
   auto scan = h::IndexScanFromStrings;
-  auto qec = ad_utility::testing::getQec("<x1> <p> <y>. <x2> <p> <y>. <y> <p> <z>");
+  auto qec =
+      ad_utility::testing::getQec("<x1> <p> <y>. <x2> <p> <y>. <y> <p> <z>");
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
 
   std::vector<Id> sources{getId("<x1>"), getId("<x2>")};
@@ -910,7 +912,8 @@ TEST(QueryPlanner, PathSearchMultipleSourcesAndTargetsCartesian) {
 }
 TEST(QueryPlanner, PathSearchMultipleSourcesAndTargetsNonCartesian) {
   auto scan = h::IndexScanFromStrings;
-  auto qec = ad_utility::testing::getQec("<x1> <p> <y>. <x2> <p> <y>. <y> <p> <z>");
+  auto qec =
+      ad_utility::testing::getQec("<x1> <p> <y>. <x2> <p> <y>. <y> <p> <z>");
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
 
   std::vector<Id> sources{getId("<x1>"), getId("<x2>")};
@@ -922,7 +925,8 @@ TEST(QueryPlanner, PathSearchMultipleSourcesAndTargetsNonCartesian) {
                                  Variable("?end"),
                                  Variable("?path"),
                                  Variable("?edge"),
-                                 {}, false};
+                                 {},
+                                 false};
   h::expect(
       "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
       "SELECT ?start ?end ?path ?edge WHERE {"
