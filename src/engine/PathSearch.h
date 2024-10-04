@@ -186,14 +186,14 @@ class PathSearch : public Operation {
     if (!config_.sourceIsVariable()) {
       return std::nullopt;
     }
-    auto sourceVar = std::get<Variable>(config_.sources_);
+    const auto& sourceVar = std::get<Variable>(config_.sources_);
     return variableColumns_.at(sourceVar).columnIndex_;
   }
   std::optional<ColumnIndex> getTargetIndex() const {
     if (!config_.targetIsVariable()) {
       return std::nullopt;
     }
-    auto targetVar = std::get<Variable>(config_.targets_);
+    const auto& targetVar = std::get<Variable>(config_.targets_);
     return variableColumns_.at(targetVar).columnIndex_;
   }
 
