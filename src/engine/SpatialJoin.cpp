@@ -10,6 +10,7 @@
 #include <s2/s2earth.h>
 #include <s2/s2point.h>
 #include <s2/s2point_index.h>
+#include <s2/util/units/length-units.h>
 
 #include <cstdint>
 #include <ctre-unicode.hpp>
@@ -23,8 +24,6 @@
 #include "global/Constants.h"
 #include "global/ValueId.h"
 #include "parser/ParsedQuery.h"
-#include "s2/s2point.h"
-#include "s2/util/units/length-units.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/GeoSparqlHelpers.h"
 #include "util/MemorySize/MemorySize.h"
@@ -292,6 +291,7 @@ std::string SpatialJoin::betweenQuotes(std::string extractFrom) const {
   }
 }
 
+// ____________________________________________________________________________
 std::optional<GeoPoint> SpatialJoin::getPoint(const IdTable* restable,
                                               size_t row,
                                               ColumnIndex col) const {
