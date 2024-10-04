@@ -8,10 +8,11 @@
 #include <string>
 
 #include "../src/util/GeoSparqlHelpers.h"
+#include "parser/GeoPoint.h"
 
-using ad_utility::wktDist;
-using ad_utility::wktLatitude;
-using ad_utility::wktLongitude;
+using ad_utility::WktDistGeoPoints;
+using ad_utility::WktLatitude;
+using ad_utility::WktLongitude;
 using ad_utility::detail::parseWktPoint;
 
 TEST(GeoSparqlHelpers, ParseWktPoint) {
@@ -22,8 +23,8 @@ TEST(GeoSparqlHelpers, ParseWktPoint) {
     auto [lng, lat] = parseWktPoint(point);
     ASSERT_DOUBLE_EQ(expected_lng, lng);
     ASSERT_DOUBLE_EQ(expected_lat, lat);
-    ASSERT_DOUBLE_EQ(expected_lng, wktLongitude(point));
-    ASSERT_DOUBLE_EQ(expected_lat, wktLatitude(point));
+    ASSERT_DOUBLE_EQ(expected_lng, WktLongitude()(GeoPoint(lat, lng)));
+    ASSERT_DOUBLE_EQ(expected_lat, WktLatitude()(GeoPoint(lat, lng)));
   };
 
   // Test that the given WKT point is invalid (with all three of
@@ -32,8 +33,6 @@ TEST(GeoSparqlHelpers, ParseWktPoint) {
     auto [lat, lng] = parseWktPoint(point);
     ASSERT_TRUE(std::isnan(lng));
     ASSERT_TRUE(std::isnan(lat));
-    ASSERT_TRUE(std::isnan(wktLongitude(point)));
-    ASSERT_TRUE(std::isnan(wktLatitude(point)));
   };
 
   // Some valid WKT points, including those from the test for `wktDist` below.
@@ -66,22 +65,19 @@ TEST(GeoSparqlHelpers, ParseWktPoint) {
 TEST(GeoSparqlHelpers, WktDist) {
   // Equal longitude, latitudes with diff 3.0 and mean zero. This returns 3
   // times the k1 from the formula, where the cosines are all 1.
-  ASSERT_DOUBLE_EQ(wktDist("POINT(2.0 1.5)", "POINT(2.0 -1.5)"),
+  ASSERT_DOUBLE_EQ(WktDistGeoPoints()(GeoPoint(1.5, 2.0), GeoPoint(-1.5, 2.0)),
                    3.0 * (111.13209 - 0.56605 + 0.0012));
 
   // Equal latitude zero, longitudes with diff 4.0. This returns, 4 times the k2
   // from the formula, where the cosines are all 1.
-  ASSERT_DOUBLE_EQ(wktDist("PoInT(3   0.0)", "pOiNt(7 -0.0)"),
+  ASSERT_DOUBLE_EQ(WktDistGeoPoints()(GeoPoint(0.0, 3.0), GeoPoint(-0.0, 7.0)),
                    4.0 * (111.41513 - 0.09455 + 0.00012));
 
   // Distance between the Eiffel tower and the Freibuger Münster (421km
   // according to the distance measurement of Google Maps, so our formula is not
   // that bad).
-  ASSERT_DOUBLE_EQ(wktDist("POINT(2.2945 48.8585)", "POINT(7.8529 47.9957)"),
+  GeoPoint eiffeltower = GeoPoint(48.8585, 2.2945);
+  GeoPoint frCathedral = GeoPoint(47.9957, 7.8529);
+  ASSERT_DOUBLE_EQ(WktDistGeoPoints()(eiffeltower, frCathedral),
                    422.41514462162974);
-
-  // One or both of the points invalid.
-  ASSERT_TRUE(std::isnan(wktDist("POINT(2.0 1.5)", "POINT")));
-  ASSERT_TRUE(std::isnan(wktDist("POINT", "POINT(2.0 -1.5)")));
-  ASSERT_TRUE(std::isnan(wktDist("POINT", "POINT")));
 }

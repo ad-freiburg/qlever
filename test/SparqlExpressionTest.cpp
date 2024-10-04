@@ -17,6 +17,7 @@
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/SampleExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
+#include "parser/GeoPoint.h"
 #include "util/AllocatorTestHelpers.h"
 #include "util/Conversions.h"
 
@@ -944,11 +945,13 @@ TEST(SparqlExpression, DatatypeExpression) {
   auto d3 = DateYearOrDuration::parseGYear("1900");
   auto d4 = DateYearOrDuration::parseXsdDate("2024-06-13");
   auto d5 = DateYearOrDuration::parseGYearMonth("2024-06");
+  auto g1 = GeoPoint(50.0, 50.0);
   Id DateId1 = Id::makeFromDate(d1);
   Id DateId2 = Id::makeFromDate(d2);
   Id DateId3 = Id::makeFromDate(d3);
   Id DateId4 = Id::makeFromDate(d4);
   Id DateId5 = Id::makeFromDate(d5);
+  Id GeoId1 = Id::makeFromGeoPoint(g1);
   auto checkGetDatatype = testUnaryExpression<&makeDatatypeExpression>;
   checkGetDatatype(IdOrLiteralOrIriVec{testContext().x},
                    IdOrLiteralOrIriVec{U});
@@ -991,6 +994,9 @@ TEST(SparqlExpression, DatatypeExpression) {
   checkGetDatatype(IdOrLiteralOrIriVec{DateId5},
                    IdOrLiteralOrIriVec{iriref(
                        "<http://www.w3.org/2001/XMLSchema#gYearMonth>")});
+  checkGetDatatype(IdOrLiteralOrIriVec{GeoId1},
+                   IdOrLiteralOrIriVec{iriref(
+                       "<http://www.opengis.net/ont/geosparql#wktLiteral>")});
   checkGetDatatype(
       IdOrLiteralOrIriVec{Id::makeFromInt(212378233)},
       IdOrLiteralOrIriVec{iriref("<http://www.w3.org/2001/XMLSchema#int>")});
@@ -1076,18 +1082,19 @@ TEST(SparqlExpression, testStrToHashExpressions) {
 TEST(SparqlExpression, testToNumericExpression) {
   Id T = Id::makeFromBool(true);
   Id F = Id::makeFromBool(false);
+  Id G = Id::makeFromGeoPoint(GeoPoint(50.0, 50.0));
   auto checkGetInt = testUnaryExpression<&makeConvertToIntExpression>;
   auto checkGetDouble = testUnaryExpression<&makeConvertToDoubleExpression>;
 
-  checkGetInt(
-      idOrLitOrStringVec({U, "  -1275", "5.97", "-78.97", "-5BoB6", "FreBurg1",
-                          "", " .", " 42\n", " 0.01 ", "", "@", "@?+1", "1"}),
-      Ids{U, I(-1275), U, U, U, U, U, U, I(42), U, U, U, U, I(1)});
+  checkGetInt(idOrLitOrStringVec({U, "  -1275", "5.97", "-78.97", "-5BoB6",
+                                  "FreBurg1", "", " .", " 42\n", " 0.01 ", "",
+                                  "@", "@?+1", "1", G}),
+              Ids{U, I(-1275), U, U, U, U, U, U, I(42), U, U, U, U, I(1), U});
   checkGetDouble(
       idOrLitOrStringVec({U, "-122.2", "19,96", " 128789334.345 ", "-0.f",
-                          "  0.007 ", " -14.75 ", "Q", "@!+?", "1"}),
+                          "  0.007 ", " -14.75 ", "Q", "@!+?", "1", G}),
       Ids{U, D(-122.2), U, D(128789334.345), U, D(0.007), D(-14.75), U, U,
-          D(1.00)});
+          D(1.00), U});
   checkGetInt(idOrLitOrStringVec(
                   {U, I(-12475), I(42), I(0), D(-14.57), D(33.0), D(0.00001)}),
               Ids{U, I(-12475), I(42), I(0), I(-14), I(33), I(0)});
@@ -1109,20 +1116,30 @@ TEST(SparqlExpression, geoSparqlExpressions) {
   auto checkLong = testUnaryExpression<&makeLongitudeExpression>;
   auto checkDist = std::bind_front(testNaryExpression, &makeDistExpression);
 
-  checkLat(idOrLitOrStringVec({"POINT(24.3 26.8)", "NotAPoint", I(12)}),
-           Ids{D(26.8), U, U});
-  checkLong(idOrLitOrStringVec({D(4.2), "POINT(24.3 26.8)", "NotAPoint"}),
-            Ids{U, D(24.3), U});
-  checkDist(D(0.0), IdOrLiteralOrIri{lit("POINT(24.3 26.8)")},
-            IdOrLiteralOrIri{lit("POINT(24.3 26.8)")});
-  checkDist(U, IdOrLiteralOrIri{lit("POINT(24.3 26.8)")},
-            IdOrLiteralOrIri{I(12)});
-  checkDist(U, IdOrLiteralOrIri{I(12)},
-            IdOrLiteralOrIri{lit("POINT(24.3 26.8)")});
-  checkDist(U, IdOrLiteralOrIri{lit("POINT(24.3 26.8)"s)},
-            IdOrLiteralOrIri{lit("NotAPoint")});
-  checkDist(U, IdOrLiteralOrIri{lit("NotAPoint")},
-            IdOrLiteralOrIri{lit("POINT(24.3 26.8)")});
+  auto p = GeoPoint(26.8, 24.3);
+  auto v = ValueId::makeFromGeoPoint(p);
+
+  // Should provide the same values, however with some precision loss, as the
+  // bit representation only uses 30 bits per coordinate, not a full double
+  auto actualValues = GeoPoint::fromBitRepresentation(
+      GeoPoint(26.8, 24.3).toBitRepresentation());
+  auto actualLat = actualValues.getLat();
+  auto actualLng = actualValues.getLng();
+  constexpr auto precision = 0.0001;
+  EXPECT_NEAR(actualLat, 26.8, precision);
+  EXPECT_NEAR(actualLng, 24.3, precision);
+  auto vLat = ValueId::makeFromDouble(actualLat);
+  auto vLng = ValueId::makeFromDouble(actualLng);
+
+  checkLat(v, vLat);
+  checkLong(v, vLng);
+  checkDist(D(0.0), v, v);
+  checkLat(idOrLitOrStringVec({"NotAPoint", I(12)}), Ids{U, U});
+  checkLong(idOrLitOrStringVec({D(4.2), "NotAPoint"}), Ids{U, U});
+  checkDist(U, v, IdOrLiteralOrIri{I(12)});
+  checkDist(U, IdOrLiteralOrIri{I(12)}, v);
+  checkDist(U, v, IdOrLiteralOrIri{lit("NotAPoint")});
+  checkDist(U, IdOrLiteralOrIri{lit("NotAPoint")}, v);
 }
 
 // ________________________________________________________________________________________

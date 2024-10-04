@@ -23,6 +23,7 @@
 #include "engine/QueryPlanner.h"
 #include "engine/Service.h"
 #include "engine/Sort.h"
+#include "engine/SpatialJoin.h"
 #include "engine/TextIndexScanForEntity.h"
 #include "engine/TextIndexScanForWord.h"
 #include "engine/TextLimit.h"
@@ -81,20 +82,28 @@ inline auto MatchTypeAndOrderedChildren =
 constexpr auto IndexScan =
     [](TripleComponent subject, TripleComponent predicate,
        TripleComponent object,
-       const std::vector<Permutation::Enum>& allowedPermutations = {})
-    -> QetMatcher {
+       const std::vector<Permutation::Enum>& allowedPermutations = {},
+       const ScanSpecificationAsTripleComponent::Graphs& graphs = std::nullopt,
+       const std::vector<Variable>& additionalVariables = {},
+       const std::vector<ColumnIndex>& additionalColumns = {}) -> QetMatcher {
   size_t numVariables = static_cast<size_t>(subject.isVariable()) +
                         static_cast<size_t>(predicate.isVariable()) +
-                        static_cast<size_t>(object.isVariable());
+                        static_cast<size_t>(object.isVariable()) +
+                        additionalColumns.size();
   auto permutationMatcher = allowedPermutations.empty()
                                 ? ::testing::A<Permutation::Enum>()
                                 : AnyOfArray(allowedPermutations);
   return RootOperation<::IndexScan>(
       AllOf(AD_PROPERTY(IndexScan, permutation, permutationMatcher),
             AD_PROPERTY(IndexScan, getResultWidth, Eq(numVariables)),
-            AD_PROPERTY(IndexScan, getSubject, Eq(subject)),
-            AD_PROPERTY(IndexScan, getPredicate, Eq(predicate)),
-            AD_PROPERTY(IndexScan, getObject, Eq(object))));
+            AD_PROPERTY(IndexScan, subject, Eq(subject)),
+            AD_PROPERTY(IndexScan, predicate, Eq(predicate)),
+            AD_PROPERTY(IndexScan, object, Eq(object)),
+            AD_PROPERTY(IndexScan, additionalVariables,
+                        ElementsAreArray(additionalVariables)),
+            AD_PROPERTY(IndexScan, additionalColumns,
+                        ElementsAreArray(additionalColumns)),
+            AD_PROPERTY(IndexScan, graphsToFilter, Eq(graphs))));
 };
 
 // Match the `NeutralElementOperation`.
@@ -188,8 +197,11 @@ inline auto CountAvailablePredicates =
 inline auto IndexScanFromStrings =
     [](std::string_view subject, std::string_view predicate,
        std::string_view object,
-       const std::vector<Permutation::Enum>& allowedPermutations = {})
-    -> QetMatcher {
+       const std::vector<Permutation::Enum>& allowedPermutations = {},
+       const std::optional<ad_utility::HashSet<std::string>> graphs =
+           std::nullopt,
+       const std::vector<Variable>& additionalVariables = {},
+       const std::vector<ColumnIndex>& additionalColumns = {}) -> QetMatcher {
   auto strToComp = [](std::string_view s) -> TripleComponent {
     if (s.starts_with("?")) {
       return ::Variable{std::string{s}};
@@ -198,8 +210,17 @@ inline auto IndexScanFromStrings =
     }
     return s;
   };
+
+  ScanSpecificationAsTripleComponent::Graphs graphsOut = std::nullopt;
+  if (graphs.has_value()) {
+    graphsOut.emplace();
+    for (const auto& graphIn : graphs.value()) {
+      graphsOut->insert(strToComp(graphIn));
+    }
+  }
   return IndexScan(strToComp(subject), strToComp(predicate), strToComp(object),
-                   allowedPermutations);
+                   allowedPermutations, graphsOut, additionalVariables,
+                   additionalColumns);
 };
 
 // For the following Join algorithms the order of the children is not important.
@@ -219,11 +240,12 @@ inline auto UnorderedJoins = [](auto&&... children) -> QetMatcher {
                                      Vec& children, const auto& self) -> void {
     const Operation* operation = tree.getRootOperation().get();
     auto join = dynamic_cast<const ::Join*>(operation);
+    auto multiColJoin = dynamic_cast<const ::MultiColumnJoin*>(operation);
     // Also allow the INTERNAL SORT BY operations that are needed for the joins.
     // TODO<joka921> is this the right place to also check that those have the
     // correct columns?
     auto sort = dynamic_cast<const ::Sort*>(operation);
-    if (!join && !sort) {
+    if (!join && !sort && !multiColJoin) {
       children.push_back(tree);
     } else {
       for (const auto& child : operation->getChildren()) {
@@ -263,6 +285,16 @@ inline auto TransitivePath =
                             TransitivePathSideMatcher(left)),
                 AD_PROPERTY(TransitivePathBase, getRight,
                             TransitivePathSideMatcher(right))));
+    };
+
+// Match a SpatialJoin operation
+inline auto SpatialJoin =
+    [](long long maxDist,
+       const std::same_as<QetMatcher> auto&... childMatchers) {
+      return RootOperation<::SpatialJoin>(
+          AllOf(Property("getChildren", &Operation::getChildren,
+                         ElementsAre(Pointee(childMatchers)...)),
+                AD_PROPERTY(SpatialJoin, getMaxDist, Eq(maxDist))));
     };
 
 // Match a sort operation. Currently, this is only required by the binary search

@@ -11,7 +11,9 @@
 #include <functional>
 #include <limits>
 
+#include "global/Constants.h"
 #include "global/IndexTypes.h"
+#include "parser/GeoPoint.h"
 #include "util/BitUtils.h"
 #include "util/DateYearDuration.h"
 #include "util/NBitInteger.h"
@@ -28,6 +30,7 @@ enum struct Datatype {
   LocalVocabIndex,
   TextRecordIndex,
   Date,
+  GeoPoint,
   WordVocabIndex,
   BlankNodeIndex,
   MaxValue = BlankNodeIndex
@@ -58,6 +61,8 @@ constexpr std::string_view toString(Datatype type) {
       return "WordVocabIndex";
     case Datatype::Date:
       return "Date";
+    case Datatype::GeoPoint:
+      return "GeoPoint";
     case Datatype::BlankNodeIndex:
       return "BlankNodeIndex";
   }
@@ -101,6 +106,10 @@ class ValueId {
   static_assert(static_cast<size_t>(maxStringType_) -
                     static_cast<size_t>(minStringType_) + 1 ==
                 stringTypes_.size());
+
+  // Assert that the size of an encoded GeoPoint equals the available bits in a
+  // ValueId.
+  static_assert(numDataBits == GeoPoint::numDataBits);
 
   /// This exception is thrown if we try to store a value of an index type
   /// (VocabIndex, LocalVocabIndex, TextRecordIndex) that is larger than
@@ -310,6 +319,19 @@ class ValueId {
 
   // TODO<joka921> implement dates
 
+  /// Create a `ValueId` for a GeoPoint object (representing a POINT from WKT).
+  static ValueId makeFromGeoPoint(GeoPoint p) {
+    return addDatatypeBits(p.toBitRepresentation(), Datatype::GeoPoint);
+  }
+
+  /// Obtain a new `GeoPoint` object representing the pair of coordinates that
+  /// this `ValueId` encodes. If `getDatatype() != GeoPoint` then the result
+  /// is unspecified.
+  GeoPoint getGeoPoint() const {
+    T bits = removeDatatypeBits(_bits);
+    return GeoPoint::fromBitRepresentation(bits);
+  }
+
   /// Return the smallest and largest possible `ValueId` wrt the underlying
   /// representation
   constexpr static ValueId min() noexcept {
@@ -360,6 +382,8 @@ class ValueId {
         return std::invoke(visitor, getWordVocabIndex());
       case Datatype::Date:
         return std::invoke(visitor, getDate());
+      case Datatype::GeoPoint:
+        return std::invoke(visitor, getGeoPoint());
       case Datatype::BlankNodeIndex:
         return std::invoke(visitor, getBlankNodeIndex());
     }
@@ -385,6 +409,8 @@ class ValueId {
         ostr << (value ? "true" : "false");
       } else if constexpr (ad_utility::isSimilar<T, DateYearOrDuration>) {
         ostr << value.toStringAndType().first;
+      } else if constexpr (ad_utility::isSimilar<T, GeoPoint>) {
+        ostr << value.toStringRepresentation();
       } else if constexpr (ad_utility::isSimilar<T, LocalVocabIndex>) {
         AD_CORRECTNESS_CHECK(value != nullptr);
         ostr << value->toStringRepresentation();
