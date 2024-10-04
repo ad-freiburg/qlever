@@ -762,12 +762,14 @@ parsedQuery::Service Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
 parsedQuery::GraphPatternOperation Visitor::visit(
     Parser::GraphGraphPatternContext* ctx) {
   auto varOrIri = visit(ctx->varOrIri());
+  auto group = visit(ctx->groupGraphPattern());
   if (std::holds_alternative<Variable>(varOrIri)) {
-    reportNotSupported(ctx, "GRAPH clauses with a variable are");
+    const auto& graphVar = std::get<Variable>(varOrIri);
+    addVisibleVariable(graphVar);
+    return parsedQuery::GroupGraphPattern{std::move(group), graphVar};
   }
   AD_CORRECTNESS_CHECK(std::holds_alternative<Iri>(varOrIri));
   auto& iri = std::get<Iri>(varOrIri);
-  auto group = visit(ctx->groupGraphPattern());
   return parsedQuery::GroupGraphPattern{
       std::move(group), TripleComponent::Iri::fromIriref(iri.toSparql())};
 }
