@@ -63,6 +63,9 @@ constexpr inline std::string_view TMP_BASENAME_COMPRESSION =
     ".tmp.for-prefix-compression";
 
 // _________________________________________________________________
+constexpr inline std::string_view INTERNAL_INDEX_INFIX = ".internal";
+
+// _________________________________________________________________
 // The degree of parallelism that is used for the index building step, where the
 // unique elements of the vocabulary are identified via hash maps. Typically, 6
 // is a good value. On systems with very few CPUs, a lower value might be
