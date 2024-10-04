@@ -17,16 +17,17 @@
  * /brief Some helpers to parse request URLs in QLever.
  */
 namespace ad_utility::url_parser {
-// TODO: There can be multiple values for a HTTP query parameter. Some SPARQL
-// features require setting a parameter multiple times. Change the interface
-// s.t. this is supported.
+
+// A map that stores the values for parameters. Parameters can be specified
+// multiple times with different values.
+using ParamValueMap = ad_utility::HashMap<string, std::vector<string>>;
 
 // A parsed URL.
 // - `path_` is the URL path
-// - `parameters_` is a hashmap of the HTTP Query parameters
+// - `parameters_` is a map of the HTTP Query parameters
 struct ParsedUrl {
   std::string path_;
-  ad_utility::HashMap<std::string, std::string> parameters_;
+  ParamValueMap parameters_;
 };
 
 // The different SPARQL operations that a `ParsedRequest` can represent.
@@ -58,7 +59,7 @@ struct None {
 // - `operation_` the operation that should be performed
 struct ParsedRequest {
   std::string path_;
-  ad_utility::HashMap<std::string, std::string> parameters_;
+  ParamValueMap parameters_;
   std::variant<Operation::Query, Operation::Update, Operation::None> operation_;
 };
 
@@ -67,8 +68,7 @@ ParsedUrl parseRequestTarget(std::string_view target);
 
 // Convert the HTTP Query parameters `params` to a hashmap. Throw an error
 // if a key is included twice.
-ad_utility::HashMap<std::string, std::string> paramsToMap(
-    boost::urls::params_view params);
+ParamValueMap paramsToMap(boost::urls::params_view params);
 }  // namespace ad_utility::url_parser
 
 #endif  // QLEVER_URLPARSER_H

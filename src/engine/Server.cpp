@@ -176,7 +176,12 @@ ad_utility::url_parser::ParsedRequest Server::parseHttpRequest(
     // Some valid requests (e.g. QLever's custom commands like retrieving index
     // statistics) don't have a query.
     if (parsedRequest.parameters_.contains("query")) {
-      parsedRequest.operation_ = Query{parsedRequest.parameters_["query"]};
+      if (parsedRequest.parameters_["query"].size() > 1) {
+        throw std::runtime_error(
+            "The parameter \"query\" must be set exactly once.");
+      }
+      parsedRequest.operation_ =
+          Query{parsedRequest.parameters_["query"].front()};
       parsedRequest.parameters_.erase("query");
     }
   };
@@ -252,7 +257,12 @@ ad_utility::url_parser::ParsedRequest Server::parseHttpRequest(
       }
       extractQueryFromParameters();
       if (parsedRequest.parameters_.contains("update")) {
-        parsedRequest.operation_ = Update{parsedRequest.parameters_["update"]};
+        if (parsedRequest.parameters_["update"].size() > 1) {
+          throw std::runtime_error(
+              "The parameter \"update\" must be set exactly once.");
+        }
+        parsedRequest.operation_ =
+            Update{parsedRequest.parameters_["update"].front()};
         parsedRequest.parameters_.erase("update");
       }
 
@@ -658,7 +668,7 @@ Awaitable<void> Server::sendStreamableResponse(
 
 // ____________________________________________________________________________
 boost::asio::awaitable<void> Server::processQuery(
-    const ParamValueMap& params, const string& query,
+    const ad_utility::url_parser::ParamValueMap& params, const string& query,
     ad_utility::Timer& requestTimer,
     const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
     TimeLimit timeLimit) {
@@ -686,7 +696,8 @@ boost::asio::awaitable<void> Server::processQuery(
   try {
     auto containsParam = [&params](const std::string& param,
                                    const std::string& expected) {
-      return params.contains(param) && params.at(param) == expected;
+      return params.contains(param) && params.at(param).size() == 1 &&
+             params.at(param).front() == expected;
     };
     const bool pinSubtrees = containsParam("pinsubtrees", "true");
     const bool pinResult = containsParam("pinresult", "true");
@@ -725,8 +736,9 @@ boost::asio::awaitable<void> Server::processQuery(
     }
 
     std::optional<uint64_t> maxSend =
-        params.contains("send") ? std::optional{std::stoul(params.at("send"))}
-                                : std::nullopt;
+        (params.contains("send") && params.at("send").size() == 1)
+            ? std::optional{std::stoul(params.at("send").front())}
+            : std::nullopt;
     // Limit JSON requests by default
     if (!maxSend.has_value() && (mediaType == MediaType::sparqlJson ||
                                  mediaType == MediaType::qleverJson)) {
@@ -944,17 +956,22 @@ bool Server::checkAccessToken(
 // _____________________________________________________________________________
 
 std::optional<std::string_view> Server::checkParameter(
-    const ad_utility::HashMap<std::string, std::string>& parameters,
+    const ad_utility::url_parser::ParamValueMap& parameters,
     std::string_view key, std::optional<std::string_view> value,
     bool accessAllowed) {
   if (!parameters.contains(key)) {
     return std::nullopt;
   }
+  if (parameters.at(key).size() > 1) {
+    return std::nullopt;
+  }
+  std::string parameterValue = parameters.at(key).front();
+
   // If value is given, but not equal to param value, return std::nullopt. If
   // no value is given, set it to param value.
   if (value == std::nullopt) {
-    value = parameters.at(key);
-  } else if (value != parameters.at(key)) {
+    value = parameterValue;
+  } else if (value != parameterValue) {
     return std::nullopt;
   }
   // Now that we have the value, check if there is a problem with the access.

@@ -38,8 +38,6 @@ class Server {
 
   virtual ~Server() = default;
 
-  using ParamValueMap = ad_utility::HashMap<string, string>;
-
  private:
   //! Initialize the server.
   void initialize(const string& indexBaseName, bool useText,
@@ -131,7 +129,7 @@ class Server {
   /// \param timeLimit Duration in seconds after which the query will be
   ///                  cancelled.
   Awaitable<void> processQuery(
-      const ParamValueMap& params, const string& query,
+      const ad_utility::url_parser::ParamValueMap& params, const string& query,
       ad_utility::Timer& requestTimer,
       const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
       TimeLimit timeLimit);
@@ -215,7 +213,7 @@ class Server {
   /// return `std::nullopt`. If `accessAllowed` is false and a value is present,
   /// throw an exception.
   static std::optional<std::string_view> checkParameter(
-      const ad_utility::HashMap<std::string, std::string>& parameters,
+      const ad_utility::url_parser::ParamValueMap& parameters,
       std::string_view key, std::optional<std::string_view> value,
       bool accessAllowed);
 

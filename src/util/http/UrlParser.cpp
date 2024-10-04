@@ -21,15 +21,17 @@ ParsedUrl ad_utility::url_parser::parseRequestTarget(std::string_view target) {
 }
 
 // _____________________________________________________________________________
-ad_utility::HashMap<std::string, std::string>
-ad_utility::url_parser::paramsToMap(boost::urls::params_view params) {
-  ad_utility::HashMap<std::string, std::string> result;
+ParamValueMap ad_utility::url_parser::paramsToMap(
+    boost::urls::params_view params) {
+  ParamValueMap result;
   for (const auto& [key, value, _] : params) {
-    auto [blockingElement, wasInserted] = result.insert({key, value});
-    if (!wasInserted) {
-      throw std::runtime_error(
-          absl::StrCat("HTTP parameter \"", key, "\" is set twice. It is \"",
-                       blockingElement->second, "\" and \"", value, "\""));
+    if (result.contains(key)) {
+      result[key].push_back(value);
+    } else {
+      auto [blockingElement, wasInserted] = result.insert({key, {value}});
+      if (!wasInserted) {
+        AD_FAIL();
+      }
     }
   }
   return result;

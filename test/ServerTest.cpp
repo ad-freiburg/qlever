@@ -16,10 +16,9 @@ using namespace ad_utility::url_parser;
 using namespace ad_utility::url_parser::Operation;
 
 namespace {
-auto ParsedRequestIs =
-    [](const std::string& path,
-       const ad_utility::HashMap<std::string, std::string>& parameters,
-       const std::variant<Query, Update, None>& operation)
+auto ParsedRequestIs = [](const std::string& path,
+                          const ParamValueMap& parameters,
+                          const std::variant<Query, Update, None>& operation)
     -> testing::Matcher<const ParsedRequest> {
   return testing::AllOf(
       AD_FIELD(ad_utility::url_parser::ParsedRequest, path_, testing::Eq(path)),
@@ -60,15 +59,15 @@ TEST(ServerTest, parseHttpRequest) {
   EXPECT_THAT(parse(MakeGetRequest("/ping")),
               ParsedRequestIs("/ping", {}, None{}));
   EXPECT_THAT(parse(MakeGetRequest("/?cmd=stats")),
-              ParsedRequestIs("/", {{"cmd", "stats"}}, None{}));
+              ParsedRequestIs("/", {{"cmd", {"stats"}}}, None{}));
   EXPECT_THAT(parse(MakeGetRequest(
                   "/?query=SELECT+%2A%20WHERE%20%7B%7D&action=csv_export")),
-              ParsedRequestIs("/", {{"action", "csv_export"}},
+              ParsedRequestIs("/", {{"action", {"csv_export"}}},
                               Query{"SELECT * WHERE {}"}));
   EXPECT_THAT(
       parse(MakePostRequest("/", URLENCODED,
                             "query=SELECT+%2A%20WHERE%20%7B%7D&send=100")),
-      ParsedRequestIs("/", {{"send", "100"}}, Query{"SELECT * WHERE {}"}));
+      ParsedRequestIs("/", {{"send", {"100"}}}, Query{"SELECT * WHERE {}"}));
   AD_EXPECT_THROW_WITH_MESSAGE(
       parse(MakePostRequest("/", URLENCODED,
                             "ääär y=SELECT+%2A%20WHERE%20%7B%7D&send=100")),
@@ -76,7 +75,7 @@ TEST(ServerTest, parseHttpRequest) {
   EXPECT_THAT(
       parse(MakePostRequest("/", "application/x-www-form-urlencoded",
                             "query=SELECT%20%2A%20WHERE%20%7B%7D&send=100")),
-      ParsedRequestIs("/", {{"send", "100"}}, Query{"SELECT * WHERE {}"}));
+      ParsedRequestIs("/", {{"send", {"100"}}}, Query{"SELECT * WHERE {}"}));
   EXPECT_THAT(parse(MakePostRequest("/", URLENCODED,
                                     "query=SELECT%20%2A%20WHERE%20%7B%7D")),
               ParsedRequestIs("/", {}, Query{"SELECT * WHERE {}"}));
@@ -86,12 +85,12 @@ TEST(ServerTest, parseHttpRequest) {
       testing::StrEq("URL-encoded POST requests must not contain query "
                      "parameters in the URL."));
   EXPECT_THAT(parse(MakePostRequest("/", URLENCODED, "cmd=clear-cache")),
-              ParsedRequestIs("/", {{"cmd", "clear-cache"}}, None{}));
+              ParsedRequestIs("/", {{"cmd", {"clear-cache"}}}, None{}));
   EXPECT_THAT(parse(MakePostRequest("/", QUERY, "SELECT * WHERE {}")),
               ParsedRequestIs("/", {}, Query{"SELECT * WHERE {}"}));
   EXPECT_THAT(
       parse(MakePostRequest("/?send=100", QUERY, "SELECT * WHERE {}")),
-      ParsedRequestIs("/", {{"send", "100"}}, Query{"SELECT * WHERE {}"}));
+      ParsedRequestIs("/", {{"send", {"100"}}}, Query{"SELECT * WHERE {}"}));
   AD_EXPECT_THROW_WITH_MESSAGE(
       parse(MakeBasicRequest(http::verb::patch, "/")),
       testing::StrEq(
