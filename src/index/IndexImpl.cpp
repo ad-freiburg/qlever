@@ -278,7 +278,7 @@ std::pair<size_t, size_t> IndexImpl::createInternalPSOandPOS(
     auto&& internalTriplesPsoSorter) {
   auto onDiskBaseBackup = onDiskBase_;
   auto configurationJsonBackup = configurationJson_;
-  onDiskBase_.append(INTERNAL_INDEX_SUFFIX);
+  onDiskBase_.append(INTERNAL_INDEX_INFIX);
   auto internalTriplesUnique = ad_utility::uniqueBlockView(
       internalTriplesPsoSorter.template getSortedBlocks<0>());
   createPSOAndPOSImpl(NumColumnsIndexBuilding, std::move(internalTriplesUnique),
@@ -322,8 +322,9 @@ void IndexImpl::createFromFile(const string& filename, Index::Filetype type) {
   // Create the internal PSO and POS permutations. This has to be called AFTER
   // all triples have been added to the `internalTriplesPso_` sorter, in
   // particular, after the patterns have been created.
-  auto createInternalPxx = [this, &numTriplesInternal, &numPredicatesInternal,
-                            &indexBuilderData]() {
+  auto createInternalPsoAndPosAndSetMetadata = [this, &numTriplesInternal,
+                                                &numPredicatesInternal,
+                                                &indexBuilderData]() {
     std::tie(numTriplesInternal, numPredicatesInternal) =
         createInternalPSOandPOS(*indexBuilderData.sorter_.internalTriplesPso_);
   };
@@ -333,14 +334,14 @@ void IndexImpl::createFromFile(const string& filename, Index::Filetype type) {
       ad_utility::uniqueBlockView(firstSorter.getSortedOutput());
 
   if (!loadAllPermutations_) {
-    createInternalPxx();
+    createInternalPsoAndPosAndSetMetadata();
     // Only two permutations, no patterns, in this case the `firstSorter` is a
     // PSO sorter, and `createPermutationPair` creates PSO/POS permutations.
     createFirstPermutationPair(NumColumnsIndexBuilding,
                                std::move(firstSorterWithUnique));
     configurationJson_["has-all-permutations"] = false;
   } else if (!usePatterns_) {
-    createInternalPxx();
+    createInternalPsoAndPosAndSetMetadata();
     // Without patterns, we explicitly have to pass in the next sorters to all
     // permutation creating functions.
     auto secondSorter = makeSorter<SecondPermutation>("second");
@@ -365,7 +366,7 @@ void IndexImpl::createFromFile(const string& filename, Index::Filetype type) {
     auto thirdSorterPtr =
         buildOspWithPatterns(std::move(patternOutput.value()),
                              *indexBuilderData.sorter_.internalTriplesPso_);
-    createInternalPxx();
+    createInternalPsoAndPosAndSetMetadata();
     createThirdPermutationPair(NumColumnsIndexBuilding + 2,
 
                                thirdSorterPtr->template getSortedBlocks<0>());
@@ -1558,6 +1559,16 @@ void IndexImpl::createPSOAndPOSImpl(size_t numColumns,
     writeConfiguration();
   }
 };
+
+// _____________________________________________________________________________
+template <typename... NextSorter>
+requires(sizeof...(NextSorter) <= 1)
+void IndexImpl::createPSOAndPOS(size_t numColumns,
+                                BlocksOfTriples sortedTriples,
+                                NextSorter&&... nextSorter) {
+  createPSOAndPOSImpl(numColumns, std::move(sortedTriples), true,
+                      AD_FWD(nextSorter)...);
+}
 
 // _____________________________________________________________________________
 template <typename... NextSorter>

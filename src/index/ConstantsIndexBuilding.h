@@ -63,7 +63,7 @@ constexpr inline std::string_view TMP_BASENAME_COMPRESSION =
     ".tmp.for-prefix-compression";
 
 // _________________________________________________________________
-constexpr inline std::string_view INTERNAL_INDEX_SUFFIX = ".internal";
+constexpr inline std::string_view INTERNAL_INDEX_INFIX = ".internal";
 
 // _________________________________________________________________
 // The degree of parallelism that is used for the index building step, where the

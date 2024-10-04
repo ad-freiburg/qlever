@@ -681,18 +681,20 @@ class IndexImpl {
 
   // Create the PSO and POS permutations. Additionally, count the number of
   // distinct predicates and the number of actual triples and write them to the
-  // metadata.
+  // metadata. The meta-data JSON file for the index statistics will only be
+  // written iff `doWriteConfiguration` is true. That parameter is set to
+  // `false` when building the additional permutations for the internal triples.
   template <typename... NextSorter>
   requires(sizeof...(NextSorter) <= 1)
   void createPSOAndPOSImpl(size_t numColumns, BlocksOfTriples sortedTriples,
-                           bool writeConfiguration, NextSorter&&... nextSorter);
+                           bool doWriteConfiguration,
+                           NextSorter&&... nextSorter);
+  // Call `createPSOAndPOSImpl` with the given arguments and with
+  // `doWriteConfiguration` set to `true` (see above).
   template <typename... NextSorter>
   requires(sizeof...(NextSorter) <= 1)
   void createPSOAndPOS(size_t numColumns, BlocksOfTriples sortedTriples,
-                       NextSorter&&... nextSorter) {
-    createPSOAndPOSImpl(numColumns, std::move(sortedTriples), true,
-                        AD_FWD(nextSorter)...);
-  }
+                       NextSorter&&... nextSorter);
 
   // Create the internal PSO and POS permutations from the sorted internal
   // triples. Return `(numInternalTriples, numInternalPredicates)`.
@@ -754,8 +756,10 @@ class IndexImpl {
   buildOspWithPatterns(PatternCreator::TripleSorter sortersFromPatternCreator,
                        auto& internalTripleSorter);
 
-  // During the index building add the number of internal triples and internal
-  // predicates to the configuration.
+  // During the index, building add the number of internal triples and internal
+  // predicates to the configuration. Note: the number of internal objects and
+  // subjects will always remain zero, because we have no cheap way of computing
+  // them.
   void addInternalStatisticsToConfiguration(size_t numTriplesInternal,
                                             size_t numPredicatesInternal);
 };
