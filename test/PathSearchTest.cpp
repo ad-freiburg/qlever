@@ -613,3 +613,110 @@ TEST(PathSearchTest, multiSourceMultiTargetallPathsNotCartesian) {
   ASSERT_THAT(resultTable.idTable(),
               ::testing::UnorderedElementsAreArray(expected));
 }
+
+TEST(PathSearchTest, sourceBound) {
+  auto sub = makeIdTableFromVector({{0, 1}, {1, 2}, {2, 3}, {3, 4}});
+  auto sourceTable = makeIdTableFromVector({{0}});
+  auto expected = makeIdTableFromVector({
+      {V(0), V(1), I(0), I(0), V(0)},
+      {V(1), V(2), I(0), I(1), V(0)},
+      {V(2), V(3), I(0), I(2), V(0)},
+      {V(3), V(4), I(0), I(3), V(0)},
+  });
+
+  std::vector<Id> targets{V(4)};
+  Vars vars = {Variable{"?start"}, Variable{"?end"}};
+  PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
+                                 Var{"?source"},
+                                 targets,
+                                 Var{"?start"},
+                                 Var{"?end"},
+                                 Var{"?edgeIndex"},
+                                 Var{"?pathIndex"},
+                                 {}};
+
+  auto qec = getQec();
+  auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, std::move(sub), vars);
+  auto pathSearch = PathSearch(qec, std::move(subtree), std::move(config));
+
+  Vars sourceTreeVars = {Var{"?source"}};
+  auto sourceTree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, std::move(sourceTable), sourceTreeVars);
+  pathSearch.bindSourceSide(sourceTree, 0);
+
+  auto resultTable = pathSearch.computeResult(false);
+  ASSERT_THAT(resultTable.idTable(),
+              ::testing::UnorderedElementsAreArray(expected));
+}
+
+TEST(PathSearchTest, targetBound) {
+  auto sub = makeIdTableFromVector({{0, 1}, {1, 2}, {2, 3}, {3, 4}});
+  auto targetTable = makeIdTableFromVector({{4}});
+  auto expected = makeIdTableFromVector({
+      {V(0), V(1), I(0), I(0), V(4)},
+      {V(1), V(2), I(0), I(1), V(4)},
+      {V(2), V(3), I(0), I(2), V(4)},
+      {V(3), V(4), I(0), I(3), V(4)},
+  });
+
+  std::vector<Id> sources{V(0)};
+  Vars vars = {Variable{"?start"}, Variable{"?end"}};
+  PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
+                                 sources,
+                                 Var{"?target"},
+                                 Var{"?start"},
+                                 Var{"?end"},
+                                 Var{"?edgeIndex"},
+                                 Var{"?pathIndex"},
+                                 {}};
+
+  auto qec = getQec();
+  auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, std::move(sub), vars);
+  auto pathSearch = PathSearch(qec, std::move(subtree), std::move(config));
+
+  Vars targetTreeVars = {Var{"?target"}};
+  auto targetTree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, std::move(targetTable), targetTreeVars);
+  pathSearch.bindTargetSide(targetTree, 0);
+
+  auto resultTable = pathSearch.computeResult(false);
+  ASSERT_THAT(resultTable.idTable(),
+              ::testing::UnorderedElementsAreArray(expected));
+}
+
+TEST(PathSearchTest, sourceAndTargetBound) {
+  auto sub = makeIdTableFromVector({{0, 1}, {1, 2}, {2, 3}, {3, 4}});
+  auto sideTable = makeIdTableFromVector({{0, 4}});
+  auto expected = makeIdTableFromVector({
+      {V(0), V(1), I(0), I(0), V(0), V(4)},
+      {V(1), V(2), I(0), I(1), V(0), V(4)},
+      {V(2), V(3), I(0), I(2), V(0), V(4)},
+      {V(3), V(4), I(0), I(3), V(0), V(4)},
+  });
+
+  Vars vars = {Variable{"?start"}, Variable{"?end"}};
+  PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
+                                 Var{"?source"},
+                                 Var{"?target"},
+                                 Var{"?start"},
+                                 Var{"?end"},
+                                 Var{"?edgeIndex"},
+                                 Var{"?pathIndex"},
+                                 {}};
+
+  auto qec = getQec();
+  auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, std::move(sub), vars);
+  auto pathSearch = PathSearch(qec, std::move(subtree), std::move(config));
+
+  Vars sideTreeVars = {Var{"?source"}, Var{"?target"}};
+  auto sideTree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, std::move(sideTable), sideTreeVars);
+  pathSearch.bindSourceAndTargetSide(sideTree, 0, 1);
+
+  auto resultTable = pathSearch.computeResult(false);
+  ASSERT_THAT(resultTable.idTable(),
+              ::testing::UnorderedElementsAreArray(expected));
+}
