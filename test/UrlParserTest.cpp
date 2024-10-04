@@ -83,3 +83,33 @@ TEST(UrlParserTest, parseRequestTarget) {
       parseRequestTarget("file://more-than-target"),
       testing::StrEq("Failed to parse URL: \"file://more-than-target\"."));
 }
+
+TEST(UrlParserTest, parseDatasetClauses) {
+  using namespace ad_utility::url_parser;
+  using Iri = ad_utility::triple_component::Iri;
+
+  // Construct the vector from an initializer list without specifying the type.
+  auto IsDatasets = [](const std::vector<DatasetClause>& datasetClauses)
+      -> testing::Matcher<const std::vector<DatasetClause>&> {
+    return testing::ContainerEq(datasetClauses);
+  };
+
+  EXPECT_THAT(parseDatasetClauses({}), IsDatasets({}));
+  EXPECT_THAT(
+      parseDatasetClauses({{"default-graph-uri", {"https://w3.org/1"}}}),
+      IsDatasets({{Iri::fromIriref("<https://w3.org/1>"), false}}));
+  EXPECT_THAT(parseDatasetClauses({{"named-graph-uri", {"https://w3.org/1"}}}),
+              IsDatasets({{Iri::fromIriref("<https://w3.org/1>"), true}}));
+  EXPECT_THAT(parseDatasetClauses({{"default-graph-uri", {"https://w3.org/1"}},
+                                   {"named-graph-uri", {"https://w3.org/2"}}}),
+              IsDatasets({{Iri::fromIriref("<https://w3.org/1>"), false},
+                          {Iri::fromIriref("<https://w3.org/2>"), true}}));
+  EXPECT_THAT(
+      parseDatasetClauses(
+          {{"default-graph-uri", {"https://w3.org/1", "https://w3.org/2"}},
+           {"named-graph-uri", {"https://w3.org/3", "https://w3.org/4"}}}),
+      IsDatasets({{Iri::fromIriref("<https://w3.org/1>"), false},
+                  {Iri::fromIriref("<https://w3.org/2>"), false},
+                  {Iri::fromIriref("<https://w3.org/3>"), true},
+                  {Iri::fromIriref("<https://w3.org/4>"), true}}));
+}

@@ -276,10 +276,10 @@ ad_utility::url_parser::ParsedRequest Server::parseHttpRequest(
       parsedRequest.operation_ = Update{request.body()};
       return parsedRequest;
     }
-    throw std::runtime_error(
-        absl::StrCat("POST request with content type \"", contentType,
-                     "\" not supported (must be \"", contentTypeUrlEncoded,
-                     "\" or \"", contentTypeSparqlQuery, "\")"));
+    throw std::runtime_error(absl::StrCat(
+        "POST request with content type \"", contentType,
+        "\" not supported (must be \"", contentTypeUrlEncoded, "\", \"",
+        contentTypeSparqlQuery, "\" or \"", contentTypeSparqlUpdate, "\")"));
   }
   std::ostringstream requestMethodName;
   requestMethodName << request.method();

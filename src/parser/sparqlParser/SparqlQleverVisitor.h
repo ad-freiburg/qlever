@@ -31,6 +31,9 @@ class Reversed {
 struct DatasetClause {
   TripleComponent::Iri dataset_;
   bool isNamed_;
+
+  // For testing
+  bool operator==(const DatasetClause& other) const = default;
 };
 
 /**

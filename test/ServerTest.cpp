@@ -72,6 +72,23 @@ TEST(ServerTest, parseHttpRequest) {
       parse(MakePostRequest("/", URLENCODED,
                             "ääär y=SELECT+%2A%20WHERE%20%7B%7D&send=100")),
       ::testing::HasSubstr("Invalid URL-encoded POST request"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      parse(MakeGetRequest("/?query=SELECT%20%2A%20WHERE%20%7B%7D&query=SELECT%"
+                           "20%3Ffoo%20WHERE%20%7B%7D")),
+      ::testing::HasSubstr(
+          "The parameter \"query\" must be set exactly once."));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      parse(MakePostRequest("/", URLENCODED,
+                            "query=SELECT%20%2A%20WHERE%20%7B%7D&update=DELETE%"
+                            "20%7B%7D%20WHERE%20%7B%7D")),
+      ::testing::HasSubstr(
+          "Request must only contain one of \"query\" and \"update\"."));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      parse(MakePostRequest("/", URLENCODED,
+                            "update=DELETE%20%7B%7D%20WHERE%20%7B%7D&update="
+                            "DELETE%20%7B%7D%20WHERE%20%7B%7D")),
+      ::testing::HasSubstr(
+          "The parameter \"update\" must be set exactly once."));
   EXPECT_THAT(
       parse(MakePostRequest("/", "application/x-www-form-urlencoded",
                             "query=SELECT%20%2A%20WHERE%20%7B%7D&send=100")),
@@ -106,6 +123,12 @@ TEST(ServerTest, parseHttpRequest) {
       parse(MakeBasicRequest(http::verb::patch, "/")),
       testing::StrEq(
           "Request method \"PATCH\" not supported (has to be GET or POST)"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      parse(MakePostRequest("/", "invalid/content-type", "")),
+      testing::StrEq(
+          "POST request with content type \"invalid/content-type\" not "
+          "supported (must be \"application/x-www-form-urlencoded\", "
+          "\"application/sparql-query\" or \"application/sparql-update\")"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       parse(MakeGetRequest("/?update=DELETE%20%2A%20WHERE%20%7B%7D")),
       testing::StrEq("SPARQL Update is not allowed as GET request."));
