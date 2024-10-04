@@ -469,7 +469,7 @@ TripleComponent TurtleParser<T>::literalAndDatatypeToTripleComponentImpl(
   std::string_view type = asStringViewUnsafe(typeIri.getContent());
 
   // Helper to handle literals that are invalid for the respective datatype
-  auto makeNormalLiteral = [parser, literal, normalizedLiteralContent,
+  auto makeNormalLiteral = [&parser, &literal, normalizedLiteralContent,
                             type](std::optional<std::exception> error =
                                       std::nullopt) {
     std::string_view errorMsg = error.has_value() ? error.value().what() : "";
