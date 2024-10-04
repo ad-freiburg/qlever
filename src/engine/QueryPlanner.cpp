@@ -715,7 +715,7 @@ auto QueryPlanner::seedWithScansAndText(
     const auto& input = node.triple_.p_._iri;
     if ((input.starts_with(MAX_DIST_IN_METERS) ||
          input.starts_with(NEAREST_NEIGHBORS)) &&
-        input[input.size() - 1] == '>') {
+        input.ends_with('>')) {
       pushPlan(makeSubtreePlan<SpatialJoin>(_qec, node.triple_, std::nullopt,
                                             std::nullopt));
       continue;
