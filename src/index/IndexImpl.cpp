@@ -100,7 +100,7 @@ std::unique_ptr<RdfParserBase> IndexImpl::makeRdfParser(
     using TokenizerT =
         std::conditional_t<useCtre == 1, TokenizerCtre, Tokenizer>;
     // TODO<joka921> parallelism etc.
-    return std::make_unique<RdfMultifileParser<Tokenizer>>(files);
+    return std::make_unique<RdfMultifileParser<TokenizerT>>(files);
   };
 
   // `callFixedSize` litfts runtime integers to compile time integers. We use it
@@ -340,8 +340,8 @@ void IndexImpl::createFromFile(const string& filename, Index::Filetype type) {
   // all triples have been added to the `internalTriplesPso_` sorter, in
   // particular, after the patterns have been created.
   auto createInternalPsoAndPosAndSetMetadata = [this, &numTriplesInternal,
-      &numPredicatesInternal,
-      &indexBuilderData]() {
+                                                &numPredicatesInternal,
+                                                &indexBuilderData]() {
     std::tie(numTriplesInternal, numPredicatesInternal) =
         createInternalPSOandPOS(*indexBuilderData.sorter_.internalTriplesPso_);
   };
