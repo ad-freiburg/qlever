@@ -340,6 +340,10 @@ class QueryPlanner {
       const SubtreePlan& a, const SubtreePlan& b,
       const std::vector<std::array<ColumnIndex, 2>>& jcs);
 
+  [[nodiscard]] static std::optional<SubtreePlan> createJoinWithPathSearch(
+      const SubtreePlan& a, const SubtreePlan& b,
+      const std::vector<std::array<ColumnIndex, 2>>& jcs);
+
   template <typename Operation>
   [[nodiscard]] static std::optional<SubtreePlan> createSubtreeWithService(
       const SubtreePlan& a, const SubtreePlan& b);
@@ -513,6 +517,7 @@ class QueryPlanner {
     void visitBasicGraphPattern(const parsedQuery::BasicGraphPattern& pattern);
     void visitBind(const parsedQuery::Bind& bind);
     void visitTransitivePath(parsedQuery::TransPath& transitivePath);
+    void visitPathSearch(parsedQuery::PathQuery& config);
     void visitUnion(parsedQuery::Union& un);
     void visitSubquery(parsedQuery::Subquery& subquery);
 

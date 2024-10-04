@@ -69,7 +69,8 @@ bool isVariableContainedInGraphPatternOperation(
     } else if constexpr (std::is_same_v<T, p::Service>) {
       return ad_utility::contains(arg.visibleVariables_, variable);
     } else {
-      static_assert(std::is_same_v<T, p::TransPath>);
+      static_assert(std::is_same_v<T, p::TransPath> ||
+                    std::is_same_v<T, p::PathQuery>);
       // The `TransPath` is set up later in the query planning, when this
       // function should not be called anymore.
       AD_FAIL();
