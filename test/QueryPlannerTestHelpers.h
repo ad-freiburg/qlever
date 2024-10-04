@@ -7,6 +7,8 @@
 #include <gmock/gmock-matchers.h>
 #include <gmock/gmock.h>
 
+#include <optional>
+
 #include "./util/GTestHelpers.h"
 #include "engine/Bind.h"
 #include "engine/CartesianProductJoin.h"
@@ -288,15 +290,15 @@ inline auto TransitivePath =
                             TransitivePathSideMatcher(right))));
     };
 
-// Match a SpatialJoin operation
+// Match a SpatialJoin operation, set arguments to ignore to -1
 inline auto SpatialJoin =
     [](long long maxDist, long long maxResults,
        const std::same_as<QetMatcher> auto&... childMatchers) {
       return RootOperation<::SpatialJoin>(
           AllOf(Property("getChildren", &Operation::getChildren,
                          ElementsAre(Pointee(childMatchers)...)),
-                AD_PROPERTY(SpatialJoin, getMaxDist, Eq(maxDist)),
-                AD_PROPERTY(SpatialJoin, getMaxResults, Eq(maxResults))));
+                AD_PROPERTY(SpatialJoin, onlyForTestingGetConfig,
+                            Eq(std::pair(maxDist, maxResults)))));
     };
 
 // Match a sort operation. Currently, this is only required by the binary search

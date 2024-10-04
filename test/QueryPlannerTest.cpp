@@ -6,6 +6,7 @@
 
 #include "QueryPlannerTestHelpers.h"
 #include "engine/QueryPlanner.h"
+#include "engine/SpatialJoin.h"
 #include "parser/SparqlParser.h"
 #include "util/TripleComponentTestHelpers.h"
 
@@ -827,8 +828,7 @@ TEST(QueryPlanner, SpatialJoinViaMaxDistPredicate) {
                 "?a <p> ?b."
                 "?y <max-distance-in-meters:-1> ?b }",
                 ::testing::_),
-      ::testing::ContainsRegex("parsing of the maximum distance for the "
-                               "SpatialJoin operation was not possible"));
+      ::testing::ContainsRegex("invalid triple for construction"));
 }
 
 // __________________________________________________________________________
@@ -905,7 +905,7 @@ TEST(QueryPlanner, SpatialJoinViaNearestNeighborsPredicate) {
                 "?a <p> ?b."
                 "?y <nearest-neighbors:-50:500> ?b }",
                 ::testing::_),
-      ::testing::ContainsRegex("invalid arguments for <nearest-neighbors>"));
+      ::testing::ContainsRegex("invalid triple for construction"));
 
   AD_EXPECT_THROW_WITH_MESSAGE(
       h::expect("SELECT ?x ?y WHERE {"
@@ -913,7 +913,7 @@ TEST(QueryPlanner, SpatialJoinViaNearestNeighborsPredicate) {
                 "?a <p> ?b."
                 "?y <nearest-neighbors:1:-200> ?b }",
                 ::testing::_),
-      ::testing::ContainsRegex("invalid arguments for <nearest-neighbors>"));
+      ::testing::ContainsRegex("invalid triple for construction"));
 
   AD_EXPECT_THROW_WITH_MESSAGE(
       h::expect("SELECT ?x ?y WHERE {"
@@ -921,7 +921,7 @@ TEST(QueryPlanner, SpatialJoinViaNearestNeighborsPredicate) {
                 "?a <p> ?b."
                 "?y <nearest-neighbors:0:-1> ?b }",
                 ::testing::_),
-      ::testing::ContainsRegex("invalid arguments for <nearest-neighbors>"));
+      ::testing::ContainsRegex("invalid triple for construction"));
 }
 
 // __________________________________________________________________________

@@ -55,11 +55,11 @@ SpatialJoin::SpatialJoin(
 // ____________________________________________________________________________
 void SpatialJoin::parseConfigFromTriple() {
   // Helper to convert a ctre match to an integer
-  auto matchToInt = [](std::string_view match) -> std::optional<int> {
+  auto matchToInt = [](std::string_view match) -> std::optional<long long> {
     if (match.size() > 0) {
       double res = 0;
       absl::from_chars(match.data(), match.data() + match.size(), res);
-      return static_cast<int>(res);
+      return static_cast<long long>(res);
     }
     return std::nullopt;
   };
@@ -108,8 +108,8 @@ bool SpatialJoin::isConstructed() const {
 }
 
 // ____________________________________________________________________________
-std::optional<int> SpatialJoin::getMaxDist() const {
-  auto visitor = []<typename T>(const T& config) -> std::optional<int> {
+std::optional<long long> SpatialJoin::getMaxDist() const {
+  auto visitor = []<typename T>(const T& config) -> std::optional<long long> {
     if constexpr (std::is_same_v<T, MaxDistanceConfig>) {
       return config.maxDist_;
     } else if constexpr (std::is_same_v<T, NearestNeighborsConfig>) {
@@ -120,8 +120,8 @@ std::optional<int> SpatialJoin::getMaxDist() const {
 }
 
 // ____________________________________________________________________________
-std::optional<int> SpatialJoin::getMaxResults() const {
-  auto visitor = []<typename T>(const T& config) -> std::optional<int> {
+std::optional<long long> SpatialJoin::getMaxResults() const {
+  auto visitor = []<typename T>(const T& config) -> std::optional<long long> {
     if constexpr (std::is_same_v<T, MaxDistanceConfig>) {
       return std::nullopt;
     } else if constexpr (std::is_same_v<T, NearestNeighborsConfig>) {

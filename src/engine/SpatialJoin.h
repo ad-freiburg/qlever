@@ -5,17 +5,19 @@
 
 #pragma once
 
+#include <optional>
+
 #include "engine/Operation.h"
 #include "global/Id.h"
 #include "parser/ParsedQuery.h"
 
 // Configuration to restrict the results provided by the SpatialJoin
 struct NearestNeighborsConfig {
-  int maxResults_;
-  std::optional<int> maxDist_;
+  long long maxResults_;
+  std::optional<long long> maxDist_ = std::nullopt;
 };
 struct MaxDistanceConfig {
-  int maxDist_;
+  long long maxDist_;
 };
 
 // This class is implementing a SpatialJoin operation. This operations joins
@@ -75,11 +77,15 @@ class SpatialJoin : public Operation {
   bool isConstructed() const;
 
   // this function is used to give the maximum distance for internal purposes
-  std::optional<int> getMaxDist() const;
+  std::optional<long long> getMaxDist() const;
 
   // this function is used to give the maximum number of results for internal
   // purposes
-  std::optional<int> getMaxResults() const;
+  std::optional<long long> getMaxResults() const;
+
+  std::pair<long long, long long> onlyForTestingGetConfig() const {
+    return std::pair{getMaxDist().value_or(-1), getMaxResults().value_or(-1)};
+  }
 
   std::shared_ptr<QueryExecutionTree> onlyForTestingGetLeftChild() const {
     return childLeft_;
