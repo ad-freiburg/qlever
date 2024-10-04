@@ -25,14 +25,7 @@ ParamValueMap ad_utility::url_parser::paramsToMap(
     boost::urls::params_view params) {
   ParamValueMap result;
   for (const auto& [key, value, _] : params) {
-    if (result.contains(key)) {
-      result[key].push_back(value);
-    } else {
-      auto [blockingElement, wasInserted] = result.insert({key, {value}});
-      if (!wasInserted) {
-        AD_FAIL();
-      }
-    }
+    result[key].push_back(value);
   }
   return result;
 }

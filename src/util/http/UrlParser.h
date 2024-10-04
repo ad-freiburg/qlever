@@ -64,11 +64,11 @@ struct ParsedRequest {
   std::variant<Operation::Query, Operation::Update, Operation::None> operation_;
 };
 
-// Parse the URL path and the URL query parameters of a HTTP Request target.
+// Parse the URL path and the URL query parameters of an HTTP Request target.
 ParsedUrl parseRequestTarget(std::string_view target);
 
-// Convert the HTTP Query parameters `params` to a hashmap. Throw an error
-// if a key is included twice.
+// Convert the HTTP Query parameters `params` to a ParamValueMap (a map from
+// string to vectors of strings).
 ParamValueMap paramsToMap(boost::urls::params_view params);
 
 // Parse default and named graphs URIs from the parameters.
