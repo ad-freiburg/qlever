@@ -182,8 +182,10 @@ class Server {
   /// or throws an exception. We still need to return an `optional` though for
   /// technical reasons that are described in the definition of this function.
   net::awaitable<std::optional<PlannedQuery>> parseAndPlan(
-      const std::string& query, QueryExecutionContext& qec,
-      SharedCancellationHandle handle, TimeLimit timeLimit);
+      const std::string& query,
+      const vector<SparqlQleverVisitor::DatasetClause>& additionalDatasets,
+      QueryExecutionContext& qec, SharedCancellationHandle handle,
+      TimeLimit timeLimit);
 
   /// Acquire the `CancellationHandle` for the given `QueryId`, start the
   /// watchdog and call `cancelAfterDeadline` to set the timeout after

@@ -774,8 +774,10 @@ boost::asio::awaitable<void> Server::processQuery(
     auto [cancellationHandle, cancelTimeoutOnDestruction] =
         setupCancellationHandle(messageSender.getQueryId(), timeLimit);
 
-    plannedQuery =
-        co_await parseAndPlan(query, qec, cancellationHandle, timeLimit);
+    auto additionalDatasets =
+        ad_utility::url_parser::parseDatasetClauses(params);
+    plannedQuery = co_await parseAndPlan(query, additionalDatasets, qec,
+                                         cancellationHandle, timeLimit);
     AD_CORRECTNESS_CHECK(plannedQuery.has_value());
     auto& qet = plannedQuery.value().queryExecutionTree_;
     qet.isRoot() = true;  // allow pinning of the final result
@@ -898,10 +900,29 @@ Awaitable<T> Server::computeInNewThread(Function function,
       std::move(handle), std::move(cancelTimerPromise));
 }
 
+// TODO<qup42> duplicated from SparqlQleverVisitor
+namespace {
+// Add the `datasetClauses` to the `targetClauses`.
+void addDatasetClauses(
+    ParsedQuery::DatasetClauses& targetClauses,
+    const std::vector<SparqlQleverVisitor::DatasetClause>& datasetClauses) {
+  for (auto& [dataset, isNamed] : datasetClauses) {
+    auto& graphs =
+        isNamed ? targetClauses.namedGraphs_ : targetClauses.defaultGraphs_;
+    if (!graphs.has_value()) {
+      graphs.emplace();
+    }
+    graphs.value().insert(dataset);
+  }
+}
+}  // namespace
+
 // _____________________________________________________________________________
 net::awaitable<std::optional<Server::PlannedQuery>> Server::parseAndPlan(
-    const std::string& query, QueryExecutionContext& qec,
-    SharedCancellationHandle handle, TimeLimit timeLimit) {
+    const std::string& query,
+    const vector<SparqlQleverVisitor::DatasetClause>& additionalDatasets,
+    QueryExecutionContext& qec, SharedCancellationHandle handle,
+    TimeLimit timeLimit) {
   auto handleCopy = handle;
 
   // The usage of an `optional` here is required because of a limitation in
@@ -911,10 +932,11 @@ net::awaitable<std::optional<Server::PlannedQuery>> Server::parseAndPlan(
   // probably related to issues in GCC's coroutine implementation.
   return computeInNewThread(
       [&query, &qec, enablePatternTrick = enablePatternTrick_,
-       handle = std::move(handle),
-       timeLimit]() mutable -> std::optional<PlannedQuery> {
+       handle = std::move(handle), timeLimit,
+       &additionalDatasets]() mutable -> std::optional<PlannedQuery> {
         auto pq = SparqlParser::parseQuery(query);
         handle->throwIfCancelled();
+        addDatasetClauses(pq.datasetClauses_, additionalDatasets);
         QueryPlanner qp(&qec, handle);
         qp.setEnablePatternTrick(enablePatternTrick);
         auto qet = qp.createExecutionTree(pq);

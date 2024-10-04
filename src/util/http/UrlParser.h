@@ -11,7 +11,8 @@
 #include <string>
 #include <string_view>
 
-#include "../HashMap.h"
+#include "parser/sparqlParser/SparqlQleverVisitor.h"
+#include "util/HashMap.h"
 
 /**
  * /brief Some helpers to parse request URLs in QLever.
@@ -69,6 +70,10 @@ ParsedUrl parseRequestTarget(std::string_view target);
 // Convert the HTTP Query parameters `params` to a hashmap. Throw an error
 // if a key is included twice.
 ParamValueMap paramsToMap(boost::urls::params_view params);
+
+// Parse default and named graphs URIs from the parameters.
+std::vector<SparqlQleverVisitor::DatasetClause> parseDatasetClauses(
+    const ParamValueMap& params);
 }  // namespace ad_utility::url_parser
 
 #endif  // QLEVER_URLPARSER_H

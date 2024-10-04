@@ -36,3 +36,22 @@ ParamValueMap ad_utility::url_parser::paramsToMap(
   }
   return result;
 }
+
+// _____________________________________________________________________________
+std::vector<SparqlQleverVisitor::DatasetClause>
+ad_utility::url_parser::parseDatasetClauses(const ParamValueMap& params) {
+  std::vector<SparqlQleverVisitor::DatasetClause> datasetClauses;
+  auto readDatasetClauses = [&params, &datasetClauses](const std::string& key,
+                                                       bool isNamed) {
+    if (params.contains(key)) {
+      for (const auto& uri : params.at(key)) {
+        datasetClauses.emplace_back(
+            ad_utility::triple_component::Iri::fromIrirefWithoutBrackets(uri),
+            isNamed);
+      }
+    }
+  };
+  readDatasetClauses("default-graph-uri", false);
+  readDatasetClauses("named-graph-uri", true);
+  return datasetClauses;
+}
