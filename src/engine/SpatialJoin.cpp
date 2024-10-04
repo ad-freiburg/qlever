@@ -498,7 +498,7 @@ Result SpatialJoin::s2geometryAlgorithm() {
     s2query.mutable_options()->set_max_results(maxResults.value());
   }
   if (maxDist.has_value()) {
-    s2query.mutable_options()->set_max_distance(
+    s2query.mutable_options()->set_inclusive_max_distance(
         S2Earth::ToAngle(util::units::Meters(maxDist.value())));
   }
 

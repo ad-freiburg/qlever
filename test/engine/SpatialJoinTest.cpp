@@ -1269,12 +1269,7 @@ void testGetResultWidthOrVariableToColumnMap(bool leftSideBigChild,
       ColumnIndex ind =
           varColMap[Variable{expectedColumns.at(i).first}].columnIndex_;
       const IdTable* r = &resultTable.idTable();
-      // TODO<ullingerc> Hotfix for failing test - for maxDist_==0
-      // baselineAlgorithm returns all self-pairs, but s2geometryAlgorithm
-      // returns none
-      if (r->numRows() == 0) {
-        continue;
-      }
+      ASSERT_LT(0, r->numRows());
       ASSERT_LT(ind, r->numColumns());
       ValueId tableEntry = r->at(0, ind);
 
