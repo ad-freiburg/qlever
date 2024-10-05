@@ -496,16 +496,15 @@ ProtoResult Join::lazyJoin(std::shared_ptr<const Result> a, ColumnIndex jc1,
   auto rowAdder = std::make_unique<ad_utility::AddCombinedRowToIdTable>(
       1, IdTable{getResultWidth(), getExecutionContext()->getAllocator()},
       cancellationHandle_);
+  using TableView = decltype(std::declval<IdTable>().asColumnSubsetView(
+      std::declval<std::span<const ColumnIndex>>()));
+  using ArrayType = std::array<ad_utility::IdTableAndFirstCol<TableView>, 1>;
   auto performJoin = [this, &rowAdder, requestLaziness, jc1, jc2](
                          auto leftBlocks, auto rightBlocks) {
     auto couldContainUndef = [](const auto& blocks, const auto& tree,
                                 ColumnIndex joinColumn) {
-      if constexpr (std::is_same_v<
-                        decltype(blocks),
-                        const std::span<
-                            ad_utility::IdTableAndFirstCol<IdTable>>&>) {
-        return !blocks.empty() && !blocks[0].empty() &&
-               blocks[0][0].isUndefined();
+      if constexpr (std::is_same_v<decltype(blocks), const ArrayType&>) {
+        return !blocks[0].empty() && blocks[0][0].isUndefined();
       } else {
         auto undefStatus = tree->getVariableAndInfoByColumnIndex(joinColumn)
                                .second.mightContainUndef_;
@@ -528,15 +527,15 @@ ProtoResult Join::lazyJoin(std::shared_ptr<const Result> a, ColumnIndex jc1,
   std::optional<cppcoro::generator<std::monostate>> resultGenerator =
       std::nullopt;
   if (a->isFullyMaterialized() && !b->isFullyMaterialized()) {
-    ad_utility::IdTableAndFirstCol permutationIdTable{
-        a->idTable().asColumnSubsetView(joinColMap.permutationLeft())};
-    resultGenerator = performJoin(std::span{&permutationIdTable, 1},
-                                  convertGenerator(std::move(b->idTables())));
+    resultGenerator = performJoin(
+        ArrayType{ad_utility::IdTableAndFirstCol{
+            a->idTable().asColumnSubsetView(joinColMap.permutationLeft())}},
+        convertGenerator(std::move(b->idTables())));
   } else if (!a->isFullyMaterialized() && b->isFullyMaterialized()) {
-    ad_utility::IdTableAndFirstCol permutationIdTable{
-        b->idTable().asColumnSubsetView(joinColMap.permutationRight())};
-    resultGenerator = performJoin(convertGenerator(std::move(a->idTables())),
-                                  std::span{&permutationIdTable, 1});
+    resultGenerator = performJoin(
+        convertGenerator(std::move(a->idTables())),
+        ArrayType{ad_utility::IdTableAndFirstCol{
+            b->idTable().asColumnSubsetView(joinColMap.permutationRight())}});
   } else if (!a->isFullyMaterialized() && !b->isFullyMaterialized()) {
     resultGenerator = performJoin(convertGenerator(std::move(a->idTables())),
                                   convertGenerator(std::move(b->idTables())));
@@ -704,7 +703,8 @@ IdTable Join::computeResultForTwoIndexScans() const {
   auto rightBlocks = convertGenerator(std::move(rightBlocksInternal));
 
   auto generator = ad_utility::zipperJoinForBlocksWithoutUndef(
-      true, leftBlocks, rightBlocks, std::less{}, rowAdder);
+      true, std::ranges::ref_view(leftBlocks),
+      std::ranges::ref_view(rightBlocks), std::less{}, rowAdder);
 
   for ([[maybe_unused]] std::monostate& _ : generator) {
     AD_FAIL();
@@ -773,11 +773,14 @@ IdTable Join::computeResultForIndexScanAndIdTable(const IdTable& idTable,
 
   runtimeInfo().addDetail("time-for-filtering-blocks", timer.msecs());
   auto doJoin = [&rowAdder, idTableHasUndef](auto& left, auto& right) mutable {
-    auto generator = idTableHasUndef
-                         ? ad_utility::zipperJoinForBlocksWithPotentialUndef(
-                               true, left, right, std::less{}, rowAdder)
-                         : ad_utility::zipperJoinForBlocksWithoutUndef(
-                               true, left, right, std::less{}, rowAdder);
+    auto generator =
+        idTableHasUndef
+            ? ad_utility::zipperJoinForBlocksWithPotentialUndef(
+                  true, std::ranges::ref_view(left),
+                  std::ranges::ref_view(right), std::less{}, rowAdder)
+            : ad_utility::zipperJoinForBlocksWithoutUndef(
+                  true, std::ranges::ref_view(left),
+                  std::ranges::ref_view(right), std::less{}, rowAdder);
     for ([[maybe_unused]] std::monostate& _ : generator) {
       AD_FAIL();
     }

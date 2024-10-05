@@ -131,8 +131,8 @@ auto lazyOptionalJoinOnFirstColumn(auto& leftInput, auto& rightInput,
       BUFFER_SIZE_JOIN_PATTERNS_WITH_OSP, resultCallback};
 
   auto generator = ad_utility::zipperJoinForBlocksWithoutUndef(
-      true, leftInput, rightInput, comparator, rowAdder, projection, projection,
-      std::true_type{});
+      true, std::ranges::ref_view(leftInput), std::ranges::ref_view(rightInput),
+      comparator, rowAdder, projection, projection, std::true_type{});
   for ([[maybe_unused]] std::monostate& _ : generator) {
     AD_FAIL();
   }

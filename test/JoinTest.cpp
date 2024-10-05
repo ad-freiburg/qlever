@@ -230,11 +230,21 @@ using ExpectedColumns = ad_utility::HashMap<
     std::pair<std::span<const Id>, ColumnIndexAndTypeInfo::UndefStatus>>;
 
 // Test that the result of the `join` matches the `expected` outcome.
-void testJoinOperation(Join& join, const ExpectedColumns& expected) {
-  auto res = join.getResult();
+void testJoinOperation(Join& join, const ExpectedColumns& expected,
+                       bool requestLaziness = false) {
+  auto res = join.getResult(false, requestLaziness
+                                       ? ComputationMode::LAZY_IF_SUPPORTED
+                                       : ComputationMode::FULLY_MATERIALIZED);
   const auto& varToCols = join.getExternallyVisibleVariableColumns();
   EXPECT_EQ(varToCols.size(), expected.size());
-  const auto& table = res->idTable();
+  IdTable aggregatedResult{join.getResultWidth(), join.allocator()};
+  if (!res->isFullyMaterialized()) {
+    for (const IdTable& idTable : res->idTables()) {
+      aggregatedResult.insertAtEnd(idTable);
+    }
+  }
+  const auto& table =
+      res->isFullyMaterialized() ? res->idTable() : aggregatedResult;
   ASSERT_EQ(table.numColumns(), expected.size());
   for (const auto& [var, columnAndStatus] : expected) {
     const auto& [colIndex, undefStatus] = varToCols.at(var);
@@ -415,10 +425,14 @@ TEST(JoinTest, joinWithColumnAndScanUndefValues) {
         {Variable{"?s"}, makeAlwaysDefinedColumn(0)},
         {Variable{"?o"}, makeAlwaysDefinedColumn(1)}};
     testJoinOperation(join, makeExpectedColumns(expectedVariables, expected));
+    testJoinOperation(join, makeExpectedColumns(expectedVariables, expected),
+                      true);
 
     auto joinSwitched = Join{qec, valuesTree, fullScanPSO, 0, 0};
     testJoinOperation(joinSwitched,
                       makeExpectedColumns(expectedVariables, expected));
+    testJoinOperation(joinSwitched,
+                      makeExpectedColumns(expectedVariables, expected), true);
   };
   test(0);
   test(1);
@@ -468,4 +482,73 @@ TEST(JoinTest, invalidJoinVariable) {
   auto valuesTree2 = makeValuesForSingleVariable(qec, "?p", {"<x>"});
 
   ASSERT_ANY_THROW(Join(qec, valuesTree2, valuesTree, 0, 0));
+}
+
+// _____________________________________________________________________________
+TEST(JoinTest, joinTwoLazyOperationsWithAndWithoutUndefValues) {
+  auto performJoin = [](std::vector<IdTable> leftTables,
+                        std::vector<IdTable> rightTables,
+                        const IdTable& expected,
+                        bool expectPossiblyUndefinedResult,
+                        ad_utility::source_location loc =
+                            ad_utility::source_location::current()) {
+    auto l = generateLocationTrace(loc);
+    auto qec = ad_utility::testing::getQec();
+    RuntimeParameters().set<"lazy-index-scan-max-size-materialization">(0);
+    qec->getQueryTreeCache().clearAll();
+    auto leftTree = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, std::move(leftTables), Vars{Variable{"?s"}}, false,
+        std::vector<ColumnIndex>{0});
+    auto rightTree = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, std::move(rightTables), Vars{Variable{"?s"}}, false,
+        std::vector<ColumnIndex>{0});
+    auto join = Join{qec, leftTree, rightTree, 0, 0};
+    EXPECT_EQ(join.getDescriptor(), "Join on ?s");
+
+    VariableToColumnMap expectedVariables{
+        {Variable{"?s"}, expectPossiblyUndefinedResult
+                             ? makePossiblyUndefinedColumn(0)
+                             : makeAlwaysDefinedColumn(0)}};
+
+    testJoinOperation(join, makeExpectedColumns(expectedVariables, expected),
+                      true);
+
+    auto joinSwitched = Join{qec, rightTree, leftTree, 0, 0};
+    testJoinOperation(joinSwitched,
+                      makeExpectedColumns(expectedVariables, expected), true);
+  };
+  auto U = Id::makeUndefined();
+  std::vector<IdTable> leftTables;
+  std::vector<IdTable> rightTables;
+  IdTable expected1{1, ad_utility::makeUnlimitedAllocator<Id>()};
+  performJoin(std::move(leftTables), std::move(rightTables), expected1, false);
+
+  leftTables.push_back(makeIdTableFromVector({{U}}));
+  rightTables.push_back(makeIdTableFromVector({{U}}));
+  auto expected2 = makeIdTableFromVector({{U}});
+  performJoin(std::move(leftTables), std::move(rightTables), expected2, true);
+
+  leftTables.push_back(makeIdTableFromVector({{U}, {I(0)}}));
+  rightTables.push_back(makeIdTableFromVector({{U}}));
+  auto expected3 = makeIdTableFromVector({{U}, {I(0)}});
+  performJoin(std::move(leftTables), std::move(rightTables), expected3, true);
+
+  leftTables.push_back(makeIdTableFromVector({{U}, {I(0)}}));
+  leftTables.push_back(makeIdTableFromVector({{I(1)}}));
+  rightTables.push_back(makeIdTableFromVector({{I(0)}}));
+  auto expected4 = makeIdTableFromVector({{I(0)}, {I(0)}});
+  performJoin(std::move(leftTables), std::move(rightTables), expected4, false);
+
+  leftTables.push_back(makeIdTableFromVector({{U}, {I(0)}}));
+  leftTables.push_back(makeIdTableFromVector({{I(1)}}));
+  rightTables.push_back(IdTable{1, ad_utility::makeUnlimitedAllocator<Id>()});
+  IdTable expected5{1, ad_utility::makeUnlimitedAllocator<Id>()};
+  performJoin(std::move(leftTables), std::move(rightTables), expected5, false);
+
+  leftTables.push_back(makeIdTableFromVector({{I(0)}}));
+  leftTables.push_back(makeIdTableFromVector({{I(1)}}));
+  rightTables.push_back(makeIdTableFromVector({{I(1)}}));
+  rightTables.push_back(makeIdTableFromVector({{I(2)}}));
+  auto expected6 = makeIdTableFromVector({{I(1)}});
+  performJoin(std::move(leftTables), std::move(rightTables), expected6, false);
 }

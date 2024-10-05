@@ -652,14 +652,24 @@ class BlockAndSubrange {
   }
 };
 
+template <typename It>
+struct IteratorTraitsLight {
+  using value_type = It::value_type;
+};
+
+template <typename V>
+struct IteratorTraitsLight<V*> {
+  using value_type = V;
+};
+
 // A helper struct for the zipper join on blocks algorithm (see below). It
 // combines the current iterator, then end iterator, the relevant projection to
 // obtain the input to the comparison, and a buffer for blocks that are
 // currently required by the join algorithm for one side of the join.
 template <typename Iterator, typename End, typename Projection>
 struct JoinSide {
-  using CurrentBlocks =
-      std::vector<detail::BlockAndSubrange<typename Iterator::value_type>>;
+  using CurrentBlocks = std::vector<detail::BlockAndSubrange<
+      typename IteratorTraitsLight<Iterator>::value_type>>;
   Iterator it_;
   [[no_unique_address]] const End end_;
   const Projection& projection_;
@@ -667,7 +677,8 @@ struct JoinSide {
   CurrentBlocks undefBlocks_{};
 
   // Type aliases for a single element from a block from the left/right input.
-  using value_type = std::ranges::range_value_t<typename Iterator::value_type>;
+  using value_type = std::ranges::range_value_t<
+      typename IteratorTraitsLight<Iterator>::value_type>;
   // Type alias for the result of the projection.
   using ProjectedEl =
       std::decay_t<std::invoke_result_t<const Projection&, value_type>>;
@@ -1373,8 +1384,8 @@ template <typename LeftBlocks, typename RightBlocks, typename LessThan,
           typename RightProjection = std::identity,
           typename DoOptionalJoinTag = std::false_type>
 cppcoro::generator<std::monostate> zipperJoinForBlocksWithoutUndef(
-    bool dontYield, LeftBlocks&& leftBlocks, RightBlocks&& rightBlocks,
-    const LessThan& lessThan, auto& compatibleRowAction,
+    bool dontYield, LeftBlocks leftBlocks, RightBlocks rightBlocks,
+    LessThan lessThan, auto& compatibleRowAction,
     LeftProjection leftProjection = {}, RightProjection rightProjection = {},
     DoOptionalJoinTag = {}) {
   static constexpr bool DoOptionalJoin = DoOptionalJoinTag::value;
@@ -1396,8 +1407,8 @@ template <typename LeftBlocks, typename RightBlocks, typename LessThan,
           typename RightProjection = std::identity,
           typename DoOptionalJoinTag = std::false_type>
 cppcoro::generator<std::monostate> zipperJoinForBlocksWithPotentialUndef(
-    bool dontYield, LeftBlocks&& leftBlocks, RightBlocks&& rightBlocks,
-    const LessThan& lessThan, auto& compatibleRowAction,
+    bool dontYield, LeftBlocks leftBlocks, RightBlocks rightBlocks,
+    LessThan lessThan, auto& compatibleRowAction,
     LeftProjection leftProjection = {}, RightProjection rightProjection = {},
     DoOptionalJoinTag = {}) {
   static constexpr bool DoOptionalJoin = DoOptionalJoinTag::value;
