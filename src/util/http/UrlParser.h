@@ -32,7 +32,7 @@ struct ParsedUrl {
 };
 
 // The different SPARQL operations that a `ParsedRequest` can represent.
-namespace Operation {
+namespace sparqlOperation {
 // A SPARQL 1.1 Query
 struct Query {
   std::string query_;
@@ -52,7 +52,7 @@ struct Update {
 struct None {
   bool operator==(const None& rhs) const = default;
 };
-}  // namespace Operation
+}  // namespace sparqlOperation
 
 // Representation of parsed HTTP request.
 // - `path_` is the URL path
@@ -61,7 +61,9 @@ struct None {
 struct ParsedRequest {
   std::string path_;
   ParamValueMap parameters_;
-  std::variant<Operation::Query, Operation::Update, Operation::None> operation_;
+  std::variant<sparqlOperation::Query, sparqlOperation::Update,
+               sparqlOperation::None>
+      operation_;
 };
 
 // Parse the URL path and the URL query parameters of an HTTP Request target.

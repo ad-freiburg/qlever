@@ -13,7 +13,7 @@
 #include "util/http/UrlParser.h"
 
 using namespace ad_utility::url_parser;
-using namespace ad_utility::url_parser::Operation;
+using namespace ad_utility::url_parser::sparqlOperation;
 
 namespace {
 auto ParsedRequestIs = [](const std::string& path,

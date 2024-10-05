@@ -168,7 +168,7 @@ ad_utility::url_parser::ParsedRequest Server::parseHttpRequest(
     const ad_utility::httpUtils::HttpRequest auto& request) {
   // For an HTTP request, `request.target()` yields the HTTP Request-URI.
   // This is a concatenation of the URL path and the query strings.
-  using namespace ad_utility::url_parser::Operation;
+  using namespace ad_utility::url_parser::sparqlOperation;
   auto parsedUrl = ad_utility::url_parser::parseRequestTarget(request.target());
   ad_utility::url_parser::ParsedRequest parsedRequest{
       std::move(parsedUrl.path_), std::move(parsedUrl.parameters_), None{}};
@@ -452,14 +452,14 @@ Awaitable<void> Server::process(
   }
 
   // Process the two operation types.
-  if (std::holds_alternative<ad_utility::url_parser::Operation::Query>(
+  if (std::holds_alternative<ad_utility::url_parser::sparqlOperation::Query>(
           parsedHttpRequest.operation_)) {
     if (auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
             checkParameter("timeout", std::nullopt), accessTokenOk, request,
             send)) {
       co_return co_await processQuery(
           parameters,
-          std::get<ad_utility::url_parser::Operation::Query>(
+          std::get<ad_utility::url_parser::sparqlOperation::Query>(
               parsedHttpRequest.operation_)
               .query_,
           requestTimer, std::move(request), send, timeLimit.value());
@@ -469,7 +469,8 @@ Awaitable<void> Server::process(
       // sent to the client already. We can stop here.
       co_return;
     }
-  } else if (std::holds_alternative<ad_utility::url_parser::Operation::Update>(
+  } else if (std::holds_alternative<
+                 ad_utility::url_parser::sparqlOperation::Update>(
                  parsedHttpRequest.operation_)) {
     throw std::runtime_error(
         "SPARQL 1.1 Update is  currently not supported by QLever.");
