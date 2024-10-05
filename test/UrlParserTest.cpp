@@ -6,23 +6,25 @@
 #include <gtest/gtest.h>
 
 #include "util/GTestHelpers.h"
+#include "util/TripleComponentTestHelpers.h"
 #include "util/http/HttpUtils.h"
 #include "util/http/UrlParser.h"
 
 using namespace ad_utility;
+using namespace ad_utility::testing;
 
 TEST(UrlParserTest, getParameterCheckAtMostOnce) {
   const url_parser::ParamValueMap map = {{"once", {"a"}},
                                          {"multiple_times", {"b", "c"}}};
 
   EXPECT_THAT(url_parser::getParameterCheckAtMostOnce(map, "absent"),
-              testing::Eq(std::nullopt));
+              ::testing::Eq(std::nullopt));
   EXPECT_THAT(url_parser::getParameterCheckAtMostOnce(map, "once"),
-              testing::Optional(testing::StrEq("a")));
+              ::testing::Optional(::testing::StrEq("a")));
   AD_EXPECT_THROW_WITH_MESSAGE(
       url_parser::getParameterCheckAtMostOnce(map, "multiple_times"),
-      testing::HasSubstr("Parameter \"multiple_times\" must be specified "
-                         "exactly once. Is: 2"));
+      ::testing::HasSubstr("Parameter \"multiple_times\" must be specified "
+                           "exactly once. Is: 2"));
 }
 
 TEST(UrlParserTest, paramsToMap) {
@@ -32,8 +34,8 @@ TEST(UrlParserTest, paramsToMap) {
     return url_parser::paramsToMap(url.params());
   };
   auto HashMapEq = [](const url_parser::ParamValueMap& hashMap)
-      -> testing::Matcher<const url_parser::ParamValueMap> {
-    return testing::ContainerEq(hashMap);
+      -> ::testing::Matcher<const url_parser::ParamValueMap> {
+    return ::testing::ContainerEq(hashMap);
   };
 
   EXPECT_THAT(parseParams("?foo=a&foo=b"), HashMapEq({{"foo", {"a", "b"}}}));
@@ -73,10 +75,10 @@ TEST(UrlParserTest, parseRequestTarget) {
 
   auto IsParsedUrl = [](const string& path,
                         const url_parser::ParamValueMap& parameters)
-      -> testing::Matcher<const ParsedUrl&> {
-    return testing::AllOf(
-        AD_FIELD(ParsedUrl, path_, testing::Eq(path)),
-        AD_FIELD(ParsedUrl, parameters_, testing::ContainerEq(parameters)));
+      -> ::testing::Matcher<const ParsedUrl&> {
+    return ::testing::AllOf(
+        AD_FIELD(ParsedUrl, path_, ::testing::Eq(path)),
+        AD_FIELD(ParsedUrl, parameters_, ::testing::ContainerEq(parameters)));
   };
 
   EXPECT_THAT(parseRequestTarget("/"), IsParsedUrl("/", {}));
@@ -95,7 +97,7 @@ TEST(UrlParserTest, parseRequestTarget) {
   // This a complete URL and not only the request target
   AD_EXPECT_THROW_WITH_MESSAGE(
       parseRequestTarget("file://more-than-target"),
-      testing::StrEq("Failed to parse URL: \"file://more-than-target\"."));
+      ::testing::StrEq("Failed to parse URL: \"file://more-than-target\"."));
 }
 
 TEST(UrlParserTest, parseDatasetClauses) {
@@ -104,26 +106,26 @@ TEST(UrlParserTest, parseDatasetClauses) {
 
   // Construct the vector from an initializer list without specifying the type.
   auto IsDatasets = [](const std::vector<DatasetClause>& datasetClauses)
-      -> testing::Matcher<const std::vector<DatasetClause>&> {
-    return testing::ContainerEq(datasetClauses);
+      -> ::testing::Matcher<const std::vector<DatasetClause>&> {
+    return ::testing::ContainerEq(datasetClauses);
   };
 
   EXPECT_THAT(parseDatasetClauses({}), IsDatasets({}));
   EXPECT_THAT(
       parseDatasetClauses({{"default-graph-uri", {"https://w3.org/1"}}}),
-      IsDatasets({{Iri::fromIriref("<https://w3.org/1>"), false}}));
+      IsDatasets({{iri("<https://w3.org/1>"), false}}));
   EXPECT_THAT(parseDatasetClauses({{"named-graph-uri", {"https://w3.org/1"}}}),
-              IsDatasets({{Iri::fromIriref("<https://w3.org/1>"), true}}));
+              IsDatasets({{iri("<https://w3.org/1>"), true}}));
   EXPECT_THAT(parseDatasetClauses({{"default-graph-uri", {"https://w3.org/1"}},
                                    {"named-graph-uri", {"https://w3.org/2"}}}),
-              IsDatasets({{Iri::fromIriref("<https://w3.org/1>"), false},
-                          {Iri::fromIriref("<https://w3.org/2>"), true}}));
+              IsDatasets({{iri("<https://w3.org/1>"), false},
+                          {iri("<https://w3.org/2>"), true}}));
   EXPECT_THAT(
       parseDatasetClauses(
           {{"default-graph-uri", {"https://w3.org/1", "https://w3.org/2"}},
            {"named-graph-uri", {"https://w3.org/3", "https://w3.org/4"}}}),
-      IsDatasets({{Iri::fromIriref("<https://w3.org/1>"), false},
-                  {Iri::fromIriref("<https://w3.org/2>"), false},
-                  {Iri::fromIriref("<https://w3.org/3>"), true},
-                  {Iri::fromIriref("<https://w3.org/4>"), true}}));
+      IsDatasets({{iri("<https://w3.org/1>"), false},
+                  {iri("<https://w3.org/2>"), false},
+                  {iri("<https://w3.org/3>"), true},
+                  {iri("<https://w3.org/4>"), true}}));
 }
