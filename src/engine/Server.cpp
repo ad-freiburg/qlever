@@ -697,10 +697,7 @@ boost::asio::awaitable<void> Server::processQuery(
                                    const std::string& expected) {
       auto parameterValue =
           ad_utility::url_parser::getParameterCheckAtMostOnce(params, param);
-      if (!parameterValue.has_value()) {
-        return false;
-      }
-      return parameterValue.value() == expected;
+     return parameterValue.has_value() && parameterValue.value() == expected;
     };
     const bool pinSubtrees = containsParam("pinsubtrees", "true");
     const bool pinResult = containsParam("pinresult", "true");
