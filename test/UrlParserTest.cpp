@@ -102,7 +102,6 @@ TEST(UrlParserTest, parseRequestTarget) {
 
 TEST(UrlParserTest, parseDatasetClauses) {
   using namespace ad_utility::url_parser;
-  using Iri = ad_utility::triple_component::Iri;
 
   // Construct the vector from an initializer list without specifying the type.
   auto IsDatasets = [](const std::vector<DatasetClause>& datasetClauses)
