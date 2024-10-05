@@ -48,7 +48,7 @@ struct DatasetClauses {
   // FROM NAMED clauses.
   ScanSpecificationAsTripleComponent::Graphs namedGraphs_{};
 
-  void addClauses(const std::vector<DatasetClause>& clauses);
+  static DatasetClauses fromClauses(const std::vector<DatasetClause>& clauses);
 };
 }  // namespace parsedQuery
 

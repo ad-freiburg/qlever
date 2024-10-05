@@ -182,7 +182,7 @@ class Server {
   /// or throws an exception. We still need to return an `optional` though for
   /// technical reasons that are described in the definition of this function.
   net::awaitable<std::optional<PlannedQuery>> parseAndPlan(
-      const std::string& query, const vector<DatasetClause>& additionalDatasets,
+      const std::string& query, const vector<DatasetClause>& queryDatasets,
       QueryExecutionContext& qec, SharedCancellationHandle handle,
       TimeLimit timeLimit);
 

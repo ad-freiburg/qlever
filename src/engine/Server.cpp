@@ -780,9 +780,8 @@ boost::asio::awaitable<void> Server::processQuery(
     auto [cancellationHandle, cancelTimeoutOnDestruction] =
         setupCancellationHandle(messageSender.getQueryId(), timeLimit);
 
-    auto additionalDatasets =
-        ad_utility::url_parser::parseDatasetClauses(params);
-    plannedQuery = co_await parseAndPlan(query, additionalDatasets, qec,
+    auto queryDatasets = ad_utility::url_parser::parseDatasetClauses(params);
+    plannedQuery = co_await parseAndPlan(query, queryDatasets, qec,
                                          cancellationHandle, timeLimit);
     AD_CORRECTNESS_CHECK(plannedQuery.has_value());
     auto& qet = plannedQuery.value().queryExecutionTree_;
@@ -908,7 +907,7 @@ Awaitable<T> Server::computeInNewThread(Function function,
 
 // _____________________________________________________________________________
 net::awaitable<std::optional<Server::PlannedQuery>> Server::parseAndPlan(
-    const std::string& query, const vector<DatasetClause>& additionalDatasets,
+    const std::string& query, const vector<DatasetClause>& queryDatasets,
     QueryExecutionContext& qec, SharedCancellationHandle handle,
     TimeLimit timeLimit) {
   auto handleCopy = handle;
@@ -921,10 +920,15 @@ net::awaitable<std::optional<Server::PlannedQuery>> Server::parseAndPlan(
   return computeInNewThread(
       [&query, &qec, enablePatternTrick = enablePatternTrick_,
        handle = std::move(handle), timeLimit,
-       &additionalDatasets]() mutable -> std::optional<PlannedQuery> {
+       &queryDatasets]() mutable -> std::optional<PlannedQuery> {
         auto pq = SparqlParser::parseQuery(query);
         handle->throwIfCancelled();
-        pq.datasetClauses_.addClauses(additionalDatasets);
+        // SPARQL Protocol 2.1.4 specifies that the dataset from the query
+        // parameters overrides the dataset from the query itself.
+        if (!queryDatasets.empty()) {
+          pq.datasetClauses_ =
+              parsedQuery::DatasetClauses::fromClauses(queryDatasets);
+        }
         QueryPlanner qp(&qec, handle);
         qp.setEnablePatternTrick(enablePatternTrick);
         auto qet = qp.createExecutionTree(pq);

@@ -23,15 +23,17 @@ using std::string;
 using std::vector;
 
 // _____________________________________________________________________________
-void parsedQuery::DatasetClauses::addClauses(
+parsedQuery::DatasetClauses parsedQuery::DatasetClauses::fromClauses(
     const std::vector<DatasetClause>& clauses) {
+  DatasetClauses result;
   for (auto& [dataset, isNamed] : clauses) {
-    auto& graphs = isNamed ? namedGraphs_ : defaultGraphs_;
+    auto& graphs = isNamed ? result.namedGraphs_ : result.defaultGraphs_;
     if (!graphs.has_value()) {
       graphs.emplace();
     }
     graphs.value().insert(dataset);
   }
+  return result;
 }
 
 // _____________________________________________________________________________
