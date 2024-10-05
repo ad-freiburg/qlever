@@ -172,19 +172,22 @@ ad_utility::url_parser::ParsedRequest Server::parseHttpRequest(
   auto parsedUrl = ad_utility::url_parser::parseRequestTarget(request.target());
   ad_utility::url_parser::ParsedRequest parsedRequest{
       std::move(parsedUrl.path_), std::move(parsedUrl.parameters_), None{}};
-  auto extractQueryFromParameters = [&parsedRequest]() {
-    // Some valid requests (e.g. QLever's custom commands like retrieving index
-    // statistics) don't have a query.
-    auto query = ad_utility::url_parser::getParameterCheckAtMostOnce(
-        parsedRequest.parameters_, "query");
-    if (query.has_value()) {
-      parsedRequest.operation_ = Query{query.value()};
-      parsedRequest.parameters_.erase("query");
-    }
-  };
+
+  // Some valid requests (e.g. QLever's custom commands like retrieving index
+  // statistics) don't have a query. So an empty operation is not necessarily an
+  // error.
+  auto setOperationIfSpecifiedInParams =
+      [&]<typename Operation>(string_view paramName) {
+        auto operation = ad_utility::url_parser::getParameterCheckAtMostOnce(
+            parsedRequest.parameters_, paramName);
+        if (operation.has_value()) {
+          parsedRequest.operation_ = Operation{operation.value()};
+          parsedRequest.parameters_.erase(paramName);
+        }
+      };
 
   if (request.method() == http::verb::get) {
-    extractQueryFromParameters();
+    setOperationIfSpecifiedInParams.template operator()<Query>("query");
     if (parsedRequest.parameters_.contains("update")) {
       throw std::runtime_error("SPARQL Update is not allowed as GET request.");
     }
@@ -252,13 +255,8 @@ ad_utility::url_parser::ParsedRequest Server::parseHttpRequest(
         throw std::runtime_error(
             R"(Request must only contain one of "query" and "update".)");
       }
-      extractQueryFromParameters();
-      auto update = ad_utility::url_parser::getParameterCheckAtMostOnce(
-          parsedRequest.parameters_, "update");
-      if (update.has_value()) {
-        parsedRequest.operation_ = Update{update.value()};
-        parsedRequest.parameters_.erase("update");
-      }
+      setOperationIfSpecifiedInParams.template operator()<Query>("query");
+      setOperationIfSpecifiedInParams.template operator()<Update>("update");
 
       return parsedRequest;
     }
@@ -697,7 +695,7 @@ boost::asio::awaitable<void> Server::processQuery(
                                    const std::string& expected) {
       auto parameterValue =
           ad_utility::url_parser::getParameterCheckAtMostOnce(params, param);
-     return parameterValue.has_value() && parameterValue.value() == expected;
+      return parameterValue.has_value() && parameterValue.value() == expected;
     };
     const bool pinSubtrees = containsParam("pinsubtrees", "true");
     const bool pinResult = containsParam("pinresult", "true");

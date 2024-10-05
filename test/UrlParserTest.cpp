@@ -23,8 +23,8 @@ TEST(UrlParserTest, getParameterCheckAtMostOnce) {
               ::testing::Optional(::testing::StrEq("a")));
   AD_EXPECT_THROW_WITH_MESSAGE(
       url_parser::getParameterCheckAtMostOnce(map, "multiple_times"),
-      ::testing::HasSubstr("Parameter \"multiple_times\" must be specified "
-                           "exactly once. Is: 2"));
+      ::testing::StrEq("Parameter \"multiple_times\" must be given "
+                       "exactly once. Is: 2"));
 }
 
 TEST(UrlParserTest, paramsToMap) {
