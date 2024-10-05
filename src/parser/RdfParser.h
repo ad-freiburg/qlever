@@ -735,13 +735,15 @@ class RdfMultifileParser : public RdfParserBase {
  private:
   // A thread that feeds the file specifications to the actual parser threads.
   ad_utility::JThread feederThread_;
+  // The buffer for the finished batches.
+  ad_utility::data_structures::ThreadSafeQueue<std::vector<TurtleTriple>>
+      finishedBatchQueue_{10};
+  // Note: The order is important
+  // TODO<joka921> comment on this...
   // This queue manages its own thread. Each task consists of a single file
   // that is to be parsed.
   ad_utility::TaskQueue<false> parsingQueue_{10, NUM_PARALLEL_PARSER_THREADS};
 
-  // The buffer for the finished batches.
-  ad_utility::data_structures::ThreadSafeQueue<std::vector<TurtleTriple>>
-      finishedBatchQueue_{10};
   // The number of parsers that have started, but not yet finished. This is
   // needed to detect the complete parsing.
   std::atomic<size_t> numActiveParsers_ = 0;
