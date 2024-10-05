@@ -11,6 +11,20 @@
 
 using namespace ad_utility;
 
+TEST(UrlParserTest, getParameterCheckAtMostOnce) {
+  const url_parser::ParamValueMap map = {{"once", {"a"}},
+                                         {"multiple_times", {"b", "c"}}};
+
+  EXPECT_THAT(url_parser::getParameterCheckAtMostOnce(map, "absent"),
+              testing::Eq(std::nullopt));
+  EXPECT_THAT(url_parser::getParameterCheckAtMostOnce(map, "once"),
+              testing::Optional(testing::StrEq("a")));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      url_parser::getParameterCheckAtMostOnce(map, "multiple_times"),
+      testing::HasSubstr("Parameter \"multiple_times\" must be specified "
+                         "exactly once. Is: 2"));
+}
+
 TEST(UrlParserTest, paramsToMap) {
   auto parseParams =
       [](const string& queryString) -> url_parser::ParamValueMap {
