@@ -68,9 +68,10 @@ IndexBuilderDataAsFirstPermutationSorter IndexImpl::createIdTriplesAndVocab(
 
 // _____________________________________________________________________________
 std::unique_ptr<RdfParserBase> IndexImpl::makeRdfParser(
-    const std::string& filename, Index::Filetype type) const {
+    const Index::InputFileSpecification& file) const {
   auto makeRdfParserImpl =
-      [&filename]<int useParallel, int isTurtleInput, int useCtre>()
+      [&filename =
+           file.filename_]<int useParallel, int isTurtleInput, int useCtre>()
       -> std::unique_ptr<RdfParserBase> {
     using TokenizerT =
         std::conditional_t<useCtre == 1, TokenizerCtre, Tokenizer>;
@@ -86,8 +87,8 @@ std::unique_ptr<RdfParserBase> IndexImpl::makeRdfParser(
   // `callFixedSize` litfts runtime integers to compile time integers. We use it
   // here to create the correct combinations of template arguments.
   return ad_utility::callFixedSize(
-      std::array{useParallelParser_ ? 1 : 0,
-                 type == Index::Filetype::Turtle ? 1 : 0,
+      std::array{file.parseInParallel_ ? 1 : 0,
+                 file.filetype_ == Index::Filetype::Turtle ? 1 : 0,
                  onlyAsciiTurtlePrefixes_ ? 1 : 0},
       makeRdfParserImpl);
 }
@@ -95,6 +96,9 @@ std::unique_ptr<RdfParserBase> IndexImpl::makeRdfParser(
 // _____________________________________________________________________________
 std::unique_ptr<RdfParserBase> IndexImpl::makeRdfParser(
     const std::vector<Index::InputFileSpecification>& files) const {
+  if (files.size() == 1) {
+    return makeRdfParser(files.front());
+  }
   auto makeRdfParserImpl =
       [&files]<int useCtre>() -> std::unique_ptr<RdfParserBase> {
     using TokenizerT =
@@ -315,84 +319,7 @@ std::pair<size_t, size_t> IndexImpl::createInternalPSOandPOS(
 
 // _____________________________________________________________________________
 void IndexImpl::createFromFile(const string& filename, Index::Filetype type) {
-  if (!loadAllPermutations_ && usePatterns_) {
-    throw std::runtime_error{
-        "The patterns can only be built when all 6 permutations are created"};
-  }
-  LOG(INFO) << "Processing input triples from " << filename << " ..."
-            << std::endl;
-
-  readIndexBuilderSettingsFromFile();
-
-  IndexBuilderDataAsFirstPermutationSorter indexBuilderData =
-      createIdTriplesAndVocab(makeRdfParser(filename, type));
-
-  // Write the configuration already at this point, so we have it available in
-  // case any of the permutations fail.
-  writeConfiguration();
-
-  auto& firstSorter = *indexBuilderData.sorter_.firstPermutationSorter_;
-
-  size_t numTriplesInternal = 0;
-  size_t numPredicatesInternal = 0;
-
-  // Create the internal PSO and POS permutations. This has to be called AFTER
-  // all triples have been added to the `internalTriplesPso_` sorter, in
-  // particular, after the patterns have been created.
-  auto createInternalPsoAndPosAndSetMetadata = [this, &numTriplesInternal,
-                                                &numPredicatesInternal,
-                                                &indexBuilderData]() {
-    std::tie(numTriplesInternal, numPredicatesInternal) =
-        createInternalPSOandPOS(*indexBuilderData.sorter_.internalTriplesPso_);
-  };
-
-  // For the first permutation, perform a unique.
-  auto firstSorterWithUnique =
-      ad_utility::uniqueBlockView(firstSorter.getSortedOutput());
-
-  if (!loadAllPermutations_) {
-    createInternalPsoAndPosAndSetMetadata();
-    // Only two permutations, no patterns, in this case the `firstSorter` is a
-    // PSO sorter, and `createPermutationPair` creates PSO/POS permutations.
-    createFirstPermutationPair(NumColumnsIndexBuilding,
-                               std::move(firstSorterWithUnique));
-    configurationJson_["has-all-permutations"] = false;
-  } else if (!usePatterns_) {
-    createInternalPsoAndPosAndSetMetadata();
-    // Without patterns, we explicitly have to pass in the next sorters to all
-    // permutation creating functions.
-    auto secondSorter = makeSorter<SecondPermutation>("second");
-    createFirstPermutationPair(NumColumnsIndexBuilding,
-                               std::move(firstSorterWithUnique), secondSorter);
-    firstSorter.clearUnderlying();
-
-    auto thirdSorter = makeSorter<ThirdPermutation>("third");
-    createSecondPermutationPair(NumColumnsIndexBuilding,
-                                secondSorter.getSortedBlocks<0>(), thirdSorter);
-    secondSorter.clear();
-    createThirdPermutationPair(NumColumnsIndexBuilding,
-                               thirdSorter.getSortedBlocks<0>());
-    configurationJson_["has-all-permutations"] = true;
-  } else {
-    // Load all permutations and also load the patterns. In this case the
-    // `createFirstPermutationPair` function returns the next sorter, already
-    // enriched with the patterns of the subjects in the triple.
-    auto patternOutput = createFirstPermutationPair(
-        NumColumnsIndexBuilding, std::move(firstSorterWithUnique));
-    firstSorter.clearUnderlying();
-    auto thirdSorterPtr =
-        buildOspWithPatterns(std::move(patternOutput.value()),
-                             *indexBuilderData.sorter_.internalTriplesPso_);
-    createInternalPsoAndPosAndSetMetadata();
-    createThirdPermutationPair(NumColumnsIndexBuilding + 2,
-
-                               thirdSorterPtr->template getSortedBlocks<0>());
-    configurationJson_["has-all-permutations"] = true;
-  }
-
-  addInternalStatisticsToConfiguration(numTriplesInternal,
-                                       numPredicatesInternal);
-  LOG(INFO) << "Index build completed" << std::endl;
+  createFromFiles({{filename, type, std::nullopt, useParallelParser_}});
 }
 
 // _____________________________________________________________________________
@@ -402,10 +329,13 @@ void IndexImpl::createFromFiles(
     throw std::runtime_error{
         "The patterns can only be built when all 6 permutations are created"};
   }
-  /*
-  LOG(INFO) << "Processing input triples from " << filename << " ..."
-            << std::endl;
-            */
+  if (files.size() == 1) {
+    LOG(INFO) << "Processing input triples from " << files.at(0).filename_
+              << " ..." << std::endl;
+  } else {
+    LOG(INFO) << "Processing input triples from " << files.size()
+              << " distinct input files" << std::endl;
+  }
 
   readIndexBuilderSettingsFromFile();
 

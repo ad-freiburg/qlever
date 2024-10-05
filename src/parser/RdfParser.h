@@ -697,26 +697,28 @@ class RdfParallelParser : public Parser {
 
   std::chrono::milliseconds sleepTimeForTesting_;
 };
-/**
- * This class is a TurtleParser that always assumes that
- * its input file is an uncompressed .ttl file that will be read in
- * chunks. Input file can also be a stream like stdin.
- */
+
+// This class is an RDF parser that parses multiple files in parallel. Each
+// file is specified by an  `InputFileSpecification`.
 template <typename Tokenizer>
 class RdfMultifileParser : public RdfParserBase {
  public:
-  using Triple = std::array<string, 3>;
   // Default construction needed for tests
   RdfMultifileParser() = default;
 
-  // If the `sleepTimeForTesting` is set, then after the initialization the
-  // parser will sleep for the specified time before parsing each batch s.t.
-  // certain corner cases can be tested.
+  // Construct the parser from a vector of file specifications and eagerly start
+  // parsing them on background threads.
   explicit RdfMultifileParser(
       const std::vector<qlever::InputFileSpecification>& files);
 
+  // This function is needed for the interface, but always throws an exception.
+  // `getBatch` (below) has to be used insteadl.
   bool getLine(TurtleTriple* triple) override;
 
+  // Retrieve the next batch of triples, or `nullopt` if there are no more
+  // batches. There is no guarantee about the order in which batches from
+  // different input files are returned, but each batch belongs to a distinct
+  // input file.
   std::optional<std::vector<TurtleTriple>> getBatch() override;
 
   size_t getParsePosition() const override {
@@ -731,11 +733,16 @@ class RdfMultifileParser : public RdfParserBase {
   ~RdfMultifileParser() override;
 
  private:
+  // A thread that feeds the file specifications to the actual parser threads.
   ad_utility::JThread feederThread_;
-  std::vector<ad_utility::JThread> workerThreads_;
-  // TODO<joka921> get rid of magic constants.
-  ad_utility::TaskQueue<false> parsingQueue{10, 5};
+  // This queue manages its own thread. Each task consists of a single file
+  // that is to be parsed.
+  ad_utility::TaskQueue<false> parsingQueue_{10, NUM_PARALLEL_PARSER_THREADS};
+
+  // The buffer for the finished batches.
   ad_utility::data_structures::ThreadSafeQueue<std::vector<TurtleTriple>>
       finishedBatchQueue_{10};
+  // The number of parsers that have started, but not yet finished. This is
+  // needed to detect the complete parsing.
   std::atomic<size_t> numActiveParsers_ = 0;
 };

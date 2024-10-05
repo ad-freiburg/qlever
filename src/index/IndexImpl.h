@@ -475,8 +475,8 @@ class IndexImpl {
   // configured to either parse in parallel or not, and to either use the
   // CTRE-based relaxed parser or not, depending on the settings of the
   // corresponding member variables.
-  std::unique_ptr<RdfParserBase> makeRdfParser(const std::string& filename,
-                                               Index::Filetype type) const;
+  std::unique_ptr<RdfParserBase> makeRdfParser(
+      const Index::InputFileSpecification& file) const;
   std::unique_ptr<RdfParserBase> makeRdfParser(
       const std::vector<Index::InputFileSpecification>& files) const;
 

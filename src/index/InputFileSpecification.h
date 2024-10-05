@@ -12,5 +12,6 @@ struct InputFileSpecification {
   std::string filename_;
   Filetype filetype_;
   std::optional<std::string> defaultGraph_;
+  bool parseInParallel_ = false;
 };
 }  // namespace qlever

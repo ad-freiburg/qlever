@@ -1124,10 +1124,19 @@ RdfMultifileParser<T>::RdfMultifileParser(
   };
 
   auto parseFile = [this, makeParser](const InputFileSpecification& file) {
-    auto parser = makeParser(file);
-    // TODO<joka921> handle exceptions.
-    while (auto batch = parser->getBatch()) {
-      finishedBatchQueue_.push(std::move(batch.value()));
+    try {
+      auto parser = makeParser(file);
+      // TODO<joka921> handle exceptions.
+      while (auto batch = parser->getBatch()) {
+        bool active = finishedBatchQueue_.push(std::move(batch.value()));
+        if (!active) {
+          // The queue was finished prematurely, stop this thread.
+          return;
+        }
+      }
+    } catch (...) {
+      finishedBatchQueue_.pushException(std::current_exception());
+      return;
     }
     if (numActiveParsers_.fetch_sub(1) == 1) {
       // We are the last parser, we have to notify the downstream code.
@@ -1138,21 +1147,34 @@ RdfMultifileParser<T>::RdfMultifileParser(
   auto makeParsers = [files, this, parseFile]() {
     for (const auto& file : files) {
       numActiveParsers_++;
-      parsingQueue.push(std::bind_front(parseFile, file));
+      bool active = parsingQueue_.push(std::bind_front(parseFile, file));
+      if (!active) {
+        return;
+      }
     }
-    parsingQueue.finish();
+    parsingQueue_.finish();
   };
   feederThread_ = ad_utility::JThread{makeParsers};
 }
 
-// TODO<joka921> check if there is anything to be done here.
+// _____________________________________________________________________________
 template <typename T>
-RdfMultifileParser<T>::~RdfMultifileParser() {}
+RdfMultifileParser<T>::~RdfMultifileParser() {
+  ad_utility::ignoreExceptionIfThrows(
+      [this] {
+        parsingQueue_.finish();
+        finishedBatchQueue_.finish();
+      },
+      "During the destruction of an RdfMultifileParser");
+}
 
+//______________________________________________________________________________
 template <typename T>
 bool RdfMultifileParser<T>::getLine(TurtleTriple*) {
   AD_FAIL();
 }
+
+// _____________________________________________________________________________
 template <typename T>
 std::optional<std::vector<TurtleTriple>> RdfMultifileParser<T>::getBatch() {
   return finishedBatchQueue_.pop();
