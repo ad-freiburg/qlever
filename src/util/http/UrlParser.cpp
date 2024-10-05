@@ -17,7 +17,7 @@ std::optional<std::string> ad_utility::url_parser::getParameterCheckAtMostOnce(
   if (value.size() != 1) {
     throw std::runtime_error(
         absl::StrCat("Parameter \"", key,
-                     "\" must be specified exactly once. Is: ", value.size()));
+                     "\" must be given exactly once. Is: ", value.size()));
   }
   return value.front();
 }

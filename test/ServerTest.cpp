@@ -75,8 +75,8 @@ TEST(ServerTest, parseHttpRequest) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       parse(MakeGetRequest("/?query=SELECT%20%2A%20WHERE%20%7B%7D&query=SELECT%"
                            "20%3Ffoo%20WHERE%20%7B%7D")),
-      ::testing::HasSubstr(
-          "The parameter \"query\" must be set exactly once."));
+      ::testing::StrEq(
+          "Parameter \"query\" must be given exactly once. Is: 2"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       parse(MakePostRequest("/", URLENCODED,
                             "query=SELECT%20%2A%20WHERE%20%7B%7D&update=DELETE%"
@@ -87,8 +87,8 @@ TEST(ServerTest, parseHttpRequest) {
       parse(MakePostRequest("/", URLENCODED,
                             "update=DELETE%20%7B%7D%20WHERE%20%7B%7D&update="
                             "DELETE%20%7B%7D%20WHERE%20%7B%7D")),
-      ::testing::HasSubstr(
-          "The parameter \"update\" must be set exactly once."));
+      ::testing::StrEq(
+          "Parameter \"update\" must be given exactly once. Is: 2"));
   EXPECT_THAT(
       parse(MakePostRequest("/", "application/x-www-form-urlencoded",
                             "query=SELECT%20%2A%20WHERE%20%7B%7D&send=100")),
