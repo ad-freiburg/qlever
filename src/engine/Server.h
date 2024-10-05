@@ -217,6 +217,7 @@ class Server {
       const ad_utility::url_parser::ParamValueMap& parameters,
       std::string_view key, std::optional<std::string_view> value,
       bool accessAllowed);
+  FRIEND_TEST(ServerTest, checkParameter);
 
   /// Check if user-provided timeout is authorized with a valid access-token or
   /// lower than the server default. Return an empty optional and send a 403

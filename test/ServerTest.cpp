@@ -141,3 +141,22 @@ TEST(ServerTest, parseHttpRequest) {
                                     "update=DELETE+%2A+WHERE%20%7B%7D")),
               ParsedRequestIs("/", {}, Update{"DELETE * WHERE {}"}));
 }
+
+TEST(ServerTest, checkParameter) {
+  const ParamValueMap exampleParams = {{"foo", {"bar"}},
+                                       {"baz", {"qux", "quux"}}};
+
+  EXPECT_THAT(Server::checkParameter(exampleParams, "doesNotExist", "", false),
+              testing::Eq(std::nullopt));
+  EXPECT_THAT(Server::checkParameter(exampleParams, "foo", "baz", false),
+              testing::Eq(std::nullopt));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      Server::checkParameter(exampleParams, "foo", "bar", false),
+      testing::StrEq("Access to \"foo=bar\" denied (requires a valid access "
+                     "token), processing of request aborted"));
+  EXPECT_THAT(Server::checkParameter(exampleParams, "foo", "bar", true),
+              testing::Optional(testing::StrEq("bar")));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      Server::checkParameter(exampleParams, "baz", "qux", false),
+      testing::StrEq("Parameter \"baz\" must be given exactly once. Is: 2"));
+}

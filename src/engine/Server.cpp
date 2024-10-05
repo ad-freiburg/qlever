@@ -177,7 +177,7 @@ ad_utility::url_parser::ParsedRequest Server::parseHttpRequest(
   // statistics) don't have a query. So an empty operation is not necessarily an
   // error.
   auto setOperationIfSpecifiedInParams =
-      [&]<typename Operation>(string_view paramName) {
+      [&parsedRequest]<typename Operation>(string_view paramName) {
         auto operation = ad_utility::url_parser::getParameterCheckAtMostOnce(
             parsedRequest.parameters_, paramName);
         if (operation.has_value()) {
@@ -459,8 +459,8 @@ Awaitable<void> Server::process(
       co_return;
     }
   };
-  auto visitUpdate =
-      [](ad_utility::url_parser::sparqlOperation::Update) -> Awaitable<void> {
+  auto visitUpdate = [](const ad_utility::url_parser::sparqlOperation::Update&)
+      -> Awaitable<void> {
     throw std::runtime_error(
         "SPARQL 1.1 Update is  currently not supported by QLever.");
   };
