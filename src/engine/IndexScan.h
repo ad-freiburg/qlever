@@ -124,8 +124,6 @@ class IndexScan final : public Operation {
 
   vector<QueryExecutionTree*> getChildren() override { return {}; }
 
-  void computeFullScan(IdTable* result, Permutation::Enum permutation) const;
-
   size_t computeSizeEstimate() const;
 
   std::string getCacheKeyImpl() const override;

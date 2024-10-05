@@ -626,13 +626,15 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
     return binding.dump();
   };
 
+  bool isFirstRow = true;
   for (const auto& [idTable, range] : getRowIndices(limitAndOffset, *result)) {
     for (uint64_t i : range) {
-      if (i != 0) [[likely]] {
+      if (!isFirstRow) [[likely]] {
         co_yield ",";
       }
       co_yield getBinding(idTable, i);
       cancellationHandle->throwIfCancelled();
+      isFirstRow = false;
     }
   }
 

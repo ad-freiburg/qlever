@@ -1728,13 +1728,8 @@ TEST_F(GroupByOptimizations, computeGroupByForFullIndexScan) {
         ::testing::ElementsAre(getId("<a>"), getId("<b>"), getId("<c>"),
                                getId("<x>"), getId("<y>"), getId("<z>")));
     if (includeCount) {
-      EXPECT_THAT(
-          result.getColumn(1),
-          ::testing::ElementsAre(I(2), I(2), I(2), I(7), I(1),
-                                 // TODO<joka921> This should be 1.
-                                 // There is one triple added <z> @en@<label>
-                                 // "zz"@en which is currently not filtered out.
-                                 I(2)));
+      EXPECT_THAT(result.getColumn(1),
+                  ::testing::ElementsAre(I(2), I(2), I(2), I(7), I(1), I(1)));
     }
   };
   testWithBothInterfaces(true, true);

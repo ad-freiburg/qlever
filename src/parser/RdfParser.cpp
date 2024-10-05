@@ -8,6 +8,8 @@
 #include <absl/strings/charconv.h>
 
 #include <cstring>
+#include <exception>
+#include <optional>
 
 #include "global/Constants.h"
 #include "parser/GeoPoint.h"
@@ -466,6 +468,21 @@ TripleComponent TurtleParser<T>::literalAndDatatypeToTripleComponentImpl(
       asNormalizedStringViewUnsafe(normalizedLiteralContent));
   std::string_view type = asStringViewUnsafe(typeIri.getContent());
 
+  // Helper to handle literals that are invalid for the respective datatype
+  auto makeNormalLiteral = [&parser, &literal, normalizedLiteralContent,
+                            type](std::optional<std::exception> error =
+                                      std::nullopt) {
+    std::string_view errorMsg = error.has_value() ? error.value().what() : "";
+    std::string_view sep = error.has_value() ? ": " : "";
+    LOG(DEBUG) << normalizedLiteralContent
+               << " could not be parsed as an object of type " << type << sep
+               << errorMsg
+               << ". It is treated as a plain string literal without datatype "
+                  "instead."
+               << std::endl;
+    parser->lastParseResult_ = std::move(literal);
+  };
+
   try {
     if (ad_utility::contains(integerDatatypes_, type)) {
       parser->parseIntegerConstant(normalizedLiteralContent);
@@ -475,13 +492,7 @@ TripleComponent TurtleParser<T>::literalAndDatatypeToTripleComponentImpl(
       } else if (normalizedLiteralContent == "false") {
         parser->lastParseResult_ = false;
       } else {
-        LOG(DEBUG)
-            << normalizedLiteralContent
-            << " could not be parsed as a boolean object of type " << type
-            << ". It is treated as a plain string literal without datatype "
-               "instead"
-            << std::endl;
-        parser->lastParseResult_ = std::move(literal);
+        makeNormalLiteral();
       }
     } else if (ad_utility::contains(floatDatatypes_, type)) {
       parser->parseDoubleConstant(normalizedLiteralContent);
@@ -513,38 +524,16 @@ TripleComponent TurtleParser<T>::literalAndDatatypeToTripleComponentImpl(
       literal.addDatatype(typeIri);
       parser->lastParseResult_ = std::move(literal);
     }
-  } catch (const DateParseException&) {
-    LOG(DEBUG) << normalizedLiteralContent
-               << " could not be parsed as a date object of type " << type
-               << ". It is treated as a plain string literal without datatype "
-                  "instead"
-               << std::endl;
-    parser->lastParseResult_ = std::move(literal);
+  } catch (const DateParseException& ex) {
+    makeNormalLiteral(ex);
   } catch (const DateOutOfRangeException& ex) {
-    LOG(DEBUG)
-        << normalizedLiteralContent
-        << " could not be parsed as a date object for the following reason: "
-        << ex.what()
-        << ". It is treated as a plain string literal without datatype "
-           "instead"
-        << std::endl;
-    parser->lastParseResult_ = std::move(literal);
-  } catch (const DurationParseException&) {
-    LOG(DEBUG) << normalizedLiteralContent
-               << " could not be parsed as a duration object of type " << type
-               << ". It is treated as a plain string literal without datatype "
-                  "instead"
-               << std::endl;
-    parser->lastParseResult_ = std::move(literal);
+    makeNormalLiteral(ex);
+  } catch (const DurationParseException& ex) {
+    makeNormalLiteral(ex);
   } catch (const DurationOverflowException& ex) {
-    LOG(DEBUG) << normalizedLiteralContent
-               << " could not be parsed as duration object for the following "
-                  "reason: "
-               << ex.what()
-               << ". It is treated as a plain string literal without datatype "
-                  "instead"
-               << std::endl;
-    parser->lastParseResult_ = std::move(literal);
+    makeNormalLiteral(ex);
+  } catch (const CoordinateOutOfRangeException& ex) {
+    makeNormalLiteral(ex);
   } catch (const std::exception& e) {
     parser->raise(e.what());
   }

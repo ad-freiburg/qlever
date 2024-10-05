@@ -4,9 +4,9 @@
 
 #pragma once
 
-#include "engine/LocalVocabEntry.h"
 #include "global/TypedIndex.h"
 #include "global/VocabIndex.h"
+#include "index/LocalVocabEntry.h"
 
 // Typedefs for several kinds of typed indices that are used across QLever.
 
