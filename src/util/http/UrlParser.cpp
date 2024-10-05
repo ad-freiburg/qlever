@@ -8,6 +8,19 @@
 
 using namespace ad_utility::url_parser;
 
+std::optional<std::string> ad_utility::url_parser::getParameterCheckAtMostOnce(
+    const ParamValueMap& map, string_view key) {
+  if (!map.contains(key)) {
+    return std::nullopt;
+  }
+  auto& value = map.at(key);
+  if (value.size() != 1) {
+    throw std::runtime_error(
+        absl::StrCat("Parameter \"", key,
+                     "\" must be specified exactly once. Is: ", value.size()));
+  }
+  return value.front();
+}
 // _____________________________________________________________________________
 ParsedUrl ad_utility::url_parser::parseRequestTarget(std::string_view target) {
   auto urlResult = boost::urls::parse_origin_form(target);

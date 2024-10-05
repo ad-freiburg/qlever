@@ -175,13 +175,10 @@ ad_utility::url_parser::ParsedRequest Server::parseHttpRequest(
   auto extractQueryFromParameters = [&parsedRequest]() {
     // Some valid requests (e.g. QLever's custom commands like retrieving index
     // statistics) don't have a query.
-    if (parsedRequest.parameters_.contains("query")) {
-      if (parsedRequest.parameters_["query"].size() > 1) {
-        throw std::runtime_error(
-            "The parameter \"query\" must be set exactly once.");
-      }
-      parsedRequest.operation_ =
-          Query{parsedRequest.parameters_["query"].front()};
+    auto query = ad_utility::url_parser::getParameterCheckAtMostOnce(
+        parsedRequest.parameters_, "query");
+    if (query.has_value()) {
+      parsedRequest.operation_ = Query{query.value()};
       parsedRequest.parameters_.erase("query");
     }
   };
@@ -256,13 +253,10 @@ ad_utility::url_parser::ParsedRequest Server::parseHttpRequest(
             R"(Request must only contain one of "query" and "update".)");
       }
       extractQueryFromParameters();
-      if (parsedRequest.parameters_.contains("update")) {
-        if (parsedRequest.parameters_["update"].size() > 1) {
-          throw std::runtime_error(
-              "The parameter \"update\" must be set exactly once.");
-        }
-        parsedRequest.operation_ =
-            Update{parsedRequest.parameters_["update"].front()};
+      auto update = ad_utility::url_parser::getParameterCheckAtMostOnce(
+          parsedRequest.parameters_, "update");
+      if (update.has_value()) {
+        parsedRequest.operation_ = Update{update.value()};
         parsedRequest.parameters_.erase("update");
       }
 
@@ -451,48 +445,52 @@ Awaitable<void> Server::process(
     }
   }
 
-  // Process the two operation types.
-  if (std::holds_alternative<ad_utility::url_parser::sparqlOperation::Query>(
-          parsedHttpRequest.operation_)) {
+  auto visitQuery = [&checkParameter, &accessTokenOk, &request, &send,
+                     &parameters, &requestTimer,
+                     this](ad_utility::url_parser::sparqlOperation::Query query)
+      -> Awaitable<void> {
     if (auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
             checkParameter("timeout", std::nullopt), accessTokenOk, request,
             send)) {
-      co_return co_await processQuery(
-          parameters,
-          std::get<ad_utility::url_parser::sparqlOperation::Query>(
-              parsedHttpRequest.operation_)
-              .query_,
-          requestTimer, std::move(request), send, timeLimit.value());
-
+      co_return co_await processQuery(parameters, query.query_, requestTimer,
+                                      std::move(request), send,
+                                      timeLimit.value());
     } else {
       // If the optional is empty, this indicates an error response has been
       // sent to the client already. We can stop here.
       co_return;
     }
-  } else if (std::holds_alternative<
-                 ad_utility::url_parser::sparqlOperation::Update>(
-                 parsedHttpRequest.operation_)) {
+  };
+  auto visitUpdate =
+      [](ad_utility::url_parser::sparqlOperation::Update) -> Awaitable<void> {
     throw std::runtime_error(
         "SPARQL 1.1 Update is  currently not supported by QLever.");
-  }
+  };
+  auto visitNone =
+      [&response, &send, &request](
+          ad_utility::url_parser::sparqlOperation::None) -> Awaitable<void> {
+    // If there was no "query", but any of the URL parameters processed before
+    // produced a `response`, send that now. Note that if multiple URL
+    // parameters were processed, only the `response` from the last one is sent.
+    if (response.has_value()) {
+      co_return co_await send(std::move(response.value()));
+    }
 
-  // If there was no "query", but any of the URL parameters processed before
-  // produced a `response`, send that now. Note that if multiple URL parameters
-  // were processed, only the `response` from the last one is sent.
-  if (response.has_value()) {
-    co_return co_await send(std::move(response.value()));
-  }
+    // At this point, if there is a "?" in the query string, it means that there
+    // are URL parameters which QLever does not know or did not process.
+    if (request.target().find("?") != std::string::npos) {
+      throw std::runtime_error(
+          "Request with URL parameters, but none of them could be processed");
+    }
+    // No path matched up until this point, so return 404 to indicate the client
+    // made an error and the server will not serve anything else.
+    co_return co_await send(
+        createNotFoundResponse("Unknown path", std::move(request)));
+  };
 
-  // At this point, if there is a "?" in the query string, it means that there
-  // are URL parameters which QLever does not know or did not process.
-  if (request.target().find("?") != std::string::npos) {
-    throw std::runtime_error(
-        "Request with URL parameters, but none of them could be processed");
-  }
-  // No path matched up until this point, so return 404 to indicate the client
-  // made an error and the server will not serve anything else.
-  co_return co_await send(
-      createNotFoundResponse("Unknown path", std::move(request)));
+  co_return co_await std::visit(
+      ad_utility::OverloadCallOperator{visitQuery, visitUpdate, visitNone},
+      parsedHttpRequest.operation_);
 }
 
 // _____________________________________________________________________________
@@ -697,8 +695,12 @@ boost::asio::awaitable<void> Server::processQuery(
   try {
     auto containsParam = [&params](const std::string& param,
                                    const std::string& expected) {
-      return params.contains(param) && params.at(param).size() == 1 &&
-             params.at(param).front() == expected;
+      auto parameterValue =
+          ad_utility::url_parser::getParameterCheckAtMostOnce(params, param);
+      if (!parameterValue.has_value()) {
+        return false;
+      }
+      return parameterValue.value() == expected;
     };
     const bool pinSubtrees = containsParam("pinsubtrees", "true");
     const bool pinResult = containsParam("pinresult", "true");
@@ -736,10 +738,13 @@ boost::asio::awaitable<void> Server::processQuery(
       mediaType = ad_utility::getMediaTypeFromAcceptHeader(acceptHeader);
     }
 
-    std::optional<uint64_t> maxSend =
-        (params.contains("send") && params.at("send").size() == 1)
-            ? std::optional{std::stoul(params.at("send").front())}
-            : std::nullopt;
+    // TODO<c++23> use std::optional::transform
+    std::optional<uint64_t> maxSend = std::nullopt;
+    auto parameterValue =
+        ad_utility::url_parser::getParameterCheckAtMostOnce(params, "send");
+    if (parameterValue.has_value()) {
+      maxSend = std::stoul(parameterValue.value());
+    }
     // Limit JSON requests by default
     if (!maxSend.has_value() && (mediaType == MediaType::sparqlJson ||
                                  mediaType == MediaType::qleverJson)) {
@@ -964,13 +969,12 @@ std::optional<std::string_view> Server::checkParameter(
     const ad_utility::url_parser::ParamValueMap& parameters,
     std::string_view key, std::optional<std::string_view> value,
     bool accessAllowed) {
-  if (!parameters.contains(key)) {
+  auto param =
+      ad_utility::url_parser::getParameterCheckAtMostOnce(parameters, key);
+  if (!param.has_value()) {
     return std::nullopt;
   }
-  if (parameters.at(key).size() > 1) {
-    return std::nullopt;
-  }
-  std::string parameterValue = parameters.at(key).front();
+  std::string parameterValue = param.value();
 
   // If value is given, but not equal to param value, return std::nullopt. If
   // no value is given, set it to param value.
