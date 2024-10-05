@@ -4,18 +4,68 @@
 
 #pragma once
 
+#include "parser/Iri.h"
 #include "parser/SelectClause.h"
 #include "parser/SparqlTriple.h"
+#include "parser/data/GraphRef.h"
 #include "parser/data/Types.h"
 
-namespace parsedQuery {
-struct UpdateClause : ClauseBase {
+struct Load {
+  bool silent_;
+  ad_utility::triple_component::Iri source_;
+  std::optional<GraphRef> target_;
+};
+
+struct Clear {
+  bool silent_;
+  GraphRefAll target_;
+};
+
+struct Drop {
+  bool silent_;
+  GraphRefAll target_;
+};
+
+struct Create {
+  bool silent_;
+  GraphRef target_;
+};
+
+struct Add {
+  bool silent_;
+  GraphOrDefault source_;
+  GraphOrDefault target_;
+};
+
+struct Move {
+  bool silent_;
+  GraphOrDefault source_;
+  GraphOrDefault target_;
+};
+
+struct Copy {
+  bool silent_;
+  GraphOrDefault source_;
+  GraphOrDefault target_;
+};
+
+struct GraphUpdate {
   std::vector<SparqlTripleSimple> toInsert_;
   std::vector<SparqlTripleSimple> toDelete_;
 
-  UpdateClause() = default;
-  UpdateClause(std::vector<SparqlTripleSimple> toInsert,
-               std::vector<SparqlTripleSimple> toDelete)
+  GraphUpdate() = default;
+  GraphUpdate(std::vector<SparqlTripleSimple> toInsert,
+              std::vector<SparqlTripleSimple> toDelete)
       : toInsert_{std::move(toInsert)}, toDelete_{std::move(toDelete)} {}
+};
+
+namespace parsedQuery {
+struct UpdateClause : parsedQuery::ClauseBase {
+  std::variant<GraphUpdate, Load, Clear, Drop, Create, Add, Move, Copy> op_;
+
+  UpdateClause() = default;
+  explicit UpdateClause(
+      std::variant<GraphUpdate, Load, Clear, Drop, Create, Add, Move, Copy> op)
+      : op_{std::move(op)} {}
 };
 }  // namespace parsedQuery

@@ -882,12 +882,23 @@ inline auto UpdateQuery =
   return testing::AllOf(
       AD_PROPERTY(ParsedQuery, hasUpdateClause, testing::IsTrue()),
       AD_PROPERTY(ParsedQuery, updateClause,
-                  AD_FIELD(parsedQuery::UpdateClause, toDelete_,
-                           testing::ElementsAreArray(toDelete))),
+                  AD_FIELD(parsedQuery::UpdateClause, op_,
+                           testing::VariantWith<GraphUpdate>(
+                               AD_FIELD(GraphUpdate, toDelete_,
+                                        testing::ElementsAreArray(toDelete))))),
       AD_PROPERTY(ParsedQuery, updateClause,
-                  AD_FIELD(parsedQuery::UpdateClause, toInsert_,
-                           testing::ElementsAreArray(toInsert))),
+                  AD_FIELD(parsedQuery::UpdateClause, op_,
+                           testing::VariantWith<GraphUpdate>(
+                               AD_FIELD(GraphUpdate, toInsert_,
+                                        testing::ElementsAreArray(toInsert))))),
       RootGraphPattern(graphPatternMatcher));
+};
+
+inline auto UpdateClause = [](const parsedQuery::UpdateClause& updateClause)
+    -> Matcher<const ::ParsedQuery&> {
+  return testing::AllOf(
+      AD_PROPERTY(ParsedQuery, hasUpdateClause, testing::IsTrue()),
+      AD_PROPERTY(ParsedQuery, updateClause, testing::Eq(updateClause)));
 };
 
 template <typename T>

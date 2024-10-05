@@ -190,28 +190,29 @@ class SparqlQleverVisitor {
 
   ParsedQuery visit(Parser::Update1Context* ctx);
 
-  [[noreturn]] void visit(const Parser::LoadContext* ctx) const;
+  Load visit(Parser::LoadContext* ctx);
 
-  ParsedQuery visit(Parser::ClearContext* ctx);
+  Clear visit(Parser::ClearContext* ctx);
 
-  [[noreturn]] void visit(const Parser::DropContext* ctx) const;
+  Drop visit(Parser::DropContext* ctx);
 
-  [[noreturn]] void visit(const Parser::CreateContext* ctx) const;
+  Create visit(Parser::CreateContext* ctx);
 
-  [[noreturn]] void visit(const Parser::AddContext* ctx) const;
+  Add visit(Parser::AddContext* ctx);
 
-  [[noreturn]] void visit(const Parser::MoveContext* ctx) const;
+  Move visit(Parser::MoveContext* ctx);
 
-  [[noreturn]] void visit(const Parser::CopyContext* ctx) const;
+  Copy visit(Parser::CopyContext* ctx);
 
-  vector<SparqlTripleSimple> visit(Parser::InsertDataContext* ctx);
+  GraphUpdate visit(Parser::InsertDataContext* ctx);
 
-  vector<SparqlTripleSimple> visit(Parser::DeleteDataContext* ctx);
+  GraphUpdate visit(Parser::DeleteDataContext* ctx);
 
-  std::pair<vector<SparqlTripleSimple>, ParsedQuery::GraphPattern> visit(
+  std::pair<GraphUpdate, ParsedQuery::GraphPattern> visit(
       Parser::DeleteWhereContext* ctx);
 
-  ParsedQuery visit(Parser::ModifyContext* ctx);
+  std::pair<GraphUpdate, ParsedQuery::GraphPattern> visit(
+      Parser::ModifyContext* ctx);
 
   vector<SparqlTripleSimple> visit(Parser::DeleteClauseContext* ctx);
 
