@@ -27,19 +27,13 @@ using std::string;
 namespace {
 // Convert a `generator<IdTable` to a `generator<IdTableAndFirstCol>` for more
 // efficient access in the join columns below.
-cppcoro::generator<ad_utility::IdTableAndFirstCol<IdTable>,
-                   CompressedRelationReader::LazyScanMetadata>
-convertGenerator(Permutation::IdTableGenerator gen) {
-  co_await cppcoro::getDetails = gen.details();
-  gen.setDetailsPointer(&co_await cppcoro::getDetails);
-  for (auto& table : gen) {
-    ad_utility::IdTableAndFirstCol t{std::move(table)};
-    co_yield t;
+template <typename Details>
+cppcoro::generator<ad_utility::IdTableAndFirstCol<IdTable>, Details>
+convertGenerator(cppcoro::generator<IdTable, Details> gen) {
+  if constexpr (!std::is_same_v<cppcoro::NoDetails, Details>) {
+    co_await cppcoro::getDetails = gen.details();
+    gen.setDetailsPointer(&co_await cppcoro::getDetails);
   }
-}
-
-cppcoro::generator<ad_utility::IdTableAndFirstCol<IdTable>> convertGenerator(
-    cppcoro::generator<IdTable> gen) {
   for (auto& table : gen) {
     ad_utility::IdTableAndFirstCol t{std::move(table)};
     co_yield t;
@@ -496,14 +490,12 @@ ProtoResult Join::lazyJoin(std::shared_ptr<const Result> a, ColumnIndex jc1,
   auto rowAdder = std::make_unique<ad_utility::AddCombinedRowToIdTable>(
       1, IdTable{getResultWidth(), getExecutionContext()->getAllocator()},
       cancellationHandle_);
-  using TableView = decltype(std::declval<IdTable>().asColumnSubsetView(
-      std::declval<std::span<const ColumnIndex>>()));
-  using ArrayType = std::array<ad_utility::IdTableAndFirstCol<TableView>, 1>;
   auto performJoin = [this, &rowAdder, requestLaziness, jc1, jc2](
                          auto leftBlocks, auto rightBlocks) {
     auto couldContainUndef = [](const auto& blocks, const auto& tree,
                                 ColumnIndex joinColumn) {
-      if constexpr (std::is_same_v<decltype(blocks), const ArrayType&>) {
+      if constexpr (std::ranges::random_access_range<decltype(blocks)>) {
+        AD_CORRECTNESS_CHECK(!std::ranges::empty(blocks));
         return !blocks[0].empty() && blocks[0][0].isUndefined();
       } else {
         auto undefStatus = tree->getVariableAndInfoByColumnIndex(joinColumn)
@@ -528,13 +520,13 @@ ProtoResult Join::lazyJoin(std::shared_ptr<const Result> a, ColumnIndex jc1,
       std::nullopt;
   if (a->isFullyMaterialized() && !b->isFullyMaterialized()) {
     resultGenerator = performJoin(
-        ArrayType{ad_utility::IdTableAndFirstCol{
+        std::array{ad_utility::IdTableAndFirstCol{
             a->idTable().asColumnSubsetView(joinColMap.permutationLeft())}},
         convertGenerator(std::move(b->idTables())));
   } else if (!a->isFullyMaterialized() && b->isFullyMaterialized()) {
     resultGenerator = performJoin(
         convertGenerator(std::move(a->idTables())),
-        ArrayType{ad_utility::IdTableAndFirstCol{
+        std::array{ad_utility::IdTableAndFirstCol{
             b->idTable().asColumnSubsetView(joinColMap.permutationRight())}});
   } else if (!a->isFullyMaterialized() && !b->isFullyMaterialized()) {
     resultGenerator = performJoin(convertGenerator(std::move(a->idTables())),
