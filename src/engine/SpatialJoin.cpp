@@ -425,7 +425,8 @@ Result SpatialJoin::baselineAlgorithm() {
 
       // Ensure `maxDist_` constraint
       if (dist.getDatatype() != Datatype::Int ||
-          (maxDist.has_value() && dist.getInt() > maxDist.value())) {
+          (maxDist.has_value() &&
+           dist.getInt() > static_cast<int64_t>(maxDist.value()))) {
         continue;
       }
 
@@ -477,18 +478,25 @@ Result SpatialJoin::s2geometryAlgorithm() {
     return S2Point{latlng};
   };
 
-  // Build an index that contains all elements of the right table
   S2PointIndex<size_t> s2index;
-  for (size_t rowRight = 0; rowRight < resRight->size(); rowRight++) {
-    auto p = getPoint(resRight, rowRight, rightJoinCol);
+
+  // Optimization: If we only search by maximum distance, the operation is
+  // symmetric, so the larger table can be used for the index
+  bool indexOfRight =
+      (maxResults.has_value() || (resLeft->size() > resRight->size()));
+  auto indexTable = indexOfRight ? resRight : resLeft;
+  auto indexJoinCol = indexOfRight ? rightJoinCol : leftJoinCol;
+
+  // Populate the index
+  for (size_t row = 0; row < indexTable->size(); row++) {
+    auto p = getPoint(indexTable, row, indexJoinCol);
     if (p.has_value()) {
-      s2index.Add(toS2Point(p.value()), rowRight);
+      s2index.Add(toS2Point(p.value()), row);
     }
   }
 
-  // Performs a nearest neighbor search on the index containing the right table
-  // for each row in the left table and returns the closest points that satisfy
-  // the criteria given by `maxDist_` and `maxResults_`.
+  // Performs a nearest neighbor search on the index and returns the closest
+  // points that satisfy the criteria given by `maxDist_` and `maxResults_`.
 
   // Construct a query object with the given constraints
   auto s2query = S2ClosestPointQuery<size_t>{&s2index};
@@ -501,8 +509,12 @@ Result SpatialJoin::s2geometryAlgorithm() {
         S2Earth::ToAngle(util::units::Meters(maxDist.value())));
   }
 
-  for (size_t rowLeft = 0; rowLeft < resLeft->size(); rowLeft++) {
-    auto p = getPoint(resLeft, rowLeft, leftJoinCol);
+  auto searchTable = indexOfRight ? resLeft : resRight;
+  auto searchJoinCol = indexOfRight ? leftJoinCol : rightJoinCol;
+
+  // Use the index to lookup the points of the other table
+  for (size_t searchRow = 0; searchRow < searchTable->size(); searchRow++) {
+    auto p = getPoint(searchTable, searchRow, searchJoinCol);
     if (!p.has_value()) {
       continue;
     }
@@ -512,8 +524,11 @@ Result SpatialJoin::s2geometryAlgorithm() {
     for (const auto& neighbor : s2query.FindClosestPoints(&s2target)) {
       // In this loop we only receive points that already satisfy the given
       // criteria
-      auto rowRight = neighbor.data();
+      auto indexRow = neighbor.data();
       auto dist = static_cast<int64_t>(S2Earth::ToMeters(neighbor.distance()));
+
+      auto rowLeft = indexOfRight ? searchRow : indexRow;
+      auto rowRight = indexOfRight ? indexRow : searchRow;
       addResultTableEntry(&result, resLeft, resRight, rowLeft, rowRight,
                           Id::makeFromInt(dist));
     }
