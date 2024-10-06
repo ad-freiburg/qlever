@@ -8,9 +8,8 @@
 
 using namespace ad_utility::url_parser;
 
-const std::optional<std::string>&
-ad_utility::url_parser::getParameterCheckAtMostOnce(const ParamValueMap& map,
-                                                    string_view key) {
+std::optional<std::string> ad_utility::url_parser::getParameterCheckAtMostOnce(
+    const ParamValueMap& map, string_view key) {
   if (!map.contains(key)) {
     return std::nullopt;
   }

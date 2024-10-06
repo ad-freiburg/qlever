@@ -345,9 +345,10 @@ Awaitable<void> Server::process(
   checkParameterNotPresent("named-graph-uri");
 
   auto checkParameter = [&parameters](std::string_view key,
-                                      std::optional<std::string_view> value,
+                                      std::optional<std::string> value,
                                       bool accessAllowed = true) {
-    return Server::checkParameter(parameters, key, value, accessAllowed);
+    return Server::checkParameter(parameters, key, std::move(value),
+                                  accessAllowed);
   };
 
   // Check the access token. If an access token is provided and the check fails,
@@ -693,7 +694,7 @@ boost::asio::awaitable<void> Server::processQuery(
   try {
     auto containsParam = [&params](const std::string& param,
                                    const std::string& expected) {
-      auto& parameterValue =
+      auto parameterValue =
           ad_utility::url_parser::getParameterCheckAtMostOnce(params, param);
       return parameterValue.has_value() && parameterValue.value() == expected;
     };
@@ -735,7 +736,7 @@ boost::asio::awaitable<void> Server::processQuery(
 
     // TODO<c++23> use std::optional::transform
     std::optional<uint64_t> maxSend = std::nullopt;
-    auto& parameterValue =
+    auto parameterValue =
         ad_utility::url_parser::getParameterCheckAtMostOnce(params, "send");
     if (parameterValue.has_value()) {
       maxSend = std::stoul(parameterValue.value());
@@ -964,16 +965,16 @@ bool Server::checkAccessToken(
 
 // _____________________________________________________________________________
 
-std::optional<std::string_view> Server::checkParameter(
+std::optional<std::string> Server::checkParameter(
     const ad_utility::url_parser::ParamValueMap& parameters,
-    std::string_view key, std::optional<std::string_view> value,
+    std::string_view key, std::optional<std::string> value,
     bool accessAllowed) {
-  auto& param =
+  auto param =
       ad_utility::url_parser::getParameterCheckAtMostOnce(parameters, key);
   if (!param.has_value()) {
     return std::nullopt;
   }
-  const std::string& parameterValue = param.value();
+  std::string parameterValue = param.value();
 
   // If value is given, but not equal to param value, return std::nullopt. If
   // no value is given, set it to param value.

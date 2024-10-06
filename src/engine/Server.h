@@ -213,9 +213,9 @@ class Server {
   /// the key determines the kind of action. If the key is not found, always
   /// return `std::nullopt`. If `accessAllowed` is false and a value is present,
   /// throw an exception.
-  static std::optional<std::string_view> checkParameter(
+  static std::optional<std::string> checkParameter(
       const ad_utility::url_parser::ParamValueMap& parameters,
-      std::string_view key, std::optional<std::string_view> value,
+      std::string_view key, std::optional<std::string> value,
       bool accessAllowed);
   FRIEND_TEST(ServerTest, checkParameter);
 
