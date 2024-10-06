@@ -169,8 +169,8 @@ ProtoResult Join::computeResult(bool requestLaziness) {
       std::dynamic_pointer_cast<IndexScan>(_left->getRootOperation());
   if (leftIndexScan &&
       std::dynamic_pointer_cast<IndexScan>(_right->getRootOperation())) {
-    if (rightResIfCached && !leftResIfCached &&
-        rightResIfCached->isFullyMaterialized()) {
+    if (rightResIfCached && !leftResIfCached) {
+      AD_CORRECTNESS_CHECK(rightResIfCached->isFullyMaterialized());
       idTable = computeResultForIndexScanAndIdTable<true>(
           rightResIfCached->idTable(), _rightJoinCol, *leftIndexScan,
           _leftJoinCol);
@@ -483,6 +483,8 @@ ProtoResult Join::monostateGeneratorToResult(
 ProtoResult Join::lazyJoin(std::shared_ptr<const Result> a, ColumnIndex jc1,
                            std::shared_ptr<const Result> b, ColumnIndex jc2,
                            bool requestLaziness) const {
+  // If both inputs are fully materialized, we can join them more efficiently.
+  AD_CONTRACT_CHECK(!a->isFullyMaterialized() || !b->isFullyMaterialized());
   auto joinColMap = ad_utility::JoinColumnMapping{
       {{jc1, jc2}},
       _left->getRootOperation()->getResultWidth(),
@@ -518,37 +520,36 @@ ProtoResult Join::lazyJoin(std::shared_ptr<const Result> a, ColumnIndex jc1,
   };
   auto toBlockRange =
       [](auto&& blockOrBlocks,
-         [[maybe_unused]] std::span<const ColumnIndex> columnIndices = {}) {
-        if constexpr (ad_utility::isSimilar<decltype(blockOrBlocks), IdTable>) {
-          return std::array{ad_utility::IdTableAndFirstCol{
-              blockOrBlocks.asColumnSubsetView(columnIndices)}};
-        } else if constexpr (std::ranges::range<decltype(blockOrBlocks)>) {
-          return convertGenerator(std::move(blockOrBlocks));
-        } else {
-          static_assert(ad_utility::alwaysFalse<decltype(blockOrBlocks)>,
-                        "Unexpected type");
-        }
-      };
-  std::optional<cppcoro::generator<std::monostate>> resultGenerator =
-      std::nullopt;
-  if (a->isFullyMaterialized() && !b->isFullyMaterialized()) {
-    resultGenerator =
-        performJoin(toBlockRange(a->idTable(), joinColMap.permutationLeft()),
-                    toBlockRange(b->idTables(), {}));
-  } else if (!a->isFullyMaterialized() && b->isFullyMaterialized()) {
-    resultGenerator =
-        performJoin(toBlockRange(a->idTables()),
-                    toBlockRange(b->idTable(), joinColMap.permutationRight()));
-  } else if (!a->isFullyMaterialized() && !b->isFullyMaterialized()) {
-    resultGenerator =
-        performJoin(toBlockRange(a->idTables()), toBlockRange(b->idTables()));
-  } else {
-    // If both inputs are fully materialized, we can join them more efficiently.
-    AD_FAIL();
-  }
-  return monostateGeneratorToResult(
-      requestLaziness, std::move(resultGenerator).value(), std::move(a),
-      std::move(b), std::move(rowAdder), std::move(joinColMap));
+         [[maybe_unused]] std::span<const ColumnIndex> columnIndices = {})
+      -> std::variant<
+          cppcoro::generator<ad_utility::IdTableAndFirstCol<IdTable>>,
+          std::array<ad_utility::IdTableAndFirstCol<IdTableView<0>>, 1>> {
+    if constexpr (ad_utility::isSimilar<decltype(blockOrBlocks), IdTable>) {
+      return std::array{ad_utility::IdTableAndFirstCol{
+          blockOrBlocks.asColumnSubsetView(columnIndices)}};
+    } else if constexpr (std::ranges::range<decltype(blockOrBlocks)>) {
+      return convertGenerator(std::move(blockOrBlocks));
+    } else {
+      static_assert(ad_utility::alwaysFalse<decltype(blockOrBlocks)>,
+                    "Unexpected type");
+    }
+  };
+  auto leftRange =
+      a->isFullyMaterialized()
+          ? toBlockRange(a->idTable(), joinColMap.permutationLeft())
+          : toBlockRange(a->idTables());
+  auto rightRange =
+      b->isFullyMaterialized()
+          ? toBlockRange(b->idTable(), joinColMap.permutationRight())
+          : toBlockRange(b->idTables());
+  auto resultGenerator = std::visit(
+      [&performJoin](auto& leftBlocks, auto& rightBlocks) {
+        return performJoin(std::move(leftBlocks), std::move(rightBlocks));
+      },
+      leftRange, rightRange);
+  return monostateGeneratorToResult(requestLaziness, std::move(resultGenerator),
+                                    std::move(a), std::move(b),
+                                    std::move(rowAdder), std::move(joinColMap));
 }
 
 // ______________________________________________________________________________

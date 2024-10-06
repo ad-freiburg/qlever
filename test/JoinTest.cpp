@@ -494,7 +494,6 @@ TEST(JoinTest, joinTwoLazyOperationsWithAndWithoutUndefValues) {
         auto l = generateLocationTrace(loc);
         auto qec = ad_utility::testing::getQec();
         RuntimeParameters().set<"lazy-index-scan-max-size-materialization">(0);
-        qec->getQueryTreeCache().clearAll();
         auto leftTree = ad_utility::makeExecutionTree<ValuesForTesting>(
             qec, std::move(leftTables), Vars{Variable{"?s"}}, false,
             std::vector<ColumnIndex>{0});
@@ -509,11 +508,15 @@ TEST(JoinTest, joinTwoLazyOperationsWithAndWithoutUndefValues) {
         auto join = Join{qec, leftTree, rightTree, 0, 0};
         EXPECT_EQ(join.getDescriptor(), "Join on ?s");
 
+        qec->getQueryTreeCache().clearAll();
         testJoinOperation(join, expectedColumns, true);
+        qec->getQueryTreeCache().clearAll();
         testJoinOperation(join, expectedColumns, false);
 
         auto joinSwitched = Join{qec, rightTree, leftTree, 0, 0};
+        qec->getQueryTreeCache().clearAll();
         testJoinOperation(joinSwitched, expectedColumns, true);
+        qec->getQueryTreeCache().clearAll();
         testJoinOperation(joinSwitched, expectedColumns, false);
       };
   auto U = Id::makeUndefined();
@@ -562,10 +565,10 @@ TEST(JoinTest, joinLazyAndNonLazyOperationWithAndWithoutUndefValues) {
     auto l = generateLocationTrace(loc);
     auto qec = ad_utility::testing::getQec();
     RuntimeParameters().set<"lazy-index-scan-max-size-materialization">(0);
-    qec->getQueryTreeCache().clearAll();
-    auto leftTree = ad_utility::makeExecutionTree<ValuesForTesting>(
-        qec, std::move(leftTable), Vars{Variable{"?s"}}, false,
-        std::vector<ColumnIndex>{0}, LocalVocab{}, std::nullopt, true);
+    auto leftTree =
+        ad_utility::makeExecutionTree<ValuesForTestingNoKnownEmptyResult>(
+            qec, std::move(leftTable), Vars{Variable{"?s"}}, false,
+            std::vector<ColumnIndex>{0}, LocalVocab{}, std::nullopt, true);
     auto rightTree = ad_utility::makeExecutionTree<ValuesForTesting>(
         qec, std::move(rightTables), Vars{Variable{"?s"}}, false,
         std::vector<ColumnIndex>{0});
@@ -577,11 +580,15 @@ TEST(JoinTest, joinLazyAndNonLazyOperationWithAndWithoutUndefValues) {
     auto join = Join{qec, leftTree, rightTree, 0, 0};
     EXPECT_EQ(join.getDescriptor(), "Join on ?s");
 
+    qec->getQueryTreeCache().clearAll();
     testJoinOperation(join, expectedColumns, true);
+    qec->getQueryTreeCache().clearAll();
     testJoinOperation(join, expectedColumns, false);
 
     auto joinSwitched = Join{qec, rightTree, leftTree, 0, 0};
+    qec->getQueryTreeCache().clearAll();
     testJoinOperation(joinSwitched, expectedColumns, true);
+    qec->getQueryTreeCache().clearAll();
     testJoinOperation(joinSwitched, expectedColumns, false);
   };
   auto U = Id::makeUndefined();
