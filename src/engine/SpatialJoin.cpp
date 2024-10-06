@@ -110,11 +110,7 @@ bool SpatialJoin::isConstructed() const {
 // ____________________________________________________________________________
 std::optional<size_t> SpatialJoin::getMaxDist() const {
   auto visitor = []<typename T>(const T& config) -> std::optional<size_t> {
-    if constexpr (std::is_same_v<T, MaxDistanceConfig>) {
-      return config.maxDist_;
-    } else if constexpr (std::is_same_v<T, NearestNeighborsConfig>) {
-      return config.maxDist_;
-    }
+    return config.maxDist_;
   };
   return std::visit(visitor, config_);
 }
