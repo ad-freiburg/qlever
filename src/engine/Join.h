@@ -99,6 +99,9 @@ class Join : public Operation {
       std::shared_ptr<const Result> a, std::shared_ptr<const Result> b,
       auto rowAdder, auto joinColMap) const;
 
+  static bool couldContainUndef(const auto& blocks, const auto& tree,
+                                ColumnIndex joinColumn);
+
   ProtoResult lazyJoin(std::shared_ptr<const Result> a, ColumnIndex jc1,
                        std::shared_ptr<const Result> b, ColumnIndex jc2,
                        bool requestLaziness) const;

@@ -147,7 +147,7 @@ ProtoResult Join::computeResult(bool requestLaziness) {
   // * They are already present in the cache
   // * Their result is small
   // This is purely for performance reasons.
-  auto getCachedOrSmallResult = [](QueryExecutionTree& tree) {
+  auto getCachedOrSmallResult = [](const QueryExecutionTree& tree) {
     bool isSmall =
         tree.getRootOperation()->getSizeEstimate() <
         RuntimeParameters().get<"lazy-index-scan-max-size-materialization">();
@@ -479,6 +479,20 @@ ProtoResult Join::monostateGeneratorToResult(
   }
 }
 
+// _____________________________________________________________________________
+bool Join::couldContainUndef(const auto& blocks, const auto& tree,
+                             ColumnIndex joinColumn) {
+  if constexpr (std::ranges::random_access_range<decltype(blocks)>) {
+    AD_CORRECTNESS_CHECK(!std::ranges::empty(blocks));
+    return !blocks[0].empty() && blocks[0][0].isUndefined();
+  } else {
+    auto undefStatus = tree->getVariableAndInfoByColumnIndex(joinColumn)
+                           .second.mightContainUndef_;
+    return undefStatus ==
+           ColumnIndexAndTypeInfo::UndefStatus::PossiblyUndefined;
+  }
+}
+
 // ______________________________________________________________________________
 ProtoResult Join::lazyJoin(std::shared_ptr<const Result> a, ColumnIndex jc1,
                            std::shared_ptr<const Result> b, ColumnIndex jc2,
@@ -492,46 +506,20 @@ ProtoResult Join::lazyJoin(std::shared_ptr<const Result> a, ColumnIndex jc1,
   auto rowAdder = std::make_unique<ad_utility::AddCombinedRowToIdTable>(
       1, IdTable{getResultWidth(), getExecutionContext()->getAllocator()},
       cancellationHandle_);
-  auto performJoin = [this, &rowAdder, requestLaziness, jc1, jc2](
-                         auto leftBlocks, auto rightBlocks) {
-    auto couldContainUndef = [](const auto& blocks, const auto& tree,
-                                ColumnIndex joinColumn) {
-      if constexpr (std::ranges::random_access_range<decltype(blocks)>) {
-        AD_CORRECTNESS_CHECK(!std::ranges::empty(blocks));
-        return !blocks[0].empty() && blocks[0][0].isUndefined();
-      } else {
-        auto undefStatus = tree->getVariableAndInfoByColumnIndex(joinColumn)
-                               .second.mightContainUndef_;
-        return undefStatus ==
-               ColumnIndexAndTypeInfo::UndefStatus::PossiblyUndefined;
-      }
-    };
-    bool containsUndef = couldContainUndef(leftBlocks, _left, jc1) ||
-                         couldContainUndef(rightBlocks, _right, jc2);
-    if (containsUndef) {
-      return ad_utility::zipperJoinForBlocksWithPotentialUndef(
-          !requestLaziness, std::move(leftBlocks), std::move(rightBlocks),
-          std::less{}, *rowAdder);
-    } else {
-      return ad_utility::zipperJoinForBlocksWithoutUndef(
-          !requestLaziness, std::move(leftBlocks), std::move(rightBlocks),
-          std::less{}, *rowAdder);
-    }
-  };
   auto toBlockRange =
-      [](auto&& blockOrBlocks,
-         [[maybe_unused]] std::span<const ColumnIndex> columnIndices = {})
+      []<typename T>(
+          T& blockOrBlocks,
+          [[maybe_unused]] std::span<const ColumnIndex> columnIndices = {})
       -> std::variant<
           cppcoro::generator<ad_utility::IdTableAndFirstCol<IdTable>>,
           std::array<ad_utility::IdTableAndFirstCol<IdTableView<0>>, 1>> {
-    if constexpr (ad_utility::isSimilar<decltype(blockOrBlocks), IdTable>) {
+    if constexpr (ad_utility::isSimilar<T, IdTable>) {
       return std::array{ad_utility::IdTableAndFirstCol{
           blockOrBlocks.asColumnSubsetView(columnIndices)}};
-    } else if constexpr (std::ranges::range<decltype(blockOrBlocks)>) {
+    } else if constexpr (std::ranges::range<T>) {
       return convertGenerator(std::move(blockOrBlocks));
     } else {
-      static_assert(ad_utility::alwaysFalse<decltype(blockOrBlocks)>,
-                    "Unexpected type");
+      static_assert(ad_utility::alwaysFalse<T>, "Unexpected type");
     }
   };
   auto leftRange =
@@ -543,8 +531,19 @@ ProtoResult Join::lazyJoin(std::shared_ptr<const Result> a, ColumnIndex jc1,
           ? toBlockRange(b->idTable(), joinColMap.permutationRight())
           : toBlockRange(b->idTables());
   auto resultGenerator = std::visit(
-      [&performJoin](auto& leftBlocks, auto& rightBlocks) {
-        return performJoin(std::move(leftBlocks), std::move(rightBlocks));
+      [this, &rowAdder, requestLaziness, jc1, jc2](auto& leftBlocks,
+                                                   auto& rightBlocks) {
+        bool containsUndef = couldContainUndef(leftBlocks, _left, jc1) ||
+                             couldContainUndef(rightBlocks, _right, jc2);
+        if (containsUndef) {
+          return ad_utility::zipperJoinForBlocksWithPotentialUndef(
+              !requestLaziness, std::move(leftBlocks), std::move(rightBlocks),
+              std::less{}, *rowAdder);
+        } else {
+          return ad_utility::zipperJoinForBlocksWithoutUndef(
+              !requestLaziness, std::move(leftBlocks), std::move(rightBlocks),
+              std::less{}, *rowAdder);
+        }
       },
       leftRange, rightRange);
   return monostateGeneratorToResult(requestLaziness, std::move(resultGenerator),
