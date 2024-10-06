@@ -390,8 +390,9 @@ SpatialJoin::PreparedJoinParams SpatialJoin::prepareJoin() const {
 
   // Size of output table
   size_t numColumns = getResultWidth();
-  return PreparedJoinParams{resLeft,        keepAliveLeft, resRight,
-                            keepAliveRight, leftJoinCol,   rightJoinCol,
+  return PreparedJoinParams{resLeft,     std::move(keepAliveLeft),
+                            resRight,    std::move(keepAliveRight),
+                            leftJoinCol, rightJoinCol,
                             numColumns};
 }
 
