@@ -120,7 +120,8 @@ std::optional<size_t> SpatialJoin::getMaxResults() const {
   auto visitor = []<typename T>(const T& config) -> std::optional<size_t> {
     if constexpr (std::is_same_v<T, MaxDistanceConfig>) {
       return std::nullopt;
-    } else if constexpr (std::is_same_v<T, NearestNeighborsConfig>) {
+    } else {
+      static_assert(std::is_same_v<T, NearestNeighborsConfig>);
       return config.maxResults_;
     }
   };
@@ -168,7 +169,8 @@ string SpatialJoin::getDescriptor() const {
     if constexpr (std::is_same_v<T, MaxDistanceConfig>) {
       return absl::StrCat("MaxDistJoin ", left, " to ", right, " of ",
                           config.maxDist_, " meter(s)");
-    } else if constexpr (std::is_same_v<T, NearestNeighborsConfig>) {
+    } else {
+      static_assert(std::is_same_v<T, NearestNeighborsConfig>);
       return absl::StrCat("NearestNeighborsJoin ", left, " to ", right,
                           " of max. ", config.maxResults_);
     }
