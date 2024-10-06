@@ -7,9 +7,12 @@
 
 #include "./util/GTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
+#include "global/Constants.h"
+#include "global/ValueId.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "parser/RdfParser.h"
+#include "parser/TripleComponent.h"
 #include "util/Conversions.h"
 
 using std::string;
@@ -253,6 +256,22 @@ TEST(RdfParserTest, literalAndDatatypeToTripleComponent) {
   ASSERT_EQ(ladttc("+144321", fromIri(XSD_INTEGER_TYPE)), +144321);
   ASSERT_EQ(ladttc("true", fromIri(XSD_BOOLEAN_TYPE)), true);
   ASSERT_EQ(ladttc("false", fromIri(XSD_BOOLEAN_TYPE)), false);
+  auto result = ladttc("POINT(7.8 47.9)", fromIri(GEO_WKT_LITERAL));
+  auto vid = result.toValueIdIfNotString();
+  ASSERT_TRUE(vid.has_value() &&
+              vid.value().getDatatype() == Datatype::GeoPoint);
+  auto result2 = ladttc("POLYGON(7.8 47.9, 40.0 40.5, 10.9 20.5)",
+                        fromIri(GEO_WKT_LITERAL));
+  ASSERT_TRUE(result2.isLiteral());
+  EXPECT_EQ(asStringViewUnsafe(result2.getLiteral().getContent()),
+            "POLYGON(7.8 47.9, 40.0 40.5, 10.9 20.5)");
+  EXPECT_EQ(asStringViewUnsafe(result2.getLiteral().getDatatype()),
+            GEO_WKT_LITERAL);
+  // Invalid points should be converted to plain string literals
+  auto result3 = ladttc("POINT(0.0 99.9999)", fromIri(GEO_WKT_LITERAL));
+  ASSERT_FALSE(result3.getLiteral().hasDatatype());
+  ASSERT_EQ(asStringViewUnsafe(result3.getLiteral().getContent()),
+            "POINT(0.0 99.9999)");
 }
 
 TEST(RdfParserTest, blankNode) {

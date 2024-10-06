@@ -25,7 +25,9 @@ TEST(RandomExpression, evaluate) {
 
   std::vector<int64_t> histogram(10);
   for (auto rand : resultVector) {
-    ASSERT_EQ(rand.getDatatype(), Datatype::Int);
+    ASSERT_EQ(rand.getDatatype(), Datatype::Double);
+    ASSERT_GE(rand.getDouble(), 0.0);
+    ASSERT_LT(rand.getDouble(), 1.0);
     histogram[std::abs(rand.getInt()) % 10]++;
   }
 

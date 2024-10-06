@@ -390,18 +390,12 @@ ProtoResult GroupBy::computeResult(bool requestLaziness) {
         std::move(subresult), std::move(aggregates),
         std::move(metadataForUnsequentialData).value().aggregateAliases_,
         std::move(groupByCols), localVocabPointer, !requestLaziness);
-    if (requestLaziness) {
-      return {std::move(generator), resultSortedOn(),
-              std::move(localVocabPointer)};
-    }
-    // In this case we expect the generator to yield exactly one `IdTable`.
-    auto iterator = generator.begin();
-    AD_CORRECTNESS_CHECK(iterator != generator.end());
-    IdTable idTable = std::move(*iterator);
-    // Only one result is expected
-    AD_CORRECTNESS_CHECK(++iterator == generator.end());
-    return {std::move(idTable), resultSortedOn(),
-            std::move(*localVocabPointer)};
+
+    return requestLaziness
+               ? ProtoResult{std::move(generator), resultSortedOn(),
+                             std::move(localVocabPointer)}
+               : ProtoResult{cppcoro::getSingleElement(std::move(generator)),
+                             resultSortedOn(), std::move(*localVocabPointer)};
   }
 
   AD_CORRECTNESS_CHECK(subresult->idTable().numColumns() == inWidth);
@@ -581,7 +575,8 @@ std::optional<IdTable> GroupBy::computeGroupByForSingleIndexScan() const {
     return std::nullopt;
   }
 
-  if (indexScan->getResultWidth() <= 1 || !_groupByVariables.empty()) {
+  if (indexScan->getResultWidth() <= 1 ||
+      indexScan->graphsToFilter().has_value() || !_groupByVariables.empty()) {
     return std::nullopt;
   }
 
@@ -625,7 +620,8 @@ std::optional<IdTable> GroupBy::computeGroupByObjectWithCount() const {
   // The child must be an `IndexScan` with exactly two variables.
   auto indexScan =
       std::dynamic_pointer_cast<IndexScan>(_subtree->getRootOperation());
-  if (!indexScan || indexScan->numVariables() != 2) {
+  if (!indexScan || indexScan->graphsToFilter().has_value() ||
+      indexScan->numVariables() != 2) {
     return std::nullopt;
   }
   const auto& permutedTriple = indexScan->getPermutedTriple();
@@ -712,8 +708,6 @@ std::optional<IdTable> GroupBy::computeGroupByForFullIndexScan() const {
 
   _subtree->getRootOperation()->updateRuntimeInformationWhenOptimizedOut({});
 
-  auto ignoredRanges =
-      getIndex().getImpl().getIgnoredIdRanges(permutationEnum.value()).first;
   const auto& permutation =
       getExecutionContext()->getIndex().getPimpl().getPermutation(
           permutationEnum.value());
@@ -721,13 +715,6 @@ std::optional<IdTable> GroupBy::computeGroupByForFullIndexScan() const {
   if (numCounts == 0) {
     table.setColumnSubset({{0}});
   }
-  // TODO<joka921> This is only semi-efficient.
-  auto end = std::ranges::remove_if(table, [&ignoredRanges](const auto& row) {
-    return std::ranges::any_of(ignoredRanges, [id = row[0]](const auto& pair) {
-      return id >= pair.first && id < pair.second;
-    });
-  });
-  table.resize(end.begin() - table.begin());
 
   // TODO<joka921> This optimization should probably also apply if
   // the query is `SELECT DISTINCT ?s WHERE {?s ?p ?o} ` without a
@@ -742,22 +729,23 @@ std::optional<Permutation::Enum> GroupBy::getPermutationForThreeVariableTriple(
   auto indexScan =
       std::dynamic_pointer_cast<const IndexScan>(tree.getRootOperation());
 
-  if (!indexScan || indexScan->getResultWidth() != 3) {
+  if (!indexScan || indexScan->graphsToFilter().has_value() ||
+      indexScan->getResultWidth() != 3) {
     return std::nullopt;
   }
   {
     auto v = variableThatMustBeContained;
-    if (v != indexScan->getSubject() && v != indexScan->getPredicate() &&
-        v != indexScan->getObject()) {
+    if (v != indexScan->subject() && v != indexScan->predicate() &&
+        v != indexScan->object()) {
       return std::nullopt;
     }
   }
 
-  if (variableByWhichToSort == indexScan->getSubject()) {
+  if (variableByWhichToSort == indexScan->subject()) {
     return Permutation::SPO;
-  } else if (variableByWhichToSort == indexScan->getPredicate()) {
+  } else if (variableByWhichToSort == indexScan->predicate()) {
     return Permutation::POS;
-  } else if (variableByWhichToSort == indexScan->getObject()) {
+  } else if (variableByWhichToSort == indexScan->object()) {
     return Permutation::OSP;
   } else {
     return std::nullopt;

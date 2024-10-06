@@ -98,4 +98,7 @@ class ScanSpecificationAsTripleComponent {
 
   // The number of columns that the corresponding index scan will have.
   size_t numColumns() const;
+
+  // Getter for testing.
+  const Graphs& graphsToFilter() const { return graphsToFilter_; }
 };

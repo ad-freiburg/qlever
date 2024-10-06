@@ -37,9 +37,14 @@ class IndexScan final : public Operation {
 
   ~IndexScan() override = default;
 
-  const TripleComponent& getPredicate() const { return predicate_; }
-  const TripleComponent& getSubject() const { return subject_; }
-  const TripleComponent& getObject() const { return object_; }
+  // Const getters for testing.
+  const TripleComponent& predicate() const { return predicate_; }
+  const TripleComponent& subject() const { return subject_; }
+  const TripleComponent& object() const { return object_; }
+  const auto& graphsToFilter() const { return graphsToFilter_; }
+  const std::vector<Variable>& additionalVariables() const {
+    return additionalVariables_;
+  }
 
   const std::vector<ColumnIndex>& additionalColumns() const {
     return additionalColumns_;
@@ -118,8 +123,6 @@ class IndexScan final : public Operation {
   ProtoResult computeResult(bool requestLaziness) override;
 
   vector<QueryExecutionTree*> getChildren() override { return {}; }
-
-  void computeFullScan(IdTable* result, Permutation::Enum permutation) const;
 
   size_t computeSizeEstimate() const;
 

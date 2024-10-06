@@ -136,6 +136,13 @@ class Service : public Operation {
   // parse JSON here and not a VALUES clause.
   template <size_t I>
   void writeJsonResult(const std::vector<std::string>& vars,
-                       ad_utility::LazyJsonParser::Generator& response,
-                       IdTable* idTable, LocalVocab* localVocab);
+                       const nlohmann::json& partJson, IdTable* idTable,
+                       LocalVocab* localVocab, size_t& rowIdx);
+
+  // Compute the result lazy as IdTable generator.
+  // If the `singleIdTable` flag is set, the result is yielded as one idTable.
+  cppcoro::generator<IdTable> computeResultLazily(
+      const std::vector<std::string> vars,
+      ad_utility::LazyJsonParser::Generator body,
+      std::shared_ptr<LocalVocab> localVocab, bool singleIdTable);
 };

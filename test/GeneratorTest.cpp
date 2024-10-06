@@ -80,3 +80,17 @@ TEST(Generator, detailsForDefaultConstructedGenerator) {
   ASSERT_EQ(gen.details(), Details());
   ASSERT_EQ(std::as_const(gen).details(), Details());
 }
+
+TEST(Generator, getSingleElement) {
+  // The generator yields more than a single element -> throw
+  EXPECT_ANY_THROW(cppcoro::getSingleElement(simpleGen()));
+
+  // The generator yields exactly one element -> return the element
+  auto gen2 = []() -> cppcoro::generator<int> { co_yield 1; }();
+  EXPECT_EQ(1, cppcoro::getSingleElement(std::move(gen2)));
+  auto gen3 = []() -> cppcoro::generator<int> {
+    co_yield 1;
+    co_yield 3;
+  }();
+  EXPECT_ANY_THROW(cppcoro::getSingleElement(std::move(gen3)));
+}
