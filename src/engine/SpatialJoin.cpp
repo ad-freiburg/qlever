@@ -55,11 +55,11 @@ SpatialJoin::SpatialJoin(
 // ____________________________________________________________________________
 void SpatialJoin::parseConfigFromTriple() {
   // Helper to convert a ctre match to an integer
-  auto matchToInt = [](std::string_view match) -> std::optional<long long> {
+  auto matchToInt = [](std::string_view match) -> std::optional<size_t> {
     if (match.size() > 0) {
       double res = 0;
       absl::from_chars(match.data(), match.data() + match.size(), res);
-      return static_cast<long long>(res);
+      return static_cast<size_t>(res);
     }
     return std::nullopt;
   };
@@ -108,8 +108,8 @@ bool SpatialJoin::isConstructed() const {
 }
 
 // ____________________________________________________________________________
-std::optional<long long> SpatialJoin::getMaxDist() const {
-  auto visitor = []<typename T>(const T& config) -> std::optional<long long> {
+std::optional<size_t> SpatialJoin::getMaxDist() const {
+  auto visitor = []<typename T>(const T& config) -> std::optional<size_t> {
     if constexpr (std::is_same_v<T, MaxDistanceConfig>) {
       return config.maxDist_;
     } else if constexpr (std::is_same_v<T, NearestNeighborsConfig>) {
@@ -120,8 +120,8 @@ std::optional<long long> SpatialJoin::getMaxDist() const {
 }
 
 // ____________________________________________________________________________
-std::optional<long long> SpatialJoin::getMaxResults() const {
-  auto visitor = []<typename T>(const T& config) -> std::optional<long long> {
+std::optional<size_t> SpatialJoin::getMaxResults() const {
+  auto visitor = []<typename T>(const T& config) -> std::optional<size_t> {
     if constexpr (std::is_same_v<T, MaxDistanceConfig>) {
       return std::nullopt;
     } else if constexpr (std::is_same_v<T, NearestNeighborsConfig>) {
@@ -440,7 +440,7 @@ Result SpatialJoin::baselineAlgorithm() {
       // Ensure `maxResults_` constraint using priority queue
       intermediate.push(std::pair{rowRight, dist.getInt()});
       // Too many results? Drop the worst one
-      if (intermediate.size() > static_cast<size_t>(maxResults.value())) {
+      if (intermediate.size() > maxResults.value()) {
         intermediate.pop();
       }
     }

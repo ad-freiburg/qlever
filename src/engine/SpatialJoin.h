@@ -13,11 +13,11 @@
 
 // Configuration to restrict the results provided by the SpatialJoin
 struct NearestNeighborsConfig {
-  long long maxResults_;
-  std::optional<long long> maxDist_ = std::nullopt;
+  size_t maxResults_;
+  std::optional<size_t> maxDist_ = std::nullopt;
 };
 struct MaxDistanceConfig {
-  long long maxDist_;
+  size_t maxDist_;
 };
 
 // This class is implementing a SpatialJoin operation. This operations joins
@@ -77,13 +77,13 @@ class SpatialJoin : public Operation {
   bool isConstructed() const;
 
   // this function is used to give the maximum distance for internal purposes
-  std::optional<long long> getMaxDist() const;
+  std::optional<size_t> getMaxDist() const;
 
   // this function is used to give the maximum number of results for internal
   // purposes
-  std::optional<long long> getMaxResults() const;
+  std::optional<size_t> getMaxResults() const;
 
-  std::pair<long long, long long> onlyForTestingGetConfig() const {
+  std::pair<size_t, size_t> onlyForTestingGetConfig() const {
     return std::pair{getMaxDist().value_or(-1), getMaxResults().value_or(-1)};
   }
 
