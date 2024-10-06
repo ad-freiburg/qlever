@@ -159,4 +159,16 @@ TEST(ServerTest, checkParameter) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       Server::checkParameter(exampleParams, "baz", "qux", false),
       testing::StrEq("Parameter \"baz\" must be given exactly once. Is: 2"));
+  EXPECT_THAT(Server::checkParameter(exampleParams, "foo", std::nullopt, true),
+              testing::Optional(testing::StrEq("bar")));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      Server::checkParameter(exampleParams, "foo", std::nullopt, false),
+      testing::StrEq("Access to \"foo=bar\" denied (requires a valid access "
+                     "token), processing of request aborted"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      Server::checkParameter(exampleParams, "baz", std::nullopt, false),
+      testing::StrEq("Parameter \"baz\" must be given exactly once. Is: 2"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      Server::checkParameter(exampleParams, "baz", std::nullopt, true),
+      testing::StrEq("Parameter \"baz\" must be given exactly once. Is: 2"));
 }
