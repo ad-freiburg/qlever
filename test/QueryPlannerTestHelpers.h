@@ -292,7 +292,7 @@ inline auto TransitivePath =
 
 // Match a SpatialJoin operation, set arguments to ignore to -1
 inline auto SpatialJoin =
-    [](long long maxDist, long long maxResults,
+    [](size_t maxDist, size_t maxResults,
        const std::same_as<QetMatcher> auto&... childMatchers) {
       return RootOperation<::SpatialJoin>(
           AllOf(Property("getChildren", &Operation::getChildren,

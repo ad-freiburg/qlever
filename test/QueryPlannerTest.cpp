@@ -822,13 +822,12 @@ TEST(QueryPlanner, SpatialJoinViaMaxDistPredicate) {
       ::testing::ContainsRegex(
           "SpatialJoin needs two children, but at least one is missing"));
 
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      h::expect("SELECT ?x ?y WHERE {"
-                "?x <p> ?y."
-                "?a <p> ?b."
-                "?y <max-distance-in-meters:-1> ?b }",
-                ::testing::_),
-      ::testing::ContainsRegex("invalid triple for construction"));
+  AD_EXPECT_THROW_WITH_MESSAGE(h::expect("SELECT ?x ?y WHERE {"
+                                         "?x <p> ?y."
+                                         "?a <p> ?b."
+                                         "?y <max-distance-in-meters:-1> ?b }",
+                                         ::testing::_),
+                               ::testing::ContainsRegex("unknown triple"));
 }
 
 // __________________________________________________________________________
@@ -899,29 +898,26 @@ TEST(QueryPlanner, SpatialJoinViaNearestNeighborsPredicate) {
       ::testing::ContainsRegex(
           "SpatialJoin needs two children, but at least one is missing"));
 
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      h::expect("SELECT ?x ?y WHERE {"
-                "?x <p> ?y."
-                "?a <p> ?b."
-                "?y <nearest-neighbors:-50:500> ?b }",
-                ::testing::_),
-      ::testing::ContainsRegex("invalid triple for construction"));
+  AD_EXPECT_THROW_WITH_MESSAGE(h::expect("SELECT ?x ?y WHERE {"
+                                         "?x <p> ?y."
+                                         "?a <p> ?b."
+                                         "?y <nearest-neighbors:-50:500> ?b }",
+                                         ::testing::_),
+                               ::testing::ContainsRegex("unknown triple"));
 
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      h::expect("SELECT ?x ?y WHERE {"
-                "?x <p> ?y."
-                "?a <p> ?b."
-                "?y <nearest-neighbors:1:-200> ?b }",
-                ::testing::_),
-      ::testing::ContainsRegex("invalid triple for construction"));
+  AD_EXPECT_THROW_WITH_MESSAGE(h::expect("SELECT ?x ?y WHERE {"
+                                         "?x <p> ?y."
+                                         "?a <p> ?b."
+                                         "?y <nearest-neighbors:1:-200> ?b }",
+                                         ::testing::_),
+                               ::testing::ContainsRegex("unknown triple"));
 
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      h::expect("SELECT ?x ?y WHERE {"
-                "?x <p> ?y."
-                "?a <p> ?b."
-                "?y <nearest-neighbors:0:-1> ?b }",
-                ::testing::_),
-      ::testing::ContainsRegex("invalid triple for construction"));
+  AD_EXPECT_THROW_WITH_MESSAGE(h::expect("SELECT ?x ?y WHERE {"
+                                         "?x <p> ?y."
+                                         "?a <p> ?b."
+                                         "?y <nearest-neighbors:0:-1> ?b }",
+                                         ::testing::_),
+                               ::testing::ContainsRegex("unknown triple"));
 }
 
 // __________________________________________________________________________
