@@ -516,21 +516,32 @@ ProtoResult Join::lazyJoin(std::shared_ptr<const Result> a, ColumnIndex jc1,
           std::less{}, *rowAdder);
     }
   };
+  auto toBlockRange =
+      [](auto&& blockOrBlocks,
+         [[maybe_unused]] std::span<const ColumnIndex> columnIndices = {}) {
+        if constexpr (ad_utility::isSimilar<decltype(blockOrBlocks), IdTable>) {
+          return std::array{ad_utility::IdTableAndFirstCol{
+              blockOrBlocks.asColumnSubsetView(columnIndices)}};
+        } else if constexpr (std::ranges::range<decltype(blockOrBlocks)>) {
+          return convertGenerator(std::move(blockOrBlocks));
+        } else {
+          static_assert(ad_utility::alwaysFalse<decltype(blockOrBlocks)>,
+                        "Unexpected type");
+        }
+      };
   std::optional<cppcoro::generator<std::monostate>> resultGenerator =
       std::nullopt;
   if (a->isFullyMaterialized() && !b->isFullyMaterialized()) {
-    resultGenerator = performJoin(
-        std::array{ad_utility::IdTableAndFirstCol{
-            a->idTable().asColumnSubsetView(joinColMap.permutationLeft())}},
-        convertGenerator(std::move(b->idTables())));
+    resultGenerator =
+        performJoin(toBlockRange(a->idTable(), joinColMap.permutationLeft()),
+                    toBlockRange(b->idTables(), {}));
   } else if (!a->isFullyMaterialized() && b->isFullyMaterialized()) {
-    resultGenerator = performJoin(
-        convertGenerator(std::move(a->idTables())),
-        std::array{ad_utility::IdTableAndFirstCol{
-            b->idTable().asColumnSubsetView(joinColMap.permutationRight())}});
+    resultGenerator =
+        performJoin(toBlockRange(a->idTables()),
+                    toBlockRange(b->idTable(), joinColMap.permutationRight()));
   } else if (!a->isFullyMaterialized() && !b->isFullyMaterialized()) {
-    resultGenerator = performJoin(convertGenerator(std::move(a->idTables())),
-                                  convertGenerator(std::move(b->idTables())));
+    resultGenerator =
+        performJoin(toBlockRange(a->idTables()), toBlockRange(b->idTables()));
   } else {
     // If both inputs are fully materialized, we can join them more efficiently.
     AD_FAIL();
