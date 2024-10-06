@@ -149,7 +149,7 @@ class ValuesForTesting : public Operation {
   }
 
   size_t getResultWidth() const override {
-    // Asume a width of 1 if we have no tables and no other information to base
+    // Assume a width of 1 if we have no tables and no other information to base
     // it on because 0 would otherwise cause stuff to break.
     return tables_.empty() ? 1 : tables_.at(0).numColumns();
   }
