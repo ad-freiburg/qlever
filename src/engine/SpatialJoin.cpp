@@ -424,8 +424,8 @@ Result SpatialJoin::baselineAlgorithm() {
                             rightJoinCol);
 
       // Ensure `maxDist_` constraint
-      if (dist.getDatatype() != Datatype::Int || !maxDist.has_value() ||
-          dist.getInt() > maxDist.value()) {
+      if (dist.getDatatype() != Datatype::Int ||
+          (maxDist.has_value() && dist.getInt() > maxDist.value())) {
         continue;
       }
 
