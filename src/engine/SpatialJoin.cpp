@@ -26,6 +26,7 @@
 #include "global/ValueId.h"
 #include "parser/ParsedQuery.h"
 #include "util/AllocatorWithLimit.h"
+#include "util/Exception.h"
 #include "util/GeoSparqlHelpers.h"
 #include "util/MemorySize/MemorySize.h"
 
@@ -68,20 +69,19 @@ void SpatialJoin::parseConfigFromTriple() {
 
   if (auto match = ctre::match<MAX_DIST_IN_METERS_REGEX>(input)) {
     auto maxDist = matchToInt(match.get<"dist">());
-    if (maxDist.has_value()) {
-      config_ = MaxDistanceConfig{maxDist.value()};
-      return;
-    }
+    AD_CORRECTNESS_CHECK(maxDist.has_value());
+    config_ = MaxDistanceConfig{maxDist.value()};
   } else if (auto match = ctre::search<NEAREST_NEIGHBORS_REGEX>(input)) {
     auto maxResults = matchToInt(match.get<"results">());
     auto maxDist = matchToInt(match.get<"dist">());
-    if (maxResults.has_value()) {
-      config_ = NearestNeighborsConfig{maxResults.value(), maxDist};
-      return;
-    }
+    AD_CORRECTNESS_CHECK(maxResults.has_value());
+    config_ = NearestNeighborsConfig{maxResults.value(), maxDist};
+  } else {
+    AD_THROW(
+        absl::StrCat("Tried to perform spatial join with unknown triple ",
+                     input, ". This must be a valid spatial condition like ",
+                     "<max-distance-in-meters:50> or <nearest-neighbors:3>."));
   }
-
-  AD_THROW("invalid triple for construction of SpatialJoin");
 }
 
 // ____________________________________________________________________________
