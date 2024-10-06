@@ -1293,9 +1293,9 @@ size_t QueryPlanner::countSubgraphsRecursively(const Graph& graph,
   for (const auto& el : NeighborsOfS) {
     newIgnored.insert(el);
   }
-  LOG(INFO) << "Num Neighbors: " << upperBound << std::endl;
-  // TODO<joka921> iterate over all Subsets.
-  // TODO<joka921> (0, 1, ?)
+  // LOG(INFO) << "Num Neighbors: " << upperBound << std::endl;
+  //  TODO<joka921> iterate over all Subsets.
+  //  TODO<joka921> (0, 1, ?)
   for (size_t i = 1; i < upperBound; ++i) {
     ++c;
     if (c > budget) {
@@ -1305,9 +1305,11 @@ size_t QueryPlanner::countSubgraphsRecursively(const Graph& graph,
     auto newSubgraph = subgraph;
     for (size_t k = 0; k < NeighborsOfS.size(); ++k) {
       if (1 << k & i) {
-        newSubgraph.insert(NeighborsOfS[i]);
+        newSubgraph.insert(NeighborsOfS[k]);
       }
     }
+    // LOG(INFO) << "new subgraph " << newSubgraph.size() << " newIgnored " <<
+    // newIgnored.size() << " c " << c <<std::endl;
     c = countSubgraphsRecursively(graph, newSubgraph, newIgnored, c, budget);
   }
   return c;
