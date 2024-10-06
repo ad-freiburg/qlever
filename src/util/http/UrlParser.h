@@ -26,8 +26,8 @@ using ParamValueMap = ad_utility::HashMap<string, std::vector<string>>;
 // Extracts a parameter that must be present exactly once. If the parameter is
 // not present std::nullopt is returned. If the parameter is present multiple
 // times an exception is thrown.
-std::optional<std::string> getParameterCheckAtMostOnce(const ParamValueMap& map,
-                                                       string_view key);
+const std::optional<std::string>& getParameterCheckAtMostOnce(
+    const ParamValueMap& map, string_view key);
 
 // A parsed URL.
 // - `path_` is the URL path

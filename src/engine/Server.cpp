@@ -693,7 +693,7 @@ boost::asio::awaitable<void> Server::processQuery(
   try {
     auto containsParam = [&params](const std::string& param,
                                    const std::string& expected) {
-      auto parameterValue =
+      auto& parameterValue =
           ad_utility::url_parser::getParameterCheckAtMostOnce(params, param);
       return parameterValue.has_value() && parameterValue.value() == expected;
     };
@@ -735,7 +735,7 @@ boost::asio::awaitable<void> Server::processQuery(
 
     // TODO<c++23> use std::optional::transform
     std::optional<uint64_t> maxSend = std::nullopt;
-    auto parameterValue =
+    auto& parameterValue =
         ad_utility::url_parser::getParameterCheckAtMostOnce(params, "send");
     if (parameterValue.has_value()) {
       maxSend = std::stoul(parameterValue.value());
@@ -968,12 +968,12 @@ std::optional<std::string_view> Server::checkParameter(
     const ad_utility::url_parser::ParamValueMap& parameters,
     std::string_view key, std::optional<std::string_view> value,
     bool accessAllowed) {
-  auto param =
+  auto& param =
       ad_utility::url_parser::getParameterCheckAtMostOnce(parameters, key);
   if (!param.has_value()) {
     return std::nullopt;
   }
-  std::string parameterValue = param.value();
+  const std::string& parameterValue = param.value();
 
   // If value is given, but not equal to param value, return std::nullopt. If
   // no value is given, set it to param value.
