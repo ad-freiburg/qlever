@@ -502,11 +502,12 @@ Result SpatialJoin::s2geometryAlgorithm() {
   auto s2query = S2ClosestPointQuery<size_t>{&s2index};
 
   if (maxResults.has_value()) {
-    s2query.mutable_options()->set_max_results(maxResults.value());
+    s2query.mutable_options()->set_max_results(
+        static_cast<int>(maxResults.value()));
   }
   if (maxDist.has_value()) {
-    s2query.mutable_options()->set_inclusive_max_distance(
-        S2Earth::ToAngle(util::units::Meters(maxDist.value())));
+    s2query.mutable_options()->set_inclusive_max_distance(S2Earth::ToAngle(
+        util::units::Meters(static_cast<float>(maxDist.value()))));
   }
 
   auto searchTable = indexOfRight ? resLeft : resRight;
