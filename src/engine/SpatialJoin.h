@@ -127,13 +127,13 @@ class SpatialJoin : public Operation {
 
   // helper struct to improve readability in prepareJoin()
   struct PreparedJoinParams {
-    const IdTable* const resLeft;
-    std::shared_ptr<const Result> keepAliveLeft;
-    const IdTable* const resRight;
-    std::shared_ptr<const Result> keepAliveRight;
-    ColumnIndex leftJoinCol;
-    ColumnIndex rightJoinCol;
-    size_t numColumns;
+    const IdTable* const resLeft_;
+    std::shared_ptr<const Result> keepAliveLeft_;
+    const IdTable* const resRight_;
+    std::shared_ptr<const Result> keepAliveRight_;
+    ColumnIndex leftJoinCol_;
+    ColumnIndex rightJoinCol_;
+    size_t numColumns_;
   };
 
   // helper function, to initialize various required objects for both algorithms
