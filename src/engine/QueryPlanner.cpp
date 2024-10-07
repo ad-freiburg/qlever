@@ -185,13 +185,6 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createExecutionTrees(
 
   checkCancellation();
 
-  const auto& fromNamed = pq.datasetClauses_.namedGraphs_;
-  if (fromNamed.has_value()) {
-    AD_CORRECTNESS_CHECK(!fromNamed.value().empty());
-    throw std::runtime_error(
-        "FROM NAMED clauses are not yet supported by QLever");
-  }
-
   return lastRow;
 }
 
@@ -732,18 +725,32 @@ auto QueryPlanner::seedWithScansAndText(
       continue;
     }
 
-    auto addIndexScan =
-        [this, pushPlan, node,
-         &relevantGraphs = activeDatasetClauses_.defaultGraphs_](
-            Permutation::Enum permutation,
-            std::optional<SparqlTripleSimple> triple = std::nullopt) {
-          if (!triple.has_value()) {
-            triple = node.triple_.getSimple();
-          }
+    auto addIndexScan = [this, pushPlan, node,
+                         &relevantGraphs =
+                             activeDatasetClauses_.defaultGraphs_](
+                            Permutation::Enum permutation,
+                            std::optional<SparqlTripleSimple> triple =
+                                std::nullopt) {
+      if (!triple.has_value()) {
+        triple = node.triple_.getSimple();
+      }
 
-          pushPlan(makeSubtreePlan<IndexScan>(
-              _qec, permutation, std::move(triple.value()), relevantGraphs));
-        };
+      // We are inside a `GRAPH ?var {...}` clause, so all index scans have
+      // to add the graph variable as an additional column.
+      auto& additionalColumns = triple.value().additionalScanColumns_;
+      AD_CORRECTNESS_CHECK(!ad_utility::contains(
+          additionalColumns | std::views::keys, ADDITIONAL_COLUMN_GRAPH_ID));
+      if (activeGraphVariable_.has_value()) {
+        additionalColumns.emplace_back(ADDITIONAL_COLUMN_GRAPH_ID,
+                                       activeGraphVariable_.value());
+      }
+
+      // TODO<joka921> Handle the case, that the Graph variable is also used
+      // inside the `GRAPH` clause, e.g. by being used inside a triple.
+
+      pushPlan(makeSubtreePlan<IndexScan>(
+          _qec, permutation, std::move(triple.value()), relevantGraphs));
+    };
 
     auto addFilter = [&filters = result.filters_](SparqlFilter filter) {
       filters.push_back(std::move(filter));
@@ -2109,11 +2116,28 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
     // default graphs while planning this clause, and reset them when leaving
     // the clause.
     std::optional<ParsedQuery::DatasetClauses> datasetBackup;
+    std::optional<Variable> graphVariableBackup = planner_.activeGraphVariable_;
     if constexpr (std::is_same_v<T, p::GroupGraphPattern>) {
-      if (arg._graphIri.has_value()) {
+      if (std::holds_alternative<TripleComponent::Iri>(arg.graphSpec_)) {
         datasetBackup = planner_.activeDatasetClauses_;
         planner_.activeDatasetClauses_.defaultGraphs_.emplace(
-            {arg._graphIri.value()});
+            {std::get<TripleComponent::Iri>(arg.graphSpec_)});
+      } else if (std::holds_alternative<Variable>(arg.graphSpec_)) {
+        const auto& graphVar = std::get<Variable>(arg.graphSpec_);
+        if (checkUsePatternTrick::isVariableContainedInGraphPattern(
+                graphVar, arg._child, nullptr)) {
+          throw std::runtime_error(
+              "A variable that is used as the graph specifier of a `GRAPH ?var "
+              "{...}` clause may not appear in the body of that clause");
+        }
+        datasetBackup = planner_.activeDatasetClauses_;
+        planner_.activeDatasetClauses_.defaultGraphs_ =
+            planner_.activeDatasetClauses_.namedGraphs_;
+        // We already have backed up the `activeGraphVariable_`.
+        planner_.activeGraphVariable_ = std::get<Variable>(arg.graphSpec_);
+      } else {
+        AD_CORRECTNESS_CHECK(
+            std::holds_alternative<std::monostate>(arg.graphSpec_));
       }
     }
 
@@ -2127,6 +2151,7 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
     if (datasetBackup.has_value()) {
       planner_.activeDatasetClauses_ = std::move(datasetBackup.value());
     }
+    planner_.activeGraphVariable_ = std::move(graphVariableBackup);
   } else if constexpr (std::is_same_v<T, p::Union>) {
     visitUnion(arg);
   } else if constexpr (std::is_same_v<T, p::Subquery>) {
@@ -2170,8 +2195,8 @@ void QueryPlanner::GraphPatternPlanner::visitBasicGraphPattern(
     }
   }
 
-  // Then collect the triples. Transform each triple with a property path to an
-  // equivalent form without property path (using `seedFromPropertyPath`).
+  // Then collect the triples. Transform each triple with a property path to
+  // an equivalent form without property path (using `seedFromPropertyPath`).
   for (const auto& triple : v._triples) {
     if (triple.p_._operation == PropertyPath::Operation::IRI) {
       candidateTriples_._triples.push_back(triple);
@@ -2283,8 +2308,18 @@ void QueryPlanner::GraphPatternPlanner::visitSubquery(
   // Make sure that variables that are not selected by the subquery are
   // not visible.
   auto setSelectedVariables = [&](SubtreePlan& plan) {
+    auto selectedVariables = arg.get().selectClause().getSelectedVariables();
+    // TODO<C++23> Use `optional::transform`
+    if (planner_.activeGraphVariable_.has_value()) {
+      const auto& graphVar = planner_.activeGraphVariable_.value();
+      AD_CORRECTNESS_CHECK(
+          !ad_utility::contains(selectedVariables, graphVar),
+          "This case (variable of GRAPH ?var {...} appears also in the body) "
+          "should have thrown further up in the call stack");
+      selectedVariables.push_back(graphVar);
+    }
     plan._qet->getRootOperation()->setSelectedVariablesForSubquery(
-        arg.get().selectClause().getSelectedVariables());
+        selectedVariables);
   };
   std::ranges::for_each(candidatesForSubquery, setSelectedVariables);
   // A subquery must also respect LIMIT and OFFSET clauses
