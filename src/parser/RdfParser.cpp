@@ -11,6 +11,7 @@
 #include <exception>
 #include <optional>
 
+#include "engine/CallFixedSize.h"
 #include "global/Constants.h"
 #include "parser/GeoPoint.h"
 #include "parser/NormalizedString.h"
@@ -1087,6 +1088,38 @@ RdfParallelParser<T>::~RdfParallelParser() {
       "During the destruction of a RdfParallelParser");
 }
 
+// _____________________________________________________________________________
+template <typename TokenizerT>
+std::unique_ptr<RdfParserBase> makeSingleRdfParser(
+    const Index::InputFileSpecification& file) {
+  auto defaultGraph = [file]() -> TripleComponent {
+    if (file.defaultGraph_.has_value()) {
+      return TripleComponent::Iri::fromIrirefWithoutBrackets(
+          file.defaultGraph_.value());
+    } else {
+      return qlever::specialIds().at(DEFAULT_GRAPH_IRI);
+    }
+  };
+  auto makeRdfParserImpl = [&filename = file.filename_,
+                            &defaultGraph]<int useParallel, int isTurtleInput>()
+      -> std::unique_ptr<RdfParserBase> {
+    using InnerParser =
+        std::conditional_t<isTurtleInput == 1, TurtleParser<TokenizerT>,
+                           NQuadParser<TokenizerT>>;
+    using Parser =
+        std::conditional_t<useParallel == 1, RdfParallelParser<InnerParser>,
+                           RdfStreamParser<InnerParser>>;
+    return std::make_unique<Parser>(filename, defaultGraph());
+  };
+
+  // `callFixedSize` litfts runtime integers to compile time integers. We use it
+  // here to create the correct combinations of template arguments.
+  return ad_utility::callFixedSize(
+      std::array{file.parseInParallel_ ? 1 : 0,
+                 file.filetype_ == Index::Filetype::Turtle ? 1 : 0},
+      makeRdfParserImpl);
+}
+
 // ______________________________________________________________
 template <typename T>
 RdfMultifileParser<T>::RdfMultifileParser(
@@ -1094,22 +1127,7 @@ RdfMultifileParser<T>::RdfMultifileParser(
   using namespace qlever;
   auto makeParser =
       [](const InputFileSpecification& file) -> std::unique_ptr<RdfParserBase> {
-    auto defaultGraph = [file]() -> TripleComponent {
-      if (file.defaultGraph_.has_value()) {
-        return TripleComponent::Iri::fromIrirefWithoutBrackets(
-            file.defaultGraph_.value());
-      } else {
-        return qlever::specialIds().at(DEFAULT_GRAPH_IRI);
-      }
-    }();
-    if (file.filetype_ == Filetype::Turtle) {
-      return std::make_unique<RdfStreamParser<TurtleParser<T>>>(
-          file.filename_, std::move(defaultGraph));
-    } else {
-      AD_CORRECTNESS_CHECK(file.filetype_ == Filetype::NQuad);
-      return std::make_unique<RdfStreamParser<NQuadParser<T>>>(
-          file.filename_, std::move(defaultGraph));
-    }
+    return makeSingleRdfParser<Tokenizer>(file);
   };
 
   auto parseFile = [this, makeParser](const InputFileSpecification& file) {
