@@ -70,6 +70,14 @@ void mergeSubtreePlanIds(QueryPlanner::SubtreePlan& target,
   target.idsOfIncludedTextLimits_ =
       a.idsOfIncludedTextLimits_ | b.idsOfIncludedTextLimits_;
 }
+void copySubtreePlanIds(QueryPlanner::SubtreePlan& target,
+                         const QueryPlanner::SubtreePlan& source
+                         ) {
+  target._idsOfIncludedNodes = source._idsOfIncludedNodes;
+  target._idsOfIncludedFilters = source._idsOfIncludedFilters;
+  target.idsOfIncludedTextLimits_ = source.idsOfIncludedTextLimits_;
+}
+
 }  // namespace
 
 // _____________________________________________________________________________
@@ -1688,7 +1696,9 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
     if (auto opt = createSubtreeWithService<Minus>(a, b)) {
       return {opt.value()};
     }
-    return {makeSubtreePlan<Minus>(_qec, a._qet, b._qet)};
+    auto optional = makeSubtreePlan<Minus>(_qec, a._qet, b._qet);
+    copySubtreePlanIds(optional, a);
+    return {std::move(optional)};
   }
 
   // OPTIONAL JOINS are not symmetric!
@@ -1700,7 +1710,9 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
     }
 
     // Join the two optional columns using an optional join
-    return {makeSubtreePlan<OptionalJoin>(_qec, a._qet, b._qet)};
+    auto optional = makeSubtreePlan<OptionalJoin>(_qec, a._qet, b._qet);
+    copySubtreePlanIds(optional, a);
+    return {std::move(optional)};
   }
 
   // Check if one of the two Operations is a SERVICE. If so, we can try
@@ -1942,7 +1954,10 @@ auto QueryPlanner::createSubtreeWithService(const SubtreePlan& a,
 
   SubtreePlan plan = makeSubtreePlan<Operation>(
       qec, a._qet, std::move(serviceWithSibling._qet));
-  mergeSubtreePlanIds(plan, a, b);
+  // For `OPTIONAL` and `MINUS` the right hand side is a nested suboperation,
+  // so it has its own ID space.
+  static_assert(ad_utility::SameAsAny<Operation, Minus, OptionalJoin>);
+  copySubtreePlanIds(plan, a);
 
   return plan;
 }
