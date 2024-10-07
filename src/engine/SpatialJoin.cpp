@@ -58,9 +58,9 @@ void SpatialJoin::parseConfigFromTriple() {
   // Helper to convert a ctre match to an integer
   auto matchToInt = [](std::string_view match) -> std::optional<size_t> {
     if (match.size() > 0) {
-      double res = 0;
-      absl::from_chars(match.data(), match.data() + match.size(), res);
-      return static_cast<size_t>(res);
+      size_t res = 0;
+      std::from_chars(match.data(), match.data() + match.size(), res);
+      return res;
     }
     return std::nullopt;
   };
