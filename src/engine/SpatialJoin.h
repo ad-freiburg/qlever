@@ -83,6 +83,10 @@ class SpatialJoin : public Operation {
   // purposes
   std::optional<size_t> getMaxResults() const;
 
+  void selectAlgorithm(bool useBaselineAlgorithm) {
+    useBaselineAlgorithm_ = useBaselineAlgorithm;
+  }
+
   std::pair<size_t, size_t> onlyForTestingGetConfig() const {
     return std::pair{getMaxDist().value_or(-1), getMaxResults().value_or(-1)};
   }
