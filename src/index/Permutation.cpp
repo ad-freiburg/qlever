@@ -5,6 +5,7 @@
 #include "index/Permutation.h"
 
 #include "absl/strings/str_cat.h"
+#include "index/ConstantsIndexBuilding.h"
 #include "util/StringUtils.h"
 
 // _____________________________________________________________________
@@ -12,10 +13,20 @@ Permutation::Permutation(Enum permutation, Allocator allocator)
     : readableName_(toString(permutation)),
       fileSuffix_(absl::StrCat(".", ad_utility::utf8ToLower(readableName_))),
       keyOrder_(toKeyOrder(permutation)),
-      allocator_{std::move(allocator)} {}
+      allocator_{std::move(allocator)},
+      permutation_{permutation} {}
 
 // _____________________________________________________________________
-void Permutation::loadFromDisk(const std::string& onDiskBase) {
+void Permutation::loadFromDisk(const std::string& onDiskBase,
+                               std::function<bool(Id)> isInternalId,
+                               bool loadInternalPermutation) {
+  isInternalId_ = std::move(isInternalId);
+  if (loadInternalPermutation) {
+    internalPermutation_ =
+        std::make_unique<Permutation>(permutation_, allocator_);
+    internalPermutation_->loadFromDisk(
+        absl::StrCat(onDiskBase, INTERNAL_INDEX_INFIX), isInternalId_, false);
+  }
   if constexpr (MetaData::isMmapBased_) {
     meta_.setup(onDiskBase + ".index" + fileSuffix_ + MMAP_FILE_SUFFIX,
                 ad_utility::ReuseTag(), ad_utility::AccessPattern::Random);
@@ -48,21 +59,25 @@ IdTable Permutation::scan(const ScanSpecification& scanSpec,
                              readableName_ + ", which was not loaded");
   }
 
-  return reader().scan(scanSpec, meta_.blockData(), additionalColumns,
-                       cancellationHandle, limitOffset);
+  const auto& p = getActualPermutation(scanSpec);
+
+  return p.reader().scan(scanSpec, p.meta_.blockData(), additionalColumns,
+                         cancellationHandle, limitOffset);
 }
 
 // _____________________________________________________________________
 size_t Permutation::getResultSizeOfScan(
     const ScanSpecification& scanSpec) const {
-  return reader().getResultSizeOfScan(scanSpec, meta_.blockData());
+  const auto& p = getActualPermutation(scanSpec);
+  return p.reader().getResultSizeOfScan(scanSpec, p.meta_.blockData());
 }
 
 // ____________________________________________________________________________
 IdTable Permutation::getDistinctCol1IdsAndCounts(
     Id col0Id, const CancellationHandle& cancellationHandle) const {
-  return reader().getDistinctCol1IdsAndCounts(col0Id, meta_.blockData(),
-                                              cancellationHandle);
+  const auto& p = getActualPermutation(col0Id);
+  return p.reader().getDistinctCol1IdsAndCounts(col0Id, p.meta_.blockData(),
+                                                cancellationHandle);
 }
 
 // ____________________________________________________________________________
@@ -115,20 +130,22 @@ std::string_view Permutation::toString(Permutation::Enum permutation) {
 // _____________________________________________________________________
 std::optional<CompressedRelationMetadata> Permutation::getMetadata(
     Id col0Id) const {
-  if (meta_.col0IdExists(col0Id)) {
-    return meta_.getMetaData(col0Id);
+  const auto& p = getActualPermutation(col0Id);
+  if (p.meta_.col0IdExists(col0Id)) {
+    return p.meta_.getMetaData(col0Id);
   }
-  return reader().getMetadataForSmallRelation(meta_.blockData(), col0Id);
+  return p.reader().getMetadataForSmallRelation(p.meta_.blockData(), col0Id);
 }
 
 // _____________________________________________________________________
 std::optional<Permutation::MetadataAndBlocks> Permutation::getMetadataAndBlocks(
     const ScanSpecification& scanSpec) const {
+  const auto& p = getActualPermutation(scanSpec);
   CompressedRelationReader::ScanSpecAndBlocks mb{
-      scanSpec,
-      CompressedRelationReader::getRelevantBlocks(scanSpec, meta_.blockData())};
+      scanSpec, CompressedRelationReader::getRelevantBlocks(
+                    scanSpec, p.meta_.blockData())};
 
-  auto firstAndLastTriple = reader().getFirstAndLastTriple(mb);
+  auto firstAndLastTriple = p.reader().getFirstAndLastTriple(mb);
   if (!firstAndLastTriple.has_value()) {
     return std::nullopt;
   }
@@ -143,13 +160,40 @@ Permutation::IdTableGenerator Permutation::lazyScan(
     ColumnIndicesRef additionalColumns,
     ad_utility::SharedCancellationHandle cancellationHandle,
     const LimitOffsetClause& limitOffset) const {
+  const auto& p = getActualPermutation(scanSpec);
   if (!blocks.has_value()) {
     auto blockSpan = CompressedRelationReader::getRelevantBlocks(
-        scanSpec, meta_.blockData());
+        scanSpec, p.meta_.blockData());
     blocks = std::vector(blockSpan.begin(), blockSpan.end());
   }
   ColumnIndices columns{additionalColumns.begin(), additionalColumns.end()};
-  return reader().lazyScan(scanSpec, std::move(blocks.value()),
-                           std::move(columns), std::move(cancellationHandle),
-                           limitOffset);
+  return p.reader().lazyScan(scanSpec, std::move(blocks.value()),
+                             std::move(columns), std::move(cancellationHandle),
+                             limitOffset);
+}
+
+// ______________________________________________________________________
+const Permutation& Permutation::getActualPermutation(
+    const ScanSpecification& spec) const {
+  auto isInternal = [this](const std::optional<Id>& id) {
+    return id.has_value() && isInternalId_(id.value());
+  };
+
+  bool isInternalScan = isInternal(spec.col0Id()) ||
+                        isInternal(spec.col1Id()) || isInternal(spec.col2Id());
+
+  if (!isInternalScan) {
+    return *this;
+  }
+  AD_CORRECTNESS_CHECK(internalPermutation_ != nullptr, [this]() {
+    return absl::StrCat("No internal triples were loaded for the permutation ",
+                        readableName_);
+  });
+  return *internalPermutation_;
+}
+
+// ______________________________________________________________________
+const Permutation& Permutation::getActualPermutation(Id id) const {
+  return getActualPermutation(
+      ScanSpecification{id, std::nullopt, std::nullopt});
 }
