@@ -708,8 +708,6 @@ std::optional<IdTable> GroupBy::computeGroupByForFullIndexScan() const {
 
   _subtree->getRootOperation()->updateRuntimeInformationWhenOptimizedOut({});
 
-  auto ignoredRanges =
-      getIndex().getImpl().getIgnoredIdRanges(permutationEnum.value()).first;
   const auto& permutation =
       getExecutionContext()->getIndex().getPimpl().getPermutation(
           permutationEnum.value());
@@ -717,13 +715,6 @@ std::optional<IdTable> GroupBy::computeGroupByForFullIndexScan() const {
   if (numCounts == 0) {
     table.setColumnSubset({{0}});
   }
-  // TODO<joka921> This is only semi-efficient.
-  auto end = std::ranges::remove_if(table, [&ignoredRanges](const auto& row) {
-    return std::ranges::any_of(ignoredRanges, [id = row[0]](const auto& pair) {
-      return id >= pair.first && id < pair.second;
-    });
-  });
-  table.resize(end.begin() - table.begin());
 
   // TODO<joka921> This optimization should probably also apply if
   // the query is `SELECT DISTINCT ?s WHERE {?s ?p ?o} ` without a

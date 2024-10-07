@@ -6,5 +6,5 @@ add_library(index
         DocsDB.cpp FTSAlgorithms.cpp
         PrefixHeuristic.cpp CompressedRelation.cpp
         PatternCreator.cpp ScanSpecification.cpp
-        DeltaTriples.cpp)
+        DeltaTriples.cpp LocalVocabEntry.cpp)
 qlever_target_link_libraries(index util parser vocabulary ${STXXL_LIBRARIES})
