@@ -7,39 +7,24 @@
 #include "util/BlankNodeManager.h"
 #include "util/Random.h"
 
-using namespace ad_utility;
-
-class BlankNodeManagerTest : public BlankNodeManager {
- public:
-  BlankNodeManagerTest() : BlankNodeManager() {}
-  BlankNodeManagerTest(SlowRandomIntGenerator<uint64_t> randomIntGenerator)
-      : BlankNodeManager(randomIntGenerator) {}
-
-  using BlankNodeManager::usedBlocksSet_;
-};
-
-class LocalBlankNodeManagerTest
-    : public BlankNodeManager::LocalBlankNodeManager {
- public:
-  using BlankNodeManager::LocalBlankNodeManager::blocks_;
-};
-
-TEST(blockAllocation, BlankNodeManagerTest) {
+namespace ad_utility {
+TEST(BlankNodeManager, blockAllocation) {
   using Block = BlankNodeManager::Block;
-  BlankNodeManagerTest bnm;
+  auto& bnm = globalBlankNodeManager;
 
   EXPECT_EQ(bnm.usedBlocksSet_.size(), 0);
-  Block b = bnm.allocateBlock();
-  EXPECT_EQ(bnm.usedBlocksSet_.size(), 1);
-  bnm.freeBlock(b.blockIdx_);
+
+  {
+    Block b = bnm.allocateBlock();
+    EXPECT_EQ(bnm.usedBlocksSet_.size(), 1);
+  }
+
+  // Blocks are removed from the globalBlankNodeManager once they are destroyed.
   EXPECT_EQ(bnm.usedBlocksSet_.size(), 0);
-  // double free
-  EXPECT_NO_THROW(bnm.freeBlock(b.blockIdx_));
 }
 
-TEST(LocalBlankNodeManagerGetID, BlankNodeManagerTest) {
-  using LocalBNM = LocalBlankNodeManagerTest;
-  LocalBNM l;
+TEST(BlankNodeManager, LocalBlankNodeManagerGetID) {
+  BlankNodeManager::LocalBlankNodeManager l;
   // initially the LocalBlankNodeManager doesn't have any blocks
   EXPECT_EQ(l.blocks_.size(), 0);
 
@@ -53,3 +38,5 @@ TEST(LocalBlankNodeManagerGetID, BlankNodeManagerTest) {
   id = l.getId();
   EXPECT_EQ(l.blocks_.size(), 2);
 }
+
+}  // namespace ad_utility

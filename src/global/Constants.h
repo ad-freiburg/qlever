@@ -260,10 +260,6 @@ constexpr inline std::string_view EMPH_ON = "\033[1m";
 /// ANSI escape sequence to print "normal" text again in the console.
 constexpr inline std::string_view EMPH_OFF = "\033[22m";
 
-// Counter for internal Blank Node Ids that are not part of the index, but were
-// locally added (by SERVICE clauses or expressions).
-inline std::atomic_uint64_t NEXT_LOCALBLANKNODEINDEX{0};
-
 // Allowed range for geographical coordinates from WTK Text
 constexpr inline double COORDINATE_LAT_MAX = 90.0;
 constexpr inline double COORDINATE_LNG_MAX = 180.0;

@@ -119,24 +119,6 @@ class QueryExecutionContext {
     updateCallback_(nlohmann::ordered_json(runtimeInformation).dump());
   }
 
-  // Getter for the global `NEXT_LOCALBLANKNODEINDEX` counter.
-  // Use n to set the number of indices to be reserved for the caller.
-  [[nodiscard]] uint64_t getNextLocalBlankNodeIndex(uint64_t n = 1) {
-    uint64_t oldIdx = NEXT_LOCALBLANKNODEINDEX.load();
-    uint64_t newIdx;
-
-    do {
-      newIdx = oldIdx + n;
-
-      if (newIdx == std::numeric_limits<uint64_t>::max()) [[unlikely]] {
-        throw std::runtime_error(
-            "Counter for local blank nodes overflowed. Tell the developers to "
-            "reset it.");
-      }
-    } while (!NEXT_LOCALBLANKNODEINDEX.compare_exchange_weak(oldIdx, newIdx));
-    return oldIdx;
-  }
-
   bool _pinSubtrees;
   bool _pinResult;
 

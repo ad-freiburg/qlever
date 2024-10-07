@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include <gtest/gtest_prod.h>
+
 #include <vector>
 
 #include "global/ValueId.h"
@@ -26,8 +28,7 @@ class BlankNodeManager {
   // Mutex for Block allocation.
   std::mutex mtx_;
 
- protected:
-  // Tracks blocks currently hold by instances of `LocalBlankNodeManager`.
+  // Tracks blocks currently used by instances of `LocalBlankNodeManager`.
   HashSet<uint64_t> usedBlocksSet_;
 
  public:
@@ -53,9 +54,11 @@ class BlankNodeManager {
     // Get a new id.
     [[nodiscard]] uint64_t getId();
 
-   protected:
+   private:
     // Reserved blocks.
     std::vector<BlankNodeManager::Block> blocks_;
+
+    FRIEND_TEST(BlankNodeManager, LocalBlankNodeManagerGetID);
   };
 
   // Allocate and retrieve a block of free ids.
@@ -63,6 +66,8 @@ class BlankNodeManager {
 
   // Free a block of ids.
   void freeBlock(uint64_t blockIndex);
+
+  FRIEND_TEST(BlankNodeManager, blockAllocation);
 };
 
 }  // namespace ad_utility
