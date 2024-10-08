@@ -355,14 +355,14 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getGroupByRow(
     // necessary.
     auto groupVariables = pq._groupByVariables;
     if (activeGraphVariable_.has_value()) {
-      AD_CORRECTNESS_CHECK(!ad_utility::contains(groupVariables,
-                           activeGraphVariable_.value()),
-                           "Graph variable used inside the GRAPH clause, this "
-                           "should have thrown an exception earlier");
+      AD_CORRECTNESS_CHECK(
+          !ad_utility::contains(groupVariables, activeGraphVariable_.value()),
+          "Graph variable used inside the GRAPH clause, this "
+          "should have thrown an exception earlier");
       groupVariables.push_back(activeGraphVariable_.value());
     }
     groupByPlan._qet = makeExecutionTree<GroupBy>(
-        _qec, pq._groupByVariables, std::move(aliases), parent._qet);
+        _qec, groupVariables, std::move(aliases), parent._qet);
     added.push_back(groupByPlan);
   }
   return added;
