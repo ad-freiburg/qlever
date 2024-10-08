@@ -58,4 +58,4 @@ jobs:
           SERVER_URL: ${{ secrets.SPARQL_CONFORMANCE_SERVER_URL }}
           API_KEY: ${{ secrets.SPARQL_CONFORMANCE_SERVER_KEY }}
         run: |
-          curl -H "x-api-key: $API_KEY" -H "event: ${{github.event.workflow_run.event}}" -H "sha: ${{env.commit_sha}}" -H "pr-number: ${{env.pr_number}}" -H "repo: ${{env.original_github_repository}}" -F "file=@${{env.commit_sha}}.json.bz2" $SERVER_URL/upload
+          curl -H "x-api-key: $API_KEY" -H "event: ${{github.event.workflow_run.event}}" -H "sha: ${{env.commit_sha}}" -H "pr-number: ${{env.pr_number}}" -H "repo: ${{env.original_github_repository}}" -F "file=@${{env.commit_sha}}.json" $SERVER_URL/upload

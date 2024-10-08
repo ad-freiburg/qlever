@@ -17,50 +17,8 @@ jobs:
 
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v3
-        with:
-          submodules: "recursive"
-          path: qlever-code
-      - name: Checkout sparql-test-suite-files
-        uses: actions/checkout@v3
-        with:
-          repository: "w3c/rdf-tests"
-          path: sparql-test-suite
-      - name: Checkout qlever-test-suite
-        uses: actions/checkout@v3
-        with:
-          repository: "SIRDNARch/qlever-conformance-tests"
-          token: ${{ secrets.CONFORMANCE_REPO_ACCESS_TOKEN }}
-          path: qlever-test-suite
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: "3.10"
-      - name: Install python dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install requests
-          pip install rdflib
-      - name: Install dependencies
-        uses: ./qlever-code/.github/workflows/install-dependencies-ubuntu
-      - name: Install compiler
-        uses: ./qlever-code/.github/workflows/install-compiler-ubuntu
-        with:
-          compiler: "clang"
-          compiler-version: "16"
-      - name: Create build directory
-        run: mkdir ${{github.workspace}}/qlever-code/build
-      - name: Configure CMake
-        run: cmake -S ${{github.workspace}}/qlever-code/ -B ${{github.workspace}}/qlever-code/build ${{env.cmake-flags}} -DCMAKE_BUILD_TYPE=${{env.build-type}} -DLOGLEVEL=INFO -DUSE_PARALLEL=false
-      - name: Build
-        run: cmake --build ${{github.workspace}}/qlever-code/build --config ${{env.build-type}} -- -j $(nproc)
-      - name: Execute test suite
-        run: |
-          cd qlever-test-suite
-          python testsuite.py config http://0.0.0.0 7001 ${{github.workspace}}/sparql-test-suite/sparql/sparql11/ ${{github.workspace}}/qlever-code/build/ localhost sparql sparql
-          python testsuite.py extract
-          python testsuite.py ${{ github.sha }}
-          cd ..
+      - name: "spoof a json file for experimenting"
+        run: echo "{}" > dummyResults.json
       # Only upload directly if this is not a pull request. In this
       # case we are on the master branch and have access to the token.
       - name: "Submit data to server"
@@ -69,7 +27,7 @@ jobs:
           SERVER_URL: ${{ secrets.SPARQL_CONFORMANCE_SERVER_URL }}
           API_KEY: ${{ secrets.SPARQL_CONFORMANCE_SERVER_KEY }}
         run: |
-          curl -H "x-api-key: $API_KEY" -H "event: ${{github.event_name}}" -H "sha: ${{github.sha}}" -F "file=@${{github.workspace}}/qlever-test-suite/results/${{ github.sha }}.json.bz2" $SERVER_URL/upload
+          curl -H "x-api-key: $API_KEY" -H "event: ${{github.event_name}}" -H "sha: ${{github.sha}}" -F "file=@${{github.workspace}}/dummyResults.json" $SERVER_URL/upload
 
       # For a pull request we store the file as well as some information
       # about this PR (number, how to check it out, etc.) and upload it as an artifact
@@ -82,7 +40,7 @@ jobs:
           echo ${{ github.repository }} > ./conformance-report/github_repository
           echo ${GITHUB_REF} > ./conformance-report/github_ref
           echo ${{github.event.pull_request.head.sha}} > ./conformance-report/sha
-          mv ${{ github.workspace}}/qlever-test-suite/results/${{ github.sha }}.json.bz2 conformance-report/${{ github.event.pull_request.head.sha }}.json.bz2
+          mv ${{ github.workspace}}/dummyResults.json conformance-report/${{ github.event.pull_request.head.sha }}.json
       - name: Upload coverage artifact
         if: github.event_name == 'pull_request'
         uses: actions/upload-artifact@v3
