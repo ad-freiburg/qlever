@@ -99,11 +99,6 @@ class LogicalExpression : public PrefilterExpression {
   std::unique_ptr<PrefilterExpression> logicalComplement() const override;
 
  private:
-  // Introduce a helper method for the specification LogicalOperators::OR
-  std::vector<BlockMetadata> evaluateOrImpl(
-      const std::vector<BlockMetadata>& input, size_t evaluationColumn) const
-      requires(Operation == LogicalOperators::OR);
-
   std::vector<BlockMetadata> evaluateImpl(
       const std::vector<BlockMetadata>& input,
       size_t evaluationColumn) const override;

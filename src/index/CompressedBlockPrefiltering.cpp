@@ -31,9 +31,9 @@ static auto getIdFromColumnIndex(const BlockMetadata::PermutedTriple& triple,
 // position (column index) defined by `ignoreIndex`. The ignored positions are
 // filled with Ids `Id::makeUndefined()`. `Id::makeUndefined()` is guaranteed
 // to be smaller than Ids of all other types.
-static auto getTiedMaskedPermutedTriple(
-    const BlockMetadata::PermutedTriple& triple, size_t ignoreIndex = 3) {
-  const auto undefined = Id::makeUndefined();
+static auto getTiedMaskedTriple(const BlockMetadata::PermutedTriple& triple,
+                                size_t ignoreIndex = 3) {
+  static const auto undefined = Id::makeUndefined();
   switch (ignoreIndex) {
     case 3:
       return std::tie(triple.col0Id_, triple.col1Id_, triple.col2Id_);
@@ -63,20 +63,73 @@ static auto checkEvalRequirements(const std::vector<BlockMetadata>& input,
     if (block1 == block2) {
       throwRuntimeError("The provided data blocks must be unique.");
     }
-    const auto& triple1 = block1.lastTriple_;
-    const auto& triple2 = block2.firstTriple_;
-    if (getIdFromColumnIndex(triple1, evaluationColumn) >
-        getIdFromColumnIndex(triple2, evaluationColumn)) {
-      throwRuntimeError("The data blocks must be provided in sorted order.");
-    }
-    if (getTiedMaskedPermutedTriple(triple1, evaluationColumn) !=
-        getTiedMaskedPermutedTriple(triple2, evaluationColumn)) {
+    const auto& triple1First = block1.firstTriple_;
+    const auto& triple1Last = block1.lastTriple_;
+    const auto& triple2First = block2.firstTriple_;
+    const auto& triple2Last = block2.lastTriple_;
+
+    const auto checkInvalid = [triple1First, triple1Last, triple2First,
+                               triple2Last](auto comp, size_t evalCol) {
+      const auto& maskedT1Last = getTiedMaskedTriple(triple1Last, evalCol);
+      const auto& maskedT2First = getTiedMaskedTriple(triple2First, evalCol);
+      return comp(getTiedMaskedTriple(triple1First, evalCol), maskedT1Last) ||
+             comp(maskedT1Last, maskedT2First) ||
+             comp(maskedT2First, getTiedMaskedTriple(triple2Last, evalCol));
+    };
+    // Check for equality of IDs up to the evaluation column.
+    if (checkInvalid(std::not_equal_to<>{}, evaluationColumn)) {
       throwRuntimeError(
           "The columns up to the evaluation column must contain the same "
           "values.");
     }
+    // Check for order of IDs on evaluation Column.
+    if (checkInvalid(std::greater<>{}, evaluationColumn + 1)) {
+      throwRuntimeError(
+          "The data blocks must be provided in sorted order regarding the "
+          "evaluation column.");
+    }
   }
 };
+
+//______________________________________________________________________________
+// Given two sorted `vector`s containing `BlockMetadata`, this function
+// returns their merged `BlockMetadata` content in a `vector` which is free of
+// duplicates and ordered.
+static auto getSetUnion(const std::vector<BlockMetadata>& blocks1,
+                        const std::vector<BlockMetadata>& blocks2,
+                        size_t evalCol) {
+  evalCol += 1;
+  std::vector<BlockMetadata> mergedVectors;
+  mergedVectors.reserve(blocks1.size() + blocks2.size());
+  auto blockLessThanBlock = [evalCol](const BlockMetadata& block1,
+                                      const BlockMetadata& block2) {
+    const auto& lastTripleBlock1 =
+        getTiedMaskedTriple(block1.lastTriple_, evalCol);
+    const auto& firstTripleBlock2 =
+        getTiedMaskedTriple(block2.firstTriple_, evalCol);
+    // Given two blocks with the respective ranges [-4, -4] (block1)
+    // and [-4, 0.0] (block2) on the evaluation column, we see that [-4, -4] <
+    // [-4, 0.0] should hold true. To assess if block1 is less than block2, it
+    // is not enough to just compare -4 (ID from last triple of block1) to -4
+    // (ID from first triple of block2). With this simple comparison [-4, -4] <
+    // [-4, 0.0] wouldn't hold, because the comparison -4 < -4 will yield false.
+    // Thus for proper implementation of the < operator, we have to check here
+    // on the IDs of the last triple. -4 < 0.0 will yield true => [-4, -4] <
+    // [-4, 0.0] holds true.
+    if (lastTripleBlock1 == firstTripleBlock2) {
+      return lastTripleBlock1 <
+             getTiedMaskedTriple(block2.lastTriple_, evalCol);
+    } else {
+      return lastTripleBlock1 < firstTripleBlock2;
+    }
+  };
+  // Given that we have vectors with sorted (BlockMedata) values, we can
+  // use std::ranges::set_union. Thus the complexity is O(n + m).
+  std::ranges::set_union(blocks1, blocks2, std::back_inserter(mergedVectors),
+                         blockLessThanBlock);
+  mergedVectors.shrink_to_fit();
+  return mergedVectors;
+}
 
 // SECTION PREFILTER EXPRESSION (BASE CLASS)
 //______________________________________________________________________________
@@ -127,13 +180,31 @@ std::vector<BlockMetadata> RelationalExpression<Comparison>::evaluateImpl(
   // For each BlockMetadata value in vector input, we have a respective Id for
   // firstTriple and lastTriple
   valueIdsInput.reserve(2 * input.size());
+  std::vector<BlockMetadata> mixedDatatypeBlocks;
 
   for (const auto& block : input) {
-    valueIdsInput.push_back(
-        getIdFromColumnIndex(block.firstTriple_, evaluationColumn));
-    valueIdsInput.push_back(
-        getIdFromColumnIndex(block.lastTriple_, evaluationColumn));
+    const auto firstId =
+        getIdFromColumnIndex(block.firstTriple_, evaluationColumn);
+    const auto secondId =
+        getIdFromColumnIndex(block.lastTriple_, evaluationColumn);
+    const auto firstIdDatatype = firstId.getDatatype();
+    const auto secondIdDatatype = secondId.getDatatype();
+    const auto referenceIdDatatype = referenceId_.getDatatype();
+    valueIdsInput.push_back(firstId);
+    valueIdsInput.push_back(secondId);
+
+    if ((firstIdDatatype != secondIdDatatype) &&
+        // The block is only potentially relevant if at least one of the
+        // respective bounding Ids is of similar (comparable) type to
+        // refernceId_.
+        (valueIdComparators::detail::areTypesCompatible(referenceIdDatatype,
+                                                        firstIdDatatype) ||
+         valueIdComparators::detail::areTypesCompatible(referenceIdDatatype,
+                                                        secondIdDatatype))) {
+      mixedDatatypeBlocks.push_back(block);
+    }
   }
+
   // Use getRangesForId (from valueIdComparators) to extract the ranges
   // containing the relevant ValueIds.
   // For pre-filtering with CompOp::EQ, we have to consider empty ranges.
@@ -146,11 +217,13 @@ std::vector<BlockMetadata> RelationalExpression<Comparison>::evaluateImpl(
                            referenceId_, Comparison)
           : getRangesForId(valueIdsInput.begin(), valueIdsInput.end(),
                            referenceId_, Comparison, false);
-  // The vector for relevant BlockMetadata values that contain ValueIds defined
-  // as relevant by relevantIdRanges.
+
+  // The vector for relevant BlockMetadata values which contain ValueIds
+  // defined as relevant by relevantIdRanges.
   std::vector<BlockMetadata> relevantBlocks;
   // Reserve memory, input.size() is upper bound.
   relevantBlocks.reserve(input.size());
+
   // Given the relevant Id ranges, retrieve the corresponding relevant
   // BlockMetadata values from vector input and add them to the relevantBlocks
   // vector.
@@ -169,7 +242,9 @@ std::vector<BlockMetadata> RelationalExpression<Comparison>::evaluateImpl(
             std::distance(valueIdsInput.begin(), secondIdAdjusted) / 2);
   }
   relevantBlocks.shrink_to_fit();
-  return relevantBlocks;
+  // Merge mixedDatatypeBlocks into relevantBlocks while maintaing order and
+  // avoiding dublicates.
+  return getSetUnion(relevantBlocks, mixedDatatypeBlocks, evaluationColumn);
 };
 
 // SECTION LOGICAL OPERATIONS
@@ -202,31 +277,6 @@ std::unique_ptr<PrefilterExpression> NotExpression::logicalComplement() const {
 
 //______________________________________________________________________________
 template <LogicalOperators Operation>
-std::vector<BlockMetadata> LogicalExpression<Operation>::evaluateOrImpl(
-    const std::vector<BlockMetadata>& input, size_t evaluationColumn) const
-    requires(Operation == LogicalOperators::OR) {
-  auto relevantBlocksChild1 = child1_->evaluate(input, evaluationColumn);
-  auto relevantBlocksChild2 = child2_->evaluate(input, evaluationColumn);
-
-  std::vector<BlockMetadata> unionedRelevantBlocks;
-  unionedRelevantBlocks.reserve(relevantBlocksChild1.size() +
-                                relevantBlocksChild2.size());
-
-  auto blockLessThanBlock = [](const BlockMetadata& block1,
-                               const BlockMetadata& block2) {
-    return getTiedMaskedPermutedTriple(block1.lastTriple_) <
-           getTiedMaskedPermutedTriple(block2.firstTriple_);
-  };
-  // Given that we have vectors with sorted (BlockMedata) values, we can
-  // use std::ranges::set_union, thus the complexity is O(n + m).
-  std::ranges::set_union(relevantBlocksChild1, relevantBlocksChild2,
-                         std::back_inserter(unionedRelevantBlocks),
-                         blockLessThanBlock);
-  return unionedRelevantBlocks;
-};
-
-//______________________________________________________________________________
-template <LogicalOperators Operation>
 std::vector<BlockMetadata> LogicalExpression<Operation>::evaluateImpl(
     const std::vector<BlockMetadata>& input, size_t evaluationColumn) const {
   using enum LogicalOperators;
@@ -235,7 +285,9 @@ std::vector<BlockMetadata> LogicalExpression<Operation>::evaluateImpl(
     return child2_->evaluate(resultChild1, evaluationColumn);
   } else {
     static_assert(Operation == OR);
-    return evaluateOrImpl(input, evaluationColumn);
+    return getSetUnion(child1_->evaluate(input, evaluationColumn),
+                       child2_->evaluate(input, evaluationColumn),
+                       evaluationColumn);
   }
 };
 
