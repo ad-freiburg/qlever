@@ -1,0 +1,49 @@
+name: sparql-test-suite
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+  merge_group:
+
+jobs:
+  build:
+    env:
+      compiler: clang
+      compiler-version: 16
+      build-type: Release
+      cmake-flags: "-DCMAKE_C_COMPILER=clang-16 -DCMAKE_CXX_COMPILER=clang++-16"
+
+    runs-on: ubuntu-22.04
+    steps:
+      - name: "spoof a json file for experimenting"
+        run: echo "{}" > dummyResults.json
+      # Only upload directly if this is not a pull request. In this
+      # case we are on the master branch and have access to the token.
+      - name: "Submit data to server"
+        if: github.event_name != 'pull_request'
+        env:
+          SERVER_URL: ${{ secrets.SPARQL_CONFORMANCE_SERVER_URL }}
+          API_KEY: ${{ secrets.SPARQL_CONFORMANCE_SERVER_KEY }}
+        run: |
+          curl -H "x-api-key: $API_KEY" -H "event: ${{github.event_name}}" -H "sha: ${{github.sha}}" -F "file=@${{github.workspace}}/dummyResults.json" $SERVER_URL/upload
+
+      # For a pull request we store the file as well as some information
+      # about this PR (number, how to check it out, etc.) and upload it as an artifact
+      - name: Save PR number and coverage file in same directory
+        if: github.event_name == 'pull_request'
+        # Note: If you change any of the filenames here, you also have to change them in `upload-coverage.yml`
+        run : |
+          mkdir -p conformance-report
+          echo ${{ github.event.number }} > ./conformance-report/pr
+          echo ${{ github.repository }} > ./conformance-report/github_repository
+          echo ${GITHUB_REF} > ./conformance-report/github_ref
+          echo ${{github.event.pull_request.head.sha}} > ./conformance-report/sha
+          mv ${{ github.workspace}}/dummyResults.json conformance-report/${{ github.event.pull_request.head.sha }}.json
+      - name: Upload coverage artifact
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v3
+        with:
+          name: conformance-report
+          path: conformance-report/

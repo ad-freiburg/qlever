@@ -1,0 +1,61 @@
+name: Upload conformance tests result
+
+on:
+  workflow_run:
+    # This has to be the `name:` of the workflow in `code_coverage.yml`.
+    # Start when this  workflow has finished successfully.
+    workflows: [sparql-test-suite]
+    types:
+      - completed
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    if: >
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success'
+    steps:
+      - name: 'Download artifact'
+        uses: actions/github-script@v6
+        # The following script is taken from the link stated at the
+        # beginning of this file. It manually downloads an artifact
+        # from another workflow.
+        with:
+          script: |
+            var artifacts = await github.rest.actions.listWorkflowRunArtifacts({
+               owner: context.repo.owner,
+               repo: context.repo.repo,
+               run_id: ${{github.event.workflow_run.id }},
+            });
+            var matchArtifact = artifacts.data.artifacts.filter((artifact) => {
+              return artifact.name == "conformance-report"
+            })[0];
+            var download = await github.rest.actions.downloadArtifact({
+               owner: context.repo.owner,
+               repo: context.repo.repo,
+               artifact_id: matchArtifact.id,
+               archive_format: 'zip',
+            });
+            var fs = require('fs');
+            fs.writeFileSync('${{github.workspace}}/conformance-report.zip', Buffer.from(download.data));
+      - run: unzip conformance-report.zip
+      # Read the metadata into environment variables.
+      - name: "Read PR number"
+        run: echo "pr_number=`cat pr`" >> $GITHUB_ENV
+      - name: "Read Github Ref"
+        run: echo "original_github_ref=`cat github_ref`" >> $GITHUB_ENV;
+      - name: "Read Github SHA"
+        run: echo "commit_sha=`cat sha`" >> $GITHUB_ENV;
+      - name: "Read Github Repository"
+        run: echo "original_github_repository=`cat github_repository`" >> $GITHUB_ENV;
+        # We have to check out the source code from the PR, otherwise Codecov
+        # won't process the upload properly. We first check it out into a
+        # subdirectory `qlever-source`, otherwise the coverage report will
+        # be overwritten. We then move all the files back into the working
+        # directory such that Codecov will pick them up properly.
+      - name: "Submit data to server"
+        env:
+          SERVER_URL: ${{ secrets.SPARQL_CONFORMANCE_SERVER_URL }}
+          API_KEY: ${{ secrets.SPARQL_CONFORMANCE_SERVER_KEY }}
+        run: |
+          curl -H "x-api-key: $API_KEY" -H "event: ${{github.event.workflow_run.event}}" -H "sha: ${{env.commit_sha}}" -H "pr-number: ${{env.pr_number}}" -H "repo: ${{env.original_github_repository}}" -F "file=@${{env.commit_sha}}.json" $SERVER_URL/upload
