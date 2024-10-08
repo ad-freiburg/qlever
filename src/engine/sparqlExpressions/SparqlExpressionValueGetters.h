@@ -12,6 +12,7 @@
 #include "engine/Result.h"
 #include "engine/sparqlExpressions/SparqlExpressionTypes.h"
 #include "global/Id.h"
+#include "parser/GeoPoint.h"
 #include "util/ConstexprSmallString.h"
 #include "util/TypeTraits.h"
 
@@ -198,6 +199,25 @@ struct DateValueGetter : Mixin<DateValueGetter> {
   Opt operator()(ValueId id, const EvaluationContext*) const {
     if (id.getDatatype() == Datatype::Date) {
       return id.getDate();
+    } else {
+      return std::nullopt;
+    }
+  }
+
+  Opt operator()(const LiteralOrIri&, const EvaluationContext*) const {
+    return std::nullopt;
+  }
+};
+
+/// This class can be used as the `ValueGetter` argument of Expression
+/// templates. It produces a `std::optional<GeoPoint>`.
+struct GeoPointValueGetter : Mixin<GeoPointValueGetter> {
+  using Mixin<GeoPointValueGetter>::operator();
+  using Opt = std::optional<GeoPoint>;
+
+  Opt operator()(ValueId id, const EvaluationContext*) const {
+    if (id.getDatatype() == Datatype::GeoPoint) {
+      return id.getGeoPoint();
     } else {
       return std::nullopt;
     }
