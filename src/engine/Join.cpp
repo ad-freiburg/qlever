@@ -66,7 +66,7 @@ void updateRuntimeInfoForLazyScan(
 // _____________________________________________________________________________
 Join::Join(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
            std::shared_ptr<QueryExecutionTree> t2, ColumnIndex t1JoinCol,
-           ColumnIndex t2JoinCol, bool keepJoinColumn)
+           ColumnIndex t2JoinCol)
     : Operation(qec) {
   AD_CONTRACT_CHECK(t1 && t2);
   // Currently all join algorithms require both inputs to be sorted, so we
@@ -95,7 +95,6 @@ Join::Join(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
   _leftJoinCol = t1JoinCol;
   _right = std::move(t2);
   _rightJoinCol = t2JoinCol;
-  _keepJoinColumn = keepJoinColumn;
   _sizeEstimate = 0;
   _sizeEstimateComputed = false;
   _multiplicities.clear();
@@ -132,15 +131,11 @@ string Join::getDescriptor() const { return "Join on " + _joinVar.name(); }
 // _____________________________________________________________________________
 ProtoResult Join::computeResult(bool requestLaziness) {
   LOG(DEBUG) << "Getting sub-results for join result computation..." << endl;
-  size_t leftWidth = _left->getResultWidth();
-  size_t rightWidth = _right->getResultWidth();
-  IdTable idTable{getExecutionContext()->getAllocator()};
-  idTable.setNumColumns(leftWidth + rightWidth - 1);
-
   if (_left->knownEmptyResult() || _right->knownEmptyResult()) {
     _left->getRootOperation()->updateRuntimeInformationWhenOptimizedOut();
     _right->getRootOperation()->updateRuntimeInformationWhenOptimizedOut();
-    return {std::move(idTable), resultSortedOn(), LocalVocab()};
+    return {IdTable{getResultWidth(), getExecutionContext()->getAllocator()},
+            resultSortedOn(), LocalVocab()};
   }
 
   // Always materialize results that meet one of the following criteria:
@@ -188,7 +183,8 @@ ProtoResult Join::computeResult(bool requestLaziness) {
     // TODO<joka921, hannahbast, SPARQL update> When we add triples to the
     // index, the vocabularies of index scans will not necessarily be empty and
     // we need a mechanism to still retrieve them when using the lazy scan.
-    return {std::move(idTable), resultSortedOn(), LocalVocab()};
+    return {IdTable{getResultWidth(), getExecutionContext()->getAllocator()},
+            resultSortedOn(), LocalVocab()};
   }
 
   // Note: If only one of the children is a scan, then we have made sure in the
@@ -206,6 +202,7 @@ ProtoResult Join::computeResult(bool requestLaziness) {
       rightResIfCached ? rightResIfCached : _right->getResult(true);
   checkCancellation();
   if (leftRes->isFullyMaterialized() && rightRes->isFullyMaterialized()) {
+    IdTable idTable{getResultWidth(), getExecutionContext()->getAllocator()};
     join(leftRes->idTable(), _leftJoinCol, rightRes->idTable(), _rightJoinCol,
          &idTable);
     checkCancellation();
@@ -229,8 +226,7 @@ VariableToColumnMap Join::computeVariableToColumnMap() const {
 
 // _____________________________________________________________________________
 size_t Join::getResultWidth() const {
-  size_t res = _left->getResultWidth() + _right->getResultWidth() -
-               (_keepJoinColumn ? 1 : 2);
+  size_t res = _left->getResultWidth() + _right->getResultWidth() - 1;
   AD_CONTRACT_CHECK(res > 0);
   return res;
 }

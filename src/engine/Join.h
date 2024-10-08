@@ -23,8 +23,6 @@ class Join : public Operation {
 
   Variable _joinVar{"?notSet"};
 
-  bool _keepJoinColumn;
-
   bool _sizeEstimateComputed;
   size_t _sizeEstimate;
 
@@ -33,7 +31,7 @@ class Join : public Operation {
  public:
   Join(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
        std::shared_ptr<QueryExecutionTree> t2, ColumnIndex t1JoinCol,
-       ColumnIndex t2JoinCol, bool keepJoinColumn = true);
+       ColumnIndex t2JoinCol);
 
   // A very explicit constructor, which initializes an invalid join object (it
   // has no subtrees, which violates class invariants). These invalid Join
