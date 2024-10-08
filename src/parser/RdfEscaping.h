@@ -91,9 +91,6 @@ NormalizedRDFString normalizeRDFLiteral(std::string_view origLiteral);
  * and "be"ta"@en becomes "be\"ta"@en.
  *
  * If the `normLiteral` is not a literal, an AD_CONTRACT_CHECK will fail.
- *
- * TODO: This function currently only handles the escaping of " inside the
- * literal, no other characters. Is that enough?
  */
 std::string validRDFLiteralFromNormalized(std::string_view normLiteral);
 

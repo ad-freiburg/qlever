@@ -102,6 +102,11 @@ class Service : public Operation {
   static TripleComponent bindingToTripleComponent(
       const nlohmann::json& binding);
 
+  // Create a value for the VALUES-clause used in `getSiblingValuesClause` from
+  // id. If the id is of type blank node `std::nullopt` is returned.
+  static std::optional<std::string> idToValueForValuesClause(
+      const Index& index, Id id, const LocalVocab& localVocab);
+
  private:
   // The string returned by this function is used as cache key.
   std::string getCacheKeyImpl() const override;

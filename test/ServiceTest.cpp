@@ -392,6 +392,7 @@ TEST_F(ServiceTest, computeResult) {
     // Check 5: When a siblingTree with variables common to the Service
     // Clause is passed, the Service Operation shall use the siblings result
     // to reduce its Query complexity by injecting them as Values Clause
+
     auto iri = ad_utility::testing::iri;
     using TC = TripleComponent;
     auto siblingTree = std::make_shared<QueryExecutionTree>(
@@ -402,7 +403,11 @@ TEST_F(ServiceTest, computeResult) {
                 {Variable{"?x"}, Variable{"?y"}, Variable{"?z"}},
                 {{TC(iri("<x>")), TC(iri("<y>")), TC(iri("<z>"))},
                  {TC(iri("<x>")), TC(iri("<y>")), TC(iri("<z2>"))},
-                 {TC(iri("<blu>")), TC(iri("<bla>")), TC(iri("<blo>"))}}}));
+                 {TC(iri("<blu>")), TC(iri("<bla>")), TC(iri("<blo>"))},
+                 // This row will be ignored in the created Values Clause as it
+                 // contains a blank node.
+                 {TC(Id::makeFromBlankNodeIndex(BlankNodeIndex::make(0))),
+                  TC(iri("<bl>")), TC(iri("<ank>"))}}}));
 
     auto parsedServiceClause5 = parsedServiceClause;
     parsedServiceClause5.graphPatternAsString_ =
@@ -593,6 +598,10 @@ TEST_F(ServiceTest, bindingToTripleComponent) {
                                                       "@de"));
 
   EXPECT_EQ(Service::bindingToTripleComponent(
+                {{"type", "literal"}, {"value", "a\"b\"c"}}),
+            TripleComponent::Literal::fromEscapedRdfLiteral("\"a\\\"b\\\"c\""));
+
+  EXPECT_EQ(Service::bindingToTripleComponent(
                 {{"type", "uri"}, {"value", "http://doof.org"}}),
             TripleComponent::Iri::fromIrirefWithoutBrackets("http://doof.org"));
 
@@ -604,4 +613,36 @@ TEST_F(ServiceTest, bindingToTripleComponent) {
       Service::bindingToTripleComponent(
           {{"type", "INVALID_TYPE"}, {"value", "v"}}),
       ::testing::HasSubstr("Type INVALID_TYPE is undefined"));
+}
+
+// ____________________________________________________________________________
+TEST_F(ServiceTest, idToValueForValuesClause) {
+  auto idToVc = Service::idToValueForValuesClause;
+  LocalVocab localVocab{};
+  auto index = ad_utility::testing::makeIndexWithTestSettings();
+
+  // blanknode -> nullopt
+  EXPECT_EQ(idToVc(index, Id::makeFromBlankNodeIndex(BlankNodeIndex::make(0)),
+                   localVocab),
+            std::nullopt);
+
+  EXPECT_EQ(idToVc(index, Id::makeUndefined(), localVocab), "UNDEF");
+
+  // simple datatypes -> implicit string representation
+  EXPECT_EQ(idToVc(index, Id::makeFromInt(42), localVocab), "42");
+  EXPECT_EQ(idToVc(index, Id::makeFromDouble(3.14), localVocab), "3.14");
+  EXPECT_EQ(idToVc(index, Id::makeFromBool(true), localVocab), "true");
+
+  // Escape Quotes within literals.
+  auto str = LocalVocabEntry(
+      ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes(
+          "a\"b\"c"));
+  EXPECT_EQ(idToVc(index, Id::makeFromLocalVocabIndex(&str), localVocab),
+            "\"a\\\"b\\\"c\"");
+
+  // value with xsd-type
+  EXPECT_EQ(
+      idToVc(index, Id::makeFromGeoPoint(GeoPoint(70.5, 130.2)), localVocab)
+          .value(),
+      absl::StrCat("\"POINT(130.200000 70.500000)\"^^<", GEO_WKT_LITERAL, ">"));
 }
