@@ -55,6 +55,13 @@ QetMatcher RootOperation(auto matcher) {
                   WhenDynamicCastTo<const OperationType&>(matcher));
 }
 
+// Match the `getChildren` method of an `Operation`.
+inline Matcher<const ::Operation&> children(
+    const std::same_as<QetMatcher> auto&... childMatchers) {
+  return Property("getChildren", &Operation::getChildren,
+                  ElementsAre(Pointee(childMatchers)...));
+}
+
 // Return a matcher that test whether a given `QueryExecutionTree` contains a
 // `OperationType` operation the children of which match the
 // `childMatcher`s. Note that the child matchers are not ordered.
@@ -71,9 +78,7 @@ inline auto MatchTypeAndUnorderedChildren =
 template <typename OperationType>
 inline auto MatchTypeAndOrderedChildren =
     [](const std::same_as<QetMatcher> auto&... childMatchers) {
-      return RootOperation<OperationType>(
-          AllOf(Property("getChildren", &Operation::getChildren,
-                         ElementsAre(Pointee(childMatchers)...))));
+      return RootOperation<OperationType>(AllOf(children(childMatchers...)));
     };
 
 /// Return a matcher that checks that a given `QueryExecutionTree` consists of a
@@ -127,8 +132,7 @@ constexpr auto TextLimit = [](const size_t n, const QetMatcher& childMatcher,
                               const vector<Variable>& entityVars,
                               const vector<Variable>& scoreVars) -> QetMatcher {
   return RootOperation<::TextLimit>(AllOf(
-      AD_PROPERTY(::TextLimit, getTextLimit, Eq(n)),
-      AD_PROPERTY(Operation, getChildren, ElementsAre(Pointee(childMatcher))),
+      AD_PROPERTY(::TextLimit, getTextLimit, Eq(n)), children(childMatcher),
       AD_PROPERTY(::TextLimit, getTextRecordVariable, Eq(textRecVar)),
       AD_PROPERTY(::TextLimit, getEntityVariables,
                   UnorderedElementsAreArray(entityVars)),
@@ -171,8 +175,7 @@ inline auto Bind = [](const QetMatcher& childMatcher,
                      AD_PROPERTY(sparqlExpression::SparqlExpressionPimpl,
                                  getDescriptor, Eq(expression))));
   return RootOperation<::Bind>(AllOf(
-      AD_PROPERTY(::Bind, bind, AllOf(innerMatcher)),
-      AD_PROPERTY(Operation, getChildren, ElementsAre(Pointee(childMatcher)))));
+      AD_PROPERTY(::Bind, bind, AllOf(innerMatcher)), children(childMatcher)));
 };
 
 // Matcher for a `CountAvailablePredicates` operation. The case of 0 children
@@ -188,8 +191,7 @@ inline auto CountAvailablePredicates =
       AD_PROPERTY(::CountAvailablePredicates, predicateVariable,
                   Eq(predicateVar)),
       AD_PROPERTY(::CountAvailablePredicates, countVariable, Eq(countVar)),
-      AD_PROPERTY(Operation, getChildren,
-                  ElementsAre(Pointee(childMatchers)...))));
+      children(childMatchers...)));
 };
 
 // Same as above, but the subject, predicate, and object are passed in as
@@ -278,8 +280,7 @@ inline auto TransitivePath =
     [](TransitivePathSide left, TransitivePathSide right, size_t minDist,
        size_t maxDist, const std::same_as<QetMatcher> auto&... childMatchers) {
       return RootOperation<::TransitivePathBase>(
-          AllOf(Property("getChildren", &Operation::getChildren,
-                         ElementsAre(Pointee(childMatchers)...)),
+          AllOf(children(childMatchers...),
                 AD_PROPERTY(TransitivePathBase, getMinDist, Eq(minDist)),
                 AD_PROPERTY(TransitivePathBase, getMaxDist, Eq(maxDist)),
                 AD_PROPERTY(TransitivePathBase, getLeft,
@@ -317,9 +318,10 @@ static constexpr auto GroupBy =
 
   return RootOperation<::GroupBy>(
       AllOf(children(childMatcher),
-            AD_PROPERTY(::GroupBy, groupByVariables, Eq(groupByVariables)),
+            AD_PROPERTY(::GroupBy, groupByVariables,
+                        UnorderedElementsAreArray(groupByVariables)),
             AD_PROPERTY(::GroupBy, aliases,
-                        ResultOf(aliasesToStrings, ContainerEq(aliases))), ));
+                        ResultOf(aliasesToStrings, ContainerEq(aliases)))));
 };
 
 // Match a sort operation. Currently, this is only required by the binary search
@@ -332,8 +334,7 @@ inline auto Sort = MatchTypeAndUnorderedChildren<::Sort>;
 constexpr auto Filter = [](std::string_view descriptor,
                            const QetMatcher& childMatcher) {
   return RootOperation<::Filter>(
-      AllOf(Property("getChildren", &Operation::getChildren,
-                     ElementsAre(Pointee(childMatcher))),
+      AllOf(children(childMatcher),
             AD_PROPERTY(::Operation, getDescriptor, HasSubstr(descriptor))));
 };
 
@@ -341,8 +342,7 @@ constexpr auto Filter = [](std::string_view descriptor,
 constexpr auto OrderBy = [](const ::OrderBy::SortedVariables& sortedVariables,
                             const QetMatcher& childMatcher) {
   return RootOperation<::OrderBy>(
-      AllOf(Property("getChildren", &Operation::getChildren,
-                     ElementsAre(Pointee(childMatcher))),
+      AllOf(children(childMatcher),
             AD_PROPERTY(::OrderBy, getSortedVariables, Eq(sortedVariables))));
 };
 
