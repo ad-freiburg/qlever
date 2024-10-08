@@ -27,6 +27,7 @@ jobs:
           SERVER_URL: ${{ secrets.SPARQL_CONFORMANCE_SERVER_URL }}
           API_KEY: ${{ secrets.SPARQL_CONFORMANCE_SERVER_KEY }}
         run: |
+          echo "x-api-key: $API_KEY" -H "event: ${{github.event_name}}" -H "sha: ${{github.sha}}" -F "file=@${{github.workspace}}/dummyResults.json" $SERVER_URL/upload
           curl -H "x-api-key: $API_KEY" -H "event: ${{github.event_name}}" -H "sha: ${{github.sha}}" -F "file=@${{github.workspace}}/dummyResults.json" $SERVER_URL/upload
 
       # For a pull request we store the file as well as some information
