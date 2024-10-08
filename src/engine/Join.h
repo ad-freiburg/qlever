@@ -142,17 +142,17 @@ class Join : public Operation {
   // A special implementation that is called when both children are
   // `IndexScan`s. Uses the lazy scans to only retrieve the subset of the
   // `IndexScan`s that is actually needed without fully materializing them.
-  IdTable computeResultForTwoIndexScans() const;
+  ProtoResult computeResultForTwoIndexScans(bool requestLaziness) const;
 
   // A special implementation that is called when one of the children is an
   // `IndexScan`. The argument `scanIsLeft` determines whether the `IndexScan`
   // is the left or the right child of this `Join`. This needs to be known to
   // determine the correct order of the columns in the result.
   template <bool scanIsLeft>
-  IdTable computeResultForIndexScanAndIdTable(const IdTable& idTable,
-                                              ColumnIndex joinColTable,
-                                              IndexScan& scan,
-                                              ColumnIndex joinColScan);
+  ProtoResult computeResultForIndexScanAndIdTable(
+      bool requestLaziness, const IdTable& idTable, ColumnIndex joinColTable,
+      std::shared_ptr<IndexScan> scan, ColumnIndex joinColScan,
+      const std::shared_ptr<const Result>& subResult = nullptr) const;
 
   /*
    * @brief Combines 2 rows like in a join and inserts the result in the
