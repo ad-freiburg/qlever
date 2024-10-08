@@ -8,11 +8,14 @@
 
 #include "./SparqlExpressionTestHelpers.h"
 #include "index/CompressedBlockPrefiltering.h"
+#include "util/DateYearDuration.h"
 #include "util/IdTestHelpers.h"
 
+using ad_utility::testing::BlankNodeId;
+using ad_utility::testing::BoolId;
+using ad_utility::testing::DateId;
 using ad_utility::testing::DoubleId;
 using ad_utility::testing::IntId;
-using ad_utility::testing::LocalVocabId;
 using ad_utility::testing::UndefId;
 using ad_utility::testing::VocabId;
 using sparqlExpression::TestContext;
@@ -53,49 +56,49 @@ struct MetadataBlocks {
             false};
   };
 
-  BlockMetadata b1 = makeBlock(IntId(0), IntId(0));
-  BlockMetadata b2 = makeBlock(IntId(0), IntId(5));
-  BlockMetadata b3 = makeBlock(IntId(5), IntId(6));
-  BlockMetadata b4 = makeBlock(IntId(8), IntId(9));
-  BlockMetadata b5 = makeBlock(IntId(-10), IntId(-8));
-  BlockMetadata b6 = makeBlock(IntId(-4), IntId(-4));
+  const BlockMetadata b1 = makeBlock(IntId(0), IntId(0));
+  const BlockMetadata b2 = makeBlock(IntId(0), IntId(5));
+  const BlockMetadata b3 = makeBlock(IntId(5), IntId(6));
+  const BlockMetadata b4 = makeBlock(IntId(8), IntId(9));
+  const BlockMetadata b5 = makeBlock(IntId(-10), IntId(-8));
+  const BlockMetadata b6 = makeBlock(IntId(-4), IntId(-4));
   // b7 contains mixed datatypes in COLUMN 2
-  BlockMetadata b7 = makeBlock(IntId(-4), DoubleId(2));
-  BlockMetadata b8 = makeBlock(DoubleId(2), DoubleId(2));
-  BlockMetadata b9 = makeBlock(DoubleId(4), DoubleId(4));
-  BlockMetadata b10 = makeBlock(DoubleId(4), DoubleId(10));
-  BlockMetadata b11 = makeBlock(DoubleId(-1.23), DoubleId(-6.25));
-  BlockMetadata b12 = makeBlock(DoubleId(-6.25), DoubleId(-6.25));
-  BlockMetadata b13 = makeBlock(DoubleId(-10.42), DoubleId(-12.00));
+  const BlockMetadata b7 = makeBlock(IntId(-4), DoubleId(2));
+  const BlockMetadata b8 = makeBlock(DoubleId(2), DoubleId(2));
+  const BlockMetadata b9 = makeBlock(DoubleId(4), DoubleId(4));
+  const BlockMetadata b10 = makeBlock(DoubleId(4), DoubleId(10));
+  const BlockMetadata b11 = makeBlock(DoubleId(-1.23), DoubleId(-6.25));
+  const BlockMetadata b12 = makeBlock(DoubleId(-6.25), DoubleId(-6.25));
+  const BlockMetadata b13 = makeBlock(DoubleId(-10.42), DoubleId(-12.00));
   // b14 contains mixed datatypes
-  BlockMetadata b14 = makeBlock(DoubleId(-14.01), VocabId(0));
-  BlockMetadata b15 = makeBlock(VocabId(10), VocabId(14));
-  BlockMetadata b16 = makeBlock(VocabId(14), VocabId(14));
-  BlockMetadata b17 = makeBlock(VocabId(14), VocabId(17));
+  const BlockMetadata b14 = makeBlock(DoubleId(-14.01), VocabId(0));
+  const BlockMetadata b15 = makeBlock(VocabId(10), VocabId(14));
+  const BlockMetadata b16 = makeBlock(VocabId(14), VocabId(14));
+  const BlockMetadata b17 = makeBlock(VocabId(14), VocabId(17));
   std::vector<BlockMetadata> blocks = {b1,  b2,  b3,  b4,  b5,  b6,
                                        b7,  b8,  b9,  b10, b11, b12,
                                        b13, b14, b15, b16, b17};
 
   // The following blocks will be swapped with their respective correct block,
   // to test if the method evaluate checks the pre-conditions properly.
-  BlockMetadata b1_1{{},
-                     0,
-                     {VocabId10, DoubleId33, IntId(0)},
-                     {VocabId10, DoubleId(22), IntId(0)},
-                     {},
-                     false};
+  const BlockMetadata b1_1{{},
+                           0,
+                           {VocabId10, DoubleId33, IntId(0)},
+                           {VocabId10, DoubleId(22), IntId(0)},
+                           {},
+                           false};
   std::vector<BlockMetadata> blocksInvalidCol1 = {b1_1, b2,  b3,  b4,  b5,  b6,
                                                   b7,   b8,  b9,  b10, b11, b12,
                                                   b13,  b14, b15, b16, b17};
-  BlockMetadata b5_1{{},
-                     0,
-                     {VocabId(11), DoubleId33, IntId(-10)},
-                     {VocabId10, DoubleId33, IntId(-8)},
-                     {},
-                     false};
-  std::vector<BlockMetadata> blocksInvalidCol02 = {
-      b1,  b2,  b3,  b4,  b5_1, b6,  b7,  b8, b9,
-      b10, b11, b12, b13, b14,  b15, b16, b17};
+  const BlockMetadata b5_1{{},
+                           0,
+                           {VocabId(11), DoubleId33, IntId(-10)},
+                           {VocabId10, DoubleId33, IntId(-8)},
+                           {},
+                           false};
+  std::vector<BlockMetadata> blocksInvalidCol2 = {b1,  b2,  b3,  b4,  b5_1, b6,
+                                                  b7,  b8,  b9,  b10, b11,  b12,
+                                                  b13, b14, b15, b16, b17};
   std::vector<BlockMetadata> blocksInvalidOrder1 = {
       b2,  b1,  b3,  b4,  b5,  b6,  b7,  b8, b9,
       b10, b11, b12, b13, b14, b15, b16, b17};
@@ -108,6 +111,30 @@ struct MetadataBlocks {
   std::vector<BlockMetadata> blocksWithDuplicate2 = {
       b1,  b2,  b3,  b4,  b5,  b6,  b7,  b8,  b9,
       b10, b11, b12, b13, b14, b15, b16, b17, b17};
+
+  //____________________________________________________________________________
+  // Additional blocks for different datatype mix.
+  const Id undef = Id::makeUndefined();
+  const Id falseId = BoolId(false);
+  const Id trueId = BoolId(true);
+  const Id referenceDate1 =
+      DateId(DateYearOrDuration::parseXsdDate, "1999-11-11");
+  const Id referenceDate2 =
+      DateId(DateYearOrDuration::parseXsdDate, "2005-02-27");
+  const Id referenceDateEqual =
+      DateId(DateYearOrDuration::parseXsdDate, "2000-01-01");
+  const BlockMetadata bd1 = makeBlock(undef, undef);
+  const BlockMetadata bd2 = makeBlock(undef, falseId);
+  const BlockMetadata bd3 = makeBlock(falseId, falseId);
+  const BlockMetadata bd4 = makeBlock(trueId, trueId);
+  const BlockMetadata bd5 =
+      makeBlock(trueId, DateId(DateYearOrDuration::parseXsdDate, "1999-12-12"));
+  const BlockMetadata bd6 =
+      makeBlock(DateId(DateYearOrDuration::parseXsdDate, "2000-01-01"),
+                DateId(DateYearOrDuration::parseXsdDate, "2000-01-01"));
+  const BlockMetadata bd7 = makeBlock(
+      DateId(DateYearOrDuration::parseXsdDate, "2024-10-08"), BlankNodeId(10));
+  std::vector<BlockMetadata> otherBlocks = {bd1, bd2, bd3, bd4, bd5, bd6, bd7};
 };
 
 // Static tests, they focus on corner case values for the given block triples.
@@ -200,6 +227,23 @@ struct TestNotExpression {
 };
 
 //______________________________________________________________________________
+TEST(BlockMetadata, testBlockFormatForDebugging) {
+  MetadataBlocks blocks{};
+  EXPECT_EQ(
+      "#BlockMetadata\n(first) Triple: V:10 D:33.000000 I:0\n(last) Triple: "
+      "V:10 D:33.000000 I:0\nnum. rows: 0.\n",
+      (std::stringstream() << blocks.b1).str());
+  EXPECT_EQ(
+      "#BlockMetadata\n(first) Triple: V:10 D:33.000000 I:-4\n(last) Triple: "
+      "V:10 D:33.000000 D:2.000000\nnum. rows: 0.\n",
+      (std::stringstream() << blocks.b7).str());
+  EXPECT_EQ(
+      "#BlockMetadata\n(first) Triple: V:10 D:33.000000 V:14\n(last) Triple: "
+      "V:10 D:33.000000 V:17\nnum. rows: 0.\n",
+      (std::stringstream() << blocks.b17).str());
+}
+
+//______________________________________________________________________________
 // Test LessThanExpression
 TEST(RelationalExpression, testLessThanExpressions) {
   MetadataBlocks blocks{};
@@ -232,6 +276,18 @@ TEST(RelationalExpression, testLessThanExpressions) {
   testExpression(2, VocabId(14), blocks.blocks, {blocks.b14, blocks.b15});
   testExpression(2, VocabId(16), blocks.blocks,
                  {blocks.b14, blocks.b15, blocks.b16, blocks.b17});
+  testExpression(2, blocks.undef, blocks.otherBlocks, {});
+  testExpression(2, blocks.falseId, blocks.otherBlocks,
+                 {blocks.bd2, blocks.bd5});
+  testExpression(2, blocks.trueId, blocks.otherBlocks,
+                 {blocks.bd2, blocks.bd3, blocks.bd5});
+  testExpression(2, blocks.referenceDate1, blocks.otherBlocks,
+                 {blocks.bd5, blocks.bd7});
+  testExpression(2, blocks.referenceDateEqual, blocks.otherBlocks,
+                 {blocks.bd5, blocks.bd7});
+  testExpression(2, blocks.referenceDate2, blocks.otherBlocks,
+                 {blocks.bd5, blocks.bd6, blocks.bd7});
+  testExpression(2, BlankNodeId(11), blocks.otherBlocks, {blocks.bd7});
 }
 
 //______________________________________________________________________________
@@ -267,6 +323,14 @@ TEST(RelationalExpression, testLessEqualExpressions) {
   testExpression(2, VocabId(11), blocks.blocks, {blocks.b14, blocks.b15});
   testExpression(2, VocabId(14), blocks.blocks,
                  {blocks.b14, blocks.b15, blocks.b16, blocks.b17});
+  testExpression(2, blocks.undef, blocks.otherBlocks, {});
+  testExpression(2, blocks.falseId, blocks.otherBlocks,
+                 {blocks.bd2, blocks.bd3, blocks.bd5});
+  testExpression(2, blocks.trueId, blocks.otherBlocks,
+                 {blocks.bd2, blocks.bd3, blocks.bd4, blocks.bd5});
+  testExpression(2, blocks.referenceDateEqual, blocks.otherBlocks,
+                 {blocks.bd5, blocks.bd6, blocks.bd7});
+  testExpression(2, BlankNodeId(11), blocks.otherBlocks, {blocks.bd7});
 }
 
 //______________________________________________________________________________
@@ -308,6 +372,16 @@ TEST(RelationalExpression, testGreaterThanExpression) {
   testExpression(2, VocabId(14), blocks.blocks, {blocks.b14, blocks.b17});
   testExpression(2, VocabId(12), blocks.blocks,
                  {blocks.b14, blocks.b15, blocks.b16, blocks.b17});
+  testExpression(2, blocks.undef, blocks.otherBlocks, {});
+  testExpression(2, blocks.falseId, blocks.otherBlocks,
+                 {blocks.bd2, blocks.bd4, blocks.bd5});
+  testExpression(2, blocks.trueId, blocks.otherBlocks,
+                 {blocks.bd2, blocks.bd5});
+  testExpression(2, blocks.referenceDateEqual, blocks.otherBlocks,
+                 {blocks.bd5, blocks.bd7});
+  testExpression(2, blocks.referenceDate1, blocks.otherBlocks,
+                 {blocks.bd5, blocks.bd6, blocks.bd7});
+  testExpression(2, IntId(5), blocks.otherBlocks, {});
 }
 
 //______________________________________________________________________________
@@ -351,6 +425,14 @@ TEST(RelationalExpression, testGreaterEqualExpression) {
   testExpression(2, VocabId(10), blocks.blocks,
                  {blocks.b14, blocks.b15, blocks.b16, blocks.b17});
   testExpression(2, VocabId(17), blocks.blocks, {blocks.b14, blocks.b17});
+  testExpression(2, blocks.undef, blocks.otherBlocks, {});
+  testExpression(2, blocks.falseId, blocks.otherBlocks,
+                 {blocks.bd2, blocks.bd3, blocks.bd4, blocks.bd5});
+  testExpression(2, blocks.trueId, blocks.otherBlocks,
+                 {blocks.bd2, blocks.bd4, blocks.bd5});
+  testExpression(2, blocks.referenceDateEqual, blocks.otherBlocks,
+                 {blocks.bd5, blocks.bd6, blocks.bd7});
+  testExpression(2, VocabId(0), blocks.otherBlocks, {});
 }
 
 //______________________________________________________________________________
@@ -387,6 +469,14 @@ TEST(RelationalExpression, testEqualExpression) {
   testExpression(2, VocabId(17), blocks.blocks, {blocks.b14, blocks.b17});
   testExpression(2, IntId(-4), blocks.blocks,
                  {blocks.b6, blocks.b7, blocks.b11, blocks.b14});
+  testExpression(2, blocks.trueId, blocks.otherBlocks,
+                 {blocks.bd2, blocks.bd4, blocks.bd5});
+  testExpression(2, blocks.referenceDate1, blocks.otherBlocks,
+                 {blocks.bd5, blocks.bd7});
+  testExpression(2, blocks.referenceDateEqual, blocks.otherBlocks,
+                 {blocks.bd5, blocks.bd6, blocks.bd7});
+  testExpression(2, blocks.referenceDate2, blocks.otherBlocks,
+                 {blocks.bd5, blocks.bd7});
 }
 
 //______________________________________________________________________________
@@ -431,6 +521,13 @@ TEST(RelationalExpression, testNotEqualExpression) {
                  {blocks.b14, blocks.b15, blocks.b17});
   testExpression(2, VocabId(17), blocks.blocks,
                  {blocks.b14, blocks.b15, blocks.b16, blocks.b17});
+  testExpression(2, blocks.undef, blocks.otherBlocks, {});
+  testExpression(2, blocks.falseId, blocks.otherBlocks,
+                 {blocks.bd2, blocks.bd4, blocks.bd5});
+  testExpression(2, blocks.referenceDateEqual, blocks.otherBlocks,
+                 {blocks.bd5, blocks.bd7});
+  testExpression(2, blocks.referenceDate1, blocks.otherBlocks,
+                 {blocks.bd5, blocks.bd6, blocks.bd7});
 }
 
 //______________________________________________________________________________
@@ -597,6 +694,12 @@ TEST(LogicalExpression, testNotExpression) {
       2, DoubleId(0), blocks.blocks,
       {blocks.b1, blocks.b2, blocks.b5, blocks.b6, blocks.b7, blocks.b11,
        blocks.b12, blocks.b13, blocks.b14});
+  testExpression.test<EqualExpression>(0, blocks.VocabId10, blocks.blocks, {});
+  testExpression.test<EqualExpression>(1, blocks.DoubleId33, blocks.blocks, {});
+  testExpression.test<LessThanExpression>(0, blocks.VocabId10, blocks.blocks,
+                                          blocks.blocks);
+  testExpression.test<GreaterEqualExpression>(1, blocks.DoubleId33,
+                                              blocks.blocks, {});
 }
 
 //______________________________________________________________________________
@@ -624,14 +727,14 @@ TEST(PrefilterExpression, testInputConditionCheck) {
       "The data blocks must be provided in sorted order regarding the "
       "evaluation column.");
   testNotExpression.test<EqualExpression>(
-      0, IntId(0), blocks.blocksInvalidCol02,
+      0, IntId(0), blocks.blocksInvalidCol2,
       "The data blocks must be provided in sorted order regarding the "
       "evaluation column.");
   testNotExpression.test<EqualExpression>(
-      1, IntId(0), blocks.blocksInvalidCol02,
+      1, IntId(0), blocks.blocksInvalidCol2,
       "The columns up to the evaluation column must contain the same values.");
   testNotExpression.test<EqualExpression>(
-      2, IntId(0), blocks.blocksInvalidCol02,
+      2, IntId(0), blocks.blocksInvalidCol2,
       "The columns up to the evaluation column must contain the same values.");
 
   TestLogicalExpression<AndExpression, std::string> testAndExpression{};
@@ -643,6 +746,6 @@ TEST(PrefilterExpression, testInputConditionCheck) {
       "The data blocks must be provided in sorted order regarding the "
       "evaluation column.");
   testAndExpression.test<GreaterThanExpression, LessThanExpression>(
-      2, DoubleId(-4.24), IntId(5), blocks.blocksInvalidCol02,
+      2, DoubleId(-4.24), IntId(5), blocks.blocksInvalidCol2,
       "The columns up to the evaluation column must contain the same values.");
 }

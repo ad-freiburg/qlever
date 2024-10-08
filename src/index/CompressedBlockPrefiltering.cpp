@@ -242,8 +242,8 @@ std::vector<BlockMetadata> RelationalExpression<Comparison>::evaluateImpl(
             std::distance(valueIdsInput.begin(), secondIdAdjusted) / 2);
   }
   relevantBlocks.shrink_to_fit();
-  // Merge mixedDatatypeBlocks into relevantBlocks while maintaing order and
-  // avoiding dublicates.
+  // Merge mixedDatatypeBlocks into relevantBlocks while maintaining order and
+  // avoiding duplicates.
   return getSetUnion(relevantBlocks, mixedDatatypeBlocks, evaluationColumn);
 };
 
