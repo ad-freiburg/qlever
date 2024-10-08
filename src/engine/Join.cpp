@@ -468,10 +468,7 @@ ProtoResult Join::monostateGeneratorToResult(
                                       std::move(joinColMap));
     return {std::move(result), resultSortedOn(), std::move(localVocabPointer)};
   } else {
-    for ([[maybe_unused]] std::monostate& _ : generator) {
-      // Generator should never yield, just consume everything in one go.
-      AD_FAIL();
-    }
+    ad_utility::consumeSingleStepGenerator(generator);
     auto result = std::move(*rowAdder).resultTable();
     result.setColumnSubset(joinColMap.permutationResult());
     return {std::move(result), resultSortedOn(),
@@ -709,9 +706,7 @@ IdTable Join::computeResultForTwoIndexScans() const {
       true, std::ranges::ref_view(leftBlocks),
       std::ranges::ref_view(rightBlocks), std::less{}, rowAdder);
 
-  for ([[maybe_unused]] std::monostate& _ : generator) {
-    AD_FAIL();
-  }
+  ad_utility::consumeSingleStepGenerator(generator);
 
   updateRuntimeInfoForLazyScan(*leftScan, leftBlocks.details());
   updateRuntimeInfoForLazyScan(*rightScan, rightBlocks.details());
@@ -784,9 +779,7 @@ IdTable Join::computeResultForIndexScanAndIdTable(const IdTable& idTable,
             : ad_utility::zipperJoinForBlocksWithoutUndef(
                   true, std::ranges::ref_view(left),
                   std::ranges::ref_view(right), std::less{}, rowAdder);
-    for ([[maybe_unused]] std::monostate& _ : generator) {
-      AD_FAIL();
-    }
+    ad_utility::consumeSingleStepGenerator(generator);
   };
   auto blockForIdTable = std::span{&permutationIdTable, 1};
   std::visit(

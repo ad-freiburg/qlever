@@ -69,15 +69,11 @@ void testJoin(const NestedBlock& a, const NestedBlock& b, JoinResult expected,
     auto generator = zipperJoinForBlocksWithoutUndef(
         true, a, b, compare, adder, std::identity{}, std::identity{},
         std::true_type{});
-    for ([[maybe_unused]] std::monostate& _ : generator) {
-      AD_FAIL();
-    }
+    ad_utility::consumeSingleStepGenerator(generator);
   } else {
     auto generator =
         zipperJoinForBlocksWithoutUndef(true, a, b, compare, adder);
-    for ([[maybe_unused]] std::monostate& _ : generator) {
-      AD_FAIL();
-    }
+    ad_utility::consumeSingleStepGenerator(generator);
   }
   // The result must be sorted on the first column
   EXPECT_TRUE(std::ranges::is_sorted(result, std::less<>{}, ad_utility::first));
@@ -97,9 +93,7 @@ void testJoin(const NestedBlock& a, const NestedBlock& b, JoinResult expected,
     auto adder = makeRowAdder(result);
     auto generator =
         zipperJoinForBlocksWithoutUndef(true, b, a, compare, adder);
-    for ([[maybe_unused]] std::monostate& _ : generator) {
-      AD_FAIL();
-    }
+    ad_utility::consumeSingleStepGenerator(generator);
     EXPECT_TRUE(
         std::ranges::is_sorted(result, std::less<>{}, ad_utility::first));
     EXPECT_THAT(result, ::testing::UnorderedElementsAreArray(expected));
@@ -276,9 +270,7 @@ void testDynamicJoinWithUndef(const std::vector<std::vector<FakeId>>& a,
     RowAdderWithUndef adder{};
     auto generator =
         zipperJoinForBlocksWithPotentialUndef(true, a, b, compare, adder);
-    for ([[maybe_unused]] std::monostate& _ : generator) {
-      AD_FAIL();
-    }
+    ad_utility::consumeSingleStepGenerator(generator);
     const auto& result = adder.getOutput();
     // The result must be sorted on the first column
     EXPECT_TRUE(
@@ -297,9 +289,7 @@ void testDynamicJoinWithUndef(const std::vector<std::vector<FakeId>>& a,
     RowAdderWithUndef adder{};
     auto generator =
         zipperJoinForBlocksWithPotentialUndef(true, b, a, compare, adder);
-    for ([[maybe_unused]] std::monostate& _ : generator) {
-      AD_FAIL();
-    }
+    ad_utility::consumeSingleStepGenerator(generator);
     const auto& result = adder.getOutput();
     EXPECT_TRUE(
         std::ranges::is_sorted(result, std::less<>{}, validationProjection));
@@ -429,4 +419,31 @@ TEST(JoinAlgorithm, DefaultIsUndefinedFunctionAlwaysReturnsFalse) {
   EXPECT_FALSE(impl.isUndefined_(1));
   EXPECT_FALSE(impl.isUndefined_(I(1)));
   EXPECT_FALSE(impl.isUndefined_(Id::makeUndefined()));
+}
+
+// _____________________________________________________________________________
+TEST(JoinAlgorithm, consumeSingleStepGeneratorConsumesSingleStep) {
+  bool flag = false;
+  auto generator = [](bool& flagRef) -> cppcoro::generator<std::monostate> {
+    flagRef = true;
+    co_return;
+  }(flag);
+
+  EXPECT_FALSE(flag);
+  ad_utility::consumeSingleStepGenerator(generator);
+  EXPECT_TRUE(flag);
+}
+
+// _____________________________________________________________________________
+TEST(JoinAlgorithm, consumeSingleStepGeneratorThrowsErrorWhenYielding) {
+  bool flag = false;
+  auto generator = [](bool& flagRef) -> cppcoro::generator<std::monostate> {
+    co_yield std::monostate{};
+    flagRef = true;
+  }(flag);
+
+  EXPECT_FALSE(flag);
+  EXPECT_THROW(ad_utility::consumeSingleStepGenerator(generator),
+               ad_utility::Exception);
+  EXPECT_FALSE(flag);
 }

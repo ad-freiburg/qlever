@@ -1415,4 +1415,12 @@ cppcoro::generator<std::monostate> zipperJoinForBlocksWithPotentialUndef(
   }
 }
 
+inline void consumeSingleStepGenerator(
+    cppcoro::generator<std::monostate>& generator) {
+  for ([[maybe_unused]] std::monostate& _ : generator) {
+    // Generator should never yield, just consume everything in one go.
+    AD_FAIL();
+  }
+}
+
 }  // namespace ad_utility
