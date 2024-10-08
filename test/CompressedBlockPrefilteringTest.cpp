@@ -172,12 +172,40 @@ static const auto testThrowError =
     };
 
 //______________________________________________________________________________
-template <typename RelExpr, typename ResT>
+template <typename RelExpr1>
+constexpr std::unique_ptr<PrefilterExpression> makeRelExpr(
+    const ValueId& referenceId) {
+  return std::make_unique<RelExpr1>(referenceId);
+}
+
+//______________________________________________________________________________
+template <typename LogExpr, typename RelExpr1, typename RelExpr2>
+constexpr std::unique_ptr<PrefilterExpression> makeLogExpr(
+    const ValueId& referenceId1, const ValueId& referenceId2) {
+  return std::make_unique<LogExpr>(makeRelExpr<RelExpr1>(referenceId1),
+                                   makeRelExpr<RelExpr2>(referenceId2));
+}
+
+//______________________________________________________________________________
+template <typename RelExpr1, typename RelExpr2, typename LogExpr>
+constexpr std::unique_ptr<PrefilterExpression> makeNotExpression(
+    const ValueId& referenceId1, std::optional<ValueId> optId2) {
+  if constexpr (check_is_relational_v<RelExpr2> &&
+                check_is_logical_v<LogExpr> && optId2.has_value()) {
+    return std::make_unique<NotExpression>(
+        makeLogExpr<LogExpr, RelExpr1, RelExpr2>(referenceId1, optId2.value()));
+  } else {
+    return std::make_unique<NotExpression>(makeRelExpr<RelExpr1>(referenceId1));
+  }
+}
+
+//______________________________________________________________________________
+template <typename RelExpr1, typename ResT>
 struct TestRelationalExpression {
-  void operator()(size_t evaluationColumn, ValueId referenceId,
+  void operator()(size_t evaluationColumn, const ValueId& referenceId,
                   const std::vector<BlockMetadata>& input, const ResT& expected)
-      requires check_is_relational_v<RelExpr> {
-    auto expression = std::make_unique<RelExpr>(referenceId);
+      requires check_is_relational_v<RelExpr1> {
+    auto expression = makeRelExpr<RelExpr1>(referenceId);
     if constexpr (std::is_same_v<ResT, std::string>) {
       testThrowError(std::move(expression), evaluationColumn, input, expected);
     } else {
@@ -191,14 +219,13 @@ struct TestRelationalExpression {
 template <typename LogExpr, typename ResT>
 struct TestLogicalExpression {
   template <typename RelExpr1, typename RelExpr2>
-  void test(size_t evaluationColumn, ValueId referenceIdChild1,
+  void test(size_t evaluationColumn, const ValueId& referenceIdChild1,
             ValueId referenceIdChild2, const std::vector<BlockMetadata>& input,
             const ResT& expected)
       requires(check_is_logical_v<LogExpr> && check_is_relational_v<RelExpr1> &&
                check_is_relational_v<RelExpr2>) {
-    auto expression = std::make_unique<LogExpr>(
-        std::make_unique<RelExpr1>(referenceIdChild1),
-        std::make_unique<RelExpr2>(referenceIdChild2));
+    auto expression = makeLogExpr<LogExpr, RelExpr1, RelExpr2>(
+        referenceIdChild1, referenceIdChild2);
     if constexpr (std::is_same_v<ResT, std::string>) {
       testThrowError(std::move(expression), evaluationColumn, input, expected);
     } else {
@@ -211,12 +238,14 @@ struct TestLogicalExpression {
 //______________________________________________________________________________
 template <typename ResT>
 struct TestNotExpression {
-  template <typename RelExpr>
-  void test(size_t evaluationColumn, ValueId referenceIdChild,
-            const std::vector<BlockMetadata>& input, const ResT& expected)
-      requires check_is_relational_v<RelExpr> {
-    auto expression = std::make_unique<NotExpression>(
-        std::make_unique<RelExpr>(referenceIdChild));
+  template <typename RelExpr1, typename RelExpr2 = std::nullptr_t,
+            typename LogExpr = std::nullptr_t>
+  void test(size_t evaluationColumn, const std::vector<BlockMetadata>& input,
+            const ResT& expected, const ValueId& referenceId1,
+            std::optional<ValueId> optId2 = std::nullopt)
+      requires check_is_relational_v<RelExpr1> {
+    auto expression =
+        makeNotExpression<RelExpr1, RelExpr2, LogExpr>(referenceId1, optId2);
     if constexpr (std::is_same_v<ResT, std::string>) {
       testThrowError(std::move(expression), evaluationColumn, input, expected);
     } else {
@@ -655,51 +684,56 @@ TEST(LogicalExpression, testNotExpression) {
   MetadataBlocks blocks{};
   TestNotExpression<std::vector<BlockMetadata>> testExpression{};
   testExpression.test<EqualExpression>(
-      2, VocabId(2), blocks.blocks,
-      {blocks.b14, blocks.b15, blocks.b16, blocks.b17});
-  testExpression.test<EqualExpression>(2, VocabId(14), blocks.blocks,
-                                       {blocks.b14, blocks.b15, blocks.b17});
-  testExpression.test<NotEqualExpression>(
-      2, VocabId(14), blocks.blocks,
-      {blocks.b14, blocks.b15, blocks.b16, blocks.b17});
+      2, blocks.blocks, {blocks.b14, blocks.b15, blocks.b16, blocks.b17},
+      VocabId(2));
   testExpression.test<EqualExpression>(
-      2, VocabId(0), blocks.blocks,
-      {blocks.b14, blocks.b15, blocks.b16, blocks.b17});
+      2, blocks.blocks, {blocks.b14, blocks.b15, blocks.b17}, VocabId(14));
+  testExpression.test<NotEqualExpression>(
+      2, blocks.blocks, {blocks.b14, blocks.b15, blocks.b16, blocks.b17},
+      VocabId(14));
+  testExpression.test<EqualExpression>(
+      2, blocks.blocks, {blocks.b14, blocks.b15, blocks.b16, blocks.b17},
+      VocabId(0));
   testExpression.test<LessThanExpression>(
-      2, DoubleId(-14.01), blocks.blocks,
+      2, blocks.blocks,
       {blocks.b1, blocks.b2, blocks.b3, blocks.b4, blocks.b5, blocks.b6,
        blocks.b7, blocks.b8, blocks.b9, blocks.b10, blocks.b11, blocks.b12,
-       blocks.b13, blocks.b14});
+       blocks.b13, blocks.b14},
+      DoubleId(-14.01));
   testExpression.test<GreaterEqualExpression>(
-      2, DoubleId(-14.01), blocks.blocks, {blocks.b7, blocks.b14});
+      2, blocks.blocks, {blocks.b7, blocks.b14}, DoubleId(-14.01));
   testExpression.test<GreaterThanExpression>(
-      2, DoubleId(-4.00), blocks.blocks,
+      2, blocks.blocks,
       {blocks.b5, blocks.b6, blocks.b7, blocks.b11, blocks.b12, blocks.b13,
-       blocks.b14});
-  testExpression.test<GreaterEqualExpression>(2, DoubleId(-24.4), blocks.blocks,
-                                              {blocks.b7, blocks.b14});
+       blocks.b14},
+      DoubleId(-4.00));
+  testExpression.test<GreaterEqualExpression>(
+      2, blocks.blocks, {blocks.b7, blocks.b14}, DoubleId(-24.4));
   testExpression.test<LessEqualExpression>(
-      2, IntId(0), blocks.blocks,
+      2, blocks.blocks,
       {blocks.b2, blocks.b3, blocks.b4, blocks.b7, blocks.b8, blocks.b9,
-       blocks.b10, blocks.b14});
+       blocks.b10, blocks.b14},
+      IntId(0));
   testExpression.test<EqualExpression>(
-      2, DoubleId(-6.25), blocks.blocks,
+      2, blocks.blocks,
       {blocks.b1, blocks.b2, blocks.b3, blocks.b4, blocks.b5, blocks.b6,
        blocks.b7, blocks.b8, blocks.b9, blocks.b10, blocks.b11, blocks.b13,
-       blocks.b14});
+       blocks.b14},
+      DoubleId(-6.25));
   testExpression.test<NotEqualExpression>(
-      2, DoubleId(4), blocks.blocks,
-      {blocks.b2, blocks.b7, blocks.b9, blocks.b10, blocks.b14});
+      2, blocks.blocks,
+      {blocks.b2, blocks.b7, blocks.b9, blocks.b10, blocks.b14}, DoubleId(4));
   testExpression.test<GreaterThanExpression>(
-      2, DoubleId(0), blocks.blocks,
+      2, blocks.blocks,
       {blocks.b1, blocks.b2, blocks.b5, blocks.b6, blocks.b7, blocks.b11,
-       blocks.b12, blocks.b13, blocks.b14});
-  testExpression.test<EqualExpression>(0, blocks.VocabId10, blocks.blocks, {});
-  testExpression.test<EqualExpression>(1, blocks.DoubleId33, blocks.blocks, {});
-  testExpression.test<LessThanExpression>(0, blocks.VocabId10, blocks.blocks,
-                                          blocks.blocks);
-  testExpression.test<GreaterEqualExpression>(1, blocks.DoubleId33,
-                                              blocks.blocks, {});
+       blocks.b12, blocks.b13, blocks.b14},
+      DoubleId(0));
+  testExpression.test<EqualExpression>(0, blocks.blocks, {}, blocks.VocabId10);
+  testExpression.test<EqualExpression>(1, blocks.blocks, {}, blocks.DoubleId33);
+  testExpression.test<LessThanExpression>(0, blocks.blocks, blocks.blocks,
+                                          blocks.VocabId10);
+  testExpression.test<GreaterEqualExpression>(1, blocks.blocks, {},
+                                              blocks.DoubleId33);
 }
 
 //______________________________________________________________________________
@@ -720,22 +754,26 @@ TEST(PrefilterExpression, testInputConditionCheck) {
 
   TestNotExpression<std::string> testNotExpression{};
   testNotExpression.test<NotEqualExpression>(
-      2, VocabId(2), blocks.blocksWithDuplicate1,
-      "The provided data blocks must be unique.");
+      2, blocks.blocksWithDuplicate1,
+      "The provided data blocks must be unique.", VocabId(2));
   testNotExpression.test<LessThanExpression>(
-      2, DoubleId(-14.1), blocks.blocksInvalidOrder1,
+      2, blocks.blocksInvalidOrder1,
       "The data blocks must be provided in sorted order regarding the "
-      "evaluation column.");
+      "evaluation column.",
+      DoubleId(-14.1));
   testNotExpression.test<EqualExpression>(
-      0, IntId(0), blocks.blocksInvalidCol2,
+      0, blocks.blocksInvalidCol2,
       "The data blocks must be provided in sorted order regarding the "
-      "evaluation column.");
+      "evaluation column.",
+      IntId(0));
   testNotExpression.test<EqualExpression>(
-      1, IntId(0), blocks.blocksInvalidCol2,
-      "The columns up to the evaluation column must contain the same values.");
+      1, blocks.blocksInvalidCol2,
+      "The columns up to the evaluation column must contain the same values.",
+      IntId(0));
   testNotExpression.test<EqualExpression>(
-      2, IntId(0), blocks.blocksInvalidCol2,
-      "The columns up to the evaluation column must contain the same values.");
+      2, blocks.blocksInvalidCol2,
+      "The columns up to the evaluation column must contain the same values.",
+      IntId(0));
 
   TestLogicalExpression<AndExpression, std::string> testAndExpression{};
   testAndExpression.test<GreaterThanExpression, LessThanExpression>(
