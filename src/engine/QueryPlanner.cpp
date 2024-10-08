@@ -1282,69 +1282,50 @@ QueryPlanner::runDynamicProgrammingOnConnectedComponent(
     // be nonempty.
     AD_CORRECTNESS_CHECK(!dpTab[k - 1].empty());
   }
+  /*
   size_t numEntries = 0;
   for (const auto& row : dpTab) {
     numEntries += row.size();
   }
   LOG(INFO) << " num entries in DP table: " << numEntries << std::endl;
+   */
   return std::move(dpTab.back());
 }
 
-using Vertex = const QueryPlanner::SubtreePlan*;
-using Vertices = ad_utility::HashSet<Vertex>;
-using Graph = std::vector<Vertex>;
+struct PlainVertex {
+  uint64_t id_{};
+  uint64_t neighbors_{};
+};
+// using Vertex = const QueryPlanner::SubtreePlan*;
+// using Vertices = ad_utility::HashSet<Vertex>;
+using PlainGraph = std::vector<PlainVertex>;
 
-size_t QueryPlanner::countSubgraphs(Graph graph, size_t budget) {
-  auto getId = [](const Vertex& v) { return v->_idsOfIncludedNodes; };
-  std::ranges::sort(graph, std::ranges::less{}, getId);
-  graph.erase(
-      std::ranges::unique(graph, std::ranges::equal_to{}, getId).begin(),
-      graph.end());
-  // TODO<joka921> precompute which of the subgraphs are already connected,
-  // Then the counting can be done much cheaper.
-  size_t c = 0;
-  for (size_t i = 0; i < graph.size(); ++i) {
-    ++c;
-    if (c > budget) {
-      return c;
-    }
-    Vertices subgraph{graph[i]};
-    Vertices ignored;
-    for (size_t k = 0; k < i; ++k) {
-      ignored.insert(graph[k]);
-    }
-    c = countSubgraphsRecursively(graph, subgraph, ignored, c, budget);
-  }
-  LOG(INFO) << "Number of subgraphs (capped at " << budget << "): " << c
+size_t countSubgraphsRecursively(const PlainGraph& graph, uint64_t& subgraph,
+                                 uint64_t& ignored, size_t c, size_t budget) {
+  /*
+  LOG(INFO) << "subgraph size " << std::bitset<64>(subgraph).count()
+            << " newIgnored " << std::bitset<64>(ignored).count() << " c " << c
             << std::endl;
-  return c;
-}
-size_t QueryPlanner::countSubgraphsRecursively(const Graph& graph,
-                                               Vertices& subgraph,
-                                               Vertices& ignored, size_t c,
-                                               size_t budget) {
-  // LOG(INFO) << "new subgraph " << subgraph.size() << " newIgnored "
-  //           << ignored.size() << " c " << c << std::endl;
-  std::vector<Vertex> NeighborsOfS;
-  for (const auto& v : graph) {
-    if (ignored.contains(v)) {
-      continue;
-    }
-    if (ad_utility::contains_if(subgraph, [&v](const auto& el) {
-          return (v != el) && !QueryPlanner::getJoinColumns(*v, *el).empty();
-        })) {
-      NeighborsOfS.push_back(v);
+            */
+  uint64_t NeighborsOfS{};
+  for (size_t i = 0; i < 64; ++i) {
+    bool set = subgraph & (1ull << i);
+    if (set) {
+      NeighborsOfS |= graph[i].neighbors_;
     }
   }
-  if (NeighborsOfS.size() > 60) {
-    return budget + 1;
+  NeighborsOfS &= (~ignored);
+
+  std::vector<uint64_t> neighborVec;
+  for (uint64_t i = 0; i < 64; ++i) {
+    if (NeighborsOfS & (1ull << i)) {
+      neighborVec.push_back(i);
+    }
   }
-  size_t upperBound = 1ull << NeighborsOfS.size();
+  size_t upperBound = 1ull << neighborVec.size();
 
   auto newIgnored = ignored;
-  for (const auto& el : NeighborsOfS) {
-    newIgnored.insert(el);
-  }
+  newIgnored |= NeighborsOfS;
 
   // LOG(INFO) << "Num Neighbors: " << NeighborsOfS.size() << std::endl;
   //   TODO<joka921> iterate over all Subsets.
@@ -1356,14 +1337,66 @@ size_t QueryPlanner::countSubgraphsRecursively(const Graph& graph,
     }
     // TODO<joka921> This can probably be done more efficiently...
     auto newSubgraph = subgraph;
-    for (size_t k = 0; k < NeighborsOfS.size(); ++k) {
+    for (size_t k = 0; k < neighborVec.size(); ++k) {
       if (1 << k & i) {
-        newSubgraph.insert(NeighborsOfS[k]);
+        newSubgraph |= (1ull << neighborVec[k]);
       }
     }
     c = countSubgraphsRecursively(graph, newSubgraph, newIgnored, c, budget);
   }
   return c;
+}
+
+size_t countSubgraphsImpl(PlainGraph graph, size_t budget) {
+  /*
+  LOG(INFO) << "Counting subgraphs for input of size " << graph.size()
+            << std::endl;
+            */
+  size_t c = 0;
+  for (size_t i = 0; i < graph.size(); ++i) {
+    ++c;
+    if (c > budget) {
+      /*
+      LOG(INFO) << "Number of subgraphs (capped at " << budget << "): " << c
+                << std::endl;
+                */
+      return c;
+    }
+    uint64_t subgraph = 1ull << i;
+    uint64_t ignored{};
+    for (size_t k = 0; k < i; ++k) {
+      ignored |= (1ull << k);
+    }
+    // LOG(INFO) << "Value of ignored " << ignored << std::endl;
+    c = countSubgraphsRecursively(graph, subgraph, ignored, c, budget);
+  }
+  // LOG(INFO) << "Number of subgraphs (not capped): " << c << std::endl;
+  return c;
+}
+
+size_t QueryPlanner::countSubgraphs(
+    std::vector<const QueryPlanner::SubtreePlan*> graph, size_t budget) {
+  auto getId = [](const Vertex& v) { return v->_idsOfIncludedNodes; };
+  std::ranges::sort(graph, std::ranges::less{}, getId);
+  graph.erase(
+      std::ranges::unique(graph, std::ranges::equal_to{}, getId).begin(),
+      graph.end());
+
+  if (graph.size() > 64) {
+    return budget + 1;
+  }
+  PlainGraph g;
+  for (size_t i = 0; i < graph.size(); ++i) {
+    PlainVertex v{uint64_t{i}, 0};
+    for (size_t k = 0; k < graph.size(); ++k) {
+      if ((k != i) &&
+          !QueryPlanner::getJoinColumns(*graph.at(k), *graph.at(i)).empty()) {
+        v.neighbors_ |= (1ull << k);
+      }
+    }
+    g.push_back(v);
+  }
+  return countSubgraphsImpl(g, budget);
 }
 
 // _____________________________________________________________________________
@@ -1420,15 +1453,25 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
     for (const auto& plan : component) {
       g.push_back(&plan);
     }
-    // TODO<joka921> Make this a runtime parameter.
-    static constexpr size_t budget = 2'000;
-    bool useGreedyPlanning = RuntimeParameters().get<"use-greedy-planning">() ||
-                             countSubgraphs(g, budget) >= budget;
+    ad_utility::Timer timer{ad_utility::Timer::Started};
+    bool alwaysGreedy = RuntimeParameters().get<"use-greedy-planning">();
+    const size_t budget = RuntimeParameters().get<"greedy-planning-budget">();
+    bool useGreedyPlanning =
+        alwaysGreedy || countSubgraphs(g, budget) >= budget;
+    if (!alwaysGreedy && useGreedyPlanning) {
+      LOG(INFO) << "Using the greedy query planner for a large component"
+                << std::endl;
+    }
+    // LOG(INFO) << "time for deciding which planner to use" <<
+    // timer.msecs().count() << "ms" << std::endl;
+    timer.start();
     auto impl = useGreedyPlanning
                     ? &QueryPlanner::runGreedyPlanningOnConnectedComponent
                     : &QueryPlanner::runDynamicProgrammingOnConnectedComponent;
     lastDpRowFromComponents.push_back(
         std::invoke(impl, this, std::move(component), filters, textLimits, tg));
+    // LOG(INFO) << "time for planning of connected component" <<
+    // timer.msecs().count() << "ms" << std::endl;
     checkCancellation();
   }
   size_t numConnectedComponents = lastDpRowFromComponents.size();

@@ -49,7 +49,8 @@ inline auto& RuntimeParameters() {
         Bool<"group-by-hash-map-enabled">{false},
         Bool<"group-by-disable-index-scan-optimizations">{false},
         SizeT<"service-max-value-rows">{100},
-        Bool<"use-greedy-planning">{false}};
+        Bool<"use-greedy-planning">{false},
+        SizeT<"greedy-planning-budget">{1000}};
   }();
   return params;
 }

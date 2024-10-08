@@ -12,6 +12,7 @@
 #include "engine/CartesianProductJoin.h"
 #include "engine/CountAvailablePredicates.h"
 #include "engine/Filter.h"
+#include "engine/GroupBy.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
 #include "engine/Minus.h"
@@ -287,15 +288,39 @@ inline auto TransitivePath =
                             TransitivePathSideMatcher(right))));
     };
 
+static constexpr auto children(
+    const std::same_as<QetMatcher> auto&... childMatchers) {
+  return Property("getChildren", &Operation::getChildren,
+                  ElementsAre(Pointee(childMatchers)...));
+}
 // Match a SpatialJoin operation
 inline auto SpatialJoin =
     [](long long maxDist,
        const std::same_as<QetMatcher> auto&... childMatchers) {
       return RootOperation<::SpatialJoin>(
-          AllOf(Property("getChildren", &Operation::getChildren,
-                         ElementsAre(Pointee(childMatchers)...)),
+          AllOf(children(childMatchers...),
                 AD_PROPERTY(SpatialJoin, getMaxDist, Eq(maxDist))));
     };
+
+// Match a GroupBy operation
+static constexpr auto GroupBy =
+    [](const std::vector<Variable>& groupByVariables,
+       const std::vector<std::string>& aliases,
+       const QetMatcher& childMatcher) -> QetMatcher {
+  // TODO<joka921> Also test the aliases.
+  auto aliasesToStrings = [](const std::vector<Alias>& aliases) {
+    std::vector<std::string> result;
+    std::ranges::transform(aliases, std::back_inserter(result),
+                           &Alias::getDescriptor);
+    return result;
+  };
+
+  return RootOperation<::GroupBy>(
+      AllOf(children(childMatcher),
+            AD_PROPERTY(::GroupBy, groupByVariables, Eq(groupByVariables)),
+            AD_PROPERTY(::GroupBy, aliases,
+                        ResultOf(aliasesToStrings, ContainerEq(aliases))), ));
+};
 
 // Match a sort operation. Currently, this is only required by the binary search
 // version of the transitive path operation. This matcher checks only the
