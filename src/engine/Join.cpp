@@ -440,39 +440,57 @@ void Join::join(const IdTable& a, ColumnIndex jc1, const IdTable& b,
 }
 
 // _____________________________________________________________________________
+LocalVocab Join::mergeVocabsIfNecessary(
+    const std::shared_ptr<const Result>& result1,
+    const std::shared_ptr<const Result>& result2) {
+  std::vector<const LocalVocab*> vocabs{};
+  if (result1) {
+    vocabs.push_back(&result1->localVocab());
+  }
+  if (result2) {
+    vocabs.push_back(&result2->localVocab());
+  }
+  return LocalVocab::merge(vocabs);
+}
+
+// _____________________________________________________________________________
+template <typename T>
 ProtoResult Join::monostateGeneratorToResult(
     bool requestedLaziness, cppcoro::generator<std::monostate> generator,
     std::shared_ptr<const Result> a, std::shared_ptr<const Result> b,
-    auto rowAdder, auto joinColMap) const {
+    T rowAdder,
+    ad_utility::InvocableWithExactReturnType<IdTable, T&> auto extractTable,
+    std::invocable auto postAction) const {
   if (requestedLaziness) {
     auto localVocabPointer = std::make_shared<LocalVocab>();
-    auto result = [](const Join* self, auto originalGenerator, auto rowAdder,
-                     auto localVocab, auto a, auto b,
-                     auto joinColMap) -> cppcoro::generator<IdTable> {
+    auto result = [](auto originalGenerator, auto localVocab, auto a, auto b,
+                     auto getResult, auto postAction)
+        -> cppcoro::generator<IdTable> {
       for ([[maybe_unused]] std::monostate& _ : originalGenerator) {
-        auto result = std::move(rowAdder->resultTable());
-        result.setColumnSubset(joinColMap.permutationResult());
-        co_yield result;
-        result = IdTable{self->getResultWidth(),
-                         self->getExecutionContext()->getAllocator()};
+        IdTable result = getResult();
+        if (!result.empty()) {
+          co_yield result;
+        }
       }
-      if (!rowAdder->resultTable().empty()) {
-        auto result = std::move(*rowAdder).resultTable();
-        result.setColumnSubset(joinColMap.permutationResult());
+      IdTable result = getResult();
+      if (!result.empty()) {
         co_yield result;
       }
-      std::vector<const LocalVocab*> vocabs{&a->localVocab(), &b->localVocab()};
-      *localVocab = LocalVocab::merge(vocabs);
-    }(this, std::move(generator), std::move(rowAdder), localVocabPointer,
-                                      std::move(a), std::move(b),
-                                      std::move(joinColMap));
+      *localVocab = mergeVocabsIfNecessary(a, b);
+      postAction();
+    }(
+            std::move(generator), localVocabPointer, std::move(a), std::move(b),
+            [extractTable = std::move(extractTable),
+             rowAdder = std::move(rowAdder)]() {
+              return extractTable(rowAdder);
+            },
+            std::move(postAction));
     return {std::move(result), resultSortedOn(), std::move(localVocabPointer)};
   } else {
     ad_utility::consumeSingleStepGenerator(generator);
-    auto result = std::move(*rowAdder).resultTable();
-    result.setColumnSubset(joinColMap.permutationResult());
-    return {std::move(result), resultSortedOn(),
-            Result::getMergedLocalVocab(*a, *b)};
+    postAction();
+    return {extractTable(rowAdder), resultSortedOn(),
+            mergeVocabsIfNecessary(a, b)};
   }
 }
 
@@ -543,9 +561,15 @@ ProtoResult Join::lazyJoin(std::shared_ptr<const Result> a, ColumnIndex jc1,
         }
       },
       leftRange, rightRange);
-  return monostateGeneratorToResult(requestLaziness, std::move(resultGenerator),
-                                    std::move(a), std::move(b),
-                                    std::move(rowAdder), std::move(joinColMap));
+  return monostateGeneratorToResult(
+      requestLaziness, std::move(resultGenerator), std::move(a), std::move(b),
+      std::move(rowAdder),
+      [joinColMap = std::move(joinColMap)](auto& rowAdder) {
+        auto result = std::move(rowAdder->resultTable());
+        result.setColumnSubset(joinColMap.permutationResult());
+        return result;
+      },
+      ad_utility::noop);
 }
 
 // ______________________________________________________________________________

@@ -11,6 +11,7 @@
 #include "engine/QueryExecutionTree.h"
 #include "util/HashMap.h"
 #include "util/HashSet.h"
+#include "util/TypeTraits.h"
 
 class Join : public Operation {
  private:
@@ -94,10 +95,18 @@ class Join : public Operation {
   void join(const IdTable& a, ColumnIndex jc1, const IdTable& b,
             ColumnIndex jc2, IdTable* result) const;
 
+  // Allows the parameters to be null, which causes them to be ignored.
+  static LocalVocab mergeVocabsIfNecessary(
+      const std::shared_ptr<const Result>& result1,
+      const std::shared_ptr<const Result>& result2);
+
+  template <typename T>
   ProtoResult monostateGeneratorToResult(
       bool requestedLaziness, cppcoro::generator<std::monostate> generator,
       std::shared_ptr<const Result> a, std::shared_ptr<const Result> b,
-      auto rowAdder, auto joinColMap) const;
+      T rowAdder,
+      ad_utility::InvocableWithExactReturnType<IdTable, T&> auto extractTable,
+      std::invocable auto postAction) const;
 
   static bool couldContainUndef(const auto& blocks, const auto& tree,
                                 ColumnIndex joinColumn);
