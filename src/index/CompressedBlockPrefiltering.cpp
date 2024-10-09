@@ -187,22 +187,10 @@ std::vector<BlockMetadata> RelationalExpression<Comparison>::evaluateImpl(
         getIdFromColumnIndex(block.firstTriple_, evaluationColumn);
     const auto secondId =
         getIdFromColumnIndex(block.lastTriple_, evaluationColumn);
-    const auto firstIdDatatype = firstId.getDatatype();
-    const auto secondIdDatatype = secondId.getDatatype();
-    const auto referenceIdDatatype = referenceId_.getDatatype();
     valueIdsInput.push_back(firstId);
     valueIdsInput.push_back(secondId);
 
-    if ((firstIdDatatype != secondIdDatatype) &&
-        // The block is only potentially relevant if at least one of the
-        // respective bounding Ids is of similar (comparable) type to
-        // refernceId_. However, this requires that the comparable datatypes
-        // are grouped/stand next to each other given the ValueId ordering
-        // on datatype (most relevant) bits.
-        (valueIdComparators::detail::areTypesCompatible(referenceIdDatatype,
-                                                        firstIdDatatype) ||
-         valueIdComparators::detail::areTypesCompatible(referenceIdDatatype,
-                                                        secondIdDatatype))) {
+    if ((firstId.getDatatype() != secondId.getDatatype())) {
       mixedDatatypeBlocks.push_back(block);
     }
   }

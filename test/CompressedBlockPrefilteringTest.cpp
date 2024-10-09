@@ -304,24 +304,28 @@ TEST(RelationalExpression, testLessThanExpressions) {
   testExpression(
       2, DoubleId(-4.121), blocks.blocks,
       {blocks.b5, blocks.b7, blocks.b11, blocks.b12, blocks.b13, blocks.b14});
-  testExpression(2, VocabId(0), blocks.blocks, {blocks.b14});
-  testExpression(2, VocabId(12), blocks.blocks, {blocks.b14, blocks.b15});
-  testExpression(2, VocabId(14), blocks.blocks, {blocks.b14, blocks.b15});
+  testExpression(2, VocabId(0), blocks.blocks, {blocks.b7, blocks.b14});
+  testExpression(2, VocabId(12), blocks.blocks,
+                 {blocks.b7, blocks.b14, blocks.b15});
+  testExpression(2, VocabId(14), blocks.blocks,
+                 {blocks.b7, blocks.b14, blocks.b15});
   testExpression(2, VocabId(16), blocks.blocks,
-                 {blocks.b14, blocks.b15, blocks.b16, blocks.b17});
+                 {blocks.b7, blocks.b14, blocks.b15, blocks.b16, blocks.b17});
   // test blocks.otherBlocks
-  testExpression(2, blocks.undef, blocks.otherBlocks, {});
+  testExpression(2, blocks.undef, blocks.otherBlocks,
+                 {blocks.bd2, blocks.bd5, blocks.bd7});
   testExpression(2, blocks.falseId, blocks.otherBlocks,
-                 {blocks.bd2, blocks.bd5});
+                 {blocks.bd2, blocks.bd5, blocks.bd7});
   testExpression(2, blocks.trueId, blocks.otherBlocks,
-                 {blocks.bd2, blocks.bd3, blocks.bd5});
+                 {blocks.bd2, blocks.bd3, blocks.bd5, blocks.bd7});
   testExpression(2, blocks.referenceDate1, blocks.otherBlocks,
-                 {blocks.bd5, blocks.bd7});
+                 {blocks.bd2, blocks.bd5, blocks.bd7});
   testExpression(2, blocks.referenceDateEqual, blocks.otherBlocks,
-                 {blocks.bd5, blocks.bd7});
+                 {blocks.bd2, blocks.bd5, blocks.bd7});
   testExpression(2, blocks.referenceDate2, blocks.otherBlocks,
-                 {blocks.bd5, blocks.bd6, blocks.bd7});
-  testExpression(2, BlankNodeId(11), blocks.otherBlocks, {blocks.bd7});
+                 {blocks.bd2, blocks.bd5, blocks.bd6, blocks.bd7});
+  testExpression(2, BlankNodeId(11), blocks.otherBlocks,
+                 {blocks.bd2, blocks.bd5, blocks.bd7});
 }
 
 //______________________________________________________________________________
@@ -353,19 +357,22 @@ TEST(RelationalExpression, testLessEqualExpressions) {
   testExpression(2, DoubleId(-11.99999999999999), blocks.blocks,
                  {blocks.b7, blocks.b13, blocks.b14});
   testExpression(2, DoubleId(-14.03), blocks.blocks, {blocks.b7, blocks.b14});
-  testExpression(2, VocabId(0), blocks.blocks, {blocks.b14});
-  testExpression(2, VocabId(11), blocks.blocks, {blocks.b14, blocks.b15});
+  testExpression(2, VocabId(0), blocks.blocks, {blocks.b7, blocks.b14});
+  testExpression(2, VocabId(11), blocks.blocks,
+                 {blocks.b7, blocks.b14, blocks.b15});
   testExpression(2, VocabId(14), blocks.blocks,
-                 {blocks.b14, blocks.b15, blocks.b16, blocks.b17});
+                 {blocks.b7, blocks.b14, blocks.b15, blocks.b16, blocks.b17});
   // test block.otherBlocks
-  testExpression(2, blocks.undef, blocks.otherBlocks, {});
+  testExpression(2, blocks.undef, blocks.otherBlocks,
+                 {blocks.bd2, blocks.bd5, blocks.bd7});
   testExpression(2, blocks.falseId, blocks.otherBlocks,
-                 {blocks.bd2, blocks.bd3, blocks.bd5});
+                 {blocks.bd2, blocks.bd3, blocks.bd5, blocks.bd7});
   testExpression(2, blocks.trueId, blocks.otherBlocks,
-                 {blocks.bd2, blocks.bd3, blocks.bd4, blocks.bd5});
+                 {blocks.bd2, blocks.bd3, blocks.bd4, blocks.bd5, blocks.bd7});
   testExpression(2, blocks.referenceDateEqual, blocks.otherBlocks,
-                 {blocks.bd5, blocks.bd6, blocks.bd7});
-  testExpression(2, BlankNodeId(11), blocks.otherBlocks, {blocks.bd7});
+                 {blocks.bd2, blocks.bd5, blocks.bd6, blocks.bd7});
+  testExpression(2, BlankNodeId(11), blocks.otherBlocks,
+                 {blocks.bd2, blocks.bd5, blocks.bd7});
 }
 
 //______________________________________________________________________________
@@ -403,21 +410,24 @@ TEST(RelationalExpression, testGreaterThanExpression) {
                  {blocks.b1, blocks.b2, blocks.b3, blocks.b4, blocks.b7,
                   blocks.b8, blocks.b9, blocks.b10, blocks.b11, blocks.b14});
   testExpression(2, IntId(33), blocks.blocks, {blocks.b7, blocks.b14});
-  testExpression(2, VocabId(22), blocks.blocks, {blocks.b14});
-  testExpression(2, VocabId(14), blocks.blocks, {blocks.b14, blocks.b17});
+  testExpression(2, VocabId(22), blocks.blocks, {blocks.b7, blocks.b14});
+  testExpression(2, VocabId(14), blocks.blocks,
+                 {blocks.b7, blocks.b14, blocks.b17});
   testExpression(2, VocabId(12), blocks.blocks,
-                 {blocks.b14, blocks.b15, blocks.b16, blocks.b17});
+                 {blocks.b7, blocks.b14, blocks.b15, blocks.b16, blocks.b17});
   // test blocks.otherBlocks
-  testExpression(2, blocks.undef, blocks.otherBlocks, {});
+  testExpression(2, blocks.undef, blocks.otherBlocks,
+                 {blocks.bd2, blocks.bd5, blocks.bd7});
   testExpression(2, blocks.falseId, blocks.otherBlocks,
-                 {blocks.bd2, blocks.bd4, blocks.bd5});
+                 {blocks.bd2, blocks.bd4, blocks.bd5, blocks.bd7});
   testExpression(2, blocks.trueId, blocks.otherBlocks,
-                 {blocks.bd2, blocks.bd5});
+                 {blocks.bd2, blocks.bd5, blocks.bd7});
   testExpression(2, blocks.referenceDateEqual, blocks.otherBlocks,
-                 {blocks.bd5, blocks.bd7});
+                 {blocks.bd2, blocks.bd5, blocks.bd7});
   testExpression(2, blocks.referenceDate1, blocks.otherBlocks,
-                 {blocks.bd5, blocks.bd6, blocks.bd7});
-  testExpression(2, IntId(5), blocks.otherBlocks, {});
+                 {blocks.bd2, blocks.bd5, blocks.bd6, blocks.bd7});
+  testExpression(2, IntId(5), blocks.otherBlocks,
+                 {blocks.bd2, blocks.bd5, blocks.bd7});
 }
 
 //______________________________________________________________________________
@@ -457,19 +467,22 @@ TEST(RelationalExpression, testGreaterEqualExpression) {
                  {blocks.b4, blocks.b7, blocks.b10, blocks.b14});
   testExpression(2, DoubleId(10.0001), blocks.blocks, {blocks.b7, blocks.b14});
   testExpression(2, VocabId(14), blocks.blocks,
-                 {blocks.b14, blocks.b15, blocks.b16, blocks.b17});
+                 {blocks.b7, blocks.b14, blocks.b15, blocks.b16, blocks.b17});
   testExpression(2, VocabId(10), blocks.blocks,
-                 {blocks.b14, blocks.b15, blocks.b16, blocks.b17});
-  testExpression(2, VocabId(17), blocks.blocks, {blocks.b14, blocks.b17});
+                 {blocks.b7, blocks.b14, blocks.b15, blocks.b16, blocks.b17});
+  testExpression(2, VocabId(17), blocks.blocks,
+                 {blocks.b7, blocks.b14, blocks.b17});
   // test blocks.otherBlocks
-  testExpression(2, blocks.undef, blocks.otherBlocks, {});
+  testExpression(2, blocks.undef, blocks.otherBlocks,
+                 {blocks.bd2, blocks.bd5, blocks.bd7});
   testExpression(2, blocks.falseId, blocks.otherBlocks,
-                 {blocks.bd2, blocks.bd3, blocks.bd4, blocks.bd5});
+                 {blocks.bd2, blocks.bd3, blocks.bd4, blocks.bd5, blocks.bd7});
   testExpression(2, blocks.trueId, blocks.otherBlocks,
-                 {blocks.bd2, blocks.bd4, blocks.bd5});
+                 {blocks.bd2, blocks.bd4, blocks.bd5, blocks.bd7});
   testExpression(2, blocks.referenceDateEqual, blocks.otherBlocks,
-                 {blocks.bd5, blocks.bd6, blocks.bd7});
-  testExpression(2, VocabId(0), blocks.otherBlocks, {});
+                 {blocks.bd2, blocks.bd5, blocks.bd6, blocks.bd7});
+  testExpression(2, VocabId(0), blocks.otherBlocks,
+                 {blocks.bd2, blocks.bd5, blocks.bd7});
 }
 
 //______________________________________________________________________________
@@ -499,22 +512,24 @@ TEST(RelationalExpression, testEqualExpression) {
                  {blocks.b3, blocks.b7, blocks.b10, blocks.b14});
   testExpression(2, DoubleId(1.5), blocks.blocks,
                  {blocks.b2, blocks.b7, blocks.b14});
-  testExpression(2, VocabId(1), blocks.blocks, {blocks.b14});
+  testExpression(2, VocabId(1), blocks.blocks, {blocks.b7, blocks.b14});
   testExpression(2, VocabId(14), blocks.blocks,
-                 {blocks.b14, blocks.b15, blocks.b16, blocks.b17});
-  testExpression(2, VocabId(11), blocks.blocks, {blocks.b14, blocks.b15});
-  testExpression(2, VocabId(17), blocks.blocks, {blocks.b14, blocks.b17});
+                 {blocks.b7, blocks.b14, blocks.b15, blocks.b16, blocks.b17});
+  testExpression(2, VocabId(11), blocks.blocks,
+                 {blocks.b7, blocks.b14, blocks.b15});
+  testExpression(2, VocabId(17), blocks.blocks,
+                 {blocks.b7, blocks.b14, blocks.b17});
   testExpression(2, IntId(-4), blocks.blocks,
                  {blocks.b6, blocks.b7, blocks.b11, blocks.b14});
   // test blocks.otherBlocks
   testExpression(2, blocks.trueId, blocks.otherBlocks,
-                 {blocks.bd2, blocks.bd4, blocks.bd5});
+                 {blocks.bd2, blocks.bd4, blocks.bd5, blocks.bd7});
   testExpression(2, blocks.referenceDate1, blocks.otherBlocks,
-                 {blocks.bd5, blocks.bd7});
+                 {blocks.bd2, blocks.bd5, blocks.bd7});
   testExpression(2, blocks.referenceDateEqual, blocks.otherBlocks,
-                 {blocks.bd5, blocks.bd6, blocks.bd7});
+                 {blocks.bd2, blocks.bd5, blocks.bd6, blocks.bd7});
   testExpression(2, blocks.referenceDate2, blocks.otherBlocks,
-                 {blocks.bd5, blocks.bd7});
+                 {blocks.bd2, blocks.bd5, blocks.bd7});
 }
 
 //______________________________________________________________________________
@@ -552,21 +567,22 @@ TEST(RelationalExpression, testNotEqualExpression) {
                   blocks.b6, blocks.b7, blocks.b8, blocks.b9, blocks.b10,
                   blocks.b11, blocks.b12, blocks.b13, blocks.b14});
   testExpression(2, VocabId(0), blocks.blocks,
-                 {blocks.b14, blocks.b15, blocks.b16, blocks.b17});
+                 {blocks.b7, blocks.b14, blocks.b15, blocks.b16, blocks.b17});
   testExpression(2, VocabId(7), blocks.blocks,
-                 {blocks.b14, blocks.b15, blocks.b16, blocks.b17});
+                 {blocks.b7, blocks.b14, blocks.b15, blocks.b16, blocks.b17});
   testExpression(2, VocabId(14), blocks.blocks,
-                 {blocks.b14, blocks.b15, blocks.b17});
+                 {blocks.b7, blocks.b14, blocks.b15, blocks.b17});
   testExpression(2, VocabId(17), blocks.blocks,
-                 {blocks.b14, blocks.b15, blocks.b16, blocks.b17});
+                 {blocks.b7, blocks.b14, blocks.b15, blocks.b16, blocks.b17});
   // test blocks.otherBlocks
-  testExpression(2, blocks.undef, blocks.otherBlocks, {});
+  testExpression(2, blocks.undef, blocks.otherBlocks,
+                 {blocks.bd2, blocks.bd5, blocks.bd7});
   testExpression(2, blocks.falseId, blocks.otherBlocks,
-                 {blocks.bd2, blocks.bd4, blocks.bd5});
+                 {blocks.bd2, blocks.bd4, blocks.bd5, blocks.bd7});
   testExpression(2, blocks.referenceDateEqual, blocks.otherBlocks,
-                 {blocks.bd5, blocks.bd7});
+                 {blocks.bd2, blocks.bd5, blocks.bd7});
   testExpression(2, blocks.referenceDate1, blocks.otherBlocks,
-                 {blocks.bd5, blocks.bd6, blocks.bd7});
+                 {blocks.bd2, blocks.bd5, blocks.bd6, blocks.bd7});
 }
 
 //______________________________________________________________________________
@@ -580,27 +596,25 @@ TEST(LogicalExpression, testAndExpression) {
       testExpression;
   testExpression.test<GreaterEqualExpression, GreaterThanExpression>(
       2, VocabId(10), VocabId(10), blocks.blocks,
-      {blocks.b14, blocks.b15, blocks.b16, blocks.b17});
+      {blocks.b7, blocks.b14, blocks.b15, blocks.b16, blocks.b17});
   testExpression.test<GreaterEqualExpression, GreaterEqualExpression>(
-      2, VocabId(0), VocabId(17), blocks.blocks, {blocks.b14, blocks.b17});
+      2, VocabId(0), VocabId(17), blocks.blocks,
+      {blocks.b7, blocks.b14, blocks.b17});
   testExpression.test<GreaterEqualExpression, GreaterThanExpression>(
-      2, VocabId(12), VocabId(17), blocks.blocks, {blocks.b14});
+      2, VocabId(12), VocabId(17), blocks.blocks, {blocks.b7, blocks.b14});
   testExpression.test<GreaterEqualExpression, LessThanExpression>(
-      2, VocabId(10), VocabId(14), blocks.blocks, {blocks.b14, blocks.b15});
+      2, VocabId(10), VocabId(14), blocks.blocks,
+      {blocks.b7, blocks.b14, blocks.b15});
   testExpression.test<LessEqualExpression, LessThanExpression>(
-      2, VocabId(0), VocabId(10), blocks.blocks, {blocks.b14});
+      2, VocabId(0), VocabId(10), blocks.blocks, {blocks.b7, blocks.b14});
   testExpression.test<LessEqualExpression, LessThanExpression>(
       2, VocabId(17), VocabId(17), blocks.blocks,
-      {blocks.b14, blocks.b15, blocks.b16, blocks.b17});
+      {blocks.b7, blocks.b14, blocks.b15, blocks.b16, blocks.b17});
   testExpression.test<GreaterEqualExpression, LessThanExpression>(
       2, DoubleId(-6.25), IntId(-7), blocks.blocks, {blocks.b7, blocks.b14});
   testExpression.test<GreaterThanExpression, LessThanExpression>(
       2, DoubleId(-6.25), DoubleId(-6.25), blocks.blocks,
       {blocks.b7, blocks.b14});
-  // Corner case: Logically it is impossible to satisfy (x > 0) and (x < 0) at
-  // the same time. But given that we evaluate on block boundaries and their
-  // possible values (Ids) in between, block b7 satisfies both conditions over
-  // its range [IntId(-4)... DoubleId(2)] for column 2.
   testExpression.test<GreaterThanExpression, LessThanExpression>(
       2, IntId(0), IntId(0), blocks.blocks, {blocks.b7, blocks.b14});
   testExpression.test<GreaterEqualExpression, LessThanExpression>(
@@ -645,11 +659,12 @@ TEST(LogicalExpression, testOrExpression) {
       testExpression;
   testExpression.test<LessThanExpression, LessEqualExpression>(
       2, VocabId(22), VocabId(0), blocks.blocks,
-      {blocks.b14, blocks.b15, blocks.b16, blocks.b17});
+      {blocks.b7, blocks.b14, blocks.b15, blocks.b16, blocks.b17});
   testExpression.test<LessEqualExpression, GreaterEqualExpression>(
-      2, VocabId(0), VocabId(16), blocks.blocks, {blocks.b14, blocks.b17});
+      2, VocabId(0), VocabId(16), blocks.blocks,
+      {blocks.b7, blocks.b14, blocks.b17});
   testExpression.test<GreaterThanExpression, GreaterEqualExpression>(
-      2, VocabId(17), VocabId(242), blocks.blocks, {blocks.b14});
+      2, VocabId(17), VocabId(242), blocks.blocks, {blocks.b7, blocks.b14});
   testExpression.test<LessThanExpression, EqualExpression>(
       2, DoubleId(-5.95), VocabId(14), blocks.blocks,
       {blocks.b5, blocks.b7, blocks.b11, blocks.b12, blocks.b13, blocks.b14,
@@ -694,16 +709,17 @@ TEST(LogicalExpression, testNotExpression) {
   MetadataBlocks blocks{};
   TestNotExpression<std::vector<BlockMetadata>> testExpression{};
   testExpression.test<EqualExpression>(
-      2, blocks.blocks, {blocks.b14, blocks.b15, blocks.b16, blocks.b17},
-      VocabId(2));
+      2, blocks.blocks,
+      {blocks.b7, blocks.b14, blocks.b15, blocks.b16, blocks.b17}, VocabId(2));
   testExpression.test<EqualExpression>(
-      2, blocks.blocks, {blocks.b14, blocks.b15, blocks.b17}, VocabId(14));
-  testExpression.test<NotEqualExpression>(
-      2, blocks.blocks, {blocks.b14, blocks.b15, blocks.b16, blocks.b17},
+      2, blocks.blocks, {blocks.b7, blocks.b14, blocks.b15, blocks.b17},
       VocabId(14));
+  testExpression.test<NotEqualExpression>(
+      2, blocks.blocks,
+      {blocks.b7, blocks.b14, blocks.b15, blocks.b16, blocks.b17}, VocabId(14));
   testExpression.test<EqualExpression>(
-      2, blocks.blocks, {blocks.b14, blocks.b15, blocks.b16, blocks.b17},
-      VocabId(0));
+      2, blocks.blocks,
+      {blocks.b7, blocks.b14, blocks.b15, blocks.b16, blocks.b17}, VocabId(0));
   testExpression.test<LessThanExpression>(
       2, blocks.blocks,
       {blocks.b1, blocks.b2, blocks.b3, blocks.b4, blocks.b5, blocks.b6,
@@ -754,7 +770,7 @@ TEST(LogicalExpression, testNotExpression) {
        blocks.b14},
       DoubleId(-6.25));
   testExpression.test<LessThanExpression, NotExpression>(
-      2, blocks.blocks, {blocks.b14}, VocabId(10));
+      2, blocks.blocks, {blocks.b7, blocks.b14}, VocabId(10));
   testExpression.test<GreaterEqualExpression, NotExpression>(
       2, blocks.blocks,
       {blocks.b2, blocks.b3, blocks.b4, blocks.b7, blocks.b9, blocks.b10,
@@ -801,16 +817,18 @@ TEST(LogicalExpression, testNotExpression) {
           2, blocks.blocks, {blocks.b5, blocks.b7, blocks.b13, blocks.b14},
           DoubleId(0), IntId(-10));
   testExpression.test<LessThanExpression, OrExpression, GreaterThanExpression>(
-      2, blocks.blocks, {blocks.b14, blocks.b15}, VocabId(10), VocabId(10));
+      2, blocks.blocks, {blocks.b7, blocks.b14, blocks.b15}, VocabId(10),
+      VocabId(10));
   testExpression.test<LessThanExpression, OrExpression, GreaterThanExpression>(
       2, blocks.blocks, {blocks.b6, blocks.b7, blocks.b11, blocks.b14},
       DoubleId(-4), IntId(-4));
   testExpression
       .test<GreaterThanExpression, OrExpression, GreaterEqualExpression>(
-          2, blocks.blocks, {blocks.b14}, IntId(-42), VocabId(0));
+          2, blocks.blocks, {blocks.b7, blocks.b14}, IntId(-42), VocabId(0));
   testExpression
       .test<GreaterEqualExpression, OrExpression, GreaterThanExpression>(
-          2, blocks.blocks, {blocks.b14, blocks.b15}, VocabId(14), VocabId(15));
+          2, blocks.blocks, {blocks.b7, blocks.b14, blocks.b15}, VocabId(14),
+          VocabId(15));
   testExpression.test<LessThanExpression, OrExpression, NotEqualExpression>(
       2, blocks.blocks, {blocks.b7, blocks.b11, blocks.b12, blocks.b14},
       DoubleId(-7.25), DoubleId(-6.25));
