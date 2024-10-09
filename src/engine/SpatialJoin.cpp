@@ -411,7 +411,7 @@ Result SpatialJoin::baselineAlgorithm() {
     // it is not a memory concern.
     auto compare = [](std::pair<size_t, int64_t> a,
                       std::pair<size_t, int64_t> b) {
-      return a.second > b.second;
+      return a.second < b.second;
     };
     std::priority_queue<std::pair<size_t, int64_t>,
                         std::vector<std::pair<size_t, int64_t>>,
