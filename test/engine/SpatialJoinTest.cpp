@@ -208,7 +208,6 @@ class SpatialJoinParamTest : public ::testing::TestWithParam<bool> {
     // add first child
     std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
     SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
-    spatialJoin->selectAlgorithm(useBaselineAlgorithm_);
     auto firstChild = addLeftChildFirst ? leftChild : rightChild;
     auto secondChild = addLeftChildFirst ? rightChild : leftChild;
     Variable firstVariable = addLeftChildFirst
@@ -233,6 +232,9 @@ class SpatialJoinParamTest : public ::testing::TestWithParam<bool> {
         columnNames);
     auto expectedOutput = localTestHelpers::createRowVectorFromColumnVector(
         expectedOutputOrdered);
+
+    // Select algorithm
+    spatialJoin->selectAlgorithm(GetParam());
 
     auto res = spatialJoin->computeResult(false);
     auto vec = localTestHelpers::printTable(qec, &res);
