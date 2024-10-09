@@ -233,9 +233,6 @@ class QueryPlanner {
   using Graph = std::vector<Vertex>;
 
   static size_t countSubgraphs(Graph graph, size_t budget);
-  static size_t countSubgraphsRecursively(const Graph& graph,
-                                          Vertices& subgraph, Vertices& ignored,
-                                          size_t c, size_t budget);
 
  private:
   QueryExecutionContext* _qec;

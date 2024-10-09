@@ -289,11 +289,6 @@ inline auto TransitivePath =
                             TransitivePathSideMatcher(right))));
     };
 
-static constexpr auto children(
-    const std::same_as<QetMatcher> auto&... childMatchers) {
-  return Property("getChildren", &Operation::getChildren,
-                  ElementsAre(Pointee(childMatchers)...));
-}
 // Match a SpatialJoin operation
 inline auto SpatialJoin =
     [](long long maxDist,
