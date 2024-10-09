@@ -1204,6 +1204,7 @@ TEST(QueryPlanner, SubtreeWithService) {
       h::Minus(sibling, h::Sort(h::Service(sibling, "{ ?x <is-a> ?z . }"))));
 }
 
+// ________________________________________
 TEST(QueryPlanner, DatasetClause) {
   auto scan = h::IndexScanFromStrings;
   using Graphs = ad_utility::HashSet<std::string>;

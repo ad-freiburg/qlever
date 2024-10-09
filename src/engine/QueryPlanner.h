@@ -218,22 +218,6 @@ class QueryPlanner {
   [[nodiscard]] std::vector<SubtreePlan> createExecutionTrees(
       ParsedQuery& pq, bool isSubquery = false);
 
-  using Vertex = const SubtreePlan*;
-  struct VertexEq {
-    bool operator()(Vertex a, Vertex b) const {
-      return a->_idsOfIncludedNodes == b->_idsOfIncludedNodes;
-    }
-  };
-  struct VertexHash {
-    size_t operator()(Vertex a) const {
-      return std::hash<size_t>{}(a->_idsOfIncludedNodes);
-    }
-  };
-  using Vertices = ad_utility::HashSet<Vertex, VertexHash, VertexEq>;
-  using Graph = std::vector<Vertex>;
-
-  static size_t countSubgraphs(Graph graph, size_t budget);
-
  private:
   QueryExecutionContext* _qec;
 
@@ -479,10 +463,20 @@ class QueryPlanner {
       const vector<SparqlFilter>& filters, const TextLimitMap& textLimits,
       const TripleGraph& tg) const;
 
+  // Same as `runDynamicProgrammingOnConnectedComponent`, but uses a greedy
+  // algorithm that always greedily chooses the smallest result of the possible
+  // join operations using the "Greedy Operatior Ordering (GOO)" algorithm.
   std::vector<QueryPlanner::SubtreePlan> runGreedyPlanningOnConnectedComponent(
       std::vector<SubtreePlan> connectedComponent,
       const vector<SparqlFilter>& filters, const TextLimitMap& textLimits,
       const TripleGraph& tg) const;
+
+  // Return the number of connected subgraphs is the `graph`, or `budget + 1`,
+  // if the number of subgraphs is `> budget`. This is used to analyze the
+  // complexity of the query graph and to choose between the DP and the greedy
+  // query planner see above.
+  static size_t countSubgraphs(std::vector<const SubtreePlan*> graph, size_t budget);
+
 
   // Creates a SubtreePlan for the given text leaf node in the triple graph.
   // While doing this the TextLimitMetaObjects are created and updated according

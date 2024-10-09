@@ -1096,7 +1096,7 @@ bool QueryPlanner::connected(const QueryPlanner::SubtreePlan& a,
 
 // _____________________________________________________________________________
 std::vector<std::array<ColumnIndex, 2>> QueryPlanner::getJoinColumns(
-    const QueryPlanner::SubtreePlan& a, const QueryPlanner::SubtreePlan& b) {
+    const SubtreePlan& a, const SubtreePlan& b) {
   AD_CORRECTNESS_CHECK(a._qet && b._qet);
   return QueryExecutionTree::getJoinColumns(*a._qet, *b._qet);
 }
@@ -1291,19 +1291,13 @@ QueryPlanner::runDynamicProgrammingOnConnectedComponent(
     // be nonempty.
     AD_CORRECTNESS_CHECK(!dpTab[k - 1].empty());
   }
-  /*
-  size_t numEntries = 0;
-  for (const auto& row : dpTab) {
-    numEntries += row.size();
-  }
-  LOG(INFO) << " num entries in DP table: " << numEntries << std::endl;
-   */
   return std::move(dpTab.back());
 }
 
+// _____________________________________________________________________________
 size_t QueryPlanner::countSubgraphs(
     std::vector<const QueryPlanner::SubtreePlan*> graph, size_t budget) {
-  auto getId = [](const Vertex& v) { return v->_idsOfIncludedNodes; };
+  auto getId = [](const SubtreePlan* v) { return v->_idsOfIncludedNodes; };
   std::ranges::sort(graph, std::ranges::less{}, getId);
   graph.erase(
       std::ranges::unique(graph, std::ranges::equal_to{}, getId).begin(),
