@@ -61,10 +61,6 @@ struct TestContext {
   // vocab.
   Id notInVocabA, notInVocabB, notInVocabC, notInVocabD, notInVocabAelpha,
       notInVocabIri, notInVocabIriLit;
-  // LocalVocab IDs used for testing the block pre-filtering procedure in
-  // CompressedBlockPrefilteringTest
-  Id berlin, bonn, cologne, dortmund, düsseldorf, essen, frankfurt,
-      frankfurt_oder, hamburg, hannover, ingolstadt, karlsruhe, munich;
   TestContext() {
     // First get some IDs for strings from the vocabulary to later reuse them.
     // Note the `u_` inserted for the blank node (see 'BlankNode.cpp').
@@ -99,19 +95,6 @@ struct TestContext {
         addLocalIri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>");
     notInVocabIriLit = addLocalLiteral(
         "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString");
-    berlin = addLocalLiteral("berlin");
-    bonn = addLocalLiteral("bonn");
-    cologne = addLocalLiteral("cologne");
-    düsseldorf = addLocalLiteral("düsseldorf");
-    dortmund = addLocalLiteral("dortmund");
-    essen = addLocalLiteral("essen");
-    frankfurt = addLocalLiteral("frankfurt");
-    frankfurt_oder = addLocalLiteral("frankfurt (FFO)");
-    hamburg = addLocalLiteral("hamburg");
-    hannover = addLocalLiteral("hannover");
-    ingolstadt = addLocalLiteral("ingolstadt");
-    karlsruhe = addLocalLiteral("karlsruhe");
-    munich = addLocalLiteral("munich");
 
     // Set up the `table` that represents the previous partial query results. It
     // has five columns/variables: ?ints (only integers), ?doubles (only
