@@ -682,9 +682,11 @@ auto QueryPlanner::seedWithScansAndText(
   // add all child plans as seeds
   uint64_t idShift = tg._nodeMap.size();
   for (const auto& vec : children) {
-    AD_CONTRACT_CHECK(idShift < 64,
-                      "QLever currently supports at most 64 elements (etc. "
-                      "triples) per group.");
+    AD_CONTRACT_CHECK(
+        idShift < 64,
+        absl::StrCat("Group graph pattern too large: QLever currently supports "
+                     "at most 64 elements (like triples), but found ",
+                     idShift));
     for (const SubtreePlan& plan : vec) {
       SubtreePlan newIdPlan = plan;
       // give the plan a unique id bit
@@ -1297,15 +1299,23 @@ QueryPlanner::runDynamicProgrammingOnConnectedComponent(
 // _____________________________________________________________________________
 size_t QueryPlanner::countSubgraphs(
     std::vector<const QueryPlanner::SubtreePlan*> graph, size_t budget) {
-  auto getId = [](const SubtreePlan* v) { return v->_idsOfIncludedNodes; };
+  // Remove duplicate plans from `graph`.
+  auto getId = [](const SubtreePlan* v) -> uint64_t {
+    return v->_idsOfIncludedNodes;
+  };
   std::ranges::sort(graph, std::ranges::less{}, getId);
   graph.erase(
       std::ranges::unique(graph, std::ranges::equal_to{}, getId).begin(),
       graph.end());
 
+  // NOTE: Not sure if we can have this many plans here, but if we can, assume
+  // that we have more subgraphs than `budget` allows.
   if (graph.size() > 64) {
     return budget + 1;
   }
+
+  // Compute the bit representation needed for the call to
+  // `countConnectedSubgraphs::countSubgraphs` below.
   countConnectedSubgraphs::Graph g;
   for (size_t i = 0; i < graph.size(); ++i) {
     countConnectedSubgraphs::Node v{0};
@@ -1317,6 +1327,7 @@ size_t QueryPlanner::countSubgraphs(
     }
     g.push_back(v);
   }
+
   return countConnectedSubgraphs::countSubgraphs(g, budget);
 }
 
@@ -1377,14 +1388,12 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
     ad_utility::Timer timer{ad_utility::Timer::Started};
     bool alwaysGreedy = RuntimeParameters().get<"use-greedy-planning">();
     const size_t budget = RuntimeParameters().get<"greedy-planning-budget">();
-    bool useGreedyPlanning =
-        alwaysGreedy || countSubgraphs(g, budget) >= budget;
+    bool useGreedyPlanning = alwaysGreedy || countSubgraphs(g, budget) > budget;
     if (!alwaysGreedy && useGreedyPlanning) {
-      LOG(INFO) << "Using the greedy query planner for a large component"
-                << std::endl;
+      LOG(INFO)
+          << "Using the greedy query planner for a large connected component"
+          << std::endl;
     }
-    // LOG(INFO) << "time for deciding which planner to use" <<
-    // timer.msecs().count() << "ms" << std::endl;
     timer.start();
     auto impl = useGreedyPlanning
                     ? &QueryPlanner::runGreedyPlanningOnConnectedComponent
@@ -1732,8 +1741,7 @@ size_t QueryPlanner::findCheapestExecutionTree(
       return aCost < bCost;
     }
   };
-  return std::ranges::min_element(lastRow, compare) -
-         lastRow.begin();
+  return std::ranges::min_element(lastRow, compare) - lastRow.begin();
 };
 
 // _________________________________________________________________________________
@@ -1746,8 +1754,7 @@ size_t QueryPlanner::findSmallestExecutionTree(
     };
     return tie(a) < tie(b);
   };
-  return std::ranges::min_element(lastRow, compare) -
-         lastRow.begin();
+  return std::ranges::min_element(lastRow, compare) - lastRow.begin();
 };
 
 // _____________________________________________________________________________

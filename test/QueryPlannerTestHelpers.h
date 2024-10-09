@@ -401,7 +401,7 @@ void expectGreedy(std::string query, auto matcher,
 }
 
 // Same as `expect` above, but run the test for different query planning
-// budgets. This is guaranteed to run with both, the greedy and the
+// budgets. This is guaranteed to run with both the greedy query planner and the
 // dynamic-programming based query planner.
 void expectDifferentPlanners(
     std::string query, auto matcher,
