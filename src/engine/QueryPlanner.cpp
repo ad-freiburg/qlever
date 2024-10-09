@@ -1306,9 +1306,9 @@ size_t QueryPlanner::countSubgraphs(
   if (graph.size() > 64) {
     return budget + 1;
   }
-  countConnectedSubgraphs::PlainGraph g;
+  countConnectedSubgraphs::Graph g;
   for (size_t i = 0; i < graph.size(); ++i) {
-    countConnectedSubgraphs::PlainVertex v{0};
+    countConnectedSubgraphs::Node v{0};
     for (size_t k = 0; k < graph.size(); ++k) {
       if ((k != i) &&
           !QueryPlanner::getJoinColumns(*graph.at(k), *graph.at(i)).empty()) {

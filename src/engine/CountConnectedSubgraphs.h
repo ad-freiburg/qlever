@@ -18,21 +18,22 @@ namespace countConnectedSubgraphs {
 // Each vertex consists of a unique ID (`0 <= ID < 64`) and the set of its
 // neighbors, which is stored in a single 64-bit number, where the i-th bit is 1
 // iff the node with ID `i` is a neighbor.
-struct PlainVertex {
+struct Node {
   uint64_t neighbors_{};
 };
-using PlainGraph = std::vector<PlainVertex>;
+using Graph = std::vector<Node>;
+
 
 // Compute the number of connected subgraphs in the `graph`. If the number of
 // such subraphs is `> budget` return `budget + 1`.
-size_t countSubgraphs(PlainGraph graph, size_t budget);
+size_t countSubgraphs(const Graph& graph, size_t budget);
 
 // Recursive implementation of `countSubgraphs`. Compute the number of connected
 // subgraphs in the `graph` that contain all the nodes in the `subgraph` but
 // none of the nodes in `ignored`. Assume that `c` subgraphs have been
-// previously found and therefore count towards the `budget`. The `subgraph` and
+// previously found and therefore count towards the `budget`. The `nodes` and
 // `ignored` are 1-hot encoded bitsets (see above).
-size_t countSubgraphsRecursively(const PlainGraph& graph, uint64_t subgraph,
+size_t countSubgraphsRecursively(const Graph& graph, uint64_t nodes,
                                  uint64_t ignored, size_t c, size_t budget);
 
 // Convert `x` to a string of bits, with the leading zeros removed, e.g.

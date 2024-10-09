@@ -9,7 +9,7 @@
 namespace countConnectedSubgraphs {
 
 // _____________________________________________________________________________
-size_t countSubgraphs(PlainGraph graph, size_t budget) {
+size_t countSubgraphs(const Graph& graph, size_t budget) {
   size_t c = 0;
   // For each node i, recursively count all subgraphs that contain `i`, but no
   // node `k < i` (because these have already been counted previously, when we
@@ -35,17 +35,17 @@ size_t countSubgraphs(PlainGraph graph, size_t budget) {
 // result. Note that the result may contain nodes from the `subgraph` itself.
 // All inputs and outputs use the same bit encoding like all the other
 // functions.
-static uint64_t computeNeighbors(const PlainGraph& graph, uint64_t subgraph,
+static uint64_t computeNeighbors(const Graph& graph, uint64_t subgraph,
                                  uint64_t ignored) {
-  uint64_t NeighborsOfS{};
+  uint64_t neighbors{};
   for (size_t i = 0; i < 64; ++i) {
     bool set = subgraph & (1ULL << i);
     if (set) {
-      NeighborsOfS |= graph[i].neighbors_;
+      neighbors |= graph[i].neighbors_;
     }
   }
-  NeighborsOfS &= (~ignored);
-  return NeighborsOfS;
+  neighbors &= (~ignored);
+  return neighbors;
 }
 
 // For a number `i` with `0 <= i < 2^neighborVec.size()` return the `i`-th
@@ -53,7 +53,7 @@ static uint64_t computeNeighbors(const PlainGraph& graph, uint64_t subgraph,
 // to be `<64`, so that the final result can be expressed as a bitmap.
 static uint64_t subsetIndexToBitmap(size_t i,
                                     const std::vector<uint8_t>& neighborVec) {
-  // TODO<joka921> This can probably be done more efficiently using bit
+  // Note: This can probably be done more efficiently using bit
   // fiddling, but it is efficient enough for now.
   uint64_t newSubgraph = 0;
   for (size_t k = 0; k < neighborVec.size(); ++k) {
@@ -87,18 +87,18 @@ std::string toBitsetString(uint64_t x) {
 }
 
 // _____________________________________________________________________________
-size_t countSubgraphsRecursively(const PlainGraph& graph, uint64_t subgraph,
+size_t countSubgraphsRecursively(const Graph& graph, uint64_t nodes,
                                  uint64_t ignored, size_t c, size_t budget) {
-  // Compute the set of direct neighbors of the `subgraph` that is not
+  // Compute the set of direct neighbors of the `nodes` that is not
   // ignored
-  uint64_t neighbors = computeNeighbors(graph, subgraph, ignored);
+  uint64_t neighbors = computeNeighbors(graph, nodes, ignored);
 
   std::vector<uint8_t> neighborVec = bitsetToVec(neighbors);
 
   // This is the recursion level which handles all the subsets of the neigrbors,
-  // and the above recursion levels deal with the `subgraph`, so we have to
+  // and the above recursion levels deal with the `nodes`, so we have to
   // exclude them further down.
-  auto newIgnored = ignored | neighbors | subgraph;
+  auto newIgnored = ignored | neighbors | nodes;
 
   //   Iterate over all Subsets of the neighbors
   size_t upperBound = 1ULL << neighborVec.size();
@@ -108,7 +108,7 @@ size_t countSubgraphsRecursively(const PlainGraph& graph, uint64_t subgraph,
       return budget + 1;
     }
     auto subset = subsetIndexToBitmap(i, neighborVec);
-    c = countSubgraphsRecursively(graph, subgraph | subset, newIgnored, c,
+    c = countSubgraphsRecursively(graph, nodes | subset, newIgnored, c,
                                   budget);
   }
   return c;

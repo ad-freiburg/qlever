@@ -13,8 +13,8 @@ using namespace countConnectedSubgraphs;
 
 namespace {
 // Return a clique with `size` elements.
-PlainGraph makeClique(uint64_t size) {
-  PlainGraph clique;
+Graph makeClique(uint64_t size) {
+  Graph clique;
   AD_CORRECTNESS_CHECK(size <= 64);
   uint64_t all = ad_utility::bitMaskForLowerBits(size);
   for (uint64_t i = 0; i < size; ++i) {
@@ -25,9 +25,9 @@ PlainGraph makeClique(uint64_t size) {
 }
 
 // Make `n` unconnected cliques of size `size` each.
-PlainGraph makeUnconnectedCliques(uint64_t size, size_t n) {
+Graph makeUnconnectedCliques(uint64_t size, size_t n) {
   AD_CORRECTNESS_CHECK(64 / n >= size);
-  PlainGraph result;
+  Graph result;
   for (size_t i = 0; i < n; ++i) {
     auto clique = makeClique(size);
     for (auto& v : clique) {
@@ -40,8 +40,8 @@ PlainGraph makeUnconnectedCliques(uint64_t size, size_t n) {
 
 // Make a chain (the n-th element is connected only to the n-1 and n+1-th
 // element with `size` elements.
-PlainGraph makeChain(uint64_t size) {
-  PlainGraph clique;
+Graph makeChain(uint64_t size) {
+  Graph clique;
   AD_CORRECTNESS_CHECK(size <= 64);
   for (uint64_t i = 0; i < size; ++i) {
     uint64_t left = i > 0 ? (1ull << (i - 1)) : 0;
