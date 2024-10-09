@@ -21,6 +21,10 @@ class QueryPlanner {
   using vector = std::vector<T>;
 
   ParsedQuery::DatasetClauses activeDatasetClauses_;
+  // The variable of the innermost `GRAPH ?var` clause that the planner
+  // currently is planning.
+  // Note: The behavior of only taking the innermost graph variable into account
+  // for nested `GRAPH` clauses is compliant with SPARQL 1.1.
   std::optional<Variable> activeGraphVariable_;
 
  public:
