@@ -62,7 +62,7 @@ struct MetadataBlocks {
   const BlockMetadata b4 = makeBlock(IntId(8), IntId(9));
   const BlockMetadata b5 = makeBlock(IntId(-10), IntId(-8));
   const BlockMetadata b6 = makeBlock(IntId(-4), IntId(-4));
-  // b7 contains mixed datatypes in COLUMN 2
+  // b7 contains mixed datatypes (COLUMN 2)
   const BlockMetadata b7 = makeBlock(IntId(-4), DoubleId(2));
   const BlockMetadata b8 = makeBlock(DoubleId(2), DoubleId(2));
   const BlockMetadata b9 = makeBlock(DoubleId(4), DoubleId(4));
@@ -70,7 +70,7 @@ struct MetadataBlocks {
   const BlockMetadata b11 = makeBlock(DoubleId(-1.23), DoubleId(-6.25));
   const BlockMetadata b12 = makeBlock(DoubleId(-6.25), DoubleId(-6.25));
   const BlockMetadata b13 = makeBlock(DoubleId(-10.42), DoubleId(-12.00));
-  // b14 contains mixed datatypes
+  // b14 contains mixed datatypes (COLUMN 2)
   const BlockMetadata b14 = makeBlock(DoubleId(-14.01), VocabId(0));
   const BlockMetadata b15 = makeBlock(VocabId(10), VocabId(14));
   const BlockMetadata b16 = makeBlock(VocabId(14), VocabId(14));
@@ -173,27 +173,28 @@ static const auto testThrowError =
 
 //______________________________________________________________________________
 template <typename RelExpr1>
-constexpr std::unique_ptr<PrefilterExpression> makeRelExpr(
-    const ValueId& referenceId) {
+auto makeRelExpr(const ValueId& referenceId) {
   return std::make_unique<RelExpr1>(referenceId);
 }
 
 //______________________________________________________________________________
 template <typename LogExpr, typename RelExpr1, typename RelExpr2>
-constexpr std::unique_ptr<PrefilterExpression> makeLogExpr(
-    const ValueId& referenceId1, const ValueId& referenceId2) {
+auto makeLogExpr(const ValueId& referenceId1, const ValueId& referenceId2) {
   return std::make_unique<LogExpr>(makeRelExpr<RelExpr1>(referenceId1),
                                    makeRelExpr<RelExpr2>(referenceId2));
 }
 
 //______________________________________________________________________________
-template <typename RelExpr1, typename RelExpr2, typename LogExpr>
-constexpr std::unique_ptr<PrefilterExpression> makeNotExpression(
-    const ValueId& referenceId1, std::optional<ValueId> optId2) {
+template <typename RelExpr1, typename LogExpr, typename RelExpr2>
+auto makeNotExpression(const ValueId& referenceId1,
+                       std::optional<ValueId> optId2) {
   if constexpr (check_is_relational_v<RelExpr2> &&
                 check_is_logical_v<LogExpr> && optId2.has_value()) {
     return std::make_unique<NotExpression>(
         makeLogExpr<LogExpr, RelExpr1, RelExpr2>(referenceId1, optId2.value()));
+  } else if constexpr (std::is_same_v<LogExpr, NotExpression>) {
+    return std::make_unique<NotExpression>(
+        makeNotExpression<RelExpr1, NotExpression>(referenceId1));
   } else {
     return std::make_unique<NotExpression>(makeRelExpr<RelExpr1>(referenceId1));
   }
@@ -238,14 +239,14 @@ struct TestLogicalExpression {
 //______________________________________________________________________________
 template <typename ResT>
 struct TestNotExpression {
-  template <typename RelExpr1, typename RelExpr2 = std::nullptr_t,
-            typename LogExpr = std::nullptr_t>
+  template <typename RelExpr1, typename LogExpr = std::nullptr_t,
+            typename RelExpr2 = std::nullptr_t>
   void test(size_t evaluationColumn, const std::vector<BlockMetadata>& input,
             const ResT& expected, const ValueId& referenceId1,
             std::optional<ValueId> optId2 = std::nullopt)
       requires check_is_relational_v<RelExpr1> {
     auto expression =
-        makeNotExpression<RelExpr1, RelExpr2, LogExpr>(referenceId1, optId2);
+        makeNotExpression<RelExpr1, LogExpr, RelExpr2>(referenceId1, optId2);
     if constexpr (std::is_same_v<ResT, std::string>) {
       testThrowError(std::move(expression), evaluationColumn, input, expected);
     } else {
@@ -305,6 +306,7 @@ TEST(RelationalExpression, testLessThanExpressions) {
   testExpression(2, VocabId(14), blocks.blocks, {blocks.b14, blocks.b15});
   testExpression(2, VocabId(16), blocks.blocks,
                  {blocks.b14, blocks.b15, blocks.b16, blocks.b17});
+  // test blocks.otherBlocks
   testExpression(2, blocks.undef, blocks.otherBlocks, {});
   testExpression(2, blocks.falseId, blocks.otherBlocks,
                  {blocks.bd2, blocks.bd5});
@@ -352,6 +354,7 @@ TEST(RelationalExpression, testLessEqualExpressions) {
   testExpression(2, VocabId(11), blocks.blocks, {blocks.b14, blocks.b15});
   testExpression(2, VocabId(14), blocks.blocks,
                  {blocks.b14, blocks.b15, blocks.b16, blocks.b17});
+  // test block.otherBlocks
   testExpression(2, blocks.undef, blocks.otherBlocks, {});
   testExpression(2, blocks.falseId, blocks.otherBlocks,
                  {blocks.bd2, blocks.bd3, blocks.bd5});
@@ -401,6 +404,7 @@ TEST(RelationalExpression, testGreaterThanExpression) {
   testExpression(2, VocabId(14), blocks.blocks, {blocks.b14, blocks.b17});
   testExpression(2, VocabId(12), blocks.blocks,
                  {blocks.b14, blocks.b15, blocks.b16, blocks.b17});
+  // test blocks.otherBlocks
   testExpression(2, blocks.undef, blocks.otherBlocks, {});
   testExpression(2, blocks.falseId, blocks.otherBlocks,
                  {blocks.bd2, blocks.bd4, blocks.bd5});
@@ -454,6 +458,7 @@ TEST(RelationalExpression, testGreaterEqualExpression) {
   testExpression(2, VocabId(10), blocks.blocks,
                  {blocks.b14, blocks.b15, blocks.b16, blocks.b17});
   testExpression(2, VocabId(17), blocks.blocks, {blocks.b14, blocks.b17});
+  // test blocks.otherBlocks
   testExpression(2, blocks.undef, blocks.otherBlocks, {});
   testExpression(2, blocks.falseId, blocks.otherBlocks,
                  {blocks.bd2, blocks.bd3, blocks.bd4, blocks.bd5});
@@ -498,6 +503,7 @@ TEST(RelationalExpression, testEqualExpression) {
   testExpression(2, VocabId(17), blocks.blocks, {blocks.b14, blocks.b17});
   testExpression(2, IntId(-4), blocks.blocks,
                  {blocks.b6, blocks.b7, blocks.b11, blocks.b14});
+  // test blocks.otherBlocks
   testExpression(2, blocks.trueId, blocks.otherBlocks,
                  {blocks.bd2, blocks.bd4, blocks.bd5});
   testExpression(2, blocks.referenceDate1, blocks.otherBlocks,
@@ -550,6 +556,7 @@ TEST(RelationalExpression, testNotEqualExpression) {
                  {blocks.b14, blocks.b15, blocks.b17});
   testExpression(2, VocabId(17), blocks.blocks,
                  {blocks.b14, blocks.b15, blocks.b16, blocks.b17});
+  // test blocks.otherBlocks
   testExpression(2, blocks.undef, blocks.otherBlocks, {});
   testExpression(2, blocks.falseId, blocks.otherBlocks,
                  {blocks.bd2, blocks.bd4, blocks.bd5});

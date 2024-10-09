@@ -8,7 +8,7 @@
 
 namespace prefilterExpressions {
 
-// HELPER FUNCTION
+// HELPER FUNCTIONS
 //______________________________________________________________________________
 // Given a PermutedTriple retrieve the suitable Id w.r.t. a column (index).
 static auto getIdFromColumnIndex(const BlockMetadata::PermutedTriple& triple,
@@ -196,7 +196,9 @@ std::vector<BlockMetadata> RelationalExpression<Comparison>::evaluateImpl(
     if ((firstIdDatatype != secondIdDatatype) &&
         // The block is only potentially relevant if at least one of the
         // respective bounding Ids is of similar (comparable) type to
-        // refernceId_.
+        // refernceId_. However, this requires that the comparable datatypes
+        // are grouped/stand next to each other given the ValueId ordering
+        // on datatype (most relevant) bits.
         (valueIdComparators::detail::areTypesCompatible(referenceIdDatatype,
                                                         firstIdDatatype) ||
          valueIdComparators::detail::areTypesCompatible(referenceIdDatatype,

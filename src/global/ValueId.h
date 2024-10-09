@@ -29,9 +29,9 @@ enum struct Datatype {
   VocabIndex,
   LocalVocabIndex,
   TextRecordIndex,
-  WordVocabIndex,
   Date,
   GeoPoint,
+  WordVocabIndex,
   BlankNodeIndex,
   MaxValue = BlankNodeIndex
   // Note: Unfortunately we cannot easily get the size of an enum.
