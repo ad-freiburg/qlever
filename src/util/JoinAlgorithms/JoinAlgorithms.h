@@ -1266,7 +1266,7 @@ struct BlockZipperJoinImpl {
   // been consumed yet and match them against undef blocks.
   template <bool reversed>
   bool consumeRemainingBlocks(auto& side, const auto& undefBlocks) {
-    bool hasUndef;
+    bool hasUndef = false;
     while (side.it_ != side.end_) {
       const auto& lBlock = *side.it_;
       for (const auto& rBlock : undefBlocks) {
