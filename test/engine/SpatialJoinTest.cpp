@@ -236,6 +236,12 @@ class SpatialJoinParamTest : public ::testing::TestWithParam<bool> {
     // Select algorithm
     spatialJoin->selectAlgorithm(GetParam());
 
+    // At worst quadratic time
+    ASSERT_LE(
+        spatialJoin->getCostEstimate(),
+        std::pow(firstChild->getSizeEstimate() * secondChild->getSizeEstimate(),
+                 2));
+
     auto res = spatialJoin->computeResult(false);
     auto vec = localTestHelpers::printTable(qec, &res);
     /*
@@ -422,55 +428,53 @@ auto expectedDist = [](const GeoPoint& p1, const GeoPoint& p2) {
   return std::to_string(static_cast<int>(S2Earth::ToMeters(S1Angle(p1_, p2_))));
 };
 
+// Places for testing
+auto PUni = P(7.83505, 48.01267);
+auto PMun = P(7.85298, 47.99557);
+auto PEif = P(2.29451, 48.85825);
+auto PEye = P(-0.11957, 51.50333);
+auto PLib = P(-74.04454, 40.68925);
+auto testPlaces = std::vector{PUni, PMun, PEif, PEye, PLib};
+
 // distance from Uni Freiburg to Freiburger Münster is 2,33 km according to
 // google maps
-std::vector<std::string> expectedDistUniMun{
-    expectedDist(P(7.83505, 48.01267), P(7.85298, 47.99557))};
+std::vector<std::string> expectedDistUniMun{expectedDist(PUni, PMun)};
 
 // distance from Uni Freiburg to Eiffel Tower is 419,32 km according to
 // google maps
-std::vector<std::string> expectedDistUniEif{
-    expectedDist(P(7.83505, 48.01267), P(2.29451, 48.85825))};
+std::vector<std::string> expectedDistUniEif{expectedDist(PUni, PEif)};
 
 // distance from Minster Freiburg to eiffel tower is 421,09 km according to
 // google maps
-std::vector<std::string> expectedDistMunEif{
-    expectedDist(P(7.85298, 47.99557), P(2.29451, 48.85825))};
+std::vector<std::string> expectedDistMunEif{expectedDist(PMun, PEif)};
 
 // distance from london eye to eiffel tower is 340,62 km according to
 // google maps
-std::vector<std::string> expectedDistEyeEif{
-    expectedDist(P(-0.11957, 51.50333), P(2.29451, 48.85825))};
+std::vector<std::string> expectedDistEyeEif{expectedDist(PEye, PEif)};
 
 // distance from Uni Freiburg to London Eye is 690,18 km according to
 // google maps
-std::vector<std::string> expectedDistUniEye{
-    expectedDist(P(7.83505, 48.01267), P(-0.11957, 51.50333))};
+std::vector<std::string> expectedDistUniEye{expectedDist(PUni, PEye)};
 
 // distance from Minster Freiburg to London Eye is 692,39 km according to
 // google maps
-std::vector<std::string> expectedDistMunEye{
-    expectedDist(P(7.85298, 47.99557), P(-0.11957, 51.50333))};
+std::vector<std::string> expectedDistMunEye{expectedDist(PMun, PEye)};
 
 // distance from Uni Freiburg to Statue of Liberty is 6249,55 km according to
 // google maps
-std::vector<std::string> expectedDistUniLib{
-    expectedDist(P(7.83505, 48.01267), P(-74.04454, 40.68925))};
+std::vector<std::string> expectedDistUniLib{expectedDist(PUni, PLib)};
 
 // distance from Minster Freiburg to Statue of Liberty is 6251,58 km
 // according to google maps
-std::vector<std::string> expectedDistMunLib{
-    expectedDist(P(7.85298, 47.99557), P(-74.04454, 40.68925))};
+std::vector<std::string> expectedDistMunLib{expectedDist(PMun, PLib)};
 
 // distance from london eye to statue of liberty is 5575,08 km according to
 // google maps
-std::vector<std::string> expectedDistEyeLib{
-    expectedDist(P(-0.11957, 51.50333), P(-74.04454, 40.68925))};
+std::vector<std::string> expectedDistEyeLib{expectedDist(PEye, PLib)};
 
 // distance from eiffel tower to Statue of liberty is 5837,42 km according to
 // google maps
-std::vector<std::string> expectedDistEifLib{
-    expectedDist(P(2.29451, 48.85825), P(-74.04454, 40.68925))};
+std::vector<std::string> expectedDistEifLib{expectedDist(PEif, PLib)};
 
 std::vector<std::vector<std::string>> expectedMaxDist1_rows{
     mergeToRow(TF, TF, expectedDistSelf),

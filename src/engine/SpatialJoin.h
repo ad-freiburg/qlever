@@ -107,10 +107,6 @@ class SpatialJoin : public Operation {
   // helper function, which parses a triple and populates config_
   void parseConfigFromTriple();
 
-  // helper function which gets the coordinates from the coordinates string
-  // (usually the object of a triple)
-  std::string betweenQuotes(std::string extractFrom) const;
-
   // helper function which returns a GeoPoint if the element of the given table
   // represents a GeoPoint
   std::optional<GeoPoint> getPoint(const IdTable* restable, size_t row,

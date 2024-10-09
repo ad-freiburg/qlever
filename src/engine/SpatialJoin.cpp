@@ -287,20 +287,6 @@ vector<ColumnIndex> SpatialJoin::resultSortedOn() const {
 }
 
 // ____________________________________________________________________________
-std::string SpatialJoin::betweenQuotes(std::string extractFrom) const {
-  // returns everything between the first two quotes. If the string does
-  // not contain two quotes, the string is returned as a whole
-  //
-  size_t pos1 = extractFrom.find("\"", 0);
-  size_t pos2 = extractFrom.find("\"", pos1 + 1);
-  if (pos1 != std::string::npos && pos2 != std::string::npos) {
-    return extractFrom.substr(pos1 + 1, pos2 - pos1 - 1);
-  } else {
-    return extractFrom;
-  }
-}
-
-// ____________________________________________________________________________
 std::optional<GeoPoint> SpatialJoin::getPoint(const IdTable* restable,
                                               size_t row,
                                               ColumnIndex col) const {
