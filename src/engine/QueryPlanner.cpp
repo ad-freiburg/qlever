@@ -351,8 +351,8 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getGroupByRow(
       aliases = pq.selectClause().getAliases();
     }
 
-    // Inside a `GRAPH ?var {....}` clause,  a `GROUP BY` must implicitly group
-    // by the graph variable.
+    // Inside a `GRAPH ?var {....}` clause,  a `GROUP BY` must implicitly (also)
+    // group by the graph variable.
     auto groupVariables = pq._groupByVariables;
     if (activeGraphVariable_.has_value()) {
       AD_CORRECTNESS_CHECK(
