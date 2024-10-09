@@ -231,12 +231,20 @@ using ExpectedColumns = ad_utility::HashMap<
 
 // Test that the result of the `join` matches the `expected` outcome.
 void testJoinOperation(Join& join, const ExpectedColumns& expected,
-                       bool requestLaziness = false) {
+                       bool requestLaziness = false,
+                       bool expectLazinessParityWhenNonEmpty = false,
+                       ad_utility::source_location location =
+                           ad_utility::source_location::current()) {
+  auto lt = generateLocationTrace(location);
   auto res = join.getResult(false, requestLaziness
                                        ? ComputationMode::LAZY_IF_SUPPORTED
                                        : ComputationMode::FULLY_MATERIALIZED);
   const auto& varToCols = join.getExternallyVisibleVariableColumns();
   EXPECT_EQ(varToCols.size(), expected.size());
+  if (expectLazinessParityWhenNonEmpty &&
+      (!res->isFullyMaterialized() || !res->idTable().empty())) {
+    EXPECT_EQ(res->isFullyMaterialized(), !requestLaziness);
+  }
   IdTable aggregatedResult{join.getResultWidth(), join.allocator()};
   if (!res->isFullyMaterialized()) {
     for (const IdTable& idTable : res->idTables()) {
@@ -424,15 +432,20 @@ TEST(JoinTest, joinWithColumnAndScanUndefValues) {
     VariableToColumnMap expectedVariables{
         {Variable{"?s"}, makeAlwaysDefinedColumn(0)},
         {Variable{"?o"}, makeAlwaysDefinedColumn(1)}};
-    testJoinOperation(join, makeExpectedColumns(expectedVariables, expected));
-    testJoinOperation(join, makeExpectedColumns(expectedVariables, expected),
-                      true);
+    auto expectedColumns = makeExpectedColumns(expectedVariables, expected);
+
+    qec->getQueryTreeCache().clearAll();
+    testJoinOperation(join, expectedColumns, true,
+                      materializationThreshold < 3);
+    qec->getQueryTreeCache().clearAll();
+    testJoinOperation(join, expectedColumns, false);
 
     auto joinSwitched = Join{qec, valuesTree, fullScanPSO, 0, 0};
-    testJoinOperation(joinSwitched,
-                      makeExpectedColumns(expectedVariables, expected));
-    testJoinOperation(joinSwitched,
-                      makeExpectedColumns(expectedVariables, expected), true);
+    qec->getQueryTreeCache().clearAll();
+    testJoinOperation(joinSwitched, expectedColumns, true,
+                      materializationThreshold < 3);
+    qec->getQueryTreeCache().clearAll();
+    testJoinOperation(joinSwitched, expectedColumns, false);
   };
   test(0);
   test(1);
@@ -447,7 +460,6 @@ TEST(JoinTest, joinTwoScans) {
         "<x> <p> 1. <x2> <p> 2. <x> <p2> 3 . <x2> <p2> 4. <x3> <p2> 7. ");
     RuntimeParameters().set<"lazy-index-scan-max-size-materialization">(
         materializationThreshold);
-    qec->getQueryTreeCache().clearAll();
     auto scanP = ad_utility::makeExecutionTree<IndexScan>(
         qec, PSO, SparqlTriple{Var{"?s"}, "<p>", Var{"?o"}});
     auto scanP2 = ad_utility::makeExecutionTree<IndexScan>(
@@ -462,11 +474,20 @@ TEST(JoinTest, joinTwoScans) {
         {Variable{"?s"}, makeAlwaysDefinedColumn(0)},
         {Variable{"?q"}, makeAlwaysDefinedColumn(1)},
         {Variable{"?o"}, makeAlwaysDefinedColumn(2)}};
-    testJoinOperation(join, makeExpectedColumns(expectedVariables, expected));
+    auto expectedColumns = makeExpectedColumns(expectedVariables, expected);
+
+    qec->getQueryTreeCache().clearAll();
+    testJoinOperation(join, expectedColumns, true,
+                      materializationThreshold <= 3);
+    qec->getQueryTreeCache().clearAll();
+    testJoinOperation(join, expectedColumns, false);
 
     auto joinSwitched = Join{qec, scanP2, scanP, 0, 0};
-    testJoinOperation(joinSwitched,
-                      makeExpectedColumns(expectedVariables, expected));
+    qec->getQueryTreeCache().clearAll();
+    testJoinOperation(joinSwitched, expectedColumns, true,
+                      materializationThreshold <= 3);
+    qec->getQueryTreeCache().clearAll();
+    testJoinOperation(joinSwitched, expectedColumns, false);
   };
   test(0);
   test(1);
@@ -509,13 +530,13 @@ TEST(JoinTest, joinTwoLazyOperationsWithAndWithoutUndefValues) {
         EXPECT_EQ(join.getDescriptor(), "Join on ?s");
 
         qec->getQueryTreeCache().clearAll();
-        testJoinOperation(join, expectedColumns, true);
+        testJoinOperation(join, expectedColumns, true, true);
         qec->getQueryTreeCache().clearAll();
         testJoinOperation(join, expectedColumns, false);
 
         auto joinSwitched = Join{qec, rightTree, leftTree, 0, 0};
         qec->getQueryTreeCache().clearAll();
-        testJoinOperation(joinSwitched, expectedColumns, true);
+        testJoinOperation(joinSwitched, expectedColumns, true, true);
         qec->getQueryTreeCache().clearAll();
         testJoinOperation(joinSwitched, expectedColumns, false);
       };
