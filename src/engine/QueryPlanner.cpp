@@ -1370,7 +1370,7 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
   }
   vector<vector<SubtreePlan>> lastDpRowFromComponents;
   for (auto& component : components | std::views::values) {
-    Graph g;
+    std::vector<const SubtreePlan*> g;
     for (const auto& plan : component) {
       g.push_back(&plan);
     }
@@ -1732,7 +1732,7 @@ size_t QueryPlanner::findCheapestExecutionTree(
       return aCost < bCost;
     }
   };
-  return std::min_element(lastRow.begin(), lastRow.end(), compare) -
+  return std::ranges::min_element(lastRow, compare) -
          lastRow.begin();
 };
 
@@ -1740,14 +1740,13 @@ size_t QueryPlanner::findCheapestExecutionTree(
 size_t QueryPlanner::findSmallestExecutionTree(
     const std::vector<SubtreePlan>& lastRow) {
   AD_CONTRACT_CHECK(!lastRow.empty());
-  // TODO<joka921> Precompute the sizes and costs. (or check if they are
-  // cached).
   auto compare = [](const auto& a, const auto& b) {
-    auto aSize = a.getSizeEstimate(), bSize = b.getSizeEstimate();
-    auto aCost = a.getCostEstimate(), bCost = b.getCostEstimate();
-    return std::tie(aSize, aCost) < std::tie(bSize, bCost);
+    auto tie = [](const auto& x) {
+      return std::tuple{x.getSizeEstimate(), x.getSizeEstimate()};
+    };
+    return tie(a) < tie(b);
   };
-  return std::min_element(lastRow.begin(), lastRow.end(), compare) -
+  return std::ranges::min_element(lastRow, compare) -
          lastRow.begin();
 };
 

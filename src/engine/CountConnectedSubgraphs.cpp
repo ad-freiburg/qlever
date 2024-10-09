@@ -23,7 +23,7 @@ size_t countSubgraphs(PlainGraph graph, size_t budget) {
     // The ignored set has `1`s in all `i` bits that have a lower index than `i`
     // (e.g. if `i` is 3, then the subgraph is `[0 *56] 0000 1000` and the
     // ignored set is `[0 * 56] 0000 0111`.
-    uint64_t subgraph = 1ull << i;
+    uint64_t subgraph = 1ULL << i;
     uint64_t ignored = ad_utility::bitMaskForLowerBits(i);
     c = countSubgraphsRecursively(graph, subgraph, ignored, c, budget);
   }
@@ -39,7 +39,7 @@ static uint64_t computeNeighbors(const PlainGraph& graph, uint64_t subgraph,
                                  uint64_t ignored) {
   uint64_t NeighborsOfS{};
   for (size_t i = 0; i < 64; ++i) {
-    bool set = subgraph & (1ull << i);
+    bool set = subgraph & (1ULL << i);
     if (set) {
       NeighborsOfS |= graph[i].neighbors_;
     }
@@ -58,7 +58,7 @@ static uint64_t subsetIndexToBitmap(size_t i,
   uint64_t newSubgraph = 0;
   for (size_t k = 0; k < neighborVec.size(); ++k) {
     if (1 << k & i) {
-      newSubgraph |= (1ull << neighborVec[k]);
+      newSubgraph |= (1ULL << neighborVec[k]);
     }
   }
   return newSubgraph;
@@ -69,7 +69,7 @@ static uint64_t subsetIndexToBitmap(size_t i,
 static std::vector<uint8_t> bitsetToVec(uint64_t bitset) {
   std::vector<uint8_t> neighborVec;
   for (uint64_t i = 0; i < 64; ++i) {
-    if (bitset & (1ull << i)) {
+    if (bitset & (1ULL << i)) {
       neighborVec.push_back(i);
     }
   }
@@ -95,13 +95,13 @@ size_t countSubgraphsRecursively(const PlainGraph& graph, uint64_t subgraph,
 
   std::vector<uint8_t> neighborVec = bitsetToVec(neighbors);
 
-  // This is the recursion level which handles all the subsets of the neighbors,
+  // This is the recursion level which handles all the subsets of the neigrbors,
   // and the above recursion levels deal with the `subgraph`, so we have to
   // exclude them further down.
   auto newIgnored = ignored | neighbors | subgraph;
 
   //   Iterate over all Subsets of the neighbors
-  size_t upperBound = 1ull << neighborVec.size();
+  size_t upperBound = 1ULL << neighborVec.size();
   for (size_t i = 1; i < upperBound; ++i) {
     ++c;
     if (c > budget) {
