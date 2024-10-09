@@ -173,28 +173,31 @@ static const auto testThrowError =
 
 //______________________________________________________________________________
 template <typename RelExpr1>
-auto makeRelExpr(const ValueId& referenceId) {
+std::unique_ptr<PrefilterExpression> makeRelExpr(const ValueId& referenceId) {
   return std::make_unique<RelExpr1>(referenceId);
 }
 
 //______________________________________________________________________________
 template <typename LogExpr, typename RelExpr1, typename RelExpr2>
-auto makeLogExpr(const ValueId& referenceId1, const ValueId& referenceId2) {
+std::unique_ptr<PrefilterExpression> makeLogExpr(const ValueId& referenceId1,
+                                                 const ValueId& referenceId2) {
   return std::make_unique<LogExpr>(makeRelExpr<RelExpr1>(referenceId1),
                                    makeRelExpr<RelExpr2>(referenceId2));
 }
 
 //______________________________________________________________________________
-template <typename RelExpr1, typename LogExpr, typename RelExpr2>
-auto makeNotExpression(const ValueId& referenceId1,
-                       std::optional<ValueId> optId2) {
+template <typename RelExpr1, typename LogExpr = std::nullptr_t,
+          typename RelExpr2 = std::nullptr_t>
+std::unique_ptr<PrefilterExpression> makeNotExpression(
+    const ValueId& referenceId1, const std::optional<ValueId> optId2) {
   if constexpr (check_is_relational_v<RelExpr2> &&
-                check_is_logical_v<LogExpr> && optId2.has_value()) {
+                check_is_logical_v<LogExpr>) {
+    assert(optId2.has_value() && "Logical Expressions require two ValueIds");
     return std::make_unique<NotExpression>(
         makeLogExpr<LogExpr, RelExpr1, RelExpr2>(referenceId1, optId2.value()));
   } else if constexpr (std::is_same_v<LogExpr, NotExpression>) {
     return std::make_unique<NotExpression>(
-        makeNotExpression<RelExpr1, NotExpression>(referenceId1));
+        makeNotExpression<RelExpr1>(referenceId1, optId2));
   } else {
     return std::make_unique<NotExpression>(makeRelExpr<RelExpr1>(referenceId1));
   }
@@ -741,6 +744,76 @@ TEST(LogicalExpression, testNotExpression) {
                                           blocks.VocabId10);
   testExpression.test<GreaterEqualExpression>(1, blocks.blocks, {},
                                               blocks.DoubleId33);
+  testExpression.test<EqualExpression, NotExpression>(
+      2, blocks.blocks, {blocks.b1, blocks.b2, blocks.b7, blocks.b14},
+      IntId(0));
+  testExpression.test<NotEqualExpression, NotExpression>(
+      2, blocks.blocks,
+      {blocks.b1, blocks.b2, blocks.b3, blocks.b4, blocks.b5, blocks.b6,
+       blocks.b7, blocks.b8, blocks.b9, blocks.b10, blocks.b11, blocks.b13,
+       blocks.b14},
+      DoubleId(-6.25));
+  testExpression.test<LessThanExpression, NotExpression>(
+      2, blocks.blocks, {blocks.b14}, VocabId(10));
+  testExpression.test<GreaterEqualExpression, NotExpression>(
+      2, blocks.blocks,
+      {blocks.b2, blocks.b3, blocks.b4, blocks.b7, blocks.b9, blocks.b10,
+       blocks.b14},
+      DoubleId(3.99));
+  testExpression
+      .test<LessEqualExpression, AndExpression, GreaterEqualExpression>(
+          2, blocks.blocks,
+          {blocks.b2, blocks.b3, blocks.b4, blocks.b5, blocks.b6, blocks.b7,
+           blocks.b8, blocks.b9, blocks.b10, blocks.b11, blocks.b12, blocks.b13,
+           blocks.b14},
+          IntId(0), IntId(0));
+  testExpression.test<NotEqualExpression, AndExpression, NotEqualExpression>(
+      2, blocks.blocks, {blocks.b5, blocks.b7, blocks.b14}, IntId(-10),
+      DoubleId(-14.02));
+  testExpression
+      .test<GreaterThanExpression, AndExpression, GreaterEqualExpression>(
+          2, blocks.blocks,
+          {blocks.b1, blocks.b2, blocks.b3, blocks.b4, blocks.b5, blocks.b6,
+           blocks.b7, blocks.b8, blocks.b9, blocks.b10, blocks.b11, blocks.b12,
+           blocks.b13, blocks.b14},
+          IntId(10), DoubleId(-6.25));
+  testExpression
+      .test<GreaterThanExpression, AndExpression, GreaterEqualExpression>(
+          2, blocks.blocks,
+          {blocks.b5, blocks.b6, blocks.b7, blocks.b11, blocks.b12, blocks.b13,
+           blocks.b14},
+          IntId(-4), DoubleId(-6.25));
+  testExpression
+      .test<LessThanExpression, AndExpression, GreaterEqualExpression>(
+          2, blocks.blocks,
+          {blocks.b1, blocks.b2, blocks.b3, blocks.b4, blocks.b5, blocks.b6,
+           blocks.b7, blocks.b8, blocks.b9, blocks.b10, blocks.b11, blocks.b12,
+           blocks.b13, blocks.b14},
+          DoubleId(-7), IntId(6));
+  testExpression
+      .test<LessEqualExpression, OrExpression, GreaterEqualExpression>(
+          2, blocks.blocks,
+          {blocks.b2, blocks.b3, blocks.b7, blocks.b8, blocks.b9, blocks.b10,
+           blocks.b14},
+          IntId(0), DoubleId(6));
+  testExpression
+      .test<GreaterEqualExpression, OrExpression, GreaterThanExpression>(
+          2, blocks.blocks, {blocks.b5, blocks.b7, blocks.b13, blocks.b14},
+          DoubleId(0), IntId(-10));
+  testExpression.test<LessThanExpression, OrExpression, GreaterThanExpression>(
+      2, blocks.blocks, {blocks.b14, blocks.b15}, VocabId(10), VocabId(10));
+  testExpression.test<LessThanExpression, OrExpression, GreaterThanExpression>(
+      2, blocks.blocks, {blocks.b6, blocks.b7, blocks.b11, blocks.b14},
+      DoubleId(-4), IntId(-4));
+  testExpression
+      .test<GreaterThanExpression, OrExpression, GreaterEqualExpression>(
+          2, blocks.blocks, {blocks.b14}, IntId(-42), VocabId(0));
+  testExpression
+      .test<GreaterEqualExpression, OrExpression, GreaterThanExpression>(
+          2, blocks.blocks, {blocks.b14, blocks.b15}, VocabId(14), VocabId(15));
+  testExpression.test<LessThanExpression, OrExpression, NotEqualExpression>(
+      2, blocks.blocks, {blocks.b7, blocks.b11, blocks.b12, blocks.b14},
+      DoubleId(-7.25), DoubleId(-6.25));
 }
 
 //______________________________________________________________________________
