@@ -52,6 +52,7 @@ struct Copy {
 struct GraphUpdate {
   std::vector<SparqlTripleSimple> toInsert_;
   std::vector<SparqlTripleSimple> toDelete_;
+  std::optional<ad_utility::triple_component::Iri> with_;
 
   GraphUpdate() = default;
   GraphUpdate(std::vector<SparqlTripleSimple> toInsert,
@@ -60,7 +61,7 @@ struct GraphUpdate {
 };
 
 namespace parsedQuery {
-struct UpdateClause : parsedQuery::ClauseBase {
+struct UpdateClause : ClauseBase {
   std::variant<GraphUpdate, Load, Clear, Drop, Create, Add, Move, Copy> op_;
 
   UpdateClause() = default;

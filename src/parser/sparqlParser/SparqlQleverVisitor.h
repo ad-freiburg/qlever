@@ -208,11 +208,11 @@ class SparqlQleverVisitor {
 
   GraphUpdate visit(Parser::DeleteDataContext* ctx);
 
-  std::pair<GraphUpdate, ParsedQuery::GraphPattern> visit(
-      Parser::DeleteWhereContext* ctx);
+  std::tuple<GraphUpdate, ParsedQuery::GraphPattern, std::vector<DatasetClause>>
+  visit(Parser::DeleteWhereContext* ctx);
 
-  std::pair<GraphUpdate, ParsedQuery::GraphPattern> visit(
-      Parser::ModifyContext* ctx);
+  std::tuple<GraphUpdate, ParsedQuery::GraphPattern, std::vector<DatasetClause>>
+  visit(Parser::ModifyContext* ctx);
 
   vector<SparqlTripleSimple> visit(Parser::DeleteClauseContext* ctx);
 
@@ -461,6 +461,8 @@ class SparqlQleverVisitor {
   string visit(Parser::PnameLnContext* ctx);
 
   string visit(Parser::PnameNsContext* ctx);
+
+  DatasetClause visit(Parser::UsingClauseContext* ctx);
 
  private:
   // Helper to assign variable `startTime_` a correctly formatted time string.

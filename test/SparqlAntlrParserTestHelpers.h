@@ -894,11 +894,84 @@ inline auto UpdateQuery =
       RootGraphPattern(graphPatternMatcher));
 };
 
-inline auto UpdateClause = [](const parsedQuery::UpdateClause& updateClause)
+using Op =
+    std::variant<GraphUpdate, Load, Clear, Drop, Create, Add, Move, Copy>;
+
+inline auto Load =
+    [](bool silent, const ad_utility::triple_component::Iri& source,
+       const std::optional<GraphRef>& target) -> Matcher<const Op&> {
+  return testing::VariantWith<::Load>(
+      testing::AllOf(AD_FIELD(Load, silent_, testing::Eq(silent)),
+                     AD_FIELD(Load, source_, testing::Eq(source)),
+                     AD_FIELD(Load, target_, testing::Eq(target))));
+};
+
+inline auto Clear = [](bool silent,
+                       const GraphRefAll& target) -> Matcher<const Op&> {
+  return testing::VariantWith<::Clear>(
+      testing::AllOf(AD_FIELD(Clear, silent_, testing::Eq(silent)),
+                     AD_FIELD(Clear, target_, testing::Eq(target))));
+};
+
+inline auto Drop = [](bool silent,
+                      const GraphRefAll& target) -> Matcher<const Op&> {
+  return testing::VariantWith<::Drop>(
+      testing::AllOf(AD_FIELD(Drop, silent_, testing::Eq(silent)),
+                     AD_FIELD(Drop, target_, testing::Eq(target))));
+};
+
+inline auto Create = [](bool silent,
+                        const GraphRef& target) -> Matcher<const Op&> {
+  return testing::VariantWith<::Create>(
+      testing::AllOf(AD_FIELD(Create, silent_, testing::Eq(silent)),
+                     AD_FIELD(Create, target_, testing::Eq(target))));
+};
+
+inline auto Add = [](bool silent, const GraphOrDefault& source,
+                     const GraphOrDefault& target) -> Matcher<const Op&> {
+  return testing::VariantWith<::Add>(
+      testing::AllOf(AD_FIELD(Add, silent_, testing::Eq(silent)),
+                     AD_FIELD(Add, source_, testing::Eq(source)),
+                     AD_FIELD(Add, target_, testing::Eq(target))));
+};
+
+inline auto Move = [](bool silent, const GraphOrDefault& source,
+                      const GraphOrDefault& target) -> Matcher<const Op&> {
+  return testing::VariantWith<::Move>(
+      testing::AllOf(AD_FIELD(Move, silent_, testing::Eq(silent)),
+                     AD_FIELD(Move, source_, testing::Eq(source)),
+                     AD_FIELD(Move, target_, testing::Eq(target))));
+};
+
+inline auto Copy = [](bool silent, const GraphOrDefault& source,
+                      const GraphOrDefault& target) -> Matcher<const Op&> {
+  return testing::VariantWith<::Copy>(
+      testing::AllOf(AD_FIELD(Copy, silent_, testing::Eq(silent)),
+                     AD_FIELD(Copy, source_, testing::Eq(source)),
+                     AD_FIELD(Copy, target_, testing::Eq(target))));
+};
+
+inline auto GraphUpdate =
+    [](const std::vector<SparqlTripleSimple>& toDelete,
+       const std::vector<SparqlTripleSimple>& toInsert,
+       const std::optional<ad_utility::triple_component::Iri>& with)
+    -> Matcher<const Op&> {
+  return testing::VariantWith<::GraphUpdate>(testing::AllOf(
+      AD_FIELD(GraphUpdate, toInsert_, testing::ElementsAreArray(toInsert)),
+      AD_FIELD(GraphUpdate, toDelete_, testing::ElementsAreArray(toDelete)),
+      AD_FIELD(GraphUpdate, with_, testing::Eq(with))));
+};
+
+// TODO<qup42> add a parameter for the datasets clauses in the graph pattern
+inline auto UpdateClause =
+    [](const Matcher<const Op&>& opMatcher,
+       const Matcher<const p::GraphPattern&>& graphPatternMatcher)
     -> Matcher<const ::ParsedQuery&> {
   return testing::AllOf(
       AD_PROPERTY(ParsedQuery, hasUpdateClause, testing::IsTrue()),
-      AD_PROPERTY(ParsedQuery, updateClause, testing::Eq(updateClause)));
+      AD_PROPERTY(ParsedQuery, updateClause,
+                  AD_FIELD(parsedQuery::UpdateClause, op_, opMatcher)),
+      RootGraphPattern(graphPatternMatcher));
 };
 
 template <typename T>

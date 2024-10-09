@@ -377,11 +377,15 @@ ParsedQuery Visitor::visit(Parser::Update1Context* ctx) {
   // TODO: check that toInsert and toDelete only contain visible variables
 
   if (ctx->deleteWhere() || ctx->modify()) {
-    auto [graphUpdate, pattern] =
-        visitAlternative<std::pair<GraphUpdate, ParsedQuery::GraphPattern>>(
+    auto [graphUpdate, pattern, usingClauses] =
+        visitAlternative<std::tuple<GraphUpdate, ParsedQuery::GraphPattern,
+                                    std::vector<DatasetClause>>>(
             ctx->deleteWhere(), ctx->modify());
     parsedQuery_._clause = parsedQuery::UpdateClause{std::move(graphUpdate)};
     parsedQuery_._rootGraphPattern = std::move(pattern);
+    // TODO<qup42> once #1538 is merged
+    // parsedQuery_.datasetClauses_ =
+    // parsedQuery::DatasetClauses::fromClauses(usingClauses);
   } else {
     parsedQuery_._clause = visitAlternative<parsedQuery::UpdateClause>(
         ctx->load(), ctx->clear(), ctx->drop(), ctx->create(), ctx->add(),
@@ -442,8 +446,9 @@ GraphUpdate Visitor::visit(Parser::DeleteDataContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-std::pair<GraphUpdate, ParsedQuery::GraphPattern> Visitor::visit(
-    Parser::DeleteWhereContext* ctx) {
+std::tuple<GraphUpdate, ParsedQuery::GraphPattern,
+           std::vector<SparqlQleverVisitor::DatasetClause>>
+Visitor::visit(Parser::DeleteWhereContext* ctx) {
   auto triples = visit(ctx->quadPattern());
   auto registerIfVariable = [this](const TripleComponent& component) {
     if (component.isVariable()) {
@@ -465,25 +470,22 @@ std::pair<GraphUpdate, ParsedQuery::GraphPattern> Visitor::visit(
   pattern._graphPatterns.emplace_back(BasicGraphPattern{
       ad_utility::transform(triples, transformAndRegisterTriple)});
 
-  return {{{}, std::move(triples)}, std::move(pattern)};
+  return std::make_tuple(GraphUpdate{{}, std::move(triples)},
+                         std::move(pattern),
+                         std::vector<SparqlQleverVisitor::DatasetClause>{});
 }
 
 // ____________________________________________________________________________________
-std::pair<GraphUpdate, ParsedQuery::GraphPattern> Visitor::visit(
-    Parser::ModifyContext* ctx) {
-  if (ctx->iri()) {
-    reportNotSupported(ctx->iri(), "Named graphs are");
-  }
-  if (!ctx->usingClause().empty()) {
-    reportNotSupported(ctx->usingClause(0),
-                       "USING inside an DELETE or INSERT is");
-  }
-
+std::tuple<GraphUpdate, ParsedQuery::GraphPattern,
+           std::vector<SparqlQleverVisitor::DatasetClause>>
+Visitor::visit(Parser::ModifyContext* ctx) {
   auto op = GraphUpdate{};
   visitIf(&op.toInsert_, ctx->insertClause());
   visitIf(&op.toDelete_, ctx->deleteClause());
+  visitIf(&op.with_, ctx->iri());
 
-  return {std::move(op), visit(ctx->groupGraphPattern())};
+  return std::make_tuple(std::move(op), visit(ctx->groupGraphPattern()),
+                         visitVector(ctx->usingClause()));
 }
 
 // ____________________________________________________________________________________
@@ -901,6 +903,16 @@ string Visitor::visit(Parser::PnameNsContext* ctx) {
                          " was not registered using a PREFIX declaration");
   }
   return prefixMap_[prefix];
+}
+
+// ____________________________________________________________________________________
+SparqlQleverVisitor::DatasetClause SparqlQleverVisitor::visit(
+    Parser::UsingClauseContext* ctx) {
+  if (ctx->NAMED()) {
+    return {.dataset_ = visit(ctx->iri()), .isNamed_ = true};
+  } else {
+    return {.dataset_ = visit(ctx->iri()), .isNamed_ = false};
+  }
 }
 
 // ____________________________________________________________________________________
