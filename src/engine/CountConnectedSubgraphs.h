@@ -29,5 +29,7 @@ size_t countSubgraphs(PlainGraph graph, size_t budget);
 size_t countSubgraphsRecursively(const PlainGraph& graph, uint64_t subgraph,
                                  uint64_t ignored, size_t c, size_t budget);
 
+std::string bs(uint64_t x);
+
 }
 

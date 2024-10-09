@@ -14,6 +14,7 @@ size_t countSubgraphs(PlainGraph graph, size_t budget) {
   // node `k < i` (because these have already been counted previously, when we
   // ran the loop for `k`.
   for (size_t i = 0; i < graph.size(); ++i) {
+    ++c;
     if (c > budget) {
       return c;
     }
@@ -66,16 +67,26 @@ static std::vector<uint8_t> bitsetToVec(uint64_t bitset) {
     return neighborVec;
 };
 
+std::string bs(uint64_t x) {
+  auto res = std::bitset<64>{x}.to_string();
+  auto pos = res.find('1');
+  if (pos >= res.size()) {
+    return "0";
+  }
+  return res.substr(pos);
+}
+
 // _____________________________________________________________________________
 size_t countSubgraphsRecursively(const PlainGraph& graph, uint64_t subgraph,
                                  uint64_t ignored, size_t c, size_t budget) {
+
   // Compute the set of direct neighbors of the `subgraph` that is not
   // ignored
   uint64_t NeighborsOfS = computeNeighbors(graph, subgraph, ignored);
 
   std::vector<uint8_t> neighborVec = bitsetToVec(NeighborsOfS);
 
-  auto newIgnored = ignored | NeighborsOfS;
+  auto newIgnored = ignored | NeighborsOfS | subgraph;
 
   //   Iterate over all Subsets of the neighbors
   //   TODO<joka921> Should we include the empty subset here?
