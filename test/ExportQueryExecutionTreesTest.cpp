@@ -1157,7 +1157,7 @@ TEST(ExportQueryExecutionTrees, CornerCases) {
   std::string queryNoVariablesVisible = "SELECT ?not ?known WHERE {<s> ?p ?o}";
   auto resultNoColumns = runJSONQuery(kg, queryNoVariablesVisible,
                                       ad_utility::MediaType::sparqlJson);
-  ASSERT_TRUE(resultNoColumns["result"]["bindings"].empty());
+  ASSERT_TRUE(resultNoColumns["results"]["bindings"].empty());
 
   auto qec = ad_utility::testing::getQec(kg);
   AD_EXPECT_THROW_WITH_MESSAGE(

@@ -38,8 +38,6 @@ class Server {
 
   virtual ~Server() = default;
 
-  using ParamValueMap = ad_utility::HashMap<string, string>;
-
  private:
   //! Initialize the server.
   void initialize(const string& indexBaseName, bool useText,
@@ -131,7 +129,7 @@ class Server {
   /// \param timeLimit Duration in seconds after which the query will be
   ///                  cancelled.
   Awaitable<void> processQuery(
-      const ParamValueMap& params, const string& query,
+      const ad_utility::url_parser::ParamValueMap& params, const string& query,
       ad_utility::Timer& requestTimer,
       const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
       TimeLimit timeLimit);
@@ -184,8 +182,9 @@ class Server {
   /// or throws an exception. We still need to return an `optional` though for
   /// technical reasons that are described in the definition of this function.
   net::awaitable<std::optional<PlannedQuery>> parseAndPlan(
-      const std::string& query, QueryExecutionContext& qec,
-      SharedCancellationHandle handle, TimeLimit timeLimit);
+      const std::string& query, const vector<DatasetClause>& queryDatasets,
+      QueryExecutionContext& qec, SharedCancellationHandle handle,
+      TimeLimit timeLimit);
 
   /// Acquire the `CancellationHandle` for the given `QueryId`, start the
   /// watchdog and call `cancelAfterDeadline` to set the timeout after
@@ -214,10 +213,11 @@ class Server {
   /// the key determines the kind of action. If the key is not found, always
   /// return `std::nullopt`. If `accessAllowed` is false and a value is present,
   /// throw an exception.
-  static std::optional<std::string_view> checkParameter(
-      const ad_utility::HashMap<std::string, std::string>& parameters,
-      std::string_view key, std::optional<std::string_view> value,
+  static std::optional<std::string> checkParameter(
+      const ad_utility::url_parser::ParamValueMap& parameters,
+      std::string_view key, std::optional<std::string> value,
       bool accessAllowed);
+  FRIEND_TEST(ServerTest, checkParameter);
 
   /// Check if user-provided timeout is authorized with a valid access-token or
   /// lower than the server default. Return an empty optional and send a 403
