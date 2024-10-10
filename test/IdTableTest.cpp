@@ -1122,6 +1122,7 @@ TEST(IdTable, constructorsAreSfinaeFriendly) {
 // _____________________________________________________________________________
 TEST(IdTable, addEmptyColumn) {
   using ::testing::ElementsAre;
+  using ::testing::Eq;
   IdTable table{1, ad_utility::makeUnlimitedAllocator<Id>()};
   table.push_back({V(1)});
   table.push_back({V(2)});
@@ -1130,7 +1131,10 @@ TEST(IdTable, addEmptyColumn) {
 
   EXPECT_EQ(table.numColumns(), 2);
   EXPECT_THAT(table.getColumn(0), ElementsAre(V(1), V(2)));
-  EXPECT_THAT(table.getColumn(1), ElementsAre(UndefId(), UndefId()));
+  EXPECT_THAT(
+      table.getColumn(1),
+      ElementsAre(AD_PROPERTY(Id, getDatatype, Eq(Datatype::Undefined)),
+                  AD_PROPERTY(Id, getDatatype, Eq(Datatype::Undefined))));
 }
 
 // Check that we can completely instantiate `IdTable`s with a different value
