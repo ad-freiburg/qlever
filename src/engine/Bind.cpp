@@ -162,6 +162,9 @@ IdTable Bind::computeExpressionBind(
       }
       return output;
     } else {
+      (void)this;
+      (void)inSize;
+      (void)inCols;
       IdTable output = std::move(inputIdTable);
       output.addEmptyColumn();
       return std::move(output).toStatic<OUT_WIDTH>();
