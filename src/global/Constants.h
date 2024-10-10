@@ -27,7 +27,7 @@ constexpr inline ad_utility::MemorySize STXXL_DISK_SIZE_INDEX_BUILDER = 1_GB;
 constexpr inline ad_utility::MemorySize DEFAULT_MEM_FOR_QUERIES = 4_GB;
 
 constexpr inline uint64_t MAX_NOF_ROWS_IN_RESULT = 1'000'000;
-constexpr inline size_t MIN_WORD_PREFIX_SIZE = 4;
+constexpr inline size_t MIN_WORD_PREFIX_SIZE = 2;
 constexpr inline char PREFIX_CHAR = '*';
 
 constexpr inline size_t BUFFER_SIZE_DOCSFILE_LINE = 100'000'000;
