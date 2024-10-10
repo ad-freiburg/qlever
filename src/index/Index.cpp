@@ -56,6 +56,10 @@ auto Index::getTextVocab() const -> const TextVocab& {
   return pimpl_->getTextVocab();
 }
 
+ad_utility::BlankNodeManager* Index::getBlankNodeManager() const {
+  return pimpl_->blankNodeManager_.get();
+}
+
 // ____________________________________________________________________________
 size_t Index::getCardinality(const TripleComponent& comp,
                              Permutation::Enum p) const {

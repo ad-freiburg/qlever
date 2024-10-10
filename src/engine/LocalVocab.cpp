@@ -77,3 +77,15 @@ std::vector<LocalVocab::LiteralOrIri> LocalVocab::getAllWordsForTesting()
   }
   return result;
 }
+
+// _____________________________________________________________________________
+BlankNodeIndex LocalVocab::getBlankNodeIndex(
+    ad_utility::BlankNodeManager* blankNodeManager) {
+  // Initialize the `localBlankNodeManager_` if it doesn't exist yet.
+  if (!localBlankNodeManager_) [[unlikely]] {
+    localBlankNodeManager_ =
+        std::make_unique<ad_utility::BlankNodeManager::LocalBlankNodeManager>(
+            blankNodeManager);
+  }
+  return BlankNodeIndex::make(localBlankNodeManager_->getId());
+}

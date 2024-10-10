@@ -15,6 +15,7 @@
 #include "parser/RdfParser.h"
 #include "parser/TokenizerCtre.h"
 #include "util/Exception.h"
+#include "util/HashMap.h"
 #include "util/HashSet.h"
 #include "util/StringUtils.h"
 #include "util/http/HttpUtils.h"
@@ -204,6 +205,9 @@ void Service::writeJsonResult(const std::vector<std::string>& vars,
   IdTableStatic<I> idTable = std::move(*idTablePtr).toStatic<I>();
   checkCancellation();
   std::vector<size_t> numLocalVocabPerColumn(idTable.numColumns());
+  // TODO<joka921> We should include a memory limit, as soon as we can do proper
+  // memory-limited HashMaps.
+  ad_utility::HashMap<std::string, Id> blankNodeMap;
 
   auto writeBindings = [&](const nlohmann::json& bindings, size_t& rowIdx) {
     for (const auto& binding : bindings) {
@@ -211,7 +215,8 @@ void Service::writeJsonResult(const std::vector<std::string>& vars,
       for (size_t colIdx = 0; colIdx < vars.size(); ++colIdx) {
         TripleComponent tc =
             binding.contains(vars[colIdx])
-                ? bindingToTripleComponent(binding[vars[colIdx]])
+                ? bindingToTripleComponent(binding[vars[colIdx]], blankNodeMap,
+                                           localVocab)
                 : TripleComponent::UNDEF();
 
         Id id = std::move(tc).toValueId(getIndex().getVocab(), *localVocab);
@@ -359,7 +364,9 @@ std::optional<std::string> Service::getSiblingValuesClause() const {
 
 // ____________________________________________________________________________
 TripleComponent Service::bindingToTripleComponent(
-    const nlohmann::json& binding) {
+    const nlohmann::json& binding,
+    ad_utility::HashMap<std::string, Id>& blankNodeMap,
+    LocalVocab* localVocab) const {
   if (!binding.contains("type") || !binding.contains("value")) {
     throw std::runtime_error(absl::StrCat(
         "Missing type or value field in binding. The binding is: '",
@@ -368,6 +375,8 @@ TripleComponent Service::bindingToTripleComponent(
 
   const auto type = binding["type"].get<std::string_view>();
   const auto value = binding["value"].get<std::string_view>();
+  auto blankNodeManagerPtr =
+      getExecutionContext()->getIndex().getBlankNodeManager();
 
   TripleComponent tc;
   if (type == "literal") {
@@ -386,12 +395,12 @@ TripleComponent Service::bindingToTripleComponent(
   } else if (type == "uri") {
     tc = TripleComponent::Iri::fromIrirefWithoutBrackets(value);
   } else if (type == "bnode") {
-    throw std::runtime_error(
-        "Blank nodes in the result of a SERVICE are currently not "
-        "supported. "
-        "For now, consider filtering them out using the ISBLANK function "
-        "or "
-        "converting them via the STR function.");
+    auto [it, wasNew] = blankNodeMap.try_emplace(value, Id());
+    if (wasNew) {
+      it->second = Id::makeFromBlankNodeIndex(
+          localVocab->getBlankNodeIndex(blankNodeManagerPtr));
+    }
+    tc = it->second;
   } else {
     throw std::runtime_error(absl::StrCat("Type ", type,
                                           " is undefined. The binding is: '",
