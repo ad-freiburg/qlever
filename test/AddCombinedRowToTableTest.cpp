@@ -164,6 +164,27 @@ TEST(AddCombinedRowToTable, setInput) {
 }
 
 // _______________________________________________________________________________
+TEST(AddCombinedRowToTable, testReferenceCallsFlush) {
+  auto testWithBufferSize = [](size_t bufferSize) {
+    auto result = makeIdTableFromVector({});
+    result.setNumColumns(3);
+    auto adder = ad_utility::AddCombinedRowToIdTable(
+        1, std::move(result),
+        std::make_shared<ad_utility::CancellationHandle<>>(), bufferSize);
+    auto left = makeIdTableFromVector({{U, 5}, {2, U}, {3, U}, {4, U}});
+    auto right = makeIdTableFromVector({{1, 2}, {3, 4}, {4, 7}, {U, 8}});
+    adder.setInput(left, right);
+    adder.addRow(0, 0);
+    adder.addRow(0, 1);
+    result = std::move(adder.resultTable());
+
+    auto expected = makeIdTableFromVector({{1, 5, 2}, {3, 5, 4}});
+    ASSERT_EQ(result, expected);
+  };
+  testWithAllBuffersizes(testWithBufferSize);
+}
+
+// _______________________________________________________________________________
 TEST(AddCombinedRowToTable, cornerCases) {
   auto testWithBufferSize = [](size_t bufferSize) {
     auto result = makeIdTableFromVector({});
