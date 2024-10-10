@@ -49,9 +49,9 @@ std::pair<double, double> parseWktPoint(const std::string_view point) {
 
 // Compute distance (in km) between two WKT points.
 double wktDistImpl(GeoPoint point1, GeoPoint point2) {
-  auto p1_ = S2Point{S2LatLng::FromDegrees(point1.getLat(), point1.getLng())};
-  auto p2_ = S2Point{S2LatLng::FromDegrees(point2.getLat(), point2.getLng())};
-  return S2Earth::ToKm(S1Angle(p1_, p2_));
+  auto p1 = S2Point{S2LatLng::FromDegrees(point1.getLat(), point1.getLng())};
+  auto p2 = S2Point{S2LatLng::FromDegrees(point2.getLat(), point2.getLng())};
+  return S2Earth::ToKm(S1Angle(p1, p2));
 }
 
 }  // namespace detail
