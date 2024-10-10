@@ -63,21 +63,17 @@ TEST(GeoSparqlHelpers, ParseWktPoint) {
 }
 
 TEST(GeoSparqlHelpers, WktDist) {
-  // Equal longitude, latitudes with diff 3.0 and mean zero. This returns 3
-  // times the k1 from the formula, where the cosines are all 1.
-  ASSERT_DOUBLE_EQ(WktDistGeoPoints()(GeoPoint(1.5, 2.0), GeoPoint(-1.5, 2.0)),
-                   3.0 * (111.13209 - 0.56605 + 0.0012));
+  // Equal longitude, latitudes with diff 3.0 and mean zero.
+  ASSERT_NEAR(WktDistGeoPoints()(GeoPoint(1.5, 2.0), GeoPoint(-1.5, 2.0)),
+              333.58, 0.01);
 
-  // Equal latitude zero, longitudes with diff 4.0. This returns, 4 times the k2
-  // from the formula, where the cosines are all 1.
-  ASSERT_DOUBLE_EQ(WktDistGeoPoints()(GeoPoint(0.0, 3.0), GeoPoint(-0.0, 7.0)),
-                   4.0 * (111.41513 - 0.09455 + 0.00012));
+  // Equal latitude zero, longitudes with diff 4.0.
+  ASSERT_NEAR(WktDistGeoPoints()(GeoPoint(0.0, 3.0), GeoPoint(-0.0, 7.0)),
+              444.7804, 0.01);
 
   // Distance between the Eiffel tower and the Freibuger Münster (421km
-  // according to the distance measurement of Google Maps, so our formula is not
-  // that bad).
+  // according to the distance measurement of Google Maps).
   GeoPoint eiffeltower = GeoPoint(48.8585, 2.2945);
   GeoPoint frCathedral = GeoPoint(47.9957, 7.8529);
-  ASSERT_DOUBLE_EQ(WktDistGeoPoints()(eiffeltower, frCathedral),
-                   422.41514462162974);
+  ASSERT_NEAR(WktDistGeoPoints()(eiffeltower, frCathedral), 421.098, 0.01);
 }

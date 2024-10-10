@@ -5,6 +5,9 @@
 #include "./GeoSparqlHelpers.h"
 
 #include <absl/strings/charconv.h>
+#include <s2/s2earth.h>
+#include <s2/s2point.h>
+#include <s2/util/units/length-units.h>
 
 #include <cmath>
 #include <ctre-unicode.hpp>
@@ -46,15 +49,9 @@ std::pair<double, double> parseWktPoint(const std::string_view point) {
 
 // Compute distance (in km) between two WKT points.
 double wktDistImpl(GeoPoint point1, GeoPoint point2) {
-  double lng1 = point1.getLng();
-  double lat1 = point1.getLat();
-  double lng2 = point2.getLng();
-  double lat2 = point2.getLat();
-  auto sqr = [](double x) { return x * x; };
-  auto m = std::numbers::pi / 180.0 * (lat1 + lat2) / 2.0;
-  auto k1 = 111.13209 - 0.56605 * cos(2 * m) + 0.00120 * cos(4 * m);
-  auto k2 = 111.41513 * cos(m) - 0.09455 * cos(3 * m) + 0.00012 * cos(5 * m);
-  return sqrt(sqr(k1 * (lat1 - lat2)) + sqr(k2 * (lng1 - lng2)));
+  auto p1 = S2Point{S2LatLng::FromDegrees(point1.getLat(), point1.getLng())};
+  auto p2 = S2Point{S2LatLng::FromDegrees(point2.getLat(), point2.getLng())};
+  return S2Earth::ToKm(S1Angle(p1, p2));
 }
 
 }  // namespace detail
