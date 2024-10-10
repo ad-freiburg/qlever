@@ -106,6 +106,9 @@ class IndexImpl {
 
   using NumNormalAndInternal = Index::NumNormalAndInternal;
 
+  // BlankNodeManager, initialized during `readConfiguration`
+  std::unique_ptr<ad_utility::BlankNodeManager> blankNodeManager_{nullptr};
+
   // Private data members.
  private:
   string onDiskBase_;

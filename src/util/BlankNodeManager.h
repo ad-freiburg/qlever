@@ -11,45 +11,58 @@
 #include "global/ValueId.h"
 #include "util/HashSet.h"
 #include "util/Random.h"
+#include "util/Synchronized.h"
 
 namespace ad_utility {
 /*
- * Manager class for LocalBlankNodeIndex.
+ * Manager class for Blank node indices added after indexing time.
  */
 class BlankNodeManager {
  public:
-  static const uint blockSize_ = 1000;
-  static constexpr uint64_t totalAvailableBlocks_ =
-      (ValueId::maxIndex + 1) / blockSize_;
+  // Minimum index.
+  const uint64_t minIndex_;
+
+  // Number of indices that make up a single block.
+  static constexpr uint blockSize_ = 1000;
+
+  // Number of blocks available.
+  const uint64_t totalAvailableBlocks_ =
+      (ValueId::maxIndex - minIndex_ + 1) / blockSize_;
 
  private:
   // Int Generator yielding random block indices.
   SlowRandomIntGenerator<uint64_t> randBlockIndex_;
-  // Mutex for Block allocation.
-  std::mutex mtx_;
 
   // Tracks blocks currently used by instances of `LocalBlankNodeManager`.
-  HashSet<uint64_t> usedBlocksSet_;
+  Synchronized<HashSet<uint64_t>> usedBlocksSet_;
 
  public:
-  explicit BlankNodeManager(
-      SlowRandomIntGenerator<uint64_t> randomIntGenerator =
-          SlowRandomIntGenerator<uint64_t>{0, totalAvailableBlocks_ - 1});
+  // Constructor, where `minIndex` is the minimum index such that all managed
+  // indices are in [`minIndex_`, `ValueId::maxIndex`]. Currently `minIndex_` is
+  // determined by the number of BlankNodes in the current Index.
+  explicit BlankNodeManager(uint64_t minIndex = 0);
   ~BlankNodeManager() = default;
 
-  // A Local BlankNode Ids Block of size `blockSize_`.
-  struct Block {
-    explicit Block(uint64_t blockIndex);
-    ~Block();
+  // A BlankNodeIndex Block of size `blockSize_`.
+  class Block {
+    // Intentional private constructor, allowing only the BlankNodeManager to
+    // create Blocks (for a `LocalBlankNodeManager`).
+    explicit Block(uint64_t blockIndex, uint64_t startIndex);
+    friend class BlankNodeManager;
+
+   public:
+    ~Block() = default;
+    // The index of this block.
     uint64_t blockIdx_;
+    // The next free index within this block.
     uint64_t nextIdx_;
   };
 
-  // Manages the LocalBlankNodes used within a LocalVocab.
+  // Manages the BlankNodes used within a LocalVocab.
   class LocalBlankNodeManager {
    public:
-    LocalBlankNodeManager() = default;
-    ~LocalBlankNodeManager() = default;
+    explicit LocalBlankNodeManager(BlankNodeManager* blankNodeManager);
+    ~LocalBlankNodeManager();
 
     // Get a new id.
     [[nodiscard]] uint64_t getId();
@@ -58,8 +71,13 @@ class BlankNodeManager {
     // Reserved blocks.
     std::vector<BlankNodeManager::Block> blocks_;
 
+    // Reference of the BlankNodeManager, used to free the reserved blocks.
+    BlankNodeManager* const blankNodeManager_;
+
     FRIEND_TEST(BlankNodeManager, LocalBlankNodeManagerGetID);
   };
+
+  void setInitialIndex(uint64_t idx);
 
   // Allocate and retrieve a block of free ids.
   [[nodiscard]] Block allocateBlock();
@@ -67,9 +85,7 @@ class BlankNodeManager {
   // Free a block of ids.
   void freeBlock(uint64_t blockIndex);
 
-  FRIEND_TEST(BlankNodeManager, blockAllocation);
+  FRIEND_TEST(BlankNodeManager, blockAllocationAndFree);
 };
 
 }  // namespace ad_utility
-
-inline ad_utility::BlankNodeManager globalBlankNodeManager;

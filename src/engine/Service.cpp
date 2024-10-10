@@ -348,6 +348,8 @@ TripleComponent Service::bindingToTripleComponent(
 
   const auto type = binding["type"].get<std::string_view>();
   const auto value = binding["value"].get<std::string_view>();
+  auto blankNodeManagerPtr =
+      getExecutionContext()->getIndex().getBlankNodeManager();
 
   TripleComponent tc;
   if (type == "literal") {
@@ -366,12 +368,12 @@ TripleComponent Service::bindingToTripleComponent(
   } else if (type == "uri") {
     tc = TripleComponent::Iri::fromIrirefWithoutBrackets(value);
   } else if (type == "bnode") {
-    auto optEmplace = blankNodeMap.try_emplace(value, Id());
-    if (optEmplace.second) {
-      optEmplace.first->second =
-          Id::makeFromLocalBlankNodeIndex(localVocab->getBlankNodeIndex());
+    auto [it, wasNew] = blankNodeMap.try_emplace(value, Id());
+    if (wasNew) {
+      it->second = Id::makeFromBlankNodeIndex(
+          localVocab->getBlankNodeIndex(blankNodeManagerPtr));
     }
-    tc = optEmplace.first->second;
+    tc = it->second;
   } else {
     throw std::runtime_error(absl::StrCat("Type ", type,
                                           " is undefined. The binding is: '",

@@ -535,11 +535,13 @@ TEST_F(ServiceTest, bindingToTripleComponent) {
       bTTC({{"type", "bnode"}, {"value", "A"}}).toValueIdIfNotString().value();
   Id b =
       bTTC({{"type", "bnode"}, {"value", "B"}}).toValueIdIfNotString().value();
+  EXPECT_EQ(a.getDatatype(), Datatype::BlankNodeIndex);
+  EXPECT_EQ(b.getDatatype(), Datatype::BlankNodeIndex);
   EXPECT_NE(a, b);
 
   EXPECT_EQ(blankNodeMap.size(), 2);
 
-  // BlankNode exists already, known Id will be used.
+  // This BlankNode exists already, known Id will be used.
   Id a2 =
       bTTC({{"type", "bnode"}, {"value", "A"}}).toValueIdIfNotString().value();
   EXPECT_EQ(a, a2);

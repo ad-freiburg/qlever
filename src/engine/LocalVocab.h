@@ -39,7 +39,8 @@ class LocalVocab {
   auto& primaryWordSet() { return *primaryWordSet_; }
   const auto& primaryWordSet() const { return *primaryWordSet_; }
 
-  ad_utility::BlankNodeManager::LocalBlankNodeManager blankNodeManager_;
+  std::unique_ptr<ad_utility::BlankNodeManager::LocalBlankNodeManager>
+      localBlankNodeManager_;
 
  public:
   // Create a new, empty local vocabulary.
@@ -93,8 +94,9 @@ class LocalVocab {
   // Return all the words from all the word sets as a vector.
   std::vector<LiteralOrIri> getAllWordsForTesting() const;
 
-  // Get a new LocalBlankNodeIndex using the LocalBlankNodeManager.
-  LocalBlankNodeIndex getBlankNodeIndex();
+  // Get a new BlankNodeIndex using the LocalBlankNodeManager.
+  [[nodiscard]] BlankNodeIndex getBlankNodeIndex(
+      ad_utility::BlankNodeManager* blankNodeManager);
 
  private:
   // Common implementation for the two variants of

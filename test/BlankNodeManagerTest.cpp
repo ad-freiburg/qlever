@@ -5,26 +5,28 @@
 #include <gtest/gtest.h>
 
 #include "util/BlankNodeManager.h"
-#include "util/Random.h"
 
 namespace ad_utility {
-TEST(BlankNodeManager, blockAllocation) {
-  using Block = BlankNodeManager::Block;
-  auto& bnm = globalBlankNodeManager;
-
-  EXPECT_EQ(bnm.usedBlocksSet_.size(), 0);
+TEST(BlankNodeManager, blockAllocationAndFree) {
+  BlankNodeManager bnm(0);
+  EXPECT_EQ(bnm.usedBlocksSet_.rlock()->size(), 0);
 
   {
-    Block b = bnm.allocateBlock();
-    EXPECT_EQ(bnm.usedBlocksSet_.size(), 1);
+    // LocalBlankNodeManager allocates a new block
+    BlankNodeManager::LocalBlankNodeManager lbnm(&bnm);
+    [[maybe_unused]] uint64_t id = lbnm.getId();
+    EXPECT_EQ(bnm.usedBlocksSet_.rlock()->size(), 1);
   }
 
-  // Blocks are removed from the globalBlankNodeManager once they are destroyed.
-  EXPECT_EQ(bnm.usedBlocksSet_.size(), 0);
+  // The Blocks allocated by the LocalBlankNodeManager are freed/removed from
+  // the set once it is destroyed
+  EXPECT_EQ(bnm.usedBlocksSet_.rlock()->size(), 0);
 }
 
 TEST(BlankNodeManager, LocalBlankNodeManagerGetID) {
-  BlankNodeManager::LocalBlankNodeManager l;
+  BlankNodeManager bnm(0);
+  BlankNodeManager::LocalBlankNodeManager l(&bnm);
+
   // initially the LocalBlankNodeManager doesn't have any blocks
   EXPECT_EQ(l.blocks_.size(), 0);
 
@@ -37,6 +39,16 @@ TEST(BlankNodeManager, LocalBlankNodeManagerGetID) {
   l.blocks_.back().nextIdx_ = id + BlankNodeManager::blockSize_;
   id = l.getId();
   EXPECT_EQ(l.blocks_.size(), 2);
+}
+
+TEST(BlankNodeManager, maxNumOfBlocks) {
+  // Mock a high `minIndex_` to simulate reduced space in the usedBlocksSet_
+  BlankNodeManager bnm(ValueId::maxIndex - 256 * BlankNodeManager::blockSize_ +
+                       2);
+  auto allocateBlock = [&bnm]() {
+    [[maybe_unused]] auto _ = bnm.allocateBlock();
+  };
+  EXPECT_ANY_THROW(allocateBlock());
 }
 
 }  // namespace ad_utility
