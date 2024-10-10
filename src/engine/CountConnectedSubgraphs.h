@@ -27,12 +27,12 @@ using Graph = std::vector<Node>;
 size_t countSubgraphs(const Graph& graph, size_t budget);
 
 // Recursive implementation of `countSubgraphs`. Compute the number of connected
-// subgraphs in the `graph` that contains all the nodes in `nodes`, but none
-// of the nodes in `ignored`. Assume that `c` subgraphs have been previously
-// found and therefore count towards the `budget`. The `nodes` and `ignored`
-// are 1-hot encoded bitsets (see above).
+// subgraphs in `graph` that contains all the nodes in `nodes`, but none of the
+// nodes in `ignored`. Assume that `count` subgraphs have been previously found
+// and therefore count towards the `budget`. The `nodes` and `ignored` are 1-hot
+// encoded bitsets (see above).
 size_t countSubgraphsRecursively(const Graph& graph, uint64_t nodes,
-                                 uint64_t ignored, size_t c, size_t budget);
+                                 uint64_t ignored, size_t count, size_t budget);
 
 // Convert `x` to a string of bits, with the leading zeros removed, e.g.,
 // `3` will become "11". This is useful for debugging the functions above.
