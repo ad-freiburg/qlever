@@ -204,6 +204,43 @@ TEST_F(ServiceTest, computeResult) {
       return s.computeResultOnlyForTesting();
     };
 
+    // Compute the Result lazily for the given Service and check that the
+    // resulting IdTable equals the expected IdTable-vector.
+    auto checkLazyResult =
+        [](Service& service,
+           const std::vector<std::vector<std::string>>& expIdTableVector) {
+          auto result = service.computeResultOnlyForTesting(true);
+
+          // compute resulting idTable
+          IdTable idTable{2, ad_utility::testing::makeAllocator()};
+          for (auto& row : result.idTables()) {
+            idTable.insertAtEnd(row);
+          }
+
+          // create expected idTable
+          const auto& localVocab = result.localVocab();
+          auto get = [&localVocab](const std::string& s) {
+            return localVocab.getIndexOrNullopt(
+                ad_utility::triple_component::LiteralOrIri::iriref(s));
+          };
+          std::vector<std::vector<IntOrId>> idVector;
+          std::map<std::string, Id> ids;
+          for (auto& row : expIdTableVector) {
+            auto& idVecRow = idVector.emplace_back();
+            for (auto& e : row) {
+              if (!ids.contains(e)) {
+                auto idx = get(absl::StrCat("<", e, ">"));
+                ASSERT_TRUE(idx);
+                ids.insert({e, Id::makeFromLocalVocabIndex(idx.value())});
+              }
+              idVecRow.emplace_back(ids.at(e));
+            }
+          }
+          EXPECT_EQ(localVocab.size(), ids.size());
+
+          EXPECT_EQ(idTable, makeIdTableFromVector(idVector));
+        };
+
     // Checks that a given result throws a specific error message, however when
     // the `SILENT` keyword is set it will be caught.
     auto expectThrowOrSilence =
@@ -356,7 +393,8 @@ TEST_F(ServiceTest, computeResult) {
 
     // Check 5: When a siblingTree with variables common to the Service
     // Clause is passed, the Service Operation shall use the siblings result
-    // to reduce its Query complexity by injecting them as Value Clause
+    // to reduce its Query complexity by injecting them as Values Clause
+
     auto iri = ad_utility::testing::iri;
     using TC = TripleComponent;
     auto siblingTree = std::make_shared<QueryExecutionTree>(
@@ -367,7 +405,11 @@ TEST_F(ServiceTest, computeResult) {
                 {Variable{"?x"}, Variable{"?y"}, Variable{"?z"}},
                 {{TC(iri("<x>")), TC(iri("<y>")), TC(iri("<z>"))},
                  {TC(iri("<x>")), TC(iri("<y>")), TC(iri("<z2>"))},
-                 {TC(iri("<blu>")), TC(iri("<bla>")), TC(iri("<blo>"))}}}));
+                 {TC(iri("<blu>")), TC(iri("<bla>")), TC(iri("<blo>"))},
+                 // This row will be ignored in the created Values Clause as it
+                 // contains a blank node.
+                 {TC(Id::makeFromBlankNodeIndex(BlankNodeIndex::make(0))),
+                  TC(iri("<bl>")), TC(iri("<ank>"))}}}));
 
     auto parsedServiceClause5 = parsedServiceClause;
     parsedServiceClause5.graphPatternAsString_ =
@@ -410,6 +452,44 @@ TEST_F(ServiceTest, computeResult) {
         siblingTree};
     EXPECT_NO_THROW(serviceOperation6.computeResultOnlyForTesting());
     RuntimeParameters().set<"service-max-value-rows">(maxValueRowsDefault);
+
+    // Check 7: Lazy computation
+    Service lazyService{
+        testQec, parsedServiceClause,
+        getResultFunctionFactory(
+            expectedUrl, expectedSparqlQuery,
+            genJsonResult({"x", "y"},
+                          {{"bla", "bli"}, {"blu", "bla"}, {"bli", "blu"}}),
+            boost::beast::http::status::ok, "application/sparql-results+json")};
+
+    checkLazyResult(lazyService,
+                    {{"bla", "bli"}, {"blu", "bla"}, {"bli", "blu"}});
+
+    // Check 8: LazyJsonParser Error
+    Service service8{
+        testQec, parsedServiceClause,
+        getResultFunctionFactory(
+            expectedUrl, expectedSparqlQuery, std::string(1'000'000, '0'),
+            boost::beast::http::status::ok, "application/sparql-results+json")};
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        service8.computeResultOnlyForTesting(),
+        ::testing::HasSubstr("Parser failed with error"));
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        checkLazyResult(service8, {}),
+        ::testing::HasSubstr("Parser failed with error"));
+
+    Service service8b{
+        testQec, parsedServiceClause,
+        getResultFunctionFactory(
+            expectedUrl, expectedSparqlQuery,
+            R"({"head": {"vars": ["a"]}, "results": {"bindings": [{"a": break}]}})",
+            boost::beast::http::status::ok, "application/sparql-results+json")};
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        service8b.computeResultOnlyForTesting(),
+        ::testing::HasSubstr("Parser failed with error"));
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        checkLazyResult(service8b, {}),
+        ::testing::HasSubstr("Parser failed with error"));
   }
 }
 
@@ -525,6 +605,9 @@ TEST_F(ServiceTest, bindingToTripleComponent) {
       TripleComponent::Literal::fromEscapedRdfLiteral("\"Hallo \\\\Welt\"",
                                                       "@de"));
 
+  EXPECT_EQ(bTTC({{"type", "literal"}, {"value", "a\"b\"c"}}),
+            TripleComponent::Literal::fromEscapedRdfLiteral("\"a\\\"b\\\"c\""));
+
   EXPECT_EQ(bTTC({{"type", "uri"}, {"value", "http://doof.org"}}),
             TripleComponent::Iri::fromIrirefWithoutBrackets("http://doof.org"));
 
@@ -550,4 +633,36 @@ TEST_F(ServiceTest, bindingToTripleComponent) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       bTTC({{"type", "INVALID_TYPE"}, {"value", "v"}}),
       ::testing::HasSubstr("Type INVALID_TYPE is undefined."));
+}
+
+// ____________________________________________________________________________
+TEST_F(ServiceTest, idToValueForValuesClause) {
+  auto idToVc = Service::idToValueForValuesClause;
+  LocalVocab localVocab{};
+  auto index = ad_utility::testing::makeIndexWithTestSettings();
+
+  // blanknode -> nullopt
+  EXPECT_EQ(idToVc(index, Id::makeFromBlankNodeIndex(BlankNodeIndex::make(0)),
+                   localVocab),
+            std::nullopt);
+
+  EXPECT_EQ(idToVc(index, Id::makeUndefined(), localVocab), "UNDEF");
+
+  // simple datatypes -> implicit string representation
+  EXPECT_EQ(idToVc(index, Id::makeFromInt(42), localVocab), "42");
+  EXPECT_EQ(idToVc(index, Id::makeFromDouble(3.14), localVocab), "3.14");
+  EXPECT_EQ(idToVc(index, Id::makeFromBool(true), localVocab), "true");
+
+  // Escape Quotes within literals.
+  auto str = LocalVocabEntry(
+      ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes(
+          "a\"b\"c"));
+  EXPECT_EQ(idToVc(index, Id::makeFromLocalVocabIndex(&str), localVocab),
+            "\"a\\\"b\\\"c\"");
+
+  // value with xsd-type
+  EXPECT_EQ(
+      idToVc(index, Id::makeFromGeoPoint(GeoPoint(70.5, 130.2)), localVocab)
+          .value(),
+      absl::StrCat("\"POINT(130.200000 70.500000)\"^^<", GEO_WKT_LITERAL, ">"));
 }

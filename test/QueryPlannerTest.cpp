@@ -1191,8 +1191,48 @@ TEST(QueryPlanner, DatasetClause) {
           scan("<c>", "?p", "<z>", {}, g2), scan("<d>", "?p", "<z2>", {}, g2),
           scan("<e>", "?p", "<z3>", {}, g1)));
 
+  auto g12 = Graphs{"<g1>", "<g2>"};
+  auto varG = std::vector{Variable{"?g"}};
+  std::vector<ColumnIndex> graphCol{ADDITIONAL_COLUMN_GRAPH_ID};
+  h::expect(
+      "SELECT * FROM <x> FROM NAMED <g1> FROM NAMED <g2> WHERE { GRAPH ?g {<a> "
+      "<b> <c>}}",
+      scan("<a>", "<b>", "<c>", {}, g12, varG, graphCol));
+
+  h::expect("SELECT * FROM <x> WHERE { GRAPH ?g {<a> <b> <c>}}",
+            scan("<a>", "<b>", "<c>", {}, std::nullopt, varG, graphCol));
+
+  // `GROUP BY` inside a `GRAPH ?g` clause.
+  // We use the `UnorderedJoins` matcher, because the index scan has to be
+  // resorted by the graph column.
+  h::expect(
+      "SELECT * FROM <g1> FROM NAMED <g2> { GRAPH ?g "
+      "{ "
+      "{SELECT ?p {<d> ?p <z2>} GROUP BY ?p}"
+      "} }",
+      h::GroupBy({Variable{"?p"}, Variable{"?g"}}, {},
+                 h::UnorderedJoins(
+                     scan("<d>", "?p", "<z2>", {}, g2, varG, graphCol))));
+
+  // A complex example with graph variables.
+  h::expect(
+      "SELECT * FROM <g1> FROM NAMED <g2> { <a> ?p <x>. {<b> ?p <y>} GRAPH ?g "
+      "{ <c> ?p <z> "
+      "{SELECT * {<d> ?p <z2>}}"
+      "{SELECT ?p {<d> ?p <z2>} GROUP BY ?p}"
+      "} <e> ?p <z3> }",
+      h::UnorderedJoins(
+          scan("<a>", "?p", "<x>", {}, g1), scan("<b>", "?p", "<y>", {}, g1),
+          scan("<c>", "?p", "<z>", {}, g2, varG, graphCol),
+          scan("<d>", "?p", "<z2>", {}, g2, varG, graphCol),
+          h::GroupBy({Variable{"?p"}, Variable{"?g"}}, {},
+                     h::UnorderedJoins(
+                         scan("<d>", "?p", "<z2>", {}, g2, varG, graphCol))),
+          scan("<e>", "?p", "<z3>", {}, g1)));
+  // We currently don't support repeating the graph variable inside the
+  // graph clause
   AD_EXPECT_THROW_WITH_MESSAGE(
-      h::expect("SELECT * FROM <x> FROM NAMED <y> WHERE { ?x ?y ?z}",
-                ::testing::_),
-      ::testing::HasSubstr("FROM NAMED clauses are not yet supported"));
+      h::expect("SELECT * { GRAPH ?x {?x <b> <c>}}", ::testing::_),
+      AllOf(HasSubstr("used as the graph specifier"),
+            HasSubstr("may not appear in the body")));
 }

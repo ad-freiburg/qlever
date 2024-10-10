@@ -104,6 +104,11 @@ class Service : public Operation {
       ad_utility::HashMap<std::string, Id>& blankNodeMap,
       LocalVocab* localVocab) const;
 
+  // Create a value for the VALUES-clause used in `getSiblingValuesClause` from
+  // id. If the id is of type blank node `std::nullopt` is returned.
+  static std::optional<std::string> idToValueForValuesClause(
+      const Index& index, Id id, const LocalVocab& localVocab);
+
  private:
   // The string returned by this function is used as cache key.
   std::string getCacheKeyImpl() const override;
@@ -138,6 +143,13 @@ class Service : public Operation {
   // parse JSON here and not a VALUES clause.
   template <size_t I>
   void writeJsonResult(const std::vector<std::string>& vars,
-                       ad_utility::LazyJsonParser::Generator& response,
-                       IdTable* idTable, LocalVocab* localVocab);
+                       const nlohmann::json& partJson, IdTable* idTable,
+                       LocalVocab* localVocab, size_t& rowIdx);
+
+  // Compute the result lazy as IdTable generator.
+  // If the `singleIdTable` flag is set, the result is yielded as one idTable.
+  cppcoro::generator<IdTable> computeResultLazily(
+      const std::vector<std::string> vars,
+      ad_utility::LazyJsonParser::Generator body,
+      std::shared_ptr<LocalVocab> localVocab, bool singleIdTable);
 };

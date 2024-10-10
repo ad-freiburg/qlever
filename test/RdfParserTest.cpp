@@ -267,6 +267,11 @@ TEST(RdfParserTest, literalAndDatatypeToTripleComponent) {
             "POLYGON(7.8 47.9, 40.0 40.5, 10.9 20.5)");
   EXPECT_EQ(asStringViewUnsafe(result2.getLiteral().getDatatype()),
             GEO_WKT_LITERAL);
+  // Invalid points should be converted to plain string literals
+  auto result3 = ladttc("POINT(0.0 99.9999)", fromIri(GEO_WKT_LITERAL));
+  ASSERT_FALSE(result3.getLiteral().hasDatatype());
+  ASSERT_EQ(asStringViewUnsafe(result3.getLiteral().getContent()),
+            "POINT(0.0 99.9999)");
 }
 
 TEST(RdfParserTest, blankNode) {
