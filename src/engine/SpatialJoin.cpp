@@ -297,12 +297,12 @@ std::optional<GeoPoint> SpatialJoin::getPoint(const IdTable* restable,
 };
 
 // ____________________________________________________________________________
-Id SpatialJoin::computeDist(const IdTable* resLeft, const IdTable* resRight,
-                            size_t rowLeft, size_t rowRight,
-                            ColumnIndex leftPointCol,
+Id SpatialJoin::computeDist(const IdTable* idTableLeft,
+                            const IdTable* idTableRight, size_t rowLeft,
+                            size_t rowRight, ColumnIndex leftPointCol,
                             ColumnIndex rightPointCol) const {
-  auto point1 = getPoint(resLeft, rowLeft, leftPointCol);
-  auto point2 = getPoint(resRight, rowRight, rightPointCol);
+  auto point1 = getPoint(idTableLeft, rowLeft, leftPointCol);
+  auto point2 = getPoint(idTableRight, rowRight, rightPointCol);
   if (!point1.has_value() || !point2.has_value()) {
     return Id::makeUndefined();
   }
@@ -312,8 +312,8 @@ Id SpatialJoin::computeDist(const IdTable* resLeft, const IdTable* resRight,
 
 // ____________________________________________________________________________
 void SpatialJoin::addResultTableEntry(IdTable* result,
-                                      const IdTable* resultLeft,
-                                      const IdTable* resultRight,
+                                      const IdTable* idTableLeft,
+                                      const IdTable* idTableRight,
                                       size_t rowLeft, size_t rowRight,
                                       Id distance) const {
   // this lambda function copies elements from copyFrom
@@ -335,8 +335,8 @@ void SpatialJoin::addResultTableEntry(IdTable* result,
   result->emplace_back();
   // add columns to result table
   size_t rescol = 0;
-  rescol = addColumns(result, resultLeft, resrow, rescol, rowLeft);
-  rescol = addColumns(result, resultRight, resrow, rescol, rowRight);
+  rescol = addColumns(result, idTableLeft, resrow, rescol, rowLeft);
+  rescol = addColumns(result, idTableRight, resrow, rescol, rowRight);
 
   if (addDistToResult_) {
     result->at(resrow, rescol) = distance;
@@ -365,8 +365,8 @@ SpatialJoin::PreparedJoinParams SpatialJoin::prepareJoin() const {
   };
 
   // Input tables
-  const auto [resLeft, keepAliveLeft] = getIdTable(childLeft_);
-  const auto [resRight, keepAliveRight] = getIdTable(childRight_);
+  const auto [idTableLeft, resultLeft] = getIdTable(childLeft_);
+  const auto [idTableRight, resultRight] = getIdTable(childRight_);
 
   // Input table columns for the join
   ColumnIndex leftJoinCol = getJoinCol(childLeft_, leftChildVariable_);
@@ -374,15 +374,14 @@ SpatialJoin::PreparedJoinParams SpatialJoin::prepareJoin() const {
 
   // Size of output table
   size_t numColumns = getResultWidth();
-  return PreparedJoinParams{resLeft,     std::move(keepAliveLeft),
-                            resRight,    std::move(keepAliveRight),
-                            leftJoinCol, rightJoinCol,
-                            numColumns};
+  return PreparedJoinParams{
+      idTableLeft, std::move(resultLeft), idTableRight, std::move(resultRight),
+      leftJoinCol, rightJoinCol,          numColumns};
 }
 
 // ____________________________________________________________________________
 Result SpatialJoin::baselineAlgorithm() {
-  const auto [resLeft, keepAliveLeft, resRight, keepAliveRight, leftJoinCol,
+  const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
               rightJoinCol, numColumns] = prepareJoin();
   IdTable result{numColumns, _executionContext->getAllocator()};
   auto maxDist = getMaxDist();
@@ -390,7 +389,7 @@ Result SpatialJoin::baselineAlgorithm() {
 
   // cartesian product between the two tables, pairs are restricted according to
   // `maxDistance_` and `maxResults_`
-  for (size_t rowLeft = 0; rowLeft < resLeft->size(); rowLeft++) {
+  for (size_t rowLeft = 0; rowLeft < idTableLeft->size(); rowLeft++) {
     // This priority queue stores the intermediate best results if `maxResults_`
     // is used. Each intermediate result is stored as a pair of its `rowRight`
     // and distance. Since the queue will hold at most `maxResults_ + 1` items,
@@ -405,9 +404,9 @@ Result SpatialJoin::baselineAlgorithm() {
         intermediate(compare);
 
     // Inner loop of cartesian product
-    for (size_t rowRight = 0; rowRight < resRight->size(); rowRight++) {
-      Id dist = computeDist(resLeft, resRight, rowLeft, rowRight, leftJoinCol,
-                            rightJoinCol);
+    for (size_t rowRight = 0; rowRight < idTableRight->size(); rowRight++) {
+      Id dist = computeDist(idTableLeft, idTableRight, rowLeft, rowRight,
+                            leftJoinCol, rightJoinCol);
 
       // Ensure `maxDist_` constraint
       if (dist.getDatatype() != Datatype::Int ||
@@ -418,8 +417,8 @@ Result SpatialJoin::baselineAlgorithm() {
 
       // If there is no `maxResults_` we can add the result row immediately
       if (!maxResults.has_value()) {
-        addResultTableEntry(&result, resLeft, resRight, rowLeft, rowRight,
-                            dist);
+        addResultTableEntry(&result, idTableLeft, idTableRight, rowLeft,
+                            rowRight, dist);
         continue;
       }
 
@@ -440,17 +439,18 @@ Result SpatialJoin::baselineAlgorithm() {
         auto [rowRight, dist] = intermediate.top();
         intermediate.pop();
 
-        addResultTableEntry(&result, resLeft, resRight, rowLeft, rowRight,
-                            Id::makeFromInt(dist));
+        addResultTableEntry(&result, idTableLeft, idTableRight, rowLeft,
+                            rowRight, Id::makeFromInt(dist));
       }
     }
   }
-  return Result(std::move(result), std::vector<ColumnIndex>{}, LocalVocab{});
+  return Result(std::move(result), std::vector<ColumnIndex>{},
+                Result::getMergedLocalVocab(*resultLeft, *resultRight));
 }
 
 // ____________________________________________________________________________
 Result SpatialJoin::s2geometryAlgorithm() {
-  const auto [resLeft, keepAliveLeft, resRight, keepAliveRight, leftJoinCol,
+  const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
               rightJoinCol, numColumns] = prepareJoin();
   IdTable result{numColumns, _executionContext->getAllocator()};
   auto maxDist = getMaxDist();
@@ -469,8 +469,8 @@ Result SpatialJoin::s2geometryAlgorithm() {
   // Optimization: If we only search by maximum distance, the operation is
   // symmetric, so the larger table can be used for the index
   bool indexOfRight =
-      (maxResults.has_value() || (resLeft->size() > resRight->size()));
-  auto indexTable = indexOfRight ? resRight : resLeft;
+      (maxResults.has_value() || (idTableLeft->size() > idTableRight->size()));
+  auto indexTable = indexOfRight ? idTableRight : idTableLeft;
   auto indexJoinCol = indexOfRight ? rightJoinCol : leftJoinCol;
 
   // Populate the index
@@ -496,7 +496,7 @@ Result SpatialJoin::s2geometryAlgorithm() {
         util::units::Meters(static_cast<float>(maxDist.value()))));
   }
 
-  auto searchTable = indexOfRight ? resLeft : resRight;
+  auto searchTable = indexOfRight ? idTableLeft : idTableRight;
   auto searchJoinCol = indexOfRight ? leftJoinCol : rightJoinCol;
 
   // Use the index to lookup the points of the other table
@@ -516,12 +516,13 @@ Result SpatialJoin::s2geometryAlgorithm() {
 
       auto rowLeft = indexOfRight ? searchRow : indexRow;
       auto rowRight = indexOfRight ? indexRow : searchRow;
-      addResultTableEntry(&result, resLeft, resRight, rowLeft, rowRight,
+      addResultTableEntry(&result, idTableLeft, idTableRight, rowLeft, rowRight,
                           Id::makeFromInt(dist));
     }
   }
 
-  return Result(std::move(result), std::vector<ColumnIndex>{}, LocalVocab{});
+  return Result(std::move(result), std::vector<ColumnIndex>{},
+                Result::getMergedLocalVocab(*resultLeft, *resultRight));
 }
 
 // ____________________________________________________________________________
