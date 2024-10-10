@@ -190,7 +190,7 @@ std::vector<BlockMetadata> RelationalExpression<Comparison>::evaluateImpl(
     valueIdsInput.push_back(firstId);
     valueIdsInput.push_back(secondId);
 
-    if ((firstId.getDatatype() != secondId.getDatatype())) {
+    if (firstId.getDatatype() != secondId.getDatatype()) {
       mixedDatatypeBlocks.push_back(block);
     }
   }
