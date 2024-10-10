@@ -36,11 +36,6 @@ class Bind : public Operation {
   float getMultiplicity(size_t col) override;
   bool knownEmptyResult() override;
 
-  // Returns the variable to which the expression will be bound
-  [[nodiscard]] const string& targetVariable() const {
-    return _bind._target.name();
-  }
-
  protected:
   [[nodiscard]] vector<ColumnIndex> resultSortedOn() const override;
 
@@ -48,7 +43,6 @@ class Bind : public Operation {
   ProtoResult computeResult(bool requestLaziness) override;
 
   // Implementation for the binding of arbitrary expressions.
-  template <size_t IN_WIDTH, size_t OUT_WIDTH>
   IdTable computeExpressionBind(
       LocalVocab* outputLocalVocab,
       ad_utility::SimilarTo<IdTable> auto&& inputIdTable,

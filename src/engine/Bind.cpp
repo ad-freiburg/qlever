@@ -87,16 +87,9 @@ ProtoResult Bind::computeResult(bool requestLaziness) {
   LOG(DEBUG) << "Got input to Bind operation." << std::endl;
 
   auto applyBind = [this, subRes](auto&& idTable, LocalVocab* localVocab) {
-    size_t inwidth = idTable.numColumns();
-    size_t outwidth = getResultWidth();
-    return ad_utility::callFixedSize(
-        (std::array{inwidth, outwidth}),
-        [this, &subRes, localVocab,
-         &idTable]<size_t IN_WIDTH, size_t OUT_WIDTH>() {
-          return computeExpressionBind<IN_WIDTH, OUT_WIDTH>(
-              localVocab, AD_FWD(idTable), subRes->localVocab(),
-              _bind._expression.getPimpl());
-        });
+    return computeExpressionBind(localVocab, AD_FWD(idTable),
+                                 subRes->localVocab(),
+                                 _bind._expression.getPimpl());
   };
 
   if (subRes->isFullyMaterialized()) {
@@ -126,7 +119,6 @@ ProtoResult Bind::computeResult(bool requestLaziness) {
 }
 
 // _____________________________________________________________________________
-template <size_t IN_WIDTH, size_t OUT_WIDTH>
 IdTable Bind::computeExpressionBind(
     LocalVocab* outputLocalVocab,
     ad_utility::SimilarTo<IdTable> auto&& inputIdTable,
@@ -139,37 +131,10 @@ IdTable Bind::computeExpressionBind(
 
   sparqlExpression::ExpressionResult expressionResult =
       expression->evaluate(&evaluationContext);
-  size_t inSize = inputIdTable.size();
-  size_t inCols = inputIdTable.numColumns();
 
-  auto output = [this, &inputIdTable, inSize, inCols]() {
-    if constexpr (std::is_const_v<
-                      std::remove_reference_t<decltype(inputIdTable)>>) {
-      const auto input = inputIdTable.template asStaticView<IN_WIDTH>();
-      auto output =
-          IdTable{getResultWidth(), getExecutionContext()->getAllocator()}
-              .template toStatic<OUT_WIDTH>();
-
-      // first initialize the first columns (they remain identical)
-      output.reserve(inSize);
-      // copy the input to the first numColumns;
-      for (size_t i = 0; i < inSize; ++i) {
-        output.emplace_back();
-        for (size_t j = 0; j < inCols; ++j) {
-          output(i, j) = input(i, j);
-        }
-        checkCancellation();
-      }
-      return output;
-    } else {
-      (void)this;
-      (void)inSize;
-      (void)inCols;
-      IdTable output = std::move(inputIdTable);
-      output.addEmptyColumn();
-      return std::move(output).toStatic<OUT_WIDTH>();
-    }
-  }();
+  auto output = std::move(AD_FWD(inputIdTable)).cloneOrMove();
+  output.addEmptyColumn();
+  auto outputColumn = output.getColumn(output.numColumns() - 1);
 
   auto visitor = [&]<sparqlExpression::SingleExpressionResult T>(
                      T&& singleResult) mutable {
@@ -177,22 +142,23 @@ IdTable Bind::computeExpressionBind(
     constexpr static bool isStrongId = std::is_same_v<T, Id>;
 
     if constexpr (isVariable) {
-      auto column =
+      auto columnIndex =
           getInternallyVisibleVariableColumns().at(singleResult).columnIndex_;
-      for (size_t i = 0; i < inSize; ++i) {
-        output(i, inCols) = output(i, column);
+      auto inputColumn = output.getColumn(columnIndex);
+      for (size_t i = 0; i < outputColumn.size(); ++i) {
+        outputColumn[i] = inputColumn[i];
         checkCancellation();
       }
     } else if constexpr (isStrongId) {
-      for (size_t i = 0; i < inSize; ++i) {
-        output(i, inCols) = singleResult;
+      for (size_t i = 0; i < outputColumn.size(); ++i) {
+        outputColumn[i] = singleResult;
         checkCancellation();
       }
     } else {
       constexpr bool isConstant = sparqlExpression::isConstantResult<T>;
 
       auto resultGenerator = sparqlExpression::detail::makeGenerator(
-          std::forward<T>(singleResult), inSize, &evaluationContext);
+          std::forward<T>(singleResult), outputColumn.size(), &evaluationContext);
 
       if constexpr (isConstant) {
         auto it = resultGenerator.begin();
@@ -200,8 +166,8 @@ IdTable Bind::computeExpressionBind(
           Id constantId =
               sparqlExpression::detail::constantExpressionResultToId(
                   std::move(*it), *outputLocalVocab);
-          for (size_t i = 0; i < inSize; ++i) {
-            output(i, inCols) = constantId;
+          for (size_t i = 0; i < outputColumn.size(); ++i) {
+            outputColumn[i] = constantId;
             checkCancellation();
           }
         }
@@ -209,7 +175,7 @@ IdTable Bind::computeExpressionBind(
         size_t i = 0;
         // We deliberately move the values from the generator.
         for (auto& resultValue : resultGenerator) {
-          output(i, inCols) =
+          outputColumn[i] =
               sparqlExpression::detail::constantExpressionResultToId(
                   std::move(resultValue), *outputLocalVocab);
           i++;
@@ -221,5 +187,5 @@ IdTable Bind::computeExpressionBind(
 
   std::visit(visitor, std::move(expressionResult));
 
-  return std::move(output).toDynamic();
+  return output;
 }

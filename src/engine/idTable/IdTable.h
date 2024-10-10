@@ -435,13 +435,27 @@ class IdTable {
     push_back(std::ranges::ref_view{newRow});
   }
 
-  // Create a deep copy of this `IdTable` that owns its memory. In most cases
-  // this behaves exactly like the copy constructor with the following
-  // exception: If `this` is a view (because the `isView` template parameter is
-  // `true`), then the copy constructor will also create a (const and
-  // non-owning) view, but `clone` will create a mutable deep copy of the data
-  // that the view points to
-  IdTable<T, NumColumns, ColumnStorage, IsView::False> clone() const
+  // Same semantics as clone, but if we have a temporary, we can move instead.
+  IdTable cloneOrMove() const& requires(
+      !isView && std::is_copy_constructible_v<Storage> &&
+      std::is_copy_constructible_v<ColumnStorage>) {
+    return clone();
+  }
+
+  // Optimization for rvalues: We can move the data instead of copying it.
+  IdTable cloneOrMove() &&
+      requires(!isView && std::is_copy_constructible_v<Storage> &&
+               std::is_copy_constructible_v<ColumnStorage>) {
+        return std::move(*this);
+      }
+
+      // Create a deep copy of this `IdTable` that owns its memory. In most
+      // cases this behaves exactly like the copy constructor with the following
+      // exception: If `this` is a view (because the `isView` template parameter
+      // is `true`), then the copy constructor will also create a (const and
+      // non-owning) view, but `clone` will create a mutable deep copy of the
+      // data that the view points to
+      IdTable<T, NumColumns, ColumnStorage, IsView::False> clone() const
       requires std::is_copy_constructible_v<Storage> &&
                std::is_copy_constructible_v<ColumnStorage> {
     Storage storage;
