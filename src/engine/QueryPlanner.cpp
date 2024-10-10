@@ -14,6 +14,7 @@
 #include "engine/CartesianProductJoin.h"
 #include "engine/CheckUsePatternTrick.h"
 #include "engine/CountAvailablePredicates.h"
+#include "engine/CountConnectedSubgraphs.h"
 #include "engine/Distinct.h"
 #include "engine/Filter.h"
 #include "engine/GroupBy.h"
@@ -36,6 +37,7 @@
 #include "engine/Values.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
+#include "global/RuntimeParameters.h"
 #include "parser/Alias.h"
 #include "parser/SparqlParserHelpers.h"
 
@@ -361,8 +363,6 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getGroupByRow(
           "should have thrown an exception earlier");
       groupVariables.push_back(activeGraphVariable_.value());
     }
-    // The GroupBy constructor automatically takes care of sorting the input if
-    // necessary.
     groupByPlan._qet = makeExecutionTree<GroupBy>(
         _qec, groupVariables, std::move(aliases), parent._qet);
     added.push_back(groupByPlan);
@@ -682,6 +682,11 @@ auto QueryPlanner::seedWithScansAndText(
   // add all child plans as seeds
   uint64_t idShift = tg._nodeMap.size();
   for (const auto& vec : children) {
+    AD_CONTRACT_CHECK(
+        idShift < 64,
+        absl::StrCat("Group graph pattern too large: QLever currently supports "
+                     "at most 64 elements (like triples), but found ",
+                     idShift));
     for (const SubtreePlan& plan : vec) {
       SubtreePlan newIdPlan = plan;
       // give the plan a unique id bit
@@ -1093,8 +1098,7 @@ bool QueryPlanner::connected(const QueryPlanner::SubtreePlan& a,
 
 // _____________________________________________________________________________
 std::vector<std::array<ColumnIndex, 2>> QueryPlanner::getJoinColumns(
-    const QueryPlanner::SubtreePlan& a,
-    const QueryPlanner::SubtreePlan& b) const {
+    const SubtreePlan& a, const SubtreePlan& b) {
   AD_CORRECTNESS_CHECK(a._qet && b._qet);
   return QueryExecutionTree::getJoinColumns(*a._qet, *b._qet);
 }
@@ -1247,6 +1251,20 @@ void QueryPlanner::applyTextLimitsIfPossible(
 }
 
 // _____________________________________________________________________________
+size_t QueryPlanner::findUniqueNodeIds(
+    const std::vector<SubtreePlan>& connectedComponent) {
+  ad_utility::HashSet<uint64_t> uniqueNodeIds;
+  auto nodeIds = connectedComponent |
+                 std::views::transform(&SubtreePlan::_idsOfIncludedNodes);
+  // Check that all the `_idsOfIncludedNodes` are one-hot encodings of a single
+  // value, i.e. they have exactly one bit set.
+  AD_CORRECTNESS_CHECK(std::ranges::all_of(
+      nodeIds, [](auto nodeId) { return std::popcount(nodeId) == 1; }));
+  std::ranges::copy(nodeIds, std::inserter(uniqueNodeIds, uniqueNodeIds.end()));
+  return uniqueNodeIds.size();
+}
+
+// _____________________________________________________________________________
 std::vector<QueryPlanner::SubtreePlan>
 QueryPlanner::runDynamicProgrammingOnConnectedComponent(
     std::vector<SubtreePlan> connectedComponent,
@@ -1259,16 +1277,12 @@ QueryPlanner::runDynamicProgrammingOnConnectedComponent(
   dpTab.push_back(std::move(connectedComponent));
   applyFiltersIfPossible<false>(dpTab.back(), filters);
   applyTextLimitsIfPossible(dpTab.back(), textLimits, false);
-  ad_utility::HashSet<uint64_t> uniqueNodeIds;
-  std::ranges::copy(
-      dpTab.back() | std::views::transform(&SubtreePlan::_idsOfIncludedNodes),
-      std::inserter(uniqueNodeIds, uniqueNodeIds.end()));
-  size_t numSeeds = uniqueNodeIds.size();
+  size_t numSeeds = findUniqueNodeIds(dpTab.back());
 
   for (size_t k = 2; k <= numSeeds; ++k) {
     LOG(TRACE) << "Producing plans that unite " << k << " triples."
                << std::endl;
-    dpTab.emplace_back(vector<SubtreePlan>());
+    dpTab.emplace_back();
     for (size_t i = 1; i * 2 <= k; ++i) {
       checkCancellation();
       auto newPlans = merge(dpTab[i - 1], dpTab[k - i - 1], tg);
@@ -1281,6 +1295,72 @@ QueryPlanner::runDynamicProgrammingOnConnectedComponent(
     AD_CORRECTNESS_CHECK(!dpTab[k - 1].empty());
   }
   return std::move(dpTab.back());
+}
+
+// _____________________________________________________________________________
+size_t QueryPlanner::countSubgraphs(
+    std::vector<const QueryPlanner::SubtreePlan*> graph, size_t budget) {
+  // Remove duplicate plans from `graph`.
+  auto getId = [](const SubtreePlan* v) { return v->_idsOfIncludedNodes; };
+  std::ranges::sort(graph, std::ranges::less{}, getId);
+  graph.erase(
+      std::ranges::unique(graph, std::ranges::equal_to{}, getId).begin(),
+      graph.end());
+
+  // Qlever currently limits the number of triples etc. per group to be <= 64
+  // anyway, so we can simply assert here.
+  AD_CORRECTNESS_CHECK(graph.size() <= 64,
+                       "Should qlever ever support more than 64 elements per "
+                       "group graph pattern, then the `countSubgraphs` "
+                       "functionality also has to be changed");
+
+  // Compute the bit representation needed for the call to
+  // `countConnectedSubgraphs::countSubgraphs` below.
+  countConnectedSubgraphs::Graph g;
+  for (size_t i = 0; i < graph.size(); ++i) {
+    countConnectedSubgraphs::Node v{0};
+    for (size_t k = 0; k < graph.size(); ++k) {
+      if ((k != i) &&
+          !QueryPlanner::getJoinColumns(*graph.at(k), *graph.at(i)).empty()) {
+        v.neighbors_ |= (1ULL << k);
+      }
+    }
+    g.push_back(v);
+  }
+
+  return countConnectedSubgraphs::countSubgraphs(g, budget);
+}
+
+// _____________________________________________________________________________
+std::vector<QueryPlanner::SubtreePlan>
+QueryPlanner::runGreedyPlanningOnConnectedComponent(
+    std::vector<SubtreePlan> connectedComponent,
+    const vector<SparqlFilter>& filters, const TextLimitMap& textLimits,
+    const TripleGraph& tg) const {
+  auto& result = connectedComponent;
+  applyFiltersIfPossible<true>(result, filters);
+  applyTextLimitsIfPossible(result, textLimits, true);
+  size_t numSeeds = findUniqueNodeIds(result);
+
+  while (numSeeds > 1) {
+    checkCancellation();
+    auto newPlans = merge(result, result, tg);
+    applyFiltersIfPossible<true>(newPlans, filters);
+    applyTextLimitsIfPossible(newPlans, textLimits, true);
+    auto smallestIdx = findSmallestExecutionTree(newPlans);
+    auto& cheapestNewTree = newPlans.at(smallestIdx);
+    size_t oldSize = result.size();
+    std::erase_if(result, [&cheapestNewTree](const auto& plan) {
+      // TODO<joka921> We can also assert some other invariants here.
+      return (cheapestNewTree._idsOfIncludedNodes & plan._idsOfIncludedNodes) !=
+             0;
+    });
+    result.push_back(std::move(cheapestNewTree));
+    AD_CORRECTNESS_CHECK(result.size() < oldSize);
+    numSeeds--;
+  }
+  // TODO<joka921> Assert that all seeds are covered by the result.
+  return std::move(result);
 }
 
 // _____________________________________________________________________________
@@ -1301,8 +1381,22 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
   }
   vector<vector<SubtreePlan>> lastDpRowFromComponents;
   for (auto& component : components | std::views::values) {
-    lastDpRowFromComponents.push_back(runDynamicProgrammingOnConnectedComponent(
-        std::move(component), filters, textLimits, tg));
+    std::vector<const SubtreePlan*> g;
+    for (const auto& plan : component) {
+      g.push_back(&plan);
+    }
+    const size_t budget = RuntimeParameters().get<"query-planning-budget">();
+    bool useGreedyPlanning = countSubgraphs(g, budget) > budget;
+    if (useGreedyPlanning) {
+      LOG(INFO)
+          << "Using the greedy query planner for a large connected component"
+          << std::endl;
+    }
+    auto impl = useGreedyPlanning
+                    ? &QueryPlanner::runGreedyPlanningOnConnectedComponent
+                    : &QueryPlanner::runDynamicProgrammingOnConnectedComponent;
+    lastDpRowFromComponents.push_back(
+        std::invoke(impl, this, std::move(component), filters, textLimits, tg));
     checkCancellation();
   }
   size_t numConnectedComponents = lastDpRowFromComponents.size();
@@ -1642,8 +1736,20 @@ size_t QueryPlanner::findCheapestExecutionTree(
       return aCost < bCost;
     }
   };
-  return std::min_element(lastRow.begin(), lastRow.end(), compare) -
-         lastRow.begin();
+  return std::ranges::min_element(lastRow, compare) - lastRow.begin();
+};
+
+// _________________________________________________________________________________
+size_t QueryPlanner::findSmallestExecutionTree(
+    const std::vector<SubtreePlan>& lastRow) {
+  AD_CONTRACT_CHECK(!lastRow.empty());
+  auto compare = [](const auto& a, const auto& b) {
+    auto tie = [](const auto& x) {
+      return std::tuple{x.getSizeEstimate(), x.getSizeEstimate()};
+    };
+    return tie(a) < tie(b);
+  };
+  return std::ranges::min_element(lastRow, compare) - lastRow.begin();
 };
 
 // _____________________________________________________________________________

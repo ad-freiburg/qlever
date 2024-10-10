@@ -304,13 +304,22 @@ TEST(QueryPlanner, testFilterAfterSeed) {
   auto scan = h::IndexScanFromStrings;
   auto qec = ad_utility::testing::getQec(
       "<s> <r> <x>, <x2>, <x3>. <s2> <r> <y1>, <y2>, <y3>.");
-  h::expect(
+  // The following query leads to a different query plan with the dynamic
+  // programming and the greedy query planner, because the greedy planner
+  // also applies the filters greedily.
+  std::string query =
       "SELECT ?x ?y ?z WHERE {"
       "?x <r> ?y . ?y <r> ?z . "
-      "FILTER(?x != ?y) }",
+      "FILTER(?x != ?y) }";
+  h::expectDynamicProgramming(
+      query,
       h::Filter("?x != ?y",
                 h::Join(scan("?x", "<r>", "?y"), scan("?y", "<r>", "?z"))),
       qec);
+  h::expectGreedy(query,
+                  h::Join(h::Filter("?x != ?y", scan("?x", "<r>", "?y")),
+                          scan("?y", "<r>", "?z")),
+                  qec);
 }
 
 TEST(QueryPlanner, testFilterAfterJoin) {
@@ -1169,6 +1178,7 @@ TEST(QueryPlanner, SubtreeWithService) {
       h::Minus(sibling, h::Sort(h::Service(sibling, "{ ?x <is-a> ?z . }"))));
 }
 
+// ________________________________________
 TEST(QueryPlanner, DatasetClause) {
   auto scan = h::IndexScanFromStrings;
   using Graphs = ad_utility::HashSet<std::string>;
