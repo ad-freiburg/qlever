@@ -924,8 +924,7 @@ TEST_P(SpatialJoinParamTest, computeResultSmallDatasetDifferentSizeChildren) {
       expectedMaxDist10000000_rows_diff, columnNames, false);
 }
 
-INSTANTIATE_TEST_CASE_P(SpatialJoin, SpatialJoinParamTest,
-                        ::testing::Values(true, false));
+INSTANTIATE_TEST_SUITE_P(SpatialJoin, SpatialJoinParamTest, ::testing::Bool());
 
 }  // end of Namespace computeResultTest
 
