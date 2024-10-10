@@ -323,7 +323,6 @@ TEST_F(ValueIdTest, toDebugString) {
   test(makeTextRecordId(37), "T:37");
   test(makeWordVocabId(42), "W:42");
   test(makeBlankNodeId(27), "B:27");
-  test(makeLocalBlankNodeId(28), "L:28");
   test(ValueId::makeFromDate(
            DateYearOrDuration{123456, DateYearOrDuration::Type::Year}),
        "D:123456");
