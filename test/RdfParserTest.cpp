@@ -768,7 +768,13 @@ TEST(RdfParserTest, iriref) {
 template <typename Parser>
 std::vector<TurtleTriple> parseFromFile(const std::string& filename,
                                         bool useBatchInterface) {
-  Parser parserChild{filename};
+  auto parserChild = [&]() {
+    if constexpr (ad_utility::isInstantiation<Parser, RdfMultifileParser>) {
+      return Parser{{{filename, qlever::Filetype::Turtle, std::nullopt}}};
+    } else {
+      return Parser{filename};
+    }
+  }();
   RdfParserBase& parser = parserChild;
 
   std::vector<TurtleTriple> result;
@@ -800,6 +806,12 @@ auto forAllParallelParsers(const auto& function, const auto&... args) {
   function.template operator()<RdfParallelParser<TurtleParser<TokenizerCtre>>>(
       false, args...);
 }
+auto forAllMultifileParsers(const auto& function, const auto&... args) {
+  function.template operator()<RdfMultifileParser<Tokenizer>>(true, args...);
+  function.template operator()<RdfMultifileParser<TokenizerCtre>>(true,
+                                                                  args...);
+}
+
 auto forAllParsers(const auto& function, const auto&... args) {
   function.template operator()<RdfStreamParser<TurtleParser<Tokenizer>>>(
       true, args...);
@@ -810,6 +822,7 @@ auto forAllParsers(const auto& function, const auto&... args) {
   function.template operator()<RdfStreamParser<TurtleParser<TokenizerCtre>>>(
       false, args...);
   forAllParallelParsers(function, args...);
+  forAllMultifileParsers(function, args...);
 }
 
 TEST(RdfParserTest, TurtleStreamAndParallelParser) {
@@ -833,6 +846,7 @@ TEST(RdfParserTest, TurtleStreamAndParallelParser) {
   };
 
   forAllParsers(testWithParser);
+  forAllMultifileParsers(testWithParser);
   ad_utility::deleteFile(filename);
 }
 
@@ -854,6 +868,7 @@ TEST(RdfParserTest, emptyInput) {
   forAllParsers(testWithParser, "");
   std::string onlyPrefixes = "PREFIX bim: <http://www.bimm.bam.de/blubb/>";
   forAllParsers(testWithParser, onlyPrefixes);
+  forAllMultifileParsers(testWithParser);
 }
 
 // ________________________________________________________________________
@@ -967,7 +982,13 @@ TEST(RdfParserTest, stopParsingOnOutsideFailure) {
     }
     ad_utility::Timer t{ad_utility::Timer::Stopped};
     {
-      [[maybe_unused]] Parser parserChild{filename, 10ms};
+      [[maybe_unused]] Parser parserChild = [&]() {
+        if constexpr (ad_utility::isInstantiation<Parser, RdfMultifileParser>) {
+          return Parser{{{filename, qlever::Filetype::Turtle, std::nullopt}}};
+        } else {
+          return Parser{filename, 10ms};
+        }
+      }();
       t.cont();
     }
     EXPECT_LE(t.msecs(), 20ms);
@@ -983,6 +1004,7 @@ TEST(RdfParserTest, stopParsingOnOutsideFailure) {
   }();
   FILE_BUFFER_SIZE = 40;
   forAllParallelParsers(testWithParser, input);
+  forAllMultifileParsers(testWithParser, input);
 }
 
 // _____________________________________________________________________________

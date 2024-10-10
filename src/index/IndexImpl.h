@@ -234,6 +234,7 @@ class IndexImpl {
   // !! The index can not directly be used after this call, but has to be setup
   // by createFromOnDiskIndex after this call.
   void createFromFile(const string& filename, Index::Filetype type);
+  void createFromFiles(const std::vector<Index::InputFileSpecification>& files);
 
   // Creates an index object from an on disk index that has previously been
   // constructed. Read necessary meta data into memory and opens file handles.
@@ -474,8 +475,10 @@ class IndexImpl {
   // configured to either parse in parallel or not, and to either use the
   // CTRE-based relaxed parser or not, depending on the settings of the
   // corresponding member variables.
-  std::unique_ptr<RdfParserBase> makeRdfParser(const std::string& filename,
-                                               Index::Filetype type) const;
+  std::unique_ptr<RdfParserBase> makeRdfParser(
+      const Index::InputFileSpecification& file) const;
+  std::unique_ptr<RdfParserBase> makeRdfParser(
+      const std::vector<Index::InputFileSpecification>& files) const;
 
   FirstPermutationSorterAndInternalTriplesAsPso convertPartialToGlobalIds(
       TripleVec& data, const vector<size_t>& actualLinesPerPartial,

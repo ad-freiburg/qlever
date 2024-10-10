@@ -68,9 +68,10 @@ IndexBuilderDataAsFirstPermutationSorter IndexImpl::createIdTriplesAndVocab(
 
 // _____________________________________________________________________________
 std::unique_ptr<RdfParserBase> IndexImpl::makeRdfParser(
-    const std::string& filename, Index::Filetype type) const {
+    const Index::InputFileSpecification& file) const {
   auto makeRdfParserImpl =
-      [&filename]<int useParallel, int isTurtleInput, int useCtre>()
+      [&filename =
+           file.filename_]<int useParallel, int isTurtleInput, int useCtre>()
       -> std::unique_ptr<RdfParserBase> {
     using TokenizerT =
         std::conditional_t<useCtre == 1, TokenizerCtre, Tokenizer>;
@@ -86,10 +87,30 @@ std::unique_ptr<RdfParserBase> IndexImpl::makeRdfParser(
   // `callFixedSize` litfts runtime integers to compile time integers. We use it
   // here to create the correct combinations of template arguments.
   return ad_utility::callFixedSize(
-      std::array{useParallelParser_ ? 1 : 0,
-                 type == Index::Filetype::Turtle ? 1 : 0,
+      std::array{file.parseInParallel_ ? 1 : 0,
+                 file.filetype_ == Index::Filetype::Turtle ? 1 : 0,
                  onlyAsciiTurtlePrefixes_ ? 1 : 0},
       makeRdfParserImpl);
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<RdfParserBase> IndexImpl::makeRdfParser(
+    const std::vector<Index::InputFileSpecification>& files) const {
+  if (files.size() == 1) {
+    return makeRdfParser(files.front());
+  }
+  auto makeRdfParserImpl =
+      [&files]<int useCtre>() -> std::unique_ptr<RdfParserBase> {
+    using TokenizerT =
+        std::conditional_t<useCtre == 1, TokenizerCtre, Tokenizer>;
+    // TODO<joka921> parallelism etc.
+    return std::make_unique<RdfMultifileParser<TokenizerT>>(files);
+  };
+
+  // `callFixedSize` litfts runtime integers to compile time integers. We use it
+  // here to create the correct combinations of template arguments.
+  return ad_utility::callFixedSize(std::array{onlyAsciiTurtlePrefixes_ ? 1 : 0},
+                                   makeRdfParserImpl);
 }
 
 // Several helper functions for joining the OSP permutation with the patterns.
@@ -298,17 +319,28 @@ std::pair<size_t, size_t> IndexImpl::createInternalPSOandPOS(
 
 // _____________________________________________________________________________
 void IndexImpl::createFromFile(const string& filename, Index::Filetype type) {
+  createFromFiles({{filename, type, std::nullopt, useParallelParser_}});
+}
+
+// _____________________________________________________________________________
+void IndexImpl::createFromFiles(
+    const std::vector<Index::InputFileSpecification>& files) {
   if (!loadAllPermutations_ && usePatterns_) {
     throw std::runtime_error{
         "The patterns can only be built when all 6 permutations are created"};
   }
-  LOG(INFO) << "Processing input triples from " << filename << " ..."
-            << std::endl;
+  if (files.size() == 1) {
+    LOG(INFO) << "Processing input triples from " << files.at(0).filename_
+              << " ..." << std::endl;
+  } else {
+    LOG(INFO) << "Processing input triples from " << files.size()
+              << " distinct input files" << std::endl;
+  }
 
   readIndexBuilderSettingsFromFile();
 
   IndexBuilderDataAsFirstPermutationSorter indexBuilderData =
-      createIdTriplesAndVocab(makeRdfParser(filename, type));
+      createIdTriplesAndVocab(makeRdfParser(files));
 
   // Write the configuration already at this point, so we have it available in
   // case any of the permutations fail.

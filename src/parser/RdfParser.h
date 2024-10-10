@@ -17,6 +17,7 @@
 #include "global/Constants.h"
 #include "global/SpecialIds.h"
 #include "index/ConstantsIndexBuilding.h"
+#include "index/InputFileSpecification.h"
 #include "parser/ParallelBuffer.h"
 #include "parser/Tokenizer.h"
 #include "parser/TokenizerCtre.h"
@@ -195,6 +196,7 @@ class TurtleParser : public RdfParserBase {
   std::string activePrefix_;
   TripleComponent activeSubject_;
   TripleComponent::Iri activePredicate_;
+  TripleComponent defaultGraphIri_ = qlever::specialIds().at(DEFAULT_GRAPH_IRI);
   size_t numBlankNodes_ = 0;
 
   bool currentTripleIgnoredBecauseOfInvalidLiteral_ = false;
@@ -206,6 +208,8 @@ class TurtleParser : public RdfParserBase {
 
  public:
   TurtleParser() = default;
+  TurtleParser(TripleComponent defaultGraphIri)
+      : defaultGraphIri_{std::move(defaultGraphIri)} {}
   TurtleParser(TurtleParser&& rhs) noexcept = default;
   TurtleParser& operator=(TurtleParser&& rhs) noexcept = default;
 
@@ -347,7 +351,8 @@ class TurtleParser : public RdfParserBase {
   // ______________________________________________________________________________________
   void emitTriple() {
     if (!currentTripleIgnoredBecauseOfInvalidLiteral_) {
-      triples_.emplace_back(activeSubject_, activePredicate_, lastParseResult_);
+      triples_.emplace_back(activeSubject_, activePredicate_, lastParseResult_,
+                            defaultGraphIri_);
     }
     currentTripleIgnoredBecauseOfInvalidLiteral_ = false;
   }
@@ -406,11 +411,15 @@ class TurtleParser : public RdfParserBase {
 
 template <class Tokenizer_T>
 class NQuadParser : public TurtleParser<Tokenizer_T> {
-  static inline const TripleComponent defaultGraphId_ =
-      qlever::specialIds().at(DEFAULT_GRAPH_IRI);
+  TripleComponent defaultGraphId_ = qlever::specialIds().at(DEFAULT_GRAPH_IRI);
   TripleComponent activeObject_;
   TripleComponent activeGraphLabel_;
   using Base = TurtleParser<Tokenizer_T>;
+
+ public:
+  NQuadParser() = default;
+  NQuadParser(TripleComponent defaultGraphId)
+      : defaultGraphId_{std::move(defaultGraphId)} {}
 
  protected:
   bool statement() override;
@@ -554,8 +563,11 @@ class RdfStreamParser : public Parser {
  public:
   // Default construction needed for tests
   RdfStreamParser() = default;
-  explicit RdfStreamParser(const string& filename) {
-    LOG(DEBUG) << "Initialize turtle parsing from uncompressed file or stream "
+  explicit RdfStreamParser(const string& filename,
+                           TripleComponent defaultGraphIri =
+                               qlever::specialIds().at(DEFAULT_GRAPH_IRI))
+      : Parser{std::move(defaultGraphIri)} {
+    LOG(DEBUG) << "Initialize RDF parsing from uncompressed file or stream "
                << filename << std::endl;
     initialize(filename);
   }
@@ -684,4 +696,55 @@ class RdfParallelParser : public Parser {
   std::atomic<size_t> numBatchesTotal_ = 0;
 
   std::chrono::milliseconds sleepTimeForTesting_;
+};
+
+// This class is an RDF parser that parses multiple files in parallel. Each
+// file is specified by an  `InputFileSpecification`.
+template <typename Tokenizer>
+class RdfMultifileParser : public RdfParserBase {
+ public:
+  // Default construction needed for tests
+  RdfMultifileParser() = default;
+
+  // Construct the parser from a vector of file specifications and eagerly start
+  // parsing them on background threads.
+  explicit RdfMultifileParser(
+      const std::vector<qlever::InputFileSpecification>& files);
+
+  // This function is needed for the interface, but always throws an exception.
+  // `getBatch` (below) has to be used insteadl.
+  bool getLine(TurtleTriple* triple) override;
+
+  // Retrieve the next batch of triples, or `nullopt` if there are no more
+  // batches. There is no guarantee about the order in which batches from
+  // different input files are returned, but each batch belongs to a distinct
+  // input file.
+  std::optional<std::vector<TurtleTriple>> getBatch() override;
+
+  size_t getParsePosition() const override {
+    // TODO: can we really define this position here?
+    return 0;
+  }
+
+  // The destructor has to clean up all the parallel structures that might be
+  // still running in the background, especially when it is called before the
+  // parsing has finished (e.g. in case of an exception in the code that uses
+  // the parser).
+  ~RdfMultifileParser() override;
+
+ private:
+  // A thread that feeds the file specifications to the actual parser threads.
+  ad_utility::JThread feederThread_;
+  // The buffer for the finished batches.
+  ad_utility::data_structures::ThreadSafeQueue<std::vector<TurtleTriple>>
+      finishedBatchQueue_{10};
+  // Note: The order is important
+  // TODO<joka921> comment on this...
+  // This queue manages its own thread. Each task consists of a single file
+  // that is to be parsed.
+  ad_utility::TaskQueue<false> parsingQueue_{10, NUM_PARALLEL_PARSER_THREADS};
+
+  // The number of parsers that have started, but not yet finished. This is
+  // needed to detect the complete parsing.
+  std::atomic<size_t> numActiveParsers_ = 0;
 };

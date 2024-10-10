@@ -49,6 +49,47 @@ void writeStxxlConfigFile(const string& location, const string& tail) {
              << STXXL_DISK_SIZE_INDEX_BUILDER << ",syscall\n";
 }
 
+// Check, that the `vec` has exactly 1 or exactly `numFiles` many entries. If
+// `allowZero` is true, then an empty vector will also be accepted. If this
+// condition is violated, throw an exception. This is used to validate the
+// parameters for file types and default graphs.
+static constexpr auto checkNumParams = [](const auto& vec, size_t numFiles,
+                                          bool allowZero,
+                                          std::string_view parameterName) {
+  if (allowZero && vec.empty()) {
+    return;
+  }
+  if (vec.size() == 1 || vec.size() == numFiles) {
+    return;
+  }
+  auto error = absl::StrCat(
+      "The parameter \"", parameterName,
+      "\" must be specified either exactly once (in which case it is "
+      "used for all input files) or exactly `num-inpu-files` times, in "
+      "which case each input file has its own value.");
+  if (allowZero) {
+    absl::StrAppend(&error,
+                    " It can additionally be completely omitted, in which "
+                    "case a default value is used for all inputs");
+  }
+  throw std::runtime_error{std::move(error)};
+};
+
+// Convert the `filetype` string, which must be "ttl", "nt", or "nq" to the
+// corresponding `qlever::Filetype` value.
+auto getFiletype = [](std::string_view filetype) {
+  if (filetype == "ttl" || filetype == "nt") {
+    return qlever::Filetype::Turtle;
+  } else if (filetype == "nq") {
+    return qlever::Filetype::NQuad;
+  } else {
+    throw std::runtime_error{
+        absl::StrCat("The parameter --file-format, -F must be either one of "
+                     "`ttl`, `nt`, or `nq`, but is `",
+                     filetype, "`")};
+  }
+};
+
 // Main function.
 int main(int argc, char** argv) {
   // Copy the git hash and datetime of compilation (which require relinking)
@@ -67,8 +108,9 @@ int main(int argc, char** argv) {
   string textIndexName;
   string kbIndexName;
   string settingsFile;
-  string filetype;
-  string inputFile;
+  std::vector<string> filetype;
+  std::vector<string> inputFile;
+  std::vector<string> defaultGraphs;
   bool noPatterns = false;
   bool onlyAddTextIndex = false;
   bool keepTemporaryFiles = false;
@@ -94,6 +136,8 @@ int main(int argc, char** argv) {
       "The format of the input file with the knowledge graph data. Must be one "
       "of [nt|ttl|nq]. If not set, QLever will try to deduce it from the "
       "filename suffix.");
+  add("default-graph,g", po::value(&defaultGraphs),
+      "The default graph Iri for the k-th file");
   add("kg-index-name,K", po::value(&kbIndexName),
       "The name of the knowledge graph index (default: basename of "
       "`kg-input-file`).");
@@ -157,8 +201,8 @@ int main(int argc, char** argv) {
 
   // If no index name was specified, take the part of the input file name after
   // the last slash.
-  if (kbIndexName.empty() && !inputFile.empty()) {
-    kbIndexName = ad_utility::getLastPartOfString(inputFile, '/');
+  if (kbIndexName.empty()) {
+    kbIndexName = "no index name specified";
   }
 
   LOG(INFO) << EMPH_ON << "QLever IndexBuilder, compiled on "
@@ -181,59 +225,38 @@ int main(int argc, char** argv) {
     index.setKeepTempFiles(keepTemporaryFiles);
     index.setSettingsFile(settingsFile);
     index.loadAllPermutations() = !onlyPsoAndPos;
-    // NOTE: If `onlyAddTextIndex` is true, we do not want to construct an
-    // index, but we assume that it already exists. In particular, we then need
-    // the vocabulary from the KB index for building the text index.
+
+    // Convert the parameters for the filenames, file types, and default graphs
+    // into a `vector<InputFileSpecification>`.
+    auto getFileSpecifications = [&]() {
+      checkNumParams(filetype, inputFile.size(), false, "--file-format, -F");
+      checkNumParams(defaultGraphs, inputFile.size(), true,
+                     "--default-graph, -g");
+      std::vector<qlever::InputFileSpecification> fileSpecs;
+      for (size_t i = 0; i < inputFile.size(); ++i) {
+        std::string_view type =
+            filetype.size() == 1 ? filetype.at(0) : filetype.at(i);
+        auto defaultGraph = [&]() -> std::optional<string> {
+          if (defaultGraphs.empty()) {
+            return std::nullopt;
+          }
+          return defaultGraphs.size() == 1 ? defaultGraphs.at(0)
+                                           : defaultGraphs.at(i);
+        }();
+        auto& filename = inputFile.at(i);
+        if (filename == "-") {
+          filename = "/dev/stdin";
+        }
+        fileSpecs.emplace_back(filename, getFiletype(type),
+                               std::move(defaultGraph));
+      }
+      return fileSpecs;
+    };
+
     if (!onlyAddTextIndex) {
-      if (inputFile.empty() || inputFile == "-") {
-        inputFile = "/dev/stdin";
-      }
-
-      if (!filetype.empty()) {
-        LOG(INFO) << "You specified the input format: "
-                  << ad_utility::getUppercase(filetype) << std::endl;
-      } else {
-        bool filetypeDeduced = false;
-        if (inputFile.ends_with(".nt")) {
-          filetype = "nt";
-          filetypeDeduced = true;
-        } else if (inputFile.ends_with(".ttl")) {
-          filetype = "ttl";
-          filetypeDeduced = true;
-        } else if (inputFile.ends_with(".nq")) {
-          filetype = "nq";
-          filetypeDeduced = true;
-        } else {
-          LOG(INFO) << "Unknown or missing extension of input file, assuming: "
-                       "TTL"
-                    << std::endl;
-        }
-        if (filetypeDeduced) {
-          LOG(INFO) << "Format of input file deduced from extension: "
-                    << ad_utility::getUppercase(filetype) << std::endl;
-        }
-        LOG(INFO) << "If this is not correct, start again using the option "
-                     "--file-format (-F)"
-                  << std::endl;
-      }
-
-      if (filetype == "ttl") {
-        LOG(DEBUG) << "Parsing uncompressed TTL from: " << inputFile
-                   << std::endl;
-        index.createFromFile(inputFile, Index::Filetype::Turtle);
-      } else if (filetype == "nt") {
-        LOG(DEBUG) << "Parsing uncompressed N-Triples from: " << inputFile
-                   << " (using the Turtle parser)" << std::endl;
-        index.createFromFile(inputFile, Index::Filetype::Turtle);
-      } else if (filetype == "nq") {
-        LOG(DEBUG) << "Parsing uncompressed N-Quads from: " << inputFile
-                   << std::endl;
-        index.createFromFile(inputFile, Index::Filetype::NQuad);
-      } else {
-        LOG(ERROR) << "File format must be one of: nt ttl nq" << std::endl;
-        std::cerr << boostOptions << std::endl;
-        exit(1);
-      }
+      auto fileSpecifications = getFileSpecifications();
+      AD_CONTRACT_CHECK(!fileSpecifications.empty());
+      index.createFromFiles(fileSpecifications);
     }
 
     if (!wordsfile.empty() || addWordsFromLiterals) {
