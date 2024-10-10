@@ -402,7 +402,7 @@ void expectGreedy(std::string query, auto matcher,
                   source_location l = source_location::current()) {
   expectWithGivenBudget(std::move(query), std::move(matcher), optQec, 0, l);
 }
-// Same as `expectWithGivenBudget` above, but always use the dyanmic programming
+// Same as `expectWithGivenBudget` above, but always use the dynamic programming
 // query planner.
 void expectDynamicProgramming(
     std::string query, auto matcher,
