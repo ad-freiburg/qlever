@@ -2,8 +2,7 @@
 // Created by johannes on 19.04.20.
 //
 
-#ifndef QLEVER_BIND_H
-#define QLEVER_BIND_H
+#pragma once
 
 #include "engine/Operation.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
@@ -46,16 +45,15 @@ class Bind : public Operation {
   [[nodiscard]] vector<ColumnIndex> resultSortedOn() const override;
 
  private:
-  ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override;
+  ProtoResult computeResult(bool requestLaziness) override;
 
   // Implementation for the binding of arbitrary expressions.
   template <size_t IN_WIDTH, size_t OUT_WIDTH>
-  void computeExpressionBind(
-      IdTable* outputIdTable, LocalVocab* outputLocalVocab,
-      const Result& inputResultTable,
+  IdTable computeExpressionBind(
+      LocalVocab* outputLocalVocab,
+      ad_utility::SimilarTo<IdTable> auto&& inputIdTable,
+      const LocalVocab& inputLocalVocab,
       sparqlExpression::SparqlExpression* expression) const;
 
   [[nodiscard]] VariableToColumnMap computeVariableToColumnMap() const override;
 };
-
-#endif  // QLEVER_BIND_H
