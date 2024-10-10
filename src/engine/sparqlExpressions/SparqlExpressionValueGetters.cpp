@@ -32,7 +32,6 @@ NumericValue NumericValueGetter::operator()(
     case Datatype::Date:
     case Datatype::GeoPoint:
     case Datatype::BlankNodeIndex:
-    case Datatype::LocalBlankNodeIndex:
       return NotNumeric{};
   }
   AD_FAIL();
@@ -53,7 +52,6 @@ auto EffectiveBooleanValueGetter::operator()(
       return id.getBool() ? True : False;
     case Datatype::Undefined:
     case Datatype::BlankNodeIndex:
-    case Datatype::LocalBlankNodeIndex:
       return Undef;
     case Datatype::VocabIndex: {
       auto index = id.getVocabIndex();
@@ -157,7 +155,6 @@ IntDoubleStr ToNumericValueGetter::operator()(
     case Datatype::WordVocabIndex:
     case Datatype::Date:
     case Datatype::BlankNodeIndex:
-    case Datatype::LocalBlankNodeIndex:
       auto optString = LiteralFromIdGetter{}(id, context);
       if (optString.has_value()) {
         return std::move(optString.value());
@@ -202,7 +199,6 @@ OptIri DatatypeValueGetter::operator()(ValueId id,
                      context);
     case Undefined:
     case BlankNodeIndex:
-    case LocalBlankNodeIndex:
     case TextRecordIndex:
     case WordVocabIndex:
       return std::nullopt;
@@ -257,7 +253,6 @@ T getValue(ValueId id, const sparqlExpression::EvaluationContext* context,
     case TextRecordIndex:
     case WordVocabIndex:
     case BlankNodeIndex:
-    case LocalBlankNodeIndex:
     case Bool:
     case Int:
     case Double:

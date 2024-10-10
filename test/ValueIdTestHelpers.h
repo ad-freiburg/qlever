@@ -57,9 +57,6 @@ inline ValueId makeWordVocabId(uint64_t value) {
 inline ValueId makeBlankNodeId(uint64_t value) {
   return ValueId::makeFromBlankNodeIndex(BlankNodeIndex::make(value));
 }
-inline ValueId makeLocalBlankNodeId(uint64_t value) {
-  return ValueId::makeFromLocalBlankNodeIndex(LocalBlankNodeIndex::make(value));
-}
 
 inline uint64_t getVocabIndex(ValueId id) { return id.getVocabIndex().get(); }
 // TODO<joka921> Make the tests more precise for the localVocabIndices.
