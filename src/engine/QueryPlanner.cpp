@@ -351,10 +351,20 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getGroupByRow(
       aliases = pq.selectClause().getAliases();
     }
 
+    // Inside a `GRAPH ?var {....}` clause,  a `GROUP BY` must implicitly (also)
+    // group by the graph variable.
+    auto groupVariables = pq._groupByVariables;
+    if (activeGraphVariable_.has_value()) {
+      AD_CORRECTNESS_CHECK(
+          !ad_utility::contains(groupVariables, activeGraphVariable_.value()),
+          "Graph variable used inside the GRAPH clause, this "
+          "should have thrown an exception earlier");
+      groupVariables.push_back(activeGraphVariable_.value());
+    }
     // The GroupBy constructor automatically takes care of sorting the input if
     // necessary.
     groupByPlan._qet = makeExecutionTree<GroupBy>(
-        _qec, pq._groupByVariables, std::move(aliases), parent._qet);
+        _qec, groupVariables, std::move(aliases), parent._qet);
     added.push_back(groupByPlan);
   }
   return added;
