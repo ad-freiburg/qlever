@@ -105,6 +105,15 @@ struct CompressedBlockMetadata {
 
   // Two of these are equal if all members are equal.
   bool operator==(const CompressedBlockMetadata&) const = default;
+
+  // Format BlockMetadata contents for debugging.
+  friend std::ostream& operator<<(
+      std::ostream& str, const CompressedBlockMetadata& blockMetadata) {
+    str << "#BlockMetadata\n(first) " << blockMetadata.firstTriple_ << "(last) "
+        << blockMetadata.lastTriple_ << "num. rows: " << blockMetadata.numRows_
+        << "." << std::endl;
+    return str;
+  }
 };
 
 // Serialization of the `OffsetAndcompressedSize` subclass.
