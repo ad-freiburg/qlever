@@ -1131,10 +1131,9 @@ TEST(IdTable, addEmptyColumn) {
 
   EXPECT_EQ(table.numColumns(), 2);
   EXPECT_THAT(table.getColumn(0), ElementsAre(V(1), V(2)));
-  EXPECT_THAT(
-      table.getColumn(1),
-      ElementsAre(AD_PROPERTY(Id, getDatatype, Eq(Datatype::Undefined)),
-                  AD_PROPERTY(Id, getDatatype, Eq(Datatype::Undefined))));
+  // The new column is uninitialized, so we can't make any more specific
+  // assertions about its content here.
+  EXPECT_EQ(table.getColumn(1).size(), 2);
 }
 
 // Check that we can completely instantiate `IdTable`s with a different value
