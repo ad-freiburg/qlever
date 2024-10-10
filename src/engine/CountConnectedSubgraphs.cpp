@@ -67,7 +67,7 @@ static uint64_t subsetIndexToBitmap(size_t i,
 // `13` (`1101` as bits) will be converted to `[0, 2, 3]`;
 static std::vector<uint8_t> bitsetToVector(uint64_t bitset) {
   std::vector<uint8_t> result;
-  for (uint64_t i = 0; i < 64; ++i) {
+  for (uint8_t i = 0; i < 64; ++i) {
     if (bitset & (1ULL << i)) {
       result.push_back(i);
     }

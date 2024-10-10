@@ -207,11 +207,11 @@ TEST(QueryPlanner, testBFSLeaveOut) {
 TEST(QueryPlanner, indexScanZeroVariables) {
   auto scan = h::IndexScanFromStrings;
   using enum Permutation::Enum;
-  h::expectDifferentPlanners(
+  h::expect(
       "SELECT * \n "
       "WHERE \t {<x> <y> <z>}",
       scan("<x>", "<y>", "<z>"));
-  h::expectDifferentPlanners(
+  h::expect(
       "SELECT * \n "
       "WHERE \t {<x> <y> <z> . <x> <y> ?z}",
       h::CartesianProductJoin(scan("<x>", "<y>", "<z>"),
@@ -221,14 +221,14 @@ TEST(QueryPlanner, indexScanZeroVariables) {
 TEST(QueryPlanner, indexScanOneVariable) {
   auto scan = h::IndexScanFromStrings;
   using enum Permutation::Enum;
-  h::expectDifferentPlanners(
+  h::expect(
       "PREFIX : <http://rdf.myprefix.com/>\n"
       "SELECT ?x \n "
       "WHERE \t {?x :myrel :obj}",
       scan("?x", "<http://rdf.myprefix.com/myrel>",
            "<http://rdf.myprefix.com/obj>", {POS}));
 
-  h::expectDifferentPlanners(
+  h::expect(
       "PREFIX : <http://rdf.myprefix.com/>\n"
       "SELECT ?x \n "
       "WHERE \t {:subj :myrel ?x}",
@@ -240,7 +240,7 @@ TEST(QueryPlanner, indexScanTwoVariables) {
   auto scan = h::IndexScanFromStrings;
   using enum Permutation::Enum;
 
-  h::expectDifferentPlanners(
+  h::expect(
       "PREFIX : <http://rdf.myprefix.com/>\n"
       "SELECT ?x \n "
       "WHERE \t {?x :myrel ?y}",
@@ -250,20 +250,20 @@ TEST(QueryPlanner, indexScanTwoVariables) {
 TEST(QueryPlanner, joinOfTwoScans) {
   auto scan = h::IndexScanFromStrings;
   using enum Permutation::Enum;
-  h::expectDifferentPlanners(
+  h::expect(
       "PREFIX : <pre/>\n"
       "SELECT ?x \n "
       "WHERE \t {:s1 :r ?x. :s2 :r ?x}",
       h::Join(scan("<pre/s1>", "<pre/r>", "?x"),
               scan("<pre/s2>", "<pre/r>", "?x")));
 
-  h::expectDifferentPlanners(
+  h::expect(
       "PREFIX : <pre/>\n"
       "SELECT ?x ?y \n "
       "WHERE  {?y :r ?x . :s2 :r ?x}",
       h::Join(scan("?y", "<pre/r>", "?x"), scan("<pre/s2>", "<pre/r>", "?x")));
 
-  h::expectDifferentPlanners(
+  h::expect(
       "PREFIX : <pre/>\n"
       "SELECT ?x ?y ?z \n "
       "WHERE {?y :r ?x. ?z :r ?x}",
@@ -273,7 +273,7 @@ TEST(QueryPlanner, joinOfTwoScans) {
 TEST(QueryPlanner, testActorsBornInEurope) {
   auto scan = h::IndexScanFromStrings;
   using enum ::OrderBy::AscOrDesc;
-  h::expectDifferentPlanners(
+  h::expect(
       "PREFIX : <pre/>\n"
       "SELECT ?a \n "
       "WHERE {?a :profession :Actor . ?a :born-in ?c. ?c :in :Europe}\n"
@@ -287,7 +287,7 @@ TEST(QueryPlanner, testActorsBornInEurope) {
 
 TEST(QueryPlanner, testStarTwoFree) {
   auto scan = h::IndexScanFromStrings;
-  h::expectDifferentPlanners(
+  h::expect(
       "PREFIX : <http://rdf.myprefix.com/>\n"
       "PREFIX ns: <http://rdf.myprefix.com/ns/>\n"
       "PREFIX xxx: <http://rdf.myprefix.com/xxx/>\n"
@@ -311,10 +311,11 @@ TEST(QueryPlanner, testFilterAfterSeed) {
       "SELECT ?x ?y ?z WHERE {"
       "?x <r> ?y . ?y <r> ?z . "
       "FILTER(?x != ?y) }";
-  h::expect(query,
-            h::Filter("?x != ?y", h::Join(scan("?x", "<r>", "?y"),
-                                          scan("?y", "<r>", "?z"))),
-            qec);
+  h::expectDynamicProgramming(
+      query,
+      h::Filter("?x != ?y",
+                h::Join(scan("?x", "<r>", "?y"), scan("?y", "<r>", "?z"))),
+      qec);
   h::expectGreedy(query,
                   h::Join(h::Filter("?x != ?y", scan("?x", "<r>", "?y")),
                           scan("?y", "<r>", "?z")),
@@ -324,7 +325,7 @@ TEST(QueryPlanner, testFilterAfterSeed) {
 TEST(QueryPlanner, testFilterAfterJoin) {
   auto scan = h::IndexScanFromStrings;
   auto qec = ad_utility::testing::getQec("<s> <r> <x>");
-  h::expectDifferentPlanners(
+  h::expect(
       "SELECT ?x ?y ?z WHERE {"
       "?x <r> ?y . ?y <r> ?z . "
       "FILTER(?x != ?z) }",
@@ -337,19 +338,19 @@ TEST(QueryPlanner, threeVarTriples) {
   auto scan = h::IndexScanFromStrings;
   using enum Permutation::Enum;
 
-  h::expectDifferentPlanners(
+  h::expect(
       "SELECT ?x ?p ?o WHERE {"
       "<s> <p> ?x . ?x ?p ?o }",
       h::Join(scan("<s>", "<p>", "?x", {SPO, PSO}),
               scan("?x", "?p", "?o", {SPO, SOP})));
 
-  h::expectDifferentPlanners(
+  h::expect(
       "SELECT ?x ?p ?o WHERE {"
       "<s> ?x <o> . ?x ?p ?o }",
       h::Join(scan("<s>", "?x", "<o>", {SOP, OSP}),
               scan("?x", "?p", "?o", {SPO, SOP})));
 
-  h::expectDifferentPlanners(
+  h::expect(
       "SELECT ?s ?p ?o WHERE {"
       "<s> <p> ?p . ?s ?p ?o }",
       h::Join(scan("<s>", "<p>", "?p", {SPO, PSO}),
@@ -359,12 +360,12 @@ TEST(QueryPlanner, threeVarTriples) {
 TEST(QueryPlanner, threeVarTriplesTCJ) {
   auto qec = ad_utility::testing::getQec("<s> <p> <x>");
   auto scan = h::IndexScanFromStrings;
-  h::expectDifferentPlanners(
+  h::expect(
       "SELECT ?x ?p ?o WHERE {"
       "<s> ?p ?x . ?x ?p ?o }",
       h::MultiColumnJoin(scan("<s>", "?p", "?x"), scan("?x", "?p", "?o")), qec);
 
-  h::expectDifferentPlanners(
+  h::expect(
       "SELECT ?s ?p ?o WHERE {"
       "?s ?p ?o . ?s ?p <x> }",
       h::MultiColumnJoin(scan("?s", "?p", "?o"), scan("?s", "?p", "<x>")), qec);
@@ -372,7 +373,7 @@ TEST(QueryPlanner, threeVarTriplesTCJ) {
 
 TEST(QueryPlanner, threeVarXthreeVarException) {
   auto scan = h::IndexScanFromStrings;
-  h::expectDifferentPlanners(
+  h::expect(
       "SELECT ?s ?s2 WHERE {"
       "?s ?p ?o . ?s2 ?p ?o }",
       h::MultiColumnJoin(scan("?s", "?p", "?o"), scan("?s2", "?p", "?o")));
@@ -380,7 +381,7 @@ TEST(QueryPlanner, threeVarXthreeVarException) {
 
 TEST(QueryExecutionTreeTest, testBooksbyNewman) {
   auto scan = h::IndexScanFromStrings;
-  h::expectDifferentPlanners(
+  h::expect(
       "SELECT ?x WHERE { ?x <is-a> <Book> . "
       "?x <Author> <Anthony_Newman_(Author)> }",
       h::Join(scan("?x", "<is-a>", "<Book>"),
@@ -389,7 +390,7 @@ TEST(QueryExecutionTreeTest, testBooksbyNewman) {
 
 TEST(QueryExecutionTreeTest, testBooksGermanAwardNomAuth) {
   auto scan = h::IndexScanFromStrings;
-  h::expectDifferentPlanners(
+  h::expect(
       "SELECT ?x ?y WHERE { "
       "?x <is-a> <Person> . "
       "?x <Country_of_nationality> <Germany> . "
@@ -405,7 +406,7 @@ TEST(QueryExecutionTreeTest, testPlantsEdibleLeaves) {
   auto scan = h::IndexScanFromStrings;
   auto wordScan = h::TextIndexScanForWord;
   auto entityScan = h::TextIndexScanForEntity;
-  h::expectDifferentPlanners(
+  h::expect(
       "SELECT ?a WHERE  {?a <is-a> <Plant> . ?c ql:contains-entity ?a. ?c "
       "ql:contains-word \"edible leaves\"}",
       h::UnorderedJoins(scan("?a", "<is-a>", "<Plant>"),
@@ -418,7 +419,7 @@ TEST(QueryExecutionTreeTest, testCoOccFreeVar) {
   auto scan = h::IndexScanFromStrings;
   auto wordScan = h::TextIndexScanForWord;
   auto entityScan = h::TextIndexScanForEntity;
-  h::expectDifferentPlanners(
+  h::expect(
       "PREFIX : <> SELECT ?x ?y WHERE { ?x :is-a :Politician . ?c "
       "ql:contains-entity ?x . ?c ql:contains-word \"friend*\" . ?c "
       "ql:contains-entity ?y }",
@@ -432,7 +433,7 @@ TEST(QueryExecutionTreeTest, testPoliticiansFriendWithScieManHatProj) {
   auto scan = h::IndexScanFromStrings;
   auto wordScan = h::TextIndexScanForWord;
   auto entityScan = h::TextIndexScanForEntity;
-  h::expectDifferentPlanners(
+  h::expect(
       "SELECT ?p ?s"
       "WHERE {"
       "?a <is-a> <Politician> . "
@@ -585,11 +586,11 @@ TEST(QueryExecutionTreeTest, testFormerSegfaultTriFilter) {
 
 TEST(QueryPlanner, testSimpleOptional) {
   auto scan = h::IndexScanFromStrings;
-  h::expectDifferentPlanners(
+  h::expect(
       "SELECT ?a ?b \n "
       "WHERE  {?a <rel1> ?b . OPTIONAL { ?a <rel2> ?c }}",
       h::OptionalJoin(scan("?a", "<rel1>", "?b"), scan("?a", "<rel2>", "?c")));
-  h::expectDifferentPlanners(
+  h::expect(
       "SELECT ?a ?b \n "
       "WHERE  {?a <rel1> ?b . "
       "OPTIONAL { ?a <rel2> ?c }} ORDER BY ?b",
@@ -605,12 +606,9 @@ TEST(QueryPlanner, SimpleTripleOneVariable) {
   // With only one variable, there are always two permutations that will yield
   // exactly the same result. The query planner consistently chooses one of
   // them.
-  h::expectDifferentPlanners("SELECT * WHERE { ?s <p> <o> }",
-                             scan("?s", "<p>", "<o>", {POS}));
-  h::expectDifferentPlanners("SELECT * WHERE { <s> ?p <o> }",
-                             scan("<s>", "?p", "<o>", {SOP}));
-  h::expectDifferentPlanners("SELECT * WHERE { <s> <p> ?o }",
-                             scan("<s>", "<p>", "?o", {PSO}));
+  h::expect("SELECT * WHERE { ?s <p> <o> }", scan("?s", "<p>", "<o>", {POS}));
+  h::expect("SELECT * WHERE { <s> ?p <o> }", scan("<s>", "?p", "<o>", {SOP}));
+  h::expect("SELECT * WHERE { <s> <p> ?o }", scan("<s>", "<p>", "?o", {PSO}));
 }
 
 TEST(QueryPlanner, SimpleTripleTwoVariables) {
@@ -628,29 +626,29 @@ TEST(QueryPlanner, SimpleTripleTwoVariables) {
   // Fixed predicate.
 
   // Without `Order By`, two orderings are possible, both are fine.
-  h::expectDifferentPlanners("SELECT * WHERE { ?s <p> ?o }",
-                             scan("?s", "<p>", "?o", {POS, PSO}), qec);
+  h::expect("SELECT * WHERE { ?s <p> ?o }", scan("?s", "<p>", "?o", {POS, PSO}),
+            qec);
   // Must always be a single index scan, never index scan + sorting.
-  h::expectDifferentPlanners("SELECT * WHERE { ?s <p> ?o } INTERNAL SORT BY ?o",
-                             scan("?s", "<p>", "?o", {POS}), qec);
-  h::expectDifferentPlanners("SELECT * WHERE { ?s <p> ?o } INTERNAL SORT BY ?s",
-                             scan("?s", "<p>", "?o", {PSO}), qec);
+  h::expect("SELECT * WHERE { ?s <p> ?o } INTERNAL SORT BY ?o",
+            scan("?s", "<p>", "?o", {POS}), qec);
+  h::expect("SELECT * WHERE { ?s <p> ?o } INTERNAL SORT BY ?s",
+            scan("?s", "<p>", "?o", {PSO}), qec);
 
   // Fixed subject.
-  h::expectDifferentPlanners("SELECT * WHERE { <s> ?p ?o }",
-                             scan("<s>", "?p", "?o", {SOP, SPO}), qec);
-  h::expectDifferentPlanners("SELECT * WHERE { <s> ?p ?o } INTERNAL SORT BY ?o",
-                             scan("<s>", "?p", "?o", {SOP}), qec);
-  h::expectDifferentPlanners("SELECT * WHERE { <s> ?p ?o } INTERNAL SORT BY ?p",
-                             scan("<s>", "?p", "?o", {SPO}), qec);
+  h::expect("SELECT * WHERE { <s> ?p ?o }", scan("<s>", "?p", "?o", {SOP, SPO}),
+            qec);
+  h::expect("SELECT * WHERE { <s> ?p ?o } INTERNAL SORT BY ?o",
+            scan("<s>", "?p", "?o", {SOP}), qec);
+  h::expect("SELECT * WHERE { <s> ?p ?o } INTERNAL SORT BY ?p",
+            scan("<s>", "?p", "?o", {SPO}), qec);
 
   // Fixed object.
-  h::expectDifferentPlanners("SELECT * WHERE { <s> ?p ?o }",
-                             scan("<s>", "?p", "?o", {SOP, SPO}), qec);
-  h::expectDifferentPlanners("SELECT * WHERE { <s> ?p ?o } INTERNAL SORT BY ?o",
-                             scan("<s>", "?p", "?o", {SOP}), qec);
-  h::expectDifferentPlanners("SELECT * WHERE { <s> ?p ?o } INTERNAL SORT BY ?p",
-                             scan("<s>", "?p", "?o", {SPO}), qec);
+  h::expect("SELECT * WHERE { <s> ?p ?o }", scan("<s>", "?p", "?o", {SOP, SPO}),
+            qec);
+  h::expect("SELECT * WHERE { <s> ?p ?o } INTERNAL SORT BY ?o",
+            scan("<s>", "?p", "?o", {SOP}), qec);
+  h::expect("SELECT * WHERE { <s> ?p ?o } INTERNAL SORT BY ?p",
+            scan("<s>", "?p", "?o", {SPO}), qec);
 }
 
 TEST(QueryPlanner, SimpleTripleThreeVariables) {
@@ -658,55 +656,46 @@ TEST(QueryPlanner, SimpleTripleThreeVariables) {
 
   // Fixed predicate.
   // Don't care about the sorting.
-  h::expectDifferentPlanners("SELECT * WHERE { ?s ?p ?o }",
-                             h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"},
-                                          {SPO, SOP, PSO, POS, OSP, OPS}));
+  h::expect("SELECT * WHERE { ?s ?p ?o }",
+            h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"},
+                         {SPO, SOP, PSO, POS, OSP, OPS}));
 
   // Sorted by one variable, two possible permutations remain.
-  h::expectDifferentPlanners(
-      "SELECT * WHERE { ?s ?p ?o } INTERNAL SORT BY ?s",
-      h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"}, {SPO, SOP}));
-  h::expectDifferentPlanners(
-      "SELECT * WHERE { ?s ?p ?o } INTERNAL SORT BY ?p",
-      h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"}, {POS, PSO}));
-  h::expectDifferentPlanners(
-      "SELECT * WHERE { ?s ?p ?o } INTERNAL SORT BY ?o",
-      h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"}, {OSP, OPS}));
+  h::expect("SELECT * WHERE { ?s ?p ?o } INTERNAL SORT BY ?s",
+            h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"}, {SPO, SOP}));
+  h::expect("SELECT * WHERE { ?s ?p ?o } INTERNAL SORT BY ?p",
+            h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"}, {POS, PSO}));
+  h::expect("SELECT * WHERE { ?s ?p ?o } INTERNAL SORT BY ?o",
+            h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"}, {OSP, OPS}));
 
   // Sorted by two variables, this makes the permutation unique.
-  h::expectDifferentPlanners(
-      "SELECT * WHERE { ?s ?p ?o } INTERNAL SORT BY ?s ?o",
-      h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"}, {SOP}));
-  h::expectDifferentPlanners(
-      "SELECT * WHERE { ?s ?p ?o } INTERNAL SORT BY ?s ?p",
-      h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"}, {SPO}));
-  h::expectDifferentPlanners(
-      "SELECT * WHERE { ?s ?p ?o } INTERNAL SORT BY ?o ?s",
-      h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"}, {OSP}));
-  h::expectDifferentPlanners(
-      "SELECT * WHERE { ?s ?p ?o } INTERNAL SORT BY ?o ?p",
-      h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"}, {OPS}));
-  h::expectDifferentPlanners(
-      "SELECT * WHERE { ?s ?p ?o } INTERNAL SORT BY ?p ?s",
-      h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"}, {PSO}));
-  h::expectDifferentPlanners(
-      "SELECT * WHERE { ?s ?p ?o } INTERNAL SORT BY ?p ?o",
-      h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"}, {POS}));
+  h::expect("SELECT * WHERE { ?s ?p ?o } INTERNAL SORT BY ?s ?o",
+            h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"}, {SOP}));
+  h::expect("SELECT * WHERE { ?s ?p ?o } INTERNAL SORT BY ?s ?p",
+            h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"}, {SPO}));
+  h::expect("SELECT * WHERE { ?s ?p ?o } INTERNAL SORT BY ?o ?s",
+            h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"}, {OSP}));
+  h::expect("SELECT * WHERE { ?s ?p ?o } INTERNAL SORT BY ?o ?p",
+            h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"}, {OPS}));
+  h::expect("SELECT * WHERE { ?s ?p ?o } INTERNAL SORT BY ?p ?s",
+            h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"}, {PSO}));
+  h::expect("SELECT * WHERE { ?s ?p ?o } INTERNAL SORT BY ?p ?o",
+            h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"}, {POS}));
 }
 
 TEST(QueryPlanner, CartesianProductJoin) {
   auto scan = h::IndexScanFromStrings;
-  h::expectDifferentPlanners(
+  h::expect(
       "SELECT ?x ?p ?o WHERE {"
       "<s> <p> ?o . ?a <b> <c> }",
       h::CartesianProductJoin(scan("<s>", "<p>", "?o"),
                               scan("?a", "<b>", "<c>")));
   // This currently fails because of a bug, we have to fix the bug...
-  h::expectDifferentPlanners(
+  h::expect(
       "SELECT ?x ?p ?o WHERE {"
       "<s> ?p ?o . ?a ?b ?c }",
       h::CartesianProductJoin(scan("<s>", "?p", "?o"), scan("?a", "?b", "?c")));
-  h::expectDifferentPlanners(
+  h::expect(
       "SELECT * WHERE {"
       "?s <p> <o> . ?s <p2> ?o2 . ?x <b> ?c }",
       h::CartesianProductJoin(
@@ -726,7 +715,7 @@ TEST(QueryPlanner, TransitivePathUnbound) {
   auto scan = h::IndexScanFromStrings;
   TransitivePathSide left{std::nullopt, 0, Variable("?x"), 0};
   TransitivePathSide right{std::nullopt, 1, Variable("?y"), 1};
-  h::expectDifferentPlanners(
+  h::expect(
       "SELECT ?x ?y WHERE {"
       "?x <p>+ ?y }",
       h::TransitivePath(left, right, 1, std::numeric_limits<size_t>::max(),
@@ -741,7 +730,7 @@ TEST(QueryPlanner, TransitivePathLeftId) {
 
   TransitivePathSide left{std::nullopt, 0, getId("<s>"), 0};
   TransitivePathSide right{std::nullopt, 1, Variable("?y"), 1};
-  h::expectDifferentPlanners(
+  h::expect(
       "SELECT ?y WHERE {"
       "<s> <p>+ ?y }",
       h::TransitivePath(left, right, 1, std::numeric_limits<size_t>::max(),
@@ -757,7 +746,7 @@ TEST(QueryPlanner, TransitivePathRightId) {
 
   TransitivePathSide left{std::nullopt, 1, Variable("?x"), 0};
   TransitivePathSide right{std::nullopt, 0, getId("<o>"), 1};
-  h::expectDifferentPlanners(
+  h::expect(
       "SELECT ?y WHERE {"
       "?x <p>+ <o> }",
       h::TransitivePath(left, right, 1, std::numeric_limits<size_t>::max(),
@@ -769,7 +758,7 @@ TEST(QueryPlanner, TransitivePathBindLeft) {
   auto scan = h::IndexScanFromStrings;
   TransitivePathSide left{std::nullopt, 0, Variable("?x"), 0};
   TransitivePathSide right{std::nullopt, 1, Variable("?y"), 1};
-  h::expectDifferentPlanners(
+  h::expect(
       "SELECT ?x ?y WHERE {"
       "<s> <p> ?x."
       "?x <p>* ?y }",
@@ -782,7 +771,7 @@ TEST(QueryPlanner, TransitivePathBindRight) {
   auto scan = h::IndexScanFromStrings;
   TransitivePathSide left{std::nullopt, 1, Variable("?x"), 0};
   TransitivePathSide right{std::nullopt, 0, Variable("?y"), 1};
-  h::expectDifferentPlanners(
+  h::expect(
       "SELECT ?x ?y WHERE {"
       "?x <p>* ?y."
       "?y <p> <o> }",
@@ -795,7 +784,7 @@ TEST(QueryPlanner, TransitivePathBindRight) {
 
 TEST(QueryPlanner, SpatialJoin) {
   auto scan = h::IndexScanFromStrings;
-  h::expectDifferentPlanners(
+  h::expect(
       "SELECT ?x ?y WHERE {"
       "?x <p> ?y."
       "?a <p> ?b."
@@ -803,57 +792,57 @@ TEST(QueryPlanner, SpatialJoin) {
       h::SpatialJoin(1, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
 
   AD_EXPECT_THROW_WITH_MESSAGE(
-      h::expectDifferentPlanners("SELECT ?x ?y WHERE {"
-                                 "?x <p> ?y."
-                                 "?a <p> ?b."
-                                 "?y <max-distance-in-meters:1> ?b ."
-                                 "?y <a> ?b}",
-                                 ::testing::_),
+      h::expect("SELECT ?x ?y WHERE {"
+                "?x <p> ?y."
+                "?a <p> ?b."
+                "?y <max-distance-in-meters:1> ?b ."
+                "?y <a> ?b}",
+                ::testing::_),
       ::testing::ContainsRegex(
           "Currently, if both sides of a SpatialJoin are variables, then the"
           "SpatialJoin must be the only connection between these variables"));
 
   AD_EXPECT_THROW_WITH_MESSAGE(
-      h::expectDifferentPlanners("SELECT ?x ?y WHERE {"
-                                 "?y <p> ?b."
-                                 "?y <max-distance-in-meters:1> ?b }",
-                                 ::testing::_),
+      h::expect("SELECT ?x ?y WHERE {"
+                "?y <p> ?b."
+                "?y <max-distance-in-meters:1> ?b }",
+                ::testing::_),
       ::testing::ContainsRegex(
           "Currently, if both sides of a SpatialJoin are variables, then the"
           "SpatialJoin must be the only connection between these variables"));
 
   EXPECT_ANY_THROW(
-      h::expectDifferentPlanners("SELECT ?x ?y WHERE {"
-                                 "?x <p> ?y."
-                                 "?y <max-distance-in-meters:1> <a> }",
-                                 ::testing::_));
+      h::expect("SELECT ?x ?y WHERE {"
+                "?x <p> ?y."
+                "?y <max-distance-in-meters:1> <a> }",
+                ::testing::_));
 
   EXPECT_ANY_THROW(
-      h::expectDifferentPlanners("SELECT ?x ?y WHERE {"
-                                 "?x <p> ?y."
-                                 "<a> <max-distance-in-meters:1> ?y }",
-                                 ::testing::_));
+      h::expect("SELECT ?x ?y WHERE {"
+                "?x <p> ?y."
+                "<a> <max-distance-in-meters:1> ?y }",
+                ::testing::_));
 
   AD_EXPECT_THROW_WITH_MESSAGE(
-      h::expectDifferentPlanners("SELECT ?x ?y WHERE {"
-                                 "?y <max-distance-in-meters:1> ?b }",
-                                 ::testing::_),
+      h::expect("SELECT ?x ?y WHERE {"
+                "?y <max-distance-in-meters:1> ?b }",
+                ::testing::_),
       ::testing::ContainsRegex(
           "SpatialJoin needs two children, but at least one is missing"));
 
   AD_EXPECT_THROW_WITH_MESSAGE(
-      h::expectDifferentPlanners("SELECT ?x ?y WHERE {"
-                                 "?x <p> ?y."
-                                 "?a <p> ?b."
-                                 "?y <max-distance-in-meters:-1> ?b }",
-                                 ::testing::_),
+      h::expect("SELECT ?x ?y WHERE {"
+                "?x <p> ?y."
+                "?a <p> ?b."
+                "?y <max-distance-in-meters:-1> ?b }",
+                ::testing::_),
       ::testing::ContainsRegex("parsing of the maximum distance for the "
                                "SpatialJoin operation was not possible"));
 }
 
 // __________________________________________________________________________
 TEST(QueryPlanner, BindAtBeginningOfQuery) {
-  h::expectDifferentPlanners(
+  h::expect(
       "SELECT * WHERE {"
       " BIND (3 + 5 AS ?x) }",
       h::Bind(h::NeutralElement(), "3 + 5", Variable{"?x"}));
@@ -869,15 +858,13 @@ TEST(QueryPlanner, TextIndexScanForWord) {
       true, true, true, 16_B, true);
   auto wordScan = h::TextIndexScanForWord;
 
-  h::expectDifferentPlanners(
-      "SELECT * WHERE { ?text ql:contains-word \"test*\" }",
-      wordScan(Var{"?text"}, "test*"), qec);
+  h::expect("SELECT * WHERE { ?text ql:contains-word \"test*\" }",
+            wordScan(Var{"?text"}, "test*"), qec);
 
-  h::expectDifferentPlanners(
-      "SELECT * WHERE { ?text2 ql:contains-word \"test\" }",
-      wordScan(Var{"?text2"}, "test"), qec);
+  h::expect("SELECT * WHERE { ?text2 ql:contains-word \"test\" }",
+            wordScan(Var{"?text2"}, "test"), qec);
 
-  h::expectDifferentPlanners(
+  h::expect(
       "SELECT * WHERE { ?text2 ql:contains-word \"multiple words* test\" }",
       h::UnorderedJoins(wordScan(Var{"?text2"}, "test"),
                         wordScan(Var{"?text2"}, "words*"),
@@ -902,14 +889,14 @@ TEST(QueryPlanner, TextIndexScanForEntity) {
 
   auto wordScan = h::TextIndexScanForWord;
   auto entityScan = h::TextIndexScanForEntity;
-  h::expectDifferentPlanners(
+  h::expect(
       "SELECT * WHERE { ?text ql:contains-entity ?scientist . ?text "
       "ql:contains-word \"test*\" }",
       h::Join(wordScan(Var{"?text"}, "test*"),
               entityScan(Var{"?text"}, Var{"?scientist"}, "test*")),
       qec);
 
-  h::expectDifferentPlanners(
+  h::expect(
       "SELECT * WHERE { ?text ql:contains-entity <testEntity> . ?text "
       "ql:contains-word \"test\" }",
       h::Join(wordScan(Var{"?text"}, "test"),
@@ -917,7 +904,7 @@ TEST(QueryPlanner, TextIndexScanForEntity) {
       qec);
 
   // Test case sensitivity
-  h::expectDifferentPlanners(
+  h::expect(
       "SELECT * WHERE { ?text ql:contains-entity <testEntity> . ?text "
       "ql:contains-word \"TeST\" }",
       h::Join(wordScan(Var{"?text"}, "test"),
@@ -927,7 +914,7 @@ TEST(QueryPlanner, TextIndexScanForEntity) {
   // NOTE: It is important that the TextIndexScanForEntity uses "opti", because
   // we also want to test here if the QueryPlanner assigns the optimal word to
   // the Operation.
-  h::expectDifferentPlanners(
+  h::expect(
       "SELECT * WHERE { ?text ql:contains-word \"picking*\" . ?text "
       "ql:contains-entity <testEntity> . ?text ql:contains-word "
       "\"opti\" . ?text ql:contains-word \"testi*\"}",
@@ -959,12 +946,11 @@ TEST(QueryPlanner, TextLimit) {
   auto entityScan = h::TextIndexScanForEntity;
 
   // Only contains word
-  h::expectDifferentPlanners(
-      "SELECT * WHERE { ?text ql:contains-word \"test*\" } TEXTLIMIT 10",
-      wordScan(Var{"?text"}, "test*"), qec);
+  h::expect("SELECT * WHERE { ?text ql:contains-word \"test*\" } TEXTLIMIT 10",
+            wordScan(Var{"?text"}, "test*"), qec);
 
   // Contains fixed entity
-  h::expectDifferentPlanners(
+  h::expect(
       "SELECT * WHERE { ?text ql:contains-word \"test*\" . ?text "
       "ql:contains-entity <testEntity> } TEXTLIMIT 10",
       h::TextLimit(
@@ -976,7 +962,7 @@ TEST(QueryPlanner, TextLimit) {
       qec);
 
   // Contains entity
-  h::expectDifferentPlanners(
+  h::expect(
       "SELECT * WHERE { ?text ql:contains-entity ?scientist . ?text "
       "ql:contains-word \"test*\" } TEXTLIMIT 10",
       h::TextLimit(
@@ -988,7 +974,7 @@ TEST(QueryPlanner, TextLimit) {
       qec);
 
   // Contains entity and fixed entity
-  h::expectDifferentPlanners(
+  h::expect(
       "SELECT * WHERE { ?text ql:contains-entity ?scientist . ?text "
       "ql:contains-word \"test*\" . ?text ql:contains-entity <testEntity>} "
       "TEXTLIMIT 5",
@@ -1004,7 +990,7 @@ TEST(QueryPlanner, TextLimit) {
       qec);
 
   // Contains two entities
-  h::expectDifferentPlanners(
+  h::expect(
       "SELECT * WHERE { ?text ql:contains-entity ?scientist . ?text "
       "ql:contains-word \"test*\" . ?text ql:contains-entity ?scientist2} "
       "TEXTLIMIT 5",
@@ -1021,7 +1007,7 @@ TEST(QueryPlanner, TextLimit) {
 
   // Contains two text variables. Also checks if the textlimit at an efficient
   // place in the query
-  h::expectDifferentPlanners(
+  h::expect(
       "SELECT * WHERE { ?text1 ql:contains-entity ?scientist1 . ?text1 "
       "ql:contains-word \"test*\" . ?text2 ql:contains-word \"test*\" . ?text2 "
       "ql:contains-entity ?author1 . ?text2 ql:contains-entity ?author2 } "
@@ -1052,50 +1038,40 @@ TEST(QueryPlanner, NonDistinctVariablesInTriple) {
     return absl::StrCat(l, "=", r);
   };
 
-  h::expectDifferentPlanners(
-      "SELECT * WHERE {?s ?p ?s}",
-      h::Filter(eq(internalVar(0), "?s"),
-                h::IndexScanFromStrings(internalVar(0), "?p", "?s")));
-  h::expectDifferentPlanners(
-      "SELECT * WHERE {?s ?s ?o}",
-      h::Filter(eq(internalVar(0), "?s"),
-                h::IndexScanFromStrings(internalVar(0), "?s", "?o")));
-  h::expectDifferentPlanners(
-      "SELECT * WHERE {?s ?p ?p}",
-      h::Filter(eq(internalVar(0), "?p"),
-                h::IndexScanFromStrings("?s", "?p", internalVar(0))));
-  h::expectDifferentPlanners(
-      "SELECT * WHERE {?s ?s ?s}",
-      h::Filter(eq(internalVar(1), "?s"),
-                h::Filter(eq(internalVar(0), "?s"),
-                          h::IndexScanFromStrings(internalVar(1), "?s",
-                                                  internalVar(0)))));
-  h::expectDifferentPlanners(
-      "SELECT * WHERE {?s <is-a> ?s}",
-      h::Filter(eq(internalVar(0), "?s"),
-                h::IndexScanFromStrings("?s", "<is-a>", internalVar(0))));
-  h::expectDifferentPlanners(
-      "SELECT * WHERE {<s> ?p ?p}",
-      h::Filter(eq(internalVar(0), "?p"),
-                h::IndexScanFromStrings("<s>", "?p", internalVar(0))));
-  h::expectDifferentPlanners(
-      "SELECT * WHERE {?s ?s <o>}",
-      h::Filter(eq(internalVar(0), "?s"),
-                h::IndexScanFromStrings(internalVar(0), "?s", "<o>")));
+  h::expect("SELECT * WHERE {?s ?p ?s}",
+            h::Filter(eq(internalVar(0), "?s"),
+                      h::IndexScanFromStrings(internalVar(0), "?p", "?s")));
+  h::expect("SELECT * WHERE {?s ?s ?o}",
+            h::Filter(eq(internalVar(0), "?s"),
+                      h::IndexScanFromStrings(internalVar(0), "?s", "?o")));
+  h::expect("SELECT * WHERE {?s ?p ?p}",
+            h::Filter(eq(internalVar(0), "?p"),
+                      h::IndexScanFromStrings("?s", "?p", internalVar(0))));
+  h::expect("SELECT * WHERE {?s ?s ?s}",
+            h::Filter(eq(internalVar(1), "?s"),
+                      h::Filter(eq(internalVar(0), "?s"),
+                                h::IndexScanFromStrings(internalVar(1), "?s",
+                                                        internalVar(0)))));
+  h::expect("SELECT * WHERE {?s <is-a> ?s}",
+            h::Filter(eq(internalVar(0), "?s"),
+                      h::IndexScanFromStrings("?s", "<is-a>", internalVar(0))));
+  h::expect("SELECT * WHERE {<s> ?p ?p}",
+            h::Filter(eq(internalVar(0), "?p"),
+                      h::IndexScanFromStrings("<s>", "?p", internalVar(0))));
+  h::expect("SELECT * WHERE {?s ?s <o>}",
+            h::Filter(eq(internalVar(0), "?s"),
+                      h::IndexScanFromStrings(internalVar(0), "?s", "<o>")));
 }
 
 TEST(QueryPlanner, emptyGroupGraphPattern) {
-  h::expectDifferentPlanners("SELECT * WHERE {}", h::NeutralElement());
-  h::expectDifferentPlanners("SELECT * WHERE { {} }", h::NeutralElement());
-  h::expectDifferentPlanners(
-      "SELECT * WHERE { {} {} }",
-      h::CartesianProductJoin(h::NeutralElement(), h::NeutralElement()));
-  h::expectDifferentPlanners(
-      "SELECT * WHERE { {} UNION {} }",
-      h::Union(h::NeutralElement(), h::NeutralElement()));
-  h::expectDifferentPlanners(
-      "SELECT * WHERE { {} { SELECT * WHERE {}}}",
-      h::CartesianProductJoin(h::NeutralElement(), h::NeutralElement()));
+  h::expect("SELECT * WHERE {}", h::NeutralElement());
+  h::expect("SELECT * WHERE { {} }", h::NeutralElement());
+  h::expect("SELECT * WHERE { {} {} }",
+            h::CartesianProductJoin(h::NeutralElement(), h::NeutralElement()));
+  h::expect("SELECT * WHERE { {} UNION {} }",
+            h::Union(h::NeutralElement(), h::NeutralElement()));
+  h::expect("SELECT * WHERE { {} { SELECT * WHERE {}}}",
+            h::CartesianProductJoin(h::NeutralElement(), h::NeutralElement()));
 }
 
 // __________________________________________________________________________
@@ -1114,12 +1090,12 @@ TEST(QueryPlanner, TooManyTriples) {
 
 // ___________________________________________________________________________
 TEST(QueryPlanner, CountAvailablePredicates) {
-  h::expectDifferentPlanners(
+  h::expect(
       "SELECT ?p (COUNT(DISTINCT ?s) as ?cnt) WHERE { ?s ?p ?o} GROUP BY ?p",
       h::CountAvailablePredicates(
           0, Var{"?p"}, Var{"?cnt"},
           h::IndexScanFromStrings("?s", HAS_PATTERN_PREDICATE, "?p")));
-  h::expectDifferentPlanners(
+  h::expect(
       "SELECT ?p (COUNT(DISTINCT ?s) as ?cnt) WHERE { ?s ql:has-predicate "
       "?p} "
       "GROUP BY ?p",
@@ -1133,11 +1109,9 @@ TEST(QueryPlanner, CountAvailablePredicates) {
 // Check that a MINUS operation that only refers to unbound variables is deleted
 // by the query planner.
 TEST(QueryPlanner, UnboundMinusIgnored) {
-  h::expectDifferentPlanners("SELECT * WHERE {MINUS{?x <is-a> ?y}}",
-                             h::NeutralElement());
-  h::expectDifferentPlanners(
-      "SELECT * WHERE { ?a <is-a> ?b MINUS{?x <is-a> ?y}}",
-      h::IndexScanFromStrings("?a", "<is-a>", "?b"));
+  h::expect("SELECT * WHERE {MINUS{?x <is-a> ?y}}", h::NeutralElement());
+  h::expect("SELECT * WHERE { ?a <is-a> ?b MINUS{?x <is-a> ?y}}",
+            h::IndexScanFromStrings("?a", "<is-a>", "?b"));
 }
 
 // ___________________________________________________________________________
@@ -1161,17 +1135,17 @@ TEST(QueryPlanner, JoinWithService) {
   auto sibling = scan("?x", "<is-a>", "?y");
   std::string_view graphPatternAsString = "{ ?x <is-a> ?z . }";
 
-  h::expectDifferentPlanners(
+  h::expect(
       "SELECT * WHERE {"
       "SERVICE <https://endpoint.com> { ?x <is-a> ?z . ?y <is-a> ?a . }}",
       h::Service(std::nullopt, "{ ?x <is-a> ?z . ?y <is-a> ?a . }"));
 
-  h::expectDifferentPlanners(
+  h::expect(
       "SELECT * WHERE { ?x <is-a> ?y ."
       "SERVICE <https://endpoint.com> { ?x <is-a> ?z . }}",
       h::UnorderedJoins(sibling, h::Service(sibling, graphPatternAsString)));
 
-  h::expectDifferentPlanners(
+  h::expect(
       "SELECT * WHERE { ?x <is-a> ?y . "
       "SERVICE <https://endpoint.com> { ?x <is-a> ?z . ?y <is-a> ?a . }}",
       h::MultiColumnJoin(
@@ -1184,13 +1158,13 @@ TEST(QueryPlanner, SubtreeWithService) {
   auto scan = h::IndexScanFromStrings;
   auto sibling = scan("?x", "<is-a>", "?y");
 
-  h::expectDifferentPlanners(
+  h::expect(
       "SELECT * WHERE { ?x <is-a> ?y ."
       "OPTIONAL{SERVICE <https://endpoint.com> { ?x <is-a> ?z . }}}",
       h::OptionalJoin(sibling,
                       h::Sort(h::Service(sibling, "{ ?x <is-a> ?z . }"))));
 
-  h::expectDifferentPlanners(
+  h::expect(
       "SELECT * WHERE { ?x <is-a> ?y . "
       "OPTIONAL{"
       "SERVICE <https://endpoint.com> { ?x <is-a> ?z . ?y <is-a> ?a . }}}",
@@ -1198,7 +1172,7 @@ TEST(QueryPlanner, SubtreeWithService) {
           sibling,
           h::Sort(h::Service(sibling, "{ ?x <is-a> ?z . ?y <is-a> ?a . }"))));
 
-  h::expectDifferentPlanners(
+  h::expect(
       "SELECT * WHERE { ?x <is-a> ?y MINUS{SERVICE <https://endpoint.com> { ?x "
       "<is-a> ?z . }}}",
       h::Minus(sibling, h::Sort(h::Service(sibling, "{ ?x <is-a> ?z . }"))));
@@ -1208,19 +1182,18 @@ TEST(QueryPlanner, SubtreeWithService) {
 TEST(QueryPlanner, DatasetClause) {
   auto scan = h::IndexScanFromStrings;
   using Graphs = ad_utility::HashSet<std::string>;
-  h::expectDifferentPlanners("SELECT * FROM <x> FROM <y> WHERE { ?x ?y ?z}",
-                             scan("?x", "?y", "?z", {}, Graphs{"<x>", "<y>"}));
+  h::expect("SELECT * FROM <x> FROM <y> WHERE { ?x ?y ?z}",
+            scan("?x", "?y", "?z", {}, Graphs{"<x>", "<y>"}));
 
-  h::expectDifferentPlanners(
-      "SELECT * FROM <x> FROM <y> { SELECT * {?x ?y ?z}}",
-      scan("?x", "?y", "?z", {}, Graphs{"<x>", "<y>"}));
+  h::expect("SELECT * FROM <x> FROM <y> { SELECT * {?x ?y ?z}}",
+            scan("?x", "?y", "?z", {}, Graphs{"<x>", "<y>"}));
 
-  h::expectDifferentPlanners("SELECT * FROM <x> WHERE { GRAPH <z> {?x ?y ?z}}",
-                             scan("?x", "?y", "?z", {}, Graphs{"<z>"}));
+  h::expect("SELECT * FROM <x> WHERE { GRAPH <z> {?x ?y ?z}}",
+            scan("?x", "?y", "?z", {}, Graphs{"<z>"}));
 
   auto g1 = Graphs{"<g1>"};
   auto g2 = Graphs{"<g2>"};
-  h::expectDifferentPlanners(
+  h::expect(
       "SELECT * FROM <g1> { <a> ?p <x>. {<b> ?p <y>} GRAPH <g2> { <c> ?p <z> "
       "{SELECT * {<d> ?p <z2>}}} <e> ?p <z3> }",
       h::UnorderedJoins(
@@ -1231,19 +1204,18 @@ TEST(QueryPlanner, DatasetClause) {
   auto g12 = Graphs{"<g1>", "<g2>"};
   auto varG = std::vector{Variable{"?g"}};
   std::vector<ColumnIndex> graphCol{ADDITIONAL_COLUMN_GRAPH_ID};
-  h::expectDifferentPlanners(
+  h::expect(
       "SELECT * FROM <x> FROM NAMED <g1> FROM NAMED <g2> WHERE { GRAPH ?g {<a> "
       "<b> <c>}}",
       scan("<a>", "<b>", "<c>", {}, g12, varG, graphCol));
 
-  h::expectDifferentPlanners(
-      "SELECT * FROM <x> WHERE { GRAPH ?g {<a> <b> <c>}}",
-      scan("<a>", "<b>", "<c>", {}, std::nullopt, varG, graphCol));
+  h::expect("SELECT * FROM <x> WHERE { GRAPH ?g {<a> <b> <c>}}",
+            scan("<a>", "<b>", "<c>", {}, std::nullopt, varG, graphCol));
 
   // `GROUP BY` inside a `GRAPH ?g` clause.
   // We use the `UnorderedJoins` matcher, because the index scan has to be
   // resorted by the graph column.
-  h::expectDifferentPlanners(
+  h::expect(
       "SELECT * FROM <g1> FROM NAMED <g2> { GRAPH ?g "
       "{ "
       "{SELECT ?p {<d> ?p <z2>} GROUP BY ?p}"
@@ -1253,7 +1225,7 @@ TEST(QueryPlanner, DatasetClause) {
                      scan("<d>", "?p", "<z2>", {}, g2, varG, graphCol))));
 
   // A complex example with graph variables.
-  h::expectDifferentPlanners(
+  h::expect(
       "SELECT * FROM <g1> FROM NAMED <g2> { <a> ?p <x>. {<b> ?p <y>} GRAPH ?g "
       "{ <c> ?p <z> "
       "{SELECT * {<d> ?p <z2>}}"
@@ -1270,8 +1242,7 @@ TEST(QueryPlanner, DatasetClause) {
   // We currently don't support repeating the graph variable inside the
   // graph clause
   AD_EXPECT_THROW_WITH_MESSAGE(
-      h::expectDifferentPlanners("SELECT * { GRAPH ?x {?x <b> <c>}}",
-                                 ::testing::_),
+      h::expect("SELECT * { GRAPH ?x {?x <b> <c>}}", ::testing::_),
       AllOf(HasSubstr("used as the graph specifier"),
             HasSubstr("may not appear in the body")));
 }

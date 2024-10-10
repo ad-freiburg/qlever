@@ -1254,12 +1254,13 @@ void QueryPlanner::applyTextLimitsIfPossible(
 size_t QueryPlanner::findUniqueNodeIds(
     const std::vector<SubtreePlan>& connectedComponent) {
   ad_utility::HashSet<uint64_t> uniqueNodeIds;
-  // TODO<joka921> Assert that all the node IDs only consist of a single
-  // element. Or even better: Do a bitwise or and then count the number of set
-  // bits...
-  std::ranges::copy(connectedComponent | std::views::transform(
-                                             &SubtreePlan::_idsOfIncludedNodes),
-                    std::inserter(uniqueNodeIds, uniqueNodeIds.end()));
+  auto nodeIds = connectedComponent |
+                 std::views::transform(&SubtreePlan::_idsOfIncludedNodes);
+  // Check that all the `_idsOfIncludedNodes` are one-hot encodings of a single
+  // value, i.e. they have exactly one bit set.
+  AD_CORRECTNESS_CHECK(std::ranges::all_of(
+      nodeIds, [](auto nodeId) { return std::popcount(nodeId) == 1; }));
+  std::ranges::copy(nodeIds, std::inserter(uniqueNodeIds, uniqueNodeIds.end()));
   return uniqueNodeIds.size();
 }
 
@@ -1300,19 +1301,18 @@ QueryPlanner::runDynamicProgrammingOnConnectedComponent(
 size_t QueryPlanner::countSubgraphs(
     std::vector<const QueryPlanner::SubtreePlan*> graph, size_t budget) {
   // Remove duplicate plans from `graph`.
-  auto getId = [](const SubtreePlan* v) -> uint64_t {
-    return v->_idsOfIncludedNodes;
-  };
+  auto getId = [](const SubtreePlan* v) { return v->_idsOfIncludedNodes; };
   std::ranges::sort(graph, std::ranges::less{}, getId);
   graph.erase(
       std::ranges::unique(graph, std::ranges::equal_to{}, getId).begin(),
       graph.end());
 
-  // NOTE: Not sure if we can have this many plans here, but if we can, assume
-  // that we have more subgraphs than `budget` allows.
-  if (graph.size() > 64) {
-    return budget + 1;
-  }
+  // Qlever currently limits the number of triples etc. per group to be <= 64
+  // anyway, so we can simply assert here.
+  AD_CORRECTNESS_CHECK(graph.size() <= 64,
+                       "Should qlever ever support more than 64 elements per "
+                       "group graph pattern, then the `countSubgraphs` "
+                       "functionality also has to be changed");
 
   // Compute the bit representation needed for the call to
   // `countConnectedSubgraphs::countSubgraphs` below.
@@ -1322,7 +1322,7 @@ size_t QueryPlanner::countSubgraphs(
     for (size_t k = 0; k < graph.size(); ++k) {
       if ((k != i) &&
           !QueryPlanner::getJoinColumns(*graph.at(k), *graph.at(i)).empty()) {
-        v.neighbors_ |= (1ull << k);
+        v.neighbors_ |= (1ULL << k);
       }
     }
     g.push_back(v);
@@ -1385,23 +1385,18 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
     for (const auto& plan : component) {
       g.push_back(&plan);
     }
-    ad_utility::Timer timer{ad_utility::Timer::Started};
-    bool alwaysGreedy = RuntimeParameters().get<"use-greedy-planning">();
-    const size_t budget = RuntimeParameters().get<"greedy-planning-budget">();
-    bool useGreedyPlanning = alwaysGreedy || countSubgraphs(g, budget) > budget;
-    if (!alwaysGreedy && useGreedyPlanning) {
+    const size_t budget = RuntimeParameters().get<"query-planning-budget">();
+    bool useGreedyPlanning = countSubgraphs(g, budget) > budget;
+    if (useGreedyPlanning) {
       LOG(INFO)
           << "Using the greedy query planner for a large connected component"
           << std::endl;
     }
-    timer.start();
     auto impl = useGreedyPlanning
                     ? &QueryPlanner::runGreedyPlanningOnConnectedComponent
                     : &QueryPlanner::runDynamicProgrammingOnConnectedComponent;
     lastDpRowFromComponents.push_back(
         std::invoke(impl, this, std::move(component), filters, textLimits, tg));
-    // LOG(INFO) << "time for planning of connected component" <<
-    // timer.msecs().count() << "ms" << std::endl;
     checkCancellation();
   }
   size_t numConnectedComponents = lastDpRowFromComponents.size();
