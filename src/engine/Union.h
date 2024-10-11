@@ -54,9 +54,9 @@ class Union : public Operation {
   static constexpr size_t chunkSize = 1'000'000;
 
   // The method is declared here to make it unit testable
-  void computeUnion(IdTable* inputTable, const IdTable& left,
-                    const IdTable& right,
-                    const std::vector<std::array<size_t, 2>>& columnOrigins);
+  IdTable computeUnion(
+      const IdTable& left, const IdTable& right,
+      const std::vector<std::array<size_t, 2>>& columnOrigins) const;
 
   vector<QueryExecutionTree*> getChildren() override {
     return {_subtrees[0].get(), _subtrees[1].get()};

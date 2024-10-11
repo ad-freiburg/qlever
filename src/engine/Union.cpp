@@ -164,11 +164,8 @@ ProtoResult Union::computeResult([[maybe_unused]] bool requestLaziness) {
   std::shared_ptr<const Result> subRes2 = _subtrees[1]->getResult();
   LOG(DEBUG) << "Union subresult computation done." << std::endl;
 
-  IdTable idTable{getExecutionContext()->getAllocator()};
-
-  idTable.setNumColumns(getResultWidth());
-  computeUnion(&idTable, subRes1->idTable(), subRes2->idTable(),
-                      _columnOrigins);
+  IdTable idTable =
+      computeUnion(subRes1->idTable(), subRes2->idTable(), _columnOrigins);
 
   LOG(DEBUG) << "Union result computation done" << std::endl;
   // If only one of the two operands has a non-empty local vocabulary, share
@@ -198,10 +195,10 @@ void Union::fillChunked(auto beg, auto end, const auto& value) const {
 };
 
 // _____________________________________________________________________________
-void Union::computeUnion(
-    IdTable* resPtr, const IdTable& left, const IdTable& right,
-    const std::vector<std::array<size_t, 2>>& columnOrigins) {
-  IdTable& res = *resPtr;
+IdTable Union::computeUnion(
+    const IdTable& left, const IdTable& right,
+    const std::vector<std::array<size_t, 2>>& columnOrigins) const {
+  IdTable res{getResultWidth(), getExecutionContext()->getAllocator()};
   res.resize(left.size() + right.size());
 
   // Write the column with the `inputColumnIndex` from the `inputTable` into the
@@ -230,4 +227,5 @@ void Union::computeUnion(
     writeColumn(left, targetColumn, leftCol, 0u);
     writeColumn(right, targetColumn, rightCol, left.size());
   }
+  return res;
 }
