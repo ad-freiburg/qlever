@@ -11,6 +11,8 @@
 /// BIND operation, currently only supports a very limited subset of expressions
 class Bind : public Operation {
  public:
+  static constexpr size_t CHUNK_SIZE = 10'000;
+
   Bind(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> subtree,
        parsedQuery::Bind b)
       : Operation(qec), _subtree(std::move(subtree)), _bind(std::move(b)) {}
@@ -42,12 +44,16 @@ class Bind : public Operation {
  private:
   ProtoResult computeResult(bool requestLaziness) override;
 
+  static IdTable cloneSubView(const IdTable& idTable,
+                              const std::pair<size_t, size_t>& subrange);
+
   // Implementation for the binding of arbitrary expressions.
   IdTable computeExpressionBind(
       LocalVocab* outputLocalVocab,
       ad_utility::SimilarTo<IdTable> auto&& inputIdTable,
       const LocalVocab& inputLocalVocab,
-      sparqlExpression::SparqlExpression* expression) const;
+      sparqlExpression::SparqlExpression* expression,
+      std::optional<std::pair<size_t, size_t>> subrange) const;
 
   [[nodiscard]] VariableToColumnMap computeVariableToColumnMap() const override;
 };

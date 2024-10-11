@@ -81,18 +81,45 @@ std::vector<QueryExecutionTree*> Bind::getChildren() {
 }
 
 // _____________________________________________________________________________
+IdTable Bind::cloneSubView(const IdTable& idTable,
+                           const std::pair<size_t, size_t>& subrange) {
+  IdTable result(idTable.numColumns(), idTable.getAllocator());
+  result.resize(subrange.second - subrange.first);
+  std::ranges::copy(idTable.begin() + subrange.first,
+                    idTable.begin() + subrange.second, result.begin());
+  return result;
+}
+
+// _____________________________________________________________________________
 ProtoResult Bind::computeResult(bool requestLaziness) {
   LOG(DEBUG) << "Get input to BIND operation..." << std::endl;
   std::shared_ptr<const Result> subRes = _subtree->getResult(requestLaziness);
   LOG(DEBUG) << "Got input to Bind operation." << std::endl;
 
-  auto applyBind = [this, subRes](auto&& idTable, LocalVocab* localVocab) {
+  auto applyBind = [this, subRes](
+                       auto&& idTable, LocalVocab* localVocab,
+                       std::optional<std::pair<size_t, size_t>> subrange =
+                           std::nullopt) {
     return computeExpressionBind(localVocab, AD_FWD(idTable),
                                  subRes->localVocab(),
-                                 _bind._expression.getPimpl());
+                                 _bind._expression.getPimpl(), subrange);
   };
 
   if (subRes->isFullyMaterialized()) {
+    if (requestLaziness && subRes->idTable().size() > CHUNK_SIZE) {
+      auto localVocab =
+          std::make_shared<LocalVocab>(subRes->getCopyOfLocalVocab());
+      auto generator = [](std::shared_ptr<LocalVocab> vocab, auto applyBind,
+                          std::shared_ptr<const Result> result)
+          -> cppcoro::generator<IdTable> {
+        size_t size = result->idTable().size();
+        for (size_t offset = 0; offset < size; offset += CHUNK_SIZE) {
+          co_yield applyBind(result->idTable(), vocab.get(),
+                             {{offset, std::min(size, offset + CHUNK_SIZE)}});
+        }
+      }(localVocab, std::move(applyBind), std::move(subRes));
+      return {std::move(generator), resultSortedOn(), std::move(localVocab)};
+    }
     // Make a deep copy of the local vocab from `subRes` and then add to it (in
     // case BIND adds a new word or words).
     //
@@ -123,16 +150,25 @@ IdTable Bind::computeExpressionBind(
     LocalVocab* outputLocalVocab,
     ad_utility::SimilarTo<IdTable> auto&& inputIdTable,
     const LocalVocab& inputLocalVocab,
-    sparqlExpression::SparqlExpression* expression) const {
+    sparqlExpression::SparqlExpression* expression,
+    std::optional<std::pair<size_t, size_t>> subrange) const {
   sparqlExpression::EvaluationContext evaluationContext(
       *getExecutionContext(), _subtree->getVariableColumns(), inputIdTable,
       getExecutionContext()->getAllocator(), inputLocalVocab,
       cancellationHandle_, deadline_);
 
+  if (subrange.has_value()) {
+    auto [beginIndex, endIndex] = subrange.value();
+    evaluationContext._beginIndex = beginIndex;
+    evaluationContext._endIndex = endIndex;
+  }
+
   sparqlExpression::ExpressionResult expressionResult =
       expression->evaluate(&evaluationContext);
 
-  auto output = std::move(inputIdTable).cloneOrMove();
+  auto output = subrange.has_value()
+                    ? cloneSubView(inputIdTable, subrange.value())
+                    : std::move(inputIdTable).cloneOrMove();
   output.addEmptyColumn();
   auto outputColumn = output.getColumn(output.numColumns() - 1);
 

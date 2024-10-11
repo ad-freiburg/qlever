@@ -84,3 +84,50 @@ TEST(Bind, computeResultWithTableWithoutColumns) {
 
   expectBindYieldsIdTable(qec, bind, makeIdTableFromVector({{val}, {val}}));
 }
+
+// _____________________________________________________________________________
+TEST(
+    Bind,
+    computeResultProducesLazyResultWhenFullyMaterializedSubResultIsTooLargeAndRequested) {
+  auto val = Id::makeFromInt(42);
+  IdTable::row_type row{1};
+  row[0] = val;
+  auto* qec = ad_utility::testing::getQec();
+  IdTable table{1, ad_utility::makeUnlimitedAllocator<Id>()};
+  table.resize(Bind::CHUNK_SIZE + 1);
+  std::ranges::fill(table, row);
+  auto valuesTree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, table.clone(), Vars{Variable{"?a"}}, false,
+      std::vector<ColumnIndex>{}, LocalVocab{}, std::nullopt, true);
+  Bind bind{
+      qec,
+      std::move(valuesTree),
+      {SparqlExpressionPimpl{std::make_unique<IdExpression>(val), "42 as ?b"},
+       Variable{"?b"}}};
+
+  table.addEmptyColumn();
+  row = IdTable::row_type{2};
+  row[0] = val;
+  row[1] = val;
+  std::ranges::fill(table, row);
+  {
+    qec->getQueryTreeCache().clearAll();
+    auto result = bind.getResult(false, ComputationMode::FULLY_MATERIALIZED);
+    ASSERT_TRUE(result->isFullyMaterialized());
+    EXPECT_EQ(result->idTable(), table);
+  }
+
+  {
+    table.resize(Bind::CHUNK_SIZE);
+    qec->getQueryTreeCache().clearAll();
+    auto result = bind.getResult(false, ComputationMode::LAZY_IF_SUPPORTED);
+    ASSERT_FALSE(result->isFullyMaterialized());
+    auto& idTables = result->idTables();
+    auto iterator = idTables.begin();
+    ASSERT_NE(iterator, idTables.end());
+    EXPECT_EQ(*iterator, table);
+    ASSERT_NE(++iterator, idTables.end());
+    EXPECT_EQ(*iterator, makeIdTableFromVector({{val, val}}));
+    EXPECT_EQ(++iterator, idTables.end());
+  }
+}
