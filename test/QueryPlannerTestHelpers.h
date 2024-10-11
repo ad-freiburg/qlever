@@ -30,6 +30,7 @@
 #include "engine/TextLimit.h"
 #include "engine/TransitivePathBase.h"
 #include "engine/Union.h"
+#include "global/RuntimeParameters.h"
 #include "parser/SparqlParser.h"
 #include "util/IndexTestHelpers.h"
 
@@ -372,15 +373,58 @@ QueryExecutionTree parseAndPlan(std::string query, QueryExecutionContext* qec) {
 }
 
 // Check that the `QueryExecutionTree` that is obtained by parsing and planning
-// the `query` matches the `matcher`.
-void expect(std::string query, auto matcher,
-            std::optional<QueryExecutionContext*> optQec = std::nullopt,
-            source_location l = source_location::current()) {
-  auto trace = generateLocationTrace(l, "expect");
+// the `query` matches the `matcher`. The query planning budget can be
+// controlled to choose between the greedy and the dynamic programming planner.
+// This function only serves as a common implementation, for the actual tests
+// the three functions below should be used.
+void expectWithGivenBudget(std::string query, auto matcher,
+                           std::optional<QueryExecutionContext*> optQec,
+                           size_t queryPlanningBudget,
+                           source_location l = source_location::current()) {
+  auto budgetBackup = RuntimeParameters().get<"query-planning-budget">();
+  RuntimeParameters().set<"query-planning-budget">(queryPlanningBudget);
+  auto cleanup = absl::Cleanup{[budgetBackup]() {
+    RuntimeParameters().set<"query-planning-budget">(budgetBackup);
+  }};
+  auto trace = generateLocationTrace(
+      l, absl::StrCat("expect with budget ", queryPlanningBudget));
   QueryExecutionContext* qec = optQec.value_or(ad_utility::testing::getQec());
   auto qet = parseAndPlan(std::move(query), qec);
   qet.getRootOperation()->createRuntimeInfoFromEstimates(
       qet.getRootOperation()->getRuntimeInfoPointer());
   EXPECT_THAT(qet, matcher);
+}
+
+// Same as `expectWithGivenBudget` above, but always use the greedy query
+// planner.
+void expectGreedy(std::string query, auto matcher,
+                  std::optional<QueryExecutionContext*> optQec = std::nullopt,
+                  source_location l = source_location::current()) {
+  expectWithGivenBudget(std::move(query), std::move(matcher), optQec, 0, l);
+}
+// Same as `expectWithGivenBudget` above, but always use the dynamic programming
+// query planner.
+void expectDynamicProgramming(
+    std::string query, auto matcher,
+    std::optional<QueryExecutionContext*> optQec = std::nullopt,
+    source_location l = source_location::current()) {
+  expectWithGivenBudget(std::move(query), std::move(matcher), optQec,
+                        std::numeric_limits<size_t>::max(), l);
+}
+
+// Same as `expectWithGivenBudget` above, but run the test for different query
+// planning budgets. This is guaranteed to run with both the greedy query
+// planner and the dynamic-programming based query planner.
+void expect(std::string query, auto matcher,
+            std::optional<QueryExecutionContext*> optQec = std::nullopt,
+            source_location l = source_location::current()) {
+  auto e = [&](size_t budget) {
+    expectWithGivenBudget(query, matcher, optQec, budget, l);
+  };
+  e(0);
+  e(1);
+  e(4);
+  e(16);
+  e(64'000'000);
 }
 }  // namespace queryPlannerTestHelpers
