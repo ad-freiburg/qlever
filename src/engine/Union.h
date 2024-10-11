@@ -51,6 +51,8 @@ class Union : public Operation {
 
   const static size_t NO_COLUMN;
 
+  static constexpr size_t chunkSize = 1'000'000;
+
   // The method is declared here to make it unit testable
   void computeUnion(IdTable* inputTable, const IdTable& left,
                     const IdTable& right,
@@ -61,6 +63,13 @@ class Union : public Operation {
   }
 
  private:
+  // A drop-in replacement for `std::copy` that performs the copying in chunks
+  // of `chunkSize` and checks the timeout after each chunk.
+  void copyChunked(auto beg, auto end, auto target) const;
+
+  // A similar timeout-checking replacement for `std::fill`.
+  void fillChunked(auto beg, auto end, const auto& value) const;
+
   virtual ProtoResult computeResult(
       [[maybe_unused]] bool requestLaziness) override;
 

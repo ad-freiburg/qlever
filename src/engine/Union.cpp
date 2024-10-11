@@ -167,7 +167,7 @@ ProtoResult Union::computeResult([[maybe_unused]] bool requestLaziness) {
   IdTable idTable{getExecutionContext()->getAllocator()};
 
   idTable.setNumColumns(getResultWidth());
-  Union::computeUnion(&idTable, subRes1->idTable(), subRes2->idTable(),
+  computeUnion(&idTable, subRes1->idTable(), subRes2->idTable(),
                       _columnOrigins);
 
   LOG(DEBUG) << "Union result computation done" << std::endl;
@@ -177,43 +177,40 @@ ProtoResult Union::computeResult([[maybe_unused]] bool requestLaziness) {
           Result::getMergedLocalVocab(*subRes1, *subRes2)};
 }
 
+// _____________________________________________________________________________
+void Union::copyChunked(auto beg, auto end, auto target) const {
+  size_t total = end - beg;
+  for (size_t i = 0; i < total; i += chunkSize) {
+    checkCancellation();
+      size_t actualEnd = std::min(i + chunkSize, total);
+      std::copy(beg + i, beg + actualEnd, target + i);
+  }
+};
+
+// _____________________________________________________________________________
+void Union::fillChunked(auto beg, auto end, const auto& value) const {
+  size_t total = end - beg;
+  for (size_t i = 0; i < total; i += chunkSize) {
+    checkCancellation();
+    size_t actualEnd = std::min(i + chunkSize, total);
+    std::fill(beg + i, beg + actualEnd, value);
+  }
+};
+
+// _____________________________________________________________________________
 void Union::computeUnion(
     IdTable* resPtr, const IdTable& left, const IdTable& right,
     const std::vector<std::array<size_t, 2>>& columnOrigins) {
   IdTable& res = *resPtr;
   res.resize(left.size() + right.size());
 
-  static constexpr size_t chunkSize = 1'000'000;
-
-  // A drop-in replacement for `std::copy` that performs the copying in chunks
-  // of `chunkSize` and checks the timeout after each chunk.
-  auto copyChunked = [this](auto beg, auto end, auto target) {
-    size_t total = end - beg;
-    for (size_t i = 0; i < total; i += chunkSize) {
-      checkCancellation();
-      size_t actualEnd = std::min(i + chunkSize, total);
-      std::copy(beg + i, beg + actualEnd, target + i);
-    }
-  };
-
-  // A similar timeout-checking replacement for `std::fill`.
-  auto fillChunked = [this](auto beg, auto end, const auto& value) {
-    size_t total = end - beg;
-    for (size_t i = 0; i < total; i += chunkSize) {
-      checkCancellation();
-      size_t actualEnd = std::min(i + chunkSize, total);
-      std::fill(beg + i, beg + actualEnd, value);
-    }
-  };
-
   // Write the column with the `inputColumnIndex` from the `inputTable` into the
   // `targetColumn`. Always copy the complete input column and start at position
   // `offset` in the target column. If the `inputColumnIndex` is `NO_COLUMN`,
   // then the corresponding range in the `targetColumn` will be filled with
   // UNDEF.
-  auto writeColumn = [&copyChunked, &fillChunked](
-                         const auto& inputTable, auto& targetColumn,
-                         size_t inputColumnIndex, size_t offset) {
+  auto writeColumn = [this](const auto& inputTable, auto& targetColumn,
+                            size_t inputColumnIndex, size_t offset) {
     if (inputColumnIndex != NO_COLUMN) {
       decltype(auto) input = inputTable.getColumn(inputColumnIndex);
       copyChunked(input.begin(), input.end(), targetColumn.begin() + offset);
