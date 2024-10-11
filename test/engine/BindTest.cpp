@@ -25,19 +25,28 @@ Bind makeBindForIdTable(QueryExecutionContext* qec, IdTable idTable) {
        Variable{"?b"}}};
 }
 
-IdTable getSingleIdTable(cppcoro::generator<IdTable>& generator) {
-  std::optional<IdTable> result = std::nullopt;
-  for (IdTable& idTable : generator) {
-    if (result.has_value()) {
-      ADD_FAILURE() << "More than one IdTable was generated";
-      break;
-    }
-    result = std::move(idTable);
+void expectBindYieldsIdTable(
+    QueryExecutionContext* qec, Bind& bind, const IdTable& expected,
+    ad_utility::source_location loc = ad_utility::source_location::current()) {
+  auto trace = generateLocationTrace(loc);
+
+  {
+    qec->getQueryTreeCache().clearAll();
+    auto result = bind.getResult(false, ComputationMode::FULLY_MATERIALIZED);
+    ASSERT_TRUE(result->isFullyMaterialized());
+    EXPECT_EQ(result->idTable(), expected);
   }
-  if (!result.has_value()) {
-    throw std::runtime_error{"No IdTable was generated"};
+
+  {
+    qec->getQueryTreeCache().clearAll();
+    auto result = bind.getResult(false, ComputationMode::LAZY_IF_SUPPORTED);
+    ASSERT_FALSE(result->isFullyMaterialized());
+    auto& idTables = result->idTables();
+    auto iterator = idTables.begin();
+    ASSERT_NE(iterator, idTables.end());
+    EXPECT_EQ(*iterator, expected);
+    EXPECT_EQ(++iterator, idTables.end());
   }
-  return std::move(result).value();
 }
 }  // namespace
 
@@ -47,21 +56,8 @@ TEST(Bind, computeResult) {
   Bind bind =
       makeBindForIdTable(qec, makeIdTableFromVector({{1}, {2}, {3}, {4}}));
 
-  {
-    qec->getQueryTreeCache().clearAll();
-    auto result = bind.getResult(false, ComputationMode::FULLY_MATERIALIZED);
-    ASSERT_TRUE(result->isFullyMaterialized());
-    EXPECT_EQ(result->idTable(),
-              makeIdTableFromVector({{1, 1}, {2, 2}, {3, 3}, {4, 4}}));
-  }
-
-  {
-    qec->getQueryTreeCache().clearAll();
-    auto result = bind.getResult(false, ComputationMode::LAZY_IF_SUPPORTED);
-    ASSERT_FALSE(result->isFullyMaterialized());
-    EXPECT_EQ(getSingleIdTable(result->idTables()),
-              makeIdTableFromVector({{1, 1}, {2, 2}, {3, 3}, {4, 4}}));
-  }
+  expectBindYieldsIdTable(
+      qec, bind, makeIdTableFromVector({{1, 1}, {2, 2}, {3, 3}, {4, 4}}));
 }
 
 // _____________________________________________________________________________
@@ -70,21 +66,8 @@ TEST(Bind, computeResultWithTableWithoutRows) {
   Bind bind = makeBindForIdTable(
       qec, IdTable{1, ad_utility::makeUnlimitedAllocator<Id>()});
 
-  {
-    qec->getQueryTreeCache().clearAll();
-    auto result = bind.getResult(false, ComputationMode::FULLY_MATERIALIZED);
-    ASSERT_TRUE(result->isFullyMaterialized());
-    EXPECT_EQ(result->idTable(),
-              (IdTable{2, ad_utility::makeUnlimitedAllocator<Id>()}));
-  }
-
-  {
-    qec->getQueryTreeCache().clearAll();
-    auto result = bind.getResult(false, ComputationMode::LAZY_IF_SUPPORTED);
-    ASSERT_FALSE(result->isFullyMaterialized());
-    EXPECT_EQ(getSingleIdTable(result->idTables()),
-              (IdTable{2, ad_utility::makeUnlimitedAllocator<Id>()}));
-  }
+  expectBindYieldsIdTable(qec, bind,
+                          IdTable{2, ad_utility::makeUnlimitedAllocator<Id>()});
 }
 
 // _____________________________________________________________________________
@@ -99,18 +82,5 @@ TEST(Bind, computeResultWithTableWithoutColumns) {
       {SparqlExpressionPimpl{std::make_unique<IdExpression>(val), "42 as ?b"},
        Variable{"?b"}}};
 
-  {
-    qec->getQueryTreeCache().clearAll();
-    auto result = bind.getResult(false, ComputationMode::FULLY_MATERIALIZED);
-    ASSERT_TRUE(result->isFullyMaterialized());
-    EXPECT_EQ(result->idTable(), makeIdTableFromVector({{val}, {val}}));
-  }
-
-  {
-    qec->getQueryTreeCache().clearAll();
-    auto result = bind.getResult(false, ComputationMode::LAZY_IF_SUPPORTED);
-    ASSERT_FALSE(result->isFullyMaterialized());
-    EXPECT_EQ(getSingleIdTable(result->idTables()),
-              makeIdTableFromVector({{val}, {val}}));
-  }
+  expectBindYieldsIdTable(qec, bind, makeIdTableFromVector({{val}, {val}}));
 }

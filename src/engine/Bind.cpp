@@ -132,7 +132,7 @@ IdTable Bind::computeExpressionBind(
   sparqlExpression::ExpressionResult expressionResult =
       expression->evaluate(&evaluationContext);
 
-  auto output = std::move(AD_FWD(inputIdTable)).cloneOrMove();
+  auto output = std::move(inputIdTable).cloneOrMove();
   output.addEmptyColumn();
   auto outputColumn = output.getColumn(output.numColumns() - 1);
 
@@ -158,7 +158,8 @@ IdTable Bind::computeExpressionBind(
       constexpr bool isConstant = sparqlExpression::isConstantResult<T>;
 
       auto resultGenerator = sparqlExpression::detail::makeGenerator(
-          std::forward<T>(singleResult), outputColumn.size(), &evaluationContext);
+          std::forward<T>(singleResult), outputColumn.size(),
+          &evaluationContext);
 
       if constexpr (isConstant) {
         auto it = resultGenerator.begin();
