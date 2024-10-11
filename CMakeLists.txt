@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.27)
 project(QLever C CXX)
 
 # C/C++ Versions
@@ -244,6 +244,18 @@ FetchContent_Declare(
         GIT_TAG 93ac3a4f9ee7792af399cebd873ee99ce15aed08  # 2024-05-16
 )
 
+################################
+# S2 Geometry
+################################
+SET (BUILD_TESTS OFF CACHE BOOL "no tests for s2")
+FetchContent_Declare(
+        s2
+        GIT_REPOSITORY https://github.com/google/s2geometry.git
+        GI_TAG 5b5eccd54a08ae03b4467e79ffbb076d0b5f221e  #version 0.11.1
+        SYSTEM
+)
+
+
 if (USE_PARALLEL)
     include(FindOpenMP)
     if (OPENMP_FOUND)
@@ -301,8 +313,13 @@ FetchContent_Declare(
 ################################
 FetchContent_Declare(
         fsst
-        GIT_REPOSITORY https://github.com/cwida/fsst.git
-        GIT_TAG c8719ef0aa3740da9685ad2738bb9c8ecc327944
+        #GIT_REPOSITORY https://github.com/cwida/fsst.git
+        #GIT_TAG c8719ef0aa3740da9685ad2738bb9c8ecc327944
+        #FSST Currently has a struct name `Encoder` that leads to ODR violations with the `Encoder`class of S2.
+        # I (joka921) have filed bug reports for both of them and a PR for fsst, but for now we use our own fork
+        # of Fsst.
+        GIT_REPOSITORY https://github.com/joka921/fsst.git
+        GIT_TAG 43fb2d1756f5a5d0e85e765c7b51f5e3be8cc83f
 )
 
 
@@ -321,8 +338,9 @@ FetchContent_Declare(
 ################################
 # Apply FetchContent
 ################################
-FetchContent_MakeAvailable(googletest ctre abseil re2 stxxl fsst)
+FetchContent_MakeAvailable(googletest ctre abseil re2 stxxl fsst s2)
 # Disable some warnings in RE2, STXXL, and GTEST
+target_compile_options(s2 PRIVATE -Wno-sign-compare -Wno-unused-parameter -Wno-class-memaccess -Wno-comment -Wno-redundant-move -Wno-unknown-warning-option -Wno-maybe-uninitialized -Wno-class-memaccess)
 target_compile_options(re2 PRIVATE -Wno-unused-parameter)
 target_compile_options(stxxl PRIVATE -Wno-deprecated-declarations)
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
