@@ -34,13 +34,11 @@ inline auto subtract = makeNumericExpression<std::minus<>>();
 NARY_EXPRESSION(SubtractExpression, 2,
                 FV<decltype(subtract), NumericValueGetter>);
 
-// Power
-struct powOp {
-  constexpr double operator()(const double base, const double exp) {
-    return std::pow(base, exp);
-  }
+// Power.
+inline auto powImpl = [](double base, double exp) {
+  return std::pow(base, exp);
 };
-inline auto pow = makeNumericExpression<powOp>();
+inline auto pow = makeNumericExpression<decltype(powImpl)>();
 NARY_EXPRESSION(PowExpression, 2, FV<decltype(pow), NumericValueGetter>);
 
 // Or
