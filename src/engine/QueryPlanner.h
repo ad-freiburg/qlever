@@ -378,8 +378,8 @@ class QueryPlanner {
   [[nodiscard]] bool connected(const SubtreePlan& a, const SubtreePlan& b,
                                const TripleGraph& graph) const;
 
-  [[nodiscard]] std::vector<std::array<ColumnIndex, 2>> getJoinColumns(
-      const SubtreePlan& a, const SubtreePlan& b) const;
+  static std::vector<std::array<ColumnIndex, 2>> getJoinColumns(
+      const SubtreePlan& a, const SubtreePlan& b);
 
   [[nodiscard]] string getPruningKey(
       const SubtreePlan& plan,
@@ -467,6 +467,21 @@ class QueryPlanner {
       const vector<SparqlFilter>& filters, const TextLimitMap& textLimits,
       const TripleGraph& tg) const;
 
+  // Same as `runDynamicProgrammingOnConnectedComponent`, but uses a greedy
+  // algorithm that always greedily chooses the smallest result of the possible
+  // join operations using the "Greedy Operator Ordering (GOO)" algorithm.
+  std::vector<QueryPlanner::SubtreePlan> runGreedyPlanningOnConnectedComponent(
+      std::vector<SubtreePlan> connectedComponent,
+      const vector<SparqlFilter>& filters, const TextLimitMap& textLimits,
+      const TripleGraph& tg) const;
+
+  // Return the number of connected subgraphs is the `graph`, or `budget + 1`,
+  // if the number of subgraphs is `> budget`. This is used to analyze the
+  // complexity of the query graph and to choose between the DP and the greedy
+  // query planner see above.
+  static size_t countSubgraphs(std::vector<const SubtreePlan*> graph,
+                               size_t budget);
+
   // Creates a SubtreePlan for the given text leaf node in the triple graph.
   // While doing this the TextLimitMetaObjects are created and updated according
   // to the text leaf node.
@@ -551,8 +566,12 @@ class QueryPlanner {
    * sorting by the cache key when comparing equally cheap indices, else the
    * first element that has the minimum index is returned.
    */
-  [[nodiscard]] size_t findCheapestExecutionTree(
+  size_t findCheapestExecutionTree(
       const std::vector<SubtreePlan>& lastRow) const;
+  static size_t findSmallestExecutionTree(
+      const std::vector<SubtreePlan>& lastRow);
+  static size_t findUniqueNodeIds(
+      const std::vector<SubtreePlan>& connectedComponent);
 
   /// if this Planner is not associated with a queryExecutionContext we are only
   /// in the unit test mode
