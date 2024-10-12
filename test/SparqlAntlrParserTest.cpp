@@ -19,6 +19,7 @@
 #include "engine/sparqlExpressions/CountStarExpression.h"
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
+#include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/NowDatetimeExpression.h"
 #include "engine/sparqlExpressions/RandomExpression.h"
 #include "engine/sparqlExpressions/RegexExpression.h"
@@ -1669,6 +1670,9 @@ TEST(SparqlParser, FunctionCall) {
                      matchUnary(&makeCosExpression));
   expectFunctionCall(absl::StrCat(math, "tan>(?x)"),
                      matchUnary(&makeTanExpression));
+  expectFunctionCall(
+      absl::StrCat(math, "pow>(?a, ?b)"),
+      matchNary(&makePowExpression, Variable{"?a"}, Variable{"?b"}));
   expectFunctionCall(absl::StrCat(xsd, "int>(?x)"),
                      matchUnary(&makeConvertToIntExpression));
   expectFunctionCall(absl::StrCat(xsd, "integer>(?x)"),

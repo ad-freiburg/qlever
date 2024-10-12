@@ -17,6 +17,7 @@
 #include "engine/sparqlExpressions/CountStarExpression.h"
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
+#include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/NowDatetimeExpression.h"
 #include "engine/sparqlExpressions/RandomExpression.h"
 #include "engine/sparqlExpressions/RegexExpression.h"
@@ -131,6 +132,10 @@ ExpressionPtr Visitor::processIriFunctionCall(
     } else if (functionName == "tan") {
       checkNumArgs(1);
       return sparqlExpression::makeTanExpression(std::move(argList[0]));
+    } else if (functionName == "pow") {
+      checkNumArgs(2);
+      return sparqlExpression::makePowExpression(std::move(argList[0]),
+                                                 std::move(argList[1]));
     }
   } else if (checkPrefix(XSD_PREFIX)) {
     if (functionName == "integer" || functionName == "int") {
