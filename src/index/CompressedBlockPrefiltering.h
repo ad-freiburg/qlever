@@ -122,6 +122,18 @@ class NotExpression : public PrefilterExpression {
 };
 
 //______________________________________________________________________________
+// Instanitate templates with specializations (for linking accessibility)
+template class RelationalExpression<CompOp::LT>;
+template class RelationalExpression<CompOp::LE>;
+template class RelationalExpression<CompOp::GE>;
+template class RelationalExpression<CompOp::GT>;
+template class RelationalExpression<CompOp::EQ>;
+template class RelationalExpression<CompOp::NE>;
+
+template class LogicalExpression<LogicalOperators::AND>;
+template class LogicalExpression<LogicalOperators::OR>;
+
+//______________________________________________________________________________
 // Definition of the RelationalExpression for LT, LE, EQ, NE, GE and GT.
 using LessThanExpression = prefilterExpressions::RelationalExpression<
     prefilterExpressions::CompOp::LT>;

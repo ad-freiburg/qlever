@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "engine/VariableToColumnMap.h"
+#include "index/CompressedBlockPrefiltering.h"
 #include "parser/data/Variable.h"
 #include "util/HashMap.h"
 #include "util/HashSet.h"
@@ -110,6 +111,10 @@ class SparqlExpressionPimpl {
   Estimates getEstimatesForFilterExpression(
       uint64_t inputSizeEstimate,
       const std::optional<Variable>& primarySortKeyVariable);
+
+  std::optional<std::pair<
+      std::unique_ptr<prefilterExpressions::PrefilterExpression>, Variable>>
+  getPrefilterExpressionForMetadata() const;
 
   SparqlExpression* getPimpl() { return _pimpl.get(); }
   [[nodiscard]] const SparqlExpression* getPimpl() const {

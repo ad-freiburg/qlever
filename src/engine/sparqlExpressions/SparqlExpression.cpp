@@ -109,6 +109,13 @@ Estimates SparqlExpression::getEstimatesForFilterExpression(
 }
 
 // _____________________________________________________________________________
+std::optional<std::pair<
+    std::unique_ptr<prefilterExpressions::PrefilterExpression>, Variable>>
+SparqlExpression::getPrefilterExpressionForMetadata() const {
+  return std::nullopt;
+};
+
+// _____________________________________________________________________________
 bool SparqlExpression::isConstantExpression() const { return false; }
 
 // _____________________________________________________________________________

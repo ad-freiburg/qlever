@@ -287,16 +287,4 @@ std::vector<BlockMetadata> NotExpression::evaluateImpl(
   return child_->evaluate(input, evaluationColumn);
 };
 
-//______________________________________________________________________________
-// Necessary instantiation of template specializations
-template class RelationalExpression<CompOp::LT>;
-template class RelationalExpression<CompOp::LE>;
-template class RelationalExpression<CompOp::GE>;
-template class RelationalExpression<CompOp::GT>;
-template class RelationalExpression<CompOp::EQ>;
-template class RelationalExpression<CompOp::NE>;
-
-template class LogicalExpression<LogicalOperators::AND>;
-template class LogicalExpression<LogicalOperators::OR>;
-
 }  //  namespace prefilterExpressions
