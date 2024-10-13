@@ -780,19 +780,17 @@ ExportQueryExecutionTrees::computeResultAsQLeverJSON(
                 qet, query.constructClause().triples_, query._limitOffset,
                 std::move(result), std::move(cancellationHandle));
 
-  size_t sentResultSize = 0;
+  size_t numBindingsYielded = 0;
   for (const std::string& b : bindings) {
-    if (sentResultSize > 0) [[likely]] {
+    if (numBindingsYielded > 0) [[likely]] {
       co_yield ",";
     }
     co_yield b;
-    ++sentResultSize;
+    ++numBindingsYielded;
   }
 
   RuntimeInformation runtimeInformation = qet.getRootOperation()->runtimeInfo();
-  // Take size before implicit limit (more or less meaningless for lazy
-  // operations)
-  size_t actualResultSize = runtimeInformation.numRows_;
+  size_t resultSizeBeforeImplicitLimit = runtimeInformation.numRows_;
   runtimeInformation.addLimitOffsetRow(query._limitOffset, false);
 
   auto timeResultComputation =
@@ -804,8 +802,16 @@ ExportQueryExecutionTrees::computeResultAsQLeverJSON(
       qet.getRootOperation()->getRuntimeInfoWholeQuery());
   jsonSuffix["runtimeInformation"]["query_execution_tree"] =
       nlohmann::ordered_json(runtimeInformation);
-  jsonSuffix["resultsize"] =
-      query.hasSelectClause() ? actualResultSize : sentResultSize;
+  // TODO: This is a simple hack to get the result size for typical SELECT
+  // queries. When the final operation is lazy, it will be the size of the
+  // blocks produced by that operation (which is a lower bound on the size of
+  // the full result). For CONSTRUCT queries, it will be at most the implicit
+  // limit. The proper solution is to reinstate the `send` parameter
+  // (independently from the LIMIT), and if it is set, send only that many
+  // results but compute the full result size.
+  jsonSuffix["resultsize"] = query.hasSelectClause()
+                                 ? resultSizeBeforeImplicitLimit
+                                 : numBindingsYielded;
   jsonSuffix["time"]["total"] =
       absl::StrCat(requestTimer.msecs().count(), "ms");
   jsonSuffix["time"]["computeResult"] =
