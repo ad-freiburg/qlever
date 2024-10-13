@@ -11,19 +11,19 @@
 #include <string>
 
 #include "index/IndexImpl.h"
-#include "index/TriplesView.h"
 #include "parser/ParsedQuery.h"
 
 using std::string;
 
 // _____________________________________________________________________________
 IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
-                     const SparqlTripleSimple& triple)
+                     const SparqlTripleSimple& triple, Graphs graphsToFilter)
     : Operation(qec),
       permutation_(permutation),
       subject_(triple.s_),
       predicate_(triple.p_),
       object_(triple.o_),
+      graphsToFilter_{std::move(graphsToFilter)},
       numVariables_(static_cast<size_t>(subject_.isVariable()) +
                     static_cast<size_t>(predicate_.isVariable()) +
                     static_cast<size_t>(object_.isVariable())) {
@@ -51,8 +51,9 @@ IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
 
 // _____________________________________________________________________________
 IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
-                     const SparqlTriple& triple)
-    : IndexScan(qec, permutation, triple.getSimple()) {}
+                     const SparqlTriple& triple, Graphs graphsToFilter)
+    : IndexScan(qec, permutation, triple.getSimple(),
+                std::move(graphsToFilter)) {}
 
 // _____________________________________________________________________________
 string IndexScan::getCacheKeyImpl() const {
@@ -77,6 +78,16 @@ string IndexScan::getCacheKeyImpl() const {
   if (!additionalColumns_.empty()) {
     os << " Additional Columns: ";
     os << absl::StrJoin(additionalColumns(), " ");
+  }
+  if (graphsToFilter_.has_value()) {
+    // The graphs are stored as a hash set, but we need a deterministic order.
+    std::vector<std::string> graphIdVec;
+    std::ranges::transform(graphsToFilter_.value(),
+                           std::back_inserter(graphIdVec),
+                           &TripleComponent::toRdfLiteral);
+    std::ranges::sort(graphIdVec);
+    os << "\nFiltered by Graphs:";
+    os << absl::StrJoin(graphIdVec, " ");
   }
   return std::move(os).str();
 }
@@ -149,13 +160,8 @@ ProtoResult IndexScan::computeResult(bool requestLaziness) {
   using enum Permutation::Enum;
   idTable.setNumColumns(numVariables_);
   const auto& index = _executionContext->getIndex();
-  if (numVariables_ < 3) {
-    idTable = index.scan(getScanSpecification(), permutation_,
-                         additionalColumns(), cancellationHandle_, getLimit());
-  } else {
-    AD_CORRECTNESS_CHECK(numVariables_ == 3);
-    computeFullScan(&idTable, permutation_);
-  }
+  idTable = index.scan(getScanSpecification(), permutation_,
+                       additionalColumns(), cancellationHandle_, getLimit());
   AD_CORRECTNESS_CHECK(idTable.numColumns() == getResultWidth());
   LOG(DEBUG) << "IndexScan result computation done.\n";
   checkCancellation();
@@ -166,19 +172,7 @@ ProtoResult IndexScan::computeResult(bool requestLaziness) {
 // _____________________________________________________________________________
 size_t IndexScan::computeSizeEstimate() const {
   AD_CORRECTNESS_CHECK(_executionContext);
-  // We have to do a simple scan anyway so might as well do it now
-  if (numVariables_ < 3) {
-    return getIndex().getResultSizeOfScan(getScanSpecification(), permutation_);
-  } else {
-    // The triple consists of three variables.
-    // TODO<joka921> As soon as all implementations of a full index scan
-    // (Including the "dummy joins" in Join.cpp) consistently exclude the
-    // internal triples, this estimate should be changed to only return
-    // the number of triples in the actual knowledge graph (excluding the
-    // internal triples).
-    AD_CORRECTNESS_CHECK(numVariables_ == 3);
-    return getIndex().numTriples().normalAndInternal_();
-  }
+  return getIndex().getResultSizeOfScan(getScanSpecification(), permutation_);
 }
 
 // _____________________________________________________________________________
@@ -211,44 +205,6 @@ void IndexScan::determineMultiplicities() {
   AD_CONTRACT_CHECK(multiplicity_.size() == getResultWidth());
 }
 
-// ________________________________________________________________________
-void IndexScan::computeFullScan(IdTable* result,
-                                const Permutation::Enum permutation) const {
-  auto [ignoredRanges, isTripleIgnored] =
-      getIndex().getImpl().getIgnoredIdRanges(permutation);
-
-  result->setNumColumns(3);
-
-  // This implementation computes the complete knowledge graph, except the
-  // internal triples.
-  uint64_t resultSize = getIndex().numTriples().normal;
-  if (getLimit()._limit.has_value() && getLimit()._limit < resultSize) {
-    resultSize = getLimit()._limit.value();
-  }
-
-  // TODO<joka921> Implement OFFSET
-  if (getLimit()._offset != 0) {
-    throw NotSupportedException{
-        "Scanning the complete index with an OFFSET clause is currently not "
-        "supported by QLever"};
-  }
-  result->reserve(resultSize);
-  auto table = std::move(*result).toStatic<3>();
-  size_t i = 0;
-  const auto& permutationImpl =
-      getExecutionContext()->getIndex().getImpl().getPermutation(permutation);
-  auto triplesView = TriplesView(permutationImpl, cancellationHandle_,
-                                 ignoredRanges, isTripleIgnored);
-  for (const auto& triple : triplesView) {
-    if (i >= resultSize) {
-      break;
-    }
-    table.push_back(triple);
-    ++i;
-  }
-  *result = std::move(table).toDynamic();
-}
-
 // ___________________________________________________________________________
 std::array<const TripleComponent* const, 3> IndexScan::getPermutedTriple()
     const {
@@ -259,19 +215,21 @@ std::array<const TripleComponent* const, 3> IndexScan::getPermutedTriple()
 }
 
 // ___________________________________________________________________________
-ScanSpecificationAsTripleComponent IndexScan::getScanSpecification() const {
+ScanSpecification IndexScan::getScanSpecification() const {
+  const IndexImpl& index = getIndex().getImpl();
+  return getScanSpecificationTc().toScanSpecification(index);
+}
+
+// ___________________________________________________________________________
+ScanSpecificationAsTripleComponent IndexScan::getScanSpecificationTc() const {
   auto permutedTriple = getPermutedTriple();
-  return {*permutedTriple[0], *permutedTriple[1], *permutedTriple[2]};
+  return {*permutedTriple[0], *permutedTriple[1], *permutedTriple[2],
+          graphsToFilter_};
 }
 
 // ___________________________________________________________________________
 Permutation::IdTableGenerator IndexScan::getLazyScan(
     std::vector<CompressedBlockMetadata> blocks) const {
-  const IndexImpl& index = getIndex().getImpl();
-  auto scanSpecification = getScanSpecification().toScanSpecification(index);
-  if (!scanSpecification.has_value()) {
-    return {};
-  }
   // If there is a LIMIT or OFFSET clause that constrains the scan
   // (which can happen with an explicit subquery), we cannot use the prefiltered
   // blocks, as we currently have no mechanism to include limits and offsets
@@ -280,8 +238,10 @@ Permutation::IdTableGenerator IndexScan::getLazyScan(
                           ? std::optional{std::move(blocks)}
                           : std::nullopt;
 
-  return index.getPermutation(permutation())
-      .lazyScan(std::move(scanSpecification).value(), std::move(actualBlocks),
+  return getIndex()
+      .getImpl()
+      .getPermutation(permutation())
+      .lazyScan(getScanSpecification(), std::move(actualBlocks),
                 additionalColumns(), cancellationHandle_, getLimit());
 };
 
@@ -289,12 +249,8 @@ Permutation::IdTableGenerator IndexScan::getLazyScan(
 std::optional<Permutation::MetadataAndBlocks> IndexScan::getMetadataForScan()
     const {
   const auto& index = getExecutionContext()->getIndex().getImpl();
-  auto scanSpec = getScanSpecification().toScanSpecification(index);
-  if (!scanSpec.has_value()) {
-    return std::nullopt;
-  }
   return index.getPermutation(permutation())
-      .getMetadataAndBlocks(scanSpec.value());
+      .getMetadataAndBlocks(getScanSpecification());
 };
 
 // ________________________________________________________________

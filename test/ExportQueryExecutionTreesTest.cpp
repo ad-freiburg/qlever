@@ -542,6 +542,38 @@ TEST(ExportQueryExecutionTrees, Dates) {
 }
 
 // ____________________________________________________________________________
+TEST(ExportQueryExecutionTrees, GeoPoints) {
+  std::string kg =
+      "<s> <p> "
+      "\"POINT(50.0 "
+      "50.0)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>.";
+  std::string query = "SELECT ?o WHERE {?s ?p ?o} ORDER BY ?o";
+  std::string expectedXml = makeXMLHeader({"o"}) +
+                            R"(
+  <result>
+    <binding name="o"><literal datatype="http://www.opengis.net/ont/geosparql#wktLiteral">POINT(50.000000 50.000000)</literal></binding>
+  </result>)" + xmlTrailer;
+  TestCaseSelectQuery testCase{
+      kg, query, 1,
+      // TSV
+      "?o\n"
+      "POINT(50.000000 50.000000)\n",
+      // should be
+      // "\"POINT(50.000000 50.000000)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>\n",
+      // but that is a bug in the TSV export for another PR. Note: the duplicate
+      // quotes are due to the escaping for CSV.
+      "o\n"
+      "POINT(50.000000 50.000000)\n",
+      makeExpectedQLeverJSON(
+          {"\"POINT(50.000000 50.000000)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>"s}),
+      makeExpectedSparqlJSON(
+          {makeJSONBinding("http://www.opengis.net/ont/geosparql#wktLiteral",
+                           "literal", "POINT(50.000000 50.000000)")}),
+      expectedXml};
+  runSelectQueryTestCase(testCase);
+}
+
+// ____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, Entities) {
   std::string kg = "PREFIX qlever: <http://qlever.com/> \n <s> <p> qlever:o";
   std::string query = "SELECT ?o WHERE {?s ?p ?o} ORDER BY ?o";
@@ -1022,6 +1054,53 @@ TEST(ExportQueryExecutionTrees, MultipleVariables) {
 }
 
 // ____________________________________________________________________________
+TEST(ExportQueryExecutionTrees, LimitOffset) {
+  std::string kg = "<a> <b> <c> . <d> <e> <f> . <g> <h> <i> . <j> <k> <l>";
+  std::string objectQuery =
+      "SELECT ?s WHERE { ?s ?p ?o } ORDER BY ?s LIMIT 2 OFFSET 1";
+  std::string expectedXml = makeXMLHeader({"s"}) +
+                            R"(
+  <result>
+    <binding name="s"><uri>d</uri></binding>
+  </result>
+  <result>
+    <binding name="s"><uri>g</uri></binding>
+  </result>)" + xmlTrailer;
+  TestCaseSelectQuery testCaseLimitOffset{
+      kg, objectQuery, 2,
+      // TSV
+      "?s\n"
+      "<d>\n"
+      "<g>\n",
+      // CSV
+      "s\n"
+      "d\n"
+      "g\n",
+      []() {
+        nlohmann::json j;
+        j.push_back(std::vector{
+            "<d>"s,
+        });
+        j.push_back(std::vector{
+            "<g>"s,
+        });
+        return j;
+      }(),
+      []() {
+        nlohmann::json j;
+        j["head"]["vars"].push_back("s");
+        auto& bindings = j["results"]["bindings"];
+        bindings.emplace_back();
+        bindings.back()["s"] = makeJSONBinding(std::nullopt, "uri", "d");
+        bindings.emplace_back();
+        bindings.back()["s"] = makeJSONBinding(std::nullopt, "uri", "g");
+        return j;
+      }(),
+      expectedXml};
+  runSelectQueryTestCase(testCaseLimitOffset);
+}
+
+// ____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, BinaryExport) {
   std::string kg = "<s> <p> 31 . <s> <o> 42";
   std::string query = "SELECT ?p ?o WHERE {<s> ?p ?o } ORDER BY ?p ?o";
@@ -1078,7 +1157,7 @@ TEST(ExportQueryExecutionTrees, CornerCases) {
   std::string queryNoVariablesVisible = "SELECT ?not ?known WHERE {<s> ?p ?o}";
   auto resultNoColumns = runJSONQuery(kg, queryNoVariablesVisible,
                                       ad_utility::MediaType::sparqlJson);
-  ASSERT_TRUE(resultNoColumns["result"]["bindings"].empty());
+  ASSERT_TRUE(resultNoColumns["results"]["bindings"].empty());
 
   auto qec = ad_utility::testing::getQec(kg);
   AD_EXPECT_THROW_WITH_MESSAGE(

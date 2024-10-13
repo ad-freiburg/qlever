@@ -302,7 +302,6 @@ void Join::computeSizeEstimateAndMultiplicities() {
     }
     _multiplicities.emplace_back(m);
   }
-
   assert(_multiplicities.size() == getResultWidth());
 }
 
@@ -510,7 +509,7 @@ void Join::hashJoin(const IdTable& dynA, ColumnIndex jc1, const IdTable& dynB,
                     ColumnIndex jc2, IdTable* dynRes) {
   CALL_FIXED_SIZE(
       (std::array{dynA.numColumns(), dynB.numColumns(), dynRes->numColumns()}),
-      &Join::hashJoinImpl, this, dynA, jc1, dynB, jc2, dynRes);
+      &Join::hashJoinImpl, dynA, jc1, dynB, jc2, dynRes);
 }
 
 // ___________________________________________________________________________
@@ -565,6 +564,13 @@ void updateRuntimeInfoForLazyScan(
   rti.addDetail("num-blocks-read", metadata.numBlocksRead_);
   rti.addDetail("num-blocks-all", metadata.numBlocksAll_);
   rti.addDetail("num-elements-read", metadata.numElementsRead_);
+  if (metadata.numBlocksSkippedBecauseOfGraph_ > 0) {
+    rti.addDetail("num-blocks-skipped-graph",
+                  metadata.numBlocksSkippedBecauseOfGraph_);
+  }
+  if (metadata.numBlocksPostprocessed_ > 0) {
+    rti.addDetail("num-blocks-postprocessed", metadata.numBlocksPostprocessed_);
+  }
 }
 }  // namespace
 

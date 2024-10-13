@@ -212,6 +212,8 @@ ExportQueryExecutionTrees::idToStringAndTypeForEncodedValue(Id id) {
       return std::pair{std::to_string(id.getInt()), XSD_INT_TYPE};
     case Date:
       return id.getDate().toStringAndType();
+    case GeoPoint:
+      return id.getGeoPoint().toStringAndType();
     case BlankNodeIndex:
       return std::pair{absl::StrCat("_:bn", id.getBlankNodeIndex().get()),
                        nullptr};
@@ -624,13 +626,15 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
     return binding.dump();
   };
 
+  bool isFirstRow = true;
   for (const auto& [idTable, range] : getRowIndices(limitAndOffset, *result)) {
     for (uint64_t i : range) {
-      if (i != 0) [[likely]] {
+      if (!isFirstRow) [[likely]] {
         co_yield ",";
       }
       co_yield getBinding(idTable, i);
       cancellationHandle->throwIfCancelled();
+      isFirstRow = false;
     }
   }
 

@@ -48,7 +48,8 @@ class LiteralExpression : public SparqlExpression {
       if (auto ptr = cachedResult_.load(std::memory_order_relaxed)) {
         return *ptr;
       }
-      auto id = context->_qec.getIndex().getId(s);
+      TripleComponent tc{s};
+      std::optional<Id> id = tc.toValueId(context->_qec.getIndex().getVocab());
       IdOrLiteralOrIri result =
           id.has_value()
               ? IdOrLiteralOrIri{id.value()}
@@ -83,7 +84,7 @@ class LiteralExpression : public SparqlExpression {
   }
 
   // _________________________________________________________________________
-  vector<Variable> getUnaggregatedVariables() override {
+  vector<Variable> getUnaggregatedVariables() const override {
     if constexpr (std::is_same_v<T, ::Variable>) {
       return {_value};
     } else {
@@ -192,7 +193,7 @@ struct SingleUseExpression : public SparqlExpression {
     return std::move(result_);
   }
 
-  vector<Variable> getUnaggregatedVariables() override {
+  vector<Variable> getUnaggregatedVariables() const override {
     // This class should only be used as an implementation of other expressions,
     // not as a "normal" part of an expression tree.
     AD_FAIL();

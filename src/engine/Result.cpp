@@ -95,6 +95,12 @@ Result::Result(cppcoro::generator<IdTable> idTables,
              SharedLocalVocabWrapper{std::move(localVocab)}} {}
 
 // _____________________________________________________________________________
+Result::Result(cppcoro::generator<IdTable> idTables,
+               std::vector<ColumnIndex> sortedBy, LocalVocabPtr localVocab)
+    : Result{std::move(idTables), std::move(sortedBy),
+             SharedLocalVocabWrapper{std::move(localVocab)}} {}
+
+// _____________________________________________________________________________
 // Apply `LimitOffsetClause` to given `IdTable`.
 void resizeIdTable(IdTable& idTable, const LimitOffsetClause& limitOffset) {
   std::ranges::for_each(
@@ -196,9 +202,10 @@ void Result::checkDefinedness(const VariableToColumnMap& varColMap) {
   if (isFullyMaterialized()) {
     AD_EXPENSIVE_CHECK(performCheck(varColMap, std::get<IdTable>(data_)));
   } else {
-    auto generator = [](cppcoro::generator<IdTable> original,
-                        VariableToColumnMap varColMap,
-                        auto performCheck) -> cppcoro::generator<IdTable> {
+    auto generator =
+        [](cppcoro::generator<IdTable> original,
+           [[maybe_unused]] VariableToColumnMap varColMap,
+           [[maybe_unused]] auto performCheck) -> cppcoro::generator<IdTable> {
       for (IdTable& idTable : original) {
         // No need to check subsequent idTables assuming the datatypes
         // don't change mid result.

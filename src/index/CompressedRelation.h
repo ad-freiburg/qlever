@@ -2,8 +2,7 @@
 // Chair of Algorithms and Data Structures
 // Author: Johannes Kalmbach <johannes.kalmbach@gmail.com>
 
-#ifndef QLEVER_COMPRESSEDRELATION_H
-#define QLEVER_COMPRESSEDRELATION_H
+#pragma once
 
 #include <algorithm>
 #include <type_traits>
@@ -20,6 +19,7 @@
 #include "util/Generator.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/Serializer/SerializeArrayOrTuple.h"
+#include "util/Serializer/SerializeOptional.h"
 #include "util/Serializer/SerializeVector.h"
 #include "util/Serializer/Serializer.h"
 #include "util/TaskQueue.h"
@@ -94,6 +94,15 @@ struct CompressedBlockMetadata {
   PermutedTriple firstTriple_;
   PermutedTriple lastTriple_;
 
+  // If there are only few graphs contained at all in this block, then
+  // the IDs of those graphs are stored here. If there are many different graphs
+  // inside this block, `std::nullopt` is stored.
+  std::optional<std::vector<Id>> graphInfo_;
+  // True if and only if this block contains (adjacent) triples which only
+  // differ in their Graph ID. Those have to be filtered out when scanning the
+  // blocks.
+  bool containsDuplicatesWithDifferentGraphs_;
+
   // Two of these are equal if all members are equal.
   bool operator==(const CompressedBlockMetadata&) const = default;
 };
@@ -110,6 +119,8 @@ AD_SERIALIZE_FUNCTION(CompressedBlockMetadata) {
   serializer | arg.numRows_;
   serializer | arg.firstTriple_;
   serializer | arg.lastTriple_;
+  serializer | arg.graphInfo_;
+  serializer | arg.containsDuplicatesWithDifferentGraphs_;
 }
 
 // The metadata of a whole compressed "relation", where relation refers to a
@@ -330,11 +341,13 @@ class CompressedRelationWriter {
   CompressedRelationMetadata addCompleteLargeRelation(Id col0Id,
                                                       auto&& sortedBlocks);
 
-  // This is the function in `CompressedRelationsTest.cpp` that tests the
+  // This is a function in `CompressedRelationsTest.cpp` that tests the
   // internals of this class and therefore needs private access.
-  friend void testCompressedRelations(const auto& inputs,
-                                      std::string testCaseName,
-                                      ad_utility::MemorySize blocksize);
+  friend std::pair<std::vector<CompressedBlockMetadata>,
+                   std::vector<CompressedRelationMetadata>>
+  compressedRelationTestWriteCompressedRelations(
+      const auto& inputs, std::string filename,
+      ad_utility::MemorySize blocksize);
 };
 
 using namespace std::string_view_literals;
@@ -351,14 +364,54 @@ class CompressedRelationReader {
   using ColumnIndices = std::vector<ColumnIndex>;
   using CancellationHandle = ad_utility::SharedCancellationHandle;
 
-  // The metadata of a single relation together with a subset of its
-  // blocks and possibly a `col1Id` for additional filtering. This is used as
-  // the input to several functions below that take such an input.
-  struct MetadataAndBlocks {
+  // This struct stores a reference to the (optional) graphs by which a result
+  // is filtered, the column in which the graph ID will reside in a result,
+  // and the information whether this column is required as part of the output,
+  // or whether it should be deleted after filtering. It can then filter a given
+  // block according to those settings.
+  struct FilterDuplicatesAndGraphs {
+    const ScanSpecification::Graphs& desiredGraphs_;
+    ColumnIndex graphColumn_;
+    bool deleteGraphColumn_;
+    // Filter `block` such that it contains only the specified graphs and no
+    // duplicates. The `blockMetadata` of `block` is used for possible shortcuts
+    // (for example, if we know that there are no duplicates, we do not have to
+    // eliminate them). The return value is `true` if the `block` has been
+    // modified because it contained duplicates or triples from unwanted graphs.
+    bool postprocessBlock(IdTable& block,
+                          const CompressedBlockMetadata& blockMetadata) const;
+
+    // Return true, iff a block, specified by the `blockMetadata` contains no
+    // triples from `desiredGraphs_` and therefore doesn't have to be read from
+    // disk, and if this fact can be determined by `blockMetadata` alone.
+    bool canBlockBeSkipped(const CompressedBlockMetadata& blockMetadata) const;
+
+   private:
+    // Return true iff all triples from the block belong to the
+    // `desiredGraphs_`, and if this fact can be determined by looking at the
+    // metadata alone.
+    bool blockNeedsFilteringByGraph(
+        const CompressedBlockMetadata& metadata) const;
+
+    // Implementation of the various steps of `postprocessBlock`. Each of them
+    // returns `true` iff filtering the block was necessary.
+    bool filterByGraphIfNecessary(
+        IdTable& block, const CompressedBlockMetadata& blockMetadata) const;
+    static bool filterDuplicatesIfNecessary(
+        IdTable& block, const CompressedBlockMetadata& blockMetadata);
+  };
+
+  // The specification of scan, together with the blocks on which this scan is
+  // to be performed.
+  struct ScanSpecAndBlocks {
     ScanSpecification scanSpec_;
     const std::span<const CompressedBlockMetadata> blockMetadata_;
+  };
 
-    // If set, `firstAndLastTriple_` contains the first and the last triple
+  // This struct additionally contains the first and last triple of the scan
+  // result.
+  struct ScanSpecAndBlocksAndBounds : public ScanSpecAndBlocks {
+    // `firstAndLastTriple_` contains the first and the last triple
     // of the specified relation (and being filtered by the `col1Id` if
     // specified). This might be different from the first triple in the first
     // block (in the case of the `firstTriple_`, similarly for `lastTriple_`)
@@ -368,12 +421,23 @@ class CompressedRelationReader {
       CompressedBlockMetadata::PermutedTriple firstTriple_;
       CompressedBlockMetadata::PermutedTriple lastTriple_;
     };
-    std::optional<FirstAndLastTriple> firstAndLastTriple_;
+    FirstAndLastTriple firstAndLastTriple_;
+    // Deliberately delete the default constructor such that we don't
+    // accidentally forget to set the `firstAndLastTriple_`.
+    ScanSpecAndBlocksAndBounds() = delete;
+    ScanSpecAndBlocksAndBounds(ScanSpecAndBlocks base,
+                               FirstAndLastTriple triples)
+        : ScanSpecAndBlocks(std::move(base)),
+          firstAndLastTriple_(std::move(triples)) {}
   };
 
   struct LazyScanMetadata {
     size_t numBlocksRead_ = 0;
     size_t numBlocksAll_ = 0;
+    // The number of blocks that are skipped by looking only at their metadata
+    // (because the graph IDs of the block did not match the query).
+    size_t numBlocksSkippedBecauseOfGraph_ = 0;
+    size_t numBlocksPostprocessed_ = 0;
     // If a LIMIT or OFFSET is present we possibly read more rows than we
     // actually yield.
     size_t numElementsRead_ = 0;
@@ -413,7 +477,7 @@ class CompressedRelationReader {
   // (col2) else.
   static std::vector<CompressedBlockMetadata> getBlocksForJoin(
       std::span<const Id> joinColumn,
-      const MetadataAndBlocks& metadataAndBlocks);
+      const ScanSpecAndBlocksAndBounds& metadataAndBlocks);
 
   // For each of `metadataAndBlocks, metadataAndBlocks2` get the blocks (an
   // ordered subset of the blocks in the `scanMetadata` that might contain
@@ -423,8 +487,8 @@ class CompressedRelationReader {
   // the metadata, so the middle column (col1) in case the `scanMetadata`
   // doesn't contain a `col1Id`, or the last column (col2) else.
   static std::array<std::vector<CompressedBlockMetadata>, 2> getBlocksForJoin(
-      const MetadataAndBlocks& metadataAndBlocks,
-      const MetadataAndBlocks& metadataAndBlocks2);
+      const ScanSpecAndBlocksAndBounds& metadataAndBlocks,
+      const ScanSpecAndBlocksAndBounds& metadataAndBlocks2);
 
   /**
    * @brief For a permutation XYZ, retrieve all Z for given X and Y (if `col1Id`
@@ -492,18 +556,18 @@ class CompressedRelationReader {
       const ScanSpecification& blockA,
       std::span<const CompressedBlockMetadata> blockB);
 
-  // The same function, but specify the arguments as the `MetadataAndBlocks`
-  // struct.
+  // The same function, but specify the arguments as the
+  // `ScanSpecAndBlocksAndBounds` struct.
   static std::span<const CompressedBlockMetadata> getBlocksFromMetadata(
-      const MetadataAndBlocks& metadataAndBlocks);
+      const ScanSpecAndBlocks& metadataAndBlocks);
 
   // Get the first and the last triple that the result of a `scan` with the
-  // given arguments would lead to. Throw an exception if the scan result would
+  // given arguments would lead to. Return `nullopt` if the scan result would
   // be empty. This function is used to more efficiently filter the blocks of
   // index scans between joining them to get better estimates for the beginning
   // and end of incomplete blocks.
-  MetadataAndBlocks::FirstAndLastTriple getFirstAndLastTriple(
-      const MetadataAndBlocks& metadataAndBlocks) const;
+  std::optional<ScanSpecAndBlocksAndBounds::FirstAndLastTriple>
+  getFirstAndLastTriple(const ScanSpecAndBlocks& metadataAndBlocks) const;
 
   // Get access to the underlying allocator
   const Allocator& allocator() const { return allocator_; }
@@ -557,10 +621,11 @@ class CompressedRelationReader {
   // are yielded, else all columns are yielded. The blocks are yielded
   // in the correct order, but asynchronously read and decompressed using
   // multiple worker threads.
+
   IdTableGenerator asyncParallelBlockGenerator(
       auto beginBlock, auto endBlock, ColumnIndices columnIndices,
-      CancellationHandle cancellationHandle,
-      LimitOffsetClause& limitOffset) const;
+      CancellationHandle cancellationHandle, LimitOffsetClause& limitOffset,
+      FilterDuplicatesAndGraphs blockGraphFilter) const;
 
   // Return a vector that consists of the concatenation of `baseColumns` and
   // `additionalColumns`
@@ -592,5 +657,3 @@ class CompressedRelationReader {
  * wrapper.
  * 2. Then add assertions that we only get valid column indices specified.
  */
-
-#endif  // QLEVER_COMPRESSEDRELATION_H

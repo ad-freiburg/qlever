@@ -7,13 +7,17 @@
 #include <gmock/gmock-matchers.h>
 #include <gmock/gmock.h>
 
+#include <optional>
+
 #include "./util/GTestHelpers.h"
 #include "engine/Bind.h"
 #include "engine/CartesianProductJoin.h"
 #include "engine/CountAvailablePredicates.h"
 #include "engine/Filter.h"
+#include "engine/GroupBy.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
+#include "engine/Minus.h"
 #include "engine/MultiColumnJoin.h"
 #include "engine/NeutralElementOperation.h"
 #include "engine/OptionalJoin.h"
@@ -22,11 +26,13 @@
 #include "engine/QueryPlanner.h"
 #include "engine/Service.h"
 #include "engine/Sort.h"
+#include "engine/SpatialJoin.h"
 #include "engine/TextIndexScanForEntity.h"
 #include "engine/TextIndexScanForWord.h"
 #include "engine/TextLimit.h"
 #include "engine/TransitivePathBase.h"
 #include "engine/Union.h"
+#include "global/RuntimeParameters.h"
 #include "parser/SparqlParser.h"
 #include "util/IndexTestHelpers.h"
 
@@ -52,6 +58,13 @@ QetMatcher RootOperation(auto matcher) {
                   WhenDynamicCastTo<const OperationType&>(matcher));
 }
 
+// Match the `getChildren` method of an `Operation`.
+inline Matcher<const ::Operation&> children(
+    const std::same_as<QetMatcher> auto&... childMatchers) {
+  return Property("getChildren", &Operation::getChildren,
+                  ElementsAre(Pointee(childMatchers)...));
+}
+
 // Return a matcher that test whether a given `QueryExecutionTree` contains a
 // `OperationType` operation the children of which match the
 // `childMatcher`s. Note that the child matchers are not ordered.
@@ -68,9 +81,7 @@ inline auto MatchTypeAndUnorderedChildren =
 template <typename OperationType>
 inline auto MatchTypeAndOrderedChildren =
     [](const std::same_as<QetMatcher> auto&... childMatchers) {
-      return RootOperation<OperationType>(
-          AllOf(Property("getChildren", &Operation::getChildren,
-                         ElementsAre(Pointee(childMatchers)...))));
+      return RootOperation<OperationType>(AllOf(children(childMatchers...)));
     };
 
 /// Return a matcher that checks that a given `QueryExecutionTree` consists of a
@@ -80,20 +91,28 @@ inline auto MatchTypeAndOrderedChildren =
 constexpr auto IndexScan =
     [](TripleComponent subject, TripleComponent predicate,
        TripleComponent object,
-       const std::vector<Permutation::Enum>& allowedPermutations = {})
-    -> QetMatcher {
+       const std::vector<Permutation::Enum>& allowedPermutations = {},
+       const ScanSpecificationAsTripleComponent::Graphs& graphs = std::nullopt,
+       const std::vector<Variable>& additionalVariables = {},
+       const std::vector<ColumnIndex>& additionalColumns = {}) -> QetMatcher {
   size_t numVariables = static_cast<size_t>(subject.isVariable()) +
                         static_cast<size_t>(predicate.isVariable()) +
-                        static_cast<size_t>(object.isVariable());
+                        static_cast<size_t>(object.isVariable()) +
+                        additionalColumns.size();
   auto permutationMatcher = allowedPermutations.empty()
                                 ? ::testing::A<Permutation::Enum>()
                                 : AnyOfArray(allowedPermutations);
   return RootOperation<::IndexScan>(
       AllOf(AD_PROPERTY(IndexScan, permutation, permutationMatcher),
             AD_PROPERTY(IndexScan, getResultWidth, Eq(numVariables)),
-            AD_PROPERTY(IndexScan, getSubject, Eq(subject)),
-            AD_PROPERTY(IndexScan, getPredicate, Eq(predicate)),
-            AD_PROPERTY(IndexScan, getObject, Eq(object))));
+            AD_PROPERTY(IndexScan, subject, Eq(subject)),
+            AD_PROPERTY(IndexScan, predicate, Eq(predicate)),
+            AD_PROPERTY(IndexScan, object, Eq(object)),
+            AD_PROPERTY(IndexScan, additionalVariables,
+                        ElementsAreArray(additionalVariables)),
+            AD_PROPERTY(IndexScan, additionalColumns,
+                        ElementsAreArray(additionalColumns)),
+            AD_PROPERTY(IndexScan, graphsToFilter, Eq(graphs))));
 };
 
 // Match the `NeutralElementOperation`.
@@ -116,8 +135,7 @@ constexpr auto TextLimit = [](const size_t n, const QetMatcher& childMatcher,
                               const vector<Variable>& entityVars,
                               const vector<Variable>& scoreVars) -> QetMatcher {
   return RootOperation<::TextLimit>(AllOf(
-      AD_PROPERTY(::TextLimit, getTextLimit, Eq(n)),
-      AD_PROPERTY(Operation, getChildren, ElementsAre(Pointee(childMatcher))),
+      AD_PROPERTY(::TextLimit, getTextLimit, Eq(n)), children(childMatcher),
       AD_PROPERTY(::TextLimit, getTextRecordVariable, Eq(textRecVar)),
       AD_PROPERTY(::TextLimit, getEntityVariables,
                   UnorderedElementsAreArray(entityVars)),
@@ -160,8 +178,7 @@ inline auto Bind = [](const QetMatcher& childMatcher,
                      AD_PROPERTY(sparqlExpression::SparqlExpressionPimpl,
                                  getDescriptor, Eq(expression))));
   return RootOperation<::Bind>(AllOf(
-      AD_PROPERTY(::Bind, bind, AllOf(innerMatcher)),
-      AD_PROPERTY(Operation, getChildren, ElementsAre(Pointee(childMatcher)))));
+      AD_PROPERTY(::Bind, bind, AllOf(innerMatcher)), children(childMatcher)));
 };
 
 // Matcher for a `CountAvailablePredicates` operation. The case of 0 children
@@ -177,8 +194,7 @@ inline auto CountAvailablePredicates =
       AD_PROPERTY(::CountAvailablePredicates, predicateVariable,
                   Eq(predicateVar)),
       AD_PROPERTY(::CountAvailablePredicates, countVariable, Eq(countVar)),
-      AD_PROPERTY(Operation, getChildren,
-                  ElementsAre(Pointee(childMatchers)...))));
+      children(childMatchers...)));
 };
 
 // Same as above, but the subject, predicate, and object are passed in as
@@ -187,8 +203,11 @@ inline auto CountAvailablePredicates =
 inline auto IndexScanFromStrings =
     [](std::string_view subject, std::string_view predicate,
        std::string_view object,
-       const std::vector<Permutation::Enum>& allowedPermutations = {})
-    -> QetMatcher {
+       const std::vector<Permutation::Enum>& allowedPermutations = {},
+       const std::optional<ad_utility::HashSet<std::string>> graphs =
+           std::nullopt,
+       const std::vector<Variable>& additionalVariables = {},
+       const std::vector<ColumnIndex>& additionalColumns = {}) -> QetMatcher {
   auto strToComp = [](std::string_view s) -> TripleComponent {
     if (s.starts_with("?")) {
       return ::Variable{std::string{s}};
@@ -197,8 +216,17 @@ inline auto IndexScanFromStrings =
     }
     return s;
   };
+
+  ScanSpecificationAsTripleComponent::Graphs graphsOut = std::nullopt;
+  if (graphs.has_value()) {
+    graphsOut.emplace();
+    for (const auto& graphIn : graphs.value()) {
+      graphsOut->insert(strToComp(graphIn));
+    }
+  }
   return IndexScan(strToComp(subject), strToComp(predicate), strToComp(object),
-                   allowedPermutations);
+                   allowedPermutations, graphsOut, additionalVariables,
+                   additionalColumns);
 };
 
 // For the following Join algorithms the order of the children is not important.
@@ -206,6 +234,8 @@ inline auto MultiColumnJoin = MatchTypeAndUnorderedChildren<::MultiColumnJoin>;
 inline auto Join = MatchTypeAndUnorderedChildren<::Join>;
 
 constexpr auto OptionalJoin = MatchTypeAndOrderedChildren<::OptionalJoin>;
+
+constexpr auto Minus = MatchTypeAndOrderedChildren<::Minus>;
 
 // Return a matcher that matches a query execution tree that consists of
 // multiple JOIN operations that join the `children`. The `INTERNAL SORT BY`
@@ -216,11 +246,12 @@ inline auto UnorderedJoins = [](auto&&... children) -> QetMatcher {
                                      Vec& children, const auto& self) -> void {
     const Operation* operation = tree.getRootOperation().get();
     auto join = dynamic_cast<const ::Join*>(operation);
+    auto multiColJoin = dynamic_cast<const ::MultiColumnJoin*>(operation);
     // Also allow the INTERNAL SORT BY operations that are needed for the joins.
     // TODO<joka921> is this the right place to also check that those have the
     // correct columns?
     auto sort = dynamic_cast<const ::Sort*>(operation);
-    if (!join && !sort) {
+    if (!join && !sort && !multiColJoin) {
       children.push_back(tree);
     } else {
       for (const auto& child : operation->getChildren()) {
@@ -252,8 +283,7 @@ inline auto TransitivePath =
     [](TransitivePathSide left, TransitivePathSide right, size_t minDist,
        size_t maxDist, const std::same_as<QetMatcher> auto&... childMatchers) {
       return RootOperation<::TransitivePathBase>(
-          AllOf(Property("getChildren", &Operation::getChildren,
-                         ElementsAre(Pointee(childMatchers)...)),
+          AllOf(children(childMatchers...),
                 AD_PROPERTY(TransitivePathBase, getMinDist, Eq(minDist)),
                 AD_PROPERTY(TransitivePathBase, getMaxDist, Eq(maxDist)),
                 AD_PROPERTY(TransitivePathBase, getLeft,
@@ -261,6 +291,37 @@ inline auto TransitivePath =
                 AD_PROPERTY(TransitivePathBase, getRight,
                             TransitivePathSideMatcher(right))));
     };
+
+// Match a SpatialJoin operation, set arguments to ignore to -1
+inline auto SpatialJoin =
+    [](size_t maxDist, size_t maxResults,
+       const std::same_as<QetMatcher> auto&... childMatchers) {
+      return RootOperation<::SpatialJoin>(
+          AllOf(children(childMatchers...),
+                AD_PROPERTY(SpatialJoin, onlyForTestingGetConfig,
+                            Eq(std::pair(maxDist, maxResults)))));
+    };
+
+// Match a GroupBy operation
+static constexpr auto GroupBy =
+    [](const std::vector<Variable>& groupByVariables,
+       const std::vector<std::string>& aliases,
+       const QetMatcher& childMatcher) -> QetMatcher {
+  // TODO<joka921> Also test the aliases.
+  auto aliasesToStrings = [](const std::vector<Alias>& aliases) {
+    std::vector<std::string> result;
+    std::ranges::transform(aliases, std::back_inserter(result),
+                           &Alias::getDescriptor);
+    return result;
+  };
+
+  return RootOperation<::GroupBy>(
+      AllOf(children(childMatcher),
+            AD_PROPERTY(::GroupBy, groupByVariables,
+                        UnorderedElementsAreArray(groupByVariables)),
+            AD_PROPERTY(::GroupBy, aliases,
+                        ResultOf(aliasesToStrings, ContainerEq(aliases)))));
+};
 
 // Match a sort operation. Currently, this is only required by the binary search
 // version of the transitive path operation. This matcher checks only the
@@ -272,8 +333,7 @@ inline auto Sort = MatchTypeAndUnorderedChildren<::Sort>;
 constexpr auto Filter = [](std::string_view descriptor,
                            const QetMatcher& childMatcher) {
   return RootOperation<::Filter>(
-      AllOf(Property("getChildren", &Operation::getChildren,
-                     ElementsAre(Pointee(childMatcher))),
+      AllOf(children(childMatcher),
             AD_PROPERTY(::Operation, getDescriptor, HasSubstr(descriptor))));
 };
 
@@ -281,8 +341,7 @@ constexpr auto Filter = [](std::string_view descriptor,
 constexpr auto OrderBy = [](const ::OrderBy::SortedVariables& sortedVariables,
                             const QetMatcher& childMatcher) {
   return RootOperation<::OrderBy>(
-      AllOf(Property("getChildren", &Operation::getChildren,
-                     ElementsAre(Pointee(childMatcher))),
+      AllOf(children(childMatcher),
             AD_PROPERTY(::OrderBy, getSortedVariables, Eq(sortedVariables))));
 };
 
@@ -317,15 +376,58 @@ QueryExecutionTree parseAndPlan(std::string query, QueryExecutionContext* qec) {
 }
 
 // Check that the `QueryExecutionTree` that is obtained by parsing and planning
-// the `query` matches the `matcher`.
-void expect(std::string query, auto matcher,
-            std::optional<QueryExecutionContext*> optQec = std::nullopt,
-            source_location l = source_location::current()) {
-  auto trace = generateLocationTrace(l, "expect");
+// the `query` matches the `matcher`. The query planning budget can be
+// controlled to choose between the greedy and the dynamic programming planner.
+// This function only serves as a common implementation, for the actual tests
+// the three functions below should be used.
+void expectWithGivenBudget(std::string query, auto matcher,
+                           std::optional<QueryExecutionContext*> optQec,
+                           size_t queryPlanningBudget,
+                           source_location l = source_location::current()) {
+  auto budgetBackup = RuntimeParameters().get<"query-planning-budget">();
+  RuntimeParameters().set<"query-planning-budget">(queryPlanningBudget);
+  auto cleanup = absl::Cleanup{[budgetBackup]() {
+    RuntimeParameters().set<"query-planning-budget">(budgetBackup);
+  }};
+  auto trace = generateLocationTrace(
+      l, absl::StrCat("expect with budget ", queryPlanningBudget));
   QueryExecutionContext* qec = optQec.value_or(ad_utility::testing::getQec());
   auto qet = parseAndPlan(std::move(query), qec);
   qet.getRootOperation()->createRuntimeInfoFromEstimates(
       qet.getRootOperation()->getRuntimeInfoPointer());
   EXPECT_THAT(qet, matcher);
+}
+
+// Same as `expectWithGivenBudget` above, but always use the greedy query
+// planner.
+void expectGreedy(std::string query, auto matcher,
+                  std::optional<QueryExecutionContext*> optQec = std::nullopt,
+                  source_location l = source_location::current()) {
+  expectWithGivenBudget(std::move(query), std::move(matcher), optQec, 0, l);
+}
+// Same as `expectWithGivenBudget` above, but always use the dynamic programming
+// query planner.
+void expectDynamicProgramming(
+    std::string query, auto matcher,
+    std::optional<QueryExecutionContext*> optQec = std::nullopt,
+    source_location l = source_location::current()) {
+  expectWithGivenBudget(std::move(query), std::move(matcher), optQec,
+                        std::numeric_limits<size_t>::max(), l);
+}
+
+// Same as `expectWithGivenBudget` above, but run the test for different query
+// planning budgets. This is guaranteed to run with both the greedy query
+// planner and the dynamic-programming based query planner.
+void expect(std::string query, auto matcher,
+            std::optional<QueryExecutionContext*> optQec = std::nullopt,
+            source_location l = source_location::current()) {
+  auto e = [&](size_t budget) {
+    expectWithGivenBudget(query, matcher, optQec, budget, l);
+  };
+  e(0);
+  e(1);
+  e(4);
+  e(16);
+  e(64'000'000);
 }
 }  // namespace queryPlannerTestHelpers

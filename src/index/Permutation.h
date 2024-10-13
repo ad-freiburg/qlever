@@ -31,6 +31,8 @@ class Permutation {
   static constexpr auto SOP = Enum::SOP;
   static constexpr auto OPS = Enum::OPS;
   static constexpr auto OSP = Enum::OSP;
+  static constexpr auto ALL = {Enum::PSO, Enum::POS, Enum::SPO,
+                               Enum::SOP, Enum::OPS, Enum::OSP};
 
   using MetaData = IndexMetaDataMmapView;
   using Allocator = ad_utility::AllocatorWithLimit<Id>;
@@ -49,7 +51,9 @@ class Permutation {
   explicit Permutation(Enum permutation, Allocator allocator);
 
   // everything that has to be done when reading an index from disk
-  void loadFromDisk(const std::string& onDiskBase);
+  void loadFromDisk(const std::string& onDiskBase,
+                    std::function<bool(Id)> isInternalId,
+                    bool loadAdditional = false);
 
   // For a given ID for the col0, retrieve all IDs of the col1 and col2.
   // If `col1Id` is specified, only the col2 is returned for triples that
@@ -70,7 +74,8 @@ class Permutation {
       const CancellationHandle& cancellationHandle) const;
 
   // Typedef to propagate the `MetadataAndblocks` and `IdTableGenerator` type.
-  using MetadataAndBlocks = CompressedRelationReader::MetadataAndBlocks;
+  using MetadataAndBlocks =
+      CompressedRelationReader::ScanSpecAndBlocksAndBounds;
 
   using IdTableGenerator = CompressedRelationReader::IdTableGenerator;
 
@@ -84,7 +89,7 @@ class Permutation {
   //   with the `col1Id` if specified), else the behavior is
   //   undefined.
   // TODO<joka921> We should only communicate this interface via the
-  // `MetadataAndBlocks` class and make this a strong class that always
+  // `ScanSpecAndBlocksAndBounds` class and make this a strong class that always
   // maintains its invariants.
   IdTableGenerator lazyScan(
       const ScanSpecification& scanSpec,
@@ -94,10 +99,10 @@ class Permutation {
 
   std::optional<CompressedRelationMetadata> getMetadata(Id col0Id) const;
 
-  // Return the metadata for the relation specified by the `col0Id`
-  // along with the metadata for all the blocks that contain this relation (also
-  // prefiltered by the `col1Id` if specified). If the `col0Id` does not exist
-  // in this permutation, `nullopt` is returned.
+  // Return the metadata for the scan specified by the `scanSpecification`
+  // along with the metadata for all the blocks that are relevant for this scan.
+  // If there are no matching blocks (meaning that the scan result will be
+  // empty) return `nullopt`.
   std::optional<MetadataAndBlocks> getMetadataAndBlocks(
       const ScanSpecification& scanSpec) const;
 
@@ -126,6 +131,13 @@ class Permutation {
   // _______________________________________________________
   const bool& isLoaded() const { return isLoaded_; }
 
+  // _______________________________________________________
+  const MetaData& metaData() const { return meta_; }
+
+  // _______________________________________________________
+  const Permutation& getActualPermutation(const ScanSpecification& spec) const;
+  const Permutation& getActualPermutation(Id id) const;
+
  private:
   // for Log output, e.g. "POS"
   std::string readableName_;
@@ -135,7 +147,6 @@ class Permutation {
   // sorted, for example {1, 0, 2} for PSO.
   array<size_t, 3> keyOrder_;
 
-  const MetaData& metaData() const { return meta_; }
   MetaData meta_;
 
   // This member is `optional` because we initialize it in a deferred way in the
@@ -144,4 +155,9 @@ class Permutation {
   Allocator allocator_;
 
   bool isLoaded_ = false;
+
+  Enum permutation_;
+  std::unique_ptr<Permutation> internalPermutation_ = nullptr;
+
+  std::function<bool(Id)> isInternalId_;
 };

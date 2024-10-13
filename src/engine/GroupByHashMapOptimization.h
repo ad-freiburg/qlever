@@ -6,7 +6,7 @@
 #pragma once
 
 #include "engine/sparqlExpressions/AggregateExpression.h"
-#include "engine/sparqlExpressions/RelationalExpressionHelpers.h"
+#include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 
 // _____________________________________________________________________________
@@ -41,12 +41,9 @@ struct AvgAggregationData {
 
   // _____________________________________________________________________________
   [[nodiscard]] ValueId calculateResult(
-      [[maybe_unused]] const LocalVocab* localVocab) const {
-    if (error_)
-      return ValueId::makeUndefined();
-    else
-      return ValueId::makeFromDouble(sum_ / static_cast<double>(count_));
-  }
+      [[maybe_unused]] const LocalVocab* localVocab) const;
+
+  void reset() { *this = AvgAggregationData{}; }
 };
 
 // Data to perform the COUNT aggregation using the HashMap optimization.
@@ -61,9 +58,9 @@ struct CountAggregationData {
 
   // _____________________________________________________________________________
   [[nodiscard]] ValueId calculateResult(
-      [[maybe_unused]] const LocalVocab* localVocab) const {
-    return ValueId::makeFromInt(count_);
-  }
+      [[maybe_unused]] const LocalVocab* localVocab) const;
+
+  void reset() { *this = CountAggregationData{}; }
 };
 
 // Data to perform MIN/MAX aggregation using the HashMap optimization.
@@ -86,17 +83,9 @@ struct ExtremumAggregationData {
   }
 
   // _____________________________________________________________________________
-  [[nodiscard]] ValueId calculateResult(LocalVocab* localVocab) const {
-    auto valueIdResultGetter = [](ValueId id) { return id; };
-    auto stringResultGetter =
-        [localVocab](const ad_utility::triple_component::LiteralOrIri& str) {
-          auto localVocabIndex = localVocab->getIndexAndAddIfNotContained(str);
-          return ValueId::makeFromLocalVocabIndex(localVocabIndex);
-        };
-    return std::visit(ad_utility::OverloadCallOperator(valueIdResultGetter,
-                                                       stringResultGetter),
-                      currentValue_);
-  }
+  [[nodiscard]] ValueId calculateResult(LocalVocab* localVocab) const;
+
+  void reset() { *this = ExtremumAggregationData{}; }
 };
 
 using MinAggregationData =
@@ -135,21 +124,16 @@ struct SumAggregationData {
 
   // _____________________________________________________________________________
   [[nodiscard]] ValueId calculateResult(
-      [[maybe_unused]] const LocalVocab* localVocab) const {
-    if (error_)
-      return ValueId::makeUndefined();
-    else if (intSumValid_)
-      return ValueId::makeFromInt(intSum_);
-    else
-      return ValueId::makeFromDouble(sum_);
-  }
+      [[maybe_unused]] const LocalVocab* localVocab) const;
+
+  void reset() { *this = SumAggregationData{}; }
 };
 
 // Data to perform GROUP_CONCAT aggregation using the HashMap optimization.
 struct GroupConcatAggregationData {
   using ValueGetter = sparqlExpression::detail::StringValueGetter;
   std::string currentValue_;
-  std::string separator_;
+  std::string_view separator_;
 
   // _____________________________________________________________________________
   void addValue(auto&& value, const sparqlExpression::EvaluationContext* ctx) {
@@ -161,18 +145,31 @@ struct GroupConcatAggregationData {
   }
 
   // _____________________________________________________________________________
-  [[nodiscard]] ValueId calculateResult(LocalVocab* localVocab) const {
-    using namespace ad_utility::triple_component;
-    using Lit = ad_utility::triple_component::Literal;
-    auto localVocabIndex = localVocab->getIndexAndAddIfNotContained(
-        LiteralOrIri{Lit::literalWithNormalizedContent(
-            asNormalizedStringViewUnsafe(currentValue_))});
-    return ValueId::makeFromLocalVocabIndex(localVocabIndex);
+  [[nodiscard]] ValueId calculateResult(LocalVocab* localVocab) const;
+
+  // _____________________________________________________________________________
+  explicit GroupConcatAggregationData(std::string_view separator)
+      : separator_{separator} {
+    currentValue_.reserve(20000);
+  }
+
+  void reset() { currentValue_.clear(); }
+};
+
+// Data to perform SAMPLE aggregation using the HashMap optimization.
+struct SampleAggregationData {
+  std::optional<sparqlExpression::IdOrLiteralOrIri> value_ = std::nullopt;
+
+  // _____________________________________________________________________________
+  void addValue(const sparqlExpression::IdOrLiteralOrIri& value,
+                [[maybe_unused]] const sparqlExpression::EvaluationContext*) {
+    if (!value_.has_value()) {
+      value_.emplace(value);
+    }
   }
 
   // _____________________________________________________________________________
-  explicit GroupConcatAggregationData(std::string separator)
-      : separator_{std::move(separator)} {
-    currentValue_.reserve(20000);
-  }
+  [[nodiscard]] ValueId calculateResult(LocalVocab* localVocab) const;
+
+  void reset() { *this = SampleAggregationData{}; }
 };
