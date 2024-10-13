@@ -637,12 +637,6 @@ class IdTable {
   // that `begin() <= beginIt <= endIt < end`, else the behavior is undefined.
   // The order of the elements before and after the erased regions remains the
   // same. This behavior is similar to `std::vector::erase`.
-  //
-  // TODO<joka921> It is currently used by the implementation of DISTINCT, which
-  // first copies the sorted input completely, and then calls `std::unique`,
-  // followed by `erase` at the end. `DISTINCT` should be implemented via an
-  // out-of-place algorithm that only writes the distinct elements. The the
-  // following two functions can be deleted.
   void erase(const iterator& beginIt, const iterator& endIt) requires(!isView) {
     AD_EXPENSIVE_CHECK(begin() <= beginIt && beginIt <= endIt &&
                        endIt <= end());

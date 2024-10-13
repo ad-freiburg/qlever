@@ -39,7 +39,7 @@ ProtoResult Distinct::computeResult([[maybe_unused]] bool requestLaziness) {
   std::shared_ptr<const Result> subRes = subtree_->getResult();
 
   LOG(DEBUG) << "Distinct result computation..." << endl;
-  size_t width = subRes->idTable().numColumns();
+  size_t width = subtree_->getResultWidth();
   IdTable idTable = CALL_FIXED_SIZE(width, &Distinct::distinct,
                                     subRes->idTable(), _keepIndices);
   LOG(DEBUG) << "Distinct result computation done." << endl;
@@ -50,10 +50,9 @@ ProtoResult Distinct::computeResult([[maybe_unused]] bool requestLaziness) {
 template <size_t WIDTH>
 IdTable Distinct::distinct(const IdTable& dynInput,
                            const std::vector<ColumnIndex>& keepIndices) {
+  AD_CONTRACT_CHECK(keepIndices.size() <= dynInput.numColumns());
   LOG(DEBUG) << "Distinct on " << dynInput.size() << " elements.\n";
-  const IdTableView<WIDTH> input = dynInput.asStaticView<WIDTH>();
-  IdTableStatic<WIDTH> result = input.clone();
-  AD_CONTRACT_CHECK(keepIndices.size() <= input.numColumns());
+  IdTableStatic<WIDTH> result = dynInput.clone().toStatic<WIDTH>();
 
   auto last = std::unique(result.begin(), result.end(),
                           [&keepIndices](const auto& a, const auto& b) {
