@@ -1683,14 +1683,14 @@ TEST(SparqlParser, FunctionCall) {
                      matchUnary(&makeConvertToDoubleExpression));
 
   // Wrong number of arguments.
-  expectFunctionCallFails(
-      "<http://www.opengis.net/def/function/geosparql/distance>(?a)");
-  // Unknown function with the `geof:` prefix.
-  expectFunctionCallFails(
-      "<http://www.opengis.net/def/function/geosparql/notExisting>()");
+  expectFunctionCallFails(absl::StrCat(geof, "distance>(?a)"));
+  // Unknown function with `geof:`, `math:`, or `xsd:` prefix.
+  expectFunctionCallFails(absl::StrCat(geof, "nada>(?x)"));
+  expectFunctionCallFails(absl::StrCat(math, "nada>(?x)"));
+  expectFunctionCallFails(absl::StrCat(xsd, "nada>(?x)"));
   // Prefix for which no function is known.
-  expectFunctionCallFails(
-      "<http://www.no-existing-prefixes.com/notExisting>()");
+  std::string prefixNexistepas = "<http://nexiste.pas/>";
+  expectFunctionCallFails(absl::StrCat(prefixNexistepas, "nada>(?x)"));
 }
 
 // ______________________________________________________________________________
