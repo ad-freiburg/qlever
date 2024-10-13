@@ -4,9 +4,12 @@
 
 #include <gmock/gmock.h>
 
+#include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "engine/Distinct.h"
 #include "engine/NeutralElementOperation.h"
+
+using ad_utility::testing::makeAllocator;
 
 TEST(Distinct, CacheKey) {
   // The cache key has to change when the subtree changes or when the
@@ -23,4 +26,26 @@ TEST(Distinct, CacheKey) {
   EXPECT_NE(d->getCacheKey(), d2.getCacheKey());
   EXPECT_NE(d->getCacheKey(), d3.getCacheKey());
   EXPECT_NE(d2.getCacheKey(), d3.getCacheKey());
+}
+
+// _____________________________________________________________________________
+TEST(Distinct, distinct) {
+  IdTable input{makeIdTableFromVector(
+      {{1, 1, 3, 7}, {6, 1, 3, 6}, {2, 2, 3, 5}, {3, 6, 5, 4}, {1, 6, 5, 1}})};
+
+  std::vector<ColumnIndex> keepIndices{{1, 2}};
+  IdTable result = CALL_FIXED_SIZE(4, Distinct::distinct, input, keepIndices);
+
+  // For easier checking.
+  IdTable expectedResult{
+      makeIdTableFromVector({{1, 1, 3, 7}, {2, 2, 3, 5}, {3, 6, 5, 4}})};
+  ASSERT_EQ(expectedResult, result);
+}
+
+// _____________________________________________________________________________
+TEST(Distinct, distinctWithEmptyInput) {
+  IdTable input{1, makeAllocator()};
+  IdTable result =
+      CALL_FIXED_SIZE(1, Distinct::distinct, input, std::vector<ColumnIndex>{});
+  ASSERT_EQ(input, result);
 }
