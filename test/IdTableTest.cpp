@@ -1144,7 +1144,7 @@ TEST(IdTable, cloneOrMove) {
   source.push_back({V(1)});
   source.push_back({V(2)});
 
-  IdTable clone = static_cast<const IdTable&>(source).cloneOrMove();
+  IdTable clone = std::as_const(source).cloneOrMove();
 
   EXPECT_EQ(source, clone);
 

@@ -1,6 +1,6 @@
-//
-// Created by johannes on 19.04.20.
-//
+//  Copyright 2020, University of Freiburg,
+//  Chair of Algorithms and Data Structures.
+//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 #pragma once
 
@@ -52,7 +52,7 @@ class Bind : public Operation {
       LocalVocab* outputLocalVocab,
       ad_utility::SimilarTo<IdTable> auto&& inputIdTable,
       const LocalVocab& inputLocalVocab,
-      sparqlExpression::SparqlExpression* expression,
+      const sparqlExpression::SparqlExpression* expression,
       std::optional<std::pair<size_t, size_t>> subrange) const;
 
   [[nodiscard]] VariableToColumnMap computeVariableToColumnMap() const override;

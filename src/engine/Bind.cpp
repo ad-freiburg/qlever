@@ -123,10 +123,10 @@ ProtoResult Bind::computeResult(bool requestLaziness) {
     // Make a deep copy of the local vocab from `subRes` and then add to it (in
     // case BIND adds a new word or words).
     //
-    // TODO: In most BIND operations, nothing is added to the local vocabulary,
-    // so it would be more efficient to first share the pointer here (like with
-    // `shareLocalVocabFrom`) and only copy it when a new word is about to be
-    // added. Same for GROUP BY.
+    // Make a copy of the local vocab from`subRes`and then add to it (in case
+    // BIND adds new words). Note: The copy of the local vocab is shallow
+    // via`shared_ptr`s, so the following is also efficient if the BIND adds no
+    // new words.
     LocalVocab localVocab = subRes->getCopyOfLocalVocab();
     IdTable result = applyBind(subRes->idTable(), &localVocab);
     LOG(DEBUG) << "BIND result computation done." << std::endl;
@@ -137,7 +137,7 @@ ProtoResult Bind::computeResult(bool requestLaziness) {
       [](std::shared_ptr<LocalVocab> vocab, auto applyBind,
          std::shared_ptr<const Result> result) -> cppcoro::generator<IdTable> {
     for (IdTable& idTable : result->idTables()) {
-      co_yield applyBind(idTable, vocab.get());
+      co_yield applyBind(std::move(idTable), vocab.get());
     }
     std::array<const LocalVocab*, 2> vocabs{vocab.get(), &result->localVocab()};
     *vocab = LocalVocab::merge(std::span{vocabs});
@@ -150,7 +150,7 @@ IdTable Bind::computeExpressionBind(
     LocalVocab* outputLocalVocab,
     ad_utility::SimilarTo<IdTable> auto&& inputIdTable,
     const LocalVocab& inputLocalVocab,
-    sparqlExpression::SparqlExpression* expression,
+    const sparqlExpression::SparqlExpression* expression,
     std::optional<std::pair<size_t, size_t>> subrange) const {
   sparqlExpression::EvaluationContext evaluationContext(
       *getExecutionContext(), _subtree->getVariableColumns(), inputIdTable,
@@ -168,7 +168,7 @@ IdTable Bind::computeExpressionBind(
 
   auto output = subrange.has_value()
                     ? cloneSubView(inputIdTable, subrange.value())
-                    : std::move(inputIdTable).cloneOrMove();
+                    : AD_FWD(inputIdTable).cloneOrMove();
   output.addEmptyColumn();
   auto outputColumn = output.getColumn(output.numColumns() - 1);
 
@@ -181,15 +181,10 @@ IdTable Bind::computeExpressionBind(
       auto columnIndex =
           getInternallyVisibleVariableColumns().at(singleResult).columnIndex_;
       auto inputColumn = output.getColumn(columnIndex);
-      for (size_t i = 0; i < outputColumn.size(); ++i) {
-        outputColumn[i] = inputColumn[i];
-        checkCancellation();
-      }
+      AD_CORRECTNESS_CHECK(inputColumn.size() == outputColumn.size());
+      std::ranges::copy(inputColumn, outputColumn.begin());
     } else if constexpr (isStrongId) {
-      for (size_t i = 0; i < outputColumn.size(); ++i) {
-        outputColumn[i] = singleResult;
-        checkCancellation();
-      }
+      std::ranges::fill(outputColumn, singleResult);
     } else {
       constexpr bool isConstant = sparqlExpression::isConstantResult<T>;
 
@@ -203,10 +198,8 @@ IdTable Bind::computeExpressionBind(
           Id constantId =
               sparqlExpression::detail::constantExpressionResultToId(
                   std::move(*it), *outputLocalVocab);
-          for (size_t i = 0; i < outputColumn.size(); ++i) {
-            outputColumn[i] = constantId;
-            checkCancellation();
-          }
+          checkCancellation();
+          std::ranges::fill(outputColumn, constantId);
         }
       } else {
         size_t i = 0;
