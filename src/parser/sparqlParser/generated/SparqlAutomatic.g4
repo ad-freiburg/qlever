@@ -582,6 +582,7 @@ aggregate :  COUNT '(' DISTINCT? ( '*' | expression ) ')'
            | MIN '(' DISTINCT? expression ')'
            | MAX '(' DISTINCT? expression ')'
            | AVG '(' DISTINCT? expression ')'
+           | STDEV '(' DISTINCT? expression ')'
            | SAMPLE '(' DISTINCT? expression ')'
            | GROUP_CONCAT '(' DISTINCT? expression ( ';' SEPARATOR '=' string )? ')'  ;
 
@@ -763,6 +764,7 @@ SUM : S U M;
 MIN : M I N;
 MAX : M A X;
 AVG : A V G;
+STDEV : S T D E V ;
 SAMPLE : S A M P L E;
 SEPARATOR : S E P A R A T O R;
 
