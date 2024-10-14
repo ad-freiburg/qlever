@@ -1,4 +1,4 @@
-# pragma once
+#pragma once
 
 #include <cstdlib>
 
@@ -96,7 +96,8 @@ std::string createSmallDatasetWithPoints() {
 QueryExecutionContext* buildTestQEC() {
   std::string kg = createSmallDatasetWithPoints();
   ad_utility::MemorySize blocksizePermutations = 16_MB;
-  auto qec = ad_utility::testing::getQec(kg, true, true, false, blocksizePermutations, false);
+  auto qec = ad_utility::testing::getQec(kg, true, true, false,
+                                         blocksizePermutations, false);
   return qec;
 }
 
@@ -141,4 +142,4 @@ std::shared_ptr<QueryExecutionTree> buildSmallChild(
   return buildJoin(qec, scan1, scan2, joinVariable);
 }
 
-}
+}  // namespace SpatialJoinTestHelpers

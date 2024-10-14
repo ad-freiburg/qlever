@@ -15,13 +15,13 @@
 #include "../util/IndexTestHelpers.h"
 #include "./../../src/global/ValueId.h"
 #include "./../../src/util/GeoSparqlHelpers.h"
+#include "./SpatialJoinTestHelpers.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/SpatialJoin.h"
 #include "parser/data/Variable.h"
-#include "./SpatialJoinTestHelpers.h"
 
 namespace {  // anonymous namespace to avoid linker problems
 
@@ -137,10 +137,10 @@ void testAddChild(bool addLeftChildFirst) {
   // ====================== build inputs ===================================
   TripleComponent point1{Variable{"?point1"}};
   TripleComponent point2{Variable{"?point2"}};
-  auto leftChild = buildIndexScan(
-      qec, {"?obj1", std::string{"<asWKT>"}, "?point1"});
-  auto rightChild = buildIndexScan(
-      qec, {"?obj2", std::string{"<asWKT>"}, "?point2"});
+  auto leftChild =
+      buildIndexScan(qec, {"?obj1", std::string{"<asWKT>"}, "?point1"});
+  auto rightChild =
+      buildIndexScan(qec, {"?obj2", std::string{"<asWKT>"}, "?point2"});
   SparqlTriple triple{point1, "<max-distance-in-meters:1000>", point2};
 
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
@@ -193,10 +193,10 @@ TEST(SpatialJoin, isConstructed) {
   // ====================== build inputs ===================================
   TripleComponent point1{Variable{"?point1"}};
   TripleComponent point2{Variable{"?point2"}};
-  auto leftChild = buildIndexScan(
-      qec, {"?obj1", std::string{"<asWKT>"}, "?point1"});
-  auto rightChild = buildIndexScan(
-      qec, {"?obj2", std::string{"<asWKT>"}, "?point2"});
+  auto leftChild =
+      buildIndexScan(qec, {"?obj1", std::string{"<asWKT>"}, "?point1"});
+  auto rightChild =
+      buildIndexScan(qec, {"?obj2", std::string{"<asWKT>"}, "?point2"});
   SparqlTriple triple{point1, "<max-distance-in-meters:1000>", point2};
 
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
@@ -226,10 +226,10 @@ TEST(SpatialJoin, getChildren) {
   // ====================== build inputs ===================================
   TripleComponent point1{Variable{"?point1"}};
   TripleComponent point2{Variable{"?point2"}};
-  auto leftChild = buildIndexScan(
-      qec, {"?obj1", std::string{"<asWKT>"}, "?point1"});
-  auto rightChild = buildIndexScan(
-      qec, {"?obj2", std::string{"<asWKT>"}, "?point2"});
+  auto leftChild =
+      buildIndexScan(qec, {"?obj1", std::string{"<asWKT>"}, "?point1"});
+  auto rightChild =
+      buildIndexScan(qec, {"?obj2", std::string{"<asWKT>"}, "?point2"});
   SparqlTriple triple{point1, "<max-distance-in-meters:1000>", point2};
 
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
@@ -296,14 +296,12 @@ void testGetResultWidthOrVariableToColumnMap(bool leftSideBigChild,
     std::string geo = absl::StrCat("?geo", numberOfChild);
     std::string point = absl::StrCat("?point", numberOfChild);
     if (getBigChild) {
-      return buildMediumChild(
-          qec, {obj, std::string{"<name>"}, name},
-          {obj, std::string{"<hasGeometry>"}, geo},
-          {geo, std::string{"<asWKT>"}, point}, obj, geo);
+      return buildMediumChild(qec, {obj, std::string{"<name>"}, name},
+                              {obj, std::string{"<hasGeometry>"}, geo},
+                              {geo, std::string{"<asWKT>"}, point}, obj, geo);
     } else {
-      return buildSmallChild(
-          qec, {obj, std::string{"<hasGeometry>"}, geo},
-          {geo, std::string{"<asWKT>"}, point}, geo);
+      return buildSmallChild(qec, {obj, std::string{"<hasGeometry>"}, geo},
+                             {geo, std::string{"<asWKT>"}, point}, geo);
     }
   };
   auto addExpectedColumns =
@@ -439,9 +437,9 @@ void testKnownEmptyResult(bool leftSideEmptyChild, bool rightSideEmptyChild,
 
   auto getChild = [](QueryExecutionContext* qec, bool emptyChild) {
     std::string predicate = emptyChild ? "<notExistingPred>" : "<hasGeometry>";
-    return buildSmallChild(
-        qec, {"?obj1", predicate, "?geo1"},
-        {"?geo1", std::string{"<asWKT>"}, "?point1"}, "?geo1");
+    return buildSmallChild(qec, {"?obj1", predicate, "?geo1"},
+                           {"?geo1", std::string{"<asWKT>"}, "?point1"},
+                           "?geo1");
   };
 
   auto qec = buildTestQEC();
@@ -511,10 +509,8 @@ TEST(SpatialJoin, resultSortedOn) {
 
   TripleComponent obj1{Variable{"?point1"}};
   TripleComponent obj2{Variable{"?point2"}};
-  auto leftChild = buildIndexScan(
-      qec, {"?geometry1", "<asWKT>", "?point1"});
-  auto rightChild = buildIndexScan(
-      qec, {"?geometry2", "<asWKT>", "?point2"});
+  auto leftChild = buildIndexScan(qec, {"?geometry1", "<asWKT>", "?point1"});
+  auto rightChild = buildIndexScan(qec, {"?geometry2", "<asWKT>", "?point2"});
 
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
       ad_utility::makeExecutionTree<SpatialJoin>(qec, spatialJoinTriple,
@@ -564,10 +560,10 @@ TEST(SpatialJoin, getCacheKeyImpl) {
   auto spatialJoinTriple = SparqlTriple{TripleComponent{Variable{"?point1"}},
                                         "<max-distance-in-meters:1000>",
                                         TripleComponent{Variable{"?point2"}}};
-  auto leftChild = buildIndexScan(
-      qec, {"?obj1", std::string{"<asWKT>"}, "?point1"});
-  auto rightChild = buildIndexScan(
-      qec, {"?obj2", std::string{"<asWKT>"}, "?point2"});
+  auto leftChild =
+      buildIndexScan(qec, {"?obj1", std::string{"<asWKT>"}, "?point1"});
+  auto rightChild =
+      buildIndexScan(qec, {"?obj2", std::string{"<asWKT>"}, "?point2"});
 
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
       ad_utility::makeExecutionTree<SpatialJoin>(qec, spatialJoinTriple,
@@ -759,10 +755,8 @@ void testMultiplicitiesOrSizeEstimate(bool addLeftChildFirst,
     TripleComponent obj1{Variable{"?point1"}};
     TripleComponent subj2{Variable{"?geometry2"}};
     TripleComponent obj2{Variable{"?point2"}};
-    auto leftChild = buildIndexScan(
-        qec, {"?geometry1", "<asWKT>", "?point1"});
-    auto rightChild = buildIndexScan(
-        qec, {"?geometry2", "<asWKT>", "?point2"});
+    auto leftChild = buildIndexScan(qec, {"?geometry1", "<asWKT>", "?point1"});
+    auto rightChild = buildIndexScan(qec, {"?geometry2", "<asWKT>", "?point2"});
 
     std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
         ad_utility::makeExecutionTree<SpatialJoin>(qec, spatialJoinTriple,

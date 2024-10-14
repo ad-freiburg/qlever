@@ -8,15 +8,15 @@
 #include <regex>
 
 #include "../util/IndexTestHelpers.h"
-#include "engine/SpatialJoinAlgorithms.h"
 #include "./../../src/util/GeoSparqlHelpers.h"
+#include "./SpatialJoinTestHelpers.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/SpatialJoin.h"
+#include "engine/SpatialJoinAlgorithms.h"
 #include "parser/data/Variable.h"
-#include "./SpatialJoinTestHelpers.h"
 
 namespace {  // anonymous namespace to avoid linker problems
 
@@ -83,11 +83,11 @@ class SpatialJoinParamTest : public ::testing::TestWithParam<bool> {
     // prepare expected output
     // swap rows and columns to use the function orderColAccordingToVarColMap
     auto expectedMaxDistCols = swapColumns(expectedOutputUnorderedRows);
-    auto expectedOutputOrdered = orderColAccordingToVarColMap(
-        spatialJoin->computeVariableToColumnMap(), expectedMaxDistCols,
-        columnNames);
-    auto expectedOutput = createRowVectorFromColumnVector(
-        expectedOutputOrdered);
+    auto expectedOutputOrdered =
+        orderColAccordingToVarColMap(spatialJoin->computeVariableToColumnMap(),
+                                     expectedMaxDistCols, columnNames);
+    auto expectedOutput =
+        createRowVectorFromColumnVector(expectedOutputOrdered);
 
     // Select algorithm
     spatialJoin->selectAlgorithm(GetParam());
@@ -784,4 +784,4 @@ INSTANTIATE_TEST_SUITE_P(SpatialJoin, SpatialJoinParamTest, ::testing::Bool());
 
 }  // end of Namespace computeResultTest
 
-}
+}  // namespace
