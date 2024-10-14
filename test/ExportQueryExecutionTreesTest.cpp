@@ -24,10 +24,11 @@ using ::testing::HasSubstr;
 namespace {
 // Run the given SPARQL `query` on the given Turtle `kg` and export the result
 // as the `mediaType`. `mediaType` must be TSV or CSV.
-std::string runQueryStreamableResult(const std::string& kg,
-                                     const std::string& query,
-                                     ad_utility::MediaType mediaType,
-                                     bool useTextIndex = false) {
+std::string runQueryStreamableResult(
+    const std::string& kg, const std::string& query,
+    ad_utility::MediaType mediaType, bool useTextIndex = false,
+    std::optional<size_t> limit = std::nullopt,
+    std::optional<size_t> maxSend = std::nullopt) {
   auto qec =
       ad_utility::testing::getQec(kg, true, true, true, 16_B, useTextIndex);
   // TODO<joka921> There is a bug in the caching that we have yet to trace.
@@ -37,6 +38,8 @@ std::string runQueryStreamableResult(const std::string& kg,
       std::make_shared<ad_utility::CancellationHandle<>>();
   QueryPlanner qp{qec, cancellationHandle};
   auto pq = SparqlParser::parseQuery(query);
+  pq._limitOffset._limit = limit;
+  pq._limitOffset.maxSend_ = maxSend;
   auto qet = qp.createExecutionTree(pq);
   ad_utility::Timer timer(ad_utility::Timer::Started);
   auto strGenerator = ExportQueryExecutionTrees::computeResult(
@@ -131,9 +134,22 @@ void runSelectQueryTestCase(
   auto xmlAsString = runQueryStreamableResult(testCase.kg, testCase.query,
                                               sparqlXml, useTextIndex);
   EXPECT_EQ(testCase.resultXml, xmlAsString);
+
+  // Test interaction of `limit` and `maxSend`.
+  qleverJSONResult = nlohmann::json::parse(runQueryStreamableResult(
+      testCase.kg, testCase.query, qleverJson, useTextIndex, 2ul, 5ul));
+  ASSERT_EQ(qleverJSONResult["sent"], std::min(2ul, testCase.resultSize));
+  qleverJSONResult = nlohmann::json::parse(runQueryStreamableResult(
+      testCase.kg, testCase.query, qleverJson, useTextIndex, 2ul, 0ul));
+  ASSERT_EQ(qleverJSONResult["sent"], 0);
 }
 
 // Run a single test case for a CONSTRUCT query.
+//
+// NOTE: For `CONSTRUCT` queries, it can currently happen that the internal
+// `result` is (potentially much) larger than what we return because undefined
+// values are filtered out. Hence we here compare `testCase.resultSize` to the
+// value of "sent", and not to "resultsize" like for `SELECT` queries.
 void runConstructQueryTestCase(
     const TestCaseConstructQuery& testCase,
     ad_utility::source_location l = ad_utility::source_location::current()) {
@@ -146,10 +162,18 @@ void runConstructQueryTestCase(
   auto qleverJSONStreamResult = nlohmann::json::parse(
       runQueryStreamableResult(testCase.kg, testCase.query, qleverJson));
   ASSERT_EQ(qleverJSONStreamResult["query"], testCase.query);
-  ASSERT_EQ(qleverJSONStreamResult["resultsize"], testCase.resultSize);
+  ASSERT_EQ(qleverJSONStreamResult["sent"], testCase.resultSize);
   EXPECT_EQ(qleverJSONStreamResult["res"], testCase.resultQLeverJSON);
   EXPECT_EQ(runQueryStreamableResult(testCase.kg, testCase.query, turtle),
             testCase.resultTurtle);
+
+  // Test interaction of `limit` and `maxSend`.
+  qleverJSONStreamResult = nlohmann::json::parse(runQueryStreamableResult(
+      testCase.kg, testCase.query, qleverJson, false, 2ul, 5ul));
+  ASSERT_EQ(qleverJSONStreamResult["sent"], std::min(2ul, testCase.resultSize));
+  qleverJSONStreamResult = nlohmann::json::parse(runQueryStreamableResult(
+      testCase.kg, testCase.query, qleverJson, false, 2ul, 0ul));
+  ASSERT_EQ(qleverJSONStreamResult["sent"], 0ul);
 }
 
 // Create a `json` that can be used as the `resultQLeverJSON` of a
