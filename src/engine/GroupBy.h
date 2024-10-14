@@ -244,6 +244,7 @@ class GroupBy : public Operation {
     MAX,
     SUM,
     GROUP_CONCAT,
+    STDEV,
     SAMPLE
   };
 
