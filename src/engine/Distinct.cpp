@@ -130,9 +130,9 @@ IdTable Distinct::distinct(
         *++dest = std::move(*first);
       }
     }
-
-    result.erase(++dest, last);
+    ++dest;
   }
+  result.erase(dest, last);
 
   LOG(DEBUG) << "Distinct done.\n";
   return std::move(result).toDynamic();

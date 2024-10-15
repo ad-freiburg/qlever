@@ -127,6 +127,12 @@ TEST(Distinct, lazyWithLazyInputs) {
   idTables.push_back(makeIdTableFromVector({{1, 1, 3, 7}}));
   idTables.push_back(makeIdTableFromVector(
       {{6, 1, 3, 6}, {2, 2, 3, 5}, {3, 6, 5, 4}, {1, 6, 5, 1}}));
+  idTables.push_back(makeIdTableFromVector({{2, 6, 5, 2}}));
+  idTables.push_back(IdTable{4, ad_utility::makeUnlimitedAllocator<Id>()});
+  idTables.push_back(makeIdTableFromVector(
+      {{6, 7, 0, 6}, {2, 7, 1, 5}, {3, 7, 2, 4}, {1, 7, 3, 1}}));
+  idTables.push_back(makeIdTableFromVector(
+      {{6, 7, 4, 6}, {2, 7, 4, 5}, {3, 7, 4, 4}, {1, 7, 4, 1}}));
 
   auto qec = ad_utility::testing::getQec();
   qec->getQueryTreeCache().clearAll();
@@ -146,6 +152,10 @@ TEST(Distinct, lazyWithLazyInputs) {
   using ::testing::ElementsAre;
   EXPECT_THAT(
       toVector(std::move(result->idTables())),
-      ElementsAre(m(makeIdTableFromVector({{1, 1, 3, 7}})),
-                  m(makeIdTableFromVector({{2, 2, 3, 5}, {3, 6, 5, 4}}))));
+      ElementsAre(
+          m(makeIdTableFromVector({{1, 1, 3, 7}})),
+          m(makeIdTableFromVector({{2, 2, 3, 5}, {3, 6, 5, 4}})),
+          m(makeIdTableFromVector(
+              {{6, 7, 0, 6}, {2, 7, 1, 5}, {3, 7, 2, 4}, {1, 7, 3, 1}})),
+          m(makeIdTableFromVector({{6, 7, 4, 6}}))));
 }
