@@ -322,6 +322,7 @@ PathsLimited PathSearch::findPaths(const Id& source,
   }
 
   while (!edgeStack.empty()) {
+    checkCancellation();
     auto edge = edgeStack.back();
     edgeStack.pop_back();
 
@@ -404,6 +405,7 @@ void PathSearch::pathsToResultTable(IdTable& tableDyn,
     }
 
     for (size_t edgeIndex = 0; edgeIndex < path.size(); edgeIndex++) {
+      checkCancellation();
       auto edge = path.edges_[edgeIndex];
       table.emplace_back();
       table(rowIndex, getStartIndex()) = edge.start_;
