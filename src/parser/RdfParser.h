@@ -637,6 +637,12 @@ class RdfParallelParser : public Parser {
     initialize(filename);
   }
 
+  // Construct a parser from a file and a given default graph iri.
+  RdfParallelParser(const string& filename, TripleComponent defaultGraphIri)
+      : Parser{std::move(defaultGraphIri)} {
+    initialize(filename);
+  }
+
   // inherit the wrapper overload
   using Parser::getLine;
 

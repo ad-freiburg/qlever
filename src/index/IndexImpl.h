@@ -234,7 +234,7 @@ class IndexImpl {
   // !! The index can not directly be used after this call, but has to be setup
   // by createFromOnDiskIndex after this call.
   void createFromFile(const string& filename, Index::Filetype type);
-  void createFromFiles(const std::vector<Index::InputFileSpecification>& files);
+  void createFromFiles(std::vector<Index::InputFileSpecification> files);
 
   // Creates an index object from an on disk index that has previously been
   // constructed. Read necessary meta data into memory and opens file handles.
@@ -763,4 +763,8 @@ class IndexImpl {
   // them.
   void addInternalStatisticsToConfiguration(size_t numTriplesInternal,
                                             size_t numPredicatesInternal);
+
+  static void prepareInputFileSpecificationsAndLog(
+      std::vector<Index::InputFileSpecification>& files,
+      bool parallelParsingSpecifiedViaJson);
 };

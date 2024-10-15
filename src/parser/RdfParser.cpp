@@ -1090,7 +1090,7 @@ RdfParallelParser<T>::~RdfParallelParser() {
 
 // _____________________________________________________________________________
 template <typename TokenizerT>
-std::unique_ptr<RdfParserBase> makeSingleRdfParser(
+static std::unique_ptr<RdfParserBase> makeSingleRdfParser(
     const Index::InputFileSpecification& file) {
   auto defaultGraph = [file]() -> TripleComponent {
     if (file.defaultGraph_.has_value()) {

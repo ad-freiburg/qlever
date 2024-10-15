@@ -292,12 +292,9 @@ void IndexImpl::createFromFile(const string& filename, Index::Filetype type) {
 }
 
 // _____________________________________________________________________________
-void IndexImpl::createFromFiles(
-    const std::vector<Index::InputFileSpecification>& files) {
-  if (!loadAllPermutations_ && usePatterns_) {
-    throw std::runtime_error{
-        "The patterns can only be built when all 6 permutations are created"};
-  }
+void IndexImpl::prepareInputFileSpecificationsAndLog(
+    std::vector<Index::InputFileSpecification>& files,
+    bool parallelParsingSpecifiedViaJson) {
   if (files.size() == 1) {
     LOG(INFO) << "Processing input triples from " << files.at(0).filename_
               << " ..." << std::endl;
@@ -305,9 +302,33 @@ void IndexImpl::createFromFiles(
     LOG(INFO) << "Processing input triples from " << files.size()
               << " distinct input files" << std::endl;
   }
+  if (parallelParsingSpecifiedViaJson) {
+    if (files.size() == 1) {
+      LOG(WARN) << "Parallel parsing was specified via the settings JSON. This "
+                   "is deprecated, please use the dedicated command line "
+                   "option to enable the parallel parsing."
+                << std::endl;
+      files.at(0).parseInParallel_ = true;
+    } else {
+      throw std::runtime_error{
+          "For more than one input file, the parallel parsing may not be "
+          "specified via the settings JSON file, but has to be specified via "
+          "the command line options"};
+    }
+  }
+}
+
+// _____________________________________________________________________________
+void IndexImpl::createFromFiles(
+    std::vector<Index::InputFileSpecification> files) {
+  if (!loadAllPermutations_ && usePatterns_) {
+    throw std::runtime_error{
+        "The patterns can only be built when all 6 permutations are created"};
+  }
 
   readIndexBuilderSettingsFromFile();
 
+  prepareInputFileSpecificationsAndLog(files, useParallelParser_);
   IndexBuilderDataAsFirstPermutationSorter indexBuilderData =
       createIdTriplesAndVocab(makeRdfParser(files));
 

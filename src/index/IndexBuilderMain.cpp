@@ -72,23 +72,62 @@ static constexpr auto checkNumParams = [](const auto& vec, size_t numFiles,
                     " It can additionally be completely omitted, in which "
                     "case a default value is used for all inputs");
   }
-  throw std::runtime_error{std::move(error)};
+  throw std::runtime_error{error};
 };
 
 // Convert the `filetype` string, which must be "ttl", "nt", or "nq" to the
-// corresponding `qlever::Filetype` value.
-auto getFiletype = [](std::string_view filetype) {
-  if (filetype == "ttl" || filetype == "nt") {
-    return qlever::Filetype::Turtle;
-  } else if (filetype == "nq") {
-    return qlever::Filetype::NQuad;
+// corresponding `qlever::Filetype` value. If no filetyp is given, try to deduce
+// the type from the filename.
+auto getFiletype = [](std::optional<std::string_view> filetype,
+                      std::string_view filename) {
+  auto impl = [](std::string_view s) -> std::optional<qlever::Filetype> {
+    if (s == "ttl" || s == "nt") {
+      return qlever::Filetype::Turtle;
+    } else if (s == "nq") {
+      return qlever::Filetype::NQuad;
+    } else {
+      return std::nullopt;
+    }
+  };
+  if (filetype.has_value()) {
+    auto result = impl(filetype.value());
+    if (result.has_value()) {
+      return result.value();
+    } else {
+      throw std::runtime_error{
+          absl::StrCat("The parameter --file-format, -F must be either one of "
+                       "`ttl`, `nt`, or `nq`, but is `",
+                       filetype.value(), "`")};
+    }
+  }
+
+  auto posOfDot = filename.rfind('.');
+  auto throwNotDeducable = [&filename]() {
+    throw std::runtime_error{absl::StrCat(
+        "Could not deduced the file format from the filename \"", filename,
+        "\". Either use files with names that end on `.ttl`, `.nt`, or `.nq`, "
+        "or explicitly set the format of the file via the command line")};
+  };
+  if (posOfDot == std::string::npos) {
+    throwNotDeducable();
+  }
+  auto deducedType = impl(filename.substr(posOfDot + 1));
+  if (deducedType.has_value()) {
+    return deducedType.value();
   } else {
-    throw std::runtime_error{
-        absl::StrCat("The parameter --file-format, -F must be either one of "
-                     "`ttl`, `nt`, or `nq`, but is `",
-                     filetype, "`")};
+    throwNotDeducable();
   }
 };
+template <typename T>
+T getParam(size_t idx, const auto& params, const T& defaultValue) {
+  if (params.empty()) {
+    return defaultValue;
+  }
+  if (params.size() == 1) {
+    return params.at(0);
+  }
+  return params.at(idx);
+}
 
 // Main function.
 int main(int argc, char** argv) {
@@ -111,6 +150,7 @@ int main(int argc, char** argv) {
   std::vector<string> filetype;
   std::vector<string> inputFile;
   std::vector<string> defaultGraphs;
+  std::vector<bool> parseParallel;
   bool noPatterns = false;
   bool onlyAddTextIndex = false;
   bool keepTemporaryFiles = false;
@@ -137,7 +177,15 @@ int main(int argc, char** argv) {
       "of [nt|ttl|nq]. If not set, QLever will try to deduce it from the "
       "filename suffix.");
   add("default-graph,g", po::value(&defaultGraphs),
-      "The default graph Iri for the k-th file");
+      "The graph Iri. If set to `-`, the default graph will "
+      "be used. Can be specified 0 times (all files use the default graph), "
+      "once (all files use the same graph), or once per file");
+  add("parse-parallel,p", po::value(&parseParallel),
+      "Enable or disable the parallel parser for all files (if set once) or "
+      "individually per input file (if set multiple times). Parallel parsing "
+      "works for all N-Triples and N-Quads files, as well as for well-behaved "
+      "Turtle files where all the prefix declarations come in one block at the "
+      "beginning and there are no multiline literals");
   add("kg-index-name,K", po::value(&kbIndexName),
       "The name of the knowledge graph index (default: basename of "
       "`kg-input-file`).");
@@ -232,23 +280,27 @@ int main(int argc, char** argv) {
       checkNumParams(filetype, inputFile.size(), false, "--file-format, -F");
       checkNumParams(defaultGraphs, inputFile.size(), true,
                      "--default-graph, -g");
+      checkNumParams(parseParallel, parseParallel.size(), false,
+                     "--parse-parallel, p");
+
       std::vector<qlever::InputFileSpecification> fileSpecs;
       for (size_t i = 0; i < inputFile.size(); ++i) {
-        std::string_view type =
-            filetype.size() == 1 ? filetype.at(0) : filetype.at(i);
-        auto defaultGraph = [&]() -> std::optional<string> {
-          if (defaultGraphs.empty()) {
-            return std::nullopt;
-          }
-          return defaultGraphs.size() == 1 ? defaultGraphs.at(0)
-                                           : defaultGraphs.at(i);
-        }();
+        auto type = getParam<std::optional<std::string_view>>(i, filetype,
+                                                              std::nullopt);
+
+        auto defaultGraph =
+            getParam<std::optional<string>>(i, defaultGraphs, std::nullopt);
+        if (defaultGraph == "-") {
+          defaultGraph = std::nullopt;
+        }
+
+        bool parseInParallel = getParam(i, parseParallel, false);
         auto& filename = inputFile.at(i);
         if (filename == "-") {
           filename = "/dev/stdin";
         }
-        fileSpecs.emplace_back(filename, getFiletype(type),
-                               std::move(defaultGraph));
+        fileSpecs.emplace_back(filename, getFiletype(type, filename),
+                               std::move(defaultGraph), parseInParallel);
       }
       return fileSpecs;
     };
