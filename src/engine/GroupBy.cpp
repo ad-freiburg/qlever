@@ -1014,7 +1014,8 @@ GroupBy::isSupportedAggregate(sparqlExpression::SparqlExpression* expr) {
   if (auto val = dynamic_cast<GroupConcatExpression*>(expr)) {
     return H{GROUP_CONCAT, val->getSeparator()};
   }
-  if (dynamic_cast<StdevExpression*>(expr)) return H{STDEV};
+  // NOTE: The STDEV function is not suitable for lazy and hash map
+  // optimizations.
   if (dynamic_cast<SampleExpression*>(expr)) return H{SAMPLE};
 
   // `expr` is an unsupported aggregate

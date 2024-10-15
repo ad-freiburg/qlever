@@ -54,18 +54,26 @@ class DeviationExpression : public SparqlExpression {
       VectorWithMemoryLimit<IdOrLiteralOrIri> exprResult{context->_allocator};
       std::fill_n(std::back_inserter(exprResult), context->size(),
                   IdOrLiteralOrIri{Id::makeUndefined()});
+      bool undef = false;
 
-      auto devImpl = [&exprResult, context](auto generator) {
+      auto devImpl = [&undef, &exprResult, context](auto generator) {
         double sum = 0.0;
-        std::vector<double> childResults = {};
+        // Intermediate storage of the results returned from the child
+        // expression
+        VectorWithMemoryLimit<double> childResults{context->_allocator};
 
         // Collect values as doubles
         for (auto& inp : generator) {
-          const auto& s = detail::NumericValueGetter{}(std::move(inp), context);
-          auto v = std::visit(numValToDouble, s);
+          const auto& n = detail::NumericValueGetter{}(std::move(inp), context);
+          auto v = std::visit(numValToDouble, n);
           if (v.has_value()) {
             childResults.push_back(v.value());
             sum += v.value();
+          } else {
+            // There is a non-numeric value in the input. Therefore the entire
+            // result will be undef.
+            undef = true;
+            return;
           }
           context->cancellationHandle_->throwIfCancelled();
         }
@@ -88,6 +96,9 @@ class DeviationExpression : public SparqlExpression {
         devImpl(std::move(generator));
       }
 
+      if (undef) {
+        return IdOrLiteralOrIri{Id::makeUndefined()};
+      }
       return exprResult;
     };
     auto childRes = child_->evaluate(context);
