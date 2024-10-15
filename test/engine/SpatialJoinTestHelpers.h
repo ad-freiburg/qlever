@@ -19,7 +19,7 @@ auto makePointLiteral = [](std::string_view c1, std::string_view c2) {
 };
 
 // helper function to create a vector of strings from a result table
-std::vector<std::string> printTable(const QueryExecutionContext* qec,
+inline std::vector<std::string> printTable(const QueryExecutionContext* qec,
                                     const Result* table) {
   std::vector<std::string> output;
   for (size_t i = 0; i < table->idTable().numRows(); i++) {
@@ -40,7 +40,7 @@ std::vector<std::string> printTable(const QueryExecutionContext* qec,
 // should be tested (it uses a vector of vectors (the first vector is containing
 // each column of the result, each column consist of a vector, where each entry
 // is a row of this column))
-std::vector<std::vector<std::string>> orderColAccordingToVarColMap(
+inline std::vector<std::vector<std::string>> orderColAccordingToVarColMap(
     VariableToColumnMap varColMaps,
     std::vector<std::vector<std::string>> columns,
     std::vector<std::string> columnNames) {
@@ -61,7 +61,7 @@ std::vector<std::vector<std::string>> orderColAccordingToVarColMap(
 // vector of strings representing columns. Please make sure, that the order of
 // the columns is already matching the order of the result. If this is not the
 // case call the function orderColAccordingToVarColMap
-std::vector<std::string> createRowVectorFromColumnVector(
+inline std::vector<std::string> createRowVectorFromColumnVector(
     std::vector<std::vector<std::string>> column_vector) {
   std::vector<std::string> result;
   if (column_vector.size() > 0) {
@@ -85,7 +85,7 @@ std::vector<std::string> createRowVectorFromColumnVector(
 // are not copied from a real input file. Copying the query will therefore
 // likely not result in the same results as here (also the names, coordinates,
 // etc. might be different in the real datasets)
-std::string createSmallDatasetWithPoints() {
+inline std::string createSmallDatasetWithPoints() {
   auto addPoint = [](std::string& kg, std::string number, std::string name,
                      std::string point) {
     kg += absl::StrCat("<node_", number, "> <name> ", name, " .<node_", number,
@@ -103,7 +103,7 @@ std::string createSmallDatasetWithPoints() {
   return kg2;
 }
 
-QueryExecutionContext* buildTestQEC() {
+inline QueryExecutionContext* buildTestQEC() {
   std::string kg = createSmallDatasetWithPoints();
   ad_utility::MemorySize blocksizePermutations = 16_MB;
   auto qec = ad_utility::testing::getQec(kg, true, true, false,
@@ -111,7 +111,7 @@ QueryExecutionContext* buildTestQEC() {
   return qec;
 }
 
-std::shared_ptr<QueryExecutionTree> buildIndexScan(
+inline std::shared_ptr<QueryExecutionTree> buildIndexScan(
     QueryExecutionContext* qec, std::array<std::string, 3> triple) {
   TripleComponent subject{Variable{triple.at(0)}};
   TripleComponent object{Variable{triple.at(2)}};
@@ -119,7 +119,7 @@ std::shared_ptr<QueryExecutionTree> buildIndexScan(
       qec, Permutation::Enum::PSO, SparqlTriple{subject, triple.at(1), object});
 }
 
-std::shared_ptr<QueryExecutionTree> buildJoin(
+inline std::shared_ptr<QueryExecutionTree> buildJoin(
     QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> tree1,
     std::shared_ptr<QueryExecutionTree> tree2, Variable joinVariable) {
   auto varCol1 = tree1->getVariableColumns();
@@ -130,7 +130,7 @@ std::shared_ptr<QueryExecutionTree> buildJoin(
                                              true);
 }
 
-std::shared_ptr<QueryExecutionTree> buildMediumChild(
+inline std::shared_ptr<QueryExecutionTree> buildMediumChild(
     QueryExecutionContext* qec, std::array<std::string, 3> triple1,
     std::array<std::string, 3> triple2, std::array<std::string, 3> triple3,
     std::string joinVariable1_, std::string joinVariable2_) {
@@ -143,7 +143,7 @@ std::shared_ptr<QueryExecutionTree> buildMediumChild(
   return buildJoin(qec, join, scan3, joinVariable2);
 }
 
-std::shared_ptr<QueryExecutionTree> buildSmallChild(
+inline std::shared_ptr<QueryExecutionTree> buildSmallChild(
     QueryExecutionContext* qec, std::array<std::string, 3> triple1,
     std::array<std::string, 3> triple2, std::string joinVariable_) {
   Variable joinVariable{joinVariable_};
