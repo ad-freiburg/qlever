@@ -6,8 +6,8 @@
 
 #include "QueryPlannerTestHelpers.h"
 #include "engine/QueryPlanner.h"
-#include "parser/GraphPatternOperation.h"
 #include "engine/SpatialJoin.h"
+#include "parser/GraphPatternOperation.h"
 #include "parser/SparqlParser.h"
 #include "parser/data/Variable.h"
 #include "util/TripleComponentTestHelpers.h"

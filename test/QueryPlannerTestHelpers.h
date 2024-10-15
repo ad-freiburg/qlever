@@ -7,9 +7,8 @@
 #include <gmock/gmock-matchers.h>
 #include <gmock/gmock.h>
 
-#include <variant>
-
 #include <optional>
+#include <variant>
 
 #include "./util/GTestHelpers.h"
 #include "engine/Bind.h"
