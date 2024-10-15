@@ -50,9 +50,15 @@ class Distinct : public Operation {
   [[nodiscard]] string getCacheKeyImpl() const override;
 
  private:
-  ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override;
+  ProtoResult computeResult(bool requestLaziness) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
+
+  template <size_t WIDTH>
+  static cppcoro::generator<IdTable> lazyDistinct(
+      cppcoro::generator<IdTable> originalGenerator,
+      std::vector<ColumnIndex> keepIndices,
+      std::optional<IdTable> aggregateTable);
 
   // Removes all duplicates from input with regards to the columns
   // in keepIndices. The input needs to be sorted on the keep indices,
@@ -60,9 +66,7 @@ class Distinct : public Operation {
   template <size_t WIDTH>
   static IdTable distinct(
       IdTable dynInput, const std::vector<ColumnIndex>& keepIndices,
-      std::optional<
-          std::reference_wrapper<typename IdTableStatic<WIDTH>::row_type>>
-          previousRow);
+      std::optional<typename IdTableStatic<WIDTH>::row_type> previousRow);
 
   FRIEND_TEST(Distinct, distinct);
   FRIEND_TEST(Distinct, distinctWithEmptyInput);

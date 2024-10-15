@@ -33,27 +33,65 @@ VariableToColumnMap Distinct::computeVariableToColumnMap() const {
   return subtree_->getVariableColumns();
 }
 
+template <size_t WIDTH>
+cppcoro::generator<IdTable> Distinct::lazyDistinct(
+    cppcoro::generator<IdTable> originalGenerator,
+    std::vector<ColumnIndex> keepIndices,
+    std::optional<IdTable> aggregateTable) {
+  std::optional<typename IdTableStatic<WIDTH>::row_type> previousRow =
+      std::nullopt;
+  for (IdTable& idTable : originalGenerator) {
+    IdTable result =
+        distinct<WIDTH>(std::move(idTable), keepIndices, previousRow);
+    if (!result.empty()) {
+      auto view = result.asStaticView<WIDTH>();
+      previousRow.emplace(std::as_const(view).back());
+      if (aggregateTable.has_value()) {
+        aggregateTable.value().insertAtEnd(result);
+      } else {
+        co_yield result;
+      }
+    }
+  }
+  if (aggregateTable.has_value()) {
+    co_yield aggregateTable.value();
+  }
+}
+
 // _____________________________________________________________________________
-ProtoResult Distinct::computeResult([[maybe_unused]] bool requestLaziness) {
+ProtoResult Distinct::computeResult(bool requestLaziness) {
   LOG(DEBUG) << "Getting sub-result for distinct result computation..." << endl;
-  std::shared_ptr<const Result> subRes = subtree_->getResult();
+  std::shared_ptr<const Result> subRes = subtree_->getResult(true);
 
   LOG(DEBUG) << "Distinct result computation..." << endl;
   size_t width = subtree_->getResultWidth();
-  IdTable idTable =
-      CALL_FIXED_SIZE(width, &Distinct::distinct, subRes->idTable().clone(),
-                      _keepIndices, std::nullopt);
-  LOG(DEBUG) << "Distinct result computation done." << endl;
-  return {std::move(idTable), resultSortedOn(), subRes->getSharedLocalVocab()};
+  if (subRes->isFullyMaterialized()) {
+    IdTable idTable =
+        CALL_FIXED_SIZE(width, &Distinct::distinct, subRes->idTable().clone(),
+                        _keepIndices, std::nullopt);
+    LOG(DEBUG) << "Distinct result computation done." << endl;
+    return {std::move(idTable), resultSortedOn(),
+            subRes->getSharedLocalVocab()};
+  }
+
+  auto generator = CALL_FIXED_SIZE(
+      width, &Distinct::lazyDistinct, std::move(subRes->idTables()),
+      _keepIndices,
+      requestLaziness ? std::optional{IdTable{width, allocator()}}
+                      : std::nullopt);
+  if (!requestLaziness) {
+    IdTable result = cppcoro::getSingleElement(std::move(generator));
+    return {std::move(result), resultSortedOn(), subRes->getSharedLocalVocab()};
+  }
+  return {std::move(generator), resultSortedOn(),
+          subRes->getSharedLocalVocab()};
 }
 
 // _____________________________________________________________________________
 template <size_t WIDTH>
 IdTable Distinct::distinct(
     IdTable dynInput, const std::vector<ColumnIndex>& keepIndices,
-    std::optional<
-        std::reference_wrapper<typename IdTableStatic<WIDTH>::row_type>>
-        previousRow) {
+    std::optional<typename IdTableStatic<WIDTH>::row_type> previousRow) {
   AD_CONTRACT_CHECK(keepIndices.size() <= dynInput.numColumns());
   LOG(DEBUG) << "Distinct on " << dynInput.size() << " elements.\n";
   IdTableStatic<WIDTH> result = std::move(dynInput).toStatic<WIDTH>();
@@ -70,7 +108,7 @@ IdTable Distinct::distinct(
   auto subrange = std::ranges::unique(
       result, [&matchesRow, &previousRow](const auto& a, const auto& b) {
         return matchesRow(a, b) && (!previousRow.has_value() ||
-                                    !matchesRow(previousRow.value().get(), a));
+                                    !matchesRow(previousRow.value(), a));
       });
   result.erase(subrange.begin(), subrange.end());
   LOG(DEBUG) << "Distinct done.\n";
