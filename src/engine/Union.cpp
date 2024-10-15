@@ -252,7 +252,7 @@ std::vector<size_t> Union::computePermutation() const {
       originIndex = startOfUndefColumns;
       startOfUndefColumns++;
     }
-    permutation[originIndex] = targetColIdx;
+    permutation[targetColIdx] = originIndex;
   }
   return permutation;
 }
