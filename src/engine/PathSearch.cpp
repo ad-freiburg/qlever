@@ -5,6 +5,7 @@
 #include "PathSearch.h"
 
 #include <algorithm>
+#include <functional>
 #include <iterator>
 #include <optional>
 #include <ranges>
@@ -14,6 +15,7 @@
 #include "engine/CallFixedSize.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/VariableToColumnMap.h"
+#include "util/AllocatorWithLimit.h"
 
 using namespace pathSearch;
 
@@ -305,9 +307,14 @@ PathsLimited PathSearch::findPaths(const Id& source,
                                    const BinSearchWrapper& binSearch) const {
   std::vector<Edge> edgeStack;
   Path currentPath{EdgesLimited(allocator())};
-  std::unordered_map<uint64_t, std::vector<Path>> pathCache;
+  std::unordered_map<
+      uint64_t, PathsLimited, std::hash<uint64_t>, std::equal_to<uint64_t>,
+      ad_utility::AllocatorWithLimit<std::pair<const uint64_t, PathsLimited>>>
+      pathCache{allocator()};
   PathsLimited result{allocator()};
-  std::unordered_set<uint64_t> visited;
+  std::unordered_set<uint64_t, std::hash<uint64_t>, std::equal_to<uint64_t>,
+                     ad_utility::AllocatorWithLimit<uint64_t>>
+      visited{allocator()};
 
   visited.insert(source.getBits());
   for (auto edge : binSearch.outgoingEdes(source)) {
