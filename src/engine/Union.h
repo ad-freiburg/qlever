@@ -70,7 +70,7 @@ class Union : public Operation {
   // A similar timeout-checking replacement for `std::fill`.
   void fillChunked(auto beg, auto end, const auto& value) const;
 
-  virtual ProtoResult computeResult(bool requestLaziness) override;
+  ProtoResult computeResult(bool requestLaziness) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 

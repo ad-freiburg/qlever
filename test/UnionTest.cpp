@@ -79,6 +79,7 @@ TEST(UnionTest, computeUnionLazy) {
                         ad_utility::source_location::current()) {
     auto l = generateLocationTrace(loc);
     auto* qec = ad_utility::testing::getQec();
+    qec->getQueryTreeCache().clearAll();
     IdTable left = makeIdTableFromVector({{V(1)}, {V(2)}, {V(3)}});
     auto leftT = ad_utility::makeExecutionTree<ValuesForTesting>(
         qec, std::move(left), Vars{Variable{"?x"}}, false,
