@@ -20,7 +20,7 @@ auto makePointLiteral = [](std::string_view c1, std::string_view c2) {
 
 // helper function to create a vector of strings from a result table
 inline std::vector<std::string> printTable(const QueryExecutionContext* qec,
-                                    const Result* table) {
+                                           const Result* table) {
   std::vector<std::string> output;
   for (size_t i = 0; i < table->idTable().numRows(); i++) {
     std::string line = "";
