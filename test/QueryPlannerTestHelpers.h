@@ -315,8 +315,7 @@ inline auto PathSearch =
     [](PathSearchConfiguration config, bool sourceBound, bool targetBound,
        const std::same_as<QetMatcher> auto&... childMatchers) {
       return RootOperation<::PathSearch>(AllOf(
-          Property("getChildren", &Operation::getChildren,
-                   ElementsAre(Pointee(childMatchers)...)),
+          children(childMatchers...),
           AD_PROPERTY(PathSearch, getConfig, PathSearchConfigMatcher(config)),
           AD_PROPERTY(PathSearch, isSourceBound, Eq(sourceBound)),
           AD_PROPERTY(PathSearch, isTargetBound, Eq(targetBound))));

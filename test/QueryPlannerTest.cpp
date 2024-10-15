@@ -998,7 +998,7 @@ TEST(QueryPlanner, PathSearchWithEdgeProperties) {
 
 TEST(QueryPlanner, PathSearchWithMultipleEdgePropertiesAndTargets) {
   auto scan = h::IndexScanFromStrings;
-  auto join = h::Join;
+  auto join = h::UnorderedJoins;
   auto qec = ad_utility::testing::getQec(
       "<x> <p1> <m1>."
       "<m1> <p3> <n1>."
@@ -1041,8 +1041,8 @@ TEST(QueryPlanner, PathSearchWithMultipleEdgePropertiesAndTargets) {
       h::PathSearch(
           config, true, true,
           h::Sort(join(scan("?start", "<p1>", "?middle"),
-                       join(scan("?middle", "<p3>", "?middleAttribute"),
-                            scan("?middle", "<p2>", "?end"))))),
+                       scan("?middle", "<p3>", "?middleAttribute"),
+                            scan("?middle", "<p2>", "?end")))),
       qec);
 }
 
