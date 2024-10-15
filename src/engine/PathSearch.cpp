@@ -52,14 +52,21 @@ std::vector<Id> BinSearchWrapper::getSources() const {
 }
 
 // _____________________________________________________________________________
+std::vector<Id> BinSearchWrapper::getEdgeProperties(const Edge& edge) const {
+  std::vector<Id> edgeProperties;
+  for (auto edgeCol : edgeCols_) {
+    edgeProperties.push_back(table_(edge.edgeRow_, edgeCol));
+  }
+  return edgeProperties;
+}
+
+// _____________________________________________________________________________
 Edge BinSearchWrapper::makeEdgeFromRow(size_t row) const {
   Edge edge;
   edge.start_ = table_(row, startCol_);
   edge.end_ = table_(row, endCol_);
+  edge.edgeRow_ = row;
 
-  for (auto edgeCol : edgeCols_) {
-    edge.edgeProperties_.push_back(table_(row, edgeCol));
-  }
   return edge;
 }
 
@@ -246,7 +253,8 @@ Result PathSearch::computeResult([[maybe_unused]] bool requestLaziness) {
     timer.start();
 
     CALL_FIXED_SIZE(std::array{getResultWidth()},
-                    &PathSearch::pathsToResultTable, this, idTable, paths);
+                    &PathSearch::pathsToResultTable, this, idTable, paths,
+                    binSearch);
 
     timer.stop();
     auto fillTime = timer.msecs();
@@ -380,8 +388,8 @@ PathsLimited PathSearch::allPaths(std::span<const Id> sources,
 
 // _____________________________________________________________________________
 template <size_t WIDTH>
-void PathSearch::pathsToResultTable(IdTable& tableDyn,
-                                    PathsLimited& paths) const {
+void PathSearch::pathsToResultTable(IdTable& tableDyn, PathsLimited& paths,
+                                    const BinSearchWrapper& binSearch) const {
   IdTableStatic<WIDTH> table = std::move(tableDyn).toStatic<WIDTH>();
 
   std::vector<size_t> edgePropertyCols;
@@ -421,11 +429,11 @@ void PathSearch::pathsToResultTable(IdTable& tableDyn,
         table(rowIndex, getTargetIndex().value()) = targetId.value();
       }
 
+      auto edgeProperties = binSearch.getEdgeProperties(edge);
       for (size_t edgePropertyIndex = 0;
-           edgePropertyIndex < edge.edgeProperties_.size();
-           edgePropertyIndex++) {
+           edgePropertyIndex < edgeProperties.size(); edgePropertyIndex++) {
         table(rowIndex, edgePropertyCols[edgePropertyIndex]) =
-            edge.edgeProperties_[edgePropertyIndex];
+            edgeProperties[edgePropertyIndex];
       }
 
       rowIndex++;

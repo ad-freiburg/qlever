@@ -28,7 +28,7 @@ struct Edge {
 
   Id end_;
 
-  std::vector<Id> edgeProperties_;
+  size_t edgeRow_;
 };
 
 using EdgesLimited = std::vector<Edge, ad_utility::AllocatorWithLimit<Edge>>;
@@ -80,6 +80,8 @@ class BinSearchWrapper {
    * start nodes). Returns only unique start nodes.
    */
   std::vector<Id> getSources() const;
+
+  std::vector<Id> getEdgeProperties(const Edge& edge) const;
 
  private:
   Edge makeEdgeFromRow(size_t row) const;
@@ -275,6 +277,6 @@ class PathSearch : public Operation {
    * @param paths The vector of paths to convert.
    */
   template <size_t WIDTH>
-  void pathsToResultTable(IdTable& tableDyn,
-                          pathSearch::PathsLimited& paths) const;
+  void pathsToResultTable(IdTable& tableDyn, pathSearch::PathsLimited& paths,
+                          const pathSearch::BinSearchWrapper& binSearch) const;
 };
