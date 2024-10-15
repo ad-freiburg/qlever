@@ -44,8 +44,7 @@ cppcoro::generator<IdTable> Distinct::lazyDistinct(
     IdTable result =
         distinct<WIDTH>(std::move(idTable), keepIndices, previousRow);
     if (!result.empty()) {
-      auto view = result.asStaticView<WIDTH>();
-      previousRow.emplace(std::as_const(view).back());
+      previousRow.emplace(result.asStaticView<WIDTH>().back());
       if (aggregateTable.has_value()) {
         aggregateTable.value().insertAtEnd(result);
       } else {

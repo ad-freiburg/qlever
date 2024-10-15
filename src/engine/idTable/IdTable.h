@@ -359,9 +359,11 @@ class IdTable {
   // `std::vector` aand other containers.
   // TODO<C++23, joka921> Remove the duplicates via explicit object parameters
   // ("deducing this").
-  row_reference_restricted front() { return (*this)[0]; }
+  row_reference_restricted front() requires(!isView) { return (*this)[0]; }
   const_row_reference_restricted front() const { return (*this)[0]; }
-  row_reference_restricted back() { return (*this)[numRows() - 1]; }
+  row_reference_restricted back() requires(!isView) {
+    return (*this)[numRows() - 1];
+  }
   const_row_reference_restricted back() const { return (*this)[numRows() - 1]; }
 
   // Resize the `IdTable` to exactly `numRows`. If `numRows < size()`, then the
