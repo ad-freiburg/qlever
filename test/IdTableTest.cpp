@@ -1136,24 +1136,6 @@ TEST(IdTable, addEmptyColumn) {
   EXPECT_EQ(table.getColumn(1).size(), 2);
 }
 
-// _____________________________________________________________________________
-TEST(IdTable, cloneOrMove) {
-  using ::testing::ElementsAre;
-  using ::testing::Eq;
-  IdTable source{1, ad_utility::makeUnlimitedAllocator<Id>()};
-  source.push_back({V(1)});
-  source.push_back({V(2)});
-
-  IdTable clone = std::as_const(source).cloneOrMove();
-
-  EXPECT_EQ(source, clone);
-
-  IdTable moved = std::move(source).cloneOrMove();
-
-  EXPECT_EQ(clone, moved);
-  EXPECT_EQ(source.numRows(), 0);
-}
-
 // Check that we can completely instantiate `IdTable`s with a different value
 // type and a different underlying storage.
 

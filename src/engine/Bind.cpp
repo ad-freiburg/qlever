@@ -96,13 +96,10 @@ ProtoResult Bind::computeResult(bool requestLaziness) {
   std::shared_ptr<const Result> subRes = _subtree->getResult(requestLaziness);
   LOG(DEBUG) << "Got input to Bind operation." << std::endl;
 
-  auto applyBind = [this, subRes](
-                       auto&& idTable, LocalVocab* localVocab,
-                       std::optional<std::pair<size_t, size_t>> subrange =
-                           std::nullopt) {
-    return computeExpressionBind(localVocab, AD_FWD(idTable),
+  auto applyBind = [this, subRes](IdTable idTable, LocalVocab* localVocab) {
+    return computeExpressionBind(localVocab, std::move(idTable),
                                  subRes->localVocab(),
-                                 _bind._expression.getPimpl(), subrange);
+                                 _bind._expression.getPimpl());
   };
 
   if (subRes->isFullyMaterialized()) {
@@ -114,8 +111,10 @@ ProtoResult Bind::computeResult(bool requestLaziness) {
           -> cppcoro::generator<IdTable> {
         size_t size = result->idTable().size();
         for (size_t offset = 0; offset < size; offset += CHUNK_SIZE) {
-          co_yield applyBind(result->idTable(), vocab.get(),
-                             {{offset, std::min(size, offset + CHUNK_SIZE)}});
+          co_yield applyBind(
+              cloneSubView(result->idTable(),
+                           {offset, std::min(size, offset + CHUNK_SIZE)}),
+              vocab.get());
         }
       }(localVocab, std::move(applyBind), std::move(subRes));
       return {std::move(generator), resultSortedOn(), std::move(localVocab)};
@@ -128,7 +127,7 @@ ProtoResult Bind::computeResult(bool requestLaziness) {
     // via`shared_ptr`s, so the following is also efficient if the BIND adds no
     // new words.
     LocalVocab localVocab = subRes->getCopyOfLocalVocab();
-    IdTable result = applyBind(subRes->idTable(), &localVocab);
+    IdTable result = applyBind(subRes->idTable().clone(), &localVocab);
     LOG(DEBUG) << "BIND result computation done." << std::endl;
     return {std::move(result), resultSortedOn(), std::move(localVocab)};
   }
@@ -147,30 +146,19 @@ ProtoResult Bind::computeResult(bool requestLaziness) {
 
 // _____________________________________________________________________________
 IdTable Bind::computeExpressionBind(
-    LocalVocab* outputLocalVocab,
-    ad_utility::SimilarTo<IdTable> auto&& inputIdTable,
+    LocalVocab* outputLocalVocab, IdTable idTable,
     const LocalVocab& inputLocalVocab,
-    const sparqlExpression::SparqlExpression* expression,
-    std::optional<std::pair<size_t, size_t>> subrange) const {
+    const sparqlExpression::SparqlExpression* expression) const {
   sparqlExpression::EvaluationContext evaluationContext(
-      *getExecutionContext(), _subtree->getVariableColumns(), inputIdTable,
+      *getExecutionContext(), _subtree->getVariableColumns(), idTable,
       getExecutionContext()->getAllocator(), inputLocalVocab,
       cancellationHandle_, deadline_);
-
-  if (subrange.has_value()) {
-    auto [beginIndex, endIndex] = subrange.value();
-    evaluationContext._beginIndex = beginIndex;
-    evaluationContext._endIndex = endIndex;
-  }
 
   sparqlExpression::ExpressionResult expressionResult =
       expression->evaluate(&evaluationContext);
 
-  auto output = subrange.has_value()
-                    ? cloneSubView(inputIdTable, subrange.value())
-                    : AD_FWD(inputIdTable).cloneOrMove();
-  output.addEmptyColumn();
-  auto outputColumn = output.getColumn(output.numColumns() - 1);
+  idTable.addEmptyColumn();
+  auto outputColumn = idTable.getColumn(idTable.numColumns() - 1);
 
   auto visitor = [&]<sparqlExpression::SingleExpressionResult T>(
                      T&& singleResult) mutable {
@@ -180,7 +168,7 @@ IdTable Bind::computeExpressionBind(
     if constexpr (isVariable) {
       auto columnIndex =
           getInternallyVisibleVariableColumns().at(singleResult).columnIndex_;
-      auto inputColumn = output.getColumn(columnIndex);
+      auto inputColumn = idTable.getColumn(columnIndex);
       AD_CORRECTNESS_CHECK(inputColumn.size() == outputColumn.size());
       std::ranges::copy(inputColumn, outputColumn.begin());
     } else if constexpr (isStrongId) {
@@ -217,5 +205,5 @@ IdTable Bind::computeExpressionBind(
 
   std::visit(visitor, std::move(expressionResult));
 
-  return output;
+  return idTable;
 }

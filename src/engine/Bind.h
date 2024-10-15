@@ -49,11 +49,9 @@ class Bind : public Operation {
 
   // Implementation for the binding of arbitrary expressions.
   IdTable computeExpressionBind(
-      LocalVocab* outputLocalVocab,
-      ad_utility::SimilarTo<IdTable> auto&& inputIdTable,
+      LocalVocab* outputLocalVocab, IdTable idTable,
       const LocalVocab& inputLocalVocab,
-      const sparqlExpression::SparqlExpression* expression,
-      std::optional<std::pair<size_t, size_t>> subrange) const;
+      const sparqlExpression::SparqlExpression* expression) const;
 
   [[nodiscard]] VariableToColumnMap computeVariableToColumnMap() const override;
 };
