@@ -86,6 +86,10 @@ class GroupBy : public Operation {
     return {_subtree.get()};
   }
 
+  // Getters for testing
+  const auto& groupByVariables() const { return _groupByVariables; }
+  const auto& aliases() const { return _aliases; }
+
   struct HashMapAliasInformation;
 
  private:

@@ -118,13 +118,15 @@ addLinkAndDiscoverTest(LocatedTriplesTest index)
 
 addLinkAndDiscoverTestSerial(IdTripleTest index)
 
+addLinkAndDiscoverTestSerial(DeltaTriplesTest index)
+
 addLinkAndDiscoverTest(EngineTest engine)
 
 addLinkAndDiscoverTest(JoinTest engine)
 
 addLinkAndDiscoverTest(TextLimitOperationTest engine)
 
-addLinkAndDiscoverTest(QueryPlannerTest engine)
+addLinkAndDiscoverTestSerial(QueryPlannerTest engine)
 
 addLinkAndDiscoverTest(HashMapTest)
 
@@ -236,8 +238,6 @@ addLinkAndDiscoverTest(ForwardTest)
 addLinkAndDiscoverTest(CompressorStreamTest engine)
 
 addLinkAndDiscoverTest(AsyncStreamTest)
-
-addLinkAndDiscoverTest(TriplesViewTest util OpenSSL::SSL OpenSSL::Crypto)
 
 addLinkAndDiscoverTest(BitUtilsTest)
 
@@ -407,7 +407,7 @@ addLinkAndDiscoverTest(FilterTest engine)
 
 addLinkAndDiscoverTest(ResultTest engine)
 
-addLinkAndDiscoverTest(SparqlExpressionGeneratorsTest)
+addLinkAndDiscoverTest(SparqlExpressionGeneratorsTest engine)
 
 addLinkAndDiscoverTest(UrlParserTest)
 
