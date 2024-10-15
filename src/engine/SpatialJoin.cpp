@@ -230,6 +230,15 @@ size_t SpatialJoin::getCostEstimate() {
 // ____________________________________________________________________________
 uint64_t SpatialJoin::getSizeEstimateBeforeLimit() {
   if (childLeft_ && childRight_) {
+    // If we limit the number of results to k, even in the largest scenario, the
+    // result can be at most `|childLeft| * k`
+    auto maxResults = getMaxResults();
+    if (maxResults.has_value()) {
+      return childLeft_->getSizeEstimate() * maxResults.value();
+    }
+
+    // If we don't limit the number of results, we cannot draw conclusions about
+    // the size, other than the worst case `|childLeft| * |childRight|`
     return childLeft_->getSizeEstimate() * childRight_->getSizeEstimate();
   }
   return 1;  // dummy return if not both children are added
