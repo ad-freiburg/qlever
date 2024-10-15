@@ -71,3 +71,44 @@ TEST(UnionTest, computeUnionLarge) {
 
   ASSERT_EQ(result, makeIdTableFromVector(expected));
 }
+
+// _____________________________________________________________________________
+TEST(UnionTest, computeUnionLazy) {
+  auto runTest = [](bool nonLazyChilds,
+                    ad_utility::source_location loc =
+                        ad_utility::source_location::current()) {
+    auto l = generateLocationTrace(loc);
+    auto* qec = ad_utility::testing::getQec();
+    IdTable left = makeIdTableFromVector({{V(1)}, {V(2)}, {V(3)}});
+    auto leftT = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, std::move(left), Vars{Variable{"?x"}}, false,
+        std::vector<ColumnIndex>{}, LocalVocab{}, std::nullopt, nonLazyChilds);
+
+    IdTable right = makeIdTableFromVector({{V(4), V(5)}, {V(6), V(7)}});
+    auto rightT = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, std::move(right), Vars{Variable{"?u"}, Variable{"?x"}}, false,
+        std::vector<ColumnIndex>{}, LocalVocab{}, std::nullopt, nonLazyChilds);
+
+    Union u{ad_utility::testing::getQec(), std::move(leftT), std::move(rightT)};
+    auto resultTable = u.computeResultOnlyForTesting(true);
+    ASSERT_FALSE(resultTable.isFullyMaterialized());
+    auto& result = resultTable.idTables();
+
+    auto U = Id::makeUndefined();
+    auto expected1 = makeIdTableFromVector({{V(1), U}, {V(2), U}, {V(3), U}});
+    auto expected2 = makeIdTableFromVector({{V(5), V(4)}, {V(7), V(6)}});
+
+    auto iterator = result.begin();
+    ASSERT_NE(iterator, result.end());
+    ASSERT_EQ(*iterator, expected1);
+
+    ++iterator;
+    ASSERT_NE(iterator, result.end());
+    ASSERT_EQ(*iterator, expected2);
+
+    ASSERT_EQ(++iterator, result.end());
+  };
+
+  runTest(false);
+  runTest(true);
+}

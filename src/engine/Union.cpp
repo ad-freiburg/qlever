@@ -158,10 +158,20 @@ size_t Union::getCostEstimate() {
          getSizeEstimateBeforeLimit();
 }
 
-ProtoResult Union::computeResult([[maybe_unused]] bool requestLaziness) {
+ProtoResult Union::computeResult(bool requestLaziness) {
   LOG(DEBUG) << "Union result computation..." << std::endl;
-  std::shared_ptr<const Result> subRes1 = _subtrees[0]->getResult();
-  std::shared_ptr<const Result> subRes2 = _subtrees[1]->getResult();
+  std::shared_ptr<const Result> subRes1 =
+      _subtrees[0]->getResult(requestLaziness);
+  std::shared_ptr<const Result> subRes2 =
+      _subtrees[1]->getResult(requestLaziness);
+
+  if (requestLaziness) {
+    auto localVocab = std::make_shared<LocalVocab>();
+    auto generator =
+        computeResultLazily(std::move(subRes1), std::move(subRes2), localVocab);
+    return {std::move(generator), resultSortedOn(), std::move(localVocab)};
+  }
+
   LOG(DEBUG) << "Union subresult computation done." << std::endl;
 
   IdTable idTable =
@@ -179,10 +189,10 @@ void Union::copyChunked(auto beg, auto end, auto target) const {
   size_t total = end - beg;
   for (size_t i = 0; i < total; i += chunkSize) {
     checkCancellation();
-      size_t actualEnd = std::min(i + chunkSize, total);
-      std::copy(beg + i, beg + actualEnd, target + i);
+    size_t actualEnd = std::min(i + chunkSize, total);
+    std::copy(beg + i, beg + actualEnd, target + i);
   }
-};
+}
 
 // _____________________________________________________________________________
 void Union::fillChunked(auto beg, auto end, const auto& value) const {
@@ -228,4 +238,72 @@ IdTable Union::computeUnion(
     writeColumn(right, targetColumn, rightCol, left.size());
   }
   return res;
+}
+
+// _____________________________________________________________________________
+template <bool left>
+std::vector<size_t> Union::computePermutation() const {
+  size_t startOfUndefColumns = _subtrees[left ? 0 : 1]->getResultWidth();
+  std::vector<size_t> permutation(_columnOrigins.size());
+  for (size_t targetColIdx = 0; targetColIdx < _columnOrigins.size();
+       ++targetColIdx) {
+    size_t originIndex = _columnOrigins.at(targetColIdx)[left ? 0 : 1];
+    if (originIndex == NO_COLUMN) {
+      originIndex = startOfUndefColumns;
+      startOfUndefColumns++;
+    }
+    permutation[originIndex] = targetColIdx;
+  }
+  return permutation;
+}
+
+// _____________________________________________________________________________
+IdTable Union::transformToCorrectColumnFormat(
+    IdTable idTable, const std::vector<size_t>& permutation) const {
+  while (idTable.numColumns() < getResultWidth()) {
+    idTable.addEmptyColumn();
+    std::ranges::fill(idTable.getColumn(idTable.numColumns() - 1),
+                      Id::makeUndefined());
+  }
+
+  // i + 1 because once everything expect the last column is in the correct
+  // position, the last column is already in the correct position so the last
+  // iteration would always swap the last column with itself.
+  for (size_t i = 0; i + 1 < permutation.size(); ++i) {
+    size_t ind = permutation[i];
+    while (ind < i) {
+      ind = permutation[ind];
+    }
+    idTable.swapColumns(i, ind);
+  }
+  return idTable;
+}
+
+// _____________________________________________________________________________
+cppcoro::generator<IdTable> Union::computeResultLazily(
+    std::shared_ptr<const Result> result1,
+    std::shared_ptr<const Result> result2,
+    std::shared_ptr<LocalVocab> localVocab) const {
+  if (result1->isFullyMaterialized()) {
+    co_yield computeUnion(result1->idTable(),
+                          IdTable{getResultWidth(), allocator()},
+                          _columnOrigins);
+  } else {
+    std::vector<size_t> permutation = computePermutation<true>();
+    for (IdTable& idTable : result1->idTables()) {
+      co_yield transformToCorrectColumnFormat(std::move(idTable), permutation);
+    }
+  }
+  if (result2->isFullyMaterialized()) {
+    co_yield computeUnion(IdTable{getResultWidth(), allocator()},
+                          result2->idTable(), _columnOrigins);
+  } else {
+    std::vector<size_t> permutation = computePermutation<false>();
+    for (IdTable& idTable : result2->idTables()) {
+      co_yield transformToCorrectColumnFormat(std::move(idTable), permutation);
+    }
+  }
+  std::array<const LocalVocab*, 2> vocabs{&result1->localVocab(),
+                                          &result2->localVocab()};
+  *localVocab = LocalVocab::merge(vocabs);
 }

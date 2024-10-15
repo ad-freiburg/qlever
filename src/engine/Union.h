@@ -70,8 +70,21 @@ class Union : public Operation {
   // A similar timeout-checking replacement for `std::fill`.
   void fillChunked(auto beg, auto end, const auto& value) const;
 
-  virtual ProtoResult computeResult(
-      [[maybe_unused]] bool requestLaziness) override;
+  virtual ProtoResult computeResult(bool requestLaziness) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
+
+  // Compute the permutation of the `IdTable` being yielded for the left or
+  // right child depending on `left`. This permutation can then be used to swap
+  // the columns without any copy operations.
+  template <bool left>
+  std::vector<size_t> computePermutation() const;
+
+  IdTable transformToCorrectColumnFormat(
+      IdTable idTable, const std::vector<size_t>& permutation) const;
+
+  cppcoro::generator<IdTable> computeResultLazily(
+      std::shared_ptr<const Result> result1,
+      std::shared_ptr<const Result> result2,
+      std::shared_ptr<LocalVocab> localVocab) const;
 };
