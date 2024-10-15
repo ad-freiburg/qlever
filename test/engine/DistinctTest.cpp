@@ -10,6 +10,18 @@
 #include "engine/NeutralElementOperation.h"
 
 using ad_utility::testing::makeAllocator;
+using V = Variable;
+
+namespace {
+// Convert a generator to a vector for easier comparison in assertions
+std::vector<IdTable> toVector(cppcoro::generator<IdTable> generator) {
+  std::vector<IdTable> result;
+  for (auto& table : generator) {
+    result.push_back(std::move(table));
+  }
+  return result;
+}
+}  // namespace
 
 TEST(Distinct, CacheKey) {
   // The cache key has to change when the subtree changes or when the
@@ -49,4 +61,91 @@ TEST(Distinct, distinctWithEmptyInput) {
   IdTable result = CALL_FIXED_SIZE(1, Distinct::distinct, input.clone(),
                                    std::vector<ColumnIndex>{}, std::nullopt);
   ASSERT_EQ(input, result);
+}
+
+// _____________________________________________________________________________
+TEST(Distinct, nonLazy) {
+  IdTable input{makeIdTableFromVector(
+      {{1, 1, 3, 7}, {6, 1, 3, 6}, {2, 2, 3, 5}, {3, 6, 5, 4}, {1, 6, 5, 1}})};
+
+  auto qec = ad_utility::testing::getQec();
+  qec->getQueryTreeCache().clearAll();
+
+  auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, std::move(input),
+      std::vector<std::optional<Variable>>{
+          {V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}}},
+      false, std::vector<ColumnIndex>{1, 2}, LocalVocab{}, std::nullopt, true);
+
+  Distinct distinct{qec, std::move(values), {1, 2}};
+
+  {
+    auto result =
+        distinct.getResult(false, ComputationMode::FULLY_MATERIALIZED);
+    ASSERT_TRUE(result->isFullyMaterialized());
+    EXPECT_EQ(
+        result->idTable(),
+        makeIdTableFromVector({{1, 1, 3, 7}, {2, 2, 3, 5}, {3, 6, 5, 4}}));
+  }
+
+  {
+    auto result = distinct.getResult(false, ComputationMode::LAZY_IF_SUPPORTED);
+    ASSERT_TRUE(result->isFullyMaterialized());
+    EXPECT_EQ(
+        result->idTable(),
+        makeIdTableFromVector({{1, 1, 3, 7}, {2, 2, 3, 5}, {3, 6, 5, 4}}));
+  }
+}
+
+// _____________________________________________________________________________
+TEST(Distinct, nonLazyWithLazyInputs) {
+  std::vector<IdTable> idTables{};
+  idTables.push_back(makeIdTableFromVector({{1, 1, 3, 7}}));
+  idTables.push_back(makeIdTableFromVector(
+      {{6, 1, 3, 6}, {2, 2, 3, 5}, {3, 6, 5, 4}, {1, 6, 5, 1}}));
+
+  auto qec = ad_utility::testing::getQec();
+  qec->getQueryTreeCache().clearAll();
+
+  auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, std::move(idTables),
+      std::vector<std::optional<Variable>>{
+          {V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}}},
+      false, std::vector<ColumnIndex>{1, 2});
+
+  Distinct distinct{qec, std::move(values), {1, 2}};
+
+  auto result = distinct.getResult(false, ComputationMode::FULLY_MATERIALIZED);
+  ASSERT_TRUE(result->isFullyMaterialized());
+  EXPECT_EQ(result->idTable(),
+            makeIdTableFromVector({{1, 1, 3, 7}, {2, 2, 3, 5}, {3, 6, 5, 4}}));
+}
+
+// _____________________________________________________________________________
+TEST(Distinct, lazyWithLazyInputs) {
+  std::vector<IdTable> idTables{};
+  idTables.push_back(makeIdTableFromVector({{1, 1, 3, 7}}));
+  idTables.push_back(makeIdTableFromVector(
+      {{6, 1, 3, 6}, {2, 2, 3, 5}, {3, 6, 5, 4}, {1, 6, 5, 1}}));
+
+  auto qec = ad_utility::testing::getQec();
+  qec->getQueryTreeCache().clearAll();
+
+  auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, std::move(idTables),
+      std::vector<std::optional<Variable>>{
+          {V{"?a"}, V{"?b"}, V{"?c"}, V{"?d"}}},
+      false, std::vector<ColumnIndex>{1, 2});
+
+  Distinct distinct{qec, std::move(values), {1, 2}};
+
+  auto result = distinct.getResult(false, ComputationMode::LAZY_IF_SUPPORTED);
+  ASSERT_FALSE(result->isFullyMaterialized());
+
+  auto m = matchesIdTable;
+  using ::testing::ElementsAre;
+  EXPECT_THAT(
+      toVector(std::move(result->idTables())),
+      ElementsAre(m(makeIdTableFromVector({{1, 1, 3, 7}})),
+                  m(makeIdTableFromVector({{2, 2, 3, 5}, {3, 6, 5, 4}}))));
 }

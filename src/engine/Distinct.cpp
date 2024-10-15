@@ -77,8 +77,8 @@ ProtoResult Distinct::computeResult(bool requestLaziness) {
   auto generator = CALL_FIXED_SIZE(
       width, &Distinct::lazyDistinct, std::move(subRes->idTables()),
       _keepIndices,
-      requestLaziness ? std::optional{IdTable{width, allocator()}}
-                      : std::nullopt);
+      requestLaziness ? std::nullopt
+                      : std::optional{IdTable{width, allocator()}});
   if (!requestLaziness) {
     IdTable result = cppcoro::getSingleElement(std::move(generator));
     return {std::move(result), resultSortedOn(), subRes->getSharedLocalVocab()};
@@ -105,12 +105,36 @@ IdTable Distinct::distinct(
     return true;
   };
 
-  auto subrange = std::ranges::unique(
-      result, [&matchesRow, &previousRow](const auto& a, const auto& b) {
-        return matchesRow(a, b) && (!previousRow.has_value() ||
-                                    !matchesRow(previousRow.value(), a));
-      });
-  result.erase(subrange.begin(), subrange.end());
+  // Variant of `std::ranges::unique` that allows to skip the first rows of
+  // elements found in the previous table.
+  auto first = std::ranges::find_if(result, [&matchesRow,
+                                             &previousRow](const auto& row) {
+    return !previousRow.has_value() || !matchesRow(row, previousRow.value());
+  });
+  auto last = result.end();
+
+  auto dest = result.begin();
+  if (first == dest) {
+    // Optimization to avoid redundant move operations.
+    first = std::ranges::adjacent_find(first, last, matchesRow);
+    dest = first;
+    if (first != last) {
+      ++first;
+    }
+  } else if (first != last) {
+    *dest = std::move(*first);
+  }
+
+  if (first != last) {
+    while (++first != last) {
+      if (!matchesRow(*dest, *first)) {
+        *++dest = std::move(*first);
+      }
+    }
+
+    result.erase(++dest, last);
+  }
+
   LOG(DEBUG) << "Distinct done.\n";
   return std::move(result).toDynamic();
 }
