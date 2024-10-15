@@ -34,7 +34,8 @@ TEST(Distinct, distinct) {
       {{1, 1, 3, 7}, {6, 1, 3, 6}, {2, 2, 3, 5}, {3, 6, 5, 4}, {1, 6, 5, 1}})};
 
   std::vector<ColumnIndex> keepIndices{{1, 2}};
-  IdTable result = CALL_FIXED_SIZE(4, Distinct::distinct, input, keepIndices);
+  IdTable result = CALL_FIXED_SIZE(4, Distinct::distinct, std::move(input),
+                                   keepIndices, std::nullopt);
 
   // For easier checking.
   IdTable expectedResult{
@@ -45,7 +46,7 @@ TEST(Distinct, distinct) {
 // _____________________________________________________________________________
 TEST(Distinct, distinctWithEmptyInput) {
   IdTable input{1, makeAllocator()};
-  IdTable result =
-      CALL_FIXED_SIZE(1, Distinct::distinct, input, std::vector<ColumnIndex>{});
+  IdTable result = CALL_FIXED_SIZE(1, Distinct::distinct, input.clone(),
+                                   std::vector<ColumnIndex>{}, std::nullopt);
   ASSERT_EQ(input, result);
 }

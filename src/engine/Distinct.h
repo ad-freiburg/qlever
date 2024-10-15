@@ -58,8 +58,11 @@ class Distinct : public Operation {
   // in keepIndices. The input needs to be sorted on the keep indices,
   // otherwise the result of this function is undefined.
   template <size_t WIDTH>
-  static IdTable distinct(const IdTable& dynInput,
-                          const std::vector<ColumnIndex>& keepIndices);
+  static IdTable distinct(
+      IdTable dynInput, const std::vector<ColumnIndex>& keepIndices,
+      std::optional<
+          std::reference_wrapper<typename IdTableStatic<WIDTH>::row_type>>
+          previousRow);
 
   FRIEND_TEST(Distinct, distinct);
   FRIEND_TEST(Distinct, distinctWithEmptyInput);

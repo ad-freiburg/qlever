@@ -40,30 +40,39 @@ ProtoResult Distinct::computeResult([[maybe_unused]] bool requestLaziness) {
 
   LOG(DEBUG) << "Distinct result computation..." << endl;
   size_t width = subtree_->getResultWidth();
-  IdTable idTable = CALL_FIXED_SIZE(width, &Distinct::distinct,
-                                    subRes->idTable(), _keepIndices);
+  IdTable idTable =
+      CALL_FIXED_SIZE(width, &Distinct::distinct, subRes->idTable().clone(),
+                      _keepIndices, std::nullopt);
   LOG(DEBUG) << "Distinct result computation done." << endl;
   return {std::move(idTable), resultSortedOn(), subRes->getSharedLocalVocab()};
 }
 
 // _____________________________________________________________________________
 template <size_t WIDTH>
-IdTable Distinct::distinct(const IdTable& dynInput,
-                           const std::vector<ColumnIndex>& keepIndices) {
+IdTable Distinct::distinct(
+    IdTable dynInput, const std::vector<ColumnIndex>& keepIndices,
+    std::optional<
+        std::reference_wrapper<typename IdTableStatic<WIDTH>::row_type>>
+        previousRow) {
   AD_CONTRACT_CHECK(keepIndices.size() <= dynInput.numColumns());
   LOG(DEBUG) << "Distinct on " << dynInput.size() << " elements.\n";
-  IdTableStatic<WIDTH> result = dynInput.clone().toStatic<WIDTH>();
+  IdTableStatic<WIDTH> result = std::move(dynInput).toStatic<WIDTH>();
 
-  auto last = std::unique(result.begin(), result.end(),
-                          [&keepIndices](const auto& a, const auto& b) {
-                            for (ColumnIndex i : keepIndices) {
-                              if (a[i] != b[i]) {
-                                return false;
-                              }
-                            }
-                            return true;
-                          });
-  result.erase(last, result.end());
+  auto matchesRow = [&keepIndices](const auto& a, const auto& b) {
+    for (ColumnIndex i : keepIndices) {
+      if (a[i] != b[i]) {
+        return false;
+      }
+    }
+    return true;
+  };
+
+  auto subrange = std::ranges::unique(
+      result, [&matchesRow, &previousRow](const auto& a, const auto& b) {
+        return matchesRow(a, b) && (!previousRow.has_value() ||
+                                    !matchesRow(previousRow.value().get(), a));
+      });
+  result.erase(subrange.begin(), subrange.end());
   LOG(DEBUG) << "Distinct done.\n";
   return std::move(result).toDynamic();
 }
