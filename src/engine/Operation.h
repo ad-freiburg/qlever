@@ -104,6 +104,11 @@ class Operation {
     }
   }
 
+  // Holds a precomputed Result of this operation if it is the sibling of a
+  // Service operation.
+  std::optional<std::shared_ptr<const Result>>
+      precomputedResultBecauseSiblingOfService_;
+
  private:
   virtual uint64_t getSizeEstimateBeforeLimit() = 0;
 

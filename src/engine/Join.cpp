@@ -14,6 +14,7 @@
 #include "engine/AddCombinedRowToTable.h"
 #include "engine/CallFixedSize.h"
 #include "engine/IndexScan.h"
+#include "engine/Service.h"
 #include "global/Constants.h"
 #include "global/Id.h"
 #include "global/RuntimeParameters.h"
@@ -154,6 +155,11 @@ ProtoResult Join::computeResult([[maybe_unused]] bool requestLaziness) {
       return {std::move(idTable), resultSortedOn(), LocalVocab{}};
     }
   }
+
+  // If one of the RootOperations is a Service, precompute it's sibling's result
+  // for potential Service clause optimization.
+  Service::precomputeSiblingResult(_left->getRootOperation(),
+                                   _right->getRootOperation(), false);
 
   std::shared_ptr<const Result> leftRes =
       leftResIfCached ? leftResIfCached : _left->getResult();

@@ -429,6 +429,8 @@ TEST_F(ServiceTest, computeResult) {
                                              {"blu", "bla", "y"},
                                              {"bli", "blu", "y"}})),
         siblingTree};
+
+    serviceOperation5.precomputedSiblingResult_ = siblingTree->getResult();
     EXPECT_NO_THROW(serviceOperation5.computeResultOnlyForTesting());
 
     // Check 6: SiblingTree's rows exceed maxValue
@@ -645,4 +647,78 @@ TEST_F(ServiceTest, idToValueForValuesClause) {
       idToVc(index, Id::makeFromGeoPoint(GeoPoint(70.5, 130.2)), localVocab)
           .value(),
       absl::StrCat("\"POINT(130.200000 70.500000)\"^^<", GEO_WKT_LITERAL, ">"));
+}
+
+// ____________________________________________________________________________
+TEST_F(ServiceTest, precomputeSiblingResult) {
+  auto service = std::make_shared<Service>(
+      testQec,
+      parsedQuery::Service{
+          {Variable{"?x"}, Variable{"?y"}},
+          TripleComponent::Iri::fromIriref("<http://localhorst/api>"),
+          "PREFIX doof: <http://doof.org>",
+          "{ }",
+          true},
+      getResultFunctionFactory(
+          "http://localhorst:80/api",
+          "PREFIX doof: <http://doof.org> SELECT ?x ?y WHERE { }",
+          genJsonResult({"x", "y"}, {{"a", "b"}}),
+          boost::beast::http::status::ok, "application/sparql-results+json"));
+
+  auto service2 = std::make_shared<Service>(*service);
+
+  auto iri = ad_utility::testing::iri;
+  using TC = TripleComponent;
+  auto sibling = std::make_shared<Values>(
+      testQec, parsedQuery::SparqlValues{{Variable{"?x"}, Variable{"?y"}},
+                                         {{TC(iri("<x>")), TC(iri("<y>"))}}});
+
+  auto reset = [&]() {
+    service->precomputedSiblingResult_.reset();
+    service2->precomputedResultBecauseSiblingOfService_.reset();
+    sibling->precomputedResultBecauseSiblingOfService_.reset();
+  };
+
+  // Right requested but it is not a Service -> no computation
+  Service::precomputeSiblingResult(service, sibling, true);
+  EXPECT_FALSE(sibling->precomputedResultBecauseSiblingOfService_.has_value());
+  EXPECT_FALSE(service->precomputedSiblingResult_.has_value());
+  EXPECT_FALSE(service->precomputedResultBecauseSiblingOfService_.has_value());
+  reset();
+
+  // Right requested and two Service operations -> sibling computed
+  Service::precomputeSiblingResult(service, service2, true);
+  EXPECT_TRUE(service2->precomputedResultBecauseSiblingOfService_.has_value());
+  EXPECT_TRUE(service->precomputedSiblingResult_.has_value());
+  EXPECT_FALSE(service->precomputedResultBecauseSiblingOfService_.has_value());
+  reset();
+
+  // Two Service operations -> no computation
+  Service::precomputeSiblingResult(service, service2, false);
+  EXPECT_FALSE(service2->precomputedResultBecauseSiblingOfService_.has_value());
+  EXPECT_FALSE(service->precomputedSiblingResult_.has_value());
+  EXPECT_FALSE(service->precomputedResultBecauseSiblingOfService_.has_value());
+  reset();
+
+  // Right requested and it is a Service, however the sibling-results size
+  // exceeds the allowed threshold and will not be used by the service
+  // -> no sibling-result reference for the service
+  const auto maxValueRowsDefault =
+      RuntimeParameters().get<"service-max-value-rows">();
+  RuntimeParameters().set<"service-max-value-rows">(0);
+
+  Service::precomputeSiblingResult(sibling, service, true);
+  EXPECT_TRUE(sibling->precomputedResultBecauseSiblingOfService_.has_value());
+  EXPECT_FALSE(service->precomputedSiblingResult_.has_value());
+  EXPECT_FALSE(service->precomputedResultBecauseSiblingOfService_.has_value());
+  reset();
+
+  RuntimeParameters().set<"service-max-value-rows">(maxValueRowsDefault);
+
+  // One of the operations is a service, and the siblings-result size doesn't
+  // exceed the allowed threshold -> sibling-result reference for the service
+  Service::precomputeSiblingResult(sibling, service, false);
+  EXPECT_TRUE(sibling->precomputedResultBecauseSiblingOfService_.has_value());
+  EXPECT_TRUE(service->precomputedSiblingResult_.has_value());
+  EXPECT_FALSE(service->precomputedResultBecauseSiblingOfService_.has_value());
 }
