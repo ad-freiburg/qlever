@@ -504,9 +504,10 @@ TEST(IndexTest, loggingAndSettingOfParallelParsing) {
   {
     testing::internal::CaptureStdout();
     IndexImpl::prepareInputFileSpecificationsAndLog(files, true);
-    EXPECT_THAT(testing::internal::GetCapturedStdout(),
-                AllOf(HasSubstr("from singleFile.ttl"), HasSubstr("parallel"),
-                      HasSubstr("please use the dedicated command line")));
+    EXPECT_THAT(
+        testing::internal::GetCapturedStdout(),
+        AllOf(HasSubstr("from singleFile.ttl"), HasSubstr("This is deprecated"),
+              HasSubstr("--parse-parallel")));
     EXPECT_TRUE(files.at(0).parseInParallel_);
   }
 
@@ -517,7 +518,7 @@ TEST(IndexTest, loggingAndSettingOfParallelParsing) {
     IndexImpl::prepareInputFileSpecificationsAndLog(files, false);
     EXPECT_THAT(testing::internal::GetCapturedStdout(),
                 AllOf(HasSubstr("from 2 distinct input files"),
-                      Not(HasSubstr("parallel"))));
+                      Not(HasSubstr("This is deprecated"))));
     EXPECT_EQ(files, filesCopy);
   }
 

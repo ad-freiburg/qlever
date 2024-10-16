@@ -299,16 +299,16 @@ void IndexImpl::prepareInputFileSpecificationsAndLog(
   }
   if (parallelParsingSpecifiedViaJson) {
     if (files.size() == 1) {
-      LOG(WARN) << "Parallel parsing was specified via the settings JSON. This "
-                   "is deprecated, please use the dedicated command line "
-                   "option to enable the parallel parsing."
+      LOG(WARN) << "Parallel parsing was set to `true` in the settings JSON. "
+                   "This is deprecated, please use the command-line option "
+                   "--parse-parallel or -p instead"
                 << std::endl;
       files.at(0).parseInParallel_ = true;
     } else {
       throw std::runtime_error{
-          "For more than one input file, the parallel parsing may not be "
+          "For more than one input file, the parallel parsing must not be "
           "specified via the settings JSON file, but has to be specified via "
-          "the command line options"};
+          "the command-line option --parse-parallel or -p"};
     }
   }
 }

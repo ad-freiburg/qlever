@@ -1,7 +1,6 @@
 // Copyright 2018, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach(joka921) <johannes.kalmbach@gmail.com>
-//
 
 #include "parser/RdfParser.h"
 
@@ -1089,13 +1088,13 @@ RdfParallelParser<T>::~RdfParallelParser() {
       "During the destruction of a RdfParallelParser");
 }
 
-// Create a parser for a single file for an `InputFileSpecification`. The type
-// of the parser depends on the filetype (Turtle or NQuad) and on whether the
+// Create a parser for a single file of an `InputFileSpecification`. The type
+// of the parser depends on the filetype (Turtle or N-Quads) and on whether the
 // file is to be parsed in parallel.
 template <typename TokenizerT>
 static std::unique_ptr<RdfParserBase> makeSingleRdfParser(
     const Index::InputFileSpecification& file) {
-  auto defaultGraph = [file]() -> TripleComponent {
+  auto graph = [file]() -> TripleComponent {
     if (file.defaultGraph_.has_value()) {
       return TripleComponent::Iri::fromIrirefWithoutBrackets(
           file.defaultGraph_.value());
@@ -1104,7 +1103,7 @@ static std::unique_ptr<RdfParserBase> makeSingleRdfParser(
     }
   };
   auto makeRdfParserImpl = [&filename = file.filename_,
-                            &defaultGraph]<int useParallel, int isTurtleInput>()
+                            &graph]<int useParallel, int isTurtleInput>()
       -> std::unique_ptr<RdfParserBase> {
     using InnerParser =
         std::conditional_t<isTurtleInput == 1, TurtleParser<TokenizerT>,
@@ -1112,11 +1111,12 @@ static std::unique_ptr<RdfParserBase> makeSingleRdfParser(
     using Parser =
         std::conditional_t<useParallel == 1, RdfParallelParser<InnerParser>,
                            RdfStreamParser<InnerParser>>;
-    return std::make_unique<Parser>(filename, defaultGraph());
+    return std::make_unique<Parser>(filename, graph());
   };
 
-  // `callFixedSize` litfts runtime integers to compile time integers. We use it
-  // here to create the correct combinations of template arguments.
+  // The call to `callFixedSize` lifts runtime integers to compile time
+  // integers. We use it here to create the correct combination of template
+  // arguments.
   return ad_utility::callFixedSize(
       std::array{file.parseInParallel_ ? 1 : 0,
                  file.filetype_ == Index::Filetype::Turtle ? 1 : 0},
@@ -1128,7 +1128,7 @@ template <typename T>
 RdfMultifileParser<T>::RdfMultifileParser(
     const std::vector<qlever::InputFileSpecification>& files) {
   using namespace qlever;
-  // This lambda parses a single file and pushes the results and all occuring
+  // This lambda parses a single file and pushes the results and all occurring
   // exceptions to the `finishedBatchQueue_`.
   auto parseFile = [this](const InputFileSpecification& file) {
     try {
@@ -1136,7 +1136,8 @@ RdfMultifileParser<T>::RdfMultifileParser(
       while (auto batch = parser->getBatch()) {
         bool active = finishedBatchQueue_.push(std::move(batch.value()));
         if (!active) {
-          // The queue was finished prematurely, stop this thread.
+          // The queue was finished prematurely, stop this thread. This is
+          // important to avoid deadlocks.
           return;
         }
       }
@@ -1157,6 +1158,8 @@ RdfMultifileParser<T>::RdfMultifileParser(
       numActiveParsers_++;
       bool active = parsingQueue_.push(std::bind_front(parseFile, file));
       if (!active) {
+        // The queue was finished prematurely, stop this thread. This is
+        // important to avoid deadlocks.
         return;
       }
     }
