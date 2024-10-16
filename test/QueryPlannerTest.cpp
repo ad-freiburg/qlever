@@ -1430,6 +1430,59 @@ TEST(QueryPlanner, PathSearchTwoVariablesForSource) {
       parsedQuery::PathSearchException);
 }
 
+// __________________________________________________________________________
+TEST(QueryPlanner, PathSearchUnsupportedElement) {
+  auto qec = ad_utility::testing::getQec("<x> <p> <y>. <y> <p> <z>");
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+
+  auto query =
+      "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
+      "SELECT ?start ?end ?path ?edge WHERE {"
+      "SERVICE pathSearch: {"
+      "_:path pathSearch:algorithm pathSearch:allPaths ;"
+      "pathSearch:source ?source1 ;"
+      "pathSearch:source ?source2 ;"
+      "pathSearch:target <z> ;"
+      "pathSearch:pathColumn ?path ;"
+      "pathSearch:edgeColumn ?edge ;"
+      "pathSearch:start ?start;"
+      "pathSearch:end ?end;"
+      "VALUES ?middle {<m1>}"
+      "{SELECT * WHERE {"
+      "?start <p> ?end."
+      "}}}}";
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      h::parseAndPlan(std::move(query), qec),
+      HasSubstr("Unsupported element in pathSearch"),
+      parsedQuery::PathSearchException);
+}
+
+// __________________________________________________________________________
+TEST(QueryPlanner, PathSearchUnsupportedAlgorithm) {
+  auto qec = ad_utility::testing::getQec("<x> <p> <y>. <y> <p> <z>");
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+
+  auto query =
+      "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
+      "SELECT ?start ?end ?path ?edge WHERE {"
+      "SERVICE pathSearch: {"
+      "_:path pathSearch:algorithm pathSearch:shortestPath ;"
+      "pathSearch:source ?source1 ;"
+      "pathSearch:source ?source2 ;"
+      "pathSearch:target <z> ;"
+      "pathSearch:pathColumn ?path ;"
+      "pathSearch:edgeColumn ?edge ;"
+      "pathSearch:start ?start;"
+      "pathSearch:end ?end;"
+      "{SELECT * WHERE {"
+      "?start <p> ?end."
+      "}}}}";
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      h::parseAndPlan(std::move(query), qec),
+      HasSubstr("Unsupported algorithm in pathSearch"),
+      parsedQuery::PathSearchException);
+}
+
 TEST(QueryPlanner, SpatialJoinViaMaxDistPredicate) {
   auto scan = h::IndexScanFromStrings;
   h::expect(
