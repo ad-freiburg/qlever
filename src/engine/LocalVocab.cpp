@@ -81,6 +81,7 @@ std::vector<LocalVocab::LiteralOrIri> LocalVocab::getAllWordsForTesting()
 // _____________________________________________________________________________
 BlankNodeIndex LocalVocab::getBlankNodeIndex(
     ad_utility::BlankNodeManager* blankNodeManager) {
+  AD_CONTRACT_CHECK(blankNodeManager);
   // Initialize the `localBlankNodeManager_` if it doesn't exist yet.
   if (!localBlankNodeManager_) [[unlikely]] {
     localBlankNodeManager_ =

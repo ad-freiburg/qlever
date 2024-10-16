@@ -15,11 +15,17 @@
 
 namespace ad_utility {
 /*
- * Manager class for Blank node indices added after indexing time.
+ * Manager class owned by an `Index` to manage currently available indices for
+ * blank nodes to be added during runtime. The intention is to use the same
+ * `BlankNodeIndex`-Datatype as for blank nodes given at indexing time, by
+ * setting their count as the minimum index for the ones added at runtime.
+ * A `LocalVocab` can register new blank nodes (e.g. resulting from a `Service`
+ * operation) by obtaining a `Block` of currently unused indices using it's own
+ * `LocalBlankNodeManager` from the `BlankNodeManager`.
  */
 class BlankNodeManager {
  public:
-  // Minimum index.
+  // Minimum blank node index.
   const uint64_t minIndex_;
 
   // Number of indices that make up a single block.
@@ -38,7 +44,7 @@ class BlankNodeManager {
 
  public:
   // Constructor, where `minIndex` is the minimum index such that all managed
-  // indices are in [`minIndex_`, `ValueId::maxIndex`]. Currently `minIndex_` is
+  // indices are in [`minIndex_`, `ValueId::maxIndex`]. `minIndex_` is
   // determined by the number of BlankNodes in the current Index.
   explicit BlankNodeManager(uint64_t minIndex = 0);
   ~BlankNodeManager() = default;
@@ -53,7 +59,7 @@ class BlankNodeManager {
    public:
     ~Block() = default;
     // The index of this block.
-    uint64_t blockIdx_;
+    const uint64_t blockIdx_;
     // The next free index within this block.
     uint64_t nextIdx_;
   };
@@ -63,6 +69,9 @@ class BlankNodeManager {
    public:
     explicit LocalBlankNodeManager(BlankNodeManager* blankNodeManager);
     ~LocalBlankNodeManager();
+
+    LocalBlankNodeManager(LocalBlankNodeManager&) = delete;
+    LocalBlankNodeManager& operator=(const LocalBlankNodeManager&) = delete;
 
     // Get a new id.
     [[nodiscard]] uint64_t getId();
@@ -74,16 +83,14 @@ class BlankNodeManager {
     // Reference of the BlankNodeManager, used to free the reserved blocks.
     BlankNodeManager* const blankNodeManager_;
 
+    // The first index after the current Block.
+    uint64_t idxAfterCurrentBlock_{0};
+
     FRIEND_TEST(BlankNodeManager, LocalBlankNodeManagerGetID);
   };
 
-  void setInitialIndex(uint64_t idx);
-
   // Allocate and retrieve a block of free ids.
   [[nodiscard]] Block allocateBlock();
-
-  // Free a block of ids.
-  void freeBlock(uint64_t blockIndex);
 
   FRIEND_TEST(BlankNodeManager, blockAllocationAndFree);
 };

@@ -486,3 +486,14 @@ TEST(IndexTest, trivialGettersAndSetters) {
   EXPECT_EQ(index.memoryLimitIndexBuilding(), 7_kB);
   EXPECT_EQ(std::as_const(index).memoryLimitIndexBuilding(), 7_kB);
 }
+
+TEST(IndexTest, getBlankNodeManager) {
+  // The `blankNodeManager_` is initialized after initializing the Index itself.
+  // Therefore we expect a throw when the getter is called by an
+  // uninitialized Index.
+  Index index{ad_utility::makeUnlimitedAllocator<Id>()};
+  EXPECT_ANY_THROW(index.getBlankNodeManager());
+
+  const Index& index2 = getQec("")->getIndex();
+  EXPECT_NO_THROW(index2.getBlankNodeManager());
+}

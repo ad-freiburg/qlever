@@ -16,23 +16,18 @@ BlankNodeManager::BlankNodeManager(uint64_t minIndex)
 BlankNodeManager::Block BlankNodeManager::allocateBlock() {
   // The Random-Generation Algorithm's performance is reduced once the number of
   // used blocks exceeds a limit.
-  AD_CORRECTNESS_CHECK(usedBlocksSet_.rlock()->size() <
-                       totalAvailableBlocks_ / 256);
+  AD_CORRECTNESS_CHECK(
+      usedBlocksSet_.rlock()->size() < totalAvailableBlocks_ / 256,
+      absl::StrCat("Critical high number of blank node blocks in use: ",
+                   usedBlocksSet_.rlock()->size(), " blocks"));
 
   uint64_t newBlockIndex = randBlockIndex_();
-  {
-    auto usedBlocksSetPtr_ = usedBlocksSet_.wlock();
-    while (usedBlocksSetPtr_->contains(newBlockIndex)) {
-      newBlockIndex = randBlockIndex_();
-    }
-    usedBlocksSetPtr_->insert(newBlockIndex);
+  auto usedBlocksSetPtr = usedBlocksSet_.wlock();
+  while (usedBlocksSetPtr->contains(newBlockIndex)) {
+    newBlockIndex = randBlockIndex_();
   }
+  usedBlocksSetPtr->insert(newBlockIndex);
   return Block(newBlockIndex, minIndex_ + newBlockIndex * blockSize_);
-}
-
-// _____________________________________________________________________________
-void BlankNodeManager::freeBlock(uint64_t blockIndex) {
-  usedBlocksSet_.wlock()->erase(blockIndex);
 }
 
 // _____________________________________________________________________________
@@ -46,18 +41,17 @@ BlankNodeManager::LocalBlankNodeManager::LocalBlankNodeManager(
 
 // _____________________________________________________________________________
 BlankNodeManager::LocalBlankNodeManager::~LocalBlankNodeManager() {
+  auto ptr = blankNodeManager_->usedBlocksSet_.wlock();
   for (auto block : blocks_) {
-    blankNodeManager_->freeBlock(block.blockIdx_);
+    ptr->erase(block.blockIdx_);
   }
 }
 
 // _____________________________________________________________________________
 uint64_t BlankNodeManager::LocalBlankNodeManager::getId() {
-  if (blocks_.empty() ||
-      blocks_.back().nextIdx_ ==
-          (blankNodeManager_->minIndex_ + blocks_.back().blockIdx_ + 1) *
-              blockSize_) {
+  if (blocks_.empty() || blocks_.back().nextIdx_ == idxAfterCurrentBlock_) {
     blocks_.emplace_back(blankNodeManager_->allocateBlock());
+    idxAfterCurrentBlock_ = blocks_.back().nextIdx_ + blockSize_;
   }
   return blocks_.back().nextIdx_++;
 }

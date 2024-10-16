@@ -6,17 +6,13 @@
 
 #pragma once
 
-#include <cstdint>
-#include <limits>
 #include <memory>
-#include <shared_mutex>
 #include <string>
 
 #include "engine/QueryPlanningCostFactors.h"
 #include "engine/Result.h"
 #include "engine/RuntimeInformation.h"
 #include "engine/SortPerformanceEstimator.h"
-#include "global/Constants.h"
 #include "global/Id.h"
 #include "index/Index.h"
 #include "util/Cache.h"

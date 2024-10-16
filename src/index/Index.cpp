@@ -57,6 +57,7 @@ auto Index::getTextVocab() const -> const TextVocab& {
 }
 
 ad_utility::BlankNodeManager* Index::getBlankNodeManager() const {
+  AD_CONTRACT_CHECK(pimpl_->blankNodeManager_);
   return pimpl_->blankNodeManager_.get();
 }
 

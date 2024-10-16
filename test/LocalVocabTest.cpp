@@ -370,6 +370,7 @@ TEST(LocalVocab, propagation) {
   // they never introduce any local vocab.
 }
 
+// _____________________________________________________________________________
 TEST(LocalVocab, getBlankNodeIndex) {
   ad_utility::BlankNodeManager bnm(0);
   LocalVocab v;

@@ -4,7 +4,9 @@
 
 #include <gtest/gtest.h>
 
+#include "gmock/gmock.h"
 #include "util/BlankNodeManager.h"
+#include "util/GTestHelpers.h"
 
 namespace ad_utility {
 TEST(BlankNodeManager, blockAllocationAndFree) {
@@ -45,10 +47,10 @@ TEST(BlankNodeManager, maxNumOfBlocks) {
   // Mock a high `minIndex_` to simulate reduced space in the usedBlocksSet_
   BlankNodeManager bnm(ValueId::maxIndex - 256 * BlankNodeManager::blockSize_ +
                        2);
-  auto allocateBlock = [&bnm]() {
-    [[maybe_unused]] auto _ = bnm.allocateBlock();
-  };
-  EXPECT_ANY_THROW(allocateBlock());
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      [[maybe_unused]] auto _ = bnm.allocateBlock(),
+      ::testing::HasSubstr(
+          "Critical high number of blank node blocks in use:"));
 }
 
 }  // namespace ad_utility
