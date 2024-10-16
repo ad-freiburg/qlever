@@ -78,7 +78,7 @@ class Union : public Operation {
   // right child depending on `left`. This permutation can then be used to swap
   // the columns without any copy operations.
   template <bool left>
-  std::vector<size_t> computePermutation() const;
+  std::vector<ColumnIndex> computePermutation() const;
 
   // Take the given `IdTable`, add any missing columns to it (filled with
   // undefined values) and permutate the columns to match the end result.
