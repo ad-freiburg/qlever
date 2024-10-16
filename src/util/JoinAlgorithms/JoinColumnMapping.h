@@ -128,7 +128,7 @@ struct IdTableAndFirstCol {
   auto begin() const { return col().begin(); }
   auto end() const { return col().end(); }
 
-  bool empty() { return col().empty(); }
+  bool empty() const { return col().empty(); }
 
   const Id& operator[](size_t idx) const { return col()[idx]; }
 
