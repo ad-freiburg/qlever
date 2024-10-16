@@ -51,18 +51,45 @@ class Union : public Operation {
 
   const static size_t NO_COLUMN;
 
+  static constexpr size_t chunkSize = 1'000'000;
+
   // The method is declared here to make it unit testable
-  void computeUnion(IdTable* inputTable, const IdTable& left,
-                    const IdTable& right,
-                    const std::vector<std::array<size_t, 2>>& columnOrigins);
+  IdTable computeUnion(
+      const IdTable& left, const IdTable& right,
+      const std::vector<std::array<size_t, 2>>& columnOrigins) const;
 
   vector<QueryExecutionTree*> getChildren() override {
     return {_subtrees[0].get(), _subtrees[1].get()};
   }
 
  private:
-  virtual ProtoResult computeResult(
-      [[maybe_unused]] bool requestLaziness) override;
+  // A drop-in replacement for `std::copy` that performs the copying in chunks
+  // of `chunkSize` and checks the timeout after each chunk.
+  void copyChunked(auto beg, auto end, auto target) const;
+
+  // A similar timeout-checking replacement for `std::fill`.
+  void fillChunked(auto beg, auto end, const auto& value) const;
+
+  ProtoResult computeResult(bool requestLaziness) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
+
+  // Compute the permutation of the `IdTable` being yielded for the left or
+  // right child depending on `left`. This permutation can then be used to swap
+  // the columns without any copy operations.
+  template <bool left>
+  std::vector<ColumnIndex> computePermutation() const;
+
+  // Take the given `IdTable`, add any missing columns to it (filled with
+  // undefined values) and permutate the columns to match the end result.
+  IdTable transformToCorrectColumnFormat(
+      IdTable idTable, const std::vector<ColumnIndex>& permutation) const;
+
+  // Create a generator that yields the `IdTable` for the left or right child
+  // one after another and apply a potential differing permutation to it. Write
+  // the merged LocalVocab to the given `LocalVocab` object at the end.
+  cppcoro::generator<IdTable> computeResultLazily(
+      std::shared_ptr<const Result> result1,
+      std::shared_ptr<const Result> result2,
+      std::shared_ptr<LocalVocab> localVocab) const;
 };
