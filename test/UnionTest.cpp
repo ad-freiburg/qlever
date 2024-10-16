@@ -74,7 +74,7 @@ TEST(Union, computeUnionLarge) {
 
 // _____________________________________________________________________________
 TEST(Union, computeUnionLazy) {
-  auto runTest = [](bool nonLazyChilds,
+  auto runTest = [](bool nonLazyChildren,
                     ad_utility::source_location loc =
                         ad_utility::source_location::current()) {
     auto l = generateLocationTrace(loc);
@@ -83,12 +83,14 @@ TEST(Union, computeUnionLazy) {
     IdTable left = makeIdTableFromVector({{V(1)}, {V(2)}, {V(3)}});
     auto leftT = ad_utility::makeExecutionTree<ValuesForTesting>(
         qec, std::move(left), Vars{Variable{"?x"}}, false,
-        std::vector<ColumnIndex>{}, LocalVocab{}, std::nullopt, nonLazyChilds);
+        std::vector<ColumnIndex>{}, LocalVocab{}, std::nullopt,
+        nonLazyChildren);
 
     IdTable right = makeIdTableFromVector({{V(4), V(5)}, {V(6), V(7)}});
     auto rightT = ad_utility::makeExecutionTree<ValuesForTesting>(
         qec, std::move(right), Vars{Variable{"?u"}, Variable{"?x"}}, false,
-        std::vector<ColumnIndex>{}, LocalVocab{}, std::nullopt, nonLazyChilds);
+        std::vector<ColumnIndex>{}, LocalVocab{}, std::nullopt,
+        nonLazyChildren);
 
     Union u{qec, std::move(leftT), std::move(rightT)};
     auto resultTable = u.computeResultOnlyForTesting(true);

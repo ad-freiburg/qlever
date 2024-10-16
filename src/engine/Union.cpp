@@ -266,16 +266,7 @@ IdTable Union::transformToCorrectColumnFormat(
                       Id::makeUndefined());
   }
 
-  // i + 1 because once everything expect the last column is in the correct
-  // position, the last column is already in the correct position so the last
-  // iteration would always swap the last column with itself.
-  for (size_t i = 0; i + 1 < permutation.size(); ++i) {
-    size_t ind = permutation[i];
-    while (ind < i) {
-      ind = permutation[ind];
-    }
-    idTable.swapColumns(i, ind);
-  }
+  idTable.setColumnSubset(permutation);
   return idTable;
 }
 
@@ -284,21 +275,20 @@ cppcoro::generator<IdTable> Union::computeResultLazily(
     std::shared_ptr<const Result> result1,
     std::shared_ptr<const Result> result2,
     std::shared_ptr<LocalVocab> localVocab) const {
+  std::vector<size_t> permutation = computePermutation<true>();
   if (result1->isFullyMaterialized()) {
-    co_yield computeUnion(result1->idTable(),
-                          IdTable{getResultWidth(), allocator()},
-                          _columnOrigins);
+    co_yield transformToCorrectColumnFormat(result1->idTable().clone(),
+                                            permutation);
   } else {
-    std::vector<size_t> permutation = computePermutation<true>();
     for (IdTable& idTable : result1->idTables()) {
       co_yield transformToCorrectColumnFormat(std::move(idTable), permutation);
     }
   }
+  permutation = computePermutation<false>();
   if (result2->isFullyMaterialized()) {
-    co_yield computeUnion(IdTable{getResultWidth(), allocator()},
-                          result2->idTable(), _columnOrigins);
+    co_yield transformToCorrectColumnFormat(result2->idTable().clone(),
+                                            permutation);
   } else {
-    std::vector<size_t> permutation = computePermutation<false>();
     for (IdTable& idTable : result2->idTables()) {
       co_yield transformToCorrectColumnFormat(std::move(idTable), permutation);
     }
