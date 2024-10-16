@@ -123,7 +123,7 @@ auto getFiletype = [](std::optional<std::string_view> filetype,
   AD_FAIL();
 };
 
-// Get paramter values at the given index. If the vector is empty, return the
+// Get parameter values at the given index. If the vector is empty, return the
 // given `defaultValue`. If the vector has exactly one element, return that
 // element, no matter what the index is.
 template <typename T>
