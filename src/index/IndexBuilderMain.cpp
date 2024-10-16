@@ -49,14 +49,14 @@ void writeStxxlConfigFile(const string& location, const string& tail) {
              << STXXL_DISK_SIZE_INDEX_BUILDER << ",syscall\n";
 }
 
-// Check, that the `values` has exactly one or `numFiles` many entries. If
-// `allowZero` is true, then an empty vector will also be accepted. If this
+// Check that `values` has exactly one or `numFiles` many entries. If
+// `allowEmpty` is true, then an empty vector will also be accepted. If this
 // condition is violated, throw an exception. This is used to validate the
 // parameters for file types and default graphs.
 static void checkNumParameterValues(const auto& values, size_t numFiles,
-                                    bool allowZero,
+                                    bool allowEmpty,
                                     std::string_view parameterName) {
-  if (allowZero && values.empty()) {
+  if (allowEmpty && values.empty()) {
     return;
   }
   if (values.size() == 1 || values.size() == numFiles) {
@@ -67,7 +67,7 @@ static void checkNumParameterValues(const auto& values, size_t numFiles,
       "\" must be specified either exactly once (in which case it is "
       "used for all input files) or exactly as many times as there are "
       "input files, in which case each input file has its own value.");
-  if (allowZero) {
+  if (allowEmpty) {
     absl::StrAppend(&error,
                     " The parameter can also be omitted entirely, in which "
                     " case a default value is used for all input files.");
@@ -95,7 +95,7 @@ qlever::Filetype getFiletype(std::optional<std::string_view> filetype,
       return result.value();
     } else {
       throw std::runtime_error{
-          absl::StrCat("The parameter --file-format, -F must be one of "
+          absl::StrCat("The value of --file-format or -F must be one of "
                        "`ttl`, `nt`, or `nq`, but is `",
                        filetype.value(), "`")};
     }
@@ -123,8 +123,8 @@ qlever::Filetype getFiletype(std::optional<std::string_view> filetype,
   AD_FAIL();
 }
 
-// Get parameter values at the given index. If the vector is empty, return the
-// given `defaultValue`. If the vector has exactly one element, return that
+// Get the parameter value at the given index. If the vector is empty, return
+// the given `defaultValue`. If the vector has exactly one element, return that
 // element, no matter what the index is.
 template <typename T>
 T getParameterValue(size_t idx, const auto& values, const T& defaultValue) {
@@ -186,9 +186,9 @@ int main(int argc, char** argv) {
       "or once per file, or not at all (in that case, the format is deduced "
       "from the filename suffix if possible).");
   add("default-graph,g", po::value(&defaultGraphs),
-      "The graph IRI without angle brackets. If set to `-`, the default graph "
-      "will be used. Can be omitted (then all files use the default graph), "
-      "specified once (then all files use that graph), or once per file.");
+      "The graph IRI without angle brackets. Write `-` for the default graph. "
+      "Can be omitted (then all files use the default graph), specified once "
+      "(then all files use that graph), or once per file.");
   add("parse-parallel,p", po::value(&parseParallel),
       "Enable or disable the parallel parser for all files (if specified once) "
       "or once per input file. Parallel parsing works for all input files "

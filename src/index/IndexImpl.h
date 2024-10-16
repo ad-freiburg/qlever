@@ -762,9 +762,9 @@ class IndexImpl {
   void addInternalStatisticsToConfiguration(size_t numTriplesInternal,
                                             size_t numPredicatesInternal);
 
-  // Write information from the given `InputFileSpecification` to the log and
-  // make a few checks.
-  static void prepareInputFileSpecificationsAndLog(
-      std::vector<Index::InputFileSpecification>& files,
+  // Update `InputFileSpecification` based on `parallelParsingSpecifiedViaJson`
+  // and write a summary to the log.
+  static void updateInputFileSpecificationsAndLog(
+      std::vector<Index::InputFileSpecification>& spec,
       bool parallelParsingSpecifiedViaJson);
 };

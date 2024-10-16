@@ -287,28 +287,28 @@ std::pair<size_t, size_t> IndexImpl::createInternalPSOandPOS(
 }
 
 // _____________________________________________________________________________
-void IndexImpl::prepareInputFileSpecificationsAndLog(
-    std::vector<Index::InputFileSpecification>& files,
+void IndexImpl::updateInputFileSpecificationsAndLog(
+    std::vector<Index::InputFileSpecification>& spec,
     bool parallelParsingSpecifiedViaJson) {
-  if (files.size() == 1) {
-    LOG(INFO) << "Processing input triples from " << files.at(0).filename_
-              << " ..." << std::endl;
+  if (spec.size() == 1) {
+    LOG(INFO) << "Processing triples from " << spec.at(0).filename_ << " ..."
+              << std::endl;
   } else {
-    LOG(INFO) << "Processing input triples from " << files.size()
-              << " distinct input files" << std::endl;
+    LOG(INFO) << "Processing triples from " << spec.size()
+              << " input streams ..." << std::endl;
   }
   if (parallelParsingSpecifiedViaJson) {
-    if (files.size() == 1) {
-      LOG(WARN) << "Parallel parsing was set to `true` in the settings JSON. "
-                   "This is deprecated, please use the command-line option "
-                   "--parse-parallel or -p instead"
+    if (spec.size() == 1) {
+      LOG(WARN) << "Parallel parsing set to `true` in the `.settings.json` "
+                   "file; this is deprecated, please use the command-line "
+                   " option --parse-parallel or -p instead"
                 << std::endl;
-      files.at(0).parseInParallel_ = true;
+      spec.at(0).parseInParallel_ = true;
     } else {
       throw std::runtime_error{
           "For more than one input file, the parallel parsing must not be "
-          "specified via the settings JSON file, but has to be specified via "
-          "the command-line option --parse-parallel or -p"};
+          "specified via the `.settings.json` file, but has to be specified "
+          " via the command-line option --parse-parallel or -p"};
     }
   }
 }
@@ -323,7 +323,7 @@ void IndexImpl::createFromFiles(
 
   readIndexBuilderSettingsFromFile();
 
-  prepareInputFileSpecificationsAndLog(files, useParallelParser_);
+  updateInputFileSpecificationsAndLog(files, useParallelParser_);
   IndexBuilderDataAsFirstPermutationSorter indexBuilderData =
       createIdTriplesAndVocab(makeRdfParser(files));
 

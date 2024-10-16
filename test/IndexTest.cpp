@@ -494,7 +494,7 @@ TEST(IndexTest, loggingAndSettingOfParallelParsing) {
   testing::internal::CaptureStdout();
   using namespace ::testing;
   {
-    IndexImpl::prepareInputFileSpecificationsAndLog(files, false);
+    IndexImpl::updateInputFileSpecificationsAndLog(files, false);
     EXPECT_THAT(
         testing::internal::GetCapturedStdout(),
         AllOf(HasSubstr("from singleFile.ttl"), Not(HasSubstr("parallel"))));
@@ -503,11 +503,10 @@ TEST(IndexTest, loggingAndSettingOfParallelParsing) {
 
   {
     testing::internal::CaptureStdout();
-    IndexImpl::prepareInputFileSpecificationsAndLog(files, true);
-    EXPECT_THAT(
-        testing::internal::GetCapturedStdout(),
-        AllOf(HasSubstr("from singleFile.ttl"), HasSubstr("This is deprecated"),
-              HasSubstr("--parse-parallel")));
+    IndexImpl::updateInputFileSpecificationsAndLog(files, true);
+    EXPECT_THAT(testing::internal::GetCapturedStdout(),
+                AllOf(HasSubstr("from singleFile.ttl"), HasSubstr("deprecated"),
+                      HasSubstr("--parse-parallel")));
     EXPECT_TRUE(files.at(0).parseInParallel_);
   }
 
@@ -515,16 +514,16 @@ TEST(IndexTest, loggingAndSettingOfParallelParsing) {
     files.emplace_back("secondFile.ttl", Turtle, std::nullopt, false);
     auto filesCopy = files;
     testing::internal::CaptureStdout();
-    IndexImpl::prepareInputFileSpecificationsAndLog(files, false);
+    IndexImpl::updateInputFileSpecificationsAndLog(files, false);
     EXPECT_THAT(testing::internal::GetCapturedStdout(),
-                AllOf(HasSubstr("from 2 distinct input files"),
-                      Not(HasSubstr("This is deprecated"))));
+                AllOf(HasSubstr("from 2 input streams"),
+                      Not(HasSubstr("is deprecated"))));
     EXPECT_EQ(files, filesCopy);
   }
 
   {
     AD_EXPECT_THROW_WITH_MESSAGE(
-        IndexImpl::prepareInputFileSpecificationsAndLog(files, true),
+        IndexImpl::updateInputFileSpecificationsAndLog(files, true),
         HasSubstr("but has to be specified"));
   }
 }
