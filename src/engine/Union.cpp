@@ -262,8 +262,8 @@ IdTable Union::transformToCorrectColumnFormat(
     IdTable idTable, const std::vector<size_t>& permutation) const {
   while (idTable.numColumns() < getResultWidth()) {
     idTable.addEmptyColumn();
-    std::ranges::fill(idTable.getColumn(idTable.numColumns() - 1),
-                      Id::makeUndefined());
+    auto column = idTable.getColumn(idTable.numColumns() - 1);
+    fillChunked(column.begin(), column.end(), Id::makeUndefined());
   }
 
   idTable.setColumnSubset(permutation);
