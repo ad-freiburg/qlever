@@ -83,7 +83,7 @@ class Union : public Operation {
   // Take the given `IdTable`, add any missing columns to it (filled with
   // undefined values) and permutate the columns to match the end result.
   IdTable transformToCorrectColumnFormat(
-      IdTable idTable, const std::vector<size_t>& permutation) const;
+      IdTable idTable, const std::vector<ColumnIndex>& permutation) const;
 
   // Create a generator that yields the `IdTable` for the left or right child
   // one after another and apply a potential differing permutation to it. Write

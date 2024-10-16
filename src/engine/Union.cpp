@@ -242,12 +242,12 @@ IdTable Union::computeUnion(
 
 // _____________________________________________________________________________
 template <bool left>
-std::vector<size_t> Union::computePermutation() const {
-  size_t startOfUndefColumns = _subtrees[left ? 0 : 1]->getResultWidth();
-  std::vector<size_t> permutation(_columnOrigins.size());
+std::vector<ColumnIndex> Union::computePermutation() const {
+  ColumnIndex startOfUndefColumns = _subtrees[left ? 0 : 1]->getResultWidth();
+  std::vector<ColumnIndex> permutation(_columnOrigins.size());
   for (size_t targetColIdx = 0; targetColIdx < _columnOrigins.size();
        ++targetColIdx) {
-    size_t originIndex = _columnOrigins.at(targetColIdx)[left ? 0 : 1];
+    ColumnIndex originIndex = _columnOrigins.at(targetColIdx)[left ? 0 : 1];
     if (originIndex == NO_COLUMN) {
       originIndex = startOfUndefColumns;
       startOfUndefColumns++;
@@ -259,7 +259,7 @@ std::vector<size_t> Union::computePermutation() const {
 
 // _____________________________________________________________________________
 IdTable Union::transformToCorrectColumnFormat(
-    IdTable idTable, const std::vector<size_t>& permutation) const {
+    IdTable idTable, const std::vector<ColumnIndex>& permutation) const {
   while (idTable.numColumns() < getResultWidth()) {
     idTable.addEmptyColumn();
     auto column = idTable.getColumn(idTable.numColumns() - 1);
@@ -275,7 +275,7 @@ cppcoro::generator<IdTable> Union::computeResultLazily(
     std::shared_ptr<const Result> result1,
     std::shared_ptr<const Result> result2,
     std::shared_ptr<LocalVocab> localVocab) const {
-  std::vector<size_t> permutation = computePermutation<true>();
+  std::vector<ColumnIndex> permutation = computePermutation<true>();
   if (result1->isFullyMaterialized()) {
     co_yield transformToCorrectColumnFormat(result1->idTable().clone(),
                                             permutation);
