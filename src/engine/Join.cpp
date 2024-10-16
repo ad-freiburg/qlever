@@ -91,10 +91,7 @@ string Join::getDescriptor() const { return "Join on " + _joinVar.name(); }
 // _____________________________________________________________________________
 ProtoResult Join::computeResult([[maybe_unused]] bool requestLaziness) {
   LOG(DEBUG) << "Getting sub-results for join result computation..." << endl;
-  size_t leftWidth = _left->getResultWidth();
-  size_t rightWidth = _right->getResultWidth();
-  IdTable idTable{getExecutionContext()->getAllocator()};
-  idTable.setNumColumns(leftWidth + rightWidth - 1);
+  IdTable idTable{getResultWidth(), getExecutionContext()->getAllocator()};
 
   if (_left->knownEmptyResult() || _right->knownEmptyResult()) {
     _left->getRootOperation()->updateRuntimeInformationWhenOptimizedOut();
@@ -157,7 +154,7 @@ ProtoResult Join::computeResult([[maybe_unused]] bool requestLaziness) {
   std::shared_ptr<const Result> leftRes =
       leftResIfCached ? leftResIfCached : _left->getResult();
   checkCancellation();
-  if (leftRes->idTable().size() == 0) {
+  if (leftRes->idTable().empty()) {
     _right->getRootOperation()->updateRuntimeInformationWhenOptimizedOut();
     // TODO<joka921, hannahbast, SPARQL update> When we add triples to the
     // index, the vocabularies of index scans will not necessarily be empty and
