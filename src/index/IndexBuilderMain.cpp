@@ -53,33 +53,33 @@ void writeStxxlConfigFile(const string& location, const string& tail) {
 // `allowZero` is true, then an empty vector will also be accepted. If this
 // condition is violated, throw an exception. This is used to validate the
 // parameters for file types and default graphs.
-static constexpr auto checkNumParameterValues =
-    [](const auto& values, size_t numFiles, bool allowZero,
-       std::string_view parameterName) {
-      if (allowZero && values.empty()) {
-        return;
-      }
-      if (values.size() == 1 || values.size() == numFiles) {
-        return;
-      }
-      auto error = absl::StrCat(
-          "The parameter \"", parameterName,
-          "\" must be specified either exactly once (in which case it is "
-          "used for all input files) or exactly as many times as there are "
-          "input files, in which case each input file has its own value.");
-      if (allowZero) {
-        absl::StrAppend(&error,
-                        " The parameter can also be omitted entirely, in which "
-                        " case a default value is used for all input files.");
-      }
-      throw std::runtime_error{error};
-    };
+static void checkNumParameterValues(const auto& values, size_t numFiles,
+                                    bool allowZero,
+                                    std::string_view parameterName) {
+  if (allowZero && values.empty()) {
+    return;
+  }
+  if (values.size() == 1 || values.size() == numFiles) {
+    return;
+  }
+  auto error = absl::StrCat(
+      "The parameter \"", parameterName,
+      "\" must be specified either exactly once (in which case it is "
+      "used for all input files) or exactly as many times as there are "
+      "input files, in which case each input file has its own value.");
+  if (allowZero) {
+    absl::StrAppend(&error,
+                    " The parameter can also be omitted entirely, in which "
+                    " case a default value is used for all input files.");
+  }
+  throw std::runtime_error{error};
+}
 
 // Convert the `filetype` string, which must be "ttl", "nt", or "nq" to the
 // corresponding `qlever::Filetype` value. If no filetyp is given, try to deduce
 // the type from the filename.
-auto getFiletype = [](std::optional<std::string_view> filetype,
-                      std::string_view filename) {
+qlever::Filetype getFiletype(std::optional<std::string_view> filetype,
+                             std::string_view filename) {
   auto impl = [](std::string_view s) -> std::optional<qlever::Filetype> {
     if (s == "ttl" || s == "nt") {
       return qlever::Filetype::Turtle;
@@ -121,7 +121,7 @@ auto getFiletype = [](std::optional<std::string_view> filetype,
   // deduce that the above `else` case always throws and there is currently no
   // way to mark the `throwNotDeducable` lambda as `[[noreturn]]`.
   AD_FAIL();
-};
+}
 
 // Get parameter values at the given index. If the vector is empty, return the
 // given `defaultValue`. If the vector has exactly one element, return that
