@@ -144,6 +144,22 @@ std::string PathSearch::getCacheKeyImpl() const {
 
   AD_CORRECTNESS_CHECK(subtree_);
   os << "Subtree:\n" << subtree_->getCacheKey() << '\n';
+
+  if (sourceTree_.has_value()) {
+    os << "Source Side subtree:\n"
+       << sourceTree_.value()->getCacheKey() << '\n';
+  }
+
+  if (targetTree_.has_value()) {
+    os << "Target Side subtree:\n"
+       << targetTree_.value()->getCacheKey() << '\n';
+  }
+
+  if (sourceAndTargetTree_.has_value()) {
+    os << "Source And Target Side subtree:\n"
+       << sourceAndTargetTree_.value()->getCacheKey() << '\n';
+  }
+
   return std::move(os).str();
 };
 
