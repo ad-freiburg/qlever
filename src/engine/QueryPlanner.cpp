@@ -9,6 +9,7 @@
 #include <absl/strings/str_split.h>
 
 #include <algorithm>
+#include <optional>
 
 #include "engine/Bind.h"
 #include "engine/CartesianProductJoin.h"
@@ -26,6 +27,7 @@
 #include "engine/NeutralElementOperation.h"
 #include "engine/OptionalJoin.h"
 #include "engine/OrderBy.h"
+#include "engine/PathSearch.h"
 #include "engine/Service.h"
 #include "engine/Sort.h"
 #include "engine/SpatialJoin.h"
@@ -37,9 +39,11 @@
 #include "engine/Values.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
+#include "global/Id.h"
 #include "global/RuntimeParameters.h"
 #include "parser/Alias.h"
 #include "parser/SparqlParserHelpers.h"
+#include "util/Exception.h"
 
 namespace p = parsedQuery;
 namespace {
@@ -1820,6 +1824,11 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
     return {makeSubtreePlan<OptionalJoin>(_qec, a._qet, b._qet)};
   }
 
+  if (auto opt = createJoinWithPathSearch(a, b, jcs)) {
+    candidates.push_back(std::move(opt.value()));
+    return candidates;
+  }
+
   // Check if one of the two Operations is a SERVICE. If so, we can try
   // to simplify the Service Query using the result of the other operation.
   if (auto opt = createJoinWithService(a, b, jcs)) {
@@ -2065,6 +2074,98 @@ auto QueryPlanner::createSubtreeWithService(const SubtreePlan& a,
 }
 
 // _____________________________________________________________________
+auto QueryPlanner::createJoinWithPathSearch(
+    const SubtreePlan& a, const SubtreePlan& b,
+    const std::vector<std::array<ColumnIndex, 2>>& jcs)
+    -> std::optional<SubtreePlan> {
+  auto aRootOp =
+      std::dynamic_pointer_cast<PathSearch>(a._qet->getRootOperation());
+  auto bRootOp =
+      std::dynamic_pointer_cast<PathSearch>(b._qet->getRootOperation());
+
+  // Exactly one of the two Operations can be a path search.
+  if (static_cast<bool>(aRootOp) == static_cast<bool>(bRootOp)) {
+    return std::nullopt;
+  }
+
+  auto pathSearch = aRootOp ? aRootOp : bRootOp;
+  auto sibling = bRootOp ? a : b;
+
+  auto decideColumns = [aRootOp](std::array<ColumnIndex, 2> joinColumns)
+      -> std::pair<ColumnIndex, ColumnIndex> {
+    auto thisCol = aRootOp ? joinColumns[0] : joinColumns[1];
+    auto otherCol = aRootOp ? joinColumns[1] : joinColumns[0];
+    return {thisCol, otherCol};
+  };
+
+  // Only source and target may be bound directly
+  if (jcs.size() > 2) {
+    return std::nullopt;
+  }
+
+  auto sourceColumn = pathSearch->getSourceColumn();
+  auto targetColumn = pathSearch->getTargetColumn();
+
+  // Either source or target column have to be a variable to create a join
+  if (!sourceColumn && !targetColumn) {
+    return std::nullopt;
+  }
+
+  // A join on an edge property column should not create any candidates
+  auto isJoinOnSourceOrTarget = [sourceColumn,
+                                 targetColumn](size_t joinColumn) {
+    return ((sourceColumn && sourceColumn.value() == joinColumn) ||
+            (targetColumn && targetColumn.value() == joinColumn));
+  };
+
+  if (jcs.size() == 2) {
+    // To join source and target, both must be variables
+    if (!sourceColumn || !targetColumn) {
+      return std::nullopt;
+    }
+
+    auto [firstCol, firstOtherCol] = decideColumns(jcs[0]);
+
+    auto [secondCol, secondOtherCol] = decideColumns(jcs[1]);
+
+    if (!isJoinOnSourceOrTarget(firstCol) &&
+        !isJoinOnSourceOrTarget(secondCol)) {
+      return std::nullopt;
+    }
+
+    if (sourceColumn == firstCol && targetColumn == secondCol) {
+      pathSearch->bindSourceAndTargetSide(sibling._qet, firstOtherCol,
+                                          secondOtherCol);
+    } else if (sourceColumn == secondCol && targetColumn == firstCol) {
+      pathSearch->bindSourceAndTargetSide(sibling._qet, secondOtherCol,
+                                          firstOtherCol);
+    } else {
+      return std::nullopt;
+    }
+  } else if (jcs.size() == 1) {
+    auto [thisCol, otherCol] = decideColumns(jcs[0]);
+
+    if (!isJoinOnSourceOrTarget(thisCol)) {
+      return std::nullopt;
+    }
+
+    if (sourceColumn && sourceColumn == thisCol &&
+        !pathSearch->isSourceBound()) {
+      pathSearch->bindSourceSide(sibling._qet, otherCol);
+    } else if (targetColumn && targetColumn == thisCol &&
+               !pathSearch->isTargetBound()) {
+      pathSearch->bindTargetSide(sibling._qet, otherCol);
+    }
+  } else {
+    return std::nullopt;
+  }
+
+  SubtreePlan plan = makeSubtreePlan(pathSearch);
+  mergeSubtreePlanIds(plan, a, b);
+  return plan;
+}
+
+// _____________________________________________________________________
 void QueryPlanner::QueryGraph::setupGraph(
     const std::vector<SubtreePlan>& leafOperations) {
   // Prepare the `nodes_` vector for the graph. We have one node for each leaf
@@ -2289,6 +2390,8 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
       c.type = SubtreePlan::MINUS;
     }
     visitGroupOptionalOrMinus(std::move(candidates));
+  } else if constexpr (std::is_same_v<T, p::PathQuery>) {
+    visitPathSearch(arg);
   } else {
     static_assert(std::is_same_v<T, p::BasicGraphPattern>);
     visitBasicGraphPattern(arg);
@@ -2391,6 +2494,24 @@ void QueryPlanner::GraphPatternPlanner::visitTransitivePath(
     auto transitivePath = TransitivePathBase::makeTransitivePath(
         qec_, std::move(sub._qet), std::move(left), std::move(right), min, max);
     auto plan = makeSubtreePlan<TransitivePathBase>(std::move(transitivePath));
+    candidatesOut.push_back(std::move(plan));
+  }
+  visitGroupOptionalOrMinus(std::move(candidatesOut));
+}
+
+// _______________________________________________________________
+void QueryPlanner::GraphPatternPlanner::visitPathSearch(
+    parsedQuery::PathQuery& pathQuery) {
+  auto candidatesIn = planner_.optimize(&pathQuery.childGraphPattern_);
+  std::vector<SubtreePlan> candidatesOut;
+
+  const auto& vocab = planner_._qec->getIndex().getVocab();
+  auto config = pathQuery.toPathSearchConfiguration(vocab);
+
+  for (auto& sub : candidatesIn) {
+    auto pathSearch =
+        std::make_shared<PathSearch>(qec_, std::move(sub._qet), config);
+    auto plan = makeSubtreePlan<PathSearch>(std::move(pathSearch));
     candidatesOut.push_back(std::move(plan));
   }
   visitGroupOptionalOrMinus(std::move(candidatesOut));

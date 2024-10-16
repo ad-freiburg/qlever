@@ -8,6 +8,7 @@
 #include <gmock/gmock.h>
 
 #include <optional>
+#include <variant>
 
 #include "./util/GTestHelpers.h"
 #include "engine/Bind.h"
@@ -22,6 +23,7 @@
 #include "engine/NeutralElementOperation.h"
 #include "engine/OptionalJoin.h"
 #include "engine/OrderBy.h"
+#include "engine/PathSearch.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/QueryPlanner.h"
 #include "engine/Service.h"
@@ -291,6 +293,38 @@ inline auto TransitivePath =
                 AD_PROPERTY(TransitivePathBase, getRight,
                             TransitivePathSideMatcher(right))));
     };
+
+inline auto PathSearchConfigMatcher = [](PathSearchConfiguration config) {
+  auto sourceMatcher =
+      AD_FIELD(PathSearchConfiguration, sources_, Eq(config.sources_));
+  auto targetMatcher =
+      AD_FIELD(PathSearchConfiguration, targets_, Eq(config.targets_));
+  return AllOf(
+      AD_FIELD(PathSearchConfiguration, algorithm_, Eq(config.algorithm_)),
+      sourceMatcher, targetMatcher,
+      AD_FIELD(PathSearchConfiguration, start_, Eq(config.start_)),
+      AD_FIELD(PathSearchConfiguration, end_, Eq(config.end_)),
+      AD_FIELD(PathSearchConfiguration, pathColumn_, Eq(config.pathColumn_)),
+      AD_FIELD(PathSearchConfiguration, edgeColumn_, Eq(config.edgeColumn_)),
+      AD_FIELD(PathSearchConfiguration, edgeProperties_,
+               UnorderedElementsAreArray(config.edgeProperties_)));
+};
+
+// Match a PathSearch operation
+inline auto PathSearch =
+    [](PathSearchConfiguration config, bool sourceBound, bool targetBound,
+       const std::same_as<QetMatcher> auto&... childMatchers) {
+      return RootOperation<::PathSearch>(AllOf(
+          children(childMatchers...),
+          AD_PROPERTY(PathSearch, getConfig, PathSearchConfigMatcher(config)),
+          AD_PROPERTY(PathSearch, isSourceBound, Eq(sourceBound)),
+          AD_PROPERTY(PathSearch, isTargetBound, Eq(targetBound))));
+    };
+
+inline auto ValuesClause = [](string cacheKey) {
+  return RootOperation<::Values>(
+      AllOf(AD_PROPERTY(Values, getCacheKey, cacheKey)));
+};
 
 // Match a SpatialJoin operation, set arguments to ignore to -1
 inline auto SpatialJoin =
