@@ -119,7 +119,7 @@ class IndexImpl {
   string onDiskBase_;
   string settingsFileName_;
   bool onlyAsciiTurtlePrefixes_ = false;
-  bool useParallelParser_ = true;
+  bool useParallelParser_ = false;
   TurtleParserIntegerOverflowBehavior turtleParserIntegerOverflowBehavior_ =
       TurtleParserIntegerOverflowBehavior::Error;
   bool turtleParserSkipIllegalLiterals_ = false;
