@@ -1,11 +1,10 @@
 name: sparql-conformance
 
 on:
-  #TODO<joka921> Change the following to "master" when finally merging it.
   push:
-    branches: [ sparql-conformance-workflows ]
+    branches: [ master ]
   pull_request:
-    branches: [ sparql-conformance-workflows ]
+    branches: [ master ]
   merge_group:
 
 jobs:
