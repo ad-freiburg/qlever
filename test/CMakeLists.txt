@@ -126,7 +126,7 @@ addLinkAndDiscoverTest(JoinTest engine)
 
 addLinkAndDiscoverTest(TextLimitOperationTest engine)
 
-addLinkAndDiscoverTest(QueryPlannerTest engine)
+addLinkAndDiscoverTestSerial(QueryPlannerTest engine)
 
 addLinkAndDiscoverTest(HashMapTest)
 

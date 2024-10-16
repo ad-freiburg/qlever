@@ -19,10 +19,12 @@ Index::Index(Index&&) noexcept = default;
 // https://stackoverflow.com/questions/13414652/forward-declaration-with-unique-ptr
 Index::~Index() = default;
 
+/*
 // ____________________________________________________________________________
 void Index::createFromFile(const std::string& filename, Filetype type) {
   pimpl_->createFromFile(filename, type);
 }
+ */
 
 // ____________________________________________________________________________
 void Index::createFromOnDiskIndex(const std::string& onDiskBase) {

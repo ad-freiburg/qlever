@@ -831,8 +831,9 @@ void RdfStreamParser<T>::initialize(const string& filename) {
   }
 }
 
+// _____________________________________________________________________________
 template <class T>
-bool RdfStreamParser<T>::getLine(TurtleTriple* triple) {
+bool RdfStreamParser<T>::getLineImpl(TurtleTriple* triple) {
   if (triples_.empty()) {
     // if parsing the line fails because our buffer ends before the end of
     // the next statement we need to be able to recover
@@ -945,7 +946,7 @@ template <typename Tokenizer_T>
 void RdfParallelParser<Tokenizer_T>::parseBatch(size_t parsePosition,
                                                 auto batch) {
   try {
-    RdfStringParser<Tokenizer_T> parser;
+    RdfStringParser<Tokenizer_T> parser{defaultGraphIri_};
     parser.prefixMap_ = this->prefixMap_;
     parser.setPositionOffset(parsePosition);
     parser.setInputStream(std::move(batch));
@@ -1038,7 +1039,7 @@ void RdfParallelParser<Tokenizer_T>::initialize(const string& filename) {
 
 // _______________________________________________________________________
 template <class T>
-bool RdfParallelParser<T>::getLine(TurtleTriple* triple) {
+bool RdfParallelParser<T>::getLineImpl(TurtleTriple* triple) {
   // If the current batch is out of triples_ get the next batch of triples.
   // We need a while loop instead of a simple if in case there is a batch that
   // contains no triples. (Theoretically this might happen, and it is safer this
@@ -1088,7 +1089,9 @@ RdfParallelParser<T>::~RdfParallelParser() {
       "During the destruction of a RdfParallelParser");
 }
 
-// _____________________________________________________________________________
+// Create a parser for a single file for an `InputFileSpecification`. The type
+// of the parser depends on the filetype (Turtle or NQuad) and on whether the
+// file is to be parsed in parallel.
 template <typename TokenizerT>
 static std::unique_ptr<RdfParserBase> makeSingleRdfParser(
     const Index::InputFileSpecification& file) {
@@ -1125,15 +1128,11 @@ template <typename T>
 RdfMultifileParser<T>::RdfMultifileParser(
     const std::vector<qlever::InputFileSpecification>& files) {
   using namespace qlever;
-  auto makeParser =
-      [](const InputFileSpecification& file) -> std::unique_ptr<RdfParserBase> {
-    return makeSingleRdfParser<Tokenizer>(file);
-  };
-
-  auto parseFile = [this, makeParser](const InputFileSpecification& file) {
+  // This lambda parses a single file and pushes the results and all occuring
+  // exceptions to the `finishedBatchQueue_`.
+  auto parseFile = [this](const InputFileSpecification& file) {
     try {
-      auto parser = makeParser(file);
-      // TODO<joka921> handle exceptions.
+      auto parser = makeSingleRdfParser<Tokenizer>(file);
       while (auto batch = parser->getBatch()) {
         bool active = finishedBatchQueue_.push(std::move(batch.value()));
         if (!active) {
@@ -1146,11 +1145,13 @@ RdfMultifileParser<T>::RdfMultifileParser(
       return;
     }
     if (numActiveParsers_.fetch_sub(1) == 1) {
-      // We are the last parser, we have to notify the downstream code.
+      // We are the last parser, we have to notify the downstream code that the
+      // input has been parsed completely.
       finishedBatchQueue_.finish();
     }
   };
 
+  // Feed all the input files to the `parsingQueue_`.
   auto makeParsers = [files, this, parseFile]() {
     for (const auto& file : files) {
       numActiveParsers_++;
@@ -1177,7 +1178,7 @@ RdfMultifileParser<T>::~RdfMultifileParser() {
 
 //______________________________________________________________________________
 template <typename T>
-bool RdfMultifileParser<T>::getLine(TurtleTriple*) {
+bool RdfMultifileParser<T>::getLineImpl(TurtleTriple*) {
   AD_FAIL();
 }
 

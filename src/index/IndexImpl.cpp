@@ -287,11 +287,6 @@ std::pair<size_t, size_t> IndexImpl::createInternalPSOandPOS(
 }
 
 // _____________________________________________________________________________
-void IndexImpl::createFromFile(const string& filename, Index::Filetype type) {
-  createFromFiles({{filename, type, std::nullopt, useParallelParser_}});
-}
-
-// _____________________________________________________________________________
 void IndexImpl::prepareInputFileSpecificationsAndLog(
     std::vector<Index::InputFileSpecification>& files,
     bool parallelParsingSpecifiedViaJson) {

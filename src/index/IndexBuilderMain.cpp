@@ -117,6 +117,10 @@ auto getFiletype = [](std::optional<std::string_view> filetype,
   } else {
     throwNotDeducable();
   }
+  // The following line is necessary because Clang and GCC currently can't
+  // deduce that the above `else` case always throws and there is currently no
+  // way to mark the `throwNotDeducable` lambda as `[[noreturn]]`.
+  AD_FAIL();
 };
 template <typename T>
 T getParam(size_t idx, const auto& params, const T& defaultValue) {

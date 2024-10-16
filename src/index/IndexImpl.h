@@ -228,12 +228,10 @@ class IndexImpl {
   Permutation& getPermutation(Permutation::Enum p);
   const Permutation& getPermutation(Permutation::Enum p) const;
 
-  // Creates an index from a file. Parameter Parser must be able to split the
-  // file's format into triples.
-  // Will write vocabulary and on-disk index data.
+  // Creates an index from a given set of input files. Will write vocabulary and
+  // on-disk index data.
   // !! The index can not directly be used after this call, but has to be setup
   // by createFromOnDiskIndex after this call.
-  void createFromFile(const string& filename, Index::Filetype type);
   void createFromFiles(std::vector<Index::InputFileSpecification> files);
 
   // Creates an index object from an on disk index that has previously been

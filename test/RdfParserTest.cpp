@@ -1044,14 +1044,67 @@ TEST(RdfParserTest, nQuadParser) {
   runTestsForParser(NQuadCtreParser{});
 }
 
+// _____________________________________________________________________________
 TEST(RdfParserTest, noGetlineInStringParser) {
   auto runTestsForParser = [](auto parser) {
     parser.setInputStream("<x> <p> <o> .");
     TurtleTriple t;
-    EXPECT_ANY_THROW(parser.getLine(&t));
+    EXPECT_ANY_THROW(parser.getLine(t));
   };
   runTestsForParser(NQuadRe2Parser{});
   runTestsForParser(NQuadCtreParser{});
   runTestsForParser(Re2Parser{});
   runTestsForParser(CtreParser{});
+}
+
+// _____________________________________________________________________________
+TEST(RdfParserTest, noGetlineInMultifileParsers) {
+  auto runTestsForParser =
+      []<typename Parser>([[maybe_unused]] bool interface) {
+        Parser parser{};
+        TurtleTriple t;
+        // Also test the dummy parse position member.
+        EXPECT_EQ(parser.getParsePosition(), 0u);
+        EXPECT_ANY_THROW(parser.getLine(t));
+      };
+  forAllMultifileParsers(runTestsForParser);
+}
+
+// _____________________________________________________________________________
+TEST(RdfParserTest, multifileParser) {
+  auto impl = []<typename Parser>(bool useParallelParser) {
+    std::vector<TurtleTriple> expected;
+    std::string ttl = "<x> <y> <z>. <x> <y> <z2>.";
+    expected.push_back(TurtleTriple{iri("<x>"), iri("<y>"), iri("<z>"),
+                                    iri("<defaultGraphTTL>")});
+    expected.push_back(TurtleTriple{iri("<x>"), iri("<y>"), iri("<z2>"),
+                                    iri("<defaultGraphTTL>")});
+    std::string nq = "<x2> <y2> <z2> <g1>. <x3> <y3> <z3>.";
+    expected.push_back(
+        TurtleTriple{iri("<x2>"), iri("<y2>"), iri("<z2>"), iri("<g1>")});
+    expected.push_back(TurtleTriple{iri("<x3>"), iri("<y3>"), iri("<z3>"),
+                                    iri("<defaultGraphNQ>")});
+    std::string file1 = "multifileParserTest1.ttl";
+    std::string file2 = "multifileParserTest2.nq";
+    {
+      auto f = ad_utility::makeOfstream(file1);
+      f << ttl;
+    }
+    {
+      auto f = ad_utility::makeOfstream(file2);
+      f << nq;
+    }
+    std::vector<qlever::InputFileSpecification> specs;
+    specs.emplace_back(file1, qlever::Filetype::Turtle, "defaultGraphTTL",
+                       useParallelParser);
+    specs.emplace_back(file2, qlever::Filetype::NQuad, "defaultGraphNQ",
+                       useParallelParser);
+    Parser p{specs};
+    std::vector<TurtleTriple> result;
+    while (auto batch = p.getBatch()) {
+      std::ranges::copy(batch.value(), std::back_inserter(result));
+    }
+    EXPECT_THAT(result, ::testing::UnorderedElementsAreArray(expected));
+  };
+  forAllMultifileParsers(impl);
 }
