@@ -49,31 +49,31 @@ void writeStxxlConfigFile(const string& location, const string& tail) {
              << STXXL_DISK_SIZE_INDEX_BUILDER << ",syscall\n";
 }
 
-// Check, that the `vec` has exactly 1 or exactly `numFiles` many entries. If
+// Check, that the `values` has exactly one or `numFiles` many entries. If
 // `allowZero` is true, then an empty vector will also be accepted. If this
 // condition is violated, throw an exception. This is used to validate the
 // parameters for file types and default graphs.
-static constexpr auto checkNumParams = [](const auto& vec, size_t numFiles,
-                                          bool allowZero,
-                                          std::string_view parameterName) {
-  if (allowZero && vec.empty()) {
-    return;
-  }
-  if (vec.size() == 1 || vec.size() == numFiles) {
-    return;
-  }
-  auto error = absl::StrCat(
-      "The parameter \"", parameterName,
-      "\" must be specified either exactly once (in which case it is "
-      "used for all input files) or exactly `num-inpu-files` times, in "
-      "which case each input file has its own value.");
-  if (allowZero) {
-    absl::StrAppend(&error,
-                    " It can additionally be completely omitted, in which "
-                    "case a default value is used for all inputs");
-  }
-  throw std::runtime_error{error};
-};
+static constexpr auto checkNumParameterValues =
+    [](const auto& values, size_t numFiles, bool allowZero,
+       std::string_view parameterName) {
+      if (allowZero && values.empty()) {
+        return;
+      }
+      if (values.size() == 1 || values.size() == numFiles) {
+        return;
+      }
+      auto error = absl::StrCat(
+          "The parameter \"", parameterName,
+          "\" must be specified either exactly once (in which case it is "
+          "used for all input files) or exactly as many times as there are "
+          "input files, in which case each input file has its own value.");
+      if (allowZero) {
+        absl::StrAppend(&error,
+                        " The parameter can also be omitted entirely, in which "
+                        " case a default value is used for all input files.");
+      }
+      throw std::runtime_error{error};
+    };
 
 // Convert the `filetype` string, which must be "ttl", "nt", or "nq" to the
 // corresponding `qlever::Filetype` value. If no filetyp is given, try to deduce
@@ -95,7 +95,7 @@ auto getFiletype = [](std::optional<std::string_view> filetype,
       return result.value();
     } else {
       throw std::runtime_error{
-          absl::StrCat("The parameter --file-format, -F must be either one of "
+          absl::StrCat("The parameter --file-format, -F must be one of "
                        "`ttl`, `nt`, or `nq`, but is `",
                        filetype.value(), "`")};
     }
@@ -104,9 +104,9 @@ auto getFiletype = [](std::optional<std::string_view> filetype,
   auto posOfDot = filename.rfind('.');
   auto throwNotDeducable = [&filename]() {
     throw std::runtime_error{absl::StrCat(
-        "Could not deduced the file format from the filename \"", filename,
+        "Could not deduce the file format from the filename \"", filename,
         "\". Either use files with names that end on `.ttl`, `.nt`, or `.nq`, "
-        "or explicitly set the format of the file via the command line")};
+        "or explicitly set the format of the file via --file-format or -F")};
   };
   if (posOfDot == std::string::npos) {
     throwNotDeducable();
@@ -122,15 +122,19 @@ auto getFiletype = [](std::optional<std::string_view> filetype,
   // way to mark the `throwNotDeducable` lambda as `[[noreturn]]`.
   AD_FAIL();
 };
+
+// Get paramter values at the given index. If the vector is empty, return the
+// given `defaultValue`. If the vector has exactly one element, return that
+// element, no matter what the index is.
 template <typename T>
-T getParam(size_t idx, const auto& params, const T& defaultValue) {
-  if (params.empty()) {
+T getParameterValue(size_t idx, const auto& values, const T& defaultValue) {
+  if (values.empty()) {
     return defaultValue;
   }
-  if (params.size() == 1) {
-    return params.at(0);
+  if (values.size() == 1) {
+    return values.at(0);
   }
-  return params.at(idx);
+  return values.at(idx);
 }
 
 // Main function.
@@ -178,18 +182,19 @@ int main(int argc, char** argv) {
       "will read from stdin.");
   add("file-format,F", po::value(&filetype),
       "The format of the input file with the knowledge graph data. Must be one "
-      "of [nt|ttl|nq]. If not set, QLever will try to deduce it from the "
-      "filename suffix.");
+      "of [nt|ttl|nq]. Can be specified once (then all files use that format), "
+      "or once per file, or not at all (in that case, the format is deduced "
+      "from the filename suffix if possible).");
   add("default-graph,g", po::value(&defaultGraphs),
-      "The graph Iri. If set to `-`, the default graph will "
-      "be used. Can be specified 0 times (all files use the default graph), "
-      "once (all files use the same graph), or once per file");
+      "The graph IRI without angle brackets. If set to `-`, the default graph "
+      "will be used. Can be omitted (then all files use the default graph), "
+      "specified once (then all files use that graph), or once per file.");
   add("parse-parallel,p", po::value(&parseParallel),
-      "Enable or disable the parallel parser for all files (if set once) or "
-      "individually per input file (if set multiple times). Parallel parsing "
-      "works for all N-Triples and N-Quads files, as well as for well-behaved "
-      "Turtle files where all the prefix declarations come in one block at the "
-      "beginning and there are no multiline literals");
+      "Enable or disable the parallel parser for all files (if specified once) "
+      "or once per input file. Parallel parsing works for all input files "
+      "using the N-Triples or N-Quads format, as well as for well-behaved "
+      "Turtle files, where all the prefix declarations come in one block at "
+      "the beginning and there are no multiline literals");
   add("kg-index-name,K", po::value(&kbIndexName),
       "The name of the knowledge graph index (default: basename of "
       "`kg-input-file`).");
@@ -281,24 +286,25 @@ int main(int argc, char** argv) {
     // Convert the parameters for the filenames, file types, and default graphs
     // into a `vector<InputFileSpecification>`.
     auto getFileSpecifications = [&]() {
-      checkNumParams(filetype, inputFile.size(), false, "--file-format, -F");
-      checkNumParams(defaultGraphs, inputFile.size(), true,
-                     "--default-graph, -g");
-      checkNumParams(parseParallel, parseParallel.size(), false,
-                     "--parse-parallel, p");
+      checkNumParameterValues(filetype, inputFile.size(), true,
+                              "--file-format, -F");
+      checkNumParameterValues(defaultGraphs, inputFile.size(), true,
+                              "--default-graph, -g");
+      checkNumParameterValues(parseParallel, parseParallel.size(), true,
+                              "--parse-parallel, p");
 
       std::vector<qlever::InputFileSpecification> fileSpecs;
       for (size_t i = 0; i < inputFile.size(); ++i) {
-        auto type = getParam<std::optional<std::string_view>>(i, filetype,
-                                                              std::nullopt);
+        auto type = getParameterValue<std::optional<std::string_view>>(
+            i, filetype, std::nullopt);
 
-        auto defaultGraph =
-            getParam<std::optional<string>>(i, defaultGraphs, std::nullopt);
+        auto defaultGraph = getParameterValue<std::optional<string>>(
+            i, defaultGraphs, std::nullopt);
         if (defaultGraph == "-") {
           defaultGraph = std::nullopt;
         }
 
-        bool parseInParallel = getParam(i, parseParallel, false);
+        bool parseInParallel = getParameterValue(i, parseParallel, false);
         auto& filename = inputFile.at(i);
         if (filename == "-") {
           filename = "/dev/stdin";
