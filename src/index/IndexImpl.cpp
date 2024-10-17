@@ -68,28 +68,18 @@ IndexBuilderDataAsFirstPermutationSorter IndexImpl::createIdTriplesAndVocab(
 
 // _____________________________________________________________________________
 std::unique_ptr<RdfParserBase> IndexImpl::makeRdfParser(
-    const std::string& filename, Index::Filetype type) const {
+    const std::vector<Index::InputFileSpecification>& files) const {
   auto makeRdfParserImpl =
-      [&filename]<int useParallel, int isTurtleInput, int useCtre>()
-      -> std::unique_ptr<RdfParserBase> {
+      [&files]<int useCtre>() -> std::unique_ptr<RdfParserBase> {
     using TokenizerT =
         std::conditional_t<useCtre == 1, TokenizerCtre, Tokenizer>;
-    using InnerParser =
-        std::conditional_t<isTurtleInput == 1, TurtleParser<TokenizerT>,
-                           NQuadParser<TokenizerT>>;
-    using Parser =
-        std::conditional_t<useParallel == 1, RdfParallelParser<InnerParser>,
-                           RdfStreamParser<InnerParser>>;
-    return std::make_unique<Parser>(filename);
+    return std::make_unique<RdfMultifileParser<TokenizerT>>(files);
   };
 
   // `callFixedSize` litfts runtime integers to compile time integers. We use it
   // here to create the correct combinations of template arguments.
-  return ad_utility::callFixedSize(
-      std::array{useParallelParser_ ? 1 : 0,
-                 type == Index::Filetype::Turtle ? 1 : 0,
-                 onlyAsciiTurtlePrefixes_ ? 1 : 0},
-      makeRdfParserImpl);
+  return ad_utility::callFixedSize(std::array{onlyAsciiTurtlePrefixes_ ? 1 : 0},
+                                   makeRdfParserImpl);
 }
 
 // Several helper functions for joining the OSP permutation with the patterns.
@@ -297,18 +287,45 @@ std::pair<size_t, size_t> IndexImpl::createInternalPSOandPOS(
 }
 
 // _____________________________________________________________________________
-void IndexImpl::createFromFile(const string& filename, Index::Filetype type) {
+void IndexImpl::updateInputFileSpecificationsAndLog(
+    std::vector<Index::InputFileSpecification>& spec,
+    bool parallelParsingSpecifiedViaJson) {
+  if (spec.size() == 1) {
+    LOG(INFO) << "Processing triples from " << spec.at(0).filename_ << " ..."
+              << std::endl;
+  } else {
+    LOG(INFO) << "Processing triples from " << spec.size()
+              << " input streams ..." << std::endl;
+  }
+  if (parallelParsingSpecifiedViaJson) {
+    if (spec.size() == 1) {
+      LOG(WARN) << "Parallel parsing set to `true` in the `.settings.json` "
+                   "file; this is deprecated, please use the command-line "
+                   " option --parse-parallel or -p instead"
+                << std::endl;
+      spec.at(0).parseInParallel_ = true;
+    } else {
+      throw std::runtime_error{
+          "For more than one input file, the parallel parsing must not be "
+          "specified via the `.settings.json` file, but has to be specified "
+          " via the command-line option --parse-parallel or -p"};
+    }
+  }
+}
+
+// _____________________________________________________________________________
+void IndexImpl::createFromFiles(
+    std::vector<Index::InputFileSpecification> files) {
   if (!loadAllPermutations_ && usePatterns_) {
     throw std::runtime_error{
         "The patterns can only be built when all 6 permutations are created"};
   }
-  LOG(INFO) << "Processing input triples from " << filename << " ..."
-            << std::endl;
 
   readIndexBuilderSettingsFromFile();
 
+  updateInputFileSpecificationsAndLog(files, useParallelParser_);
   IndexBuilderDataAsFirstPermutationSorter indexBuilderData =
-      createIdTriplesAndVocab(makeRdfParser(filename, type));
+      createIdTriplesAndVocab(makeRdfParser(files));
 
   // Write the configuration already at this point, so we have it available in
   // case any of the permutations fail.
