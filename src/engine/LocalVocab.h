@@ -39,7 +39,7 @@ class LocalVocab {
   auto& primaryWordSet() { return *primaryWordSet_; }
   const auto& primaryWordSet() const { return *primaryWordSet_; }
 
-  std::unique_ptr<ad_utility::BlankNodeManager::LocalBlankNodeManager>
+  std::optional<ad_utility::BlankNodeManager::LocalBlankNodeManager>
       localBlankNodeManager_;
 
  public:

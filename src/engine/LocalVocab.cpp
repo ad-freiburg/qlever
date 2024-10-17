@@ -85,8 +85,7 @@ BlankNodeIndex LocalVocab::getBlankNodeIndex(
   // Initialize the `localBlankNodeManager_` if it doesn't exist yet.
   if (!localBlankNodeManager_) [[unlikely]] {
     localBlankNodeManager_ =
-        std::make_unique<ad_utility::BlankNodeManager::LocalBlankNodeManager>(
-            blankNodeManager);
+        ad_utility::BlankNodeManager::LocalBlankNodeManager(blankNodeManager);
   }
   return BlankNodeIndex::make(localBlankNodeManager_->getId());
 }

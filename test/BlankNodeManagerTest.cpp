@@ -20,9 +20,17 @@ TEST(BlankNodeManager, blockAllocationAndFree) {
     EXPECT_EQ(bnm.usedBlocksSet_.rlock()->size(), 1);
   }
 
-  // The Blocks allocated by the LocalBlankNodeManager are freed/removed from
-  // the set once it is destroyed
+  // Once the LocalBlankNodeManager is destroyed, all Blocks allocated through
+  // it are freed/removed from the BlankNodeManager's set.
   EXPECT_EQ(bnm.usedBlocksSet_.rlock()->size(), 0);
+
+  // Mock randomIntGenerator to let the block index generation collide.
+  bnm.randBlockIndex_ = SlowRandomIntGenerator<uint64_t>(0, 1);
+  [[maybe_unused]] auto _ = bnm.allocateBlock();
+  for (int i = 0; i < 30; ++i) {
+    auto block = bnm.allocateBlock();
+    bnm.usedBlocksSet_.wlock()->erase(block.blockIdx_);
+  }
 }
 
 TEST(BlankNodeManager, LocalBlankNodeManagerGetID) {

@@ -70,8 +70,12 @@ class BlankNodeManager {
     explicit LocalBlankNodeManager(BlankNodeManager* blankNodeManager);
     ~LocalBlankNodeManager();
 
-    LocalBlankNodeManager(LocalBlankNodeManager&) = delete;
+    // No copy, as the managed blocks shall not be duplicated.
+    LocalBlankNodeManager(const LocalBlankNodeManager&) = delete;
     LocalBlankNodeManager& operator=(const LocalBlankNodeManager&) = delete;
+
+    LocalBlankNodeManager(LocalBlankNodeManager&&) = default;
+    LocalBlankNodeManager& operator=(LocalBlankNodeManager&&) = default;
 
     // Get a new id.
     [[nodiscard]] uint64_t getId();
@@ -81,7 +85,7 @@ class BlankNodeManager {
     std::vector<BlankNodeManager::Block> blocks_;
 
     // Reference of the BlankNodeManager, used to free the reserved blocks.
-    BlankNodeManager* const blankNodeManager_;
+    BlankNodeManager* blankNodeManager_;
 
     // The first index after the current Block.
     uint64_t idxAfterCurrentBlock_{0};
