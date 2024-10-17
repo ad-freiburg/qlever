@@ -140,37 +140,6 @@ class Engine {
 
   static void sort(IdTable& idTable, const std::vector<ColumnIndex>& sortCols);
 
-  /**
-   * @brief Removes all duplicates from input with regards to the columns
-   *        in keepIndices. The input needs to be sorted on the keep indices,
-   *        otherwise the result of this function is undefined.
-   **/
-  template <size_t WIDTH>
-  static void distinct(const IdTable& dynInput,
-                       const std::vector<ColumnIndex>& keepIndices,
-                       IdTable* dynResult) {
-    LOG(DEBUG) << "Distinct on " << dynInput.size() << " elements.\n";
-    const IdTableView<WIDTH> input = dynInput.asStaticView<WIDTH>();
-    IdTableStatic<WIDTH> result = std::move(*dynResult).toStatic<WIDTH>();
-    result = input.clone();
-    if (!input.empty()) {
-      AD_CONTRACT_CHECK(keepIndices.size() <= input.numColumns());
-
-      auto last = std::unique(result.begin(), result.end(),
-                              [&keepIndices](const auto& a, const auto& b) {
-                                for (ColumnIndex i : keepIndices) {
-                                  if (a[i] != b[i]) {
-                                    return false;
-                                  }
-                                }
-                                return true;
-                              });
-      result.erase(last, result.end());
-    }
-    *dynResult = std::move(result).toDynamic();
-    LOG(DEBUG) << "Distinct done.\n";
-  }
-
   // Return the number of distinct rows in the `input`. The input must have all
   // duplicates adjacent to each other (e.g. by being sorted), otherwise the
   // behavior is undefined. `checkCancellation()` is invoked regularly and can

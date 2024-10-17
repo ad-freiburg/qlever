@@ -359,9 +359,11 @@ class IdTable {
   // `std::vector` aand other containers.
   // TODO<C++23, joka921> Remove the duplicates via explicit object parameters
   // ("deducing this").
-  row_reference_restricted front() { return (*this)[0]; }
+  row_reference_restricted front() requires(!isView) { return (*this)[0]; }
   const_row_reference_restricted front() const { return (*this)[0]; }
-  row_reference_restricted back() { return (*this)[numRows() - 1]; }
+  row_reference_restricted back() requires(!isView) {
+    return (*this)[numRows() - 1];
+  }
   const_row_reference_restricted back() const { return (*this)[numRows() - 1]; }
 
   // Resize the `IdTable` to exactly `numRows`. If `numRows < size()`, then the
@@ -637,12 +639,6 @@ class IdTable {
   // that `begin() <= beginIt <= endIt < end`, else the behavior is undefined.
   // The order of the elements before and after the erased regions remains the
   // same. This behavior is similar to `std::vector::erase`.
-  //
-  // TODO<joka921> It is currently used by the implementation of DISTINCT, which
-  // first copies the sorted input completely, and then calls `std::unique`,
-  // followed by `erase` at the end. `DISTINCT` should be implemented via an
-  // out-of-place algorithm that only writes the distinct elements. The the
-  // following two functions can be deleted.
   void erase(const iterator& beginIt, const iterator& endIt) requires(!isView) {
     AD_EXPENSIVE_CHECK(begin() <= beginIt && beginIt <= endIt &&
                        endIt <= end());
