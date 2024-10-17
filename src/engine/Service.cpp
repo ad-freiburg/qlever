@@ -295,16 +295,11 @@ cppcoro::generator<IdTable> Service::computeResultLazily(
 
 // ____________________________________________________________________________
 std::optional<std::string> Service::getSiblingValuesClause() const {
-  if (siblingTree_ == nullptr) {
+  if (!siblingTree_ || !precomputedSiblingResult_.has_value()) {
     return std::nullopt;
   }
 
-  const auto& siblingResult = siblingTree_->getResult();
-  if (siblingResult->idTable().size() >
-      RuntimeParameters().get<"service-max-value-rows">()) {
-    return std::nullopt;
-  }
-
+  const auto& siblingResult = precomputedSiblingResult_.value();
   checkCancellation();
 
   std::vector<ColumnIndex> commonColumnIndices;
@@ -491,5 +486,35 @@ std::optional<std::string> Service::idToValueForValuesClause(
       } else {
         return RdfEscaping::validRDFLiteralFromNormalized(value);
       }
+  }
+}
+
+// ____________________________________________________________________________
+void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
+                                      std::shared_ptr<Operation> right,
+                                      bool rightOnly) {
+  AD_CORRECTNESS_CHECK(left && right);
+  auto a = std::dynamic_pointer_cast<Service>(left);
+  auto b = std::dynamic_pointer_cast<Service>(right);
+
+  if ((rightOnly && !b) ||
+      (!rightOnly && static_cast<bool>(a) == static_cast<bool>(b))) {
+    return;
+  }
+
+  const auto& [service, sibling] = [&]() {
+    if (a) {
+      return std::tie(a, right);
+    } else {
+      AD_CORRECTNESS_CHECK(b);
+      return std::tie(b, left);
+    }
+  }();
+
+  auto siblingResult = sibling->getResult();
+  sibling->precomputedResultBecauseSiblingOfService_ = siblingResult;
+  if (siblingResult->idTable().size() <=
+      RuntimeParameters().get<"service-max-value-rows">()) {
+    service->precomputedSiblingResult_ = siblingResult;
   }
 }

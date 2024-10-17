@@ -8,6 +8,7 @@
 #include "engine/AddCombinedRowToTable.h"
 #include "engine/CallFixedSize.h"
 #include "engine/Engine.h"
+#include "engine/Service.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 
 using std::endl;
@@ -91,6 +92,11 @@ string OptionalJoin::getDescriptor() const {
 // _____________________________________________________________________________
 ProtoResult OptionalJoin::computeResult([[maybe_unused]] bool requestLaziness) {
   LOG(DEBUG) << "OptionalJoin result computation..." << endl;
+
+  // If the right of the RootOperations is a Service, precompute it's sibling's
+  // result for potential Service clause optimization.
+  Service::precomputeSiblingResult(_left->getRootOperation(),
+                                   _right->getRootOperation(), true);
 
   IdTable idTable{getExecutionContext()->getAllocator()};
   idTable.setNumColumns(getResultWidth());

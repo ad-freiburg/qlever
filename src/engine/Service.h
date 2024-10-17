@@ -37,6 +37,9 @@ class Service : public Operation {
       const boost::beast::http::verb&, std::string_view, std::string_view,
       std::string_view)>;
 
+  // Optional precomputed sibling result.
+  std::optional<std::shared_ptr<const Result>> precomputedSiblingResult_;
+
  private:
   // The parsed SERVICE clause.
   parsedQuery::Service parsedServiceClause_;
@@ -106,6 +109,13 @@ class Service : public Operation {
   // id. If the id is of type blank node `std::nullopt` is returned.
   static std::optional<std::string> idToValueForValuesClause(
       const Index& index, Id id, const LocalVocab& localVocab);
+
+  // Given two child-operations of a (Optional-)Join or Minus operation, the
+  // Result of the sibling-operation is computed.
+  // If rightOnly is true, only the right operation can be a service.
+  static void precomputeSiblingResult(std::shared_ptr<Operation> left,
+                                      std::shared_ptr<Operation> right,
+                                      bool rightOnly = false);
 
  private:
   // The string returned by this function is used as cache key.
