@@ -12,7 +12,7 @@
 #include "util/ConstexprUtils.h"
 #include "util/http/MediaTypes.h"
 
-bool getResultForAsk(std::shared_ptr<const Result> res) {
+bool getResultForAsk(const std::shared_ptr<const Result>& res) {
   if (res->isFullyMaterialized()) {
     return !res->idTable().empty();
   } else {
@@ -23,8 +23,7 @@ bool getResultForAsk(std::shared_ptr<const Result> res) {
 // _____________________________________________________________________________
 cppcoro::generator<std::string> computeResultForAsk(
     const ParsedQuery& parsedQuery, const QueryExecutionTree& qet,
-    ad_utility::MediaType mediaType, const ad_utility::Timer& requestTimer
-) {
+    ad_utility::MediaType mediaType, const ad_utility::Timer& requestTimer) {
   bool result = getResultForAsk(qet.getResult(true));
 
   std::string xmlTemplate = R"(<?xml version="1.0"?>
@@ -45,7 +44,9 @@ cppcoro::generator<std::string> computeResultForAsk(
       break;
     }
     default:
-      throw std::runtime_error("ASK queries are currently only supported for XML and sparql-json results");
+      throw std::runtime_error(
+          "ASK queries are currently only supported for XML and sparql-json "
+          "results");
   }
 }
 
@@ -398,14 +399,15 @@ static nlohmann::json stringAndTypeToBinding(std::string_view entitystr,
 }
 
 // _____________________________________________________________________________
-cppcoro::generator<std::string>
-askQueryResultToQLeverJSON(
-    const QueryExecutionTree& qet,
-    std::shared_ptr<const Result> result
-    ) {
+cppcoro::generator<std::string> askQueryResultToQLeverJSON(
+    const QueryExecutionTree& qet, std::shared_ptr<const Result> result) {
   AD_CORRECTNESS_CHECK(result != nullptr);
-  // TODO<joka921> Also yield "false" if appropriate.
-  co_yield "[true]";
+  std::string s =
+      getResultForAsk(qet.getResult(true))
+          ? "[\"\\\"true\\\"^^<http://www.w3.org/2001/XMLSchema#boolean>\"]"
+          : "[\"\\\"false\\\"^^<http://www.w3.org/2001/"
+            "XMLSchema#boolean>\"]";
+  co_yield s;
 }
 
 // _____________________________________________________________________________
@@ -764,7 +766,6 @@ ExportQueryExecutionTrees::convertStreamGeneratorForChunkedTransfer(
   }(std::move(streamGenerator), std::move(it));
 }
 
-
 // _____________________________________________________________________________
 cppcoro::generator<std::string> ExportQueryExecutionTrees::computeResult(
     const ParsedQuery& parsedQuery, const QueryExecutionTree& qet,
@@ -823,8 +824,7 @@ ExportQueryExecutionTrees::computeResultAsQLeverJSON(
         std::vector<std::string>{"?subject", "?predicate", "?object"};
   } else {
     // TODO<joka921> Assert that this is an ASK clause.
-    jsonPrefix["selected"] =
-        std::vector<std::string>{"?result"};
+    jsonPrefix["selected"] = std::vector<std::string>{"?result"};
   }
 
   std::string prefixStr = jsonPrefix.dump();

@@ -86,8 +86,9 @@ class ParsedQuery {
 
   using DatasetClauses = parsedQuery::DatasetClauses;
 
-  // ASK queries have no further context in the header, so we use an empty struct
-  struct AskClause : public parsedQuery::ClauseBase{};
+  // ASK queries have no further context in the header, so we use an empty
+  // struct
+  struct AskClause : public parsedQuery::ClauseBase {};
 
   ParsedQuery() = default;
 
