@@ -86,6 +86,9 @@ class ParsedQuery {
 
   using DatasetClauses = parsedQuery::DatasetClauses;
 
+  // ASK queries have no further context in the header, so we use an empty struct
+  struct AskClause : public parsedQuery::ClauseBase{};
+
   ParsedQuery() = default;
 
   GraphPattern _rootGraphPattern;
@@ -101,7 +104,7 @@ class ParsedQuery {
 
   // explicit default initialisation because the constructor
   // of SelectClause is private
-  std::variant<SelectClause, ConstructClause, UpdateClause> _clause{
+  std::variant<SelectClause, ConstructClause, UpdateClause, AskClause> _clause{
       SelectClause{}};
 
   // The IRIs from the FROM and FROM NAMED clauses.
@@ -117,6 +120,10 @@ class ParsedQuery {
 
   [[nodiscard]] bool hasUpdateClause() const {
     return std::holds_alternative<UpdateClause>(_clause);
+  }
+
+  bool hasAskClause() const {
+    return std::holds_alternative<AskClause>(_clause);
   }
 
   [[nodiscard]] decltype(auto) selectClause() const {

@@ -264,8 +264,25 @@ ParsedQuery Visitor::visit(const Parser::DescribeQueryContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-ParsedQuery Visitor::visit(const Parser::AskQueryContext* ctx) {
-  reportNotSupported(ctx, "ASK queries are");
+ParsedQuery Visitor::visit(Parser::AskQueryContext* ctx) {
+  parsedQuery_._clause = ParsedQuery::AskClause{};
+  parsedQuery_.datasetClauses_ = parsedQuery::DatasetClauses::fromClauses(
+      visitVector(ctx->datasetClause()));
+  auto [pattern, visibleVariables] = visit(ctx->whereClause());
+  parsedQuery_._rootGraphPattern = std::move(pattern);
+  // TODO<joka921> This is probably not required for ask queries.
+  parsedQuery_.registerVariablesVisibleInQueryBody(visibleVariables);
+  auto getSolutionModifiers = [this, ctx]() {
+    auto solutionModifiers = visit(ctx->solutionModifier());
+    if (!solutionModifiers.limitOffset_.isUnconstrained()) {
+      reportError(ctx->solutionModifier(),
+                  "ASK queries may not contain LIMIT or OFFSET clauses");
+    }
+    solutionModifiers.limitOffset_._limit = 1;
+    return solutionModifiers;
+  };
+  parsedQuery_.addSolutionModifiers(getSolutionModifiers());
+  return parsedQuery_;
 }
 
 // ____________________________________________________________________________________
