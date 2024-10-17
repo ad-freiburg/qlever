@@ -1,6 +1,6 @@
-//  Copyright 2022, University of Freiburg,
-//                  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2022 - 2024, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 #include "ExportQueryExecutionTrees.h"
 
@@ -25,14 +25,17 @@ ad_utility::streams::stream_generator computeResultForAsk(
     [[maybe_unused]] const ParsedQuery& parsedQuery,
     const QueryExecutionTree& qet, ad_utility::MediaType mediaType,
     [[maybe_unused]] const ad_utility::Timer& requestTimer) {
+  // Compute the result of the ASK query.
   bool result = getResultForAsk(qet.getResult(true));
 
+  // Template for the result as RDF/XML.
   std::string xmlTemplate = R"(<?xml version="1.0"?>
 <sparql xmlns="http://www.w3.org/2005/sparql-results#">
   <head/>
   <boolean>true</boolean>
 </sparql>)";
 
+  // Return the result in the requested format.
   switch (mediaType) {
     using enum ad_utility::MediaType;
     case sparqlXml: {
@@ -408,6 +411,8 @@ static nlohmann::json stringAndTypeToBinding(std::string_view entitystr,
 cppcoro::generator<std::string> askQueryResultToQLeverJSON(
     const QueryExecutionTree& qet, std::shared_ptr<const Result> result) {
   AD_CORRECTNESS_CHECK(result != nullptr);
+  // TODO joka921: Call function for converting this to JSON (which also avoids
+  // spelling out the XSD type).
   std::string s =
       getResultForAsk(qet.getResult(true))
           ? "[\"\\\"true\\\"^^<http://www.w3.org/2001/XMLSchema#boolean>\"]"
@@ -848,7 +853,7 @@ ExportQueryExecutionTrees::computeResultAsQLeverJSON(
           qet, query.constructClause().triples_, query._limitOffset,
           std::move(result), std::move(cancellationHandle));
     } else {
-      // Assert ASK clause
+      // TODO<joka921>: Refactor this to use std::visit.
       return askQueryResultToQLeverJSON(qet, std::move(result));
     }
   }();

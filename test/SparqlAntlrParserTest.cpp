@@ -1318,8 +1318,7 @@ TEST(SparqlParser, Query) {
   // Describe and Ask Queries are not supported.
   expectQueryFails("DESCRIBE *");
   // TODO<joka921> Those are implemented now, test them
-  //expectQueryFails("ASK WHERE { ?x <foo> <bar> }");
-
+  // expectQueryFails("ASK WHERE { ?x <foo> <bar> }");
 }
 
 // Some helper matchers for the `builtInCall` test below.

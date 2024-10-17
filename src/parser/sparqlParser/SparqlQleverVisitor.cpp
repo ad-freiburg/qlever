@@ -270,8 +270,9 @@ ParsedQuery Visitor::visit(Parser::AskQueryContext* ctx) {
       visitVector(ctx->datasetClause()));
   auto [pattern, visibleVariables] = visit(ctx->whereClause());
   parsedQuery_._rootGraphPattern = std::move(pattern);
-  // TODO<joka921> This is probably not required for ask queries.
   parsedQuery_.registerVariablesVisibleInQueryBody(visibleVariables);
+  // NOTE: It can make sense to have solution modifiers with an ASK query, for
+  // example, a GROUP BY with a HAVING.
   auto getSolutionModifiers = [this, ctx]() {
     auto solutionModifiers = visit(ctx->solutionModifier());
     if (!solutionModifiers.limitOffset_.isUnconstrained()) {

@@ -103,10 +103,10 @@ class ParsedQuery {
   LimitOffsetClause _limitOffset{};
   string _originalString;
 
-  // explicit default initialisation because the constructor
-  // of SelectClause is private
   using HeaderClause =
       std::variant<SelectClause, ConstructClause, UpdateClause, AskClause>;
+  // Use explicit default initialization for `SelectClause` because its
+  // constructor is private.
   HeaderClause _clause{SelectClause{}};
 
   // The IRIs from the FROM and FROM NAMED clauses.
