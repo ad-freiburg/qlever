@@ -21,14 +21,15 @@ bool getResultForAsk(const std::shared_ptr<const Result>& res) {
 }
 
 // _____________________________________________________________________________
-cppcoro::generator<std::string> computeResultForAsk(
-    const ParsedQuery& parsedQuery, const QueryExecutionTree& qet,
-    ad_utility::MediaType mediaType, const ad_utility::Timer& requestTimer) {
+ad_utility::streams::stream_generator computeResultForAsk(
+    [[maybe_unused]] const ParsedQuery& parsedQuery,
+    const QueryExecutionTree& qet, ad_utility::MediaType mediaType,
+    [[maybe_unused]] const ad_utility::Timer& requestTimer) {
   bool result = getResultForAsk(qet.getResult(true));
 
   std::string xmlTemplate = R"(<?xml version="1.0"?>
 <sparql xmlns="http://www.w3.org/2005/sparql-results#">
-  <head></head>
+  <head/>
   <boolean>true</boolean>
 </sparql>)";
 
@@ -43,10 +44,15 @@ cppcoro::generator<std::string> computeResultForAsk(
       }
       break;
     }
+    case sparqlJson: {
+      nlohmann::json j;
+      j["head"] = nlohmann::json::object_t{};
+      j["boolean"] = result;
+      co_yield j.dump();
+    }
     default:
-      throw std::runtime_error(
-          "ASK queries are currently only supported for XML and sparql-json "
-          "results");
+      throw std::runtime_error{
+          "ASK queries are not supported for TSV or CSV or binary format."};
   }
 }
 
@@ -771,22 +777,23 @@ cppcoro::generator<std::string> ExportQueryExecutionTrees::computeResult(
     const ParsedQuery& parsedQuery, const QueryExecutionTree& qet,
     ad_utility::MediaType mediaType, const ad_utility::Timer& requestTimer,
     CancellationHandle cancellationHandle) {
-  if (parsedQuery.hasAskClause() && mediaType != MediaType::qleverJson) {
-    return computeResultForAsk(parsedQuery, qet, mediaType, requestTimer);
-  }
   auto compute = [&]<MediaType format> {
     if constexpr (format == MediaType::qleverJson) {
       return computeResultAsQLeverJSON(parsedQuery, qet, requestTimer,
                                        std::move(cancellationHandle));
+    } else {
+      if (parsedQuery.hasAskClause()) {
+        return computeResultForAsk(parsedQuery, qet, mediaType, requestTimer);
+      }
+      return parsedQuery.hasSelectClause()
+                 ? selectQueryResultToStream<format>(
+                       qet, parsedQuery.selectClause(),
+                       parsedQuery._limitOffset, std::move(cancellationHandle))
+                 : constructQueryResultToStream<format>(
+                       qet, parsedQuery.constructClause().triples_,
+                       parsedQuery._limitOffset, qet.getResult(true),
+                       std::move(cancellationHandle));
     }
-    return parsedQuery.hasSelectClause()
-               ? selectQueryResultToStream<format>(
-                     qet, parsedQuery.selectClause(), parsedQuery._limitOffset,
-                     std::move(cancellationHandle))
-               : constructQueryResultToStream<format>(
-                     qet, parsedQuery.constructClause().triples_,
-                     parsedQuery._limitOffset, qet.getResult(true),
-                     std::move(cancellationHandle));
   };
 
   using enum MediaType;

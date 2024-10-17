@@ -105,8 +105,9 @@ class ParsedQuery {
 
   // explicit default initialisation because the constructor
   // of SelectClause is private
-  std::variant<SelectClause, ConstructClause, UpdateClause, AskClause> _clause{
-      SelectClause{}};
+  using HeaderClause =
+      std::variant<SelectClause, ConstructClause, UpdateClause, AskClause>;
+  HeaderClause _clause{SelectClause{}};
 
   // The IRIs from the FROM and FROM NAMED clauses.
   DatasetClauses datasetClauses_;
