@@ -81,64 +81,84 @@ std::vector<QueryExecutionTree*> Bind::getChildren() {
 }
 
 // _____________________________________________________________________________
-ProtoResult Bind::computeResult([[maybe_unused]] bool requestLaziness) {
-  using std::endl;
-  LOG(DEBUG) << "Get input to BIND operation..." << endl;
-  std::shared_ptr<const Result> subRes = _subtree->getResult();
-  LOG(DEBUG) << "Got input to Bind operation." << endl;
-  IdTable idTable{getExecutionContext()->getAllocator()};
-
-  idTable.setNumColumns(getResultWidth());
-
-  // Make a deep copy of the local vocab from `subRes` and then add to it (in
-  // case BIND adds a new word or words).
-  //
-  // TODO: In most BIND operations, nothing is added to the local vocabulary, so
-  // it would be more efficient to first share the pointer here (like with
-  // `shareLocalVocabFrom`) and only copy it when a new word is about to be
-  // added. Same for GROUP BY.
-  auto localVocab = subRes->getCopyOfLocalVocab();
-
-  size_t inwidth = subRes->idTable().numColumns();
-  size_t outwidth = getResultWidth();
-
-  CALL_FIXED_SIZE((std::array{inwidth, outwidth}), &Bind::computeExpressionBind,
-                  this, &idTable, &localVocab, *subRes,
-                  _bind._expression.getPimpl());
-
-  LOG(DEBUG) << "BIND result computation done." << endl;
-  return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
+IdTable Bind::cloneSubView(const IdTable& idTable,
+                           const std::pair<size_t, size_t>& subrange) {
+  IdTable result(idTable.numColumns(), idTable.getAllocator());
+  result.resize(subrange.second - subrange.first);
+  std::ranges::copy(idTable.begin() + subrange.first,
+                    idTable.begin() + subrange.second, result.begin());
+  return result;
 }
 
 // _____________________________________________________________________________
-template <size_t IN_WIDTH, size_t OUT_WIDTH>
-void Bind::computeExpressionBind(
-    IdTable* outputIdTable, LocalVocab* outputLocalVocab,
-    const Result& inputResultTable,
-    sparqlExpression::SparqlExpression* expression) const {
+ProtoResult Bind::computeResult(bool requestLaziness) {
+  LOG(DEBUG) << "Get input to BIND operation..." << std::endl;
+  std::shared_ptr<const Result> subRes = _subtree->getResult(requestLaziness);
+  LOG(DEBUG) << "Got input to Bind operation." << std::endl;
+
+  auto applyBind = [this, subRes](IdTable idTable, LocalVocab* localVocab) {
+    return computeExpressionBind(localVocab, std::move(idTable),
+                                 subRes->localVocab(),
+                                 _bind._expression.getPimpl());
+  };
+
+  if (subRes->isFullyMaterialized()) {
+    if (requestLaziness && subRes->idTable().size() > CHUNK_SIZE) {
+      auto localVocab =
+          std::make_shared<LocalVocab>(subRes->getCopyOfLocalVocab());
+      auto generator = [](std::shared_ptr<LocalVocab> vocab, auto applyBind,
+                          std::shared_ptr<const Result> result)
+          -> cppcoro::generator<IdTable> {
+        size_t size = result->idTable().size();
+        for (size_t offset = 0; offset < size; offset += CHUNK_SIZE) {
+          co_yield applyBind(
+              cloneSubView(result->idTable(),
+                           {offset, std::min(size, offset + CHUNK_SIZE)}),
+              vocab.get());
+        }
+      }(localVocab, std::move(applyBind), std::move(subRes));
+      return {std::move(generator), resultSortedOn(), std::move(localVocab)};
+    }
+    // Make a deep copy of the local vocab from `subRes` and then add to it (in
+    // case BIND adds a new word or words).
+    //
+    // Make a copy of the local vocab from`subRes`and then add to it (in case
+    // BIND adds new words). Note: The copy of the local vocab is shallow
+    // via`shared_ptr`s, so the following is also efficient if the BIND adds no
+    // new words.
+    LocalVocab localVocab = subRes->getCopyOfLocalVocab();
+    IdTable result = applyBind(subRes->idTable().clone(), &localVocab);
+    LOG(DEBUG) << "BIND result computation done." << std::endl;
+    return {std::move(result), resultSortedOn(), std::move(localVocab)};
+  }
+  auto localVocab = std::make_shared<LocalVocab>();
+  auto generator =
+      [](std::shared_ptr<LocalVocab> vocab, auto applyBind,
+         std::shared_ptr<const Result> result) -> cppcoro::generator<IdTable> {
+    for (IdTable& idTable : result->idTables()) {
+      co_yield applyBind(std::move(idTable), vocab.get());
+    }
+    std::array<const LocalVocab*, 2> vocabs{vocab.get(), &result->localVocab()};
+    *vocab = LocalVocab::merge(std::span{vocabs});
+  }(localVocab, std::move(applyBind), std::move(subRes));
+  return {std::move(generator), resultSortedOn(), std::move(localVocab)};
+}
+
+// _____________________________________________________________________________
+IdTable Bind::computeExpressionBind(
+    LocalVocab* outputLocalVocab, IdTable idTable,
+    const LocalVocab& inputLocalVocab,
+    const sparqlExpression::SparqlExpression* expression) const {
   sparqlExpression::EvaluationContext evaluationContext(
-      *getExecutionContext(), _subtree->getVariableColumns(),
-      inputResultTable.idTable(), getExecutionContext()->getAllocator(),
-      inputResultTable.localVocab(), cancellationHandle_, deadline_);
+      *getExecutionContext(), _subtree->getVariableColumns(), idTable,
+      getExecutionContext()->getAllocator(), inputLocalVocab,
+      cancellationHandle_, deadline_);
 
   sparqlExpression::ExpressionResult expressionResult =
       expression->evaluate(&evaluationContext);
 
-  const auto input = inputResultTable.idTable().asStaticView<IN_WIDTH>();
-  auto output = std::move(*outputIdTable).toStatic<OUT_WIDTH>();
-
-  // first initialize the first columns (they remain identical)
-  const auto inSize = input.size();
-  output.reserve(inSize);
-  const auto inCols = input.numColumns();
-  // copy the input to the first numColumns;
-  for (size_t i = 0; i < inSize; ++i) {
-    output.emplace_back();
-    for (size_t j = 0; j < inCols; ++j) {
-      output(i, j) = input(i, j);
-    }
-    checkCancellation();
-  }
+  idTable.addEmptyColumn();
+  auto outputColumn = idTable.getColumn(idTable.numColumns() - 1);
 
   auto visitor = [&]<sparqlExpression::SingleExpressionResult T>(
                      T&& singleResult) mutable {
@@ -146,22 +166,19 @@ void Bind::computeExpressionBind(
     constexpr static bool isStrongId = std::is_same_v<T, Id>;
 
     if constexpr (isVariable) {
-      auto column =
+      auto columnIndex =
           getInternallyVisibleVariableColumns().at(singleResult).columnIndex_;
-      for (size_t i = 0; i < inSize; ++i) {
-        output(i, inCols) = output(i, column);
-        checkCancellation();
-      }
+      auto inputColumn = idTable.getColumn(columnIndex);
+      AD_CORRECTNESS_CHECK(inputColumn.size() == outputColumn.size());
+      std::ranges::copy(inputColumn, outputColumn.begin());
     } else if constexpr (isStrongId) {
-      for (size_t i = 0; i < inSize; ++i) {
-        output(i, inCols) = singleResult;
-        checkCancellation();
-      }
+      std::ranges::fill(outputColumn, singleResult);
     } else {
       constexpr bool isConstant = sparqlExpression::isConstantResult<T>;
 
       auto resultGenerator = sparqlExpression::detail::makeGenerator(
-          std::forward<T>(singleResult), inSize, &evaluationContext);
+          std::forward<T>(singleResult), outputColumn.size(),
+          &evaluationContext);
 
       if constexpr (isConstant) {
         auto it = resultGenerator.begin();
@@ -169,16 +186,14 @@ void Bind::computeExpressionBind(
           Id constantId =
               sparqlExpression::detail::constantExpressionResultToId(
                   std::move(*it), *outputLocalVocab);
-          for (size_t i = 0; i < inSize; ++i) {
-            output(i, inCols) = constantId;
-            checkCancellation();
-          }
+          checkCancellation();
+          std::ranges::fill(outputColumn, constantId);
         }
       } else {
         size_t i = 0;
         // We deliberately move the values from the generator.
         for (auto& resultValue : resultGenerator) {
-          output(i, inCols) =
+          outputColumn[i] =
               sparqlExpression::detail::constantExpressionResultToId(
                   std::move(resultValue), *outputLocalVocab);
           i++;
@@ -190,5 +205,5 @@ void Bind::computeExpressionBind(
 
   std::visit(visitor, std::move(expressionResult));
 
-  *outputIdTable = std::move(output).toDynamic();
+  return idTable;
 }

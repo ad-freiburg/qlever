@@ -20,11 +20,6 @@ Index::Index(Index&&) noexcept = default;
 Index::~Index() = default;
 
 // ____________________________________________________________________________
-void Index::createFromFile(const std::string& filename, Filetype type) {
-  pimpl_->createFromFile(filename, type);
-}
-
-// ____________________________________________________________________________
 void Index::createFromOnDiskIndex(const std::string& onDiskBase) {
   pimpl_->createFromOnDiskIndex(onDiskBase);
 }
@@ -282,4 +277,9 @@ IdTable Index::scan(
 size_t Index::getResultSizeOfScan(const ScanSpecification& scanSpecification,
                                   const Permutation::Enum& permutation) const {
   return pimpl_->getResultSizeOfScan(scanSpecification, permutation);
+}
+
+// ____________________________________________________________________________
+void Index::createFromFiles(const std::vector<InputFileSpecification>& files) {
+  return pimpl_->createFromFiles(files);
 }

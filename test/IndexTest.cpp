@@ -486,3 +486,44 @@ TEST(IndexTest, trivialGettersAndSetters) {
   EXPECT_EQ(index.memoryLimitIndexBuilding(), 7_kB);
   EXPECT_EQ(std::as_const(index).memoryLimitIndexBuilding(), 7_kB);
 }
+
+TEST(IndexTest, loggingAndSettingOfParallelParsing) {
+  using enum qlever::Filetype;
+  std::vector<qlever::InputFileSpecification> files{
+      {"singleFile.ttl", Turtle, std::nullopt, false}};
+  testing::internal::CaptureStdout();
+  using namespace ::testing;
+  {
+    IndexImpl::updateInputFileSpecificationsAndLog(files, false);
+    EXPECT_THAT(
+        testing::internal::GetCapturedStdout(),
+        AllOf(HasSubstr("from singleFile.ttl"), Not(HasSubstr("parallel"))));
+    EXPECT_FALSE(files.at(0).parseInParallel_);
+  }
+
+  {
+    testing::internal::CaptureStdout();
+    IndexImpl::updateInputFileSpecificationsAndLog(files, true);
+    EXPECT_THAT(testing::internal::GetCapturedStdout(),
+                AllOf(HasSubstr("from singleFile.ttl"), HasSubstr("deprecated"),
+                      HasSubstr("--parse-parallel")));
+    EXPECT_TRUE(files.at(0).parseInParallel_);
+  }
+
+  {
+    files.emplace_back("secondFile.ttl", Turtle, std::nullopt, false);
+    auto filesCopy = files;
+    testing::internal::CaptureStdout();
+    IndexImpl::updateInputFileSpecificationsAndLog(files, false);
+    EXPECT_THAT(testing::internal::GetCapturedStdout(),
+                AllOf(HasSubstr("from 2 input streams"),
+                      Not(HasSubstr("is deprecated"))));
+    EXPECT_EQ(files, filesCopy);
+  }
+
+  {
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        IndexImpl::updateInputFileSpecificationsAndLog(files, true),
+        HasSubstr("but has to be specified"));
+  }
+}
