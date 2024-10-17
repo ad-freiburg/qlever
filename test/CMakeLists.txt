@@ -405,6 +405,8 @@ addLinkAndDiscoverTest(FilterTest engine)
 
 addLinkAndDiscoverTest(ResultTest engine)
 
+addLinkAndDiscoverTest(BlankNodeManagerTest)
+
 addLinkAndDiscoverTest(SparqlExpressionGeneratorsTest engine)
 
 addLinkAndDiscoverTest(UrlParserTest)

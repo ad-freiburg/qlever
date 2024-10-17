@@ -390,6 +390,9 @@ void IndexImpl::createFromFiles(
     configurationJson_["has-all-permutations"] = true;
   }
 
+  configurationJson_["num-blank-nodes-total"] =
+      indexBuilderData.vocabularyMetaData_.getNextBlankNodeIndex();
+
   addInternalStatisticsToConfiguration(numTriplesInternal,
                                        numPredicatesInternal);
   LOG(INFO) << "Index build completed" << std::endl;
@@ -1076,6 +1079,12 @@ void IndexImpl::readConfiguration() {
   loadDataMember("num-subjects", numSubjects_, NumNormalAndInternal{});
   loadDataMember("num-objects", numObjects_, NumNormalAndInternal{});
   loadDataMember("num-triples", numTriples_, NumNormalAndInternal{});
+
+  // Initialize BlankNodeManager
+  uint64_t numBlankNodesTotal;
+  loadDataMember("num-blank-nodes-total", numBlankNodesTotal);
+  blankNodeManager_ =
+      std::make_unique<ad_utility::BlankNodeManager>(numBlankNodesTotal);
 
   // Compute unique ID for this index.
   //
