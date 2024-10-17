@@ -238,8 +238,11 @@ uint64_t SpatialJoin::getSizeEstimateBeforeLimit() {
     }
 
     // If we don't limit the number of results, we cannot draw conclusions about
-    // the size, other than the worst case `|childLeft| * |childRight|`
-    return childLeft_->getSizeEstimate() * childRight_->getSizeEstimate();
+    // the size, other than the worst case `|childLeft| * |childRight|`. However
+    // to improve query planning for the average case, we apply a constant
+    // factor (the asymptotic behavior remains unchanged).
+    return (childLeft_->getSizeEstimate() * childRight_->getSizeEstimate()) /
+           SPATIAL_JOIN_MAX_DIST_SIZE_ESTIMATE;
   }
   return 1;  // dummy return if not both children are added
 }
@@ -271,7 +274,9 @@ float SpatialJoin::getMultiplicity(size_t col) {
       column -= childLeft_->getResultWidth();
     }
     auto distinctnessChild = getDistinctness(child, column);
-    return static_cast<float>(getSizeEstimate()) / distinctnessChild;
+    return static_cast<float>(childLeft_->getSizeEstimate() *
+                              childRight_->getSizeEstimate()) /
+           distinctnessChild;
   } else {
     return 1;
   }
