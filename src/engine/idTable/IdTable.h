@@ -278,6 +278,12 @@ class IdTable {
     data().resize(numColumns, ColumnStorage{allocator_});
   }
 
+  // Add a new empty column to the table.
+  void addEmptyColumn() requires columnsAreAllocatable && isDynamic {
+    data().emplace_back(size(), allocator_);
+    ++numColumns_;
+  }
+
   // The number of rows in the table. We deliberately have an explicitly named
   // function `numRows` as well as a generic `size` function because the latter
   // can be used to write generic code, for example when using STL algorithms on

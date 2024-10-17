@@ -11,6 +11,7 @@
 
 #include "global/Id.h"
 #include "index/CompressedString.h"
+#include "index/InputFileSpecification.h"
 #include "index/Permutation.h"
 #include "index/StringSortComparator.h"
 #include "index/Vocabulary.h"
@@ -63,6 +64,9 @@ class Index {
     vector<Score> scores_;
   };
 
+  using Filetype = qlever::Filetype;
+  using InputFileSpecification = qlever::InputFileSpecification;
+
   /// Forbid copy and assignment.
   Index& operator=(const Index&) = delete;
   Index(const Index&) = delete;
@@ -79,9 +83,7 @@ class Index {
   // Create an index from a file. Will write vocabulary and on-disk index data.
   // NOTE: The index can not directly be used after this call, but has to be
   // setup by `createFromOnDiskIndex` after this call.
-  enum class Filetype { Turtle, NQuad };
-  void createFromFile(const std::string& filename,
-                      Filetype filetype = Filetype::Turtle);
+  void createFromFiles(const std::vector<InputFileSpecification>& files);
 
   // Create an index object from an on-disk index that has previously been
   // constructed using the `createFromFile` method which is typically called via
