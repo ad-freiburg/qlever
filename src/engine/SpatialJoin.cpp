@@ -303,8 +303,8 @@ PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
   };
 
   // Input tables
-  const auto [idTableLeft, resultLeft] = getIdTable(childLeft_);
-  const auto [idTableRight, resultRight] = getIdTable(childRight_);
+  auto [idTableLeft, resultLeft] = getIdTable(childLeft_);
+  auto [idTableRight, resultRight] = getIdTable(childRight_);
 
   // Input table columns for the join
   ColumnIndex leftJoinCol = getJoinCol(childLeft_, leftChildVariable_);

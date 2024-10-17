@@ -14,9 +14,9 @@ SpatialJoinAlgorithms::SpatialJoinAlgorithms(
     bool addDistToResult,
     std::variant<NearestNeighborsConfig, MaxDistanceConfig> config)
     : qec_{qec},
-      params_{params},
+      params_{std::move(params)},
       addDistToResult_{addDistToResult},
-      config_{config} {}
+      config_{std::move(config)} {}
 
 // ____________________________________________________________________________
 std::optional<GeoPoint> SpatialJoinAlgorithms::getPoint(const IdTable* restable,
@@ -39,8 +39,8 @@ Id SpatialJoinAlgorithms::computeDist(const IdTable* idTableLeft,
   if (!point1.has_value() || !point2.has_value()) {
     return Id::makeUndefined();
   }
-  return Id::makeFromInt(
-      ad_utility::detail::wktDistImpl(point1.value(), point2.value()) * 1000);
+  return Id::makeFromInt(static_cast<long long>(
+      ad_utility::detail::wktDistImpl(point1.value(), point2.value()) * 1000));
 }
 
 // ____________________________________________________________________________
