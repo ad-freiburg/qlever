@@ -63,13 +63,6 @@ class Union : public Operation {
   }
 
  private:
-  // A drop-in replacement for `std::copy` that performs the copying in chunks
-  // of `chunkSize` and checks the timeout after each chunk.
-  void copyChunked(auto beg, auto end, auto target) const;
-
-  // A similar timeout-checking replacement for `std::fill`.
-  void fillChunked(auto beg, auto end, const auto& value) const;
-
   ProtoResult computeResult(bool requestLaziness) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;

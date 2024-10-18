@@ -8,6 +8,7 @@
 #include "engine/QueryExecutionTree.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
+#include "util/ChunkedForLoop.h"
 #include "util/Exception.h"
 
 // BIND adds exactly one new column
@@ -170,9 +171,11 @@ IdTable Bind::computeExpressionBind(
           getInternallyVisibleVariableColumns().at(singleResult).columnIndex_;
       auto inputColumn = idTable.getColumn(columnIndex);
       AD_CORRECTNESS_CHECK(inputColumn.size() == outputColumn.size());
-      std::ranges::copy(inputColumn, outputColumn.begin());
+      ad_utility::chunkedCopy(inputColumn, outputColumn.begin(), CHUNK_SIZE,
+                              [this]() { checkCancellation(); });
     } else if constexpr (isStrongId) {
-      std::ranges::fill(outputColumn, singleResult);
+      ad_utility::chunkedFill(outputColumn, singleResult, CHUNK_SIZE,
+                              [this]() { checkCancellation(); });
     } else {
       constexpr bool isConstant = sparqlExpression::isConstantResult<T>;
 
@@ -187,7 +190,8 @@ IdTable Bind::computeExpressionBind(
               sparqlExpression::detail::constantExpressionResultToId(
                   std::move(*it), *outputLocalVocab);
           checkCancellation();
-          std::ranges::fill(outputColumn, constantId);
+          ad_utility::chunkedFill(outputColumn, constantId, CHUNK_SIZE,
+                                  [this]() { checkCancellation(); });
         }
       } else {
         size_t i = 0;

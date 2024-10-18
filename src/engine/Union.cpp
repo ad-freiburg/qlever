@@ -6,6 +6,7 @@
 #include "Union.h"
 
 #include "engine/CallFixedSize.h"
+#include "util/ChunkedForLoop.h"
 #include "util/TransparentFunctors.h"
 
 const size_t Union::NO_COLUMN = std::numeric_limits<size_t>::max();
@@ -185,26 +186,6 @@ ProtoResult Union::computeResult(bool requestLaziness) {
 }
 
 // _____________________________________________________________________________
-void Union::copyChunked(auto beg, auto end, auto target) const {
-  size_t total = end - beg;
-  for (size_t i = 0; i < total; i += chunkSize) {
-    checkCancellation();
-    size_t actualEnd = std::min(i + chunkSize, total);
-    std::copy(beg + i, beg + actualEnd, target + i);
-  }
-}
-
-// _____________________________________________________________________________
-void Union::fillChunked(auto beg, auto end, const auto& value) const {
-  size_t total = end - beg;
-  for (size_t i = 0; i < total; i += chunkSize) {
-    checkCancellation();
-    size_t actualEnd = std::min(i + chunkSize, total);
-    std::fill(beg + i, beg + actualEnd, value);
-  }
-};
-
-// _____________________________________________________________________________
 IdTable Union::computeUnion(
     const IdTable& left, const IdTable& right,
     const std::vector<std::array<size_t, 2>>& columnOrigins) const {
@@ -220,11 +201,14 @@ IdTable Union::computeUnion(
                             size_t inputColumnIndex, size_t offset) {
     if (inputColumnIndex != NO_COLUMN) {
       decltype(auto) input = inputTable.getColumn(inputColumnIndex);
-      copyChunked(input.begin(), input.end(), targetColumn.begin() + offset);
+      ad_utility::chunkedCopy(input, targetColumn.begin() + offset, chunkSize,
+                              [this]() { checkCancellation(); });
     } else {
-      fillChunked(targetColumn.begin() + offset,
-                  targetColumn.begin() + offset + inputTable.size(),
-                  Id::makeUndefined());
+      ad_utility::chunkedFill(
+          std::ranges::subrange{
+              targetColumn.begin() + offset,
+              targetColumn.begin() + offset + inputTable.size()},
+          Id::makeUndefined(), chunkSize, [this]() { checkCancellation(); });
     }
   };
 
@@ -263,8 +247,9 @@ IdTable Union::transformToCorrectColumnFormat(
     IdTable idTable, const std::vector<ColumnIndex>& permutation) const {
   while (idTable.numColumns() < getResultWidth()) {
     idTable.addEmptyColumn();
-    auto column = idTable.getColumn(idTable.numColumns() - 1);
-    fillChunked(column.begin(), column.end(), Id::makeUndefined());
+    ad_utility::chunkedFill(idTable.getColumn(idTable.numColumns() - 1),
+                            Id::makeUndefined(), chunkSize,
+                            [this]() { checkCancellation(); });
   }
 
   idTable.setColumnSubset(permutation);
