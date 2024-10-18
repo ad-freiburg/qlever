@@ -181,6 +181,11 @@ class AddCombinedRowToIdTable {
     }
   }
 
+  IdTable& resultTable() & {
+    flush();
+    return resultTable_;
+  }
+
   // Move the result out after the last write. The function ensures, that the
   // `flush()` is called before doing so.
   IdTable&& resultTable() && {

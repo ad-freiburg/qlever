@@ -125,9 +125,10 @@ auto lazyOptionalJoinOnFirstColumn(auto& leftInput, auto& rightInput,
       std::make_shared<ad_utility::CancellationHandle<>>(),
       BUFFER_SIZE_JOIN_PATTERNS_WITH_OSP, resultCallback};
 
-  ad_utility::zipperJoinForBlocksWithoutUndef(leftInput, rightInput, comparator,
-                                              rowAdder, projection, projection,
-                                              std::true_type{});
+  auto generator = ad_utility::zipperJoinForBlocksWithoutUndef(
+      true, std::ranges::ref_view(leftInput), std::ranges::ref_view(rightInput),
+      comparator, rowAdder, projection, projection, std::true_type{});
+  ad_utility::consumeSingleStepGenerator(generator);
   rowAdder.flush();
 }
 
