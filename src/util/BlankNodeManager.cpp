@@ -16,18 +16,20 @@ BlankNodeManager::BlankNodeManager(uint64_t minIndex)
 BlankNodeManager::Block BlankNodeManager::allocateBlock() {
   // The Random-Generation Algorithm's performance is reduced once the number of
   // used blocks exceeds a limit.
+  auto numBlocks = usedBlocksSet_.rlock()->size();
   AD_CORRECTNESS_CHECK(
-      usedBlocksSet_.rlock()->size() < totalAvailableBlocks_ / 256,
+      numBlocks < totalAvailableBlocks_ / 256,
       absl::StrCat("Critical high number of blank node blocks in use: ",
-                   usedBlocksSet_.rlock()->size(), " blocks"));
+                   numBlocks, " blocks"));
 
-  uint64_t newBlockIndex = randBlockIndex_();
   auto usedBlocksSetPtr = usedBlocksSet_.wlock();
-  while (usedBlocksSetPtr->contains(newBlockIndex)) {
-    newBlockIndex = randBlockIndex_();
+  while (true) {
+    auto blockIdx = randBlockIndex_();
+    if (!usedBlocksSetPtr->contains(blockIdx)) {
+      usedBlocksSetPtr->insert(blockIdx);
+      return Block(blockIdx, minIndex_ + blockIdx * blockSize_);
+    }
   }
-  usedBlocksSetPtr->insert(newBlockIndex);
-  return Block(newBlockIndex, minIndex_ + newBlockIndex * blockSize_);
 }
 
 // _____________________________________________________________________________
@@ -43,6 +45,7 @@ BlankNodeManager::LocalBlankNodeManager::LocalBlankNodeManager(
 BlankNodeManager::LocalBlankNodeManager::~LocalBlankNodeManager() {
   auto ptr = blankNodeManager_->usedBlocksSet_.wlock();
   for (auto block : blocks_) {
+    AD_CONTRACT_CHECK(ptr->contains(block.blockIdx_));
     ptr->erase(block.blockIdx_);
   }
 }

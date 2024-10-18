@@ -84,8 +84,7 @@ BlankNodeIndex LocalVocab::getBlankNodeIndex(
   AD_CONTRACT_CHECK(blankNodeManager);
   // Initialize the `localBlankNodeManager_` if it doesn't exist yet.
   if (!localBlankNodeManager_) [[unlikely]] {
-    localBlankNodeManager_ =
-        ad_utility::BlankNodeManager::LocalBlankNodeManager(blankNodeManager);
+    localBlankNodeManager_.emplace(blankNodeManager);
   }
   return BlankNodeIndex::make(localBlankNodeManager_->getId());
 }

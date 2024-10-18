@@ -535,6 +535,16 @@ TEST(IndexTest, getBlankNodeManager) {
   Index index{ad_utility::makeUnlimitedAllocator<Id>()};
   EXPECT_ANY_THROW(index.getBlankNodeManager());
 
+  // Index is initialized -> no throw
   const Index& index2 = getQec("")->getIndex();
   EXPECT_NO_THROW(index2.getBlankNodeManager());
+
+  // Given an Index, ensure that the BlankNodeManager's `minIndex_` is set to
+  // the number of blank nodes the Index is initialized with.
+  std::string kb =
+      "_:a <b> <c> .\n"
+      "_:b <c> <a> .\n"
+      "_:c <a> <b> .";
+  const Index& index3 = getQec(kb)->getIndex();
+  EXPECT_EQ(index3.getBlankNodeManager()->minIndex_, 3);
 }

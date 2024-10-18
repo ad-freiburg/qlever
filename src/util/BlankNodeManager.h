@@ -97,6 +97,7 @@ class BlankNodeManager {
   [[nodiscard]] Block allocateBlock();
 
   FRIEND_TEST(BlankNodeManager, blockAllocationAndFree);
+  FRIEND_TEST(BlankNodeManager, moveLocalBlankNodeManager);
 };
 
 }  // namespace ad_utility

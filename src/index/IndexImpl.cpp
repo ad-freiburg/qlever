@@ -1695,3 +1695,9 @@ std::unique_ptr<ExternalSorter<Comparator, I>> IndexImpl::makeSorterPtr(
     std::string_view permutationName) const {
   return makeSorterImpl<Comparator, I, true>(permutationName);
 }
+
+// _____________________________________________________________________________
+ad_utility::BlankNodeManager* IndexImpl::getBlankNodeManager() const {
+  AD_CONTRACT_CHECK(blankNodeManager_);
+  return blankNodeManager_.get();
+}

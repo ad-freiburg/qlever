@@ -114,9 +114,6 @@ class IndexImpl {
 
   using NumNormalAndInternal = Index::NumNormalAndInternal;
 
-  // BlankNodeManager, initialized during `readConfiguration`
-  std::unique_ptr<ad_utility::BlankNodeManager> blankNodeManager_{nullptr};
-
   // Private data members.
  private:
   string onDiskBase_;
@@ -186,6 +183,9 @@ class IndexImpl {
   // after the creation of the vocabulary is finished.
   std::optional<Id> idOfHasPatternDuringIndexBuilding_;
   std::optional<Id> idOfInternalGraphDuringIndexBuilding_;
+
+  // BlankNodeManager, initialized during `readConfiguration`
+  std::unique_ptr<ad_utility::BlankNodeManager> blankNodeManager_{nullptr};
 
  public:
   explicit IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator);
@@ -257,6 +257,8 @@ class IndexImpl {
   auto& getNonConstVocabForTesting() { return vocab_; }
 
   const auto& getTextVocab() const { return textVocab_; };
+
+  ad_utility::BlankNodeManager* getBlankNodeManager() const;
 
   // --------------------------------------------------------------------------
   //  -- RETRIEVAL ---
