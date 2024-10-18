@@ -119,7 +119,7 @@ class IndexImpl {
   string onDiskBase_;
   string settingsFileName_;
   bool onlyAsciiTurtlePrefixes_ = false;
-  bool useParallelParser_ = true;
+  bool useParallelParser_ = false;
   TurtleParserIntegerOverflowBehavior turtleParserIntegerOverflowBehavior_ =
       TurtleParserIntegerOverflowBehavior::Error;
   bool turtleParserSkipIllegalLiterals_ = false;
@@ -228,12 +228,11 @@ class IndexImpl {
   Permutation& getPermutation(Permutation::Enum p);
   const Permutation& getPermutation(Permutation::Enum p) const;
 
-  // Creates an index from a file. Parameter Parser must be able to split the
-  // file's format into triples.
-  // Will write vocabulary and on-disk index data.
+  // Creates an index from a given set of input files. Will write vocabulary and
+  // on-disk index data.
   // !! The index can not directly be used after this call, but has to be setup
   // by createFromOnDiskIndex after this call.
-  void createFromFile(const string& filename, Index::Filetype type);
+  void createFromFiles(std::vector<Index::InputFileSpecification> files);
 
   // Creates an index object from an on disk index that has previously been
   // constructed. Read necessary meta data into memory and opens file handles.
@@ -474,8 +473,8 @@ class IndexImpl {
   // configured to either parse in parallel or not, and to either use the
   // CTRE-based relaxed parser or not, depending on the settings of the
   // corresponding member variables.
-  std::unique_ptr<RdfParserBase> makeRdfParser(const std::string& filename,
-                                               Index::Filetype type) const;
+  std::unique_ptr<RdfParserBase> makeRdfParser(
+      const std::vector<Index::InputFileSpecification>& files) const;
 
   FirstPermutationSorterAndInternalTriplesAsPso convertPartialToGlobalIds(
       TripleVec& data, const vector<size_t>& actualLinesPerPartial,
@@ -762,4 +761,10 @@ class IndexImpl {
   // them.
   void addInternalStatisticsToConfiguration(size_t numTriplesInternal,
                                             size_t numPredicatesInternal);
+
+  // Update `InputFileSpecification` based on `parallelParsingSpecifiedViaJson`
+  // and write a summary to the log.
+  static void updateInputFileSpecificationsAndLog(
+      std::vector<Index::InputFileSpecification>& spec,
+      bool parallelParsingSpecifiedViaJson);
 };
