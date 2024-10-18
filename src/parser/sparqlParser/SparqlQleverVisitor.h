@@ -154,7 +154,7 @@ class SparqlQleverVisitor {
   [[noreturn]] static ParsedQuery visit(
       const Parser::DescribeQueryContext* ctx);
 
-  [[noreturn]] static ParsedQuery visit(const Parser::AskQueryContext* ctx);
+  ParsedQuery visit(Parser::AskQueryContext* ctx);
 
   DatasetClause visit(Parser::DatasetClauseContext* ctx);
 

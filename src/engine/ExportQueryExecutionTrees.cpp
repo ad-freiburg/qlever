@@ -1,6 +1,6 @@
-//  Copyright 2022, University of Freiburg,
-//                  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2022 - 2024, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 #include "ExportQueryExecutionTrees.h"
 
@@ -11,6 +11,53 @@
 #include "parser/RdfEscaping.h"
 #include "util/ConstexprUtils.h"
 #include "util/http/MediaTypes.h"
+
+bool getResultForAsk(const std::shared_ptr<const Result>& res) {
+  if (res->isFullyMaterialized()) {
+    return !res->idTable().empty();
+  } else {
+    return std::ranges::any_of(res->idTables(), std::not_fn(&IdTable::empty));
+  }
+}
+
+// _____________________________________________________________________________
+ad_utility::streams::stream_generator computeResultForAsk(
+    [[maybe_unused]] const ParsedQuery& parsedQuery,
+    const QueryExecutionTree& qet, ad_utility::MediaType mediaType,
+    [[maybe_unused]] const ad_utility::Timer& requestTimer) {
+  // Compute the result of the ASK query.
+  bool result = getResultForAsk(qet.getResult(true));
+
+  // Template for the result as RDF/XML.
+  std::string xmlTemplate = R"(<?xml version="1.0"?>
+<sparql xmlns="http://www.w3.org/2005/sparql-results#">
+  <head/>
+  <boolean>true</boolean>
+</sparql>)";
+
+  // Return the result in the requested format.
+  switch (mediaType) {
+    using enum ad_utility::MediaType;
+    case sparqlXml: {
+      if (result) {
+        co_yield xmlTemplate;
+      } else {
+        auto str = absl::StrReplaceAll(xmlTemplate, {{"true", "false"}});
+        co_yield str;
+      }
+      break;
+    }
+    case sparqlJson: {
+      nlohmann::json j;
+      j["head"] = nlohmann::json::object_t{};
+      j["boolean"] = result;
+      co_yield j.dump();
+    }
+    default:
+      throw std::runtime_error{
+          "ASK queries are not supported for TSV or CSV or binary format."};
+  }
+}
 
 // __________________________________________________________________________
 cppcoro::generator<const IdTable&> ExportQueryExecutionTrees::getIdTables(
@@ -358,6 +405,20 @@ static nlohmann::json stringAndTypeToBinding(std::string_view entitystr,
     }
   }
   return b;
+}
+
+// _____________________________________________________________________________
+cppcoro::generator<std::string> askQueryResultToQLeverJSON(
+    const QueryExecutionTree& qet, std::shared_ptr<const Result> result) {
+  AD_CORRECTNESS_CHECK(result != nullptr);
+  // TODO joka921: Call function for converting this to JSON (which also avoids
+  // spelling out the XSD type).
+  std::string s =
+      getResultForAsk(qet.getResult(true))
+          ? "[\"\\\"true\\\"^^<http://www.w3.org/2001/XMLSchema#boolean>\"]"
+          : "[\"\\\"false\\\"^^<http://www.w3.org/2001/"
+            "XMLSchema#boolean>\"]";
+  co_yield s;
 }
 
 // _____________________________________________________________________________
@@ -725,15 +786,19 @@ cppcoro::generator<std::string> ExportQueryExecutionTrees::computeResult(
     if constexpr (format == MediaType::qleverJson) {
       return computeResultAsQLeverJSON(parsedQuery, qet, requestTimer,
                                        std::move(cancellationHandle));
+    } else {
+      if (parsedQuery.hasAskClause()) {
+        return computeResultForAsk(parsedQuery, qet, mediaType, requestTimer);
+      }
+      return parsedQuery.hasSelectClause()
+                 ? selectQueryResultToStream<format>(
+                       qet, parsedQuery.selectClause(),
+                       parsedQuery._limitOffset, std::move(cancellationHandle))
+                 : constructQueryResultToStream<format>(
+                       qet, parsedQuery.constructClause().triples_,
+                       parsedQuery._limitOffset, qet.getResult(true),
+                       std::move(cancellationHandle));
     }
-    return parsedQuery.hasSelectClause()
-               ? selectQueryResultToStream<format>(
-                     qet, parsedQuery.selectClause(), parsedQuery._limitOffset,
-                     std::move(cancellationHandle))
-               : constructQueryResultToStream<format>(
-                     qet, parsedQuery.constructClause().triples_,
-                     parsedQuery._limitOffset, qet.getResult(true),
-                     std::move(cancellationHandle));
   };
 
   using enum MediaType;
@@ -766,23 +831,32 @@ ExportQueryExecutionTrees::computeResultAsQLeverJSON(
   if (query.hasSelectClause()) {
     jsonPrefix["selected"] =
         query.selectClause().getSelectedVariablesAsStrings();
-  } else {
+  } else if (query.hasConstructClause()) {
     jsonPrefix["selected"] =
         std::vector<std::string>{"?subject", "?predicate", "?object"};
+  } else {
+    // TODO<joka921> Assert that this is an ASK clause.
+    jsonPrefix["selected"] = std::vector<std::string>{"?result"};
   }
 
   std::string prefixStr = jsonPrefix.dump();
   co_yield absl::StrCat(prefixStr.substr(0, prefixStr.size() - 1),
                         R"(,"res":[)");
 
-  auto bindings =
-      query.hasSelectClause()
-          ? selectQueryResultBindingsToQLeverJSON(
-                qet, query.selectClause(), query._limitOffset,
-                std::move(result), std::move(cancellationHandle))
-          : constructQueryResultBindingsToQLeverJSON(
-                qet, query.constructClause().triples_, query._limitOffset,
-                std::move(result), std::move(cancellationHandle));
+  auto bindings = [&]() {
+    if (query.hasSelectClause()) {
+      return selectQueryResultBindingsToQLeverJSON(
+          qet, query.selectClause(), query._limitOffset, std::move(result),
+          std::move(cancellationHandle));
+    } else if (query.hasConstructClause()) {
+      return constructQueryResultBindingsToQLeverJSON(
+          qet, query.constructClause().triples_, query._limitOffset,
+          std::move(result), std::move(cancellationHandle));
+    } else {
+      // TODO<joka921>: Refactor this to use std::visit.
+      return askQueryResultToQLeverJSON(qet, std::move(result));
+    }
+  }();
 
   size_t resultSize = 0;
   for (const std::string& b : bindings) {
