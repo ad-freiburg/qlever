@@ -243,16 +243,17 @@ IdTable Union::computeUnion(
 // _____________________________________________________________________________
 template <bool left>
 std::vector<ColumnIndex> Union::computePermutation() const {
-  ColumnIndex startOfUndefColumns = _subtrees[left ? 0 : 1]->getResultWidth();
-  std::vector<ColumnIndex> permutation(_columnOrigins.size());
-  for (size_t targetColIdx = 0; targetColIdx < _columnOrigins.size();
-       ++targetColIdx) {
-    ColumnIndex originIndex = _columnOrigins.at(targetColIdx)[left ? 0 : 1];
+  constexpr size_t treeIndex = left ? 0 : 1;
+  ColumnIndex startOfUndefColumns = _subtrees[treeIndex]->getResultWidth();
+  std::vector<ColumnIndex> permutation{};
+  permutation.reserve(_columnOrigins.size());
+  for (const auto& columnOrigin : _columnOrigins) {
+    ColumnIndex originIndex = columnOrigin[treeIndex];
     if (originIndex == NO_COLUMN) {
       originIndex = startOfUndefColumns;
       startOfUndefColumns++;
     }
-    permutation[targetColIdx] = originIndex;
+    permutation.push_back(originIndex);
   }
   return permutation;
 }
