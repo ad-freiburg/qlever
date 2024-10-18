@@ -684,7 +684,7 @@ template <typename Blocks>
 auto makeJoinSide(Blocks& blocks, const auto& projection) {
   return JoinSide{std::ranges::begin(blocks), std::ranges::end(blocks),
                   projection};
-};
+}
 
 // A concept to identify instantiations of the `JoinSide` template.
 template <typename T>

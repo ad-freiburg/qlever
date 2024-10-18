@@ -910,6 +910,9 @@ TEST(SparqlExpression, customNumericFunctions) {
   testUnaryExpression<makeTanExpression>(
       std::vector<Id>{I(0), D(1), D(2), D(-1)},
       std::vector<Id>{D(0), D(tan(1)), D(tan(2)), D(tan(-1))});
+  auto checkPow = std::bind_front(testNaryExpression, &makePowExpression);
+  checkPow(Ids{D(1), D(32), U, U}, Ids{I(5), D(2), U, D(0)},
+           IdOrLiteralOrIriVec{I(0), D(5), I(0), lit("abc")});
 }
 
 // ____________________________________________________________________________

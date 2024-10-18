@@ -1,9 +1,8 @@
-//
-// Created by johannes on 19.04.20.
-//
+//  Copyright 2020, University of Freiburg,
+//  Chair of Algorithms and Data Structures.
+//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#ifndef QLEVER_BIND_H
-#define QLEVER_BIND_H
+#pragma once
 
 #include "engine/Operation.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
@@ -12,6 +11,8 @@
 /// BIND operation, currently only supports a very limited subset of expressions
 class Bind : public Operation {
  public:
+  static constexpr size_t CHUNK_SIZE = 10'000;
+
   Bind(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> subtree,
        parsedQuery::Bind b)
       : Operation(qec), _subtree(std::move(subtree)), _bind(std::move(b)) {}
@@ -37,25 +38,20 @@ class Bind : public Operation {
   float getMultiplicity(size_t col) override;
   bool knownEmptyResult() override;
 
-  // Returns the variable to which the expression will be bound
-  [[nodiscard]] const string& targetVariable() const {
-    return _bind._target.name();
-  }
-
  protected:
   [[nodiscard]] vector<ColumnIndex> resultSortedOn() const override;
 
  private:
-  ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override;
+  ProtoResult computeResult(bool requestLaziness) override;
+
+  static IdTable cloneSubView(const IdTable& idTable,
+                              const std::pair<size_t, size_t>& subrange);
 
   // Implementation for the binding of arbitrary expressions.
-  template <size_t IN_WIDTH, size_t OUT_WIDTH>
-  void computeExpressionBind(
-      IdTable* outputIdTable, LocalVocab* outputLocalVocab,
-      const Result& inputResultTable,
-      sparqlExpression::SparqlExpression* expression) const;
+  IdTable computeExpressionBind(
+      LocalVocab* outputLocalVocab, IdTable idTable,
+      const LocalVocab& inputLocalVocab,
+      const sparqlExpression::SparqlExpression* expression) const;
 
   [[nodiscard]] VariableToColumnMap computeVariableToColumnMap() const override;
 };
-
-#endif  // QLEVER_BIND_H

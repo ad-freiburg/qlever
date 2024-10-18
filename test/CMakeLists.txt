@@ -126,7 +126,7 @@ addLinkAndDiscoverTest(JoinTest engine)
 
 addLinkAndDiscoverTest(TextLimitOperationTest engine)
 
-addLinkAndDiscoverTest(QueryPlannerTest engine)
+addLinkAndDiscoverTestSerial(QueryPlannerTest engine)
 
 addLinkAndDiscoverTest(HashMapTest)
 
@@ -404,6 +404,8 @@ addLinkAndDiscoverTest(CacheableGeneratorTest)
 addLinkAndDiscoverTest(FilterTest engine)
 
 addLinkAndDiscoverTest(ResultTest engine)
+
+addLinkAndDiscoverTest(BlankNodeManagerTest)
 
 addLinkAndDiscoverTest(SparqlExpressionGeneratorsTest engine)
 

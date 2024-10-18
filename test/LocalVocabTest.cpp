@@ -369,3 +369,12 @@ TEST(LocalVocab, propagation) {
   // TODO<joka921> Maybe add tests for the new TextIndexScanFor... classes,
   // they never introduce any local vocab.
 }
+
+// _____________________________________________________________________________
+TEST(LocalVocab, getBlankNodeIndex) {
+  ad_utility::BlankNodeManager bnm(0);
+  LocalVocab v;
+  BlankNodeIndex a = v.getBlankNodeIndex(&bnm);
+  BlankNodeIndex b = v.getBlankNodeIndex(&bnm);
+  EXPECT_NE(a, b);
+}

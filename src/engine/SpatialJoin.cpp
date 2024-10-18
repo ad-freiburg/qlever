@@ -1,10 +1,33 @@
+//  Copyright 2024, University of Freiburg,
+//  Chair of Algorithms and Data Structures.
+//  Author: @Jonathan24680
+//  Author: Christoph Ullinger <ullingec@informatik.uni-freiburg.de>
+
 #include "engine/SpatialJoin.h"
 
+#include <absl/strings/charconv.h>
+#include <s2/s2closest_point_query.h>
+#include <s2/s2earth.h>
+#include <s2/s2point.h>
+#include <s2/s2point_index.h>
+#include <s2/util/units/length-units.h>
+
+#include <cstdint>
+#include <ctre-unicode.hpp>
+#include <limits>
+#include <optional>
+#include <queue>
+#include <tuple>
+
 #include "engine/ExportQueryExecutionTrees.h"
+#include "engine/SpatialJoinAlgorithms.h"
 #include "engine/VariableToColumnMap.h"
+#include "engine/idTable/IdTable.h"
+#include "global/Constants.h"
 #include "global/ValueId.h"
 #include "parser/ParsedQuery.h"
 #include "util/AllocatorWithLimit.h"
+#include "util/Exception.h"
 #include "util/GeoSparqlHelpers.h"
 #include "util/MemorySize/MemorySize.h"
 
@@ -17,7 +40,8 @@ SpatialJoin::SpatialJoin(
       triple_{std::move(triple)},
       leftChildVariable_{triple_.s_.getVariable()},
       rightChildVariable_{triple_.o_.getVariable()} {
-  parseMaxDistance();
+  // A `SpatialJoin` can be constructed from different system predicates, parse
+  parseConfigFromTriple();
 
   if (childLeft) {
     childLeft_ = std::move(childLeft.value());
@@ -31,23 +55,33 @@ SpatialJoin::SpatialJoin(
 }
 
 // ____________________________________________________________________________
-void SpatialJoin::parseMaxDistance() {
+void SpatialJoin::parseConfigFromTriple() {
+  // Helper to convert a ctre match to an integer
+  auto matchToInt = [](std::string_view match) -> std::optional<size_t> {
+    if (match.size() > 0) {
+      size_t res = 0;
+      std::from_chars(match.data(), match.data() + match.size(), res);
+      return res;
+    }
+    return std::nullopt;
+  };
+
   const std::string& input = triple_.p_._iri;
-  std::string errormessage =
-      "parsing of the maximum distance for the "
-      "SpatialJoin operation was not possible";
 
-  if (ctre::match<MAX_DIST_IN_METERS_REGEX>(input)) {
-    std::string number = input.substr(
-        MAX_DIST_IN_METERS.size(),
-        input.size() - MAX_DIST_IN_METERS.size() - 1);  // -1: compensate for >
-    maxDist_ = std::stoll(number);
+  if (auto match = ctre::match<MAX_DIST_IN_METERS_REGEX>(input)) {
+    auto maxDist = matchToInt(match.get<"dist">());
+    AD_CORRECTNESS_CHECK(maxDist.has_value());
+    config_ = MaxDistanceConfig{maxDist.value()};
+  } else if (auto match = ctre::search<NEAREST_NEIGHBORS_REGEX>(input)) {
+    auto maxResults = matchToInt(match.get<"results">());
+    auto maxDist = matchToInt(match.get<"dist">());
+    AD_CORRECTNESS_CHECK(maxResults.has_value());
+    config_ = NearestNeighborsConfig{maxResults.value(), maxDist};
   } else {
-    AD_THROW(errormessage);
-  }
-
-  if (maxDist_ < 0) {
-    AD_THROW("the maximum distance between two objects must be >= 0");
+    AD_THROW(
+        absl::StrCat("Tried to perform spatial join with unknown triple ",
+                     input, ". This must be a valid spatial condition like ",
+                     "<max-distance-in-meters:50> or <nearest-neighbors:3>."));
   }
 }
 
@@ -75,6 +109,27 @@ bool SpatialJoin::isConstructed() const {
 }
 
 // ____________________________________________________________________________
+std::optional<size_t> SpatialJoin::getMaxDist() const {
+  auto visitor = []<typename T>(const T& config) -> std::optional<size_t> {
+    return config.maxDist_;
+  };
+  return std::visit(visitor, config_);
+}
+
+// ____________________________________________________________________________
+std::optional<size_t> SpatialJoin::getMaxResults() const {
+  auto visitor = []<typename T>(const T& config) -> std::optional<size_t> {
+    if constexpr (std::is_same_v<T, MaxDistanceConfig>) {
+      return std::nullopt;
+    } else {
+      static_assert(std::is_same_v<T, NearestNeighborsConfig>);
+      return config.maxResults_;
+    }
+  };
+  return std::visit(visitor, config_);
+}
+
+// ____________________________________________________________________________
 std::vector<QueryExecutionTree*> SpatialJoin::getChildren() {
   if (!(childLeft_ && childRight_)) {
     AD_THROW("SpatialJoin needs two children, but at least one is missing");
@@ -89,7 +144,14 @@ string SpatialJoin::getCacheKeyImpl() const {
     std::ostringstream os;
     os << "SpatialJoin\nChild1:\n" << childLeft_->getCacheKey() << "\n";
     os << "Child2:\n" << childRight_->getCacheKey() << "\n";
-    os << "maxDist: " << maxDist_ << "\n";
+    auto maxDist = getMaxDist();
+    if (maxDist.has_value()) {
+      os << "maxDist: " << maxDist.value() << "\n";
+    }
+    auto maxResults = getMaxResults();
+    if (maxResults.has_value()) {
+      os << "maxResults: " << maxResults.value() << "\n";
+    }
     return std::move(os).str();
   } else {
     return "incomplete SpatialJoin class";
@@ -98,9 +160,23 @@ string SpatialJoin::getCacheKeyImpl() const {
 
 // ____________________________________________________________________________
 string SpatialJoin::getDescriptor() const {
-  return absl::StrCat("SpatialJoin: ", triple_.s_.getVariable().name(),
-                      " max distance of ", std::to_string(maxDist_), " to ",
-                      triple_.o_.getVariable().name());
+  // Build different descriptors depending on the configuration
+  auto visitor = [this]<typename T>(const T& config) -> std::string {
+    // Joined Variables
+    auto left = triple_.s_.getVariable().name();
+    auto right = triple_.o_.getVariable().name();
+
+    // Config type
+    if constexpr (std::is_same_v<T, MaxDistanceConfig>) {
+      return absl::StrCat("MaxDistJoin ", left, " to ", right, " of ",
+                          config.maxDist_, " meter(s)");
+    } else {
+      static_assert(std::is_same_v<T, NearestNeighborsConfig>);
+      return absl::StrCat("NearestNeighborsJoin ", left, " to ", right,
+                          " of max. ", config.maxResults_);
+    }
+  };
+  return std::visit(visitor, config_);
 }
 
 // ____________________________________________________________________________
@@ -136,11 +212,17 @@ size_t SpatialJoin::getCostEstimate() {
     if (useBaselineAlgorithm_) {
       return inputEstimate * inputEstimate;
     } else {
-      // check after implementation, if it is correct, for now it remains
-      // here because otherwise SonarQube complains about costEstimate and
-      // sizeEstimate having the same implementation
-      return inputEstimate *
-             static_cast<size_t>(log(static_cast<double>(inputEstimate)));
+      // Let n be the size of the left table and m the size of the right table.
+      // When using the S2Point index, we first create the index for the right
+      // table in O(m * log(m)). We then iterate over the left table in O(n) and
+      // for each item do a lookup on the index for the right table in O(log m).
+      // Together we have O(n log(m) + m log(m)), because in general we can't
+      // draw conclusions about the relation between the sizes of n and m.
+      auto n = childLeft_->getSizeEstimate();
+      auto m = childRight_->getSizeEstimate();
+      auto logm = static_cast<size_t>(
+          log(static_cast<double>(childRight_->getSizeEstimate())));
+      return (n * logm) + (m * logm);
     }
   }
   return 1;  // dummy return, as the class does not have its children yet
@@ -149,7 +231,19 @@ size_t SpatialJoin::getCostEstimate() {
 // ____________________________________________________________________________
 uint64_t SpatialJoin::getSizeEstimateBeforeLimit() {
   if (childLeft_ && childRight_) {
-    return childLeft_->getSizeEstimate() * childRight_->getSizeEstimate();
+    // If we limit the number of results to k, even in the largest scenario, the
+    // result can be at most `|childLeft| * k`
+    auto maxResults = getMaxResults();
+    if (maxResults.has_value()) {
+      return childLeft_->getSizeEstimate() * maxResults.value();
+    }
+
+    // If we don't limit the number of results, we cannot draw conclusions about
+    // the size, other than the worst case `|childLeft| * |childRight|`. However
+    // to improve query planning for the average case, we apply a constant
+    // factor (the asymptotic behavior remains unchanged).
+    return (childLeft_->getSizeEstimate() * childRight_->getSizeEstimate()) /
+           SPATIAL_JOIN_MAX_DIST_SIZE_ESTIMATE;
   }
   return 1;  // dummy return if not both children are added
 }
@@ -181,7 +275,9 @@ float SpatialJoin::getMultiplicity(size_t col) {
       column -= childLeft_->getResultWidth();
     }
     auto distinctnessChild = getDistinctness(child, column);
-    return static_cast<float>(getSizeEstimate()) / distinctnessChild;
+    return static_cast<float>(childLeft_->getSizeEstimate() *
+                              childRight_->getSizeEstimate()) /
+           distinctnessChild;
   } else {
     return 1;
   }
@@ -205,88 +301,8 @@ vector<ColumnIndex> SpatialJoin::resultSortedOn() const {
   return {};
 }
 
-long long SpatialJoin::getMaxDist() const { return maxDist_; }
-
 // ____________________________________________________________________________
-std::string SpatialJoin::betweenQuotes(std::string extractFrom) const {
-  // returns everything between the first two quotes. If the string does
-  // not contain two quotes, the string is returned as a whole
-  //
-  size_t pos1 = extractFrom.find("\"", 0);
-  size_t pos2 = extractFrom.find("\"", pos1 + 1);
-  if (pos1 != std::string::npos && pos2 != std::string::npos) {
-    return extractFrom.substr(pos1 + 1, pos2 - pos1 - 1);
-  } else {
-    return extractFrom;
-  }
-}
-
-// ____________________________________________________________________________
-Id SpatialJoin::computeDist(const IdTable* resLeft, const IdTable* resRight,
-                            size_t rowLeft, size_t rowRight,
-                            ColumnIndex leftPointCol,
-                            ColumnIndex rightPointCol) const {
-  auto getPoint = [&](const IdTable* restable, size_t row,
-                      ColumnIndex col) -> std::optional<GeoPoint> {
-    auto id = restable->at(row, col);
-    /*
-    std::cerr << "id is " << id << std::endl;
-     */
-    return id.getDatatype() == Datatype::GeoPoint
-               ? std::optional{id.getGeoPoint()}
-               : std::nullopt;
-  };
-
-  auto point1 = getPoint(resLeft, rowLeft, leftPointCol);
-  auto point2 = getPoint(resRight, rowRight, rightPointCol);
-  if (!point1.has_value() || !point2.has_value()) {
-    return Id::makeUndefined();
-  }
-  return Id::makeFromInt(
-      ad_utility::detail::wktDistImpl(point1.value(), point2.value()) * 1000);
-}
-
-// ____________________________________________________________________________
-void SpatialJoin::addResultTableEntry(IdTable* result,
-                                      const IdTable* resultLeft,
-                                      const IdTable* resultRight,
-                                      size_t rowLeft, size_t rowRight,
-                                      Id distance) const {
-  // this lambda function copies elements from copyFrom
-  // into the table res. It copies them into the row
-  // rowIndRes and column column colIndRes. It returns the column number
-  // until which elements were copied
-  auto addColumns = [](IdTable* res, const IdTable* copyFrom, size_t rowIndRes,
-                       size_t colIndRes, size_t rowIndCopy) {
-    size_t col = 0;
-    while (col < copyFrom->numColumns()) {
-      res->at(rowIndRes, colIndRes) = (*copyFrom).at(rowIndCopy, col);
-      colIndRes += 1;
-      col += 1;
-    }
-    return colIndRes;
-  };
-
-  auto resrow = result->numRows();
-  result->emplace_back();
-  // add columns to result table
-  size_t rescol = 0;
-  rescol = addColumns(result, resultLeft, resrow, rescol, rowLeft);
-  rescol = addColumns(result, resultRight, resrow, rescol, rowRight);
-
-  if (addDistToResult_) {
-    result->at(resrow, rescol) = distance;
-    // rescol isn't used after that in this function, but future updates,
-    // which add additional columns, would need to remember to increase
-    // rescol at this place otherwise. If they forget to do this, the
-    // distance column will be overwritten, the variableToColumnMap will
-    // not work and so on
-    // rescol += 1;
-  }
-}
-
-// ____________________________________________________________________________
-Result SpatialJoin::baselineAlgorithm() {
+PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
   auto getIdTable = [](std::shared_ptr<QueryExecutionTree> child) {
     std::shared_ptr<const Result> resTable = child->getResult();
     auto idTablePtr = &resTable->idTable();
@@ -300,34 +316,31 @@ Result SpatialJoin::baselineAlgorithm() {
     return varColMap[childVariable].columnIndex_;
   };
 
-  const auto [resLeft, keepAliveLeft] = getIdTable(childLeft_);
-  const auto [resRight, keepAliveRight] = getIdTable(childRight_);
+  // Input tables
+  auto [idTableLeft, resultLeft] = getIdTable(childLeft_);
+  auto [idTableRight, resultRight] = getIdTable(childRight_);
+
+  // Input table columns for the join
   ColumnIndex leftJoinCol = getJoinCol(childLeft_, leftChildVariable_);
   ColumnIndex rightJoinCol = getJoinCol(childRight_, rightChildVariable_);
-  size_t numColumns = getResultWidth();
-  IdTable result{numColumns, _executionContext->getAllocator()};
 
-  // cartesian product with a distance of at most maxDist between the two
-  // objects
-  for (size_t rowLeft = 0; rowLeft < resLeft->size(); rowLeft++) {
-    for (size_t rowRight = 0; rowRight < resRight->size(); rowRight++) {
-      Id dist = computeDist(resLeft, resRight, rowLeft, rowRight, leftJoinCol,
-                            rightJoinCol);
-      if (dist.getDatatype() == Datatype::Int && dist.getInt() <= maxDist_) {
-        addResultTableEntry(&result, resLeft, resRight, rowLeft, rowRight,
-                            dist);
-      }
-    }
-  }
-  return Result(std::move(result), std::vector<ColumnIndex>{}, LocalVocab{});
+  // Size of output table
+  size_t numColumns = getResultWidth();
+  return PreparedSpatialJoinParams{idTableLeft,    std::move(resultLeft),
+                                   idTableRight,   std::move(resultRight),
+                                   leftJoinCol,    rightJoinCol,
+                                   numColumns,     getMaxDist(),
+                                   getMaxResults()};
 }
 
 // ____________________________________________________________________________
 Result SpatialJoin::computeResult([[maybe_unused]] bool requestLaziness) {
+  SpatialJoinAlgorithms algorithms{_executionContext, prepareJoin(),
+                                   addDistToResult_, config_};
   if (useBaselineAlgorithm_) {
-    return baselineAlgorithm();
+    return algorithms.BaselineAlgorithm();
   } else {
-    AD_THROW("Not yet implemented");
+    return algorithms.S2geometryAlgorithm();
   }
 }
 

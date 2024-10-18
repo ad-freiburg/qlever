@@ -19,6 +19,7 @@
 #include "engine/sparqlExpressions/CountStarExpression.h"
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
+#include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/NowDatetimeExpression.h"
 #include "engine/sparqlExpressions/RandomExpression.h"
 #include "engine/sparqlExpressions/RegexExpression.h"
@@ -1669,6 +1670,9 @@ TEST(SparqlParser, FunctionCall) {
                      matchUnary(&makeCosExpression));
   expectFunctionCall(absl::StrCat(math, "tan>(?x)"),
                      matchUnary(&makeTanExpression));
+  expectFunctionCall(
+      absl::StrCat(math, "pow>(?a, ?b)"),
+      matchNary(&makePowExpression, Variable{"?a"}, Variable{"?b"}));
   expectFunctionCall(absl::StrCat(xsd, "int>(?x)"),
                      matchUnary(&makeConvertToIntExpression));
   expectFunctionCall(absl::StrCat(xsd, "integer>(?x)"),
@@ -1679,14 +1683,14 @@ TEST(SparqlParser, FunctionCall) {
                      matchUnary(&makeConvertToDoubleExpression));
 
   // Wrong number of arguments.
-  expectFunctionCallFails(
-      "<http://www.opengis.net/def/function/geosparql/distance>(?a)");
-  // Unknown function with the `geof:` prefix.
-  expectFunctionCallFails(
-      "<http://www.opengis.net/def/function/geosparql/notExisting>()");
+  expectFunctionCallFails(absl::StrCat(geof, "distance>(?a)"));
+  // Unknown function with `geof:`, `math:`, or `xsd:` prefix.
+  expectFunctionCallFails(absl::StrCat(geof, "nada>(?x)"));
+  expectFunctionCallFails(absl::StrCat(math, "nada>(?x)"));
+  expectFunctionCallFails(absl::StrCat(xsd, "nada>(?x)"));
   // Prefix for which no function is known.
-  expectFunctionCallFails(
-      "<http://www.no-existing-prefixes.com/notExisting>()");
+  std::string prefixNexistepas = "<http://nexiste.pas/>";
+  expectFunctionCallFails(absl::StrCat(prefixNexistepas, "nada>(?x)"));
 }
 
 // ______________________________________________________________________________

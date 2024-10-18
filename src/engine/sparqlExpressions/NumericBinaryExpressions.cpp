@@ -2,6 +2,7 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
+#include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 
 namespace sparqlExpression {
 namespace detail {
@@ -32,6 +33,13 @@ NARY_EXPRESSION(AddExpression, 2, FV<decltype(add), NumericValueGetter>);
 inline auto subtract = makeNumericExpression<std::minus<>>();
 NARY_EXPRESSION(SubtractExpression, 2,
                 FV<decltype(subtract), NumericValueGetter>);
+
+// Power.
+inline auto powImpl = [](double base, double exp) {
+  return std::pow(base, exp);
+};
+inline auto pow = makeNumericExpression<decltype(powImpl)>();
+NARY_EXPRESSION(PowExpression, 2, FV<decltype(pow), NumericValueGetter>);
 
 // Or
 inline auto orLambda = [](TernaryBool a, TernaryBool b) {
@@ -95,5 +103,10 @@ SparqlExpression::Ptr makeAndExpression(SparqlExpression::Ptr child1,
 SparqlExpression::Ptr makeOrExpression(SparqlExpression::Ptr child1,
                                        SparqlExpression::Ptr child2) {
   return std::make_unique<OrExpression>(std::move(child1), std::move(child2));
+}
+
+SparqlExpression::Ptr makePowExpression(SparqlExpression::Ptr child1,
+                                        SparqlExpression::Ptr child2) {
+  return std::make_unique<PowExpression>(std::move(child1), std::move(child2));
 }
 }  // namespace sparqlExpression

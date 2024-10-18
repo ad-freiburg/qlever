@@ -52,10 +52,7 @@ class WktLatitude {
   }
 };
 
-// Compute the distance in km between two WKT points according to the formula in
-// https://en.wikipedia.org/wiki/Geographical_distance ("ellipsoidal earth
-// projected to a plane"). A more precise way is the Haversine formula, which we
-// save for when we compute this at indexing time.
+// Compute the distance in km between two WKT points.
 class WktDistGeoPoints {
  public:
   double operator()(const std::optional<GeoPoint>& point1,

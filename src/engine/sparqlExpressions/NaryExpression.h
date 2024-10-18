@@ -42,6 +42,8 @@ SparqlExpression::Ptr makeSqrtExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeSinExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeCosExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeTanExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makePowExpression(SparqlExpression::Ptr child1,
+                                        SparqlExpression::Ptr child2);
 
 SparqlExpression::Ptr makeDistExpression(SparqlExpression::Ptr child1,
                                          SparqlExpression::Ptr child2);

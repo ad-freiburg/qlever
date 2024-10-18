@@ -1119,6 +1119,23 @@ TEST(IdTable, constructorsAreSfinaeFriendly) {
   static_assert(std::is_constructible_v<IntTable, size_t>);
 }
 
+// _____________________________________________________________________________
+TEST(IdTable, addEmptyColumn) {
+  using ::testing::ElementsAre;
+  using ::testing::Eq;
+  IdTable table{1, ad_utility::makeUnlimitedAllocator<Id>()};
+  table.push_back({V(1)});
+  table.push_back({V(2)});
+
+  table.addEmptyColumn();
+
+  EXPECT_EQ(table.numColumns(), 2);
+  EXPECT_THAT(table.getColumn(0), ElementsAre(V(1), V(2)));
+  // The new column is uninitialized, so we can't make any more specific
+  // assertions about its content here.
+  EXPECT_EQ(table.getColumn(1).size(), 2);
+}
+
 // Check that we can completely instantiate `IdTable`s with a different value
 // type and a different underlying storage.
 

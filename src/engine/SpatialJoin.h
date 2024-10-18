@@ -1,12 +1,41 @@
+//  Copyright 2024, University of Freiburg,
+//  Chair of Algorithms and Data Structures.
+//  Author: @Jonathan24680
+//  Author: Christoph Ullinger <ullingec@informatik.uni-freiburg.de>
+
 #pragma once
 
+#include <optional>
+
 #include "engine/Operation.h"
+#include "global/Id.h"
 #include "parser/ParsedQuery.h"
 
+// Configuration to restrict the results provided by the SpatialJoin
+struct NearestNeighborsConfig {
+  size_t maxResults_;
+  std::optional<size_t> maxDist_ = std::nullopt;
+};
+struct MaxDistanceConfig {
+  size_t maxDist_;
+};
+
+// helper struct to improve readability in prepareJoin()
+struct PreparedSpatialJoinParams {
+  const IdTable* const idTableLeft_;
+  std::shared_ptr<const Result> resultLeft_;
+  const IdTable* const idTableRight_;
+  std::shared_ptr<const Result> resultRight_;
+  ColumnIndex leftJoinCol_;
+  ColumnIndex rightJoinCol_;
+  size_t numColumns_;
+  std::optional<size_t> maxDist_;
+  std::optional<size_t> maxResults_;
+};
+
 // This class is implementing a SpatialJoin operation. This operations joins
-// two tables, using their positional column. If the distance of the two
-// positions is less than a given maximum distance, the pair will be in the
-// result table.
+// two tables, using their positional column. It supports nearest neighbor
+// search as well as search of all points within a given range.
 class SpatialJoin : public Operation {
  public:
   // creates a SpatialJoin operation. The triple is needed, to get the
@@ -60,8 +89,20 @@ class SpatialJoin : public Operation {
   // already constructed
   bool isConstructed() const;
 
-  // this function is used to give the maximum distance for testing purposes
-  long long getMaxDist() const;
+  // this function is used to give the maximum distance for internal purposes
+  std::optional<size_t> getMaxDist() const;
+
+  // this function is used to give the maximum number of results for internal
+  // purposes
+  std::optional<size_t> getMaxResults() const;
+
+  void selectAlgorithm(bool useBaselineAlgorithm) {
+    useBaselineAlgorithm_ = useBaselineAlgorithm;
+  }
+
+  std::pair<size_t, size_t> onlyForTestingGetConfig() const {
+    return std::pair{getMaxDist().value_or(-1), getMaxResults().value_or(-1)};
+  }
 
   std::shared_ptr<QueryExecutionTree> onlyForTestingGetLeftChild() const {
     return childLeft_;
@@ -76,40 +117,23 @@ class SpatialJoin : public Operation {
   }
 
  private:
-  // helper function, which parses the max distance triple into a long long
-  // distance
-  void parseMaxDistance();
+  // helper function, which parses a triple and populates config_
+  void parseConfigFromTriple();
 
-  // helper function which gets the coordinates from the coordinates string
-  // (usually the object of a triple)
-  std::string betweenQuotes(std::string extractFrom) const;
-
-  // helper function, which computes the distance of two points, where each
-  // point comes from a different result table
-  Id computeDist(const IdTable* resLeft, const IdTable* resRight,
-                 size_t rowLeft, size_t rowRight, ColumnIndex leftPointCol,
-                 ColumnIndex rightPointCol) const;
-
-  // Helper function, which adds a row, which belongs to the result to the
-  // result table. As inputs it uses a row of the left and a row of the right
-  // child result table.
-  void addResultTableEntry(IdTable* result, const IdTable* resultLeft,
-                           const IdTable* resultRight, size_t rowLeft,
-                           size_t rowRight, Id distance) const;
-
-  // the baseline algorithm, which just checks every combination
-  Result baselineAlgorithm();
+  // helper function, to initialize various required objects for both algorithms
+  PreparedSpatialJoinParams prepareJoin() const;
 
   SparqlTriple triple_;
   Variable leftChildVariable_;
   Variable rightChildVariable_;
   std::shared_ptr<QueryExecutionTree> childLeft_ = nullptr;
   std::shared_ptr<QueryExecutionTree> childRight_ = nullptr;
-  long long maxDist_ = 0;  // max distance in meters
+
+  std::variant<NearestNeighborsConfig, MaxDistanceConfig> config_;
 
   // adds an extra column to the result, which contains the actual distance,
   // between the two objects
   bool addDistToResult_ = true;
   const string nameDistanceInternal_ = "?distOfTheTwoObjectsAddedInternally";
-  bool useBaselineAlgorithm_ = true;
+  bool useBaselineAlgorithm_ = false;
 };
