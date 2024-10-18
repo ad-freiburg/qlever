@@ -390,6 +390,9 @@ void IndexImpl::createFromFiles(
     configurationJson_["has-all-permutations"] = true;
   }
 
+  configurationJson_["num-blank-nodes-total"] =
+      indexBuilderData.vocabularyMetaData_.getNextBlankNodeIndex();
+
   addInternalStatisticsToConfiguration(numTriplesInternal,
                                        numPredicatesInternal);
   LOG(INFO) << "Index build completed" << std::endl;
@@ -1077,6 +1080,12 @@ void IndexImpl::readConfiguration() {
   loadDataMember("num-objects", numObjects_, NumNormalAndInternal{});
   loadDataMember("num-triples", numTriples_, NumNormalAndInternal{});
 
+  // Initialize BlankNodeManager
+  uint64_t numBlankNodesTotal;
+  loadDataMember("num-blank-nodes-total", numBlankNodesTotal);
+  blankNodeManager_ =
+      std::make_unique<ad_utility::BlankNodeManager>(numBlankNodesTotal);
+
   // Compute unique ID for this index.
   //
   // TODO: This is a simplistic way. It would be better to incorporate bytes
@@ -1685,4 +1694,10 @@ template <typename Comparator, size_t I>
 std::unique_ptr<ExternalSorter<Comparator, I>> IndexImpl::makeSorterPtr(
     std::string_view permutationName) const {
   return makeSorterImpl<Comparator, I, true>(permutationName);
+}
+
+// _____________________________________________________________________________
+ad_utility::BlankNodeManager* IndexImpl::getBlankNodeManager() const {
+  AD_CONTRACT_CHECK(blankNodeManager_);
+  return blankNodeManager_.get();
 }
