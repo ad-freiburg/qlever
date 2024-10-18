@@ -24,14 +24,17 @@ namespace detail {
 //    `...Expression` (`std::move` the arguments into the constructor). The
 //    function should be declared in `NaryExpression.h`.
 
-// Expressions for `isIRI`, `isBlank`, `isLiteral`, and `isNumeric`. Note that
-// the value getters already return the correct `Id`, hence `std::identity`.
+// Expressions for the builtin functions `isIRI`, `isBlank`, `isLiteral`,
+// `isNumeric`, and the custom function `isWktPoint`. Note that the value
+// getters already return the correct `Id`, hence `std::identity`.
 using isIriExpression = NARY<1, FV<std::identity, IsIriValueGetter>>;
 using isBlankExpression = NARY<1, FV<std::identity, IsBlankNodeValueGetter>>;
 using isLiteralExpression = NARY<1, FV<std::identity, IsLiteralValueGetter>>;
 using isNumericExpression = NARY<1, FV<std::identity, IsNumericValueGetter>>;
-// The expression for `bound` is slightly different because
-// `IsValidValueGetter` returns a `bool` and not an `Id`.
+using isWktPointExpression = NARY<1, FV<std::identity, IsWktPointValueGetter>>;
+
+// The expression for `bound` is slightly different as `IsValidValueGetter`
+// returns a `bool` and not an `Id`.
 inline auto boolToId = [](bool b) { return Id::makeFromBool(b); };
 using boundExpression = NARY<1, FV<decltype(boolToId), IsValidValueGetter>>;
 
@@ -48,6 +51,9 @@ SparqlExpression::Ptr makeIsLiteralExpression(SparqlExpression::Ptr arg) {
 }
 SparqlExpression::Ptr makeIsNumericExpression(SparqlExpression::Ptr arg) {
   return std::make_unique<detail::isNumericExpression>(std::move(arg));
+}
+SparqlExpression::Ptr makeIsWktPointExpression(SparqlExpression::Ptr arg) {
+  return std::make_unique<detail::isWktPointExpression>(std::move(arg));
 }
 SparqlExpression::Ptr makeBoundExpression(SparqlExpression::Ptr arg) {
   return std::make_unique<detail::boundExpression>(std::move(arg));
