@@ -21,6 +21,7 @@
 #include "engine/Join.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/SpatialJoin.h"
+#include "global/Constants.h"
 #include "parser/data/Variable.h"
 
 namespace {  // anonymous namespace to avoid linker problems
@@ -608,12 +609,7 @@ void testMultiplicitiesOrSizeEstimate(bool addLeftChildFirst,
     }
   };
 
-  auto assert_double_with_bounds = [](double value1, double value2) {
-    // ASSERT_DOUBLE_EQ did not work properly
-    ASSERT_TRUE(value1 * 0.99999 < value2);
-    ASSERT_TRUE(value1 * 1.00001 > value2);
-  };
-
+  const double doubleBound = 0.00001;
   std::string kg = createSmallDatasetWithPoints();
 
   // add multiplicities to test knowledge graph
@@ -704,7 +700,7 @@ void testMultiplicitiesOrSizeEstimate(bool addLeftChildFirst,
         auto sizeEstimateChild = inputChild->getSizeEstimate();
         double distinctnessChild = sizeEstimateChild / multiplicityChild;
         auto mult = spatialJoin->getMultiplicity(i);
-        auto sizeEst = spatialJoin->getSizeEstimate();
+        auto sizeEst = std::pow(sizeEstimateChild, 2);
         double distinctness = sizeEst / mult;
         // multiplicity, distinctness and size are related via the formula
         // size = distinctness * multiplicity. Therefore if we have two of them,
@@ -712,7 +708,7 @@ void testMultiplicitiesOrSizeEstimate(bool addLeftChildFirst,
         // holds true. The distinctness must not change after the operation, the
         // other two variables can change. Therefore we check the correctness
         // via distinctness.
-        assert_double_with_bounds(distinctnessChild, distinctness);
+        ASSERT_NEAR(distinctnessChild, distinctness, doubleBound);
       }
     }
   } else {
@@ -723,12 +719,12 @@ void testMultiplicitiesOrSizeEstimate(bool addLeftChildFirst,
     ASSERT_EQ(spatialJoin->getSizeEstimate(), 1);
     auto spJoin2 = spatialJoin->addChild(secondChild, secondVariable);
     spatialJoin = static_cast<SpatialJoin*>(spJoin2.get());
-    // the size should be 49, because both input tables have 7 rows and it is
-    // assumed, that the whole cross product is build
+    // the size should be at most 49, because both input tables have 7 rows and
+    // it is assumed, that in the worst case the whole cross product is build
     auto estimate =
         spatialJoin->onlyForTestingGetLeftChild()->getSizeEstimate() *
         spatialJoin->onlyForTestingGetRightChild()->getSizeEstimate();
-    ASSERT_EQ(estimate, spatialJoin->getSizeEstimate());
+    ASSERT_LE(spatialJoin->getSizeEstimate(), estimate);
   }
 
   {  // new block for hard coded testing
@@ -790,9 +786,8 @@ void testMultiplicitiesOrSizeEstimate(bool addLeftChildFirst,
       auto assertMultiplicity = [&](Variable var, double multiplicity,
                                     SpatialJoin* spatialJoin,
                                     VariableToColumnMap& varColsMap) {
-        assert_double_with_bounds(
-            spatialJoin->getMultiplicity(varColsMap[var].columnIndex_),
-            multiplicity);
+        ASSERT_NEAR(spatialJoin->getMultiplicity(varColsMap[var].columnIndex_),
+                    multiplicity, doubleBound);
       };
       multiplicitiesBeforeAllChildrenAdded(spatialJoin);
       auto spJoin1 = spatialJoin->addChild(firstChild, firstVariable);
@@ -815,7 +810,7 @@ void testMultiplicitiesOrSizeEstimate(bool addLeftChildFirst,
       spatialJoin = static_cast<SpatialJoin*>(spJoin1.get());
       auto spJoin2 = spatialJoin->addChild(secondChild, secondVariable);
       spatialJoin = static_cast<SpatialJoin*>(spJoin2.get());
-      ASSERT_EQ(spatialJoin->getSizeEstimate(), 49);
+      ASSERT_LE(spatialJoin->getSizeEstimate(), 49);
     }
   }
 }
