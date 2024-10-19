@@ -112,7 +112,7 @@ ExpressionPtr Visitor::processIriFunctionCall(
     } else if (functionName == "latitude") {
       checkNumArgs(1);
       return sparqlExpression::makeLatitudeExpression(std::move(argList[0]));
-    } else if (functionName == "iswktpoint") {
+    } else if (functionName == "isPointWKT") {
       checkNumArgs(1);
       return sparqlExpression::makeIsWktPointExpression(std::move(argList[0]));
     }

@@ -1655,7 +1655,7 @@ TEST(SparqlParser, FunctionCall) {
                      matchUnary(&makeLatitudeExpression));
   expectFunctionCall(absl::StrCat(geof, "longitude>(?x)"),
                      matchUnary(&makeLongitudeExpression));
-  expectFunctionCall(absl::StrCat(geof, "iswktpoint>(?x)"),
+  expectFunctionCall(absl::StrCat(geof, "isPointWKT>(?x)"),
                      matchUnary(&makeIsWktPointExpression));
   expectFunctionCall(
       absl::StrCat(geof, "distance>(?a, ?b)"),
