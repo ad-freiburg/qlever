@@ -186,15 +186,14 @@ ProtoResult Service::computeResultImpl([[maybe_unused]] bool requestLaziness) {
   // Note: The `body`-generator also keeps the complete response connection
   // alive, so we have no lifetime issue here(see `HttpRequest::send` for
   // details).
-  auto localVocabPtr = std::make_shared<LocalVocab>();
-  auto generator = computeResultLazily(expVariableKeys, std::move(body),
-                                       localVocabPtr, !requestLaziness);
-
-  return requestLaziness
-             ? ProtoResult{std::move(generator), resultSortedOn(),
-                           std::move(localVocabPtr)}
-             : ProtoResult{cppcoro::getSingleElement(std::move(generator)),
-                           resultSortedOn(), std::move(*localVocabPtr)};
+  auto generator =
+      computeResultLazily(expVariableKeys, std::move(body), !requestLaziness);
+  if (requestLaziness) {
+    return ProtoResult{std::move(generator), resultSortedOn()};
+  }
+  auto pair = cppcoro::getSingleElement(std::move(generator));
+  return ProtoResult{std::move(pair.idTable_), resultSortedOn(),
+                     std::move(pair.localVocab_)};
 }
 
 template <size_t I>
@@ -242,10 +241,10 @@ void Service::writeJsonResult(const std::vector<std::string>& vars,
 }
 
 // ____________________________________________________________________________
-cppcoro::generator<IdTable> Service::computeResultLazily(
+cppcoro::generator<Result::IdTableVocabPair> Service::computeResultLazily(
     const std::vector<std::string> vars,
-    ad_utility::LazyJsonParser::Generator body,
-    std::shared_ptr<LocalVocab> localVocab, bool singleIdTable) {
+    ad_utility::LazyJsonParser::Generator body, bool singleIdTable) {
+  LocalVocab localVocab{};
   IdTable idTable{getResultWidth(), getExecutionContext()->getAllocator()};
 
   size_t rowIdx = 0;
@@ -260,10 +259,15 @@ cppcoro::generator<IdTable> Service::computeResultLazily(
       }
 
       CALL_FIXED_SIZE(getResultWidth(), &Service::writeJsonResult, this, vars,
-                      partJson, &idTable, localVocab.get(), rowIdx);
+                      partJson, &idTable, &localVocab, rowIdx);
       if (!singleIdTable) {
-        co_yield idTable;
+        Result::IdTableVocabPair pair{std::move(idTable),
+                                      std::move(localVocab)};
+        co_yield pair;
+        // Move back to re-use buffer if not moved out.
+        idTable = std::move(pair.idTable_);
         idTable.clear();
+        localVocab = LocalVocab{};
         rowIdx = 0;
       }
       resultExists = true;
@@ -294,7 +298,7 @@ cppcoro::generator<IdTable> Service::computeResultLazily(
   }
 
   if (singleIdTable) {
-    co_yield idTable;
+    co_yield {std::move(idTable), std::move(localVocab)};
   }
 }
 
