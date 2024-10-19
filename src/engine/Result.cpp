@@ -165,8 +165,7 @@ void Result::assertThatLimitWasRespected(const LimitOffsetClause& limitOffset) {
       auto limit = limitOffset._limit;
       uint64_t elementCount = 0;
       for (IdTableVocabPair& pair : original) {
-        auto& idTable = pair.idTable_;
-        elementCount += idTable.numRows();
+        elementCount += pair.idTable_.numRows();
         AD_CONTRACT_CHECK(!limit.has_value() || elementCount <= limit.value());
         co_yield pair;
       }

@@ -37,7 +37,7 @@ ExportQueryExecutionTrees::getRowIndices(LimitOffsetClause limitOffset,
   if (limitOffset._limit.value_or(1) == 0) {
     co_return;
   }
-  for (const TableConstRefWithVocab& tableWithVocab : getIdTables(result)) {
+  for (TableConstRefWithVocab& tableWithVocab : getIdTables(result)) {
     uint64_t currentOffset =
         limitOffset.actualOffset(tableWithVocab.idTable_.numRows());
     uint64_t upperBound =
