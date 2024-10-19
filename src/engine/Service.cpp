@@ -264,7 +264,7 @@ cppcoro::generator<Result::IdTableVocabPair> Service::computeResultLazily(
         Result::IdTableVocabPair pair{std::move(idTable),
                                       std::move(localVocab)};
         co_yield pair;
-        // Move back to re-use buffer if not moved out.
+        // Move back to reuse buffer if not moved out.
         idTable = std::move(pair.idTable_);
         idTable.clear();
         localVocab = LocalVocab{};

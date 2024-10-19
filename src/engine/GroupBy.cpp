@@ -535,11 +535,11 @@ cppcoro::generator<Result::IdTableVocabPair> GroupBy::computeResultLazily(
     lazyGroupBy.processBlock(evaluationContext, lastBlockStart, idTable.size());
     if (!singleIdTable && !resultTable.empty()) {
       currentLocalVocab.mergeWith(storedLocalVocabs);
-      Result::IdTableVocabPair pair{std::move(resultTable),
-                                    std::move(currentLocalVocab)};
-      co_yield pair;
-      // Re-use buffer if not moved out
-      resultTable = std::move(pair.idTable_);
+      Result::IdTableVocabPair outputPair{std::move(resultTable),
+                                          std::move(currentLocalVocab)};
+      co_yield outputPair;
+      // Reuse buffer if not moved out
+      resultTable = std::move(outputPair.idTable_);
       resultTable.clear();
       currentLocalVocab = LocalVocab{};
       storedLocalVocabs.clear();

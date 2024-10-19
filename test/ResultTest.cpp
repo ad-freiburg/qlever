@@ -40,7 +40,7 @@ std::vector<cppcoro::generator<Result::IdTableVocabPair>> getAllSubSplits(
             if (splitIndex < split.size() && split[splitIndex] == i) {
               Result::IdTableVocabPair pair{std::move(subSplit), LocalVocab{}};
               co_yield pair;
-              // Move back if not moved out to re-use buffer.
+              // Move back if not moved out to reuse buffer.
               subSplit = std::move(pair.idTable_);
               subSplit.clear();
               ++splitIndex;
