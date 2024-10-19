@@ -284,9 +284,8 @@ void Result::cacheDuringConsumption(
           if (aggregate.has_value()) {
             auto& value = aggregate.value();
             value.idTable_.insertAtEnd(newTablePair.idTable_);
-            std::array<const LocalVocab*, 2> vocabs{&value.localVocab_,
-                                                    &newTablePair.localVocab_};
-            value.localVocab_ = LocalVocab::merge(vocabs);
+            value.localVocab_.mergeWith(
+                std::span{&newTablePair.localVocab_, 1});
           } else {
             aggregate.emplace(newTablePair.idTable_.clone(),
                               newTablePair.localVocab_.clone());
