@@ -46,7 +46,7 @@ class DeviationExpression : public SparqlExpression {
   // __________________________________________________________________________
   ExpressionResult evaluate(EvaluationContext* context) const override {
     auto impl =
-        [this, context](SingleExpressionResult auto&& el) -> ExpressionResult {
+        [context](SingleExpressionResult auto&& el) -> ExpressionResult {
       // Prepare space for result
       VectorWithMemoryLimit<IdOrLiteralOrIri> exprResult{context->_allocator};
       std::fill_n(std::back_inserter(exprResult), context->size(),
