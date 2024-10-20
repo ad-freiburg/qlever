@@ -2,8 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Christoph Ullinger <ullingec@informatik.uni-freiburg.de>
 
-#ifndef QLEVER_STDEVEXPRESSION_H
-#define QLEVER_STDEVEXPRESSION_H
+#pragma once
 
 #include <cmath>
 #include <functional>
@@ -40,11 +39,9 @@ auto inline numValToDouble =
 class DeviationExpression : public SparqlExpression {
  private:
   Ptr child_;
-  bool distinct_;
 
  public:
-  DeviationExpression(bool distinct, Ptr&& child)
-      : child_{std::move(child)}, distinct_{distinct} {}
+  DeviationExpression(Ptr&& child) : child_{std::move(child)} {}
 
   // __________________________________________________________________________
   ExpressionResult evaluate(EvaluationContext* context) const override {
@@ -88,13 +85,7 @@ class DeviationExpression : public SparqlExpression {
 
       auto generator =
           detail::makeGenerator(AD_FWD(el), context->size(), context);
-      if (distinct_) {
-        context->cancellationHandle_->throwIfCancelled();
-        devImpl(detail::getUniqueElements(context, context->size(),
-                                          std::move(generator)));
-      } else {
-        devImpl(std::move(generator));
-      }
+      devImpl(std::move(generator));
 
       if (undef) {
         return IdOrLiteralOrIri{Id::makeUndefined()};
@@ -113,8 +104,7 @@ class DeviationExpression : public SparqlExpression {
   // __________________________________________________________________________
   [[nodiscard]] string getCacheKey(
       const VariableToColumnMap& varColMap) const override {
-    return absl::StrCat("[ SQ.DEVIATION ", distinct_ ? " DISTINCT " : "", "]",
-                        child_->getCacheKey(varColMap));
+    return absl::StrCat("[ SQ.DEVIATION ]", child_->getCacheKey(varColMap));
   }
 
  private:
@@ -135,8 +125,7 @@ class DeviationAggExpression
   DeviationAggExpression(bool distinct, SparqlExpression::Ptr&& child,
                          AggregateOperation aggregateOp = AggregateOperation{})
       : AggregateExpression<AggregateOperation, FinalOperation>(
-            distinct,
-            std::make_unique<DeviationExpression>(distinct, std::move(child)),
+            distinct, std::make_unique<DeviationExpression>(std::move(child)),
             aggregateOp){};
 };
 
@@ -162,7 +151,7 @@ using StdevExpressionBase =
     DeviationAggExpression<AvgOperation, decltype(stdevFinalOperation)>;
 class StdevExpression : public StdevExpressionBase {
   using StdevExpressionBase::StdevExpressionBase;
-  ValueId resultForEmptyGroup() const override { return Id::makeFromInt(0); }
+  ValueId resultForEmptyGroup() const override { return Id::makeFromDouble(0); }
 };
 
 }  // namespace detail
@@ -170,5 +159,3 @@ class StdevExpression : public StdevExpressionBase {
 using detail::StdevExpression;
 
 }  // namespace sparqlExpression
-
-#endif  // QLEVER_STDEVEXPRESSION_H
