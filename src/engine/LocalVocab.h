@@ -13,6 +13,7 @@
 #include "absl/container/node_hash_set.h"
 #include "global/Id.h"
 #include "parser/LiteralOrIri.h"
+#include "util/BlankNodeManager.h"
 
 // A class for maintaining a local vocabulary with contiguous (local) IDs. This
 // is meant for words that are not part of the normal vocabulary (constructed
@@ -37,6 +38,9 @@ class LocalVocab {
 
   auto& primaryWordSet() { return *primaryWordSet_; }
   const auto& primaryWordSet() const { return *primaryWordSet_; }
+
+  std::optional<ad_utility::BlankNodeManager::LocalBlankNodeManager>
+      localBlankNodeManager_;
 
  public:
   // Create a new, empty local vocabulary.
@@ -89,6 +93,10 @@ class LocalVocab {
 
   // Return all the words from all the word sets as a vector.
   std::vector<LiteralOrIri> getAllWordsForTesting() const;
+
+  // Get a new BlankNodeIndex using the LocalBlankNodeManager.
+  [[nodiscard]] BlankNodeIndex getBlankNodeIndex(
+      ad_utility::BlankNodeManager* blankNodeManager);
 
  private:
   // Common implementation for the two variants of

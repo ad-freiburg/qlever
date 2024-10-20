@@ -20,7 +20,7 @@ using Vars = std::vector<std::optional<Variable>>;
 }  // namespace
 
 // A simple test for computing a union.
-TEST(UnionTest, computeUnion) {
+TEST(Union, computeUnion) {
   auto* qec = ad_utility::testing::getQec();
   IdTable left = makeIdTableFromVector({{V(1)}, {V(2)}, {V(3)}});
   auto leftT = ad_utility::makeExecutionTree<ValuesForTesting>(
@@ -30,7 +30,7 @@ TEST(UnionTest, computeUnion) {
   auto rightT = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, right.clone(), Vars{Variable{"?u"}, Variable{"?x"}});
 
-  Union u{ad_utility::testing::getQec(), leftT, rightT};
+  Union u{qec, leftT, rightT};
   auto resultTable = u.computeResultOnlyForTesting();
   const auto& result = resultTable.idTable();
 
@@ -42,7 +42,7 @@ TEST(UnionTest, computeUnion) {
 
 // A test with large inputs to test the chunked writing that is caused by the
 // timeout checks.
-TEST(UnionTest, computeUnionLarge) {
+TEST(Union, computeUnionLarge) {
   auto* qec = ad_utility::testing::getQec();
   VectorTable leftInput, rightInput, expected;
   size_t numInputsL = 1'500'000u;
@@ -65,9 +65,100 @@ TEST(UnionTest, computeUnionLarge) {
   auto rightT = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, makeIdTableFromVector(rightInput), Vars{Variable{"?u"}});
 
-  Union u{ad_utility::testing::getQec(), leftT, rightT};
+  Union u{qec, leftT, rightT};
   auto resultTable = u.computeResultOnlyForTesting();
   const auto& result = resultTable.idTable();
 
   ASSERT_EQ(result, makeIdTableFromVector(expected));
+}
+
+// _____________________________________________________________________________
+TEST(Union, computeUnionLazy) {
+  auto runTest = [](bool nonLazyChildren,
+                    ad_utility::source_location loc =
+                        ad_utility::source_location::current()) {
+    auto l = generateLocationTrace(loc);
+    auto* qec = ad_utility::testing::getQec();
+    qec->getQueryTreeCache().clearAll();
+    IdTable left = makeIdTableFromVector({{V(1)}, {V(2)}, {V(3)}});
+    auto leftT = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, std::move(left), Vars{Variable{"?x"}}, false,
+        std::vector<ColumnIndex>{}, LocalVocab{}, std::nullopt,
+        nonLazyChildren);
+
+    IdTable right = makeIdTableFromVector({{V(4), V(5)}, {V(6), V(7)}});
+    auto rightT = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, std::move(right), Vars{Variable{"?u"}, Variable{"?x"}}, false,
+        std::vector<ColumnIndex>{}, LocalVocab{}, std::nullopt,
+        nonLazyChildren);
+
+    Union u{qec, std::move(leftT), std::move(rightT)};
+    auto resultTable = u.computeResultOnlyForTesting(true);
+    ASSERT_FALSE(resultTable.isFullyMaterialized());
+    auto& result = resultTable.idTables();
+
+    auto U = Id::makeUndefined();
+    auto expected1 = makeIdTableFromVector({{V(1), U}, {V(2), U}, {V(3), U}});
+    auto expected2 = makeIdTableFromVector({{V(5), V(4)}, {V(7), V(6)}});
+
+    auto iterator = result.begin();
+    ASSERT_NE(iterator, result.end());
+    ASSERT_EQ(*iterator, expected1);
+
+    ++iterator;
+    ASSERT_NE(iterator, result.end());
+    ASSERT_EQ(*iterator, expected2);
+
+    ASSERT_EQ(++iterator, result.end());
+  };
+
+  runTest(false);
+  runTest(true);
+}
+
+// _____________________________________________________________________________
+TEST(Union, ensurePermutationIsAppliedCorrectly) {
+  using Var = Variable;
+  auto* qec = ad_utility::testing::getQec();
+  auto leftT = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{1, 2, 3, 4, 5}}),
+      Vars{Var{"?a"}, Var{"?b"}, Var{"?c"}, Var{"?d"}, Var{"?e"}});
+
+  auto rightT = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{6, 7, 8}}),
+      Vars{Var{"?b"}, Var{"?a"}, Var{"?e"}});
+
+  Union u{qec, std::move(leftT), std::move(rightT)};
+
+  {
+    qec->getQueryTreeCache().clearAll();
+    auto resultTable = u.computeResultOnlyForTesting(true);
+    ASSERT_FALSE(resultTable.isFullyMaterialized());
+    auto& result = resultTable.idTables();
+
+    auto U = Id::makeUndefined();
+    auto expected1 = makeIdTableFromVector({{1, 2, 3, 4, 5}});
+    auto expected2 = makeIdTableFromVector({{V(7), V(6), U, U, V(8)}});
+
+    auto iterator = result.begin();
+    ASSERT_NE(iterator, result.end());
+    ASSERT_EQ(*iterator, expected1);
+
+    ++iterator;
+    ASSERT_NE(iterator, result.end());
+    ASSERT_EQ(*iterator, expected2);
+
+    ASSERT_EQ(++iterator, result.end());
+  }
+
+  {
+    qec->getQueryTreeCache().clearAll();
+    auto resultTable = u.computeResultOnlyForTesting();
+    ASSERT_TRUE(resultTable.isFullyMaterialized());
+
+    auto U = Id::makeUndefined();
+    auto expected =
+        makeIdTableFromVector({{1, 2, 3, 4, 5}, {V(7), V(6), U, U, V(8)}});
+    EXPECT_EQ(resultTable.idTable(), expected);
+  }
 }
