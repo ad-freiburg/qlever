@@ -8,6 +8,7 @@
 
 #include "engine/Operation.h"
 #include "engine/Values.h"
+#include "engine/VariableToColumnMap.h"
 #include "parser/ParsedQuery.h"
 #include "util/LazyJsonParser.h"
 #include "util/http/HttpClient.h"
@@ -37,8 +38,12 @@ class Service : public Operation {
       const boost::beast::http::verb&, std::string_view, std::string_view,
       std::string_view)>;
 
-  // Optional precomputed sibling result.
-  std::optional<std::shared_ptr<const Result>> precomputedSiblingResult_;
+  // Information on a potential Sibling operation.
+  struct SiblingInfo {
+    std::shared_ptr<const Result> precomputedResult_;
+    VariableToColumnMap variables_;
+    std::string cacheKey_;
+  };
 
  private:
   // The parsed SERVICE clause.
@@ -47,8 +52,8 @@ class Service : public Operation {
   // The function used to obtain the result from the remote endpoint.
   GetResultFunction getResultFunction_;
 
-  // The siblingTree, used for SERVICE clause optimization.
-  std::shared_ptr<QueryExecutionTree> siblingTree_;
+  // Optional sibling information to be used in `getSiblingValuesClause`.
+  std::optional<SiblingInfo> siblingInfo_;
 
  public:
   // Construct from parsed Service clause.
@@ -58,23 +63,7 @@ class Service : public Operation {
   // but in our tests (`ServiceTest`) we use a mock function that does not
   // require a running `HttpServer`.
   Service(QueryExecutionContext* qec, parsedQuery::Service parsedServiceClause,
-          GetResultFunction getResultFunction = sendHttpOrHttpsRequest,
-          std::shared_ptr<QueryExecutionTree> siblingTree = nullptr);
-
-  // Create a new `Service` operation, that is equal to `*this` but additionally
-  // respects the `siblingTree`. The sibling tree is a partial query that will
-  // later be joined with the result of the `Service`. If the result of the
-  // sibling is small, it will be used to constrain the SERVICE query using a
-  // `VALUES` clause.
-  [[nodiscard]] std::shared_ptr<Service> createCopyWithSiblingTree(
-      std::shared_ptr<QueryExecutionTree> siblingTree) const {
-    AD_CORRECTNESS_CHECK(siblingTree_ == nullptr);
-    // TODO<joka921> This copies the `parsedServiceClause_`. We could probably
-    // use a `shared_ptr` here to reduce the copying during QueryPlanning.
-    return std::make_shared<Service>(getExecutionContext(),
-                                     parsedServiceClause_, getResultFunction_,
-                                     std::move(siblingTree));
-  }
+          GetResultFunction getResultFunction = sendHttpOrHttpsRequest);
 
   // Methods inherited from base class `Operation`.
   std::string getDescriptor() const override;
@@ -83,7 +72,6 @@ class Service : public Operation {
   float getMultiplicity(size_t col) override;
 
   // Getters for testing.
-  const auto& getSiblingTree() const { return siblingTree_; }
   const auto& getGraphPatternAsString() const {
     return parsedServiceClause_.graphPatternAsString_;
   }
@@ -112,18 +100,20 @@ class Service : public Operation {
   static std::optional<std::string> idToValueForValuesClause(
       const Index& index, Id id, const LocalVocab& localVocab);
 
-  // Given two child-operations of a (Optional-)Join or Minus operation, the
-  // Result of the sibling-operation is computed.
-  // If rightOnly is true, only the right operation can be a service.
+  // Given two child-operations of a Join-, OptionalJoin- or Minus operation,
+  // this method tries to precompute the result of one if the other one
+  // (it's sibling) is a Service operation.
+  // If rightOnly is true (used by OptionalJoin and Minus),
+  // only the right operation can be a service.
   static void precomputeSiblingResult(std::shared_ptr<Operation> left,
                                       std::shared_ptr<Operation> right,
-                                      bool rightOnly = false);
+                                      bool rightOnly, bool requestLaziness);
 
  private:
   // The string returned by this function is used as cache key.
   std::string getCacheKeyImpl() const override;
 
-  // Compute the result using `getResultFunction_` and the siblingTree.
+  // Compute the result using `getResultFunction_` and `siblingInfo_`.
   ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override;
 
   // Actually compute the result for the function above.
@@ -162,4 +152,8 @@ class Service : public Operation {
       const std::vector<std::string> vars,
       ad_utility::LazyJsonParser::Generator body,
       std::shared_ptr<LocalVocab> localVocab, bool singleIdTable);
+
+  FRIEND_TEST(ServiceTest, computeResult);
+  FRIEND_TEST(ServiceTest, getCacheKey);
+  FRIEND_TEST(ServiceTest, precomputeSiblingResult);
 };

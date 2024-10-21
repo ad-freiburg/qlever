@@ -155,7 +155,8 @@ ProtoResult Join::computeResult([[maybe_unused]] bool requestLaziness) {
   // If one of the RootOperations is a Service, precompute it's sibling's result
   // for potential Service clause optimization.
   Service::precomputeSiblingResult(_left->getRootOperation(),
-                                   _right->getRootOperation(), false);
+                                   _right->getRootOperation(), false,
+                                   requestLaziness);
 
   std::shared_ptr<const Result> leftRes =
       leftResIfCached ? leftResIfCached : _left->getResult();

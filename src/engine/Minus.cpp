@@ -39,7 +39,8 @@ ProtoResult Minus::computeResult([[maybe_unused]] bool requestLaziness) {
   // If the right of the RootOperations is a Service, precompute it's sibling's
   // result for potential Service clause optimization.
   Service::precomputeSiblingResult(_left->getRootOperation(),
-                                   _right->getRootOperation(), true);
+                                   _right->getRootOperation(), true,
+                                   requestLaziness);
 
   IdTable idTable{getExecutionContext()->getAllocator()};
   idTable.setNumColumns(getResultWidth());
