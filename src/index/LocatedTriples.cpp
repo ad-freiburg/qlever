@@ -109,7 +109,7 @@ IdTable LocatedTriplesPerBlock::mergeTriplesImpl(size_t blockIndex,
 
   // Write the given `locatedTriple` to `result` at position `resultIt` and
   // advance.
-  auto writeTripleToResult = [&result, &resultIt](auto &locatedTriple) {
+  auto writeTripleToResult = [&result, &resultIt](auto& locatedTriple) {
     // Write part from `locatedTriple` that also occurs in the input `block` to
     // the result.
     //
