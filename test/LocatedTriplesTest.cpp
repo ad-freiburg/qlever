@@ -16,7 +16,12 @@
 namespace {
 auto V = ad_utility::testing::VocabId;
 // A default graph used in this test.
-static const Id g = Id::makeFromInt(123948);
+const Id g = Id::makeFromInt(123948);
+
+void addGraphColumn(IdTable& block) {
+  block.addEmptyColumn();
+  std::ranges::fill(block.getColumn(block.numColumns() - 1), g);
+}
 
 auto IT = [](const auto& c1, const auto& c2, const auto& c3, Id graph = g) {
   // TODO<joka921> Also add tests for different Graphs, especially for the
@@ -241,6 +246,13 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
 
     auto merged = locatedTriplesPerBlock.mergeTriples(1, block, 3, false);
     EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
+
+    // Run the same test with a constant graph column that is part of the
+    // result.
+    addGraphColumn(block);
+    addGraphColumn(resultExpected);
+    merged = locatedTriplesPerBlock.mergeTriples(1, block, 3, true);
+    EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
   }
 
   // Merge the `LocatesTriples` into a block with 2 index columns. This may
@@ -276,6 +288,13 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
 
     auto merged = locatedTriplesPerBlock.mergeTriples(1, block, 2, false);
     EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
+
+    // Run the same test with a constant graph column that is part of the
+    // result.
+    addGraphColumn(block);
+    addGraphColumn(resultExpected);
+    merged = locatedTriplesPerBlock.mergeTriples(1, block, 2, true);
+    EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
   }
 
   // Merge the `LocatesTriples` into a block with 1 index column.
@@ -303,6 +322,13 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
 
     auto merged = locatedTriplesPerBlock.mergeTriples(1, block, 1, false);
     EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
+
+    // Run the same test with a constant graph column that is part of the
+    // result.
+    addGraphColumn(block);
+    addGraphColumn(resultExpected);
+    merged = locatedTriplesPerBlock.mergeTriples(1, block, 1, true);
+    EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
   }
 
   // Inserting a Triple that already exists should have no effect.
@@ -313,6 +339,13 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
     IdTable resultExpected = block.clone();
 
     auto merged = locatedTriplesPerBlock.mergeTriples(1, block, 3, false);
+    EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
+
+    // Run the same test with a constant graph column that is part of the
+    // result.
+    addGraphColumn(block);
+    addGraphColumn(resultExpected);
+    merged = locatedTriplesPerBlock.mergeTriples(1, block, 3, true);
     EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
   }
 
@@ -325,6 +358,13 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
     IdTable resultExpected = makeIdTableFromVector({{1, 2, 3}, {1, 7, 9}});
 
     auto merged = locatedTriplesPerBlock.mergeTriples(1, block, 3, false);
+    EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
+
+    // Run the same test with a constant graph column that is part of the
+    // result.
+    addGraphColumn(block);
+    addGraphColumn(resultExpected);
+    merged = locatedTriplesPerBlock.mergeTriples(1, block, 3, true);
     EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
   }
 
@@ -344,6 +384,16 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
                                {1, 7, 9, IntId(13), IntId(14)}});
 
     auto merged = locatedTriplesPerBlock.mergeTriples(1, block, 3, false);
+    EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
+
+    // Run the same test with a constant graph column that is part of the
+    // result.
+    addGraphColumn(block);
+    addGraphColumn(resultExpected);
+    block.setColumnSubset(std::array<ColumnIndex, 6>{0u, 1u, 2u, 5u, 3u, 4u});
+    resultExpected.setColumnSubset(
+        std::array<ColumnIndex, 6>{0u, 1u, 2u, 5u, 3u, 4u});
+    merged = locatedTriplesPerBlock.mergeTriples(1, block, 3, true);
     EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
   }
 
