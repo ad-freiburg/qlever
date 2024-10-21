@@ -486,3 +486,65 @@ TEST(IndexTest, trivialGettersAndSetters) {
   EXPECT_EQ(index.memoryLimitIndexBuilding(), 7_kB);
   EXPECT_EQ(std::as_const(index).memoryLimitIndexBuilding(), 7_kB);
 }
+
+TEST(IndexTest, loggingAndSettingOfParallelParsing) {
+  using enum qlever::Filetype;
+  std::vector<qlever::InputFileSpecification> files{
+      {"singleFile.ttl", Turtle, std::nullopt, false}};
+  testing::internal::CaptureStdout();
+  using namespace ::testing;
+  {
+    IndexImpl::updateInputFileSpecificationsAndLog(files, false);
+    EXPECT_THAT(
+        testing::internal::GetCapturedStdout(),
+        AllOf(HasSubstr("from singleFile.ttl"), Not(HasSubstr("parallel"))));
+    EXPECT_FALSE(files.at(0).parseInParallel_);
+  }
+
+  {
+    testing::internal::CaptureStdout();
+    IndexImpl::updateInputFileSpecificationsAndLog(files, true);
+    EXPECT_THAT(testing::internal::GetCapturedStdout(),
+                AllOf(HasSubstr("from singleFile.ttl"), HasSubstr("deprecated"),
+                      HasSubstr("--parse-parallel")));
+    EXPECT_TRUE(files.at(0).parseInParallel_);
+  }
+
+  {
+    files.emplace_back("secondFile.ttl", Turtle, std::nullopt, false);
+    auto filesCopy = files;
+    testing::internal::CaptureStdout();
+    IndexImpl::updateInputFileSpecificationsAndLog(files, false);
+    EXPECT_THAT(testing::internal::GetCapturedStdout(),
+                AllOf(HasSubstr("from 2 input streams"),
+                      Not(HasSubstr("is deprecated"))));
+    EXPECT_EQ(files, filesCopy);
+  }
+
+  {
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        IndexImpl::updateInputFileSpecificationsAndLog(files, true),
+        HasSubstr("but has to be specified"));
+  }
+}
+
+TEST(IndexTest, getBlankNodeManager) {
+  // The `blankNodeManager_` is initialized after initializing the Index itself.
+  // Therefore we expect a throw when the getter is called by an
+  // uninitialized Index.
+  Index index{ad_utility::makeUnlimitedAllocator<Id>()};
+  EXPECT_ANY_THROW(index.getBlankNodeManager());
+
+  // Index is initialized -> no throw
+  const Index& index2 = getQec("")->getIndex();
+  EXPECT_NO_THROW(index2.getBlankNodeManager());
+
+  // Given an Index, ensure that the BlankNodeManager's `minIndex_` is set to
+  // the number of blank nodes the Index is initialized with.
+  std::string kb =
+      "_:a <b> <c> .\n"
+      "_:b <c> <a> .\n"
+      "_:c <a> <b> .";
+  const Index& index3 = getQec(kb)->getIndex();
+  EXPECT_EQ(index3.getBlankNodeManager()->minIndex_, 3);
+}
