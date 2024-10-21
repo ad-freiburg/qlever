@@ -15,12 +15,16 @@
 
 namespace {
 auto V = ad_utility::testing::VocabId;
+// A default graph used in this test.
+static const Id g = Id::makeFromInt(123948);
 
-auto IT = [](const auto& c1, const auto& c2, const auto& c3) {
-  return IdTriple{std::array<Id, 3>{V(c1), V(c2), V(c3)}};
+auto IT = [](const auto& c1, const auto& c2, const auto& c3, Id graph = g) {
+  // TODO<joka921> Also add tests for different Graphs, especially for the
+  // merging.
+  return IdTriple{std::array<Id, 4>{V(c1), V(c2), V(c3), graph}};
 };
-auto PT = [](const auto& c1, const auto& c2, const auto& c3) {
-  return CompressedBlockMetadata::PermutedTriple{V(c1), V(c2), V(c3)};
+auto PT = [](const auto& c1, const auto& c2, const auto& c3, Id graph = g) {
+  return CompressedBlockMetadata::PermutedTriple{V(c1), V(c2), V(c3), graph};
 };
 auto CBM = [](const auto firstTriple, const auto lastTriple) {
   return CompressedBlockMetadata{{}, 0, firstTriple, lastTriple, {}, false};
@@ -643,7 +647,7 @@ TEST_F(LocatedTriplesTest, debugPrints) {
     EXPECT_THAT(lts, InsertIntoStream(testing::StrEq("{ }")));
     lts.insert(LT(0, IT(1, 1, 1), true));
     EXPECT_THAT(lts, InsertIntoStream(testing::StrEq(
-                         "{ LT(0 IdTriple(V:1, V:1, V:1, ) 1) }")));
+                         "{ LT(0 IdTriple(V:1, V:1, V:1, I:123948, ) 1) }")));
   }
 
   {
@@ -651,15 +655,15 @@ TEST_F(LocatedTriplesTest, debugPrints) {
     ltpb.setOriginalMetadata(std::vector{CBM(PT(1, 1, 1), PT(1, 10, 15))});
     EXPECT_THAT(ltpb, InsertIntoStream(testing::StrEq("")));
     ltpb.add(std::vector{LT(0, IT(1, 1, 1), true)});
-    EXPECT_THAT(
-        ltpb, InsertIntoStream(testing::StrEq(
-                  "LTs in Block #0: { LT(0 IdTriple(V:1, V:1, V:1, ) 1) }\n")));
+    EXPECT_THAT(ltpb, InsertIntoStream(testing::StrEq(
+                          "LTs in Block #0: { LT(0 IdTriple(V:1, "
+                          "V:1, V:1, I:123948, ) 1) }\n")));
   }
 
   {
     std::vector<IdTriple<0>> idts{IT(0, 0, 0), IT(1, 2, 3)};
-    EXPECT_THAT(idts,
-                InsertIntoStream(testing::StrEq(
-                    "IdTriple(V:0, V:0, V:0, ), IdTriple(V:1, V:2, V:3, ), ")));
+    EXPECT_THAT(idts, InsertIntoStream(testing::StrEq(
+                          "IdTriple(V:0, V:0, V:0, I:123948, ), IdTriple(V:1, "
+                          "V:2, V:3, I:123948, ), ")));
   }
 }

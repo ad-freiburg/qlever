@@ -60,7 +60,7 @@ NumAddedAndDeleted LocatedTriplesPerBlock::numTriples(size_t blockIndex) const {
 // ____________________________________________________________________________
 // Collect the relevant entries of a LocatedTriple into a triple.
 template <size_t numIndexColumns>
-requires(numIndexColumns >= 1 && numIndexColumns <= 3)
+requires(numIndexColumns >= 1 && numIndexColumns <= IdTriple<0>::NumCols)
 auto tieIdTableRow(auto& row) {
   return [&row]<size_t... I>(std::index_sequence<I...>) {
     return std::tie(row[I]...);
@@ -70,7 +70,7 @@ auto tieIdTableRow(auto& row) {
 // ____________________________________________________________________________
 // Collect the relevant entries of a LocatedTriple into a triple.
 template <size_t numIndexColumns>
-requires(numIndexColumns >= 1 && numIndexColumns <= 3)
+requires(numIndexColumns >= 1 && numIndexColumns <= IdTriple<0>::NumCols)
 auto tieLocatedTriple(auto& lt) {
   auto& ids = lt->triple_.ids_;
   return [&ids]<size_t... I>(std::index_sequence<I...>) {
@@ -159,7 +159,10 @@ IdTable LocatedTriplesPerBlock::mergeTriplesImpl(size_t blockIndex,
 IdTable LocatedTriplesPerBlock::mergeTriples(size_t blockIndex,
                                              const IdTable& block,
                                              size_t numIndexColumns) const {
-  if (numIndexColumns == 3) {
+  static_assert(IdTriple<0>::NumCols == 4);
+  if (numIndexColumns == 4) {
+    return mergeTriplesImpl<4>(blockIndex, block);
+  } else if (numIndexColumns == 3) {
     return mergeTriplesImpl<3>(blockIndex, block);
   } else if (numIndexColumns == 2) {
     return mergeTriplesImpl<2>(blockIndex, block);

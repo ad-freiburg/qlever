@@ -53,7 +53,7 @@ struct IdTriple {
   // its keyOrder.
   IdTriple<N> permute(const std::array<size_t, 3>& keyOrder) const {
     std::array<Id, NumCols> newIds{ids_[keyOrder[0]], ids_[keyOrder[1]],
-                             ids_[keyOrder[2]], ids_[3]};
+                                   ids_[keyOrder[2]], ids_[3]};
     if constexpr (N == 0) {
       return IdTriple<N>(newIds);
     } else {
@@ -63,6 +63,7 @@ struct IdTriple {
 
   CompressedBlockMetadata::PermutedTriple toPermutedTriple() const
       requires(N == 0) {
+    static_assert(NumCols == 4);
     return {ids_[0], ids_[1], ids_[2], ids_[3]};
   }
 };

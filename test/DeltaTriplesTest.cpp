@@ -92,11 +92,12 @@ class DeltaTriplesTest : public ::testing::Test {
       const Index::Vocab& vocab, LocalVocab& localVocab,
       const std::vector<std::string>& turtles) {
     auto toID = [&localVocab, &vocab](TurtleTriple triple) {
-      std::array<Id, 3> ids{
+      std::array<Id, 4> ids{
           std::move(triple.subject_).toValueId(vocab, localVocab),
           std::move(TripleComponent(triple.predicate_))
               .toValueId(vocab, localVocab),
-          std::move(triple.object_).toValueId(vocab, localVocab)};
+          std::move(triple.object_).toValueId(vocab, localVocab),
+          std::move(triple.graphIri_).toValueId(vocab, localVocab)};
       return IdTriple<0>(ids);
     };
     return ad_utility::transform(

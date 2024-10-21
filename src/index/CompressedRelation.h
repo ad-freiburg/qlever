@@ -347,8 +347,7 @@ class CompressedRelationWriter {
   friend std::pair<std::vector<CompressedBlockMetadata>,
                    std::vector<CompressedRelationMetadata>>
   compressedRelationTestWriteCompressedRelations(
-      const auto& inputs, std::string filename,
-      ad_utility::MemorySize blocksize);
+      auto inputs, std::string filename, ad_utility::MemorySize blocksize);
 };
 
 using namespace std::string_view_literals;
