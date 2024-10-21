@@ -5,7 +5,9 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <exception>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 
 #include "./util/TripleComponentTestHelpers.h"
@@ -16,6 +18,7 @@
 #include "engine/GroupBy.h"
 #include "engine/HasPredicateScan.h"
 #include "engine/Join.h"
+#include "engine/LocalVocab.h"
 #include "engine/Minus.h"
 #include "engine/MultiColumnJoin.h"
 #include "engine/OptionalJoin.h"
@@ -29,7 +32,9 @@
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "global/Id.h"
+#include "gmock/gmock.h"
 #include "util/IndexTestHelpers.h"
+#include "util/MemorySize/MemorySize.h"
 
 namespace {
 // Get test collection of words of a given size. The words are all distinct.
@@ -377,4 +382,27 @@ TEST(LocalVocab, getBlankNodeIndex) {
   BlankNodeIndex a = v.getBlankNodeIndex(&bnm);
   BlankNodeIndex b = v.getBlankNodeIndex(&bnm);
   EXPECT_NE(a, b);
+}
+
+// _____________________________________________________________________________
+TEST(LocalVocab, memoryLimit) {
+  ad_utility::MemorySize smallLimit = ad_utility::MemorySize::kilobytes(1);
+  LocalVocab localVocab(smallLimit);
+  TestWords testWords = getTestCollectionOfWords(1000);
+
+  try {
+    for (const auto& word : testWords) {
+      localVocab.getIndexAndAddIfNotContained(word);
+    }
+  } catch (const std::exception& e) {
+    std::string errorMessage = e.what();
+    EXPECT_THAT(errorMessage, ::testing::StartsWith(
+                                  "The element to be inserted is too large"));
+  }
+
+  auto extraWord =
+      ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes(
+          "ExtraWord");
+  EXPECT_THROW(localVocab.getIndexAndAddIfNotContained(extraWord),
+               std::runtime_error);
 }

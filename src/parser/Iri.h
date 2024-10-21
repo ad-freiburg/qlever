@@ -48,6 +48,8 @@ class Iri {
   // Return the string value of the iri object without any leading or trailing
   // angled brackets.
   NormalizedStringView getContent() const;
+
+  size_t getDynamicMemoryUsage() const { return iri_.capacity(); }
 };
 
 }  // namespace ad_utility::triple_component

@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <optional>
 #include <variant>
 
@@ -90,5 +91,7 @@ class Literal {
   static Literal literalWithoutQuotes(
       std::string_view rdfContentWithoutQuotes,
       std::optional<std::variant<Iri, std::string>> descriptor = std::nullopt);
+
+  size_t getDynamicMemoryUsage() const { return content_.capacity(); }
 };
 }  // namespace ad_utility::triple_component
