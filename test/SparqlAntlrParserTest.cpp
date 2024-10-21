@@ -25,6 +25,7 @@
 #include "engine/sparqlExpressions/RegexExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "engine/sparqlExpressions/SampleExpression.h"
+#include "engine/sparqlExpressions/StdevExpression.h"
 #include "engine/sparqlExpressions/UuidExpressions.h"
 #include "parser/ConstructClause.h"
 #include "parser/SparqlParserHelpers.h"
@@ -1835,6 +1836,16 @@ TEST(SparqlParser, aggregateExpressions) {
   expectAggregate(
       "group_concat(DISTINCT ?x; SEPARATOR=\";\")",
       matchAggregate<GroupConcatExpression>(true, V{"?x"}, separator(";")));
+
+  // The STDEV expression
+  // TODO<ullingec> Test failing because StdevExpression replaces its child
+
+  // expectAggregate("STDEV(?x)", matchAggregate<StdevExpression>(false,
+  // V{"?x"})); expectAggregate("stdev(?x)",
+  // matchAggregate<StdevExpression>(false, V{"?x"})); A distinct stdev is
+  // probably not very useful, but should be possible anyway
+  // expectAggregate("STDEV(DISTINCT ?x)",
+  //                 matchAggregate<StdevExpression>(true, V{"?x"}));
 }
 
 // Update queries are WIP. The individual parts to parse some update queries

@@ -10,6 +10,7 @@
 
 #include "engine/sparqlExpressions/AggregateExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
+#include "engine/sparqlExpressions/StdevExpression.h"
 #include "parser/data/GraphRef.h"
 #undef EOF
 #include "parser/sparqlParser/generated/SparqlAutomaticVisitor.h"
