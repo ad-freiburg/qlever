@@ -59,12 +59,13 @@ NumAddedAndDeleted LocatedTriplesPerBlock::numTriples(size_t blockIndex) const {
 
 // ____________________________________________________________________________
 // Collect the relevant entries of a LocatedTriple into a triple.
-template <size_t numIndexColumns>
+template <size_t numIndexColumns, bool includeGraphColumn>
 requires(numIndexColumns >= 1 && numIndexColumns <= IdTriple<0>::NumCols)
 auto tieIdTableRow(auto& row) {
   return [&row]<size_t... I>(std::index_sequence<I...>) {
     return std::tie(row[I]...);
-  }(std::make_index_sequence<numIndexColumns>{});
+  }(std::make_index_sequence<numIndexColumns +
+                             static_cast<size_t>(includeGraphColumn)>{});
 }
 
 // ____________________________________________________________________________
@@ -72,20 +73,23 @@ auto tieIdTableRow(auto& row) {
 template <size_t numIndexColumns, bool includeGraphColumn>
 requires(numIndexColumns >= 1 && numIndexColumns <= 3)
 auto tieLocatedTriple(auto& lt) {
-  auto getIndices = []() {
-    std::array<size_t, numIndexColumns + static_cast<size_t>(includeGraphColumn)> a;
+  constexpr auto indices = []() {
+    std::array<size_t,
+               numIndexColumns + static_cast<size_t>(includeGraphColumn)>
+        a;
     for (size_t i = 0; i < numIndexColumns; ++i) {
       a[i] = 3 - numIndexColumns + i;
     }
     if (includeGraphColumn) {
-      a.back() = ADDITIONAL_COLUMN_GRAPH_ID;
+      // The graph column resides at index `3` of the located triple.
+      a.back() = 3;
     }
     return a;
-  };
+  }();
   auto& ids = lt->triple_.ids_;
-  return [&ids]<size_t... I>(std::index_sequence<I...>) {
-    return std::tie(ids[3 - numIndexColumns + I]...);
-  }(std::make_index_sequence<numIndexColumns>{});
+  return [&ids]<size_t... I>(ad_utility::ValueSequence<size_t, I...>) {
+    return std::tie(ids[I]...);
+  }(ad_utility::toIntegerSequence<indices>());
 }
 
 // ____________________________________________________________________________
@@ -96,7 +100,8 @@ IdTable LocatedTriplesPerBlock::mergeTriplesImpl(size_t blockIndex,
   // specified block.
   AD_CONTRACT_CHECK(map_.contains(blockIndex));
 
-  AD_CONTRACT_CHECK(numIndexColumns + static_cast<size_t>(includeGraphColumn) <= block.numColumns());
+  AD_CONTRACT_CHECK(numIndexColumns + static_cast<size_t>(includeGraphColumn) <=
+                    block.numColumns());
 
   auto numInsertsAndDeletes = numTriples(blockIndex);
   IdTable result{block.numColumns(), block.getAllocator()};
@@ -105,12 +110,12 @@ IdTable LocatedTriplesPerBlock::mergeTriplesImpl(size_t blockIndex,
   const auto& locatedTriples = map_.at(blockIndex);
 
   auto lessThan = [](const auto& lt, const auto& row) {
-    return tieLocatedTriple<numIndexColumns>(lt) <
-           tieIdTableRow<numIndexColumns>(row);
+    return tieLocatedTriple<numIndexColumns, includeGraphColumn>(lt) <
+           tieIdTableRow<numIndexColumns, includeGraphColumn>(row);
   };
   auto equal = [](const auto& lt, const auto& row) {
-    return tieLocatedTriple<numIndexColumns>(lt) ==
-           tieIdTableRow<numIndexColumns>(row);
+    return tieLocatedTriple<numIndexColumns, includeGraphColumn>(lt) ==
+           tieIdTableRow<numIndexColumns, includeGraphColumn>(row);
   };
 
   auto rowIt = block.begin();
@@ -119,7 +124,7 @@ IdTable LocatedTriplesPerBlock::mergeTriplesImpl(size_t blockIndex,
 
   // Write the given `locatedTriple` to `result` at position `resultIt` and
   // advance.
-  auto writeTripleToResult = [&result, &resultIt](auto &locatedTriple) {
+  auto writeTripleToResult = [&result, &resultIt](auto& locatedTriple) {
     // Write part from `locatedTriple` that also occurs in the input `block` to
     // the result.
     //
@@ -127,11 +132,13 @@ IdTable LocatedTriplesPerBlock::mergeTriplesImpl(size_t blockIndex,
     // However, this would crash with the following code, as `ids_[3 -
     // numIndexColumns + i]` would access `ids_[-1]`. Either `numIndexColumns`
     // cannot be 4 or the following code needs to be adjusted.
-    for (size_t i = 0; i < numIndexColumns; i++) {
+    static constexpr auto graphOffset = static_cast<size_t>(includeGraphColumn);
+    for (size_t i = 0; i < numIndexColumns + graphOffset; i++) {
       (*resultIt)[i] = locatedTriple.triple_.ids_[3 - numIndexColumns + i];
     }
     // Write UNDEF to any additional columns.
-    for (size_t i = numIndexColumns; i < result.numColumns(); i++) {
+    for (size_t i = numIndexColumns + graphOffset; i < result.numColumns();
+         i++) {
       (*resultIt)[i] = ValueId::makeUndefined();
     }
     resultIt++;
@@ -177,17 +184,22 @@ IdTable LocatedTriplesPerBlock::mergeTriplesImpl(size_t blockIndex,
 // ____________________________________________________________________________
 IdTable LocatedTriplesPerBlock::mergeTriples(size_t blockIndex,
                                              const IdTable& block,
-                                             size_t numIndexColumns) const {
-  static_assert(IdTriple<0>::NumCols == 4);
-  if (numIndexColumns == 4) {
-    return mergeTriplesImpl<4>(blockIndex, block);
-  } else if (numIndexColumns == 3) {
-    return mergeTriplesImpl<3>(blockIndex, block);
-  } else if (numIndexColumns == 2) {
-    return mergeTriplesImpl<2>(blockIndex, block);
+                                             size_t numIndexColumns,
+                                             bool includeGraphColumn) const {
+  auto applyToGraphColumn = [&]<bool hasGraphColumn>() {
+    if (numIndexColumns == 3) {
+      return mergeTriplesImpl<3, hasGraphColumn>(blockIndex, block);
+    } else if (numIndexColumns == 2) {
+      return mergeTriplesImpl<2, hasGraphColumn>(blockIndex, block);
+    } else {
+      AD_CORRECTNESS_CHECK(numIndexColumns == 1);
+      return mergeTriplesImpl<1, hasGraphColumn>(blockIndex, block);
+    }
+  };
+  if (includeGraphColumn) {
+    return applyToGraphColumn.template operator()<true>();
   } else {
-    AD_CORRECTNESS_CHECK(numIndexColumns == 1);
-    return mergeTriplesImpl<1>(blockIndex, block);
+    return applyToGraphColumn.template operator()<false>();
   }
 }
 

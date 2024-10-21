@@ -121,7 +121,7 @@ class LocatedTriplesPerBlock {
   // `numIndexColumns` is 3 (because only OSG are present in the block), and a
   // located tripe in the result would be of the form OSGUU, where U is UNDEF.
   IdTable mergeTriples(size_t blockIndex, const IdTable& block,
-                       size_t numIndexColumns) const;
+                       size_t numIndexColumns, bool includeGraphColumn) const;
 
   // Add `locatedTriples` to the `LocatedTriplesPerBlock`.
   // Return handles to where they were added (`LocatedTriples` is a sorted set,

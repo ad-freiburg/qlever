@@ -239,7 +239,7 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
         {4, 10, 10}   // LT 7
     });
 
-    auto merged = locatedTriplesPerBlock.mergeTriples(1, block, 3);
+    auto merged = locatedTriplesPerBlock.mergeTriples(1, block, 3, false);
     EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
   }
 
@@ -274,7 +274,7 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
         {30, 10}   // LT 5
     });
 
-    auto merged = locatedTriplesPerBlock.mergeTriples(1, block, 2);
+    auto merged = locatedTriplesPerBlock.mergeTriples(1, block, 2, false);
     EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
   }
 
@@ -301,7 +301,7 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
         {30}   // orig. Row 5
     });
 
-    auto merged = locatedTriplesPerBlock.mergeTriples(1, block, 1);
+    auto merged = locatedTriplesPerBlock.mergeTriples(1, block, 1, false);
     EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
   }
 
@@ -312,7 +312,7 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
         makeLocatedTriplesPerBlock({LT{1, IT(1, 3, 5), true}});
     IdTable resultExpected = block.clone();
 
-    auto merged = locatedTriplesPerBlock.mergeTriples(1, block, 3);
+    auto merged = locatedTriplesPerBlock.mergeTriples(1, block, 3, false);
     EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
   }
 
@@ -324,7 +324,7 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
          LT{1, IT(1, 3, 5), false}});
     IdTable resultExpected = makeIdTableFromVector({{1, 2, 3}, {1, 7, 9}});
 
-    auto merged = locatedTriplesPerBlock.mergeTriples(1, block, 3);
+    auto merged = locatedTriplesPerBlock.mergeTriples(1, block, 3, false);
     EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
   }
 
@@ -343,7 +343,7 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
                                {1, 3, 6, UndefId(), UndefId()},
                                {1, 7, 9, IntId(13), IntId(14)}});
 
-    auto merged = locatedTriplesPerBlock.mergeTriples(1, block, 3);
+    auto merged = locatedTriplesPerBlock.mergeTriples(1, block, 3, false);
     EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
   }
 
@@ -368,7 +368,7 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
         LT{1, IT(4, 10, 10), true},   // Insert after row 5
     });
 
-    EXPECT_THROW(locatedTriplesPerBlock.mergeTriples(2, block, 3),
+    EXPECT_THROW(locatedTriplesPerBlock.mergeTriples(2, block, 3, false),
                  ad_utility::Exception);
   }
 
@@ -394,7 +394,7 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
         LT{1, IT(3, 30, 30), false},  // Delete row 5
         LT{1, IT(4, 10, 10), true},   // Insert after row 5
     });
-    EXPECT_THROW(locatedTriplesPerBlock.mergeTriples(1, block, 3),
+    EXPECT_THROW(locatedTriplesPerBlock.mergeTriples(1, block, 3, false),
                  ad_utility::Exception);
   }
 
@@ -419,7 +419,7 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
         LT{1, IT(3, 30, 30), false},  // Delete row 5
         LT{1, IT(4, 10, 10), true},   // Insert after row 5
     });
-    EXPECT_THROW(locatedTriplesPerBlock.mergeTriples(1, block, 4),
+    EXPECT_THROW(locatedTriplesPerBlock.mergeTriples(1, block, 4, false),
                  ad_utility::Exception);
   }
 
@@ -437,7 +437,7 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
         LT{1, IT(1, 5, 10), true},   // Insert before row 0
         LT{1, IT(2, 11, 10), true},  // Insert before row 1
     });
-    EXPECT_THROW(locatedTriplesPerBlock.mergeTriples(1, block, 0),
+    EXPECT_THROW(locatedTriplesPerBlock.mergeTriples(1, block, 0, false),
                  ad_utility::Exception);
   }
 }
