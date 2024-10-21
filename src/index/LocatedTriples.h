@@ -20,15 +20,15 @@ struct NumAddedAndDeleted {
   bool operator<=>(const NumAddedAndDeleted&) const = default;
 };
 
-// A triple and its block in a particular permutation.
-// For a detailed definition of all border cases, see the definition at
-// the end of this file.
+// A triple and its block in a particular permutation. For a detailed definition
+// of all border cases, see the definition at the end of this file.
 struct LocatedTriple {
   // The index of the block, according to the definition above.
   size_t blockIndex_;
   // The `Id`s of the triple in the order of the permutation. For example,
-  // for an object pertaining to the OPS permutation: `id1` is the object,
-  // `id2` is the predicate, and `id3` is the subject.
+  // for an object pertaining to the OPS permutation: `triple_[0]` is the
+  // object, `triple_[1]` is the predicate, `triple_[2]` is the subject,
+  // and `triple_[3]` is the graph.
   IdTriple<0> triple_;
 
   // Flag that is true if the given triple is inserted and false if it
@@ -81,7 +81,8 @@ class LocatedTriplesPerBlock {
 
   FRIEND_TEST(LocatedTriplesTest, numTriplesInBlock);
 
-  // Impl function to `mergeTriples`.
+  // Implementation of the `mergeTriples` function (which has `numIndexColumns`
+  // as a normal argument, and translates it into a template argument).
   template <size_t numIndexColumns>
   IdTable mergeTriplesImpl(size_t blockIndex, const IdTable& block) const;
 
@@ -104,21 +105,21 @@ class LocatedTriplesPerBlock {
   // `blockIndex`.
   bool hasUpdates(size_t blockIndex) const;
 
-  // Merge located triples for `blockIndex_` with the given index `block` and
-  // write to `result`, starting from position `offsetInResult`. Return the
-  // number of rows written to `result`.
+  // Merge located triples for `blockIndex_` (there must be at least one,
+  // otherwise this function should not be called) with the given input `block`.
+  // Return the result as an `IdTable`. The result has the same number of
+  // columns as `block`.
   //
-  // PRECONDITIONS:
+  // TODO: Adjust the following paragraph after Johannes' changes.
   //
-  // 1. `mergeTriples` must always be called with all the index columns in the
-  // input. So the column indices must be `{0, 1, 2, ...}`.
-  //
-  // 2. It is the responsibility of the caller that there is enough space for
-  // the result of the merge in `result` starting from `offsetInResult`.
-  //
-  // 3. The set of located triples for `blockIndex_` must be non-empty.
-  // Otherwise, there is no need for merging and this method shouldn't be
-  // called for efficiency reasons.
+  // `numIndexColumns` is the number of columns in `block` except payload, that
+  // is, a number from `{1, 2, 3, 4}`. If `block` has payload columns, the
+  // value of the merged located triples for these columns is set to UNDEF
+  // (becuse our located triples currently don't have a payload). For example,
+  // assume that `block` is from the POSG permutation and has the columns OSG
+  // and two additional payload columns X and Y, so five columns in total. Then
+  // `numIndexColumns` is 3 (because only OSG are present in the block), and a
+  // located tripe in the result would be of the form OSGUU, where U is UNDEF.
   IdTable mergeTriples(size_t blockIndex, const IdTable& block,
                        size_t numIndexColumns) const;
 

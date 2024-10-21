@@ -14,7 +14,7 @@
 
 template <size_t N = 0>
 struct IdTriple {
-  // The triples have actually 4 columns because of the Graph ID.
+  // A triple has four components: subject, predicate, object, and graph.
   static constexpr size_t NumCols = 4;
   // The three IDs that define the triple.
   std::array<Id, NumCols> ids_;
@@ -36,7 +36,7 @@ struct IdTriple {
     return os;
   }
 
-  // TODO: default once we drop clang16 with libc++16
+  // TODO: use `= default` once we drop Clang 16 with `libc++16`.
   std::strong_ordering operator<=>(const IdTriple& other) const {
     static_assert(NumCols == 4);
     return std::tie(ids_[0], ids_[1], ids_[2], ids_[3]) <=>
