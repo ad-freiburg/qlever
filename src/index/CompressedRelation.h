@@ -79,13 +79,14 @@ struct CompressedBlockMetadata {
     Id col0Id_;
     Id col1Id_;
     Id col2Id_;
+    Id graphId_;
     auto operator<=>(const PermutedTriple&) const = default;
 
     // Formatted output for debugging.
     friend std::ostream& operator<<(std::ostream& str,
                                     const PermutedTriple& trip) {
       str << "Triple: " << trip.col0Id_ << ' ' << trip.col1Id_ << ' '
-          << trip.col2Id_ << std::endl;
+          << trip.col2Id_ << ' ' << trip.graphId_ << std::endl;
       return str;
     }
 
