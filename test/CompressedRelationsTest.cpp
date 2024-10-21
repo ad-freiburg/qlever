@@ -103,8 +103,8 @@ compressedRelationTestWriteCompressedRelations(
 
   // First create the on-disk permutation.
   size_t numColumns = getNumColumns(inputs) + 1;
-  // If the input has no graph info, add a dummy graph column to all inputs,
-  // s.t. the assertions work.
+  // If the input has no graph info, add a dummy graph value to all inputs,
+  // such that the assertions work.
   if (numColumns == 3) {
     ++numColumns;
     for (auto& input : inputs) {

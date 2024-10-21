@@ -57,8 +57,10 @@ NumAddedAndDeleted LocatedTriplesPerBlock::numTriples(size_t blockIndex) const {
   return {countInserts, blockUpdateTriples.size() - countInserts};
 }
 
-// ____________________________________________________________________________
-// Collect the relevant entries of a LocatedTriple into a triple.
+// Return a `std::tie` of the relevant entries of a row, according to
+// `numIndexColumns` and `includeGraphColumn`. For example, if `numIndexColumns`
+// is `2` and `includeGraphColumn` is `true`, the function returns
+// `std::tie(row[0], row[1], row[2])`.
 template <size_t numIndexColumns, bool includeGraphColumn>
 requires(numIndexColumns >= 1 && numIndexColumns <= IdTriple<0>::NumCols)
 auto tieIdTableRow(auto& row) {
@@ -68,8 +70,11 @@ auto tieIdTableRow(auto& row) {
                              static_cast<size_t>(includeGraphColumn)>{});
 }
 
-// ____________________________________________________________________________
-// Collect the relevant entries of a LocatedTriple into a triple.
+// Return a `std::tie` of the relevant entries of a located triple,
+// according to `numIndexColumns` and `includeGraphColumn`. For example, if
+// `numIndexColumns` is `2` and `includeGraphColumn` is `true`, the function
+// returns `std::tie(ids_[1], ids_[2], ids_[3])`, where `ids_` is from
+// `lt->triple_`.
 template <size_t numIndexColumns, bool includeGraphColumn>
 requires(numIndexColumns >= 1 && numIndexColumns <= 3)
 auto tieLocatedTriple(auto& lt) {
@@ -123,21 +128,19 @@ IdTable LocatedTriplesPerBlock::mergeTriplesImpl(size_t blockIndex,
   auto resultIt = result.begin();
 
   // Write the given `locatedTriple` to `result` at position `resultIt` and
-  // advance.
-  auto writeTripleToResult = [&result, &resultIt](auto& locatedTriple) {
+  // advance `resultIt` by one. See the example in the comment of the
+  // declaration of `mergeTriples` to understand the behavior of this function.
+  auto writeLocatedTripleToResult = [&result, &resultIt](auto& locatedTriple) {
     // Write part from `locatedTriple` that also occurs in the input `block` to
     // the result.
-    //
-    // TODO: According to `mergeTriples`, `numIndexColumns` can also be 4.
-    // However, this would crash with the following code, as `ids_[3 -
-    // numIndexColumns + i]` would access `ids_[-1]`. Either `numIndexColumns`
-    // cannot be 4 or the following code needs to be adjusted.
-    static constexpr auto graphOffset = static_cast<size_t>(includeGraphColumn);
-    for (size_t i = 0; i < numIndexColumns + graphOffset; i++) {
+    static constexpr auto plusOneIfGraph =
+        static_cast<size_t>(includeGraphColumn);
+    for (size_t i = 0; i < numIndexColumns + plusOneIfGraph; i++) {
       (*resultIt)[i] = locatedTriple.triple_.ids_[3 - numIndexColumns + i];
     }
-    // Write UNDEF to any additional columns.
-    for (size_t i = numIndexColumns + graphOffset; i < result.numColumns();
+    // If the input `block` has payload columns (which located triples don't
+    // have), set their values to UNDEF.
+    for (size_t i = numIndexColumns + plusOneIfGraph; i < result.numColumns();
          i++) {
       (*resultIt)[i] = ValueId::makeUndefined();
     }
@@ -148,7 +151,7 @@ IdTable LocatedTriplesPerBlock::mergeTriplesImpl(size_t blockIndex,
     if (lessThan(locatedTripleIt, *rowIt)) {
       if (locatedTripleIt->shouldTripleExist_) {
         // Insertion of a non-existent triple.
-        writeTripleToResult(*locatedTripleIt);
+        writeLocatedTripleToResult(*locatedTripleIt);
       }
       locatedTripleIt++;
     } else if (equal(locatedTripleIt, *rowIt)) {
@@ -168,7 +171,7 @@ IdTable LocatedTriplesPerBlock::mergeTriplesImpl(size_t blockIndex,
     std::ranges::for_each(
         std::ranges::subrange(locatedTripleIt, locatedTriples.end()) |
             std::views::filter(&LocatedTriple::shouldTripleExist_),
-        writeTripleToResult);
+        writeLocatedTripleToResult);
   }
   if (rowIt != block.end()) {
     AD_CORRECTNESS_CHECK(locatedTripleIt == locatedTriples.end());
@@ -186,7 +189,9 @@ IdTable LocatedTriplesPerBlock::mergeTriples(size_t blockIndex,
                                              const IdTable& block,
                                              size_t numIndexColumns,
                                              bool includeGraphColumn) const {
-  auto applyToGraphColumn = [&]<bool hasGraphColumn>() {
+  // The following code does nothing more than turn `numIndexColumns` and
+  // `includeGraphColumn` into template parameters of `mergeTriplesImpl`.
+  auto mergeTriplesImplHelper = [&]<bool hasGraphColumn>() {
     if (numIndexColumns == 3) {
       return mergeTriplesImpl<3, hasGraphColumn>(blockIndex, block);
     } else if (numIndexColumns == 2) {
@@ -197,9 +202,9 @@ IdTable LocatedTriplesPerBlock::mergeTriples(size_t blockIndex,
     }
   };
   if (includeGraphColumn) {
-    return applyToGraphColumn.template operator()<true>();
+    return mergeTriplesImplHelper.template operator()<true>();
   } else {
-    return applyToGraphColumn.template operator()<false>();
+    return mergeTriplesImplHelper.template operator()<false>();
   }
 }
 

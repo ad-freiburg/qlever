@@ -106,20 +106,24 @@ class LocatedTriplesPerBlock {
   bool hasUpdates(size_t blockIndex) const;
 
   // Merge located triples for `blockIndex_` (there must be at least one,
-  // otherwise this function should not be called) with the given input `block`.
-  // Return the result as an `IdTable`. The result has the same number of
-  // columns as `block`.
+  // otherwise this function must not be called) with the given input `block`.
+  // Return the result as an `IdTable`, which has the same number of columns as
+  // `block`.
   //
-  // TODO: Adjust the following paragraph after Johannes' changes.
+  // `numIndexColumns` is the number of columns in `block`, except the graph
+  // column and payload if any, that is, a number from `{1, 2, 3}`.
+  // `includeGraphColumn` specifies whether `block` contains the graph column.
   //
-  // `numIndexColumns` is the number of columns in `block` except payload, that
-  // is, a number from `{1, 2, 3, 4}`. If `block` has payload columns, the
-  // value of the merged located triples for these columns is set to UNDEF
-  // (becuse our located triples currently don't have a payload). For example,
-  // assume that `block` is from the POSG permutation and has the columns OSG
-  // and two additional payload columns X and Y, so five columns in total. Then
-  // `numIndexColumns` is 3 (because only OSG are present in the block), and a
-  // located tripe in the result would be of the form OSGUU, where U is UNDEF.
+  // If `block` has payload columns (which currently our located triples never
+  // have), the value of the merged located triples for these columns is set to
+  // UNDEF.
+  //
+  // For example, assume that `block` is from the POS permutation, that
+  // `numIndexColumns` is 2 (that is, only OS are present in the block), that
+  // `includeGraphColumn` is `true` (that is, G is also present in the block),
+  // and that `block` has block has two additional payload columns X and Y.
+  // Then the result has five columns (like the input `block`), and each merged
+  // located triple will have values for OSG and UNDEF for X and Y.
   IdTable mergeTriples(size_t blockIndex, const IdTable& block,
                        size_t numIndexColumns, bool includeGraphColumn) const;
 
