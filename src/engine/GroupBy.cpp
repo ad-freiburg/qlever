@@ -380,13 +380,10 @@ ProtoResult GroupBy::computeResult(bool requestLaziness) {
         std::move(metadataForUnsequentialData).value().aggregateAliases_,
         std::move(groupByCols), !requestLaziness);
 
-    if (requestLaziness) {
-      return ProtoResult{std::move(generator), resultSortedOn()};
-    }
-    Result::IdTableVocabPair pair =
-        cppcoro::getSingleElement(std::move(generator));
-    return ProtoResult{std::move(pair.idTable_), resultSortedOn(),
-                       std::move(pair.localVocab_)};
+    return requestLaziness
+               ? ProtoResult{std::move(generator), resultSortedOn()}
+               : ProtoResult{cppcoro::getSingleElement(std::move(generator)),
+                             resultSortedOn()};
   }
 
   AD_CORRECTNESS_CHECK(subresult->idTable().numColumns() == inWidth);

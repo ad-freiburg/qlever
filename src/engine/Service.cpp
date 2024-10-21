@@ -188,12 +188,10 @@ ProtoResult Service::computeResultImpl([[maybe_unused]] bool requestLaziness) {
   // details).
   auto generator =
       computeResultLazily(expVariableKeys, std::move(body), !requestLaziness);
-  if (requestLaziness) {
-    return ProtoResult{std::move(generator), resultSortedOn()};
-  }
-  auto pair = cppcoro::getSingleElement(std::move(generator));
-  return ProtoResult{std::move(pair.idTable_), resultSortedOn(),
-                     std::move(pair.localVocab_)};
+  return requestLaziness
+             ? ProtoResult{std::move(generator), resultSortedOn()}
+             : ProtoResult{cppcoro::getSingleElement(std::move(generator)),
+                           resultSortedOn()};
 }
 
 template <size_t I>

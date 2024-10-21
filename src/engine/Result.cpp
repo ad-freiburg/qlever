@@ -66,6 +66,11 @@ Result::Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
              SharedLocalVocabWrapper{std::move(localVocab)}} {}
 
 // _____________________________________________________________________________
+Result::Result(IdTableVocabPair pair, std::vector<ColumnIndex> sortedBy)
+    : Result{std::move(pair.idTable_), std::move(sortedBy),
+             std::move(pair.localVocab_)} {}
+
+// _____________________________________________________________________________
 Result::Result(cppcoro::generator<IdTableVocabPair> idTables,
                std::vector<ColumnIndex> sortedBy)
     : data_{GenContainer{[](auto idTables, auto sortedBy)
