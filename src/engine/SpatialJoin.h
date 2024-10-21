@@ -20,6 +20,19 @@ struct MaxDistanceConfig {
   size_t maxDist_;
 };
 
+// helper struct to improve readability in prepareJoin()
+struct PreparedSpatialJoinParams {
+  const IdTable* const idTableLeft_;
+  std::shared_ptr<const Result> resultLeft_;
+  const IdTable* const idTableRight_;
+  std::shared_ptr<const Result> resultRight_;
+  ColumnIndex leftJoinCol_;
+  ColumnIndex rightJoinCol_;
+  size_t numColumns_;
+  std::optional<size_t> maxDist_;
+  std::optional<size_t> maxResults_;
+};
+
 // This class is implementing a SpatialJoin operation. This operations joins
 // two tables, using their positional column. It supports nearest neighbor
 // search as well as search of all points within a given range.
@@ -107,44 +120,8 @@ class SpatialJoin : public Operation {
   // helper function, which parses a triple and populates config_
   void parseConfigFromTriple();
 
-  // helper function which returns a GeoPoint if the element of the given table
-  // represents a GeoPoint
-  std::optional<GeoPoint> getPoint(const IdTable* restable, size_t row,
-                                   ColumnIndex col) const;
-
-  // helper function, which computes the distance of two points, where each
-  // point comes from a different result table
-  Id computeDist(const IdTable* resLeft, const IdTable* resRight,
-                 size_t rowLeft, size_t rowRight, ColumnIndex leftPointCol,
-                 ColumnIndex rightPointCol) const;
-
-  // Helper function, which adds a row, which belongs to the result to the
-  // result table. As inputs it uses a row of the left and a row of the right
-  // child result table.
-  void addResultTableEntry(IdTable* result, const IdTable* resultLeft,
-                           const IdTable* resultRight, size_t rowLeft,
-                           size_t rowRight, Id distance) const;
-
-  // helper struct to improve readability in prepareJoin()
-  struct PreparedJoinParams {
-    const IdTable* const idTableLeft_;
-    std::shared_ptr<const Result> resultLeft_;
-    const IdTable* const idTableRight_;
-    std::shared_ptr<const Result> resultRight_;
-    ColumnIndex leftJoinCol_;
-    ColumnIndex rightJoinCol_;
-    size_t numColumns_;
-  };
-
   // helper function, to initialize various required objects for both algorithms
-  PreparedJoinParams prepareJoin() const;
-
-  // the baseline algorithm, which just checks every combination
-  Result baselineAlgorithm();
-
-  // the improved algorithm, which constructs a S2PointIndex, which is usually
-  // much faster, however requires that the right relation fits into memory
-  Result s2geometryAlgorithm();
+  PreparedSpatialJoinParams prepareJoin() const;
 
   SparqlTriple triple_;
   Variable leftChildVariable_;
