@@ -2,8 +2,6 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-frei#pragma onceburg.de>
 
-
-
 #include <cstdint>
 
 #include "util/DateYearDuration.h"
