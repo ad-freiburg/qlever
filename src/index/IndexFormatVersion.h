@@ -1,8 +1,8 @@
 //  Copyright 2023, University of Freiburg,
 //                  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//  Author: Johannes Kalmbach <kalmbach@cs.uni-frei#pragma onceburg.de>
 
-#pragma once
+
 
 #include <cstdint>
 
@@ -36,5 +36,5 @@ struct IndexFormatVersion {
 // The actual index version. Change it once the binary format of the index
 // changes.
 inline const IndexFormatVersion& indexFormatVersion{
-    1504, DateYearOrDuration{Date{2024, 10, 18}}};
+    1571, DateYearOrDuration{Date{2024, 10, 21}}};
 }  // namespace qlever
