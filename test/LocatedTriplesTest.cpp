@@ -278,7 +278,7 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
     EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
   }
 
-  // Merge the `LocatesTriples` into a block with 1 index columns.
+  // Merge the `LocatesTriples` into a block with 1 index column.
   {
     IdTable block = makeIdTableFromVector({
         {10},  // Row 0

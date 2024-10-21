@@ -117,7 +117,16 @@ IdTable LocatedTriplesPerBlock::mergeTriplesImpl(size_t blockIndex,
   auto locatedTripleIt = locatedTriples.begin();
   auto resultIt = result.begin();
 
-  auto writeTripleToResult = [&result, &resultIt](auto& locatedTriple) {
+  // Write the given `locatedTriple` to `result` at position `resultIt` and
+  // advance.
+  auto writeTripleToResult = [&result, &resultIt](auto &locatedTriple) {
+    // Write part from `locatedTriple` that also occurs in the input `block` to
+    // the result.
+    //
+    // TODO: According to `mergeTriples`, `numIndexColumns` can also be 4.
+    // However, this would crash with the following code, as `ids_[3 -
+    // numIndexColumns + i]` would access `ids_[-1]`. Either `numIndexColumns`
+    // cannot be 4 or the following code needs to be adjusted.
     for (size_t i = 0; i < numIndexColumns; i++) {
       (*resultIt)[i] = locatedTriple.triple_.ids_[3 - numIndexColumns + i];
     }
