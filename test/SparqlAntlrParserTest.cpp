@@ -1252,6 +1252,72 @@ TEST(SparqlParser, ConstructQuery) {
                "grouped nor created as an alias in the SELECT clause"));
 }
 
+TEST(SparqlParser, AskQuery) {
+  auto contains = [](const std::string& s) { return ::testing::HasSubstr(s); };
+  auto expectAskQuery =
+      ExpectCompleteParse<&Parser::askQuery>{defaultPrefixMap};
+  auto expectAskQueryFails = ExpectParseFails<&Parser::askQuery>{};
+  auto DummyGraphPatternMatcher =
+      m::GraphPattern(m::Triples({{Var{"?x"}, "?y", Var{"?z"}}}));
+  using Graphs = ScanSpecificationAsTripleComponent::Graphs;
+
+  // A matcher that matches the query `ASK { ?a <bar> ?foo}`, where the
+  // FROM and FROM NAMED clauses can still be specified via arguments.
+  auto selectABarFooMatcher = [](Graphs defaultGraphs = std::nullopt,
+                                 Graphs namedGraphs = std::nullopt) {
+    return testing::AllOf(m::AskQuery(
+        m::GraphPattern(m::Triples({{Var{"?a"}, "<bar>", Var{"?foo"}}})),
+        defaultGraphs, namedGraphs));
+  };
+  expectAskQuery("ASK { ?a <bar> ?foo }", selectABarFooMatcher());
+
+  Graphs defaultGraphs;
+  defaultGraphs.emplace();
+  defaultGraphs->insert(TripleComponent::Iri::fromIriref("<x>"));
+  Graphs namedGraphs;
+  namedGraphs.emplace();
+  namedGraphs->insert(TripleComponent::Iri::fromIriref("<y>"));
+  expectAskQuery("ASK FROM <x> FROM NAMED <y> WHERE { ?a <bar> ?foo }",
+                 selectABarFooMatcher(defaultGraphs, namedGraphs));
+
+  expectAskQuery("ASK { ?x ?y ?z }",
+                 testing::AllOf(m::AskQuery(DummyGraphPatternMatcher)));
+  // Ask query with LIMIT and TEXTLIMIT is not supported.
+  expectAskQueryFails(
+      "ASK WHERE { ?x ?y ?z . FILTER(?x != <foo>) } LIMIT 10 TEXTLIMIT 5");
+
+  // ORDER BY
+  expectAskQuery("ASK { ?x ?y ?z } ORDER BY ?y ",
+                 testing::AllOf(m::AskQuery(DummyGraphPatternMatcher),
+                                m::pq::OrderKeys({{Var{"?y"}, false}})));
+
+  // Ordering by a variable or expression which contains a variable that is not
+  // visible in the query body is not allowed.
+  expectAskQueryFails("ASK { ?a ?b ?c } ORDER BY ?x",
+                      contains("Variable ?x was used by "
+                               "ORDER BY, but is not"));
+
+  expectAskQueryFails("ASK { ?a ?b ?c } ORDER BY (?x - 10)");
+
+  // Explicit GROUP BY
+  expectAskQuery("ASK { ?x ?y ?z } GROUP BY ?x",
+                 testing::AllOf(m::AskQuery(DummyGraphPatternMatcher),
+                                m::pq::GroupKeys({Var{"?x"}})));
+  expectAskQuery("ASK { ?x ?y ?z } GROUP BY ?x",
+                 testing::AllOf(m::AskQuery(DummyGraphPatternMatcher),
+                                m::pq::GroupKeys({Var{"?x"}})));
+
+  // Grouping by a variable or expression which contains a variable
+  // that is not visible in the query body is not allowed.
+  expectAskQueryFails("ASK { ?a ?b ?c } GROUP BY ?x");
+  expectAskQueryFails("ASK { ?a ?b ?c } GROUP BY (?x - 10)");
+
+  // HAVING is not allowed without GROUP BY
+  expectAskQueryFails(
+      "ASK { ?x ?y ?z } HAVING (?x < 3)",
+      contains("HAVING clause is only supported in queries with GROUP BY"));
+}
+
 TEST(SparqlParser, Query) {
   auto expectQuery = ExpectCompleteParse<&Parser::query>{defaultPrefixMap};
   auto expectQueryFails = ExpectParseFails<&Parser::query>{};
@@ -1303,6 +1369,16 @@ TEST(SparqlParser, Query) {
   expectQueryFails(
       "CONSTRUCT { ?x <foo> <bar> } WHERE { ?x ?y ?z } GROUP BY ?y");
 
+  // The same two tests with `ASK` queries
+  expectQuery(
+      "ASK WHERE { ?x ?y ?z } GROUP BY ?x",
+      testing::AllOf(
+          m::AskQuery(
+
+              m::GraphPattern(m::Triples({{Var{"?x"}, "?y", Var{"?z"}}}))),
+          m::pq::OriginalString("ASK WHERE { ?x ?y ?z } GROUP BY ?x"),
+          m::VisibleVariables({Var{"?x"}, Var{"?y"}, Var{"?z"}})));
+
   // Test that the prologue is parsed properly. We use `m::Service` here
   // because the parsing of a SERVICE clause is the only place where the
   // prologue is explicitly passed on to a `parsedQuery::` object.
@@ -1317,8 +1393,6 @@ TEST(SparqlParser, Query) {
 
   // Describe and Ask Queries are not supported.
   expectQueryFails("DESCRIBE *");
-  // TODO<joka921> Those are implemented now, test them
-  // expectQueryFails("ASK WHERE { ?x <foo> <bar> }");
 }
 
 // Some helper matchers for the `builtInCall` test below.

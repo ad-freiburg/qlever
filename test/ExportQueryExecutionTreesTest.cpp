@@ -89,6 +89,26 @@ struct TestCaseSelectQuery {
   std::string resultXml;
 };
 
+struct TestCaseAskQuery {
+  std::string kg;                   // The knowledge graph (TURTLE)
+  std::string query;                // The query (SPARQL)
+  nlohmann::json resultQLeverJSON;  // The expected result in QLeverJSON format.
+  // Note: this member only contains the inner
+  // result array with the bindings and NOT
+  // the metadata.
+  nlohmann::json resultSparqlJSON;  // The expected result in SparqlJSON format.
+  std::string resultXml;
+};
+
+// TODO<joka921> setup one test case for the ASK -> true and one for the ASK ->
+// false case and use them for unit testing.
+/*
+TestCaseAskQuery askResultTrue() {
+  TestCaseAskQuery testCase;
+  testCase.resultQLeverJSON = nlohmann::json::parse("[]");
+}
+ */
+
 struct TestCaseConstructQuery {
   std::string kg;                   // The knowledge graph (TURTLE)
   std::string query;                // The query (SPARQL)
@@ -150,6 +170,34 @@ void runConstructQueryTestCase(
   EXPECT_EQ(qleverJSONStreamResult["res"], testCase.resultQLeverJSON);
   EXPECT_EQ(runQueryStreamableResult(testCase.kg, testCase.query, turtle),
             testCase.resultTurtle);
+}
+
+// Run a single test case for an ASK query.
+void runAskQueryTestCase(
+    const TestCaseAskQuery& testCase,
+    ad_utility::source_location l = ad_utility::source_location::current()) {
+  auto trace = generateLocationTrace(l, "runConstructQueryTestCase");
+  using enum ad_utility::MediaType;
+  // TODO<joka921> match the exception
+  EXPECT_ANY_THROW(runQueryStreamableResult(testCase.kg, testCase.query, tsv));
+  EXPECT_ANY_THROW(runQueryStreamableResult(testCase.kg, testCase.query, csv));
+  EXPECT_ANY_THROW(
+      runQueryStreamableResult(testCase.kg, testCase.query, octetStream));
+  EXPECT_ANY_THROW(
+      runQueryStreamableResult(testCase.kg, testCase.query, turtle));
+  auto qleverJSONStreamResult = nlohmann::json::parse(
+      runQueryStreamableResult(testCase.kg, testCase.query, qleverJson));
+  ASSERT_EQ(qleverJSONStreamResult["query"], testCase.query);
+  ASSERT_EQ(qleverJSONStreamResult["resultsize"], 1u);
+  EXPECT_EQ(qleverJSONStreamResult["res"], testCase.resultQLeverJSON);
+
+  EXPECT_EQ(nlohmann::json::parse(runQueryStreamableResult(
+                testCase.kg, testCase.query, sparqlJson)),
+            testCase.resultSparqlJSON);
+
+  auto xmlAsString =
+      runQueryStreamableResult(testCase.kg, testCase.query, sparqlXml);
+  EXPECT_EQ(testCase.resultXml, xmlAsString);
 }
 
 // Create a `json` that can be used as the `resultQLeverJSON` of a
