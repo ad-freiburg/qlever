@@ -16,13 +16,11 @@
 cppcoro::generator<ExportQueryExecutionTrees::TableConstRefWithVocab>
 ExportQueryExecutionTrees::getIdTables(const Result& result) {
   if (result.isFullyMaterialized()) {
-    ExportQueryExecutionTrees::TableConstRefWithVocab pair{result.idTable(),
-                                                           result.localVocab()};
+    TableConstRefWithVocab pair{result.idTable(), result.localVocab()};
     co_yield pair;
   } else {
     for (const Result::IdTableVocabPair& pair : result.idTables()) {
-      ExportQueryExecutionTrees::TableConstRefWithVocab tableWithVocab{
-          pair.idTable_, pair.localVocab_};
+      TableConstRefWithVocab tableWithVocab{pair.idTable_, pair.localVocab_};
       co_yield tableWithVocab;
     }
   }

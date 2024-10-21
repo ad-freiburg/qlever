@@ -391,13 +391,8 @@ ProtoResult GroupBy::computeResult(bool requestLaziness) {
 
   AD_CORRECTNESS_CHECK(subresult->idTable().numColumns() == inWidth);
 
-  // Make a deep copy of the local vocab from `subresult` and then add to it (in
-  // case GROUP_CONCAT adds a new word or words).
-  //
-  // TODO: In most GROUP BY operations, nothing is added to the local
-  // vocabulary, so it would be more efficient to first share the pointer here
-  // (like with `shareLocalVocabFrom`) and only copy it when a new word is about
-  // to be added. Same for BIND.
+  // Make a copy of the local vocab. Note: the LocalVocab has reference
+  // semantics via `shared_ptr`, so no actual strings are copied here.
 
   auto localVocab = subresult->getCopyOfLocalVocab();
 

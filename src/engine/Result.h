@@ -176,6 +176,7 @@ class Result {
   // Get the local vocab as a shared pointer to const. This can be used if one
   // result has the same local vocab as one of its child results.
   SharedLocalVocabWrapper getSharedLocalVocab() const {
+    AD_CONTRACT_CHECK(isFullyMaterialized());
     return SharedLocalVocabWrapper{
         std::get<IdTableSharedLocalVocabPair>(data_).localVocab_};
   }
