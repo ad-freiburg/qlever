@@ -17,9 +17,8 @@ using ::testing::Values;
 namespace {
 // Helper function to generate all possible splits of an IdTable in order to
 // exhaustively test generator variants.
-std::vector<cppcoro::generator<Result::IdTableVocabPair>> getAllSubSplits(
-    const IdTable& idTable) {
-  std::vector<cppcoro::generator<Result::IdTableVocabPair>> result;
+std::vector<Result::Generator> getAllSubSplits(const IdTable& idTable) {
+  std::vector<Result::Generator> result;
   for (size_t i = 0; i < std::pow(idTable.size() - 1, 2); ++i) {
     std::vector<size_t> reverseIndex{};
     size_t copy = i;
@@ -29,52 +28,46 @@ std::vector<cppcoro::generator<Result::IdTableVocabPair>> getAllSubSplits(
       }
       copy /= 2;
     }
-    result.push_back(
-        [](auto split,
-           IdTable clone) -> cppcoro::generator<Result::IdTableVocabPair> {
-          IdTable subSplit{clone.numColumns(),
-                           ad_utility::makeUnlimitedAllocator<IdTable>()};
-          size_t splitIndex = 0;
-          for (size_t i = 0; i < clone.size(); ++i) {
-            subSplit.push_back(clone[i]);
-            if (splitIndex < split.size() && split[splitIndex] == i) {
-              Result::IdTableVocabPair pair{std::move(subSplit), LocalVocab{}};
-              co_yield pair;
-              // Move back if not moved out to reuse buffer.
-              subSplit = std::move(pair.idTable_);
-              subSplit.clear();
-              ++splitIndex;
-            }
-          }
-          if (subSplit.size() > 0) {
-            co_yield {std::move(subSplit), LocalVocab{}};
-          }
-        }(std::move(reverseIndex), idTable.clone()));
+    result.push_back([](auto split, IdTable clone) -> Result::Generator {
+      IdTable subSplit{clone.numColumns(),
+                       ad_utility::makeUnlimitedAllocator<IdTable>()};
+      size_t splitIndex = 0;
+      for (size_t i = 0; i < clone.size(); ++i) {
+        subSplit.push_back(clone[i]);
+        if (splitIndex < split.size() && split[splitIndex] == i) {
+          Result::IdTableVocabPair pair{std::move(subSplit), LocalVocab{}};
+          co_yield pair;
+          // Move back if not moved out to reuse buffer.
+          subSplit = std::move(pair.idTable_);
+          subSplit.clear();
+          ++splitIndex;
+        }
+      }
+      if (subSplit.size() > 0) {
+        co_yield {std::move(subSplit), LocalVocab{}};
+      }
+    }(std::move(reverseIndex), idTable.clone()));
   }
 
   return result;
 }
 
 // _____________________________________________________________________________
-void consumeGenerator(cppcoro::generator<Result::IdTableVocabPair>& generator) {
+void consumeGenerator(Result::Generator& generator) {
   for ([[maybe_unused]] Result::IdTableVocabPair& _ : generator) {
   }
 }
 }  // namespace
 
 TEST(Result, verifyIdTableThrowsWhenActuallyLazy) {
-  Result result{
-      []() -> cppcoro::generator<Result::IdTableVocabPair> { co_return; }(),
-      {}};
+  Result result{[]() -> Result::Generator { co_return; }(), {}};
   EXPECT_FALSE(result.isFullyMaterialized());
   EXPECT_THROW(result.idTable(), ad_utility::Exception);
 }
 
 // _____________________________________________________________________________
 TEST(Result, verifyIdTableThrowsOnSecondAccess) {
-  const Result result{
-      []() -> cppcoro::generator<Result::IdTableVocabPair> { co_return; }(),
-      {}};
+  const Result result{[]() -> Result::Generator { co_return; }(), {}};
   // First access should work
   for ([[maybe_unused]] Result::IdTableVocabPair& _ : result.idTables()) {
     ADD_FAILURE() << "Generator is empty";
@@ -178,8 +171,7 @@ TEST(Result, verifyRunOnNewChunkComputedFiresCorrectly) {
   auto idTable2 = makeIdTableFromVector({{3, 4, 0}});
   auto idTable3 = makeIdTableFromVector({{1, 6, 0}, {2, 5, 0}, {3, 4, 0}});
 
-  Result result{[](auto& t1, auto& t2,
-                   auto& t3) -> cppcoro::generator<Result::IdTableVocabPair> {
+  Result result{[](auto& t1, auto& t2, auto& t3) -> Result::Generator {
                   std::this_thread::sleep_for(1ms);
                   co_yield {t1.clone(), LocalVocab{}};
                   std::this_thread::sleep_for(3ms);
@@ -219,7 +211,7 @@ TEST(Result, verifyRunOnNewChunkComputedFiresCorrectly) {
 // _____________________________________________________________________________
 TEST(Result, verifyRunOnNewChunkCallsFinishOnError) {
   Result result{
-      []() -> cppcoro::generator<Result::IdTableVocabPair> {
+      []() -> Result::Generator {
         throw std::runtime_error{"verifyRunOnNewChunkCallsFinishOnError"};
         co_return;
       }(),
@@ -250,11 +242,10 @@ TEST(Result, verifyRunOnNewChunkCallsFinishOnPartialConsumption) {
   uint32_t callCounterFinished = 0;
 
   {
-    Result result{
-        [](IdTable idTable) -> cppcoro::generator<Result::IdTableVocabPair> {
-          co_yield {std::move(idTable), LocalVocab{}};
-        }(makeIdTableFromVector({{}})),
-        {}};
+    Result result{[](IdTable idTable) -> Result::Generator {
+                    co_yield {std::move(idTable), LocalVocab{}};
+                  }(makeIdTableFromVector({{}})),
+                  {}};
 
     result.runOnNewChunkComputed(
         [&](const IdTable&, std::chrono::microseconds) {

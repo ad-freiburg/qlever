@@ -1228,9 +1228,8 @@ TEST(ExportQueryExecutionTrees, getIdTablesReturnsSingletonIterator) {
 TEST(ExportQueryExecutionTrees, getIdTablesMirrorsGenerator) {
   IdTable idTable1 = makeIdTableFromVector({{1}, {2}, {3}});
   IdTable idTable2 = makeIdTableFromVector({{42}, {1337}});
-  auto tableGenerator =
-      [](IdTable idTableA,
-         IdTable idTableB) -> cppcoro::generator<Result::IdTableVocabPair> {
+  auto tableGenerator = [](IdTable idTableA,
+                           IdTable idTableB) -> Result::Generator {
     co_yield {std::move(idTableA), LocalVocab{}};
 
     co_yield {std::move(idTableB), LocalVocab{}};
@@ -1245,7 +1244,7 @@ TEST(ExportQueryExecutionTrees, getIdTablesMirrorsGenerator) {
 
 // _____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, ensureCorrectSlicingOfSingleIdTable) {
-  auto tableGenerator = []() -> cppcoro::generator<Result::IdTableVocabPair> {
+  auto tableGenerator = []() -> Result::Generator {
     Result::IdTableVocabPair pair1{makeIdTableFromVector({{1}, {2}, {3}}),
                                    LocalVocab{}};
     co_yield pair1;
@@ -1263,7 +1262,7 @@ TEST(ExportQueryExecutionTrees, ensureCorrectSlicingOfSingleIdTable) {
 // _____________________________________________________________________________
 TEST(ExportQueryExecutionTrees,
      ensureCorrectSlicingOfIdTablesWhenFirstIsSkipped) {
-  auto tableGenerator = []() -> cppcoro::generator<Result::IdTableVocabPair> {
+  auto tableGenerator = []() -> Result::Generator {
     Result::IdTableVocabPair pair1{makeIdTableFromVector({{1}, {2}, {3}}),
                                    LocalVocab{}};
     co_yield pair1;
@@ -1286,7 +1285,7 @@ TEST(ExportQueryExecutionTrees,
 // _____________________________________________________________________________
 TEST(ExportQueryExecutionTrees,
      ensureCorrectSlicingOfIdTablesWhenLastIsSkipped) {
-  auto tableGenerator = []() -> cppcoro::generator<Result::IdTableVocabPair> {
+  auto tableGenerator = []() -> Result::Generator {
     Result::IdTableVocabPair pair1{makeIdTableFromVector({{1}, {2}, {3}}),
                                    LocalVocab{}};
     co_yield pair1;
@@ -1309,7 +1308,7 @@ TEST(ExportQueryExecutionTrees,
 // _____________________________________________________________________________
 TEST(ExportQueryExecutionTrees,
      ensureCorrectSlicingOfIdTablesWhenFirstAndSecondArePartial) {
-  auto tableGenerator = []() -> cppcoro::generator<Result::IdTableVocabPair> {
+  auto tableGenerator = []() -> Result::Generator {
     Result::IdTableVocabPair pair1{makeIdTableFromVector({{1}, {2}, {3}}),
                                    LocalVocab{}};
     co_yield pair1;
@@ -1333,7 +1332,7 @@ TEST(ExportQueryExecutionTrees,
 // _____________________________________________________________________________
 TEST(ExportQueryExecutionTrees,
      ensureCorrectSlicingOfIdTablesWhenFirstAndLastArePartial) {
-  auto tableGenerator = []() -> cppcoro::generator<Result::IdTableVocabPair> {
+  auto tableGenerator = []() -> Result::Generator {
     Result::IdTableVocabPair pair1{makeIdTableFromVector({{1}, {2}, {3}}),
                                    LocalVocab{}};
     co_yield pair1;
@@ -1363,8 +1362,7 @@ TEST(ExportQueryExecutionTrees,
 // _____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, ensureGeneratorIsNotConsumedWhenNotRequired) {
   {
-    auto throwingGenerator =
-        []() -> cppcoro::generator<Result::IdTableVocabPair> {
+    auto throwingGenerator = []() -> Result::Generator {
       ADD_FAILURE() << "Generator was started" << std::endl;
       throw std::runtime_error("Generator was started");
       co_return;
@@ -1377,8 +1375,7 @@ TEST(ExportQueryExecutionTrees, ensureGeneratorIsNotConsumedWhenNotRequired) {
   }
 
   {
-    auto throwAfterYieldGenerator =
-        []() -> cppcoro::generator<Result::IdTableVocabPair> {
+    auto throwAfterYieldGenerator = []() -> Result::Generator {
       Result::IdTableVocabPair pair1{makeIdTableFromVector({{1}}),
                                      LocalVocab{}};
       co_yield pair1;

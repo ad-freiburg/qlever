@@ -239,7 +239,7 @@ void Service::writeJsonResult(const std::vector<std::string>& vars,
 }
 
 // ____________________________________________________________________________
-cppcoro::generator<Result::IdTableVocabPair> Service::computeResultLazily(
+Result::Generator Service::computeResultLazily(
     const std::vector<std::string> vars,
     ad_utility::LazyJsonParser::Generator body, bool singleIdTable) {
   LocalVocab localVocab{};

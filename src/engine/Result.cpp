@@ -71,10 +71,8 @@ Result::Result(IdTableVocabPair pair, std::vector<ColumnIndex> sortedBy)
              std::move(pair.localVocab_)} {}
 
 // _____________________________________________________________________________
-Result::Result(cppcoro::generator<IdTableVocabPair> idTables,
-               std::vector<ColumnIndex> sortedBy)
-    : data_{GenContainer{[](auto idTables, auto sortedBy)
-                             -> cppcoro::generator<IdTableVocabPair> {
+Result::Result(Generator idTables, std::vector<ColumnIndex> sortedBy)
+    : data_{GenContainer{[](auto idTables, auto sortedBy) -> Generator {
         std::optional<IdTable::row_type> previousId = std::nullopt;
         for (IdTableVocabPair& pair : idTables) {
           auto& idTable = pair.idTable_;
@@ -126,10 +124,8 @@ void Result::applyLimitOffset(
                   limitOffset);
     limitTimeCallback(limitTimer.msecs(), idTable());
   } else {
-    auto generator =
-        [](cppcoro::generator<IdTableVocabPair> original,
-           LimitOffsetClause limitOffset,
-           auto limitTimeCallback) -> cppcoro::generator<IdTableVocabPair> {
+    auto generator = [](Generator original, LimitOffsetClause limitOffset,
+                        auto limitTimeCallback) -> Generator {
       if (limitOffset._limit.value_or(1) == 0) {
         co_return;
       }
@@ -164,9 +160,8 @@ void Result::assertThatLimitWasRespected(const LimitOffsetClause& limitOffset) {
     auto limit = limitOffset._limit;
     AD_CONTRACT_CHECK(!limit.has_value() || numRows <= limit.value());
   } else {
-    auto generator = [](cppcoro::generator<IdTableVocabPair> original,
-                        LimitOffsetClause limitOffset)
-        -> cppcoro::generator<IdTableVocabPair> {
+    auto generator = [](Generator original,
+                        LimitOffsetClause limitOffset) -> Generator {
       auto limit = limitOffset._limit;
       uint64_t elementCount = 0;
       for (IdTableVocabPair& pair : original) {
@@ -197,10 +192,9 @@ void Result::checkDefinedness(const VariableToColumnMap& varColMap) {
     AD_EXPENSIVE_CHECK(performCheck(
         varColMap, std::get<IdTableSharedLocalVocabPair>(data_).idTable_));
   } else {
-    auto generator = [](cppcoro::generator<IdTableVocabPair> original,
+    auto generator = [](Generator original,
                         [[maybe_unused]] VariableToColumnMap varColMap,
-                        [[maybe_unused]] auto performCheck)
-        -> cppcoro::generator<IdTableVocabPair> {
+                        [[maybe_unused]] auto performCheck) -> Generator {
       for (IdTableVocabPair& pair : original) {
         // No need to check subsequent idTables assuming the datatypes
         // don't change mid result.
@@ -217,9 +211,8 @@ void Result::runOnNewChunkComputed(
     std::function<void(const IdTable&, std::chrono::microseconds)> onNewChunk,
     std::function<void(bool)> onGeneratorFinished) {
   AD_CONTRACT_CHECK(!isFullyMaterialized());
-  auto generator =
-      [](cppcoro::generator<IdTableVocabPair> original, auto onNewChunk,
-         auto onGeneratorFinished) -> cppcoro::generator<IdTableVocabPair> {
+  auto generator = [](Generator original, auto onNewChunk,
+                      auto onGeneratorFinished) -> Generator {
     // Call this within destructor to make sure it is also called when an
     // operation stops iterating before reaching the end.
     absl::Cleanup cleanup{
@@ -237,7 +230,7 @@ void Result::runOnNewChunkComputed(
       throw;
     }
   }(std::move(idTables()), std::move(onNewChunk),
-                                   std::move(onGeneratorFinished));
+                                                std::move(onGeneratorFinished));
   data_.emplace<GenContainer>(std::move(generator));
 }
 
@@ -260,7 +253,7 @@ const IdTable& Result::idTable() const {
 }
 
 // _____________________________________________________________________________
-cppcoro::generator<Result::IdTableVocabPair>& Result::idTables() const {
+Result::Generator& Result::idTables() const {
   AD_CONTRACT_CHECK(!isFullyMaterialized());
   const auto& container = std::get<GenContainer>(data_);
   AD_CONTRACT_CHECK(!container.consumed_->exchange(true));

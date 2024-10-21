@@ -255,7 +255,7 @@ IdTable Union::transformToCorrectColumnFormat(
 }
 
 // _____________________________________________________________________________
-cppcoro::generator<Result::IdTableVocabPair> Union::computeResultLazily(
+Result::Generator Union::computeResultLazily(
     std::shared_ptr<const Result> result1,
     std::shared_ptr<const Result> result2) const {
   std::vector<ColumnIndex> permutation = computePermutation<true>();

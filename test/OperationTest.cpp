@@ -406,9 +406,7 @@ TEST(Operation, ensureSignalUpdateIsOnlyCalledEvery50msAndAtTheEnd) {
       index, &cache, makeAllocator(ad_utility::MemorySize::megabytes(100)),
       SortPerformanceEstimator{}, [&](std::string) { ++updateCallCounter; }};
   CustomGeneratorOperation operation{
-      &context,
-      [](const IdTable& idTable)
-          -> cppcoro::generator<Result::IdTableVocabPair> {
+      &context, [](const IdTable& idTable) -> Result::Generator {
         std::this_thread::sleep_for(50ms);
         co_yield {idTable.clone(), LocalVocab{}};
         // This one should not trigger because it's below the 50ms threshold
@@ -451,9 +449,7 @@ TEST(Operation, ensureSignalUpdateIsCalledAtTheEndOfPartialConsumption) {
       index, &cache, makeAllocator(ad_utility::MemorySize::megabytes(100)),
       SortPerformanceEstimator{}, [&](std::string) { ++updateCallCounter; }};
   CustomGeneratorOperation operation{
-      &context,
-      [](const IdTable& idTable)
-          -> cppcoro::generator<Result::IdTableVocabPair> {
+      &context, [](const IdTable& idTable) -> Result::Generator {
         co_yield {idTable.clone(), LocalVocab{}};
         co_yield {idTable.clone(), LocalVocab{}};
       }(idTable)};

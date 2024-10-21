@@ -33,13 +33,15 @@ class Result {
         : idTable_{std::move(idTable)}, localVocab_{std::move(localVocab)} {}
   };
 
+  using Generator = cppcoro::generator<IdTableVocabPair>;
+
  private:
   // Needs to be mutable in order to be consumable from a const result.
   struct GenContainer {
-    mutable cppcoro::generator<IdTableVocabPair> generator_;
+    mutable Generator generator_;
     mutable std::unique_ptr<std::atomic_bool> consumed_ =
         std::make_unique<std::atomic_bool>(false);
-    explicit GenContainer(cppcoro::generator<IdTableVocabPair> generator)
+    explicit GenContainer(Generator generator)
         : generator_{std::move(generator)} {}
   };
 
@@ -107,8 +109,7 @@ class Result {
   Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
          LocalVocab&& localVocab);
   Result(IdTableVocabPair pair, std::vector<ColumnIndex> sortedBy);
-  Result(cppcoro::generator<IdTableVocabPair> idTables,
-         std::vector<ColumnIndex> sortedBy);
+  Result(Generator idTables, std::vector<ColumnIndex> sortedBy);
   // Prevent accidental copying of a result table.
   Result(const Result& other) = delete;
   Result& operator=(const Result& other) = delete;
@@ -153,7 +154,7 @@ class Result {
 
   // Access to the underlying `IdTable`s. Throw an `ad_utility::Exception`
   // if the underlying `data_` member holds the wrong variant.
-  cppcoro::generator<IdTableVocabPair>& idTables() const;
+  Generator& idTables() const;
 
   // Const access to the columns by which the `idTable()` is sorted.
   const std::vector<ColumnIndex>& sortedBy() const { return sortedBy_; }

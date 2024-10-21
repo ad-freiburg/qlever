@@ -88,8 +88,8 @@ class ValuesForTesting : public Operation {
       for (const IdTable& idTable : tables_) {
         clones.push_back(idTable.clone());
       }
-      auto generator = [](auto idTables, LocalVocab localVocab)
-          -> cppcoro::generator<Result::IdTableVocabPair> {
+      auto generator = [](auto idTables,
+                          LocalVocab localVocab) -> Result::Generator {
         for (IdTable& idTable : idTables) {
           co_yield {std::move(idTable), localVocab.clone()};
         }

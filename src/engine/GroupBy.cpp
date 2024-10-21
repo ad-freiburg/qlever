@@ -374,7 +374,7 @@ ProtoResult GroupBy::computeResult(bool requestLaziness) {
   if (!subresult->isFullyMaterialized()) {
     AD_CORRECTNESS_CHECK(metadataForUnsequentialData.has_value());
 
-    cppcoro::generator<Result::IdTableVocabPair> generator = CALL_FIXED_SIZE(
+    Result::Generator generator = CALL_FIXED_SIZE(
         (std::array{inWidth, outWidth}), &GroupBy::computeResultLazily, this,
         std::move(subresult), std::move(aggregates),
         std::move(metadataForUnsequentialData).value().aggregateAliases_,
@@ -467,7 +467,7 @@ void GroupBy::processEmptyImplicitGroup(
 
 // _____________________________________________________________________________
 template <size_t IN_WIDTH, size_t OUT_WIDTH>
-cppcoro::generator<Result::IdTableVocabPair> GroupBy::computeResultLazily(
+Result::Generator GroupBy::computeResultLazily(
     std::shared_ptr<const Result> subresult, std::vector<Aggregate> aggregates,
     std::vector<HashMapAliasInformation> aggregateAliases,
     std::vector<size_t> groupByCols, bool singleIdTable) const {

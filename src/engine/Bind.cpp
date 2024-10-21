@@ -105,8 +105,8 @@ ProtoResult Bind::computeResult(bool requestLaziness) {
   if (subRes->isFullyMaterialized()) {
     if (requestLaziness && subRes->idTable().size() > CHUNK_SIZE) {
       return {
-          [](auto applyBind, std::shared_ptr<const Result> result)
-              -> cppcoro::generator<Result::IdTableVocabPair> {
+          [](auto applyBind,
+             std::shared_ptr<const Result> result) -> Result::Generator {
             size_t size = result->idTable().size();
             for (size_t offset = 0; offset < size; offset += CHUNK_SIZE) {
               LocalVocab outVocab = result->getCopyOfLocalVocab();
@@ -132,8 +132,9 @@ ProtoResult Bind::computeResult(bool requestLaziness) {
     return {std::move(result), resultSortedOn(), std::move(localVocab)};
   }
   auto localVocab = std::make_shared<LocalVocab>();
-  auto generator = [](auto applyBind, std::shared_ptr<const Result> result)
-      -> cppcoro::generator<Result::IdTableVocabPair> {
+  auto generator =
+      [](auto applyBind,
+         std::shared_ptr<const Result> result) -> Result::Generator {
     for (Result::IdTableVocabPair& pair : result->idTables()) {
       IdTable idTable = applyBind(std::move(pair.idTable_), &pair.localVocab_);
       co_yield {std::move(idTable), std::move(pair.localVocab_)};

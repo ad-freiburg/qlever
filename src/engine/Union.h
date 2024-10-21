@@ -81,7 +81,7 @@ class Union : public Operation {
   // Create a generator that yields the `IdTable` for the left or right child
   // one after another and apply a potential differing permutation to it. Write
   // the merged LocalVocab to the given `LocalVocab` object at the end.
-  cppcoro::generator<Result::IdTableVocabPair> computeResultLazily(
+  Result::Generator computeResultLazily(
       std::shared_ptr<const Result> result1,
       std::shared_ptr<const Result> result2) const;
 };

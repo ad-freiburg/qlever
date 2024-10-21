@@ -57,8 +57,7 @@ ProtoResult Filter::computeResult(bool requestLaziness) {
   }
 
   if (requestLaziness) {
-    return {[](auto subRes,
-               auto* self) -> cppcoro::generator<Result::IdTableVocabPair> {
+    return {[](auto subRes, auto* self) -> Result::Generator {
               for (Result::IdTableVocabPair& pair : subRes->idTables()) {
                 IdTable result = self->filterIdTable(
                     subRes->sortedBy(), pair.idTable_, pair.localVocab_);

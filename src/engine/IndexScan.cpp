@@ -135,7 +135,7 @@ VariableToColumnMap IndexScan::computeVariableToColumnMap() const {
 }
 
 // _____________________________________________________________________________
-cppcoro::generator<Result::IdTableVocabPair> IndexScan::scanInChunks() const {
+Result::Generator IndexScan::scanInChunks() const {
   auto metadata = getMetadataForScan();
   if (!metadata.has_value()) {
     co_return;

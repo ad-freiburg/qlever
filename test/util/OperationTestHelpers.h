@@ -106,7 +106,7 @@ class AlwaysFailOperation : public Operation {
     if (!requestLaziness) {
       throw std::runtime_error{"AlwaysFailOperation"};
     }
-    return {[]() -> cppcoro::generator<Result::IdTableVocabPair> {
+    return {[]() -> Result::Generator {
               throw std::runtime_error{"AlwaysFailOperation"};
               // Required so that the exception only occurs within the generator
               co_return;
@@ -118,7 +118,7 @@ class AlwaysFailOperation : public Operation {
 // Lazy operation that will yield a result with a custom generator you can
 // provide via the constructor.
 class CustomGeneratorOperation : public Operation {
-  cppcoro::generator<Result::IdTableVocabPair> generator_;
+  Result::Generator generator_;
   std::vector<QueryExecutionTree*> getChildren() override { return {}; }
   string getCacheKeyImpl() const override { AD_FAIL(); }
   string getDescriptor() const override {
@@ -133,9 +133,8 @@ class CustomGeneratorOperation : public Operation {
   VariableToColumnMap computeVariableToColumnMap() const override { return {}; }
 
  public:
-  CustomGeneratorOperation(
-      QueryExecutionContext* context,
-      cppcoro::generator<Result::IdTableVocabPair> generator)
+  CustomGeneratorOperation(QueryExecutionContext* context,
+                           Result::Generator generator)
       : Operation{context}, generator_{std::move(generator)} {}
   ProtoResult computeResult(bool requestLaziness) override {
     AD_CONTRACT_CHECK(requestLaziness);
