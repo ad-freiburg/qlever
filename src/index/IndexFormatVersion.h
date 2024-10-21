@@ -1,6 +1,8 @@
 //  Copyright 2023, University of Freiburg,
 //                  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-frei#pragma onceburg.de>
+//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+
+#pragma once
 
 #include <cstdint>
 
