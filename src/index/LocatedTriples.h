@@ -82,7 +82,7 @@ class LocatedTriplesPerBlock {
   FRIEND_TEST(LocatedTriplesTest, numTriplesInBlock);
 
   // Impl function to `mergeTriples`.
-  template <size_t numIndexColumns>
+  template <size_t numIndexColumns, bool includeGraphColumn>
   IdTable mergeTriplesImpl(size_t blockIndex, const IdTable& block) const;
 
   // Stores the block metadata where the block borders have been adjusted for

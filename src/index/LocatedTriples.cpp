@@ -69,9 +69,19 @@ auto tieIdTableRow(auto& row) {
 
 // ____________________________________________________________________________
 // Collect the relevant entries of a LocatedTriple into a triple.
-template <size_t numIndexColumns>
-requires(numIndexColumns >= 1 && numIndexColumns <= IdTriple<0>::NumCols)
+template <size_t numIndexColumns, bool includeGraphColumn>
+requires(numIndexColumns >= 1 && numIndexColumns <= 3)
 auto tieLocatedTriple(auto& lt) {
+  auto getIndices = []() {
+    std::array<size_t, numIndexColumns + static_cast<size_t>(includeGraphColumn)> a;
+    for (size_t i = 0; i < numIndexColumns; ++i) {
+      a[i] = 3 - numIndexColumns + i;
+    }
+    if (includeGraphColumn) {
+      a.back() = ADDITIONAL_COLUMN_GRAPH_ID;
+    }
+    return a;
+  };
   auto& ids = lt->triple_.ids_;
   return [&ids]<size_t... I>(std::index_sequence<I...>) {
     return std::tie(ids[3 - numIndexColumns + I]...);
@@ -79,14 +89,14 @@ auto tieLocatedTriple(auto& lt) {
 }
 
 // ____________________________________________________________________________
-template <size_t numIndexColumns>
+template <size_t numIndexColumns, bool includeGraphColumn>
 IdTable LocatedTriplesPerBlock::mergeTriplesImpl(size_t blockIndex,
                                                  const IdTable& block) const {
   // This method should only be called if there are located triples in the
   // specified block.
   AD_CONTRACT_CHECK(map_.contains(blockIndex));
 
-  AD_CONTRACT_CHECK(numIndexColumns <= block.numColumns());
+  AD_CONTRACT_CHECK(numIndexColumns + static_cast<size_t>(includeGraphColumn) <= block.numColumns());
 
   auto numInsertsAndDeletes = numTriples(blockIndex);
   IdTable result{block.numColumns(), block.getAllocator()};
