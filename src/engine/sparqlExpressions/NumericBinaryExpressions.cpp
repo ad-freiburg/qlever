@@ -152,7 +152,7 @@ std::optional<std::vector<PrefilterExprVariablePair>> mergeChildrenOrLogicImpl(
     // And because we can't definitely say that one child (and which of the two
     // children) must be true, pre-filtering w.r.t. underlying compressed blocks
     // is not possible here.
-    // In short: OR has multiple congifurations that yield true w.r.t. two child
+    // In short: OR has multiple configurations that yield true w.r.t. two child
     // expressions => we can't define a distinct PrefilterExpression.
     return std::nullopt;
   }
@@ -184,7 +184,7 @@ std::optional<std::vector<PrefilterExprVariablePair>> mergeChildrenOrLogicImpl(
     // We have to construct a PrefilterExpression for (?x >= 10 && ?y != 0) ||
     // ?x <= 0. If this OR expression yields true, at least ?x >= 10 || ?x <= 0
     // must be staisifed; for this objective we can construct a
-    // PrefiterExpression. We can't make a distinct predicition w.r.t. ?y != 0
+    // PrefiterExpression. We can't make a distinct prediction w.r.t. ?y != 0
     // => not relevant for the PrefilterExpression. Thus, we return the
     // PrefilterExpresion {((>= 10 OR <= 0), ?x)}.
     if (varLeft == varRight) {

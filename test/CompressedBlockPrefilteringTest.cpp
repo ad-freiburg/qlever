@@ -24,7 +24,7 @@ using ad_utility::testing::UndefId;
 using ad_utility::testing::VocabId;
 using namespace prefilterExpressions;
 
-// TEST SECTION 1 (PrefilterExpression)
+// TEST SECTION 1
 //______________________________________________________________________________
 //______________________________________________________________________________
 struct MetadataBlocks {
@@ -58,7 +58,8 @@ struct MetadataBlocks {
             {VocabId10, DoubleId33, firstId},  // firstTriple
             {VocabId10, DoubleId33, lastId},   // lastTriple
             {},
-            false};
+            false,
+            0};
   };
 
   const BlockMetadata b1 = makeBlock(IntId(0), IntId(0));
@@ -91,7 +92,8 @@ struct MetadataBlocks {
                            {VocabId10, DoubleId33, IntId(0)},
                            {VocabId10, DoubleId(22), IntId(0)},
                            {},
-                           false};
+                           false,
+                           0};
   std::vector<BlockMetadata> blocksInvalidCol1 = {b1_1, b2,  b3,  b4,  b5,  b6,
                                                   b7,   b8,  b9,  b10, b11, b12,
                                                   b13,  b14, b15, b16, b17};
@@ -100,7 +102,8 @@ struct MetadataBlocks {
                            {VocabId(11), DoubleId33, IntId(-10)},
                            {VocabId10, DoubleId33, IntId(-8)},
                            {},
-                           false};
+                           false,
+                           0};
   std::vector<BlockMetadata> blocksInvalidCol2 = {b1,  b2,  b3,  b4,  b5_1, b6,
                                                   b7,  b8,  b9,  b10, b11,  b12,
                                                   b13, b14, b15, b16, b17};
@@ -878,7 +881,7 @@ TEST(PrefilterExpression, testInputConditionCheck) {
       "The columns up to the evaluation column must contain the same values.");
 }
 
-// TEST SECTION 2 (getPrefilterExpressionForMetadata)
+// TEST SECTION 2
 //______________________________________________________________________________
 //______________________________________________________________________________
 using namespace sparqlExpression;
@@ -1054,7 +1057,64 @@ auto pr = [](std::unique_ptr<PrefilterExpression> expr,
 };
 
 //______________________________________________________________________________
-// TEST SECTION
+// TEST SECTION 2
+
+//______________________________________________________________________________
+// Test PrefilterExpression equality operator.
+TEST(PrefilterExpression, testEqualityOperator) {
+  MetadataBlocks blocks{};
+  // Relational PrefilterExpressions
+  ASSERT_FALSE(*greaterEqFilterExpr(blocks.referenceDate1) ==
+               *greaterEqFilterExpr(blocks.referenceDate2));
+  ASSERT_FALSE(*notEqFilterExpr(BoolId(true)) == *eqFilterExpr(BoolId(true)));
+  ASSERT_TRUE(*eqFilterExpr(IntId(1)) == *eqFilterExpr(IntId(1)));
+  ASSERT_TRUE(*greaterEqFilterExpr(blocks.referenceDate1) ==
+              *greaterEqFilterExpr(blocks.referenceDate1));
+  // NotExpression
+  ASSERT_TRUE(*notFilterExpr(eqFilterExpr(IntId(0))) ==
+              *notFilterExpr(eqFilterExpr(IntId(0))));
+  ASSERT_TRUE(*notFilterExpr(notFilterExpr(greaterEqFilterExpr(VocabId(0)))) ==
+              *notFilterExpr(notFilterExpr(greaterEqFilterExpr(VocabId(0)))));
+  ASSERT_FALSE(*notFilterExpr(greaterThanFilterExpr(IntId(0))) ==
+               *eqFilterExpr(IntId(0)));
+  ASSERT_FALSE(*notFilterExpr(andFilterExpr(eqFilterExpr(IntId(1)),
+                                            eqFilterExpr(IntId(0)))) ==
+               *notFilterExpr(greaterEqFilterExpr(VocabId(0))));
+  // Binary PrefilterExpressions (AND and OR)
+  ASSERT_TRUE(
+      *orFilterExpr(eqFilterExpr(IntId(0)), lessEqFilterExpr(IntId(0))) ==
+      *orFilterExpr(eqFilterExpr(IntId(0)), lessEqFilterExpr(IntId(0))));
+  ASSERT_TRUE(
+      *andFilterExpr(lessEqFilterExpr(VocabId(1)),
+                     lessEqFilterExpr(IntId(0))) ==
+      *andFilterExpr(lessEqFilterExpr(VocabId(1)), lessEqFilterExpr(IntId(0))));
+  ASSERT_FALSE(
+      *orFilterExpr(eqFilterExpr(IntId(0)), lessEqFilterExpr(IntId(0))) ==
+      *andFilterExpr(lessEqFilterExpr(VocabId(1)), lessEqFilterExpr(IntId(0))));
+  ASSERT_FALSE(
+      *notFilterExpr(
+          orFilterExpr(eqFilterExpr(IntId(0)), lessEqFilterExpr(IntId(0)))) ==
+      *orFilterExpr(eqFilterExpr(IntId(0)), lessEqFilterExpr(IntId(0))));
+}
+
+//______________________________________________________________________________
+// Test PrefilterExpression content formatting for debugging.
+TEST(PrefilterExpression, checkPrintFormattedPrefilterExpression) {
+  const auto& relExpr = lessThanFilterExpr(IntId(10));
+  EXPECT_EQ((std::stringstream() << *relExpr).str(),
+            "Prefilter RelationalExpression<0>\nValueId: I:10\n.\n");
+  const auto& notExpr = notFilterExpr(eqFilterExpr(VocabId(0)));
+  EXPECT_EQ((std::stringstream() << *notExpr).str(),
+            "Prefilter NotExpression:\nchild {Prefilter "
+            "RelationalExpression<3>\nValueId: V:0\n}\n.\n");
+  const auto& orExpr =
+      orFilterExpr(lessEqFilterExpr(IntId(0)), eqFilterExpr(IntId(5)));
+  EXPECT_EQ((std::stringstream() << *orExpr).str(),
+            "Prefilter LogicalExpression<1>\nchild1 {Prefilter "
+            "RelationalExpression<1>\nValueId: I:0\n}child2 {Prefilter "
+            "RelationalExpression<2>\nValueId: I:5\n}\n.\n");
+}
+
 //______________________________________________________________________________
 // Test coverage for the default implementation of
 // getPrefilterExpressionForMetadata.
@@ -1325,6 +1385,15 @@ TEST(SparqlExpression, getPrefilterExpressionsToComplexSparqlExpressions) {
                                   greaterEqFilterExpr(IntId(-10)),
                                   lessThanFilterExpr(DoubleId(0.00))))))),
                           varX));
+  // ?y != ?x AND ?x >= 10
+  // expected prefilter pairs:
+  // {<(>= 10), ?x>}
+  evalAndEqualityCheck(andSparqlExpr(notEqSparqlExpr(varY, varX),
+                                     greaterEqSparqlExpr(varX, IntId(10))),
+                       pr(greaterEqFilterExpr(IntId(10)), varX));
+  evalAndEqualityCheck(andSparqlExpr(greaterEqSparqlExpr(varX, IntId(10)),
+                                     notEqSparqlExpr(varY, varX)),
+                       pr(greaterEqFilterExpr(IntId(10)), varX));
 }
 
 //______________________________________________________________________________
@@ -1341,6 +1410,12 @@ TEST(SparqlExpression, getEmptyPrefilterFromSparqlRelational) {
   evalToEmptyCheck(lessThanSparqlExpr(VocabId(10), BoolId(10)));
   evalToEmptyCheck(greaterEqSparqlExpr(lit, lit));
   evalToEmptyCheck(eqSparqlExpr(iri, iri));
+  evalToEmptyCheck(orSparqlExpr(eqSparqlExpr(var, var),
+                                greaterThanSparqlExpr(var, IntId(0))));
+  evalToEmptyCheck(
+      orSparqlExpr(eqSparqlExpr(var, var), greaterThanSparqlExpr(var, var)));
+  evalToEmptyCheck(
+      andSparqlExpr(eqSparqlExpr(var, var), greaterThanSparqlExpr(var, var)));
 }
 
 //______________________________________________________________________________
