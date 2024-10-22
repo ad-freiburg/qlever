@@ -32,7 +32,9 @@ auto PT = [](const auto& c1, const auto& c2, const auto& c3, Id graph = g) {
   return CompressedBlockMetadata::PermutedTriple{V(c1), V(c2), V(c3), graph};
 };
 auto CBM = [](const auto firstTriple, const auto lastTriple) {
-  return CompressedBlockMetadata{{}, 0, firstTriple, lastTriple, {}, false};
+  size_t dummyBlockIndex = 0;
+  return CompressedBlockMetadata{{}, 0,     firstTriple,    lastTriple,
+                                 {}, false, dummyBlockIndex};
 };
 
 auto numBlocks =

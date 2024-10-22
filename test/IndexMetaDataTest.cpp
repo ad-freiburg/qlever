@@ -20,7 +20,7 @@ Id g = V(123405);
 TEST(RelationMetaDataTest, writeReadTest) {
   CompressedBlockMetadata rmdB{{{12, 34}, {46, 11}},   5,
                                {V(0), V(2), V(13), g}, {V(3), V(24), V(62), g},
-                               std::vector{V(85)},     true};
+                               std::vector{V(85)},     true, 1039};
   CompressedRelationMetadata rmdF{V(1), 3, 2.0, 42.0, 16};
 
   ad_utility::serialization::FileWriteSerializer f("_testtmp.rmd");
@@ -43,18 +43,21 @@ TEST(IndexMetaDataTest, writeReadTest2Mmap) {
   std::string imdFilename = "_testtmp.imd";
   std::string mmapFilename = imdFilename + ".mmap";
   vector<CompressedBlockMetadata> bs;
+  // A value for the Graph Id.
   bs.push_back(CompressedBlockMetadata{{{12, 34}, {42, 17}},
                                        5,
                                        {V(0), V(2), V(13), g},
                                        {V(2), V(24), V(62), g},
                                        std::vector{V(512)},
-                                       true});
+                                       true,
+                                       17});
   bs.push_back(CompressedBlockMetadata{{{12, 34}, {16, 12}},
                                        5,
                                        {V(0), V(2), V(13), g},
                                        {V(3), V(24), V(62), g},
                                        {},
-                                       false});
+                                       false,
+                                       18});
   CompressedRelationMetadata rmdF{V(1), 3, 2.0, 42.0, 16};
   CompressedRelationMetadata rmdF2{V(2), 5, 3.0, 43.0, 10};
   // The index MetaData does not have an explicit clear, so we

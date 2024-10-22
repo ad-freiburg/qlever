@@ -869,13 +869,18 @@ void CompressedRelationWriter::compressAndWriteBlock(
     AD_CORRECTNESS_CHECK(lastCol0Id == last[0]);
 
     auto [hasDuplicates, graphInfo] = getGraphInfo(block);
+    // The blocks are written in parallel and possibly out of order. We thus
+    // can't set the proper block indices here. The proper block indices are set
+    // in the `getFinishedBlocks` function.
+    static constexpr size_t blockIndexNotYetSet = 111333555;
     blockBuffer_.wlock()->push_back(
         CompressedBlockMetadata{std::move(offsets),
                                 numRows,
                                 {first[0], first[1], first[2], first[3]},
                                 {last[0], last[1], last[2], last[3]},
                                 std::move(graphInfo),
-                                hasDuplicates});
+                                hasDuplicates,
+                                blockIndexNotYetSet});
     if (invokeCallback && smallBlocksCallback_) {
       std::invoke(smallBlocksCallback_, std::move(block));
     }
