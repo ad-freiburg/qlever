@@ -131,13 +131,12 @@ ProtoResult Bind::computeResult(bool requestLaziness) {
     LOG(DEBUG) << "BIND result computation done." << std::endl;
     return {std::move(result), resultSortedOn(), std::move(localVocab)};
   }
-  auto localVocab = std::make_shared<LocalVocab>();
   auto generator =
       [](auto applyBind,
          std::shared_ptr<const Result> result) -> Result::Generator {
-    for (Result::IdTableVocabPair& pair : result->idTables()) {
-      IdTable idTable = applyBind(std::move(pair.idTable_), &pair.localVocab_);
-      co_yield {std::move(idTable), std::move(pair.localVocab_)};
+    for (auto& [idTable, localVocab] : result->idTables()) {
+      IdTable resultTable = applyBind(std::move(idTable), &localVocab);
+      co_yield {std::move(resultTable), std::move(localVocab)};
     }
   }(std::move(applyBind), std::move(subRes));
   return {std::move(generator), resultSortedOn()};

@@ -264,10 +264,9 @@ Result::Generator Union::computeResultLazily(
         transformToCorrectColumnFormat(result1->idTable().clone(), permutation),
         result1->getCopyOfLocalVocab()};
   } else {
-    for (Result::IdTableVocabPair& pair : result1->idTables()) {
-      co_yield {
-          transformToCorrectColumnFormat(std::move(pair.idTable_), permutation),
-          std::move(pair.localVocab_)};
+    for (auto& [idTable, localVocab] : result1->idTables()) {
+      co_yield {transformToCorrectColumnFormat(std::move(idTable), permutation),
+                std::move(localVocab)};
     }
   }
   permutation = computePermutation<false>();
@@ -276,10 +275,9 @@ Result::Generator Union::computeResultLazily(
         transformToCorrectColumnFormat(result2->idTable().clone(), permutation),
         result2->getCopyOfLocalVocab()};
   } else {
-    for (Result::IdTableVocabPair& pair : result2->idTables()) {
-      co_yield {
-          transformToCorrectColumnFormat(std::move(pair.idTable_), permutation),
-          std::move(pair.localVocab_)};
+    for (auto& [idTable, localVocab] : result2->idTables()) {
+      co_yield {transformToCorrectColumnFormat(std::move(idTable), permutation),
+                std::move(localVocab)};
     }
   }
 }

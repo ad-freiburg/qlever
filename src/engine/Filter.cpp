@@ -58,10 +58,10 @@ ProtoResult Filter::computeResult(bool requestLaziness) {
 
   if (requestLaziness) {
     return {[](auto subRes, auto* self) -> Result::Generator {
-              for (Result::IdTableVocabPair& pair : subRes->idTables()) {
-                IdTable result = self->filterIdTable(
-                    subRes->sortedBy(), pair.idTable_, pair.localVocab_);
-                co_yield {std::move(result), std::move(pair.localVocab_)};
+              for (auto& [idTable, localVocab] : subRes->idTables()) {
+                IdTable result = self->filterIdTable(subRes->sortedBy(),
+                                                     idTable, localVocab);
+                co_yield {std::move(result), std::move(localVocab)};
               }
             }(std::move(subRes), this),
             resultSortedOn()};
