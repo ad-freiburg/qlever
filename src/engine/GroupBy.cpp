@@ -533,7 +533,8 @@ Result::Generator GroupBy::computeResultLazily(
       // Reuse buffer if not moved out
       resultTable = std::move(outputPair.idTable_);
       resultTable.clear();
-      currentLocalVocab = LocalVocab{};
+      // Keep last local vocab for next commit.
+      currentLocalVocab = std::move(storedLocalVocabs.back());
       storedLocalVocabs.clear();
     }
   }
