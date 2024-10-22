@@ -9,7 +9,6 @@
 
 #include <chrono>
 #include <ctre.hpp>
-#include <limits>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -106,6 +105,12 @@ constexpr inline std::string_view LANGUAGE_PREDICATE =
 static const std::string MAX_DIST_IN_METERS = "<max-distance-in-meters:";
 static constexpr auto MAX_DIST_IN_METERS_REGEX =
     ctll::fixed_string{"<max-distance-in-meters:(?<dist>[0-9]+)>"};
+
+// The spatial join operation without a limit on the maximum number of results
+// can, in the worst case have a square number of results, but usually this is
+// not the case. 1 divided by this constant is the damping factor for the
+// estimated number of results.
+static const size_t SPATIAL_JOIN_MAX_DIST_SIZE_ESTIMATE = 1000;
 
 // This predicate is one of the supported identifiers for the SpatialJoin class.
 // For a given triple of the form ?a <nearest-neighbors:XXXX:YYYY> ?b, it will

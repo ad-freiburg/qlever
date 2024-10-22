@@ -173,7 +173,9 @@ Index makeTestIndex(const std::string& indexBasename,
     index.usePatterns() = usePatterns;
     index.setSettingsFile(inputFilename + ".settings.json");
     index.loadAllPermutations() = loadAllPermutations;
-    index.createFromFile(inputFilename);
+    qlever::InputFileSpecification spec{inputFilename, qlever::Filetype::Turtle,
+                                        std::nullopt};
+    index.createFromFiles({spec});
     if (createTextIndex) {
       index.addTextFromContextFile("", true);
     }

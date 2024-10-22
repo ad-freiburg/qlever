@@ -49,6 +49,94 @@ void writeStxxlConfigFile(const string& location, const string& tail) {
              << STXXL_DISK_SIZE_INDEX_BUILDER << ",syscall\n";
 }
 
+// Check that `values` has exactly one or `numFiles` many entries. If
+// `allowEmpty` is true, then an empty vector will also be accepted. If this
+// condition is violated, throw an exception. This is used to validate the
+// parameters for file types and default graphs.
+static void checkNumParameterValues(const auto& values, size_t numFiles,
+                                    bool allowEmpty,
+                                    std::string_view parameterName) {
+  if (allowEmpty && values.empty()) {
+    return;
+  }
+  if (values.size() == 1 || values.size() == numFiles) {
+    return;
+  }
+  auto error = absl::StrCat(
+      "The parameter \"", parameterName,
+      "\" must be specified either exactly once (in which case it is "
+      "used for all input files) or exactly as many times as there are "
+      "input files, in which case each input file has its own value.");
+  if (allowEmpty) {
+    absl::StrAppend(&error,
+                    " The parameter can also be omitted entirely, in which "
+                    " case a default value is used for all input files.");
+  }
+  throw std::runtime_error{error};
+}
+
+// Convert the `filetype` string, which must be "ttl", "nt", or "nq" to the
+// corresponding `qlever::Filetype` value. If no filetyp is given, try to deduce
+// the type from the filename.
+qlever::Filetype getFiletype(std::optional<std::string_view> filetype,
+                             std::string_view filename) {
+  auto impl = [](std::string_view s) -> std::optional<qlever::Filetype> {
+    if (s == "ttl" || s == "nt") {
+      return qlever::Filetype::Turtle;
+    } else if (s == "nq") {
+      return qlever::Filetype::NQuad;
+    } else {
+      return std::nullopt;
+    }
+  };
+  if (filetype.has_value()) {
+    auto result = impl(filetype.value());
+    if (result.has_value()) {
+      return result.value();
+    } else {
+      throw std::runtime_error{
+          absl::StrCat("The value of --file-format or -F must be one of "
+                       "`ttl`, `nt`, or `nq`, but is `",
+                       filetype.value(), "`")};
+    }
+  }
+
+  auto posOfDot = filename.rfind('.');
+  auto throwNotDeducable = [&filename]() {
+    throw std::runtime_error{absl::StrCat(
+        "Could not deduce the file format from the filename \"", filename,
+        "\". Either use files with names that end on `.ttl`, `.nt`, or `.nq`, "
+        "or explicitly set the format of the file via --file-format or -F")};
+  };
+  if (posOfDot == std::string::npos) {
+    throwNotDeducable();
+  }
+  auto deducedType = impl(filename.substr(posOfDot + 1));
+  if (deducedType.has_value()) {
+    return deducedType.value();
+  } else {
+    throwNotDeducable();
+  }
+  // The following line is necessary because Clang and GCC currently can't
+  // deduce that the above `else` case always throws and there is currently no
+  // way to mark the `throwNotDeducable` lambda as `[[noreturn]]`.
+  AD_FAIL();
+}
+
+// Get the parameter value at the given index. If the vector is empty, return
+// the given `defaultValue`. If the vector has exactly one element, return that
+// element, no matter what the index is.
+template <typename T>
+T getParameterValue(size_t idx, const auto& values, const T& defaultValue) {
+  if (values.empty()) {
+    return defaultValue;
+  }
+  if (values.size() == 1) {
+    return values.at(0);
+  }
+  return values.at(idx);
+}
+
 // Main function.
 int main(int argc, char** argv) {
   // Copy the git hash and datetime of compilation (which require relinking)
@@ -67,8 +155,10 @@ int main(int argc, char** argv) {
   string textIndexName;
   string kbIndexName;
   string settingsFile;
-  string filetype;
-  string inputFile;
+  std::vector<string> filetype;
+  std::vector<string> inputFile;
+  std::vector<string> defaultGraphs;
+  std::vector<bool> parseParallel;
   bool noPatterns = false;
   bool onlyAddTextIndex = false;
   bool keepTemporaryFiles = false;
@@ -92,8 +182,19 @@ int main(int argc, char** argv) {
       "will read from stdin.");
   add("file-format,F", po::value(&filetype),
       "The format of the input file with the knowledge graph data. Must be one "
-      "of [nt|ttl|nq]. If not set, QLever will try to deduce it from the "
-      "filename suffix.");
+      "of [nt|ttl|nq]. Can be specified once (then all files use that format), "
+      "or once per file, or not at all (in that case, the format is deduced "
+      "from the filename suffix if possible).");
+  add("default-graph,g", po::value(&defaultGraphs),
+      "The graph IRI without angle brackets. Write `-` for the default graph. "
+      "Can be omitted (then all files use the default graph), specified once "
+      "(then all files use that graph), or once per file.");
+  add("parse-parallel,p", po::value(&parseParallel),
+      "Enable or disable the parallel parser for all files (if specified once) "
+      "or once per input file. Parallel parsing works for all input files "
+      "using the N-Triples or N-Quads format, as well as for well-behaved "
+      "Turtle files, where all the prefix declarations come in one block at "
+      "the beginning and there are no multiline literals");
   add("kg-index-name,K", po::value(&kbIndexName),
       "The name of the knowledge graph index (default: basename of "
       "`kg-input-file`).");
@@ -157,8 +258,8 @@ int main(int argc, char** argv) {
 
   // If no index name was specified, take the part of the input file name after
   // the last slash.
-  if (kbIndexName.empty() && !inputFile.empty()) {
-    kbIndexName = ad_utility::getLastPartOfString(inputFile, '/');
+  if (kbIndexName.empty()) {
+    kbIndexName = "no index name specified";
   }
 
   LOG(INFO) << EMPH_ON << "QLever IndexBuilder, compiled on "
@@ -181,59 +282,43 @@ int main(int argc, char** argv) {
     index.setKeepTempFiles(keepTemporaryFiles);
     index.setSettingsFile(settingsFile);
     index.loadAllPermutations() = !onlyPsoAndPos;
-    // NOTE: If `onlyAddTextIndex` is true, we do not want to construct an
-    // index, but we assume that it already exists. In particular, we then need
-    // the vocabulary from the KB index for building the text index.
+
+    // Convert the parameters for the filenames, file types, and default graphs
+    // into a `vector<InputFileSpecification>`.
+    auto getFileSpecifications = [&]() {
+      checkNumParameterValues(filetype, inputFile.size(), true,
+                              "--file-format, -F");
+      checkNumParameterValues(defaultGraphs, inputFile.size(), true,
+                              "--default-graph, -g");
+      checkNumParameterValues(parseParallel, parseParallel.size(), true,
+                              "--parse-parallel, p");
+
+      std::vector<qlever::InputFileSpecification> fileSpecs;
+      for (size_t i = 0; i < inputFile.size(); ++i) {
+        auto type = getParameterValue<std::optional<std::string_view>>(
+            i, filetype, std::nullopt);
+
+        auto defaultGraph = getParameterValue<std::optional<string>>(
+            i, defaultGraphs, std::nullopt);
+        if (defaultGraph == "-") {
+          defaultGraph = std::nullopt;
+        }
+
+        bool parseInParallel = getParameterValue(i, parseParallel, false);
+        auto& filename = inputFile.at(i);
+        if (filename == "-") {
+          filename = "/dev/stdin";
+        }
+        fileSpecs.emplace_back(filename, getFiletype(type, filename),
+                               std::move(defaultGraph), parseInParallel);
+      }
+      return fileSpecs;
+    };
+
     if (!onlyAddTextIndex) {
-      if (inputFile.empty() || inputFile == "-") {
-        inputFile = "/dev/stdin";
-      }
-
-      if (!filetype.empty()) {
-        LOG(INFO) << "You specified the input format: "
-                  << ad_utility::getUppercase(filetype) << std::endl;
-      } else {
-        bool filetypeDeduced = false;
-        if (inputFile.ends_with(".nt")) {
-          filetype = "nt";
-          filetypeDeduced = true;
-        } else if (inputFile.ends_with(".ttl")) {
-          filetype = "ttl";
-          filetypeDeduced = true;
-        } else if (inputFile.ends_with(".nq")) {
-          filetype = "nq";
-          filetypeDeduced = true;
-        } else {
-          LOG(INFO) << "Unknown or missing extension of input file, assuming: "
-                       "TTL"
-                    << std::endl;
-        }
-        if (filetypeDeduced) {
-          LOG(INFO) << "Format of input file deduced from extension: "
-                    << ad_utility::getUppercase(filetype) << std::endl;
-        }
-        LOG(INFO) << "If this is not correct, start again using the option "
-                     "--file-format (-F)"
-                  << std::endl;
-      }
-
-      if (filetype == "ttl") {
-        LOG(DEBUG) << "Parsing uncompressed TTL from: " << inputFile
-                   << std::endl;
-        index.createFromFile(inputFile, Index::Filetype::Turtle);
-      } else if (filetype == "nt") {
-        LOG(DEBUG) << "Parsing uncompressed N-Triples from: " << inputFile
-                   << " (using the Turtle parser)" << std::endl;
-        index.createFromFile(inputFile, Index::Filetype::Turtle);
-      } else if (filetype == "nq") {
-        LOG(DEBUG) << "Parsing uncompressed N-Quads from: " << inputFile
-                   << std::endl;
-        index.createFromFile(inputFile, Index::Filetype::NQuad);
-      } else {
-        LOG(ERROR) << "File format must be one of: nt ttl nq" << std::endl;
-        std::cerr << boostOptions << std::endl;
-        exit(1);
-      }
+      auto fileSpecifications = getFileSpecifications();
+      AD_CONTRACT_CHECK(!fileSpecifications.empty());
+      index.createFromFiles(fileSpecifications);
     }
 
     if (!wordsfile.empty() || addWordsFromLiterals) {

@@ -1,6 +1,6 @@
-// Copyright 2021, University of Freiburg,
-//                 Chair of Algorithms and Data Structures.
-// Author: Johannes Kalmbach (kalmbach@cs.uni-freiburg.de)
+// Copyright 2021 - 2024, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 #include "CompressedRelation.h"
 
@@ -874,13 +874,18 @@ void CompressedRelationWriter::compressAndWriteBlock(
     AD_CORRECTNESS_CHECK(lastCol0Id == last[0]);
 
     auto [hasDuplicates, graphInfo] = getGraphInfo(block);
+    // The blocks are written in parallel and possibly out of order. We thus
+    // can't set the proper block indices here. The proper block indices are set
+    // in the `getFinishedBlocks` function.
+    static constexpr size_t blockIndexNotYetSet = 111333555;
     blockBuffer_.wlock()->push_back(
         CompressedBlockMetadata{std::move(offsets),
                                 numRows,
                                 {first[0], first[1], first[2]},
                                 {last[0], last[1], last[2]},
                                 std::move(graphInfo),
-                                hasDuplicates});
+                                hasDuplicates,
+                                blockIndexNotYetSet});
     if (invokeCallback && smallBlocksCallback_) {
       std::invoke(smallBlocksCallback_, std::move(block));
     }

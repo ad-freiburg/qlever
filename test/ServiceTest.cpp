@@ -10,6 +10,8 @@
 #include <regex>
 
 #include "engine/Service.h"
+#include "global/Constants.h"
+#include "global/IndexTypes.h"
 #include "global/RuntimeParameters.h"
 #include "gmock/gmock.h"
 #include "parser/GraphPatternOperation.h"
@@ -211,30 +213,42 @@ TEST_F(ServiceTest, computeResult) {
 
           // compute resulting idTable
           IdTable idTable{2, ad_utility::testing::makeAllocator()};
-          for (auto& row : result.idTables()) {
-            idTable.insertAtEnd(row);
+          std::vector<LocalVocab> localVocabs{};
+          for (auto& pair : result.idTables()) {
+            idTable.insertAtEnd(pair.idTable_);
+            localVocabs.emplace_back(std::move(pair.localVocab_));
           }
 
           // create expected idTable
-          const auto& localVocab = result.localVocab();
-          auto get = [&localVocab](const std::string& s) {
-            return localVocab.getIndexOrNullopt(
-                ad_utility::triple_component::LiteralOrIri::iriref(s));
+          auto get =
+              [&localVocabs](
+                  const std::string& s) -> std::optional<LocalVocabIndex> {
+            for (const LocalVocab& localVocab : localVocabs) {
+              auto index = localVocab.getIndexOrNullopt(
+                  ad_utility::triple_component::LiteralOrIri::iriref(s));
+              if (index.has_value()) {
+                return index;
+              }
+            }
+            return std::nullopt;
           };
           std::vector<std::vector<IntOrId>> idVector;
           std::map<std::string, Id> ids;
+          size_t indexCounter = 0;
           for (auto& row : expIdTableVector) {
             auto& idVecRow = idVector.emplace_back();
             for (auto& e : row) {
               if (!ids.contains(e)) {
-                auto idx = get(absl::StrCat("<", e, ">"));
-                ASSERT_TRUE(idx);
+                auto str = absl::StrCat("<", e, ">");
+                auto idx = get(str);
+                ASSERT_TRUE(idx) << '\'' << str << "' not in local vocab";
                 ids.insert({e, Id::makeFromLocalVocabIndex(idx.value())});
+                ++indexCounter;
               }
               idVecRow.emplace_back(ids.at(e));
             }
           }
-          EXPECT_EQ(localVocab.size(), ids.size());
+          EXPECT_EQ(indexCounter, ids.size());
 
           EXPECT_EQ(idTable, makeIdTableFromVector(idVector));
         };
@@ -558,61 +572,79 @@ TEST_F(ServiceTest, getCacheKey) {
   EXPECT_NE(baseCacheKey, silentService.getCacheKey());
 }
 
-// Test that bindingToValueId behaves as expected.
+// Test that bindingToTripleComponent behaves as expected.
 TEST_F(ServiceTest, bindingToTripleComponent) {
-  Index::Vocab vocabulary;
-  nlohmann::json binding;
+  ad_utility::HashMap<std::string, Id> blankNodeMap;
+  parsedQuery::Service parsedServiceClause{
+      {Variable{"?x"}, Variable{"?y"}},
+      TripleComponent::Iri::fromIriref("<http://localhorst/api>"),
+      "PREFIX doof: <http://doof.org>",
+      "{ }",
+      false};
+  Service service{testQec, parsedServiceClause};
+  LocalVocab localVocab{};
+
+  auto bTTC = [&service, &blankNodeMap,
+               &localVocab](const nlohmann::json& binding) -> TripleComponent {
+    return service.bindingToTripleComponent(binding, blankNodeMap, &localVocab);
+  };
 
   // Missing type or value.
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      Service::bindingToTripleComponent({{"type", "literal"}}),
-      ::testing::HasSubstr("Missing type or value"));
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      Service::bindingToTripleComponent({{"value", "v"}}),
-      ::testing::HasSubstr("Missing type or value"));
+  AD_EXPECT_THROW_WITH_MESSAGE(bTTC({{"type", "literal"}}),
+                               ::testing::HasSubstr("Missing type or value"));
+  AD_EXPECT_THROW_WITH_MESSAGE(bTTC({{"value", "v"}}),
+                               ::testing::HasSubstr("Missing type or value"));
 
   EXPECT_EQ(
-      Service::bindingToTripleComponent(
-          {{"type", "literal"}, {"value", "42"}, {"datatype", XSD_INT_TYPE}}),
+      bTTC({{"type", "literal"}, {"value", "42"}, {"datatype", XSD_INT_TYPE}}),
       42);
 
   EXPECT_EQ(
-      Service::bindingToTripleComponent(
-          {{"type", "literal"}, {"value", "Hallo Welt"}, {"xml:lang", "de"}}),
+      bTTC({{"type", "literal"}, {"value", "Hallo Welt"}, {"xml:lang", "de"}}),
       TripleComponent::Literal::literalWithoutQuotes("Hallo Welt", "@de"));
 
-  EXPECT_EQ(Service::bindingToTripleComponent(
-                {{"type", "literal"}, {"value", "Hello World"}}),
+  EXPECT_EQ(bTTC({{"type", "literal"}, {"value", "Hello World"}}),
             TripleComponent::Literal::literalWithoutQuotes("Hello World"));
 
   // Test literals with escape characters (there used to be a bug for those)
   EXPECT_EQ(
-      Service::bindingToTripleComponent(
-          {{"type", "literal"}, {"value", "Hello \\World"}}),
+      bTTC({{"type", "literal"}, {"value", "Hello \\World"}}),
       TripleComponent::Literal::fromEscapedRdfLiteral("\"Hello \\\\World\""));
 
   EXPECT_EQ(
-      Service::bindingToTripleComponent(
+      bTTC(
           {{"type", "literal"}, {"value", "Hallo \\Welt"}, {"xml:lang", "de"}}),
       TripleComponent::Literal::fromEscapedRdfLiteral("\"Hallo \\\\Welt\"",
                                                       "@de"));
 
-  EXPECT_EQ(Service::bindingToTripleComponent(
-                {{"type", "literal"}, {"value", "a\"b\"c"}}),
+  EXPECT_EQ(bTTC({{"type", "literal"}, {"value", "a\"b\"c"}}),
             TripleComponent::Literal::fromEscapedRdfLiteral("\"a\\\"b\\\"c\""));
 
-  EXPECT_EQ(Service::bindingToTripleComponent(
-                {{"type", "uri"}, {"value", "http://doof.org"}}),
+  EXPECT_EQ(bTTC({{"type", "uri"}, {"value", "http://doof.org"}}),
             TripleComponent::Iri::fromIrirefWithoutBrackets("http://doof.org"));
 
-  // Blank Node not supported yet.
-  EXPECT_ANY_THROW(
-      Service::bindingToTripleComponent({{"type", "bnode"}, {"value", "b"}}));
+  // Blank Nodes.
+  EXPECT_EQ(blankNodeMap.size(), 0);
 
+  Id a =
+      bTTC({{"type", "bnode"}, {"value", "A"}}).toValueIdIfNotString().value();
+  Id b =
+      bTTC({{"type", "bnode"}, {"value", "B"}}).toValueIdIfNotString().value();
+  EXPECT_EQ(a.getDatatype(), Datatype::BlankNodeIndex);
+  EXPECT_EQ(b.getDatatype(), Datatype::BlankNodeIndex);
+  EXPECT_NE(a, b);
+
+  EXPECT_EQ(blankNodeMap.size(), 2);
+
+  // This BlankNode exists already, known Id will be used.
+  Id a2 =
+      bTTC({{"type", "bnode"}, {"value", "A"}}).toValueIdIfNotString().value();
+  EXPECT_EQ(a, a2);
+
+  // Invalid type -> throw.
   AD_EXPECT_THROW_WITH_MESSAGE(
-      Service::bindingToTripleComponent(
-          {{"type", "INVALID_TYPE"}, {"value", "v"}}),
-      ::testing::HasSubstr("Type INVALID_TYPE is undefined"));
+      bTTC({{"type", "INVALID_TYPE"}, {"value", "v"}}),
+      ::testing::HasSubstr("Type INVALID_TYPE is undefined."));
 }
 
 // ____________________________________________________________________________
