@@ -851,7 +851,7 @@ inline auto OrderKeys =
 inline auto GroupKeys = GroupByVariables;
 }  // namespace pq
 
-// Matcher for an `ASK` query.
+// Matcher for an ASK query.
 inline auto AskQuery =
     [](const Matcher<const p::GraphPattern&>& graphPatternMatcher,
        ScanSpecificationAsTripleComponent::Graphs defaultGraphs = std::nullopt,

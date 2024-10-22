@@ -1252,7 +1252,9 @@ TEST(SparqlParser, ConstructQuery) {
                "grouped nor created as an alias in the SELECT clause"));
 }
 
+// Test that ASK queries are parsed as they should.
 TEST(SparqlParser, AskQuery) {
+  // Some helper functions and abbreviations.
   auto contains = [](const std::string& s) { return ::testing::HasSubstr(s); };
   auto expectAskQuery =
       ExpectCompleteParse<&Parser::askQuery>{defaultPrefixMap};
@@ -1262,7 +1264,8 @@ TEST(SparqlParser, AskQuery) {
   using Graphs = ScanSpecificationAsTripleComponent::Graphs;
 
   // A matcher that matches the query `ASK { ?a <bar> ?foo}`, where the
-  // FROM and FROM NAMED clauses can still be specified via arguments.
+  // FROM parts of the query can be specified via `defaultGraphs` and
+  // the FROM NAMED parts can be specified via `namedGraphs`.
   auto selectABarFooMatcher = [](Graphs defaultGraphs = std::nullopt,
                                  Graphs namedGraphs = std::nullopt) {
     return testing::AllOf(m::AskQuery(
@@ -1271,6 +1274,7 @@ TEST(SparqlParser, AskQuery) {
   };
   expectAskQuery("ASK { ?a <bar> ?foo }", selectABarFooMatcher());
 
+  // ASK query with both a FROM and a FROM NAMED clause.
   Graphs defaultGraphs;
   defaultGraphs.emplace();
   defaultGraphs->insert(TripleComponent::Iri::fromIriref("<x>"));
@@ -1280,26 +1284,29 @@ TEST(SparqlParser, AskQuery) {
   expectAskQuery("ASK FROM <x> FROM NAMED <y> WHERE { ?a <bar> ?foo }",
                  selectABarFooMatcher(defaultGraphs, namedGraphs));
 
+  // ASK whether there are any triples at all.
   expectAskQuery("ASK { ?x ?y ?z }",
                  testing::AllOf(m::AskQuery(DummyGraphPatternMatcher)));
-  // Ask query with LIMIT and TEXTLIMIT is not supported.
-  expectAskQueryFails(
-      "ASK WHERE { ?x ?y ?z . FILTER(?x != <foo>) } LIMIT 10 TEXTLIMIT 5");
 
-  // ORDER BY
+  // ASK queries may contain neither of LIMIT, OFFSET, or TEXTLIMIT.
+  expectAskQueryFails("ASK WHERE { ?x ?y ?z . FILTER(?x != <foo>) } LIMIT 10");
+  expectAskQueryFails("ASK WHERE { ?x ?y ?z . FILTER(?x != <foo>) } OFFSET 20");
+  expectAskQueryFails(
+      "ASK WHERE { ?x ?y ?z . FILTER(?x != <foo>) } TEXTLIMIT 30");
+
+  // ASK with ORDER BY is allowed (even though the ORDER BY does not change the
+  // result).
   expectAskQuery("ASK { ?x ?y ?z } ORDER BY ?y ",
                  testing::AllOf(m::AskQuery(DummyGraphPatternMatcher),
                                 m::pq::OrderKeys({{Var{"?y"}, false}})));
 
-  // Ordering by a variable or expression which contains a variable that is not
-  // visible in the query body is not allowed.
+  // The variables of the ORDER BY must be visible in the query body.
   expectAskQueryFails("ASK { ?a ?b ?c } ORDER BY ?x",
                       contains("Variable ?x was used by "
                                "ORDER BY, but is not"));
-
   expectAskQueryFails("ASK { ?a ?b ?c } ORDER BY (?x - 10)");
 
-  // Explicit GROUP BY
+  // ASK with GROUP BY is allowed.
   expectAskQuery("ASK { ?x ?y ?z } GROUP BY ?x",
                  testing::AllOf(m::AskQuery(DummyGraphPatternMatcher),
                                 m::pq::GroupKeys({Var{"?x"}})));
@@ -1307,8 +1314,7 @@ TEST(SparqlParser, AskQuery) {
                  testing::AllOf(m::AskQuery(DummyGraphPatternMatcher),
                                 m::pq::GroupKeys({Var{"?x"}})));
 
-  // Grouping by a variable or expression which contains a variable
-  // that is not visible in the query body is not allowed.
+  // The variables of the GROUP BY must be visible in the query body.
   expectAskQueryFails("ASK { ?a ?b ?c } GROUP BY ?x");
   expectAskQueryFails("ASK { ?a ?b ?c } GROUP BY (?x - 10)");
 
@@ -1318,9 +1324,11 @@ TEST(SparqlParser, AskQuery) {
       contains("HAVING clause is only supported in queries with GROUP BY"));
 }
 
+// Tests for additional features of the SPARQL parser.
 TEST(SparqlParser, Query) {
   auto expectQuery = ExpectCompleteParse<&Parser::query>{defaultPrefixMap};
   auto expectQueryFails = ExpectParseFails<&Parser::query>{};
+
   // Test that `_originalString` is correctly set.
   expectQuery(
       "SELECT * WHERE { ?a <bar> ?foo }",
@@ -1338,6 +1346,8 @@ TEST(SparqlParser, Query) {
       "PREFIX a: <foo> SELECT (COUNT(?y) as ?a) WHERE { ?x ?y ?z } GROUP BY ?x",
       m::pq::OriginalString("PREFIX a: <foo> SELECT (COUNT(?y) as ?a) WHERE { "
                             "?x ?y ?z } GROUP BY ?x"));
+
+  // Test that visible variables are correctly set.
   expectQuery(
       "CONSTRUCT { ?a <foo> ?c . } WHERE { ?a ?b ?c }",
       testing::AllOf(m::ConstructQuery({{Var{"?a"}, Iri{"<foo>"}, Var{"?c"}}},
@@ -1365,6 +1375,7 @@ TEST(SparqlParser, Query) {
           m::pq::OriginalString(
               "CONSTRUCT { ?x <foo> <bar> } WHERE { ?x ?y ?z } GROUP BY ?x"),
           m::VisibleVariables({Var{"?x"}, Var{"?y"}, Var{"?z"}})));
+
   // Construct query with GROUP BY, but a variable that is not grouped is used.
   expectQueryFails(
       "CONSTRUCT { ?x <foo> <bar> } WHERE { ?x ?y ?z } GROUP BY ?y");
@@ -1391,7 +1402,7 @@ TEST(SparqlParser, Query) {
                          {Var{"?s"}, Var{"?p"}, Var{"?o"}}, "{ ?s ?p ?o }",
                          "PREFIX doof: <http://doof.org/>"))));
 
-  // Describe and Ask Queries are not supported.
+  // DESCRIBE queries are not yet supported.
   expectQueryFails("DESCRIBE *");
 }
 
