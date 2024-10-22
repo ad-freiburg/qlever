@@ -11,7 +11,7 @@
 #include "engine/QueryExecutionTree.h"
 #include "util/HashMap.h"
 #include "util/HashSet.h"
-#include "util/JoinAlgorithms/JoinAlgorithms.h"
+#include "util/TypeTraits.h"
 
 class Join : public Operation {
  private:
@@ -93,6 +93,26 @@ class Join : public Operation {
   void join(const IdTable& a, ColumnIndex jc1, const IdTable& b,
             ColumnIndex jc2, IdTable* result) const;
 
+  // Allows the parameters to be null, which causes them to be ignored.
+  static LocalVocab mergeVocabsIfNecessary(
+      const std::shared_ptr<const Result>& result1,
+      const std::shared_ptr<const Result>& result2);
+
+  template <typename T>
+  ProtoResult monostateGeneratorToResult(
+      bool requestedLaziness, cppcoro::generator<std::monostate> generator,
+      std::shared_ptr<const Result> a, std::shared_ptr<const Result> b,
+      T rowAdder,
+      ad_utility::InvocableWithExactReturnType<IdTable, T&> auto extractTable,
+      std::invocable auto postAction) const;
+
+  static bool couldContainUndef(const auto& blocks, const auto& tree,
+                                ColumnIndex joinColumn);
+
+  ProtoResult lazyJoin(std::shared_ptr<const Result> a, ColumnIndex jc1,
+                       std::shared_ptr<const Result> b, ColumnIndex jc2,
+                       bool requestLaziness) const;
+
   /**
    * @brief Joins IdTables dynA and dynB on join column jc2, returning
    * the result in dynRes. Creates a cross product for matching rows by putting
@@ -113,24 +133,24 @@ class Join : public Operation {
   virtual string getCacheKeyImpl() const override;
 
  private:
-  ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override;
+  ProtoResult computeResult(bool requestLaziness) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 
   // A special implementation that is called when both children are
   // `IndexScan`s. Uses the lazy scans to only retrieve the subset of the
   // `IndexScan`s that is actually needed without fully materializing them.
-  IdTable computeResultForTwoIndexScans();
+  ProtoResult computeResultForTwoIndexScans(bool requestLaziness) const;
 
   // A special implementation that is called when one of the children is an
   // `IndexScan`. The argument `scanIsLeft` determines whether the `IndexScan`
   // is the left or the right child of this `Join`. This needs to be known to
   // determine the correct order of the columns in the result.
   template <bool scanIsLeft>
-  IdTable computeResultForIndexScanAndIdTable(const IdTable& idTable,
-                                              ColumnIndex joinColTable,
-                                              IndexScan& scan,
-                                              ColumnIndex joinColScan);
+  ProtoResult computeResultForIndexScanAndIdTable(
+      bool requestLaziness, const IdTable& idTable, ColumnIndex joinColTable,
+      std::shared_ptr<IndexScan> scan, ColumnIndex joinColScan,
+      const std::shared_ptr<const Result>& subResult = nullptr) const;
 
   /*
    * @brief Combines 2 rows like in a join and inserts the result in the
