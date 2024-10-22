@@ -14,9 +14,12 @@ namespace sparqlExpression {
 class RegexExpression : public SparqlExpression {
  private:
   SparqlExpression::Ptr child_;
-  // If this variant holds a string, we consider this string as the prefix of a
+  // The regex. Needs to be an optional because `RE2` objects don't have a
+  // default constructor.
+  std::optional<RE2> regex_;
+  // If this optional holds a string, we consider that string as the prefix of a
   // prefix regex.
-  std::variant<std::string, RE2> regex_;
+  std::optional<std::string> prefixRegex_;
   // The regex as a string, used for the cache key.
   std::string regexAsString_;
 
@@ -50,9 +53,10 @@ class RegexExpression : public SparqlExpression {
   ExpressionResult evaluatePrefixRegex(
       const Variable& variable,
       sparqlExpression::EvaluationContext* context) const;
+
+  template <SingleExpressionResult T>
   ExpressionResult evaluateNonPrefixRegex(
-      const Variable& variable,
-      sparqlExpression::EvaluationContext* context) const;
+      T&& input, sparqlExpression::EvaluationContext* context) const;
 
   /// Helper function to check if the `CancellationHandle` of the passed
   /// `EvaluationContext` has been cancelled and throw an exception if this is
