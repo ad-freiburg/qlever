@@ -49,14 +49,18 @@ struct Copy {
   GraphOrDefault target_;
 };
 
+// A Graph Update is an Update operation that inserts or deletes some triples.
+// These triples can contain variables that are bound the result of the
+// ParsedQueries GraphPattern. This used for `INSERT DATA`, `DELETE DATA`,
+// `DELETE WHERE {...}` and `DELETE/INSERT {..} WHERE {...}`.
 struct GraphUpdate {
-  std::vector<SparqlTripleSimple> toInsert_;
-  std::vector<SparqlTripleSimple> toDelete_;
+  std::vector<SparqlTripleSimpleWithGraph> toInsert_;
+  std::vector<SparqlTripleSimpleWithGraph> toDelete_;
   std::optional<ad_utility::triple_component::Iri> with_;
 
   GraphUpdate() = default;
-  GraphUpdate(std::vector<SparqlTripleSimple> toInsert,
-              std::vector<SparqlTripleSimple> toDelete)
+  GraphUpdate(std::vector<SparqlTripleSimpleWithGraph> toInsert,
+              std::vector<SparqlTripleSimpleWithGraph> toDelete)
       : toInsert_{std::move(toInsert)}, toDelete_{std::move(toDelete)} {}
 };
 

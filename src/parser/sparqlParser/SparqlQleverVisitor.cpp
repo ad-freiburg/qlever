@@ -374,13 +374,38 @@ ParsedQuery Visitor::visit(Parser::UpdateContext* ctx) {
 
 // ____________________________________________________________________________________
 ParsedQuery Visitor::visit(Parser::Update1Context* ctx) {
-  // TODO: check that toInsert and toDelete only contain visible variables
+  auto isVisibleIfVariable = [this](const TripleComponent& component) -> bool {
+    if (component.isVariable()) {
+      return std::ranges::find(parsedQuery_.getVisibleVariables(),
+                               component.getVariable()) !=
+             parsedQuery_.getVisibleVariables().end();
+    } else {
+      return true;
+    }
+  };
+  auto checkTriples =
+      [&isVisibleIfVariable,
+       &ctx](const std::vector<SparqlTripleSimpleWithGraph>& triples) {
+        for (auto& triple : triples) {
+          if (!(isVisibleIfVariable(triple.s_) &&
+                isVisibleIfVariable(triple.p_) &&
+                isVisibleIfVariable(triple.o_))) {
+            reportError(ctx,
+                        absl::StrCat("A triple contains a variable that was "
+                                     "not bound in the query body."));
+          }
+        }
+      };
 
   if (ctx->deleteWhere() || ctx->modify()) {
-    auto [graphUpdate, pattern, usingClauses] =
-        visitAlternative<std::tuple<GraphUpdate, ParsedQuery::GraphPattern,
-                                    std::vector<DatasetClause>>>(
+    auto [graphUpdate, pattern, usingClauses, visibleVariables] =
+        visitAlternative<
+            std::tuple<GraphUpdate, ParsedQuery::GraphPattern,
+                       std::vector<DatasetClause>, vector<Variable>>>(
             ctx->deleteWhere(), ctx->modify());
+    parsedQuery_.registerVariablesVisibleInQueryBody(visibleVariables);
+    checkTriples(graphUpdate.toDelete_);
+    checkTriples(graphUpdate.toInsert_);
     parsedQuery_._clause = parsedQuery::UpdateClause{std::move(graphUpdate)};
     parsedQuery_._rootGraphPattern = std::move(pattern);
     // TODO<qup42> once #1538 is merged
@@ -447,7 +472,7 @@ GraphUpdate Visitor::visit(Parser::DeleteDataContext* ctx) {
 
 // ____________________________________________________________________________________
 std::tuple<GraphUpdate, ParsedQuery::GraphPattern,
-           std::vector<SparqlQleverVisitor::DatasetClause>>
+           std::vector<SparqlQleverVisitor::DatasetClause>, vector<Variable>>
 Visitor::visit(Parser::DeleteWhereContext* ctx) {
   auto triples = visit(ctx->quadPattern());
   auto registerIfVariable = [this](const TripleComponent& component) {
@@ -466,35 +491,46 @@ Visitor::visit(Parser::DeleteWhereContext* ctx) {
         AD_CORRECTNESS_CHECK(triple.p_.isVariable() || triple.p_.isIri());
         return SparqlTriple::fromSimple(triple);
       };
+  std::vector<Variable> visibleVariablesSoFar = std::move(visibleVariables_);
   GraphPattern pattern;
   pattern._graphPatterns.emplace_back(BasicGraphPattern{
       ad_utility::transform(triples, transformAndRegisterTriple)});
+  auto visibleVariablesWhereClause =
+      std::exchange(visibleVariables_, std::move(visibleVariablesSoFar));
 
   return std::make_tuple(GraphUpdate{{}, std::move(triples)},
                          std::move(pattern),
-                         std::vector<SparqlQleverVisitor::DatasetClause>{});
+                         std::vector<SparqlQleverVisitor::DatasetClause>{},
+                         std::move(visibleVariablesWhereClause));
 }
 
 // ____________________________________________________________________________________
 std::tuple<GraphUpdate, ParsedQuery::GraphPattern,
-           std::vector<SparqlQleverVisitor::DatasetClause>>
+           std::vector<SparqlQleverVisitor::DatasetClause>, vector<Variable>>
 Visitor::visit(Parser::ModifyContext* ctx) {
+  std::vector<Variable> visibleVariablesSoFar = std::move(visibleVariables_);
+  auto graphPattern = visit(ctx->groupGraphPattern());
+  auto visibleVariablesWhereClause =
+      std::exchange(visibleVariables_, std::move(visibleVariablesSoFar));
   auto op = GraphUpdate{};
   visitIf(&op.toInsert_, ctx->insertClause());
   visitIf(&op.toDelete_, ctx->deleteClause());
   visitIf(&op.with_, ctx->iri());
 
-  return std::make_tuple(std::move(op), visit(ctx->groupGraphPattern()),
-                         visitVector(ctx->usingClause()));
+  return std::make_tuple(std::move(op), std::move(graphPattern),
+                         visitVector(ctx->usingClause()),
+                         std::move(visibleVariablesWhereClause));
 }
 
 // ____________________________________________________________________________________
-vector<SparqlTripleSimple> Visitor::visit(Parser::DeleteClauseContext* ctx) {
+vector<SparqlTripleSimpleWithGraph> Visitor::visit(
+    Parser::DeleteClauseContext* ctx) {
   return visit(ctx->quadPattern());
 }
 
 // ____________________________________________________________________________________
-vector<SparqlTripleSimple> Visitor::visit(Parser::InsertClauseContext* ctx) {
+vector<SparqlTripleSimpleWithGraph> Visitor::visit(
+    Parser::InsertClauseContext* ctx) {
   return visit(ctx->quadPattern());
 }
 
@@ -528,12 +564,14 @@ GraphRefAll Visitor::visit(Parser::GraphRefAllContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-vector<SparqlTripleSimple> Visitor::visit(Parser::QuadPatternContext* ctx) {
+vector<SparqlTripleSimpleWithGraph> Visitor::visit(
+    Parser::QuadPatternContext* ctx) {
   return visit(ctx->quads());
 }
 
 // ____________________________________________________________________________________
-vector<SparqlTripleSimple> Visitor::visit(Parser::QuadDataContext* ctx) {
+vector<SparqlTripleSimpleWithGraph> Visitor::visit(
+    Parser::QuadDataContext* ctx) {
   auto quads = visit(ctx->quads());
   auto checkAndReportVar = [&ctx](const TripleComponent& term) {
     if (term.isVariable()) {
@@ -551,22 +589,46 @@ vector<SparqlTripleSimple> Visitor::visit(Parser::QuadDataContext* ctx) {
   return quads;
 }
 
-// ____________________________________________________________________________________
-vector<SparqlTripleSimple> Visitor::visit(Parser::QuadsContext* ctx) {
-  if (!ctx->quadsNotTriples().empty()) {
-    // Could also be default; disallow completely for now.
-    reportNotSupported(ctx->quadsNotTriples(0), "Named graphs are");
-  }
-
-  AD_CORRECTNESS_CHECK(ctx->triplesTemplate().size() == 1);
-
-  auto convertTriple =
-      [](const std::array<GraphTerm, 3>& triple) -> SparqlTripleSimple {
+vector<SparqlTripleSimpleWithGraph> Visitor::transformTriplesTemplate(
+    Parser::TriplesTemplateContext* ctx, std::optional<Iri> graph) {
+  auto convertTriple = [&graph](const std::array<GraphTerm, 3>& triple)
+      -> SparqlTripleSimpleWithGraph {
     return {visitGraphTerm(triple[0]), visitGraphTerm(triple[1]),
-            visitGraphTerm(triple[2])};
+            visitGraphTerm(triple[2]), graph};
   };
 
-  return ad_utility::transform(visit(ctx->triplesTemplate(0)), convertTriple);
+  return ad_utility::transform(visit(ctx), convertTriple);
+}
+// ____________________________________________________________________________________
+vector<SparqlTripleSimpleWithGraph> Visitor::visit(Parser::QuadsContext* ctx) {
+  auto quadsNotTriplesRes = visitVector(ctx->quadsNotTriples());
+  auto triplesTemplates = ad_utility::transform(
+      ctx->triplesTemplate(), [this](Parser::TriplesTemplateContext* ctx) {
+        return transformTriplesTemplate(ctx, std::nullopt);
+      });
+  std::ranges::move(triplesTemplates, std::back_inserter(quadsNotTriplesRes));
+  auto res = ad_utility::flatten(std::move(quadsNotTriplesRes));
+  return res;
+}
+
+// ____________________________________________________________________________________
+vector<SparqlTripleSimpleWithGraph> Visitor::visit(
+    Parser::QuadsNotTriplesContext* ctx) {
+  if (!ctx->triplesTemplate()) {
+    return {};
+  }
+
+  auto graph = visit(ctx->varOrIri());
+
+  std::optional<Iri> graphIri;
+  if (std::holds_alternative<Iri>(graph)) {
+    graphIri = std::get<Iri>(graph);
+  } else {
+    // TODO<qup42> check what is allowed here
+    reportError(ctx->varOrIri(), "Only IRIs are allowed as graph names.");
+  }
+
+  return transformTriplesTemplate(ctx->triplesTemplate(), graphIri);
 }
 
 // ____________________________________________________________________________________

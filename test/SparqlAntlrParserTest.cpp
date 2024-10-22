@@ -1889,6 +1889,7 @@ TEST(SparqlParser, UpdateQuery) {
           m::GraphUpdate({{Var("?a"), Iri("<b>"), Iri("<c>")}}, {},
                          std::nullopt),
           m::GraphPattern(m::Triples({{Iri("<d>"), "<e>", Var{"?a"}}}))));
+  expectUpdateFails("DELETE { ?a <b> <c> } WHERE { <a> ?b ?c }");
   expectUpdate(
       "DELETE { ?a <b> <c> } INSERT { <a> ?a <c> } WHERE { <d> <e> ?a }",
       m::UpdateClause(
@@ -1910,11 +1911,14 @@ TEST(SparqlParser, UpdateQuery) {
       m::UpdateClause(
           m::GraphUpdate({{Var("?a"), Var("?b"), Var("?c")}}, {}, Iri("<foo>")),
           m::GraphPattern(m::Triples({{Var{"?a"}, "?b", Var{"?c"}}}))));
-  expectUpdateFails(
-      "DELETE { ?a ?b ?c } USING <foo> WHERE { ?a ?b ?c }");  // Multiple graphs
-                                                              // are not
-                                                              // supported.
-  expectUpdateFails("INSERT DATA { GRAPH <foo> { } }");
+  expectUpdate(
+      "DELETE { ?a ?b ?c } USING <foo> WHERE { ?a ?b ?c }",
+      m::UpdateClause(
+          m::GraphUpdate({{Var("?a"), Var("?b"), Var("?c")}}, {}, std::nullopt),
+          m::GraphPattern(m::Triples({{Var{"?a"}, "?b", Var{"?c"}}}))));
+  expectUpdate(
+      "INSERT DATA { GRAPH <foo> { } }",
+      m::UpdateClause(m::GraphUpdate({}, {}, std::nullopt), m::GraphPattern()));
   expectUpdate(
       "DELETE { ?a <b> <c> } USING NAMED <foo> WHERE { <d> <e> ?a }",
       m::UpdateClause(
