@@ -18,10 +18,14 @@ namespace {
 ValueId asBool(bool value) { return Id::makeFromBool(value); }
 
 // Convert a generator to a vector for easier comparison in assertions
-std::vector<IdTable> toVector(cppcoro::generator<IdTable> generator) {
+std::vector<IdTable> toVector(Result::Generator generator) {
   std::vector<IdTable> result;
-  for (auto& table : generator) {
-    result.push_back(std::move(table));
+  for (auto& pair : generator) {
+    // IMPORTANT: The `LocalVocab` contained in the pair will be destroyed at
+    // the end of the iteration. The underlying assumption is that the
+    // `LocalVocab` will be empty and the `IdTable` won't contain any dangling
+    // references.
+    result.push_back(std::move(pair.idTable_));
   }
   return result;
 }

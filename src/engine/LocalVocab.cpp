@@ -20,11 +20,11 @@ LocalVocab LocalVocab::clone() const {
 // _____________________________________________________________________________
 LocalVocab LocalVocab::merge(std::span<const LocalVocab*> vocabs) {
   LocalVocab res;
-  auto inserter = std::back_inserter(res.otherWordSets_);
-  for (const auto* vocab : vocabs) {
-    std::ranges::copy(vocab->otherWordSets_, inserter);
-    *inserter = vocab->primaryWordSet_;
-  }
+  res.mergeWith(vocabs |
+                std::views::transform(
+                    [](const LocalVocab* localVocab) -> const LocalVocab& {
+                      return *localVocab;
+                    }));
   return res;
 }
 
