@@ -12,11 +12,13 @@
 #include "util/ConstexprUtils.h"
 #include "util/http/MediaTypes.h"
 
-bool getResultForAsk(const std::shared_ptr<const Result>& res) {
-  if (res->isFullyMaterialized()) {
-    return !res->idTable().empty();
+// Return true iff the `result` is nonempty.
+bool getResultForAsk(const std::shared_ptr<const Result>& result) {
+  if (result->isFullyMaterialized()) {
+    return !result->idTable().empty();
   } else {
-    return std::ranges::any_of(res->idTables(), std::not_fn(&IdTable::empty));
+    return std::ranges::any_of(result->idTables(),
+                               std::not_fn(&IdTable::empty));
   }
 }
 
@@ -52,6 +54,7 @@ ad_utility::streams::stream_generator computeResultForAsk(
       j["head"] = nlohmann::json::object_t{};
       j["boolean"] = result;
       co_yield j.dump();
+      break;
     }
     default:
       throw std::runtime_error{
@@ -835,7 +838,7 @@ ExportQueryExecutionTrees::computeResultAsQLeverJSON(
     jsonPrefix["selected"] =
         std::vector<std::string>{"?subject", "?predicate", "?object"};
   } else {
-    // TODO<joka921> Assert that this is an ASK clause.
+    AD_CORRECTNESS_CHECK(query.hasAskClause());
     jsonPrefix["selected"] = std::vector<std::string>{"?result"};
   }
 

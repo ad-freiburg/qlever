@@ -89,6 +89,8 @@ struct TestCaseSelectQuery {
   std::string resultXml;
 };
 
+// A test case that tests the correct execution and exporting of an ASK query
+// in various formats.
 struct TestCaseAskQuery {
   std::string kg;                   // The knowledge graph (TURTLE)
   std::string query;                // The query (SPARQL)
@@ -99,15 +101,6 @@ struct TestCaseAskQuery {
   nlohmann::json resultSparqlJSON;  // The expected result in SparqlJSON format.
   std::string resultXml;
 };
-
-// TODO<joka921> setup one test case for the ASK -> true and one for the ASK ->
-// false case and use them for unit testing.
-/*
-TestCaseAskQuery askResultTrue() {
-  TestCaseAskQuery testCase;
-  testCase.resultQLeverJSON = nlohmann::json::parse("[]");
-}
- */
 
 struct TestCaseConstructQuery {
   std::string kg;                   // The knowledge graph (TURTLE)
@@ -176,7 +169,7 @@ void runConstructQueryTestCase(
 void runAskQueryTestCase(
     const TestCaseAskQuery& testCase,
     ad_utility::source_location l = ad_utility::source_location::current()) {
-  auto trace = generateLocationTrace(l, "runConstructQueryTestCase");
+  auto trace = generateLocationTrace(l, "runAskQueryTestCase");
   using enum ad_utility::MediaType;
   // TODO<joka921> match the exception
   EXPECT_ANY_THROW(runQueryStreamableResult(testCase.kg, testCase.query, tsv));
@@ -1220,6 +1213,40 @@ TEST(ExportQueryExecutionTrees, CornerCases) {
       ExportQueryExecutionTrees::idToStringAndTypeForEncodedValue(
           ad_utility::testing::VocabId(12)),
       ::testing::ContainsRegex("should be unreachable"));
+}
+
+// Test the correct exporting of ASK queries.
+TEST(ExportQueryExecutionTrees, AskQuery) {
+  auto askResultTrue = []() {
+    TestCaseAskQuery testCase;
+    testCase.query = "ASK { BIND (3 as ?x) FILTER (?x > 0)}";
+    testCase.resultQLeverJSON = nlohmann::json{std::vector<std::string>{
+        "\"true\"^^<http://www.w3.org/2001/XMLSchema#boolean>"}};
+    testCase.resultSparqlJSON =
+        nlohmann::json::parse(R"({"head":{ }, "boolean" : true})");
+    testCase.resultXml =
+        "<?xml version=\"1.0\"?>\n<sparql "
+        "xmlns=\"http://www.w3.org/2005/sparql-results#\">\n  <head/>\n  "
+        "<boolean>true</boolean>\n</sparql>";
+
+    return testCase;
+  };
+
+  auto askResultFalse = []() {
+    TestCaseAskQuery testCase;
+    testCase.query = "ASK { BIND (3 as ?x) FILTER (?x < 0)}";
+    testCase.resultQLeverJSON = nlohmann::json{std::vector<std::string>{
+        "\"false\"^^<http://www.w3.org/2001/XMLSchema#boolean>"}};
+    testCase.resultSparqlJSON =
+        nlohmann::json::parse(R"({"head":{ }, "boolean" : false})");
+    testCase.resultXml =
+        "<?xml version=\"1.0\"?>\n<sparql "
+        "xmlns=\"http://www.w3.org/2005/sparql-results#\">\n  <head/>\n  "
+        "<boolean>false</boolean>\n</sparql>";
+    return testCase;
+  };
+  runAskQueryTestCase(askResultTrue());
+  runAskQueryTestCase(askResultFalse());
 }
 
 using enum ad_utility::MediaType;
