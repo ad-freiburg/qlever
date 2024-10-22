@@ -17,12 +17,14 @@
 #include "engine/sparqlExpressions/CountStarExpression.h"
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
+#include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/NowDatetimeExpression.h"
 #include "engine/sparqlExpressions/RandomExpression.h"
 #include "engine/sparqlExpressions/RegexExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "engine/sparqlExpressions/SampleExpression.h"
 #include "engine/sparqlExpressions/UuidExpressions.h"
+#include "parser/GraphPatternOperation.h"
 #include "parser/RdfParser.h"
 #include "parser/SparqlParser.h"
 #include "parser/TokenizerCtre.h"
@@ -131,6 +133,10 @@ ExpressionPtr Visitor::processIriFunctionCall(
     } else if (functionName == "tan") {
       checkNumArgs(1);
       return sparqlExpression::makeTanExpression(std::move(argList[0]));
+    } else if (functionName == "pow") {
+      checkNumArgs(2);
+      return sparqlExpression::makePowExpression(std::move(argList[0]),
+                                                 std::move(argList[1]));
     }
   } else if (checkPrefix(XSD_PREFIX)) {
     if (functionName == "integer" || functionName == "int") {
@@ -233,26 +239,11 @@ Alias Visitor::visit(Parser::AliasWithoutBracketsContext* ctx) {
   return {visitExpressionPimpl(ctx->expression()), visit(ctx->var())};
 }
 
-namespace {
-// Add the `datasetClauses` to the `targetClauses`.
-void addDatasetClauses(
-    ParsedQuery::DatasetClauses& targetClauses,
-    const std::vector<SparqlQleverVisitor::DatasetClause>& datasetClauses) {
-  for (auto& [dataset, isNamed] : datasetClauses) {
-    auto& graphs =
-        isNamed ? targetClauses.namedGraphs_ : targetClauses.defaultGraphs_;
-    if (!graphs.has_value()) {
-      graphs.emplace();
-    }
-    graphs.value().insert(std::move(dataset));
-  }
-}
-}  // namespace
-
 // ____________________________________________________________________________________
 ParsedQuery Visitor::visit(Parser::ConstructQueryContext* ctx) {
   ParsedQuery query;
-  addDatasetClauses(query.datasetClauses_, visitVector(ctx->datasetClause()));
+  query.datasetClauses_ = parsedQuery::DatasetClauses::fromClauses(
+      visitVector(ctx->datasetClause()));
   if (ctx->constructTemplate()) {
     query._clause = visit(ctx->constructTemplate())
                         .value_or(parsedQuery::ConstructClause{});
@@ -279,7 +270,7 @@ ParsedQuery Visitor::visit(const Parser::AskQueryContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-Visitor::DatasetClause Visitor::visit(Parser::DatasetClauseContext* ctx) {
+DatasetClause Visitor::visit(Parser::DatasetClauseContext* ctx) {
   if (ctx->defaultGraphClause()) {
     return {.dataset_ = visit(ctx->defaultGraphClause()), .isNamed_ = false};
   } else {
@@ -767,8 +758,33 @@ GraphPatternOperation Visitor::visit(Parser::OptionalGraphPatternContext* ctx) {
   return GraphPatternOperation{parsedQuery::Optional{std::move(pattern)}};
 }
 
+GraphPatternOperation Visitor::visitPathQuery(
+    Parser::ServiceGraphPatternContext* ctx) {
+  auto parsePathQuery = [](parsedQuery::PathQuery& pathQuery,
+                           const parsedQuery::GraphPatternOperation& op) {
+    if (std::holds_alternative<parsedQuery::BasicGraphPattern>(op)) {
+      pathQuery.addBasicPattern(std::get<parsedQuery::BasicGraphPattern>(op));
+    } else if (std::holds_alternative<parsedQuery::GroupGraphPattern>(op)) {
+      pathQuery.addGraph(op);
+    } else {
+      throw parsedQuery::PathSearchException(
+          "Unsupported element in pathSearch."
+          "PathQuery may only consist of triples for configuration"
+          "And a { group graph pattern } specifying edges.");
+    }
+  };
+
+  parsedQuery::GraphPattern graphPattern = visit(ctx->groupGraphPattern());
+  parsedQuery::PathQuery pathQuery;
+  for (const auto& op : graphPattern._graphPatterns) {
+    parsePathQuery(pathQuery, op);
+  }
+
+  return pathQuery;
+}
+
 // Parsing for the `serviceGraphPattern` rule.
-parsedQuery::Service Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
+GraphPatternOperation Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
   // Get the IRI and if a variable is specified, report that we do not support
   // it yet.
   //
@@ -787,6 +803,10 @@ parsedQuery::Service Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
   auto serviceIri =
       TripleComponent::Iri::fromIriref(std::get<Iri>(varOrIri).iri());
 
+  if (serviceIri.toStringRepresentation() ==
+      "<https://qlever.cs.uni-freiburg.de/pathSearch/>") {
+    return visitPathQuery(ctx);
+  }
   // Parse the body of the SERVICE query. Add the visible variables from the
   // SERVICE clause to the visible variables so far, but also remember them
   // separately (with duplicates removed) because we need them in `Service.cpp`
@@ -802,9 +822,10 @@ parsedQuery::Service Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
                            visibleVariablesServiceQuery.begin(),
                            visibleVariablesServiceQuery.end());
   // Create suitable `parsedQuery::Service` object and return it.
-  return {std::move(visibleVariablesServiceQuery), std::move(serviceIri),
-          prologueString_, getOriginalInputForContext(ctx->groupGraphPattern()),
-          static_cast<bool>(ctx->SILENT())};
+  return parsedQuery::Service{
+      std::move(visibleVariablesServiceQuery), std::move(serviceIri),
+      prologueString_, getOriginalInputForContext(ctx->groupGraphPattern()),
+      static_cast<bool>(ctx->SILENT())};
 }
 
 // ____________________________________________________________________________
@@ -1005,8 +1026,8 @@ void Visitor::visit(Parser::PrefixDeclContext* ctx) {
 // ____________________________________________________________________________________
 ParsedQuery Visitor::visit(Parser::SelectQueryContext* ctx) {
   parsedQuery_._clause = visit(ctx->selectClause());
-  addDatasetClauses(parsedQuery_.datasetClauses_,
-                    visitVector(ctx->datasetClause()));
+  parsedQuery_.datasetClauses_ = parsedQuery::DatasetClauses::fromClauses(
+      visitVector(ctx->datasetClause()));
   auto [pattern, visibleVariables] = visit(ctx->whereClause());
   parsedQuery_._rootGraphPattern = std::move(pattern);
   parsedQuery_.registerVariablesVisibleInQueryBody(visibleVariables);

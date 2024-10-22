@@ -15,11 +15,26 @@
 
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "parser/RdfEscaping.h"
+#include "parser/sparqlParser/SparqlQleverVisitor.h"
 #include "util/Conversions.h"
 #include "util/TransparentFunctors.h"
 
 using std::string;
 using std::vector;
+
+// _____________________________________________________________________________
+parsedQuery::DatasetClauses parsedQuery::DatasetClauses::fromClauses(
+    const std::vector<DatasetClause>& clauses) {
+  DatasetClauses result;
+  for (auto& [dataset, isNamed] : clauses) {
+    auto& graphs = isNamed ? result.namedGraphs_ : result.defaultGraphs_;
+    if (!graphs.has_value()) {
+      graphs.emplace();
+    }
+    graphs.value().insert(dataset);
+  }
+  return result;
+}
 
 // _____________________________________________________________________________
 string SparqlPrefix::asString() const {

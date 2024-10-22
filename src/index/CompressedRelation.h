@@ -103,6 +103,11 @@ struct CompressedBlockMetadata {
   // blocks.
   bool containsDuplicatesWithDifferentGraphs_;
 
+  // The index of this block in the permutation. This is required to find
+  // the corresponding block from the `LocatedTriples` when only a subset of
+  // blocks is being used.
+  size_t blockIndex_;
+
   // Two of these are equal if all members are equal.
   bool operator==(const CompressedBlockMetadata&) const = default;
 };
@@ -121,6 +126,7 @@ AD_SERIALIZE_FUNCTION(CompressedBlockMetadata) {
   serializer | arg.lastTriple_;
   serializer | arg.graphInfo_;
   serializer | arg.containsDuplicatesWithDifferentGraphs_;
+  serializer | arg.blockIndex_;
 }
 
 // The metadata of a whole compressed "relation", where relation refers to a
@@ -257,6 +263,10 @@ class CompressedRelationWriter {
       return std::tie(bl.firstTriple_.col0Id_, bl.firstTriple_.col1Id_,
                       bl.firstTriple_.col2Id_);
     });
+    // Write the correct block indices
+    for (size_t i : ad_utility::integerRange(blocks.size())) {
+      blocks.at(i).blockIndex_ = i;
+    }
     return blocks;
   }
 

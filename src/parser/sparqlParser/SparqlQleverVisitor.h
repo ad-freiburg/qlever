@@ -27,6 +27,15 @@ class Reversed {
   auto end() { return _iterable.rend(); }
 };
 
+// A named or default graph
+struct DatasetClause {
+  TripleComponent::Iri dataset_;
+  bool isNamed_;
+
+  // For testing
+  bool operator==(const DatasetClause& other) const = default;
+};
+
 /**
  * This is a visitor that takes the parse tree from ANTLR and transforms it into
  * a `ParsedQuery`.
@@ -147,11 +156,6 @@ class SparqlQleverVisitor {
 
   [[noreturn]] static ParsedQuery visit(const Parser::AskQueryContext* ctx);
 
-  struct DatasetClause {
-    TripleComponent::Iri dataset_;
-    bool isNamed_;
-  };
-
   DatasetClause visit(Parser::DatasetClauseContext* ctx);
 
   TripleComponent::Iri visit(Parser::DefaultGraphClauseContext* ctx);
@@ -259,7 +263,11 @@ class SparqlQleverVisitor {
   parsedQuery::GraphPatternOperation visit(
       Parser::GraphGraphPatternContext* ctx);
 
-  parsedQuery::Service visit(Parser::ServiceGraphPatternContext* ctx);
+  parsedQuery::GraphPatternOperation visit(
+      Parser::ServiceGraphPatternContext* ctx);
+
+  parsedQuery::GraphPatternOperation visitPathQuery(
+      Parser::ServiceGraphPatternContext* ctx);
 
   parsedQuery::GraphPatternOperation visit(Parser::BindContext* ctx);
 

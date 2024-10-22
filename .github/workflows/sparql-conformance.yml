@@ -1,0 +1,86 @@
+name: sparql-conformance
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+  merge_group:
+
+jobs:
+  build:
+    env:
+      compiler: clang
+      compiler-version: 16
+      build-type: Release
+      cmake-flags: "-DCMAKE_C_COMPILER=clang-16 -DCMAKE_CXX_COMPILER=clang++-16"
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: "recursive"
+          path: qlever-code
+      - name: Checkout sparql-test-suite-files
+        uses: actions/checkout@v3
+        with:
+          repository: "w3c/rdf-tests"
+          path: sparql-test-suite
+      - name: Checkout qlever-test-suite
+        uses: actions/checkout@v3
+        with:
+          repository: "ad-freiburg/sparql-conformance"
+          path: qlever-test-suite
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+      - name: Install python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
+          pip install rdflib
+      - name: Install dependencies
+        uses: ./qlever-code/.github/workflows/install-dependencies-ubuntu
+      - name: Install compiler
+        uses: ./qlever-code/.github/workflows/install-compiler-ubuntu
+        with:
+          compiler: "clang"
+          compiler-version: "16"
+      - name: Create build directory
+        run: mkdir ${{github.workspace}}/qlever-code/build
+      - name: Configure CMake
+        run: cmake -S ${{github.workspace}}/qlever-code/ -B ${{github.workspace}}/qlever-code/build ${{env.cmake-flags}} -DCMAKE_BUILD_TYPE=${{env.build-type}} -DLOGLEVEL=INFO -DUSE_PARALLEL=false
+      - name: Build IndexBuilderMain
+        run: cmake --build ${{github.workspace}}/qlever-code/build --target IndexBuilderMain --config ${{env.build-type}} -- -j $(nproc)
+      - name: Build ServerMain
+        run: cmake --build ${{github.workspace}}/qlever-code/build --target ServerMain  --config ${{env.build-type}} -- -j $(nproc)
+      - name: Execute test suite
+        run: |
+          cd qlever-test-suite
+          python testsuite.py config http://0.0.0.0 7001 ${{github.workspace}}/sparql-test-suite/sparql/sparql11/ ${{github.workspace}}/qlever-code/build/ localhost sparql sparql
+          python testsuite.py extract
+          python testsuite.py ${{ github.sha }}
+          cd ..
+      - name: Save workflow information
+        # Note: If you change any of the filenames here, you also have to change them in `upload-conformance.yml`
+        run : |
+          mkdir -p conformance-report
+          echo ${{ github.event_name }} > ./conformance-report/event
+          echo ${{ github.event.number }} > ./conformance-report/pr
+          echo ${{ github.repository }} > ./conformance-report/github_repository
+          echo ${GITHUB_REF} > ./conformance-report/github_ref
+      - name: Save SHA and conformance report if it is a master commit.
+        if: github.event_name == 'push'
+        run : |
+          echo ${{github.sha}} > ./conformance-report/sha
+          mv ${{ github.workspace}}/qlever-test-suite/results/${{ github.sha }}.json.bz2 conformance-report/${{ github.sha }}.json.bz2
+      - name: Save SHA and conformance report if it is a PR.
+        if: github.event_name == 'pull_request'
+        run : |
+          echo ${{github.event.pull_request.head.sha}} > ./conformance-report/sha
+          mv ${{ github.workspace}}/qlever-test-suite/results/${{ github.sha }}.json.bz2 conformance-report/${{ github.event.pull_request.head.sha }}.json.bz2
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: conformance-report
+          path: conformance-report/

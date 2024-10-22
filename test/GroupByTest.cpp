@@ -71,7 +71,8 @@ class GroupByTest : public ::testing::Test {
     _index.setKbName("group_by_test");
     _index.setTextName("group_by_test");
     _index.setOnDiskBase("group_ty_test");
-    _index.createFromFile("group_by_test.nt");
+    _index.createFromFiles(
+        {{"group_by_test.nt", qlever::Filetype::Turtle, std::nullopt}});
     _index.addTextFromContextFile("group_by_test.words", false);
     _index.buildDocsDB("group_by_test.documents");
 
@@ -1728,13 +1729,8 @@ TEST_F(GroupByOptimizations, computeGroupByForFullIndexScan) {
         ::testing::ElementsAre(getId("<a>"), getId("<b>"), getId("<c>"),
                                getId("<x>"), getId("<y>"), getId("<z>")));
     if (includeCount) {
-      EXPECT_THAT(
-          result.getColumn(1),
-          ::testing::ElementsAre(I(2), I(2), I(2), I(7), I(1),
-                                 // TODO<joka921> This should be 1.
-                                 // There is one triple added <z> @en@<label>
-                                 // "zz"@en which is currently not filtered out.
-                                 I(2)));
+      EXPECT_THAT(result.getColumn(1),
+                  ::testing::ElementsAre(I(2), I(2), I(2), I(7), I(1), I(1)));
     }
   };
   testWithBothInterfaces(true, true);

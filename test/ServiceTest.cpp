@@ -10,6 +10,8 @@
 #include <regex>
 
 #include "engine/Service.h"
+#include "global/Constants.h"
+#include "global/IndexTypes.h"
 #include "global/RuntimeParameters.h"
 #include "gmock/gmock.h"
 #include "parser/GraphPatternOperation.h"
@@ -392,6 +394,7 @@ TEST_F(ServiceTest, computeResult) {
     // Check 5: When a siblingTree with variables common to the Service
     // Clause is passed, the Service Operation shall use the siblings result
     // to reduce its Query complexity by injecting them as Values Clause
+
     auto iri = ad_utility::testing::iri;
     using TC = TripleComponent;
     auto siblingTree = std::make_shared<QueryExecutionTree>(
@@ -402,7 +405,11 @@ TEST_F(ServiceTest, computeResult) {
                 {Variable{"?x"}, Variable{"?y"}, Variable{"?z"}},
                 {{TC(iri("<x>")), TC(iri("<y>")), TC(iri("<z>"))},
                  {TC(iri("<x>")), TC(iri("<y>")), TC(iri("<z2>"))},
-                 {TC(iri("<blu>")), TC(iri("<bla>")), TC(iri("<blo>"))}}}));
+                 {TC(iri("<blu>")), TC(iri("<bla>")), TC(iri("<blo>"))},
+                 // This row will be ignored in the created Values Clause as it
+                 // contains a blank node.
+                 {TC(Id::makeFromBlankNodeIndex(BlankNodeIndex::make(0))),
+                  TC(iri("<bl>")), TC(iri("<ank>"))}}}));
 
     auto parsedServiceClause5 = parsedServiceClause;
     parsedServiceClause5.graphPatternAsString_ =
@@ -553,55 +560,109 @@ TEST_F(ServiceTest, getCacheKey) {
   EXPECT_NE(baseCacheKey, silentService.getCacheKey());
 }
 
-// Test that bindingToValueId behaves as expected.
+// Test that bindingToTripleComponent behaves as expected.
 TEST_F(ServiceTest, bindingToTripleComponent) {
-  Index::Vocab vocabulary;
-  nlohmann::json binding;
+  ad_utility::HashMap<std::string, Id> blankNodeMap;
+  parsedQuery::Service parsedServiceClause{
+      {Variable{"?x"}, Variable{"?y"}},
+      TripleComponent::Iri::fromIriref("<http://localhorst/api>"),
+      "PREFIX doof: <http://doof.org>",
+      "{ }",
+      false};
+  Service service{testQec, parsedServiceClause};
+  LocalVocab localVocab{};
+
+  auto bTTC = [&service, &blankNodeMap,
+               &localVocab](const nlohmann::json& binding) -> TripleComponent {
+    return service.bindingToTripleComponent(binding, blankNodeMap, &localVocab);
+  };
 
   // Missing type or value.
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      Service::bindingToTripleComponent({{"type", "literal"}}),
-      ::testing::HasSubstr("Missing type or value"));
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      Service::bindingToTripleComponent({{"value", "v"}}),
-      ::testing::HasSubstr("Missing type or value"));
+  AD_EXPECT_THROW_WITH_MESSAGE(bTTC({{"type", "literal"}}),
+                               ::testing::HasSubstr("Missing type or value"));
+  AD_EXPECT_THROW_WITH_MESSAGE(bTTC({{"value", "v"}}),
+                               ::testing::HasSubstr("Missing type or value"));
 
   EXPECT_EQ(
-      Service::bindingToTripleComponent(
-          {{"type", "literal"}, {"value", "42"}, {"datatype", XSD_INT_TYPE}}),
+      bTTC({{"type", "literal"}, {"value", "42"}, {"datatype", XSD_INT_TYPE}}),
       42);
 
   EXPECT_EQ(
-      Service::bindingToTripleComponent(
-          {{"type", "literal"}, {"value", "Hallo Welt"}, {"xml:lang", "de"}}),
+      bTTC({{"type", "literal"}, {"value", "Hallo Welt"}, {"xml:lang", "de"}}),
       TripleComponent::Literal::literalWithoutQuotes("Hallo Welt", "@de"));
 
-  EXPECT_EQ(Service::bindingToTripleComponent(
-                {{"type", "literal"}, {"value", "Hello World"}}),
+  EXPECT_EQ(bTTC({{"type", "literal"}, {"value", "Hello World"}}),
             TripleComponent::Literal::literalWithoutQuotes("Hello World"));
 
   // Test literals with escape characters (there used to be a bug for those)
   EXPECT_EQ(
-      Service::bindingToTripleComponent(
-          {{"type", "literal"}, {"value", "Hello \\World"}}),
+      bTTC({{"type", "literal"}, {"value", "Hello \\World"}}),
       TripleComponent::Literal::fromEscapedRdfLiteral("\"Hello \\\\World\""));
 
   EXPECT_EQ(
-      Service::bindingToTripleComponent(
+      bTTC(
           {{"type", "literal"}, {"value", "Hallo \\Welt"}, {"xml:lang", "de"}}),
       TripleComponent::Literal::fromEscapedRdfLiteral("\"Hallo \\\\Welt\"",
                                                       "@de"));
 
-  EXPECT_EQ(Service::bindingToTripleComponent(
-                {{"type", "uri"}, {"value", "http://doof.org"}}),
+  EXPECT_EQ(bTTC({{"type", "literal"}, {"value", "a\"b\"c"}}),
+            TripleComponent::Literal::fromEscapedRdfLiteral("\"a\\\"b\\\"c\""));
+
+  EXPECT_EQ(bTTC({{"type", "uri"}, {"value", "http://doof.org"}}),
             TripleComponent::Iri::fromIrirefWithoutBrackets("http://doof.org"));
 
-  // Blank Node not supported yet.
-  EXPECT_ANY_THROW(
-      Service::bindingToTripleComponent({{"type", "bnode"}, {"value", "b"}}));
+  // Blank Nodes.
+  EXPECT_EQ(blankNodeMap.size(), 0);
 
+  Id a =
+      bTTC({{"type", "bnode"}, {"value", "A"}}).toValueIdIfNotString().value();
+  Id b =
+      bTTC({{"type", "bnode"}, {"value", "B"}}).toValueIdIfNotString().value();
+  EXPECT_EQ(a.getDatatype(), Datatype::BlankNodeIndex);
+  EXPECT_EQ(b.getDatatype(), Datatype::BlankNodeIndex);
+  EXPECT_NE(a, b);
+
+  EXPECT_EQ(blankNodeMap.size(), 2);
+
+  // This BlankNode exists already, known Id will be used.
+  Id a2 =
+      bTTC({{"type", "bnode"}, {"value", "A"}}).toValueIdIfNotString().value();
+  EXPECT_EQ(a, a2);
+
+  // Invalid type -> throw.
   AD_EXPECT_THROW_WITH_MESSAGE(
-      Service::bindingToTripleComponent(
-          {{"type", "INVALID_TYPE"}, {"value", "v"}}),
-      ::testing::HasSubstr("Type INVALID_TYPE is undefined"));
+      bTTC({{"type", "INVALID_TYPE"}, {"value", "v"}}),
+      ::testing::HasSubstr("Type INVALID_TYPE is undefined."));
+}
+
+// ____________________________________________________________________________
+TEST_F(ServiceTest, idToValueForValuesClause) {
+  auto idToVc = Service::idToValueForValuesClause;
+  LocalVocab localVocab{};
+  auto index = ad_utility::testing::makeIndexWithTestSettings();
+
+  // blanknode -> nullopt
+  EXPECT_EQ(idToVc(index, Id::makeFromBlankNodeIndex(BlankNodeIndex::make(0)),
+                   localVocab),
+            std::nullopt);
+
+  EXPECT_EQ(idToVc(index, Id::makeUndefined(), localVocab), "UNDEF");
+
+  // simple datatypes -> implicit string representation
+  EXPECT_EQ(idToVc(index, Id::makeFromInt(42), localVocab), "42");
+  EXPECT_EQ(idToVc(index, Id::makeFromDouble(3.14), localVocab), "3.14");
+  EXPECT_EQ(idToVc(index, Id::makeFromBool(true), localVocab), "true");
+
+  // Escape Quotes within literals.
+  auto str = LocalVocabEntry(
+      ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes(
+          "a\"b\"c"));
+  EXPECT_EQ(idToVc(index, Id::makeFromLocalVocabIndex(&str), localVocab),
+            "\"a\\\"b\\\"c\"");
+
+  // value with xsd-type
+  EXPECT_EQ(
+      idToVc(index, Id::makeFromGeoPoint(GeoPoint(70.5, 130.2)), localVocab)
+          .value(),
+      absl::StrCat("\"POINT(130.200000 70.500000)\"^^<", GEO_WKT_LITERAL, ">"));
 }
