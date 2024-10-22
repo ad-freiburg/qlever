@@ -316,6 +316,49 @@ TEST(Result, verifyCacheDuringConsumptionRespectsPassedParameters) {
 }
 
 // _____________________________________________________________________________
+TEST(Result, cacheDuringConsumptionAbortsValueWhenRunningIntoMemoryLimit) {
+  bool flag = false;
+  Result result{[](bool& innerFlag) -> Result::Generator {
+                  co_yield {IdTable{1, ad_utility::makeAllocatorWithLimit<Id>(
+                                           ad_utility::MemorySize::bytes(0))},
+                            LocalVocab{}};
+                  IdTable idTable{1, ad_utility::makeUnlimitedAllocator<Id>()};
+                  idTable.push_back({Id::makeFromBool(true)});
+                  co_yield {std::move(idTable), LocalVocab{}};
+                  innerFlag = true;
+                }(flag),
+                {0}};
+  result.cacheDuringConsumption(
+      [](const std::optional<Result::IdTableVocabPair>&,
+         const Result::IdTableVocabPair&) { return true; },
+      [&](Result) { ADD_FAILURE() << "The result should not get cached."; });
+  consumeGenerator(result.idTables());
+  EXPECT_TRUE(flag);
+}
+
+// _____________________________________________________________________________
+TEST(
+    Result,
+    cacheDuringConsumptionAbortsValueWhenRunningIntoMemoryLimitOnInitialClone) {
+  bool flag = false;
+  Result result{[](bool& innerFlag) -> Result::Generator {
+                  IdTable idTable{
+                      1, ad_utility::makeAllocatorWithLimit<Id>(
+                             ad_utility::MemorySize::bytes(1) * sizeof(Id))};
+                  idTable.push_back({Id::makeFromBool(true)});
+                  co_yield {std::move(idTable), LocalVocab{}};
+                  innerFlag = true;
+                }(flag),
+                {0}};
+  result.cacheDuringConsumption(
+      [](const std::optional<Result::IdTableVocabPair>&,
+         const Result::IdTableVocabPair&) { return true; },
+      [&](Result) { ADD_FAILURE() << "The result should not get cached."; });
+  consumeGenerator(result.idTables());
+  EXPECT_TRUE(flag);
+}
+
+// _____________________________________________________________________________
 TEST(Result, verifyApplyLimitOffsetDoesCorrectlyApplyLimitAndOffset) {
   auto idTable =
       makeIdTableFromVector({{0, 9}, {1, 8}, {2, 7}, {3, 6}, {4, 5}});
