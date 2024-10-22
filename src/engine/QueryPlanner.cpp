@@ -1820,13 +1820,6 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
     return candidates;
   }
 
-  // Check if one of the two Operations is a SERVICE. If so, we can try
-  // to simplify the Service Query using the result of the other operation.
-  if (auto opt = createJoinWithService(a, b, jcs)) {
-    candidates.push_back(std::move(opt.value()));
-    return candidates;
-  }
-
   if (jcs.size() >= 2) {
     // If there are two or more join columns and we are not using the
     // TwoColumnJoin (the if part before this comment), use a multiColumnJoin.
