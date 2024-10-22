@@ -13,6 +13,12 @@
 
 namespace prefilterExpressions {
 
+//______________________________________________________________________________
+// The maximum recursion depth for `info()` / `operator<<()`. A depth of `3`
+// should be sufficient for most `PrefilterExpressions` with our use case.
+constexpr size_t maxInfoRecursion = 3;
+
+//______________________________________________________________________________
 // The compressed block metadata (see `CompressedRelation.h`) that we use to
 // filter out the non-relevant blocks by checking their content of
 // `firstTriple_` and `lastTriple_` (`PermutedTriple`)
@@ -37,12 +43,24 @@ class PrefilterExpression {
  public:
   virtual ~PrefilterExpression() = default;
 
+  virtual bool operator==(const PrefilterExpression& other) const = 0;
+
+  // Format content for debugging.
+  virtual std::string info(size_t depth) const = 0;
+
   virtual std::unique_ptr<PrefilterExpression> logicalComplement() const = 0;
 
   // The respective metadata to the blocks is expected to be provided in
   // a sorted order (w.r.t. the relevant column).
   std::vector<BlockMetadata> evaluate(const std::vector<BlockMetadata>& input,
                                       size_t evaluationColumn) const;
+
+  // Format for debugging
+  friend std::ostream& operator<<(std::ostream& str,
+                                  const PrefilterExpression& expression) {
+    str << expression.info(0) << "." << std::endl;
+    return str;
+  }
 
  private:
   virtual std::vector<BlockMetadata> evaluateImpl(
@@ -70,6 +88,8 @@ class RelationalExpression : public PrefilterExpression {
       : referenceId_(referenceId) {}
 
   std::unique_ptr<PrefilterExpression> logicalComplement() const override;
+  bool operator==(const PrefilterExpression& other) const override;
+  std::string info([[maybe_unused]] size_t depth) const override;
 
  private:
   std::vector<BlockMetadata> evaluateImpl(
@@ -97,6 +117,8 @@ class LogicalExpression : public PrefilterExpression {
       : child1_(std::move(child1)), child2_(std::move(child2)) {}
 
   std::unique_ptr<PrefilterExpression> logicalComplement() const override;
+  bool operator==(const PrefilterExpression& other) const override;
+  std::string info(size_t depth) const override;
 
  private:
   std::vector<BlockMetadata> evaluateImpl(
@@ -114,6 +136,8 @@ class NotExpression : public PrefilterExpression {
       : child_(child->logicalComplement()) {}
 
   std::unique_ptr<PrefilterExpression> logicalComplement() const override;
+  bool operator==(const PrefilterExpression& other) const override;
+  std::string info(size_t depth) const override;
 
  private:
   std::vector<BlockMetadata> evaluateImpl(
@@ -154,5 +178,20 @@ using AndExpression = prefilterExpressions::LogicalExpression<
     prefilterExpressions::LogicalOperators::AND>;
 using OrExpression = prefilterExpressions::LogicalExpression<
     prefilterExpressions::LogicalOperators::OR>;
+
+//______________________________________________________________________________
+// Helpers to check for the respective type of `PrefilterExpression`
+template <typename T>
+struct check_is : std::false_type {};
+
+template <LogicalOperators Op>
+struct check_is<LogicalExpression<Op>> : std::true_type {};
+template <CompOp Op>
+struct check_is<RelationalExpression<Op>> : std::true_type {};
+
+template <typename T>
+constexpr bool check_is_logical_v = check_is<T>::value;
+template <typename T>
+constexpr bool check_is_relational_v = check_is<T>::value;
 
 }  // namespace prefilterExpressions

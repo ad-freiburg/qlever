@@ -19,6 +19,12 @@ namespace sparqlExpression {
 class SparqlExpression;
 struct EvaluationContext;
 
+// Improve return type readability.
+// Pair containing `PrefilterExpression` pointer and a `Variable`.
+using PrefilterExprVariablePair =
+    std::pair<std::unique_ptr<prefilterExpressions::PrefilterExpression>,
+              Variable>;
+
 // Hide the `SparqlExpression` implementation in a Pimpl class, so that code
 // using this implementation only has to include the (small and therefore cheap
 // to include) `SparqlExpressionPimpl.h`
@@ -112,9 +118,8 @@ class SparqlExpressionPimpl {
       uint64_t inputSizeEstimate,
       const std::optional<Variable>& primarySortKeyVariable);
 
-  std::optional<std::pair<
-      std::unique_ptr<prefilterExpressions::PrefilterExpression>, Variable>>
-  getPrefilterExpressionForMetadata() const;
+  std::optional<std::vector<PrefilterExprVariablePair>>
+  getPrefilterExpressionForMetadata(bool isNegated = false) const;
 
   SparqlExpression* getPimpl() { return _pimpl.get(); }
   [[nodiscard]] const SparqlExpression* getPimpl() const {

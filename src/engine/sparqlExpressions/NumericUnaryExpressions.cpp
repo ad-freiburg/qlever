@@ -2,11 +2,14 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
+#include <ranges>
+
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 
 namespace sparqlExpression {
 namespace detail {
 
+// _____________________________________________________________________________
 // Unary negation.
 inline auto unaryNegate = [](TernaryBool a) {
   using enum TernaryBool;
@@ -20,10 +23,38 @@ inline auto unaryNegate = [](TernaryBool a) {
   }
   AD_FAIL();
 };
-NARY_EXPRESSION(UnaryNegateExpression, 1,
-                FV<decltype(unaryNegate), EffectiveBooleanValueGetter>,
-                SET<SetOfIntervals::Complement>);
 
+template <typename NaryOperation>
+requires(isOperation<NaryOperation>)
+class UnaryNegateExpressionImpl : public NaryExpression<NaryOperation> {
+ public:
+  using NaryExpression<NaryOperation>::NaryExpression;
+
+  std::optional<std::vector<PrefilterExprVariablePair>>
+  getPrefilterExpressionForMetadata(
+      [[maybe_unused]] bool isNegated) const override {
+    static_assert(this->N == 1);
+    auto optExprVarVec =
+        this->getNthChild(0).value()->getPrefilterExpressionForMetadata(
+            !isNegated);
+    if (!optExprVarVec.has_value()) {
+      return std::nullopt;
+    }
+    std::ranges::for_each(
+        optExprVarVec.value(), [](PrefilterExprVariablePair& exprVarPair) {
+          exprVarPair.first =
+              std::make_unique<prefilterExpressions::NotExpression>(
+                  std::move(exprVarPair.first));
+        });
+    return optExprVarVec;
+  }
+};
+
+using UnaryNegateExpression = UnaryNegateExpressionImpl<
+    Operation<1, FV<decltype(unaryNegate), EffectiveBooleanValueGetter>,
+              SET<SetOfIntervals::Complement>>>;
+
+// _____________________________________________________________________________
 // Unary Minus.
 inline auto unaryMinus = makeNumericExpression<std::negate<>>();
 NARY_EXPRESSION(UnaryMinusExpression, 1,

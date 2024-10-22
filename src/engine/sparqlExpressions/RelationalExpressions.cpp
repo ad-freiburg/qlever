@@ -411,15 +411,16 @@ ExpressionResult InExpression::evaluate(
 
 // _____________________________________________________________________________
 template <Comparison comp>
-std::optional<std::pair<
-    std::unique_ptr<prefilterExpressions::PrefilterExpression>, Variable>>
-RelationalExpression<comp>::getPrefilterExpressionForMetadata() const {
+std::optional<std::vector<PrefilterExprVariablePair>>
+RelationalExpression<comp>::getPrefilterExpressionForMetadata(
+    [[maybe_unused]] bool isNegated) const {
   AD_CORRECTNESS_CHECK(children_.size() == 2);
   const SparqlExpression::Ptr& child0 = children_.at(0);
   const SparqlExpression::Ptr& child1 = children_.at(1);
 
-  auto checkBinarySearchEvaluable = [](const SparqlExpression::Ptr& child0,
-                                       const SparqlExpression::Ptr& child1)
+  const auto checkBinarySearchEvaluable =
+      [](const SparqlExpression::Ptr& child0,
+         const SparqlExpression::Ptr& child1)
       -> std::optional<std::pair<ValueId, Variable>> {
     if (const auto* literalValueId =
             dynamic_cast<const IdExpression*>(child0.get())) {
@@ -432,29 +433,27 @@ RelationalExpression<comp>::getPrefilterExpressionForMetadata() const {
     return std::nullopt;
   };
 
-  auto createPairFilterExpressionVariable =
-      [this](std::optional<std::pair<ValueId, Variable>> optValuePair)
-      -> std::pair<std::unique_ptr<prefilterExpressions::PrefilterExpression>,
-                   Variable> {
-    const auto& [valueId, variable] = optValuePair.value();
-    return std::make_pair(
+  const auto createPrefilterExprVariablePair =
+      [this](const std::pair<ValueId, Variable>& valuePair)
+      -> std::vector<PrefilterExprVariablePair> {
+    std::vector<PrefilterExprVariablePair> pairVec;
+    pairVec.emplace_back(
         std::make_unique<prefilterExpressions::RelationalExpression<comp>>(
-            valueId),
-        variable);
+            valuePair.first),
+        valuePair.second);
+    return pairVec;
   };
-
   // Option 1: child0 is a (constant) reference ValueId, while child1 contains a
   // Variable to the respective column on which we want to filter.
   const auto& optionalPair1 = checkBinarySearchEvaluable(child0, child1);
   if (optionalPair1.has_value()) {
-    return createPairFilterExpressionVariable(optionalPair1);
+    return createPrefilterExprVariablePair(optionalPair1.value());
   }
-
   // Option 2: child1 is a (constant) reference ValueId, while child0 contains a
   // Variable to the respective column on which we want to filter.
   const auto& optionalPair2 = checkBinarySearchEvaluable(child1, child0);
   if (optionalPair2.has_value()) {
-    return createPairFilterExpressionVariable(optionalPair2);
+    return createPrefilterExprVariablePair(optionalPair2.value());
   }
   return std::nullopt;
 }

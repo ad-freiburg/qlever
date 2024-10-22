@@ -237,6 +237,28 @@ std::vector<BlockMetadata> RelationalExpression<Comparison>::evaluateImpl(
   return getSetUnion(relevantBlocks, mixedDatatypeBlocks, evaluationColumn);
 };
 
+//______________________________________________________________________________
+template <CompOp Comparison>
+bool RelationalExpression<Comparison>::operator==(
+    const PrefilterExpression& other) const {
+  const RelationalExpression<Comparison>* otherRelational =
+      dynamic_cast<const RelationalExpression<Comparison>*>(&other);
+  if (!otherRelational) {
+    return false;
+  }
+  return referenceId_ == otherRelational->referenceId_;
+};
+
+//______________________________________________________________________________
+template <CompOp Comparison>
+std::string RelationalExpression<Comparison>::info(
+    [[maybe_unused]] size_t depth) const {
+  std::stringstream stream;
+  stream << "Prefilter RelationalExpression<" << static_cast<int>(Comparison)
+         << ">\nValueId: " << referenceId_ << std::endl;
+  return stream.str();
+};
+
 // SECTION LOGICAL OPERATIONS
 //______________________________________________________________________________
 template <LogicalOperators Operation>
@@ -258,14 +280,6 @@ LogicalExpression<Operation>::logicalComplement() const {
 };
 
 //______________________________________________________________________________
-std::unique_ptr<PrefilterExpression> NotExpression::logicalComplement() const {
-  // Logically we complement (negate) a NOT here => NOT cancels out.
-  // Therefore, we can simply return the child of the respective NOT
-  // expression after undoing its previous complementation.
-  return child_->logicalComplement();
-};
-
-//______________________________________________________________________________
 template <LogicalOperators Operation>
 std::vector<BlockMetadata> LogicalExpression<Operation>::evaluateImpl(
     const std::vector<BlockMetadata>& input, size_t evaluationColumn) const {
@@ -282,9 +296,66 @@ std::vector<BlockMetadata> LogicalExpression<Operation>::evaluateImpl(
 };
 
 //______________________________________________________________________________
+template <LogicalOperators Operation>
+bool LogicalExpression<Operation>::operator==(
+    const PrefilterExpression& other) const {
+  const LogicalExpression<Operation>* otherlogical =
+      dynamic_cast<const LogicalExpression<Operation>*>(&other);
+  if (!otherlogical) {
+    return false;
+  }
+  return *child1_ == *otherlogical->child1_ &&
+         *child2_ == *otherlogical->child2_;
+};
+
+//______________________________________________________________________________
+template <LogicalOperators Operation>
+std::string LogicalExpression<Operation>::info(size_t depth) const {
+  std::string child1Info =
+      depth < maxInfoRecursion ? child1_->info(depth + 1) : "MAX_DEPTH";
+  std::string child2Info =
+      depth < maxInfoRecursion ? child2_->info(depth + 1) : "MAX_DEPTH";
+  std::stringstream stream;
+  stream << "Prefilter LogicalExpression<" << static_cast<int>(Operation)
+         << ">\n"
+         << "child1 {" << child1Info << "}"
+         << "child2 {" << child2Info << "}" << std::endl;
+  return stream.str();
+};
+
+// SECTION NOT-EXPRESSION
+//______________________________________________________________________________
+std::unique_ptr<PrefilterExpression> NotExpression::logicalComplement() const {
+  // Logically we complement (negate) a NOT here => NOT cancels out.
+  // Therefore, we can simply return the child of the respective NOT
+  // expression after undoing its previous complementation.
+  return child_->logicalComplement();
+};
+
+//______________________________________________________________________________
 std::vector<BlockMetadata> NotExpression::evaluateImpl(
     const std::vector<BlockMetadata>& input, size_t evaluationColumn) const {
   return child_->evaluate(input, evaluationColumn);
 };
+
+//______________________________________________________________________________
+bool NotExpression::operator==(const PrefilterExpression& other) const {
+  const NotExpression* otherNotExpression =
+      dynamic_cast<const NotExpression*>(&other);
+  if (!otherNotExpression) {
+    return false;
+  }
+  return *child_ == *otherNotExpression->child_;
+}
+
+//______________________________________________________________________________
+std::string NotExpression::info(size_t depth) const {
+  std::string childInfo =
+      depth < maxInfoRecursion ? child_->info(depth + 1) : "MAX_DEPTH";
+  std::stringstream stream;
+  stream << "Prefilter NotExpression:\n"
+         << "child {" << childInfo << "}" << std::endl;
+  return stream.str();
+}
 
 }  //  namespace prefilterExpressions

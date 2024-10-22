@@ -42,9 +42,9 @@ class RelationalExpression : public SparqlExpression {
   // corresponding `PrefilterExpression` for the pre-filtering procedure on
   // `CompressedBlockMetadata`. In addition we return the `Variable` that
   // corresponds to the sorted column.
-  std::optional<std::pair<
-      std::unique_ptr<prefilterExpressions::PrefilterExpression>, Variable>>
-  getPrefilterExpressionForMetadata() const override;
+  std::optional<std::vector<PrefilterExprVariablePair>>
+  getPrefilterExpressionForMetadata(
+      [[maybe_unused]] bool isNegated) const override;
 
   // These expressions are typically used inside `FILTER` clauses, so we need
   // proper estimates.

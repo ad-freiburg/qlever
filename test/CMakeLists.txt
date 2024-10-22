@@ -289,7 +289,7 @@ addLinkAndDiscoverTest(AlgorithmTest)
 
 addLinkAndDiscoverTestSerial(CompressedRelationsTest index)
 
-addLinkAndDiscoverTestSerial(CompressedBlockPrefilteringTest index)
+addLinkAndDiscoverTestSerial(CompressedBlockPrefilteringTest sparqlExpressions index engine)
 
 addLinkAndDiscoverTest(ExceptionTest)
 
