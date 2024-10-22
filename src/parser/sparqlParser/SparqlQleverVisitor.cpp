@@ -399,9 +399,8 @@ ParsedQuery Visitor::visit(Parser::Update1Context* ctx) {
     checkTriples(graphUpdate.toInsert_);
     parsedQuery_._clause = parsedQuery::UpdateClause{std::move(graphUpdate)};
     parsedQuery_._rootGraphPattern = std::move(pattern);
-    // TODO<qup42> once #1538 is merged
-    // parsedQuery_.datasetClauses_ =
-    // parsedQuery::DatasetClauses::fromClauses(usingClauses);
+    parsedQuery_.datasetClauses_ =
+        parsedQuery::DatasetClauses::fromClauses(usingClauses);
   } else {
     parsedQuery_._clause = visitAlternative<parsedQuery::UpdateClause>(
         ctx->load(), ctx->clear(), ctx->drop(), ctx->create(), ctx->add(),
@@ -462,8 +461,8 @@ GraphUpdate Visitor::visit(Parser::DeleteDataContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-std::tuple<GraphUpdate, ParsedQuery::GraphPattern,
-           std::vector<SparqlQleverVisitor::DatasetClause>, vector<Variable>>
+std::tuple<GraphUpdate, ParsedQuery::GraphPattern, std::vector<DatasetClause>,
+           vector<Variable>>
 Visitor::visit(Parser::DeleteWhereContext* ctx) {
   auto triples = visit(ctx->quadPattern());
   auto registerIfVariable = [this](const TripleComponent& component) {
@@ -490,14 +489,13 @@ Visitor::visit(Parser::DeleteWhereContext* ctx) {
       std::exchange(visibleVariables_, std::move(visibleVariablesSoFar));
 
   return std::make_tuple(GraphUpdate{{}, std::move(triples)},
-                         std::move(pattern),
-                         std::vector<SparqlQleverVisitor::DatasetClause>{},
+                         std::move(pattern), std::vector<DatasetClause>{},
                          std::move(visibleVariablesWhereClause));
 }
 
 // ____________________________________________________________________________________
-std::tuple<GraphUpdate, ParsedQuery::GraphPattern,
-           std::vector<SparqlQleverVisitor::DatasetClause>, vector<Variable>>
+std::tuple<GraphUpdate, ParsedQuery::GraphPattern, std::vector<DatasetClause>,
+           vector<Variable>>
 Visitor::visit(Parser::ModifyContext* ctx) {
   std::vector<Variable> visibleVariablesSoFar = std::move(visibleVariables_);
   auto graphPattern = visit(ctx->groupGraphPattern());
@@ -989,8 +987,7 @@ string Visitor::visit(Parser::PnameNsContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-SparqlQleverVisitor::DatasetClause SparqlQleverVisitor::visit(
-    Parser::UsingClauseContext* ctx) {
+DatasetClause SparqlQleverVisitor::visit(Parser::UsingClauseContext* ctx) {
   if (ctx->NAMED()) {
     return {.dataset_ = visit(ctx->iri()), .isNamed_ = true};
   } else {
