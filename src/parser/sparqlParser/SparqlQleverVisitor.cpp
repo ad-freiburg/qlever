@@ -275,9 +275,11 @@ ParsedQuery Visitor::visit(Parser::AskQueryContext* ctx) {
   // example, a GROUP BY with a HAVING.
   auto getSolutionModifiers = [this, ctx]() {
     auto solutionModifiers = visit(ctx->solutionModifier());
-    if (!solutionModifiers.limitOffset_.isUnconstrained()) {
-      reportError(ctx->solutionModifier(),
-                  "ASK queries may not contain LIMIT or OFFSET clauses");
+    const auto& limitOffset = solutionModifiers.limitOffset_;
+    if (!limitOffset.isUnconstrained() || limitOffset.textLimit_.has_value()) {
+      reportError(
+          ctx->solutionModifier(),
+          "ASK queries may not contain LIMIT, OFFSET, or TEXTLIMIT clauses");
     }
     solutionModifiers.limitOffset_._limit = 1;
     return solutionModifiers;

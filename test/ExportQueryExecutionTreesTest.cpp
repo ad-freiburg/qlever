@@ -1217,9 +1217,14 @@ TEST(ExportQueryExecutionTrees, CornerCases) {
 
 // Test the correct exporting of ASK queries.
 TEST(ExportQueryExecutionTrees, AskQuery) {
-  auto askResultTrue = []() {
+  auto askResultTrue = [](bool lazy) {
     TestCaseAskQuery testCase;
-    testCase.query = "ASK { BIND (3 as ?x) FILTER (?x > 0)}";
+    if (lazy) {
+      testCase.kg = "<x> <y> <z>";
+      testCase.query = "ASK { <x> ?p ?o}";
+    } else {
+      testCase.query = "ASK { BIND (3 as ?x) FILTER (?x > 0)}";
+    }
     testCase.resultQLeverJSON = nlohmann::json{std::vector<std::string>{
         "\"true\"^^<http://www.w3.org/2001/XMLSchema#boolean>"}};
     testCase.resultSparqlJSON =
@@ -1232,9 +1237,14 @@ TEST(ExportQueryExecutionTrees, AskQuery) {
     return testCase;
   };
 
-  auto askResultFalse = []() {
+  auto askResultFalse = [](bool lazy) {
     TestCaseAskQuery testCase;
-    testCase.query = "ASK { BIND (3 as ?x) FILTER (?x < 0)}";
+    if (lazy) {
+      testCase.kg = "<x> <y> <z>";
+      testCase.query = "ASK { <y> ?p ?o}";
+    } else {
+      testCase.query = "ASK { BIND (3 as ?x) FILTER (?x < 0)}";
+    }
     testCase.resultQLeverJSON = nlohmann::json{std::vector<std::string>{
         "\"false\"^^<http://www.w3.org/2001/XMLSchema#boolean>"}};
     testCase.resultSparqlJSON =
@@ -1245,8 +1255,10 @@ TEST(ExportQueryExecutionTrees, AskQuery) {
         "<boolean>false</boolean>\n</sparql>";
     return testCase;
   };
-  runAskQueryTestCase(askResultTrue());
-  runAskQueryTestCase(askResultFalse());
+  runAskQueryTestCase(askResultTrue(true));
+  runAskQueryTestCase(askResultTrue(false));
+  runAskQueryTestCase(askResultFalse(true));
+  runAskQueryTestCase(askResultFalse(false));
 }
 
 using enum ad_utility::MediaType;

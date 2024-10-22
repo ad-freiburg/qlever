@@ -30,32 +30,38 @@ ad_utility::streams::stream_generator computeResultForAsk(
   // Compute the result of the ASK query.
   bool result = getResultForAsk(qet.getResult(true));
 
-  // Template for the result as RDF/XML.
-  std::string xmlTemplate = R"(<?xml version="1.0"?>
+  // Lambda that returns the result as XML
+  auto getXmlResult = [result]() {
+    std::string xmlTemplate = R"(<?xml version="1.0"?>
 <sparql xmlns="http://www.w3.org/2005/sparql-results#">
   <head/>
   <boolean>true</boolean>
 </sparql>)";
 
+    if (result) {
+      return xmlTemplate;
+    } else {
+      return absl::StrReplaceAll(xmlTemplate, {{"true", "false"}});
+    }
+  };
+
+  // Lambda that returns the result as Sparql JSON
+  auto getSparqlJsonResult = [result]() {
+    nlohmann::json j;
+    j["head"] = nlohmann::json::object_t{};
+    j["boolean"] = result;
+    return j.dump();
+  };
+
   // Return the result in the requested format.
+  using enum ad_utility::MediaType;
   switch (mediaType) {
-    using enum ad_utility::MediaType;
-    case sparqlXml: {
-      if (result) {
-        co_yield xmlTemplate;
-      } else {
-        auto str = absl::StrReplaceAll(xmlTemplate, {{"true", "false"}});
-        co_yield str;
-      }
+    case sparqlXml:
+      co_yield getXmlResult();
       break;
-    }
-    case sparqlJson: {
-      nlohmann::json j;
-      j["head"] = nlohmann::json::object_t{};
-      j["boolean"] = result;
-      co_yield j.dump();
+    case sparqlJson:
+      co_yield getSparqlJsonResult();
       break;
-    }
     default:
       throw std::runtime_error{
           "ASK queries are not supported for TSV or CSV or binary format."};
