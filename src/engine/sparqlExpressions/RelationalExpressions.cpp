@@ -434,7 +434,7 @@ RelationalExpression<comp>::getPrefilterExpressionForMetadata(
   };
 
   const auto createPrefilterExprVariablePair =
-      [this](const std::pair<ValueId, Variable>& valuePair)
+      [](const std::pair<ValueId, Variable>& valuePair)
       -> std::vector<PrefilterExprVariablePair> {
     std::vector<PrefilterExprVariablePair> pairVec;
     pairVec.emplace_back(

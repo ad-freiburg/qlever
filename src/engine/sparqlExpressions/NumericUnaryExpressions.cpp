@@ -33,7 +33,7 @@ class UnaryNegateExpressionImpl : public NaryExpression<NaryOperation> {
   std::optional<std::vector<PrefilterExprVariablePair>>
   getPrefilterExpressionForMetadata(
       [[maybe_unused]] bool isNegated) const override {
-    static_assert(this->N == 1);
+    AD_CORRECTNESS_CHECK(this->N == 1);
     auto optExprVarVec =
         this->getNthChild(0).value()->getPrefilterExpressionForMetadata(
             !isNegated);

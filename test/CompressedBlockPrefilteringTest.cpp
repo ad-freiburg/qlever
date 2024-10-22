@@ -915,7 +915,8 @@ const auto makeLiteralSparqlExpr =
   } else if constexpr (std::is_same_v<T, Iri>) {
     return std::make_unique<IriExpression>(child);
   } else {
-    FAIL() << "Unexpected Type.";
+    throw std::runtime_error(
+        "Can't create a LiteralExpression from provided (input) type.");
   }
 };
 
@@ -1107,6 +1108,17 @@ TEST(SparqlExpression, getPrefilterExpressionsToComplexSparqlExpressions) {
                        pr(andFilterExpr(greaterEqFilterExpr(IntId(10)),
                                         notEqFilterExpr(IntId(20))),
                           varX));
+  // ?z > VocabId(0) AND ?y > 0 AND ?x < 30.00
+  // expected prefilter pairs
+  // {<(< 30.00), ?x>, <(> 0), ?y>, <(> VocabId(0)), ?z>}
+  evalAndEqualityCheck(
+      andSparqlExpr(andSparqlExpr(greaterThanSparqlExpr(varZ, VocabId(0)),
+                                  greaterThanSparqlExpr(varY, IntId(0))),
+                    lessThanSparqlExpr(varX, DoubleId(30.00))),
+      pr(lessThanFilterExpr(DoubleId(30.00)), varX),
+      pr(greaterThanFilterExpr(IntId(0)), varY),
+      pr(greaterThanFilterExpr(VocabId(0)), varZ));
+
   // ?x == VocabId(10) AND ?y >= VocabId(10)
   // expected prefilter pairs:
   // {<(== VocabId(10)), ?x>, <(>= VocabId(10)), ?y>}

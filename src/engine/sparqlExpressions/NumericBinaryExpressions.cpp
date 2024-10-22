@@ -236,7 +236,7 @@ class LogicalBinaryExpressionImpl : public NaryExpression<NaryOperation> {
 
   std::optional<std::vector<PrefilterExprVariablePair>>
   getPrefilterExpressionForMetadata(bool isNegated) const override {
-    static_assert(this->N == 2);
+    AD_CORRECTNESS_CHECK(this->N == 2);
     auto leftChild =
         this->getNthChild(0).value()->getPrefilterExpressionForMetadata(
             isNegated);
