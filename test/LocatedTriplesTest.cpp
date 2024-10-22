@@ -31,8 +31,8 @@ auto PT = [](const auto& c1, const auto& c2, const auto& c3, int graph = g) {
 };
 auto CBM = [](const auto firstTriple, const auto lastTriple) {
   size_t dummyBlockIndex = 0;
-  return CompressedBlockMetadata{{}, 0,     firstTriple,    lastTriple,
-                                 {}, false, dummyBlockIndex};
+  return CompressedBlockMetadata{{{}, 0, firstTriple, lastTriple, {}, false},
+                                 dummyBlockIndex};
 };
 
 auto numBlocks =

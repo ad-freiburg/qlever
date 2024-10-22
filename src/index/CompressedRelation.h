@@ -113,7 +113,7 @@ struct CompressedBlockMetadata : CompressedBlockMetadataNoBlockIndex {
   // The index of this block in the permutation. This is required to find
   // the corresponding block from the `LocatedTriples` when only a subset of
   // blocks is being used.
-  std::optional<size_t> blockIndex_;
+  size_t blockIndex_;
 };
 
 // Serialization of the `OffsetAndcompressedSize` subclass.

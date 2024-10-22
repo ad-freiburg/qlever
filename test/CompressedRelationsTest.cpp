@@ -502,11 +502,11 @@ TEST(CompressedRelationMetadata, GettersAndSetters) {
 
 TEST(CompressedRelationReader, getBlocksForJoinWithColumn) {
   CompressedBlockMetadata block1{
-      {}, 0, {V(16), V(0), V(0), g}, {V(38), V(4), V(12), g}, {}, false, 0};
+      {{}, 0, {V(16), V(0), V(0), g}, {V(38), V(4), V(12), g}, {}, false}, 0};
   CompressedBlockMetadata block2{
-      {}, 0, {V(42), V(3), V(0), g}, {V(42), V(4), V(12), g}, {}, false, 1};
+      {{}, 0, {V(42), V(3), V(0), g}, {V(42), V(4), V(12), g}, {}, false}, 1};
   CompressedBlockMetadata block3{
-      {}, 0, {V(42), V(4), V(13), g}, {V(42), V(6), V(9), g}, {}, false, 2};
+      {{}, 0, {V(42), V(4), V(13), g}, {V(42), V(6), V(9), g}, {}, false}, 2};
 
   // We are only interested in blocks with a col0 of `42`.
   CompressedRelationMetadata relation;
@@ -550,15 +550,16 @@ TEST(CompressedRelationReader, getBlocksForJoinWithColumn) {
 }
 TEST(CompressedRelationReader, getBlocksForJoin) {
   CompressedBlockMetadata block1{
-      {}, 0, {V(16), V(0), V(0), g}, {V(38), V(4), V(12), g}, {}, false, 0};
+      {{}, 0, {V(16), V(0), V(0), g}, {V(38), V(4), V(12), g}, {}, false}, 0};
   CompressedBlockMetadata block2{
-      {}, 0, {V(42), V(3), V(0), g}, {V(42), V(4), V(12), g}, {}, false, 1};
+      {{}, 0, {V(42), V(3), V(0), g}, {V(42), V(4), V(12), g}, {}, false}, 1};
   CompressedBlockMetadata block3{
-      {}, 0, {V(42), V(5), V(13), g}, {V(42), V(8), V(9), g}, {}, false, 2};
+      {{}, 0, {V(42), V(5), V(13), g}, {V(42), V(8), V(9), g}, {}, false}, 2};
   CompressedBlockMetadata block4{
-      {}, 0, {V(42), V(8), V(16), g}, {V(42), V(20), V(9), g}, {}, false, 3};
+      {{}, 0, {V(42), V(8), V(16), g}, {V(42), V(20), V(9), g}, {}, false}, 3};
   CompressedBlockMetadata block5{
-      {}, 0, {V(42), V(20), V(16), g}, {V(42), V(20), V(63), g}, {}, false, 4};
+      {{}, 0, {V(42), V(20), V(16), g}, {V(42), V(20), V(63), g}, {}, false},
+      4};
 
   // We are only interested in blocks with a col0 of `42`.
   CompressedRelationMetadata relation;
@@ -572,17 +573,18 @@ TEST(CompressedRelationReader, getBlocksForJoin) {
       firstAndLastTriple};
 
   CompressedBlockMetadata blockB1{
-      {}, 0, {V(16), V(0), V(0), g}, {V(38), V(4), V(12), g}, {}, false, 0};
+      {{}, 0, {V(16), V(0), V(0), g}, {V(38), V(4), V(12), g}, {}, false}, 0};
   CompressedBlockMetadata blockB2{
-      {}, 0, {V(47), V(3), V(0), g}, {V(47), V(6), V(12), g}, {}, false, 1};
+      {{}, 0, {V(47), V(3), V(0), g}, {V(47), V(6), V(12), g}, {}, false}, 1};
   CompressedBlockMetadata blockB3{
-      {}, 0, {V(47), V(7), V(13), g}, {V(47), V(9), V(9), g}, {}, false, 2};
+      {{}, 0, {V(47), V(7), V(13), g}, {V(47), V(9), V(9), g}, {}, false}, 2};
   CompressedBlockMetadata blockB4{
-      {}, 0, {V(47), V(38), V(7), g}, {V(47), V(38), V(8), g}, {}, false, 3};
+      {{}, 0, {V(47), V(38), V(7), g}, {V(47), V(38), V(8), g}, {}, false}, 3};
   CompressedBlockMetadata blockB5{
-      {}, 0, {V(47), V(38), V(9), g}, {V(47), V(38), V(12), g}, {}, false, 4};
+      {{}, 0, {V(47), V(38), V(9), g}, {V(47), V(38), V(12), g}, {}, false}, 4};
   CompressedBlockMetadata blockB6{
-      {}, 0, {V(47), V(38), V(13), g}, {V(47), V(38), V(15), g}, {}, false, 5};
+      {{}, 0, {V(47), V(38), V(13), g}, {V(47), V(38), V(15), g}, {}, false},
+      5};
 
   // We are only interested in blocks with a col0 of `42`.
   CompressedRelationMetadata relationB;
@@ -662,7 +664,7 @@ TEST(CompressedRelationReader, PermutedTripleToString) {
 TEST(CompressedRelationReader, filterDuplicatesAndGraphs) {
   auto table = makeIdTableFromVector({{3}, {4}, {5}});
   CompressedBlockMetadata metadata{
-      {}, 0, {V(16), V(0), V(0), g}, {V(38), V(4), V(12), g}, {}, false, 0};
+      {{}, 0, {V(16), V(0), V(0), g}, {V(38), V(4), V(12), g}, {}, false}, 0};
   using Filter = CompressedRelationReader::FilterDuplicatesAndGraphs;
   ScanSpecification::Graphs graphs = std::nullopt;
   Filter f{graphs, 43, false};
@@ -699,7 +701,7 @@ TEST(CompressedRelationReader, filterDuplicatesAndGraphs) {
 
 TEST(CompressedRelationReader, makeCanBeSkippedForBlock) {
   CompressedBlockMetadata metadata{
-      {}, 0, {V(16), V(0), V(0), g}, {V(38), V(4), V(12), g}, {}, false, 0};
+      {{}, 0, {V(16), V(0), V(0), g}, {V(38), V(4), V(12), g}, {}, false}, 0};
 
   using Graphs = ScanSpecification::Graphs;
   Graphs graphs = std::nullopt;
