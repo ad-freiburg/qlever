@@ -62,7 +62,7 @@ NumAddedAndDeleted LocatedTriplesPerBlock::numTriples(size_t blockIndex) const {
 // is `2` and `includeGraphColumn` is `true`, the function returns
 // `std::tie(row[0], row[1], row[2])`.
 template <size_t numIndexColumns, bool includeGraphColumn>
-requires(numIndexColumns >= 1 && numIndexColumns <= IdTriple<0>::NumCols)
+requires(numIndexColumns >= 1 && numIndexColumns <= 3)
 auto tieIdTableRow(auto& row) {
   return [&row]<size_t... I>(std::index_sequence<I...>) {
     return std::tie(row[I]...);

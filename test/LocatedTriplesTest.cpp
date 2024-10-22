@@ -512,11 +512,11 @@ TEST_F(LocatedTriplesTest, mergeTriplesWithGraph) {
         LT{1, IT(1, 5, 10, 3), true},    // Insert before row 0
         LT{1, IT(2, 15, 20, 1), false},  // Delete row 2
         LT{1, IT(2, 15, 20, 3), false},  // Delete non-existent row
-        LT{1, IT(2, 15, 30, 2), true},  //  Insert between 4 and 5
+        LT{1, IT(2, 15, 30, 2), true},   //  Insert between 4 and 5
 
     });
     IdTable resultExpected = makeIdTableFromVector({
-        {1, 5, 10, 3},   // LT 0
+        {1, 5, 10, 3},  // LT 0
         {1, 10, 10, 0},
         {2, 15, 20, 0},  // Row 1
         {2, 15, 20, 2},  // Row 3
@@ -534,114 +534,49 @@ TEST_F(LocatedTriplesTest, mergeTriplesWithGraph) {
   // happen if all triples in a block have the same value for the first column.
   {
     IdTable block = makeIdTableFromVector({
-        {10, 10},  // Row 0
-        {15, 20},  // Row 1
-        {15, 20},  // Row 1
-        {15, 20},  // Row 1
-        {15, 30},  // Row 2
-        {20, 10},  // Row 3
-        {30, 20},  // Row 4
-        {30, 30}   // Row 5
+        {10, 10, 1},  // Row 0
+        {15, 20, 2},  // Row 1
+        {15, 30, 1},  // Row 2
+        {20, 10, 2},  // Row 3
     });
     auto locatedTriplesPerBlock = makeLocatedTriplesPerBlock({
-        LT{1, IT(1, 10, 10), false},  // Delete row 0
-        LT{1, IT(1, 10, 11), true},   // Insert before row 1
-        LT{1, IT(1, 11, 10), true},   // Insert before row 1
-        LT{1, IT(1, 21, 11), true},   // Insert before row 4
-        LT{1, IT(1, 30, 10), true},   // Insert before row 4
-        LT{1, IT(1, 30, 20), false},  // Delete row 4
-        LT{1, IT(1, 30, 25), false},  // Delete non-existent row
-        LT{1, IT(1, 30, 30), false}   // Delete row 5
-    });
-    IdTable resultExpected = makeIdTableFromVector({
-        {10, 11},  // LT 2
-        {11, 10},  // LT 3
-        {15, 20},  // orig. Row 1
-        {15, 30},  // orig. Row 2
-        {20, 10},  // orig. Row 3
-        {21, 11},  // LT 4
-        {30, 10}   // LT 5
+        LT{1, IT(1, 10, 10, 1), false},  // Delete row 0
+        LT{1, IT(1, 13, 20, 3), true},   // Insert before row 1
+        LT{1, IT(1, 15, 20, 1), true},   // Insert before row 1
+        LT{1, IT(1, 15, 20, 2), true},   // Insert already existing row
+        LT{1, IT(1, 20, 10, 1), false},  // Delete non-existent row
     });
 
-    auto merged = locatedTriplesPerBlock.mergeTriples(1, block, 2, false);
-    EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
+    IdTable resultExpected = makeIdTableFromVector({{13, 20, 3},    // LT 1
+                                                    {15, 20, 1},    // LT 2
+                                                    {15, 20, 2},    // Row 1
+                                                    {15, 30, 1},    // Row 2
+                                                    {20, 10, 2}});  // Row 3
 
-    // Run the same test with a constant graph column that is part of the
-    // result.
-    addGraphColumn(block);
-    addGraphColumn(resultExpected);
-    merged = locatedTriplesPerBlock.mergeTriples(1, block, 2, true);
+    auto merged = locatedTriplesPerBlock.mergeTriples(1, block, 2, true);
     EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
   }
 
   // Merge the `LocatesTriples` into a block with 1 index column.
   {
     IdTable block = makeIdTableFromVector({
-        {10},  // Row 0
-        {11},  // Row 1
-        {12},  // Row 2
-        {20},  // Row 3
-        {23},  // Row 4
-        {30}   // Row 5
+        {10, 0},  // Row 0
+        {10, 1},  // Row 1
+        {12, 1},  // Row 2
+        {20, 0},  // Row 3
     });
     auto locatedTriplesPerBlock = makeLocatedTriplesPerBlock({
-        LT{1, IT(1, 10, 12), false},  // Delete row 2
-        LT{1, IT(1, 10, 13), true},   // Insert before row 3
+        LT{1, IT(1, 1, 10, 1), false},  // Delete row 1
+        LT{1, IT(1, 1, 12, 0), true},   // Insert before row 2
     });
     IdTable resultExpected = makeIdTableFromVector({
-        {10},  // orig. Row 0
-        {11},  // orig. Row 1
-        {13},  // LT 2
-        {20},  // orig. Row 3
-        {23},  // orig. Row 4
-        {30}   // orig. Row 5
+        {10, 0},  // Row 0
+        {12, 0},  // LT 1
+        {12, 1},  // Row 2
+        {20, 0}   // Row 3
     });
 
-    auto merged = locatedTriplesPerBlock.mergeTriples(1, block, 1, false);
-    EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
-
-    // Run the same test with a constant graph column that is part of the
-    // result.
-    addGraphColumn(block);
-    addGraphColumn(resultExpected);
-    merged = locatedTriplesPerBlock.mergeTriples(1, block, 1, true);
-    EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
-  }
-
-  // Inserting a Triple that already exists should have no effect.
-  {
-    IdTable block = makeIdTableFromVector({{1, 2, 3}, {1, 3, 5}, {1, 7, 9}});
-    auto locatedTriplesPerBlock =
-        makeLocatedTriplesPerBlock({LT{1, IT(1, 3, 5), true}});
-    IdTable resultExpected = block.clone();
-
-    auto merged = locatedTriplesPerBlock.mergeTriples(1, block, 3, false);
-    EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
-
-    // Run the same test with a constant graph column that is part of the
-    // result.
-    addGraphColumn(block);
-    addGraphColumn(resultExpected);
-    merged = locatedTriplesPerBlock.mergeTriples(1, block, 3, true);
-    EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
-  }
-
-  // Inserting a Triple that already exists should have no effect.
-  {
-    IdTable block = makeIdTableFromVector({{1, 2, 3}, {1, 3, 5}, {1, 7, 9}});
-    auto locatedTriplesPerBlock = makeLocatedTriplesPerBlock(
-        {LT{1, IT(1, 2, 4), false}, LT{1, IT(1, 2, 5), false},
-         LT{1, IT(1, 3, 5), false}});
-    IdTable resultExpected = makeIdTableFromVector({{1, 2, 3}, {1, 7, 9}});
-
-    auto merged = locatedTriplesPerBlock.mergeTriples(1, block, 3, false);
-    EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
-
-    // Run the same test with a constant graph column that is part of the
-    // result.
-    addGraphColumn(block);
-    addGraphColumn(resultExpected);
-    merged = locatedTriplesPerBlock.mergeTriples(1, block, 3, true);
+    auto merged = locatedTriplesPerBlock.mergeTriples(1, block, 1, true);
     EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
   }
 
@@ -650,122 +585,18 @@ TEST_F(LocatedTriplesTest, mergeTriplesWithGraph) {
     auto IntId = ad_utility::testing::IntId;
     auto UndefId = ad_utility::testing::UndefId;
 
-    IdTable block = makeIdTableFromVector({{1, 2, 3, IntId(10), IntId(11)},
-                                           {1, 3, 5, IntId(12), IntId(11)},
-                                           {1, 7, 9, IntId(13), IntId(14)}});
+    IdTable block = makeIdTableFromVector({{1, 2, 3, 0, IntId(10), IntId(11)},
+                                           {1, 2, 3, 2, IntId(12), IntId(11)},
+                                           {1, 7, 9, 1, IntId(13), IntId(14)}});
     auto locatedTriplesPerBlock = makeLocatedTriplesPerBlock(
-        {LT{1, IT(1, 3, 5), false}, LT{1, IT(1, 3, 6), true}});
+        {LT{1, IT(1, 2, 3, 1), true}, LT{1, IT(1, 7, 9, 1), false}});
     IdTable resultExpected =
-        makeIdTableFromVector({{1, 2, 3, IntId(10), IntId(11)},
-                               {1, 3, 6, UndefId(), UndefId()},
-                               {1, 7, 9, IntId(13), IntId(14)}});
+        makeIdTableFromVector({{1, 2, 3, 0, IntId(10), IntId(11)},
+                               {1, 2, 3, 1, UndefId(), UndefId()},
+                               {1, 2, 3, 2, IntId(12), IntId(11)}});
 
-    auto merged = locatedTriplesPerBlock.mergeTriples(1, block, 3, false);
+    auto merged = locatedTriplesPerBlock.mergeTriples(1, block, 3, true);
     EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
-
-    // Run the same test with a constant graph column that is part of the
-    // result.
-    addGraphColumn(block);
-    addGraphColumn(resultExpected);
-    block.setColumnSubset(std::array<ColumnIndex, 6>{0u, 1u, 2u, 5u, 3u, 4u});
-    resultExpected.setColumnSubset(
-        std::array<ColumnIndex, 6>{0u, 1u, 2u, 5u, 3u, 4u});
-    merged = locatedTriplesPerBlock.mergeTriples(1, block, 3, true);
-    EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
-  }
-
-  // Merging for a block that has no located triples returns an error.
-  {
-    IdTable block = makeIdTableFromVector({
-        {4, 10, 10},  // Row 0
-        {5, 15, 20},  // Row 1
-        {5, 15, 30},  // Row 2
-        {5, 20, 10},  // Row 3
-        {5, 30, 20},  // Row 4
-        {6, 30, 30}   // Row 5
-    });
-    auto locatedTriplesPerBlock = makeLocatedTriplesPerBlock({
-        LT{1, IT(1, 5, 10), true},    // Insert before row 0
-        LT{1, IT(1, 10, 10), false},  // Delete row 0
-        LT{1, IT(1, 10, 11), true},   // Insert before row 1
-        LT{1, IT(2, 11, 10), true},   // Insert before row 1
-        LT{1, IT(2, 30, 10), true},   // Insert before row 4
-        LT{1, IT(2, 30, 20), false},  // Delete row 4
-        LT{1, IT(3, 30, 30), false},  // Delete row 5
-        LT{1, IT(4, 10, 10), true},   // Insert after row 5
-    });
-
-    EXPECT_THROW(locatedTriplesPerBlock.mergeTriples(2, block, 3, false),
-                 ad_utility::Exception);
-  }
-
-  // There cannot be fewer index columns in the block than there are columns in
-  // total.
-  {
-    IdTable block = makeIdTableFromVector({
-        {10, 10},  // Row 0
-        {15, 20},  // Row 1
-        {15, 30},  // Row 2
-        {20, 10},  // Row 3
-        {30, 20},  // Row 4
-        {30, 30}   // Row 5
-    });
-    auto locatedTriplesPerBlock = makeLocatedTriplesPerBlock({
-        LT{1, IT(1, 5, 10), true},    // Insert before row 0
-        LT{1, IT(1, 10, 10), false},  // Delete row 0
-        LT{1, IT(1, 10, 11), true},   // Insert before row 1
-        LT{1, IT(2, 11, 10), true},   // Insert before row 1
-        LT{1, IT(2, 30, 10), true},   // Insert before row 4
-        LT{1, IT(2, 30, 20), false},  // Delete row 4
-        LT{1, IT(3, 30, 25), false},  // Delete non-existent row
-        LT{1, IT(3, 30, 30), false},  // Delete row 5
-        LT{1, IT(4, 10, 10), true},   // Insert after row 5
-    });
-    EXPECT_THROW(locatedTriplesPerBlock.mergeTriples(1, block, 3, false),
-                 ad_utility::Exception);
-  }
-
-  // There can be at most 3 index columns.
-  {
-    IdTable block = makeIdTableFromVector({
-        {1, 10, 10},  // Row 0
-        {2, 15, 20},  // Row 1
-        {2, 15, 30},  // Row 2
-        {2, 20, 10},  // Row 3
-        {2, 30, 20},  // Row 4
-        {3, 30, 30}   // Row 5
-    });
-    auto locatedTriplesPerBlock = makeLocatedTriplesPerBlock({
-        LT{1, IT(1, 5, 10), true},    // Insert before row 0
-        LT{1, IT(1, 10, 10), false},  // Delete row 0
-        LT{1, IT(1, 10, 11), true},   // Insert before row 1
-        LT{1, IT(2, 11, 10), true},   // Insert before row 1
-        LT{1, IT(2, 30, 10), true},   // Insert before row 4
-        LT{1, IT(2, 30, 20), false},  // Delete row 4
-        LT{1, IT(3, 30, 25), false},  // Delete non-existent row
-        LT{1, IT(3, 30, 30), false},  // Delete row 5
-        LT{1, IT(4, 10, 10), true},   // Insert after row 5
-    });
-    EXPECT_THROW(locatedTriplesPerBlock.mergeTriples(1, block, 4, false),
-                 ad_utility::Exception);
-  }
-
-  // There has to be at least one index row.
-  {
-    IdTable block = makeIdTableFromVector({
-        {},  // Row 0
-        {},  // Row 1
-        {},  // Row 2
-        {},  // Row 3
-        {},  // Row 4
-        {}   // Row 5
-    });
-    auto locatedTriplesPerBlock = makeLocatedTriplesPerBlock({
-        LT{1, IT(1, 5, 10), true},   // Insert before row 0
-        LT{1, IT(2, 11, 10), true},  // Insert before row 1
-    });
-    EXPECT_THROW(locatedTriplesPerBlock.mergeTriples(1, block, 0, false),
-                 ad_utility::Exception);
   }
 }
 
@@ -972,9 +803,9 @@ TEST_F(LocatedTriplesTest, debugPrints) {
   {
     LocatedTriples lts;
     EXPECT_THAT(lts, InsertIntoStream(testing::StrEq("{ }")));
-    lts.insert(LT(0, IT(1, 1, 1), true));
+    lts.insert(LT(0, IT(1, 1, 1, 28), true));
     EXPECT_THAT(lts, InsertIntoStream(testing::StrEq(
-                         "{ LT(0 IdTriple(V:1, V:1, V:1, I:123948, ) 1) }")));
+                         "{ LT(0 IdTriple(V:1, V:1, V:1, V:28, ) 1) }")));
   }
 
   {
@@ -984,13 +815,13 @@ TEST_F(LocatedTriplesTest, debugPrints) {
     ltpb.add(std::vector{LT(0, IT(1, 1, 1), true)});
     EXPECT_THAT(ltpb, InsertIntoStream(testing::StrEq(
                           "LTs in Block #0: { LT(0 IdTriple(V:1, "
-                          "V:1, V:1, I:123948, ) 1) }\n")));
+                          "V:1, V:1, V:123948, ) 1) }\n")));
   }
 
   {
     std::vector<IdTriple<0>> idts{IT(0, 0, 0), IT(1, 2, 3)};
     EXPECT_THAT(idts, InsertIntoStream(testing::StrEq(
-                          "IdTriple(V:0, V:0, V:0, I:123948, ), IdTriple(V:1, "
-                          "V:2, V:3, I:123948, ), ")));
+                          "IdTriple(V:0, V:0, V:0, V:123948, ), IdTriple(V:1, "
+                          "V:2, V:3, V:123948, ), ")));
   }
 }

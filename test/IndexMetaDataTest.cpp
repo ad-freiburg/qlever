@@ -18,9 +18,13 @@ Id g = V(123405);
 }  // namespace
 
 TEST(RelationMetaDataTest, writeReadTest) {
-  CompressedBlockMetadata rmdB{{{12, 34}, {46, 11}},   5,
-                               {V(0), V(2), V(13), g}, {V(3), V(24), V(62), g},
-                               std::vector{V(85)},     true, 1039};
+  CompressedBlockMetadata rmdB{{{12, 34}, {46, 11}},
+                               5,
+                               {V(0), V(2), V(13), g},
+                               {V(3), V(24), V(62), g},
+                               std::vector{V(85)},
+                               true,
+                               1039};
   CompressedRelationMetadata rmdF{V(1), 3, 2.0, 42.0, 16};
 
   ad_utility::serialization::FileWriteSerializer f("_testtmp.rmd");
