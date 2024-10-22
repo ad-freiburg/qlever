@@ -14,6 +14,7 @@
 #include "engine/LazyGroupBy.h"
 #include "engine/Sort.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
+#include "engine/sparqlExpressions/CountStarExpression.h"
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/SampleExpression.h"
@@ -1007,6 +1008,7 @@ GroupBy::isSupportedAggregate(sparqlExpression::SparqlExpression* expr) {
 
   if (dynamic_cast<AvgExpression*>(expr)) return H{AVG};
   if (dynamic_cast<CountExpression*>(expr)) return H{COUNT};
+  if (dynamic_cast<CountStarExpression*>(expr)) return H{COUNT};
   if (dynamic_cast<MinExpression*>(expr)) return H{MIN};
   if (dynamic_cast<MaxExpression*>(expr)) return H{MAX};
   if (dynamic_cast<SumExpression*>(expr)) return H{SUM};
@@ -1489,10 +1491,21 @@ IdTable GroupBy::computeGroupByForHashMapOptimization(
     aggregationTimer.cont();
     for (auto& aggregateAlias : aggregateAliases) {
       for (auto& aggregate : aggregateAlias.aggregateInfo_) {
+        // The code below assumes that DISTINCT is not supported yet.
+        AD_CORRECTNESS_CHECK(aggregate.expr_->isAggregate() ==
+                             sparqlExpression::SparqlExpression::
+                                 AggregateStatus::NonDistinctAggregate);
         // Evaluate child expression on block
         auto exprChildren = aggregate.expr_->children();
+        // `COUNT(*)` is the only expression without children, so we fake the
+        // expression result in this case by providing an arbitrary, constant
+        // and defined value. This value will be verified as non-undefined by
+        // the `CountExpression` class and ignored afterward as long as
+        // `DISTINCT` is not set (which is not supported yet).
         sparqlExpression::ExpressionResult expressionResult =
-            exprChildren[0]->evaluate(&evaluationContext);
+            exprChildren.empty()
+                ? Id::makeFromBool(true)
+                : exprChildren[0]->evaluate(&evaluationContext);
 
         auto& aggregationDataVariant =
             aggregationData.getAggregationDataVariant(

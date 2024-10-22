@@ -68,11 +68,20 @@ void LazyGroupBy::processBlock(
   evaluationContext._endIndex = endIndex;
 
   for (const auto& aggregateInfo : allAggregateInfoView()) {
+    // The code below assumes that DISTINCT is not supported yet.
+    AD_CORRECTNESS_CHECK(aggregateInfo.expr_->isAggregate() ==
+                         sparqlExpression::SparqlExpression::AggregateStatus::
+                             NonDistinctAggregate);
     // Evaluate child expression on block
     auto exprChildren = aggregateInfo.expr_->children();
-    AD_CORRECTNESS_CHECK(exprChildren.size() == 1);
+    // `COUNT(*)` is the only expression without children, so we fake the
+    // expression result in this case by providing an arbitrary, constant and
+    // defined value. This value will be verified as non-undefined by the
+    // `CountExpression` class and ignored afterward as long as `DISTINCT` is
+    // not set (which is not supported yet).
     sparqlExpression::ExpressionResult expressionResult =
-        exprChildren[0]->evaluate(&evaluationContext);
+        exprChildren.empty() ? Id::makeFromBool(true)
+                             : exprChildren[0]->evaluate(&evaluationContext);
 
     visitAggregate(
         [blockSize,
