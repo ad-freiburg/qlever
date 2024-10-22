@@ -33,6 +33,7 @@
 #include "engine/TextLimit.h"
 #include "engine/TransitivePathBase.h"
 #include "engine/Union.h"
+#include "engine/Values.h"
 #include "global/RuntimeParameters.h"
 #include "parser/SparqlParser.h"
 #include "util/IndexTestHelpers.h"

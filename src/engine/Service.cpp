@@ -516,18 +516,26 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
     }
   }();
 
+  auto addRuntimeInfo = [&](bool siblingUsed) {
+    std::string_view v = siblingUsed ? "yes"sv : "no"sv;
+    service->runtimeInfo().addDetail("Optimized with sibling result", v);
+    sibling->runtimeInfo().addDetail("Used to optimize SERVICE sibling", v);
+  };
+
   auto siblingResult = sibling->getResult(
       false, requestLaziness ? ComputationMode::LAZY_IF_SUPPORTED
                              : ComputationMode::FULLY_MATERIALIZED);
 
   if (siblingResult->isFullyMaterialized()) {
     sibling->precomputedResultBecauseSiblingOfService_ = siblingResult;
-    if (siblingResult->idTable().size() <=
-        RuntimeParameters().get<"service-max-value-rows">()) {
+    bool resultIsSmall = siblingResult->idTable().size() <=
+                         RuntimeParameters().get<"service-max-value-rows">();
+    if (resultIsSmall) {
       service->siblingInfo_.emplace(
           siblingResult, sibling->getExternallyVisibleVariableColumns(),
           sibling->getCacheKey());
     }
+    addRuntimeInfo(resultIsSmall);
     return;
   }
 
@@ -562,6 +570,7 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
               partialResultGenerator(std::move(idTables), std::move(generator),
                                      std::move(it)),
               siblingResult->sortedBy(), siblingResult->getSharedLocalVocab());
+      addRuntimeInfo(false);
       return;
     }
   }
@@ -582,4 +591,5 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
 
   sibling->precomputedResultBecauseSiblingOfService_ =
       service->siblingInfo_->precomputedResult_;
+  addRuntimeInfo(true);
 }
