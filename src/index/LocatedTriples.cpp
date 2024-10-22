@@ -191,7 +191,8 @@ IdTable LocatedTriplesPerBlock::mergeTriples(size_t blockIndex,
                                              bool includeGraphColumn) const {
   // The following code does nothing more than turn `numIndexColumns` and
   // `includeGraphColumn` into template parameters of `mergeTriplesImpl`.
-  auto mergeTriplesImplHelper = [&]<bool hasGraphColumn>() {
+  auto mergeTriplesImplHelper = [numIndexColumns, blockIndex, &block,
+                                 this]<bool hasGraphColumn>() {
     if (numIndexColumns == 3) {
       return mergeTriplesImpl<3, hasGraphColumn>(blockIndex, block);
     } else if (numIndexColumns == 2) {
