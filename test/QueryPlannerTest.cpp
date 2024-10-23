@@ -1904,6 +1904,13 @@ TEST(QueryPlanner, UnboundMinusIgnored) {
 }
 
 // ___________________________________________________________________________
+TEST(QueryPlanner, SimpleMinus) {
+  h::expect("SELECT * WHERE { ?a <is-a> ?b MINUS{?a <is-a> ?b}}",
+            h::Minus(h::IndexScanFromStrings("?a", "<is-a>", "?b"),
+                     h::IndexScanFromStrings("?a", "<is-a>", "?b")));
+}
+
+// ___________________________________________________________________________
 TEST(QueryPlanner, CancellationCancelsQueryPlanning) {
   auto cancellationHandle =
       std::make_shared<ad_utility::CancellationHandle<>>();

@@ -501,6 +501,16 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
                                       std::shared_ptr<Operation> right,
                                       bool rightOnly, bool requestLaziness) {
   AD_CORRECTNESS_CHECK(left && right);
+
+  auto skipSortOperation = [](std::shared_ptr<Operation>& op) {
+    auto children = op->getChildren();
+    if (children.size() == 1) {
+      op = children[0]->getRootOperation();
+    }
+  };
+  skipSortOperation(left);
+  skipSortOperation(right);
+
   auto a = std::dynamic_pointer_cast<Service>(left);
   auto b = std::dynamic_pointer_cast<Service>(right);
 
@@ -520,8 +530,8 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
 
   auto addRuntimeInfo = [&](bool siblingUsed) {
     std::string_view v = siblingUsed ? "yes"sv : "no"sv;
-    service->runtimeInfo().addDetail("Optimized with sibling result", v);
-    sibling->runtimeInfo().addDetail("Used to optimize SERVICE sibling", v);
+    service->runtimeInfo().addDetail("optimized-with-sibling-result", v);
+    sibling->runtimeInfo().addDetail("used-to-optimize-service-sibling", v);
   };
 
   auto siblingResult = sibling->getResult(
@@ -542,26 +552,27 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
   }
 
   // Creates an idTable-Generator from partially materialized result data.
-  auto partialResultGenerator = [](std::vector<IdTable> idTables,
-                                   cppcoro::generator<IdTable> prevGenerator,
-                                   cppcoro::generator<IdTable>::iterator it)
-      -> cppcoro::generator<IdTable> {
-    for (auto& idTable : idTables) {
-      co_yield idTable;
+  auto partialResultGenerator =
+      [](std::vector<Result::IdTableVocabPair> pairs,
+         cppcoro::generator<Result::IdTableVocabPair> prevGenerator,
+         cppcoro::generator<Result::IdTableVocabPair>::iterator it)
+      -> cppcoro::generator<Result::IdTableVocabPair> {
+    for (auto& pair : pairs) {
+      co_yield pair;
     }
-    for (auto& idTable : std::ranges::subrange{it, prevGenerator.end()}) {
-      co_yield idTable;
+    for (auto& pair : std::ranges::subrange{it, prevGenerator.end()}) {
+      co_yield pair;
     }
   };
 
   size_t rows = 0;
-  std::vector<IdTable> idTables;
+  std::vector<Result::IdTableVocabPair> resultPairs;
   auto generator = std::move(siblingResult->idTables());
   auto it = generator.begin();
   for (; it != generator.end(); ++it) {
-    auto& idTable = *it;
-    rows += idTable.size();
-    idTables.push_back(std::move(idTable));
+    auto& pair = (*it);
+    rows += pair.idTable_.size();
+    resultPairs.push_back(std::move(pair));
 
     if (rows > RuntimeParameters().get<"service-max-value-rows">()) {
       // Stop precomputation as the siblingResult's size exceeds the threshold
@@ -569,9 +580,9 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
       // Pass the partially materialized result to the sibling.
       sibling->precomputedResultBecauseSiblingOfService_ =
           std::make_shared<const Result>(
-              partialResultGenerator(std::move(idTables), std::move(generator),
-                                     std::move(it)),
-              siblingResult->sortedBy(), siblingResult->getSharedLocalVocab());
+              partialResultGenerator(std::move(resultPairs),
+                                     std::move(generator), std::move(it)),
+              siblingResult->sortedBy());
       addRuntimeInfo(false);
       return;
     }
@@ -579,16 +590,19 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
 
   // The siblingResult has been fully materialized, so it can now be
   // used in both sibling and service.
-  IdTable siblingIdTable(sibling->getResultWidth(),
-                         sibling->getExecutionContext()->getAllocator());
-  for (auto& idTable : idTables) {
-    siblingIdTable.insertAtEnd(idTable);
+  Result::IdTableVocabPair siblingPair(
+      IdTable{sibling->getResultWidth(),
+              sibling->getExecutionContext()->getAllocator()},
+      LocalVocab{});
+
+  for (auto& pair : resultPairs) {
+    siblingPair.idTable_.insertAtEnd(pair.idTable_);
+    siblingPair.localVocab_.mergeWith(std::span{&pair.localVocab_, 1});
   }
 
   service->siblingInfo_.emplace(
-      std::make_shared<Result>(std::move(siblingIdTable),
-                               siblingResult->sortedBy(),
-                               siblingResult->getSharedLocalVocab()),
+      std::make_shared<Result>(std::move(siblingPair),
+                               siblingResult->sortedBy()),
       sibling->getExternallyVisibleVariableColumns(), sibling->getCacheKey());
 
   sibling->precomputedResultBecauseSiblingOfService_ =

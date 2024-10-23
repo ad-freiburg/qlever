@@ -71,11 +71,6 @@ class Service : public Operation {
   std::vector<ColumnIndex> resultSortedOn() const override { return {}; }
   float getMultiplicity(size_t col) override;
 
-  // Getters for testing.
-  const auto& getGraphPatternAsString() const {
-    return parsedServiceClause_.graphPatternAsString_;
-  }
-
  private:
   uint64_t getSizeEstimateBeforeLimit() override;
 
