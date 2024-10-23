@@ -212,13 +212,9 @@ class SparqlQleverVisitor {
 
   GraphUpdate visit(Parser::DeleteDataContext* ctx);
 
-  std::tuple<GraphUpdate, ParsedQuery::GraphPattern, std::vector<DatasetClause>,
-             vector<Variable>>
-  visit(Parser::DeleteWhereContext* ctx);
+  ParsedQuery visit(Parser::DeleteWhereContext* ctx);
 
-  std::tuple<GraphUpdate, ParsedQuery::GraphPattern, std::vector<DatasetClause>,
-             vector<Variable>>
-  visit(Parser::ModifyContext* ctx);
+  ParsedQuery visit(Parser::ModifyContext* ctx);
 
   vector<SparqlTripleSimpleWithGraph> visit(Parser::DeleteClauseContext* ctx);
 
@@ -235,7 +231,8 @@ class SparqlQleverVisitor {
   vector<SparqlTripleSimpleWithGraph> visit(Parser::QuadDataContext* ctx);
 
   vector<SparqlTripleSimpleWithGraph> transformTriplesTemplate(
-      Parser::TriplesTemplateContext* ctx, std::optional<Iri> graph);
+      Parser::TriplesTemplateContext* ctx,
+      const std::variant<Iri, Variable, std::monostate>& graph);
 
   vector<SparqlTripleSimpleWithGraph> visit(Parser::QuadsContext* ctx);
 

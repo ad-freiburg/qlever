@@ -365,42 +365,8 @@ ParsedQuery Visitor::visit(Parser::UpdateContext* ctx) {
 
 // ____________________________________________________________________________________
 ParsedQuery Visitor::visit(Parser::Update1Context* ctx) {
-  auto isVisibleIfVariable = [this](const TripleComponent& component) -> bool {
-    if (component.isVariable()) {
-      return std::ranges::find(parsedQuery_.getVisibleVariables(),
-                               component.getVariable()) !=
-             parsedQuery_.getVisibleVariables().end();
-    } else {
-      return true;
-    }
-  };
-  auto checkTriples =
-      [&isVisibleIfVariable,
-       &ctx](const std::vector<SparqlTripleSimpleWithGraph>& triples) {
-        for (auto& triple : triples) {
-          if (!(isVisibleIfVariable(triple.s_) &&
-                isVisibleIfVariable(triple.p_) &&
-                isVisibleIfVariable(triple.o_))) {
-            reportError(ctx,
-                        absl::StrCat("A triple contains a variable that was "
-                                     "not bound in the query body."));
-          }
-        }
-      };
-
   if (ctx->deleteWhere() || ctx->modify()) {
-    auto [graphUpdate, pattern, usingClauses, visibleVariables] =
-        visitAlternative<
-            std::tuple<GraphUpdate, ParsedQuery::GraphPattern,
-                       std::vector<DatasetClause>, vector<Variable>>>(
-            ctx->deleteWhere(), ctx->modify());
-    parsedQuery_.registerVariablesVisibleInQueryBody(visibleVariables);
-    checkTriples(graphUpdate.toDelete_);
-    checkTriples(graphUpdate.toInsert_);
-    parsedQuery_._clause = parsedQuery::UpdateClause{std::move(graphUpdate)};
-    parsedQuery_._rootGraphPattern = std::move(pattern);
-    parsedQuery_.datasetClauses_ =
-        parsedQuery::DatasetClauses::fromClauses(usingClauses);
+    return visitAlternative<ParsedQuery>(ctx->deleteWhere(), ctx->modify());
   } else {
     parsedQuery_._clause = visitAlternative<parsedQuery::UpdateClause>(
         ctx->load(), ctx->clear(), ctx->drop(), ctx->create(), ctx->add(),
@@ -461,10 +427,7 @@ GraphUpdate Visitor::visit(Parser::DeleteDataContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-std::tuple<GraphUpdate, ParsedQuery::GraphPattern, std::vector<DatasetClause>,
-           vector<Variable>>
-Visitor::visit(Parser::DeleteWhereContext* ctx) {
-  auto triples = visit(ctx->quadPattern());
+ParsedQuery Visitor::visit(Parser::DeleteWhereContext* ctx) {
   auto registerIfVariable = [this](const TripleComponent& component) {
     if (component.isVariable()) {
       addVisibleVariable(component.getVariable());
@@ -482,33 +445,65 @@ Visitor::visit(Parser::DeleteWhereContext* ctx) {
         return SparqlTriple::fromSimple(triple);
       };
   std::vector<Variable> visibleVariablesSoFar = std::move(visibleVariables_);
+  visibleVariables_.clear();
   GraphPattern pattern;
+  auto triples = visit(ctx->quadPattern());
   pattern._graphPatterns.emplace_back(BasicGraphPattern{
       ad_utility::transform(triples, transformAndRegisterTriple)});
+  parsedQuery_._rootGraphPattern = std::move(pattern);
   auto visibleVariablesWhereClause =
       std::exchange(visibleVariables_, std::move(visibleVariablesSoFar));
+  parsedQuery_.registerVariablesVisibleInQueryBody(visibleVariablesWhereClause);
+  // The query body and template are identical. Variables will always be visible
+  // - no need to check that.
+  parsedQuery_._clause =
+      parsedQuery::UpdateClause{GraphUpdate{{}, std::move(triples)}};
 
-  return std::make_tuple(GraphUpdate{{}, std::move(triples)},
-                         std::move(pattern), std::vector<DatasetClause>{},
-                         std::move(visibleVariablesWhereClause));
+  return parsedQuery_;
 }
 
 // ____________________________________________________________________________________
-std::tuple<GraphUpdate, ParsedQuery::GraphPattern, std::vector<DatasetClause>,
-           vector<Variable>>
-Visitor::visit(Parser::ModifyContext* ctx) {
+ParsedQuery Visitor::visit(Parser::ModifyContext* ctx) {
+  auto isVisibleIfVariable = [this](const TripleComponent& component) {
+    if (component.isVariable()) {
+      return std::ranges::find(parsedQuery_.getVisibleVariables(),
+                               component.getVariable()) !=
+             parsedQuery_.getVisibleVariables().end();
+    } else {
+      return true;
+    }
+  };
+  auto checkTriples =
+      [&isVisibleIfVariable,
+       &ctx](const std::vector<SparqlTripleSimpleWithGraph>& triples) {
+        for (auto& triple : triples) {
+          if (!(isVisibleIfVariable(triple.s_) &&
+                isVisibleIfVariable(triple.p_) &&
+                isVisibleIfVariable(triple.o_))) {
+            reportError(ctx,
+                        absl::StrCat("A triple contains a variable that was "
+                                     "not bound in the query body."));
+          }
+        }
+      };
   std::vector<Variable> visibleVariablesSoFar = std::move(visibleVariables_);
+  visibleVariables_.clear();
   auto graphPattern = visit(ctx->groupGraphPattern());
+  parsedQuery_._rootGraphPattern = std::move(graphPattern);
   auto visibleVariablesWhereClause =
       std::exchange(visibleVariables_, std::move(visibleVariablesSoFar));
+  parsedQuery_.registerVariablesVisibleInQueryBody(visibleVariablesWhereClause);
   auto op = GraphUpdate{};
   visitIf(&op.toInsert_, ctx->insertClause());
+  checkTriples(op.toInsert_);
   visitIf(&op.toDelete_, ctx->deleteClause());
+  checkTriples(op.toDelete_);
   visitIf(&op.with_, ctx->iri());
+  parsedQuery_._clause = parsedQuery::UpdateClause{op};
+  parsedQuery_.datasetClauses_ =
+      parsedQuery::DatasetClauses::fromClauses(visitVector(ctx->usingClause()));
 
-  return std::make_tuple(std::move(op), std::move(graphPattern),
-                         visitVector(ctx->usingClause()),
-                         std::move(visibleVariablesWhereClause));
+  return parsedQuery_;
 }
 
 // ____________________________________________________________________________________
@@ -573,13 +568,17 @@ vector<SparqlTripleSimpleWithGraph> Visitor::visit(
     checkAndReportVar(quad.s_);
     checkAndReportVar(quad.p_);
     checkAndReportVar(quad.o_);
+    if (std::holds_alternative<Variable>(quad.g_)) {
+      reportError(ctx->quads(), "Variables are not allowed as graph names.");
+    }
   }
 
   return quads;
 }
 
 vector<SparqlTripleSimpleWithGraph> Visitor::transformTriplesTemplate(
-    Parser::TriplesTemplateContext* ctx, std::optional<Iri> graph) {
+    Parser::TriplesTemplateContext* ctx,
+    const std::variant<Iri, Variable, std::monostate>& graph) {
   auto convertTriple = [&graph](const std::array<GraphTerm, 3>& triple)
       -> SparqlTripleSimpleWithGraph {
     return {visitGraphTerm(triple[0]), visitGraphTerm(triple[1]),
@@ -590,34 +589,37 @@ vector<SparqlTripleSimpleWithGraph> Visitor::transformTriplesTemplate(
 }
 // ____________________________________________________________________________________
 vector<SparqlTripleSimpleWithGraph> Visitor::visit(Parser::QuadsContext* ctx) {
-  auto quadsNotTriplesRes = visitVector(ctx->quadsNotTriples());
-  auto triplesTemplates = ad_utility::transform(
+  auto triplesWithGraph = ad_utility::transform(
       ctx->triplesTemplate(), [this](Parser::TriplesTemplateContext* ctx) {
-        return transformTriplesTemplate(ctx, std::nullopt);
+        return transformTriplesTemplate(ctx, std::monostate{});
       });
-  std::ranges::move(triplesTemplates, std::back_inserter(quadsNotTriplesRes));
-  auto res = ad_utility::flatten(std::move(quadsNotTriplesRes));
-  return res;
+  std::ranges::move(visitVector(ctx->quadsNotTriples()),
+                    std::back_inserter(triplesWithGraph));
+  return ad_utility::flatten(std::move(triplesWithGraph));
 }
 
 // ____________________________________________________________________________________
 vector<SparqlTripleSimpleWithGraph> Visitor::visit(
     Parser::QuadsNotTriplesContext* ctx) {
+  // Short circuit when the triples section is empty
   if (!ctx->triplesTemplate()) {
     return {};
   }
 
-  auto graph = visit(ctx->varOrIri());
+  auto graphTerm = visit(ctx->varOrIri());
+  using GraphType = std::variant<Iri, Variable, std::monostate>;
+  GraphType graph = graphTerm.visit([&ctx]<typename T>(
+                                        const T& element) -> GraphType {
+    if constexpr (std::is_same_v<T, Variable> || std::is_same_v<T, Iri>) {
+      return element;
+    } else {
+      static_assert(std::is_same_v<T, BlankNode> || std::is_same_v<T, Literal>);
+      reportError(ctx->varOrIri(),
+                  "Only IRIs and variables are allowed as graph names.");
+    }
+  });
 
-  std::optional<Iri> graphIri;
-  if (std::holds_alternative<Iri>(graph)) {
-    graphIri = std::get<Iri>(graph);
-  } else {
-    // TODO<qup42> check what is allowed here
-    reportError(ctx->varOrIri(), "Only IRIs are allowed as graph names.");
-  }
-
-  return transformTriplesTemplate(ctx->triplesTemplate(), graphIri);
+  return transformTriplesTemplate(ctx->triplesTemplate(), graph);
 }
 
 // ____________________________________________________________________________________

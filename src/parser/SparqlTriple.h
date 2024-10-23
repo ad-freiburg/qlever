@@ -58,12 +58,13 @@ class SparqlTripleSimpleWithGraph : public SparqlTripleSimple {
  public:
   using SparqlTripleSimple::SparqlTripleSimple;
   SparqlTripleSimpleWithGraph(TripleComponent s, TripleComponent p,
-                              TripleComponent o, std::optional<Iri> g,
+                              TripleComponent o,
+                              std::variant<Iri, Variable, std::monostate> g,
                               AdditionalScanColumns additionalScanColumns = {})
       : SparqlTripleSimple(std::move(s), std::move(p), std::move(o),
                            std::move(additionalScanColumns)),
         g_{std::move(g)} {}
-  std::optional<Iri> g_;
+  std::variant<Iri, Variable, std::monostate> g_;
 };
 
 // A triple where the predicate is a `PropertyPath` (which technically still
