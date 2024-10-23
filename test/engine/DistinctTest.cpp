@@ -14,12 +14,30 @@ using V = Variable;
 
 namespace {
 // Convert a generator to a vector for easier comparison in assertions
-std::vector<IdTable> toVector(cppcoro::generator<IdTable> generator) {
+std::vector<IdTable> toVector(Result::Generator generator) {
   std::vector<IdTable> result;
-  for (auto& table : generator) {
+  for (auto& [table, vocab] : generator) {
+    // IMPORTANT: The `vocab` will go out of scope here, but the tests don't use
+    // any vocabulary so this is fine.
     result.push_back(std::move(table));
   }
   return result;
+}
+
+Distinct makeDistinct(const std::vector<ColumnIndex>& keepIndices,
+                      std::vector<IdTable> idTables = {}) {
+  auto* qec = ad_utility::testing::getQec();
+  std::vector<std::optional<Variable>> variables{};
+  size_t maxBound = idTables.empty() ? 1 : idTables.at(0).numColumns();
+  for (size_t i = 0; i < maxBound; ++i) {
+    std::string variableName = "? ";
+    variableName[1] = 'a' + i;
+    variables.emplace_back(Variable{std::move(variableName)});
+  }
+  return {qec,
+          ad_utility::makeExecutionTree<ValuesForTesting>(
+              qec, std::move(idTables), std::move(variables)),
+          keepIndices};
 }
 }  // namespace
 
@@ -45,9 +63,9 @@ TEST(Distinct, distinct) {
   IdTable input{makeIdTableFromVector(
       {{1, 1, 3, 7}, {6, 1, 3, 6}, {2, 2, 3, 5}, {3, 6, 5, 4}, {1, 6, 5, 1}})};
 
-  std::vector<ColumnIndex> keepIndices{{1, 2}};
-  IdTable result = CALL_FIXED_SIZE(4, Distinct::distinct, std::move(input),
-                                   keepIndices, std::nullopt);
+  Distinct distinct = makeDistinct({{1, 2}});
+  IdTable result =
+      CALL_FIXED_SIZE(4, &Distinct::outOfPlaceDistinct, &distinct, input);
 
   // For easier checking.
   IdTable expectedResult{
@@ -58,8 +76,9 @@ TEST(Distinct, distinct) {
 // _____________________________________________________________________________
 TEST(Distinct, distinctWithEmptyInput) {
   IdTable input{1, makeAllocator()};
-  IdTable result = CALL_FIXED_SIZE(1, Distinct::distinct, input.clone(),
-                                   std::vector<ColumnIndex>{}, std::nullopt);
+  Distinct distinct = makeDistinct({});
+  IdTable result =
+      CALL_FIXED_SIZE(1, &Distinct::outOfPlaceDistinct, &distinct, input);
   ASSERT_EQ(input, result);
 }
 
