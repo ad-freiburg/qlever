@@ -84,4 +84,5 @@ class Distinct : public Operation {
 
   FRIEND_TEST(Distinct, distinct);
   FRIEND_TEST(Distinct, distinctWithEmptyInput);
+  FRIEND_TEST(Distinct, testChunkEdgeCases);
 };

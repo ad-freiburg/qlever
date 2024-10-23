@@ -101,40 +101,40 @@ IdTable Distinct::distinct(
   LOG(DEBUG) << "Distinct on " << dynInput.size() << " elements.\n";
   IdTableStatic<WIDTH> result = std::move(dynInput).toStatic<WIDTH>();
 
-  // Variant of `std::ranges::unique` that allows to skip the first rows of
+  // Variant of `std::ranges::unique` that allows to skip the begin rows of
   // elements found in the previous table.
-  auto first =
+  auto begin =
       std::ranges::find_if(result, [this, &previousRow](const auto& row) {
         return !previousRow.has_value() ||
                !matchesRow(row, previousRow.value());
       });
-  auto last = result.end();
+  auto end = result.end();
 
   auto dest = result.begin();
-  if (first == dest) {
+  if (begin == dest) {
     // Optimization to avoid redundant move operations.
-    first = std::ranges::adjacent_find(
-        first, last,
+    begin = std::ranges::adjacent_find(
+        begin, end,
         [this](const auto& a, const auto& b) { return matchesRow(a, b); });
-    dest = first;
-    if (first != last) {
-      ++first;
+    dest = begin;
+    if (begin != end) {
+      ++begin;
     }
-  } else if (first != last) {
-    *dest = std::move(*first);
+  } else if (begin != end) {
+    *dest = std::move(*begin);
   }
 
-  if (first != last) {
-    while (++first != last) {
-      if (!matchesRow(*dest, *first)) {
-        *++dest = std::move(*first);
+  if (begin != end) {
+    while (++begin != end) {
+      if (!matchesRow(*dest, *begin)) {
+        *++dest = std::move(*begin);
         checkCancellation();
       }
     }
     ++dest;
   }
   checkCancellation();
-  result.erase(dest, last);
+  result.erase(dest, end);
   checkCancellation();
 
   LOG(DEBUG) << "Distinct done.\n";
@@ -153,21 +153,22 @@ IdTable Distinct::outOfPlaceDistinct(const IdTable& dynInput) const {
   auto end = inputView.end();
   while (begin < end) {
     int64_t allowedOffset = std::min(end - begin, CHUNK_SIZE);
-    auto intermediateEnd = begin + allowedOffset;
-    std::ranges::unique_copy(
-        begin, intermediateEnd, std::back_inserter(output),
-        [this](const auto& a, const auto& b) { return matchesRow(a, b); });
+    begin =
+        std::ranges::unique_copy(
+            begin, begin + allowedOffset, std::back_inserter(output),
+            [this](const auto& a, const auto& b) { return matchesRow(a, b); })
+            .in;
     checkCancellation();
+    // Skip to next unique value
     do {
-      allowedOffset = std::min(end - intermediateEnd, CHUNK_SIZE);
-      // Skip to next unique value
-      begin =
-          std::ranges::find_if(intermediateEnd, intermediateEnd + allowedOffset,
-                               [this, &intermediateEnd](const auto& row) {
-                                 return !matchesRow(row, intermediateEnd[-1]);
-                               });
+      allowedOffset = std::min(end - begin, CHUNK_SIZE);
+      auto lastRow = begin[-1];
+      begin = std::ranges::find_if(begin, begin + allowedOffset,
+                                   [this, &lastRow](const auto& row) {
+                                     return !matchesRow(row, lastRow);
+                                   });
       checkCancellation();
-    } while (begin != end && begin == intermediateEnd + allowedOffset);
+    } while (begin != end && matchesRow(*begin, begin[-1]));
   }
 
   LOG(DEBUG) << "Distinct done.\n";

@@ -24,19 +24,12 @@ std::vector<IdTable> toVector(Result::Generator generator) {
   return result;
 }
 
-Distinct makeDistinct(const std::vector<ColumnIndex>& keepIndices,
-                      std::vector<IdTable> idTables = {}) {
+Distinct makeDistinct(const std::vector<ColumnIndex>& keepIndices) {
   auto* qec = ad_utility::testing::getQec();
-  std::vector<std::optional<Variable>> variables{};
-  size_t maxBound = idTables.empty() ? 1 : idTables.at(0).numColumns();
-  for (size_t i = 0; i < maxBound; ++i) {
-    std::string variableName = "? ";
-    variableName[1] = 'a' + i;
-    variables.emplace_back(Variable{std::move(variableName)});
-  }
   return {qec,
           ad_utility::makeExecutionTree<ValuesForTesting>(
-              qec, std::move(idTables), std::move(variables)),
+              qec, std::vector<IdTable>{},
+              std::vector<std::optional<Variable>>{Variable{"?x"}}),
           keepIndices};
 }
 }  // namespace
@@ -63,22 +56,64 @@ TEST(Distinct, distinct) {
   IdTable input{makeIdTableFromVector(
       {{1, 1, 3, 7}, {6, 1, 3, 6}, {2, 2, 3, 5}, {3, 6, 5, 4}, {1, 6, 5, 1}})};
 
-  Distinct distinct = makeDistinct({{1, 2}});
-  IdTable result =
-      CALL_FIXED_SIZE(4, &Distinct::outOfPlaceDistinct, &distinct, input);
+  Distinct distinct = makeDistinct({1, 2});
+  IdTable result = distinct.outOfPlaceDistinct<4>(input);
 
-  // For easier checking.
   IdTable expectedResult{
       makeIdTableFromVector({{1, 1, 3, 7}, {2, 2, 3, 5}, {3, 6, 5, 4}})};
   ASSERT_EQ(expectedResult, result);
 }
 
 // _____________________________________________________________________________
+TEST(Distinct, testChunkEdgeCases) {
+  Distinct distinct = makeDistinct({0});
+  IdTable input{1, ad_utility::testing::makeAllocator()};
+  IdTable::row_type row{1};
+
+  {
+    input.resize(Distinct::CHUNK_SIZE + 1);
+    row[0] = Id::makeFromInt(0);
+    std::ranges::fill(input, row);
+    IdTable result = distinct.outOfPlaceDistinct<1>(input);
+
+    ASSERT_EQ(makeIdTableFromVector({{0}}, &Id::makeFromInt), result);
+  }
+
+  {
+    input.resize(Distinct::CHUNK_SIZE + 1);
+    row[0] = Id::makeFromInt(0);
+    std::ranges::fill(input, row);
+    input.at(Distinct::CHUNK_SIZE, 0) = Id::makeFromInt(1);
+    IdTable result = distinct.outOfPlaceDistinct<1>(input);
+
+    ASSERT_EQ(makeIdTableFromVector({{0}, {1}}, &Id::makeFromInt), result);
+  }
+
+  {
+    input.resize(2 * Distinct::CHUNK_SIZE);
+    row[0] = Id::makeFromInt(0);
+    std::ranges::fill(input, row);
+    IdTable result = distinct.outOfPlaceDistinct<1>(input);
+
+    ASSERT_EQ(makeIdTableFromVector({{0}}, &Id::makeFromInt), result);
+  }
+
+  {
+    input.resize(2 * Distinct::CHUNK_SIZE + 2);
+    row[0] = Id::makeFromInt(0);
+    std::ranges::fill(input, row);
+    input.at(2 * Distinct::CHUNK_SIZE + 1, 0) = Id::makeFromInt(1);
+    IdTable result = distinct.outOfPlaceDistinct<1>(input);
+
+    ASSERT_EQ(makeIdTableFromVector({{0}, {1}}, &Id::makeFromInt), result);
+  }
+}
+
+// _____________________________________________________________________________
 TEST(Distinct, distinctWithEmptyInput) {
   IdTable input{1, makeAllocator()};
   Distinct distinct = makeDistinct({});
-  IdTable result =
-      CALL_FIXED_SIZE(1, &Distinct::outOfPlaceDistinct, &distinct, input);
+  IdTable result = distinct.outOfPlaceDistinct<1>(input);
   ASSERT_EQ(input, result);
 }
 
