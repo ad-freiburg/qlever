@@ -81,10 +81,12 @@ RegexExpression::RegexExpression(
     child_ = std::move(std::move(*child_).moveChildrenOut().at(0));
     childIsStrExpression_ = true;
   }
+  /*
   if (!dynamic_cast<const VariableExpression*>(child_.get())) {
     throw std::runtime_error(
         "REGEX expressions are currently supported only on variables.");
   }
+   */
   std::string regexString;
   if (auto regexPtr =
           dynamic_cast<const StringLiteralExpression*>(regex.get())) {
@@ -132,18 +134,15 @@ RegexExpression::RegexExpression(
   }
 
   regexAsString_ = regexString;
-  if (auto opt = detail::getPrefixRegex(regexString)) {
-    regex_ = std::move(opt.value());
-  } else {
-    regex_.emplace<RE2>(regexString, RE2::Quiet);
-    const auto& r = std::get<RE2>(regex_);
-    if (r.error_code() != RE2::NoError) {
-      throw std::runtime_error{absl::StrCat(
-          "The regex \"", regexString,
-          "\" is not supported by QLever (which uses Google's RE2 library). "
-          "Error from RE2 is: ",
-          r.error())};
-    }
+  prefixRegex_ = detail::getPrefixRegex(regexString);
+  regex_.emplace(regexString, RE2::Quiet);
+  const auto& r = regex_.value();
+  if (r.error_code() != RE2::NoError) {
+    throw std::runtime_error{absl::StrCat(
+        "The regex \"", regexString,
+        "\" is not supported by QLever (which uses Google's RE2 library). "
+        "Error from RE2 is: ",
+        r.error())};
   }
 }
 
@@ -163,7 +162,8 @@ std::span<SparqlExpression::Ptr> RegexExpression::childrenImpl() {
 ExpressionResult RegexExpression::evaluatePrefixRegex(
     const Variable& variable,
     sparqlExpression::EvaluationContext* context) const {
-  std::string prefixRegex = std::get<std::string>(regex_);
+  AD_CORRECTNESS_CHECK(prefixRegex_.has_value());
+  std::string prefixRegex = prefixRegex_.value();
   std::vector<std::string> actualPrefixes;
   actualPrefixes.push_back("\"" + prefixRegex);
   // If the STR function was applied, we also look for prefix matches for IRIs.
@@ -229,22 +229,22 @@ ExpressionResult RegexExpression::evaluatePrefixRegex(
 }
 
 // ___________________________________________________________________________
+template <SingleExpressionResult T>
 ExpressionResult RegexExpression::evaluateNonPrefixRegex(
-    const Variable& variable,
-    sparqlExpression::EvaluationContext* context) const {
-  AD_CONTRACT_CHECK(std::holds_alternative<RE2>(regex_));
+    T&& input, sparqlExpression::EvaluationContext* context) const {
   auto resultSize = context->size();
   VectorWithMemoryLimit<Id> result{context->_allocator};
   result.reserve(resultSize);
+  AD_CORRECTNESS_CHECK(regex_.has_value());
 
   auto impl = [&]<typename ValueGetter>(const ValueGetter& getter) {
-    for (auto id : detail::makeGenerator(variable, resultSize, context)) {
+    for (auto id : detail::makeGenerator(AD_FWD(input), resultSize, context)) {
       auto str = getter(id, context);
       if (!str.has_value()) {
         result.push_back(Id::makeUndefined());
       } else {
-        result.push_back(Id::makeFromBool(
-            RE2::PartialMatch(str.value(), std::get<RE2>(regex_))));
+        result.push_back(
+            Id::makeFromBool(RE2::PartialMatch(str.value(), regex_.value())));
       }
       checkCancellation(context);
     }
@@ -262,18 +262,21 @@ ExpressionResult RegexExpression::evaluate(
     sparqlExpression::EvaluationContext* context) const {
   auto resultAsVariant = child_->evaluate(context);
   auto variablePtr = std::get_if<Variable>(&resultAsVariant);
-  AD_CONTRACT_CHECK(variablePtr);
 
-  if (std::holds_alternative<std::string>(regex_)) {
+  if (prefixRegex_.has_value() && variablePtr != nullptr) {
     return evaluatePrefixRegex(*variablePtr, context);
   } else {
-    return evaluateNonPrefixRegex(*variablePtr, context);
+    return std::visit(
+        [this, context](auto&& input) {
+          return evaluateNonPrefixRegex(AD_FWD(input), context);
+        },
+        std::move(resultAsVariant));
   }
 }
 
 // ____________________________________________________________________________
 bool RegexExpression::isPrefixExpression() const {
-  return std::holds_alternative<std::string>(regex_);
+  return prefixRegex_.has_value();
 }
 
 // ____________________________________________________________________________
@@ -285,16 +288,14 @@ auto RegexExpression::getEstimatesForFilterExpression(
     // prefix. The reason for the -2 is that at this point, _rhs always
     // starts with ^"
     double reductionFactor = std::pow(
-        10, std::max(
-                0, static_cast<int>(std::get<std::string>(regex_).size()) - 2));
+        10, std::max(0, static_cast<int>(prefixRegex_.value().size()) - 2));
     // Cap to reasonable minimal and maximal values to prevent numerical
     // stability problems.
     reductionFactor = std::min(100000000.0, reductionFactor);
     reductionFactor = std::max(1.0, reductionFactor);
     size_t sizeEstimate = inputSize / static_cast<size_t>(reductionFactor);
     auto varPtr = dynamic_cast<VariableExpression*>(child_.get());
-    AD_CONTRACT_CHECK(varPtr);
-    size_t costEstimate = firstSortedVariable == varPtr->value()
+    size_t costEstimate = (varPtr && firstSortedVariable == varPtr->value())
                               ? sizeEstimate
                               : sizeEstimate + inputSize;
 
