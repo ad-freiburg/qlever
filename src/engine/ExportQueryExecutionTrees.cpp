@@ -13,13 +13,15 @@
 #include "util/http/MediaTypes.h"
 
 // __________________________________________________________________________
-cppcoro::generator<const IdTable&> ExportQueryExecutionTrees::getIdTables(
-    const Result& result) {
+cppcoro::generator<ExportQueryExecutionTrees::TableConstRefWithVocab>
+ExportQueryExecutionTrees::getIdTables(const Result& result) {
   if (result.isFullyMaterialized()) {
-    co_yield result.idTable();
+    TableConstRefWithVocab pair{result.idTable(), result.localVocab()};
+    co_yield pair;
   } else {
-    for (const IdTable& idTable : result.idTables()) {
-      co_yield idTable;
+    for (const Result::IdTableVocabPair& pair : result.idTables()) {
+      TableConstRefWithVocab tableWithVocab{pair.idTable_, pair.localVocab_};
+      co_yield tableWithVocab;
     }
   }
 }
@@ -33,11 +35,14 @@ ExportQueryExecutionTrees::getRowIndices(LimitOffsetClause limitOffset,
   if (limitOffset._limit.value_or(1) == 0) {
     co_return;
   }
-  for (const IdTable& idTable : getIdTables(result)) {
-    uint64_t currentOffset = limitOffset.actualOffset(idTable.numRows());
-    uint64_t upperBound = limitOffset.upperBound(idTable.numRows());
+  for (TableConstRefWithVocab& tableWithVocab : getIdTables(result)) {
+    uint64_t currentOffset =
+        limitOffset.actualOffset(tableWithVocab.idTable_.numRows());
+    uint64_t upperBound =
+        limitOffset.upperBound(tableWithVocab.idTable_.numRows());
     if (currentOffset != upperBound) {
-      co_yield {idTable, std::views::iota(currentOffset, upperBound)};
+      co_yield {std::move(tableWithVocab),
+                std::views::iota(currentOffset, upperBound)};
     }
     limitOffset._offset -= currentOffset;
     if (limitOffset._limit.has_value()) {
@@ -57,9 +62,10 @@ ExportQueryExecutionTrees::constructQueryResultToTriples(
     const ad_utility::sparql_types::Triples& constructTriples,
     LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
     CancellationHandle cancellationHandle) {
-  for (const auto& [idTable, range] : getRowIndices(limitAndOffset, *result)) {
+  for (const auto& [pair, range] : getRowIndices(limitAndOffset, *result)) {
+    auto& idTable = pair.idTable_;
     for (uint64_t i : range) {
-      ConstructQueryExportContext context{i, idTable, result->localVocab(),
+      ConstructQueryExportContext context{i, idTable, pair.localVocab_,
                                           qet.getVariableColumns(),
                                           qet.getQec()->getIndex()};
       using enum PositionInTriple;
@@ -172,10 +178,10 @@ ExportQueryExecutionTrees::idTableToQLeverJSONBindings(
     std::shared_ptr<const Result> result,
     CancellationHandle cancellationHandle) {
   AD_CORRECTNESS_CHECK(result != nullptr);
-  for (const auto& [idTable, range] : getRowIndices(limitAndOffset, *result)) {
+  for (const auto& [pair, range] : getRowIndices(limitAndOffset, *result)) {
     for (uint64_t rowIndex : range) {
-      co_yield idTableToQLeverJSONRow(qet, columns, result->localVocab(),
-                                      rowIndex, idTable)
+      co_yield idTableToQLeverJSONRow(qet, columns, pair.localVocab_, rowIndex,
+                                      pair.idTable_)
           .dump();
       cancellationHandle->throwIfCancelled();
     }
@@ -405,14 +411,14 @@ ExportQueryExecutionTrees::selectQueryResultToStream(
 
   // special case : binary export of IdTable
   if constexpr (format == MediaType::octetStream) {
-    for (const auto& [idTable, range] :
-         getRowIndices(limitAndOffset, *result)) {
+    for (const auto& [pair, range] : getRowIndices(limitAndOffset, *result)) {
       for (uint64_t i : range) {
         for (const auto& columnIndex : selectedColumnIndices) {
           if (columnIndex.has_value()) {
-            co_yield std::string_view{reinterpret_cast<const char*>(&idTable(
-                                          i, columnIndex.value().columnIndex_)),
-                                      sizeof(Id)};
+            co_yield std::string_view{
+                reinterpret_cast<const char*>(
+                    &pair.idTable_(i, columnIndex.value().columnIndex_)),
+                sizeof(Id)};
           }
         }
         cancellationHandle->throwIfCancelled();
@@ -436,15 +442,15 @@ ExportQueryExecutionTrees::selectQueryResultToStream(
   constexpr auto& escapeFunction = format == MediaType::tsv
                                        ? RdfEscaping::escapeForTsv
                                        : RdfEscaping::escapeForCsv;
-  for (const auto& [idTable, range] : getRowIndices(limitAndOffset, *result)) {
+  for (const auto& [pair, range] : getRowIndices(limitAndOffset, *result)) {
     for (uint64_t i : range) {
       for (size_t j = 0; j < selectedColumnIndices.size(); ++j) {
         if (selectedColumnIndices[j].has_value()) {
           const auto& val = selectedColumnIndices[j].value();
-          Id id = idTable(i, val.columnIndex_);
+          Id id = pair.idTable_(i, val.columnIndex_);
           auto optionalStringAndType =
               idToStringAndType<format == MediaType::csv>(
-                  qet.getQec()->getIndex(), id, result->localVocab(),
+                  qet.getQec()->getIndex(), id, pair.localVocab_,
                   escapeFunction);
           if (optionalStringAndType.has_value()) [[likely]] {
             co_yield optionalStringAndType.value().first;
@@ -561,15 +567,15 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
   auto selectedColumnIndices =
       qet.selectedVariablesToColumnIndices(selectClause, false);
   // TODO<joka921> we could prefilter for the nonexisting variables.
-  for (const auto& [idTable, range] : getRowIndices(limitAndOffset, *result)) {
+  for (const auto& [pair, range] : getRowIndices(limitAndOffset, *result)) {
     for (uint64_t i : range) {
       co_yield "\n  <result>";
       for (size_t j = 0; j < selectedColumnIndices.size(); ++j) {
         if (selectedColumnIndices[j].has_value()) {
           const auto& val = selectedColumnIndices[j].value();
-          Id id = idTable(i, val.columnIndex_);
+          Id id = pair.idTable_(i, val.columnIndex_);
           co_yield idToXMLBinding(val.variable_, id, qet.getQec()->getIndex(),
-                                  result->localVocab());
+                                  pair.localVocab_);
         }
       }
       co_yield "\n  </result>";
@@ -611,12 +617,13 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
     co_return;
   }
 
-  auto getBinding = [&](const IdTable& idTable, const uint64_t& i) {
+  auto getBinding = [&](const IdTable& idTable, const uint64_t& i,
+                        const LocalVocab& localVocab) {
     nlohmann::ordered_json binding = {};
     for (const auto& column : columns) {
-      auto optionalStringAndType = idToStringAndType(
-          qet.getQec()->getIndex(), idTable(i, column->columnIndex_),
-          result->localVocab());
+      auto optionalStringAndType =
+          idToStringAndType(qet.getQec()->getIndex(),
+                            idTable(i, column->columnIndex_), localVocab);
       if (optionalStringAndType.has_value()) [[likely]] {
         const auto& [stringValue, xsdType] = optionalStringAndType.value();
         binding[column->variable_] =
@@ -627,12 +634,12 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
   };
 
   bool isFirstRow = true;
-  for (const auto& [idTable, range] : getRowIndices(limitAndOffset, *result)) {
+  for (const auto& [pair, range] : getRowIndices(limitAndOffset, *result)) {
     for (uint64_t i : range) {
       if (!isFirstRow) [[likely]] {
         co_yield ",";
       }
-      co_yield getBinding(idTable, i);
+      co_yield getBinding(pair.idTable_, i, pair.localVocab_);
       cancellationHandle->throwIfCancelled();
       isFirstRow = false;
     }

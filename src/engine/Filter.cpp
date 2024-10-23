@@ -48,47 +48,55 @@ ProtoResult Filter::computeResult(bool requestLaziness) {
   LOG(DEBUG) << "Filter result computation..." << endl;
   checkCancellation();
 
-  auto localVocab = subRes->getSharedLocalVocab();
   if (subRes->isFullyMaterialized()) {
-    IdTable result = filterIdTable(subRes, subRes->idTable());
+    IdTable result = filterIdTable(subRes->sortedBy(), subRes->idTable(),
+                                   subRes->localVocab());
     LOG(DEBUG) << "Filter result computation done." << endl;
 
-    return {std::move(result), resultSortedOn(), std::move(localVocab)};
+    return {std::move(result), resultSortedOn(), subRes->getSharedLocalVocab()};
   }
 
   if (requestLaziness) {
-    return {[](auto subRes, auto* self) -> cppcoro::generator<IdTable> {
-              for (IdTable& idTable : subRes->idTables()) {
-                IdTable result = self->filterIdTable(subRes, idTable);
-                co_yield result;
+    return {[](auto subRes, auto* self) -> Result::Generator {
+              for (auto& [idTable, localVocab] : subRes->idTables()) {
+                IdTable result = self->filterIdTable(subRes->sortedBy(),
+                                                     idTable, localVocab);
+                co_yield {std::move(result), std::move(localVocab)};
               }
             }(std::move(subRes), this),
-            resultSortedOn(), std::move(localVocab)};
+            resultSortedOn()};
   }
 
   // If we receive a generator of IdTables, we need to materialize it into a
   // single IdTable.
   size_t width = getSubtree().get()->getResultWidth();
   IdTable result{width, getExecutionContext()->getAllocator()};
-  ad_utility::callFixedSize(width, [this, &subRes, &result]<int WIDTH>() {
-    for (IdTable& idTable : subRes->idTables()) {
-      computeFilterImpl<WIDTH>(result, idTable, subRes->localVocab(),
-                               subRes->sortedBy());
-    }
-  });
+  std::vector<LocalVocab> localVocabs;
+  ad_utility::callFixedSize(
+      width, [this, &subRes, &result, &localVocabs]<int WIDTH>() {
+        for (Result::IdTableVocabPair& pair : subRes->idTables()) {
+          computeFilterImpl<WIDTH>(result, pair.idTable_, pair.localVocab_,
+                                   subRes->sortedBy());
+          localVocabs.emplace_back(std::move(pair.localVocab_));
+        }
+      });
+
+  LocalVocab resultLocalVocab{};
+  resultLocalVocab.mergeWith(localVocabs);
 
   LOG(DEBUG) << "Filter result computation done." << endl;
 
-  return {std::move(result), resultSortedOn(), std::move(localVocab)};
+  return {std::move(result), resultSortedOn(), std::move(resultLocalVocab)};
 }
 
 // _____________________________________________________________________________
-IdTable Filter::filterIdTable(const std::shared_ptr<const Result>& subRes,
-                              const IdTable& idTable) const {
+IdTable Filter::filterIdTable(std::vector<ColumnIndex> sortedBy,
+                              const IdTable& idTable,
+                              const LocalVocab& localVocab) const {
   size_t width = idTable.numColumns();
   IdTable result{width, getExecutionContext()->getAllocator()};
   CALL_FIXED_SIZE(width, &Filter::computeFilterImpl, this, result, idTable,
-                  subRes->localVocab(), subRes->sortedBy());
+                  localVocab, std::move(sortedBy));
   return result;
 }
 

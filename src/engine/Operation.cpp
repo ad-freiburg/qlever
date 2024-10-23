@@ -180,12 +180,14 @@ CacheValue Operation::runComputationAndPrepareForCache(
     AD_CONTRACT_CHECK(!pinned);
     result.cacheDuringConsumption(
         [maxSize = cache.getMaxSizeSingleEntry()](
-            const std::optional<IdTable>& currentIdTable,
-            const IdTable& newIdTable) {
-          auto currentSize = currentIdTable.has_value()
-                                 ? CacheValue::getSize(currentIdTable.value())
-                                 : 0_B;
-          return maxSize >= currentSize + CacheValue::getSize(newIdTable);
+            const std::optional<Result::IdTableVocabPair>& currentIdTablePair,
+            const Result::IdTableVocabPair& newIdTable) {
+          auto currentSize =
+              currentIdTablePair.has_value()
+                  ? CacheValue::getSize(currentIdTablePair.value().idTable_)
+                  : 0_B;
+          return maxSize >=
+                 currentSize + CacheValue::getSize(newIdTable.idTable_);
         },
         [runtimeInfo = getRuntimeInfoPointer(), &cache,
          cacheKey](Result aggregatedResult) {

@@ -67,6 +67,7 @@ class Filter : public Operation {
                          std::vector<ColumnIndex> sortedBy) const;
 
   // Run `computeFilterImpl` on the provided IdTable
-  IdTable filterIdTable(const std::shared_ptr<const Result>& subRes,
-                        const IdTable& idTable) const;
+  IdTable filterIdTable(std::vector<ColumnIndex> sortedBy,
+                        const IdTable& idTable,
+                        const LocalVocab& localVocab) const;
 };
