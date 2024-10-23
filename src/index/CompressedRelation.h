@@ -105,17 +105,17 @@ struct CompressedBlockMetadataNoBlockIndex {
   bool containsDuplicatesWithDifferentGraphs_;
 
   // Two of these are equal if all members are equal.
-  bool operator==(const CompressedBlockMetadata&) const = default;
+  bool operator==(const CompressedBlockMetadataNoBlockIndex&) const = default;
 
   // Format BlockMetadata contents for debugging.
   friend std::ostream& operator<<(
-      std::ostream& str, const CompressedBlockMetadata& blockMetadata) {
+      std::ostream& str,
+      const CompressedBlockMetadataNoBlockIndex& blockMetadata) {
     str << "#BlockMetadata\n(first) " << blockMetadata.firstTriple_ << "(last) "
         << blockMetadata.lastTriple_ << "num. rows: " << blockMetadata.numRows_
         << "." << std::endl;
     return str;
   }
-  bool operator==(const CompressedBlockMetadataNoBlockIndex&) const = default;
 };
 
 // The same as the above struct, but this block additionally knows its index.
