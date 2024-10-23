@@ -875,8 +875,8 @@ inline auto VisibleVariables =
 };
 
 inline auto UpdateQuery =
-    [](const std::vector<SparqlTripleSimple>& toDelete,
-       const std::vector<SparqlTripleSimple>& toInsert,
+    [](const std::vector<SparqlTripleSimpleWithGraph>& toDelete,
+       const std::vector<SparqlTripleSimpleWithGraph>& toInsert,
        const Matcher<const p::GraphPattern&>& graphPatternMatcher)
     -> Matcher<const ::ParsedQuery&> {
   return testing::AllOf(
@@ -952,8 +952,8 @@ inline auto Copy = [](bool silent, const GraphOrDefault& source,
 };
 
 inline auto GraphUpdate =
-    [](const std::vector<SparqlTripleSimple>& toDelete,
-       const std::vector<SparqlTripleSimple>& toInsert,
+    [](const std::vector<SparqlTripleSimpleWithGraph>& toDelete,
+       const std::vector<SparqlTripleSimpleWithGraph>& toInsert,
        const std::optional<ad_utility::triple_component::Iri>& with)
     -> Matcher<const Op&> {
   return testing::VariantWith<::GraphUpdate>(testing::AllOf(
@@ -981,5 +981,16 @@ auto inline GraphRefIri = [](const string& iri) {
   return testing::VariantWith<GraphRef>(AD_PROPERTY(
       TripleComponent::Iri, toStringRepresentation, testing::Eq(iri)));
 };
+
+inline auto Quad =
+    [](const TripleComponent& s, const TripleComponent& p,
+       const TripleComponent& o,
+       const std::variant<::Iri, ::Variable, std::monostate>& g) {
+      return testing::AllOf(
+          AD_FIELD(SparqlTripleSimpleWithGraph, s_, testing::Eq(s)),
+          AD_FIELD(SparqlTripleSimpleWithGraph, p_, testing::Eq(p)),
+          AD_FIELD(SparqlTripleSimpleWithGraph, o_, testing::Eq(o)),
+          AD_FIELD(SparqlTripleSimpleWithGraph, g_, testing::Eq(g)));
+    };
 
 }  // namespace matchers

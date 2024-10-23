@@ -1863,6 +1863,59 @@ TEST(SparqlParser, updateQueryUnsupported) {
   expectUpdateFails("COPY GRAPH <a> TO GRAPH <a>", updateUnsupported);
 }
 
+TEST(SparqlParser, Quads) {
+  auto expectQuads = ExpectCompleteParse<&Parser::quads>{defaultPrefixMap};
+  auto expectQuadsFails = ExpectParseFails<&Parser::quads>{};
+  auto Iri = [](std::string_view stringWithBrackets) {
+    return TripleComponent::Iri::fromIriref(stringWithBrackets);
+  };
+
+  expectQuads("?a <b> <c>",
+              UnorderedElementsAre(m::Quad(Var("?a"), Iri("<b>"), Iri("<c>"),
+                                           std::monostate{})));
+  expectQuads("GRAPH <foo> { ?a <b> <c> }",
+              UnorderedElementsAre(
+                  m::Quad(Var("?a"), Iri("<b>"), Iri("<c>"), ::Iri("<foo>"))));
+  expectQuads("GRAPH <foo> { ?a <b> <c> } GRAPH <bar> { <d> <e> ?f }",
+              UnorderedElementsAre(
+                  m::Quad(Var("?a"), Iri("<b>"), Iri("<c>"), ::Iri("<foo>")),
+                  m::Quad(Iri("<d>"), Iri("<e>"), Var("?f"), ::Iri("<bar>"))));
+  expectQuads(
+      "GRAPH <foo> { ?a <b> <c> } . <d> <e> <f> . <g> <h> <i> ",
+      UnorderedElementsAre(
+          m::Quad(Var("?a"), Iri("<b>"), Iri("<c>"), ::Iri("<foo>")),
+          m::Quad(Iri("<d>"), Iri("<e>"), Iri("<f>"), std::monostate{}),
+          m::Quad(Iri("<g>"), Iri("<h>"), Iri("<i>"), std::monostate{})));
+  expectQuads(
+      "GRAPH <foo> { ?a <b> <c> } . <d> <e> <f> . <g> <h> <i> GRAPH <bar> { "
+      "<j> <k> <l> }",
+      UnorderedElementsAre(
+          m::Quad(Var("?a"), Iri("<b>"), Iri("<c>"), ::Iri("<foo>")),
+          m::Quad(Iri("<d>"), Iri("<e>"), Iri("<f>"), std::monostate{}),
+          m::Quad(Iri("<g>"), Iri("<h>"), Iri("<i>"), std::monostate{}),
+          m::Quad(Iri("<j>"), Iri("<k>"), Iri("<l>"), ::Iri("<bar>"))));
+
+  expectQuads(
+      "GRAPH <foo> { ?a <b> <c> } . <d> <e> <f> . <g> <h> <i> . GRAPH <bar> { "
+      "<j> <k> <l> }",
+      UnorderedElementsAre(
+          m::Quad(Var("?a"), Iri("<b>"), Iri("<c>"), ::Iri("<foo>")),
+          m::Quad(Iri("<d>"), Iri("<e>"), Iri("<f>"), std::monostate{}),
+          m::Quad(Iri("<g>"), Iri("<h>"), Iri("<i>"), std::monostate{}),
+          m::Quad(Iri("<j>"), Iri("<k>"), Iri("<l>"), ::Iri("<bar>"))));
+}
+
+TEST(SparqlParser, QuadData) {
+  auto expectQuadData =
+      ExpectCompleteParse<&Parser::quadData>{defaultPrefixMap};
+  auto expectQuadDataFails = ExpectParseFails<&Parser::quadData>{};
+
+  expectQuadDataFails("<a> <b> ?c");
+  expectQuadDataFails("<a> <b> <c> . GRAPH <foo> { <d> ?e <f> }");
+  expectQuadDataFails("<a> <b> <c> . ?d <e> <f> }");
+  expectQuadDataFails("GRAPH ?foo { <a> <b> <c> }");
+}
+
 TEST(SparqlParser, UpdateQuery) {
   auto expectUpdate = ExpectCompleteParse<&Parser::update>{defaultPrefixMap};
   auto expectUpdateFails = ExpectParseFails<&Parser::update>{};
@@ -1872,67 +1925,83 @@ TEST(SparqlParser, UpdateQuery) {
   auto Literal = [](std::string s) {
     return TripleComponent::Literal::fromStringRepresentation(std::move(s));
   };
+  auto NoGraph = std::monostate{};
 
   expectUpdate(
       "INSERT DATA { <a> <b> <c> }",
-      m::UpdateClause(m::GraphUpdate({}, {{Iri("<a>"), Iri("<b>"), Iri("<c>")}},
-                                     std::nullopt),
-                      m::GraphPattern()));
+      m::UpdateClause(
+          m::GraphUpdate({}, {{Iri("<a>"), Iri("<b>"), Iri("<c>"), NoGraph}},
+                         std::nullopt),
+          m::GraphPattern()));
   expectUpdate(
       "INSERT DATA { <a> <b> \"foo:bar\" }",
       m::UpdateClause(
-          m::GraphUpdate({}, {{Iri("<a>"), Iri("<b>"), Literal("\"foo:bar\"")}},
-                         std::nullopt),
+          m::GraphUpdate(
+              {}, {{Iri("<a>"), Iri("<b>"), Literal("\"foo:bar\""), NoGraph}},
+              std::nullopt),
           m::GraphPattern()));
   expectUpdate("DELETE DATA { <a> <b> <c> }",
-               m::UpdateQuery({{Iri("<a>"), Iri("<b>"), Iri("<c>")}}, {},
-                              m::GraphPattern()));
+               m::UpdateQuery({{Iri("<a>"), Iri("<b>"), Iri("<c>"), NoGraph}},
+                              {}, m::GraphPattern()));
   expectUpdate(
       "DELETE { ?a <b> <c> } WHERE { <d> <e> ?a }",
       m::UpdateClause(
-          m::GraphUpdate({{Var("?a"), Iri("<b>"), Iri("<c>")}}, {},
+          m::GraphUpdate({{Var("?a"), Iri("<b>"), Iri("<c>"), NoGraph}}, {},
                          std::nullopt),
           m::GraphPattern(m::Triples({{Iri("<d>"), "<e>", Var{"?a"}}}))));
   expectUpdateFails("DELETE { ?a <b> <c> } WHERE { <a> ?b ?c }");
   expectUpdate(
       "DELETE { ?a <b> <c> } INSERT { <a> ?a <c> } WHERE { <d> <e> ?a }",
       m::UpdateClause(
-          m::GraphUpdate({{Var("?a"), Iri("<b>"), Iri("<c>")}},
-                         {{Iri("<a>"), Var("?a"), Iri("<c>")}}, std::nullopt),
+          m::GraphUpdate({{Var("?a"), Iri("<b>"), Iri("<c>"), NoGraph}},
+                         {{Iri("<a>"), Var("?a"), Iri("<c>"), NoGraph}},
+                         std::nullopt),
           m::GraphPattern(m::Triples({{Iri("<d>"), "<e>", Var{"?a"}}}))));
   expectUpdate(
       "DELETE WHERE { ?a <foo> ?c }",
       m::UpdateClause(
-          m::GraphUpdate({{Var("?a"), Iri("<foo>"), Var("?c")}}, {},
+          m::GraphUpdate({{Var("?a"), Iri("<foo>"), Var("?c"), NoGraph}}, {},
                          std::nullopt),
           m::GraphPattern(m::Triples({{Var{"?a"}, "<foo>", Var{"?c"}}}))));
   expectUpdate("CLEAR DEFAULT",
                m::UpdateClause(m::Clear(false, DEFAULT{}), m::GraphPattern()));
   expectUpdateFails("INSERT DATA { ?a ?b ?c }");  // Variables are not allowed
-                                                  // inside INSERT DATA.
+  // inside INSERT DATA.
   expectUpdate(
       "WITH <foo> DELETE { ?a ?b ?c } WHERE { ?a ?b ?c }",
       m::UpdateClause(
-          m::GraphUpdate({{Var("?a"), Var("?b"), Var("?c")}}, {}, Iri("<foo>")),
+          m::GraphUpdate({{Var("?a"), Var("?b"), Var("?c"), NoGraph}}, {},
+                         Iri("<foo>")),
           m::GraphPattern(m::Triples({{Var{"?a"}, "?b", Var{"?c"}}}))));
   expectUpdate(
       "DELETE { ?a ?b ?c } USING <foo> WHERE { ?a ?b ?c }",
       m::UpdateClause(
-          m::GraphUpdate({{Var("?a"), Var("?b"), Var("?c")}}, {}, std::nullopt),
+          m::GraphUpdate({{Var("?a"), Var("?b"), Var("?c"), NoGraph}}, {},
+                         std::nullopt),
           m::GraphPattern(m::Triples({{Var{"?a"}, "?b", Var{"?c"}}}))));
   expectUpdate(
       "INSERT DATA { GRAPH <foo> { } }",
       m::UpdateClause(m::GraphUpdate({}, {}, std::nullopt), m::GraphPattern()));
   expectUpdate(
+      "INSERT DATA { GRAPH <foo> { <a> <b> <c> } }",
+      m::UpdateClause(
+          m::GraphUpdate({},
+                         {{Iri("<a>"), Iri("<b>"), Iri("<c>"), ::Iri("<foo>")}},
+                         std::nullopt),
+          m::GraphPattern()));
+  expectUpdate(
+      "INSERT DATA { GRAPH ?f { } }",
+      m::UpdateClause(m::GraphUpdate({}, {}, std::nullopt), m::GraphPattern()));
+  expectUpdate(
       "DELETE { ?a <b> <c> } USING NAMED <foo> WHERE { <d> <e> ?a }",
       m::UpdateClause(
-          m::GraphUpdate({{Var("?a"), Iri("<b>"), Iri("<c>")}}, {},
+          m::GraphUpdate({{Var("?a"), Iri("<b>"), Iri("<c>"), NoGraph}}, {},
                          std::nullopt),
           m::GraphPattern(m::Triples({{Iri("<d>"), "<e>", Var{"?a"}}}))));
   expectUpdate(
       "WITH <foo> DELETE { ?a <b> <c> } WHERE { <d> <e> ?a }",
       m::UpdateClause(
-          m::GraphUpdate({{Var("?a"), Iri("<b>"), Iri("<c>")}}, {},
+          m::GraphUpdate({{Var("?a"), Iri("<b>"), Iri("<c>"), NoGraph}}, {},
                          Iri("<foo>")),
           m::GraphPattern(m::Triples({{Iri("<d>"), "<e>", Var{"?a"}}}))));
   // Chaining multiple updates into one query is not supported.

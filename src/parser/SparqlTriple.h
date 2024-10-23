@@ -65,6 +65,8 @@ class SparqlTripleSimpleWithGraph : public SparqlTripleSimple {
                            std::move(additionalScanColumns)),
         g_{std::move(g)} {}
   std::variant<Iri, Variable, std::monostate> g_;
+
+  bool operator==(const SparqlTripleSimpleWithGraph&) const = default;
 };
 
 // A triple where the predicate is a `PropertyPath` (which technically still
