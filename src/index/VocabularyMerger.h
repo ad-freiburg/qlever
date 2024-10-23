@@ -62,7 +62,7 @@ struct VocabularyMetaData {
     Id begin() const { return begin_; }
     Id end() const { return end_; }
 
-    // Return true iff the `id` belongs to this range.
+    // Return true if the `id` belongs to this range.
     bool contains(Id id) const { return begin_ <= id && id < end_; }
 
    private:

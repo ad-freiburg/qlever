@@ -7,7 +7,6 @@
 #pragma once
 
 #include <memory>
-#include <shared_mutex>
 #include <string>
 
 #include "engine/QueryPlanningCostFactors.h"

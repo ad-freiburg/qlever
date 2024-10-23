@@ -99,8 +99,10 @@ class Service : public Operation {
   vector<QueryExecutionTree*> getChildren() override { return {}; }
 
   // Convert the given binding to TripleComponent.
-  static TripleComponent bindingToTripleComponent(
-      const nlohmann::json& binding);
+  TripleComponent bindingToTripleComponent(
+      const nlohmann::json& binding,
+      ad_utility::HashMap<std::string, Id>& blankNodeMap,
+      LocalVocab* localVocab) const;
 
   // Create a value for the VALUES-clause used in `getSiblingValuesClause` from
   // id. If the id is of type blank node `std::nullopt` is returned.
@@ -146,8 +148,7 @@ class Service : public Operation {
 
   // Compute the result lazy as IdTable generator.
   // If the `singleIdTable` flag is set, the result is yielded as one idTable.
-  cppcoro::generator<IdTable> computeResultLazily(
+  Result::Generator computeResultLazily(
       const std::vector<std::string> vars,
-      ad_utility::LazyJsonParser::Generator body,
-      std::shared_ptr<LocalVocab> localVocab, bool singleIdTable);
+      ad_utility::LazyJsonParser::Generator body, bool singleIdTable);
 };

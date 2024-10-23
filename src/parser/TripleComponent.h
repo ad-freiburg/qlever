@@ -137,6 +137,12 @@ class TripleComponent {
     return std::holds_alternative<Variable>(_variant);
   }
 
+  [[nodiscard]] bool isBool() const {
+    return std::holds_alternative<bool>(_variant);
+  }
+
+  bool getBool() const { return std::get<bool>(_variant); }
+
   bool isLiteral() const { return std::holds_alternative<Literal>(_variant); }
   Literal& getLiteral() { return std::get<Literal>(_variant); }
   const Literal& getLiteral() const { return std::get<Literal>(_variant); }

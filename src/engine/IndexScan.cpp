@@ -135,7 +135,7 @@ VariableToColumnMap IndexScan::computeVariableToColumnMap() const {
 }
 
 // _____________________________________________________________________________
-cppcoro::generator<IdTable> IndexScan::scanInChunks() const {
+Result::Generator IndexScan::scanInChunks() const {
   auto metadata = getMetadataForScan();
   if (!metadata.has_value()) {
     co_return;
@@ -145,7 +145,7 @@ cppcoro::generator<IdTable> IndexScan::scanInChunks() const {
   std::vector<CompressedBlockMetadata> blocks{blocksSpan.begin(),
                                               blocksSpan.end()};
   for (IdTable& idTable : getLazyScan(std::move(blocks))) {
-    co_yield std::move(idTable);
+    co_yield {std::move(idTable), LocalVocab{}};
   }
 }
 
@@ -153,7 +153,7 @@ cppcoro::generator<IdTable> IndexScan::scanInChunks() const {
 ProtoResult IndexScan::computeResult(bool requestLaziness) {
   LOG(DEBUG) << "IndexScan result computation...\n";
   if (requestLaziness) {
-    return {scanInChunks(), resultSortedOn(), LocalVocab{}};
+    return {scanInChunks(), resultSortedOn()};
   }
   IdTable idTable{getExecutionContext()->getAllocator()};
 
@@ -307,6 +307,7 @@ Permutation::IdTableGenerator IndexScan::lazyScanForJoinOfColumnWithScan(
     std::span<const Id> joinColumn) const {
   AD_EXPENSIVE_CHECK(std::ranges::is_sorted(joinColumn));
   AD_CORRECTNESS_CHECK(numVariables_ <= 3 && numVariables_ > 0);
+  AD_CONTRACT_CHECK(joinColumn.empty() || !joinColumn[0].isUndefined());
 
   auto metaBlocks1 = getMetadataForScan();
 

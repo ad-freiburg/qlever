@@ -1,5 +1,12 @@
+//  Copyright 2024, University of Freiburg,
+//  Chair of Algorithms and Data Structures.
+//  Author: @Jonathan24680
+//  Author: Christoph Ullinger <ullingec@informatik.uni-freiburg.de>
+
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
+#include <s2/s2earth.h>
+#include <s2/s2point.h>
 
 #include <cstdlib>
 #include <fstream>
@@ -8,959 +15,19 @@
 #include "../util/IndexTestHelpers.h"
 #include "./../../src/global/ValueId.h"
 #include "./../../src/util/GeoSparqlHelpers.h"
+#include "./SpatialJoinTestHelpers.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/SpatialJoin.h"
+#include "global/Constants.h"
 #include "parser/data/Variable.h"
 
 namespace {  // anonymous namespace to avoid linker problems
 
 using namespace ad_utility::testing;
-
-auto makePointLiteral = [](std::string_view c1, std::string_view c2) {
-  return absl::StrCat(" \"POINT(", c1, " ", c2, ")\"^^<", GEO_WKT_LITERAL, ">");
-};
-
-namespace localTestHelpers {
-
-// helper function to create a vector of strings from a result table
-std::vector<std::string> printTable(const QueryExecutionContext* qec,
-                                    const Result* table) {
-  std::vector<std::string> output;
-  for (size_t i = 0; i < table->idTable().numRows(); i++) {
-    std::string line = "";
-    for (size_t k = 0; k < table->idTable().numColumns(); k++) {
-      auto test = ExportQueryExecutionTrees::idToStringAndType(
-          qec->getIndex(), table->idTable().at(i, k), {});
-      line += test.value().first;
-      line += " ";
-    }
-    output.push_back(line.substr(0, line.size() - 1));  // ignore last " "
-  }
-  return output;
-}
-
-// this helper function reorders an input vector according to the variable to
-// column map to make the string array match the order of the result, which
-// should be tested (it uses a vector of vectors (the first vector is containing
-// each column of the result, each column consist of a vector, where each entry
-// is a row of this column))
-std::vector<std::vector<std::string>> orderColAccordingToVarColMap(
-    VariableToColumnMap varColMaps,
-    std::vector<std::vector<std::string>> columns,
-    std::vector<std::string> columnNames) {
-  std::vector<std::vector<std::string>> result;
-  auto indVariableMap = copySortedByColumnIndex(varColMaps);
-  for (size_t i = 0; i < indVariableMap.size(); i++) {
-    for (size_t k = 0; k < columnNames.size(); k++) {
-      if (indVariableMap.at(i).first.name() == columnNames.at(k)) {
-        result.push_back(columns.at(k));
-        break;
-      }
-    }
-  }
-  return result;
-}
-
-// helper function to create a vector of strings representing rows, from a
-// vector of strings representing columns. Please make sure, that the order of
-// the columns is already matching the order of the result. If this is not the
-// case call the function orderColAccordingToVarColMap
-std::vector<std::string> createRowVectorFromColumnVector(
-    std::vector<std::vector<std::string>> column_vector) {
-  std::vector<std::string> result;
-  if (column_vector.size() > 0) {
-    for (size_t i = 0; i < column_vector.at(0).size(); i++) {
-      std::string str = "";
-      for (size_t k = 0; k < column_vector.size(); k++) {
-        str += column_vector.at(k).at(i);
-        str += " ";
-      }
-      result.push_back(str.substr(0, str.size() - 1));
-    }
-  }
-  return result;
-}
-
-// create a small test dataset, which focuses on points as geometry objects.
-// Note, that some of these objects have a polygon representation, but for
-// testing purposes, they get represented as a point here. I took those
-// points, such that it is obvious, which pair of objects should be included,
-// when the maximum distance is x meters. Please note, that these datapoints
-// are not copied from a real input file. Copying the query will therefore
-// likely not result in the same results as here (also the names, coordinates,
-// etc. might be different in the real datasets)
-std::string createSmallDatasetWithPoints() {
-  auto addPoint = [](std::string& kg, std::string number, std::string name,
-                     std::string point) {
-    kg += absl::StrCat("<node_", number, "> <name> ", name, " .<node_", number,
-                       "> <hasGeometry> <geometry", number, "> .<geometry",
-                       number, "> <asWKT> ", point, " .");
-  };
-  std::string kg2;
-  auto p = makePointLiteral;
-  addPoint(kg2, "1", "\"Uni Freiburg TF\"", p("7.83505", "48.01267"));
-  addPoint(kg2, "2", "\"Minster Freiburg\"", p("7.85298", "47.99557"));
-  addPoint(kg2, "3", "\"London Eye\"", p("-0.11957", "51.50333"));
-  addPoint(kg2, "4", "\"Statue of liberty\"", p("-74.04454", "40.68925"));
-  addPoint(kg2, "5", "\"eiffel tower\"", p("2.29451", "48.85825"));
-
-  return kg2;
-}
-
-QueryExecutionContext* buildTestQEC() {
-  std::string kg = localTestHelpers::createSmallDatasetWithPoints();
-  ad_utility::MemorySize blocksizePermutations = 16_MB;
-  auto qec = getQec(kg, true, true, false, blocksizePermutations, false);
-  return qec;
-}
-
-};  // namespace localTestHelpers
-
-namespace computeResultTest {
-
-std::shared_ptr<QueryExecutionTree> buildIndexScan(
-    QueryExecutionContext* qec, std::array<std::string, 3> triple) {
-  TripleComponent subject{Variable{triple.at(0)}};
-  TripleComponent object{Variable{triple.at(2)}};
-  return ad_utility::makeExecutionTree<IndexScan>(
-      qec, Permutation::Enum::PSO, SparqlTriple{subject, triple.at(1), object});
-}
-
-std::shared_ptr<QueryExecutionTree> buildJoin(
-    QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> tree1,
-    std::shared_ptr<QueryExecutionTree> tree2, Variable joinVariable) {
-  auto varCol1 = tree1->getVariableColumns();
-  auto varCol2 = tree2->getVariableColumns();
-  size_t col1 = varCol1[joinVariable].columnIndex_;
-  size_t col2 = varCol2[joinVariable].columnIndex_;
-  return ad_utility::makeExecutionTree<Join>(qec, tree1, tree2, col1, col2,
-                                             true);
-}
-
-std::shared_ptr<QueryExecutionTree> buildMediumChild(
-    QueryExecutionContext* qec, std::array<std::string, 3> triple1,
-    std::array<std::string, 3> triple2, std::array<std::string, 3> triple3,
-    std::string joinVariable1_, std::string joinVariable2_) {
-  Variable joinVariable1{joinVariable1_};
-  Variable joinVariable2{joinVariable2_};
-  auto scan1 = buildIndexScan(qec, triple1);
-  auto scan2 = buildIndexScan(qec, triple2);
-  auto scan3 = buildIndexScan(qec, triple3);
-  auto join = buildJoin(qec, scan1, scan2, joinVariable1);
-  return buildJoin(qec, join, scan3, joinVariable2);
-}
-
-std::shared_ptr<QueryExecutionTree> buildSmallChild(
-    QueryExecutionContext* qec, std::array<std::string, 3> triple1,
-    std::array<std::string, 3> triple2, std::string joinVariable_) {
-  Variable joinVariable{joinVariable_};
-  auto scan1 = buildIndexScan(qec, triple1);
-  auto scan2 = buildIndexScan(qec, triple2);
-  return buildJoin(qec, scan1, scan2, joinVariable);
-}
-
-void createAndTestSpatialJoin(
-    QueryExecutionContext* qec, SparqlTriple spatialJoinTriple,
-    std::shared_ptr<QueryExecutionTree> leftChild,
-    std::shared_ptr<QueryExecutionTree> rightChild, bool addLeftChildFirst,
-    std::vector<std::vector<std::string>> expectedOutputUnorderedRows,
-    std::vector<std::string> columnNames) {
-  // this function is like transposing a matrix. An entry which has been stored
-  // at (i, k) is now stored at (k, i). The reason this is needed is the
-  // following: this function receives the input as a vector of vector of
-  // strings. Each vector contains a vector, which contains a row of the result.
-  // This row contains all columns. After swapping, each vector contains a
-  // vector, which contains all entries of one column. As now each of the
-  // vectors contain only one column, we can later order them according to the
-  // variable to column map and then compare the result.
-  auto swapColumns = [&](std::vector<std::vector<std::string>> toBeSwapped) {
-    std::vector<std::vector<std::string>> result;
-    bool firstIteration = true;
-    for (size_t i = 0; i < toBeSwapped.size(); i++) {
-      for (size_t k = 0; k < toBeSwapped.at(i).size(); k++) {
-        if (firstIteration) {
-          result.push_back(std::vector<std::string>{toBeSwapped.at(i).at(k)});
-        } else {
-          result.at(k).push_back(toBeSwapped.at(i).at(k));
-        }
-      }
-      firstIteration = false;
-    }
-    return result;
-  };
-
-  std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
-      ad_utility::makeExecutionTree<SpatialJoin>(qec, spatialJoinTriple,
-                                                 std::nullopt, std::nullopt);
-
-  // add first child
-  std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
-  SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
-  auto firstChild = addLeftChildFirst ? leftChild : rightChild;
-  auto secondChild = addLeftChildFirst ? rightChild : leftChild;
-  Variable firstVariable = addLeftChildFirst
-                               ? spatialJoinTriple.s_.getVariable()
-                               : spatialJoinTriple.o_.getVariable();
-  Variable secondVariable = addLeftChildFirst
-                                ? spatialJoinTriple.o_.getVariable()
-                                : spatialJoinTriple.s_.getVariable();
-
-  auto spJoin1 = spatialJoin->addChild(firstChild, firstVariable);
-  spatialJoin = static_cast<SpatialJoin*>(spJoin1.get());
-
-  // add second child
-  auto spJoin2 = spatialJoin->addChild(secondChild, secondVariable);
-  spatialJoin = static_cast<SpatialJoin*>(spJoin2.get());
-
-  // prepare expected output
-  // swap rows and columns to use the function orderColAccordingToVarColMap
-  auto expectedMaxDistCols = swapColumns(expectedOutputUnorderedRows);
-  auto expectedOutputOrdered = localTestHelpers::orderColAccordingToVarColMap(
-      spatialJoin->computeVariableToColumnMap(), expectedMaxDistCols,
-      columnNames);
-  auto expectedOutput =
-      localTestHelpers::createRowVectorFromColumnVector(expectedOutputOrdered);
-
-  auto res = spatialJoin->computeResult(false);
-  auto vec = localTestHelpers::printTable(qec, &res);
-  /*
-  for (size_t i = 0; i < vec.size(); ++i) {
-    EXPECT_STREQ(vec.at(i).c_str(), expectedOutput.at(i).c_str());
-  }*/
-
-  EXPECT_THAT(vec, ::testing::UnorderedElementsAreArray(expectedOutput));
-}
-
-// build the test using the small dataset. Let the SpatialJoin operation be the
-// last one (the left and right child are maximally large for this test query)
-// the following Query will be simulated, the max distance will be different
-// depending on the test:
-// Select * where {
-//   ?obj1 <name> ?name1 .
-//   ?obj1 <hasGeometry> ?geo1 .
-//   ?geo1 <asWKT> ?point1
-//   ?obj2 <name> ?name2 .
-//   ?obj2 <hasGeometry> ?geo2 .
-//   ?geo2 <asWKT> ?point2
-//   ?point1 <max-distance-in-meters:XXXX> ?point2 .
-// }
-void buildAndTestSmallTestSetLargeChildren(
-    std::string maxDistanceInMetersString, bool addLeftChildFirst,
-    std::vector<std::vector<std::string>> expectedOutput,
-    std::vector<std::string> columnNames) {
-  auto qec = localTestHelpers::buildTestQEC();
-  auto numTriples = qec->getIndex().numTriples().normal;
-  ASSERT_EQ(numTriples, 15);
-  // ===================== build the first child ===============================
-  auto leftChild = buildMediumChild(
-      qec, {"?obj1", std::string{"<name>"}, "?name1"},
-      {"?obj1", std::string{"<hasGeometry>"}, "?geo1"},
-      {"?geo1", std::string{"<asWKT>"}, "?point1"}, "?obj1", "?geo1");
-
-  // ======================= build the second child ============================
-  auto rightChild = buildMediumChild(
-      qec, {"?obj2", std::string{"<name>"}, "?name2"},
-      {"?obj2", std::string{"<hasGeometry>"}, "?geo2"},
-      {"?geo2", std::string{"<asWKT>"}, "?point2"}, "?obj2", "?geo2");
-
-  createAndTestSpatialJoin(qec,
-                           SparqlTriple{TripleComponent{Variable{"?point1"}},
-                                        maxDistanceInMetersString,
-                                        TripleComponent{Variable{"?point2"}}},
-                           leftChild, rightChild, addLeftChildFirst,
-                           expectedOutput, columnNames);
-}
-
-// build the test using the small dataset. Let the SpatialJoin operation.
-// The following Query will be simulated, the max distance will be different
-// depending on the test:
-// Select * where {
-//   ?geo1 <asWKT> ?point1
-//   ?geo2 <asWKT> ?point2
-//   ?point1 <max-distance-in-meters:XXXX> ?point2 .
-// }
-void buildAndTestSmallTestSetSmallChildren(
-    std::string maxDistanceInMetersString, bool addLeftChildFirst,
-    std::vector<std::vector<std::string>> expectedOutput,
-    std::vector<std::string> columnNames) {
-  auto qec = localTestHelpers::buildTestQEC();
-  auto numTriples = qec->getIndex().numTriples().normal;
-  ASSERT_EQ(numTriples, 15);
-  // ====================== build inputs ===================================
-  TripleComponent point1{Variable{"?point1"}};
-  TripleComponent point2{Variable{"?point2"}};
-  auto leftChild =
-      buildIndexScan(qec, {"?obj1", std::string{"<asWKT>"}, "?point1"});
-  auto rightChild =
-      buildIndexScan(qec, {"?obj2", std::string{"<asWKT>"}, "?point2"});
-
-  createAndTestSpatialJoin(
-      qec, SparqlTriple{point1, maxDistanceInMetersString, point2}, leftChild,
-      rightChild, addLeftChildFirst, expectedOutput, columnNames);
-}
-
-// build the test using the small dataset. Let the SpatialJoin operation be the
-// last one.
-// the following Query will be simulated, the max distance will be different
-// depending on the test:
-// Select * where {
-//   ?obj1 <name> ?name1 .
-//   ?obj1 <hasGeometry> ?geo1 .
-//   ?geo1 <asWKT> ?point1
-//   ?geo2 <asWKT> ?point2
-//   ?point1 <max-distance-in-meters:XXXX> ?point2 .
-// }
-void buildAndTestSmallTestSetDiffSizeChildren(
-    std::string maxDistanceInMetersString, bool addLeftChildFirst,
-    std::vector<std::vector<std::string>> expectedOutput,
-    std::vector<std::string> columnNames, bool bigChildLeft) {
-  auto qec = localTestHelpers::buildTestQEC();
-  auto numTriples = qec->getIndex().numTriples().normal;
-  ASSERT_EQ(numTriples, 15);
-  // ========================= build big child =================================
-  auto bigChild = buildMediumChild(
-      qec, {"?obj1", std::string{"<name>"}, "?name1"},
-      {"?obj1", std::string{"<hasGeometry>"}, "?geo1"},
-      {"?geo1", std::string{"<asWKT>"}, "?point1"}, "?obj1", "?geo1");
-
-  // ========================= build small child ===============================
-  TripleComponent point2{Variable{"?point2"}};
-  auto smallChild =
-      buildIndexScan(qec, {"?obj2", std::string{"<asWKT>"}, "?point2"});
-
-  auto firstChild = bigChildLeft ? bigChild : smallChild;
-  auto secondChild = bigChildLeft ? smallChild : bigChild;
-  auto firstVariable =
-      bigChildLeft ? TripleComponent{Variable{"?point1"}} : point2;
-  auto secondVariable =
-      bigChildLeft ? point2 : TripleComponent{Variable{"?point1"}};
-
-  createAndTestSpatialJoin(
-      qec,
-      SparqlTriple{firstVariable, maxDistanceInMetersString, secondVariable},
-      firstChild, secondChild, addLeftChildFirst, expectedOutput, columnNames);
-}
-
-std::vector<std::string> mergeToRow(std::vector<std::string> part1,
-                                    std::vector<std::string> part2,
-                                    std::vector<std::string> part3) {
-  std::vector<std::string> result = part1;
-  for (size_t i = 0; i < part2.size(); i++) {
-    result.push_back(part2.at(i));
-  }
-  for (size_t i = 0; i < part3.size(); i++) {
-    result.push_back(part3.at(i));
-  }
-  return result;
-};
-
-std::vector<std::vector<std::string>> unordered_rows{
-    std::vector<std::string>{"\"Uni Freiburg TF\"", "<node_1>", "<geometry1>",
-                             "POINT(7.835050 48.012670)"},
-    std::vector<std::string>{"\"Minster Freiburg\"", "<node_2>", "<geometry2>",
-                             "POINT(7.852980 47.995570)"},
-    std::vector<std::string>{"\"London Eye\"", "<node_3>", "<geometry3>",
-                             "POINT(-0.119570 51.503330)"},
-    std::vector<std::string>{"\"Statue of liberty\"", "<node_4>", "<geometry4>",
-                             "POINT(-74.044540 40.689250)"},
-    std::vector<std::string>{"\"eiffel tower\"", "<node_5>", "<geometry5>",
-                             "POINT(2.294510 48.858250)"},
-};
-
-std::vector<std::vector<std::string>> unordered_rows_small{
-    std::vector<std::string>{"<geometry1>", "POINT(7.835050 48.012670)"},
-    std::vector<std::string>{"<geometry2>", "POINT(7.852980 47.995570)"},
-    std::vector<std::string>{"<geometry3>", "POINT(-0.119570 51.503330)"},
-    std::vector<std::string>{"<geometry4>", "POINT(-74.044540 40.689250)"},
-    std::vector<std::string>{"<geometry5>", "POINT(2.294510 48.858250)"}};
-
-// in all calculations below, the factor 1000 is used to convert from km to m
-
-// distance from the object to itself should be zero
-std::vector<std::string> expectedDistSelf{"0"};
-
-// distance from Uni Freiburg to Freiburger Müsnster is 2,33 km according to
-// google maps
-auto P = [](double x, double y) { return GeoPoint(y, x); };
-
-std::vector<std::string> expectedDistUniMun{std::to_string(
-    static_cast<int>(ad_utility::detail::wktDistImpl(P(7.83505, 48.01267),
-                                                     P(7.85298, 47.99557)) *
-                     1000))};
-
-// distance from Uni Freiburg to Eiffel Tower is 419,32 km according to
-// google maps
-std::vector<std::string> expectedDistUniEif{std::to_string(
-    static_cast<int>(ad_utility::detail::wktDistImpl(P(7.83505, 48.01267),
-                                                     P(2.29451, 48.85825)) *
-                     1000))};
-
-// distance from Minster Freiburg to eiffel tower is 421,09 km according to
-// google maps
-std::vector<std::string> expectedDistMunEif{std::to_string(
-    static_cast<int>(ad_utility::detail::wktDistImpl(P(7.85298, 47.99557),
-                                                     P(2.29451, 48.85825)) *
-                     1000))};
-
-// distance from london eye to eiffel tower is 340,62 km according to
-// google maps
-std::vector<std::string> expectedDistEyeEif{std::to_string(
-    static_cast<int>(ad_utility::detail::wktDistImpl(P(-0.11957, 51.50333),
-                                                     P(2.29451, 48.85825)) *
-                     1000))};
-
-// distance from Uni Freiburg to London Eye is 690,18 km according to
-// google maps
-std::vector<std::string> expectedDistUniEye{std::to_string(
-    static_cast<int>(ad_utility::detail::wktDistImpl(P(7.83505, 48.01267),
-                                                     P(-0.11957, 51.50333)) *
-                     1000))};
-
-// distance from Minster Freiburg to London Eye is 692,39 km according to
-// google maps
-std::vector<std::string> expectedDistMunEye{std::to_string(
-    static_cast<int>(ad_utility::detail::wktDistImpl(P(7.85298, 47.99557),
-                                                     P(-0.11957, 51.50333)) *
-                     1000))};
-
-// distance from Uni Freiburg to Statue of Liberty is 6249,55 km according to
-// google maps
-std::vector<std::string> expectedDistUniLib{std::to_string(
-    static_cast<int>(ad_utility::detail::wktDistImpl(P(7.83505, 48.01267),
-                                                     P(-74.04454, 40.68925)) *
-                     1000))};
-
-// distance from Minster Freiburg to Statue of Liberty is 6251,58 km
-// according to google maps
-std::vector<std::string> expectedDistMunLib{std::to_string(
-    static_cast<int>(ad_utility::detail::wktDistImpl(P(7.85298, 47.99557),
-                                                     P(-74.04454, 40.68925)) *
-                     1000))};
-
-// distance from london eye to statue of liberty is 5575,08 km according to
-// google maps
-std::vector<std::string> expectedDistEyeLib{std::to_string(
-    static_cast<int>(ad_utility::detail::wktDistImpl(P(-0.11957, 51.50333),
-                                                     P(-74.04454, 40.68925)) *
-                     1000))};
-
-// distance from eiffel tower to Statue of liberty is 5837,42 km according to
-// google maps
-std::vector<std::string> expectedDistEifLib{std::to_string(
-    static_cast<int>(ad_utility::detail::wktDistImpl(P(2.29451, 48.85825),
-                                                     P(-74.04454, 40.68925)) *
-                     1000))};
-
-std::vector<std::vector<std::string>> expectedMaxDist1_rows{
-    mergeToRow(unordered_rows.at(0), unordered_rows.at(0), expectedDistSelf),
-    mergeToRow(unordered_rows.at(1), unordered_rows.at(1), expectedDistSelf),
-    mergeToRow(unordered_rows.at(2), unordered_rows.at(2), expectedDistSelf),
-    mergeToRow(unordered_rows.at(3), unordered_rows.at(3), expectedDistSelf),
-    mergeToRow(unordered_rows.at(4), unordered_rows.at(4), expectedDistSelf)};
-
-std::vector<std::vector<std::string>> expectedMaxDist5000_rows{
-    mergeToRow(unordered_rows.at(0), unordered_rows.at(0), expectedDistSelf),
-    mergeToRow(unordered_rows.at(0), unordered_rows.at(1), expectedDistUniMun),
-    mergeToRow(unordered_rows.at(1), unordered_rows.at(1), expectedDistSelf),
-    mergeToRow(unordered_rows.at(1), unordered_rows.at(0), expectedDistUniMun),
-    mergeToRow(unordered_rows.at(2), unordered_rows.at(2), expectedDistSelf),
-    mergeToRow(unordered_rows.at(3), unordered_rows.at(3), expectedDistSelf),
-    mergeToRow(unordered_rows.at(4), unordered_rows.at(4), expectedDistSelf)};
-
-std::vector<std::vector<std::string>> expectedMaxDist500000_rows{
-    mergeToRow(unordered_rows.at(0), unordered_rows.at(0), expectedDistSelf),
-    mergeToRow(unordered_rows.at(0), unordered_rows.at(1), expectedDistUniMun),
-    mergeToRow(unordered_rows.at(0), unordered_rows.at(4), expectedDistUniEif),
-    mergeToRow(unordered_rows.at(1), unordered_rows.at(1), expectedDistSelf),
-    mergeToRow(unordered_rows.at(1), unordered_rows.at(0), expectedDistUniMun),
-    mergeToRow(unordered_rows.at(1), unordered_rows.at(4), expectedDistMunEif),
-    mergeToRow(unordered_rows.at(2), unordered_rows.at(2), expectedDistSelf),
-    mergeToRow(unordered_rows.at(2), unordered_rows.at(4), expectedDistEyeEif),
-    mergeToRow(unordered_rows.at(3), unordered_rows.at(3), expectedDistSelf),
-    mergeToRow(unordered_rows.at(4), unordered_rows.at(4), expectedDistSelf),
-    mergeToRow(unordered_rows.at(4), unordered_rows.at(0), expectedDistUniEif),
-    mergeToRow(unordered_rows.at(4), unordered_rows.at(1), expectedDistMunEif),
-    mergeToRow(unordered_rows.at(4), unordered_rows.at(2), expectedDistEyeEif)};
-
-std::vector<std::vector<std::string>> expectedMaxDist1000000_rows{
-    mergeToRow(unordered_rows.at(0), unordered_rows.at(0), expectedDistSelf),
-    mergeToRow(unordered_rows.at(0), unordered_rows.at(1), expectedDistUniMun),
-    mergeToRow(unordered_rows.at(0), unordered_rows.at(4), expectedDistUniEif),
-    mergeToRow(unordered_rows.at(0), unordered_rows.at(2), expectedDistUniEye),
-    mergeToRow(unordered_rows.at(1), unordered_rows.at(1), expectedDistSelf),
-    mergeToRow(unordered_rows.at(1), unordered_rows.at(0), expectedDistUniMun),
-    mergeToRow(unordered_rows.at(1), unordered_rows.at(4), expectedDistMunEif),
-    mergeToRow(unordered_rows.at(1), unordered_rows.at(2), expectedDistMunEye),
-    mergeToRow(unordered_rows.at(2), unordered_rows.at(2), expectedDistSelf),
-    mergeToRow(unordered_rows.at(2), unordered_rows.at(4), expectedDistEyeEif),
-    mergeToRow(unordered_rows.at(2), unordered_rows.at(0), expectedDistUniEye),
-    mergeToRow(unordered_rows.at(2), unordered_rows.at(1), expectedDistMunEye),
-    mergeToRow(unordered_rows.at(3), unordered_rows.at(3), expectedDistSelf),
-    mergeToRow(unordered_rows.at(4), unordered_rows.at(4), expectedDistSelf),
-    mergeToRow(unordered_rows.at(4), unordered_rows.at(0), expectedDistUniEif),
-    mergeToRow(unordered_rows.at(4), unordered_rows.at(1), expectedDistMunEif),
-    mergeToRow(unordered_rows.at(4), unordered_rows.at(2), expectedDistEyeEif)};
-
-std::vector<std::vector<std::string>> expectedMaxDist10000000_rows{
-    mergeToRow(unordered_rows.at(0), unordered_rows.at(0), expectedDistSelf),
-    mergeToRow(unordered_rows.at(0), unordered_rows.at(1), expectedDistUniMun),
-    mergeToRow(unordered_rows.at(0), unordered_rows.at(4), expectedDistUniEif),
-    mergeToRow(unordered_rows.at(0), unordered_rows.at(2), expectedDistUniEye),
-    mergeToRow(unordered_rows.at(0), unordered_rows.at(3), expectedDistUniLib),
-    mergeToRow(unordered_rows.at(1), unordered_rows.at(1), expectedDistSelf),
-    mergeToRow(unordered_rows.at(1), unordered_rows.at(0), expectedDistUniMun),
-    mergeToRow(unordered_rows.at(1), unordered_rows.at(4), expectedDistMunEif),
-    mergeToRow(unordered_rows.at(1), unordered_rows.at(2), expectedDistMunEye),
-    mergeToRow(unordered_rows.at(1), unordered_rows.at(3), expectedDistMunLib),
-    mergeToRow(unordered_rows.at(2), unordered_rows.at(2), expectedDistSelf),
-    mergeToRow(unordered_rows.at(2), unordered_rows.at(4), expectedDistEyeEif),
-    mergeToRow(unordered_rows.at(2), unordered_rows.at(0), expectedDistUniEye),
-    mergeToRow(unordered_rows.at(2), unordered_rows.at(1), expectedDistMunEye),
-    mergeToRow(unordered_rows.at(2), unordered_rows.at(3), expectedDistEyeLib),
-    mergeToRow(unordered_rows.at(3), unordered_rows.at(3), expectedDistSelf),
-    mergeToRow(unordered_rows.at(3), unordered_rows.at(0), expectedDistUniLib),
-    mergeToRow(unordered_rows.at(3), unordered_rows.at(1), expectedDistMunLib),
-    mergeToRow(unordered_rows.at(3), unordered_rows.at(2), expectedDistEyeLib),
-    mergeToRow(unordered_rows.at(3), unordered_rows.at(4), expectedDistEifLib),
-    mergeToRow(unordered_rows.at(4), unordered_rows.at(4), expectedDistSelf),
-    mergeToRow(unordered_rows.at(4), unordered_rows.at(0), expectedDistUniEif),
-    mergeToRow(unordered_rows.at(4), unordered_rows.at(1), expectedDistMunEif),
-    mergeToRow(unordered_rows.at(4), unordered_rows.at(2), expectedDistEyeEif),
-    mergeToRow(unordered_rows.at(4), unordered_rows.at(3), expectedDistEifLib)};
-
-std::vector<std::vector<std::string>> expectedMaxDist1_rows_small{
-    mergeToRow(unordered_rows_small.at(0), unordered_rows_small.at(0),
-               expectedDistSelf),
-    mergeToRow(unordered_rows_small.at(1), unordered_rows_small.at(1),
-               expectedDistSelf),
-    mergeToRow(unordered_rows_small.at(2), unordered_rows_small.at(2),
-               expectedDistSelf),
-    mergeToRow(unordered_rows_small.at(3), unordered_rows_small.at(3),
-               expectedDistSelf),
-    mergeToRow(unordered_rows_small.at(4), unordered_rows_small.at(4),
-               expectedDistSelf),
-};
-
-std::vector<std::vector<std::string>> expectedMaxDist5000_rows_small{
-    mergeToRow(unordered_rows_small.at(0), unordered_rows_small.at(0),
-               expectedDistSelf),
-    mergeToRow(unordered_rows_small.at(0), unordered_rows_small.at(1),
-               expectedDistUniMun),
-    mergeToRow(unordered_rows_small.at(1), unordered_rows_small.at(1),
-               expectedDistSelf),
-    mergeToRow(unordered_rows_small.at(1), unordered_rows_small.at(0),
-               expectedDistUniMun),
-    mergeToRow(unordered_rows_small.at(2), unordered_rows_small.at(2),
-               expectedDistSelf),
-    mergeToRow(unordered_rows_small.at(3), unordered_rows_small.at(3),
-               expectedDistSelf),
-    mergeToRow(unordered_rows_small.at(4), unordered_rows_small.at(4),
-               expectedDistSelf)};
-
-std::vector<std::vector<std::string>> expectedMaxDist500000_rows_small{
-    mergeToRow(unordered_rows_small.at(0), unordered_rows_small.at(0),
-               expectedDistSelf),
-    mergeToRow(unordered_rows_small.at(0), unordered_rows_small.at(1),
-               expectedDistUniMun),
-    mergeToRow(unordered_rows_small.at(0), unordered_rows_small.at(4),
-               expectedDistUniEif),
-    mergeToRow(unordered_rows_small.at(1), unordered_rows_small.at(1),
-               expectedDistSelf),
-    mergeToRow(unordered_rows_small.at(1), unordered_rows_small.at(0),
-               expectedDistUniMun),
-    mergeToRow(unordered_rows_small.at(1), unordered_rows_small.at(4),
-               expectedDistMunEif),
-    mergeToRow(unordered_rows_small.at(2), unordered_rows_small.at(2),
-               expectedDistSelf),
-    mergeToRow(unordered_rows_small.at(2), unordered_rows_small.at(4),
-               expectedDistEyeEif),
-    mergeToRow(unordered_rows_small.at(3), unordered_rows_small.at(3),
-               expectedDistSelf),
-    mergeToRow(unordered_rows_small.at(4), unordered_rows_small.at(4),
-               expectedDistSelf),
-    mergeToRow(unordered_rows_small.at(4), unordered_rows_small.at(0),
-               expectedDistUniEif),
-    mergeToRow(unordered_rows_small.at(4), unordered_rows_small.at(1),
-               expectedDistMunEif),
-    mergeToRow(unordered_rows_small.at(4), unordered_rows_small.at(2),
-               expectedDistEyeEif)};
-
-std::vector<std::vector<std::string>> expectedMaxDist1000000_rows_small{
-    mergeToRow(unordered_rows_small.at(0), unordered_rows_small.at(0),
-               expectedDistSelf),
-    mergeToRow(unordered_rows_small.at(0), unordered_rows_small.at(1),
-               expectedDistUniMun),
-    mergeToRow(unordered_rows_small.at(0), unordered_rows_small.at(4),
-               expectedDistUniEif),
-    mergeToRow(unordered_rows_small.at(0), unordered_rows_small.at(2),
-               expectedDistUniEye),
-    mergeToRow(unordered_rows_small.at(1), unordered_rows_small.at(1),
-               expectedDistSelf),
-    mergeToRow(unordered_rows_small.at(1), unordered_rows_small.at(0),
-               expectedDistUniMun),
-    mergeToRow(unordered_rows_small.at(1), unordered_rows_small.at(4),
-               expectedDistMunEif),
-    mergeToRow(unordered_rows_small.at(1), unordered_rows_small.at(2),
-               expectedDistMunEye),
-    mergeToRow(unordered_rows_small.at(2), unordered_rows_small.at(2),
-               expectedDistSelf),
-    mergeToRow(unordered_rows_small.at(2), unordered_rows_small.at(4),
-               expectedDistEyeEif),
-    mergeToRow(unordered_rows_small.at(2), unordered_rows_small.at(0),
-               expectedDistUniEye),
-    mergeToRow(unordered_rows_small.at(2), unordered_rows_small.at(1),
-               expectedDistMunEye),
-    mergeToRow(unordered_rows_small.at(3), unordered_rows_small.at(3),
-               expectedDistSelf),
-    mergeToRow(unordered_rows_small.at(4), unordered_rows_small.at(4),
-               expectedDistSelf),
-    mergeToRow(unordered_rows_small.at(4), unordered_rows_small.at(0),
-               expectedDistUniEif),
-    mergeToRow(unordered_rows_small.at(4), unordered_rows_small.at(1),
-               expectedDistMunEif),
-    mergeToRow(unordered_rows_small.at(4), unordered_rows_small.at(2),
-               expectedDistEyeEif)};
-
-std::vector<std::vector<std::string>> expectedMaxDist10000000_rows_small{
-    mergeToRow(unordered_rows_small.at(0), unordered_rows_small.at(0),
-               expectedDistSelf),
-    mergeToRow(unordered_rows_small.at(0), unordered_rows_small.at(1),
-               expectedDistUniMun),
-    mergeToRow(unordered_rows_small.at(0), unordered_rows_small.at(4),
-               expectedDistUniEif),
-    mergeToRow(unordered_rows_small.at(0), unordered_rows_small.at(2),
-               expectedDistUniEye),
-    mergeToRow(unordered_rows_small.at(0), unordered_rows_small.at(3),
-               expectedDistUniLib),
-    mergeToRow(unordered_rows_small.at(1), unordered_rows_small.at(1),
-               expectedDistSelf),
-    mergeToRow(unordered_rows_small.at(1), unordered_rows_small.at(0),
-               expectedDistUniMun),
-    mergeToRow(unordered_rows_small.at(1), unordered_rows_small.at(4),
-               expectedDistMunEif),
-    mergeToRow(unordered_rows_small.at(1), unordered_rows_small.at(2),
-               expectedDistMunEye),
-    mergeToRow(unordered_rows_small.at(1), unordered_rows_small.at(3),
-               expectedDistMunLib),
-    mergeToRow(unordered_rows_small.at(2), unordered_rows_small.at(2),
-               expectedDistSelf),
-    mergeToRow(unordered_rows_small.at(2), unordered_rows_small.at(4),
-               expectedDistEyeEif),
-    mergeToRow(unordered_rows_small.at(2), unordered_rows_small.at(0),
-               expectedDistUniEye),
-    mergeToRow(unordered_rows_small.at(2), unordered_rows_small.at(1),
-               expectedDistMunEye),
-    mergeToRow(unordered_rows_small.at(2), unordered_rows_small.at(3),
-               expectedDistEyeLib),
-    mergeToRow(unordered_rows_small.at(3), unordered_rows_small.at(3),
-               expectedDistSelf),
-    mergeToRow(unordered_rows_small.at(3), unordered_rows_small.at(0),
-               expectedDistUniLib),
-    mergeToRow(unordered_rows_small.at(3), unordered_rows_small.at(1),
-               expectedDistMunLib),
-    mergeToRow(unordered_rows_small.at(3), unordered_rows_small.at(2),
-               expectedDistEyeLib),
-    mergeToRow(unordered_rows_small.at(3), unordered_rows_small.at(4),
-               expectedDistEifLib),
-    mergeToRow(unordered_rows_small.at(4), unordered_rows_small.at(4),
-               expectedDistSelf),
-    mergeToRow(unordered_rows_small.at(4), unordered_rows_small.at(0),
-               expectedDistUniEif),
-    mergeToRow(unordered_rows_small.at(4), unordered_rows_small.at(1),
-               expectedDistMunEif),
-    mergeToRow(unordered_rows_small.at(4), unordered_rows_small.at(2),
-               expectedDistEyeEif),
-    mergeToRow(unordered_rows_small.at(4), unordered_rows_small.at(3),
-               expectedDistEifLib)};
-
-std::vector<std::vector<std::string>> expectedMaxDist1_rows_diff{
-    mergeToRow(unordered_rows.at(0), unordered_rows_small.at(0),
-               expectedDistSelf),
-    mergeToRow(unordered_rows.at(1), unordered_rows_small.at(1),
-               expectedDistSelf),
-    mergeToRow(unordered_rows.at(2), unordered_rows_small.at(2),
-               expectedDistSelf),
-    mergeToRow(unordered_rows.at(3), unordered_rows_small.at(3),
-               expectedDistSelf),
-    mergeToRow(unordered_rows.at(4), unordered_rows_small.at(4),
-               expectedDistSelf),
-};
-
-std::vector<std::vector<std::string>> expectedMaxDist5000_rows_diff{
-    mergeToRow(unordered_rows.at(0), unordered_rows_small.at(0),
-               expectedDistSelf),
-    mergeToRow(unordered_rows.at(0), unordered_rows_small.at(1),
-               expectedDistUniMun),
-    mergeToRow(unordered_rows.at(1), unordered_rows_small.at(1),
-               expectedDistSelf),
-    mergeToRow(unordered_rows.at(1), unordered_rows_small.at(0),
-               expectedDistUniMun),
-    mergeToRow(unordered_rows.at(2), unordered_rows_small.at(2),
-               expectedDistSelf),
-    mergeToRow(unordered_rows.at(3), unordered_rows_small.at(3),
-               expectedDistSelf),
-    mergeToRow(unordered_rows.at(4), unordered_rows_small.at(4),
-               expectedDistSelf)};
-
-std::vector<std::vector<std::string>> expectedMaxDist500000_rows_diff{
-    mergeToRow(unordered_rows.at(0), unordered_rows_small.at(0),
-               expectedDistSelf),
-    mergeToRow(unordered_rows.at(0), unordered_rows_small.at(1),
-               expectedDistUniMun),
-    mergeToRow(unordered_rows.at(0), unordered_rows_small.at(4),
-               expectedDistUniEif),
-    mergeToRow(unordered_rows.at(1), unordered_rows_small.at(1),
-               expectedDistSelf),
-    mergeToRow(unordered_rows.at(1), unordered_rows_small.at(0),
-               expectedDistUniMun),
-    mergeToRow(unordered_rows.at(1), unordered_rows_small.at(4),
-               expectedDistMunEif),
-    mergeToRow(unordered_rows.at(2), unordered_rows_small.at(2),
-               expectedDistSelf),
-    mergeToRow(unordered_rows.at(2), unordered_rows_small.at(4),
-               expectedDistEyeEif),
-    mergeToRow(unordered_rows.at(3), unordered_rows_small.at(3),
-               expectedDistSelf),
-    mergeToRow(unordered_rows.at(4), unordered_rows_small.at(4),
-               expectedDistSelf),
-    mergeToRow(unordered_rows.at(4), unordered_rows_small.at(0),
-               expectedDistUniEif),
-    mergeToRow(unordered_rows.at(4), unordered_rows_small.at(1),
-               expectedDistMunEif),
-    mergeToRow(unordered_rows.at(4), unordered_rows_small.at(2),
-               expectedDistEyeEif)};
-
-std::vector<std::vector<std::string>> expectedMaxDist1000000_rows_diff{
-    mergeToRow(unordered_rows.at(0), unordered_rows_small.at(0),
-               expectedDistSelf),
-    mergeToRow(unordered_rows.at(0), unordered_rows_small.at(1),
-               expectedDistUniMun),
-    mergeToRow(unordered_rows.at(0), unordered_rows_small.at(4),
-               expectedDistUniEif),
-    mergeToRow(unordered_rows.at(0), unordered_rows_small.at(2),
-               expectedDistUniEye),
-    mergeToRow(unordered_rows.at(1), unordered_rows_small.at(1),
-               expectedDistSelf),
-    mergeToRow(unordered_rows.at(1), unordered_rows_small.at(0),
-               expectedDistUniMun),
-    mergeToRow(unordered_rows.at(1), unordered_rows_small.at(4),
-               expectedDistMunEif),
-    mergeToRow(unordered_rows.at(1), unordered_rows_small.at(2),
-               expectedDistMunEye),
-    mergeToRow(unordered_rows.at(2), unordered_rows_small.at(2),
-               expectedDistSelf),
-    mergeToRow(unordered_rows.at(2), unordered_rows_small.at(4),
-               expectedDistEyeEif),
-    mergeToRow(unordered_rows.at(2), unordered_rows_small.at(0),
-               expectedDistUniEye),
-    mergeToRow(unordered_rows.at(2), unordered_rows_small.at(1),
-               expectedDistMunEye),
-    mergeToRow(unordered_rows.at(3), unordered_rows_small.at(3),
-               expectedDistSelf),
-    mergeToRow(unordered_rows.at(4), unordered_rows_small.at(4),
-               expectedDistSelf),
-    mergeToRow(unordered_rows.at(4), unordered_rows_small.at(0),
-               expectedDistUniEif),
-    mergeToRow(unordered_rows.at(4), unordered_rows_small.at(1),
-               expectedDistMunEif),
-    mergeToRow(unordered_rows.at(4), unordered_rows_small.at(2),
-               expectedDistEyeEif)};
-
-std::vector<std::vector<std::string>> expectedMaxDist10000000_rows_diff{
-    mergeToRow(unordered_rows.at(0), unordered_rows_small.at(0),
-               expectedDistSelf),
-    mergeToRow(unordered_rows.at(0), unordered_rows_small.at(1),
-               expectedDistUniMun),
-    mergeToRow(unordered_rows.at(0), unordered_rows_small.at(4),
-               expectedDistUniEif),
-    mergeToRow(unordered_rows.at(0), unordered_rows_small.at(2),
-               expectedDistUniEye),
-    mergeToRow(unordered_rows.at(0), unordered_rows_small.at(3),
-               expectedDistUniLib),
-    mergeToRow(unordered_rows.at(1), unordered_rows_small.at(1),
-               expectedDistSelf),
-    mergeToRow(unordered_rows.at(1), unordered_rows_small.at(0),
-               expectedDistUniMun),
-    mergeToRow(unordered_rows.at(1), unordered_rows_small.at(4),
-               expectedDistMunEif),
-    mergeToRow(unordered_rows.at(1), unordered_rows_small.at(2),
-               expectedDistMunEye),
-    mergeToRow(unordered_rows.at(1), unordered_rows_small.at(3),
-               expectedDistMunLib),
-    mergeToRow(unordered_rows.at(2), unordered_rows_small.at(2),
-               expectedDistSelf),
-    mergeToRow(unordered_rows.at(2), unordered_rows_small.at(4),
-               expectedDistEyeEif),
-    mergeToRow(unordered_rows.at(2), unordered_rows_small.at(0),
-               expectedDistUniEye),
-    mergeToRow(unordered_rows.at(2), unordered_rows_small.at(1),
-               expectedDistMunEye),
-    mergeToRow(unordered_rows.at(2), unordered_rows_small.at(3),
-               expectedDistEyeLib),
-    mergeToRow(unordered_rows.at(3), unordered_rows_small.at(3),
-               expectedDistSelf),
-    mergeToRow(unordered_rows.at(3), unordered_rows_small.at(0),
-               expectedDistUniLib),
-    mergeToRow(unordered_rows.at(3), unordered_rows_small.at(1),
-               expectedDistMunLib),
-    mergeToRow(unordered_rows.at(3), unordered_rows_small.at(2),
-               expectedDistEyeLib),
-    mergeToRow(unordered_rows.at(3), unordered_rows_small.at(4),
-               expectedDistEifLib),
-    mergeToRow(unordered_rows.at(4), unordered_rows_small.at(4),
-               expectedDistSelf),
-    mergeToRow(unordered_rows.at(4), unordered_rows_small.at(0),
-               expectedDistUniEif),
-    mergeToRow(unordered_rows.at(4), unordered_rows_small.at(1),
-               expectedDistMunEif),
-    mergeToRow(unordered_rows.at(4), unordered_rows_small.at(2),
-               expectedDistEyeEif),
-    mergeToRow(unordered_rows.at(4), unordered_rows_small.at(3),
-               expectedDistEifLib)};
-
-// test the compute result method on small examples
-TEST(SpatialJoin, computeResultSmallDatasetLargeChildren) {
-  std::vector<std::string> columnNames = {
-      "?name1",  "?obj1",   "?geo1",
-      "?point1", "?name2",  "?obj2",
-      "?geo2",   "?point2", "?distOfTheTwoObjectsAddedInternally"};
-  buildAndTestSmallTestSetLargeChildren("<max-distance-in-meters:1>", true,
-                                        expectedMaxDist1_rows, columnNames);
-  buildAndTestSmallTestSetLargeChildren("<max-distance-in-meters:1>", false,
-                                        expectedMaxDist1_rows, columnNames);
-  buildAndTestSmallTestSetLargeChildren("<max-distance-in-meters:5000>", true,
-                                        expectedMaxDist5000_rows, columnNames);
-  buildAndTestSmallTestSetLargeChildren("<max-distance-in-meters:5000>", false,
-                                        expectedMaxDist5000_rows, columnNames);
-  buildAndTestSmallTestSetLargeChildren("<max-distance-in-meters:500000>", true,
-                                        expectedMaxDist500000_rows,
-                                        columnNames);
-  buildAndTestSmallTestSetLargeChildren("<max-distance-in-meters:500000>",
-                                        false, expectedMaxDist500000_rows,
-                                        columnNames);
-  buildAndTestSmallTestSetLargeChildren("<max-distance-in-meters:1000000>",
-                                        true, expectedMaxDist1000000_rows,
-                                        columnNames);
-  buildAndTestSmallTestSetLargeChildren("<max-distance-in-meters:1000000>",
-                                        false, expectedMaxDist1000000_rows,
-                                        columnNames);
-  buildAndTestSmallTestSetLargeChildren("<max-distance-in-meters:10000000>",
-                                        true, expectedMaxDist10000000_rows,
-                                        columnNames);
-  buildAndTestSmallTestSetLargeChildren("<max-distance-in-meters:10000000>",
-                                        false, expectedMaxDist10000000_rows,
-                                        columnNames);
-}
-
-TEST(SpatialJoin, computeResultSmallDatasetSmallChildren) {
-  std::vector<std::string> columnNames{"?obj1", "?point1", "?obj2", "?point2",
-                                       "?distOfTheTwoObjectsAddedInternally"};
-  buildAndTestSmallTestSetSmallChildren("<max-distance-in-meters:1>", true,
-                                        expectedMaxDist1_rows_small,
-                                        columnNames);
-  buildAndTestSmallTestSetSmallChildren("<max-distance-in-meters:1>", false,
-                                        expectedMaxDist1_rows_small,
-                                        columnNames);
-  buildAndTestSmallTestSetSmallChildren("<max-distance-in-meters:5000>", true,
-                                        expectedMaxDist5000_rows_small,
-                                        columnNames);
-  buildAndTestSmallTestSetSmallChildren("<max-distance-in-meters:5000>", false,
-                                        expectedMaxDist5000_rows_small,
-                                        columnNames);
-  buildAndTestSmallTestSetSmallChildren("<max-distance-in-meters:500000>", true,
-                                        expectedMaxDist500000_rows_small,
-                                        columnNames);
-  buildAndTestSmallTestSetSmallChildren("<max-distance-in-meters:500000>",
-                                        false, expectedMaxDist500000_rows_small,
-                                        columnNames);
-  buildAndTestSmallTestSetSmallChildren("<max-distance-in-meters:1000000>",
-                                        true, expectedMaxDist1000000_rows_small,
-                                        columnNames);
-  buildAndTestSmallTestSetSmallChildren(
-      "<max-distance-in-meters:1000000>", false,
-      expectedMaxDist1000000_rows_small, columnNames);
-  buildAndTestSmallTestSetSmallChildren(
-      "<max-distance-in-meters:10000000>", true,
-      expectedMaxDist10000000_rows_small, columnNames);
-  buildAndTestSmallTestSetSmallChildren(
-      "<max-distance-in-meters:10000000>", false,
-      expectedMaxDist10000000_rows_small, columnNames);
-}
-
-TEST(SpatialJoin, computeResultSmallDatasetDifferentSizeChildren) {
-  std::vector<std::string> columnNames{"?name1",
-                                       "?obj1",
-                                       "?geo1",
-                                       "?point1",
-                                       "?obj2",
-                                       "?point2",
-                                       "?distOfTheTwoObjectsAddedInternally"};
-  buildAndTestSmallTestSetDiffSizeChildren("<max-distance-in-meters:1>", true,
-                                           expectedMaxDist1_rows_diff,
-                                           columnNames, true);
-  buildAndTestSmallTestSetDiffSizeChildren("<max-distance-in-meters:1>", false,
-                                           expectedMaxDist1_rows_diff,
-                                           columnNames, true);
-  buildAndTestSmallTestSetDiffSizeChildren("<max-distance-in-meters:1>", true,
-                                           expectedMaxDist1_rows_diff,
-                                           columnNames, false);
-  buildAndTestSmallTestSetDiffSizeChildren("<max-distance-in-meters:1>", false,
-                                           expectedMaxDist1_rows_diff,
-                                           columnNames, false);
-  buildAndTestSmallTestSetDiffSizeChildren("<max-distance-in-meters:5000>",
-                                           true, expectedMaxDist5000_rows_diff,
-                                           columnNames, true);
-  buildAndTestSmallTestSetDiffSizeChildren("<max-distance-in-meters:5000>",
-                                           false, expectedMaxDist5000_rows_diff,
-                                           columnNames, true);
-  buildAndTestSmallTestSetDiffSizeChildren("<max-distance-in-meters:5000>",
-                                           true, expectedMaxDist5000_rows_diff,
-                                           columnNames, false);
-  buildAndTestSmallTestSetDiffSizeChildren("<max-distance-in-meters:5000>",
-                                           false, expectedMaxDist5000_rows_diff,
-                                           columnNames, false);
-  buildAndTestSmallTestSetDiffSizeChildren(
-      "<max-distance-in-meters:500000>", true, expectedMaxDist500000_rows_diff,
-      columnNames, true);
-  buildAndTestSmallTestSetDiffSizeChildren(
-      "<max-distance-in-meters:500000>", false, expectedMaxDist500000_rows_diff,
-      columnNames, true);
-  buildAndTestSmallTestSetDiffSizeChildren(
-      "<max-distance-in-meters:500000>", true, expectedMaxDist500000_rows_diff,
-      columnNames, false);
-  buildAndTestSmallTestSetDiffSizeChildren(
-      "<max-distance-in-meters:500000>", false, expectedMaxDist500000_rows_diff,
-      columnNames, false);
-  buildAndTestSmallTestSetDiffSizeChildren(
-      "<max-distance-in-meters:1000000>", true,
-      expectedMaxDist1000000_rows_diff, columnNames, true);
-  buildAndTestSmallTestSetDiffSizeChildren(
-      "<max-distance-in-meters:1000000>", false,
-      expectedMaxDist1000000_rows_diff, columnNames, true);
-  buildAndTestSmallTestSetDiffSizeChildren(
-      "<max-distance-in-meters:1000000>", true,
-      expectedMaxDist1000000_rows_diff, columnNames, false);
-  buildAndTestSmallTestSetDiffSizeChildren(
-      "<max-distance-in-meters:1000000>", false,
-      expectedMaxDist1000000_rows_diff, columnNames, false);
-  buildAndTestSmallTestSetDiffSizeChildren(
-      "<max-distance-in-meters:10000000>", true,
-      expectedMaxDist10000000_rows_diff, columnNames, true);
-  buildAndTestSmallTestSetDiffSizeChildren(
-      "<max-distance-in-meters:10000000>", false,
-      expectedMaxDist10000000_rows_diff, columnNames, true);
-  buildAndTestSmallTestSetDiffSizeChildren(
-      "<max-distance-in-meters:10000000>", true,
-      expectedMaxDist10000000_rows_diff, columnNames, false);
-  buildAndTestSmallTestSetDiffSizeChildren(
-      "<max-distance-in-meters:10000000>", false,
-      expectedMaxDist10000000_rows_diff, columnNames, false);
-}
-
-}  // end of Namespace computeResultTest
+using namespace SpatialJoinTestHelpers;
 
 namespace maxDistanceParsingTest {
 
@@ -1065,16 +132,16 @@ void testAddChild(bool addLeftChildFirst) {
     }
   };
 
-  auto qec = localTestHelpers::buildTestQEC();
+  auto qec = buildTestQEC();
   auto numTriples = qec->getIndex().numTriples().normal;
   ASSERT_EQ(numTriples, 15);
   // ====================== build inputs ===================================
   TripleComponent point1{Variable{"?point1"}};
   TripleComponent point2{Variable{"?point2"}};
-  auto leftChild = computeResultTest::buildIndexScan(
-      qec, {"?obj1", std::string{"<asWKT>"}, "?point1"});
-  auto rightChild = computeResultTest::buildIndexScan(
-      qec, {"?obj2", std::string{"<asWKT>"}, "?point2"});
+  auto leftChild =
+      buildIndexScan(qec, {"?obj1", std::string{"<asWKT>"}, "?point1"});
+  auto rightChild =
+      buildIndexScan(qec, {"?obj2", std::string{"<asWKT>"}, "?point2"});
   SparqlTriple triple{point1, "<max-distance-in-meters:1000>", point2};
 
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
@@ -1121,16 +188,16 @@ TEST(SpatialJoin, addChild) {
 }
 
 TEST(SpatialJoin, isConstructed) {
-  auto qec = localTestHelpers::buildTestQEC();
+  auto qec = buildTestQEC();
   auto numTriples = qec->getIndex().numTriples().normal;
   ASSERT_EQ(numTriples, 15);
   // ====================== build inputs ===================================
   TripleComponent point1{Variable{"?point1"}};
   TripleComponent point2{Variable{"?point2"}};
-  auto leftChild = computeResultTest::buildIndexScan(
-      qec, {"?obj1", std::string{"<asWKT>"}, "?point1"});
-  auto rightChild = computeResultTest::buildIndexScan(
-      qec, {"?obj2", std::string{"<asWKT>"}, "?point2"});
+  auto leftChild =
+      buildIndexScan(qec, {"?obj1", std::string{"<asWKT>"}, "?point1"});
+  auto rightChild =
+      buildIndexScan(qec, {"?obj2", std::string{"<asWKT>"}, "?point2"});
   SparqlTriple triple{point1, "<max-distance-in-meters:1000>", point2};
 
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
@@ -1154,16 +221,16 @@ TEST(SpatialJoin, isConstructed) {
 }
 
 TEST(SpatialJoin, getChildren) {
-  auto qec = localTestHelpers::buildTestQEC();
+  auto qec = buildTestQEC();
   auto numTriples = qec->getIndex().numTriples().normal;
   ASSERT_EQ(numTriples, 15);
   // ====================== build inputs ===================================
   TripleComponent point1{Variable{"?point1"}};
   TripleComponent point2{Variable{"?point2"}};
-  auto leftChild = computeResultTest::buildIndexScan(
-      qec, {"?obj1", std::string{"<asWKT>"}, "?point1"});
-  auto rightChild = computeResultTest::buildIndexScan(
-      qec, {"?obj2", std::string{"<asWKT>"}, "?point2"});
+  auto leftChild =
+      buildIndexScan(qec, {"?obj1", std::string{"<asWKT>"}, "?point1"});
+  auto rightChild =
+      buildIndexScan(qec, {"?obj2", std::string{"<asWKT>"}, "?point2"});
   SparqlTriple triple{point1, "<max-distance-in-meters:1000>", point2};
 
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
@@ -1230,14 +297,12 @@ void testGetResultWidthOrVariableToColumnMap(bool leftSideBigChild,
     std::string geo = absl::StrCat("?geo", numberOfChild);
     std::string point = absl::StrCat("?point", numberOfChild);
     if (getBigChild) {
-      return computeResultTest::buildMediumChild(
-          qec, {obj, std::string{"<name>"}, name},
-          {obj, std::string{"<hasGeometry>"}, geo},
-          {geo, std::string{"<asWKT>"}, point}, obj, geo);
+      return buildMediumChild(qec, {obj, std::string{"<name>"}, name},
+                              {obj, std::string{"<hasGeometry>"}, geo},
+                              {geo, std::string{"<asWKT>"}, point}, obj, geo);
     } else {
-      return computeResultTest::buildSmallChild(
-          qec, {obj, std::string{"<hasGeometry>"}, geo},
-          {geo, std::string{"<asWKT>"}, point}, geo);
+      return buildSmallChild(qec, {obj, std::string{"<hasGeometry>"}, geo},
+                             {geo, std::string{"<asWKT>"}, point}, geo);
     }
   };
   auto addExpectedColumns =
@@ -1256,7 +321,7 @@ void testGetResultWidthOrVariableToColumnMap(bool leftSideBigChild,
         return expectedColumns;
       };
 
-  auto qec = localTestHelpers::buildTestQEC();
+  auto qec = buildTestQEC();
   auto numTriples = qec->getIndex().numTriples().normal;
   ASSERT_EQ(numTriples, 15);
 
@@ -1309,7 +374,11 @@ void testGetResultWidthOrVariableToColumnMap(bool leftSideBigChild,
       // test, that the column contains the correct values
       ColumnIndex ind =
           varColMap[Variable{expectedColumns.at(i).first}].columnIndex_;
-      ValueId tableEntry = resultTable.idTable().at(0, ind);
+      const IdTable* r = &resultTable.idTable();
+      ASSERT_LT(0, r->numRows());
+      ASSERT_LT(ind, r->numColumns());
+      ValueId tableEntry = r->at(0, ind);
+
       if (tableEntry.getDatatype() == Datatype::VocabIndex) {
         std::string value = ExportQueryExecutionTrees::idToStringAndType(
                                 qec->getIndex(), tableEntry, {})
@@ -1369,12 +438,12 @@ void testKnownEmptyResult(bool leftSideEmptyChild, bool rightSideEmptyChild,
 
   auto getChild = [](QueryExecutionContext* qec, bool emptyChild) {
     std::string predicate = emptyChild ? "<notExistingPred>" : "<hasGeometry>";
-    return computeResultTest::buildSmallChild(
-        qec, {"?obj1", predicate, "?geo1"},
-        {"?geo1", std::string{"<asWKT>"}, "?point1"}, "?geo1");
+    return buildSmallChild(qec, {"?obj1", predicate, "?geo1"},
+                           {"?geo1", std::string{"<asWKT>"}, "?point1"},
+                           "?geo1");
   };
 
-  auto qec = localTestHelpers::buildTestQEC();
+  auto qec = buildTestQEC();
   auto numTriples = qec->getIndex().numTriples().normal;
   ASSERT_EQ(numTriples, 15);
 
@@ -1428,7 +497,7 @@ TEST(SpatialJoin, knownEmpyResult) {
 namespace resultSortedOn {
 
 TEST(SpatialJoin, resultSortedOn) {
-  std::string kg = localTestHelpers::createSmallDatasetWithPoints();
+  std::string kg = createSmallDatasetWithPoints();
 
   ad_utility::MemorySize blocksizePermutations = 16_MB;
   auto qec = getQec(kg, true, true, false, blocksizePermutations, false);
@@ -1441,10 +510,8 @@ TEST(SpatialJoin, resultSortedOn) {
 
   TripleComponent obj1{Variable{"?point1"}};
   TripleComponent obj2{Variable{"?point2"}};
-  auto leftChild = computeResultTest::buildIndexScan(
-      qec, {"?geometry1", "<asWKT>", "?point1"});
-  auto rightChild = computeResultTest::buildIndexScan(
-      qec, {"?geometry2", "<asWKT>", "?point2"});
+  auto leftChild = buildIndexScan(qec, {"?geometry1", "<asWKT>", "?point1"});
+  auto rightChild = buildIndexScan(qec, {"?geometry2", "<asWKT>", "?point2"});
 
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
       ad_utility::makeExecutionTree<SpatialJoin>(qec, spatialJoinTriple,
@@ -1480,24 +547,24 @@ TEST(SpatialJoin, getDescriptor) {
   SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
 
   auto description = spatialJoin->getDescriptor();
-  ASSERT_TRUE(description.find(std::to_string(spatialJoin->getMaxDist())) !=
-              std::string::npos);
+  ASSERT_THAT(description, ::testing::HasSubstr(std::to_string(
+                               spatialJoin->getMaxDist().value_or(-1))));
   ASSERT_TRUE(description.find("?subject") != std::string::npos);
   ASSERT_TRUE(description.find("?object") != std::string::npos);
 }
 
 TEST(SpatialJoin, getCacheKeyImpl) {
-  auto qec = localTestHelpers::buildTestQEC();
+  auto qec = buildTestQEC();
   auto numTriples = qec->getIndex().numTriples().normal;
   ASSERT_EQ(numTriples, 15);
   // ====================== build inputs ===================================
   auto spatialJoinTriple = SparqlTriple{TripleComponent{Variable{"?point1"}},
                                         "<max-distance-in-meters:1000>",
                                         TripleComponent{Variable{"?point2"}}};
-  auto leftChild = computeResultTest::buildIndexScan(
-      qec, {"?obj1", std::string{"<asWKT>"}, "?point1"});
-  auto rightChild = computeResultTest::buildIndexScan(
-      qec, {"?obj2", std::string{"<asWKT>"}, "?point2"});
+  auto leftChild =
+      buildIndexScan(qec, {"?obj1", std::string{"<asWKT>"}, "?point1"});
+  auto rightChild =
+      buildIndexScan(qec, {"?obj2", std::string{"<asWKT>"}, "?point2"});
 
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
       ad_utility::makeExecutionTree<SpatialJoin>(qec, spatialJoinTriple,
@@ -1523,7 +590,8 @@ TEST(SpatialJoin, getCacheKeyImpl) {
   auto rightCacheKeyString =
       spatialJoin->onlyForTestingGetRightChild()->getCacheKey();
 
-  ASSERT_TRUE(cacheKeyString.find(std::to_string(spatialJoin->getMaxDist())) !=
+  ASSERT_TRUE(cacheKeyString.find(
+                  std::to_string(spatialJoin->getMaxDist().value_or(-1))) !=
               std::string::npos);
   ASSERT_TRUE(cacheKeyString.find(leftCacheKeyString) != std::string::npos);
   ASSERT_TRUE(cacheKeyString.find(rightCacheKeyString) != std::string::npos);
@@ -1541,13 +609,8 @@ void testMultiplicitiesOrSizeEstimate(bool addLeftChildFirst,
     }
   };
 
-  auto assert_double_with_bounds = [](double value1, double value2) {
-    // ASSERT_DOUBLE_EQ did not work properly
-    ASSERT_TRUE(value1 * 0.99999 < value2);
-    ASSERT_TRUE(value1 * 1.00001 > value2);
-  };
-
-  std::string kg = localTestHelpers::createSmallDatasetWithPoints();
+  const double doubleBound = 0.00001;
+  std::string kg = createSmallDatasetWithPoints();
 
   // add multiplicities to test knowledge graph
   kg += "<node_1> <name> \"testing multiplicity\" .";
@@ -1563,7 +626,7 @@ void testMultiplicitiesOrSizeEstimate(bool addLeftChildFirst,
                                         "<max-distance-in-meters:10000000>",
                                         TripleComponent{Variable{"?point2"}}};
   // ===================== build the first child ===============================
-  auto leftChild = computeResultTest::buildMediumChild(
+  auto leftChild = buildMediumChild(
       qec, {"?obj1", std::string{"<name>"}, "?name1"},
       {"?obj1", std::string{"<hasGeometry>"}, "?geo1"},
       {"?geo1", std::string{"<asWKT>"}, "?point1"}, "?obj1", "?geo1");
@@ -1578,7 +641,7 @@ void testMultiplicitiesOrSizeEstimate(bool addLeftChildFirst,
   // node_5   eiffel tower              geometry5   POINT(2.29451 48.85825)
 
   // ======================= build the second child ============================
-  auto rightChild = computeResultTest::buildMediumChild(
+  auto rightChild = buildMediumChild(
       qec, {"?obj2", std::string{"<name>"}, "?name2"},
       {"?obj2", std::string{"<hasGeometry>"}, "?geo2"},
       {"?geo2", std::string{"<asWKT>"}, "?point2"}, "?obj2", "?geo2");
@@ -1637,7 +700,7 @@ void testMultiplicitiesOrSizeEstimate(bool addLeftChildFirst,
         auto sizeEstimateChild = inputChild->getSizeEstimate();
         double distinctnessChild = sizeEstimateChild / multiplicityChild;
         auto mult = spatialJoin->getMultiplicity(i);
-        auto sizeEst = spatialJoin->getSizeEstimate();
+        auto sizeEst = std::pow(sizeEstimateChild, 2);
         double distinctness = sizeEst / mult;
         // multiplicity, distinctness and size are related via the formula
         // size = distinctness * multiplicity. Therefore if we have two of them,
@@ -1645,7 +708,7 @@ void testMultiplicitiesOrSizeEstimate(bool addLeftChildFirst,
         // holds true. The distinctness must not change after the operation, the
         // other two variables can change. Therefore we check the correctness
         // via distinctness.
-        assert_double_with_bounds(distinctnessChild, distinctness);
+        ASSERT_NEAR(distinctnessChild, distinctness, doubleBound);
       }
     }
   } else {
@@ -1656,19 +719,19 @@ void testMultiplicitiesOrSizeEstimate(bool addLeftChildFirst,
     ASSERT_EQ(spatialJoin->getSizeEstimate(), 1);
     auto spJoin2 = spatialJoin->addChild(secondChild, secondVariable);
     spatialJoin = static_cast<SpatialJoin*>(spJoin2.get());
-    // the size should be 49, because both input tables have 7 rows and it is
-    // assumed, that the whole cross product is build
+    // the size should be at most 49, because both input tables have 7 rows and
+    // it is assumed, that in the worst case the whole cross product is build
     auto estimate =
         spatialJoin->onlyForTestingGetLeftChild()->getSizeEstimate() *
         spatialJoin->onlyForTestingGetRightChild()->getSizeEstimate();
-    ASSERT_EQ(estimate, spatialJoin->getSizeEstimate());
+    ASSERT_LE(spatialJoin->getSizeEstimate(), estimate);
   }
 
   {  // new block for hard coded testing
     // ======================== hard coded test ================================
     // here the children are only index scans, as they are perfectly predictable
     // in relation to size and multiplicity estimates
-    std::string kg = localTestHelpers::createSmallDatasetWithPoints();
+    std::string kg = createSmallDatasetWithPoints();
 
     // add multiplicities to test knowledge graph
     kg += "<geometry1> <asWKT> \"POINT(7.12345 48.12345)\".";
@@ -1688,10 +751,8 @@ void testMultiplicitiesOrSizeEstimate(bool addLeftChildFirst,
     TripleComponent obj1{Variable{"?point1"}};
     TripleComponent subj2{Variable{"?geometry2"}};
     TripleComponent obj2{Variable{"?point2"}};
-    auto leftChild = computeResultTest::buildIndexScan(
-        qec, {"?geometry1", "<asWKT>", "?point1"});
-    auto rightChild = computeResultTest::buildIndexScan(
-        qec, {"?geometry2", "<asWKT>", "?point2"});
+    auto leftChild = buildIndexScan(qec, {"?geometry1", "<asWKT>", "?point1"});
+    auto rightChild = buildIndexScan(qec, {"?geometry2", "<asWKT>", "?point2"});
 
     std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
         ad_utility::makeExecutionTree<SpatialJoin>(qec, spatialJoinTriple,
@@ -1725,9 +786,8 @@ void testMultiplicitiesOrSizeEstimate(bool addLeftChildFirst,
       auto assertMultiplicity = [&](Variable var, double multiplicity,
                                     SpatialJoin* spatialJoin,
                                     VariableToColumnMap& varColsMap) {
-        assert_double_with_bounds(
-            spatialJoin->getMultiplicity(varColsMap[var].columnIndex_),
-            multiplicity);
+        ASSERT_NEAR(spatialJoin->getMultiplicity(varColsMap[var].columnIndex_),
+                    multiplicity, doubleBound);
       };
       multiplicitiesBeforeAllChildrenAdded(spatialJoin);
       auto spJoin1 = spatialJoin->addChild(firstChild, firstVariable);
@@ -1750,7 +810,7 @@ void testMultiplicitiesOrSizeEstimate(bool addLeftChildFirst,
       spatialJoin = static_cast<SpatialJoin*>(spJoin1.get());
       auto spJoin2 = spatialJoin->addChild(secondChild, secondVariable);
       spatialJoin = static_cast<SpatialJoin*>(spJoin2.get());
-      ASSERT_EQ(spatialJoin->getSizeEstimate(), 49);
+      ASSERT_LE(spatialJoin->getSizeEstimate(), 49);
     }
   }
 }
