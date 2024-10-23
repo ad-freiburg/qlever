@@ -101,8 +101,10 @@ IdTable Distinct::distinct(
   // elements found in the previous table.
   auto begin =
       std::ranges::find_if(result, [this, &previousRow](const auto& row) {
+        // Without explicit this clang seems to
+        // think the this capture is redundant.
         return !previousRow.has_value() ||
-               !matchesRow(row, previousRow.value());
+               !this->matchesRow(row, previousRow.value());
       });
   auto end = result.end();
 
