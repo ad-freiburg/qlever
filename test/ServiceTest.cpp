@@ -672,15 +672,16 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
 
     ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override {
       ProtoResult res = Values::computeResult(false);
-      IdTable idTable = res.idTable().clone();
-      return requestLaziness ? ProtoResult{[&](IdTable table)
-                                               -> cppcoro::generator<IdTable> {
-                                             co_yield std::move(table);
-                                           }(std::move(idTable)),
-                                           std::move(res.sortedBy()),
-                                           res.getSharedLocalVocab()}
-                             : ProtoResult{std::move(idTable), res.sortedBy(),
-                                           res.getSharedLocalVocab()};
+      auto pair = Result::IdTableVocabPair(res.idTable().clone(),
+                                           res.localVocab().clone());
+
+      return requestLaziness ? ProtoResult{[&](Result::IdTableVocabPair pair)
+                                               -> cppcoro::generator<
+                                                   Result::IdTableVocabPair> {
+                                             co_yield std::move(pair);
+                                           }(std::move(pair)),
+                                           std::move(res.sortedBy())}
+                             : ProtoResult{std::move(pair), res.sortedBy()};
     }
   };
 
