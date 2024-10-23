@@ -113,9 +113,12 @@ IdTable Distinct::distinct(
   auto dest = result.begin();
   if (begin == dest) {
     // Optimization to avoid redundant move operations.
-    begin = std::ranges::adjacent_find(
-        begin, end,
-        [this](const auto& a, const auto& b) { return matchesRow(a, b); });
+    begin = std::ranges::adjacent_find(begin, end,
+                                       [this](const auto& a, const auto& b) {
+                                         // Without explicit this clang seems to
+                                         // think the this capture is redundant.
+                                         return this->matchesRow(a, b);
+                                       });
     dest = begin;
     if (begin != end) {
       ++begin;
@@ -153,11 +156,14 @@ IdTable Distinct::outOfPlaceDistinct(const IdTable& dynInput) const {
   auto end = inputView.end();
   while (begin < end) {
     int64_t allowedOffset = std::min(end - begin, CHUNK_SIZE);
-    begin =
-        std::ranges::unique_copy(
-            begin, begin + allowedOffset, std::back_inserter(output),
-            [this](const auto& a, const auto& b) { return matchesRow(a, b); })
-            .in;
+    begin = std::ranges::unique_copy(begin, begin + allowedOffset,
+                                     std::back_inserter(output),
+                                     [this](const auto& a, const auto& b) {
+                                       // Without explicit this clang seems to
+                                       // think the this capture is redundant.
+                                       return this->matchesRow(a, b);
+                                     })
+                .in;
     checkCancellation();
     // Skip to next unique value
     do {
@@ -165,7 +171,9 @@ IdTable Distinct::outOfPlaceDistinct(const IdTable& dynInput) const {
       auto lastRow = begin[-1];
       begin = std::ranges::find_if(begin, begin + allowedOffset,
                                    [this, &lastRow](const auto& row) {
-                                     return !matchesRow(row, lastRow);
+                                     // Without explicit this clang seems to
+                                     // think the this capture is redundant.
+                                     return !this->matchesRow(row, lastRow);
                                    });
       checkCancellation();
     } while (begin != end && matchesRow(*begin, begin[-1]));
