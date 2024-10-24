@@ -112,6 +112,9 @@ class Index {
       Vocabulary<std::string, SimpleStringComparator, WordVocabIndex>;
   [[nodiscard]] const TextVocab& getTextVocab() const;
 
+  // Get a (non-owning) pointer to the BlankNodeManager of this Index.
+  ad_utility::BlankNodeManager* getBlankNodeManager() const;
+
   // --------------------------------------------------------------------------
   // RDF RETRIEVAL
   // --------------------------------------------------------------------------
