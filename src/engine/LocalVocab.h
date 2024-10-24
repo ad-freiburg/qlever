@@ -27,19 +27,25 @@ class LocalVocab {
  private:
   using Entry = LocalVocabEntry;
   using LiteralOrIri = LocalVocabEntry;
+
+  struct IriSizeGetter {
+    ad_utility::MemorySize operator()(
+        const ad_utility::triple_component::LiteralOrIri& literalOrIri) {
+      return ad_utility::MemorySize::bytes(
+          literalOrIri.getDynamicMemoryUsage());
+    }
+  };
+
   // A map of the words in the local vocabulary to their local IDs. This is a
   // node hash map because we need the addresses of the words (which are of type
   // `LiteralOrIri`) to remain stable over their lifetime in the hash map
   // because we hand out pointers to them.
-  using Set = ad_utility::CustomHashSetWithMemoryLimit<LiteralOrIri>;
+  using Set =
+      ad_utility::CustomHashSetWithMemoryLimit<LiteralOrIri, IriSizeGetter>;
   ad_utility::MemorySize limit_;
   std::shared_ptr<Set> primaryWordSet_;
 
-  static size_t sizeGetter(const LiteralOrIri& literalOrIri) {
-    size_t size = sizeof(LocalVocabEntry);
-    size += literalOrIri.getDynamicMemoryUsage();
-    return size;
-  }
+  IriSizeGetter sizeGetter;
 
   // Local vocabularies from child operations that were merged into this
   // vocabulary s.t. the pointers are kept alive. They have to be `const`

@@ -14,6 +14,7 @@
 
 #include "absl/container/flat_hash_set.h"
 #include "util/AllocatorWithLimit.h"
+#include "util/DefaultValueSizeGetter.h"
 #include "util/MemorySize/MemorySize.h"
 
 using std::string;
@@ -37,10 +38,9 @@ template <class T,
 using HashSetWithMemoryLimit =
     absl::flat_hash_set<T, HashFct, EqualElem, Alloc>;
 
-template <class T,
+template <class T, class SizeGetter = SizeOfSizeGetter,
           class HashFct = absl::container_internal::hash_default_hash<T>,
-          class EqualElem = absl::container_internal::hash_default_eq<T>,
-          class SizeGetter = std::function<size_t(const T&)>>
+          class EqualElem = absl::container_internal::hash_default_eq<T>>
 class CustomHashSetWithMemoryLimit {
  private:
   absl::node_hash_set<T, HashFct, EqualElem> hashSet_;
@@ -59,7 +59,7 @@ class CustomHashSetWithMemoryLimit {
   // implementations are currently missing.
   std::pair<typename absl::node_hash_set<T, HashFct, EqualElem>::iterator, bool>
   insert(const T& value) {
-    MemorySize size = MemorySize::bytes(sizeGetter_(value));
+    MemorySize size = sizeGetter_(value);
     if (!memoryLeft_.ptr()->wlock()->decrease_if_enough_left_or_return_false(
             size)) {
       throw std::runtime_error(
@@ -81,7 +81,7 @@ class CustomHashSetWithMemoryLimit {
     if (it != hashSet_.end()) {
       MemorySize size = sizeGetter_(*it);
       hashSet_.erase(it);
-      memoryLeft_.ptr()->wlock()->increase(MemorySize::bytes(sizeGetter_(*it)));
+      memoryLeft_.ptr()->wlock()->increase(size);
       memoryUsed_ -= size;
     }
   }
