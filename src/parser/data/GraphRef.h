@@ -9,9 +9,18 @@
 #include "parser/Iri.h"
 
 using GraphRef = TripleComponent::Iri;
-struct DEFAULT {};
-struct NAMED {};
-struct ALL {};
+struct DEFAULT {
+  // For testing
+  bool operator==(const DEFAULT&) const = default;
+};
+struct NAMED {
+  // For testing
+  bool operator==(const NAMED&) const = default;
+};
+struct ALL {
+  // For testing
+  bool operator==(const ALL&) const = default;
+};
 
 using GraphRefAll = std::variant<GraphRef, DEFAULT, NAMED, ALL>;
 using GraphOrDefault = std::variant<GraphRef, DEFAULT>;

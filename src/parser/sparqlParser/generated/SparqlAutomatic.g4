@@ -179,7 +179,7 @@ deleteClause: DELETE quadPattern ;
 
 insertClause: INSERT quadPattern ;
 
-usingClause: USING (IRI | NAMED iri) ;
+usingClause: USING (iri | NAMED iri) ;
 
 graphOrDefault: DEFAULT | GRAPH iri ;
 

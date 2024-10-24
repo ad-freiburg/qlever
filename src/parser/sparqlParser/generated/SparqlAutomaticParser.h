@@ -1313,9 +1313,8 @@ class SparqlAutomaticParser : public antlr4::Parser {
     UsingClauseContext(antlr4::ParserRuleContext* parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
     antlr4::tree::TerminalNode* USING();
-    antlr4::tree::TerminalNode* IRI();
-    antlr4::tree::TerminalNode* NAMED();
     IriContext* iri();
+    antlr4::tree::TerminalNode* NAMED();
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;

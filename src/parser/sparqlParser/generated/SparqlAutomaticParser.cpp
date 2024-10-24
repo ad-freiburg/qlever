@@ -994,7 +994,7 @@ void sparqlautomaticParserInitialize() {
       5,    65,   0,    0,    673,  674,  3,    100,  50,   0,    674,  89,
       1,    0,    0,    0,    675,  676,  5,    64,   0,    0,    676,  677,
       3,    100,  50,   0,    677,  91,   1,    0,    0,    0,    678,  682,
-      5,    67,   0,    0,    679,  683,  5,    85,   0,    0,    680,  681,
+      5,    67,   0,    0,    679,  683,  3,    302,  151,  0,    680,  681,
       5,    41,   0,    0,    681,  683,  3,    302,  151,  0,    682,  679,
       1,    0,    0,    0,    682,  680,  1,    0,    0,    0,    683,  93,
       1,    0,    0,    0,    684,  688,  5,    68,   0,    0,    685,  686,
@@ -6236,17 +6236,13 @@ tree::TerminalNode* SparqlAutomaticParser::UsingClauseContext::USING() {
   return getToken(SparqlAutomaticParser::USING, 0);
 }
 
-tree::TerminalNode* SparqlAutomaticParser::UsingClauseContext::IRI() {
-  return getToken(SparqlAutomaticParser::IRI, 0);
+SparqlAutomaticParser::IriContext*
+SparqlAutomaticParser::UsingClauseContext::iri() {
+  return getRuleContext<SparqlAutomaticParser::IriContext>(0);
 }
 
 tree::TerminalNode* SparqlAutomaticParser::UsingClauseContext::NAMED() {
   return getToken(SparqlAutomaticParser::NAMED, 0);
-}
-
-SparqlAutomaticParser::IriContext*
-SparqlAutomaticParser::UsingClauseContext::iri() {
-  return getRuleContext<SparqlAutomaticParser::IriContext>(0);
 }
 
 size_t SparqlAutomaticParser::UsingClauseContext::getRuleIndex() const {
@@ -6293,9 +6289,12 @@ SparqlAutomaticParser::usingClause() {
     setState(682);
     _errHandler->sync(this);
     switch (_input->LA(1)) {
-      case SparqlAutomaticParser::IRI: {
+      case SparqlAutomaticParser::IRI_REF:
+      case SparqlAutomaticParser::PNAME_NS:
+      case SparqlAutomaticParser::PNAME_LN:
+      case SparqlAutomaticParser::PREFIX_LANGTAG: {
         setState(679);
-        match(SparqlAutomaticParser::IRI);
+        iri();
         break;
       }
 
