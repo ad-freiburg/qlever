@@ -90,8 +90,8 @@ void DeltaTriples::addTriplesToLocalVocab(Triples& triples) {
   ad_utility::HashMap<Id, Id> blankNodeMap;
   // For the `id` (which has to be a `BlankNodeIndex`) return a local
   // blank node index that is managed by the `localVocab_`. If the `id` appeared
-  // previously during the same `insert/delete` request, the same value is returned
-  // as for the previous calls.
+  // previously during the same `insert/delete` request, the same value is
+  // returned as for the previous calls.
   auto getLocalBlankNode = [this, &blankNodeMap](Id id) {
     AD_CORRECTNESS_CHECK(id.getDatatype() == Datatype::BlankNodeIndex);
     // If the same blank node appears multiple times in the same update
@@ -104,16 +104,15 @@ void DeltaTriples::addTriplesToLocalVocab(Triples& triples) {
     return it->second;
   };
 
-  // Return true iff `idx` is a global blank node index that was part of the initial index.
-  auto isGlobalBlankNode = [
-           minLocalBlankNode =
-               index_.getBlankNodeManager()->minIndex_](BlankNodeIndex idx) {
-    return idx.get() < minLocalBlankNode;
-               };
+  // Return true iff `idx` is a global blank node index that was part of the
+  // initial index.
+  auto isGlobalBlankNode =
+      [minLocalBlankNode = index_.getBlankNodeManager()->minIndex_](
+          BlankNodeIndex idx) { return idx.get() < minLocalBlankNode; };
 
   // TODO<joka921> Comment.
-  auto convertLocalVocab = [this, isGlobalBlankNode, &getLocalBlankNode,
-                            &blankNodeMap](Id& id) {
+  auto convertLocalVocab = [this, isGlobalBlankNode,
+                            &getLocalBlankNode](Id& id) {
     if (id.getDatatype() == Datatype::LocalVocabIndex) {
       id = Id::makeFromLocalVocabIndex(
           localVocab_.getIndexAndAddIfNotContained(*id.getLocalVocabIndex()));
