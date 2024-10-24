@@ -109,6 +109,10 @@ class LocalVocab {
   [[nodiscard]] BlankNodeIndex getBlankNodeIndex(
       ad_utility::BlankNodeManager* blankNodeManager);
 
+  // Return true iff the `blankNodeIndex` was created and thereby is managed
+  // by this local vocab.
+  bool isBlankNodeIndexContained(BlankNodeIndex blankNodeIndex) const;
+
  private:
   // Common implementation for the two variants of
   // `getIndexAndAddIfNotContainedImpl` above.

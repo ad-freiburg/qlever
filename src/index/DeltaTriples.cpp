@@ -87,18 +87,30 @@ void DeltaTriples::deleteTriples(CancellationHandle cancellationHandle,
 
 // ____________________________________________________________________________
 void DeltaTriples::addTriplesToLocalVocab(Triples& triples) {
-  auto convertLocalVocab = [this, minLocalBlankNode =
-                                      index_.getBlankNodeManager()->minIndex_](
-                               Id& id) {
+  ad_utility::HashMap<Id, Id> blankNodeMap;
+  auto convertLocalVocab = [this,
+                            minLocalBlankNode =
+                                index_.getBlankNodeManager()->minIndex_,
+                            &blankNodeMap](Id& id) {
     if (id.getDatatype() == Datatype::LocalVocabIndex) {
       id = Id::makeFromLocalVocabIndex(
           localVocab_.getIndexAndAddIfNotContained(*id.getLocalVocabIndex()));
     } else if (id.getDatatype() == Datatype::BlankNodeIndex) {
       auto idx = id.getBlankNodeIndex();
-      if (idx.get() >= minLocalBlankNode) {
-        id = Id::makeFromBlankNodeIndex(
+      if (idx.get() < minLocalBlankNode ||
+          localVocab_.isBlankNodeIndexContained(idx)) {
+        // The ID is from the global index or already part of the local vocab.
+        return;
+      }
+
+      // If the same blank node appears multiple times in the same update
+      // request, then we have to also consistently rewrite it.
+      auto [it, newElement] = blankNodeMap.try_emplace(id, Id::makeUndefined());
+      if (newElement) {
+        it->second = Id::makeFromBlankNodeIndex(
             localVocab_.getBlankNodeIndex(index_.getBlankNodeManager()));
       }
+      id = it->second;
     }
   };
   std::ranges::for_each(triples, [&convertLocalVocab](IdTriple<0>& triple) {

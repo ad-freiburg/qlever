@@ -34,7 +34,7 @@ BlankNodeManager::Block BlankNodeManager::allocateBlock() {
 
 // _____________________________________________________________________________
 BlankNodeManager::Block::Block(uint64_t blockIndex, uint64_t startIndex)
-    : blockIdx_(blockIndex), nextIdx_(startIndex) {}
+    : blockIdx_(blockIndex), startIdx_(startIndex), nextIdx_(startIndex) {}
 
 // _____________________________________________________________________________
 BlankNodeManager::LocalBlankNodeManager::LocalBlankNodeManager(
@@ -57,6 +57,13 @@ uint64_t BlankNodeManager::LocalBlankNodeManager::getId() {
     idxAfterCurrentBlock_ = blocks_.back().nextIdx_ + blockSize_;
   }
   return blocks_.back().nextIdx_++;
+}
+
+// _____________________________________________________________________________
+bool BlankNodeManager::LocalBlankNodeManager::wasIdCreated(uint64_t id) const {
+  return std::ranges::any_of(blocks_, [id](const Block& block) {
+    return id >= block.startIdx_ && id < block.nextIdx_;
+  });
 }
 
 }  // namespace ad_utility

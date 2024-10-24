@@ -60,6 +60,9 @@ class BlankNodeManager {
     ~Block() = default;
     // The index of this block.
     const uint64_t blockIdx_;
+
+    // The first index within this block
+    const uint64_t startIdx_;
     // The next free index within this block.
     uint64_t nextIdx_;
   };
@@ -79,6 +82,9 @@ class BlankNodeManager {
 
     // Get a new id.
     [[nodiscard]] uint64_t getId();
+
+    // Return true iff the `id` was returned by a previous call to `getId()`.
+    bool wasIdCreated(uint64_t id) const;
 
    private:
     // Reserved blocks.

@@ -277,6 +277,59 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
 }
 
 // _____________________________________________________________________________
-TEST_F(DeltaTriplesTest, updateTriplesForLocalVocab) {
-  // TODO<joka921> Write this test.
+TEST_F(DeltaTriplesTest, addTriplesToLocalVocab) {
+  DeltaTriples deltaTriples(testQec->getIndex());
+  auto& vocab = testQec->getIndex().getVocab();
+  LocalVocab localVocabOutside;
+  auto triples =
+      makeIdTriples(vocab, localVocabOutside, {"<A> <notInVocab> <B>"});
+  AD_CORRECTNESS_CHECK(triples.size() == 1);
+  // Manually add a local blank node index;
+  triples[0].ids_[2] =
+      Id::makeFromBlankNodeIndex(BlankNodeIndex::make(999'888'777));
+  // Use the same new blank node ID twice to make sure that it's rewritten to
+  // the same value.
+  triples[0].ids_[3] = triples[0].ids_[2];
+  auto [s1, p1, o1, g1] = triples[0].ids_;
+  deltaTriples.addTriplesToLocalVocab(triples);
+  auto [s2, p2, o2, g2] = triples[0].ids_;
+  // The subject <A> is part of the global vocabulary, so it remains unchanged.
+  EXPECT_EQ(s2.getBits(), s1.getBits());
+
+  // The predicate <notInVocab> is part of the local vocab, so it gets
+  // rewritten. The ID changes, but the value stays the same.
+  ASSERT_TRUE(p1.getDatatype() == Datatype::LocalVocabIndex);
+  ASSERT_TRUE(p2.getDatatype() == Datatype::LocalVocabIndex);
+  EXPECT_EQ(p1, p2);
+  EXPECT_NE(p2.getBits(), p1.getBits());
+
+  // Test that the rewritten ID is in fact stored and thereby kept alive by the
+  // local vocab of the `DeltaTriples` class.
+  auto& localVocab = deltaTriples.localVocab_;
+  auto idx = p2.getLocalVocabIndex();
+  EXPECT_EQ(idx, localVocab.getIndexOrNullopt(*idx));
+
+  // The object is a local blank node index that was added by the query,
+  // it also has to be rewritten.
+  ASSERT_TRUE(o1.getDatatype() == Datatype::BlankNodeIndex);
+  ASSERT_TRUE(o2.getDatatype() == Datatype::BlankNodeIndex);
+  EXPECT_NE(o2, o1);
+  EXPECT_NE(o2.getBits(), o1.getBits());
+
+  // The object and the graph ID were the same blank node, so they should
+  // be rewritten consistently.
+  EXPECT_NE(g2.getBits(), g1.getBits());
+  EXPECT_EQ(g1.getBits(), o1.getBits());
+  EXPECT_EQ(g2.getBits(), o2.getBits());
+
+  // If we rewrite the already written triples again, nothing should change,
+  // as the `LocalVocab` of the `DeltaTriples` class is aware that it already
+  // stores the corresponding values.
+  deltaTriples.addTriplesToLocalVocab(triples);
+  ASSERT_EQ(triples.size(), 1);
+  auto [s3, p3, o3, g3] = triples[0].ids_;
+  EXPECT_EQ(s3.getBits(), s2.getBits());
+  EXPECT_EQ(p3.getBits(), p2.getBits());
+  EXPECT_EQ(o3.getBits(), o2.getBits());
+  EXPECT_EQ(g3.getBits(), g2.getBits());
 }
