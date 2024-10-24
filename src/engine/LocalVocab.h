@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdlib>
 #include <memory>
 #include <span>
@@ -14,6 +15,8 @@
 #include "global/Id.h"
 #include "parser/LiteralOrIri.h"
 #include "util/BlankNodeManager.h"
+#include "util/HashSet.h"
+#include "util/MemorySize/MemorySize.h"
 
 // A class for maintaining a local vocabulary with contiguous (local) IDs. This
 // is meant for words that are not part of the normal vocabulary (constructed
@@ -24,12 +27,25 @@ class LocalVocab {
  private:
   using Entry = LocalVocabEntry;
   using LiteralOrIri = LocalVocabEntry;
+
+  struct IriSizeGetter {
+    ad_utility::MemorySize operator()(
+        const ad_utility::triple_component::LiteralOrIri& literalOrIri) {
+      return ad_utility::MemorySize::bytes(
+          literalOrIri.getDynamicMemoryUsage());
+    }
+  };
+
   // A map of the words in the local vocabulary to their local IDs. This is a
   // node hash map because we need the addresses of the words (which are of type
   // `LiteralOrIri`) to remain stable over their lifetime in the hash map
   // because we hand out pointers to them.
-  using Set = absl::node_hash_set<LiteralOrIri>;
-  std::shared_ptr<Set> primaryWordSet_ = std::make_shared<Set>();
+  using Set =
+      ad_utility::CustomHashSetWithMemoryLimit<LiteralOrIri, IriSizeGetter>;
+  ad_utility::MemorySize limit_;
+  std::shared_ptr<Set> primaryWordSet_;
+
+  IriSizeGetter sizeGetter;
 
   // Local vocabularies from child operations that were merged into this
   // vocabulary s.t. the pointers are kept alive. They have to be `const`
@@ -44,7 +60,10 @@ class LocalVocab {
 
  public:
   // Create a new, empty local vocabulary.
-  LocalVocab() = default;
+  LocalVocab(ad_utility::MemorySize memoryLimit =
+                 ad_utility::MemorySize::megabytes(100))
+      : limit_(memoryLimit),
+        primaryWordSet_(std::make_shared<Set>(limit_, sizeGetter)) {}
 
   // Prevent accidental copying of a local vocabulary.
   LocalVocab(const LocalVocab&) = delete;
