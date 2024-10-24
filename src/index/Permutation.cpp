@@ -6,6 +6,7 @@
 
 #include "absl/strings/str_cat.h"
 #include "index/ConstantsIndexBuilding.h"
+#include "index/DeltaTriples.h"
 #include "util/StringUtils.h"
 
 // _____________________________________________________________________
@@ -43,7 +44,7 @@ void Permutation::loadFromDisk(const std::string& onDiskBase,
              e.what());
   }
   meta_.readFromFile(&file);
-  reader_.emplace(allocator_, std::move(file));
+  file_.emplace(std::move(file));
   LOG(INFO) << "Registered " << readableName_
             << " permutation: " << meta_.statistics() << std::endl;
   isLoaded_ = true;
@@ -53,6 +54,7 @@ void Permutation::loadFromDisk(const std::string& onDiskBase,
 IdTable Permutation::scan(const ScanSpecification& scanSpec,
                           ColumnIndicesRef additionalColumns,
                           const CancellationHandle& cancellationHandle,
+                          const DeltaTriples& deltaTriples,
                           const LimitOffsetClause& limitOffset) const {
   if (!isLoaded_) {
     throw std::runtime_error("This query requires the permutation " +
@@ -61,30 +63,35 @@ IdTable Permutation::scan(const ScanSpecification& scanSpec,
 
   const auto& p = getActualPermutation(scanSpec);
 
-  return p.reader().scan(scanSpec, p.meta_.blockData(), additionalColumns,
-                         cancellationHandle, limitOffset);
+  return p.reader(deltaTriples)
+      .scan(scanSpec, p.meta_.blockData(), additionalColumns,
+            cancellationHandle, limitOffset);
 }
 
 // _____________________________________________________________________
 size_t Permutation::getResultSizeOfScan(
-    const ScanSpecification& scanSpec) const {
+    const ScanSpecification& scanSpec, const DeltaTriples& deltaTriples) const {
   const auto& p = getActualPermutation(scanSpec);
-  return p.reader().getResultSizeOfScan(scanSpec, p.meta_.blockData());
+  return p.reader(deltaTriples)
+      .getResultSizeOfScan(scanSpec, p.meta_.blockData());
 }
 
 // ____________________________________________________________________________
 IdTable Permutation::getDistinctCol1IdsAndCounts(
-    Id col0Id, const CancellationHandle& cancellationHandle) const {
+    Id col0Id, const CancellationHandle& cancellationHandle,
+    const DeltaTriples& deltaTriples) const {
   const auto& p = getActualPermutation(col0Id);
-  return p.reader().getDistinctCol1IdsAndCounts(col0Id, p.meta_.blockData(),
-                                                cancellationHandle);
+  return p.reader(deltaTriples)
+      .getDistinctCol1IdsAndCounts(col0Id, p.meta_.blockData(),
+                                   cancellationHandle);
 }
 
 // ____________________________________________________________________________
 IdTable Permutation::getDistinctCol0IdsAndCounts(
-    const CancellationHandle& cancellationHandle) const {
-  return reader().getDistinctCol0IdsAndCounts(meta_.blockData(),
-                                              cancellationHandle);
+    const CancellationHandle& cancellationHandle,
+    const DeltaTriples& deltaTriples) const {
+  return reader(deltaTriples)
+      .getDistinctCol0IdsAndCounts(meta_.blockData(), cancellationHandle);
 }
 
 // _____________________________________________________________________
@@ -129,23 +136,24 @@ std::string_view Permutation::toString(Permutation::Enum permutation) {
 
 // _____________________________________________________________________
 std::optional<CompressedRelationMetadata> Permutation::getMetadata(
-    Id col0Id) const {
+    Id col0Id, const DeltaTriples& deltaTriples) const {
   const auto& p = getActualPermutation(col0Id);
   if (p.meta_.col0IdExists(col0Id)) {
     return p.meta_.getMetaData(col0Id);
   }
-  return p.reader().getMetadataForSmallRelation(p.meta_.blockData(), col0Id);
+  return p.reader(deltaTriples)
+      .getMetadataForSmallRelation(p.meta_.blockData(), col0Id);
 }
 
 // _____________________________________________________________________
 std::optional<Permutation::MetadataAndBlocks> Permutation::getMetadataAndBlocks(
-    const ScanSpecification& scanSpec) const {
+    const ScanSpecification& scanSpec, const DeltaTriples& deltaTriples) const {
   const auto& p = getActualPermutation(scanSpec);
   CompressedRelationReader::ScanSpecAndBlocks mb{
       scanSpec, CompressedRelationReader::getRelevantBlocks(
                     scanSpec, p.meta_.blockData())};
 
-  auto firstAndLastTriple = p.reader().getFirstAndLastTriple(mb);
+  auto firstAndLastTriple = p.reader(deltaTriples).getFirstAndLastTriple(mb);
   if (!firstAndLastTriple.has_value()) {
     return std::nullopt;
   }
@@ -159,6 +167,7 @@ Permutation::IdTableGenerator Permutation::lazyScan(
     std::optional<std::vector<CompressedBlockMetadata>> blocks,
     ColumnIndicesRef additionalColumns,
     ad_utility::SharedCancellationHandle cancellationHandle,
+    const DeltaTriples& deltaTriples,
     const LimitOffsetClause& limitOffset) const {
   const auto& p = getActualPermutation(scanSpec);
   if (!blocks.has_value()) {
@@ -167,9 +176,9 @@ Permutation::IdTableGenerator Permutation::lazyScan(
     blocks = std::vector(blockSpan.begin(), blockSpan.end());
   }
   ColumnIndices columns{additionalColumns.begin(), additionalColumns.end()};
-  return p.reader().lazyScan(scanSpec, std::move(blocks.value()),
-                             std::move(columns), std::move(cancellationHandle),
-                             limitOffset);
+  return p.reader(deltaTriples)
+      .lazyScan(scanSpec, std::move(blocks.value()), std::move(columns),
+                std::move(cancellationHandle), limitOffset);
 }
 
 // ______________________________________________________________________
@@ -196,4 +205,12 @@ const Permutation& Permutation::getActualPermutation(
 const Permutation& Permutation::getActualPermutation(Id id) const {
   return getActualPermutation(
       ScanSpecification{id, std::nullopt, std::nullopt});
+}
+
+// ______________________________________________________________________
+CompressedRelationReader Permutation::reader(
+    const DeltaTriples& deltaTriples) const {
+  return CompressedRelationReader{
+      allocator_, &file_.value(),
+      &deltaTriples.getLocatedTriplesPerBlock(permutation_), &blockCache_};
 }
