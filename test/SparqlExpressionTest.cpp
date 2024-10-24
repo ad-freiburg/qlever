@@ -586,7 +586,7 @@ TEST(SparqlExpression, stringOperators) {
       Ids{I(3), I(3), I(5), I(0)});
 
   // Test the different (optimized) behavior depending on whether the STR()
-  // function was applied to the argument. test
+  // function was applied to the argument.
   checkStrlen(IdOrLiteralOrIriVec{lit("one"), lit("tschüss"), I(1), D(3.6), lit("")},
               Ids{I(3),I(6), U, U, I(0)});
   checkStrlenWithStrChild(
