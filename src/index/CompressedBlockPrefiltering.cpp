@@ -11,8 +11,8 @@ namespace prefilterExpressions {
 // HELPER FUNCTIONS
 //______________________________________________________________________________
 // Given a PermutedTriple retrieve the suitable Id w.r.t. a column (index).
-static auto getIdFromColumnIndex(const BlockMetadata::PermutedTriple& triple,
-                                 size_t columnIndex) {
+static Id getIdFromColumnIndex(const BlockMetadata::PermutedTriple& triple,
+                               size_t columnIndex) {
   switch (columnIndex) {
     case 0:
       return triple.col0Id_;
@@ -27,22 +27,22 @@ static auto getIdFromColumnIndex(const BlockMetadata::PermutedTriple& triple,
 };
 
 //______________________________________________________________________________
-// Extract the Ids from the given `PermutedTriple` in a tuple up to the
+// Extract the Ids from the given `PermutedTriple` in a tuple w.r.t. the
 // position (column index) defined by `ignoreIndex`. The ignored positions are
-// filled with Ids `Id::makeUndefined()`. `Id::makeUndefined()` is guaranteed
+// filled with Ids `Id::min()`. `Id::min()` is guaranteed
 // to be smaller than Ids of all other types.
-static auto getTiedMaskedTriple(const BlockMetadata::PermutedTriple& triple,
-                                size_t ignoreIndex = 3) {
-  static const auto undefined = Id::makeUndefined();
+static auto getMaskedTriple(const BlockMetadata::PermutedTriple& triple,
+                            size_t ignoreIndex = 3) {
+  const Id& undefined = Id::min();
   switch (ignoreIndex) {
     case 3:
-      return std::tie(triple.col0Id_, triple.col1Id_, triple.col2Id_);
+      return std::make_tuple(triple.col0Id_, triple.col1Id_, triple.col2Id_);
     case 2:
-      return std::tie(triple.col0Id_, triple.col1Id_, undefined);
+      return std::make_tuple(triple.col0Id_, triple.col1Id_, undefined);
     case 1:
-      return std::tie(triple.col0Id_, undefined, undefined);
+      return std::make_tuple(triple.col0Id_, undefined, undefined);
     case 0:
-      return std::tie(undefined, undefined, undefined);
+      return std::make_tuple(undefined, undefined, undefined);
     default:
       // ignoreIndex out of bounds
       AD_FAIL();
@@ -51,43 +51,43 @@ static auto getTiedMaskedTriple(const BlockMetadata::PermutedTriple& triple,
 
 //______________________________________________________________________________
 // Check required conditions.
-static auto checkEvalRequirements(const std::vector<BlockMetadata>& input,
+static void checkEvalRequirements(const std::vector<BlockMetadata>& input,
                                   size_t evaluationColumn) {
-  auto throwRuntimeError = [](const std::string& errorMessage) {
+  const auto throwRuntimeError = [](const std::string& errorMessage) {
     throw std::runtime_error(errorMessage);
   };
-
-  for (size_t i = 1; i < input.size(); i++) {
-    const auto& block1 = input[i - 1];
-    const auto& block2 = input[i];
-    if (block1 == block2) {
-      throwRuntimeError("The provided data blocks must be unique.");
-    }
-    const auto& triple1First = block1.firstTriple_;
-    const auto& triple1Last = block1.lastTriple_;
-    const auto& triple2First = block2.firstTriple_;
-    const auto& triple2Last = block2.lastTriple_;
-
-    const auto checkInvalid = [triple1First, triple1Last, triple2First,
-                               triple2Last](auto comp, size_t evalCol) {
-      const auto& maskedT1Last = getTiedMaskedTriple(triple1Last, evalCol);
-      const auto& maskedT2First = getTiedMaskedTriple(triple2First, evalCol);
-      return comp(getTiedMaskedTriple(triple1First, evalCol), maskedT1Last) ||
-             comp(maskedT1Last, maskedT2First) ||
-             comp(maskedT2First, getTiedMaskedTriple(triple2Last, evalCol));
-    };
-    // Check for equality of IDs up to the evaluation column.
-    if (checkInvalid(std::not_equal_to<>{}, evaluationColumn)) {
-      throwRuntimeError(
-          "The columns up to the evaluation column must contain the same "
-          "values.");
-    }
-    // Check for order of IDs on evaluation Column.
-    if (checkInvalid(std::greater<>{}, evaluationColumn + 1)) {
-      throwRuntimeError(
-          "The data blocks must be provided in sorted order regarding the "
-          "evaluation column.");
-    }
+  // Check for duplicates.
+  if (auto it = std::ranges::adjacent_find(input.begin(), input.end());
+      it != input.end()) {
+    throwRuntimeError("The provided data blocks must be unique.");
+  }
+  // Helper to check for fully sorted blocks. Return `true` if `b1 < b2` is
+  // satisfied.
+  const auto checkOrder = [](const BlockMetadata& b1,
+                             const BlockMetadata& b2) -> bool {
+    return b1.blockIndex_ < b2.blockIndex_ &&
+           getMaskedTriple(b1.lastTriple_) < getMaskedTriple(b2.firstTriple_);
+  };
+  if (!std::ranges::is_sorted(input.begin(), input.end(), checkOrder)) {
+    throwRuntimeError("The blocks must be provided in sorted order.");
+  }
+  // Helper to check for column consistency. Returns `true` if the columns for
+  // `b1` and `b2` up to the evaluation are inconsistent.
+  const auto checkColumnConsistency = [evaluationColumn](
+                                          const BlockMetadata& b1,
+                                          const BlockMetadata& b2) -> bool {
+    const auto& b1Last = getMaskedTriple(b1.lastTriple_, evaluationColumn);
+    const auto& b2First = getMaskedTriple(b2.firstTriple_, evaluationColumn);
+    return getMaskedTriple(b1.firstTriple_, evaluationColumn) != b1Last ||
+           b1Last != b2First ||
+           b2First != getMaskedTriple(b2.lastTriple_, evaluationColumn);
+  };
+  if (auto it = std::ranges::adjacent_find(input.begin(), input.end(),
+                                           checkColumnConsistency);
+      it != input.end()) {
+    throwRuntimeError(
+        "The values in the columns up to the evaluation column must be "
+        "consistent.");
   }
 };
 
@@ -96,32 +96,12 @@ static auto checkEvalRequirements(const std::vector<BlockMetadata>& input,
 // returns their merged `BlockMetadata` content in a `vector` which is free of
 // duplicates and ordered.
 static auto getSetUnion(const std::vector<BlockMetadata>& blocks1,
-                        const std::vector<BlockMetadata>& blocks2,
-                        size_t evalCol) {
-  evalCol += 1;
+                        const std::vector<BlockMetadata>& blocks2) {
   std::vector<BlockMetadata> mergedVectors;
   mergedVectors.reserve(blocks1.size() + blocks2.size());
-  auto blockLessThanBlock = [evalCol](const BlockMetadata& block1,
-                                      const BlockMetadata& block2) {
-    const auto& lastTripleBlock1 =
-        getTiedMaskedTriple(block1.lastTriple_, evalCol);
-    const auto& firstTripleBlock2 =
-        getTiedMaskedTriple(block2.firstTriple_, evalCol);
-    // Given two blocks with the respective ranges [-4, -4] (block1)
-    // and [-4, 0.0] (block2) on the evaluation column, we see that [-4, -4] <
-    // [-4, 0.0] should hold true. To assess if block1 is less than block2, it
-    // is not enough to just compare -4 (ID from last triple of block1) to -4
-    // (ID from first triple of block2). With this simple comparison [-4, -4] <
-    // [-4, 0.0] wouldn't hold, because the comparison -4 < -4 will yield false.
-    // Thus for proper implementation of the < operator, we have to check here
-    // on the IDs of the last triple. -4 < 0.0 will yield true => [-4, -4] <
-    // [-4, 0.0] holds true.
-    if (lastTripleBlock1 == firstTripleBlock2) {
-      return lastTripleBlock1 <
-             getTiedMaskedTriple(block2.lastTriple_, evalCol);
-    } else {
-      return lastTripleBlock1 < firstTripleBlock2;
-    }
+  const auto blockLessThanBlock = [](const BlockMetadata& b1,
+                                     const BlockMetadata& b2) -> bool {
+    return b1.blockIndex_ < b2.blockIndex_;
   };
   // Given that we have vectors with sorted (BlockMedata) values, we can
   // use std::ranges::set_union. Thus the complexity is O(n + m).
@@ -234,7 +214,7 @@ std::vector<BlockMetadata> RelationalExpression<Comparison>::evaluateImpl(
   relevantBlocks.shrink_to_fit();
   // Merge mixedDatatypeBlocks into relevantBlocks while maintaining order and
   // avoiding duplicates.
-  return getSetUnion(relevantBlocks, mixedDatatypeBlocks, evaluationColumn);
+  return getSetUnion(relevantBlocks, mixedDatatypeBlocks);
 };
 
 // SECTION LOGICAL OPERATIONS
@@ -276,8 +256,7 @@ std::vector<BlockMetadata> LogicalExpression<Operation>::evaluateImpl(
   } else {
     static_assert(Operation == OR);
     return getSetUnion(child1_->evaluate(input, evaluationColumn),
-                       child2_->evaluate(input, evaluationColumn),
-                       evaluationColumn);
+                       child2_->evaluate(input, evaluationColumn));
   }
 };
 

@@ -130,21 +130,21 @@ class TestPrefilterExprOnBlockMetadata : public ::testing::Test {
   const BlockMetadata b24 =
       makeBlock(DateId(DateParser, "2024-10-08"), BlankNodeId(10));
 
-  // All blocks that contain mixed (ValueId) types over column 2
+  // All blocks that contain mixed (ValueId) types over column 0
   const std::vector<BlockMetadata> mixedBlocks = {b2, b4, b11, b18, b22, b24};
 
-  // Ordered Blocks
+  // Ordered and unique vector with BlockMetadata
   const std::vector<BlockMetadata> blocks = {
       b1,  b2,  b3,  b4,  b5,  b6,  b7,  b8,  b9,  b10, b11, b12,
       b13, b14, b15, b16, b17, b18, b19, b20, b21, b22, b23, b24};
 
   const std::vector<BlockMetadata> blocksInvalidOrder1 = {
-      b2,  b1,  b3,  b4,  b5,  b6,  b7,  b8,  b9,  b10, b11, b12,
-      b13, b14, b15, b16, b17, b18, b19, b20, b21, b22, b23, b24};
+      b1,  b2,  b3,  b4,  b5,  b6,  b7,  b8,  b9,  b10, b11, b12,
+      b13, b14, b15, b16, b17, b18, b19, b20, b21, b22, b24, b23};
 
   const std::vector<BlockMetadata> blocksInvalidOrder2 = {
       b1,  b2,  b3,  b4,  b5,  b6,  b7,  b8,  b9,  b10, b11, b12,
-      b14, b13, b15, b16, b17, b18, b19, b20, b21, b22, b23, b24};
+      b14, b10, b15, b16, b17, b18, b19, b20, b21, b22, b23, b24};
 
   const std::vector<BlockMetadata> blocksWithDuplicate1 = {
       b1,  b1,  b2,  b3,  b4,  b5,  b6,  b7,  b8,  b9,  b10, b11, b12,
@@ -156,6 +156,7 @@ class TestPrefilterExprOnBlockMetadata : public ::testing::Test {
 
   // Function to create BlockMetadata
   const BlockMetadata makeBlock(const ValueId& firstId, const ValueId& lastId) {
+    assert(firstId <= lastId);
     static size_t blockIdx = 0;
     ++blockIdx;
     return {{{},
@@ -170,10 +171,11 @@ class TestPrefilterExprOnBlockMetadata : public ::testing::Test {
 
   // Check if expected error is thrown.
   auto makeTestErrorCheck(std::unique_ptr<PrefilterExpression> expr,
-                          std::vector<BlockMetadata>& input,
-                          std::string& expected, size_t evaluationColumn = 0) {
+                          const std::vector<BlockMetadata>& input,
+                          const std::string& expected,
+                          size_t evaluationColumn = 0) {
     AD_EXPECT_THROW_WITH_MESSAGE(expr->evaluate(input, evaluationColumn),
-                                 expected);
+                                 ::testing::HasSubstr(expected));
   }
 
   // Check that the provided expression prefilters the correct blocks.
@@ -190,6 +192,8 @@ class TestPrefilterExprOnBlockMetadata : public ::testing::Test {
     ASSERT_EQ(expr->evaluate(blocks, 0), expectedAdjusted);
   }
 };
+
+}  // namespace
 
 //______________________________________________________________________________
 TEST_F(TestPrefilterExprOnBlockMetadata, testBlockFormatForDebugging) {
@@ -507,55 +511,27 @@ TEST_F(TestPrefilterExprOnBlockMetadata, testGeneralPrefilterExprCombinations) {
            {b4, b22, b23});
 }
 
-/*
 //______________________________________________________________________________
 // Test that correct errors are thrown for invalid input (condition
-checking). TEST_F(TestPrefilterExprOnBlockMetadata, testInputConditionCheck)
-{ TestRelationalExpression<LessThanExpression, std::string>
-      testRelationalExpression{};
-  testRelationalExpression(
-      2, DoubleId(10), blocksInvalidCol1,
-      "The columns up to the evaluation column must contain the same
-values."); testRelationalExpression( 1, DoubleId(10), blocksInvalidCol1,
-      "The data blocks must be provided in sorted order regarding the "
-      "evaluation column.");
-  testRelationalExpression(2, DoubleId(10), blocksWithDuplicate2,
-                           "The provided data blocks must be unique.");
-
-  TestNotExpression<std::string> testNotExpression{};
-  testNotExpression.test<NotEqualExpression>(
-      2, blocksWithDuplicate1, "The provided data blocks must be unique.",
-      VocabId(2));
-  testNotExpression.test<LessThanExpression>(
-      2, blocksInvalidOrder1,
-      "The data blocks must be provided in sorted order regarding the "
-      "evaluation column.",
-      DoubleId(-14.1));
-  testNotExpression.test<EqualExpression>(
-      0, blocksInvalidCol2,
-      "The data blocks must be provided in sorted order regarding the "
-      "evaluation column.",
-      IntId(0));
-  testNotExpression.test<EqualExpression>(
-      1, blocksInvalidCol2,
-      "The columns up to the evaluation column must contain the same
-values.", IntId(0)); testNotExpression.test<EqualExpression>( 2,
-blocksInvalidCol2, "The columns up to the evaluation column must contain the
-same values.", IntId(0));
-
-  TestLogicalExpression<AndExpression, std::string> testAndExpression{};
-  testAndExpression.test<GreaterThanExpression, LessThanExpression>(
-      2, DoubleId(-4.24), IntId(5), blocksWithDuplicate2,
-      "The provided data blocks must be unique.");
-  testAndExpression.test<GreaterThanExpression, LessThanExpression>(
-      2, DoubleId(-4.24), IntId(5), blocksInvalidOrder1,
-      "The data blocks must be provided in sorted order regarding the "
-      "evaluation column.");
-  testAndExpression.test<GreaterThanExpression, LessThanExpression>(
-      2, DoubleId(-4.24), IntId(5), blocksInvalidCol2,
-      "The columns up to the evaluation column must contain the same
-values.");
+TEST_F(TestPrefilterExprOnBlockMetadata, testInputConditionCheck) {
+  makeTestErrorCheck(le(IntId(5)), blocksWithDuplicate1,
+                     "The provided data blocks must be unique.");
+  makeTestErrorCheck(andExpr(gt(VocabId(10)), le(VocabId(20))),
+                     blocksWithDuplicate2,
+                     "The provided data blocks must be unique.");
+  makeTestErrorCheck(gt(DoubleId(2)), blocksInvalidOrder1,
+                     "The blocks must be provided in sorted order.");
+  makeTestErrorCheck(andExpr(gt(VocabId(10)), le(VocabId(20))),
+                     blocksInvalidOrder2,
+                     "The blocks must be provided in sorted order.");
+  makeTestErrorCheck(
+      gt(DoubleId(2)), blocks,
+      "The values in the columns up to the evaluation column must be "
+      "consistent.",
+      1);
+  makeTestErrorCheck(
+      gt(DoubleId(2)), blocks,
+      "The values in the columns up to the evaluation column must be "
+      "consistent.",
+      2);
 }
-*/
-
-}  // namespace
