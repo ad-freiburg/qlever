@@ -119,8 +119,7 @@ void DeltaTriples::rewriteLocalVocabEntriesAndBlankNodes(Triples& triples) {
   // Helper lambda that converts a single local vocab or blank node `id` as
   // described in the comment for this function. All other types are left
   // unchanged.
-  auto convertLocalVocab = [this, isGlobalBlankNode,
-                            &getLocalBlankNode](Id& id) {
+  auto convertId = [this, isGlobalBlankNode, &getLocalBlankNode](Id& id) {
     if (id.getDatatype() == Datatype::LocalVocabIndex) {
       id = Id::makeFromLocalVocabIndex(
           localVocab_.getIndexAndAddIfNotContained(*id.getLocalVocabIndex()));
@@ -134,10 +133,10 @@ void DeltaTriples::rewriteLocalVocabEntriesAndBlankNodes(Triples& triples) {
     }
   };
 
-  // Convert all local vocab entries and blank nodes in all `triples`.
-  std::ranges::for_each(triples, [&convertLocalVocab](IdTriple<0>& triple) {
-    std::ranges::for_each(triple.ids_, convertLocalVocab);
-    std::ranges::for_each(triple.payload_, convertLocalVocab);
+  // Convert all local vocab and blank node `Id`s in all `triples`.
+  std::ranges::for_each(triples, [&convertId](IdTriple<0>& triple) {
+    std::ranges::for_each(triple.ids_, convertId);
+    std::ranges::for_each(triple.payload_, convertId);
   });
 }
 
