@@ -88,29 +88,43 @@ void DeltaTriples::deleteTriples(CancellationHandle cancellationHandle,
 // ____________________________________________________________________________
 void DeltaTriples::addTriplesToLocalVocab(Triples& triples) {
   ad_utility::HashMap<Id, Id> blankNodeMap;
-  auto convertLocalVocab = [this,
-                            minLocalBlankNode =
-                                index_.getBlankNodeManager()->minIndex_,
+  // For the `id` (which has to be a `BlankNodeIndex`) return a local
+  // blank node index that is managed by the `localVocab_`. If the `id` appeared
+  // previously during the same `insert/delete` request, the same value is returned
+  // as for the previous calls.
+  auto getLocalBlankNode = [this, &blankNodeMap](Id id) {
+    AD_CORRECTNESS_CHECK(id.getDatatype() == Datatype::BlankNodeIndex);
+    // If the same blank node appears multiple times in the same update
+    // request, then we have to also consistently rewrite it.
+    auto [it, newElement] = blankNodeMap.try_emplace(id, Id::makeUndefined());
+    if (newElement) {
+      it->second = Id::makeFromBlankNodeIndex(
+          localVocab_.getBlankNodeIndex(index_.getBlankNodeManager()));
+    }
+    return it->second;
+  };
+
+  // Return true iff `idx` is a global blank node index that was part of the initial index.
+  auto isGlobalBlankNode = [
+           minLocalBlankNode =
+               index_.getBlankNodeManager()->minIndex_](BlankNodeIndex idx) {
+    return idx.get() < minLocalBlankNode;
+               };
+
+  // TODO<joka921> Comment.
+  auto convertLocalVocab = [this, isGlobalBlankNode, &getLocalBlankNode,
                             &blankNodeMap](Id& id) {
     if (id.getDatatype() == Datatype::LocalVocabIndex) {
       id = Id::makeFromLocalVocabIndex(
           localVocab_.getIndexAndAddIfNotContained(*id.getLocalVocabIndex()));
     } else if (id.getDatatype() == Datatype::BlankNodeIndex) {
       auto idx = id.getBlankNodeIndex();
-      if (idx.get() < minLocalBlankNode ||
+      if (isGlobalBlankNode(idx) ||
           localVocab_.isBlankNodeIndexContained(idx)) {
         // The ID is from the global index or already part of the local vocab.
         return;
       }
-
-      // If the same blank node appears multiple times in the same update
-      // request, then we have to also consistently rewrite it.
-      auto [it, newElement] = blankNodeMap.try_emplace(id, Id::makeUndefined());
-      if (newElement) {
-        it->second = Id::makeFromBlankNodeIndex(
-            localVocab_.getBlankNodeIndex(index_.getBlankNodeManager()));
-      }
-      id = it->second;
+      id = getLocalBlankNode(id);
     }
   };
   std::ranges::for_each(triples, [&convertLocalVocab](IdTriple<0>& triple) {

@@ -95,5 +95,5 @@ bool LocalVocab::isBlankNodeIndexContained(
   if (!localBlankNodeManager_) {
     return false;
   }
-  return localBlankNodeManager_->wasIdCreated(blankNodeIndex.get());
+  return localBlankNodeManager_->containsBlankNodeIndex(blankNodeIndex.get());
 }

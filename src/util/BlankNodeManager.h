@@ -83,8 +83,8 @@ class BlankNodeManager {
     // Get a new id.
     [[nodiscard]] uint64_t getId();
 
-    // Return true iff the `id` was returned by a previous call to `getId()`.
-    bool wasIdCreated(uint64_t id) const;
+    // Return true iff the `index` was returned by a previous call to `getId()`.
+    bool containsBlankNodeIndex(uint64_t index) const;
 
    private:
     // Reserved blocks.
