@@ -45,7 +45,7 @@ QLever supports a custom fast spatial search operation. It can be invoked using 
 
 ### `<nearest-neighbors:k>` or `<nearest-neighbors:k:m>`
 
-A spatial search for nearest neighbors can be realized using `?left <nearest-neighbors:k:m> ?right`. The variables `?left` and `?right` must refer to points with `geo:wktLiteral` datatype. Additionaly, please replace `k` and `m` with integers as follows:
+A spatial search for nearest neighbors can be realized using `?left <nearest-neighbors:k:m> ?right`. The variables `?left` and `?right` must refer to points with `geo:wktLiteral` datatype. Additionally, please replace `k` and `m` with integers as follows:
 
 - For each point `?left` QLever will output the `k` nearest points from `?right`. Of course, the sets `?left` and `?right` can each be limited using further statements.
 - Using the optional integer value `m` a maximum distance in meters can be given that restricts the search radius.
