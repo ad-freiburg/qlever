@@ -116,7 +116,7 @@ void DeltaTriples::rewriteLocalVocabEntriesAndBlankNodes(Triples& triples) {
     return blankNodeIndex.get() < minLocalBlankNode;
   };
 
-  // Helper lambda that coverts a single local vocab or blank node `id` as
+  // Helper lambda that converts a single local vocab or blank node `id` as
   // described in the comment for this function. All other types are left
   // unchanged.
   auto convertLocalVocab = [this, isGlobalBlankNode,
