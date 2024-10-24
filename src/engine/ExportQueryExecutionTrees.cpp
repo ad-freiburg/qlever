@@ -30,7 +30,7 @@ ad_utility::streams::stream_generator computeResultForAsk(
   // Compute the result of the ASK query.
   bool result = getResultForAsk(qet.getResult(true));
 
-  // Lambda that returns the result as XML
+  // Lambda that returns the result bool in XML format.
   auto getXmlResult = [result]() {
     std::string xmlTemplate = R"(<?xml version="1.0"?>
 <sparql xmlns="http://www.w3.org/2005/sparql-results#">
@@ -45,7 +45,7 @@ ad_utility::streams::stream_generator computeResultForAsk(
     }
   };
 
-  // Lambda that returns the result as Sparql JSON
+  // Lambda that returns the result bool in SPARQL JSON format.
   auto getSparqlJsonResult = [result]() {
     nlohmann::json j;
     j["head"] = nlohmann::json::object_t{};
