@@ -46,10 +46,14 @@ TEST(BlankNodeManager, LocalBlankNodeManagerGetID) {
   // no blocks are allocated yet
   uint64_t id = l.getId();
   EXPECT_EQ(l.blocks_.size(), 1);
+  EXPECT_TRUE(l.containsBlankNodeIndex(id));
+  EXPECT_FALSE(l.containsBlankNodeIndex(id + 1));
+  EXPECT_FALSE(l.containsBlankNodeIndex(id - 1));
 
   // or the ids of the last block are all used
   l.blocks_.back().nextIdx_ = id + BlankNodeManager::blockSize_;
   id = l.getId();
+  EXPECT_TRUE(l.containsBlankNodeIndex(id));
   EXPECT_EQ(l.blocks_.size(), 2);
 }
 

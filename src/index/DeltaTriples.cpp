@@ -86,10 +86,66 @@ void DeltaTriples::deleteTriples(CancellationHandle cancellationHandle,
 }
 
 // ____________________________________________________________________________
+void DeltaTriples::rewriteLocalVocabEntriesAndBlankNodes(Triples& triples) {
+  // Remember which original blank node (from the parsing of an insert
+  // operation) is mapped to which blank node managed by the `localVocab_` of
+  // this class.
+  ad_utility::HashMap<Id, Id> blankNodeMap;
+  // For the given original blank node `id`, check if it has already been
+  // mapped. If not, map it to a new blank node managed by the `localVocab_` of
+  // this class. Either way, return the (already existing or newly created)
+  // value.
+  auto getLocalBlankNode = [this, &blankNodeMap](Id id) {
+    AD_CORRECTNESS_CHECK(id.getDatatype() == Datatype::BlankNodeIndex);
+    // The following code handles both cases (already mapped or not) with a
+    // single lookup in the map. Note that the value of the `try_emplace` call
+    // is irrelevant.
+    auto [it, newElement] = blankNodeMap.try_emplace(id, Id::makeUndefined());
+    if (newElement) {
+      it->second = Id::makeFromBlankNodeIndex(
+          localVocab_.getBlankNodeIndex(index_.getBlankNodeManager()));
+    }
+    return it->second;
+  };
+
+  // Return true iff `blankNodeIndex` is a blank node index from the original
+  // index.
+  auto isGlobalBlankNode = [minLocalBlankNode =
+                                index_.getBlankNodeManager()->minIndex_](
+                               BlankNodeIndex blankNodeIndex) {
+    return blankNodeIndex.get() < minLocalBlankNode;
+  };
+
+  // Helper lambda that converts a single local vocab or blank node `id` as
+  // described in the comment for this function. All other types are left
+  // unchanged.
+  auto convertId = [this, isGlobalBlankNode, &getLocalBlankNode](Id& id) {
+    if (id.getDatatype() == Datatype::LocalVocabIndex) {
+      id = Id::makeFromLocalVocabIndex(
+          localVocab_.getIndexAndAddIfNotContained(*id.getLocalVocabIndex()));
+    } else if (id.getDatatype() == Datatype::BlankNodeIndex) {
+      auto idx = id.getBlankNodeIndex();
+      if (isGlobalBlankNode(idx) ||
+          localVocab_.isBlankNodeIndexContained(idx)) {
+        return;
+      }
+      id = getLocalBlankNode(id);
+    }
+  };
+
+  // Convert all local vocab and blank node `Id`s in all `triples`.
+  std::ranges::for_each(triples, [&convertId](IdTriple<0>& triple) {
+    std::ranges::for_each(triple.ids_, convertId);
+    std::ranges::for_each(triple.payload_, convertId);
+  });
+}
+
+// ____________________________________________________________________________
 void DeltaTriples::modifyTriplesImpl(CancellationHandle cancellationHandle,
                                      Triples triples, bool shouldExist,
                                      TriplesToHandlesMap& targetMap,
                                      TriplesToHandlesMap& inverseMap) {
+  rewriteLocalVocabEntriesAndBlankNodes(triples);
   std::ranges::sort(triples);
   auto [first, last] = std::ranges::unique(triples);
   triples.erase(first, last);

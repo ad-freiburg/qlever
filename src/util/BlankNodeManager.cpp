@@ -34,7 +34,7 @@ BlankNodeManager::Block BlankNodeManager::allocateBlock() {
 
 // _____________________________________________________________________________
 BlankNodeManager::Block::Block(uint64_t blockIndex, uint64_t startIndex)
-    : blockIdx_(blockIndex), nextIdx_(startIndex) {}
+    : blockIdx_(blockIndex), startIdx_(startIndex), nextIdx_(startIndex) {}
 
 // _____________________________________________________________________________
 BlankNodeManager::LocalBlankNodeManager::LocalBlankNodeManager(
@@ -44,7 +44,7 @@ BlankNodeManager::LocalBlankNodeManager::LocalBlankNodeManager(
 // _____________________________________________________________________________
 BlankNodeManager::LocalBlankNodeManager::~LocalBlankNodeManager() {
   auto ptr = blankNodeManager_->usedBlocksSet_.wlock();
-  for (auto block : blocks_) {
+  for (const auto& block : blocks_) {
     AD_CONTRACT_CHECK(ptr->contains(block.blockIdx_));
     ptr->erase(block.blockIdx_);
   }
@@ -57,6 +57,14 @@ uint64_t BlankNodeManager::LocalBlankNodeManager::getId() {
     idxAfterCurrentBlock_ = blocks_.back().nextIdx_ + blockSize_;
   }
   return blocks_.back().nextIdx_++;
+}
+
+// _____________________________________________________________________________
+bool BlankNodeManager::LocalBlankNodeManager::containsBlankNodeIndex(
+    uint64_t index) const {
+  return std::ranges::any_of(blocks_, [index](const Block& block) {
+    return index >= block.startIdx_ && index < block.nextIdx_;
+  });
 }
 
 }  // namespace ad_utility
