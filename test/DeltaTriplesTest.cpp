@@ -70,7 +70,8 @@ class DeltaTriplesTest : public ::testing::Test {
       "<b> <prev> <a> . "
       "<c> <prev> <b> . "
       "<B> <prev> <A> . "
-      "<C> <prev> <B>";
+      "<C> <prev> <B> . "
+      "<anon> <x> _:blubb";
 
   // Query execution context with index for testing, see `IndexTestHelpers.h`.
   QueryExecutionContext* testQec = ad_utility::testing::getQec(testTurtle);
@@ -332,4 +333,12 @@ TEST_F(DeltaTriplesTest, addTriplesToLocalVocab) {
   EXPECT_EQ(p3.getBits(), p2.getBits());
   EXPECT_EQ(o3.getBits(), o2.getBits());
   EXPECT_EQ(g3.getBits(), g2.getBits());
+
+  // If we use a local blank node that is already part of the global vocabulary,
+  // also nothing gets rewritten.
+  auto blank0 = Id::makeFromBlankNodeIndex(BlankNodeIndex::make(0));
+  triples[0].ids_[0] = blank0;
+  deltaTriples.addTriplesToLocalVocab(triples);
+  auto s4 = triples[0].ids_[0];
+  EXPECT_EQ(s4.getBits(), blank0.getBits());
 }
