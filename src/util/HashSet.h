@@ -43,7 +43,8 @@ template <class T, class SizeGetter = SizeOfSizeGetter,
           class EqualElem = absl::container_internal::hash_default_eq<T>>
 class CustomHashSetWithMemoryLimit {
  private:
-  absl::node_hash_set<T, HashFct, EqualElem> hashSet_;
+  using HashSet = absl::node_hash_set<T, HashFct, EqualElem>;
+  HashSet hashSet_;
   detail::AllocationMemoryLeftThreadsafe memoryLeft_;
   MemorySize memoryUsed_;
   SizeGetter sizeGetter_;
@@ -57,8 +58,7 @@ class CustomHashSetWithMemoryLimit {
   // Insert an element into the hash set. If the memory limit is exceeded, the
   // insert operation fails with a runtime error. Note: Other overloaded
   // implementations are currently missing.
-  std::pair<typename absl::node_hash_set<T, HashFct, EqualElem>::iterator, bool>
-  insert(const T& value) {
+  std::pair<typename HashSet::iterator, bool> insert(const T& value) {
     MemorySize size = sizeGetter_(value);
     if (!memoryLeft_.ptr()->wlock()->decrease_if_enough_left_or_return_false(
             size)) {
@@ -98,25 +98,15 @@ class CustomHashSetWithMemoryLimit {
 
   size_t count(const T& value) const { return hashSet_.count(value); }
 
-  typename absl::node_hash_set<T, HashFct, EqualElem>::const_iterator find(
-      const T& value) const {
+  HashSet::const_iterator find(const T& value) const {
     return hashSet_.find(value);
   }
 
-  typename absl::node_hash_set<T, HashFct, EqualElem>::iterator find(
-      const T& value) {
-    return hashSet_.find(value);
-  }
+  HashSet::iterator find(const T& value) { return hashSet_.find(value); }
 
-  typename absl::node_hash_set<T, HashFct, EqualElem>::const_iterator begin()
-      const {
-    return hashSet_.begin();
-  }
+  HashSet::const_iterator begin() const { return hashSet_.begin(); }
 
-  typename absl::node_hash_set<T, HashFct, EqualElem>::const_iterator end()
-      const {
-    return hashSet_.end();
-  }
+  HashSet::const_iterator end() const { return hashSet_.end(); }
 
   MemorySize getCurrentMemoryUsage() const { return memoryUsed_; }
 };
