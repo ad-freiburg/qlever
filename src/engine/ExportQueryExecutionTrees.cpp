@@ -418,16 +418,13 @@ static nlohmann::json stringAndTypeToBinding(std::string_view entitystr,
 
 // _____________________________________________________________________________
 cppcoro::generator<std::string> askQueryResultToQLeverJSON(
-    const QueryExecutionTree& qet, std::shared_ptr<const Result> result) {
+    std::shared_ptr<const Result> result) {
   AD_CORRECTNESS_CHECK(result != nullptr);
-  // TODO joka921: Call function for converting this to JSON (which also avoids
-  // spelling out the XSD type).
-  std::string s =
-      getResultForAsk(qet.getResult(true))
-          ? "[\"\\\"true\\\"^^<http://www.w3.org/2001/XMLSchema#boolean>\"]"
-          : "[\"\\\"false\\\"^^<http://www.w3.org/2001/"
-            "XMLSchema#boolean>\"]";
-  co_yield s;
+  std::string_view value = getResultForAsk(result) ? "true" : "false";
+  std::string resultLit =
+      absl::StrCat("\"", value, "\"^^<", XSD_BOOLEAN_TYPE, ">");
+  nlohmann::json resultJson = std::vector{std::move(resultLit)};
+  co_yield resultJson.dump();
 }
 
 // _____________________________________________________________________________
@@ -863,7 +860,7 @@ ExportQueryExecutionTrees::computeResultAsQLeverJSON(
           std::move(result), std::move(cancellationHandle));
     } else {
       // TODO<joka921>: Refactor this to use std::visit.
-      return askQueryResultToQLeverJSON(qet, std::move(result));
+      return askQueryResultToQLeverJSON(std::move(result));
     }
   }();
 
