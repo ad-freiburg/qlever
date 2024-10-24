@@ -17,8 +17,9 @@ bool getResultForAsk(const std::shared_ptr<const Result>& result) {
   if (result->isFullyMaterialized()) {
     return !result->idTable().empty();
   } else {
-    return std::ranges::any_of(result->idTables(),
-                               std::not_fn(&IdTable::empty));
+    return std::ranges::any_of(result->idTables(), [](const auto& pair) {
+      return !pair.idTable_.empty();
+    });
   }
 }
 
