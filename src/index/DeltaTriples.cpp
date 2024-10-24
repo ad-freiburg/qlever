@@ -86,10 +86,33 @@ void DeltaTriples::deleteTriples(CancellationHandle cancellationHandle,
 }
 
 // ____________________________________________________________________________
+void DeltaTriples::addTriplesToLocalVocab(Triples& triples) {
+  auto convertLocalVocab = [this, minLocalBlankNode =
+                                      index_.getBlankNodeManager()->minIndex_](
+                               Id& id) {
+    if (id.getDatatype() == Datatype::LocalVocabIndex) {
+      id = Id::makeFromLocalVocabIndex(
+          localVocab_.getIndexAndAddIfNotContained(*id.getLocalVocabIndex()));
+    } else if (id.getDatatype() == Datatype::BlankNodeIndex) {
+      auto idx = id.getBlankNodeIndex();
+      if (idx.get() >= minLocalBlankNode) {
+        id = Id::makeFromBlankNodeIndex(
+            localVocab_.getBlankNodeIndex(index_.getBlankNodeManager()));
+      }
+    }
+  };
+  std::ranges::for_each(triples, [&convertLocalVocab](IdTriple<0>& triple) {
+    std::ranges::for_each(triple.ids_, convertLocalVocab);
+    std::ranges::for_each(triple.payload_, convertLocalVocab);
+  });
+}
+
+// ____________________________________________________________________________
 void DeltaTriples::modifyTriplesImpl(CancellationHandle cancellationHandle,
                                      Triples triples, bool shouldExist,
                                      TriplesToHandlesMap& targetMap,
                                      TriplesToHandlesMap& inverseMap) {
+  addTriplesToLocalVocab(triples);
   std::ranges::sort(triples);
   auto [first, last] = std::ranges::unique(triples);
   triples.erase(first, last);

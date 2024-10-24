@@ -31,6 +31,7 @@
 class DeltaTriples {
   FRIEND_TEST(DeltaTriplesTest, insertTriplesAndDeleteTriples);
   FRIEND_TEST(DeltaTriplesTest, clear);
+  FRIEND_TEST(DeltaTriplesTest, addTriplesToLocalVocab);
 
  private:
   // The index to which these triples are added.
@@ -122,6 +123,11 @@ class DeltaTriples {
   void modifyTriplesImpl(CancellationHandle cancellationHandle, Triples triples,
                          bool shouldExist, TriplesToHandlesMap& targetMap,
                          TriplesToHandlesMap& inverseMap);
+
+  // Rewrite each triple in `triples` such that all local vocab entries and all
+  // local blank nodes are managed by the `localVocab_` of this class to avoid
+  // lifetime issues.
+  void addTriplesToLocalVocab(Triples& triples);
 
   // Erase `LocatedTriple` object from each `LocatedTriplesPerBlock` list. The
   // argument are iterators for each list, as returned by the method

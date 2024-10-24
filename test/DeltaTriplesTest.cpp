@@ -275,3 +275,8 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
                       {"<A> <B> <D>", "<A> <next> <B>", "<B> <next> <C>",
                        "<C> <prev> <B>", "<B> <prev> <A>"}));
 }
+
+// _____________________________________________________________________________
+TEST_F(DeltaTriplesTest, updateTriplesForLocalVocab) {
+  // TODO<joka921> Write this test.
+}
