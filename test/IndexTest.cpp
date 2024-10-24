@@ -29,36 +29,42 @@ auto lit = ad_utility::testing::tripleComponentLiteral;
 // on the `permutation` (e.g. a fixed P and S in the PSO permutation)
 // of the `index` and checks whether the result of the
 // scan matches `expected`.
-auto makeTestScanWidthOne = [](const IndexImpl& index) {
-  return [&index](const TripleComponent& c0, const TripleComponent& c1,
-                  Permutation::Enum permutation, const VectorTable& expected,
-                  Permutation::ColumnIndices additionalColumns = {},
-                  ad_utility::source_location l =
-                      ad_utility::source_location::current()) {
-    auto t = generateLocationTrace(l);
-    IdTable result =
-        index.scan({c0, c1, std::nullopt}, permutation, additionalColumns,
-                   std::make_shared<ad_utility::CancellationHandle<>>());
-    ASSERT_EQ(result.numColumns(), 1 + additionalColumns.size());
-    ASSERT_EQ(result, makeIdTableFromVector(expected));
-  };
+auto makeTestScanWidthOne = [](const IndexImpl& index,
+                               const QueryExecutionContext& qec) {
+  return
+      [&index, &qec](const TripleComponent& c0, const TripleComponent& c1,
+                     Permutation::Enum permutation, const VectorTable& expected,
+                     Permutation::ColumnIndices additionalColumns = {},
+                     ad_utility::source_location l =
+                         ad_utility::source_location::current()) {
+        auto t = generateLocationTrace(l);
+        IdTable result =
+            index.scan({c0, c1, std::nullopt}, permutation, additionalColumns,
+                       std::make_shared<ad_utility::CancellationHandle<>>(),
+                       qec.deltaTriples());
+        ASSERT_EQ(result.numColumns(), 1 + additionalColumns.size());
+        ASSERT_EQ(result, makeIdTableFromVector(expected));
+      };
 };
 // Return a lambda that runs a scan for a fixed element `c0`
 // on the `permutation` (e.g. a fixed P in the PSO permutation)
 // of the `index` and checks whether the result of the
 // scan matches `expected`.
-auto makeTestScanWidthTwo = [](const IndexImpl& index) {
-  return [&index](const TripleComponent& c0, Permutation::Enum permutation,
-                  const VectorTable& expected,
-                  ad_utility::source_location l =
-                      ad_utility::source_location::current()) {
-    auto t = generateLocationTrace(l);
-    IdTable wol =
-        index.scan({c0, std::nullopt, std::nullopt}, permutation,
-                   Permutation::ColumnIndicesRef{},
-                   std::make_shared<ad_utility::CancellationHandle<>>());
-    ASSERT_EQ(wol, makeIdTableFromVector(expected));
-  };
+auto makeTestScanWidthTwo = [](const IndexImpl& index,
+                               const QueryExecutionContext& qec) {
+  return
+      [&index, &qec](const TripleComponent& c0, Permutation::Enum permutation,
+                     const VectorTable& expected,
+                     ad_utility::source_location l =
+                         ad_utility::source_location::current()) {
+        auto t = generateLocationTrace(l);
+        IdTable wol =
+            index.scan({c0, std::nullopt, std::nullopt}, permutation,
+                       Permutation::ColumnIndicesRef{},
+                       std::make_shared<ad_utility::CancellationHandle<>>(),
+                       qec.deltaTriples());
+        ASSERT_EQ(wol, makeIdTableFromVector(expected));
+      };
 };
 }  // namespace
 
@@ -72,10 +78,12 @@ TEST(IndexTest, createFromTurtleTest) {
           "<a2> <b2> <c2> .";
 
       auto getIndex = [&]() -> decltype(auto) {
+        auto qec = getQec(kb, loadAllPermutations, loadPatterns);
         [[maybe_unused]] decltype(auto) ref =
             getQec(kb, loadAllPermutations, loadPatterns)->getIndex().getImpl();
-        return ref;
+        return std::tie(ref, *qec);
       };
+
       if (!loadAllPermutations && loadPatterns) {
         AD_EXPECT_THROW_WITH_MESSAGE(
             getIndex(),
@@ -83,7 +91,8 @@ TEST(IndexTest, createFromTurtleTest) {
                 "patterns can only be built when all 6 permutations"));
         return;
       }
-      const IndexImpl& index = getIndex();
+      const auto& [index, qec] = getIndex();
+      const auto& deltaTriples = qec.deltaTriples();
 
       auto getId = makeGetId(getQec(kb)->getIndex());
       Id a = getId("<a>");
@@ -94,31 +103,37 @@ TEST(IndexTest, createFromTurtleTest) {
       Id c2 = getId("<c2>");
 
       // TODO<joka921> We could also test the multiplicities here.
-      ASSERT_TRUE(index.PSO().getMetadata(b).has_value());
-      ASSERT_TRUE(index.PSO().getMetadata(b2).has_value());
-      ASSERT_FALSE(index.PSO().getMetadata(a2).has_value());
-      ASSERT_FALSE(index.PSO().getMetadata(c).has_value());
+      ASSERT_TRUE(index.PSO().getMetadata(b, deltaTriples).has_value());
+      ASSERT_TRUE(index.PSO().getMetadata(b2, deltaTriples).has_value());
+      ASSERT_FALSE(index.PSO().getMetadata(a2, deltaTriples).has_value());
+      ASSERT_FALSE(index.PSO().getMetadata(c, deltaTriples).has_value());
       ASSERT_FALSE(
           index.PSO()
-              .getMetadata(Id::makeFromVocabIndex(VocabIndex::make(735)))
+              .getMetadata(Id::makeFromVocabIndex(VocabIndex::make(735)),
+                           deltaTriples)
               .has_value());
-      ASSERT_FALSE(index.PSO().getMetadata(b).value().isFunctional());
-      ASSERT_TRUE(index.PSO().getMetadata(b2).value().isFunctional());
+      ASSERT_FALSE(
+          index.PSO().getMetadata(b, deltaTriples).value().isFunctional());
+      ASSERT_TRUE(
+          index.PSO().getMetadata(b2, deltaTriples).value().isFunctional());
 
-      ASSERT_TRUE(index.POS().getMetadata(b).has_value());
-      ASSERT_TRUE(index.POS().getMetadata(b2).has_value());
-      ASSERT_FALSE(index.POS().getMetadata(a2).has_value());
-      ASSERT_FALSE(index.POS().getMetadata(c).has_value());
+      ASSERT_TRUE(index.POS().getMetadata(b, deltaTriples).has_value());
+      ASSERT_TRUE(index.POS().getMetadata(b2, deltaTriples).has_value());
+      ASSERT_FALSE(index.POS().getMetadata(a2, deltaTriples).has_value());
+      ASSERT_FALSE(index.POS().getMetadata(c, deltaTriples).has_value());
       ASSERT_FALSE(
           index.POS()
-              .getMetadata(Id::makeFromVocabIndex(VocabIndex::make(735)))
+              .getMetadata(Id::makeFromVocabIndex(VocabIndex::make(735)),
+                           deltaTriples)
               .has_value());
-      ASSERT_TRUE(index.POS().getMetadata(b).value().isFunctional());
-      ASSERT_TRUE(index.POS().getMetadata(b2).value().isFunctional());
+      ASSERT_TRUE(
+          index.POS().getMetadata(b, deltaTriples).value().isFunctional());
+      ASSERT_TRUE(
+          index.POS().getMetadata(b2, deltaTriples).value().isFunctional());
 
       // Relation b
       // Pair index
-      auto testTwo = makeTestScanWidthTwo(index);
+      auto testTwo = makeTestScanWidthTwo(index, qec);
       testTwo(iri("<b>"), Permutation::PSO, {{a, c}, {a, c2}});
       std::vector<std::array<Id, 2>> buffer;
 
@@ -132,7 +147,7 @@ TEST(IndexTest, createFromTurtleTest) {
         // possibly contain the combination of the ids. In this example <b2> is
         // the largest predicate that occurs and <c2> is larger than the largest
         // subject that appears with <b2>.
-        auto testOne = makeTestScanWidthOne(index);
+        auto testOne = makeTestScanWidthOne(index, qec);
         testOne(iri("<b2>"), iri("<c2>"), Permutation::PSO, {});
         // An empty scan result must still have the correct number of columns.
         testOne(iri("<notExisting>"), iri("<alsoNotExisting>"),
@@ -150,7 +165,9 @@ TEST(IndexTest, createFromTurtleTest) {
           "<c> <is-a> <1> .\n"
           "<c> <is-a> <2> .\n";
 
-      const IndexImpl& index = getQec(kb)->getIndex().getImpl();
+      const auto& qec = *getQec(kb);
+      const IndexImpl& index = qec.getIndex().getImpl();
+      const auto& deltaTriples = qec.deltaTriples();
 
       auto getId = makeGetId(getQec(kb)->getIndex());
       Id zero = getId("<0>");
@@ -162,15 +179,17 @@ TEST(IndexTest, createFromTurtleTest) {
       Id c = getId("<c>");
       Id isA = getId("<is-a>");
 
-      ASSERT_TRUE(index.PSO().getMetadata(isA).has_value());
-      ASSERT_FALSE(index.PSO().getMetadata(a).has_value());
+      ASSERT_TRUE(index.PSO().getMetadata(isA, deltaTriples).has_value());
+      ASSERT_FALSE(index.PSO().getMetadata(a, deltaTriples).has_value());
 
-      ASSERT_FALSE(index.PSO().getMetadata(isA).value().isFunctional());
+      ASSERT_FALSE(
+          index.PSO().getMetadata(isA, deltaTriples).value().isFunctional());
 
-      ASSERT_TRUE(index.POS().getMetadata(isA).has_value());
-      ASSERT_FALSE(index.POS().getMetadata(isA).value().isFunctional());
+      ASSERT_TRUE(index.POS().getMetadata(isA, deltaTriples).has_value());
+      ASSERT_FALSE(
+          index.POS().getMetadata(isA, deltaTriples).value().isFunctional());
 
-      auto testTwo = makeTestScanWidthTwo(index);
+      auto testTwo = makeTestScanWidthTwo(index, qec);
       testTwo(iri("<is-a>"), Permutation::PSO,
               {{a, zero},
                {a, one},
@@ -203,7 +222,9 @@ TEST(IndexTest, createFromOnDiskIndexTest) {
       "<a>  <b>  <c2> .\n"
       "<a>  <b2> <c>  .\n"
       "<a2> <b2> <c2> .";
-  const IndexImpl& index = getQec(kb)->getIndex().getImpl();
+  const auto& qec = *getQec(kb);
+  const IndexImpl& index = qec.getIndex().getImpl();
+  const auto& deltaTriples = qec.deltaTriples();
 
   auto getId = makeGetId(getQec(kb)->getIndex());
   Id b = getId("<b>");
@@ -211,19 +232,19 @@ TEST(IndexTest, createFromOnDiskIndexTest) {
   Id a = getId("<a>");
   Id c = getId("<c>");
 
-  ASSERT_TRUE(index.PSO().getMetadata(b).has_value());
-  ASSERT_TRUE(index.PSO().getMetadata(b2).has_value());
-  ASSERT_FALSE(index.PSO().getMetadata(a).has_value());
-  ASSERT_FALSE(index.PSO().getMetadata(c).has_value());
-  ASSERT_FALSE(index.PSO().getMetadata(b).value().isFunctional());
-  ASSERT_TRUE(index.PSO().getMetadata(b2).value().isFunctional());
+  ASSERT_TRUE(index.PSO().getMetadata(b, deltaTriples).has_value());
+  ASSERT_TRUE(index.PSO().getMetadata(b2, deltaTriples).has_value());
+  ASSERT_FALSE(index.PSO().getMetadata(a, deltaTriples).has_value());
+  ASSERT_FALSE(index.PSO().getMetadata(c, deltaTriples).has_value());
+  ASSERT_FALSE(index.PSO().getMetadata(b, deltaTriples).value().isFunctional());
+  ASSERT_TRUE(index.PSO().getMetadata(b2, deltaTriples).value().isFunctional());
 
-  ASSERT_TRUE(index.POS().getMetadata(b).has_value());
-  ASSERT_TRUE(index.POS().getMetadata(b2).has_value());
-  ASSERT_FALSE(index.POS().getMetadata(a).has_value());
-  ASSERT_FALSE(index.POS().getMetadata(c).has_value());
-  ASSERT_TRUE(index.POS().getMetadata(b).value().isFunctional());
-  ASSERT_TRUE(index.POS().getMetadata(b2).value().isFunctional());
+  ASSERT_TRUE(index.POS().getMetadata(b, deltaTriples).has_value());
+  ASSERT_TRUE(index.POS().getMetadata(b2, deltaTriples).has_value());
+  ASSERT_FALSE(index.POS().getMetadata(a, deltaTriples).has_value());
+  ASSERT_FALSE(index.POS().getMetadata(c, deltaTriples).has_value());
+  ASSERT_TRUE(index.POS().getMetadata(b, deltaTriples).value().isFunctional());
+  ASSERT_TRUE(index.POS().getMetadata(b2, deltaTriples).value().isFunctional());
 };
 
 TEST(IndexTest, indexId) {
@@ -254,12 +275,13 @@ TEST(IndexTest, scanTest) {
       IdTable wol(1, makeAllocator());
       IdTable wtl(2, makeAllocator());
 
-      auto getId = makeGetId(getQec(kb)->getIndex());
+      const auto& qec = *getQec(kb);
+      auto getId = makeGetId(qec.getIndex());
       Id a = getId("<a>");
       Id c = getId("<c>");
       Id a2 = getId("<a2>");
       Id c2 = getId("<c2>");
-      auto testTwo = makeTestScanWidthTwo(index);
+      auto testTwo = makeTestScanWidthTwo(index, qec);
 
       testTwo(iri("<b>"), PSO, {{a, c}, {a, c2}});
       testTwo(iri("<x>"), PSO, {});
@@ -268,7 +290,7 @@ TEST(IndexTest, scanTest) {
       testTwo(iri("<x>"), POS, {});
       testTwo(iri("<c>"), POS, {});
 
-      auto testOne = makeTestScanWidthOne(index);
+      auto testOne = makeTestScanWidthOne(index, qec);
 
       testOne(iri("<b>"), iri("<a>"), PSO, {{c}, {c2}});
       testOne(iri("<b>"), iri("<c>"), PSO, {});
@@ -284,10 +306,8 @@ TEST(IndexTest, scanTest) {
          "<c> <is-a> <2> . \n";
 
     {
-      const IndexImpl& index =
-          ad_utility::testing::getQec(kb, true, true, useCompression)
-              ->getIndex()
-              .getImpl();
+      const auto& qec = *getQec(kb, true, true, useCompression);
+      const IndexImpl& index = qec.getIndex().getImpl();
 
       auto getId = makeGetId(ad_utility::testing::getQec(kb)->getIndex());
       Id a = getId("<a>");
@@ -298,7 +318,7 @@ TEST(IndexTest, scanTest) {
       Id two = getId("<2>");
       Id three = getId("<3>");
 
-      auto testTwo = makeTestScanWidthTwo(index);
+      auto testTwo = makeTestScanWidthTwo(index, qec);
       testTwo(iri("<is-a>"), PSO,
               {{{a, zero},
                 {a, one},
@@ -316,7 +336,7 @@ TEST(IndexTest, scanTest) {
                {two, c},
                {three, b}});
 
-      auto testWidthOne = makeTestScanWidthOne(index);
+      auto testWidthOne = makeTestScanWidthOne(index, qec);
 
       testWidthOne(iri("<is-a>"), iri("<0>"), POS, {{a}, {b}});
       testWidthOne(iri("<is-a>"), iri("<1>"), POS, {{a}, {c}});
@@ -333,8 +353,8 @@ TEST(IndexTest, scanTest) {
 
 // ______________________________________________________________
 TEST(IndexTest, emptyIndex) {
-  const IndexImpl& emptyIndexWithCompression =
-      getQec("", true, true, true)->getIndex().getImpl();
+  const auto& qec = *getQec("", true, true, true);
+  const IndexImpl& emptyIndexWithCompression = qec.getIndex().getImpl();
   const IndexImpl& emptyIndexWithoutCompression =
       getQec("", true, true, false)->getIndex().getImpl();
 
@@ -342,7 +362,7 @@ TEST(IndexTest, emptyIndex) {
   EXPECT_EQ(emptyIndexWithoutCompression.numTriples().normal, 0u);
   EXPECT_EQ(emptyIndexWithCompression.numTriples().internal, 0u);
   EXPECT_EQ(emptyIndexWithoutCompression.numTriples().internal, 0u);
-  auto test = makeTestScanWidthTwo(emptyIndexWithCompression);
+  auto test = makeTestScanWidthTwo(emptyIndexWithCompression, qec);
   // Test that scanning an empty index works, but yields an empty permutation.
   test(iri("<x>"), Permutation::PSO, {});
 }
@@ -406,7 +426,8 @@ TEST(IndexTest, NumDistinctEntities) {
       "<x> "
       "<label> \"Beta\". <x> <is-a> <y>. <y> <is-a> <x>. <z> <label> "
       "\"zz\"@en";
-  const IndexImpl& index = getQec(turtleInput)->getIndex().getImpl();
+  const auto& qec = *getQec(turtleInput);
+  const IndexImpl& index = qec.getIndex().getImpl();
   // Note: Those numbers might change as the triples of the test index in
   // `IndexTestHelpers.cpp` change.
   // TODO<joka921> Also check the number of triples and the number of
@@ -444,7 +465,8 @@ TEST(IndexTest, NumDistinctEntities) {
   EXPECT_FLOAT_EQ(multiplicities[1], 7.0 / 2.0);
   EXPECT_FLOAT_EQ(multiplicities[2], 7.0 / 7.0);
 
-  multiplicities = index.getMultiplicities(iri("<x>"), Permutation::SPO);
+  multiplicities =
+      index.getMultiplicities(iri("<x>"), Permutation::SPO, qec.deltaTriples());
   EXPECT_FLOAT_EQ(multiplicities[0], 2.5);
   EXPECT_FLOAT_EQ(multiplicities[1], 1);
 }

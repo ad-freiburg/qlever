@@ -26,6 +26,8 @@
 
 // Forward declaration of the `IdTable` class.
 class IdTable;
+// Forward declaration of the `LocatedTriples` class.
+class LocatedTriplesPerBlock;
 
 // This type is used to buffer small relations that will be stored in the same
 // block.
@@ -465,6 +467,9 @@ class CompressedRelationReader {
 
   using IdTableGenerator = cppcoro::generator<IdTable, LazyScanMetadata>;
 
+  using BlockCache = ad_utility::ConcurrentCache<ad_utility::HeapBasedLRUCache<
+      off_t, DecompressedBlock, DecompressedBlockSizeGetter>>;
+
  private:
   // This cache stores a small number of decompressed blocks. Its current
   // purpose is to make the e2e-tests run fast. They contain many SPARQL queries
@@ -472,19 +477,28 @@ class CompressedRelationReader {
   // Note: The cache is thread-safe and using it does not change the semantics
   // of this class, so it is safe to mark it as `mutable` to make the `scan`
   // functions below `const`.
-  mutable ad_utility::ConcurrentCache<ad_utility::HeapBasedLRUCache<
-      off_t, DecompressedBlock, DecompressedBlockSizeGetter>>
-      blockCache_{20ul};
+  mutable BlockCache* blockCache_;
 
   // The allocator used to allocate intermediate buffers.
   mutable Allocator allocator_;
 
   // The file that stores the actual permutations.
-  ad_utility::File file_;
+  const ad_utility::File* file_;
+
+  const LocatedTriplesPerBlock* locatedTriples_;
 
  public:
-  explicit CompressedRelationReader(Allocator allocator, ad_utility::File file)
-      : allocator_{std::move(allocator)}, file_{std::move(file)} {}
+  explicit CompressedRelationReader(
+      Allocator allocator, const ad_utility::File* file,
+      const LocatedTriplesPerBlock* locatedTriples, BlockCache* blockCache)
+      : blockCache_(blockCache),
+        allocator_{std::move(allocator)},
+        file_{file},
+        locatedTriples_{locatedTriples} {
+    AD_CONTRACT_CHECK(file_ != nullptr);
+    AD_CONTRACT_CHECK(blockCache_ != nullptr);
+    AD_CONTRACT_CHECK(locatedTriples_ != nullptr);
+  }
 
   // Get the blocks (an ordered subset of the blocks that are passed in via the
   // `metadataAndBlocks`) where the `col1Id` can theoretically match one of the
@@ -541,6 +555,14 @@ class CompressedRelationReader {
       ColumnIndices additionalColumns, CancellationHandle cancellationHandle,
       LimitOffsetClause limitOffset = {}) const;
 
+ private:
+  static CompressedRelationReader::IdTableGenerator lazyScanImpl(
+      CompressedRelationReader reader, ScanSpecification scanSpec,
+      std::vector<CompressedBlockMetadata> blockMetadata,
+      ColumnIndices additionalColumns, CancellationHandle cancellationHandle,
+      LimitOffsetClause limitOffset = {});
+
+ public:
   // Only get the size of the result for a given permutation XYZ for a given X
   // and Y. This can be done by scanning one or two blocks. Note: The overload
   // of this function where only the X is given is not needed, as the size of

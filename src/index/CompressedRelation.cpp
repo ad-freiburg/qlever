@@ -222,12 +222,22 @@ bool CompressedRelationReader::FilterDuplicatesAndGraphs::canBlockBeSkipped(
       });
 }
 
-// _____________________________________________________________________________
 CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
     ScanSpecification scanSpec,
     std::vector<CompressedBlockMetadata> blockMetadata,
     ColumnIndices additionalColumns, CancellationHandle cancellationHandle,
     LimitOffsetClause limitOffset) const {
+  return lazyScanImpl(*this, std::move(scanSpec), std::move(blockMetadata),
+                      std::move(additionalColumns),
+                      std::move(cancellationHandle), std::move(limitOffset));
+}
+// _____________________________________________________________________________
+CompressedRelationReader::IdTableGenerator
+CompressedRelationReader::lazyScanImpl(
+    CompressedRelationReader reader, ScanSpecification scanSpec,
+    std::vector<CompressedBlockMetadata> blockMetadata,
+    ColumnIndices additionalColumns, CancellationHandle cancellationHandle,
+    LimitOffsetClause limitOffset) {
   // We will modify `limitOffset` as we go, so we have to copy the original
   // value for sanity checks which we apply later.
   const auto originalLimit = limitOffset;
@@ -272,8 +282,8 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
       scanSpec.graphsToFilter(), graphColumnIndex, deleteGraphColumn};
 
   auto getIncompleteBlock = [&](auto it) {
-    auto result = readPossiblyIncompleteBlock(scanSpec, *it, std::ref(details),
-                                              columnIndices);
+    auto result = reader.readPossiblyIncompleteBlock(
+        scanSpec, *it, std::ref(details), columnIndices);
     cancellationHandle->throwIfCancelled();
     return result;
   };
@@ -297,7 +307,7 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
   if (beginBlockMetadata + 1 < endBlockMetadata) {
     // We copy the cancellationHandle because it is still captured by reference
     // inside the `getIncompleteBlock` lambda.
-    auto blockGenerator = asyncParallelBlockGenerator(
+    auto blockGenerator = reader.asyncParallelBlockGenerator(
         beginBlockMetadata + 1, endBlockMetadata - 1, columnIndices,
         cancellationHandle, limitOffset, filterDuplicatesAndGraphs);
     blockGenerator.setDetailsPointer(&details);
@@ -535,7 +545,7 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
   auto cacheKey = blockMetadata.offsetsAndCompressedSize_.at(0).offsetInFile_;
   auto sharedResultFromCache =
       blockCache_
-          .computeOnce(
+          ->computeOnce(
               cacheKey,
               [&]() {
                 return readAndDecompressBlock(blockMetadata, allColumns);
@@ -760,7 +770,8 @@ CompressedBlock CompressedRelationReader::readCompressedBlockFromFile(
         blockMetaData.offsetsAndCompressedSize_.at(columnIndices[i]);
     auto& currentCol = compressedBuffer[i];
     currentCol.resize(offset.compressedSize_);
-    file_.read(currentCol.data(), offset.compressedSize_, offset.offsetInFile_);
+    file_->read(currentCol.data(), offset.compressedSize_,
+                offset.offsetInFile_);
   }
   return compressedBuffer;
 }

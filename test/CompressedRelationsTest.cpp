@@ -194,12 +194,18 @@ auto writeAndOpenRelations(const std::vector<RelationInput>& inputs,
                            ad_utility::MemorySize blocksize) {
   auto [blocks, metaData] = compressedRelationTestWriteCompressedRelations(
       inputs, filename, blocksize);
+  auto file = std::make_shared<ad_utility::File>(filename, "r");
+  auto cache = std::make_shared<CompressedRelationReader::BlockCache>();
+  auto& index = ad_utility::testing::getQec()->getIndex();
+  static DeltaTriples deltaTriples(index);
   auto reader = [&]() {
     return std::make_unique<CompressedRelationReader>(
-        ad_utility::makeUnlimitedAllocator<Id>(),
-        ad_utility::File{filename, "r"});
+        ad_utility::makeUnlimitedAllocator<Id>(), file.get(),
+        &deltaTriples.getLocatedTriplesPerBlock(Permutation::Enum::PSO),
+        cache.get());
   };
-  return std::tuple{std::move(blocks), std::move(metaData), reader()};
+  return std::tuple{std::move(blocks), std::move(metaData), reader(),
+                    std::pair{std::move(file), std::move(cache)}};
 }
 
 // Run a set of tests on a permutation that is defined by the `inputs`. The
@@ -211,7 +217,7 @@ void testCompressedRelations(const auto& inputs, std::string testCaseName,
                              ad_utility::MemorySize blocksize) {
   auto filename = testCaseName + ".dat";
   auto cleanup = makeCleanup(filename);
-  auto [blocks, metaData, readerPtr] =
+  auto [blocks, metaData, readerPtr, file] =
       writeAndOpenRelations(inputs, filename, blocksize);
   auto& reader = *readerPtr;
 
@@ -330,7 +336,7 @@ TEST(CompressedRelationWriter, getFirstAndLastTriple) {
         i, {{i - 1, i + 1, g2}, {i - 1, i + 2, g2}, {i + 1, i - 1, g2}}});
   }
   auto filename = "getFirstAndLastTriple.dat";
-  auto [blocks, metaData, readerPtr] =
+  auto [blocks, metaData, readerPtr, file] =
       writeAndOpenRelations(inputs, filename, 40_B);
 
   // Test that the result of calling `getFirstAndLastTriple` for the index from
@@ -746,7 +752,7 @@ TEST(CompressedRelationWriter, graphInfoInBlockMetadata) {
   }
   using namespace ::testing;
   {
-    auto [blocks, metadata, reader] =
+    auto [blocks, metadata, reader, file] =
         writeAndOpenRelations(inputs, "graphInfo1", 100_MB);
     EXPECT_EQ(blocks.size(), 1);
     EXPECT_FALSE(blocks.at(0).containsDuplicatesWithDifferentGraphs_);
@@ -760,7 +766,7 @@ TEST(CompressedRelationWriter, graphInfoInBlockMetadata) {
     inputs.at(i).col1And2_.at(0).at(2) = i;
   }
   {
-    auto [blocks, metadata, reader] =
+    auto [blocks, metadata, reader, file] =
         writeAndOpenRelations(inputs, "graphInfo1", 100_MB);
     EXPECT_EQ(blocks.size(), 1);
     EXPECT_FALSE(blocks.at(0).containsDuplicatesWithDifferentGraphs_);
@@ -772,7 +778,7 @@ TEST(CompressedRelationWriter, graphInfoInBlockMetadata) {
   inputs.push_back(RelationInput{3, {{1, 2, 0}, {1, 3, 0}, {1, 3, 1}}});
 
   {
-    auto [blocks, metadata, reader] =
+    auto [blocks, metadata, reader, file] =
         writeAndOpenRelations(inputs, "graphInfo1", 100_MB);
     EXPECT_EQ(blocks.size(), 1);
     EXPECT_TRUE(blocks.at(0).containsDuplicatesWithDifferentGraphs_);
@@ -795,7 +801,7 @@ TEST(CompressedRelationWriter, scanWithGraphs) {
                                   {9, 5, 1}}});
   using namespace ::testing;
   for (auto blocksize : std::array{8_B, 16_B, 32_B, 64_B, 128_B}) {
-    auto [blocks, metadata, reader] =
+    auto [blocks, metadata, reader, file] =
         writeAndOpenRelations(inputs, "scanWithGraphs", blocksize);
     ad_utility::HashSet<Id> graphs{V(0)};
     ScanSpecification spec{V(42), std::nullopt, std::nullopt, {}, graphs};

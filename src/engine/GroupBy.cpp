@@ -663,8 +663,8 @@ std::optional<IdTable> GroupBy::computeGroupByObjectWithCount() const {
   const auto& permutation =
       getExecutionContext()->getIndex().getPimpl().getPermutation(
           indexScan->permutation());
-  auto result = permutation.getDistinctCol1IdsAndCounts(col0Id.value(),
-                                                        cancellationHandle_);
+  auto result = permutation.getDistinctCol1IdsAndCounts(
+      col0Id.value(), cancellationHandle_, deltaTriples());
   indexScan->updateRuntimeInformationWhenOptimizedOut(
       {}, RuntimeInformation::Status::optimizedOut);
 
@@ -716,7 +716,8 @@ std::optional<IdTable> GroupBy::computeGroupByForFullIndexScan() const {
   const auto& permutation =
       getExecutionContext()->getIndex().getPimpl().getPermutation(
           permutationEnum.value());
-  auto table = permutation.getDistinctCol0IdsAndCounts(cancellationHandle_);
+  auto table = permutation.getDistinctCol0IdsAndCounts(cancellationHandle_,
+                                                       deltaTriples());
   if (numCounts == 0) {
     table.setColumnSubset({{0}});
   }
@@ -837,7 +838,8 @@ std::optional<IdTable> GroupBy::computeGroupByForJoinWithFullScan() const {
   // Take care of duplicate values in the input.
   Id currentId = subresult->idTable()(0, columnIndex);
   size_t currentCount = 0;
-  size_t currentCardinality = index.getCardinality(currentId, permutation);
+  size_t currentCardinality =
+      index.getCardinality(currentId, permutation, deltaTriples());
 
   auto pushRow = [&]() {
     // If the count is 0 this means that the element with the `currentId`
@@ -859,7 +861,8 @@ std::optional<IdTable> GroupBy::computeGroupByForJoinWithFullScan() const {
       // TODO<joka921> This is also not quite correct, we want the cardinality
       // without the internally added triples, but that is not easy to
       // retrieve right now.
-      currentCardinality = index.getCardinality(id, permutation);
+      currentCardinality =
+          index.getCardinality(id, permutation, deltaTriples());
     }
     currentCount += currentCardinality;
   }
