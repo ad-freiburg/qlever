@@ -125,9 +125,14 @@ class DeltaTriples {
                          TriplesToHandlesMap& inverseMap);
 
   // Rewrite each triple in `triples` such that all local vocab entries and all
-  // local blank nodes are managed by the `localVocab_` of this class to avoid
-  // lifetime issues.
-  void addTriplesToLocalVocab(Triples& triples);
+  // local blank nodes are managed by the `localVocab_` of this class.
+  //
+  // NOTE: This is important for two reasons: (1) It avoids duplicates for
+  // successive insertions referring to the same local vocab entries; (2) It
+  // avoids storing local vocab entries or blank nodes that were created only
+  // temporarily when evaluating the WHERE clause of an update query.
+  void rewriteLocalVocabEntriesAndBlankNodes(Triples& triples);
+  FRIEND_TEST(DeltaTriplesTest, rewriteLocalVocabEntriesAndBlankNodes);
 
   // Erase `LocatedTriple` object from each `LocatedTriplesPerBlock` list. The
   // argument are iterators for each list, as returned by the method
