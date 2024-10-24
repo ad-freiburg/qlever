@@ -190,6 +190,18 @@ struct IsNumericValueGetter : Mixin<IsNumericValueGetter> {
   }
 };
 
+// Value getter for `isWktPoint`.
+struct IsWktPointValueGetter : Mixin<IsWktPointValueGetter> {
+  using Mixin<IsWktPointValueGetter>::operator();
+  Id operator()(ValueId id, const EvaluationContext*) const {
+    return Id::makeFromBool(id.getDatatype() == Datatype::GeoPoint);
+  }
+
+  Id operator()(const LiteralOrIri&, const EvaluationContext*) const {
+    return Id::makeFromBool(false);
+  }
+};
+
 /// This class can be used as the `ValueGetter` argument of Expression
 /// templates. It produces a `std::optional<DateYearOrDuration>`.
 struct DateValueGetter : Mixin<DateValueGetter> {
