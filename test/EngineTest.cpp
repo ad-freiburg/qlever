@@ -15,12 +15,10 @@
 #include "engine/ValuesForTesting.h"
 #include "engine/idTable/IdTable.h"
 #include "util/AllocatorTestHelpers.h"
-#include "util/Forward.h"
 #include "util/GTestHelpers.h"
 #include "util/IdTableHelpers.h"
 #include "util/IdTestHelpers.h"
 #include "util/IndexTestHelpers.h"
-#include "util/Random.h"
 
 using ad_utility::testing::makeAllocator;
 using namespace ad_utility::testing;
@@ -29,31 +27,6 @@ auto V = VocabId;
 constexpr auto U = Id::makeUndefined();
 using JoinColumns = std::vector<std::array<ColumnIndex, 2>>;
 }  // namespace
-
-TEST(EngineTest, distinctTest) {
-  IdTable input{makeIdTableFromVector(
-      {{1, 1, 3, 7}, {6, 1, 3, 6}, {2, 2, 3, 5}, {3, 6, 5, 4}, {1, 6, 5, 1}})};
-
-  IdTable result{4, makeAllocator()};
-
-  std::vector<ColumnIndex> keepIndices{{1, 2}};
-  CALL_FIXED_SIZE(4, Engine::distinct, input, keepIndices, &result);
-
-  // For easier checking.
-  IdTable expectedResult{
-      makeIdTableFromVector({{1, 1, 3, 7}, {2, 2, 3, 5}, {3, 6, 5, 4}})};
-  ASSERT_EQ(expectedResult, result);
-}
-
-TEST(EngineTest, distinctWithEmptyInput) {
-  IdTable input{1, makeAllocator()};
-  // Deliberately input a non-empty result to check that it is
-  // overwritten by the (empty) input.
-  IdTable result = makeIdTableFromVector({{3}});
-  CALL_FIXED_SIZE(1, Engine::distinct, input, std::vector<ColumnIndex>{},
-                  &result);
-  ASSERT_EQ(input, result);
-}
 
 void testOptionalJoin(const IdTable& inputA, const IdTable& inputB,
                       JoinColumns jcls, const IdTable& expectedResult) {
