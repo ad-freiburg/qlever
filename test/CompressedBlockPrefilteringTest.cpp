@@ -535,3 +535,13 @@ TEST_F(TestPrefilterExprOnBlockMetadata, testInputConditionCheck) {
       "consistent.",
       2);
 }
+
+//______________________________________________________________________________
+// Check for correctness given only one BlockMetadata value is provided.
+TEST_F(TestPrefilterExprOnBlockMetadata, testWithOneBlockMetadataValue) {
+  auto expr = orExpr(eq(DoubleId(-6.25)), eq(IntId(0)));
+  std::vector<BlockMetadata> input = {b16};
+  EXPECT_EQ(expr->evaluate(input, 0), input);
+  EXPECT_EQ(expr->evaluate(input, 1), std::vector<BlockMetadata>{});
+  EXPECT_EQ(expr->evaluate(input, 2), std::vector<BlockMetadata>{});
+}

@@ -57,33 +57,30 @@ static void checkEvalRequirements(const std::vector<BlockMetadata>& input,
     throw std::runtime_error(errorMessage);
   };
   // Check for duplicates.
-  if (auto it = std::ranges::adjacent_find(input.begin(), input.end());
-      it != input.end()) {
+  if (auto it = std::ranges::adjacent_find(input); it != input.end()) {
     throwRuntimeError("The provided data blocks must be unique.");
   }
   // Helper to check for fully sorted blocks. Return `true` if `b1 < b2` is
   // satisfied.
-  const auto checkOrder = [](const BlockMetadata& b1,
-                             const BlockMetadata& b2) -> bool {
+  const auto checkOrder = [](const BlockMetadata& b1, const BlockMetadata& b2) {
     return b1.blockIndex_ < b2.blockIndex_ &&
            getMaskedTriple(b1.lastTriple_) < getMaskedTriple(b2.firstTriple_);
   };
-  if (!std::ranges::is_sorted(input.begin(), input.end(), checkOrder)) {
+  if (!std::ranges::is_sorted(input, checkOrder)) {
     throwRuntimeError("The blocks must be provided in sorted order.");
   }
   // Helper to check for column consistency. Returns `true` if the columns for
   // `b1` and `b2` up to the evaluation are inconsistent.
-  const auto checkColumnConsistency = [evaluationColumn](
-                                          const BlockMetadata& b1,
-                                          const BlockMetadata& b2) -> bool {
-    const auto& b1Last = getMaskedTriple(b1.lastTriple_, evaluationColumn);
-    const auto& b2First = getMaskedTriple(b2.firstTriple_, evaluationColumn);
-    return getMaskedTriple(b1.firstTriple_, evaluationColumn) != b1Last ||
-           b1Last != b2First ||
-           b2First != getMaskedTriple(b2.lastTriple_, evaluationColumn);
-  };
-  if (auto it = std::ranges::adjacent_find(input.begin(), input.end(),
-                                           checkColumnConsistency);
+  const auto checkColumnConsistency =
+      [evaluationColumn](const BlockMetadata& b1, const BlockMetadata& b2) {
+        const auto& b1Last = getMaskedTriple(b1.lastTriple_, evaluationColumn);
+        const auto& b2First =
+            getMaskedTriple(b2.firstTriple_, evaluationColumn);
+        return getMaskedTriple(b1.firstTriple_, evaluationColumn) != b1Last ||
+               b1Last != b2First ||
+               b2First != getMaskedTriple(b2.lastTriple_, evaluationColumn);
+      };
+  if (auto it = std::ranges::adjacent_find(input, checkColumnConsistency);
       it != input.end()) {
     throwRuntimeError(
         "The values in the columns up to the evaluation column must be "
@@ -100,7 +97,7 @@ static auto getSetUnion(const std::vector<BlockMetadata>& blocks1,
   std::vector<BlockMetadata> mergedVectors;
   mergedVectors.reserve(blocks1.size() + blocks2.size());
   const auto blockLessThanBlock = [](const BlockMetadata& b1,
-                                     const BlockMetadata& b2) -> bool {
+                                     const BlockMetadata& b2) {
     return b1.blockIndex_ < b2.blockIndex_;
   };
   // Given that we have vectors with sorted (BlockMedata) values, we can
