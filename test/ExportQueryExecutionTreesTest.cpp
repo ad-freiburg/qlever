@@ -89,6 +89,19 @@ struct TestCaseSelectQuery {
   std::string resultXml;
 };
 
+// A test case that tests the correct execution and exporting of an ASK query
+// in various formats.
+struct TestCaseAskQuery {
+  std::string kg;                   // The knowledge graph (TURTLE)
+  std::string query;                // The query (SPARQL)
+  nlohmann::json resultQLeverJSON;  // The expected result in QLeverJSON format.
+  // Note: this member only contains the inner
+  // result array with the bindings and NOT
+  // the metadata.
+  nlohmann::json resultSparqlJSON;  // The expected result in SparqlJSON format.
+  std::string resultXml;
+};
+
 struct TestCaseConstructQuery {
   std::string kg;                   // The knowledge graph (TURTLE)
   std::string query;                // The query (SPARQL)
@@ -150,6 +163,34 @@ void runConstructQueryTestCase(
   EXPECT_EQ(qleverJSONStreamResult["res"], testCase.resultQLeverJSON);
   EXPECT_EQ(runQueryStreamableResult(testCase.kg, testCase.query, turtle),
             testCase.resultTurtle);
+}
+
+// Run a single test case for an ASK query.
+void runAskQueryTestCase(
+    const TestCaseAskQuery& testCase,
+    ad_utility::source_location l = ad_utility::source_location::current()) {
+  auto trace = generateLocationTrace(l, "runAskQueryTestCase");
+  using enum ad_utility::MediaType;
+  // TODO<joka921> match the exception
+  EXPECT_ANY_THROW(runQueryStreamableResult(testCase.kg, testCase.query, tsv));
+  EXPECT_ANY_THROW(runQueryStreamableResult(testCase.kg, testCase.query, csv));
+  EXPECT_ANY_THROW(
+      runQueryStreamableResult(testCase.kg, testCase.query, octetStream));
+  EXPECT_ANY_THROW(
+      runQueryStreamableResult(testCase.kg, testCase.query, turtle));
+  auto qleverJSONStreamResult = nlohmann::json::parse(
+      runQueryStreamableResult(testCase.kg, testCase.query, qleverJson));
+  ASSERT_EQ(qleverJSONStreamResult["query"], testCase.query);
+  ASSERT_EQ(qleverJSONStreamResult["resultsize"], 1u);
+  EXPECT_EQ(qleverJSONStreamResult["res"], testCase.resultQLeverJSON);
+
+  EXPECT_EQ(nlohmann::json::parse(runQueryStreamableResult(
+                testCase.kg, testCase.query, sparqlJson)),
+            testCase.resultSparqlJSON);
+
+  auto xmlAsString =
+      runQueryStreamableResult(testCase.kg, testCase.query, sparqlXml);
+  EXPECT_EQ(testCase.resultXml, xmlAsString);
 }
 
 // Create a `json` that can be used as the `resultQLeverJSON` of a
@@ -226,10 +267,12 @@ static const std::string xmlTrailer = "\n</results>\n</sparql>";
 
 // Helper function for easier testing of the `IdTable` generator.
 std::vector<IdTable> convertToVector(
-    cppcoro::generator<const IdTable&> generator) {
+    cppcoro::generator<ExportQueryExecutionTrees::TableConstRefWithVocab>
+        generator) {
   std::vector<IdTable> result;
-  for (const IdTable& idTable : generator) {
-    result.push_back(idTable.clone());
+  for (const ExportQueryExecutionTrees::TableConstRefWithVocab& pair :
+       generator) {
+    result.push_back(pair.idTable_.clone());
   }
   return result;
 }
@@ -239,11 +282,11 @@ auto matchesIdTables(const auto&... tables) {
   return ElementsAre(matchesIdTable(tables)...);
 }
 
-// Template is only required because inner class is not visible
-template <typename T>
-std::vector<IdTable> convertToVector(cppcoro::generator<T> generator) {
+std::vector<IdTable> convertToVector(
+    cppcoro::generator<ExportQueryExecutionTrees::TableWithRange> generator) {
   std::vector<IdTable> result;
-  for (const auto& [idTable, range] : generator) {
+  for (const auto& [pair, range] : generator) {
+    const auto& idTable = pair.idTable_;
     result.emplace_back(idTable.numColumns(), idTable.getAllocator());
     result.back().insertAtEnd(idTable.begin() + *range.begin(),
                               idTable.begin() + *(range.end() - 1) + 1);
@@ -1174,6 +1217,52 @@ TEST(ExportQueryExecutionTrees, CornerCases) {
       ::testing::ContainsRegex("should be unreachable"));
 }
 
+// Test the correct exporting of ASK queries.
+TEST(ExportQueryExecutionTrees, AskQuery) {
+  auto askResultTrue = [](bool lazy) {
+    TestCaseAskQuery testCase;
+    if (lazy) {
+      testCase.kg = "<x> <y> <z>";
+      testCase.query = "ASK { <x> ?p ?o}";
+    } else {
+      testCase.query = "ASK { BIND (3 as ?x) FILTER (?x > 0)}";
+    }
+    testCase.resultQLeverJSON = nlohmann::json{std::vector<std::string>{
+        "\"true\"^^<http://www.w3.org/2001/XMLSchema#boolean>"}};
+    testCase.resultSparqlJSON =
+        nlohmann::json::parse(R"({"head":{ }, "boolean" : true})");
+    testCase.resultXml =
+        "<?xml version=\"1.0\"?>\n<sparql "
+        "xmlns=\"http://www.w3.org/2005/sparql-results#\">\n  <head/>\n  "
+        "<boolean>true</boolean>\n</sparql>";
+
+    return testCase;
+  };
+
+  auto askResultFalse = [](bool lazy) {
+    TestCaseAskQuery testCase;
+    if (lazy) {
+      testCase.kg = "<x> <y> <z>";
+      testCase.query = "ASK { <y> ?p ?o}";
+    } else {
+      testCase.query = "ASK { BIND (3 as ?x) FILTER (?x < 0)}";
+    }
+    testCase.resultQLeverJSON = nlohmann::json{std::vector<std::string>{
+        "\"false\"^^<http://www.w3.org/2001/XMLSchema#boolean>"}};
+    testCase.resultSparqlJSON =
+        nlohmann::json::parse(R"({"head":{ }, "boolean" : false})");
+    testCase.resultXml =
+        "<?xml version=\"1.0\"?>\n<sparql "
+        "xmlns=\"http://www.w3.org/2005/sparql-results#\">\n  <head/>\n  "
+        "<boolean>false</boolean>\n</sparql>";
+    return testCase;
+  };
+  runAskQueryTestCase(askResultTrue(true));
+  runAskQueryTestCase(askResultTrue(false));
+  runAskQueryTestCase(askResultFalse(true));
+  runAskQueryTestCase(askResultFalse(false));
+}
+
 using enum ad_utility::MediaType;
 
 // ____________________________________________________________________________
@@ -1227,13 +1316,13 @@ TEST(ExportQueryExecutionTrees, getIdTablesMirrorsGenerator) {
   IdTable idTable1 = makeIdTableFromVector({{1}, {2}, {3}});
   IdTable idTable2 = makeIdTableFromVector({{42}, {1337}});
   auto tableGenerator = [](IdTable idTableA,
-                           IdTable idTableB) -> cppcoro::generator<IdTable> {
-    co_yield idTableA;
+                           IdTable idTableB) -> Result::Generator {
+    co_yield {std::move(idTableA), LocalVocab{}};
 
-    co_yield idTableB;
+    co_yield {std::move(idTableB), LocalVocab{}};
   }(idTable1.clone(), idTable2.clone());
 
-  Result result{std::move(tableGenerator), {}, LocalVocab{}};
+  Result result{std::move(tableGenerator), {}};
   auto generator = ExportQueryExecutionTrees::getIdTables(result);
 
   EXPECT_THAT(convertToVector(std::move(generator)),
@@ -1242,12 +1331,13 @@ TEST(ExportQueryExecutionTrees, getIdTablesMirrorsGenerator) {
 
 // _____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, ensureCorrectSlicingOfSingleIdTable) {
-  auto tableGenerator = []() -> cppcoro::generator<IdTable> {
-    IdTable idTable1 = makeIdTableFromVector({{1}, {2}, {3}});
-    co_yield idTable1;
+  auto tableGenerator = []() -> Result::Generator {
+    Result::IdTableVocabPair pair1{makeIdTableFromVector({{1}, {2}, {3}}),
+                                   LocalVocab{}};
+    co_yield pair1;
   }();
 
-  Result result{std::move(tableGenerator), {}, LocalVocab{}};
+  Result result{std::move(tableGenerator), {}};
   auto generator = ExportQueryExecutionTrees::getRowIndices(
       LimitOffsetClause{._limit = 1, ._offset = 1}, result);
 
@@ -1259,15 +1349,17 @@ TEST(ExportQueryExecutionTrees, ensureCorrectSlicingOfSingleIdTable) {
 // _____________________________________________________________________________
 TEST(ExportQueryExecutionTrees,
      ensureCorrectSlicingOfIdTablesWhenFirstIsSkipped) {
-  auto tableGenerator = []() -> cppcoro::generator<IdTable> {
-    IdTable idTable1 = makeIdTableFromVector({{1}, {2}, {3}});
-    co_yield idTable1;
+  auto tableGenerator = []() -> Result::Generator {
+    Result::IdTableVocabPair pair1{makeIdTableFromVector({{1}, {2}, {3}}),
+                                   LocalVocab{}};
+    co_yield pair1;
 
-    IdTable idTable2 = makeIdTableFromVector({{4}, {5}});
-    co_yield idTable2;
+    Result::IdTableVocabPair pair2{makeIdTableFromVector({{4}, {5}}),
+                                   LocalVocab{}};
+    co_yield pair2;
   }();
 
-  Result result{std::move(tableGenerator), {}, LocalVocab{}};
+  Result result{std::move(tableGenerator), {}};
   auto generator = ExportQueryExecutionTrees::getRowIndices(
       LimitOffsetClause{._limit = std::nullopt, ._offset = 3}, result);
 
@@ -1280,15 +1372,17 @@ TEST(ExportQueryExecutionTrees,
 // _____________________________________________________________________________
 TEST(ExportQueryExecutionTrees,
      ensureCorrectSlicingOfIdTablesWhenLastIsSkipped) {
-  auto tableGenerator = []() -> cppcoro::generator<IdTable> {
-    IdTable idTable1 = makeIdTableFromVector({{1}, {2}, {3}});
-    co_yield idTable1;
+  auto tableGenerator = []() -> Result::Generator {
+    Result::IdTableVocabPair pair1{makeIdTableFromVector({{1}, {2}, {3}}),
+                                   LocalVocab{}};
+    co_yield pair1;
 
-    IdTable idTable2 = makeIdTableFromVector({{4}, {5}});
-    co_yield idTable2;
+    Result::IdTableVocabPair pair2{makeIdTableFromVector({{4}, {5}}),
+                                   LocalVocab{}};
+    co_yield pair2;
   }();
 
-  Result result{std::move(tableGenerator), {}, LocalVocab{}};
+  Result result{std::move(tableGenerator), {}};
   auto generator = ExportQueryExecutionTrees::getRowIndices(
       LimitOffsetClause{._limit = 3}, result);
 
@@ -1301,15 +1395,17 @@ TEST(ExportQueryExecutionTrees,
 // _____________________________________________________________________________
 TEST(ExportQueryExecutionTrees,
      ensureCorrectSlicingOfIdTablesWhenFirstAndSecondArePartial) {
-  auto tableGenerator = []() -> cppcoro::generator<IdTable> {
-    IdTable idTable1 = makeIdTableFromVector({{1}, {2}, {3}});
-    co_yield idTable1;
+  auto tableGenerator = []() -> Result::Generator {
+    Result::IdTableVocabPair pair1{makeIdTableFromVector({{1}, {2}, {3}}),
+                                   LocalVocab{}};
+    co_yield pair1;
 
-    IdTable idTable2 = makeIdTableFromVector({{4}, {5}});
-    co_yield idTable2;
+    Result::IdTableVocabPair pair2{makeIdTableFromVector({{4}, {5}}),
+                                   LocalVocab{}};
+    co_yield pair2;
   }();
 
-  Result result{std::move(tableGenerator), {}, LocalVocab{}};
+  Result result{std::move(tableGenerator), {}};
   auto generator = ExportQueryExecutionTrees::getRowIndices(
       LimitOffsetClause{._limit = 3, ._offset = 1}, result);
 
@@ -1323,18 +1419,21 @@ TEST(ExportQueryExecutionTrees,
 // _____________________________________________________________________________
 TEST(ExportQueryExecutionTrees,
      ensureCorrectSlicingOfIdTablesWhenFirstAndLastArePartial) {
-  auto tableGenerator = []() -> cppcoro::generator<IdTable> {
-    IdTable idTable1 = makeIdTableFromVector({{1}, {2}, {3}});
-    co_yield idTable1;
+  auto tableGenerator = []() -> Result::Generator {
+    Result::IdTableVocabPair pair1{makeIdTableFromVector({{1}, {2}, {3}}),
+                                   LocalVocab{}};
+    co_yield pair1;
 
-    IdTable idTable2 = makeIdTableFromVector({{4}, {5}});
-    co_yield idTable2;
+    Result::IdTableVocabPair pair2{makeIdTableFromVector({{4}, {5}}),
+                                   LocalVocab{}};
+    co_yield pair2;
 
-    IdTable idTable3 = makeIdTableFromVector({{6}, {7}, {8}, {9}});
-    co_yield idTable3;
+    Result::IdTableVocabPair pair3{makeIdTableFromVector({{6}, {7}, {8}, {9}}),
+                                   LocalVocab{}};
+    co_yield pair3;
   }();
 
-  Result result{std::move(tableGenerator), {}, LocalVocab{}};
+  Result result{std::move(tableGenerator), {}};
   auto generator = ExportQueryExecutionTrees::getRowIndices(
       LimitOffsetClause{._limit = 5, ._offset = 2}, result);
 
@@ -1350,28 +1449,29 @@ TEST(ExportQueryExecutionTrees,
 // _____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, ensureGeneratorIsNotConsumedWhenNotRequired) {
   {
-    auto throwingGenerator = []() -> cppcoro::generator<IdTable> {
+    auto throwingGenerator = []() -> Result::Generator {
       ADD_FAILURE() << "Generator was started" << std::endl;
       throw std::runtime_error("Generator was started");
       co_return;
     }();
 
-    Result result{std::move(throwingGenerator), {}, LocalVocab{}};
+    Result result{std::move(throwingGenerator), {}};
     auto generator = ExportQueryExecutionTrees::getRowIndices(
         LimitOffsetClause{._limit = 0, ._offset = 0}, result);
     EXPECT_NO_THROW(convertToVector(std::move(generator)));
   }
 
   {
-    auto throwAfterYieldGenerator = []() -> cppcoro::generator<IdTable> {
-      IdTable idTable1 = makeIdTableFromVector({{1}});
-      co_yield idTable1;
+    auto throwAfterYieldGenerator = []() -> Result::Generator {
+      Result::IdTableVocabPair pair1{makeIdTableFromVector({{1}}),
+                                     LocalVocab{}};
+      co_yield pair1;
 
       ADD_FAILURE() << "Generator was resumed" << std::endl;
       throw std::runtime_error("Generator was resumed");
     }();
 
-    Result result{std::move(throwAfterYieldGenerator), {}, LocalVocab{}};
+    Result result{std::move(throwAfterYieldGenerator), {}};
     auto generator = ExportQueryExecutionTrees::getRowIndices(
         LimitOffsetClause{._limit = 1, ._offset = 0}, result);
     IdTable referenceTable1 = makeIdTableFromVector({{1}});

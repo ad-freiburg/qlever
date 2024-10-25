@@ -20,11 +20,11 @@ LocalVocab LocalVocab::clone() const {
 // _____________________________________________________________________________
 LocalVocab LocalVocab::merge(std::span<const LocalVocab*> vocabs) {
   LocalVocab res;
-  auto inserter = std::back_inserter(res.otherWordSets_);
-  for (const auto* vocab : vocabs) {
-    std::ranges::copy(vocab->otherWordSets_, inserter);
-    *inserter = vocab->primaryWordSet_;
-  }
+  res.mergeWith(vocabs |
+                std::views::transform(
+                    [](const LocalVocab* localVocab) -> const LocalVocab& {
+                      return *localVocab;
+                    }));
   return res;
 }
 
@@ -87,4 +87,13 @@ BlankNodeIndex LocalVocab::getBlankNodeIndex(
     localBlankNodeManager_.emplace(blankNodeManager);
   }
   return BlankNodeIndex::make(localBlankNodeManager_->getId());
+}
+
+// _____________________________________________________________________________
+bool LocalVocab::isBlankNodeIndexContained(
+    BlankNodeIndex blankNodeIndex) const {
+  if (!localBlankNodeManager_) {
+    return false;
+  }
+  return localBlankNodeManager_->containsBlankNodeIndex(blankNodeIndex.get());
 }

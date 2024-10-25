@@ -165,9 +165,9 @@ void CountAvailablePredicates::computePatternTrickAllEntities(
           TripleComponent::Iri::fromIriref(HAS_PATTERN_PREDICATE), std::nullopt,
           std::nullopt}
           .toScanSpecification(index);
-  auto fullHasPattern =
-      index.getPermutation(Permutation::Enum::PSO)
-          .lazyScan(scanSpec, std::nullopt, {}, cancellationHandle_);
+  auto fullHasPattern = index.getPermutation(Permutation::Enum::PSO)
+                            .lazyScan(scanSpec, std::nullopt, {},
+                                      cancellationHandle_, deltaTriples());
   for (const auto& idTable : fullHasPattern) {
     for (const auto& patternId : idTable.getColumn(1)) {
       AD_CORRECTNESS_CHECK(patternId.getDatatype() == Datatype::Int);
