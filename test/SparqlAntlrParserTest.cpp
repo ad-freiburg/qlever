@@ -1990,11 +1990,17 @@ TEST(SparqlParser, QuadData) {
   auto expectQuadData =
       ExpectCompleteParse<&Parser::quadData>{defaultPrefixMap};
   auto expectQuadDataFails = ExpectParseFails<&Parser::quadData>{};
+  auto Iri = [](std::string_view stringWithBrackets) {
+    return TripleComponent::Iri::fromIriref(stringWithBrackets);
+  };
 
-  expectQuadDataFails("<a> <b> ?c");
-  expectQuadDataFails("<a> <b> <c> . GRAPH <foo> { <d> ?e <f> }");
-  expectQuadDataFails("<a> <b> <c> . ?d <e> <f> }");
-  expectQuadDataFails("GRAPH ?foo { <a> <b> <c> }");
+  expectQuadData("{ <a> <b> <c> }",
+                 ElementsAre(m::Quad(Iri("<a>"), Iri("<b>"), Iri("<c>"),
+                                     std::monostate{})));
+  expectQuadDataFails("{ <a> <b> ?c }");
+  expectQuadDataFails("{ <a> <b> <c> . GRAPH <foo> { <d> ?e <f> } }");
+  expectQuadDataFails("{ <a> <b> <c> . ?d <e> <f> } }");
+  expectQuadDataFails("{ GRAPH ?foo { <a> <b> <c> } }");
 }
 
 TEST(SparqlParser, UpdateQuery) {
@@ -2006,42 +2012,45 @@ TEST(SparqlParser, UpdateQuery) {
   auto Literal = [](std::string s) {
     return TripleComponent::Literal::fromStringRepresentation(std::move(s));
   };
-  auto NoGraph = std::monostate{};
+  auto noGraph = std::monostate{};
 
   expectUpdate(
       "INSERT DATA { <a> <b> <c> }",
       m::UpdateClause(
-          m::GraphUpdate({}, {{Iri("<a>"), Iri("<b>"), Iri("<c>"), NoGraph}},
+          m::GraphUpdate({}, {{Iri("<a>"), Iri("<b>"), Iri("<c>"), noGraph}},
                          std::nullopt),
           m::GraphPattern()));
   expectUpdate(
       "INSERT DATA { <a> <b> \"foo:bar\" }",
       m::UpdateClause(
           m::GraphUpdate(
-              {}, {{Iri("<a>"), Iri("<b>"), Literal("\"foo:bar\""), NoGraph}},
+              {}, {{Iri("<a>"), Iri("<b>"), Literal("\"foo:bar\""), noGraph}},
               std::nullopt),
           m::GraphPattern()));
-  expectUpdate("DELETE DATA { <a> <b> <c> }",
-               m::UpdateQuery({{Iri("<a>"), Iri("<b>"), Iri("<c>"), NoGraph}},
-                              {}, m::GraphPattern()));
+  expectUpdate(
+      "DELETE DATA { <a> <b> <c> }",
+      m::UpdateClause(
+          m::GraphUpdate({{Iri("<a>"), Iri("<b>"), Iri("<c>"), noGraph}}, {},
+                         std::nullopt),
+          m::GraphPattern()));
   expectUpdate(
       "DELETE { ?a <b> <c> } WHERE { <d> <e> ?a }",
       m::UpdateClause(
-          m::GraphUpdate({{Var("?a"), Iri("<b>"), Iri("<c>"), NoGraph}}, {},
+          m::GraphUpdate({{Var("?a"), Iri("<b>"), Iri("<c>"), noGraph}}, {},
                          std::nullopt),
           m::GraphPattern(m::Triples({{Iri("<d>"), "<e>", Var{"?a"}}}))));
   expectUpdateFails("DELETE { ?a <b> <c> } WHERE { <a> ?b ?c }");
   expectUpdate(
       "DELETE { ?a <b> <c> } INSERT { <a> ?a <c> } WHERE { <d> <e> ?a }",
       m::UpdateClause(
-          m::GraphUpdate({{Var("?a"), Iri("<b>"), Iri("<c>"), NoGraph}},
-                         {{Iri("<a>"), Var("?a"), Iri("<c>"), NoGraph}},
+          m::GraphUpdate({{Var("?a"), Iri("<b>"), Iri("<c>"), noGraph}},
+                         {{Iri("<a>"), Var("?a"), Iri("<c>"), noGraph}},
                          std::nullopt),
           m::GraphPattern(m::Triples({{Iri("<d>"), "<e>", Var{"?a"}}}))));
   expectUpdate(
       "DELETE WHERE { ?a <foo> ?c }",
       m::UpdateClause(
-          m::GraphUpdate({{Var("?a"), Iri("<foo>"), Var("?c"), NoGraph}}, {},
+          m::GraphUpdate({{Var("?a"), Iri("<foo>"), Var("?c"), noGraph}}, {},
                          std::nullopt),
           m::GraphPattern(m::Triples({{Var{"?a"}, "<foo>", Var{"?c"}}}))));
   expectUpdate("CLEAR DEFAULT",
@@ -2051,13 +2060,13 @@ TEST(SparqlParser, UpdateQuery) {
   expectUpdate(
       "WITH <foo> DELETE { ?a ?b ?c } WHERE { ?a ?b ?c }",
       m::UpdateClause(
-          m::GraphUpdate({{Var("?a"), Var("?b"), Var("?c"), NoGraph}}, {},
+          m::GraphUpdate({{Var("?a"), Var("?b"), Var("?c"), noGraph}}, {},
                          Iri("<foo>")),
           m::GraphPattern(m::Triples({{Var{"?a"}, "?b", Var{"?c"}}}))));
   expectUpdate(
       "DELETE { ?a ?b ?c } USING <foo> WHERE { ?a ?b ?c }",
       m::UpdateClause(
-          m::GraphUpdate({{Var("?a"), Var("?b"), Var("?c"), NoGraph}}, {},
+          m::GraphUpdate({{Var("?a"), Var("?b"), Var("?c"), noGraph}}, {},
                          std::nullopt),
           m::GraphPattern(m::Triples({{Var{"?a"}, "?b", Var{"?c"}}})),
           m::datasetClausesMatcher(m::Graphs{TripleComponent(Iri("<foo>"))},
@@ -2078,7 +2087,7 @@ TEST(SparqlParser, UpdateQuery) {
   expectUpdate(
       "DELETE { ?a <b> <c> } USING NAMED <foo> WHERE { <d> <e> ?a }",
       m::UpdateClause(
-          m::GraphUpdate({{Var("?a"), Iri("<b>"), Iri("<c>"), NoGraph}}, {},
+          m::GraphUpdate({{Var("?a"), Iri("<b>"), Iri("<c>"), noGraph}}, {},
                          std::nullopt),
           m::GraphPattern(m::Triples({{Iri("<d>"), "<e>", Var{"?a"}}})),
           m::datasetClausesMatcher(std::nullopt,
@@ -2086,7 +2095,7 @@ TEST(SparqlParser, UpdateQuery) {
   expectUpdate(
       "WITH <foo> DELETE { ?a <b> <c> } WHERE { <d> <e> ?a }",
       m::UpdateClause(
-          m::GraphUpdate({{Var("?a"), Iri("<b>"), Iri("<c>"), NoGraph}}, {},
+          m::GraphUpdate({{Var("?a"), Iri("<b>"), Iri("<c>"), noGraph}}, {},
                          Iri("<foo>")),
           m::GraphPattern(m::Triples({{Iri("<d>"), "<e>", Var{"?a"}}}))));
   // Chaining multiple updates into one query is not supported.

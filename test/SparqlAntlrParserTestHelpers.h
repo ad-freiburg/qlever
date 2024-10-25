@@ -890,26 +890,6 @@ inline auto VisibleVariables =
 
 using namespace updateClause;
 
-inline auto UpdateQuery =
-    [](const std::vector<SparqlTripleSimpleWithGraph>& toDelete,
-       const std::vector<SparqlTripleSimpleWithGraph>& toInsert,
-       const Matcher<const p::GraphPattern&>& graphPatternMatcher)
-    -> Matcher<const ::ParsedQuery&> {
-  return testing::AllOf(
-      AD_PROPERTY(ParsedQuery, hasUpdateClause, testing::IsTrue()),
-      AD_PROPERTY(ParsedQuery, updateClause,
-                  AD_FIELD(parsedQuery::UpdateClause, op_,
-                           testing::VariantWith<::updateClause::GraphUpdate>(
-                               AD_FIELD(GraphUpdate, toDelete_,
-                                        testing::ElementsAreArray(toDelete))))),
-      AD_PROPERTY(ParsedQuery, updateClause,
-                  AD_FIELD(parsedQuery::UpdateClause, op_,
-                           testing::VariantWith<::updateClause::GraphUpdate>(
-                               AD_FIELD(GraphUpdate, toInsert_,
-                                        testing::ElementsAreArray(toInsert))))),
-      RootGraphPattern(graphPatternMatcher));
-};
-
 inline auto Load = [](bool silent,
                       const ad_utility::triple_component::Iri& source,
                       const std::optional<GraphRef>& target)
