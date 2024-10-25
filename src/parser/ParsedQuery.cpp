@@ -219,8 +219,7 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
       // expressions
       selectClause.deleteAliasesButKeepVariables();
     }
-  } else {
-    AD_CORRECTNESS_CHECK(hasConstructClause());
+  } else if (hasConstructClause()) {
     if (_groupByVariables.empty()) {
       return;
     }
@@ -232,6 +231,9 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
                                           noteForGroupByError);
       }
     }
+  } else {
+    // TODO<joka921> refactor this to use `std::visit`. It is much safer.
+    AD_CORRECTNESS_CHECK(hasAskClause());
   }
 }
 

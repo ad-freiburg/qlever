@@ -851,6 +851,20 @@ inline auto OrderKeys =
 inline auto GroupKeys = GroupByVariables;
 }  // namespace pq
 
+// Matcher for an ASK query.
+inline auto AskQuery =
+    [](const Matcher<const p::GraphPattern&>& graphPatternMatcher,
+       ScanSpecificationAsTripleComponent::Graphs defaultGraphs = std::nullopt,
+       ScanSpecificationAsTripleComponent::Graphs namedGraphs =
+           std::nullopt) -> Matcher<const ::ParsedQuery&> {
+  using namespace ::testing;
+  auto datasetMatcher = datasetClausesMatcher(defaultGraphs, namedGraphs);
+  return AllOf(AD_PROPERTY(ParsedQuery, hasAskClause, testing::IsTrue()),
+               AD_FIELD(ParsedQuery, datasetClauses_, datasetMatcher),
+               pq::LimitOffset(LimitOffsetClause{1u, 0, std::nullopt}),
+               RootGraphPattern(graphPatternMatcher));
+};
+
 // _____________________________________________________________________________
 inline auto ConstructQuery(
     const std::vector<std::array<GraphTerm, 3>>& elems,
