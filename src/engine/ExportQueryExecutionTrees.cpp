@@ -1,6 +1,6 @@
-//  Copyright 2022, University of Freiburg,
-//                  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2022 - 2024, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 #include "ExportQueryExecutionTrees.h"
 
@@ -11,6 +11,63 @@
 #include "parser/RdfEscaping.h"
 #include "util/ConstexprUtils.h"
 #include "util/http/MediaTypes.h"
+
+// Return true iff the `result` is nonempty.
+bool getResultForAsk(const std::shared_ptr<const Result>& result) {
+  if (result->isFullyMaterialized()) {
+    return !result->idTable().empty();
+  } else {
+    return std::ranges::any_of(result->idTables(), [](const auto& pair) {
+      return !pair.idTable_.empty();
+    });
+  }
+}
+
+// _____________________________________________________________________________
+ad_utility::streams::stream_generator computeResultForAsk(
+    [[maybe_unused]] const ParsedQuery& parsedQuery,
+    const QueryExecutionTree& qet, ad_utility::MediaType mediaType,
+    [[maybe_unused]] const ad_utility::Timer& requestTimer) {
+  // Compute the result of the ASK query.
+  bool result = getResultForAsk(qet.getResult(true));
+
+  // Lambda that returns the result bool in XML format.
+  auto getXmlResult = [result]() {
+    std::string xmlTemplate = R"(<?xml version="1.0"?>
+<sparql xmlns="http://www.w3.org/2005/sparql-results#">
+  <head/>
+  <boolean>true</boolean>
+</sparql>)";
+
+    if (result) {
+      return xmlTemplate;
+    } else {
+      return absl::StrReplaceAll(xmlTemplate, {{"true", "false"}});
+    }
+  };
+
+  // Lambda that returns the result bool in SPARQL JSON format.
+  auto getSparqlJsonResult = [result]() {
+    nlohmann::json j;
+    j["head"] = nlohmann::json::object_t{};
+    j["boolean"] = result;
+    return j.dump();
+  };
+
+  // Return the result in the requested format.
+  using enum ad_utility::MediaType;
+  switch (mediaType) {
+    case sparqlXml:
+      co_yield getXmlResult();
+      break;
+    case sparqlJson:
+      co_yield getSparqlJsonResult();
+      break;
+    default:
+      throw std::runtime_error{
+          "ASK queries are not supported for TSV or CSV or binary format."};
+  }
+}
 
 // __________________________________________________________________________
 cppcoro::generator<ExportQueryExecutionTrees::TableConstRefWithVocab>
@@ -364,6 +421,17 @@ static nlohmann::json stringAndTypeToBinding(std::string_view entitystr,
     }
   }
   return b;
+}
+
+// _____________________________________________________________________________
+cppcoro::generator<std::string> askQueryResultToQLeverJSON(
+    std::shared_ptr<const Result> result) {
+  AD_CORRECTNESS_CHECK(result != nullptr);
+  std::string_view value = getResultForAsk(result) ? "true" : "false";
+  std::string resultLit =
+      absl::StrCat("\"", value, "\"^^<", XSD_BOOLEAN_TYPE, ">");
+  nlohmann::json resultJson = std::vector{std::move(resultLit)};
+  co_yield resultJson.dump();
 }
 
 // _____________________________________________________________________________
@@ -732,15 +800,19 @@ cppcoro::generator<std::string> ExportQueryExecutionTrees::computeResult(
     if constexpr (format == MediaType::qleverJson) {
       return computeResultAsQLeverJSON(parsedQuery, qet, requestTimer,
                                        std::move(cancellationHandle));
+    } else {
+      if (parsedQuery.hasAskClause()) {
+        return computeResultForAsk(parsedQuery, qet, mediaType, requestTimer);
+      }
+      return parsedQuery.hasSelectClause()
+                 ? selectQueryResultToStream<format>(
+                       qet, parsedQuery.selectClause(),
+                       parsedQuery._limitOffset, std::move(cancellationHandle))
+                 : constructQueryResultToStream<format>(
+                       qet, parsedQuery.constructClause().triples_,
+                       parsedQuery._limitOffset, qet.getResult(true),
+                       std::move(cancellationHandle));
     }
-    return parsedQuery.hasSelectClause()
-               ? selectQueryResultToStream<format>(
-                     qet, parsedQuery.selectClause(), parsedQuery._limitOffset,
-                     std::move(cancellationHandle))
-               : constructQueryResultToStream<format>(
-                     qet, parsedQuery.constructClause().triples_,
-                     parsedQuery._limitOffset, qet.getResult(true),
-                     std::move(cancellationHandle));
   };
 
   using enum MediaType;
@@ -773,23 +845,32 @@ ExportQueryExecutionTrees::computeResultAsQLeverJSON(
   if (query.hasSelectClause()) {
     jsonPrefix["selected"] =
         query.selectClause().getSelectedVariablesAsStrings();
-  } else {
+  } else if (query.hasConstructClause()) {
     jsonPrefix["selected"] =
         std::vector<std::string>{"?subject", "?predicate", "?object"};
+  } else {
+    AD_CORRECTNESS_CHECK(query.hasAskClause());
+    jsonPrefix["selected"] = std::vector<std::string>{"?result"};
   }
 
   std::string prefixStr = jsonPrefix.dump();
   co_yield absl::StrCat(prefixStr.substr(0, prefixStr.size() - 1),
                         R"(,"res":[)");
 
-  auto bindings =
-      query.hasSelectClause()
-          ? selectQueryResultBindingsToQLeverJSON(
-                qet, query.selectClause(), query._limitOffset,
-                std::move(result), std::move(cancellationHandle))
-          : constructQueryResultBindingsToQLeverJSON(
-                qet, query.constructClause().triples_, query._limitOffset,
-                std::move(result), std::move(cancellationHandle));
+  auto bindings = [&]() {
+    if (query.hasSelectClause()) {
+      return selectQueryResultBindingsToQLeverJSON(
+          qet, query.selectClause(), query._limitOffset, std::move(result),
+          std::move(cancellationHandle));
+    } else if (query.hasConstructClause()) {
+      return constructQueryResultBindingsToQLeverJSON(
+          qet, query.constructClause().triples_, query._limitOffset,
+          std::move(result), std::move(cancellationHandle));
+    } else {
+      // TODO<joka921>: Refactor this to use std::visit.
+      return askQueryResultToQLeverJSON(std::move(result));
+    }
+  }();
 
   size_t resultSize = 0;
   for (const std::string& b : bindings) {
