@@ -722,21 +722,19 @@ TEST_F(GroupByOptimizations, correctResultForHashMapOptimization) {
       SparqlTriple{Variable{"?z"}, {"<is>"}, Variable{"?y"}});
   Tree join = makeExecutionTree<Join>(qec, zxScan, zyScan, 0, 0);
   std::vector<ColumnIndex> sortedColumns = {1};
-  Tree sortedJoin = makeExecutionTree<Sort>(qec, join, sortedColumns);
 
   SparqlExpressionPimpl avgYPimpl = makeAvgPimpl(varY);
   std::vector<Alias> aliasesAvgY{Alias{avgYPimpl, Variable{"?avg"}}};
 
   // Calculate result with optimization
   RuntimeParameters().set<"group-by-hash-map-enabled">(true);
-  GroupBy groupByWithOptimization{qec, variablesOnlyX, aliasesAvgY, sortedJoin};
+  GroupBy groupByWithOptimization{qec, variablesOnlyX, aliasesAvgY, join};
   auto resultWithOptimization = groupByWithOptimization.getResult();
 
   // Clear cache, calculate result without optimization
   qec->clearCacheUnpinnedOnly();
   RuntimeParameters().set<"group-by-hash-map-enabled">(false);
-  GroupBy groupByWithoutOptimization{qec, variablesOnlyX, aliasesAvgY,
-                                     sortedJoin};
+  GroupBy groupByWithoutOptimization{qec, variablesOnlyX, aliasesAvgY, join};
   auto resultWithoutOptimization = groupByWithoutOptimization.getResult();
 
   // Compare results, using debugString as the result only contains 2 rows
@@ -760,7 +758,6 @@ TEST_F(GroupByOptimizations, correctResultForHashMapOptimizationForCountStar) {
       SparqlTriple{Variable{"?z"}, {"<is>"}, Variable{"?y"}});
   Tree join = makeExecutionTree<Join>(qec, zxScan, zyScan, 0, 0);
   std::vector<ColumnIndex> sortedColumns = {1};
-  Tree sortedJoin = makeExecutionTree<Sort>(qec, join, sortedColumns);
 
   SparqlExpressionPimpl countStarPimpl{makeCountStarExpression(false),
                                        "COUNT(*) as ?c"};
@@ -768,15 +765,14 @@ TEST_F(GroupByOptimizations, correctResultForHashMapOptimizationForCountStar) {
 
   // Calculate result with optimization
   RuntimeParameters().set<"group-by-hash-map-enabled">(true);
-  GroupBy groupByWithOptimization{qec, variablesOnlyX, aliasesCountStar,
-                                  sortedJoin};
+  GroupBy groupByWithOptimization{qec, variablesOnlyX, aliasesCountStar, join};
   auto resultWithOptimization = groupByWithOptimization.getResult();
 
   // Clear cache, calculate result without optimization
   qec->clearCacheUnpinnedOnly();
   RuntimeParameters().set<"group-by-hash-map-enabled">(false);
   GroupBy groupByWithoutOptimization{qec, variablesOnlyX, aliasesCountStar,
-                                     sortedJoin};
+                                     join};
   auto resultWithoutOptimization = groupByWithoutOptimization.getResult();
 
   // Compare results, using debugString as the result only contains 2 rows

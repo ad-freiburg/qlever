@@ -1013,6 +1013,9 @@ GroupBy::isSupportedAggregate(sparqlExpression::SparqlExpression* expr) {
 
   if (dynamic_cast<AvgExpression*>(expr)) return H{AVG};
   if (dynamic_cast<CountExpression*>(expr)) return H{COUNT};
+  // We reuse the COUNT implementation which works, but leaves some optimization
+  // potential on the table because `COUNT(*)` doesn't need to check for
+  // undefined values.
   if (dynamic_cast<CountStarExpression*>(expr)) return H{COUNT};
   if (dynamic_cast<MinExpression*>(expr)) return H{MIN};
   if (dynamic_cast<MaxExpression*>(expr)) return H{MAX};
@@ -1371,6 +1374,29 @@ void GroupBy::evaluateAlias(
 }
 
 // _____________________________________________________________________________
+sparqlExpression::ExpressionResult
+GroupBy::evaluateChildExpressionOfAggregateFunction(
+    const HashMapAggregateInformation& aggregate,
+    sparqlExpression::EvaluationContext& evaluationContext) {
+  // The code below assumes that DISTINCT is not supported yet.
+  AD_CORRECTNESS_CHECK(aggregate.expr_->isAggregate() ==
+                       sparqlExpression::SparqlExpression::AggregateStatus::
+                           NonDistinctAggregate);
+  // Evaluate child expression on block
+  auto exprChildren = aggregate.expr_->children();
+  // `COUNT(*)` is the only expression without children, so we fake the
+  // expression result in this case by providing an arbitrary, constant and
+  // defined value. This value will be verified as non-undefined by the
+  // `CountExpression` class and ignored afterward as long as `DISTINCT` is
+  // not set (which is not supported yet).
+  AD_CORRECTNESS_CHECK(
+      exprChildren.size() == 1 ||
+      dynamic_cast<sparqlExpression::CountStarExpression*>(aggregate.expr_));
+  return exprChildren.empty() ? Id::makeFromBool(true)
+                              : exprChildren[0]->evaluate(&evaluationContext);
+}
+
+// _____________________________________________________________________________
 template <size_t NUM_GROUP_COLUMNS>
 IdTable GroupBy::createResultFromHashMap(
     const HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
@@ -1496,21 +1522,9 @@ IdTable GroupBy::computeGroupByForHashMapOptimization(
     aggregationTimer.cont();
     for (auto& aggregateAlias : aggregateAliases) {
       for (auto& aggregate : aggregateAlias.aggregateInfo_) {
-        // The code below assumes that DISTINCT is not supported yet.
-        AD_CORRECTNESS_CHECK(aggregate.expr_->isAggregate() ==
-                             sparqlExpression::SparqlExpression::
-                                 AggregateStatus::NonDistinctAggregate);
-        // Evaluate child expression on block
-        auto exprChildren = aggregate.expr_->children();
-        // `COUNT(*)` is the only expression without children, so we fake the
-        // expression result in this case by providing an arbitrary, constant
-        // and defined value. This value will be verified as non-undefined by
-        // the `CountExpression` class and ignored afterward as long as
-        // `DISTINCT` is not set (which is not supported yet).
         sparqlExpression::ExpressionResult expressionResult =
-            exprChildren.empty()
-                ? Id::makeFromBool(true)
-                : exprChildren[0]->evaluate(&evaluationContext);
+            GroupBy::evaluateChildExpressionOfAggregateFunction(
+                aggregate, evaluationContext);
 
         auto& aggregationDataVariant =
             aggregationData.getAggregationDataVariant(
