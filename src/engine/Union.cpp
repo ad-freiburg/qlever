@@ -167,10 +167,8 @@ ProtoResult Union::computeResult(bool requestLaziness) {
       _subtrees[1]->getResult(requestLaziness);
 
   if (requestLaziness) {
-    auto localVocab = std::make_shared<LocalVocab>();
-    auto generator =
-        computeResultLazily(std::move(subRes1), std::move(subRes2), localVocab);
-    return {std::move(generator), resultSortedOn(), std::move(localVocab)};
+    return {computeResultLazily(std::move(subRes1), std::move(subRes2)),
+            resultSortedOn()};
   }
 
   LOG(DEBUG) << "Union subresult computation done." << std::endl;
@@ -257,29 +255,29 @@ IdTable Union::transformToCorrectColumnFormat(
 }
 
 // _____________________________________________________________________________
-cppcoro::generator<IdTable> Union::computeResultLazily(
+Result::Generator Union::computeResultLazily(
     std::shared_ptr<const Result> result1,
-    std::shared_ptr<const Result> result2,
-    std::shared_ptr<LocalVocab> localVocab) const {
+    std::shared_ptr<const Result> result2) const {
   std::vector<ColumnIndex> permutation = computePermutation<true>();
   if (result1->isFullyMaterialized()) {
-    co_yield transformToCorrectColumnFormat(result1->idTable().clone(),
-                                            permutation);
+    co_yield {
+        transformToCorrectColumnFormat(result1->idTable().clone(), permutation),
+        result1->getCopyOfLocalVocab()};
   } else {
-    for (IdTable& idTable : result1->idTables()) {
-      co_yield transformToCorrectColumnFormat(std::move(idTable), permutation);
+    for (auto& [idTable, localVocab] : result1->idTables()) {
+      co_yield {transformToCorrectColumnFormat(std::move(idTable), permutation),
+                std::move(localVocab)};
     }
   }
   permutation = computePermutation<false>();
   if (result2->isFullyMaterialized()) {
-    co_yield transformToCorrectColumnFormat(result2->idTable().clone(),
-                                            permutation);
+    co_yield {
+        transformToCorrectColumnFormat(result2->idTable().clone(), permutation),
+        result2->getCopyOfLocalVocab()};
   } else {
-    for (IdTable& idTable : result2->idTables()) {
-      co_yield transformToCorrectColumnFormat(std::move(idTable), permutation);
+    for (auto& [idTable, localVocab] : result2->idTables()) {
+      co_yield {transformToCorrectColumnFormat(std::move(idTable), permutation),
+                std::move(localVocab)};
     }
   }
-  std::array<const LocalVocab*, 2> vocabs{&result1->localVocab(),
-                                          &result2->localVocab()};
-  *localVocab = LocalVocab::merge(vocabs);
 }

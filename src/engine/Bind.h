@@ -49,8 +49,7 @@ class Bind : public Operation {
 
   // Implementation for the binding of arbitrary expressions.
   IdTable computeExpressionBind(
-      LocalVocab* outputLocalVocab, IdTable idTable,
-      const LocalVocab& inputLocalVocab,
+      LocalVocab* localVocab, IdTable idTable,
       const sparqlExpression::SparqlExpression* expression) const;
 
   [[nodiscard]] VariableToColumnMap computeVariableToColumnMap() const override;

@@ -213,30 +213,42 @@ TEST_F(ServiceTest, computeResult) {
 
           // compute resulting idTable
           IdTable idTable{2, ad_utility::testing::makeAllocator()};
-          for (auto& row : result.idTables()) {
-            idTable.insertAtEnd(row);
+          std::vector<LocalVocab> localVocabs{};
+          for (auto& pair : result.idTables()) {
+            idTable.insertAtEnd(pair.idTable_);
+            localVocabs.emplace_back(std::move(pair.localVocab_));
           }
 
           // create expected idTable
-          const auto& localVocab = result.localVocab();
-          auto get = [&localVocab](const std::string& s) {
-            return localVocab.getIndexOrNullopt(
-                ad_utility::triple_component::LiteralOrIri::iriref(s));
+          auto get =
+              [&localVocabs](
+                  const std::string& s) -> std::optional<LocalVocabIndex> {
+            for (const LocalVocab& localVocab : localVocabs) {
+              auto index = localVocab.getIndexOrNullopt(
+                  ad_utility::triple_component::LiteralOrIri::iriref(s));
+              if (index.has_value()) {
+                return index;
+              }
+            }
+            return std::nullopt;
           };
           std::vector<std::vector<IntOrId>> idVector;
           std::map<std::string, Id> ids;
+          size_t indexCounter = 0;
           for (auto& row : expIdTableVector) {
             auto& idVecRow = idVector.emplace_back();
             for (auto& e : row) {
               if (!ids.contains(e)) {
-                auto idx = get(absl::StrCat("<", e, ">"));
-                ASSERT_TRUE(idx);
+                auto str = absl::StrCat("<", e, ">");
+                auto idx = get(str);
+                ASSERT_TRUE(idx) << '\'' << str << "' not in local vocab";
                 ids.insert({e, Id::makeFromLocalVocabIndex(idx.value())});
+                ++indexCounter;
               }
               idVecRow.emplace_back(ids.at(e));
             }
           }
-          EXPECT_EQ(localVocab.size(), ids.size());
+          EXPECT_EQ(indexCounter, ids.size());
 
           EXPECT_EQ(idTable, makeIdTableFromVector(idVector));
         };
