@@ -314,9 +314,9 @@ void IndexImpl::updateInputFileSpecificationsAndLog(
 
   if (spec.size() == 1 && !parallelParsingSpecifiedViaJson.has_value()) {
     LOG(WARN) << "Implicitly using the parallel parser for a single input file "
-                 "to be consistent with previous behavior. Please set the "
-                 "settings for parallel parsing explicitly via the command "
-                 "line to suppress this warning"
+                 "for reasons of backward compatibility; this is deprecated, "
+                 "please use the command-line option --parse-parallel or -p "
+                 "instead"
               << std::endl;
     spec.at(0).parseInParallel_ = true;
   }

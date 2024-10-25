@@ -505,16 +505,16 @@ TEST(IndexTest, updateInputFileSpecificationsAndLog) {
     testing::internal::CaptureStdout();
     IndexImpl::updateInputFileSpecificationsAndLog(files, true);
     EXPECT_THAT(testing::internal::GetCapturedStdout(),
-                AllOf(HasSubstr("from singleFile.ttl"), HasSubstr("deprecated"),
-                      HasSubstr("--parse-parallel")));
+                AllOf(HasSubstr("from singleFile.ttl"),
+                      HasSubstr("settings.json"), HasSubstr("deprecated")));
     EXPECT_TRUE(files.at(0).parseInParallel_);
   }
   {
     testing::internal::CaptureStdout();
     IndexImpl::updateInputFileSpecificationsAndLog(files, std::nullopt);
     EXPECT_THAT(testing::internal::GetCapturedStdout(),
-                AllOf(HasSubstr("from singleFile.ttl"), HasSubstr("parallel"),
-                      HasSubstr("consistent with previous behavior")));
+                AllOf(HasSubstr("from singleFile.ttl"),
+                      HasSubstr("single input"), HasSubstr("deprecated")));
     EXPECT_TRUE(files.at(0).parseInParallel_);
   }
 
