@@ -267,9 +267,9 @@ ProtoResult HasPredicateScan::computeResult(
           TripleComponent::Iri::fromIriref(HAS_PATTERN_PREDICATE), std::nullopt,
           std::nullopt}
           .toScanSpecification(index);
-  auto hasPattern =
-      index.getPermutation(Permutation::Enum::PSO)
-          .lazyScan(scanSpec, std::nullopt, {}, cancellationHandle_);
+  auto hasPattern = index.getPermutation(Permutation::Enum::PSO)
+                        .lazyScan(scanSpec, std::nullopt, {},
+                                  cancellationHandle_, deltaTriples());
 
   auto getId = [this](const TripleComponent tc) {
     std::optional<Id> id = tc.toValueId(getIndex().getVocab());
@@ -339,8 +339,9 @@ void HasPredicateScan::computeFreeO(
           TripleComponent::Iri::fromIriref(HAS_PATTERN_PREDICATE), subjectAsId,
           std::nullopt}
           .toScanSpecification(index);
-  auto hasPattern = index.getPermutation(Permutation::Enum::PSO)
-                        .scan(std::move(scanSpec), {}, cancellationHandle_);
+  auto hasPattern =
+      index.getPermutation(Permutation::Enum::PSO)
+          .scan(std::move(scanSpec), {}, cancellationHandle_, deltaTriples());
   AD_CORRECTNESS_CHECK(hasPattern.numRows() <= 1);
   for (Id patternId : hasPattern.getColumn(0)) {
     const auto& pattern = patterns[patternId.getInt()];
