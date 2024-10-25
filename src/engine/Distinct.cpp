@@ -166,6 +166,8 @@ IdTable Distinct::outOfPlaceDistinct(const IdTable& dynInput) const {
     // Skip to next unique value
     do {
       allowedOffset = std::min(end - begin, CHUNK_SIZE);
+      // This can only be called when dynInput is not empty, so `begin[-1]` is
+      // always valid.
       auto lastRow = begin[-1];
       begin = std::ranges::find_if(begin, begin + allowedOffset,
                                    [this, &lastRow](const auto& row) {

@@ -24,6 +24,7 @@ std::vector<IdTable> toVector(Result::Generator generator) {
   return result;
 }
 
+// _____________________________________________________________________________
 Distinct makeDistinct(const std::vector<ColumnIndex>& keepIndices) {
   auto* qec = ad_utility::testing::getQec();
   return {qec,
@@ -69,6 +70,15 @@ TEST(Distinct, testChunkEdgeCases) {
   Distinct distinct = makeDistinct({0});
   IdTable input{1, ad_utility::testing::makeAllocator()};
   IdTable::row_type row{1};
+
+  {
+    input.resize(1);
+    row[0] = Id::makeFromInt(0);
+    std::ranges::fill(input, row);
+    IdTable result = distinct.outOfPlaceDistinct<1>(input);
+
+    ASSERT_EQ(makeIdTableFromVector({{0}}, &Id::makeFromInt), result);
+  }
 
   {
     input.resize(Distinct::CHUNK_SIZE + 1);
