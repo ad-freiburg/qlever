@@ -289,7 +289,7 @@ void Result::cacheDuringConsumption(
               aggregate.emplace(newTablePair.idTable_.clone(),
                                 newTablePair.localVocab_.clone());
             }
-          } catch (...) {
+          } catch (const ad_utility::detail::AllocationExceedsLimitException&) {
             // We expect potential memory allocation errors here. In this case
             // we just abort the cached value entirely instead of aborting the
             // query.
