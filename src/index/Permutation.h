@@ -7,6 +7,7 @@
 #include <string>
 
 #include "global/Constants.h"
+#include "index/CompressedRelation.h"
 #include "index/IndexMetaData.h"
 #include "parser/data/LimitOffsetClause.h"
 #include "util/CancellationHandle.h"
@@ -15,8 +16,8 @@
 
 // Forward declaration of `IdTable`
 class IdTable;
-
-// Forward declaration of `DeltaTriples`
+// Forward declaration of `LocatedTriplesPerBlock`
+class LocatedTriplesPerBlock;
 class DeltaTriples;
 
 // Helper class to store static properties of the different permutations to
@@ -145,7 +146,9 @@ class Permutation {
   const Permutation& getActualPermutation(const ScanSpecification& spec) const;
   const Permutation& getActualPermutation(Id id) const;
 
-  CompressedRelationReader reader(const DeltaTriples&) const;
+  const LocatedTriplesPerBlock& locatedTriples(const DeltaTriples&) const;
+
+  const CompressedRelationReader& reader() const { return reader_.value(); }
 
  private:
   // for Log output, e.g. "POS"
@@ -160,7 +163,7 @@ class Permutation {
 
   // This member is `optional` because we initialize it in a deferred way in the
   // `loadFromDisk` method.
-  std::optional<ad_utility::File> file_;
+  std::optional<CompressedRelationReader> reader_;
   Allocator allocator_;
 
   bool isLoaded_ = false;
@@ -169,12 +172,4 @@ class Permutation {
   std::unique_ptr<Permutation> internalPermutation_ = nullptr;
 
   std::function<bool(Id)> isInternalId_;
-
-  // This cache stores a small number of decompressed blocks. Its current
-  // purpose is to make the e2e-tests run fast. They contain many SPARQL queries
-  // with ?s ?p ?o triples in the body.
-  // Note: The cache is thread-safe and using it does not change the semantics
-  // of this class, so it is safe to mark it as `mutable` to make the `scan`
-  // functions below `const`.
-  mutable CompressedRelationReader::BlockCache blockCache_{20ul};
 };

@@ -24,9 +24,9 @@
 #include "util/Serializer/Serializer.h"
 #include "util/TaskQueue.h"
 
-// Forward declaration of the `IdTable` class.
+// Forward declarations
 class IdTable;
-// Forward declaration of the `LocatedTriples` class.
+
 class LocatedTriplesPerBlock;
 
 // This type is used to buffer small relations that will be stored in the same
@@ -467,9 +467,6 @@ class CompressedRelationReader {
 
   using IdTableGenerator = cppcoro::generator<IdTable, LazyScanMetadata>;
 
-  using BlockCache = ad_utility::ConcurrentCache<ad_utility::HeapBasedLRUCache<
-      off_t, DecompressedBlock, DecompressedBlockSizeGetter>>;
-
  private:
   // This cache stores a small number of decompressed blocks. Its current
   // purpose is to make the e2e-tests run fast. They contain many SPARQL queries
@@ -477,28 +474,19 @@ class CompressedRelationReader {
   // Note: The cache is thread-safe and using it does not change the semantics
   // of this class, so it is safe to mark it as `mutable` to make the `scan`
   // functions below `const`.
-  mutable BlockCache* blockCache_;
+  mutable ad_utility::ConcurrentCache<ad_utility::HeapBasedLRUCache<
+      off_t, DecompressedBlock, DecompressedBlockSizeGetter>>
+      blockCache_{20ul};
 
   // The allocator used to allocate intermediate buffers.
   mutable Allocator allocator_;
 
   // The file that stores the actual permutations.
-  const ad_utility::File* file_;
-
-  const LocatedTriplesPerBlock* locatedTriples_;
+  ad_utility::File file_;
 
  public:
-  explicit CompressedRelationReader(
-      Allocator allocator, const ad_utility::File* file,
-      const LocatedTriplesPerBlock* locatedTriples, BlockCache* blockCache)
-      : blockCache_(blockCache),
-        allocator_{std::move(allocator)},
-        file_{file},
-        locatedTriples_{locatedTriples} {
-    AD_CONTRACT_CHECK(file_ != nullptr);
-    AD_CONTRACT_CHECK(blockCache_ != nullptr);
-    AD_CONTRACT_CHECK(locatedTriples_ != nullptr);
-  }
+  explicit CompressedRelationReader(Allocator allocator, ad_utility::File file)
+      : allocator_{std::move(allocator)}, file_{std::move(file)} {}
 
   // Get the blocks (an ordered subset of the blocks that are passed in via the
   // `metadataAndBlocks`) where the `col1Id` can theoretically match one of the
@@ -544,6 +532,7 @@ class CompressedRelationReader {
                std::span<const CompressedBlockMetadata> blocks,
                ColumnIndicesRef additionalColumns,
                const CancellationHandle& cancellationHandle,
+               const LocatedTriplesPerBlock& locatedTriplesPerBlock,
                const LimitOffsetClause& limitOffset = {}) const;
 
   // Similar to `scan` (directly above), but the result of the scan is lazily
@@ -553,16 +542,9 @@ class CompressedRelationReader {
       ScanSpecification scanSpec,
       std::vector<CompressedBlockMetadata> blockMetadata,
       ColumnIndices additionalColumns, CancellationHandle cancellationHandle,
+      const LocatedTriplesPerBlock& locatedTriplesPerBlock,
       LimitOffsetClause limitOffset = {}) const;
 
- private:
-  static CompressedRelationReader::IdTableGenerator lazyScanImpl(
-      CompressedRelationReader reader, ScanSpecification scanSpec,
-      std::vector<CompressedBlockMetadata> blockMetadata,
-      ColumnIndices additionalColumns, CancellationHandle cancellationHandle,
-      LimitOffsetClause limitOffset = {});
-
- public:
   // Only get the size of the result for a given permutation XYZ for a given X
   // and Y. This can be done by scanning one or two blocks. Note: The overload
   // of this function where only the X is given is not needed, as the size of
@@ -570,23 +552,26 @@ class CompressedRelationReader {
   // directly.
   size_t getResultSizeOfScan(
       const ScanSpecification& scanSpec,
-      const vector<CompressedBlockMetadata>& blocks) const;
+      const vector<CompressedBlockMetadata>& blocks,
+      const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
 
   // For a given relation, determine the `col1Id`s and their counts. This is
   // used for `computeGroupByObjectWithCount`.
   IdTable getDistinctCol1IdsAndCounts(
       Id col0Id, const std::vector<CompressedBlockMetadata>& allBlocksMetadata,
-      const CancellationHandle& cancellationHandle) const;
+      const CancellationHandle& cancellationHandle,
+      const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
 
   // For all `col0Ids` determine their counts. This is
   // used for `computeGroupByForFullScan`.
   IdTable getDistinctCol0IdsAndCounts(
       const std::vector<CompressedBlockMetadata>& allBlocksMetadata,
-      const CancellationHandle& cancellationHandle) const;
+      const CancellationHandle& cancellationHandle,
+      const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
 
   std::optional<CompressedRelationMetadata> getMetadataForSmallRelation(
-      const std::vector<CompressedBlockMetadata>& allBlocksMetadata,
-      Id col0Id) const;
+      const std::vector<CompressedBlockMetadata>& allBlocksMetadata, Id col0Id,
+      const LocatedTriplesPerBlock&) const;
 
   // Get the contiguous subrange of the given `blockB` for the blocks
   // that contain the triples that have the relationId/col0Id that was specified
@@ -607,7 +592,9 @@ class CompressedRelationReader {
   // index scans between joining them to get better estimates for the beginning
   // and end of incomplete blocks.
   std::optional<ScanSpecAndBlocksAndBounds::FirstAndLastTriple>
-  getFirstAndLastTriple(const ScanSpecAndBlocks& metadataAndBlocks) const;
+  getFirstAndLastTriple(
+      const ScanSpecAndBlocks& metadataAndBlocks,
+      const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
 
   // Get access to the underlying allocator
   const Allocator& allocator() const { return allocator_; }

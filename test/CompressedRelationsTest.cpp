@@ -16,6 +16,11 @@ namespace {
 
 using ad_utility::source_location;
 
+const auto& emptyLocatedTriples = []() -> const LocatedTriplesPerBlock& {
+  static LocatedTriplesPerBlock locatedTriplesPerBlock{};
+  return locatedTriplesPerBlock;
+}();
+
 // Return an `ID` of type `VocabIndex` from `index`. Assert that `index`
 // is `>= 0`.
 Id V(int64_t index) {
@@ -194,18 +199,12 @@ auto writeAndOpenRelations(const std::vector<RelationInput>& inputs,
                            ad_utility::MemorySize blocksize) {
   auto [blocks, metaData] = compressedRelationTestWriteCompressedRelations(
       inputs, filename, blocksize);
-  auto file = std::make_shared<ad_utility::File>(filename, "r");
-  auto cache = std::make_shared<CompressedRelationReader::BlockCache>();
-  auto& index = ad_utility::testing::getQec()->getIndex();
-  static DeltaTriples deltaTriples(index);
   auto reader = [&]() {
     return std::make_unique<CompressedRelationReader>(
-        ad_utility::makeUnlimitedAllocator<Id>(), file.get(),
-        &deltaTriples.getLocatedTriplesPerBlock(Permutation::Enum::PSO),
-        cache.get());
+        ad_utility::makeUnlimitedAllocator<Id>(),
+        ad_utility::File{filename, "r"});
   };
-  return std::tuple{std::move(blocks), std::move(metaData), reader(),
-                    std::pair{std::move(file), std::move(cache)}};
+  return std::tuple{std::move(blocks), std::move(metaData), reader()};
 }
 
 // Run a set of tests on a permutation that is defined by the `inputs`. The
@@ -217,7 +216,7 @@ void testCompressedRelations(const auto& inputs, std::string testCaseName,
                              ad_utility::MemorySize blocksize) {
   auto filename = testCaseName + ".dat";
   auto cleanup = makeCleanup(filename);
-  auto [blocks, metaData, readerPtr, file] =
+  auto [blocks, metaData, readerPtr] =
       writeAndOpenRelations(inputs, filename, blocksize);
   auto& reader = *readerPtr;
 
@@ -239,8 +238,8 @@ void testCompressedRelations(const auto& inputs, std::string testCaseName,
                     m.multiplicityCol1_);
     // Scan for all distinct `col0` and check that we get the expected result.
     ScanSpecification scanSpec{metaData[i].col0Id_, std::nullopt, std::nullopt};
-    IdTable table =
-        reader.scan(scanSpec, blocks, additionalColumns, cancellationHandle);
+    IdTable table = reader.scan(scanSpec, blocks, additionalColumns,
+                                cancellationHandle, emptyLocatedTriples);
     const auto& col1And2 = inputs[i].col1And2_;
     checkThatTablesAreEqual(col1And2, table);
     table.clear();
@@ -248,8 +247,9 @@ void testCompressedRelations(const auto& inputs, std::string testCaseName,
     std::vector<LimitOffsetClause> limitOffsetClauses{
         {std::nullopt, 5}, {5, 0}, {std::nullopt, 12}, {12, 0}, {7, 5}};
     for (const auto& limitOffset : limitOffsetClauses) {
-      IdTable table = reader.scan(scanSpec, blocks, additionalColumns,
-                                  cancellationHandle, limitOffset);
+      IdTable table =
+          reader.scan(scanSpec, blocks, additionalColumns, cancellationHandle,
+                      emptyLocatedTriples, limitOffset);
       auto col1And2 = inputs[i].col1And2_;
       col1And2.resize(limitOffset.upperBound(col1And2.size()));
       col1And2.erase(
@@ -257,8 +257,9 @@ void testCompressedRelations(const auto& inputs, std::string testCaseName,
           col1And2.begin() + limitOffset.actualOffset(col1And2.size()));
       checkThatTablesAreEqual(col1And2, table);
     }
-    for (const auto& block : reader.lazyScan(
-             scanSpec, blocks, additionalColumns, cancellationHandle)) {
+    for (const auto& block :
+         reader.lazyScan(scanSpec, blocks, additionalColumns,
+                         cancellationHandle, emptyLocatedTriples)) {
       table.insertAtEnd(block.begin(), block.end());
     }
     checkThatTablesAreEqual(col1And2, table);
@@ -272,17 +273,18 @@ void testCompressedRelations(const auto& inputs, std::string testCaseName,
     auto scanAndCheck = [&]() {
       ScanSpecification scanSpec{metaData[i].col0Id_, V(lastCol1Id),
                                  std::nullopt};
-      auto size = reader.getResultSizeOfScan(scanSpec, blocks);
+      auto size =
+          reader.getResultSizeOfScan(scanSpec, blocks, emptyLocatedTriples);
       IdTable tableWidthOne =
           reader.scan(scanSpec, blocks, Permutation::ColumnIndicesRef{},
-                      cancellationHandle);
+                      cancellationHandle, emptyLocatedTriples);
       ASSERT_EQ(tableWidthOne.numColumns(), 1);
       EXPECT_EQ(size, tableWidthOne.numRows());
       checkThatTablesAreEqual(col3, tableWidthOne);
       tableWidthOne.clear();
       for (const auto& block :
            reader.lazyScan(scanSpec, blocks, Permutation::ColumnIndices{},
-                           cancellationHandle)) {
+                           cancellationHandle, emptyLocatedTriples)) {
         tableWidthOne.insertAtEnd(block.begin(), block.end());
       }
       checkThatTablesAreEqual(col3, tableWidthOne);
@@ -336,13 +338,14 @@ TEST(CompressedRelationWriter, getFirstAndLastTriple) {
         i, {{i - 1, i + 1, g2}, {i - 1, i + 2, g2}, {i + 1, i - 1, g2}}});
   }
   auto filename = "getFirstAndLastTriple.dat";
-  auto [blocks, metaData, readerPtr, file] =
+  auto [blocks, metaData, readerPtr] =
       writeAndOpenRelations(inputs, filename, 40_B);
 
   // Test that the result of calling `getFirstAndLastTriple` for the index from
   // above with the given `ScanSpecification` matches the given `matcher`.
   auto testFirstAndLastBlock = [&](ScanSpecification spec, auto matcher) {
-    auto firstAndLastTriple = readerPtr->getFirstAndLastTriple({spec, blocks});
+    auto firstAndLastTriple =
+        readerPtr->getFirstAndLastTriple({spec, blocks}, emptyLocatedTriples);
     EXPECT_THAT(firstAndLastTriple, matcher);
   };
 
@@ -752,7 +755,7 @@ TEST(CompressedRelationWriter, graphInfoInBlockMetadata) {
   }
   using namespace ::testing;
   {
-    auto [blocks, metadata, reader, file] =
+    auto [blocks, metadata, reader] =
         writeAndOpenRelations(inputs, "graphInfo1", 100_MB);
     EXPECT_EQ(blocks.size(), 1);
     EXPECT_FALSE(blocks.at(0).containsDuplicatesWithDifferentGraphs_);
@@ -766,7 +769,7 @@ TEST(CompressedRelationWriter, graphInfoInBlockMetadata) {
     inputs.at(i).col1And2_.at(0).at(2) = i;
   }
   {
-    auto [blocks, metadata, reader, file] =
+    auto [blocks, metadata, reader] =
         writeAndOpenRelations(inputs, "graphInfo1", 100_MB);
     EXPECT_EQ(blocks.size(), 1);
     EXPECT_FALSE(blocks.at(0).containsDuplicatesWithDifferentGraphs_);
@@ -778,7 +781,7 @@ TEST(CompressedRelationWriter, graphInfoInBlockMetadata) {
   inputs.push_back(RelationInput{3, {{1, 2, 0}, {1, 3, 0}, {1, 3, 1}}});
 
   {
-    auto [blocks, metadata, reader, file] =
+    auto [blocks, metadata, reader] =
         writeAndOpenRelations(inputs, "graphInfo1", 100_MB);
     EXPECT_EQ(blocks.size(), 1);
     EXPECT_TRUE(blocks.at(0).containsDuplicatesWithDifferentGraphs_);
@@ -801,19 +804,19 @@ TEST(CompressedRelationWriter, scanWithGraphs) {
                                   {9, 5, 1}}});
   using namespace ::testing;
   for (auto blocksize : std::array{8_B, 16_B, 32_B, 64_B, 128_B}) {
-    auto [blocks, metadata, reader, file] =
+    auto [blocks, metadata, reader] =
         writeAndOpenRelations(inputs, "scanWithGraphs", blocksize);
     ad_utility::HashSet<Id> graphs{V(0)};
     ScanSpecification spec{V(42), std::nullopt, std::nullopt, {}, graphs};
     auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
-    auto res = reader->scan(spec, blocks, {}, handle);
+    auto res = reader->scan(spec, blocks, {}, handle, emptyLocatedTriples);
     EXPECT_THAT(res,
                 matchesIdTableFromVector({{3, 4}, {7, 4}, {8, 4}, {8, 5}}));
 
     graphs.clear();
     graphs.insert(V(1));
     spec = ScanSpecification{V(42), std::nullopt, std::nullopt, {}, graphs};
-    res = reader->scan(spec, blocks, {}, handle);
+    res = reader->scan(spec, blocks, {}, handle, emptyLocatedTriples);
     EXPECT_THAT(res,
                 matchesIdTableFromVector({{3, 4}, {8, 5}, {9, 4}, {9, 5}}));
   }
