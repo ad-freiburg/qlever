@@ -60,31 +60,38 @@ class BlankNodeManager {
     ~Block() = default;
     // The index of this block.
     const uint64_t blockIdx_;
+
+    // The first index within this block
+    const uint64_t startIdx_;
     // The next free index within this block.
     uint64_t nextIdx_;
   };
 
-  // Manages the BlankNodes used within a LocalVocab.
+  // Manages the blank nodes for a single local vocab.
   class LocalBlankNodeManager {
    public:
     explicit LocalBlankNodeManager(BlankNodeManager* blankNodeManager);
     ~LocalBlankNodeManager();
 
-    // No copy, as the managed blocks shall not be duplicated.
+    // No copy, as the managed blocks should not be duplicated.
     LocalBlankNodeManager(const LocalBlankNodeManager&) = delete;
     LocalBlankNodeManager& operator=(const LocalBlankNodeManager&) = delete;
 
+    // Move is allowed.
     LocalBlankNodeManager(LocalBlankNodeManager&&) = default;
     LocalBlankNodeManager& operator=(LocalBlankNodeManager&&) = default;
 
-    // Get a new id.
+    // Get a new blank node index.
     [[nodiscard]] uint64_t getId();
+
+    // Return true iff the `index` was returned by a previous call to `getId()`.
+    bool containsBlankNodeIndex(uint64_t index) const;
 
    private:
     // Reserved blocks.
     std::vector<BlankNodeManager::Block> blocks_;
 
-    // Reference of the BlankNodeManager, used to free the reserved blocks.
+    // Reference to the BlankNodeManager, used to free the reserved blocks.
     BlankNodeManager* blankNodeManager_;
 
     // The first index after the current Block.
@@ -93,7 +100,7 @@ class BlankNodeManager {
     FRIEND_TEST(BlankNodeManager, LocalBlankNodeManagerGetID);
   };
 
-  // Allocate and retrieve a block of free ids.
+  // Allocate and retrieve a block of new blank node indexes.
   [[nodiscard]] Block allocateBlock();
 
   FRIEND_TEST(BlankNodeManager, blockAllocationAndFree);

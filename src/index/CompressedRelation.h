@@ -49,7 +49,7 @@ struct DecompressedBlockSizeGetter {
 using CompressedBlock = std::vector<std::vector<char>>;
 
 // The metadata of a compressed block of ID triples in an index permutation.
-struct CompressedBlockMetadata {
+struct CompressedBlockMetadataNoBlockIndex {
   // Since we have column-based indices, the two columns of each block are
   // stored separately (but adjacently).
   struct OffsetAndCompressedSize {
@@ -79,13 +79,14 @@ struct CompressedBlockMetadata {
     Id col0Id_;
     Id col1Id_;
     Id col2Id_;
+    Id graphId_;
     auto operator<=>(const PermutedTriple&) const = default;
 
     // Formatted output for debugging.
     friend std::ostream& operator<<(std::ostream& str,
                                     const PermutedTriple& trip) {
       str << "Triple: " << trip.col0Id_ << ' ' << trip.col1Id_ << ' '
-          << trip.col2Id_ << std::endl;
+          << trip.col2Id_ << ' ' << trip.graphId_ << std::endl;
       return str;
     }
 
@@ -103,13 +104,16 @@ struct CompressedBlockMetadata {
   // blocks.
   bool containsDuplicatesWithDifferentGraphs_;
 
+  // Two of these are equal if all members are equal.
+  bool operator==(const CompressedBlockMetadataNoBlockIndex&) const = default;
+};
+
+// The same as the above struct, but this block additionally knows its index.
+struct CompressedBlockMetadata : CompressedBlockMetadataNoBlockIndex {
   // The index of this block in the permutation. This is required to find
   // the corresponding block from the `LocatedTriples` when only a subset of
   // blocks is being used.
   size_t blockIndex_;
-
-  // Two of these are equal if all members are equal.
-  bool operator==(const CompressedBlockMetadata&) const = default;
 };
 
 // Serialization of the `OffsetAndcompressedSize` subclass.
@@ -173,7 +177,8 @@ AD_SERIALIZE_FUNCTION(CompressedRelationMetadata) {
 class CompressedRelationWriter {
  private:
   ad_utility::Synchronized<ad_utility::File> outfile_;
-  ad_utility::Synchronized<std::vector<CompressedBlockMetadata>> blockBuffer_;
+  ad_utility::Synchronized<std::vector<CompressedBlockMetadataNoBlockIndex>>
+      blockBuffer_;
   // If multiple small relations are stored in the same block, keep track of the
   // first and last `col0Id`.
   Id currentBlockFirstCol0_ = Id::makeUndefined();
@@ -259,15 +264,19 @@ class CompressedRelationWriter {
   std::vector<CompressedBlockMetadata> getFinishedBlocks() && {
     finish();
     auto blocks = std::move(*(blockBuffer_.wlock()));
-    std::ranges::sort(blocks, {}, [](const CompressedBlockMetadata& bl) {
-      return std::tie(bl.firstTriple_.col0Id_, bl.firstTriple_.col1Id_,
-                      bl.firstTriple_.col2Id_);
-    });
+    std::ranges::sort(
+        blocks, {}, [](const CompressedBlockMetadataNoBlockIndex& bl) {
+          return std::tie(bl.firstTriple_.col0Id_, bl.firstTriple_.col1Id_,
+                          bl.firstTriple_.col2Id_);
+        });
+
+    std::vector<CompressedBlockMetadata> result;
+    result.reserve(blocks.size());
     // Write the correct block indices
     for (size_t i : ad_utility::integerRange(blocks.size())) {
-      blocks.at(i).blockIndex_ = i;
+      result.emplace_back(std::move(blocks.at(i)), i);
     }
-    return blocks;
+    return result;
   }
 
   // Compute the multiplicity of given the number of elements and the number of
@@ -356,8 +365,7 @@ class CompressedRelationWriter {
   friend std::pair<std::vector<CompressedBlockMetadata>,
                    std::vector<CompressedRelationMetadata>>
   compressedRelationTestWriteCompressedRelations(
-      const auto& inputs, std::string filename,
-      ad_utility::MemorySize blocksize);
+      auto inputs, std::string filename, ad_utility::MemorySize blocksize);
 };
 
 using namespace std::string_view_literals;

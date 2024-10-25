@@ -23,6 +23,10 @@ Id V(int64_t index) {
   return Id::makeFromVocabIndex(VocabIndex::make(index));
 }
 
+// A default graph IRI that is used in test cases where we don't care about the
+// graph.
+const Id g = V(1234059);
+
 // A representation of a relation, consisting of the constant `col0_` element
 // as well as the 2D-vector for the other two columns. `col1And2_` must be
 // sorted lexicographically.
@@ -85,8 +89,7 @@ void checkThatTablesAreEqual(const auto& expected, const IdTable& actual,
 std::pair<std::vector<CompressedBlockMetadata>,
           std::vector<CompressedRelationMetadata>>
 compressedRelationTestWriteCompressedRelations(
-    const auto& inputs, std::string filename,
-    ad_utility::MemorySize blocksize) {
+    auto inputs, std::string filename, ad_utility::MemorySize blocksize) {
   // First check the invariants of the `inputs`. They must be sorted by the
   // `col0_` and for each of the `inputs` the `col1And2_` must also be sorted.
   AD_CONTRACT_CHECK(std::ranges::is_sorted(
@@ -100,6 +103,17 @@ compressedRelationTestWriteCompressedRelations(
 
   // First create the on-disk permutation.
   size_t numColumns = getNumColumns(inputs) + 1;
+  // If the input has no graph info, add a dummy graph value to all inputs,
+  // such that the assertions work.
+  if (numColumns == 3) {
+    ++numColumns;
+    for (auto& input : inputs) {
+      for (auto& row : input.col1And2_) {
+        row.push_back(103496581);
+      }
+    }
+  }
+  AD_CORRECTNESS_CHECK(numColumns >= 4);
   CompressedRelationWriter writer{numColumns, ad_utility::File{filename, "w"},
                                   blocksize};
   vector<CompressedRelationMetadata> metaData;
@@ -309,9 +323,11 @@ TEST(CompressedRelationWriter, getFirstAndLastTriple) {
   using namespace ::testing;
   // Write some triples, and prepare an index
   std::vector<RelationInput> inputs;
+  // A dummy graph ID.
+  int g2 = 120349;
   for (int i = 1; i < 200; ++i) {
-    inputs.push_back(
-        RelationInput{i, {{i - 1, i + 1}, {i - 1, i + 2}, {i + 1, i - 1}}});
+    inputs.push_back(RelationInput{
+        i, {{i - 1, i + 1, g2}, {i - 1, i + 2, g2}, {i + 1, i - 1, g2}}});
   }
   auto filename = "getFirstAndLastTriple.dat";
   auto [blocks, metaData, readerPtr] =
@@ -486,17 +502,17 @@ TEST(CompressedRelationMetadata, GettersAndSetters) {
 
 TEST(CompressedRelationReader, getBlocksForJoinWithColumn) {
   CompressedBlockMetadata block1{
-      {}, 0, {V(16), V(0), V(0)}, {V(38), V(4), V(12)}, {}, false, 0};
+      {{}, 0, {V(16), V(0), V(0), g}, {V(38), V(4), V(12), g}, {}, false}, 0};
   CompressedBlockMetadata block2{
-      {}, 0, {V(42), V(3), V(0)}, {V(42), V(4), V(12)}, {}, false, 1};
+      {{}, 0, {V(42), V(3), V(0), g}, {V(42), V(4), V(12), g}, {}, false}, 1};
   CompressedBlockMetadata block3{
-      {}, 0, {V(42), V(4), V(13)}, {V(42), V(6), V(9)}, {}, false, 2};
+      {{}, 0, {V(42), V(4), V(13), g}, {V(42), V(6), V(9), g}, {}, false}, 2};
 
   // We are only interested in blocks with a col0 of `42`.
   CompressedRelationMetadata relation;
   relation.col0Id_ = V(42);
   CompressedRelationReader::ScanSpecAndBlocksAndBounds::FirstAndLastTriple
-      firstAndLastTriple{{V(42), V(3), V(0)}, {V(42), V(6), V(9)}};
+      firstAndLastTriple{{V(42), V(3), V(0), g}, {V(42), V(6), V(9), g}};
 
   std::vector blocks{block1, block2, block3};
   CompressedRelationReader::ScanSpecAndBlocksAndBounds metadataAndBlocks{
@@ -527,28 +543,29 @@ TEST(CompressedRelationReader, getBlocksForJoinWithColumn) {
   metadataAndBlocks.scanSpec_.setCol1Id(V(4));
   metadataAndBlocks.firstAndLastTriple_ =
       CompressedRelationReader::ScanSpecAndBlocksAndBounds::FirstAndLastTriple{
-          {V(42), V(4), V(11)}, {V(42), V(4), V(738)}};
+          {V(42), V(4), V(11), g}, {V(42), V(4), V(738), g}};
   test({V(11), V(27), V(30)}, {block2, block3});
   test({V(12)}, {block2});
   test({V(13)}, {block3});
 }
 TEST(CompressedRelationReader, getBlocksForJoin) {
   CompressedBlockMetadata block1{
-      {}, 0, {V(16), V(0), V(0)}, {V(38), V(4), V(12)}, {}, false, 0};
+      {{}, 0, {V(16), V(0), V(0), g}, {V(38), V(4), V(12), g}, {}, false}, 0};
   CompressedBlockMetadata block2{
-      {}, 0, {V(42), V(3), V(0)}, {V(42), V(4), V(12)}, {}, false, 1};
+      {{}, 0, {V(42), V(3), V(0), g}, {V(42), V(4), V(12), g}, {}, false}, 1};
   CompressedBlockMetadata block3{
-      {}, 0, {V(42), V(5), V(13)}, {V(42), V(8), V(9)}, {}, false, 2};
+      {{}, 0, {V(42), V(5), V(13), g}, {V(42), V(8), V(9), g}, {}, false}, 2};
   CompressedBlockMetadata block4{
-      {}, 0, {V(42), V(8), V(16)}, {V(42), V(20), V(9)}, {}, false, 3};
+      {{}, 0, {V(42), V(8), V(16), g}, {V(42), V(20), V(9), g}, {}, false}, 3};
   CompressedBlockMetadata block5{
-      {}, 0, {V(42), V(20), V(16)}, {V(42), V(20), V(63)}, {}, false, 4};
+      {{}, 0, {V(42), V(20), V(16), g}, {V(42), V(20), V(63), g}, {}, false},
+      4};
 
   // We are only interested in blocks with a col0 of `42`.
   CompressedRelationMetadata relation;
   relation.col0Id_ = V(42);
   CompressedRelationReader::ScanSpecAndBlocksAndBounds::FirstAndLastTriple
-      firstAndLastTriple{{V(42), V(3), V(0)}, {V(42), V(20), V(63)}};
+      firstAndLastTriple{{V(42), V(3), V(0), g}, {V(42), V(20), V(63), g}};
 
   std::vector blocks{block1, block2, block3, block4, block5};
   CompressedRelationReader::ScanSpecAndBlocksAndBounds metadataAndBlocks{
@@ -556,17 +573,18 @@ TEST(CompressedRelationReader, getBlocksForJoin) {
       firstAndLastTriple};
 
   CompressedBlockMetadata blockB1{
-      {}, 0, {V(16), V(0), V(0)}, {V(38), V(4), V(12)}, {}, false, 0};
+      {{}, 0, {V(16), V(0), V(0), g}, {V(38), V(4), V(12), g}, {}, false}, 0};
   CompressedBlockMetadata blockB2{
-      {}, 0, {V(47), V(3), V(0)}, {V(47), V(6), V(12)}, {}, false, 1};
+      {{}, 0, {V(47), V(3), V(0), g}, {V(47), V(6), V(12), g}, {}, false}, 1};
   CompressedBlockMetadata blockB3{
-      {}, 0, {V(47), V(7), V(13)}, {V(47), V(9), V(9)}, {}, false, 2};
+      {{}, 0, {V(47), V(7), V(13), g}, {V(47), V(9), V(9), g}, {}, false}, 2};
   CompressedBlockMetadata blockB4{
-      {}, 0, {V(47), V(38), V(7)}, {V(47), V(38), V(8)}, {}, false, 3};
+      {{}, 0, {V(47), V(38), V(7), g}, {V(47), V(38), V(8), g}, {}, false}, 3};
   CompressedBlockMetadata blockB5{
-      {}, 0, {V(47), V(38), V(9)}, {V(47), V(38), V(12)}, {}, false, 4};
+      {{}, 0, {V(47), V(38), V(9), g}, {V(47), V(38), V(12), g}, {}, false}, 4};
   CompressedBlockMetadata blockB6{
-      {}, 0, {V(47), V(38), V(13)}, {V(47), V(38), V(15)}, {}, false, 5};
+      {{}, 0, {V(47), V(38), V(13), g}, {V(47), V(38), V(15), g}, {}, false},
+      5};
 
   // We are only interested in blocks with a col0 of `42`.
   CompressedRelationMetadata relationB;
@@ -574,7 +592,7 @@ TEST(CompressedRelationReader, getBlocksForJoin) {
 
   std::vector blocksB{blockB1, blockB2, blockB3, blockB4, blockB5, blockB6};
   CompressedRelationReader::ScanSpecAndBlocksAndBounds::FirstAndLastTriple
-      firstAndLastTripleB{{V(47), V(3), V(0)}, {V(47), V(38), V(15)}};
+      firstAndLastTripleB{{V(47), V(3), V(0), g}, {V(47), V(38), V(15), g}};
   CompressedRelationReader::ScanSpecAndBlocksAndBounds metadataAndBlocksB{
       {{V(47), std::nullopt, std::nullopt}, blocksB}, firstAndLastTripleB};
 
@@ -612,16 +630,16 @@ TEST(CompressedRelationReader, getBlocksForJoin) {
   using FL =
       CompressedRelationReader::ScanSpecAndBlocksAndBounds::FirstAndLastTriple;
   metadataAndBlocks.firstAndLastTriple_ =
-      FL{{V(42), V(20), V(5)}, {V(42), V(20), V(63)}};
+      FL{{V(42), V(20), V(5), g}, {V(42), V(20), V(63), g}};
   metadataAndBlocksB.scanSpec_.setCol1Id(V(38));
   metadataAndBlocksB.firstAndLastTriple_ =
-      FL{{V(47), V(38), V(5)}, {V(47), V(38), V(15)}};
+      FL{{V(47), V(38), V(5), g}, {V(47), V(38), V(15), g}};
   test({std::vector{block4}, std::vector{blockB4, blockB5}});
 
   // Fix only the col1Id of the left input.
   metadataAndBlocks.scanSpec_.setCol1Id(V(4));
   metadataAndBlocks.firstAndLastTriple_ =
-      FL{{V(42), V(4), V(8)}, {V(42), V(4), V(12)}};
+      FL{{V(42), V(4), V(8), g}, {V(42), V(4), V(12), g}};
   metadataAndBlocksB.scanSpec_.setCol1Id(std::nullopt);
   metadataAndBlocksB.firstAndLastTriple_ = firstAndLastTripleB;
   test({std::vector{block2}, std::vector{blockB3}});
@@ -631,21 +649,22 @@ TEST(CompressedRelationReader, getBlocksForJoin) {
   metadataAndBlocks.firstAndLastTriple_ = firstAndLastTriple;
   metadataAndBlocksB.scanSpec_.setCol1Id(V(7));
   metadataAndBlocksB.firstAndLastTriple_ =
-      FL{{V(47), V(7), V(13)}, {V(47), V(7), V(58)}};
+      FL{{V(47), V(7), V(13), g}, {V(47), V(7), V(58), g}};
   test({std::vector{block4, block5}, std::vector{blockB3}});
 }
 
 TEST(CompressedRelationReader, PermutedTripleToString) {
-  auto tr = CompressedBlockMetadata::PermutedTriple{V(12), V(13), V(27)};
+  auto tr =
+      CompressedBlockMetadata::PermutedTriple{V(12), V(13), V(27), V(12345)};
   std::stringstream str;
   str << tr;
-  ASSERT_EQ(str.str(), "Triple: V:12 V:13 V:27\n");
+  ASSERT_EQ(str.str(), "Triple: V:12 V:13 V:27 V:12345\n");
 }
 
 TEST(CompressedRelationReader, filterDuplicatesAndGraphs) {
   auto table = makeIdTableFromVector({{3}, {4}, {5}});
   CompressedBlockMetadata metadata{
-      {}, 0, {V(16), V(0), V(0)}, {V(38), V(4), V(12)}, {}, false, 0};
+      {{}, 0, {V(16), V(0), V(0), g}, {V(38), V(4), V(12), g}, {}, false}, 0};
   using Filter = CompressedRelationReader::FilterDuplicatesAndGraphs;
   ScanSpecification::Graphs graphs = std::nullopt;
   Filter f{graphs, 43, false};
@@ -682,7 +701,7 @@ TEST(CompressedRelationReader, filterDuplicatesAndGraphs) {
 
 TEST(CompressedRelationReader, makeCanBeSkippedForBlock) {
   CompressedBlockMetadata metadata{
-      {}, 0, {V(16), V(0), V(0)}, {V(38), V(4), V(12)}, {}, false, 0};
+      {{}, 0, {V(16), V(0), V(0), g}, {V(38), V(4), V(12), g}, {}, false}, 0};
 
   using Graphs = ScanSpecification::Graphs;
   Graphs graphs = std::nullopt;

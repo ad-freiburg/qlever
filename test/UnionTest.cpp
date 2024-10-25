@@ -103,11 +103,11 @@ TEST(Union, computeUnionLazy) {
 
     auto iterator = result.begin();
     ASSERT_NE(iterator, result.end());
-    ASSERT_EQ(*iterator, expected1);
+    ASSERT_EQ(iterator->idTable_, expected1);
 
     ++iterator;
     ASSERT_NE(iterator, result.end());
-    ASSERT_EQ(*iterator, expected2);
+    ASSERT_EQ(iterator->idTable_, expected2);
 
     ASSERT_EQ(++iterator, result.end());
   };
@@ -142,11 +142,11 @@ TEST(Union, ensurePermutationIsAppliedCorrectly) {
 
     auto iterator = result.begin();
     ASSERT_NE(iterator, result.end());
-    ASSERT_EQ(*iterator, expected1);
+    ASSERT_EQ(iterator->idTable_, expected1);
 
     ++iterator;
     ASSERT_NE(iterator, result.end());
-    ASSERT_EQ(*iterator, expected2);
+    ASSERT_EQ(iterator->idTable_, expected2);
 
     ASSERT_EQ(++iterator, result.end());
   }
