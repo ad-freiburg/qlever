@@ -119,7 +119,8 @@ class IndexImpl {
   string onDiskBase_;
   string settingsFileName_;
   bool onlyAsciiTurtlePrefixes_ = false;
-  bool useParallelParser_ = false;
+  // Note: `std::nullopt` means `not specified by the user`.
+  std::optional<bool> useParallelParser_ = std::nullopt;
   TurtleParserIntegerOverflowBehavior turtleParserIntegerOverflowBehavior_ =
       TurtleParserIntegerOverflowBehavior::Error;
   bool turtleParserSkipIllegalLiterals_ = false;
@@ -777,5 +778,5 @@ class IndexImpl {
   // and write a summary to the log.
   static void updateInputFileSpecificationsAndLog(
       std::vector<Index::InputFileSpecification>& spec,
-      bool parallelParsingSpecifiedViaJson);
+      std::optional<bool> parallelParsingSpecifiedViaJson);
 };
