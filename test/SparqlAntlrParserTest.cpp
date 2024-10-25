@@ -1058,14 +1058,10 @@ TEST(SparqlParser, SelectQuery) {
   };
   expectSelectQuery("SELECT * WHERE { ?a <bar> ?foo }", selectABarFooMatcher());
 
-  Graphs defaultGraphs;
-  defaultGraphs.emplace();
-  defaultGraphs->insert(TripleComponent::Iri::fromIriref("<x>"));
-  Graphs namedGraphs;
-  namedGraphs.emplace();
-  namedGraphs->insert(TripleComponent::Iri::fromIriref("<y>"));
-  expectSelectQuery("SELECT * FROM <x> FROM NAMED <y> WHERE { ?a <bar> ?foo }",
-                    selectABarFooMatcher(defaultGraphs, namedGraphs));
+  expectSelectQuery(
+      "SELECT * FROM <x> FROM NAMED <y> WHERE { ?a <bar> ?foo }",
+      selectABarFooMatcher(m::Graphs{TripleComponent::Iri::fromIriref("<x>")},
+                           m::Graphs{TripleComponent::Iri::fromIriref("<y>")}));
 
   expectSelectQuery("SELECT * WHERE { ?x ?y ?z }",
                     testing::AllOf(m::SelectQuery(m::AsteriskSelect(),
@@ -1240,11 +1236,10 @@ TEST(SparqlParser, ConstructQuery) {
                        m::ConstructQuery({{Var{"?a"}, Iri{"<foo>"}, Var{"?b"}}},
                                          m::GraphPattern()));
   // CONSTRUCT with datasets.
-  using Graphs = ad_utility::HashSet<TripleComponent>;
   expectConstructQuery(
       "CONSTRUCT { } FROM <foo> FROM NAMED <foo2> FROM NAMED <foo3> WHERE { }",
-      m::ConstructQuery({}, m::GraphPattern(), Graphs{iri("<foo>")},
-                        Graphs{iri("<foo2>"), iri("<foo3>")}));
+      m::ConstructQuery({}, m::GraphPattern(), m::Graphs{iri("<foo>")},
+                        m::Graphs{iri("<foo2>"), iri("<foo3>")}));
   // GROUP BY and ORDER BY, but the ordered variable is not grouped
   expectConstructQueryFails(
       "CONSTRUCT {?a <b> <c> } WHERE { ?a ?b ?c } GROUP BY ?a ORDER BY ?b",
@@ -1978,7 +1973,9 @@ TEST(SparqlParser, UpdateQuery) {
       m::UpdateClause(
           m::GraphUpdate({{Var("?a"), Var("?b"), Var("?c"), NoGraph}}, {},
                          std::nullopt),
-          m::GraphPattern(m::Triples({{Var{"?a"}, "?b", Var{"?c"}}}))));
+          m::GraphPattern(m::Triples({{Var{"?a"}, "?b", Var{"?c"}}})),
+          m::datasetClausesMatcher(m::Graphs{TripleComponent(Iri("<foo>"))},
+                                   std::nullopt)));
   expectUpdate(
       "INSERT DATA { GRAPH <foo> { } }",
       m::UpdateClause(m::GraphUpdate({}, {}, std::nullopt), m::GraphPattern()));
@@ -1997,7 +1994,9 @@ TEST(SparqlParser, UpdateQuery) {
       m::UpdateClause(
           m::GraphUpdate({{Var("?a"), Iri("<b>"), Iri("<c>"), NoGraph}}, {},
                          std::nullopt),
-          m::GraphPattern(m::Triples({{Iri("<d>"), "<e>", Var{"?a"}}}))));
+          m::GraphPattern(m::Triples({{Iri("<d>"), "<e>", Var{"?a"}}})),
+          m::datasetClausesMatcher(std::nullopt,
+                                   m::Graphs{TripleComponent(Iri("<foo>"))})));
   expectUpdate(
       "WITH <foo> DELETE { ?a <b> <c> } WHERE { <d> <e> ?a }",
       m::UpdateClause(

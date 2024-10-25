@@ -968,15 +968,25 @@ inline auto GraphUpdate =
       AD_FIELD(GraphUpdate, with_, testing::Eq(with))));
 };
 
-// TODO<qup42> add a parameter for the datasets clauses in the graph pattern
+inline auto EmptyDatasets = [] {
+  return AllOf(AD_FIELD(ParsedQuery::DatasetClauses, defaultGraphs_,
+                        testing::Eq(std::nullopt)),
+               AD_FIELD(ParsedQuery::DatasetClauses, namedGraphs_,
+                        testing::Eq(std::nullopt)));
+};
+
+using Graphs = ad_utility::HashSet<TripleComponent>;
+
 inline auto UpdateClause =
     [](const Matcher<const updateClause::Operation&>& opMatcher,
-       const Matcher<const p::GraphPattern&>& graphPatternMatcher)
-    -> Matcher<const ::ParsedQuery&> {
+       const Matcher<const p::GraphPattern&>& graphPatternMatcher,
+       const Matcher<const ::ParsedQuery::DatasetClauses&>& datasetMatcher =
+           EmptyDatasets()) -> Matcher<const ::ParsedQuery&> {
   return testing::AllOf(
       AD_PROPERTY(ParsedQuery, hasUpdateClause, testing::IsTrue()),
       AD_PROPERTY(ParsedQuery, updateClause,
                   AD_FIELD(parsedQuery::UpdateClause, op_, opMatcher)),
+      AD_FIELD(ParsedQuery, datasetClauses_, datasetMatcher),
       RootGraphPattern(graphPatternMatcher));
 };
 

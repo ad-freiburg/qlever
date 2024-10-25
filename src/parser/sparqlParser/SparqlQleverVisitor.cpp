@@ -589,6 +589,7 @@ vector<SparqlTripleSimpleWithGraph> Visitor::transformTriplesTemplate(
 
   return ad_utility::transform(visit(ctx), convertTriple);
 }
+
 // ____________________________________________________________________________________
 vector<SparqlTripleSimpleWithGraph> Visitor::visit(Parser::QuadsContext* ctx) {
   // The ordering of the individual triplesTemplate and quadsNotTriples is not
