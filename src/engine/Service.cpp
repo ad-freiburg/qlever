@@ -10,6 +10,7 @@
 
 #include "engine/CallFixedSize.h"
 #include "engine/ExportQueryExecutionTrees.h"
+#include "engine/Sort.h"
 #include "engine/VariableToColumnMap.h"
 #include "global/RuntimeParameters.h"
 #include "parser/RdfParser.h"
@@ -304,6 +305,7 @@ std::optional<std::string> Service::getSiblingValuesClause() const {
     return std::nullopt;
   }
   const auto& [siblingResult, siblingVars, _] = siblingInfo_.value();
+  AD_CORRECTNESS_CHECK(siblingResult);
 
   checkCancellation();
 
@@ -503,8 +505,9 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
   AD_CORRECTNESS_CHECK(left && right);
 
   auto skipSortOperation = [](std::shared_ptr<Operation>& op) {
-    auto children = op->getChildren();
-    if (children.size() == 1) {
+    if (static_cast<bool>(std::dynamic_pointer_cast<Sort>(op))) {
+      auto children = op->getChildren();
+      AD_CORRECTNESS_CHECK(children.size() == 1);
       op = children[0]->getRootOperation();
     }
   };
@@ -514,6 +517,11 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
   auto a = std::dynamic_pointer_cast<Service>(left);
   auto b = std::dynamic_pointer_cast<Service>(right);
 
+  // The sibling is only precomputed iff
+  // - `rightOnly` is true and the right operation is a Service
+  // - or exactly one of the operations is a Service. If we could estimate
+  // the result size of a Service, the Service with the smaller result could
+  // be used as a sibling here.
   if ((rightOnly && !static_cast<bool>(b)) ||
       (!rightOnly && static_cast<bool>(a) == static_cast<bool>(b))) {
     return;
@@ -527,6 +535,7 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
       return std::tie(b, left);
     }
   }();
+  AD_CORRECTNESS_CHECK(service);
 
   auto addRuntimeInfo = [&](bool siblingUsed) {
     std::string_view v = siblingUsed ? "yes"sv : "no"sv;
@@ -539,7 +548,6 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
                              : ComputationMode::FULLY_MATERIALIZED);
 
   if (siblingResult->isFullyMaterialized()) {
-    sibling->precomputedResultBecauseSiblingOfService_ = siblingResult;
     bool resultIsSmall = siblingResult->idTable().size() <=
                          RuntimeParameters().get<"service-max-value-rows">();
     if (resultIsSmall) {
@@ -547,16 +555,17 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
           siblingResult, sibling->getExternallyVisibleVariableColumns(),
           sibling->getCacheKey());
     }
+    sibling->precomputedResultBecauseSiblingOfService() =
+        std::move(siblingResult);
     addRuntimeInfo(resultIsSmall);
     return;
   }
 
-  // Creates an idTable-Generator from partially materialized result data.
+  // Creates a `Result::Generator` from partially materialized result data.
   auto partialResultGenerator =
       [](std::vector<Result::IdTableVocabPair> pairs,
-         cppcoro::generator<Result::IdTableVocabPair> prevGenerator,
-         cppcoro::generator<Result::IdTableVocabPair>::iterator it)
-      -> cppcoro::generator<Result::IdTableVocabPair> {
+         Result::Generator prevGenerator,
+         Result::Generator::iterator it) -> Result::Generator {
     for (auto& pair : pairs) {
       co_yield pair;
     }
@@ -565,35 +574,39 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
     }
   };
 
+  // Start materializing the lazy `siblingResult`.
   size_t rows = 0;
   std::vector<Result::IdTableVocabPair> resultPairs;
   auto generator = std::move(siblingResult->idTables());
   auto it = generator.begin();
+  const size_t maxValueRows =
+      RuntimeParameters().get<"service-max-value-rows">();
   for (; it != generator.end(); ++it) {
-    auto& pair = (*it);
+    auto& pair = *it;
     rows += pair.idTable_.size();
     resultPairs.push_back(std::move(pair));
 
-    if (rows > RuntimeParameters().get<"service-max-value-rows">()) {
-      // Stop precomputation as the siblingResult's size exceeds the threshold
-      // it is not useful for the service operation.
-      // Pass the partially materialized result to the sibling.
-      sibling->precomputedResultBecauseSiblingOfService_ =
+    if (rows > maxValueRows) {
+      // Stop precomputation as the size of `siblingResult` exceeds the
+      // threshold it is not useful for the service operation. Pass the
+      // partially materialized result to the sibling.
+      sibling->precomputedResultBecauseSiblingOfService() =
           std::make_shared<const Result>(
               partialResultGenerator(std::move(resultPairs),
-                                     std::move(generator), std::move(it)),
+                                     std::move(generator), std::move(++it)),
               siblingResult->sortedBy());
       addRuntimeInfo(false);
       return;
     }
   }
 
-  // The siblingResult has been fully materialized, so it can now be
+  // The `siblingResult` has been fully materialized, so it can now be
   // used in both sibling and service.
   Result::IdTableVocabPair siblingPair(
       IdTable{sibling->getResultWidth(),
               sibling->getExecutionContext()->getAllocator()},
       LocalVocab{});
+  siblingPair.idTable_.reserve(rows);
 
   for (auto& pair : resultPairs) {
     siblingPair.idTable_.insertAtEnd(pair.idTable_);
@@ -605,7 +618,7 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
                                siblingResult->sortedBy()),
       sibling->getExternallyVisibleVariableColumns(), sibling->getCacheKey());
 
-  sibling->precomputedResultBecauseSiblingOfService_ =
+  sibling->precomputedResultBecauseSiblingOfService() =
       service->siblingInfo_->precomputedResult_;
   addRuntimeInfo(true);
 }

@@ -172,7 +172,8 @@ TEST_F(OperationTestFixture, getPrecomputedResultBecauseSiblingOfService) {
       idTable.clone(), std::vector<ColumnIndex>{0}, LocalVocab{});
   operation.precomputedResultBecauseSiblingOfService_ =
       std::make_optional(result);
-  ASSERT_EQ(operation.getResult(), result);
+  EXPECT_EQ(operation.getResult(), result);
+  EXPECT_FALSE(operation.precomputedResultBecauseSiblingOfService_.has_value());
 }
 
 // _____________________________________________________________________________

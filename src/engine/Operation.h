@@ -104,11 +104,6 @@ class Operation {
     }
   }
 
-  // Holds a precomputed Result of this operation if it is the sibling of a
-  // Service operation.
-  std::optional<std::shared_ptr<const Result>>
-      precomputedResultBecauseSiblingOfService_;
-
  private:
   virtual uint64_t getSizeEstimateBeforeLimit() = 0;
 
@@ -130,6 +125,11 @@ class Operation {
   virtual bool isIndexScanWithNumVariables(
       [[maybe_unused]] size_t target) const {
     return false;
+  }
+
+  std::optional<std::shared_ptr<const Result>>&
+  precomputedResultBecauseSiblingOfService() {
+    return precomputedResultBecauseSiblingOfService_;
   }
 
   RuntimeInformation& runtimeInfo() const { return *_runtimeInfo; }
@@ -354,6 +354,11 @@ class Operation {
   // Recursively call a function on all children.
   template <typename F>
   void forAllDescendants(F f) const;
+
+  // Holds a precomputed Result of this operation if it is the sibling of a
+  // Service operation.
+  std::optional<std::shared_ptr<const Result>>
+      precomputedResultBecauseSiblingOfService_;
 
   std::shared_ptr<RuntimeInformation> _runtimeInfo =
       std::make_shared<RuntimeInformation>();

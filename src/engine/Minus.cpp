@@ -36,8 +36,8 @@ string Minus::getDescriptor() const { return "Minus"; }
 ProtoResult Minus::computeResult([[maybe_unused]] bool requestLaziness) {
   LOG(DEBUG) << "Minus result computation..." << endl;
 
-  // If the right of the RootOperations is a Service, precompute it's sibling's
-  // result for potential Service clause optimization.
+  // If the right of the RootOperations is a Service, precompute the result of
+  // its sibling.
   Service::precomputeSiblingResult(_left->getRootOperation(),
                                    _right->getRootOperation(), true,
                                    requestLaziness);

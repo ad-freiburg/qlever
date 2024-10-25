@@ -11,6 +11,7 @@
 
 #include "engine/Service.h"
 #include "engine/Sort.h"
+#include "engine/Values.h"
 #include "global/Constants.h"
 #include "global/IndexTypes.h"
 #include "global/RuntimeParameters.h"
@@ -672,16 +673,25 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
 
     ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override {
       ProtoResult res = Values::computeResult(false);
-      auto pair = Result::IdTableVocabPair(res.idTable().clone(),
-                                           res.localVocab().clone());
 
-      return requestLaziness ? ProtoResult{[&](Result::IdTableVocabPair pair)
-                                               -> cppcoro::generator<
-                                                   Result::IdTableVocabPair> {
-                                             co_yield std::move(pair);
-                                           }(std::move(pair)),
-                                           std::move(res.sortedBy())}
-                             : ProtoResult{std::move(pair), res.sortedBy()};
+      if (!requestLaziness) {
+        return ProtoResult(Result::IdTableVocabPair(res.idTable().clone(),
+                                                    res.localVocab().clone()),
+                           res.sortedBy());
+      }
+
+      // yield each row individually
+      return {[&](IdTable clone) -> Result::Generator {
+                IdTable idt{clone.numColumns(),
+                            ad_utility::makeUnlimitedAllocator<IdTable>()};
+                for (size_t i = 0; i < clone.size(); ++i) {
+                  idt.push_back(clone[i]);
+                  Result::IdTableVocabPair pair{std::move(idt), LocalVocab{}};
+                  co_yield pair;
+                  idt.clear();
+                }
+              }(res.idTable().clone()),
+              res.sortedBy()};
     }
   };
 
@@ -689,7 +699,8 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
   using TC = TripleComponent;
   auto siblingOperation = std::make_shared<MockValues>(
       testQec, parsedQuery::SparqlValues{{Variable{"?x"}, Variable{"?y"}},
-                                         {{TC(iri("<x>")), TC(iri("<y>"))}}});
+                                         {{TC(iri("<x>")), TC(iri("<y>"))},
+                                          {TC(iri("<z>")), TC(iri("<a>"))}}});
   auto sibling = std::make_shared<Sort>(
       testQec, std::make_shared<QueryExecutionTree>(testQec, siblingOperation),
       std::vector<ColumnIndex>{});
@@ -697,43 +708,44 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
   // Reset the computed results, to reuse the mock-operations.
   auto reset = [&]() {
     service->siblingInfo_.reset();
-    service2->precomputedResultBecauseSiblingOfService_.reset();
-    siblingOperation->precomputedResultBecauseSiblingOfService_.reset();
+    service2->precomputedResultBecauseSiblingOfService().reset();
+    siblingOperation->precomputedResultBecauseSiblingOfService().reset();
     testQec->clearCacheUnpinnedOnly();
   };
 
   // Right requested but it is not a Service -> no computation
   Service::precomputeSiblingResult(service, sibling, true, false);
   EXPECT_FALSE(
-      siblingOperation->precomputedResultBecauseSiblingOfService_.has_value());
+      siblingOperation->precomputedResultBecauseSiblingOfService().has_value());
   EXPECT_FALSE(service->siblingInfo_.has_value());
-  EXPECT_FALSE(service->precomputedResultBecauseSiblingOfService_.has_value());
+  EXPECT_FALSE(service->precomputedResultBecauseSiblingOfService().has_value());
   reset();
 
   // Two Service operations -> no computation
   Service::precomputeSiblingResult(service, service2, false, false);
-  EXPECT_FALSE(service2->precomputedResultBecauseSiblingOfService_.has_value());
+  EXPECT_FALSE(
+      service2->precomputedResultBecauseSiblingOfService().has_value());
   EXPECT_FALSE(service->siblingInfo_.has_value());
-  EXPECT_FALSE(service->precomputedResultBecauseSiblingOfService_.has_value());
+  EXPECT_FALSE(service->precomputedResultBecauseSiblingOfService().has_value());
   reset();
 
   // Right requested and two Service operations -> compute
   Service::precomputeSiblingResult(service, service2, true, false);
-  EXPECT_TRUE(service2->precomputedResultBecauseSiblingOfService_.has_value());
+  EXPECT_TRUE(service2->precomputedResultBecauseSiblingOfService().has_value());
   EXPECT_TRUE(service->siblingInfo_.has_value());
-  EXPECT_FALSE(service->precomputedResultBecauseSiblingOfService_.has_value());
+  EXPECT_FALSE(service->precomputedResultBecauseSiblingOfService().has_value());
   reset();
 
   // Right requested and it is a service -> sibling result is computed and
   // shared with service
   Service::precomputeSiblingResult(sibling, service, true, false);
-  EXPECT_TRUE(
-      siblingOperation->precomputedResultBecauseSiblingOfService_.has_value());
-  EXPECT_TRUE(
-      siblingOperation->precomputedResultBecauseSiblingOfService_.value()
-          ->isFullyMaterialized());
+  ASSERT_TRUE(
+      siblingOperation->precomputedResultBecauseSiblingOfService().has_value());
+  EXPECT_TRUE(siblingOperation->precomputedResultBecauseSiblingOfService()
+                  .value()
+                  ->isFullyMaterialized());
   EXPECT_TRUE(service->siblingInfo_.has_value());
-  EXPECT_FALSE(service->precomputedResultBecauseSiblingOfService_.has_value());
+  EXPECT_FALSE(service->precomputedResultBecauseSiblingOfService().has_value());
   reset();
 
   // Compute (large) sibling -> sibling result is computed
@@ -741,39 +753,45 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
       RuntimeParameters().get<"service-max-value-rows">();
   RuntimeParameters().set<"service-max-value-rows">(0);
   Service::precomputeSiblingResult(sibling, service, true, false);
-  EXPECT_TRUE(
-      siblingOperation->precomputedResultBecauseSiblingOfService_.has_value());
-  EXPECT_TRUE(
-      siblingOperation->precomputedResultBecauseSiblingOfService_.value()
-          ->isFullyMaterialized());
+  ASSERT_TRUE(
+      siblingOperation->precomputedResultBecauseSiblingOfService().has_value());
+  EXPECT_TRUE(siblingOperation->precomputedResultBecauseSiblingOfService()
+                  .value()
+                  ->isFullyMaterialized());
   EXPECT_FALSE(service->siblingInfo_.has_value());
-  EXPECT_FALSE(service->precomputedResultBecauseSiblingOfService_.has_value());
+  EXPECT_FALSE(service->precomputedResultBecauseSiblingOfService().has_value());
   RuntimeParameters().set<"service-max-value-rows">(maxValueRowsDefault);
   reset();
 
   // Lazy compute (small) sibling -> sibling result is fully materialized and
   // shared with service
   Service::precomputeSiblingResult(service, sibling, false, true);
-  EXPECT_TRUE(
-      siblingOperation->precomputedResultBecauseSiblingOfService_.has_value());
-  EXPECT_TRUE(
-      siblingOperation->precomputedResultBecauseSiblingOfService_.value()
-          ->isFullyMaterialized());
+  ASSERT_TRUE(
+      siblingOperation->precomputedResultBecauseSiblingOfService().has_value());
+  EXPECT_TRUE(siblingOperation->precomputedResultBecauseSiblingOfService()
+                  .value()
+                  ->isFullyMaterialized());
   EXPECT_TRUE(service->siblingInfo_.has_value());
-  EXPECT_FALSE(service->precomputedResultBecauseSiblingOfService_.has_value());
+  EXPECT_FALSE(service->precomputedResultBecauseSiblingOfService().has_value());
   reset();
 
   // Lazy compute (large) sibling -> partially materialized result is passed
   // back to sibling
   RuntimeParameters().set<"service-max-value-rows">(0);
   Service::precomputeSiblingResult(service, sibling, false, true);
-  EXPECT_TRUE(
-      siblingOperation->precomputedResultBecauseSiblingOfService_.has_value());
-  EXPECT_FALSE(
-      siblingOperation->precomputedResultBecauseSiblingOfService_.value()
-          ->isFullyMaterialized());
+  ASSERT_TRUE(
+      siblingOperation->precomputedResultBecauseSiblingOfService().has_value());
+  EXPECT_FALSE(siblingOperation->precomputedResultBecauseSiblingOfService()
+                   .value()
+                   ->isFullyMaterialized());
   EXPECT_FALSE(service->siblingInfo_.has_value());
-  EXPECT_FALSE(service->precomputedResultBecauseSiblingOfService_.has_value());
+  EXPECT_FALSE(service->precomputedResultBecauseSiblingOfService().has_value());
   RuntimeParameters().set<"service-max-value-rows">(maxValueRowsDefault);
-  reset();
+
+  // consume the sibling result-generator
+  for ([[maybe_unused]] auto& _ :
+       siblingOperation->precomputedResultBecauseSiblingOfService()
+           .value()
+           ->idTables()) {
+  }
 }

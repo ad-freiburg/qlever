@@ -7,7 +7,6 @@
 #include <functional>
 
 #include "engine/Operation.h"
-#include "engine/Values.h"
 #include "engine/VariableToColumnMap.h"
 #include "parser/ParsedQuery.h"
 #include "util/LazyJsonParser.h"
@@ -38,7 +37,7 @@ class Service : public Operation {
       const boost::beast::http::verb&, std::string_view, std::string_view,
       std::string_view)>;
 
-  // Information on a potential Sibling operation.
+  // Information on a Sibling operation.
   struct SiblingInfo {
     std::shared_ptr<const Result> precomputedResult_;
     VariableToColumnMap variables_;
@@ -95,11 +94,10 @@ class Service : public Operation {
   static std::optional<std::string> idToValueForValuesClause(
       const Index& index, Id id, const LocalVocab& localVocab);
 
-  // Given two child-operations of a Join-, OptionalJoin- or Minus operation,
-  // this method tries to precompute the result of one if the other one
-  // (it's sibling) is a Service operation.
-  // If rightOnly is true (used by OptionalJoin and Minus),
-  // only the right operation can be a service.
+  // Given two child-operations of a `Join`-, `OptionalJoin`- or `Minus`
+  // operation, this method tries to precompute the result of one if the other
+  // one (its sibling) is a `Service` operation. If `rightOnly` is true (used by
+  // `OptionalJoin` and `Minus`), only the right operation can be a `Service`.
   static void precomputeSiblingResult(std::shared_ptr<Operation> left,
                                       std::shared_ptr<Operation> right,
                                       bool rightOnly, bool requestLaziness);
