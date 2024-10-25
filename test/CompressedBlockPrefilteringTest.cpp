@@ -7,14 +7,14 @@
 #include <vector>
 
 #include "./SparqlExpressionTestHelpers.h"
-#include "./util/GTestHelpers.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "index/CompressedBlockPrefiltering.h"
 #include "util/DateYearDuration.h"
+#include "util/GTestHelpers.h"
 #include "util/IdTestHelpers.h"
 
-using ad_utility::source_location;
+namespace {
 using ad_utility::testing::BlankNodeId;
 using ad_utility::testing::BoolId;
 using ad_utility::testing::DateId;
@@ -22,868 +22,539 @@ using ad_utility::testing::DoubleId;
 using ad_utility::testing::IntId;
 using ad_utility::testing::UndefId;
 using ad_utility::testing::VocabId;
+constexpr auto DateParser = &DateYearOrDuration::parseXsdDate;
 using namespace prefilterExpressions;
 
-// TEST SECTION 1
+namespace makeFilterExpr {
 //______________________________________________________________________________
+// Make RelationalExpression
+template <typename RelExpr>
+auto relExpr =
+    [](const ValueId& referenceId) -> std::unique_ptr<PrefilterExpression> {
+  return std::make_unique<RelExpr>(referenceId);
+};
+
+// Make AndExpression or OrExpression
+template <typename LogExpr>
+auto logExpr = [](std::unique_ptr<PrefilterExpression> child1,
+                  std::unique_ptr<PrefilterExpression> child2)
+    -> std::unique_ptr<PrefilterExpression> {
+  return std::make_unique<LogExpr>(std::move(child1), std::move(child2));
+};
+
+// Make NotExpression
+auto notExpr = [](std::unique_ptr<PrefilterExpression> child)
+    -> std::unique_ptr<PrefilterExpression> {
+  return std::make_unique<NotExpression>(std::move(child));
+};
+
+}  // namespace makeFilterExpr
 //______________________________________________________________________________
-struct MetadataBlocks {
-  /*
-  Our pre-filtering procedure expects blocks that are in correct (ascending)
-  order w.r.t. their contained ValueIds given the first and last triple.
+// instantiation relational
+// LESS THAN (`<`, `PrefilterExpression`)
+constexpr auto lt = makeFilterExpr::relExpr<LessThanExpression>;
+// LESS EQUAL (`<=`, `PrefilterExpression`)
+constexpr auto le = makeFilterExpr::relExpr<LessEqualExpression>;
+// GREATER EQUAL (`>=`, `PrefilterExpression`)
+constexpr auto ge = makeFilterExpr::relExpr<GreaterEqualExpression>;
+// GREATER THAN (`>`, `PrefiterExpression`)
+constexpr auto gt = makeFilterExpr::relExpr<GreaterThanExpression>;
+// EQUAL (`==`, `PrefiterExpression`)
+constexpr auto eq = makeFilterExpr::relExpr<EqualExpression>;
+// NOT EQUAL (`!=`, `PrefiterExpression`)
+constexpr auto neq = makeFilterExpr::relExpr<NotEqualExpression>;
+// AND (`&&`, `PrefiterExpression`)
+constexpr auto andExpr = makeFilterExpr::logExpr<AndExpression>;
+// OR (`||`, `PrefiterExpression`)
+constexpr auto orExpr = makeFilterExpr::logExpr<OrExpression>;
+// NOT (`!`, `PrefiterExpression`)
+constexpr auto notExpr = makeFilterExpr::notExpr;
 
-  The correct order of the ValueIds is dependent on their type and underlying
-  representation.
+//______________________________________________________________________________
+/*
+Our pre-filtering procedure expects blocks that are in correct (ascending)
+order w.r.t. their contained ValueIds given the first and last triple.
 
-  Short overview on the ascending order logic for the underlying values:
-  Order ValueIds for (signed) integer values - [0... max, -max... -1]
-  Order ValueIds for (signed) doubles values - [0.0... max, -0.0... -max]
-  Order ValueIds for Vocab and LocalVocab values given the vocabulary with
-  indices (up to N) - [VocabId(0), .... VocabId(N)]
+The correct order of the ValueIds is dependent on their type and underlying
+representation.
 
-  COLUMN 0 and COLUMN 1 contain fixed values, this is a necessary condition
-  that is also checked during the pre-filtering procedure. The actual evaluation
-  column (we filter w.r.t. values of COLUMN 2) contains mixed types.
-  */
+Short overview on the ascending order logic for the underlying values:
+Order ValueIds for (signed) integer values - [0... max, -max... -1]
+Order ValueIds for (signed) doubles values - [0.0... max, -0.0... -max]
+Order ValueIds for Vocab and LocalVocab values given the vocabulary with
+indices (up to N) - [VocabId(0), .... VocabId(N)]
 
-  // Values for fixed columns
-  const Id VocabId10 = VocabId(10);
-  const Id DoubleId33 = DoubleId(33);
-
-  auto makeBlock(const ValueId& firstId, const ValueId& lastId)
-      -> BlockMetadata {
-    return {{},
-            0,
-            // COLUMN 0  |  COLUMN 1  |  COLUMN 2
-            {VocabId10, DoubleId33, firstId},  // firstTriple
-            {VocabId10, DoubleId33, lastId},   // lastTriple
-            {},
-            false,
-            0};
-  };
-
-  const BlockMetadata b1 = makeBlock(IntId(0), IntId(0));
-  const BlockMetadata b2 = makeBlock(IntId(0), IntId(5));
-  const BlockMetadata b3 = makeBlock(IntId(5), IntId(6));
-  const BlockMetadata b4 = makeBlock(IntId(8), IntId(9));
-  const BlockMetadata b5 = makeBlock(IntId(-10), IntId(-8));
-  const BlockMetadata b6 = makeBlock(IntId(-4), IntId(-4));
-  // b7 contains mixed datatypes (COLUMN 2)
-  const BlockMetadata b7 = makeBlock(IntId(-4), DoubleId(2));
-  const BlockMetadata b8 = makeBlock(DoubleId(2), DoubleId(2));
-  const BlockMetadata b9 = makeBlock(DoubleId(4), DoubleId(4));
-  const BlockMetadata b10 = makeBlock(DoubleId(4), DoubleId(10));
-  const BlockMetadata b11 = makeBlock(DoubleId(-1.23), DoubleId(-6.25));
-  const BlockMetadata b12 = makeBlock(DoubleId(-6.25), DoubleId(-6.25));
-  const BlockMetadata b13 = makeBlock(DoubleId(-10.42), DoubleId(-12.00));
-  // b14 contains mixed datatypes (COLUMN 2)
-  const BlockMetadata b14 = makeBlock(DoubleId(-14.01), VocabId(0));
-  const BlockMetadata b15 = makeBlock(VocabId(10), VocabId(14));
-  const BlockMetadata b16 = makeBlock(VocabId(14), VocabId(14));
-  const BlockMetadata b17 = makeBlock(VocabId(14), VocabId(17));
-  std::vector<BlockMetadata> blocks = {b1,  b2,  b3,  b4,  b5,  b6,
-                                       b7,  b8,  b9,  b10, b11, b12,
-                                       b13, b14, b15, b16, b17};
-
-  // The following blocks will be swapped with their respective correct block,
-  // to test if the method evaluate checks the pre-conditions properly.
-  const BlockMetadata b1_1{{},
-                           0,
-                           {VocabId10, DoubleId33, IntId(0)},
-                           {VocabId10, DoubleId(22), IntId(0)},
-                           {},
-                           false,
-                           0};
-  std::vector<BlockMetadata> blocksInvalidCol1 = {b1_1, b2,  b3,  b4,  b5,  b6,
-                                                  b7,   b8,  b9,  b10, b11, b12,
-                                                  b13,  b14, b15, b16, b17};
-  const BlockMetadata b5_1{{},
-                           0,
-                           {VocabId(11), DoubleId33, IntId(-10)},
-                           {VocabId10, DoubleId33, IntId(-8)},
-                           {},
-                           false,
-                           0};
-  std::vector<BlockMetadata> blocksInvalidCol2 = {b1,  b2,  b3,  b4,  b5_1, b6,
-                                                  b7,  b8,  b9,  b10, b11,  b12,
-                                                  b13, b14, b15, b16, b17};
-  std::vector<BlockMetadata> blocksInvalidOrder1 = {
-      b2,  b1,  b3,  b4,  b5,  b6,  b7,  b8, b9,
-      b10, b11, b12, b13, b14, b15, b16, b17};
-  std::vector<BlockMetadata> blocksInvalidOrder2 = {
-      b1,  b2,  b3,  b4,  b5,  b6,  b7,  b8, b9,
-      b10, b11, b12, b14, b13, b15, b16, b17};
-  std::vector<BlockMetadata> blocksWithDuplicate1 = {
-      b1, b1,  b2,  b3,  b4,  b5,  b6,  b7,  b8,
-      b9, b10, b11, b12, b13, b14, b15, b16, b17};
-  std::vector<BlockMetadata> blocksWithDuplicate2 = {
-      b1,  b2,  b3,  b4,  b5,  b6,  b7,  b8,  b9,
-      b10, b11, b12, b13, b14, b15, b16, b17, b17};
-
-  //____________________________________________________________________________
-  // Additional blocks for different datatype mix.
+COLUMN 1 and COLUMN 2 contain fixed values, this is a necessary condition
+that is also checked during the pre-filtering procedure. The actual evaluation
+column (we filter w.r.t. values of COLUMN 0) contains mixed types.
+*/
+//______________________________________________________________________________
+class TestPrefilterExprOnBlockMetadata : public ::testing::Test {
+ public:
+  const Id referenceDate1 = DateId(DateParser, "1999-11-11");
+  const Id referenceDate2 = DateId(DateParser, "2005-02-27");
   const Id undef = Id::makeUndefined();
   const Id falseId = BoolId(false);
   const Id trueId = BoolId(true);
-  const Id referenceDate1 =
-      DateId(DateYearOrDuration::parseXsdDate, "1999-11-11");
-  const Id referenceDate2 =
-      DateId(DateYearOrDuration::parseXsdDate, "2005-02-27");
-  const Id referenceDateEqual =
-      DateId(DateYearOrDuration::parseXsdDate, "2000-01-01");
-  const BlockMetadata bd1 = makeBlock(undef, undef);
-  const BlockMetadata bd2 = makeBlock(undef, falseId);
-  const BlockMetadata bd3 = makeBlock(falseId, falseId);
-  const BlockMetadata bd4 = makeBlock(trueId, trueId);
-  const BlockMetadata bd5 =
-      makeBlock(trueId, DateId(DateYearOrDuration::parseXsdDate, "1999-12-12"));
-  const BlockMetadata bd6 =
-      makeBlock(DateId(DateYearOrDuration::parseXsdDate, "2000-01-01"),
-                DateId(DateYearOrDuration::parseXsdDate, "2000-01-01"));
-  const BlockMetadata bd7 = makeBlock(
-      DateId(DateYearOrDuration::parseXsdDate, "2024-10-08"), BlankNodeId(10));
-  std::vector<BlockMetadata> otherBlocks = {bd1, bd2, bd3, bd4, bd5, bd6, bd7};
-};
+  const Id referenceDateEqual = DateId(DateParser, "2000-01-01");
 
-// Static tests, they focus on corner case values for the given block triples.
-//______________________________________________________________________________
-//______________________________________________________________________________
-// Test PrefilterExpressions
+  // Fixed column ValueIds
+  const Id VocabId10 = VocabId(10);
+  const Id DoubleId33 = DoubleId(33);
+  const Id GraphId = VocabId(0);
 
-//______________________________________________________________________________
-static const auto testThrowError =
-    [](std::unique_ptr<PrefilterExpression> expression, size_t evaluationColumn,
-       const std::vector<BlockMetadata>& input,
-       const std::string& expectedErrorMessage) {
-      try {
-        expression->evaluate(input, evaluationColumn);
-        FAIL() << "Expected thrown error message.";
-      } catch (const std::runtime_error& error) {
-        EXPECT_EQ(std::string(error.what()), expectedErrorMessage);
-      } catch (...) {
-        FAIL() << "Expected an error of type std::runtime_error, but a "
-                  "different error was thrown.";
-      }
-    };
+  // Define BlockMetadata
+  const BlockMetadata b1 = makeBlock(undef, undef);
+  const BlockMetadata b2 = makeBlock(undef, falseId);
+  const BlockMetadata b3 = makeBlock(falseId, falseId);
+  const BlockMetadata b4 = makeBlock(trueId, IntId(0));
+  const BlockMetadata b5 = makeBlock(IntId(0), IntId(0));
+  const BlockMetadata b6 = makeBlock(IntId(0), IntId(5));
+  const BlockMetadata b7 = makeBlock(IntId(5), IntId(6));
+  const BlockMetadata b8 = makeBlock(IntId(8), IntId(9));
+  const BlockMetadata b9 = makeBlock(IntId(-10), IntId(-8));
+  const BlockMetadata b10 = makeBlock(IntId(-4), IntId(-4));
+  const BlockMetadata b11 = makeBlock(IntId(-4), DoubleId(2));
+  const BlockMetadata b12 = makeBlock(DoubleId(2), DoubleId(2));
+  const BlockMetadata b13 = makeBlock(DoubleId(4), DoubleId(4));
+  const BlockMetadata b14 = makeBlock(DoubleId(4), DoubleId(10));
+  const BlockMetadata b15 = makeBlock(DoubleId(-1.23), DoubleId(-6.25));
+  const BlockMetadata b16 = makeBlock(DoubleId(-6.25), DoubleId(-6.25));
+  const BlockMetadata b17 = makeBlock(DoubleId(-10.42), DoubleId(-12.00));
+  const BlockMetadata b18 = makeBlock(DoubleId(-14.01), VocabId(0));
+  const BlockMetadata b19 = makeBlock(VocabId(10), VocabId(14));
+  const BlockMetadata b20 = makeBlock(VocabId(14), VocabId(14));
+  const BlockMetadata b21 = makeBlock(VocabId(14), VocabId(17));
+  const BlockMetadata b22 =
+      makeBlock(VocabId(20), DateId(DateParser, "1999-12-12"));
+  const BlockMetadata b23 = makeBlock(DateId(DateParser, "2000-01-01"),
+                                      DateId(DateParser, "2000-01-01"));
+  const BlockMetadata b24 =
+      makeBlock(DateId(DateParser, "2024-10-08"), BlankNodeId(10));
 
-//______________________________________________________________________________
-template <typename RelExpr1>
-std::unique_ptr<PrefilterExpression> makeRelExpr(const ValueId& referenceId) {
-  return std::make_unique<RelExpr1>(referenceId);
-}
+  // All blocks that contain mixed (ValueId) types over column 0
+  const std::vector<BlockMetadata> mixedBlocks = {b2, b4, b11, b18, b22, b24};
 
-//______________________________________________________________________________
-template <typename LogExpr, typename RelExpr1, typename RelExpr2>
-std::unique_ptr<PrefilterExpression> makeLogExpr(const ValueId& referenceId1,
-                                                 const ValueId& referenceId2) {
-  return std::make_unique<LogExpr>(makeRelExpr<RelExpr1>(referenceId1),
-                                   makeRelExpr<RelExpr2>(referenceId2));
-}
+  // Ordered and unique vector with BlockMetadata
+  const std::vector<BlockMetadata> blocks = {
+      b1,  b2,  b3,  b4,  b5,  b6,  b7,  b8,  b9,  b10, b11, b12,
+      b13, b14, b15, b16, b17, b18, b19, b20, b21, b22, b23, b24};
 
-//______________________________________________________________________________
-template <typename RelExpr1, typename LogExpr = std::nullptr_t,
-          typename RelExpr2 = std::nullptr_t>
-std::unique_ptr<PrefilterExpression> makeNotExpression(
-    const ValueId& referenceId1, const std::optional<ValueId> optId2) {
-  if constexpr (check_is_relational_v<RelExpr2> &&
-                check_is_logical_v<LogExpr>) {
-    assert(optId2.has_value() && "Logical Expressions require two ValueIds");
-    return std::make_unique<NotExpression>(
-        makeLogExpr<LogExpr, RelExpr1, RelExpr2>(referenceId1, optId2.value()));
-  } else if constexpr (std::is_same_v<LogExpr, NotExpression>) {
-    return std::make_unique<NotExpression>(
-        makeNotExpression<RelExpr1>(referenceId1, optId2));
-  } else {
-    return std::make_unique<NotExpression>(makeRelExpr<RelExpr1>(referenceId1));
+  const std::vector<BlockMetadata> blocksInvalidOrder1 = {
+      b1,  b2,  b3,  b4,  b5,  b6,  b7,  b8,  b9,  b10, b11, b12,
+      b13, b14, b15, b16, b17, b18, b19, b20, b21, b22, b24, b23};
+
+  const std::vector<BlockMetadata> blocksInvalidOrder2 = {
+      b1,  b2,  b3,  b4,  b5,  b6,  b7,  b8,  b9,  b10, b11, b12,
+      b14, b10, b15, b16, b17, b18, b19, b20, b21, b22, b23, b24};
+
+  const std::vector<BlockMetadata> blocksWithDuplicate1 = {
+      b1,  b1,  b2,  b3,  b4,  b5,  b6,  b7,  b8,  b9,  b10, b11, b12,
+      b13, b14, b15, b16, b17, b18, b19, b20, b21, b22, b23, b24};
+
+  const std::vector<BlockMetadata> blocksWithDuplicate2 = {
+      b1,  b2,  b3,  b4,  b5,  b6,  b7,  b8,  b9,  b10, b11, b12, b13,
+      b14, b15, b16, b17, b18, b19, b20, b21, b22, b23, b24, b24};
+
+  // Function to create BlockMetadata
+  const BlockMetadata makeBlock(const ValueId& firstId, const ValueId& lastId) {
+    assert(firstId <= lastId);
+    static size_t blockIdx = 0;
+    ++blockIdx;
+    return {{{},
+             0,
+             // COLUMN 0  |  COLUMN 1  |  COLUMN 2
+             {firstId, VocabId10, DoubleId33, GraphId},  // firstTriple
+             {lastId, VocabId10, DoubleId33, GraphId},   // lastTriple
+             {},
+             false},
+            blockIdx};
   }
-}
 
-//______________________________________________________________________________
-template <typename RelExpr1, typename ResT>
-struct TestRelationalExpression {
-  void operator()(size_t evaluationColumn, const ValueId& referenceId,
-                  const std::vector<BlockMetadata>& input, const ResT& expected)
-      requires check_is_relational_v<RelExpr1> {
-    auto expression = makeRelExpr<RelExpr1>(referenceId);
-    if constexpr (std::is_same_v<ResT, std::string>) {
-      testThrowError(std::move(expression), evaluationColumn, input, expected);
-    } else {
-      static_assert(std::is_same_v<ResT, std::vector<BlockMetadata>>);
-      EXPECT_EQ(expression->evaluate(input, evaluationColumn), expected);
-    }
+  // Check if expected error is thrown.
+  auto makeTestErrorCheck(std::unique_ptr<PrefilterExpression> expr,
+                          const std::vector<BlockMetadata>& input,
+                          const std::string& expected,
+                          size_t evaluationColumn = 0) {
+    AD_EXPECT_THROW_WITH_MESSAGE(expr->evaluate(input, evaluationColumn),
+                                 ::testing::HasSubstr(expected));
   }
-};
 
-//______________________________________________________________________________
-template <typename LogExpr, typename ResT>
-struct TestLogicalExpression {
-  template <typename RelExpr1, typename RelExpr2>
-  void test(size_t evaluationColumn, const ValueId& referenceIdChild1,
-            ValueId referenceIdChild2, const std::vector<BlockMetadata>& input,
-            const ResT& expected)
-      requires(check_is_logical_v<LogExpr> && check_is_relational_v<RelExpr1> &&
-               check_is_relational_v<RelExpr2>) {
-    auto expression = makeLogExpr<LogExpr, RelExpr1, RelExpr2>(
-        referenceIdChild1, referenceIdChild2);
-    if constexpr (std::is_same_v<ResT, std::string>) {
-      testThrowError(std::move(expression), evaluationColumn, input, expected);
-    } else {
-      static_assert(std::is_same_v<ResT, std::vector<BlockMetadata>>);
-      EXPECT_EQ(expression->evaluate(input, evaluationColumn), expected);
-    }
+  // Check that the provided expression prefilters the correct blocks.
+  auto makeTest(std::unique_ptr<PrefilterExpression> expr,
+                std::vector<BlockMetadata>&& expected) {
+    std::vector<BlockMetadata> expectedAdjusted;
+    // This is for convenience, we automatically insert all mixed blocks
+    // which must be always returned.
+    std::ranges::set_union(
+        expected, mixedBlocks, std::back_inserter(expectedAdjusted),
+        [](const BlockMetadata& b1, const BlockMetadata& b2) {
+          return b1.blockIndex_ < b2.blockIndex_;
+        });
+    ASSERT_EQ(expr->evaluate(blocks, 0), expectedAdjusted);
   }
 };
 
-//______________________________________________________________________________
-template <typename ResT>
-struct TestNotExpression {
-  template <typename RelExpr1, typename LogExpr = std::nullptr_t,
-            typename RelExpr2 = std::nullptr_t>
-  void test(size_t evaluationColumn, const std::vector<BlockMetadata>& input,
-            const ResT& expected, const ValueId& referenceId1,
-            std::optional<ValueId> optId2 = std::nullopt)
-      requires check_is_relational_v<RelExpr1> {
-    auto expression =
-        makeNotExpression<RelExpr1, LogExpr, RelExpr2>(referenceId1, optId2);
-    if constexpr (std::is_same_v<ResT, std::string>) {
-      testThrowError(std::move(expression), evaluationColumn, input, expected);
-    } else {
-      static_assert(std::is_same_v<ResT, std::vector<BlockMetadata>>);
-      EXPECT_EQ(expression->evaluate(input, evaluationColumn), expected);
-    }
-  }
-};
+}  // namespace
 
 //______________________________________________________________________________
-TEST(BlockMetadata, testBlockFormatForDebugging) {
-  MetadataBlocks blocks{};
+TEST_F(TestPrefilterExprOnBlockMetadata, testBlockFormatForDebugging) {
   EXPECT_EQ(
-      "#BlockMetadata\n(first) Triple: V:10 D:33.000000 I:0\n(last) Triple: "
-      "V:10 D:33.000000 I:0\nnum. rows: 0.\n",
-      (std::stringstream() << blocks.b1).str());
+      "#BlockMetadata\n(first) Triple: I:0 V:10 D:33.000000 V:0\n(last) "
+      "Triple: I:0 V:10 D:33.000000 V:0\nnum. rows: 0.\n",
+      (std::stringstream() << b5).str());
   EXPECT_EQ(
-      "#BlockMetadata\n(first) Triple: V:10 D:33.000000 I:-4\n(last) Triple: "
-      "V:10 D:33.000000 D:2.000000\nnum. rows: 0.\n",
-      (std::stringstream() << blocks.b7).str());
+      "#BlockMetadata\n(first) Triple: I:-4 V:10 D:33.000000 V:0\n(last) "
+      "Triple: D:2.000000 V:10 D:33.000000 V:0\nnum. rows: 0.\n",
+      (std::stringstream() << b11).str());
   EXPECT_EQ(
-      "#BlockMetadata\n(first) Triple: V:10 D:33.000000 V:14\n(last) Triple: "
-      "V:10 D:33.000000 V:17\nnum. rows: 0.\n",
-      (std::stringstream() << blocks.b17).str());
+      "#BlockMetadata\n(first) Triple: V:14 V:10 D:33.000000 V:0\n(last) "
+      "Triple: V:17 V:10 D:33.000000 V:0\nnum. rows: 0.\n",
+      (std::stringstream() << b21).str());
 }
 
+// Test Relational Expressions
 //______________________________________________________________________________
 // Test LessThanExpression
-TEST(RelationalExpression, testLessThanExpressions) {
-  MetadataBlocks blocks{};
-  TestRelationalExpression<LessThanExpression, std::vector<BlockMetadata>>
-      testExpression;
-  testExpression(
-      2, IntId(5), blocks.blocks,
-      {blocks.b1, blocks.b2, blocks.b5, blocks.b6, blocks.b7, blocks.b8,
-       blocks.b9, blocks.b10, blocks.b11, blocks.b12, blocks.b13, blocks.b14});
-
-  testExpression(2, IntId(-12), blocks.blocks, {blocks.b7, blocks.b14});
-  testExpression(2, IntId(0), blocks.blocks,
-                 {blocks.b5, blocks.b6, blocks.b7, blocks.b11, blocks.b12,
-                  blocks.b13, blocks.b14});
-  testExpression(2, IntId(100), blocks.blocks,
-                 {blocks.b1, blocks.b2, blocks.b3, blocks.b4, blocks.b5,
-                  blocks.b6, blocks.b7, blocks.b8, blocks.b9, blocks.b10,
-                  blocks.b11, blocks.b12, blocks.b13, blocks.b14});
-  testExpression(2, DoubleId(-3), blocks.blocks,
-                 {blocks.b5, blocks.b6, blocks.b7, blocks.b11, blocks.b12,
-                  blocks.b13, blocks.b14});
-  testExpression(2, DoubleId(-14.01), blocks.blocks, {blocks.b7, blocks.b14});
-  testExpression(2, DoubleId(-11.22), blocks.blocks,
-                 {blocks.b7, blocks.b13, blocks.b14});
-  testExpression(
-      2, DoubleId(-4.121), blocks.blocks,
-      {blocks.b5, blocks.b7, blocks.b11, blocks.b12, blocks.b13, blocks.b14});
-  testExpression(2, VocabId(0), blocks.blocks, {blocks.b7, blocks.b14});
-  testExpression(2, VocabId(12), blocks.blocks,
-                 {blocks.b7, blocks.b14, blocks.b15});
-  testExpression(2, VocabId(14), blocks.blocks,
-                 {blocks.b7, blocks.b14, blocks.b15});
-  testExpression(2, VocabId(16), blocks.blocks,
-                 {blocks.b7, blocks.b14, blocks.b15, blocks.b16, blocks.b17});
-  // test blocks.otherBlocks
-  testExpression(2, blocks.undef, blocks.otherBlocks,
-                 {blocks.bd2, blocks.bd5, blocks.bd7});
-  testExpression(2, blocks.falseId, blocks.otherBlocks,
-                 {blocks.bd2, blocks.bd5, blocks.bd7});
-  testExpression(2, blocks.trueId, blocks.otherBlocks,
-                 {blocks.bd2, blocks.bd3, blocks.bd5, blocks.bd7});
-  testExpression(2, blocks.referenceDate1, blocks.otherBlocks,
-                 {blocks.bd2, blocks.bd5, blocks.bd7});
-  testExpression(2, blocks.referenceDateEqual, blocks.otherBlocks,
-                 {blocks.bd2, blocks.bd5, blocks.bd7});
-  testExpression(2, blocks.referenceDate2, blocks.otherBlocks,
-                 {blocks.bd2, blocks.bd5, blocks.bd6, blocks.bd7});
-  testExpression(2, BlankNodeId(11), blocks.otherBlocks,
-                 {blocks.bd2, blocks.bd5, blocks.bd7});
+TEST_F(TestPrefilterExprOnBlockMetadata, testLessThanExpressions) {
+  makeTest(lt(IntId(5)),
+           {b5, b6, b9, b10, b11, b12, b13, b14, b15, b16, b17, b18});
+  makeTest(lt(IntId(-12)), {b18});
+  makeTest(lt(IntId(0)), {b9, b10, b15, b16, b17, b18});
+  makeTest(lt(DoubleId(-14.01)), {b18});
+  makeTest(lt(DoubleId(-11.22)), {b17, b18});
+  makeTest(lt(DoubleId(-4.121)), {b9, b15, b16, b17, b18});
+  makeTest(lt(VocabId(0)), {b18});
+  makeTest(lt(VocabId(12)), {b18, b19});
+  makeTest(lt(VocabId(14)), {b18, b19});
+  makeTest(lt(VocabId(16)), {b18, b19, b20, b21});
+  makeTest(lt(IntId(100)),
+           {b5, b6, b7, b8, b9, b10, b12, b13, b14, b15, b16, b17, b18});
+  makeTest(lt(undef), {});
+  makeTest(lt(falseId), {});
+  makeTest(lt(trueId), {b2, b3});
+  makeTest(lt(referenceDate1), {});
+  makeTest(lt(referenceDateEqual), {b22});
+  makeTest(lt(referenceDate2), {b22, b23, b24});
+  makeTest(lt(BlankNodeId(11)), {b24});
 }
 
 //______________________________________________________________________________
 // Test LessEqualExpression
-TEST(RelationalExpression, testLessEqualExpressions) {
-  MetadataBlocks blocks{};
-  TestRelationalExpression<LessEqualExpression, std::vector<BlockMetadata>>
-      testExpression;
-  testExpression(2, IntId(0), blocks.blocks,
-                 {blocks.b1, blocks.b2, blocks.b5, blocks.b6, blocks.b7,
-                  blocks.b11, blocks.b12, blocks.b13, blocks.b14});
-  testExpression(
-      2, IntId(-6), blocks.blocks,
-      {blocks.b5, blocks.b7, blocks.b11, blocks.b12, blocks.b13, blocks.b14});
-  testExpression(2, IntId(7), blocks.blocks,
-                 {blocks.b1, blocks.b2, blocks.b3, blocks.b5, blocks.b6,
-                  blocks.b7, blocks.b8, blocks.b9, blocks.b10, blocks.b11,
-                  blocks.b12, blocks.b13, blocks.b14});
-  testExpression(2, IntId(-9), blocks.blocks,
-                 {blocks.b5, blocks.b7, blocks.b13, blocks.b14});
-  testExpression(2, DoubleId(-9.131), blocks.blocks,
-                 {blocks.b5, blocks.b7, blocks.b13, blocks.b14});
-  testExpression(2, DoubleId(1.1415), blocks.blocks,
-                 {blocks.b1, blocks.b2, blocks.b5, blocks.b6, blocks.b7,
-                  blocks.b11, blocks.b12, blocks.b13, blocks.b14});
-  testExpression(2, DoubleId(3.1415), blocks.blocks,
-                 {blocks.b1, blocks.b2, blocks.b5, blocks.b6, blocks.b7,
-                  blocks.b8, blocks.b11, blocks.b12, blocks.b13, blocks.b14});
-  testExpression(2, DoubleId(-11.99999999999999), blocks.blocks,
-                 {blocks.b7, blocks.b13, blocks.b14});
-  testExpression(2, DoubleId(-14.03), blocks.blocks, {blocks.b7, blocks.b14});
-  testExpression(2, VocabId(0), blocks.blocks, {blocks.b7, blocks.b14});
-  testExpression(2, VocabId(11), blocks.blocks,
-                 {blocks.b7, blocks.b14, blocks.b15});
-  testExpression(2, VocabId(14), blocks.blocks,
-                 {blocks.b7, blocks.b14, blocks.b15, blocks.b16, blocks.b17});
-  // test block.otherBlocks
-  testExpression(2, blocks.undef, blocks.otherBlocks,
-                 {blocks.bd2, blocks.bd5, blocks.bd7});
-  testExpression(2, blocks.falseId, blocks.otherBlocks,
-                 {blocks.bd2, blocks.bd3, blocks.bd5, blocks.bd7});
-  testExpression(2, blocks.trueId, blocks.otherBlocks,
-                 {blocks.bd2, blocks.bd3, blocks.bd4, blocks.bd5, blocks.bd7});
-  testExpression(2, blocks.referenceDateEqual, blocks.otherBlocks,
-                 {blocks.bd2, blocks.bd5, blocks.bd6, blocks.bd7});
-  testExpression(2, BlankNodeId(11), blocks.otherBlocks,
-                 {blocks.bd2, blocks.bd5, blocks.bd7});
+TEST_F(TestPrefilterExprOnBlockMetadata, testLessEqualExpressions) {
+  makeTest(le(IntId(0)), {b5, b6, b9, b10, b11, b15, b16, b17, b18});
+  makeTest(le(IntId(-6)), {b9, b11, b15, b16, b17, b18});
+  makeTest(le(IntId(7)),
+           {b5, b6, b7, b9, b10, b11, b12, b13, b14, b15, b16, b17, b18});
+  makeTest(le(IntId(-9)), {b9, b11, b17, b18});
+  makeTest(le(DoubleId(-9.131)), {b9, b11, b17, b18});
+  makeTest(le(DoubleId(1.1415)), {b5, b6, b9, b10, b11, b15, b16, b17, b18});
+  makeTest(le(DoubleId(3.1415)),
+           {b5, b6, b9, b10, b11, b12, b15, b16, b17, b18});
+  makeTest(le(DoubleId(-11.99999999999999)), {b17, b18});
+  makeTest(le(DoubleId(-14.03)), {b18});
+  makeTest(le(VocabId(0)), {b18});
+  makeTest(le(VocabId(11)), {b18, b19});
+  makeTest(le(VocabId(14)), {b18, b19, b20, b21});
+  makeTest(le(undef), {});
+  makeTest(le(falseId), {b2, b3});
+  makeTest(le(trueId), {b2, b3, b4});
+  makeTest(le(referenceDateEqual), {b22, b23});
+  makeTest(le(BlankNodeId(11)), {b24});
 }
 
 //______________________________________________________________________________
 // Test GreaterThanExpression
-TEST(RelationalExpression, testGreaterThanExpression) {
-  MetadataBlocks blocks{};
-  TestRelationalExpression<GreaterThanExpression, std::vector<BlockMetadata>>
-      testExpression;
-  testExpression(2, DoubleId(5.5375), blocks.blocks,
-                 {blocks.b3, blocks.b4, blocks.b7, blocks.b10, blocks.b14});
-  testExpression(2, DoubleId(9.9994), blocks.blocks,
-                 {blocks.b7, blocks.b10, blocks.b14});
-  testExpression(
-      2, IntId(-5), blocks.blocks,
-      {blocks.b1, blocks.b2, blocks.b3, blocks.b4, blocks.b6, blocks.b7,
-       blocks.b8, blocks.b9, blocks.b10, blocks.b11, blocks.b14});
-  testExpression(
-      2, DoubleId(-5.5375), blocks.blocks,
-      {blocks.b1, blocks.b2, blocks.b3, blocks.b4, blocks.b6, blocks.b7,
-       blocks.b8, blocks.b9, blocks.b10, blocks.b11, blocks.b14});
-  testExpression(
-      2, DoubleId(-6.2499999), blocks.blocks,
-      {blocks.b1, blocks.b2, blocks.b3, blocks.b4, blocks.b6, blocks.b7,
-       blocks.b8, blocks.b9, blocks.b10, blocks.b11, blocks.b14});
-  testExpression(2, IntId(1), blocks.blocks,
-                 {blocks.b2, blocks.b3, blocks.b4, blocks.b7, blocks.b8,
-                  blocks.b9, blocks.b10, blocks.b14});
-  testExpression(2, IntId(3), blocks.blocks,
-                 {blocks.b2, blocks.b3, blocks.b4, blocks.b7, blocks.b9,
-                  blocks.b10, blocks.b14});
-  testExpression(
-      2, IntId(4), blocks.blocks,
-      {blocks.b2, blocks.b3, blocks.b4, blocks.b7, blocks.b10, blocks.b14});
-  testExpression(2, IntId(-4), blocks.blocks,
-                 {blocks.b1, blocks.b2, blocks.b3, blocks.b4, blocks.b7,
-                  blocks.b8, blocks.b9, blocks.b10, blocks.b11, blocks.b14});
-  testExpression(2, IntId(33), blocks.blocks, {blocks.b7, blocks.b14});
-  testExpression(2, VocabId(22), blocks.blocks, {blocks.b7, blocks.b14});
-  testExpression(2, VocabId(14), blocks.blocks,
-                 {blocks.b7, blocks.b14, blocks.b17});
-  testExpression(2, VocabId(12), blocks.blocks,
-                 {blocks.b7, blocks.b14, blocks.b15, blocks.b16, blocks.b17});
-  // test blocks.otherBlocks
-  testExpression(2, blocks.undef, blocks.otherBlocks,
-                 {blocks.bd2, blocks.bd5, blocks.bd7});
-  testExpression(2, blocks.falseId, blocks.otherBlocks,
-                 {blocks.bd2, blocks.bd4, blocks.bd5, blocks.bd7});
-  testExpression(2, blocks.trueId, blocks.otherBlocks,
-                 {blocks.bd2, blocks.bd5, blocks.bd7});
-  testExpression(2, blocks.referenceDateEqual, blocks.otherBlocks,
-                 {blocks.bd2, blocks.bd5, blocks.bd7});
-  testExpression(2, blocks.referenceDate1, blocks.otherBlocks,
-                 {blocks.bd2, blocks.bd5, blocks.bd6, blocks.bd7});
-  testExpression(2, IntId(5), blocks.otherBlocks,
-                 {blocks.bd2, blocks.bd5, blocks.bd7});
+TEST_F(TestPrefilterExprOnBlockMetadata, testGreaterThanExpression) {
+  makeTest(gt(DoubleId(5.5375)), {b7, b8, b11, b14, b18});
+  makeTest(gt(DoubleId(9.9994)), {b14});
+  makeTest(gt(IntId(-5)), {b5, b6, b7, b8, b10, b11, b12, b13, b14, b15});
+  makeTest(gt(DoubleId(-5.5375)),
+           {b5, b6, b7, b8, b10, b11, b12, b13, b14, b15});
+  makeTest(gt(DoubleId(-6.2499999)),
+           {b5, b6, b7, b8, b10, b11, b12, b13, b14, b15});
+  makeTest(gt(IntId(1)), {b6, b7, b8, b11, b12, b13, b14});
+  makeTest(gt(IntId(3)), {b6, b7, b8, b11, b13, b14});
+  makeTest(gt(IntId(4)), {b6, b7, b8, b11, b14});
+  makeTest(gt(IntId(-4)), {b5, b6, b7, b8, b11, b12, b13, b14, b15});
+  makeTest(gt(IntId(33)), {});
+  makeTest(gt(VocabId(22)), {b22});
+  makeTest(gt(VocabId(14)), {b21, b22});
+  makeTest(gt(VocabId(12)), {b19, b20, b21, b22});
+  makeTest(gt(undef), {});
+  makeTest(gt(falseId), {b4});
+  makeTest(gt(trueId), {});
+  makeTest(gt(referenceDateEqual), {b24});
+  makeTest(gt(referenceDate1), {b22, b23, b24});
+  makeTest(gt(referenceDate2), {b24});
 }
 
 //______________________________________________________________________________
 // Test GreaterEqualExpression
-TEST(RelationalExpression, testGreaterEqualExpression) {
-  MetadataBlocks blocks{};
-  TestRelationalExpression<GreaterEqualExpression, std::vector<BlockMetadata>>
-      testExpression;
-  testExpression(2, IntId(0), blocks.blocks,
-                 {blocks.b1, blocks.b2, blocks.b3, blocks.b4, blocks.b7,
-                  blocks.b8, blocks.b9, blocks.b10, blocks.b14});
-  testExpression(2, IntId(8), blocks.blocks,
-                 {blocks.b4, blocks.b7, blocks.b10, blocks.b14});
-  testExpression(2, DoubleId(9.98), blocks.blocks,
-                 {blocks.b7, blocks.b10, blocks.b14});
-  testExpression(2, IntId(-3), blocks.blocks,
-                 {blocks.b1, blocks.b2, blocks.b3, blocks.b4, blocks.b7,
-                  blocks.b8, blocks.b9, blocks.b10, blocks.b11, blocks.b14});
-  testExpression(2, IntId(-10), blocks.blocks,
-                 {blocks.b1, blocks.b2, blocks.b3, blocks.b4, blocks.b5,
-                  blocks.b6, blocks.b7, blocks.b8, blocks.b9, blocks.b10,
-                  blocks.b11, blocks.b12, blocks.b14});
-  testExpression(2, DoubleId(-3.1415), blocks.blocks,
-                 {blocks.b1, blocks.b2, blocks.b3, blocks.b4, blocks.b7,
-                  blocks.b8, blocks.b9, blocks.b10, blocks.b11, blocks.b14});
-  testExpression(
-      2, DoubleId(-4.000001), blocks.blocks,
-      {blocks.b1, blocks.b2, blocks.b3, blocks.b4, blocks.b6, blocks.b7,
-       blocks.b8, blocks.b9, blocks.b10, blocks.b11, blocks.b14});
-  testExpression(2, DoubleId(10.000), blocks.blocks,
-                 {blocks.b7, blocks.b10, blocks.b14});
-  testExpression(2, DoubleId(-15.22), blocks.blocks,
-                 {blocks.b1, blocks.b2, blocks.b3, blocks.b4, blocks.b5,
-                  blocks.b6, blocks.b7, blocks.b8, blocks.b9, blocks.b10,
-                  blocks.b11, blocks.b12, blocks.b13, blocks.b14});
-  testExpression(2, DoubleId(7.999999), blocks.blocks,
-                 {blocks.b4, blocks.b7, blocks.b10, blocks.b14});
-  testExpression(2, DoubleId(10.0001), blocks.blocks, {blocks.b7, blocks.b14});
-  testExpression(2, VocabId(14), blocks.blocks,
-                 {blocks.b7, blocks.b14, blocks.b15, blocks.b16, blocks.b17});
-  testExpression(2, VocabId(10), blocks.blocks,
-                 {blocks.b7, blocks.b14, blocks.b15, blocks.b16, blocks.b17});
-  testExpression(2, VocabId(17), blocks.blocks,
-                 {blocks.b7, blocks.b14, blocks.b17});
-  // test blocks.otherBlocks
-  testExpression(2, blocks.undef, blocks.otherBlocks,
-                 {blocks.bd2, blocks.bd5, blocks.bd7});
-  testExpression(2, blocks.falseId, blocks.otherBlocks,
-                 {blocks.bd2, blocks.bd3, blocks.bd4, blocks.bd5, blocks.bd7});
-  testExpression(2, blocks.trueId, blocks.otherBlocks,
-                 {blocks.bd2, blocks.bd4, blocks.bd5, blocks.bd7});
-  testExpression(2, blocks.referenceDateEqual, blocks.otherBlocks,
-                 {blocks.bd2, blocks.bd5, blocks.bd6, blocks.bd7});
-  testExpression(2, VocabId(0), blocks.otherBlocks,
-                 {blocks.bd2, blocks.bd5, blocks.bd7});
+TEST_F(TestPrefilterExprOnBlockMetadata, testGreaterEqualExpression) {
+  makeTest(ge(IntId(0)), {b5, b6, b7, b8, b11, b12, b13, b14});
+  makeTest(ge(IntId(8)), {b8, b11, b14});
+  makeTest(ge(DoubleId(9.98)), {b11, b14});
+  makeTest(ge(IntId(-3)), {b5, b6, b7, b8, b11, b12, b13, b14, b15});
+  makeTest(ge(IntId(-10)),
+           {b5, b6, b7, b8, b9, b10, b11, b12, b13, b14, b15, b16});
+  makeTest(ge(DoubleId(-3.1415)), {b5, b6, b7, b8, b11, b12, b13, b14, b15});
+  makeTest(ge(DoubleId(-4.000001)),
+           {b5, b6, b7, b8, b10, b11, b12, b13, b14, b15});
+  makeTest(ge(DoubleId(10.000)), {b11, b14});
+  makeTest(ge(DoubleId(-15.22)),
+           {b5, b6, b7, b8, b9, b10, b11, b12, b13, b14, b15, b16, b17, b18});
+  makeTest(ge(DoubleId(7.999999)), {b8, b11, b14});
+  makeTest(ge(DoubleId(10.0001)), {});
+  makeTest(ge(VocabId(14)), {b18, b19, b20, b21, b22});
+  makeTest(ge(VocabId(10)), {b18, b19, b20, b21, b22});
+  makeTest(ge(VocabId(17)), {b18, b21, b22});
+  makeTest(ge(undef), {});
+  makeTest(ge(falseId), {b2, b3, b4});
+  makeTest(ge(trueId), {b4});
+  makeTest(ge(referenceDateEqual), {b23, b24});
 }
 
 //______________________________________________________________________________
 // Test EqualExpression
-TEST(RelationalExpression, testEqualExpression) {
-  MetadataBlocks blocks{};
-  TestRelationalExpression<EqualExpression, std::vector<BlockMetadata>>
-      testExpression;
-  testExpression(2, IntId(0), blocks.blocks,
-                 {blocks.b1, blocks.b2, blocks.b7, blocks.b14});
-  testExpression(2, IntId(5), blocks.blocks,
-                 {blocks.b2, blocks.b3, blocks.b7, blocks.b10, blocks.b14});
-  testExpression(2, IntId(22), blocks.blocks, {blocks.b7, blocks.b14});
-  testExpression(2, IntId(-10), blocks.blocks,
-                 {blocks.b5, blocks.b7, blocks.b14});
-  testExpression(2, DoubleId(-6.25), blocks.blocks,
-                 {blocks.b7, blocks.b11, blocks.b12, blocks.b14});
-  testExpression(2, IntId(-11), blocks.blocks,
-                 {blocks.b7, blocks.b13, blocks.b14});
-  testExpression(2, DoubleId(-14.02), blocks.blocks, {blocks.b7, blocks.b14});
-  testExpression(2, DoubleId(-0.001), blocks.blocks, {blocks.b7, blocks.b14});
-  testExpression(2, DoubleId(0), blocks.blocks,
-                 {blocks.b1, blocks.b2, blocks.b7, blocks.b14});
-  testExpression(2, IntId(2), blocks.blocks,
-                 {blocks.b2, blocks.b7, blocks.b8, blocks.b14});
-  testExpression(2, DoubleId(5.5), blocks.blocks,
-                 {blocks.b3, blocks.b7, blocks.b10, blocks.b14});
-  testExpression(2, DoubleId(1.5), blocks.blocks,
-                 {blocks.b2, blocks.b7, blocks.b14});
-  testExpression(2, VocabId(1), blocks.blocks, {blocks.b7, blocks.b14});
-  testExpression(2, VocabId(14), blocks.blocks,
-                 {blocks.b7, blocks.b14, blocks.b15, blocks.b16, blocks.b17});
-  testExpression(2, VocabId(11), blocks.blocks,
-                 {blocks.b7, blocks.b14, blocks.b15});
-  testExpression(2, VocabId(17), blocks.blocks,
-                 {blocks.b7, blocks.b14, blocks.b17});
-  testExpression(2, IntId(-4), blocks.blocks,
-                 {blocks.b6, blocks.b7, blocks.b11, blocks.b14});
-  // test blocks.otherBlocks
-  testExpression(2, blocks.trueId, blocks.otherBlocks,
-                 {blocks.bd2, blocks.bd4, blocks.bd5, blocks.bd7});
-  testExpression(2, blocks.referenceDate1, blocks.otherBlocks,
-                 {blocks.bd2, blocks.bd5, blocks.bd7});
-  testExpression(2, blocks.referenceDateEqual, blocks.otherBlocks,
-                 {blocks.bd2, blocks.bd5, blocks.bd6, blocks.bd7});
-  testExpression(2, blocks.referenceDate2, blocks.otherBlocks,
-                 {blocks.bd2, blocks.bd5, blocks.bd7});
+TEST_F(TestPrefilterExprOnBlockMetadata, testEqualExpression) {
+  makeTest(eq(IntId(0)), {b4, b5, b6, b11});
+  makeTest(eq(IntId(5)), {b6, b7, b11, b14});
+  makeTest(eq(IntId(22)), {});
+  makeTest(eq(IntId(-10)), {b9, b11, b18});
+  makeTest(eq(DoubleId(-6.25)), {b15, b16});
+  makeTest(eq(IntId(-11)), {b17});
+  makeTest(eq(DoubleId(-14.02)), {b18});
+  makeTest(eq(DoubleId(-0.001)), {b11});
+  makeTest(eq(DoubleId(0)), {b4, b5, b6, b11});
+  makeTest(eq(IntId(2)), {b6, b11, b12});
+  makeTest(eq(DoubleId(5.5)), {b7, b11, b14});
+  makeTest(eq(DoubleId(1.5)), {b6, b11});
+  makeTest(eq(VocabId(1)), {b18});
+  makeTest(eq(VocabId(14)), {b18, b19, b20, b21});
+  makeTest(eq(VocabId(11)), {b18, b19});
+  makeTest(eq(VocabId(17)), {b18, b21});
+  makeTest(eq(IntId(-4)), {b10, b11, b15});
+  makeTest(eq(trueId), {b4});
+  makeTest(eq(referenceDate1), {b22});
+  makeTest(eq(referenceDateEqual), {b23});
+  makeTest(eq(referenceDate2), {});
 }
 
 //______________________________________________________________________________
 // Test NotEqualExpression
-TEST(RelationalExpression, testNotEqualExpression) {
-  MetadataBlocks blocks{};
-  TestRelationalExpression<NotEqualExpression, std::vector<BlockMetadata>>
-      testExpression;
-  testExpression(2, DoubleId(0.00), blocks.blocks,
-                 {blocks.b2, blocks.b3, blocks.b4, blocks.b5, blocks.b6,
-                  blocks.b7, blocks.b8, blocks.b9, blocks.b10, blocks.b11,
-                  blocks.b12, blocks.b13, blocks.b14});
-  testExpression(2, IntId(-4), blocks.blocks,
-                 {blocks.b1, blocks.b2, blocks.b3, blocks.b4, blocks.b5,
-                  blocks.b7, blocks.b8, blocks.b9, blocks.b10, blocks.b11,
-                  blocks.b12, blocks.b13, blocks.b14});
-  testExpression(2, DoubleId(0.001), blocks.blocks,
-                 {blocks.b1, blocks.b2, blocks.b3, blocks.b4, blocks.b5,
-                  blocks.b6, blocks.b7, blocks.b8, blocks.b9, blocks.b10,
-                  blocks.b11, blocks.b12, blocks.b13, blocks.b14});
-  testExpression(2, IntId(2), blocks.blocks,
-                 {blocks.b1, blocks.b2, blocks.b3, blocks.b4, blocks.b5,
-                  blocks.b6, blocks.b7, blocks.b9, blocks.b10, blocks.b11,
-                  blocks.b12, blocks.b13, blocks.b14});
-  testExpression(2, DoubleId(-6.2500), blocks.blocks,
-                 {blocks.b1, blocks.b2, blocks.b3, blocks.b4, blocks.b5,
-                  blocks.b6, blocks.b7, blocks.b8, blocks.b9, blocks.b10,
-                  blocks.b11, blocks.b13, blocks.b14});
-  testExpression(2, IntId(5), blocks.blocks,
-                 {blocks.b1, blocks.b2, blocks.b3, blocks.b4, blocks.b5,
-                  blocks.b6, blocks.b7, blocks.b8, blocks.b9, blocks.b10,
-                  blocks.b11, blocks.b12, blocks.b13, blocks.b14});
-  testExpression(2, DoubleId(-101.23), blocks.blocks,
-                 {blocks.b1, blocks.b2, blocks.b3, blocks.b4, blocks.b5,
-                  blocks.b6, blocks.b7, blocks.b8, blocks.b9, blocks.b10,
-                  blocks.b11, blocks.b12, blocks.b13, blocks.b14});
-  testExpression(2, VocabId(0), blocks.blocks,
-                 {blocks.b7, blocks.b14, blocks.b15, blocks.b16, blocks.b17});
-  testExpression(2, VocabId(7), blocks.blocks,
-                 {blocks.b7, blocks.b14, blocks.b15, blocks.b16, blocks.b17});
-  testExpression(2, VocabId(14), blocks.blocks,
-                 {blocks.b7, blocks.b14, blocks.b15, blocks.b17});
-  testExpression(2, VocabId(17), blocks.blocks,
-                 {blocks.b7, blocks.b14, blocks.b15, blocks.b16, blocks.b17});
-  // test blocks.otherBlocks
-  testExpression(2, blocks.undef, blocks.otherBlocks,
-                 {blocks.bd2, blocks.bd5, blocks.bd7});
-  testExpression(2, blocks.falseId, blocks.otherBlocks,
-                 {blocks.bd2, blocks.bd4, blocks.bd5, blocks.bd7});
-  testExpression(2, blocks.referenceDateEqual, blocks.otherBlocks,
-                 {blocks.bd2, blocks.bd5, blocks.bd7});
-  testExpression(2, blocks.referenceDate1, blocks.otherBlocks,
-                 {blocks.bd2, blocks.bd5, blocks.bd6, blocks.bd7});
+TEST_F(TestPrefilterExprOnBlockMetadata, testNotEqualExpression) {
+  makeTest(neq(DoubleId(0.00)),
+           {b6, b7, b8, b9, b10, b11, b12, b13, b14, b15, b16, b17, b18});
+  makeTest(neq(IntId(-4)),
+           {b5, b6, b7, b8, b9, b11, b12, b13, b14, b15, b16, b17, b18});
+  makeTest(neq(DoubleId(0.001)),
+           {b5, b6, b7, b8, b9, b10, b11, b12, b13, b14, b15, b16, b17, b18});
+  makeTest(neq(IntId(2)),
+           {b5, b6, b7, b8, b9, b10, b11, b13, b14, b15, b16, b17, b18});
+  makeTest(neq(DoubleId(-6.2500)),
+           {b5, b6, b7, b8, b9, b10, b11, b12, b13, b14, b15, b17, b18});
+  makeTest(neq(IntId(5)),
+           {b5, b6, b7, b8, b9, b10, b11, b12, b13, b14, b15, b16, b17, b18});
+  makeTest(neq(DoubleId(-101.23)),
+           {b5, b6, b7, b8, b9, b10, b11, b12, b13, b14, b15, b16, b17, b18});
+  makeTest(neq(VocabId(0)), {b19, b20, b21, b22});
+  makeTest(neq(VocabId(7)), {b18, b19, b20, b21, b22});
+  makeTest(neq(VocabId(14)), {b18, b19, b21, b22});
+  makeTest(neq(VocabId(17)), {b18, b19, b20, b21, b22});
+  makeTest(neq(undef), {});
+  makeTest(neq(falseId), {b4});
+  makeTest(neq(referenceDateEqual), {b22, b24});
+  makeTest(neq(referenceDate1), {b22, b23, b24});
 }
 
-//______________________________________________________________________________
-//______________________________________________________________________________
 // Test Logical Expressions
-
+//______________________________________________________________________________
 // Test AndExpression
-TEST(LogicalExpression, testAndExpression) {
-  MetadataBlocks blocks{};
-  TestLogicalExpression<AndExpression, std::vector<BlockMetadata>>
-      testExpression;
-  testExpression.test<GreaterEqualExpression, GreaterThanExpression>(
-      2, VocabId(10), VocabId(10), blocks.blocks,
-      {blocks.b7, blocks.b14, blocks.b15, blocks.b16, blocks.b17});
-  testExpression.test<GreaterEqualExpression, GreaterEqualExpression>(
-      2, VocabId(0), VocabId(17), blocks.blocks,
-      {blocks.b7, blocks.b14, blocks.b17});
-  testExpression.test<GreaterEqualExpression, GreaterThanExpression>(
-      2, VocabId(12), VocabId(17), blocks.blocks, {blocks.b7, blocks.b14});
-  testExpression.test<GreaterEqualExpression, LessThanExpression>(
-      2, VocabId(10), VocabId(14), blocks.blocks,
-      {blocks.b7, blocks.b14, blocks.b15});
-  testExpression.test<LessEqualExpression, LessThanExpression>(
-      2, VocabId(0), VocabId(10), blocks.blocks, {blocks.b7, blocks.b14});
-  testExpression.test<LessEqualExpression, LessThanExpression>(
-      2, VocabId(17), VocabId(17), blocks.blocks,
-      {blocks.b7, blocks.b14, blocks.b15, blocks.b16, blocks.b17});
-  testExpression.test<GreaterEqualExpression, LessThanExpression>(
-      2, DoubleId(-6.25), IntId(-7), blocks.blocks, {blocks.b7, blocks.b14});
-  testExpression.test<GreaterThanExpression, LessThanExpression>(
-      2, DoubleId(-6.25), DoubleId(-6.25), blocks.blocks,
-      {blocks.b7, blocks.b14});
-  testExpression.test<GreaterThanExpression, LessThanExpression>(
-      2, IntId(0), IntId(0), blocks.blocks, {blocks.b7, blocks.b14});
-  testExpression.test<GreaterEqualExpression, LessThanExpression>(
-      2, IntId(-10), DoubleId(0.00), blocks.blocks,
-      {blocks.b5, blocks.b6, blocks.b7, blocks.b11, blocks.b12, blocks.b14});
-  // Also a corner case.
-  testExpression.test<GreaterThanExpression, EqualExpression>(
-      2, IntId(0), DoubleId(0), blocks.blocks,
-      {blocks.b2, blocks.b7, blocks.b14});
-  testExpression.test<GreaterEqualExpression, EqualExpression>(
-      2, IntId(0), IntId(0), blocks.blocks,
-      {blocks.b1, blocks.b2, blocks.b7, blocks.b14});
-  testExpression.test<GreaterThanExpression, GreaterEqualExpression>(
-      2, DoubleId(-34.23), DoubleId(15.1), blocks.blocks,
-      {blocks.b7, blocks.b14});
-  testExpression.test<LessThanExpression, LessEqualExpression>(
-      2, IntId(0), DoubleId(-4), blocks.blocks,
-      {blocks.b5, blocks.b6, blocks.b7, blocks.b11, blocks.b12, blocks.b13,
-       blocks.b14});
-  testExpression.test<NotEqualExpression, NotEqualExpression>(
-      2, IntId(0), IntId(-4), blocks.blocks,
-      {blocks.b2, blocks.b3, blocks.b4, blocks.b5, blocks.b7, blocks.b8,
-       blocks.b9, blocks.b10, blocks.b11, blocks.b12, blocks.b13, blocks.b14});
-  testExpression.test<NotEqualExpression, EqualExpression>(
-      2, DoubleId(-3.1415), DoubleId(4.5), blocks.blocks,
-      {blocks.b2, blocks.b7, blocks.b10, blocks.b14});
-  testExpression.test<NotEqualExpression, LessThanExpression>(
-      2, DoubleId(-6.25), IntId(0), blocks.blocks,
-      {blocks.b5, blocks.b6, blocks.b7, blocks.b11, blocks.b13, blocks.b14});
-  testExpression.test<LessEqualExpression, GreaterEqualExpression>(
-      2, DoubleId(-4), DoubleId(1), blocks.blocks, {blocks.b7, blocks.b14});
-  testExpression.test<LessEqualExpression, EqualExpression>(
-      2, DoubleId(-2), IntId(-3), blocks.blocks,
-      {blocks.b7, blocks.b11, blocks.b14});
+TEST_F(TestPrefilterExprOnBlockMetadata, testAndExpression) {
+  makeTest(andExpr(ge(VocabId(10)), gt(VocabId(10))), {b19, b20, b21, b22});
+  makeTest(andExpr(ge(VocabId(10)), ge(VocabId(10))), {b19, b20, b21, b22});
+  makeTest(andExpr(ge(VocabId(12)), gt(VocabId(17))), {b22});
+  makeTest(andExpr(ge(VocabId(12)), gt(VocabId(17))), {b22});
+  makeTest(andExpr(ge(VocabId(10)), lt(VocabId(14))), {b19});
+  makeTest(andExpr(le(VocabId(0)), lt(VocabId(10))), {b18});
+  makeTest(andExpr(le(VocabId(17)), lt(VocabId(17))), {b18, b19, b20, b21});
+  makeTest(andExpr(ge(DoubleId(-6.25)), lt(IntId(-7))), {});
+  makeTest(andExpr(gt(DoubleId(-6.25)), lt(DoubleId(-6.25))), {});
+  makeTest(andExpr(gt(IntId(0)), lt(IntId(0))), {});
+  makeTest(andExpr(gt(IntId(-10)), lt(DoubleId(0))), {b9, b10, b11, b15, b16});
+  makeTest(andExpr(gt(IntId(0)), eq(DoubleId(0))), {b6, b11});
+  makeTest(andExpr(ge(IntId(0)), eq(IntId(0))), {b5, b6, b11});
+  makeTest(andExpr(gt(DoubleId(-34.23)), ge(DoubleId(15.1))), {});
+  makeTest(andExpr(lt(IntId(0)), le(DoubleId(-4))),
+           {b9, b10, b11, b15, b16, b17, b18});
+  makeTest(andExpr(neq(IntId(0)), neq(IntId(-4))),
+           {b6, b7, b8, b9, b11, b12, b13, b14, b15, b16, b17, b18});
+  makeTest(andExpr(neq(DoubleId(-3.141)), eq(DoubleId(4.5))),
+           {b6, b11, b14, b18});
+  makeTest(andExpr(neq(DoubleId(-6.25)), lt(IntId(0))),
+           {b9, b10, b11, b15, b17, b18});
+  makeTest(andExpr(le(DoubleId(-4)), ge(DoubleId(1))), {});
+  makeTest(andExpr(le(DoubleId(-2)), eq(IntId(-3))), {b11, b15});
+  makeTest(andExpr(andExpr(le(IntId(10)), gt(DoubleId(0))), eq(undef)), {});
+  makeTest(andExpr(gt(referenceDate1), le(IntId(10))), {});
+  makeTest(andExpr(gt(IntId(4)), andExpr(gt(DoubleId(8)), lt(IntId(10)))),
+           {b8, b14});
+  makeTest(andExpr(eq(IntId(0)), andExpr(lt(IntId(-20)), gt(IntId(30)))), {});
+  makeTest(andExpr(eq(IntId(0)), andExpr(le(IntId(0)), ge(IntId(0)))),
+           {b4, b5, b6, b11});
 }
 
 //______________________________________________________________________________
 // Test OrExpression
-TEST(LogicalExpression, testOrExpression) {
-  MetadataBlocks blocks{};
-  TestLogicalExpression<OrExpression, std::vector<BlockMetadata>>
-      testExpression;
-  testExpression.test<LessThanExpression, LessEqualExpression>(
-      2, VocabId(22), VocabId(0), blocks.blocks,
-      {blocks.b7, blocks.b14, blocks.b15, blocks.b16, blocks.b17});
-  testExpression.test<LessEqualExpression, GreaterEqualExpression>(
-      2, VocabId(0), VocabId(16), blocks.blocks,
-      {blocks.b7, blocks.b14, blocks.b17});
-  testExpression.test<GreaterThanExpression, GreaterEqualExpression>(
-      2, VocabId(17), VocabId(242), blocks.blocks, {blocks.b7, blocks.b14});
-  testExpression.test<LessThanExpression, EqualExpression>(
-      2, DoubleId(-5.95), VocabId(14), blocks.blocks,
-      {blocks.b5, blocks.b7, blocks.b11, blocks.b12, blocks.b13, blocks.b14,
-       blocks.b15, blocks.b16, blocks.b17});
-  testExpression.test<EqualExpression, NotEqualExpression>(
-      2, DoubleId(0), VocabId(14), blocks.blocks,
-      {blocks.b1, blocks.b2, blocks.b7, blocks.b14, blocks.b15, blocks.b17});
-  testExpression.test<EqualExpression, EqualExpression>(
-      2, DoubleId(0.0), DoubleId(-6.25), blocks.blocks,
-      {blocks.b1, blocks.b2, blocks.b7, blocks.b11, blocks.b12, blocks.b14});
-  testExpression.test<EqualExpression, LessThanExpression>(
-      2, DoubleId(-11.99), DoubleId(-15.22), blocks.blocks,
-      {blocks.b7, blocks.b13, blocks.b14});
-  testExpression.test<GreaterEqualExpression, LessThanExpression>(
-      2, DoubleId(7.99), DoubleId(-7.99), blocks.blocks,
-      {blocks.b4, blocks.b5, blocks.b7, blocks.b10, blocks.b13, blocks.b14});
-  testExpression.test<GreaterThanExpression, EqualExpression>(
-      2, IntId(-15), IntId(2), blocks.blocks,
-      {blocks.b1, blocks.b2, blocks.b3, blocks.b4, blocks.b5, blocks.b6,
-       blocks.b7, blocks.b8, blocks.b9, blocks.b10, blocks.b11, blocks.b12,
-       blocks.b13, blocks.b14});
-  testExpression.test<EqualExpression, EqualExpression>(
-      2, IntId(0), IntId(-4), blocks.blocks,
-      {blocks.b1, blocks.b2, blocks.b6, blocks.b7, blocks.b11, blocks.b14});
-  testExpression.test<NotEqualExpression, EqualExpression>(
-      2, VocabId(14), IntId(2), blocks.blocks,
-      {blocks.b2, blocks.b7, blocks.b8, blocks.b14, blocks.b15, blocks.b17});
-  testExpression.test<LessThanExpression, GreaterEqualExpression>(
-      2, DoubleId(-1), IntId(1), blocks.blocks,
-      {blocks.b2, blocks.b3, blocks.b4, blocks.b5, blocks.b6, blocks.b7,
-       blocks.b8, blocks.b9, blocks.b10, blocks.b11, blocks.b12, blocks.b13,
-       blocks.b14});
-  testExpression.test<LessEqualExpression, EqualExpression>(
-      2, DoubleId(-4), IntId(-4), blocks.blocks,
-      {blocks.b5, blocks.b6, blocks.b7, blocks.b11, blocks.b12, blocks.b13,
-       blocks.b14});
+TEST_F(TestPrefilterExprOnBlockMetadata, testOrExpression) {
+  makeTest(orExpr(lt(VocabId(22)), le(VocabId(0))), {b18, b19, b20, b21});
+  makeTest(orExpr(le(VocabId(0)), ge(VocabId(16))), {b18, b21, b22});
+  makeTest(orExpr(gt(VocabId(17)), ge(VocabId(17))), {b21, b22});
+  makeTest(orExpr(lt(DoubleId(-5.95)), eq(VocabId(14))),
+           {b9, b15, b16, b17, b18, b19, b20, b21});
+  makeTest(orExpr(eq(DoubleId(0)), neq(VocabId(14))),
+           {b5, b6, b11, b18, b19, b21});
+  makeTest(orExpr(eq(DoubleId(0)), eq(DoubleId(-6.25))),
+           {b5, b6, b11, b15, b16, b18});
+  makeTest(orExpr(gt(undef), le(IntId(-6))), {b9, b15, b16, b17, b18});
+  makeTest(orExpr(le(trueId), gt(referenceDate1)), {b2, b3, b4, b22, b23, b24});
+  makeTest(orExpr(eq(IntId(0)), orExpr(lt(IntId(-10)), gt(IntId(8)))),
+           {b5, b6, b8, b11, b14, b17, b18});
+  makeTest(orExpr(gt(referenceDate2), eq(trueId)), {b4});
+  makeTest(orExpr(eq(VocabId(17)), orExpr(lt(VocabId(0)), gt(VocabId(20)))),
+           {b21, b22});
+  makeTest(orExpr(eq(undef), gt(referenceDateEqual)), {b24});
+  makeTest(orExpr(gt(IntId(8)), gt(DoubleId(22.1))), {b8, b14});
+  makeTest(orExpr(lt(DoubleId(-8.25)), le(IntId(-10))), {b9, b17, b18});
+  makeTest(orExpr(eq(IntId(0)), neq(DoubleId(0.25))),
+           {b5, b6, b7, b8, b9, b10, b11, b12, b13, b14, b15, b16, b17, b18});
+  makeTest(orExpr(gt(referenceDate1), orExpr(gt(trueId), eq(IntId(0)))),
+           {b4, b5, b6, b11, b22, b23, b24});
+  makeTest(orExpr(gt(DoubleId(-6.25)), lt(DoubleId(-6.25))),
+           {b5, b6, b7, b8, b9, b10, b11, b12, b13, b14, b15, b17, b18});
+  makeTest(orExpr(orExpr(eq(IntId(0)), eq(IntId(5))),
+                  orExpr(eq(DoubleId(-6.25)), lt(DoubleId(-12)))),
+           {b4, b5, b6, b7, b11, b14, b15, b16, b18});
+  makeTest(orExpr(le(trueId), gt(falseId)), {b2, b3, b4});
+  makeTest(orExpr(eq(VocabId(0)), eq(DoubleId(0.25))), {b6, b11, b18});
 }
 
 //______________________________________________________________________________
 // Test NotExpression
-TEST(LogicalExpression, testNotExpression) {
-  MetadataBlocks blocks{};
-  TestNotExpression<std::vector<BlockMetadata>> testExpression{};
-  testExpression.test<EqualExpression>(
-      2, blocks.blocks,
-      {blocks.b7, blocks.b14, blocks.b15, blocks.b16, blocks.b17}, VocabId(2));
-  testExpression.test<EqualExpression>(
-      2, blocks.blocks, {blocks.b7, blocks.b14, blocks.b15, blocks.b17},
-      VocabId(14));
-  testExpression.test<NotEqualExpression>(
-      2, blocks.blocks,
-      {blocks.b7, blocks.b14, blocks.b15, blocks.b16, blocks.b17}, VocabId(14));
-  testExpression.test<EqualExpression>(
-      2, blocks.blocks,
-      {blocks.b7, blocks.b14, blocks.b15, blocks.b16, blocks.b17}, VocabId(0));
-  testExpression.test<LessThanExpression>(
-      2, blocks.blocks,
-      {blocks.b1, blocks.b2, blocks.b3, blocks.b4, blocks.b5, blocks.b6,
-       blocks.b7, blocks.b8, blocks.b9, blocks.b10, blocks.b11, blocks.b12,
-       blocks.b13, blocks.b14},
-      DoubleId(-14.01));
-  testExpression.test<GreaterEqualExpression>(
-      2, blocks.blocks, {blocks.b7, blocks.b14}, DoubleId(-14.01));
-  testExpression.test<GreaterThanExpression>(
-      2, blocks.blocks,
-      {blocks.b5, blocks.b6, blocks.b7, blocks.b11, blocks.b12, blocks.b13,
-       blocks.b14},
-      DoubleId(-4.00));
-  testExpression.test<GreaterEqualExpression>(
-      2, blocks.blocks, {blocks.b7, blocks.b14}, DoubleId(-24.4));
-  testExpression.test<LessEqualExpression>(
-      2, blocks.blocks,
-      {blocks.b2, blocks.b3, blocks.b4, blocks.b7, blocks.b8, blocks.b9,
-       blocks.b10, blocks.b14},
-      IntId(0));
-  testExpression.test<EqualExpression>(
-      2, blocks.blocks,
-      {blocks.b1, blocks.b2, blocks.b3, blocks.b4, blocks.b5, blocks.b6,
-       blocks.b7, blocks.b8, blocks.b9, blocks.b10, blocks.b11, blocks.b13,
-       blocks.b14},
-      DoubleId(-6.25));
-  testExpression.test<NotEqualExpression>(
-      2, blocks.blocks,
-      {blocks.b2, blocks.b7, blocks.b9, blocks.b10, blocks.b14}, DoubleId(4));
-  testExpression.test<GreaterThanExpression>(
-      2, blocks.blocks,
-      {blocks.b1, blocks.b2, blocks.b5, blocks.b6, blocks.b7, blocks.b11,
-       blocks.b12, blocks.b13, blocks.b14},
-      DoubleId(0));
-  testExpression.test<EqualExpression>(0, blocks.blocks, {}, blocks.VocabId10);
-  testExpression.test<EqualExpression>(1, blocks.blocks, {}, blocks.DoubleId33);
-  testExpression.test<LessThanExpression>(0, blocks.blocks, blocks.blocks,
-                                          blocks.VocabId10);
-  testExpression.test<GreaterEqualExpression>(1, blocks.blocks, {},
-                                              blocks.DoubleId33);
-  testExpression.test<EqualExpression, NotExpression>(
-      2, blocks.blocks, {blocks.b1, blocks.b2, blocks.b7, blocks.b14},
-      IntId(0));
-  testExpression.test<NotEqualExpression, NotExpression>(
-      2, blocks.blocks,
-      {blocks.b1, blocks.b2, blocks.b3, blocks.b4, blocks.b5, blocks.b6,
-       blocks.b7, blocks.b8, blocks.b9, blocks.b10, blocks.b11, blocks.b13,
-       blocks.b14},
-      DoubleId(-6.25));
-  testExpression.test<LessThanExpression, NotExpression>(
-      2, blocks.blocks, {blocks.b7, blocks.b14}, VocabId(10));
-  testExpression.test<GreaterEqualExpression, NotExpression>(
-      2, blocks.blocks,
-      {blocks.b2, blocks.b3, blocks.b4, blocks.b7, blocks.b9, blocks.b10,
-       blocks.b14},
-      DoubleId(3.99));
-  testExpression
-      .test<LessEqualExpression, AndExpression, GreaterEqualExpression>(
-          2, blocks.blocks,
-          {blocks.b2, blocks.b3, blocks.b4, blocks.b5, blocks.b6, blocks.b7,
-           blocks.b8, blocks.b9, blocks.b10, blocks.b11, blocks.b12, blocks.b13,
-           blocks.b14},
-          IntId(0), IntId(0));
-  testExpression.test<NotEqualExpression, AndExpression, NotEqualExpression>(
-      2, blocks.blocks, {blocks.b5, blocks.b7, blocks.b14}, IntId(-10),
-      DoubleId(-14.02));
-  testExpression
-      .test<GreaterThanExpression, AndExpression, GreaterEqualExpression>(
-          2, blocks.blocks,
-          {blocks.b1, blocks.b2, blocks.b3, blocks.b4, blocks.b5, blocks.b6,
-           blocks.b7, blocks.b8, blocks.b9, blocks.b10, blocks.b11, blocks.b12,
-           blocks.b13, blocks.b14},
-          IntId(10), DoubleId(-6.25));
-  testExpression
-      .test<GreaterThanExpression, AndExpression, GreaterEqualExpression>(
-          2, blocks.blocks,
-          {blocks.b5, blocks.b6, blocks.b7, blocks.b11, blocks.b12, blocks.b13,
-           blocks.b14},
-          IntId(-4), DoubleId(-6.25));
-  testExpression
-      .test<LessThanExpression, AndExpression, GreaterEqualExpression>(
-          2, blocks.blocks,
-          {blocks.b1, blocks.b2, blocks.b3, blocks.b4, blocks.b5, blocks.b6,
-           blocks.b7, blocks.b8, blocks.b9, blocks.b10, blocks.b11, blocks.b12,
-           blocks.b13, blocks.b14},
-          DoubleId(-7), IntId(6));
-  testExpression
-      .test<LessEqualExpression, OrExpression, GreaterEqualExpression>(
-          2, blocks.blocks,
-          {blocks.b2, blocks.b3, blocks.b7, blocks.b8, blocks.b9, blocks.b10,
-           blocks.b14},
-          IntId(0), DoubleId(6));
-  testExpression
-      .test<GreaterEqualExpression, OrExpression, GreaterThanExpression>(
-          2, blocks.blocks, {blocks.b5, blocks.b7, blocks.b13, blocks.b14},
-          DoubleId(0), IntId(-10));
-  testExpression.test<LessThanExpression, OrExpression, GreaterThanExpression>(
-      2, blocks.blocks, {blocks.b7, blocks.b14, blocks.b15}, VocabId(10),
-      VocabId(10));
-  testExpression.test<LessThanExpression, OrExpression, GreaterThanExpression>(
-      2, blocks.blocks, {blocks.b6, blocks.b7, blocks.b11, blocks.b14},
-      DoubleId(-4), IntId(-4));
-  testExpression
-      .test<GreaterThanExpression, OrExpression, GreaterEqualExpression>(
-          2, blocks.blocks, {blocks.b7, blocks.b14}, IntId(-42), VocabId(0));
-  testExpression
-      .test<GreaterEqualExpression, OrExpression, GreaterThanExpression>(
-          2, blocks.blocks, {blocks.b7, blocks.b14, blocks.b15}, VocabId(14),
-          VocabId(15));
-  testExpression.test<LessThanExpression, OrExpression, NotEqualExpression>(
-      2, blocks.blocks, {blocks.b7, blocks.b11, blocks.b12, blocks.b14},
-      DoubleId(-7.25), DoubleId(-6.25));
+TEST_F(TestPrefilterExprOnBlockMetadata, testNotExpression) {
+  makeTest(notExpr(eq(VocabId(2))), {b18, b19, b20, b21, b22});
+  makeTest(notExpr(eq(VocabId(14))), {b18, b19, b21, b22});
+  makeTest(notExpr(neq(VocabId(14))), {b19, b20, b21});
+  makeTest(notExpr(gt(VocabId(2))), {b18});
+  makeTest(notExpr(lt(DoubleId(-14.01))),
+           {b5, b6, b7, b8, b9, b10, b11, b12, b13, b14, b15, b16, b17, b18});
+  makeTest(notExpr(ge(DoubleId(-14.01))), {b18});
+  makeTest(notExpr(gt(DoubleId(-4.00))), {b9, b10, b11, b15, b16, b17, b18});
+  makeTest(notExpr(ge(DoubleId(-24.4))), {b18});
+  makeTest(notExpr(gt(referenceDate2)), {b22, b23});
+  makeTest(notExpr(le(trueId)), {});
+  makeTest(notExpr(le(IntId(0))), {b6, b7, b8, b11, b12, b13, b14});
+  makeTest(notExpr(gt(undef)), {});
+  makeTest(notExpr(eq(DoubleId(-6.25))),
+           {b5, b6, b7, b8, b9, b10, b11, b12, b13, b14, b15, b17, b18});
+  makeTest(notExpr(neq(DoubleId(4))), {b6, b11, b13, b14, b18});
+  makeTest(notExpr(gt(DoubleId(0))),
+           {b4, b5, b6, b9, b10, b11, b15, b16, b17, b18});
+  makeTest(notExpr(notExpr(eq(IntId(0)))), {b4, b5, b6, b11});
+  makeTest(notExpr(notExpr(neq(DoubleId(-6.25)))),
+           {b4, b5, b6, b7, b8, b9, b10, b11, b12, b13, b14, b15, b17, b18});
+  makeTest(notExpr(notExpr(lt(VocabId(10)))), {b18});
+  makeTest(notExpr(notExpr(ge(DoubleId(3.99)))), {b6, b7, b8, b11, b13, b14});
+  makeTest(notExpr(andExpr(le(IntId(0)), ge(IntId(0)))),
+           {b6, b7, b8, b9, b10, b11, b12, b13, b14, b15, b16, b17, b18});
+  makeTest(notExpr(andExpr(neq(IntId(-10)), neq(DoubleId(-14.02)))), {b9, b18});
+  makeTest(
+      notExpr(andExpr(gt(IntId(10)), ge(DoubleId(-6.25)))),
+      {b4, b5, b6, b7, b8, b9, b10, b11, b12, b13, b14, b15, b16, b17, b18});
+  makeTest(
+      notExpr(andExpr(lt(DoubleId(-7)), ge(IntId(6)))),
+      {b4, b5, b6, b7, b8, b9, b10, b11, b12, b13, b14, b15, b16, b17, b18});
+  makeTest(notExpr(orExpr(le(IntId(0)), ge(DoubleId(6)))),
+           {b6, b7, b11, b12, b13, b14});
+  makeTest(notExpr(orExpr(ge(DoubleId(0)), gt(IntId(-10)))),
+           {b9, b11, b17, b18});
+  makeTest(notExpr(orExpr(lt(VocabId(10)), gt(VocabId(10)))), {b19});
+  makeTest(notExpr(orExpr(lt(DoubleId(-4)), gt(IntId(-4)))), {b10, b11, b15});
+  makeTest(notExpr(orExpr(gt(IntId(-42)), ge(VocabId(0)))), {b11});
+  makeTest(notExpr(orExpr(ge(VocabId(14)), gt(VocabId(15)))), {b18, b19});
 }
 
 //______________________________________________________________________________
-// Test that correct errors are thrown for invalid input (condition checking).
-TEST(PrefilterExpression, testInputConditionCheck) {
-  MetadataBlocks blocks{};
-  TestRelationalExpression<LessThanExpression, std::string>
-      testRelationalExpression{};
-  testRelationalExpression(
-      2, DoubleId(10), blocks.blocksInvalidCol1,
-      "The columns up to the evaluation column must contain the same values.");
-  testRelationalExpression(
-      1, DoubleId(10), blocks.blocksInvalidCol1,
-      "The data blocks must be provided in sorted order regarding the "
-      "evaluation column.");
-  testRelationalExpression(2, DoubleId(10), blocks.blocksWithDuplicate2,
-                           "The provided data blocks must be unique.");
-
-  TestNotExpression<std::string> testNotExpression{};
-  testNotExpression.test<NotEqualExpression>(
-      2, blocks.blocksWithDuplicate1,
-      "The provided data blocks must be unique.", VocabId(2));
-  testNotExpression.test<LessThanExpression>(
-      2, blocks.blocksInvalidOrder1,
-      "The data blocks must be provided in sorted order regarding the "
-      "evaluation column.",
-      DoubleId(-14.1));
-  testNotExpression.test<EqualExpression>(
-      0, blocks.blocksInvalidCol2,
-      "The data blocks must be provided in sorted order regarding the "
-      "evaluation column.",
-      IntId(0));
-  testNotExpression.test<EqualExpression>(
-      1, blocks.blocksInvalidCol2,
-      "The columns up to the evaluation column must contain the same values.",
-      IntId(0));
-  testNotExpression.test<EqualExpression>(
-      2, blocks.blocksInvalidCol2,
-      "The columns up to the evaluation column must contain the same values.",
-      IntId(0));
-
-  TestLogicalExpression<AndExpression, std::string> testAndExpression{};
-  testAndExpression.test<GreaterThanExpression, LessThanExpression>(
-      2, DoubleId(-4.24), IntId(5), blocks.blocksWithDuplicate2,
-      "The provided data blocks must be unique.");
-  testAndExpression.test<GreaterThanExpression, LessThanExpression>(
-      2, DoubleId(-4.24), IntId(5), blocks.blocksInvalidOrder1,
-      "The data blocks must be provided in sorted order regarding the "
-      "evaluation column.");
-  testAndExpression.test<GreaterThanExpression, LessThanExpression>(
-      2, DoubleId(-4.24), IntId(5), blocks.blocksInvalidCol2,
-      "The columns up to the evaluation column must contain the same values.");
+// Test PrefilterExpressions mixed
+TEST_F(TestPrefilterExprOnBlockMetadata, testGeneralPrefilterExprCombinations) {
+  makeTest(andExpr(notExpr(gt(DoubleId(-14.01))), lt(IntId(0))), {b18});
+  makeTest(
+      orExpr(andExpr(gt(DoubleId(8.25)), le(IntId(10))), eq(DoubleId(-6.25))),
+      {b8, b14, b15, b16});
+  makeTest(
+      orExpr(andExpr(gt(DoubleId(8.25)), le(IntId(10))), lt(DoubleId(-6.25))),
+      {b8, b9, b14, b17, b18});
+  makeTest(andExpr(orExpr(ge(trueId), le(falseId)), eq(referenceDate1)), {});
+  makeTest(andExpr(eq(IntId(0)), orExpr(lt(IntId(-11)), le(IntId(-12)))), {});
+  makeTest(
+      andExpr(eq(DoubleId(-4)), orExpr(gt(IntId(-4)), lt(DoubleId(-1.25)))),
+      {b10, b11, b15});
+  makeTest(orExpr(notExpr(andExpr(lt(IntId(10)), gt(IntId(5)))), eq(IntId(0))),
+           {b4, b5, b6, b7, b9, b10, b11, b12, b13, b14, b15, b16, b17, b18});
+  makeTest(andExpr(orExpr(gt(VocabId(16)), le(VocabId(5))), gt(DoubleId(7.25))),
+           {});
+  makeTest(andExpr(lt(falseId), orExpr(lt(IntId(10)), gt(DoubleId(17.25)))),
+           {});
+  makeTest(
+      orExpr(andExpr(gt(VocabId(16)), ge(VocabId(17))), gt(DoubleId(7.25))),
+      {b8, b14, b18, b21, b22});
+  makeTest(orExpr(eq(trueId), andExpr(gt(referenceDate1), lt(referenceDate2))),
+           {b4, b22, b23});
 }
 
+//______________________________________________________________________________
+// Test that correct errors are thrown for invalid input (condition
+TEST_F(TestPrefilterExprOnBlockMetadata, testInputConditionCheck) {
+  makeTestErrorCheck(le(IntId(5)), blocksWithDuplicate1,
+                     "The provided data blocks must be unique.");
+  makeTestErrorCheck(andExpr(gt(VocabId(10)), le(VocabId(20))),
+                     blocksWithDuplicate2,
+                     "The provided data blocks must be unique.");
+  makeTestErrorCheck(gt(DoubleId(2)), blocksInvalidOrder1,
+                     "The blocks must be provided in sorted order.");
+  makeTestErrorCheck(andExpr(gt(VocabId(10)), le(VocabId(20))),
+                     blocksInvalidOrder2,
+                     "The blocks must be provided in sorted order.");
+  makeTestErrorCheck(
+      gt(DoubleId(2)), blocks,
+      "The values in the columns up to the evaluation column must be "
+      "consistent.",
+      1);
+  makeTestErrorCheck(
+      gt(DoubleId(2)), blocks,
+      "The values in the columns up to the evaluation column must be "
+      "consistent.",
+      2);
+}
+
+//______________________________________________________________________________
+// Check for correctness given only one BlockMetadata value is provided.
+TEST_F(TestPrefilterExprOnBlockMetadata, testWithOneBlockMetadataValue) {
+  auto expr = orExpr(eq(DoubleId(-6.25)), eq(IntId(0)));
+  std::vector<BlockMetadata> input = {b16};
+  EXPECT_EQ(expr->evaluate(input, 0), input);
+  EXPECT_EQ(expr->evaluate(input, 1), std::vector<BlockMetadata>{});
+  EXPECT_EQ(expr->evaluate(input, 2), std::vector<BlockMetadata>{});
+}
+
+//______________________________________________________________________________
+//______________________________________________________________________________
 // TEST SECTION 2
 //______________________________________________________________________________
 //______________________________________________________________________________
+namespace {
+
 using namespace sparqlExpression;
 using optPrefilterVec = std::optional<std::vector<PrefilterExprVariablePair>>;
 using Literal = ad_utility::triple_component::Literal;
@@ -903,6 +574,12 @@ const auto L = [](const std::string& content) -> Literal {
 // make `Iri`
 const auto I = [](const std::string& content) -> Iri {
   return Iri::fromIriref(content);
+};
+
+//______________________________________________________________________________
+struct TestDates {
+  const Id referenceDate1 = DateId(DateParser, "1999-11-11");
+  const Id referenceDate2 = DateId(DateParser, "2005-02-27");
 };
 
 //______________________________________________________________________________
@@ -944,45 +621,30 @@ std::unique_ptr<PrefilterExpression> makeLogicalBinaryPrefilterExprImpl(
 };
 
 //______________________________________________________________________________
-std::unique_ptr<PrefilterExpression> makeNotPrefilterExprImpl(
-    std::unique_ptr<PrefilterExpression> child) {
-  return std::make_unique<prefilterExpressions::NotExpression>(
-      std::move(child));
-};
-
-//______________________________________________________________________________
-constexpr auto lessThanSparqlExpr =
+// LESS THAN (`<`, `SparqlExpression`)
+constexpr auto ltSprql =
     &makeRelationalSparqlExprImpl<sparqlExpression::LessThanExpression>;
-constexpr auto lessThanFilterExpr =
-    &makeRelExpr<prefilterExpressions::LessThanExpression>;
-constexpr auto lessEqSparqlExpr =
+// LESS EQUAL (`<=`, `SparqlExpression`)
+constexpr auto leSprql =
     &makeRelationalSparqlExprImpl<sparqlExpression::LessEqualExpression>;
-constexpr auto lessEqFilterExpr =
-    &makeRelExpr<prefilterExpressions::LessEqualExpression>;
-constexpr auto eqSparqlExpr =
+// EQUAL (`==`, `SparqlExpression`)
+constexpr auto eqSprql =
     &makeRelationalSparqlExprImpl<sparqlExpression::EqualExpression>;
-constexpr auto eqFilterExpr =
-    &makeRelExpr<prefilterExpressions::EqualExpression>;
-constexpr auto notEqSparqlExpr =
+// NOT EQUAL (`!=`, `SparqlExpression`)
+constexpr auto neqSprql =
     &makeRelationalSparqlExprImpl<sparqlExpression::NotEqualExpression>;
-constexpr auto notEqFilterExpr =
-    &makeRelExpr<prefilterExpressions::NotEqualExpression>;
-constexpr auto greaterEqSparqlExpr =
+// GREATER EQUAL (`>=`, `SparqlExpression`)
+constexpr auto geSprql =
     &makeRelationalSparqlExprImpl<sparqlExpression::GreaterEqualExpression>;
-constexpr auto greaterEqFilterExpr =
-    &makeRelExpr<prefilterExpressions::GreaterEqualExpression>;
-constexpr auto greaterThanSparqlExpr =
+// GREATER THAN (`>`, `SparqlExpression`)
+constexpr auto gtSprql =
     &makeRelationalSparqlExprImpl<sparqlExpression::GreaterThanExpression>;
-constexpr auto greaterThanFilterExpr =
-    &makeRelExpr<prefilterExpressions::GreaterThanExpression>;
-constexpr auto andSparqlExpr = &makeAndExpression;
-constexpr auto orSparqlExpr = &makeOrExpression;
-constexpr auto notSparqlExpr = &makeUnaryNegateExpression;
-constexpr auto andFilterExpr =
-    &makeLogicalBinaryPrefilterExprImpl<prefilterExpressions::AndExpression>;
-constexpr auto orFilterExpr =
-    &makeLogicalBinaryPrefilterExprImpl<prefilterExpressions::OrExpression>;
-constexpr auto notFilterExpr = &makeNotPrefilterExprImpl;
+// AND (`&&`, `SparqlExpression`)
+constexpr auto andSprqlExpr = &makeAndExpression;
+// OR (`||`, `SparqlExpression`)
+constexpr auto orSprqlExpr = &makeOrExpression;
+// NOT (`!`, `SparqlExpression`)
+constexpr auto notSprqlExpr = &makeUnaryNegateExpression;
 
 //______________________________________________________________________________
 const auto checkVectorPrefilterExprVariablePair =
@@ -1050,66 +712,52 @@ const auto evalAndEqualityCheck =
     };
 
 //______________________________________________________________________________
-// Construct a pair with the given `PrefilterExpression` and `Variable` value.
+// Construct a `PAIR` with the given `PrefilterExpression` and `Variable` value.
 auto pr = [](std::unique_ptr<PrefilterExpression> expr,
              const Variable& var) -> PrefilterExprVariablePair {
   return {std::move(expr), var};
 };
-
-//______________________________________________________________________________
-// TEST SECTION 2
+}  // namespace
 
 //______________________________________________________________________________
 // Test PrefilterExpression equality operator.
 TEST(PrefilterExpression, testEqualityOperator) {
-  MetadataBlocks blocks{};
+  const TestDates dt{};
   // Relational PrefilterExpressions
-  ASSERT_FALSE(*greaterEqFilterExpr(blocks.referenceDate1) ==
-               *greaterEqFilterExpr(blocks.referenceDate2));
-  ASSERT_FALSE(*notEqFilterExpr(BoolId(true)) == *eqFilterExpr(BoolId(true)));
-  ASSERT_TRUE(*eqFilterExpr(IntId(1)) == *eqFilterExpr(IntId(1)));
-  ASSERT_TRUE(*greaterEqFilterExpr(blocks.referenceDate1) ==
-              *greaterEqFilterExpr(blocks.referenceDate1));
+  ASSERT_FALSE(*ge(dt.referenceDate1) == *ge(dt.referenceDate2));
+  ASSERT_FALSE(*neq(BoolId(true)) == *eq(BoolId(true)));
+  ASSERT_TRUE(*eq(IntId(1)) == *eq(IntId(1)));
+  ASSERT_TRUE(*ge(dt.referenceDate1) == *ge(dt.referenceDate1));
   // NotExpression
-  ASSERT_TRUE(*notFilterExpr(eqFilterExpr(IntId(0))) ==
-              *notFilterExpr(eqFilterExpr(IntId(0))));
-  ASSERT_TRUE(*notFilterExpr(notFilterExpr(greaterEqFilterExpr(VocabId(0)))) ==
-              *notFilterExpr(notFilterExpr(greaterEqFilterExpr(VocabId(0)))));
-  ASSERT_FALSE(*notFilterExpr(greaterThanFilterExpr(IntId(0))) ==
-               *eqFilterExpr(IntId(0)));
-  ASSERT_FALSE(*notFilterExpr(andFilterExpr(eqFilterExpr(IntId(1)),
-                                            eqFilterExpr(IntId(0)))) ==
-               *notFilterExpr(greaterEqFilterExpr(VocabId(0))));
+  ASSERT_TRUE(*notExpr(eq(IntId(0))) == *notExpr(eq(IntId(0))));
+  ASSERT_TRUE(*notExpr(notExpr(ge(VocabId(0)))) ==
+              *notExpr(notExpr(ge(VocabId(0)))));
+  ASSERT_FALSE(*notExpr(gt(IntId(0))) == *eq(IntId(0)));
+  ASSERT_FALSE(*notExpr(andExpr(eq(IntId(1)), eq(IntId(0)))) ==
+               *notExpr(ge(VocabId(0))));
   // Binary PrefilterExpressions (AND and OR)
-  ASSERT_TRUE(
-      *orFilterExpr(eqFilterExpr(IntId(0)), lessEqFilterExpr(IntId(0))) ==
-      *orFilterExpr(eqFilterExpr(IntId(0)), lessEqFilterExpr(IntId(0))));
-  ASSERT_TRUE(
-      *andFilterExpr(lessEqFilterExpr(VocabId(1)),
-                     lessEqFilterExpr(IntId(0))) ==
-      *andFilterExpr(lessEqFilterExpr(VocabId(1)), lessEqFilterExpr(IntId(0))));
-  ASSERT_FALSE(
-      *orFilterExpr(eqFilterExpr(IntId(0)), lessEqFilterExpr(IntId(0))) ==
-      *andFilterExpr(lessEqFilterExpr(VocabId(1)), lessEqFilterExpr(IntId(0))));
-  ASSERT_FALSE(
-      *notFilterExpr(
-          orFilterExpr(eqFilterExpr(IntId(0)), lessEqFilterExpr(IntId(0)))) ==
-      *orFilterExpr(eqFilterExpr(IntId(0)), lessEqFilterExpr(IntId(0))));
+  ASSERT_TRUE(*orExpr(eq(IntId(0)), le(IntId(0))) ==
+              *orExpr(eq(IntId(0)), le(IntId(0))));
+  ASSERT_TRUE(*andExpr(le(VocabId(1)), le(IntId(0))) ==
+              *andExpr(le(VocabId(1)), le(IntId(0))));
+  ASSERT_FALSE(*orExpr(eq(IntId(0)), le(IntId(0))) ==
+               *andExpr(le(VocabId(1)), le(IntId(0))));
+  ASSERT_FALSE(*notExpr(orExpr(eq(IntId(0)), le(IntId(0)))) ==
+               *orExpr(eq(IntId(0)), le(IntId(0))));
 }
 
 //______________________________________________________________________________
 // Test PrefilterExpression content formatting for debugging.
 TEST(PrefilterExpression, checkPrintFormattedPrefilterExpression) {
-  const auto& relExpr = lessThanFilterExpr(IntId(10));
-  EXPECT_EQ((std::stringstream() << *relExpr).str(),
+  auto expr = lt(IntId(10));
+  EXPECT_EQ((std::stringstream() << *expr).str(),
             "Prefilter RelationalExpression<0>\nValueId: I:10\n.\n");
-  const auto& notExpr = notFilterExpr(eqFilterExpr(VocabId(0)));
-  EXPECT_EQ((std::stringstream() << *notExpr).str(),
+  expr = notExpr(eq(VocabId(0)));
+  EXPECT_EQ((std::stringstream() << *expr).str(),
             "Prefilter NotExpression:\nchild {Prefilter "
             "RelationalExpression<3>\nValueId: V:0\n}\n.\n");
-  const auto& orExpr =
-      orFilterExpr(lessEqFilterExpr(IntId(0)), eqFilterExpr(IntId(5)));
-  EXPECT_EQ((std::stringstream() << *orExpr).str(),
+  expr = orExpr(le(IntId(0)), eq(IntId(5)));
+  EXPECT_EQ((std::stringstream() << *expr).str(),
             "Prefilter LogicalExpression<1>\nchild1 {Prefilter "
             "RelationalExpression<1>\nValueId: I:0\n}child2 {Prefilter "
             "RelationalExpression<2>\nValueId: I:5\n}\n.\n");
@@ -1136,20 +784,17 @@ TEST(SparqlExpression, testGetPrefilterExpressionDefault) {
 // Check that the (Sparql) RelationalExpression returns the expected
 // PrefilterExpression.
 TEST(SparqlExpression, getPrefilterExpressionFromSparqlRelational) {
+  const TestDates dt{};
   const Variable var = Variable{"?x"};
-  MetadataBlocks blocks{};
-  evalAndEqualityCheck(eqSparqlExpr(var, BoolId(true)),
-                       pr(eqFilterExpr(BoolId(true)), var));
-  evalAndEqualityCheck(greaterEqSparqlExpr(var, IntId(1)),
-                       pr(greaterEqFilterExpr(IntId(1)), var));
-  evalAndEqualityCheck(notEqSparqlExpr(VocabId(10), var),
-                       pr(notEqFilterExpr(VocabId(10)), var));
-  evalAndEqualityCheck(greaterEqSparqlExpr(BlankNodeId(1), var),
-                       pr(greaterEqFilterExpr(BlankNodeId(1)), var));
-  evalAndEqualityCheck(lessEqSparqlExpr(var, blocks.referenceDate1),
-                       pr(lessEqFilterExpr(blocks.referenceDate1), var));
-  evalAndEqualityCheck(lessThanSparqlExpr(DoubleId(10.2), var),
-                       pr(lessThanFilterExpr(DoubleId(10.2)), var));
+  evalAndEqualityCheck(eqSprql(var, BoolId(true)), pr(eq(BoolId(true)), var));
+  evalAndEqualityCheck(geSprql(var, IntId(1)), pr(ge(IntId(1)), var));
+  evalAndEqualityCheck(neqSprql(VocabId(10), var), pr(neq(VocabId(10)), var));
+  evalAndEqualityCheck(geSprql(BlankNodeId(1), var),
+                       pr(ge(BlankNodeId(1)), var));
+  evalAndEqualityCheck(leSprql(var, dt.referenceDate1),
+                       pr(le(dt.referenceDate1), var));
+  evalAndEqualityCheck(ltSprql(DoubleId(10.2), var),
+                       pr(lt(DoubleId(10.2)), var));
 }
 
 //______________________________________________________________________________
@@ -1163,237 +808,186 @@ TEST(SparqlExpression, getPrefilterExpressionsToComplexSparqlExpressions) {
   // ?x >= 10 AND ?x != 20
   // expected prefilter pairs:
   // {<((>= 10) AND (!= 20)), ?x>}
-  evalAndEqualityCheck(andSparqlExpr(greaterEqSparqlExpr(varX, IntId(10)),
-                                     notEqSparqlExpr(varX, IntId(20))),
-                       pr(andFilterExpr(greaterEqFilterExpr(IntId(10)),
-                                        notEqFilterExpr(IntId(20))),
-                          varX));
+  evalAndEqualityCheck(
+      andSprqlExpr(geSprql(varX, IntId(10)), neqSprql(varX, IntId(20))),
+      pr(andExpr(ge(IntId(10)), neq(IntId(20))), varX));
   // ?z > VocabId(0) AND ?y > 0 AND ?x < 30.00
   // expected prefilter pairs
   // {<(< 30.00), ?x>, <(> 0), ?y>, <(> VocabId(0)), ?z>}
-  evalAndEqualityCheck(
-      andSparqlExpr(andSparqlExpr(greaterThanSparqlExpr(varZ, VocabId(0)),
-                                  greaterThanSparqlExpr(varY, IntId(0))),
-                    lessThanSparqlExpr(varX, DoubleId(30.00))),
-      pr(lessThanFilterExpr(DoubleId(30.00)), varX),
-      pr(greaterThanFilterExpr(IntId(0)), varY),
-      pr(greaterThanFilterExpr(VocabId(0)), varZ));
+  evalAndEqualityCheck(andSprqlExpr(andSprqlExpr(gtSprql(varZ, VocabId(0)),
+                                                 gtSprql(varY, IntId(0))),
+                                    ltSprql(varX, DoubleId(30.00))),
+                       pr(lt(DoubleId(30.00)), varX), pr(gt(IntId(0)), varY),
+                       pr(gt(VocabId(0)), varZ));
 
   // ?x == VocabId(10) AND ?y >= VocabId(10)
   // expected prefilter pairs:
   // {<(== VocabId(10)), ?x>, <(>= VocabId(10)), ?y>}
-  evalAndEqualityCheck(andSparqlExpr(eqSparqlExpr(varX, VocabId(10)),
-                                     greaterEqSparqlExpr(varY, VocabId(10))),
-                       pr(eqFilterExpr(VocabId(10)), varX),
-                       pr(greaterEqFilterExpr(VocabId(10)), varY));
+  evalAndEqualityCheck(
+      andSprqlExpr(eqSprql(varX, VocabId(10)), geSprql(varY, VocabId(10))),
+      pr(eq(VocabId(10)), varX), pr(ge(VocabId(10)), varY));
   // !(?x >= 10 OR ?x <= 0)
   // expected prefilter pairs:
   // {<!(?x >= 10 OR ?x <= 0), ?x>}
-  evalAndEqualityCheck(
-      notSparqlExpr(orSparqlExpr(greaterEqSparqlExpr(varX, IntId(10)),
-                                 lessEqSparqlExpr(varX, IntId(0)))),
-      pr(notFilterExpr(orFilterExpr(greaterEqFilterExpr(IntId(10)),
-                                    lessEqFilterExpr(IntId(0)))),
-         varX));
+  evalAndEqualityCheck(notSprqlExpr(orSprqlExpr(geSprql(varX, IntId(10)),
+                                                leSprql(varX, IntId(0)))),
+                       pr(notExpr(orExpr(ge(IntId(10)), le(IntId(0)))), varX));
   // !(?z == VocabId(10) AND ?z >= VocabId(20))
   // expected prefilter pairs:
   // {<!(?z == VocabId(10) AND ?z >= VocabId(20)) , ?z>}
   evalAndEqualityCheck(
-      notSparqlExpr(andSparqlExpr(eqSparqlExpr(varZ, VocabId(10)),
-                                  greaterEqSparqlExpr(varZ, VocabId(20)))),
-      pr(notFilterExpr(andFilterExpr(eqFilterExpr(VocabId(10)),
-                                     greaterEqFilterExpr(VocabId(20)))),
-         varZ));
+      notSprqlExpr(
+          andSprqlExpr(eqSprql(varZ, VocabId(10)), geSprql(varZ, VocabId(20)))),
+      pr(notExpr(andExpr(eq(VocabId(10)), ge(VocabId(20)))), varZ));
   // (?x == VocabId(10) AND ?z == VocabId(0)) AND ?y != DoubleId(22.1)
   // expected prefilter pairs:
   // {<(==VocabId(10)) , ?x>, <(!=DoubleId(22.1)), ?y>, <(==VocabId(0)), ?z>}
-  evalAndEqualityCheck(
-      andSparqlExpr(andSparqlExpr(eqSparqlExpr(VocabId(10), varX),
-                                  eqSparqlExpr(varZ, VocabId(0))),
-                    notEqSparqlExpr(DoubleId(22.1), varY)),
-      pr(eqFilterExpr(VocabId(10)), varX),
-      pr(notEqFilterExpr(DoubleId(22.1)), varY),
-      pr(eqFilterExpr(VocabId(0)), varZ));
+  evalAndEqualityCheck(andSprqlExpr(andSprqlExpr(eqSprql(VocabId(10), varX),
+                                                 eqSprql(varZ, VocabId(0))),
+                                    neqSprql(DoubleId(22.1), varY)),
+                       pr(eq(VocabId(10)), varX), pr(neq(DoubleId(22.1)), varY),
+                       pr(eq(VocabId(0)), varZ));
   // (?z >= 1000 AND ?x == VocabId(10)) OR ?z >= 10000
   // expected prefilter pairs:
   // {<((>=1000) OR (>= 10000)), ?z>}
-  evalAndEqualityCheck(
-      orSparqlExpr(andSparqlExpr(greaterEqSparqlExpr(varZ, IntId(1000)),
-                                 eqSparqlExpr(varX, VocabId(10))),
-                   greaterEqSparqlExpr(varZ, IntId(10000))),
-      pr(orFilterExpr(greaterEqFilterExpr(IntId(1000)),
-                      greaterEqFilterExpr(IntId(10000))),
-         varZ));
+  evalAndEqualityCheck(orSprqlExpr(andSprqlExpr(geSprql(varZ, IntId(1000)),
+                                                eqSprql(varX, VocabId(10))),
+                                   geSprql(varZ, IntId(10000))),
+                       pr(orExpr(ge(IntId(1000)), ge(IntId(10000))), varZ));
   // !((?z <= VocabId(10) OR ?y <= VocabId(10)) OR ?x <= VocabId(10))
   // expected prefilter pairs:
   // {<!(<= VocabId(10)), ?x>, <!(<= VocabId(10)), ?y>, <!(<= VocabId(10)), ?z>}
-  evalAndEqualityCheck(notSparqlExpr(orSparqlExpr(
-                           orSparqlExpr(lessEqSparqlExpr(varZ, VocabId(10)),
-                                        lessEqSparqlExpr(varY, VocabId(10))),
-                           lessEqSparqlExpr(varX, VocabId(10)))),
-                       pr(notFilterExpr(lessEqFilterExpr(VocabId(10))), varX),
-                       pr(notFilterExpr(lessEqFilterExpr(VocabId(10))), varY),
-                       pr(notFilterExpr(lessEqFilterExpr(VocabId(10))), varZ));
+  evalAndEqualityCheck(
+      notSprqlExpr(orSprqlExpr(
+          orSprqlExpr(leSprql(varZ, VocabId(10)), leSprql(varY, VocabId(10))),
+          leSprql(varX, VocabId(10)))),
+      pr(notExpr(le(VocabId(10))), varX), pr(notExpr(le(VocabId(10))), varY),
+      pr(notExpr(le(VocabId(10))), varZ));
   // ?x >= 10 AND ?y >= 10
   // expected prefilter pairs:
   // {<(>= 10), ?x>, <(>= 10), ?y>}
-  evalAndEqualityCheck(andSparqlExpr(greaterEqSparqlExpr(varX, IntId(10)),
-                                     greaterEqSparqlExpr(varY, IntId(10))),
-                       pr(greaterEqFilterExpr(IntId(10)), varX),
-                       pr(greaterEqFilterExpr(IntId(10)), varY));
+  evalAndEqualityCheck(
+      andSprqlExpr(geSprql(varX, IntId(10)), geSprql(varY, IntId(10))),
+      pr(ge(IntId(10)), varX), pr(ge(IntId(10)), varY));
   // ?x <= 0 AND ?y <= 0
   // expected prefilter pairs:
   // {<(<= 0), ?x>, <(<= 0), ?y>}
-  evalAndEqualityCheck(andSparqlExpr(lessEqSparqlExpr(varX, IntId(0)),
-                                     lessEqSparqlExpr(varY, IntId(0))),
-                       pr(lessEqFilterExpr(IntId(0)), varX),
-                       pr(lessEqFilterExpr(IntId(0)), varY));
+  evalAndEqualityCheck(
+      andSprqlExpr(leSprql(varX, IntId(0)), leSprql(varY, IntId(0))),
+      pr(le(IntId(0)), varX), pr(le(IntId(0)), varY));
   // (?x >= 10 AND ?y >= 10) OR (?x <= 0 AND ?y <= 0)
   // expected prefilter pairs:
   // {<((>= 10) OR (<= 0)), ?x> <(>= 10) OR (<= 0)), ?y>}
   evalAndEqualityCheck(
-      orSparqlExpr(andSparqlExpr(greaterEqSparqlExpr(varX, IntId(10)),
-                                 greaterEqSparqlExpr(varY, IntId(10))),
-                   andSparqlExpr(lessEqSparqlExpr(varX, IntId(0)),
-                                 lessEqSparqlExpr(varY, IntId(0)))),
-      pr(orFilterExpr(greaterEqFilterExpr(IntId(10)),
-                      lessEqFilterExpr(IntId(0))),
-         varX),
-      pr(orFilterExpr(greaterEqFilterExpr(IntId(10)),
-                      lessEqFilterExpr(IntId(0))),
-         varY));
+      orSprqlExpr(
+          andSprqlExpr(geSprql(varX, IntId(10)), geSprql(varY, IntId(10))),
+          andSprqlExpr(leSprql(varX, IntId(0)), leSprql(varY, IntId(0)))),
+      pr(orExpr(ge(IntId(10)), le(IntId(0))), varX),
+      pr(orExpr(ge(IntId(10)), le(IntId(0))), varY));
   // !(?x >= 10 OR ?y >= 10) OR !(?x <= 0 OR ?y <= 0)
   // expected prefilter pairs:
   // {<((!(>= 10) OR !(<= 0))), ?x> <(!(>= 10) OR !(<= 0))), ?y>}
   evalAndEqualityCheck(
-      orSparqlExpr(
-          notSparqlExpr(orSparqlExpr(greaterEqSparqlExpr(varX, IntId(10)),
-                                     greaterEqSparqlExpr(varY, IntId(10)))),
-          notSparqlExpr(orSparqlExpr(lessEqSparqlExpr(varX, IntId(0)),
-                                     lessEqSparqlExpr(varY, IntId(0))))),
-      pr(orFilterExpr(notFilterExpr(greaterEqFilterExpr(IntId(10))),
-                      notFilterExpr(lessEqFilterExpr(IntId(0)))),
-         varX),
-      pr(orFilterExpr(notFilterExpr(greaterEqFilterExpr(IntId(10))),
-                      notFilterExpr(lessEqFilterExpr(IntId(0)))),
-         varY));
+      orSprqlExpr(notSprqlExpr(orSprqlExpr(geSprql(varX, IntId(10)),
+                                           geSprql(varY, IntId(10)))),
+                  notSprqlExpr(orSprqlExpr(leSprql(varX, IntId(0)),
+                                           leSprql(varY, IntId(0))))),
+      pr(orExpr(notExpr(ge(IntId(10))), notExpr(le(IntId(0)))), varX),
+      pr(orExpr(notExpr(ge(IntId(10))), notExpr(le(IntId(0)))), varY));
   // !(?x == VocabId(10) OR ?x == VocabId(20)) AND !(?z >= 10.00 OR ?y == false)
   // expected prefilter pairs:
   // {<!((== VocabId(10)) OR (== VocabId(20))), ?x>, <!(== false), ?y>,
   // <!(>= 10), ?z>}
   evalAndEqualityCheck(
-      andSparqlExpr(
-          notSparqlExpr(orSparqlExpr(eqSparqlExpr(varX, VocabId(10)),
-                                     eqSparqlExpr(varX, VocabId(20)))),
-          notSparqlExpr(orSparqlExpr(greaterEqSparqlExpr(varZ, DoubleId(10)),
-                                     eqSparqlExpr(varY, BoolId(false))))),
-      pr(notFilterExpr(orFilterExpr(eqFilterExpr(VocabId(10)),
-                                    eqFilterExpr(VocabId(20)))),
-         varX),
-      pr(notFilterExpr(eqFilterExpr(BoolId(false))), varY),
-      pr(notFilterExpr(greaterEqFilterExpr(DoubleId(10))), varZ));
+      andSprqlExpr(notSprqlExpr(orSprqlExpr(eqSprql(varX, VocabId(10)),
+                                            eqSprql(varX, VocabId(20)))),
+                   notSprqlExpr(orSprqlExpr(geSprql(varZ, DoubleId(10)),
+                                            eqSprql(varY, BoolId(false))))),
+      pr(notExpr(orExpr(eq(VocabId(10)), eq(VocabId(20)))), varX),
+      pr(notExpr(eq(BoolId(false))), varY),
+      pr(notExpr(ge(DoubleId(10))), varZ));
   // !(!(?x >= 10 AND ?y >= 10)) OR !(!(?x <= 0 AND ?y <= 0))
   // expected prefilter pairs:
   // {<(!!(>= 10) OR !!(<= 0)), ?x>, <(!!(>= 10) OR !!(<= 0)) ,?y>}
   evalAndEqualityCheck(
-      orSparqlExpr(notSparqlExpr(notSparqlExpr(
-                       andSparqlExpr(greaterEqSparqlExpr(varX, IntId(10)),
-                                     greaterEqSparqlExpr(varY, IntId(10))))),
-                   notSparqlExpr(notSparqlExpr(
-                       andSparqlExpr(lessEqSparqlExpr(varX, IntId(0)),
-                                     lessEqSparqlExpr(varY, IntId(0)))))),
-      pr(orFilterExpr(
-             notFilterExpr(notFilterExpr(greaterEqFilterExpr(IntId(10)))),
-             notFilterExpr(notFilterExpr(lessEqFilterExpr(IntId(0))))),
+      orSprqlExpr(notSprqlExpr(notSprqlExpr(andSprqlExpr(
+                      geSprql(varX, IntId(10)), geSprql(varY, IntId(10))))),
+                  notSprqlExpr(notSprqlExpr(andSprqlExpr(
+                      leSprql(varX, IntId(0)), leSprql(varY, IntId(0)))))),
+      pr(orExpr(notExpr(notExpr(ge(IntId(10)))),
+                notExpr(notExpr(le(IntId(0))))),
          varX),
-      pr(orFilterExpr(
-             notFilterExpr(notFilterExpr(greaterEqFilterExpr(IntId(10)))),
-             notFilterExpr(notFilterExpr(lessEqFilterExpr(IntId(0))))),
+      pr(orExpr(notExpr(notExpr(ge(IntId(10)))),
+                notExpr(notExpr(le(IntId(0))))),
          varY));
   // !((?x >= VocabId(0) AND ?x <= VocabId(10)) OR !(?x != VocabId(99)))
   // expected prefilter pairs:
   // {<!(((>= VocabId(0)) AND (<= VocabId(10))) OR !(!= VocabId(99))) , ?x>}
-  evalAndEqualityCheck(notSparqlExpr(orSparqlExpr(
-                           andSparqlExpr(greaterEqSparqlExpr(varX, VocabId(0)),
-                                         lessEqSparqlExpr(varX, VocabId(10))),
-                           notSparqlExpr(notEqSparqlExpr(varX, VocabId(99))))),
-                       pr(notFilterExpr(orFilterExpr(
-                              andFilterExpr(greaterEqFilterExpr(VocabId(0)),
-                                            lessEqFilterExpr(VocabId(10))),
-                              notFilterExpr(notEqFilterExpr(VocabId(99))))),
-                          varX));
+  evalAndEqualityCheck(
+      notSprqlExpr(orSprqlExpr(
+          andSprqlExpr(geSprql(varX, VocabId(0)), leSprql(varX, VocabId(10))),
+          notSprqlExpr(neqSprql(varX, VocabId(99))))),
+      pr(notExpr(orExpr(andExpr(ge(VocabId(0)), le(VocabId(10))),
+                        notExpr(neq(VocabId(99))))),
+         varX));
   // !((?y >= 10 AND ?y <= 100) OR !(?x >= VocabId(99)))
   // expected prefilter pairs:
   // {<!((>= VocabId(0)) AND (<= VocabId(10)), ?y>, <!(!(>= VocabId(99))), ?x>}
   evalAndEqualityCheck(
-      notSparqlExpr(
-          orSparqlExpr(andSparqlExpr(greaterEqSparqlExpr(varY, VocabId(0)),
-                                     lessEqSparqlExpr(varY, VocabId(10))),
-                       notSparqlExpr(greaterEqSparqlExpr(varX, VocabId(99))))),
-      pr(notFilterExpr(notFilterExpr(greaterEqFilterExpr(VocabId(99)))), varX),
-      pr(notFilterExpr(andFilterExpr(greaterEqFilterExpr(VocabId(0)),
-                                     lessEqFilterExpr(VocabId(10)))),
-         varY));
+      notSprqlExpr(orSprqlExpr(
+          andSprqlExpr(geSprql(varY, VocabId(0)), leSprql(varY, VocabId(10))),
+          notSprqlExpr(geSprql(varX, VocabId(99))))),
+      pr(notExpr(notExpr(ge(VocabId(99)))), varX),
+      pr(notExpr(andExpr(ge(VocabId(0)), le(VocabId(10)))), varY));
   // ?z >= 10 AND ?z <= 100 AND ?x >= 10 AND ?x != 50 AND !(?y <= 10) AND
   // !(?city <= VocabId(1000) OR ?city == VocabId(1005))
   // expected prefilter pairs:
   // {<!((<= VocabId(1000)) OR (== VocabId(1005))), ?city>, <((>= 10) AND (!=
   // 50)), ?x>, <!(<= 10), ?y>, <((>= 10) AND (<= 100)), ?z>}
   evalAndEqualityCheck(
-      andSparqlExpr(
-          andSparqlExpr(
-              andSparqlExpr(greaterEqSparqlExpr(varZ, IntId(10)),
-                            lessEqSparqlExpr(varZ, IntId(100))),
-              andSparqlExpr(andSparqlExpr(greaterEqSparqlExpr(varX, IntId(10)),
-                                          notEqSparqlExpr(varX, IntId(50))),
-                            notSparqlExpr(lessEqSparqlExpr(varY, IntId(10))))),
-          notSparqlExpr(
-              orSparqlExpr(lessEqSparqlExpr(Variable{"?city"}, VocabId(1000)),
-                           eqSparqlExpr(Variable{"?city"}, VocabId(1005))))),
-      pr(notFilterExpr(orFilterExpr(lessEqFilterExpr(VocabId(1000)),
-                                    eqFilterExpr(VocabId(1005)))),
+      andSprqlExpr(
+          andSprqlExpr(
+              andSprqlExpr(geSprql(varZ, IntId(10)), leSprql(varZ, IntId(100))),
+              andSprqlExpr(andSprqlExpr(geSprql(varX, IntId(10)),
+                                        neqSprql(varX, IntId(50))),
+                           notSprqlExpr(leSprql(varY, IntId(10))))),
+          notSprqlExpr(orSprqlExpr(leSprql(Variable{"?city"}, VocabId(1000)),
+                                   eqSprql(Variable{"?city"}, VocabId(1005))))),
+      pr(notExpr(orExpr(le(VocabId(1000)), eq(VocabId(1005)))),
          Variable{"?city"}),
-      pr(andFilterExpr(greaterEqFilterExpr(IntId(10)),
-                       notEqFilterExpr(IntId(50))),
-         varX),
-      pr(notFilterExpr(lessEqFilterExpr(IntId(10))), varY),
-      pr(andFilterExpr(greaterEqFilterExpr(IntId(10)),
-                       lessEqFilterExpr(IntId(100))),
-         varZ));
+      pr(andExpr(ge(IntId(10)), neq(IntId(50))), varX),
+      pr(notExpr(le(IntId(10))), varY),
+      pr(andExpr(ge(IntId(10)), le(IntId(100))), varZ));
   // ?x >= 10 OR (?x >= -10 AND ?x < 0.00)
   // expected prefilter pairs:
   // {<((>= 10) OR ((>= -10) AND (< 0.00))), ?x>}
   evalAndEqualityCheck(
-      orSparqlExpr(greaterEqSparqlExpr(varX, IntId(10)),
-                   andSparqlExpr(greaterEqSparqlExpr(varX, IntId(-10)),
-                                 lessThanSparqlExpr(DoubleId(0.00), varX))),
-      pr(orFilterExpr(greaterEqFilterExpr(IntId(10)),
-                      andFilterExpr(greaterEqFilterExpr(IntId(-10)),
-                                    lessThanFilterExpr(DoubleId(0.00)))),
+      orSprqlExpr(geSprql(varX, IntId(10)),
+                  andSprqlExpr(geSprql(varX, IntId(-10)),
+                               ltSprql(DoubleId(0.00), varX))),
+      pr(orExpr(ge(IntId(10)), andExpr(ge(IntId(-10)), lt(DoubleId(0.00)))),
          varX));
   // !(!(?x >= 10) OR !!(?x >= -10 AND ?x < 0.00))
   // expected prefilter pairs:
   // {<!(!(>= 10) OR !!((>= -10) AND (< 0.00))), ?x>}
-  evalAndEqualityCheck(notSparqlExpr(orSparqlExpr(
-                           notSparqlExpr(greaterEqSparqlExpr(varX, IntId(10))),
-                           notSparqlExpr(notSparqlExpr(andSparqlExpr(
-                               greaterEqSparqlExpr(varX, IntId(-10)),
-                               lessThanSparqlExpr(DoubleId(0.00), varX)))))),
-                       pr(notFilterExpr(orFilterExpr(
-                              notFilterExpr(greaterEqFilterExpr(IntId(10))),
-                              notFilterExpr(notFilterExpr(andFilterExpr(
-                                  greaterEqFilterExpr(IntId(-10)),
-                                  lessThanFilterExpr(DoubleId(0.00))))))),
-                          varX));
+  evalAndEqualityCheck(
+      notSprqlExpr(orSprqlExpr(
+          notSprqlExpr(geSprql(varX, IntId(10))),
+          notSprqlExpr(notSprqlExpr(andSprqlExpr(
+              geSprql(varX, IntId(-10)), ltSprql(DoubleId(0.00), varX)))))),
+      pr(notExpr(orExpr(
+             notExpr(ge(IntId(10))),
+             notExpr(notExpr(andExpr(ge(IntId(-10)), lt(DoubleId(0.00))))))),
+         varX));
   // ?y != ?x AND ?x >= 10
   // expected prefilter pairs:
   // {<(>= 10), ?x>}
-  evalAndEqualityCheck(andSparqlExpr(notEqSparqlExpr(varY, varX),
-                                     greaterEqSparqlExpr(varX, IntId(10))),
-                       pr(greaterEqFilterExpr(IntId(10)), varX));
-  evalAndEqualityCheck(andSparqlExpr(greaterEqSparqlExpr(varX, IntId(10)),
-                                     notEqSparqlExpr(varY, varX)),
-                       pr(greaterEqFilterExpr(IntId(10)), varX));
+  evalAndEqualityCheck(
+      andSprqlExpr(neqSprql(varY, varX), geSprql(varX, IntId(10))),
+      pr(ge(IntId(10)), varX));
+  evalAndEqualityCheck(
+      andSprqlExpr(geSprql(varX, IntId(10)), neqSprql(varY, varX)),
+      pr(ge(IntId(10)), varX));
 }
 
 //______________________________________________________________________________
@@ -1402,20 +996,17 @@ TEST(SparqlExpression, getEmptyPrefilterFromSparqlRelational) {
   const Variable var = Variable{"?x"};
   const Iri iri = I("<Iri>");
   const Literal lit = L("\"lit\"");
-  evalToEmptyCheck(lessEqSparqlExpr(var, var));
-  evalToEmptyCheck(notEqSparqlExpr(iri, var));
-  evalToEmptyCheck(eqSparqlExpr(var, iri));
-  evalToEmptyCheck(notEqSparqlExpr(IntId(10), DoubleId(23.3)));
-  evalToEmptyCheck(greaterThanSparqlExpr(DoubleId(10), lit));
-  evalToEmptyCheck(lessThanSparqlExpr(VocabId(10), BoolId(10)));
-  evalToEmptyCheck(greaterEqSparqlExpr(lit, lit));
-  evalToEmptyCheck(eqSparqlExpr(iri, iri));
-  evalToEmptyCheck(orSparqlExpr(eqSparqlExpr(var, var),
-                                greaterThanSparqlExpr(var, IntId(0))));
-  evalToEmptyCheck(
-      orSparqlExpr(eqSparqlExpr(var, var), greaterThanSparqlExpr(var, var)));
-  evalToEmptyCheck(
-      andSparqlExpr(eqSparqlExpr(var, var), greaterThanSparqlExpr(var, var)));
+  evalToEmptyCheck(leSprql(var, var));
+  evalToEmptyCheck(neqSprql(iri, var));
+  evalToEmptyCheck(eqSprql(var, iri));
+  evalToEmptyCheck(neqSprql(IntId(10), DoubleId(23.3)));
+  evalToEmptyCheck(gtSprql(DoubleId(10), lit));
+  evalToEmptyCheck(ltSprql(VocabId(10), BoolId(10)));
+  evalToEmptyCheck(geSprql(lit, lit));
+  evalToEmptyCheck(eqSprql(iri, iri));
+  evalToEmptyCheck(orSprqlExpr(eqSprql(var, var), gtSprql(var, IntId(0))));
+  evalToEmptyCheck(orSprqlExpr(eqSprql(var, var), gtSprql(var, var)));
+  evalToEmptyCheck(andSprqlExpr(eqSprql(var, var), gtSprql(var, var)));
 }
 
 //______________________________________________________________________________
@@ -1426,86 +1017,79 @@ TEST(SparqlExpression, getEmptyPrefilterForMoreComplexSparqlExpressions) {
   const Variable varY = Variable{"?y"};
   const Variable varZ = Variable{"?z"};
   // ?x <= 10.00 OR ?y > 10
-  evalToEmptyCheck(orSparqlExpr(lessEqSparqlExpr(DoubleId(10), varX),
-                                greaterThanSparqlExpr(IntId(10), varY)));
-  // ?x >= VocabId(23) OR ?z == VocabId(1)
-  evalToEmptyCheck(orSparqlExpr(greaterEqSparqlExpr(varX, VocabId(23)),
-                                eqSparqlExpr(varZ, VocabId(1))));
-  // (?x < VocabId(10) OR ?z <= VocabId(4)) OR ?z != 5.00
   evalToEmptyCheck(
-      orSparqlExpr(orSparqlExpr(lessThanSparqlExpr(varX, VocabId(10)),
-                                lessEqSparqlExpr(VocabId(4), varZ)),
-                   notEqSparqlExpr(varZ, DoubleId(5))));
+      orSprqlExpr(leSprql(DoubleId(10), varX), gtSprql(IntId(10), varY)));
+  // ?x >= VocabId(23) OR ?z == VocabId(1)
+  evalToEmptyCheck(
+      orSprqlExpr(geSprql(varX, VocabId(23)), eqSprql(varZ, VocabId(1))));
+  // (?x < VocabId(10) OR ?z <= VocabId(4)) OR ?z != 5.00
+  evalToEmptyCheck(orSprqlExpr(
+      orSprqlExpr(ltSprql(varX, VocabId(10)), leSprql(VocabId(4), varZ)),
+      neqSprql(varZ, DoubleId(5))));
   // !(?z > 10.20 AND ?x < 0.001)
   // is equal to
   // ?z <= 10.20 OR ?x >= 0.001
-  evalToEmptyCheck(
-      notSparqlExpr(andSparqlExpr(greaterThanSparqlExpr(DoubleId(10.2), varZ),
-                                  lessThanSparqlExpr(DoubleId(0.001), varX))));
+  evalToEmptyCheck(notSprqlExpr(andSprqlExpr(gtSprql(DoubleId(10.2), varZ),
+                                             ltSprql(DoubleId(0.001), varX))));
   // !(?x > 10.20 AND ?z != VocabId(22))
   // is equal to
   // ?x <= 10.20 OR ?z == VocabId(22)
-  evalToEmptyCheck(
-      notSparqlExpr(andSparqlExpr(greaterThanSparqlExpr(DoubleId(10.2), varX),
-                                  notEqSparqlExpr(VocabId(22), varZ))));
+  evalToEmptyCheck(notSprqlExpr(andSprqlExpr(gtSprql(DoubleId(10.2), varX),
+                                             neqSprql(VocabId(22), varZ))));
   // !(!((?x < VocabId(10) OR ?x <= VocabId(4)) OR ?z != 5.00))
   // is equal to
   // (?x < VocabId(10) OR ?x <= VocabId(4)) OR ?z != 5.00
-  evalToEmptyCheck(notSparqlExpr(notSparqlExpr(
-      orSparqlExpr(orSparqlExpr(lessThanSparqlExpr(varX, VocabId(10)),
-                                lessEqSparqlExpr(VocabId(4), varX)),
-                   notEqSparqlExpr(varZ, DoubleId(5))))));
+  evalToEmptyCheck(notSprqlExpr(notSprqlExpr(orSprqlExpr(
+      orSprqlExpr(ltSprql(varX, VocabId(10)), leSprql(VocabId(4), varX)),
+      neqSprql(varZ, DoubleId(5))))));
   // !(?x != 10 AND !(?y >= 10.00 OR ?z <= 10))
   // is equal to
   // ?x == 10 OR ?y >= 10.00 OR ?z <= 10
-  evalToEmptyCheck(notSparqlExpr(andSparqlExpr(
-      notEqSparqlExpr(varX, IntId(10)),
-      notSparqlExpr(orSparqlExpr(greaterEqSparqlExpr(varY, DoubleId(10.00)),
-                                 lessEqSparqlExpr(varZ, IntId(10)))))));
+  evalToEmptyCheck(notSprqlExpr(
+      andSprqlExpr(neqSprql(varX, IntId(10)),
+                   notSprqlExpr(orSprqlExpr(geSprql(varY, DoubleId(10.00)),
+                                            leSprql(varZ, IntId(10)))))));
   // !((?x != 10 AND ?z != 10) AND (?y == 10 AND ?x >= 20))
   // is equal to
   //?x == 10 OR ?z == 10 OR ?y != 10 OR ?x < 20
-  evalToEmptyCheck(notSparqlExpr(
-      andSparqlExpr(andSparqlExpr(notEqSparqlExpr(varX, IntId(10)),
-                                  notEqSparqlExpr(varZ, IntId(10))),
-                    andSparqlExpr(eqSparqlExpr(varY, IntId(10)),
-                                  greaterEqSparqlExpr(varX, IntId(20))))));
+  evalToEmptyCheck(notSprqlExpr(andSprqlExpr(
+      andSprqlExpr(neqSprql(varX, IntId(10)), neqSprql(varZ, IntId(10))),
+      andSprqlExpr(eqSprql(varY, IntId(10)), geSprql(varX, IntId(20))))));
   // !(?z >= 40 AND (?z != 10.00 AND ?y != VocabId(1)))
   // is equal to
   // ?z <= 40 OR ?z == 10.00 OR ?y == VocabId(1)
-  evalToEmptyCheck(notSparqlExpr(
-      andSparqlExpr(greaterEqSparqlExpr(varZ, IntId(40)),
-                    andSparqlExpr(notEqSparqlExpr(varZ, DoubleId(10.00)),
-                                  notEqSparqlExpr(varY, VocabId(1))))));
+  evalToEmptyCheck(notSprqlExpr(andSprqlExpr(
+      geSprql(varZ, IntId(40)), andSprqlExpr(neqSprql(varZ, DoubleId(10.00)),
+                                             neqSprql(varY, VocabId(1))))));
   // ?z <= true OR !(?x == 10 AND ?y == 10)
   // is equal to
   // ?z <= true OR ?x != 10 OR ?y != 10
-  evalToEmptyCheck(orSparqlExpr(
-      lessEqSparqlExpr(varZ, BoolId(true)),
-      notSparqlExpr(andSparqlExpr(eqSparqlExpr(varX, IntId(10)),
-                                  eqSparqlExpr(IntId(10), varY)))));
+  evalToEmptyCheck(
+      orSprqlExpr(leSprql(varZ, BoolId(true)),
+                  notSprqlExpr(andSprqlExpr(eqSprql(varX, IntId(10)),
+                                            eqSprql(IntId(10), varY)))));
   // !(!(?z <= true OR !(?x == 10 AND ?y == 10)))
   // is equal to
   // ?z <= true OR ?x != 10 OR ?y != 10
-  evalToEmptyCheck(notSparqlExpr(notSparqlExpr(orSparqlExpr(
-      lessEqSparqlExpr(varZ, BoolId(true)),
-      notSparqlExpr(andSparqlExpr(eqSparqlExpr(varX, IntId(10)),
-                                  eqSparqlExpr(IntId(10), varY)))))));
+  evalToEmptyCheck(notSprqlExpr(notSprqlExpr(
+      orSprqlExpr(leSprql(varZ, BoolId(true)),
+                  notSprqlExpr(andSprqlExpr(eqSprql(varX, IntId(10)),
+                                            eqSprql(IntId(10), varY)))))));
   // !(!(?x != 10 OR !(?y >= 10.00 AND ?z <= 10)))
   // is equal to
   // ?x != 10 OR ?y < 10.00 OR ?z > 10
-  evalToEmptyCheck(notSparqlExpr(notSparqlExpr(orSparqlExpr(
-      notEqSparqlExpr(varX, IntId(10)),
-      notSparqlExpr(andSparqlExpr(greaterEqSparqlExpr(varY, DoubleId(10.00)),
-                                  lessEqSparqlExpr(varZ, IntId(10))))))));
+  evalToEmptyCheck(notSprqlExpr(notSprqlExpr(
+      orSprqlExpr(neqSprql(varX, IntId(10)),
+                  notSprqlExpr(andSprqlExpr(geSprql(varY, DoubleId(10.00)),
+                                            leSprql(varZ, IntId(10))))))));
   // !(!(?x == VocabId(10) OR ?y >= 25) AND !(!(?z == true AND ?country ==
   // VocabId(20))))
   // is equal to
   // ?x == VocabId(10) OR ?y >= 25 OR ?z == true AND ?country == VocabId(20)
-  evalToEmptyCheck(notSparqlExpr(andSparqlExpr(
-      notSparqlExpr(orSparqlExpr(eqSparqlExpr(varX, VocabId(10)),
-                                 greaterEqSparqlExpr(varY, IntId(25)))),
-      notSparqlExpr(notSparqlExpr(
-          andSparqlExpr(eqSparqlExpr(varZ, BoolId(true)),
-                        eqSparqlExpr(Variable{"?country"}, VocabId(20))))))));
+  evalToEmptyCheck(notSprqlExpr(andSprqlExpr(
+      notSprqlExpr(
+          orSprqlExpr(eqSprql(varX, VocabId(10)), geSprql(varY, IntId(25)))),
+      notSprqlExpr(notSprqlExpr(
+          andSprqlExpr(eqSprql(varZ, BoolId(true)),
+                       eqSprql(Variable{"?country"}, VocabId(20))))))));
 }

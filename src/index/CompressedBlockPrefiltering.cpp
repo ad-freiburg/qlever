@@ -79,14 +79,12 @@ static auto checkEvalRequirements(const std::vector<BlockMetadata>& input,
     // Check for equality of IDs up to the evaluation column.
     if (checkInvalid(std::not_equal_to<>{}, evaluationColumn)) {
       throwRuntimeError(
-          "The columns up to the evaluation column must contain the same "
-          "values.");
+          "The values in the columns up to the evaluation column must be "
+          "consistent.");
     }
     // Check for order of IDs on evaluation Column.
     if (checkInvalid(std::greater<>{}, evaluationColumn + 1)) {
-      throwRuntimeError(
-          "The data blocks must be provided in sorted order regarding the "
-          "evaluation column.");
+      throwRuntimeError("The blocks must be provided in sorted order.");
     }
   }
 };
