@@ -170,10 +170,11 @@ TEST_F(OperationTestFixture, getPrecomputedResultBecauseSiblingOfService) {
   auto idTable = makeIdTableFromVector({{1, 6, 0}, {2, 5, 0}, {3, 4, 0}});
   auto result = std::make_shared<const Result>(
       idTable.clone(), std::vector<ColumnIndex>{0}, LocalVocab{});
-  operation.precomputedResultBecauseSiblingOfService_ =
+  operation.precomputedResultBecauseSiblingOfService() =
       std::make_optional(result);
   EXPECT_EQ(operation.getResult(), result);
-  EXPECT_FALSE(operation.precomputedResultBecauseSiblingOfService_.has_value());
+  EXPECT_FALSE(
+      operation.precomputedResultBecauseSiblingOfService().has_value());
 }
 
 // _____________________________________________________________________________
