@@ -194,23 +194,23 @@ class SparqlQleverVisitor {
 
   ParsedQuery visit(Parser::Update1Context* ctx);
 
-  Load visit(Parser::LoadContext* ctx);
+  updateClause::Load visit(Parser::LoadContext* ctx);
 
-  Clear visit(Parser::ClearContext* ctx);
+  updateClause::Clear visit(Parser::ClearContext* ctx);
 
-  Drop visit(Parser::DropContext* ctx);
+  updateClause::Drop visit(Parser::DropContext* ctx);
 
-  Create visit(Parser::CreateContext* ctx);
+  updateClause::Create visit(Parser::CreateContext* ctx);
 
-  Add visit(Parser::AddContext* ctx);
+  updateClause::Add visit(Parser::AddContext* ctx);
 
-  Move visit(Parser::MoveContext* ctx);
+  updateClause::Move visit(Parser::MoveContext* ctx);
 
-  Copy visit(Parser::CopyContext* ctx);
+  updateClause::Copy visit(Parser::CopyContext* ctx);
 
-  GraphUpdate visit(Parser::InsertDataContext* ctx);
+  updateClause::GraphUpdate visit(Parser::InsertDataContext* ctx);
 
-  GraphUpdate visit(Parser::DeleteDataContext* ctx);
+  updateClause::GraphUpdate visit(Parser::DeleteDataContext* ctx);
 
   ParsedQuery visit(Parser::DeleteWhereContext* ctx);
 
@@ -230,9 +230,10 @@ class SparqlQleverVisitor {
 
   vector<SparqlTripleSimpleWithGraph> visit(Parser::QuadDataContext* ctx);
 
+  // Parse the triples and set the graph for all of them.
   vector<SparqlTripleSimpleWithGraph> transformTriplesTemplate(
       Parser::TriplesTemplateContext* ctx,
-      const std::variant<Iri, Variable, std::monostate>& graph);
+      const SparqlTripleSimpleWithGraph::Graph& graph);
 
   vector<SparqlTripleSimpleWithGraph> visit(Parser::QuadsContext* ctx);
 

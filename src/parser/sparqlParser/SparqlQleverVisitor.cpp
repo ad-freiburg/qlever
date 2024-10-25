@@ -35,6 +35,7 @@
 
 using namespace ad_utility::sparql_types;
 using namespace sparqlExpression;
+using namespace updateClause;
 using ExpressionPtr = sparqlExpression::SparqlExpression::Ptr;
 using SparqlExpressionPimpl = sparqlExpression::SparqlExpressionPimpl;
 using SelectClause = parsedQuery::SelectClause;
@@ -400,14 +401,18 @@ Create Visitor::visit(Parser::CreateContext* ctx) {
 
 // ____________________________________________________________________________________
 Add Visitor::visit(Parser::AddContext* ctx) {
-  return Add{static_cast<bool>(ctx->SILENT()), visit(ctx->graphOrDefault()[0]),
-             visit(ctx->graphOrDefault()[1])};
+  AD_CORRECTNESS_CHECK(ctx->graphOrDefault().size() == 2);
+  return Add{static_cast<bool>(ctx->SILENT()),
+             visit(ctx->graphOrDefault().at(0)),
+             visit(ctx->graphOrDefault().at(1))};
 }
 
 // ____________________________________________________________________________________
 Move Visitor::visit(Parser::MoveContext* ctx) {
-  return Move{static_cast<bool>(ctx->SILENT()), visit(ctx->graphOrDefault()[0]),
-              visit(ctx->graphOrDefault()[1])};
+  AD_CORRECTNESS_CHECK(ctx->graphOrDefault().size() == 2);
+  return Move{static_cast<bool>(ctx->SILENT()),
+              visit(ctx->graphOrDefault().at(0)),
+              visit(ctx->graphOrDefault().at(1))};
 }
 
 // ____________________________________________________________________________________
@@ -576,9 +581,10 @@ vector<SparqlTripleSimpleWithGraph> Visitor::visit(
   return quads;
 }
 
+// ____________________________________________________________________________________
 vector<SparqlTripleSimpleWithGraph> Visitor::transformTriplesTemplate(
     Parser::TriplesTemplateContext* ctx,
-    const std::variant<Iri, Variable, std::monostate>& graph) {
+    const SparqlTripleSimpleWithGraph::Graph& graph) {
   auto convertTriple = [&graph](const std::array<GraphTerm, 3>& triple)
       -> SparqlTripleSimpleWithGraph {
     return {visitGraphTerm(triple[0]), visitGraphTerm(triple[1]),
@@ -607,17 +613,18 @@ vector<SparqlTripleSimpleWithGraph> Visitor::visit(
   }
 
   auto graphTerm = visit(ctx->varOrIri());
-  using GraphType = std::variant<Iri, Variable, std::monostate>;
-  GraphType graph = graphTerm.visit([&ctx]<typename T>(
-                                        const T& element) -> GraphType {
-    if constexpr (std::is_same_v<T, Variable> || std::is_same_v<T, Iri>) {
-      return element;
-    } else {
-      static_assert(std::is_same_v<T, BlankNode> || std::is_same_v<T, Literal>);
-      reportError(ctx->varOrIri(),
-                  "Only IRIs and variables are allowed as graph names.");
-    }
-  });
+  SparqlTripleSimpleWithGraph::Graph graph = graphTerm.visit(
+      [&ctx]<typename T>(
+          const T& element) -> SparqlTripleSimpleWithGraph::Graph {
+        if constexpr (std::is_same_v<T, Variable> || std::is_same_v<T, Iri>) {
+          return element;
+        } else {
+          static_assert(std::is_same_v<T, BlankNode> ||
+                        std::is_same_v<T, Literal>);
+          reportError(ctx->varOrIri(),
+                      "Only IRIs and variables are allowed as graph names.");
+        }
+      });
 
   return transformTriplesTemplate(ctx->triplesTemplate(), graph);
 }

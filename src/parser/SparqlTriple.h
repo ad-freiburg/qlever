@@ -56,15 +56,15 @@ class SparqlTripleSimple : public SparqlTripleBase<TripleComponent> {
 
 class SparqlTripleSimpleWithGraph : public SparqlTripleSimple {
  public:
-  using SparqlTripleSimple::SparqlTripleSimple;
+  using Graph = std::variant<std::monostate, Iri, Variable>;
+
   SparqlTripleSimpleWithGraph(TripleComponent s, TripleComponent p,
-                              TripleComponent o,
-                              std::variant<Iri, Variable, std::monostate> g,
+                              TripleComponent o, Graph g,
                               AdditionalScanColumns additionalScanColumns = {})
       : SparqlTripleSimple(std::move(s), std::move(p), std::move(o),
                            std::move(additionalScanColumns)),
         g_{std::move(g)} {}
-  std::variant<Iri, Variable, std::monostate> g_;
+  Graph g_;
 
   bool operator==(const SparqlTripleSimpleWithGraph&) const = default;
 };

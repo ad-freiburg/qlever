@@ -10,6 +10,7 @@
 #include "parser/data/GraphRef.h"
 #include "parser/data/Types.h"
 
+namespace updateClause {
 struct Load {
   bool silent_;
   ad_utility::triple_component::Iri source_;
@@ -63,14 +64,17 @@ struct GraphUpdate {
               std::vector<SparqlTripleSimpleWithGraph> toDelete)
       : toInsert_{std::move(toInsert)}, toDelete_{std::move(toDelete)} {}
 };
+}  // namespace updateClause
 
 namespace parsedQuery {
 struct UpdateClause : ClauseBase {
-  std::variant<GraphUpdate, Load, Clear, Drop, Create, Add, Move, Copy> op_;
+  using Operation = std::variant<updateClause::GraphUpdate, updateClause::Load,
+                                 updateClause::Clear, updateClause::Drop,
+                                 updateClause::Create, updateClause::Add,
+                                 updateClause::Move, updateClause::Copy>;
+  Operation op_;
 
   UpdateClause() = default;
-  explicit UpdateClause(
-      std::variant<GraphUpdate, Load, Clear, Drop, Create, Add, Move, Copy> op)
-      : op_{std::move(op)} {}
+  explicit UpdateClause(Operation op) : op_{std::move(op)} {}
 };
 }  // namespace parsedQuery
