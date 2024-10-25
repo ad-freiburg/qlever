@@ -125,7 +125,7 @@ using IriOrUriExpression = NARY<1, FV<std::identity, IriOrUriValueGetter>>;
 
 // STRLEN
 [[maybe_unused]] auto strlen = [](std::string_view s) {
-  // Counts UTF-8 characters by skipping continuation bytes (those starting with "10").
+  // Count UTF-8 characters by skipping continuation bytes (those starting with "10").
   auto utf8Len = std::count_if(s.begin(), s.end(),
     [](char c) { return (static_cast<unsigned char>(c) & 0xC0) != 0x80; } );
   return Id::makeFromInt(static_cast<int64_t>(utf8Len));
