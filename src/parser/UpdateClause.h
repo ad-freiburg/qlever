@@ -64,17 +64,17 @@ struct GraphUpdate {
               std::vector<SparqlTripleSimpleWithGraph> toDelete)
       : toInsert_{std::move(toInsert)}, toDelete_{std::move(toDelete)} {}
 };
+
+// All the available update operations.
+using Operation =
+    std::variant<GraphUpdate, Load, Clear, Drop, Create, Add, Move, Copy>;
 }  // namespace updateClause
 
 namespace parsedQuery {
 struct UpdateClause : ClauseBase {
-  using Operation = std::variant<updateClause::GraphUpdate, updateClause::Load,
-                                 updateClause::Clear, updateClause::Drop,
-                                 updateClause::Create, updateClause::Add,
-                                 updateClause::Move, updateClause::Copy>;
-  Operation op_;
+  updateClause::Operation op_;
 
   UpdateClause() = default;
-  explicit UpdateClause(Operation op) : op_{std::move(op)} {}
+  explicit UpdateClause(updateClause::Operation op) : op_{std::move(op)} {}
 };
 }  // namespace parsedQuery

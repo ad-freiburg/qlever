@@ -449,16 +449,14 @@ ParsedQuery Visitor::visit(Parser::DeleteWhereContext* ctx) {
         AD_CORRECTNESS_CHECK(triple.p_.isVariable() || triple.p_.isIri());
         return SparqlTriple::fromSimple(triple);
       };
-  std::vector<Variable> visibleVariablesSoFar = std::move(visibleVariables_);
-  visibleVariables_.clear();
+  AD_CORRECTNESS_CHECK(visibleVariables_.empty());
   GraphPattern pattern;
   auto triples = visit(ctx->quadPattern());
   pattern._graphPatterns.emplace_back(BasicGraphPattern{
       ad_utility::transform(triples, transformAndRegisterTriple)});
   parsedQuery_._rootGraphPattern = std::move(pattern);
-  auto visibleVariablesWhereClause =
-      std::exchange(visibleVariables_, std::move(visibleVariablesSoFar));
-  parsedQuery_.registerVariablesVisibleInQueryBody(visibleVariablesWhereClause);
+  parsedQuery_.registerVariablesVisibleInQueryBody(visibleVariables_);
+  visibleVariables_.clear();
   // The query body and template are identical. Variables will always be visible
   // - no need to check that.
   parsedQuery_._clause =
@@ -491,13 +489,11 @@ ParsedQuery Visitor::visit(Parser::ModifyContext* ctx) {
           }
         }
       };
-  std::vector<Variable> visibleVariablesSoFar = std::move(visibleVariables_);
-  visibleVariables_.clear();
+  AD_CORRECTNESS_CHECK(visibleVariables_.empty());
   auto graphPattern = visit(ctx->groupGraphPattern());
   parsedQuery_._rootGraphPattern = std::move(graphPattern);
-  auto visibleVariablesWhereClause =
-      std::exchange(visibleVariables_, std::move(visibleVariablesSoFar));
-  parsedQuery_.registerVariablesVisibleInQueryBody(visibleVariablesWhereClause);
+  parsedQuery_.registerVariablesVisibleInQueryBody(visibleVariables_);
+  visibleVariables_.clear();
   auto op = GraphUpdate{};
   visitIf(&op.toInsert_, ctx->insertClause());
   checkTriples(op.toInsert_);
@@ -595,6 +591,8 @@ vector<SparqlTripleSimpleWithGraph> Visitor::transformTriplesTemplate(
 }
 // ____________________________________________________________________________________
 vector<SparqlTripleSimpleWithGraph> Visitor::visit(Parser::QuadsContext* ctx) {
+  // The ordering of the individual triplesTemplate and quadsNotTriples is not
+  // relevant and also not known.
   auto triplesWithGraph = ad_utility::transform(
       ctx->triplesTemplate(), [this](Parser::TriplesTemplateContext* ctx) {
         return transformTriplesTemplate(ctx, std::monostate{});
