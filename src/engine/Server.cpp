@@ -505,7 +505,10 @@ Awaitable<void> Server::processUpdate(
 
   auto& vocab = index_.getVocab();
   DeltaTriples deltaTriples = DeltaTriples{index_};
-  // const LocalVocab& localVocab = std::as_const(deltaTriples).localVocab();
+  // DeltaTriples transfers the IDs that are actually inserted to its own
+  // LocalVocab.
+  // TODO<qup42>: The IDs in this LocalVocab are from the template. All of them
+  // will be added to the DeltaTriples' LocalVocab.
   LocalVocab localVocab = {};
   using IdOrVariable = std::variant<Id, Variable>;
   auto transformSparqlTripleComponent =
@@ -518,11 +521,11 @@ Awaitable<void> Server::processUpdate(
   };
   auto transformSparqlTripleSimple =
       [&transformSparqlTripleComponent](SparqlTripleSimple triple) {
-        return std::array<IdOrVariable, 3>{
-            transformSparqlTripleComponent(std::move(triple.s_)),
-            transformSparqlTripleComponent(std::move(triple.p_)),
-            transformSparqlTripleComponent(std::move(triple.o_))};
+        return std::array{transformSparqlTripleComponent(std::move(triple.s_)),
+                          transformSparqlTripleComponent(std::move(triple.p_)),
+                          transformSparqlTripleComponent(std::move(triple.o_))};
       };
+  // TODO<qup42>: add graph once 1574 is merged
   std::vector<std::array<IdOrVariable, 3>> toInsertTemplates =
       ad_utility::transform(std::move(updateClause.toInsert_),
                             transformSparqlTripleSimple);
@@ -546,50 +549,49 @@ Awaitable<void> Server::processUpdate(
       AD_FAIL();
     }
   };
-  std::vector<IdTriple<0>> toInsert;
-  std::vector<IdTriple<0>> toDelete;
+  auto computeQuadsForResultRow = [&resolveVariable](
+                                      auto& templates, auto& result,
+                                      const IdTable& idTable, uint64_t row,
+                                      const VariableToColumnMap&
+                                          variableColumns) {
+    for (const auto& [s, p, o] : templates) {
+      auto subject = resolveVariable(idTable, row, variableColumns, s);
+      auto predicate = resolveVariable(idTable, row, variableColumns, p);
+      auto object = resolveVariable(idTable, row, variableColumns, o);
+
+      if (!subject.has_value() || !predicate.has_value() ||
+          !object.has_value()) {
+        continue;
+      }
+      result.emplace_back(IdTriple<0>{*subject, *predicate, *object, *object});
+    }
+    return result;
+  };
+  std::vector<IdTriple<>> toInsert;
+  std::vector<IdTriple<>> toDelete;
   // Expected result size is size(query result) x num template rows
   toInsert.reserve(res->idTable().size() * toInsertTemplates.size());
   toDelete.reserve(res->idTable().size() * toDeleteTemplates.size());
+  // TODO<qup42>: what are the lifetimes of the Result's LocalVocab? ->
+  // https://github.com/ad-freiburg/qlever/pull/1580#issuecomment-2437700759
   for (const auto& [pair, range] :
        ExportQueryExecutionTrees::getRowIndices(query._limitOffset, *res)) {
     auto& idTable = pair.idTable_;
     for (uint64_t i : range) {
-      // TODO: extract into lambda
-      for (const auto& [s, p, o] : toInsertTemplates) {
-        auto subject = resolveVariable(idTable, i, qet.getVariableColumns(), s);
-        auto predicate =
-            resolveVariable(idTable, i, qet.getVariableColumns(), p);
-        auto object = resolveVariable(idTable, i, qet.getVariableColumns(), o);
-
-        if (!subject.has_value() || !predicate.has_value() ||
-            !object.has_value()) {
-          continue;
-        }
-        toInsert.emplace_back(
-            IdTriple<0>({*subject, *predicate, *object, *object}));
-      }
+      computeQuadsForResultRow(toInsertTemplates, toInsert, idTable, i,
+                               qet.getVariableColumns());
       cancellationHandle->throwIfCancelled();
 
-      for (const auto& [s, p, o] : toDeleteTemplates) {
-        auto subject = resolveVariable(idTable, i, qet.getVariableColumns(), s);
-        auto predicate =
-            resolveVariable(idTable, i, qet.getVariableColumns(), p);
-        auto object = resolveVariable(idTable, i, qet.getVariableColumns(), o);
-
-        if (!subject.has_value() || !predicate.has_value() ||
-            !object.has_value()) {
-          continue;
-        }
-        toDelete.emplace_back(
-            IdTriple<0>({*subject, *predicate, *object, *object}));
-      }
+      computeQuadsForResultRow(toDeleteTemplates, toDelete, idTable, i,
+                               qet.getVariableColumns());
       cancellationHandle->throwIfCancelled();
     }
   }
 
   deltaTriples.insertTriples(cancellationHandle, std::move(toInsert));
   deltaTriples.deleteTriples(cancellationHandle, std::move(toDelete));
+
+  co_return;
 }
 // _____________________________________________________________________________
 json Server::composeErrorResponseJson(
