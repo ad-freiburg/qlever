@@ -317,14 +317,10 @@ auto RegexExpression::getEstimatesForFilterExpression(
     uint64_t inputSize,
     const std::optional<Variable>& firstSortedVariable) const -> Estimates {
   // If we have a simple prefix regex, assume that only 10^-k entries remain,
-  // where k is the length of the prefix. The reason for the -2 is that at this
-  // point, `prefixRegex_` always starts with `"^`.
-  //
-  // TODO: Is this correct? My understanding is that `prefixRegex_` only
-  // contains the prefix string, without any leading characters.
+  // where k is the length of the prefix.
   if (isPrefixExpression()) {
     double reductionFactor = std::pow(
-        10, std::max(0, static_cast<int>(prefixRegex_.value().size()) - 2));
+        10, std::max(0, static_cast<int>(prefixRegex_.value().size())));
     // Cap to reasonable minimal and maximal values to prevent numerical
     // stability problems.
     reductionFactor = std::min(100000000.0, reductionFactor);
