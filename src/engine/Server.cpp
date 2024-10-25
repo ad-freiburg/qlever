@@ -6,6 +6,8 @@
 
 #include "engine/Server.h"
 
+#include <index/DeltaTriples.h>
+
 #include <boost/url.hpp>
 #include <sstream>
 #include <string>
@@ -492,6 +494,103 @@ Awaitable<void> Server::process(
       parsedHttpRequest.operation_);
 }
 
+// _____________________________________________________________________________
+Awaitable<void> Server::processUpdate(
+    const ParsedQuery& query, const QueryExecutionTree& qet,
+    const ad_utility::Timer& requestTimer,
+    SharedCancellationHandle cancellationHandle, const Index& index) {
+  AD_CONTRACT_CHECK(query.hasUpdateClause());
+  auto updateClause = query.updateClause();
+  auto res = qet.getResult(true);
+
+  auto& vocab = index_.getVocab();
+  DeltaTriples deltaTriples = DeltaTriples{index_};
+  // const LocalVocab& localVocab = std::as_const(deltaTriples).localVocab();
+  LocalVocab localVocab = {};
+  using IdOrVariable = std::variant<Id, Variable>;
+  auto transformSparqlTripleComponent =
+      [&vocab, &localVocab](TripleComponent component) -> IdOrVariable {
+    if (component.isVariable()) {
+      return std::move(component.getVariable());
+    } else {
+      return std::move(component).toValueId(vocab, localVocab);
+    }
+  };
+  auto transformSparqlTripleSimple =
+      [&transformSparqlTripleComponent](SparqlTripleSimple triple) {
+        return std::array<IdOrVariable, 3>{
+            transformSparqlTripleComponent(std::move(triple.s_)),
+            transformSparqlTripleComponent(std::move(triple.p_)),
+            transformSparqlTripleComponent(std::move(triple.o_))};
+      };
+  std::vector<std::array<IdOrVariable, 3>> toInsertTemplates =
+      ad_utility::transform(std::move(updateClause.toInsert_),
+                            transformSparqlTripleSimple);
+  std::vector<std::array<IdOrVariable, 3>> toDeleteTemplates =
+      ad_utility::transform(std::move(updateClause.toDelete_),
+                            transformSparqlTripleSimple);
+
+  auto resolveVariable = [](const IdTable& idTable, const size_t& row,
+                            const VariableToColumnMap& variableColumns,
+                            IdOrVariable idOrVar) -> std::optional<Id> {
+    if (std::holds_alternative<Variable>(idOrVar)) {
+      auto var = std::get<Variable>(std::move(idOrVar));
+      if (!variableColumns.contains(var)) {
+        return std::nullopt;
+      } else {
+        return idTable(row, variableColumns.at(var).columnIndex_);
+      }
+    } else if (std::holds_alternative<Id>(idOrVar)) {
+      return std::get<Id>(idOrVar);
+    } else {
+      AD_FAIL();
+    }
+  };
+  std::vector<IdTriple<0>> toInsert;
+  std::vector<IdTriple<0>> toDelete;
+  // Expected result size is size(query result) x num template rows
+  toInsert.reserve(res->idTable().size() * toInsertTemplates.size());
+  toDelete.reserve(res->idTable().size() * toDeleteTemplates.size());
+  for (const auto& [pair, range] :
+       ExportQueryExecutionTrees::getRowIndices(query._limitOffset, *res)) {
+    auto& idTable = pair.idTable_;
+    for (uint64_t i : range) {
+      // TODO: extract into lambda
+      for (const auto& [s, p, o] : toInsertTemplates) {
+        auto subject = resolveVariable(idTable, i, qet.getVariableColumns(), s);
+        auto predicate =
+            resolveVariable(idTable, i, qet.getVariableColumns(), p);
+        auto object = resolveVariable(idTable, i, qet.getVariableColumns(), o);
+
+        if (!subject.has_value() || !predicate.has_value() ||
+            !object.has_value()) {
+          continue;
+        }
+        toInsert.emplace_back(
+            IdTriple<0>({*subject, *predicate, *object, *object}));
+      }
+      cancellationHandle->throwIfCancelled();
+
+      for (const auto& [s, p, o] : toDeleteTemplates) {
+        auto subject = resolveVariable(idTable, i, qet.getVariableColumns(), s);
+        auto predicate =
+            resolveVariable(idTable, i, qet.getVariableColumns(), p);
+        auto object = resolveVariable(idTable, i, qet.getVariableColumns(), o);
+
+        if (!subject.has_value() || !predicate.has_value() ||
+            !object.has_value()) {
+          continue;
+        }
+        toDelete.emplace_back(
+            IdTriple<0>({*subject, *predicate, *object, *object}));
+      }
+      cancellationHandle->throwIfCancelled();
+    }
+  }
+
+  deltaTriples.insertTriples(cancellationHandle, std::move(toInsert));
+  deltaTriples.deleteTriples(cancellationHandle, std::move(toDelete));
+}
 // _____________________________________________________________________________
 json Server::composeErrorResponseJson(
     const string& query, const std::string& errorMsg,

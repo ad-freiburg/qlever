@@ -134,6 +134,12 @@ class Server {
       const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
       TimeLimit timeLimit);
 
+  Awaitable<void> processUpdate(const ParsedQuery& query,
+                                const QueryExecutionTree& qet,
+                                const ad_utility::Timer& requestTimer,
+                                SharedCancellationHandle cancellationHandle,
+                                const Index& index);
+
   static json composeErrorResponseJson(
       const string& query, const std::string& errorMsg,
       ad_utility::Timer& requestTimer,
