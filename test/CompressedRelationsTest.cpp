@@ -16,6 +16,8 @@ namespace {
 
 using ad_utility::source_location;
 
+const LocatedTriplesPerBlock emptyLocatedTriples{};
+
 // Return an `ID` of type `VocabIndex` from `index`. Assert that `index`
 // is `>= 0`.
 Id V(int64_t index) {
@@ -233,8 +235,8 @@ void testCompressedRelations(const auto& inputs, std::string testCaseName,
                     m.multiplicityCol1_);
     // Scan for all distinct `col0` and check that we get the expected result.
     ScanSpecification scanSpec{metaData[i].col0Id_, std::nullopt, std::nullopt};
-    IdTable table =
-        reader.scan(scanSpec, blocks, additionalColumns, cancellationHandle);
+    IdTable table = reader.scan(scanSpec, blocks, additionalColumns,
+                                cancellationHandle, emptyLocatedTriples);
     const auto& col1And2 = inputs[i].col1And2_;
     checkThatTablesAreEqual(col1And2, table);
     table.clear();
@@ -242,8 +244,9 @@ void testCompressedRelations(const auto& inputs, std::string testCaseName,
     std::vector<LimitOffsetClause> limitOffsetClauses{
         {std::nullopt, 5}, {5, 0}, {std::nullopt, 12}, {12, 0}, {7, 5}};
     for (const auto& limitOffset : limitOffsetClauses) {
-      IdTable table = reader.scan(scanSpec, blocks, additionalColumns,
-                                  cancellationHandle, limitOffset);
+      IdTable table =
+          reader.scan(scanSpec, blocks, additionalColumns, cancellationHandle,
+                      emptyLocatedTriples, limitOffset);
       auto col1And2 = inputs[i].col1And2_;
       col1And2.resize(limitOffset.upperBound(col1And2.size()));
       col1And2.erase(
@@ -251,8 +254,9 @@ void testCompressedRelations(const auto& inputs, std::string testCaseName,
           col1And2.begin() + limitOffset.actualOffset(col1And2.size()));
       checkThatTablesAreEqual(col1And2, table);
     }
-    for (const auto& block : reader.lazyScan(
-             scanSpec, blocks, additionalColumns, cancellationHandle)) {
+    for (const auto& block :
+         reader.lazyScan(scanSpec, blocks, additionalColumns,
+                         cancellationHandle, emptyLocatedTriples)) {
       table.insertAtEnd(block.begin(), block.end());
     }
     checkThatTablesAreEqual(col1And2, table);
@@ -266,17 +270,18 @@ void testCompressedRelations(const auto& inputs, std::string testCaseName,
     auto scanAndCheck = [&]() {
       ScanSpecification scanSpec{metaData[i].col0Id_, V(lastCol1Id),
                                  std::nullopt};
-      auto size = reader.getResultSizeOfScan(scanSpec, blocks);
+      auto size =
+          reader.getResultSizeOfScan(scanSpec, blocks, emptyLocatedTriples);
       IdTable tableWidthOne =
           reader.scan(scanSpec, blocks, Permutation::ColumnIndicesRef{},
-                      cancellationHandle);
+                      cancellationHandle, emptyLocatedTriples);
       ASSERT_EQ(tableWidthOne.numColumns(), 1);
       EXPECT_EQ(size, tableWidthOne.numRows());
       checkThatTablesAreEqual(col3, tableWidthOne);
       tableWidthOne.clear();
       for (const auto& block :
            reader.lazyScan(scanSpec, blocks, Permutation::ColumnIndices{},
-                           cancellationHandle)) {
+                           cancellationHandle, emptyLocatedTriples)) {
         tableWidthOne.insertAtEnd(block.begin(), block.end());
       }
       checkThatTablesAreEqual(col3, tableWidthOne);
@@ -336,7 +341,8 @@ TEST(CompressedRelationWriter, getFirstAndLastTriple) {
   // Test that the result of calling `getFirstAndLastTriple` for the index from
   // above with the given `ScanSpecification` matches the given `matcher`.
   auto testFirstAndLastBlock = [&](ScanSpecification spec, auto matcher) {
-    auto firstAndLastTriple = readerPtr->getFirstAndLastTriple({spec, blocks});
+    auto firstAndLastTriple =
+        readerPtr->getFirstAndLastTriple({spec, blocks}, emptyLocatedTriples);
     EXPECT_THAT(firstAndLastTriple, matcher);
   };
 
@@ -800,14 +806,14 @@ TEST(CompressedRelationWriter, scanWithGraphs) {
     ad_utility::HashSet<Id> graphs{V(0)};
     ScanSpecification spec{V(42), std::nullopt, std::nullopt, {}, graphs};
     auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
-    auto res = reader->scan(spec, blocks, {}, handle);
+    auto res = reader->scan(spec, blocks, {}, handle, emptyLocatedTriples);
     EXPECT_THAT(res,
                 matchesIdTableFromVector({{3, 4}, {7, 4}, {8, 4}, {8, 5}}));
 
     graphs.clear();
     graphs.insert(V(1));
     spec = ScanSpecification{V(42), std::nullopt, std::nullopt, {}, graphs};
-    res = reader->scan(spec, blocks, {}, handle);
+    res = reader->scan(spec, blocks, {}, handle, emptyLocatedTriples);
     EXPECT_THAT(res,
                 matchesIdTableFromVector({{3, 4}, {8, 5}, {9, 4}, {9, 5}}));
   }
