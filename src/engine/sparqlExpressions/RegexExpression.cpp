@@ -81,12 +81,6 @@ RegexExpression::RegexExpression(
     child_ = std::move(std::move(*child_).moveChildrenOut().at(0));
     childIsStrExpression_ = true;
   }
-  /*
-  if (!dynamic_cast<const VariableExpression*>(child_.get())) {
-    throw std::runtime_error(
-        "REGEX expressions are currently supported only on variables.");
-  }
-   */
   std::string regexString;
   if (auto regexPtr =
           dynamic_cast<const StringLiteralExpression*>(regex.get())) {
