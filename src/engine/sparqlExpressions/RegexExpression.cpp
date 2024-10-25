@@ -167,9 +167,12 @@ ExpressionResult RegexExpression::evaluatePrefixRegex(
   std::vector<std::string> actualPrefixes;
   actualPrefixes.push_back("\"" + prefixRegex);
   // If the STR function was applied, we also look for prefix matches for IRIs.
-  // TODO<joka921> prefix filters currently never find numbers or local vocab
-  // entries, numbers, or other datatypes that are encoded directly inside the
-  // IDs.
+  // TODO<joka921> prefix filters currently have false negatives when the prefix
+  // is not in the vocabulary, and there exist local vocab entries in the input
+  // that are between the prefix and the next local vocab entry. This is
+  // non-trivial to fix as it involves fiddling with Unicode prefix encodings.
+  // TODO<joka921> prefix filters currently never find numbers or other
+  // datatypes that are encoded directly inside the IDs.
   if (childIsStrExpression_) {
     actualPrefixes.push_back("<" + prefixRegex);
   }
@@ -238,16 +241,18 @@ ExpressionResult RegexExpression::evaluateNonPrefixRegex(
   AD_CORRECTNESS_CHECK(regex_.has_value());
 
   auto impl = [&]<typename ValueGetter>(const ValueGetter& getter) {
-    for (auto id : detail::makeGenerator(AD_FWD(input), resultSize, context)) {
-      auto str = getter(id, context);
-      if (!str.has_value()) {
-        result.push_back(Id::makeUndefined());
-      } else {
-        result.push_back(
-            Id::makeFromBool(RE2::PartialMatch(str.value(), regex_.value())));
-      }
-      checkCancellation(context);
-    }
+    std::ranges::for_each(
+        detail::makeGenerator(AD_FWD(input), resultSize, context),
+        [&getter, &context, &result, this](const auto& id) {
+          auto str = getter(id, context);
+          if (!str.has_value()) {
+            result.push_back(Id::makeUndefined());
+          } else {
+            result.push_back(Id::makeFromBool(
+                RE2::PartialMatch(str.value(), regex_.value())));
+          }
+          checkCancellation(context);
+        });
   };
   if (childIsStrExpression_) {
     impl(detail::StringValueGetter{});
