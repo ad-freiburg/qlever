@@ -487,13 +487,13 @@ TEST(IndexTest, trivialGettersAndSetters) {
   EXPECT_EQ(std::as_const(index).memoryLimitIndexBuilding(), 7_kB);
 }
 
-TEST(IndexTest, loggingAndSettingOfParallelParsing) {
+TEST(IndexTest, updateInputFileSpecificationsAndLog) {
   using enum qlever::Filetype;
   std::vector<qlever::InputFileSpecification> files{
       {"singleFile.ttl", Turtle, std::nullopt, false}};
-  testing::internal::CaptureStdout();
   using namespace ::testing;
   {
+    testing::internal::CaptureStdout();
     IndexImpl::updateInputFileSpecificationsAndLog(files, false);
     EXPECT_THAT(
         testing::internal::GetCapturedStdout(),
@@ -507,6 +507,14 @@ TEST(IndexTest, loggingAndSettingOfParallelParsing) {
     EXPECT_THAT(testing::internal::GetCapturedStdout(),
                 AllOf(HasSubstr("from singleFile.ttl"), HasSubstr("deprecated"),
                       HasSubstr("--parse-parallel")));
+    EXPECT_TRUE(files.at(0).parseInParallel_);
+  }
+  {
+    testing::internal::CaptureStdout();
+    IndexImpl::updateInputFileSpecificationsAndLog(files, std::nullopt);
+    EXPECT_THAT(testing::internal::GetCapturedStdout(),
+                AllOf(HasSubstr("from singleFile.ttl"), HasSubstr("parallel"),
+                      HasSubstr("consistent with previous behavior")));
     EXPECT_TRUE(files.at(0).parseInParallel_);
   }
 
