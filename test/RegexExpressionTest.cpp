@@ -1,6 +1,6 @@
-//  Copyright 2022, University of Freiburg,
-//                  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
+// Copyright 2022 - 2024, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
 #include <optional>
 #include <string>
@@ -23,7 +23,9 @@ constexpr auto T = Id::makeFromBool(true);
 constexpr auto F = Id::makeFromBool(false);
 constexpr Id U = Id::makeUndefined();
 
-// _____________________________________________________________________________
+// Make `RegexExpression` from given the `child` (the expression on which to
+// apply the regex), `regex`, and optional `flags`. The argument `childAsStr` is
+// true iff the expression is enclosed in a `STR()` function.
 RegexExpression makeRegexExpression(
     SparqlExpression::Ptr child, std::string regex,
     std::optional<std::string> flags = std::nullopt, bool childAsStr = false) {
@@ -48,6 +50,8 @@ RegexExpression makeRegexExpression(
           std::move(flagsExpression)};
 }
 
+// Special case of the `makeRegexExpression` above, where the `child`
+// expression is a variable.
 RegexExpression makeRegexExpression(
     std::string variable, std::string regex,
     std::optional<std::string> flags = std::nullopt, bool childAsStr = false) {
@@ -86,6 +90,8 @@ auto testNonPrefixRegex = [](std::string variable, std::string regex,
   testWithExplicitResult(expr, expectedResult);
 };
 
+// Tests where the expression is a variable and the regex is not a simple prefix
+// regex (that translates to a simple range search).
 TEST(RegexExpression, nonPrefixRegex) {
   // ?vocab column is `"Beta", "alpha", "älpha"
   // ?mixed column is `1, -0.1, <x>`
@@ -95,10 +101,11 @@ TEST(RegexExpression, nonPrefixRegex) {
   test("?vocab", "l[^a]{2}a", {F, T, T});
   test("?vocab", "[el][^a]*a", {T, T, T});
   test("?vocab", "B", {T, F, F});
-  // case-sensitive by default.
+
+  // The match is case-sensitive by default.
   test("?vocab", "b", {F, F, F});
 
-  // Not a prefix expression because of the "special" regex characters
+  // A prefix regex, but not a fixed string.
   test("?vocab", "^a.*", {F, T, F});
 
   test("?mixed", "x", {U, U, U});
@@ -108,17 +115,21 @@ TEST(RegexExpression, nonPrefixRegex) {
 
   // ?localVocab column is "notInVocabA", "notInVocabB", <"notInVocabD">
   test("?localVocab", "InV", {T, T, U});
+
   // The IRI is only considered when testing with a STR expression
   test("?localVocab", "Vocab[AD]", {T, F, T}, true);
 }
 
-// Test regex expressions where the input is not a variable.
+// Test where the expression is not simply a variable.
 TEST(RegexExpression, inputNotVariable) {
+  // Our expression is a fixed string literal: "hallo".
   VectorWithMemoryLimit<IdOrLiteralOrIri> input{
       ad_utility::testing::getQec()->getAllocator()};
   input.push_back(ad_utility::triple_component::LiteralOrIri(lit("\"hallo\"")));
   auto child = std::make_unique<sparqlExpression::detail::SingleUseExpression>(
       input.clone());
+
+  // "hallo" matches the regex "ha".
   auto expr = makeRegexExpression(std::move(child), "ha", "");
   std::vector<Id> expected;
   expected.push_back(Id::makeFromBool(true));
@@ -136,6 +147,7 @@ auto testNonPrefixRegexWithFlags =
       testWithExplicitResult(expr, expectedResult);
     };
 
+// Fun with flags.
 TEST(RegexExpression, nonPrefixRegexWithFlags) {
   // ?vocab column is `"Beta", "alpha", "älpha"
   // ?mixed column is `1, -0.1, A`
@@ -166,6 +178,8 @@ TEST(RegexExpression, nonPrefixRegexWithFlags) {
   // TODO<joka921>  Add tests for other flags (maybe the non-greedy one?)
 }
 
+// Test the `getPrefixRegex` function (which returns `std::nullopt` if the regex
+// is not a simple prefix regex).
 TEST(RegexExpression, getPrefixRegex) {
   using namespace sparqlExpression::detail;
   ASSERT_EQ(std::nullopt, getPrefixRegex("alpha"));

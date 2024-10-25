@@ -1,6 +1,6 @@
-//  Copyright 2022, University of Freiburg,
-//                  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
+// Copyright 2022 - 2024, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
 #pragma once
 
@@ -11,25 +11,27 @@
 #include "re2/re2.h"
 
 namespace sparqlExpression {
+// Class implementing the REGEX function, which takes two mandatory arguments
+// (an expression and a regex) and one optional argument (a string of flags).
 class RegexExpression : public SparqlExpression {
  private:
   SparqlExpression::Ptr child_;
-  // The regex. Needs to be an optional because `RE2` objects don't have a
-  // default constructor.
+  // The reguar expression. It needs to be a `std::optional` because `RE2`
+  // objects do not have a default constructor.
   std::optional<RE2> regex_;
-  // If this optional holds a string, we consider that string as the prefix of a
-  // prefix regex.
+  // If this `std::optional` holds a string, we have a simple prefix regex
+  // (which translates to a range search) and this string holds the prefix.
   std::optional<std::string> prefixRegex_;
   // The regex as a string, used for the cache key.
   std::string regexAsString_;
 
-  // True if the STR() function is to be applied on the child before evaluating
-  // the regex.
+  // True iff the expression is enclosed in `STR()`.
   bool childIsStrExpression_ = false;
 
  public:
-  // `child` must be a `VariableExpression` and `regex` must be a
-  // `LiteralExpression` that stores a string, else an exception will be thrown.
+  // The `child` must be a `VariableExpression` and `regex` must be a
+  // `LiteralExpression` that stores a string, otherwise an exception will be
+  // thrown.
   RegexExpression(SparqlExpression::Ptr child, SparqlExpression::Ptr regex,
                   std::optional<SparqlExpression::Ptr> optionalFlags);
 
@@ -49,18 +51,21 @@ class RegexExpression : public SparqlExpression {
 
  private:
   std::span<SparqlExpression::Ptr> childrenImpl() override;
-  // Internal implementations that are called by `evaluate`.
+
+  // Evaluate for the special case, where the expression is a variable and we
+  // have a simple prefix regex (in which case the regex match translates to a
+  // simple range check).
   ExpressionResult evaluatePrefixRegex(
       const Variable& variable,
       sparqlExpression::EvaluationContext* context) const;
 
+  // Evaluate for the general case.
   template <SingleExpressionResult T>
-  ExpressionResult evaluateNonPrefixRegex(
+  ExpressionResult evaluateGeneralCase(
       T&& input, sparqlExpression::EvaluationContext* context) const;
 
-  /// Helper function to check if the `CancellationHandle` of the passed
-  /// `EvaluationContext` has been cancelled and throw an exception if this is
-  /// the case.
+  // Check if the `CancellationHandle` of `context` has been cancelled and throw
+  // an exception if this is the case.
   static void checkCancellation(
       const sparqlExpression::EvaluationContext* context,
       ad_utility::source_location location =
