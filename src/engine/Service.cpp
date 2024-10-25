@@ -305,7 +305,7 @@ std::optional<std::string> Service::getSiblingValuesClause() const {
     return std::nullopt;
   }
   const auto& [siblingResult, siblingVars, _] = siblingInfo_.value();
-  AD_CORRECTNESS_CHECK(siblingResult);
+  AD_CORRECTNESS_CHECK(siblingResult != nullptr);
 
   checkCancellation();
 
@@ -535,7 +535,7 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
       return std::tie(b, left);
     }
   }();
-  AD_CORRECTNESS_CHECK(service);
+  AD_CORRECTNESS_CHECK(service != nullptr);
 
   auto addRuntimeInfo = [&](bool siblingUsed) {
     std::string_view v = siblingUsed ? "yes"sv : "no"sv;
