@@ -343,10 +343,17 @@ void ParsedQuery::checkVariableIsVisible(
     std::string_view otherPossibleLocationDescription) const {
   if (!ad_utility::contains(getVisibleVariables(), variable) &&
       !additionalVisibleVariables.contains(variable)) {
+    LOG(WARN) << absl::StrCat("Variable ", variable.name(),
+                              " was used by " + locationDescription,
+                              ", but is not defined in the query body",
+                              otherPossibleLocationDescription, ".")
+              << std::endl;
+    /*
     throw InvalidSparqlQueryException(absl::StrCat(
         "Variable ", variable.name(), " was used by " + locationDescription,
         ", but is not defined in the query body",
         otherPossibleLocationDescription, "."));
+    */
   }
 }
 
@@ -455,11 +462,19 @@ void ParsedQuery::addOrderByClause(OrderClause orderClause, bool isGroupBy,
     if (isGroupBy &&
         !ad_utility::contains(_groupByVariables, orderKey.variable_) &&
         (!variablesFromAliases.contains(orderKey.variable_))) {
+      /*
       throw InvalidSparqlQueryException(
           "Variable " + orderKey.variable_.name() +
           " was used in an ORDER BY clause, but is neither grouped nor "
           "created as an alias in the SELECT clause." +
           noteForImplicitGroupBy);
+          */
+      LOG(WARN)
+          << "Variable " + orderKey.variable_.name() +
+                 " was used in an ORDER BY clause, but is neither grouped nor "
+                 "created as an alias in the SELECT clause." +
+                 noteForImplicitGroupBy
+          << std::endl;
     }
     _orderBy.push_back(std::move(orderKey));
   };

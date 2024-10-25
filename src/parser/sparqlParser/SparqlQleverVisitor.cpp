@@ -338,10 +338,17 @@ GraphPatternOperation Visitor::visit(Parser::BindContext* ctx) {
       DisableSomeChecksOnlyForTesting::False) {
     for (const auto& var : expression.containedVariables()) {
       if (!ad_utility::contains(visibleVariables_, *var)) {
+        LOG(WARN) << absl::StrCat(
+                         "The variable ", var->name(),
+                         " was used in the expression of a BIND clause "
+                         "but was not previously bound in the query.")
+                  << std::endl;
+        /*
         reportError(ctx,
                     absl::StrCat("The variable ", var->name(),
                                  " was used in the expression of a BIND clause "
                                  "but was not previously bound in the query."));
+*/
       }
     }
   }

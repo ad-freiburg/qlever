@@ -35,6 +35,12 @@ GroupBy::GroupBy(QueryExecutionContext* qec, vector<Variable> groupByVariables,
     : Operation{qec},
       _groupByVariables{std::move(groupByVariables)},
       _aliases{std::move(aliases)} {
+  AD_CORRECTNESS_CHECK(subtree != nullptr);
+  // Ignore all variables that are not contained in the subtree.
+  std::erase_if(_groupByVariables,
+                [&map = subtree->getVariableColumns()](const auto& var) {
+                  return !map.contains(var);
+                });
   // Sort the groupByVariables to ensure that the cache key is order
   // invariant.
   // Note: It is tempting to do the same also for the aliases, but that would
@@ -115,6 +121,9 @@ vector<ColumnIndex> GroupBy::computeSortColumns(
   std::unordered_set<ColumnIndex> sortColSet;
 
   for (const auto& var : _groupByVariables) {
+    if (!inVarColMap.contains(var)) {
+      continue;
+    }
     AD_CONTRACT_CHECK(inVarColMap.contains(var), "Variable ", var.name(),
                       " not found in subtree for GROUP BY");
     ColumnIndex col = inVarColMap.at(var).columnIndex_;

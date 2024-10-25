@@ -388,8 +388,20 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getOrderByRow(
     plan.idsOfIncludedTextLimits_ = parent.idsOfIncludedTextLimits_;
     vector<pair<ColumnIndex, bool>> sortIndices;
     for (auto& ord : pq._orderBy) {
-      sortIndices.emplace_back(parent._qet->getVariableColumn(ord.variable_),
-                               ord.isDescending_);
+      // TODO<joka921> Make this a proper interface
+      try {
+        sortIndices.emplace_back(parent._qet->getVariableColumn(ord.variable_),
+                                 ord.isDescending_);
+      } catch (...) {
+        // Skip nonexisting variables.
+        continue;
+      }
+    }
+
+    // All variables were not part of the query, so we don't actually have
+    // to add an ORDER BY or INTERNAL SORT BY.
+    if (sortIndices.empty()) {
+      return previous;
     }
 
     if (pq._isInternalSort == IsInternalSort::True) {

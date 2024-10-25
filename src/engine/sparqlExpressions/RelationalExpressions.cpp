@@ -96,9 +96,12 @@ ad_utility::SetOfIntervals evaluateWithBinarySearch(
   // Set up iterators into the `IdTable` that only access the column where the
   // `variable` is stored.
   auto columnIndex = context->getColumnIndexForVariable(variable);
+  if (!columnIndex.has_value()) {
+    return {};
+  }
 
   auto getIdFromColumn = ad_utility::makeAssignableLambda(
-      [columnIndex](const auto& idTable, auto i) {
+      [columnIndex = columnIndex.value()](const auto& idTable, auto i) {
         return idTable(i, columnIndex);
       });
 

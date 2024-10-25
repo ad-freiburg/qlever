@@ -188,7 +188,12 @@ ExpressionResult RegexExpression::evaluatePrefixRegex(
   auto end = context->_inputTable.begin() + context->_endIndex;
   AD_CONTRACT_CHECK(end <= context->_inputTable.end());
   if (context->isResultSortedBy(variable)) {
-    auto column = context->getColumnIndexForVariable(variable);
+    auto optColumn = context->getColumnIndexForVariable(variable);
+    // The variable doesn't exist in the input, always return UNDEF
+    if (!optColumn.has_value()) {
+      return Id::makeUndefined();
+    }
+    const auto& column = optColumn.value();
     for (auto [lowerId, upperId] : lowerAndUpperIds) {
       auto lower = std::lower_bound(
           beg, end, nullptr,
