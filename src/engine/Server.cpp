@@ -569,7 +569,6 @@ class QueryAlreadyInUseError : public std::runtime_error {
 };
 
 // _____________________________________________
-
 ad_utility::websocket::OwningQueryId Server::getQueryId(
     const ad_utility::httpUtils::HttpRequest auto& request,
     std::string_view query) {
@@ -587,7 +586,6 @@ ad_utility::websocket::OwningQueryId Server::getQueryId(
 }
 
 // _____________________________________________________________________________
-
 auto Server::cancelAfterDeadline(
     std::weak_ptr<ad_utility::CancellationHandle<>> cancellationHandle,
     TimeLimit timeLimit)
@@ -660,6 +658,63 @@ Awaitable<void> Server::sendStreamableResponse(
 }
 
 // ____________________________________________________________________________
+class NoSupportedMediatypeError : public std::runtime_error {
+ public:
+  explicit NoSupportedMediatypeError(std::string_view msg)
+      : std::runtime_error{std::string{msg}} {}
+};
+
+bool containsParam(const auto& params, const std::string& param,
+                   const std::string& expected) {
+  auto parameterValue =
+      ad_utility::url_parser::getParameterCheckAtMostOnce(params, param);
+  return parameterValue.has_value() && parameterValue.value() == expected;
+};
+
+// ____________________________________________________________________________
+ad_utility::MediaType Server::determineMediaType(
+    const ad_utility::url_parser::ParamValueMap& params,
+    const ad_utility::httpUtils::HttpRequest auto& request) {
+  // The following code block determines the media type to be used for the
+  // result. The media type is either determined by the "Accept:" header of
+  // the request or by the URL parameter "action=..." (for TSV and CSV export,
+  // for QLever-historical reasons).
+  std::optional<MediaType> mediaType = std::nullopt;
+
+  // The explicit `action=..._export` parameter have precedence over the
+  // `Accept:...` header field
+  if (containsParam(params, "action", "csv_export")) {
+    mediaType = MediaType::csv;
+  } else if (containsParam(params, "action", "tsv_export")) {
+    mediaType = MediaType::tsv;
+  } else if (containsParam(params, "action", "qlever_json_export")) {
+    mediaType = MediaType::qleverJson;
+  } else if (containsParam(params, "action", "sparql_json_export")) {
+    mediaType = MediaType::sparqlJson;
+  } else if (containsParam(params, "action", "turtle_export")) {
+    mediaType = MediaType::turtle;
+  } else if (containsParam(params, "action", "binary_export")) {
+    mediaType = MediaType::octetStream;
+  }
+
+  std::string_view acceptHeader = request.base()[http::field::accept];
+
+  if (!mediaType.has_value()) {
+    mediaType = ad_utility::getMediaTypeFromAcceptHeader(acceptHeader);
+  }
+
+  if (!mediaType.has_value()) {
+    throw NoSupportedMediatypeError(
+        absl::StrCat("Did not find any supported media type "
+                     "in this \'Accept:\' header field: \"",
+                     acceptHeader, "\". ",
+                     ad_utility::getErrorMessageForSupportedMediaTypes()));
+  }
+  AD_CONTRACT_CHECK(mediaType.has_value());
+  return mediaType.value();
+}
+
+// ____________________________________________________________________________
 boost::asio::awaitable<void> Server::processQuery(
     const ad_utility::url_parser::ParamValueMap& params, const string& query,
     ad_utility::Timer& requestTimer,
@@ -687,47 +742,16 @@ boost::asio::awaitable<void> Server::processQuery(
   // access to the runtimeInformation in the case of an error.
   std::optional<PlannedQuery> plannedQuery;
   try {
-    auto containsParam = [&params](const std::string& param,
-                                   const std::string& expected) {
-      auto parameterValue =
-          ad_utility::url_parser::getParameterCheckAtMostOnce(params, param);
-      return parameterValue.has_value() && parameterValue.value() == expected;
-    };
-    const bool pinSubtrees = containsParam("pinsubtrees", "true");
-    const bool pinResult = containsParam("pinresult", "true");
+    const bool pinSubtrees = containsParam(params, "pinsubtrees", "true");
+    const bool pinResult = containsParam(params, "pinresult", "true");
     LOG(INFO) << "Processing the following SPARQL query:"
               << (pinResult ? " [pin result]" : "")
               << (pinSubtrees ? " [pin subresults]" : "") << "\n"
               << query << std::endl;
 
-    // The following code block determines the media type to be used for the
-    // result. The media type is either determined by the "Accept:" header of
-    // the request or by the URL parameter "action=..." (for TSV and CSV export,
-    // for QLever-historical reasons).
-
-    std::optional<MediaType> mediaType = std::nullopt;
-
-    // The explicit `action=..._export` parameter have precedence over the
-    // `Accept:...` header field
-    if (containsParam("action", "csv_export")) {
-      mediaType = MediaType::csv;
-    } else if (containsParam("action", "tsv_export")) {
-      mediaType = MediaType::tsv;
-    } else if (containsParam("action", "qlever_json_export")) {
-      mediaType = MediaType::qleverJson;
-    } else if (containsParam("action", "sparql_json_export")) {
-      mediaType = MediaType::sparqlJson;
-    } else if (containsParam("action", "turtle_export")) {
-      mediaType = MediaType::turtle;
-    } else if (containsParam("action", "binary_export")) {
-      mediaType = MediaType::octetStream;
-    }
-
-    std::string_view acceptHeader = request.base()[http::field::accept];
-
-    if (!mediaType.has_value()) {
-      mediaType = ad_utility::getMediaTypeFromAcceptHeader(acceptHeader);
-    }
+    MediaType mediaType = determineMediaType(params, request);
+    LOG(INFO) << "Requested media type of result is \""
+              << ad_utility::toString(mediaType) << "\"" << std::endl;
 
     // TODO<c++23> use std::optional::transform
     std::optional<uint64_t> maxSend = std::nullopt;
@@ -741,18 +765,6 @@ boost::asio::awaitable<void> Server::processQuery(
                                  mediaType == MediaType::qleverJson)) {
       maxSend = MAX_NOF_ROWS_IN_RESULT;
     }
-
-    if (!mediaType.has_value()) {
-      co_return co_await send(createBadRequestResponse(
-          absl::StrCat("Did not find any supported media type "
-                       "in this \'Accept:\' header field: \"",
-                       acceptHeader, "\". ",
-                       ad_utility::getErrorMessageForSupportedMediaTypes()),
-          request));
-    }
-    AD_CONTRACT_CHECK(mediaType.has_value());
-    LOG(INFO) << "Requested media type of result is \""
-              << ad_utility::toString(mediaType.value()) << "\"" << std::endl;
 
     auto queryHub = queryHub_.lock();
     AD_CORRECTNESS_CHECK(queryHub);
@@ -802,7 +814,7 @@ boost::asio::awaitable<void> Server::processQuery(
 
     // This actually processes the query and sends the result in the requested
     // format.
-    co_await sendStreamableResponse(request, send, mediaType.value(),
+    co_await sendStreamableResponse(request, send, mediaType,
                                     plannedQuery.value(), qet, requestTimer,
                                     cancellationHandle);
 
@@ -828,6 +840,9 @@ boost::asio::awaitable<void> Server::processQuery(
     metadata = e.metadata();
   } catch (const QueryAlreadyInUseError& e) {
     responseStatus = http::status::conflict;
+    exceptionErrorMsg = e.what();
+  } catch (const NoSupportedMediatypeError& e) {
+    responseStatus = http::status::bad_request;
     exceptionErrorMsg = e.what();
   } catch (const ad_utility::CancellationException& e) {
     // Send 429 status code to indicate that the time limit was reached

@@ -134,6 +134,10 @@ class Server {
       const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
       TimeLimit timeLimit);
 
+  ad_utility::MediaType determineMediaType(
+      const ad_utility::url_parser::ParamValueMap& params,
+      const ad_utility::httpUtils::HttpRequest auto& request);
+
   static json composeErrorResponseJson(
       const string& query, const std::string& errorMsg,
       ad_utility::Timer& requestTimer,
