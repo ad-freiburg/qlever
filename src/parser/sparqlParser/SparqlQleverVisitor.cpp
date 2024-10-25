@@ -265,8 +265,28 @@ ParsedQuery Visitor::visit(const Parser::DescribeQueryContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-ParsedQuery Visitor::visit(const Parser::AskQueryContext* ctx) {
-  reportNotSupported(ctx, "ASK queries are");
+ParsedQuery Visitor::visit(Parser::AskQueryContext* ctx) {
+  parsedQuery_._clause = ParsedQuery::AskClause{};
+  parsedQuery_.datasetClauses_ = parsedQuery::DatasetClauses::fromClauses(
+      visitVector(ctx->datasetClause()));
+  auto [pattern, visibleVariables] = visit(ctx->whereClause());
+  parsedQuery_._rootGraphPattern = std::move(pattern);
+  parsedQuery_.registerVariablesVisibleInQueryBody(visibleVariables);
+  // NOTE: It can make sense to have solution modifiers with an ASK query, for
+  // example, a GROUP BY with a HAVING.
+  auto getSolutionModifiers = [this, ctx]() {
+    auto solutionModifiers = visit(ctx->solutionModifier());
+    const auto& limitOffset = solutionModifiers.limitOffset_;
+    if (!limitOffset.isUnconstrained() || limitOffset.textLimit_.has_value()) {
+      reportError(
+          ctx->solutionModifier(),
+          "ASK queries may not contain LIMIT, OFFSET, or TEXTLIMIT clauses");
+    }
+    solutionModifiers.limitOffset_._limit = 1;
+    return solutionModifiers;
+  };
+  parsedQuery_.addSolutionModifiers(getSolutionModifiers());
+  return parsedQuery_;
 }
 
 // ____________________________________________________________________________________
