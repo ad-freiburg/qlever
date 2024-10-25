@@ -16,10 +16,7 @@ namespace {
 
 using ad_utility::source_location;
 
-const auto& emptyLocatedTriples = []() -> const LocatedTriplesPerBlock& {
-  static LocatedTriplesPerBlock locatedTriplesPerBlock{};
-  return locatedTriplesPerBlock;
-}();
+const LocatedTriplesPerBlock emptyLocatedTriples{};
 
 // Return an `ID` of type `VocabIndex` from `index`. Assert that `index`
 // is `>= 0`.
