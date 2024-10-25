@@ -1952,10 +1952,10 @@ class GroupByLazyFixture : public ::testing::TestWithParam<bool> {
     ASSERT_NE(result.isFullyMaterialized(), lazyResult);
     if (lazyResult) {
       size_t counter = 0;
-      for (const IdTable& idTable : result.idTables()) {
+      for (const Result::IdTableVocabPair& pair : result.idTables()) {
         ASSERT_LT(counter, idTables.size())
             << "Too many idTables yielded. Expected: " << idTables.size();
-        EXPECT_EQ(idTables.at(counter), idTable);
+        EXPECT_EQ(idTables.at(counter), pair.idTable_);
         ++counter;
       }
       EXPECT_EQ(counter, idTables.size())
@@ -2130,10 +2130,9 @@ TEST_P(GroupByLazyFixture, nestedAggregateFunctionsWork) {
   auto result = groupBy.computeResultOnlyForTesting(GetParam());
 
   // Acquire the local vocab index for a given string representation if present.
-  auto makeEntry = [&result](std::string string) {
-    return result.localVocab().getIndexOrNullopt(
-        sparqlExpression::detail::LiteralOrIri{
-            L::fromStringRepresentation(std::move(string))});
+  auto makeEntry = [](std::string string, const LocalVocab& localVocab) {
+    return localVocab.getIndexOrNullopt(sparqlExpression::detail::LiteralOrIri{
+        L::fromStringRepresentation(std::move(string))});
   };
 
   auto entryToId = [](std::optional<LocalVocabIndex> entry) {
@@ -2144,30 +2143,30 @@ TEST_P(GroupByLazyFixture, nestedAggregateFunctionsWork) {
   auto i = IntId;
 
   if (GetParam()) {
-    EXPECT_EQ(result.localVocab().size(), 0);
-
     auto& generator = result.idTables();
 
     auto iterator = generator.begin();
     ASSERT_NE(iterator, generator.end());
-    EXPECT_EQ(result.localVocab().size(), 2);
-    auto entry1 = makeEntry("\"1---\"");
-    auto entry2 = makeEntry("\"6---\"");
-    EXPECT_EQ(*iterator, makeIdTableFromVector({{i(0), entryToId(entry1)},
-                                                {i(1), entryToId(entry2)}}));
+    EXPECT_EQ(iterator->localVocab_.size(), 2);
+    auto entry1 = makeEntry("\"1---\"", iterator->localVocab_);
+    auto entry2 = makeEntry("\"6---\"", iterator->localVocab_);
+    EXPECT_EQ(iterator->idTable_,
+              makeIdTableFromVector(
+                  {{i(0), entryToId(entry1)}, {i(1), entryToId(entry2)}}));
     ++iterator;
     ASSERT_NE(iterator, generator.end());
-    EXPECT_EQ(result.localVocab().size(), 3);
-    auto entry3 = makeEntry("\"8---\"");
-    EXPECT_EQ(*iterator, makeIdTableFromVector({{i(2), entryToId(entry3)}}));
+    EXPECT_EQ(iterator->localVocab_.size(), 1);
+    auto entry3 = makeEntry("\"8---\"", iterator->localVocab_);
+    EXPECT_EQ(iterator->idTable_,
+              makeIdTableFromVector({{i(2), entryToId(entry3)}}));
 
     EXPECT_EQ(++iterator, generator.end());
 
   } else {
     EXPECT_EQ(result.localVocab().size(), 3);
-    auto entry1 = makeEntry("\"1---\"");
-    auto entry2 = makeEntry("\"6---\"");
-    auto entry3 = makeEntry("\"8---\"");
+    auto entry1 = makeEntry("\"1---\"", result.localVocab());
+    auto entry2 = makeEntry("\"6---\"", result.localVocab());
+    auto entry3 = makeEntry("\"8---\"", result.localVocab());
 
     ASSERT_TRUE(entry1.has_value());
     ASSERT_TRUE(entry2.has_value());

@@ -44,7 +44,7 @@ void expectBindYieldsIdTable(
     auto& idTables = result->idTables();
     auto iterator = idTables.begin();
     ASSERT_NE(iterator, idTables.end());
-    EXPECT_EQ(*iterator, expected);
+    EXPECT_EQ(iterator->idTable_, expected);
     EXPECT_EQ(++iterator, idTables.end());
   }
 }
@@ -125,9 +125,9 @@ TEST(
     auto& idTables = result->idTables();
     auto iterator = idTables.begin();
     ASSERT_NE(iterator, idTables.end());
-    EXPECT_EQ(*iterator, table);
+    EXPECT_EQ(iterator->idTable_, table);
     ASSERT_NE(++iterator, idTables.end());
-    EXPECT_EQ(*iterator, makeIdTableFromVector({{val, val}}));
+    EXPECT_EQ(iterator->idTable_, makeIdTableFromVector({{val, val}}));
     EXPECT_EQ(++iterator, idTables.end());
   }
 }

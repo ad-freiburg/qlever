@@ -816,12 +816,7 @@ CompressedRelationWriter::compressAndWriteColumn(std::span<const Id> column) {
 // in the block metadata.
 static std::pair<bool, std::optional<std::vector<Id>>> getGraphInfo(
     const std::shared_ptr<IdTable>& block) {
-  // Early bailout if the graph column doesn't exist (should only happen in
-  // unit tests).
-  if (block->numColumns() <= ADDITIONAL_COLUMN_GRAPH_ID) {
-    return {false, std::nullopt};
-  }
-
+  AD_CORRECTNESS_CHECK(block->numColumns() > ADDITIONAL_COLUMN_GRAPH_ID);
   // Return true iff the block contains duplicates when only considering the
   // actual triple of S, P, and O.
   auto hasDuplicates = [&block]() {
@@ -874,18 +869,13 @@ void CompressedRelationWriter::compressAndWriteBlock(
     AD_CORRECTNESS_CHECK(lastCol0Id == last[0]);
 
     auto [hasDuplicates, graphInfo] = getGraphInfo(block);
-    // The blocks are written in parallel and possibly out of order. We thus
-    // can't set the proper block indices here. The proper block indices are set
-    // in the `getFinishedBlocks` function.
-    static constexpr size_t blockIndexNotYetSet = 111333555;
-    blockBuffer_.wlock()->push_back(
-        CompressedBlockMetadata{std::move(offsets),
-                                numRows,
-                                {first[0], first[1], first[2]},
-                                {last[0], last[1], last[2]},
-                                std::move(graphInfo),
-                                hasDuplicates,
-                                blockIndexNotYetSet});
+    blockBuffer_.wlock()->emplace_back(CompressedBlockMetadataNoBlockIndex{
+        std::move(offsets),
+        numRows,
+        {first[0], first[1], first[2], first[3]},
+        {last[0], last[1], last[2], last[3]},
+        std::move(graphInfo),
+        hasDuplicates});
     if (invokeCallback && smallBlocksCallback_) {
       std::invoke(smallBlocksCallback_, std::move(block));
     }
@@ -915,6 +905,10 @@ CompressedRelationReader::getRelevantBlocks(
   setKey(&PermutedTriple::col0Id_, &ScanSpecification::col0Id);
   setKey(&PermutedTriple::col1Id_, &ScanSpecification::col1Id);
   setKey(&PermutedTriple::col2Id_, &ScanSpecification::col2Id);
+
+  // We currently don't filter by the graph ID here.
+  key.firstTriple_.graphId_ = Id::min();
+  key.lastTriple_.graphId_ = Id::max();
 
   // This comparator only returns true if a block stands completely before
   // another block without any overlap. In other words, the last triple of `a`
@@ -947,14 +941,14 @@ auto CompressedRelationReader::getFirstAndLastTriple(
     // Note: the following call only returns the part of the block that
     // actually matches the col0 and col1.
     return readPossiblyIncompleteBlock(scanSpec, block, std::nullopt,
-                                       {{0, 1, 2}});
+                                       {{0, 1, 2, ADDITIONAL_COLUMN_GRAPH_ID}});
   };
 
   auto rowToTriple =
       [&](const auto& row) -> CompressedBlockMetadata::PermutedTriple {
     AD_CORRECTNESS_CHECK(!scanSpec.col0Id().has_value() ||
                          row[0] == scanSpec.col0Id().value());
-    return {row[0], row[1], row[2]};
+    return {row[0], row[1], row[2], row[ADDITIONAL_COLUMN_GRAPH_ID]};
   };
 
   auto firstBlock = scanBlock(relevantBlocks.front());
