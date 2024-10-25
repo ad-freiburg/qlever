@@ -512,11 +512,6 @@ json Server::composeErrorResponseJson(
     j["metadata"]["stopIndex"] = value.stopIndex_;
     j["metadata"]["line"] = value.line_;
     j["metadata"]["positionInLine"] = value.charPositionInLine_;
-    // The ANTLR parser may not see the whole query. (The reason is value mixing
-    // of the old and new parser.) To detect/work with this we also transmit
-    // what ANTLR saw as query.
-    // TODO<qup42> remove once the whole query is parsed with ANTLR.
-    j["metadata"]["query"] = value.query_;
   }
 
   return j;
