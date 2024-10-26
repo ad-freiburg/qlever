@@ -1769,10 +1769,14 @@ TEST(SparqlParser, FunctionCall) {
 
   // Wrong number of arguments.
   expectFunctionCallFails(absl::StrCat(geof, "distance>(?a)"));
-  // Unknown function with `geof:`, `math:`, or `xsd:` prefix.
+  expectFunctionCallFails(absl::StrCat(geof, "distance>(?a, ?b, ?c)"));
+
+  // Unknown function with `geof:`, `math:`, `xsd:`, or `ql` prefix.
   expectFunctionCallFails(absl::StrCat(geof, "nada>(?x)"));
   expectFunctionCallFails(absl::StrCat(math, "nada>(?x)"));
   expectFunctionCallFails(absl::StrCat(xsd, "nada>(?x)"));
+  expectFunctionCallFails(absl::StrCat(ql, "nada>(?x)"));
+
   // Prefix for which no function is known.
   std::string prefixNexistepas = "<http://nexiste.pas/>";
   expectFunctionCallFails(absl::StrCat(prefixNexistepas, "nada>(?x)"));

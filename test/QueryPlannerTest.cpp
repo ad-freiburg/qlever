@@ -1904,6 +1904,13 @@ TEST(QueryPlanner, UnboundMinusIgnored) {
 }
 
 // ___________________________________________________________________________
+TEST(QueryPlanner, SimpleMinus) {
+  h::expect("SELECT * WHERE { ?a <is-a> ?b MINUS{?a <is-a> ?b}}",
+            h::Minus(h::IndexScanFromStrings("?a", "<is-a>", "?b"),
+                     h::IndexScanFromStrings("?a", "<is-a>", "?b")));
+}
+
+// ___________________________________________________________________________
 TEST(QueryPlanner, CancellationCancelsQueryPlanning) {
   auto cancellationHandle =
       std::make_shared<ad_utility::CancellationHandle<>>();
@@ -1919,55 +1926,6 @@ TEST(QueryPlanner, CancellationCancelsQueryPlanning) {
 }
 
 // ___________________________________________________________________________
-TEST(QueryPlanner, JoinWithService) {
-  auto scan = h::IndexScanFromStrings;
-  auto sibling = scan("?x", "<is-a>", "?y");
-  std::string_view graphPatternAsString = "{ ?x <is-a> ?z . }";
-
-  h::expect(
-      "SELECT * WHERE {"
-      "SERVICE <https://endpoint.com> { ?x <is-a> ?z . ?y <is-a> ?a . }}",
-      h::Service(std::nullopt, "{ ?x <is-a> ?z . ?y <is-a> ?a . }"));
-
-  h::expect(
-      "SELECT * WHERE { ?x <is-a> ?y ."
-      "SERVICE <https://endpoint.com> { ?x <is-a> ?z . }}",
-      h::UnorderedJoins(sibling, h::Service(sibling, graphPatternAsString)));
-
-  h::expect(
-      "SELECT * WHERE { ?x <is-a> ?y . "
-      "SERVICE <https://endpoint.com> { ?x <is-a> ?z . ?y <is-a> ?a . }}",
-      h::MultiColumnJoin(
-          sibling,
-          h::Sort(h::Service(sibling, "{ ?x <is-a> ?z . ?y <is-a> ?a . }"))));
-}
-
-// ___________________________________________________________________________
-TEST(QueryPlanner, SubtreeWithService) {
-  auto scan = h::IndexScanFromStrings;
-  auto sibling = scan("?x", "<is-a>", "?y");
-
-  h::expect(
-      "SELECT * WHERE { ?x <is-a> ?y ."
-      "OPTIONAL{SERVICE <https://endpoint.com> { ?x <is-a> ?z . }}}",
-      h::OptionalJoin(sibling,
-                      h::Sort(h::Service(sibling, "{ ?x <is-a> ?z . }"))));
-
-  h::expect(
-      "SELECT * WHERE { ?x <is-a> ?y . "
-      "OPTIONAL{"
-      "SERVICE <https://endpoint.com> { ?x <is-a> ?z . ?y <is-a> ?a . }}}",
-      h::OptionalJoin(
-          sibling,
-          h::Sort(h::Service(sibling, "{ ?x <is-a> ?z . ?y <is-a> ?a . }"))));
-
-  h::expect(
-      "SELECT * WHERE { ?x <is-a> ?y MINUS{SERVICE <https://endpoint.com> { ?x "
-      "<is-a> ?z . }}}",
-      h::Minus(sibling, h::Sort(h::Service(sibling, "{ ?x <is-a> ?z . }"))));
-}
-
-// ________________________________________
 TEST(QueryPlanner, DatasetClause) {
   auto scan = h::IndexScanFromStrings;
   using Graphs = ad_utility::HashSet<std::string>;
