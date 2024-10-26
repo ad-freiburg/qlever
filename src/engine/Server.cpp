@@ -451,7 +451,7 @@ Awaitable<void> Server::process(
     if (auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
             checkParameter("timeout", std::nullopt), accessTokenOk, request,
             send)) {
-      co_return co_await processQueryOrUpdate<true>(
+      co_return co_await processQueryOrUpdate<OperationType::Query>(
           parameters, query.query_, requestTimer, std::move(request), send,
           timeLimit.value());
     } else {
@@ -468,7 +468,7 @@ Awaitable<void> Server::process(
     if (auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
             checkParameter("timeout", std::nullopt), accessTokenOk, request,
             send)) {
-      co_return co_await processQueryOrUpdate<false>(
+      co_return co_await processQueryOrUpdate<OperationType::Update>(
           parameters, update.update_, requestTimer, std::move(request), send,
           timeLimit.value());
     } else {
@@ -849,7 +849,7 @@ Awaitable<void> Server::processQuery(
 }
 
 // ____________________________________________________________________________
-template <bool isQuery>
+template <Server::OperationType type>
 Awaitable<void> Server::processQueryOrUpdate(
     const ad_utility::url_parser::ParamValueMap& params,
     const string& queryOrUpdate, ad_utility::Timer& requestTimer,
@@ -869,7 +869,7 @@ Awaitable<void> Server::processQueryOrUpdate(
   // access to the runtimeInformation in the case of an error.
   std::optional<PlannedQuery> plannedQuery;
   try {
-    if constexpr (isQuery) {
+    if constexpr (type == OperationType::Query) {
       co_await processQuery(params, queryOrUpdate, requestTimer, request, send,
                             timeLimit);
     } else {
