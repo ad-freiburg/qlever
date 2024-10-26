@@ -710,7 +710,7 @@ namespace {
 // A helper function to recreate the internal variables added by the query
 // planner for transitive paths.
 std::string internalVar(int i) {
-  return absl::StrCat(INTERNAL_VARIABLE_QUERY_PLANNER_PREFIX, i);
+  return absl::StrCat(QLEVER_INTERNAL_VARIABLE_QUERY_PLANNER_PREFIX, i);
 }
 }  // namespace
 

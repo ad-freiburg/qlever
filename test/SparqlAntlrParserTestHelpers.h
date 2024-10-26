@@ -287,10 +287,10 @@ inline auto BlankNode = [](bool generated, const std::string& label) {
 };
 
 inline auto InternalVariable = [](const std::string& label) {
-  return MultiVariantWith<GraphTerm, ::Variable>(
-      testing::AllOf(AD_PROPERTY(::Variable, name,
-                                 testing::StartsWith(INTERNAL_VARIABLE_PREFIX)),
-                     AD_PROPERTY(::Variable, name, testing::EndsWith(label))));
+  return MultiVariantWith<GraphTerm, ::Variable>(testing::AllOf(
+      AD_PROPERTY(::Variable, name,
+                  testing::StartsWith(QLEVER_INTERNAL_VARIABLE_PREFIX)),
+      AD_PROPERTY(::Variable, name, testing::EndsWith(label))));
 };
 
 // _____________________________________________________________________________

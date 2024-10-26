@@ -268,7 +268,7 @@ std::pair<size_t, size_t> IndexImpl::createInternalPSOandPOS(
     auto&& internalTriplesPsoSorter) {
   auto onDiskBaseBackup = onDiskBase_;
   auto configurationJsonBackup = configurationJson_;
-  onDiskBase_.append(INTERNAL_INDEX_INFIX);
+  onDiskBase_.append(QLEVER_INTERNAL_INDEX_INFIX);
   auto internalTriplesUnique = ad_utility::uniqueBlockView(
       internalTriplesPsoSorter.template getSortedBlocks<0>());
   createPSOAndPOSImpl(NumColumnsIndexBuilding, std::move(internalTriplesUnique),
@@ -560,7 +560,7 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
   idOfHasPatternDuringIndexBuilding_ =
       mergeRes.specialIdMapping().at(HAS_PATTERN_PREDICATE);
   idOfInternalGraphDuringIndexBuilding_ =
-      mergeRes.specialIdMapping().at(INTERNAL_GRAPH_IRI);
+      mergeRes.specialIdMapping().at(QLEVER_INTERNAL_GRAPH_IRI);
   LOG(INFO) << "Number of words in external vocabulary: "
             << res.vocabularyMetaData_.numWordsTotal() - sizeInternalVocabulary
             << std::endl;
@@ -858,7 +858,7 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
              << vocab_.size() << std::endl;
 
   auto range1 =
-      vocab_.prefixRanges(absl::StrCat("<", INTERNAL_PREDICATE_PREFIX));
+      vocab_.prefixRanges(QLEVER_INTERNAL_PREFIX_IRI_WITHOUT_CLOSING_BRACKET);
   auto range2 = vocab_.prefixRanges("@");
   auto isInternalId = [range1, range2](Id id) {
     // TODO<joka921> What about internal vocab stuff for update queries? this
@@ -1464,7 +1464,7 @@ size_t IndexImpl::getCardinality(const TripleComponent& comp,
   // or objects anyway.
   // TODO<joka921> Find out what the effect of this special case is for the
   // query planning.
-  if (comp == INTERNAL_TEXT_MATCH_PREDICATE) {
+  if (comp == QLEVER_INTERNAL_TEXT_MATCH_PREDICATE) {
     return TEXT_PREDICATE_CARDINALITY_ESTIMATE;
   }
   if (std::optional<Id> relId = comp.toValueId(getVocab()); relId.has_value()) {

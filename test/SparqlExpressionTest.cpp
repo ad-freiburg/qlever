@@ -1117,7 +1117,7 @@ TEST(SparqlExpression, testToNumericExpression) {
 TEST(SparqlExpression, geoSparqlExpressions) {
   auto checkLat = testUnaryExpression<&makeLatitudeExpression>;
   auto checkLong = testUnaryExpression<&makeLongitudeExpression>;
-  auto checkIsWktPoint = testUnaryExpression<&makeIsWktPointExpression>;
+  auto checkIsGeoPoint = testUnaryExpression<&makeIsGeoPointExpression>;
   auto checkDist = std::bind_front(testNaryExpression, &makeDistExpression);
 
   auto p = GeoPoint(26.8, 24.3);
@@ -1137,11 +1137,11 @@ TEST(SparqlExpression, geoSparqlExpressions) {
 
   checkLat(v, vLat);
   checkLong(v, vLng);
-  checkIsWktPoint(v, B(true));
+  checkIsGeoPoint(v, B(true));
   checkDist(D(0.0), v, v);
   checkLat(idOrLitOrStringVec({"NotAPoint", I(12)}), Ids{U, U});
   checkLong(idOrLitOrStringVec({D(4.2), "NotAPoint"}), Ids{U, U});
-  checkIsWktPoint(IdOrLiteralOrIri{lit("NotAPoint")}, B(false));
+  checkIsGeoPoint(IdOrLiteralOrIri{lit("NotAPoint")}, B(false));
   checkDist(U, v, IdOrLiteralOrIri{I(12)});
   checkDist(U, IdOrLiteralOrIri{I(12)}, v);
   checkDist(U, v, IdOrLiteralOrIri{lit("NotAPoint")});

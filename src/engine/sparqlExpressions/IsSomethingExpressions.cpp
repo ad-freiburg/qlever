@@ -28,10 +28,12 @@ namespace detail {
 // `isNumeric`, and the custom function `isWktPoint`. Note that the value
 // getters already return the correct `Id`, hence `std::identity`.
 using isIriExpression = NARY<1, FV<std::identity, IsIriValueGetter>>;
-using isBlankExpression = NARY<1, FV<std::identity, IsBlankNodeValueGetter>>;
 using isLiteralExpression = NARY<1, FV<std::identity, IsLiteralValueGetter>>;
 using isNumericExpression = NARY<1, FV<std::identity, IsNumericValueGetter>>;
-using isWktPointExpression = NARY<1, FV<std::identity, IsWktPointValueGetter>>;
+using isBlankExpression =
+    NARY<1, FV<std::identity, IsValueIdValueGetter<Datatype::BlankNodeIndex>>>;
+using isGeoPointExpression =
+    NARY<1, FV<std::identity, IsValueIdValueGetter<Datatype::GeoPoint>>>;
 
 // The expression for `bound` is slightly different as `IsValidValueGetter`
 // returns a `bool` and not an `Id`.
@@ -52,8 +54,8 @@ SparqlExpression::Ptr makeIsLiteralExpression(SparqlExpression::Ptr arg) {
 SparqlExpression::Ptr makeIsNumericExpression(SparqlExpression::Ptr arg) {
   return std::make_unique<detail::isNumericExpression>(std::move(arg));
 }
-SparqlExpression::Ptr makeIsWktPointExpression(SparqlExpression::Ptr arg) {
-  return std::make_unique<detail::isWktPointExpression>(std::move(arg));
+SparqlExpression::Ptr makeIsGeoPointExpression(SparqlExpression::Ptr arg) {
+  return std::make_unique<detail::isGeoPointExpression>(std::move(arg));
 }
 SparqlExpression::Ptr makeBoundExpression(SparqlExpression::Ptr arg) {
   return std::make_unique<detail::boundExpression>(std::move(arg));
