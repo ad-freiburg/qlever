@@ -120,9 +120,11 @@ class Server {
   Awaitable<void> process(
       const ad_utility::httpUtils::HttpRequest auto& request, auto&& send);
 
-  /// Handle a http request that asks for the processing of a query.
+  /// Handle a http request that asks for the processing of an operation.
+  /// This is only a wrapper for `processQuery` and `processUpdate` which
+  /// does the error handling.
   /// \param params The key-value-pairs  sent in the HTTP GET request.
-  /// \param operation The query.
+  /// \param operation The operation.
   /// \param requestTimer Timer that measure the total processing
   ///                     time of this request.
   /// \param request The HTTP request.
@@ -136,11 +138,13 @@ class Server {
       const string& operation, ad_utility::Timer& requestTimer,
       const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
       TimeLimit timeLimit);
+  // Do the actual execution of a query.
   Awaitable<void> processQuery(
       const ad_utility::url_parser::ParamValueMap& params, const string& query,
       ad_utility::Timer& requestTimer,
       const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
       TimeLimit timeLimit);
+  // Do the actual execution of an update.
   Awaitable<void> processUpdate(
       const ad_utility::url_parser::ParamValueMap& params, const string& update,
       ad_utility::Timer& requestTimer,
@@ -153,14 +157,15 @@ class Server {
   ad_utility::MediaType determineMediaType(
       const ad_utility::url_parser::ParamValueMap& params,
       const ad_utility::httpUtils::HttpRequest auto& request);
-  // Set up the QueryExecutionContext, parse the operation and plan the
-  // operation.
-  Awaitable<std::pair<PlannedQuery, QueryExecutionContext>>
-  setupPlannedQueryAndQEC(
+  // Determine whether the subtress and the result should be pinned.
+  std::pair<bool, bool> determineResultPinning(
       const ad_utility::url_parser::ParamValueMap& params,
-      const std::string& operation, SharedCancellationHandle handle,
-      TimeLimit timeLimit,
-      const ad_utility::websocket::MessageSender& messageSender,
+      const std::string& operation);
+  // Sets up the PlannedQuery s.t. it is ready to be executed.
+  Awaitable<PlannedQuery> setupPlannedQuery(
+      const ad_utility::url_parser::ParamValueMap& params,
+      const std::string& operation, QueryExecutionContext& qec,
+      SharedCancellationHandle handle, TimeLimit timeLimit,
       const ad_utility::Timer& requestTimer);
 
   static json composeErrorResponseJson(

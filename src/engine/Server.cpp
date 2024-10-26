@@ -512,31 +512,19 @@ bool containsParam(const auto& params, const std::string& param,
   return parameterValue.has_value() && parameterValue.value() == expected;
 };
 
-// ____________________________________________________________________________
-Awaitable<std::pair<Server::PlannedQuery, QueryExecutionContext>>
-Server::setupPlannedQueryAndQEC(
+std::pair<bool, bool> Server::determineResultPinning(
     const ad_utility::url_parser::ParamValueMap& params,
-    const std::string& operation, SharedCancellationHandle handle,
-    TimeLimit timeLimit,
-    const ad_utility::websocket::MessageSender& messageSender,
-    const ad_utility::Timer& requestTimer) {
+    const std::string& operation) {
   const bool pinSubtrees = containsParam(params, "pinsubtrees", "true");
   const bool pinResult = containsParam(params, "pinresult", "true");
-  LOG(INFO) << "Processing the following SPARQL operation:"
-            << (pinResult ? " [pin result]" : "")
-            << (pinSubtrees ? " [pin subresults]" : "") << "\n"
-            << operation << std::endl;
-
-  // Do the query planning. This creates a `QueryExecutionTree`, which will
-  // then be used to process the query.
-  //
-  // NOTE: This should come after determining the media type. Otherwise, it
-  // might happen that the query planner runs for a while (recall that it many
-  // do index scans) and then we get an error message afterward that a
-  // certain media type is not supported.
-  QueryExecutionContext qec(index_, &cache_, allocator_,
-                            sortPerformanceEstimator_, std::ref(messageSender),
-                            pinSubtrees, pinResult);
+  return {pinSubtrees, pinResult};
+}
+// ____________________________________________________________________________
+Awaitable<Server::PlannedQuery> Server::setupPlannedQuery(
+    const ad_utility::url_parser::ParamValueMap& params,
+    const std::string& operation, QueryExecutionContext& qec,
+    SharedCancellationHandle handle, TimeLimit timeLimit,
+    const ad_utility::Timer& requestTimer) {
   auto queryDatasets = ad_utility::url_parser::parseDatasetClauses(params);
   std::optional<PlannedQuery> plannedQuery =
       co_await parseAndPlan(operation, queryDatasets, qec, handle, timeLimit);
@@ -551,7 +539,7 @@ Server::setupPlannedQueryAndQEC(
             << " ms" << std::endl;
   LOG(TRACE) << qet.getCacheKey() << std::endl;
 
-  co_return std::pair{plannedQuery.value(), qec};
+  co_return std::move(plannedQuery.value());
 }
 // _____________________________________________________________________________
 json Server::composeErrorResponseJson(
@@ -799,9 +787,23 @@ Awaitable<void> Server::processQuery(
   auto [cancellationHandle, cancelTimeoutOnDestruction] =
       setupCancellationHandle(messageSender.getQueryId(), timeLimit);
 
-  auto [plannedQuery, qec] =
-      co_await setupPlannedQueryAndQEC(params, query, cancellationHandle,
-                                       timeLimit, messageSender, requestTimer);
+  // Do the query planning. This creates a `QueryExecutionTree`, which will
+  // then be used to process the query.
+  //
+  // NOTE: This should come after determining the media type. Otherwise, it
+  // might happen that the query planner runs for a while (recall that it many
+  // do index scans) and then we get an error message afterward that a
+  // certain media type is not supported.
+  auto [pinSubtrees, pinResult] = determineResultPinning(params, query);
+  LOG(INFO) << "Processing the following SPARQL query:"
+            << (pinResult ? " [pin result]" : "")
+            << (pinSubtrees ? " [pin subresults]" : "") << "\n"
+            << query << std::endl;
+  QueryExecutionContext qec(index_, &cache_, allocator_,
+                            sortPerformanceEstimator_, std::ref(messageSender),
+                            pinSubtrees, pinResult);
+  auto plannedQuery = co_await setupPlannedQuery(
+      params, query, qec, cancellationHandle, timeLimit, requestTimer);
   auto qet = plannedQuery.queryExecutionTree_;
 
   if (plannedQuery.parsedQuery_.hasUpdateClause()) {
@@ -860,9 +862,16 @@ Awaitable<void> Server::processUpdate(
   auto [cancellationHandle, cancelTimeoutOnDestruction] =
       setupCancellationHandle(messageSender.getQueryId(), timeLimit);
 
-  auto [plannedQuery, qec] =
-      co_await setupPlannedQueryAndQEC(params, update, cancellationHandle,
-                                       timeLimit, messageSender, requestTimer);
+  auto [pinSubtrees, pinResult] = determineResultPinning(params, update);
+  LOG(INFO) << "Processing the following SPARQL update:"
+            << (pinResult ? " [pin result]" : "")
+            << (pinSubtrees ? " [pin subresults]" : "") << "\n"
+            << update << std::endl;
+  QueryExecutionContext qec(index_, &cache_, allocator_,
+                            sortPerformanceEstimator_, std::ref(messageSender),
+                            pinSubtrees, pinResult);
+  auto plannedQuery = co_await setupPlannedQuery(
+      params, update, qec, cancellationHandle, timeLimit, requestTimer);
   auto qet = plannedQuery.queryExecutionTree_;
 
   if (!plannedQuery.parsedQuery_.hasUpdateClause()) {
