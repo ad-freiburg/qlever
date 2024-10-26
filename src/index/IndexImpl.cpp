@@ -289,7 +289,7 @@ std::pair<size_t, size_t> IndexImpl::createInternalPSOandPOS(
 // _____________________________________________________________________________
 void IndexImpl::updateInputFileSpecificationsAndLog(
     std::vector<Index::InputFileSpecification>& spec,
-    bool parallelParsingSpecifiedViaJson) {
+    std::optional<bool> parallelParsingSpecifiedViaJson) {
   if (spec.size() == 1) {
     LOG(INFO) << "Processing triples from " << spec.at(0).filename_ << " ..."
               << std::endl;
@@ -297,7 +297,7 @@ void IndexImpl::updateInputFileSpecificationsAndLog(
     LOG(INFO) << "Processing triples from " << spec.size()
               << " input streams ..." << std::endl;
   }
-  if (parallelParsingSpecifiedViaJson) {
+  if (parallelParsingSpecifiedViaJson.value_or(false) == true) {
     if (spec.size() == 1) {
       LOG(WARN) << "Parallel parsing set to `true` in the `.settings.json` "
                    "file; this is deprecated, please use the command-line "
@@ -310,6 +310,15 @@ void IndexImpl::updateInputFileSpecificationsAndLog(
           "specified via the `.settings.json` file, but has to be specified "
           " via the command-line option --parse-parallel or -p"};
     }
+  }
+
+  if (spec.size() == 1 && !parallelParsingSpecifiedViaJson.has_value()) {
+    LOG(WARN) << "Implicitly using the parallel parser for a single input file "
+                 "for reasons of backward compatibility; this is deprecated, "
+                 "please use the command-line option --parse-parallel or -p "
+                 "instead"
+              << std::endl;
+    spec.at(0).parseInParallel_ = true;
   }
 }
 
