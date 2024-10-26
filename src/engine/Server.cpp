@@ -451,7 +451,7 @@ Awaitable<void> Server::process(
     if (auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
             checkParameter("timeout", std::nullopt), accessTokenOk, request,
             send)) {
-      co_return co_await processOperation<true>(
+      co_return co_await processQueryOrUpdate<true>(
           parameters, query.query_, requestTimer, std::move(request), send,
           timeLimit.value());
     } else {
@@ -468,7 +468,7 @@ Awaitable<void> Server::process(
     if (auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
             checkParameter("timeout", std::nullopt), accessTokenOk, request,
             send)) {
-      co_return co_await processOperation<false>(
+      co_return co_await processQueryOrUpdate<false>(
           parameters, update.update_, requestTimer, std::move(request), send,
           timeLimit.value());
     } else {
@@ -509,7 +509,7 @@ bool containsParam(const auto& params, const std::string& param,
                    const std::string& expected) {
   auto parameterValue =
       ad_utility::url_parser::getParameterCheckAtMostOnce(params, param);
-  return parameterValue.has_value() && parameterValue.value() == expected;
+  return parameterValue == expected;
 };
 
 // ____________________________________________________________________________
@@ -850,9 +850,9 @@ Awaitable<void> Server::processQuery(
 
 // ____________________________________________________________________________
 template <bool isQuery>
-Awaitable<void> Server::processOperation(
+Awaitable<void> Server::processQueryOrUpdate(
     const ad_utility::url_parser::ParamValueMap& params,
-    const string& operation, ad_utility::Timer& requestTimer,
+    const string& queryOrUpdate, ad_utility::Timer& requestTimer,
     const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
     TimeLimit timeLimit) {
   using namespace ad_utility::httpUtils;
@@ -870,7 +870,7 @@ Awaitable<void> Server::processOperation(
   std::optional<PlannedQuery> plannedQuery;
   try {
     if constexpr (isQuery) {
-      co_await processQuery(params, operation, requestTimer, request, send,
+      co_await processQuery(params, queryOrUpdate, requestTimer, request, send,
                             timeLimit);
     } else {
       throw std::runtime_error(
@@ -915,7 +915,7 @@ Awaitable<void> Server::processOperation(
       }
     }
     auto errorResponseJson = composeErrorResponseJson(
-        operation, exceptionErrorMsg.value(), requestTimer, metadata);
+        queryOrUpdate, exceptionErrorMsg.value(), requestTimer, metadata);
     if (plannedQuery.has_value()) {
       errorResponseJson["runtimeInformation"] =
           nlohmann::ordered_json(plannedQuery.value()

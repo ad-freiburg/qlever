@@ -120,11 +120,11 @@ class Server {
   Awaitable<void> process(
       const ad_utility::httpUtils::HttpRequest auto& request, auto&& send);
 
-  /// Handle a http request that asks for the processing of an operation.
+  /// Handle a http request that asks for the processing of an query or update.
   /// This is only a wrapper for `processQuery` and `processUpdate` which
   /// does the error handling.
   /// \param params The key-value-pairs  sent in the HTTP GET request.
-  /// \param operation The operation.
+  /// \param queryOrUpdate The query or update.
   /// \param requestTimer Timer that measure the total processing
   ///                     time of this request.
   /// \param request The HTTP request.
@@ -133,9 +133,9 @@ class Server {
   /// \param timeLimit Duration in seconds after which the query will be
   ///                  cancelled.
   template <bool isQuery>
-  Awaitable<void> processOperation(
+  Awaitable<void> processQueryOrUpdate(
       const ad_utility::url_parser::ParamValueMap& params,
-      const string& operation, ad_utility::Timer& requestTimer,
+      const string& queryOrUpdate, ad_utility::Timer& requestTimer,
       const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
       TimeLimit timeLimit);
   // Do the actual execution of a query.
