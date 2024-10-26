@@ -512,6 +512,7 @@ bool containsParam(const auto& params, const std::string& param,
   return parameterValue.has_value() && parameterValue.value() == expected;
 };
 
+// ____________________________________________________________________________
 std::pair<bool, bool> Server::determineResultPinning(
     const ad_utility::url_parser::ParamValueMap& params,
     const std::string& operation) {
