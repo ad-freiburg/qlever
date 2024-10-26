@@ -2039,7 +2039,14 @@ TEST(SparqlParser, UpdateQuery) {
           m::GraphUpdate({{Var("?a"), Iri("<b>"), Iri("<c>"), noGraph}}, {},
                          std::nullopt),
           m::GraphPattern(m::Triples({{Iri("<d>"), "<e>", Var{"?a"}}}))));
+  // Use variables that are not visible in the query body. Do this for all parts
+  // of the quad for coverage reasons.
   expectUpdateFails("DELETE { ?a <b> <c> } WHERE { <a> ?b ?c }");
+  expectUpdateFails("DELETE { <c> <d> <c> . <e> ?a <f> } WHERE { <a> ?b ?c }");
+  expectUpdateFails(
+      "DELETE { GRAPH <foo> { <c> <d> <c> . <e> <f> ?a } } WHERE { <a> ?b ?c "
+      "}");
+  expectUpdateFails("DELETE { GRAPH ?a { <c> <d> <c> } } WHERE { <a> ?b ?c }");
   expectUpdate(
       "DELETE { ?a <b> <c> } INSERT { <a> ?a <c> } WHERE { <d> <e> ?a }",
       m::UpdateClause(
@@ -2157,6 +2164,27 @@ TEST(SparqlParser, GraphRef) {
   expectGraphRefAll("NAMED", m::Variant<NAMED>());
   expectGraphRefAll("ALL", m::Variant<ALL>());
   expectGraphRefAll("GRAPH <foo>", m::GraphRefIri("<foo>"));
+}
+
+TEST(SparqlParser, QuadsNotTriples) {
+  auto expectQuadsNotTriples =
+      ExpectCompleteParse<&Parser::quadsNotTriples>{defaultPrefixMap};
+  auto expectQuadsNotTriplesFails =
+      ExpectParseFails<&Parser::quadsNotTriples>{};
+
+  expectQuadsNotTriples(
+      "GRAPH <foo> { <a> <b> <c> }",
+      testing::ElementsAre(m::Quad(TripleComponent::Iri::fromIriref("<a>"),
+                                   TripleComponent::Iri::fromIriref("<b>"),
+                                   TripleComponent::Iri::fromIriref("<c>"),
+                                   ::Iri("<foo>"))));
+  expectQuadsNotTriples(
+      "GRAPH ?f { <a> <b> <c> }",
+      ElementsAre(m::Quad(TripleComponent::Iri::fromIriref("<a>"),
+                          TripleComponent::Iri::fromIriref("<b>"),
+                          TripleComponent::Iri::fromIriref("<c>"), Var{"?f"})));
+  expectQuadsNotTriplesFails("GRAPH \"foo\" { <a> <b> <c> }");
+  expectQuadsNotTriplesFails("GRAPH _:blankNode { <a> <b> <c> }");
 }
 
 TEST(SparqlParser, SourceSelector) {
