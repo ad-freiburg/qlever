@@ -1389,11 +1389,11 @@ GroupBy::evaluateChildExpressionOfAggregateFunction(
   // defined value. This value will be verified as non-undefined by the
   // `CountExpression` class and ignored afterward as long as `DISTINCT` is
   // not set (which is not supported yet).
-  AD_CORRECTNESS_CHECK(
-      exprChildren.size() == 1 ||
-      dynamic_cast<sparqlExpression::CountStarExpression*>(aggregate.expr_));
-  return exprChildren.empty() ? Id::makeFromBool(true)
-                              : exprChildren[0]->evaluate(&evaluationContext);
+  bool isCountStar =
+      dynamic_cast<sparqlExpression::CountStarExpression*>(aggregate.expr_);
+  AD_CORRECTNESS_CHECK(isCountStar || exprChildren.size() == 1);
+  return isCountStar ? Id::makeFromBool(true)
+                     : exprChildren[0]->evaluate(&evaluationContext);
 }
 
 // _____________________________________________________________________________
