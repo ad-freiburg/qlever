@@ -24,8 +24,10 @@
 #include "util/Serializer/Serializer.h"
 #include "util/TaskQueue.h"
 
-// Forward declaration of the `IdTable` class.
+// Forward declarations
 class IdTable;
+
+class LocatedTriplesPerBlock;
 
 // This type is used to buffer small relations that will be stored in the same
 // block.
@@ -530,6 +532,7 @@ class CompressedRelationReader {
                std::span<const CompressedBlockMetadata> blocks,
                ColumnIndicesRef additionalColumns,
                const CancellationHandle& cancellationHandle,
+               const LocatedTriplesPerBlock& locatedTriplesPerBlock,
                const LimitOffsetClause& limitOffset = {}) const;
 
   // Similar to `scan` (directly above), but the result of the scan is lazily
@@ -539,6 +542,7 @@ class CompressedRelationReader {
       ScanSpecification scanSpec,
       std::vector<CompressedBlockMetadata> blockMetadata,
       ColumnIndices additionalColumns, CancellationHandle cancellationHandle,
+      const LocatedTriplesPerBlock& locatedTriplesPerBlock,
       LimitOffsetClause limitOffset = {}) const;
 
   // Only get the size of the result for a given permutation XYZ for a given X
@@ -548,23 +552,26 @@ class CompressedRelationReader {
   // directly.
   size_t getResultSizeOfScan(
       const ScanSpecification& scanSpec,
-      const vector<CompressedBlockMetadata>& blocks) const;
+      const vector<CompressedBlockMetadata>& blocks,
+      const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
 
   // For a given relation, determine the `col1Id`s and their counts. This is
   // used for `computeGroupByObjectWithCount`.
   IdTable getDistinctCol1IdsAndCounts(
       Id col0Id, const std::vector<CompressedBlockMetadata>& allBlocksMetadata,
-      const CancellationHandle& cancellationHandle) const;
+      const CancellationHandle& cancellationHandle,
+      const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
 
   // For all `col0Ids` determine their counts. This is
   // used for `computeGroupByForFullScan`.
   IdTable getDistinctCol0IdsAndCounts(
       const std::vector<CompressedBlockMetadata>& allBlocksMetadata,
-      const CancellationHandle& cancellationHandle) const;
+      const CancellationHandle& cancellationHandle,
+      const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
 
   std::optional<CompressedRelationMetadata> getMetadataForSmallRelation(
-      const std::vector<CompressedBlockMetadata>& allBlocksMetadata,
-      Id col0Id) const;
+      const std::vector<CompressedBlockMetadata>& allBlocksMetadata, Id col0Id,
+      const LocatedTriplesPerBlock&) const;
 
   // Get the contiguous subrange of the given `blockB` for the blocks
   // that contain the triples that have the relationId/col0Id that was specified
@@ -585,7 +592,9 @@ class CompressedRelationReader {
   // index scans between joining them to get better estimates for the beginning
   // and end of incomplete blocks.
   std::optional<ScanSpecAndBlocksAndBounds::FirstAndLastTriple>
-  getFirstAndLastTriple(const ScanSpecAndBlocks& metadataAndBlocks) const;
+  getFirstAndLastTriple(
+      const ScanSpecAndBlocks& metadataAndBlocks,
+      const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
 
   // Get access to the underlying allocator
   const Allocator& allocator() const { return allocator_; }
