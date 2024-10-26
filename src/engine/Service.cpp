@@ -506,7 +506,7 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
 
   auto skipSortOperation = [](std::shared_ptr<Operation>& op) {
     if (static_cast<bool>(std::dynamic_pointer_cast<Sort>(op))) {
-      auto children = op->getChildren();
+      const auto& children = op->getChildren();
       AD_CORRECTNESS_CHECK(children.size() == 1);
       op = children[0]->getRootOperation();
     }
@@ -578,10 +578,9 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
   size_t rows = 0;
   std::vector<Result::IdTableVocabPair> resultPairs;
   auto generator = std::move(siblingResult->idTables());
-  auto it = generator.begin();
   const size_t maxValueRows =
       RuntimeParameters().get<"service-max-value-rows">();
-  for (; it != generator.end(); ++it) {
+  for (auto it = generator.begin(); it != generator.end(); ++it) {
     auto& pair = *it;
     rows += pair.idTable_.size();
     resultPairs.push_back(std::move(pair));

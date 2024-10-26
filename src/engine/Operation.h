@@ -131,6 +131,7 @@ class Operation {
     return false;
   }
 
+  // See the member variable with the same name below for documentation.
   std::optional<std::shared_ptr<const Result>>&
   precomputedResultBecauseSiblingOfService() {
     return precomputedResultBecauseSiblingOfService_;
