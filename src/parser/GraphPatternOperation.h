@@ -8,6 +8,7 @@
 #include <limits>
 #include <memory>
 
+#include "engine/PathSearch.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "parser/GraphPattern.h"
 #include "parser/TripleComponent.h"
@@ -143,6 +144,91 @@ struct TransPath {
   GraphPattern _childGraphPattern;
 };
 
+class PathSearchException : public std::exception {
+  std::string message_;
+
+ public:
+  explicit PathSearchException(const std::string& message)
+      : message_(message) {}
+  const char* what() const noexcept override { return message_.data(); }
+};
+
+// The PathQuery object holds intermediate information for the PathSearch.
+// The PathSearchConfiguration requires concrete Ids. The vocabulary from the
+// QueryPlanner is needed to translate the TripleComponents to ValueIds.
+// Also, the members of the PathQuery have defaults and can be set after
+// the object creation, simplifying the parsing process. If a required
+// value has not been set during parsing, the method 'toPathSearchConfiguration'
+// will throw an exception.
+// All the error handling for the PathSearch happens in the PathQuery object.
+// Thus, if a PathSearchConfiguration can be constructed, it is valid.
+struct PathQuery {
+  std::vector<TripleComponent> sources_;
+  std::vector<TripleComponent> targets_;
+  std::optional<Variable> start_;
+  std::optional<Variable> end_;
+  std::optional<Variable> pathColumn_;
+  std::optional<Variable> edgeColumn_;
+  std::vector<Variable> edgeProperties_;
+  PathSearchAlgorithm algorithm_;
+
+  GraphPattern childGraphPattern_;
+  bool cartesian_ = true;
+
+  /**
+   * @brief Add a parameter to the PathQuery from the given triple.
+   * The predicate of the triple determines the parameter name and the object
+   * of the triple determines the parameter value. The subject is ignored.
+   * Throws a PathSearchException if an unsupported algorithm is given or if the
+   * predicate contains an unknown parameter name.
+   *
+   * @param triple A SparqlTriple that contains the parameter info
+   */
+  void addParameter(const SparqlTriple& triple);
+
+  /**
+   * @brief Add the parameters from a BasicGraphPattern to the PathQuery
+   *
+   * @param pattern
+   */
+  void addBasicPattern(const BasicGraphPattern& pattern);
+
+  /**
+   * @brief Add a GraphPatternOperation to the PathQuery. The pattern specifies
+   * the edges of the graph that is used by the path search
+   *
+   * @param childGraphPattern
+   */
+  void addGraph(const GraphPatternOperation& childGraphPattern);
+
+  /**
+   * @brief Convert the vector of triple components into a SearchSide
+   * The SeachSide can either be a variable or a list of Ids.
+   * A PathSearchException is thrown if more than one variable is given.
+   *
+   * @param side A vector of TripleComponents, containing either exactly one
+   *             Variable or zero or more ValueIds
+   * @param vocab A Vocabulary containing the Ids of the TripleComponents.
+   *              The Vocab is only used if the given vector contains IRIs.
+   */
+  std::variant<Variable, std::vector<Id>> toSearchSide(
+      std::vector<TripleComponent> side, const Index::Vocab& vocab) const;
+
+  /**
+   * @brief Convert this PathQuery into a PathSearchConfiguration object.
+   * This method checks if all required parameters are set and converts
+   * the PathSearch sources and targets into SearchSides.
+   * A PathSearchException is thrown if required parameters are missing.
+   * The required parameters are start, end, pathColumn and edgeColumn.
+   *
+   * @param vocab A vocab containing the Ids of the IRIs in
+   *              sources_ and targets_
+   * @return A valid PathSearchConfiguration
+   */
+  PathSearchConfiguration toPathSearchConfiguration(
+      const Index::Vocab& vocab) const;
+};
+
 // A SPARQL Bind construct.
 struct Bind {
   sparqlExpression::SparqlExpressionPimpl _expression;
@@ -159,7 +245,7 @@ struct Bind {
 // class actually becomes `using GraphPatternOperation = std::variant<...>`
 using GraphPatternOperationVariant =
     std::variant<Optional, Union, Subquery, TransPath, Bind, BasicGraphPattern,
-                 Values, Service, Minus, GroupGraphPattern>;
+                 Values, Service, PathQuery, Minus, GroupGraphPattern>;
 struct GraphPatternOperation
     : public GraphPatternOperationVariant,
       public VisitMixin<GraphPatternOperation, GraphPatternOperationVariant> {

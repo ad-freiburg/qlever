@@ -418,9 +418,7 @@ TEST(IndexScan, getResultSizeOfScan) {
   {
     SparqlTripleSimple scanTriple{V{"?x"}, V("?y"), V{"?z"}};
     IndexScan scan{qec, Permutation::Enum::PSO, scanTriple};
-    // Note: this currently also contains the (internal) triple for the
-    // `ql:has-pattern` relation of `<x>`.
-    EXPECT_EQ(scan.getSizeEstimate(), 4);
+    EXPECT_EQ(scan.getSizeEstimate(), 3);
   }
   {
     SparqlTripleSimple scanTriple{V{"?x"}, I::fromIriref("<p>"), V{"?y"}};
@@ -487,8 +485,8 @@ TEST(IndexScan, computeResultCanBeConsumedLazily) {
 
   IdTable resultTable{3, ad_utility::makeUnlimitedAllocator<Id>()};
 
-  for (IdTable& idTable : result.idTables()) {
-    resultTable.insertAtEnd(idTable);
+  for (Result::IdTableVocabPair& pair : result.idTables()) {
+    resultTable.insertAtEnd(pair.idTable_);
   }
 
   EXPECT_EQ(resultTable,
@@ -507,7 +505,7 @@ TEST(IndexScan, computeResultReturnsEmptyGeneratorIfScanIsEmpty) {
 
   ASSERT_FALSE(result.isFullyMaterialized());
 
-  for ([[maybe_unused]] IdTable& idTable : result.idTables()) {
+  for ([[maybe_unused]] Result::IdTableVocabPair& pair : result.idTables()) {
     ADD_FAILURE() << "Generator should be empty" << std::endl;
   }
 }

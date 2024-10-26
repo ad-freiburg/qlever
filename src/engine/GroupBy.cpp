@@ -339,16 +339,6 @@ ProtoResult GroupBy::computeResult(bool requestLaziness) {
 
   LOG(DEBUG) << "GroupBy subresult computation done" << std::endl;
 
-  // Make a deep copy of the local vocab from `subresult` and then add to it (in
-  // case GROUP_CONCAT adds a new word or words).
-  //
-  // TODO: In most GROUP BY operations, nothing is added to the local
-  // vocabulary, so it would be more efficient to first share the pointer here
-  // (like with `shareLocalVocabFrom`) and only copy it when a new word is about
-  // to be added. Same for BIND.
-
-  auto localVocab = subresult->getCopyOfLocalVocab();
-
   std::vector<size_t> groupByColumns;
 
   // parse the group by columns
@@ -369,6 +359,7 @@ ProtoResult GroupBy::computeResult(bool requestLaziness) {
   }
 
   if (useHashMapOptimization) {
+    auto localVocab = subresult->getCopyOfLocalVocab();
     IdTable idTable = CALL_FIXED_SIZE(
         groupByCols.size(), &GroupBy::computeGroupByForHashMapOptimization,
         this, metadataForUnsequentialData->aggregateAliases_,
@@ -383,22 +374,24 @@ ProtoResult GroupBy::computeResult(bool requestLaziness) {
   if (!subresult->isFullyMaterialized()) {
     AD_CORRECTNESS_CHECK(metadataForUnsequentialData.has_value());
 
-    auto localVocabPointer =
-        std::make_shared<LocalVocab>(std::move(localVocab));
-    cppcoro::generator<IdTable> generator = CALL_FIXED_SIZE(
+    Result::Generator generator = CALL_FIXED_SIZE(
         (std::array{inWidth, outWidth}), &GroupBy::computeResultLazily, this,
         std::move(subresult), std::move(aggregates),
         std::move(metadataForUnsequentialData).value().aggregateAliases_,
-        std::move(groupByCols), localVocabPointer, !requestLaziness);
+        std::move(groupByCols), !requestLaziness);
 
     return requestLaziness
-               ? ProtoResult{std::move(generator), resultSortedOn(),
-                             std::move(localVocabPointer)}
+               ? ProtoResult{std::move(generator), resultSortedOn()}
                : ProtoResult{cppcoro::getSingleElement(std::move(generator)),
-                             resultSortedOn(), std::move(*localVocabPointer)};
+                             resultSortedOn()};
   }
 
   AD_CORRECTNESS_CHECK(subresult->idTable().numColumns() == inWidth);
+
+  // Make a copy of the local vocab. Note: the LocalVocab has reference
+  // semantics via `shared_ptr`, so no actual strings are copied here.
+
+  auto localVocab = subresult->getCopyOfLocalVocab();
 
   IdTable idTable = CALL_FIXED_SIZE(
       (std::array{inWidth, outWidth}), &GroupBy::doGroupBy, this,
@@ -474,14 +467,15 @@ void GroupBy::processEmptyImplicitGroup(
 
 // _____________________________________________________________________________
 template <size_t IN_WIDTH, size_t OUT_WIDTH>
-cppcoro::generator<IdTable> GroupBy::computeResultLazily(
+Result::Generator GroupBy::computeResultLazily(
     std::shared_ptr<const Result> subresult, std::vector<Aggregate> aggregates,
     std::vector<HashMapAliasInformation> aggregateAliases,
-    std::vector<size_t> groupByCols, std::shared_ptr<LocalVocab> localVocab,
-    bool singleIdTable) const {
+    std::vector<size_t> groupByCols, bool singleIdTable) const {
   size_t inWidth = _subtree->getResultWidth();
   AD_CONTRACT_CHECK(inWidth == IN_WIDTH || IN_WIDTH == 0);
-  LazyGroupBy lazyGroupBy{*localVocab, std::move(aggregateAliases),
+  LocalVocab currentLocalVocab{};
+  std::vector<LocalVocab> storedLocalVocabs;
+  LazyGroupBy lazyGroupBy{currentLocalVocab, std::move(aggregateAliases),
                           getExecutionContext()->getAllocator(),
                           groupByCols.size()};
 
@@ -491,12 +485,14 @@ cppcoro::generator<IdTable> GroupBy::computeResultLazily(
 
   GroupBlock currentGroupBlock;
 
-  for (IdTable& idTable : subresult->idTables()) {
+  for (Result::IdTableVocabPair& pair : subresult->idTables()) {
+    auto& idTable = pair.idTable_;
     if (idTable.empty()) {
       continue;
     }
     AD_CORRECTNESS_CHECK(idTable.numColumns() == inWidth);
     checkCancellation();
+    storedLocalVocabs.emplace_back(std::move(pair.localVocab_));
 
     if (currentGroupBlock.empty()) {
       for (size_t col : groupByCols) {
@@ -505,11 +501,11 @@ cppcoro::generator<IdTable> GroupBy::computeResultLazily(
     }
 
     sparqlExpression::EvaluationContext evaluationContext =
-        createEvaluationContext(*localVocab, idTable);
+        createEvaluationContext(currentLocalVocab, idTable);
 
     size_t lastBlockStart = searchBlockBoundaries(
         [this, &groupSplitAcrossTables, &lazyGroupBy, &evaluationContext,
-         &resultTable, &currentGroupBlock, &aggregates, &localVocab,
+         &resultTable, &currentGroupBlock, &aggregates, &currentLocalVocab,
          &groupByCols](size_t blockStart, size_t blockEnd) {
           if (groupSplitAcrossTables) {
             lazyGroupBy.processBlock(evaluationContext, blockStart, blockEnd);
@@ -521,7 +517,7 @@ cppcoro::generator<IdTable> GroupBy::computeResultLazily(
             IdTableStatic<OUT_WIDTH> table =
                 std::move(resultTable).toStatic<OUT_WIDTH>();
             processBlock<OUT_WIDTH>(table, aggregates, evaluationContext,
-                                    blockStart, blockEnd, localVocab.get(),
+                                    blockStart, blockEnd, &currentLocalVocab,
                                     groupByCols);
             resultTable = std::move(table).toDynamic();
           }
@@ -530,8 +526,16 @@ cppcoro::generator<IdTable> GroupBy::computeResultLazily(
     groupSplitAcrossTables = true;
     lazyGroupBy.processBlock(evaluationContext, lastBlockStart, idTable.size());
     if (!singleIdTable && !resultTable.empty()) {
-      co_yield resultTable;
+      currentLocalVocab.mergeWith(storedLocalVocabs);
+      Result::IdTableVocabPair outputPair{std::move(resultTable),
+                                          std::move(currentLocalVocab)};
+      co_yield outputPair;
+      // Reuse buffer if not moved out
+      resultTable = std::move(outputPair.idTable_);
       resultTable.clear();
+      // Keep last local vocab for next commit.
+      currentLocalVocab = std::move(storedLocalVocabs.back());
+      storedLocalVocabs.clear();
     }
   }
   // No need for final commit when loop was never entered.
@@ -539,11 +543,11 @@ cppcoro::generator<IdTable> GroupBy::computeResultLazily(
     // If we have an implicit group by we need to produce one result row
     if (groupByCols.empty()) {
       processEmptyImplicitGroup<OUT_WIDTH>(resultTable, aggregates,
-                                           localVocab.get());
-      co_yield resultTable;
+                                           &currentLocalVocab);
+      co_yield {std::move(resultTable), std::move(currentLocalVocab)};
     } else if (singleIdTable) {
       // Yield at least a single empty table if requested.
-      co_yield resultTable;
+      co_yield {std::move(resultTable), std::move(currentLocalVocab)};
     }
     co_return;
   }
@@ -560,9 +564,10 @@ cppcoro::generator<IdTable> GroupBy::computeResultLazily(
   }
 
   sparqlExpression::EvaluationContext evaluationContext =
-      createEvaluationContext(*localVocab, idTable);
+      createEvaluationContext(currentLocalVocab, idTable);
   lazyGroupBy.commitRow(resultTable, evaluationContext, currentGroupBlock);
-  co_yield resultTable;
+  currentLocalVocab.mergeWith(storedLocalVocabs);
+  co_yield {std::move(resultTable), std::move(currentLocalVocab)};
 }
 
 // _____________________________________________________________________________
@@ -658,8 +663,8 @@ std::optional<IdTable> GroupBy::computeGroupByObjectWithCount() const {
   const auto& permutation =
       getExecutionContext()->getIndex().getPimpl().getPermutation(
           indexScan->permutation());
-  auto result = permutation.getDistinctCol1IdsAndCounts(col0Id.value(),
-                                                        cancellationHandle_);
+  auto result = permutation.getDistinctCol1IdsAndCounts(
+      col0Id.value(), cancellationHandle_, deltaTriples());
   indexScan->updateRuntimeInformationWhenOptimizedOut(
       {}, RuntimeInformation::Status::optimizedOut);
 
@@ -708,22 +713,14 @@ std::optional<IdTable> GroupBy::computeGroupByForFullIndexScan() const {
 
   _subtree->getRootOperation()->updateRuntimeInformationWhenOptimizedOut({});
 
-  auto ignoredRanges =
-      getIndex().getImpl().getIgnoredIdRanges(permutationEnum.value()).first;
   const auto& permutation =
       getExecutionContext()->getIndex().getPimpl().getPermutation(
           permutationEnum.value());
-  auto table = permutation.getDistinctCol0IdsAndCounts(cancellationHandle_);
+  auto table = permutation.getDistinctCol0IdsAndCounts(cancellationHandle_,
+                                                       deltaTriples());
   if (numCounts == 0) {
     table.setColumnSubset({{0}});
   }
-  // TODO<joka921> This is only semi-efficient.
-  auto end = std::ranges::remove_if(table, [&ignoredRanges](const auto& row) {
-    return std::ranges::any_of(ignoredRanges, [id = row[0]](const auto& pair) {
-      return id >= pair.first && id < pair.second;
-    });
-  });
-  table.resize(end.begin() - table.begin());
 
   // TODO<joka921> This optimization should probably also apply if
   // the query is `SELECT DISTINCT ?s WHERE {?s ?p ?o} ` without a
@@ -841,7 +838,8 @@ std::optional<IdTable> GroupBy::computeGroupByForJoinWithFullScan() const {
   // Take care of duplicate values in the input.
   Id currentId = subresult->idTable()(0, columnIndex);
   size_t currentCount = 0;
-  size_t currentCardinality = index.getCardinality(currentId, permutation);
+  size_t currentCardinality =
+      index.getCardinality(currentId, permutation, deltaTriples());
 
   auto pushRow = [&]() {
     // If the count is 0 this means that the element with the `currentId`
@@ -863,7 +861,8 @@ std::optional<IdTable> GroupBy::computeGroupByForJoinWithFullScan() const {
       // TODO<joka921> This is also not quite correct, we want the cardinality
       // without the internally added triples, but that is not easy to
       // retrieve right now.
-      currentCardinality = index.getCardinality(id, permutation);
+      currentCardinality =
+          index.getCardinality(id, permutation, deltaTriples());
     }
     currentCount += currentCardinality;
   }

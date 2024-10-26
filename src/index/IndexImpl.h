@@ -78,11 +78,19 @@ struct IndexBuilderDataAsStxxlVector : IndexBuilderDataBase {
   std::vector<size_t> actualPartialSizes;
 };
 
+// Store the "normal" triples sorted by the first permutation, together with
+// the additional "internal" triples, sorted by PSO.
+struct FirstPermutationSorterAndInternalTriplesAsPso {
+  using SorterPtr =
+      std::unique_ptr<ad_utility::CompressedExternalIdTableSorterTypeErased>;
+  SorterPtr firstPermutationSorter_;
+  std::unique_ptr<ExternalSorter<SortByPSO, NumColumnsIndexBuilding>>
+      internalTriplesPso_;
+};
 // All the data from IndexBuilderDataBase and a ExternalSorter that stores all
 // ID triples sorted by the first permutation.
 struct IndexBuilderDataAsFirstPermutationSorter : IndexBuilderDataBase {
-  using SorterPtr =
-      std::unique_ptr<ad_utility::CompressedExternalIdTableSorterTypeErased>;
+  using SorterPtr = FirstPermutationSorterAndInternalTriplesAsPso;
   SorterPtr sorter_;
   IndexBuilderDataAsFirstPermutationSorter(const IndexBuilderDataBase& base,
                                            SorterPtr sorter)
@@ -111,7 +119,8 @@ class IndexImpl {
   string onDiskBase_;
   string settingsFileName_;
   bool onlyAsciiTurtlePrefixes_ = false;
-  bool useParallelParser_ = true;
+  // Note: `std::nullopt` means `not specified by the user`.
+  std::optional<bool> useParallelParser_ = std::nullopt;
   TurtleParserIntegerOverflowBehavior turtleParserIntegerOverflowBehavior_ =
       TurtleParserIntegerOverflowBehavior::Error;
   bool turtleParserSkipIllegalLiterals_ = false;
@@ -176,6 +185,9 @@ class IndexImpl {
   std::optional<Id> idOfHasPatternDuringIndexBuilding_;
   std::optional<Id> idOfInternalGraphDuringIndexBuilding_;
 
+  // BlankNodeManager, initialized during `readConfiguration`
+  std::unique_ptr<ad_utility::BlankNodeManager> blankNodeManager_{nullptr};
+
  public:
   explicit IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator);
 
@@ -220,12 +232,11 @@ class IndexImpl {
   Permutation& getPermutation(Permutation::Enum p);
   const Permutation& getPermutation(Permutation::Enum p) const;
 
-  // Creates an index from a file. Parameter Parser must be able to split the
-  // file's format into triples.
-  // Will write vocabulary and on-disk index data.
+  // Creates an index from a given set of input files. Will write vocabulary and
+  // on-disk index data.
   // !! The index can not directly be used after this call, but has to be setup
   // by createFromOnDiskIndex after this call.
-  void createFromFile(const string& filename, Index::Filetype type);
+  void createFromFiles(std::vector<Index::InputFileSpecification> files);
 
   // Creates an index object from an on disk index that has previously been
   // constructed. Read necessary meta data into memory and opens file handles.
@@ -248,6 +259,8 @@ class IndexImpl {
 
   const auto& getTextVocab() const { return textVocab_; };
 
+  ad_utility::BlankNodeManager* getBlankNodeManager() const;
+
   // --------------------------------------------------------------------------
   //  -- RETRIEVAL ---
   // --------------------------------------------------------------------------
@@ -269,11 +282,13 @@ class IndexImpl {
   NumNormalAndInternal numDistinctCol0(Permutation::Enum permutation) const;
 
   // ___________________________________________________________________________
-  size_t getCardinality(Id id, Permutation::Enum permutation) const;
+  size_t getCardinality(Id id, Permutation::Enum permutation,
+                        const DeltaTriples&) const;
 
   // ___________________________________________________________________________
   size_t getCardinality(const TripleComponent& comp,
-                        Permutation::Enum permutation) const;
+                        Permutation::Enum permutation,
+                        const DeltaTriples& deltaTriples) const;
 
   // ___________________________________________________________________________
   std::string indexToString(VocabIndex id) const;
@@ -406,7 +421,8 @@ class IndexImpl {
 
   // _____________________________________________________________________________
   vector<float> getMultiplicities(const TripleComponent& key,
-                                  Permutation::Enum permutation) const;
+                                  Permutation::Enum permutation,
+                                  const DeltaTriples&) const;
 
   // ___________________________________________________________________
   vector<float> getMultiplicities(Permutation::Enum permutation) const;
@@ -416,17 +432,20 @@ class IndexImpl {
                const Permutation::Enum& permutation,
                Permutation::ColumnIndicesRef additionalColumns,
                const ad_utility::SharedCancellationHandle& cancellationHandle,
+               const DeltaTriples& deltaTriples,
                const LimitOffsetClause& limitOffset = {}) const;
 
   // _____________________________________________________________________________
   IdTable scan(const ScanSpecification& scanSpecification, Permutation::Enum p,
                Permutation::ColumnIndicesRef additionalColumns,
                const ad_utility::SharedCancellationHandle& cancellationHandle,
+               const DeltaTriples& deltaTriples,
                const LimitOffsetClause& limitOffset = {}) const;
 
   // _____________________________________________________________________________
   size_t getResultSizeOfScan(const ScanSpecification& scanSpecification,
-                             const Permutation::Enum& permutation) const;
+                             const Permutation::Enum& permutation,
+                             const DeltaTriples& deltaTriples) const;
 
  private:
   // Private member functions
@@ -466,13 +485,12 @@ class IndexImpl {
   // configured to either parse in parallel or not, and to either use the
   // CTRE-based relaxed parser or not, depending on the settings of the
   // corresponding member variables.
-  std::unique_ptr<RdfParserBase> makeRdfParser(const std::string& filename,
-                                               Index::Filetype type) const;
+  std::unique_ptr<RdfParserBase> makeRdfParser(
+      const std::vector<Index::InputFileSpecification>& files) const;
 
-  std::unique_ptr<ad_utility::CompressedExternalIdTableSorterTypeErased>
-  convertPartialToGlobalIds(TripleVec& data,
-                            const vector<size_t>& actualLinesPerPartial,
-                            size_t linesPerPartial);
+  FirstPermutationSorterAndInternalTriplesAsPso convertPartialToGlobalIds(
+      TripleVec& data, const vector<size_t>& actualLinesPerPartial,
+      size_t linesPerPartial, auto isQLeverInternalTriple);
 
   // Generator that returns all words in the given context file (if not empty)
   // and then all words in all literals (if second argument is true).
@@ -647,97 +665,10 @@ class IndexImpl {
   // the input).
   NumNormalAndInternal numTriples() const;
 
-  // The index contains several triples that are not part of the "actual"
-  // knowledge graph, but are added by QLever for internal reasons (e.g. for an
-  // efficient implementation of language filters). For a given
-  // `Permutation::Enum`, returns the following `std::pair`:
-  //
-  // first:  A `vector<pair<Id, Id>>` that denotes ranges in the first column
-  //         of the permutation that imply that a triple is added. For example
-  //         in the `SPO` and `SOP` permutation a literal subject means that the
-  //         triple was added (literals are not legal subjects in RDF), so the
-  //         pair `(idOfFirstLiteral, idOfLastLiteral + 1)` will be contained
-  //         in the vector.
-  // second: A lambda that checks for a triple *that is not already excluded
-  //         by the ignored ranges from the first argument* whether it still
-  //         is an added triple. For example in the `Sxx` and `Oxx` permutation
-  //         a triple where the predicate starts with '@' (instead of the usual
-  //         '<' is an added triple from the language filter implementation.
-  //
-  // Note: A triple from a given permutation is an added triple if and only if
-  //       it's first column is contained in any of the ranges from `first` OR
-  //       the lambda `second` returns true for that triple.
-  //
-  // For example usages see `IndexScan.cpp` (the implementation of the full
-  // index scan) and `GroupBy.cpp`.
-  auto getIgnoredIdRanges(const Permutation::Enum permutation) const {
-    std::vector<std::pair<Id, Id>> ignoredRanges;
-    ignoredRanges.emplace_back(qlever::getBoundsForSpecialIds());
-
-    auto literalRanges =
-        getVocab().prefixRanges(ad_utility::triple_component::literalPrefix);
-    auto taggedPredicatesRanges =
-        getVocab().prefixRanges(ad_utility::languageTaggedPredicatePrefix);
-    std::string internal{INTERNAL_ENTITIES_URI_PREFIX};
-    internal[0] = ad_utility::triple_component::iriPrefixChar;
-    auto internalEntitiesRanges = getVocab().prefixRanges(internal);
-
-    auto pushIgnoredRange = [&ignoredRanges](const auto& ranges) {
-      for (const auto& range : ranges.ranges()) {
-        ignoredRanges.emplace_back(Id::makeFromVocabIndex(range.first),
-                                   Id::makeFromVocabIndex(range.second));
-      }
-    };
-    pushIgnoredRange(internalEntitiesRanges);
-    using enum Permutation::Enum;
-    if (permutation == SPO || permutation == SOP) {
-      pushIgnoredRange(literalRanges);
-    } else if (permutation == PSO || permutation == POS) {
-      pushIgnoredRange(taggedPredicatesRanges);
-    }
-
-    // A lambda that checks whether the `predicateId` is an internal ID like
-    // `ql:has-pattern` or `@en@rdfs:label`.
-    auto isInternalPredicateId = [internalEntitiesRanges,
-                                  taggedPredicatesRanges](Id predicateId) {
-      if (predicateId.getDatatype() == Datatype::Undefined) {
-        return true;
-      }
-      AD_CORRECTNESS_CHECK(predicateId.getDatatype() == Datatype::VocabIndex);
-      auto index = predicateId.getVocabIndex();
-      return (internalEntitiesRanges.contain(index) ||
-              taggedPredicatesRanges.contain(index));
-    };
-
-    auto isTripleIgnored = [permutation,
-                            isInternalPredicateId](const auto& triple) {
-      // TODO<joka921, everybody in the future>:
-      // A lot of code (especially for statistical queries in `GroupBy.cpp` and
-      // the pattern trick) relies on this function being a noop for the `PSO`
-      // and `POS` permutations, meaning that it suffices to check the
-      // `ignoredRanges` for them. Should this ever change (which means that we
-      // add internal triples that use predicates that are actually contained in
-      // the knowledge graph), then all the code that uses this function has to
-      // be thoroughly reviewed.
-      if (permutation == SPO || permutation == OPS) {
-        // Predicates are always entities from the vocabulary.
-        return isInternalPredicateId(triple[1]);
-      } else if (permutation == SOP || permutation == OSP) {
-        return isInternalPredicateId(triple[2]);
-      }
-      return false;
-    };
-
-    return std::pair{std::move(ignoredRanges), std::move(isTripleIgnored)};
-  }
   using BlocksOfTriples = cppcoro::generator<IdTableStatic<0>>;
 
   // Functions to create the pairs of permutations during the index build. Each
   // of them takes the following arguments:
-  // * `isQleverInternalTriple` a callable that takes an `Id` and returns true
-  // iff
-  //    the corresponding IRI was internally added by QLever and not part of the
-  //    knowledge graph.
   // * `sortedInput`  The input, must be sorted by the first permutation in the
   //    function name.
   // * `nextSorter` A callback that is invoked for each row in each of the
@@ -750,24 +681,36 @@ class IndexImpl {
   template <typename... NextSorter>
   requires(sizeof...(NextSorter) <= 1)
   std::optional<PatternCreator::TripleSorter> createSPOAndSOP(
-      size_t numColumns, auto& isInternalTriple, BlocksOfTriples sortedTriples,
+      size_t numColumns, BlocksOfTriples sortedTriples,
       NextSorter&&... nextSorter);
   // Create the OSP and OPS permutations. Additionally, count the number of
   // distinct objects and write it to the metadata.
   template <typename... NextSorter>
   requires(sizeof...(NextSorter) <= 1)
-  void createOSPAndOPS(size_t numColumns, auto& isInternalTriple,
-                       BlocksOfTriples sortedTriples,
+  void createOSPAndOPS(size_t numColumns, BlocksOfTriples sortedTriples,
                        NextSorter&&... nextSorter);
 
   // Create the PSO and POS permutations. Additionally, count the number of
   // distinct predicates and the number of actual triples and write them to the
-  // metadata.
+  // metadata. The meta-data JSON file for the index statistics will only be
+  // written iff `doWriteConfiguration` is true. That parameter is set to
+  // `false` when building the additional permutations for the internal triples.
   template <typename... NextSorter>
   requires(sizeof...(NextSorter) <= 1)
-  void createPSOAndPOS(size_t numColumns, auto& isInternalTriple,
-                       BlocksOfTriples sortedTriples,
+  void createPSOAndPOSImpl(size_t numColumns, BlocksOfTriples sortedTriples,
+                           bool doWriteConfiguration,
+                           NextSorter&&... nextSorter);
+  // Call `createPSOAndPOSImpl` with the given arguments and with
+  // `doWriteConfiguration` set to `true` (see above).
+  template <typename... NextSorter>
+  requires(sizeof...(NextSorter) <= 1)
+  void createPSOAndPOS(size_t numColumns, BlocksOfTriples sortedTriples,
                        NextSorter&&... nextSorter);
+
+  // Create the internal PSO and POS permutations from the sorted internal
+  // triples. Return `(numInternalTriples, numInternalPredicates)`.
+  std::pair<size_t, size_t> createInternalPSOandPOS(
+      auto&& internalTriplesPsoSorter);
 
   // Set up one of the permutation sorters with the appropriate memory limit.
   // The `permutationName` is used to determine the filename and must be unique
@@ -822,5 +765,18 @@ class IndexImpl {
   // PSO and POS permutations.
   std::unique_ptr<ExternalSorter<SortByPSO, NumColumnsIndexBuilding + 2>>
   buildOspWithPatterns(PatternCreator::TripleSorter sortersFromPatternCreator,
-                       auto isQleverInternalTriple);
+                       auto& internalTripleSorter);
+
+  // During the index, building add the number of internal triples and internal
+  // predicates to the configuration. Note: the number of internal objects and
+  // subjects will always remain zero, because we have no cheap way of computing
+  // them.
+  void addInternalStatisticsToConfiguration(size_t numTriplesInternal,
+                                            size_t numPredicatesInternal);
+
+  // Update `InputFileSpecification` based on `parallelParsingSpecifiedViaJson`
+  // and write a summary to the log.
+  static void updateInputFileSpecificationsAndLog(
+      std::vector<Index::InputFileSpecification>& spec,
+      std::optional<bool> parallelParsingSpecifiedViaJson);
 };

@@ -124,15 +124,13 @@ class IndexScan final : public Operation {
 
   vector<QueryExecutionTree*> getChildren() override { return {}; }
 
-  void computeFullScan(IdTable* result, Permutation::Enum permutation) const;
-
   size_t computeSizeEstimate() const;
 
   std::string getCacheKeyImpl() const override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 
-  cppcoro::generator<IdTable> scanInChunks() const;
+  Result::Generator scanInChunks() const;
 
   //  Helper functions for the public `getLazyScanFor...` functions (see above).
   Permutation::IdTableGenerator getLazyScan(

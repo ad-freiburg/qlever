@@ -15,6 +15,7 @@
 #include "parser/RdfParser.h"
 #include "parser/TokenizerCtre.h"
 #include "util/Exception.h"
+#include "util/HashMap.h"
 #include "util/HashSet.h"
 #include "util/StringUtils.h"
 #include "util/http/HttpUtils.h"
@@ -185,15 +186,12 @@ ProtoResult Service::computeResultImpl([[maybe_unused]] bool requestLaziness) {
   // Note: The `body`-generator also keeps the complete response connection
   // alive, so we have no lifetime issue here(see `HttpRequest::send` for
   // details).
-  auto localVocabPtr = std::make_shared<LocalVocab>();
-  auto generator = computeResultLazily(expVariableKeys, std::move(body),
-                                       localVocabPtr, !requestLaziness);
-
+  auto generator =
+      computeResultLazily(expVariableKeys, std::move(body), !requestLaziness);
   return requestLaziness
-             ? ProtoResult{std::move(generator), resultSortedOn(),
-                           std::move(localVocabPtr)}
+             ? ProtoResult{std::move(generator), resultSortedOn()}
              : ProtoResult{cppcoro::getSingleElement(std::move(generator)),
-                           resultSortedOn(), std::move(*localVocabPtr)};
+                           resultSortedOn()};
 }
 
 template <size_t I>
@@ -204,6 +202,9 @@ void Service::writeJsonResult(const std::vector<std::string>& vars,
   IdTableStatic<I> idTable = std::move(*idTablePtr).toStatic<I>();
   checkCancellation();
   std::vector<size_t> numLocalVocabPerColumn(idTable.numColumns());
+  // TODO<joka921> We should include a memory limit, as soon as we can do proper
+  // memory-limited HashMaps.
+  ad_utility::HashMap<std::string, Id> blankNodeMap;
 
   auto writeBindings = [&](const nlohmann::json& bindings, size_t& rowIdx) {
     for (const auto& binding : bindings) {
@@ -211,7 +212,8 @@ void Service::writeJsonResult(const std::vector<std::string>& vars,
       for (size_t colIdx = 0; colIdx < vars.size(); ++colIdx) {
         TripleComponent tc =
             binding.contains(vars[colIdx])
-                ? bindingToTripleComponent(binding[vars[colIdx]])
+                ? bindingToTripleComponent(binding[vars[colIdx]], blankNodeMap,
+                                           localVocab)
                 : TripleComponent::UNDEF();
 
         Id id = std::move(tc).toValueId(getIndex().getVocab(), *localVocab);
@@ -237,10 +239,10 @@ void Service::writeJsonResult(const std::vector<std::string>& vars,
 }
 
 // ____________________________________________________________________________
-cppcoro::generator<IdTable> Service::computeResultLazily(
+Result::Generator Service::computeResultLazily(
     const std::vector<std::string> vars,
-    ad_utility::LazyJsonParser::Generator body,
-    std::shared_ptr<LocalVocab> localVocab, bool singleIdTable) {
+    ad_utility::LazyJsonParser::Generator body, bool singleIdTable) {
+  LocalVocab localVocab{};
   IdTable idTable{getResultWidth(), getExecutionContext()->getAllocator()};
 
   size_t rowIdx = 0;
@@ -255,10 +257,15 @@ cppcoro::generator<IdTable> Service::computeResultLazily(
       }
 
       CALL_FIXED_SIZE(getResultWidth(), &Service::writeJsonResult, this, vars,
-                      partJson, &idTable, localVocab.get(), rowIdx);
+                      partJson, &idTable, &localVocab, rowIdx);
       if (!singleIdTable) {
-        co_yield idTable;
+        Result::IdTableVocabPair pair{std::move(idTable),
+                                      std::move(localVocab)};
+        co_yield pair;
+        // Move back to reuse buffer if not moved out.
+        idTable = std::move(pair.idTable_);
         idTable.clear();
+        localVocab = LocalVocab{};
         rowIdx = 0;
       }
       resultExists = true;
@@ -289,7 +296,7 @@ cppcoro::generator<IdTable> Service::computeResultLazily(
   }
 
   if (singleIdTable) {
-    co_yield idTable;
+    co_yield {std::move(idTable), std::move(localVocab)};
   }
 }
 
@@ -322,31 +329,35 @@ std::optional<std::string> Service::getSiblingValuesClause() const {
 
   checkCancellation();
 
-  ad_utility::HashSet<std::string> rowSet;
-
-  std::string values = " { ";
-  for (size_t rowIndex = 0; rowIndex < siblingResult->idTable().size();
-       ++rowIndex) {
+  // Creates a single row of the values clause or an empty string on error.
+  auto createValueRow = [&](size_t rowIndex) -> std::string {
     std::string row = "(";
     for (const auto& columnIdx : commonColumnIndices) {
-      const auto& optionalString = ExportQueryExecutionTrees::idToStringAndType(
+      const auto& optStr = idToValueForValuesClause(
           siblingTree_->getRootOperation()->getIndex(),
           siblingResult->idTable()(rowIndex, columnIdx),
           siblingResult->localVocab());
 
-      if (optionalString.has_value()) {
-        absl::StrAppend(&row, optionalString.value().first, " ");
+      if (!optStr.has_value()) {
+        return "";
       }
+      absl::StrAppend(&row, optStr.value(), " ");
     }
     row.back() = ')';
+    return row;
+  };
 
-    if (rowSet.contains(row)) {
+  ad_utility::HashSet<std::string> rowSet;
+  std::string values = " { ";
+  for (size_t rowIndex = 0; rowIndex < siblingResult->idTable().size();
+       ++rowIndex) {
+    std::string row = createValueRow(rowIndex);
+    if (row.empty() || rowSet.contains(row)) {
       continue;
     }
-
     rowSet.insert(row);
-    absl::StrAppend(&values, row, " ");
 
+    absl::StrAppend(&values, row, " ");
     checkCancellation();
   }
 
@@ -355,7 +366,9 @@ std::optional<std::string> Service::getSiblingValuesClause() const {
 
 // ____________________________________________________________________________
 TripleComponent Service::bindingToTripleComponent(
-    const nlohmann::json& binding) {
+    const nlohmann::json& binding,
+    ad_utility::HashMap<std::string, Id>& blankNodeMap,
+    LocalVocab* localVocab) const {
   if (!binding.contains("type") || !binding.contains("value")) {
     throw std::runtime_error(absl::StrCat(
         "Missing type or value field in binding. The binding is: '",
@@ -364,6 +377,8 @@ TripleComponent Service::bindingToTripleComponent(
 
   const auto type = binding["type"].get<std::string_view>();
   const auto value = binding["value"].get<std::string_view>();
+  auto blankNodeManagerPtr =
+      getExecutionContext()->getIndex().getBlankNodeManager();
 
   TripleComponent tc;
   if (type == "literal") {
@@ -382,12 +397,12 @@ TripleComponent Service::bindingToTripleComponent(
   } else if (type == "uri") {
     tc = TripleComponent::Iri::fromIrirefWithoutBrackets(value);
   } else if (type == "bnode") {
-    throw std::runtime_error(
-        "Blank nodes in the result of a SERVICE are currently not "
-        "supported. "
-        "For now, consider filtering them out using the ISBLANK function "
-        "or "
-        "converting them via the STR function.");
+    auto [it, wasNew] = blankNodeMap.try_emplace(value, Id());
+    if (wasNew) {
+      it->second = Id::makeFromBlankNodeIndex(
+          localVocab->getBlankNodeIndex(blankNodeManagerPtr));
+    }
+    tc = it->second;
   } else {
     throw std::runtime_error(absl::StrCat("Type ", type,
                                           " is undefined. The binding is: '",
@@ -454,4 +469,38 @@ void Service::throwErrorWithContext(std::string_view msg,
       ">: ", msg, ". First 100 bytes of the response: '", first100,
       (last100.empty() ? "'"
                        : absl::StrCat(", last 100 bytes: '", last100, "'"))));
+}
+
+// ____________________________________________________________________________
+std::optional<std::string> Service::idToValueForValuesClause(
+    const Index& index, Id id, const LocalVocab& localVocab) {
+  using enum Datatype;
+  const auto& optionalStringAndXsdType =
+      ExportQueryExecutionTrees::idToStringAndType(index, id, localVocab);
+  if (!optionalStringAndXsdType.has_value()) {
+    AD_CORRECTNESS_CHECK(id.getDatatype() == Undefined);
+    return "UNDEF";
+  }
+  const auto& [value, xsdType] = optionalStringAndXsdType.value();
+
+  switch (id.getDatatype()) {
+    case BlankNodeIndex:
+      // Blank nodes are not allowed in a values clause. Additionally blank
+      // nodes across a SERVICE endpoint are disjoint anyway, so rows that
+      // contain blank nodes will never create matches and we can safely omit
+      // them.
+      return std::nullopt;
+    case Int:
+    case Double:
+    case Bool:
+      return value;
+    default:
+      if (xsdType) {
+        return absl::StrCat("\"", value, "\"^^<", xsdType, ">");
+      } else if (value.starts_with('<')) {
+        return value;
+      } else {
+        return RdfEscaping::validRDFLiteralFromNormalized(value);
+      }
+  }
 }

@@ -5,6 +5,8 @@
 #include "index/Permutation.h"
 
 #include "absl/strings/str_cat.h"
+#include "index/ConstantsIndexBuilding.h"
+#include "index/DeltaTriples.h"
 #include "util/StringUtils.h"
 
 // _____________________________________________________________________
@@ -12,10 +14,20 @@ Permutation::Permutation(Enum permutation, Allocator allocator)
     : readableName_(toString(permutation)),
       fileSuffix_(absl::StrCat(".", ad_utility::utf8ToLower(readableName_))),
       keyOrder_(toKeyOrder(permutation)),
-      allocator_{std::move(allocator)} {}
+      allocator_{std::move(allocator)},
+      permutation_{permutation} {}
 
 // _____________________________________________________________________
-void Permutation::loadFromDisk(const std::string& onDiskBase) {
+void Permutation::loadFromDisk(const std::string& onDiskBase,
+                               std::function<bool(Id)> isInternalId,
+                               bool loadInternalPermutation) {
+  isInternalId_ = std::move(isInternalId);
+  if (loadInternalPermutation) {
+    internalPermutation_ =
+        std::make_unique<Permutation>(permutation_, allocator_);
+    internalPermutation_->loadFromDisk(
+        absl::StrCat(onDiskBase, INTERNAL_INDEX_INFIX), isInternalId_, false);
+  }
   if constexpr (MetaData::isMmapBased_) {
     meta_.setup(onDiskBase + ".index" + fileSuffix_ + MMAP_FILE_SUFFIX,
                 ad_utility::ReuseTag(), ad_utility::AccessPattern::Random);
@@ -42,34 +54,44 @@ void Permutation::loadFromDisk(const std::string& onDiskBase) {
 IdTable Permutation::scan(const ScanSpecification& scanSpec,
                           ColumnIndicesRef additionalColumns,
                           const CancellationHandle& cancellationHandle,
+                          const DeltaTriples& deltaTriples,
                           const LimitOffsetClause& limitOffset) const {
   if (!isLoaded_) {
     throw std::runtime_error("This query requires the permutation " +
                              readableName_ + ", which was not loaded");
   }
 
-  return reader().scan(scanSpec, meta_.blockData(), additionalColumns,
-                       cancellationHandle, limitOffset);
+  const auto& p = getActualPermutation(scanSpec);
+
+  return p.reader().scan(scanSpec, p.meta_.blockData(), additionalColumns,
+                         cancellationHandle, locatedTriples(deltaTriples),
+                         limitOffset);
 }
 
 // _____________________________________________________________________
 size_t Permutation::getResultSizeOfScan(
-    const ScanSpecification& scanSpec) const {
-  return reader().getResultSizeOfScan(scanSpec, meta_.blockData());
+    const ScanSpecification& scanSpec, const DeltaTriples& deltaTriples) const {
+  const auto& p = getActualPermutation(scanSpec);
+  return p.reader().getResultSizeOfScan(scanSpec, p.meta_.blockData(),
+                                        locatedTriples(deltaTriples));
 }
 
 // ____________________________________________________________________________
 IdTable Permutation::getDistinctCol1IdsAndCounts(
-    Id col0Id, const CancellationHandle& cancellationHandle) const {
-  return reader().getDistinctCol1IdsAndCounts(col0Id, meta_.blockData(),
-                                              cancellationHandle);
+    Id col0Id, const CancellationHandle& cancellationHandle,
+    const DeltaTriples& deltaTriples) const {
+  const auto& p = getActualPermutation(col0Id);
+  return p.reader().getDistinctCol1IdsAndCounts(col0Id, p.meta_.blockData(),
+                                                cancellationHandle,
+                                                locatedTriples(deltaTriples));
 }
 
 // ____________________________________________________________________________
 IdTable Permutation::getDistinctCol0IdsAndCounts(
-    const CancellationHandle& cancellationHandle) const {
-  return reader().getDistinctCol0IdsAndCounts(meta_.blockData(),
-                                              cancellationHandle);
+    const CancellationHandle& cancellationHandle,
+    const DeltaTriples& deltaTriples) const {
+  return reader().getDistinctCol0IdsAndCounts(
+      meta_.blockData(), cancellationHandle, locatedTriples(deltaTriples));
 }
 
 // _____________________________________________________________________
@@ -114,21 +136,25 @@ std::string_view Permutation::toString(Permutation::Enum permutation) {
 
 // _____________________________________________________________________
 std::optional<CompressedRelationMetadata> Permutation::getMetadata(
-    Id col0Id) const {
-  if (meta_.col0IdExists(col0Id)) {
-    return meta_.getMetaData(col0Id);
+    Id col0Id, const DeltaTriples& deltaTriples) const {
+  const auto& p = getActualPermutation(col0Id);
+  if (p.meta_.col0IdExists(col0Id)) {
+    return p.meta_.getMetaData(col0Id);
   }
-  return reader().getMetadataForSmallRelation(meta_.blockData(), col0Id);
+  return p.reader().getMetadataForSmallRelation(p.meta_.blockData(), col0Id,
+                                                locatedTriples(deltaTriples));
 }
 
 // _____________________________________________________________________
 std::optional<Permutation::MetadataAndBlocks> Permutation::getMetadataAndBlocks(
-    const ScanSpecification& scanSpec) const {
+    const ScanSpecification& scanSpec, const DeltaTriples& deltaTriples) const {
+  const auto& p = getActualPermutation(scanSpec);
   CompressedRelationReader::ScanSpecAndBlocks mb{
-      scanSpec,
-      CompressedRelationReader::getRelevantBlocks(scanSpec, meta_.blockData())};
+      scanSpec, CompressedRelationReader::getRelevantBlocks(
+                    scanSpec, p.meta_.blockData())};
 
-  auto firstAndLastTriple = reader().getFirstAndLastTriple(mb);
+  auto firstAndLastTriple =
+      p.reader().getFirstAndLastTriple(mb, locatedTriples(deltaTriples));
   if (!firstAndLastTriple.has_value()) {
     return std::nullopt;
   }
@@ -142,14 +168,48 @@ Permutation::IdTableGenerator Permutation::lazyScan(
     std::optional<std::vector<CompressedBlockMetadata>> blocks,
     ColumnIndicesRef additionalColumns,
     ad_utility::SharedCancellationHandle cancellationHandle,
+    const DeltaTriples& deltaTriples,
     const LimitOffsetClause& limitOffset) const {
+  const auto& p = getActualPermutation(scanSpec);
   if (!blocks.has_value()) {
     auto blockSpan = CompressedRelationReader::getRelevantBlocks(
-        scanSpec, meta_.blockData());
+        scanSpec, p.meta_.blockData());
     blocks = std::vector(blockSpan.begin(), blockSpan.end());
   }
   ColumnIndices columns{additionalColumns.begin(), additionalColumns.end()};
-  return reader().lazyScan(scanSpec, std::move(blocks.value()),
-                           std::move(columns), std::move(cancellationHandle),
-                           limitOffset);
+  return p.reader().lazyScan(scanSpec, std::move(blocks.value()),
+                             std::move(columns), std::move(cancellationHandle),
+                             locatedTriples(deltaTriples), limitOffset);
+}
+
+// ______________________________________________________________________
+const Permutation& Permutation::getActualPermutation(
+    const ScanSpecification& spec) const {
+  auto isInternal = [this](const std::optional<Id>& id) {
+    return id.has_value() && isInternalId_(id.value());
+  };
+
+  bool isInternalScan = isInternal(spec.col0Id()) ||
+                        isInternal(spec.col1Id()) || isInternal(spec.col2Id());
+
+  if (!isInternalScan) {
+    return *this;
+  }
+  AD_CORRECTNESS_CHECK(internalPermutation_ != nullptr, [this]() {
+    return absl::StrCat("No internal triples were loaded for the permutation ",
+                        readableName_);
+  });
+  return *internalPermutation_;
+}
+
+// ______________________________________________________________________
+const Permutation& Permutation::getActualPermutation(Id id) const {
+  return getActualPermutation(
+      ScanSpecification{id, std::nullopt, std::nullopt});
+}
+
+// ______________________________________________________________________
+const LocatedTriplesPerBlock& Permutation::locatedTriples(
+    const DeltaTriples& deltaTriples) const {
+  return deltaTriples.getLocatedTriplesPerBlock(permutation_);
 }

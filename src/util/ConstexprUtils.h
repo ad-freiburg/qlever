@@ -159,7 +159,6 @@ template <auto Array>
 auto toIntegerSequence() {
   return detail::toIntegerSequenceHelper<Array>(
       std::make_index_sequence<Array.size()>{});
-  // return typename detail::ToIntegerSequenceImpl<Array>::type{};
 }
 
 // Map a single integer `value` that is in the range `[0, ..., (maxValue + 1) ^
