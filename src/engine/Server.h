@@ -144,23 +144,16 @@ class Server {
       ad_utility::Timer& requestTimer,
       const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
       TimeLimit timeLimit);
-  // Do the actual execution of an update.
-  Awaitable<void> processUpdate(
-      const ad_utility::url_parser::ParamValueMap& params, const string& update,
-      ad_utility::Timer& requestTimer,
-      const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
-      TimeLimit timeLimit);
 
   // Determine the media type to be used for the result. The media type is
   // determined (in this order) by the current action (e.g.,
   // "action=csv_export") and by the "Accept" header of the request.
   ad_utility::MediaType determineMediaType(
       const ad_utility::url_parser::ParamValueMap& params,
-      const ad_utility::httpUtils::HttpRequest auto& request);
+      const ad_utility::httpUtils::HttpRequest auto& request) const;
   // Determine whether the subtress and the result should be pinned.
   std::pair<bool, bool> determineResultPinning(
-      const ad_utility::url_parser::ParamValueMap& params,
-      const std::string& operation);
+      const ad_utility::url_parser::ParamValueMap& params) const;
   // Sets up the PlannedQuery s.t. it is ready to be executed.
   Awaitable<PlannedQuery> setupPlannedQuery(
       const ad_utility::url_parser::ParamValueMap& params,

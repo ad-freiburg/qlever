@@ -514,8 +514,7 @@ bool containsParam(const auto& params, const std::string& param,
 
 // ____________________________________________________________________________
 std::pair<bool, bool> Server::determineResultPinning(
-    const ad_utility::url_parser::ParamValueMap& params,
-    const std::string& operation) {
+    const ad_utility::url_parser::ParamValueMap& params) const {
   const bool pinSubtrees = containsParam(params, "pinsubtrees", "true");
   const bool pinResult = containsParam(params, "pinresult", "true");
   return {pinSubtrees, pinResult};
@@ -717,7 +716,7 @@ class NoSupportedMediatypeError : public std::runtime_error {
 // ____________________________________________________________________________
 MediaType Server::determineMediaType(
     const ad_utility::url_parser::ParamValueMap& params,
-    const ad_utility::httpUtils::HttpRequest auto& request) {
+    const ad_utility::httpUtils::HttpRequest auto& request) const {
   // The following code block determines the media type to be used for the
   // result. The media type is either determined by the "Accept:" header of
   // the request or by the URL parameter "action=..." (for TSV and CSV export,
@@ -795,7 +794,7 @@ Awaitable<void> Server::processQuery(
   // might happen that the query planner runs for a while (recall that it many
   // do index scans) and then we get an error message afterward that a
   // certain media type is not supported.
-  auto [pinSubtrees, pinResult] = determineResultPinning(params, query);
+  auto [pinSubtrees, pinResult] = determineResultPinning(params);
   LOG(INFO) << "Processing the following SPARQL query:"
             << (pinResult ? " [pin result]" : "")
             << (pinSubtrees ? " [pin subresults]" : "") << "\n"
@@ -850,46 +849,6 @@ Awaitable<void> Server::processQuery(
 }
 
 // ____________________________________________________________________________
-Awaitable<void> Server::processUpdate(
-    const ad_utility::url_parser::ParamValueMap& params, const string& update,
-    ad_utility::Timer& requestTimer,
-    const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
-    TimeLimit timeLimit) {
-  auto queryHub = queryHub_.lock();
-  AD_CORRECTNESS_CHECK(queryHub);
-  ad_utility::websocket::MessageSender messageSender{
-      getQueryId(request, update), *queryHub};
-
-  auto [cancellationHandle, cancelTimeoutOnDestruction] =
-      setupCancellationHandle(messageSender.getQueryId(), timeLimit);
-
-  auto [pinSubtrees, pinResult] = determineResultPinning(params, update);
-  LOG(INFO) << "Processing the following SPARQL update:"
-            << (pinResult ? " [pin result]" : "")
-            << (pinSubtrees ? " [pin subresults]" : "") << "\n"
-            << update << std::endl;
-  QueryExecutionContext qec(index_, &cache_, allocator_,
-                            sortPerformanceEstimator_, std::ref(messageSender),
-                            pinSubtrees, pinResult);
-  auto plannedQuery = co_await setupPlannedQuery(
-      params, update, qec, cancellationHandle, timeLimit, requestTimer);
-  auto qet = plannedQuery.queryExecutionTree_;
-
-  if (!plannedQuery.parsedQuery_.hasUpdateClause()) {
-    throw std::runtime_error("Expected Update but received Query.");
-  }
-
-  // TODO<qup42> do actual update processing here
-
-  LOG(INFO) << "Done processing update"
-            << ", total time was " << requestTimer.msecs().count() << " ms"
-            << std::endl;
-  LOG(DEBUG) << "Runtime Info:\n"
-             << qet.getRootOperation()->runtimeInfo().toString() << std::endl;
-  co_return;
-}
-
-// ____________________________________________________________________________
 template <bool isQuery>
 Awaitable<void> Server::processOperation(
     const ad_utility::url_parser::ParamValueMap& params,
@@ -916,8 +875,6 @@ Awaitable<void> Server::processOperation(
     } else {
       throw std::runtime_error(
           "SPARQL 1.1 Update is  currently not supported by QLever.");
-      // co_await processUpdate(params, operation, requestTimer, request, send,
-      // timeLimit);
     }
   } catch (const ParseException& e) {
     responseStatus = http::status::bad_request;
