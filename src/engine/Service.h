@@ -148,8 +148,7 @@ class Service : public Operation {
 
   // Compute the result lazy as IdTable generator.
   // If the `singleIdTable` flag is set, the result is yielded as one idTable.
-  cppcoro::generator<IdTable> computeResultLazily(
+  Result::Generator computeResultLazily(
       const std::vector<std::string> vars,
-      ad_utility::LazyJsonParser::Generator body,
-      std::shared_ptr<LocalVocab> localVocab, bool singleIdTable);
+      ad_utility::LazyJsonParser::Generator body, bool singleIdTable);
 };

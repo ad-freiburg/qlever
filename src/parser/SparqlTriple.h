@@ -5,6 +5,7 @@
 
 #pragma once
 
+#include <utility>
 #include <vector>
 
 #include "PropertyPath.h"
@@ -51,6 +52,21 @@ class SparqlTripleBase {
 class SparqlTripleSimple : public SparqlTripleBase<TripleComponent> {
   using Base = SparqlTripleBase<TripleComponent>;
   using Base::Base;
+};
+
+class SparqlTripleSimpleWithGraph : public SparqlTripleSimple {
+ public:
+  using Graph = std::variant<std::monostate, Iri, Variable>;
+
+  SparqlTripleSimpleWithGraph(TripleComponent s, TripleComponent p,
+                              TripleComponent o, Graph g,
+                              AdditionalScanColumns additionalScanColumns = {})
+      : SparqlTripleSimple(std::move(s), std::move(p), std::move(o),
+                           std::move(additionalScanColumns)),
+        g_{std::move(g)} {}
+  Graph g_;
+
+  bool operator==(const SparqlTripleSimpleWithGraph&) const = default;
 };
 
 // A triple where the predicate is a `PropertyPath` (which technically still

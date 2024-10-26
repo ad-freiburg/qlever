@@ -140,12 +140,11 @@ class GroupBy : public Operation {
   // skipping empty tables unless `singleIdTable` is set which causes the
   // function to yield a single id table with the complete result.
   template <size_t IN_WIDTH, size_t OUT_WIDTH>
-  cppcoro::generator<IdTable> computeResultLazily(
+  Result::Generator computeResultLazily(
       std::shared_ptr<const Result> subresult,
       std::vector<Aggregate> aggregates,
       std::vector<HashMapAliasInformation> aggregateAliases,
-      std::vector<size_t> groupByCols, std::shared_ptr<LocalVocab> localVocab,
-      bool singleIdTable) const;
+      std::vector<size_t> groupByCols, bool singleIdTable) const;
 
   template <size_t OUT_WIDTH>
   void processGroup(const Aggregate& expression,
