@@ -4,6 +4,8 @@
 
 #include <gmock/gmock.h>
 
+#include <optional>
+
 #include "engine/NeutralElementOperation.h"
 #include "engine/ValuesForTesting.h"
 #include "util/IdTableHelpers.h"
@@ -159,6 +161,20 @@ TEST_F(OperationTestFixture, verifyCachePreventsInProgressState) {
       ElementsAre(
           ParsedAsJson(HasKeyMatching("status", Eq("not started"))),
           ParsedAsJson(HasKeyMatching("status", Eq("fully materialized")))));
+}
+
+// _____________________________________________________________________________
+
+TEST_F(OperationTestFixture, getPrecomputedResultBecauseSiblingOfService) {
+  // If a precomputedResult is set, it will be returned by `getResult`
+  auto idTable = makeIdTableFromVector({{1, 6, 0}, {2, 5, 0}, {3, 4, 0}});
+  auto result = std::make_shared<const Result>(
+      idTable.clone(), std::vector<ColumnIndex>{0}, LocalVocab{});
+  operation.precomputedResultBecauseSiblingOfService() =
+      std::make_optional(result);
+  EXPECT_EQ(operation.getResult(), result);
+  EXPECT_FALSE(
+      operation.precomputedResultBecauseSiblingOfService().has_value());
 }
 
 // _____________________________________________________________________________

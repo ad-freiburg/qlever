@@ -131,6 +131,12 @@ class Operation {
     return false;
   }
 
+  // See the member variable with the same name below for documentation.
+  std::optional<std::shared_ptr<const Result>>&
+  precomputedResultBecauseSiblingOfService() {
+    return precomputedResultBecauseSiblingOfService_;
+  }
+
   RuntimeInformation& runtimeInfo() const { return *_runtimeInfo; }
 
   std::shared_ptr<RuntimeInformation> getRuntimeInfoPointer() {
@@ -353,6 +359,11 @@ class Operation {
   // Recursively call a function on all children.
   template <typename F>
   void forAllDescendants(F f) const;
+
+  // Holds a precomputed Result of this operation if it is the sibling of a
+  // Service operation.
+  std::optional<std::shared_ptr<const Result>>
+      precomputedResultBecauseSiblingOfService_;
 
   std::shared_ptr<RuntimeInformation> _runtimeInfo =
       std::make_shared<RuntimeInformation>();

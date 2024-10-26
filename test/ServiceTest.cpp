@@ -10,6 +10,8 @@
 #include <regex>
 
 #include "engine/Service.h"
+#include "engine/Sort.h"
+#include "engine/Values.h"
 #include "global/Constants.h"
 #include "global/IndexTypes.h"
 #include "global/RuntimeParameters.h"
@@ -127,6 +129,12 @@ class ServiceTest : public ::testing::Test {
     }
     return res.dump();
   }
+
+  static Service::SiblingInfo siblingInfoFromOp(std::shared_ptr<Operation> op) {
+    return Service::SiblingInfo{op->getResult(),
+                                op->getExternallyVisibleVariableColumns(),
+                                op->getCacheKey()};
+  };
 };
 
 // Test basic methods of class `Service`.
@@ -409,19 +417,17 @@ TEST_F(ServiceTest, computeResult) {
 
     auto iri = ad_utility::testing::iri;
     using TC = TripleComponent;
-    auto siblingTree = std::make_shared<QueryExecutionTree>(
-        testQec,
-        std::make_shared<Values>(
-            testQec,
-            (parsedQuery::SparqlValues){
-                {Variable{"?x"}, Variable{"?y"}, Variable{"?z"}},
-                {{TC(iri("<x>")), TC(iri("<y>")), TC(iri("<z>"))},
-                 {TC(iri("<x>")), TC(iri("<y>")), TC(iri("<z2>"))},
-                 {TC(iri("<blu>")), TC(iri("<bla>")), TC(iri("<blo>"))},
-                 // This row will be ignored in the created Values Clause as it
-                 // contains a blank node.
-                 {TC(Id::makeFromBlankNodeIndex(BlankNodeIndex::make(0))),
-                  TC(iri("<bl>")), TC(iri("<ank>"))}}}));
+
+    auto sibling = std::make_shared<Values>(
+        testQec, (parsedQuery::SparqlValues){
+                     {Variable{"?x"}, Variable{"?y"}, Variable{"?z"}},
+                     {{TC(iri("<x>")), TC(iri("<y>")), TC(iri("<z>"))},
+                      {TC(iri("<x>")), TC(iri("<y>")), TC(iri("<z2>"))},
+                      {TC(iri("<blu>")), TC(iri("<bla>")), TC(iri("<blo>"))},
+                      // This row will be ignored in the created Values Clause
+                      // as it contains a blank node.
+                      {TC(Id::makeFromBlankNodeIndex(BlankNodeIndex::make(0))),
+                       TC(iri("<bl>")), TC(iri("<ank>"))}}});
 
     auto parsedServiceClause5 = parsedServiceClause;
     parsedServiceClause5.graphPatternAsString_ =
@@ -441,29 +447,10 @@ TEST_F(ServiceTest, computeResult) {
             genJsonResult({"x", "y", "z2"}, {{"x", "y", "y"},
                                              {"bla", "bli", "y"},
                                              {"blu", "bla", "y"},
-                                             {"bli", "blu", "y"}})),
-        siblingTree};
-    EXPECT_NO_THROW(serviceOperation5.computeResultOnlyForTesting());
+                                             {"bli", "blu", "y"}}))};
 
-    // Check 6: SiblingTree's rows exceed maxValue
-    const auto maxValueRowsDefault =
-        RuntimeParameters().get<"service-max-value-rows">();
-    RuntimeParameters().set<"service-max-value-rows">(0);
-    testQec->getQueryTreeCache().clearAll();
-    std::string_view expectedSparqlQuery6 =
-        "PREFIX doof: <http://doof.org> SELECT ?x ?y ?z2 "
-        "WHERE { ?x <ble> ?y . ?y <is-a> ?z2 . }";
-    Service serviceOperation6{
-        testQec, parsedServiceClause5,
-        getResultFunctionFactory(
-            expectedUrl, expectedSparqlQuery6,
-            genJsonResult({"x", "y", "z2"}, {{"x", "y", "y"},
-                                             {"bla", "bli", "y"},
-                                             {"blue", "bla", "y"},
-                                             {"bli", "blu", "y"}})),
-        siblingTree};
-    EXPECT_NO_THROW(serviceOperation6.computeResultOnlyForTesting());
-    RuntimeParameters().set<"service-max-value-rows">(maxValueRowsDefault);
+    serviceOperation5.siblingInfo_.emplace(siblingInfoFromOp(sibling));
+    EXPECT_NO_THROW(serviceOperation5.computeResultOnlyForTesting());
 
     // Check 7: Lazy computation
     Service lazyService{
@@ -529,47 +516,27 @@ TEST_F(ServiceTest, getCacheKey) {
   // of the siblingTree, as it might alter the Service Query.
   auto iri = ad_utility::testing::iri;
   using TC = TripleComponent;
-  auto siblingTree = std::make_shared<QueryExecutionTree>(
-      testQec,
-      std::make_shared<Values>(
-          testQec,
-          (parsedQuery::SparqlValues){
-              {Variable{"?x"}, Variable{"?y"}, Variable{"?z"}},
-              {{TC(iri("<x>")), TC(iri("<y>")), TC(iri("<z>"))},
-               {TC(iri("<blu>")), TC(iri("<bla>")), TC(iri("<blo>"))}}}));
+  auto sibling = std::make_shared<Values>(
+      testQec, (parsedQuery::SparqlValues){
+                   {Variable{"?x"}, Variable{"?y"}, Variable{"?z"}},
+                   {{TC(iri("<x>")), TC(iri("<y>")), TC(iri("<z>"))},
+                    {TC(iri("<blu>")), TC(iri("<bla>")), TC(iri("<blo>"))}}});
+  service.siblingInfo_.emplace(siblingInfoFromOp(sibling));
 
-  auto siblingCacheKey =
-      service.createCopyWithSiblingTree(siblingTree)->getCacheKey();
+  auto siblingCacheKey = service.getCacheKey();
   EXPECT_NE(baseCacheKey, siblingCacheKey);
 
-  auto siblingTree2 = std::make_shared<QueryExecutionTree>(
-      testQec,
-      std::make_shared<Values>(
-          testQec, (parsedQuery::SparqlValues){
-                       {Variable{"?x"}, Variable{"?y"}, Variable{"?z"}},
-                       {{TC(iri("<x>")), TC(iri("<y>")), TC(iri("<z>"))}}}));
+  auto sibling2 = std::make_shared<Values>(
+      testQec, (parsedQuery::SparqlValues){
+                   {Variable{"?x"}, Variable{"?y"}, Variable{"?z"}},
+                   {{TC(iri("<x>")), TC(iri("<y>")), TC(iri("<z>"))}}});
+  service.siblingInfo_.emplace(siblingInfoFromOp(sibling2));
 
-  auto serviceWithSibling = service.createCopyWithSiblingTree(siblingTree2);
-
-  EXPECT_NE(siblingCacheKey, serviceWithSibling->getCacheKey());
+  EXPECT_NE(siblingCacheKey, service.getCacheKey());
 
   // SILENT keyword
-  parsedQuery::Service silentParsedServiceClause{
-      {Variable{"?x"}, Variable{"?y"}},
-      TripleComponent::Iri::fromIriref("<http://localhorst/api>"),
-      "PREFIX doof: <http://doof.org>",
-      "{ }",
-      true};
-  Service silentService(
-      testQec, silentParsedServiceClause,
-      getResultFunctionFactory(
-          "http://localhorst:80/api",
-          "PREFIX doof: <http://doof.org> SELECT ?x ?y WHERE { }",
-          genJsonResult(
-              {"x", "y"},
-              {{"x", "y"}, {"bla", "bli"}, {"blu", "bla"}, {"bli", "blu"}})));
-
-  EXPECT_NE(baseCacheKey, silentService.getCacheKey());
+  service.parsedServiceClause_.silent_ = true;
+  EXPECT_NE(baseCacheKey, service.getCacheKey());
 }
 
 // Test that bindingToTripleComponent behaves as expected.
@@ -677,4 +644,154 @@ TEST_F(ServiceTest, idToValueForValuesClause) {
       idToVc(index, Id::makeFromGeoPoint(GeoPoint(70.5, 130.2)), localVocab)
           .value(),
       absl::StrCat("\"POINT(130.200000 70.500000)\"^^<", GEO_WKT_LITERAL, ">"));
+}
+
+// ____________________________________________________________________________
+TEST_F(ServiceTest, precomputeSiblingResult) {
+  auto service = std::make_shared<Service>(
+      testQec,
+      parsedQuery::Service{
+          {Variable{"?x"}, Variable{"?y"}},
+          TripleComponent::Iri::fromIriref("<http://localhorst/api>"),
+          "PREFIX doof: <http://doof.org>",
+          "{ }",
+          true},
+      getResultFunctionFactory(
+          "http://localhorst:80/api",
+          "PREFIX doof: <http://doof.org> SELECT ?x ?y WHERE { }",
+          genJsonResult({"x", "y"}, {{"a", "b"}}),
+          boost::beast::http::status::ok, "application/sparql-results+json"));
+
+  auto service2 = std::make_shared<Service>(*service);
+
+  // Adaptation of the Values class, allowing to compute lazy Results.
+  class MockValues : public Values {
+   public:
+    MockValues(QueryExecutionContext* qec,
+               parsedQuery::SparqlValues parsedValues)
+        : Values(qec, parsedValues) {}
+
+    ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override {
+      ProtoResult res = Values::computeResult(false);
+
+      if (!requestLaziness) {
+        return ProtoResult(Result::IdTableVocabPair(res.idTable().clone(),
+                                                    res.localVocab().clone()),
+                           res.sortedBy());
+      }
+
+      // yield each row individually
+      return {[&](IdTable clone) -> Result::Generator {
+                IdTable idt{clone.numColumns(),
+                            ad_utility::makeUnlimitedAllocator<IdTable>()};
+                for (size_t i = 0; i < clone.size(); ++i) {
+                  idt.push_back(clone[i]);
+                  Result::IdTableVocabPair pair{std::move(idt), LocalVocab{}};
+                  co_yield pair;
+                  idt.clear();
+                }
+              }(res.idTable().clone()),
+              res.sortedBy()};
+    }
+  };
+
+  auto iri = ad_utility::testing::iri;
+  using TC = TripleComponent;
+  auto siblingOperation = std::make_shared<MockValues>(
+      testQec, parsedQuery::SparqlValues{{Variable{"?x"}, Variable{"?y"}},
+                                         {{TC(iri("<x>")), TC(iri("<y>"))},
+                                          {TC(iri("<z>")), TC(iri("<a>"))}}});
+  auto sibling = std::make_shared<Sort>(
+      testQec, std::make_shared<QueryExecutionTree>(testQec, siblingOperation),
+      std::vector<ColumnIndex>{});
+
+  // Reset the computed results, to reuse the mock-operations.
+  auto reset = [&]() {
+    service->siblingInfo_.reset();
+    service2->precomputedResultBecauseSiblingOfService().reset();
+    siblingOperation->precomputedResultBecauseSiblingOfService().reset();
+    testQec->clearCacheUnpinnedOnly();
+  };
+
+  // Right requested but it is not a Service -> no computation
+  Service::precomputeSiblingResult(service, sibling, true, false);
+  EXPECT_FALSE(
+      siblingOperation->precomputedResultBecauseSiblingOfService().has_value());
+  EXPECT_FALSE(service->siblingInfo_.has_value());
+  EXPECT_FALSE(service->precomputedResultBecauseSiblingOfService().has_value());
+  reset();
+
+  // Two Service operations -> no computation
+  Service::precomputeSiblingResult(service, service2, false, false);
+  EXPECT_FALSE(
+      service2->precomputedResultBecauseSiblingOfService().has_value());
+  EXPECT_FALSE(service->siblingInfo_.has_value());
+  EXPECT_FALSE(service->precomputedResultBecauseSiblingOfService().has_value());
+  reset();
+
+  // Right requested and two Service operations -> compute
+  Service::precomputeSiblingResult(service, service2, true, false);
+  EXPECT_TRUE(service2->precomputedResultBecauseSiblingOfService().has_value());
+  EXPECT_TRUE(service->siblingInfo_.has_value());
+  EXPECT_FALSE(service->precomputedResultBecauseSiblingOfService().has_value());
+  reset();
+
+  // Right requested and it is a service -> sibling result is computed and
+  // shared with service
+  Service::precomputeSiblingResult(sibling, service, true, false);
+  ASSERT_TRUE(
+      siblingOperation->precomputedResultBecauseSiblingOfService().has_value());
+  EXPECT_TRUE(siblingOperation->precomputedResultBecauseSiblingOfService()
+                  .value()
+                  ->isFullyMaterialized());
+  EXPECT_TRUE(service->siblingInfo_.has_value());
+  EXPECT_FALSE(service->precomputedResultBecauseSiblingOfService().has_value());
+  reset();
+
+  // Compute (large) sibling -> sibling result is computed
+  const auto maxValueRowsDefault =
+      RuntimeParameters().get<"service-max-value-rows">();
+  RuntimeParameters().set<"service-max-value-rows">(0);
+  Service::precomputeSiblingResult(sibling, service, true, false);
+  ASSERT_TRUE(
+      siblingOperation->precomputedResultBecauseSiblingOfService().has_value());
+  EXPECT_TRUE(siblingOperation->precomputedResultBecauseSiblingOfService()
+                  .value()
+                  ->isFullyMaterialized());
+  EXPECT_FALSE(service->siblingInfo_.has_value());
+  EXPECT_FALSE(service->precomputedResultBecauseSiblingOfService().has_value());
+  RuntimeParameters().set<"service-max-value-rows">(maxValueRowsDefault);
+  reset();
+
+  // Lazy compute (small) sibling -> sibling result is fully materialized and
+  // shared with service
+  Service::precomputeSiblingResult(service, sibling, false, true);
+  ASSERT_TRUE(
+      siblingOperation->precomputedResultBecauseSiblingOfService().has_value());
+  EXPECT_TRUE(siblingOperation->precomputedResultBecauseSiblingOfService()
+                  .value()
+                  ->isFullyMaterialized());
+  EXPECT_TRUE(service->siblingInfo_.has_value());
+  EXPECT_FALSE(service->precomputedResultBecauseSiblingOfService().has_value());
+  reset();
+
+  // Lazy compute (large) sibling -> partially materialized result is passed
+  // back to sibling
+  RuntimeParameters().set<"service-max-value-rows">(0);
+  Service::precomputeSiblingResult(service, sibling, false, true);
+  ASSERT_TRUE(
+      siblingOperation->precomputedResultBecauseSiblingOfService().has_value());
+  EXPECT_FALSE(siblingOperation->precomputedResultBecauseSiblingOfService()
+                   .value()
+                   ->isFullyMaterialized());
+  EXPECT_FALSE(service->siblingInfo_.has_value());
+  EXPECT_FALSE(service->precomputedResultBecauseSiblingOfService().has_value());
+  RuntimeParameters().set<"service-max-value-rows">(maxValueRowsDefault);
+
+  // consume the sibling result-generator
+  for ([[maybe_unused]] auto& _ :
+       siblingOperation->precomputedResultBecauseSiblingOfService()
+           .value()
+           ->idTables()) {
+  }
 }
