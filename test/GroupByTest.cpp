@@ -18,6 +18,7 @@
 #include "engine/Values.h"
 #include "engine/ValuesForTesting.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
+#include "engine/sparqlExpressions/CountStarExpression.h"
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
@@ -71,7 +72,8 @@ class GroupByTest : public ::testing::Test {
     _index.setKbName("group_by_test");
     _index.setTextName("group_by_test");
     _index.setOnDiskBase("group_ty_test");
-    _index.createFromFile("group_by_test.nt");
+    _index.createFromFiles(
+        {{"group_by_test.nt", qlever::Filetype::Turtle, std::nullopt}});
     _index.addTextFromContextFile("group_by_test.words", false);
     _index.buildDocsDB("group_by_test.documents");
 
@@ -720,21 +722,57 @@ TEST_F(GroupByOptimizations, correctResultForHashMapOptimization) {
       SparqlTriple{Variable{"?z"}, {"<is>"}, Variable{"?y"}});
   Tree join = makeExecutionTree<Join>(qec, zxScan, zyScan, 0, 0);
   std::vector<ColumnIndex> sortedColumns = {1};
-  Tree sortedJoin = makeExecutionTree<Sort>(qec, join, sortedColumns);
 
   SparqlExpressionPimpl avgYPimpl = makeAvgPimpl(varY);
   std::vector<Alias> aliasesAvgY{Alias{avgYPimpl, Variable{"?avg"}}};
 
   // Calculate result with optimization
   RuntimeParameters().set<"group-by-hash-map-enabled">(true);
-  GroupBy groupByWithOptimization{qec, variablesOnlyX, aliasesAvgY, sortedJoin};
+  GroupBy groupByWithOptimization{qec, variablesOnlyX, aliasesAvgY, join};
   auto resultWithOptimization = groupByWithOptimization.getResult();
 
   // Clear cache, calculate result without optimization
   qec->clearCacheUnpinnedOnly();
   RuntimeParameters().set<"group-by-hash-map-enabled">(false);
-  GroupBy groupByWithoutOptimization{qec, variablesOnlyX, aliasesAvgY,
-                                     sortedJoin};
+  GroupBy groupByWithoutOptimization{qec, variablesOnlyX, aliasesAvgY, join};
+  auto resultWithoutOptimization = groupByWithoutOptimization.getResult();
+
+  // Compare results, using debugString as the result only contains 2 rows
+  ASSERT_EQ(resultWithOptimization->asDebugString(),
+            resultWithoutOptimization->asDebugString());
+}
+
+// _____________________________________________________________________________
+TEST_F(GroupByOptimizations, correctResultForHashMapOptimizationForCountStar) {
+  /* Setup query:
+  SELECT ?x (COUNT(*) as ?c) WHERE {
+    ?z <is-a> ?x .
+    ?z <is> ?y
+  } GROUP BY ?x
+ */
+  Tree zxScan = makeExecutionTree<IndexScan>(
+      qec, Permutation::Enum::PSO,
+      SparqlTriple{Variable{"?z"}, {"<is-a>"}, Variable{"?x"}});
+  Tree zyScan = makeExecutionTree<IndexScan>(
+      qec, Permutation::Enum::PSO,
+      SparqlTriple{Variable{"?z"}, {"<is>"}, Variable{"?y"}});
+  Tree join = makeExecutionTree<Join>(qec, zxScan, zyScan, 0, 0);
+  std::vector<ColumnIndex> sortedColumns = {1};
+
+  SparqlExpressionPimpl countStarPimpl{makeCountStarExpression(false),
+                                       "COUNT(*) as ?c"};
+  std::vector<Alias> aliasesCountStar{Alias{countStarPimpl, Variable{"?c"}}};
+
+  // Calculate result with optimization
+  RuntimeParameters().set<"group-by-hash-map-enabled">(true);
+  GroupBy groupByWithOptimization{qec, variablesOnlyX, aliasesCountStar, join};
+  auto resultWithOptimization = groupByWithOptimization.getResult();
+
+  // Clear cache, calculate result without optimization
+  qec->clearCacheUnpinnedOnly();
+  RuntimeParameters().set<"group-by-hash-map-enabled">(false);
+  GroupBy groupByWithoutOptimization{qec, variablesOnlyX, aliasesCountStar,
+                                     join};
   auto resultWithoutOptimization = groupByWithoutOptimization.getResult();
 
   // Compare results, using debugString as the result only contains 2 rows
@@ -1728,13 +1766,8 @@ TEST_F(GroupByOptimizations, computeGroupByForFullIndexScan) {
         ::testing::ElementsAre(getId("<a>"), getId("<b>"), getId("<c>"),
                                getId("<x>"), getId("<y>"), getId("<z>")));
     if (includeCount) {
-      EXPECT_THAT(
-          result.getColumn(1),
-          ::testing::ElementsAre(I(2), I(2), I(2), I(7), I(1),
-                                 // TODO<joka921> This should be 1.
-                                 // There is one triple added <z> @en@<label>
-                                 // "zz"@en which is currently not filtered out.
-                                 I(2)));
+      EXPECT_THAT(result.getColumn(1),
+                  ::testing::ElementsAre(I(2), I(2), I(2), I(7), I(1), I(1)));
     }
   };
   testWithBothInterfaces(true, true);
@@ -1956,10 +1989,10 @@ class GroupByLazyFixture : public ::testing::TestWithParam<bool> {
     ASSERT_NE(result.isFullyMaterialized(), lazyResult);
     if (lazyResult) {
       size_t counter = 0;
-      for (const IdTable& idTable : result.idTables()) {
+      for (const Result::IdTableVocabPair& pair : result.idTables()) {
         ASSERT_LT(counter, idTables.size())
             << "Too many idTables yielded. Expected: " << idTables.size();
-        EXPECT_EQ(idTables.at(counter), idTable);
+        EXPECT_EQ(idTables.at(counter), pair.idTable_);
         ++counter;
       }
       EXPECT_EQ(counter, idTables.size())
@@ -2134,10 +2167,9 @@ TEST_P(GroupByLazyFixture, nestedAggregateFunctionsWork) {
   auto result = groupBy.computeResultOnlyForTesting(GetParam());
 
   // Acquire the local vocab index for a given string representation if present.
-  auto makeEntry = [&result](std::string string) {
-    return result.localVocab().getIndexOrNullopt(
-        sparqlExpression::detail::LiteralOrIri{
-            L::fromStringRepresentation(std::move(string))});
+  auto makeEntry = [](std::string string, const LocalVocab& localVocab) {
+    return localVocab.getIndexOrNullopt(sparqlExpression::detail::LiteralOrIri{
+        L::fromStringRepresentation(std::move(string))});
   };
 
   auto entryToId = [](std::optional<LocalVocabIndex> entry) {
@@ -2148,30 +2180,30 @@ TEST_P(GroupByLazyFixture, nestedAggregateFunctionsWork) {
   auto i = IntId;
 
   if (GetParam()) {
-    EXPECT_EQ(result.localVocab().size(), 0);
-
     auto& generator = result.idTables();
 
     auto iterator = generator.begin();
     ASSERT_NE(iterator, generator.end());
-    EXPECT_EQ(result.localVocab().size(), 2);
-    auto entry1 = makeEntry("\"1---\"");
-    auto entry2 = makeEntry("\"6---\"");
-    EXPECT_EQ(*iterator, makeIdTableFromVector({{i(0), entryToId(entry1)},
-                                                {i(1), entryToId(entry2)}}));
+    EXPECT_EQ(iterator->localVocab_.size(), 2);
+    auto entry1 = makeEntry("\"1---\"", iterator->localVocab_);
+    auto entry2 = makeEntry("\"6---\"", iterator->localVocab_);
+    EXPECT_EQ(iterator->idTable_,
+              makeIdTableFromVector(
+                  {{i(0), entryToId(entry1)}, {i(1), entryToId(entry2)}}));
     ++iterator;
     ASSERT_NE(iterator, generator.end());
-    EXPECT_EQ(result.localVocab().size(), 3);
-    auto entry3 = makeEntry("\"8---\"");
-    EXPECT_EQ(*iterator, makeIdTableFromVector({{i(2), entryToId(entry3)}}));
+    EXPECT_EQ(iterator->localVocab_.size(), 1);
+    auto entry3 = makeEntry("\"8---\"", iterator->localVocab_);
+    EXPECT_EQ(iterator->idTable_,
+              makeIdTableFromVector({{i(2), entryToId(entry3)}}));
 
     EXPECT_EQ(++iterator, generator.end());
 
   } else {
     EXPECT_EQ(result.localVocab().size(), 3);
-    auto entry1 = makeEntry("\"1---\"");
-    auto entry2 = makeEntry("\"6---\"");
-    auto entry3 = makeEntry("\"8---\"");
+    auto entry1 = makeEntry("\"1---\"", result.localVocab());
+    auto entry2 = makeEntry("\"6---\"", result.localVocab());
+    auto entry3 = makeEntry("\"8---\"", result.localVocab());
 
     ASSERT_TRUE(entry1.has_value());
     ASSERT_TRUE(entry2.has_value());
@@ -2198,4 +2230,20 @@ TEST_P(GroupByLazyFixture, aliasRenameWorks) {
 
   expectReturningIdTables<2>(groupBy, {makeIntTable({{1, 1}, {2, 2}, {4, 4}}),
                                        makeIntTable({{8, 8}})});
+}
+
+// _____________________________________________________________________________
+TEST_P(GroupByLazyFixture, countStarWorks) {
+  std::vector<IdTable> idTables;
+  idTables.push_back(makeIntTable({{1}}));
+  idTables.push_back(makeIntTable({{2}, {4}, {8}}));
+  auto subtree = makeExecutionTree<ValuesForTesting>(
+      qec_, std::move(idTables), vars("?x"), true, std::vector<ColumnIndex>{0});
+
+  Alias alias{
+      SparqlExpressionPimpl{makeCountStarExpression(false), "COUNT(*) as ?y"},
+      V{"?y"}};
+  GroupBy groupBy{qec_, {}, {std::move(alias)}, std::move(subtree)};
+
+  expectReturningIdTables<1>(groupBy, {makeIntTable({{4}})});
 }

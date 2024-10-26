@@ -29,36 +29,42 @@ auto lit = ad_utility::testing::tripleComponentLiteral;
 // on the `permutation` (e.g. a fixed P and S in the PSO permutation)
 // of the `index` and checks whether the result of the
 // scan matches `expected`.
-auto makeTestScanWidthOne = [](const IndexImpl& index) {
-  return [&index](const TripleComponent& c0, const TripleComponent& c1,
-                  Permutation::Enum permutation, const VectorTable& expected,
-                  Permutation::ColumnIndices additionalColumns = {},
-                  ad_utility::source_location l =
-                      ad_utility::source_location::current()) {
-    auto t = generateLocationTrace(l);
-    IdTable result =
-        index.scan({c0, c1, std::nullopt}, permutation, additionalColumns,
-                   std::make_shared<ad_utility::CancellationHandle<>>());
-    ASSERT_EQ(result.numColumns(), 1 + additionalColumns.size());
-    ASSERT_EQ(result, makeIdTableFromVector(expected));
-  };
+auto makeTestScanWidthOne = [](const IndexImpl& index,
+                               const QueryExecutionContext& qec) {
+  return
+      [&index, &qec](const TripleComponent& c0, const TripleComponent& c1,
+                     Permutation::Enum permutation, const VectorTable& expected,
+                     Permutation::ColumnIndices additionalColumns = {},
+                     ad_utility::source_location l =
+                         ad_utility::source_location::current()) {
+        auto t = generateLocationTrace(l);
+        IdTable result =
+            index.scan({c0, c1, std::nullopt}, permutation, additionalColumns,
+                       std::make_shared<ad_utility::CancellationHandle<>>(),
+                       qec.deltaTriples());
+        ASSERT_EQ(result.numColumns(), 1 + additionalColumns.size());
+        ASSERT_EQ(result, makeIdTableFromVector(expected));
+      };
 };
 // Return a lambda that runs a scan for a fixed element `c0`
 // on the `permutation` (e.g. a fixed P in the PSO permutation)
 // of the `index` and checks whether the result of the
 // scan matches `expected`.
-auto makeTestScanWidthTwo = [](const IndexImpl& index) {
-  return [&index](const TripleComponent& c0, Permutation::Enum permutation,
-                  const VectorTable& expected,
-                  ad_utility::source_location l =
-                      ad_utility::source_location::current()) {
-    auto t = generateLocationTrace(l);
-    IdTable wol =
-        index.scan({c0, std::nullopt, std::nullopt}, permutation,
-                   Permutation::ColumnIndicesRef{},
-                   std::make_shared<ad_utility::CancellationHandle<>>());
-    ASSERT_EQ(wol, makeIdTableFromVector(expected));
-  };
+auto makeTestScanWidthTwo = [](const IndexImpl& index,
+                               const QueryExecutionContext& qec) {
+  return
+      [&index, &qec](const TripleComponent& c0, Permutation::Enum permutation,
+                     const VectorTable& expected,
+                     ad_utility::source_location l =
+                         ad_utility::source_location::current()) {
+        auto t = generateLocationTrace(l);
+        IdTable wol =
+            index.scan({c0, std::nullopt, std::nullopt}, permutation,
+                       Permutation::ColumnIndicesRef{},
+                       std::make_shared<ad_utility::CancellationHandle<>>(),
+                       qec.deltaTriples());
+        ASSERT_EQ(wol, makeIdTableFromVector(expected));
+      };
 };
 }  // namespace
 
@@ -72,10 +78,12 @@ TEST(IndexTest, createFromTurtleTest) {
           "<a2> <b2> <c2> .";
 
       auto getIndex = [&]() -> decltype(auto) {
+        auto qec = getQec(kb, loadAllPermutations, loadPatterns);
         [[maybe_unused]] decltype(auto) ref =
             getQec(kb, loadAllPermutations, loadPatterns)->getIndex().getImpl();
-        return ref;
+        return std::tie(ref, *qec);
       };
+
       if (!loadAllPermutations && loadPatterns) {
         AD_EXPECT_THROW_WITH_MESSAGE(
             getIndex(),
@@ -83,7 +91,8 @@ TEST(IndexTest, createFromTurtleTest) {
                 "patterns can only be built when all 6 permutations"));
         return;
       }
-      const IndexImpl& index = getIndex();
+      const auto& [index, qec] = getIndex();
+      const auto& deltaTriples = qec.deltaTriples();
 
       auto getId = makeGetId(getQec(kb)->getIndex());
       Id a = getId("<a>");
@@ -94,31 +103,37 @@ TEST(IndexTest, createFromTurtleTest) {
       Id c2 = getId("<c2>");
 
       // TODO<joka921> We could also test the multiplicities here.
-      ASSERT_TRUE(index.PSO().getMetadata(b).has_value());
-      ASSERT_TRUE(index.PSO().getMetadata(b2).has_value());
-      ASSERT_FALSE(index.PSO().getMetadata(a2).has_value());
-      ASSERT_FALSE(index.PSO().getMetadata(c).has_value());
+      ASSERT_TRUE(index.PSO().getMetadata(b, deltaTriples).has_value());
+      ASSERT_TRUE(index.PSO().getMetadata(b2, deltaTriples).has_value());
+      ASSERT_FALSE(index.PSO().getMetadata(a2, deltaTriples).has_value());
+      ASSERT_FALSE(index.PSO().getMetadata(c, deltaTriples).has_value());
       ASSERT_FALSE(
           index.PSO()
-              .getMetadata(Id::makeFromVocabIndex(VocabIndex::make(735)))
+              .getMetadata(Id::makeFromVocabIndex(VocabIndex::make(735)),
+                           deltaTriples)
               .has_value());
-      ASSERT_FALSE(index.PSO().getMetadata(b).value().isFunctional());
-      ASSERT_TRUE(index.PSO().getMetadata(b2).value().isFunctional());
+      ASSERT_FALSE(
+          index.PSO().getMetadata(b, deltaTriples).value().isFunctional());
+      ASSERT_TRUE(
+          index.PSO().getMetadata(b2, deltaTriples).value().isFunctional());
 
-      ASSERT_TRUE(index.POS().getMetadata(b).has_value());
-      ASSERT_TRUE(index.POS().getMetadata(b2).has_value());
-      ASSERT_FALSE(index.POS().getMetadata(a2).has_value());
-      ASSERT_FALSE(index.POS().getMetadata(c).has_value());
+      ASSERT_TRUE(index.POS().getMetadata(b, deltaTriples).has_value());
+      ASSERT_TRUE(index.POS().getMetadata(b2, deltaTriples).has_value());
+      ASSERT_FALSE(index.POS().getMetadata(a2, deltaTriples).has_value());
+      ASSERT_FALSE(index.POS().getMetadata(c, deltaTriples).has_value());
       ASSERT_FALSE(
           index.POS()
-              .getMetadata(Id::makeFromVocabIndex(VocabIndex::make(735)))
+              .getMetadata(Id::makeFromVocabIndex(VocabIndex::make(735)),
+                           deltaTriples)
               .has_value());
-      ASSERT_TRUE(index.POS().getMetadata(b).value().isFunctional());
-      ASSERT_TRUE(index.POS().getMetadata(b2).value().isFunctional());
+      ASSERT_TRUE(
+          index.POS().getMetadata(b, deltaTriples).value().isFunctional());
+      ASSERT_TRUE(
+          index.POS().getMetadata(b2, deltaTriples).value().isFunctional());
 
       // Relation b
       // Pair index
-      auto testTwo = makeTestScanWidthTwo(index);
+      auto testTwo = makeTestScanWidthTwo(index, qec);
       testTwo(iri("<b>"), Permutation::PSO, {{a, c}, {a, c2}});
       std::vector<std::array<Id, 2>> buffer;
 
@@ -132,7 +147,7 @@ TEST(IndexTest, createFromTurtleTest) {
         // possibly contain the combination of the ids. In this example <b2> is
         // the largest predicate that occurs and <c2> is larger than the largest
         // subject that appears with <b2>.
-        auto testOne = makeTestScanWidthOne(index);
+        auto testOne = makeTestScanWidthOne(index, qec);
         testOne(iri("<b2>"), iri("<c2>"), Permutation::PSO, {});
         // An empty scan result must still have the correct number of columns.
         testOne(iri("<notExisting>"), iri("<alsoNotExisting>"),
@@ -150,7 +165,9 @@ TEST(IndexTest, createFromTurtleTest) {
           "<c> <is-a> <1> .\n"
           "<c> <is-a> <2> .\n";
 
-      const IndexImpl& index = getQec(kb)->getIndex().getImpl();
+      const auto& qec = *getQec(kb);
+      const IndexImpl& index = qec.getIndex().getImpl();
+      const auto& deltaTriples = qec.deltaTriples();
 
       auto getId = makeGetId(getQec(kb)->getIndex());
       Id zero = getId("<0>");
@@ -162,15 +179,17 @@ TEST(IndexTest, createFromTurtleTest) {
       Id c = getId("<c>");
       Id isA = getId("<is-a>");
 
-      ASSERT_TRUE(index.PSO().getMetadata(isA).has_value());
-      ASSERT_FALSE(index.PSO().getMetadata(a).has_value());
+      ASSERT_TRUE(index.PSO().getMetadata(isA, deltaTriples).has_value());
+      ASSERT_FALSE(index.PSO().getMetadata(a, deltaTriples).has_value());
 
-      ASSERT_FALSE(index.PSO().getMetadata(isA).value().isFunctional());
+      ASSERT_FALSE(
+          index.PSO().getMetadata(isA, deltaTriples).value().isFunctional());
 
-      ASSERT_TRUE(index.POS().getMetadata(isA).has_value());
-      ASSERT_FALSE(index.POS().getMetadata(isA).value().isFunctional());
+      ASSERT_TRUE(index.POS().getMetadata(isA, deltaTriples).has_value());
+      ASSERT_FALSE(
+          index.POS().getMetadata(isA, deltaTriples).value().isFunctional());
 
-      auto testTwo = makeTestScanWidthTwo(index);
+      auto testTwo = makeTestScanWidthTwo(index, qec);
       testTwo(iri("<is-a>"), Permutation::PSO,
               {{a, zero},
                {a, one},
@@ -203,7 +222,9 @@ TEST(IndexTest, createFromOnDiskIndexTest) {
       "<a>  <b>  <c2> .\n"
       "<a>  <b2> <c>  .\n"
       "<a2> <b2> <c2> .";
-  const IndexImpl& index = getQec(kb)->getIndex().getImpl();
+  const auto& qec = *getQec(kb);
+  const IndexImpl& index = qec.getIndex().getImpl();
+  const auto& deltaTriples = qec.deltaTriples();
 
   auto getId = makeGetId(getQec(kb)->getIndex());
   Id b = getId("<b>");
@@ -211,19 +232,19 @@ TEST(IndexTest, createFromOnDiskIndexTest) {
   Id a = getId("<a>");
   Id c = getId("<c>");
 
-  ASSERT_TRUE(index.PSO().getMetadata(b).has_value());
-  ASSERT_TRUE(index.PSO().getMetadata(b2).has_value());
-  ASSERT_FALSE(index.PSO().getMetadata(a).has_value());
-  ASSERT_FALSE(index.PSO().getMetadata(c).has_value());
-  ASSERT_FALSE(index.PSO().getMetadata(b).value().isFunctional());
-  ASSERT_TRUE(index.PSO().getMetadata(b2).value().isFunctional());
+  ASSERT_TRUE(index.PSO().getMetadata(b, deltaTriples).has_value());
+  ASSERT_TRUE(index.PSO().getMetadata(b2, deltaTriples).has_value());
+  ASSERT_FALSE(index.PSO().getMetadata(a, deltaTriples).has_value());
+  ASSERT_FALSE(index.PSO().getMetadata(c, deltaTriples).has_value());
+  ASSERT_FALSE(index.PSO().getMetadata(b, deltaTriples).value().isFunctional());
+  ASSERT_TRUE(index.PSO().getMetadata(b2, deltaTriples).value().isFunctional());
 
-  ASSERT_TRUE(index.POS().getMetadata(b).has_value());
-  ASSERT_TRUE(index.POS().getMetadata(b2).has_value());
-  ASSERT_FALSE(index.POS().getMetadata(a).has_value());
-  ASSERT_FALSE(index.POS().getMetadata(c).has_value());
-  ASSERT_TRUE(index.POS().getMetadata(b).value().isFunctional());
-  ASSERT_TRUE(index.POS().getMetadata(b2).value().isFunctional());
+  ASSERT_TRUE(index.POS().getMetadata(b, deltaTriples).has_value());
+  ASSERT_TRUE(index.POS().getMetadata(b2, deltaTriples).has_value());
+  ASSERT_FALSE(index.POS().getMetadata(a, deltaTriples).has_value());
+  ASSERT_FALSE(index.POS().getMetadata(c, deltaTriples).has_value());
+  ASSERT_TRUE(index.POS().getMetadata(b, deltaTriples).value().isFunctional());
+  ASSERT_TRUE(index.POS().getMetadata(b2, deltaTriples).value().isFunctional());
 };
 
 TEST(IndexTest, indexId) {
@@ -254,12 +275,13 @@ TEST(IndexTest, scanTest) {
       IdTable wol(1, makeAllocator());
       IdTable wtl(2, makeAllocator());
 
-      auto getId = makeGetId(getQec(kb)->getIndex());
+      const auto& qec = *getQec(kb);
+      auto getId = makeGetId(qec.getIndex());
       Id a = getId("<a>");
       Id c = getId("<c>");
       Id a2 = getId("<a2>");
       Id c2 = getId("<c2>");
-      auto testTwo = makeTestScanWidthTwo(index);
+      auto testTwo = makeTestScanWidthTwo(index, qec);
 
       testTwo(iri("<b>"), PSO, {{a, c}, {a, c2}});
       testTwo(iri("<x>"), PSO, {});
@@ -268,7 +290,7 @@ TEST(IndexTest, scanTest) {
       testTwo(iri("<x>"), POS, {});
       testTwo(iri("<c>"), POS, {});
 
-      auto testOne = makeTestScanWidthOne(index);
+      auto testOne = makeTestScanWidthOne(index, qec);
 
       testOne(iri("<b>"), iri("<a>"), PSO, {{c}, {c2}});
       testOne(iri("<b>"), iri("<c>"), PSO, {});
@@ -284,10 +306,8 @@ TEST(IndexTest, scanTest) {
          "<c> <is-a> <2> . \n";
 
     {
-      const IndexImpl& index =
-          ad_utility::testing::getQec(kb, true, true, useCompression)
-              ->getIndex()
-              .getImpl();
+      const auto& qec = *getQec(kb, true, true, useCompression);
+      const IndexImpl& index = qec.getIndex().getImpl();
 
       auto getId = makeGetId(ad_utility::testing::getQec(kb)->getIndex());
       Id a = getId("<a>");
@@ -298,7 +318,7 @@ TEST(IndexTest, scanTest) {
       Id two = getId("<2>");
       Id three = getId("<3>");
 
-      auto testTwo = makeTestScanWidthTwo(index);
+      auto testTwo = makeTestScanWidthTwo(index, qec);
       testTwo(iri("<is-a>"), PSO,
               {{{a, zero},
                 {a, one},
@@ -316,7 +336,7 @@ TEST(IndexTest, scanTest) {
                {two, c},
                {three, b}});
 
-      auto testWidthOne = makeTestScanWidthOne(index);
+      auto testWidthOne = makeTestScanWidthOne(index, qec);
 
       testWidthOne(iri("<is-a>"), iri("<0>"), POS, {{a}, {b}});
       testWidthOne(iri("<is-a>"), iri("<1>"), POS, {{a}, {c}});
@@ -333,8 +353,8 @@ TEST(IndexTest, scanTest) {
 
 // ______________________________________________________________
 TEST(IndexTest, emptyIndex) {
-  const IndexImpl& emptyIndexWithCompression =
-      getQec("", true, true, true)->getIndex().getImpl();
+  const auto& qec = *getQec("", true, true, true);
+  const IndexImpl& emptyIndexWithCompression = qec.getIndex().getImpl();
   const IndexImpl& emptyIndexWithoutCompression =
       getQec("", true, true, false)->getIndex().getImpl();
 
@@ -342,7 +362,7 @@ TEST(IndexTest, emptyIndex) {
   EXPECT_EQ(emptyIndexWithoutCompression.numTriples().normal, 0u);
   EXPECT_EQ(emptyIndexWithCompression.numTriples().internal, 0u);
   EXPECT_EQ(emptyIndexWithoutCompression.numTriples().internal, 0u);
-  auto test = makeTestScanWidthTwo(emptyIndexWithCompression);
+  auto test = makeTestScanWidthTwo(emptyIndexWithCompression, qec);
   // Test that scanning an empty index works, but yields an empty permutation.
   test(iri("<x>"), Permutation::PSO, {});
 }
@@ -400,133 +420,35 @@ TEST(IndexTest, TripleToInternalRepresentation) {
   }
 }
 
-TEST(IndexTest, getIgnoredIdRanges) {
-  const Index& indexNoImpl = getQec()->getIndex();
-  const IndexImpl& index = indexNoImpl.getImpl();
-
-  // First manually get the IDs of the vocabulary elements that might appear
-  // in added triples.
-  auto getId = makeGetId(indexNoImpl);
-  Id label = getId("<label>");
-  Id firstLiteral = getId("\"A\"");
-  Id lastLiteral = getId("\"zz\"@en");
-  Id x = getId("<x>");
-  Id enLabel =
-      getId(ad_utility::convertToLanguageTaggedPredicate("<label>", "en"));
-  Id qlLangtag =
-      getId("<http://qlever.cs.uni-freiburg.de/builtin-functions/langtag>");
-  Id en = getId("<http://qlever.cs.uni-freiburg.de/builtin-functions/@en>");
-
-  auto increment = [](Id id) {
-    return Id::makeFromVocabIndex(id.getVocabIndex().incremented());
-  };
-
-  // The range of all entities that start with
-  // "<http://qlever.cs.uni-freiburg.de/builtin-functions/"
-  auto internalEntities = std::pair{en, increment(qlLangtag)};
-
-  // The range of all entities that start with @ (like `@en@<label>`)
-  auto predicatesWithLangtag = std::pair{enLabel, increment(enLabel)};
-  // The range of all literals;
-  auto literals = std::pair{firstLiteral, increment(lastLiteral)};
-  // Nothing in the external vocabulary for this test.
-  //
-
-  auto specialIds = qlever::getBoundsForSpecialIds();
-  {
-    auto [ranges, lambda] = index.getIgnoredIdRanges(Permutation::POS);
-    ASSERT_FALSE(lambda(std::array{label, firstLiteral, x}));
-
-    // Note: The following triple is added, but it should be filtered out via
-    // the ranges and not via the lambda, because it can be retrieved using the
-    // `ranges`.
-    ASSERT_FALSE(lambda(std::array{enLabel, firstLiteral, x}));
-    ASSERT_FALSE(lambda(std::array{x, x, x}));
-    EXPECT_THAT(ranges,
-                UnorderedElementsAre(internalEntities, predicatesWithLangtag,
-                                     specialIds));
-  }
-  {
-    auto [ranges, lambda] = index.getIgnoredIdRanges(Permutation::PSO);
-    ASSERT_FALSE(lambda(std::array{label, x, firstLiteral}));
-
-    // Note: The following triple is added, but it should be filtered out via
-    // the ranges and not via the lambda, because it can be retrieved using the
-    // `ranges`.
-    ASSERT_FALSE(lambda(std::array{enLabel, x, firstLiteral}));
-    ASSERT_FALSE(lambda(std::array{x, x, x}));
-    EXPECT_THAT(ranges,
-                UnorderedElementsAre(internalEntities, predicatesWithLangtag,
-                                     specialIds));
-  }
-  {
-    auto [ranges, lambda] = index.getIgnoredIdRanges(Permutation::SOP);
-    ASSERT_TRUE(lambda(std::array{x, firstLiteral, enLabel}));
-    ASSERT_FALSE(lambda(std::array{x, firstLiteral, label}));
-    ASSERT_FALSE(lambda(std::array{x, x, label}));
-    EXPECT_THAT(ranges,
-                UnorderedElementsAre(internalEntities, literals, specialIds));
-  }
-  {
-    auto [ranges, lambda] = index.getIgnoredIdRanges(Permutation::SPO);
-    ASSERT_TRUE(lambda(std::array{x, enLabel, firstLiteral}));
-    ASSERT_FALSE(lambda(std::array{x, label, firstLiteral}));
-    ASSERT_FALSE(lambda(std::array{x, label, x}));
-    EXPECT_THAT(ranges,
-                UnorderedElementsAre(internalEntities, literals, specialIds));
-  }
-  {
-    auto [ranges, lambda] = index.getIgnoredIdRanges(Permutation::OSP);
-    ASSERT_TRUE(lambda(std::array{firstLiteral, x, enLabel}));
-    ASSERT_FALSE(lambda(std::array{firstLiteral, x, label}));
-    ASSERT_FALSE(lambda(std::array{x, x, label}));
-    EXPECT_THAT(ranges, UnorderedElementsAre(internalEntities, specialIds));
-  }
-  {
-    auto [ranges, lambda] = index.getIgnoredIdRanges(Permutation::OPS);
-    ASSERT_TRUE(lambda(std::array{firstLiteral, enLabel, x}));
-    ASSERT_FALSE(lambda(std::array{firstLiteral, label, x}));
-    ASSERT_FALSE(lambda(std::array{x, label, x}));
-    auto hasPattern =
-        qlever::specialIds().at(std::string{HAS_PATTERN_PREDICATE});
-    ASSERT_TRUE(lambda(std::array{firstLiteral, hasPattern, x}));
-    EXPECT_THAT(ranges, UnorderedElementsAre(internalEntities, specialIds));
-  }
-}
-
 TEST(IndexTest, NumDistinctEntities) {
   std::string turtleInput =
       "<x> <label> \"alpha\" . <x> <label> \"älpha\" . <x> <label> \"A\" . "
       "<x> "
       "<label> \"Beta\". <x> <is-a> <y>. <y> <is-a> <x>. <z> <label> "
       "\"zz\"@en";
-  const IndexImpl& index = getQec(turtleInput)->getIndex().getImpl();
+  const auto& qec = *getQec(turtleInput);
+  const IndexImpl& index = qec.getIndex().getImpl();
   // Note: Those numbers might change as the triples of the test index in
   // `IndexTestHelpers.cpp` change.
   // TODO<joka921> Also check the number of triples and the number of
   // added things.
-  auto subjects = index.numDistinctSubjects();
-  EXPECT_EQ(subjects.normal, 3);
-  // All literals with language tags are added subjects.
-  EXPECT_EQ(subjects.internal, 1);
-  EXPECT_EQ(subjects, index.numDistinctCol0(Permutation::SPO));
-  EXPECT_EQ(subjects, index.numDistinctCol0(Permutation::SOP));
+  auto numSubjects = index.numDistinctSubjects();
+  EXPECT_EQ(numSubjects.normal, 3);
+  // All literals with language tags are added numSubjects.
+  EXPECT_EQ(numSubjects, index.numDistinctCol0(Permutation::SPO));
+  EXPECT_EQ(numSubjects, index.numDistinctCol0(Permutation::SOP));
 
-  auto predicates = index.numDistinctPredicates();
-  EXPECT_EQ(predicates.normal, 2);
-  // The added predicates are `ql:has-pattern`, `ql:langtag`, and one added
+  auto numPredicates = index.numDistinctPredicates();
+  EXPECT_EQ(numPredicates.normal, 2);
+  // The added numPredicates are `ql:has-pattern`, `ql:langtag`, and one added
   // predicate for each combination of predicate+language that is actually used
   // (e.g. `@en@label`).
-  EXPECT_EQ(predicates.internal, 3);
-  EXPECT_EQ(predicates, index.numDistinctCol0(Permutation::PSO));
-  EXPECT_EQ(predicates, index.numDistinctCol0(Permutation::POS));
+  EXPECT_EQ(numPredicates.internal, 3);
+  EXPECT_EQ(numPredicates, index.numDistinctCol0(Permutation::PSO));
+  EXPECT_EQ(numPredicates, index.numDistinctCol0(Permutation::POS));
 
   auto objects = index.numDistinctObjects();
   EXPECT_EQ(objects.normal, 7);
-  // One added object for each language that is used.
-  // Note: The pattern indices from the `ql:has-pattern` predicate are currently
-  // not part of `objects.internal`, but they are also not very important.
-  EXPECT_EQ(objects.internal, 1);
   EXPECT_EQ(objects, index.numDistinctCol0(Permutation::OSP));
   EXPECT_EQ(objects, index.numDistinctCol0(Permutation::OPS));
 
@@ -537,11 +459,14 @@ TEST(IndexTest, NumDistinctEntities) {
   EXPECT_EQ(numTriples.internal, 5);
 
   auto multiplicities = index.getMultiplicities(Permutation::SPO);
-  EXPECT_FLOAT_EQ(multiplicities[0], 12.0 / 4.0);
-  EXPECT_FLOAT_EQ(multiplicities[1], 12.0 / 5.0);
-  EXPECT_FLOAT_EQ(multiplicities[2], 12.0 / 8.0);
+  // 7 triples, three distinct numSubjects, 2 distinct numPredicates, 7 distinct
+  // objects.
+  EXPECT_FLOAT_EQ(multiplicities[0], 7.0 / 3.0);
+  EXPECT_FLOAT_EQ(multiplicities[1], 7.0 / 2.0);
+  EXPECT_FLOAT_EQ(multiplicities[2], 7.0 / 7.0);
 
-  multiplicities = index.getMultiplicities(iri("<x>"), Permutation::SPO);
+  multiplicities =
+      index.getMultiplicities(iri("<x>"), Permutation::SPO, qec.deltaTriples());
   EXPECT_FLOAT_EQ(multiplicities[0], 2.5);
   EXPECT_FLOAT_EQ(multiplicities[1], 1);
 }
@@ -582,4 +507,74 @@ TEST(IndexTest, trivialGettersAndSetters) {
   index.memoryLimitIndexBuilding() = 7_kB;
   EXPECT_EQ(index.memoryLimitIndexBuilding(), 7_kB);
   EXPECT_EQ(std::as_const(index).memoryLimitIndexBuilding(), 7_kB);
+}
+
+TEST(IndexTest, updateInputFileSpecificationsAndLog) {
+  using enum qlever::Filetype;
+  std::vector<qlever::InputFileSpecification> files{
+      {"singleFile.ttl", Turtle, std::nullopt, false}};
+  using namespace ::testing;
+  {
+    testing::internal::CaptureStdout();
+    IndexImpl::updateInputFileSpecificationsAndLog(files, false);
+    EXPECT_THAT(
+        testing::internal::GetCapturedStdout(),
+        AllOf(HasSubstr("from singleFile.ttl"), Not(HasSubstr("parallel"))));
+    EXPECT_FALSE(files.at(0).parseInParallel_);
+  }
+
+  {
+    testing::internal::CaptureStdout();
+    IndexImpl::updateInputFileSpecificationsAndLog(files, true);
+    EXPECT_THAT(testing::internal::GetCapturedStdout(),
+                AllOf(HasSubstr("from singleFile.ttl"),
+                      HasSubstr("settings.json"), HasSubstr("deprecated")));
+    EXPECT_TRUE(files.at(0).parseInParallel_);
+  }
+  {
+    testing::internal::CaptureStdout();
+    IndexImpl::updateInputFileSpecificationsAndLog(files, std::nullopt);
+    EXPECT_THAT(testing::internal::GetCapturedStdout(),
+                AllOf(HasSubstr("from singleFile.ttl"),
+                      HasSubstr("single input"), HasSubstr("deprecated")));
+    EXPECT_TRUE(files.at(0).parseInParallel_);
+  }
+
+  {
+    files.emplace_back("secondFile.ttl", Turtle, std::nullopt, false);
+    auto filesCopy = files;
+    testing::internal::CaptureStdout();
+    IndexImpl::updateInputFileSpecificationsAndLog(files, false);
+    EXPECT_THAT(testing::internal::GetCapturedStdout(),
+                AllOf(HasSubstr("from 2 input streams"),
+                      Not(HasSubstr("is deprecated"))));
+    EXPECT_EQ(files, filesCopy);
+  }
+
+  {
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        IndexImpl::updateInputFileSpecificationsAndLog(files, true),
+        HasSubstr("but has to be specified"));
+  }
+}
+
+TEST(IndexTest, getBlankNodeManager) {
+  // The `blankNodeManager_` is initialized after initializing the Index itself.
+  // Therefore we expect a throw when the getter is called by an
+  // uninitialized Index.
+  Index index{ad_utility::makeUnlimitedAllocator<Id>()};
+  EXPECT_ANY_THROW(index.getBlankNodeManager());
+
+  // Index is initialized -> no throw
+  const Index& index2 = getQec("")->getIndex();
+  EXPECT_NO_THROW(index2.getBlankNodeManager());
+
+  // Given an Index, ensure that the BlankNodeManager's `minIndex_` is set to
+  // the number of blank nodes the Index is initialized with.
+  std::string kb =
+      "_:a <b> <c> .\n"
+      "_:b <c> <a> .\n"
+      "_:c <a> <b> .";
+  const Index& index3 = getQec(kb)->getIndex();
+  EXPECT_EQ(index3.getBlankNodeManager()->minIndex_, 3);
 }

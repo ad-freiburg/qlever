@@ -14,15 +14,17 @@
 
 template <size_t N = 0>
 struct IdTriple {
+  // A triple has four components: subject, predicate, object, and graph.
+  static constexpr size_t NumCols = 4;
   // The three IDs that define the triple.
-  std::array<Id, 3> ids_;
+  std::array<Id, NumCols> ids_;
   // Some additional payload of the triple, e.g. which graph it belongs to.
   std::array<Id, N> payload_;
 
-  explicit IdTriple(const std::array<Id, 3>& ids) requires(N == 0)
+  explicit IdTriple(const std::array<Id, NumCols>& ids) requires(N == 0)
       : ids_(ids), payload_(){};
 
-  explicit IdTriple(const std::array<Id, 3>& ids,
+  explicit IdTriple(const std::array<Id, NumCols>& ids,
                     const std::array<Id, N>& payload) requires(N != 0)
       : ids_(ids), payload_(payload){};
 
@@ -34,10 +36,11 @@ struct IdTriple {
     return os;
   }
 
-  // TODO: default once we drop clang16 with libc++16
+  // TODO: use `= default` once we drop Clang 16 with `libc++16`.
   std::strong_ordering operator<=>(const IdTriple& other) const {
-    return std::tie(ids_[0], ids_[1], ids_[2]) <=>
-           std::tie(other.ids_[0], other.ids_[1], other.ids_[2]);
+    static_assert(NumCols == 4);
+    return std::tie(ids_[0], ids_[1], ids_[2], ids_[3]) <=>
+           std::tie(other.ids_[0], other.ids_[1], other.ids_[2], other.ids_[3]);
   }
   bool operator==(const IdTriple& other) const = default;
 
@@ -49,8 +52,8 @@ struct IdTriple {
   // Permutes the ID of this triple according to the given permutation given by
   // its keyOrder.
   IdTriple<N> permute(const std::array<size_t, 3>& keyOrder) const {
-    std::array<Id, 3> newIds{ids_[keyOrder[0]], ids_[keyOrder[1]],
-                             ids_[keyOrder[2]]};
+    std::array<Id, NumCols> newIds{ids_[keyOrder[0]], ids_[keyOrder[1]],
+                                   ids_[keyOrder[2]], ids_[3]};
     if constexpr (N == 0) {
       return IdTriple<N>(newIds);
     } else {
@@ -60,6 +63,7 @@ struct IdTriple {
 
   CompressedBlockMetadata::PermutedTriple toPermutedTriple() const
       requires(N == 0) {
-    return {ids_[0], ids_[1], ids_[2]};
+    static_assert(NumCols == 4);
+    return {ids_[0], ids_[1], ids_[2], ids_[3]};
   }
 };

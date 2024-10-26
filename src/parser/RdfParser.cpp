@@ -1,14 +1,16 @@
 // Copyright 2018, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach(joka921) <johannes.kalmbach@gmail.com>
-//
 
 #include "parser/RdfParser.h"
 
 #include <absl/strings/charconv.h>
 
 #include <cstring>
+#include <exception>
+#include <optional>
 
+#include "engine/CallFixedSize.h"
 #include "global/Constants.h"
 #include "parser/GeoPoint.h"
 #include "parser/NormalizedString.h"
@@ -466,6 +468,21 @@ TripleComponent TurtleParser<T>::literalAndDatatypeToTripleComponentImpl(
       asNormalizedStringViewUnsafe(normalizedLiteralContent));
   std::string_view type = asStringViewUnsafe(typeIri.getContent());
 
+  // Helper to handle literals that are invalid for the respective datatype
+  auto makeNormalLiteral = [&parser, &literal, normalizedLiteralContent,
+                            type](std::optional<std::exception> error =
+                                      std::nullopt) {
+    std::string_view errorMsg = error.has_value() ? error.value().what() : "";
+    std::string_view sep = error.has_value() ? ": " : "";
+    LOG(DEBUG) << normalizedLiteralContent
+               << " could not be parsed as an object of type " << type << sep
+               << errorMsg
+               << ". It is treated as a plain string literal without datatype "
+                  "instead."
+               << std::endl;
+    parser->lastParseResult_ = std::move(literal);
+  };
+
   try {
     if (ad_utility::contains(integerDatatypes_, type)) {
       parser->parseIntegerConstant(normalizedLiteralContent);
@@ -475,13 +492,7 @@ TripleComponent TurtleParser<T>::literalAndDatatypeToTripleComponentImpl(
       } else if (normalizedLiteralContent == "false") {
         parser->lastParseResult_ = false;
       } else {
-        LOG(DEBUG)
-            << normalizedLiteralContent
-            << " could not be parsed as a boolean object of type " << type
-            << ". It is treated as a plain string literal without datatype "
-               "instead"
-            << std::endl;
-        parser->lastParseResult_ = std::move(literal);
+        makeNormalLiteral();
       }
     } else if (ad_utility::contains(floatDatatypes_, type)) {
       parser->parseDoubleConstant(normalizedLiteralContent);
@@ -513,38 +524,16 @@ TripleComponent TurtleParser<T>::literalAndDatatypeToTripleComponentImpl(
       literal.addDatatype(typeIri);
       parser->lastParseResult_ = std::move(literal);
     }
-  } catch (const DateParseException&) {
-    LOG(DEBUG) << normalizedLiteralContent
-               << " could not be parsed as a date object of type " << type
-               << ". It is treated as a plain string literal without datatype "
-                  "instead"
-               << std::endl;
-    parser->lastParseResult_ = std::move(literal);
+  } catch (const DateParseException& ex) {
+    makeNormalLiteral(ex);
   } catch (const DateOutOfRangeException& ex) {
-    LOG(DEBUG)
-        << normalizedLiteralContent
-        << " could not be parsed as a date object for the following reason: "
-        << ex.what()
-        << ". It is treated as a plain string literal without datatype "
-           "instead"
-        << std::endl;
-    parser->lastParseResult_ = std::move(literal);
-  } catch (const DurationParseException&) {
-    LOG(DEBUG) << normalizedLiteralContent
-               << " could not be parsed as a duration object of type " << type
-               << ". It is treated as a plain string literal without datatype "
-                  "instead"
-               << std::endl;
-    parser->lastParseResult_ = std::move(literal);
+    makeNormalLiteral(ex);
+  } catch (const DurationParseException& ex) {
+    makeNormalLiteral(ex);
   } catch (const DurationOverflowException& ex) {
-    LOG(DEBUG) << normalizedLiteralContent
-               << " could not be parsed as duration object for the following "
-                  "reason: "
-               << ex.what()
-               << ". It is treated as a plain string literal without datatype "
-                  "instead"
-               << std::endl;
-    parser->lastParseResult_ = std::move(literal);
+    makeNormalLiteral(ex);
+  } catch (const CoordinateOutOfRangeException& ex) {
+    makeNormalLiteral(ex);
   } catch (const std::exception& e) {
     parser->raise(e.what());
   }
@@ -841,8 +830,9 @@ void RdfStreamParser<T>::initialize(const string& filename) {
   }
 }
 
+// _____________________________________________________________________________
 template <class T>
-bool RdfStreamParser<T>::getLine(TurtleTriple* triple) {
+bool RdfStreamParser<T>::getLineImpl(TurtleTriple* triple) {
   if (triples_.empty()) {
     // if parsing the line fails because our buffer ends before the end of
     // the next statement we need to be able to recover
@@ -955,7 +945,7 @@ template <typename Tokenizer_T>
 void RdfParallelParser<Tokenizer_T>::parseBatch(size_t parsePosition,
                                                 auto batch) {
   try {
-    RdfStringParser<Tokenizer_T> parser;
+    RdfStringParser<Tokenizer_T> parser{defaultGraphIri_};
     parser.prefixMap_ = this->prefixMap_;
     parser.setPositionOffset(parsePosition);
     parser.setInputStream(std::move(batch));
@@ -1048,7 +1038,7 @@ void RdfParallelParser<Tokenizer_T>::initialize(const string& filename) {
 
 // _______________________________________________________________________
 template <class T>
-bool RdfParallelParser<T>::getLine(TurtleTriple* triple) {
+bool RdfParallelParser<T>::getLineImpl(TurtleTriple* triple) {
   // If the current batch is out of triples_ get the next batch of triples.
   // We need a while loop instead of a simple if in case there is a batch that
   // contains no triples. (Theoretically this might happen, and it is safer this
@@ -1098,6 +1088,109 @@ RdfParallelParser<T>::~RdfParallelParser() {
       "During the destruction of a RdfParallelParser");
 }
 
+// Create a parser for a single file of an `InputFileSpecification`. The type
+// of the parser depends on the filetype (Turtle or N-Quads) and on whether the
+// file is to be parsed in parallel.
+template <typename TokenizerT>
+static std::unique_ptr<RdfParserBase> makeSingleRdfParser(
+    const Index::InputFileSpecification& file) {
+  auto graph = [file]() -> TripleComponent {
+    if (file.defaultGraph_.has_value()) {
+      return TripleComponent::Iri::fromIrirefWithoutBrackets(
+          file.defaultGraph_.value());
+    } else {
+      return qlever::specialIds().at(DEFAULT_GRAPH_IRI);
+    }
+  };
+  auto makeRdfParserImpl = [&filename = file.filename_,
+                            &graph]<int useParallel, int isTurtleInput>()
+      -> std::unique_ptr<RdfParserBase> {
+    using InnerParser =
+        std::conditional_t<isTurtleInput == 1, TurtleParser<TokenizerT>,
+                           NQuadParser<TokenizerT>>;
+    using Parser =
+        std::conditional_t<useParallel == 1, RdfParallelParser<InnerParser>,
+                           RdfStreamParser<InnerParser>>;
+    return std::make_unique<Parser>(filename, graph());
+  };
+
+  // The call to `callFixedSize` lifts runtime integers to compile time
+  // integers. We use it here to create the correct combination of template
+  // arguments.
+  return ad_utility::callFixedSize(
+      std::array{file.parseInParallel_ ? 1 : 0,
+                 file.filetype_ == Index::Filetype::Turtle ? 1 : 0},
+      makeRdfParserImpl);
+}
+
+// ______________________________________________________________
+template <typename T>
+RdfMultifileParser<T>::RdfMultifileParser(
+    const std::vector<qlever::InputFileSpecification>& files) {
+  using namespace qlever;
+  // This lambda parses a single file and pushes the results and all occurring
+  // exceptions to the `finishedBatchQueue_`.
+  auto parseFile = [this](const InputFileSpecification& file) {
+    try {
+      auto parser = makeSingleRdfParser<Tokenizer>(file);
+      while (auto batch = parser->getBatch()) {
+        bool active = finishedBatchQueue_.push(std::move(batch.value()));
+        if (!active) {
+          // The queue was finished prematurely, stop this thread. This is
+          // important to avoid deadlocks.
+          return;
+        }
+      }
+    } catch (...) {
+      finishedBatchQueue_.pushException(std::current_exception());
+      return;
+    }
+    if (numActiveParsers_.fetch_sub(1) == 1) {
+      // We are the last parser, we have to notify the downstream code that the
+      // input has been parsed completely.
+      finishedBatchQueue_.finish();
+    }
+  };
+
+  // Feed all the input files to the `parsingQueue_`.
+  auto makeParsers = [files, this, parseFile]() {
+    for (const auto& file : files) {
+      numActiveParsers_++;
+      bool active = parsingQueue_.push(std::bind_front(parseFile, file));
+      if (!active) {
+        // The queue was finished prematurely, stop this thread. This is
+        // important to avoid deadlocks.
+        return;
+      }
+    }
+    parsingQueue_.finish();
+  };
+  feederThread_ = ad_utility::JThread{makeParsers};
+}
+
+// _____________________________________________________________________________
+template <typename T>
+RdfMultifileParser<T>::~RdfMultifileParser() {
+  ad_utility::ignoreExceptionIfThrows(
+      [this] {
+        parsingQueue_.finish();
+        finishedBatchQueue_.finish();
+      },
+      "During the destruction of an RdfMultifileParser");
+}
+
+//______________________________________________________________________________
+template <typename T>
+bool RdfMultifileParser<T>::getLineImpl(TurtleTriple*) {
+  AD_FAIL();
+}
+
+// _____________________________________________________________________________
+template <typename T>
+std::optional<std::vector<TurtleTriple>> RdfMultifileParser<T>::getBatch() {
+  return finishedBatchQueue_.pop();
+}
+
 // Explicit instantiations
 template class TurtleParser<Tokenizer>;
 template class TurtleParser<TokenizerCtre>;
@@ -1109,3 +1202,5 @@ template class RdfStreamParser<NQuadParser<Tokenizer>>;
 template class RdfStreamParser<NQuadParser<TokenizerCtre>>;
 template class RdfParallelParser<NQuadParser<Tokenizer>>;
 template class RdfParallelParser<NQuadParser<TokenizerCtre>>;
+template class RdfMultifileParser<Tokenizer>;
+template class RdfMultifileParser<TokenizerCtre>;

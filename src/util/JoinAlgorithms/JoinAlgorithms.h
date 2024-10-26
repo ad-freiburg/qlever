@@ -20,14 +20,6 @@ namespace ad_utility {
 
 // Some helper concepts.
 
-// A predicate type `Pred` fulfills `BinaryRangePredicate<Range>` if it can be
-// called with two values of the `Range`'s `value_type` and produces a result
-// that can be converted to `bool`.
-template <typename Pred, typename Range>
-concept BinaryRangePredicate =
-    std::indirect_binary_predicate<Pred, std::ranges::iterator_t<Range>,
-                                   std::ranges::iterator_t<Range>>;
-
 // A  function `F` fulfills `UnaryIteratorFunction` if it can be called with a
 // single argument of the `Range`'s iterator type (NOT value type).
 template <typename F, typename Range>
@@ -667,14 +659,14 @@ class BlockAndSubrange {
 template <typename Iterator, typename End, typename Projection>
 struct JoinSide {
   using CurrentBlocks =
-      std::vector<detail::BlockAndSubrange<typename Iterator::value_type>>;
+      std::vector<detail::BlockAndSubrange<std::iter_value_t<Iterator>>>;
   Iterator it_;
   [[no_unique_address]] const End end_;
   const Projection& projection_;
   CurrentBlocks currentBlocks_{};
 
   // Type aliases for a single element from a block from the left/right input.
-  using value_type = std::ranges::range_value_t<typename Iterator::value_type>;
+  using value_type = std::ranges::range_value_t<std::iter_value_t<Iterator>>;
   // Type alias for the result of the projection.
   using ProjectedEl =
       std::decay_t<std::invoke_result_t<const Projection&, value_type>>;
@@ -691,7 +683,7 @@ template <typename Blocks>
 auto makeJoinSide(Blocks& blocks, const auto& projection) {
   return JoinSide{std::ranges::begin(blocks), std::ranges::end(blocks),
                   projection};
-};
+}
 
 // A concept to identify instantiations of the `JoinSide` template.
 template <typename T>
@@ -759,14 +751,10 @@ struct BlockZipperJoinImpl {
   using ProjectedEl = LeftSide::ProjectedEl;
   static_assert(std::same_as<ProjectedEl, typename RightSide::ProjectedEl>);
 
-  // The largest element for which all blocks are currently stored in the buffer
-  // and processed.
-  std::optional<ProjectedEl> currentMinEl_ = std::nullopt;
-
   // Create an equality comparison from the `lessThan` predicate.
   bool eq(const auto& el1, const auto& el2) {
     return !lessThan_(el1, el2) && !lessThan_(el2, el1);
-  };
+  }
 
   // Recompute the `currentEl`. It is the minimum of the last element in the
   // first block of either of the join sides.
@@ -775,7 +763,7 @@ struct BlockZipperJoinImpl {
       return side.projection_(side.currentBlocks_.front().back());
     };
     return std::min(getFirst(leftSide_), getFirst(rightSide_), lessThan_);
-  };
+  }
 
   // Fill `side.currentBlocks_` with blocks from the range `[side.it_,
   // side.end_)` and advance `side.it_` for each read buffer until all elements
@@ -823,7 +811,7 @@ struct BlockZipperJoinImpl {
     } else {
       return BlockStatus::allFilled;
     }
-  };
+  }
 
   // Remove all elements from `blocks` (either `leftSide_.currentBlocks_` or
   // `rightSide_.currentBlocks`) s.t. only elements `> lastProcessedElement`
@@ -848,7 +836,7 @@ struct BlockZipperJoinImpl {
     if (blocks.at(0).empty()) {
       blocks.clear();
     }
-  };
+  }
 
   // For one of the inputs (`leftSide_.currentBlocks_` or
   // `rightSide_.currentBlocks_`) obtain a tuple of the following elements:
@@ -860,7 +848,7 @@ struct BlockZipperJoinImpl {
     const auto& first = currentBlocks.at(0);
     auto it = std::ranges::lower_bound(first.subrange(), currentEl, lessThan_);
     return std::tuple{std::ref(first.fullBlock()), first.subrange(), it};
-  };
+  }
 
   // Call `compatibleRowAction` for all pairs of elements in the Cartesian
   // product of the blocks in `blocksLeft` and `blocksRight`.
@@ -892,7 +880,7 @@ struct BlockZipperJoinImpl {
       }
     }
     compatibleRowAction_.flush();
-  };
+  }
 
   // Return a vector of subranges of all elements in `blocks` that are equal to
   // `currentEl`. Effectively, these subranges cover all the blocks completely
@@ -907,7 +895,7 @@ struct BlockZipperJoinImpl {
     last.setSubrange(
         std::ranges::equal_range(last.subrange(), currentEl, lessThan_));
     return result;
-  };
+  }
 
   // Join the first block in `currentBlocksLeft` with the first block in
   // `currentBlocksRight`, but ignore all elements that are `>= currentEl`
@@ -949,7 +937,7 @@ struct BlockZipperJoinImpl {
     // Remove the joined elements.
     currentBlocksLeft.at(0).setSubrange(currentElItL, subrangeLeft.end());
     currentBlocksRight.at(0).setSubrange(currentElItR, subrangeRight.end());
-  };
+  }
 
   // If the `targetBuffer` is empty, read the next nonempty block from `[it,
   // end)` if there is one.
@@ -965,7 +953,7 @@ struct BlockZipperJoinImpl {
       }
       ++it;
     }
-  };
+  }
 
   // Fill both buffers (left and right) until they contain at least one block.
   // Then recompute the `currentEl()` and keep on filling the buffers until at
@@ -988,9 +976,7 @@ struct BlockZipperJoinImpl {
     }
 
     // Add the remaining blocks such that condition 3 from above is fulfilled.
-    auto blockStatus = fillEqualToCurrentElBothSides(getCurrentEl());
-    currentMinEl_ = getCurrentEl();
-    return blockStatus;
+    return fillEqualToCurrentElBothSides(getCurrentEl());
   }
 
   // Combine the above functionality and perform one round of joining.
@@ -999,11 +985,10 @@ struct BlockZipperJoinImpl {
   void joinBuffers(BlockStatus& blockStatus) {
     auto& currentBlocksLeft = leftSide_.currentBlocks_;
     auto& currentBlocksRight = rightSide_.currentBlocks_;
-    joinAndRemoveLessThanCurrentEl<DoOptionalJoin>(
-        currentBlocksLeft, currentBlocksRight, getCurrentEl());
-
-    // TODO<joka921> This should still be the same.
     ProjectedEl currentEl = getCurrentEl();
+    joinAndRemoveLessThanCurrentEl<DoOptionalJoin>(
+        currentBlocksLeft, currentBlocksRight, currentEl);
+
     // At this point the `currentBlocksLeft/Right` only consist of elements `>=
     // currentEl`. We now obtain a view on the elements `== currentEl` which are
     // needed for the next step (the Cartesian product). In the last block,

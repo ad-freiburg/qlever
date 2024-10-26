@@ -7,6 +7,7 @@
 #include <string>
 
 #include "global/Constants.h"
+#include "index/CompressedRelation.h"
 #include "index/IndexMetaData.h"
 #include "parser/data/LimitOffsetClause.h"
 #include "util/CancellationHandle.h"
@@ -15,6 +16,9 @@
 
 // Forward declaration of `IdTable`
 class IdTable;
+// Forward declaration of `LocatedTriplesPerBlock`
+class LocatedTriplesPerBlock;
+class DeltaTriples;
 
 // Helper class to store static properties of the different permutations to
 // avoid code duplication. The first template parameter is a search functor for
@@ -51,7 +55,9 @@ class Permutation {
   explicit Permutation(Enum permutation, Allocator allocator);
 
   // everything that has to be done when reading an index from disk
-  void loadFromDisk(const std::string& onDiskBase);
+  void loadFromDisk(const std::string& onDiskBase,
+                    std::function<bool(Id)> isInternalId,
+                    bool loadAdditional = false);
 
   // For a given ID for the col0, retrieve all IDs of the col1 and col2.
   // If `col1Id` is specified, only the col2 is returned for triples that
@@ -60,16 +66,19 @@ class Permutation {
   IdTable scan(const ScanSpecification& scanSpec,
                ColumnIndicesRef additionalColumns,
                const CancellationHandle& cancellationHandle,
+               const DeltaTriples& deltaTriples,
                const LimitOffsetClause& limitOffset = {}) const;
 
   // For a given relation, determine the `col1Id`s and their counts. This is
   // used for `computeGroupByObjectWithCount`. The `col0Id` must have metadata
   // in `meta_`.
   IdTable getDistinctCol1IdsAndCounts(
-      Id col0Id, const CancellationHandle& cancellationHandle) const;
+      Id col0Id, const CancellationHandle& cancellationHandle,
+      const DeltaTriples& deltaTriples) const;
 
   IdTable getDistinctCol0IdsAndCounts(
-      const CancellationHandle& cancellationHandle) const;
+      const CancellationHandle& cancellationHandle,
+      const DeltaTriples& deltaTriples) const;
 
   // Typedef to propagate the `MetadataAndblocks` and `IdTableGenerator` type.
   using MetadataAndBlocks =
@@ -93,29 +102,30 @@ class Permutation {
       const ScanSpecification& scanSpec,
       std::optional<std::vector<CompressedBlockMetadata>> blocks,
       ColumnIndicesRef additionalColumns, CancellationHandle cancellationHandle,
+      const DeltaTriples& deltaTriples,
       const LimitOffsetClause& limitOffset = {}) const;
 
-  std::optional<CompressedRelationMetadata> getMetadata(Id col0Id) const;
+  std::optional<CompressedRelationMetadata> getMetadata(
+      Id col0Id, const DeltaTriples& deltaTriples) const;
 
   // Return the metadata for the scan specified by the `scanSpecification`
   // along with the metadata for all the blocks that are relevant for this scan.
   // If there are no matching blocks (meaning that the scan result will be
   // empty) return `nullopt`.
   std::optional<MetadataAndBlocks> getMetadataAndBlocks(
-      const ScanSpecification& scanSpec) const;
+      const ScanSpecification& scanSpec,
+      const DeltaTriples& deltaTriples) const;
 
   /// Similar to the previous `scan` function, but only get the size of the
   /// result
-  size_t getResultSizeOfScan(const ScanSpecification& scanSpec) const;
+  size_t getResultSizeOfScan(const ScanSpecification& scanSpec,
+                             const DeltaTriples& deltaTriples) const;
 
   // _______________________________________________________
   void setKbName(const string& name) { meta_.setName(name); }
 
   // _______________________________________________________
   const std::string& getKbName() const { return meta_.getName(); }
-
-  // _______________________________________________________
-  const CompressedRelationReader& reader() const { return reader_.value(); }
 
   // _______________________________________________________
   const std::string& readableName() const { return readableName_; }
@@ -131,6 +141,14 @@ class Permutation {
 
   // _______________________________________________________
   const MetaData& metaData() const { return meta_; }
+
+  // _______________________________________________________
+  const Permutation& getActualPermutation(const ScanSpecification& spec) const;
+  const Permutation& getActualPermutation(Id id) const;
+
+  const LocatedTriplesPerBlock& locatedTriples(const DeltaTriples&) const;
+
+  const CompressedRelationReader& reader() const { return reader_.value(); }
 
  private:
   // for Log output, e.g. "POS"
@@ -149,4 +167,9 @@ class Permutation {
   Allocator allocator_;
 
   bool isLoaded_ = false;
+
+  Enum permutation_;
+  std::unique_ptr<Permutation> internalPermutation_ = nullptr;
+
+  std::function<bool(Id)> isInternalId_;
 };

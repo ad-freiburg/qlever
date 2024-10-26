@@ -88,12 +88,13 @@ class ValuesForTesting : public Operation {
       for (const IdTable& idTable : tables_) {
         clones.push_back(idTable.clone());
       }
-      auto generator = [](auto idTables) -> cppcoro::generator<IdTable> {
+      auto generator = [](auto idTables,
+                          LocalVocab localVocab) -> Result::Generator {
         for (IdTable& idTable : idTables) {
-          co_yield std::move(idTable);
+          co_yield {std::move(idTable), localVocab.clone()};
         }
-      }(std::move(clones));
-      return {std::move(generator), resultSortedOn(), localVocab_.clone()};
+      }(std::move(clones), localVocab_.clone());
+      return {std::move(generator), resultSortedOn()};
     }
     std::optional<IdTable> optionalTable;
     if (tables_.size() > 1) {
@@ -149,7 +150,9 @@ class ValuesForTesting : public Operation {
   }
 
   size_t getResultWidth() const override {
-    return tables_.empty() ? 0 : tables_.at(0).numColumns();
+    // Assume a width of 1 if we have no tables and no other information to base
+    // it on because 0 would otherwise cause stuff to break.
+    return tables_.empty() ? 1 : tables_.at(0).numColumns();
   }
 
   vector<ColumnIndex> resultSortedOn() const override {

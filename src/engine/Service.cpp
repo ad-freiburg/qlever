@@ -10,11 +10,13 @@
 
 #include "engine/CallFixedSize.h"
 #include "engine/ExportQueryExecutionTrees.h"
+#include "engine/Sort.h"
 #include "engine/VariableToColumnMap.h"
 #include "global/RuntimeParameters.h"
 #include "parser/RdfParser.h"
 #include "parser/TokenizerCtre.h"
 #include "util/Exception.h"
+#include "util/HashMap.h"
 #include "util/HashSet.h"
 #include "util/StringUtils.h"
 #include "util/http/HttpUtils.h"
@@ -22,12 +24,10 @@
 // ____________________________________________________________________________
 Service::Service(QueryExecutionContext* qec,
                  parsedQuery::Service parsedServiceClause,
-                 GetResultFunction getResultFunction,
-                 std::shared_ptr<QueryExecutionTree> siblingTree)
+                 GetResultFunction getResultFunction)
     : Operation{qec},
       parsedServiceClause_{std::move(parsedServiceClause)},
-      getResultFunction_{std::move(getResultFunction)},
-      siblingTree_{std::move(siblingTree)} {}
+      getResultFunction_{std::move(getResultFunction)} {}
 
 // ____________________________________________________________________________
 std::string Service::getCacheKeyImpl() const {
@@ -39,8 +39,8 @@ std::string Service::getCacheKeyImpl() const {
   os << parsedServiceClause_.serviceIri_.toStringRepresentation() << " {\n"
      << parsedServiceClause_.prologue_ << "\n"
      << parsedServiceClause_.graphPatternAsString_ << "\n";
-  if (siblingTree_ != nullptr) {
-    os << siblingTree_->getRootOperation()->getCacheKey() << "\n";
+  if (siblingInfo_.has_value()) {
+    os << siblingInfo_->cacheKey_ << "\n";
   }
   os << "}\n";
   return std::move(os).str();
@@ -185,15 +185,12 @@ ProtoResult Service::computeResultImpl([[maybe_unused]] bool requestLaziness) {
   // Note: The `body`-generator also keeps the complete response connection
   // alive, so we have no lifetime issue here(see `HttpRequest::send` for
   // details).
-  auto localVocabPtr = std::make_shared<LocalVocab>();
-  auto generator = computeResultLazily(expVariableKeys, std::move(body),
-                                       localVocabPtr, !requestLaziness);
-
+  auto generator =
+      computeResultLazily(expVariableKeys, std::move(body), !requestLaziness);
   return requestLaziness
-             ? ProtoResult{std::move(generator), resultSortedOn(),
-                           std::move(localVocabPtr)}
+             ? ProtoResult{std::move(generator), resultSortedOn()}
              : ProtoResult{cppcoro::getSingleElement(std::move(generator)),
-                           resultSortedOn(), std::move(*localVocabPtr)};
+                           resultSortedOn()};
 }
 
 template <size_t I>
@@ -204,6 +201,9 @@ void Service::writeJsonResult(const std::vector<std::string>& vars,
   IdTableStatic<I> idTable = std::move(*idTablePtr).toStatic<I>();
   checkCancellation();
   std::vector<size_t> numLocalVocabPerColumn(idTable.numColumns());
+  // TODO<joka921> We should include a memory limit, as soon as we can do proper
+  // memory-limited HashMaps.
+  ad_utility::HashMap<std::string, Id> blankNodeMap;
 
   auto writeBindings = [&](const nlohmann::json& bindings, size_t& rowIdx) {
     for (const auto& binding : bindings) {
@@ -211,7 +211,8 @@ void Service::writeJsonResult(const std::vector<std::string>& vars,
       for (size_t colIdx = 0; colIdx < vars.size(); ++colIdx) {
         TripleComponent tc =
             binding.contains(vars[colIdx])
-                ? bindingToTripleComponent(binding[vars[colIdx]])
+                ? bindingToTripleComponent(binding[vars[colIdx]], blankNodeMap,
+                                           localVocab)
                 : TripleComponent::UNDEF();
 
         Id id = std::move(tc).toValueId(getIndex().getVocab(), *localVocab);
@@ -237,10 +238,10 @@ void Service::writeJsonResult(const std::vector<std::string>& vars,
 }
 
 // ____________________________________________________________________________
-cppcoro::generator<IdTable> Service::computeResultLazily(
+Result::Generator Service::computeResultLazily(
     const std::vector<std::string> vars,
-    ad_utility::LazyJsonParser::Generator body,
-    std::shared_ptr<LocalVocab> localVocab, bool singleIdTable) {
+    ad_utility::LazyJsonParser::Generator body, bool singleIdTable) {
+  LocalVocab localVocab{};
   IdTable idTable{getResultWidth(), getExecutionContext()->getAllocator()};
 
   size_t rowIdx = 0;
@@ -255,10 +256,15 @@ cppcoro::generator<IdTable> Service::computeResultLazily(
       }
 
       CALL_FIXED_SIZE(getResultWidth(), &Service::writeJsonResult, this, vars,
-                      partJson, &idTable, localVocab.get(), rowIdx);
+                      partJson, &idTable, &localVocab, rowIdx);
       if (!singleIdTable) {
-        co_yield idTable;
+        Result::IdTableVocabPair pair{std::move(idTable),
+                                      std::move(localVocab)};
+        co_yield pair;
+        // Move back to reuse buffer if not moved out.
+        idTable = std::move(pair.idTable_);
         idTable.clear();
+        localVocab = LocalVocab{};
         rowIdx = 0;
       }
       resultExists = true;
@@ -289,26 +295,21 @@ cppcoro::generator<IdTable> Service::computeResultLazily(
   }
 
   if (singleIdTable) {
-    co_yield idTable;
+    co_yield {std::move(idTable), std::move(localVocab)};
   }
 }
 
 // ____________________________________________________________________________
 std::optional<std::string> Service::getSiblingValuesClause() const {
-  if (siblingTree_ == nullptr) {
+  if (!siblingInfo_.has_value()) {
     return std::nullopt;
   }
-
-  const auto& siblingResult = siblingTree_->getResult();
-  if (siblingResult->idTable().size() >
-      RuntimeParameters().get<"service-max-value-rows">()) {
-    return std::nullopt;
-  }
+  const auto& [siblingResult, siblingVars, _] = siblingInfo_.value();
+  AD_CORRECTNESS_CHECK(siblingResult != nullptr);
 
   checkCancellation();
 
   std::vector<ColumnIndex> commonColumnIndices;
-  const auto& siblingVars = siblingTree_->getVariableColumns();
   std::string vars = "(";
   for (const auto& localVar : parsedServiceClause_.visibleVariables_) {
     auto it = siblingVars.find(localVar);
@@ -322,31 +323,34 @@ std::optional<std::string> Service::getSiblingValuesClause() const {
 
   checkCancellation();
 
-  ad_utility::HashSet<std::string> rowSet;
+  // Creates a single row of the values clause or an empty string on error.
+  auto createValueRow = [&](size_t rowIndex) -> std::string {
+    std::string row = "(";
+    for (const auto& columnIdx : commonColumnIndices) {
+      const auto& optStr = idToValueForValuesClause(
+          getIndex(), siblingResult->idTable()(rowIndex, columnIdx),
+          siblingResult->localVocab());
 
+      if (!optStr.has_value()) {
+        return "";
+      }
+      absl::StrAppend(&row, optStr.value(), " ");
+    }
+    row.back() = ')';
+    return row;
+  };
+
+  ad_utility::HashSet<std::string> rowSet;
   std::string values = " { ";
   for (size_t rowIndex = 0; rowIndex < siblingResult->idTable().size();
        ++rowIndex) {
-    std::string row = "(";
-    for (const auto& columnIdx : commonColumnIndices) {
-      const auto& optionalString = ExportQueryExecutionTrees::idToStringAndType(
-          siblingTree_->getRootOperation()->getIndex(),
-          siblingResult->idTable()(rowIndex, columnIdx),
-          siblingResult->localVocab());
-
-      if (optionalString.has_value()) {
-        absl::StrAppend(&row, optionalString.value().first, " ");
-      }
-    }
-    row.back() = ')';
-
-    if (rowSet.contains(row)) {
+    std::string row = createValueRow(rowIndex);
+    if (row.empty() || rowSet.contains(row)) {
       continue;
     }
-
     rowSet.insert(row);
-    absl::StrAppend(&values, row, " ");
 
+    absl::StrAppend(&values, row, " ");
     checkCancellation();
   }
 
@@ -355,7 +359,9 @@ std::optional<std::string> Service::getSiblingValuesClause() const {
 
 // ____________________________________________________________________________
 TripleComponent Service::bindingToTripleComponent(
-    const nlohmann::json& binding) {
+    const nlohmann::json& binding,
+    ad_utility::HashMap<std::string, Id>& blankNodeMap,
+    LocalVocab* localVocab) const {
   if (!binding.contains("type") || !binding.contains("value")) {
     throw std::runtime_error(absl::StrCat(
         "Missing type or value field in binding. The binding is: '",
@@ -364,6 +370,8 @@ TripleComponent Service::bindingToTripleComponent(
 
   const auto type = binding["type"].get<std::string_view>();
   const auto value = binding["value"].get<std::string_view>();
+  auto blankNodeManagerPtr =
+      getExecutionContext()->getIndex().getBlankNodeManager();
 
   TripleComponent tc;
   if (type == "literal") {
@@ -382,12 +390,12 @@ TripleComponent Service::bindingToTripleComponent(
   } else if (type == "uri") {
     tc = TripleComponent::Iri::fromIrirefWithoutBrackets(value);
   } else if (type == "bnode") {
-    throw std::runtime_error(
-        "Blank nodes in the result of a SERVICE are currently not "
-        "supported. "
-        "For now, consider filtering them out using the ISBLANK function "
-        "or "
-        "converting them via the STR function.");
+    auto [it, wasNew] = blankNodeMap.try_emplace(value, Id());
+    if (wasNew) {
+      it->second = Id::makeFromBlankNodeIndex(
+          localVocab->getBlankNodeIndex(blankNodeManagerPtr));
+    }
+    tc = it->second;
   } else {
     throw std::runtime_error(absl::StrCat("Type ", type,
                                           " is undefined. The binding is: '",
@@ -454,4 +462,162 @@ void Service::throwErrorWithContext(std::string_view msg,
       ">: ", msg, ". First 100 bytes of the response: '", first100,
       (last100.empty() ? "'"
                        : absl::StrCat(", last 100 bytes: '", last100, "'"))));
+}
+
+// ____________________________________________________________________________
+std::optional<std::string> Service::idToValueForValuesClause(
+    const Index& index, Id id, const LocalVocab& localVocab) {
+  using enum Datatype;
+  const auto& optionalStringAndXsdType =
+      ExportQueryExecutionTrees::idToStringAndType(index, id, localVocab);
+  if (!optionalStringAndXsdType.has_value()) {
+    AD_CORRECTNESS_CHECK(id.getDatatype() == Undefined);
+    return "UNDEF";
+  }
+  const auto& [value, xsdType] = optionalStringAndXsdType.value();
+
+  switch (id.getDatatype()) {
+    case BlankNodeIndex:
+      // Blank nodes are not allowed in a values clause. Additionally blank
+      // nodes across a SERVICE endpoint are disjoint anyway, so rows that
+      // contain blank nodes will never create matches and we can safely omit
+      // them.
+      return std::nullopt;
+    case Int:
+    case Double:
+    case Bool:
+      return value;
+    default:
+      if (xsdType) {
+        return absl::StrCat("\"", value, "\"^^<", xsdType, ">");
+      } else if (value.starts_with('<')) {
+        return value;
+      } else {
+        return RdfEscaping::validRDFLiteralFromNormalized(value);
+      }
+  }
+}
+
+// ____________________________________________________________________________
+void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
+                                      std::shared_ptr<Operation> right,
+                                      bool rightOnly, bool requestLaziness) {
+  AD_CORRECTNESS_CHECK(left && right);
+
+  auto skipSortOperation = [](std::shared_ptr<Operation>& op) {
+    if (static_cast<bool>(std::dynamic_pointer_cast<Sort>(op))) {
+      const auto& children = op->getChildren();
+      AD_CORRECTNESS_CHECK(children.size() == 1);
+      op = children[0]->getRootOperation();
+    }
+  };
+  skipSortOperation(left);
+  skipSortOperation(right);
+
+  auto a = std::dynamic_pointer_cast<Service>(left);
+  auto b = std::dynamic_pointer_cast<Service>(right);
+
+  // The sibling is only precomputed iff
+  // - `rightOnly` is true and the right operation is a Service
+  // - or exactly one of the operations is a Service. If we could estimate
+  // the result size of a Service, the Service with the smaller result could
+  // be used as a sibling here.
+  if ((rightOnly && !static_cast<bool>(b)) ||
+      (!rightOnly && static_cast<bool>(a) == static_cast<bool>(b))) {
+    return;
+  }
+
+  const auto& [service, sibling] = [&]() {
+    if (a) {
+      return std::tie(a, right);
+    } else {
+      AD_CORRECTNESS_CHECK(b);
+      return std::tie(b, left);
+    }
+  }();
+  AD_CORRECTNESS_CHECK(service != nullptr);
+
+  auto addRuntimeInfo = [&](bool siblingUsed) {
+    std::string_view v = siblingUsed ? "yes"sv : "no"sv;
+    service->runtimeInfo().addDetail("optimized-with-sibling-result", v);
+    sibling->runtimeInfo().addDetail("used-to-optimize-service-sibling", v);
+  };
+
+  auto siblingResult = sibling->getResult(
+      false, requestLaziness ? ComputationMode::LAZY_IF_SUPPORTED
+                             : ComputationMode::FULLY_MATERIALIZED);
+
+  if (siblingResult->isFullyMaterialized()) {
+    bool resultIsSmall = siblingResult->idTable().size() <=
+                         RuntimeParameters().get<"service-max-value-rows">();
+    if (resultIsSmall) {
+      service->siblingInfo_.emplace(
+          siblingResult, sibling->getExternallyVisibleVariableColumns(),
+          sibling->getCacheKey());
+    }
+    sibling->precomputedResultBecauseSiblingOfService() =
+        std::move(siblingResult);
+    addRuntimeInfo(resultIsSmall);
+    return;
+  }
+
+  // Creates a `Result::Generator` from partially materialized result data.
+  auto partialResultGenerator =
+      [](std::vector<Result::IdTableVocabPair> pairs,
+         Result::Generator prevGenerator,
+         Result::Generator::iterator it) -> Result::Generator {
+    for (auto& pair : pairs) {
+      co_yield pair;
+    }
+    for (auto& pair : std::ranges::subrange{it, prevGenerator.end()}) {
+      co_yield pair;
+    }
+  };
+
+  // Start materializing the lazy `siblingResult`.
+  size_t rows = 0;
+  std::vector<Result::IdTableVocabPair> resultPairs;
+  auto generator = std::move(siblingResult->idTables());
+  const size_t maxValueRows =
+      RuntimeParameters().get<"service-max-value-rows">();
+  for (auto it = generator.begin(); it != generator.end(); ++it) {
+    auto& pair = *it;
+    rows += pair.idTable_.size();
+    resultPairs.push_back(std::move(pair));
+
+    if (rows > maxValueRows) {
+      // Stop precomputation as the size of `siblingResult` exceeds the
+      // threshold it is not useful for the service operation. Pass the
+      // partially materialized result to the sibling.
+      sibling->precomputedResultBecauseSiblingOfService() =
+          std::make_shared<const Result>(
+              partialResultGenerator(std::move(resultPairs),
+                                     std::move(generator), std::move(++it)),
+              siblingResult->sortedBy());
+      addRuntimeInfo(false);
+      return;
+    }
+  }
+
+  // The `siblingResult` has been fully materialized, so it can now be
+  // used in both sibling and service.
+  Result::IdTableVocabPair siblingPair(
+      IdTable{sibling->getResultWidth(),
+              sibling->getExecutionContext()->getAllocator()},
+      LocalVocab{});
+  siblingPair.idTable_.reserve(rows);
+
+  for (auto& pair : resultPairs) {
+    siblingPair.idTable_.insertAtEnd(pair.idTable_);
+    siblingPair.localVocab_.mergeWith(std::span{&pair.localVocab_, 1});
+  }
+
+  service->siblingInfo_.emplace(
+      std::make_shared<Result>(std::move(siblingPair),
+                               siblingResult->sortedBy()),
+      sibling->getExternallyVisibleVariableColumns(), sibling->getCacheKey());
+
+  sibling->precomputedResultBecauseSiblingOfService() =
+      service->siblingInfo_->precomputedResult_;
+  addRuntimeInfo(true);
 }
