@@ -122,7 +122,7 @@ class Server {
 
   /// Handle a http request that asks for the processing of a query.
   /// \param params The key-value-pairs  sent in the HTTP GET request.
-  /// \param query The query.
+  /// \param operation The query.
   /// \param requestTimer Timer that measure the total processing
   ///                     time of this request.
   /// \param request The HTTP request.
@@ -130,6 +130,12 @@ class Server {
   ///             `HttpServer.h` for documentation).
   /// \param timeLimit Duration in seconds after which the query will be
   ///                  cancelled.
+  template <bool isQuery>
+  Awaitable<void> processOperation(
+      const ad_utility::url_parser::ParamValueMap& params,
+      const string& operation, ad_utility::Timer& requestTimer,
+      const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
+      TimeLimit timeLimit);
   Awaitable<void> processQuery(
       const ad_utility::url_parser::ParamValueMap& params, const string& query,
       ad_utility::Timer& requestTimer,

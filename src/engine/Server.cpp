@@ -451,19 +451,31 @@ Awaitable<void> Server::process(
     if (auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
             checkParameter("timeout", std::nullopt), accessTokenOk, request,
             send)) {
-      co_return co_await processQuery(parameters, query.query_, requestTimer,
-                                      std::move(request), send,
-                                      timeLimit.value());
+      co_return co_await processOperation<true>(
+          parameters, query.query_, requestTimer, std::move(request), send,
+          timeLimit.value());
     } else {
       // If the optional is empty, this indicates an error response has been
       // sent to the client already. We can stop here.
       co_return;
     }
   };
-  auto visitUpdate = [](const ad_utility::url_parser::sparqlOperation::Update&)
+  auto visitUpdate =
+      [&checkParameter, &accessTokenOk, &request, &send, &parameters,
+       &requestTimer,
+       this](const ad_utility::url_parser::sparqlOperation::Update& update)
       -> Awaitable<void> {
-    throw std::runtime_error(
-        "SPARQL 1.1 Update is  currently not supported by QLever.");
+    if (auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
+            checkParameter("timeout", std::nullopt), accessTokenOk, request,
+            send)) {
+      co_return co_await processOperation<false>(
+          parameters, update.update_, requestTimer, std::move(request), send,
+          timeLimit.value());
+    } else {
+      // If the optional is empty, this indicates an error response has been
+      // sent to the client already. We can stop here.
+      co_return;
+    }
   };
   auto visitNone =
       [&response, &send, &request](
@@ -757,9 +769,121 @@ MediaType Server::determineMediaType(
 }
 
 // ____________________________________________________________________________
-boost::asio::awaitable<void> Server::processQuery(
+Awaitable<void> Server::processQuery(
     const ad_utility::url_parser::ParamValueMap& params, const string& query,
     ad_utility::Timer& requestTimer,
+    const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
+    TimeLimit timeLimit) {
+  MediaType mediaType = determineMediaType(params, request);
+  LOG(INFO) << "Requested media type of result is \""
+            << ad_utility::toString(mediaType) << "\"" << std::endl;
+
+  // TODO<c++23> use std::optional::transform
+  std::optional<uint64_t> maxSend = std::nullopt;
+  auto parameterValue =
+      ad_utility::url_parser::getParameterCheckAtMostOnce(params, "send");
+  if (parameterValue.has_value()) {
+    maxSend = std::stoul(parameterValue.value());
+  }
+  // Limit JSON requests by default
+  if (!maxSend.has_value() && (mediaType == MediaType::sparqlJson ||
+                               mediaType == MediaType::qleverJson)) {
+    maxSend = MAX_NOF_ROWS_IN_RESULT;
+  }
+
+  auto queryHub = queryHub_.lock();
+  AD_CORRECTNESS_CHECK(queryHub);
+  ad_utility::websocket::MessageSender messageSender{getQueryId(request, query),
+                                                     *queryHub};
+
+  auto [cancellationHandle, cancelTimeoutOnDestruction] =
+      setupCancellationHandle(messageSender.getQueryId(), timeLimit);
+
+  auto [plannedQuery, qec] =
+      co_await setupPlannedQueryAndQEC(params, query, cancellationHandle,
+                                       timeLimit, messageSender, requestTimer);
+  auto qet = plannedQuery.queryExecutionTree_;
+
+  if (plannedQuery.parsedQuery_.hasUpdateClause()) {
+    throw std::runtime_error("Expected Query but received Update.");
+  }
+
+  // Apply stricter limit for export if present
+  if (maxSend.has_value()) {
+    auto& pq = plannedQuery.parsedQuery_;
+    pq._limitOffset._limit =
+        std::min(maxSend.value(), pq._limitOffset.limitOrDefault());
+  }
+  // Make sure we don't underflow here
+  AD_CORRECTNESS_CHECK(plannedQuery.parsedQuery_._limitOffset._offset >=
+                       qet.getRootOperation()->getLimit()._offset);
+  // Don't apply offset twice, if the offset was not applied to the operation
+  // then the exporter can safely apply it during export.
+  plannedQuery.parsedQuery_._limitOffset._offset -=
+      qet.getRootOperation()->getLimit()._offset;
+
+  // This actually processes the query and sends the result in the requested
+  // format.
+  co_await sendStreamableResponse(request, send, mediaType, plannedQuery, qet,
+                                  requestTimer, cancellationHandle);
+
+  // Print the runtime info. This needs to be done after the query
+  // was computed.
+
+  // Log that we are done with the query and how long it took.
+  //
+  // NOTE: We need to explicitly stop the `requestTimer` here because in the
+  // sending code above, it is done only in some cases and not in others (in
+  // particular, not for TSV and CSV because for those, the result does not
+  // contain timing information).
+  //
+  // TODO<joka921> Also log an identifier of the query.
+  LOG(INFO) << "Done processing query and sending result"
+            << ", total time was " << requestTimer.msecs().count() << " ms"
+            << std::endl;
+  LOG(DEBUG) << "Runtime Info:\n"
+             << qet.getRootOperation()->runtimeInfo().toString() << std::endl;
+  co_return;
+}
+
+// ____________________________________________________________________________
+Awaitable<void> Server::processUpdate(
+    const ad_utility::url_parser::ParamValueMap& params, const string& update,
+    ad_utility::Timer& requestTimer,
+    const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
+    TimeLimit timeLimit) {
+  auto queryHub = queryHub_.lock();
+  AD_CORRECTNESS_CHECK(queryHub);
+  ad_utility::websocket::MessageSender messageSender{
+      getQueryId(request, update), *queryHub};
+
+  auto [cancellationHandle, cancelTimeoutOnDestruction] =
+      setupCancellationHandle(messageSender.getQueryId(), timeLimit);
+
+  auto [plannedQuery, qec] =
+      co_await setupPlannedQueryAndQEC(params, update, cancellationHandle,
+                                       timeLimit, messageSender, requestTimer);
+  auto qet = plannedQuery.queryExecutionTree_;
+
+  if (!plannedQuery.parsedQuery_.hasUpdateClause()) {
+    throw std::runtime_error("Expected Update but received Query.");
+  }
+
+  // TODO<qup42> do actual update processing here
+
+  LOG(INFO) << "Done processing update"
+            << ", total time was " << requestTimer.msecs().count() << " ms"
+            << std::endl;
+  LOG(DEBUG) << "Runtime Info:\n"
+             << qet.getRootOperation()->runtimeInfo().toString() << std::endl;
+  co_return;
+}
+
+// ____________________________________________________________________________
+template <bool isQuery>
+Awaitable<void> Server::processOperation(
+    const ad_utility::url_parser::ParamValueMap& params,
+    const string& operation, ad_utility::Timer& requestTimer,
     const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
     TimeLimit timeLimit) {
   using namespace ad_utility::httpUtils;
@@ -776,73 +900,15 @@ boost::asio::awaitable<void> Server::processQuery(
   // access to the runtimeInformation in the case of an error.
   std::optional<PlannedQuery> plannedQuery;
   try {
-    MediaType mediaType = determineMediaType(params, request);
-    LOG(INFO) << "Requested media type of result is \""
-              << ad_utility::toString(mediaType) << "\"" << std::endl;
-
-    // TODO<c++23> use std::optional::transform
-    std::optional<uint64_t> maxSend = std::nullopt;
-    auto parameterValue =
-        ad_utility::url_parser::getParameterCheckAtMostOnce(params, "send");
-    if (parameterValue.has_value()) {
-      maxSend = std::stoul(parameterValue.value());
+    if constexpr (isQuery) {
+      co_await processQuery(params, operation, requestTimer, request, send,
+                            timeLimit);
+    } else {
+      throw std::runtime_error(
+          "SPARQL 1.1 Update is  currently not supported by QLever.");
+      // co_await processUpdate(params, operation, requestTimer, request, send,
+      // timeLimit);
     }
-    // Limit JSON requests by default
-    if (!maxSend.has_value() && (mediaType == MediaType::sparqlJson ||
-                                 mediaType == MediaType::qleverJson)) {
-      maxSend = MAX_NOF_ROWS_IN_RESULT;
-    }
-
-    auto queryHub = queryHub_.lock();
-    AD_CORRECTNESS_CHECK(queryHub);
-    ad_utility::websocket::MessageSender messageSender{
-        getQueryId(request, query), *queryHub};
-
-    auto [cancellationHandle, cancelTimeoutOnDestruction] =
-        setupCancellationHandle(messageSender.getQueryId(), timeLimit);
-
-    auto [plannedQuery, qec] = co_await setupPlannedQueryAndQEC(
-        params, query, cancellationHandle, timeLimit, messageSender,
-        requestTimer);
-    auto qet = plannedQuery.queryExecutionTree_;
-
-    // Apply stricter limit for export if present
-    if (maxSend.has_value()) {
-      auto& pq = plannedQuery.value().parsedQuery_;
-      pq._limitOffset._limit =
-          std::min(maxSend.value(), pq._limitOffset.limitOrDefault());
-    }
-    // Make sure we don't underflow here
-    AD_CORRECTNESS_CHECK(
-        plannedQuery.value().parsedQuery_._limitOffset._offset >=
-        qet.getRootOperation()->getLimit()._offset);
-    // Don't apply offset twice, if the offset was not applied to the operation
-    // then the exporter can safely apply it during export.
-    plannedQuery.value().parsedQuery_._limitOffset._offset -=
-        qet.getRootOperation()->getLimit()._offset;
-
-    // This actually processes the query and sends the result in the requested
-    // format.
-    co_await sendStreamableResponse(request, send, mediaType,
-                                    plannedQuery.value(), qet, requestTimer,
-                                    cancellationHandle);
-
-    // Print the runtime info. This needs to be done after the query
-    // was computed.
-
-    // Log that we are done with the query and how long it took.
-    //
-    // NOTE: We need to explicitly stop the `requestTimer` here because in the
-    // sending code above, it is done only in some cases and not in others (in
-    // particular, not for TSV and CSV because for those, the result does not
-    // contain timing information).
-    //
-    // TODO<joka921> Also log an identifier of the query.
-    LOG(INFO) << "Done processing query and sending result"
-              << ", total time was " << requestTimer.msecs().count() << " ms"
-              << std::endl;
-    LOG(DEBUG) << "Runtime Info:\n"
-               << qet.getRootOperation()->runtimeInfo().toString() << std::endl;
   } catch (const ParseException& e) {
     responseStatus = http::status::bad_request;
     exceptionErrorMsg = e.errorMessageWithoutPositionalInfo();
@@ -882,110 +948,7 @@ boost::asio::awaitable<void> Server::processQuery(
       }
     }
     auto errorResponseJson = composeErrorResponseJson(
-        query, exceptionErrorMsg.value(), requestTimer, metadata);
-    if (plannedQuery.has_value()) {
-      errorResponseJson["runtimeInformation"] =
-          nlohmann::ordered_json(plannedQuery.value()
-                                     .queryExecutionTree_.getRootOperation()
-                                     ->runtimeInfo());
-    }
-    auto response =
-        createJsonResponse(errorResponseJson, request, responseStatus);
-    co_return co_await send(std::move(response));
-  }
-}
-
-// ____________________________________________________________________________
-boost::asio::awaitable<void> Server::processUpdate(
-    const ad_utility::url_parser::ParamValueMap& params, const string& update,
-    ad_utility::Timer& requestTimer,
-    const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
-    TimeLimit timeLimit) {
-  using namespace ad_utility::httpUtils;
-
-  http::status responseStatus = http::status::ok;
-
-  // Put the whole query processing in a try-catch block. If any exception
-  // occurs, log the error message and send a JSON response with all the details
-  // to the client. Note that the C++ standard forbids co_await in the catch
-  // block, hence the workaround with the optional `exceptionErrorMsg`.
-  std::optional<std::string> exceptionErrorMsg;
-  std::optional<ExceptionMetadata> metadata;
-  // Also store the QueryExecutionTree outside the try-catch block to gain
-  // access to the runtimeInformation in the case of an error.
-  std::optional<PlannedQuery> plannedQuery;
-  try {
-    auto queryHub = queryHub_.lock();
-    AD_CORRECTNESS_CHECK(queryHub);
-    ad_utility::websocket::MessageSender messageSender{
-        getQueryId(request, update), *queryHub};
-
-    auto [cancellationHandle, cancelTimeoutOnDestruction] =
-        setupCancellationHandle(messageSender.getQueryId(), timeLimit);
-
-    auto [plannedQuery, qec] = co_await setupPlannedQueryAndQEC(
-        params, update, cancellationHandle, timeLimit, messageSender,
-        requestTimer);
-    auto qet = plannedQuery.queryExecutionTree_;
-
-    // TODO: do actual update
-
-    // Print the runtime info. This needs to be done after the query
-    // was computed.
-
-    // Log that we are done with the query and how long it took.
-    //
-    // NOTE: We need to explicitly stop the `requestTimer` here because in the
-    // sending code above, it is done only in some cases and not in others (in
-    // particular, not for TSV and CSV because for those, the result does not
-    // contain timing information).
-    //
-    // TODO<joka921> Also log an identifier of the query.
-    LOG(INFO) << "Done processing update"
-              << ", total time was " << requestTimer.msecs().count() << " ms"
-              << std::endl;
-    LOG(DEBUG) << "Runtime Info:\n"
-               << qet.getRootOperation()->runtimeInfo().toString() << std::endl;
-  } catch (const ParseException& e) {
-    responseStatus = http::status::bad_request;
-    exceptionErrorMsg = e.errorMessageWithoutPositionalInfo();
-    metadata = e.metadata();
-  } catch (const QueryAlreadyInUseError& e) {
-    responseStatus = http::status::conflict;
-    exceptionErrorMsg = e.what();
-  } catch (const NoSupportedMediatypeError& e) {
-    responseStatus = http::status::bad_request;
-    exceptionErrorMsg = e.what();
-  } catch (const ad_utility::CancellationException& e) {
-    // Send 429 status code to indicate that the time limit was reached
-    // or the query was cancelled because of some other reason.
-    responseStatus = http::status::too_many_requests;
-    exceptionErrorMsg = e.what();
-  } catch (const std::exception& e) {
-    responseStatus = http::status::internal_server_error;
-    exceptionErrorMsg = e.what();
-  }
-  // TODO<qup42> at this stage should probably have a wrapper that takes
-  //  optional<errorMsg> and optional<metadata> and does this logic
-  if (exceptionErrorMsg) {
-    LOG(ERROR) << exceptionErrorMsg.value() << std::endl;
-    if (metadata) {
-      // The `coloredError()` message might fail because of the different
-      // Unicode handling of QLever and ANTLR. Make sure to detect this case so
-      // that we can fix it if it happens.
-      try {
-        LOG(ERROR) << metadata.value().coloredError() << std::endl;
-      } catch (const std::exception& e) {
-        exceptionErrorMsg.value().append(absl::StrCat(
-            " Highlighting an error for the command line log failed: ",
-            e.what()));
-        LOG(ERROR) << "Failed to highlight error in update. " << e.what()
-                   << std::endl;
-        LOG(ERROR) << metadata.value().query_ << std::endl;
-      }
-    }
-    auto errorResponseJson = composeErrorResponseJson(
-        update, exceptionErrorMsg.value(), requestTimer, metadata);
+        operation, exceptionErrorMsg.value(), requestTimer, metadata);
     if (plannedQuery.has_value()) {
       errorResponseJson["runtimeInformation"] =
           nlohmann::ordered_json(plannedQuery.value()
