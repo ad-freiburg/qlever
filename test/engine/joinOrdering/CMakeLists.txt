@@ -1,2 +1,4 @@
 addLinkAndDiscoverTest(IKKBZTest joinOrdering)
+addLinkAndDiscoverTest(TreeCostTest joinOrdering)
+addLinkAndDiscoverTest(LinearizedDPTest joinOrdering)
 #addLinkAndDiscoverTest(CostASITest joinOrdering)

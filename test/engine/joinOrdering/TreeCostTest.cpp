@@ -122,19 +122,53 @@ TEST_F(LinearTreeSanity, JOIN_RELATION_LABELS) {
   ASSERT_EQ(tt.root->left->right->relation.getLabel(), "R2");
   ASSERT_EQ(tt.root->right->left->relation.getLabel(), "R3");
   ASSERT_EQ(tt.root->right->right->relation.getLabel(), "R4");
+
+  EXPECT_THAT(t1.relations_iter_str(), testing::ElementsAre("R1", "R2"));
+  EXPECT_THAT(t2.relations_iter_str(), testing::ElementsAre("R3", "R4"));
+  EXPECT_THAT(tt.relations_iter_str(),
+              testing::ElementsAre("R1", "R2", "R3", "R4"));
 }
 
+/**
+        ⋈
+       / \
+      /   \
+     /     \
+    ⋈       ⋈
+   / \     / \
+  R1  R2  R3  R4
+
+ */
 TEST_F(LinearTreeSanity, CONSTRUCT_2_JOIN_TREES) {
   auto tt = JoinTree(JoinTree(R1, R2), JoinTree(R3, R4), JoinType::BOWTIE);
   ASSERT_EQ(tt.expr(), "((R1⋈R2)⋈(R3⋈R4))");
 }
 
+/**
+        ⋈
+       / \
+      ⋈   ⋈
+     / \   \
+    R1  R2  R5
+ */
 TEST_F(LinearTreeSanity, CONSTRUCT_2_1_JOIN_TREES) {
   auto tt = JoinTree(JoinTree(R1, R2, JoinType::BOWTIE), JoinTree(R5),
                      JoinType::BOWTIE);
   ASSERT_EQ(tt.expr(), "((R1⋈R2)⋈(R5))");
 }
 
+/**
+          ⋈
+         / \
+        ⋈   R3
+       / \
+      /   \
+     /     \
+    ⋈       ⋈
+   / \     / \
+  R1  R2  R4  R5
+
+ */
 TEST_F(LinearTreeSanity, CONSTRUCT_3_JOIN_TREES) {
   auto t1 = JoinTree(R1, R2);
   auto t2 = JoinTree(R4, R5);
@@ -143,6 +177,18 @@ TEST_F(LinearTreeSanity, CONSTRUCT_3_JOIN_TREES) {
   ASSERT_EQ(tt.expr(), "(((R1⋈R2)⋈(R4⋈R5))⋈(R3))");
 }
 
+/**
+          x
+         / \
+        ⋈   R3
+       / \
+      /   \
+     /     \
+    x       ⋈
+   / \     / \
+  R1  R2  R4  R5
+
+ */
 TEST_F(LinearTreeSanity, CONSTRUCT_3_1_JOIN_TREES) {
   auto t1 = JoinTree(R1, R2, JoinType::CROSS);
   auto t2 = JoinTree(R4, R5, JoinType::BOWTIE);
