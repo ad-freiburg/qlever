@@ -14,6 +14,7 @@
 #include "engine/LazyGroupBy.h"
 #include "engine/Sort.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
+#include "engine/sparqlExpressions/CountStarExpression.h"
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/SampleExpression.h"
@@ -672,8 +673,8 @@ std::optional<IdTable> GroupBy::computeGroupByObjectWithCount() const {
   const auto& permutation =
       getExecutionContext()->getIndex().getPimpl().getPermutation(
           indexScan->permutation());
-  auto result = permutation.getDistinctCol1IdsAndCounts(col0Id.value(),
-                                                        cancellationHandle_);
+  auto result = permutation.getDistinctCol1IdsAndCounts(
+      col0Id.value(), cancellationHandle_, deltaTriples());
   indexScan->updateRuntimeInformationWhenOptimizedOut(
       {}, RuntimeInformation::Status::optimizedOut);
 
@@ -725,7 +726,8 @@ std::optional<IdTable> GroupBy::computeGroupByForFullIndexScan() const {
   const auto& permutation =
       getExecutionContext()->getIndex().getPimpl().getPermutation(
           permutationEnum.value());
-  auto table = permutation.getDistinctCol0IdsAndCounts(cancellationHandle_);
+  auto table = permutation.getDistinctCol0IdsAndCounts(cancellationHandle_,
+                                                       deltaTriples());
   if (numCounts == 0) {
     table.setColumnSubset({{0}});
   }
@@ -846,7 +848,8 @@ std::optional<IdTable> GroupBy::computeGroupByForJoinWithFullScan() const {
   // Take care of duplicate values in the input.
   Id currentId = subresult->idTable()(0, columnIndex);
   size_t currentCount = 0;
-  size_t currentCardinality = index.getCardinality(currentId, permutation);
+  size_t currentCardinality =
+      index.getCardinality(currentId, permutation, deltaTriples());
 
   auto pushRow = [&]() {
     // If the count is 0 this means that the element with the `currentId`
@@ -868,7 +871,8 @@ std::optional<IdTable> GroupBy::computeGroupByForJoinWithFullScan() const {
       // TODO<joka921> This is also not quite correct, we want the cardinality
       // without the internally added triples, but that is not easy to
       // retrieve right now.
-      currentCardinality = index.getCardinality(id, permutation);
+      currentCardinality =
+          index.getCardinality(id, permutation, deltaTriples());
     }
     currentCount += currentCardinality;
   }
@@ -1021,6 +1025,10 @@ GroupBy::isSupportedAggregate(sparqlExpression::SparqlExpression* expr) {
 
   if (dynamic_cast<AvgExpression*>(expr)) return H{AVG};
   if (dynamic_cast<CountExpression*>(expr)) return H{COUNT};
+  // We reuse the COUNT implementation which works, but leaves some optimization
+  // potential on the table because `COUNT(*)` doesn't need to check for
+  // undefined values.
+  if (dynamic_cast<CountStarExpression*>(expr)) return H{COUNT};
   if (dynamic_cast<MinExpression*>(expr)) return H{MIN};
   if (dynamic_cast<MaxExpression*>(expr)) return H{MAX};
   if (dynamic_cast<SumExpression*>(expr)) return H{SUM};
@@ -1378,6 +1386,29 @@ void GroupBy::evaluateAlias(
 }
 
 // _____________________________________________________________________________
+sparqlExpression::ExpressionResult
+GroupBy::evaluateChildExpressionOfAggregateFunction(
+    const HashMapAggregateInformation& aggregate,
+    sparqlExpression::EvaluationContext& evaluationContext) {
+  // The code below assumes that DISTINCT is not supported yet.
+  AD_CORRECTNESS_CHECK(aggregate.expr_->isAggregate() ==
+                       sparqlExpression::SparqlExpression::AggregateStatus::
+                           NonDistinctAggregate);
+  // Evaluate child expression on block
+  auto exprChildren = aggregate.expr_->children();
+  // `COUNT(*)` is the only expression without children, so we fake the
+  // expression result in this case by providing an arbitrary, constant and
+  // defined value. This value will be verified as non-undefined by the
+  // `CountExpression` class and ignored afterward as long as `DISTINCT` is
+  // not set (which is not supported yet).
+  bool isCountStar =
+      dynamic_cast<sparqlExpression::CountStarExpression*>(aggregate.expr_);
+  AD_CORRECTNESS_CHECK(isCountStar || exprChildren.size() == 1);
+  return isCountStar ? Id::makeFromBool(true)
+                     : exprChildren[0]->evaluate(&evaluationContext);
+}
+
+// _____________________________________________________________________________
 template <size_t NUM_GROUP_COLUMNS>
 IdTable GroupBy::createResultFromHashMap(
     const HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
@@ -1503,10 +1534,9 @@ IdTable GroupBy::computeGroupByForHashMapOptimization(
     aggregationTimer.cont();
     for (auto& aggregateAlias : aggregateAliases) {
       for (auto& aggregate : aggregateAlias.aggregateInfo_) {
-        // Evaluate child expression on block
-        auto exprChildren = aggregate.expr_->children();
         sparqlExpression::ExpressionResult expressionResult =
-            exprChildren[0]->evaluate(&evaluationContext);
+            GroupBy::evaluateChildExpressionOfAggregateFunction(
+                aggregate, evaluationContext);
 
         auto& aggregationDataVariant =
             aggregationData.getAggregationDataVariant(
