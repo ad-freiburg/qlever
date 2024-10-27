@@ -5,8 +5,8 @@
 
 #pragma once
 
-#include <string>
 #include <compare>
+#include <string>
 
 namespace JoinOrdering {
 
