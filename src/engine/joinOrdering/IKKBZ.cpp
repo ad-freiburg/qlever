@@ -6,11 +6,12 @@
 #include "IKKBZ.h"
 
 #include "CostIKKBZ.h"
+#include "RelationBasic.h"
 
 namespace JoinOrdering {
 
 template <typename N>
-requires RelationAble<N> auto IKKBZ(QueryGraph<N> g) -> std::vector<N> {
+requires RelationAble<N> std::vector<N> IKKBZ(QueryGraph<N> g) {
   // execute the IKKBZ routine for EVERY relation on the graph
   // then take return the permutation with the minimum cost.
   auto rxs(g.relations_);
@@ -38,8 +39,7 @@ requires RelationAble<N> auto IKKBZ(QueryGraph<N> g) -> std::vector<N> {
 }
 
 template <typename N>
-requires RelationAble<N>
-auto IKKBZ(QueryGraph<N> g, const N& n) -> QueryGraph<N> {
+requires RelationAble<N> QueryGraph<N> IKKBZ(QueryGraph<N> g, const N& n) {
   auto new_g = toPrecedenceGraph(g, n);
   auto Ch = CostIKKBZ<N>();
   IKKBZ_Sub(new_g, Ch);
@@ -48,7 +48,7 @@ auto IKKBZ(QueryGraph<N> g, const N& n) -> QueryGraph<N> {
 
 template <typename N>
 requires RelationAble<N>
-auto IKKBZ(QueryGraph<N> g, ICostASI<N>& Ch, const N& n) -> QueryGraph<N> {
+QueryGraph<N> IKKBZ(QueryGraph<N> g, ICostASI<N>& Ch, const N& n) {
   auto new_g = toPrecedenceGraph(g, n);
   IKKBZ_Sub(new_g, Ch);
   return new_g;
@@ -56,8 +56,7 @@ auto IKKBZ(QueryGraph<N> g, ICostASI<N>& Ch, const N& n) -> QueryGraph<N> {
 
 template <typename N>
 requires RelationAble<N>
-[[nodiscard]] auto toPrecedenceGraph(QueryGraph<N>& g, const N& root)
-    -> QueryGraph<N> {
+[[nodiscard]] QueryGraph<N> toPrecedenceGraph(QueryGraph<N>& g, const N& root) {
   // bfs-ing over g and assign direction to visited relation
   auto pg = QueryGraph<N>();
   auto v = std::set<N>();
@@ -267,4 +266,13 @@ requires RelationAble<N> void IKKBZ_Denormalize(QueryGraph<N>& g) {
   // R1 -> R4 -> R6 -> R7 -> R5 -> R3 -> R2
   std::for_each(fv.begin(), fv.end(), uncombine);
 }
+
+// explicit template instantiation
+
+template std::vector<RelationBasic> IKKBZ(QueryGraph<RelationBasic>);
+template QueryGraph<RelationBasic> IKKBZ(QueryGraph<RelationBasic>,
+                                         const RelationBasic&);
+template void IKKBZ_merge(QueryGraph<RelationBasic>&, ICostASI<RelationBasic>&,
+                          std::vector<RelationBasic>&);
+
 }  // namespace JoinOrdering

@@ -49,8 +49,7 @@ requires RelationAble<N> class QueryGraph {
   std::map<N, std::map<N, EdgeInfo>> edges_;
   std::map<N, std::optional<std::pair<N, N>>> hist;
   std::map<N, int> cardinality;
-  std::map<N, float> selectivity;
-
+  std::map<N, float> selectivity;  // FIXME: directed unordered pair
   N root;
 
   /**
@@ -151,7 +150,18 @@ requires RelationAble<N> class QueryGraph {
    * @param n Relation
    * @return A view to the children of Relation n
    */
-  auto get_children(const N& n) const;
+
+  auto get_children(const N& n) const {
+    return std::views::filter(edges_.at(n),  // edges_[n]
+                              [](std::pair<const N&, const EdgeInfo&> t) {
+                                // TODO: structural binding in args
+                                auto const& [x, e] = t;
+                                return e.direction == Direction::PARENT &&
+                                       !e.hidden;
+                              }) |
+           std::views::transform(
+               [](std::pair<const N&, const EdgeInfo&> t) { return t.first; });
+  }
 
   /**
    * Gets the direct parent of a given relation where relation n is set as a
@@ -163,7 +173,16 @@ requires RelationAble<N> class QueryGraph {
    * @param n Relation
    * @return A view to the parent of Relation n
    */
-  auto get_parent(const N& n) const;
+  auto get_parent(const N& n) const {
+    return std::views::filter(edges_.at(n),  // edges_[n],
+                              [](std::pair<const N&, const EdgeInfo&> t) {
+                                auto const& [x, e] = t;
+                                return e.direction == Direction::CHILD &&
+                                       !e.hidden;
+                              }) |
+           std::views::transform(
+               [](std::pair<const N&, const EdgeInfo&> t) { return t.first; });
+  }
 
   /**
    * Recursively breaks down a compound relation till into basic relations.\

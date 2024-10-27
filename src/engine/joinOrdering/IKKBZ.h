@@ -30,7 +30,7 @@ namespace JoinOrdering {
  * @return optimal left-deep tree
  */
 template <typename N>
-requires RelationAble<N> auto IKKBZ(QueryGraph<N> g) -> std::vector<N>;
+requires RelationAble<N> std::vector<N> IKKBZ(QueryGraph<N> g);
 
 /**
  *
@@ -42,8 +42,7 @@ requires RelationAble<N> auto IKKBZ(QueryGraph<N> g) -> std::vector<N>;
  * @return left-deep tree rooted at n
  */
 template <typename N>
-requires RelationAble<N>
-auto IKKBZ(QueryGraph<N> g, const N& n) -> QueryGraph<N>;
+requires RelationAble<N> QueryGraph<N> IKKBZ(QueryGraph<N> g, const N& n);
 
 /**
  *
@@ -57,7 +56,7 @@ auto IKKBZ(QueryGraph<N> g, const N& n) -> QueryGraph<N>;
  */
 template <typename N>
 requires RelationAble<N>
-auto IKKBZ(QueryGraph<N> g, ICostASI<N>& Ch, const N& n) -> QueryGraph<N>;
+QueryGraph<N> IKKBZ(QueryGraph<N> g, ICostASI<N>& Ch, const N& n);
 
 /**
  * The precedence graph describes the (partial) ordering of joins
@@ -109,8 +108,7 @@ auto IKKBZ(QueryGraph<N> g, ICostASI<N>& Ch, const N& n) -> QueryGraph<N>;
  */
 template <typename N>
 requires RelationAble<N>
-[[nodiscard]] auto toPrecedenceGraph(QueryGraph<N>& g, const N& root)
-    -> QueryGraph<N>;
+[[nodiscard]] QueryGraph<N> toPrecedenceGraph(QueryGraph<N>& g, const N& root);
 
 template <typename N>
 requires RelationAble<N> void IKKBZ_Sub(QueryGraph<N>& g);

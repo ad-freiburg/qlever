@@ -5,6 +5,8 @@
 
 #include "RelationBasic.h"
 
+#include <utility>
+
 namespace JoinOrdering {
 
 RelationBasic::RelationBasic() = default;
@@ -15,13 +17,20 @@ RelationBasic::RelationBasic() = default;
 
 RelationBasic::RelationBasic(std::string label, int cardinality)
     : cardinality(cardinality), label(std::move(label)) {}
-auto RelationBasic::operator<=>(const RelationBasic& other) const = default;
+std::strong_ordering RelationBasic::operator<=>(const RelationBasic& other) const =
+    default;
 
+// bool RelationBasic::operator<(const RelationBasic& other) const {
+//   return this->cardinality < other.cardinality;
+// }
 bool RelationBasic::operator==(const RelationBasic& other) const {
   return this->cardinality == other.cardinality && this->label == other.label;
 }
 int RelationBasic::getCardinality() const { return cardinality; }
 std::string RelationBasic::getLabel() const { return label; }
+void RelationBasic::setLabel(std::string label_) {
+  this->label = std::move(label_);
+}
 
 // ref: https://abseil.io/docs/cpp/guides/hash
 template <typename H>

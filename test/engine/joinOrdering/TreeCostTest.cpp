@@ -3,6 +3,7 @@
 // Author:
 // Mahmoud Khalaf (2024-, khalaf@cs.uni-freiburg.de)
 
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include "engine/joinOrdering/CostCout.h"

@@ -6,6 +6,7 @@
 #pragma once
 
 #include <string>
+#include <compare>
 
 namespace JoinOrdering {
 
@@ -18,11 +19,13 @@ class RelationBasic {
   RelationBasic();
   //  RelationBasic(const RelationBasic& r);
   RelationBasic(std::string label, int cardinality);
+  std::strong_ordering operator<=>(const RelationBasic& other) const;
 
-  auto operator<=>(const RelationBasic& other) const;
+  //  bool operator<(const RelationBasic& other) const;
   bool operator==(const RelationBasic& other) const;
   [[nodiscard]] int getCardinality() const;
   [[nodiscard]] std::string getLabel() const;
+  void setLabel(std::string label_);
 
   template <typename H>
   friend H AbslHashValue(H h, const RelationBasic& r);

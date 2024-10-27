@@ -147,35 +147,36 @@ bool QueryGraph<N>::is_chain(const N& n) const {  // NOLINT
 
 template <typename N>
 requires RelationAble<N> bool QueryGraph<N>::is_subtree(const N& n) const {
+  // TODO: mem subtrees?
   return !is_chain(n) and std::ranges::all_of(get_children(n), [&](const N& x) {
     return is_chain(x);
   });
 }
+//
+// template <typename N>
+// requires RelationAble<N> auto QueryGraph<N>::get_parent(const N& n) const {
+//  return std::views::filter(edges_.at(n),  // edges_[n],
+//                            [](std::pair<const N&, const EdgeInfo&> t) {
+//                              auto const& [x, e] = t;
+//                              return e.direction == Direction::CHILD &&
+//                                     !e.hidden;
+//                            }) |
+//         std::views::transform(
+//             [](std::pair<const N&, const EdgeInfo&> t) { return t.first; });
+//}
 
-template <typename N>
-requires RelationAble<N> auto QueryGraph<N>::get_parent(const N& n) const {
-  return std::views::filter(edges_.at(n),  // edges_[n],
-                            [](std::pair<const N&, const EdgeInfo&> t) {
-                              auto const& [x, e] = t;
-                              return e.direction == Direction::CHILD &&
-                                     !e.hidden;
-                            }) |
-         std::views::transform(
-             [](std::pair<const N&, const EdgeInfo&> t) { return t.first; });
-}
-
-template <typename N>
-requires RelationAble<N> auto QueryGraph<N>::get_children(const N& n) const {
-  return std::views::filter(edges_.at(n),  // edges_[n]
-                            [](std::pair<const N&, const EdgeInfo&> t) {
-                              // TODO: structural binding in args
-                              auto const& [x, e] = t;
-                              return e.direction == Direction::PARENT &&
-                                     !e.hidden;
-                            }) |
-         std::views::transform(
-             [](std::pair<const N&, const EdgeInfo&> t) { return t.first; });
-}
+// template <typename N>
+// requires RelationAble<N> auto QueryGraph<N>::get_children(const N& n) const {
+//   return std::views::filter(edges_.at(n),  // edges_[n]
+//                             [](std::pair<const N&, const EdgeInfo&> t) {
+//                               // TODO: structural binding in args
+//                               auto const& [x, e] = t;
+//                               return e.direction == Direction::PARENT &&
+//                                      !e.hidden;
+//                             }) |
+//          std::views::transform(
+//              [](std::pair<const N&, const EdgeInfo&> t) { return t.first; });
+// }
 
 template <typename N>
 requires RelationAble<N>
@@ -197,7 +198,7 @@ auto QueryGraph<N>::get_chained_subtree(const N& n) -> N {
 template <typename N>
 requires RelationAble<N> auto QueryGraph<N>::iter() -> std::vector<N> {
   // QueryGraph(Relation)?
-  AD_CONTRACT_CHECK(&root != NULL);
+  AD_CONTRACT_CHECK(&root != nullptr);
   return iter(root);
 }
 
@@ -226,7 +227,7 @@ auto QueryGraph<N>::iter(const N& n) -> std::vector<N> {
     }
   }
 
-  return erg;  // std::move?
+  return erg;
 }
 
 template <typename N>
@@ -284,5 +285,7 @@ requires RelationAble<N> constexpr Direction QueryGraph<N>::inv(Direction dir) {
       return Direction::UNDIRECTED;
   }
 }
+
+template class QueryGraph<RelationBasic>;
 
 }  // namespace JoinOrdering

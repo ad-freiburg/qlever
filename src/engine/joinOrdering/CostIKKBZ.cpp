@@ -5,11 +5,13 @@
 
 #include "CostIKKBZ.h"
 
+#include "RelationBasic.h"
+
 namespace JoinOrdering {
 
 template <typename N>
 requires RelationAble<N>
-auto CostIKKBZ<N>::C(const QueryGraph<N>& g, std::span<N> seq) -> float {
+float CostIKKBZ<N>::C(const QueryGraph<N>& g, std::span<N> seq) {
   if (seq.empty()) return 0.0f;
   auto s1 = seq.front();
   //  auto s2 = seq | std::views::drop(1);
@@ -19,7 +21,7 @@ auto CostIKKBZ<N>::C(const QueryGraph<N>& g, std::span<N> seq) -> float {
 
 template <typename N>
 requires RelationAble<N>
-auto CostIKKBZ<N>::C(const QueryGraph<N>& g, const N& n) -> float {
+float CostIKKBZ<N>::C(const QueryGraph<N>& g, const N& n) {
   // return 0 if Ri is root 113/637
   if (g.root == n) return 0;
 
@@ -32,7 +34,7 @@ auto CostIKKBZ<N>::C(const QueryGraph<N>& g, const N& n) -> float {
 
 template <typename N>
 requires RelationAble<N>
-auto CostIKKBZ<N>::T(const QueryGraph<N>& g, const N& n) -> float {
+float CostIKKBZ<N>::T(const QueryGraph<N>& g, const N& n) {
   // return 0 if Ri is root 113/637
   if (g.root == n) return 1;
   return g.selectivity.at(n) * static_cast<float>(n.getCardinality());
@@ -40,7 +42,7 @@ auto CostIKKBZ<N>::T(const QueryGraph<N>& g, const N& n) -> float {
 
 template <typename N>
 requires RelationAble<N>
-auto CostIKKBZ<N>::rank(const QueryGraph<N>& g, const N& n) -> float {
+float CostIKKBZ<N>::rank(const QueryGraph<N>& g, const N& n) {
   // memorize cost and rank
   // avoid recomputing for long sequences
   if (rank_m.contains(n)) return rank_m[n];     // important
@@ -56,4 +58,10 @@ auto CostIKKBZ<N>::rank(const QueryGraph<N>& g, const N& n) -> float {
   T_m[n] = t;
   return r;
 }
+
+template float CostIKKBZ<RelationBasic>::C(const QueryGraph<RelationBasic>& g,
+                                           std::span<RelationBasic> seq);
+
+template float CostIKKBZ<RelationBasic>::rank(
+    const QueryGraph<RelationBasic>& g, const RelationBasic& n);
 }  // namespace JoinOrdering

@@ -8,18 +8,23 @@
 #include <span>
 
 #include "ICostASI.h"
-#include "util/HashMap.h"
+// #include "util/HashMap.h"
+#include <map>
 
 namespace JoinOrdering {
 
 template <typename N>
 requires RelationAble<N> class CostIKKBZ : public ICostASI<N> {
  public:
-  ad_utility::HashMap<N, float> rank_m;
-  ad_utility::HashMap<N, float> C_m;
-  ad_utility::HashMap<N, float> T_m;
+  //  ad_utility::HashMap<N, float> rank_m;
+  //  ad_utility::HashMap<N, float> C_m;
+  //  ad_utility::HashMap<N, float> T_m;
 
-  auto rank(const QueryGraph<N>& g, const N& n) -> float;
+  std::map<N, float> rank_m;
+  std::map<N, float> C_m;
+  std::map<N, float> T_m;
+
+  float rank(const QueryGraph<N>& g, const N& n);
 
   /**
    *
@@ -31,7 +36,7 @@ requires RelationAble<N> class CostIKKBZ : public ICostASI<N> {
    * @param n Relation
    * @return T(n)
    */
-  auto T(const QueryGraph<N>& g, const N& n) -> float;
+  float T(const QueryGraph<N>& g, const N& n);
   /**
    *
    * a join is called increasing if cost > 1
@@ -43,7 +48,7 @@ requires RelationAble<N> class CostIKKBZ : public ICostASI<N> {
    * @param n Relation
    * @return C(n)
    */
-  auto C(const QueryGraph<N>& g, const N& n) -> float;
+  float C(const QueryGraph<N>& g, const N& n);
 
   /**
    *
@@ -61,7 +66,7 @@ requires RelationAble<N> class CostIKKBZ : public ICostASI<N> {
    * @param seq sequence of relations (may include compound relations)
    * @return C(S_1 S_2)
    */
-  auto C(const QueryGraph<N>& g, std::span<N> seq) -> float;
+  float C(const QueryGraph<N>& g, std::span<N> seq);
 };
 
 }  // namespace JoinOrdering
