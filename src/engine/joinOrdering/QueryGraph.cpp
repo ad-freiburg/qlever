@@ -200,7 +200,7 @@ auto QueryGraph<N>::get_chained_subtree(const N& n) -> N {
 template <typename N>
 requires RelationAble<N> auto QueryGraph<N>::iter() -> std::vector<N> {
   // QueryGraph(Relation)?
-  AD_CONTRACT_CHECK(&root != nullptr);
+  //  AD_CONTRACT_CHECK(&root != nullptr); // always true
   return iter(root);
 }
 

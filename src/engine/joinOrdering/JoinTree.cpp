@@ -119,7 +119,8 @@ requires RelationAble<N>
 bool JoinTree<N>::isRightDeep(std::shared_ptr<JoinNode<N>> r) {
   if (r == nullptr) return true;
   if (r->left) return false;
-  if (!r->left && r->right) return isRightDeep(r->right);
+  //  if (!r->left && r->right)
+  return isRightDeep(r->right);
 }
 
 template <typename N>
@@ -132,7 +133,8 @@ requires RelationAble<N>
 bool JoinTree<N>::isLeftDeep(std::shared_ptr<JoinNode<N>> r) {
   if (r == nullptr) return true;
   if (r->right) return false;
-  if (!r->right && r->left) return isLeftDeep(r->left);
+  //  if (!r->right && r->left)
+  return isLeftDeep(r->left);
 }
 
 // explicit template instantiation
