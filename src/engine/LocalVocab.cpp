@@ -20,11 +20,11 @@ LocalVocab LocalVocab::clone() const {
 // _____________________________________________________________________________
 LocalVocab LocalVocab::merge(std::span<const LocalVocab*> vocabs) {
   LocalVocab res;
-  auto inserter = std::back_inserter(res.otherWordSets_);
-  for (const auto* vocab : vocabs) {
-    std::ranges::copy(vocab->otherWordSets_, inserter);
-    *inserter = vocab->primaryWordSet_;
-  }
+  res.mergeWith(vocabs |
+                std::views::transform(
+                    [](const LocalVocab* localVocab) -> const LocalVocab& {
+                      return *localVocab;
+                    }));
   return res;
 }
 
@@ -76,4 +76,24 @@ std::vector<LocalVocab::LiteralOrIri> LocalVocab::getAllWordsForTesting()
     std::ranges::copy(*previous, std::back_inserter(result));
   }
   return result;
+}
+
+// _____________________________________________________________________________
+BlankNodeIndex LocalVocab::getBlankNodeIndex(
+    ad_utility::BlankNodeManager* blankNodeManager) {
+  AD_CONTRACT_CHECK(blankNodeManager);
+  // Initialize the `localBlankNodeManager_` if it doesn't exist yet.
+  if (!localBlankNodeManager_) [[unlikely]] {
+    localBlankNodeManager_.emplace(blankNodeManager);
+  }
+  return BlankNodeIndex::make(localBlankNodeManager_->getId());
+}
+
+// _____________________________________________________________________________
+bool LocalVocab::isBlankNodeIndexContained(
+    BlankNodeIndex blankNodeIndex) const {
+  if (!localBlankNodeManager_) {
+    return false;
+  }
+  return localBlankNodeManager_->containsBlankNodeIndex(blankNodeIndex.get());
 }

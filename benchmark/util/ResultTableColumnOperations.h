@@ -69,12 +69,12 @@ requires(sizeof...(ColumnInputTypes) > 1) void sumUpColumns(
 }
 
 /*
-@brief Reads two floating point columns, calculates the relativ speedup between
+@brief Reads two floating point columns, calculates the relative speedup between
 their entries and writes it in a third column.
 
 @param columnToCalculateFor, columnToCompareAgainst The columns, with which
 the question "How much faster than the entries of `columnToCompareAgainst`
-are the entires of `columnToCalculateFor`?".
+are the entries of `columnToCalculateFor`?".
 @param columnToPlaceResultIn This is where the speedup calculation results
 will be placed in.
 */

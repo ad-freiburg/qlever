@@ -8,6 +8,7 @@
 #include <sstream>
 
 #include "engine/CallFixedSize.h"
+#include "engine/Engine.h"
 #include "engine/QueryExecutionTree.h"
 #include "global/RuntimeParameters.h"
 
@@ -50,24 +51,15 @@ std::string Sort::getDescriptor() const {
 }
 
 // _____________________________________________________________________________
-ResultTable Sort::computeResult() {
+ProtoResult Sort::computeResult([[maybe_unused]] bool requestLaziness) {
   using std::endl;
   LOG(DEBUG) << "Getting sub-result for Sort result computation..." << endl;
-  shared_ptr<const ResultTable> subRes = subtree_->getResult();
+  std::shared_ptr<const Result> subRes = subtree_->getResult();
 
   // TODO<joka921> proper timeout for sorting operations
-  auto sortEstimateCancellationFactor =
-      RuntimeParameters().get<"sort-estimate-cancellation-factor">();
-  if (getExecutionContext()->getSortPerformanceEstimator().estimatedSortTime(
-          subRes->size(), subRes->width()) >
-      remainingTime() * sortEstimateCancellationFactor) {
-    // The estimated time for this sort is much larger than the actually
-    // remaining time, cancel this operation
-    throw ad_utility::CancellationException(
-        "Sort operation was canceled, because time estimate exceeded "
-        "remaining time by a factor of " +
-        std::to_string(sortEstimateCancellationFactor));
-  }
+  const auto& subTable = subRes->idTable();
+  getExecutionContext()->getSortPerformanceEstimator().throwIfEstimateTooLong(
+      subTable.numRows(), subTable.numColumns(), deadline_, "Sort operation");
 
   LOG(DEBUG) << "Sort result computation..." << endl;
   ad_utility::Timer t{ad_utility::timer::Timer::InitialStatus::Started};

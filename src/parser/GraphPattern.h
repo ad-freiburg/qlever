@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "parser/TripleComponent.h"
 #include "parser/data/SparqlFilter.h"
 
 namespace parsedQuery {

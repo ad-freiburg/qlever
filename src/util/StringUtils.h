@@ -4,28 +4,15 @@
 
 #pragma once
 
-#include <absl/strings/str_cat.h>
 #include <absl/strings/str_replace.h>
-#include <unicode/bytestream.h>
-#include <unicode/casemap.h>
+#include <gmock/gmock-spec-builders.h>
 
-#include <algorithm>
-#include <cctype>
-#include <cstdint>
-#include <ctre-unicode.hpp>
-#include <functional>
-#include <iterator>
-#include <ranges>
-#include <sstream>
-#include <string>
 #include <string_view>
 
 #include "util/Algorithm.h"
 #include "util/Concepts.h"
+#include "util/ConstexprSmallString.h"
 #include "util/CtreHelpers.h"
-#include "util/Exception.h"
-#include "util/Forward.h"
-#include "util/TypeTraits.h"
 
 using std::string;
 using std::string_view;
@@ -42,6 +29,13 @@ string_view commonPrefix(string_view a, string_view b);
 string getLowercase(const string& orig);
 
 string getUppercase(const string& orig);
+
+// Check if the given string `language tag` is `BPC47` conform.
+// Use the ICU library (unicode/uloc.h) for this procedure.
+bool strIsLangTag(const string& strLangTag);
+
+// Implements a case insensitive `language-range` to `language-tag`comparison.
+bool isLanguageMatch(string& languageTag, string& languageRange);
 
 /*
  * @brief convert a UTF-8 String to lowercase according to the held locale
@@ -105,7 +99,7 @@ size_t findLiteralEnd(std::string_view input, std::string_view literalEnd);
 @brief Add elements of the range to a stream, with the `separator` between the
 elements.
 
-@tparam Range An input range, whos dereferenced iterators can be inserted into
+@tparam Range An input range, whose dereferenced iterators can be inserted into
 streams.
 
 @param separator Will be put between each of the string representations
@@ -202,7 +196,7 @@ void lazyStrJoin(std::ostream* stream, Range&& r, std::string_view separator) {
     return;
   }
 
-  // Add the first entry without a seperator.
+  // Add the first entry without a separator.
   *stream << *begin;
 
   // Add the remaining entries.
@@ -270,7 +264,7 @@ std::string insertThousandSeparator(const std::string_view str,
     /*
     For walking over the string view.
     Our initialization value skips the leading digits, so that only the digits
-    remain, where we have to put the seperator in front of every three chars.
+    remain, where we have to put the separator in front of every three chars.
     */
     size_t currentIdx{s.length() % 3 == 0 ? 3 : s.length() % 3};
     ostream << s.substr(0, currentIdx);
@@ -305,13 +299,65 @@ std::string insertThousandSeparator(const std::string_view str,
   ostream << std::string_view(std::move(parseIterator), std::end(str));
   return ostream.str();
 }
+
+// The implementation of `constexprStrCat` below.
+namespace detail::constexpr_str_cat_impl {
+// We currently have a fixed upper bound of 100 characters on the inputs.
+// This can be changed once it becomes a problem. It would also be possible
+// to have flexible upper bounds, but this would make the implementation much
+// more complicated.
+using ConstexprString = ad_utility::ConstexprSmallString<100>;
+
+// Concatenate the elements of `arr` into a single array with an additional zero
+// byte at the end. `sz` must be the sum of the sizes in `arr`, else the
+// behavior is undefined.
+template <size_t sz, size_t numStrings>
+constexpr std::array<char, sz + 1> catImpl(
+    const std::array<ConstexprString, numStrings>& arr) {
+  std::array<char, sz + 1> buf{};
+  auto it = buf.begin();
+  for (const auto& str : arr) {
+    for (size_t i = 0; i < str.size(); ++i) {
+      *it = str[i];
+      ++it;
+    }
+  }
+  return buf;
+};
+// Concatenate the `strings` into a single `std::array<char>` with an additional
+// zero byte at the end.
+template <ConstexprString... strings>
+constexpr auto constexprStrCatBufferImpl() {
+  constexpr size_t sz = (size_t{0} + ... + strings.size());
+  constexpr auto innerResult =
+      catImpl<sz>(std::array<ConstexprString, sizeof...(strings)>{strings...});
+  return innerResult;
+}
+
+// A constexpr variable that stores the concatenation of the `strings`.
+// TODO<C++26> This can be a `static constexpr` variable inside the
+// `constexprStrCatBufferImpl()` function above.
+template <ConstexprString... strings>
+constexpr inline auto constexprStrCatBufferVar =
+    constexprStrCatBufferImpl<strings...>();
+}  // namespace detail::constexpr_str_cat_impl
+
+// Return the concatenation of the `strings` as a `string_view`. Can be
+// evaluated at compile time. The buffer that backs the returned `string_view`
+// will be zero-terminated, so it is safe to pass pointers into the result into
+// legacy C-APIs.
+template <detail::constexpr_str_cat_impl::ConstexprString... strings>
+constexpr std::string_view constexprStrCat() {
+  const auto& b =
+      detail::constexpr_str_cat_impl::constexprStrCatBufferVar<strings...>;
+  return {b.data(), b.size() - 1};
+}
 }  // namespace ad_utility
 
-// these overloads are missing in the STL
-// TODO they can be constexpr once the compiler completely supports C++20
+// A helper function for the `operator+` overloads below.
 template <typename Char>
-inline std::basic_string<Char> strCatImpl(const std::basic_string_view<Char>& a,
-                                          std::basic_string_view<Char> b) {
+std::basic_string<Char> strCatImpl(const std::basic_string_view<Char>& a,
+                                   std::basic_string_view<Char> b) {
   std::basic_string<Char> res;
   res.reserve(a.size() + b.size());
   res += a;
@@ -319,18 +365,22 @@ inline std::basic_string<Char> strCatImpl(const std::basic_string_view<Char>& a,
   return res;
 }
 
+// These overloads of `operator+` between a `string` and a `string_view`  are
+// missing in the STL.
+// TODO they can be constexpr once the compiler completely supports C++20
 template <typename Char>
-inline std::basic_string<Char> operator+(const std::basic_string<Char>& a,
-                                         std::basic_string_view<Char> b) {
+std::basic_string<Char> operator+(const std::basic_string<Char>& a,
+                                  std::basic_string_view<Char> b) {
   return strCatImpl(std::basic_string_view<Char>{a}, b);
 }
 
 template <typename Char>
-inline std::basic_string<Char> operator+(const std::basic_string_view<Char>& a,
-                                         std::basic_string<Char> b) {
+std::basic_string<Char> operator+(const std::basic_string_view<Char>& a,
+                                  std::basic_string<Char> b) {
   return strCatImpl(a, std::basic_string_view<Char>{b});
 }
 
-inline std::string operator+(char c, std::string_view b) {
+template <typename Char>
+std::string operator+(Char c, std::basic_string_view<Char> b) {
   return strCatImpl(std::string_view(&c, 1), b);
 }

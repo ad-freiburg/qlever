@@ -1,10 +1,11 @@
 // Copyright 2023, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Andre Schlegel (Januar of 2023, schlegea@informatik.uni-freiburg.de)
+// Author: Andre Schlegel (January of 2023, schlegea@informatik.uni-freiburg.de)
 
 #pragma once
 
 #include <algorithm>
+#include <concepts>
 #include <cstdio>
 #include <fstream>
 #include <ranges>
@@ -82,9 +83,43 @@ IdTable makeIdTableFromVector(const VectorTable& content,
   return result;
 }
 
+// Similar to `makeIdTableFromVector` (see above), but returns a GMock
+// `matcher`, that matches for equality with the created `IdTable`. In
+// particular, the matcher also deals with `IdTable` not being copyable, which
+// requires a workaround for GMock/GTest.
+struct MatchesIdTableFromVector {
+  template <typename Transformation = decltype(ad_utility::testing::VocabId)>
+  auto operator()(const VectorTable& content, Transformation t = {}) const {
+    return ::testing::Eq(
+        CopyShield<IdTable>(makeIdTableFromVector(content, std::move(t))));
+  }
+};
+static constexpr MatchesIdTableFromVector matchesIdTableFromVector;
+
+// Construct an `IdTable` from the given arguments, but returns a GMock
+// `matcher`, that matches for equality with the `IdTable`. In particular, the
+// matcher also deals with `IdTable` not being copyable, which requires a
+// workaround for GMock/GTest.
+struct MatchesIdTable {
+  template <typename... Ts>
+  requires(std::constructible_from<IdTable, Ts && ...>)
+  auto operator()(Ts&&... ts) const {
+    return ::testing::Eq(CopyShield<IdTable>(IdTable{AD_FWD(ts)...}));
+  }
+
+  // Overload for lvalue-references (`IdTable`s are not copyable)
+  template <ad_utility::SimilarTo<IdTable> T>
+  auto operator()(T& table) const {
+    // Note: We could use `Eq(cref(table))` , but the explicit deep copy
+    // gets rid of all possibly lifetime and mutability issues.
+    return operator()(table.clone());
+  }
+};
+static constexpr MatchesIdTable matchesIdTable;
+
 /*
  * @brief Tests, whether the given IdTable has the same content as the sample
- * solution and, if the option was choosen, if the IdTable is sorted by
+ * solution and, if the option was chosen, if the IdTable is sorted by
  * the join column.
  *
  * @param table The IdTable that should be tested.
@@ -101,6 +136,12 @@ void compareIdTableWithExpectedContent(
     const bool resultMustBeSortedByJoinColumn = false,
     const size_t joinColumn = 0,
     ad_utility::source_location l = ad_utility::source_location::current());
+
+/*
+ * @brief Sorts an IdTable in place, in the same way, that we sort them during
+ * normal program usage.
+ */
+void sortIdTableByJoinColumnInPlace(IdTableAndJoinColumn& table);
 
 /*
 @brief Creates a `IdTable`, where the rows are created via generator.
@@ -199,7 +240,7 @@ IdTable createRandomlyFilledIdTable(
         ad_utility::FastRandomIntGenerator<unsigned int>{}()));
 
 /*
-@brief Return a IdTable, that is completly randomly filled.
+@brief Return a IdTable, that is completely randomly filled.
 
 @param numberRows, numberColumns The size of the IdTable, that is to be
 returned.

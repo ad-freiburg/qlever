@@ -45,8 +45,8 @@ cppcoro::generator<typename Range::value_type> runStreamAsync(
     queue.finish();
   }};
 
-  // Only rethrow an exception from the `thread` if no exception occured in this
-  // thread to avoid crashes because of multiple active exceptions.
+  // Only rethrow an exception from the `thread` if no exception occurred in
+  // this thread to avoid crashes because of multiple active exceptions.
   auto cleanup = ad_utility::makeOnDestructionDontThrowDuringStackUnwinding(
       [&queue, &thread, &exception] {
         queue.finish();
@@ -73,8 +73,8 @@ cppcoro::generator<typename Range::value_type> runStreamAsync(
   }
   ifTiming([&t] {
     t->stop();
-    LOG(INFO) << "Waiting time for async stream was " << t->msecs().count()
-              << "ms" << std::endl;
+    LOG(TRACE) << "Waiting time for async stream was " << t->msecs().count()
+               << "ms" << std::endl;
   });
 }
 }  // namespace ad_utility::streams

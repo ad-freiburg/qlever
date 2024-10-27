@@ -14,6 +14,7 @@
 #include "engine/AddCombinedRowToTable.h"
 #include "engine/CallFixedSize.h"
 #include "engine/IndexScan.h"
+#include "engine/Service.h"
 #include "global/Constants.h"
 #include "global/Id.h"
 #include "global/RuntimeParameters.h"
@@ -26,7 +27,7 @@ using std::string;
 // _____________________________________________________________________________
 Join::Join(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
            std::shared_ptr<QueryExecutionTree> t2, ColumnIndex t1JoinCol,
-           ColumnIndex t2JoinCol, bool keepJoinColumn)
+           ColumnIndex t2JoinCol)
     : Operation(qec) {
   AD_CONTRACT_CHECK(t1 && t2);
   // Currently all join algorithms require both inputs to be sorted, so we
@@ -55,7 +56,6 @@ Join::Join(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
   _leftJoinCol = t1JoinCol;
   _right = std::move(t2);
   _rightJoinCol = t2JoinCol;
-  _keepJoinColumn = keepJoinColumn;
   _sizeEstimate = 0;
   _sizeEstimateComputed = false;
   _multiplicities.clear();
@@ -90,12 +90,9 @@ string Join::getCacheKeyImpl() const {
 string Join::getDescriptor() const { return "Join on " + _joinVar.name(); }
 
 // _____________________________________________________________________________
-ResultTable Join::computeResult() {
+ProtoResult Join::computeResult([[maybe_unused]] bool requestLaziness) {
   LOG(DEBUG) << "Getting sub-results for join result computation..." << endl;
-  size_t leftWidth = _left->getResultWidth();
-  size_t rightWidth = _right->getResultWidth();
-  IdTable idTable{getExecutionContext()->getAllocator()};
-  idTable.setNumColumns(leftWidth + rightWidth - 1);
+  IdTable idTable{getResultWidth(), getExecutionContext()->getAllocator()};
 
   if (_left->knownEmptyResult() || _right->knownEmptyResult()) {
     _left->getRootOperation()->updateRuntimeInformationWhenOptimizedOut();
@@ -122,8 +119,10 @@ ResultTable Join::computeResult() {
     // The third argument means "only get the result if it can be read from the
     // cache". So effectively, this returns the result if it is small, contains
     // UNDEF values, or is contained in the cache, otherwise `nullptr`.
-    return tree.getRootOperation()->getResult(false,
-                                              !(isSmall || containsUndef));
+    // TODO<joka921> Add a unit test that checks the correct conditions
+    return tree.getRootOperation()->getResult(
+        false, (isSmall || containsUndef) ? ComputationMode::FULLY_MATERIALIZED
+                                          : ComputationMode::ONLY_IF_CACHED);
   };
 
   auto leftResIfCached = getCachedOrSmallResult(*_left, _leftJoinCol);
@@ -153,10 +152,16 @@ ResultTable Join::computeResult() {
     }
   }
 
-  shared_ptr<const ResultTable> leftRes =
+  // If one of the RootOperations is a Service, precompute the result of its
+  // sibling.
+  Service::precomputeSiblingResult(_left->getRootOperation(),
+                                   _right->getRootOperation(), false,
+                                   requestLaziness);
+
+  std::shared_ptr<const Result> leftRes =
       leftResIfCached ? leftResIfCached : _left->getResult();
   checkCancellation();
-  if (leftRes->size() == 0) {
+  if (leftRes->idTable().empty()) {
     _right->getRootOperation()->updateRuntimeInformationWhenOptimizedOut();
     // TODO<joka921, hannahbast, SPARQL update> When we add triples to the
     // index, the vocabularies of index scans will not necessarily be empty and
@@ -181,7 +186,7 @@ ResultTable Join::computeResult() {
             leftRes->getSharedLocalVocab()};
   }
 
-  shared_ptr<const ResultTable> rightRes =
+  std::shared_ptr<const Result> rightRes =
       rightResIfCached ? rightResIfCached : _right->getResult();
   checkCancellation();
   join(leftRes->idTable(), _leftJoinCol, rightRes->idTable(), _rightJoinCol,
@@ -191,7 +196,7 @@ ResultTable Join::computeResult() {
   // If only one of the two operands has a non-empty local vocabulary, share
   // with that one (otherwise, throws an exception).
   return {std::move(idTable), resultSortedOn(),
-          ResultTable::getMergedLocalVocab(*leftRes, *rightRes)};
+          Result::getMergedLocalVocab(*leftRes, *rightRes)};
 }
 
 // _____________________________________________________________________________
@@ -204,8 +209,7 @@ VariableToColumnMap Join::computeVariableToColumnMap() const {
 
 // _____________________________________________________________________________
 size_t Join::getResultWidth() const {
-  size_t res = _left->getResultWidth() + _right->getResultWidth() -
-               (_keepJoinColumn ? 1 : 2);
+  size_t res = _left->getResultWidth() + _right->getResultWidth() - 1;
   AD_CONTRACT_CHECK(res > 0);
   return res;
 }
@@ -300,7 +304,6 @@ void Join::computeSizeEstimateAndMultiplicities() {
     }
     _multiplicities.emplace_back(m);
   }
-
   assert(_multiplicities.size() == getResultWidth());
 }
 
@@ -508,7 +511,7 @@ void Join::hashJoin(const IdTable& dynA, ColumnIndex jc1, const IdTable& dynB,
                     ColumnIndex jc2, IdTable* dynRes) {
   CALL_FIXED_SIZE(
       (std::array{dynA.numColumns(), dynB.numColumns(), dynRes->numColumns()}),
-      &Join::hashJoinImpl, this, dynA, jc1, dynB, jc2, dynRes);
+      &Join::hashJoinImpl, dynA, jc1, dynB, jc2, dynRes);
 }
 
 // ___________________________________________________________________________
@@ -558,10 +561,18 @@ void updateRuntimeInfoForLazyScan(
   scanTree.updateRuntimeInformationWhenOptimizedOut(
       RuntimeInformation::Status::lazilyMaterialized);
   auto& rti = scanTree.runtimeInfo();
-  rti.numRows_ = metadata.numElementsRead_;
+  rti.numRows_ = metadata.numElementsYielded_;
   rti.totalTime_ = metadata.blockingTime_;
   rti.addDetail("num-blocks-read", metadata.numBlocksRead_);
   rti.addDetail("num-blocks-all", metadata.numBlocksAll_);
+  rti.addDetail("num-elements-read", metadata.numElementsRead_);
+  if (metadata.numBlocksSkippedBecauseOfGraph_ > 0) {
+    rti.addDetail("num-blocks-skipped-graph",
+                  metadata.numBlocksSkippedBecauseOfGraph_);
+  }
+  if (metadata.numBlocksPostprocessed_ > 0) {
+    rti.addDetail("num-blocks-postprocessed", metadata.numBlocksPostprocessed_);
+  }
 }
 }  // namespace
 
@@ -630,8 +641,8 @@ IdTable Join::computeResultForIndexScanAndIdTable(const IdTable& idTable,
                               : joinColMap.permutationLeft())};
 
   ad_utility::Timer timer{ad_utility::timer::Timer::InitialStatus::Started};
-  auto rightBlocksInternal = IndexScan::lazyScanForJoinOfColumnWithScan(
-      permutationIdTable.col(), scan);
+  auto rightBlocksInternal =
+      scan.lazyScanForJoinOfColumnWithScan(permutationIdTable.col());
   auto rightBlocks = convertGenerator(std::move(rightBlocksInternal));
 
   runtimeInfo().addDetail("time-for-filtering-blocks", timer.msecs());

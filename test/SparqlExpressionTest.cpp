@@ -11,10 +11,13 @@
 #include "./util/GTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
+#include "engine/sparqlExpressions/CountStarExpression.h"
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
+#include "engine/sparqlExpressions/SampleExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
+#include "parser/GeoPoint.h"
 #include "util/AllocatorTestHelpers.h"
 #include "util/Conversions.h"
 
@@ -208,7 +211,7 @@ auto testNaryExpressionImpl =
       context._endIndex = resultSize;
 
       std::array<SparqlExpression::Ptr, sizeof...(operands)> children{
-          std::make_unique<DummyExpression>(
+          std::make_unique<SingleUseExpression>(
               ExpressionResult{clone(operands)})...};
 
       auto expressionPtr = std::apply(makeExpression, std::move(children));
@@ -454,7 +457,8 @@ TEST(SparqlExpression, dateOperators) {
   auto checkSeconds = testUnaryExpression<&makeSecondsExpression>;
   auto check = [&checkYear, &checkMonth, &checkDay, &checkHours, &checkMinutes,
                 &checkSeconds](
-                   const DateOrLargeYear& date, std::optional<int> expectedYear,
+                   const DateYearOrDuration& date,
+                   std::optional<int> expectedYear,
                    std::optional<int> expectedMonth = std::nullopt,
                    std::optional<int> expectedDay = std::nullopt,
                    std::optional<int> expectedHours = std::nullopt,
@@ -485,7 +489,7 @@ TEST(SparqlExpression, dateOperators) {
                  Ids{optToIdDouble(expectedSeconds)});
   };
 
-  using D = DateOrLargeYear;
+  using D = DateYearOrDuration;
   // Now the checks for dates with varying level of detail.
   check(D::parseXsdDatetime("1970-04-22T11:53:42.25"), 1970, 4, 22, 11, 53,
         42.25);
@@ -516,11 +520,58 @@ TEST(SparqlExpression, dateOperators) {
   testYear(Ids{Id::makeFromDouble(42.0)}, Ids{U});
   testYear(Ids{Id::makeFromBool(false)}, Ids{U});
   testYear(IdOrLiteralOrIriVec{lit("noDate")}, Ids{U});
+
+  // test makeTimezoneStrExpression / makeTimezoneExpression
+  auto positive = DayTimeDuration::Type::Positive;
+  auto negative = DayTimeDuration::Type::Negative;
+  using Timezone = std::variant<Date::NoTimeZone, Date::TimeZoneZ, int>;
+  auto checkStrTimezone = testUnaryExpression<&makeTimezoneStrExpression>;
+  auto checkTimezone = testUnaryExpression<&makeTimezoneExpression>;
+  Id U = Id::makeUndefined();
+  Timezone tz = -5;
+  auto d1 = DateYearOrDuration(Date(2011, 1, 10, 14, 45, 13.815, tz));
+  auto duration1 = DateYearOrDuration(DayTimeDuration{negative, 0, 5, 0, 0.0});
+  checkStrTimezone(Ids{Id::makeFromDate(d1)},
+                   IdOrLiteralOrIriVec{lit("-05:00")});
+  checkTimezone(Ids{Id::makeFromDate(d1)}, Ids{Id::makeFromDate(duration1)});
+  tz = 23;
+  auto d2 = DateYearOrDuration(Date(2011, 1, 10, 14, 45, 13.815, tz));
+  auto duration2 = DateYearOrDuration(DayTimeDuration{positive, 0, 23, 0, 0.0});
+  checkTimezone(Ids{Id::makeFromDate(d2)}, Ids{Id::makeFromDate(duration2)});
+  checkStrTimezone(Ids{Id::makeFromDate(d2)},
+                   IdOrLiteralOrIriVec{lit("+23:00")});
+  tz = Date::TimeZoneZ{};
+  auto d3 = DateYearOrDuration(Date(2011, 1, 10, 14, 45, 13.815, tz));
+  auto duration3 = DateYearOrDuration(DayTimeDuration{});
+  checkTimezone(Ids{Id::makeFromDate(d3)}, Ids{Id::makeFromDate(duration3)});
+  checkStrTimezone(Ids{Id::makeFromDate(d3)}, IdOrLiteralOrIriVec{lit("Z")});
+  tz = Date::NoTimeZone{};
+  DateYearOrDuration d4 =
+      DateYearOrDuration(Date(2011, 1, 10, 14, 45, 13.815, tz));
+  checkStrTimezone(Ids{Id::makeFromDate(d4)}, IdOrLiteralOrIriVec{lit("")});
+  checkTimezone(Ids{Id::makeFromDate(d4)}, Ids{U});
+  DateYearOrDuration d5 = DateYearOrDuration(Date(2012, 1, 4, 14, 45));
+  checkStrTimezone(Ids{Id::makeFromDate(d5)}, IdOrLiteralOrIriVec{lit("")});
+  checkTimezone(Ids{Id::makeFromDate(d5)}, Ids{U});
+  checkStrTimezone(IdOrLiteralOrIriVec{lit("2011-01-10T14:")},
+                   IdOrLiteralOrIriVec{U});
+  checkStrTimezone(Ids{Id::makeFromDouble(120.0123)}, IdOrLiteralOrIriVec{U});
+  checkTimezone(Ids{Id::makeFromDouble(2.34)}, Ids{U});
+  checkStrTimezone(Ids{Id::makeUndefined()}, IdOrLiteralOrIriVec{U});
+  DateYearOrDuration d6 =
+      DateYearOrDuration(-1394785, DateYearOrDuration::Type::Year);
+  checkTimezone(Ids{Id::makeFromDate(d6)}, Ids{U});
+  checkStrTimezone(Ids{Id::makeFromDate(d6)}, IdOrLiteralOrIriVec{lit("")});
+  DateYearOrDuration d7 =
+      DateYearOrDuration(10000, DateYearOrDuration::Type::Year);
+  checkStrTimezone(Ids{Id::makeFromDate(d7)}, IdOrLiteralOrIriVec{lit("")});
+  checkTimezone(Ids{Id::makeFromDate(d7)}, Ids{U});
 }
 
 // _____________________________________________________________________________________
 auto checkStrlen = testUnaryExpression<&makeStrlenExpression>;
 auto checkStr = testUnaryExpression<&makeStrExpression>;
+auto checkIriOrUri = testUnaryExpression<&makeIriOrUriExpression>;
 static auto makeStrlenWithStr = [](auto arg) {
   return makeStrlenExpression(makeStrExpression(std::move(arg)));
 };
@@ -549,6 +600,39 @@ TEST(SparqlExpression, stringOperators) {
            IdOrLiteralOrIriVec{lit("true"), lit("false"), lit("true")});
   checkStr(IdOrLiteralOrIriVec{lit("one"), lit("two"), lit("three")},
            IdOrLiteralOrIriVec{lit("one"), lit("two"), lit("three")});
+
+  auto T = Id::makeFromBool(true);
+  auto F = Id::makeFromBool(false);
+  auto dateDate =
+      Id::makeFromDate(DateYearOrDuration::parseXsdDate("2025-01-01"));
+  auto dateLYear = Id::makeFromDate(
+      DateYearOrDuration(11853, DateYearOrDuration::Type::Year));
+  // Test `iriOrUriExpression`.
+  // test invalid
+  checkIriOrUri(IdOrLiteralOrIriVec{U, IntId(2), DoubleId(12.99), dateDate,
+                                    dateLYear, T, F},
+                IdOrLiteralOrIriVec{U, U, U, U, U, U, U});
+  // test valid
+  checkIriOrUri(
+      IdOrLiteralOrIriVec{
+          lit("bimbim"), iriref("<bambim>"),
+          lit("https://www.bimbimbam/2001/bamString"),
+          lit("http://www.w3.\torg/2001/\nXMLSchema#\runsignedShort"),
+          lit("http://www.w3.org/2001/XMLSchema#string"),
+          iriref("<http://www.w3.org/2001/XMLSchema#string>"),
+          testContext().notInVocabIri, testContext().notInVocabIriLit,
+          lit("http://example/"), iriref("<http://\t\t\nexample/>"),
+          lit("\t\n\r")},
+      IdOrLiteralOrIriVec{
+          iriref("<bimbim>"), iriref("<bambim>"),
+          iriref("<https://www.bimbimbam/2001/bamString>"),
+          iriref("<http://www.w3.\torg/2001/\nXMLSchema#\runsignedShort>"),
+          iriref("<http://www.w3.org/2001/XMLSchema#string>"),
+          iriref("<http://www.w3.org/2001/XMLSchema#string>"),
+          iriref("<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>"),
+          iriref("<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>"),
+          iriref("<http://example/>"), iriref("<http://\t\t\nexample/>"),
+          iriref("<\t\n\r>")});
 
   // A simple test for uniqueness of the cache key.
   auto c1a = makeStrlenExpression(std::make_unique<IriExpression>(iri("<bim>")))
@@ -705,6 +789,54 @@ TEST(SparqlExpression, substr) {
 }
 
 // _____________________________________________________________________________________
+TEST(SparqlExpression, strIriDtTagged) {
+  auto U = Id::makeUndefined();
+  auto checkStrIriTag =
+      std::bind_front(testNaryExpression, &makeStrIriDtExpression);
+  checkStrIriTag(IdOrLiteralOrIriVec{lit(
+                     "123", "^^<http://www.w3.org/2001/XMLSchema#integer>")},
+                 IdOrLiteralOrIriVec{lit("123")},
+                 IdOrLiteralOrIriVec{
+                     iriref("<http://www.w3.org/2001/XMLSchema#integer>")});
+  checkStrIriTag(
+      IdOrLiteralOrIriVec{lit("iiii", "^^<http://example/romanNumeral>")},
+      IdOrLiteralOrIriVec{lit("iiii")},
+      IdOrLiteralOrIriVec{iriref("<http://example/romanNumeral>")});
+  checkStrIriTag(IdOrLiteralOrIriVec{U},
+                 IdOrLiteralOrIriVec{iriref("<http://example/romanNumeral>")},
+                 IdOrLiteralOrIriVec{U});
+  checkStrIriTag(IdOrLiteralOrIriVec{U}, IdOrLiteralOrIriVec{lit("iiii")},
+                 IdOrLiteralOrIriVec{U});
+  checkStrIriTag(IdOrLiteralOrIriVec{U}, IdOrLiteralOrIriVec{lit("XVII")},
+                 IdOrLiteralOrIriVec{lit("<not/a/iriref>")});
+}
+
+// _____________________________________________________________________________________
+TEST(SparqlExpression, strLangTagged) {
+  auto U = Id::makeUndefined();
+  auto checkStrTag =
+      std::bind_front(testNaryExpression, &makeStrLangTagExpression);
+  checkStrTag(IdOrLiteralOrIriVec{lit("chat", "@en")},
+              IdOrLiteralOrIriVec{lit("chat")}, IdOrLiteralOrIriVec{lit("en")});
+  checkStrTag(IdOrLiteralOrIriVec{lit("chat", "@en-US")},
+              IdOrLiteralOrIriVec{lit("chat")},
+              IdOrLiteralOrIriVec{lit("en-US")});
+  checkStrTag(IdOrLiteralOrIriVec{lit("Sprachnachricht", "@de-Latn-de")},
+              IdOrLiteralOrIriVec{lit("Sprachnachricht")},
+              IdOrLiteralOrIriVec{lit("de-Latn-de")});
+  checkStrTag(IdOrLiteralOrIriVec{U}, IdOrLiteralOrIriVec{lit("chat")},
+              IdOrLiteralOrIriVec{lit("d1235")});
+  checkStrTag(IdOrLiteralOrIriVec{U}, IdOrLiteralOrIriVec{lit("reporter")},
+              IdOrLiteralOrIriVec{lit("@")});
+  checkStrTag(IdOrLiteralOrIriVec{U}, IdOrLiteralOrIriVec{lit("chat")},
+              IdOrLiteralOrIriVec{lit("")});
+  checkStrTag(IdOrLiteralOrIriVec{U}, IdOrLiteralOrIriVec{U},
+              IdOrLiteralOrIriVec{lit("d")});
+  checkStrTag(IdOrLiteralOrIriVec{U}, IdOrLiteralOrIriVec{U},
+              IdOrLiteralOrIriVec{U});
+}
+
+// _____________________________________________________________________________________
 TEST(SparqlExpression, unaryNegate) {
   auto checkNegate = testUnaryExpression<&makeUnaryNegateExpression>;
   // Zero and NaN are considered to be false, so their negation is true
@@ -778,6 +910,9 @@ TEST(SparqlExpression, customNumericFunctions) {
   testUnaryExpression<makeTanExpression>(
       std::vector<Id>{I(0), D(1), D(2), D(-1)},
       std::vector<Id>{D(0), D(tan(1)), D(tan(2)), D(tan(-1))});
+  auto checkPow = std::bind_front(testNaryExpression, &makePowExpression);
+  checkPow(Ids{D(1), D(32), U, U}, Ids{I(5), D(2), U, D(0)},
+           IdOrLiteralOrIriVec{I(0), D(5), I(0), lit("abc")});
 }
 
 // ____________________________________________________________________________
@@ -806,39 +941,211 @@ TEST(SparqlExpression, isSomethingFunctions) {
 }
 
 // ____________________________________________________________________________
+TEST(SparqlExpression, DatatypeExpression) {
+  U = Id::makeUndefined();
+  auto d1 = DateYearOrDuration::parseXsdDatetime("1900-12-13T03:12:00.33Z");
+  auto d2 = DateYearOrDuration::parseGYear("-10000");
+  auto d3 = DateYearOrDuration::parseGYear("1900");
+  auto d4 = DateYearOrDuration::parseXsdDate("2024-06-13");
+  auto d5 = DateYearOrDuration::parseGYearMonth("2024-06");
+  auto g1 = GeoPoint(50.0, 50.0);
+  Id DateId1 = Id::makeFromDate(d1);
+  Id DateId2 = Id::makeFromDate(d2);
+  Id DateId3 = Id::makeFromDate(d3);
+  Id DateId4 = Id::makeFromDate(d4);
+  Id DateId5 = Id::makeFromDate(d5);
+  Id GeoId1 = Id::makeFromGeoPoint(g1);
+  auto checkGetDatatype = testUnaryExpression<&makeDatatypeExpression>;
+  checkGetDatatype(IdOrLiteralOrIriVec{testContext().x},
+                   IdOrLiteralOrIriVec{U});
+  checkGetDatatype(
+      IdOrLiteralOrIriVec{testContext().alpha},
+      IdOrLiteralOrIriVec{iriref("<http://www.w3.org/2001/XMLSchema#string>")});
+  checkGetDatatype(
+      IdOrLiteralOrIriVec{testContext().zz},
+      IdOrLiteralOrIriVec{
+          iriref("<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>")});
+  checkGetDatatype(
+      IdOrLiteralOrIriVec{testContext().notInVocabB},
+      IdOrLiteralOrIriVec{iriref("<http://www.w3.org/2001/XMLSchema#string>")});
+  checkGetDatatype(IdOrLiteralOrIriVec{testContext().notInVocabD},
+                   IdOrLiteralOrIriVec{U});
+  checkGetDatatype(IdOrLiteralOrIriVec{lit(
+                       "123", "^^<http://www.w3.org/2001/XMLSchema#integer>")},
+                   IdOrLiteralOrIriVec{
+                       iriref("<http://www.w3.org/2001/XMLSchema#integer>")});
+  checkGetDatatype(
+      IdOrLiteralOrIriVec{lit("Simple StrStr")},
+      IdOrLiteralOrIriVec{iriref("<http://www.w3.org/2001/XMLSchema#string>")});
+  checkGetDatatype(
+      IdOrLiteralOrIriVec{lit("english", "@en")},
+      IdOrLiteralOrIriVec{
+          iriref("<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>")});
+  checkGetDatatype(IdOrLiteralOrIriVec{U}, IdOrLiteralOrIriVec{U});
+  checkGetDatatype(IdOrLiteralOrIriVec{DateId1},
+                   IdOrLiteralOrIriVec{
+                       iriref("<http://www.w3.org/2001/XMLSchema#dateTime>")});
+  checkGetDatatype(
+      IdOrLiteralOrIriVec{DateId2},
+      IdOrLiteralOrIriVec{iriref("<http://www.w3.org/2001/XMLSchema#gYear>")});
+  checkGetDatatype(
+      IdOrLiteralOrIriVec{DateId3},
+      IdOrLiteralOrIriVec{iriref("<http://www.w3.org/2001/XMLSchema#gYear>")});
+  checkGetDatatype(
+      IdOrLiteralOrIriVec{DateId4},
+      IdOrLiteralOrIriVec{iriref("<http://www.w3.org/2001/XMLSchema#date>")});
+  checkGetDatatype(IdOrLiteralOrIriVec{DateId5},
+                   IdOrLiteralOrIriVec{iriref(
+                       "<http://www.w3.org/2001/XMLSchema#gYearMonth>")});
+  checkGetDatatype(IdOrLiteralOrIriVec{GeoId1},
+                   IdOrLiteralOrIriVec{iriref(
+                       "<http://www.opengis.net/ont/geosparql#wktLiteral>")});
+  checkGetDatatype(
+      IdOrLiteralOrIriVec{Id::makeFromInt(212378233)},
+      IdOrLiteralOrIriVec{iriref("<http://www.w3.org/2001/XMLSchema#int>")});
+  checkGetDatatype(
+      IdOrLiteralOrIriVec{Id::makeFromDouble(2.3475)},
+      IdOrLiteralOrIriVec{iriref("<http://www.w3.org/2001/XMLSchema#double>")});
+  checkGetDatatype(IdOrLiteralOrIriVec{Id::makeFromBool(false)},
+                   IdOrLiteralOrIriVec{
+                       iriref("<http://www.w3.org/2001/XMLSchema#boolean>")});
+  checkGetDatatype(
+      IdOrLiteralOrIriVec{Id::makeFromInt(true)},
+      IdOrLiteralOrIriVec{iriref("<http://www.w3.org/2001/XMLSchema#int>")});
+  checkGetDatatype(
+      IdOrLiteralOrIriVec{lit("")},
+      IdOrLiteralOrIriVec{iriref("<http://www.w3.org/2001/XMLSchema#string>")});
+  checkGetDatatype(
+      IdOrLiteralOrIriVec{lit(" ", "@de-LATN-de")},
+      IdOrLiteralOrIriVec{
+          iriref("<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>")});
+  checkGetDatatype(
+      IdOrLiteralOrIriVec{lit("testval", "^^<http://example/iri/test#test>")},
+      IdOrLiteralOrIriVec{iriref("<http://example/iri/test#test>")});
+  checkGetDatatype(IdOrLiteralOrIriVec{iriref("<http://example/iri/test>")},
+                   IdOrLiteralOrIriVec{U});
+
+  // test corner case DatatypeValueGetter
+  TestContext ctx;
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      sparqlExpression::detail::DatatypeValueGetter{}(Id::max(), &ctx.context),
+      ::testing::ContainsRegex("should be unreachable"));
+}
+
+// ____________________________________________________________________________
+TEST(SparqlExpression, testStrToHashExpressions) {
+  auto checkGetMD5Expression = testUnaryExpression<&makeMD5Expression>;
+  auto checkGetSHA1Expression = testUnaryExpression<&makeSHA1Expression>;
+  auto checkGetSHA256Expression = testUnaryExpression<&makeSHA256Expression>;
+  auto checkGetSHA384Expression = testUnaryExpression<&makeSHA384Expression>;
+  auto checkGetSHA512Expression = testUnaryExpression<&makeSHA512Expression>;
+  std::string testStr1 = "";
+  std::string testStr2 = "Friburg23o";
+  std::string testStr3 = "abc";
+  checkGetMD5Expression(
+      idOrLitOrStringVec({U, testStr1, testStr2, testStr3}),
+      idOrLitOrStringVec({U, "d41d8cd98f00b204e9800998ecf8427e",
+                          "9d9a73f67e20835e516029541595c381",
+                          "900150983cd24fb0d6963f7d28e17f72"}));
+  checkGetSHA1Expression(
+      idOrLitOrStringVec({U, testStr1, testStr2, testStr3}),
+      idOrLitOrStringVec({U, "da39a3ee5e6b4b0d3255bfef95601890afd80709",
+                          "c3a77a6104fa091f590f594b3e2dba2668196d3c",
+                          "a9993e364706816aba3e25717850c26c9cd0d89d"}));
+  checkGetSHA256Expression(
+      idOrLitOrStringVec({U, testStr1, testStr2, testStr3}),
+      idOrLitOrStringVec(
+          {U,
+           "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+           "af8d98f09845a700aea36b35e8cc3a35632e38d0f7be9c0ca508e53c578da900",
+           "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015a"
+           "d"}));
+  checkGetSHA384Expression(
+      idOrLitOrStringVec({U, testStr1, testStr2, testStr3}),
+      idOrLitOrStringVec({U,
+                          "38b060a751ac96384cd9327eb1b1e36a21fdb71114be07434c0c"
+                          "c7bf63f6e1da274edebfe76f65fbd51ad2f14898b95b",
+                          "72810006e3b418ebd179812522cafa486cd6c2a988378fac148a"
+                          "f1a9a098a01ce3373734c23978f7df68bf7e98955c02",
+                          "cb00753f45a35e8bb5a03d699ac65007272c32ab0eded1631a8b"
+                          "605a43ff5bed8086072ba1e7cc2358baeca134c825a7"}));
+  checkGetSHA512Expression(
+      idOrLitOrStringVec({U, testStr1, testStr2, testStr3}),
+      idOrLitOrStringVec(
+          {U,
+           "cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d"
+           "0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e",
+           "be4422bfad59ee51e98dc51c540dc9d85333cb786333b152d13b2bebde1bdaa499e"
+           "9d4e1370a5bb2e831f4443b1358f2301fd5214ba80554ea0ff1d185c3b027",
+           "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a219"
+           "2992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f"}));
+}
+
+// ____________________________________________________________________________
 TEST(SparqlExpression, testToNumericExpression) {
-  auto checkGetInt = testUnaryExpression<&makeIntExpression>;
-  auto checkGetDouble = testUnaryExpression<&makeDoubleExpression>;
+  Id T = Id::makeFromBool(true);
+  Id F = Id::makeFromBool(false);
+  Id G = Id::makeFromGeoPoint(GeoPoint(50.0, 50.0));
+  auto checkGetInt = testUnaryExpression<&makeConvertToIntExpression>;
+  auto checkGetDouble = testUnaryExpression<&makeConvertToDoubleExpression>;
 
   checkGetInt(idOrLitOrStringVec({U, "  -1275", "5.97", "-78.97", "-5BoB6",
-                                  "FreBurg1", "", " .", " 42\n", " 0.01 ", ""}),
-              Ids{U, I(-1275), U, U, U, U, U, U, I(42), U, U});
+                                  "FreBurg1", "", " .", " 42\n", " 0.01 ", "",
+                                  "@", "@?+1", "1", G}),
+              Ids{U, I(-1275), U, U, U, U, U, U, I(42), U, U, U, U, I(1), U});
   checkGetDouble(
       idOrLitOrStringVec({U, "-122.2", "19,96", " 128789334.345 ", "-0.f",
-                          "  0.007 ", " -14.75 "}),
-      Ids{U, D(-122.2), U, D(128789334.345), U, D(0.007), D(-14.75)});
+                          "  0.007 ", " -14.75 ", "Q", "@!+?", "1", G}),
+      Ids{U, D(-122.2), U, D(128789334.345), U, D(0.007), D(-14.75), U, U,
+          D(1.00), U});
+  checkGetInt(idOrLitOrStringVec(
+                  {U, I(-12475), I(42), I(0), D(-14.57), D(33.0), D(0.00001)}),
+              Ids{U, I(-12475), I(42), I(0), I(-14), I(33), I(0)});
+  checkGetDouble(
+      idOrLitOrStringVec(
+          {U, I(-12475), I(42), I(0), D(-14.57), D(33.0), D(0.00001)}),
+      Ids{U, D(-12475.00), D(42.00), D(0.00), D(-14.57), D(33.00), D(0.00001)});
+  checkGetDouble(IdOrLiteralOrIriVec{lit("."), lit("-12.745"), T, F,
+                                     lit("0.003"), lit("1")},
+                 Ids{U, D(-12.745), D(1.00), D(0.00), D(0.003), D(1.00)});
+  checkGetInt(IdOrLiteralOrIriVec{lit("."), lit("-12.745"), T, F, lit(".03"),
+                                  lit("1"), lit("-33")},
+              Ids{U, U, I(1), I(0), U, I(1), I(-33)});
 }
 
 // ____________________________________________________________________________
 TEST(SparqlExpression, geoSparqlExpressions) {
   auto checkLat = testUnaryExpression<&makeLatitudeExpression>;
   auto checkLong = testUnaryExpression<&makeLongitudeExpression>;
+  auto checkIsGeoPoint = testUnaryExpression<&makeIsGeoPointExpression>;
   auto checkDist = std::bind_front(testNaryExpression, &makeDistExpression);
 
-  checkLat(idOrLitOrStringVec({"POINT(24.3 26.8)", "NotAPoint", I(12)}),
-           Ids{D(26.8), U, U});
-  checkLong(idOrLitOrStringVec({D(4.2), "POINT(24.3 26.8)", "NotAPoint"}),
-            Ids{U, D(24.3), U});
-  checkDist(D(0.0), IdOrLiteralOrIri{lit("POINT(24.3 26.8)")},
-            IdOrLiteralOrIri{lit("POINT(24.3 26.8)")});
-  checkDist(U, IdOrLiteralOrIri{lit("POINT(24.3 26.8)")},
-            IdOrLiteralOrIri{I(12)});
-  checkDist(U, IdOrLiteralOrIri{I(12)},
-            IdOrLiteralOrIri{lit("POINT(24.3 26.8)")});
-  checkDist(U, IdOrLiteralOrIri{lit("POINT(24.3 26.8)"s)},
-            IdOrLiteralOrIri{lit("NotAPoint")});
-  checkDist(U, IdOrLiteralOrIri{lit("NotAPoint")},
-            IdOrLiteralOrIri{lit("POINT(24.3 26.8)")});
+  auto p = GeoPoint(26.8, 24.3);
+  auto v = ValueId::makeFromGeoPoint(p);
+
+  // Should provide the same values, however with some precision loss, as the
+  // bit representation only uses 30 bits per coordinate, not a full double
+  auto actualValues = GeoPoint::fromBitRepresentation(
+      GeoPoint(26.8, 24.3).toBitRepresentation());
+  auto actualLat = actualValues.getLat();
+  auto actualLng = actualValues.getLng();
+  constexpr auto precision = 0.0001;
+  EXPECT_NEAR(actualLat, 26.8, precision);
+  EXPECT_NEAR(actualLng, 24.3, precision);
+  auto vLat = ValueId::makeFromDouble(actualLat);
+  auto vLng = ValueId::makeFromDouble(actualLng);
+
+  checkLat(v, vLat);
+  checkLong(v, vLng);
+  checkIsGeoPoint(v, B(true));
+  checkDist(D(0.0), v, v);
+  checkLat(idOrLitOrStringVec({"NotAPoint", I(12)}), Ids{U, U});
+  checkLong(idOrLitOrStringVec({D(4.2), "NotAPoint"}), Ids{U, U});
+  checkIsGeoPoint(IdOrLiteralOrIri{lit("NotAPoint")}, B(false));
+  checkDist(U, v, IdOrLiteralOrIri{I(12)});
+  checkDist(U, IdOrLiteralOrIri{I(12)}, v);
+  checkDist(U, v, IdOrLiteralOrIri{lit("NotAPoint")});
+  checkDist(U, IdOrLiteralOrIri{lit("NotAPoint")}, v);
 }
 
 // ________________________________________________________________________________________
@@ -940,7 +1247,7 @@ TEST(SparqlExpression, ReplaceExpression) {
                           IdOrLiteralOrIri{lit("(?i)[ei]")},
                           IdOrLiteralOrIri{lit("x")}});
 
-  // Multiple matches withing the same string
+  // Multiple matches within the same string
   checkReplace(
       IdOrLiteralOrIri{lit("wEeDEflE")},
       std::tuple{IdOrLiteralOrIri{lit("weeeDeeflee")},
@@ -1020,39 +1327,68 @@ TEST(SparqlExpression, replaceChildThrowsIfOutOfRange) {
 
 // ______________________________________________________________________________
 TEST(SparqlExpression, isAggregateAndIsDistinct) {
-  sparqlExpression::IdExpression idExpr(ValueId::makeFromInt(42));
+  using namespace sparqlExpression;
+  IdExpression idExpr(ValueId::makeFromInt(42));
 
-  ASSERT_FALSE(idExpr.isAggregate());
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      idExpr.isDistinct(),
-      ::testing::ContainsRegex(
-          "isDistinct\\(\\) maybe only called for aggregate expressions\\. If "
-          "this is an aggregate expression, then the implementation of "
-          "isDistinct\\(\\) is missing for this expression\\. Please report "
-          "this to the developers\\."));
+  using enum SparqlExpression::AggregateStatus;
 
-  Variable varX("?x");
-  sparqlExpression::detail::AvgExpression avgExpression(
-      false, std::make_unique<VariableExpression>(varX));
+  ASSERT_EQ(idExpr.isAggregate(), NoAggregate);
+  ASSERT_FALSE(idExpr.isInsideAggregate());
 
-  ASSERT_TRUE(avgExpression.isAggregate());
-  ASSERT_FALSE(avgExpression.isDistinct());
+  auto varX = []() {
+    return std::make_unique<VariableExpression>(Variable{"?x"});
+  };
 
-  sparqlExpression::detail::AvgExpression avgDistinctExpression(
-      true, std::make_unique<VariableExpression>(varX));
+  // Return a matcher that checks whether a given `SparqlExpression` is an
+  // aggregate with the given distinctness. In particular, the expression itself
+  // as well as its child must return `true` for the `isInsideAggregate()`
+  // function, and the distinctness of the aggregate itself must match.
+  // If `hasChild` is `true`, then the aggregate is expected to have at least
+  // one child. This is the case for all aggregates except the
+  // `CountStarExpression`.
+  auto match = [](bool distinct, bool hasChild = true) {
+    auto aggStatus = distinct ? DistinctAggregate : NonDistinctAggregate;
+    auto distinctMatcher =
+        AD_PROPERTY(SparqlExpression, isAggregate, aggStatus);
+    auto getChild = [](const SparqlExpression& expression) -> decltype(auto) {
+      return *expression.children()[0];
+    };
+    auto insideAggregate =
+        AD_PROPERTY(SparqlExpression, isInsideAggregate, true);
+    using namespace ::testing;
+    auto childMatcher = [&]() -> Matcher<const SparqlExpression&> {
+      if (hasChild) {
+        return ResultOf(getChild, insideAggregate);
+      } else {
+        return ::testing::_;
+      }
+    }();
+    return AllOf(distinctMatcher, insideAggregate, childMatcher);
+  };
 
-  ASSERT_TRUE(avgDistinctExpression.isAggregate());
-  ASSERT_TRUE(avgDistinctExpression.isDistinct());
+  EXPECT_THAT(AvgExpression(false, varX()), match(false));
+  EXPECT_THAT(AvgExpression(true, varX()), match(true));
 
-  sparqlExpression::GroupConcatExpression groupConcatExpression(
-      false, std::make_unique<VariableExpression>(varX), ",");
+  EXPECT_THAT(GroupConcatExpression(false, varX(), " "), match(false));
+  EXPECT_THAT(GroupConcatExpression(true, varX(), " "), match(true));
 
-  ASSERT_TRUE(groupConcatExpression.isAggregate());
-  ASSERT_FALSE(groupConcatExpression.isDistinct());
+  EXPECT_THAT(SampleExpression(false, varX()), match(false));
+  // For `SAMPLE` the distinctness makes no difference, so we always return `not
+  // distinct`.
+  EXPECT_THAT(SampleExpression(true, varX()), match(false));
 
-  sparqlExpression::GroupConcatExpression groupConcatDistinctExpression(
-      true, std::make_unique<VariableExpression>(varX), ",");
+  EXPECT_THAT(*makeCountStarExpression(true), match(true, false));
+  EXPECT_THAT(*makeCountStarExpression(false), match(false, false));
+}
 
-  ASSERT_TRUE(groupConcatDistinctExpression.isAggregate());
-  ASSERT_TRUE(groupConcatDistinctExpression.isDistinct());
+// ___________________________________________________________________________
+TEST(SingleUseExpression, simpleMembersForTestCoverage) {
+  SingleUseExpression expression(Id::makeUndefined());
+  using namespace ::testing;
+  EXPECT_THAT(expression.evaluate(nullptr),
+              VariantWith<Id>(Eq(Id::makeUndefined())));
+  EXPECT_ANY_THROW(expression.evaluate(nullptr));
+  EXPECT_THAT(expression.childrenForTesting(), IsEmpty());
+  EXPECT_ANY_THROW(expression.getUnaggregatedVariables());
+  EXPECT_ANY_THROW(expression.getCacheKey({}));
 }

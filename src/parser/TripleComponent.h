@@ -45,8 +45,9 @@ class TripleComponent {
 
  private:
   // The underlying variant type.
-  using Variant = std::variant<std::string, double, int64_t, bool, UNDEF,
-                               Variable, Literal, Iri, DateOrLargeYear>;
+  using Variant =
+      std::variant<Id, std::string, double, int64_t, bool, UNDEF, Variable,
+                   Literal, Iri, DateYearOrDuration, GeoPoint>;
   Variant _variant;
 
  public:
@@ -136,6 +137,12 @@ class TripleComponent {
     return std::holds_alternative<Variable>(_variant);
   }
 
+  [[nodiscard]] bool isBool() const {
+    return std::holds_alternative<bool>(_variant);
+  }
+
+  bool getBool() const { return std::get<bool>(_variant); }
+
   bool isLiteral() const { return std::holds_alternative<Literal>(_variant); }
   Literal& getLiteral() { return std::get<Literal>(_variant); }
   const Literal& getLiteral() const { return std::get<Literal>(_variant); }
@@ -189,21 +196,17 @@ class TripleComponent {
   [[nodiscard]] std::optional<Id> toValueId(
       const Vocabulary& vocabulary) const {
     AD_CONTRACT_CHECK(!isString());
-    if (isLiteral() || isIri()) {
-      VocabIndex idx;
-      const std::string& content = isLiteral()
-                                       ? getLiteral().toStringRepresentation()
-                                       : getIri().toStringRepresentation();
-      if (vocabulary.getId(content, &idx)) {
-        return Id::makeFromVocabIndex(idx);
-      } else if (qlever::specialIds.contains(content)) {
-        return qlever::specialIds.at(content);
-      } else {
-        return std::nullopt;
-      }
-    } else {
-      return toValueIdIfNotString();
+    std::optional<Id> vid = toValueIdIfNotString();
+    if (vid != std::nullopt) return vid;
+    AD_CORRECTNESS_CHECK(isLiteral() || isIri());
+    VocabIndex idx;
+    const std::string& content = isLiteral()
+                                     ? getLiteral().toStringRepresentation()
+                                     : getIri().toStringRepresentation();
+    if (vocabulary.getId(content, &idx)) {
+      return Id::makeFromVocabIndex(idx);
     }
+    return std::nullopt;
   }
 
   // Same as the above, but also consider the given local vocabulary. If the

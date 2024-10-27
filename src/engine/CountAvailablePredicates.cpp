@@ -90,7 +90,7 @@ uint64_t CountAvailablePredicates::getSizeEstimateBeforeLimit() {
 size_t CountAvailablePredicates::getCostEstimate() {
   if (subtree_.get() != nullptr) {
     // Without knowing the ratio of elements that will have a pattern assuming
-    // constant cost per entry should be reasonable (altough non distinct
+    // constant cost per entry should be reasonable (although non distinct
     // entries are of course actually cheaper).
     return subtree_->getCostEstimate() + subtree_->getSizeEstimate();
   } else {
@@ -100,7 +100,8 @@ size_t CountAvailablePredicates::getCostEstimate() {
 }
 
 // _____________________________________________________________________________
-ResultTable CountAvailablePredicates::computeResult() {
+ProtoResult CountAvailablePredicates::computeResult(
+    [[maybe_unused]] bool requestLaziness) {
   LOG(DEBUG) << "CountAvailablePredicates result computation..." << std::endl;
   IdTable idTable{getExecutionContext()->getAllocator()};
   idTable.setNumColumns(2);
@@ -121,12 +122,12 @@ ResultTable CountAvailablePredicates::computeResult() {
     if (!indexScan) {
       return false;
     }
-    if (!indexScan->getSubject().isVariable() ||
-        !indexScan->getObject().isVariable()) {
+    if (!indexScan->subject().isVariable() ||
+        !indexScan->object().isVariable()) {
       return false;
     }
 
-    return indexScan->getPredicate() == HAS_PATTERN_PREDICATE;
+    return indexScan->predicate() == HAS_PATTERN_PREDICATE;
   }();
 
   if (isPatternTrickForAllEntities) {
@@ -137,7 +138,7 @@ ResultTable CountAvailablePredicates::computeResult() {
                                                              patterns);
     return {std::move(idTable), resultSortedOn(), LocalVocab{}};
   } else {
-    std::shared_ptr<const ResultTable> subresult = subtree_->getResult();
+    std::shared_ptr<const Result> subresult = subtree_->getResult();
     LOG(DEBUG) << "CountAvailablePredicates subresult computation done."
                << std::endl;
 
@@ -158,14 +159,15 @@ void CountAvailablePredicates::computePatternTrickAllEntities(
   LOG(DEBUG) << "For all entities." << std::endl;
   ad_utility::HashMap<Id, size_t> predicateCounts;
   ad_utility::HashMap<size_t, size_t> patternCounts;
-  auto fullHasPattern =
-      getExecutionContext()
-          ->getIndex()
-          .getImpl()
-          .getPermutation(Permutation::Enum::PSO)
-          .lazyScan({qlever::specialIds.at(HAS_PATTERN_PREDICATE), std::nullopt,
-                     std::nullopt},
-                    std::nullopt, {}, cancellationHandle_);
+  const auto& index = getExecutionContext()->getIndex().getImpl();
+  auto scanSpec =
+      ScanSpecificationAsTripleComponent{
+          TripleComponent::Iri::fromIriref(HAS_PATTERN_PREDICATE), std::nullopt,
+          std::nullopt}
+          .toScanSpecification(index);
+  auto fullHasPattern = index.getPermutation(Permutation::Enum::PSO)
+                            .lazyScan(scanSpec, std::nullopt, {},
+                                      cancellationHandle_, deltaTriples());
   for (const auto& idTable : fullHasPattern) {
     for (const auto& patternId : idTable.getColumn(1)) {
       AD_CORRECTNESS_CHECK(patternId.getDatatype() == Datatype::Int);

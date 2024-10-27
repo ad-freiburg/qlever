@@ -70,7 +70,7 @@ bool ConfigOption::wasSet() const {
 void ConfigOption::setValueWithJson(const nlohmann::json& json) {
   // TODO<C++23> Use "deducing this" for simpler recursive lambdas.
   /*
-  Manually checks, if the json represents one of the possibilites of
+  Manually checks, if the json represents one of the possibilities of
   `AvailableTypes`.
   */
   auto isValueTypeSubType = []<typename T>(const nlohmann::json& j,

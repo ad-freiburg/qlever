@@ -29,14 +29,14 @@ using std::vector;
 
 //! The HTTP Server used.
 class Server {
+  FRIEND_TEST(ServerTest, parseHttpRequest);
+
  public:
   explicit Server(unsigned short port, size_t numThreads,
                   ad_utility::MemorySize maxMem, std::string accessToken,
                   bool usePatternTrick = true);
 
   virtual ~Server() = default;
-
-  using ParamValueMap = ad_utility::HashMap<string, string>;
 
  private:
   //! Initialize the server.
@@ -106,7 +106,7 @@ class Server {
 
   /// Parse the path and URL parameters from the given request. Supports both
   /// GET and POST request according to the SPARQL 1.1 standard.
-  ad_utility::UrlParser::UrlPathAndParameters getUrlPathAndParameters(
+  static ad_utility::url_parser::ParsedRequest parseHttpRequest(
       const ad_utility::httpUtils::HttpRequest auto& request);
 
   /// Handle a single HTTP request. Check whether a file request or a query was
@@ -119,9 +119,8 @@ class Server {
       const ad_utility::httpUtils::HttpRequest auto& request, auto&& send);
 
   /// Handle a http request that asks for the processing of a query.
-  /// \param params The key-value-pairs  sent in the HTTP GET request. When this
-  /// function is called, we already know that a parameter "query" is contained
-  /// in `params`.
+  /// \param params The key-value-pairs  sent in the HTTP GET request.
+  /// \param query The query.
   /// \param requestTimer Timer that measure the total processing
   ///                     time of this request.
   /// \param request The HTTP request.
@@ -130,7 +129,8 @@ class Server {
   /// \param timeLimit Duration in seconds after which the query will be
   ///                  cancelled.
   Awaitable<void> processQuery(
-      const ParamValueMap& params, ad_utility::Timer& requestTimer,
+      const ad_utility::url_parser::ParamValueMap& params, const string& query,
+      ad_utility::Timer& requestTimer,
       const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
       TimeLimit timeLimit);
 
@@ -182,8 +182,9 @@ class Server {
   /// or throws an exception. We still need to return an `optional` though for
   /// technical reasons that are described in the definition of this function.
   net::awaitable<std::optional<PlannedQuery>> parseAndPlan(
-      const std::string& query, QueryExecutionContext& qec,
-      SharedCancellationHandle handle, TimeLimit timeLimit);
+      const std::string& query, const vector<DatasetClause>& queryDatasets,
+      QueryExecutionContext& qec, SharedCancellationHandle handle,
+      TimeLimit timeLimit);
 
   /// Acquire the `CancellationHandle` for the given `QueryId`, start the
   /// watchdog and call `cancelAfterDeadline` to set the timeout after
@@ -212,10 +213,11 @@ class Server {
   /// the key determines the kind of action. If the key is not found, always
   /// return `std::nullopt`. If `accessAllowed` is false and a value is present,
   /// throw an exception.
-  static std::optional<std::string_view> checkParameter(
-      const ad_utility::HashMap<std::string, std::string>& parameters,
-      std::string_view key, std::optional<std::string_view> value,
+  static std::optional<std::string> checkParameter(
+      const ad_utility::url_parser::ParamValueMap& parameters,
+      std::string_view key, std::optional<std::string> value,
       bool accessAllowed);
+  FRIEND_TEST(ServerTest, checkParameter);
 
   /// Check if user-provided timeout is authorized with a valid access-token or
   /// lower than the server default. Return an empty optional and send a 403
@@ -227,10 +229,10 @@ class Server {
       const ad_utility::httpUtils::HttpRequest auto& request, auto& send) const;
 
   /// Send response for the streamable media types (tsv, csv, octet-stream,
-  /// turtle).
+  /// turtle, sparqlJson, qleverJson).
   Awaitable<void> sendStreamableResponse(
       const ad_utility::httpUtils::HttpRequest auto& request, auto& send,
       ad_utility::MediaType mediaType, const PlannedQuery& plannedQuery,
-      const QueryExecutionTree& qet,
+      const QueryExecutionTree& qet, ad_utility::Timer& requestTimer,
       SharedCancellationHandle cancellationHandle) const;
 };

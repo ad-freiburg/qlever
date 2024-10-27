@@ -4,7 +4,7 @@ add_library(SortPerformanceEstimator SortPerformanceEstimator.cpp)
 qlever_target_link_libraries(SortPerformanceEstimator)
 
 add_library(engine
-        Engine.cpp QueryExecutionTree.cpp Operation.cpp ResultTable.cpp LocalVocab.cpp
+        Engine.cpp QueryExecutionTree.cpp Operation.cpp Result.cpp LocalVocab.cpp
         IndexScan.cpp Join.cpp Sort.cpp
         Distinct.cpp OrderBy.cpp Filter.cpp
         Server.cpp QueryPlanner.cpp QueryPlanningCostFactors.cpp
@@ -14,6 +14,6 @@ add_library(engine
         Values.cpp Bind.cpp Minus.cpp RuntimeInformation.cpp CheckUsePatternTrick.cpp
         VariableToColumnMap.cpp ExportQueryExecutionTrees.cpp
         CartesianProductJoin.cpp TextIndexScanForWord.cpp TextIndexScanForEntity.cpp
-        TextLimit.cpp
-        idTable/CompressedExternalIdTable.h)
-qlever_target_link_libraries(engine util index parser sparqlExpressions http SortPerformanceEstimator Boost::iostreams)
+        TextLimit.cpp LazyGroupBy.cpp GroupByHashMapOptimization.cpp SpatialJoin.cpp
+        CountConnectedSubgraphs.cpp SpatialJoinAlgorithms.cpp PathSearch.cpp)
+qlever_target_link_libraries(engine util index parser sparqlExpressions http SortPerformanceEstimator Boost::iostreams s2)

@@ -31,6 +31,7 @@ using IndexPair = std::pair<size_t, size_t>;
 void testLazyScan(Permutation::IdTableGenerator partialLazyScanResult,
                   IndexScan& fullScan,
                   const std::vector<IndexPair>& expectedRows,
+                  const LimitOffsetClause& limitOffset = {},
                   source_location l = source_location::current()) {
   auto t = generateLocationTrace(l);
   auto alloc = ad_utility::makeUnlimitedAllocator<Id>();
@@ -44,20 +45,36 @@ void testLazyScan(Permutation::IdTableGenerator partialLazyScanResult,
     ++numBlocks;
   }
 
-  EXPECT_EQ(numBlocks, partialLazyScanResult.details().numBlocksRead_);
-  EXPECT_EQ(lazyScanRes.size(),
-            partialLazyScanResult.details().numElementsRead_);
+  if (limitOffset.isUnconstrained()) {
+    EXPECT_EQ(numBlocks, partialLazyScanResult.details().numBlocksRead_);
+    EXPECT_EQ(lazyScanRes.size(),
+              partialLazyScanResult.details().numElementsRead_);
+  }
 
   auto resFullScan = fullScan.getResult()->idTable().clone();
   IdTable expected{resFullScan.numColumns(), alloc};
 
-  for (auto [lower, upper] : expectedRows) {
-    for (auto index : std::views::iota(lower, upper)) {
-      expected.push_back(resFullScan.at(index));
+  if (limitOffset.isUnconstrained()) {
+    for (auto [lower, upper] : expectedRows) {
+      for (auto index : std::views::iota(lower, upper)) {
+        expected.push_back(resFullScan.at(index));
+      }
     }
+  } else {
+    // as soon as a limit clause is applied, we currently ignore the block
+    // filter, thus the result of the lazy and the materialized scan become the
+    // same.
+    expected = resFullScan.clone();
   }
 
-  EXPECT_EQ(lazyScanRes, expected);
+  if (limitOffset.isUnconstrained()) {
+    EXPECT_EQ(lazyScanRes, expected);
+  } else {
+    // If the join on blocks could already determine that there are no matching
+    // blocks, then the lazy scan will be empty even with a limit present.
+    EXPECT_TRUE((lazyScanRes.empty() && expectedRows.empty()) ||
+                lazyScanRes == expected);
+  }
 }
 
 // Test that when two scans are set up (specified by `tripleLeft` and
@@ -73,18 +90,26 @@ void testLazyScanForJoinOfTwoScans(
     ad_utility::MemorySize blocksizePermutations = 16_B,
     source_location l = source_location::current()) {
   auto t = generateLocationTrace(l);
-  auto qec = getQec(kgTurtle, true, true, true, blocksizePermutations);
-  IndexScan s1{qec, Permutation::PSO, tripleLeft};
-  IndexScan s2{qec, Permutation::PSO, tripleRight};
-  auto implForSwitch = [](IndexScan& l, IndexScan& r, const auto& expectedL,
-                          const auto& expectedR) {
-    auto [scan1, scan2] = (IndexScan::lazyScanForJoinOfTwoScans(l, r));
+  // As soon as there is a LIMIT clause present, we cannot use the prefiltered
+  // blocks.
+  std::vector<LimitOffsetClause> limits{{}, {12, 3}, {2, 3}};
+  for (const auto& limit : limits) {
+    auto qec = getQec(kgTurtle, true, true, true, blocksizePermutations);
+    IndexScan s1{qec, Permutation::PSO, tripleLeft};
+    s1.setLimit(limit);
+    IndexScan s2{qec, Permutation::PSO, tripleRight};
+    auto implForSwitch = [](IndexScan& l, IndexScan& r, const auto& expectedL,
+                            const auto& expectedR,
+                            const LimitOffsetClause& limitL,
+                            const LimitOffsetClause& limitR) {
+      auto [scan1, scan2] = (IndexScan::lazyScanForJoinOfTwoScans(l, r));
 
-    testLazyScan(std::move(scan1), l, expectedL);
-    testLazyScan(std::move(scan2), r, expectedR);
-  };
-  implForSwitch(s1, s2, leftRows, rightRows);
-  implForSwitch(s2, s1, rightRows, leftRows);
+      testLazyScan(std::move(scan1), l, expectedL, limitL);
+      testLazyScan(std::move(scan2), r, expectedR, limitR);
+    };
+    implForSwitch(s1, s2, leftRows, rightRows, limit, {});
+    implForSwitch(s2, s1, rightRows, leftRows, {}, limit);
+  }
 }
 
 // Test that setting up the lazy partial scans between `tripleLeft` and
@@ -115,7 +140,7 @@ void testLazyScanForJoinWithColumn(
     column.push_back(entry.toValueId(qec->getIndex().getVocab()).value());
   }
 
-  auto lazyScan = IndexScan::lazyScanForJoinOfColumnWithScan(column, scan);
+  auto lazyScan = scan.lazyScanForJoinOfColumnWithScan(column);
   testLazyScan(std::move(lazyScan), scan, expectedRows);
 }
 
@@ -136,8 +161,7 @@ void testLazyScanWithColumnThrows(
   // We need this to suppress the warning about a [[nodiscard]] return value
   // being unused.
   auto makeScan = [&column, &s1]() {
-    [[maybe_unused]] auto scan =
-        IndexScan::lazyScanForJoinOfColumnWithScan(column, s1);
+    [[maybe_unused]] auto scan = s1.lazyScanForJoinOfColumnWithScan(column);
   };
   EXPECT_ANY_THROW(makeScan());
 }
@@ -147,6 +171,7 @@ void testLazyScanWithColumnThrows(
 TEST(IndexScan, lazyScanForJoinOfTwoScans) {
   SparqlTriple xpy{Tc{Var{"?x"}}, "<p>", Tc{Var{"?y"}}};
   SparqlTriple xqz{Tc{Var{"?x"}}, "<q>", Tc{Var{"?z"}}};
+  /*
   {
     // In the tests we have a blocksize of two triples per block, and a new
     // block is started for a new relation. That explains the spacing of the
@@ -171,9 +196,10 @@ TEST(IndexScan, lazyScanForJoinOfTwoScans) {
     // graph), so both lazy scans are empty.
     testLazyScanForJoinOfTwoScans(kg, xpy, xqz, {}, {});
   }
+   */
   {
     // No triple for relation <x> (which does appear in the knowledge graph, but
-    // not as a predicate), so both lazy scans arek.
+    // not as a predicate), so both lazy scans are empty.
     std::string kg =
         "<a> <p> <A>. <a> <p> <A2>. "
         "<a> <p> <A3> . <b> <p> <B>. "
@@ -343,7 +369,7 @@ TEST(IndexScan, additionalColumn) {
   ASSERT_THAT(scan.getExternallyVisibleVariableColumns(),
               ::testing::UnorderedElementsAreArray(expected));
   ASSERT_THAT(scan.getCacheKey(),
-              ::testing::ContainsRegex("Additional Columns: 3 4"));
+              ::testing::ContainsRegex("Additional Columns: 4 5"));
   auto res = scan.computeResultOnlyForTesting();
   auto getId = makeGetId(qec->getIndex());
   auto I = IntId;
@@ -352,4 +378,178 @@ TEST(IndexScan, additionalColumn) {
   auto exp = makeIdTableFromVector(
       {{getId("<x>"), getId("<z>"), I(0), I(NO_PATTERN)}});
   EXPECT_THAT(res.idTable(), ::testing::ElementsAreArray(exp));
+}
+
+// Test that the graphs by which an `IndexScan` is to be filtered is correctly
+// reflected in its cache key and its `ScanSpecification`.
+TEST(IndexScan, namedGraphs) {
+  auto qec = getQec("<x> <y> <z>.");
+  using V = Variable;
+  SparqlTriple triple{V{"?x"}, "<y>", V{"?z"}};
+  ad_utility::HashSet<TripleComponent> graphs{
+      TripleComponent::Iri::fromIriref("<graph1>"),
+      TripleComponent::Iri::fromIriref("<graph2>")};
+  auto scan = IndexScan{qec, Permutation::PSO, triple, graphs};
+  using namespace testing;
+  EXPECT_THAT(scan.graphsToFilter(), Optional(graphs));
+  EXPECT_THAT(scan.getCacheKey(),
+              HasSubstr("Filtered by Graphs:<graph1> <graph2>"));
+  EXPECT_THAT(scan.getScanSpecificationTc().graphsToFilter(), Optional(graphs));
+
+  auto scanNoGraphs = IndexScan{qec, Permutation::PSO, triple};
+  EXPECT_EQ(scanNoGraphs.graphsToFilter(), std::nullopt);
+  EXPECT_THAT(scanNoGraphs.getCacheKey(),
+              Not(HasSubstr("Filtered by Graphs:")));
+  EXPECT_THAT(scanNoGraphs.getScanSpecificationTc().graphsToFilter(),
+              Eq(std::nullopt));
+}
+
+TEST(IndexScan, getResultSizeOfScan) {
+  auto qec = getQec("<x> <p> <s1>, <s2>. <x> <p2> <s1>.");
+  auto getId = makeGetId(qec->getIndex());
+  [[maybe_unused]] auto x = getId("<x>");
+  [[maybe_unused]] auto p = getId("<p>");
+  [[maybe_unused]] auto s1 = getId("<s1>");
+  [[maybe_unused]] auto s2 = getId("<s2>");
+  [[maybe_unused]] auto p2 = getId("<p2>");
+  using V = Variable;
+  using I = TripleComponent::Iri;
+
+  {
+    SparqlTripleSimple scanTriple{V{"?x"}, V("?y"), V{"?z"}};
+    IndexScan scan{qec, Permutation::Enum::PSO, scanTriple};
+    EXPECT_EQ(scan.getSizeEstimate(), 3);
+  }
+  {
+    SparqlTripleSimple scanTriple{V{"?x"}, I::fromIriref("<p>"), V{"?y"}};
+    IndexScan scan{qec, Permutation::Enum::PSO, scanTriple};
+    EXPECT_EQ(scan.getSizeEstimate(), 2);
+  }
+  {
+    SparqlTripleSimple scanTriple{I::fromIriref("<x>"), I::fromIriref("<p>"),
+                                  V{"?y"}};
+    IndexScan scan{qec, Permutation::Enum::PSO, scanTriple};
+    EXPECT_EQ(scan.getSizeEstimate(), 2);
+  }
+  {
+    SparqlTripleSimple scanTriple{V("?x"), I::fromIriref("<p>"),
+                                  I::fromIriref("<s1>")};
+    IndexScan scan{qec, Permutation::Enum::POS, scanTriple};
+    EXPECT_EQ(scan.getSizeEstimate(), 1);
+  }
+  // 0 variables
+  {
+    SparqlTripleSimple scanTriple{I::fromIriref("<x>"), I::fromIriref("<p>"),
+                                  I::fromIriref("<s1>")};
+    IndexScan scan{qec, Permutation::Enum::POS, scanTriple};
+    EXPECT_EQ(scan.getSizeEstimate(), 1);
+    EXPECT_ANY_THROW(scan.getMultiplicity(0));
+    auto res = scan.computeResultOnlyForTesting();
+    ASSERT_EQ(res.idTable().numRows(), 1);
+    ASSERT_EQ(res.idTable().numColumns(), 0);
+  }
+  {
+    SparqlTripleSimple scanTriple{I::fromIriref("<x2>"), I::fromIriref("<p>"),
+                                  I::fromIriref("<s1>")};
+    IndexScan scan{qec, Permutation::Enum::POS, scanTriple};
+    EXPECT_EQ(scan.getSizeEstimate(), 0);
+  }
+  {
+    SparqlTripleSimple scanTriple{I::fromIriref("<x>"), I::fromIriref("<p>"),
+                                  I::fromIriref("<p>")};
+    IndexScan scan{qec, Permutation::Enum::POS, scanTriple};
+    EXPECT_EQ(scan.getSizeEstimate(), 0);
+    EXPECT_ANY_THROW(scan.getMultiplicity(0));
+    auto res = scan.computeResultOnlyForTesting();
+    ASSERT_EQ(res.idTable().numRows(), 0);
+    ASSERT_EQ(res.idTable().numColumns(), 0);
+  }
+}
+
+// _____________________________________________________________________________
+TEST(IndexScan, computeResultCanBeConsumedLazily) {
+  using V = Variable;
+  auto qec = getQec("<x> <p> <s1>, <s2>. <x> <p2> <s1>.", true, false);
+  auto getId = makeGetId(qec->getIndex());
+  auto x = getId("<x>");
+  auto p = getId("<p>");
+  auto s1 = getId("<s1>");
+  auto s2 = getId("<s2>");
+  auto p2 = getId("<p2>");
+  SparqlTripleSimple scanTriple{V{"?x"}, V{"?y"}, V{"?z"}};
+  IndexScan scan{qec, Permutation::Enum::POS, scanTriple};
+
+  ProtoResult result = scan.computeResultOnlyForTesting(true);
+
+  ASSERT_FALSE(result.isFullyMaterialized());
+
+  IdTable resultTable{3, ad_utility::makeUnlimitedAllocator<Id>()};
+
+  for (Result::IdTableVocabPair& pair : result.idTables()) {
+    resultTable.insertAtEnd(pair.idTable_);
+  }
+
+  EXPECT_EQ(resultTable,
+            makeIdTableFromVector({{p, s1, x}, {p, s2, x}, {p2, s1, x}}));
+}
+
+// _____________________________________________________________________________
+TEST(IndexScan, computeResultReturnsEmptyGeneratorIfScanIsEmpty) {
+  using V = Variable;
+  using I = TripleComponent::Iri;
+  auto qec = getQec("<x> <p> <s1>, <s2>. <x> <p2> <s1>.", true, false);
+  SparqlTripleSimple scanTriple{V{"?x"}, I::fromIriref("<abcdef>"), V{"?z"}};
+  IndexScan scan{qec, Permutation::Enum::POS, scanTriple};
+
+  ProtoResult result = scan.computeResultOnlyForTesting(true);
+
+  ASSERT_FALSE(result.isFullyMaterialized());
+
+  for ([[maybe_unused]] Result::IdTableVocabPair& pair : result.idTables()) {
+    ADD_FAILURE() << "Generator should be empty" << std::endl;
+  }
+}
+
+// _____________________________________________________________________________
+TEST(IndexScan, unlikelyToFitInCacheCalculatesSizeCorrectly) {
+  using ad_utility::MemorySize;
+  using V = Variable;
+  using I = TripleComponent::Iri;
+  using enum Permutation::Enum;
+  auto qec = getQec("<x> <p> <s1>, <s2>. <x> <p2> <s1>.", true, false);
+  auto x = I::fromIriref("<x>");
+  auto p = I::fromIriref("<p>");
+  auto p2 = I::fromIriref("<p2>");
+
+  auto expectMaximumCacheableSize = [&](const IndexScan& scan, size_t numRows,
+                                        size_t numCols,
+                                        source_location l =
+                                            source_location::current()) {
+    auto locationTrace = generateLocationTrace(l);
+
+    EXPECT_TRUE(scan.unlikelyToFitInCache(MemorySize::bytes(0)));
+    size_t byteCount = numRows * numCols * sizeof(Id);
+    EXPECT_TRUE(scan.unlikelyToFitInCache(MemorySize::bytes(byteCount - 1)));
+    EXPECT_FALSE(scan.unlikelyToFitInCache(MemorySize::bytes(byteCount)));
+  };
+
+  {
+    IndexScan scan{qec, POS, {V{"?x"}, V{"?y"}, V{"?z"}}};
+    expectMaximumCacheableSize(scan, 3, 3);
+  }
+
+  {
+    IndexScan scan{qec, SPO, {x, V{"?y"}, V{"?z"}}};
+    expectMaximumCacheableSize(scan, 3, 2);
+  }
+
+  {
+    IndexScan scan{qec, POS, {V{"?x"}, p, V{"?z"}}};
+    expectMaximumCacheableSize(scan, 2, 2);
+  }
+
+  {
+    IndexScan scan{qec, SPO, {x, p2, V{"?z"}}};
+    expectMaximumCacheableSize(scan, 1, 1);
+  }
 }

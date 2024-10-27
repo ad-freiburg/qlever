@@ -15,12 +15,10 @@
 #include "engine/ValuesForTesting.h"
 #include "engine/idTable/IdTable.h"
 #include "util/AllocatorTestHelpers.h"
-#include "util/Forward.h"
 #include "util/GTestHelpers.h"
 #include "util/IdTableHelpers.h"
 #include "util/IdTestHelpers.h"
 #include "util/IndexTestHelpers.h"
-#include "util/Random.h"
 
 using ad_utility::testing::makeAllocator;
 using namespace ad_utility::testing;
@@ -29,31 +27,6 @@ auto V = VocabId;
 constexpr auto U = Id::makeUndefined();
 using JoinColumns = std::vector<std::array<ColumnIndex, 2>>;
 }  // namespace
-
-TEST(EngineTest, distinctTest) {
-  IdTable input{makeIdTableFromVector(
-      {{1, 1, 3, 7}, {6, 1, 3, 6}, {2, 2, 3, 5}, {3, 6, 5, 4}, {1, 6, 5, 1}})};
-
-  IdTable result{4, makeAllocator()};
-
-  std::vector<ColumnIndex> keepIndices{{1, 2}};
-  CALL_FIXED_SIZE(4, Engine::distinct, input, keepIndices, &result);
-
-  // For easier checking.
-  IdTable expectedResult{
-      makeIdTableFromVector({{1, 1, 3, 7}, {2, 2, 3, 5}, {3, 6, 5, 4}})};
-  ASSERT_EQ(expectedResult, result);
-}
-
-TEST(EngineTest, distinctWithEmptyInput) {
-  IdTable input{1, makeAllocator()};
-  // Deliberately input a non-empty result to check that it is
-  // overwritten by the (empty) input.
-  IdTable result = makeIdTableFromVector({{3}});
-  CALL_FIXED_SIZE(1, Engine::distinct, input, std::vector<ColumnIndex>{},
-                  &result);
-  ASSERT_EQ(input, result);
-}
 
 void testOptionalJoin(const IdTable& inputA, const IdTable& inputB,
                       JoinColumns jcls, const IdTable& expectedResult) {
@@ -351,5 +324,35 @@ TEST(OptionalJoin, gallopingJoin) {
     JoinColumns jcls{{0, 0}};
 
     testOptionalJoin(a, b, jcls, expectedResult);
+  }
+}
+
+// _____________________________________________________________________________
+TEST(Engine, countDistinct) {
+  auto alloc = ad_utility::testing::makeAllocator();
+  IdTable t1(alloc);
+  t1.setNumColumns(0);
+  auto noop = []() {};
+  EXPECT_EQ(0u, Engine::countDistinct(t1, noop));
+  t1.setNumColumns(3);
+  EXPECT_EQ(0u, Engine::countDistinct(t1, noop));
+
+  // 0 columns, but multiple rows;
+  t1.setNumColumns(0);
+  t1.resize(1);
+  EXPECT_EQ(1u, Engine::countDistinct(t1, noop));
+  t1.resize(5);
+  EXPECT_EQ(1u, Engine::countDistinct(t1, noop));
+
+  t1 = makeIdTableFromVector(
+      {{0, 0}, {0, 0}, {1, 3}, {1, 4}, {1, 4}, {4, 4}, {4, 5}, {4, 7}});
+  EXPECT_EQ(6u, Engine::countDistinct(t1, noop));
+
+  t1 = makeIdTableFromVector(
+      {{0, 0}, {1, 4}, {1, 3}, {1, 4}, {1, 4}, {4, 4}, {4, 5}, {4, 7}});
+
+  if constexpr (ad_utility::areExpensiveChecksEnabled) {
+    AD_EXPECT_THROW_WITH_MESSAGE(Engine::countDistinct(t1, noop),
+                                 ::testing::HasSubstr("must be sorted"));
   }
 }

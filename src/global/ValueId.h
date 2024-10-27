@@ -2,8 +2,7 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#ifndef QLEVER_VALUEID_H
-#define QLEVER_VALUEID_H
+#pragma once
 
 #include <absl/strings/str_cat.h>
 
@@ -12,9 +11,11 @@
 #include <functional>
 #include <limits>
 
+#include "global/Constants.h"
 #include "global/IndexTypes.h"
+#include "parser/GeoPoint.h"
 #include "util/BitUtils.h"
-#include "util/Date.h"
+#include "util/DateYearDuration.h"
 #include "util/NBitInteger.h"
 #include "util/Serializer/Serializer.h"
 #include "util/SourceLocation.h"
@@ -29,6 +30,7 @@ enum struct Datatype {
   LocalVocabIndex,
   TextRecordIndex,
   Date,
+  GeoPoint,
   WordVocabIndex,
   BlankNodeIndex,
   MaxValue = BlankNodeIndex
@@ -59,6 +61,8 @@ constexpr std::string_view toString(Datatype type) {
       return "WordVocabIndex";
     case Datatype::Date:
       return "Date";
+    case Datatype::GeoPoint:
+      return "GeoPoint";
     case Datatype::BlankNodeIndex:
       return "BlankNodeIndex";
   }
@@ -88,6 +92,24 @@ class ValueId {
 
   // The largest representable integer value.
   static constexpr int64_t maxInt = IntegerType::max();
+  // All types that store strings. Together, the IDs of all the items of these
+  // types form a consecutive range of IDs when sorted. Within this range, the
+  // IDs are ordered by their string values, not by their IDs (and hence also
+  // not by their types).
+  static constexpr std::array<Datatype, 2> stringTypes_{
+      Datatype::VocabIndex, Datatype::LocalVocabIndex};
+
+  // Assert that the types in `stringTypes_` are directly adjacent. This is
+  // required to make the comparison of IDs in `ValueIdComparators.h` work.
+  static constexpr Datatype maxStringType_ = std::ranges::max(stringTypes_);
+  static constexpr Datatype minStringType_ = std::ranges::min(stringTypes_);
+  static_assert(static_cast<size_t>(maxStringType_) -
+                    static_cast<size_t>(minStringType_) + 1 ==
+                stringTypes_.size());
+
+  // Assert that the size of an encoded GeoPoint equals the available bits in a
+  // ValueId.
+  static_assert(numDataBits == GeoPoint::numDataBits);
 
   /// This exception is thrown if we try to store a value of an index type
   /// (VocabIndex, LocalVocabIndex, TextRecordIndex) that is larger than
@@ -97,9 +119,9 @@ class ValueId {
     std::string errorMessage_;
 
    public:
-    IndexTooLargeException(T tooBigValue,
-                           ad_utility::source_location s =
-                               ad_utility::source_location::current()) {
+    explicit IndexTooLargeException(
+        T tooBigValue, ad_utility::source_location s =
+                           ad_utility::source_location::current()) {
       errorMessage_ = absl::StrCat(
           s.file_name(), ", line ", s.line(), ": The given value ", tooBigValue,
           " is bigger than what the maxIndex of ValueId allows.");
@@ -120,21 +142,6 @@ class ValueId {
   /// Default construction of an uninitialized id.
   ValueId() = default;
 
-  /// Equality comparison is performed directly on the underlying
-  /// representation.
-  // NOTE: (Also for the operator<=> below: These comparisons only work
-  // correctly if we only store entries in the local vocab that are NOT part of
-  // the vocabulary. This is currently not true for expression results from
-  // GROUP BY and BIND operations (for performance reaons). So a join with such
-  // results will currently lead to wrong results.
-  constexpr bool operator==(const ValueId& other) const {
-    if (getDatatype() == Datatype::LocalVocabIndex &&
-        other.getDatatype() == Datatype::LocalVocabIndex) [[unlikely]] {
-      return *getLocalVocabIndex() == *other.getLocalVocabIndex();
-    }
-    return _bits == other._bits;
-  }
-
   /// Comparison is performed directly on the underlying representation. Note
   /// that because the type bits are the most significant bits, all values of
   /// the same `Datatype` will be adjacent to each other. Unsigned index types
@@ -144,11 +151,56 @@ class ValueId {
   /// doubles in reversed order. This is a direct consequence of comparing the
   /// bit representation of these values as unsigned integers.
   constexpr auto operator<=>(const ValueId& other) const {
-    if (getDatatype() == Datatype::LocalVocabIndex &&
-        other.getDatatype() == Datatype::LocalVocabIndex) [[unlikely]] {
+    using enum Datatype;
+    auto type = getDatatype();
+    auto otherType = other.getDatatype();
+    if (type != LocalVocabIndex && otherType != LocalVocabIndex) {
+      return _bits <=> other._bits;
+    }
+    if (type == LocalVocabIndex && otherType == LocalVocabIndex) [[unlikely]] {
       return *getLocalVocabIndex() <=> *other.getLocalVocabIndex();
     }
+    auto compareVocabAndLocalVocab =
+        [](::VocabIndex vocabIndex,
+           ::LocalVocabIndex localVocabIndex) -> std::strong_ordering {
+      auto [lowerBound, upperBound] = localVocabIndex->positionInVocab();
+      if (vocabIndex < lowerBound) {
+        return std::strong_ordering::less;
+      } else if (vocabIndex >= upperBound) {
+        return std::strong_ordering::greater;
+      } else {
+        return std::strong_ordering::equal;
+      }
+    };
+    // GCC 11 issues a false positive warning here, so we try to avoid it by
+    // being over-explicit about the branches here.
+    if (type == VocabIndex && otherType == LocalVocabIndex) {
+      return compareVocabAndLocalVocab(getVocabIndex(),
+                                       other.getLocalVocabIndex());
+    } else if (type == LocalVocabIndex && otherType == VocabIndex) {
+      auto inverseOrder = compareVocabAndLocalVocab(other.getVocabIndex(),
+                                                    getLocalVocabIndex());
+      return 0 <=> inverseOrder;
+    }
+
+    // One of the types is `LocalVocab`, and the other one is a non-string type
+    // like `Integer` or `Undefined. Then the comparison by bits automatically
+    // compares by the datatype.
     return _bits <=> other._bits;
+  }
+
+  // When there are no local vocab entries, then comparison can only be done
+  // on the underlying bits, which allows much better code generation (e.g.
+  // vectorization). In particular, this method should for example be used
+  // during index building.
+  constexpr auto compareWithoutLocalVocab(const ValueId& other) const {
+    return _bits <=> other._bits;
+  }
+
+  // For some reason which I (joka921) don't understand, we still need
+  // operator== although we already have operator <=>.
+  constexpr bool operator==(const ValueId& other) const {
+    return (*this <=> other) == 0;
   }
 
   /// Get the underlying bit representation, e.g. for compression etc.
@@ -257,15 +309,28 @@ class ValueId {
   }
 
   // Store or load a `Date` object.
-  static ValueId makeFromDate(DateOrLargeYear d) noexcept {
+  static ValueId makeFromDate(DateYearOrDuration d) noexcept {
     return addDatatypeBits(std::bit_cast<uint64_t>(d), Datatype::Date);
   }
 
-  DateOrLargeYear getDate() const noexcept {
-    return std::bit_cast<DateOrLargeYear>(removeDatatypeBits(_bits));
+  DateYearOrDuration getDate() const noexcept {
+    return std::bit_cast<DateYearOrDuration>(removeDatatypeBits(_bits));
   }
 
   // TODO<joka921> implement dates
+
+  /// Create a `ValueId` for a GeoPoint object (representing a POINT from WKT).
+  static ValueId makeFromGeoPoint(GeoPoint p) {
+    return addDatatypeBits(p.toBitRepresentation(), Datatype::GeoPoint);
+  }
+
+  /// Obtain a new `GeoPoint` object representing the pair of coordinates that
+  /// this `ValueId` encodes. If `getDatatype() != GeoPoint` then the result
+  /// is unspecified.
+  GeoPoint getGeoPoint() const {
+    T bits = removeDatatypeBits(_bits);
+    return GeoPoint::fromBitRepresentation(bits);
+  }
 
   /// Return the smallest and largest possible `ValueId` wrt the underlying
   /// representation
@@ -317,6 +382,8 @@ class ValueId {
         return std::invoke(visitor, getWordVocabIndex());
       case Datatype::Date:
         return std::invoke(visitor, getDate());
+      case Datatype::GeoPoint:
+        return std::invoke(visitor, getGeoPoint());
       case Datatype::BlankNodeIndex:
         return std::invoke(visitor, getBlankNodeIndex());
     }
@@ -326,17 +393,24 @@ class ValueId {
   /// This operator is only for debugging and testing. It returns a
   /// human-readable representation.
   friend std::ostream& operator<<(std::ostream& ostr, const ValueId& id) {
-    ostr << toString(id.getDatatype()) << ':';
+    ostr << toString(id.getDatatype())[0] << ':';
+    if (id.getDatatype() == Datatype::Undefined) {
+      return ostr << id.getBits();
+    }
+
     auto visitor = [&ostr]<typename T>(T&& value) {
       if constexpr (ad_utility::isSimilar<T, ValueId::UndefinedType>) {
-        ostr << "Undefined";
+        // already handled above
+        AD_FAIL();
       } else if constexpr (ad_utility::isSimilar<T, double> ||
                            ad_utility::isSimilar<T, int64_t>) {
         ostr << std::to_string(value);
       } else if constexpr (ad_utility::isSimilar<T, bool>) {
         ostr << (value ? "true" : "false");
-      } else if constexpr (ad_utility::isSimilar<T, DateOrLargeYear>) {
+      } else if constexpr (ad_utility::isSimilar<T, DateYearOrDuration>) {
         ostr << value.toStringAndType().first;
+      } else if constexpr (ad_utility::isSimilar<T, GeoPoint>) {
+        ostr << value.toStringRepresentation();
       } else if constexpr (ad_utility::isSimilar<T, LocalVocabIndex>) {
         AD_CORRECTNESS_CHECK(value != nullptr);
         ostr << value->toStringRepresentation();
@@ -376,5 +450,3 @@ class ValueId {
     return addDatatypeBits(id, type);
   }
 };
-
-#endif  // QLEVER_VALUEID_H

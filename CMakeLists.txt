@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.27)
 project(QLever C CXX)
 
 # C/C++ Versions
@@ -70,7 +70,7 @@ include(FetchContent)
 FetchContent_Declare(
         googletest
         GIT_REPOSITORY https://github.com/google/googletest.git
-        GIT_TAG f8d7d77c06936315286eb55f8de22cd23c188571 # release-1.14.0
+        GIT_TAG 33af80a883ddc33d9c0fac0a5b4578301efb18de # main branch on 2024/05/16
 )
 
 ################################
@@ -241,8 +241,20 @@ set(ABSL_PROPAGATE_CXX_STD ON)
 FetchContent_Declare(
         abseil
         GIT_REPOSITORY https://github.com/abseil/abseil-cpp.git
-        GIT_TAG 258e5a15759cc3d122d4a4826bc499af91d40aa9 # 2023-12-21
+        GIT_TAG 93ac3a4f9ee7792af399cebd873ee99ce15aed08  # 2024-05-16
 )
+
+################################
+# S2 Geometry
+################################
+SET (BUILD_TESTS OFF CACHE BOOL "no tests for s2")
+FetchContent_Declare(
+        s2
+        GIT_REPOSITORY https://github.com/google/s2geometry.git
+        GI_TAG 5b5eccd54a08ae03b4467e79ffbb076d0b5f221e  #version 0.11.1
+        SYSTEM
+)
+
 
 if (USE_PARALLEL)
     include(FindOpenMP)
@@ -301,8 +313,13 @@ FetchContent_Declare(
 ################################
 FetchContent_Declare(
         fsst
-        GIT_REPOSITORY https://github.com/cwida/fsst.git
-        GIT_TAG c8719ef0aa3740da9685ad2738bb9c8ecc327944
+        #GIT_REPOSITORY https://github.com/cwida/fsst.git
+        #GIT_TAG c8719ef0aa3740da9685ad2738bb9c8ecc327944
+        #FSST Currently has a struct name `Encoder` that leads to ODR violations with the `Encoder`class of S2.
+        # I (joka921) have filed bug reports for both of them and a PR for fsst, but for now we use our own fork
+        # of Fsst.
+        GIT_REPOSITORY https://github.com/joka921/fsst.git
+        GIT_TAG 43fb2d1756f5a5d0e85e765c7b51f5e3be8cc83f
 )
 
 
@@ -321,8 +338,9 @@ FetchContent_Declare(
 ################################
 # Apply FetchContent
 ################################
-FetchContent_MakeAvailable(googletest ctre abseil re2 stxxl fsst)
+FetchContent_MakeAvailable(googletest ctre abseil re2 stxxl fsst s2)
 # Disable some warnings in RE2, STXXL, and GTEST
+target_compile_options(s2 PRIVATE -Wno-sign-compare -Wno-unused-parameter -Wno-class-memaccess -Wno-comment -Wno-redundant-move -Wno-unknown-warning-option -Wno-maybe-uninitialized -Wno-class-memaccess)
 target_compile_options(re2 PRIVATE -Wno-unused-parameter)
 target_compile_options(stxxl PRIVATE -Wno-deprecated-declarations)
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
@@ -348,7 +366,7 @@ message(STATUS ---)
 include_directories(src)
 
 # Run the script `CompilationInfo.cmake` that creates the file `CompilationInfo.cpp`
-# with the current git hash and the curent time and date. When specifying
+# with the current git hash and the current time and date. When specifying
 # `-DDONT_UPDATE_COMPILATION_INFO=true` as an argument to `cmake`, the compilation info is
 # never updated. This is useful during development to avoid a relinking of the binaries for
 # every compilation.
@@ -409,19 +427,17 @@ add_subdirectory(test)
 # Add the library with the constants declared in `CompilationInfo.h` and defined
 # in `CompilationInfo.cpp` created by `CompilationInfo.cmake`.
 add_library(compilationInfo ${CMAKE_CURRENT_BINARY_DIR}/CompilationInfo.cpp)
+qlever_target_link_libraries(compilationInfo)
 
 add_executable(IndexBuilderMain src/index/IndexBuilderMain.cpp)
-qlever_target_link_libraries(IndexBuilderMain index ${CMAKE_THREAD_LIBS_INIT} Boost::program_options)
+qlever_target_link_libraries(IndexBuilderMain index ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo)
 
 add_executable(ServerMain src/ServerMain.cpp)
-qlever_target_link_libraries(ServerMain engine ${CMAKE_THREAD_LIBS_INIT} Boost::program_options)
+qlever_target_link_libraries(ServerMain engine ${CMAKE_THREAD_LIBS_INIT} Boost::program_options compilationInfo)
 target_precompile_headers(ServerMain REUSE_FROM engine)
 
 add_executable(VocabularyMergerMain src/VocabularyMergerMain.cpp)
 qlever_target_link_libraries(VocabularyMergerMain index ${CMAKE_THREAD_LIBS_INIT})
-
-add_executable(PermutationExporterMain src/index/PermutationExporterMain.cpp)
-qlever_target_link_libraries(PermutationExporterMain index ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(PrintIndexVersionMain src/PrintIndexVersionMain.cpp)
 qlever_target_link_libraries(PrintIndexVersionMain util)

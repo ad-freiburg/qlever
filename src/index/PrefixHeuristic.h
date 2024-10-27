@@ -21,7 +21,7 @@
 //                            be added to every word, no matter if it is
 //                            actually compressed. (This is true for the
 //                            vocabulary in QLever). The Algorithm has to know
-//                            this in order to chosse the correct prefixes.
+//                            this in order to choose the correct prefixes.
 //
 // Returns:   Vector of suitable prefixes which have been selected by the
 //            algorithm

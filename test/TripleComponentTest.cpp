@@ -7,6 +7,9 @@
 
 #include "./util/IdTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
+#include "global/ValueId.h"
+#include "parser/GeoPoint.h"
+#include "parser/Literal.h"
 #include "parser/TripleComponent.h"
 #include "util/IndexTestHelpers.h"
 
@@ -112,7 +115,7 @@ TEST(TripleComponent, toRdfLiteral) {
   object = -43.3;
   ASSERT_EQ(object.toRdfLiteral(),
             R"("-43.3"^^<http://www.w3.org/2001/XMLSchema#decimal>)");
-  object = DateOrLargeYear{123456, DateOrLargeYear::Type::Year};
+  object = DateYearOrDuration{123456, DateYearOrDuration::Type::Year};
   ASSERT_EQ(object.toRdfLiteral(),
             R"("123456"^^<http://www.w3.org/2001/XMLSchema#gYear>)");
 }
@@ -123,7 +126,15 @@ TEST(TripleComponent, toValueIdIfNotString) {
   tc = 131.4;
   ASSERT_EQ(tc.toValueIdIfNotString().value(), D(131.4));
 
-  DateOrLargeYear date{123456, DateOrLargeYear::Type::Year};
+  tc = TripleComponent{GeoPoint(47.9, 7.8)};
+  ASSERT_EQ(tc.toValueIdIfNotString().value().getDatatype(),
+            Datatype::GeoPoint);
+  ASSERT_FLOAT_EQ(tc.toValueIdIfNotString().value().getGeoPoint().getLat(),
+                  47.9);
+  ASSERT_FLOAT_EQ(tc.toValueIdIfNotString().value().getGeoPoint().getLng(),
+                  7.8);
+
+  DateYearOrDuration date{123456, DateYearOrDuration::Type::Year};
   tc = date;
   ASSERT_EQ(tc.toValueIdIfNotString().value(), Id::makeFromDate(date));
   tc = "<x>";
@@ -160,7 +171,7 @@ TEST(TripleComponent, toValueId) {
 
   tc = iri(HAS_PATTERN_PREDICATE);
   ASSERT_EQ(tc.toValueId(vocab).value(),
-            qlever::specialIds.at(HAS_PATTERN_PREDICATE));
+            getId(std::string{HAS_PATTERN_PREDICATE}));
 }
 
 TEST(TripleComponent, settingVariablesAsStringsIsIllegal) {
