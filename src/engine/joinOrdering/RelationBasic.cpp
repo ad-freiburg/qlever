@@ -17,8 +17,8 @@ RelationBasic::RelationBasic() = default;
 
 RelationBasic::RelationBasic(std::string label, int cardinality)
     : cardinality(cardinality), label(std::move(label)) {}
-std::strong_ordering RelationBasic::operator<=>(const RelationBasic& other) const =
-    default;
+std::strong_ordering RelationBasic::operator<=>(
+    const RelationBasic& other) const = default;
 
 // bool RelationBasic::operator<(const RelationBasic& other) const {
 //   return this->cardinality < other.cardinality;
