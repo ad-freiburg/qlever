@@ -1806,32 +1806,16 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
   // further into the query that optional should be resolved by now.
   AD_CONTRACT_CHECK(a.type != SubtreePlan::OPTIONAL);
   if (b.type == SubtreePlan::MINUS) {
-    if (auto opt = createSubtreeWithService<Minus>(a, b)) {
-      return {opt.value()};
-    }
     return {makeSubtreePlan<Minus>(_qec, a._qet, b._qet)};
   }
 
   // OPTIONAL JOINS are not symmetric!
   if (b.type == SubtreePlan::OPTIONAL) {
-    // If the OPTIONAL subtree's rootOperation is a SERVICE, try to simplify it
-    // using the result of the first subtree.
-    if (auto opt = createSubtreeWithService<OptionalJoin>(a, b)) {
-      return {opt.value()};
-    }
-
     // Join the two optional columns using an optional join
     return {makeSubtreePlan<OptionalJoin>(_qec, a._qet, b._qet)};
   }
 
   if (auto opt = createJoinWithPathSearch(a, b, jcs)) {
-    candidates.push_back(std::move(opt.value()));
-    return candidates;
-  }
-
-  // Check if one of the two Operations is a SERVICE. If so, we can try
-  // to simplify the Service Query using the result of the other operation.
-  if (auto opt = createJoinWithService(a, b, jcs)) {
     candidates.push_back(std::move(opt.value()));
     return candidates;
   }
@@ -2005,71 +1989,6 @@ auto QueryPlanner::createJoinWithHasPredicateScan(
   auto plan = makeSubtreePlan<HasPredicateScan>(
       qec, std::move(otherTree), otherTreeJoinColumn, std::move(object));
   mergeSubtreePlanIds(plan, a, b);
-  return plan;
-}
-
-// _____________________________________________________________________
-auto QueryPlanner::createJoinWithService(
-    const SubtreePlan& a, const SubtreePlan& b,
-    const std::vector<std::array<ColumnIndex, 2>>& jcs)
-    -> std::optional<SubtreePlan> {
-  // We can only proceed if exactly one of the inputs is a `SERVICE`.
-  auto aRootOp = std::dynamic_pointer_cast<Service>(a._qet->getRootOperation());
-  auto bRootOp = std::dynamic_pointer_cast<Service>(b._qet->getRootOperation());
-  if (static_cast<bool>(aRootOp) == static_cast<bool>(bRootOp)) {
-    return std::nullopt;
-  }
-
-  // Setup some variables that are agnostic of which of the two inputs is the
-  // serviceWithSibling clause, as these cases are completely symmetric.
-  const auto& [serviceIn, sibling, serviceIdx, siblingIdx] = [&]() {
-    // `std::tie` requires lvalue-references, that's why we define explicit
-    // variables for `0` and `1`.
-    static constexpr size_t zero = 0;
-    static constexpr size_t one = 1;
-    if (aRootOp) {
-      return std::tie(aRootOp, b, zero, one);
-    } else {
-      AD_CORRECTNESS_CHECK(bRootOp);
-      return std::tie(bRootOp, a, one, zero);
-    }
-  }();
-
-  auto serviceWithSibling =
-      makeSubtreePlan(serviceIn->createCopyWithSiblingTree(sibling._qet));
-  auto qec = serviceIn->getExecutionContext();
-
-  SubtreePlan plan =
-      jcs.size() == 1
-          ? makeSubtreePlan<Join>(qec, std::move(serviceWithSibling._qet),
-                                  sibling._qet, jcs[0][serviceIdx],
-                                  jcs[0][siblingIdx])
-          : makeSubtreePlan<MultiColumnJoin>(
-                qec, std::move(serviceWithSibling._qet), sibling._qet);
-  mergeSubtreePlanIds(plan, a, b);
-
-  return plan;
-}
-
-// _____________________________________________________________________
-template <typename Operation>
-auto QueryPlanner::createSubtreeWithService(const SubtreePlan& a,
-                                            const SubtreePlan& b)
-    -> std::optional<SubtreePlan> {
-  // The right subtree has to be a Service.
-  auto bRootOp = std::dynamic_pointer_cast<Service>(b._qet->getRootOperation());
-  if (!static_cast<bool>(bRootOp)) {
-    return std::nullopt;
-  }
-
-  auto serviceWithSibling =
-      makeSubtreePlan(bRootOp->createCopyWithSiblingTree(a._qet));
-  auto qec = bRootOp->getExecutionContext();
-
-  SubtreePlan plan = makeSubtreePlan<Operation>(
-      qec, a._qet, std::move(serviceWithSibling._qet));
-  mergeSubtreePlanIds(plan, a, b);
-
   return plan;
 }
 

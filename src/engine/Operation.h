@@ -69,6 +69,10 @@ class Operation {
 
   const Index& getIndex() const { return _executionContext->getIndex(); }
 
+  const DeltaTriples& deltaTriples() const {
+    return _executionContext->deltaTriples();
+  }
+
   // Get a unique, not ambiguous string representation for a subtree.
   // This should act like an ID for each subtree.
   // Calls  `getCacheKeyImpl` and adds the information about the `LIMIT` clause.
@@ -125,6 +129,12 @@ class Operation {
   virtual bool isIndexScanWithNumVariables(
       [[maybe_unused]] size_t target) const {
     return false;
+  }
+
+  // See the member variable with the same name below for documentation.
+  std::optional<std::shared_ptr<const Result>>&
+  precomputedResultBecauseSiblingOfService() {
+    return precomputedResultBecauseSiblingOfService_;
   }
 
   RuntimeInformation& runtimeInfo() const { return *_runtimeInfo; }
@@ -349,6 +359,11 @@ class Operation {
   // Recursively call a function on all children.
   template <typename F>
   void forAllDescendants(F f) const;
+
+  // Holds a precomputed Result of this operation if it is the sibling of a
+  // Service operation.
+  std::optional<std::shared_ptr<const Result>>
+      precomputedResultBecauseSiblingOfService_;
 
   std::shared_ptr<RuntimeInformation> _runtimeInfo =
       std::make_shared<RuntimeInformation>();
