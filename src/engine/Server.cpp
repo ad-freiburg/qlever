@@ -601,7 +601,9 @@ Awaitable<void> Server::executeUpdate(
   };
   std::vector<IdTriple<>> toInsert;
   std::vector<IdTriple<>> toDelete;
-  // Expected result size is size(query result) x num template rows.
+  // The maximum result size is size(query result) x num template rows. The
+  // actual result can be smaller if there are template rows with variables for
+  // which a result row does not have a value.
   toInsert.reserve(res->idTable().size() * toInsertTemplates.size());
   toDelete.reserve(res->idTable().size() * toDeleteTemplates.size());
   for (const auto& [pair, range] :
