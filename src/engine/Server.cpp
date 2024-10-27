@@ -509,13 +509,16 @@ Awaitable<void> Server::executeUpdate(
   auto res = qet.getResult(true);
 
   auto& vocab = index_.getVocab();
-  DeltaTriples deltaTriples = DeltaTriples{index_};
   // DeltaTriples transfers the IDs that are actually inserted to its own
   // LocalVocab. This LocalVocab only contains IDs that are related to the
   // template. Most of the IDs will be added to the DeltaTriples' LocalVocab. An
   // ID will not be added if it belongs to a Quad with a variable that has no
   // solutions.
   LocalVocab localVocab = {};
+  // The GraphUpdate consist of a template of `SparqlTripleSimpleWithGraph` and
+  // in some cases also an GraphPattern. The template contains
+  // `TripleComponent`s (s, p and o) and a `Graph` (graph). First transform
+  // everything except Variables in the template to IDs.
   using IdOrVariable = std::variant<Id, Variable>;
   auto transformSparqlTripleComponent =
       [&vocab, &localVocab](TripleComponent component) -> IdOrVariable {
@@ -558,6 +561,9 @@ Awaitable<void> Server::executeUpdate(
       ad_utility::transform(std::move(graphUpdate.toDelete_),
                             transformSparqlTripleSimple);
 
+  // To calculate the set of quads for the update, for each row in the template
+  // resolve the variables using each row of the result to obtain a quad without
+  // variables. These quads can then be used with `DeltaTriples`.
   auto resolveVariable = [](const IdTable& idTable, const size_t& row,
                             const VariableToColumnMap& variableColumns,
                             IdOrVariable idOrVar) -> std::optional<Id> {
@@ -595,7 +601,7 @@ Awaitable<void> Server::executeUpdate(
   };
   std::vector<IdTriple<>> toInsert;
   std::vector<IdTriple<>> toDelete;
-  // Expected result size is size(query result) x num template rows
+  // Expected result size is size(query result) x num template rows.
   toInsert.reserve(res->idTable().size() * toInsertTemplates.size());
   toDelete.reserve(res->idTable().size() * toDeleteTemplates.size());
   for (const auto& [pair, range] :
@@ -612,6 +618,8 @@ Awaitable<void> Server::executeUpdate(
     }
   }
 
+  // TODO<qup42> use the actual DeltaTriples object
+  DeltaTriples deltaTriples = DeltaTriples{index_};
   deltaTriples.insertTriples(cancellationHandle, std::move(toInsert));
   deltaTriples.deleteTriples(cancellationHandle, std::move(toDelete));
 
