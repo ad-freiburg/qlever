@@ -102,7 +102,7 @@ class CustomHashSetWithMemoryLimit {
     return hashSet_.find(value);
   }
 
-  HashSet::iterator find(const T& value) { return hashSet_.find(value); }
+  bool contains(const T& key) { return hashSet_.contains(key); }
 
   HashSet::const_iterator begin() const { return hashSet_.begin(); }
 
