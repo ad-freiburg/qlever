@@ -268,7 +268,7 @@ std::pair<size_t, size_t> IndexImpl::createInternalPSOandPOS(
     auto&& internalTriplesPsoSorter) {
   auto onDiskBaseBackup = onDiskBase_;
   auto configurationJsonBackup = configurationJson_;
-  onDiskBase_.append(INTERNAL_INDEX_INFIX);
+  onDiskBase_.append(QLEVER_INTERNAL_INDEX_INFIX);
   auto internalTriplesUnique = ad_utility::uniqueBlockView(
       internalTriplesPsoSorter.template getSortedBlocks<0>());
   createPSOAndPOSImpl(NumColumnsIndexBuilding, std::move(internalTriplesUnique),
@@ -289,7 +289,7 @@ std::pair<size_t, size_t> IndexImpl::createInternalPSOandPOS(
 // _____________________________________________________________________________
 void IndexImpl::updateInputFileSpecificationsAndLog(
     std::vector<Index::InputFileSpecification>& spec,
-    bool parallelParsingSpecifiedViaJson) {
+    std::optional<bool> parallelParsingSpecifiedViaJson) {
   if (spec.size() == 1) {
     LOG(INFO) << "Processing triples from " << spec.at(0).filename_ << " ..."
               << std::endl;
@@ -297,7 +297,7 @@ void IndexImpl::updateInputFileSpecificationsAndLog(
     LOG(INFO) << "Processing triples from " << spec.size()
               << " input streams ..." << std::endl;
   }
-  if (parallelParsingSpecifiedViaJson) {
+  if (parallelParsingSpecifiedViaJson.value_or(false) == true) {
     if (spec.size() == 1) {
       LOG(WARN) << "Parallel parsing set to `true` in the `.settings.json` "
                    "file; this is deprecated, please use the command-line "
@@ -310,6 +310,15 @@ void IndexImpl::updateInputFileSpecificationsAndLog(
           "specified via the `.settings.json` file, but has to be specified "
           " via the command-line option --parse-parallel or -p"};
     }
+  }
+
+  if (spec.size() == 1 && !parallelParsingSpecifiedViaJson.has_value()) {
+    LOG(WARN) << "Implicitly using the parallel parser for a single input file "
+                 "for reasons of backward compatibility; this is deprecated, "
+                 "please use the command-line option --parse-parallel or -p "
+                 "instead"
+              << std::endl;
+    spec.at(0).parseInParallel_ = true;
   }
 }
 
@@ -551,7 +560,7 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
   idOfHasPatternDuringIndexBuilding_ =
       mergeRes.specialIdMapping().at(HAS_PATTERN_PREDICATE);
   idOfInternalGraphDuringIndexBuilding_ =
-      mergeRes.specialIdMapping().at(INTERNAL_GRAPH_IRI);
+      mergeRes.specialIdMapping().at(QLEVER_INTERNAL_GRAPH_IRI);
   LOG(INFO) << "Number of words in external vocabulary: "
             << res.vocabularyMetaData_.numWordsTotal() - sizeInternalVocabulary
             << std::endl;
@@ -849,7 +858,7 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
              << vocab_.size() << std::endl;
 
   auto range1 =
-      vocab_.prefixRanges(absl::StrCat("<", INTERNAL_PREDICATE_PREFIX));
+      vocab_.prefixRanges(QLEVER_INTERNAL_PREFIX_IRI_WITHOUT_CLOSING_BRACKET);
   auto range2 = vocab_.prefixRanges("@");
   auto isInternalId = [range1, range2](Id id) {
     // TODO<joka921> What about internal vocab stuff for update queries? this
@@ -1455,7 +1464,7 @@ size_t IndexImpl::getCardinality(const TripleComponent& comp,
   // or objects anyway.
   // TODO<joka921> Find out what the effect of this special case is for the
   // query planning.
-  if (comp == INTERNAL_TEXT_MATCH_PREDICATE) {
+  if (comp == QLEVER_INTERNAL_TEXT_MATCH_PREDICATE) {
     return TEXT_PREDICATE_CARDINALITY_ESTIMATE;
   }
   if (std::optional<Id> relId = comp.toValueId(getVocab()); relId.has_value()) {

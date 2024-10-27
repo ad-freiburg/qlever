@@ -18,6 +18,7 @@
 #include "engine/Values.h"
 #include "engine/ValuesForTesting.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
+#include "engine/sparqlExpressions/CountStarExpression.h"
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
@@ -721,21 +722,57 @@ TEST_F(GroupByOptimizations, correctResultForHashMapOptimization) {
       SparqlTriple{Variable{"?z"}, {"<is>"}, Variable{"?y"}});
   Tree join = makeExecutionTree<Join>(qec, zxScan, zyScan, 0, 0);
   std::vector<ColumnIndex> sortedColumns = {1};
-  Tree sortedJoin = makeExecutionTree<Sort>(qec, join, sortedColumns);
 
   SparqlExpressionPimpl avgYPimpl = makeAvgPimpl(varY);
   std::vector<Alias> aliasesAvgY{Alias{avgYPimpl, Variable{"?avg"}}};
 
   // Calculate result with optimization
   RuntimeParameters().set<"group-by-hash-map-enabled">(true);
-  GroupBy groupByWithOptimization{qec, variablesOnlyX, aliasesAvgY, sortedJoin};
+  GroupBy groupByWithOptimization{qec, variablesOnlyX, aliasesAvgY, join};
   auto resultWithOptimization = groupByWithOptimization.getResult();
 
   // Clear cache, calculate result without optimization
   qec->clearCacheUnpinnedOnly();
   RuntimeParameters().set<"group-by-hash-map-enabled">(false);
-  GroupBy groupByWithoutOptimization{qec, variablesOnlyX, aliasesAvgY,
-                                     sortedJoin};
+  GroupBy groupByWithoutOptimization{qec, variablesOnlyX, aliasesAvgY, join};
+  auto resultWithoutOptimization = groupByWithoutOptimization.getResult();
+
+  // Compare results, using debugString as the result only contains 2 rows
+  ASSERT_EQ(resultWithOptimization->asDebugString(),
+            resultWithoutOptimization->asDebugString());
+}
+
+// _____________________________________________________________________________
+TEST_F(GroupByOptimizations, correctResultForHashMapOptimizationForCountStar) {
+  /* Setup query:
+  SELECT ?x (COUNT(*) as ?c) WHERE {
+    ?z <is-a> ?x .
+    ?z <is> ?y
+  } GROUP BY ?x
+ */
+  Tree zxScan = makeExecutionTree<IndexScan>(
+      qec, Permutation::Enum::PSO,
+      SparqlTriple{Variable{"?z"}, {"<is-a>"}, Variable{"?x"}});
+  Tree zyScan = makeExecutionTree<IndexScan>(
+      qec, Permutation::Enum::PSO,
+      SparqlTriple{Variable{"?z"}, {"<is>"}, Variable{"?y"}});
+  Tree join = makeExecutionTree<Join>(qec, zxScan, zyScan, 0, 0);
+  std::vector<ColumnIndex> sortedColumns = {1};
+
+  SparqlExpressionPimpl countStarPimpl{makeCountStarExpression(false),
+                                       "COUNT(*) as ?c"};
+  std::vector<Alias> aliasesCountStar{Alias{countStarPimpl, Variable{"?c"}}};
+
+  // Calculate result with optimization
+  RuntimeParameters().set<"group-by-hash-map-enabled">(true);
+  GroupBy groupByWithOptimization{qec, variablesOnlyX, aliasesCountStar, join};
+  auto resultWithOptimization = groupByWithOptimization.getResult();
+
+  // Clear cache, calculate result without optimization
+  qec->clearCacheUnpinnedOnly();
+  RuntimeParameters().set<"group-by-hash-map-enabled">(false);
+  GroupBy groupByWithoutOptimization{qec, variablesOnlyX, aliasesCountStar,
+                                     join};
   auto resultWithoutOptimization = groupByWithoutOptimization.getResult();
 
   // Compare results, using debugString as the result only contains 2 rows
@@ -2193,4 +2230,20 @@ TEST_P(GroupByLazyFixture, aliasRenameWorks) {
 
   expectReturningIdTables<2>(groupBy, {makeIntTable({{1, 1}, {2, 2}, {4, 4}}),
                                        makeIntTable({{8, 8}})});
+}
+
+// _____________________________________________________________________________
+TEST_P(GroupByLazyFixture, countStarWorks) {
+  std::vector<IdTable> idTables;
+  idTables.push_back(makeIntTable({{1}}));
+  idTables.push_back(makeIntTable({{2}, {4}, {8}}));
+  auto subtree = makeExecutionTree<ValuesForTesting>(
+      qec_, std::move(idTables), vars("?x"), true, std::vector<ColumnIndex>{0});
+
+  Alias alias{
+      SparqlExpressionPimpl{makeCountStarExpression(false), "COUNT(*) as ?y"},
+      V{"?y"}};
+  GroupBy groupBy{qec_, {}, {std::move(alias)}, std::move(subtree)};
+
+  expectReturningIdTables<1>(groupBy, {makeIntTable({{4}})});
 }
