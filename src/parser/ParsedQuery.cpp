@@ -253,7 +253,7 @@ void ParsedQuery::registerVariablesVisibleInQueryBody(
 // _____________________________________________________________________________
 void ParsedQuery::registerVariableVisibleInQueryBody(const Variable& variable) {
   auto addVariable = [&variable](auto& clause) {
-    if (!variable.name().starts_with(INTERNAL_VARIABLE_PREFIX)) {
+    if (!variable.name().starts_with(QLEVER_INTERNAL_VARIABLE_PREFIX)) {
       clause.addVisibleVariable(variable);
     }
   };
@@ -285,7 +285,8 @@ void ParsedQuery::GraphPattern::addLanguageFilter(const Variable& variable,
       if (triple.o_ == variable &&
           (triple.p_._operation == PropertyPath::Operation::IRI &&
            !isVariable(triple.p_)) &&
-          !triple.p_._iri.starts_with(INTERNAL_ENTITIES_URI_PREFIX)) {
+          !triple.p_._iri.starts_with(
+              QLEVER_INTERNAL_PREFIX_IRI_WITHOUT_CLOSING_BRACKET)) {
         matchingTriples.push_back(&triple);
       }
     }
@@ -492,14 +493,14 @@ void ParsedQuery::addOrderByClause(OrderClause orderClause, bool isGroupBy,
 
 // ________________________________________________________________
 Variable ParsedQuery::getNewInternalVariable() {
-  auto variable =
-      Variable{absl::StrCat(INTERNAL_VARIABLE_PREFIX, numInternalVariables_)};
+  auto variable = Variable{
+      absl::StrCat(QLEVER_INTERNAL_VARIABLE_PREFIX, numInternalVariables_)};
   numInternalVariables_++;
   return variable;
 }
 
 Variable ParsedQuery::blankNodeToInternalVariable(std::string_view blankNode) {
   AD_CONTRACT_CHECK(blankNode.starts_with("_:"));
-  return Variable{
-      absl::StrCat(INTERNAL_BLANKNODE_VARIABLE_PREFIX, blankNode.substr(2))};
+  return Variable{absl::StrCat(QLEVER_INTERNAL_BLANKNODE_VARIABLE_PREFIX,
+                               blankNode.substr(2))};
 }

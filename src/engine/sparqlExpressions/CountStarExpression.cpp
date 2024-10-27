@@ -38,7 +38,8 @@ ExpressionResult CountStarExpression::evaluate(
 
   auto varToColNoInternalVariables =
       ctx->_variableToColumnMap | std::views::filter([](const auto& varAndIdx) {
-        return !varAndIdx.first.name().starts_with(INTERNAL_VARIABLE_PREFIX);
+        return !varAndIdx.first.name().starts_with(
+            QLEVER_INTERNAL_VARIABLE_PREFIX);
       });
   table.setNumColumns(std::ranges::distance(varToColNoInternalVariables));
   table.resize(ctx->size());
