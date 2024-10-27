@@ -5,6 +5,8 @@
 
 #include "QueryGraph.h"
 
+#include "RelationBasic.h"
+
 namespace JoinOrdering {
 
 template <typename N>
