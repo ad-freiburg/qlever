@@ -5,11 +5,10 @@
 
 #include <gtest/gtest.h>
 
-#include "engine/joinOrdering/CostIKKBZ.cpp"
-#include "engine/joinOrdering/GOO.cpp"
-#include "engine/joinOrdering/IKKBZ.cpp"
-#include "engine/joinOrdering/QueryGraph.cpp"
-#include "engine/joinOrdering/RelationBasic.cpp"
+#include "engine/joinOrdering/CostIKKBZ.h"
+#include "engine/joinOrdering/IKKBZ.h"
+#include "engine/joinOrdering/QueryGraph.h"
+#include "engine/joinOrdering/RelationBasic.h"
 
 #define eps 0.001
 
@@ -134,6 +133,7 @@ TEST(IKKBZ_SANITY, EX2_R1) {
   g.add_rjoin(R8, R9, 1.0 / 25);
 
   auto g2_R1 = JoinOrdering::IKKBZ(g, R1);
+
   ASSERT_EQ(g2_R1.iter(), (std::vector({R1, R3, R4, R5, R8, R9, R6, R7, R2})));
 }
 
