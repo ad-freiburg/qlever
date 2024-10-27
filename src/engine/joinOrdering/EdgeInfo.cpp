@@ -8,7 +8,7 @@
 namespace JoinOrdering {
 
 EdgeInfo::EdgeInfo() = default;
-EdgeInfo::EdgeInfo(Direction dir) : direction(dir) {}
+// EdgeInfo::EdgeInfo(Direction dir) : direction(dir) {}
 EdgeInfo::EdgeInfo(Direction dir, float weight)
     : direction(dir), weight(weight) {}
 }  // namespace JoinOrdering

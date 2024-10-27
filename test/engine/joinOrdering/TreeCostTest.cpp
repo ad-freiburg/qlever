@@ -125,6 +125,9 @@ TEST_F(LinearTreeSanity, JOIN_RELATION_LABELS) {
   ASSERT_EQ(tt.root->right->left->relation.getLabel(), "R3");
   ASSERT_EQ(tt.root->right->right->relation.getLabel(), "R4");
 
+  ASSERT_FALSE(tt.isLeftDeep());
+  ASSERT_FALSE(tt.isRightDeep());
+
   EXPECT_THAT(t1.relations_iter_str(), testing::ElementsAre("R1", "R2"));
   EXPECT_THAT(t2.relations_iter_str(), testing::ElementsAre("R3", "R4"));
   EXPECT_THAT(tt.relations_iter_str(),
@@ -157,6 +160,8 @@ TEST_F(LinearTreeSanity, CONSTRUCT_2_1_JOIN_TREES) {
   auto tt = JoinTree(JoinTree(R1, R2, JoinType::BOWTIE), JoinTree(R5),
                      JoinType::BOWTIE);
   ASSERT_EQ(tt.expr(), "((R1⋈R2)⋈(R5))");
+  ASSERT_FALSE(tt.isLeftDeep());
+  ASSERT_FALSE(tt.isRightDeep());
 }
 
 /**

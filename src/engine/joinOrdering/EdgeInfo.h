@@ -23,7 +23,7 @@ class EdgeInfo {
   float weight{-1};
 
   EdgeInfo();
-  explicit EdgeInfo(Direction dir);
+  //  explicit EdgeInfo(Direction dir);
   EdgeInfo(Direction dir, float weight);
 };
 

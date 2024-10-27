@@ -232,40 +232,40 @@ auto QueryGraph<N>::iter(const N& n) -> std::vector<N> {
   return erg;
 }
 
-template <typename N>
-requires RelationAble<N>
-auto QueryGraph<N>::iter_pairs() -> std::vector<std::pair<N, N>> {
-  auto v = std::set<std::pair<N, N>>();
-
-  for (auto const& [a, be] : edges_)
-    for (auto const& [b, e] : be) {
-      auto p = std::pair(b, a);
-      // skip implicitly removed relation (with hidden edges)
-      // skip already visited pairs
-      // skip duplicates. (R1, R2) is the same as (R2, R1)
-      if (e.hidden || v.contains(p) || v.contains(std::pair(a, b))) continue;
-      v.insert(p);
-    }
-
-  return std::vector(v.begin(), v.end());
-}
-
-template <typename N>
-requires RelationAble<N>
-auto QueryGraph<N>::iter_pairs(const N& n) -> std::vector<std::pair<N, N>> {
-  auto v = std::set<std::pair<N, N>>();
-
-  for (auto const& [b, e] : edges_[n]) {
-    auto p = std::pair(b, n);
-    // skip implicitly removed relation (with hidden edges)
-    // skip already visited pairs
-    // skip duplicates. (R1, R2) is the same as (R2, R1)
-    if (e.hidden || v.contains(p) || v.contains(std::pair(n, b))) continue;
-    v.insert(p);
-  }
-
-  return std::vector(v.begin(), v.end());
-}
+// template <typename N>
+// requires RelationAble<N>
+// auto QueryGraph<N>::iter_pairs() -> std::vector<std::pair<N, N>> {
+//   auto v = std::set<std::pair<N, N>>();
+//
+//   for (auto const& [a, be] : edges_)
+//     for (auto const& [b, e] : be) {
+//       auto p = std::pair(b, a);
+//       // skip implicitly removed relation (with hidden edges)
+//       // skip already visited pairs
+//       // skip duplicates. (R1, R2) is the same as (R2, R1)
+//       if (e.hidden || v.contains(p) || v.contains(std::pair(a, b))) continue;
+//       v.insert(p);
+//     }
+//
+//   return std::vector(v.begin(), v.end());
+// }
+//
+// template <typename N>
+// requires RelationAble<N>
+// auto QueryGraph<N>::iter_pairs(const N& n) -> std::vector<std::pair<N, N>> {
+//   auto v = std::set<std::pair<N, N>>();
+//
+//   for (auto const& [b, e] : edges_[n]) {
+//     auto p = std::pair(b, n);
+//     // skip implicitly removed relation (with hidden edges)
+//     // skip already visited pairs
+//     // skip duplicates. (R1, R2) is the same as (R2, R1)
+//     if (e.hidden || v.contains(p) || v.contains(std::pair(n, b))) continue;
+//     v.insert(p);
+//   }
+//
+//   return std::vector(v.begin(), v.end());
+// }
 
 template <typename N>
 requires RelationAble<N> constexpr Direction QueryGraph<N>::inv(Direction dir) {

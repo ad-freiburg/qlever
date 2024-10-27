@@ -259,7 +259,7 @@ requires RelationAble<N> class QueryGraph {
    *
    * @return set of pairs of connected relations
    */
-  auto iter_pairs() -> std::vector<std::pair<N, N>>;
+  //  auto iter_pairs() -> std::vector<std::pair<N, N>>;
 
   /**
    * Gets relation pairs that involve a particular relation.
@@ -269,7 +269,7 @@ requires RelationAble<N> class QueryGraph {
    * @return set of pairs of connected relations that involve n
    * @see iter_pairs()
    */
-  auto iter_pairs(const N& n) -> std::vector<std::pair<N, N>>;
+  //  auto iter_pairs(const N& n) -> std::vector<std::pair<N, N>>;
 
   /**
    *
