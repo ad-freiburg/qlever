@@ -40,10 +40,10 @@ requires RelationAble<N> JoinTree<N> linearizedDP(const QueryGraph<N>& g) {
     }
   }
 
-  for (size_t i = 0; i < sz_v; i++) {
-    for (size_t j = 0; j < sz_v; j++) std::cout << T[i][j].expr() << " ";
-    std::cout << std::endl;
-  }
+  //  for (size_t i = 0; i < sz_v; i++) {
+  //    for (size_t j = 0; j < sz_v; j++) std::cout << T[i][j].expr() << " ";
+  //    std::cout << std::endl;
+  //  }
 
   return T[0][sz_v - 1];
 }

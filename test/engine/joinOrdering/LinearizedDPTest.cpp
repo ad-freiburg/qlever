@@ -128,6 +128,7 @@ TEST_F(LinDPJoin1, CAN_JOIN_SAMPLE_1) {
 
 TEST_F(LinDPJoin1, ADAPTIVE_5_16) {
   auto erg = JoinOrdering::linearizedDP(g);
-
-  std::cout << erg.expr() << "\n";
+  //  std::cout << erg.expr() << "\n";
+  // FIXME: just suppress codecov
+  ASSERT_EQ(erg.expr(), "(((((((R2)⋈(R1))⋈(R4))⋈(R6))⋈(R7))⋈(R5))⋈(R3))");
 }
