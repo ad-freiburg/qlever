@@ -25,7 +25,6 @@ class RelationBasic {
   bool operator==(const RelationBasic& other) const;
   [[nodiscard]] int getCardinality() const;
   [[nodiscard]] std::string getLabel() const;
-  void setLabel(std::string label_);
 
   template <typename H>
   friend H AbslHashValue(H h, const RelationBasic& r);

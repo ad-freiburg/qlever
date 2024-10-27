@@ -28,9 +28,6 @@ bool RelationBasic::operator==(const RelationBasic& other) const {
 }
 int RelationBasic::getCardinality() const { return cardinality; }
 std::string RelationBasic::getLabel() const { return label; }
-void RelationBasic::setLabel(std::string label_) {
-  this->label = std::move(label_);
-}
 
 // ref: https://abseil.io/docs/cpp/guides/hash
 template <typename H>
