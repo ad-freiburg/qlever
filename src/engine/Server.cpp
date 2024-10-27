@@ -747,15 +747,8 @@ MediaType Server::determineMediaType(
   if (!mediaType.has_value()) {
     mediaType = ad_utility::getMediaTypeFromAcceptHeader(acceptHeader);
   }
+  AD_CORRECTNESS_CHECK(mediaType.has_value());
 
-  if (!mediaType.has_value()) {
-    throw NoSupportedMediatypeError(
-        absl::StrCat("Did not find any supported media type "
-                     "in this \'Accept:\' header field: \"",
-                     acceptHeader, "\". ",
-                     ad_utility::getErrorMessageForSupportedMediaTypes()));
-  }
-  AD_CONTRACT_CHECK(mediaType.has_value());
   return mediaType.value();
 }
 
