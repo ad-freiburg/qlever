@@ -495,20 +495,26 @@ Awaitable<void> Server::process(
 }
 
 // _____________________________________________________________________________
-Awaitable<void> Server::processUpdate(
+Awaitable<void> Server::executeUpdate(
     const ParsedQuery& query, const QueryExecutionTree& qet,
     const ad_utility::Timer& requestTimer,
-    SharedCancellationHandle cancellationHandle, const Index& index) {
+    SharedCancellationHandle cancellationHandle) {
   AD_CONTRACT_CHECK(query.hasUpdateClause());
   auto updateClause = query.updateClause();
+  if (!std::holds_alternative<updateClause::GraphUpdate>(updateClause.op_)) {
+    throw std::runtime_error(
+        "Only INSERT/DELETE update operations are currently supported.");
+  }
+  auto graphUpdate = std::get<updateClause::GraphUpdate>(updateClause.op_);
   auto res = qet.getResult(true);
 
   auto& vocab = index_.getVocab();
   DeltaTriples deltaTriples = DeltaTriples{index_};
   // DeltaTriples transfers the IDs that are actually inserted to its own
-  // LocalVocab.
-  // TODO<qup42>: The IDs in this LocalVocab are from the template. All of them
-  // will be added to the DeltaTriples' LocalVocab.
+  // LocalVocab. This LocalVocab only contains IDs that are related to the
+  // template. Most of the IDs will be added to the DeltaTriples' LocalVocab. An
+  // ID will not be added if it belongs to a Quad with a variable that has no
+  // solutions.
   LocalVocab localVocab = {};
   using IdOrVariable = std::variant<Id, Variable>;
   auto transformSparqlTripleComponent =
@@ -519,18 +525,37 @@ Awaitable<void> Server::processUpdate(
       return std::move(component).toValueId(vocab, localVocab);
     }
   };
+  auto transformGraph =
+      [&vocab,
+       &localVocab](SparqlTripleSimpleWithGraph::Graph graph) -> IdOrVariable {
+    return std::visit(
+        ad_utility::OverloadCallOperator{
+            [](const std::monostate&) -> IdOrVariable {
+              AD_CORRECTNESS_CHECK(
+                  qlever::specialIds().contains(DEFAULT_GRAPH_IRI));
+              return qlever::specialIds().at(DEFAULT_GRAPH_IRI);
+            },
+            [&vocab, &localVocab](const Iri& iri) -> IdOrVariable {
+              ad_utility::triple_component::Iri i =
+                  ad_utility::triple_component::Iri::fromIriref(iri.iri());
+              return TripleComponent(i).toValueId(vocab, localVocab);
+            },
+            [](const Variable& var) -> IdOrVariable { return var; }},
+        graph);
+  };
   auto transformSparqlTripleSimple =
-      [&transformSparqlTripleComponent](SparqlTripleSimple triple) {
+      [&transformSparqlTripleComponent,
+       &transformGraph](SparqlTripleSimpleWithGraph triple) {
         return std::array{transformSparqlTripleComponent(std::move(triple.s_)),
                           transformSparqlTripleComponent(std::move(triple.p_)),
-                          transformSparqlTripleComponent(std::move(triple.o_))};
+                          transformSparqlTripleComponent(std::move(triple.o_)),
+                          transformGraph(std::move(triple.g_))};
       };
-  // TODO<qup42>: add graph once 1574 is merged
-  std::vector<std::array<IdOrVariable, 3>> toInsertTemplates =
-      ad_utility::transform(std::move(updateClause.toInsert_),
+  std::vector<std::array<IdOrVariable, 4>> toInsertTemplates =
+      ad_utility::transform(std::move(graphUpdate.toInsert_),
                             transformSparqlTripleSimple);
-  std::vector<std::array<IdOrVariable, 3>> toDeleteTemplates =
-      ad_utility::transform(std::move(updateClause.toDelete_),
+  std::vector<std::array<IdOrVariable, 4>> toDeleteTemplates =
+      ad_utility::transform(std::move(graphUpdate.toDelete_),
                             transformSparqlTripleSimple);
 
   auto resolveVariable = [](const IdTable& idTable, const size_t& row,
@@ -554,16 +579,17 @@ Awaitable<void> Server::processUpdate(
                                       const IdTable& idTable, uint64_t row,
                                       const VariableToColumnMap&
                                           variableColumns) {
-    for (const auto& [s, p, o] : templates) {
+    for (const auto& [s, p, o, g] : templates) {
       auto subject = resolveVariable(idTable, row, variableColumns, s);
       auto predicate = resolveVariable(idTable, row, variableColumns, p);
       auto object = resolveVariable(idTable, row, variableColumns, o);
+      auto graph = resolveVariable(idTable, row, variableColumns, g);
 
       if (!subject.has_value() || !predicate.has_value() ||
-          !object.has_value()) {
+          !object.has_value() || !graph.has_value()) {
         continue;
       }
-      result.emplace_back(IdTriple<0>{*subject, *predicate, *object, *object});
+      result.emplace_back(std::array{*subject, *predicate, *object, *graph});
     }
     return result;
   };
@@ -572,8 +598,6 @@ Awaitable<void> Server::processUpdate(
   // Expected result size is size(query result) x num template rows
   toInsert.reserve(res->idTable().size() * toInsertTemplates.size());
   toDelete.reserve(res->idTable().size() * toDeleteTemplates.size());
-  // TODO<qup42>: what are the lifetimes of the Result's LocalVocab? ->
-  // https://github.com/ad-freiburg/qlever/pull/1580#issuecomment-2437700759
   for (const auto& [pair, range] :
        ExportQueryExecutionTrees::getRowIndices(query._limitOffset, *res)) {
     auto& idTable = pair.idTable_;
