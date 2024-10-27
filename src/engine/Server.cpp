@@ -347,8 +347,17 @@ Awaitable<void> Server::process(
   auto checkParameter = [&parameters](std::string_view key,
                                       std::optional<std::string> value,
                                       bool accessAllowed = true) {
-    return Server::checkParameter(parameters, key, std::move(value),
-                                  accessAllowed);
+    std::optional<string> param =
+        Server::checkParameter(parameters, key, std::move(value));
+    // Now that we have the value, check if there is a problem with the access.
+    // If yes, we abort the query processing at this point.
+    if (param && !accessAllowed) {
+      throw std::runtime_error(absl::StrCat("Access to \"", key, "=",
+                                            param.value(), "\" denied",
+                                            " (requires a valid access token)",
+                                            ", processing of request aborted"));
+    }
+    return param;
   };
 
   // Check the access token. If an access token is provided and the check fails,
@@ -505,18 +514,12 @@ Awaitable<void> Server::process(
 }
 
 // ____________________________________________________________________________
-bool containsParam(const auto& params, const std::string& param,
-                   const std::string& expected) {
-  auto parameterValue =
-      ad_utility::url_parser::getParameterCheckAtMostOnce(params, param);
-  return parameterValue == expected;
-};
-
-// ____________________________________________________________________________
 std::pair<bool, bool> Server::determineResultPinning(
-    const ad_utility::url_parser::ParamValueMap& params) const {
-  const bool pinSubtrees = containsParam(params, "pinsubtrees", "true");
-  const bool pinResult = containsParam(params, "pinresult", "true");
+    const ad_utility::url_parser::ParamValueMap& params) {
+  const bool pinSubtrees =
+      checkParameter(params, "pinsubtrees", "true").has_value();
+  const bool pinResult =
+      checkParameter(params, "pinresult", "true").has_value();
   return {pinSubtrees, pinResult};
 }
 // ____________________________________________________________________________
@@ -716,7 +719,7 @@ class NoSupportedMediatypeError : public std::runtime_error {
 // ____________________________________________________________________________
 MediaType Server::determineMediaType(
     const ad_utility::url_parser::ParamValueMap& params,
-    const ad_utility::httpUtils::HttpRequest auto& request) const {
+    const ad_utility::httpUtils::HttpRequest auto& request) {
   // The following code block determines the media type to be used for the
   // result. The media type is either determined by the "Accept:" header of
   // the request or by the URL parameter "action=..." (for TSV and CSV export,
@@ -725,17 +728,17 @@ MediaType Server::determineMediaType(
 
   // The explicit `action=..._export` parameter have precedence over the
   // `Accept:...` header field
-  if (containsParam(params, "action", "csv_export")) {
+  if (checkParameter(params, "action", "csv_export")) {
     mediaType = MediaType::csv;
-  } else if (containsParam(params, "action", "tsv_export")) {
+  } else if (checkParameter(params, "action", "tsv_export")) {
     mediaType = MediaType::tsv;
-  } else if (containsParam(params, "action", "qlever_json_export")) {
+  } else if (checkParameter(params, "action", "qlever_json_export")) {
     mediaType = MediaType::qleverJson;
-  } else if (containsParam(params, "action", "sparql_json_export")) {
+  } else if (checkParameter(params, "action", "sparql_json_export")) {
     mediaType = MediaType::sparqlJson;
-  } else if (containsParam(params, "action", "turtle_export")) {
+  } else if (checkParameter(params, "action", "turtle_export")) {
     mediaType = MediaType::turtle;
-  } else if (containsParam(params, "action", "binary_export")) {
+  } else if (checkParameter(params, "action", "binary_export")) {
     mediaType = MediaType::octetStream;
   }
 
@@ -1018,11 +1021,9 @@ bool Server::checkAccessToken(
 }
 
 // _____________________________________________________________________________
-
 std::optional<std::string> Server::checkParameter(
     const ad_utility::url_parser::ParamValueMap& parameters,
-    std::string_view key, std::optional<std::string> value,
-    bool accessAllowed) {
+    std::string_view key, std::optional<std::string> value) {
   auto param =
       ad_utility::url_parser::getParameterCheckAtMostOnce(parameters, key);
   if (!param.has_value()) {
@@ -1036,13 +1037,6 @@ std::optional<std::string> Server::checkParameter(
     value = parameterValue;
   } else if (value != parameterValue) {
     return std::nullopt;
-  }
-  // Now that we have the value, check if there is a problem with the access.
-  // If yes, we abort the query processing at this point.
-  if (!accessAllowed) {
-    throw std::runtime_error(absl::StrCat(
-        "Access to \"", key, "=", value.value(), "\" denied",
-        " (requires a valid access token)", ", processing of request aborted"));
   }
   return value;
 }
