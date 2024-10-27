@@ -114,10 +114,12 @@ class LinearTreeCost3 : public testing::Test {
 };
 
 TEST_F(LinearTreeSanity, JOIN_RELATION_LABELS) {
+  auto t0 = JoinTree<RelationBasic>();
   auto t1 = JoinTree(R1, R2);
   auto t2 = JoinTree(R3, R4);
   auto tt = JoinTree(t1, t2);
 
+  ASSERT_EQ(t0.expr(), "");
   ASSERT_EQ(tt.root->left->left->relation.getLabel(), "R1");
   ASSERT_EQ(tt.root->left->right->relation.getLabel(), "R2");
   ASSERT_EQ(tt.root->right->left->relation.getLabel(), "R3");
