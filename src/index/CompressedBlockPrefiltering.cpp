@@ -63,8 +63,21 @@ static void checkEvalRequirements(const std::vector<BlockMetadata>& input,
   // Helper to check for fully sorted blocks. Return `true` if `b1 < b2` is
   // satisfied.
   const auto checkOrder = [](const BlockMetadata& b1, const BlockMetadata& b2) {
-    return b1.blockIndex_ < b2.blockIndex_ &&
-           getMaskedTriple(b1.lastTriple_) < getMaskedTriple(b2.firstTriple_);
+    if (b1.blockIndex_ < b2.blockIndex_) {
+      AD_CORRECTNESS_CHECK(getMaskedTriple(b1.lastTriple_) <=
+                           getMaskedTriple(b2.lastTriple_));
+      return true;
+    } else if (b1.blockIndex_ == b2.blockIndex_) {
+      // Given the previous check detects duplicates in the input, the
+      // correctness check here will never evaluate to true.
+      // => blockIndex_ assignment issue.
+      AD_CORRECTNESS_CHECK(b1 == b2);
+      return false;
+    } else {
+      AD_CORRECTNESS_CHECK(getMaskedTriple(b1.lastTriple_) >
+                           getMaskedTriple(b2.firstTriple_));
+      return false;
+    }
   };
   if (!std::ranges::is_sorted(input, checkOrder)) {
     throwRuntimeError("The blocks must be provided in sorted order.");

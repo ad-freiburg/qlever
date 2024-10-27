@@ -214,6 +214,8 @@ TEST_F(TestPrefilterExprOnBlockMetadata, testBlockFormatForDebugging) {
 // Test Relational Expressions
 //______________________________________________________________________________
 // Test LessThanExpression
+// Note: the `makeTest` function automatically adds the blocks with mixed
+// datatypes to the expected result.
 TEST_F(TestPrefilterExprOnBlockMetadata, testLessThanExpressions) {
   makeTest(lt(IntId(5)),
            {b5, b6, b9, b10, b11, b12, b13, b14, b15, b16, b17, b18});
@@ -239,6 +241,8 @@ TEST_F(TestPrefilterExprOnBlockMetadata, testLessThanExpressions) {
 
 //______________________________________________________________________________
 // Test LessEqualExpression
+// Note: the `makeTest` function automatically adds the blocks with mixed
+// datatypes to the expected result.
 TEST_F(TestPrefilterExprOnBlockMetadata, testLessEqualExpressions) {
   makeTest(le(IntId(0)), {b5, b6, b9, b10, b11, b15, b16, b17, b18});
   makeTest(le(IntId(-6)), {b9, b11, b15, b16, b17, b18});
@@ -263,6 +267,8 @@ TEST_F(TestPrefilterExprOnBlockMetadata, testLessEqualExpressions) {
 
 //______________________________________________________________________________
 // Test GreaterThanExpression
+// Note: the `makeTest` function automatically adds the blocks with mixed
+// datatypes to the expected result.
 TEST_F(TestPrefilterExprOnBlockMetadata, testGreaterThanExpression) {
   makeTest(gt(DoubleId(5.5375)), {b7, b8, b11, b14, b18});
   makeTest(gt(DoubleId(9.9994)), {b14});
@@ -289,6 +295,8 @@ TEST_F(TestPrefilterExprOnBlockMetadata, testGreaterThanExpression) {
 
 //______________________________________________________________________________
 // Test GreaterEqualExpression
+// Note: the `makeTest` function automatically adds the blocks with mixed
+// datatypes to the expected result.
 TEST_F(TestPrefilterExprOnBlockMetadata, testGreaterEqualExpression) {
   makeTest(ge(IntId(0)), {b5, b6, b7, b8, b11, b12, b13, b14});
   makeTest(ge(IntId(8)), {b8, b11, b14});
@@ -315,6 +323,8 @@ TEST_F(TestPrefilterExprOnBlockMetadata, testGreaterEqualExpression) {
 
 //______________________________________________________________________________
 // Test EqualExpression
+// Note: the `makeTest` function automatically adds the blocks with mixed
+// datatypes to the expected result.
 TEST_F(TestPrefilterExprOnBlockMetadata, testEqualExpression) {
   makeTest(eq(IntId(0)), {b4, b5, b6, b11});
   makeTest(eq(IntId(5)), {b6, b7, b11, b14});
@@ -341,6 +351,8 @@ TEST_F(TestPrefilterExprOnBlockMetadata, testEqualExpression) {
 
 //______________________________________________________________________________
 // Test NotEqualExpression
+// Note: the `makeTest` function automatically adds the blocks with mixed
+// datatypes to the expected result.
 TEST_F(TestPrefilterExprOnBlockMetadata, testNotEqualExpression) {
   makeTest(neq(DoubleId(0.00)),
            {b6, b7, b8, b9, b10, b11, b12, b13, b14, b15, b16, b17, b18});
@@ -369,6 +381,8 @@ TEST_F(TestPrefilterExprOnBlockMetadata, testNotEqualExpression) {
 // Test Logical Expressions
 //______________________________________________________________________________
 // Test AndExpression
+// Note: the `makeTest` function automatically adds the blocks with mixed
+// datatypes to the expected result.
 TEST_F(TestPrefilterExprOnBlockMetadata, testAndExpression) {
   makeTest(andExpr(ge(VocabId(10)), gt(VocabId(10))), {b19, b20, b21, b22});
   makeTest(andExpr(ge(VocabId(10)), ge(VocabId(10))), {b19, b20, b21, b22});
@@ -405,6 +419,8 @@ TEST_F(TestPrefilterExprOnBlockMetadata, testAndExpression) {
 
 //______________________________________________________________________________
 // Test OrExpression
+// Note: the `makeTest` function automatically adds the blocks with mixed
+// datatypes to the expected result.
 TEST_F(TestPrefilterExprOnBlockMetadata, testOrExpression) {
   makeTest(orExpr(lt(VocabId(22)), le(VocabId(0))), {b18, b19, b20, b21});
   makeTest(orExpr(le(VocabId(0)), ge(VocabId(16))), {b18, b21, b22});
@@ -440,6 +456,8 @@ TEST_F(TestPrefilterExprOnBlockMetadata, testOrExpression) {
 
 //______________________________________________________________________________
 // Test NotExpression
+// Note: the `makeTest` function automatically adds the blocks with mixed
+// datatypes to the expected result.
 TEST_F(TestPrefilterExprOnBlockMetadata, testNotExpression) {
   makeTest(notExpr(eq(VocabId(2))), {b18, b19, b20, b21, b22});
   makeTest(notExpr(eq(VocabId(14))), {b18, b19, b21, b22});
@@ -485,6 +503,8 @@ TEST_F(TestPrefilterExprOnBlockMetadata, testNotExpression) {
 
 //______________________________________________________________________________
 // Test PrefilterExpressions mixed
+// Note: the `makeTest` function automatically adds the blocks with mixed
+// datatypes to the expected result.
 TEST_F(TestPrefilterExprOnBlockMetadata, testGeneralPrefilterExprCombinations) {
   makeTest(andExpr(notExpr(gt(DoubleId(-14.01))), lt(IntId(0))), {b18});
   makeTest(
@@ -512,7 +532,7 @@ TEST_F(TestPrefilterExprOnBlockMetadata, testGeneralPrefilterExprCombinations) {
 }
 
 //______________________________________________________________________________
-// Test that correct errors are thrown for invalid input (condition
+// Test that correct errors are thrown for invalid input (condition)
 TEST_F(TestPrefilterExprOnBlockMetadata, testInputConditionCheck) {
   makeTestErrorCheck(le(IntId(5)), blocksWithDuplicate1,
                      "The provided data blocks must be unique.");
