@@ -279,14 +279,21 @@ void Result::cacheDuringConsumption(
           const IdTableVocabPair& newTablePair) {
         bool doBothFitInCache = fitInCache(aggregate, newTablePair);
         if (doBothFitInCache) {
-          if (aggregate.has_value()) {
-            auto& value = aggregate.value();
-            value.idTable_.insertAtEnd(newTablePair.idTable_);
-            value.localVocab_.mergeWith(
-                std::span{&newTablePair.localVocab_, 1});
-          } else {
-            aggregate.emplace(newTablePair.idTable_.clone(),
-                              newTablePair.localVocab_.clone());
+          try {
+            if (aggregate.has_value()) {
+              auto& value = aggregate.value();
+              value.idTable_.insertAtEnd(newTablePair.idTable_);
+              value.localVocab_.mergeWith(
+                  std::span{&newTablePair.localVocab_, 1});
+            } else {
+              aggregate.emplace(newTablePair.idTable_.clone(),
+                                newTablePair.localVocab_.clone());
+            }
+          } catch (const ad_utility::detail::AllocationExceedsLimitException&) {
+            // We expect potential memory allocation errors here. In this case
+            // we just abort the cached value entirely instead of aborting the
+            // query.
+            return false;
           }
         }
         return doBothFitInCache;
