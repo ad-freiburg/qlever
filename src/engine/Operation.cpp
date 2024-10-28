@@ -212,6 +212,13 @@ CacheValue Operation::runComputationAndPrepareForCache(
 // ________________________________________________________________________
 std::shared_ptr<const Result> Operation::getResult(
     bool isRoot, ComputationMode computationMode) {
+  // Use the precomputed Result if it exists.
+  if (precomputedResultBecauseSiblingOfService_.has_value()) {
+    auto result = std::move(precomputedResultBecauseSiblingOfService_).value();
+    precomputedResultBecauseSiblingOfService_.reset();
+    return result;
+  }
+
   ad_utility::Timer timer{ad_utility::Timer::Started};
 
   if (isRoot) {

@@ -14,7 +14,7 @@ ParsedQuery SparqlParser::parseQuery(std::string query) {
   using S = std::string;
   sparqlParserHelpers::ParserAndVisitor p{
       std::move(query),
-      {{S{INTERNAL_PREDICATE_PREFIX_NAME}, S{INTERNAL_PREDICATE_PREFIX_IRI}}}};
+      {{S{QLEVER_INTERNAL_PREFIX_NAME}, S{QLEVER_INTERNAL_PREFIX_IRI}}}};
   // Note: `AntlrParser::query` is a method of `AntlrParser` (which is an alias
   // for `SparqlAutomaticParser`) that returns the `QueryContext*` for the whole
   // query.

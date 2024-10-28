@@ -87,6 +87,7 @@ ExpressionPtr Visitor::processIriFunctionCall(
       return false;
     }
   };
+
   // Helper lambda that checks the number of arguments and throws an error
   // if it's not right. The `functionName` and `prefixName` are used for the
   // error message.
@@ -102,6 +103,7 @@ ExpressionPtr Visitor::processIriFunctionCall(
                                numArgs == 1 ? " argument" : " arguments"));
     }
   };
+
   // Geo functions.
   if (checkPrefix(GEOF_PREFIX)) {
     if (functionName == "distance") {
@@ -115,7 +117,10 @@ ExpressionPtr Visitor::processIriFunctionCall(
       checkNumArgs(1);
       return sparqlExpression::makeLatitudeExpression(std::move(argList[0]));
     }
-  } else if (checkPrefix(MATH_PREFIX)) {
+  }
+
+  // Math functions.
+  if (checkPrefix(MATH_PREFIX)) {
     if (functionName == "log") {
       checkNumArgs(1);
       return sparqlExpression::makeLogExpression(std::move(argList[0]));
@@ -139,7 +144,10 @@ ExpressionPtr Visitor::processIriFunctionCall(
       return sparqlExpression::makePowExpression(std::move(argList[0]),
                                                  std::move(argList[1]));
     }
-  } else if (checkPrefix(XSD_PREFIX)) {
+  }
+
+  // XSD conversion functions.
+  if (checkPrefix(XSD_PREFIX)) {
     if (functionName == "integer" || functionName == "int") {
       checkNumArgs(1);
       return sparqlExpression::makeConvertToIntExpression(
@@ -150,6 +158,18 @@ ExpressionPtr Visitor::processIriFunctionCall(
           std::move(argList[0]));
     }
   }
+
+  // QLever-internal functions.
+  //
+  // NOTE: Predicates like `ql:has-predicate` etc. are handled elsewhere.
+  if (checkPrefix(QL_PREFIX)) {
+    if (functionName == "isGeoPoint") {
+      checkNumArgs(1);
+      return sparqlExpression::makeIsGeoPointExpression(std::move(argList[0]));
+    }
+  }
+
+  // If none of the above matched, report unknown function.
   reportNotSupported(ctx,
                      "Function \""s + iri.toStringRepresentation() + "\" is");
 }

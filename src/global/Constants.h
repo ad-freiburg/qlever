@@ -35,43 +35,44 @@ constexpr inline size_t TEXT_PREDICATE_CARDINALITY_ESTIMATE = 1'000'000'000;
 
 constexpr inline size_t GALLOP_THRESHOLD = 1000;
 
-constexpr inline char INTERNAL_PREDICATE_PREFIX_NAME[] = "ql";
-
-constexpr inline char INTERNAL_PREDICATE_PREFIX[] =
+constexpr inline char QLEVER_INTERNAL_PREFIX_NAME[] = "ql";
+constexpr inline char QLEVER_INTERNAL_PREFIX_URL[] =
     "http://qlever.cs.uni-freiburg.de/builtin-functions/";
 
-// Return a IRI of the form
-// `<http://qlever.cs.uni-freiburg.de/builtin-functions/concatenationOfSuffixes>`
+// Make a QLever-internal IRI from `QL_INTERNAL_PREFIX_URL` by appending the
+// concatenation of the given `suffixes` and enclosing the result in angle
+// brackets (const and non-const version).
 template <
     ad_utility::detail::constexpr_str_cat_impl::ConstexprString... suffixes>
-constexpr std::string_view makeInternalIriConst() {
-  return ad_utility::constexprStrCat<"<", INTERNAL_PREDICATE_PREFIX,
+constexpr std::string_view makeQleverInternalIriConst() {
+  return ad_utility::constexprStrCat<"<", QLEVER_INTERNAL_PREFIX_URL,
                                      suffixes..., ">">();
 }
-
-inline std::string makeInternalIri(const auto&... suffixes) {
-  return absl::StrCat("<", std::string_view{INTERNAL_PREDICATE_PREFIX},
+inline std::string makeQleverInternalIri(const auto&... suffixes) {
+  return absl::StrCat("<", std::string_view{QLEVER_INTERNAL_PREFIX_URL},
                       suffixes..., ">");
 }
-constexpr inline std::string_view INTERNAL_ENTITIES_URI_PREFIX =
-    ad_utility::constexprStrCat<"<", INTERNAL_PREDICATE_PREFIX>();
-constexpr inline std::string_view INTERNAL_PREDICATE_PREFIX_IRI =
-    makeInternalIriConst<"">();
-constexpr inline std::string_view CONTAINS_ENTITY_PREDICATE =
-    makeInternalIriConst<"contains-entity">();
-constexpr inline std::string_view CONTAINS_WORD_PREDICATE =
-    makeInternalIriConst<"contains-word">();
 
-constexpr inline std::string_view INTERNAL_TEXT_MATCH_PREDICATE =
-    makeInternalIriConst<"text">();
+constexpr inline std::string_view QLEVER_INTERNAL_PREFIX_IRI =
+    makeQleverInternalIriConst<"">();
+constexpr inline std::string_view
+    QLEVER_INTERNAL_PREFIX_IRI_WITHOUT_CLOSING_BRACKET =
+        ad_utility::constexprStrCat<"<", QLEVER_INTERNAL_PREFIX_URL>();
+constexpr inline std::string_view CONTAINS_ENTITY_PREDICATE =
+    makeQleverInternalIriConst<"contains-entity">();
+constexpr inline std::string_view CONTAINS_WORD_PREDICATE =
+    makeQleverInternalIriConst<"contains-word">();
+
+constexpr inline std::string_view QLEVER_INTERNAL_TEXT_MATCH_PREDICATE =
+    makeQleverInternalIriConst<"text">();
 constexpr inline std::string_view HAS_PREDICATE_PREDICATE =
-    makeInternalIriConst<"has-predicate">();
+    makeQleverInternalIriConst<"has-predicate">();
 constexpr inline std::string_view HAS_PATTERN_PREDICATE =
-    makeInternalIriConst<"has-pattern">();
+    makeQleverInternalIriConst<"has-pattern">();
 constexpr inline std::string_view DEFAULT_GRAPH_IRI =
-    makeInternalIriConst<"default-graph">();
-constexpr inline std::string_view INTERNAL_GRAPH_IRI =
-    makeInternalIriConst<"internal-graph">();
+    makeQleverInternalIriConst<"default-graph">();
+constexpr inline std::string_view QLEVER_INTERNAL_GRAPH_IRI =
+    makeQleverInternalIriConst<"internal-graph">();
 
 constexpr inline std::pair<std::string_view, std::string_view> GEOF_PREFIX = {
     "geof:", "http://www.opengis.net/def/function/geosparql/"};
@@ -79,22 +80,25 @@ constexpr inline std::pair<std::string_view, std::string_view> MATH_PREFIX = {
     "math:", "http://www.w3.org/2005/xpath-functions/math#"};
 constexpr inline std::pair<std::string_view, std::string_view> XSD_PREFIX = {
     "xsd", "http://www.w3.org/2001/XMLSchema#"};
+constexpr inline std::pair<std::string_view, std::string_view> QL_PREFIX = {
+    QLEVER_INTERNAL_PREFIX_NAME, QLEVER_INTERNAL_PREFIX_URL};
 
-constexpr inline std::string_view INTERNAL_VARIABLE_PREFIX =
+constexpr inline std::string_view QLEVER_INTERNAL_VARIABLE_PREFIX =
     "?_QLever_internal_variable_";
 
-constexpr inline std::string_view INTERNAL_BLANKNODE_VARIABLE_PREFIX =
+constexpr inline std::string_view QLEVER_INTERNAL_BLANKNODE_VARIABLE_PREFIX =
     "?_QLever_internal_variable_bn_";
 
-constexpr inline std::string_view INTERNAL_VARIABLE_QUERY_PLANNER_PREFIX =
-    "?_QLever_internal_variable_qp_";
+constexpr inline std::string_view
+    QLEVER_INTERNAL_VARIABLE_QUERY_PLANNER_PREFIX =
+        "?_QLever_internal_variable_qp_";
 
 constexpr inline std::string_view SCORE_VARIABLE_PREFIX = "?ql_score_";
 constexpr inline std::string_view MATCHINGWORD_VARIABLE_PREFIX =
     "?ql_matchingword_";
 
 constexpr inline std::string_view LANGUAGE_PREDICATE =
-    makeInternalIriConst<"langtag">();
+    makeQleverInternalIriConst<"langtag">();
 
 // this predicate is one of the supported identifiers for the SpatialJoin class.
 // It joins the two objects, if their distance is smaller or equal to the

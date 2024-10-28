@@ -43,8 +43,8 @@ auto iri = ad_utility::testing::iri;
 auto lit = ad_utility::testing::tripleComponentLiteral;
 
 const ad_utility::HashMap<std::string, std::string> defaultPrefixMap{
-    {std::string{INTERNAL_PREDICATE_PREFIX_NAME},
-     std::string{INTERNAL_PREDICATE_PREFIX_IRI}}};
+    {std::string{QLEVER_INTERNAL_PREFIX_NAME},
+     std::string{QLEVER_INTERNAL_PREFIX_IRI}}};
 
 template <auto F, bool testInsideConstructTemplate = false>
 auto parse =
@@ -817,9 +817,10 @@ TEST(SparqlParser, triplesSameSubjectPath) {
       ExpectCompleteParse<&Parser::triplesSameSubjectPath, true>{};
   expectTriplesConstruct("_:1 <bar> ?baz", {{BlankNode(false, "1"),
                                              PathIri("<bar>"), Var{"?baz"}}});
-  expectTriples("_:one <bar> ?baz",
-                {{Var{absl::StrCat(INTERNAL_BLANKNODE_VARIABLE_PREFIX, "one")},
-                  PathIri("<bar>"), Var{"?baz"}}});
+  expectTriples(
+      "_:one <bar> ?baz",
+      {{Var{absl::StrCat(QLEVER_INTERNAL_BLANKNODE_VARIABLE_PREFIX, "one")},
+        PathIri("<bar>"), Var{"?baz"}}});
   expectTriples("10.0 <bar> true",
                 {{Literal(10.0), PathIri("<bar>"), Literal(true)}});
   expectTriples(
@@ -1730,12 +1731,15 @@ TEST(SparqlParser, FunctionCall) {
   auto geof = absl::StrCat("<", GEOF_PREFIX.second);
   auto math = absl::StrCat("<", MATH_PREFIX.second);
   auto xsd = absl::StrCat("<", XSD_PREFIX.second);
+  auto ql = absl::StrCat("<", QL_PREFIX.second);
 
   // Correct function calls. Check that the parser picks the correct expression.
   expectFunctionCall(absl::StrCat(geof, "latitude>(?x)"),
                      matchUnary(&makeLatitudeExpression));
   expectFunctionCall(absl::StrCat(geof, "longitude>(?x)"),
                      matchUnary(&makeLongitudeExpression));
+  expectFunctionCall(absl::StrCat(ql, "isGeoPoint>(?x)"),
+                     matchUnary(&makeIsGeoPointExpression));
   expectFunctionCall(
       absl::StrCat(geof, "distance>(?a, ?b)"),
       matchNary(&makeDistExpression, Variable{"?a"}, Variable{"?b"}));
@@ -1765,10 +1769,14 @@ TEST(SparqlParser, FunctionCall) {
 
   // Wrong number of arguments.
   expectFunctionCallFails(absl::StrCat(geof, "distance>(?a)"));
-  // Unknown function with `geof:`, `math:`, or `xsd:` prefix.
+  expectFunctionCallFails(absl::StrCat(geof, "distance>(?a, ?b, ?c)"));
+
+  // Unknown function with `geof:`, `math:`, `xsd:`, or `ql` prefix.
   expectFunctionCallFails(absl::StrCat(geof, "nada>(?x)"));
   expectFunctionCallFails(absl::StrCat(math, "nada>(?x)"));
   expectFunctionCallFails(absl::StrCat(xsd, "nada>(?x)"));
+  expectFunctionCallFails(absl::StrCat(ql, "nada>(?x)"));
+
   // Prefix for which no function is known.
   std::string prefixNexistepas = "<http://nexiste.pas/>";
   expectFunctionCallFails(absl::StrCat(prefixNexistepas, "nada>(?x)"));

@@ -196,7 +196,7 @@ TEST(AggregateExpression, CountStar) {
   // This variable is internal, so it doesn't count towards the `COUNT(DISTINCT
   // *)` and doesn't change the result.
   t.varToColMap[Variable{
-      absl::StrCat(INTERNAL_VARIABLE_PREFIX, "someInternalVar")}] = {
+      absl::StrCat(QLEVER_INTERNAL_VARIABLE_PREFIX, "someInternalVar")}] = {
       0, ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined};
   t.qec->getQueryTreeCache().clearAll();
   EXPECT_THAT(m, matcher(totalSize));
