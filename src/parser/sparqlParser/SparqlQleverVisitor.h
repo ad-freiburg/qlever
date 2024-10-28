@@ -194,32 +194,31 @@ class SparqlQleverVisitor {
 
   ParsedQuery visit(Parser::Update1Context* ctx);
 
-  [[noreturn]] void visit(const Parser::LoadContext* ctx) const;
+  updateClause::Load visit(Parser::LoadContext* ctx);
 
-  ParsedQuery visit(Parser::ClearContext* ctx);
+  updateClause::Clear visit(Parser::ClearContext* ctx);
 
-  [[noreturn]] void visit(const Parser::DropContext* ctx) const;
+  updateClause::Drop visit(Parser::DropContext* ctx);
 
-  [[noreturn]] void visit(const Parser::CreateContext* ctx) const;
+  updateClause::Create visit(Parser::CreateContext* ctx);
 
-  [[noreturn]] void visit(const Parser::AddContext* ctx) const;
+  updateClause::Add visit(Parser::AddContext* ctx);
 
-  [[noreturn]] void visit(const Parser::MoveContext* ctx) const;
+  updateClause::Move visit(Parser::MoveContext* ctx);
 
-  [[noreturn]] void visit(const Parser::CopyContext* ctx) const;
+  updateClause::Copy visit(Parser::CopyContext* ctx);
 
-  vector<SparqlTripleSimple> visit(Parser::InsertDataContext* ctx);
+  updateClause::GraphUpdate visit(Parser::InsertDataContext* ctx);
 
-  vector<SparqlTripleSimple> visit(Parser::DeleteDataContext* ctx);
+  updateClause::GraphUpdate visit(Parser::DeleteDataContext* ctx);
 
-  std::pair<vector<SparqlTripleSimple>, ParsedQuery::GraphPattern> visit(
-      Parser::DeleteWhereContext* ctx);
+  ParsedQuery visit(Parser::DeleteWhereContext* ctx);
 
   ParsedQuery visit(Parser::ModifyContext* ctx);
 
-  vector<SparqlTripleSimple> visit(Parser::DeleteClauseContext* ctx);
+  vector<SparqlTripleSimpleWithGraph> visit(Parser::DeleteClauseContext* ctx);
 
-  vector<SparqlTripleSimple> visit(Parser::InsertClauseContext* ctx);
+  vector<SparqlTripleSimpleWithGraph> visit(Parser::InsertClauseContext* ctx);
 
   GraphOrDefault visit(Parser::GraphOrDefaultContext* ctx);
 
@@ -227,11 +226,19 @@ class SparqlQleverVisitor {
 
   GraphRefAll visit(Parser::GraphRefAllContext* ctx);
 
-  vector<SparqlTripleSimple> visit(Parser::QuadPatternContext* ctx);
+  vector<SparqlTripleSimpleWithGraph> visit(Parser::QuadPatternContext* ctx);
 
-  vector<SparqlTripleSimple> visit(Parser::QuadDataContext* ctx);
+  vector<SparqlTripleSimpleWithGraph> visit(Parser::QuadDataContext* ctx);
 
-  vector<SparqlTripleSimple> visit(Parser::QuadsContext* ctx);
+  // Parse the triples and set the graph for all of them.
+  vector<SparqlTripleSimpleWithGraph> transformTriplesTemplate(
+      Parser::TriplesTemplateContext* ctx,
+      const SparqlTripleSimpleWithGraph::Graph& graph);
+
+  vector<SparqlTripleSimpleWithGraph> visit(Parser::QuadsContext* ctx);
+
+  vector<SparqlTripleSimpleWithGraph> visit(
+      Parser::QuadsNotTriplesContext* ctx);
 
   Triples visit(Parser::TriplesTemplateContext* ctx);
 
@@ -468,6 +475,8 @@ class SparqlQleverVisitor {
   string visit(Parser::PnameLnContext* ctx);
 
   string visit(Parser::PnameNsContext* ctx);
+
+  DatasetClause visit(Parser::UsingClauseContext* ctx);
 
  private:
   // Helper to assign variable `startTime_` a correctly formatted time string.

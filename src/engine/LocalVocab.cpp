@@ -88,3 +88,12 @@ BlankNodeIndex LocalVocab::getBlankNodeIndex(
   }
   return BlankNodeIndex::make(localBlankNodeManager_->getId());
 }
+
+// _____________________________________________________________________________
+bool LocalVocab::isBlankNodeIndexContained(
+    BlankNodeIndex blankNodeIndex) const {
+  if (!localBlankNodeManager_) {
+    return false;
+  }
+  return localBlankNodeManager_->containsBlankNodeIndex(blankNodeIndex.get());
+}

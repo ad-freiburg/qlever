@@ -441,6 +441,14 @@ class GroupBy : public Operation {
       const HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
       LocalVocab* localVocab, const Allocator& allocator);
 
+  // Helper function to evaluate the child expression of an aggregate function.
+  // Only `COUNT(*)` does not have a single child, so we make a special case for
+  // it.
+  static sparqlExpression::ExpressionResult
+  evaluateChildExpressionOfAggregateFunction(
+      const HashMapAggregateInformation& aggregate,
+      sparqlExpression::EvaluationContext& evaluationContext);
+
   // Sort the HashMap by key and create result table.
   template <size_t NUM_GROUP_COLUMNS>
   IdTable createResultFromHashMap(

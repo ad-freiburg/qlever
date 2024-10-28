@@ -14,6 +14,7 @@
 #include "engine/RuntimeInformation.h"
 #include "engine/SortPerformanceEstimator.h"
 #include "global/Id.h"
+#include "index/DeltaTriples.h"
 #include "index/Index.h"
 #include "util/Cache.h"
 #include "util/ConcurrentCache.h"
@@ -91,6 +92,8 @@ class QueryExecutionContext {
 
   [[nodiscard]] const Index& getIndex() const { return _index; }
 
+  const DeltaTriples& deltaTriples() const { return *deltaTriples_; }
+
   void clearCacheUnpinnedOnly() { getQueryTreeCache().clearUnpinnedOnly(); }
 
   [[nodiscard]] const SortPerformanceEstimator& getSortPerformanceEstimator()
@@ -120,6 +123,10 @@ class QueryExecutionContext {
 
  private:
   const Index& _index;
+  // TODO<joka921> This has to be stored externally once we properly support
+  // SPARQL UPDATE, currently it is just a stub to make the interface work.
+  std::shared_ptr<DeltaTriples> deltaTriples_{
+      std::make_shared<DeltaTriples>(_index)};
   QueryResultCache* const _subtreeCache;
   // allocators are copied but hold shared state
   ad_utility::AllocatorWithLimit<Id> _allocator;

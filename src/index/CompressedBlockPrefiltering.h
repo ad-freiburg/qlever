@@ -48,6 +48,23 @@ class PrefilterExpression {
   // Format content for debugging.
   virtual std::string info(size_t depth) const = 0;
 
+  // Needed for implementing the `NotExpression`. This method is required,
+  // because we logically operate on `BlockMetadata` values which define ranges
+  // given the `ValueIds` from last and first triple.
+  // E.g. the `BlockMetadata` that defines the range [IntId(0),... IntId(5)],
+  // should be considered relevant for the expression `?x >= IntId(3)`, but also
+  // for expression `!(?x >= IntId(3))`. Thus we can't retrieve the negation by
+  // simply taking the complementing set of `BlockMetadata`, instead we
+  // retrieve it by directly negating/complementing the child expression itself.
+  // Every derived class can return it's respective logical complement
+  // (negation) when being called on `logicalCoplement()`. E.g. for a call
+  // w.r.t. `RelationalExpression<LT>(IntId(5))` (< 5), the returned logical
+  // complement is `RelationalExpression<GE>(IntId(5))` (>= 5). On a
+  // `LogicalExpression` (`AND` or `OR`), we respectively apply De-Morgan's law
+  // and return the resulting `LogicalExpression`. In case of the
+  // `NotExpression`, we just return its child expression given that two
+  // negations (complementations) cancel out. For a more concise explanation
+  // take a look at the actual implementation for derived classes.
   virtual std::unique_ptr<PrefilterExpression> logicalComplement() const = 0;
 
   // The respective metadata to the blocks is expected to be provided in

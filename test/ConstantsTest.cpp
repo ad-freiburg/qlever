@@ -26,9 +26,9 @@ TEST(Constants, testDefaultQueryTimeoutIsStriclyPositive) {
   EXPECT_NO_THROW(RuntimeParameters().set<"default-query-timeout">(1s));
 }
 
-TEST(Constants, makeInternalIri) {
-  EXPECT_EQ(makeInternalIri("hi", "-bye"),
-            (makeInternalIriConst<"hi", "-bye">()));
-  EXPECT_EQ(makeInternalIri("hi", "-bye"),
+TEST(Constants, makeQleverInternalIri) {
+  EXPECT_EQ(makeQleverInternalIri("hi", "-bye"),
+            (makeQleverInternalIriConst<"hi", "-bye">()));
+  EXPECT_EQ(makeQleverInternalIri("hi", "-bye"),
             "<http://qlever.cs.uni-freiburg.de/builtin-functions/hi-bye>");
 }

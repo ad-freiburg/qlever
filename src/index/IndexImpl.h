@@ -119,7 +119,8 @@ class IndexImpl {
   string onDiskBase_;
   string settingsFileName_;
   bool onlyAsciiTurtlePrefixes_ = false;
-  bool useParallelParser_ = false;
+  // Note: `std::nullopt` means `not specified by the user`.
+  std::optional<bool> useParallelParser_ = std::nullopt;
   TurtleParserIntegerOverflowBehavior turtleParserIntegerOverflowBehavior_ =
       TurtleParserIntegerOverflowBehavior::Error;
   bool turtleParserSkipIllegalLiterals_ = false;
@@ -281,11 +282,13 @@ class IndexImpl {
   NumNormalAndInternal numDistinctCol0(Permutation::Enum permutation) const;
 
   // ___________________________________________________________________________
-  size_t getCardinality(Id id, Permutation::Enum permutation) const;
+  size_t getCardinality(Id id, Permutation::Enum permutation,
+                        const DeltaTriples&) const;
 
   // ___________________________________________________________________________
   size_t getCardinality(const TripleComponent& comp,
-                        Permutation::Enum permutation) const;
+                        Permutation::Enum permutation,
+                        const DeltaTriples& deltaTriples) const;
 
   // ___________________________________________________________________________
   std::string indexToString(VocabIndex id) const;
@@ -418,7 +421,8 @@ class IndexImpl {
 
   // _____________________________________________________________________________
   vector<float> getMultiplicities(const TripleComponent& key,
-                                  Permutation::Enum permutation) const;
+                                  Permutation::Enum permutation,
+                                  const DeltaTriples&) const;
 
   // ___________________________________________________________________
   vector<float> getMultiplicities(Permutation::Enum permutation) const;
@@ -428,17 +432,20 @@ class IndexImpl {
                const Permutation::Enum& permutation,
                Permutation::ColumnIndicesRef additionalColumns,
                const ad_utility::SharedCancellationHandle& cancellationHandle,
+               const DeltaTriples& deltaTriples,
                const LimitOffsetClause& limitOffset = {}) const;
 
   // _____________________________________________________________________________
   IdTable scan(const ScanSpecification& scanSpecification, Permutation::Enum p,
                Permutation::ColumnIndicesRef additionalColumns,
                const ad_utility::SharedCancellationHandle& cancellationHandle,
+               const DeltaTriples& deltaTriples,
                const LimitOffsetClause& limitOffset = {}) const;
 
   // _____________________________________________________________________________
   size_t getResultSizeOfScan(const ScanSpecification& scanSpecification,
-                             const Permutation::Enum& permutation) const;
+                             const Permutation::Enum& permutation,
+                             const DeltaTriples& deltaTriples) const;
 
  private:
   // Private member functions
@@ -771,5 +778,5 @@ class IndexImpl {
   // and write a summary to the log.
   static void updateInputFileSpecificationsAndLog(
       std::vector<Index::InputFileSpecification>& spec,
-      bool parallelParsingSpecifiedViaJson);
+      std::optional<bool> parallelParsingSpecifiedViaJson);
 };
