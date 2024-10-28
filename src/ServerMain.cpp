@@ -109,8 +109,8 @@ int main(int argc, char** argv) {
       "automatically.");
   add("service-max-value-rows,S",
       optionFactory.getProgramOption<"service-max-value-rows">(),
-      "Maximum number of result rows to be passed into a SERVICE operation to "
-      "optimize it's computation.");
+      "The maximal number of result rows to be passed to a SERVICE operation "
+      "as a VALUES clause to optimize its computation.");
   po::variables_map optionsMap;
 
   try {
