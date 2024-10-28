@@ -224,7 +224,7 @@ std::vector<BlockMetadata> RelationalExpression<Comparison>::evaluateImpl(
   relevantBlocks.shrink_to_fit();
   // Merge mixedDatatypeBlocks into relevantBlocks while maintaining order and
   // avoiding duplicates.
-  return getSetUnion(relevantBlocks, mixedDatatypeBlocks, evaluationColumn);
+  return getSetUnion(relevantBlocks, mixedDatatypeBlocks);
 };
 
 //______________________________________________________________________________

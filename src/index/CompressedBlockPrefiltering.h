@@ -15,7 +15,7 @@ namespace prefilterExpressions {
 
 //______________________________________________________________________________
 // The maximum recursion depth for `info()` / `operator<<()`. A depth of `3`
-// should be sufficient for most `PrefilterExpressions` with our use case.
+// should be sufficient for most `PrefilterExpressions` in our use case.
 constexpr size_t maxInfoRecursion = 3;
 
 //______________________________________________________________________________
