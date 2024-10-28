@@ -625,14 +625,14 @@ class CompressedRelationReader {
     size_t numIndexColumns_;
     bool includeGraphColumn_;
   };
-  struct LocatedTriplesConfigurationWithBlockIndex : public LocatedTriplesConfiguration {
+  struct LocatedTriplesConfigurationWithBlockIndex
+      : public LocatedTriplesConfiguration {
     size_t blockIndex;
   };
 
   DecompressedBlock decompressBlock(
       const CompressedBlock& compressedBlock, size_t numRowsToRead,
-      const LocatedTriplesConfigurationWithBlockIndex&
-      ) const;
+      const LocatedTriplesConfigurationWithBlockIndex&) const;
 
   // Helper function used by `decompressBlock` and
   // `decompressBlockToExistingIdTable`. Decompress the `compressedColumn` and
@@ -647,7 +647,8 @@ class CompressedRelationReader {
   // are returned.
   DecompressedBlock readAndDecompressBlock(
       const CompressedBlockMetadata& blockMetaData,
-      ColumnIndicesRef columnIndices, const LocatedTriplesConfiguration& locatedTriples) const;
+      ColumnIndicesRef columnIndices,
+      const LocatedTriplesConfiguration& locatedTriples) const;
 
   // Read the block identified by `blockMetadata` from disk, decompress it, and
   // return the part that matches `col1Id` (or the whole block if `col1Id` is
@@ -662,7 +663,7 @@ class CompressedRelationReader {
       const ScanSpecification& scanSpec,
       const CompressedBlockMetadata& blockMetadata,
       std::optional<std::reference_wrapper<LazyScanMetadata>> scanMetadata,
-      ColumnIndicesRef columnIndices, const LocatedTriplesConfiguration&) const;
+      ColumnIndicesRef columnIndices, const LocatedTriplesPerBlock&) const;
 
   // Yield all the blocks in the range `[beginBlock, endBlock)`. If the
   // `columnIndices` are set, only the specified columns from the blocks
@@ -673,13 +674,17 @@ class CompressedRelationReader {
   IdTableGenerator asyncParallelBlockGenerator(
       auto beginBlock, auto endBlock, ColumnIndices columnIndices,
       CancellationHandle cancellationHandle, LimitOffsetClause& limitOffset,
-      FilterDuplicatesAndGraphs blockGraphFilter, LocatedTriplesConfiguration locatedTriples) const;
+      FilterDuplicatesAndGraphs blockGraphFilter,
+      LocatedTriplesConfiguration locatedTriples) const;
 
   // Return a vector that consists of the concatenation of `baseColumns` and
   // `additionalColumns`
   static std::vector<ColumnIndex> prepareColumnIndices(
       std::initializer_list<ColumnIndex> baseColumns,
       ColumnIndicesRef additionalColumns);
+
+  static LocatedTriplesConfiguration prepareLocatedTriples(
+      ColumnIndicesRef columns, const LocatedTriplesPerBlock& locatedTriples);
 
   // If `col1Id` is specified, `return {1, additionalColumns...}`, else return
   // `{0, 1, additionalColumns}`.
@@ -695,7 +700,8 @@ class CompressedRelationReader {
           Id, const CompressedBlockMetadata::PermutedTriple&> auto idGetter,
       const ScanSpecification& scanSpec,
       const std::vector<CompressedBlockMetadata>& allBlocksMetadata,
-      const CancellationHandle& cancellationHandle) const;
+      const CancellationHandle& cancellationHandle,
+      const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
 };
 
 // TODO<joka921>

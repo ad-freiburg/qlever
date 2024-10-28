@@ -127,6 +127,10 @@ class LocatedTriplesPerBlock {
   IdTable mergeTriples(size_t blockIndex, const IdTable& block,
                        size_t numIndexColumns, bool includeGraphColumn) const;
 
+  bool containsTriples(size_t blockIndex) const {
+    return map_.contains(blockIndex);
+  }
+
   // Add `locatedTriples` to the `LocatedTriplesPerBlock`.
   // Return handles to where they were added (`LocatedTriples` is a sorted set,
   // see above). We need the handles so that we can easily remove the
