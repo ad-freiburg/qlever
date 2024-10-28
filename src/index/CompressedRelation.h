@@ -108,6 +108,16 @@ struct CompressedBlockMetadataNoBlockIndex {
 
   // Two of these are equal if all members are equal.
   bool operator==(const CompressedBlockMetadataNoBlockIndex&) const = default;
+
+  // Format BlockMetadata contents for debugging.
+  friend std::ostream& operator<<(
+      std::ostream& str,
+      const CompressedBlockMetadataNoBlockIndex& blockMetadata) {
+    str << "#BlockMetadata\n(first) " << blockMetadata.firstTriple_ << "(last) "
+        << blockMetadata.lastTriple_ << "num. rows: " << blockMetadata.numRows_
+        << "." << std::endl;
+    return str;
+  }
 };
 
 // The same as the above struct, but this block additionally knows its index.
