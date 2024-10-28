@@ -344,27 +344,26 @@ Awaitable<void> Server::process(
   checkParameterNotPresent("default-graph-uri");
   checkParameterNotPresent("named-graph-uri");
 
-  auto checkParameter = [&parameters](std::string_view key,
-                                      std::optional<std::string> value,
-                                      bool accessAllowed = true) {
-    std::optional<string> param =
-        Server::checkParameter(parameters, key, std::move(value));
-    // Now that we have the value, check if there is a problem with the access.
-    // If yes, we abort the query processing at this point.
-    if (param && !accessAllowed) {
-      throw std::runtime_error(absl::StrCat("Access to \"", key, "=",
-                                            param.value(), "\" denied",
-                                            " (requires a valid access token)",
-                                            ", processing of request aborted"));
-    }
-    return param;
-  };
+  // We always want to call `Server::checkParameter` with the same first
+  // parameter.
+  auto checkParameter =
+      std::bind(&Server::checkParameter, std::cref(parameters),
+                std::placeholders::_1, std::placeholders::_2);
 
   // Check the access token. If an access token is provided and the check fails,
   // throw an exception and do not process any part of the query (even if the
   // processing had been allowed without access token).
   bool accessTokenOk =
       checkAccessToken(checkParameter("access-token", std::nullopt));
+  auto requireValidAccessToken = [&accessTokenOk](
+                                     const std::string& actionName) {
+    if (!accessTokenOk) {
+      throw std::runtime_error(absl::StrCat(
+          actionName,
+          " requires a valid access token. No valid access token is present.",
+          "Processing of request aborted."));
+    }
+  };
 
   // Process all URL parameters known to QLever. If there is more than one,
   // QLever processes all of them, but only returns the result from the last
@@ -391,8 +390,8 @@ Awaitable<void> Server::process(
     logCommand(cmd, "clear the cache (unpinned elements only)");
     cache_.clearUnpinnedOnly();
     response = createJsonResponse(composeCacheStatsJson(), request);
-  } else if (auto cmd =
-                 checkParameter("cmd", "clear-cache-complete", accessTokenOk)) {
+  } else if (auto cmd = checkParameter("cmd", "clear-cache-complete")) {
+    requireValidAccessToken("clear-cache-complete");
     logCommand(cmd, "clear cache completely (including unpinned elements)");
     cache_.clearAll();
     response = createJsonResponse(composeCacheStatsJson(), request);
@@ -403,8 +402,8 @@ Awaitable<void> Server::process(
     logCommand(cmd, "get index ID");
     response =
         createOkResponse(index_.getIndexId(), request, MediaType::textPlain);
-  } else if (auto cmd =
-                 checkParameter("cmd", "dump-active-queries", accessTokenOk)) {
+  } else if (auto cmd = checkParameter("cmd", "dump-active-queries")) {
+    requireValidAccessToken("dump-active-queries");
     logCommand(cmd, "dump active queries");
     nlohmann::json json;
     for (auto& [key, value] : queryRegistry_.getActiveQueries()) {
@@ -426,8 +425,8 @@ Awaitable<void> Server::process(
   }
 
   // Set description of KB index.
-  if (auto description =
-          checkParameter("index-description", std::nullopt, accessTokenOk)) {
+  if (auto description = checkParameter("index-description", std::nullopt)) {
+    requireValidAccessToken("index-description");
     LOG(INFO) << "Setting index description to: \"" << description.value()
               << "\"" << std::endl;
     index_.setKbName(std::string{description.value()});
@@ -435,8 +434,8 @@ Awaitable<void> Server::process(
   }
 
   // Set description of text index.
-  if (auto description =
-          checkParameter("text-description", std::nullopt, accessTokenOk)) {
+  if (auto description = checkParameter("text-description", std::nullopt)) {
+    requireValidAccessToken("text-description");
     LOG(INFO) << "Setting text description to: \"" << description.value()
               << "\"" << std::endl;
     index_.setTextName(std::string{description.value()});
@@ -445,7 +444,8 @@ Awaitable<void> Server::process(
 
   // Set one or several of the runtime parameters.
   for (auto key : RuntimeParameters().getKeys()) {
-    if (auto value = checkParameter(key, std::nullopt, accessTokenOk)) {
+    if (auto value = checkParameter(key, std::nullopt)) {
+      requireValidAccessToken("setting runtime parameters");
       LOG(INFO) << "Setting runtime parameter \"" << key << "\""
                 << " to value \"" << value.value() << "\"" << std::endl;
       RuntimeParameters().set(key, std::string{value.value()});
@@ -785,11 +785,6 @@ Awaitable<void> Server::processQuery(
 
   // Do the query planning. This creates a `QueryExecutionTree`, which will
   // then be used to process the query.
-  //
-  // NOTE: This should come after determining the media type. Otherwise, it
-  // might happen that the query planner runs for a while (recall that it many
-  // do index scans) and then we get an error message afterward that a
-  // certain media type is not supported.
   auto [pinSubtrees, pinResult] = determineResultPinning(params);
   LOG(INFO) << "Processing the following SPARQL query:"
             << (pinResult ? " [pin result]" : "")

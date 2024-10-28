@@ -211,8 +211,10 @@ TEST(ServerTest, determineMediaType) {
   // No supported media type in the `Accept` header. (Contrary to it's docstring
   // and interface) `ad_utility::getMediaTypeFromAcceptHeader` throws an
   // exception if no supported media type is found.
-  EXPECT_THROW(Server::determineMediaType({}, MakeRequest("text/css")),
-               std::runtime_error);
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      Server::determineMediaType({}, MakeRequest("text/css")),
+      testing::HasSubstr("Not a single media type known to this parser was "
+                         "detected in \"text/css\"."));
   // No `Accept` header means that any content type is allowed.
   EXPECT_THAT(Server::determineMediaType({}, MakeRequest(std::nullopt)),
               testing::Eq(ad_utility::MediaType::sparqlJson));
