@@ -48,7 +48,7 @@ inline auto& RuntimeParameters() {
         Bool<"use-binsearch-transitive-path">{true},
         Bool<"group-by-hash-map-enabled">{false},
         Bool<"group-by-disable-index-scan-optimizations">{false},
-        SizeT<"service-max-value-rows">{100},
+        SizeT<"service-max-value-rows">{10'000},
         SizeT<"query-planning-budget">{1500}};
   }();
   return params;
