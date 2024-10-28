@@ -60,10 +60,11 @@ requires RelationAble<N> unsigned long long cardinality(
            selectivity(l, r, selectivities);
 
   if (l) return cardinality(n->left, cardinalities, selectivities);
-  if (r) return cardinality(n->right, cardinalities, selectivities);
+  //  if (r) return cardinality(n->right, cardinalities, selectivities);
+  return cardinality(n->right, cardinalities, selectivities);
 
-  AD_CONTRACT_CHECK("How Did We Get Here?");
-  return 0;
+  //  AD_CONTRACT_CHECK("How Did We Get Here?");
+  //  return 0;
 }
 
 template <typename N>
@@ -117,10 +118,10 @@ requires RelationAble<N> double Cout(
            Cout(r, cardinalities, selectivities);
 
   if (l) return Cout(l, cardinalities, selectivities);
-  if (r) return Cout(r, cardinalities, selectivities);
-
-  AD_CONTRACT_CHECK("How Did We Get Here?");
-  return 0;
+  //  if (r) return Cout(r, cardinalities, selectivities);
+  return Cout(r, cardinalities, selectivities);
+  //  AD_CONTRACT_CHECK("How Did We Get Here?");
+  //  return 0;
 }
 
 template double Cout(const JoinTree<RelationBasic>& t,
