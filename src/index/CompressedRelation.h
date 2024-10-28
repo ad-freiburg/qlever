@@ -620,8 +620,19 @@ class CompressedRelationReader {
   // have after decompression must be passed in via the `numRowsToRead`
   // argument. It is typically obtained from the corresponding
   // `CompressedBlockMetaData`.
-  DecompressedBlock decompressBlock(const CompressedBlock& compressedBlock,
-                                    size_t numRowsToRead) const;
+  struct LocatedTriplesConfiguration {
+    const LocatedTriplesPerBlock& locatedTriples_;
+    size_t numIndexColumns_;
+    bool includeGraphColumn_;
+  };
+  struct LocatedTriplesConfigurationWithBlockIndex : public LocatedTriplesConfiguration {
+    size_t blockIndex;
+  };
+
+  DecompressedBlock decompressBlock(
+      const CompressedBlock& compressedBlock, size_t numRowsToRead,
+      const LocatedTriplesConfigurationWithBlockIndex&
+      ) const;
 
   // Helper function used by `decompressBlock` and
   // `decompressBlockToExistingIdTable`. Decompress the `compressedColumn` and
@@ -636,7 +647,7 @@ class CompressedRelationReader {
   // are returned.
   DecompressedBlock readAndDecompressBlock(
       const CompressedBlockMetadata& blockMetaData,
-      ColumnIndicesRef columnIndices) const;
+      ColumnIndicesRef columnIndices, const LocatedTriplesConfiguration& locatedTriples) const;
 
   // Read the block identified by `blockMetadata` from disk, decompress it, and
   // return the part that matches `col1Id` (or the whole block if `col1Id` is
@@ -651,7 +662,7 @@ class CompressedRelationReader {
       const ScanSpecification& scanSpec,
       const CompressedBlockMetadata& blockMetadata,
       std::optional<std::reference_wrapper<LazyScanMetadata>> scanMetadata,
-      ColumnIndicesRef columnIndices) const;
+      ColumnIndicesRef columnIndices, const LocatedTriplesConfiguration&) const;
 
   // Yield all the blocks in the range `[beginBlock, endBlock)`. If the
   // `columnIndices` are set, only the specified columns from the blocks
@@ -662,7 +673,7 @@ class CompressedRelationReader {
   IdTableGenerator asyncParallelBlockGenerator(
       auto beginBlock, auto endBlock, ColumnIndices columnIndices,
       CancellationHandle cancellationHandle, LimitOffsetClause& limitOffset,
-      FilterDuplicatesAndGraphs blockGraphFilter) const;
+      FilterDuplicatesAndGraphs blockGraphFilter, LocatedTriplesConfiguration locatedTriples) const;
 
   // Return a vector that consists of the concatenation of `baseColumns` and
   // `additionalColumns`
