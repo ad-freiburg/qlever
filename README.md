@@ -32,5 +32,6 @@ If the `qlever` script does not work for you for whatever reason, have a look at
 
 An older (and not quite up-to-date anymore) step-by-step instruction can be found [here](docs/quickstart.md).
 QLever's [advanced features are described here](docs/advanced_features.md).
-For more in-depth information, see the various other `.md` files in [this folder](docs), some of which are outdated though.
+Features involving spatial search [are described here](https://github.com/ad-freiburg/qlever/wiki/Spatial-Queries-in-QLever).
+For more in-depth information, see the various `.md` files in [this folder](docs), some of which are outdated though.
 For high-level descriptions how Qlever works and experiences with some concrete datasets, see the [Qlever Wiki](https://github.com/ad-freiburg/qlever/wiki).
