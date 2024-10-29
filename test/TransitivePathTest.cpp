@@ -24,13 +24,14 @@ using Vars = std::vector<std::optional<Variable>>;
 
 }  // namespace
 
-class TransitivePathTest : public testing::TestWithParam<bool> {
+class TransitivePathTest
+    : public testing::TestWithParam<std::tuple<bool, bool>> {
  public:
   [[nodiscard]] static std::pair<std::shared_ptr<TransitivePathBase>,
                                  QueryExecutionContext*>
   makePath(IdTable input, Vars vars, TransitivePathSide left,
            TransitivePathSide right, size_t minDist, size_t maxDist) {
-    bool useBinSearch = GetParam();
+    bool useBinSearch = std::get<0>(GetParam());
     auto qec = getQec();
     auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
         qec, std::move(input), vars);
@@ -70,13 +71,25 @@ class TransitivePathTest : public testing::TestWithParam<bool> {
     return T->bindRightSide(rightOp, sideTableCol);
   }
 
+  static bool requestLaziness() { return std::get<1>(GetParam()); }
+
   void assertResultMatchesIdTable(const Result& result, const IdTable& expected,
                                   ad_utility::source_location loc =
                                       ad_utility::source_location::current()) {
     auto t = generateLocationTrace(loc);
-    ASSERT_TRUE(result.isFullyMaterialized());
-    ASSERT_THAT(result.idTable(),
-                ::testing::UnorderedElementsAreArray(expected));
+    using ::testing::UnorderedElementsAreArray;
+    ASSERT_NE(result.isFullyMaterialized(), requestLaziness());
+    if (requestLaziness()) {
+      IdTable aggregateTable{expected.numColumns(), expected.getAllocator()};
+      std::vector<LocalVocab> localVocabs;
+      for (auto& [idTable, localVocab] : result.idTables()) {
+        localVocabs.emplace_back(std::move(localVocab));
+        aggregateTable.insertAtEnd(idTable);
+      }
+      EXPECT_THAT(aggregateTable, UnorderedElementsAreArray(expected));
+    } else {
+      EXPECT_THAT(result.idTable(), UnorderedElementsAreArray(expected));
+    }
   }
 };
 
@@ -91,7 +104,7 @@ TEST_P(TransitivePathTest, idToId) {
       makePathUnbound(std::move(sub), {Variable{"?start"}, Variable{"?target"}},
                       left, right, 1, std::numeric_limits<size_t>::max());
 
-  auto resultTable = T->computeResultOnlyForTesting();
+  auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
   assertResultMatchesIdTable(resultTable, expected);
 }
 
@@ -106,7 +119,7 @@ TEST_P(TransitivePathTest, idToVar) {
       makePathUnbound(std::move(sub), {Variable{"?start"}, Variable{"?target"}},
                       left, right, 1, std::numeric_limits<size_t>::max());
 
-  auto resultTable = T->computeResultOnlyForTesting();
+  auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
   assertResultMatchesIdTable(resultTable, expected);
 }
 
@@ -125,7 +138,7 @@ TEST_P(TransitivePathTest, varToId) {
       makePathUnbound(std::move(sub), {Variable{"?start"}, Variable{"?target"}},
                       left, right, 1, std::numeric_limits<size_t>::max());
 
-  auto resultTable = T->computeResultOnlyForTesting();
+  auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
   assertResultMatchesIdTable(resultTable, expected);
 }
 
@@ -140,7 +153,7 @@ TEST_P(TransitivePathTest, idToVarMinLengthZero) {
       makePathUnbound(std::move(sub), {Variable{"?start"}, Variable{"?target"}},
                       left, right, 0, std::numeric_limits<size_t>::max());
 
-  auto resultTable = T->computeResultOnlyForTesting();
+  auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
   assertResultMatchesIdTable(resultTable, expected);
 }
 
@@ -160,7 +173,7 @@ TEST_P(TransitivePathTest, varToIdMinLengthZero) {
       makePathUnbound(std::move(sub), {Variable{"?start"}, Variable{"?target"}},
                       left, right, 0, std::numeric_limits<size_t>::max());
 
-  auto resultTable = T->computeResultOnlyForTesting();
+  auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
   assertResultMatchesIdTable(resultTable, expected);
 }
 
@@ -187,7 +200,7 @@ TEST_P(TransitivePathTest, varTovar) {
       makePathUnbound(std::move(sub), {Variable{"?start"}, Variable{"?target"}},
                       left, right, 1, std::numeric_limits<size_t>::max());
 
-  auto resultTable = T->computeResultOnlyForTesting();
+  auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
   assertResultMatchesIdTable(resultTable, expected);
 }
 
@@ -226,7 +239,7 @@ TEST_P(TransitivePathTest, unlimitedMaxLength) {
       makePathUnbound(std::move(sub), {Variable{"?start"}, Variable{"?target"}},
                       left, right, 1, std::numeric_limits<size_t>::max());
 
-  auto resultTable = T->computeResultOnlyForTesting();
+  auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
   assertResultMatchesIdTable(resultTable, expected);
 }
 
@@ -253,7 +266,7 @@ TEST_P(TransitivePathTest, idToLeftBound) {
         leftOpTable.clone(), 1, {Variable{"?x"}, Variable{"?start"}}, left,
         right, 0, std::numeric_limits<size_t>::max());
 
-    auto resultTable = T->computeResultOnlyForTesting();
+    auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
     assertResultMatchesIdTable(resultTable, expected);
   }
   {
@@ -263,7 +276,7 @@ TEST_P(TransitivePathTest, idToLeftBound) {
         std::move(left), std::move(right), 0,
         std::numeric_limits<size_t>::max());
 
-    auto resultTable = T->computeResultOnlyForTesting();
+    auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
     assertResultMatchesIdTable(resultTable, expected);
   }
 }
@@ -297,7 +310,7 @@ TEST_P(TransitivePathTest, idToRightBound) {
         rightOpTable.clone(), 0, {Variable{"?target"}, Variable{"?x"}}, left,
         right, 0, std::numeric_limits<size_t>::max());
 
-    auto resultTable = T->computeResultOnlyForTesting();
+    auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
     assertResultMatchesIdTable(resultTable, expected);
   }
   {
@@ -307,7 +320,7 @@ TEST_P(TransitivePathTest, idToRightBound) {
         std::move(left), std::move(right), 0,
         std::numeric_limits<size_t>::max());
 
-    auto resultTable = T->computeResultOnlyForTesting();
+    auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
     assertResultMatchesIdTable(resultTable, expected);
   }
 }
@@ -347,7 +360,7 @@ TEST_P(TransitivePathTest, leftBoundToVar) {
         std::move(left), std::move(right), 0,
         std::numeric_limits<size_t>::max());
 
-    auto resultTable = T->computeResultOnlyForTesting();
+    auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
     assertResultMatchesIdTable(resultTable, expected);
   }
 }
@@ -385,7 +398,7 @@ TEST_P(TransitivePathTest, rightBoundToVar) {
       std::move(rightOpTable), 0, {Variable{"?target"}, Variable{"?x"}},
       std::move(left), std::move(right), 0, std::numeric_limits<size_t>::max());
 
-  auto resultTable = T->computeResultOnlyForTesting();
+  auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
   assertResultMatchesIdTable(resultTable, expected);
 }
 
@@ -420,7 +433,7 @@ TEST_P(TransitivePathTest, maxLength2FromVariable) {
   auto T =
       makePathUnbound(std::move(sub), {Variable{"?start"}, Variable{"?target"}},
                       left, right, 1, 2);
-  auto resultTable = T->computeResultOnlyForTesting();
+  auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
   assertResultMatchesIdTable(resultTable, expected);
 }
 
@@ -447,7 +460,7 @@ TEST_P(TransitivePathTest, maxLength2FromId) {
   auto T =
       makePathUnbound(std::move(sub), {Variable{"?start"}, Variable{"?target"}},
                       left, right, 1, 2);
-  auto resultTable = T->computeResultOnlyForTesting();
+  auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
   assertResultMatchesIdTable(resultTable, expected);
 }
 
@@ -473,7 +486,7 @@ TEST_P(TransitivePathTest, maxLength2ToId) {
   auto T =
       makePathUnbound(std::move(sub), {Variable{"?start"}, Variable{"?target"}},
                       left, right, 1, 2);
-  auto resultTable = T->computeResultOnlyForTesting();
+  auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
   assertResultMatchesIdTable(resultTable, expected);
 }
 
@@ -495,15 +508,18 @@ TEST_P(TransitivePathTest, zeroLengthException) {
       makePathUnbound(std::move(sub), {Variable{"?start"}, Variable{"?target"}},
                       left, right, 0, std::numeric_limits<size_t>::max());
   AD_EXPECT_THROW_WITH_MESSAGE(
-      T->computeResultOnlyForTesting(),
+      T->computeResultOnlyForTesting(requestLaziness()),
       ::testing::ContainsRegex("This query might have to evaluate the empty "
                                "path, which is currently "
                                "not supported"));
 }
 
-INSTANTIATE_TEST_SUITE_P(TransitivePathTestSuite, TransitivePathTest,
-                         testing::Bool(),
-                         [](const testing::TestParamInfo<bool>& info) {
-                           return info.param ? "TransitivePathBinSearch"
-                                             : "TransitivePathHashMap";
-                         });
+INSTANTIATE_TEST_SUITE_P(
+    TransitivePathTestSuite, TransitivePathTest,
+    ::testing::Combine(::testing::Bool(), ::testing::Bool()),
+    [](const testing::TestParamInfo<std::tuple<bool, bool>>& info) {
+      std::string result = std::get<0>(info.param) ? "TransitivePathBinSearch"
+                                                   : "TransitivePathHashMap";
+      result += std::get<1>(info.param) ? "Lazy" : "FullyMaterialized";
+      return result;
+    });
