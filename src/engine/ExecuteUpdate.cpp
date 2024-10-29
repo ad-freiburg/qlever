@@ -50,7 +50,7 @@ void ExecuteUpdate::executeUpdate(const Index& index, const ParsedQuery& query,
   }
 
   // TODO<qup42> use the actual DeltaTriples object
-  DeltaTriples deltaTriples = DeltaTriples{index};
+  DeltaTriples deltaTriples(index);
   deltaTriples.insertTriples(cancellationHandle, std::move(toInsert));
   deltaTriples.deleteTriples(cancellationHandle, std::move(toDelete));
 }
@@ -82,23 +82,23 @@ ExecuteUpdate::transformTriplesTemplate(
     return std::get<Id>(defaultGraph);
   }();
   auto transformGraph =
-      [&vocab, &localVocab, &defaultGraphIri, &variableColumns](
-          SparqlTripleSimpleWithGraph::Graph graph) -> IdOrVariableIndex {
-    return std::visit(
-        ad_utility::OverloadCallOperator{
-            [&defaultGraphIri](const std::monostate&) -> IdOrVariableIndex {
-              return defaultGraphIri;
-            },
-            [&vocab, &localVocab](const Iri& iri) -> IdOrVariableIndex {
-              ad_utility::triple_component::Iri i =
-                  ad_utility::triple_component::Iri::fromIriref(iri.iri());
-              return TripleComponent(i).toValueId(vocab, localVocab);
-            },
-            [&variableColumns](const Variable& var) -> IdOrVariableIndex {
-              return variableColumns.at(var);
-            }},
-        graph);
-  };
+      [&vocab, &localVocab, &defaultGraphIri,
+       &variableColumns](SparqlTripleSimpleWithGraph::Graph graph) {
+        return std::visit(
+            ad_utility::OverloadCallOperator{
+                [&defaultGraphIri](const std::monostate&) -> IdOrVariableIndex {
+                  return defaultGraphIri;
+                },
+                [&vocab, &localVocab](const Iri& iri) -> IdOrVariableIndex {
+                  ad_utility::triple_component::Iri i =
+                      ad_utility::triple_component::Iri::fromIriref(iri.iri());
+                  return TripleComponent(i).toValueId(vocab, localVocab);
+                },
+                [&variableColumns](const Variable& var) -> IdOrVariableIndex {
+                  return variableColumns.at(var);
+                }},
+            graph);
+      };
   auto transformSparqlTripleSimple =
       [&transformSparqlTripleComponent,
        &transformGraph](SparqlTripleSimpleWithGraph triple) {
