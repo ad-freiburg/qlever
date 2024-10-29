@@ -102,7 +102,7 @@ Result::Generator TransitivePathBase::fillTableWithHullImpl(
     }
     std::optional<IdTableView<INPUT_WIDTH>> inputView = std::nullopt;
     if (idTable != nullptr) {
-      inputView = idTable->asStaticView<INPUT_WIDTH>();
+      inputView = idTable->template asStaticView<INPUT_WIDTH>();
     }
     for (Id linkedNode : linkedNodes) {
       table.emplace_back();
