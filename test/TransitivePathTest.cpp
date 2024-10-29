@@ -52,23 +52,56 @@ class TransitivePathTest
   [[nodiscard]] static std::shared_ptr<TransitivePathBase> makePathLeftBound(
       IdTable input, Vars vars, IdTable sideTable, size_t sideTableCol,
       Vars sideVars, TransitivePathSide left, TransitivePathSide right,
-      size_t minDist, size_t maxDist) {
+      size_t minDist, size_t maxDist, bool forceFullyMaterialized) {
     auto [T, qec] = makePath(std::move(input), vars, std::move(left),
                              std::move(right), minDist, maxDist);
     auto leftOp = ad_utility::makeExecutionTree<ValuesForTesting>(
-        qec, std::move(sideTable), sideVars);
+        qec, std::move(sideTable), sideVars, false, std::vector<ColumnIndex>{},
+        LocalVocab{}, std::nullopt, forceFullyMaterialized);
+    return T->bindLeftSide(leftOp, sideTableCol);
+  }
+
+  [[nodiscard]] static std::shared_ptr<TransitivePathBase> makePathLeftBound(
+      IdTable input, Vars vars, std::vector<IdTable> sideTables,
+      size_t sideTableCol, Vars sideVars, TransitivePathSide left,
+      TransitivePathSide right, size_t minDist, size_t maxDist) {
+    auto [T, qec] = makePath(std::move(input), vars, std::move(left),
+                             std::move(right), minDist, maxDist);
+    auto leftOp = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, std::move(sideTables), sideVars);
     return T->bindLeftSide(leftOp, sideTableCol);
   }
 
   [[nodiscard]] static std::shared_ptr<TransitivePathBase> makePathRightBound(
       IdTable input, Vars vars, IdTable sideTable, size_t sideTableCol,
       Vars sideVars, TransitivePathSide left, TransitivePathSide right,
-      size_t minDist, size_t maxDist) {
+      size_t minDist, size_t maxDist, bool forceFullyMaterialized) {
     auto [T, qec] = makePath(std::move(input), vars, std::move(left),
                              std::move(right), minDist, maxDist);
     auto rightOp = ad_utility::makeExecutionTree<ValuesForTesting>(
-        qec, std::move(sideTable), sideVars);
+        qec, std::move(sideTable), sideVars, false, std::vector<ColumnIndex>{},
+        LocalVocab{}, std::nullopt, forceFullyMaterialized);
     return T->bindRightSide(rightOp, sideTableCol);
+  }
+
+  [[nodiscard]] static std::shared_ptr<TransitivePathBase> makePathRightBound(
+      IdTable input, Vars vars, std::vector<IdTable> sideTables,
+      size_t sideTableCol, Vars sideVars, TransitivePathSide left,
+      TransitivePathSide right, size_t minDist, size_t maxDist) {
+    auto [T, qec] = makePath(std::move(input), vars, std::move(left),
+                             std::move(right), minDist, maxDist);
+    auto rightOp = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, std::move(sideTables), sideVars);
+    return T->bindRightSide(rightOp, sideTableCol);
+  }
+
+  static std::vector<IdTable> split(const IdTable& idTable) {
+    std::vector<IdTable> result;
+    for (const auto& row : idTable) {
+      result.emplace_back(idTable.numColumns(), idTable.getAllocator());
+      result.back().push_back(row);
+    }
+    return result;
   }
 
   static bool requestLaziness() { return std::get<1>(GetParam()); }
@@ -264,7 +297,43 @@ TEST_P(TransitivePathTest, idToLeftBound) {
     auto T = makePathLeftBound(
         sub.clone(), {Variable{"?start"}, Variable{"?target"}},
         leftOpTable.clone(), 1, {Variable{"?x"}, Variable{"?start"}}, left,
+        right, 0, std::numeric_limits<size_t>::max(), false);
+
+    auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+    assertResultMatchesIdTable(resultTable, expected);
+  }
+  {
+    auto T = makePathLeftBound(
+        sub.clone(), {Variable{"?start"}, Variable{"?target"}},
+        leftOpTable.clone(), 1, {std::nullopt, Variable{"?start"}}, left, right,
+        0, std::numeric_limits<size_t>::max(), false);
+
+    auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+    assertResultMatchesIdTable(resultTable, expected);
+  }
+  {
+    auto T = makePathLeftBound(
+        sub.clone(), {Variable{"?start"}, Variable{"?target"}},
+        split(leftOpTable), 1, {Variable{"?x"}, Variable{"?start"}}, left,
         right, 0, std::numeric_limits<size_t>::max());
+
+    auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+    assertResultMatchesIdTable(resultTable, expected);
+  }
+  {
+    auto T = makePathLeftBound(
+        sub.clone(), {Variable{"?start"}, Variable{"?target"}},
+        split(leftOpTable), 1, {std::nullopt, Variable{"?start"}}, left, right,
+        0, std::numeric_limits<size_t>::max());
+
+    auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+    assertResultMatchesIdTable(resultTable, expected);
+  }
+  {
+    auto T = makePathLeftBound(
+        sub.clone(), {Variable{"?start"}, Variable{"?target"}},
+        leftOpTable.clone(), 1, {Variable{"?x"}, Variable{"?start"}}, left,
+        right, 0, std::numeric_limits<size_t>::max(), true);
 
     auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
     assertResultMatchesIdTable(resultTable, expected);
@@ -274,7 +343,7 @@ TEST_P(TransitivePathTest, idToLeftBound) {
         std::move(sub), {Variable{"?start"}, Variable{"?target"}},
         std::move(leftOpTable), 1, {std::nullopt, Variable{"?start"}},
         std::move(left), std::move(right), 0,
-        std::numeric_limits<size_t>::max());
+        std::numeric_limits<size_t>::max(), true);
 
     auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
     assertResultMatchesIdTable(resultTable, expected);
@@ -308,7 +377,43 @@ TEST_P(TransitivePathTest, idToRightBound) {
     auto T = makePathRightBound(
         sub.clone(), {Variable{"?start"}, Variable{"?target"}},
         rightOpTable.clone(), 0, {Variable{"?target"}, Variable{"?x"}}, left,
+        right, 0, std::numeric_limits<size_t>::max(), false);
+
+    auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+    assertResultMatchesIdTable(resultTable, expected);
+  }
+  {
+    auto T = makePathRightBound(
+        sub.clone(), {Variable{"?start"}, Variable{"?target"}},
+        rightOpTable.clone(), 0, {Variable{"?target"}, std::nullopt}, left,
+        right, 0, std::numeric_limits<size_t>::max(), false);
+
+    auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+    assertResultMatchesIdTable(resultTable, expected);
+  }
+  {
+    auto T = makePathRightBound(
+        sub.clone(), {Variable{"?start"}, Variable{"?target"}},
+        split(rightOpTable), 0, {Variable{"?target"}, Variable{"?x"}}, left,
         right, 0, std::numeric_limits<size_t>::max());
+
+    auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+    assertResultMatchesIdTable(resultTable, expected);
+  }
+  {
+    auto T = makePathRightBound(
+        sub.clone(), {Variable{"?start"}, Variable{"?target"}},
+        split(rightOpTable), 0, {Variable{"?target"}, std::nullopt}, left,
+        right, 0, std::numeric_limits<size_t>::max());
+
+    auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+    assertResultMatchesIdTable(resultTable, expected);
+  }
+  {
+    auto T = makePathRightBound(
+        sub.clone(), {Variable{"?start"}, Variable{"?target"}},
+        rightOpTable.clone(), 0, {Variable{"?target"}, Variable{"?x"}}, left,
+        right, 0, std::numeric_limits<size_t>::max(), true);
 
     auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
     assertResultMatchesIdTable(resultTable, expected);
@@ -318,7 +423,7 @@ TEST_P(TransitivePathTest, idToRightBound) {
         std::move(sub), {Variable{"?start"}, Variable{"?target"}},
         std::move(rightOpTable), 0, {Variable{"?target"}, std::nullopt},
         std::move(left), std::move(right), 0,
-        std::numeric_limits<size_t>::max());
+        std::numeric_limits<size_t>::max(), true);
 
     auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
     assertResultMatchesIdTable(resultTable, expected);
@@ -355,10 +460,28 @@ TEST_P(TransitivePathTest, leftBoundToVar) {
   TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
   {
     auto T = makePathLeftBound(
+        sub.clone(), {Variable{"?start"}, Variable{"?target"}},
+        leftOpTable.clone(), 1, {Variable{"?x"}, Variable{"?start"}}, left,
+        right, 0, std::numeric_limits<size_t>::max(), false);
+
+    auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+    assertResultMatchesIdTable(resultTable, expected);
+  }
+  {
+    auto T = makePathLeftBound(
+        sub.clone(), {Variable{"?start"}, Variable{"?target"}},
+        split(leftOpTable), 1, {Variable{"?x"}, Variable{"?start"}}, left,
+        right, 0, std::numeric_limits<size_t>::max());
+
+    auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+    assertResultMatchesIdTable(resultTable, expected);
+  }
+  {
+    auto T = makePathLeftBound(
         std::move(sub), {Variable{"?start"}, Variable{"?target"}},
         std::move(leftOpTable), 1, {Variable{"?x"}, Variable{"?start"}},
         std::move(left), std::move(right), 0,
-        std::numeric_limits<size_t>::max());
+        std::numeric_limits<size_t>::max(), true);
 
     auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
     assertResultMatchesIdTable(resultTable, expected);
@@ -393,13 +516,34 @@ TEST_P(TransitivePathTest, rightBoundToVar) {
 
   TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
   TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
-  auto T = makePathRightBound(
-      std::move(sub), {Variable{"?start"}, Variable{"?target"}},
-      std::move(rightOpTable), 0, {Variable{"?target"}, Variable{"?x"}},
-      std::move(left), std::move(right), 0, std::numeric_limits<size_t>::max());
+  {
+    auto T = makePathRightBound(
+        sub.clone(), {Variable{"?start"}, Variable{"?target"}},
+        rightOpTable.clone(), 0, {Variable{"?target"}, Variable{"?x"}}, left,
+        right, 0, std::numeric_limits<size_t>::max(), false);
 
-  auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
-  assertResultMatchesIdTable(resultTable, expected);
+    auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+    assertResultMatchesIdTable(resultTable, expected);
+  }
+  {
+    auto T = makePathRightBound(
+        sub.clone(), {Variable{"?start"}, Variable{"?target"}},
+        split(rightOpTable), 0, {Variable{"?target"}, Variable{"?x"}}, left,
+        right, 0, std::numeric_limits<size_t>::max());
+
+    auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+    assertResultMatchesIdTable(resultTable, expected);
+  }
+  {
+    auto T = makePathRightBound(
+        std::move(sub), {Variable{"?start"}, Variable{"?target"}},
+        std::move(rightOpTable), 0, {Variable{"?target"}, Variable{"?x"}},
+        std::move(left), std::move(right), 0,
+        std::numeric_limits<size_t>::max(), true);
+
+    auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+    assertResultMatchesIdTable(resultTable, expected);
+  }
 }
 
 TEST_P(TransitivePathTest, maxLength2FromVariable) {
