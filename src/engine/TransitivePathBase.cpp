@@ -52,6 +52,9 @@ TransitivePathBase::~TransitivePathBase() = default;
 std::pair<TransitivePathSide&, TransitivePathSide&>
 TransitivePathBase::decideDirection() {
   if (lhs_.isBoundVariable()) {
+    // TODO<RobinTF> In case both sides are bound variables, we could choose try
+    // to get a side that can do lazy evaluation to the left. This means we
+    // should somehow indicates that the sides are swappable
     LOG(DEBUG) << "Computing TransitivePath left to right" << std::endl;
     return {lhs_, rhs_};
   } else if (rhs_.isBoundVariable() || !rhs_.isVariable()) {
@@ -63,76 +66,79 @@ TransitivePathBase::decideDirection() {
 }
 
 // _____________________________________________________________________________
-void TransitivePathBase::fillTableWithHull(IdTable& table, const Map& hull,
-                                           std::vector<Id>& nodes,
-                                           size_t startSideCol,
-                                           size_t targetSideCol,
-                                           const IdTable& startSideTable,
-                                           size_t skipCol) const {
-  CALL_FIXED_SIZE((std::array{table.numColumns(), startSideTable.numColumns()}),
-                  &TransitivePathBase::fillTableWithHullImpl, this, table, hull,
-                  nodes, startSideCol, targetSideCol, startSideTable, skipCol);
+Result::Generator TransitivePathBase::fillTableWithHull(NodeGenerator hull,
+                                                        size_t startSideCol,
+                                                        size_t targetSideCol,
+                                                        size_t skipCol,
+                                                        bool yieldOnce) const {
+  return ad_utility::callFixedSize(getResultWidth(), [&]<size_t WIDTH>() {
+    return fillTableWithHullImpl<WIDTH>(
+        std::move(hull), startSideCol, targetSideCol,
+        ([this, skipCol](IdTableStatic<WIDTH>& table, const IdTable& startView,
+                         size_t nodeIndex, size_t rowIndex) {
+          this->copyColumns<WIDTH>(startView, table, nodeIndex, rowIndex,
+                                   skipCol);
+        }),
+        yieldOnce);
+  });
 }
 
 // _____________________________________________________________________________
-template <size_t WIDTH, size_t START_WIDTH>
-void TransitivePathBase::fillTableWithHullImpl(
-    IdTable& tableDyn, const Map& hull, std::vector<Id>& nodes,
-    size_t startSideCol, size_t targetSideCol, const IdTable& startSideTable,
-    size_t skipCol) const {
-  IdTableStatic<WIDTH> table = std::move(tableDyn).toStatic<WIDTH>();
-  IdTableView<START_WIDTH> startView =
-      startSideTable.asStaticView<START_WIDTH>();
-
-  size_t rowIndex = 0;
-  for (size_t i = 0; i < nodes.size(); i++) {
-    Id node = nodes[i];
-    auto it = hull.find(node);
-    if (it == hull.end()) {
-      continue;
-    }
-
-    for (Id otherNode : it->second) {
-      table.emplace_back();
-      table(rowIndex, startSideCol) = node;
-      table(rowIndex, targetSideCol) = otherNode;
-
-      copyColumns<START_WIDTH, WIDTH>(startView, table, i, rowIndex, skipCol);
-
-      rowIndex++;
-    }
-  }
-
-  tableDyn = std::move(table).toDynamic();
-}
-
-// _____________________________________________________________________________
-void TransitivePathBase::fillTableWithHull(IdTable& table, const Map& hull,
-                                           size_t startSideCol,
-                                           size_t targetSideCol) const {
-  CALL_FIXED_SIZE((std::array{table.numColumns()}),
-                  &TransitivePathBase::fillTableWithHullImpl, this, table, hull,
-                  startSideCol, targetSideCol);
+Result::Generator TransitivePathBase::fillTableWithHull(NodeGenerator hull,
+                                                        size_t startSideCol,
+                                                        size_t targetSideCol,
+                                                        bool yieldOnce) const {
+  return ad_utility::callFixedSize(getResultWidth(), [&]<size_t WIDTH>() {
+    return fillTableWithHullImpl<WIDTH>(
+        std::move(hull), startSideCol, targetSideCol,
+        [](const auto&, const IdTable&, size_t, size_t) {}, yieldOnce);
+  });
 }
 
 // _____________________________________________________________________________
 template <size_t WIDTH>
-void TransitivePathBase::fillTableWithHullImpl(IdTable& tableDyn,
-                                               const Map& hull,
-                                               size_t startSideCol,
-                                               size_t targetSideCol) const {
-  IdTableStatic<WIDTH> table = std::move(tableDyn).toStatic<WIDTH>();
-  size_t rowIndex = 0;
-  for (auto const& [node, linkedNodes] : hull) {
+Result::Generator TransitivePathBase::fillTableWithHullImpl(
+    NodeGenerator hull, size_t startSideCol, size_t targetSideCol,
+    std::invocable<IdTableStatic<WIDTH>&, const IdTable&, size_t, size_t> auto
+        onEntryAdded,
+    bool yieldOnce) const {
+  size_t outputRow = 0;
+  size_t inputRow = 0;
+  IdTableStatic<WIDTH> table{getResultWidth(), allocator()};
+  std::vector<LocalVocab> storedLocalVocabs;
+  for (auto& [node, linkedNodes, localVocab, idTable] : hull) {
+    if (!yieldOnce) {
+      table.reserve(linkedNodes.size());
+    }
     for (Id linkedNode : linkedNodes) {
       table.emplace_back();
-      table(rowIndex, startSideCol) = node;
-      table(rowIndex, targetSideCol) = linkedNode;
+      table(outputRow, startSideCol) = node;
+      table(outputRow, targetSideCol) = linkedNode;
 
-      rowIndex++;
+      if (idTable != nullptr) {
+        onEntryAdded(table, *idTable, inputRow, outputRow);
+      }
+
+      outputRow++;
+    }
+    inputRow++;
+
+    if (!table.empty()) {
+      if (yieldOnce) {
+        storedLocalVocabs.emplace_back(std::move(localVocab));
+      } else {
+        co_yield {std::move(table).toDynamic(), std::move(localVocab)};
+        table = IdTableStatic<WIDTH>{getResultWidth(), allocator()};
+        outputRow = 0;
+        inputRow = 0;
+      }
     }
   }
-  tableDyn = std::move(table).toDynamic();
+  if (yieldOnce) {
+    LocalVocab mergedVocab{};
+    mergedVocab.mergeWith(storedLocalVocabs);
+    co_yield {std::move(table).toDynamic(), std::move(mergedVocab)};
+  }
 }
 
 // _____________________________________________________________________________
@@ -390,8 +396,8 @@ bool TransitivePathBase::isBoundOrId() const {
 }
 
 // _____________________________________________________________________________
-template <size_t INPUT_WIDTH, size_t OUTPUT_WIDTH>
-void TransitivePathBase::copyColumns(const IdTableView<INPUT_WIDTH>& inputTable,
+template <size_t OUTPUT_WIDTH>
+void TransitivePathBase::copyColumns(const IdTable& inputTable,
                                      IdTableStatic<OUTPUT_WIDTH>& outputTable,
                                      size_t inputRow, size_t outputRow,
                                      size_t skipCol) const {
