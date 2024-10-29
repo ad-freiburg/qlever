@@ -63,25 +63,20 @@ class TransitivePathImpl : public TransitivePathBase {
       std::shared_ptr<const Result> sub, const TransitivePathSide& startSide,
       const TransitivePathSide& targetSide,
       std::shared_ptr<const Result> startSideResult, bool yieldOnce) const {
-    auto timer = ad_utility::Timer(ad_utility::Timer::Stopped);
-    timer.start();
+    ad_utility::Timer timer{ad_utility::Timer::Started};
 
     auto edges = setupEdgesMap(sub->idTable(), startSide, targetSide);
     auto nodes = setupNodes(startSide, std::move(startSideResult));
-
-    timer.stop();
-    auto initTime = timer.msecs();
-    timer.start();
+    // Setup nodes returns a generator, so this time measurement won't include
+    // the time for each iteration, but every iteration step should have
+    // constant overhead, which should be safe to ignore.
+    runtimeInfo().addDetail("Initialization time", timer.msecs().count());
 
     NodeGenerator hull =
         transitiveHull(edges, sub->getCopyOfLocalVocab(), std::move(nodes),
                        targetSide.isVariable()
                            ? std::nullopt
                            : std::optional{std::get<Id>(targetSide.value_)});
-
-    timer.stop();
-    auto hullTime = timer.msecs();
-    timer.start();
 
     auto result = fillTableWithHull(
         std::move(hull), startSide.outputCol_, targetSide.outputCol_,
@@ -92,14 +87,6 @@ class TransitivePathImpl : public TransitivePathBase {
     for (auto& pair : result) {
       co_yield pair;
     }
-
-    timer.stop();
-    auto fillTime = timer.msecs();
-
-    auto& info = runtimeInfo();
-    info.addDetail("Initialization time", initTime.count());
-    info.addDetail("Hull time", hullTime.count());
-    info.addDetail("IdTable fill time", fillTime.count());
   };
 
   /**
@@ -115,8 +102,7 @@ class TransitivePathImpl : public TransitivePathBase {
                                           const TransitivePathSide& startSide,
                                           const TransitivePathSide& targetSide,
                                           bool yieldOnce) const {
-    auto timer = ad_utility::Timer(ad_utility::Timer::Stopped);
-    timer.start();
+    ad_utility::Timer timer{ad_utility::Timer::Started};
 
     auto edges = setupEdgesMap(sub->idTable(), startSide, targetSide);
     auto nodesWithDuplicates =
@@ -126,9 +112,7 @@ class TransitivePathImpl : public TransitivePathBase {
       nodesWithoutDuplicates.insert(span.begin(), span.end());
     }
 
-    timer.stop();
-    auto initTime = timer.msecs();
-    timer.start();
+    runtimeInfo().addDetail("Initialization time", timer.msecs());
 
     // Technically we should pass the localVocab of `sub` here, but this will
     // just lead to a merge with itself later on in the pipeline.
@@ -141,10 +125,6 @@ class TransitivePathImpl : public TransitivePathBase {
             ? std::nullopt
             : std::optional{std::get<Id>(targetSide.value_)});
 
-    timer.stop();
-    auto hullTime = timer.msecs();
-    timer.start();
-
     auto result = fillTableWithHull(std::move(hull), startSide.outputCol_,
                                     targetSide.outputCol_, yieldOnce);
 
@@ -152,14 +132,6 @@ class TransitivePathImpl : public TransitivePathBase {
     for (auto& pair : result) {
       co_yield pair;
     }
-
-    timer.stop();
-    auto fillTime = timer.msecs();
-
-    auto& info = runtimeInfo();
-    info.addDetail("Initialization time", initTime.count());
-    info.addDetail("Hull time", hullTime.count());
-    info.addDetail("IdTable fill time", fillTime.count());
   };
 
  protected:
@@ -225,10 +197,12 @@ class TransitivePathImpl : public TransitivePathBase {
   NodeGenerator transitiveHull(const T& edges, LocalVocab edgesVocab,
                                std::ranges::range auto startNodes,
                                std::optional<Id> target) const {
+    ad_utility::Timer timer{ad_utility::Timer::Stopped};
     std::vector<std::pair<Id, size_t>> stack;
     ad_utility::HashSetWithMemoryLimit<Id> marks{
         getExecutionContext()->getAllocator()};
     for (auto&& tableColumn : startNodes) {
+      timer.cont();
       LocalVocab mergedVocab = std::move(tableColumn.vocab_);
       mergedVocab.mergeWith(std::span{&edgesVocab, 1});
       for (Id startNode : tableColumn.column_) {
@@ -261,7 +235,9 @@ class TransitivePathImpl : public TransitivePathBase {
             }
           }
         }
+        timer.stop();
         if (!marks.empty()) {
+          runtimeInfo().addDetail("Hull time", timer.msecs());
           co_yield NodeWithTargets{startNode, std::move(connectedNodes),
                                    mergedVocab.clone(), tableColumn.table_};
         }

@@ -93,11 +93,13 @@ template <size_t INPUT_WIDTH, size_t OUTPUT_WIDTH>
 Result::Generator TransitivePathBase::fillTableWithHullImpl(
     NodeGenerator hull, size_t startSideCol, size_t targetSideCol,
     bool yieldOnce, size_t skipCol) const {
+  ad_utility::Timer timer{ad_utility::Timer::Stopped};
   size_t outputRow = 0;
   size_t inputRow = 0;
   IdTableStatic<OUTPUT_WIDTH> table{getResultWidth(), allocator()};
   std::vector<LocalVocab> storedLocalVocabs;
   for (auto& [node, linkedNodes, localVocab, idTable] : hull) {
+    timer.cont();
     if (!yieldOnce) {
       table.reserve(linkedNodes.size());
     }
@@ -123,16 +125,21 @@ Result::Generator TransitivePathBase::fillTableWithHullImpl(
       if (yieldOnce) {
         storedLocalVocabs.emplace_back(std::move(localVocab));
       } else {
+        timer.stop();
+        runtimeInfo().addDetail("IdTable fill time", timer.msecs());
         co_yield {std::move(table).toDynamic(), std::move(localVocab)};
         table = IdTableStatic<OUTPUT_WIDTH>{getResultWidth(), allocator()};
         outputRow = 0;
         inputRow = 0;
       }
     }
+    timer.stop();
   }
   if (yieldOnce) {
+    timer.start();
     LocalVocab mergedVocab{};
     mergedVocab.mergeWith(storedLocalVocabs);
+    runtimeInfo().addDetail("IdTable fill time", timer.msecs());
     co_yield {std::move(table).toDynamic(), std::move(mergedVocab)};
   }
 }
