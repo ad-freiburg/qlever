@@ -134,13 +134,6 @@ class Server {
       const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
       TimeLimit timeLimit);
 
-  // Execute an update and send a response for the request. This function is
-  // comparable to `sendStreamableResponse` for queries.
-  Awaitable<void> executeUpdate(const ParsedQuery& query,
-                                const QueryExecutionTree& qet,
-                                const ad_utility::Timer& requestTimer,
-                                SharedCancellationHandle cancellationHandle);
-
   static json composeErrorResponseJson(
       const string& query, const std::string& errorMsg,
       ad_utility::Timer& requestTimer,

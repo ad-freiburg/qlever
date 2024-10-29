@@ -13,6 +13,7 @@
 #include <string>
 #include <vector>
 
+#include "ExecuteUpdate.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/QueryPlanner.h"
 #include "global/RuntimeParameters.h"
@@ -494,139 +495,6 @@ Awaitable<void> Server::process(
       parsedHttpRequest.operation_);
 }
 
-// _____________________________________________________________________________
-Awaitable<void> Server::executeUpdate(
-    const ParsedQuery& query, const QueryExecutionTree& qet,
-    const ad_utility::Timer& requestTimer,
-    SharedCancellationHandle cancellationHandle) {
-  AD_CONTRACT_CHECK(query.hasUpdateClause());
-  auto updateClause = query.updateClause();
-  if (!std::holds_alternative<updateClause::GraphUpdate>(updateClause.op_)) {
-    throw std::runtime_error(
-        "Only INSERT/DELETE update operations are currently supported.");
-  }
-  auto graphUpdate = std::get<updateClause::GraphUpdate>(updateClause.op_);
-  auto res = qet.getResult(true);
-
-  auto& vocab = index_.getVocab();
-  // DeltaTriples transfers the IDs that are actually inserted to its own
-  // LocalVocab. This LocalVocab only contains IDs that are related to the
-  // template. Most of the IDs will be added to the DeltaTriples' LocalVocab. An
-  // ID will not be added if it belongs to a Quad with a variable that has no
-  // solutions.
-  LocalVocab localVocab = {};
-  // The GraphUpdate consist of a template of `SparqlTripleSimpleWithGraph` and
-  // in some cases also an GraphPattern. The template contains
-  // `TripleComponent`s (s, p and o) and a `Graph` (graph). First transform
-  // everything except Variables in the template to IDs.
-  using IdOrVariable = std::variant<Id, Variable>;
-  auto transformSparqlTripleComponent =
-      [&vocab, &localVocab](TripleComponent component) -> IdOrVariable {
-    if (component.isVariable()) {
-      return std::move(component.getVariable());
-    } else {
-      return std::move(component).toValueId(vocab, localVocab);
-    }
-  };
-  auto transformGraph =
-      [&vocab,
-       &localVocab](SparqlTripleSimpleWithGraph::Graph graph) -> IdOrVariable {
-    return std::visit(
-        ad_utility::OverloadCallOperator{
-            [](const std::monostate&) -> IdOrVariable {
-              AD_CORRECTNESS_CHECK(
-                  qlever::specialIds().contains(DEFAULT_GRAPH_IRI));
-              return qlever::specialIds().at(DEFAULT_GRAPH_IRI);
-            },
-            [&vocab, &localVocab](const Iri& iri) -> IdOrVariable {
-              ad_utility::triple_component::Iri i =
-                  ad_utility::triple_component::Iri::fromIriref(iri.iri());
-              return TripleComponent(i).toValueId(vocab, localVocab);
-            },
-            [](const Variable& var) -> IdOrVariable { return var; }},
-        graph);
-  };
-  auto transformSparqlTripleSimple =
-      [&transformSparqlTripleComponent,
-       &transformGraph](SparqlTripleSimpleWithGraph triple) {
-        return std::array{transformSparqlTripleComponent(std::move(triple.s_)),
-                          transformSparqlTripleComponent(std::move(triple.p_)),
-                          transformSparqlTripleComponent(std::move(triple.o_)),
-                          transformGraph(std::move(triple.g_))};
-      };
-  std::vector<std::array<IdOrVariable, 4>> toInsertTemplates =
-      ad_utility::transform(std::move(graphUpdate.toInsert_),
-                            transformSparqlTripleSimple);
-  std::vector<std::array<IdOrVariable, 4>> toDeleteTemplates =
-      ad_utility::transform(std::move(graphUpdate.toDelete_),
-                            transformSparqlTripleSimple);
-
-  // To calculate the set of quads for the update, for each row in the template
-  // resolve the variables using each row of the result to obtain a quad without
-  // variables. These quads can then be used with `DeltaTriples`.
-  auto resolveVariable = [](const IdTable& idTable, const size_t& row,
-                            const VariableToColumnMap& variableColumns,
-                            IdOrVariable idOrVar) -> std::optional<Id> {
-    if (std::holds_alternative<Variable>(idOrVar)) {
-      auto var = std::get<Variable>(std::move(idOrVar));
-      if (!variableColumns.contains(var)) {
-        return std::nullopt;
-      } else {
-        return idTable(row, variableColumns.at(var).columnIndex_);
-      }
-    } else if (std::holds_alternative<Id>(idOrVar)) {
-      return std::get<Id>(idOrVar);
-    } else {
-      AD_FAIL();
-    }
-  };
-  auto computeQuadsForResultRow = [&resolveVariable](
-                                      auto& templates, auto& result,
-                                      const IdTable& idTable, uint64_t row,
-                                      const VariableToColumnMap&
-                                          variableColumns) {
-    for (const auto& [s, p, o, g] : templates) {
-      auto subject = resolveVariable(idTable, row, variableColumns, s);
-      auto predicate = resolveVariable(idTable, row, variableColumns, p);
-      auto object = resolveVariable(idTable, row, variableColumns, o);
-      auto graph = resolveVariable(idTable, row, variableColumns, g);
-
-      if (!subject.has_value() || !predicate.has_value() ||
-          !object.has_value() || !graph.has_value()) {
-        continue;
-      }
-      result.emplace_back(std::array{*subject, *predicate, *object, *graph});
-    }
-    return result;
-  };
-  std::vector<IdTriple<>> toInsert;
-  std::vector<IdTriple<>> toDelete;
-  // The maximum result size is size(query result) x num template rows. The
-  // actual result can be smaller if there are template rows with variables for
-  // which a result row does not have a value.
-  toInsert.reserve(res->idTable().size() * toInsertTemplates.size());
-  toDelete.reserve(res->idTable().size() * toDeleteTemplates.size());
-  for (const auto& [pair, range] :
-       ExportQueryExecutionTrees::getRowIndices(query._limitOffset, *res)) {
-    auto& idTable = pair.idTable_;
-    for (uint64_t i : range) {
-      computeQuadsForResultRow(toInsertTemplates, toInsert, idTable, i,
-                               qet.getVariableColumns());
-      cancellationHandle->throwIfCancelled();
-
-      computeQuadsForResultRow(toDeleteTemplates, toDelete, idTable, i,
-                               qet.getVariableColumns());
-      cancellationHandle->throwIfCancelled();
-    }
-  }
-
-  // TODO<qup42> use the actual DeltaTriples object
-  DeltaTriples deltaTriples = DeltaTriples{index_};
-  deltaTriples.insertTriples(cancellationHandle, std::move(toInsert));
-  deltaTriples.deleteTriples(cancellationHandle, std::move(toDelete));
-
-  co_return;
-}
 // _____________________________________________________________________________
 json Server::composeErrorResponseJson(
     const string& query, const std::string& errorMsg,
