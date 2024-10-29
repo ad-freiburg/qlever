@@ -56,8 +56,9 @@ class TransitivePathTest
     auto [T, qec] = makePath(std::move(input), vars, std::move(left),
                              std::move(right), minDist, maxDist);
     auto leftOp = ad_utility::makeExecutionTree<ValuesForTesting>(
-        qec, std::move(sideTable), sideVars, false, std::vector<ColumnIndex>{},
-        LocalVocab{}, std::nullopt, forceFullyMaterialized);
+        qec, std::move(sideTable), sideVars, false,
+        std::vector<ColumnIndex>{sideTableCol}, LocalVocab{}, std::nullopt,
+        forceFullyMaterialized);
     return T->bindLeftSide(leftOp, sideTableCol);
   }
 
@@ -68,7 +69,8 @@ class TransitivePathTest
     auto [T, qec] = makePath(std::move(input), vars, std::move(left),
                              std::move(right), minDist, maxDist);
     auto leftOp = ad_utility::makeExecutionTree<ValuesForTesting>(
-        qec, std::move(sideTables), sideVars);
+        qec, std::move(sideTables), sideVars, false,
+        std::vector<ColumnIndex>{sideTableCol});
     return T->bindLeftSide(leftOp, sideTableCol);
   }
 
@@ -79,8 +81,9 @@ class TransitivePathTest
     auto [T, qec] = makePath(std::move(input), vars, std::move(left),
                              std::move(right), minDist, maxDist);
     auto rightOp = ad_utility::makeExecutionTree<ValuesForTesting>(
-        qec, std::move(sideTable), sideVars, false, std::vector<ColumnIndex>{},
-        LocalVocab{}, std::nullopt, forceFullyMaterialized);
+        qec, std::move(sideTable), sideVars, false,
+        std::vector<ColumnIndex>{sideTableCol}, LocalVocab{}, std::nullopt,
+        forceFullyMaterialized);
     return T->bindRightSide(rightOp, sideTableCol);
   }
 
@@ -91,7 +94,8 @@ class TransitivePathTest
     auto [T, qec] = makePath(std::move(input), vars, std::move(left),
                              std::move(right), minDist, maxDist);
     auto rightOp = ad_utility::makeExecutionTree<ValuesForTesting>(
-        qec, std::move(sideTables), sideVars);
+        qec, std::move(sideTables), sideVars, false,
+        std::vector<ColumnIndex>{sideTableCol});
     return T->bindRightSide(rightOp, sideTableCol);
   }
 
