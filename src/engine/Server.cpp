@@ -347,8 +347,7 @@ Awaitable<void> Server::process(
   // We always want to call `Server::checkParameter` with the same first
   // parameter.
   auto checkParameter =
-      std::bind(&Server::checkParameter, std::cref(parameters),
-                std::placeholders::_1, std::placeholders::_2);
+      std::bind_front(&Server::checkParameter, std::cref(parameters));
 
   // Check the access token. If an access token is provided and the check fails,
   // throw an exception and do not process any part of the query (even if the
