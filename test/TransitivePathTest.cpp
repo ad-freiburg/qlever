@@ -4,7 +4,6 @@
 //         Johannes Herrmann (johannes.r.herrmann(at)gmail.com)
 
 #include <gmock/gmock.h>
-#include <gtest/gtest.h>
 
 #include <limits>
 #include <memory>
@@ -14,7 +13,6 @@
 #include "engine/QueryExecutionTree.h"
 #include "engine/TransitivePathBase.h"
 #include "engine/ValuesForTesting.h"
-#include "gtest/gtest.h"
 #include "util/GTestHelpers.h"
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
@@ -71,6 +69,15 @@ class TransitivePathTest : public testing::TestWithParam<bool> {
         qec, std::move(sideTable), sideVars);
     return T->bindRightSide(rightOp, sideTableCol);
   }
+
+  void assertResultMatchesIdTable(const Result& result, const IdTable& expected,
+                                  ad_utility::source_location loc =
+                                      ad_utility::source_location::current()) {
+    auto t = generateLocationTrace(loc);
+    ASSERT_TRUE(result.isFullyMaterialized());
+    ASSERT_THAT(result.idTable(),
+                ::testing::UnorderedElementsAreArray(expected));
+  }
 };
 
 TEST_P(TransitivePathTest, idToId) {
@@ -85,8 +92,7 @@ TEST_P(TransitivePathTest, idToId) {
                       left, right, 1, std::numeric_limits<size_t>::max());
 
   auto resultTable = T->computeResultOnlyForTesting();
-  ASSERT_THAT(resultTable.idTable(),
-              ::testing::UnorderedElementsAreArray(expected));
+  assertResultMatchesIdTable(resultTable, expected);
 }
 
 TEST_P(TransitivePathTest, idToVar) {
@@ -101,8 +107,7 @@ TEST_P(TransitivePathTest, idToVar) {
                       left, right, 1, std::numeric_limits<size_t>::max());
 
   auto resultTable = T->computeResultOnlyForTesting();
-  ASSERT_THAT(resultTable.idTable(),
-              ::testing::UnorderedElementsAreArray(expected));
+  assertResultMatchesIdTable(resultTable, expected);
 }
 
 TEST_P(TransitivePathTest, varToId) {
@@ -121,8 +126,7 @@ TEST_P(TransitivePathTest, varToId) {
                       left, right, 1, std::numeric_limits<size_t>::max());
 
   auto resultTable = T->computeResultOnlyForTesting();
-  ASSERT_THAT(resultTable.idTable(),
-              ::testing::UnorderedElementsAreArray(expected));
+  assertResultMatchesIdTable(resultTable, expected);
 }
 
 TEST_P(TransitivePathTest, idToVarMinLengthZero) {
@@ -137,8 +141,7 @@ TEST_P(TransitivePathTest, idToVarMinLengthZero) {
                       left, right, 0, std::numeric_limits<size_t>::max());
 
   auto resultTable = T->computeResultOnlyForTesting();
-  ASSERT_THAT(resultTable.idTable(),
-              ::testing::UnorderedElementsAreArray(expected));
+  assertResultMatchesIdTable(resultTable, expected);
 }
 
 TEST_P(TransitivePathTest, varToIdMinLengthZero) {
@@ -158,8 +161,7 @@ TEST_P(TransitivePathTest, varToIdMinLengthZero) {
                       left, right, 0, std::numeric_limits<size_t>::max());
 
   auto resultTable = T->computeResultOnlyForTesting();
-  ASSERT_THAT(resultTable.idTable(),
-              ::testing::UnorderedElementsAreArray(expected));
+  assertResultMatchesIdTable(resultTable, expected);
 }
 
 TEST_P(TransitivePathTest, varTovar) {
@@ -186,8 +188,7 @@ TEST_P(TransitivePathTest, varTovar) {
                       left, right, 1, std::numeric_limits<size_t>::max());
 
   auto resultTable = T->computeResultOnlyForTesting();
-  ASSERT_THAT(resultTable.idTable(),
-              ::testing::UnorderedElementsAreArray(expected));
+  assertResultMatchesIdTable(resultTable, expected);
 }
 
 TEST_P(TransitivePathTest, unlimitedMaxLength) {
@@ -226,8 +227,7 @@ TEST_P(TransitivePathTest, unlimitedMaxLength) {
                       left, right, 1, std::numeric_limits<size_t>::max());
 
   auto resultTable = T->computeResultOnlyForTesting();
-  ASSERT_THAT(resultTable.idTable(),
-              ::testing::UnorderedElementsAreArray(expected));
+  assertResultMatchesIdTable(resultTable, expected);
 }
 
 TEST_P(TransitivePathTest, idToLeftBound) {
@@ -254,8 +254,7 @@ TEST_P(TransitivePathTest, idToLeftBound) {
         right, 0, std::numeric_limits<size_t>::max());
 
     auto resultTable = T->computeResultOnlyForTesting();
-    ASSERT_THAT(resultTable.idTable(),
-                ::testing::UnorderedElementsAreArray(expected));
+    assertResultMatchesIdTable(resultTable, expected);
   }
   {
     auto T = makePathLeftBound(
@@ -265,8 +264,7 @@ TEST_P(TransitivePathTest, idToLeftBound) {
         std::numeric_limits<size_t>::max());
 
     auto resultTable = T->computeResultOnlyForTesting();
-    ASSERT_THAT(resultTable.idTable(),
-                ::testing::UnorderedElementsAreArray(expected));
+    assertResultMatchesIdTable(resultTable, expected);
   }
 }
 
@@ -300,8 +298,7 @@ TEST_P(TransitivePathTest, idToRightBound) {
         right, 0, std::numeric_limits<size_t>::max());
 
     auto resultTable = T->computeResultOnlyForTesting();
-    ASSERT_THAT(resultTable.idTable(),
-                ::testing::UnorderedElementsAreArray(expected));
+    assertResultMatchesIdTable(resultTable, expected);
   }
   {
     auto T = makePathRightBound(
@@ -311,8 +308,7 @@ TEST_P(TransitivePathTest, idToRightBound) {
         std::numeric_limits<size_t>::max());
 
     auto resultTable = T->computeResultOnlyForTesting();
-    ASSERT_THAT(resultTable.idTable(),
-                ::testing::UnorderedElementsAreArray(expected));
+    assertResultMatchesIdTable(resultTable, expected);
   }
 }
 
@@ -352,8 +348,7 @@ TEST_P(TransitivePathTest, leftBoundToVar) {
         std::numeric_limits<size_t>::max());
 
     auto resultTable = T->computeResultOnlyForTesting();
-    ASSERT_THAT(resultTable.idTable(),
-                ::testing::UnorderedElementsAreArray(expected));
+    assertResultMatchesIdTable(resultTable, expected);
   }
 }
 
@@ -391,8 +386,7 @@ TEST_P(TransitivePathTest, rightBoundToVar) {
       std::move(left), std::move(right), 0, std::numeric_limits<size_t>::max());
 
   auto resultTable = T->computeResultOnlyForTesting();
-  ASSERT_THAT(resultTable.idTable(),
-              ::testing::UnorderedElementsAreArray(expected));
+  assertResultMatchesIdTable(resultTable, expected);
 }
 
 TEST_P(TransitivePathTest, maxLength2FromVariable) {
@@ -427,8 +421,7 @@ TEST_P(TransitivePathTest, maxLength2FromVariable) {
       makePathUnbound(std::move(sub), {Variable{"?start"}, Variable{"?target"}},
                       left, right, 1, 2);
   auto resultTable = T->computeResultOnlyForTesting();
-  ASSERT_THAT(resultTable.idTable(),
-              ::testing::UnorderedElementsAreArray(expected));
+  assertResultMatchesIdTable(resultTable, expected);
 }
 
 TEST_P(TransitivePathTest, maxLength2FromId) {
@@ -455,8 +448,7 @@ TEST_P(TransitivePathTest, maxLength2FromId) {
       makePathUnbound(std::move(sub), {Variable{"?start"}, Variable{"?target"}},
                       left, right, 1, 2);
   auto resultTable = T->computeResultOnlyForTesting();
-  ASSERT_THAT(resultTable.idTable(),
-              ::testing::UnorderedElementsAreArray(expected));
+  assertResultMatchesIdTable(resultTable, expected);
 }
 
 TEST_P(TransitivePathTest, maxLength2ToId) {
@@ -482,8 +474,7 @@ TEST_P(TransitivePathTest, maxLength2ToId) {
       makePathUnbound(std::move(sub), {Variable{"?start"}, Variable{"?target"}},
                       left, right, 1, 2);
   auto resultTable = T->computeResultOnlyForTesting();
-  ASSERT_THAT(resultTable.idTable(),
-              ::testing::UnorderedElementsAreArray(expected));
+  assertResultMatchesIdTable(resultTable, expected);
 }
 
 TEST_P(TransitivePathTest, zeroLengthException) {
