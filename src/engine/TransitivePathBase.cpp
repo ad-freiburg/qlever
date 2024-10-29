@@ -52,9 +52,6 @@ TransitivePathBase::~TransitivePathBase() = default;
 std::pair<TransitivePathSide&, TransitivePathSide&>
 TransitivePathBase::decideDirection() {
   if (lhs_.isBoundVariable()) {
-    // TODO<RobinTF> In case both sides are bound variables, we could choose try
-    // to get a side that can do lazy evaluation to the left. This means we
-    // should somehow indicates that the sides are swappable
     LOG(DEBUG) << "Computing TransitivePath left to right" << std::endl;
     return {lhs_, rhs_};
   } else if (rhs_.isBoundVariable() || !rhs_.isVariable()) {
