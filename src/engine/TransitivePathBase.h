@@ -175,7 +175,7 @@ class TransitivePathBase : public Operation {
    */
   Result::Generator fillTableWithHull(NodeGenerator hull, size_t startSideCol,
                                       size_t targetSideCol, size_t skipCol,
-                                      bool yieldOnce) const;
+                                      bool yieldOnce, size_t inputWidth) const;
 
   /**
    * @brief Fill the given table with the transitive hull.
@@ -192,8 +192,8 @@ class TransitivePathBase : public Operation {
                                       bool yieldOnce) const;
 
   // Copy the columns from the input table to the output table
-  template <size_t OUTPUT_WIDTH>
-  void copyColumns(const IdTable& inputTable,
+  template <size_t INPUT_WIDTH, size_t OUTPUT_WIDTH>
+  void copyColumns(const IdTableView<INPUT_WIDTH>& inputTable,
                    IdTableStatic<OUTPUT_WIDTH>& outputTable, size_t inputRow,
                    size_t outputRow, size_t skipCol) const;
 
@@ -216,12 +216,11 @@ class TransitivePathBase : public Operation {
  private:
   uint64_t getSizeEstimateBeforeLimit() override;
 
-  template <size_t WIDTH>
-  Result::Generator fillTableWithHullImpl(
-      NodeGenerator hull, size_t startSideCol, size_t targetSideCol,
-      std::invocable<IdTableStatic<WIDTH>&, const IdTable&, size_t, size_t> auto
-          onEntryAdded,
-      bool yieldOnce) const;
+  template <size_t INPUT_WIDTH, size_t OUTPUT_WIDTH>
+  Result::Generator fillTableWithHullImpl(NodeGenerator hull,
+                                          size_t startSideCol,
+                                          size_t targetSideCol, bool yieldOnce,
+                                          size_t skipCol = 0) const;
 
  public:
   size_t getCostEstimate() override;
