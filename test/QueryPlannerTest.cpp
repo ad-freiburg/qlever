@@ -958,6 +958,7 @@ TEST(QueryPlanner, PathSearchMultipleSourcesAndTargetsNonCartesian) {
       h::PathSearch(config, true, true, scan("?start", "<p>", "?end")), qec);
 }
 
+// _____________________________________________________________________________
 TEST(QueryPlanner, numPathsPerTarget) {
   auto scan = h::IndexScanFromStrings;
   auto qec =

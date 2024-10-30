@@ -362,13 +362,10 @@ PathsLimited PathSearch::findPaths(
 
     auto edgeEnd = edge.end_.getBits();
     if (numPathsPerTarget) {
-      numPathsPerNode.try_emplace(edgeEnd, 0);
-      auto numPaths = numPathsPerNode[edgeEnd];
+      auto numPaths = ++numPathsPerNode[edgeEnd];
 
-      if (numPaths >= numPathsPerTarget) {
+      if (numPaths > numPathsPerTarget) {
         continue;
-      } else {
-        numPathsPerNode[edgeEnd] = numPaths + 1;
       }
     }
 
