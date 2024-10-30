@@ -69,6 +69,8 @@ using Map = std::unordered_map<
     Id, Set, HashId, std::equal_to<Id>,
     ad_utility::AllocatorWithLimit<std::pair<const Id, Set>>>;
 
+// Helper struct, that allows a generator to yield a combination of those to
+// store it within a new table.
 struct NodeWithTargets {
   Id node_;
   Set targets_;
@@ -76,6 +78,8 @@ struct NodeWithTargets {
   const IdTable* idTable_;
   size_t row_;
 
+  // Explicit to prevent issues with co_yield and lifetime.
+  // See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=103909 for more info.
   NodeWithTargets(Id node, Set targets, LocalVocab localVocab,
                   const IdTable* idTable, size_t row)
       : node_{node},
@@ -165,15 +169,17 @@ class TransitivePathBase : public Operation {
    * startSideTable to fill in the rest of the columns.
    * This function is called if the start side is bound and a variable.
    *
-   * @param hull The transitive hull.
+   * @param hull The transitive hull, represented by a generator that yields
+   * sets of connected nodes with some metadata.
    * @param startSideCol The column of the result table for the startSide of the
    * hull
    * @param targetSideCol The column of the result table for the targetSide of
    * the hull
-   * @param startSideTable An IdTable that holds other results. The other
-   * results will be transferred to the new result table.
    * @param skipCol This column contains the Ids of the start side in the
    * startSideTable and will be skipped.
+   * @param yieldOnce If true, the generator will yield only a single time.
+   * @param inputWidth The width of the input table that is referenced by the
+   * elements of `hull`.
    */
   Result::Generator fillTableWithHull(NodeGenerator hull, size_t startSideCol,
                                       size_t targetSideCol, size_t skipCol,
@@ -188,6 +194,7 @@ class TransitivePathBase : public Operation {
    * hull
    * @param targetSideCol The column of the result table for the targetSide of
    * the hull
+   * @param yieldOnce If true, the generator will yield only a single time.
    */
   Result::Generator fillTableWithHull(NodeGenerator hull, size_t startSideCol,
                                       size_t targetSideCol,
