@@ -117,6 +117,12 @@ Result::Generator TransitivePathBase::fillTableWithHullImpl(
       outputRow++;
     }
     inputRow++;
+    // Reset row to zero so the next `IdTable` is accessed correctly. The
+    // implicit assumption here is that every row in all `IdTable`s corresponds
+    // to exactly one start node.
+    if (idTable != nullptr && inputRow == idTable->size()) {
+      inputRow = 0;
+    }
 
     if (!table.empty()) {
       if (yieldOnce) {
@@ -127,7 +133,6 @@ Result::Generator TransitivePathBase::fillTableWithHullImpl(
         co_yield {std::move(table).toDynamic(), std::move(localVocab)};
         table = IdTableStatic<OUTPUT_WIDTH>{getResultWidth(), allocator()};
         outputRow = 0;
-        inputRow = 0;
       }
     }
     timer.stop();
@@ -411,7 +416,7 @@ void TransitivePathBase::copyColumns(const IdTableView<INPUT_WIDTH>& inputTable,
       continue;
     }
 
-    outputTable(outputRow, outCol) = inputTable(inputRow, inCol);
+    outputTable.at(outputRow, outCol) = inputTable.at(inputRow, inCol);
     inCol++;
     outCol++;
   }
