@@ -31,9 +31,40 @@ class UnaryNegateExpressionImpl : public NaryExpression<NaryOperation> {
   using NaryExpression<NaryOperation>::NaryExpression;
 
   std::optional<std::vector<PrefilterExprVariablePair>>
-  getPrefilterExpressionForMetadata(
-      [[maybe_unused]] bool isNegated) const override {
+  getPrefilterExpressionForMetadata(bool isNegated) const override {
     AD_CORRECTNESS_CHECK(this->N == 1);
+    namespace p = prefilterExpressions;
+    // The bool flag isNegated (by default false) acts as decision variable
+    // to select the correct merging procedure while constructing the
+    // PrefilterExpression(s) for a binary expression (AND or OR). For the
+    // negation procedure, we apply (partially over multiple Variables)
+    // De-Morgans law w.r.t. the affected (lower) expression parts, and
+    // isNegated indicates if we should apply it (or not). For more detailed
+    // information see NumericBinaryExpressions.cpp. For UnaryNegate we have to
+    // toggle the value of isNegated to pass the respective negation information
+    // down the expression tree.
+    // Remark:
+    // - Expression sub-tree has an even number of NOT expressions as
+    // parents: the negation cancels out (isNegated = false).
+    // - For an uneven number of NOT expressions as parent nodes: the
+    // sub-tree is actually negated (isNegated = true).
+    //
+    // Example - Apply De-Morgans law in two steps (see (1) and (2)) on
+    // expression !(?x >= IntId(10) || ?y >= IntId(10)) (SparqlExpression)
+    // With De-Morgan's rule we retrieve: ?x < IntId(10) && ?y < IntId(10)
+    //
+    // (1) Merge {<(>= IntId(10)), ?x>} and {<(>= IntId(10)), ?y>}
+    // with mergeChildrenForAndExpressionImpl (defined in
+    // NumericBinaryExpressions.cpp), which we select based on isNegated = true
+    // (first part of De-Morgans law).
+    // Result (1): {<(>= IntId(10)), ?x>, <(>= IntId(10)), ?y>}
+    //
+    // (2) On each pair <PrefilterExpression, Variable> given the result from
+    // (1), apply NotExpression (see the following implementation part).
+    // Step by step for the given example:
+    // {<(>= IntId(10)), ?x>, <(>= IntId(10)), ?y>} (apply NotExpression) =>
+    // {<(!(>= IntId(10))), ?x>, <(!(>= IntId(10))), ?y>}
+    // => Result (2): {<(< IntId(10)), ?x>, <(< IntId(10)), ?y>}
     auto optExprVarVec =
         this->getNthChild(0).value()->getPrefilterExpressionForMetadata(
             !isNegated);
@@ -41,11 +72,12 @@ class UnaryNegateExpressionImpl : public NaryExpression<NaryOperation> {
       return std::nullopt;
     }
     std::ranges::for_each(
-        optExprVarVec.value(), [](PrefilterExprVariablePair& exprVarPair) {
-          exprVarPair.first =
-              std::make_unique<prefilterExpressions::NotExpression>(
-                  std::move(exprVarPair.first));
+        optExprVarVec.value() | std::views::keys,
+        [](std::unique_ptr<p::PrefilterExpression>& expression) {
+          expression =
+              std::make_unique<p::NotExpression>(std::move(expression));
         });
+    p::detail::checkPropertiesForPrefilterConstruction(optExprVarVec.value());
     return optExprVarVec;
   }
 };

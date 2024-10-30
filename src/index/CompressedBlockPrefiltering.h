@@ -196,19 +196,18 @@ using AndExpression = prefilterExpressions::LogicalExpression<
 using OrExpression = prefilterExpressions::LogicalExpression<
     prefilterExpressions::LogicalOperators::OR>;
 
+namespace detail {
 //______________________________________________________________________________
-// Helpers to check for the respective type of `PrefilterExpression`
-template <typename T>
-struct check_is : std::false_type {};
+// Pair containing a `PrefilterExpression` and its corresponding `Variable`.
+using PrefilterExprVariablePair =
+    std::pair<std::unique_ptr<PrefilterExpression>, Variable>;
+//______________________________________________________________________________
+// Helper function to perform a check regarding the following conditions.
+// (1) For each relevant Variable, the vector contains exactly one pair.
+// (2) The vector contains those pairs (`<PrefilterExpression, Variable>`) in
+// sorted order w.r.t. the Variable value.
+void checkPropertiesForPrefilterConstruction(
+    const std::vector<PrefilterExprVariablePair>& vec);
 
-template <LogicalOperators Op>
-struct check_is<LogicalExpression<Op>> : std::true_type {};
-template <CompOp Op>
-struct check_is<RelationalExpression<Op>> : std::true_type {};
-
-template <typename T>
-constexpr bool check_is_logical_v = check_is<T>::value;
-template <typename T>
-constexpr bool check_is_relational_v = check_is<T>::value;
-
+}  // namespace detail
 }  // namespace prefilterExpressions

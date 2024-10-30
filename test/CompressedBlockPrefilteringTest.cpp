@@ -806,15 +806,54 @@ TEST(SparqlExpression, testGetPrefilterExpressionDefault) {
 TEST(SparqlExpression, getPrefilterExpressionFromSparqlRelational) {
   const TestDates dt{};
   const Variable var = Variable{"?x"};
+  // ?x == BooldId(true) (RelationalExpression Sparql)
+  // expected: <(== Boold(true)), ?x> (PrefilterExpression, Variable)
   evalAndEqualityCheck(eqSprql(var, BoolId(true)), pr(eq(BoolId(true)), var));
+  // For BoolId(true) == ?x we expect the same PrefilterExpression pair.
+  evalAndEqualityCheck(eqSprql(BoolId(true), var), pr(eq(BoolId(true)), var));
+  // ?x != BooldId(true) (RelationalExpression Sparql)
+  // expected: <(!= Boold(true)), ?x> (PrefilterExpression, Variable)
+  evalAndEqualityCheck(neqSprql(var, BoolId(false)),
+                       pr(neq(BoolId(false)), var));
+  // Same expected value for BoolId(true) != ?x.
+  evalAndEqualityCheck(neqSprql(BoolId(false), var),
+                       pr(neq(BoolId(false)), var));
+  // ?x >= IntId(1)
+  // expected: <(>= IntId(1)), ?x>
   evalAndEqualityCheck(geSprql(var, IntId(1)), pr(ge(IntId(1)), var));
+  // IntId(1) <= ?x
+  // expected: <(>= IntId(1)), ?x>
+  evalAndEqualityCheck(leSprql(IntId(1), var), pr(ge(IntId(1)), var));
+  // ?x > IntId(1)
+  // expected: <(> IntId(1)), ?x>
+  evalAndEqualityCheck(gtSprql(var, IntId(1)), pr(gt(IntId(1)), var));
+  // VocabId(10) != ?x
+  // expected: <(!= VocabId(10)), ?x>
   evalAndEqualityCheck(neqSprql(VocabId(10), var), pr(neq(VocabId(10)), var));
+  // BlankNodeId(1) > ?x
+  // expected: <(< BlankNodeId(1)), ?x>
   evalAndEqualityCheck(geSprql(BlankNodeId(1), var),
-                       pr(ge(BlankNodeId(1)), var));
+                       pr(le(BlankNodeId(1)), var));
+  // ?x < BlankNodeId(1)
+  // expected: <(< BlankNodeId(1)), ?x>
+  evalAndEqualityCheck(ltSprql(var, BlankNodeId(1)),
+                       pr(lt(BlankNodeId(1)), var));
+  // ?x <= referenceDate1
+  // expected: <(<= referenceDate1), ?x>
   evalAndEqualityCheck(leSprql(var, dt.referenceDate1),
                        pr(le(dt.referenceDate1), var));
+  // referenceDate1 >= ?x
+  // expected: <(<= referenceDate1), ?x>
+  evalAndEqualityCheck(geSprql(dt.referenceDate1, var),
+                       pr(le(dt.referenceDate1), var));
+  // DoubleId(10.2) < ?x
+  // expected: <(> DoubleId(10.2)), ?x>
   evalAndEqualityCheck(ltSprql(DoubleId(10.2), var),
-                       pr(lt(DoubleId(10.2)), var));
+                       pr(gt(DoubleId(10.2)), var));
+  // ?x > DoubleId(10.2)
+  // expected: <(> DoubleId(10.2)), ?x>
+  evalAndEqualityCheck(gtSprql(var, DoubleId(10.2)),
+                       pr(gt(DoubleId(10.2)), var));
 }
 
 //______________________________________________________________________________
@@ -984,7 +1023,7 @@ TEST(SparqlExpression, getPrefilterExpressionsToComplexSparqlExpressions) {
   evalAndEqualityCheck(
       orSprqlExpr(geSprql(varX, IntId(10)),
                   andSprqlExpr(geSprql(varX, IntId(-10)),
-                               ltSprql(DoubleId(0.00), varX))),
+                               ltSprql(varX, DoubleId(0.00)))),
       pr(orExpr(ge(IntId(10)), andExpr(ge(IntId(-10)), lt(DoubleId(0.00)))),
          varX));
   // !(!(?x >= 10) OR !!(?x >= -10 AND ?x < 0.00))
@@ -994,7 +1033,7 @@ TEST(SparqlExpression, getPrefilterExpressionsToComplexSparqlExpressions) {
       notSprqlExpr(orSprqlExpr(
           notSprqlExpr(geSprql(varX, IntId(10))),
           notSprqlExpr(notSprqlExpr(andSprqlExpr(
-              geSprql(varX, IntId(-10)), ltSprql(DoubleId(0.00), varX)))))),
+              geSprql(varX, IntId(-10)), ltSprql(varX, DoubleId(0.00))))))),
       pr(notExpr(orExpr(
              notExpr(ge(IntId(10))),
              notExpr(notExpr(andExpr(ge(IntId(-10)), lt(DoubleId(0.00))))))),
@@ -1112,4 +1151,40 @@ TEST(SparqlExpression, getEmptyPrefilterForMoreComplexSparqlExpressions) {
       notSprqlExpr(notSprqlExpr(
           andSprqlExpr(eqSprql(varZ, BoolId(true)),
                        eqSprql(Variable{"?country"}, VocabId(20))))))));
+}
+
+// Test that the conditions required for a correct merge of child
+// PrefilterExpressions are properly checked during the PrefilterExpression
+// construction procedure. This check is applied in the SparqlExpression (for
+// NOT, AND and OR) counter-expressions, while constructing their corresponding
+// PrefilterExpression.
+//______________________________________________________________________________
+TEST(SparqlExpression, checkPropertiesForPrefilterConstruction) {
+  namespace pd = prefilterExpressions::detail;
+  const Variable varX = Variable{"?x"};
+  const Variable varY = Variable{"?y"};
+  const Variable varZ = Variable{"?z"};
+  const Variable varW = Variable{"?w"};
+  std::vector<PrefilterExprVariablePair> vec{};
+  vec.push_back(pr(andExpr(lt(IntId(5)), gt(DoubleId(-0.01))), varX));
+  vec.push_back(pr(gt(VocabId(0)), varY));
+  EXPECT_NO_THROW(pd::checkPropertiesForPrefilterConstruction(vec));
+  vec.push_back(pr(eq(VocabId(33)), varZ));
+  EXPECT_NO_THROW(pd::checkPropertiesForPrefilterConstruction(vec));
+  // Add a pair <PrefilterExpression, Variable> with duplicate Variable.
+  vec.push_back(pr(gt(VocabId(0)), varZ));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      pd::checkPropertiesForPrefilterConstruction(vec),
+      ::testing::HasSubstr("For each relevant Variable must exist exactly "
+                           "one <PrefilterExpression, Variable> pair."));
+  // Remove the last two pairs and add a pair <PrefilterExpression, Variable>
+  // which violates the order on Variable(s).
+  vec.pop_back();
+  vec.pop_back();
+  vec.push_back(pr(eq(VocabId(0)), varW));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      pd::checkPropertiesForPrefilterConstruction(vec),
+      ::testing::HasSubstr(
+          "The vector must contain the <PrefilterExpression, Variable> "
+          "pairs in sorted order w.r.t. Variable value."));
 }

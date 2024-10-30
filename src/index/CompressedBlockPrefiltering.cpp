@@ -4,6 +4,8 @@
 
 #include "index/CompressedBlockPrefiltering.h"
 
+#include <ranges>
+
 #include "global/ValueIdComparators.h"
 
 namespace prefilterExpressions {
@@ -347,4 +349,26 @@ std::string NotExpression::info(size_t depth) const {
   return stream.str();
 }
 
+namespace detail {
+//______________________________________________________________________________
+void checkPropertiesForPrefilterConstruction(
+    const std::vector<PrefilterExprVariablePair>& vec) {
+  if (!std::ranges::is_sorted(vec, [](const auto& pair1, const auto& pair2) {
+        return pair1.second < pair2.second;
+      })) {
+    throw std::runtime_error(
+        "The vector must contain the <PrefilterExpression, Variable> pairs in "
+        "sorted order w.r.t. Variable value.");
+  };
+  if (auto it = std::ranges::adjacent_find(
+          vec, [](const auto& pair1,
+                  const auto& pair2) { return pair1.second == pair2.second; });
+      it != vec.end()) {
+    throw std::runtime_error(
+        "For each relevant Variable must exist exactly one "
+        "<PrefilterExpression, Variable> pair.");
+  }
+};
+
+}  //  namespace detail
 }  //  namespace prefilterExpressions

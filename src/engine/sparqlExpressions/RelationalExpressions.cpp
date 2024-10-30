@@ -414,46 +414,69 @@ template <Comparison comp>
 std::optional<std::vector<PrefilterExprVariablePair>>
 RelationalExpression<comp>::getPrefilterExpressionForMetadata(
     [[maybe_unused]] bool isNegated) const {
+  namespace p = prefilterExpressions;
   AD_CORRECTNESS_CHECK(children_.size() == 2);
   const SparqlExpression::Ptr& child0 = children_.at(0);
   const SparqlExpression::Ptr& child1 = children_.at(1);
 
-  const auto checkBinarySearchEvaluable =
-      [](const SparqlExpression::Ptr& child0,
-         const SparqlExpression::Ptr& child1)
-      -> std::optional<std::pair<ValueId, Variable>> {
-    if (const auto* literalValueId =
-            dynamic_cast<const IdExpression*>(child0.get())) {
-      if (const auto* literalVariable =
-              dynamic_cast<const VariableExpression*>(child1.get())) {
-        return std::make_pair(literalValueId->value(),
-                              literalVariable->value());
+  const auto getPrefilterExprVariablePairVec =
+      [](const Variable& variable, const ValueId valueId,
+         bool reverse) -> std::vector<PrefilterExprVariablePair> {
+    const auto mirroredExpression =
+        [](const ValueId valueId) -> std::unique_ptr<p::PrefilterExpression> {
+      using enum Comparison;
+      switch (comp) {
+        case LT:
+          // Id < ?var -> ?var > Id
+          return std::make_unique<p::GreaterThanExpression>(valueId);
+        case LE:
+          // Id <= ?var -> ?var >= Id
+          return std::make_unique<p::GreaterEqualExpression>(valueId);
+        case GE:
+          // Id >= ?var -> ?var <= Id
+          return std::make_unique<p::LessEqualExpression>(valueId);
+        case GT:
+          // Id > ?var -> ?var < Id
+          return std::make_unique<p::LessThanExpression>(valueId);
+        default:
+          // EQ(==) or NE(!=)
+          // Given that these two relations are symmetric w.r.t. ?var and Id,
+          // no swap regarding the relational operator is neccessary.
+          return std::make_unique<p::RelationalExpression<comp>>(valueId);
       }
+    };
+    std::vector<PrefilterExprVariablePair> resVec;
+    resVec.emplace_back(std::make_pair(
+        reverse ? mirroredExpression(valueId)
+                : std::make_unique<p::RelationalExpression<comp>>(valueId),
+        variable));
+    return resVec;
+  };
+  // Option 1:
+  // RelationalExpression containing a VariableExpression as the first child
+  // and an IdExpression as the second child.
+  // E.g. for ?x >= 10 (RelationalExpression Sparql), we obtain the following
+  // pair with PrefilterExpression and Variable: <(>= 10), ?x>
+  if (const auto* variable =
+          dynamic_cast<const VariableExpression*>(child0.get())) {
+    if (const auto* valueId = dynamic_cast<const IdExpression*>(child1.get())) {
+      return getPrefilterExprVariablePairVec(variable->value(),
+                                             valueId->value(), false);
     }
-    return std::nullopt;
-  };
-
-  const auto createPrefilterExprVariablePair =
-      [](const std::pair<ValueId, Variable>& valuePair)
-      -> std::vector<PrefilterExprVariablePair> {
-    std::vector<PrefilterExprVariablePair> pairVec;
-    pairVec.emplace_back(
-        std::make_unique<prefilterExpressions::RelationalExpression<comp>>(
-            valuePair.first),
-        valuePair.second);
-    return pairVec;
-  };
-  // Option 1: child0 is a (constant) reference ValueId, while child1 contains a
-  // Variable to the respective column on which we want to filter.
-  const auto& optionalPair1 = checkBinarySearchEvaluable(child0, child1);
-  if (optionalPair1.has_value()) {
-    return createPrefilterExprVariablePair(optionalPair1.value());
   }
-  // Option 2: child1 is a (constant) reference ValueId, while child0 contains a
-  // Variable to the respective column on which we want to filter.
-  const auto& optionalPair2 = checkBinarySearchEvaluable(child1, child0);
-  if (optionalPair2.has_value()) {
-    return createPrefilterExprVariablePair(optionalPair2.value());
+  // Option 2:
+  // RelationalExpression containing a IdExpression as the first child and an
+  // VariableExpression as the second child.
+  // (1) 10 >= ?x (RelationalExpression Sparql), we obtain the following
+  // pair with PrefilterExpression and Variable: <(<= 10), ?x>
+  // (2) 10 != ?x (RelationalExpression Sparql), we obtain the following
+  // pair with PrefilterExpression and Variable: <(!= 10), ?x>
+  if (const auto* valueId = dynamic_cast<const IdExpression*>(child0.get())) {
+    if (const auto* variable =
+            dynamic_cast<const VariableExpression*>(child1.get())) {
+      return getPrefilterExprVariablePairVec(variable->value(),
+                                             valueId->value(), true);
+    }
   }
   return std::nullopt;
 }
