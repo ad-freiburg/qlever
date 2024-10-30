@@ -807,12 +807,12 @@ TEST(SparqlExpression, getPrefilterExpressionFromSparqlRelational) {
   const TestDates dt{};
   const Variable var = Variable{"?x"};
   // ?x == BooldId(true) (RelationalExpression Sparql)
-  // expected: <(== Boold(true)), ?x> (PrefilterExpression, Variable)
+  // expected: <(== BoolId(true)), ?x> (PrefilterExpression, Variable)
   evalAndEqualityCheck(eqSprql(var, BoolId(true)), pr(eq(BoolId(true)), var));
   // For BoolId(true) == ?x we expect the same PrefilterExpression pair.
   evalAndEqualityCheck(eqSprql(BoolId(true), var), pr(eq(BoolId(true)), var));
   // ?x != BooldId(true) (RelationalExpression Sparql)
-  // expected: <(!= Boold(true)), ?x> (PrefilterExpression, Variable)
+  // expected: <(!= BoolId(true)), ?x> (PrefilterExpression, Variable)
   evalAndEqualityCheck(neqSprql(var, BoolId(false)),
                        pr(neq(BoolId(false)), var));
   // Same expected value for BoolId(true) != ?x.
