@@ -41,6 +41,7 @@ class TransitivePathTest
             qec};
   }
 
+  // ___________________________________________________________________________
   [[nodiscard]] static std::shared_ptr<TransitivePathBase> makePathUnbound(
       IdTable input, Vars vars, TransitivePathSide left,
       TransitivePathSide right, size_t minDist, size_t maxDist) {
@@ -49,6 +50,7 @@ class TransitivePathTest
     return T;
   }
 
+  // ___________________________________________________________________________
   [[nodiscard]] static std::shared_ptr<TransitivePathBase> makePathLeftBound(
       IdTable input, Vars vars, IdTable sideTable, size_t sideTableCol,
       Vars sideVars, TransitivePathSide left, TransitivePathSide right,
@@ -62,6 +64,7 @@ class TransitivePathTest
     return T->bindLeftSide(leftOp, sideTableCol);
   }
 
+  // ___________________________________________________________________________
   [[nodiscard]] static std::shared_ptr<TransitivePathBase> makePathLeftBound(
       IdTable input, Vars vars, std::vector<IdTable> sideTables,
       size_t sideTableCol, Vars sideVars, TransitivePathSide left,
@@ -74,6 +77,7 @@ class TransitivePathTest
     return T->bindLeftSide(leftOp, sideTableCol);
   }
 
+  // ___________________________________________________________________________
   [[nodiscard]] static std::shared_ptr<TransitivePathBase> makePathRightBound(
       IdTable input, Vars vars, IdTable sideTable, size_t sideTableCol,
       Vars sideVars, TransitivePathSide left, TransitivePathSide right,
@@ -87,6 +91,7 @@ class TransitivePathTest
     return T->bindRightSide(rightOp, sideTableCol);
   }
 
+  // ___________________________________________________________________________
   [[nodiscard]] static std::shared_ptr<TransitivePathBase> makePathRightBound(
       IdTable input, Vars vars, std::vector<IdTable> sideTables,
       size_t sideTableCol, Vars sideVars, TransitivePathSide left,
@@ -99,6 +104,7 @@ class TransitivePathTest
     return T->bindRightSide(rightOp, sideTableCol);
   }
 
+  // ___________________________________________________________________________
   static std::vector<IdTable> split(const IdTable& idTable) {
     std::vector<IdTable> result;
     for (const auto& row : idTable) {
@@ -108,8 +114,10 @@ class TransitivePathTest
     return result;
   }
 
+  // ___________________________________________________________________________
   static bool requestLaziness() { return std::get<1>(GetParam()); }
 
+  // ___________________________________________________________________________
   void assertResultMatchesIdTable(const Result& result, const IdTable& expected,
                                   ad_utility::source_location loc =
                                       ad_utility::source_location::current()) {
@@ -130,6 +138,7 @@ class TransitivePathTest
   }
 };
 
+// _____________________________________________________________________________
 TEST_P(TransitivePathTest, idToId) {
   auto sub = makeIdTableFromVector({{0, 1}, {1, 2}, {1, 3}, {2, 3}});
 
@@ -145,6 +154,7 @@ TEST_P(TransitivePathTest, idToId) {
   assertResultMatchesIdTable(resultTable, expected);
 }
 
+// _____________________________________________________________________________
 TEST_P(TransitivePathTest, idToVar) {
   auto sub = makeIdTableFromVector({{0, 1}, {1, 2}, {1, 3}, {2, 3}});
 
@@ -160,6 +170,7 @@ TEST_P(TransitivePathTest, idToVar) {
   assertResultMatchesIdTable(resultTable, expected);
 }
 
+// _____________________________________________________________________________
 TEST_P(TransitivePathTest, varToId) {
   auto sub = makeIdTableFromVector({{0, 1}, {1, 2}, {1, 3}, {2, 3}});
 
@@ -179,6 +190,7 @@ TEST_P(TransitivePathTest, varToId) {
   assertResultMatchesIdTable(resultTable, expected);
 }
 
+// _____________________________________________________________________________
 TEST_P(TransitivePathTest, idToVarMinLengthZero) {
   auto sub = makeIdTableFromVector({{0, 1}, {1, 2}, {1, 3}, {2, 3}});
 
@@ -194,6 +206,7 @@ TEST_P(TransitivePathTest, idToVarMinLengthZero) {
   assertResultMatchesIdTable(resultTable, expected);
 }
 
+// _____________________________________________________________________________
 TEST_P(TransitivePathTest, varToIdMinLengthZero) {
   auto sub = makeIdTableFromVector({{0, 1}, {1, 2}, {1, 3}, {2, 3}});
 
@@ -214,6 +227,7 @@ TEST_P(TransitivePathTest, varToIdMinLengthZero) {
   assertResultMatchesIdTable(resultTable, expected);
 }
 
+// _____________________________________________________________________________
 TEST_P(TransitivePathTest, varTovar) {
   auto sub = makeIdTableFromVector({
       {0, 1},
@@ -241,6 +255,7 @@ TEST_P(TransitivePathTest, varTovar) {
   assertResultMatchesIdTable(resultTable, expected);
 }
 
+// _____________________________________________________________________________
 TEST_P(TransitivePathTest, unlimitedMaxLength) {
   auto sub = makeIdTableFromVector({{0, 2},
                                     {2, 4},
@@ -280,6 +295,7 @@ TEST_P(TransitivePathTest, unlimitedMaxLength) {
   assertResultMatchesIdTable(resultTable, expected);
 }
 
+// _____________________________________________________________________________
 TEST_P(TransitivePathTest, idToLeftBound) {
   auto sub = makeIdTableFromVector({{0, 1}, {1, 2}, {1, 3}, {2, 3}, {3, 4}});
 
@@ -354,6 +370,7 @@ TEST_P(TransitivePathTest, idToLeftBound) {
   }
 }
 
+// _____________________________________________________________________________
 TEST_P(TransitivePathTest, idToRightBound) {
   auto sub = makeIdTableFromVector({
       {0, 1},
@@ -434,6 +451,7 @@ TEST_P(TransitivePathTest, idToRightBound) {
   }
 }
 
+// _____________________________________________________________________________
 TEST_P(TransitivePathTest, leftBoundToVar) {
   auto sub = makeIdTableFromVector({
       {1, 2},
@@ -492,6 +510,7 @@ TEST_P(TransitivePathTest, leftBoundToVar) {
   }
 }
 
+// _____________________________________________________________________________
 TEST_P(TransitivePathTest, rightBoundToVar) {
   auto sub = makeIdTableFromVector({
       {1, 2},
@@ -550,6 +569,7 @@ TEST_P(TransitivePathTest, rightBoundToVar) {
   }
 }
 
+// _____________________________________________________________________________
 TEST_P(TransitivePathTest, startNodesWithNoMatchesRightBound) {
   auto sub = makeIdTableFromVector({
       {1, 2},
@@ -578,6 +598,27 @@ TEST_P(TransitivePathTest, startNodesWithNoMatchesRightBound) {
   assertResultMatchesIdTable(resultTable, expected);
 }
 
+// _____________________________________________________________________________
+TEST_P(TransitivePathTest, emptySideTable) {
+  auto sub = makeIdTableFromVector({
+      {1, 2},
+      {3, 4},
+  });
+
+  auto expected = makeIdTableFromVector({});
+
+  TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
+  TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
+  auto T =
+      makePathLeftBound(sub.clone(), {Variable{"?start"}, Variable{"?target"}},
+                        std::vector<IdTable>{}, 0, {Variable{"?start"}}, left,
+                        right, 0, std::numeric_limits<size_t>::max());
+
+  auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+  assertResultMatchesIdTable(resultTable, expected);
+}
+
+// _____________________________________________________________________________
 TEST_P(TransitivePathTest, startNodesWithNoMatchesLeftBound) {
   auto sub = makeIdTableFromVector({
       {1, 2},
@@ -605,6 +646,7 @@ TEST_P(TransitivePathTest, startNodesWithNoMatchesLeftBound) {
   assertResultMatchesIdTable(resultTable, expected);
 }
 
+// _____________________________________________________________________________
 TEST_P(TransitivePathTest, maxLength2FromVariable) {
   auto sub = makeIdTableFromVector({
       {0, 2},
@@ -640,6 +682,7 @@ TEST_P(TransitivePathTest, maxLength2FromVariable) {
   assertResultMatchesIdTable(resultTable, expected);
 }
 
+// _____________________________________________________________________________
 TEST_P(TransitivePathTest, maxLength2FromId) {
   auto sub = makeIdTableFromVector({
       {0, 2},
@@ -667,6 +710,7 @@ TEST_P(TransitivePathTest, maxLength2FromId) {
   assertResultMatchesIdTable(resultTable, expected);
 }
 
+// _____________________________________________________________________________
 TEST_P(TransitivePathTest, maxLength2ToId) {
   auto sub = makeIdTableFromVector({
       {0, 2},
@@ -693,6 +737,7 @@ TEST_P(TransitivePathTest, maxLength2ToId) {
   assertResultMatchesIdTable(resultTable, expected);
 }
 
+// _____________________________________________________________________________
 TEST_P(TransitivePathTest, zeroLengthException) {
   auto sub = makeIdTableFromVector({
       {0, 2},
@@ -717,6 +762,7 @@ TEST_P(TransitivePathTest, zeroLengthException) {
                                "not supported"));
 }
 
+// _____________________________________________________________________________
 INSTANTIATE_TEST_SUITE_P(
     TransitivePathTestSuite, TransitivePathTest,
     ::testing::Combine(::testing::Bool(), ::testing::Bool()),
