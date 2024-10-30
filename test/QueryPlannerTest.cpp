@@ -1522,6 +1522,86 @@ TEST(QueryPlanner, PathSearchUnsupportedAlgorithm) {
       parsedQuery::PathSearchException);
 }
 
+// __________________________________________________________________________
+TEST(QueryPlanner, PathSearchWrongArgumentCartesian) {
+  auto qec = ad_utility::testing::getQec("<x> <p> <y>. <y> <p> <z>");
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+
+  auto query =
+      "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
+      "SELECT ?start ?end ?path ?edge WHERE {"
+      "SERVICE pathSearch: {"
+      "_:path pathSearch:algorithm pathSearch:allPaths ;"
+      "pathSearch:source ?source1 ;"
+      "pathSearch:source ?source2 ;"
+      "pathSearch:target <z> ;"
+      "pathSearch:pathColumn ?path ;"
+      "pathSearch:edgeColumn ?edge ;"
+      "pathSearch:start ?start;"
+      "pathSearch:end ?end;"
+      "pathSearch:cartesian <false>;"
+      "{SELECT * WHERE {"
+      "?start <p> ?end."
+      "}}}}";
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      h::parseAndPlan(std::move(query), qec),
+      HasSubstr("The parameter 'cartesian' expects a boolean"),
+      parsedQuery::PathSearchException);
+}
+
+// __________________________________________________________________________
+TEST(QueryPlanner, PathSearchWrongArgumentNumPathsPerTarget) {
+  auto qec = ad_utility::testing::getQec("<x> <p> <y>. <y> <p> <z>");
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+
+  auto query =
+      "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
+      "SELECT ?start ?end ?path ?edge WHERE {"
+      "SERVICE pathSearch: {"
+      "_:path pathSearch:algorithm pathSearch:allPaths ;"
+      "pathSearch:source ?source1 ;"
+      "pathSearch:source ?source2 ;"
+      "pathSearch:target <z> ;"
+      "pathSearch:pathColumn ?path ;"
+      "pathSearch:edgeColumn ?edge ;"
+      "pathSearch:start ?start;"
+      "pathSearch:end ?end;"
+      "pathSearch:numPathsPerTarget <five>;"
+      "{SELECT * WHERE {"
+      "?start <p> ?end."
+      "}}}}";
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      h::parseAndPlan(std::move(query), qec),
+      HasSubstr("The parameter 'numPathsPerTarget' expects an integer"),
+      parsedQuery::PathSearchException);
+}
+
+// __________________________________________________________________________
+TEST(QueryPlanner, PathSearchWrongArgumentAlgorithm) {
+  auto qec = ad_utility::testing::getQec("<x> <p> <y>. <y> <p> <z>");
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+
+  auto query =
+      "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
+      "SELECT ?start ?end ?path ?edge WHERE {"
+      "SERVICE pathSearch: {"
+      "_:path pathSearch:algorithm 1 ;"
+      "pathSearch:source ?source1 ;"
+      "pathSearch:source ?source2 ;"
+      "pathSearch:target <z> ;"
+      "pathSearch:pathColumn ?path ;"
+      "pathSearch:edgeColumn ?edge ;"
+      "pathSearch:start ?start;"
+      "pathSearch:end ?end;"
+      "{SELECT * WHERE {"
+      "?start <p> ?end."
+      "}}}}";
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      h::parseAndPlan(std::move(query), qec),
+      HasSubstr("The 'algorithm' value has to be an Iri"),
+      parsedQuery::PathSearchException);
+}
+
 TEST(QueryPlanner, SpatialJoinViaMaxDistPredicate) {
   auto scan = h::IndexScanFromStrings;
   h::expect(
