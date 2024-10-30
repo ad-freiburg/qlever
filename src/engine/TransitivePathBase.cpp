@@ -96,6 +96,9 @@ Result::Generator TransitivePathBase::fillTableWithHullImpl(
   std::vector<LocalVocab> storedLocalVocabs;
   for (auto& [node, linkedNodes, localVocab, idTable, inputRow] : hull) {
     timer.cont();
+    // As an optimization nodes without any linked nodes should not get yielded
+    // in the first place.
+    AD_CONTRACT_CHECK(!linkedNodes.empty());
     if (!yieldOnce) {
       table.reserve(linkedNodes.size());
     }
@@ -116,16 +119,14 @@ Result::Generator TransitivePathBase::fillTableWithHullImpl(
       outputRow++;
     }
 
-    if (!table.empty()) {
-      if (yieldOnce) {
-        storedLocalVocabs.emplace_back(std::move(localVocab));
-      } else {
-        timer.stop();
-        runtimeInfo().addDetail("IdTable fill time", timer.msecs());
-        co_yield {std::move(table).toDynamic(), std::move(localVocab)};
-        table = IdTableStatic<OUTPUT_WIDTH>{getResultWidth(), allocator()};
-        outputRow = 0;
-      }
+    if (yieldOnce) {
+      storedLocalVocabs.emplace_back(std::move(localVocab));
+    } else {
+      timer.stop();
+      runtimeInfo().addDetail("IdTable fill time", timer.msecs());
+      co_yield {std::move(table).toDynamic(), std::move(localVocab)};
+      table = IdTableStatic<OUTPUT_WIDTH>{getResultWidth(), allocator()};
+      outputRow = 0;
     }
     timer.stop();
   }

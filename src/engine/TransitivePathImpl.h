@@ -252,14 +252,14 @@ class TransitivePathImpl : public TransitivePathBase {
       mergedVocab.mergeWith(std::span{&edgesVocab, 1});
       size_t currentRow = 0;
       for (Id startNode : tableColumn.column_) {
-        timer.cont();
         Set connectedNodes = findConnectedNodes(edges, startNode, target);
         if (!connectedNodes.empty()) {
-          timer.stop();
           runtimeInfo().addDetail("Hull time", timer.msecs());
+          timer.stop();
           co_yield NodeWithTargets{startNode, std::move(connectedNodes),
                                    mergedVocab.clone(), tableColumn.table_,
                                    currentRow};
+          timer.cont();
         }
         currentRow++;
       }
