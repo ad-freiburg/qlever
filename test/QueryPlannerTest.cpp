@@ -920,6 +920,7 @@ TEST(QueryPlanner, PathSearchMultipleSourcesAndTargetsCartesian) {
       "}}}}",
       h::PathSearch(config, true, true, scan("?start", "<p>", "?end")), qec);
 }
+
 TEST(QueryPlanner, PathSearchMultipleSourcesAndTargetsNonCartesian) {
   auto scan = h::IndexScanFromStrings;
   auto qec =
@@ -951,6 +952,44 @@ TEST(QueryPlanner, PathSearchMultipleSourcesAndTargetsNonCartesian) {
       "pathSearch:start ?start;"
       "pathSearch:end ?end;"
       "pathSearch:cartesian false;"
+      "{SELECT * WHERE {"
+      "?start <p> ?end."
+      "}}}}",
+      h::PathSearch(config, true, true, scan("?start", "<p>", "?end")), qec);
+}
+
+TEST(QueryPlanner, numPathsPerTarget) {
+  auto scan = h::IndexScanFromStrings;
+  auto qec =
+      ad_utility::testing::getQec("<x1> <p> <y>. <x2> <p> <y>. <y> <p> <z>");
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+
+  std::vector<Id> sources{getId("<x1>"), getId("<x2>")};
+  std::vector<Id> targets{getId("<y>"), getId("<z>")};
+  PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
+                                 sources,
+                                 targets,
+                                 Variable("?start"),
+                                 Variable("?end"),
+                                 Variable("?path"),
+                                 Variable("?edge"),
+                                 {},
+                                 true,
+                                 1};
+  h::expect(
+      "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
+      "SELECT ?start ?end ?path ?edge WHERE {"
+      "SERVICE pathSearch: {"
+      "_:path pathSearch:algorithm pathSearch:allPaths ;"
+      "pathSearch:source <x1> ;"
+      "pathSearch:source <x2> ;"
+      "pathSearch:target <y> ;"
+      "pathSearch:target <z> ;"
+      "pathSearch:pathColumn ?path ;"
+      "pathSearch:edgeColumn ?edge ;"
+      "pathSearch:start ?start;"
+      "pathSearch:end ?end;"
+      "pathSearch:numPathsPerTarget 1;"
       "{SELECT * WHERE {"
       "?start <p> ?end."
       "}}}}",

@@ -128,6 +128,12 @@ void PathQuery::addParameter(const SparqlTriple& triple) {
       throw PathSearchException("The parameter 'cartesian' expects a boolean");
     }
     cartesian_ = object.getBool();
+  } else if (predString.ends_with("numPathsPerTarget>")) {
+    if (!object.isInt()) {
+      throw PathSearchException(
+          "The parameter 'numPathsPerTarget' expects an integer");
+    }
+    numPathsPerTarget_ = object.getInt();
   } else if (predString.ends_with("algorithm>")) {
     if (!object.isIri()) {
       throw PathSearchException("The 'algorithm' value has to be an Iri");
@@ -209,7 +215,8 @@ PathSearchConfiguration PathQuery::toPathSearchConfiguration(
   return PathSearchConfiguration{
       algorithm_,          sources,         targets,
       start_.value(),      end_.value(),    pathColumn_.value(),
-      edgeColumn_.value(), edgeProperties_, cartesian_};
+      edgeColumn_.value(), edgeProperties_, cartesian_,
+      numPathsPerTarget_};
 }
 
 // ____________________________________________________________________________
