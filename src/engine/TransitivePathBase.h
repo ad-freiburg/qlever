@@ -74,13 +74,15 @@ struct NodeWithTargets {
   Set targets_;
   LocalVocab localVocab_;
   const IdTable* idTable_;
+  size_t row_;
 
   NodeWithTargets(Id node, Set targets, LocalVocab localVocab,
-                  const IdTable* idTable)
+                  const IdTable* idTable, size_t row)
       : node_{node},
         targets_{std::move(targets)},
         localVocab_{std::move(localVocab)},
-        idTable_{idTable} {}
+        idTable_{idTable},
+        row_{row} {}
 };
 
 using NodeGenerator = cppcoro::generator<NodeWithTargets>;

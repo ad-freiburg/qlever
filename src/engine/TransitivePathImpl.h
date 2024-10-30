@@ -46,7 +46,7 @@ class TransitivePathImpl : public TransitivePathBase {
                      TransitivePathSide leftSide, TransitivePathSide rightSide,
                      size_t minDist, size_t maxDist)
       : TransitivePathBase(qec, std::move(child), std::move(leftSide),
-                           std::move(rightSide), minDist, maxDist){};
+                           std::move(rightSide), minDist, maxDist) {};
 
   /**
    * @brief Compute the transitive hull with a bound side.
@@ -205,6 +205,7 @@ class TransitivePathImpl : public TransitivePathBase {
       timer.cont();
       LocalVocab mergedVocab = std::move(tableColumn.vocab_);
       mergedVocab.mergeWith(std::span{&edgesVocab, 1});
+      size_t currentRow = 0;
       for (Id startNode : tableColumn.column_) {
         Set connectedNodes{getExecutionContext()->getAllocator()};
         marks.clear();
@@ -239,8 +240,10 @@ class TransitivePathImpl : public TransitivePathBase {
         if (!marks.empty()) {
           runtimeInfo().addDetail("Hull time", timer.msecs());
           co_yield NodeWithTargets{startNode, std::move(connectedNodes),
-                                   mergedVocab.clone(), tableColumn.table_};
+                                   mergedVocab.clone(), tableColumn.table_,
+                                   currentRow};
         }
+        currentRow++;
       }
     }
   }

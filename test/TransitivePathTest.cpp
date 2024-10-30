@@ -550,6 +550,61 @@ TEST_P(TransitivePathTest, rightBoundToVar) {
   }
 }
 
+TEST_P(TransitivePathTest, startNodesWithNoMatchesRightBound) {
+  auto sub = makeIdTableFromVector({
+      {1, 2},
+      {3, 4},
+  });
+
+  auto rightOpTable = makeIdTableFromVector({
+      {2, 5},
+      {3, 6},
+      {4, 7},
+  });
+
+  auto expected = makeIdTableFromVector({
+      {1, 2, 5},
+      {3, 4, 7},
+  });
+
+  TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
+  TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
+  auto T = makePathRightBound(
+      sub.clone(), {Variable{"?start"}, Variable{"?target"}},
+      split(rightOpTable), 0, {Variable{"?target"}, Variable{"?x"}}, left,
+      right, 1, std::numeric_limits<size_t>::max());
+
+  auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+  assertResultMatchesIdTable(resultTable, expected);
+}
+
+TEST_P(TransitivePathTest, startNodesWithNoMatchesLeftBound) {
+  auto sub = makeIdTableFromVector({
+      {1, 2},
+      {3, 4},
+  });
+
+  auto leftOpTable = makeIdTableFromVector({
+      {2, 5},
+      {3, 6},
+      {4, 7},
+  });
+
+  auto expected = makeIdTableFromVector({
+      {3, 4, 6},
+  });
+
+  TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
+  TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
+  auto T = makePathLeftBound(
+      sub.clone(), {Variable{"?start"}, Variable{"?target"}},
+      split(leftOpTable), 0, {Variable{"?start"}, Variable{"?x"}}, left, right,
+      1, std::numeric_limits<size_t>::max());
+
+  auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+  assertResultMatchesIdTable(resultTable, expected);
+}
+
 TEST_P(TransitivePathTest, maxLength2FromVariable) {
   auto sub = makeIdTableFromVector({
       {0, 2},

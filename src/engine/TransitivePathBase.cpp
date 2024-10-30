@@ -92,10 +92,9 @@ Result::Generator TransitivePathBase::fillTableWithHullImpl(
     bool yieldOnce, size_t skipCol) const {
   ad_utility::Timer timer{ad_utility::Timer::Stopped};
   size_t outputRow = 0;
-  size_t inputRow = 0;
   IdTableStatic<OUTPUT_WIDTH> table{getResultWidth(), allocator()};
   std::vector<LocalVocab> storedLocalVocabs;
-  for (auto& [node, linkedNodes, localVocab, idTable] : hull) {
+  for (auto& [node, linkedNodes, localVocab, idTable, inputRow] : hull) {
     timer.cont();
     if (!yieldOnce) {
       table.reserve(linkedNodes.size());
@@ -115,13 +114,6 @@ Result::Generator TransitivePathBase::fillTableWithHullImpl(
       }
 
       outputRow++;
-    }
-    inputRow++;
-    // Reset row to zero so the next `IdTable` is accessed correctly. The
-    // implicit assumption here is that every row in all `IdTable`s corresponds
-    // to exactly one start node.
-    if (idTable != nullptr && inputRow == idTable->size()) {
-      inputRow = 0;
     }
 
     if (!table.empty()) {
