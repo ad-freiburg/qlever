@@ -50,7 +50,7 @@ class TransitivePathImpl : public TransitivePathBase {
                      TransitivePathSide leftSide, TransitivePathSide rightSide,
                      size_t minDist, size_t maxDist)
       : TransitivePathBase(qec, std::move(child), std::move(leftSide),
-                           std::move(rightSide), minDist, maxDist) {};
+                           std::move(rightSide), minDist, maxDist){};
 
   /**
    * @brief Compute the transitive hull with a bound side.
@@ -195,7 +195,7 @@ class TransitivePathImpl : public TransitivePathBase {
    *
    * @param edges Adjacency lists, mapping Ids (nodes) to their connected
    * Ids.
-   * @param startNodes A range that yields an instanciation of
+   * @param startNodes A range that yields an instantiation of
    * `TableColumnWithVocab` that can be consumed to create a transitive hull.
    * @param target Optional target Id. If supplied, only paths which end
    * in this Id are added to the hull.
