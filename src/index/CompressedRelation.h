@@ -400,7 +400,7 @@ class CompressedRelationReader {
   // or whether it should be deleted after filtering. It can then filter a given
   // block according to those settings.
   struct FilterDuplicatesAndGraphs {
-    const ScanSpecification::Graphs& desiredGraphs_;
+    ScanSpecification::Graphs desiredGraphs_;
     ColumnIndex graphColumn_;
     bool deleteGraphColumn_;
     // Filter `block` such that it contains only the specified graphs and no
@@ -429,6 +429,22 @@ class CompressedRelationReader {
         IdTable& block, const CompressedBlockMetadata& blockMetadata) const;
     static bool filterDuplicatesIfNecessary(
         IdTable& block, const CompressedBlockMetadata& blockMetadata);
+  };
+
+  struct LocatedTriplesConfiguration {
+    const LocatedTriplesPerBlock& locatedTriples_;
+    size_t numIndexColumns_;
+    bool includeGraphColumn_;
+  };
+  struct LocatedTriplesConfigurationWithBlockIndex
+      : public LocatedTriplesConfiguration {
+    size_t blockIndex;
+  };
+
+  struct ScanImplConfig {
+    ColumnIndices scanColumns_;
+    LocatedTriplesConfiguration locatedTriplesConfig_;
+    FilterDuplicatesAndGraphs graphFilter_;
   };
 
   // The specification of scan, together with the blocks on which this scan is
@@ -620,19 +636,8 @@ class CompressedRelationReader {
   // have after decompression must be passed in via the `numRowsToRead`
   // argument. It is typically obtained from the corresponding
   // `CompressedBlockMetaData`.
-  struct LocatedTriplesConfiguration {
-    const LocatedTriplesPerBlock& locatedTriples_;
-    size_t numIndexColumns_;
-    bool includeGraphColumn_;
-  };
-  struct LocatedTriplesConfigurationWithBlockIndex
-      : public LocatedTriplesConfiguration {
-    size_t blockIndex;
-  };
-
-  DecompressedBlock decompressBlock(
-      const CompressedBlock& compressedBlock, size_t numRowsToRead,
-      const LocatedTriplesConfigurationWithBlockIndex&) const;
+  DecompressedBlock decompressBlock(const CompressedBlock& compressedBlock,
+                                    size_t numRowsToRead) const;
 
   // Helper function used by `decompressBlock` and
   // `decompressBlockToExistingIdTable`. Decompress the `compressedColumn` and
@@ -645,10 +650,16 @@ class CompressedRelationReader {
   // Read the block that is identified by the `blockMetaData` from the `file`,
   // decompress and return it. Only the columns specified by the `columnIndices`
   // are returned.
-  DecompressedBlock readAndDecompressBlock(
+  std::optional<DecompressedBlock> readAndDecompressBlock(
       const CompressedBlockMetadata& blockMetaData,
-      ColumnIndicesRef columnIndices,
-      const LocatedTriplesConfiguration& locatedTriples) const;
+      const ScanImplConfig& scanConfig
+      ) const;
+
+  // TODO comment.
+  DecompressedBlock decompressAndPostprocessBlock(
+      const CompressedBlock& compressedBlock, size_t numRowsToRead,
+      const ScanImplConfig& scanConfig,
+      const CompressedBlockMetadata& metadata) const;
 
   // Read the block identified by `blockMetadata` from disk, decompress it, and
   // return the part that matches `col1Id` (or the whole block if `col1Id` is
@@ -672,10 +683,9 @@ class CompressedRelationReader {
   // multiple worker threads.
 
   IdTableGenerator asyncParallelBlockGenerator(
-      auto beginBlock, auto endBlock, ColumnIndices columnIndices,
-      CancellationHandle cancellationHandle, LimitOffsetClause& limitOffset,
-      FilterDuplicatesAndGraphs blockGraphFilter,
-      LocatedTriplesConfiguration locatedTriples) const;
+      auto beginBlock, auto endBlock, const ScanImplConfig& scanConfig,
+      CancellationHandle cancellationHandle,
+      LimitOffsetClause& limitOffset) const;
 
   // Return a vector that consists of the concatenation of `baseColumns` and
   // `additionalColumns`
@@ -692,6 +702,10 @@ class CompressedRelationReader {
   // whether the `col1Id` is specified or not.
   static std::vector<ColumnIndex> prepareColumnIndices(
       const ScanSpecification& scanSpec, ColumnIndicesRef additionalColumns);
+
+  static ScanImplConfig getScanConfig(
+      const ScanSpecification& scanSpec, ColumnIndicesRef additionalColumns,
+      const LocatedTriplesPerBlock& locatedTriples);
 
   // The common implementation for `getDistinctCol0IdsAndCounts` and
   // `getCol1IdsAndCounts`.
