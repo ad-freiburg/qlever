@@ -69,8 +69,11 @@ using Map = std::unordered_map<
     Id, Set, HashId, std::equal_to<Id>,
     ad_utility::AllocatorWithLimit<std::pair<const Id, Set>>>;
 
-// Helper struct, that allows a generator to yield a combination of those to
-// store it within a new table.
+// Helper struct, that allows a generator to yield a a node and all its
+// connected nodes (the `targets`), along with a local vocabulary and the row
+// index of the node in the input table. The `IdTable` pointer might be null if
+// the `Id` is not associated with a table. In this case the `row` value does
+// not represent anything meaningful and should not be used.
 struct NodeWithTargets {
   Id node_;
   Set targets_;

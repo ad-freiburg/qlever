@@ -161,7 +161,10 @@ class TransitivePathImpl : public TransitivePathBase {
           "not supported");
     }
     auto [startSide, targetSide] = decideDirection();
-    std::shared_ptr<const Result> subRes = subtree_->getResult();
+    // In order to traverse the graph represented by this result, we need random
+    // access across the whole table, so it doesn't make sense to lazily compute
+    // the result.
+    std::shared_ptr<const Result> subRes = subtree_->getResult(false);
 
     if (startSide.isBoundVariable()) {
       std::shared_ptr<const Result> sideRes =
@@ -178,16 +181,54 @@ class TransitivePathImpl : public TransitivePathBase {
     }
     auto gen = computeTransitivePath(std::move(subRes), startSide, targetSide,
                                      !requestLaziness);
-
-    // NOTE: The only place, where the input to a transitive path operation is
-    // not an index scan (which has an empty local vocabulary by default) is the
-    // `LocalVocabTest`. But it doesn't harm to propagate the local vocab here
-    // either.
     return requestLaziness
                ? ProtoResult{std::move(gen), resultSortedOn()}
                : ProtoResult{cppcoro::getSingleElement(std::move(gen)),
                              resultSortedOn()};
-  };
+  }
+
+  /**
+   * @brief Depth-first search to find connected nodes in the graph.
+   * @param edges The adjacency lists, mapping Ids (nodes) to their connected
+   * Ids.
+   * @param startNode The node to start the search from.
+   * @param target Optional target Id. If supplied, only paths which end in this
+   * Id are added to the result.
+   * @return A set of connected nodes in the graph.
+   */
+  Set findConnectedNodes(const T& edges, Id startNode,
+                         const std::optional<Id>& target) const {
+    std::vector<std::pair<Id, size_t>> stack;
+    ad_utility::HashSetWithMemoryLimit<Id> marks{
+        getExecutionContext()->getAllocator()};
+    Set connectedNodes{getExecutionContext()->getAllocator()};
+    stack.emplace_back(startNode, 0);
+
+    if (minDist_ == 0 && (!target.has_value() || startNode == target.value())) {
+      connectedNodes.insert(startNode);
+    }
+
+    while (!stack.empty()) {
+      checkCancellation();
+      auto [node, steps] = stack.back();
+      stack.pop_back();
+
+      if (steps <= maxDist_ && marks.count(node) == 0) {
+        if (steps >= minDist_) {
+          marks.insert(node);
+          if (!target.has_value() || node == target.value()) {
+            connectedNodes.insert(node);
+          }
+        }
+
+        const auto& successors = edges.successors(node);
+        for (auto successor : successors) {
+          stack.emplace_back(successor, steps + 1);
+        }
+      }
+    }
+    return connectedNodes;
+  }
 
   /**
    * @brief Compute the transitive hull starting at the given nodes,
@@ -205,46 +246,16 @@ class TransitivePathImpl : public TransitivePathBase {
                                std::ranges::range auto startNodes,
                                std::optional<Id> target) const {
     ad_utility::Timer timer{ad_utility::Timer::Stopped};
-    std::vector<std::pair<Id, size_t>> stack;
-    ad_utility::HashSetWithMemoryLimit<Id> marks{
-        getExecutionContext()->getAllocator()};
     for (auto&& tableColumn : startNodes) {
       timer.cont();
       LocalVocab mergedVocab = std::move(tableColumn.vocab_);
       mergedVocab.mergeWith(std::span{&edgesVocab, 1});
       size_t currentRow = 0;
       for (Id startNode : tableColumn.column_) {
-        Set connectedNodes{getExecutionContext()->getAllocator()};
-        marks.clear();
-        stack.clear();
-        stack.push_back({startNode, 0});
-
-        if (minDist_ == 0 &&
-            (!target.has_value() || startNode == target.value())) {
-          connectedNodes.insert(startNode);
-        }
-
-        while (!stack.empty()) {
-          checkCancellation();
-          auto [node, steps] = stack.back();
-          stack.pop_back();
-
-          if (steps <= maxDist_ && marks.count(node) == 0) {
-            if (steps >= minDist_) {
-              marks.insert(node);
-              if (!target.has_value() || node == target.value()) {
-                connectedNodes.insert(node);
-              }
-            }
-
-            const auto& successors = edges.successors(node);
-            for (auto successor : successors) {
-              stack.push_back({successor, steps + 1});
-            }
-          }
-        }
-        timer.stop();
-        if (!marks.empty()) {
+        timer.cont();
+        Set connectedNodes = findConnectedNodes(edges, startNode, target);
+        if (!connectedNodes.empty()) {
+          timer.stop();
           runtimeInfo().addDetail("Hull time", timer.msecs());
           co_yield NodeWithTargets{startNode, std::move(connectedNodes),
                                    mergedVocab.clone(), tableColumn.table_,
@@ -252,6 +263,7 @@ class TransitivePathImpl : public TransitivePathBase {
         }
         currentRow++;
       }
+      timer.stop();
     }
   }
 
