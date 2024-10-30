@@ -441,7 +441,7 @@ RelationalExpression<comp>::getPrefilterExpressionForMetadata(
         default:
           // EQ(==) or NE(!=)
           // Given that these two relations are symmetric w.r.t. ?var and Id,
-          // no swap regarding the relational operator is neccessary.
+          // no swap regarding the relational operator is necessary.
           return std::make_unique<p::RelationalExpression<comp>>(valueId);
       }
     };

@@ -73,7 +73,7 @@ namespace {
 // MERGE AND CONJUNCTION
 // _____________________________________________________________________________
 // For our pre-filtering logic over index scans, we need exactly one
-// corresponding PrefilterExpression for each relavant Variable. Thus, if the
+// corresponding PrefilterExpression for each relevant Variable. Thus, if the
 // left and right child contain a PrefilterExpression w.r.t. the same Variable,
 // combine them here for an AND conjunction. In the following, three examples
 // are given on how the following function merges the content of the left and
