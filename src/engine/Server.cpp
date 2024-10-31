@@ -6,14 +6,11 @@
 
 #include "engine/Server.h"
 
-#include <index/DeltaTriples.h>
-
 #include <boost/url.hpp>
 #include <sstream>
 #include <string>
 #include <vector>
 
-#include "ExecuteUpdate.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/QueryPlanner.h"
 #include "global/RuntimeParameters.h"

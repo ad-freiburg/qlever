@@ -2,14 +2,14 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
 
-#include "ExecuteUpdate.h"
+#include "engine/ExecuteUpdate.h"
 
-#include "ExportQueryExecutionTrees.h"
+#include "engine/ExportQueryExecutionTrees.h"
 
 // _____________________________________________________________________________
-void ExecuteUpdate::executeUpdate(const Index& index, const ParsedQuery& query,
-                                  const QueryExecutionTree& qet,
-                                  CancellationHandle cancellationHandle) {
+void ExecuteUpdate::executeUpdate(
+    const Index& index, const ParsedQuery& query, const QueryExecutionTree& qet,
+    DeltaTriples& deltaTriples, const CancellationHandle& cancellationHandle) {
   AD_CONTRACT_CHECK(query.hasUpdateClause());
   auto updateClause = query.updateClause();
   if (!std::holds_alternative<updateClause::GraphUpdate>(updateClause.op_)) {
@@ -21,36 +21,40 @@ void ExecuteUpdate::executeUpdate(const Index& index, const ParsedQuery& query,
 
   auto& vocab = index.getVocab();
 
-  auto [toInsertTemplates, localVocabInsert] =
-      ExecuteUpdate::transformTriplesTemplate(vocab, qet.getVariableColumns(),
-                                              std::move(graphUpdate.toInsert_));
-  auto [toDeleteTemplates, localVocabDelete] =
-      ExecuteUpdate::transformTriplesTemplate(vocab, qet.getVariableColumns(),
-                                              std::move(graphUpdate.toDelete_));
+  auto prepareTemplateAndResultContainer =
+      [&vocab, &qet,
+       &res](std::vector<SparqlTripleSimpleWithGraph>&& tripleTemplates) {
+        auto [transformedTripleTemplates, localVocab] =
+            transformTriplesTemplate(vocab, qet.getVariableColumns(),
+                                     std::move(tripleTemplates));
+        std::vector<IdTriple<>> updateTriples;
+        // The maximum result size is size(query result) x num template rows.
+        // The actual result can be smaller if there are template rows with
+        // variables for which a result row does not have a value.
+        updateTriples.reserve(res->idTable().size() *
+                              transformedTripleTemplates.size());
 
-  std::vector<IdTriple<>> toInsert;
-  std::vector<IdTriple<>> toDelete;
-  // The maximum result size is size(query result) x num template rows. The
-  // actual result can be smaller if there are template rows with variables for
-  // which a result row does not have a value.
-  toInsert.reserve(res->idTable().size() * toInsertTemplates.size());
-  toDelete.reserve(res->idTable().size() * toDeleteTemplates.size());
+        return std::tuple{std::move(transformedTripleTemplates),
+                          std::move(updateTriples), std::move(localVocab)};
+      };
+
+  auto [toInsertTemplates, toInsert, localVocabInsert] =
+      prepareTemplateAndResultContainer(std::move(graphUpdate.toInsert_));
+  auto [toDeleteTemplates, toDelete, localVocabDelete] =
+      prepareTemplateAndResultContainer(std::move(graphUpdate.toDelete_));
+
   for (const auto& [pair, range] :
        ExportQueryExecutionTrees::getRowIndices(query._limitOffset, *res)) {
     auto& idTable = pair.idTable_;
-    for (uint64_t i : range) {
-      ExecuteUpdate::computeAndAddQuadsForResultRow(toInsertTemplates, toInsert,
-                                                    idTable, i);
+    for (const uint64_t i : range) {
+      computeAndAddQuadsForResultRow(toInsertTemplates, toInsert, idTable, i);
       cancellationHandle->throwIfCancelled();
 
-      ExecuteUpdate::computeAndAddQuadsForResultRow(toDeleteTemplates, toDelete,
-                                                    idTable, i);
+      computeAndAddQuadsForResultRow(toDeleteTemplates, toDelete, idTable, i);
       cancellationHandle->throwIfCancelled();
     }
   }
 
-  // TODO<qup42> use the actual DeltaTriples object
-  DeltaTriples deltaTriples(index);
   deltaTriples.insertTriples(cancellationHandle, std::move(toInsert));
   deltaTriples.deleteTriples(cancellationHandle, std::move(toDelete));
 }
@@ -70,14 +74,15 @@ ExecuteUpdate::transformTriplesTemplate(
       [&vocab, &localVocab,
        &variableColumns](TripleComponent component) -> IdOrVariableIndex {
     if (component.isVariable()) {
-      return variableColumns.at(component.getVariable());
+      AD_CORRECTNESS_CHECK(variableColumns.contains(component.getVariable()));
+      return variableColumns.at(component.getVariable()).columnIndex_;
     } else {
       return std::move(component).toValueId(vocab, localVocab);
     }
   };
   Id defaultGraphIri = [&transformSparqlTripleComponent] {
-    IdOrVariableIndex defaultGraph =
-        transformSparqlTripleComponent(DEFAULT_GRAPH_IRI);
+    IdOrVariableIndex defaultGraph = transformSparqlTripleComponent(
+        ad_utility::triple_component::Iri::fromIriref(DEFAULT_GRAPH_IRI));
     AD_CORRECTNESS_CHECK(std::holds_alternative<Id>(defaultGraph));
     return std::get<Id>(defaultGraph);
   }();
@@ -95,7 +100,8 @@ ExecuteUpdate::transformTriplesTemplate(
                   return TripleComponent(i).toValueId(vocab, localVocab);
                 },
                 [&variableColumns](const Variable& var) -> IdOrVariableIndex {
-                  return variableColumns.at(var);
+                  AD_CORRECTNESS_CHECK(variableColumns.contains(var));
+                  return variableColumns.at(var).columnIndex_;
                 }},
             graph);
       };
@@ -114,30 +120,30 @@ ExecuteUpdate::transformTriplesTemplate(
 
 // _____________________________________________________________________________
 std::optional<Id> ExecuteUpdate::resolveVariable(const IdTable& idTable,
-                                                 const size_t& row,
+                                                 const uint64_t& rowIdx,
                                                  IdOrVariableIndex idOrVar) {
+  auto visitId = [](const Id& id) {
+    return id.isUndefined() ? std::optional<Id>{} : id;
+  };
   return std::visit(
       ad_utility::OverloadCallOperator{
-          [&idTable, &row](
-              const ColumnIndexAndTypeInfo& columnInfo) -> std::optional<Id> {
-            const auto id = idTable(row, columnInfo.columnIndex_);
-            return id.isUndefined() ? std::optional<Id>{} : id;
+          [&idTable, &rowIdx, &visitId](const ColumnIndex& columnInfo) {
+            return visitId(idTable(rowIdx, columnInfo));
           },
-          [](const Id& id) -> std::optional<Id> {
-            return id.isUndefined() ? std::optional<Id>{} : id;
-          }},
+          visitId},
       idOrVar);
 }
 
 // _____________________________________________________________________________
 void ExecuteUpdate::computeAndAddQuadsForResultRow(
-    std::vector<TransformedTriple>& templates, std::vector<IdTriple<>>& result,
-    const IdTable& idTable, const uint64_t row) {
+    const std::vector<TransformedTriple>& templates,
+    std::vector<IdTriple<>>& result, const IdTable& idTable,
+    const uint64_t rowIdx) {
   for (const auto& [s, p, o, g] : templates) {
-    auto subject = ExecuteUpdate::resolveVariable(idTable, row, s);
-    auto predicate = ExecuteUpdate::resolveVariable(idTable, row, p);
-    auto object = ExecuteUpdate::resolveVariable(idTable, row, o);
-    auto graph = ExecuteUpdate::resolveVariable(idTable, row, g);
+    auto subject = resolveVariable(idTable, rowIdx, s);
+    auto predicate = resolveVariable(idTable, rowIdx, p);
+    auto object = resolveVariable(idTable, rowIdx, o);
+    auto graph = resolveVariable(idTable, rowIdx, g);
 
     if (!subject.has_value() || !predicate.has_value() || !object.has_value() ||
         !graph.has_value()) {
