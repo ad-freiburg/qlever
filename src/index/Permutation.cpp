@@ -77,6 +77,14 @@ size_t Permutation::getResultSizeOfScan(
                                         locatedTriples(deltaTriples));
 }
 
+// _____________________________________________________________________
+std::pair<size_t, size_t> Permutation::getSizeEstimateForScan(
+    const ScanSpecification& scanSpec, const DeltaTriples& deltaTriples) const {
+  const auto& p = getActualPermutation(scanSpec);
+  return p.reader().getSizeEstimateForScan(scanSpec, p.meta_.blockData(),
+                                           locatedTriples(deltaTriples));
+}
+
 // ____________________________________________________________________________
 IdTable Permutation::getDistinctCol1IdsAndCounts(
     Id col0Id, const CancellationHandle& cancellationHandle,

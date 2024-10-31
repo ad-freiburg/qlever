@@ -580,7 +580,20 @@ class CompressedRelationReader {
       const ScanSpecification& scanSpec,
       const vector<CompressedBlockMetadata>& blocks,
       const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
+  std::pair<size_t, size_t> getSizeEstimateForScan(
+      const ScanSpecification& scanSpec,
+      const vector<CompressedBlockMetadata>& blocks,
+      const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
 
+ private:
+  template <bool exactSize>
+  std::pair<size_t, size_t> getResultSizeImpl(
+      const ScanSpecification& scanSpec,
+      const vector<CompressedBlockMetadata>& blocks,
+      [[maybe_unused]] const LocatedTriplesPerBlock& locatedTriplesPerBlock)
+      const;
+
+ public:
   // For a given relation, determine the `col1Id`s and their counts. This is
   // used for `computeGroupByObjectWithCount`.
   IdTable getDistinctCol1IdsAndCounts(

@@ -635,8 +635,6 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
   return result;
 };
 
-/*
-// ____________________________________________________________________________
 template <bool exactSize>
 std::pair<size_t, size_t> CompressedRelationReader::getResultSizeImpl(
     const ScanSpecification& scanSpec,
@@ -647,17 +645,16 @@ std::pair<size_t, size_t> CompressedRelationReader::getResultSizeImpl(
   // col1Id
   auto relevantBlocks = getRelevantBlocks(scanSpec, blocks);
   auto [beginBlock, endBlock] = getBeginAndEnd(relevantBlocks);
-  // TODO<joka921> The exact size is also wrong as soon as we have GRAPHS
-  // involved.
-  std::array<ColumnIndex, 1> columnIndices{0u};
+
+  auto config = getScanConfig(scanSpec, {}, locatedTriplesPerBlock);
 
   // The first and the last block might be incomplete (that is, only
   // a part of these blocks is actually part of the result,
   // set up a lambda which allows us to read these blocks, and returns
   // the size of the result.
   auto readSizeOfPossiblyIncompleteBlock = [&](const auto& block) {
-    return readPossiblyIncompleteBlock(scanSpec, block, std::nullopt,
-                                       columnIndices, locatedTriplesPerBlock)
+    return readPossiblyIncompleteBlock(scanSpec, config, block, std::nullopt,
+                                       locatedTriplesPerBlock)
         .numRows();
   };
 
@@ -674,24 +671,15 @@ std::pair<size_t, size_t> CompressedRelationReader::getResultSizeImpl(
   }
 
   if (beginBlock == endBlock) {
-    return { numResults, numResults };
+    return {numResults, numResults};
   }
-
-  // TODO<joka921> There are a lot of bugs here when it comes to graph columns.
-  // In particular the prepareColumnIndices should directly add the graph column
-  // if necessary etc.
-  auto allColumns = prepareColumnIndices(scanSpec, {});
-  allColumns.push_back(ADDITIONAL_COLUMN_GRAPH_ID);
-  auto locatedTriples = prepareLocatedTriples(allColumns,
-locatedTriplesPerBlock);
 
   // Determine the total size of the result.
   // First accumulate the complete blocks in the "middle"
   // TODO<joka921> If the block contains  added or deleted triples, we
   // actually have to read/materialize them to get the correct size.
-  std::size_t fromIndex;
-  std::size_t inserted;
-  std::size_t deleted;
+  std::size_t inserted = 0;
+  std::size_t deleted = 0;
   std::ranges::for_each(
       std::ranges::subrange{beginBlock, endBlock}, [&](const auto& block) {
         const auto [ins, del] =
@@ -699,15 +687,24 @@ locatedTriplesPerBlock);
         if (!exactSize || (ins == 0 && del == 0)) {
           inserted += ins;
           deleted += del;
-          fromIndex += block.numRows_;
+          numResults += block.numRows_;
         } else {
-          fromIndex += readAndDecompressBlock(block, allColumns,
-locatedTriples).numRows();
+          // TODO<joka921> We could cache the exact size as soon as we have
+          // merged the block once since the last update.
+          auto b = readAndDecompressBlock(block, config);
+          numResults += b.has_value() ? b.value().numRows() : 0u;
         }
       });
-  return {fromIndex - std::max(deleted, fromIndex), fromIndex + inserted};
+  return {numResults - std::min(deleted, numResults), numResults + inserted};
 }
- */
+
+// ____________________________________________________________________________
+std::pair<size_t, size_t> CompressedRelationReader::getSizeEstimateForScan(
+    const ScanSpecification& scanSpec,
+    const vector<CompressedBlockMetadata>& blocks,
+    const LocatedTriplesPerBlock& locatedTriplesPerBlock) const {
+  return getResultSizeImpl<false>(scanSpec, blocks, locatedTriplesPerBlock);
+}
 
 // ____________________________________________________________________________
 size_t CompressedRelationReader::getResultSizeOfScan(
@@ -715,6 +712,11 @@ size_t CompressedRelationReader::getResultSizeOfScan(
     const vector<CompressedBlockMetadata>& blocks,
     [[maybe_unused]] const LocatedTriplesPerBlock& locatedTriplesPerBlock)
     const {
+  auto [lower, upper] =
+      getResultSizeImpl<true>(scanSpec, blocks, locatedTriplesPerBlock);
+  AD_CORRECTNESS_CHECK(lower == upper);
+  return lower;
+  /*
   // Get all the blocks  that possibly might contain our pair of col0Id and
   // col1Id
   auto relevantBlocks = getRelevantBlocks(scanSpec, blocks);
@@ -752,6 +754,7 @@ size_t CompressedRelationReader::getResultSizeOfScan(
                                   return count + block.numRows_;
                                 });
   return numResults;
+   */
 }
 
 // ____________________________________________________________________________

@@ -90,6 +90,8 @@ class LocatedTriplesPerBlock {
   // the updated triples.
   std::optional<std::vector<CompressedBlockMetadata>> augmentedMetadata_;
   std::vector<CompressedBlockMetadata> originalMetadata_;
+
+ public:
   void updateAugmentedMetadata();
 
  public:

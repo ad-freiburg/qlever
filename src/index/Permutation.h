@@ -120,6 +120,9 @@ class Permutation {
   /// result
   size_t getResultSizeOfScan(const ScanSpecification& scanSpec,
                              const DeltaTriples& deltaTriples) const;
+  std::pair<size_t, size_t> getSizeEstimateForScan(
+      const ScanSpecification& scanSpec,
+      const DeltaTriples& deltaTriples) const;
 
   // _______________________________________________________
   void setKbName(const string& name) { meta_.setName(name); }
