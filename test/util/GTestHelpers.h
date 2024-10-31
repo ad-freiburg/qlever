@@ -156,4 +156,10 @@ class CopyShield {
   bool operator==(const T& other) const requires std::equality_comparable<T> {
     return *pointer_ == other;
   }
+
+  // TODO<joka921> Add requires clause here...
+  friend std::ostream& operator<<(std::ostream& os, const CopyShield& s) {
+    os << *s.pointer_;
+    return os;
+  }
 };

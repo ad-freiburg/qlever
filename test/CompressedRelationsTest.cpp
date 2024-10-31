@@ -688,8 +688,7 @@ TEST(CompressedRelationReader, filterDuplicatesAndGraphs) {
   graphs.emplace();
   graphs->insert(ValueId::makeFromVocabIndex(VocabIndex::make(1)));
   graphs->insert(ValueId::makeFromVocabIndex(VocabIndex::make(2)));
-  f.graphColumn_ = 1;
-  f.deleteGraphColumn_ = false;
+  f = Filter{graphs, 1, false};
   EXPECT_TRUE(f.postprocessBlock(table, metadata));
   EXPECT_THAT(table, matchesIdTableFromVector({{3, 1}, {3, 2}}));
 
@@ -710,9 +709,9 @@ TEST(CompressedRelationReader, makeCanBeSkippedForBlock) {
       {{}, 0, {V(16), V(0), V(0), g}, {V(38), V(4), V(12), g}, {}, false}, 0};
 
   using Graphs = ScanSpecification::Graphs;
-  Graphs graphs = std::nullopt;
-  auto filter =
-      CompressedRelationReader::FilterDuplicatesAndGraphs{graphs, 0, false};
+  auto filter = CompressedRelationReader::FilterDuplicatesAndGraphs{
+      std::nullopt, 0, false};
+  auto& graphs = filter.desiredGraphs_;
   // No information about the contained blocks, and no graph filter specified,
   // so we cannot skip.
   EXPECT_FALSE(filter.canBlockBeSkipped(metadata));

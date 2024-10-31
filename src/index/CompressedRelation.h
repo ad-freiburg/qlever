@@ -652,8 +652,7 @@ class CompressedRelationReader {
   // are returned.
   std::optional<DecompressedBlock> readAndDecompressBlock(
       const CompressedBlockMetadata& blockMetaData,
-      const ScanImplConfig& scanConfig
-      ) const;
+      const ScanImplConfig& scanConfig) const;
 
   // TODO comment.
   DecompressedBlock decompressAndPostprocessBlock(
@@ -671,10 +670,10 @@ class CompressedRelationReader {
   // an unnecessary copy of the block. Therefore, if you know that you need the
   // whole block, use `readAndDecompressBlock` instead.
   DecompressedBlock readPossiblyIncompleteBlock(
-      const ScanSpecification& scanSpec,
+      const ScanSpecification& scanSpec, const ScanImplConfig& scanConfig,
       const CompressedBlockMetadata& blockMetadata,
       std::optional<std::reference_wrapper<LazyScanMetadata>> scanMetadata,
-      ColumnIndicesRef columnIndices, const LocatedTriplesPerBlock&) const;
+      const LocatedTriplesPerBlock&) const;
 
   // Yield all the blocks in the range `[beginBlock, endBlock)`. If the
   // `columnIndices` are set, only the specified columns from the blocks
