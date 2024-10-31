@@ -109,10 +109,10 @@ Estimates SparqlExpression::getEstimatesForFilterExpression(
 }
 
 // _____________________________________________________________________________
-std::optional<std::vector<PrefilterExprVariablePair>>
+std::vector<PrefilterExprVariablePair>
 SparqlExpression::getPrefilterExpressionForMetadata(
     [[maybe_unused]] bool isNegated) const {
-  return std::nullopt;
+  return {};
 };
 
 // _____________________________________________________________________________

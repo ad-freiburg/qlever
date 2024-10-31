@@ -576,7 +576,6 @@ TEST_F(TestPrefilterExprOnBlockMetadata, testWithOneBlockMetadataValue) {
 namespace {
 
 using namespace sparqlExpression;
-using optPrefilterVec = std::optional<std::vector<PrefilterExprVariablePair>>;
 using Literal = ad_utility::triple_component::Literal;
 using Iri = ad_utility::triple_component::Iri;
 using MakeBinarySprqlExprFunc = std::function<SparqlExpression::Ptr(
@@ -666,14 +665,12 @@ constexpr auto orSprqlExpr = &makeOrExpression;
 // NOT (`!`, `SparqlExpression`)
 constexpr auto notSprqlExpr = &makeUnaryNegateExpression;
 
+// ASSERT EQUALITY
 //______________________________________________________________________________
-const auto checkVectorPrefilterExprVariablePair =
+const auto equalityCheckPrefilterVectors =
     [](const std::vector<PrefilterExprVariablePair>& result,
-       const std::vector<PrefilterExprVariablePair>& expected) -> bool {
-  if (result.size() != expected.size()) {
-    ADD_FAILURE() << "Expected vectors (result vs. expected) of equal length";
-    return false;
-  };
+       const std::vector<PrefilterExprVariablePair>& expected) -> void {
+  ASSERT_EQ(result.size(), expected.size());
   const auto isEqualImpl = [](const PrefilterExprVariablePair& resPair,
                               const PrefilterExprVariablePair& expPair) {
     if (*resPair.first != *expPair.first || resPair.second != expPair.second) {
@@ -687,46 +684,26 @@ const auto checkVectorPrefilterExprVariablePair =
     }
     return true;
   };
-  return std::equal(result.begin(), result.end(), expected.begin(),
-                    isEqualImpl);
+  ASSERT_TRUE(
+      std::equal(result.begin(), result.end(), expected.begin(), isEqualImpl));
 };
 
 //______________________________________________________________________________
-const auto checkEqualityPrefilterMethodT =
-    [](const optPrefilterVec& result, const optPrefilterVec& expected) {
-      const auto testEquality =
-          [](const optPrefilterVec& result, const optPrefilterVec& expected) {
-            if (!result.has_value() && !expected.has_value()) {
-              return true;
-            } else if (result.has_value() && expected.has_value()) {
-              return checkVectorPrefilterExprVariablePair(result.value(),
-                                                          expected.value());
-            } else {
-              ADD_FAILURE()
-                  << "Expected both values to either contain a value or to be "
-                     "std::optional.";
-              return false;
-            }
-          };
-      ASSERT_TRUE(testEquality(result, expected));
-    };
-
-//______________________________________________________________________________
-const auto evalToEmptyCheck = [](std::unique_ptr<SparqlExpression> sparqlExpr) {
-  std::vector<PrefilterExprVariablePair> prefilterVarPair;
-  checkEqualityPrefilterMethodT(sparqlExpr->getPrefilterExpressionForMetadata(),
-                                std::nullopt);
-};
-
-//______________________________________________________________________________
+// `evalAndEqualityCheck` evaluates the provided `SparqlExpression` and checks
+// in the following if the resulting vector contains the same
+// `<PrefilterExpression, Variable>` pairs in the correct order. If no
+// `<PrefilterExpression, Variable>` pair is provided, the expected value for
+// the `SparqlExpression` is an empty vector.
 const auto evalAndEqualityCheck =
     [](std::unique_ptr<SparqlExpression> sparqlExpr,
        std::convertible_to<PrefilterExprVariablePair> auto&&... prefilterArgs) {
-      std::vector<PrefilterExprVariablePair> prefilterVarPair;
-      (prefilterVarPair.emplace_back(
-           std::forward<PrefilterExprVariablePair>(prefilterArgs)),
-       ...);
-      checkEqualityPrefilterMethodT(
+      std::vector<PrefilterExprVariablePair> prefilterVarPair = {};
+      if constexpr (sizeof...(prefilterArgs) > 0) {
+        (prefilterVarPair.emplace_back(
+             std::forward<PrefilterExprVariablePair>(prefilterArgs)),
+         ...);
+      }
+      equalityCheckPrefilterVectors(
           sparqlExpr->getPrefilterExpressionForMetadata(),
           std::move(prefilterVarPair));
     };
@@ -787,15 +764,17 @@ TEST(PrefilterExpression, checkPrintFormattedPrefilterExpression) {
 // Test coverage for the default implementation of
 // getPrefilterExpressionForMetadata.
 TEST(SparqlExpression, testGetPrefilterExpressionDefault) {
-  evalToEmptyCheck(makeUnaryMinusExpression(makeLiteralSparqlExpr(IntId(0))));
-  evalToEmptyCheck(makeMultiplyExpression(makeLiteralSparqlExpr(DoubleId(11)),
-                                          makeLiteralSparqlExpr(DoubleId(3))));
-  evalToEmptyCheck(
+  evalAndEqualityCheck(
+      makeUnaryMinusExpression(makeLiteralSparqlExpr(IntId(0))));
+  evalAndEqualityCheck(makeMultiplyExpression(
+      makeLiteralSparqlExpr(DoubleId(11)), makeLiteralSparqlExpr(DoubleId(3))));
+  evalAndEqualityCheck(
       makeStrEndsExpression(makeLiteralSparqlExpr(L("\"Freiburg\"")),
                             makeLiteralSparqlExpr(L("\"burg\""))));
-  evalToEmptyCheck(makeIsIriExpression(makeLiteralSparqlExpr(I("<IriIri>"))));
-  evalToEmptyCheck(makeLogExpression(makeLiteralSparqlExpr(DoubleId(8))));
-  evalToEmptyCheck(
+  evalAndEqualityCheck(
+      makeIsIriExpression(makeLiteralSparqlExpr(I("<IriIri>"))));
+  evalAndEqualityCheck(makeLogExpression(makeLiteralSparqlExpr(DoubleId(8))));
+  evalAndEqualityCheck(
       makeStrIriDtExpression(makeLiteralSparqlExpr(L("\"test\"")),
                              makeLiteralSparqlExpr(I("<test_iri>"))));
 }
@@ -1055,17 +1034,17 @@ TEST(SparqlExpression, getEmptyPrefilterFromSparqlRelational) {
   const Variable var = Variable{"?x"};
   const Iri iri = I("<Iri>");
   const Literal lit = L("\"lit\"");
-  evalToEmptyCheck(leSprql(var, var));
-  evalToEmptyCheck(neqSprql(iri, var));
-  evalToEmptyCheck(eqSprql(var, iri));
-  evalToEmptyCheck(neqSprql(IntId(10), DoubleId(23.3)));
-  evalToEmptyCheck(gtSprql(DoubleId(10), lit));
-  evalToEmptyCheck(ltSprql(VocabId(10), BoolId(10)));
-  evalToEmptyCheck(geSprql(lit, lit));
-  evalToEmptyCheck(eqSprql(iri, iri));
-  evalToEmptyCheck(orSprqlExpr(eqSprql(var, var), gtSprql(var, IntId(0))));
-  evalToEmptyCheck(orSprqlExpr(eqSprql(var, var), gtSprql(var, var)));
-  evalToEmptyCheck(andSprqlExpr(eqSprql(var, var), gtSprql(var, var)));
+  evalAndEqualityCheck(leSprql(var, var));
+  evalAndEqualityCheck(neqSprql(iri, var));
+  evalAndEqualityCheck(eqSprql(var, iri));
+  evalAndEqualityCheck(neqSprql(IntId(10), DoubleId(23.3)));
+  evalAndEqualityCheck(gtSprql(DoubleId(10), lit));
+  evalAndEqualityCheck(ltSprql(VocabId(10), BoolId(10)));
+  evalAndEqualityCheck(geSprql(lit, lit));
+  evalAndEqualityCheck(eqSprql(iri, iri));
+  evalAndEqualityCheck(orSprqlExpr(eqSprql(var, var), gtSprql(var, IntId(0))));
+  evalAndEqualityCheck(orSprqlExpr(eqSprql(var, var), gtSprql(var, var)));
+  evalAndEqualityCheck(andSprqlExpr(eqSprql(var, var), gtSprql(var, var)));
 }
 
 //______________________________________________________________________________
@@ -1076,68 +1055,68 @@ TEST(SparqlExpression, getEmptyPrefilterForMoreComplexSparqlExpressions) {
   const Variable varY = Variable{"?y"};
   const Variable varZ = Variable{"?z"};
   // ?x <= 10.00 OR ?y > 10
-  evalToEmptyCheck(
+  evalAndEqualityCheck(
       orSprqlExpr(leSprql(DoubleId(10), varX), gtSprql(IntId(10), varY)));
   // ?x >= VocabId(23) OR ?z == VocabId(1)
-  evalToEmptyCheck(
+  evalAndEqualityCheck(
       orSprqlExpr(geSprql(varX, VocabId(23)), eqSprql(varZ, VocabId(1))));
   // (?x < VocabId(10) OR ?z <= VocabId(4)) OR ?z != 5.00
-  evalToEmptyCheck(orSprqlExpr(
+  evalAndEqualityCheck(orSprqlExpr(
       orSprqlExpr(ltSprql(varX, VocabId(10)), leSprql(VocabId(4), varZ)),
       neqSprql(varZ, DoubleId(5))));
   // !(?z > 10.20 AND ?x < 0.001)
   // is equal to
   // ?z <= 10.20 OR ?x >= 0.001
-  evalToEmptyCheck(notSprqlExpr(andSprqlExpr(gtSprql(DoubleId(10.2), varZ),
-                                             ltSprql(DoubleId(0.001), varX))));
+  evalAndEqualityCheck(notSprqlExpr(andSprqlExpr(
+      gtSprql(DoubleId(10.2), varZ), ltSprql(DoubleId(0.001), varX))));
   // !(?x > 10.20 AND ?z != VocabId(22))
   // is equal to
   // ?x <= 10.20 OR ?z == VocabId(22)
-  evalToEmptyCheck(notSprqlExpr(andSprqlExpr(gtSprql(DoubleId(10.2), varX),
-                                             neqSprql(VocabId(22), varZ))));
+  evalAndEqualityCheck(notSprqlExpr(andSprqlExpr(gtSprql(DoubleId(10.2), varX),
+                                                 neqSprql(VocabId(22), varZ))));
   // !(!((?x < VocabId(10) OR ?x <= VocabId(4)) OR ?z != 5.00))
   // is equal to
   // (?x < VocabId(10) OR ?x <= VocabId(4)) OR ?z != 5.00
-  evalToEmptyCheck(notSprqlExpr(notSprqlExpr(orSprqlExpr(
+  evalAndEqualityCheck(notSprqlExpr(notSprqlExpr(orSprqlExpr(
       orSprqlExpr(ltSprql(varX, VocabId(10)), leSprql(VocabId(4), varX)),
       neqSprql(varZ, DoubleId(5))))));
   // !(?x != 10 AND !(?y >= 10.00 OR ?z <= 10))
   // is equal to
   // ?x == 10 OR ?y >= 10.00 OR ?z <= 10
-  evalToEmptyCheck(notSprqlExpr(
+  evalAndEqualityCheck(notSprqlExpr(
       andSprqlExpr(neqSprql(varX, IntId(10)),
                    notSprqlExpr(orSprqlExpr(geSprql(varY, DoubleId(10.00)),
                                             leSprql(varZ, IntId(10)))))));
   // !((?x != 10 AND ?z != 10) AND (?y == 10 AND ?x >= 20))
   // is equal to
   //?x == 10 OR ?z == 10 OR ?y != 10 OR ?x < 20
-  evalToEmptyCheck(notSprqlExpr(andSprqlExpr(
+  evalAndEqualityCheck(notSprqlExpr(andSprqlExpr(
       andSprqlExpr(neqSprql(varX, IntId(10)), neqSprql(varZ, IntId(10))),
       andSprqlExpr(eqSprql(varY, IntId(10)), geSprql(varX, IntId(20))))));
   // !(?z >= 40 AND (?z != 10.00 AND ?y != VocabId(1)))
   // is equal to
   // ?z <= 40 OR ?z == 10.00 OR ?y == VocabId(1)
-  evalToEmptyCheck(notSprqlExpr(andSprqlExpr(
+  evalAndEqualityCheck(notSprqlExpr(andSprqlExpr(
       geSprql(varZ, IntId(40)), andSprqlExpr(neqSprql(varZ, DoubleId(10.00)),
                                              neqSprql(varY, VocabId(1))))));
   // ?z <= true OR !(?x == 10 AND ?y == 10)
   // is equal to
   // ?z <= true OR ?x != 10 OR ?y != 10
-  evalToEmptyCheck(
+  evalAndEqualityCheck(
       orSprqlExpr(leSprql(varZ, BoolId(true)),
                   notSprqlExpr(andSprqlExpr(eqSprql(varX, IntId(10)),
                                             eqSprql(IntId(10), varY)))));
   // !(!(?z <= true OR !(?x == 10 AND ?y == 10)))
   // is equal to
   // ?z <= true OR ?x != 10 OR ?y != 10
-  evalToEmptyCheck(notSprqlExpr(notSprqlExpr(
+  evalAndEqualityCheck(notSprqlExpr(notSprqlExpr(
       orSprqlExpr(leSprql(varZ, BoolId(true)),
                   notSprqlExpr(andSprqlExpr(eqSprql(varX, IntId(10)),
                                             eqSprql(IntId(10), varY)))))));
   // !(!(?x != 10 OR !(?y >= 10.00 AND ?z <= 10)))
   // is equal to
   // ?x != 10 OR ?y < 10.00 OR ?z > 10
-  evalToEmptyCheck(notSprqlExpr(notSprqlExpr(
+  evalAndEqualityCheck(notSprqlExpr(notSprqlExpr(
       orSprqlExpr(neqSprql(varX, IntId(10)),
                   notSprqlExpr(andSprqlExpr(geSprql(varY, DoubleId(10.00)),
                                             leSprql(varZ, IntId(10))))))));
@@ -1145,7 +1124,7 @@ TEST(SparqlExpression, getEmptyPrefilterForMoreComplexSparqlExpressions) {
   // VocabId(20))))
   // is equal to
   // ?x == VocabId(10) OR ?y >= 25 OR ?z == true AND ?country == VocabId(20)
-  evalToEmptyCheck(notSprqlExpr(andSprqlExpr(
+  evalAndEqualityCheck(notSprqlExpr(andSprqlExpr(
       notSprqlExpr(
           orSprqlExpr(eqSprql(varX, VocabId(10)), geSprql(varY, IntId(25)))),
       notSprqlExpr(notSprqlExpr(

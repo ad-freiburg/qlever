@@ -118,8 +118,8 @@ class SparqlExpressionPimpl {
       uint64_t inputSizeEstimate,
       const std::optional<Variable>& primarySortKeyVariable);
 
-  std::optional<std::vector<PrefilterExprVariablePair>>
-  getPrefilterExpressionForMetadata(bool isNegated = false) const;
+  std::vector<PrefilterExprVariablePair> getPrefilterExpressionForMetadata(
+      bool isNegated = false) const;
 
   SparqlExpression* getPimpl() { return _pimpl.get(); }
   [[nodiscard]] const SparqlExpression* getPimpl() const {

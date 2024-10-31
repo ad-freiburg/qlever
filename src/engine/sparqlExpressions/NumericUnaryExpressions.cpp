@@ -30,8 +30,8 @@ class UnaryNegateExpressionImpl : public NaryExpression<NaryOperation> {
  public:
   using NaryExpression<NaryOperation>::NaryExpression;
 
-  std::optional<std::vector<PrefilterExprVariablePair>>
-  getPrefilterExpressionForMetadata(bool isNegated) const override {
+  std::vector<PrefilterExprVariablePair> getPrefilterExpressionForMetadata(
+      bool isNegated) const override {
     AD_CORRECTNESS_CHECK(this->N == 1);
     namespace p = prefilterExpressions;
     // The bool flag isNegated (by default false) acts as decision variable
@@ -65,20 +65,17 @@ class UnaryNegateExpressionImpl : public NaryExpression<NaryOperation> {
     // {<(>= IntId(10)), ?x>, <(>= IntId(10)), ?y>} (apply NotExpression) =>
     // {<(!(>= IntId(10))), ?x>, <(!(>= IntId(10))), ?y>}
     // => Result (2): {<(< IntId(10)), ?x>, <(< IntId(10)), ?y>}
-    auto optExprVarVec =
+    auto child =
         this->getNthChild(0).value()->getPrefilterExpressionForMetadata(
             !isNegated);
-    if (!optExprVarVec.has_value()) {
-      return std::nullopt;
-    }
     std::ranges::for_each(
-        optExprVarVec.value() | std::views::keys,
+        child | std::views::keys,
         [](std::unique_ptr<p::PrefilterExpression>& expression) {
           expression =
               std::make_unique<p::NotExpression>(std::move(expression));
         });
-    p::detail::checkPropertiesForPrefilterConstruction(optExprVarVec.value());
-    return optExprVarVec;
+    p::detail::checkPropertiesForPrefilterConstruction(child);
+    return child;
   }
 };
 

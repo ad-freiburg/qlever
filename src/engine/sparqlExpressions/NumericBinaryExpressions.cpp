@@ -99,8 +99,7 @@ namespace {
 // Returns {<((>= 10 AND <= 20) AND != 15), ?x>, <(= 10), ?y>}
 //______________________________________________________________________________
 template <typename BinaryPrefilterExpr>
-std::optional<std::vector<PrefilterExprVariablePair>>
-mergeChildrenForAndExpressionImpl(
+std::vector<PrefilterExprVariablePair> mergeChildrenForAndExpressionImpl(
     std::vector<PrefilterExprVariablePair>&& leftChild,
     std::vector<PrefilterExprVariablePair>&& rightChild) {
   namespace pd = prefilterExpressions::detail;
@@ -131,11 +130,6 @@ mergeChildrenForAndExpressionImpl(
   }
   std::ranges::move(itLeft, leftChild.end(), std::back_inserter(resPairs));
   std::ranges::move(itRight, rightChild.end(), std::back_inserter(resPairs));
-  if (resPairs.empty()) {
-    // No PrefilterExpression(s) available with this conjunction merge on the
-    // contents of left and right child.
-    return std::nullopt;
-  }
   pd::checkPropertiesForPrefilterConstruction(resPairs);
   return resPairs;
 }
@@ -175,8 +169,7 @@ mergeChildrenForAndExpressionImpl(
 // PrefilterExpresion {<(>= 10 OR <= 0), ?x>}.
 //______________________________________________________________________________
 template <typename BinaryPrefilterExpr>
-std::optional<std::vector<PrefilterExprVariablePair>>
-mergeChildrenForOrExpressionImpl(
+std::vector<PrefilterExprVariablePair> mergeChildrenForOrExpressionImpl(
     std::vector<PrefilterExprVariablePair>&& leftChild,
     std::vector<PrefilterExprVariablePair>&& rightChild) {
   namespace pd = prefilterExpressions::detail;
@@ -199,11 +192,6 @@ mergeChildrenForOrExpressionImpl(
     } else {
       ++itRight;
     }
-  }
-  if (resPairs.empty()) {
-    // No PrefilterExpression(s) available with this conjunction merge on the
-    // contents of left and right child.
-    return std::nullopt;
   }
   pd::checkPropertiesForPrefilterConstruction(resPairs);
   return resPairs;
@@ -279,8 +267,8 @@ class LogicalBinaryExpressionImpl : public NaryExpression<NaryOperation> {
  public:
   using NaryExpression<NaryOperation>::NaryExpression;
 
-  std::optional<std::vector<PrefilterExprVariablePair>>
-  getPrefilterExpressionForMetadata(bool isNegated) const override {
+  std::vector<PrefilterExprVariablePair> getPrefilterExpressionForMetadata(
+      bool isNegated) const override {
     AD_CORRECTNESS_CHECK(this->N == 2);
     auto leftChild =
         this->getNthChild(0).value()->getPrefilterExpressionForMetadata(
@@ -289,11 +277,7 @@ class LogicalBinaryExpressionImpl : public NaryExpression<NaryOperation> {
         this->getNthChild(1).value()->getPrefilterExpressionForMetadata(
             isNegated);
     return constructPrefilterExpr::getMergeFunction<BinaryPrefilterExpr>(
-        isNegated)(
-        leftChild.has_value() ? std::move(leftChild.value())
-                              : std::vector<PrefilterExprVariablePair>{},
-        rightChild.has_value() ? std::move(rightChild.value())
-                               : std::vector<PrefilterExprVariablePair>{});
+        isNegated)(std::move(leftChild), std::move(rightChild));
   }
 };
 

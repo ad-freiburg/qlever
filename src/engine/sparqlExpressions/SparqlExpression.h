@@ -101,7 +101,7 @@ class SparqlExpression {
   // column is required to be sorted, and hence is as a consequence also binary
   // evaluable regarding the relational (e.g. `>=`) / logical (`&&`, `||` and
   // `!`) expressions.
-  virtual std::optional<std::vector<PrefilterExprVariablePair>>
+  virtual std::vector<PrefilterExprVariablePair>
   getPrefilterExpressionForMetadata(
       [[maybe_unused]] bool isNegated = false) const;
 

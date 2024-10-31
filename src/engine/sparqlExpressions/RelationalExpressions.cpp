@@ -411,7 +411,7 @@ ExpressionResult InExpression::evaluate(
 
 // _____________________________________________________________________________
 template <Comparison comp>
-std::optional<std::vector<PrefilterExprVariablePair>>
+std::vector<PrefilterExprVariablePair>
 RelationalExpression<comp>::getPrefilterExpressionForMetadata(
     [[maybe_unused]] bool isNegated) const {
   namespace p = prefilterExpressions;
@@ -478,7 +478,7 @@ RelationalExpression<comp>::getPrefilterExpressionForMetadata(
                                              valueId->value(), true);
     }
   }
-  return std::nullopt;
+  return {};
 }
 
 // _____________________________________________________________________________
