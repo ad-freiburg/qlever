@@ -130,7 +130,7 @@ using IriOrUriExpression = NARY<1, FV<std::identity, IriOrUriValueGetter>>;
   auto utf8Len = std::ranges::count_if(s, [](char c) {
     return (static_cast<unsigned char>(c) & 0xC0) != 0x80;
   });
-  return Id::makeFromInt(static_cast<int64_t>(utf8Len));
+  return Id::makeFromInt(utf8Len);
 };
 using StrlenExpression =
     StringExpressionImpl<1, LiftStringFunction<decltype(strlen)>>;
