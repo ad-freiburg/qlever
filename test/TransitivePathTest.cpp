@@ -97,16 +97,27 @@ class TransitivePathTest
     using ::testing::UnorderedElementsAreArray;
     ASSERT_NE(result.isFullyMaterialized(), requestLaziness());
     if (requestLaziness()) {
-      IdTable aggregateTable{expected.numColumns(), expected.getAllocator()};
-      std::vector<LocalVocab> localVocabs;
-      for (auto& [idTable, localVocab] : result.idTables()) {
-        localVocabs.emplace_back(std::move(localVocab));
-        aggregateTable.insertAtEnd(idTable);
-      }
-      EXPECT_THAT(aggregateTable, UnorderedElementsAreArray(expected));
+      const auto& [idTable, localVocab] =
+          aggregateTables(std::move(result.idTables()), expected.numColumns());
+      EXPECT_THAT(idTable, UnorderedElementsAreArray(expected));
     } else {
       EXPECT_THAT(result.idTable(), UnorderedElementsAreArray(expected));
     }
+  }
+
+  // Call testCase three times with differing arguments. This is used to test
+  // scenarios where the same input table is delivered in different splits
+  // either wrapped within a generator or as a single table.
+  static void runTestWithForcedSideTableScenarios(
+      const std::invocable<std::variant<IdTable, std::vector<IdTable>>,
+                           bool> auto& testCase,
+      IdTable idTable,
+      ad_utility::source_location loc =
+          ad_utility::source_location::current()) {
+    auto trace = generateLocationTrace(loc);
+    testCase(idTable.clone(), false);
+    testCase(split(idTable), false);
+    testCase(idTable.clone(), true);
   }
 };
 
@@ -285,61 +296,30 @@ TEST_P(TransitivePathTest, idToLeftBound) {
 
   TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
   TransitivePathSide right(std::nullopt, 1, V(4), 1);
-  {
-    auto T = makePathBound(
-        true, sub.clone(), {Variable{"?start"}, Variable{"?target"}},
-        leftOpTable.clone(), 1, {Variable{"?x"}, Variable{"?start"}}, left,
-        right, 0, std::numeric_limits<size_t>::max(), false);
+  runTestWithForcedSideTableScenarios(
+      [&](auto tableVariant, bool forceFullyMaterialized) {
+        auto T = makePathBound(
+            true, sub.clone(), {Variable{"?start"}, Variable{"?target"}},
+            std::move(tableVariant), 1, {Variable{"?x"}, Variable{"?start"}},
+            left, right, 0, std::numeric_limits<size_t>::max(),
+            forceFullyMaterialized);
 
-    auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
-    assertResultMatchesIdTable(resultTable, expected);
-  }
-  {
-    auto T = makePathBound(
-        true, sub.clone(), {Variable{"?start"}, Variable{"?target"}},
-        leftOpTable.clone(), 1, {std::nullopt, Variable{"?start"}}, left, right,
-        0, std::numeric_limits<size_t>::max(), false);
+        auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+        assertResultMatchesIdTable(resultTable, expected);
+      },
+      leftOpTable.clone());
+  runTestWithForcedSideTableScenarios(
+      [&](auto tableVariant, bool forceFullyMaterialized) {
+        auto T = makePathBound(
+            true, sub.clone(), {Variable{"?start"}, Variable{"?target"}},
+            std::move(tableVariant), 1, {std::nullopt, Variable{"?start"}},
+            left, right, 0, std::numeric_limits<size_t>::max(),
+            forceFullyMaterialized);
 
-    auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
-    assertResultMatchesIdTable(resultTable, expected);
-  }
-  {
-    auto T = makePathBound(
-        true, sub.clone(), {Variable{"?start"}, Variable{"?target"}},
-        split(leftOpTable), 1, {Variable{"?x"}, Variable{"?start"}}, left,
-        right, 0, std::numeric_limits<size_t>::max());
-
-    auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
-    assertResultMatchesIdTable(resultTable, expected);
-  }
-  {
-    auto T = makePathBound(
-        true, sub.clone(), {Variable{"?start"}, Variable{"?target"}},
-        split(leftOpTable), 1, {std::nullopt, Variable{"?start"}}, left, right,
-        0, std::numeric_limits<size_t>::max());
-
-    auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
-    assertResultMatchesIdTable(resultTable, expected);
-  }
-  {
-    auto T = makePathBound(
-        true, sub.clone(), {Variable{"?start"}, Variable{"?target"}},
-        leftOpTable.clone(), 1, {Variable{"?x"}, Variable{"?start"}}, left,
-        right, 0, std::numeric_limits<size_t>::max(), true);
-
-    auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
-    assertResultMatchesIdTable(resultTable, expected);
-  }
-  {
-    auto T = makePathBound(
-        true, std::move(sub), {Variable{"?start"}, Variable{"?target"}},
-        std::move(leftOpTable), 1, {std::nullopt, Variable{"?start"}},
-        std::move(left), std::move(right), 0,
-        std::numeric_limits<size_t>::max(), true);
-
-    auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
-    assertResultMatchesIdTable(resultTable, expected);
-  }
+        auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+        assertResultMatchesIdTable(resultTable, expected);
+      },
+      std::move(leftOpTable));
 }
 
 // _____________________________________________________________________________
@@ -366,61 +346,30 @@ TEST_P(TransitivePathTest, idToRightBound) {
 
   TransitivePathSide left(std::nullopt, 0, V(0), 0);
   TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
-  {
-    auto T = makePathBound(
-        false, sub.clone(), {Variable{"?start"}, Variable{"?target"}},
-        rightOpTable.clone(), 0, {Variable{"?target"}, Variable{"?x"}}, left,
-        right, 0, std::numeric_limits<size_t>::max(), false);
+  runTestWithForcedSideTableScenarios(
+      [&](auto tableVariant, bool forceFullyMaterialized) {
+        auto T = makePathBound(
+            false, sub.clone(), {Variable{"?start"}, Variable{"?target"}},
+            std::move(tableVariant), 0, {Variable{"?target"}, Variable{"?x"}},
+            left, right, 0, std::numeric_limits<size_t>::max(),
+            forceFullyMaterialized);
 
-    auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
-    assertResultMatchesIdTable(resultTable, expected);
-  }
-  {
-    auto T = makePathBound(
-        false, sub.clone(), {Variable{"?start"}, Variable{"?target"}},
-        rightOpTable.clone(), 0, {Variable{"?target"}, std::nullopt}, left,
-        right, 0, std::numeric_limits<size_t>::max(), false);
+        auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+        assertResultMatchesIdTable(resultTable, expected);
+      },
+      rightOpTable.clone());
+  runTestWithForcedSideTableScenarios(
+      [&](auto tableVariant, bool forceFullyMaterialized) {
+        auto T = makePathBound(
+            false, sub.clone(), {Variable{"?start"}, Variable{"?target"}},
+            std::move(tableVariant), 0, {Variable{"?target"}, std::nullopt},
+            left, right, 0, std::numeric_limits<size_t>::max(),
+            forceFullyMaterialized);
 
-    auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
-    assertResultMatchesIdTable(resultTable, expected);
-  }
-  {
-    auto T = makePathBound(
-        false, sub.clone(), {Variable{"?start"}, Variable{"?target"}},
-        split(rightOpTable), 0, {Variable{"?target"}, Variable{"?x"}}, left,
-        right, 0, std::numeric_limits<size_t>::max());
-
-    auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
-    assertResultMatchesIdTable(resultTable, expected);
-  }
-  {
-    auto T = makePathBound(
-        false, sub.clone(), {Variable{"?start"}, Variable{"?target"}},
-        split(rightOpTable), 0, {Variable{"?target"}, std::nullopt}, left,
-        right, 0, std::numeric_limits<size_t>::max());
-
-    auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
-    assertResultMatchesIdTable(resultTable, expected);
-  }
-  {
-    auto T = makePathBound(
-        false, sub.clone(), {Variable{"?start"}, Variable{"?target"}},
-        rightOpTable.clone(), 0, {Variable{"?target"}, Variable{"?x"}}, left,
-        right, 0, std::numeric_limits<size_t>::max(), true);
-
-    auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
-    assertResultMatchesIdTable(resultTable, expected);
-  }
-  {
-    auto T = makePathBound(
-        false, std::move(sub), {Variable{"?start"}, Variable{"?target"}},
-        std::move(rightOpTable), 0, {Variable{"?target"}, std::nullopt},
-        std::move(left), std::move(right), 0,
-        std::numeric_limits<size_t>::max(), true);
-
-    auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
-    assertResultMatchesIdTable(resultTable, expected);
-  }
+        auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+        assertResultMatchesIdTable(resultTable, expected);
+      },
+      std::move(rightOpTable));
 }
 
 // _____________________________________________________________________________
@@ -452,34 +401,18 @@ TEST_P(TransitivePathTest, leftBoundToVar) {
 
   TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
   TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
-  {
-    auto T = makePathBound(
-        true, sub.clone(), {Variable{"?start"}, Variable{"?target"}},
-        leftOpTable.clone(), 1, {Variable{"?x"}, Variable{"?start"}}, left,
-        right, 0, std::numeric_limits<size_t>::max(), false);
+  runTestWithForcedSideTableScenarios(
+      [&](auto tableVariant, bool forceFullyMaterialized) {
+        auto T = makePathBound(
+            true, sub.clone(), {Variable{"?start"}, Variable{"?target"}},
+            std::move(tableVariant), 1, {Variable{"?x"}, Variable{"?start"}},
+            left, right, 0, std::numeric_limits<size_t>::max(),
+            forceFullyMaterialized);
 
-    auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
-    assertResultMatchesIdTable(resultTable, expected);
-  }
-  {
-    auto T = makePathBound(
-        true, sub.clone(), {Variable{"?start"}, Variable{"?target"}},
-        split(leftOpTable), 1, {Variable{"?x"}, Variable{"?start"}}, left,
-        right, 0, std::numeric_limits<size_t>::max());
-
-    auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
-    assertResultMatchesIdTable(resultTable, expected);
-  }
-  {
-    auto T = makePathBound(
-        true, std::move(sub), {Variable{"?start"}, Variable{"?target"}},
-        std::move(leftOpTable), 1, {Variable{"?x"}, Variable{"?start"}},
-        std::move(left), std::move(right), 0,
-        std::numeric_limits<size_t>::max(), true);
-
-    auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
-    assertResultMatchesIdTable(resultTable, expected);
-  }
+        auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+        assertResultMatchesIdTable(resultTable, expected);
+      },
+      std::move(leftOpTable));
 }
 
 // _____________________________________________________________________________
@@ -511,34 +444,18 @@ TEST_P(TransitivePathTest, rightBoundToVar) {
 
   TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
   TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
-  {
-    auto T = makePathBound(
-        false, sub.clone(), {Variable{"?start"}, Variable{"?target"}},
-        rightOpTable.clone(), 0, {Variable{"?target"}, Variable{"?x"}}, left,
-        right, 0, std::numeric_limits<size_t>::max(), false);
+  runTestWithForcedSideTableScenarios(
+      [&](auto tableVariant, bool forceFullyMaterialized) {
+        auto T = makePathBound(
+            false, sub.clone(), {Variable{"?start"}, Variable{"?target"}},
+            std::move(tableVariant), 0, {Variable{"?target"}, Variable{"?x"}},
+            left, right, 0, std::numeric_limits<size_t>::max(),
+            forceFullyMaterialized);
 
-    auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
-    assertResultMatchesIdTable(resultTable, expected);
-  }
-  {
-    auto T = makePathBound(
-        false, sub.clone(), {Variable{"?start"}, Variable{"?target"}},
-        split(rightOpTable), 0, {Variable{"?target"}, Variable{"?x"}}, left,
-        right, 0, std::numeric_limits<size_t>::max());
-
-    auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
-    assertResultMatchesIdTable(resultTable, expected);
-  }
-  {
-    auto T = makePathBound(
-        false, std::move(sub), {Variable{"?start"}, Variable{"?target"}},
-        std::move(rightOpTable), 0, {Variable{"?target"}, Variable{"?x"}},
-        std::move(left), std::move(right), 0,
-        std::numeric_limits<size_t>::max(), true);
-
-    auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
-    assertResultMatchesIdTable(resultTable, expected);
-  }
+        auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+        assertResultMatchesIdTable(resultTable, expected);
+      },
+      std::move(rightOpTable));
 }
 
 // _____________________________________________________________________________
