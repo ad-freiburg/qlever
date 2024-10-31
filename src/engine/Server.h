@@ -5,6 +5,8 @@
 
 #pragma once
 
+#include <util/http/websocket/MessageSender.h>
+
 #include <string>
 #include <vector>
 
@@ -118,9 +120,14 @@ class Server {
   Awaitable<void> process(
       const ad_utility::httpUtils::HttpRequest auto& request, auto&& send);
 
-  /// Handle a http request that asks for the processing of a query.
+  // Indicates which type of operation is being processed.
+  enum class OperationType { Query, Update };
+
+  /// Handle a http request that asks for the processing of an query or update.
+  /// This is only a wrapper for `processQuery` and `processUpdate` which
+  /// does the error handling.
   /// \param params The key-value-pairs  sent in the HTTP GET request.
-  /// \param query The query.
+  /// \param queryOrUpdate The query or update.
   /// \param requestTimer Timer that measure the total processing
   ///                     time of this request.
   /// \param request The HTTP request.
@@ -128,11 +135,36 @@ class Server {
   ///             `HttpServer.h` for documentation).
   /// \param timeLimit Duration in seconds after which the query will be
   ///                  cancelled.
+  template <OperationType type>
+  Awaitable<void> processQueryOrUpdate(
+      const ad_utility::url_parser::ParamValueMap& params,
+      const string& queryOrUpdate, ad_utility::Timer& requestTimer,
+      const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
+      TimeLimit timeLimit);
+  // Do the actual execution of a query.
   Awaitable<void> processQuery(
       const ad_utility::url_parser::ParamValueMap& params, const string& query,
       ad_utility::Timer& requestTimer,
       const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
       TimeLimit timeLimit);
+
+  // Determine the media type to be used for the result. The media type is
+  // determined (in this order) by the current action (e.g.,
+  // "action=csv_export") and by the "Accept" header of the request.
+  static ad_utility::MediaType determineMediaType(
+      const ad_utility::url_parser::ParamValueMap& params,
+      const ad_utility::httpUtils::HttpRequest auto& request);
+  FRIEND_TEST(ServerTest, determineMediaType);
+  // Determine whether the subtrees and the result should be pinned.
+  static std::pair<bool, bool> determineResultPinning(
+      const ad_utility::url_parser::ParamValueMap& params);
+  FRIEND_TEST(ServerTest, determineResultPinning);
+  // Sets up the PlannedQuery s.t. it is ready to be executed.
+  Awaitable<PlannedQuery> setupPlannedQuery(
+      const ad_utility::url_parser::ParamValueMap& params,
+      const std::string& operation, QueryExecutionContext& qec,
+      SharedCancellationHandle handle, TimeLimit timeLimit,
+      const ad_utility::Timer& requestTimer);
 
   static json composeErrorResponseJson(
       const string& query, const std::string& errorMsg,
@@ -204,19 +236,16 @@ class Server {
   /// HTTP error response.
   bool checkAccessToken(std::optional<std::string_view> accessToken) const;
 
-  /// Checks if a URL parameter exists in the request, if we are allowed to
-  /// access it and it matches the expected `value`. If yes, return the value,
-  /// otherwise return `std::nullopt`. If `value` is `std::nullopt`, only check
-  /// if the key exists. We need this because we have parameters like
-  /// "cmd=stats", where a fixed combination of the key and value determines the
-  /// kind of action, as well as parameters like "index-decription=...", where
-  /// the key determines the kind of action. If the key is not found, always
-  /// return `std::nullopt`. If `accessAllowed` is false and a value is present,
-  /// throw an exception.
+  /// Checks if a URL parameter exists in the request, and it matches the
+  /// expected `value`. If yes, return the value, otherwise return
+  /// `std::nullopt`. If `value` is `std::nullopt`, only check if the key
+  /// exists. We need this because we have parameters like "cmd=stats", where a
+  /// fixed combination of the key and value determines the kind of action, as
+  /// well as parameters like "index-decription=...", where the key determines
+  /// the kind of action. If the key is not found, always return `std::nullopt`.
   static std::optional<std::string> checkParameter(
       const ad_utility::url_parser::ParamValueMap& parameters,
-      std::string_view key, std::optional<std::string> value,
-      bool accessAllowed);
+      std::string_view key, std::optional<std::string> value);
   FRIEND_TEST(ServerTest, checkParameter);
 
   /// Check if user-provided timeout is authorized with a valid access-token or
