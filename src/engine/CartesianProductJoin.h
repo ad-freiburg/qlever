@@ -82,11 +82,8 @@ class CartesianProductJoin : public Operation {
   // Copy each element from the `inputColumn` `groupSize` times to the
   // `targetColumn`. Repeat until the `targetColumn` is completely filled. Skip
   // the first `offset` write operations to the `targetColumn`. Call
-  // `checkCancellation` after each write. If `StaticGroupSize != 0`, then the
-  // group size is known at compile time which allows for more efficient loop
-  // processing for very small group sizes.
-  template <size_t StaticGroupSize = 0>
+  // `checkCancellation` after each write.
   void writeResultColumn(std::span<Id> targetColumn,
                          std::span<const Id> inputColumn, size_t groupSize,
-                         size_t offset);
+                         size_t offset) const;
 };
