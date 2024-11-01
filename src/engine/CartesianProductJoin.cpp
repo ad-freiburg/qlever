@@ -124,53 +124,44 @@ void CartesianProductJoin::writeResultColumn(std::span<Id> targetColumn,
 // ____________________________________________________________________________
 ProtoResult CartesianProductJoin::computeResult(
     [[maybe_unused]] bool requestLaziness) {
-  IdTable result{getResultWidth(), getExecutionContext()->getAllocator()};
-  std::vector<std::shared_ptr<const Result>> subResults;
-
   if (knownEmptyResult()) {
-    return {std::move(result), resultSortedOn(), LocalVocab{}};
+    return {IdTable{getResultWidth(), getExecutionContext()->getAllocator()},
+            resultSortedOn(), LocalVocab{}};
   }
+  std::vector<std::shared_ptr<const Result>> subResults = calculateSubResults();
 
-  // We don't need to fully materialize the child results if we have a LIMIT
-  // specified and an OFFSET of 0.
-  // TODO<joka921> We could in theory also apply this optimization if a
-  // non-zero OFFSET is specified, but this would make the algorithm more
-  // complicated.
-  std::optional<LimitOffsetClause> limitIfPresent = getLimit();
-  if (!getLimit()._limit.has_value() || getLimit()._offset != 0) {
-    limitIfPresent = std::nullopt;
+  IdTable result = writeAllColumns(subResults);
+
+  // Dereference all the subresult pointers because `getSharedLocalVocabFrom...`
+  // requires a range of references, not pointers.
+  auto subResultsDeref = std::views::transform(
+      subResults, [](auto& x) -> decltype(auto) { return *x; });
+  return {std::move(result), resultSortedOn(),
+          Result::getMergedLocalVocab(subResultsDeref)};
+}
+
+// ____________________________________________________________________________
+VariableToColumnMap CartesianProductJoin::computeVariableToColumnMap() const {
+  VariableToColumnMap result;
+  // It is crucial that we also count the columns in the inputs to which no
+  // variable was assigned. This is managed by the `offset` variable.
+  size_t offset = 0;
+  for (const auto& child : childView()) {
+    for (auto varCol : child.getExternallyVisibleVariableColumns()) {
+      varCol.second.columnIndex_ += offset;
+      result.insert(std::move(varCol));
+    }
+    // `getResultWidth` contains all the columns, not only the ones to which a
+    // variable is assigned.
+    offset += child.getResultWidth();
   }
+  return result;
+}
 
-  // Get all child results (possibly with limit, see above).
-  for (auto& child : childView()) {
-    if (limitIfPresent.has_value() && child.supportsLimit()) {
-      child.setLimit(limitIfPresent.value());
-    }
-    subResults.push_back(child.getResult());
-
-    const auto& table = subResults.back()->idTable();
-    // Early stopping: If one of the results is empty, we can stop early.
-    if (table.empty()) {
-      break;
-    }
-
-    // If one of the children is the neutral element (because of a triple with
-    // zero variables), we can simply ignore it here.
-    if (table.numRows() == 1 && table.numColumns() == 0) {
-      subResults.pop_back();
-      continue;
-    }
-    // Example for the following calculation: If we have a LIMIT of 1000 and
-    // the first child already has a result of size 100, then the second child
-    // needs to evaluate only its first 10 results. The +1 is because integer
-    // divisions are rounded down by default.
-    if (limitIfPresent.has_value()) {
-      limitIfPresent.value()._limit = limitIfPresent.value()._limit.value() /
-                                          subResults.back()->idTable().size() +
-                                      1;
-    }
-  }
-
+// _____________________________________________________________________________
+IdTable CartesianProductJoin::writeAllColumns(
+    const std::vector<std::shared_ptr<const Result>>& subResults) const {
+  IdTable result{getResultWidth(), getExecutionContext()->getAllocator()};
   // TODO<joka921> Find a solution to cheaply handle the case, that only a
   // single result is left. This can probably be done by using the
   // `ProtoResult`.
@@ -210,29 +201,51 @@ ProtoResult CartesianProductJoin::computeResult(
       groupSize *= input.numRows();
     }
   }
-
-  // Dereference all the subresult pointers because `getSharedLocalVocabFrom...`
-  // requires a range of references, not pointers.
-  auto subResultsDeref = std::views::transform(
-      subResults, [](auto& x) -> decltype(auto) { return *x; });
-  return {std::move(result), resultSortedOn(),
-          Result::getMergedLocalVocab(subResultsDeref)};
+  return result;
 }
 
-// ____________________________________________________________________________
-VariableToColumnMap CartesianProductJoin::computeVariableToColumnMap() const {
-  VariableToColumnMap result;
-  // It is crucial that we also count the columns in the inputs to which no
-  // variable was assigned. This is managed by the `offset` variable.
-  size_t offset = 0;
-  for (const auto& child : childView()) {
-    for (auto varCol : child.getExternallyVisibleVariableColumns()) {
-      varCol.second.columnIndex_ += offset;
-      result.insert(std::move(varCol));
-    }
-    // `getResultWidth` contains all the columns, not only the ones to which a
-    // variable is assigned.
-    offset += child.getResultWidth();
+// _____________________________________________________________________________
+std::vector<std::shared_ptr<const Result>>
+CartesianProductJoin::calculateSubResults() {
+  std::vector<std::shared_ptr<const Result>> subResults;
+  // We don't need to fully materialize the child results if we have a LIMIT
+  // specified and an OFFSET of 0.
+  // TODO<joka921> We could in theory also apply this optimization if a
+  // non-zero OFFSET is specified, but this would make the algorithm more
+  // complicated.
+  std::optional<LimitOffsetClause> limitIfPresent = getLimit();
+  if (!getLimit()._limit.has_value() || getLimit()._offset != 0) {
+    limitIfPresent = std::nullopt;
   }
-  return result;
+
+  // Get all child results (possibly with limit, see above).
+  for (auto& child : childView()) {
+    if (limitIfPresent.has_value() && child.supportsLimit()) {
+      child.setLimit(limitIfPresent.value());
+    }
+    subResults.push_back(child.getResult());
+
+    const auto& table = subResults.back()->idTable();
+    // Early stopping: If one of the results is empty, we can stop early.
+    if (table.empty()) {
+      break;
+    }
+
+    // If one of the children is the neutral element (because of a triple with
+    // zero variables), we can simply ignore it here.
+    if (table.numRows() == 1 && table.numColumns() == 0) {
+      subResults.pop_back();
+      continue;
+    }
+    // Example for the following calculation: If we have a LIMIT of 1000 and
+    // the first child already has a result of size 100, then the second child
+    // needs to evaluate only its first 10 results. The +1 is because integer
+    // divisions are rounded down by default.
+    if (limitIfPresent.has_value()) {
+      limitIfPresent.value()._limit = limitIfPresent.value()._limit.value() /
+                                          subResults.back()->idTable().size() +
+                                      1;
+    }
+  }
+  return subResults;
 }

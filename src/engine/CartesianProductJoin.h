@@ -86,4 +86,11 @@ class CartesianProductJoin : public Operation {
   void writeResultColumn(std::span<Id> targetColumn,
                          std::span<const Id> inputColumn, size_t groupSize,
                          size_t offset) const;
+
+  // Write all columns of the subresults into an `IdTable` and return it.
+  IdTable writeAllColumns(
+      const std::vector<std::shared_ptr<const Result>>& subResults) const;
+
+  // Calculate the subresults of the children and store them into a vector.
+  std::vector<std::shared_ptr<const Result>> calculateSubResults();
 };
