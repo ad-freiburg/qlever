@@ -1926,32 +1926,6 @@ TEST(SparqlParser, aggregateExpressions) {
       matchAggregate<GroupConcatExpression>(true, V{"?x"}, separator(";")));
 }
 
-// Update queries are WIP. The individual parts to parse some update queries
-// are in place the code to process them is still unfinished. Therefore we
-// don't accept update queries.
-TEST(SparqlParser, updateQueryUnsupported) {
-  auto expectUpdateFails = ExpectParseFails<&Parser::queryOrUpdate>{};
-  auto contains = [](const std::string& s) { return ::testing::HasSubstr(s); };
-  auto updateUnsupported =
-      contains("SPARQL 1.1 Update is currently not supported by QLever.");
-
-  // Test all the cases because some functionality will be enabled shortly.
-  expectUpdateFails("INSERT DATA { <a> <b> <c> }", updateUnsupported);
-  expectUpdateFails("DELETE DATA { <a> <b> <c> }", updateUnsupported);
-  expectUpdateFails("DELETE { <a> <b> <c> } WHERE { ?s ?p ?o }",
-                    updateUnsupported);
-  expectUpdateFails("INSERT { <a> <b> <c> } WHERE { ?s ?p ?o }",
-                    updateUnsupported);
-  expectUpdateFails("DELETE WHERE { <a> <b> <c> }", updateUnsupported);
-  expectUpdateFails("LOAD <a>", updateUnsupported);
-  expectUpdateFails("CLEAR GRAPH <a>", updateUnsupported);
-  expectUpdateFails("DROP GRAPH <a>", updateUnsupported);
-  expectUpdateFails("CREATE GRAPH <a>", updateUnsupported);
-  expectUpdateFails("ADD GRAPH <a> TO DEFAULT", updateUnsupported);
-  expectUpdateFails("MOVE DEFAULT TO GRAPH <a>", updateUnsupported);
-  expectUpdateFails("COPY GRAPH <a> TO GRAPH <a>", updateUnsupported);
-}
-
 TEST(SparqlParser, Quads) {
   auto expectQuads = ExpectCompleteParse<&Parser::quads>{defaultPrefixMap};
   auto expectQuadsFails = ExpectParseFails<&Parser::quads>{};

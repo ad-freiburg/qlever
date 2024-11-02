@@ -780,6 +780,11 @@ boost::asio::awaitable<void> Server::processQuery(
     plannedQuery = co_await parseAndPlan(query, queryDatasets, qec,
                                          cancellationHandle, timeLimit);
     AD_CORRECTNESS_CHECK(plannedQuery.has_value());
+    // This may be caused by a bug (the code is not yet tested well) or by an
+    // attack which tries to circumvent (not yet existing) access controls for
+    // Update.
+    AD_CONTRACT_CHECK(!plannedQuery.value().parsedQuery_.hasUpdateClause(),
+                      "Expected Query but got Update.");
     auto& qet = plannedQuery.value().queryExecutionTree_;
     qet.isRoot() = true;  // allow pinning of the final result
     auto timeForQueryPlanning = requestTimer.msecs();

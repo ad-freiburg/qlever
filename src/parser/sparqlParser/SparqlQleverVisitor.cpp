@@ -222,10 +222,8 @@ ParsedQuery Visitor::visit(Parser::QueryOrUpdateContext* ctx) {
                   "Empty query (this includes queries that only consist "
                   "of comments or prefix declarations).");
     }
-    reportNotSupported(ctx->update(), "SPARQL 1.1 Update is");
-  } else {
-    return visit(ctx->query());
   }
+  return visitAlternative<ParsedQuery>(ctx->query(), ctx->update());
 }
 
 // ____________________________________________________________________________________
