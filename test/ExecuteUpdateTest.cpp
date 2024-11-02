@@ -4,10 +4,10 @@
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
-#include <index/IndexImpl.h>
 
 #include "QueryPlannerTestHelpers.h"
 #include "engine/ExecuteUpdate.h"
+#include "index/IndexImpl.h"
 #include "util/GTestHelpers.h"
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
@@ -18,7 +18,7 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
   index.getImpl().setGlobalIndexAndComparatorOnlyForTesting();
   auto& vocab = const_cast<Index::Vocab&>(index.getVocab());
   vocab.createFromSet({"\"foo\"", "<bar>", std::string{DEFAULT_GRAPH_IRI}},
-                      "vocTest1.dat");
+                      "vocExecuteUpdateTest.dat");
   // Helpers
   auto expectTransformTriplesTemplate =
       [&vocab](const VariableToColumnMap& variableColumns,
@@ -32,6 +32,15 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
                                                     std::move(triples));
         EXPECT_THAT(transformedTriples, expectedTransformedTriples);
         EXPECT_THAT(localVocab, expectedLocalVocab);
+      };
+  auto expectTransformTriplesTemplateFails =
+      [&vocab](const VariableToColumnMap& variableColumns,
+               std::vector<SparqlTripleSimpleWithGraph>&& triples,
+               const testing::Matcher<const std::string&>& messageMatcher) {
+        AD_EXPECT_THROW_WITH_MESSAGE(
+            ExecuteUpdate::transformTriplesTemplate(vocab, variableColumns,
+                                                    std::move(triples)),
+            messageMatcher);
       };
   auto Iri = [](const std::string& iri) {
     return ad_utility::triple_component::Iri::fromIriref(iri);
@@ -73,27 +82,19 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
       testing::SizeIs(1));
   // A variable in the template (`?f`) is not mapped in the
   // `VariableToColumnMap`.
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      expectTransformTriplesTemplate(
-          {},
-          {SparqlTripleSimpleWithGraph{Literal("\"foo\""), Iri("<bar>"),
-                                       Variable("?f"),
-                                       SparqlTripleSimpleWithGraph::Graph{}}},
-          testing::ElementsAre(testing::ElementsAre(
-              VocabIndex(0), VocabIndex(1), 0UL, VocabIndex(2))),
-          testing::IsEmpty()),
+  expectTransformTriplesTemplateFails(
+      {},
+      {SparqlTripleSimpleWithGraph{Literal("\"foo\""), Iri("<bar>"),
+                                   Variable("?f"),
+                                   SparqlTripleSimpleWithGraph::Graph{}}},
       testing::HasSubstr(
           "Assertion `variableColumns.contains(component.getVariable())` "
           "failed."));
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      expectTransformTriplesTemplate(
-          {},
-          {SparqlTripleSimpleWithGraph{
-              Literal("\"foo\""), Iri("<bar>"), Literal("\"foo\""),
-              SparqlTripleSimpleWithGraph::Graph{Variable("?f")}}},
-          testing::ElementsAre(testing::ElementsAre(
-              VocabIndex(0), VocabIndex(1), 0UL, VocabIndex(2))),
-          testing::IsEmpty()),
+  expectTransformTriplesTemplateFails(
+      {},
+      {SparqlTripleSimpleWithGraph{
+          Literal("\"foo\""), Iri("<bar>"), Literal("\"foo\""),
+          SparqlTripleSimpleWithGraph::Graph{Variable("?f")}}},
       testing::HasSubstr("Assertion `variableColumns.contains(var)` failed."));
   // Variables in the template are mapped to their column index.
   expectTransformTriplesTemplate(

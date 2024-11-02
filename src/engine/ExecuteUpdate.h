@@ -32,16 +32,17 @@ class ExecuteUpdate {
   FRIEND_TEST(ExecuteUpdate, transformTriplesTemplate);
 
   // Resolve a single `IdOrVariable` to an `Id` by looking up the value in the
-  // result row. The `Id`s will never be undefined. If (and only if) the `Id`
-  // would be undefined, `std::nullopt` is returned.
+  // result row. The `Id`s will never be undefined. If (and only if) the input
+  // `Id` or the `Id` looked up in the `IdTable` is undefined then
+  // `std::nullopt` is returned.
   static std::optional<Id> resolveVariable(const IdTable& idTable,
                                            const uint64_t& rowIdx,
                                            IdOrVariableIndex idOrVar);
   FRIEND_TEST(ExecuteUpdate, resolveVariable);
 
-  // Calculate and add the set of quads for the update that results
-  // interpolating one result row into the template. This yields quads without
-  // variables which can be used with `DeltaTriples`.
+  // Calculate and add the set of quads for the update that results from
+  // interpolating one result row into the template. The resulting `IdTriple`s
+  // consist of only `Id`s.
   static void computeAndAddQuadsForResultRow(
       const std::vector<TransformedTriple>& templates,
       std::vector<IdTriple<>>& result, const IdTable& idTable, uint64_t rowIdx);
