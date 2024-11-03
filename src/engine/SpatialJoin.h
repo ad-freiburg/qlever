@@ -97,7 +97,7 @@ class SpatialJoin : public Operation {
   std::optional<size_t> getMaxResults() const;
 
   // options which can be used for the algorithm, which calculates the result
-  enum Algorithm { Baseline, S2Geometry, BoundingBox };
+  enum class Algorithm { Baseline, S2Geometry, BoundingBox };
 
   void selectAlgorithm(Algorithm algorithm) { algorithm_ = algorithm; }
 
@@ -141,5 +141,5 @@ class SpatialJoin : public Operation {
   // between the two objects
   bool addDistToResult_ = true;
   const string nameDistanceInternal_ = "?distOfTheTwoObjectsAddedInternally";
-  Algorithm algorithm_ = BoundingBox;
+  Algorithm algorithm_ = Algorithm::BoundingBox;
 };

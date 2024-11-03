@@ -226,7 +226,7 @@ Result SpatialJoinAlgorithms::S2geometryAlgorithm() {
 
 // ____________________________________________________________________________
 std::vector<box> SpatialJoinAlgorithms::computeBoundingBox(
-    const point& startPoint) {
+    const point& startPoint) const {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
               rightJoinCol, numColumns, maxDist, maxResults] = params_;
   if (!maxDist.has_value()) {
@@ -239,19 +239,22 @@ std::vector<box> SpatialJoinAlgorithms::computeBoundingBox(
   auto archaversine = [](double theta) { return std::acos(1 - 2 * theta); };
 
   // safety buffer for numerical inaccuracies
-  double maxDistInMetersBuffer = static_cast<double>(maxDist.value());
+  double maxDistInMetersBuffer;
   if (maxDist.value() < 10) {
     maxDistInMetersBuffer = 10;
-  } else if (maxDist.value() < std::numeric_limits<long long>::max() / 1.02) {
-    maxDistInMetersBuffer = 1.01 * maxDist.value();
+  } else if (static_cast<double>(maxDist.value()) <
+             static_cast<double>(std::numeric_limits<long long>::max()) /
+                 1.02) {
+    maxDistInMetersBuffer = 1.01 * static_cast<double>(maxDist.value());
   } else {
-    maxDistInMetersBuffer = std::numeric_limits<long long>::max();
+    maxDistInMetersBuffer =
+        static_cast<double>(std::numeric_limits<long long>::max());
   }
 
   // for large distances, where the lower calculation would just result in
   // a single bounding box for the whole planet, do an optimized version
-  if (maxDist.value() > circumferenceMax_ / 4.0 &&
-      maxDist.value() < circumferenceMax_ / 2.01) {
+  if (static_cast<double>(maxDist.value()) > circumferenceMax_ / 4.0 &&
+      static_cast<double>(maxDist.value()) < circumferenceMax_ / 2.01) {
     return computeAntiBoundingBox(startPoint);
   }
 
@@ -279,7 +282,7 @@ std::vector<box> SpatialJoinAlgorithms::computeBoundingBox(
   double alpha = maxDistInMetersBuffer / radius_;
   double gamma =
       (90 - std::abs(startPoint.get<1>())) * (2 * std::numbers::pi / 360);
-  double beta = std::acos((std::cos(gamma) / std::cos(alpha)));
+  double beta = std::acos(std::cos(gamma) / std::cos(alpha));
   double delta = 0;
   if (maxDistInMetersBuffer > circumferenceMax_ / 20) {
     // use law of cosines
@@ -295,16 +298,16 @@ std::vector<box> SpatialJoinAlgorithms::computeBoundingBox(
   double rightLonBound = startPoint.get<0>() + lonRange;
   // test for "overflows" and create two bounding boxes if necessary
   if (leftLonBound < -180) {
-    box box1 =
+    auto box1 =
         box(point(-180, lowerLatBound), point(rightLonBound, upperLatBound));
-    box box2 = box(point(leftLonBound + 360, lowerLatBound),
-                   point(180, upperLatBound));
+    auto box2 = box(point(leftLonBound + 360, lowerLatBound),
+                    point(180, upperLatBound));
     return {box1, box2};
   } else if (rightLonBound > 180) {
-    box box1 =
+    auto box1 =
         box(point(leftLonBound, lowerLatBound), point(180, upperLatBound));
-    box box2 = box(point(-180, lowerLatBound),
-                   point(rightLonBound - 360, upperLatBound));
+    auto box2 = box(point(-180, lowerLatBound),
+                    point(rightLonBound - 360, upperLatBound));
     return {box1, box2};
   }
   // default case, when no bound has an "overflow"
@@ -314,7 +317,7 @@ std::vector<box> SpatialJoinAlgorithms::computeBoundingBox(
 
 // ____________________________________________________________________________
 std::vector<box> SpatialJoinAlgorithms::computeAntiBoundingBox(
-    const point& startPoint) {
+    const point& startPoint) const {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
               rightJoinCol, numColumns, maxDist, maxResults] = params_;
   if (!maxDist.has_value()) {
@@ -329,7 +332,7 @@ std::vector<box> SpatialJoinAlgorithms::computeAntiBoundingBox(
   // only consider the distance from the point to the antiPoint, subtract
   // maxDist and a safety margine from that
   double antiDist =
-      (circumferenceMin_ / 2.0) - maxDist.value() * 1.01;  // safety margin
+      (circumferenceMin_ / 2.0) - static_cast<double>(maxDist.value()) * 1.01;
   // use the bigger circumference as an additional safety margin, use 2.01
   // instead of 2.0 because of rounding inaccuracies in floating point
   // operations
@@ -364,37 +367,38 @@ std::vector<box> SpatialJoinAlgorithms::computeAntiBoundingBox(
   if (!northPoleTouched) {
     // add upper bounding box(es)
     if (boxCrosses180Longitude) {
-      boxes.push_back(box(point(leftBound, upperBound), point(180, 90)));
-      boxes.push_back(box(point(-180, upperBound), point(rightBound, 90)));
+      boxes.emplace_back(box(point(leftBound, upperBound), point(180, 90)));
+      boxes.emplace_back(box(point(-180, upperBound), point(rightBound, 90)));
     } else {
-      boxes.push_back(box(point(leftBound, upperBound), point(rightBound, 90)));
+      boxes.emplace_back(
+          box(point(leftBound, upperBound), point(rightBound, 90)));
     }
   }
   if (!southPoleTouched) {
     // add lower bounding box(es)
     if (boxCrosses180Longitude) {
-      boxes.push_back(box(point(leftBound, -90), point(180, lowerBound)));
-      boxes.push_back(box(point(-180, -90), point(rightBound, lowerBound)));
+      boxes.emplace_back(box(point(leftBound, -90), point(180, lowerBound)));
+      boxes.emplace_back(box(point(-180, -90), point(rightBound, lowerBound)));
     } else {
-      boxes.push_back(
+      boxes.emplace_back(
           box(point(leftBound, -90), point(rightBound, lowerBound)));
     }
   }
   // add the box(es) inbetween the longitude lines
   if (boxCrosses180Longitude) {
     // only one box needed to cover the longitudes
-    boxes.push_back(box(point(rightBound, -90), point(leftBound, 90)));
+    boxes.emplace_back(box(point(rightBound, -90), point(leftBound, 90)));
   } else {
     // two boxes needed, one left and one right of the anti bounding box
-    boxes.push_back(box(point(-180, -90), point(leftBound, 90)));
-    boxes.push_back(box(point(rightBound, -90), point(180, 90)));
+    boxes.emplace_back(box(point(-180, -90), point(leftBound, 90)));
+    boxes.emplace_back(box(point(rightBound, -90), point(180, 90)));
   }
   return boxes;
 }
 
 // ____________________________________________________________________________
 bool SpatialJoinAlgorithms::containedInBoundingBoxes(
-    const std::vector<box>& bbox, point point1) {
+    const std::vector<box>& bbox, point point1) const {
   // correct lon bounds if necessary
   while (point1.get<0>() < -180) {
     point1.set<0>(point1.get<0>() + 360);
@@ -408,10 +412,10 @@ bool SpatialJoinAlgorithms::containedInBoundingBoxes(
     point1.set<1>(90);
   }
 
-  for (size_t i = 0; i < bbox.size(); i++) {
-    if (boost::geometry::covered_by(point1, bbox.at(i))) {
-      return true;
-    }
+  if (std::ranges::any_of(bbox.cbegin(), bbox.cend(), [point1](box box_) {
+        return boost::geometry::covered_by(point1, box_);
+      })) {
+    return true;
   }
   return false;
 }
@@ -426,20 +430,12 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
   auto smallerResult = idTableLeft;
   auto otherResult = idTableRight;
   bool leftResSmaller = true;
-  /*auto smallerChild = childLeft_;
-  auto otherChild = childRight_;
-  auto smallerVariable = leftChildVariable_;
-  auto otherVariable = rightChildVariable_;*/
   auto smallerResJoinCol = leftJoinCol;
   auto otherResJoinCol = rightJoinCol;
   if (idTableLeft->numRows() > idTableRight->numRows()) {
     smallerResult = idTableRight;
     otherResult = idTableLeft;
     leftResSmaller = false;
-    /*smallerChild = childRight_;
-    otherChild = childLeft_;
-    smallerVariable = rightChildVariable_;
-    otherVariable = leftChildVariable_; */
     smallerResJoinCol = rightJoinCol;
     otherResJoinCol = leftJoinCol;
   }
@@ -457,22 +453,23 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
     rtree.insert(std::make_pair(p, i));
   }
   for (size_t i = 0; i < otherResult->numRows(); i++) {
-    // ColumnIndex otherJoinCol = getJoinCol(otherChild, otherVariable);
     auto geopoint1 = getPoint(otherResult, i, otherResJoinCol);
     point p(geopoint1.value().getLng(), geopoint1.value().getLat());
 
     // query the other rtree for every point using the following bounding box
     std::vector<box> bbox = computeBoundingBox(p);
     std::vector<value> results;
-    for (size_t k = 0; k < bbox.size(); k++) {
-      rtree.query(bgi::intersects(bbox.at(k)), std::back_inserter(results));
-    }
-    for (size_t k = 0; k < results.size(); k++) {
-      size_t rowLeft = results.at(k).second;
+
+    std::ranges::for_each(bbox, [&](box bbox) {
+      rtree.query(bgi::intersects(bbox), std::back_inserter(results));
+    });
+
+    std::ranges::for_each(results, [&](value res) {
+      size_t rowLeft = res.second;
       size_t rowRight = i;
       if (!leftResSmaller) {
         rowLeft = i;
-        rowRight = results.at(k).second;
+        rowRight = res.second;
       }
       auto distance = computeDist(idTableLeft, idTableRight, rowLeft, rowRight,
                                   leftJoinCol, rightJoinCol);
@@ -481,9 +478,9 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
         addResultTableEntry(&result, idTableLeft, idTableRight, rowLeft,
                             rowRight, distance);
       }
-    }
+    });
   }
-  Result resTable =
+  auto resTable =
       Result(std::move(result), std::vector<ColumnIndex>{}, LocalVocab{});
   return resTable;
 }

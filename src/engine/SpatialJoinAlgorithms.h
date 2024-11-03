@@ -11,9 +11,9 @@
 namespace bg = boost::geometry;
 namespace bgi = boost::geometry::index;
 
-typedef bg::model::point<double, 2, bg::cs::cartesian> point;
-typedef bg::model::box<point> box;
-typedef std::pair<point, size_t> value;
+using point = bg::model::point<double, 2, bg::cs::cartesian>;
+using box = bg::model::box<point>;
+using value = std::pair<point, size_t>;
 
 class SpatialJoinAlgorithms {
  public:
@@ -58,17 +58,18 @@ class SpatialJoinAlgorithms {
   // this function computes the bounding box(es), which represent all points,
   // which are in reach of the starting point with a distance of at most
   // maxDistanceInMeters
-  std::vector<box> computeBoundingBox(const point& startPoint);
+  std::vector<box> computeBoundingBox(const point& startPoint) const;
 
   // this helper function calculates the bounding boxes based on a box, where
-  // definetly no match can occur. This function gets used, when the usual
+  // definitely no match can occur. This function gets used, when the usual
   // procedure, would just result in taking a big bounding box, which covers
   // the whole planet (so for large max distances)
-  std::vector<box> computeAntiBoundingBox(const point& startPoint);
+  std::vector<box> computeAntiBoundingBox(const point& startPoint) const;
 
   // this function returns true, when the given point is contained in any of the
   // bounding boxes
-  bool containedInBoundingBoxes(const std::vector<box>& bbox, point point1);
+  bool containedInBoundingBoxes(const std::vector<box>& bbox,
+                                point point1) const;
 
   QueryExecutionContext* qec_;
   PreparedSpatialJoinParams params_;
