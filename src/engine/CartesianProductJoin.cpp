@@ -124,10 +124,6 @@ void CartesianProductJoin::writeResultColumn(std::span<Id> targetColumn,
 // ____________________________________________________________________________
 ProtoResult CartesianProductJoin::computeResult(
     [[maybe_unused]] bool requestLaziness) {
-  if (knownEmptyResult()) {
-    return {IdTable{getResultWidth(), getExecutionContext()->getAllocator()},
-            resultSortedOn(), LocalVocab{}};
-  }
   std::vector<std::shared_ptr<const Result>> subResults = calculateSubResults();
 
   IdTable result = writeAllColumns(subResults);
