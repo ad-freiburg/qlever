@@ -118,10 +118,10 @@ class RelationalExpression : public PrefilterExpression {
 // Helper struct for a compact class implementation regarding the logical
 // operations `AND` and `OR`. `NOT` is implemented separately given that the
 // expression is unary (single child expression).
-enum struct LogicalOperators { AND, OR };
+enum struct LogicalOperator { AND, OR };
 
 //______________________________________________________________________________
-template <LogicalOperators Operation>
+template <LogicalOperator Operation>
 class LogicalExpression : public PrefilterExpression {
  private:
   std::unique_ptr<PrefilterExpression> child1_;
@@ -171,8 +171,8 @@ template class RelationalExpression<CompOp::GT>;
 template class RelationalExpression<CompOp::EQ>;
 template class RelationalExpression<CompOp::NE>;
 
-template class LogicalExpression<LogicalOperators::AND>;
-template class LogicalExpression<LogicalOperators::OR>;
+template class LogicalExpression<LogicalOperator::AND>;
+template class LogicalExpression<LogicalOperator::OR>;
 
 //______________________________________________________________________________
 // Definition of the RelationalExpression for LT, LE, EQ, NE, GE and GT.
@@ -192,9 +192,9 @@ using GreaterThanExpression = prefilterExpressions::RelationalExpression<
 //______________________________________________________________________________
 // Definition of the LogicalExpression for AND and OR.
 using AndExpression = prefilterExpressions::LogicalExpression<
-    prefilterExpressions::LogicalOperators::AND>;
+    prefilterExpressions::LogicalOperator::AND>;
 using OrExpression = prefilterExpressions::LogicalExpression<
-    prefilterExpressions::LogicalOperators::OR>;
+    prefilterExpressions::LogicalOperator::OR>;
 
 namespace detail {
 //______________________________________________________________________________

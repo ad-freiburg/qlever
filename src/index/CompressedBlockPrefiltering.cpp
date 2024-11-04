@@ -123,6 +123,42 @@ static auto getSetUnion(const std::vector<BlockMetadata>& blocks1,
   return mergedVectors;
 }
 
+//______________________________________________________________________________
+// Return `CompOp`s as string.
+static std::string getRelationalOpStr(const CompOp relOp) {
+  using enum CompOp;
+  switch (relOp) {
+    case LT:
+      return "LT(<)";
+    case LE:
+      return "LE(<=)";
+    case EQ:
+      return "EQ(=)";
+    case NE:
+      return "NE(!=)";
+    case GE:
+      return "GE(>=)";
+    case GT:
+      return "GT(>)";
+    default:
+      AD_FAIL();
+  }
+}
+
+//______________________________________________________________________________
+// Return `LogicalOperator`s as string.
+static std::string getLogicalOpStr(const LogicalOperator logOp) {
+  using enum LogicalOperator;
+  switch (logOp) {
+    case AND:
+      return "AND(&&)";
+    case OR:
+      return "OR(||)";
+    default:
+      AD_FAIL();
+  }
+}
+
 // SECTION PREFILTER EXPRESSION (BASE CLASS)
 //______________________________________________________________________________
 std::vector<BlockMetadata> PrefilterExpression::evaluate(
@@ -246,17 +282,17 @@ template <CompOp Comparison>
 std::string RelationalExpression<Comparison>::info(
     [[maybe_unused]] size_t depth) const {
   std::stringstream stream;
-  stream << "Prefilter RelationalExpression<" << static_cast<int>(Comparison)
+  stream << "Prefilter RelationalExpression<" << getRelationalOpStr(Comparison)
          << ">\nValueId: " << referenceId_ << std::endl;
   return stream.str();
 };
 
 // SECTION LOGICAL OPERATIONS
 //______________________________________________________________________________
-template <LogicalOperators Operation>
+template <LogicalOperator Operation>
 std::unique_ptr<PrefilterExpression>
 LogicalExpression<Operation>::logicalComplement() const {
-  using enum LogicalOperators;
+  using enum LogicalOperator;
   // Source De-Morgan's laws: De Morgan's laws, Wikipedia.
   // Reference: https://en.wikipedia.org/wiki/De_Morgan%27s_laws
   if constexpr (Operation == OR) {
@@ -272,10 +308,10 @@ LogicalExpression<Operation>::logicalComplement() const {
 };
 
 //______________________________________________________________________________
-template <LogicalOperators Operation>
+template <LogicalOperator Operation>
 std::vector<BlockMetadata> LogicalExpression<Operation>::evaluateImpl(
     const std::vector<BlockMetadata>& input, size_t evaluationColumn) const {
-  using enum LogicalOperators;
+  using enum LogicalOperator;
   if constexpr (Operation == AND) {
     auto resultChild1 = child1_->evaluate(input, evaluationColumn);
     return child2_->evaluate(resultChild1, evaluationColumn);
@@ -287,7 +323,7 @@ std::vector<BlockMetadata> LogicalExpression<Operation>::evaluateImpl(
 };
 
 //______________________________________________________________________________
-template <LogicalOperators Operation>
+template <LogicalOperator Operation>
 bool LogicalExpression<Operation>::operator==(
     const PrefilterExpression& other) const {
   const LogicalExpression<Operation>* otherlogical =
@@ -300,14 +336,14 @@ bool LogicalExpression<Operation>::operator==(
 };
 
 //______________________________________________________________________________
-template <LogicalOperators Operation>
+template <LogicalOperator Operation>
 std::string LogicalExpression<Operation>::info(size_t depth) const {
   std::string child1Info =
       depth < maxInfoRecursion ? child1_->info(depth + 1) : "MAX_DEPTH";
   std::string child2Info =
       depth < maxInfoRecursion ? child2_->info(depth + 1) : "MAX_DEPTH";
   std::stringstream stream;
-  stream << "Prefilter LogicalExpression<" << static_cast<int>(Operation)
+  stream << "Prefilter LogicalExpression<" << getLogicalOpStr(Operation)
          << ">\n"
          << "child1 {" << child1Info << "}"
          << "child2 {" << child2Info << "}" << std::endl;
@@ -353,22 +389,19 @@ namespace detail {
 //______________________________________________________________________________
 void checkPropertiesForPrefilterConstruction(
     const std::vector<PrefilterExprVariablePair>& vec) {
-  if (!std::ranges::is_sorted(vec, [](const auto& pair1, const auto& pair2) {
-        return pair1.second < pair2.second;
-      })) {
+  auto viewVariable = vec | std::views::values;
+  if (!std::ranges::is_sorted(viewVariable, std::less<>{})) {
     throw std::runtime_error(
         "The vector must contain the <PrefilterExpression, Variable> pairs in "
         "sorted order w.r.t. Variable value.");
-  };
-  if (auto it = std::ranges::adjacent_find(
-          vec, [](const auto& pair1,
-                  const auto& pair2) { return pair1.second == pair2.second; });
-      it != vec.end()) {
+  }
+  if (auto it = std::ranges::adjacent_find(viewVariable);
+      it != std::ranges::end(viewVariable)) {
     throw std::runtime_error(
         "For each relevant Variable must exist exactly one "
         "<PrefilterExpression, Variable> pair.");
   }
-};
+}
 
 }  //  namespace detail
 }  //  namespace prefilterExpressions

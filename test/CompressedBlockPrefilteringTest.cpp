@@ -748,16 +748,24 @@ TEST(PrefilterExpression, testEqualityOperator) {
 TEST(PrefilterExpression, checkPrintFormattedPrefilterExpression) {
   auto expr = lt(IntId(10));
   EXPECT_EQ((std::stringstream() << *expr).str(),
-            "Prefilter RelationalExpression<0>\nValueId: I:10\n.\n");
+            "Prefilter RelationalExpression<LT(<)>\nValueId: I:10\n.\n");
+  expr = neq(DoubleId(8.21));
+  EXPECT_EQ((std::stringstream() << *expr).str(),
+            "Prefilter RelationalExpression<NE(!=)>\nValueId: D:8.210000\n.\n");
   expr = notExpr(eq(VocabId(0)));
   EXPECT_EQ((std::stringstream() << *expr).str(),
             "Prefilter NotExpression:\nchild {Prefilter "
-            "RelationalExpression<3>\nValueId: V:0\n}\n.\n");
-  expr = orExpr(le(IntId(0)), eq(IntId(5)));
+            "RelationalExpression<NE(!=)>\nValueId: V:0\n}\n.\n");
+  expr = orExpr(le(IntId(0)), ge(IntId(5)));
   EXPECT_EQ((std::stringstream() << *expr).str(),
-            "Prefilter LogicalExpression<1>\nchild1 {Prefilter "
-            "RelationalExpression<1>\nValueId: I:0\n}child2 {Prefilter "
-            "RelationalExpression<2>\nValueId: I:5\n}\n.\n");
+            "Prefilter LogicalExpression<OR(||)>\nchild1 {Prefilter "
+            "RelationalExpression<LE(<=)>\nValueId: I:0\n}child2 {Prefilter "
+            "RelationalExpression<GE(>=)>\nValueId: I:5\n}\n.\n");
+  expr = andExpr(lt(IntId(20)), gt(IntId(10)));
+  EXPECT_EQ((std::stringstream() << *expr).str(),
+            "Prefilter LogicalExpression<AND(&&)>\nchild1 {Prefilter "
+            "RelationalExpression<LT(<)>\nValueId: I:20\n}child2 {Prefilter "
+            "RelationalExpression<GT(>)>\nValueId: I:10\n}\n.\n");
 }
 
 //______________________________________________________________________________
