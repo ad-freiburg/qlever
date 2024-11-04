@@ -147,6 +147,12 @@ class Server {
       ad_utility::Timer& requestTimer,
       const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
       TimeLimit timeLimit);
+  // Do the actual execution of an update.
+  Awaitable<void> processUpdate(
+      const ad_utility::url_parser::ParamValueMap& params, const string& update,
+      ad_utility::Timer& requestTimer,
+      const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
+      TimeLimit timeLimit);
 
   // Determine the media type to be used for the result. The media type is
   // determined (in this order) by the current action (e.g.,

@@ -839,6 +839,53 @@ Awaitable<void> Server::processQuery(
 }
 
 // ____________________________________________________________________________
+Awaitable<void> Server::processUpdate(
+    const ad_utility::url_parser::ParamValueMap& params, const string& update,
+    ad_utility::Timer& requestTimer,
+    const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
+    TimeLimit timeLimit) {
+  auto queryHub = queryHub_.lock();
+  AD_CORRECTNESS_CHECK(queryHub);
+  ad_utility::websocket::MessageSender messageSender{
+      getQueryId(request, update), *queryHub};
+
+  auto [cancellationHandle, cancelTimeoutOnDestruction] =
+      setupCancellationHandle(messageSender.getQueryId(), timeLimit);
+
+  auto [pinSubtrees, pinResult] = determineResultPinning(params);
+  LOG(INFO) << "Processing the following SPARQL update:"
+            << (pinResult ? " [pin result]" : "")
+            << (pinSubtrees ? " [pin subresults]" : "") << "\n"
+            << update << std::endl;
+  QueryExecutionContext qec(index_, &cache_, allocator_,
+                            sortPerformanceEstimator_, std::ref(messageSender),
+                            pinSubtrees, pinResult);
+  auto plannedQuery = co_await setupPlannedQuery(
+      params, update, qec, cancellationHandle, timeLimit, requestTimer);
+  auto qet = plannedQuery.queryExecutionTree_;
+
+  if (!plannedQuery.parsedQuery_.hasUpdateClause()) {
+    throw std::runtime_error("Expected Update but received Query.");
+  }
+
+  DeltaTriples deltaTriples = qec.deltaTriples();
+  // TODO: activate once #1592 is merged
+  // ExecuteUpdate::executeUpdate(index_, plannedQuery.parsedQuery_, qet,
+  // deltaTriples, cancellationHandle);
+
+  LOG(INFO) << "Done processing update"
+            << ", total time was " << requestTimer.msecs().count() << " ms"
+            << std::endl;
+  LOG(DEBUG) << "Runtime Info:\n"
+             << qet.getRootOperation()->runtimeInfo().toString() << std::endl;
+  // TODO<qup42> send a proper response
+  // SPARQL 1.1 Protocol 2.2.4 Successful Responses: "The response body of a
+  // successful update request is implementation defined."
+  co_await send("");
+  co_return;
+}
+
+// ____________________________________________________________________________
 template <Server::OperationType type>
 Awaitable<void> Server::processQueryOrUpdate(
     const ad_utility::url_parser::ParamValueMap& params,
