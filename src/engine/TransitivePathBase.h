@@ -69,6 +69,31 @@ using Map = std::unordered_map<
     Id, Set, HashId, std::equal_to<Id>,
     ad_utility::AllocatorWithLimit<std::pair<const Id, Set>>>;
 
+// Helper struct, that allows a generator to yield a a node and all its
+// connected nodes (the `targets`), along with a local vocabulary and the row
+// index of the node in the input table. The `IdTable` pointer might be null if
+// the `Id` is not associated with a table. In this case the `row` value does
+// not represent anything meaningful and should not be used.
+struct NodeWithTargets {
+  Id node_;
+  Set targets_;
+  LocalVocab localVocab_;
+  const IdTable* idTable_;
+  size_t row_;
+
+  // Explicit to prevent issues with co_yield and lifetime.
+  // See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=103909 for more info.
+  NodeWithTargets(Id node, Set targets, LocalVocab localVocab,
+                  const IdTable* idTable, size_t row)
+      : node_{node},
+        targets_{std::move(targets)},
+        localVocab_{std::move(localVocab)},
+        idTable_{idTable},
+        row_{row} {}
+};
+
+using NodeGenerator = cppcoro::generator<NodeWithTargets>;
+
 /**
  * @class TransitivePathBase
  * @brief A common base class for different implementations of the Transitive
@@ -147,37 +172,36 @@ class TransitivePathBase : public Operation {
    * startSideTable to fill in the rest of the columns.
    * This function is called if the start side is bound and a variable.
    *
-   * @param table The result table which will be filled.
-   * @param hull The transitive hull.
-   * @param nodes The start nodes of the transitive hull. These need to be in
-   * the same order and amount as the starting side nodes in the startTable.
+   * @param hull The transitive hull, represented by a generator that yields
+   * sets of connected nodes with some metadata.
    * @param startSideCol The column of the result table for the startSide of the
    * hull
    * @param targetSideCol The column of the result table for the targetSide of
    * the hull
-   * @param startSideTable An IdTable that holds other results. The other
-   * results will be transferred to the new result table.
    * @param skipCol This column contains the Ids of the start side in the
    * startSideTable and will be skipped.
+   * @param yieldOnce If true, the generator will yield only a single time.
+   * @param inputWidth The width of the input table that is referenced by the
+   * elements of `hull`.
    */
-  void fillTableWithHull(IdTable& table, const Map& hull,
-                         std::vector<Id>& nodes, size_t startSideCol,
-                         size_t targetSideCol, const IdTable& startSideTable,
-                         size_t skipCol) const;
+  Result::Generator fillTableWithHull(NodeGenerator hull, size_t startSideCol,
+                                      size_t targetSideCol, size_t skipCol,
+                                      bool yieldOnce, size_t inputWidth) const;
 
   /**
    * @brief Fill the given table with the transitive hull.
    * This function is called if the sides are unbound or ids.
    *
-   * @param table The result table which will be filled.
    * @param hull The transitive hull.
    * @param startSideCol The column of the result table for the startSide of the
    * hull
    * @param targetSideCol The column of the result table for the targetSide of
    * the hull
+   * @param yieldOnce If true, the generator will yield only a single time.
    */
-  void fillTableWithHull(IdTable& table, const Map& hull, size_t startSideCol,
-                         size_t targetSideCol) const;
+  Result::Generator fillTableWithHull(NodeGenerator hull, size_t startSideCol,
+                                      size_t targetSideCol,
+                                      bool yieldOnce) const;
 
   // Copy the columns from the input table to the output table
   template <size_t INPUT_WIDTH, size_t OUTPUT_WIDTH>
@@ -204,16 +228,11 @@ class TransitivePathBase : public Operation {
  private:
   uint64_t getSizeEstimateBeforeLimit() override;
 
-  template <size_t WIDTH, size_t START_WIDTH>
-  void fillTableWithHullImpl(IdTable& table, const Map& hull,
-                             std::vector<Id>& nodes, size_t startSideCol,
-                             size_t targetSideCol,
-                             const IdTable& startSideTable,
-                             size_t skipCol) const;
-
-  template <size_t WIDTH>
-  void fillTableWithHullImpl(IdTable& table, const Map& hull,
-                             size_t startSideCol, size_t targetSideCol) const;
+  template <size_t INPUT_WIDTH, size_t OUTPUT_WIDTH>
+  Result::Generator fillTableWithHullImpl(NodeGenerator hull,
+                                          size_t startSideCol,
+                                          size_t targetSideCol, bool yieldOnce,
+                                          size_t skipCol = 0) const;
 
  public:
   size_t getCostEstimate() override;

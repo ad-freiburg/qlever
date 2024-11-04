@@ -116,7 +116,7 @@ class Synchronized {
     return f(data_);
   }
 
-  /// const overload of with WriteLock
+  /// const overload of `withWriteLock`
   template <typename F>
   auto withWriteLock(F f) const {
     std::lock_guard l(mutex());

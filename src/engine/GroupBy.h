@@ -140,12 +140,11 @@ class GroupBy : public Operation {
   // skipping empty tables unless `singleIdTable` is set which causes the
   // function to yield a single id table with the complete result.
   template <size_t IN_WIDTH, size_t OUT_WIDTH>
-  cppcoro::generator<IdTable> computeResultLazily(
+  Result::Generator computeResultLazily(
       std::shared_ptr<const Result> subresult,
       std::vector<Aggregate> aggregates,
       std::vector<HashMapAliasInformation> aggregateAliases,
-      std::vector<size_t> groupByCols, std::shared_ptr<LocalVocab> localVocab,
-      bool singleIdTable) const;
+      std::vector<size_t> groupByCols, bool singleIdTable) const;
 
   template <size_t OUT_WIDTH>
   void processGroup(const Aggregate& expression,
@@ -441,6 +440,14 @@ class GroupBy : public Operation {
       sparqlExpression::EvaluationContext& evaluationContext,
       const HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
       LocalVocab* localVocab, const Allocator& allocator);
+
+  // Helper function to evaluate the child expression of an aggregate function.
+  // Only `COUNT(*)` does not have a single child, so we make a special case for
+  // it.
+  static sparqlExpression::ExpressionResult
+  evaluateChildExpressionOfAggregateFunction(
+      const HashMapAggregateInformation& aggregate,
+      sparqlExpression::EvaluationContext& evaluationContext);
 
   // Sort the HashMap by key and create result table.
   template <size_t NUM_GROUP_COLUMNS>

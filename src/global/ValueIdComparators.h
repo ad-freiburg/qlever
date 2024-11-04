@@ -349,9 +349,12 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForIndexTypes(
 // Helper function: Sort the non-overlapping ranges in `input` by the first
 // element, remove the empty ranges, and merge  directly adjacent ranges
 inline auto simplifyRanges =
-    []<typename RandomIt>(std::vector<std::pair<RandomIt, RandomIt>> input) {
-      // Eliminate empty ranges
-      std::erase_if(input, [](const auto& p) { return p.first == p.second; });
+    []<typename RandomIt>(std::vector<std::pair<RandomIt, RandomIt>> input,
+                          bool removeEmptyRanges = true) {
+      if (removeEmptyRanges) {
+        // Eliminate empty ranges
+        std::erase_if(input, [](const auto& p) { return p.first == p.second; });
+      }
       std::sort(input.begin(), input.end());
       if (input.empty()) {
         return input;
@@ -378,9 +381,13 @@ inline auto simplifyRanges =
 // 2. The condition x `comparison` value is fulfilled, where value is the value
 // of `valueId`.
 // 3. The datatype of x and `valueId` are compatible.
+//
+// When setting the flag argument `removeEmptyRanges` to false, empty ranges
+// [`begin`, `end`] where `begin` is equal to `end` will not be discarded.
 template <typename RandomIt>
 inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForId(
-    RandomIt begin, RandomIt end, ValueId valueId, Comparison comparison) {
+    RandomIt begin, RandomIt end, ValueId valueId, Comparison comparison,
+    bool removeEmptyRanges = true) {
   // For the evaluation of FILTERs, comparisons that involve undefined values
   // are always false.
   if (valueId.getDatatype() == Datatype::Undefined) {
@@ -389,11 +396,15 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForId(
   // This lambda enforces the invariants `non-empty` and `sorted`.
   switch (valueId.getDatatype()) {
     case Datatype::Double:
-      return detail::simplifyRanges(detail::getRangesForIntsAndDoubles(
-          begin, end, valueId.getDouble(), comparison));
+      return detail::simplifyRanges(
+          detail::getRangesForIntsAndDoubles(begin, end, valueId.getDouble(),
+                                             comparison),
+          removeEmptyRanges);
     case Datatype::Int:
-      return detail::simplifyRanges(detail::getRangesForIntsAndDoubles(
-          begin, end, valueId.getInt(), comparison));
+      return detail::simplifyRanges(
+          detail::getRangesForIntsAndDoubles(begin, end, valueId.getInt(),
+                                             comparison),
+          removeEmptyRanges);
     case Datatype::Undefined:
     case Datatype::VocabIndex:
     case Datatype::LocalVocabIndex:
@@ -405,7 +416,8 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForId(
     case Datatype::BlankNodeIndex:
       // For `Date` the trivial comparison via bits is also correct.
       return detail::simplifyRanges(
-          detail::getRangesForIndexTypes(begin, end, valueId, comparison));
+          detail::getRangesForIndexTypes(begin, end, valueId, comparison),
+          removeEmptyRanges);
   }
   AD_FAIL();
 }

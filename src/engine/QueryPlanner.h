@@ -338,15 +338,9 @@ class QueryPlanner {
       SubtreePlan a, SubtreePlan b,
       const std::vector<std::array<ColumnIndex, 2>>& jcs);
 
-  // The following two functions are used to provide a Service-operation with
-  // it's siblingTree, allowing us to optimize the service-query.
-  [[nodiscard]] static std::optional<SubtreePlan> createJoinWithService(
+  [[nodiscard]] static std::optional<SubtreePlan> createJoinWithPathSearch(
       const SubtreePlan& a, const SubtreePlan& b,
       const std::vector<std::array<ColumnIndex, 2>>& jcs);
-
-  template <typename Operation>
-  [[nodiscard]] static std::optional<SubtreePlan> createSubtreeWithService(
-      const SubtreePlan& a, const SubtreePlan& b);
 
   // if one of the inputs is a spatial join which is compatible with the other
   // input, then add that other input to the spatial join as a child instead of
@@ -532,6 +526,7 @@ class QueryPlanner {
     void visitBasicGraphPattern(const parsedQuery::BasicGraphPattern& pattern);
     void visitBind(const parsedQuery::Bind& bind);
     void visitTransitivePath(parsedQuery::TransPath& transitivePath);
+    void visitPathSearch(parsedQuery::PathQuery& config);
     void visitUnion(parsedQuery::Union& un);
     void visitSubquery(parsedQuery::Subquery& subquery);
 

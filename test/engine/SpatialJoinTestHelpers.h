@@ -126,8 +126,7 @@ inline std::shared_ptr<QueryExecutionTree> buildJoin(
   auto varCol2 = tree2->getVariableColumns();
   size_t col1 = varCol1[joinVariable].columnIndex_;
   size_t col2 = varCol2[joinVariable].columnIndex_;
-  return ad_utility::makeExecutionTree<Join>(qec, tree1, tree2, col1, col2,
-                                             true);
+  return ad_utility::makeExecutionTree<Join>(qec, tree1, tree2, col1, col2);
 }
 
 inline std::shared_ptr<QueryExecutionTree> buildMediumChild(
