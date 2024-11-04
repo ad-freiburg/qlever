@@ -367,31 +367,29 @@ std::vector<box> SpatialJoinAlgorithms::computeAntiBoundingBox(
   if (!northPoleTouched) {
     // add upper bounding box(es)
     if (boxCrosses180Longitude) {
-      boxes.emplace_back(box(point(leftBound, upperBound), point(180, 90)));
-      boxes.emplace_back(box(point(-180, upperBound), point(rightBound, 90)));
+      boxes.emplace_back(point(leftBound, upperBound), point(180, 90));
+      boxes.emplace_back(point(-180, upperBound), point(rightBound, 90));
     } else {
-      boxes.emplace_back(
-          box(point(leftBound, upperBound), point(rightBound, 90)));
+      boxes.emplace_back(point(leftBound, upperBound), point(rightBound, 90));
     }
   }
   if (!southPoleTouched) {
     // add lower bounding box(es)
     if (boxCrosses180Longitude) {
-      boxes.emplace_back(box(point(leftBound, -90), point(180, lowerBound)));
-      boxes.emplace_back(box(point(-180, -90), point(rightBound, lowerBound)));
+      boxes.emplace_back(point(leftBound, -90), point(180, lowerBound));
+      boxes.emplace_back(point(-180, -90), point(rightBound, lowerBound));
     } else {
-      boxes.emplace_back(
-          box(point(leftBound, -90), point(rightBound, lowerBound)));
+      boxes.emplace_back(point(leftBound, -90), point(rightBound, lowerBound));
     }
   }
   // add the box(es) inbetween the longitude lines
   if (boxCrosses180Longitude) {
     // only one box needed to cover the longitudes
-    boxes.emplace_back(box(point(rightBound, -90), point(leftBound, 90)));
+    boxes.emplace_back(point(rightBound, -90), point(leftBound, 90));
   } else {
     // two boxes needed, one left and one right of the anti bounding box
-    boxes.emplace_back(box(point(-180, -90), point(leftBound, 90)));
-    boxes.emplace_back(box(point(rightBound, -90), point(180, 90)));
+    boxes.emplace_back(point(-180, -90), point(leftBound, 90));
+    boxes.emplace_back(point(rightBound, -90), point(180, 90));
   }
   return boxes;
 }
@@ -412,8 +410,8 @@ bool SpatialJoinAlgorithms::containedInBoundingBoxes(
     point1.set<1>(90);
   }
 
-  if (std::ranges::any_of(bbox.cbegin(), bbox.cend(), [point1](box box_) {
-        return boost::geometry::covered_by(point1, box_);
+  if (std::ranges::any_of(bbox, [point1](const box& aBox) {
+        return boost::geometry::covered_by(point1, aBox);
       })) {
     return true;
   }
@@ -460,7 +458,7 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
     std::vector<box> bbox = computeBoundingBox(p);
     std::vector<value> results;
 
-    std::ranges::for_each(bbox, [&](box bbox) {
+    std::ranges::for_each(bbox, [&](const box& bbox) {
       rtree.query(bgi::intersects(bbox), std::back_inserter(results));
     });
 

@@ -27,12 +27,12 @@ class SpatialJoinAlgorithms {
   Result BoundingBoxAlgorithm();
 
   std::vector<box> OnlyForTestingWrapperComputeBoundingBox(
-      const point& startPoint) {
+      const point& startPoint) const {
     return computeBoundingBox(startPoint);
   }
 
   bool OnlyForTestingWrapperContainedInBoundingBoxes(
-      const std::vector<box>& bbox, point point1) {
+      const std::vector<box>& bbox, point point1) const {
     return containedInBoundingBoxes(bbox, point1);
   }
 
