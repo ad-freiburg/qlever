@@ -103,6 +103,10 @@ class ParsedQuery {
   LimitOffsetClause _limitOffset{};
   string _originalString;
 
+  // Contains warnings about queries that are valid according to the SPARQL
+  // standard, but are probably semantically wrong.
+  std::vector<std::string> warnings_;
+
   using HeaderClause =
       std::variant<SelectClause, ConstructClause, UpdateClause, AskClause>;
   // Use explicit default initialization for `SelectClause` because its
@@ -158,6 +162,12 @@ class ParsedQuery {
   // Add variables, that were found in the query body.
   void registerVariablesVisibleInQueryBody(const vector<Variable>& variables);
 
+  const std::vector<std::string>& warnings() const { return warnings_; }
+
+  void addWarning(std::string warning) {
+    warnings_.push_back(std::move(warning));
+  }
+
   // Returns all variables that are visible in the Query Body.
   const std::vector<Variable>& getVisibleVariables() const;
 
@@ -196,12 +206,12 @@ class ParsedQuery {
   Variable addInternalAlias(sparqlExpression::SparqlExpressionPimpl expression);
 
   // If the `variable` is neither visible in the query body nor contained in the
-  // `additionalVisibleVariables`, throw an `InvalidQueryException` that uses
-  // the `locationDescription` inside the message.
+  // `additionalVisibleVariables`, add a warning to the `warnings_` member that
+  // uses the `locationDescription` inside the message.
   void checkVariableIsVisible(
       const Variable& variable, const std::string& locationDescription,
       const ad_utility::HashSet<Variable>& additionalVisibleVariables = {},
-      std::string_view otherPossibleLocationDescription = "") const;
+      std::string_view otherPossibleLocationDescription = "");
 
   // Similar to `checkVariableIsVisible` above, but performs the check for each
   // of the variables that are used inside the `expression`.
@@ -209,7 +219,7 @@ class ParsedQuery {
       const sparqlExpression::SparqlExpressionPimpl& expression,
       const std::string& locationDescription,
       const ad_utility::HashSet<Variable>& additionalVisibleVariables = {},
-      std::string_view otherPossibleLocationDescription = "") const;
+      std::string_view otherPossibleLocationDescription = "");
 
   // Add the `groupKeys` (either variables or expressions) to the query and
   // check whether all the variables are visible inside the query body.

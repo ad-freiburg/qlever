@@ -235,6 +235,8 @@ class QueryPlanner {
 
   std::optional<size_t> textLimit_ = std::nullopt;
 
+  std::vector<std::string> warnings_;
+
   [[nodiscard]] std::vector<QueryPlanner::SubtreePlan> optimize(
       ParsedQuery::GraphPattern* rootPattern);
 

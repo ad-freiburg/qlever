@@ -97,7 +97,6 @@ class LiteralExpression : public SparqlExpression {
     if constexpr (std::is_same_v<T, ::Variable>) {
       if (!varColMap.contains(_value)) {
         return "Unbound Variable";
-        // AD_THROW(absl::StrCat("Variable ", _value.name(), " not found"));
       }
       return {"#column_" + std::to_string(varColMap.at(_value).columnIndex_) +
               "#"};

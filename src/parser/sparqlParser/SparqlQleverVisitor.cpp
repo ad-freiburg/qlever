@@ -355,24 +355,7 @@ GraphPatternOperation Visitor::visit(Parser::BindContext* ctx) {
   }
 
   auto expression = visitExpressionPimpl(ctx->expression());
-  if (disableSomeChecksOnlyForTesting_ ==
-      DisableSomeChecksOnlyForTesting::False) {
-    for (const auto& var : expression.containedVariables()) {
-      if (!ad_utility::contains(visibleVariables_, *var)) {
-        LOG(WARN) << absl::StrCat(
-                         "The variable ", var->name(),
-                         " was used in the expression of a BIND clause "
-                         "but was not previously bound in the query.")
-                  << std::endl;
-        /*
-        reportError(ctx,
-                    absl::StrCat("The variable ", var->name(),
-                                 " was used in the expression of a BIND clause "
-                                 "but was not previously bound in the query."));
-*/
-      }
-    }
-  }
+  warnIfUnboundVariables(expression, "BIND");
   addVisibleVariable(target);
   return GraphPatternOperation{Bind{std::move(expression), std::move(target)}};
 }
@@ -1255,10 +1238,27 @@ GraphPatternOperation Visitor::visit(
 }
 
 // ____________________________________________________________________________________
+void Visitor::warnIfUnboundVariables(const SparqlExpressionPimpl& expression,
+                                     std::string_view clauseName) {
+  for (const auto& var : expression.containedVariables()) {
+    // TODO<joka921> Code duplication
+    if (!ad_utility::contains(visibleVariables_, *var)) {
+      parsedQuery_.addWarning(
+          absl::StrCat("The variable ", var->name(),
+                       " was used in the expression of a ", clauseName,
+                       " clause "
+                       "but was not previously bound in the query."));
+    }
+  }
+}
+
+// ____________________________________________________________________________________
 SparqlFilter Visitor::visit(Parser::FilterRContext* ctx) {
   // The second argument means that the expression `LANG(?var) = "language"` is
   // allowed.
-  return SparqlFilter{visitExpressionPimpl(ctx->constraint(), true)};
+  auto expression = visitExpressionPimpl(ctx->constraint(), true);
+  warnIfUnboundVariables(expression, "FILTER");
+  return SparqlFilter{std::move(expression)};
 }
 
 // ____________________________________________________________________________________

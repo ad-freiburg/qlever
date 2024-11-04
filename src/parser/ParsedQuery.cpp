@@ -341,20 +341,13 @@ const std::vector<Alias>& ParsedQuery::getAliases() const {
 void ParsedQuery::checkVariableIsVisible(
     const Variable& variable, const std::string& locationDescription,
     const ad_utility::HashSet<Variable>& additionalVisibleVariables,
-    std::string_view otherPossibleLocationDescription) const {
+    std::string_view otherPossibleLocationDescription) {
   if (!ad_utility::contains(getVisibleVariables(), variable) &&
       !additionalVisibleVariables.contains(variable)) {
-    LOG(WARN) << absl::StrCat("Variable ", variable.name(),
-                              " was used by " + locationDescription,
-                              ", but is not defined in the query body",
-                              otherPossibleLocationDescription, ".")
-              << std::endl;
-    /*
-    throw InvalidSparqlQueryException(absl::StrCat(
-        "Variable ", variable.name(), " was used by " + locationDescription,
-        ", but is not defined in the query body",
-        otherPossibleLocationDescription, "."));
-    */
+    addWarning(absl::StrCat("Variable ", variable.name(),
+                            " was used by " + locationDescription,
+                            ", but is not defined in the query body",
+                            otherPossibleLocationDescription, "."));
   }
 }
 
@@ -363,7 +356,7 @@ void ParsedQuery::checkUsedVariablesAreVisible(
     const sparqlExpression::SparqlExpressionPimpl& expression,
     const std::string& locationDescription,
     const ad_utility::HashSet<Variable>& additionalVisibleVariables,
-    std::string_view otherPossibleLocationDescription) const {
+    std::string_view otherPossibleLocationDescription) {
   for (const auto* var : expression.containedVariables()) {
     checkVariableIsVisible(*var,
                            locationDescription + " in expression \"" +

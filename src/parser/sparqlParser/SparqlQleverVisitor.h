@@ -590,4 +590,7 @@ class SparqlQleverVisitor {
 
   // Constructs a TripleComponent from a GraphTerm.
   static TripleComponent visitGraphTerm(const GraphTerm& graphTerm);
+
+  void warnIfUnboundVariables(const SparqlExpressionPimpl& expression,
+                              std::string_view clauseName);
 };

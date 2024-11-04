@@ -122,9 +122,6 @@ vector<ColumnIndex> GroupBy::computeSortColumns(
   std::unordered_set<ColumnIndex> sortColSet;
 
   for (const auto& var : _groupByVariables) {
-    if (!inVarColMap.contains(var)) {
-      continue;
-    }
     AD_CONTRACT_CHECK(inVarColMap.contains(var), "Variable ", var.name(),
                       " not found in subtree for GROUP BY");
     ColumnIndex col = inVarColMap.at(var).columnIndex_;

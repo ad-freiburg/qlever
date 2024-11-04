@@ -191,6 +191,9 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createExecutionTrees(
 
   checkCancellation();
 
+  for (const auto& warning : pq.warnings()) {
+    warnings_.push_back(warning);
+  }
   return lastRow;
 }
 
@@ -201,7 +204,12 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq,
     auto lastRow = createExecutionTrees(pq, isSubquery);
     auto minInd = findCheapestExecutionTree(lastRow);
     LOG(DEBUG) << "Done creating execution plan.\n";
-    return *lastRow[minInd]._qet;
+    auto& result = *lastRow[minInd]._qet;
+    auto& rootOperation = *result.getRootOperation();
+    for (const auto& warning : warnings_) {
+      rootOperation.addWarning(warning);
+    }
+    return result;
   } catch (ad_utility::CancellationException& e) {
     e.setOperation("Query planning");
     throw;
@@ -388,14 +396,13 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getOrderByRow(
     plan.idsOfIncludedTextLimits_ = parent.idsOfIncludedTextLimits_;
     vector<pair<ColumnIndex, bool>> sortIndices;
     for (auto& ord : pq._orderBy) {
-      // TODO<joka921> Make this a proper interface
-      try {
-        sortIndices.emplace_back(parent._qet->getVariableColumn(ord.variable_),
-                                 ord.isDescending_);
-      } catch (...) {
-        // Skip nonexisting variables.
+      auto idx = parent._qet->getVariableColumnOrNullopt(ord.variable_);
+      if (!idx.has_value()) {
+        // Skip variables that are not visible in the query execution tree so
+        // far.
         continue;
       }
+      sortIndices.emplace_back(idx.value(), ord.isDescending_);
     }
 
     // All variables were not part of the query, so we don't actually have

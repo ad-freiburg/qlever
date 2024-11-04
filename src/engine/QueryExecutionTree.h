@@ -48,6 +48,8 @@ class QueryExecutionTree {
   bool isEmpty() const { return !rootOperation_; }
 
   size_t getVariableColumn(const Variable& variable) const;
+  std::optional<size_t> getVariableColumnOrNullopt(
+      const Variable& variable) const;
 
   size_t getResultWidth() const { return rootOperation_->getResultWidth(); }
 
