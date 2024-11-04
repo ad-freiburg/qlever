@@ -38,6 +38,9 @@ template <class T,
 using HashSetWithMemoryLimit =
     absl::flat_hash_set<T, HashFct, EqualElem, Alloc>;
 
+// Wrapper around absl::node_hash_set with a memory limit. All operations that
+// may change the allocated memory of the hash set is tracked using a
+// `AllocationMemoryLeftThreadsafe` object.
 template <class T, class SizeGetter = SizeOfSizeGetter,
           class HashFct = absl::container_internal::hash_default_hash<T>,
           class EqualElem = absl::container_internal::hash_default_eq<T>>
@@ -50,14 +53,15 @@ class CustomHashSetWithMemoryLimit {
   SizeGetter sizeGetter_;
 
  public:
-  CustomHashSetWithMemoryLimit(MemorySize memory, SizeGetter sizeGetter)
-      : memoryLeft_(makeAllocationMemoryLeftThreadsafeObject(memory)),
-        memoryUsed_(MemorySize::bytes(0)),
-        sizeGetter_(sizeGetter) {}
+  CustomHashSetWithMemoryLimit(
+      detail::AllocationMemoryLeftThreadsafe memoryLeft,
+      SizeGetter sizeGetter = {})
+      : memoryLeft_{memoryLeft},
+        memoryUsed_{MemorySize::bytes(0)},
+        sizeGetter_{sizeGetter} {}
 
   // Insert an element into the hash set. If the memory limit is exceeded, the
-  // insert operation fails with a runtime error. Note: Other overloaded
-  // implementations are currently missing.
+  // insert operation fails with a runtime error.
   std::pair<typename HashSet::iterator, bool> insert(const T& value) {
     MemorySize size = sizeGetter_(value);
     if (!memoryLeft_.ptr()->wlock()->decrease_if_enough_left_or_return_false(
@@ -66,16 +70,17 @@ class CustomHashSetWithMemoryLimit {
           "The element to be inserted is too large for the hash set.");
     }
 
-    auto result = hashSet_.insert(value);
+    const auto& [it, wasInserted] = hashSet_.insert(value);
 
-    if (result.second) {
+    if (wasInserted) {
       memoryUsed_ += size;
     } else {
       memoryLeft_.ptr()->wlock()->increase(size);
     }
-    return result;
+    return std::pair{it, wasInserted};
   }
 
+  // _____________________________________________________________________________
   void erase(const T& value) {
     auto it = hashSet_.find(value);
     if (it != hashSet_.end()) {
@@ -86,28 +91,37 @@ class CustomHashSetWithMemoryLimit {
     }
   }
 
+  // _____________________________________________________________________________
   void clear() {
     hashSet_.clear();
     memoryLeft_.ptr()->wlock()->increase(memoryUsed_);
     memoryUsed_ = MemorySize::bytes(0);
   }
 
+  // _____________________________________________________________________________
   size_t size() const { return hashSet_.size(); }
 
+  // _____________________________________________________________________________
   bool empty() const { return hashSet_.empty(); }
 
+  // _____________________________________________________________________________
   size_t count(const T& value) const { return hashSet_.count(value); }
 
+  // _____________________________________________________________________________
   HashSet::const_iterator find(const T& value) const {
     return hashSet_.find(value);
   }
 
+  // _____________________________________________________________________________
   bool contains(const T& key) { return hashSet_.contains(key); }
 
+  // _____________________________________________________________________________
   HashSet::const_iterator begin() const { return hashSet_.begin(); }
 
+  // _____________________________________________________________________________
   HashSet::const_iterator end() const { return hashSet_.end(); }
 
+  // _____________________________________________________________________________
   MemorySize getCurrentMemoryUsage() const { return memoryUsed_; }
 };
 
