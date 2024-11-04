@@ -182,6 +182,8 @@ AggregateExpression<AggregateOperation, FinalOperation>::getVariableForCount()
 template class AggregateExpression<AvgOperation, decltype(avgFinalOperation)>;
 
 // Explicit instantiation for the STDEV expression.
+template class AggregateExpression<AvgOperation,
+    decltype(stdevFinalOperation)>;
 template class DeviationAggExpression<AvgOperation,
                                       decltype(stdevFinalOperation)>;
 
