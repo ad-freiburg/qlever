@@ -26,7 +26,7 @@ static constexpr auto wktPointRegex = ctll::fixed_string(
     "^\\s*[Pp][Oo][Ii][Nn][Tt]\\s*\\(\\s*"
     "(-?[0-9]+|-?[0-9]+\\.[0-9]+)"
     "\\s+"
-    "(-?[0-9+]|-?[0-9]+\\.[0-9]+)"
+    "(-?[0-9]+|-?[0-9]+\\.[0-9]+)"
     "\\s*\\)\\s*$");
 
 // Parse a single WKT point and returns a pair of longitude and latitude. If

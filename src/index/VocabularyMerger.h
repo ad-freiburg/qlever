@@ -125,7 +125,8 @@ struct VocabularyMetaData {
   size_t numBlankNodesTotal_ = 0;
   IdRangeForPrefix langTaggedPredicates_{
       std::string{ad_utility::languageTaggedPredicatePrefix}};
-  IdRangeForPrefix internalEntities_{std::string{INTERNAL_ENTITIES_URI_PREFIX}};
+  IdRangeForPrefix internalEntities_{
+      std::string{QLEVER_INTERNAL_PREFIX_IRI_WITHOUT_CLOSING_BRACKET}};
 
   ad_utility::HashMap<std::string, Id> specialIdMapping_;
   const ad_utility::HashMap<std::string, Id>* globalSpecialIds_ =

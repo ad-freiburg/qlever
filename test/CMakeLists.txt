@@ -161,6 +161,8 @@ addLinkAndDiscoverTest(IdTableTest util)
 
 addLinkAndDiscoverTest(TransitivePathTest engine)
 
+addLinkAndDiscoverTest(PathSearchTest engine)
+
 addLinkAndDiscoverTest(BatchedPipelineTest)
 
 addLinkAndDiscoverTest(TupleHelpersTest)
@@ -288,6 +290,8 @@ addLinkAndDiscoverTest(TimerTest)
 addLinkAndDiscoverTest(AlgorithmTest)
 
 addLinkAndDiscoverTestSerial(CompressedRelationsTest index)
+
+addLinkAndDiscoverTestSerial(CompressedBlockPrefilteringTest index)
 
 addLinkAndDiscoverTest(ExceptionTest)
 

@@ -8,6 +8,7 @@
 #include <gmock/gmock.h>
 
 #include <optional>
+#include <variant>
 
 #include "./util/GTestHelpers.h"
 #include "engine/Bind.h"
@@ -22,9 +23,9 @@
 #include "engine/NeutralElementOperation.h"
 #include "engine/OptionalJoin.h"
 #include "engine/OrderBy.h"
+#include "engine/PathSearch.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/QueryPlanner.h"
-#include "engine/Service.h"
 #include "engine/Sort.h"
 #include "engine/SpatialJoin.h"
 #include "engine/TextIndexScanForEntity.h"
@@ -32,6 +33,7 @@
 #include "engine/TextLimit.h"
 #include "engine/TransitivePathBase.h"
 #include "engine/Union.h"
+#include "engine/Values.h"
 #include "global/RuntimeParameters.h"
 #include "parser/SparqlParser.h"
 #include "util/IndexTestHelpers.h"
@@ -292,6 +294,38 @@ inline auto TransitivePath =
                             TransitivePathSideMatcher(right))));
     };
 
+inline auto PathSearchConfigMatcher = [](PathSearchConfiguration config) {
+  auto sourceMatcher =
+      AD_FIELD(PathSearchConfiguration, sources_, Eq(config.sources_));
+  auto targetMatcher =
+      AD_FIELD(PathSearchConfiguration, targets_, Eq(config.targets_));
+  return AllOf(
+      AD_FIELD(PathSearchConfiguration, algorithm_, Eq(config.algorithm_)),
+      sourceMatcher, targetMatcher,
+      AD_FIELD(PathSearchConfiguration, start_, Eq(config.start_)),
+      AD_FIELD(PathSearchConfiguration, end_, Eq(config.end_)),
+      AD_FIELD(PathSearchConfiguration, pathColumn_, Eq(config.pathColumn_)),
+      AD_FIELD(PathSearchConfiguration, edgeColumn_, Eq(config.edgeColumn_)),
+      AD_FIELD(PathSearchConfiguration, edgeProperties_,
+               UnorderedElementsAreArray(config.edgeProperties_)));
+};
+
+// Match a PathSearch operation
+inline auto PathSearch =
+    [](PathSearchConfiguration config, bool sourceBound, bool targetBound,
+       const std::same_as<QetMatcher> auto&... childMatchers) {
+      return RootOperation<::PathSearch>(AllOf(
+          children(childMatchers...),
+          AD_PROPERTY(PathSearch, getConfig, PathSearchConfigMatcher(config)),
+          AD_PROPERTY(PathSearch, isSourceBound, Eq(sourceBound)),
+          AD_PROPERTY(PathSearch, isTargetBound, Eq(targetBound))));
+    };
+
+inline auto ValuesClause = [](string cacheKey) {
+  return RootOperation<::Values>(
+      AllOf(AD_PROPERTY(Values, getCacheKey, cacheKey)));
+};
+
 // Match a SpatialJoin operation, set arguments to ignore to -1
 inline auto SpatialJoin =
     [](size_t maxDist, size_t maxResults,
@@ -347,23 +381,6 @@ constexpr auto OrderBy = [](const ::OrderBy::SortedVariables& sortedVariables,
 
 // Match a `UNION` operation.
 constexpr auto Union = MatchTypeAndOrderedChildren<::Union>;
-
-// Match a `SERVICE` operation.
-constexpr auto Service = [](const std::optional<QetMatcher>& siblingMatcher,
-                            std::string_view graphPatternAsString) {
-  const auto optSiblingMatcher =
-      [&]() -> Matcher<const std::shared_ptr<QueryExecutionTree>&> {
-    if (siblingMatcher.has_value()) {
-      return Pointee(siblingMatcher.value());
-    }
-    return IsNull();
-  }();
-
-  return RootOperation<::Service>(
-      AllOf(AD_PROPERTY(::Service, getSiblingTree, optSiblingMatcher),
-            AD_PROPERTY(::Service, getGraphPatternAsString,
-                        Eq(graphPatternAsString))));
-};
 
 /// Parse the given SPARQL `query`, pass it to a `QueryPlanner` with empty
 /// execution context, and return the resulting `QueryExecutionTree`

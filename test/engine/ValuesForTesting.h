@@ -88,12 +88,13 @@ class ValuesForTesting : public Operation {
       for (const IdTable& idTable : tables_) {
         clones.push_back(idTable.clone());
       }
-      auto generator = [](auto idTables) -> cppcoro::generator<IdTable> {
+      auto generator = [](auto idTables,
+                          LocalVocab localVocab) -> Result::Generator {
         for (IdTable& idTable : idTables) {
-          co_yield std::move(idTable);
+          co_yield {std::move(idTable), localVocab.clone()};
         }
-      }(std::move(clones));
-      return {std::move(generator), resultSortedOn(), localVocab_.clone()};
+      }(std::move(clones), localVocab_.clone());
+      return {std::move(generator), resultSortedOn()};
     }
     std::optional<IdTable> optionalTable;
     if (tables_.size() > 1) {

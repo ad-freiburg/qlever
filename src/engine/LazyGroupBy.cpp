@@ -68,11 +68,9 @@ void LazyGroupBy::processBlock(
   evaluationContext._endIndex = endIndex;
 
   for (const auto& aggregateInfo : allAggregateInfoView()) {
-    // Evaluate child expression on block
-    auto exprChildren = aggregateInfo.expr_->children();
-    AD_CORRECTNESS_CHECK(exprChildren.size() == 1);
     sparqlExpression::ExpressionResult expressionResult =
-        exprChildren[0]->evaluate(&evaluationContext);
+        GroupBy::evaluateChildExpressionOfAggregateFunction(aggregateInfo,
+                                                            evaluationContext);
 
     visitAggregate(
         [blockSize,

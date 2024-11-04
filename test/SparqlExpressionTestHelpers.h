@@ -72,30 +72,29 @@ struct TestContext {
     zz = getId("\"zz\"@en");
     blank = Id::makeFromBlankNodeIndex(BlankNodeIndex::make(0));
 
-    constexpr auto lit = [](std::string_view s) {
-      return ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes(
-          s);
-    };
-    constexpr auto iri = [](const std::string& s) {
-      return ad_utility::triple_component::LiteralOrIri::iriref(s);
+    auto addLocalLiteral = [this](std::string_view s) {
+      return Id::makeFromLocalVocabIndex(
+          this->localVocab.getIndexAndAddIfNotContained(
+              ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes(
+                  s)));
     };
 
-    notInVocabA = Id::makeFromLocalVocabIndex(
-        localVocab.getIndexAndAddIfNotContained(lit("notInVocabA")));
-    notInVocabB = Id::makeFromLocalVocabIndex(
-        localVocab.getIndexAndAddIfNotContained(lit("notInVocabB")));
-    notInVocabC = Id::makeFromLocalVocabIndex(
-        localVocab.getIndexAndAddIfNotContained(iri("<notInVocabC>")));
-    notInVocabD = Id::makeFromLocalVocabIndex(
-        localVocab.getIndexAndAddIfNotContained(iri("<notInVocabD>")));
-    notInVocabAelpha = Id::makeFromLocalVocabIndex(
-        localVocab.getIndexAndAddIfNotContained(lit("notInVocabÄlpha")));
+    auto addLocalIri = [this](const std::string& s) {
+      return Id::makeFromLocalVocabIndex(
+          this->localVocab.getIndexAndAddIfNotContained(
+              ad_utility::triple_component::LiteralOrIri::iriref(s)));
+    };
+
+    notInVocabA = addLocalLiteral("notInVocabA");
+    notInVocabB = addLocalLiteral("notInVocabB");
+    notInVocabC = addLocalIri("<notInVocabC>");
+    notInVocabD = addLocalIri("<notInVocabD>");
+    notInVocabAelpha = addLocalLiteral("notInVocabÄlpha");
+    notInVocabAelpha = addLocalLiteral("notInVocabÄlpha");
     notInVocabIri =
-        Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
-            iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>")));
-    notInVocabIriLit =
-        Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
-            lit("http://www.w3.org/1999/02/22-rdf-syntax-ns#langString")));
+        addLocalIri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>");
+    notInVocabIriLit = addLocalLiteral(
+        "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString");
 
     // Set up the `table` that represents the previous partial query results. It
     // has five columns/variables: ?ints (only integers), ?doubles (only
