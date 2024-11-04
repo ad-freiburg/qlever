@@ -112,6 +112,9 @@ std::vector<MediaTypeWithQuality> parseAcceptHeader(
 /// media types that appear earlier in the `SUPPORTED_MEDIA_TYPES`. If none of
 /// the `SUPPORTED_MEDIA_TYPES` is accepted by `acceptHeader`, then
 /// `std::nullopt` is returned.
+// TODO: This function never returns `nullopt`, because an exception is thrown
+// if no supported media type is found. Update the docstring and make the return
+// type just `MediaType`.
 std::optional<MediaType> getMediaTypeFromAcceptHeader(
     std::string_view acceptHeader);
 
