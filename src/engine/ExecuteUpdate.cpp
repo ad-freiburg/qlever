@@ -17,7 +17,7 @@ void ExecuteUpdate::executeUpdate(
         "Only INSERT/DELETE update operations are currently supported.");
   }
   auto graphUpdate = std::get<updateClause::GraphUpdate>(updateClause.op_);
-  auto res = qet.getResult(true);
+  auto res = qet.getResult(false);
 
   auto& vocab = index.getVocab();
 
@@ -55,8 +55,8 @@ void ExecuteUpdate::executeUpdate(
     }
   }
 
-  deltaTriples.insertTriples(cancellationHandle, std::move(toInsert));
   deltaTriples.deleteTriples(cancellationHandle, std::move(toDelete));
+  deltaTriples.insertTriples(cancellationHandle, std::move(toInsert));
 }
 
 // _____________________________________________________________________________
