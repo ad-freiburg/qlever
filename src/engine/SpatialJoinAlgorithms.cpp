@@ -6,6 +6,7 @@
 #include <s2/s2point_index.h>
 #include <s2/util/units/length-units.h>
 
+#include "math.h"
 #include "util/GeoSparqlHelpers.h"
 
 // ____________________________________________________________________________
@@ -280,8 +281,7 @@ std::vector<box> SpatialJoinAlgorithms::computeBoundingBox(
   // compute longitude bound. For an explanation of the calculation and the
   // naming convention see my master thesis
   double alpha = maxDistInMetersBuffer / radius_;
-  double gamma =
-      (90 - std::abs(startPoint.get<1>())) * (2 * std::numbers::pi / 360);
+  double gamma = (90 - std::abs(startPoint.get<1>())) * (2 * M_PI / 360);
   double beta = std::acos(std::cos(gamma) / std::cos(alpha));
   double delta = 0;
   if (maxDistInMetersBuffer > circumferenceMax_ / 20) {
@@ -293,7 +293,7 @@ std::vector<box> SpatialJoinAlgorithms::computeBoundingBox(
     delta = archaversine((haversine(alpha - haversine(gamma - beta))) /
                          (std::sin(gamma) * std::sin(beta)));
   }
-  double lonRange = delta * 360 / (2 * std::numbers::pi);
+  double lonRange = delta * 360 / (2 * M_PI);
   double leftLonBound = startPoint.get<0>() - lonRange;
   double rightLonBound = startPoint.get<0>() + lonRange;
   // test for "overflows" and create two bounding boxes if necessary
@@ -438,8 +438,6 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
     otherResJoinCol = leftJoinCol;
   }
 
-  // Todo in the benchmark: use different algorithms and compare their
-  // performance
   bgi::rtree<value, bgi::quadratic<16>> rtree;
   for (size_t i = 0; i < smallerResult->numRows(); i++) {
     // get point of row i
