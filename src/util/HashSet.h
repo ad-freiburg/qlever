@@ -60,6 +60,10 @@ class CustomHashSetWithMemoryLimit {
         memoryUsed_{MemorySize::bytes(0)},
         sizeGetter_{sizeGetter} {}
 
+  ~CustomHashSetWithMemoryLimit() {
+    memoryLeft_.ptr()->wlock()->increase(memoryUsed_);
+  }
+
   // Insert an element into the hash set. If the memory limit is exceeded, the
   // insert operation fails with a runtime error.
   std::pair<typename HashSet::iterator, bool> insert(const T& value) {
