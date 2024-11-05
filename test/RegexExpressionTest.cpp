@@ -1,6 +1,6 @@
-//  Copyright 2022, University of Freiburg,
-//                  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
+// Copyright 2022 - 2024, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
 #include <optional>
 #include <string>
@@ -23,8 +23,11 @@ constexpr auto T = Id::makeFromBool(true);
 constexpr auto F = Id::makeFromBool(false);
 constexpr Id U = Id::makeUndefined();
 
+// Make `RegexExpression` from given the `child` (the expression on which to
+// apply the regex), `regex`, and optional `flags`. The argument `childAsStr` is
+// true iff the expression is enclosed in a `STR()` function.
 RegexExpression makeRegexExpression(
-    std::string variable, std::string regex,
+    SparqlExpression::Ptr child, std::string regex,
     std::optional<std::string> flags = std::nullopt, bool childAsStr = false) {
   // The regex and the flags both have to be enquoted. This is normally ensured
   // by the SPARQL parser. For easier readability of the tests we add those
@@ -33,10 +36,8 @@ RegexExpression makeRegexExpression(
   if (flags.has_value()) {
     flags.value() = absl::StrCat("\"", flags.value(), "\"");
   }
-  SparqlExpression::Ptr variableExpression =
-      std::make_unique<VariableExpression>(Variable{std::move(variable)});
   if (childAsStr) {
-    variableExpression = makeStrExpression(std::move(variableExpression));
+    child = makeStrExpression(std::move(child));
   }
   auto regexExpression = std::make_unique<StringLiteralExpression>(lit(regex));
   std::optional<SparqlExpression::Ptr> flagsExpression = std::nullopt;
@@ -45,8 +46,19 @@ RegexExpression makeRegexExpression(
         std::make_unique<StringLiteralExpression>(lit(flags.value()))};
   }
 
-  return {std::move(variableExpression), std::move(regexExpression),
+  return {std::move(child), std::move(regexExpression),
           std::move(flagsExpression)};
+}
+
+// Special case of the `makeRegexExpression` above, where the `child`
+// expression is a variable.
+RegexExpression makeRegexExpression(
+    std::string variable, std::string regex,
+    std::optional<std::string> flags = std::nullopt, bool childAsStr = false) {
+  SparqlExpression::Ptr variableExpression =
+      std::make_unique<VariableExpression>(Variable{std::move(variable)});
+  return makeRegexExpression(std::move(variableExpression), std::move(regex),
+                             std::move(flags), childAsStr);
 }
 }  // namespace
 
@@ -54,9 +66,13 @@ RegexExpression makeRegexExpression(
 // the `TestContext` (see above), yields the `expected` result.
 void testWithExplicitResult(const SparqlExpression& expression,
                             std::vector<Id> expected,
+                            std::optional<size_t> numInputs = std::nullopt,
                             source_location l = source_location::current()) {
-  static TestContext ctx;
+  TestContext ctx;
   auto trace = generateLocationTrace(l, "testWithExplicitResult");
+  if (numInputs.has_value()) {
+    ctx.context._endIndex = numInputs.value();
+  }
   auto resultAsVariant = expression.evaluate(&ctx.context);
   const auto& result = std::get<VectorWithMemoryLimit<Id>>(resultAsVariant);
 
@@ -74,6 +90,8 @@ auto testNonPrefixRegex = [](std::string variable, std::string regex,
   testWithExplicitResult(expr, expectedResult);
 };
 
+// Tests where the expression is a variable and the regex is not a simple prefix
+// regex (that translates to a simple range search).
 TEST(RegexExpression, nonPrefixRegex) {
   // ?vocab column is `"Beta", "alpha", "älpha"
   // ?mixed column is `1, -0.1, <x>`
@@ -83,10 +101,11 @@ TEST(RegexExpression, nonPrefixRegex) {
   test("?vocab", "l[^a]{2}a", {F, T, T});
   test("?vocab", "[el][^a]*a", {T, T, T});
   test("?vocab", "B", {T, F, F});
-  // case-sensitive by default.
+
+  // The match is case-sensitive by default.
   test("?vocab", "b", {F, F, F});
 
-  // Not a prefix expression because of the "special" regex characters
+  // A prefix regex, but not a fixed string.
   test("?vocab", "^a.*", {F, T, F});
 
   test("?mixed", "x", {U, U, U});
@@ -96,8 +115,25 @@ TEST(RegexExpression, nonPrefixRegex) {
 
   // ?localVocab column is "notInVocabA", "notInVocabB", <"notInVocabD">
   test("?localVocab", "InV", {T, T, U});
+
   // The IRI is only considered when testing with a STR expression
   test("?localVocab", "Vocab[AD]", {T, F, T}, true);
+}
+
+// Test where the expression is not simply a variable.
+TEST(RegexExpression, inputNotVariable) {
+  // Our expression is a fixed string literal: "hallo".
+  VectorWithMemoryLimit<IdOrLiteralOrIri> input{
+      ad_utility::testing::getQec()->getAllocator()};
+  input.push_back(ad_utility::triple_component::LiteralOrIri(lit("\"hallo\"")));
+  auto child = std::make_unique<sparqlExpression::detail::SingleUseExpression>(
+      input.clone());
+
+  // "hallo" matches the regex "ha".
+  auto expr = makeRegexExpression(std::move(child), "ha", "");
+  std::vector<Id> expected;
+  expected.push_back(Id::makeFromBool(true));
+  testWithExplicitResult(expr, expected, input.size());
 }
 
 auto testNonPrefixRegexWithFlags =
@@ -111,6 +147,7 @@ auto testNonPrefixRegexWithFlags =
       testWithExplicitResult(expr, expectedResult);
     };
 
+// Fun with flags.
 TEST(RegexExpression, nonPrefixRegexWithFlags) {
   // ?vocab column is `"Beta", "alpha", "älpha"
   // ?mixed column is `1, -0.1, A`
@@ -141,6 +178,8 @@ TEST(RegexExpression, nonPrefixRegexWithFlags) {
   // TODO<joka921>  Add tests for other flags (maybe the non-greedy one?)
 }
 
+// Test the `getPrefixRegex` function (which returns `std::nullopt` if the regex
+// is not a simple prefix regex).
 TEST(RegexExpression, getPrefixRegex) {
   using namespace sparqlExpression::detail;
   ASSERT_EQ(std::nullopt, getPrefixRegex("alpha"));
@@ -264,11 +303,6 @@ TEST(RegexExpression, invalidConstruction) {
   auto variable = [](std::string literal) {
     return std::make_unique<VariableExpression>(Variable{std::move(literal)});
   };
-
-  // The first argument must be a variable.
-  EXPECT_THROW(
-      RegexExpression(literal("\"a\""), literal("\"b\""), std::nullopt),
-      std::runtime_error);
 
   // The second argument must be a string literal.
   EXPECT_THROW(RegexExpression(variable("?a"), variable("?b"), std::nullopt),
