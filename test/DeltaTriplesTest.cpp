@@ -352,3 +352,32 @@ TEST_F(DeltaTriplesTest, rewriteLocalVocabEntriesAndBlankNodes) {
   auto s4 = triples[0].ids_[0];
   EXPECT_EQ(s4.getBits(), blank0.getBits());
 }
+
+// _____________________________________________________________________________
+TEST_F(DeltaTriplesTest, DeltaTriplesManager) {
+  DeltaTriplesManager deltaTriples(testQec->getIndex().getImpl());
+  auto& vocab = testQec->getIndex().getVocab();
+  LocalVocab localVocab;
+  auto cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+
+  std::vector<ad_utility::JThread> threads;
+  auto insertAndDelete = [&]() {
+    for (size_t i = 0; i < 200; ++i) {
+      deltaTriples.insertTriples(
+          cancellationHandle,
+          makeIdTriples(vocab, localVocab, {"<A> <B> <C>", "<A> <B> <D>"}));
+      deltaTriples.deleteTriples(
+          cancellationHandle,
+          makeIdTriples(vocab, localVocab, {"<A> <C> <E>"}));
+    }
+  };
+  for (size_t i = 0; i < 20; ++i) {
+    threads.emplace_back(insertAndDelete);
+  }
+  threads.clear();
+  auto deltaImpl = deltaTriples.deltaTriples_.rlock();
+  EXPECT_THAT(*deltaImpl, NumTriples(2, 1, 3));
+
+  // TODO<joka921> Derive a meaningful test about the decoupled located triples
+}

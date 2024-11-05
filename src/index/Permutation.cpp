@@ -214,6 +214,5 @@ const Permutation& Permutation::getActualPermutation(Id id) const {
 // ______________________________________________________________________
 const LocatedTriplesPerBlock& Permutation::locatedTriples(
     const LocatedTriplesPerBlockPtr& deltaTriples) const {
-  return deltaTriples->locatedTriplesPerBlock_.at(
-      static_cast<size_t>(permutation_));
+  return deltaTriples->getLocatedTriplesPerBlock(permutation_);
 }

@@ -55,7 +55,8 @@ namespace {
 // folded into the permutations as additional columns.
 void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
     const Index& index) {
-  DeltaTriples deltaTriples(index);
+  DeltaTriplesManager deltaTriplesManager(index.getImpl());
+  auto deltaTriples = deltaTriplesManager.getLocatedTriples();
   static constexpr size_t col0IdTag = 43;
   auto cancellationDummy = std::make_shared<ad_utility::CancellationHandle<>>();
   auto iriOfHasPattern =

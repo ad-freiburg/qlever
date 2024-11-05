@@ -37,10 +37,24 @@ class DeltaTriples {
  public:
   // The positions of the delta triples in each of the six permutations, and
   // the local vocab.
-  struct LocatedTriplesAndLocalVocab {
+  class LocatedTriplesAndLocalVocab {
+   private:
     std::array<LocatedTriplesPerBlock, Permutation::ALL.size()>
         locatedTriplesPerBlock_;
     LocalVocab localVocab_;
+
+   public:
+    LocatedTriplesAndLocalVocab(
+        std::array<LocatedTriplesPerBlock, Permutation::ALL.size()>
+            locatedTriplesPerBlock,
+        LocalVocab localVocab)
+        : locatedTriplesPerBlock_{std::move(locatedTriplesPerBlock)},
+          localVocab_{std::move(localVocab)} {}
+    LocatedTriplesAndLocalVocab() = default;
+    // Get `TripleWithPosition` objects for given permutation.
+    const LocatedTriplesPerBlock& getLocatedTriplesPerBlock(
+        Permutation::Enum permutation) const;
+    friend class DeltaTriples;
   };
 
   using LocatedTriplesPerBlockPtr =
@@ -110,6 +124,11 @@ class DeltaTriples {
  public:
   const LocalVocab& localVocab() const { return localVocab_; }
 
+  const LocatedTriplesPerBlock& getLocatedTriplesPerBlock(
+      Permutation::Enum permutation) const {
+    return locatedTriplesAndLocalVocab->getLocatedTriplesPerBlock(permutation);
+  }
+
   // Clear `triplesAdded_` and `triplesSubtracted_` and all associated data
   // structures.
   void clear();
@@ -124,10 +143,9 @@ class DeltaTriples {
   // Delete triples.
   void deleteTriples(CancellationHandle cancellationHandle, Triples triples);
 
-  // Get `TripleWithPosition` objects for given permutation.
-  const LocatedTriplesPerBlock& getLocatedTriplesPerBlock(
-      Permutation::Enum permutation) const;
-
+  // Return a deep copy of the `LocatedTriplesPerBlock` and the corresponding
+  // `LocalVocab` which form a snapshot of the current status of this
+  // `DeltaTriples` object.
   std::shared_ptr<LocatedTriplesAndLocalVocab> copyContent() const;
 
  private:
@@ -186,12 +204,14 @@ class DeltaTriplesManager {
   using Triples = DeltaTriples::Triples;
 
   explicit DeltaTriplesManager(const IndexImpl& index);
+  FRIEND_TEST(DeltaTriplesTest, DeltaTriplesManager);
+
   // Insert triples. This function is thread-safe, meaning that only one call to
   // `insertTriples` or `deleteTriples` can actually access the underlying
   // `DeltaTriples` object at the same time.
   void insertTriples(CancellationHandle cancellationHandle, Triples triples);
 
-  // Delete triples. For detaiils on the tread-safety see `insertTriples` above.
+  // Delete triples. For details on the tread-safety see `insertTriples` above.
   void deleteTriples(CancellationHandle cancellationHandle, Triples triples);
 
   // Return a `LocatedTriplesPerBlockPtr` that contains a deep copy of the state
@@ -199,6 +219,12 @@ class DeltaTriplesManager {
   // is not affected by future UPDATE requests. It can therefore be used to
   // execute a query in a consistent way.
   LocatedTriplesPerBlockPtr getLocatedTriples() const;
+
+ private:
+  // The common implementation of `insertTriples` and `deleteTriples` above.
+  template <typename Function>
+  void insertOrDeleteImpl(CancellationHandle cancellationHandle,
+                          Triples triples, Function function);
 };
 
 // DELTA TRIPLES AND THE CACHE
