@@ -171,8 +171,11 @@ class DeltaTriples {
 
 // Make it possible to forward declare this class.
 class LocatedTriplesPerBlockPtr
-    : public DeltaTriples::LocatedTriplesPerBlockPtr {};
+    : public std::shared_ptr<const DeltaTriples::LocatedTriplesAndLocalVocab> {
+};
 
+// This class synchronizes the access to a `DeltaTriples` object, thus avoiding
+// race conditions between concurrent updates and queries.
 class DeltaTriplesManager {
   ad_utility::Synchronized<DeltaTriples> deltaTriples_;
   ad_utility::Synchronized<LocatedTriplesPerBlockPtr, std::shared_mutex>
@@ -182,14 +185,19 @@ class DeltaTriplesManager {
   using CancellationHandle = DeltaTriples::CancellationHandle;
   using Triples = DeltaTriples::Triples;
 
-  explicit DeltaTriplesManager(const Index& index);
   explicit DeltaTriplesManager(const IndexImpl& index);
-  // Insert triples.
+  // Insert triples. This function is thread-safe, meaning that only one call to
+  // `insertTriples` or `deleteTriples` can actually access the underlying
+  // `DeltaTriples` object at the same time.
   void insertTriples(CancellationHandle cancellationHandle, Triples triples);
 
-  // Delete triples.
+  // Delete triples. For detaiils on the tread-safety see `insertTriples` above.
   void deleteTriples(CancellationHandle cancellationHandle, Triples triples);
 
+  // Return a `LocatedTriplesPerBlockPtr` that contains a deep copy of the state
+  // of the underlying `DeltaTriples` after the last completed UPDATE, and thus
+  // is not affected by future UPDATE requests. It can therefore be used to
+  // execute a query in a consistent way.
   LocatedTriplesPerBlockPtr getLocatedTriples() const;
 };
 
