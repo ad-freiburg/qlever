@@ -18,6 +18,7 @@
 #include "global/SpecialIds.h"
 #include "index/CompressedRelation.h"
 #include "index/ConstantsIndexBuilding.h"
+#include "index/DeltaTriples.h"
 #include "index/DocsDB.h"
 #include "index/Index.h"
 #include "index/IndexBuilderTypes.h"
@@ -188,6 +189,8 @@ class IndexImpl {
   // BlankNodeManager, initialized during `readConfiguration`
   std::unique_ptr<ad_utility::BlankNodeManager> blankNodeManager_{nullptr};
 
+  std::optional<DeltaTriplesManager> deltaTriples_;
+
  public:
   explicit IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator);
 
@@ -261,6 +264,11 @@ class IndexImpl {
 
   ad_utility::BlankNodeManager* getBlankNodeManager() const;
 
+  DeltaTriplesManager& deltaTriplesManager() { return deltaTriples_.value(); }
+  const DeltaTriplesManager& deltaTriplesManager() const {
+    return deltaTriples_.value();
+  }
+
   // --------------------------------------------------------------------------
   //  -- RETRIEVAL ---
   // --------------------------------------------------------------------------
@@ -283,12 +291,12 @@ class IndexImpl {
 
   // ___________________________________________________________________________
   size_t getCardinality(Id id, Permutation::Enum permutation,
-                        const DeltaTriples&) const;
+                        const LocatedTriplesPerBlockPtr&) const;
 
   // ___________________________________________________________________________
   size_t getCardinality(const TripleComponent& comp,
                         Permutation::Enum permutation,
-                        const DeltaTriples& deltaTriples) const;
+                        const LocatedTriplesPerBlockPtr& deltaTriples) const;
 
   // ___________________________________________________________________________
   std::string indexToString(VocabIndex id) const;
@@ -422,7 +430,7 @@ class IndexImpl {
   // _____________________________________________________________________________
   vector<float> getMultiplicities(const TripleComponent& key,
                                   Permutation::Enum permutation,
-                                  const DeltaTriples&) const;
+                                  const LocatedTriplesPerBlockPtr&) const;
 
   // ___________________________________________________________________
   vector<float> getMultiplicities(Permutation::Enum permutation) const;
@@ -432,20 +440,21 @@ class IndexImpl {
                const Permutation::Enum& permutation,
                Permutation::ColumnIndicesRef additionalColumns,
                const ad_utility::SharedCancellationHandle& cancellationHandle,
-               const DeltaTriples& deltaTriples,
+               const LocatedTriplesPerBlockPtr& deltaTriples,
                const LimitOffsetClause& limitOffset = {}) const;
 
   // _____________________________________________________________________________
   IdTable scan(const ScanSpecification& scanSpecification, Permutation::Enum p,
                Permutation::ColumnIndicesRef additionalColumns,
                const ad_utility::SharedCancellationHandle& cancellationHandle,
-               const DeltaTriples& deltaTriples,
+               const LocatedTriplesPerBlockPtr& deltaTriples,
                const LimitOffsetClause& limitOffset = {}) const;
 
   // _____________________________________________________________________________
-  size_t getResultSizeOfScan(const ScanSpecification& scanSpecification,
-                             const Permutation::Enum& permutation,
-                             const DeltaTriples& deltaTriples) const;
+  size_t getResultSizeOfScan(
+      const ScanSpecification& scanSpecification,
+      const Permutation::Enum& permutation,
+      const LocatedTriplesPerBlockPtr& deltaTriples) const;
 
  private:
   // Private member functions

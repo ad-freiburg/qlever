@@ -93,8 +93,6 @@ class LocatedTriplesPerBlock {
   void updateAugmentedMetadata();
 
  public:
-
-
   // Get upper limits for the number of located triples for the given block. The
   // return value is a pair of numbers: first, the number of existing triples
   // ("to be deleted") and second, the number of new triples ("to be inserted").

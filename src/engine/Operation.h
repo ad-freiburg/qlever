@@ -69,9 +69,7 @@ class Operation {
 
   const Index& getIndex() const { return _executionContext->getIndex(); }
 
-  const DeltaTriples& deltaTriples() const {
-    return _executionContext->deltaTriples();
-  }
+  const auto& deltaTriples() const { return _executionContext->deltaTriples(); }
 
   // Get a unique, not ambiguous string representation for a subtree.
   // This should act like an ID for each subtree.

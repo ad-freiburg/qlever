@@ -33,7 +33,7 @@ DeltaTriples::locateAndAddTriples(CancellationHandle cancellationHandle,
   std::array<std::vector<LocatedTriples::iterator>, Permutation::ALL.size()>
       intermediateHandles;
   for (auto permutation : Permutation::ALL) {
-    auto& perm = index_.getImpl().getPermutation(permutation);
+    auto& perm = index_.getPermutation(permutation);
     auto locatedTriples = LocatedTriple::locateTriplesInPermutation(
         // TODO<qup42>: replace with `getAugmentedMetadata` once integration
         //  is done
@@ -178,6 +178,50 @@ const LocatedTriplesPerBlock& DeltaTriples::getLocatedTriplesPerBlock(
 }
 
 // ____________________________________________________________________________
-std::shared_ptr<DeltaTriples::LocatedTriplesAndLocalVocab> DeltaTriples::copyContent() const {
-  return std::make_shared<LocatedTriplesAndLocalVocab>(locatedTriplesPerBlock(), localVocab_.clone());
+std::shared_ptr<DeltaTriples::LocatedTriplesAndLocalVocab>
+DeltaTriples::copyContent() const {
+  return std::make_shared<LocatedTriplesAndLocalVocab>(locatedTriplesPerBlock(),
+                                                       localVocab_.clone());
+}
+
+DeltaTriples::DeltaTriples(const Index& index)
+    : DeltaTriples(index.getImpl()) {}
+
+// ____________________________________________________________________________
+DeltaTriplesManager::DeltaTriplesManager(const IndexImpl& index)
+    : deltaTriples_{index},
+      currentLocatedTriplesPerBlock{deltaTriples_.rlock()->copyContent()} {}
+
+// ____________________________________________________________________________
+void DeltaTriplesManager::insertTriples(
+    DeltaTriples::CancellationHandle cancellationHandle,
+    DeltaTriples::Triples triples) {
+  deltaTriples_.withWriteLock(
+      [this, &cancellationHandle, &triples](DeltaTriples& deltaTriples) {
+        currentLocatedTriplesPerBlock.withWriteLock([&deltaTriples](auto& ptr) {
+          ptr = LocatedTriplesPerBlockPtr{deltaTriples.copyContent()};
+        });
+        deltaTriples.insertTriples(std::move(cancellationHandle),
+                                   std::move(triples));
+      });
+}
+
+// TODO<joka921> This is very similar to `insertTriples`, remove the
+// duplication.
+void DeltaTriplesManager::deleteTriples(
+    DeltaTriples::CancellationHandle cancellationHandle,
+    DeltaTriples::Triples triples) {
+  deltaTriples_.withWriteLock(
+      [this, &cancellationHandle, &triples](DeltaTriples& deltaTriples) {
+        currentLocatedTriplesPerBlock.withWriteLock([&deltaTriples](auto& ptr) {
+          ptr = LocatedTriplesPerBlockPtr{deltaTriples.copyContent()};
+        });
+        deltaTriples.deleteTriples(std::move(cancellationHandle),
+                                   std::move(triples));
+      });
+}
+
+// _____________________________________________________________________________
+LocatedTriplesPerBlockPtr DeltaTriplesManager::getLocatedTriples() const {
+  return *currentLocatedTriplesPerBlock.rlock();
 }

@@ -92,7 +92,11 @@ class QueryExecutionContext {
 
   [[nodiscard]] const Index& getIndex() const { return _index; }
 
-  const DeltaTriples& deltaTriples() const { return *deltaTriples_; }
+  // TODO<joka921> Don't return the pointer, but simply a reference.
+  const LocatedTriplesPerBlockPtr& deltaTriples() const {
+    AD_CORRECTNESS_CHECK(deltaTriples_ != nullptr);
+    return deltaTriples_;
+  }
 
   void clearCacheUnpinnedOnly() { getQueryTreeCache().clearUnpinnedOnly(); }
 
@@ -125,8 +129,8 @@ class QueryExecutionContext {
   const Index& _index;
   // TODO<joka921> This has to be stored externally once we properly support
   // SPARQL UPDATE, currently it is just a stub to make the interface work.
-  std::shared_ptr<DeltaTriples> deltaTriples_{
-      std::make_shared<DeltaTriples>(_index)};
+  LocatedTriplesPerBlockPtr deltaTriples_{
+      _index.deltaTriplesManager().getLocatedTriples()};
   QueryResultCache* const _subtreeCache;
   // allocators are copied but hold shared state
   ad_utility::AllocatorWithLimit<Id> _allocator;

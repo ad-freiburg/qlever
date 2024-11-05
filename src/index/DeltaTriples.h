@@ -12,6 +12,7 @@
 #include "index/IndexBuilderTypes.h"
 #include "index/LocatedTriples.h"
 #include "index/Permutation.h"
+#include "util/Synchronized.h"
 
 // A class for maintaining triples that are inserted or deleted after index
 // building, we call these delta triples. How it works in principle:
@@ -42,14 +43,15 @@ class DeltaTriples {
     LocalVocab localVocab_;
   };
 
-  using LocatedTriplesPerBlockPtr = std::shared_ptr<LocatedTriplesAndLocalVocab>;
+  using LocatedTriplesPerBlockPtr =
+      std::shared_ptr<LocatedTriplesAndLocalVocab>;
 
   using Triples = std::vector<IdTriple<0>>;
   using CancellationHandle = ad_utility::SharedCancellationHandle;
 
  private:
   // The index to which these triples are added.
-  const Index& index_;
+  const IndexImpl& index_;
 
   // The local vocabulary of the delta triples (they may have components,
   // which are not contained in the vocabulary of the original index).
@@ -89,12 +91,11 @@ class DeltaTriples {
 
  public:
   // Construct for given index.
-  explicit DeltaTriples(const Index& index) : index_(index) {}
+  explicit DeltaTriples(const Index& index);
+  explicit DeltaTriples(const IndexImpl& index) : index_{index} {};
 
   DeltaTriples(const DeltaTriples&) = delete;
   DeltaTriples& operator=(const DeltaTriples&) = delete;
-  // Create a deep copy of the DeltaTriples object.
-  DeltaTriples clone() const;
 
   // Get the common `LocalVocab` of the delta triples.
  private:
@@ -168,22 +169,28 @@ class DeltaTriples {
   void eraseTripleInAllPermutations(LocatedTripleHandles& handles);
 };
 
+// Make it possible to forward declare this class.
+class LocatedTriplesPerBlockPtr
+    : public DeltaTriples::LocatedTriplesPerBlockPtr {};
+
 class DeltaTriplesManager {
-  DeltaTriples deltaTriples_;
-  std::shared_mutex mutex_;
-  std::optional<std::shared_ptr<DeltaTriples::LocatedTriplesAndLocalVocab>>
-      vocab_;
+  ad_utility::Synchronized<DeltaTriples> deltaTriples_;
+  ad_utility::Synchronized<LocatedTriplesPerBlockPtr, std::shared_mutex>
+      currentLocatedTriplesPerBlock;
+
  public:
   using CancellationHandle = DeltaTriples::CancellationHandle;
   using Triples = DeltaTriples::Triples;
+
+  explicit DeltaTriplesManager(const Index& index);
+  explicit DeltaTriplesManager(const IndexImpl& index);
   // Insert triples.
   void insertTriples(CancellationHandle cancellationHandle, Triples triples);
 
   // Delete triples.
   void deleteTriples(CancellationHandle cancellationHandle, Triples triples);
 
-  DeltaTriples::LocatedTriplesPerBlockPtr getLocatedTriples() const;
-
+  LocatedTriplesPerBlockPtr getLocatedTriples() const;
 };
 
 // DELTA TRIPLES AND THE CACHE
