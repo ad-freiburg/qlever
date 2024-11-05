@@ -33,6 +33,20 @@ class DeltaTriples {
   FRIEND_TEST(DeltaTriplesTest, clear);
   FRIEND_TEST(DeltaTriplesTest, addTriplesToLocalVocab);
 
+ public:
+  // The positions of the delta triples in each of the six permutations, and
+  // the local vocab.
+  struct LocatedTriplesAndLocalVocab {
+    std::array<LocatedTriplesPerBlock, Permutation::ALL.size()>
+        locatedTriplesPerBlock_;
+    LocalVocab localVocab_;
+  };
+
+  using LocatedTriplesPerBlockPtr = std::shared_ptr<LocatedTriplesAndLocalVocab>;
+
+  using Triples = std::vector<IdTriple<0>>;
+  using CancellationHandle = ad_utility::SharedCancellationHandle;
+
  private:
   // The index to which these triples are added.
   const Index& index_;
@@ -52,9 +66,8 @@ class DeltaTriples {
   static_assert(static_cast<int>(Permutation::Enum::OSP) == 5);
   static_assert(Permutation::ALL.size() == 6);
 
-  // The positions of the delta triples in each of the six permutations.
-  std::array<LocatedTriplesPerBlock, Permutation::ALL.size()>
-      locatedTriplesPerBlock_;
+  LocatedTriplesPerBlockPtr locatedTriplesAndLocalVocab =
+      std::make_shared<LocatedTriplesAndLocalVocab>();
 
   // Each delta triple needs to know where it is stored in each of the six
   // `LocatedTriplesPerBlock` above.
@@ -66,8 +79,6 @@ class DeltaTriples {
   };
   using TriplesToHandlesMap =
       ad_utility::HashMap<IdTriple<0>, LocatedTripleHandles>;
-  using Triples = std::vector<IdTriple<0>>;
-  using CancellationHandle = ad_utility::SharedCancellationHandle;
 
   // The sets of triples added to and subtracted from the original index. Any
   // triple can be at most in one of the sets. The information whether a triple
@@ -80,9 +91,20 @@ class DeltaTriples {
   // Construct for given index.
   explicit DeltaTriples(const Index& index) : index_(index) {}
 
+  DeltaTriples(const DeltaTriples&) = delete;
+  DeltaTriples& operator=(const DeltaTriples&) = delete;
+  // Create a deep copy of the DeltaTriples object.
+  DeltaTriples clone() const;
+
   // Get the common `LocalVocab` of the delta triples.
  private:
-  LocalVocab& localVocab() { return localVocab_; }
+  LocalVocab& localVocab() { return locatedTriplesAndLocalVocab->localVocab_; }
+  auto& locatedTriplesPerBlock() {
+    return locatedTriplesAndLocalVocab->locatedTriplesPerBlock_;
+  }
+  const auto& locatedTriplesPerBlock() const {
+    return locatedTriplesAndLocalVocab->locatedTriplesPerBlock_;
+  }
 
  public:
   const LocalVocab& localVocab() const { return localVocab_; }
@@ -104,6 +126,8 @@ class DeltaTriples {
   // Get `TripleWithPosition` objects for given permutation.
   const LocatedTriplesPerBlock& getLocatedTriplesPerBlock(
       Permutation::Enum permutation) const;
+
+  std::shared_ptr<LocatedTriplesAndLocalVocab> copyContent() const;
 
  private:
   // Find the position of the given triple in the given permutation and add it
@@ -142,6 +166,24 @@ class DeltaTriples {
   // delete the respective entry in `triplesInserted_` or `triplesDeleted_`,
   // which stores these iterators.
   void eraseTripleInAllPermutations(LocatedTripleHandles& handles);
+};
+
+class DeltaTriplesManager {
+  DeltaTriples deltaTriples_;
+  std::shared_mutex mutex_;
+  std::optional<std::shared_ptr<DeltaTriples::LocatedTriplesAndLocalVocab>>
+      vocab_;
+ public:
+  using CancellationHandle = DeltaTriples::CancellationHandle;
+  using Triples = DeltaTriples::Triples;
+  // Insert triples.
+  void insertTriples(CancellationHandle cancellationHandle, Triples triples);
+
+  // Delete triples.
+  void deleteTriples(CancellationHandle cancellationHandle, Triples triples);
+
+  DeltaTriples::LocatedTriplesPerBlockPtr getLocatedTriples() const;
+
 };
 
 // DELTA TRIPLES AND THE CACHE

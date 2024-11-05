@@ -21,7 +21,7 @@ LocatedTriples::iterator& DeltaTriples::LocatedTripleHandles::forPermutation(
 void DeltaTriples::clear() {
   triplesInserted_.clear();
   triplesDeleted_.clear();
-  std::ranges::for_each(locatedTriplesPerBlock_,
+  std::ranges::for_each(locatedTriplesPerBlock(),
                         &LocatedTriplesPerBlock::clear);
 }
 
@@ -41,7 +41,7 @@ DeltaTriples::locateAndAddTriples(CancellationHandle cancellationHandle,
         cancellationHandle);
     cancellationHandle->throwIfCancelled();
     intermediateHandles[static_cast<size_t>(permutation)] =
-        locatedTriplesPerBlock_[static_cast<size_t>(permutation)].add(
+        locatedTriplesPerBlock()[static_cast<size_t>(permutation)].add(
             locatedTriples);
     cancellationHandle->throwIfCancelled();
   }
@@ -60,7 +60,7 @@ void DeltaTriples::eraseTripleInAllPermutations(LocatedTripleHandles& handles) {
   // Erase for all permutations.
   for (auto permutation : Permutation::ALL) {
     auto ltIter = handles.forPermutation(permutation);
-    locatedTriplesPerBlock_[static_cast<int>(permutation)].erase(
+    locatedTriplesPerBlock()[static_cast<int>(permutation)].erase(
         ltIter->blockIndex_, ltIter);
   }
 }
@@ -174,5 +174,10 @@ void DeltaTriples::modifyTriplesImpl(CancellationHandle cancellationHandle,
 // ____________________________________________________________________________
 const LocatedTriplesPerBlock& DeltaTriples::getLocatedTriplesPerBlock(
     Permutation::Enum permutation) const {
-  return locatedTriplesPerBlock_[static_cast<int>(permutation)];
+  return locatedTriplesPerBlock()[static_cast<int>(permutation)];
+}
+
+// ____________________________________________________________________________
+std::shared_ptr<DeltaTriples::LocatedTriplesAndLocalVocab> DeltaTriples::copyContent() const {
+  return std::make_shared<LocatedTriplesAndLocalVocab>(locatedTriplesPerBlock(), localVocab_.clone());
 }
