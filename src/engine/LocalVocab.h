@@ -14,6 +14,7 @@
 #include "absl/container/node_hash_set.h"
 #include "global/Id.h"
 #include "parser/LiteralOrIri.h"
+#include "util/AllocatorWithLimit.h"
 #include "util/BlankNodeManager.h"
 #include "util/HashSet.h"
 #include "util/MemorySize/MemorySize.h"
@@ -42,7 +43,7 @@ class LocalVocab {
   // because we hand out pointers to them.
   using Set =
       ad_utility::CustomHashSetWithMemoryLimit<LiteralOrIri, IriSizeGetter>;
-  ad_utility::MemorySize limit_;
+  ad_utility::detail::AllocationMemoryLeftThreadsafe limit_;
   std::shared_ptr<Set> primaryWordSet_;
 
   IriSizeGetter sizeGetter;
@@ -60,8 +61,9 @@ class LocalVocab {
 
  public:
   // Create a new, empty local vocabulary.
-  LocalVocab(ad_utility::MemorySize memoryLimit =
-                 ad_utility::MemorySize::megabytes(100))
+  LocalVocab(ad_utility::detail::AllocationMemoryLeftThreadsafe memoryLimit =
+                 ad_utility::makeAllocationMemoryLeftThreadsafeObject(
+                     ad_utility::MemorySize::megabytes(100)))
       : limit_(memoryLimit),
         primaryWordSet_(std::make_shared<Set>(limit_, sizeGetter)) {}
 

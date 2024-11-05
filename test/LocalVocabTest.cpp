@@ -33,6 +33,7 @@
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "global/Id.h"
 #include "gmock/gmock.h"
+#include "util/AllocatorWithLimit.h"
 #include "util/IndexTestHelpers.h"
 #include "util/MemorySize/MemorySize.h"
 
@@ -386,7 +387,9 @@ TEST(LocalVocab, getBlankNodeIndex) {
 
 // _____________________________________________________________________________
 TEST(LocalVocab, memoryLimit) {
-  ad_utility::MemorySize smallLimit = ad_utility::MemorySize::kilobytes(1);
+  ad_utility::detail::AllocationMemoryLeftThreadsafe smallLimit =
+      ad_utility::makeAllocationMemoryLeftThreadsafeObject(
+          ad_utility::MemorySize::kilobytes(1));
   LocalVocab localVocab(smallLimit);
   TestWords testWords = getTestCollectionOfWords(1000);
 
