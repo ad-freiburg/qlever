@@ -8,6 +8,7 @@ RUN apt-get update && apt-get install -y software-properties-common wget && add-
 RUN wget https://apt.kitware.com/kitware-archive.sh && chmod +x kitware-archive.sh &&./kitware-archive.sh
 
 FROM base as builder
+ARG TARGETPLATFORM
 RUN apt-get update && apt-get install -y build-essential cmake libicu-dev tzdata pkg-config uuid-runtime uuid-dev git libjemalloc-dev ninja-build libzstd-dev libssl-dev libboost1.81-dev libboost-program-options1.81-dev libboost-iostreams1.81-dev libboost-url1.81-dev
 
 COPY . /app/
@@ -16,7 +17,9 @@ WORKDIR /app/
 ENV DEBIAN_FRONTEND=noninteractive
 
 WORKDIR /app/build/
-RUN cmake -DCMAKE_BUILD_TYPE=Release -DLOGLEVEL=INFO -DUSE_PARALLEL=true -D_NO_TIMING_TESTS=ON -GNinja .. && ninja
+RUN cmake -DCMAKE_BUILD_TYPE=Release -DLOGLEVEL=INFO -DUSE_PARALLEL=true -D_NO_TIMING_TESTS=ON -GNinja ..
+RUN echo "Building for platform ->$TARGETPLATFORM<-"
+RUN if ["$TARGETPLATFORM" = "linux/arm64"] ; then cmake --build . --target IndexBuilderMain ServerMain; else cmake --build . ; fi
 RUN ctest --rerun-failed --output-on-failure
 
 FROM base as runtime
