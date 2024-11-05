@@ -49,7 +49,12 @@ class Iri {
   // angled brackets.
   NormalizedStringView getContent() const;
 
-  size_t getDynamicMemoryUsage() const { return iri_.capacity(); }
+  // Calculate the memory usage of the `Iri` string. This might overestimate the
+  // memory usage as this does not currently take into account small string
+  // optimization of `std::string`
+  size_t getDynamicMemoryUsage() const {
+    return sizeof(std::string) + iri_.capacity();
+  }
 };
 
 }  // namespace ad_utility::triple_component

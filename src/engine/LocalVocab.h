@@ -29,6 +29,9 @@ class LocalVocab {
   using Entry = LocalVocabEntry;
   using LiteralOrIri = LocalVocabEntry;
 
+  // A functor that calculates the memory size of an IRI or Literal.
+  // This struct defines an operator() that takes a `LiteralOrIri` object and
+  // returns its dynamic memory usage in bytes.
   struct IriSizeGetter {
     ad_utility::MemorySize operator()(
         const ad_utility::triple_component::LiteralOrIri& literalOrIri) {

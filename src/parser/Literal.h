@@ -92,6 +92,11 @@ class Literal {
       std::string_view rdfContentWithoutQuotes,
       std::optional<std::variant<Iri, std::string>> descriptor = std::nullopt);
 
-  size_t getDynamicMemoryUsage() const { return content_.capacity(); }
+  // Calculate the memory usage of the `Literal` string. This might overestimate
+  // the memory usage as this does not currently take into account small string
+  // optimization of `std::string`
+  size_t getDynamicMemoryUsage() const {
+    return sizeof(std::string) + content_.capacity();
+  }
 };
 }  // namespace ad_utility::triple_component
