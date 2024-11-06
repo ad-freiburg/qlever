@@ -34,7 +34,8 @@ static constexpr auto makeJoin =
       subtree->getVariableAndInfoByColumnIndex(subtreeColIndex).first;
   auto hasPatternScan = ad_utility::makeExecutionTree<IndexScan>(
       qec, Permutation::Enum::PSO,
-      SparqlTriple{subtreeVar, HAS_PATTERN_PREDICATE, objectVariable});
+      SparqlTriple{subtreeVar, std::string{HAS_PATTERN_PREDICATE},
+                   objectVariable});
   auto joinedSubtree = ad_utility::makeExecutionTree<Join>(
       qec, std::move(subtree), std::move(hasPatternScan), subtreeColIndex, 0);
   auto column =
@@ -115,7 +116,7 @@ string HasPredicateScan::getDescriptor() const {
     case ScanType::FULL_SCAN:
       return "HasPredicateScan full scan";
     case ScanType::SUBQUERY_S:
-      return "HasPredicateScan with a subquery on " + subject_.toRdfLiteral();
+      return "HasPredicateScan with subquery";
     default:
       return "HasPredicateScan";
   }
@@ -260,13 +261,15 @@ ProtoResult HasPredicateScan::computeResult(
   idTable.setNumColumns(getResultWidth());
 
   const CompactVectorOfStrings<Id>& patterns = getIndex().getPatterns();
-  auto hasPattern = getExecutionContext()
-                        ->getIndex()
-                        .getImpl()
-                        .getPermutation(Permutation::Enum::PSO)
-                        .lazyScan({qlever::specialIds.at(HAS_PATTERN_PREDICATE),
-                                   std::nullopt, std::nullopt},
-                                  std::nullopt, {}, cancellationHandle_);
+  const auto& index = getExecutionContext()->getIndex().getImpl();
+  auto scanSpec =
+      ScanSpecificationAsTripleComponent{
+          TripleComponent::Iri::fromIriref(HAS_PATTERN_PREDICATE), std::nullopt,
+          std::nullopt}
+          .toScanSpecification(index);
+  auto hasPattern = index.getPermutation(Permutation::Enum::PSO)
+                        .lazyScan(scanSpec, std::nullopt, {},
+                                  cancellationHandle_, deltaTriples());
 
   auto getId = [this](const TripleComponent tc) {
     std::optional<Id> id = tc.toValueId(getIndex().getVocab());
@@ -330,13 +333,15 @@ void HasPredicateScan::computeFreeS(
 void HasPredicateScan::computeFreeO(
     IdTable* resultTable, Id subjectAsId,
     const CompactVectorOfStrings<Id>& patterns) const {
-  auto hasPattern = getExecutionContext()
-                        ->getIndex()
-                        .getImpl()
-                        .getPermutation(Permutation::Enum::PSO)
-                        .scan({qlever::specialIds.at(HAS_PATTERN_PREDICATE),
-                               subjectAsId, std::nullopt},
-                              {}, cancellationHandle_);
+  const auto& index = getExecutionContext()->getIndex().getImpl();
+  auto scanSpec =
+      ScanSpecificationAsTripleComponent{
+          TripleComponent::Iri::fromIriref(HAS_PATTERN_PREDICATE), subjectAsId,
+          std::nullopt}
+          .toScanSpecification(index);
+  auto hasPattern =
+      index.getPermutation(Permutation::Enum::PSO)
+          .scan(std::move(scanSpec), {}, cancellationHandle_, deltaTriples());
   AD_CORRECTNESS_CHECK(hasPattern.numRows() <= 1);
   for (Id patternId : hasPattern.getColumn(0)) {
     const auto& pattern = patterns[patternId.getInt()];

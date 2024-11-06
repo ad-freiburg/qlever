@@ -55,14 +55,17 @@ namespace {
 // folded into the permutations as additional columns.
 void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
     const Index& index) {
+  DeltaTriples deltaTriples(index);
   static constexpr size_t col0IdTag = 43;
   auto cancellationDummy = std::make_shared<ad_utility::CancellationHandle<>>();
-  auto hasPatternId = qlever::specialIds.at(HAS_PATTERN_PREDICATE);
-  auto checkSingleElement = [&cancellationDummy, &hasPatternId](
-                                const Index& index, size_t patternIdx, Id id) {
-    auto scanResultHasPattern =
-        index.scan({hasPatternId, id, std::nullopt}, Permutation::Enum::PSO, {},
-                   cancellationDummy);
+  auto iriOfHasPattern =
+      TripleComponent::Iri::fromIriref(HAS_PATTERN_PREDICATE);
+  auto checkSingleElement = [&cancellationDummy, &iriOfHasPattern,
+                             &deltaTriples](const Index& index,
+                                            size_t patternIdx, Id id) {
+    auto scanResultHasPattern = index.scan(
+        ScanSpecificationAsTripleComponent{iriOfHasPattern, id, std::nullopt},
+        Permutation::Enum::PSO, {}, cancellationDummy, deltaTriples);
     // Each ID has at most one pattern, it can have none if it doesn't
     // appear as a subject in the knowledge graph.
     AD_CORRECTNESS_CHECK(scanResultHasPattern.numRows() <= 1);
@@ -80,19 +83,17 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
         auto cancellationDummy =
             std::make_shared<ad_utility::CancellationHandle<>>();
         auto scanResult = index.scan(
-            {col0Id, std::nullopt, std::nullopt}, permutation,
+            ScanSpecification{col0Id, std::nullopt, std::nullopt}, permutation,
             std::array{ColumnIndex{ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN},
                        ColumnIndex{ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN}},
-            cancellationDummy);
+            cancellationDummy, deltaTriples);
         ASSERT_EQ(scanResult.numColumns(), 4u);
         for (const auto& row : scanResult) {
-          auto patternIdx =
-              row[ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN - 1].getInt();
+          auto patternIdx = row[2].getInt();
           Id subjectId = row[subjectColIdx];
           checkSingleElement(index, patternIdx, subjectId);
           Id objectId = objectColIdx == col0IdTag ? col0Id : row[objectColIdx];
-          auto patternIdxObject =
-              row[ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN - 1].getInt();
+          auto patternIdxObject = row[3].getInt();
           checkSingleElement(index, patternIdxObject, objectId);
         }
       };
@@ -110,13 +111,13 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
 
   auto cancellationHandle =
       std::make_shared<ad_utility::CancellationHandle<>>();
-  auto predicates =
-      index.getImpl().PSO().getDistinctCol0IdsAndCounts(cancellationHandle);
+  auto predicates = index.getImpl().PSO().getDistinctCol0IdsAndCounts(
+      cancellationHandle, deltaTriples);
   for (const auto& predicate : predicates.getColumn(0)) {
     checkConsistencyForPredicate(predicate);
   }
-  auto objects =
-      index.getImpl().OSP().getDistinctCol0IdsAndCounts(cancellationHandle);
+  auto objects = index.getImpl().OSP().getDistinctCol0IdsAndCounts(
+      cancellationHandle, deltaTriples);
   for (const auto& object : objects.getColumn(0)) {
     checkConsistencyForObject(object);
   }
@@ -174,7 +175,9 @@ Index makeTestIndex(const std::string& indexBasename,
     index.usePatterns() = usePatterns;
     index.setSettingsFile(inputFilename + ".settings.json");
     index.loadAllPermutations() = loadAllPermutations;
-    index.createFromFile(inputFilename);
+    qlever::InputFileSpecification spec{inputFilename, qlever::Filetype::Turtle,
+                                        std::nullopt};
+    index.createFromFiles({spec});
     if (createTextIndex) {
       index.addTextFromContextFile("", true);
     }
@@ -281,15 +284,15 @@ QueryExecutionContext* getQec(std::optional<std::string> turtleInput,
 // ___________________________________________________________
 std::function<Id(const std::string&)> makeGetId(const Index& index) {
   return [&index](const std::string& el) {
-    auto literalOrIri = [&el]() {
+    auto literalOrIri = [&el]() -> TripleComponent {
       if (el.starts_with('<') || el.starts_with('@')) {
-        return triple_component::LiteralOrIri::iriref(el);
+        return TripleComponent::Iri::fromIriref(el);
       } else {
         AD_CONTRACT_CHECK(el.starts_with('\"'));
-        return triple_component::LiteralOrIri::fromStringRepresentation(el);
+        return TripleComponent::Literal::fromStringRepresentation(el);
       }
     }();
-    auto id = index.getId(literalOrIri);
+    auto id = literalOrIri.toValueId(index.getVocab());
     AD_CONTRACT_CHECK(id.has_value());
     return id.value();
   };

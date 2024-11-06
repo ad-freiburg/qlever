@@ -15,11 +15,26 @@
 
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "parser/RdfEscaping.h"
+#include "parser/sparqlParser/SparqlQleverVisitor.h"
 #include "util/Conversions.h"
 #include "util/TransparentFunctors.h"
 
 using std::string;
 using std::vector;
+
+// _____________________________________________________________________________
+parsedQuery::DatasetClauses parsedQuery::DatasetClauses::fromClauses(
+    const std::vector<DatasetClause>& clauses) {
+  DatasetClauses result;
+  for (auto& [dataset, isNamed] : clauses) {
+    auto& graphs = isNamed ? result.namedGraphs_ : result.defaultGraphs_;
+    if (!graphs.has_value()) {
+      graphs.emplace();
+    }
+    graphs.value().insert(dataset);
+  }
+  return result;
+}
 
 // _____________________________________________________________________________
 string SparqlPrefix::asString() const {
@@ -204,8 +219,7 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
       // expressions
       selectClause.deleteAliasesButKeepVariables();
     }
-  } else {
-    AD_CORRECTNESS_CHECK(hasConstructClause());
+  } else if (hasConstructClause()) {
     if (_groupByVariables.empty()) {
       return;
     }
@@ -217,6 +231,9 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
                                           noteForGroupByError);
       }
     }
+  } else {
+    // TODO<joka921> refactor this to use `std::visit`. It is much safer.
+    AD_CORRECTNESS_CHECK(hasAskClause());
   }
 }
 
@@ -236,7 +253,7 @@ void ParsedQuery::registerVariablesVisibleInQueryBody(
 // _____________________________________________________________________________
 void ParsedQuery::registerVariableVisibleInQueryBody(const Variable& variable) {
   auto addVariable = [&variable](auto& clause) {
-    if (!variable.name().starts_with(INTERNAL_VARIABLE_PREFIX)) {
+    if (!variable.name().starts_with(QLEVER_INTERNAL_VARIABLE_PREFIX)) {
       clause.addVisibleVariable(variable);
     }
   };
@@ -268,7 +285,8 @@ void ParsedQuery::GraphPattern::addLanguageFilter(const Variable& variable,
       if (triple.o_ == variable &&
           (triple.p_._operation == PropertyPath::Operation::IRI &&
            !isVariable(triple.p_)) &&
-          !triple.p_._iri.starts_with(INTERNAL_ENTITIES_URI_PREFIX)) {
+          !triple.p_._iri.starts_with(
+              QLEVER_INTERNAL_PREFIX_IRI_WITHOUT_CLOSING_BRACKET)) {
         matchingTriples.push_back(&triple);
       }
     }
@@ -302,7 +320,8 @@ void ParsedQuery::GraphPattern::addLanguageFilter(const Variable& variable,
                   ._triples;
 
     auto langEntity = ad_utility::convertLangtagToEntityUri(langTag);
-    SparqlTriple triple(variable, PropertyPath::fromIri(LANGUAGE_PREDICATE),
+    SparqlTriple triple(variable,
+                        PropertyPath::fromIri(std::string{LANGUAGE_PREDICATE}),
                         langEntity);
     t.push_back(std::move(triple));
   }
@@ -474,14 +493,14 @@ void ParsedQuery::addOrderByClause(OrderClause orderClause, bool isGroupBy,
 
 // ________________________________________________________________
 Variable ParsedQuery::getNewInternalVariable() {
-  auto variable =
-      Variable{absl::StrCat(INTERNAL_VARIABLE_PREFIX, numInternalVariables_)};
+  auto variable = Variable{
+      absl::StrCat(QLEVER_INTERNAL_VARIABLE_PREFIX, numInternalVariables_)};
   numInternalVariables_++;
   return variable;
 }
 
 Variable ParsedQuery::blankNodeToInternalVariable(std::string_view blankNode) {
   AD_CONTRACT_CHECK(blankNode.starts_with("_:"));
-  return Variable{
-      absl::StrCat(INTERNAL_BLANKNODE_VARIABLE_PREFIX, blankNode.substr(2))};
+  return Variable{absl::StrCat(QLEVER_INTERNAL_BLANKNODE_VARIABLE_PREFIX,
+                               blankNode.substr(2))};
 }

@@ -20,6 +20,7 @@
 #include "util/Iterators.h"
 #include "util/LambdaHelpers.h"
 #include "util/ResetWhenMoved.h"
+#include "util/SourceLocation.h"
 #include "util/UninitializedAllocator.h"
 #include "util/Views.h"
 
@@ -179,7 +180,11 @@ class IdTable {
   // Then the argument `numColumns` and `NumColumns` (the static and the
   // dynamic number of columns) must be equal, else a runtime check fails.
   // Note: this also allows to create an empty view.
-  explicit IdTable(size_t numColumns, Allocator allocator = {})
+  explicit IdTable(size_t numColumns)
+      requires(columnsAreAllocatable &&
+               std::is_default_constructible_v<Allocator>)
+      : IdTable(numColumns, Allocator{}) {}
+  explicit IdTable(size_t numColumns, Allocator allocator)
       requires columnsAreAllocatable
       : numColumns_{numColumns}, allocator_{std::move(allocator)} {
     if constexpr (!isDynamic) {
@@ -217,7 +222,10 @@ class IdTable {
   // already set up with the correct number of columns and can be used directly.
   // If `NumColumns == 0` then the number of columns has to be specified via
   // `setNumColumns()`.
-  explicit IdTable(Allocator allocator = {})
+  IdTable() requires(!isView && columnsAreAllocatable &&
+                     std::is_default_constructible_v<Allocator>)
+      : IdTable{NumColumns, Allocator{}} {};
+  explicit IdTable(Allocator allocator)
       requires(!isView && columnsAreAllocatable)
       : IdTable{NumColumns, std::move(allocator)} {};
 
@@ -270,6 +278,12 @@ class IdTable {
     data().resize(numColumns, ColumnStorage{allocator_});
   }
 
+  // Add a new empty column to the table.
+  void addEmptyColumn() requires columnsAreAllocatable && isDynamic {
+    data().emplace_back(size(), allocator_);
+    ++numColumns_;
+  }
+
   // The number of rows in the table. We deliberately have an explicitly named
   // function `numRows` as well as a generic `size` function because the latter
   // can be used to write generic code, for example when using STL algorithms on
@@ -299,7 +313,10 @@ class IdTable {
   // TODO<joka921, C++23> Use the multidimensional subscript operator.
   // TODO<joka921, C++23> Use explicit object parameters ("deducing this").
   T& operator()(size_t row, size_t column) requires(!isView) {
-    AD_EXPENSIVE_CHECK(column < data().size());
+    AD_EXPENSIVE_CHECK(column < data().size(), [&]() {
+      return absl::StrCat(row, " , ", column, ", ", data().size(), " ",
+                          numColumns(), ", ", numStaticColumns);
+    });
     AD_EXPENSIVE_CHECK(row < data().at(column).size());
     return data()[column][row];
   }
@@ -313,8 +330,15 @@ class IdTable {
   T& at(size_t row, size_t column) requires(!isView) {
     return data().at(column).at(row);
   }
-  const T& at(size_t row, size_t column) const {
+  // TODO<C++26> Remove overload for `isView` and drop requires clause.
+  const T& at(size_t row, size_t column) const requires(!isView) {
     return data().at(column).at(row);
+  }
+  // `std::span::at` is a C++26 feature, so we have to implement it ourselves.
+  const T& at(size_t row, size_t column) const requires(isView) {
+    const auto& col = data().at(column);
+    AD_CONTRACT_CHECK(row < col.size());
+    return col[row];
   }
 
   // Get a reference to the `i`-th row. The returned proxy objects can be
@@ -342,9 +366,11 @@ class IdTable {
   // `std::vector` aand other containers.
   // TODO<C++23, joka921> Remove the duplicates via explicit object parameters
   // ("deducing this").
-  row_reference_restricted front() { return (*this)[0]; }
+  row_reference_restricted front() requires(!isView) { return (*this)[0]; }
   const_row_reference_restricted front() const { return (*this)[0]; }
-  row_reference_restricted back() { return (*this)[numRows() - 1]; }
+  row_reference_restricted back() requires(!isView) {
+    return (*this)[numRows() - 1];
+  }
   const_row_reference_restricted back() const { return (*this)[numRows() - 1]; }
 
   // Resize the `IdTable` to exactly `numRows`. If `numRows < size()`, then the
@@ -561,6 +587,13 @@ class IdTable {
     std::swap(data()[c1], data()[c2]);
   }
 
+  // Delete the column with the given column index.
+  void deleteColumn(ColumnIndex colIdx) requires isDynamic {
+    AD_CONTRACT_CHECK(colIdx < numColumns());
+    data().erase(data().begin() + colIdx);
+    numColumns_--;
+  }
+
   // Helper `struct` that stores a pointer to this table and has an `operator()`
   // that can be called with a reference to an `IdTable` and the index of a row
   // and then returns a `row_reference_restricted` to that row. This struct is
@@ -613,12 +646,6 @@ class IdTable {
   // that `begin() <= beginIt <= endIt < end`, else the behavior is undefined.
   // The order of the elements before and after the erased regions remains the
   // same. This behavior is similar to `std::vector::erase`.
-  //
-  // TODO<joka921> It is currently used by the implementation of DISTINCT, which
-  // first copies the sorted input completely, and then calls `std::unique`,
-  // followed by `erase` at the end. `DISTINCT` should be implemented via an
-  // out-of-place algorithm that only writes the distinct elements. The the
-  // following two functions can be deleted.
   void erase(const iterator& beginIt, const iterator& endIt) requires(!isView) {
     AD_EXPENSIVE_CHECK(begin() <= beginIt && beginIt <= endIt &&
                        endIt <= end());

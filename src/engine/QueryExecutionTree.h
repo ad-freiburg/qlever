@@ -183,7 +183,7 @@ class QueryExecutionTree {
   // _____________________________________________________________
   friend void PrintTo(const QueryExecutionTree& tree, std::ostream* os) {
     auto& s = *os;
-    s << nlohmann::ordered_json{tree.getRootOperation()->runtimeInfo()}.dump(2);
+    s << tree.getRootOperation()->getDescriptor();
   }
 
  private:

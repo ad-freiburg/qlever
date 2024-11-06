@@ -47,7 +47,9 @@ inline auto& RuntimeParameters() {
         SizeT<"lazy-index-scan-max-size-materialization">{1'000'000},
         Bool<"use-binsearch-transitive-path">{true},
         Bool<"group-by-hash-map-enabled">{false},
-        SizeT<"service-max-value-rows">{100}};
+        Bool<"group-by-disable-index-scan-optimizations">{false},
+        SizeT<"service-max-value-rows">{10'000},
+        SizeT<"query-planning-budget">{1500}};
   }();
   return params;
 }

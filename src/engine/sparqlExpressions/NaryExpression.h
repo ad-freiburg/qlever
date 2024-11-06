@@ -42,6 +42,8 @@ SparqlExpression::Ptr makeSqrtExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeSinExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeCosExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeTanExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makePowExpression(SparqlExpression::Ptr child1,
+                                        SparqlExpression::Ptr child2);
 
 SparqlExpression::Ptr makeDistExpression(SparqlExpression::Ptr child1,
                                          SparqlExpression::Ptr child2);
@@ -114,9 +116,10 @@ std::optional<Variable> getVariableFromLangExpression(
 SparqlExpression::Ptr makeEncodeForUriExpression(SparqlExpression::Ptr child);
 
 SparqlExpression::Ptr makeIsIriExpression(SparqlExpression::Ptr child);
-SparqlExpression::Ptr makeIsBlankExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeIsLiteralExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeIsNumericExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeIsBlankExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeIsGeoPointExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeBoundExpression(SparqlExpression::Ptr child);
 
 // For a `function` that takes `std::vector<SparqlExpression::Ptr>` (size only

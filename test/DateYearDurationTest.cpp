@@ -8,8 +8,8 @@
 
 #include "./util/GTestHelpers.h"
 #include "global/Constants.h"
+#include "parser/RdfParser.h"
 #include "parser/TokenizerCtre.h"
-#include "parser/TurtleParser.h"
 #include "util/DateYearDuration.h"
 #include "util/Random.h"
 
@@ -298,7 +298,7 @@ auto testDatetimeImpl(auto parseFunction, std::string_view input,
   EXPECT_STREQ(type, outputType);
 
   TripleComponent parsedAsTurtle =
-      TurtleStringParser<TokenizerCtre>::parseTripleObject(
+      RdfStringParser<TurtleParser<TokenizerCtre>>::parseTripleObject(
           absl::StrCat("\"", input, "\"^^<", type, ">"));
   auto optionalId = parsedAsTurtle.toValueIdIfNotString();
   ASSERT_TRUE(optionalId.has_value());
@@ -412,7 +412,7 @@ auto testLargeYearImpl(auto parseFunction, std::string_view input,
   EXPECT_STREQ(type, outputType);
 
   TripleComponent parsedAsTurtle =
-      TurtleStringParser<TokenizerCtre>::parseTripleObject(
+      RdfStringParser<TurtleParser<TokenizerCtre>>::parseTripleObject(
           absl::StrCat("\"", input, "\"^^<", type, ">"));
   auto optionalId = parsedAsTurtle.toValueIdIfNotString();
   ASSERT_TRUE(optionalId.has_value());
@@ -552,4 +552,14 @@ TEST(DateYearOrDuration, Order) {
   ASSERT_LT(d6, d5);
   ASSERT_LT(d7, d4);
   ASSERT_LT(d7, d6);
+}
+
+// _____________________________________________________________________________
+TEST(DateYearOrDuration, Hashing) {
+  DateYearOrDuration d1{
+      DayTimeDuration{DayTimeDuration::Type::Positive, 0, 23, 23, 62.44}};
+  DateYearOrDuration d2{
+      DayTimeDuration{DayTimeDuration::Type::Positive, 1, 24, 23, 62.44}};
+  ad_utility::HashSet<DateYearOrDuration> set{d1, d2};
+  EXPECT_THAT(set, ::testing::UnorderedElementsAre(d1, d2));
 }

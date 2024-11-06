@@ -108,8 +108,8 @@ cppcoro::generator<typename SortedBlockView::value_type> uniqueBlockView(
     numUnique += block.size();
     co_yield block;
   }
-  LOG(DEBUG) << "Number of inputs to `uniqueView`: " << numInputs << '\n';
-  LOG(DEBUG) << "Number of unique elements: " << numUnique << std::endl;
+  LOG(INFO) << "Number of inputs to `uniqueView`: " << numInputs << '\n';
+  LOG(INFO) << "Number of unique elements: " << numUnique << std::endl;
 }
 
 // A view that owns its underlying storage. It is a replacement for

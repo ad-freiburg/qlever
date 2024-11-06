@@ -25,6 +25,9 @@ namespace po = boost::program_options;
 
 // Main function.
 int main(int argc, char** argv) {
+  // Copy the git hash and datetime of compilation (which require relinking)
+  // to make them accessible to other parts of the code
+  qlever::version::copyVersionInfo();
   setlocale(LC_CTYPE, "");
 
   std::locale loc;
@@ -104,6 +107,10 @@ int main(int argc, char** argv) {
       optionFactory.getProgramOption<"default-query-timeout">(),
       "Set the default timeout in seconds after which queries are cancelled"
       "automatically.");
+  add("service-max-value-rows,S",
+      optionFactory.getProgramOption<"service-max-value-rows">(),
+      "The maximal number of result rows to be passed to a SERVICE operation "
+      "as a VALUES clause to optimize its computation.");
   po::variables_map optionsMap;
 
   try {

@@ -6,7 +6,8 @@
 
 #pragma once
 
-#include <iomanip>
+#include <gtest/gtest_prod.h>
+
 #include <memory>
 
 #include "engine/QueryExecutionContext.h"
@@ -68,6 +69,10 @@ class Operation {
 
   const Index& getIndex() const { return _executionContext->getIndex(); }
 
+  const DeltaTriples& deltaTriples() const {
+    return _executionContext->deltaTriples();
+  }
+
   // Get a unique, not ambiguous string representation for a subtree.
   // This should act like an ID for each subtree.
   // Calls  `getCacheKeyImpl` and adds the information about the `LIMIT` clause.
@@ -126,6 +131,12 @@ class Operation {
     return false;
   }
 
+  // See the member variable with the same name below for documentation.
+  std::optional<std::shared_ptr<const Result>>&
+  precomputedResultBecauseSiblingOfService() {
+    return precomputedResultBecauseSiblingOfService_;
+  }
+
   RuntimeInformation& runtimeInfo() const { return *_runtimeInfo; }
 
   std::shared_ptr<RuntimeInformation> getRuntimeInfoPointer() {
@@ -173,6 +184,13 @@ class Operation {
 
   void recursivelySetTimeConstraint(
       std::chrono::steady_clock::time_point deadline);
+
+  // Optimization for lazy operations where the very nature of the operation
+  // makes it unlikely to ever fit in cache when completely materialized.
+  virtual bool unlikelyToFitInCache(
+      [[maybe_unused]] ad_utility::MemorySize maxCacheableSize) const {
+    return false;
+  }
 
   // True iff this operation directly implement a `OFFSET` and `LIMIT` clause on
   // its result.
@@ -260,6 +278,32 @@ class Operation {
   //! Compute the result of the query-subtree rooted at this element..
   virtual ProtoResult computeResult(bool requestLaziness) = 0;
 
+  // Update the runtime information of this operation according to the given
+  // arguments, considering the possibility that the initial runtime information
+  // was replaced by calling `RuntimeInformation::addLimitOffsetRow`.
+  // `applyToLimit` indicates if the stats should be applied to the runtime
+  // information of the limit, or the runtime information of the actual
+  // operation. If `supportsLimit() == true`, then the operation does already
+  // track the limit stats correctly and there's no need to keep track of both.
+  // Otherwise `externalLimitApplied_` decides how stat tracking should be
+  // handled.
+  void updateRuntimeStats(bool applyToLimit, uint64_t numRows, uint64_t numCols,
+                          std::chrono::microseconds duration) const;
+
+  // Perform the expensive computation modeled by the subclass of this
+  // `Operation`. The value provided by `computationMode` decides if lazy
+  // results are preferred. It must not be `ONLY_IF_CACHED`, this will lead to
+  // an `ad_utility::Exception`.
+  ProtoResult runComputation(const ad_utility::Timer& timer,
+                             ComputationMode computationMode);
+
+  // Call `runComputation` and transform it into a value that could be inserted
+  // into the cache.
+  CacheValue runComputationAndPrepareForCache(const ad_utility::Timer& timer,
+                                              ComputationMode computationMode,
+                                              const std::string& cacheKey,
+                                              bool pinned);
+
   // Create and store the complete runtime information for this operation after
   // it has either been successfully computed or read from the cache.
   virtual void updateRuntimeInformationOnSuccess(
@@ -272,7 +316,7 @@ class Operation {
   // allowed when `cacheStatus` is `cachedPinned` or `cachedNotPinned`,
   // otherwise a runtime check will fail.
   virtual void updateRuntimeInformationOnSuccess(
-      const Result& resultTable, ad_utility::CacheStatus cacheStatus,
+      size_t numRows, ad_utility::CacheStatus cacheStatus,
       Milliseconds duration,
       std::optional<RuntimeInformation> runtimeInfo) final;
 
@@ -315,6 +359,11 @@ class Operation {
   // Recursively call a function on all children.
   template <typename F>
   void forAllDescendants(F f) const;
+
+  // Holds a precomputed Result of this operation if it is the sibling of a
+  // Service operation.
+  std::optional<std::shared_ptr<const Result>>
+      precomputedResultBecauseSiblingOfService_;
 
   std::shared_ptr<RuntimeInformation> _runtimeInfo =
       std::make_shared<RuntimeInformation>();
@@ -359,4 +408,21 @@ class Operation {
   // Store the list of columns by which the result is sorted.
   mutable std::optional<vector<ColumnIndex>> _resultSortedColumns =
       std::nullopt;
+
+  // True if this operation does not support limits/offsets natively and a
+  // limit/offset is applied post computation.
+  bool externalLimitApplied_ = false;
+
+  FRIEND_TEST(Operation, updateRuntimeStatsWorksCorrectly);
+  FRIEND_TEST(Operation, verifyRuntimeInformationIsUpdatedForLazyOperations);
+  FRIEND_TEST(Operation, ensureFailedStatusIsSetWhenGeneratorThrowsException);
+  FRIEND_TEST(Operation, testSubMillisecondsIncrementsAreStillTracked);
+  FRIEND_TEST(Operation, ensureSignalUpdateIsOnlyCalledEvery50msAndAtTheEnd);
+  FRIEND_TEST(Operation,
+              ensureSignalUpdateIsCalledAtTheEndOfPartialConsumption);
+  FRIEND_TEST(Operation,
+              verifyLimitIsProperlyAppliedAndUpdatesRuntimeInfoCorrectly);
+  FRIEND_TEST(Operation, ensureLazyOperationIsCachedIfSmallEnough);
+  FRIEND_TEST(Operation, checkLazyOperationIsNotCachedIfTooLarge);
+  FRIEND_TEST(Operation, checkLazyOperationIsNotCachedIfUnlikelyToFitInCache);
 };

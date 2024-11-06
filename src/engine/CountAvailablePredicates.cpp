@@ -122,12 +122,12 @@ ProtoResult CountAvailablePredicates::computeResult(
     if (!indexScan) {
       return false;
     }
-    if (!indexScan->getSubject().isVariable() ||
-        !indexScan->getObject().isVariable()) {
+    if (!indexScan->subject().isVariable() ||
+        !indexScan->object().isVariable()) {
       return false;
     }
 
-    return indexScan->getPredicate() == HAS_PATTERN_PREDICATE;
+    return indexScan->predicate() == HAS_PATTERN_PREDICATE;
   }();
 
   if (isPatternTrickForAllEntities) {
@@ -159,14 +159,15 @@ void CountAvailablePredicates::computePatternTrickAllEntities(
   LOG(DEBUG) << "For all entities." << std::endl;
   ad_utility::HashMap<Id, size_t> predicateCounts;
   ad_utility::HashMap<size_t, size_t> patternCounts;
-  auto fullHasPattern =
-      getExecutionContext()
-          ->getIndex()
-          .getImpl()
-          .getPermutation(Permutation::Enum::PSO)
-          .lazyScan({qlever::specialIds.at(HAS_PATTERN_PREDICATE), std::nullopt,
-                     std::nullopt},
-                    std::nullopt, {}, cancellationHandle_);
+  const auto& index = getExecutionContext()->getIndex().getImpl();
+  auto scanSpec =
+      ScanSpecificationAsTripleComponent{
+          TripleComponent::Iri::fromIriref(HAS_PATTERN_PREDICATE), std::nullopt,
+          std::nullopt}
+          .toScanSpecification(index);
+  auto fullHasPattern = index.getPermutation(Permutation::Enum::PSO)
+                            .lazyScan(scanSpec, std::nullopt, {},
+                                      cancellationHandle_, deltaTriples());
   for (const auto& idTable : fullHasPattern) {
     for (const auto& patternId : idTable.getColumn(1)) {
       AD_CORRECTNESS_CHECK(patternId.getDatatype() == Datatype::Int);

@@ -11,10 +11,13 @@
 #include "./util/GTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
+#include "engine/sparqlExpressions/CountStarExpression.h"
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
+#include "engine/sparqlExpressions/SampleExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
+#include "parser/GeoPoint.h"
 #include "util/AllocatorTestHelpers.h"
 #include "util/Conversions.h"
 
@@ -584,8 +587,9 @@ TEST(SparqlExpression, stringOperators) {
 
   // Test the different (optimized) behavior depending on whether the STR()
   // function was applied to the argument.
-  checkStrlen(IdOrLiteralOrIriVec{lit("one"), I(1), D(3.6), lit("")},
-              Ids{I(3), U, U, I(0)});
+  checkStrlen(
+      IdOrLiteralOrIriVec{lit("one"), lit("tschüss"), I(1), D(3.6), lit("")},
+      Ids{I(3), I(7), U, U, I(0)});
   checkStrlenWithStrChild(
       IdOrLiteralOrIriVec{lit("one"), I(1), D(3.6), lit("")},
       Ids{I(3), I(1), I(3), I(0)});
@@ -907,6 +911,9 @@ TEST(SparqlExpression, customNumericFunctions) {
   testUnaryExpression<makeTanExpression>(
       std::vector<Id>{I(0), D(1), D(2), D(-1)},
       std::vector<Id>{D(0), D(tan(1)), D(tan(2)), D(tan(-1))});
+  auto checkPow = std::bind_front(testNaryExpression, &makePowExpression);
+  checkPow(Ids{D(1), D(32), U, U}, Ids{I(5), D(2), U, D(0)},
+           IdOrLiteralOrIriVec{I(0), D(5), I(0), lit("abc")});
 }
 
 // ____________________________________________________________________________
@@ -942,11 +949,13 @@ TEST(SparqlExpression, DatatypeExpression) {
   auto d3 = DateYearOrDuration::parseGYear("1900");
   auto d4 = DateYearOrDuration::parseXsdDate("2024-06-13");
   auto d5 = DateYearOrDuration::parseGYearMonth("2024-06");
+  auto g1 = GeoPoint(50.0, 50.0);
   Id DateId1 = Id::makeFromDate(d1);
   Id DateId2 = Id::makeFromDate(d2);
   Id DateId3 = Id::makeFromDate(d3);
   Id DateId4 = Id::makeFromDate(d4);
   Id DateId5 = Id::makeFromDate(d5);
+  Id GeoId1 = Id::makeFromGeoPoint(g1);
   auto checkGetDatatype = testUnaryExpression<&makeDatatypeExpression>;
   checkGetDatatype(IdOrLiteralOrIriVec{testContext().x},
                    IdOrLiteralOrIriVec{U});
@@ -989,6 +998,9 @@ TEST(SparqlExpression, DatatypeExpression) {
   checkGetDatatype(IdOrLiteralOrIriVec{DateId5},
                    IdOrLiteralOrIriVec{iriref(
                        "<http://www.w3.org/2001/XMLSchema#gYearMonth>")});
+  checkGetDatatype(IdOrLiteralOrIriVec{GeoId1},
+                   IdOrLiteralOrIriVec{iriref(
+                       "<http://www.opengis.net/ont/geosparql#wktLiteral>")});
   checkGetDatatype(
       IdOrLiteralOrIriVec{Id::makeFromInt(212378233)},
       IdOrLiteralOrIriVec{iriref("<http://www.w3.org/2001/XMLSchema#int>")});
@@ -1074,18 +1086,19 @@ TEST(SparqlExpression, testStrToHashExpressions) {
 TEST(SparqlExpression, testToNumericExpression) {
   Id T = Id::makeFromBool(true);
   Id F = Id::makeFromBool(false);
+  Id G = Id::makeFromGeoPoint(GeoPoint(50.0, 50.0));
   auto checkGetInt = testUnaryExpression<&makeConvertToIntExpression>;
   auto checkGetDouble = testUnaryExpression<&makeConvertToDoubleExpression>;
 
-  checkGetInt(
-      idOrLitOrStringVec({U, "  -1275", "5.97", "-78.97", "-5BoB6", "FreBurg1",
-                          "", " .", " 42\n", " 0.01 ", "", "@", "@?+1", "1"}),
-      Ids{U, I(-1275), U, U, U, U, U, U, I(42), U, U, U, U, I(1)});
+  checkGetInt(idOrLitOrStringVec({U, "  -1275", "5.97", "-78.97", "-5BoB6",
+                                  "FreBurg1", "", " .", " 42\n", " 0.01 ", "",
+                                  "@", "@?+1", "1", G}),
+              Ids{U, I(-1275), U, U, U, U, U, U, I(42), U, U, U, U, I(1), U});
   checkGetDouble(
       idOrLitOrStringVec({U, "-122.2", "19,96", " 128789334.345 ", "-0.f",
-                          "  0.007 ", " -14.75 ", "Q", "@!+?", "1"}),
+                          "  0.007 ", " -14.75 ", "Q", "@!+?", "1", G}),
       Ids{U, D(-122.2), U, D(128789334.345), U, D(0.007), D(-14.75), U, U,
-          D(1.00)});
+          D(1.00), U});
   checkGetInt(idOrLitOrStringVec(
                   {U, I(-12475), I(42), I(0), D(-14.57), D(33.0), D(0.00001)}),
               Ids{U, I(-12475), I(42), I(0), I(-14), I(33), I(0)});
@@ -1105,22 +1118,35 @@ TEST(SparqlExpression, testToNumericExpression) {
 TEST(SparqlExpression, geoSparqlExpressions) {
   auto checkLat = testUnaryExpression<&makeLatitudeExpression>;
   auto checkLong = testUnaryExpression<&makeLongitudeExpression>;
+  auto checkIsGeoPoint = testUnaryExpression<&makeIsGeoPointExpression>;
   auto checkDist = std::bind_front(testNaryExpression, &makeDistExpression);
 
-  checkLat(idOrLitOrStringVec({"POINT(24.3 26.8)", "NotAPoint", I(12)}),
-           Ids{D(26.8), U, U});
-  checkLong(idOrLitOrStringVec({D(4.2), "POINT(24.3 26.8)", "NotAPoint"}),
-            Ids{U, D(24.3), U});
-  checkDist(D(0.0), IdOrLiteralOrIri{lit("POINT(24.3 26.8)")},
-            IdOrLiteralOrIri{lit("POINT(24.3 26.8)")});
-  checkDist(U, IdOrLiteralOrIri{lit("POINT(24.3 26.8)")},
-            IdOrLiteralOrIri{I(12)});
-  checkDist(U, IdOrLiteralOrIri{I(12)},
-            IdOrLiteralOrIri{lit("POINT(24.3 26.8)")});
-  checkDist(U, IdOrLiteralOrIri{lit("POINT(24.3 26.8)"s)},
-            IdOrLiteralOrIri{lit("NotAPoint")});
-  checkDist(U, IdOrLiteralOrIri{lit("NotAPoint")},
-            IdOrLiteralOrIri{lit("POINT(24.3 26.8)")});
+  auto p = GeoPoint(26.8, 24.3);
+  auto v = ValueId::makeFromGeoPoint(p);
+
+  // Should provide the same values, however with some precision loss, as the
+  // bit representation only uses 30 bits per coordinate, not a full double
+  auto actualValues = GeoPoint::fromBitRepresentation(
+      GeoPoint(26.8, 24.3).toBitRepresentation());
+  auto actualLat = actualValues.getLat();
+  auto actualLng = actualValues.getLng();
+  constexpr auto precision = 0.0001;
+  EXPECT_NEAR(actualLat, 26.8, precision);
+  EXPECT_NEAR(actualLng, 24.3, precision);
+  auto vLat = ValueId::makeFromDouble(actualLat);
+  auto vLng = ValueId::makeFromDouble(actualLng);
+
+  checkLat(v, vLat);
+  checkLong(v, vLng);
+  checkIsGeoPoint(v, B(true));
+  checkDist(D(0.0), v, v);
+  checkLat(idOrLitOrStringVec({"NotAPoint", I(12)}), Ids{U, U});
+  checkLong(idOrLitOrStringVec({D(4.2), "NotAPoint"}), Ids{U, U});
+  checkIsGeoPoint(IdOrLiteralOrIri{lit("NotAPoint")}, B(false));
+  checkDist(U, v, IdOrLiteralOrIri{I(12)});
+  checkDist(U, IdOrLiteralOrIri{I(12)}, v);
+  checkDist(U, v, IdOrLiteralOrIri{lit("NotAPoint")});
+  checkDist(U, IdOrLiteralOrIri{lit("NotAPoint")}, v);
 }
 
 // ________________________________________________________________________________________
@@ -1302,41 +1328,58 @@ TEST(SparqlExpression, replaceChildThrowsIfOutOfRange) {
 
 // ______________________________________________________________________________
 TEST(SparqlExpression, isAggregateAndIsDistinct) {
-  sparqlExpression::IdExpression idExpr(ValueId::makeFromInt(42));
+  using namespace sparqlExpression;
+  IdExpression idExpr(ValueId::makeFromInt(42));
 
-  ASSERT_FALSE(idExpr.isAggregate());
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      idExpr.isDistinct(),
-      ::testing::ContainsRegex(
-          "isDistinct\\(\\) maybe only called for aggregate expressions\\. If "
-          "this is an aggregate expression, then the implementation of "
-          "isDistinct\\(\\) is missing for this expression\\. Please report "
-          "this to the developers\\."));
+  using enum SparqlExpression::AggregateStatus;
 
-  Variable varX("?x");
-  sparqlExpression::detail::AvgExpression avgExpression(
-      false, std::make_unique<VariableExpression>(varX));
+  ASSERT_EQ(idExpr.isAggregate(), NoAggregate);
+  ASSERT_FALSE(idExpr.isInsideAggregate());
 
-  ASSERT_TRUE(avgExpression.isAggregate());
-  ASSERT_FALSE(avgExpression.isDistinct());
+  auto varX = []() {
+    return std::make_unique<VariableExpression>(Variable{"?x"});
+  };
 
-  sparqlExpression::detail::AvgExpression avgDistinctExpression(
-      true, std::make_unique<VariableExpression>(varX));
+  // Return a matcher that checks whether a given `SparqlExpression` is an
+  // aggregate with the given distinctness. In particular, the expression itself
+  // as well as its child must return `true` for the `isInsideAggregate()`
+  // function, and the distinctness of the aggregate itself must match.
+  // If `hasChild` is `true`, then the aggregate is expected to have at least
+  // one child. This is the case for all aggregates except the
+  // `CountStarExpression`.
+  auto match = [](bool distinct, bool hasChild = true) {
+    auto aggStatus = distinct ? DistinctAggregate : NonDistinctAggregate;
+    auto distinctMatcher =
+        AD_PROPERTY(SparqlExpression, isAggregate, aggStatus);
+    auto getChild = [](const SparqlExpression& expression) -> decltype(auto) {
+      return *expression.children()[0];
+    };
+    auto insideAggregate =
+        AD_PROPERTY(SparqlExpression, isInsideAggregate, true);
+    using namespace ::testing;
+    auto childMatcher = [&]() -> Matcher<const SparqlExpression&> {
+      if (hasChild) {
+        return ResultOf(getChild, insideAggregate);
+      } else {
+        return ::testing::_;
+      }
+    }();
+    return AllOf(distinctMatcher, insideAggregate, childMatcher);
+  };
 
-  ASSERT_TRUE(avgDistinctExpression.isAggregate());
-  ASSERT_TRUE(avgDistinctExpression.isDistinct());
+  EXPECT_THAT(AvgExpression(false, varX()), match(false));
+  EXPECT_THAT(AvgExpression(true, varX()), match(true));
 
-  sparqlExpression::GroupConcatExpression groupConcatExpression(
-      false, std::make_unique<VariableExpression>(varX), ",");
+  EXPECT_THAT(GroupConcatExpression(false, varX(), " "), match(false));
+  EXPECT_THAT(GroupConcatExpression(true, varX(), " "), match(true));
 
-  ASSERT_TRUE(groupConcatExpression.isAggregate());
-  ASSERT_FALSE(groupConcatExpression.isDistinct());
+  EXPECT_THAT(SampleExpression(false, varX()), match(false));
+  // For `SAMPLE` the distinctness makes no difference, so we always return `not
+  // distinct`.
+  EXPECT_THAT(SampleExpression(true, varX()), match(false));
 
-  sparqlExpression::GroupConcatExpression groupConcatDistinctExpression(
-      true, std::make_unique<VariableExpression>(varX), ",");
-
-  ASSERT_TRUE(groupConcatDistinctExpression.isAggregate());
-  ASSERT_TRUE(groupConcatDistinctExpression.isDistinct());
+  EXPECT_THAT(*makeCountStarExpression(true), match(true, false));
+  EXPECT_THAT(*makeCountStarExpression(false), match(false, false));
 }
 
 // ___________________________________________________________________________

@@ -1017,6 +1017,34 @@ queries:
       - contains_row: ["<Character_Occupation>"] 
       - contains_row: ["1.87"]
 
+  - query: path_search_all_paths
+    type: no-text
+    sparql: |
+      PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>
+      SELECT * WHERE {
+        SERVICE pathSearch: {
+          pathSearch: pathSearch:algorithm pathSearch:allPaths;
+      	            pathSearch:source <Mary_Ann_Leeper>;
+      				pathSearch:target <Literature_Subject>;
+      				pathSearch:pathColumn ?path;
+      				pathSearch:edgeColumn ?edge;
+      				pathSearch:start ?start;
+      				pathSearch:end ?end;
+      	{SELECT * WHERE {
+      	  ?start <is-a> ?end
+      	}}
+        }
+      }
+    checks:
+      - num_rows: 17
+      - num_cols: 4
+      - selected: ["?path", "?edge", "?start", "?end"]
+      - contains_row: ["0", "0", "<Mary_Ann_Leeper>", "<Radiobiochemist>"]
+      - contains_row: ["0", "1", "<Radiobiochemist>", "<Chemist>"]
+      - contains_row: ["0", "2", "<Chemist>", "<Literature_Subject>"]
+      - contains_row: ["4", "0", "<Mary_Ann_Leeper>", "<Biochemist>"]
+      - contains_row: ["4", "1", "<Biochemist>", "<Literature_Subject>"]
+
 
   - query : property_path_inverse
     type: no-text

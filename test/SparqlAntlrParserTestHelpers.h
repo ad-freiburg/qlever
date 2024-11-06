@@ -273,6 +273,10 @@ inline auto PropertyPath = [](const ::PropertyPath& value) {
       ::testing::Eq(value));
 };
 
+inline auto TripleComponentIri = [](const std::string& value) {
+  return ::testing::Eq(TripleComponent::Iri::fromIriref(value));
+};
+
 // _____________________________________________________________________________
 
 // Returns a matcher that accepts a `GraphTerm` or `BlankNode`.
@@ -283,10 +287,10 @@ inline auto BlankNode = [](bool generated, const std::string& label) {
 };
 
 inline auto InternalVariable = [](const std::string& label) {
-  return MultiVariantWith<GraphTerm, ::Variable>(
-      testing::AllOf(AD_PROPERTY(::Variable, name,
-                                 testing::StartsWith(INTERNAL_VARIABLE_PREFIX)),
-                     AD_PROPERTY(::Variable, name, testing::EndsWith(label))));
+  return MultiVariantWith<GraphTerm, ::Variable>(testing::AllOf(
+      AD_PROPERTY(::Variable, name,
+                  testing::StartsWith(QLEVER_INTERNAL_VARIABLE_PREFIX)),
+      AD_PROPERTY(::Variable, name, testing::EndsWith(label))));
 };
 
 // _____________________________________________________________________________
@@ -495,17 +499,18 @@ inline auto InlineData = [](const std::vector<::Variable>& vars,
   return detail::GraphPatternOperation<p::Values>(Values(vars, values));
 };
 
-inline auto Service = [](const ::Iri& iri,
-                         const std::vector<::Variable>& variables,
-                         const std::string& graphPattern,
-                         const std::string& prologue =
-                             "") -> Matcher<const p::GraphPatternOperation&> {
+inline auto Service =
+    [](const TripleComponent::Iri& iri,
+       const std::vector<::Variable>& variables,
+       const std::string& graphPattern, const std::string& prologue = "",
+       bool silent = false) -> Matcher<const p::GraphPatternOperation&> {
   auto serviceMatcher = testing::AllOf(
       AD_FIELD(p::Service, serviceIri_, testing::Eq(iri)),
       AD_FIELD(p::Service, visibleVariables_,
                testing::UnorderedElementsAreArray(variables)),
       AD_FIELD(p::Service, graphPatternAsString_, testing::Eq(graphPattern)),
-      AD_FIELD(p::Service, prologue_, testing::Eq(prologue)));
+      AD_FIELD(p::Service, prologue_, testing::Eq(prologue)),
+      AD_FIELD(p::Service, silent_, testing::Eq(silent)));
   return detail::GraphPatternOperation<p::Service>(serviceMatcher);
 };
 
@@ -670,9 +675,12 @@ inline auto Optional =
 }  // namespace detail
 
 inline auto Group =
-    [](auto&& subMatcher) -> Matcher<const p::GraphPatternOperation&> {
-  return detail::GraphPatternOperation<p::GroupGraphPattern>(
-      AD_FIELD(p::GroupGraphPattern, _child, subMatcher));
+    [](auto&& subMatcher,
+       p::GroupGraphPattern::GraphSpec graphSpec =
+           std::monostate{}) -> Matcher<const p::GraphPatternOperation&> {
+  return detail::GraphPatternOperation<p::GroupGraphPattern>(::testing::AllOf(
+      AD_FIELD(p::GroupGraphPattern, _child, subMatcher),
+      AD_FIELD(p::GroupGraphPattern, graphSpec_, ::testing::Eq(graphSpec))));
 };
 
 inline auto Union =
@@ -755,10 +763,20 @@ inline auto GroupGraphPattern = [](vector<std::string>&& filters,
     -> Matcher<const p::GraphPatternOperation&> {
   return Group(detail::GraphPattern(false, filters, childMatchers...));
 };
+
+inline auto GroupGraphPatternWithGraph =
+    [](vector<std::string>&& filters, p::GroupGraphPattern::GraphSpec graph,
+       const auto&... childMatchers)
+    -> Matcher<const p::GraphPatternOperation&> {
+  return Group(detail::GraphPattern(false, filters, childMatchers...), graph);
+};
+
 }  // namespace detail
 
 inline auto GroupGraphPattern =
     MatcherWithDefaultFilters<detail::GroupGraphPattern>{};
+inline auto GroupGraphPatternWithGraph =
+    MatcherWithDefaultFilters<detail::GroupGraphPatternWithGraph>{};
 
 namespace detail {
 inline auto MinusGraphPattern = [](vector<std::string>&& filters,
@@ -782,14 +800,29 @@ inline auto SubSelect =
           AD_FIELD(ParsedQuery, _rootGraphPattern, whereMatcher))));
 };
 
+// Return a matcher that matches a `DatasetClause` with given
+inline auto datasetClausesMatcher(
+    ScanSpecificationAsTripleComponent::Graphs defaultGraphs = std::nullopt,
+    ScanSpecificationAsTripleComponent::Graphs namedGraphs = std::nullopt)
+    -> Matcher<const ::ParsedQuery::DatasetClauses&> {
+  using DS = ParsedQuery::DatasetClauses;
+  using namespace ::testing;
+  return AllOf(Field(&DS::defaultGraphs_, Eq(defaultGraphs)),
+               Field(&DS::namedGraphs_, Eq(namedGraphs)));
+}
+
 inline auto SelectQuery =
     [](const Matcher<const p::SelectClause&>& selectMatcher,
-       const Matcher<const p::GraphPattern&>& graphPatternMatcher)
-    -> Matcher<const ::ParsedQuery&> {
-  return testing::AllOf(
-      AD_PROPERTY(ParsedQuery, hasSelectClause, testing::IsTrue()),
-      AD_PROPERTY(ParsedQuery, selectClause, selectMatcher),
-      RootGraphPattern(graphPatternMatcher));
+       const Matcher<const p::GraphPattern&>& graphPatternMatcher,
+       ScanSpecificationAsTripleComponent::Graphs defaultGraphs = std::nullopt,
+       ScanSpecificationAsTripleComponent::Graphs namedGraphs =
+           std::nullopt) -> Matcher<const ::ParsedQuery&> {
+  using namespace ::testing;
+  auto datasetMatcher = datasetClausesMatcher(defaultGraphs, namedGraphs);
+  return AllOf(AD_PROPERTY(ParsedQuery, hasSelectClause, testing::IsTrue()),
+               AD_PROPERTY(ParsedQuery, selectClause, selectMatcher),
+               AD_FIELD(ParsedQuery, datasetClauses_, datasetMatcher),
+               RootGraphPattern(graphPatternMatcher));
 };
 
 namespace pq {
@@ -818,15 +851,34 @@ inline auto OrderKeys =
 inline auto GroupKeys = GroupByVariables;
 }  // namespace pq
 
+// Matcher for an ASK query.
+inline auto AskQuery =
+    [](const Matcher<const p::GraphPattern&>& graphPatternMatcher,
+       ScanSpecificationAsTripleComponent::Graphs defaultGraphs = std::nullopt,
+       ScanSpecificationAsTripleComponent::Graphs namedGraphs =
+           std::nullopt) -> Matcher<const ::ParsedQuery&> {
+  using namespace ::testing;
+  auto datasetMatcher = datasetClausesMatcher(defaultGraphs, namedGraphs);
+  return AllOf(AD_PROPERTY(ParsedQuery, hasAskClause, testing::IsTrue()),
+               AD_FIELD(ParsedQuery, datasetClauses_, datasetMatcher),
+               pq::LimitOffset(LimitOffsetClause{1u, 0, std::nullopt}),
+               RootGraphPattern(graphPatternMatcher));
+};
+
 // _____________________________________________________________________________
-inline auto ConstructQuery(const std::vector<std::array<GraphTerm, 3>>& elems,
-                           const Matcher<const p::GraphPattern&>& m)
-    -> Matcher<const ParsedQuery&> {
+inline auto ConstructQuery(
+    const std::vector<std::array<GraphTerm, 3>>& elems,
+    const Matcher<const p::GraphPattern&>& m,
+    ScanSpecificationAsTripleComponent::Graphs defaultGraphs = std::nullopt,
+    ScanSpecificationAsTripleComponent::Graphs namedGraphs = std::nullopt)
+    -> Matcher<const ::ParsedQuery&> {
+  auto datasetMatcher = datasetClausesMatcher(defaultGraphs, namedGraphs);
   return testing::AllOf(
       AD_PROPERTY(ParsedQuery, hasConstructClause, testing::IsTrue()),
       AD_PROPERTY(ParsedQuery, constructClause,
                   AD_FIELD(parsedQuery::ConstructClause, triples_,
                            testing::ElementsAreArray(elems))),
+      AD_FIELD(ParsedQuery, datasetClauses_, datasetMatcher),
       RootGraphPattern(m));
 }
 
@@ -836,19 +888,99 @@ inline auto VisibleVariables =
   return AD_PROPERTY(ParsedQuery, getVisibleVariables, testing::Eq(elems));
 };
 
-inline auto UpdateQuery =
-    [](const std::vector<SparqlTripleSimple>& toDelete,
-       const std::vector<SparqlTripleSimple>& toInsert,
-       const Matcher<const p::GraphPattern&>& graphPatternMatcher)
-    -> Matcher<const ::ParsedQuery&> {
+using namespace updateClause;
+
+inline auto Load = [](bool silent,
+                      const ad_utility::triple_component::Iri& source,
+                      const std::optional<GraphRef>& target)
+    -> Matcher<const updateClause::Operation&> {
+  return testing::VariantWith<updateClause::Load>(
+      testing::AllOf(AD_FIELD(Load, silent_, testing::Eq(silent)),
+                     AD_FIELD(Load, source_, testing::Eq(source)),
+                     AD_FIELD(Load, target_, testing::Eq(target))));
+};
+
+inline auto Clear =
+    [](bool silent,
+       const GraphRefAll& target) -> Matcher<const updateClause::Operation&> {
+  return testing::VariantWith<updateClause::Clear>(
+      testing::AllOf(AD_FIELD(Clear, silent_, testing::Eq(silent)),
+                     AD_FIELD(Clear, target_, testing::Eq(target))));
+};
+
+inline auto Drop =
+    [](bool silent,
+       const GraphRefAll& target) -> Matcher<const updateClause::Operation&> {
+  return testing::VariantWith<updateClause::Drop>(
+      testing::AllOf(AD_FIELD(Drop, silent_, testing::Eq(silent)),
+                     AD_FIELD(Drop, target_, testing::Eq(target))));
+};
+
+inline auto Create =
+    [](bool silent,
+       const GraphRef& target) -> Matcher<const updateClause::Operation&> {
+  return testing::VariantWith<updateClause::Create>(
+      testing::AllOf(AD_FIELD(Create, silent_, testing::Eq(silent)),
+                     AD_FIELD(Create, target_, testing::Eq(target))));
+};
+
+inline auto Add = [](bool silent, const GraphOrDefault& source,
+                     const GraphOrDefault& target)
+    -> Matcher<const updateClause::Operation&> {
+  return testing::VariantWith<updateClause::Add>(
+      testing::AllOf(AD_FIELD(Add, silent_, testing::Eq(silent)),
+                     AD_FIELD(Add, source_, testing::Eq(source)),
+                     AD_FIELD(Add, target_, testing::Eq(target))));
+};
+
+inline auto Move = [](bool silent, const GraphOrDefault& source,
+                      const GraphOrDefault& target)
+    -> Matcher<const updateClause::Operation&> {
+  return testing::VariantWith<updateClause::Move>(
+      testing::AllOf(AD_FIELD(Move, silent_, testing::Eq(silent)),
+                     AD_FIELD(Move, source_, testing::Eq(source)),
+                     AD_FIELD(Move, target_, testing::Eq(target))));
+};
+
+inline auto Copy = [](bool silent, const GraphOrDefault& source,
+                      const GraphOrDefault& target)
+    -> Matcher<const updateClause::Operation&> {
+  return testing::VariantWith<updateClause::Copy>(
+      testing::AllOf(AD_FIELD(Copy, silent_, testing::Eq(silent)),
+                     AD_FIELD(Copy, source_, testing::Eq(source)),
+                     AD_FIELD(Copy, target_, testing::Eq(target))));
+};
+
+inline auto GraphUpdate =
+    [](const std::vector<SparqlTripleSimpleWithGraph>& toDelete,
+       const std::vector<SparqlTripleSimpleWithGraph>& toInsert,
+       const std::optional<ad_utility::triple_component::Iri>& with)
+    -> Matcher<const updateClause::Operation&> {
+  return testing::VariantWith<updateClause::GraphUpdate>(testing::AllOf(
+      AD_FIELD(GraphUpdate, toInsert_, testing::ElementsAreArray(toInsert)),
+      AD_FIELD(GraphUpdate, toDelete_, testing::ElementsAreArray(toDelete)),
+      AD_FIELD(GraphUpdate, with_, testing::Eq(with))));
+};
+
+inline auto EmptyDatasets = [] {
+  return AllOf(AD_FIELD(ParsedQuery::DatasetClauses, defaultGraphs_,
+                        testing::Eq(std::nullopt)),
+               AD_FIELD(ParsedQuery::DatasetClauses, namedGraphs_,
+                        testing::Eq(std::nullopt)));
+};
+
+using Graphs = ad_utility::HashSet<TripleComponent>;
+
+inline auto UpdateClause =
+    [](const Matcher<const updateClause::Operation&>& opMatcher,
+       const Matcher<const p::GraphPattern&>& graphPatternMatcher,
+       const Matcher<const ::ParsedQuery::DatasetClauses&>& datasetMatcher =
+           EmptyDatasets()) -> Matcher<const ::ParsedQuery&> {
   return testing::AllOf(
       AD_PROPERTY(ParsedQuery, hasUpdateClause, testing::IsTrue()),
       AD_PROPERTY(ParsedQuery, updateClause,
-                  AD_FIELD(parsedQuery::UpdateClause, toDelete_,
-                           testing::ElementsAreArray(toDelete))),
-      AD_PROPERTY(ParsedQuery, updateClause,
-                  AD_FIELD(parsedQuery::UpdateClause, toInsert_,
-                           testing::ElementsAreArray(toInsert))),
+                  AD_FIELD(parsedQuery::UpdateClause, op_, opMatcher)),
+      AD_FIELD(ParsedQuery, datasetClauses_, datasetMatcher),
       RootGraphPattern(graphPatternMatcher));
 };
 
@@ -858,6 +990,16 @@ auto inline Variant = []() { return testing::VariantWith<T>(testing::_); };
 auto inline GraphRefIri = [](const string& iri) {
   return testing::VariantWith<GraphRef>(AD_PROPERTY(
       TripleComponent::Iri, toStringRepresentation, testing::Eq(iri)));
+};
+
+inline auto Quad = [](const TripleComponent& s, const TripleComponent& p,
+                      const TripleComponent& o,
+                      const SparqlTripleSimpleWithGraph::Graph& g) {
+  return testing::AllOf(
+      AD_FIELD(SparqlTripleSimpleWithGraph, s_, testing::Eq(s)),
+      AD_FIELD(SparqlTripleSimpleWithGraph, p_, testing::Eq(p)),
+      AD_FIELD(SparqlTripleSimpleWithGraph, o_, testing::Eq(o)),
+      AD_FIELD(SparqlTripleSimpleWithGraph, g_, testing::Eq(g)));
 };
 
 }  // namespace matchers

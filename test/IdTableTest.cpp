@@ -995,6 +995,32 @@ TEST(IdTableStatic, setColumnSubset) {
   // For static tables, we need a permutation, a real subset is not allowed.
   ASSERT_ANY_THROW(t.setColumnSubset(std::vector<ColumnIndex>{1, 2}));
 }
+TEST(IdTable, deleteColumn) {
+  using IntTable = columnBasedIdTable::IdTable<int, 0>;
+  IntTable t{3};  // three columns.
+  t.push_back({0, 10, 20});
+  t.push_back({1, 11, 21});
+  t.push_back({2, 12, 22});
+
+  EXPECT_ANY_THROW(t.deleteColumn(3));
+  EXPECT_ANY_THROW(t.deleteColumn(4));
+  ASSERT_NO_THROW(t.deleteColumn(1));
+  // Set up the expected table.
+  // The middle column was dropped.
+  IntTable e{2};
+  e.push_back({0, 20});
+  e.push_back({1, 21});
+  e.push_back({2, 22});
+  EXPECT_EQ(t.numRows(), 3);
+  EXPECT_EQ(t.numColumns(), 2);
+  EXPECT_EQ(t, e);
+
+  ASSERT_NO_THROW(t.deleteColumn(1));
+  ASSERT_NO_THROW(t.deleteColumn(0));
+  // No more columns left
+  EXPECT_EQ(t.numColumns(), 0);
+  EXPECT_EQ(t.numRows(), 3);
+}
 
 TEST(IdTable, cornerCases) {
   using Dynamic = columnBasedIdTable::IdTable<int, 0>;
@@ -1076,6 +1102,38 @@ TEST(IdTable, staticAsserts) {
   static_assert(std::is_trivially_copyable_v<IdTableStatic<1>::const_iterator>);
   static_assert(std::ranges::random_access_range<IdTable>);
   static_assert(std::ranges::random_access_range<IdTableStatic<1>>);
+}
+
+TEST(IdTable, constructorsAreSfinaeFriendly) {
+  // Check, that constructors that take no allocator are disabled if the
+  // allocator is not default-constructible.
+
+  // `IdTable` (in the public namespace) is templated on an
+  // `AllocatorWithMemoryLimit` which is not default-constructible.
+  static_assert(!std::is_default_constructible_v<IdTable>);
+  static_assert(!std::is_constructible_v<IdTable, size_t>);
+
+  using IntTable = columnBasedIdTable::IdTable<int, 0>;
+  //`IntTable` uses `std::allocator`, which is default-constructible.
+  static_assert(std::is_default_constructible_v<IntTable>);
+  static_assert(std::is_constructible_v<IntTable, size_t>);
+}
+
+// _____________________________________________________________________________
+TEST(IdTable, addEmptyColumn) {
+  using ::testing::ElementsAre;
+  using ::testing::Eq;
+  IdTable table{1, ad_utility::makeUnlimitedAllocator<Id>()};
+  table.push_back({V(1)});
+  table.push_back({V(2)});
+
+  table.addEmptyColumn();
+
+  EXPECT_EQ(table.numColumns(), 2);
+  EXPECT_THAT(table.getColumn(0), ElementsAre(V(1), V(2)));
+  // The new column is uninitialized, so we can't make any more specific
+  // assertions about its content here.
+  EXPECT_EQ(table.getColumn(1).size(), 2);
 }
 
 // Check that we can completely instantiate `IdTable`s with a different value

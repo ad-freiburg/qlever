@@ -118,13 +118,15 @@ addLinkAndDiscoverTest(LocatedTriplesTest index)
 
 addLinkAndDiscoverTestSerial(IdTripleTest index)
 
+addLinkAndDiscoverTestSerial(DeltaTriplesTest index)
+
 addLinkAndDiscoverTest(EngineTest engine)
 
 addLinkAndDiscoverTest(JoinTest engine)
 
 addLinkAndDiscoverTest(TextLimitOperationTest engine)
 
-addLinkAndDiscoverTest(QueryPlannerTest engine)
+addLinkAndDiscoverTestSerial(QueryPlannerTest engine)
 
 addLinkAndDiscoverTest(HashMapTest)
 
@@ -151,13 +153,15 @@ else ()
     linkAndDiscoverTest(TokenTest parser re2 util)
 endif ()
 
-addLinkAndDiscoverTestSerial(TurtleParserTest parser re2)
+addLinkAndDiscoverTestSerial(RdfParserTest parser re2)
 
 addLinkAndDiscoverTest(MultiColumnJoinTest engine)
 
 addLinkAndDiscoverTest(IdTableTest util)
 
 addLinkAndDiscoverTest(TransitivePathTest engine)
+
+addLinkAndDiscoverTest(PathSearchTest engine)
 
 addLinkAndDiscoverTest(BatchedPipelineTest)
 
@@ -235,11 +239,11 @@ addLinkAndDiscoverTest(CompressorStreamTest engine)
 
 addLinkAndDiscoverTest(AsyncStreamTest)
 
-addLinkAndDiscoverTest(TriplesViewTest util OpenSSL::SSL OpenSSL::Crypto)
-
 addLinkAndDiscoverTest(BitUtilsTest)
 
 addLinkAndDiscoverTest(NBitIntegerTest)
+
+addLinkAndDiscoverTest(GeoPointTest)
 
 addLinkAndDiscoverTest(GeoSparqlHelpersTest util)
 
@@ -273,7 +277,7 @@ addLinkAndDiscoverTestSerial(ValuesTest engine)
 
 addLinkAndDiscoverTestSerial(ServiceTest engine)
 
-addLinkAndDiscoverTest(HttpTest Boost::iostreams http)
+addLinkAndDiscoverTestSerial(HttpTest Boost::iostreams http)
 
 addLinkAndDiscoverTest(CallFixedSizeTest)
 
@@ -286,6 +290,8 @@ addLinkAndDiscoverTest(TimerTest)
 addLinkAndDiscoverTest(AlgorithmTest)
 
 addLinkAndDiscoverTestSerial(CompressedRelationsTest index)
+
+addLinkAndDiscoverTestSerial(CompressedBlockPrefilteringTest index)
 
 addLinkAndDiscoverTest(ExceptionTest)
 
@@ -394,3 +400,19 @@ addLinkAndDiscoverTest(ChunkedForLoopTest)
 addLinkAndDiscoverTest(FsstCompressorTest fsst)
 
 addLinkAndDiscoverTest(CopyableSynchronizationTest)
+
+addLinkAndDiscoverTest(LazyJsonParserTest)
+
+addLinkAndDiscoverTest(CacheableGeneratorTest)
+
+addLinkAndDiscoverTest(FilterTest engine)
+
+addLinkAndDiscoverTest(ResultTest engine)
+
+addLinkAndDiscoverTest(BlankNodeManagerTest)
+
+addLinkAndDiscoverTest(SparqlExpressionGeneratorsTest engine)
+
+addLinkAndDiscoverTest(UrlParserTest)
+
+addLinkAndDiscoverTest(ServerTest engine)

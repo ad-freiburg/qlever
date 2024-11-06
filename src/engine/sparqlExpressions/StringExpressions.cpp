@@ -125,9 +125,12 @@ using IriOrUriExpression = NARY<1, FV<std::identity, IriOrUriValueGetter>>;
 
 // STRLEN
 [[maybe_unused]] auto strlen = [](std::string_view s) {
-  return Id::makeFromInt(static_cast<int64_t>(s.size()));
+  // Count UTF-8 characters by skipping continuation bytes (those starting with
+  // "10").
+  auto utf8Len = std::ranges::count_if(
+      s, [](char c) { return (static_cast<unsigned char>(c) & 0xC0) != 0x80; });
+  return Id::makeFromInt(utf8Len);
 };
-
 using StrlenExpression =
     StringExpressionImpl<1, LiftStringFunction<decltype(strlen)>>;
 
