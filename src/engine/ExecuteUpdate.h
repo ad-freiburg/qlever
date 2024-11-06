@@ -14,13 +14,6 @@ class ExecuteUpdate {
  public:
   using CancellationHandle = ad_utility::SharedCancellationHandle;
 
-  // Execute an update. This function is comparable to
-  // `ExportQueryExecutionTrees::computeResult` for queries.
-  static void executeUpdate(const Index& index, const ParsedQuery& query,
-                            const QueryExecutionTree& qet,
-                            DeltaTriples& deltaTriples,
-                            const CancellationHandle& cancellationHandle);
-
  private:
   using IdOrVariableIndex = std::variant<Id, ColumnIndex>;
   using TransformedTriple = std::array<IdOrVariableIndex, 4>;
@@ -49,16 +42,4 @@ class ExecuteUpdate {
       const std::vector<TransformedTriple>& templates,
       std::vector<IdTriple<>>& result, const IdTable& idTable, uint64_t rowIdx);
   FRIEND_TEST(ExecuteUpdate, computeAndAddQuadsForResultRow);
-
-  struct IdTriplesAndLocalVocab {
-    std::vector<IdTriple<>> idTriples;
-    LocalVocab localVocab;
-  };
-  // Compute the set of quads to insert and delete for the given update. The
-  // update's operation must be a GraphUpdate.
-  static std::pair<IdTriplesAndLocalVocab, IdTriplesAndLocalVocab>
-  computeGraphUpdateQuads(const Index& index, const ParsedQuery& query,
-                          const QueryExecutionTree& qet,
-                          const CancellationHandle& cancellationHandle);
-  FRIEND_TEST(ExecuteUpdate, computeGraphUpdateQuads);
 };
