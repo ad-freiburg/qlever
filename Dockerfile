@@ -19,10 +19,10 @@ WORKDIR /app/build/
 RUN cmake -DCMAKE_BUILD_TYPE=Release -DLOGLEVEL=INFO -DUSE_PARALLEL=true -D_NO_TIMING_TESTS=ON -GNinja ..
 # When cross-compiling the container for ARM64, then compiling and running all tests runs into a timeout on GitHub actions,
 # so we disable tests for this platform.
-# TODO(joka921) reenable these tests as soon as we can use a native ARM64 platform to compile the docker container.
+# TODO(joka921) re-enable these tests as soon as we can use a native ARM64 platform to compile the docker container.
 RUN if  [ $TARGETPLATFORM = "linux/arm64" ] ; then echo "target is ARM64, don't build tests to avoid timeout"; fi
 RUN if [ $TARGETPLATFORM = "linux/arm64" ] ; then cmake --build . --target IndexBuilderMain ServerMain; else cmake --build . ; fi
-RUN if [ $TARGETPLATFORM = "linux/arm64" ] ; then ctest --rerun-failed --output-on-failure ; fi
+RUN if [ $TARGETPLATFORM = "linux/arm64" ] ; then echo "Skipping tests for ARM64" ; else ctest --rerun-failed --output-on-failure ; fi
 
 FROM base as runtime
 WORKDIR /app
