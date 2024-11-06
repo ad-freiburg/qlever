@@ -2171,18 +2171,15 @@ TEST(SparqlParser, QuadsNotTriples) {
       ExpectCompleteParse<&Parser::quadsNotTriples>{defaultPrefixMap};
   auto expectQuadsNotTriplesFails =
       ExpectParseFails<&Parser::quadsNotTriples>{};
+  const auto Iri = TripleComponent::Iri::fromIriref;
 
   expectQuadsNotTriples(
       "GRAPH <foo> { <a> <b> <c> }",
-      testing::ElementsAre(m::Quad(TripleComponent::Iri::fromIriref("<a>"),
-                                   TripleComponent::Iri::fromIriref("<b>"),
-                                   TripleComponent::Iri::fromIriref("<c>"),
-                                   ::Iri("<foo>"))));
+      testing::ElementsAre(
+          m::Quad(Iri("<a>"), Iri("<b>"), Iri("<c>"), ::Iri("<foo>"))));
   expectQuadsNotTriples(
       "GRAPH ?f { <a> <b> <c> }",
-      ElementsAre(m::Quad(TripleComponent::Iri::fromIriref("<a>"),
-                          TripleComponent::Iri::fromIriref("<b>"),
-                          TripleComponent::Iri::fromIriref("<c>"), Var{"?f"})));
+      ElementsAre(m::Quad(Iri("<a>"), Iri("<b>"), Iri("<c>"), Var{"?f"})));
   expectQuadsNotTriplesFails("GRAPH \"foo\" { <a> <b> <c> }");
   expectQuadsNotTriplesFails("GRAPH _:blankNode { <a> <b> <c> }");
 }

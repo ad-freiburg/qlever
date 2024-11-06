@@ -499,9 +499,8 @@ ParsedQuery Visitor::visit(Parser::ModifyContext* ctx) {
   auto isVisibleIfVariableGraph =
       [this](const SparqlTripleSimpleWithGraph::Graph& graph) {
         if (std::holds_alternative<Variable>(graph)) {
-          return std::ranges::find(parsedQuery_.getVisibleVariables(),
-                                   std::get<Variable>(graph)) !=
-                 parsedQuery_.getVisibleVariables().end();
+          return ad_utility::contains(parsedQuery_.getVisibleVariables(),
+                                      std::get<Variable>(graph));
         } else {
           return true;
         }
