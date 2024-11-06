@@ -98,13 +98,6 @@ struct Minus {
   GraphPattern _child;
 };
 
-// A SPARQL `DESCRIBE` construct.
-struct Describe {
-  using VarOrIri = std::variant<TripleComponent::Iri, Variable>;
-  std::vector<VarOrIri> resources_;
-  GraphPattern whereClause_;
-};
-
 /// A SPARQL `UNION` construct.
 struct Union {
   GraphPattern _child1;
@@ -136,6 +129,14 @@ class Subquery {
   Subquery& operator=(Subquery&&);
   ParsedQuery& get();
   const ParsedQuery& get() const;
+};
+
+// A SPARQL `DESCRIBE` construct.
+struct Describe {
+  using VarOrIri = std::variant<TripleComponent::Iri, Variable>;
+  std::vector<VarOrIri> resources_;
+
+  Subquery whereClause_;
 };
 
 struct TransPath {
@@ -253,7 +254,8 @@ struct Bind {
 // class actually becomes `using GraphPatternOperation = std::variant<...>`
 using GraphPatternOperationVariant =
     std::variant<Optional, Union, Subquery, TransPath, Bind, BasicGraphPattern,
-                 Values, Service, PathQuery, Minus, GroupGraphPattern, Describe>;
+                 Values, Service, PathQuery, Minus, GroupGraphPattern,
+                 Describe>;
 struct GraphPatternOperation
     : public GraphPatternOperationVariant,
       public VisitMixin<GraphPatternOperation, GraphPatternOperationVariant> {

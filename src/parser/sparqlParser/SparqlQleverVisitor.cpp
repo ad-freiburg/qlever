@@ -292,11 +292,11 @@ ParsedQuery Visitor::visit(Parser::DescribeQueryContext* ctx) {
     if (std::holds_alternative<Variable>(spec)) {
       clause.resources_.push_back(std::get<Variable>(spec));
     } else if (std::holds_alternative<Iri>(spec)) {
-      auto iri = TripleComponent::Iri::fromIriref(std::get<Iri>(spec).toSparql());
+      auto iri =
+          TripleComponent::Iri::fromIriref(std::get<Iri>(spec).toSparql());
       clause.resources_.push_back(std::move(iri));
     }
   }
-
 
   parsedQuery_.datasetClauses_ = parsedQuery::DatasetClauses::fromClauses(
       visitVector(ctx->datasetClause()));
@@ -307,7 +307,7 @@ ParsedQuery Visitor::visit(Parser::DescribeQueryContext* ctx) {
   }
 
   parsedQuery_.addSolutionModifiers(visit(ctx->solutionModifier()));
-  clause.whereClause_._graphPatterns.push_back(parsedQuery::Subquery{std::move(parsedQuery_)});
+  clause.whereClause_ = std::move(parsedQuery_);
   parsedQuery_ = ParsedQuery{};
   parsedQuery_._rootGraphPattern._graphPatterns.push_back(std::move(clause));
   auto constructClause = ParsedQuery::ConstructClause{};
@@ -316,7 +316,7 @@ ParsedQuery Visitor::visit(Parser::DescribeQueryContext* ctx) {
   constructClause.triples_.push_back(
       std::array{G(V("?subject")), G(V("?predicate")), G(V("?object"))});
   parsedQuery_._clause = std::move(constructClause);
-    return parsedQuery_;
+  return parsedQuery_;
 }
 
 // ____________________________________________________________________________________
