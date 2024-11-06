@@ -132,6 +132,8 @@ addLinkAndDiscoverTest(HashMapTest)
 
 addLinkAndDiscoverTest(HashSetTest)
 
+addLinkAndDiscoverTest(CustomHashSetWithMemoryLimitTest)
+
 addLinkAndDiscoverTestSerial(GroupByTest engine)
 
 addLinkAndDiscoverTest(VocabularyGeneratorTest index)
