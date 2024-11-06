@@ -21,57 +21,6 @@ auto V = [](const uint64_t index) {
 };
 
 // _____________________________________________________________________________
-TEST(ExecuteUpdate, executeUpdate) {
-  auto executeUpdate = [](const std::string& update) {
-    // These tests run on the default dataset defined in
-    // `IndexTestHelpers::makeTestIndex`.
-    QueryExecutionContext* qec = ad_utility::testing::getQec(std::nullopt);
-    const Index& index = qec->getIndex();
-    DeltaTriples deltaTriples{index};
-    const auto sharedHandle =
-        std::make_shared<ad_utility::CancellationHandle<>>();
-    const std::vector<DatasetClause> datasets = {};
-    auto pq = SparqlParser::parseQuery(update);
-    QueryPlanner qp{qec, sharedHandle};
-    const auto qet = qp.createExecutionTree(pq);
-    ExecuteUpdate::executeUpdate(index, pq, qet, deltaTriples, sharedHandle);
-    return deltaTriples;
-  };
-  auto expectExecuteUpdate =
-      [&executeUpdate](
-          const std::string& update,
-          const testing::Matcher<const DeltaTriples&>& deltaTriplesMatcher) {
-        EXPECT_THAT(executeUpdate(update), deltaTriplesMatcher);
-      };
-  auto expectExecuteUpdateFails =
-      [&executeUpdate](
-          const std::string& update,
-          const testing::Matcher<const std::string&>& messageMatcher) {
-        AD_EXPECT_THROW_WITH_MESSAGE(executeUpdate(update), messageMatcher);
-      };
-  expectExecuteUpdate("INSERT DATA { <s> <p> <o> . }", NumTriples(1, 0, 1));
-  expectExecuteUpdate("DELETE DATA { <z> <label> \"zz\"@en }",
-                      NumTriples(0, 1, 1));
-  expectExecuteUpdate(
-      "DELETE { ?s <is-a> ?o } INSERT { <a> <b> <c> } WHERE { ?s <is-a> ?o }",
-      NumTriples(1, 2, 3));
-  expectExecuteUpdate(
-      "DELETE { <a> <b> <c> } INSERT { <a> <b> <c> } WHERE { ?s <is-a> ?o }",
-      NumTriples(1, 0, 1));
-  expectExecuteUpdate(
-      "DELETE { ?s <is-a> ?o } INSERT { ?s <is-a> ?o } WHERE { ?s <is-a> ?o }",
-      NumTriples(2, 0, 2));
-  expectExecuteUpdate("DELETE WHERE { ?s ?p ?o }", NumTriples(0, 8, 8));
-  expectExecuteUpdateFails(
-      "SELECT * WHERE { ?s ?p ?o }",
-      testing::HasSubstr("Assertion `query.hasUpdateClause()` failed."));
-  expectExecuteUpdateFails(
-      "CLEAR DEFAULT",
-      testing::HasSubstr(
-          "Only INSERT/DELETE update operations are currently supported."));
-}
-
-// _____________________________________________________________________________
 TEST(ExecuteUpdate, computeGraphUpdateQuads) {
   // These tests run on the default dataset defined in
   // `IndexTestHelpers::makeTestIndex`.
