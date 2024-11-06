@@ -399,13 +399,12 @@ TEST(LocalVocab, memoryLimit) {
     }
   } catch (const std::exception& e) {
     std::string errorMessage = e.what();
-    EXPECT_THAT(errorMessage, ::testing::StartsWith(
-                                  "The element to be inserted is too large"));
+    EXPECT_THAT(errorMessage, ::testing::StartsWith("Tried to allocate"));
   }
 
   auto extraWord =
       ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes(
           "ExtraWord");
   EXPECT_THROW(localVocab.getIndexAndAddIfNotContained(extraWord),
-               std::runtime_error);
+               ad_utility::detail::AllocationExceedsLimitException);
 }
