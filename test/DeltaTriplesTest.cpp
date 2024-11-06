@@ -6,15 +6,15 @@
 
 #include <gtest/gtest.h>
 
-#include "DeltaTriplesTestHelpers.h"
+#include "./DeltaTriplesTestHelpers.h"
+#include "./util/GTestHelpers.h"
+#include "./util/IndexTestHelpers.h"
 #include "absl/strings/str_split.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "index/DeltaTriples.h"
 #include "index/IndexImpl.h"
 #include "index/Permutation.h"
 #include "parser/RdfParser.h"
-#include "util/GTestHelpers.h"
-#include "util/IndexTestHelpers.h"
 
 using namespace deltaTriplesTestHelpers;
 

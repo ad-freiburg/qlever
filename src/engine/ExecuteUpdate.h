@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include <gtest/gtest_prod.h>
+
 #include "index/Index.h"
 #include "parser/ParsedQuery.h"
 #include "util/CancellationHandle.h"
@@ -47,4 +49,16 @@ class ExecuteUpdate {
       const std::vector<TransformedTriple>& templates,
       std::vector<IdTriple<>>& result, const IdTable& idTable, uint64_t rowIdx);
   FRIEND_TEST(ExecuteUpdate, computeAndAddQuadsForResultRow);
+
+  struct IdTriplesAndLocalVocab {
+    std::vector<IdTriple<>> idTriples;
+    LocalVocab localVocab;
+  };
+  // Compute the set of quads to insert and delete for the given update. The
+  // update's operation must be a GraphUpdate.
+  static std::pair<IdTriplesAndLocalVocab, IdTriplesAndLocalVocab>
+  computeGraphUpdateQuads(const Index& index, const ParsedQuery& query,
+                          const QueryExecutionTree& qet,
+                          const CancellationHandle& cancellationHandle);
+  FRIEND_TEST(ExecuteUpdate, computeGraphUpdateQuads);
 };
