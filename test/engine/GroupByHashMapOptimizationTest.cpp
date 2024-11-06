@@ -37,6 +37,22 @@ class GroupByHashMapOptimizationTest : public ::testing::Test {
     };
     return std::tuple{std::move(calc), std::move(addValue)};
   }
+
+  std::string idToString(Id result) const {
+    auto index = result.getLocalVocabIndex();
+    auto resultString = localVocab_.getWord(index).toStringRepresentation();
+    // Strip leading and trailing quotes.
+    AD_CORRECTNESS_CHECK(resultString.size() >= 2);
+    size_t endIndex = resultString.size() - 1;
+    return std::move(resultString).substr(1, endIndex - 1);
+  };
+
+  Id idFromString(std::string string) {
+    using ad_utility::triple_component::LiteralOrIri;
+    auto literal = LiteralOrIri::literalWithoutQuotes(std::move(string));
+    return Id::makeFromLocalVocabIndex(
+        localVocab_.getIndexAndAddIfNotContained(std::move(literal)));
+  };
 };
 
 // _____________________________________________________________________________
@@ -175,22 +191,10 @@ TEST_F(GroupByHashMapOptimizationTest,
   GroupConcatAggregationData data{";"};
   auto [calc, addValue] = makeCalcAndAddValue(data);
 
-  auto getResultString = [&]() {
-    auto result = calc();
-    auto index = result.getLocalVocabIndex();
-    auto resultString = localVocab_.getWord(index).toStringRepresentation();
-    // Strip leading and trailing quotes.
-    AD_CORRECTNESS_CHECK(resultString.size() >= 2);
-    size_t endIndex = resultString.size() - 1;
-    return std::move(resultString).substr(1, endIndex - 1);
-  };
+  auto getResultString = [&]() { return idToString(calc()); };
 
   auto addString = [&](std::string string) {
-    using ad_utility::triple_component::LiteralOrIri;
-    auto literal = LiteralOrIri::literalWithoutQuotes(std::move(string));
-    auto id = Id::makeFromLocalVocabIndex(
-        localVocab_.getIndexAndAddIfNotContained(std::move(literal)));
-    addValue(id);
+    addValue(idFromString(std::move(string)));
   };
 
   EXPECT_EQ(getResultString(), "");
@@ -207,4 +211,39 @@ TEST_F(GroupByHashMapOptimizationTest,
   EXPECT_EQ(getResultString(), "a");
   addValue(Id::makeUndefined());
   EXPECT_EQ(getResultString(), "a");
+}
+
+// _____________________________________________________________________________
+TEST_F(GroupByHashMapOptimizationTest,
+       SampleAggregationDataAggregatesCorrectly) {
+  SampleAggregationData data;
+  auto [calc, addValue] = makeCalcAndAddValue(data);
+
+  EXPECT_TRUE(calc().isUndefined());
+  addValue(I(1));
+  EXPECT_EQ(calc(), I(1));
+  addValue(I(3));
+  EXPECT_EQ(calc(), I(1));
+  addValue(D(1));
+  EXPECT_EQ(calc(), I(1));
+
+  data.reset();
+  EXPECT_TRUE(calc().isUndefined());
+  addValue(D(0));
+  EXPECT_EQ(calc(), D(0));
+
+  data.reset();
+  EXPECT_TRUE(calc().isUndefined());
+  addValue(Id::makeFromBool(true));
+  EXPECT_EQ(calc(), Id::makeFromBool(true));
+  addValue(Id::makeUndefined());
+  addValue(Id::makeFromBool(true));
+
+  data.reset();
+  addValue(Id::makeUndefined());
+  EXPECT_TRUE(calc().isUndefined());
+
+  data.reset();
+  addValue(localVocab_.getWord(idFromString("Abc").getLocalVocabIndex()));
+  EXPECT_EQ(calc(), idFromString("Abc"));
 }

@@ -53,22 +53,21 @@ string CartesianProductJoin::getCacheKeyImpl() const {
 // ____________________________________________________________________________
 size_t CartesianProductJoin::getResultWidth() const {
   auto view = childView() | std::views::transform(&Operation::getResultWidth);
-  return std::accumulate(view.begin(), view.end(), 0UL, std::plus{});
+  return std::reduce(view.begin(), view.end(), 0UL, std::plus{});
 }
 
 // ____________________________________________________________________________
 size_t CartesianProductJoin::getCostEstimate() {
   auto childSizes =
       childView() | std::views::transform(&Operation::getCostEstimate);
-  return getSizeEstimate() + std::accumulate(childSizes.begin(),
-                                             childSizes.end(), 0UL,
-                                             std::plus{});
+  return getSizeEstimate() +
+         std::reduce(childSizes.begin(), childSizes.end(), 0UL, std::plus{});
 }
 
 // ____________________________________________________________________________
 uint64_t CartesianProductJoin::getSizeEstimateBeforeLimit() {
   auto view = childView() | std::views::transform(&Operation::getSizeEstimate);
-  return std::accumulate(view.begin(), view.end(), 1UL, std::multiplies{});
+  return std::reduce(view.begin(), view.end(), 1UL, std::multiplies{});
 }
 
 // ____________________________________________________________________________
@@ -85,13 +84,10 @@ bool CartesianProductJoin::knownEmptyResult() {
 }
 
 // ____________________________________________________________________________
-template <size_t StaticGroupSize>
 void CartesianProductJoin::writeResultColumn(std::span<Id> targetColumn,
                                              std::span<const Id> inputColumn,
-                                             size_t groupSize, size_t offset) {
-  if (StaticGroupSize != 0) {
-    AD_CORRECTNESS_CHECK(StaticGroupSize == groupSize);
-  }
+                                             size_t groupSize,
+                                             size_t offset) const {
   // Copy each element from the `inputColumn` `groupSize` times to
   // the `targetColumn`, repeat until the `targetColumn` is completely filled.
   size_t numRowsWritten = 0;
@@ -104,20 +100,13 @@ void CartesianProductJoin::writeResultColumn(std::span<Id> targetColumn,
   size_t groupStartIdx = offset % groupSize;
   while (true) {
     for (size_t i = firstInputElementIdx; i < inputSize; ++i) {
-      auto writeGroup = [&](size_t actualGroupSize) {
-        for (size_t u = groupStartIdx; u < actualGroupSize; ++u) {
-          if (numRowsWritten == targetSize) {
-            return;
-          }
-          targetColumn[numRowsWritten] = inputColumn[i];
-          ++numRowsWritten;
-          checkCancellation();
+      for (size_t u = groupStartIdx; u < groupSize; ++u) {
+        if (numRowsWritten == targetSize) {
+          return;
         }
-      };
-      if constexpr (StaticGroupSize == 0) {
-        writeGroup(groupSize);
-      } else {
-        writeGroup(StaticGroupSize);
+        targetColumn[numRowsWritten] = inputColumn[i];
+        ++numRowsWritten;
+        checkCancellation();
       }
       if (numRowsWritten == targetSize) {
         return;
@@ -131,13 +120,90 @@ void CartesianProductJoin::writeResultColumn(std::span<Id> targetColumn,
     firstInputElementIdx = 0;
   }
 }
+
 // ____________________________________________________________________________
 ProtoResult CartesianProductJoin::computeResult(
     [[maybe_unused]] bool requestLaziness) {
-  IdTable result{getExecutionContext()->getAllocator()};
-  result.setNumColumns(getResultWidth());
-  std::vector<std::shared_ptr<const Result>> subResults;
+  std::vector<std::shared_ptr<const Result>> subResults = calculateSubResults();
 
+  IdTable result = writeAllColumns(subResults);
+
+  // Dereference all the subresult pointers because `getSharedLocalVocabFrom...`
+  // requires a range of references, not pointers.
+  auto subResultsDeref = std::views::transform(
+      subResults, [](auto& x) -> decltype(auto) { return *x; });
+  return {std::move(result), resultSortedOn(),
+          Result::getMergedLocalVocab(subResultsDeref)};
+}
+
+// ____________________________________________________________________________
+VariableToColumnMap CartesianProductJoin::computeVariableToColumnMap() const {
+  VariableToColumnMap result;
+  // It is crucial that we also count the columns in the inputs to which no
+  // variable was assigned. This is managed by the `offset` variable.
+  size_t offset = 0;
+  for (const auto& child : childView()) {
+    for (auto varCol : child.getExternallyVisibleVariableColumns()) {
+      varCol.second.columnIndex_ += offset;
+      result.insert(std::move(varCol));
+    }
+    // `getResultWidth` contains all the columns, not only the ones to which a
+    // variable is assigned.
+    offset += child.getResultWidth();
+  }
+  return result;
+}
+
+// _____________________________________________________________________________
+IdTable CartesianProductJoin::writeAllColumns(
+    const std::vector<std::shared_ptr<const Result>>& subResults) const {
+  IdTable result{getResultWidth(), getExecutionContext()->getAllocator()};
+  // TODO<joka921> Find a solution to cheaply handle the case, that only a
+  // single result is left. This can probably be done by using the
+  // `ProtoResult`.
+
+  auto sizesView = std::views::transform(
+      subResults, [](const auto& child) { return child->idTable().size(); });
+  auto totalResultSize =
+      std::reduce(sizesView.begin(), sizesView.end(), 1UL, std::multiplies{});
+
+  size_t totalSizeIncludingLimit = getLimit().actualSize(totalResultSize);
+  size_t offset = getLimit().actualOffset(totalResultSize);
+
+  try {
+    result.resize(totalSizeIncludingLimit);
+  } catch (
+      const ad_utility::detail::AllocationExceedsLimitException& exception) {
+    throw std::runtime_error{
+        "The memory limit was exceeded during the computation of a "
+        "cross-product. Check if this cross-product is intentional or if you "
+        "have mistyped a variable name."};
+  }
+
+  if (totalSizeIncludingLimit != 0) {
+    // A `groupSize` of N means that each row of the current result is copied N
+    // times adjacent to each other.
+    size_t groupSize = 1;
+    // The index of the next column in the output that hasn't been written so
+    // far.
+    size_t resultColIdx = 0;
+    for (auto& subResultPtr : subResults) {
+      const auto& input = subResultPtr->idTable();
+      for (const auto& inputCol : input.getColumns()) {
+        decltype(auto) resultCol = result.getColumn(resultColIdx);
+        writeResultColumn(resultCol, inputCol, groupSize, offset);
+        ++resultColIdx;
+      }
+      groupSize *= input.numRows();
+    }
+  }
+  return result;
+}
+
+// _____________________________________________________________________________
+std::vector<std::shared_ptr<const Result>>
+CartesianProductJoin::calculateSubResults() {
+  std::vector<std::shared_ptr<const Result>> subResults;
   // We don't need to fully materialize the child results if we have a LIMIT
   // specified and an OFFSET of 0.
   // TODO<joka921> We could in theory also apply this optimization if a
@@ -177,71 +243,5 @@ ProtoResult CartesianProductJoin::computeResult(
                                       1;
     }
   }
-
-  // TODO<joka921> Find a solution to cheaply handle the case, that only a
-  // single result is left. This can probably be done by using the
-  // `ProtoResult`.
-
-  auto sizesView = std::views::transform(
-      subResults, [](const auto& child) { return child->idTable().size(); });
-  auto totalResultSize = std::accumulate(sizesView.begin(), sizesView.end(),
-                                         1UL, std::multiplies{});
-
-  size_t totalSizeIncludingLimit = getLimit().actualSize(totalResultSize);
-  size_t offset = getLimit().actualOffset(totalResultSize);
-
-  try {
-    result.resize(totalSizeIncludingLimit);
-  } catch (
-      const ad_utility::detail::AllocationExceedsLimitException& exception) {
-    throw std::runtime_error{
-        "The memory limit was exceeded during the computation of a "
-        "cross-product. Check if this cross-product is intentional or if you "
-        "have mistyped a variable name."};
-  }
-
-  if (totalSizeIncludingLimit != 0) {
-    // A `groupSize` of N means that each row of the current result is copied N
-    // times adjacent to each other.
-    size_t groupSize = 1;
-    // The index of the next column in the output that hasn't been written so
-    // far.
-    size_t resultColIdx = 0;
-    for (auto& subResultPtr : subResults) {
-      const auto& input = subResultPtr->idTable();
-      for (const auto& inputCol : input.getColumns()) {
-        decltype(auto) resultCol = result.getColumn(resultColIdx);
-        ad_utility::callFixedSize(groupSize, [&]<size_t I>() {
-          writeResultColumn<I>(resultCol, inputCol, groupSize, offset);
-        });
-        ++resultColIdx;
-      }
-      groupSize *= input.numRows();
-    }
-  }
-
-  // Dereference all the subresult pointers because `getSharedLocalVocabFrom...`
-  // requires a range of references, not pointers.
-  auto subResultsDeref = std::views::transform(
-      subResults, [](auto& x) -> decltype(auto) { return *x; });
-  return {std::move(result), resultSortedOn(),
-          Result::getMergedLocalVocab(subResultsDeref)};
-}
-
-// ____________________________________________________________________________
-VariableToColumnMap CartesianProductJoin::computeVariableToColumnMap() const {
-  VariableToColumnMap result;
-  // It is crucial that we also count the columns in the inputs to which no
-  // variable was assigned. This is managed by the `offset` variable.
-  size_t offset = 0;
-  for (const auto& child : childView()) {
-    for (auto varCol : child.getExternallyVisibleVariableColumns()) {
-      varCol.second.columnIndex_ += offset;
-      result.insert(std::move(varCol));
-    }
-    // `getResultWidth` contains all the columns, not only the ones to which a
-    // variable is assigned.
-    offset += child.getResultWidth();
-  }
-  return result;
+  return subResults;
 }

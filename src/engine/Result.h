@@ -22,27 +22,43 @@
 // through a generator via `idTables()` when it is supposed to be lazily
 // evaluated.
 class Result {
+ public:
+  struct IdTableVocabPair {
+    IdTable idTable_;
+    LocalVocab localVocab_;
+
+    // Explicit constructor to avoid problems with coroutines and temporaries.
+    // See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=103909 for details.
+    IdTableVocabPair(IdTable idTable, LocalVocab localVocab)
+        : idTable_{std::move(idTable)}, localVocab_{std::move(localVocab)} {}
+  };
+
+  using Generator = cppcoro::generator<IdTableVocabPair>;
+
  private:
   // Needs to be mutable in order to be consumable from a const result.
   struct GenContainer {
-    mutable cppcoro::generator<IdTable> generator_;
+    mutable Generator generator_;
     mutable std::unique_ptr<std::atomic_bool> consumed_ =
         std::make_unique<std::atomic_bool>(false);
-    explicit GenContainer(cppcoro::generator<IdTable> generator)
+    explicit GenContainer(Generator generator)
         : generator_{std::move(generator)} {}
   };
-  using Data = std::variant<IdTable, GenContainer>;
+
+  using LocalVocabPtr = std::shared_ptr<const LocalVocab>;
+
+  struct IdTableSharedLocalVocabPair {
+    IdTable idTable_;
+    // The local vocabulary of the result.
+    LocalVocabPtr localVocab_;
+  };
+  using Data = std::variant<IdTableSharedLocalVocabPair, GenContainer>;
   // The actual entries.
   Data data_;
 
   // The column indices by which the result is sorted (primary sort key first).
   // Empty if the result is not sorted on any column.
   std::vector<ColumnIndex> sortedBy_;
-
-  using LocalVocabPtr = std::shared_ptr<const LocalVocab>;
-
-  // The local vocabulary of the result.
-  LocalVocabPtr localVocab_ = std::make_shared<const LocalVocab>();
 
   // Note: If additional members and invariants are added to the class (for
   // example information about the datatypes in each column) make sure that
@@ -92,12 +108,8 @@ class Result {
          SharedLocalVocabWrapper localVocab);
   Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
          LocalVocab&& localVocab);
-  Result(cppcoro::generator<IdTable> idTables,
-         std::vector<ColumnIndex> sortedBy, SharedLocalVocabWrapper localVocab);
-  Result(cppcoro::generator<IdTable> idTables,
-         std::vector<ColumnIndex> sortedBy, LocalVocab&& localVocab);
-  Result(cppcoro::generator<IdTable> idTables,
-         std::vector<ColumnIndex> sortedBy, LocalVocabPtr localVocab);
+  Result(IdTableVocabPair pair, std::vector<ColumnIndex> sortedBy);
+  Result(Generator idTables, std::vector<ColumnIndex> sortedBy);
   // Prevent accidental copying of a result table.
   Result(const Result& other) = delete;
   Result& operator=(const Result& other) = delete;
@@ -131,7 +143,8 @@ class Result {
   // Throw an `ad_utility::Exception` if the underlying `data_` member holds the
   // wrong variant.
   void cacheDuringConsumption(
-      std::function<bool(const std::optional<IdTable>&, const IdTable&)>
+      std::function<bool(const std::optional<IdTableVocabPair>&,
+                         const IdTableVocabPair&)>
           fitInCache,
       std::function<void(Result)> storeInCache);
 
@@ -141,7 +154,7 @@ class Result {
 
   // Access to the underlying `IdTable`s. Throw an `ad_utility::Exception`
   // if the underlying `data_` member holds the wrong variant.
-  cppcoro::generator<IdTable>& idTables() const;
+  Generator& idTables() const;
 
   // Const access to the columns by which the `idTable()` is sorted.
   const std::vector<ColumnIndex>& sortedBy() const { return sortedBy_; }
@@ -157,12 +170,17 @@ class Result {
   // Filter::computeFilterImpl (evaluationContext)
   // Variable::evaluate (idToStringAndType)
   //
-  const LocalVocab& localVocab() const { return *localVocab_; }
+  const LocalVocab& localVocab() const {
+    AD_CONTRACT_CHECK(isFullyMaterialized());
+    return *std::get<IdTableSharedLocalVocabPair>(data_).localVocab_;
+  }
 
   // Get the local vocab as a shared pointer to const. This can be used if one
   // result has the same local vocab as one of its child results.
   SharedLocalVocabWrapper getSharedLocalVocab() const {
-    return SharedLocalVocabWrapper{localVocab_};
+    AD_CONTRACT_CHECK(isFullyMaterialized());
+    return SharedLocalVocabWrapper{
+        std::get<IdTableSharedLocalVocabPair>(data_).localVocab_};
   }
 
   // Like `getSharedLocalVocabFrom`, but takes more than one result and merges
@@ -176,7 +194,7 @@ class Result {
   static SharedLocalVocabWrapper getMergedLocalVocab(R&& subResults) {
     std::vector<const LocalVocab*> vocabs;
     for (const Result& table : subResults) {
-      vocabs.push_back(std::to_address(table.localVocab_));
+      vocabs.push_back(&table.localVocab());
     }
     return SharedLocalVocabWrapper{LocalVocab::merge(vocabs)};
   }

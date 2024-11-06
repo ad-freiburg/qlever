@@ -380,6 +380,30 @@ TEST(IndexScan, additionalColumn) {
   EXPECT_THAT(res.idTable(), ::testing::ElementsAreArray(exp));
 }
 
+// Test that the graphs by which an `IndexScan` is to be filtered is correctly
+// reflected in its cache key and its `ScanSpecification`.
+TEST(IndexScan, namedGraphs) {
+  auto qec = getQec("<x> <y> <z>.");
+  using V = Variable;
+  SparqlTriple triple{V{"?x"}, "<y>", V{"?z"}};
+  ad_utility::HashSet<TripleComponent> graphs{
+      TripleComponent::Iri::fromIriref("<graph1>"),
+      TripleComponent::Iri::fromIriref("<graph2>")};
+  auto scan = IndexScan{qec, Permutation::PSO, triple, graphs};
+  using namespace testing;
+  EXPECT_THAT(scan.graphsToFilter(), Optional(graphs));
+  EXPECT_THAT(scan.getCacheKey(),
+              HasSubstr("Filtered by Graphs:<graph1> <graph2>"));
+  EXPECT_THAT(scan.getScanSpecificationTc().graphsToFilter(), Optional(graphs));
+
+  auto scanNoGraphs = IndexScan{qec, Permutation::PSO, triple};
+  EXPECT_EQ(scanNoGraphs.graphsToFilter(), std::nullopt);
+  EXPECT_THAT(scanNoGraphs.getCacheKey(),
+              Not(HasSubstr("Filtered by Graphs:")));
+  EXPECT_THAT(scanNoGraphs.getScanSpecificationTc().graphsToFilter(),
+              Eq(std::nullopt));
+}
+
 TEST(IndexScan, getResultSizeOfScan) {
   auto qec = getQec("<x> <p> <s1>, <s2>. <x> <p2> <s1>.");
   auto getId = makeGetId(qec->getIndex());
@@ -394,9 +418,7 @@ TEST(IndexScan, getResultSizeOfScan) {
   {
     SparqlTripleSimple scanTriple{V{"?x"}, V("?y"), V{"?z"}};
     IndexScan scan{qec, Permutation::Enum::PSO, scanTriple};
-    // Note: this currently also contains the (internal) triple for the
-    // `ql:has-pattern` relation of `<x>`.
-    EXPECT_EQ(scan.getSizeEstimate(), 4);
+    EXPECT_EQ(scan.getSizeEstimate(), 3);
   }
   {
     SparqlTripleSimple scanTriple{V{"?x"}, I::fromIriref("<p>"), V{"?y"}};
@@ -463,8 +485,8 @@ TEST(IndexScan, computeResultCanBeConsumedLazily) {
 
   IdTable resultTable{3, ad_utility::makeUnlimitedAllocator<Id>()};
 
-  for (IdTable& idTable : result.idTables()) {
-    resultTable.insertAtEnd(idTable);
+  for (Result::IdTableVocabPair& pair : result.idTables()) {
+    resultTable.insertAtEnd(pair.idTable_);
   }
 
   EXPECT_EQ(resultTable,
@@ -483,7 +505,7 @@ TEST(IndexScan, computeResultReturnsEmptyGeneratorIfScanIsEmpty) {
 
   ASSERT_FALSE(result.isFullyMaterialized());
 
-  for ([[maybe_unused]] IdTable& idTable : result.idTables()) {
+  for ([[maybe_unused]] Result::IdTableVocabPair& pair : result.idTables()) {
     ADD_FAILURE() << "Generator should be empty" << std::endl;
   }
 }

@@ -270,6 +270,16 @@ fmap(FUNC func, generator<T> source) {
     co_yield std::invoke(func, static_cast<decltype(value)>(value));
   }
 }
+
+// Get the first element of a generator and verify that it's the only one.
+template <typename T, typename Details>
+T getSingleElement(generator<T, Details> g) {
+  auto it = g.begin();
+  AD_CORRECTNESS_CHECK(it != g.end());
+  T t = std::move(*it);
+  AD_CORRECTNESS_CHECK(++it == g.end());
+  return t;
+}
 }  // namespace cppcoro
 
 #endif

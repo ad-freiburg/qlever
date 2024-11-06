@@ -256,3 +256,8 @@ IdTable createRandomlyFilledIdTable(
 /// and filling it with dummy variables.
 std::shared_ptr<QueryExecutionTree> idTableToExecutionTree(
     QueryExecutionContext*, const IdTable&);
+
+// Fully consume a given generator and store it in an `IdTable` and store the
+// local vocabs in a vector.
+std::pair<IdTable, std::vector<LocalVocab>> aggregateTables(
+    Result::Generator generator, size_t numColumns);

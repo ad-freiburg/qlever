@@ -20,11 +20,6 @@ Index::Index(Index&&) noexcept = default;
 Index::~Index() = default;
 
 // ____________________________________________________________________________
-void Index::createFromFile(const std::string& filename, Filetype type) {
-  pimpl_->createFromFile(filename, type);
-}
-
-// ____________________________________________________________________________
 void Index::createFromOnDiskIndex(const std::string& onDiskBase) {
   pimpl_->createFromOnDiskIndex(onDiskBase);
 }
@@ -57,14 +52,20 @@ auto Index::getTextVocab() const -> const TextVocab& {
 }
 
 // ____________________________________________________________________________
-size_t Index::getCardinality(const TripleComponent& comp,
-                             Permutation::Enum p) const {
-  return pimpl_->getCardinality(comp, p);
+ad_utility::BlankNodeManager* Index::getBlankNodeManager() const {
+  return pimpl_->getBlankNodeManager();
 }
 
 // ____________________________________________________________________________
-size_t Index::getCardinality(Id id, Permutation::Enum p) const {
-  return pimpl_->getCardinality(id, p);
+size_t Index::getCardinality(const TripleComponent& comp, Permutation::Enum p,
+                             const DeltaTriples& deltaTriples) const {
+  return pimpl_->getCardinality(comp, p, deltaTriples);
+}
+
+// ____________________________________________________________________________
+size_t Index::getCardinality(Id id, Permutation::Enum p,
+                             const DeltaTriples& deltaTriples) const {
+  return pimpl_->getCardinality(id, p, deltaTriples);
 }
 
 // ____________________________________________________________________________
@@ -75,22 +76,6 @@ std::string Index::indexToString(VocabIndex id) const {
 // ____________________________________________________________________________
 std::string_view Index::indexToString(WordVocabIndex id) const {
   return pimpl_->indexToString(id);
-}
-
-// ____________________________________________________________________________
-std::optional<Id> Index::getId(
-    const ad_utility::triple_component::LiteralOrIri& element) const {
-  return pimpl_->getId(element);
-}
-// ____________________________________________________________________________
-std::optional<Id> Index::getId(
-    const ad_utility::triple_component::Iri& element) const {
-  return pimpl_->getId(element);
-}
-// ____________________________________________________________________________
-std::optional<Id> Index::getId(
-    const ad_utility::triple_component::Literal& element) const {
-  return pimpl_->getId(element);
 }
 
 // ____________________________________________________________________________
@@ -270,8 +255,9 @@ vector<float> Index::getMultiplicities(Permutation::Enum p) const {
 
 // ____________________________________________________________________________
 vector<float> Index::getMultiplicities(const TripleComponent& key,
-                                       Permutation::Enum p) const {
-  return pimpl_->getMultiplicities(key, p);
+                                       Permutation::Enum p,
+                                       const DeltaTriples& deltaTriples) const {
+  return pimpl_->getMultiplicities(key, p, deltaTriples);
 }
 
 // ____________________________________________________________________________
@@ -279,9 +265,10 @@ IdTable Index::scan(
     const ScanSpecificationAsTripleComponent& scanSpecification,
     Permutation::Enum p, Permutation::ColumnIndicesRef additionalColumns,
     const ad_utility::SharedCancellationHandle& cancellationHandle,
+    const DeltaTriples& deltaTriples,
     const LimitOffsetClause& limitOffset) const {
   return pimpl_->scan(scanSpecification, p, additionalColumns,
-                      cancellationHandle, limitOffset);
+                      cancellationHandle, deltaTriples, limitOffset);
 }
 
 // ____________________________________________________________________________
@@ -289,13 +276,21 @@ IdTable Index::scan(
     const ScanSpecification& scanSpecification, Permutation::Enum p,
     Permutation::ColumnIndicesRef additionalColumns,
     const ad_utility::SharedCancellationHandle& cancellationHandle,
+    const DeltaTriples& deltaTriples,
     const LimitOffsetClause& limitOffset) const {
   return pimpl_->scan(scanSpecification, p, additionalColumns,
-                      cancellationHandle, limitOffset);
+                      cancellationHandle, deltaTriples, limitOffset);
 }
 
 // ____________________________________________________________________________
 size_t Index::getResultSizeOfScan(const ScanSpecification& scanSpecification,
-                                  const Permutation::Enum& permutation) const {
-  return pimpl_->getResultSizeOfScan(scanSpecification, permutation);
+                                  const Permutation::Enum& permutation,
+                                  const DeltaTriples& deltaTriples) const {
+  return pimpl_->getResultSizeOfScan(scanSpecification, permutation,
+                                     deltaTriples);
+}
+
+// ____________________________________________________________________________
+void Index::createFromFiles(const std::vector<InputFileSpecification>& files) {
+  return pimpl_->createFromFiles(files);
 }

@@ -86,6 +86,10 @@ class GroupBy : public Operation {
     return {_subtree.get()};
   }
 
+  // Getters for testing
+  const auto& groupByVariables() const { return _groupByVariables; }
+  const auto& aliases() const { return _aliases; }
+
   struct HashMapAliasInformation;
 
  private:
@@ -136,12 +140,11 @@ class GroupBy : public Operation {
   // skipping empty tables unless `singleIdTable` is set which causes the
   // function to yield a single id table with the complete result.
   template <size_t IN_WIDTH, size_t OUT_WIDTH>
-  cppcoro::generator<IdTable> computeResultLazily(
+  Result::Generator computeResultLazily(
       std::shared_ptr<const Result> subresult,
       std::vector<Aggregate> aggregates,
       std::vector<HashMapAliasInformation> aggregateAliases,
-      std::vector<size_t> groupByCols, std::shared_ptr<LocalVocab> localVocab,
-      bool singleIdTable) const;
+      std::vector<size_t> groupByCols, bool singleIdTable) const;
 
   template <size_t OUT_WIDTH>
   void processGroup(const Aggregate& expression,
@@ -234,7 +237,15 @@ class GroupBy : public Operation {
   };
 
   // Used to store the kind of aggregate.
-  enum class HashMapAggregateType { AVG, COUNT, MIN, MAX, SUM, GROUP_CONCAT };
+  enum class HashMapAggregateType {
+    AVG,
+    COUNT,
+    MIN,
+    MAX,
+    SUM,
+    GROUP_CONCAT,
+    SAMPLE
+  };
 
   // `GROUP_CONCAT` requires additional data.
   struct HashMapAggregateTypeWithData {
@@ -313,7 +324,7 @@ class GroupBy : public Operation {
   using AggregationData =
       std::variant<AvgAggregationData, CountAggregationData, MinAggregationData,
                    MaxAggregationData, SumAggregationData,
-                   GroupConcatAggregationData>;
+                   GroupConcatAggregationData, SampleAggregationData>;
 
   using AggregationDataVectors =
       ad_utility::LiftedVariant<AggregationData,
@@ -355,6 +366,7 @@ class GroupBy : public Operation {
           addIf(ti<MaxAggregationData>, MAX);
           addIf(ti<SumAggregationData>, SUM);
           addIf(ti<GroupConcatAggregationData>, GROUP_CONCAT);
+          addIf(ti<SampleAggregationData>, SAMPLE);
 
           AD_CORRECTNESS_CHECK(aggregationData_.size() ==
                                aggregationDataSize + 1);
@@ -428,6 +440,14 @@ class GroupBy : public Operation {
       sparqlExpression::EvaluationContext& evaluationContext,
       const HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
       LocalVocab* localVocab, const Allocator& allocator);
+
+  // Helper function to evaluate the child expression of an aggregate function.
+  // Only `COUNT(*)` does not have a single child, so we make a special case for
+  // it.
+  static sparqlExpression::ExpressionResult
+  evaluateChildExpressionOfAggregateFunction(
+      const HashMapAggregateInformation& aggregate,
+      sparqlExpression::EvaluationContext& evaluationContext);
 
   // Sort the HashMap by key and create result table.
   template <size_t NUM_GROUP_COLUMNS>

@@ -11,6 +11,7 @@
 
 #include "engine/ResultType.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
+#include "index/ScanSpecification.h"
 #include "parser/Alias.h"
 #include "parser/ConstructClause.h"
 #include "parser/GraphPattern.h"
@@ -35,6 +36,21 @@
 
 using std::string;
 using std::vector;
+
+// Forward declaration
+struct DatasetClause;
+
+namespace parsedQuery {
+// A struct for the FROM and FROM NAMED clauses;
+struct DatasetClauses {
+  // FROM clauses.
+  ScanSpecificationAsTripleComponent::Graphs defaultGraphs_{};
+  // FROM NAMED clauses.
+  ScanSpecificationAsTripleComponent::Graphs namedGraphs_{};
+
+  static DatasetClauses fromClauses(const std::vector<DatasetClause>& clauses);
+};
+}  // namespace parsedQuery
 
 // Data container for prefixes
 class SparqlPrefix {
@@ -68,6 +84,12 @@ class ParsedQuery {
 
   using UpdateClause = parsedQuery::UpdateClause;
 
+  using DatasetClauses = parsedQuery::DatasetClauses;
+
+  // ASK queries have no further context in the header, so we use an empty
+  // struct
+  struct AskClause : public parsedQuery::ClauseBase {};
+
   ParsedQuery() = default;
 
   GraphPattern _rootGraphPattern;
@@ -81,10 +103,14 @@ class ParsedQuery {
   LimitOffsetClause _limitOffset{};
   string _originalString;
 
-  // explicit default initialisation because the constructor
-  // of SelectClause is private
-  std::variant<SelectClause, ConstructClause, UpdateClause> _clause{
-      SelectClause{}};
+  using HeaderClause =
+      std::variant<SelectClause, ConstructClause, UpdateClause, AskClause>;
+  // Use explicit default initialization for `SelectClause` because its
+  // constructor is private.
+  HeaderClause _clause{SelectClause{}};
+
+  // The IRIs from the FROM and FROM NAMED clauses.
+  DatasetClauses datasetClauses_;
 
   [[nodiscard]] bool hasSelectClause() const {
     return std::holds_alternative<SelectClause>(_clause);
@@ -96,6 +122,10 @@ class ParsedQuery {
 
   [[nodiscard]] bool hasUpdateClause() const {
     return std::holds_alternative<UpdateClause>(_clause);
+  }
+
+  bool hasAskClause() const {
+    return std::holds_alternative<AskClause>(_clause);
   }
 
   [[nodiscard]] decltype(auto) selectClause() const {
