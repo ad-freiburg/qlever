@@ -281,8 +281,42 @@ ParsedQuery Visitor::visit(Parser::ConstructQueryContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-ParsedQuery Visitor::visit(const Parser::DescribeQueryContext* ctx) {
-  reportNotSupported(ctx, "DESCRIBE queries are");
+ParsedQuery Visitor::visit(Parser::DescribeQueryContext* ctx) {
+  auto clause = parsedQuery::Describe{};
+  auto specs = visitVector(ctx->varOrIri());
+  if (specs.empty()) {
+    reportNotSupported(ctx, "DESCRIBE * is");
+  }
+
+  for (GraphTerm& spec : specs) {
+    if (std::holds_alternative<Variable>(spec)) {
+      clause.resources_.push_back(std::get<Variable>(spec));
+    } else if (std::holds_alternative<Iri>(spec)) {
+      auto iri = TripleComponent::Iri::fromIriref(std::get<Iri>(spec).toSparql());
+      clause.resources_.push_back(std::move(iri));
+    }
+  }
+
+
+  parsedQuery_.datasetClauses_ = parsedQuery::DatasetClauses::fromClauses(
+      visitVector(ctx->datasetClause()));
+  if (ctx->whereClause()) {
+    auto [pattern, visibleVariables] = visit(ctx->whereClause());
+    parsedQuery_._rootGraphPattern = std::move(pattern);
+    parsedQuery_.registerVariablesVisibleInQueryBody(visibleVariables);
+  }
+
+  parsedQuery_.addSolutionModifiers(visit(ctx->solutionModifier()));
+  clause.whereClause_._graphPatterns.push_back(parsedQuery::Subquery{std::move(parsedQuery_)});
+  parsedQuery_ = ParsedQuery{};
+  parsedQuery_._rootGraphPattern._graphPatterns.push_back(std::move(clause));
+  auto constructClause = ParsedQuery::ConstructClause{};
+  using G = GraphTerm;
+  using V = Variable;
+  constructClause.triples_.push_back(
+      std::array{G(V("?subject")), G(V("?predicate")), G(V("?object"))});
+  parsedQuery_._clause = std::move(constructClause);
+    return parsedQuery_;
 }
 
 // ____________________________________________________________________________________
