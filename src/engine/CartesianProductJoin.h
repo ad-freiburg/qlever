@@ -12,9 +12,18 @@
 class CartesianProductJoin : public Operation {
  public:
   using Children = std::vector<std::shared_ptr<QueryExecutionTree>>;
+  static constexpr size_t CHUNK_SIZE = 1'000'000;
 
  private:
   Children children_;
+
+  struct IdTableWithMetadata {
+    const IdTable& idTable_;
+    size_t totalOffset_;
+    size_t tableOffset_;
+    size_t totalLimit_;
+    bool done_ = false;
+  };
 
   // Access to the actual operations of the children.
   // TODO<joka921> We can move this whole children management into a base class
@@ -77,20 +86,33 @@ class CartesianProductJoin : public Operation {
 
  private:
   //! Compute the result of the query-subtree rooted at this element..
-  ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override;
+  ProtoResult computeResult(bool requestLaziness) override;
 
   // Copy each element from the `inputColumn` `groupSize` times to the
   // `targetColumn`. Repeat until the `targetColumn` is completely filled. Skip
   // the first `offset` write operations to the `targetColumn`. Call
   // `checkCancellation` after each write.
-  void writeResultColumn(std::span<Id> targetColumn,
-                         std::span<const Id> inputColumn, size_t groupSize,
-                         size_t offset) const;
+  size_t writeResultColumn(std::span<Id> targetColumn,
+                           std::span<const Id> inputColumn, size_t groupSize,
+                           size_t offset) const;
 
   // Write all columns of the subresults into an `IdTable` and return it.
-  IdTable writeAllColumns(
-      const std::vector<std::shared_ptr<const Result>>& subResults) const;
+  IdTable writeAllColumns(std::ranges::range auto subResults,
+                          IdTableWithMetadata* partialIdTable = nullptr) const;
 
   // Calculate the subresults of the children and store them into a vector.
-  std::vector<std::shared_ptr<const Result>> calculateSubResults();
+  std::pair<std::shared_ptr<const Result>,
+            std::vector<std::shared_ptr<const Result>>>
+  calculateSubResults(bool requestLaziness);
+
+  Result::Generator createLazyProducer(
+      LocalVocab staticMergedVocab,
+      std::vector<std::shared_ptr<const Result>> subresults,
+      size_t offsetFromFront, std::optional<size_t> limit = std::nullopt,
+      size_t* offsetPtr = nullptr) const;
+
+  Result::Generator createLazyConsumer(
+      LocalVocab staticMergedVocab, std::shared_ptr<const Result> lazyResult,
+      std::vector<std::shared_ptr<const Result>> subresults,
+      size_t offsetFromFront) const;
 };
