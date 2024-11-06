@@ -214,9 +214,9 @@ void DeltaTriplesManager::deleteTriples(
 template <typename Function>
 void DeltaTriplesManager::insertOrDeleteImpl(
     CancellationHandle cancellationHandle, Triples triples, Function function) {
-  // While holding the lock for the underlying `DeltaTriples`, perform the actual
-  // update (insert or delete) and (while still holding the lock) update the
-  // `currentLocatedTriplesPerBlock`.
+  // While holding the lock for the underlying `DeltaTriples`, perform the
+  // actual update (insert or delete) and (while still holding the lock) update
+  // the `currentLocatedTriplesPerBlock`.
   deltaTriples_.withWriteLock([this, &cancellationHandle, &triples,
                                &function](DeltaTriples& deltaTriples) {
     std::invoke(function, deltaTriples, std::move(cancellationHandle),

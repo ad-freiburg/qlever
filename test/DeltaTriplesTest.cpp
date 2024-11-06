@@ -357,27 +357,74 @@ TEST_F(DeltaTriplesTest, rewriteLocalVocabEntriesAndBlankNodes) {
 TEST_F(DeltaTriplesTest, DeltaTriplesManager) {
   DeltaTriplesManager deltaTriples(testQec->getIndex().getImpl());
   auto& vocab = testQec->getIndex().getVocab();
-  LocalVocab localVocab;
   auto cancellationHandle =
       std::make_shared<ad_utility::CancellationHandle<>>();
 
   std::vector<ad_utility::JThread> threads;
-  auto insertAndDelete = [&]() {
-    for (size_t i = 0; i < 200; ++i) {
-      deltaTriples.insertTriples(
-          cancellationHandle,
-          makeIdTriples(vocab, localVocab, {"<A> <B> <C>", "<A> <B> <D>"}));
-      deltaTriples.deleteTriples(
-          cancellationHandle,
-          makeIdTriples(vocab, localVocab, {"<A> <C> <E>"}));
+  static constexpr size_t numThreads = 18;
+  static constexpr size_t numIterations = 21;
+  // The following lambda inserts and deletes some triples and checks the state
+  // of the `DeltaTriples` for consistency.
+  auto insertAndDelete = [&](size_t threadIdx) {
+    LocalVocab localVocab;
+    LocatedTriplesPerBlockPtr beforeUpdate = deltaTriples.getLocatedTriples();
+    for (size_t i = 0; i < numIterations; ++i) {
+      // The first triple in both vectors is shared between all threads, the
+      // other triples are exclusive to this thread via the `threadIdx`.
+      auto triplesToInsert = makeIdTriples(
+          vocab, localVocab,
+          {"<A> <B> <C>", absl::StrCat("<A> <B> <D", threadIdx, ">"),
+           absl::StrCat("<A> <B> <E", threadIdx, ">")});
+      auto triplesToDelete = makeIdTriples(
+          vocab, localVocab,
+          {"<A> <C> <E>", absl::StrCat("<A> <B> <E", threadIdx, ">"),
+           absl::StrCat("<A> <B> <F", threadIdx, ">")});
+
+      deltaTriples.insertTriples(cancellationHandle, triplesToInsert);
+
+      // We have succesfully complete an update, so we expect the snapshot
+      // pointer to change.
+      EXPECT_NE(beforeUpdate, deltaTriples.getLocatedTriples());
+
+      deltaTriples.deleteTriples(cancellationHandle, triplesToDelete);
+      if (i == numIterations / 2) {
+        {
+          // Before the first iteration, none of the thread-exclusive triples
+          // are contained in the snapshot returned by the `deltaTriples`. As
+          // the snapshot is persistent over time, this doesn't change in
+          // further iterations.
+          const auto& locatedSPO =
+              beforeUpdate->getLocatedTriplesPerBlock(Permutation::SPO);
+          EXPECT_FALSE(locatedSPO.containsTriple(triplesToInsert.at(1), true));
+          EXPECT_FALSE(locatedSPO.containsTriple(triplesToInsert.at(1), false));
+          EXPECT_FALSE(locatedSPO.containsTriple(triplesToInsert.at(2), true));
+          EXPECT_FALSE(locatedSPO.containsTriple(triplesToInsert.at(2), false));
+          EXPECT_FALSE(locatedSPO.containsTriple(triplesToDelete.at(2), true));
+          EXPECT_FALSE(locatedSPO.containsTriple(triplesToDelete.at(2), false));
+        }
+        {
+          auto p = deltaTriples.getLocatedTriples();
+          const auto& locatedSPO =
+              p->getLocatedTriplesPerBlock(Permutation::SPO);
+          EXPECT_TRUE(locatedSPO.containsTriple(triplesToInsert.at(1), true));
+          EXPECT_TRUE(locatedSPO.containsTriple(triplesToInsert.at(2), false));
+          EXPECT_TRUE(locatedSPO.containsTriple(triplesToDelete.at(2), false));
+        }
+      }
     }
   };
-  for (size_t i = 0; i < 20; ++i) {
-    threads.emplace_back(insertAndDelete);
+  // Run the above lambda in multiple threads to detect
+  for (size_t i = 0; i < numThreads; ++i) {
+    threads.emplace_back(insertAndDelete, i);
   }
   threads.clear();
-  auto deltaImpl = deltaTriples.deltaTriples_.rlock();
-  EXPECT_THAT(*deltaImpl, NumTriples(2, 1, 3));
 
-  // TODO<joka921> Derive a meaningful test about the decoupled located triples
+  // If there are no updates, then the snapshot pointer doesn't change.
+  auto p1 = deltaTriples.getLocatedTriples();
+  auto p2 = deltaTriples.getLocatedTriples();
+  EXPECT_EQ(p1, p2);
+
+  auto deltaImpl = deltaTriples.deltaTriples_.rlock();
+  EXPECT_THAT(*deltaImpl, NumTriples(numThreads + 1, 2 * numThreads + 1,
+                                     3 * numThreads + 2));
 }
