@@ -910,8 +910,8 @@ Awaitable<void> Server::processQueryOrUpdate(
       co_await processQuery(params, queryOrUpdate, requestTimer, request, send,
                             timeLimit);
     } else {
-      throw std::runtime_error(
-          "SPARQL 1.1 Update is  currently not supported by QLever.");
+      co_await processUpdate(params, queryOrUpdate, requestTimer, request, send,
+                             timeLimit);
     }
   } catch (const ParseException& e) {
     responseStatus = http::status::bad_request;
