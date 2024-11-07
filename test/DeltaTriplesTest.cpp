@@ -6,6 +6,7 @@
 
 #include <gtest/gtest.h>
 
+#include "./DeltaTriplesTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "./util/IndexTestHelpers.h"
 #include "absl/strings/str_split.h"
@@ -15,41 +16,7 @@
 #include "index/Permutation.h"
 #include "parser/RdfParser.h"
 
-namespace {
-// A matcher that applies `InnerMatcher` to all `LocatedTriplesPerBlock` of a
-// `DeltaTriples`.
-auto InAllPermutations =
-    [](testing::Matcher<const LocatedTriplesPerBlock&> InnerMatcher)
-    -> testing::Matcher<const DeltaTriples&> {
-  return testing::AllOfArray(ad_utility::transform(
-      Permutation::ALL, [&InnerMatcher](const Permutation::Enum& perm) {
-        return testing::ResultOf(
-            absl::StrCat(".getLocatedTriplesPerBlock(",
-                         Permutation::toString(perm), ")"),
-            [perm](const DeltaTriples& deltaTriples) {
-              return deltaTriples.getLocatedTriplesPerBlock(perm);
-            },
-            InnerMatcher);
-      }));
-};
-// A matcher that checks `numTriples()` for all `LocatedTriplesPerBlock` of a
-// `DeltaTriples`.
-auto NumTriplesInAllPermutations =
-    [](size_t expectedNumTriples) -> testing::Matcher<const DeltaTriples&> {
-  return InAllPermutations(AD_PROPERTY(LocatedTriplesPerBlock, numTriples,
-                                       testing::Eq(expectedNumTriples)));
-};
-// A matcher that checks `numInserted()` and `numDeleted()` of a `DeltaTriples`
-// and `numTriples()` for all `LocatedTriplesPerBlock` of the `DeltaTriples`.
-auto NumTriples =
-    [](size_t inserted, size_t deleted,
-       size_t inAllPermutations) -> testing::Matcher<const DeltaTriples&> {
-  return testing::AllOf(
-      AD_PROPERTY(DeltaTriples, numInserted, testing::Eq(inserted)),
-      AD_PROPERTY(DeltaTriples, numDeleted, testing::Eq(deleted)),
-      NumTriplesInAllPermutations(inAllPermutations));
-};
-}  // namespace
+using namespace deltaTriplesTestHelpers;
 
 // Fixture that sets up a test index.
 class DeltaTriplesTest : public ::testing::Test {
