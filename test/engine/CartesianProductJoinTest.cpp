@@ -503,6 +503,80 @@ TEST_P(CartesianProductJoinLazyTest, leftTableBiggerThanChunk) {
 }
 
 // _____________________________________________________________________________
+TEST_P(CartesianProductJoinLazyTest, tablesAccumulatedBiggerThanChunk) {
+  // All tables individually smaller than chunk size, but larger when combined.
+  size_t rootSize = std::sqrt(CHUNK_SIZE) + 1;
+  IdTable table1{2, ad_utility::testing::makeAllocator()};
+  table1.resize(rootSize);
+  std::ranges::copy(std::views::iota(static_cast<int64_t>(0),
+                                     static_cast<int64_t>(rootSize)) |
+                        std::views::transform(Id::makeFromInt),
+                    table1.getColumn(0).begin());
+  std::ranges::copy(std::views::iota(static_cast<int64_t>(-rootSize),
+                                     static_cast<int64_t>(0)) |
+                        std::views::transform(Id::makeFromInt),
+                    table1.getColumn(1).begin());
+
+  IdTable table2{2, ad_utility::testing::makeAllocator()};
+  table2.resize(rootSize);
+  std::ranges::copy(std::views::iota(static_cast<int64_t>(0),
+                                     static_cast<int64_t>(rootSize)) |
+                        std::views::transform(Id::makeFromInt),
+                    table2.getColumn(0).begin());
+  std::ranges::copy(std::views::iota(static_cast<int64_t>(-rootSize),
+                                     static_cast<int64_t>(0)) |
+                        std::views::transform(Id::makeFromInt),
+                    table2.getColumn(1).begin());
+
+  std::vector<IdTable> tables;
+  tables.push_back(std::move(table1));
+  tables.push_back(std::move(table2));
+
+  auto occurenceCounts = getOccurenceCountWithoutLimit(tables);
+  auto valueCount = getValueCount(tables);
+  size_t expectedSize = getExpectedSize(tables);
+  auto join = makeJoin(std::move(tables));
+  expectCorrectResult(join, expectedSize, occurenceCounts, valueCount);
+}
+
+// _____________________________________________________________________________
+TEST_P(CartesianProductJoinLazyTest, twoTablesMatchChunkSize) {
+  // 2 tables multiplied together match chunk size exactly
+  size_t rootSize = std::sqrt(CHUNK_SIZE);
+  IdTable table1{2, ad_utility::testing::makeAllocator()};
+  table1.resize(rootSize);
+  std::ranges::copy(std::views::iota(static_cast<int64_t>(0),
+                                     static_cast<int64_t>(rootSize)) |
+                        std::views::transform(Id::makeFromInt),
+                    table1.getColumn(0).begin());
+  std::ranges::copy(std::views::iota(static_cast<int64_t>(-rootSize),
+                                     static_cast<int64_t>(0)) |
+                        std::views::transform(Id::makeFromInt),
+                    table1.getColumn(1).begin());
+
+  IdTable table2{2, ad_utility::testing::makeAllocator()};
+  table2.resize(rootSize);
+  std::ranges::copy(std::views::iota(static_cast<int64_t>(rootSize),
+                                     static_cast<int64_t>(rootSize * 2)) |
+                        std::views::transform(Id::makeFromInt),
+                    table2.getColumn(0).begin());
+  std::ranges::copy(std::views::iota(static_cast<int64_t>(-rootSize * 2),
+                                     static_cast<int64_t>(-rootSize)) |
+                        std::views::transform(Id::makeFromInt),
+                    table2.getColumn(1).begin());
+
+  std::vector<IdTable> tables;
+  tables.push_back(std::move(table1));
+  tables.push_back(std::move(table2));
+
+  auto occurenceCounts = getOccurenceCountWithoutLimit(tables);
+  auto valueCount = getValueCount(tables);
+  size_t expectedSize = getExpectedSize(tables);
+  auto join = makeJoin(std::move(tables));
+  expectCorrectResult(join, expectedSize, occurenceCounts, valueCount);
+}
+
+// _____________________________________________________________________________
 
 using ::testing::Range;
 using ::testing::Values;
