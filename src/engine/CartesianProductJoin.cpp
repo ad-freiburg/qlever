@@ -104,14 +104,14 @@ size_t CartesianProductJoin::writeResultColumn(std::span<Id> targetColumn,
     for (size_t i = firstInputElementIdx; i < inputSize; ++i) {
       for (size_t u = groupStartIdx; u < groupSize; ++u) {
         if (numRowsWritten == targetSize) {
-          return i - firstInputElementIdx + 1;
+          return i;
         }
         targetColumn[numRowsWritten] = inputColumn[i];
         ++numRowsWritten;
         checkCancellation();
       }
       if (numRowsWritten == targetSize) {
-        return i - firstInputElementIdx + 1;
+        return i;
       }
       // only the first round might be incomplete because of the offset, all
       // subsequent rounds start at 0.
@@ -238,15 +238,17 @@ IdTable CartesianProductJoin::writeAllColumns(
 
   size_t realOffset =
       partialIdTable ? partialIdTable->totalOffset_ : getLimit()._offset;
-    
+
   if (partialIdTable) {
-    totalResultSize *= std::min(
+    size_t factor = std::min(
         std::max(CHUNK_SIZE, totalResultSize) / totalResultSize,
         partialIdTable->idTable_.size() - partialIdTable->tableOffset_);
+    totalResultSize *= factor;
     // Make sure the offset doesn't cause a row to be partially consumed.
     if (partialIdTable->totalOffset_ >= totalResultSize) {
       partialIdTable->totalOffset_ -= totalResultSize;
       totalResultSize = 0;
+      partialIdTable->tableOffset_ += factor;
     } else {
       totalResultSize -= partialIdTable->totalOffset_;
       partialIdTable->totalOffset_ = 0;
@@ -293,14 +295,14 @@ IdTable CartesianProductJoin::writeAllColumns(
                                          offsetForPartialTable);
         ++resultColIdx;
       }
-      partialIdTable->tableOffset_ += consumedRows;
+      partialIdTable->tableOffset_ = consumedRows + 1;
     }
   }
   if (partialIdTable) {
     partialIdTable->totalLimit_ -= result.size();
     partialIdTable->done_ =
         partialIdTable->tableOffset_ >= partialIdTable->idTable_.size() ||
-        totalSizeIncludingLimit == 0;
+        partialIdTable->totalLimit_ == 0;
   }
   return result;
 }
