@@ -424,14 +424,12 @@ Result::Generator CartesianProductJoin::createLazyProducer(
         offset = itwm->totalOffset_;
         // TODO<RobinTF> consider skipping empty id tables.
         size_t currentColumn = columnOffset;
-        auto valueView =
-            row |
-            std::views::transform([](const auto& elem) { return *elem; }) |
-            std::views::join;
-        for (const auto& value : valueView) {
-          std::ranges::fill(idTable.getColumn(currentColumn), value);
-          currentColumn++;
-          checkCancellation();
+        for (const auto& partialRow : row) {
+          for (const ValueId& value : *partialRow) {
+            std::ranges::fill(idTable.getColumn(currentColumn), value);
+            currentColumn++;
+            checkCancellation();
+          }
         }
       }
       co_yield {std::move(idTable), staticMergedVocab.clone()};
