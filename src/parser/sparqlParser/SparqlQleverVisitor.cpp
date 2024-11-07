@@ -516,13 +516,23 @@ ParsedQuery Visitor::visit(Parser::ModifyContext* ctx) {
       return true;
     }
   };
+  auto isVisibleIfVariableGraph =
+      [this](const SparqlTripleSimpleWithGraph::Graph& graph) {
+        if (std::holds_alternative<Variable>(graph)) {
+          return ad_utility::contains(parsedQuery_.getVisibleVariables(),
+                                      std::get<Variable>(graph));
+        } else {
+          return true;
+        }
+      };
   auto checkTriples =
-      [&isVisibleIfVariable,
-       &ctx](const std::vector<SparqlTripleSimpleWithGraph>& triples) {
+      [&isVisibleIfVariable, &ctx, &isVisibleIfVariableGraph](
+          const std::vector<SparqlTripleSimpleWithGraph>& triples) {
         for (auto& triple : triples) {
           if (!(isVisibleIfVariable(triple.s_) &&
                 isVisibleIfVariable(triple.p_) &&
-                isVisibleIfVariable(triple.o_))) {
+                isVisibleIfVariable(triple.o_) &&
+                isVisibleIfVariableGraph(triple.g_))) {
             reportError(ctx,
                         absl::StrCat("A triple contains a variable that was "
                                      "not bound in the query body."));
