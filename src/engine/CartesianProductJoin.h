@@ -12,10 +12,10 @@
 class CartesianProductJoin : public Operation {
  public:
   using Children = std::vector<std::shared_ptr<QueryExecutionTree>>;
-  static constexpr size_t CHUNK_SIZE = 1'000'000;
 
  private:
   Children children_;
+  size_t chunkSize_;
 
   struct IdTableWithMetadata {
     const IdTable& idTable_;
@@ -44,7 +44,8 @@ class CartesianProductJoin : public Operation {
   // Constructor. `children` must not be empty and the variables of all the
   // children must be disjoint, else an `AD_CONTRACT_CHECK` fails.
   explicit CartesianProductJoin(QueryExecutionContext* executionContext,
-                                Children children);
+                                Children children,
+                                size_t chunkSize = 1'000'000);
 
   /// get non-owning pointers to all the held subtrees to actually use the
   /// Execution Trees as trees

@@ -13,7 +13,7 @@
 
 using namespace ad_utility::testing;
 using ad_utility::source_location;
-constexpr auto CHUNK_SIZE = CartesianProductJoin::CHUNK_SIZE;
+constexpr size_t CHUNK_SIZE = 10'000;
 using O = std::optional<size_t>;
 
 // Create a `CartesianProductJoin` the children of which are `ValuesForTesting`
@@ -274,7 +274,7 @@ class CartesianProductJoinLazyTest
           qec, splitIntoRandomSubtables(tables.back()),
           makeUniqueVariables(tables.back())));
     }
-    CartesianProductJoin join{qec, std::move(children)};
+    CartesianProductJoin join{qec, std::move(children), CHUNK_SIZE};
     join.setLimit(LimitOffsetClause{std::get<2>(GetParam()), getOffset()});
     return join;
   }

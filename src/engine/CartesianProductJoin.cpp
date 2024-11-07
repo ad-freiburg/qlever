@@ -8,8 +8,11 @@
 
 // ____________________________________________________________________________
 CartesianProductJoin::CartesianProductJoin(
-    QueryExecutionContext* executionContext, Children children)
-    : Operation{executionContext}, children_{std::move(children)} {
+    QueryExecutionContext* executionContext, Children children,
+    size_t chunkSize)
+    : Operation{executionContext},
+      children_{std::move(children)},
+      chunkSize_{chunkSize} {
   AD_CONTRACT_CHECK(!children_.empty());
   AD_CONTRACT_CHECK(std::ranges::all_of(
       children_, [](auto& child) { return child != nullptr; }));
@@ -186,7 +189,7 @@ ProtoResult CartesianProductJoin::computeResult(bool requestLaziness) {
   size_t currentSize = 1;
   for (const auto& sr : subResults) {
     size_t newSize = currentSize * sr->idTable().numRows();
-    if (newSize > CHUNK_SIZE && currentSize != 1) {
+    if (newSize > chunkSize_ && currentSize != 1) {
       break;
     }
     currentSize = newSize;
@@ -241,7 +244,7 @@ IdTable CartesianProductJoin::writeAllColumns(
 
   if (partialIdTable) {
     size_t factor = std::min(
-        std::max(CHUNK_SIZE, totalResultSize) / totalResultSize,
+        std::max(chunkSize_, totalResultSize) / totalResultSize,
         partialIdTable->idTable_.size() - partialIdTable->tableOffset_);
     totalResultSize *= factor;
     // Make sure the offset doesn't cause a row to be partially consumed.
