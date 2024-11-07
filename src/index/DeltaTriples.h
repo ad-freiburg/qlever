@@ -79,7 +79,6 @@ class DeltaTriples {
  public:
   // Construct for given index.
   explicit DeltaTriples(const Index& index) : index_(index) {}
-  DeltaTriples(const DeltaTriples&) = default;
 
   // Get the common `LocalVocab` of the delta triples.
  private:
