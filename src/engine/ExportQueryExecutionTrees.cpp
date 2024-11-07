@@ -86,31 +86,77 @@ ExportQueryExecutionTrees::getIdTables(const Result& result) {
 // _____________________________________________________________________________
 cppcoro::generator<ExportQueryExecutionTrees::TableWithRange>
 ExportQueryExecutionTrees::getRowIndices(LimitOffsetClause limitOffset,
-                                         const Result& result) {
-  size_t fullResultSize = 0;
-  size_t numRowRemainingForExport = limitOffset.limitOrDefault();
-  size_t numRowRemainingForCounting = limitOffset.limitOrDefault();
+                                         const Result& result,
+                                         uint64_t& resultSizeTotal) {
+  // The first call initializes the `resultSizeTotal` to zero (no need to
+  // initialize it outside of the function).
+  resultSizeTotal = 0;
 
+  // If the LIMIT is zero, there are no blocks to yield and the total result
+  // size is zero.
   if (limitOffset._limit.value_or(1) == 0) {
     co_return;
   }
+
+  // The effective offset, limit, and export limit. These will be updated after
+  // each block, see `updateEffectiveOffsetAndLimits` below. If they were not
+  // specified, they are initialized to their default values (0 for the offset
+  // and `std::numeric_limits<uint64_t>::max()` for the two limits).
+  uint64_t effectiveOffset = limitOffset._offset;
+  uint64_t effectiveLimit = limitOffset.limitOrDefault();
+  uint64_t effectiveExportLimit = limitOffset.exportLimitOrDefault();
+
+  // Make sure that the export limit is at most the limit (increasing the
+  // export limit beyond the limit has no effect).
+  effectiveExportLimit = std::min(effectiveExportLimit, effectiveLimit);
+
+  // Iterate over the result in blocks.
   for (TableConstRefWithVocab& tableWithVocab : getIdTables(result)) {
-    uint64_t currentOffset =
-        limitOffset.actualOffset(tableWithVocab.idTable_.numRows());
-    uint64_t upperBound =
-        limitOffset.upperBound(tableWithVocab.idTable_.numRows());
-    if (currentOffset != upperBound) {
+    // If the effective limit is zero, there is nothing to yield and nothing
+    // to count anymore.
+    if (effectiveLimit == 0) {
+      co_return;
+    }
+
+    // If all rows in the current block are before the effective offset, we can
+    // skip the block entirely. If not, there is at least something to count
+    // and maybe also something to yield.
+    uint64_t currentBlockSize = tableWithVocab.idTable_.numRows();
+    if (effectiveOffset >= currentBlockSize) {
+      effectiveOffset -= currentBlockSize;
+      continue;
+    }
+    AD_CORRECTNESS_CHECK(effectiveOffset < currentBlockSize);
+    AD_CORRECTNESS_CHECK(effectiveLimit > 0);
+
+    // Compute the range of rows to be exported (can by zero) and to be counted
+    // (always non-zero at this point).
+    uint64_t rangeBegin = effectiveOffset;
+    uint64_t numRowsToBeExported =
+        std::min(effectiveExportLimit, currentBlockSize - rangeBegin);
+    uint64_t numRowsToBeCounted =
+        std::min(effectiveLimit, currentBlockSize - rangeBegin);
+    AD_CORRECTNESS_CHECK(rangeBegin + numRowsToBeExported <= currentBlockSize);
+    AD_CORRECTNESS_CHECK(rangeBegin + numRowsToBeCounted <= currentBlockSize);
+    AD_CORRECTNESS_CHECK(numRowsToBeCounted > 0);
+
+    // If there is something to be exported, yield it.
+    if (numRowsToBeExported > 0) {
       co_yield {std::move(tableWithVocab),
-                std::views::iota(currentOffset, upperBound)};
+                std::views::iota(rangeBegin, rangeBegin + numRowsToBeExported)};
     }
-    limitOffset._offset -= currentOffset;
-    if (limitOffset._limit.has_value()) {
-      limitOffset._limit =
-          limitOffset._limit.value() - (upperBound - currentOffset);
-    }
-    if (limitOffset._limit.value_or(1) == 0) {
-      break;
-    }
+
+    // Add to `resultSizeTotal` and update the effective limits (make sure to
+    // never go below zero and `std::numeric_limits<uint64_t>::max()` stays
+    // there).
+    resultSizeTotal += numRowsToBeCounted;
+    auto reduceLimit = [&](uint64_t& limit, uint64_t subtrahend) {
+      if (limit != std::numeric_limits<uint64_t>::max()) {
+        limit = limit > subtrahend ? limit - subtrahend : 0;
+      }
+    };
+    reduceLimit(effectiveLimit, numRowsToBeCounted);
+    reduceLimit(effectiveExportLimit, numRowsToBeCounted);
   }
 }
 
@@ -121,7 +167,9 @@ ExportQueryExecutionTrees::constructQueryResultToTriples(
     const ad_utility::sparql_types::Triples& constructTriples,
     LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
     CancellationHandle cancellationHandle) {
-  for (const auto& [pair, range] : getRowIndices(limitAndOffset, *result)) {
+  uint64_t resultSizeTotal = 0;
+  for (const auto& [pair, range] :
+       getRowIndices(limitAndOffset, *result, resultSizeTotal)) {
     auto& idTable = pair.idTable_;
     for (uint64_t i : range) {
       ConstructQueryExportContext context{i, idTable, pair.localVocab_,
@@ -237,7 +285,9 @@ ExportQueryExecutionTrees::idTableToQLeverJSONBindings(
     std::shared_ptr<const Result> result,
     CancellationHandle cancellationHandle) {
   AD_CORRECTNESS_CHECK(result != nullptr);
-  for (const auto& [pair, range] : getRowIndices(limitAndOffset, *result)) {
+  uint64_t resultSizeTotal = 0;
+  for (const auto& [pair, range] :
+       getRowIndices(limitAndOffset, *result, resultSizeTotal)) {
     for (uint64_t rowIndex : range) {
       co_yield idTableToQLeverJSONRow(qet, columns, pair.localVocab_, rowIndex,
                                       pair.idTable_)
@@ -481,7 +531,9 @@ ExportQueryExecutionTrees::selectQueryResultToStream(
 
   // special case : binary export of IdTable
   if constexpr (format == MediaType::octetStream) {
-    for (const auto& [pair, range] : getRowIndices(limitAndOffset, *result)) {
+    uint64_t resultSizeTotal = 0;
+    for (const auto& [pair, range] :
+         getRowIndices(limitAndOffset, *result, resultSizeTotal)) {
       for (uint64_t i : range) {
         for (const auto& columnIndex : selectedColumnIndices) {
           if (columnIndex.has_value()) {
@@ -512,7 +564,9 @@ ExportQueryExecutionTrees::selectQueryResultToStream(
   constexpr auto& escapeFunction = format == MediaType::tsv
                                        ? RdfEscaping::escapeForTsv
                                        : RdfEscaping::escapeForCsv;
-  for (const auto& [pair, range] : getRowIndices(limitAndOffset, *result)) {
+  uint64_t resultSizeTotal = 0;
+  for (const auto& [pair, range] :
+       getRowIndices(limitAndOffset, *result, resultSizeTotal)) {
     for (uint64_t i : range) {
       for (size_t j = 0; j < selectedColumnIndices.size(); ++j) {
         if (selectedColumnIndices[j].has_value()) {
@@ -637,7 +691,9 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
   auto selectedColumnIndices =
       qet.selectedVariablesToColumnIndices(selectClause, false);
   // TODO<joka921> we could prefilter for the nonexisting variables.
-  for (const auto& [pair, range] : getRowIndices(limitAndOffset, *result)) {
+  uint64_t resultSizeTotal = 0;
+  for (const auto& [pair, range] :
+       getRowIndices(limitAndOffset, *result, resultSizeTotal)) {
     for (uint64_t i : range) {
       co_yield "\n  <result>";
       for (size_t j = 0; j < selectedColumnIndices.size(); ++j) {
@@ -704,7 +760,9 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
   };
 
   bool isFirstRow = true;
-  for (const auto& [pair, range] : getRowIndices(limitAndOffset, *result)) {
+  uint64_t resultSizeTotal = 0;
+  for (const auto& [pair, range] :
+       getRowIndices(limitAndOffset, *result, resultSizeTotal)) {
     for (uint64_t i : range) {
       if (!isFirstRow) [[likely]] {
         co_yield ",";

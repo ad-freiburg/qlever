@@ -761,19 +761,6 @@ Awaitable<void> Server::processQuery(
   LOG(INFO) << "Requested media type of result is \""
             << ad_utility::toString(mediaType) << "\"" << std::endl;
 
-  // TODO<c++23> use std::optional::transform
-  std::optional<uint64_t> maxSend = std::nullopt;
-  auto parameterValue =
-      ad_utility::url_parser::getParameterCheckAtMostOnce(params, "send");
-  if (parameterValue.has_value()) {
-    maxSend = std::stoul(parameterValue.value());
-  }
-  // Limit JSON requests by default
-  if (!maxSend.has_value() && (mediaType == MediaType::sparqlJson ||
-                               mediaType == MediaType::qleverJson)) {
-    maxSend = MAX_NOF_ROWS_IN_RESULT;
-  }
-
   auto queryHub = queryHub_.lock();
   AD_CORRECTNESS_CHECK(queryHub);
   ad_utility::websocket::MessageSender messageSender{getQueryId(request, query),
@@ -804,11 +791,13 @@ Awaitable<void> Server::processQuery(
   // limits the number of bindings exported in `ExportQueryExecutionTrees`.
   // Even without "send" parameter, JSON exports are limited to
   // `MAX_NOF_ROWS_IN_RESULT` bindings.
-  auto& limitOffset = plannedQuery.value().parsedQuery_._limitOffset;
+  auto& limitOffset = plannedQuery.parsedQuery_._limitOffset;
   auto& exportLimit = limitOffset.exportLimit_;
-  exportLimit = params.contains("send")
-                    ? std::optional{std::stoul(params.at("send"))}
-                    : std::nullopt;
+  auto sendParameter =
+      ad_utility::url_parser::getParameterCheckAtMostOnce(params, "send");
+  if (sendParameter.has_value()) {
+    exportLimit = std::stoul(sendParameter.value());
+  }
   if (!exportLimit.has_value() && (mediaType == MediaType::sparqlJson ||
                                    mediaType == MediaType::qleverJson)) {
     exportLimit = MAX_NOF_ROWS_IN_RESULT;

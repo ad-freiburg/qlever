@@ -172,13 +172,25 @@ class ExportQueryExecutionTrees {
   static cppcoro::generator<ExportQueryExecutionTrees::TableConstRefWithVocab>
   getIdTables(const Result& result);
 
-  // Return a range that contains the indices of the rows that have to be
-  // exported from the `idTable` given the `LimitOffsetClause`. It takes into
-  // account the LIMIT, the OFFSET, and the actual size of the `idTable`. It
-  // also takes into account the value of the QLever-specific `send` parameter
-  // (the value of which is stored in `LimitOffsetClause::maxSend_`).
+  // Generate the result in "blocks" and, when iterating over the generator
+  // from beginning to end, return the total number of rows in the result
+  // in `totalResultSize`.
+  //
+  // Blocks, where all rows are before OFFSET, are requested (and hence
+  // computed), but skipped.
+  //
+  // Blocks, where at least one row is after OFFSET but before the effective
+  // export limit (minimum of the LIMIT and the value of the `send` parameter),
+  // are requested and yielded (together with the corresponding `LocalVocab`
+  // and the range from that `IdTable` that belongs to the result).
+  //
+  // Blocks after the effective export limit until the LIMIT are requested, and
+  // counted towards the `totalResultSize`, but not yielded.
+  //
+  // Blocks after the LIMIT are not even requested.
   static cppcoro::generator<TableWithRange> getRowIndices(
-      LimitOffsetClause limitOffset, const Result& result);
+      LimitOffsetClause limitOffset, const Result& result,
+      uint64_t& resutSizeTotal);
 
   FRIEND_TEST(ExportQueryExecutionTrees, getIdTablesReturnsSingletonIterator);
   FRIEND_TEST(ExportQueryExecutionTrees, getIdTablesMirrorsGenerator);

@@ -28,7 +28,7 @@ std::string runQueryStreamableResult(
     const std::string& kg, const std::string& query,
     ad_utility::MediaType mediaType, bool useTextIndex = false,
     std::optional<size_t> limit = std::nullopt,
-    std::optional<size_t> maxSend = std::nullopt) {
+    std::optional<size_t> exportLimit = std::nullopt) {
   auto qec =
       ad_utility::testing::getQec(kg, true, true, true, 16_B, useTextIndex);
   // TODO<joka921> There is a bug in the caching that we have yet to trace.
@@ -39,7 +39,7 @@ std::string runQueryStreamableResult(
   QueryPlanner qp{qec, cancellationHandle};
   auto pq = SparqlParser::parseQuery(query);
   pq._limitOffset._limit = limit;
-  pq._limitOffset.maxSend_ = maxSend;
+  pq._limitOffset.exportLimit_ = exportLimit;
   auto qet = qp.createExecutionTree(pq);
   ad_utility::Timer timer(ad_utility::Timer::Started);
   auto strGenerator = ExportQueryExecutionTrees::computeResult(
@@ -148,7 +148,7 @@ void runSelectQueryTestCase(
                                               sparqlXml, useTextIndex);
   EXPECT_EQ(testCase.resultXml, xmlAsString);
 
-  // Test interaction of `limit` and `maxSend`.
+  // Test interaction of `limit` and `exportLimit`.
   qleverJSONResult = nlohmann::json::parse(runQueryStreamableResult(
       testCase.kg, testCase.query, qleverJson, useTextIndex, 2ul, 5ul));
   ASSERT_EQ(qleverJSONResult["sent"], std::min(2ul, testCase.resultSize));
@@ -180,7 +180,7 @@ void runConstructQueryTestCase(
   EXPECT_EQ(runQueryStreamableResult(testCase.kg, testCase.query, turtle),
             testCase.resultTurtle);
 
-  // Test interaction of `limit` and `maxSend`.
+  // Test interaction of `limit` and `exportLimit`.
   qleverJSONStreamResult = nlohmann::json::parse(runQueryStreamableResult(
       testCase.kg, testCase.query, qleverJson, false, 2ul, 5ul));
   ASSERT_EQ(qleverJSONStreamResult["sent"], std::min(2ul, testCase.resultSize));
@@ -1362,12 +1362,14 @@ TEST(ExportQueryExecutionTrees, ensureCorrectSlicingOfSingleIdTable) {
   }();
 
   Result result{std::move(tableGenerator), {}};
+  uint64_t resultSizeTotal = 0;
   auto generator = ExportQueryExecutionTrees::getRowIndices(
-      LimitOffsetClause{._limit = 1, ._offset = 1}, result);
+      LimitOffsetClause{._limit = 1, ._offset = 1}, result, resultSizeTotal);
 
   auto referenceTable = makeIdTableFromVector({{2}});
   EXPECT_THAT(convertToVector(std::move(generator)),
               matchesIdTables(referenceTable));
+  EXPECT_EQ(resultSizeTotal, 3);
 }
 
 // _____________________________________________________________________________
@@ -1384,13 +1386,16 @@ TEST(ExportQueryExecutionTrees,
   }();
 
   Result result{std::move(tableGenerator), {}};
+  uint64_t resultSizeTotal = 0;
   auto generator = ExportQueryExecutionTrees::getRowIndices(
-      LimitOffsetClause{._limit = std::nullopt, ._offset = 3}, result);
+      LimitOffsetClause{._limit = std::nullopt, ._offset = 3}, result,
+      resultSizeTotal);
 
   auto referenceTable1 = makeIdTableFromVector({{4}, {5}});
 
   EXPECT_THAT(convertToVector(std::move(generator)),
               matchesIdTables(referenceTable1));
+  EXPECT_EQ(resultSizeTotal, 5);
 }
 
 // _____________________________________________________________________________
@@ -1407,13 +1412,15 @@ TEST(ExportQueryExecutionTrees,
   }();
 
   Result result{std::move(tableGenerator), {}};
+  uint64_t resultSizeTotal = 0;
   auto generator = ExportQueryExecutionTrees::getRowIndices(
-      LimitOffsetClause{._limit = 3}, result);
+      LimitOffsetClause{._limit = 3}, result, resultSizeTotal);
 
   auto referenceTable1 = makeIdTableFromVector({{1}, {2}, {3}});
 
   EXPECT_THAT(convertToVector(std::move(generator)),
               matchesIdTables(referenceTable1));
+  EXPECT_EQ(resultSizeTotal, 5);
 }
 
 // _____________________________________________________________________________
@@ -1430,14 +1437,16 @@ TEST(ExportQueryExecutionTrees,
   }();
 
   Result result{std::move(tableGenerator), {}};
+  uint64_t resultSizeTotal = 0;
   auto generator = ExportQueryExecutionTrees::getRowIndices(
-      LimitOffsetClause{._limit = 3, ._offset = 1}, result);
+      LimitOffsetClause{._limit = 3, ._offset = 1}, result, resultSizeTotal);
 
   auto referenceTable1 = makeIdTableFromVector({{2}, {3}});
   auto referenceTable2 = makeIdTableFromVector({{4}});
 
   EXPECT_THAT(convertToVector(std::move(generator)),
               matchesIdTables(referenceTable1, referenceTable2));
+  EXPECT_EQ(resultSizeTotal, 5);
 }
 
 // _____________________________________________________________________________
@@ -1458,8 +1467,9 @@ TEST(ExportQueryExecutionTrees,
   }();
 
   Result result{std::move(tableGenerator), {}};
+  uint64_t resultSizeTotal = 0;
   auto generator = ExportQueryExecutionTrees::getRowIndices(
-      LimitOffsetClause{._limit = 5, ._offset = 2}, result);
+      LimitOffsetClause{._limit = 5, ._offset = 2}, result, resultSizeTotal);
 
   auto referenceTable1 = makeIdTableFromVector({{3}});
   auto referenceTable2 = makeIdTableFromVector({{4}, {5}});
@@ -1468,6 +1478,7 @@ TEST(ExportQueryExecutionTrees,
   EXPECT_THAT(
       convertToVector(std::move(generator)),
       matchesIdTables(referenceTable1, referenceTable2, referenceTable3));
+  EXPECT_EQ(resultSizeTotal, 9);
 }
 
 // _____________________________________________________________________________
@@ -1480,8 +1491,9 @@ TEST(ExportQueryExecutionTrees, ensureGeneratorIsNotConsumedWhenNotRequired) {
     }();
 
     Result result{std::move(throwingGenerator), {}};
+    uint64_t resultSizeTotal = 0;
     auto generator = ExportQueryExecutionTrees::getRowIndices(
-        LimitOffsetClause{._limit = 0, ._offset = 0}, result);
+        LimitOffsetClause{._limit = 0, ._offset = 0}, result, resultSizeTotal);
     EXPECT_NO_THROW(convertToVector(std::move(generator)));
   }
 
@@ -1496,8 +1508,9 @@ TEST(ExportQueryExecutionTrees, ensureGeneratorIsNotConsumedWhenNotRequired) {
     }();
 
     Result result{std::move(throwAfterYieldGenerator), {}};
+    uint64_t resultSizeTotal = 0;
     auto generator = ExportQueryExecutionTrees::getRowIndices(
-        LimitOffsetClause{._limit = 1, ._offset = 0}, result);
+        LimitOffsetClause{._limit = 1, ._offset = 0}, result, resultSizeTotal);
     IdTable referenceTable1 = makeIdTableFromVector({{1}});
     std::vector<IdTable> tables;
     EXPECT_NO_THROW({ tables = convertToVector(std::move(generator)); });
