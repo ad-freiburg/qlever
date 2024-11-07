@@ -18,7 +18,8 @@
 class IdTable;
 // Forward declaration of `LocatedTriplesPerBlock`
 class LocatedTriplesPerBlock;
-class LocatedTriplesPerBlockPtr;
+class SharedLocatedTriplesSnapshot;
+class LocatedTriplesSnapshot;
 
 // Helper class to store static properties of the different permutations to
 // avoid code duplication. The first template parameter is a search functor for
@@ -66,7 +67,7 @@ class Permutation {
   IdTable scan(const ScanSpecification& scanSpec,
                ColumnIndicesRef additionalColumns,
                const CancellationHandle& cancellationHandle,
-               const LocatedTriplesPerBlockPtr& deltaTriples,
+               const LocatedTriplesSnapshot& locatedTriplesSnapshot,
                const LimitOffsetClause& limitOffset = {}) const;
 
   // For a given relation, determine the `col1Id`s and their counts. This is
@@ -74,11 +75,11 @@ class Permutation {
   // in `meta_`.
   IdTable getDistinctCol1IdsAndCounts(
       Id col0Id, const CancellationHandle& cancellationHandle,
-      const LocatedTriplesPerBlockPtr& deltaTriples) const;
+      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
 
   IdTable getDistinctCol0IdsAndCounts(
       const CancellationHandle& cancellationHandle,
-      const LocatedTriplesPerBlockPtr& deltaTriples) const;
+      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
 
   // Typedef to propagate the `MetadataAndblocks` and `IdTableGenerator` type.
   using MetadataAndBlocks =
@@ -102,11 +103,11 @@ class Permutation {
       const ScanSpecification& scanSpec,
       std::optional<std::vector<CompressedBlockMetadata>> blocks,
       ColumnIndicesRef additionalColumns, CancellationHandle cancellationHandle,
-      const LocatedTriplesPerBlockPtr& deltaTriples,
+      const LocatedTriplesSnapshot& locatedTriplesSnapshot,
       const LimitOffsetClause& limitOffset = {}) const;
 
   std::optional<CompressedRelationMetadata> getMetadata(
-      Id col0Id, const LocatedTriplesPerBlockPtr& deltaTriples) const;
+      Id col0Id, const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
 
   // Return the metadata for the scan specified by the `scanSpecification`
   // along with the metadata for all the blocks that are relevant for this scan.
@@ -114,13 +115,13 @@ class Permutation {
   // empty) return `nullopt`.
   std::optional<MetadataAndBlocks> getMetadataAndBlocks(
       const ScanSpecification& scanSpec,
-      const LocatedTriplesPerBlockPtr& deltaTriples) const;
+      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
 
   /// Similar to the previous `scan` function, but only get the size of the
   /// result
   size_t getResultSizeOfScan(
       const ScanSpecification& scanSpec,
-      const LocatedTriplesPerBlockPtr& deltaTriples) const;
+      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
 
   // _______________________________________________________
   void setKbName(const string& name) { meta_.setName(name); }
@@ -148,7 +149,7 @@ class Permutation {
   const Permutation& getActualPermutation(Id id) const;
 
   const LocatedTriplesPerBlock& locatedTriples(
-      const LocatedTriplesPerBlockPtr&) const;
+      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
 
   const CompressedRelationReader& reader() const { return reader_.value(); }
 

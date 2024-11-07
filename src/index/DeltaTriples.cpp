@@ -172,17 +172,15 @@ void DeltaTriples::modifyTriplesImpl(CancellationHandle cancellationHandle,
 }
 
 // ____________________________________________________________________________
-const LocatedTriplesPerBlock&
-DeltaTriples::LocatedTriplesAndLocalVocab::getLocatedTriplesPerBlock(
+const LocatedTriplesPerBlock& LocatedTriplesSnapshot::getLocatedTriplesPerBlock(
     Permutation::Enum permutation) const {
   return locatedTriplesPerBlock_[static_cast<int>(permutation)];
 }
 
 // ____________________________________________________________________________
-std::shared_ptr<DeltaTriples::LocatedTriplesAndLocalVocab>
-DeltaTriples::copyContent() const {
-  return std::make_shared<LocatedTriplesAndLocalVocab>(locatedTriplesPerBlock(),
-                                                       localVocab_.clone());
+std::shared_ptr<LocatedTriplesSnapshot> DeltaTriples::copySnapshot() const {
+  return std::make_shared<LocatedTriplesSnapshot>(locatedTriplesPerBlock(),
+                                                  localVocab_.clone());
 }
 
 // ____________________________________________________________________________
@@ -192,42 +190,22 @@ DeltaTriples::DeltaTriples(const Index& index)
 // ____________________________________________________________________________
 DeltaTriplesManager::DeltaTriplesManager(const IndexImpl& index)
     : deltaTriples_{index},
-      currentLocatedTriplesPerBlock{deltaTriples_.rlock()->copyContent()} {}
-
-// ____________________________________________________________________________
-void DeltaTriplesManager::insertTriples(
-    DeltaTriples::CancellationHandle cancellationHandle,
-    DeltaTriples::Triples triples) {
-  return insertOrDeleteImpl(std::move(cancellationHandle), std::move(triples),
-                            &DeltaTriples::insertTriples);
-}
+      currentLocatedTriplesSnapshot_{deltaTriples_.rlock()->copySnapshot()} {}
 
 // _____________________________________________________________________________
-void DeltaTriplesManager::deleteTriples(
-    DeltaTriples::CancellationHandle cancellationHandle,
-    DeltaTriples::Triples triples) {
-  return insertOrDeleteImpl(std::move(cancellationHandle), std::move(triples),
-                            &DeltaTriples::deleteTriples);
-}
-
-// _____________________________________________________________________________
-template <typename Function>
-void DeltaTriplesManager::insertOrDeleteImpl(
-    CancellationHandle cancellationHandle, Triples triples, Function function) {
+void DeltaTriplesManager::modify(std::function<void(DeltaTriples&)> function) {
   // While holding the lock for the underlying `DeltaTriples`, perform the
   // actual update (insert or delete) and (while still holding the lock) update
   // the `currentLocatedTriplesPerBlock`.
-  deltaTriples_.withWriteLock([this, &cancellationHandle, &triples,
-                               &function](DeltaTriples& deltaTriples) {
-    std::invoke(function, deltaTriples, std::move(cancellationHandle),
-                std::move(triples));
-    currentLocatedTriplesPerBlock.withWriteLock([&deltaTriples](auto& ptr) {
-      ptr = LocatedTriplesPerBlockPtr{deltaTriples.copyContent()};
+  deltaTriples_.withWriteLock([this, &function](DeltaTriples& deltaTriples) {
+    function(deltaTriples);
+    currentLocatedTriplesSnapshot_.withWriteLock([&deltaTriples](auto& ptr) {
+      ptr = SharedLocatedTriplesSnapshot{deltaTriples.copySnapshot()};
     });
   });
 }
 
 // _____________________________________________________________________________
-LocatedTriplesPerBlockPtr DeltaTriplesManager::getLocatedTriples() const {
-  return *currentLocatedTriplesPerBlock.rlock();
+SharedLocatedTriplesSnapshot DeltaTriplesManager::getSnapshot() const {
+  return *currentLocatedTriplesSnapshot_.rlock();
 }

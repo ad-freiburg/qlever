@@ -355,7 +355,7 @@ TEST_F(DeltaTriplesTest, rewriteLocalVocabEntriesAndBlankNodes) {
 
 // _____________________________________________________________________________
 TEST_F(DeltaTriplesTest, DeltaTriplesManager) {
-  DeltaTriplesManager deltaTriples(testQec->getIndex().getImpl());
+  DeltaTriplesManager deltaTriplesManager(testQec->getIndex().getImpl());
   auto& vocab = testQec->getIndex().getVocab();
   auto cancellationHandle =
       std::make_shared<ad_utility::CancellationHandle<>>();
@@ -367,7 +367,8 @@ TEST_F(DeltaTriplesTest, DeltaTriplesManager) {
   // of the `DeltaTriples` for consistency.
   auto insertAndDelete = [&](size_t threadIdx) {
     LocalVocab localVocab;
-    LocatedTriplesPerBlockPtr beforeUpdate = deltaTriples.getLocatedTriples();
+    SharedLocatedTriplesSnapshot beforeUpdate =
+        deltaTriplesManager.getSnapshot();
     for (size_t i = 0; i < numIterations; ++i) {
       // The first triple in both vectors is shared between all threads, the
       // other triples are exclusive to this thread via the `threadIdx`.
@@ -380,19 +381,24 @@ TEST_F(DeltaTriplesTest, DeltaTriplesManager) {
           {"<A> <C> <E>", absl::StrCat("<A> <B> <E", threadIdx, ">"),
            absl::StrCat("<A> <B> <F", threadIdx, ">")});
 
-      deltaTriples.insertTriples(cancellationHandle, triplesToInsert);
+      deltaTriplesManager.modify([&](DeltaTriples& deltaTriples) {
+        deltaTriples.insertTriples(cancellationHandle, triplesToInsert);
+      });
 
-      // We have succesfully complete an update, so we expect the snapshot
+      // We have successfully complete an update, so we expect the snapshot
       // pointer to change.
-      EXPECT_NE(beforeUpdate, deltaTriples.getLocatedTriples());
+      EXPECT_NE(beforeUpdate, deltaTriplesManager.getSnapshot());
 
-      deltaTriples.deleteTriples(cancellationHandle, triplesToDelete);
+      deltaTriplesManager.modify([&](DeltaTriples& deltaTriples) {
+        deltaTriples.deleteTriples(cancellationHandle, triplesToDelete);
+      });
+
       if (i == numIterations / 2) {
         {
           // Before the first iteration, none of the thread-exclusive triples
-          // are contained in the snapshot returned by the `deltaTriples`. As
-          // the snapshot is persistent over time, this doesn't change in
-          // further iterations.
+          // are contained in the snapshot returned by the
+          // `locatedTriplesSnapshot`. As the snapshot is persistent over time,
+          // this doesn't change in further iterations.
           const auto& locatedSPO =
               beforeUpdate->getLocatedTriplesPerBlock(Permutation::SPO);
           EXPECT_FALSE(locatedSPO.containsTriple(triplesToInsert.at(1), true));
@@ -403,7 +409,7 @@ TEST_F(DeltaTriplesTest, DeltaTriplesManager) {
           EXPECT_FALSE(locatedSPO.containsTriple(triplesToDelete.at(2), false));
         }
         {
-          auto p = deltaTriples.getLocatedTriples();
+          auto p = deltaTriplesManager.getSnapshot();
           const auto& locatedSPO =
               p->getLocatedTriplesPerBlock(Permutation::SPO);
           EXPECT_TRUE(locatedSPO.containsTriple(triplesToInsert.at(1), true));
@@ -420,11 +426,11 @@ TEST_F(DeltaTriplesTest, DeltaTriplesManager) {
   threads.clear();
 
   // If there are no updates, then the snapshot pointer doesn't change.
-  auto p1 = deltaTriples.getLocatedTriples();
-  auto p2 = deltaTriples.getLocatedTriples();
+  auto p1 = deltaTriplesManager.getSnapshot();
+  auto p2 = deltaTriplesManager.getSnapshot();
   EXPECT_EQ(p1, p2);
 
-  auto deltaImpl = deltaTriples.deltaTriples_.rlock();
+  auto deltaImpl = deltaTriplesManager.deltaTriples_.rlock();
   EXPECT_THAT(*deltaImpl, NumTriples(numThreads + 1, 2 * numThreads + 1,
                                      3 * numThreads + 2));
 }

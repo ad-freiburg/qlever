@@ -291,12 +291,12 @@ class IndexImpl {
 
   // ___________________________________________________________________________
   size_t getCardinality(Id id, Permutation::Enum permutation,
-                        const LocatedTriplesPerBlockPtr&) const;
+                        const LocatedTriplesSnapshot&) const;
 
   // ___________________________________________________________________________
   size_t getCardinality(const TripleComponent& comp,
                         Permutation::Enum permutation,
-                        const LocatedTriplesPerBlockPtr& deltaTriples) const;
+                        const LocatedTriplesSnapshot& locatedTriples) const;
 
   // ___________________________________________________________________________
   std::string indexToString(VocabIndex id) const;
@@ -428,9 +428,9 @@ class IndexImpl {
   bool hasAllPermutations() const { return SPO().isLoaded(); }
 
   // _____________________________________________________________________________
-  vector<float> getMultiplicities(const TripleComponent& key,
-                                  Permutation::Enum permutation,
-                                  const LocatedTriplesPerBlockPtr&) const;
+  vector<float> getMultiplicities(
+      const TripleComponent& key, Permutation::Enum permutation,
+      const LocatedTriplesSnapshot& locatedTriples) const;
 
   // ___________________________________________________________________
   vector<float> getMultiplicities(Permutation::Enum permutation) const;
@@ -440,21 +440,21 @@ class IndexImpl {
                const Permutation::Enum& permutation,
                Permutation::ColumnIndicesRef additionalColumns,
                const ad_utility::SharedCancellationHandle& cancellationHandle,
-               const LocatedTriplesPerBlockPtr& deltaTriples,
+               const LocatedTriplesSnapshot& locatedTriples,
                const LimitOffsetClause& limitOffset = {}) const;
 
   // _____________________________________________________________________________
   IdTable scan(const ScanSpecification& scanSpecification, Permutation::Enum p,
                Permutation::ColumnIndicesRef additionalColumns,
                const ad_utility::SharedCancellationHandle& cancellationHandle,
-               const LocatedTriplesPerBlockPtr& deltaTriples,
+               const LocatedTriplesSnapshot& locatedTriples,
                const LimitOffsetClause& limitOffset = {}) const;
 
   // _____________________________________________________________________________
   size_t getResultSizeOfScan(
       const ScanSpecification& scanSpecification,
       const Permutation::Enum& permutation,
-      const LocatedTriplesPerBlockPtr& deltaTriples) const;
+      const LocatedTriplesSnapshot& locatedTriples) const;
 
  private:
   // Private member functions

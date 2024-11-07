@@ -1448,9 +1448,9 @@ Index::NumNormalAndInternal IndexImpl::numDistinctCol0(
 // ___________________________________________________________________________
 size_t IndexImpl::getCardinality(
     Id id, Permutation::Enum permutation,
-    const LocatedTriplesPerBlockPtr& deltaTriples) const {
+    const LocatedTriplesSnapshot& locatedTriples) const {
   if (const auto& meta =
-          getPermutation(permutation).getMetadata(id, deltaTriples);
+          getPermutation(permutation).getMetadata(id, locatedTriples);
       meta.has_value()) {
     return meta.value().numRows_;
   }
@@ -1460,7 +1460,7 @@ size_t IndexImpl::getCardinality(
 // ___________________________________________________________________________
 size_t IndexImpl::getCardinality(
     const TripleComponent& comp, Permutation::Enum permutation,
-    const LocatedTriplesPerBlockPtr& deltaTriples) const {
+    const LocatedTriplesSnapshot& locatedTriples) const {
   // TODO<joka921> This special case is only relevant for the `PSO` and `POS`
   // permutations, but this internal predicate should never appear in subjects
   // or objects anyway.
@@ -1470,7 +1470,7 @@ size_t IndexImpl::getCardinality(
     return TEXT_PREDICATE_CARDINALITY_ESTIMATE;
   }
   if (std::optional<Id> relId = comp.toValueId(getVocab()); relId.has_value()) {
-    return getCardinality(relId.value(), permutation, deltaTriples);
+    return getCardinality(relId.value(), permutation, locatedTriples);
   }
   return 0;
 }
@@ -1493,10 +1493,10 @@ Index::Vocab::PrefixRanges IndexImpl::prefixRanges(
 // _____________________________________________________________________________
 vector<float> IndexImpl::getMultiplicities(
     const TripleComponent& key, Permutation::Enum permutation,
-    const LocatedTriplesPerBlockPtr& deltaTriples) const {
+    const LocatedTriplesSnapshot& locatedTriples) const {
   if (auto keyId = key.toValueId(getVocab()); keyId.has_value()) {
     auto meta =
-        getPermutation(permutation).getMetadata(keyId.value(), deltaTriples);
+        getPermutation(permutation).getMetadata(keyId.value(), locatedTriples);
     if (meta.has_value()) {
       return {meta.value().getCol1Multiplicity(),
               meta.value().getCol2Multiplicity()};
@@ -1522,30 +1522,31 @@ IdTable IndexImpl::scan(
     const Permutation::Enum& permutation,
     Permutation::ColumnIndicesRef additionalColumns,
     const ad_utility::SharedCancellationHandle& cancellationHandle,
-    const LocatedTriplesPerBlockPtr& deltaTriples,
+    const LocatedTriplesSnapshot& locatedTriples,
     const LimitOffsetClause& limitOffset) const {
   auto scanSpecification = scanSpecificationAsTc.toScanSpecification(*this);
   return scan(scanSpecification, permutation, additionalColumns,
-              cancellationHandle, deltaTriples, limitOffset);
+              cancellationHandle, locatedTriples, limitOffset);
 }
 // _____________________________________________________________________________
 IdTable IndexImpl::scan(
     const ScanSpecification& scanSpecification, Permutation::Enum p,
     Permutation::ColumnIndicesRef additionalColumns,
     const ad_utility::SharedCancellationHandle& cancellationHandle,
-    const LocatedTriplesPerBlockPtr& deltaTriples,
+    const LocatedTriplesSnapshot& locatedTriples,
     const LimitOffsetClause& limitOffset) const {
   return getPermutation(p).scan(scanSpecification, additionalColumns,
-                                cancellationHandle, deltaTriples, limitOffset);
+                                cancellationHandle, locatedTriples,
+                                limitOffset);
 }
 
 // _____________________________________________________________________________
 size_t IndexImpl::getResultSizeOfScan(
     const ScanSpecification& scanSpecification,
     const Permutation::Enum& permutation,
-    const LocatedTriplesPerBlockPtr& deltaTriples) const {
+    const LocatedTriplesSnapshot& locatedTriples) const {
   return getPermutation(permutation)
-      .getResultSizeOfScan(scanSpecification, deltaTriples);
+      .getResultSizeOfScan(scanSpecification, locatedTriples);
 }
 
 // _____________________________________________________________________________

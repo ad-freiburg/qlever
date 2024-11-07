@@ -14,6 +14,30 @@
 #include "index/Permutation.h"
 #include "util/Synchronized.h"
 
+// The positions of the delta triples (triples that were inserted or deleted
+// since the index was built) in each of the six permutations, and the local
+// vocab. This is all the information that is required to perform a query that
+// correctly respects the delta triples, hence the name.
+class LocatedTriplesSnapshot {
+ private:
+  std::array<LocatedTriplesPerBlock, Permutation::ALL.size()>
+      locatedTriplesPerBlock_;
+  LocalVocab localVocab_;
+
+ public:
+  LocatedTriplesSnapshot(
+      std::array<LocatedTriplesPerBlock, Permutation::ALL.size()>
+          locatedTriplesPerBlock,
+      LocalVocab localVocab)
+      : locatedTriplesPerBlock_{std::move(locatedTriplesPerBlock)},
+        localVocab_{std::move(localVocab)} {}
+  LocatedTriplesSnapshot() = default;
+  // Get `TripleWithPosition` objects for given permutation.
+  const LocatedTriplesPerBlock& getLocatedTriplesPerBlock(
+      Permutation::Enum permutation) const;
+  friend class DeltaTriples;
+};
+
 // A class for maintaining triples that are inserted or deleted after index
 // building, we call these delta triples. How it works in principle:
 //
@@ -35,30 +59,7 @@ class DeltaTriples {
   FRIEND_TEST(DeltaTriplesTest, addTriplesToLocalVocab);
 
  public:
-  // The positions of the delta triples in each of the six permutations, and
-  // the local vocab.
-  class LocatedTriplesAndLocalVocab {
-   private:
-    std::array<LocatedTriplesPerBlock, Permutation::ALL.size()>
-        locatedTriplesPerBlock_;
-    LocalVocab localVocab_;
-
-   public:
-    LocatedTriplesAndLocalVocab(
-        std::array<LocatedTriplesPerBlock, Permutation::ALL.size()>
-            locatedTriplesPerBlock,
-        LocalVocab localVocab)
-        : locatedTriplesPerBlock_{std::move(locatedTriplesPerBlock)},
-          localVocab_{std::move(localVocab)} {}
-    LocatedTriplesAndLocalVocab() = default;
-    // Get `TripleWithPosition` objects for given permutation.
-    const LocatedTriplesPerBlock& getLocatedTriplesPerBlock(
-        Permutation::Enum permutation) const;
-    friend class DeltaTriples;
-  };
-
-  using LocatedTriplesPerBlockPtr =
-      std::shared_ptr<LocatedTriplesAndLocalVocab>;
+  using LocatedTriplesPerBlockPtr = std::shared_ptr<LocatedTriplesSnapshot>;
 
   using Triples = std::vector<IdTriple<0>>;
   using CancellationHandle = ad_utility::SharedCancellationHandle;
@@ -82,8 +83,8 @@ class DeltaTriples {
   static_assert(static_cast<int>(Permutation::Enum::OSP) == 5);
   static_assert(Permutation::ALL.size() == 6);
 
-  LocatedTriplesPerBlockPtr locatedTriplesAndLocalVocab =
-      std::make_shared<LocatedTriplesAndLocalVocab>();
+  LocatedTriplesPerBlockPtr locatedTriplesSnapshot =
+      std::make_shared<LocatedTriplesSnapshot>();
 
   // Each delta triple needs to know where it is stored in each of the six
   // `LocatedTriplesPerBlock` above.
@@ -113,12 +114,12 @@ class DeltaTriples {
 
   // Get the common `LocalVocab` of the delta triples.
  private:
-  LocalVocab& localVocab() { return locatedTriplesAndLocalVocab->localVocab_; }
+  LocalVocab& localVocab() { return locatedTriplesSnapshot->localVocab_; }
   auto& locatedTriplesPerBlock() {
-    return locatedTriplesAndLocalVocab->locatedTriplesPerBlock_;
+    return locatedTriplesSnapshot->locatedTriplesPerBlock_;
   }
   const auto& locatedTriplesPerBlock() const {
-    return locatedTriplesAndLocalVocab->locatedTriplesPerBlock_;
+    return locatedTriplesSnapshot->locatedTriplesPerBlock_;
   }
 
  public:
@@ -126,7 +127,7 @@ class DeltaTriples {
 
   const LocatedTriplesPerBlock& getLocatedTriplesPerBlock(
       Permutation::Enum permutation) const {
-    return locatedTriplesAndLocalVocab->getLocatedTriplesPerBlock(permutation);
+    return locatedTriplesSnapshot->getLocatedTriplesPerBlock(permutation);
   }
 
   // Clear `triplesAdded_` and `triplesSubtracted_` and all associated data
@@ -143,10 +144,10 @@ class DeltaTriples {
   // Delete triples.
   void deleteTriples(CancellationHandle cancellationHandle, Triples triples);
 
-  // Return a deep copy of the `LocatedTriplesPerBlock` and the corresponding
+  // Return a deep copy of the `LocatedTriples` and the corresponding
   // `LocalVocab` which form a snapshot of the current status of this
   // `DeltaTriples` object.
-  std::shared_ptr<LocatedTriplesAndLocalVocab> copyContent() const;
+  std::shared_ptr<LocatedTriplesSnapshot> copySnapshot() const;
 
  private:
   // Find the position of the given triple in the given permutation and add it
@@ -188,16 +189,15 @@ class DeltaTriples {
 };
 
 // Make it possible to forward declare this class.
-class LocatedTriplesPerBlockPtr
-    : public std::shared_ptr<const DeltaTriples::LocatedTriplesAndLocalVocab> {
-};
+class SharedLocatedTriplesSnapshot
+    : public std::shared_ptr<const LocatedTriplesSnapshot> {};
 
 // This class synchronizes the access to a `DeltaTriples` object, thus avoiding
 // race conditions between concurrent updates and queries.
 class DeltaTriplesManager {
   ad_utility::Synchronized<DeltaTriples> deltaTriples_;
-  ad_utility::Synchronized<LocatedTriplesPerBlockPtr, std::shared_mutex>
-      currentLocatedTriplesPerBlock;
+  ad_utility::Synchronized<SharedLocatedTriplesSnapshot, std::shared_mutex>
+      currentLocatedTriplesSnapshot_;
 
  public:
   using CancellationHandle = DeltaTriples::CancellationHandle;
@@ -214,11 +214,17 @@ class DeltaTriplesManager {
   // Delete triples. For details on the tread-safety see `insertTriples` above.
   void deleteTriples(CancellationHandle cancellationHandle, Triples triples);
 
-  // Return a `LocatedTriplesPerBlockPtr` that contains a deep copy of the state
-  // of the underlying `DeltaTriples` after the last completed UPDATE, and thus
-  // is not affected by future UPDATE requests. It can therefore be used to
+  // Modify the underlying `DeltaTriples` by applying the `function` to them.
+  // Then update the current snapshot, s.t. subsequent calls to `getSnapshot`
+  // will observe the modifications. All this is done in a thread-safe way,
+  // meaning that there can be only one call to `modify` at the same time.
+  void modify(std::function<void(DeltaTriples&)> function);
+
+  // Return a `SharedLocatedTriplesSnapshot` that contains a deep copy of the
+  // state of the underlying `DeltaTriples` after the last completed UPDATE, and
+  // thus is not affected by future UPDATE requests. It can therefore be used to
   // execute a query in a consistent way.
-  LocatedTriplesPerBlockPtr getLocatedTriples() const;
+  SharedLocatedTriplesSnapshot getSnapshot() const;
 
  private:
   // The common implementation of `insertTriples` and `deleteTriples` above.

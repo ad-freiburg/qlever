@@ -41,7 +41,7 @@ auto makeTestScanWidthOne = [](const IndexImpl& index,
         IdTable result =
             index.scan({c0, c1, std::nullopt}, permutation, additionalColumns,
                        std::make_shared<ad_utility::CancellationHandle<>>(),
-                       qec.deltaTriples());
+                       qec.locatedTriplesSnapshot());
         ASSERT_EQ(result.numColumns(), 1 + additionalColumns.size());
         ASSERT_EQ(result, makeIdTableFromVector(expected));
       };
@@ -62,7 +62,7 @@ auto makeTestScanWidthTwo = [](const IndexImpl& index,
             index.scan({c0, std::nullopt, std::nullopt}, permutation,
                        Permutation::ColumnIndicesRef{},
                        std::make_shared<ad_utility::CancellationHandle<>>(),
-                       qec.deltaTriples());
+                       qec.locatedTriplesSnapshot());
         ASSERT_EQ(wol, makeIdTableFromVector(expected));
       };
 };
@@ -92,7 +92,7 @@ TEST(IndexTest, createFromTurtleTest) {
         return;
       }
       const auto& [index, qec] = getIndex();
-      const auto& deltaTriples = qec.deltaTriples();
+      const auto& deltaTriples = qec.locatedTriplesSnapshot();
 
       auto getId = makeGetId(getQec(kb)->getIndex());
       Id a = getId("<a>");
@@ -167,7 +167,7 @@ TEST(IndexTest, createFromTurtleTest) {
 
       const auto& qec = *getQec(kb);
       const IndexImpl& index = qec.getIndex().getImpl();
-      const auto& deltaTriples = qec.deltaTriples();
+      const auto& deltaTriples = qec.locatedTriplesSnapshot();
 
       auto getId = makeGetId(getQec(kb)->getIndex());
       Id zero = getId("<0>");
@@ -224,7 +224,7 @@ TEST(IndexTest, createFromOnDiskIndexTest) {
       "<a2> <b2> <c2> .";
   const auto& qec = *getQec(kb);
   const IndexImpl& index = qec.getIndex().getImpl();
-  const auto& deltaTriples = qec.deltaTriples();
+  const auto& deltaTriples = qec.locatedTriplesSnapshot();
 
   auto getId = makeGetId(getQec(kb)->getIndex());
   Id b = getId("<b>");
@@ -465,8 +465,8 @@ TEST(IndexTest, NumDistinctEntities) {
   EXPECT_FLOAT_EQ(multiplicities[1], 7.0 / 2.0);
   EXPECT_FLOAT_EQ(multiplicities[2], 7.0 / 7.0);
 
-  multiplicities =
-      index.getMultiplicities(iri("<x>"), Permutation::SPO, qec.deltaTriples());
+  multiplicities = index.getMultiplicities(iri("<x>"), Permutation::SPO,
+                                           qec.locatedTriplesSnapshot());
   EXPECT_FLOAT_EQ(multiplicities[0], 2.5);
   EXPECT_FLOAT_EQ(multiplicities[1], 1);
 }
