@@ -11,12 +11,14 @@ void ExecuteUpdate::executeUpdate(
     const Index& index, const ParsedQuery& query, const QueryExecutionTree& qet,
     DeltaTriples& deltaTriples, const CancellationHandle& cancellationHandle) {
   auto [toInsert, toDelete] =
-      std::move(computeGraphUpdateQuads(index, query, qet, cancellationHandle));
+      computeGraphUpdateQuads(index, query, qet, cancellationHandle);
 
   // "The deletion of the triples happens before the insertion." (SPARQL 1.1
   // Update 3.1.3)
-  deltaTriples.deleteTriples(cancellationHandle, std::move(toDelete.idTriples));
-  deltaTriples.insertTriples(cancellationHandle, std::move(toInsert.idTriples));
+  deltaTriples.deleteTriples(cancellationHandle,
+                             std::move(toDelete.idTriples_));
+  deltaTriples.insertTriples(cancellationHandle,
+                             std::move(toInsert.idTriples_));
 }
 
 // _____________________________________________________________________________
@@ -130,7 +132,7 @@ ExecuteUpdate::computeGraphUpdateQuads(
   // update.
   auto res = qet.getResult(false);
 
-  auto& vocab = index.getVocab();
+  const auto& vocab = index.getVocab();
 
   auto prepareTemplateAndResultContainer =
       [&vocab, &qet,

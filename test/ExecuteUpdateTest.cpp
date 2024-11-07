@@ -92,15 +92,11 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
   const auto Id = ad_utility::testing::makeGetId(index);
   auto defaultGraphId = Id(std::string{DEFAULT_GRAPH_IRI});
 
-  ad_utility::HashMap<std::string, std::unique_ptr<LocalVocabEntry>>
-      localVocabEntries;
-  auto LVI = [&localVocabEntries](const std::string& iri) {
-    if (!localVocabEntries.contains(iri)) {
-      localVocabEntries.try_emplace(
-          iri, std::make_unique<LocalVocabEntry>(
-                   ad_utility::triple_component::Iri::fromIriref(iri)));
-    }
-    return Id::makeFromLocalVocabIndex(localVocabEntries.at(iri).get());
+  using namespace ::testing;
+  LocalVocab localVocab;
+  auto LVI = [&localVocab](const std::string& iri) {
+    return Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
+        LocalVocabEntry(ad_utility::triple_component::Iri::fromIriref(iri))));
   };
 
   auto IdTriple = [defaultGraphId](const ::Id s, const ::Id p, const ::Id o,
@@ -122,58 +118,50 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
   auto expectComputeGraphUpdateQuads =
       [&executeComputeGraphUpdateQuads](
           const std::string& update,
-          const testing::Matcher<const std::vector<::IdTriple<>>&>&
-              toInsertMatcher,
-          const testing::Matcher<const std::vector<::IdTriple<>>&>&
-              toDeleteMatcher) {
-        EXPECT_THAT(
-            executeComputeGraphUpdateQuads(update),
-            testing::Pair(AD_FIELD(ExecuteUpdate::IdTriplesAndLocalVocab,
-                                   idTriples, toInsertMatcher),
-                          AD_FIELD(ExecuteUpdate::IdTriplesAndLocalVocab,
-                                   idTriples, toDeleteMatcher)));
+          const Matcher<const std::vector<::IdTriple<>>&>& toInsertMatcher,
+          const Matcher<const std::vector<::IdTriple<>>&>& toDeleteMatcher) {
+        EXPECT_THAT(executeComputeGraphUpdateQuads(update),
+                    Pair(AD_FIELD(ExecuteUpdate::IdTriplesAndLocalVocab,
+                                  idTriples_, toInsertMatcher),
+                         AD_FIELD(ExecuteUpdate::IdTriplesAndLocalVocab,
+                                  idTriples_, toDeleteMatcher)));
       };
   auto expectComputeGraphUpdateQuadsFails =
       [&executeComputeGraphUpdateQuads](
           const std::string& update,
-          const testing::Matcher<const std::string&>& messageMatcher) {
+          const Matcher<const std::string&>& messageMatcher) {
         AD_EXPECT_THROW_WITH_MESSAGE(executeComputeGraphUpdateQuads(update),
                                      messageMatcher);
       };
 
   expectComputeGraphUpdateQuads(
       "INSERT DATA { <s> <p> <o> . }",
-      testing::ElementsAreArray({IdTriple(LVI("<s>"), LVI("<p>"), LVI("<o>"))}),
-      testing::IsEmpty());
+      ElementsAreArray({IdTriple(LVI("<s>"), LVI("<p>"), LVI("<o>"))}),
+      IsEmpty());
   expectComputeGraphUpdateQuads(
-      "DELETE DATA { <z> <label> \"zz\"@en }", testing::IsEmpty(),
-      testing::ElementsAreArray(
-          {IdTriple(Id("<z>"), Id("<label>"), Id("\"zz\"@en"))}));
+      "DELETE DATA { <z> <label> \"zz\"@en }", IsEmpty(),
+      ElementsAreArray({IdTriple(Id("<z>"), Id("<label>"), Id("\"zz\"@en"))}));
   expectComputeGraphUpdateQuads(
       "DELETE { ?s <is-a> ?o } INSERT { <s> <p> <o> } WHERE { ?s <is-a> ?o }",
-      testing::ElementsAreArray({IdTriple(LVI("<s>"), LVI("<p>"), LVI("<o>")),
-                                 // TODO: what to do with this duplicate entry?
-                                 IdTriple(LVI("<s>"), LVI("<p>"), LVI("<o>"))}),
-      testing::ElementsAreArray(
-          {IdTriple(Id("<x>"), Id("<is-a>"), Id("<y>")),
-           IdTriple(Id("<y>"), Id("<is-a>"), Id("<x>"))}));
+      ElementsAreArray({IdTriple(LVI("<s>"), LVI("<p>"), LVI("<o>")),
+                        IdTriple(LVI("<s>"), LVI("<p>"), LVI("<o>"))}),
+      ElementsAreArray({IdTriple(Id("<x>"), Id("<is-a>"), Id("<y>")),
+                        IdTriple(Id("<y>"), Id("<is-a>"), Id("<x>"))}));
   expectComputeGraphUpdateQuads(
       "DELETE { <s> <p> <o> } INSERT { <s> <p> <o> } WHERE { ?s <is-a> ?o }",
-      testing::ElementsAreArray({IdTriple(LVI("<s>"), LVI("<p>"), LVI("<o>")),
-                                 IdTriple(LVI("<s>"), LVI("<p>"), LVI("<o>"))}),
-      testing::ElementsAreArray(
-          {IdTriple(LVI("<s>"), LVI("<p>"), LVI("<o>")),
-           IdTriple(LVI("<s>"), LVI("<p>"), LVI("<o>"))}));
+      ElementsAreArray({IdTriple(LVI("<s>"), LVI("<p>"), LVI("<o>")),
+                        IdTriple(LVI("<s>"), LVI("<p>"), LVI("<o>"))}),
+      ElementsAreArray({IdTriple(LVI("<s>"), LVI("<p>"), LVI("<o>")),
+                        IdTriple(LVI("<s>"), LVI("<p>"), LVI("<o>"))}));
   expectComputeGraphUpdateQuads(
       "DELETE { ?s <is-a> ?o } INSERT { ?s <is-a> ?o } WHERE { ?s <is-a> ?o }",
-      testing::ElementsAreArray({IdTriple(Id("<x>"), Id("<is-a>"), Id("<y>")),
-                                 IdTriple(Id("<y>"), Id("<is-a>"), Id("<x>"))}),
-      testing::ElementsAreArray(
-          {IdTriple(Id("<x>"), Id("<is-a>"), Id("<y>")),
-           IdTriple(Id("<y>"), Id("<is-a>"), Id("<x>"))}));
+      ElementsAreArray({IdTriple(Id("<x>"), Id("<is-a>"), Id("<y>")),
+                        IdTriple(Id("<y>"), Id("<is-a>"), Id("<x>"))}),
+      ElementsAreArray({IdTriple(Id("<x>"), Id("<is-a>"), Id("<y>")),
+                        IdTriple(Id("<y>"), Id("<is-a>"), Id("<x>"))}));
   expectComputeGraphUpdateQuads(
-      "DELETE WHERE { ?s ?p ?o }", testing::IsEmpty(),
-      testing::UnorderedElementsAreArray(
+      "DELETE WHERE { ?s ?p ?o }", IsEmpty(),
+      UnorderedElementsAreArray(
           {IdTriple(Id("<x>"), Id("<label>"), Id("\"alpha\"")),
            IdTriple(Id("<x>"), Id("<label>"), Id("\"älpha\"")),
            IdTriple(Id("<x>"), Id("<label>"), Id("\"A\"")),
@@ -184,10 +172,10 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
            IdTriple(Id("<zz>"), Id("<label>"), Id("<zz>"))}));
   expectComputeGraphUpdateQuadsFails(
       "SELECT * WHERE { ?s ?p ?o }",
-      testing::HasSubstr("Assertion `query.hasUpdateClause()` failed."));
+      HasSubstr("Assertion `query.hasUpdateClause()` failed."));
   expectComputeGraphUpdateQuadsFails(
       "CLEAR DEFAULT",
-      testing::HasSubstr(
+      HasSubstr(
           "Only INSERT/DELETE update operations are currently supported."));
 }
 
@@ -200,6 +188,7 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
   auto& vocab = const_cast<Index::Vocab&>(index.getVocab());
 
   // Helpers
+  using namespace ::testing;
   const auto Id = ad_utility::testing::makeGetId(index);
   using Graph = SparqlTripleSimpleWithGraph::Graph;
   using LocalVocab = ad_utility::triple_component::LiteralOrIri;
@@ -212,16 +201,16 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
         literal);
   };
   // Matchers
-  using MatcherType = testing::Matcher<const ExecuteUpdate::IdOrVariableIndex&>;
+  using MatcherType = Matcher<const ExecuteUpdate::IdOrVariableIndex&>;
   auto TripleComponentMatcher = [](const ::LocalVocab& localVocab,
                                    TripleComponentT component) -> MatcherType {
     return std::visit(
         ad_utility::OverloadCallOperator{
             [](const ::Id& id) -> MatcherType {
-              return testing::VariantWith<::Id>(testing::Eq(id));
+              return VariantWith<::Id>(Eq(id));
             },
             [](const ColumnIndex& index) -> MatcherType {
-              return testing::VariantWith<ColumnIndex>(testing::Eq(index));
+              return VariantWith<ColumnIndex>(Eq(index));
             },
             [&localVocab](
                 const ad_utility::triple_component::LiteralOrIri& literalOrIri)
@@ -233,8 +222,8 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
                                  " not in local vocab"));
               }
               const auto id = Id::makeFromLocalVocabIndex(lviOpt.value());
-              return testing::VariantWith<::Id>(
-                  AD_PROPERTY(Id, getBits, testing::Eq(id.getBits())));
+              return VariantWith<::Id>(
+                  AD_PROPERTY(Id, getBits, Eq(id.getBits())));
             }},
         component);
   };
@@ -257,12 +246,12 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
                   TripleComponentMatcher(localVocab, expectedTriple.at(3)));
             });
         EXPECT_THAT(transformedTriples,
-                    testing::ElementsAreArray(transformedTriplesMatchers));
+                    ElementsAreArray(transformedTriplesMatchers));
       };
   auto expectTransformTriplesTemplateFails =
       [&vocab](const VariableToColumnMap& variableColumns,
                std::vector<SparqlTripleSimpleWithGraph>&& triples,
-               const testing::Matcher<const std::string&>& messageMatcher) {
+               const Matcher<const std::string&>& messageMatcher) {
         AD_EXPECT_THROW_WITH_MESSAGE(
             ExecuteUpdate::transformTriplesTemplate(vocab, variableColumns,
                                                     std::move(triples)),
@@ -290,14 +279,13 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
       {},
       {SparqlTripleSimpleWithGraph{Literal("\"foo\""), Iri("<bar>"),
                                    Variable("?f"), Graph{}}},
-      testing::HasSubstr(
-          "Assertion `variableColumns.contains(component.getVariable())` "
-          "failed."));
+      HasSubstr("Assertion `variableColumns.contains(component.getVariable())` "
+                "failed."));
   expectTransformTriplesTemplateFails(
       {},
       {SparqlTripleSimpleWithGraph{Literal("\"foo\""), Iri("<bar>"),
                                    Literal("\"foo\""), Graph{Variable("?f")}}},
-      testing::HasSubstr("Assertion `variableColumns.contains(var)` failed."));
+      HasSubstr("Assertion `variableColumns.contains(var)` failed."));
   // Variables in the template are mapped to their column index.
   expectTransformTriplesTemplate(
       {{Variable("?f"), {0, ColumnIndexAndTypeInfo::PossiblyUndefined}}},
@@ -313,22 +301,23 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
 
 // _____________________________________________________________________________
 TEST(ExecuteUpdate, resolveVariable) {
+  using namespace ::testing;
   const auto idTable =
       makeIdTableFromVector({{V(0), V(1), V(2)},
                              {V(3), V(4), V(5)},
                              {V(6), Id::makeUndefined(), V(8)}});
   auto resolveVariable =
       std::bind_front(&ExecuteUpdate::resolveVariable, std::cref(idTable));
-  EXPECT_THAT(resolveVariable(0, V(10)), testing::Eq(V(10)));
-  EXPECT_THAT(resolveVariable(0, 1UL), testing::Eq(V(1)));
-  EXPECT_THAT(resolveVariable(1, 1UL), testing::Eq(V(4)));
-  EXPECT_THAT(resolveVariable(2, 1UL), testing::Eq(std::nullopt));
-  EXPECT_THAT(resolveVariable(2, Id::makeUndefined()),
-              testing::Eq(std::nullopt));
+  EXPECT_THAT(resolveVariable(0, V(10)), Eq(V(10)));
+  EXPECT_THAT(resolveVariable(0, 1UL), Eq(V(1)));
+  EXPECT_THAT(resolveVariable(1, 1UL), Eq(V(4)));
+  EXPECT_THAT(resolveVariable(2, 1UL), Eq(std::nullopt));
+  EXPECT_THAT(resolveVariable(2, Id::makeUndefined()), Eq(std::nullopt));
 }
 
 // _____________________________________________________________________________
 TEST(ExecuteUpdate, computeAndAddQuadsForResultRow) {
+  using namespace ::testing;
   const auto idTable =
       makeIdTableFromVector({{V(0), V(1), V(2)},
                              {V(3), V(4), V(5)},
@@ -336,45 +325,40 @@ TEST(ExecuteUpdate, computeAndAddQuadsForResultRow) {
   auto expectComputeQuads =
       [](const std::vector<ExecuteUpdate::TransformedTriple>& templates,
          const IdTable& idTable, uint64_t rowIdx,
-         const testing::Matcher<const std::vector<IdTriple<>>&>&
-             expectedQuads) {
+         const Matcher<const std::vector<IdTriple<>>&>& expectedQuads) {
         std::vector<IdTriple<>> result;
         ExecuteUpdate::computeAndAddQuadsForResultRow(templates, result,
                                                       idTable, rowIdx);
         EXPECT_THAT(result, expectedQuads);
       };
   // Compute the quads for an empty template set yields no quads.
-  expectComputeQuads({}, idTable, 0, testing::IsEmpty());
+  expectComputeQuads({}, idTable, 0, IsEmpty());
   // Compute the quads for template without variables yields the templates
   // unmodified.
-  expectComputeQuads(
-      {{V(0), V(1), V(2), V(3)}}, idTable, 0,
-      testing::ElementsAreArray({IdTriple{{V(0), V(1), V(2), V(3)}}}));
-  expectComputeQuads(
-      {{V(0), V(1), V(2), V(3)}}, idTable, 1,
-      testing::ElementsAreArray({IdTriple{{V(0), V(1), V(2), V(3)}}}));
+  expectComputeQuads({{V(0), V(1), V(2), V(3)}}, idTable, 0,
+                     ElementsAreArray({IdTriple{{V(0), V(1), V(2), V(3)}}}));
+  expectComputeQuads({{V(0), V(1), V(2), V(3)}}, idTable, 1,
+                     ElementsAreArray({IdTriple{{V(0), V(1), V(2), V(3)}}}));
   // The variables in templates are resolved to the value of the variable in the
   // specified row of the result.
-  expectComputeQuads(
-      {{0UL, V(1), 1UL, V(3)}}, idTable, 0,
-      testing::ElementsAreArray({IdTriple{{V(0), V(1), V(1), V(3)}}}));
-  expectComputeQuads(
-      {{0UL, V(1), 1UL, V(3)}}, idTable, 1,
-      testing::ElementsAreArray({IdTriple{{V(3), V(1), V(4), V(3)}}}));
+  expectComputeQuads({{0UL, V(1), 1UL, V(3)}}, idTable, 0,
+                     ElementsAreArray({IdTriple{{V(0), V(1), V(1), V(3)}}}));
+  expectComputeQuads({{0UL, V(1), 1UL, V(3)}}, idTable, 1,
+                     ElementsAreArray({IdTriple{{V(3), V(1), V(4), V(3)}}}));
   // Quads with undefined IDs cannot be stored and are not returned.
-  expectComputeQuads({{0UL, V(1), 1UL, V(3)}}, idTable, 2, testing::IsEmpty());
+  expectComputeQuads({{0UL, V(1), 1UL, V(3)}}, idTable, 2, IsEmpty());
   expectComputeQuads({{V(0), V(1), Id::makeUndefined(), V(3)}}, idTable, 0,
-                     testing::IsEmpty());
+                     IsEmpty());
   // Some extra cases to cover all branches.
   expectComputeQuads({{Id::makeUndefined(), V(1), V(2), V(3)}}, idTable, 0,
-                     testing::IsEmpty());
+                     IsEmpty());
   expectComputeQuads({{V(0), Id::makeUndefined(), V(2), V(3)}}, idTable, 0,
-                     testing::IsEmpty());
+                     IsEmpty());
   expectComputeQuads({{V(0), V(1), V(2), Id::makeUndefined()}}, idTable, 0,
-                     testing::IsEmpty());
+                     IsEmpty());
   // All the templates are evaluated for the specified row of the result.
-  expectComputeQuads(
-      {{0UL, V(1), 1UL, V(3)}, {V(0), 1UL, 2UL, V(3)}}, idTable, 0,
-      testing::ElementsAreArray({IdTriple{{V(0), V(1), V(1), V(3)}},
-                                 IdTriple{{V(0), V(1), V(2), V(3)}}}));
+  expectComputeQuads({{0UL, V(1), 1UL, V(3)}, {V(0), 1UL, 2UL, V(3)}}, idTable,
+                     0,
+                     ElementsAreArray({IdTriple{{V(0), V(1), V(1), V(3)}},
+                                       IdTriple{{V(0), V(1), V(2), V(3)}}}));
 }

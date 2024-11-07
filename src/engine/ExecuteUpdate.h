@@ -50,11 +50,12 @@ class ExecuteUpdate {
   FRIEND_TEST(ExecuteUpdate, computeAndAddQuadsForResultRow);
 
   struct IdTriplesAndLocalVocab {
-    std::vector<IdTriple<>> idTriples;
-    LocalVocab localVocab;
+    std::vector<IdTriple<>> idTriples_;
+    LocalVocab localVocab_;
   };
   // Compute the set of quads to insert and delete for the given update. The
-  // update's operation must be a GraphUpdate.
+  // ParsedQuery's clause must be an UpdateClause. The UpdateClause's operation
+  // must be a GraphUpdate.
   static std::pair<IdTriplesAndLocalVocab, IdTriplesAndLocalVocab>
   computeGraphUpdateQuads(const Index& index, const ParsedQuery& query,
                           const QueryExecutionTree& qet,
