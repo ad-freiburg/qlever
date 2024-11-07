@@ -756,15 +756,14 @@ MediaType Server::determineMediaType(
 // ____________________________________________________________________________
 std::pair<std::shared_ptr<ad_utility::websocket::QueryHub>,
           ad_utility::websocket::MessageSender>
-createMessageSender(auto& queryHub_,
-                    const ad_utility::httpUtils::HttpRequest auto& request,
-                    const string& operation) {
+Server::createMessageSender(auto& queryHub_, const auto& request,
+                            const string& operation) {
   auto queryHub = queryHub_.lock();
   AD_CORRECTNESS_CHECK(queryHub);
   ad_utility::websocket::MessageSender messageSender{
       getQueryId(request, operation), *queryHub};
   // TODO<qup42> is it required to keep the queryHub alive?
-  return {queryHub, messageSender};
+  return std::make_pair(std::move(queryHub), std::move(messageSender));
 }
 
 // ____________________________________________________________________________
@@ -816,8 +815,8 @@ Awaitable<void> Server::processQuery(
     // Update.
     throw std::runtime_error(
         absl::StrCat("SPARQL QUERY was request via the HTTP request, but the "
-                     "following update was sent instead of an update: "),
-        plannedQuery.parsedQuery_._originalString);
+                     "following update was sent instead of an update: ",
+                     plannedQuery.parsedQuery_._originalString));
   }
 
   // Apply stricter limit for export if present
@@ -885,8 +884,8 @@ Awaitable<void> Server::processUpdate(
   if (!plannedQuery.parsedQuery_.hasUpdateClause()) {
     throw std::runtime_error(
         absl::StrCat("SPARQL UPDATE was request via the HTTP request, but the "
-                     "following query was sent instead of an update: "),
-        plannedQuery.parsedQuery_._originalString);
+                     "following query was sent instead of an update: ",
+                     plannedQuery.parsedQuery_._originalString));
   }
 
   // TODO: activate once #1603 is merged

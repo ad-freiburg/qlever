@@ -174,8 +174,7 @@ class Server {
 
   std::pair<std::shared_ptr<ad_utility::websocket::QueryHub>,
             ad_utility::websocket::MessageSender>
-  createMessageSender(auto& queryHub_,
-                      const ad_utility::httpUtils::HttpRequest auto& request,
+  createMessageSender(auto& queryHub_, const auto& request,
                       const string& operation);
 
   static json composeErrorResponseJson(
