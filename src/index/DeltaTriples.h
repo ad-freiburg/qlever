@@ -14,10 +14,10 @@
 #include "index/Permutation.h"
 #include "util/Synchronized.h"
 
-// The positions of the delta triples (triples that were inserted or deleted
-// since the index was built) in each of the six permutations, and the local
-// vocab. This is all the information that is required to perform a query that
-// correctly respects the delta triples, hence the name.
+// The locations of a set of delta triples (triples that were inserted or
+// deleted since the index was built) in each of the six permutations, and a
+// local vocab. This is all the information that is required to perform a query
+// that correctly respects these delta triples, hence the name.
 class LocatedTriplesSnapshot {
  private:
   std::array<LocatedTriplesPerBlock, Permutation::ALL.size()>
@@ -60,7 +60,6 @@ class DeltaTriples {
 
  public:
   using LocatedTriplesPerBlockPtr = std::shared_ptr<LocatedTriplesSnapshot>;
-
   using Triples = std::vector<IdTriple<0>>;
   using CancellationHandle = ad_utility::SharedCancellationHandle;
 
