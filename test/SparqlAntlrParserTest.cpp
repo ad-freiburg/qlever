@@ -1926,32 +1926,6 @@ TEST(SparqlParser, aggregateExpressions) {
       matchAggregate<GroupConcatExpression>(true, V{"?x"}, separator(";")));
 }
 
-// Update queries are WIP. The individual parts to parse some update queries
-// are in place the code to process them is still unfinished. Therefore we
-// don't accept update queries.
-TEST(SparqlParser, updateQueryUnsupported) {
-  auto expectUpdateFails = ExpectParseFails<&Parser::queryOrUpdate>{};
-  auto contains = [](const std::string& s) { return ::testing::HasSubstr(s); };
-  auto updateUnsupported =
-      contains("SPARQL 1.1 Update is currently not supported by QLever.");
-
-  // Test all the cases because some functionality will be enabled shortly.
-  expectUpdateFails("INSERT DATA { <a> <b> <c> }", updateUnsupported);
-  expectUpdateFails("DELETE DATA { <a> <b> <c> }", updateUnsupported);
-  expectUpdateFails("DELETE { <a> <b> <c> } WHERE { ?s ?p ?o }",
-                    updateUnsupported);
-  expectUpdateFails("INSERT { <a> <b> <c> } WHERE { ?s ?p ?o }",
-                    updateUnsupported);
-  expectUpdateFails("DELETE WHERE { <a> <b> <c> }", updateUnsupported);
-  expectUpdateFails("LOAD <a>", updateUnsupported);
-  expectUpdateFails("CLEAR GRAPH <a>", updateUnsupported);
-  expectUpdateFails("DROP GRAPH <a>", updateUnsupported);
-  expectUpdateFails("CREATE GRAPH <a>", updateUnsupported);
-  expectUpdateFails("ADD GRAPH <a> TO DEFAULT", updateUnsupported);
-  expectUpdateFails("MOVE DEFAULT TO GRAPH <a>", updateUnsupported);
-  expectUpdateFails("COPY GRAPH <a> TO GRAPH <a>", updateUnsupported);
-}
-
 TEST(SparqlParser, Quads) {
   auto expectQuads = ExpectCompleteParse<&Parser::quads>{defaultPrefixMap};
   auto expectQuadsFails = ExpectParseFails<&Parser::quads>{};
@@ -2011,8 +1985,14 @@ TEST(SparqlParser, QuadData) {
   expectQuadDataFails("{ GRAPH ?foo { <a> <b> <c> } }");
 }
 
-TEST(SparqlParser, UpdateQuery) {
-  auto expectUpdate = ExpectCompleteParse<&Parser::update>{defaultPrefixMap};
+TEST(SparqlParser, Update) {
+  auto expectUpdate_ = ExpectCompleteParse<&Parser::update>{defaultPrefixMap};
+  // Automatically test all updates for their `_originalString`.
+  auto expectUpdate = [&expectUpdate_](const std::string& query,
+                                       auto&& expected) {
+    expectUpdate_(query,
+                  testing::AllOf(expected, m::pq::OriginalString(query)));
+  };
   auto expectUpdateFails = ExpectParseFails<&Parser::update>{};
   auto Iri = [](std::string_view stringWithBrackets) {
     return TripleComponent::Iri::fromIriref(stringWithBrackets);
@@ -2022,6 +2002,7 @@ TEST(SparqlParser, UpdateQuery) {
   };
   auto noGraph = std::monostate{};
 
+  // Test the parsing of the update clause in the ParsedQuery.
   expectUpdate(
       "INSERT DATA { <a> <b> <c> }",
       m::UpdateClause(
@@ -2144,13 +2125,35 @@ TEST(SparqlParser, UpdateQuery) {
                                m::GraphPattern()));
 }
 
-TEST(SparqlParser, EmptyQuery) {
+TEST(SparqlParser, QueryOrUpdate) {
+  auto expectQuery =
+      ExpectCompleteParse<&Parser::queryOrUpdate>{defaultPrefixMap};
   auto expectQueryFails = ExpectParseFails<&Parser::queryOrUpdate>{};
+  auto Iri = [](std::string_view stringWithBrackets) {
+    return TripleComponent::Iri::fromIriref(stringWithBrackets);
+  };
+  // Empty queries (queries without any query or update operation) are
+  // forbidden.
   auto emptyMatcher = ::testing::HasSubstr("Empty quer");
   expectQueryFails("", emptyMatcher);
   expectQueryFails(" ", emptyMatcher);
   expectQueryFails("PREFIX ex: <http://example.org>", emptyMatcher);
   expectQueryFails("### Some comment \n \n #someMoreComments", emptyMatcher);
+  // Hit all paths for coverage.
+  expectQuery("SELECT ?a WHERE { ?a <is-a> <b> }",
+              AllOf(m::SelectQuery(m::Select({Var{"?a"}}),
+                                   m::GraphPattern(m::Triples(
+                                       {{Var{"?a"}, "<is-a>", Iri("<b>")}}))),
+                    m::pq::OriginalString("SELECT ?a WHERE { ?a <is-a> <b> }"),
+                    m::VisibleVariables({Var{"?a"}})));
+  expectQuery(
+      "INSERT DATA { <a> <b> <c> }",
+      AllOf(m::UpdateClause(m::GraphUpdate({},
+                                           {{Iri("<a>"), Iri("<b>"), Iri("<c>"),
+                                             std::monostate{}}},
+                                           std::nullopt),
+                            m::GraphPattern()),
+            m::pq::OriginalString("INSERT DATA { <a> <b> <c> }")));
 }
 
 TEST(SparqlParser, GraphOrDefault) {
