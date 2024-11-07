@@ -92,7 +92,7 @@ TEST(IndexTest, createFromTurtleTest) {
         return;
       }
       const auto& [index, qec] = getIndex();
-      const auto& deltaTriples = qec.locatedTriplesSnapshot_();
+      const auto& locatedTriplesSnapshot = qec.locatedTriplesSnapshot();
 
       auto getId = makeGetId(getQec(kb)->getIndex());
       Id a = getId("<a>");
@@ -103,33 +103,49 @@ TEST(IndexTest, createFromTurtleTest) {
       Id c2 = getId("<c2>");
 
       // TODO<joka921> We could also test the multiplicities here.
-      ASSERT_TRUE(index.PSO().getMetadata(b, deltaTriples).has_value());
-      ASSERT_TRUE(index.PSO().getMetadata(b2, deltaTriples).has_value());
-      ASSERT_FALSE(index.PSO().getMetadata(a2, deltaTriples).has_value());
-      ASSERT_FALSE(index.PSO().getMetadata(c, deltaTriples).has_value());
+      ASSERT_TRUE(
+          index.PSO().getMetadata(b, locatedTriplesSnapshot).has_value());
+      ASSERT_TRUE(
+          index.PSO().getMetadata(b2, locatedTriplesSnapshot).has_value());
+      ASSERT_FALSE(
+          index.PSO().getMetadata(a2, locatedTriplesSnapshot).has_value());
+      ASSERT_FALSE(
+          index.PSO().getMetadata(c, locatedTriplesSnapshot).has_value());
       ASSERT_FALSE(
           index.PSO()
               .getMetadata(Id::makeFromVocabIndex(VocabIndex::make(735)),
-                           deltaTriples)
+                           locatedTriplesSnapshot)
               .has_value());
-      ASSERT_FALSE(
-          index.PSO().getMetadata(b, deltaTriples).value().isFunctional());
-      ASSERT_TRUE(
-          index.PSO().getMetadata(b2, deltaTriples).value().isFunctional());
+      ASSERT_FALSE(index.PSO()
+                       .getMetadata(b, locatedTriplesSnapshot)
+                       .value()
+                       .isFunctional());
+      ASSERT_TRUE(index.PSO()
+                      .getMetadata(b2, locatedTriplesSnapshot)
+                      .value()
+                      .isFunctional());
 
-      ASSERT_TRUE(index.POS().getMetadata(b, deltaTriples).has_value());
-      ASSERT_TRUE(index.POS().getMetadata(b2, deltaTriples).has_value());
-      ASSERT_FALSE(index.POS().getMetadata(a2, deltaTriples).has_value());
-      ASSERT_FALSE(index.POS().getMetadata(c, deltaTriples).has_value());
+      ASSERT_TRUE(
+          index.POS().getMetadata(b, locatedTriplesSnapshot).has_value());
+      ASSERT_TRUE(
+          index.POS().getMetadata(b2, locatedTriplesSnapshot).has_value());
+      ASSERT_FALSE(
+          index.POS().getMetadata(a2, locatedTriplesSnapshot).has_value());
+      ASSERT_FALSE(
+          index.POS().getMetadata(c, locatedTriplesSnapshot).has_value());
       ASSERT_FALSE(
           index.POS()
               .getMetadata(Id::makeFromVocabIndex(VocabIndex::make(735)),
-                           deltaTriples)
+                           locatedTriplesSnapshot)
               .has_value());
-      ASSERT_TRUE(
-          index.POS().getMetadata(b, deltaTriples).value().isFunctional());
-      ASSERT_TRUE(
-          index.POS().getMetadata(b2, deltaTriples).value().isFunctional());
+      ASSERT_TRUE(index.POS()
+                      .getMetadata(b, locatedTriplesSnapshot)
+                      .value()
+                      .isFunctional());
+      ASSERT_TRUE(index.POS()
+                      .getMetadata(b2, locatedTriplesSnapshot)
+                      .value()
+                      .isFunctional());
 
       // Relation b
       // Pair index
