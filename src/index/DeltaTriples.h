@@ -27,7 +27,7 @@ struct LocatedTriplesSnapshot {
   LocatedTriplesPerBlockAllPermutations locatedTriplesPerBlock_;
   LocalVocab localVocab_;
   // Get `TripleWithPosition` objects for given permutation.
-  const LocatedTriplesPerBlock& getLocatedTriplesPerBlock(
+  const LocatedTriplesPerBlock& getLocatedTriplesForPermutation(
       Permutation::Enum permutation) const;
 };
 
@@ -65,7 +65,7 @@ class DeltaTriples {
   const IndexImpl& index_;
 
   // The located triples for all the 6 permutations.
-  LocatedTriplesPerBlockAllPermutations locatedTriplesPerBlock_;
+  LocatedTriplesPerBlockAllPermutations locatedTriples_;
 
   // The local vocabulary of the delta triples (they may have components,
   // which are not contained in the vocabulary of the original index).
@@ -111,15 +111,15 @@ class DeltaTriples {
   // Get the common `LocalVocab` of the delta triples.
  private:
   LocalVocab& localVocab() { return localVocab_; }
-  auto& locatedTriplesPerBlock() { return locatedTriplesPerBlock_; }
-  const auto& locatedTriplesPerBlock() const { return locatedTriplesPerBlock_; }
+  auto& locatedTriples() { return locatedTriples_; }
+  const auto& locatedTriples() const { return locatedTriples_; }
 
  public:
   const LocalVocab& localVocab() const { return localVocab_; }
 
-  const LocatedTriplesPerBlock& getLocatedTriplesPerBlock(
+  const LocatedTriplesPerBlock& getLocatedTriplesForPermutation(
       Permutation::Enum permutation) const {
-    return locatedTriplesPerBlock.at(static_cast<size_t>(permutation));
+    return locatedTriples_.at(static_cast<size_t>(permutation));
   }
 
   // Clear `triplesAdded_` and `triplesSubtracted_` and all associated data
@@ -139,7 +139,7 @@ class DeltaTriples {
   // Return a deep copy of the `LocatedTriples` and the corresponding
   // `LocalVocab` which form a snapshot of the current status of this
   // `DeltaTriples` object.
-  SharedLocatedTriplesSnapshot copySnapshot() const;
+  SharedLocatedTriplesSnapshot getSnapshot() const;
 
  private:
   // Find the position of the given triple in the given permutation and add it
@@ -195,16 +195,17 @@ class DeltaTriplesManager {
   FRIEND_TEST(DeltaTriplesTest, DeltaTriplesManager);
 
   // Modify the underlying `DeltaTriples` by applying the `function` to them.
-  // Then update the current snapshot, s.t. subsequent calls to `getSnapshot`
-  // will observe the modifications. All this is done in a thread-safe way,
-  // meaning that there can be only one call to `modify` at the same time.
+  // Then update the current snapshot, s.t. subsequent calls to
+  // `getCurrentSnapshot` will observe the modifications. All this is done in a
+  // thread-safe way, meaning that there can be only one call to `modify` at the
+  // same time.
   void modify(std::function<void(DeltaTriples&)> function);
 
   // Return a `SharedLocatedTriplesSnapshot` that contains a deep copy of the
   // state of the underlying `DeltaTriples` after the last completed UPDATE, and
   // thus is not affected by future UPDATE requests. It can therefore be used to
   // execute a query in a consistent way.
-  SharedLocatedTriplesSnapshot getSnapshot() const;
+  SharedLocatedTriplesSnapshot getCurrentSnapshot() const;
 };
 
 // DELTA TRIPLES AND THE CACHE

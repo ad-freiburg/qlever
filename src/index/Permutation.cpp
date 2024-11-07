@@ -64,9 +64,9 @@ IdTable Permutation::scan(const ScanSpecification& scanSpec,
 
   const auto& p = getActualPermutation(scanSpec);
 
-  return p.reader().scan(scanSpec, p.meta_.blockData(), additionalColumns,
-                         cancellationHandle,
-                         locatedTriples(locatedTriplesSnapshot), limitOffset);
+  return p.reader().scan(
+      scanSpec, p.meta_.blockData(), additionalColumns, cancellationHandle,
+      getLocatedTriplesForPermutation(locatedTriplesSnapshot), limitOffset);
 }
 
 // _____________________________________________________________________
@@ -74,8 +74,9 @@ size_t Permutation::getResultSizeOfScan(
     const ScanSpecification& scanSpec,
     const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
   const auto& p = getActualPermutation(scanSpec);
-  return p.reader().getResultSizeOfScan(scanSpec, p.meta_.blockData(),
-                                        locatedTriples(locatedTriplesSnapshot));
+  return p.reader().getResultSizeOfScan(
+      scanSpec, p.meta_.blockData(),
+      getLocatedTriplesForPermutation(locatedTriplesSnapshot));
 }
 
 // ____________________________________________________________________________
@@ -85,7 +86,7 @@ IdTable Permutation::getDistinctCol1IdsAndCounts(
   const auto& p = getActualPermutation(col0Id);
   return p.reader().getDistinctCol1IdsAndCounts(
       col0Id, p.meta_.blockData(), cancellationHandle,
-      locatedTriples(locatedTriplesSnapshot));
+      getLocatedTriplesForPermutation(locatedTriplesSnapshot));
 }
 
 // ____________________________________________________________________________
@@ -94,7 +95,7 @@ IdTable Permutation::getDistinctCol0IdsAndCounts(
     const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
   return reader().getDistinctCol0IdsAndCounts(
       meta_.blockData(), cancellationHandle,
-      locatedTriples(locatedTriplesSnapshot));
+      getLocatedTriplesForPermutation(locatedTriplesSnapshot));
 }
 
 // _____________________________________________________________________
@@ -145,7 +146,8 @@ std::optional<CompressedRelationMetadata> Permutation::getMetadata(
     return p.meta_.getMetaData(col0Id);
   }
   return p.reader().getMetadataForSmallRelation(
-      p.meta_.blockData(), col0Id, locatedTriples(locatedTriplesSnapshot));
+      p.meta_.blockData(), col0Id,
+      getLocatedTriplesForPermutation(locatedTriplesSnapshot));
 }
 
 // _____________________________________________________________________
@@ -158,7 +160,7 @@ std::optional<Permutation::MetadataAndBlocks> Permutation::getMetadataAndBlocks(
                     scanSpec, p.meta_.blockData())};
 
   auto firstAndLastTriple = p.reader().getFirstAndLastTriple(
-      mb, locatedTriples(locatedTriplesSnapshot));
+      mb, getLocatedTriplesForPermutation(locatedTriplesSnapshot));
   if (!firstAndLastTriple.has_value()) {
     return std::nullopt;
   }
@@ -181,10 +183,10 @@ Permutation::IdTableGenerator Permutation::lazyScan(
     blocks = std::vector(blockSpan.begin(), blockSpan.end());
   }
   ColumnIndices columns{additionalColumns.begin(), additionalColumns.end()};
-  return p.reader().lazyScan(scanSpec, std::move(blocks.value()),
-                             std::move(columns), std::move(cancellationHandle),
-                             locatedTriples(locatedTriplesSnapshot),
-                             limitOffset);
+  return p.reader().lazyScan(
+      scanSpec, std::move(blocks.value()), std::move(columns),
+      std::move(cancellationHandle),
+      getLocatedTriplesForPermutation(locatedTriplesSnapshot), limitOffset);
 }
 
 // ______________________________________________________________________
@@ -214,7 +216,7 @@ const Permutation& Permutation::getActualPermutation(Id id) const {
 }
 
 // ______________________________________________________________________
-const LocatedTriplesPerBlock& Permutation::locatedTriples(
+const LocatedTriplesPerBlock& Permutation::getLocatedTriplesForPermutation(
     const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
-  return locatedTriplesSnapshot.getLocatedTriplesPerBlock(permutation_);
+  return locatedTriplesSnapshot.getLocatedTriplesForPermutation(permutation_);
 }

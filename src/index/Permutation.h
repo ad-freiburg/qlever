@@ -19,7 +19,7 @@ class IdTable;
 // Forward declaration of `LocatedTriplesPerBlock`
 class LocatedTriplesPerBlock;
 class SharedLocatedTriplesSnapshot;
-class LocatedTriplesSnapshot;
+struct LocatedTriplesSnapshot;
 
 // Helper class to store static properties of the different permutations to
 // avoid code duplication. The first template parameter is a search functor for
@@ -148,7 +148,7 @@ class Permutation {
   const Permutation& getActualPermutation(const ScanSpecification& spec) const;
   const Permutation& getActualPermutation(Id id) const;
 
-  const LocatedTriplesPerBlock& locatedTriples(
+  const LocatedTriplesPerBlock& getLocatedTriplesForPermutation(
       const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
 
   const CompressedRelationReader& reader() const { return reader_.value(); }

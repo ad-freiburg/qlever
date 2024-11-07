@@ -126,10 +126,12 @@ class QueryExecutionContext {
 
  private:
   const Index& _index;
-  // TODO<joka921> This has to be stored externally once we properly support
-  // SPARQL UPDATE, currently it is just a stub to make the interface work.
+
+  // When the `QueryExecutionContext` is constructed, get a stable snapshot of
+  // the current UPDATE status from the `DeltaTriplesManager`, which can then by
+  // used by the query without interfering with concurrent UPDATEs.
   SharedLocatedTriplesSnapshot sharedLocatedTriplesSnapshot{
-      _index.deltaTriplesManager().getSnapshot()};
+      _index.deltaTriplesManager().getCurrentSnapshot()};
   QueryResultCache* const _subtreeCache;
   // allocators are copied but hold shared state
   ad_utility::AllocatorWithLimit<Id> _allocator;

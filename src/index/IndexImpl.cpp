@@ -1448,9 +1448,9 @@ Index::NumNormalAndInternal IndexImpl::numDistinctCol0(
 // ___________________________________________________________________________
 size_t IndexImpl::getCardinality(
     Id id, Permutation::Enum permutation,
-    const LocatedTriplesSnapshot& locatedTriples) const {
+    const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
   if (const auto& meta =
-          getPermutation(permutation).getMetadata(id, locatedTriples);
+          getPermutation(permutation).getMetadata(id, locatedTriplesSnapshot);
       meta.has_value()) {
     return meta.value().numRows_;
   }
@@ -1460,7 +1460,7 @@ size_t IndexImpl::getCardinality(
 // ___________________________________________________________________________
 size_t IndexImpl::getCardinality(
     const TripleComponent& comp, Permutation::Enum permutation,
-    const LocatedTriplesSnapshot& locatedTriples) const {
+    const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
   // TODO<joka921> This special case is only relevant for the `PSO` and `POS`
   // permutations, but this internal predicate should never appear in subjects
   // or objects anyway.
@@ -1470,7 +1470,7 @@ size_t IndexImpl::getCardinality(
     return TEXT_PREDICATE_CARDINALITY_ESTIMATE;
   }
   if (std::optional<Id> relId = comp.toValueId(getVocab()); relId.has_value()) {
-    return getCardinality(relId.value(), permutation, locatedTriples);
+    return getCardinality(relId.value(), permutation, locatedTriplesSnapshot);
   }
   return 0;
 }
@@ -1493,10 +1493,10 @@ Index::Vocab::PrefixRanges IndexImpl::prefixRanges(
 // _____________________________________________________________________________
 vector<float> IndexImpl::getMultiplicities(
     const TripleComponent& key, Permutation::Enum permutation,
-    const LocatedTriplesSnapshot& locatedTriples) const {
+    const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
   if (auto keyId = key.toValueId(getVocab()); keyId.has_value()) {
-    auto meta =
-        getPermutation(permutation).getMetadata(keyId.value(), locatedTriples);
+    auto meta = getPermutation(permutation)
+                    .getMetadata(keyId.value(), locatedTriplesSnapshot);
     if (meta.has_value()) {
       return {meta.value().getCol1Multiplicity(),
               meta.value().getCol2Multiplicity()};
@@ -1522,21 +1522,21 @@ IdTable IndexImpl::scan(
     const Permutation::Enum& permutation,
     Permutation::ColumnIndicesRef additionalColumns,
     const ad_utility::SharedCancellationHandle& cancellationHandle,
-    const LocatedTriplesSnapshot& locatedTriples,
+    const LocatedTriplesSnapshot& locatedTriplesSnapshot,
     const LimitOffsetClause& limitOffset) const {
   auto scanSpecification = scanSpecificationAsTc.toScanSpecification(*this);
   return scan(scanSpecification, permutation, additionalColumns,
-              cancellationHandle, locatedTriples, limitOffset);
+              cancellationHandle, locatedTriplesSnapshot, limitOffset);
 }
 // _____________________________________________________________________________
 IdTable IndexImpl::scan(
     const ScanSpecification& scanSpecification, Permutation::Enum p,
     Permutation::ColumnIndicesRef additionalColumns,
     const ad_utility::SharedCancellationHandle& cancellationHandle,
-    const LocatedTriplesSnapshot& locatedTriples,
+    const LocatedTriplesSnapshot& locatedTriplesSnapshot,
     const LimitOffsetClause& limitOffset) const {
   return getPermutation(p).scan(scanSpecification, additionalColumns,
-                                cancellationHandle, locatedTriples,
+                                cancellationHandle, locatedTriplesSnapshot,
                                 limitOffset);
 }
 
@@ -1544,9 +1544,9 @@ IdTable IndexImpl::scan(
 size_t IndexImpl::getResultSizeOfScan(
     const ScanSpecification& scanSpecification,
     const Permutation::Enum& permutation,
-    const LocatedTriplesSnapshot& locatedTriples) const {
+    const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
   return getPermutation(permutation)
-      .getResultSizeOfScan(scanSpecification, locatedTriples);
+      .getResultSizeOfScan(scanSpecification, locatedTriplesSnapshot);
 }
 
 // _____________________________________________________________________________
