@@ -11,6 +11,7 @@
 #include <string>
 #include <vector>
 
+#include "engine/ExecuteUpdate.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/QueryPlanner.h"
 #include "global/RuntimeParameters.h"
