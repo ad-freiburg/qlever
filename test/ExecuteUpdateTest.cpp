@@ -27,6 +27,7 @@ using TripleComponentT =
 
 // A matcher that never matches and outputs the given message.
 MATCHER_P(AlwaysFalse, msg, "") {
+  (void)arg;  // avoid compiler warning for unused value.
   *result_listener << msg;
   return false;
 }
