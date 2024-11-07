@@ -13,11 +13,10 @@
 class ExecuteUpdate {
  public:
   using CancellationHandle = ad_utility::SharedCancellationHandle;
-
- private:
   using IdOrVariableIndex = std::variant<Id, ColumnIndex>;
   using TransformedTriple = std::array<IdOrVariableIndex, 4>;
 
+ private:
   // Resolve all `TripleComponent`s and `Graph`s in a vector of
   // `SparqlTripleSimpleWithGraph` into `Variable`s or `Id`s.
   static std::pair<std::vector<TransformedTriple>, LocalVocab>

@@ -20,6 +20,18 @@ auto V = [](const uint64_t index) {
   return Id::makeFromVocabIndex(VocabIndex::make(index));
 };
 
+// `ExecuteUpdate::IdOrVariableIndex` extended by `LiteralOrIri` which denotes
+// an entry from the local vocab.
+using TripleComponentT =
+    std::variant<Id, ColumnIndex, ad_utility::triple_component::LiteralOrIri>;
+
+// A matcher that never matches and outputs the given message.
+MATCHER_P(AlwaysFalse, msg, "") {
+  (void)arg;  // avoid compiler warning for unused value.
+  *result_listener << msg;
+  return false;
+}
+
 // _____________________________________________________________________________
 TEST(ExecuteUpdate, transformTriplesTemplate) {
   // Create an index for testing.
@@ -28,21 +40,65 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
   // We need a non-const vocab for the test.
   auto& vocab = const_cast<Index::Vocab&>(index.getVocab());
 
-  const auto Id = ad_utility::testing::makeGetId(index);
   // Helpers
+  const auto Id = ad_utility::testing::makeGetId(index);
+  using Graph = SparqlTripleSimpleWithGraph::Graph;
+  using LocalVocab = ad_utility::triple_component::LiteralOrIri;
+  auto defaultGraphId = Id(std::string{DEFAULT_GRAPH_IRI});
+  auto Iri = [](const std::string& iri) {
+    return ad_utility::triple_component::Iri::fromIriref(iri);
+  };
+  auto Literal = [](const std::string& literal) {
+    return ad_utility::triple_component::Literal::fromStringRepresentation(
+        literal);
+  };
+  // Matchers
+  using MatcherType = testing::Matcher<const ExecuteUpdate::IdOrVariableIndex&>;
+  auto TripleComponentMatcher = [](const ::LocalVocab& localVocab,
+                                   TripleComponentT component) -> MatcherType {
+    return std::visit(
+        ad_utility::OverloadCallOperator{
+            [](const ::Id& id) -> MatcherType {
+              return testing::VariantWith<::Id>(testing::Eq(id));
+            },
+            [](const ColumnIndex& index) -> MatcherType {
+              return testing::VariantWith<ColumnIndex>(testing::Eq(index));
+            },
+            [&localVocab](
+                const ad_utility::triple_component::LiteralOrIri& literalOrIri)
+                -> MatcherType {
+              const auto lviOpt = localVocab.getIndexOrNullopt(literalOrIri);
+              if (!lviOpt) {
+                return AlwaysFalse(
+                    absl::StrCat(literalOrIri.toStringRepresentation(),
+                                 " not in local vocab"));
+              }
+              const auto id = Id::makeFromLocalVocabIndex(lviOpt.value());
+              return testing::VariantWith<::Id>(
+                  AD_PROPERTY(Id, getBits, testing::Eq(id.getBits())));
+            }},
+        component);
+  };
   auto expectTransformTriplesTemplate =
-      [&vocab](const VariableToColumnMap& variableColumns,
-               std::vector<SparqlTripleSimpleWithGraph>&& triples,
-               const testing::Matcher<
-                   const std::vector<ExecuteUpdate::TransformedTriple>>&
-                   expectedTransformedTriples,
-               const testing::Matcher<const LocalVocab&>& expectedLocalVocab =
-                   testing::IsEmpty()) {
+      [&vocab, &TripleComponentMatcher](
+          const VariableToColumnMap& variableColumns,
+          std::vector<SparqlTripleSimpleWithGraph>&& triples,
+          const std::vector<std::array<TripleComponentT, 4>>&
+              expectedTransformedTriples) {
         auto [transformedTriples, localVocab] =
             ExecuteUpdate::transformTriplesTemplate(vocab, variableColumns,
                                                     std::move(triples));
-        EXPECT_THAT(transformedTriples, expectedTransformedTriples);
-        EXPECT_THAT(localVocab, expectedLocalVocab);
+        const auto transformedTriplesMatchers = ad_utility::transform(
+            expectedTransformedTriples,
+            [&localVocab, &TripleComponentMatcher](const auto& expectedTriple) {
+              return ElementsAre(
+                  TripleComponentMatcher(localVocab, expectedTriple.at(0)),
+                  TripleComponentMatcher(localVocab, expectedTriple.at(1)),
+                  TripleComponentMatcher(localVocab, expectedTriple.at(2)),
+                  TripleComponentMatcher(localVocab, expectedTriple.at(3)));
+            });
+        EXPECT_THAT(transformedTriples,
+                    testing::ElementsAreArray(transformedTriplesMatchers));
       };
   auto expectTransformTriplesTemplateFails =
       [&vocab](const VariableToColumnMap& variableColumns,
@@ -53,48 +109,22 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
                                                     std::move(triples)),
             messageMatcher);
       };
-  auto Iri = [](const std::string& iri) {
-    return ad_utility::triple_component::Iri::fromIriref(iri);
-  };
-  auto Literal = [](const std::string& literal) {
-    return ad_utility::triple_component::Literal::fromStringRepresentation(
-        literal);
-  };
-  auto LocalVocabIndex = [](const LocalVocabEntry* entry) {
-    return Id::makeFromLocalVocabIndex(entry);
-  };
-  auto localVocabContains = [](const LocalVocabEntry& word) {
-    return ResultOf(
-        absl::StrCat(".getIndexOrNullopt(", word.toStringRepresentation(), ")"),
-        [&word](const LocalVocab& lv) { return lv.getIndexOrNullopt(word); },
-        AllOf(testing::Not(testing::Eq(std::nullopt)),
-              AD_PROPERTY(std::optional<::LocalVocabIndex>, value,
-                          testing::Pointee(testing::Eq(word)))));
-  };
-  using Graph = SparqlTripleSimpleWithGraph::Graph;
-  using TransformedTriple = ExecuteUpdate::TransformedTriple;
-  auto defaultGraphId = Id(std::string{DEFAULT_GRAPH_IRI});
   // Transforming an empty vector of template results in no `TransformedTriple`s
   // and leaves the `LocalVocab` empty.
-  expectTransformTriplesTemplate({}, {}, testing::IsEmpty());
+  expectTransformTriplesTemplate({}, {}, {});
   // Resolve a `SparqlTripleSimpleWithGraph` without variables.
   expectTransformTriplesTemplate(
       {},
       {SparqlTripleSimpleWithGraph{Literal("\"foo\""), Iri("<bar>"),
                                    Literal("\"foo\""), Graph{}}},
-      testing::ElementsAre(TransformedTriple{Id("\"foo\""), Id("<bar>"),
-                                             Id("\"foo\""), defaultGraphId}));
-  const auto entryNotInIndex = LocalVocabEntry(Iri("<baz>"));
+      {{Id("\"foo\""), Id("<bar>"), Id("\"foo\""), defaultGraphId}});
   // Literals in the template that are not in the index are added to the
   // `LocalVocab`.
   expectTransformTriplesTemplate(
       {},
       {SparqlTripleSimpleWithGraph{Literal("\"foo\""), Iri("<bar>"),
                                    Literal("\"foo\""), Graph{::Iri("<baz>")}}},
-      testing::ElementsAre(
-          TransformedTriple{Id("\"foo\""), Id("<bar>"), Id("\"foo\""),
-                            LocalVocabIndex(&entryNotInIndex)}),
-      localVocabContains(LocalVocabEntry(Iri("<baz>"))));
+      {{Id("\"foo\""), Id("<bar>"), Id("\"foo\""), LocalVocab(Iri("<baz>"))}});
   // A variable in the template (`?f`) is not mapped in the
   // `VariableToColumnMap`.
   expectTransformTriplesTemplateFails(
@@ -114,14 +144,12 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
       {{Variable("?f"), {0, ColumnIndexAndTypeInfo::PossiblyUndefined}}},
       {SparqlTripleSimpleWithGraph{Literal("\"foo\""), Iri("<bar>"),
                                    Variable("?f"), Graph{}}},
-      testing::ElementsAre(
-          TransformedTriple{Id("\"foo\""), Id("<bar>"), 0UL, defaultGraphId}));
+      {{Id("\"foo\""), Id("<bar>"), 0UL, defaultGraphId}});
   expectTransformTriplesTemplate(
       {{Variable("?f"), {0, ColumnIndexAndTypeInfo::PossiblyUndefined}}},
       {SparqlTripleSimpleWithGraph{Literal("\"foo\""), Iri("<bar>"),
                                    Literal("\"foo\""), Graph{Variable("?f")}}},
-      testing::ElementsAre(
-          TransformedTriple{Id("\"foo\""), Id("<bar>"), Id("\"foo\""), 0UL}));
+      {{Id("\"foo\""), Id("<bar>"), Id("\"foo\""), 0UL}});
 }
 
 // _____________________________________________________________________________
