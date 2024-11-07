@@ -350,7 +350,7 @@ class CartesianProductJoinLazyTest
     return idTable;
   }
 
-  // Count the invididual entries in the result set and check those counts match
+  // Count the individual entries in the result set and check those counts match
   // the expected counts. For results with limit and offset it can't make strict
   // checks because the order is not guaranteed by the operation so we have to
   // check if the error is within a certain error margin.
@@ -380,10 +380,10 @@ class CartesianProductJoinLazyTest
       for (const auto& [id, count] : counter.at(col)) {
         size_t occurenceCount = occurenceCounts.at(col);
         EXPECT_LE(count, occurenceCount)
-            << "Column " << col << " did contain too many occurences for id "
+            << "Column " << col << " did contain too many occurrences for id "
             << Id::fromBits(id);
         EXPECT_GE(count, occurenceCount - std::min(occurenceCount, penalty))
-            << "Column " << col << " did contain too few occurences for id "
+            << "Column " << col << " did contain too few occurrences for id "
             << Id::fromBits(id);
       }
       size_t expectedCount = valueCount.at(col);
