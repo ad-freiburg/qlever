@@ -868,10 +868,12 @@ Awaitable<void> Server::processUpdate(
     throw std::runtime_error("Expected Update but received Query.");
   }
 
-  DeltaTriples deltaTriples = qec.deltaTriples();
-  // TODO: activate once #1592 is merged
-  // ExecuteUpdate::executeUpdate(index_, plannedQuery.parsedQuery_, qet,
-  // deltaTriples, cancellationHandle);
+  // TODO: activate once #1603 is merged
+  // auto& deltaTriples = index_.deltaTriplesManager();
+  auto deltaTriples = DeltaTriples(index_);
+  // TODO: will work, once #1607 is merged
+  ExecuteUpdate::executeUpdate(index_, plannedQuery.parsedQuery_, qet,
+                               deltaTriples, cancellationHandle);
 
   LOG(INFO) << "Done processing update"
             << ", total time was " << requestTimer.msecs().count() << " ms"
