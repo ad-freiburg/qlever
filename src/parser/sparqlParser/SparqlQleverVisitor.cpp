@@ -388,16 +388,20 @@ std::optional<Values> Visitor::visit(Parser::ValuesClauseContext* ctx) {
 
 // ____________________________________________________________________________________
 ParsedQuery Visitor::visit(Parser::UpdateContext* ctx) {
+  // The prologue (BASE and PREFIX declarations)  only affects the internal
+  // state of the visitor.
   visit(ctx->prologue());
 
-  auto query = visit(ctx->update1());
+  auto update = visit(ctx->update1());
 
   if (ctx->update()) {
     parsedQuery_ = ParsedQuery{};
     reportNotSupported(ctx->update(), "Multiple updates in one query are");
   }
 
-  return query;
+  update._originalString = ctx->getStart()->getInputStream()->toString();
+
+  return update;
 }
 
 // ____________________________________________________________________________________
