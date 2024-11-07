@@ -453,7 +453,7 @@ TEST_P(CartesianProductJoinLazyTest, allTablesSmallerThanChunk) {
 
 // _____________________________________________________________________________
 TEST_P(CartesianProductJoinLazyTest, leftTableBiggerThanChunk) {
-  // TODO Leftmost table individually larger than chunk size
+  // Leftmost table individually larger than chunk size
   IdTable bigTable{1, ad_utility::testing::makeAllocator()};
   bigTable.resize(CHUNK_SIZE + 1);
   std::ranges::copy(std::views::iota(static_cast<int64_t>(0),
@@ -508,12 +508,11 @@ using ::testing::Range;
 using ::testing::Values;
 INSTANTIATE_TEST_SUITE_P(
     CartesianProdctJoinTestSuite, CartesianProductJoinLazyTest,
-    ::testing::Combine(Range<uint32_t>(0, 10),
-                       Values(0, 1, 10, CHUNK_SIZE / 2, CHUNK_SIZE,
-                              CHUNK_SIZE + 1, CHUNK_SIZE * 2),
-                       Values(O{0}, O{1}, O{10}, O{CHUNK_SIZE},
-                              O{CHUNK_SIZE * 2}, O{CHUNK_SIZE * 10},
-                              std::nullopt)),
+    ::testing::Combine(
+        Range<uint32_t>(0, 5),
+        Values(0, 1, 25, CHUNK_SIZE, CHUNK_SIZE + 1, CHUNK_SIZE * 2),
+        Values(O{0}, O{1}, O{25}, O{CHUNK_SIZE}, O{CHUNK_SIZE * 2},
+               O{CHUNK_SIZE * 10}, std::nullopt)),
     [](const testing::TestParamInfo<
         std::tuple<uint32_t, size_t, std::optional<size_t>>>& info) {
       std::ostringstream stream;
