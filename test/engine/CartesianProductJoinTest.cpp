@@ -267,7 +267,8 @@ class CartesianProductJoinLazyTest
     }
     if (std::get<0>(GetParam()) == 0) {
       children.push_back(ad_utility::makeExecutionTree<ValuesForTesting>(
-          qec, tables.back().clone(), makeUniqueVariables(tables.back())));
+          qec, tables.back().clone(), makeUniqueVariables(tables.back()), false,
+          std::vector<ColumnIndex>{}, LocalVocab{}, std::nullopt, true));
     } else {
       children.push_back(ad_utility::makeExecutionTree<ValuesForTesting>(
           qec, splitIntoRandomSubtables(tables.back()),
