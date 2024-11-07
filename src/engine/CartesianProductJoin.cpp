@@ -126,6 +126,9 @@ size_t CartesianProductJoin::writeResultColumn(std::span<Id> targetColumn,
   }
 }
 
+// Helper function to compute the cartesian product of a range of ranges. For an
+// empty range of ranges, it yields once with an empty vector. If any of the
+// subranges are empty it returns without yielding any elements.
 auto dynamicCartesianProduct(std::ranges::random_access_range auto values)
     -> cppcoro::generator<const std::vector<std::ranges::iterator_t<
         std::ranges::range_reference_t<decltype(values)>>>>
@@ -243,6 +246,8 @@ IdTable CartesianProductJoin::writeAllColumns(
       partialIdTable ? partialIdTable->totalOffset_ : getLimit()._offset;
 
   if (partialIdTable) {
+    // Calculate how many rows we have to consume from the partial table to stay
+    // below `chunkSize_`.
     size_t factor = std::min(
         std::max(chunkSize_, totalResultSize) / totalResultSize,
         partialIdTable->idTable_.size() - partialIdTable->tableOffset_);
@@ -298,11 +303,14 @@ IdTable CartesianProductJoin::writeAllColumns(
                                          offsetForPartialTable);
         ++resultColIdx;
       }
+      // Set index where next to resume.
       partialIdTable->tableOffset_ = consumedRows + 1;
     }
   }
   if (partialIdTable) {
     partialIdTable->totalLimit_ -= result.size();
+    // Set to true if the limit is reached or the partial table is fully
+    // consumed.
     partialIdTable->done_ =
         partialIdTable->tableOffset_ >= partialIdTable->idTable_.size() ||
         partialIdTable->totalLimit_ == 0;
@@ -412,6 +420,7 @@ Result::Generator CartesianProductJoin::createLazyProducer(
       AD_CORRECTNESS_CHECK(actualLimit >= idTable.size());
       actualLimit -= idTable.size();
       if (itwm.has_value()) {
+        // Store in offset for next table.
         offset = itwm->totalOffset_;
         // TODO<RobinTF> consider skipping empty id tables.
         size_t currentColumn = columnOffset;

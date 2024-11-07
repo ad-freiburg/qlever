@@ -42,7 +42,8 @@ class CartesianProductJoin : public Operation {
 
  public:
   // Constructor. `children` must not be empty and the variables of all the
-  // children must be disjoint, else an `AD_CONTRACT_CHECK` fails.
+  // children must be disjoint, else an `AD_CONTRACT_CHECK` fails. Accept a
+  // custom `chunkSize` for chunking lazy results.
   explicit CartesianProductJoin(QueryExecutionContext* executionContext,
                                 Children children,
                                 size_t chunkSize = 1'000'000);
@@ -106,12 +107,26 @@ class CartesianProductJoin : public Operation {
             std::vector<std::shared_ptr<const Result>>>
   calculateSubResults(bool requestLaziness);
 
+  // Create a generator that lazily produces the Cartesian product of the
+  // results passed in `subresults`. All of those results are expected to be
+  // fully materialized. The `staticMergedVocab` is the merged vocabulary of all
+  // of those materialized results. It will be cloned for every yielded element.
+  // The `offsetFromFront` parameter indicates how many of the subresults are
+  // smaller than the `chunkSize_` when multipliying their respective sizes with
+  // each other. This value has to be at least one. This also means that tables
+  // yielded by this generator will always be smaller than `chunkSize_` or the
+  // size of the leftmost result, whichever is bigger. The `limit` parameter can
+  // be used to pass a custom limit. If `offsetPtr` is not `nullptr`, it will be
+  // used to act as the offset and automatically get updated during iteration.
   Result::Generator createLazyProducer(
       LocalVocab staticMergedVocab,
       std::vector<std::shared_ptr<const Result>> subresults,
       size_t offsetFromFront, std::optional<size_t> limit = std::nullopt,
       size_t* offsetPtr = nullptr) const;
 
+  // Similar to `createLazyProducer`, but it works with an additional single
+  // lazy result. The `staticMergedVocab` will be cloned for every yielded
+  // element and merged with the tables yielded by `lazyResult` respectively.
   Result::Generator createLazyConsumer(
       LocalVocab staticMergedVocab, std::shared_ptr<const Result> lazyResult,
       std::vector<std::shared_ptr<const Result>> subresults,

@@ -13,7 +13,7 @@
 
 using namespace ad_utility::testing;
 using ad_utility::source_location;
-constexpr size_t CHUNK_SIZE = 10'000;
+constexpr size_t CHUNK_SIZE = 1'000;
 using O = std::optional<size_t>;
 
 // Create a `CartesianProductJoin` the children of which are `ValuesForTesting`
@@ -226,6 +226,8 @@ TEST(CartesianProductJoin, variableColumnMap) {
 class CartesianProductJoinLazyTest
     : public testing::TestWithParam<
           std::tuple<uint64_t, size_t, std::optional<size_t>>> {
+  // Randomly split `idTable` into equivalent subsets of itself at pseudo-random
+  // positions.
   static std::vector<IdTable> splitIntoRandomSubtables(const IdTable& idTable) {
     // Ensure results are reproducible.
     std::mt19937_64 generator{std::get<0>(GetParam())};
@@ -245,8 +247,10 @@ class CartesianProductJoinLazyTest
     return result;
   }
 
+  // Counter to ensure unique variables.
   static size_t varIndex;
 
+  // Create a unique variable with the scheme: ?v0, ?v1, ...
   static std::vector<std::optional<Variable>> makeUniqueVariables(
       const IdTable& idTable) {
     std::vector<std::optional<Variable>> result;
@@ -257,6 +261,8 @@ class CartesianProductJoinLazyTest
   }
 
  protected:
+  // Create a join instance with the given `tables`. The last table is split for
+  // tests cases with a non-zero seed.
   static CartesianProductJoin makeJoin(std::vector<IdTable> tables) {
     AD_CONTRACT_CHECK(tables.size() >= 2);
     auto* qec = ad_utility::testing::getQec();
@@ -279,14 +285,17 @@ class CartesianProductJoinLazyTest
     return join;
   }
 
+  // Get the offset.
   static size_t getOffset() { return std::get<1>(GetParam()); }
 
+  // Get the limit if present, otherwise return the maximum size_t value.
   static size_t getLimit() {
     return std::get<2>(GetParam()).has_value()
                ? std::get<2>(GetParam()).value()
                : std::numeric_limits<size_t>::max();
   }
 
+  // Clamp `maximum` size to account for the limit and offset.
   static size_t clampSize(size_t maximum) {
     // Apply offset
     maximum -= std::min(maximum, getOffset());
@@ -295,6 +304,8 @@ class CartesianProductJoinLazyTest
     return maximum;
   }
 
+  // Calculate the expected size of the Cartesian product without considering
+  // limit and offset.
   static size_t getExpectedSize(const std::vector<IdTable>& idTables) {
     size_t totalExpectedSize = 1;
     for (const auto& idTable : idTables) {
@@ -303,6 +314,8 @@ class CartesianProductJoinLazyTest
     return totalExpectedSize;
   }
 
+  // Count how many times a certain id is expected to occur in the Cartesian
+  // product within the respective column without considering limit and offset.
   static std::vector<size_t> getOccurenceCountWithoutLimit(
       const std::vector<IdTable>& idTables) {
     size_t totalExpectedSize = getExpectedSize(idTables);
@@ -315,6 +328,7 @@ class CartesianProductJoinLazyTest
     return result;
   }
 
+  // Return the expected number of unique for every column in the result set.
   static std::vector<size_t> getValueCount(
       const std::vector<IdTable>& idTables) {
     std::vector<size_t> result;
@@ -326,6 +340,7 @@ class CartesianProductJoinLazyTest
     return result;
   }
 
+  // Trim the `idTable` to the given `offset` and `limit`.
   static IdTable trimToLimitAndOffset(IdTable idTable, size_t offset,
                                       size_t limit) {
     idTable.erase(idTable.begin(),
@@ -335,6 +350,10 @@ class CartesianProductJoinLazyTest
     return idTable;
   }
 
+  // Count the invididual entries in the result set and check those counts match
+  // the expected counts. For results with limit and offset it can't make strict
+  // checks because the order is not guaranteed by the operation so we have to
+  // check if the error is within a certain error margin.
   static void expectCorrectResult(
       CartesianProductJoin& join, size_t expectedSize,
       const std::vector<size_t>& occurenceCounts,
@@ -380,6 +399,8 @@ class CartesianProductJoinLazyTest
     }
   }
 
+  // Expect that the generator yields the expected values in `tables`. Offset
+  // and limit are automatically applied.
   template <size_t N>
   static void expectGeneratorYieldsValues(
       std::array<IdTable, N> tables, Result::Generator generator,
@@ -413,6 +434,7 @@ class CartesianProductJoinLazyTest
   }
 };
 
+// Out of line initialization because C++ needs this for some reason.
 size_t CartesianProductJoinLazyTest::varIndex = 0;
 
 // _____________________________________________________________________________
