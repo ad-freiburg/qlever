@@ -192,9 +192,11 @@ class ExportQueryExecutionTrees {
   // Return a range that contains the indices of the rows that have to be
   // exported from the `idTable` given the `LimitOffsetClause`. It takes into
   // account the LIMIT, the OFFSET, and the actual size of the `idTable`
+ public:
   static cppcoro::generator<TableWithRange> getRowIndices(
       LimitOffsetClause limitOffset, const Result& result);
 
+ private:
   FRIEND_TEST(ExportQueryExecutionTrees, getIdTablesReturnsSingletonIterator);
   FRIEND_TEST(ExportQueryExecutionTrees, getIdTablesMirrorsGenerator);
   FRIEND_TEST(ExportQueryExecutionTrees, ensureCorrectSlicingOfSingleIdTable);
