@@ -178,7 +178,7 @@ const LocatedTriplesPerBlock& LocatedTriplesSnapshot::getLocatedTriplesPerBlock(
 }
 
 // ____________________________________________________________________________
-std::shared_ptr<LocatedTriplesSnapshot> DeltaTriples::copySnapshot() const {
+SharedLocatedTriplesSnapshot DeltaTriples::copySnapshot() const {
   return std::make_shared<LocatedTriplesSnapshot>(locatedTriplesPerBlock(),
                                                   localVocab_.clone());
 }
@@ -200,7 +200,7 @@ void DeltaTriplesManager::modify(std::function<void(DeltaTriples&)> function) {
   deltaTriples_.withWriteLock([this, &function](DeltaTriples& deltaTriples) {
     function(deltaTriples);
     currentLocatedTriplesSnapshot_.withWriteLock([&deltaTriples](auto& ptr) {
-      ptr = SharedLocatedTriplesSnapshot{deltaTriples.copySnapshot()};
+      ptr = deltaTriples.copySnapshot();
     });
   });
 }

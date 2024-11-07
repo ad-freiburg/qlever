@@ -92,7 +92,7 @@ TEST(IndexTest, createFromTurtleTest) {
         return;
       }
       const auto& [index, qec] = getIndex();
-      const auto& deltaTriples = qec.locatedTriplesSnapshot();
+      const auto& deltaTriples = qec.locatedTriplesSnapshot_();
 
       auto getId = makeGetId(getQec(kb)->getIndex());
       Id a = getId("<a>");

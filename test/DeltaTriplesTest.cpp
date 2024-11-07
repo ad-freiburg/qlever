@@ -397,7 +397,7 @@ TEST_F(DeltaTriplesTest, DeltaTriplesManager) {
         {
           // Before the first iteration, none of the thread-exclusive triples
           // are contained in the snapshot returned by the
-          // `locatedTriplesSnapshot`. As the snapshot is persistent over time,
+          // `locatedTriplesSnapshot_`. As the snapshot is persistent over time,
           // this doesn't change in further iterations.
           const auto& locatedSPO =
               beforeUpdate->getLocatedTriplesPerBlock(Permutation::SPO);
