@@ -471,9 +471,10 @@ Awaitable<void> Server::process(
   };
   auto visitUpdate =
       [&checkParameter, &accessTokenOk, &request, &send, &parameters,
-       &requestTimer,
-       this](const ad_utility::url_parser::sparqlOperation::Update& update)
+       &requestTimer, this, &requireValidAccessToken](
+          const ad_utility::url_parser::sparqlOperation::Update& update)
       -> Awaitable<void> {
+    requireValidAccessToken("SPARQL Update");
     if (auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
             checkParameter("timeout", std::nullopt), accessTokenOk, request,
             send)) {
@@ -753,6 +754,20 @@ MediaType Server::determineMediaType(
 }
 
 // ____________________________________________________________________________
+std::pair<std::shared_ptr<ad_utility::websocket::QueryHub>,
+          ad_utility::websocket::MessageSender>
+createMessageSender(auto& queryHub_,
+                    const ad_utility::httpUtils::HttpRequest auto& request,
+                    const string& operation) {
+  auto queryHub = queryHub_.lock();
+  AD_CORRECTNESS_CHECK(queryHub);
+  ad_utility::websocket::MessageSender messageSender{
+      getQueryId(request, operation), *queryHub};
+  // TODO<qup42> is it required to keep the queryHub alive?
+  return {queryHub, messageSender};
+}
+
+// ____________________________________________________________________________
 Awaitable<void> Server::processQuery(
     const ad_utility::url_parser::ParamValueMap& params, const string& query,
     ad_utility::Timer& requestTimer,
@@ -775,10 +790,8 @@ Awaitable<void> Server::processQuery(
     maxSend = MAX_NOF_ROWS_IN_RESULT;
   }
 
-  auto queryHub = queryHub_.lock();
-  AD_CORRECTNESS_CHECK(queryHub);
-  ad_utility::websocket::MessageSender messageSender{getQueryId(request, query),
-                                                     *queryHub};
+  auto [queryHub, messageSender] =
+      createMessageSender(queryHub_, request, query);
 
   auto [cancellationHandle, cancelTimeoutOnDestruction] =
       setupCancellationHandle(messageSender.getQueryId(), timeLimit);
@@ -801,7 +814,10 @@ Awaitable<void> Server::processQuery(
     // This may be caused by a bug (the code is not yet tested well) or by an
     // attack which tries to circumvent (not yet existing) access controls for
     // Update.
-    throw std::runtime_error("Expected Query but received Update.");
+    throw std::runtime_error(
+        absl::StrCat("SPARQL QUERY was request via the HTTP request, but the "
+                     "following update was sent instead of an update: "),
+        plannedQuery.parsedQuery_._originalString);
   }
 
   // Apply stricter limit for export if present
@@ -848,10 +864,8 @@ Awaitable<void> Server::processUpdate(
     ad_utility::Timer& requestTimer,
     const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
     TimeLimit timeLimit) {
-  auto queryHub = queryHub_.lock();
-  AD_CORRECTNESS_CHECK(queryHub);
-  ad_utility::websocket::MessageSender messageSender{
-      getQueryId(request, update), *queryHub};
+  auto [queryHub, messageSender] =
+      createMessageSender(queryHub_, request, update);
 
   auto [cancellationHandle, cancelTimeoutOnDestruction] =
       setupCancellationHandle(messageSender.getQueryId(), timeLimit);
@@ -869,7 +883,10 @@ Awaitable<void> Server::processUpdate(
   auto qet = plannedQuery.queryExecutionTree_;
 
   if (!plannedQuery.parsedQuery_.hasUpdateClause()) {
-    throw std::runtime_error("Expected Update but received Query.");
+    throw std::runtime_error(
+        absl::StrCat("SPARQL UPDATE was request via the HTTP request, but the "
+                     "following query was sent instead of an update: "),
+        plannedQuery.parsedQuery_._originalString);
   }
 
   // TODO: activate once #1603 is merged
@@ -887,7 +904,8 @@ Awaitable<void> Server::processUpdate(
   // TODO<qup42> send a proper response
   // SPARQL 1.1 Protocol 2.2.4 Successful Responses: "The response body of a
   // successful update request is implementation defined."
-  co_await send("");
+  co_await send(ad_utility::httpUtils::createOkResponse(
+      "Update successful", request, MediaType::textPlain));
   co_return;
 }
 

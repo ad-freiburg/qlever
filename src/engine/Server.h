@@ -172,6 +172,12 @@ class Server {
       SharedCancellationHandle handle, TimeLimit timeLimit,
       const ad_utility::Timer& requestTimer);
 
+  std::pair<std::shared_ptr<ad_utility::websocket::QueryHub>,
+            ad_utility::websocket::MessageSender>
+  createMessageSender(auto& queryHub_,
+                      const ad_utility::httpUtils::HttpRequest auto& request,
+                      const string& operation);
+
   static json composeErrorResponseJson(
       const string& query, const std::string& errorMsg,
       ad_utility::Timer& requestTimer,
