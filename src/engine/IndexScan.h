@@ -127,6 +127,10 @@ class IndexScan final : public Operation {
 
   vector<QueryExecutionTree*> getChildren() override { return {}; }
 
+  // Compute the size estimate of the index scan, taking delta triples (from
+  // the `queryExecutionContext_`) into account. The `bool` is true iff the
+  // estimate is exact. If not, the esimate is the mean of the lower and upper
+  // bound.
   std::pair<bool, size_t> computeSizeEstimate() const;
 
   std::string getCacheKeyImpl() const override;

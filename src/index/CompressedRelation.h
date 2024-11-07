@@ -1,6 +1,6 @@
-// Copyright 2021, University of Freiburg,
+// Copyright 2021 - 2024, University of Freiburg
 // Chair of Algorithms and Data Structures
-// Author: Johannes Kalmbach <johannes.kalmbach@gmail.com>
+// Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
 #pragma once
 
@@ -150,6 +150,7 @@ AD_SERIALIZE_FUNCTION(CompressedBlockMetadata) {
 // permutation).
 struct CompressedRelationMetadata {
   Id col0Id_;
+  // TODO: Is this still needed? Same for `offsetInBlock_`.
   size_t numRows_;
   float multiplicityCol1_;  // E.g., in PSO this is the multiplicity of "S".
   float multiplicityCol2_;  // E.g., in PSO this is the multiplicity of "O".
@@ -431,6 +432,8 @@ class CompressedRelationReader {
         IdTable& block, const CompressedBlockMetadata& blockMetadata);
   };
 
+  // Classes holding various subsets of parameters relevant for a scan of a
+  // permutation, including a reference to the relevant located triples.
   struct LocatedTriplesConfiguration {
     const LocatedTriplesPerBlock& locatedTriples_;
     size_t numIndexColumns_;
@@ -440,7 +443,6 @@ class CompressedRelationReader {
       : public LocatedTriplesConfiguration {
     size_t blockIndex;
   };
-
   struct ScanImplConfig {
     ColumnIndices scanColumns_;
     LocatedTriplesConfiguration locatedTriplesConfig_;
@@ -571,21 +573,25 @@ class CompressedRelationReader {
       const LocatedTriplesPerBlock& locatedTriplesPerBlock,
       LimitOffsetClause limitOffset = {}) const;
 
-  // Only get the size of the result for a given permutation XYZ for a given X
-  // and Y. This can be done by scanning one or two blocks. Note: The overload
-  // of this function where only the X is given is not needed, as the size of
-  // these scans can be retrieved from the `CompressedRelationMetadata`
-  // directly.
+  // Get the exact size of the result of the scan, taking the given located
+  // triples into account. This requires locating the triples exactly in each
+  // of the relevant blocks.
   size_t getResultSizeOfScan(
       const ScanSpecification& scanSpec,
       const vector<CompressedBlockMetadata>& blocks,
       const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
+
+  // Get a lower and an upper bound for the size of the result of the scan. For
+  // this call, it is enough that each located triple knows the block to which
+  // it belongs (which is the case for `LocatedTriplesPerBlock`).
   std::pair<size_t, size_t> getSizeEstimateForScan(
       const ScanSpecification& scanSpec,
       const vector<CompressedBlockMetadata>& blocks,
       const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
 
  private:
+  // Common implementation of `getResultSizeOfScan` and `getSizeEstimateForScan`
+  // above.
   template <bool exactSize>
   std::pair<size_t, size_t> getResultSizeImpl(
       const ScanSpecification& scanSpec,
@@ -660,24 +666,24 @@ class CompressedRelationReader {
   static void decompressColumn(const std::vector<char>& compressedColumn,
                                size_t numRowsToRead, Iterator iterator);
 
-  // Read the block that is identified by the `blockMetaData` from the `file`,
-  // decompress and return it. Only the columns specified by the `columnIndices`
-  // are returned.
+  // Read and decompress the parts of the block given by `blockMetaData` (which
+  // identifies the block) and `scanConfig` (which specifies the part of that
+  // block).
   std::optional<DecompressedBlock> readAndDecompressBlock(
       const CompressedBlockMetadata& blockMetaData,
       const ScanImplConfig& scanConfig) const;
 
-  // TODO comment.
+  // Like `readAndDecompressBlock`, and postprocess by merging the located
+  // triples (if any) and applying the graph filters (if any), both specified
+  // as part of the `scanConfig`.
   DecompressedBlock decompressAndPostprocessBlock(
       const CompressedBlock& compressedBlock, size_t numRowsToRead,
       const ScanImplConfig& scanConfig,
       const CompressedBlockMetadata& metadata) const;
 
-  // Read the block identified by `blockMetadata` from disk, decompress it, and
-  // return the part that matches `col1Id` (or the whole block if `col1Id` is
-  // `nullopt`). The block must contain triples from the relation identified by
-  // `relationMetadata`. If `scanMetadata` is not `nullopt`, update information
-  // about the number of blocks and elements read.
+  // Read, decompress, and postprocess the part of the block according to 
+  // `blockMetadata` (which identifies the block) and `scanConfig` (which
+  // specifies the part of that block, graph filters, and located triples).
   //
   // NOTE: When all triples in the block match the `col1Id`, this method makes
   // an unnecessary copy of the block. Therefore, if you know that you need the
@@ -693,7 +699,6 @@ class CompressedRelationReader {
   // are yielded, else all columns are yielded. The blocks are yielded
   // in the correct order, but asynchronously read and decompressed using
   // multiple worker threads.
-
   IdTableGenerator asyncParallelBlockGenerator(
       auto beginBlock, auto endBlock, const ScanImplConfig& scanConfig,
       CancellationHandle cancellationHandle,
