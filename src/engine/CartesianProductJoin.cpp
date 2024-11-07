@@ -240,6 +240,8 @@ IdTable CartesianProductJoin::writeAllColumns(
     totalResultSize *= std::min(
         std::max(CHUNK_SIZE, totalResultSize) / totalResultSize,
         partialIdTable->idTable_.size() - partialIdTable->tableOffset_);
+    // Make sure the offset doesn't cause a row to be partially consumed.
+    totalResultSize -= std::min(partialIdTable->totalOffset_, totalResultSize);
   }
 
   size_t totalSizeIncludingLimit =

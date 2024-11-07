@@ -384,13 +384,10 @@ class CartesianProductJoinLazyTest
       std::array<IdTable, N> tables, Result::Generator generator,
       source_location loc = source_location::current()) {
     auto trace = generateLocationTrace(loc);
-    size_t sanitizedLimit = getLimit() == std::numeric_limits<size_t>::max()
-                                ? getLimit()
-                                : getOffset() + getLimit();
     size_t rowsConsumed = 0;
     auto iterator = generator.begin();
     for (IdTable& table : tables) {
-      if (rowsConsumed >= sanitizedLimit) {
+      if (rowsConsumed >= getLimit()) {
         // TODO<RobinTF> Don't yield empty tables.
         if (iterator != generator.end()) {
           EXPECT_THAT(iterator->idTable_, ::testing::IsEmpty());
@@ -398,7 +395,6 @@ class CartesianProductJoinLazyTest
         }
         break;
       }
-      size_t tableSize = table.size();
       ASSERT_NE(iterator, generator.end());
       IdTable reference = trimToLimitAndOffset(
           std::move(table), getOffset() - std::min(getOffset(), rowsConsumed),
@@ -406,7 +402,7 @@ class CartesianProductJoinLazyTest
       EXPECT_EQ(iterator->idTable_, reference)
           << "Expected " << reference.size() << " rows and got "
           << iterator->idTable_.size();
-      rowsConsumed += tableSize;
+      rowsConsumed += reference.size();
       ++iterator;
     }
     ASSERT_EQ(iterator, generator.end());
