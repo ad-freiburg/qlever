@@ -225,10 +225,10 @@ TEST(CartesianProductJoin, variableColumnMap) {
 // Third parameter indicates the limit for the LIMIT clause.
 class CartesianProductJoinLazyTest
     : public testing::TestWithParam<
-          std::tuple<uint32_t, size_t, std::optional<size_t>>> {
+          std::tuple<uint64_t, size_t, std::optional<size_t>>> {
   static std::vector<IdTable> splitIntoRandomSubtables(const IdTable& idTable) {
     // Ensure results are reproducible.
-    std::mt19937 generator{std::get<0>(GetParam())};
+    std::mt19937_64 generator{std::get<0>(GetParam())};
     // The average size of splits.
     size_t averageSplitSize =
         std::uniform_int_distribution<size_t>{0, idTable.size()}(generator);
@@ -584,12 +584,12 @@ using ::testing::Values;
 INSTANTIATE_TEST_SUITE_P(
     CartesianProdctJoinTestSuite, CartesianProductJoinLazyTest,
     ::testing::Combine(
-        Range<uint32_t>(0, 5),
+        Range<uint64_t>(0, 5),
         Values(0, 1, 25, CHUNK_SIZE, CHUNK_SIZE + 1, CHUNK_SIZE * 2),
         Values(O{0}, O{1}, O{25}, O{CHUNK_SIZE}, O{CHUNK_SIZE * 2},
                O{CHUNK_SIZE * 10}, std::nullopt)),
     [](const testing::TestParamInfo<
-        std::tuple<uint32_t, size_t, std::optional<size_t>>>& info) {
+        std::tuple<uint64_t, size_t, std::optional<size_t>>>& info) {
       std::ostringstream stream;
       if (std::get<0>(info.param) == 0) {
         stream << "FullyMaterialized";
