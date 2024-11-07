@@ -236,20 +236,26 @@ IdTable CartesianProductJoin::writeAllColumns(
   auto totalResultSize =
       std::reduce(sizesView.begin(), sizesView.end(), 1UL, std::multiplies{});
 
+  size_t realOffset =
+      partialIdTable ? partialIdTable->totalOffset_ : getLimit()._offset;
+    
   if (partialIdTable) {
     totalResultSize *= std::min(
         std::max(CHUNK_SIZE, totalResultSize) / totalResultSize,
         partialIdTable->idTable_.size() - partialIdTable->tableOffset_);
     // Make sure the offset doesn't cause a row to be partially consumed.
-    totalResultSize -= std::min(partialIdTable->totalOffset_, totalResultSize);
+    if (partialIdTable->totalOffset_ >= totalResultSize) {
+      partialIdTable->totalOffset_ -= totalResultSize;
+      totalResultSize = 0;
+    } else {
+      totalResultSize -= partialIdTable->totalOffset_;
+      partialIdTable->totalOffset_ = 0;
+    }
   }
 
   size_t totalSizeIncludingLimit =
       partialIdTable ? std::min(totalResultSize, partialIdTable->totalLimit_)
                      : getLimit().actualSize(totalResultSize);
-  size_t realOffset =
-      std::min(totalResultSize, partialIdTable ? partialIdTable->totalOffset_
-                                               : getLimit()._offset);
 
   try {
     result.resize(totalSizeIncludingLimit);
@@ -292,7 +298,6 @@ IdTable CartesianProductJoin::writeAllColumns(
   }
   if (partialIdTable) {
     partialIdTable->totalLimit_ -= result.size();
-    partialIdTable->totalOffset_ -= realOffset;
     partialIdTable->done_ =
         partialIdTable->tableOffset_ >= partialIdTable->idTable_.size() ||
         totalSizeIncludingLimit == 0;

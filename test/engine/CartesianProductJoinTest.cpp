@@ -385,6 +385,7 @@ class CartesianProductJoinLazyTest
       source_location loc = source_location::current()) {
     auto trace = generateLocationTrace(loc);
     size_t rowsConsumed = 0;
+    size_t remainingOffset = getOffset();
     auto iterator = generator.begin();
     for (IdTable& table : tables) {
       if (rowsConsumed >= getLimit()) {
@@ -396,13 +397,15 @@ class CartesianProductJoinLazyTest
         break;
       }
       ASSERT_NE(iterator, generator.end());
-      IdTable reference = trimToLimitAndOffset(
-          std::move(table), getOffset() - std::min(getOffset(), rowsConsumed),
-          getLimit() - std::min(getLimit(), rowsConsumed));
+      size_t untrimmedSize = table.size();
+      IdTable reference =
+          trimToLimitAndOffset(std::move(table), remainingOffset,
+                               getLimit() - std::min(getLimit(), rowsConsumed));
       EXPECT_EQ(iterator->idTable_, reference)
           << "Expected " << reference.size() << " rows and got "
           << iterator->idTable_.size();
       rowsConsumed += reference.size();
+      remainingOffset -= std::min(untrimmedSize, remainingOffset);
       ++iterator;
     }
     ASSERT_EQ(iterator, generator.end());
