@@ -858,7 +858,7 @@ inline void testBoundingBox(const long long& maxDistInMeters,
       std::nullopt};
 
   SpatialJoinAlgorithms spatialJoinAlgs{
-      qec, params, true, spatialJoin->onlyForTestingGetRealConfig()};
+      qec, params, true, spatialJoin->onlyForTestingGetActualConfig()};
 
   std::vector<box> bbox =
       spatialJoinAlgs.OnlyForTestingWrapperComputeBoundingBox(startPoint);
@@ -950,7 +950,7 @@ TEST(SpatialJoin, containedInBoundingBoxes) {
       std::nullopt};
 
   SpatialJoinAlgorithms spatialJoinAlgs{
-      qec, params, true, spatialJoin->onlyForTestingGetRealConfig()};
+      qec, params, true, spatialJoin->onlyForTestingGetActualConfig()};
 
   // note that none of the boxes is overlapping, therefore we can check, that
   // none of the points which should be contained in one box are contained in

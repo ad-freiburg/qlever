@@ -106,7 +106,7 @@ class SpatialJoin : public Operation {
   }
 
   std::variant<NearestNeighborsConfig, MaxDistanceConfig>
-  onlyForTestingGetRealConfig() const {
+  onlyForTestingGetActualConfig() const {
     return config_;
   }
 

@@ -8,16 +8,18 @@
 #include "engine/Result.h"
 #include "engine/SpatialJoin.h"
 
+namespace BoostGeometryNamespace {
 namespace bg = boost::geometry;
 namespace bgi = boost::geometry::index;
 
-using point = bg::model::point<double, 2, bg::cs::cartesian>;
-using box = bg::model::box<point>;
-using value = std::pair<point, size_t>;
+using Point = bg::model::point<double, 2, bg::cs::cartesian>;
+using Box = bg::model::box<Point>;
+using Value = std::pair<Point, size_t>;
+}  // namespace BoostGeometryNamespace
 
 class SpatialJoinAlgorithms {
  public:
-  // initialize the Algorithm with the needed parameters
+  // Initialize the Algorithm with the needed parameters
   SpatialJoinAlgorithms(
       QueryExecutionContext* qec, PreparedSpatialJoinParams params,
       bool addDistToResult,
@@ -26,23 +28,25 @@ class SpatialJoinAlgorithms {
   Result S2geometryAlgorithm();
   Result BoundingBoxAlgorithm();
 
-  std::vector<box> OnlyForTestingWrapperComputeBoundingBox(
-      const point& startPoint) const {
+  std::vector<BoostGeometryNamespace::Box>
+  OnlyForTestingWrapperComputeBoundingBox(
+      const BoostGeometryNamespace::Point& startPoint) const {
     return computeBoundingBox(startPoint);
   }
 
   bool OnlyForTestingWrapperContainedInBoundingBoxes(
-      const std::vector<box>& bbox, point point1) const {
+      const std::vector<BoostGeometryNamespace::Box>& bbox,
+      const BoostGeometryNamespace::Point& point1) const {
     return containedInBoundingBoxes(bbox, point1);
   }
 
  private:
-  // helper function which returns a GeoPoint if the element of the given table
+  // Helper function which returns a GeoPoint if the element of the given table
   // represents a GeoPoint
   std::optional<GeoPoint> getPoint(const IdTable* restable, size_t row,
                                    ColumnIndex col) const;
 
-  // helper function, which computes the distance of two points, where each
+  // Helper function, which computes the distance of two points, where each
   // point comes from a different result table
   Id computeDist(const IdTable* resLeft, const IdTable* resRight,
                  size_t rowLeft, size_t rowRight, ColumnIndex leftPointCol,
@@ -55,21 +59,35 @@ class SpatialJoinAlgorithms {
                            const IdTable* resultRight, size_t rowLeft,
                            size_t rowRight, Id distance) const;
 
-  // this function computes the bounding box(es), which represent all points,
+  // This function computes the bounding box(es) which represent all points,
   // which are in reach of the starting point with a distance of at most
-  // maxDistanceInMeters
-  std::vector<box> computeBoundingBox(const point& startPoint) const;
+  // 'maxDistanceInMeters'. In theory there is always only one bounding box, but
+  // when mapping the spherical surface on a cartesian plane there are borders.
+  // So when the "single true" bounding box crosses the left or right (+/-180
+  // longitude line) or the poles (+/- 90 latitude, which on the cartesian
+  // mapping is the top and bottom edge of the rectangular mapping) then the
+  // single box gets split into multiple boxes (i.e. one on the left and one on
+  // the right, which when seen on the sphere look like a single box, but on the
+  // map and in the internal representation it looks like two/more boxes)
+  std::vector<BoostGeometryNamespace::Box> computeBoundingBox(
+      const BoostGeometryNamespace::Point& startPoint) const;
 
-  // this helper function calculates the bounding boxes based on a box, where
-  // definitely no match can occur. This function gets used, when the usual
-  // procedure, would just result in taking a big bounding box, which covers
-  // the whole planet (so for large max distances)
-  std::vector<box> computeAntiBoundingBox(const point& startPoint) const;
+  // This helper function calculates the bounding boxes based on a box, where
+  // definitely no match can occur. This means every element in the anti
+  // bounding box is guaranteed to be more than 'maxDistanceInMeters' away from
+  // the startPoint. The function is then returning the set of boxes, which
+  // cover everything on earth, except for the anti bounding box. This function
+  // gets used, when the usual procedure, would just result in taking a big
+  // bounding box, which covers the whole planet (so for extremely large max
+  // distances)
+  std::vector<BoostGeometryNamespace::Box> computeUsingAntiBoundingBox(
+      const BoostGeometryNamespace::Point& startPoint) const;
 
-  // this function returns true, when the given point is contained in any of the
+  // This function returns true, iff the given point is contained in any of the
   // bounding boxes
-  bool containedInBoundingBoxes(const std::vector<box>& bbox,
-                                point point1) const;
+  bool containedInBoundingBoxes(
+      const std::vector<BoostGeometryNamespace::Box>& bbox,
+      BoostGeometryNamespace::Point point1) const;
 
   QueryExecutionContext* qec_;
   PreparedSpatialJoinParams params_;
@@ -77,12 +95,12 @@ class SpatialJoinAlgorithms {
   std::variant<NearestNeighborsConfig, MaxDistanceConfig> config_;
 
   // circumference in meters at the equator (max) and the pole (min) (as the
-  // earth is not exactly a sphere the circumference is different. Note the
-  // factor of 1000 to convert to meters)
-  static constexpr double circumferenceMax_ = 40075 * 1000;
-  static constexpr double circumferenceMin_ = 40007 * 1000;
+  // earth is not exactly a sphere the circumference is different. Note that
+  // the values are given in meters)
+  static constexpr double circumferenceMax_ = 40'075'000;
+  static constexpr double circumferenceMin_ = 40'007'000;
 
   // radius of the earth in meters (as the earth is not exactly a sphere the
   // radius at the equator has been taken)
-  static constexpr double radius_ = 6378 * 1000;  // * 1000 to convert to meters
+  static constexpr double radius_ = 6'378'000;
 };

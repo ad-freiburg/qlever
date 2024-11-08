@@ -9,6 +9,8 @@
 #include "math.h"
 #include "util/GeoSparqlHelpers.h"
 
+using namespace BoostGeometryNamespace;
+
 // ____________________________________________________________________________
 SpatialJoinAlgorithms::SpatialJoinAlgorithms(
     QueryExecutionContext* qec, PreparedSpatialJoinParams params,
@@ -226,8 +228,8 @@ Result SpatialJoinAlgorithms::S2geometryAlgorithm() {
 }
 
 // ____________________________________________________________________________
-std::vector<box> SpatialJoinAlgorithms::computeBoundingBox(
-    const point& startPoint) const {
+std::vector<Box> SpatialJoinAlgorithms::computeBoundingBox(
+    const Point& startPoint) const {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
               rightJoinCol, numColumns, maxDist, maxResults] = params_;
   if (!maxDist.has_value()) {
@@ -256,14 +258,13 @@ std::vector<box> SpatialJoinAlgorithms::computeBoundingBox(
   // a single bounding box for the whole planet, do an optimized version
   if (static_cast<double>(maxDist.value()) > circumferenceMax_ / 4.0 &&
       static_cast<double>(maxDist.value()) < circumferenceMax_ / 2.01) {
-    return computeAntiBoundingBox(startPoint);
+    return computeUsingAntiBoundingBox(startPoint);
   }
 
   // compute latitude bound
-  double upperLatBound =
-      startPoint.get<1>() + maxDistInMetersBuffer * (360 / circumferenceMax_);
-  double lowerLatBound =
-      startPoint.get<1>() - maxDistInMetersBuffer * (360 / circumferenceMax_);
+  double maxDistInDegrees = maxDistInMetersBuffer * (360 / circumferenceMax_);
+  double upperLatBound = startPoint.get<1>() + maxDistInDegrees;
+  double lowerLatBound = startPoint.get<1>() - maxDistInDegrees;
   bool poleReached = false;
   // test for "overflows"
   if (lowerLatBound <= -90) {
@@ -275,7 +276,7 @@ std::vector<box> SpatialJoinAlgorithms::computeBoundingBox(
     poleReached = true;  // north pole reached
   }
   if (poleReached) {
-    return {box(point(-180.0f, lowerLatBound), point(180.0f, upperLatBound))};
+    return {Box(Point(-180.0f, lowerLatBound), Point(180.0f, upperLatBound))};
   }
 
   // compute longitude bound. For an explanation of the calculation and the
@@ -299,32 +300,33 @@ std::vector<box> SpatialJoinAlgorithms::computeBoundingBox(
   // test for "overflows" and create two bounding boxes if necessary
   if (leftLonBound < -180) {
     auto box1 =
-        box(point(-180, lowerLatBound), point(rightLonBound, upperLatBound));
-    auto box2 = box(point(leftLonBound + 360, lowerLatBound),
-                    point(180, upperLatBound));
+        Box(Point(-180, lowerLatBound), Point(rightLonBound, upperLatBound));
+    auto box2 = Box(Point(leftLonBound + 360, lowerLatBound),
+                    Point(180, upperLatBound));
     return {box1, box2};
   } else if (rightLonBound > 180) {
     auto box1 =
-        box(point(leftLonBound, lowerLatBound), point(180, upperLatBound));
-    auto box2 = box(point(-180, lowerLatBound),
-                    point(rightLonBound - 360, upperLatBound));
+        Box(Point(leftLonBound, lowerLatBound), Point(180, upperLatBound));
+    auto box2 = Box(Point(-180, lowerLatBound),
+                    Point(rightLonBound - 360, upperLatBound));
     return {box1, box2};
   }
   // default case, when no bound has an "overflow"
-  return {box(point(leftLonBound, lowerLatBound),
-              point(rightLonBound, upperLatBound))};
+  return {Box(Point(leftLonBound, lowerLatBound),
+              Point(rightLonBound, upperLatBound))};
 }
 
 // ____________________________________________________________________________
-std::vector<box> SpatialJoinAlgorithms::computeAntiBoundingBox(
-    const point& startPoint) const {
+std::vector<Box> SpatialJoinAlgorithms::computeUsingAntiBoundingBox(
+    const Point& startPoint) const {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
               rightJoinCol, numColumns, maxDist, maxResults] = params_;
   if (!maxDist.has_value()) {
     AD_THROW("Max distance must have a value for this operation");
   }
+
   // point on the opposite side of the globe
-  point antiPoint(startPoint.get<0>() + 180, startPoint.get<1>() * -1);
+  Point antiPoint(startPoint.get<0>() + 180, startPoint.get<1>() * -1);
   if (antiPoint.get<0>() > 180) {
     antiPoint.set<0>(antiPoint.get<0>() - 360);
   }
@@ -363,41 +365,41 @@ std::vector<box> SpatialJoinAlgorithms::computeAntiBoundingBox(
     boxCrosses180Longitude = true;
   }
   // compute bounding boxes using the anti bounding box from above
-  std::vector<box> boxes;
+  std::vector<Box> boxes;
   if (!northPoleTouched) {
     // add upper bounding box(es)
     if (boxCrosses180Longitude) {
-      boxes.emplace_back(point(leftBound, upperBound), point(180, 90));
-      boxes.emplace_back(point(-180, upperBound), point(rightBound, 90));
+      boxes.emplace_back(Point(leftBound, upperBound), Point(180, 90));
+      boxes.emplace_back(Point(-180, upperBound), Point(rightBound, 90));
     } else {
-      boxes.emplace_back(point(leftBound, upperBound), point(rightBound, 90));
+      boxes.emplace_back(Point(leftBound, upperBound), Point(rightBound, 90));
     }
   }
   if (!southPoleTouched) {
     // add lower bounding box(es)
     if (boxCrosses180Longitude) {
-      boxes.emplace_back(point(leftBound, -90), point(180, lowerBound));
-      boxes.emplace_back(point(-180, -90), point(rightBound, lowerBound));
+      boxes.emplace_back(Point(leftBound, -90), Point(180, lowerBound));
+      boxes.emplace_back(Point(-180, -90), Point(rightBound, lowerBound));
     } else {
-      boxes.emplace_back(point(leftBound, -90), point(rightBound, lowerBound));
+      boxes.emplace_back(Point(leftBound, -90), Point(rightBound, lowerBound));
     }
   }
   // add the box(es) inbetween the longitude lines
   if (boxCrosses180Longitude) {
     // only one box needed to cover the longitudes
-    boxes.emplace_back(point(rightBound, -90), point(leftBound, 90));
+    boxes.emplace_back(Point(rightBound, -90), Point(leftBound, 90));
   } else {
     // two boxes needed, one left and one right of the anti bounding box
-    boxes.emplace_back(point(-180, -90), point(leftBound, 90));
-    boxes.emplace_back(point(rightBound, -90), point(180, 90));
+    boxes.emplace_back(Point(-180, -90), Point(leftBound, 90));
+    boxes.emplace_back(Point(rightBound, -90), Point(180, 90));
   }
   return boxes;
 }
 
 // ____________________________________________________________________________
 bool SpatialJoinAlgorithms::containedInBoundingBoxes(
-    const std::vector<box>& bbox, point point1) const {
-  // correct lon bounds if necessary
+    const std::vector<Box>& bbox, Point point1) const {
+  // correct lon and lat bounds if necessary
   while (point1.get<0>() < -180) {
     point1.set<0>(point1.get<0>() + 360);
   }
@@ -410,16 +412,18 @@ bool SpatialJoinAlgorithms::containedInBoundingBoxes(
     point1.set<1>(90);
   }
 
-  if (std::ranges::any_of(bbox, [point1](const box& aBox) {
-        return boost::geometry::covered_by(point1, aBox);
-      })) {
-    return true;
-  }
-  return false;
+  return std::ranges::any_of(bbox, [point1](const Box& aBox) {
+    return boost::geometry::covered_by(point1, aBox);
+  });
 }
 
 // ____________________________________________________________________________
 Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
+  auto printWarning = []() {
+    LOG(WARN)
+        << "expected a point here, but no point is given. Skipping this point"
+        << std::endl;
+  };
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
               rightJoinCol, numColumns, maxDist, maxResults] = params_;
   IdTable result{numColumns, qec_->getAllocator()};
@@ -431,41 +435,49 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
   auto smallerResJoinCol = leftJoinCol;
   auto otherResJoinCol = rightJoinCol;
   if (idTableLeft->numRows() > idTableRight->numRows()) {
-    smallerResult = idTableRight;
-    otherResult = idTableLeft;
+    std::swap(smallerResult, otherResult);
     leftResSmaller = false;
-    smallerResJoinCol = rightJoinCol;
-    otherResJoinCol = leftJoinCol;
+    std::swap(smallerResJoinCol, otherResJoinCol);
   }
 
-  bgi::rtree<value, bgi::quadratic<16>> rtree;
+  bgi::rtree<Value, bgi::quadratic<16>> rtree;
   for (size_t i = 0; i < smallerResult->numRows(); i++) {
     // get point of row i
-    // ColumnIndex smallerJoinCol = getJoinCol(smallerChild, smallerVariable);
     auto geopoint = getPoint(smallerResult, i, smallerResJoinCol);
-    point p(geopoint.value().getLng(), geopoint.value().getLat());
+
+    if (!geopoint) {
+      printWarning();
+      continue;
+    }
+
+    Point p(geopoint.value().getLng(), geopoint.value().getLat());
 
     // add every point together with the row number into the rtree
     rtree.insert(std::make_pair(p, i));
   }
   for (size_t i = 0; i < otherResult->numRows(); i++) {
     auto geopoint1 = getPoint(otherResult, i, otherResJoinCol);
-    point p(geopoint1.value().getLng(), geopoint1.value().getLat());
+
+    if (!geopoint1) {
+      printWarning();
+      continue;
+    }
+
+    Point p(geopoint1.value().getLng(), geopoint1.value().getLat());
 
     // query the other rtree for every point using the following bounding box
-    std::vector<box> bbox = computeBoundingBox(p);
-    std::vector<value> results;
+    std::vector<Box> bbox = computeBoundingBox(p);
+    std::vector<Value> results;
 
-    std::ranges::for_each(bbox, [&](const box& bbox) {
+    std::ranges::for_each(bbox, [&](const Box& bbox) {
       rtree.query(bgi::intersects(bbox), std::back_inserter(results));
     });
 
-    std::ranges::for_each(results, [&](value res) {
+    std::ranges::for_each(results, [&](const Value& res) {
       size_t rowLeft = res.second;
       size_t rowRight = i;
       if (!leftResSmaller) {
-        rowLeft = i;
-        rowRight = res.second;
+        std::swap(rowLeft, rowRight);
       }
       auto distance = computeDist(idTableLeft, idTableRight, rowLeft, rowRight,
                                   leftJoinCol, rightJoinCol);
@@ -477,6 +489,7 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
     });
   }
   auto resTable =
-      Result(std::move(result), std::vector<ColumnIndex>{}, LocalVocab{});
+      Result(std::move(result), std::vector<ColumnIndex>{},
+             Result::getMergedLocalVocab(*resultLeft, *resultRight));
   return resTable;
 }
