@@ -285,7 +285,7 @@ std::ostream& operator<<(std::ostream& os, const std::vector<IdTriple<0>>& v) {
 }
 
 // ____________________________________________________________________________
-bool LocatedTriplesPerBlock::containsTriple(const IdTriple<0> triple,
+bool LocatedTriplesPerBlock::containsTriple(const IdTriple<0>& triple,
                                             bool shouldExist) const {
   auto blockContains = [&triple, shouldExist](const LocatedTriples& lt,
                                               size_t blockIndex) {

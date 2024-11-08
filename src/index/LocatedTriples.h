@@ -169,7 +169,7 @@ class LocatedTriplesPerBlock {
 
   // Only used for testing. Return `true` iff a `LocatedTriple` with the given
   // value for `shouldExist` is contained in any block.
-  bool containsTriple(const IdTriple<0> triple, bool shouldExist) const;
+  bool containsTriple(const IdTriple<0>& triple, bool shouldExist) const;
 
   // This operator is only for debugging and testing. It returns a
   // human-readable representation.

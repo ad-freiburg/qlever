@@ -382,12 +382,14 @@ TEST_F(DeltaTriplesTest, DeltaTriplesManager) {
           // Check for several of the thread-exclusive triples that they are
           // properly contained in the current snapshot.
           //
-          // TODO(Hannah): I don't understand the `false` for the second
-          // `containsTriple`.
           auto p = deltaTriplesManager.getCurrentSnapshot();
           const auto& locatedSPO =
               p->getLocatedTriplesForPermutation(Permutation::SPO);
           EXPECT_TRUE(locatedSPO.containsTriple(triplesToInsert.at(1), true));
+          // This triple is exclusive to the thread and is inserted and then
+          // immediately deleted again. The `DeltaTriples` thus only store it as
+          // deleted. It might be contained in the original input, hence we
+          // cannot simply drop it.
           EXPECT_TRUE(locatedSPO.containsTriple(triplesToInsert.at(2), false));
           EXPECT_TRUE(locatedSPO.containsTriple(triplesToDelete.at(2), false));
         }
@@ -409,11 +411,12 @@ TEST_F(DeltaTriplesTest, DeltaTriplesManager) {
 
   // Each of the threads above inserts on thread-exclusive triple, deletes one
   // thread-exclusive triple and inserts one thread-exclusive triple that is
-  // deleted right after. Additionally, there is one common triple inserted by
-  // all the threads and one common triple that is deleted by all the threads.
+  // deleted right after (This triple is stored as deleted in the `DeltaTriples`
+  // because it might be contained in the original input). Additionally, there
+  // is one common triple inserted by// all the threads and one common triple
+  // that is deleted by all the threads.
   //
-  // TODO(Hannah): I don't understand why the number of thread-exclusive deleted
-  // triples is twice that of the thread-exclusive inserted triples.
+
   auto deltaImpl = deltaTriplesManager.deltaTriples_.rlock();
   EXPECT_THAT(*deltaImpl, NumTriples(numThreads + 1, 2 * numThreads + 1,
                                      3 * numThreads + 2));

@@ -196,7 +196,8 @@ DeltaTriplesManager::DeltaTriplesManager(const IndexImpl& index)
       currentLocatedTriplesSnapshot_{deltaTriples_.rlock()->getSnapshot()} {}
 
 // _____________________________________________________________________________
-void DeltaTriplesManager::modify(std::function<void(DeltaTriples&)> function) {
+void DeltaTriplesManager::modify(
+    const std::function<void(DeltaTriples&)>& function) {
   // While holding the lock for the underlying `DeltaTriples`, perform the
   // actual `function` (typically some combination of insert and delete
   // operations) and (while still holding the lock) update the

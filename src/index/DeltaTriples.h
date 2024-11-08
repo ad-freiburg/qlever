@@ -198,7 +198,7 @@ class DeltaTriplesManager {
   // the current snapshot. Concurrent calls to `modify` will be serialized, and
   // each call to `getCurrentSnapshot` will either return the snapshot before or
   // after a modification, but never one of an ongoing modification.
-  void modify(std::function<void(DeltaTriples&)> function);
+  void modify(const std::function<void(DeltaTriples&)>& function);
 
   // Return a shared pointer to a deep copy of the current snapshot. This can
   // be safely used to execute a query without interfering with future updates.

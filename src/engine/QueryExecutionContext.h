@@ -92,8 +92,8 @@ class QueryExecutionContext {
   [[nodiscard]] const Index& getIndex() const { return _index; }
 
   const LocatedTriplesSnapshot& locatedTriplesSnapshot() const {
-    AD_CORRECTNESS_CHECK(sharedLocatedTriplesSnapshot != nullptr);
-    return *sharedLocatedTriplesSnapshot;
+    AD_CORRECTNESS_CHECK(sharedLocatedTriplesSnapshot_ != nullptr);
+    return *sharedLocatedTriplesSnapshot_;
   }
 
   void clearCacheUnpinnedOnly() { getQueryTreeCache().clearUnpinnedOnly(); }
@@ -130,7 +130,7 @@ class QueryExecutionContext {
   // snapshot of the current (located) delta triples. These can then be used
   // by the respective query without interfering with further incoming
   // update operations.
-  SharedLocatedTriplesSnapshot sharedLocatedTriplesSnapshot{
+  SharedLocatedTriplesSnapshot sharedLocatedTriplesSnapshot_{
       _index.deltaTriplesManager().getCurrentSnapshot()};
   QueryResultCache* const _subtreeCache;
   // allocators are copied but hold shared state
