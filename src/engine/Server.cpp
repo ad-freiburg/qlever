@@ -797,6 +797,9 @@ Awaitable<void> Server::processQuery(
   auto qet = plannedQuery.queryExecutionTree_;
 
   if (plannedQuery.parsedQuery_.hasUpdateClause()) {
+    // This may be caused by a bug (the code is not yet tested well) or by an
+    // attack which tries to circumvent (not yet existing) access controls for
+    // Update.
     throw std::runtime_error("Expected Query but received Update.");
   }
 

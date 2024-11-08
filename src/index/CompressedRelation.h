@@ -681,7 +681,7 @@ class CompressedRelationReader {
       const ScanImplConfig& scanConfig,
       const CompressedBlockMetadata& metadata) const;
 
-  // Read, decompress, and postprocess the part of the block according to 
+  // Read, decompress, and postprocess the part of the block according to
   // `blockMetadata` (which identifies the block) and `scanConfig` (which
   // specifies the part of that block, graph filters, and located triples).
   //

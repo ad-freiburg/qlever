@@ -162,7 +162,7 @@ ProtoResult IndexScan::computeResult(bool requestLaziness) {
   const auto& index = _executionContext->getIndex();
   idTable =
       index.scan(getScanSpecification(), permutation_, additionalColumns(),
-                 cancellationHandle_, deltaTriples(), getLimit());
+                 cancellationHandle_, locatedTriplesSnapshot(), getLimit());
   AD_CORRECTNESS_CHECK(idTable.numColumns() == getResultWidth());
   LOG(DEBUG) << "IndexScan result computation done.\n";
   checkCancellation();
@@ -173,11 +173,11 @@ ProtoResult IndexScan::computeResult(bool requestLaziness) {
 // _____________________________________________________________________________
 std::pair<bool, size_t> IndexScan::computeSizeEstimate() const {
   AD_CORRECTNESS_CHECK(_executionContext);
-  auto [lower, upper] =
-      getIndex()
-          .getImpl()
-          .getPermutation(permutation())
-          .getSizeEstimateForScan(getScanSpecification(), deltaTriples());
+  auto [lower, upper] = getIndex()
+                            .getImpl()
+                            .getPermutation(permutation())
+                            .getSizeEstimateForScan(getScanSpecification(),
+                                                    locatedTriplesSnapshot());
   return {lower == upper, std::midpoint(lower, upper)};
 }
 
@@ -185,7 +185,7 @@ std::pair<bool, size_t> IndexScan::computeSizeEstimate() const {
 size_t IndexScan::getExactSize() const {
   AD_CORRECTNESS_CHECK(_executionContext);
   return getIndex().getResultSizeOfScan(getScanSpecification(), permutation_,
-                                        deltaTriples());
+                                        locatedTriplesSnapshot());
 }
 
 // _____________________________________________________________________________
@@ -206,7 +206,7 @@ void IndexScan::determineMultiplicities() {
       return {1.0f};
     } else if (numVariables_ == 2) {
       return idx.getMultiplicities(*getPermutedTriple()[0], permutation_,
-                                   deltaTriples());
+                                   locatedTriplesSnapshot());
     } else {
       AD_CORRECTNESS_CHECK(numVariables_ == 3);
       return idx.getMultiplicities(permutation_);
@@ -256,8 +256,8 @@ Permutation::IdTableGenerator IndexScan::getLazyScan(
       .getImpl()
       .getPermutation(permutation())
       .lazyScan(getScanSpecification(), std::move(actualBlocks),
-                additionalColumns(), cancellationHandle_, deltaTriples(),
-                getLimit());
+                additionalColumns(), cancellationHandle_,
+                locatedTriplesSnapshot(), getLimit());
 };
 
 // ________________________________________________________________
@@ -265,7 +265,7 @@ std::optional<Permutation::MetadataAndBlocks> IndexScan::getMetadataForScan()
     const {
   const auto& index = getExecutionContext()->getIndex().getImpl();
   return index.getPermutation(permutation())
-      .getMetadataAndBlocks(getScanSpecification(), deltaTriples());
+      .getMetadataAndBlocks(getScanSpecification(), locatedTriplesSnapshot());
 };
 
 // ________________________________________________________________

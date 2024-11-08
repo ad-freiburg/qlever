@@ -245,11 +245,6 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
     ColumnIndices additionalColumns, CancellationHandle cancellationHandle,
     [[maybe_unused]] const LocatedTriplesPerBlock& locatedTriplesPerBlock,
     LimitOffsetClause limitOffset) const {
-  // Empty range.
-  if (beginBlockMetadata == endBlockMetadata) {
-    co_return;
-  }
-
   // We will modify `limitOffset` as we go, so we have to copy the original
   // value for sanity checks which we apply later.
   const auto originalLimit = limitOffset;
@@ -261,6 +256,11 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
   size_t numBlocksTotal = endBlockMetadata - beginBlockMetadata;
   auto config =
       getScanConfig(scanSpec, additionalColumns, locatedTriplesPerBlock);
+
+  // Empty range.
+  if (beginBlockMetadata == endBlockMetadata) {
+    co_return;
+  }
 
   // Helper lambda for reading the first and last block, of which only a part
   // is needed.
