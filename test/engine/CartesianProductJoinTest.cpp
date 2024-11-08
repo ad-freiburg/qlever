@@ -410,25 +410,19 @@ class CartesianProductJoinLazyTest
     size_t remainingOffset = getOffset();
     auto iterator = generator.begin();
     for (IdTable& table : tables) {
-      if (rowsConsumed >= getLimit()) {
-        // TODO<RobinTF> Don't yield empty tables.
-        if (iterator != generator.end()) {
-          EXPECT_THAT(iterator->idTable_, ::testing::IsEmpty());
-          ++iterator;
-        }
-        break;
-      }
-      ASSERT_NE(iterator, generator.end());
       size_t untrimmedSize = table.size();
       IdTable reference =
           trimToLimitAndOffset(std::move(table), remainingOffset,
                                getLimit() - std::min(getLimit(), rowsConsumed));
-      EXPECT_EQ(iterator->idTable_, reference)
-          << "Expected " << reference.size() << " rows and got "
-          << iterator->idTable_.size();
       rowsConsumed += reference.size();
       remainingOffset -= std::min(untrimmedSize, remainingOffset);
-      ++iterator;
+      if (!reference.empty()) {
+        ASSERT_NE(iterator, generator.end());
+        EXPECT_EQ(iterator->idTable_, reference)
+            << "Expected " << reference.size() << " rows and got "
+            << iterator->idTable_.size();
+        ++iterator;
+      }
     }
     ASSERT_EQ(iterator, generator.end());
   }

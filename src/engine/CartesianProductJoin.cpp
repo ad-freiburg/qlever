@@ -350,7 +350,7 @@ CartesianProductJoin::calculateSubResults(bool requestLaziness) {
 Result::Generator CartesianProductJoin::createLazyProducer(
     LocalVocab staticMergedVocab,
     std::vector<std::shared_ptr<const Result>> subresults,
-    size_t offsetFromFront, std::optional<size_t> limit,
+    size_t offsetFromFront, bool yieldEmptyTables, std::optional<size_t> limit,
     size_t* offsetPtr) const {
   std::span subspan{subresults};
   auto trailingTables =
@@ -383,7 +383,6 @@ Result::Generator CartesianProductJoin::createLazyProducer(
       if (itwm.has_value()) {
         // Store in offset for next table.
         offset = itwm->totalOffset_;
-        // TODO<RobinTF> consider skipping empty id tables.
         size_t currentColumn = columnOffset;
         for (const auto& partialRow : row) {
           for (const ValueId& value : partialRow) {
@@ -393,7 +392,9 @@ Result::Generator CartesianProductJoin::createLazyProducer(
           }
         }
       }
-      co_yield {std::move(idTable), staticMergedVocab.clone()};
+      if (yieldEmptyTables || !idTable.empty()) {
+        co_yield {std::move(idTable), staticMergedVocab.clone()};
+      }
     } while (itwm.has_value() && !itwm->done_);
   }
   if (offsetPtr) {
@@ -421,14 +422,16 @@ Result::Generator CartesianProductJoin::createLazyConsumer(
             writeAllColumns(std::ranges::ref_view(subresults), &itwm);
         limit -= innerIdTable.size();
         offset = itwm.totalOffset_;
-        co_yield {std::move(innerIdTable), localVocab.clone()};
+        if (!innerIdTable.empty()) {
+          co_yield {std::move(innerIdTable), localVocab.clone()};
+        }
       } while (!itwm.done_);
     } else {
       // Case that processes each row individually
       for (const auto& row : idTable) {
         for (auto& [innerIdTable, mergedVocab] :
              createLazyProducer(staticMergedVocab.clone(), subresults,
-                                offsetFromFront, limit, &offset)) {
+                                offsetFromFront, true, limit, &offset)) {
           limit -= innerIdTable.size();
           size_t currentColumn = columnOffset;
           for (const auto& value : row) {
@@ -436,8 +439,10 @@ Result::Generator CartesianProductJoin::createLazyConsumer(
             currentColumn++;
             checkCancellation();
           }
-          mergedVocab.mergeWith(std::span{&localVocab, 1});
-          co_yield {std::move(innerIdTable), std::move(mergedVocab)};
+          if (!innerIdTable.empty()) {
+            mergedVocab.mergeWith(std::span{&localVocab, 1});
+            co_yield {std::move(innerIdTable), std::move(mergedVocab)};
+          }
         }
       }
     }

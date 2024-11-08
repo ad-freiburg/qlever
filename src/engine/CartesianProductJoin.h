@@ -115,13 +115,16 @@ class CartesianProductJoin : public Operation {
   // smaller than the `chunkSize_` when multipliying their respective sizes with
   // each other. This value has to be at least one. This also means that tables
   // yielded by this generator will always be smaller than `chunkSize_` or the
-  // size of the leftmost result, whichever is bigger. The `limit` parameter can
-  // be used to pass a custom limit. If `offsetPtr` is not `nullptr`, it will be
+  // size of the leftmost result, whichever is bigger. The `yieldEmptyTables`
+  // parameter indicates if empty tables should be yielded at all. This is
+  // useful to keep track of offsets correctly. The `limit` parameter can be
+  // used to pass a custom limit. If `offsetPtr` is not `nullptr`, it will be
   // used to act as the offset and automatically get updated during iteration.
   Result::Generator createLazyProducer(
       LocalVocab staticMergedVocab,
       std::vector<std::shared_ptr<const Result>> subresults,
-      size_t offsetFromFront, std::optional<size_t> limit = std::nullopt,
+      size_t offsetFromFront, bool yieldEmptyTables = false,
+      std::optional<size_t> limit = std::nullopt,
       size_t* offsetPtr = nullptr) const;
 
   // Similar to `createLazyProducer`, but it works with an additional single
