@@ -3,7 +3,7 @@
 // Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
-#include <gtest/gtest.h>
+#include <gmock/gmock.h>
 
 #include <algorithm>
 
@@ -120,7 +120,7 @@ TEST(Algorithm, Flatten) {
 }
 
 // _____________________________________________________________________________
-TEST(AlgorithmTest, removeDuplicates) {
+TEST(Algorithm, removeDuplicates) {
   // Test with ints.
   ASSERT_EQ(ad_utility::removeDuplicates(std::vector<int>{4, 6, 6, 2, 2, 4, 2}),
             (std::vector<int>{4, 6, 2}));
@@ -137,7 +137,7 @@ TEST(AlgorithmTest, removeDuplicates) {
 };
 
 // _____________________________________________________________________________
-TEST(AlgorithmTest, ZipVectors) {
+TEST(Algorithm, ZipVectors) {
   // Vectors of different size are not allowed.
   ASSERT_ANY_THROW(
       zipVectors(std::vector<size_t>{1}, std::vector<size_t>{1, 2}));
@@ -156,7 +156,7 @@ TEST(AlgorithmTest, ZipVectors) {
 };
 
 // ___________________________________________________________________________
-TEST(AlgorithmTest, transformArray) {
+TEST(Algorithm, transformArray) {
   using namespace std::string_literals;
   auto inc = [](int x) { return x + 2; };
   ASSERT_EQ(transformArray(std::array{1, 3, 5}, inc), (std::array{3, 5, 7}));
@@ -165,7 +165,7 @@ TEST(AlgorithmTest, transformArray) {
             (std::array{"a"s, "aaa"s, "aaaaa"s}));
 }
 
-TEST(AlgorithmTest, lowerUpperBoundIterator) {
+TEST(Algorithm, lowerUpperBoundIterator) {
   std::vector<size_t> input;
   FastRandomIntGenerator<size_t> randomGenerator;
   std::ranges::generate_n(std::back_inserter(input), 1000,
@@ -185,4 +185,73 @@ TEST(AlgorithmTest, lowerUpperBoundIterator) {
                                                value, compForUpperBound),
               std::ranges::upper_bound(input, value));
   }
+}
+
+// _____________________________________________________________________________
+TEST(Algorithm, dynamicCartesianProduct) {
+  std::vector<std::vector<int>> values{{1, 2, 3}, {4, 5}, {6, 7, 8}};
+  std::vector<std::vector<int>> expected{
+      {1, 4, 6}, {1, 4, 7}, {1, 4, 8}, {1, 5, 6}, {1, 5, 7}, {1, 5, 8},
+      {2, 4, 6}, {2, 4, 7}, {2, 4, 8}, {2, 5, 6}, {2, 5, 7}, {2, 5, 8},
+      {3, 4, 6}, {3, 4, 7}, {3, 4, 8}, {3, 5, 6}, {3, 5, 7}, {3, 5, 8}};
+
+  auto result = cartesianProduct(std::move(values));
+  std::vector<std::vector<int>> resultVec;
+  for (const auto& vec : result) {
+    resultVec.emplace_back(vec.begin(), vec.end());
+  }
+  EXPECT_EQ(resultVec, expected);
+}
+
+// _____________________________________________________________________________
+TEST(Algorithm, dynamicCartesianProductWithStrings) {
+  std::vector<std::string_view> values{"abc", "def"};
+  std::vector<std::string_view> expected{"ad", "ae", "af", "bd", "be",
+                                         "bf", "cd", "ce", "cf"};
+
+  auto result = cartesianProduct(std::move(values));
+  std::vector<std::string> resultVec;
+  for (const auto& vec : result) {
+    resultVec.emplace_back(vec.begin(), vec.end());
+  }
+  EXPECT_THAT(resultVec, ::testing::ElementsAreArray(expected));
+}
+
+// _____________________________________________________________________________
+TEST(Algorithm, dynamicCartesianProductRanges) {
+  std::vector<std::ranges::iota_view<int, int>> values{{1, 4}, {4, 6}, {6, 9}};
+  std::vector<std::vector<int>> expected{
+      {1, 4, 6}, {1, 4, 7}, {1, 4, 8}, {1, 5, 6}, {1, 5, 7}, {1, 5, 8},
+      {2, 4, 6}, {2, 4, 7}, {2, 4, 8}, {2, 5, 6}, {2, 5, 7}, {2, 5, 8},
+      {3, 4, 6}, {3, 4, 7}, {3, 4, 8}, {3, 5, 6}, {3, 5, 7}, {3, 5, 8}};
+
+  auto result = cartesianProduct(std::move(values));
+  std::vector<std::vector<int>> resultVec;
+  for (const auto& vec : result) {
+    resultVec.emplace_back(vec.begin(), vec.end());
+  }
+  EXPECT_EQ(resultVec, expected);
+}
+
+// _____________________________________________________________________________
+TEST(Algorithm, dynamicCartesianProductFailsOnEmptySubrange) {
+  std::vector<std::string_view> values{"abc", {}, "def"};
+
+  auto result = cartesianProduct(std::move(values));
+  for ([[maybe_unused]] const auto& vec : result) {
+    ADD_FAILURE() << "This should not be called";
+  }
+}
+
+// _____________________________________________________________________________
+TEST(Algorithm, dynamicCartesianProductShouldYieldEmptyRangeOnEmptyInput) {
+  std::vector<std::string_view> values{};
+
+  auto result = cartesianProduct(std::move(values));
+  size_t counter = 0;
+  for (const auto& vec : result) {
+    EXPECT_THAT(vec, ::testing::IsEmpty());
+    counter++;
+  }
+  EXPECT_EQ(counter, 1);
 }

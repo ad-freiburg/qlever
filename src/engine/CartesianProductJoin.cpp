@@ -5,6 +5,7 @@
 #include "engine/CartesianProductJoin.h"
 
 #include "engine/CallFixedSize.h"
+#include "util/Algorithm.h"
 
 // ____________________________________________________________________________
 CartesianProductJoin::CartesianProductJoin(
@@ -123,47 +124,6 @@ size_t CartesianProductJoin::writeResultColumn(std::span<Id> targetColumn,
     // only the first round might be incomplete because of the offset, all
     // subsequent rounds start at 0.
     firstInputElementIdx = 0;
-  }
-}
-
-// Helper function to compute the cartesian product of a range of ranges. For an
-// empty range of ranges, it yields once with an empty vector. If any of the
-// subranges are empty it returns without yielding any elements.
-auto dynamicCartesianProduct(std::ranges::random_access_range auto values)
-    -> cppcoro::generator<const std::vector<std::ranges::iterator_t<
-        std::ranges::range_reference_t<decltype(values)>>>>
-    requires(std::ranges::random_access_range<
-             std::ranges::range_reference_t<decltype(values)>>) {
-  using namespace std::ranges;
-  if (any_of(values, empty)) {
-    co_return;
-  }
-  std::vector<iterator_t<range_reference_t<decltype(values)>>> currentIterators;
-  if (empty(values)) {
-    co_yield currentIterators;
-    co_return;
-  }
-
-  currentIterators.reserve(size(values));
-  for (const auto& value : values) {
-    currentIterators.push_back(begin(value));
-  }
-
-  while (true) {
-    co_yield currentIterators;
-    // co_yield transform(currentIterators, [](const auto& elem) ->
-    // decltype(auto) { return *elem; });
-    for (size_t i = 0; i < currentIterators.size(); i++) {
-      size_t currentIndex = currentIterators.size() - 1 - i;
-      currentIterators[currentIndex]++;
-      if (currentIterators[currentIndex] != end(values[currentIndex])) {
-        break;
-      }
-      if (currentIndex == 0) {
-        co_return;
-      }
-      currentIterators[currentIndex] = begin(values[currentIndex]);
-    }
   }
 }
 
@@ -405,7 +365,8 @@ Result::Generator CartesianProductJoin::createLazyProducer(
   size_t actualLimit =
       limit.has_value() ? limit.value() : getLimit().limitOrDefault();
   size_t offset = offsetPtr ? *offsetPtr : getLimit()._offset;
-  for (auto& row : dynamicCartesianProduct(std::move(trailingTables))) {
+  for (const auto& row :
+       ad_utility::cartesianProduct(std::move(trailingTables))) {
     std::optional<IdTableWithMetadata> itwm =
         offsetFromFront < subresults.size()
             ? std::optional<IdTableWithMetadata>{{subresults
@@ -425,7 +386,7 @@ Result::Generator CartesianProductJoin::createLazyProducer(
         // TODO<RobinTF> consider skipping empty id tables.
         size_t currentColumn = columnOffset;
         for (const auto& partialRow : row) {
-          for (const ValueId& value : *partialRow) {
+          for (const ValueId& value : partialRow) {
             std::ranges::fill(idTable.getColumn(currentColumn), value);
             currentColumn++;
             checkCancellation();

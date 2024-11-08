@@ -3,8 +3,7 @@
 // Authors: Julian Mundhahs <mundhahj@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
-#ifndef QLEVER_ALGORITHM_H
-#define QLEVER_ALGORITHM_H
+#pragma once
 
 #include <algorithm>
 #include <numeric>
@@ -14,6 +13,7 @@
 
 #include "util/Exception.h"
 #include "util/Forward.h"
+#include "util/Generator.h"
 #include "util/HashSet.h"
 #include "util/Iterators.h"
 #include "util/TypeTraits.h"
@@ -130,8 +130,9 @@ std::vector<T> flatten(std::vector<std::vector<T>>&& input) {
 // copies could be avoided, but our current uses of this function are
 // currently not at all performance-critical (small `input` and small `T`).
 template <std::ranges::forward_range Range>
-auto removeDuplicates(const Range& input) -> std::vector<
-    typename std::iterator_traits<std::ranges::iterator_t<Range>>::value_type> {
+auto removeDuplicates(const Range& input)
+    -> std::vector<typename std::iterator_traits<
+        std::ranges::iterator_t<Range>>::value_type> {
   using T =
       typename std::iterator_traits<std::ranges::iterator_t<Range>>::value_type;
   std::vector<T> result;
@@ -211,6 +212,60 @@ constexpr ForwardIterator upper_bound_iterator(ForwardIterator first,
   return first;
 }
 
-}  // namespace ad_utility
+namespace detail {
+inline auto dereferenceValues(std::ranges::range auto&& input) {
+  return input | std::views::transform(
+                     [](const auto& elem) -> decltype(auto) { return *elem; });
+}
 
-#endif  // QLEVER_ALGORITHM_H
+// TODO<C++23> Use `std::ranges::const_iterator_t` instead of this custom type.
+template <std::ranges::range R>
+using const_iterator_t = decltype(std::ranges::cbegin(std::declval<R&>()));
+
+template <typename T>
+using NestedIterator = const_iterator_t<std::ranges::range_reference_t<T>>;
+}  // namespace detail
+
+// Helper function to compute the cartesian product of a range of ranges. For an
+// empty range of ranges, it yields once with an empty vector. If any of the
+// subranges are empty it returns without yielding any elements.
+// Semantics are similar to `std::ranges::views::cartesian_product`.
+template <std::ranges::random_access_range Range>
+auto cartesianProduct(Range values)
+    -> cppcoro::generator<const decltype(detail::dereferenceValues(
+        std::declval<std::vector<detail::NestedIterator<Range>>&>()))>
+    requires(
+        std::ranges::random_access_range<std::ranges::range_reference_t<Range>>)
+{
+  using namespace std::ranges;
+  if (any_of(values, empty)) {
+    co_return;
+  }
+  std::vector<detail::NestedIterator<Range>> currentIterators;
+  if (empty(values)) {
+    co_yield detail::dereferenceValues(currentIterators);
+    co_return;
+  }
+
+  currentIterators.reserve(size(values));
+  for (const auto& value : values) {
+    currentIterators.push_back(cbegin(value));
+  }
+
+  while (true) {
+    co_yield detail::dereferenceValues(currentIterators);
+    for (size_t i = 0; i < currentIterators.size(); i++) {
+      size_t currentIndex = currentIterators.size() - 1 - i;
+      currentIterators[currentIndex]++;
+      if (currentIterators[currentIndex] != cend(values[currentIndex])) {
+        break;
+      }
+      if (currentIndex == 0) {
+        co_return;
+      }
+      currentIterators[currentIndex] = cbegin(values[currentIndex]);
+    }
+  }
+}
+
+}  // namespace ad_utility
