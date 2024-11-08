@@ -130,9 +130,8 @@ std::vector<T> flatten(std::vector<std::vector<T>>&& input) {
 // copies could be avoided, but our current uses of this function are
 // currently not at all performance-critical (small `input` and small `T`).
 template <std::ranges::forward_range Range>
-auto removeDuplicates(const Range& input)
-    -> std::vector<typename std::iterator_traits<
-        std::ranges::iterator_t<Range>>::value_type> {
+auto removeDuplicates(const Range& input) -> std::vector<
+    typename std::iterator_traits<std::ranges::iterator_t<Range>>::value_type> {
   using T =
       typename std::iterator_traits<std::ranges::iterator_t<Range>>::value_type;
   std::vector<T> result;
