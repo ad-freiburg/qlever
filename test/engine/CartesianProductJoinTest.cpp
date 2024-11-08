@@ -542,18 +542,21 @@ TEST_P(CartesianProductJoinLazyTest, tablesAccumulatedBiggerThanChunk) {
 
   IdTable table2{2, ad_utility::testing::makeAllocator()};
   table2.resize(rootSize);
-  std::ranges::copy(std::views::iota(static_cast<int64_t>(0),
-                                     static_cast<int64_t>(rootSize)) |
+  std::ranges::copy(std::views::iota(static_cast<int64_t>(rootSize),
+                                     static_cast<int64_t>(rootSize * 2)) |
                         std::views::transform(Id::makeFromInt),
                     table2.getColumn(0).begin());
-  std::ranges::copy(std::views::iota(static_cast<int64_t>(-rootSize),
-                                     static_cast<int64_t>(0)) |
+  std::ranges::copy(std::views::iota(static_cast<int64_t>(-rootSize * 2),
+                                     static_cast<int64_t>(-rootSize)) |
                         std::views::transform(Id::makeFromInt),
                     table2.getColumn(1).begin());
 
   std::vector<IdTable> tables;
   tables.push_back(std::move(table1));
   tables.push_back(std::move(table2));
+  tables.push_back(makeIdTableFromVector({{0, 10}, {1, 11}, {2, 12}}));
+  tables.push_back(
+      makeIdTableFromVector({{100, 1000}, {101, 1001}, {102, 1002}}));
 
   auto occurenceCounts = getOccurenceCountWithoutLimit(tables);
   auto valueCount = getValueCount(tables);
