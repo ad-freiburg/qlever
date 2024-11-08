@@ -955,12 +955,25 @@ ExportQueryExecutionTrees::computeResultAsQLeverJSON(
       std::chrono::duration_cast<std::chrono::milliseconds>(
           timeUntilFunctionCall + runtimeInformation.totalTime_);
 
+  // NOTE: The `resultsizeExported` is the number of bindings exported. This is
+  // redundant information (we could simply count the number of entries in the
+  // `res` array), but it is useful for testing and emphasizes that
+  // `resultsize`can be (and sometimes is) something different.
+  //
+  // The `resultsize` is what `getRowIndices` computes. If the query LIMIT is
+  // larger than the export limit (valu of the "send" parameter), then
+  // `resultsize` is typically larger. Also, for CONSTRUCT queries, it is the
+  // size of the result of the WHERE clause, which can be (and typically is)
+  // different from the number of the results of the CONSTRUCT query if the
+  // CONSTRUCT clause has multiple triples or some of these triples do not
+  // materialize (e.g. because of undefined variables).
   nlohmann::json jsonSuffix;
   jsonSuffix["runtimeInformation"]["meta"] = nlohmann::ordered_json(
       qet.getRootOperation()->getRuntimeInfoWholeQuery());
   jsonSuffix["runtimeInformation"]["query_execution_tree"] =
       nlohmann::ordered_json(runtimeInformation);
   jsonSuffix["resultsize"] = resultSize;
+  jsonSuffix["resultsizeExported"] = numBindingsExported;
   jsonSuffix["time"]["total"] =
       absl::StrCat(requestTimer.msecs().count(), "ms");
   jsonSuffix["time"]["computeResult"] =

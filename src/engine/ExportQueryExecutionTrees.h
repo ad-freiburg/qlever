@@ -131,17 +131,17 @@ class ExportQueryExecutionTrees {
   // `StringTriple`s.
   static cppcoro::generator<QueryExecutionTree::StringTriple>
   constructQueryResultToTriples(
-      const QueryExecutionTree &qet,
-      const ad_utility::sparql_types::Triples &constructTriples,
+      const QueryExecutionTree& qet,
+      const ad_utility::sparql_types::Triples& constructTriples,
       LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
-      uint64_t &resultSize, CancellationHandle cancellationHandle);
+      uint64_t& resultSize, CancellationHandle cancellationHandle);
 
   // Helper function that generates the result of a CONSTRUCT query as a
   // CSV or TSV stream.
   template <MediaType format>
   static ad_utility::streams::stream_generator constructQueryResultToStream(
-      const QueryExecutionTree &qet,
-      const ad_utility::sparql_types::Triples &constructTriples,
+      const QueryExecutionTree& qet,
+      const ad_utility::sparql_types::Triples& constructTriples,
       LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
       CancellationHandle cancellationHandle);
 

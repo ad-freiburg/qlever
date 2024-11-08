@@ -105,10 +105,14 @@ struct TestCaseAskQuery {
   std::string resultXml;
 };
 
+// For a CONSTRUCT query, the `resultsize` of the QLever JSON is the number of
+// results of the WHERE clause, hence we include that here.
 struct TestCaseConstructQuery {
   std::string kg;                   // The knowledge graph (TURTLE)
   std::string query;                // The query (SPARQL)
   size_t resultSize;                // The expected number of results.
+  size_t resultSizeWhereClause;     // The expected number of results of the
+                                    // WHERE clause.
   std::string resultTsv;            // The expected result in TSV format.
   std::string resultCsv;            // The expected result in CSV format
   std::string resultTurtle;         // The expected result in Turtle format
@@ -171,7 +175,9 @@ void runConstructQueryTestCase(
   auto qleverJSONStreamResult = nlohmann::json::parse(
       runQueryStreamableResult(testCase.kg, testCase.query, qleverJson));
   ASSERT_EQ(qleverJSONStreamResult["query"], testCase.query);
-  ASSERT_EQ(qleverJSONStreamResult["resultsize"], testCase.resultSize);
+  // The `resultsize` is the number of results of the WHERE clause, which is `2`.
+  ASSERT_EQ(qleverJSONStreamResult["resultsize"], 3ul);
+  ASSERT_EQ(qleverJSONStreamResult["resultsizeExported"], testCase.resultSize);
   EXPECT_EQ(qleverJSONStreamResult["res"], testCase.resultQLeverJSON);
   EXPECT_EQ(runQueryStreamableResult(testCase.kg, testCase.query, turtle),
             testCase.resultTurtle);
