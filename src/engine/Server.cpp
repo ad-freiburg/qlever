@@ -888,12 +888,16 @@ Awaitable<void> Server::processUpdate(
                      plannedQuery.parsedQuery_._originalString));
   }
 
-  // TODO: activate once #1603 is merged
-  // auto& deltaTriples = index_.deltaTriplesManager();
-  auto deltaTriples = DeltaTriples(index_);
-  // TODO: will work, once #1607 is merged
-  ExecuteUpdate::executeUpdate(index_, plannedQuery.parsedQuery_, qet,
-                               deltaTriples, cancellationHandle);
+  // Update the delta triples.
+  //
+  // TODO: This does not yet handle concurrent updates correctly, but it should
+  // work fine when a new update is sent only after the previous one has
+  // finished.
+  auto& deltaTriplesManager = index_.deltaTriplesManager();
+  deltaTriplesManager.modify([&](auto& deltaTriples) {
+    ExecuteUpdate::executeUpdate(index_, plannedQuery.parsedQuery_, qet,
+                                 deltaTriples, cancellationHandle);
+  });
 
   LOG(INFO) << "Done processing update"
             << ", total time was " << requestTimer.msecs().count() << " ms"
