@@ -1,8 +1,8 @@
 // Copyright 2023 - 2024, University of Freiburg
-//  Chair of Algorithms and Data Structures.
-//  Authors:
-//    2023 Hannah Bast <bast@cs.uni-freiburg.de>
-//    2024 Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
+// Chair of Algorithms and Data Structures
+// Authors: Hannah Bast <bast@cs.uni-freiburg.de>
+//          Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
+//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 #include "index/DeltaTriples.h"
 
@@ -179,8 +179,9 @@ LocatedTriplesSnapshot::getLocatedTriplesForPermutation(
 
 // ____________________________________________________________________________
 SharedLocatedTriplesSnapshot DeltaTriples::getSnapshot() const {
-  // Note: Semantically, both the members are copied, but the `localVocab_` has
-  // no explicit copy constructor, hence the explicit `clone`.
+  // NOTE: Both members of the `LocatedTriplesSnapshot` are copied, but the
+  // `localVocab_` has no copy constructor (in order to avoid accidental
+  // copies), hence the explicit `clone`.
   return SharedLocatedTriplesSnapshot{std::make_shared<LocatedTriplesSnapshot>(
       locatedTriples(), localVocab_.clone())};
 }

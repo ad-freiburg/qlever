@@ -1,8 +1,8 @@
 // Copyright 2023 - 2024, University of Freiburg
-//  Chair of Algorithms and Data Structures.
-//  Authors:
-//    2023 Hannah Bast <bast@cs.uni-freiburg.de>
-//    2024 Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
+// Chair of Algorithms and Data Structures
+// Authors: Hannah Bast <bast@cs.uni-freiburg.de>
+//          Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
+//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 #pragma once
 
@@ -31,8 +31,8 @@ struct LocatedTriplesSnapshot {
       Permutation::Enum permutation) const;
 };
 
-// A `shared_ptr` to a const `LocatedTriplesSnapshot`, but as an explicit class,
-// s.t. it can be forward-declared.
+// A shared pointer to a constant `LocatedTriplesSnapshot`, but as an explicit
+// class, such that it can be forward-declared.
 class SharedLocatedTriplesSnapshot
     : public std::shared_ptr<const LocatedTriplesSnapshot> {};
 
@@ -194,21 +194,13 @@ class DeltaTriplesManager {
   explicit DeltaTriplesManager(const IndexImpl& index);
   FRIEND_TEST(DeltaTriplesTest, DeltaTriplesManager);
 
-  // Modify the underlying `DeltaTriples` by applying the `function` to them.
-  // Then update the current snapshot, s.t. subsequent calls to
-  // `getCurrentSnapshot` will observe the modifications. All this is done in a
-  // thread-safe way, meaning that there can be only one call to `modify` at the
-  // same time.
+  // Modify the underlying `DeltaTriples` by applying `function` and then update
+  // the current snapshot. Concurrent calls to `modify` will be serialized, and
+  // each call to `getCurrentSnapshot` will either return the snapshot before or
+  // after a modification, but never one of an ongoing modification.
   void modify(std::function<void(DeltaTriples&)> function);
 
-  // Return a `SharedLocatedTriplesSnapshot` that contains a deep copy of the
-  // state of the underlying `DeltaTriples` after the last completed UPDATE, and
-  // thus is not affected by future UPDATE requests. It can therefore be used to
-  // execute a query in a consistent way.
+  // Return a shared pointer to a deep copy of the current snapshot. This can
+  // be safely used to execute a query without interfering with future updates.
   SharedLocatedTriplesSnapshot getCurrentSnapshot() const;
 };
-
-// DELTA TRIPLES AND THE CACHE
-//
-// Changes to the DeltaTriples invalidate all cache results that have an index
-// scan in their subtree, which is almost all entries in practice.

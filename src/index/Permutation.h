@@ -1,6 +1,7 @@
-// Copyright 2018, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Johannes Kalmbach<joka921> (johannes.kalmbach@gmail.com)
+// Copyright 2018 - 2024, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+
 #pragma once
 
 #include <array>
@@ -148,20 +149,21 @@ class Permutation {
   const Permutation& getActualPermutation(const ScanSpecification& spec) const;
   const Permutation& getActualPermutation(Id id) const;
 
+  // From the given snapshot, get the located triples for this permutation.
   const LocatedTriplesPerBlock& getLocatedTriplesForPermutation(
       const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
 
   const CompressedRelationReader& reader() const { return reader_.value(); }
 
  private:
-  // for Log output, e.g. "POS"
+  // Readable name for this permutation, e.g., `POS`.
   std::string readableName_;
-  // e.g. ".pos"
+  // File name suffix for this permutation, e.g., `.pos`.
   std::string fileSuffix_;
-  // order of the 3 keys S(0), P(1), and O(2) for which this permutation is
-  // sorted, for example {1, 0, 2} for PSO.
+  // The order of the three components (S=0, P=1, O=2) in this permutation,
+  // e.g., `{1, 0, 2}` for `PSO`.
   array<size_t, 3> keyOrder_;
-
+  // The metadata for this permutation.
   MetaData meta_;
 
   // This member is `optional` because we initialize it in a deferred way in the

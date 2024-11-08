@@ -1,8 +1,7 @@
-// Copyright 2011, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author:
-//   2011-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
-//   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
+// Copyright 2011 - 2024, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de> [2011 - 2017]
+//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de> [2017 - 2024]
 
 #pragma once
 
@@ -127,9 +126,10 @@ class QueryExecutionContext {
  private:
   const Index& _index;
 
-  // When the `QueryExecutionContext` is constructed, get a stable snapshot of
-  // the current UPDATE status from the `DeltaTriplesManager`, which can then by
-  // used by the query without interfering with concurrent UPDATEs.
+  // When the `QueryExecutionContext` is constructed, get a stable read-only
+  // snapshot of the current (located) delta triples. These can then be used
+  // by the respective query without interfering with further incoming
+  // update operations.
   SharedLocatedTriplesSnapshot sharedLocatedTriplesSnapshot{
       _index.deltaTriplesManager().getCurrentSnapshot()};
   QueryResultCache* const _subtreeCache;
