@@ -186,10 +186,12 @@ class ExportQueryExecutionTrees {
   // counted towards the `totalResultSize`, but not yielded.
   //
   // Blocks after the LIMIT are not even requested.
+ public:
   static cppcoro::generator<TableWithRange> getRowIndices(
       LimitOffsetClause limitOffset, const Result& result,
       uint64_t& resutSizeTotal);
 
+ private:
   FRIEND_TEST(ExportQueryExecutionTrees, getIdTablesReturnsSingletonIterator);
   FRIEND_TEST(ExportQueryExecutionTrees, getIdTablesMirrorsGenerator);
   FRIEND_TEST(ExportQueryExecutionTrees, ensureCorrectSlicingOfSingleIdTable);
