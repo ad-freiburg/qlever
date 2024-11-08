@@ -148,21 +148,17 @@ void runSelectQueryTestCase(
                                               sparqlXml, useTextIndex);
   EXPECT_EQ(testCase.resultXml, xmlAsString);
 
-  // Test interaction of `limit` and `exportLimit`.
+  // Test interaction of `limit` and `exportLimit`. The `resultsize` should be
+  // correct, no matter what the `exportLimit` is.
   qleverJSONResult = nlohmann::json::parse(runQueryStreamableResult(
       testCase.kg, testCase.query, qleverJson, useTextIndex, 2ul, 5ul));
-  ASSERT_EQ(qleverJSONResult["sent"], std::min(2ul, testCase.resultSize));
+  ASSERT_EQ(qleverJSONResult["resultsize"], std::min(2ul, testCase.resultSize));
   qleverJSONResult = nlohmann::json::parse(runQueryStreamableResult(
       testCase.kg, testCase.query, qleverJson, useTextIndex, 2ul, 0ul));
-  ASSERT_EQ(qleverJSONResult["sent"], 0);
+  ASSERT_EQ(qleverJSONResult["resultsize"], std::min(2ul, testCase.resultSize));
 }
 
 // Run a single test case for a CONSTRUCT query.
-//
-// NOTE: For `CONSTRUCT` queries, it can currently happen that the internal
-// `result` is (potentially much) larger than what we return because undefined
-// values are filtered out. Hence we here compare `testCase.resultSize` to the
-// value of "sent", and not to "resultsize" like for `SELECT` queries.
 void runConstructQueryTestCase(
     const TestCaseConstructQuery& testCase,
     ad_utility::source_location l = ad_utility::source_location::current()) {
@@ -175,18 +171,21 @@ void runConstructQueryTestCase(
   auto qleverJSONStreamResult = nlohmann::json::parse(
       runQueryStreamableResult(testCase.kg, testCase.query, qleverJson));
   ASSERT_EQ(qleverJSONStreamResult["query"], testCase.query);
-  ASSERT_EQ(qleverJSONStreamResult["sent"], testCase.resultSize);
+  ASSERT_EQ(qleverJSONStreamResult["resultsize"], testCase.resultSize);
   EXPECT_EQ(qleverJSONStreamResult["res"], testCase.resultQLeverJSON);
   EXPECT_EQ(runQueryStreamableResult(testCase.kg, testCase.query, turtle),
             testCase.resultTurtle);
 
-  // Test interaction of `limit` and `exportLimit`.
+  // Test interaction of `limit` and `exportLimit`. The `resultsize` should be
+  // correct, no matter what the `exportLimit` is.
   qleverJSONStreamResult = nlohmann::json::parse(runQueryStreamableResult(
       testCase.kg, testCase.query, qleverJson, false, 2ul, 5ul));
-  ASSERT_EQ(qleverJSONStreamResult["sent"], std::min(2ul, testCase.resultSize));
+  ASSERT_EQ(qleverJSONStreamResult["resultsize"],
+            std::min(2ul, testCase.resultSize));
   qleverJSONStreamResult = nlohmann::json::parse(runQueryStreamableResult(
       testCase.kg, testCase.query, qleverJson, false, 2ul, 0ul));
-  ASSERT_EQ(qleverJSONStreamResult["sent"], 0ul);
+  ASSERT_EQ(qleverJSONStreamResult["resultsize"],
+            std::min(2ul, testCase.resultSize));
 }
 
 // Run a single test case for an ASK query.

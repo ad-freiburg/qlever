@@ -784,23 +784,18 @@ Awaitable<void> Server::processQuery(
   auto qet = plannedQuery.queryExecutionTree_;
 
   if (plannedQuery.parsedQuery_.hasUpdateClause()) {
-    throw std::runtime_error("Expected Query but received Update.");
+    throw std::runtime_error("Expected normal query but received update query");
   }
 
-  // Read the export limit from the `send` parameter (historical name). This
+  // Read the export limit from the send` parameter (historical name). This
   // limits the number of bindings exported in `ExportQueryExecutionTrees`.
-  // Even without "send" parameter, JSON exports are limited to
-  // `MAX_NOF_ROWS_IN_RESULT` bindings.
+  // It should only have an effect for the QLever JSON export.
   auto& limitOffset = plannedQuery.parsedQuery_._limitOffset;
   auto& exportLimit = limitOffset.exportLimit_;
   auto sendParameter =
       ad_utility::url_parser::getParameterCheckAtMostOnce(params, "send");
-  if (sendParameter.has_value()) {
+  if (sendParameter.has_value() && mediaType == MediaType::qleverJson) {
     exportLimit = std::stoul(sendParameter.value());
-  }
-  if (!exportLimit.has_value() && (mediaType == MediaType::sparqlJson ||
-                                   mediaType == MediaType::qleverJson)) {
-    exportLimit = MAX_NOF_ROWS_IN_RESULT;
   }
 
   // Make sure that the offset is not applied again when exporting the result

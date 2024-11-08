@@ -87,10 +87,10 @@ ExportQueryExecutionTrees::getIdTables(const Result& result) {
 cppcoro::generator<ExportQueryExecutionTrees::TableWithRange>
 ExportQueryExecutionTrees::getRowIndices(LimitOffsetClause limitOffset,
                                          const Result& result,
-                                         uint64_t& resultSizeTotal) {
-  // The first call initializes the `resultSizeTotal` to zero (no need to
+                                         uint64_t& resultSize) {
+  // The first call initializes the `resultSize` to zero (no need to
   // initialize it outside of the function).
-  resultSizeTotal = 0;
+  resultSize = 0;
 
   // If the LIMIT is zero, there are no blocks to yield and the total result
   // size is zero.
@@ -146,10 +146,10 @@ ExportQueryExecutionTrees::getRowIndices(LimitOffsetClause limitOffset,
                 std::views::iota(rangeBegin, rangeBegin + numRowsToBeExported)};
     }
 
-    // Add to `resultSizeTotal` and update the effective limits (make sure to
+    // Add to `resultSize` and update the effective limits (make sure to
     // never go below zero and `std::numeric_limits<uint64_t>::max()` stays
     // there).
-    resultSizeTotal += numRowsToBeCounted;
+    resultSize += numRowsToBeCounted;
     auto reduceLimit = [&](uint64_t& limit, uint64_t subtrahend) {
       if (limit != std::numeric_limits<uint64_t>::max()) {
         limit = limit > subtrahend ? limit - subtrahend : 0;
@@ -166,10 +166,9 @@ ExportQueryExecutionTrees::constructQueryResultToTriples(
     const QueryExecutionTree& qet,
     const ad_utility::sparql_types::Triples& constructTriples,
     LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
-    CancellationHandle cancellationHandle) {
-  uint64_t resultSizeTotal = 0;
+    uint64_t& resultSize, CancellationHandle cancellationHandle) {
   for (const auto& [pair, range] :
-       getRowIndices(limitAndOffset, *result, resultSizeTotal)) {
+       getRowIndices(limitAndOffset, *result, resultSize)) {
     auto& idTable = pair.idTable_;
     for (uint64_t i : range) {
       ConstructQueryExportContext context{i, idTable, pair.localVocab_,
@@ -201,9 +200,10 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
         LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
         CancellationHandle cancellationHandle) {
   result->logResultSize();
-  auto generator =
-      constructQueryResultToTriples(qet, constructTriples, limitAndOffset,
-                                    result, std::move(cancellationHandle));
+  [[maybe_unused]] uint64_t resultSize = 0;
+  auto generator = constructQueryResultToTriples(
+      qet, constructTriples, limitAndOffset, result, resultSize,
+      std::move(cancellationHandle));
   for (const auto& triple : generator) {
     co_yield triple.subject_;
     co_yield ' ';
@@ -232,11 +232,12 @@ cppcoro::generator<std::string>
 ExportQueryExecutionTrees::constructQueryResultBindingsToQLeverJSON(
     const QueryExecutionTree& qet,
     const ad_utility::sparql_types::Triples& constructTriples,
-    const LimitOffsetClause& limitAndOffset, std::shared_ptr<const Result> res,
+    const LimitOffsetClause& limitAndOffset,
+    std::shared_ptr<const Result> result, uint64_t& resultSize,
     CancellationHandle cancellationHandle) {
-  auto generator = constructQueryResultToTriples(qet, constructTriples,
-                                                 limitAndOffset, std::move(res),
-                                                 std::move(cancellationHandle));
+  auto generator = constructQueryResultToTriples(
+      qet, constructTriples, limitAndOffset, std::move(result), resultSize,
+      std::move(cancellationHandle));
   for (auto& triple : generator) {
     auto binding = nlohmann::json::array({std::move(triple.subject_),
                                           std::move(triple.predicate_),
@@ -282,12 +283,11 @@ cppcoro::generator<std::string>
 ExportQueryExecutionTrees::idTableToQLeverJSONBindings(
     const QueryExecutionTree& qet, const LimitOffsetClause& limitAndOffset,
     const QueryExecutionTree::ColumnIndicesAndTypes columns,
-    std::shared_ptr<const Result> result,
+    std::shared_ptr<const Result> result, uint64_t& resultSize,
     CancellationHandle cancellationHandle) {
   AD_CORRECTNESS_CHECK(result != nullptr);
-  uint64_t resultSizeTotal = 0;
   for (const auto& [pair, range] :
-       getRowIndices(limitAndOffset, *result, resultSizeTotal)) {
+       getRowIndices(limitAndOffset, *result, resultSize)) {
     for (uint64_t rowIndex : range) {
       co_yield idTableToQLeverJSONRow(qet, columns, pair.localVocab_, rowIndex,
                                       pair.idTable_)
@@ -492,7 +492,7 @@ ExportQueryExecutionTrees::selectQueryResultBindingsToQLeverJSON(
     const QueryExecutionTree& qet,
     const parsedQuery::SelectClause& selectClause,
     const LimitOffsetClause& limitAndOffset,
-    std::shared_ptr<const Result> result,
+    std::shared_ptr<const Result> result, uint64_t& resultSize,
     CancellationHandle cancellationHandle) {
   AD_CORRECTNESS_CHECK(result != nullptr);
   LOG(DEBUG) << "Resolving strings for finished binary result...\n";
@@ -500,7 +500,7 @@ ExportQueryExecutionTrees::selectQueryResultBindingsToQLeverJSON(
       qet.selectedVariablesToColumnIndices(selectClause, true);
 
   return idTableToQLeverJSONBindings(qet, limitAndOffset, selectedColumnIndices,
-                                     std::move(result),
+                                     std::move(result), resultSize,
                                      std::move(cancellationHandle));
 }
 
@@ -531,9 +531,9 @@ ExportQueryExecutionTrees::selectQueryResultToStream(
 
   // special case : binary export of IdTable
   if constexpr (format == MediaType::octetStream) {
-    uint64_t resultSizeTotal = 0;
+    uint64_t resultSize = 0;
     for (const auto& [pair, range] :
-         getRowIndices(limitAndOffset, *result, resultSizeTotal)) {
+         getRowIndices(limitAndOffset, *result, resultSize)) {
       for (uint64_t i : range) {
         for (const auto& columnIndex : selectedColumnIndices) {
           if (columnIndex.has_value()) {
@@ -564,9 +564,9 @@ ExportQueryExecutionTrees::selectQueryResultToStream(
   constexpr auto& escapeFunction = format == MediaType::tsv
                                        ? RdfEscaping::escapeForTsv
                                        : RdfEscaping::escapeForCsv;
-  uint64_t resultSizeTotal = 0;
+  uint64_t resultSize = 0;
   for (const auto& [pair, range] :
-       getRowIndices(limitAndOffset, *result, resultSizeTotal)) {
+       getRowIndices(limitAndOffset, *result, resultSize)) {
     for (uint64_t i : range) {
       for (size_t j = 0; j < selectedColumnIndices.size(); ++j) {
         if (selectedColumnIndices[j].has_value()) {
@@ -691,9 +691,9 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
   auto selectedColumnIndices =
       qet.selectedVariablesToColumnIndices(selectClause, false);
   // TODO<joka921> we could prefilter for the nonexisting variables.
-  uint64_t resultSizeTotal = 0;
+  uint64_t resultSize = 0;
   for (const auto& [pair, range] :
-       getRowIndices(limitAndOffset, *result, resultSizeTotal)) {
+       getRowIndices(limitAndOffset, *result, resultSize)) {
     for (uint64_t i : range) {
       co_yield "\n  <result>";
       for (size_t j = 0; j < selectedColumnIndices.size(); ++j) {
@@ -760,9 +760,9 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
   };
 
   bool isFirstRow = true;
-  uint64_t resultSizeTotal = 0;
+  uint64_t resultSize = 0;
   for (const auto& [pair, range] :
-       getRowIndices(limitAndOffset, *result, resultSizeTotal)) {
+       getRowIndices(limitAndOffset, *result, resultSize)) {
     for (uint64_t i : range) {
       if (!isFirstRow) [[likely]] {
         co_yield ",";
@@ -803,9 +803,10 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
                                        ? RdfEscaping::escapeForTsv
                                        : RdfEscaping::escapeForCsv;
   constexpr char sep = format == MediaType::tsv ? '\t' : ',';
-  auto generator =
-      constructQueryResultToTriples(qet, constructTriples, limitAndOffset,
-                                    result, std::move(cancellationHandle));
+  [[maybe_unused]] uint64_t resultSize = 0;
+  auto generator = constructQueryResultToTriples(
+      qet, constructTriples, limitAndOffset, result, resultSize,
+      std::move(cancellationHandle));
   for (auto& triple : generator) {
     co_yield escapeFunction(std::move(triple.subject_));
     co_yield sep;
@@ -896,10 +897,6 @@ ExportQueryExecutionTrees::computeResultAsQLeverJSON(
   auto timeUntilFunctionCall = requestTimer.msecs();
   std::shared_ptr<const Result> result = qet.getResult(true);
   result->logResultSize();
-  std::optional<size_t> resultSizeOrNullopt =
-      result->isFullyMaterialized()
-          ? std::optional<size_t>(result->idTable().size())
-          : std::nullopt;
 
   nlohmann::json jsonPrefix;
 
@@ -921,34 +918,34 @@ ExportQueryExecutionTrees::computeResultAsQLeverJSON(
   co_yield absl::StrCat(prefixStr.substr(0, prefixStr.size() - 1),
                         R"(,"res":[)");
 
-  // Yield the bindings.
+  // Yield the bindings and compute the result size.
+  uint64_t resultSize = 0;
   auto bindings = [&]() {
     if (query.hasSelectClause()) {
       return selectQueryResultBindingsToQLeverJSON(
           qet, query.selectClause(), query._limitOffset, std::move(result),
-          std::move(cancellationHandle));
+          resultSize, std::move(cancellationHandle));
     } else if (query.hasConstructClause()) {
       return constructQueryResultBindingsToQLeverJSON(
           qet, query.constructClause().triples_, query._limitOffset,
-          std::move(result), std::move(cancellationHandle));
+          std::move(result), resultSize, std::move(cancellationHandle));
     } else {
       // TODO<joka921>: Refactor this to use std::visit.
       return askQueryResultToQLeverJSON(std::move(result));
     }
   }();
 
-  size_t numBindingsYielded = 0;
+  size_t numBindingsExported = 0;
   for (const std::string& b : bindings) {
-    if (numBindingsYielded > 0) [[likely]] {
+    if (numBindingsExported > 0) [[likely]] {
       co_yield ",";
     }
     co_yield b;
-    ++numBindingsYielded;
+    ++numBindingsExported;
   }
-  size_t resultSize = resultSizeOrNullopt.value_or(numBindingsYielded);
-  if (numBindingsYielded < resultSize) {
-    LOG(INFO) << "Number of bindings exported: " << numBindingsYielded << " of "
-              << resultSize << std::endl;
+  if (numBindingsExported < resultSize) {
+    LOG(INFO) << "Number of bindings exported: " << numBindingsExported
+              << " of " << resultSize << std::endl;
   }
 
   RuntimeInformation runtimeInformation = qet.getRootOperation()->runtimeInfo();
@@ -964,7 +961,6 @@ ExportQueryExecutionTrees::computeResultAsQLeverJSON(
   jsonSuffix["runtimeInformation"]["query_execution_tree"] =
       nlohmann::ordered_json(runtimeInformation);
   jsonSuffix["resultsize"] = resultSize;
-  jsonSuffix["sent"] = numBindingsYielded;
   jsonSuffix["time"]["total"] =
       absl::StrCat(requestTimer.msecs().count(), "ms");
   jsonSuffix["time"]["computeResult"] =
