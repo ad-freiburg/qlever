@@ -597,6 +597,51 @@ TEST_P(CartesianProductJoinLazyTest, twoTablesMatchChunkSize) {
 }
 
 // _____________________________________________________________________________
+TEST(CartesianProductJoinLazy, lazyTableTurnsOutEmpty) {
+  // Test we get an empty lazy result when the lazy table is empty.
+  auto* qec = ad_utility::testing::getQec();
+  IdTable nonEmpty = makeIdTableFromVector({{1}});
+  IdTable empty{1, ad_utility::testing::makeAllocator()};
+  CartesianProductJoin::Children children{};
+  children.push_back(ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, std::move(nonEmpty),
+      std::vector<std::optional<Variable>>{{Variable{"?a"}}}));
+  children.push_back(
+      ad_utility::makeExecutionTree<ValuesForTestingNoKnownEmptyResult>(
+          qec, std::move(empty),
+          std::vector<std::optional<Variable>>{{Variable{"?b"}}}));
+  CartesianProductJoin join{qec, std::move(children)};
+
+  auto result = join.computeResultOnlyForTesting(true);
+  ASSERT_FALSE(result.isFullyMaterialized());
+  auto& generator = result.idTables();
+  ASSERT_EQ(generator.begin(), generator.end());
+}
+
+// _____________________________________________________________________________
+TEST(CartesianProductJoinLazy, lazyTableTurnsOutEmptyWithEmptyGenerator) {
+  // Test we get an empty lazy result when the lazy operation returns an empty
+  // generator.
+  auto* qec = ad_utility::testing::getQec();
+  IdTable nonEmpty = makeIdTableFromVector({{1}});
+  IdTable empty{1, ad_utility::testing::makeAllocator()};
+  CartesianProductJoin::Children children{};
+  children.push_back(ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, std::move(nonEmpty),
+      std::vector<std::optional<Variable>>{{Variable{"?a"}}}));
+  children.push_back(
+      ad_utility::makeExecutionTree<ValuesForTestingNoKnownEmptyResult>(
+          qec, std::vector<IdTable>{},
+          std::vector<std::optional<Variable>>{{Variable{"?b"}}}));
+  CartesianProductJoin join{qec, std::move(children)};
+
+  auto result = join.computeResultOnlyForTesting(true);
+  ASSERT_FALSE(result.isFullyMaterialized());
+  auto& generator = result.idTables();
+  ASSERT_EQ(generator.begin(), generator.end());
+}
+
+// _____________________________________________________________________________
 
 using ::testing::Range;
 using ::testing::Values;
