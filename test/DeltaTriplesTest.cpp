@@ -319,3 +319,105 @@ TEST_F(DeltaTriplesTest, rewriteLocalVocabEntriesAndBlankNodes) {
   auto s4 = triples[0].ids_[0];
   EXPECT_EQ(s4.getBits(), blank0.getBits());
 }
+
+// _____________________________________________________________________________
+TEST_F(DeltaTriplesTest, DeltaTriplesManager) {
+  // Preparation.
+  DeltaTriplesManager deltaTriplesManager(testQec->getIndex().getImpl());
+  auto& vocab = testQec->getIndex().getVocab();
+  auto cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+  std::vector<ad_utility::JThread> threads;
+  static constexpr size_t numThreads = 18;
+  static constexpr size_t numIterations = 21;
+
+  // Insert and delete a well-defined set of triples, some independent and some
+  // dependent on the thread index. Check that the snapshot before in the
+  // middle of these updates is as expected.
+  auto insertAndDelete = [&](size_t threadIdx) {
+    LocalVocab localVocab;
+    SharedLocatedTriplesSnapshot beforeUpdate =
+        deltaTriplesManager.getCurrentSnapshot();
+    for (size_t i = 0; i < numIterations; ++i) {
+      // The first triple in both vectors is the same for all threads, the
+      // others are exclusive to this thread via the `threadIdx`.
+      auto triplesToInsert = makeIdTriples(
+          vocab, localVocab,
+          {"<A> <B> <C>", absl::StrCat("<A> <B> <D", threadIdx, ">"),
+           absl::StrCat("<A> <B> <E", threadIdx, ">")});
+      auto triplesToDelete = makeIdTriples(
+          vocab, localVocab,
+          {"<A> <C> <E>", absl::StrCat("<A> <B> <E", threadIdx, ">"),
+           absl::StrCat("<A> <B> <F", threadIdx, ">")});
+      // Insert the `triplesToInsert`.
+      deltaTriplesManager.modify([&](DeltaTriples& deltaTriples) {
+        deltaTriples.insertTriples(cancellationHandle, triplesToInsert);
+      });
+      // We should have successfully completed an update, so the snapshot
+      // pointer should have changed.
+      EXPECT_NE(beforeUpdate, deltaTriplesManager.getCurrentSnapshot());
+      // Delete the `triplesToDelete`.
+      deltaTriplesManager.modify([&](DeltaTriples& deltaTriples) {
+        deltaTriples.deleteTriples(cancellationHandle, triplesToDelete);
+      });
+
+      // Make some checks in the middle of these updates (while the other
+      // threads are likely to be in the middle of their updates as well).
+      if (i == numIterations / 2) {
+        {
+          // None of the thread-exclusive triples should be contained in the
+          // original snapshot and this should not change over time. The
+          // Boolean argument specifies whether the triple was inserted (`true`)
+          // or deleted (`false`).
+          const auto& locatedSPO =
+              beforeUpdate->getLocatedTriplesForPermutation(Permutation::SPO);
+          EXPECT_FALSE(locatedSPO.containsTriple(triplesToInsert.at(1), true));
+          EXPECT_FALSE(locatedSPO.containsTriple(triplesToInsert.at(1), false));
+          EXPECT_FALSE(locatedSPO.containsTriple(triplesToInsert.at(2), true));
+          EXPECT_FALSE(locatedSPO.containsTriple(triplesToInsert.at(2), false));
+          EXPECT_FALSE(locatedSPO.containsTriple(triplesToDelete.at(2), true));
+          EXPECT_FALSE(locatedSPO.containsTriple(triplesToDelete.at(2), false));
+        }
+        {
+          // Check for several of the thread-exclusive triples that they are
+          // properly contained in the current snapshot.
+          //
+          auto p = deltaTriplesManager.getCurrentSnapshot();
+          const auto& locatedSPO =
+              p->getLocatedTriplesForPermutation(Permutation::SPO);
+          EXPECT_TRUE(locatedSPO.containsTriple(triplesToInsert.at(1), true));
+          // This triple is exclusive to the thread and is inserted and then
+          // immediately deleted again. The `DeltaTriples` thus only store it as
+          // deleted. It might be contained in the original input, hence we
+          // cannot simply drop it.
+          EXPECT_TRUE(locatedSPO.containsTriple(triplesToInsert.at(2), false));
+          EXPECT_TRUE(locatedSPO.containsTriple(triplesToDelete.at(2), false));
+        }
+      }
+    }
+  };
+
+  // Run the above for each of `numThreads` threads, where each thread knows
+  // its index (used to create the thread-exclusive triples).
+  for (size_t i = 0; i < numThreads; ++i) {
+    threads.emplace_back(insertAndDelete, i);
+  }
+  threads.clear();
+
+  // Check that without updates, the snapshot pointer does not change.
+  auto p1 = deltaTriplesManager.getCurrentSnapshot();
+  auto p2 = deltaTriplesManager.getCurrentSnapshot();
+  EXPECT_EQ(p1, p2);
+
+  // Each of the threads above inserts on thread-exclusive triple, deletes one
+  // thread-exclusive triple and inserts one thread-exclusive triple that is
+  // deleted right after (This triple is stored as deleted in the `DeltaTriples`
+  // because it might be contained in the original input). Additionally, there
+  // is one common triple inserted by// all the threads and one common triple
+  // that is deleted by all the threads.
+  //
+
+  auto deltaImpl = deltaTriplesManager.deltaTriples_.rlock();
+  EXPECT_THAT(*deltaImpl, NumTriples(numThreads + 1, 2 * numThreads + 1,
+                                     3 * numThreads + 2));
+}
