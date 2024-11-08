@@ -55,17 +55,19 @@ namespace {
 // folded into the permutations as additional columns.
 void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
     const Index& index) {
-  DeltaTriples deltaTriples(index);
+  DeltaTriplesManager deltaTriplesManager(index.getImpl());
+  auto sharedLocatedTriplesSnapshot = deltaTriplesManager.getCurrentSnapshot();
+  const auto& locatedTriplesSnapshot = *sharedLocatedTriplesSnapshot;
   static constexpr size_t col0IdTag = 43;
   auto cancellationDummy = std::make_shared<ad_utility::CancellationHandle<>>();
   auto iriOfHasPattern =
       TripleComponent::Iri::fromIriref(HAS_PATTERN_PREDICATE);
   auto checkSingleElement = [&cancellationDummy, &iriOfHasPattern,
-                             &deltaTriples](const Index& index,
-                                            size_t patternIdx, Id id) {
+                             &locatedTriplesSnapshot](
+                                const Index& index, size_t patternIdx, Id id) {
     auto scanResultHasPattern = index.scan(
         ScanSpecificationAsTripleComponent{iriOfHasPattern, id, std::nullopt},
-        Permutation::Enum::PSO, {}, cancellationDummy, deltaTriples);
+        Permutation::Enum::PSO, {}, cancellationDummy, locatedTriplesSnapshot);
     // Each ID has at most one pattern, it can have none if it doesn't
     // appear as a subject in the knowledge graph.
     AD_CORRECTNESS_CHECK(scanResultHasPattern.numRows() <= 1);
@@ -86,7 +88,7 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
             ScanSpecification{col0Id, std::nullopt, std::nullopt}, permutation,
             std::array{ColumnIndex{ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN},
                        ColumnIndex{ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN}},
-            cancellationDummy, deltaTriples);
+            cancellationDummy, locatedTriplesSnapshot);
         ASSERT_EQ(scanResult.numColumns(), 4u);
         for (const auto& row : scanResult) {
           auto patternIdx = row[2].getInt();
@@ -112,12 +114,12 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
   auto cancellationHandle =
       std::make_shared<ad_utility::CancellationHandle<>>();
   auto predicates = index.getImpl().PSO().getDistinctCol0IdsAndCounts(
-      cancellationHandle, deltaTriples);
+      cancellationHandle, locatedTriplesSnapshot);
   for (const auto& predicate : predicates.getColumn(0)) {
     checkConsistencyForPredicate(predicate);
   }
   auto objects = index.getImpl().OSP().getDistinctCol0IdsAndCounts(
-      cancellationHandle, deltaTriples);
+      cancellationHandle, locatedTriplesSnapshot);
   for (const auto& object : objects.getColumn(0)) {
     checkConsistencyForObject(object);
   }

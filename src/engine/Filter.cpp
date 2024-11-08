@@ -122,41 +122,63 @@ void Filter::computeFilterImpl(IdTable& dynamicResultTable,
   sparqlExpression::ExpressionResult expressionResult =
       _expression.getPimpl()->evaluate(&evaluationContext);
 
-  // Note: the explicit (seemingly redundant) capture of `resultTable` is
+  // Filter `input` by `expressionResult` and store the result in `resultTable`.
+  // This is a lambda because `expressionResult` is a `std::variant`.
+  //
+  // NOTE: the explicit (seemingly redundant) capture of `resultTable` is
   // required to work around a bug in Clang 17, see
   // https://github.com/llvm/llvm-project/issues/61267
-  auto visitor =
+  auto computeResult =
       [this, &resultTable = resultTable, &input,
        &evaluationContext]<sparqlExpression::SingleExpressionResult T>(
           T&& singleResult) {
         if constexpr (std::is_same_v<T, ad_utility::SetOfIntervals>) {
+          AD_CONTRACT_CHECK(input.size() == evaluationContext.size());
+          // If the expression result is given as a set of intervals, we copy
+          // the corresponding parts of `input` to `resultTable`.
+          //
+          // NOTE: One of the interval ends may be larger than `input.size()`
+          // (as the result of a negation).
           auto totalSize = std::accumulate(
               singleResult._intervals.begin(), singleResult._intervals.end(),
-              resultTable.size(), [](const auto& sum, const auto& interval) {
-                return sum + (interval.second - interval.first);
+              resultTable.size(),
+              [&input](const auto& sum, const auto& interval) {
+                size_t intervalBegin = interval.first;
+                size_t intervalEnd = std::min(interval.second, input.size());
+                return sum + (intervalEnd - intervalBegin);
               });
           resultTable.reserve(totalSize);
           checkCancellation();
-          for (auto [beg, end] : singleResult._intervals) {
-            AD_CONTRACT_CHECK(end <= input.size());
-            resultTable.insertAtEnd(input.cbegin() + beg, input.cbegin() + end);
+          for (auto [intervalBegin, intervalEnd] : singleResult._intervals) {
+            intervalEnd = std::min(intervalEnd, input.size());
+            resultTable.insertAtEnd(input.cbegin() + intervalBegin,
+                                    input.cbegin() + intervalEnd);
             checkCancellation();
           }
           AD_CONTRACT_CHECK(resultTable.size() == totalSize);
         } else {
-          // All other results are converted to boolean values via the
-          // `EffectiveBooleanValueGetter`. This means for example, that zero,
-          // UNDEF, and empty strings are filtered out.
-          // TODO<joka921> Check whether it's feasible to precompute and reserve
-          // the total size. This depends on the expensiveness of the
-          // `EffectiveBooleanValueGetter`.
+          // In the general case, we generate all expression results and apply
+          // the `EffectiveBooleanValueGetter` to each.
+          //
+          // NOTE: According to the standard, this means that values like zero,
+          // UNDEF, and empty strings are converted to `false` and hence the
+          // corresponding rows from `input` are filtered out.
+          //
+          // TODO<joka921> Check whether it is feasible to precompute the
+          // number of `true` values and use that to reserve the right
+          // amount of space for `resultTable`, like we do it for the set of
+          // intervals above. This depends on how expensive the evaluation with
+          // the `EffectiveBooleanValueGetter` is.
           auto resultGenerator = sparqlExpression::detail::makeGenerator(
               std::forward<T>(singleResult), input.size(), &evaluationContext);
           size_t i = 0;
 
-          using EBV = sparqlExpression::detail::EffectiveBooleanValueGetter;
+          using ValueGetter =
+              sparqlExpression::detail::EffectiveBooleanValueGetter;
+          ValueGetter valueGetter{};
           for (auto&& resultValue : resultGenerator) {
-            if (EBV{}(resultValue, &evaluationContext) == EBV::Result::True) {
+            if (valueGetter(resultValue, &evaluationContext) ==
+                ValueGetter::Result::True) {
               resultTable.push_back(input[i]);
             }
             checkCancellation();
@@ -164,8 +186,7 @@ void Filter::computeFilterImpl(IdTable& dynamicResultTable,
           }
         }
       };
-
-  std::visit(visitor, std::move(expressionResult));
+  std::visit(computeResult, std::move(expressionResult));
 
   dynamicResultTable = std::move(resultTable).toDynamic();
   checkCancellation();

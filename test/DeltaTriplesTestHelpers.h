@@ -25,7 +25,7 @@ inline auto InAllPermutations =
             absl::StrCat(".getLocatedTriplesPerBlock(",
                          Permutation::toString(perm), ")"),
             [perm](const DeltaTriples& deltaTriples) {
-              return deltaTriples.getLocatedTriplesPerBlock(perm);
+              return deltaTriples.getLocatedTriplesForPermutation(perm);
             },
             InnerMatcher);
       }));
