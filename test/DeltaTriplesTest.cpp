@@ -412,7 +412,7 @@ TEST_F(DeltaTriplesTest, DeltaTriplesManager) {
   // deleted right after. Additionally, there is one common triple inserted by
   // all the threads and one common triple that is deleted by all the threads.
   //
-  // TODO(Hannah): I don't understand why the number of thread-exclusive delted
+  // TODO(Hannah): I don't understand why the number of thread-exclusive deleted
   // triples is twice that of the thread-exclusive inserted triples.
   auto deltaImpl = deltaTriplesManager.deltaTriples_.rlock();
   EXPECT_THAT(*deltaImpl, NumTriples(numThreads + 1, 2 * numThreads + 1,
