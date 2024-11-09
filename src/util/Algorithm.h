@@ -217,12 +217,9 @@ inline auto dereferenceValues(std::ranges::range auto&& input) {
                      [](const auto& elem) -> decltype(auto) { return *elem; });
 }
 
-// TODO<C++23> Use `std::ranges::const_iterator_t` instead of this custom type.
-template <std::ranges::range R>
-using const_iterator_t = decltype(std::ranges::cbegin(std::declval<R&>()));
-
 template <typename T>
-using NestedIterator = const_iterator_t<std::ranges::range_reference_t<T>>;
+using NestedIterator =
+    std::ranges::iterator_t<std::ranges::range_reference_t<T>>;
 }  // namespace detail
 
 // Helper function to compute the cartesian product of a range of ranges. For an
@@ -247,8 +244,8 @@ auto cartesianProduct(Range values)
   }
 
   currentIterators.reserve(size(values));
-  for (const auto& value : values) {
-    currentIterators.push_back(cbegin(value));
+  for (auto&& value : values) {
+    currentIterators.push_back(begin(value));
   }
 
   while (true) {
@@ -256,13 +253,13 @@ auto cartesianProduct(Range values)
     for (size_t i = 0; i < currentIterators.size(); i++) {
       size_t currentIndex = currentIterators.size() - 1 - i;
       currentIterators[currentIndex]++;
-      if (currentIterators[currentIndex] != cend(values[currentIndex])) {
+      if (currentIterators[currentIndex] != end(values[currentIndex])) {
         break;
       }
       if (currentIndex == 0) {
         co_return;
       }
-      currentIterators[currentIndex] = cbegin(values[currentIndex]);
+      currentIterators[currentIndex] = begin(values[currentIndex]);
     }
   }
 }
