@@ -791,17 +791,57 @@ INSTANTIATE_TEST_SUITE_P(
 
 namespace boundingBox {
 
-namespace bg = boost::geometry;
-namespace bgi = boost::geometry::index;
+using BoostGeometryNamespace::Box;
+using BoostGeometryNamespace::Point;
+using BoostGeometryNamespace::Value;
 
-typedef bg::model::point<double, 2, bg::cs::cartesian> point;
-typedef bg::model::box<point> box;
-typedef std::pair<point, size_t> value;
+// usage of this helper function for the bounding box to test:
+// Iterate over every edge of the bounding box. Furthermore iterate over each
+// edge (i.e. use 100 points, which are on the edge of the bounding box). Then
+// call this function for each of those points twice. Once slightly move the
+// point inside the bounding box and give 'shouldBeWithin' = true to this
+// function, the other time move it slightly outside of the bounding box and
+// give 'shouldBeTrue' = false to the function. Do this for all edges. Note
+// that this function is not taking a set of boxes, as neighboring boxes would
+// not work with this approach (slighly outside of one box can be inside the
+// neighboring box. For a set of boxes, check each box separately)
+void testBounds(double x, double y, const Box& bbox, bool shouldBeWithin) {
+  // correct lon bounds if necessary
+  if (x < -180) {
+    x += 360;
+  } else if (x > 180) {
+    x -= 360;
+  }
 
-inline void testBoundingBox(const long long& maxDistInMeters,
-                            const point& startPoint) {
-  auto checkOutside = [&](const point& point1, const point& startPoint,
-                          const std::vector<box>& bbox,
+  // testing only possible, if lat bounds are correct and the lon bounds
+  // don't cover everything (as then left or right of the box is again
+  // inside the box because of the spherical geometry). If we have a bounding
+  // box, which goes from -180 to 180 longitude, then left of the bounding box
+  // is just in the bounding box again. (i.e. -180.00001 is the same as
+  // +179.99999). As all longitudes are covered, a left or right bound does
+  // not exist (on the sphere this makes intuitive sense). A test in that case
+  // is not necessary, because this test is about testing the edges and if
+  // everything is covered an edge doesn't exist there is no need for testing
+  // in that case
+  double minLonBox = bbox.min_corner().get<0>();
+  double maxLonBox = bbox.max_corner().get<0>();
+  if (y < 90 && y > -90 && !(minLonBox < 179.9999 && maxLonBox > 179.9999)) {
+    bool within = boost::geometry::covered_by(Point(x, y), bbox);
+    ASSERT_TRUE(within == shouldBeWithin);
+  }
+};
+
+// This function performs multiple tests on the bounding box. First it asserts,
+// that a point, which is not contained in any bounding box is more than
+// 'maxDistInMeters' away from 'startPoint'. Second it iterates over the edges
+// of the bounding box and checks, that points which are slightly inside or
+// outside of the bounding box are correctly identified.
+void testBoundingBox(const size_t& maxDistInMeters, const Point& startPoint) {
+  // this helper function checks, that a point, which is not contained in any
+  // bounding box, is really more than 'maxDistanceInMeters' away from
+  // 'startPoint'
+  auto checkOutside = [&](const Point& point1, const Point& startPoint,
+                          const std::vector<Box>& bbox,
                           SpatialJoinAlgorithms* spatialJoinAlg) {
     // check if the point is contained in any bounding box
     bool within = spatialJoinAlg->OnlyForTestingWrapperContainedInBoundingBoxes(
@@ -814,67 +854,31 @@ inline void testBoundingBox(const long long& maxDistInMeters,
     }
   };
 
-  auto testBounds = [](double x, double y, const box& bbox,
-                       bool shouldBeWithin) {
-    // correct lon bounds if necessary
-    if (x < -180) {
-      x += 360;
-    } else if (x > 180) {
-      x -= 360;
-    }
-
-    // testing only possible, if lat bounds are correct and the lon bounds
-    // don't cover everything (as then left or right of the box is again
-    // inside the box because of the spherical geometry)
-    double minLonBox = bbox.min_corner().get<0>();
-    double maxLonBox = bbox.max_corner().get<0>();
-    if (y < 90 && y > -90 && !(minLonBox < 179.9999 && maxLonBox > 179.9999)) {
-      bool within = boost::geometry::covered_by(point(x, y), bbox);
-      ASSERT_TRUE(within == shouldBeWithin);
-    }
-  };
-
-  // build dummy join to access the containedInBoundingBox and
-  // computeBoundingBox functions. Note that maxDistInMeters has to be accurate,
-  // otherwise the functions of spatialJoin don't work correctly
-  auto maxDistInMetersStr =
-      "<max-distance-in-meters:" + std::to_string(maxDistInMeters) + ">";
-  auto qec = buildTestQEC();
-  auto spatialJoinTriple =
-      SparqlTriple{TripleComponent{Variable{"?point1"}}, maxDistInMetersStr,
-                   TripleComponent{Variable{"?point2"}}};
-  std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
-      ad_utility::makeExecutionTree<SpatialJoin>(qec, spatialJoinTriple,
-                                                 std::nullopt, std::nullopt);
-
-  // add children and test, that multiplicity is a dummy return before all
-  // children are added
-  std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
-  SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
-
   PreparedSpatialJoinParams params{
-      nullptr,     nullptr, nullptr, nullptr,
-      0,           0,       1,       spatialJoin->getMaxDist(),
-      std::nullopt};
+      nullptr, nullptr, nullptr,         nullptr,     0,
+      0,       1,       maxDistInMeters, std::nullopt};
 
-  SpatialJoinAlgorithms spatialJoinAlgs{
-      qec, params, true, spatialJoin->onlyForTestingGetActualConfig()};
+  std::variant<NearestNeighborsConfig, MaxDistanceConfig> config{
+      MaxDistanceConfig{maxDistInMeters}};
 
-  std::vector<box> bbox =
+  SpatialJoinAlgorithms spatialJoinAlgs{buildTestQEC(), params, true, config};
+
+  std::vector<Box> bbox =
       spatialJoinAlgs.OnlyForTestingWrapperComputeBoundingBox(startPoint);
   // broad grid test
   for (int lon = -180; lon < 180; lon += 20) {
     for (int lat = -90; lat < 90; lat += 20) {
-      checkOutside(point(lon, lat), startPoint, bbox, &spatialJoinAlgs);
+      checkOutside(Point(lon, lat), startPoint, bbox, &spatialJoinAlgs);
     }
   }
 
-  // do tests at the border of the box
+  // do tests at the border of the box. The exact usage of this is described in
+  // the function comment of the helper function 'testBounds'
   for (size_t k = 0; k < bbox.size(); k++) {
     // use a small delta for testing because of floating point inaccuracies
     const double delta = 0.00000001;
-    const point minPoint = bbox.at(k).min_corner();
-    const point maxPoint = bbox.at(k).max_corner();
+    const Point minPoint = bbox.at(k).min_corner();
+    const Point maxPoint = bbox.at(k).max_corner();
     const double lowX = minPoint.get<0>();
     const double lowY = minPoint.get<1>();
     const double highX = maxPoint.get<0>();
@@ -887,28 +891,28 @@ inline void testBoundingBox(const long long& maxDistInMeters,
                  true);
       testBounds(lowX - delta, lowY + delta + (yRange / 100) * i, bbox.at(k),
                  false);
-      checkOutside(point(lowX - delta, lowY + (yRange / 100) * i), startPoint,
+      checkOutside(Point(lowX - delta, lowY + (yRange / 100) * i), startPoint,
                    bbox, &spatialJoinAlgs);
       // barely in or out at the bottom edge
       testBounds(lowX + delta + (xRange / 100) * i, lowY + delta, bbox.at(k),
                  true);
       testBounds(lowX + delta + (xRange / 100) * i, lowY - delta, bbox.at(k),
                  false);
-      checkOutside(point(lowX + (xRange / 100) * i, lowY - delta), startPoint,
+      checkOutside(Point(lowX + (xRange / 100) * i, lowY - delta), startPoint,
                    bbox, &spatialJoinAlgs);
       // barely in or out at the right edge
       testBounds(highX - delta, lowY + delta + (yRange / 100) * i, bbox.at(k),
                  true);
       testBounds(highX + delta, lowY + delta + (yRange / 100) * i, bbox.at(k),
                  false);
-      checkOutside(point(highX + delta, lowY + (yRange / 100) * i), startPoint,
+      checkOutside(Point(highX + delta, lowY + (yRange / 100) * i), startPoint,
                    bbox, &spatialJoinAlgs);
       // barely in or out at the top edge
       testBounds(lowX + delta + (xRange / 100) * i, highY - delta, bbox.at(k),
                  true);
       testBounds(lowX + delta + (xRange / 100) * i, highY + delta, bbox.at(k),
                  false);
-      checkOutside(point(lowX + (xRange / 100) * i, highY + delta), startPoint,
+      checkOutside(Point(lowX + (xRange / 100) * i, highY + delta), startPoint,
                    bbox, &spatialJoinAlgs);
     }
   }
@@ -924,7 +928,7 @@ TEST(SpatialJoin, computeBoundingBox) {
       // circ / 2 means, that all points on earth are within maxDist km of any
       // starting point
       for (int maxDist = 0; maxDist <= circ / 2.0; maxDist += circ / 36.0) {
-        testBoundingBox(maxDist, point(lon, lat));
+        testBoundingBox(maxDist, Point(lon, lat));
       }
     }
   }
@@ -955,28 +959,28 @@ TEST(SpatialJoin, containedInBoundingBoxes) {
   // note that none of the boxes is overlapping, therefore we can check, that
   // none of the points which should be contained in one box are contained in
   // another box
-  std::vector<box> boxes = {
-      box(point(20, 40), point(40, 60)),
-      box(point(-180, -20), point(-150, 30)),  // touching left border
-      box(point(50, -30), point(180, 10)),     // touching right border
-      box(point(-30, 50), point(10, 90)),      // touching north pole
-      box(point(-45, -90), point(0, -45))      // touching south pole
+  std::vector<Box> boxes = {
+      Box(Point(20, 40), Point(40, 60)),
+      Box(Point(-180, -20), Point(-150, 30)),  // touching left border
+      Box(Point(50, -30), Point(180, 10)),     // touching right border
+      Box(Point(-30, 50), Point(10, 90)),      // touching north pole
+      Box(Point(-45, -90), Point(0, -45))      // touching south pole
   };
 
   // the first entry in this vector is a vector of points, which is contained
   // in the first box, the second entry contains points, which are contained in
   // the second box and so on
-  std::vector<std::vector<point>> containedInBox = {
-      {point(20, 40), point(40, 40), point(40, 60), point(20, 60),
-       point(30, 50)},
-      {point(-180, -20), point(-150, -20), point(-150, 30), point(-180, 30),
-       point(-150, 0)},
-      {point(50, -30), point(180, -30), point(180, 10), point(50, 10),
-       point(70, -10)},
-      {point(-30, 50), point(10, 50), point(10, 90), point(-30, 90),
-       point(-20, 60)},
-      {point(-45, -90), point(0, -90), point(0, -45), point(-45, -45),
-       point(-10, -60)}};
+  std::vector<std::vector<Point>> containedInBox = {
+      {Point(20, 40), Point(40, 40), Point(40, 60), Point(20, 60),
+       Point(30, 50)},
+      {Point(-180, -20), Point(-150, -20), Point(-150, 30), Point(-180, 30),
+       Point(-150, 0)},
+      {Point(50, -30), Point(180, -30), Point(180, 10), Point(50, 10),
+       Point(70, -10)},
+      {Point(-30, 50), Point(10, 50), Point(10, 90), Point(-30, 90),
+       Point(-20, 60)},
+      {Point(-45, -90), Point(0, -90), Point(0, -45), Point(-45, -45),
+       Point(-10, -60)}};
 
   // all combinations of box is contained in bounding boxes and is not
   // contained. a one encodes, the bounding box is contained in the set of
@@ -990,9 +994,9 @@ TEST(SpatialJoin, containedInBoundingBoxes) {
       for (size_t c = 0; a <= 1; a++) {
         for (size_t d = 0; a <= 1; a++) {
           for (size_t e = 0; a <= 1; a++) {
-            std::vector<box> toTest;  // the set of bounding boxes
-            std::vector<std::vector<point>> shouldBeContained;
-            std::vector<std::vector<point>> shouldNotBeContained;
+            std::vector<Box> toTest;  // the set of bounding boxes
+            std::vector<std::vector<Point>> shouldBeContained;
+            std::vector<std::vector<Point>> shouldNotBeContained;
             if (a == 1) {  // box nr. 0 is contained in the set of boxes
               toTest.push_back(boxes.at(0));
               shouldBeContained.push_back(containedInBox.at(0));
