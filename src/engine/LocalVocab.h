@@ -45,7 +45,7 @@ class LocalVocab {
   // `LiteralOrIri`) to remain stable over their lifetime in the hash map
   // because we hand out pointers to them.
   using Set =
-      ad_utility::CustomHashSetWithMemoryLimit<LiteralOrIri, IriSizeGetter>;
+      ad_utility::NodeHashSetWithMemoryLimit<LiteralOrIri, IriSizeGetter>;
   ad_utility::detail::AllocationMemoryLeftThreadsafe limit_;
   std::shared_ptr<Set> primaryWordSet_;
 

@@ -7,7 +7,7 @@
 using ad_utility::makeAllocationMemoryLeftThreadsafeObject;
 using namespace ad_utility::memory_literals;
 
-using Set = ad_utility::CustomHashSetWithMemoryLimit<int>;
+using Set = ad_utility::NodeHashSetWithMemoryLimit<int>;
 
 TEST(CustomHashSetWithMemoryLimitTest, sizeAndInsert) {
   Set hashSet{makeAllocationMemoryLeftThreadsafeObject(100_B)};
@@ -142,7 +142,7 @@ struct StringSizeGetter {
 };
 
 using StringSet =
-    ad_utility::CustomHashSetWithMemoryLimit<std::string, StringSizeGetter>;
+    ad_utility::NodeHashSetWithMemoryLimit<std::string, StringSizeGetter>;
 
 TEST(CustomHashSetWithMemoryLimitTest, stringInsertAndMemoryTracking) {
   StringSet hashSet{makeAllocationMemoryLeftThreadsafeObject(1000_B)};

@@ -17,6 +17,7 @@
 #include "util/AllocatorWithLimit.h"
 #include "util/DefaultValueSizeGetter.h"
 #include "util/MemorySize/MemorySize.h"
+#include "util/ValueSizeGetters.h"
 
 using std::string;
 
@@ -43,10 +44,10 @@ using HashSetWithMemoryLimit =
 // Wrapper around absl::node_hash_set with a memory limit. All operations that
 // may change the allocated memory of the hash set is tracked using a
 // `AllocationMemoryLeftThreadsafe` object.
-template <class T, class SizeGetter = SizeOfSizeGetter,
+template <class T, class SizeGetter = DefaultValueSizeGetter<T>,
           class HashFct = absl::container_internal::hash_default_hash<T>,
           class EqualElem = absl::container_internal::hash_default_eq<T>>
-class CustomHashSetWithMemoryLimit {
+class NodeHashSetWithMemoryLimit {
  private:
   using HashSet = absl::node_hash_set<T, HashFct, EqualElem>;
   HashSet hashSet_;
@@ -70,9 +71,8 @@ class CustomHashSetWithMemoryLimit {
   constexpr static size_t slotMemoryCost = sizeof(void*) + 1;
 
  public:
-  CustomHashSetWithMemoryLimit(
-      detail::AllocationMemoryLeftThreadsafe memoryLeft,
-      SizeGetter sizeGetter = {})
+  NodeHashSetWithMemoryLimit(detail::AllocationMemoryLeftThreadsafe memoryLeft,
+                             SizeGetter sizeGetter = {})
       : memoryLeft_{memoryLeft},
         memoryUsed_{MemorySize::bytes(0)},
         sizeGetter_{sizeGetter},
@@ -82,7 +82,7 @@ class CustomHashSetWithMemoryLimit {
     updateSlotArrayMemoryUsage();
   }
 
-  ~CustomHashSetWithMemoryLimit() { decreaseMemoryUsed(memoryUsed_); }
+  ~NodeHashSetWithMemoryLimit() { decreaseMemoryUsed(memoryUsed_); }
 
   // Try to allocate the amount of memory requested
   void increaseMemoryUsed(ad_utility::MemorySize amount) {
