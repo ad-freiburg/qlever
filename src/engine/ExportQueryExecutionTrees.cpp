@@ -112,12 +112,6 @@ ExportQueryExecutionTrees::getRowIndices(LimitOffsetClause limitOffset,
 
   // Iterate over the result in blocks.
   for (TableConstRefWithVocab& tableWithVocab : getIdTables(result)) {
-    // If the effective limit is zero, there is nothing to yield and nothing
-    // to count anymore.
-    if (effectiveLimit == 0) {
-      co_return;
-    }
-
     // If all rows in the current block are before the effective offset, we can
     // skip the block entirely. If not, there is at least something to count
     // and maybe also something to yield.
@@ -146,10 +140,11 @@ ExportQueryExecutionTrees::getRowIndices(LimitOffsetClause limitOffset,
                 std::views::iota(rangeBegin, rangeBegin + numRowsToBeExported)};
     }
 
-    // Add to `resultSize` and update the effective limits (make sure to
-    // never go below zero and `std::numeric_limits<uint64_t>::max()` stays
-    // there).
+    // Add to `resultSize` and update the effective offset (which becomes zero
+    // after the first non-skipped block) and limits (make sure to never go
+    // below zero and `std::numeric_limits<uint64_t>::max()` stays there).
     resultSize += numRowsToBeCounted;
+    effectiveOffset = 0;
     auto reduceLimit = [&](uint64_t& limit, uint64_t subtrahend) {
       if (limit != std::numeric_limits<uint64_t>::max()) {
         limit = limit > subtrahend ? limit - subtrahend : 0;
@@ -157,6 +152,14 @@ ExportQueryExecutionTrees::getRowIndices(LimitOffsetClause limitOffset,
     };
     reduceLimit(effectiveLimit, numRowsToBeCounted);
     reduceLimit(effectiveExportLimit, numRowsToBeCounted);
+
+    // If the effective limit is zero, there is nothing to yield and nothing
+    // to count anymore. This should come at the end of this loop and not at
+    // the beginning, to avoid unnecessarily fetching another block from
+    // `result`.
+    if (effectiveLimit == 0) {
+      co_return;
+    }
   }
 }
 
@@ -189,6 +192,11 @@ ExportQueryExecutionTrees::constructQueryResultToTriples(
       }
     }
   }
+  // For each result from the WHERE clause, we produce up to
+  // `constructTriples.size()` triples. We do not account for triples that are
+  // filtered out because one of the components is UNDEF (it would require
+  // materializing the whole result).
+  resultSize *= constructTriples.size();
 }
 
 // _____________________________________________________________________________
@@ -955,25 +963,30 @@ ExportQueryExecutionTrees::computeResultAsQLeverJSON(
       std::chrono::duration_cast<std::chrono::milliseconds>(
           timeUntilFunctionCall + runtimeInformation.totalTime_);
 
-  // NOTE: The `resultsizeExported` is the number of bindings exported. This is
-  // redundant information (we could simply count the number of entries in the
-  // `res` array), but it is useful for testing and emphasizes that
-  // `resultsize`can be (and sometimes is) something different.
+  // NOTE: We report three "results sizes" in the QLever JSON output, fo the
+  // following reasons:
   //
-  // The `resultsize` is what `getRowIndices` computes. If the query LIMIT is
-  // larger than the export limit (valu of the "send" parameter), then
-  // `resultsize` is typically larger. Also, for CONSTRUCT queries, it is the
-  // size of the result of the WHERE clause, which can be (and typically is)
-  // different from the number of the results of the CONSTRUCT query if the
-  // CONSTRUCT clause has multiple triples or some of these triples do not
-  // materialize (e.g. because of undefined variables).
+  // The `resultSizeExported` is the number of bindings exported. This is
+  // redundant information (we could simply count the number of entries in the
+  // `res` array), but it is useful for testing and emphasizes the conceptual
+  // difference to `resultSizeTotal`.
+  //
+  // The `resultSizeTotal` is the number of results of the WHOLE query. For
+  // CONSRTUCT queries, it can be an overestimate because it also includes
+  // triples, where one of the components is UNDEF, which are not included
+  // in the final result of a CONSTRUCT query.
+  //
+  // The `resultsize` is equal to `resultSizeTotal`. It is included for
+  // backwards compatibility, in particular, because the QLever UI uses it
+  // at many places.
   nlohmann::json jsonSuffix;
   jsonSuffix["runtimeInformation"]["meta"] = nlohmann::ordered_json(
       qet.getRootOperation()->getRuntimeInfoWholeQuery());
   jsonSuffix["runtimeInformation"]["query_execution_tree"] =
       nlohmann::ordered_json(runtimeInformation);
+  jsonSuffix["resultSizeExported"] = numBindingsExported;
+  jsonSuffix["resultSizeTotal"] = resultSize;
   jsonSuffix["resultsize"] = resultSize;
-  jsonSuffix["resultsizeExported"] = numBindingsExported;
   jsonSuffix["time"]["total"] =
       absl::StrCat(requestTimer.msecs().count(), "ms");
   jsonSuffix["time"]["computeResult"] =
