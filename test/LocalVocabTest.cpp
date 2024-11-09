@@ -34,6 +34,7 @@
 #include "global/Id.h"
 #include "gmock/gmock.h"
 #include "util/AllocatorWithLimit.h"
+#include "util/GTestHelpers.h"
 #include "util/IndexTestHelpers.h"
 #include "util/MemorySize/MemorySize.h"
 
@@ -393,14 +394,13 @@ TEST(LocalVocab, memoryLimit) {
   LocalVocab localVocab(smallLimit);
   TestWords testWords = getTestCollectionOfWords(1000);
 
-  try {
-    for (const auto& word : testWords) {
-      localVocab.getIndexAndAddIfNotContained(word);
-    }
-  } catch (const std::exception& e) {
-    std::string errorMessage = e.what();
-    EXPECT_THAT(errorMessage, ::testing::StartsWith("Tried to allocate"));
-  }
+  EXPECT_THROW(
+      {
+        for (const auto& word : testWords) {
+          localVocab.getIndexAndAddIfNotContained(word);
+        }
+      },
+      ad_utility::detail::AllocationExceedsLimitException);
 
   auto extraWord =
       ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes(

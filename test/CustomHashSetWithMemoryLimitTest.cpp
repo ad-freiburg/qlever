@@ -9,6 +9,7 @@ using namespace ad_utility::memory_literals;
 
 using Set = ad_utility::NodeHashSetWithMemoryLimit<int>;
 
+// _____________________________________________________________________________
 TEST(CustomHashSetWithMemoryLimitTest, sizeAndInsert) {
   Set hashSet{makeAllocationMemoryLeftThreadsafeObject(100_B)};
   ASSERT_EQ(hashSet.size(), 0);
@@ -18,6 +19,7 @@ TEST(CustomHashSetWithMemoryLimitTest, sizeAndInsert) {
   ASSERT_EQ(hashSet.size(), 3);
 }
 
+// _____________________________________________________________________________
 TEST(CustomHashSetWithMemoryLimitTest, memoryLimit) {
   Set hashSet{makeAllocationMemoryLeftThreadsafeObject(10_B)};
   std::initializer_list<int> testNums = {
@@ -36,6 +38,7 @@ TEST(CustomHashSetWithMemoryLimitTest, memoryLimit) {
       ad_utility::detail::AllocationExceedsLimitException);
 }
 
+// _____________________________________________________________________________
 TEST(CustomHashSetWithMemoryLimitTest, iteratorOperations) {
   Set hashSet{makeAllocationMemoryLeftThreadsafeObject(1000_B)};
   hashSet.insert(1);
@@ -59,6 +62,7 @@ TEST(CustomHashSetWithMemoryLimitTest, iteratorOperations) {
   ASSERT_EQ(values, std::vector<int>({1, 2, 3}));
 }
 
+// _____________________________________________________________________________
 TEST(CustomHashSetWithMemoryLimitTest, eraseOperations) {
   Set hashSet{makeAllocationMemoryLeftThreadsafeObject(1000_B)};
   hashSet.insert(1);
@@ -76,6 +80,7 @@ TEST(CustomHashSetWithMemoryLimitTest, eraseOperations) {
   ASSERT_EQ(hashSet.size(), originalSize);
 }
 
+// _____________________________________________________________________________
 TEST(CustomHashSetWithMemoryLimitTest, clearOperation) {
   Set hashSet{makeAllocationMemoryLeftThreadsafeObject(1000_B)};
   auto initialMemory = hashSet.getCurrentMemoryUsage();
@@ -98,6 +103,7 @@ TEST(CustomHashSetWithMemoryLimitTest, clearOperation) {
   ASSERT_LE(hashSet.getCurrentMemoryUsage(), usedMemory);
 }
 
+// _____________________________________________________________________________
 TEST(CustomHashSetWithMemoryLimitTest, memoryTrackingAccuracy) {
   Set hashSet{makeAllocationMemoryLeftThreadsafeObject(1000_B)};
   auto initialMemory = hashSet.getCurrentMemoryUsage();
@@ -117,6 +123,7 @@ TEST(CustomHashSetWithMemoryLimitTest, memoryTrackingAccuracy) {
   ASSERT_EQ(hashSet.getCurrentMemoryUsage(), initialMemory);
 }
 
+// _____________________________________________________________________________
 TEST(CustomHashSetWithMemoryLimitTest, edgeCases) {
   // Test with zero memory limit
   ASSERT_THROW(Set zeroHashSet{makeAllocationMemoryLeftThreadsafeObject(0_B)},
@@ -124,13 +131,14 @@ TEST(CustomHashSetWithMemoryLimitTest, edgeCases) {
 
   // Test multiple insert/erase cycles
   Set cycleHashSet{makeAllocationMemoryLeftThreadsafeObject(1000_B)};
+  auto memoryBeforeCycle = cycleHashSet.getCurrentMemoryUsage();
   for (int i = 0; i < 10; ++i) {
     cycleHashSet.insert(i);
     cycleHashSet.erase(i);
   }
+  auto memoryAfterCycle = cycleHashSet.getCurrentMemoryUsage();
   ASSERT_TRUE(cycleHashSet.empty());
-  ASSERT_EQ(cycleHashSet.getCurrentMemoryUsage(),
-            cycleHashSet.getCurrentMemoryUsage());
+  ASSERT_EQ(memoryBeforeCycle, memoryAfterCycle);
 }
 
 // Define a custom size getter for strings that includes the actual string
@@ -144,6 +152,7 @@ struct StringSizeGetter {
 using StringSet =
     ad_utility::NodeHashSetWithMemoryLimit<std::string, StringSizeGetter>;
 
+// _____________________________________________________________________________
 TEST(CustomHashSetWithMemoryLimitTest, stringInsertAndMemoryTracking) {
   StringSet hashSet{makeAllocationMemoryLeftThreadsafeObject(1000_B)};
   auto initialMemory = hashSet.getCurrentMemoryUsage();
@@ -163,6 +172,7 @@ TEST(CustomHashSetWithMemoryLimitTest, stringInsertAndMemoryTracking) {
             afterFirstInsert - initialMemory);
 }
 
+// _____________________________________________________________________________
 TEST(CustomHashSetWithMemoryLimitTest, stringMemoryLimit) {
   // Set a very small memory limit
   StringSet hashSet{makeAllocationMemoryLeftThreadsafeObject(100_B)};
@@ -177,6 +187,7 @@ TEST(CustomHashSetWithMemoryLimitTest, stringMemoryLimit) {
       ad_utility::detail::AllocationExceedsLimitException);
 }
 
+// _____________________________________________________________________________
 TEST(CustomHashSetWithMemoryLimitTest, stringEraseAndClear) {
   StringSet hashSet{makeAllocationMemoryLeftThreadsafeObject(1000_B)};
 
@@ -197,6 +208,7 @@ TEST(CustomHashSetWithMemoryLimitTest, stringEraseAndClear) {
   ASSERT_LT(memoryAfterClear, memoryAfterErase);
 }
 
+// _____________________________________________________________________________
 TEST(CustomHashSetWithMemoryLimitTest, stringDuplicates) {
   StringSet hashSet{makeAllocationMemoryLeftThreadsafeObject(1000_B)};
 
@@ -211,6 +223,7 @@ TEST(CustomHashSetWithMemoryLimitTest, stringDuplicates) {
   ASSERT_EQ(hashSet.size(), 1);
 }
 
+// _____________________________________________________________________________
 TEST(CustomHashSetWithMemoryLimitTest, stringCapacityVsSize) {
   StringSet hashSet{makeAllocationMemoryLeftThreadsafeObject(1000_B)};
 
