@@ -240,9 +240,8 @@ cppcoro::generator<std::string>
 ExportQueryExecutionTrees::constructQueryResultBindingsToQLeverJSON(
     const QueryExecutionTree& qet,
     const ad_utility::sparql_types::Triples& constructTriples,
-    const LimitOffsetClause& limitAndOffset,
-    std::shared_ptr<const Result> result, uint64_t& resultSize,
-    CancellationHandle cancellationHandle) {
+    LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
+    uint64_t& resultSize, CancellationHandle cancellationHandle) {
   auto generator = constructQueryResultToTriples(
       qet, constructTriples, limitAndOffset, std::move(result), resultSize,
       std::move(cancellationHandle));
@@ -289,7 +288,7 @@ nlohmann::json idTableToQLeverJSONRow(
 // _____________________________________________________________________________
 cppcoro::generator<std::string>
 ExportQueryExecutionTrees::idTableToQLeverJSONBindings(
-    const QueryExecutionTree& qet, const LimitOffsetClause& limitAndOffset,
+    const QueryExecutionTree& qet, LimitOffsetClause limitAndOffset,
     const QueryExecutionTree::ColumnIndicesAndTypes columns,
     std::shared_ptr<const Result> result, uint64_t& resultSize,
     CancellationHandle cancellationHandle) {
@@ -499,9 +498,8 @@ cppcoro::generator<std::string>
 ExportQueryExecutionTrees::selectQueryResultBindingsToQLeverJSON(
     const QueryExecutionTree& qet,
     const parsedQuery::SelectClause& selectClause,
-    const LimitOffsetClause& limitAndOffset,
-    std::shared_ptr<const Result> result, uint64_t& resultSize,
-    CancellationHandle cancellationHandle) {
+    LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
+    uint64_t& resultSize, CancellationHandle cancellationHandle) {
   AD_CORRECTNESS_CHECK(result != nullptr);
   LOG(DEBUG) << "Resolving strings for finished binary result...\n";
   QueryExecutionTree::ColumnIndicesAndTypes selectedColumnIndices =

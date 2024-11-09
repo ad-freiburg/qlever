@@ -39,7 +39,6 @@ struct LimitOffsetClause {
   // is large enough, this is simply `limit + offset`. Otherwise, it is
   // appropriately clamped.
   uint64_t upperBound(uint64_t actualSize) const {
-    // TODO<hannahbast>: This looks unnecessarily complicated.
     auto val = limitOrDefault() + _offset;
     val = val >= std::max(limitOrDefault(), _offset)
               ? val
