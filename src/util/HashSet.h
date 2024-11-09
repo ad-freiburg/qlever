@@ -15,7 +15,6 @@
 
 #include "absl/container/flat_hash_set.h"
 #include "util/AllocatorWithLimit.h"
-#include "util/DefaultValueSizeGetter.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/ValueSizeGetters.h"
 
@@ -52,9 +51,9 @@ class NodeHashSetWithMemoryLimit {
   using HashSet = absl::node_hash_set<T, HashFct, EqualElem>;
   HashSet hashSet_;
   detail::AllocationMemoryLeftThreadsafe memoryLeft_;
-  MemorySize memoryUsed_;
+  MemorySize memoryUsed_{MemorySize::bytes(0)};
   SizeGetter sizeGetter_;
-  size_t currentSlotSize_;
+  size_t currentNumSlots_{0};
 
   // `slotMemoryCost` represents the per-slot memory cost of a node hash set.
   // It accounts for the memory used by a slot in the hash table, which
@@ -68,15 +67,13 @@ class NodeHashSetWithMemoryLimit {
   // 4 bytes for 32-bit and 8 bytes for 64-bit systems).
   // - `+ 1` accounts for an extra control byte used for state management in the
   // hash set.
-  constexpr static size_t slotMemoryCost = sizeof(void*) + 1;
+  constexpr static MemorySize slotMemoryCost =
+      MemorySize::bytes(sizeof(void*) + 1);
 
  public:
   NodeHashSetWithMemoryLimit(detail::AllocationMemoryLeftThreadsafe memoryLeft,
                              SizeGetter sizeGetter = {})
-      : memoryLeft_{memoryLeft},
-        memoryUsed_{MemorySize::bytes(0)},
-        sizeGetter_{sizeGetter},
-        currentSlotSize_{0} {
+      : memoryLeft_{memoryLeft}, sizeGetter_{sizeGetter} {
     // Once the hash set is initialized, calculate the initial memory
     // used by the slots of the hash set
     updateSlotArrayMemoryUsage();
@@ -102,22 +99,20 @@ class NodeHashSetWithMemoryLimit {
   // and if the slot count decreases, it releases the unused memory back to the
   // memory tracker.
   void updateSlotArrayMemoryUsage() {
-    size_t newSlotSize = hashSet_.bucket_count();
-    if (newSlotSize != currentSlotSize_) {
-      if (newSlotSize > currentSlotSize_) {
+    size_t newNumSlots = hashSet_.bucket_count();
+    if (newNumSlots != currentNumSlots_) {
+      if (newNumSlots > currentNumSlots_) {
         ad_utility::MemorySize sizeIncrease =
-            ad_utility::MemorySize::bytes(slotMemoryCost) *
-            (newSlotSize - currentSlotSize_);
+            slotMemoryCost * (newNumSlots - currentNumSlots_);
         increaseMemoryUsed(sizeIncrease);
       } else {
         ad_utility::MemorySize sizeDecrease =
-            ad_utility::MemorySize::bytes(slotMemoryCost) *
-            (currentSlotSize_ - newSlotSize);
+            slotMemoryCost * (currentNumSlots_ - newNumSlots);
 
         decreaseMemoryUsed(sizeDecrease);
       }
     }
-    currentSlotSize_ = newSlotSize;
+    currentNumSlots_ = newNumSlots;
   }
 
   // Insert an element into the hash set. If the memory limit is exceeded, the
@@ -156,13 +151,12 @@ class NodeHashSetWithMemoryLimit {
     decreaseMemoryUsed(memoryUsed_);
 
     // Update slot memory usage based on the new bucket count after clearing
-    size_t newSlotSize = hashSet_.bucket_count();
-    ad_utility::MemorySize slotMemoryAfterClear =
-        MemorySize::bytes(slotMemoryCost * newSlotSize);
+    size_t newNumSlots = hashSet_.bucket_count();
+    ad_utility::MemorySize slotMemoryAfterClear = slotMemoryCost * newNumSlots;
     // After clearing it only tracks the slot memory as nodes are gone
     increaseMemoryUsed(slotMemoryAfterClear);
 
-    currentSlotSize_ = newSlotSize;
+    currentNumSlots_ = newNumSlots;
   }
 
   // _____________________________________________________________________________
