@@ -22,20 +22,6 @@ using std::string;
 
 namespace ad_utility {
 
-// `slotMemoryCost` represents the per-slot memory cost of a node hash set.
-// It accounts for the memory used by a slot in the hash table, which typically
-// consists of a pointer (used for node storage) plus any additional control
-// bytes required for maintaining the hash set's structure and state.
-// This value helps estimate and manage memory consumption for operations that
-// involve slots, such as insertion and rehashing.
-//
-// The value is defined as `sizeof(void*) + 1` bytes, where:
-// - `sizeof(void*)` represents the size of a pointer on the platform (usually 4
-// bytes for 32-bit and 8 bytes for 64-bit systems).
-// - `+ 1` accounts for an extra control byte used for state management in the
-// hash set.
-constexpr size_t slotMemoryCost = sizeof(void*) + 1;
-
 // Wrapper for HashSets (with elements of type T) to be used everywhere
 // throughout code for the semantic search. This wrapper interface is not
 // designed to be complete from the beginning. Feel free to extend it at need.
@@ -68,6 +54,20 @@ class CustomHashSetWithMemoryLimit {
   MemorySize memoryUsed_;
   SizeGetter sizeGetter_;
   size_t currentSlotSize_;
+
+  // `slotMemoryCost` represents the per-slot memory cost of a node hash set.
+  // It accounts for the memory used by a slot in the hash table, which
+  // typically consists of a pointer (used for node storage) plus any additional
+  // control bytes required for maintaining the hash set's structure and state.
+  // This value helps estimate and manage memory consumption for operations that
+  // involve slots, such as insertion and rehashing.
+  //
+  // The value is defined as `sizeof(void*) + 1` bytes, where:
+  // - `sizeof(void*)` represents the size of a pointer on the platform (usually
+  // 4 bytes for 32-bit and 8 bytes for 64-bit systems).
+  // - `+ 1` accounts for an extra control byte used for state management in the
+  // hash set.
+  constexpr static size_t slotMemoryCost = sizeof(void*) + 1;
 
  public:
   CustomHashSetWithMemoryLimit(
