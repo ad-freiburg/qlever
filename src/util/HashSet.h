@@ -52,7 +52,7 @@ class NodeHashSetWithMemoryLimit {
   HashSet hashSet_;
   detail::AllocationMemoryLeftThreadsafe memoryLeft_;
   MemorySize memoryUsed_{MemorySize::bytes(0)};
-  SizeGetter sizeGetter_;
+  SizeGetter sizeGetter_{};
   size_t currentNumSlots_{0};
 
   // `slotMemoryCost` represents the per-slot memory cost of a node hash set.
@@ -71,9 +71,8 @@ class NodeHashSetWithMemoryLimit {
       MemorySize::bytes(sizeof(void*) + 1);
 
  public:
-  NodeHashSetWithMemoryLimit(detail::AllocationMemoryLeftThreadsafe memoryLeft,
-                             SizeGetter sizeGetter = {})
-      : memoryLeft_{memoryLeft}, sizeGetter_{sizeGetter} {
+  NodeHashSetWithMemoryLimit(detail::AllocationMemoryLeftThreadsafe memoryLeft)
+      : memoryLeft_{memoryLeft} {
     // Once the hash set is initialized, calculate the initial memory
     // used by the slots of the hash set
     updateSlotArrayMemoryUsage();

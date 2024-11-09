@@ -49,8 +49,6 @@ class LocalVocab {
   ad_utility::detail::AllocationMemoryLeftThreadsafe limit_;
   std::shared_ptr<Set> primaryWordSet_;
 
-  IriSizeGetter sizeGetter;
-
   // Local vocabularies from child operations that were merged into this
   // vocabulary s.t. the pointers are kept alive. They have to be `const`
   // because they are possibly shared concurrently (for example via the cache).
@@ -66,9 +64,8 @@ class LocalVocab {
   // Create a new, empty local vocabulary.
   LocalVocab(ad_utility::detail::AllocationMemoryLeftThreadsafe memoryLimit =
                  ad_utility::makeAllocationMemoryLeftThreadsafeObject(
-                     ad_utility::MemorySize::megabytes(100)))
-      : limit_(memoryLimit),
-        primaryWordSet_(std::make_shared<Set>(limit_, sizeGetter)) {}
+                     ad_utility::MemorySize::max()))
+      : limit_(memoryLimit), primaryWordSet_(std::make_shared<Set>(limit_)) {}
 
   // Prevent accidental copying of a local vocabulary.
   LocalVocab(const LocalVocab&) = delete;
