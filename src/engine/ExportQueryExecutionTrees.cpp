@@ -963,7 +963,7 @@ ExportQueryExecutionTrees::computeResultAsQLeverJSON(
       std::chrono::duration_cast<std::chrono::milliseconds>(
           timeUntilFunctionCall + runtimeInformation.totalTime_);
 
-  // NOTE: We report three "results sizes" in the QLever JSON output, fo the
+  // NOTE: We report three "results sizes" in the QLever JSON output, for the
   // following reasons:
   //
   // The `resultSizeExported` is the number of bindings exported. This is
@@ -972,7 +972,7 @@ ExportQueryExecutionTrees::computeResultAsQLeverJSON(
   // difference to `resultSizeTotal`.
   //
   // The `resultSizeTotal` is the number of results of the WHOLE query. For
-  // CONSRTUCT queries, it can be an overestimate because it also includes
+  // CONSTRUCT queries, it can be an overestimate because it also includes
   // triples, where one of the components is UNDEF, which are not included
   // in the final result of a CONSTRUCT query.
   //
