@@ -1,6 +1,8 @@
-//  Copyright 2022, University of Freiburg,
-//                  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2022 - 2024, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//          Robin Textor-Falconi <textorr@cs.uni-freiburg.de>
+//          Hannah Bast <bast@cs.uni-freiburg.de>
 
 #pragma once
 
@@ -10,14 +12,9 @@
 #include "util/http/MediaTypes.h"
 #include "util/json.h"
 
-// This class contains all the functionality to convert a query that has already
-// been parsed (by the SPARQL parser) and planned (by the query planner) into
-// a serialized result. In particular, it creates TSV, CSV, Turtle, JSON (SPARQL
-// conforming and QLever's flavor) and binary results).
-// This class has only two static public functions, one for the JSON
-// output format (which returns a `nlohmann::json` object) and one for the other
-// result formats (tsv, csv, turtle, binary) which returns a
-// `streamable_generator`.
+// Class for computing the result of an already parsed and planned query and
+// exporting it in different formats (TSV, CSV, Turtle, JSON, Binary).
+//
 // TODO<joka921> Also implement a streaming JSON serializer to reduce the RAM
 // consumption of large JSON exports and to make this interface even simpler.
 class ExportQueryExecutionTrees {
@@ -40,18 +37,6 @@ class ExportQueryExecutionTrees {
       const ParsedQuery& parsedQuery, const QueryExecutionTree& qet,
       MediaType mediaType, const ad_utility::Timer& requestTimer,
       CancellationHandle cancellationHandle);
-
-  // Compute the result of the given `parsedQuery` (created by the
-  // `SparqlParser`) for which the `QueryExecutionTree` has been previously
-  // created by the `QueryPlanner`. The result is converted to the format
-  // specified by the `mediaType`. Supported formats for this function are
-  // `SparqlJSON` and `QLeverJSON`. Note that the SparqlJSON format can only be
-  // used with SELECT queries. Invalid `mediaType`s and invalid combinations of
-  // `mediaType` and the query type will throw. The result is returned as a
-  // single JSON object that is fully materialized before the function returns.
-  // The `requestTimer` is used to report timing statistics on the query. It
-  // must have already run during the query planning to produce the expected
-  // results.
 
   // Convert the `id` to a human-readable string. The `index` is used to resolve
   // `Id`s with datatype `VocabIndex` or `TextRecordIndex`. The `localVocab` is
@@ -105,66 +90,64 @@ class ExportQueryExecutionTrees {
       ad_utility::streams::stream_generator streamGenerator);
 
  private:
-  // Similar to `computeResult` but returns a stream in
-  // QLeverJSON-format.
+  // Generate the bindings of the result of a SELECT or CONSTRUCT query in the
+  // `application/qlever-results+json` format.
+  //
+  // NOTE: This calls `selectQueryResultBindingsToQLeverJSON` or
+  // `constructQueryResultBindingsToQLeverJSON` for the bindings and adds the
+  // remaining (meta) fields needed for the `application/qlever-results+json`
+  // format.
   static ad_utility::streams::stream_generator computeResultAsQLeverJSON(
       const ParsedQuery& query, const QueryExecutionTree& qet,
       const ad_utility::Timer& requestTimer,
       CancellationHandle cancellationHandle);
 
-  // ___________________________________________________________________________
+  // Generate the bindings of the result of a SELECT query in the
+  // `application/ qlever+json` format.
   static cppcoro::generator<std::string> selectQueryResultBindingsToQLeverJSON(
       const QueryExecutionTree& qet,
       const parsedQuery::SelectClause& selectClause,
       const LimitOffsetClause& limitAndOffset,
-      std::shared_ptr<const Result> result,
-      CancellationHandle cancellationHandle);
-  /**
-   * @brief Convert an `IdTable` (typically from a query result) to a JSON
-   * array In the `QLeverJSON` format. This function is called by
-   *  `computeQueryResultAsQLeverJSON` to obtain the "actual" query results
-   * (without the meta data)
-   * @param qet The `QueryExecutionTree` of the query.
-   * @param limitAndOffset at most <limit> entries are written, starting at
-   * <from>
-   * @param columns each pair of <columnInIdTable, correspondingType> tells
-   * us which columns are to be serialized in which order
-   * @param resultTable The query result in the ID space. If it is `nullptr`,
-   *        then the query result will be obtained via `qet->getResult()`.
-   * @return a 2D-Json array corresponding to the IdTable given the arguments
-   */
-  static cppcoro::generator<std::string> idTableToQLeverJSONBindings(
-      const QueryExecutionTree& qet, const LimitOffsetClause& limitAndOffset,
-      const QueryExecutionTree::ColumnIndicesAndTypes columns,
-      std::shared_ptr<const Result> result,
+      std::shared_ptr<const Result> result, uint64_t& resultSize,
       CancellationHandle cancellationHandle);
 
-  // ___________________________________________________________________________
+  // Generate the bindings of the result of a CONSTRUCT query in the
+  // `application/ qlever+json` format.
   static cppcoro::generator<std::string>
   constructQueryResultBindingsToQLeverJSON(
       const QueryExecutionTree& qet,
       const ad_utility::sparql_types::Triples& constructTriples,
       const LimitOffsetClause& limitAndOffset,
-      std::shared_ptr<const Result> res, CancellationHandle cancellationHandle);
+      std::shared_ptr<const Result> result, uint64_t& resultSize,
+      CancellationHandle cancellationHandle);
 
-  // Generate an RDF graph for a CONSTRUCT query.
+  // Helper function that generates the individual bindings for the
+  // `application/ qlever+json` format.
+  static cppcoro::generator<std::string> idTableToQLeverJSONBindings(
+      const QueryExecutionTree& qet, LimitOffsetClause limitAndOffset,
+      const QueryExecutionTree::ColumnIndicesAndTypes columns,
+      std::shared_ptr<const Result> result, uint64_t& resultSize,
+      CancellationHandle cancellationHandle);
+
+  // Helper function that generates the result of a CONSTRUCT query as
+  // `StringTriple`s.
   static cppcoro::generator<QueryExecutionTree::StringTriple>
   constructQueryResultToTriples(
       const QueryExecutionTree& qet,
       const ad_utility::sparql_types::Triples& constructTriples,
-      LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> res,
-      CancellationHandle cancellationHandle);
+      LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
+      uint64_t& resultSize, CancellationHandle cancellationHandle);
 
-  // ___________________________________________________________________________
+  // Helper function that generates the result of a CONSTRUCT query as a
+  // CSV or TSV stream.
   template <MediaType format>
   static ad_utility::streams::stream_generator constructQueryResultToStream(
       const QueryExecutionTree& qet,
       const ad_utility::sparql_types::Triples& constructTriples,
-      LimitOffsetClause limitAndOffset,
-      std::shared_ptr<const Result> resultTable,
+      LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
       CancellationHandle cancellationHandle);
 
-  // _____________________________________________________________________________
+  // Generate the result of a SELECT query as a CSV or TSV or binary stream.
   template <MediaType format>
   static ad_utility::streams::stream_generator selectQueryResultToStream(
       const QueryExecutionTree& qet,
@@ -189,12 +172,26 @@ class ExportQueryExecutionTrees {
   static cppcoro::generator<ExportQueryExecutionTrees::TableConstRefWithVocab>
   getIdTables(const Result& result);
 
-  // Return a range that contains the indices of the rows that have to be
-  // exported from the `idTable` given the `LimitOffsetClause`. It takes into
-  // account the LIMIT, the OFFSET, and the actual size of the `idTable`
+  // Generate the result in "blocks" and, when iterating over the generator
+  // from beginning to end, return the total number of rows in the result
+  // in `totalResultSize`.
+  //
+  // Blocks, where all rows are before OFFSET, are requested (and hence
+  // computed), but skipped.
+  //
+  // Blocks, where at least one row is after OFFSET but before the effective
+  // export limit (minimum of the LIMIT and the value of the `send` parameter),
+  // are requested and yielded (together with the corresponding `LocalVocab`
+  // and the range from that `IdTable` that belongs to the result).
+  //
+  // Blocks after the effective export limit until the LIMIT are requested, and
+  // counted towards the `totalResultSize`, but not yielded.
+  //
+  // Blocks after the LIMIT are not even requested.
  public:
   static cppcoro::generator<TableWithRange> getRowIndices(
-      LimitOffsetClause limitOffset, const Result& result);
+      LimitOffsetClause limitOffset, const Result& result,
+      uint64_t& resutSizeTotal);
 
  private:
   FRIEND_TEST(ExportQueryExecutionTrees, getIdTablesReturnsSingletonIterator);

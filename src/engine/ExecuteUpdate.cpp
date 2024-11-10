@@ -130,13 +130,13 @@ ExecuteUpdate::computeGraphUpdateQuads(
   auto graphUpdate = std::get<updateClause::GraphUpdate>(updateClause.op_);
   // Fully materialize the result for now. This makes it easier to execute the
   // update.
-  auto res = qet.getResult(false);
+  auto result = qet.getResult(false);
 
   const auto& vocab = index.getVocab();
 
   auto prepareTemplateAndResultContainer =
       [&vocab, &qet,
-       &res](std::vector<SparqlTripleSimpleWithGraph>&& tripleTemplates) {
+       &result](std::vector<SparqlTripleSimpleWithGraph>&& tripleTemplates) {
         auto [transformedTripleTemplates, localVocab] =
             transformTriplesTemplate(vocab, qet.getVariableColumns(),
                                      std::move(tripleTemplates));
@@ -144,7 +144,7 @@ ExecuteUpdate::computeGraphUpdateQuads(
         // The maximum result size is size(query result) x num template rows.
         // The actual result can be smaller if there are template rows with
         // variables for which a result row does not have a value.
-        updateTriples.reserve(res->idTable().size() *
+        updateTriples.reserve(result->idTable().size() *
                               transformedTripleTemplates.size());
 
         return std::tuple{std::move(transformedTripleTemplates),
@@ -156,8 +156,9 @@ ExecuteUpdate::computeGraphUpdateQuads(
   auto [toDeleteTemplates, toDelete, localVocabDelete] =
       prepareTemplateAndResultContainer(std::move(graphUpdate.toDelete_));
 
-  for (const auto& [pair, range] :
-       ExportQueryExecutionTrees::getRowIndices(query._limitOffset, *res)) {
+  uint64_t resultSize = 0;
+  for (const auto& [pair, range] : ExportQueryExecutionTrees::getRowIndices(
+           query._limitOffset, *result, resultSize)) {
     auto& idTable = pair.idTable_;
     for (const uint64_t i : range) {
       computeAndAddQuadsForResultRow(toInsertTemplates, toInsert, idTable, i);

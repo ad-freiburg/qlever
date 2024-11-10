@@ -32,14 +32,14 @@ MATCHER_P(AlwaysFalse, msg, "") {
   return false;
 }
 
-// _____________________________________________________________________________
+// Test the `ExecuteUpdate::executeUpdate` method. These tests run on the
+// default dataset defined in `IndexTestHelpers::makeTestIndex`.
 TEST(ExecuteUpdate, executeUpdate) {
-  auto executeUpdate = [](const std::string& update) {
-    // These tests run on the default dataset defined in
-    // `IndexTestHelpers::makeTestIndex`.
-    QueryExecutionContext* qec = ad_utility::testing::getQec(std::nullopt);
-    const Index& index = qec->getIndex();
-    DeltaTriples deltaTriples{index};
+  QueryExecutionContext* qec = ad_utility::testing::getQec(std::nullopt);
+  const Index& index = qec->getIndex();
+  // Perform the given `update` and store result in given `deltaTriples`.
+  auto expectExecuteUpdateHelper = [&qec, &index](const std::string& update,
+                                                  DeltaTriples& deltaTriples) {
     const auto sharedHandle =
         std::make_shared<ad_utility::CancellationHandle<>>();
     const std::vector<DatasetClause> datasets = {};
@@ -47,20 +47,26 @@ TEST(ExecuteUpdate, executeUpdate) {
     QueryPlanner qp{qec, sharedHandle};
     const auto qet = qp.createExecutionTree(pq);
     ExecuteUpdate::executeUpdate(index, pq, qet, deltaTriples, sharedHandle);
-    return deltaTriples;
   };
+  // Execute the given `update` and check that the delta triples are correct.
   auto expectExecuteUpdate =
-      [&executeUpdate](
+      [&index, &expectExecuteUpdateHelper](
           const std::string& update,
           const testing::Matcher<const DeltaTriples&>& deltaTriplesMatcher) {
-        EXPECT_THAT(executeUpdate(update), deltaTriplesMatcher);
+        DeltaTriples deltaTriples{index};
+        expectExecuteUpdateHelper(update, deltaTriples);
+        EXPECT_THAT(deltaTriples, deltaTriplesMatcher);
       };
+  // Execute the given `update` and check that it fails with the given message.
   auto expectExecuteUpdateFails =
-      [&executeUpdate](
+      [&index, &expectExecuteUpdateHelper](
           const std::string& update,
           const testing::Matcher<const std::string&>& messageMatcher) {
-        AD_EXPECT_THROW_WITH_MESSAGE(executeUpdate(update), messageMatcher);
+        DeltaTriples deltaTriples{index};
+        AD_EXPECT_THROW_WITH_MESSAGE(
+            expectExecuteUpdateHelper(update, deltaTriples), messageMatcher);
       };
+  // Now the actual tests.
   expectExecuteUpdate("INSERT DATA { <s> <p> <o> . }", NumTriples(1, 0, 1));
   expectExecuteUpdate("DELETE DATA { <z> <label> \"zz\"@en }",
                       NumTriples(0, 1, 1));

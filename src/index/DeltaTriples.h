@@ -105,6 +105,7 @@ class DeltaTriples {
   explicit DeltaTriples(const Index& index);
   explicit DeltaTriples(const IndexImpl& index) : index_{index} {};
 
+  // Disable accidental copying.
   DeltaTriples(const DeltaTriples&) = delete;
   DeltaTriples& operator=(const DeltaTriples&) = delete;
 
