@@ -360,6 +360,7 @@ class CartesianProductJoinLazyTest
       const std::vector<size_t>& valueCount,
       source_location loc = source_location::current()) {
     auto trace = generateLocationTrace(loc);
+    join.getExecutionContext()->getQueryTreeCache().clearAll();
     Result result = join.computeResultOnlyForTesting(true);
     ASSERT_FALSE(result.isFullyMaterialized());
     std::vector<std::unordered_map<uint64_t, size_t>> counter{
@@ -446,6 +447,7 @@ TEST_P(CartesianProductJoinLazyTest, allTablesSmallerThanChunk) {
   auto join = makeJoin(std::move(tables));
   expectCorrectResult(join, expectedSize, occurenceCounts, valueCount);
 
+  join.getExecutionContext()->getQueryTreeCache().clearAll();
   // For a table this small we can assert the result directly
   auto result = join.computeResultOnlyForTesting(true);
   ASSERT_FALSE(result.isFullyMaterialized());
@@ -464,8 +466,18 @@ TEST_P(CartesianProductJoinLazyTest, allTablesSmallerThanChunk) {
       {1, 11, 102, 1000, 10001, 100001},
   });
 
-  expectGeneratorYieldsValues<1>({std::move(reference)},
-                                 std::move(result.idTables()));
+  // Table is yielded fully materialized
+  if (std::get<0>(GetParam()) == 0) {
+    expectGeneratorYieldsValues<1>({std::move(reference)},
+                                   std::move(result.idTables()));
+  } else {
+    // In this case the tables are split randomly and thus we can't assert a
+    // specific output size.
+    auto materializedResult = aggregateTables(std::move(result.idTables()), 6);
+    EXPECT_EQ(
+        materializedResult.first,
+        trimToLimitAndOffset(std::move(reference), getOffset(), getLimit()));
+  }
 }
 
 // _____________________________________________________________________________
@@ -494,6 +506,7 @@ TEST_P(CartesianProductJoinLazyTest, leftTableBiggerThanChunk) {
   std::ranges::fill(bigTable.getColumn(3),
                     Id::makeFromVocabIndex(VocabIndex::make(100)));
 
+  join.getExecutionContext()->getQueryTreeCache().clearAll();
   auto result = join.computeResultOnlyForTesting(true);
   ASSERT_FALSE(result.isFullyMaterialized());
 
