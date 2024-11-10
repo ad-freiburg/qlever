@@ -1,4 +1,4 @@
-// Copyright 2011 - 2022, University of Freiburg
+// Copyright 2011 - 2024, University of Freiburg
 // Chair of Algorithms and Data Structures
 // Authors: Björn Buchhold <b.buchhold@gmail.com>
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
@@ -761,19 +761,6 @@ Awaitable<void> Server::processQuery(
   LOG(INFO) << "Requested media type of result is \""
             << ad_utility::toString(mediaType) << "\"" << std::endl;
 
-  // TODO<c++23> use std::optional::transform
-  std::optional<uint64_t> maxSend = std::nullopt;
-  auto parameterValue =
-      ad_utility::url_parser::getParameterCheckAtMostOnce(params, "send");
-  if (parameterValue.has_value()) {
-    maxSend = std::stoul(parameterValue.value());
-  }
-  // Limit JSON requests by default
-  if (!maxSend.has_value() && (mediaType == MediaType::sparqlJson ||
-                               mediaType == MediaType::qleverJson)) {
-    maxSend = MAX_NOF_ROWS_IN_RESULT;
-  }
-
   auto queryHub = queryHub_.lock();
   AD_CORRECTNESS_CHECK(queryHub);
   ad_utility::websocket::MessageSender messageSender{getQueryId(request, query),
@@ -800,22 +787,27 @@ Awaitable<void> Server::processQuery(
     // This may be caused by a bug (the code is not yet tested well) or by an
     // attack which tries to circumvent (not yet existing) access controls for
     // Update.
-    throw std::runtime_error("Expected Query but received Update.");
+    throw std::runtime_error("Expected normal query but received update query");
   }
 
-  // Apply stricter limit for export if present
-  if (maxSend.has_value()) {
-    auto& pq = plannedQuery.parsedQuery_;
-    pq._limitOffset._limit =
-        std::min(maxSend.value(), pq._limitOffset.limitOrDefault());
+  // Read the export limit from the send` parameter (historical name). This
+  // limits the number of bindings exported in `ExportQueryExecutionTrees`.
+  // It should only have an effect for the QLever JSON export.
+  auto& limitOffset = plannedQuery.parsedQuery_._limitOffset;
+  auto& exportLimit = limitOffset.exportLimit_;
+  auto sendParameter =
+      ad_utility::url_parser::getParameterCheckAtMostOnce(params, "send");
+  if (sendParameter.has_value() && mediaType == MediaType::qleverJson) {
+    exportLimit = std::stoul(sendParameter.value());
   }
-  // Make sure we don't underflow here
-  AD_CORRECTNESS_CHECK(plannedQuery.parsedQuery_._limitOffset._offset >=
+
+  // Make sure that the offset is not applied again when exporting the result
+  // (it is already applied by the root operation in the query execution
+  // tree). Note that we don't need this for the limit because applying a
+  // fixed limit is idempotent.
+  AD_CORRECTNESS_CHECK(limitOffset._offset >=
                        qet.getRootOperation()->getLimit()._offset);
-  // Don't apply offset twice, if the offset was not applied to the operation
-  // then the exporter can safely apply it during export.
-  plannedQuery.parsedQuery_._limitOffset._offset -=
-      qet.getRootOperation()->getLimit()._offset;
+  limitOffset._offset -= qet.getRootOperation()->getLimit()._offset;
 
   // This actually processes the query and sends the result in the requested
   // format.
@@ -824,6 +816,9 @@ Awaitable<void> Server::processQuery(
 
   // Print the runtime info. This needs to be done after the query
   // was computed.
+  LOG(INFO) << "Done processing query and sending result"
+            << ", total time was " << requestTimer.msecs().count() << " ms"
+            << std::endl;
 
   // Log that we are done with the query and how long it took.
   //
@@ -833,9 +828,6 @@ Awaitable<void> Server::processQuery(
   // contain timing information).
   //
   // TODO<joka921> Also log an identifier of the query.
-  LOG(INFO) << "Done processing query and sending result"
-            << ", total time was " << requestTimer.msecs().count() << " ms"
-            << std::endl;
   LOG(DEBUG) << "Runtime Info:\n"
              << qet.getRootOperation()->runtimeInfo().toString() << std::endl;
   co_return;
