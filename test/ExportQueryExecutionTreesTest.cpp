@@ -81,7 +81,7 @@ nlohmann::json runJSONQuery(const std::string& kg, const std::string& query,
 struct TestCaseSelectQuery {
   std::string kg;                   // The knowledge graph (TURTLE)
   std::string query;                // The query (SPARQL)
-  size_t resultSize;                // The expected number of results.
+  uint64_t resultSize;              // The expected number of results.
   std::string resultTsv;            // The expected result in TSV format.
   std::string resultCsv;            // The expected result in CSV format
   nlohmann::json resultQLeverJSON;  // The expected result in QLeverJSOn format.
@@ -110,9 +110,9 @@ struct TestCaseAskQuery {
 struct TestCaseConstructQuery {
   std::string kg;                   // The knowledge graph (TURTLE)
   std::string query;                // The query (SPARQL)
-  size_t resultSizeTotal;           // The expected number of results,
+  uint64_t resultSizeTotal;         // The expected number of results,
                                     // including triples with UNDEF values.
-  size_t resultSizeExported;        // The expected number of results exported.
+  uint64_t resultSizeExported;      // The expected number of results exported.
   std::string resultTsv;            // The expected result in TSV format.
   std::string resultCsv;            // The expected result in CSV format
   std::string resultTurtle;         // The expected result in Turtle format
