@@ -1,4 +1,4 @@
-// Copyright 2011 - 2022, University of Freiburg
+// Copyright 2011 - 2024, University of Freiburg
 // Chair of Algorithms and Data Structures
 // Authors: Björn Buchhold <b.buchhold@gmail.com>
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>

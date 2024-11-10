@@ -105,9 +105,9 @@ class DeltaTriples {
   explicit DeltaTriples(const Index& index);
   explicit DeltaTriples(const IndexImpl& index) : index_{index} {};
 
-  // TODO: Undeleted because they are needed in `test/ExecuteUpdateTest.cpp`.
-  // DeltaTriples(const DeltaTriples&) = delete;
-  // DeltaTriples& operator=(const DeltaTriples&) = delete;
+  // Disable accidental copying.
+  DeltaTriples(const DeltaTriples&) = delete;
+  DeltaTriples& operator=(const DeltaTriples&) = delete;
 
   // Get the common `LocalVocab` of the delta triples.
  private:

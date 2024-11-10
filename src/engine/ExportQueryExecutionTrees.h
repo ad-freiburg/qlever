@@ -1,6 +1,8 @@
-//  Copyright 2022, University of Freiburg,
-//                  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2022 - 2024, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//          Robin Textor-Falconi <robintf@cs.uni-freiburg.de>
+//          Hannah Bast <bast@cs.uni-freiburg.de>
 
 #pragma once
 
@@ -105,8 +107,9 @@ class ExportQueryExecutionTrees {
   static cppcoro::generator<std::string> selectQueryResultBindingsToQLeverJSON(
       const QueryExecutionTree& qet,
       const parsedQuery::SelectClause& selectClause,
-      LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
-      uint64_t& resultSize, CancellationHandle cancellationHandle);
+      const LimitOffsetClause& limitAndOffset,
+      std::shared_ptr<const Result> result, uint64_t& resultSize,
+      CancellationHandle cancellationHandle);
 
   // Generate the bindings of the result of a CONSTRUCT query in the
   // `application/ qlever+json` format.
@@ -114,8 +117,9 @@ class ExportQueryExecutionTrees {
   constructQueryResultBindingsToQLeverJSON(
       const QueryExecutionTree& qet,
       const ad_utility::sparql_types::Triples& constructTriples,
-      LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
-      uint64_t& resultSize, CancellationHandle cancellationHandle);
+      const LimitOffsetClause& limitAndOffset,
+      std::shared_ptr<const Result> result, uint64_t& resultSize,
+      CancellationHandle cancellationHandle);
 
   // Helper function that generates the individual bindings for the
   // `application/ qlever+json` format.
