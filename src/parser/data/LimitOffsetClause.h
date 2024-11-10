@@ -63,11 +63,5 @@ struct LimitOffsetClause {
   // almost always.
   bool isUnconstrained() const { return !_limit.has_value() && _offset == 0; }
 
-  // Return true if and only if it is OK to process the query lazily.
-  //
-  // NOTE: If we don't modify the `LIMIT` of the original query, this is always
-  // fine.
-  bool requestLaziness() const { return true; }
-
   bool operator==(const LimitOffsetClause&) const = default;
 };
