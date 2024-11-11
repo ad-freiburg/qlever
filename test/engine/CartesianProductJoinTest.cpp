@@ -449,8 +449,6 @@ TEST_P(CartesianProductJoinLazyTest, allTablesSmallerThanChunk) {
       {1, 11, 102, 1000, 10001, 100001},
   });
 
-  // In this case the tables are split randomly and thus we can't assert a
-  // specific output size.
   auto materializedResult = aggregateTables(std::move(result.idTables()), 6);
   EXPECT_EQ(
       materializedResult.first,
@@ -483,25 +481,26 @@ TEST_P(CartesianProductJoinLazyTest, leftTableBiggerThanChunk) {
   };
   fillWithVocabValue(3, 100);
 
-  /*join.getExecutionContext()->getQueryTreeCache().clearAll();
+  join.getExecutionContext()->getQueryTreeCache().clearAll();
   auto result = join.computeResultOnlyForTesting(true);
   ASSERT_FALSE(result.isFullyMaterialized());
 
   fillWithVocabValue(1, 0);
   fillWithVocabValue(2, 10);
-  IdTable table1 = bigTable.clone();
+  IdTable reference = bigTable.clone();
 
   fillWithVocabValue(1, 1);
   fillWithVocabValue(2, 11);
-  IdTable table2 = bigTable.clone();
+  reference.insertAtEnd(bigTable);
 
   fillWithVocabValue(1, 2);
   fillWithVocabValue(2, 12);
-  IdTable table3 = bigTable.clone();
+  reference.insertAtEnd(bigTable);
 
-  expectGeneratorYieldsValues<3>(
-      {std::move(table1), std::move(table2), std::move(table3)},
-      std::move(result.idTables()));*/
+  auto materializedResult = aggregateTables(std::move(result.idTables()), 4);
+  EXPECT_EQ(
+      materializedResult.first,
+      trimToLimitAndOffset(std::move(reference), getOffset(), getLimit()));
 }
 
 // _____________________________________________________________________________

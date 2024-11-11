@@ -17,14 +17,6 @@ class CartesianProductJoin : public Operation {
   Children children_;
   size_t chunkSize_;
 
-  struct IdTableWithMetadata {
-    const IdTable& idTable_;
-    size_t totalOffset_;
-    size_t tableOffset_;
-    size_t totalLimit_;
-    bool done_ = false;
-  };
-
   // Access to the actual operations of the children.
   // TODO<joka921> We can move this whole children management into a base class
   // and clean up the implementation of several other children.
@@ -94,9 +86,9 @@ class CartesianProductJoin : public Operation {
   // `targetColumn`. Repeat until the `targetColumn` is completely filled. Skip
   // the first `offset` write operations to the `targetColumn`. Call
   // `checkCancellation` after each write.
-  size_t writeResultColumn(std::span<Id> targetColumn,
-                           std::span<const Id> inputColumn, size_t groupSize,
-                           size_t offset) const;
+  void writeResultColumn(std::span<Id> targetColumn,
+                         std::span<const Id> inputColumn, size_t groupSize,
+                         size_t offset) const;
 
   // Write all columns of the subresults into an `IdTable` and return it.
   IdTable writeAllColumns(std::ranges::random_access_range auto idTables,
@@ -108,11 +100,19 @@ class CartesianProductJoin : public Operation {
             std::vector<std::shared_ptr<const Result>>>
   calculateSubResults(bool requestLaziness);
 
+  // Take a range of `IdTable`s and a corresponding `LocalVocab` and yield
+  // `IdTable`s with sizes up to `chunkSize_` until the limit is reached.
+  // `offset` indicates the total offset of the desired result.
+  // `limit` is the maximum number of rows to yield.
+  // `lastTableOffset` is the offset of the last table in the range. This is
+  // used to handle `IdTable`s yielded by generators where the range of indices
+  // they represent do not cover the whole result.
   Result::Generator produceTablesLazily(LocalVocab mergedVocab,
                                         std::ranges::range auto idTables,
                                         size_t offset, size_t limit,
                                         size_t lastTableOffset = 0) const;
 
+  // Similar to `produceTablesLazily` but can handle a single lazy result.
   Result::Generator createLazyConsumer(
       LocalVocab staticMergedVocab, std::shared_ptr<const Result> lazyResult,
       std::vector<std::shared_ptr<const Result>> subresults) const;

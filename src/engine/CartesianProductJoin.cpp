@@ -5,7 +5,6 @@
 #include "engine/CartesianProductJoin.h"
 
 #include "engine/CallFixedSize.h"
-#include "util/Algorithm.h"
 
 // ____________________________________________________________________________
 CartesianProductJoin::CartesianProductJoin(
@@ -90,10 +89,10 @@ bool CartesianProductJoin::knownEmptyResult() {
 }
 
 // ____________________________________________________________________________
-size_t CartesianProductJoin::writeResultColumn(std::span<Id> targetColumn,
-                                               std::span<const Id> inputColumn,
-                                               size_t groupSize,
-                                               size_t offset) const {
+void CartesianProductJoin::writeResultColumn(std::span<Id> targetColumn,
+                                             std::span<const Id> inputColumn,
+                                             size_t groupSize,
+                                             size_t offset) const {
   // Copy each element from the `inputColumn` `groupSize` times to
   // the `targetColumn`, repeat until the `targetColumn` is completely filled.
   size_t numRowsWritten = 0;
@@ -108,14 +107,14 @@ size_t CartesianProductJoin::writeResultColumn(std::span<Id> targetColumn,
     for (size_t i = firstInputElementIdx; i < inputSize; ++i) {
       for (size_t u = groupStartIdx; u < groupSize; ++u) {
         if (numRowsWritten == targetSize) {
-          return i;
+          return;
         }
         targetColumn[numRowsWritten] = inputColumn[i];
         ++numRowsWritten;
         checkCancellation();
       }
       if (numRowsWritten == targetSize) {
-        return i;
+        return;
       }
       // only the first round might be incomplete because of the offset, all
       // subsequent rounds start at 0.
