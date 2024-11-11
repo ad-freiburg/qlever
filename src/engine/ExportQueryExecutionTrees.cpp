@@ -1,6 +1,8 @@
 // Copyright 2022 - 2024, University of Freiburg
 // Chair of Algorithms and Data Structures
-// Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//          Robin Textor-Falconi <textorr@cs.uni-freiburg.de>
+//          Hannah Bast <bast@cs.uni-freiburg.de>
 
 #include "ExportQueryExecutionTrees.h"
 
@@ -83,31 +85,82 @@ ExportQueryExecutionTrees::getIdTables(const Result& result) {
   }
 }
 
-// Return a range that contains the indices of the rows that have to be exported
-// from the `idTable` given the `LimitOffsetClause`. It takes into account the
-// LIMIT, the OFFSET, and the actual size of the `idTable`
+// _____________________________________________________________________________
 cppcoro::generator<ExportQueryExecutionTrees::TableWithRange>
 ExportQueryExecutionTrees::getRowIndices(LimitOffsetClause limitOffset,
-                                         const Result& result) {
+                                         const Result& result,
+                                         uint64_t& resultSize) {
+  // The first call initializes the `resultSize` to zero (no need to
+  // initialize it outside of the function).
+  resultSize = 0;
+
+  // If the LIMIT is zero, there are no blocks to yield and the total result
+  // size is zero.
   if (limitOffset._limit.value_or(1) == 0) {
     co_return;
   }
+
+  // The effective offset, limit, and export limit. These will be updated after
+  // each block, see `updateEffectiveOffsetAndLimits` below. If they were not
+  // specified, they are initialized to their default values (0 for the offset
+  // and `std::numeric_limits<uint64_t>::max()` for the two limits).
+  uint64_t effectiveOffset = limitOffset._offset;
+  uint64_t effectiveLimit = limitOffset.limitOrDefault();
+  uint64_t effectiveExportLimit = limitOffset.exportLimitOrDefault();
+
+  // Make sure that the export limit is at most the limit (increasing the
+  // export limit beyond the limit has no effect).
+  effectiveExportLimit = std::min(effectiveExportLimit, effectiveLimit);
+
+  // Iterate over the result in blocks.
   for (TableConstRefWithVocab& tableWithVocab : getIdTables(result)) {
-    uint64_t currentOffset =
-        limitOffset.actualOffset(tableWithVocab.idTable_.numRows());
-    uint64_t upperBound =
-        limitOffset.upperBound(tableWithVocab.idTable_.numRows());
-    if (currentOffset != upperBound) {
+    // If all rows in the current block are before the effective offset, we can
+    // skip the block entirely. If not, there is at least something to count
+    // and maybe also something to yield.
+    uint64_t currentBlockSize = tableWithVocab.idTable_.numRows();
+    if (effectiveOffset >= currentBlockSize) {
+      effectiveOffset -= currentBlockSize;
+      continue;
+    }
+    AD_CORRECTNESS_CHECK(effectiveOffset < currentBlockSize);
+    AD_CORRECTNESS_CHECK(effectiveLimit > 0);
+
+    // Compute the range of rows to be exported (can by zero) and to be counted
+    // (always non-zero at this point).
+    uint64_t rangeBegin = effectiveOffset;
+    uint64_t numRowsToBeExported =
+        std::min(effectiveExportLimit, currentBlockSize - rangeBegin);
+    uint64_t numRowsToBeCounted =
+        std::min(effectiveLimit, currentBlockSize - rangeBegin);
+    AD_CORRECTNESS_CHECK(rangeBegin + numRowsToBeExported <= currentBlockSize);
+    AD_CORRECTNESS_CHECK(rangeBegin + numRowsToBeCounted <= currentBlockSize);
+    AD_CORRECTNESS_CHECK(numRowsToBeCounted > 0);
+
+    // If there is something to be exported, yield it.
+    if (numRowsToBeExported > 0) {
       co_yield {std::move(tableWithVocab),
-                std::views::iota(currentOffset, upperBound)};
+                std::views::iota(rangeBegin, rangeBegin + numRowsToBeExported)};
     }
-    limitOffset._offset -= currentOffset;
-    if (limitOffset._limit.has_value()) {
-      limitOffset._limit =
-          limitOffset._limit.value() - (upperBound - currentOffset);
-    }
-    if (limitOffset._limit.value_or(1) == 0) {
-      break;
+
+    // Add to `resultSize` and update the effective offset (which becomes zero
+    // after the first non-skipped block) and limits (make sure to never go
+    // below zero and `std::numeric_limits<uint64_t>::max()` stays there).
+    resultSize += numRowsToBeCounted;
+    effectiveOffset = 0;
+    auto reduceLimit = [&](uint64_t& limit, uint64_t subtrahend) {
+      if (limit != std::numeric_limits<uint64_t>::max()) {
+        limit = limit > subtrahend ? limit - subtrahend : 0;
+      }
+    };
+    reduceLimit(effectiveLimit, numRowsToBeCounted);
+    reduceLimit(effectiveExportLimit, numRowsToBeCounted);
+
+    // If the effective limit is zero, there is nothing to yield and nothing
+    // to count anymore. This should come at the end of this loop and not at
+    // the beginning, to avoid unnecessarily fetching another block from
+    // `result`.
+    if (effectiveLimit == 0) {
+      co_return;
     }
   }
 }
@@ -118,8 +171,9 @@ ExportQueryExecutionTrees::constructQueryResultToTriples(
     const QueryExecutionTree& qet,
     const ad_utility::sparql_types::Triples& constructTriples,
     LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
-    CancellationHandle cancellationHandle) {
-  for (const auto& [pair, range] : getRowIndices(limitAndOffset, *result)) {
+    uint64_t& resultSize, CancellationHandle cancellationHandle) {
+  for (const auto& [pair, range] :
+       getRowIndices(limitAndOffset, *result, resultSize)) {
     auto& idTable = pair.idTable_;
     for (uint64_t i : range) {
       ConstructQueryExportContext context{i, idTable, pair.localVocab_,
@@ -140,6 +194,11 @@ ExportQueryExecutionTrees::constructQueryResultToTriples(
       }
     }
   }
+  // For each result from the WHERE clause, we produce up to
+  // `constructTriples.size()` triples. We do not account for triples that are
+  // filtered out because one of the components is UNDEF (it would require
+  // materializing the whole result).
+  resultSize *= constructTriples.size();
 }
 
 // _____________________________________________________________________________
@@ -151,9 +210,10 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
         LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
         CancellationHandle cancellationHandle) {
   result->logResultSize();
-  auto generator =
-      constructQueryResultToTriples(qet, constructTriples, limitAndOffset,
-                                    result, std::move(cancellationHandle));
+  [[maybe_unused]] uint64_t resultSize = 0;
+  auto generator = constructQueryResultToTriples(
+      qet, constructTriples, limitAndOffset, result, resultSize,
+      std::move(cancellationHandle));
   for (const auto& triple : generator) {
     co_yield triple.subject_;
     co_yield ' ';
@@ -182,11 +242,12 @@ cppcoro::generator<std::string>
 ExportQueryExecutionTrees::constructQueryResultBindingsToQLeverJSON(
     const QueryExecutionTree& qet,
     const ad_utility::sparql_types::Triples& constructTriples,
-    const LimitOffsetClause& limitAndOffset, std::shared_ptr<const Result> res,
+    const LimitOffsetClause& limitAndOffset,
+    std::shared_ptr<const Result> result, uint64_t& resultSize,
     CancellationHandle cancellationHandle) {
-  auto generator = constructQueryResultToTriples(qet, constructTriples,
-                                                 limitAndOffset, std::move(res),
-                                                 std::move(cancellationHandle));
+  auto generator = constructQueryResultToTriples(
+      qet, constructTriples, limitAndOffset, std::move(result), resultSize,
+      std::move(cancellationHandle));
   for (auto& triple : generator) {
     auto binding = nlohmann::json::array({std::move(triple.subject_),
                                           std::move(triple.predicate_),
@@ -230,12 +291,13 @@ nlohmann::json idTableToQLeverJSONRow(
 // _____________________________________________________________________________
 cppcoro::generator<std::string>
 ExportQueryExecutionTrees::idTableToQLeverJSONBindings(
-    const QueryExecutionTree& qet, const LimitOffsetClause& limitAndOffset,
+    const QueryExecutionTree& qet, LimitOffsetClause limitAndOffset,
     const QueryExecutionTree::ColumnIndicesAndTypes columns,
-    std::shared_ptr<const Result> result,
+    std::shared_ptr<const Result> result, uint64_t& resultSize,
     CancellationHandle cancellationHandle) {
   AD_CORRECTNESS_CHECK(result != nullptr);
-  for (const auto& [pair, range] : getRowIndices(limitAndOffset, *result)) {
+  for (const auto& [pair, range] :
+       getRowIndices(limitAndOffset, *result, resultSize)) {
     for (uint64_t rowIndex : range) {
       co_yield idTableToQLeverJSONRow(qet, columns, pair.localVocab_, rowIndex,
                                       pair.idTable_)
@@ -440,7 +502,7 @@ ExportQueryExecutionTrees::selectQueryResultBindingsToQLeverJSON(
     const QueryExecutionTree& qet,
     const parsedQuery::SelectClause& selectClause,
     const LimitOffsetClause& limitAndOffset,
-    std::shared_ptr<const Result> result,
+    std::shared_ptr<const Result> result, uint64_t& resultSize,
     CancellationHandle cancellationHandle) {
   AD_CORRECTNESS_CHECK(result != nullptr);
   LOG(DEBUG) << "Resolving strings for finished binary result...\n";
@@ -448,7 +510,7 @@ ExportQueryExecutionTrees::selectQueryResultBindingsToQLeverJSON(
       qet.selectedVariablesToColumnIndices(selectClause, true);
 
   return idTableToQLeverJSONBindings(qet, limitAndOffset, selectedColumnIndices,
-                                     std::move(result),
+                                     std::move(result), resultSize,
                                      std::move(cancellationHandle));
 }
 
@@ -479,7 +541,9 @@ ExportQueryExecutionTrees::selectQueryResultToStream(
 
   // special case : binary export of IdTable
   if constexpr (format == MediaType::octetStream) {
-    for (const auto& [pair, range] : getRowIndices(limitAndOffset, *result)) {
+    uint64_t resultSize = 0;
+    for (const auto& [pair, range] :
+         getRowIndices(limitAndOffset, *result, resultSize)) {
       for (uint64_t i : range) {
         for (const auto& columnIndex : selectedColumnIndices) {
           if (columnIndex.has_value()) {
@@ -510,7 +574,9 @@ ExportQueryExecutionTrees::selectQueryResultToStream(
   constexpr auto& escapeFunction = format == MediaType::tsv
                                        ? RdfEscaping::escapeForTsv
                                        : RdfEscaping::escapeForCsv;
-  for (const auto& [pair, range] : getRowIndices(limitAndOffset, *result)) {
+  uint64_t resultSize = 0;
+  for (const auto& [pair, range] :
+       getRowIndices(limitAndOffset, *result, resultSize)) {
     for (uint64_t i : range) {
       for (size_t j = 0; j < selectedColumnIndices.size(); ++j) {
         if (selectedColumnIndices[j].has_value()) {
@@ -635,7 +701,9 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
   auto selectedColumnIndices =
       qet.selectedVariablesToColumnIndices(selectClause, false);
   // TODO<joka921> we could prefilter for the nonexisting variables.
-  for (const auto& [pair, range] : getRowIndices(limitAndOffset, *result)) {
+  uint64_t resultSize = 0;
+  for (const auto& [pair, range] :
+       getRowIndices(limitAndOffset, *result, resultSize)) {
     for (uint64_t i : range) {
       co_yield "\n  <result>";
       for (size_t j = 0; j < selectedColumnIndices.size(); ++j) {
@@ -702,7 +770,9 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
   };
 
   bool isFirstRow = true;
-  for (const auto& [pair, range] : getRowIndices(limitAndOffset, *result)) {
+  uint64_t resultSize = 0;
+  for (const auto& [pair, range] :
+       getRowIndices(limitAndOffset, *result, resultSize)) {
     for (uint64_t i : range) {
       if (!isFirstRow) [[likely]] {
         co_yield ",";
@@ -743,9 +813,10 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
                                        ? RdfEscaping::escapeForTsv
                                        : RdfEscaping::escapeForCsv;
   constexpr char sep = format == MediaType::tsv ? '\t' : ',';
-  auto generator =
-      constructQueryResultToTriples(qet, constructTriples, limitAndOffset,
-                                    result, std::move(cancellationHandle));
+  [[maybe_unused]] uint64_t resultSize = 0;
+  auto generator = constructQueryResultToTriples(
+      qet, constructTriples, limitAndOffset, result, resultSize,
+      std::move(cancellationHandle));
   for (auto& triple : generator) {
     co_yield escapeFunction(std::move(triple.subject_));
     co_yield sep;
@@ -857,28 +928,34 @@ ExportQueryExecutionTrees::computeResultAsQLeverJSON(
   co_yield absl::StrCat(prefixStr.substr(0, prefixStr.size() - 1),
                         R"(,"res":[)");
 
+  // Yield the bindings and compute the result size.
+  uint64_t resultSize = 0;
   auto bindings = [&]() {
     if (query.hasSelectClause()) {
       return selectQueryResultBindingsToQLeverJSON(
           qet, query.selectClause(), query._limitOffset, std::move(result),
-          std::move(cancellationHandle));
+          resultSize, std::move(cancellationHandle));
     } else if (query.hasConstructClause()) {
       return constructQueryResultBindingsToQLeverJSON(
           qet, query.constructClause().triples_, query._limitOffset,
-          std::move(result), std::move(cancellationHandle));
+          std::move(result), resultSize, std::move(cancellationHandle));
     } else {
       // TODO<joka921>: Refactor this to use std::visit.
       return askQueryResultToQLeverJSON(std::move(result));
     }
   }();
 
-  size_t resultSize = 0;
+  size_t numBindingsExported = 0;
   for (const std::string& b : bindings) {
-    if (resultSize > 0) [[likely]] {
+    if (numBindingsExported > 0) [[likely]] {
       co_yield ",";
     }
     co_yield b;
-    ++resultSize;
+    ++numBindingsExported;
+  }
+  if (numBindingsExported < resultSize) {
+    LOG(INFO) << "Number of bindings exported: " << numBindingsExported
+              << " of " << resultSize << std::endl;
   }
 
   RuntimeInformation runtimeInformation = qet.getRootOperation()->runtimeInfo();
@@ -888,11 +965,29 @@ ExportQueryExecutionTrees::computeResultAsQLeverJSON(
       std::chrono::duration_cast<std::chrono::milliseconds>(
           timeUntilFunctionCall + runtimeInformation.totalTime_);
 
+  // NOTE: We report three "results sizes" in the QLever JSON output, for the
+  // following reasons:
+  //
+  // The `resultSizeExported` is the number of bindings exported. This is
+  // redundant information (we could simply count the number of entries in the
+  // `res` array), but it is useful for testing and emphasizes the conceptual
+  // difference to `resultSizeTotal`.
+  //
+  // The `resultSizeTotal` is the number of results of the WHOLE query. For
+  // CONSTRUCT queries, it can be an overestimate because it also includes
+  // triples, where one of the components is UNDEF, which are not included
+  // in the final result of a CONSTRUCT query.
+  //
+  // The `resultsize` is equal to `resultSizeTotal`. It is included for
+  // backwards compatibility, in particular, because the QLever UI uses it
+  // at many places.
   nlohmann::json jsonSuffix;
   jsonSuffix["runtimeInformation"]["meta"] = nlohmann::ordered_json(
       qet.getRootOperation()->getRuntimeInfoWholeQuery());
   jsonSuffix["runtimeInformation"]["query_execution_tree"] =
       nlohmann::ordered_json(runtimeInformation);
+  jsonSuffix["resultSizeExported"] = numBindingsExported;
+  jsonSuffix["resultSizeTotal"] = resultSize;
   jsonSuffix["resultsize"] = resultSize;
   jsonSuffix["time"]["total"] =
       absl::StrCat(requestTimer.msecs().count(), "ms");

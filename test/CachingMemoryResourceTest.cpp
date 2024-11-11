@@ -35,6 +35,10 @@ TEST(CachingMemoryResource, allocateAndDeallocate) {
 
   ptr->deallocate(p12a, 1, 2);
   ptr->deallocate(p12b, 1, 2);
+
+  // Reset the default resource to the default resource, such that subsequent
+  // unit test running in the same binary won't run into trouble.
+  std::pmr::set_default_resource(nullptr);
 }
 
 TEST(CachingMemoryResource, equality) {
