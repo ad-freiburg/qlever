@@ -190,8 +190,7 @@ IdTable CartesianProductJoin::writeAllColumns(
   // single result is left. This can probably be done by using the
   // `ProtoResult`.
 
-  auto sizesView = std::views::transform(
-      idTables, [](const auto& idTable) { return idTable.size(); });
+  auto sizesView = std::views::transform(idTables, &IdTable::size);
   auto totalResultSize =
       std::reduce(sizesView.begin(), sizesView.end(), 1UL, std::multiplies{});
 
@@ -307,13 +306,12 @@ Result::Generator CartesianProductJoin::produceTablesLazily(
     uint64_t limitWithChunkSize = std::min(limit, chunkSize_);
     IdTable idTable = writeAllColumns(std::ranges::ref_view(idTables), offset,
                                       limitWithChunkSize, lastTableOffset);
-    if (idTable.empty()) {
-      break;
-    }
     size_t tableSize = idTable.size();
-    offset += tableSize;
-    limit -= tableSize;
-    co_yield {std::move(idTable), mergedVocab.clone()};
+    if (!idTable.empty()) {
+      offset += tableSize;
+      limit -= tableSize;
+      co_yield {std::move(idTable), mergedVocab.clone()};
+    }
     if (tableSize < limitWithChunkSize) {
       break;
     }
