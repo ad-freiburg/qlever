@@ -147,7 +147,7 @@ class IndexScan final : public Operation {
   // Filter relevant `CompressedBlockMetadata` blocks by applying the
   // `PrefilterExpression`s from `prefilters_`.
   std::vector<CompressedBlockMetadata> applyFilterBlockMetadata(
-      const std::vector<CompressedBlockMetadata>& blocks) const;
+      std::vector<CompressedBlockMetadata>&& blocks) const;
 
   // Return the (lazy) `IdTable` for this `IndexScan` in chunks.
   Result::Generator chunkedIndexScan() const;
@@ -157,6 +157,6 @@ class IndexScan final : public Operation {
   // Helper functions for the public `getLazyScanFor...` methods and
   // `chunkedIndexScan` (see above).
   Permutation::IdTableGenerator getLazyScan(
-      std::vector<CompressedBlockMetadata> blocks) const;
+      std::vector<CompressedBlockMetadata>&& blocks) const;
   std::optional<Permutation::MetadataAndBlocks> getMetadataForScan() const;
 };

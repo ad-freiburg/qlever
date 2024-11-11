@@ -448,22 +448,21 @@ RelationalExpression<comp>::getPrefilterExpressionForMetadata(
   };
 
   const auto tryGetPrefilterExprVariablePairVec =
-      [&mirroredExpression](
-          const SparqlExpression* child0, const SparqlExpression* child1,
-          bool reversed) -> std::vector<PrefilterExprVariablePair> {
-    std::vector<PrefilterExprVariablePair> resVec{};
-    if (const auto* variable =
-            dynamic_cast<const VariableExpression*>(child0)) {
-      if (const auto* valueId = dynamic_cast<const IdExpression*>(child1)) {
-        resVec.emplace_back(std::make_pair(
-            reversed ? mirroredExpression(valueId->value())
-                     : std::make_unique<p::RelationalExpression<comp>>(
-                           valueId->value()),
-            variable->value()));
-      }
-    }
-    return resVec;
-  };
+      [&mirroredExpression](const SparqlExpression* child0,
+                            const SparqlExpression* child1, bool reversed) {
+        std::vector<PrefilterExprVariablePair> resVec{};
+        if (const auto* variable =
+                dynamic_cast<const VariableExpression*>(child0)) {
+          if (const auto* valueId = dynamic_cast<const IdExpression*>(child1)) {
+            resVec.emplace_back(
+                reversed ? mirroredExpression(valueId->value())
+                         : std::make_unique<p::RelationalExpression<comp>>(
+                               valueId->value()),
+                variable->value());
+          }
+        }
+        return resVec;
+      };
   // Option 1:
   // RelationalExpression containing a VariableExpression as the first child
   // and an IdExpression as the second child.

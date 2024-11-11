@@ -157,7 +157,7 @@ VariableToColumnMap IndexScan::computeVariableToColumnMap() const {
 
 //______________________________________________________________________________
 std::vector<CompressedBlockMetadata> IndexScan::applyFilterBlockMetadata(
-    const std::vector<CompressedBlockMetadata>& blocks) const {
+    std::vector<CompressedBlockMetadata>&& blocks) const {
   std::ranges::for_each(prefilters_, [&blocks](const PrefilterIndexPair& pair) {
     pair.first->evaluate(blocks, pair.second);
   });
@@ -276,7 +276,7 @@ ScanSpecificationAsTripleComponent IndexScan::getScanSpecificationTc() const {
 
 // _____________________________________________________________________________
 Permutation::IdTableGenerator IndexScan::getLazyScan(
-    std::vector<CompressedBlockMetadata> blocks) const {
+    std::vector<CompressedBlockMetadata>&& blocks) const {
   // If there is a LIMIT or OFFSET clause that constrains the scan
   // (which can happen with an explicit subquery), we cannot use the prefiltered
   // blocks, as we currently have no mechanism to include limits and offsets
@@ -344,7 +344,8 @@ IndexScan::lazyScanForJoinOfTwoScans(const IndexScan& s1, const IndexScan& s2) {
   auto [blocks1, blocks2] = CompressedRelationReader::getBlocksForJoin(
       metaBlocks1.value(), metaBlocks2.value());
 
-  std::array result{s1.getLazyScan(blocks1), s2.getLazyScan(blocks2)};
+  std::array result{s1.getLazyScan(std::move(blocks1)),
+                    s2.getLazyScan(std::move(blocks2))};
   result[0].details().numBlocksAll_ = metaBlocks1.value().blockMetadata_.size();
   result[1].details().numBlocksAll_ = metaBlocks2.value().blockMetadata_.size();
   return result;
@@ -365,7 +366,7 @@ Permutation::IdTableGenerator IndexScan::lazyScanForJoinOfColumnWithScan(
   auto blocks = CompressedRelationReader::getBlocksForJoin(joinColumn,
                                                            metaBlocks1.value());
 
-  auto result = getLazyScan(blocks);
+  auto result = getLazyScan(std::move(blocks));
   result.details().numBlocksAll_ = metaBlocks1.value().blockMetadata_.size();
   return result;
 }

@@ -48,12 +48,11 @@ string Filter::getDescriptor() const {
 void Filter::setPrefilterExpressionForIndexScanChildren() {
   const std::vector<PrefilterVariablePair>& prefilterVec =
       _expression.getPrefilterExpressionForMetadata();
-  this->forAllDescendants(
-      [&prefilterVec](const QueryExecutionTree* ptr) -> void {
-        if (ptr) {
-          ptr->setPrefilterExpression(prefilterVec);
-        }
-      });
+  this->forAllDescendants([&prefilterVec](const QueryExecutionTree* ptr) {
+    if (ptr) {
+      ptr->setPrefilterExpression(prefilterVec);
+    }
+  });
 }
 
 // _____________________________________________________________________________

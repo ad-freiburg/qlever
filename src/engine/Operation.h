@@ -79,7 +79,15 @@ class Operation {
 
   // Set `PrefilterExpression`s (for `IndexScan`).
   virtual void setPrefilterExpression(
-      const std::vector<PrefilterVariablePair>&){};
+      const std::vector<PrefilterVariablePair>&){
+      // The prefiltering procedure is implemented by applying the
+      // PrefilterExpressions directly on the CompressedBlockMetadata.
+      // This is currently done while performing the result computation for
+      // IndexScan.
+      // (1) Overwrite this method for the derived IndexScan class.
+      // (2) The default method for all other derived classes is implemented
+      // here, no PrefilterExpressions need to be set.
+  };
 
   // Apply the provided void function for all descendants. The given function
   // must be invocable with a `const QueryExecutionTree*` object.

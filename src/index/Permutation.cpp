@@ -66,8 +66,7 @@ IdTable Permutation::scan(
   const auto& p = getActualPermutation(scanSpec);
 
   return p.reader().scan(
-      scanSpec,
-      blocks.has_value() ? std::move(blocks.value()) : p.meta_.blockData(),
+      scanSpec, blocks.has_value() ? blocks.value() : p.meta_.blockData(),
       additionalColumns, cancellationHandle,
       getLocatedTriplesForPermutation(locatedTriplesSnapshot), limitOffset);
 }

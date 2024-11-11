@@ -269,7 +269,7 @@ std::vector<BlockMetadata> RelationalExpression<Comparison>::evaluateImpl(
 template <CompOp Comparison>
 bool RelationalExpression<Comparison>::operator==(
     const PrefilterExpression& other) const {
-  const RelationalExpression<Comparison>* otherRelational =
+  const auto* otherRelational =
       dynamic_cast<const RelationalExpression<Comparison>*>(&other);
   if (!otherRelational) {
     return false;
@@ -333,7 +333,7 @@ std::vector<BlockMetadata> LogicalExpression<Operation>::evaluateImpl(
 template <LogicalOperator Operation>
 bool LogicalExpression<Operation>::operator==(
     const PrefilterExpression& other) const {
-  const LogicalExpression<Operation>* otherlogical =
+  const auto* otherlogical =
       dynamic_cast<const LogicalExpression<Operation>*>(&other);
   if (!otherlogical) {
     return false;
@@ -382,8 +382,7 @@ std::vector<BlockMetadata> NotExpression::evaluateImpl(
 
 //______________________________________________________________________________
 bool NotExpression::operator==(const PrefilterExpression& other) const {
-  const NotExpression* otherNotExpression =
-      dynamic_cast<const NotExpression*>(&other);
+  const auto* otherNotExpression = dynamic_cast<const NotExpression*>(&other);
   if (!otherNotExpression) {
     return false;
   }
