@@ -99,39 +99,21 @@ class CartesianProductJoin : public Operation {
                            size_t offset) const;
 
   // Write all columns of the subresults into an `IdTable` and return it.
-  IdTable writeAllColumns(std::ranges::range auto subResults,
-                          IdTableWithMetadata* partialIdTable = nullptr) const;
+  IdTable writeAllColumns(std::ranges::random_access_range auto idTables,
+                          size_t offset, size_t limit,
+                          size_t lastTableOffset = 0) const;
 
   // Calculate the subresults of the children and store them into a vector.
   std::pair<std::shared_ptr<const Result>,
             std::vector<std::shared_ptr<const Result>>>
   calculateSubResults(bool requestLaziness);
 
-  // Create a generator that lazily produces the Cartesian product of the
-  // results passed in `subresults`. All of those results are expected to be
-  // fully materialized. The `staticMergedVocab` is the merged vocabulary of all
-  // of those materialized results. It will be cloned for every yielded element.
-  // The `offsetFromFront` parameter indicates how many of the subresults are
-  // smaller than the `chunkSize_` when multipliying their respective sizes with
-  // each other. This value has to be at least one. This also means that tables
-  // yielded by this generator will always be smaller than `chunkSize_` or the
-  // size of the leftmost result, whichever is bigger. The `yieldEmptyTables`
-  // parameter indicates if empty tables should be yielded at all. This is
-  // useful to keep track of offsets correctly. The `limit` parameter can be
-  // used to pass a custom limit. If `offsetPtr` is not `nullptr`, it will be
-  // used to act as the offset and automatically get updated during iteration.
-  Result::Generator createLazyProducer(
-      LocalVocab staticMergedVocab,
-      std::vector<std::shared_ptr<const Result>> subresults,
-      size_t offsetFromFront, bool yieldEmptyTables = false,
-      std::optional<size_t> limit = std::nullopt,
-      size_t* offsetPtr = nullptr) const;
+  Result::Generator produceTablesLazily(LocalVocab mergedVocab,
+                                        std::ranges::range auto idTables,
+                                        size_t offset, size_t limit,
+                                        size_t lastTableOffset = 0) const;
 
-  // Similar to `createLazyProducer`, but it works with an additional single
-  // lazy result. The `staticMergedVocab` will be cloned for every yielded
-  // element and merged with the tables yielded by `lazyResult` respectively.
   Result::Generator createLazyConsumer(
       LocalVocab staticMergedVocab, std::shared_ptr<const Result> lazyResult,
-      std::vector<std::shared_ptr<const Result>> subresults,
-      size_t offsetFromFront) const;
+      std::vector<std::shared_ptr<const Result>> subresults) const;
 };
