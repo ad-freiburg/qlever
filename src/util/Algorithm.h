@@ -212,7 +212,7 @@ constexpr ForwardIterator upper_bound_iterator(ForwardIterator first,
 }
 
 namespace detail {
-inline auto dereferenceValues(std::ranges::range auto&& input) {
+inline auto dereferenceValues(const std::ranges::range auto& input) {
   return input | std::views::transform(
                      [](const auto& elem) -> decltype(auto) { return *elem; });
 }
@@ -250,16 +250,18 @@ auto cartesianProduct(Range values)
 
   while (true) {
     co_yield detail::dereferenceValues(currentIterators);
-    for (size_t i = 0; i < currentIterators.size(); i++) {
-      size_t currentIndex = currentIterators.size() - 1 - i;
+    size_t currentIndex = currentIterators.size() - 1;
+    while (true) {
       currentIterators[currentIndex]++;
       if (currentIterators[currentIndex] != end(values[currentIndex])) {
         break;
       }
+      // Make sure we don't underflow and return if we are at the end.
       if (currentIndex == 0) {
         co_return;
       }
       currentIterators[currentIndex] = begin(values[currentIndex]);
+      currentIndex--;
     }
   }
 }
