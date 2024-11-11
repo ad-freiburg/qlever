@@ -3,7 +3,8 @@
 // Authors: Julian Mundhahs <mundhahj@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
-#pragma once
+#ifndef QLEVER_ALGORITHM_H
+#define QLEVER_ALGORITHM_H
 
 #include <algorithm>
 #include <numeric>
@@ -13,7 +14,6 @@
 
 #include "util/Exception.h"
 #include "util/Forward.h"
-#include "util/Generator.h"
 #include "util/HashSet.h"
 #include "util/Iterators.h"
 #include "util/TypeTraits.h"
@@ -211,59 +211,6 @@ constexpr ForwardIterator upper_bound_iterator(ForwardIterator first,
   return first;
 }
 
-namespace detail {
-inline auto dereferenceValues(const std::ranges::range auto& input) {
-  return input | std::views::transform(
-                     [](const auto& elem) -> decltype(auto) { return *elem; });
-}
-
-template <typename T>
-using NestedIterator =
-    std::ranges::iterator_t<std::ranges::range_reference_t<T>>;
-}  // namespace detail
-
-// Helper function to compute the cartesian product of a range of ranges. For an
-// empty range of ranges, it yields once with an empty vector. If any of the
-// subranges are empty it returns without yielding any elements.
-// Semantics are similar to `std::ranges::views::cartesian_product`.
-template <std::ranges::random_access_range Range>
-auto cartesianProduct(Range values)
-    -> cppcoro::generator<const decltype(detail::dereferenceValues(
-        std::declval<std::vector<detail::NestedIterator<Range>>&>()))>
-    requires(
-        std::ranges::random_access_range<std::ranges::range_reference_t<Range>>)
-{
-  using namespace std::ranges;
-  if (any_of(values, empty)) {
-    co_return;
-  }
-  std::vector<detail::NestedIterator<Range>> currentIterators;
-  if (empty(values)) {
-    co_yield detail::dereferenceValues(currentIterators);
-    co_return;
-  }
-
-  currentIterators.reserve(size(values));
-  for (auto&& value : values) {
-    currentIterators.push_back(begin(value));
-  }
-
-  while (true) {
-    co_yield detail::dereferenceValues(currentIterators);
-    size_t currentIndex = currentIterators.size() - 1;
-    while (true) {
-      currentIterators[currentIndex]++;
-      if (currentIterators[currentIndex] != end(values[currentIndex])) {
-        break;
-      }
-      // Make sure we don't underflow and return if we are at the end.
-      if (currentIndex == 0) {
-        co_return;
-      }
-      currentIterators[currentIndex] = begin(values[currentIndex]);
-      currentIndex--;
-    }
-  }
-}
-
 }  // namespace ad_utility
+
+#endif  // QLEVER_ALGORITHM_H
