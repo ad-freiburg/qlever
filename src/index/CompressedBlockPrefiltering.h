@@ -45,6 +45,9 @@ class PrefilterExpression {
 
   virtual bool operator==(const PrefilterExpression& other) const = 0;
 
+  // Create a copy of this `PrefilterExpression`.
+  virtual std::unique_ptr<PrefilterExpression> clone() const = 0;
+
   // Format content for debugging.
   virtual std::string info(size_t depth) const = 0;
 
@@ -106,6 +109,7 @@ class RelationalExpression : public PrefilterExpression {
 
   std::unique_ptr<PrefilterExpression> logicalComplement() const override;
   bool operator==(const PrefilterExpression& other) const override;
+  std::unique_ptr<PrefilterExpression> clone() const override;
   std::string info([[maybe_unused]] size_t depth) const override;
 
  private:
@@ -135,6 +139,7 @@ class LogicalExpression : public PrefilterExpression {
 
   std::unique_ptr<PrefilterExpression> logicalComplement() const override;
   bool operator==(const PrefilterExpression& other) const override;
+  std::unique_ptr<PrefilterExpression> clone() const override;
   std::string info(size_t depth) const override;
 
  private:
@@ -149,11 +154,16 @@ class NotExpression : public PrefilterExpression {
   std::unique_ptr<PrefilterExpression> child_;
 
  public:
-  explicit NotExpression(std::unique_ptr<PrefilterExpression> child)
-      : child_(child->logicalComplement()) {}
+  explicit NotExpression(std::unique_ptr<PrefilterExpression> child,
+                         bool makeCopy = false)
+      // If we create a copy, the child expression has already been
+      // complemented while creating the original expression. Thus, just move
+      // the child.
+      : child_(makeCopy ? std::move(child) : child->logicalComplement()) {}
 
   std::unique_ptr<PrefilterExpression> logicalComplement() const override;
   bool operator==(const PrefilterExpression& other) const override;
+  std::unique_ptr<PrefilterExpression> clone() const override;
   std::string info(size_t depth) const override;
 
  private:

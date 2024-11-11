@@ -54,7 +54,7 @@ class UnaryNegateExpressionImpl : public NaryExpression<NaryOperation> {
     // With De-Morgan's rule we retrieve: ?x < IntId(10) && ?y < IntId(10)
     //
     // (1) Merge {<(>= IntId(10)), ?x>} and {<(>= IntId(10)), ?y>}
-    // with mergeChildrenForAndExpressionImpl (defined in
+    // with mergeChildrenForBinaryOpExpressionImpl (defined in
     // NumericBinaryExpressions.cpp), which we select based on isNegated = true
     // (first part of De-Morgans law).
     // Result (1): {<(>= IntId(10)), ?x>, <(>= IntId(10)), ?y>}

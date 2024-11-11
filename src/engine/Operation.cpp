@@ -10,31 +10,39 @@
 
 using namespace std::chrono_literals;
 
+//______________________________________________________________________________
 template <typename F>
-void Operation::forAllDescendants(F f) {
+void Operation::forAllDescendantsImpl(F&& f) {
   static_assert(
       std::is_same_v<void, std::invoke_result_t<F, QueryExecutionTree*>>);
   for (auto ptr : getChildren()) {
     if (ptr) {
-      f(ptr);
-      ptr->forAllDescendants(f);
+      std::forward<F>(f)(ptr);
+      ptr->forAllDescendants(std::forward<F>(f));
     }
   }
 }
 
+//______________________________________________________________________________
 template <typename F>
-void Operation::forAllDescendants(F f) const {
+void Operation::forAllDescendantsImpl(F&& f) const {
   static_assert(
       std::is_same_v<void, std::invoke_result_t<F, const QueryExecutionTree*>>);
   for (auto ptr : getChildren()) {
     if (ptr) {
-      f(ptr);
-      ptr->forAllDescendants(f);
+      std::forward<F>(f)(ptr);
+      ptr->forAllDescendants(std::forward<F>(f));
     }
   }
 }
 
-// __________________________________________________________________________________________________________
+// _____________________________________________________________________________
+void Operation::forAllDescendants(
+    std::function<void(const QueryExecutionTree*)>&& func) {
+  forAllDescendantsImpl(std::move(func));
+}
+
+// _____________________________________________________________________________
 vector<string> Operation::collectWarnings() const {
   vector<string> res = getWarnings();
   for (auto child : getChildren()) {
@@ -53,7 +61,7 @@ vector<string> Operation::collectWarnings() const {
 void Operation::recursivelySetCancellationHandle(
     SharedCancellationHandle cancellationHandle) {
   AD_CORRECTNESS_CHECK(cancellationHandle);
-  forAllDescendants([&cancellationHandle](auto child) {
+  forAllDescendantsImpl([&cancellationHandle](auto child) {
     child->getRootOperation()->cancellationHandle_ = cancellationHandle;
   });
   cancellationHandle_ = std::move(cancellationHandle);
@@ -64,7 +72,7 @@ void Operation::recursivelySetCancellationHandle(
 void Operation::recursivelySetTimeConstraint(
     std::chrono::steady_clock::time_point deadline) {
   deadline_ = deadline;
-  forAllDescendants([deadline](auto child) {
+  forAllDescendantsImpl([deadline](auto child) {
     child->getRootOperation()->deadline_ = deadline;
   });
 }

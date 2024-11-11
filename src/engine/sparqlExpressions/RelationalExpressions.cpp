@@ -464,13 +464,12 @@ RelationalExpression<comp>::getPrefilterExpressionForMetadata(
     }
     return resVec;
   };
-  std::vector<PrefilterExprVariablePair> resVec;
   // Option 1:
   // RelationalExpression containing a VariableExpression as the first child
   // and an IdExpression as the second child.
   // E.g. for ?x >= 10 (RelationalExpression Sparql), we obtain the following
   // pair with PrefilterExpression and Variable: <(>= 10), ?x>
-  resVec = tryGetPrefilterExprVariablePairVec(child0, child1, false);
+  auto resVec = tryGetPrefilterExprVariablePairVec(child0, child1, false);
   if (!resVec.empty()) {
     return resVec;
   }

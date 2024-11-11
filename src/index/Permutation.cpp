@@ -52,11 +52,11 @@ void Permutation::loadFromDisk(const std::string& onDiskBase,
 }
 
 // _____________________________________________________________________
-IdTable Permutation::scan(const ScanSpecification& scanSpec,
-                          ColumnIndicesRef additionalColumns,
-                          const CancellationHandle& cancellationHandle,
-                          const DeltaTriples& deltaTriples,
-                          const LimitOffsetClause& limitOffset) const {
+IdTable Permutation::scan(
+    const ScanSpecification& scanSpec, ColumnIndicesRef additionalColumns,
+    const CancellationHandle& cancellationHandle,
+    const DeltaTriples& deltaTriples, const LimitOffsetClause& limitOffset,
+    std::optional<std::vector<CompressedBlockMetadata>> blocks) const {
   if (!isLoaded_) {
     throw std::runtime_error("This query requires the permutation " +
                              readableName_ + ", which was not loaded");
@@ -64,9 +64,11 @@ IdTable Permutation::scan(const ScanSpecification& scanSpec,
 
   const auto& p = getActualPermutation(scanSpec);
 
-  return p.reader().scan(scanSpec, p.meta_.blockData(), additionalColumns,
-                         cancellationHandle, locatedTriples(deltaTriples),
-                         limitOffset);
+  return p.reader().scan(
+      scanSpec,
+      blocks.has_value() ? std::move(blocks.value()) : p.meta_.blockData(),
+      additionalColumns, cancellationHandle, locatedTriples(deltaTriples),
+      limitOffset);
 }
 
 // _____________________________________________________________________

@@ -14,6 +14,7 @@
 #include "engine/Result.h"
 #include "engine/RuntimeInformation.h"
 #include "engine/VariableToColumnMap.h"
+#include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "parser/data/LimitOffsetClause.h"
 #include "parser/data/Variable.h"
 #include "util/CancellationHandle.h"
@@ -34,6 +35,9 @@ class Operation {
   using Milliseconds = std::chrono::milliseconds;
 
  public:
+  // Holds a `PrefilterExpression` with its corresponding `Variable`.
+  using PrefilterVariablePair = sparqlExpression::PrefilterExprVariablePair;
+
   // Default Constructor.
   Operation() : _executionContext(nullptr) {}
 
@@ -72,6 +76,14 @@ class Operation {
   const DeltaTriples& deltaTriples() const {
     return _executionContext->deltaTriples();
   }
+
+  // Set `PrefilterExpression`s (for `IndexScan`).
+  virtual void setPrefilterExpression(
+      const std::vector<PrefilterVariablePair>&){};
+
+  // Apply the provided void function for all descendants. The given function
+  // must be invocable with a `const QueryExecutionTree*` object.
+  void forAllDescendants(std::function<void(const QueryExecutionTree*)>&& func);
 
   // Get a unique, not ambiguous string representation for a subtree.
   // This should act like an ID for each subtree.
@@ -354,11 +366,11 @@ class Operation {
 
   // Recursively call a function on all children.
   template <typename F>
-  void forAllDescendants(F f);
+  void forAllDescendantsImpl(F&& f);
 
   // Recursively call a function on all children.
   template <typename F>
-  void forAllDescendants(F f) const;
+  void forAllDescendantsImpl(F&& f) const;
 
   // Holds a precomputed Result of this operation if it is the sibling of a
   // Service operation.

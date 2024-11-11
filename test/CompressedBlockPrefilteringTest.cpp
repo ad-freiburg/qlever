@@ -180,6 +180,12 @@ class TestPrefilterExprOnBlockMetadata : public ::testing::Test {
                                  ::testing::HasSubstr(expected));
   }
 
+  // Assert that the PrefilterExpression tree is properly copied when calling
+  // method clone.
+  auto makeTestClone(std::unique_ptr<PrefilterExpression> expr) {
+    ASSERT_EQ(*expr, *expr->clone());
+  }
+
   // Check that the provided expression prefilters the correct blocks.
   auto makeTest(std::unique_ptr<PrefilterExpression> expr,
                 std::vector<BlockMetadata>&& expected) {
@@ -569,6 +575,26 @@ TEST_F(TestPrefilterExprOnBlockMetadata, testWithOneBlockMetadataValue) {
 }
 
 //______________________________________________________________________________
+// Test method clone. clone() creates a copy of the complete PrefilterExpression
+// tree.
+TEST_F(TestPrefilterExprOnBlockMetadata, testMethodClonePrefilterExpression) {
+  makeTestClone(lt(VocabId(10)));
+  makeTestClone(gt(referenceDate2));
+  makeTestClone(andExpr(lt(VocabId(20)), gt(VocabId(10))));
+  makeTestClone(neq(IntId(10)));
+  makeTestClone(orExpr(eq(IntId(10)), neq(DoubleId(10))));
+  makeTestClone(notExpr(ge(referenceDate1)));
+  makeTestClone(notExpr(notExpr(neq(VocabId(0)))));
+  makeTestClone(notExpr(andExpr(eq(IntId(10)), neq(DoubleId(10)))));
+  makeTestClone(orExpr(orExpr(eq(VocabId(101)), lt(IntId(100))),
+                       andExpr(gt(referenceDate1), lt(referenceDate2))));
+  makeTestClone(andExpr(andExpr(neq(IntId(10)), neq(DoubleId(100.23))),
+                        orExpr(gt(DoubleId(0.001)), lt(IntId(250)))));
+  makeTestClone(orExpr(orExpr(eq(VocabId(101)), lt(IntId(100))),
+                       notExpr(andExpr(lt(VocabId(0)), neq(IntId(100))))));
+}
+
+//______________________________________________________________________________
 //______________________________________________________________________________
 // TEST SECTION 2
 //______________________________________________________________________________
@@ -620,15 +646,23 @@ const auto makeLiteralSparqlExpr =
 };
 
 //______________________________________________________________________________
+auto getExpr = [](const auto& variantVal) -> std::unique_ptr<SparqlExpression> {
+  return makeLiteralSparqlExpr(variantVal);
+};
+
+//______________________________________________________________________________
 template <typename RelExpr>
 std::unique_ptr<SparqlExpression> makeRelationalSparqlExprImpl(
     const RelValues& child0, const RelValues& child1) {
-  auto getExpr =
-      [](const auto& variantVal) -> std::unique_ptr<SparqlExpression> {
-    return makeLiteralSparqlExpr(variantVal);
-  };
   return std::make_unique<RelExpr>(std::array<SparqlExpression::Ptr, 2>{
       std::visit(getExpr, child0), std::visit(getExpr, child1)});
+};
+
+//______________________________________________________________________________
+std::unique_ptr<SparqlExpression> makeStringStartsWithSparqlExpression(
+    const RelValues& child0, const RelValues& child1) {
+  return makeStrStartsExpression(std::visit(getExpr, child0),
+                                 std::visit(getExpr, child1));
 };
 
 //______________________________________________________________________________
@@ -664,6 +698,10 @@ constexpr auto andSprqlExpr = &makeAndExpression;
 constexpr auto orSprqlExpr = &makeOrExpression;
 // NOT (`!`, `SparqlExpression`)
 constexpr auto notSprqlExpr = &makeUnaryNegateExpression;
+
+//______________________________________________________________________________
+// Create SparqlExpression `STRSTARTS`.
+constexpr auto strStartsSprql = &makeStringStartsWithSparqlExpression;
 
 // ASSERT EQUALITY
 //______________________________________________________________________________
@@ -1138,6 +1176,19 @@ TEST(SparqlExpression, getEmptyPrefilterForMoreComplexSparqlExpressions) {
       notSprqlExpr(notSprqlExpr(
           andSprqlExpr(eqSprql(varZ, BoolId(true)),
                        eqSprql(Variable{"?country"}, VocabId(20))))))));
+}
+
+// Test PrefilterExpression creation for SparqlExpression STRSTARTS
+//______________________________________________________________________________
+TEST(SparqlExpression, getPrefilterExprForStrStartsExpr) {
+  const auto varX = Variable{"?x"};
+  const auto varY = Variable{"?y"};
+  evalAndEqualityCheck(strStartsSprql(varX, VocabId(0)),
+                       pr(ge(VocabId(0)), varX));
+  evalAndEqualityCheck(strStartsSprql(VocabId(0), varX),
+                       pr(le(VocabId(0)), varX));
+  evalAndEqualityCheck(strStartsSprql(varX, varY));
+  evalAndEqualityCheck(strStartsSprql(VocabId(0), VocabId(10)));
 }
 
 // Test that the conditions required for a correct merge of child

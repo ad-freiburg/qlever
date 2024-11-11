@@ -70,7 +70,10 @@ inline auto andLambda = [](TernaryBool a, TernaryBool b) {
 namespace constructPrefilterExpr {
 namespace {
 
-// MERGE AND CONJUNCTION
+// `BinaryOperator` defines the operations `AND` and `OR`.
+using BinaryOperator = prefilterExpressions::LogicalOperator;
+
+// MERGE <BinaryOperator::AND, AndExpression>
 // _____________________________________________________________________________
 // For our pre-filtering logic over index scans, we need exactly one
 // corresponding PrefilterExpression for each relevant Variable. Thus, if the
@@ -97,44 +100,34 @@ namespace {
 // left child: {<(>= 10 AND <= 20), ?x>}; (?x >= 10 && ?x <= 20)
 // right child: {<(!= 15), ?x>, <(= 10), ?y>}; (?x != 15 && ?y = 10)
 // Returns {<((>= 10 AND <= 20) AND != 15), ?x>, <(= 10), ?y>}
+//
+//
+// MERGE <BinaryOperator::AND, OrExpression>
+// (Partial De-Morgan applied w.r.t. Or-conjunction)
 //______________________________________________________________________________
-template <typename BinaryPrefilterExpr>
-std::vector<PrefilterExprVariablePair> mergeChildrenForAndExpressionImpl(
-    std::vector<PrefilterExprVariablePair>&& leftChild,
-    std::vector<PrefilterExprVariablePair>&& rightChild) {
-  namespace pd = prefilterExpressions::detail;
-  pd::checkPropertiesForPrefilterConstruction(leftChild);
-  pd::checkPropertiesForPrefilterConstruction(rightChild);
-  // Merge the PrefilterExpression vectors from the left and right child.
-  // Remark: The vectors contain std::pairs, sorted by their respective
-  // Variable to the PrefilterExpression.
-  auto itLeft = leftChild.begin();
-  auto itRight = rightChild.begin();
-  std::vector<PrefilterExprVariablePair> resPairs;
-  while (itLeft != leftChild.end() && itRight != rightChild.end()) {
-    auto& [exprLeft, varLeft] = *itLeft;
-    auto& [exprRight, varRight] = *itRight;
-    if (varLeft == varRight) {
-      resPairs.emplace_back(std::make_unique<BinaryPrefilterExpr>(
-                                std::move(exprLeft), std::move(exprRight)),
-                            varLeft);
-      ++itLeft;
-      ++itRight;
-    } else if (varLeft < varRight) {
-      resPairs.emplace_back(std::move(*itLeft));
-      ++itLeft;
-    } else {
-      resPairs.emplace_back(std::move(*itRight));
-      ++itRight;
-    }
-  }
-  std::ranges::move(itLeft, leftChild.end(), std::back_inserter(resPairs));
-  std::ranges::move(itRight, rightChild.end(), std::back_inserter(resPairs));
-  pd::checkPropertiesForPrefilterConstruction(resPairs);
-  return resPairs;
-}
-
-// MERGE OR CONJUNCTION
+// Merge the pair values of leftChild and rightChild with the combine logic for
+// AND. Given we have a respective pair <PrefilterExpression,
+// Variable> from leftChild and rightChild for which the Variable value is
+// equal, conjunct the two PrefilterExpressions over an OrExpression. For the
+// resulting pairs, NOT (NotExpression) is applied later on. (As a result we
+// have fully applied De-Morgan on the available PrefilterExpression)
+//
+// EXAMPLE 1
+// !...(?x = 5 OR ?y = VocabId(10))
+// partial De-Morgan: ...(?x = 5 AND ?y = VocabId(10))
+// (complete De-Morgan later on with NotExpression:
+// ...(?x != 5 AND ?y != VocabId(10))) (in NumericUnaryExpression.cpp)
+// The merge function implements the following:
+// left child: {<(= 5), ?x>}
+// right child: {<(= VocabId(10)), ?y>}
+// merged: {<(= 5), ?x>, <(= VocabId(10)), ?y>}
+//
+// EXAMPLE 2
+// left child: {<(>= 10 OR <= 20), ?x>}
+// right child: {<(!= 15), ?x>, <(= 10), ?y>}
+// merged: {<((>= 10 OR <= 20) OR ?x != 15), ?x>, <(= 10), ?y>}
+//
+// MERGE <BinaryOperator::OR, OrExpression>
 //______________________________________________________________________________
 // Four examples on how this function (OR) merges the content of two children.
 //
@@ -167,14 +160,44 @@ std::vector<PrefilterExprVariablePair> mergeChildrenForAndExpressionImpl(
 // PrefiterExpression. We can't make a distinct prediction w.r.t. ?y != 0
 // => not relevant for the PrefilterExpression. Thus, we return the
 // PrefilterExpresion {<(>= 10 OR <= 0), ?x>}.
+//
+//
+// MERGE <BinaryOperator::OR, AndExpression>
+// (Partial De-Morgan applied w.r.t. And-conjunction)
 //______________________________________________________________________________
-template <typename BinaryPrefilterExpr>
-std::vector<PrefilterExprVariablePair> mergeChildrenForOrExpressionImpl(
+// Merge the pair values of leftChild and rightChild with the combine logic for
+// OR. The difference, given we have a respective pair <PrefilterExpression,
+// Variable> from leftChild and rightChild for which the Variable value is
+// equal, conjunct the two PrefilterExpressions over an AndExpression. For the
+// resulting pairs, NOT (NotExpression) is applied later on. As a result we
+// have fully applied De-Morgan on the available PrefilterExpression.
+//
+// EXAMPLE 1
+// !...(?y = 5 AND ?x <= 3); apply partial De-Morgan given NOT(!): Thus OR
+// instead of AND merge (here).
+// left child: {<(= 5), ?y>}
+// right child: {<(<= 3), ?x>}
+// merged result: {}
+//
+// EXAMPLE 2
+// !...((?x = 10 OR ?y != 0) AND ?x <= 0); apply partial De-Morgan given NOT(!):
+// Thus OR instead of AND merge (here).
+// left child: {<(= 10), ?x), <(!= 0), ?y>};
+// right child: {<(<= 0), ?x>}
+// merged result: {<((= 10) AND (<= 0)), ?x>}
+// (with NOT applied later on: {<((!= 10) OR (> 0)), ?x>})
+//______________________________________________________________________________
+template <BinaryOperator binOp, typename BinaryPrefilterExpr>
+std::vector<PrefilterExprVariablePair> mergeChildrenForBinaryOpExpressionImpl(
     std::vector<PrefilterExprVariablePair>&& leftChild,
     std::vector<PrefilterExprVariablePair>&& rightChild) {
+  using enum BinaryOperator;
   namespace pd = prefilterExpressions::detail;
   pd::checkPropertiesForPrefilterConstruction(leftChild);
   pd::checkPropertiesForPrefilterConstruction(rightChild);
+  // Merge the PrefilterExpression vectors from the left and right child.
+  // Remark: The vectors contain std::pairs, sorted by their respective
+  // Variable to the PrefilterExpression.
   auto itLeft = leftChild.begin();
   auto itRight = rightChild.begin();
   std::vector<PrefilterExprVariablePair> resPairs;
@@ -188,14 +211,41 @@ std::vector<PrefilterExprVariablePair> mergeChildrenForOrExpressionImpl(
       ++itLeft;
       ++itRight;
     } else if (varLeft < varRight) {
+      if constexpr (binOp == AND) {
+        resPairs.emplace_back(std::move(*itLeft));
+      }
       ++itLeft;
     } else {
+      if constexpr (binOp == AND) {
+        resPairs.emplace_back(std::move(*itRight));
+      }
       ++itRight;
     }
+  }
+  if constexpr (binOp == AND) {
+    std::ranges::move(itLeft, leftChild.end(), std::back_inserter(resPairs));
+    std::ranges::move(itRight, rightChild.end(), std::back_inserter(resPairs));
   }
   pd::checkPropertiesForPrefilterConstruction(resPairs);
   return resPairs;
 }
+
+// TEMPLATED STANDARD MERGE
+//______________________________________________________________________________
+constexpr auto makeAndMergeWithAndConjunction =
+    mergeChildrenForBinaryOpExpressionImpl<BinaryOperator::AND,
+                                           prefilterExpressions::AndExpression>;
+constexpr auto makeOrMergeWithOrConjunction =
+    mergeChildrenForBinaryOpExpressionImpl<BinaryOperator::OR,
+                                           prefilterExpressions::OrExpression>;
+// TEMPLATED (PARTIAL) DE-MORGAN MERGE
+//______________________________________________________________________________
+constexpr auto makeAndMergeWithOrConjunction =
+    mergeChildrenForBinaryOpExpressionImpl<BinaryOperator::AND,
+                                           prefilterExpressions::OrExpression>;
+constexpr auto makeOrMergeWithAndConjunction =
+    mergeChildrenForBinaryOpExpressionImpl<BinaryOperator::OR,
+                                           prefilterExpressions::AndExpression>;
 
 // GET TEMPLATED MERGE FUNCTION (CONJUNCTION AND / OR)
 //______________________________________________________________________________
@@ -221,8 +271,7 @@ std::vector<PrefilterExprVariablePair> mergeChildrenForOrExpressionImpl(
 // left child: {<(!= 10), ?y>, <(!= 0), ?x>}; (?y != 10 || ?x != 0)
 //
 // Remark: The (child) expressions of the left and right child have been
-// combined with the merging procedure AND
-// (mergeChildrenForAndExpressionImpl<prefilterExpression::OrExpression>),
+// combined with the merging procedure AND (makeAndMergeWithOrConjunction),
 // because with isNegated = true, it is implied that De-Morgan's law is applied.
 // Thus, the OR is logically an AND conjunction with its application.
 //
@@ -230,10 +279,10 @@ std::vector<PrefilterExprVariablePair> mergeChildrenForOrExpressionImpl(
 //
 // isNegated is true, hence we know that we have to partially apply
 // De-Morgan's law. Given that, OR switches to an AND. Therefore we use
-// mergeChildrenForAndExpressionImpl with OrExpression (PrefilterExpression)
-// as a template value (BinaryPrefilterExpr).
-// Call mergeChildrenAndExpressionImpl<prefilterExpression::OrExpression>
-// with left and right child as args., we get their merged combination:
+// mergeChildrenForBinaryOpExpressionImpl with OrExpression
+// (PrefilterExpression) as a template value (BinaryPrefilterExpr). Call
+// makeAndMergeWithOrConjunction with left and right child as arguments, we get
+// their merged combination:
 // {<(!= 10), ?y>, <((!= 0) OR ((= 5) OR (>= 10))), ?x>}
 //
 // Next their merged value is returned to UnaryNegateExpressionImpl
@@ -242,19 +291,23 @@ std::vector<PrefilterExprVariablePair> mergeChildrenForOrExpressionImpl(
 // applied.
 // {<(!= 10), ?y>, <((!= 0) OR ((= 5) OR (>= 10))), ?x>}
 // apply NotExpr.: {<!(!= 10), ?y>, <!((!= 0) OR ((= 5) OR (>= 10))), ?x>}
-// This yields: {<(= 10), ?y>, <((= 0) AND ((!= 5) AND (< 10))), ?x>}
+// This procedure yields: {<(= 10), ?y>, <((= 0) AND ((!= 5) AND (< 10))), ?x>}
 //______________________________________________________________________________
 template <typename BinaryPrefilterExpr>
 constexpr auto getMergeFunction(bool isNegated) {
   if constexpr (std::is_same_v<BinaryPrefilterExpr,
                                prefilterExpressions::AndExpression>) {
-    return !isNegated ? mergeChildrenForAndExpressionImpl<BinaryPrefilterExpr>
-                      : mergeChildrenForOrExpressionImpl<BinaryPrefilterExpr>;
+    return !isNegated ? makeAndMergeWithAndConjunction
+                      // negated, partially apply De-Morgan:
+                      // change AND to OR
+                      : makeOrMergeWithAndConjunction;
   } else {
     static_assert(std::is_same_v<BinaryPrefilterExpr,
                                  prefilterExpressions::OrExpression>);
-    return !isNegated ? mergeChildrenForOrExpressionImpl<BinaryPrefilterExpr>
-                      : mergeChildrenForAndExpressionImpl<BinaryPrefilterExpr>;
+    return !isNegated ? makeOrMergeWithOrConjunction
+                      // negated, partially apply De-Morgan:
+                      // change OR to AND
+                      : makeAndMergeWithOrConjunction;
   }
 }
 

@@ -279,6 +279,13 @@ bool RelationalExpression<Comparison>::operator==(
 
 //______________________________________________________________________________
 template <CompOp Comparison>
+std::unique_ptr<PrefilterExpression> RelationalExpression<Comparison>::clone()
+    const {
+  return std::make_unique<RelationalExpression<Comparison>>(referenceId_);
+};
+
+//______________________________________________________________________________
+template <CompOp Comparison>
 std::string RelationalExpression<Comparison>::info(
     [[maybe_unused]] size_t depth) const {
   std::stringstream stream;
@@ -337,6 +344,14 @@ bool LogicalExpression<Operation>::operator==(
 
 //______________________________________________________________________________
 template <LogicalOperator Operation>
+std::unique_ptr<PrefilterExpression> LogicalExpression<Operation>::clone()
+    const {
+  return std::make_unique<LogicalExpression<Operation>>(child1_->clone(),
+                                                        child2_->clone());
+};
+
+//______________________________________________________________________________
+template <LogicalOperator Operation>
 std::string LogicalExpression<Operation>::info(size_t depth) const {
   std::string child1Info =
       depth < maxInfoRecursion ? child1_->info(depth + 1) : "MAX_DEPTH";
@@ -374,6 +389,11 @@ bool NotExpression::operator==(const PrefilterExpression& other) const {
   }
   return *child_ == *otherNotExpression->child_;
 }
+
+//______________________________________________________________________________
+std::unique_ptr<PrefilterExpression> NotExpression::clone() const {
+  return std::make_unique<NotExpression>((child_->clone()), true);
+};
 
 //______________________________________________________________________________
 std::string NotExpression::info(size_t depth) const {
