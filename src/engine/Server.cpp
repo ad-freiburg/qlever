@@ -395,6 +395,12 @@ Awaitable<void> Server::process(
     logCommand(cmd, "clear cache completely (including unpinned elements)");
     cache_.clearAll();
     response = createJsonResponse(composeCacheStatsJson(), request);
+  } else if (auto cmd = checkParameter("cmd", "clear-delta-triples")) {
+    requireValidAccessToken("clear-delta-triples");
+    logCommand(cmd, "clear delta triples");
+    index_.deltaTriplesManager().clear();
+    response = createOkResponse("Delta triples have been cleared", request,
+                                MediaType::textPlain);
   } else if (auto cmd = checkParameter("cmd", "get-settings")) {
     logCommand(cmd, "get server settings");
     response = createJsonResponse(RuntimeParameters().toMap(), request);

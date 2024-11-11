@@ -213,6 +213,18 @@ void DeltaTriplesManager::modify(
 }
 
 // _____________________________________________________________________________
+void DeltaTriplesManager::clear() {
+  deltaTriples_.withWriteLock([this](DeltaTriples& deltaTriples) {
+    deltaTriples.clear();
+    auto newSnapshot = deltaTriples.getSnapshot();
+    currentLocatedTriplesSnapshot_.withWriteLock(
+        [&newSnapshot](auto& currentSnapshot) {
+          currentSnapshot = std::move(newSnapshot);
+        });
+  });
+}
+
+// _____________________________________________________________________________
 SharedLocatedTriplesSnapshot DeltaTriplesManager::getCurrentSnapshot() const {
   return *currentLocatedTriplesSnapshot_.rlock();
 }
