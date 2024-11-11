@@ -297,12 +297,22 @@ CartesianProductJoin::calculateSubResults(bool requestLaziness) {
   auto children = childView();
   AD_CORRECTNESS_CHECK(!std::ranges::empty(children));
   // Get all child results (possibly with limit, see above).
-  for (Operation& child :
-       std::ranges::subrange{children.begin(), children.end() - 1}) {
+  for (Operation& child : children) {
     if (limitIfPresent.has_value() && child.supportsLimit()) {
       child.setLimit(limitIfPresent.value());
     }
-    auto result = child.getResult();
+    // To preserve order of the columns we can only consume the first child
+    // lazily. In the future this restriction may be lifted by permutating the
+    // columns afterwards.
+    bool requestLazy = requestLaziness && &child == &children.back();
+    auto result = child.getResult(
+        false, requestLazy ? ComputationMode::LAZY_IF_SUPPORTED
+                           : ComputationMode::FULLY_MATERIALIZED);
+
+    if (!result->isFullyMaterialized()) {
+      lazyResult = std::move(result);
+      continue;
+    }
 
     const auto& table = result->idTable();
     // Early stopping: If one of the results is empty, we can stop early.
@@ -328,21 +338,6 @@ CartesianProductJoin::calculateSubResults(bool requestLaziness) {
     subResults.push_back(std::move(result));
   }
 
-  // To preserve order of the columns we can only consume the first child
-  // lazily. In the future this restriction may be lifted by permutating the
-  // columns afterwards.
-  if (limitIfPresent.has_value() && children.back().supportsLimit()) {
-    children.back().setLimit(limitIfPresent.value());
-  }
-  auto result = children.back().getResult(
-      false, requestLaziness ? ComputationMode::LAZY_IF_SUPPORTED
-                             : ComputationMode::FULLY_MATERIALIZED);
-  if (!result->isFullyMaterialized()) {
-    lazyResult = std::move(result);
-  } else if (result->idTable().numRows() != 1 ||
-             result->idTable().numColumns() != 0) {
-    subResults.push_back(std::move(result));
-  }
   return {std::move(lazyResult), std::move(subResults)};
 }
 
