@@ -6,6 +6,7 @@ add_library(sparqlExpressions
         SampleExpression.cpp
         RelationalExpressions.cpp
         AggregateExpression.cpp
+        StdevExpression.cpp
         RegexExpression.cpp
         NumericUnaryExpressions.cpp
         NumericBinaryExpressions.cpp
