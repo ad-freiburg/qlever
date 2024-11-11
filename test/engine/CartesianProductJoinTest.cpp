@@ -427,6 +427,15 @@ class CartesianProductJoinLazyTest
     }
     ASSERT_EQ(iterator, generator.end());
   }
+
+  // Fills the column with index `column` in the `table` with the values from
+  // `start` to `end` wrapped as Ids.
+  static void fillColumn(IdTable& table, size_t column, int64_t start,
+                         int64_t end) {
+    std::ranges::copy(
+        std::views::iota(start, end) | std::views::transform(Id::makeFromInt),
+        table.getColumn(column).begin());
+  }
 };
 
 // Out of line initialization because C++ needs this for some reason.
@@ -485,10 +494,7 @@ TEST_P(CartesianProductJoinLazyTest, leftTableBiggerThanChunk) {
   // Leftmost table individually larger than chunk size
   IdTable bigTable{1, ad_utility::testing::makeAllocator()};
   bigTable.resize(CHUNK_SIZE + 1);
-  std::ranges::copy(std::views::iota(static_cast<int64_t>(0),
-                                     static_cast<int64_t>(CHUNK_SIZE + 1)) |
-                        std::views::transform(Id::makeFromInt),
-                    bigTable.getColumn(0).begin());
+  fillColumn(bigTable, 0, 0, CHUNK_SIZE + 1);
   std::vector<IdTable> tables;
   tables.push_back(bigTable.clone());
   tables.push_back(makeIdTableFromVector({{0, 10}, {1, 11}, {2, 12}}));
@@ -503,28 +509,26 @@ TEST_P(CartesianProductJoinLazyTest, leftTableBiggerThanChunk) {
   bigTable.addEmptyColumn();
   bigTable.addEmptyColumn();
   bigTable.addEmptyColumn();
-  std::ranges::fill(bigTable.getColumn(3),
-                    Id::makeFromVocabIndex(VocabIndex::make(100)));
+  auto fillWithVocabValue = [&bigTable](size_t column, uint64_t vocabIndex) {
+    std::ranges::fill(bigTable.getColumn(column),
+                      Id::makeFromVocabIndex(VocabIndex::make(vocabIndex)));
+  };
+  fillWithVocabValue(3, 100);
 
   join.getExecutionContext()->getQueryTreeCache().clearAll();
   auto result = join.computeResultOnlyForTesting(true);
   ASSERT_FALSE(result.isFullyMaterialized());
 
-  std::ranges::fill(bigTable.getColumn(1),
-                    Id::makeFromVocabIndex(VocabIndex::make(0)));
-  std::ranges::fill(bigTable.getColumn(2),
-                    Id::makeFromVocabIndex(VocabIndex::make(10)));
+  fillWithVocabValue(1, 0);
+  fillWithVocabValue(2, 10);
   IdTable table1 = bigTable.clone();
 
-  std::ranges::fill(bigTable.getColumn(1),
-                    Id::makeFromVocabIndex(VocabIndex::make(1)));
-  std::ranges::fill(bigTable.getColumn(2),
-                    Id::makeFromVocabIndex(VocabIndex::make(11)));
+  fillWithVocabValue(1, 1);
+  fillWithVocabValue(2, 11);
   IdTable table2 = bigTable.clone();
-  std::ranges::fill(bigTable.getColumn(1),
-                    Id::makeFromVocabIndex(VocabIndex::make(2)));
-  std::ranges::fill(bigTable.getColumn(2),
-                    Id::makeFromVocabIndex(VocabIndex::make(12)));
+
+  fillWithVocabValue(1, 2);
+  fillWithVocabValue(2, 12);
   IdTable table3 = bigTable.clone();
 
   expectGeneratorYieldsValues<3>(
@@ -538,25 +542,13 @@ TEST_P(CartesianProductJoinLazyTest, tablesAccumulatedBiggerThanChunk) {
   size_t rootSize = std::sqrt(CHUNK_SIZE) + 1;
   IdTable table1{2, ad_utility::testing::makeAllocator()};
   table1.resize(rootSize);
-  std::ranges::copy(std::views::iota(static_cast<int64_t>(0),
-                                     static_cast<int64_t>(rootSize)) |
-                        std::views::transform(Id::makeFromInt),
-                    table1.getColumn(0).begin());
-  std::ranges::copy(std::views::iota(static_cast<int64_t>(-rootSize),
-                                     static_cast<int64_t>(0)) |
-                        std::views::transform(Id::makeFromInt),
-                    table1.getColumn(1).begin());
+  fillColumn(table1, 0, 0, rootSize);
+  fillColumn(table1, 1, -rootSize, 0);
 
   IdTable table2{2, ad_utility::testing::makeAllocator()};
   table2.resize(rootSize);
-  std::ranges::copy(std::views::iota(static_cast<int64_t>(rootSize),
-                                     static_cast<int64_t>(rootSize * 2)) |
-                        std::views::transform(Id::makeFromInt),
-                    table2.getColumn(0).begin());
-  std::ranges::copy(std::views::iota(static_cast<int64_t>(-rootSize * 2),
-                                     static_cast<int64_t>(-rootSize)) |
-                        std::views::transform(Id::makeFromInt),
-                    table2.getColumn(1).begin());
+  fillColumn(table2, 0, rootSize, rootSize * 2);
+  fillColumn(table2, 1, -rootSize * 2, -rootSize);
 
   std::vector<IdTable> tables;
   tables.push_back(std::move(table1));
@@ -578,25 +570,13 @@ TEST_P(CartesianProductJoinLazyTest, twoTablesMatchChunkSize) {
   size_t rootSize = std::sqrt(CHUNK_SIZE);
   IdTable table1{2, ad_utility::testing::makeAllocator()};
   table1.resize(rootSize);
-  std::ranges::copy(std::views::iota(static_cast<int64_t>(0),
-                                     static_cast<int64_t>(rootSize)) |
-                        std::views::transform(Id::makeFromInt),
-                    table1.getColumn(0).begin());
-  std::ranges::copy(std::views::iota(static_cast<int64_t>(-rootSize),
-                                     static_cast<int64_t>(0)) |
-                        std::views::transform(Id::makeFromInt),
-                    table1.getColumn(1).begin());
+  fillColumn(table1, 0, 0, rootSize);
+  fillColumn(table1, 1, -rootSize, 0);
 
   IdTable table2{2, ad_utility::testing::makeAllocator()};
   table2.resize(rootSize);
-  std::ranges::copy(std::views::iota(static_cast<int64_t>(rootSize),
-                                     static_cast<int64_t>(rootSize * 2)) |
-                        std::views::transform(Id::makeFromInt),
-                    table2.getColumn(0).begin());
-  std::ranges::copy(std::views::iota(static_cast<int64_t>(-rootSize * 2),
-                                     static_cast<int64_t>(-rootSize)) |
-                        std::views::transform(Id::makeFromInt),
-                    table2.getColumn(1).begin());
+  fillColumn(table2, 0, rootSize, rootSize * 2);
+  fillColumn(table2, 1, -rootSize * 2, -rootSize);
 
   std::vector<IdTable> tables;
   tables.push_back(std::move(table1));
