@@ -98,6 +98,7 @@ struct PathSearchConfiguration {
   Variable edgeColumn_;
   std::vector<Variable> edgeProperties_;
   bool cartesian_ = true;
+  std::optional<uint64_t> numPathsPerTarget_ = std::nullopt;
 
   bool sourceIsVariable() const {
     return std::holds_alternative<Variable>(sources_);
@@ -260,7 +261,8 @@ class PathSearch : public Operation {
    */
   pathSearch::PathsLimited findPaths(
       const Id& source, const std::unordered_set<uint64_t>& targets,
-      const pathSearch::BinSearchWrapper& binSearch) const;
+      const pathSearch::BinSearchWrapper& binSearch,
+      std::optional<uint64_t> numPathsPerTarget) const;
 
   /**
    * @brief Finds all paths in the graph.
@@ -268,7 +270,8 @@ class PathSearch : public Operation {
    */
   pathSearch::PathsLimited allPaths(
       std::span<const Id> sources, std::span<const Id> targets,
-      const pathSearch::BinSearchWrapper& binSearch, bool cartesian) const;
+      const pathSearch::BinSearchWrapper& binSearch, bool cartesian,
+      std::optional<uint64_t> numPathsPerTarget) const;
 
   /**
    * @brief Converts paths to a result table with a specified width.

@@ -283,3 +283,19 @@ std::ostream& operator<<(std::ostream& os, const std::vector<IdTriple<0>>& v) {
   std::ranges::copy(v, std::ostream_iterator<IdTriple<0>>(os, ", "));
   return os;
 }
+
+// ____________________________________________________________________________
+bool LocatedTriplesPerBlock::containsTriple(const IdTriple<0>& triple,
+                                            bool shouldExist) const {
+  auto blockContains = [&triple, shouldExist](const LocatedTriples& lt,
+                                              size_t blockIndex) {
+    LocatedTriple locatedTriple{blockIndex, triple, shouldExist};
+    locatedTriple.blockIndex_ = blockIndex;
+    return ad_utility::contains(lt, locatedTriple);
+  };
+
+  return std::ranges::any_of(map_, [&blockContains](auto& indexAndBlock) {
+    const auto& [index, block] = indexAndBlock;
+    return blockContains(block, index);
+  });
+}
