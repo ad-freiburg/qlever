@@ -53,6 +53,11 @@ inline std::string makeQleverInternalIri(const auto&... suffixes) {
                       suffixes..., ">");
 }
 
+const inline char PATH_SEARCH_IRI[] =
+    "<https://qlever.cs.uni-freiburg.de/pathSearch/>";
+const inline char SPATIAL_SEARCH_IRI[] =
+    "<https://qlever.cs.uni-freiburg.de/spatialSearch/>";
+
 constexpr inline std::string_view QLEVER_INTERNAL_PREFIX_IRI =
     makeQleverInternalIriConst<"">();
 constexpr inline std::string_view
@@ -116,6 +121,7 @@ static constexpr auto MAX_DIST_IN_METERS_REGEX =
 // estimated number of results.
 static const size_t SPATIAL_JOIN_MAX_DIST_SIZE_ESTIMATE = 1000;
 
+// TODO<ullingerc> will be obsolete, remove
 // This predicate is one of the supported identifiers for the SpatialJoin class.
 // For a given triple of the form ?a <nearest-neighbors:XXXX:YYYY> ?b, it will
 // produce for each value of ?a the nearest neighbors ?b to ?a. The number of

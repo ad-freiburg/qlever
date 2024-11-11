@@ -33,55 +33,16 @@
 
 // ____________________________________________________________________________
 SpatialJoin::SpatialJoin(
-    QueryExecutionContext* qec, SparqlTriple triple,
+    QueryExecutionContext* qec,
+    std::shared_ptr<SpatialJoinConfiguration> config,
     std::optional<std::shared_ptr<QueryExecutionTree>> childLeft,
     std::optional<std::shared_ptr<QueryExecutionTree>> childRight)
-    : Operation(qec),
-      triple_{std::move(triple)},
-      leftChildVariable_{triple_.s_.getVariable()},
-      rightChildVariable_{triple_.o_.getVariable()} {
-  // A `SpatialJoin` can be constructed from different system predicates, parse
-  parseConfigFromTriple();
-
+    : Operation(qec), config_{config} {
   if (childLeft) {
     childLeft_ = std::move(childLeft.value());
   }
   if (childRight) {
     childRight_ = std::move(childRight.value());
-  }
-
-  AD_CONTRACT_CHECK(triple_.s_.isVariable() && triple_.o_.isVariable(),
-                    "Currently, SpatialJoin needs two variables");
-}
-
-// ____________________________________________________________________________
-void SpatialJoin::parseConfigFromTriple() {
-  // Helper to convert a ctre match to an integer
-  auto matchToInt = [](std::string_view match) -> std::optional<size_t> {
-    if (match.size() > 0) {
-      size_t res = 0;
-      std::from_chars(match.data(), match.data() + match.size(), res);
-      return res;
-    }
-    return std::nullopt;
-  };
-
-  const std::string& input = triple_.p_._iri;
-
-  if (auto match = ctre::match<MAX_DIST_IN_METERS_REGEX>(input)) {
-    auto maxDist = matchToInt(match.get<"dist">());
-    AD_CORRECTNESS_CHECK(maxDist.has_value());
-    config_ = MaxDistanceConfig{maxDist.value()};
-  } else if (auto match = ctre::search<NEAREST_NEIGHBORS_REGEX>(input)) {
-    auto maxResults = matchToInt(match.get<"results">());
-    auto maxDist = matchToInt(match.get<"dist">());
-    AD_CORRECTNESS_CHECK(maxResults.has_value());
-    config_ = NearestNeighborsConfig{maxResults.value(), maxDist};
-  } else {
-    AD_THROW(
-        absl::StrCat("Tried to perform spatial join with unknown triple ",
-                     input, ". This must be a valid spatial condition like ",
-                     "<max-distance-in-meters:50> or <nearest-neighbors:3>."));
   }
 }
 
@@ -89,11 +50,11 @@ void SpatialJoin::parseConfigFromTriple() {
 std::shared_ptr<SpatialJoin> SpatialJoin::addChild(
     std::shared_ptr<QueryExecutionTree> child,
     const Variable& varOfChild) const {
-  if (varOfChild == leftChildVariable_) {
-    return std::make_shared<SpatialJoin>(getExecutionContext(), triple_,
+  if (varOfChild == config_->left_) {
+    return std::make_shared<SpatialJoin>(getExecutionContext(), config_,
                                          std::move(child), childRight_);
-  } else if (varOfChild == rightChildVariable_) {
-    return std::make_shared<SpatialJoin>(getExecutionContext(), triple_,
+  } else if (varOfChild == config_->right_) {
+    return std::make_shared<SpatialJoin>(getExecutionContext(), config_,
                                          childLeft_, std::move(child));
   } else {
     AD_THROW("variable does not match");
@@ -113,7 +74,7 @@ std::optional<size_t> SpatialJoin::getMaxDist() const {
   auto visitor = []<typename T>(const T& config) -> std::optional<size_t> {
     return config.maxDist_;
   };
-  return std::visit(visitor, config_);
+  return std::visit(visitor, config_->task_);
 }
 
 // ____________________________________________________________________________
@@ -126,7 +87,7 @@ std::optional<size_t> SpatialJoin::getMaxResults() const {
       return config.maxResults_;
     }
   };
-  return std::visit(visitor, config_);
+  return std::visit(visitor, config_->task_);
 }
 
 // ____________________________________________________________________________
@@ -163,8 +124,8 @@ string SpatialJoin::getDescriptor() const {
   // Build different descriptors depending on the configuration
   auto visitor = [this]<typename T>(const T& config) -> std::string {
     // Joined Variables
-    auto left = triple_.s_.getVariable().name();
-    auto right = triple_.o_.getVariable().name();
+    auto left = config_->left_.name();
+    auto right = config_->right_.name();
 
     // Config type
     if constexpr (std::is_same_v<T, MaxDistanceConfig>) {
@@ -176,7 +137,7 @@ string SpatialJoin::getDescriptor() const {
                           " of max. ", config.maxResults_);
     }
   };
-  return std::visit(visitor, config_);
+  return std::visit(visitor, config_->task_);
 }
 
 // ____________________________________________________________________________
@@ -321,8 +282,8 @@ PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
   auto [idTableRight, resultRight] = getIdTable(childRight_);
 
   // Input table columns for the join
-  ColumnIndex leftJoinCol = getJoinCol(childLeft_, leftChildVariable_);
-  ColumnIndex rightJoinCol = getJoinCol(childRight_, rightChildVariable_);
+  ColumnIndex leftJoinCol = getJoinCol(childLeft_, config_->left_);
+  ColumnIndex rightJoinCol = getJoinCol(childRight_, config_->right_);
 
   // Size of output table
   size_t numColumns = getResultWidth();
@@ -336,7 +297,8 @@ PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
 // ____________________________________________________________________________
 Result SpatialJoin::computeResult([[maybe_unused]] bool requestLaziness) {
   SpatialJoinAlgorithms algorithms{_executionContext, prepareJoin(),
-                                   addDistToResult_, config_};
+                                   addDistToResult_, config_->task_};
+  // TODO<ullingerc> addDistToResult and config_->bindDist_
   if (useBaselineAlgorithm_) {
     return algorithms.BaselineAlgorithm();
   } else {
@@ -351,14 +313,14 @@ VariableToColumnMap SpatialJoin::computeVariableToColumnMap() const {
 
   if (!(childLeft_ || childRight_)) {
     // none of the children has been added
-    variableToColumnMap[leftChildVariable_] = makeUndefCol(ColumnIndex{0});
-    variableToColumnMap[rightChildVariable_] = makeUndefCol(ColumnIndex{1});
+    variableToColumnMap[config_->left_] = makeUndefCol(ColumnIndex{0});
+    variableToColumnMap[config_->right_] = makeUndefCol(ColumnIndex{1});
   } else if (childLeft_ && !childRight_) {
     // only the left child has been added
-    variableToColumnMap[rightChildVariable_] = makeUndefCol(ColumnIndex{1});
+    variableToColumnMap[config_->right_] = makeUndefCol(ColumnIndex{1});
   } else if (!childLeft_ && childRight_) {
     // only the right child has been added
-    variableToColumnMap[leftChildVariable_] = makeUndefCol(ColumnIndex{0});
+    variableToColumnMap[config_->left_] = makeUndefCol(ColumnIndex{0});
   } else {
     auto addColumns = [&](std::shared_ptr<QueryExecutionTree> child,
                           size_t offset) {

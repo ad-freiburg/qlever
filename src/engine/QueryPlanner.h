@@ -11,6 +11,7 @@
 #include "engine/CheckUsePatternTrick.h"
 #include "engine/QueryExecutionTree.h"
 #include "parser/GraphPattern.h"
+#include "parser/GraphPatternOperation.h"
 #include "parser/ParsedQuery.h"
 
 class QueryPlanner {
@@ -527,6 +528,7 @@ class QueryPlanner {
     void visitBind(const parsedQuery::Bind& bind);
     void visitTransitivePath(parsedQuery::TransPath& transitivePath);
     void visitPathSearch(parsedQuery::PathQuery& config);
+    void visitSpatialSearch(parsedQuery::SpatialQuery& config);
     void visitUnion(parsedQuery::Union& un);
     void visitSubquery(parsedQuery::Subquery& subquery);
 

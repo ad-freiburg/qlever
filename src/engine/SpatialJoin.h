@@ -5,11 +5,12 @@
 
 #pragma once
 
+#include <memory>
 #include <optional>
 
 #include "engine/Operation.h"
 #include "global/Id.h"
-#include "parser/ParsedQuery.h"
+#include "parser/data/Variable.h"
 
 // Configuration to restrict the results provided by the SpatialJoin
 struct NearestNeighborsConfig {
@@ -18,6 +19,18 @@ struct NearestNeighborsConfig {
 };
 struct MaxDistanceConfig {
   size_t maxDist_;
+};
+
+// The configuration object that will be provided by the special SERVICE.
+struct SpatialJoinConfiguration {
+  std::variant<NearestNeighborsConfig, MaxDistanceConfig> task_;
+  Variable left_;
+  Variable right_;
+
+  // TODO<ullingerc>
+  // If given, the distance will be added to the result and be bound to this
+  // Variable.
+  std::optional<Variable> bindDist_;
 };
 
 // helper struct to improve readability in prepareJoin()
@@ -44,9 +57,11 @@ class SpatialJoin : public Operation {
   // distance, which two objects can be apart, which will still be accepted
   // as a match and therefore be part of the result table. The distance is
   // parsed from the triple.
-  SpatialJoin(QueryExecutionContext* qec, SparqlTriple triple,
+  SpatialJoin(QueryExecutionContext* qec,
+              std::shared_ptr<SpatialJoinConfiguration> config,
               std::optional<std::shared_ptr<QueryExecutionTree>> childLeft_,
               std::optional<std::shared_ptr<QueryExecutionTree>> childRight_);
+
   std::vector<QueryExecutionTree*> getChildren() override;
   string getCacheKeyImpl() const override;
   string getDescriptor() const override;
@@ -117,19 +132,13 @@ class SpatialJoin : public Operation {
   }
 
  private:
-  // helper function, which parses a triple and populates config_
-  void parseConfigFromTriple();
-
   // helper function, to initialize various required objects for both algorithms
   PreparedSpatialJoinParams prepareJoin() const;
 
-  SparqlTriple triple_;
-  Variable leftChildVariable_;
-  Variable rightChildVariable_;
   std::shared_ptr<QueryExecutionTree> childLeft_ = nullptr;
   std::shared_ptr<QueryExecutionTree> childRight_ = nullptr;
 
-  std::variant<NearestNeighborsConfig, MaxDistanceConfig> config_;
+  std::shared_ptr<SpatialJoinConfiguration> config_;
 
   // adds an extra column to the result, which contains the actual distance,
   // between the two objects

@@ -1,3 +1,8 @@
+//  Copyright 2024, University of Freiburg,
+//  Chair of Algorithms and Data Structures.
+//  Author: @Jonathan24680
+//  Author: Christoph Ullinger <ullingec@informatik.uni-freiburg.de>
+
 #pragma once
 
 #include "engine/Result.h"
@@ -8,6 +13,7 @@ class SpatialJoinAlgorithms {
   // initialize the Algorithm with the needed parameters
   SpatialJoinAlgorithms(
       QueryExecutionContext* qec, PreparedSpatialJoinParams params,
+      // TODO<ullingerc> bindDist_
       bool addDistToResult,
       std::variant<NearestNeighborsConfig, MaxDistanceConfig> config);
   Result BaselineAlgorithm();
@@ -35,6 +41,7 @@ class SpatialJoinAlgorithms {
 
   QueryExecutionContext* qec_;
   PreparedSpatialJoinParams params_;
+  // TODO<ullingerc> bindDist_
   bool addDistToResult_;
   std::variant<NearestNeighborsConfig, MaxDistanceConfig> config_;
 };

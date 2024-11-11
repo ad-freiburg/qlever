@@ -24,6 +24,7 @@
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "engine/sparqlExpressions/SampleExpression.h"
 #include "engine/sparqlExpressions/UuidExpressions.h"
+#include "global/Constants.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/RdfParser.h"
 #include "parser/SparqlParser.h"
@@ -829,6 +830,32 @@ GraphPatternOperation Visitor::visitPathQuery(
   return pathQuery;
 }
 
+GraphPatternOperation Visitor::visitSpatialQuery(
+    Parser::ServiceGraphPatternContext* ctx) {
+  auto parseSpatialQuery = [](parsedQuery::SpatialQuery& spatialQuery,
+                              const parsedQuery::GraphPatternOperation& op) {
+    if (std::holds_alternative<parsedQuery::BasicGraphPattern>(op)) {
+      spatialQuery.addBasicPattern(
+          std::get<parsedQuery::BasicGraphPattern>(op));
+    } else if (std::holds_alternative<parsedQuery::GroupGraphPattern>(op)) {
+      spatialQuery.addGraph(op);
+    } else {
+      throw parsedQuery::SpatialSearchException(
+          "Unsupported element in spatialQuery."
+          "spatialQuery may only consist of triples for configuration"
+          "And a { group graph pattern } specifying the right join table.");
+    }
+  };
+
+  parsedQuery::GraphPattern graphPattern = visit(ctx->groupGraphPattern());
+  parsedQuery::SpatialQuery spatialQuery;
+  for (const auto& op : graphPattern._graphPatterns) {
+    parseSpatialQuery(spatialQuery, op);
+  }
+
+  return spatialQuery;
+}
+
 // Parsing for the `serviceGraphPattern` rule.
 GraphPatternOperation Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
   // Get the IRI and if a variable is specified, report that we do not support
@@ -849,9 +876,10 @@ GraphPatternOperation Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
   auto serviceIri =
       TripleComponent::Iri::fromIriref(std::get<Iri>(varOrIri).iri());
 
-  if (serviceIri.toStringRepresentation() ==
-      "<https://qlever.cs.uni-freiburg.de/pathSearch/>") {
+  if (serviceIri.toStringRepresentation() == PATH_SEARCH_IRI) {
     return visitPathQuery(ctx);
+  } else if (serviceIri.toStringRepresentation() == SPATIAL_SEARCH_IRI) {
+    return visitSpatialQuery(ctx);
   }
   // Parse the body of the SERVICE query. Add the visible variables from the
   // SERVICE clause to the visible variables so far, but also remember them
@@ -2124,24 +2152,28 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
   using namespace sparqlExpression;
   // Create the expression using the matching factory function from
   // `NaryExpression.h`.
-  auto createUnary = [&argList]<typename Function>(Function function)
-      requires std::is_invocable_r_v<ExpressionPtr, Function, ExpressionPtr> {
+  auto createUnary =
+      [&argList]<typename Function>(Function function)
+          requires std::is_invocable_r_v<ExpressionPtr, Function, ExpressionPtr>
+  {
     AD_CORRECTNESS_CHECK(argList.size() == 1, argList.size());
     return function(std::move(argList[0]));
   };
-  auto createBinary = [&argList]<typename Function>(Function function)
-      requires std::is_invocable_r_v<ExpressionPtr, Function, ExpressionPtr,
-                                     ExpressionPtr> {
-    AD_CORRECTNESS_CHECK(argList.size() == 2);
-    return function(std::move(argList[0]), std::move(argList[1]));
-  };
-  auto createTernary = [&argList]<typename Function>(Function function)
-      requires std::is_invocable_r_v<ExpressionPtr, Function, ExpressionPtr,
-                                     ExpressionPtr, ExpressionPtr> {
-    AD_CORRECTNESS_CHECK(argList.size() == 3);
-    return function(std::move(argList[0]), std::move(argList[1]),
-                    std::move(argList[2]));
-  };
+  auto createBinary =
+      [&argList]<typename Function>(Function function)
+          requires std::is_invocable_r_v<ExpressionPtr, Function, ExpressionPtr,
+                                         ExpressionPtr> {
+            AD_CORRECTNESS_CHECK(argList.size() == 2);
+            return function(std::move(argList[0]), std::move(argList[1]));
+          };
+  auto createTernary =
+      [&argList]<typename Function>(Function function)
+          requires std::is_invocable_r_v<ExpressionPtr, Function, ExpressionPtr,
+                                         ExpressionPtr, ExpressionPtr> {
+            AD_CORRECTNESS_CHECK(argList.size() == 3);
+            return function(std::move(argList[0]), std::move(argList[1]),
+                            std::move(argList[2]));
+          };
   if (functionName == "str") {
     return createUnary(&makeStrExpression);
   } else if (functionName == "iri" || functionName == "uri") {

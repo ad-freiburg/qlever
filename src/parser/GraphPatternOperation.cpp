@@ -10,6 +10,7 @@
 
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
+#include "engine/SpatialJoin.h"
 #include "parser/ParsedQuery.h"
 #include "parser/TripleComponent.h"
 #include "util/Exception.h"
@@ -82,32 +83,6 @@ void PathQuery::addParameter(const SparqlTriple& triple) {
     throw PathSearchException("Predicates must be IRIs");
   }
 
-  auto getVariable = [](std::string_view parameter,
-                        const TripleComponent& object) {
-    if (!object.isVariable()) {
-      throw PathSearchException(absl::StrCat("The value ", object.toString(),
-                                             " for parameter '", parameter,
-                                             "' has to be a variable"));
-    }
-
-    return object.getVariable();
-  };
-
-  auto setVariable = [&](std::string_view parameter,
-                         const TripleComponent& object,
-                         std::optional<Variable>& existingValue) {
-    auto variable = getVariable(parameter, object);
-
-    if (existingValue.has_value()) {
-      throw PathSearchException(absl::StrCat(
-          "The parameter '", parameter, "' has already been set to variable: '",
-          existingValue.value().toSparql(), "'. New variable: '",
-          object.toString(), "'."));
-    }
-
-    existingValue = object.getVariable();
-  };
-
   std::string predString = predicate.getIri().toStringRepresentation();
   if (predString.ends_with("source>")) {
     sources_.push_back(std::move(object));
@@ -176,14 +151,14 @@ std::variant<Variable, std::vector<Id>> PathQuery::toSearchSide(
 }
 
 // ____________________________________________________________________________
-void PathQuery::addBasicPattern(const BasicGraphPattern& pattern) {
+void MagicServiceQuery::addBasicPattern(const BasicGraphPattern& pattern) {
   for (SparqlTriple triple : pattern._triples) {
     addParameter(triple);
   }
 }
 
 // ____________________________________________________________________________
-void PathQuery::addGraph(const GraphPatternOperation& op) {
+void MagicServiceQuery::addGraph(const GraphPatternOperation& op) {
   if (childGraphPattern_._graphPatterns.empty()) {
     auto pattern = std::get<parsedQuery::GroupGraphPattern>(op);
     childGraphPattern_ = std::move(pattern._child);
@@ -210,6 +185,96 @@ PathSearchConfiguration PathQuery::toPathSearchConfiguration(
       algorithm_,          sources,         targets,
       start_.value(),      end_.value(),    pathColumn_.value(),
       edgeColumn_.value(), edgeProperties_, cartesian_};
+}
+
+// ____________________________________________________________________________
+Variable MagicServiceQuery::getVariable(std::string_view parameter,
+                                        const TripleComponent& object) {
+  if (!object.isVariable()) {
+    throw MagicServiceException(absl::StrCat("The value ", object.toString(),
+                                             " for parameter '", parameter,
+                                             "' has to be a variable"));
+  }
+
+  return object.getVariable();
+};
+
+// ____________________________________________________________________________
+void MagicServiceQuery::setVariable(std::string_view parameter,
+                                    const TripleComponent& object,
+                                    std::optional<Variable>& existingValue) {
+  auto variable = getVariable(parameter, object);
+
+  if (existingValue.has_value()) {
+    throw PathSearchException(absl::StrCat(
+        "The parameter '", parameter, "' has already been set to variable:'",
+        existingValue.value().toSparql(), "'.New variable: '",
+        object.toString(), "'."));
+  }
+
+  existingValue = object.getVariable();
+};
+
+// ____________________________________________________________________________
+void SpatialQuery::addParameter(const SparqlTriple& triple) {
+  auto simpleTriple = triple.getSimple();
+  TripleComponent predicate = simpleTriple.p_;
+  TripleComponent object = simpleTriple.o_;
+
+  if (!predicate.isIri()) {
+    throw SpatialSearchException("Predicates must be IRIs");
+  }
+
+  std::string predString = predicate.getIri().toStringRepresentation();
+  if (predString.ends_with("left>")) {
+    setVariable("left", object, left_);
+  } else if (predString.ends_with("right>")) {
+    setVariable("right", object, right_);
+  } else if (predString.ends_with("nearestNeighbors>")) {
+    if (!object.isBool()) {
+      throw SpatialSearchException(
+          "The parameter 'nearestNeighbors' expects an integer (the maximum "
+          "number of nearest neighbors)");
+    }
+    maxResults_ = object.getInt();
+  } else if (predString.ends_with("maxDistance>")) {
+    if (!object.isBool()) {
+      throw SpatialSearchException(
+          "The parameter 'maxDistance' expects an integer (the maximum "
+          "distance in meters)");
+    }
+    maxDist_ = object.getInt();
+  } else if (predString.ends_with("bindDistance>")) {
+    setVariable("bindDistance", object, bindDist_);
+  } else {
+    throw SpatialSearchException(
+        "Unsupported argument " + predString +
+        " in Spatial Search. Supported Arguments: left, right, "
+        "nearestNeighbors, maxDistance and bindDistance.");
+  }
+}
+
+// ____________________________________________________________________________
+SpatialJoinConfiguration SpatialQuery::toSpatialJoinConfiguration() const {
+  if (!left_.has_value()) {
+    throw SpatialSearchException("Missing parameter 'left' in spatial search.");
+  } else if (!right_.has_value()) {
+    throw SpatialSearchException(
+        "Missing parameter 'right' in spatial search.");
+  } else if (!maxDist_.has_value() && !maxResults_.has_value()) {
+    throw SpatialSearchException(
+        "Neither 'nearestNeighbors' nor 'maxDistance' were provided. At least "
+        "one of both is required.");
+  }
+
+  if (maxResults_.has_value()) {
+    return SpatialJoinConfiguration{
+        NearestNeighborsConfig{maxResults_.value(), maxDist_}, left_.value(),
+        right_.value(), bindDist_};
+  } else {
+    return SpatialJoinConfiguration{MaxDistanceConfig{maxDist_.value()},
+                                    left_.value(), right_.value(), bindDist_};
+  }
 }
 
 // ____________________________________________________________________________

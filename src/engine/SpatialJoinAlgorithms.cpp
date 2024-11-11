@@ -1,3 +1,8 @@
+//  Copyright 2024, University of Freiburg,
+//  Chair of Algorithms and Data Structures.
+//  Author: @Jonathan24680
+//  Author: Christoph Ullinger <ullingec@informatik.uni-freiburg.de>
+
 #include "engine/SpatialJoinAlgorithms.h"
 
 #include <s2/s2closest_point_query.h>
@@ -11,10 +16,12 @@
 // ____________________________________________________________________________
 SpatialJoinAlgorithms::SpatialJoinAlgorithms(
     QueryExecutionContext* qec, PreparedSpatialJoinParams params,
+    // TODO<ullingerc> bindDist_
     bool addDistToResult,
     std::variant<NearestNeighborsConfig, MaxDistanceConfig> config)
     : qec_{qec},
       params_{std::move(params)},
+      // TODO<ullingerc> bindDist_
       addDistToResult_{addDistToResult},
       config_{std::move(config)} {}
 
@@ -71,6 +78,7 @@ void SpatialJoinAlgorithms::addResultTableEntry(IdTable* result,
   rescol = addColumns(result, idTableLeft, resrow, rescol, rowLeft);
   rescol = addColumns(result, idTableRight, resrow, rescol, rowRight);
 
+  // TODO<ullingerc> bindDist_ feature
   if (addDistToResult_) {
     result->at(resrow, rescol) = distance;
     // rescol isn't used after that in this function, but future updates,

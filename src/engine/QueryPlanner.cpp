@@ -9,7 +9,9 @@
 #include <absl/strings/str_split.h>
 
 #include <algorithm>
+#include <memory>
 #include <optional>
+#include <type_traits>
 
 #include "engine/Bind.h"
 #include "engine/CartesianProductJoin.h"
@@ -42,6 +44,7 @@
 #include "global/Id.h"
 #include "global/RuntimeParameters.h"
 #include "parser/Alias.h"
+#include "parser/GraphPatternOperation.h"
 #include "parser/SparqlParserHelpers.h"
 #include "util/Exception.h"
 
@@ -731,14 +734,15 @@ auto QueryPlanner::seedWithScansAndText(
           "necessary also rebuild the index.");
     }
 
-    const auto& input = node.triple_.p_._iri;
-    if ((input.starts_with(MAX_DIST_IN_METERS) ||
-         input.starts_with(NEAREST_NEIGHBORS)) &&
-        input.ends_with('>')) {
-      pushPlan(makeSubtreePlan<SpatialJoin>(_qec, node.triple_, std::nullopt,
-                                            std::nullopt));
-      continue;
-    }
+    // TODO<ullingerc>
+    // const auto& input = node.triple_.p_._iri;
+    // if ((input.starts_with(MAX_DIST_IN_METERS) ||
+    //      input.starts_with(NEAREST_NEIGHBORS)) &&
+    //     input.ends_with('>')) {
+    //   pushPlan(makeSubtreePlan<SpatialJoin>(_qec, node.triple_, std::nullopt,
+    //                                         std::nullopt));
+    //   continue;
+    // }
 
     if (node.triple_.p_._iri == HAS_PREDICATE_PREDICATE) {
       pushPlan(makeSubtreePlan<HasPredicateScan>(_qec, node.triple_));
@@ -1784,6 +1788,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
     return candidates;
   }
 
+  // TODO<ullingerc>
   // if one of the inputs is the spatial join and the other input is compatible
   // with the SpatialJoin, add it as a child to the spatialJoin. As unbound
   // SpatialJoin operations are incompatible with normal join operations, we
@@ -2311,6 +2316,8 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
     visitGroupOptionalOrMinus(std::move(candidates));
   } else if constexpr (std::is_same_v<T, p::PathQuery>) {
     visitPathSearch(arg);
+  } else if constexpr (std::is_same_v<T, p::SpatialQuery>) {
+    visitSpatialSearch(arg);
   } else {
     static_assert(std::is_same_v<T, p::BasicGraphPattern>);
     visitBasicGraphPattern(arg);
@@ -2431,6 +2438,24 @@ void QueryPlanner::GraphPatternPlanner::visitPathSearch(
     auto pathSearch =
         std::make_shared<PathSearch>(qec_, std::move(sub._qet), config);
     auto plan = makeSubtreePlan<PathSearch>(std::move(pathSearch));
+    candidatesOut.push_back(std::move(plan));
+  }
+  visitGroupOptionalOrMinus(std::move(candidatesOut));
+}
+
+// _______________________________________________________________
+void QueryPlanner::GraphPatternPlanner::visitSpatialSearch(
+    parsedQuery::SpatialQuery& spatialQuery) {
+  auto candidatesIn = planner_.optimize(&spatialQuery.childGraphPattern_);
+  std::vector<SubtreePlan> candidatesOut;
+
+  auto config = spatialQuery.toSpatialJoinConfiguration();
+
+  for (auto& sub : candidatesIn) {
+    auto spatialJoin = std::make_shared<SpatialJoin>(
+        qec_, std::make_shared<SpatialJoinConfiguration>(config), std::nullopt,
+        std::move(sub._qet));
+    auto plan = makeSubtreePlan<SpatialJoin>(std::move(spatialJoin));
     candidatesOut.push_back(std::move(plan));
   }
   visitGroupOptionalOrMinus(std::move(candidatesOut));

@@ -9,6 +9,7 @@
 #include <memory>
 
 #include "engine/PathSearch.h"
+#include "engine/SpatialJoin.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "parser/GraphPattern.h"
 #include "parser/TripleComponent.h"
@@ -144,6 +145,42 @@ struct TransPath {
   GraphPattern _childGraphPattern;
 };
 
+class MagicServiceException : public std::exception {
+  std::string message_;
+
+ public:
+  explicit MagicServiceException(const std::string& message)
+      : message_(message) {}
+  const char* what() const noexcept override { return message_.data(); }
+};
+
+struct MagicServiceQuery {
+  GraphPattern childGraphPattern_;
+
+  virtual void addParameter(const SparqlTriple& triple);
+
+  /**
+   * @brief Add the parameters from a BasicGraphPattern to the PathQuery
+   *
+   * @param pattern
+   */
+  void addBasicPattern(const BasicGraphPattern& pattern);
+
+  /**
+   * @brief Add a GraphPatternOperation to the PathQuery. The pattern specifies
+   * the edges of the graph that is used by the path search
+   *
+   * @param childGraphPattern
+   */
+  void addGraph(const GraphPatternOperation& childGraphPattern);
+
+  Variable getVariable(std::string_view parameter,
+                       const TripleComponent& object);
+
+  void setVariable(std::string_view parameter, const TripleComponent& object,
+                   std::optional<Variable>& existingValue);
+};
+
 class PathSearchException : public std::exception {
   std::string message_;
 
@@ -162,7 +199,7 @@ class PathSearchException : public std::exception {
 // will throw an exception.
 // All the error handling for the PathSearch happens in the PathQuery object.
 // Thus, if a PathSearchConfiguration can be constructed, it is valid.
-struct PathQuery {
+struct PathQuery : MagicServiceQuery {
   std::vector<TripleComponent> sources_;
   std::vector<TripleComponent> targets_;
   std::optional<Variable> start_;
@@ -185,21 +222,6 @@ struct PathQuery {
    * @param triple A SparqlTriple that contains the parameter info
    */
   void addParameter(const SparqlTriple& triple);
-
-  /**
-   * @brief Add the parameters from a BasicGraphPattern to the PathQuery
-   *
-   * @param pattern
-   */
-  void addBasicPattern(const BasicGraphPattern& pattern);
-
-  /**
-   * @brief Add a GraphPatternOperation to the PathQuery. The pattern specifies
-   * the edges of the graph that is used by the path search
-   *
-   * @param childGraphPattern
-   */
-  void addGraph(const GraphPatternOperation& childGraphPattern);
 
   /**
    * @brief Convert the vector of triple components into a SearchSide
@@ -229,6 +251,29 @@ struct PathQuery {
       const Index::Vocab& vocab) const;
 };
 
+class SpatialSearchException : public std::exception {
+  std::string message_;
+
+ public:
+  explicit SpatialSearchException(const std::string& message)
+      : message_(message) {}
+  const char* what() const noexcept override { return message_.data(); }
+};
+
+struct SpatialQuery : MagicServiceQuery {
+  std::optional<Variable> left_;
+  std::optional<Variable> right_;
+  std::optional<size_t> maxDist_;
+  std::optional<size_t> maxResults_;
+  std::optional<Variable> bindDist_;
+
+  GraphPattern childGraphPattern_;
+
+  void addParameter(const SparqlTriple& triple);
+
+  SpatialJoinConfiguration toSpatialJoinConfiguration() const;
+};
+
 // A SPARQL Bind construct.
 struct Bind {
   sparqlExpression::SparqlExpressionPimpl _expression;
@@ -245,7 +290,8 @@ struct Bind {
 // class actually becomes `using GraphPatternOperation = std::variant<...>`
 using GraphPatternOperationVariant =
     std::variant<Optional, Union, Subquery, TransPath, Bind, BasicGraphPattern,
-                 Values, Service, PathQuery, Minus, GroupGraphPattern>;
+                 Values, Service, PathQuery, SpatialQuery, Minus,
+                 GroupGraphPattern>;
 struct GraphPatternOperation
     : public GraphPatternOperationVariant,
       public VisitMixin<GraphPatternOperation, GraphPatternOperationVariant> {
