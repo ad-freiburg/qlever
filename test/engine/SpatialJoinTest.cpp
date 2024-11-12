@@ -29,6 +29,9 @@ namespace {  // anonymous namespace to avoid linker problems
 using namespace ad_utility::testing;
 using namespace SpatialJoinTestHelpers;
 
+// TODO<ullingerc> Most of these tests require refactoring after switching to
+// magic SERVICE invocation instead of predicate
+
 namespace maxDistanceParsingTest {
 
 // test if the SpatialJoin operation parses the maximum distance correctly

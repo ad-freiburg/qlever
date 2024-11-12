@@ -157,7 +157,7 @@ class MagicServiceException : public std::exception {
 struct MagicServiceQuery {
   GraphPattern childGraphPattern_;
 
-  virtual void addParameter(const SparqlTriple& triple);
+  virtual void addParameter(const SparqlTriple& triple) = 0;
 
   /**
    * @brief Add the parameters from a BasicGraphPattern to the PathQuery
@@ -222,7 +222,7 @@ struct PathQuery : MagicServiceQuery {
    *
    * @param triple A SparqlTriple that contains the parameter info
    */
-  void addParameter(const SparqlTriple& triple);
+  void addParameter(const SparqlTriple& triple) override;
 
   /**
    * @brief Convert the vector of triple components into a SearchSide
@@ -271,7 +271,7 @@ struct SpatialQuery : MagicServiceQuery {
 
   GraphPattern childGraphPattern_;
 
-  void addParameter(const SparqlTriple& triple);
+  void addParameter(const SparqlTriple& triple) override;
 
   SpatialJoinConfiguration toSpatialJoinConfiguration() const;
 };

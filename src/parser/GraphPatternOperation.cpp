@@ -264,7 +264,7 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
     if (algoIri.ends_with("baseline>")) {
       algo_ = SpatialJoinAlgorithm::BASELINE;
     } else if (algoIri.ends_with("s2>")) {
-      algo_ = SpatialJoinAlgorithm::S2;
+      algo_ = SpatialJoinAlgorithm::S2_GEOMETRY;
     } else {
       throw SpatialSearchException(
           "The IRI given for the parameter 'algorithm' does not refer to a "
@@ -292,8 +292,8 @@ SpatialJoinConfiguration SpatialQuery::toSpatialJoinConfiguration() const {
         "one of both is required.");
   }
 
-  // Default algorithm is S2
-  SpatialJoinAlgorithm algo = SpatialJoinAlgorithm::S2;
+  // Default algorithm
+  SpatialJoinAlgorithm algo = SPATIAL_JOIN_DEFAULT_ALGORITHM;
   if (algo_.has_value()) {
     algo = algo_.value();
   }

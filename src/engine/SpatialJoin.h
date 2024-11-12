@@ -21,26 +21,30 @@ struct MaxDistanceConfig {
   size_t maxDist_;
 };
 
-// Selection of a SpatialSearch algorithm
+// Selection of a SpatialJoin algorithm
 enum SpatialJoinAlgorithm {
   BASELINE,
-  S2
-  //,BOUNDING_BOX
+  S2_GEOMETRY
+  // BOUNDING_BOX
 };
+const SpatialJoinAlgorithm SPATIAL_JOIN_DEFAULT_ALGORITHM =
+    SpatialJoinAlgorithm::S2_GEOMETRY;
 
 // The configuration object that will be provided by the special SERVICE.
 struct SpatialJoinConfiguration {
+  // The task defines search parameters
   std::variant<NearestNeighborsConfig, MaxDistanceConfig> task_;
+
+  // The variables for the two tables to be joined
   Variable left_;
   Variable right_;
 
-  // TODO<ullingerc>
   // If given, the distance will be added to the result and be bound to this
-  // Variable.
-  // adds an extra column to the result, which contains the actual distance,
-  // between the two objects
+  // variable.
   std::optional<Variable> bindDist_;
 
+  // Choice of algorithm. Both algorithms have equal results, but different
+  // runtime characteristics.
   SpatialJoinAlgorithm algo_;
 };
 

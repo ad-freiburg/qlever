@@ -6,11 +6,6 @@
 #include "engine/SpatialJoin.h"
 
 #include <absl/strings/charconv.h>
-#include <s2/s2closest_point_query.h>
-#include <s2/s2earth.h>
-#include <s2/s2point.h>
-#include <s2/s2point_index.h>
-#include <s2/util/units/length-units.h>
 
 #include <cstdint>
 #include <ctre-unicode.hpp>
@@ -149,7 +144,7 @@ size_t SpatialJoin::getResultWidth() const {
     // might contain different positions, which should be kept).
     auto widthChildren =
         childLeft_->getResultWidth() + childRight_->getResultWidth();
-    if (addDistToResult_) {
+    if (config_->bindDist_.has_value()) {
       return widthChildren + 1;
     } else {
       return widthChildren;
@@ -170,9 +165,9 @@ size_t SpatialJoin::getCostEstimate() {
   if (childLeft_ && childRight_) {
     size_t inputEstimate =
         childLeft_->getSizeEstimate() * childRight_->getSizeEstimate();
-    if (useBaselineAlgorithm_) {
+    if (config_->algo_ == SpatialJoinAlgorithm::BASELINE) {
       return inputEstimate * inputEstimate;
-    } else {
+    } else if (config_->algo_ == SpatialJoinAlgorithm::S2_GEOMETRY) {
       // Let n be the size of the left table and m the size of the right table.
       // When using the S2Point index, we first create the index for the right
       // table in O(m * log(m)). We then iterate over the left table in O(n) and
@@ -184,6 +179,8 @@ size_t SpatialJoin::getCostEstimate() {
       auto logm = static_cast<size_t>(
           log(static_cast<double>(childRight_->getSizeEstimate())));
       return (n * logm) + (m * logm);
+    } else {
+      AD_THROW("Unknown SpatialJoin Algorithm.");
     }
   }
   return 1;  // dummy return, as the class does not have its children yet
@@ -225,7 +222,7 @@ float SpatialJoin::getMultiplicity(size_t col) {
   if (childLeft_ && childRight_) {
     std::shared_ptr<QueryExecutionTree> child;
     size_t column = col;
-    if (addDistToResult_ && col == getResultWidth() - 1) {
+    if (config_->bindDist_.has_value() && col == getResultWidth() - 1) {
       // as each distance is very likely to be unique (even if only after
       // a few decimal places), no multiplicities are assumed
       return 1;
@@ -296,14 +293,13 @@ PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
 
 // ____________________________________________________________________________
 Result SpatialJoin::computeResult([[maybe_unused]] bool requestLaziness) {
-  SpatialJoinAlgorithms algorithms{_executionContext, prepareJoin(),
-                                   addDistToResult_, config_->task_};
-  // TODO<ullingerc> addDistToResult and config_->bindDist_ ;; select algorithm
-  // from config
-  if (useBaselineAlgorithm_) {
+  SpatialJoinAlgorithms algorithms{_executionContext, prepareJoin(), config_};
+  if (config_->algo_ == SpatialJoinAlgorithm::BASELINE) {
     return algorithms.BaselineAlgorithm();
-  } else {
+  } else if (config_->algo_ == SpatialJoinAlgorithm::S2_GEOMETRY) {
     return algorithms.S2geometryAlgorithm();
+  } else {
+    AD_THROW("Unknown SpatialJoin Algorithm.");
   }
 }
 
@@ -341,8 +337,8 @@ VariableToColumnMap SpatialJoin::computeVariableToColumnMap() const {
     addColumns(childLeft_, 0);
     addColumns(childRight_, sizeLeft);
 
-    if (addDistToResult_) {
-      variableToColumnMap[Variable{nameDistanceInternal_}] =
+    if (config_->bindDist_.has_value()) {
+      variableToColumnMap[config_->bindDist_.value()] =
           makeUndefCol(ColumnIndex{sizeLeft + sizeRight});
     }
   }
