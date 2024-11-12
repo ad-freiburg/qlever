@@ -95,13 +95,6 @@ size_t QueryExecutionTree::getSizeEstimate() {
   return sizeEstimate_.value();
 }
 
-//_____________________________________________________________________________
-void QueryExecutionTree::setPrefilterExpression(
-    const std::vector<Operation::PrefilterVariablePair>& prefilterVec) const {
-  AD_CONTRACT_CHECK(rootOperation_);
-  rootOperation_->setPrefilterExpression(prefilterVec);
-}
-
 // _____________________________________________________________________________
 bool QueryExecutionTree::knownEmptyResult() {
   if (cachedResult_) {

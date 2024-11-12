@@ -87,9 +87,6 @@ class QueryExecutionTree {
     return rootOperation_->getMultiplicity(col);
   }
 
-  void setPrefilterExpression(
-      const std::vector<Operation::PrefilterVariablePair>& prefilterVec) const;
-
   size_t getDistinctEstimate(size_t col) const {
     return static_cast<size_t>(rootOperation_->getSizeEstimate() /
                                rootOperation_->getMultiplicity(col));
@@ -111,26 +108,26 @@ class QueryExecutionTree {
   }
 
   template <typename F>
-  void forAllDescendants(F&& f) {
+  void forAllDescendants(F f) {
     static_assert(
         std::is_same_v<void, std::invoke_result_t<F, QueryExecutionTree*>>);
     for (auto ptr : rootOperation_->getChildren()) {
       if (ptr) {
-        std::forward<F>(f)(ptr);
-        ptr->forAllDescendants(std::forward<F>(f));
+        f(ptr);
+        ptr->forAllDescendants(f);
       }
     }
   }
 
   template <typename F>
-  void forAllDescendants(F&& f) const {
+  void forAllDescendants(F f) const {
     static_assert(
         std::is_same_v<void,
                        std::invoke_result_t<F, const QueryExecutionTree*>>);
     for (auto ptr : rootOperation_->getChildren()) {
       if (ptr) {
-        std::forward<F>(f)(ptr);
-        ptr->forAllDescendants(std::forward<F>(f));
+        f(ptr);
+        ptr->forAllDescendants(f);
       }
     }
   }

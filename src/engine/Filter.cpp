@@ -27,9 +27,7 @@ Filter::Filter(QueryExecutionContext* qec,
                sparqlExpression::SparqlExpressionPimpl expression)
     : Operation(qec),
       _subtree(std::move(subtree)),
-      _expression{std::move(expression)} {
-  setPrefilterExpressionForIndexScanChildren();
-}
+      _expression{std::move(expression)} {}
 
 // _____________________________________________________________________________
 string Filter::getCacheKeyImpl() const {
@@ -39,20 +37,8 @@ string Filter::getCacheKeyImpl() const {
   return std::move(os).str();
 }
 
-//______________________________________________________________________________
 string Filter::getDescriptor() const {
   return absl::StrCat("Filter ", _expression.getDescriptor());
-}
-
-//______________________________________________________________________________
-void Filter::setPrefilterExpressionForIndexScanChildren() {
-  const std::vector<PrefilterVariablePair>& prefilterVec =
-      _expression.getPrefilterExpressionForMetadata();
-  this->forAllDescendants([&prefilterVec](const QueryExecutionTree* ptr) {
-    if (ptr) {
-      ptr->setPrefilterExpression(prefilterVec);
-    }
-  });
 }
 
 // _____________________________________________________________________________

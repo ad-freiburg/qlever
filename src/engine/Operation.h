@@ -14,7 +14,6 @@
 #include "engine/Result.h"
 #include "engine/RuntimeInformation.h"
 #include "engine/VariableToColumnMap.h"
-#include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "parser/data/LimitOffsetClause.h"
 #include "parser/data/Variable.h"
 #include "util/CancellationHandle.h"
@@ -35,9 +34,6 @@ class Operation {
   using Milliseconds = std::chrono::milliseconds;
 
  public:
-  // Holds a `PrefilterExpression` with its corresponding `Variable`.
-  using PrefilterVariablePair = sparqlExpression::PrefilterExprVariablePair;
-
   // Default Constructor.
   Operation() : _executionContext(nullptr) {}
 
@@ -76,22 +72,6 @@ class Operation {
   const auto& locatedTriplesSnapshot() const {
     return _executionContext->locatedTriplesSnapshot();
   }
-
-  // Set `PrefilterExpression`s (for `IndexScan`).
-  virtual void setPrefilterExpression(
-      const std::vector<PrefilterVariablePair>&){
-      // The prefiltering procedure is implemented by applying the
-      // PrefilterExpressions directly on the CompressedBlockMetadata.
-      // This is currently done while performing the result computation for
-      // IndexScan.
-      // (1) Overwrite this method for the derived IndexScan class.
-      // (2) The default method for all other derived classes is implemented
-      // here, no PrefilterExpressions need to be set.
-  };
-
-  // Apply the provided void function for all descendants. The given function
-  // must be invocable with a `const QueryExecutionTree*` object.
-  void forAllDescendants(std::function<void(const QueryExecutionTree*)>&& func);
 
   // Get a unique, not ambiguous string representation for a subtree.
   // This should act like an ID for each subtree.
@@ -374,11 +354,11 @@ class Operation {
 
   // Recursively call a function on all children.
   template <typename F>
-  void forAllDescendantsImpl(F&& f);
+  void forAllDescendants(F f);
 
   // Recursively call a function on all children.
   template <typename F>
-  void forAllDescendantsImpl(F&& f) const;
+  void forAllDescendants(F f) const;
 
   // Holds a precomputed Result of this operation if it is the sibling of a
   // Service operation.

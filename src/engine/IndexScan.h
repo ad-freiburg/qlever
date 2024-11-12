@@ -11,21 +11,13 @@ class SparqlTriple;
 class SparqlTripleSimple;
 
 class IndexScan final : public Operation {
-  using Graphs = ScanSpecificationAsTripleComponent::Graphs;
-  // Pair containing a `PrefilterExpression` with `ColumnIndex` (eval. index)
-  using PrefilterIndexPair =
-      std::pair<std::unique_ptr<prefilterExpressions::PrefilterExpression>,
-                ColumnIndex>;
-  // Vector with `PrefilterIndexPair` values.
-  using PrefilterIndexPairs = std::vector<PrefilterIndexPair>;
-
  private:
   Permutation::Enum permutation_;
   TripleComponent subject_;
   TripleComponent predicate_;
   TripleComponent object_;
+  using Graphs = ScanSpecificationAsTripleComponent::Graphs;
   Graphs graphsToFilter_;
-  PrefilterIndexPairs prefilters_;
   size_t numVariables_;
   size_t sizeEstimate_;
   vector<float> multiplicity_;
@@ -38,12 +30,10 @@ class IndexScan final : public Operation {
 
  public:
   IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
-            const SparqlTriple& triple, Graphs graphsToFilter = std::nullopt,
-            PrefilterIndexPairs prefilters = {});
+            const SparqlTriple& triple, Graphs graphsToFilter = std::nullopt);
   IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
             const SparqlTripleSimple& triple,
-            Graphs graphsToFilter = std::nullopt,
-            PrefilterIndexPairs prefilters = {});
+            Graphs graphsToFilter = std::nullopt);
 
   ~IndexScan() override = default;
 
@@ -64,10 +54,6 @@ class IndexScan final : public Operation {
   size_t getResultWidth() const override;
 
   vector<ColumnIndex> resultSortedOn() const override;
-
-  // Set `PrefilterExpression`s.
-  void setPrefilterExpression(const std::vector<PrefilterVariablePair>&
-                                  prefilterVariablePairs) override;
 
   size_t numVariables() const { return numVariables_; }
 
@@ -144,19 +130,10 @@ class IndexScan final : public Operation {
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 
-  // Filter relevant `CompressedBlockMetadata` blocks by applying the
-  // `PrefilterExpression`s from `prefilters_`.
-  std::vector<CompressedBlockMetadata> applyFilterBlockMetadata(
-      std::vector<CompressedBlockMetadata>&& blocks) const;
+  Result::Generator scanInChunks() const;
 
-  // Return the (lazy) `IdTable` for this `IndexScan` in chunks.
-  Result::Generator chunkedIndexScan() const;
-  // Get the `IdTable` for this `IndexScan` in one piece.
-  IdTable completeIndexScan() const;
-
-  // Helper functions for the public `getLazyScanFor...` methods and
-  // `chunkedIndexScan` (see above).
+  //  Helper functions for the public `getLazyScanFor...` functions (see above).
   Permutation::IdTableGenerator getLazyScan(
-      std::vector<CompressedBlockMetadata>&& blocks) const;
+      std::vector<CompressedBlockMetadata> blocks) const;
   std::optional<Permutation::MetadataAndBlocks> getMetadataForScan() const;
 };
