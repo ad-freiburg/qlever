@@ -5,7 +5,7 @@
 #include "engine/CartesianProductJoin.h"
 
 #include "engine/CallFixedSize.h"
-#include "util/OwningView.h"
+#include "util/Views.h"
 
 // ____________________________________________________________________________
 CartesianProductJoin::CartesianProductJoin(
@@ -133,7 +133,7 @@ ProtoResult CartesianProductJoin::computeResult(bool requestLaziness) {
     return {IdTable{getResultWidth(), getExecutionContext()->getAllocator()},
             resultSortedOn(), LocalVocab{}};
   }
-  auto [lazyResult, subResults] = calculateSubResults(requestLaziness);
+  auto [subResults, lazyResult] = calculateSubResults(requestLaziness);
 
   LocalVocab staticMergedVocab{};
   staticMergedVocab.mergeWith(
@@ -152,16 +152,15 @@ ProtoResult CartesianProductJoin::computeResult(bool requestLaziness) {
 
   if (lazyResult) {
     return {createLazyConsumer(std::move(staticMergedVocab),
-                               std::move(lazyResult), std::move(subResults)),
+                               std::move(subResults), std::move(lazyResult)),
             resultSortedOn()};
   }
 
   // Owning view wrapper to please gcc 11.
-  return {produceTablesLazily(
-              std::move(staticMergedVocab),
-              owning_view<decltype(subResults)>{std::move(subResults)} |
-                  std::views::transform(&Result::idTable),
-              getLimit()._offset, getLimit().limitOrDefault()),
+  return {produceTablesLazily(std::move(staticMergedVocab),
+                              ad_utility::OwningView{std::move(subResults)} |
+                                  std::views::transform(&Result::idTable),
+                              getLimit()._offset, getLimit().limitOrDefault()),
           resultSortedOn()};
 }
 
@@ -239,8 +238,8 @@ IdTable CartesianProductJoin::writeAllColumns(
 }
 
 // _____________________________________________________________________________
-std::pair<std::shared_ptr<const Result>,
-          std::vector<std::shared_ptr<const Result>>>
+std::pair<std::vector<std::shared_ptr<const Result>>,
+          std::shared_ptr<const Result>>
 CartesianProductJoin::calculateSubResults(bool requestLaziness) {
   std::vector<std::shared_ptr<const Result>> subResults;
   // We don't need to fully materialize the child results if we have a LIMIT
@@ -264,12 +263,14 @@ CartesianProductJoin::calculateSubResults(bool requestLaziness) {
     // To preserve order of the columns we can only consume the first child
     // lazily. In the future this restriction may be lifted by permutating the
     // columns afterwards.
-    bool requestLazy = requestLaziness && &child == &children.back();
+    bool isLast = &child == &children.back();
+    bool requestLazy = requestLaziness && isLast;
     auto result = child.getResult(
         false, requestLazy ? ComputationMode::LAZY_IF_SUPPORTED
                            : ComputationMode::FULLY_MATERIALIZED);
 
     if (!result->isFullyMaterialized()) {
+      AD_CORRECTNESS_CHECK(isLast);
       lazyResult = std::move(result);
       continue;
     }
@@ -298,7 +299,7 @@ CartesianProductJoin::calculateSubResults(bool requestLaziness) {
     subResults.push_back(std::move(result));
   }
 
-  return {std::move(lazyResult), std::move(subResults)};
+  return {std::move(subResults), std::move(lazyResult)};
 }
 
 // _____________________________________________________________________________
@@ -310,6 +311,7 @@ Result::Generator CartesianProductJoin::produceTablesLazily(
     IdTable idTable = writeAllColumns(std::ranges::ref_view(idTables), offset,
                                       limitWithChunkSize, lastTableOffset);
     size_t tableSize = idTable.size();
+    AD_CORRECTNESS_CHECK(tableSize <= limit);
     if (!idTable.empty()) {
       offset += tableSize;
       limit -= tableSize;
@@ -323,8 +325,9 @@ Result::Generator CartesianProductJoin::produceTablesLazily(
 
 // _____________________________________________________________________________
 Result::Generator CartesianProductJoin::createLazyConsumer(
-    LocalVocab staticMergedVocab, std::shared_ptr<const Result> lazyResult,
-    std::vector<std::shared_ptr<const Result>> subresults) const {
+    LocalVocab staticMergedVocab,
+    std::vector<std::shared_ptr<const Result>> subresults,
+    std::shared_ptr<const Result> lazyResult) const {
   AD_CONTRACT_CHECK(lazyResult);
   size_t limit = getLimit().limitOrDefault();
   size_t offset = getLimit()._offset;
