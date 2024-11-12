@@ -32,6 +32,8 @@ using std::vector;
 //! The HTTP Server used.
 class Server {
   FRIEND_TEST(ServerTest, parseHttpRequest);
+  FRIEND_TEST(ServerTest, getQueryId);
+  FRIEND_TEST(ServerTest, createMessageSender);
 
  public:
   explicit Server(unsigned short port, size_t numThreads,
@@ -172,10 +174,11 @@ class Server {
       SharedCancellationHandle handle, TimeLimit timeLimit,
       const ad_utility::Timer& requestTimer);
 
-  std::pair<std::shared_ptr<ad_utility::websocket::QueryHub>,
-            ad_utility::websocket::MessageSender>
-  createMessageSender(auto& queryHub_, const auto& request,
-                      const string& operation);
+  // Creates a `MessageSender` for the given operation.
+  ad_utility::websocket::MessageSender createMessageSender(
+      const std::weak_ptr<ad_utility::websocket::QueryHub>& queryHub,
+      const ad_utility::httpUtils::HttpRequest auto& request,
+      const string& operation);
 
   static json composeErrorResponseJson(
       const string& query, const std::string& errorMsg,

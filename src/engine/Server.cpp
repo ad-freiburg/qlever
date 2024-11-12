@@ -760,16 +760,15 @@ MediaType Server::determineMediaType(
 }
 
 // ____________________________________________________________________________
-std::pair<std::shared_ptr<ad_utility::websocket::QueryHub>,
-          ad_utility::websocket::MessageSender>
-Server::createMessageSender(auto& queryHub_, const auto& request,
-                            const string& operation) {
-  auto queryHub = queryHub_.lock();
-  AD_CORRECTNESS_CHECK(queryHub);
+ad_utility::websocket::MessageSender Server::createMessageSender(
+    const std::weak_ptr<ad_utility::websocket::QueryHub>& queryHub,
+    const ad_utility::httpUtils::HttpRequest auto& request,
+    const string& operation) {
+  auto queryHubLock = queryHub.lock();
+  AD_CORRECTNESS_CHECK(queryHubLock);
   ad_utility::websocket::MessageSender messageSender{
-      getQueryId(request, operation), *queryHub};
-  // TODO<qup42> is it required to keep the queryHub alive?
-  return std::make_pair(std::move(queryHub), std::move(messageSender));
+      getQueryId(request, operation), *queryHubLock};
+  return messageSender;
 }
 
 // ____________________________________________________________________________
@@ -782,10 +781,8 @@ Awaitable<void> Server::processQuery(
   LOG(INFO) << "Requested media type of result is \""
             << ad_utility::toString(mediaType) << "\"" << std::endl;
 
-  auto queryHub = queryHub_.lock();
-  AD_CORRECTNESS_CHECK(queryHub);
-  ad_utility::websocket::MessageSender messageSender{getQueryId(request, query),
-                                                     *queryHub};
+  ad_utility::websocket::MessageSender messageSender =
+      createMessageSender(queryHub_, request, query);
   auto [cancellationHandle, cancelTimeoutOnDestruction] =
       setupCancellationHandle(messageSender.getQueryId(), timeLimit);
 
@@ -862,8 +859,7 @@ Awaitable<void> Server::processUpdate(
     ad_utility::Timer& requestTimer,
     const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
     TimeLimit timeLimit) {
-  auto [queryHub, messageSender] =
-      createMessageSender(queryHub_, request, update);
+  auto messageSender = createMessageSender(queryHub_, request, update);
 
   auto [cancellationHandle, cancelTimeoutOnDestruction] =
       setupCancellationHandle(messageSender.getQueryId(), timeLimit);
@@ -893,10 +889,11 @@ Awaitable<void> Server::processUpdate(
   // work fine when a new update is sent only after the previous one has
   // finished.
   auto& deltaTriplesManager = index_.deltaTriplesManager();
-  deltaTriplesManager.modify([&](auto& deltaTriples) {
-    ExecuteUpdate::executeUpdate(index_, plannedQuery.parsedQuery_, qet,
-                                 deltaTriples, cancellationHandle);
-  });
+  deltaTriplesManager.modify(
+      [this, &plannedQuery, &qet, &cancellationHandle](auto& deltaTriples) {
+        ExecuteUpdate::executeUpdate(index_, plannedQuery.parsedQuery_, qet,
+                                     deltaTriples, cancellationHandle);
+      });
 
   LOG(INFO) << "Done processing update"
             << ", total time was " << requestTimer.msecs().count() << " ms"
