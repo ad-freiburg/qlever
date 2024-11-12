@@ -958,6 +958,8 @@ TEST(QueryPlanner, PathSearchMultipleSourcesAndTargetsNonCartesian) {
       h::PathSearch(config, true, true, scan("?start", "<p>", "?end")), qec);
 }
 
+// TODO<ullingerc> Add tests for SERVICE spatialSearch: {...}
+
 // _____________________________________________________________________________
 TEST(QueryPlanner, numPathsPerTarget) {
   auto scan = h::IndexScanFromStrings;

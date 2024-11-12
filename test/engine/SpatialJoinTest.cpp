@@ -10,6 +10,7 @@
 
 #include <cstdlib>
 #include <fstream>
+#include <memory>
 #include <regex>
 
 #include "../util/IndexTestHelpers.h"
@@ -65,8 +66,9 @@ void testAddChild(bool addLeftChildFirst) {
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
       ad_utility::makeExecutionTree<SpatialJoin>(
           qec,
-          SpatialJoinConfiguration{MaxDistanceConfig{1000},
-                                   point1.getVariable(), point2.getVariable()},
+          std::make_shared<SpatialJoinConfiguration>(MaxDistanceConfig{1000},
+                                                     point1.getVariable(),
+                                                     point2.getVariable()),
           std::nullopt, std::nullopt);
 
   std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
@@ -123,8 +125,9 @@ TEST(SpatialJoin, isConstructed) {
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
       ad_utility::makeExecutionTree<SpatialJoin>(
           qec,
-          SpatialJoinConfiguration{MaxDistanceConfig{1000},
-                                   point1.getVariable(), point2.getVariable()},
+          std::make_shared<SpatialJoinConfiguration>(MaxDistanceConfig{1000},
+                                                     point1.getVariable(),
+                                                     point2.getVariable()),
           std::nullopt, std::nullopt);
 
   std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
@@ -158,8 +161,9 @@ TEST(SpatialJoin, getChildren) {
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
       ad_utility::makeExecutionTree<SpatialJoin>(
           qec,
-          SpatialJoinConfiguration{MaxDistanceConfig{1000},
-                                   point1.getVariable(), point2.getVariable()},
+          std::make_shared<SpatialJoinConfiguration>(MaxDistanceConfig{1000},
+                                                     point1.getVariable(),
+                                                     point2.getVariable()),
           std::nullopt, std::nullopt);
 
   std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
@@ -256,8 +260,8 @@ void testGetResultWidthOrVariableToColumnMap(bool leftSideBigChild,
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
       ad_utility::makeExecutionTree<SpatialJoin>(
           qec,
-          SpatialJoinConfiguration{MaxDistanceConfig{0}, Variable{"?point1"},
-                                   Variable{"?point2"}},
+          std::make_shared<SpatialJoinConfiguration>(
+              MaxDistanceConfig{0}, Variable{"?point1"}, Variable{"?point2"}),
           std::nullopt, std::nullopt);
   std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
   SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
@@ -377,8 +381,8 @@ void testKnownEmptyResult(bool leftSideEmptyChild, bool rightSideEmptyChild,
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
       ad_utility::makeExecutionTree<SpatialJoin>(
           qec,
-          SpatialJoinConfiguration{MaxDistanceConfig{0}, Variable{"?point1"},
-                                   Variable{"?point2"}},
+          std::make_shared<SpatialJoinConfiguration>(
+              MaxDistanceConfig{0}, Variable{"?point1"}, Variable{"?point2"}),
           std::nullopt, std::nullopt);
   std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
   SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
@@ -435,8 +439,9 @@ TEST(SpatialJoin, resultSortedOn) {
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
       ad_utility::makeExecutionTree<SpatialJoin>(
           qec,
-          SpatialJoinConfiguration{MaxDistanceConfig{10000000},
-                                   Variable{"?point1"}, Variable{"?point2"}},
+          std::make_shared<SpatialJoinConfiguration>(
+              MaxDistanceConfig{10000000}, Variable{"?point1"},
+              Variable{"?point2"}),
           std::nullopt, std::nullopt);
 
   // add children and test, that multiplicity is a dummy return before all
@@ -464,8 +469,9 @@ TEST(SpatialJoin, getDescriptor) {
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
       ad_utility::makeExecutionTree<SpatialJoin>(
           qec,
-          SpatialJoinConfiguration{MaxDistanceConfig{1000},
-                                   subject.getVariable(), object.getVariable()},
+          std::make_shared<SpatialJoinConfiguration>(MaxDistanceConfig{1000},
+                                                     subject.getVariable(),
+                                                     object.getVariable()),
           std::nullopt, std::nullopt);
   std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
   SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
@@ -491,7 +497,9 @@ TEST(SpatialJoin, getCacheKeyImpl) {
 
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
       ad_utility::makeExecutionTree<SpatialJoin>(
-          qec, SpatialJoinConfiguration{MaxDistanceConfig{1000}, subj, obj},
+          qec,
+          std::make_shared<SpatialJoinConfiguration>(MaxDistanceConfig{1000},
+                                                     subj, obj),
           std::nullopt, std::nullopt);
   std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
   SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
@@ -571,7 +579,9 @@ void testMultiplicitiesOrSizeEstimate(bool addLeftChildFirst,
 
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
       ad_utility::makeExecutionTree<SpatialJoin>(
-          qec, SpatialJoinConfiguration{MaxDistanceConfig{10000000}, subj, obj},
+          qec,
+          std::make_shared<SpatialJoinConfiguration>(
+              MaxDistanceConfig{10000000}, subj, obj),
           std::nullopt, std::nullopt);
 
   // add children and test, that multiplicity is a dummy return before all
@@ -675,7 +685,8 @@ void testMultiplicitiesOrSizeEstimate(bool addLeftChildFirst,
     std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
         ad_utility::makeExecutionTree<SpatialJoin>(
             qec,
-            SpatialJoinConfiguration{MaxDistanceConfig{10000000}, subj, obj},
+            std::make_shared<SpatialJoinConfiguration>(
+                MaxDistanceConfig{10000000}, subj, obj),
             std::nullopt, std::nullopt);
 
     // add children and test, that multiplicity is a dummy return before all

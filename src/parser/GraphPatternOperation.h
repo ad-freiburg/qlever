@@ -154,26 +154,37 @@ class MagicServiceException : public std::exception {
   const char* what() const noexcept override { return message_.data(); }
 };
 
+// Abstract structure for parsing a magic SERVICE statement (used to invoke
+// QLever-specific features)
 struct MagicServiceQuery {
   GraphPattern childGraphPattern_;
 
+  /**
+   * @brief Add a parameter to the query from the given triple.
+   * The predicate of the triple determines the parameter name and the object
+   * of the triple determines the parameter value. The subject is ignored.
+   * Throws an exception if an unsupported algorithm is given or if the
+   * predicate contains an unknown parameter name.
+   *
+   * @param triple A SparqlTriple that contains the parameter info
+   */
   virtual void addParameter(const SparqlTriple& triple) = 0;
 
   /**
-   * @brief Add the parameters from a BasicGraphPattern to the PathQuery
+   * @brief Add the parameters from a BasicGraphPattern to the query
    *
    * @param pattern
    */
   void addBasicPattern(const BasicGraphPattern& pattern);
 
   /**
-   * @brief Add a GraphPatternOperation to the PathQuery. The pattern specifies
-   * the edges of the graph that is used by the path search
+   * @brief Add a GraphPatternOperation to the query.
    *
    * @param childGraphPattern
    */
   void addGraph(const GraphPatternOperation& childGraphPattern);
 
+  // Utility functions
   Variable getVariable(std::string_view parameter,
                        const TripleComponent& object);
 
@@ -213,15 +224,7 @@ struct PathQuery : MagicServiceQuery {
   bool cartesian_ = true;
   std::optional<uint64_t> numPathsPerTarget_ = std::nullopt;
 
-  /**
-   * @brief Add a parameter to the PathQuery from the given triple.
-   * The predicate of the triple determines the parameter name and the object
-   * of the triple determines the parameter value. The subject is ignored.
-   * Throws a PathSearchException if an unsupported algorithm is given or if the
-   * predicate contains an unknown parameter name.
-   *
-   * @param triple A SparqlTriple that contains the parameter info
-   */
+  // See MagicServiceQuery
   void addParameter(const SparqlTriple& triple) override;
 
   /**
@@ -261,18 +264,32 @@ class SpatialSearchException : public std::exception {
   const char* what() const noexcept override { return message_.data(); }
 };
 
+// Spatial Search feature via SERVICE. This struct holds intermediate or
+// incomplete configuration during the parsing process.
 struct SpatialQuery : MagicServiceQuery {
+  // Required after everything has been added: the left and right join
+  // variables.
   std::optional<Variable> left_;
   std::optional<Variable> right_;
+
+  // The spatial join task definition: maximum distance and number of results.
+  // One of both - or both - must be provided.
   std::optional<size_t> maxDist_;
   std::optional<size_t> maxResults_;
+
+  // Optional further arguments
   std::optional<Variable> bindDist_;
   std::optional<SpatialJoinAlgorithm> algo_;
 
+  // The graph pattern inside the SERVICE (provides the graph for the right_
+  // variable)
   GraphPattern childGraphPattern_;
 
+  // See MagicServiceQuery
   void addParameter(const SparqlTriple& triple) override;
 
+  // Convert this SpatialQuery to a proper SpatialJoinConfiguration. This will
+  // check if all required values have been provided and otherwise throw.
   SpatialJoinConfiguration toSpatialJoinConfiguration() const;
 };
 

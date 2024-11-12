@@ -65,8 +65,8 @@ class SpatialJoinParamTest : public ::testing::TestWithParam<bool> {
 
     std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
         ad_utility::makeExecutionTree<SpatialJoin>(
-            qec, SpatialJoinConfiguration{task, left, right}, std::nullopt,
-            std::nullopt);
+            qec, std::make_shared<SpatialJoinConfiguration>(task, left, right),
+            std::nullopt, std::nullopt);
 
     // add first child
     std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
