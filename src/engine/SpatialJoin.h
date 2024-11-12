@@ -21,6 +21,13 @@ struct MaxDistanceConfig {
   size_t maxDist_;
 };
 
+// Selection of a SpatialSearch algorithm
+enum SpatialJoinAlgorithm {
+  BASELINE,
+  S2
+  //,BOUNDING_BOX
+};
+
 // The configuration object that will be provided by the special SERVICE.
 struct SpatialJoinConfiguration {
   std::variant<NearestNeighborsConfig, MaxDistanceConfig> task_;
@@ -30,7 +37,11 @@ struct SpatialJoinConfiguration {
   // TODO<ullingerc>
   // If given, the distance will be added to the result and be bound to this
   // Variable.
+  // adds an extra column to the result, which contains the actual distance,
+  // between the two objects
   std::optional<Variable> bindDist_;
+
+  SpatialJoinAlgorithm algo_;
 };
 
 // helper struct to improve readability in prepareJoin()
@@ -111,9 +122,7 @@ class SpatialJoin : public Operation {
   // purposes
   std::optional<size_t> getMaxResults() const;
 
-  void selectAlgorithm(bool useBaselineAlgorithm) {
-    useBaselineAlgorithm_ = useBaselineAlgorithm;
-  }
+  void selectAlgorithm(SpatialJoinAlgorithm algo) { config_->algo_ = algo; }
 
   std::pair<size_t, size_t> onlyForTestingGetConfig() const {
     return std::pair{getMaxDist().value_or(-1), getMaxResults().value_or(-1)};
@@ -140,9 +149,5 @@ class SpatialJoin : public Operation {
 
   std::shared_ptr<SpatialJoinConfiguration> config_;
 
-  // adds an extra column to the result, which contains the actual distance,
-  // between the two objects
-  bool addDistToResult_ = true;
   const string nameDistanceInternal_ = "?distOfTheTwoObjectsAddedInternally";
-  bool useBaselineAlgorithm_ = false;
 };

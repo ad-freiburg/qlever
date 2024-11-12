@@ -298,7 +298,8 @@ PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
 Result SpatialJoin::computeResult([[maybe_unused]] bool requestLaziness) {
   SpatialJoinAlgorithms algorithms{_executionContext, prepareJoin(),
                                    addDistToResult_, config_->task_};
-  // TODO<ullingerc> addDistToResult and config_->bindDist_
+  // TODO<ullingerc> addDistToResult and config_->bindDist_ ;; select algorithm
+  // from config
   if (useBaselineAlgorithm_) {
     return algorithms.BaselineAlgorithm();
   } else {

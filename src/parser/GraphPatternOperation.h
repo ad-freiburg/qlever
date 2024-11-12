@@ -267,6 +267,7 @@ struct SpatialQuery : MagicServiceQuery {
   std::optional<size_t> maxDist_;
   std::optional<size_t> maxResults_;
   std::optional<Variable> bindDist_;
+  std::optional<SpatialJoinAlgorithm> algo_;
 
   GraphPattern childGraphPattern_;
 

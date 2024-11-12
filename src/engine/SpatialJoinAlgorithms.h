@@ -5,17 +5,17 @@
 
 #pragma once
 
+#include <memory>
+
 #include "engine/Result.h"
 #include "engine/SpatialJoin.h"
 
 class SpatialJoinAlgorithms {
  public:
   // initialize the Algorithm with the needed parameters
-  SpatialJoinAlgorithms(
-      QueryExecutionContext* qec, PreparedSpatialJoinParams params,
-      // TODO<ullingerc> bindDist_
-      bool addDistToResult,
-      std::variant<NearestNeighborsConfig, MaxDistanceConfig> config);
+  SpatialJoinAlgorithms(QueryExecutionContext* qec,
+                        PreparedSpatialJoinParams params,
+                        std::shared_ptr<SpatialJoinConfiguration> config);
   Result BaselineAlgorithm();
   Result S2geometryAlgorithm();
   Result BoundingBoxAlgorithm();
@@ -41,7 +41,5 @@ class SpatialJoinAlgorithms {
 
   QueryExecutionContext* qec_;
   PreparedSpatialJoinParams params_;
-  // TODO<ullingerc> bindDist_
-  bool addDistToResult_;
-  std::variant<NearestNeighborsConfig, MaxDistanceConfig> config_;
+  std::shared_ptr<SpatialJoinConfiguration> config_;
 };

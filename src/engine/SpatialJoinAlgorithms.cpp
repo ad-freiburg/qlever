@@ -11,19 +11,16 @@
 #include <s2/s2point_index.h>
 #include <s2/util/units/length-units.h>
 
+#include <memory>
+
+#include "engine/SpatialJoin.h"
 #include "util/GeoSparqlHelpers.h"
 
 // ____________________________________________________________________________
 SpatialJoinAlgorithms::SpatialJoinAlgorithms(
     QueryExecutionContext* qec, PreparedSpatialJoinParams params,
-    // TODO<ullingerc> bindDist_
-    bool addDistToResult,
-    std::variant<NearestNeighborsConfig, MaxDistanceConfig> config)
-    : qec_{qec},
-      params_{std::move(params)},
-      // TODO<ullingerc> bindDist_
-      addDistToResult_{addDistToResult},
-      config_{std::move(config)} {}
+    std::shared_ptr<SpatialJoinConfiguration> config)
+    : qec_{qec}, params_{std::move(params)}, config_{config} {}
 
 // ____________________________________________________________________________
 std::optional<GeoPoint> SpatialJoinAlgorithms::getPoint(const IdTable* restable,
@@ -79,7 +76,7 @@ void SpatialJoinAlgorithms::addResultTableEntry(IdTable* result,
   rescol = addColumns(result, idTableRight, resrow, rescol, rowRight);
 
   // TODO<ullingerc> bindDist_ feature
-  if (addDistToResult_) {
+  if (config_->bindDist_.has_value()) {
     result->at(resrow, rescol) = distance;
     // rescol isn't used after that in this function, but future updates,
     // which add additional columns, would need to remember to increase

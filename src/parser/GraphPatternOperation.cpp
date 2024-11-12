@@ -253,6 +253,24 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
     maxDist_ = object.getInt();
   } else if (predString.ends_with("bindDistance>")) {
     setVariable("bindDistance", object, bindDist_);
+  } else if (predString.ends_with("algorithm>")) {
+    if (!object.isIri()) {
+      throw SpatialSearchException(
+          "The parameter 'algorithm' needs an IRI that selects the algorithm "
+          "to employ. Currently supported are 'spatialSearch:baseline' and "
+          "'spatialSearch:s2'.");
+    }
+    auto algoIri = object.getIri().toStringRepresentation();
+    if (algoIri.ends_with("baseline>")) {
+      algo_ = SpatialJoinAlgorithm::BASELINE;
+    } else if (algoIri.ends_with("s2>")) {
+      algo_ = SpatialJoinAlgorithm::S2;
+    } else {
+      throw SpatialSearchException(
+          "The IRI given for the parameter 'algorithm' does not refer to a "
+          "supported spatial search algorithm. Please select either "
+          "'spatialSearch:baseline' or 'spatialSearch:s2'.");
+    }
   } else {
     throw SpatialSearchException(
         "Unsupported argument " + predString +
@@ -274,13 +292,20 @@ SpatialJoinConfiguration SpatialQuery::toSpatialJoinConfiguration() const {
         "one of both is required.");
   }
 
+  // Default algorithm is S2
+  SpatialJoinAlgorithm algo = SpatialJoinAlgorithm::S2;
+  if (algo_.has_value()) {
+    algo = algo_.value();
+  }
+
   if (maxResults_.has_value()) {
     return SpatialJoinConfiguration{
         NearestNeighborsConfig{maxResults_.value(), maxDist_}, left_.value(),
-        right_.value(), bindDist_};
+        right_.value(), bindDist_, algo};
   } else {
     return SpatialJoinConfiguration{MaxDistanceConfig{maxDist_.value()},
-                                    left_.value(), right_.value(), bindDist_};
+                                    left_.value(), right_.value(), bindDist_,
+                                    algo};
   }
 }
 
