@@ -689,6 +689,9 @@ class CompressedRelationReader {
       std::initializer_list<ColumnIndex> baseColumns,
       ColumnIndicesRef additionalColumns);
 
+  // Return the number of columns that should be read (except for the graph
+  // column and any payload columns, this is one of 0, 1, 2, 3) and whether the
+  // graph column is contained in `columns`.
   static std::pair<size_t, bool> prepareLocatedTriples(
       ColumnIndicesRef columns);
 

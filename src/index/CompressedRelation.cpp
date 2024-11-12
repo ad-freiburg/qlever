@@ -241,18 +241,20 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
     ColumnIndices additionalColumns, CancellationHandle cancellationHandle,
     [[maybe_unused]] const LocatedTriplesPerBlock& locatedTriplesPerBlock,
     LimitOffsetClause limitOffset) const {
-  // We will modify `limitOffset` as we go, so we have to copy the original
-  // value for sanity checks which we apply later.
+  AD_CONTRACT_CHECK(cancellationHandle);
+
+  // We will modify `limitOffset` as we go. We make a copy of the original
+  // value for some sanity checks at the end of the function.
   const auto originalLimit = limitOffset;
 
-  AD_CONTRACT_CHECK(cancellationHandle);
+  // Compute the sequence of relevant blocks. If the sequence is empty, there
+  // is nothing to yield.
   auto relevantBlocks = getRelevantBlocks(scanSpec, blockMetadata);
-
-  // Empty range.
   if (std::ranges::empty(relevantBlocks)) {
     co_return;
   }
 
+  // Some preparation.
   auto [beginBlockMetadata, endBlockMetadata] = getBeginAndEnd(relevantBlocks);
   LazyScanMetadata& details = co_await cppcoro::getDetails;
   size_t numBlocksTotal = endBlockMetadata - beginBlockMetadata;
@@ -307,59 +309,74 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
       !limitOffset.isUnconstrained());
 }
 
+// Helper function that enables a comparison of a triple with an `Id` in
+// the function `getBlocksForJoin` below.
+//
+// If the given triple matches `col0Id` of the given `ScanSpecification`, then
+// `col1Id` is returned.
+// respective other `Id` of the triple is returned.
+//
+// If the given triple matches neither, a sentinel value is returned (`Id::min`
+// if the triple is lower than all triples matching the `ScanSpecification`, or
+// `Id::max` if it is higher).
 namespace {
-// An internal helper function for the `getBlocksForJoin` functions below.
-// Get the ID from the `triple` that pertains to the join column (the col2 if
-// the col1 is specified, else the col1). There are two special cases: If the
-// triple doesn't match the `col0` and (if specified) the `col1` then a
-// sentinel value is returned that is `Id::min` if the triple is lower than
-// all matching triples, and `Id::max` if is higher. That way we can
-// consistently compare a single ID from a join column with a complete triple
-// from a block.
 auto getRelevantIdFromTriple(
     CompressedBlockMetadata::PermutedTriple triple,
     const CompressedRelationReader::ScanSpecAndBlocksAndBounds&
         metadataAndBlocks) {
-  auto idForNonMatchingBlock = [](Id fromTriple, Id key, Id minKey,
-                                  Id maxKey) -> std::optional<Id> {
-    if (fromTriple < key) {
-      return minKey;
-    }
-    if (fromTriple > key) {
-      return maxKey;
-    }
-    return std::nullopt;
-  };
-
+  // The `ScanSpecifcation`, which must ask for at least one column.
   const auto& scanSpec = metadataAndBlocks.scanSpec_;
-  AD_CORRECTNESS_CHECK(!scanSpec.col2Id().has_value());
+  AD_CORRECTNESS_CHECK(!scanSpec.col2Id());
 
-  auto [minKey, maxKey] = [&]() {
-    const auto& [first, last] = metadataAndBlocks.firstAndLastTriple_;
-    if (scanSpec.col1Id().has_value()) {
-      return std::array{first.col2Id_, last.col2Id_};
-    } else if (scanSpec.col0Id().has_value()) {
-      return std::array{first.col1Id_, last.col1Id_};
-    } else {
-      return std::array{Id::min(), Id::max()};
-    }
-  }();
-
+  // For a full scan, return the triples's `col0Id`.
   if (!scanSpec.col0Id().has_value()) {
     return triple.col0Id_;
   }
 
+  // Compute the following range: If the `scanSpec` specifies both `col0Id` and
+  // `col1Id`, the first and last `col2Id` of the blocks. If the `scanSpec`
+  // specifies only `col0Id`, the first and last `col1Id` of the blocks.
+  auto [minId, maxId] = [&]() {
+    const auto& [first, last] = metadataAndBlocks.firstAndLastTriple_;
+    if (scanSpec.col1Id().has_value()) {
+      return std::array{first.col2Id_, last.col2Id_};
+    } else {
+      AD_CORRECTNESS_CHECK(scanSpec.col0Id().has_value());
+      return std::array{first.col1Id_, last.col1Id_};
+    }
+  }();
+
+  // Helper lambda that returns `std::nullopt` if `idFromTriple` equals `id`,
+  // `minId` if is smaller, and `maxId` if it is larger.
+  auto idForNonMatchingBlock = [](Id idFromTriple, Id id, Id minId,
+                                  Id maxId) -> std::optional<Id> {
+    if (idFromTriple < id) {
+      return minId;
+    }
+    if (idFromTriple > id) {
+      return maxId;
+    }
+    return std::nullopt;
+  };
+
+  // If the `col0Id` of the triple does not match that of the `scanSpec`,
+  // return `minId` (if it is smaller) or `maxId` (if it is larger).
   if (auto optId = idForNonMatchingBlock(
-          triple.col0Id_, scanSpec.col0Id().value(), minKey, maxKey)) {
+          triple.col0Id_, scanSpec.col0Id().value(), minId, maxId)) {
     return optId.value();
   }
 
+  // If the `col0Id` of the triple matches that of the `scanSpec`, and the
+  // `scanSpec` does not specify `col1Id`, return the triples's `col1Id`.
   if (!scanSpec.col1Id().has_value()) {
     return triple.col1Id_;
   }
 
-  return idForNonMatchingBlock(triple.col1Id_, scanSpec.col1Id().value(),
-                               minKey, maxKey)
+  // If the `col1Id` of the triple matches that of the `scanSpec`, return the
+  // triples's `col2Id`. Otherwise, return `minId` (if it is smaller) or `maxId`
+  // (if it is larger).
+  return idForNonMatchingBlock(triple.col1Id_, scanSpec.col1Id().value(), minId,
+                               maxId)
       .value_or(triple.col2Id_);
 }
 }  // namespace
@@ -1099,10 +1116,8 @@ std::vector<ColumnIndex> CompressedRelationReader::prepareColumnIndices(
 std::pair<size_t, bool> CompressedRelationReader::prepareLocatedTriples(
     ColumnIndicesRef columns) {
   AD_CORRECTNESS_CHECK(std::ranges::is_sorted(columns));
-  // NOTE 1: For example, ?s ?p ?o, then columns = {0, 1, 2, ...}
-  // NOTE 2: columns[0] > 3 can occur if the triple is fixed but there is
-  // payload (probably cannot occur in the current implementation).
-  // NOTE 3: Returns the number of columns that have to be scanned.
+  // Compute number of columns that should be read (except the graph column
+  // and any payload columns).
   size_t numScanColumns = [&]() -> size_t {
     if (columns.empty() || columns[0] > 3) {
       return 0;
@@ -1127,9 +1142,9 @@ CompressedRelationMetadata CompressedRelationWriter::addSmallRelation(
   size_t numRows = relation.numRows();
   // Make sure that the blocks don't become too large: If the previously
   // buffered small relations together with the new relations would exceed
-  // `1.5
-  // * blocksize` then we start a new block for the current relation. Note:
-  // there are some unit tests that rely on this factor being `1.5`.
+  // `1.5 * blocksize` then we start a new block for the current relation.
+  //
+  // NOTE: there are some unit tests that rely on this factor being `1.5`.
   if (static_cast<double>(numRows + smallRelationsBuffer_.numRows()) >
       static_cast<double>(blocksize()) * 1.5) {
     writeBufferedRelationsToSingleBlock();
@@ -1534,24 +1549,13 @@ auto CompressedRelationReader::getScanConfig(
     CompressedRelationReader::ColumnIndicesRef additionalColumns,
     const LocatedTriplesPerBlock& locatedTriples) -> ScanImplConfig {
   auto columnIndices = prepareColumnIndices(scanSpec, additionalColumns);
-  // Determine the index of the graph column and whether we we need it for the
-  // final result or not.
+  // Determine the index of the graph column (which we need either for
+  // filtering or for the output or both) and whether we we need it for
+  // the output or not.
   //
-  // NOTE: The index of the graph column is also needed in
-  // `prepareLocatedTriples`, where we compute it again. We could also return
-  // it here, so that is stored in the `ScanImplConfig` struct. However, it's
-  // easy to compute, so why bother.
-  //
-  // If we need to filter by the graph ID of the triples, then we need to add
-  // the graph column to the scan. If the graph column is not needed as an
-  // output anyway, then we have to delete it after the filtering. The
-  // following lambda determines the column index in which the graph column
-  // will reside (and adds it if necessary), and also determines whether we
-  // have to delete this column.
-  // Note: The graph column has to come directly after the triple columns and
-  // before any additional payload columns, else the `prepareLocatedTriples`
-  // logic will throw an assertion.
-  //
+  // NOTE: The graph column has to come directly after the triple columns and
+  // before any additional payload columns. Otherwise `prepareLocatedTriples`
+  // will throw an assertion.
   auto [graphColumnIndex,
         deleteGraphColumn] = [&]() -> std::pair<ColumnIndex, bool> {
     if (!scanSpec.graphsToFilter().has_value()) {
