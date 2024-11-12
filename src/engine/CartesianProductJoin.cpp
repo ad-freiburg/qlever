@@ -157,10 +157,11 @@ ProtoResult CartesianProductJoin::computeResult(bool requestLaziness) {
   }
 
   // Owning view wrapper to please gcc 11.
-  return {produceTablesLazily(std::move(staticMergedVocab),
-                              owning_view{std::move(subResults)} |
-                                  std::views::transform(&Result::idTable),
-                              getLimit()._offset, getLimit().limitOrDefault()),
+  return {produceTablesLazily(
+              std::move(staticMergedVocab),
+              owning_view<decltype(subResults)>{std::move(subResults)} |
+                  std::views::transform(&Result::idTable),
+              getLimit()._offset, getLimit().limitOrDefault()),
           resultSortedOn()};
 }
 
