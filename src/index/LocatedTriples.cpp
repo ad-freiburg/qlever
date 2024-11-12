@@ -268,6 +268,27 @@ void LocatedTriplesPerBlock::updateAugmentedMetadata() {
     }
     blockIndex++;
   }
+  // Also account for the last block that contains the triples that are larger
+  // than all the inserted triples.
+  if (hasUpdates(blockIndex)) {
+    const auto& blockUpdates = map_.at(blockIndex);
+    auto firstTriple = blockUpdates.begin()->triple_.toPermutedTriple();
+    auto lastTriple = blockUpdates.rbegin()->triple_.toPermutedTriple();
+
+    using O = CompressedBlockMetadata::OffsetAndCompressedSize;
+    O emptyBlock{0, 0};
+
+    // TODO<joka921> We need the appropriate number of columns here, or we need
+    // to make the reading code work regardless of the number of columns.
+    CompressedBlockMetadataNoBlockIndex lastBlockN{
+        std::vector<O>(4, emptyBlock),
+        0,
+        firstTriple,
+        lastTriple,
+        std::nullopt,
+        true};
+    augmentedMetadata_->emplace_back(lastBlockN, blockIndex);
+  }
 }
 
 // ____________________________________________________________________________

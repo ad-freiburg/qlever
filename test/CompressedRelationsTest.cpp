@@ -69,12 +69,11 @@ void checkThatTablesAreEqual(const auto& expected, const IdTable& actual,
 
   VectorTable exp;
   for (const auto& row : expected) {
-    exp.emplace_back(row.begin(), row.end());
-    /*
+    // exp.emplace_back(row.begin(), row.end());
+    exp.emplace_back();
     for (auto& el : row) {
       exp.back().push_back(el);
     }
-     */
   }
   EXPECT_THAT(actual, matchesIdTableFromVector(exp));
 }
@@ -288,19 +287,29 @@ void testCompressedRelations(const auto& inputsOriginalBeforeCopy,
   std::vector<ColumnIndex> additionalColumns;
   std::ranges::copy(std::views::iota(3ul, getNumColumns(inputs) + 1),
                     std::back_inserter(additionalColumns));
+  auto getMetadata = [&, &metaData = metaData](size_t i) {
+    Id col0 = V(inputs[i].col0_);
+    auto it = std::ranges::lower_bound(metaData, col0, {},
+                                       &CompressedRelationMetadata::col0Id_);
+    if (it != metaData.end() && it->col0Id_ == col0) {
+      return *it;
+    }
+    return reader.getMetadataForSmallRelation(blocks, col0, locatedTriples)
+        .value();
+  };
   for (size_t i = 0; i < inputs.size(); ++i) {
-    // const auto& m = metaData[i];
-    //  TODO<joka921> The metadata i inaccurate because of the locatedTriples
-    //  stuff, figure out how to properly test that.
+    // The metadata does not include the located triples, so we can only test it
+    // if there are no located triples.
+    if (locatedTriplesProbability == 0) {
+      const auto& m = getMetadata(i);
+      ASSERT_EQ(V(inputs[i].col0_), m.col0Id_);
+      ASSERT_EQ(inputs[i].col1And2_.size(), m.numRows_);
+      //  The number of distinct elements in `col1` was passed in as `i + 1` for
+      //  testing purposes, so this is the expected multiplicity.
+      ASSERT_FLOAT_EQ(m.numRows_ / static_cast<float>(i + 1),
+                      m.multiplicityCol1_);
+    }
 
-    // ASSERT_EQ(V(inputs[i].col0_), m.col0Id_);
-    // ASSERT_EQ(inputs[i].col1And2_.size(), m.numRows_);
-    //  The number of distinct elements in `col1` was passed in as `i + 1` for
-    //  testing purposes, so this is the expected multiplicity.
-    /*
-    ASSERT_FLOAT_EQ(m.numRows_ / static_cast<float>(i + 1),
-                    m.multiplicityCol1_);
-                    */
     // Scan for all distinct `col0` and check that we get the expected result.
     ScanSpecification scanSpec{V(inputs[i].col0_), std::nullopt, std::nullopt};
     IdTable table = reader.scan(scanSpec, blocks, additionalColumns,

@@ -648,16 +648,16 @@ class CompressedRelationReader {
   // Read and decompress the parts of the block given by `blockMetaData` (which
   // identifies the block) and `scanConfig` (which specifies the part of that
   // block).
-  std::optional<DecompressedBlock> readAndDecompressBlock(
+  std::optional<std::pair<DecompressedBlock, bool>> readAndDecompressBlock(
       const CompressedBlockMetadata& blockMetaData,
       const ScanImplConfig& scanConfig) const;
 
   // Like `readAndDecompressBlock`, and postprocess by merging the located
   // triples (if any) and applying the graph filters (if any), both specified
   // as part of the `scanConfig`.
-  DecompressedBlock decompressAndPostprocessBlock(
+  std::pair<DecompressedBlock, bool> decompressAndPostprocessBlock(
       const CompressedBlock& compressedBlock, size_t numRowsToRead,
-      const ScanImplConfig& scanConfig,
+      const CompressedRelationReader::ScanImplConfig& scanConfig,
       const CompressedBlockMetadata& metadata) const;
 
   // Read, decompress, and postprocess the part of the block according to

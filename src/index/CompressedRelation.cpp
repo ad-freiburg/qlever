@@ -102,11 +102,9 @@ CompressedRelationReader::asyncParallelBlockGenerator(
     CompressedBlock compressedBlock =
         readCompressedBlockFromFile(blockMetadata, columnIndices);
     lock.unlock();
-    auto decompressedBlock = decompressAndPostprocessBlock(
+    auto [decompressedBlock, wasPostprocessed] = decompressAndPostprocessBlock(
         compressedBlock, blockMetadata.numRows_, scanConfig, blockMetadata);
-    // TODO<joka921> We need to pass the information whether the block was
-    // postprocessed for the statistics from the `decompressAndPostprocessBlock`
-    // function.
+    details.numBlocksPostprocessed_ += static_cast<size_t>(wasPostprocessed);
     return std::pair{myIndex, std::optional{std::move(decompressedBlock)}};
   };
 
@@ -249,16 +247,17 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
 
   AD_CONTRACT_CHECK(cancellationHandle);
   auto relevantBlocks = getRelevantBlocks(scanSpec, blockMetadata);
+
+  // Empty range.
+  if (std::ranges::empty(relevantBlocks)) {
+    co_return;
+  }
+
   auto [beginBlockMetadata, endBlockMetadata] = getBeginAndEnd(relevantBlocks);
   LazyScanMetadata& details = co_await cppcoro::getDetails;
   size_t numBlocksTotal = endBlockMetadata - beginBlockMetadata;
   auto config =
       getScanConfig(scanSpec, additionalColumns, locatedTriplesPerBlock);
-
-  // Empty range.
-  if (beginBlockMetadata == endBlockMetadata) {
-    co_return;
-  }
 
   // Helper lambda for reading the first and last block, of which only a part
   // is needed.
@@ -272,11 +271,6 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
   // Get and yield the first block.
   if (beginBlockMetadata < endBlockMetadata) {
     auto block = getIncompleteBlock(beginBlockMetadata);
-    // TODO<joka921> we need to add the information whether the block was
-    // postprocessed for statistics.
-    // TODO<joka921> Can we merge this `pruneBlock` with the above
-    // `postprocess` method? And can /should we include the skipped blocks
-    // into the `limitOffset` calculation?
     pruneBlock(block, limitOffset);
     details.numElementsYielded_ += block.numRows();
     if (!block.empty()) {
@@ -296,8 +290,6 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
       co_yield block;
     }
     auto lastBlock = getIncompleteBlock(endBlockMetadata - 1);
-    // TODO<joka921> We need to get the information whether the block
-    // was postprocessed for statistics.
     pruneBlock(lastBlock, limitOffset);
     if (!lastBlock.empty()) {
       details.numElementsYielded_ += lastBlock.numRows();
@@ -405,10 +397,8 @@ std::vector<CompressedBlockMetadata> CompressedRelationReader::getBlocksForJoin(
   // Find the matching blocks by performing binary search on the `joinColumn`.
   // Note that it is tempting to reuse the `zipperJoinWithUndef` routine, but
   // this doesn't work because the implicit equality defined by
-  // `!lessThan(a,b)
-  // && !lessThan(b, a)` is not transitive.
+  // `!lessThan(a,b) && !lessThan(b, a)` is not transitive.
   std::vector<CompressedBlockMetadata> result;
-
   auto blockIsNeeded = [&joinColumn, &lessThan](const auto& block) {
     return !std::ranges::equal_range(joinColumn, block, lessThan).empty();
   };
@@ -522,32 +512,34 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
     const CompressedBlockMetadata& blockMetadata,
     std::optional<std::reference_wrapper<LazyScanMetadata>> scanMetadata,
     const LocatedTriplesPerBlock& locatedTriples) const {
-  std::vector<ColumnIndex> additionalColumns;
-  const auto& columnIndices = scanConfig.scanColumns_;
   AD_CORRECTNESS_CHECK(ADDITIONAL_COLUMN_GRAPH_ID <
                        blockMetadata.offsetsAndCompressedSize_.size());
+
+  // We first scan the complete block including ALL columns.
+  std::vector<ColumnIndex> allAdditionalColumns;
   std::ranges::copy(
       std::views::iota(ADDITIONAL_COLUMN_GRAPH_ID,
                        blockMetadata.offsetsAndCompressedSize_.size()),
-      std::back_inserter(additionalColumns));
+      std::back_inserter(allAdditionalColumns));
   ScanSpecification specForAllColumns{std::nullopt,
                                       std::nullopt,
                                       std::nullopt,
                                       {},
                                       scanConfig.graphFilter_.desiredGraphs_};
-  auto config = getScanConfig(specForAllColumns, std::move(additionalColumns),
-                              locatedTriples);
+  auto config = getScanConfig(specForAllColumns,
+                              std::move(allAdditionalColumns), locatedTriples);
   bool manuallyDeleteGraphColumn = scanConfig.graphFilter_.deleteGraphColumn_;
-  // A block is uniquely identified by its start position in the file.
-  // auto cacheKey =
-  // blockMetadata.offsetsAndCompressedSize_.at(0).offsetInFile_;
 
   // Helper lambda that returns the decompressed block or an empty block if
   // `readAndDecompressBlock` returns `std::nullopt`.
   const DecompressedBlock& block = [&]() {
     auto result = readAndDecompressBlock(blockMetadata, config);
     if (result.has_value()) {
-      return std::move(result.value());
+      auto& [decompressedBlock, wasPostprocessed] = result.value();
+      if (scanMetadata.has_value() && wasPostprocessed) {
+        ++scanMetadata.value().get().numBlocksPostprocessed_;
+      }
+      return std::move(decompressedBlock);
     } else {
       return DecompressedBlock{config.scanColumns_.size(), allocator_};
     }
@@ -589,6 +581,7 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
                            allocator_};
   result.resize(endIdx - beginIdx);
   size_t i = 0;
+  const auto& columnIndices = scanConfig.scanColumns_;
   for (const auto& inputColIdx :
        columnIndices | std::views::filter([&](const auto& idx) {
          return !manuallyDeleteGraphColumn || idx != ADDITIONAL_COLUMN_GRAPH_ID;
@@ -610,6 +603,7 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
   return result;
 };
 
+// ____________________________________________________________________________
 template <bool exactSize>
 std::pair<size_t, size_t> CompressedRelationReader::getResultSizeImpl(
     const ScanSpecification& scanSpec,
@@ -665,7 +659,7 @@ std::pair<size_t, size_t> CompressedRelationReader::getResultSizeImpl(
           // TODO<joka921> We could cache the exact size as soon as we have
           // merged the block once since the last update.
           auto b = readAndDecompressBlock(block, config);
-          numResults += b.has_value() ? b.value().numRows() : 0u;
+          numResults += b.has_value() ? b.value().first.numRows() : 0u;
         }
       });
   return {numResults - std::min(deleted, numResults), numResults + inserted};
@@ -689,45 +683,6 @@ size_t CompressedRelationReader::getResultSizeOfScan(
       getResultSizeImpl<true>(scanSpec, blocks, locatedTriplesPerBlock);
   AD_CORRECTNESS_CHECK(lower == upper);
   return lower;
-  /*
-  // Get all the blocks  that possibly might contain our pair of col0Id and
-  // col1Id
-  auto relevantBlocks = getRelevantBlocks(scanSpec, blocks);
-  auto [beginBlock, endBlock] = getBeginAndEnd(relevantBlocks);
-
-  // The first and the last block might be incomplete (that is, only
-  // a part of these blocks is actually part of the result,
-  // set up a lambda which allows us to read these blocks, and returns
-  // the size of the result.
-  auto config = getScanConfig(scanSpec, {}, locatedTriplesPerBlock);
-  auto readSizeOfPossiblyIncompleteBlock = [&](const auto& block) {
-    return readPossiblyIncompleteBlock(scanSpec, config, block, std::nullopt,
-                                       locatedTriplesPerBlock)
-        .numRows();
-  };
-
-  size_t numResults = 0;
-  // The first and the last block might be incomplete, compute
-  // and store the partial results from them.
-  if (beginBlock < endBlock) {
-    numResults += readSizeOfPossiblyIncompleteBlock(*beginBlock);
-    ++beginBlock;
-  }
-  if (beginBlock < endBlock) {
-    numResults += readSizeOfPossiblyIncompleteBlock(*(endBlock - 1));
-    --endBlock;
-  }
-
-  // Determine the total size of the result.
-  // First accumulate the complete blocks in the "middle"
-  // TODO<joka921> If the block contains  added or deleted triples, we
-  // actually have to read/materialize them to get the correct size.
-  numResults += std::accumulate(beginBlock, endBlock, 0UL,
-                                [](const auto& count, const auto& block) {
-                                  return count + block.numRows_;
-                                });
-  return numResults;
-   */
 }
 
 // ____________________________________________________________________________
@@ -782,11 +737,20 @@ IdTable CompressedRelationReader::getDistinctColIdsAndCountsImpl(
       processColId(firstColId, blockMetadata.numRows_);
     } else {
       // Multiple `colId`s -> we have to read the block.
-      const auto& optionalBlock =
-          i == 0 ? readPossiblyIncompleteBlock(scanSpec, scanConfig,
-                                               blockMetadata, std::nullopt,
-                                               locatedTriplesPerBlock)
-                 : readAndDecompressBlock(blockMetadata, scanConfig);
+      const auto& optionalBlock = [&]() -> std::optional<DecompressedBlock> {
+        if (i == 0) {
+          return readPossiblyIncompleteBlock(scanSpec, scanConfig,
+                                             blockMetadata, std::nullopt,
+                                             locatedTriplesPerBlock);
+        } else {
+          auto optionalBlock =
+              readAndDecompressBlock(blockMetadata, scanConfig);
+          if (!optionalBlock.has_value()) {
+            return std::nullopt;
+          }
+          return std::move(optionalBlock.value().first);
+        }
+      }();
       cancellationHandle->throwIfCancelled();
       if (!optionalBlock.has_value()) {
         // The block was skipped because of the graph filter
@@ -892,7 +856,8 @@ DecompressedBlock CompressedRelationReader::decompressBlock(
 }
 
 // ____________________________________________________________________________
-DecompressedBlock CompressedRelationReader::decompressAndPostprocessBlock(
+std::pair<DecompressedBlock, bool>
+CompressedRelationReader::decompressAndPostprocessBlock(
     const CompressedBlock& compressedBlock, size_t numRowsToRead,
     const CompressedRelationReader::ScanImplConfig& scanConfig,
     const CompressedBlockMetadata& metadata) const {
@@ -904,8 +869,9 @@ DecompressedBlock CompressedRelationReader::decompressAndPostprocessBlock(
         metadata.blockIndex_, decompressedBlock, numIndexColumns,
         includeGraphColumn);
   }
-  scanConfig.graphFilter_.postprocessBlock(decompressedBlock, metadata);
-  return decompressedBlock;
+  bool wasPostprocessed =
+      scanConfig.graphFilter_.postprocessBlock(decompressedBlock, metadata);
+  return {std::move(decompressedBlock), wasPostprocessed};
 }
 
 // ____________________________________________________________________________
@@ -921,15 +887,13 @@ void CompressedRelationReader::decompressColumn(
 }
 
 // ____________________________________________________________________________
-std::optional<DecompressedBlock>
+std::optional<std::pair<DecompressedBlock, bool>>
 CompressedRelationReader::readAndDecompressBlock(
     const CompressedBlockMetadata& blockMetaData,
     const ScanImplConfig& scanConfig) const {
   if (scanConfig.graphFilter_.canBlockBeSkipped(blockMetaData)) {
     return std::nullopt;
   }
-  // TODO<joka921> We can only take `LocatedTriplesPerBlock` here and prepare
-  // the Config ourselves. or at least assert that it is correct.
   CompressedBlock compressedColumns =
       readCompressedBlockFromFile(blockMetaData, scanConfig.scanColumns_);
   const auto numRowsToRead = blockMetaData.numRows_;
@@ -1387,15 +1351,13 @@ auto CompressedRelationWriter::createPermutationPair(
         // relation as its overhead is far too high for small relations.
         relation.swapColumns(c1Idx, c2Idx);
 
-        // We only need to sort by the columns of the triple, not the
-        // additional payload.
-        // TODO<joka921> As soon as we implement named graphs, those should
-        // probably also be part of the ordering.
-        // Note: We could also use `compareWithoutLocalVocab` to compare the
-        // IDs cheaper, but this sort is far from being a performance
-        // bottleneck.
+        // We only need to sort by the columns of the triple + the graph column,
+        // not the additional payload. Note: We could also use
+        // `compareWithoutLocalVocab` to compare the IDs cheaper, but this sort
+        // is far from being a performance bottleneck.
         auto compare = [](const auto& a, const auto& b) {
-          return std::tie(a[0], a[1], a[2]) < std::tie(b[0], b[1], b[2]);
+          return std::tie(a[0], a[1], a[2], a[3]) <
+                 std::tie(b[0], b[1], b[2], b[3]);
         };
         std::ranges::sort(relation, compare);
         AD_CORRECTNESS_CHECK(!relation.empty());
