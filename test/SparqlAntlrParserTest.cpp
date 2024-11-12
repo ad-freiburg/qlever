@@ -1869,7 +1869,8 @@ template <typename AggregateExpr>
 
   using enum SparqlExpression::AggregateStatus;
   auto aggregateStatus = distinct ? DistinctAggregate : NonDistinctAggregate;
-  return Pointee(AD_PROPERTY(Exp, isAggregate, Eq(aggregateStatus)));
+  return Pointee(AllOf(AD_PROPERTY(Exp, isAggregate, Eq(aggregateStatus)),
+                       WhenDynamicCastTo<const AggregateExpr&>(testing::_)));
 }
 }  // namespace aggregateTestHelpers
 
