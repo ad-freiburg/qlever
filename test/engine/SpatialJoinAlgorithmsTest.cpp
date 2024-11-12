@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <regex>
+#include <variant>
 
 #include "../util/IndexTestHelpers.h"
 #include "./../../src/util/GeoSparqlHelpers.h"
@@ -23,6 +24,8 @@ namespace {  // anonymous namespace to avoid linker problems
 using namespace ad_utility::testing;
 using namespace SpatialJoinTestHelpers;
 
+using SJ = std::variant<NearestNeighborsConfig, MaxDistanceConfig>;
+
 // TODO<ullingerc> Most of these tests require refactoring after switching to
 // magic SERVICE invocation instead of predicate
 
@@ -31,7 +34,7 @@ namespace computeResultTest {
 class SpatialJoinParamTest : public ::testing::TestWithParam<bool> {
  public:
   void createAndTestSpatialJoin(
-      QueryExecutionContext* qec, SparqlTriple spatialJoinTriple,
+      QueryExecutionContext* qec, Variable left, SJ task, Variable right,
       std::shared_ptr<QueryExecutionTree> leftChild,
       std::shared_ptr<QueryExecutionTree> rightChild, bool addLeftChildFirst,
       std::vector<std::vector<std::string>> expectedOutputUnorderedRows,
@@ -61,20 +64,17 @@ class SpatialJoinParamTest : public ::testing::TestWithParam<bool> {
     };
 
     std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
-        ad_utility::makeExecutionTree<SpatialJoin>(qec, spatialJoinTriple,
-                                                   std::nullopt, std::nullopt);
+        ad_utility::makeExecutionTree<SpatialJoin>(
+            qec, SpatialJoinConfiguration{task, left, right}, std::nullopt,
+            std::nullopt);
 
     // add first child
     std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
     SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
     auto firstChild = addLeftChildFirst ? leftChild : rightChild;
     auto secondChild = addLeftChildFirst ? rightChild : leftChild;
-    Variable firstVariable = addLeftChildFirst
-                                 ? spatialJoinTriple.s_.getVariable()
-                                 : spatialJoinTriple.o_.getVariable();
-    Variable secondVariable = addLeftChildFirst
-                                  ? spatialJoinTriple.o_.getVariable()
-                                  : spatialJoinTriple.s_.getVariable();
+    Variable firstVariable = addLeftChildFirst ? left : right;
+    Variable secondVariable = addLeftChildFirst ? left : right;
 
     auto spJoin1 = spatialJoin->addChild(firstChild, firstVariable);
     spatialJoin = static_cast<SpatialJoin*>(spJoin1.get());
@@ -93,7 +93,9 @@ class SpatialJoinParamTest : public ::testing::TestWithParam<bool> {
         createRowVectorFromColumnVector(expectedOutputOrdered);
 
     // Select algorithm
-    spatialJoin->selectAlgorithm(GetParam());
+    spatialJoin->selectAlgorithm(GetParam()
+                                     ? SpatialJoinAlgorithm::BASELINE
+                                     : SpatialJoinAlgorithm::S2_GEOMETRY);
 
     // At worst quadratic time
     ASSERT_LE(
@@ -124,7 +126,7 @@ class SpatialJoinParamTest : public ::testing::TestWithParam<bool> {
   //   ?point1 <max-distance-in-meters:XXXX> ?point2 .
   // }
   void buildAndTestSmallTestSetLargeChildren(
-      std::string specialPredicate, bool addLeftChildFirst,
+      SJ task, bool addLeftChildFirst,
       std::vector<std::vector<std::string>> expectedOutput,
       std::vector<std::string> columnNames) {
     auto qec = buildTestQEC();
@@ -144,11 +146,9 @@ class SpatialJoinParamTest : public ::testing::TestWithParam<bool> {
         {"?obj2", std::string{"<hasGeometry>"}, "?geo2"},
         {"?geo2", std::string{"<asWKT>"}, "?point2"}, "?obj2", "?geo2");
 
-    createAndTestSpatialJoin(
-        qec,
-        SparqlTriple{TripleComponent{Variable{"?point1"}}, specialPredicate,
-                     TripleComponent{Variable{"?point2"}}},
-        leftChild, rightChild, addLeftChildFirst, expectedOutput, columnNames);
+    createAndTestSpatialJoin(qec, Variable{"?point1"}, task,
+                             Variable{"?point2"}, leftChild, rightChild,
+                             addLeftChildFirst, expectedOutput, columnNames);
   }
 
   // build the test using the small dataset. Let the SpatialJoin operation.
@@ -160,23 +160,21 @@ class SpatialJoinParamTest : public ::testing::TestWithParam<bool> {
   //   ?point1 <max-distance-in-meters:XXXX> ?point2 .
   // }
   void buildAndTestSmallTestSetSmallChildren(
-      std::string specialPredicate, bool addLeftChildFirst,
+      SJ task, bool addLeftChildFirst,
       std::vector<std::vector<std::string>> expectedOutput,
       std::vector<std::string> columnNames) {
     auto qec = buildTestQEC();
     auto numTriples = qec->getIndex().numTriples().normal;
     ASSERT_EQ(numTriples, 15);
     // ====================== build inputs ===================================
-    TripleComponent point1{Variable{"?point1"}};
-    TripleComponent point2{Variable{"?point2"}};
     auto leftChild =
         buildIndexScan(qec, {"?obj1", std::string{"<asWKT>"}, "?point1"});
     auto rightChild =
         buildIndexScan(qec, {"?obj2", std::string{"<asWKT>"}, "?point2"});
 
-    createAndTestSpatialJoin(
-        qec, SparqlTriple{point1, specialPredicate, point2}, leftChild,
-        rightChild, addLeftChildFirst, expectedOutput, columnNames);
+    createAndTestSpatialJoin(qec, Variable{"?point1"}, task,
+                             Variable{"?point2"}, leftChild, rightChild,
+                             addLeftChildFirst, expectedOutput, columnNames);
   }
 
   // build the test using the small dataset. Let the SpatialJoin operation be
@@ -189,7 +187,7 @@ class SpatialJoinParamTest : public ::testing::TestWithParam<bool> {
   //   ?point1 <max-distance-in-meters:XXXX> ?point2 .
   // }
   void buildAndTestSmallTestSetDiffSizeChildren(
-      std::string specialPredicate, bool addLeftChildFirst,
+      SJ task, bool addLeftChildFirst,
       std::vector<std::vector<std::string>> expectedOutput,
       std::vector<std::string> columnNames, bool bigChildLeft) {
     auto qec = buildTestQEC();
@@ -204,21 +202,18 @@ class SpatialJoinParamTest : public ::testing::TestWithParam<bool> {
 
     // ========================= build small child
     // ===============================
-    TripleComponent point2{Variable{"?point2"}};
+    Variable point2{"?point2"};
     auto smallChild =
         buildIndexScan(qec, {"?obj2", std::string{"<asWKT>"}, "?point2"});
 
     auto firstChild = bigChildLeft ? bigChild : smallChild;
     auto secondChild = bigChildLeft ? smallChild : bigChild;
-    auto firstVariable =
-        bigChildLeft ? TripleComponent{Variable{"?point1"}} : point2;
-    auto secondVariable =
-        bigChildLeft ? point2 : TripleComponent{Variable{"?point1"}};
+    auto firstVariable = bigChildLeft ? Variable{"?point1"} : point2;
+    auto secondVariable = bigChildLeft ? point2 : Variable{"?point1"};
 
-    createAndTestSpatialJoin(
-        qec, SparqlTriple{firstVariable, specialPredicate, secondVariable},
-        firstChild, secondChild, addLeftChildFirst, expectedOutput,
-        columnNames);
+    createAndTestSpatialJoin(qec, firstVariable, task, secondVariable,
+                             firstChild, secondChild, addLeftChildFirst,
+                             expectedOutput, columnNames);
   }
 
  protected:
@@ -634,46 +629,46 @@ TEST_P(SpatialJoinParamTest, computeResultSmallDatasetLargeChildren) {
       "?name1",  "?obj1",   "?geo1",
       "?point1", "?name2",  "?obj2",
       "?geo2",   "?point2", "?distOfTheTwoObjectsAddedInternally"};
-  buildAndTestSmallTestSetLargeChildren("<max-distance-in-meters:1>", true,
+
+  buildAndTestSmallTestSetLargeChildren(MaxDistanceConfig{1}, true,
                                         expectedMaxDist1_rows, columnNames);
-  buildAndTestSmallTestSetLargeChildren("<max-distance-in-meters:1>", false,
+  buildAndTestSmallTestSetLargeChildren(MaxDistanceConfig{1}, false,
                                         expectedMaxDist1_rows, columnNames);
-  buildAndTestSmallTestSetLargeChildren("<max-distance-in-meters:5000>", true,
+  buildAndTestSmallTestSetLargeChildren(MaxDistanceConfig{5000}, true,
                                         expectedMaxDist5000_rows, columnNames);
-  buildAndTestSmallTestSetLargeChildren("<max-distance-in-meters:5000>", false,
+  buildAndTestSmallTestSetLargeChildren(MaxDistanceConfig{5000}, false,
                                         expectedMaxDist5000_rows, columnNames);
-  buildAndTestSmallTestSetLargeChildren("<max-distance-in-meters:500000>", true,
+  buildAndTestSmallTestSetLargeChildren(
+      MaxDistanceConfig{500000}, true, expectedMaxDist500000_rows, columnNames);
+  buildAndTestSmallTestSetLargeChildren(MaxDistanceConfig{500000}, false,
                                         expectedMaxDist500000_rows,
                                         columnNames);
-  buildAndTestSmallTestSetLargeChildren("<max-distance-in-meters:500000>",
-                                        false, expectedMaxDist500000_rows,
+  buildAndTestSmallTestSetLargeChildren(MaxDistanceConfig{1000000}, true,
+                                        expectedMaxDist1000000_rows,
                                         columnNames);
-  buildAndTestSmallTestSetLargeChildren("<max-distance-in-meters:1000000>",
-                                        true, expectedMaxDist1000000_rows,
+  buildAndTestSmallTestSetLargeChildren(MaxDistanceConfig{1000000}, false,
+                                        expectedMaxDist1000000_rows,
                                         columnNames);
-  buildAndTestSmallTestSetLargeChildren("<max-distance-in-meters:1000000>",
-                                        false, expectedMaxDist1000000_rows,
+  buildAndTestSmallTestSetLargeChildren(MaxDistanceConfig{10000000}, true,
+                                        expectedMaxDist10000000_rows,
                                         columnNames);
-  buildAndTestSmallTestSetLargeChildren("<max-distance-in-meters:10000000>",
-                                        true, expectedMaxDist10000000_rows,
+  buildAndTestSmallTestSetLargeChildren(MaxDistanceConfig{10000000}, false,
+                                        expectedMaxDist10000000_rows,
                                         columnNames);
-  buildAndTestSmallTestSetLargeChildren("<max-distance-in-meters:10000000>",
-                                        false, expectedMaxDist10000000_rows,
-                                        columnNames);
-  buildAndTestSmallTestSetLargeChildren("<nearest-neighbors:1>", true,
+  buildAndTestSmallTestSetLargeChildren(NearestNeighborsConfig{1}, true,
                                         expectedNearestNeighbors1, columnNames);
-  buildAndTestSmallTestSetLargeChildren("<nearest-neighbors:2>", true,
+  buildAndTestSmallTestSetLargeChildren(NearestNeighborsConfig{2}, true,
                                         expectedNearestNeighbors2, columnNames);
-  buildAndTestSmallTestSetLargeChildren("<nearest-neighbors:2:400000>", true,
+  buildAndTestSmallTestSetLargeChildren(NearestNeighborsConfig{2, 400000}, true,
                                         expectedNearestNeighbors2_400000,
                                         columnNames);
-  buildAndTestSmallTestSetLargeChildren("<nearest-neighbors:2:4000>", true,
+  buildAndTestSmallTestSetLargeChildren(NearestNeighborsConfig{2, 4000}, true,
                                         expectedNearestNeighbors2_4000,
                                         columnNames);
-  buildAndTestSmallTestSetLargeChildren("<nearest-neighbors:2:40>", true,
+  buildAndTestSmallTestSetLargeChildren(NearestNeighborsConfig{2, 40}, true,
                                         expectedNearestNeighbors2_40,
                                         columnNames);
-  buildAndTestSmallTestSetLargeChildren("<nearest-neighbors:3:500000>", true,
+  buildAndTestSmallTestSetLargeChildren(NearestNeighborsConfig{3, 500000}, true,
                                         expectedNearestNeighbors3_500000,
                                         columnNames);
 }
@@ -681,36 +676,34 @@ TEST_P(SpatialJoinParamTest, computeResultSmallDatasetLargeChildren) {
 TEST_P(SpatialJoinParamTest, computeResultSmallDatasetSmallChildren) {
   std::vector<std::string> columnNames{"?obj1", "?point1", "?obj2", "?point2",
                                        "?distOfTheTwoObjectsAddedInternally"};
-  buildAndTestSmallTestSetSmallChildren("<max-distance-in-meters:1>", true,
-                                        expectedMaxDist1_rows_small,
-                                        columnNames);
-  buildAndTestSmallTestSetSmallChildren("<max-distance-in-meters:1>", false,
-                                        expectedMaxDist1_rows_small,
-                                        columnNames);
-  buildAndTestSmallTestSetSmallChildren("<max-distance-in-meters:5000>", true,
+  buildAndTestSmallTestSetSmallChildren(
+      MaxDistanceConfig{1}, true, expectedMaxDist1_rows_small, columnNames);
+  buildAndTestSmallTestSetSmallChildren(
+      MaxDistanceConfig{1}, false, expectedMaxDist1_rows_small, columnNames);
+  buildAndTestSmallTestSetSmallChildren(MaxDistanceConfig{5000}, true,
                                         expectedMaxDist5000_rows_small,
                                         columnNames);
-  buildAndTestSmallTestSetSmallChildren("<max-distance-in-meters:5000>", false,
+  buildAndTestSmallTestSetSmallChildren(MaxDistanceConfig{5000}, false,
                                         expectedMaxDist5000_rows_small,
                                         columnNames);
-  buildAndTestSmallTestSetSmallChildren("<max-distance-in-meters:500000>", true,
+  buildAndTestSmallTestSetSmallChildren(MaxDistanceConfig{500000}, true,
                                         expectedMaxDist500000_rows_small,
                                         columnNames);
-  buildAndTestSmallTestSetSmallChildren("<max-distance-in-meters:500000>",
-                                        false, expectedMaxDist500000_rows_small,
+  buildAndTestSmallTestSetSmallChildren(MaxDistanceConfig{500000}, false,
+                                        expectedMaxDist500000_rows_small,
                                         columnNames);
-  buildAndTestSmallTestSetSmallChildren("<max-distance-in-meters:1000000>",
-                                        true, expectedMaxDist1000000_rows_small,
+  buildAndTestSmallTestSetSmallChildren(MaxDistanceConfig{1000000}, true,
+                                        expectedMaxDist1000000_rows_small,
                                         columnNames);
-  buildAndTestSmallTestSetSmallChildren(
-      "<max-distance-in-meters:1000000>", false,
-      expectedMaxDist1000000_rows_small, columnNames);
-  buildAndTestSmallTestSetSmallChildren(
-      "<max-distance-in-meters:10000000>", true,
-      expectedMaxDist10000000_rows_small, columnNames);
-  buildAndTestSmallTestSetSmallChildren(
-      "<max-distance-in-meters:10000000>", false,
-      expectedMaxDist10000000_rows_small, columnNames);
+  buildAndTestSmallTestSetSmallChildren(MaxDistanceConfig{1000000}, false,
+                                        expectedMaxDist1000000_rows_small,
+                                        columnNames);
+  buildAndTestSmallTestSetSmallChildren(MaxDistanceConfig{10000000}, true,
+                                        expectedMaxDist10000000_rows_small,
+                                        columnNames);
+  buildAndTestSmallTestSetSmallChildren(MaxDistanceConfig{10000000}, false,
+                                        expectedMaxDist10000000_rows_small,
+                                        columnNames);
 }
 
 TEST_P(SpatialJoinParamTest, computeResultSmallDatasetDifferentSizeChildren) {
@@ -721,66 +714,66 @@ TEST_P(SpatialJoinParamTest, computeResultSmallDatasetDifferentSizeChildren) {
                                        "?obj2",
                                        "?point2",
                                        "?distOfTheTwoObjectsAddedInternally"};
-  buildAndTestSmallTestSetDiffSizeChildren("<max-distance-in-meters:1>", true,
+  buildAndTestSmallTestSetDiffSizeChildren(MaxDistanceConfig{1}, true,
                                            expectedMaxDist1_rows_diff,
                                            columnNames, true);
-  buildAndTestSmallTestSetDiffSizeChildren("<max-distance-in-meters:1>", false,
+  buildAndTestSmallTestSetDiffSizeChildren(MaxDistanceConfig{1}, false,
                                            expectedMaxDist1_rows_diff,
                                            columnNames, true);
-  buildAndTestSmallTestSetDiffSizeChildren("<max-distance-in-meters:1>", true,
+  buildAndTestSmallTestSetDiffSizeChildren(MaxDistanceConfig{1}, true,
                                            expectedMaxDist1_rows_diff,
                                            columnNames, false);
-  buildAndTestSmallTestSetDiffSizeChildren("<max-distance-in-meters:1>", false,
+  buildAndTestSmallTestSetDiffSizeChildren(MaxDistanceConfig{1}, false,
                                            expectedMaxDist1_rows_diff,
                                            columnNames, false);
-  buildAndTestSmallTestSetDiffSizeChildren("<max-distance-in-meters:5000>",
-                                           true, expectedMaxDist5000_rows_diff,
+  buildAndTestSmallTestSetDiffSizeChildren(MaxDistanceConfig{5000}, true,
+                                           expectedMaxDist5000_rows_diff,
                                            columnNames, true);
-  buildAndTestSmallTestSetDiffSizeChildren("<max-distance-in-meters:5000>",
-                                           false, expectedMaxDist5000_rows_diff,
+  buildAndTestSmallTestSetDiffSizeChildren(MaxDistanceConfig{5000}, false,
+                                           expectedMaxDist5000_rows_diff,
                                            columnNames, true);
-  buildAndTestSmallTestSetDiffSizeChildren("<max-distance-in-meters:5000>",
-                                           true, expectedMaxDist5000_rows_diff,
+  buildAndTestSmallTestSetDiffSizeChildren(MaxDistanceConfig{5000}, true,
+                                           expectedMaxDist5000_rows_diff,
                                            columnNames, false);
-  buildAndTestSmallTestSetDiffSizeChildren("<max-distance-in-meters:5000>",
-                                           false, expectedMaxDist5000_rows_diff,
+  buildAndTestSmallTestSetDiffSizeChildren(MaxDistanceConfig{5000}, false,
+                                           expectedMaxDist5000_rows_diff,
                                            columnNames, false);
-  buildAndTestSmallTestSetDiffSizeChildren(
-      "<max-distance-in-meters:500000>", true, expectedMaxDist500000_rows_diff,
-      columnNames, true);
-  buildAndTestSmallTestSetDiffSizeChildren(
-      "<max-distance-in-meters:500000>", false, expectedMaxDist500000_rows_diff,
-      columnNames, true);
-  buildAndTestSmallTestSetDiffSizeChildren(
-      "<max-distance-in-meters:500000>", true, expectedMaxDist500000_rows_diff,
-      columnNames, false);
-  buildAndTestSmallTestSetDiffSizeChildren(
-      "<max-distance-in-meters:500000>", false, expectedMaxDist500000_rows_diff,
-      columnNames, false);
-  buildAndTestSmallTestSetDiffSizeChildren(
-      "<max-distance-in-meters:1000000>", true,
-      expectedMaxDist1000000_rows_diff, columnNames, true);
-  buildAndTestSmallTestSetDiffSizeChildren(
-      "<max-distance-in-meters:1000000>", false,
-      expectedMaxDist1000000_rows_diff, columnNames, true);
-  buildAndTestSmallTestSetDiffSizeChildren(
-      "<max-distance-in-meters:1000000>", true,
-      expectedMaxDist1000000_rows_diff, columnNames, false);
-  buildAndTestSmallTestSetDiffSizeChildren(
-      "<max-distance-in-meters:1000000>", false,
-      expectedMaxDist1000000_rows_diff, columnNames, false);
-  buildAndTestSmallTestSetDiffSizeChildren(
-      "<max-distance-in-meters:10000000>", true,
-      expectedMaxDist10000000_rows_diff, columnNames, true);
-  buildAndTestSmallTestSetDiffSizeChildren(
-      "<max-distance-in-meters:10000000>", false,
-      expectedMaxDist10000000_rows_diff, columnNames, true);
-  buildAndTestSmallTestSetDiffSizeChildren(
-      "<max-distance-in-meters:10000000>", true,
-      expectedMaxDist10000000_rows_diff, columnNames, false);
-  buildAndTestSmallTestSetDiffSizeChildren(
-      "<max-distance-in-meters:10000000>", false,
-      expectedMaxDist10000000_rows_diff, columnNames, false);
+  buildAndTestSmallTestSetDiffSizeChildren(MaxDistanceConfig{500000}, true,
+                                           expectedMaxDist500000_rows_diff,
+                                           columnNames, true);
+  buildAndTestSmallTestSetDiffSizeChildren(MaxDistanceConfig{500000}, false,
+                                           expectedMaxDist500000_rows_diff,
+                                           columnNames, true);
+  buildAndTestSmallTestSetDiffSizeChildren(MaxDistanceConfig{500000}, true,
+                                           expectedMaxDist500000_rows_diff,
+                                           columnNames, false);
+  buildAndTestSmallTestSetDiffSizeChildren(MaxDistanceConfig{500000}, false,
+                                           expectedMaxDist500000_rows_diff,
+                                           columnNames, false);
+  buildAndTestSmallTestSetDiffSizeChildren(MaxDistanceConfig{1000000}, true,
+                                           expectedMaxDist1000000_rows_diff,
+                                           columnNames, true);
+  buildAndTestSmallTestSetDiffSizeChildren(MaxDistanceConfig{1000000}, false,
+                                           expectedMaxDist1000000_rows_diff,
+                                           columnNames, true);
+  buildAndTestSmallTestSetDiffSizeChildren(MaxDistanceConfig{1000000}, true,
+                                           expectedMaxDist1000000_rows_diff,
+                                           columnNames, false);
+  buildAndTestSmallTestSetDiffSizeChildren(MaxDistanceConfig{1000000}, false,
+                                           expectedMaxDist1000000_rows_diff,
+                                           columnNames, false);
+  buildAndTestSmallTestSetDiffSizeChildren(MaxDistanceConfig{10000000}, true,
+                                           expectedMaxDist10000000_rows_diff,
+                                           columnNames, true);
+  buildAndTestSmallTestSetDiffSizeChildren(MaxDistanceConfig{10000000}, false,
+                                           expectedMaxDist10000000_rows_diff,
+                                           columnNames, true);
+  buildAndTestSmallTestSetDiffSizeChildren(MaxDistanceConfig{10000000}, true,
+                                           expectedMaxDist10000000_rows_diff,
+                                           columnNames, false);
+  buildAndTestSmallTestSetDiffSizeChildren(MaxDistanceConfig{10000000}, false,
+                                           expectedMaxDist10000000_rows_diff,
+                                           columnNames, false);
 }
 
 INSTANTIATE_TEST_SUITE_P(SpatialJoin, SpatialJoinParamTest, ::testing::Bool());

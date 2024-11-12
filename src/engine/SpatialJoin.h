@@ -41,11 +41,11 @@ struct SpatialJoinConfiguration {
 
   // If given, the distance will be added to the result and be bound to this
   // variable.
-  std::optional<Variable> bindDist_;
+  std::optional<Variable> bindDist_ = std::nullopt;
 
   // Choice of algorithm. Both algorithms have equal results, but different
   // runtime characteristics.
-  SpatialJoinAlgorithm algo_;
+  SpatialJoinAlgorithm algo_ = SPATIAL_JOIN_DEFAULT_ALGORITHM;
 };
 
 // helper struct to improve readability in prepareJoin()

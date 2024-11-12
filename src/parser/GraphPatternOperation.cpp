@@ -275,7 +275,7 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
     throw SpatialSearchException(
         "Unsupported argument " + predString +
         " in Spatial Search. Supported Arguments: left, right, "
-        "nearestNeighbors, maxDistance and bindDistance.");
+        "nearestNeighbors, maxDistance, bindDistance and algorithm.");
   }
 }
 

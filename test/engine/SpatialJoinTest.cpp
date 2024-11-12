@@ -32,90 +32,6 @@ using namespace SpatialJoinTestHelpers;
 // TODO<ullingerc> Most of these tests require refactoring after switching to
 // magic SERVICE invocation instead of predicate
 
-namespace maxDistanceParsingTest {
-
-// test if the SpatialJoin operation parses the maximum distance correctly
-void testMaxDistance(std::string distanceIRI, long long distance,
-                     bool shouldThrow) {
-  auto qec = getQec();
-  TripleComponent subject{Variable{"?subject"}};
-  TripleComponent object{Variable{"?object"}};
-  SparqlTriple triple{subject, distanceIRI, object};
-  if (shouldThrow) {
-    ASSERT_ANY_THROW(ad_utility::makeExecutionTree<SpatialJoin>(
-        qec, triple, std::nullopt, std::nullopt));
-  } else {
-    std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
-        ad_utility::makeExecutionTree<SpatialJoin>(qec, triple, std::nullopt,
-                                                   std::nullopt);
-    std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
-    SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
-    ASSERT_EQ(spatialJoin->getMaxDist(), distance);
-  }
-}
-
-TEST(SpatialJoin, maxDistanceParsingTest) {
-  testMaxDistance("<max-distance-in-meters:1000>", 1000, false);
-
-  testMaxDistance("<max-distance-in-meters:0>", 0, false);
-
-  testMaxDistance("<max-distance-in-meters:20000000>", 20000000, false);
-
-  testMaxDistance("<max-distance-in-meters:123456789>", 123456789, false);
-
-  // the following distance is slightly bigger than earths circumference.
-  // This distance should still be representable
-  testMaxDistance("<max-distance-in-meters:45000000000>", 45000000000, false);
-
-  // distance must be positive
-  testMaxDistance("<max-distance-in-meters:-10>", -10, true);
-
-  // some words start with an upper case
-  testMaxDistance("<max-Distance-In-Meters:1000>", 1000, true);
-
-  // wrong keyword for the spatialJoin operation
-  testMaxDistance("<maxDistanceInMeters:1000>", 1000, true);
-
-  // "M" in meters is upper case
-  testMaxDistance("<max-distance-in-Meters:1000>", 1000, true);
-
-  // two > at the end
-  testMaxDistance("<maxDistanceInMeters:1000>>", 1000, true);
-
-  // distance must be given as integer
-  testMaxDistance("<maxDistanceInMeters:oneThousand>", 1000, true);
-
-  // distance must be given as integer
-  testMaxDistance("<maxDistanceInMeters:1000.54>>", 1000, true);
-
-  // missing > at the end
-  testMaxDistance("<maxDistanceInMeters:1000", 1000, true);
-
-  // prefix before correct iri
-  testMaxDistance("<asdfmax-distance-in-meters:1000>", 1000, true);
-
-  // suffix after correct iri
-  testMaxDistance("<max-distance-in-metersjklö:1000>", 1000, true);
-
-  // suffix after correct iri
-  testMaxDistance("<max-distance-in-meters:qwer1000>", 1000, true);
-
-  // suffix after number.
-  // Note that the usual stoll function would return
-  // 1000 instead of throwing an exception. To fix this mistake, a for loop
-  // has been added to the parsing, which checks, if each character (which
-  // should be converted to a number) is a digit
-  testMaxDistance("<max-distance-in-meters:1000asff>", 1000, true);
-
-  // prefix before <
-  testMaxDistance("yxcv<max-distance-in-metersjklö:1000>", 1000, true);
-
-  // suffix after >
-  testMaxDistance("<max-distance-in-metersjklö:1000>dfgh", 1000, true);
-}
-
-}  // namespace maxDistanceParsingTest
-
 namespace childrenTesting {
 
 void testAddChild(bool addLeftChildFirst) {
@@ -145,11 +61,13 @@ void testAddChild(bool addLeftChildFirst) {
       buildIndexScan(qec, {"?obj1", std::string{"<asWKT>"}, "?point1"});
   auto rightChild =
       buildIndexScan(qec, {"?obj2", std::string{"<asWKT>"}, "?point2"});
-  SparqlTriple triple{point1, "<max-distance-in-meters:1000>", point2};
 
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
-      ad_utility::makeExecutionTree<SpatialJoin>(qec, triple, std::nullopt,
-                                                 std::nullopt);
+      ad_utility::makeExecutionTree<SpatialJoin>(
+          qec,
+          SpatialJoinConfiguration{MaxDistanceConfig{1000},
+                                   point1.getVariable(), point2.getVariable()},
+          std::nullopt, std::nullopt);
 
   std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
   SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
@@ -201,11 +119,13 @@ TEST(SpatialJoin, isConstructed) {
       buildIndexScan(qec, {"?obj1", std::string{"<asWKT>"}, "?point1"});
   auto rightChild =
       buildIndexScan(qec, {"?obj2", std::string{"<asWKT>"}, "?point2"});
-  SparqlTriple triple{point1, "<max-distance-in-meters:1000>", point2};
 
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
-      ad_utility::makeExecutionTree<SpatialJoin>(qec, triple, std::nullopt,
-                                                 std::nullopt);
+      ad_utility::makeExecutionTree<SpatialJoin>(
+          qec,
+          SpatialJoinConfiguration{MaxDistanceConfig{1000},
+                                   point1.getVariable(), point2.getVariable()},
+          std::nullopt, std::nullopt);
 
   std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
   SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
@@ -234,11 +154,13 @@ TEST(SpatialJoin, getChildren) {
       buildIndexScan(qec, {"?obj1", std::string{"<asWKT>"}, "?point1"});
   auto rightChild =
       buildIndexScan(qec, {"?obj2", std::string{"<asWKT>"}, "?point2"});
-  SparqlTriple triple{point1, "<max-distance-in-meters:1000>", point2};
 
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
-      ad_utility::makeExecutionTree<SpatialJoin>(qec, triple, std::nullopt,
-                                                 std::nullopt);
+      ad_utility::makeExecutionTree<SpatialJoin>(
+          qec,
+          SpatialJoinConfiguration{MaxDistanceConfig{1000},
+                                   point1.getVariable(), point2.getVariable()},
+          std::nullopt, std::nullopt);
 
   std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
   SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
@@ -334,9 +256,8 @@ void testGetResultWidthOrVariableToColumnMap(bool leftSideBigChild,
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
       ad_utility::makeExecutionTree<SpatialJoin>(
           qec,
-          SparqlTriple{TripleComponent{Variable{"?point1"}},
-                       std::string{"<max-distance-in-meters:0>"},
-                       TripleComponent{Variable{"?point2"}}},
+          SpatialJoinConfiguration{MaxDistanceConfig{0}, Variable{"?point1"},
+                                   Variable{"?point2"}},
           std::nullopt, std::nullopt);
   std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
   SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
@@ -456,9 +377,8 @@ void testKnownEmptyResult(bool leftSideEmptyChild, bool rightSideEmptyChild,
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
       ad_utility::makeExecutionTree<SpatialJoin>(
           qec,
-          SparqlTriple{TripleComponent{Variable{"?point1"}},
-                       std::string{"<max-distance-in-meters:0>"},
-                       TripleComponent{Variable{"?point2"}}},
+          SpatialJoinConfiguration{MaxDistanceConfig{0}, Variable{"?point1"},
+                                   Variable{"?point2"}},
           std::nullopt, std::nullopt);
   std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
   SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
@@ -507,18 +427,17 @@ TEST(SpatialJoin, resultSortedOn) {
   auto numTriples = qec->getIndex().numTriples().normal;
   ASSERT_EQ(numTriples, 15);
 
-  auto spatialJoinTriple = SparqlTriple{TripleComponent{Variable{"?point1"}},
-                                        "<max-distance-in-meters:10000000>",
-                                        TripleComponent{Variable{"?point2"}}};
-
   TripleComponent obj1{Variable{"?point1"}};
   TripleComponent obj2{Variable{"?point2"}};
   auto leftChild = buildIndexScan(qec, {"?geometry1", "<asWKT>", "?point1"});
   auto rightChild = buildIndexScan(qec, {"?geometry2", "<asWKT>", "?point2"});
 
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
-      ad_utility::makeExecutionTree<SpatialJoin>(qec, spatialJoinTriple,
-                                                 std::nullopt, std::nullopt);
+      ad_utility::makeExecutionTree<SpatialJoin>(
+          qec,
+          SpatialJoinConfiguration{MaxDistanceConfig{10000000},
+                                   Variable{"?point1"}, Variable{"?point2"}},
+          std::nullopt, std::nullopt);
 
   // add children and test, that multiplicity is a dummy return before all
   // children are added
@@ -541,11 +460,13 @@ TEST(SpatialJoin, getDescriptor) {
   auto qec = getQec();
   TripleComponent subject{Variable{"?subject"}};
   TripleComponent object{Variable{"?object"}};
-  SparqlTriple triple{subject, "<max-distance-in-meters:1000>", object};
 
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
-      ad_utility::makeExecutionTree<SpatialJoin>(qec, triple, std::nullopt,
-                                                 std::nullopt);
+      ad_utility::makeExecutionTree<SpatialJoin>(
+          qec,
+          SpatialJoinConfiguration{MaxDistanceConfig{1000},
+                                   subject.getVariable(), object.getVariable()},
+          std::nullopt, std::nullopt);
   std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
   SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
 
@@ -561,30 +482,28 @@ TEST(SpatialJoin, getCacheKeyImpl) {
   auto numTriples = qec->getIndex().numTriples().normal;
   ASSERT_EQ(numTriples, 15);
   // ====================== build inputs ===================================
-  auto spatialJoinTriple = SparqlTriple{TripleComponent{Variable{"?point1"}},
-                                        "<max-distance-in-meters:1000>",
-                                        TripleComponent{Variable{"?point2"}}};
+  Variable subj{"?point1"};
+  Variable obj{"?point2"};
   auto leftChild =
       buildIndexScan(qec, {"?obj1", std::string{"<asWKT>"}, "?point1"});
   auto rightChild =
       buildIndexScan(qec, {"?obj2", std::string{"<asWKT>"}, "?point2"});
 
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
-      ad_utility::makeExecutionTree<SpatialJoin>(qec, spatialJoinTriple,
-                                                 std::nullopt, std::nullopt);
+      ad_utility::makeExecutionTree<SpatialJoin>(
+          qec, SpatialJoinConfiguration{MaxDistanceConfig{1000}, subj, obj},
+          std::nullopt, std::nullopt);
   std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
   SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
 
   ASSERT_EQ(spatialJoin->getCacheKeyImpl(), "incomplete SpatialJoin class");
 
-  auto spJoin1 =
-      spatialJoin->addChild(leftChild, spatialJoinTriple.s_.getVariable());
+  auto spJoin1 = spatialJoin->addChild(leftChild, subj);
   spatialJoin = static_cast<SpatialJoin*>(spJoin1.get());
 
   ASSERT_EQ(spatialJoin->getCacheKeyImpl(), "incomplete SpatialJoin class");
 
-  auto spJoin2 =
-      spatialJoin->addChild(rightChild, spatialJoinTriple.o_.getVariable());
+  auto spJoin2 = spatialJoin->addChild(rightChild, obj);
   spatialJoin = static_cast<SpatialJoin*>(spJoin2.get());
 
   auto cacheKeyString = spatialJoin->getCacheKeyImpl();
@@ -625,9 +544,9 @@ void testMultiplicitiesOrSizeEstimate(bool addLeftChildFirst,
   const unsigned int nrTriplesInput = 17;
   ASSERT_EQ(numTriples, nrTriplesInput);
 
-  auto spatialJoinTriple = SparqlTriple{TripleComponent{Variable{"?point1"}},
-                                        "<max-distance-in-meters:10000000>",
-                                        TripleComponent{Variable{"?point2"}}};
+  Variable subj{"?point1"};
+  Variable obj{"?point2"};
+
   // ===================== build the first child ===============================
   auto leftChild = buildMediumChild(
       qec, {"?obj1", std::string{"<name>"}, "?name1"},
@@ -651,8 +570,9 @@ void testMultiplicitiesOrSizeEstimate(bool addLeftChildFirst,
   // result table of rightChild is identical to leftChild, see above
 
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
-      ad_utility::makeExecutionTree<SpatialJoin>(qec, spatialJoinTriple,
-                                                 std::nullopt, std::nullopt);
+      ad_utility::makeExecutionTree<SpatialJoin>(
+          qec, SpatialJoinConfiguration{MaxDistanceConfig{10000000}, subj, obj},
+          std::nullopt, std::nullopt);
 
   // add children and test, that multiplicity is a dummy return before all
   // children are added
@@ -660,12 +580,8 @@ void testMultiplicitiesOrSizeEstimate(bool addLeftChildFirst,
   SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
   auto firstChild = addLeftChildFirst ? leftChild : rightChild;
   auto secondChild = addLeftChildFirst ? rightChild : leftChild;
-  Variable firstVariable = addLeftChildFirst
-                               ? spatialJoinTriple.s_.getVariable()
-                               : spatialJoinTriple.o_.getVariable();
-  Variable secondVariable = addLeftChildFirst
-                                ? spatialJoinTriple.o_.getVariable()
-                                : spatialJoinTriple.s_.getVariable();
+  Variable firstVariable = addLeftChildFirst ? subj : obj;
+  Variable secondVariable = addLeftChildFirst ? subj : obj;
 
   if (testMultiplicities) {
     multiplicitiesBeforeAllChildrenAdded(spatialJoin);
@@ -746,9 +662,8 @@ void testMultiplicitiesOrSizeEstimate(bool addLeftChildFirst,
     const unsigned int nrTriplesInput = 17;
     ASSERT_EQ(numTriples, nrTriplesInput);
 
-    auto spatialJoinTriple = SparqlTriple{TripleComponent{Variable{"?point1"}},
-                                          "<max-distance-in-meters:10000000>",
-                                          TripleComponent{Variable{"?point2"}}};
+    Variable subj{"?point1"};
+    Variable obj{"?point2"};
 
     TripleComponent subj1{Variable{"?geometry1"}};
     TripleComponent obj1{Variable{"?point1"}};
@@ -758,8 +673,10 @@ void testMultiplicitiesOrSizeEstimate(bool addLeftChildFirst,
     auto rightChild = buildIndexScan(qec, {"?geometry2", "<asWKT>", "?point2"});
 
     std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
-        ad_utility::makeExecutionTree<SpatialJoin>(qec, spatialJoinTriple,
-                                                   std::nullopt, std::nullopt);
+        ad_utility::makeExecutionTree<SpatialJoin>(
+            qec,
+            SpatialJoinConfiguration{MaxDistanceConfig{10000000}, subj, obj},
+            std::nullopt, std::nullopt);
 
     // add children and test, that multiplicity is a dummy return before all
     // children are added
@@ -767,12 +684,8 @@ void testMultiplicitiesOrSizeEstimate(bool addLeftChildFirst,
     SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
     auto firstChild = addLeftChildFirst ? leftChild : rightChild;
     auto secondChild = addLeftChildFirst ? rightChild : leftChild;
-    Variable firstVariable = addLeftChildFirst
-                                 ? spatialJoinTriple.s_.getVariable()
-                                 : spatialJoinTriple.o_.getVariable();
-    Variable secondVariable = addLeftChildFirst
-                                  ? spatialJoinTriple.o_.getVariable()
-                                  : spatialJoinTriple.s_.getVariable();
+    Variable firstVariable = addLeftChildFirst ? subj : obj;
+    Variable secondVariable = addLeftChildFirst ? subj : obj;
 
     // each of the input child result tables should look like this:
     // ?geometry           ?point
