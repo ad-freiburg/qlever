@@ -69,19 +69,22 @@ void checkThatTablesAreEqual(const auto& expected, const IdTable& actual,
 
   VectorTable exp;
   for (const auto& row : expected) {
-    exp.emplace_back();
+    exp.emplace_back(row.begin(), row.end());
+    /*
     for (auto& el : row) {
       exp.back().push_back(el);
     }
+     */
   }
   EXPECT_THAT(actual, matchesIdTableFromVector(exp));
 }
 
+// If the `inputs` have no graph column (because the corresponding tests don't
+// care about named graphs), add a constant dummy graph column, such that the
+// assertions inside `CompressedRelation.cpp` (which always expect a graph
+// column) work.
 auto addGraphColumnIfNecessary(std::vector<RelationInput>& inputs) {
-  // First create the on-disk permutation.
   size_t numColumns = getNumColumns(inputs) + 1;
-  // If the input has no graph info, add a dummy graph value to all inputs,
-  // such that the assertions work.
   if (numColumns == 3) {
     ++numColumns;
     for (auto& input : inputs) {
@@ -117,18 +120,6 @@ compressedRelationTestWriteCompressedRelations(
   // First create the on-disk permutation.
   addGraphColumnIfNecessary(inputs);
   size_t numColumns = getNumColumns(inputs) + 1;
-  /*
-  // If the input has no graph info, add a dummy graph value to all inputs,
-  // such that the assertions work.
-  if (numColumns == 3) {
-    ++numColumns;
-    for (auto& input : inputs) {
-      for (auto& row : input.col1And2_) {
-        row.push_back(103496581);
-      }
-    }
-  }
-   */
   AD_CORRECTNESS_CHECK(numColumns >= 4);
   CompressedRelationWriter writer{numColumns, ad_utility::File{filename, "w"},
                                   blocksize};
@@ -201,14 +192,19 @@ auto makeCleanup(std::string filename) {
       [filename = std::move(filename)] { ad_utility::deleteFile(filename); });
 }
 
-auto makeLocatedTriplesFromPartOfInput(
-    float locatedProbab, const std::vector<RelationInput> inputs) {
+// From the `inputs` delete each triple with probability `locatedProbab` and
+// add it to a vector of `IdTriple`s which can then be used to build a
+// `LocatedTriples` object. Return the remaining triples and the (not-yet)
+// located triples.
+std::tuple<std::vector<RelationInput>, std::vector<IdTriple<>>>
+makeLocatedTriplesFromPartOfInput(float locatedProbab,
+                                  const std::vector<RelationInput>& inputs) {
   std::vector<IdTriple<>> locatedTriples;
   std::vector<RelationInput> result;
   ad_utility::RandomDoubleGenerator randomGenerator(0.0, 1.0);
   auto gen = [&randomGenerator, &locatedProbab]() {
     auto r = randomGenerator();
-    return r < locatedProbab;
+    return locatedProbab == 1.0f || r < locatedProbab;
   };
 
   auto addLocated = [&locatedTriples](Id col0, const auto& otherCols) {
@@ -223,7 +219,6 @@ auto makeLocatedTriplesFromPartOfInput(
     for (const auto& otherCols : input.col1And2_) {
       AD_CORRECTNESS_CHECK(otherCols.size() >= 3);
       auto isLocated = gen();
-      // std::cerr << isLocated << std::endl;
       if (isLocated) {
         addLocated(col0, otherCols);
       } else {
@@ -234,7 +229,7 @@ auto makeLocatedTriplesFromPartOfInput(
       result.pop_back();
     }
   }
-  return std::tuple{result, locatedTriples};
+  return {std::move(result), std::move(locatedTriples)};
 }
 
 // Write the relations specified by the `inputs` to a compressed permutation at

@@ -12,9 +12,7 @@
 #include "global/RuntimeParameters.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/LocatedTriples.h"
-#include "util/Cache.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
-#include "util/ConcurrentCache.h"
 #include "util/Generator.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/OverloadCallOperator.h"
@@ -554,26 +552,6 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
       return DecompressedBlock{config.scanColumns_.size(), allocator_};
     }
   }();
-  /*
-        auto sharedResultFromCache =
-      blockCache_
-          .computeOnce(
-              cacheKey,
-              [&]() {
-                auto optBlock = readAndDecompressBlock(blockMetadata, config);
-                if (optBlock.has_value()) {
-                  return std::move(optBlock.value());
-                } else {
-                  return DecompressedBlock{config.scanColumns_.size(),
-                                           allocator_};
-                }
-              },
-              false, [](const auto&) { return true; })
-          ._resultPointer;
-  // For debugging for now...
-  blockCache_.clearAll();
-  const DecompressedBlock& block = *sharedResultFromCache;
-   */
 
   // We now compute the range of the block according to the `scanSpec`. We
   // start with the full range of the block.
@@ -787,21 +765,10 @@ IdTable CompressedRelationReader::getDistinctColIdsAndCountsImpl(
   std::span<const CompressedBlockMetadata> relevantBlocksMetadata =
       getRelevantBlocks(scanSpec, allBlocksMetadata);
 
-  // Get the index of the column with the `colId`s that we are interested in.
-  /*
-  auto relevantColumnIndex = prepareColumnIndices(scanSpec, {});
-  AD_CORRECTNESS_CHECK(!relevantColumnIndex.empty());
-   */
-  // TODO<joka921> We have to read the other blocks for the merging of the
+  // TODO<joka921> We have to read the other columns for the merging of the
   // located triples. We could skip this for blocks with no updates, but that
-  // would require more arguments to the `decompessBlock` function.
-  // relevantColumnIndex.resize(1);
+  // would require more arguments to the `decompressBlock` function.
   auto scanConfig = getScanConfig(scanSpec, {}, locatedTriplesPerBlock);
-  /*
-  auto locatedTriplesConfig =
-      prepareLocatedTriples(relevantColumnIndex, locatedTriplesPerBlock);
-      */
-
   // Iterate over the blocks and only read (and decompress) those which
   // contain more than one different `colId`. For the others, we can determine
   // the count from the metadata.
@@ -930,11 +897,12 @@ DecompressedBlock CompressedRelationReader::decompressAndPostprocessBlock(
     const CompressedRelationReader::ScanImplConfig& scanConfig,
     const CompressedBlockMetadata& metadata) const {
   auto decompressedBlock = decompressBlock(compressedBlock, numRowsToRead);
-  const auto& lt = scanConfig.locatedTriplesConfig_;
-  if (lt.locatedTriples_.containsTriples(metadata.blockIndex_)) {
-    decompressedBlock = lt.locatedTriples_.mergeTriples(
-        metadata.blockIndex_, decompressedBlock, lt.numIndexColumns_,
-        lt.includeGraphColumn_);
+  auto [numIndexColumns, includeGraphColumn] =
+      prepareLocatedTriples(scanConfig.scanColumns_);
+  if (scanConfig.locatedTriples_.containsTriples(metadata.blockIndex_)) {
+    decompressedBlock = scanConfig.locatedTriples_.mergeTriples(
+        metadata.blockIndex_, decompressedBlock, numIndexColumns,
+        includeGraphColumn);
   }
   scanConfig.graphFilter_.postprocessBlock(decompressedBlock, metadata);
   return decompressedBlock;
@@ -1110,9 +1078,10 @@ auto CompressedRelationReader::getFirstAndLastTriple(
 
   ScanSpecification scanSpecForAllColumns{
       std::nullopt, std::nullopt, std::nullopt, {}, std::nullopt};
-  auto config = getScanConfig(scanSpecForAllColumns,
-                              std::array{ADDITIONAL_COLUMN_GRAPH_ID},
-                              locatedTriplesPerBlock);
+  auto config =
+      getScanConfig(scanSpecForAllColumns,
+                    std::array{ColumnIndex{ADDITIONAL_COLUMN_GRAPH_ID}},
+                    locatedTriplesPerBlock);
   auto scanBlock = [&](const CompressedBlockMetadata& block) {
     // Note: the following call only returns the part of the block that
     // actually matches the col0 and col1.
@@ -1163,9 +1132,8 @@ std::vector<ColumnIndex> CompressedRelationReader::prepareColumnIndices(
 }
 
 // ___________________________________________________________________________
-CompressedRelationReader::LocatedTriplesConfiguration
-CompressedRelationReader::prepareLocatedTriples(
-    ColumnIndicesRef columns, const LocatedTriplesPerBlock& locatedTriples) {
+std::pair<size_t, bool> CompressedRelationReader::prepareLocatedTriples(
+    ColumnIndicesRef columns) {
   AD_CORRECTNESS_CHECK(std::ranges::is_sorted(columns));
   size_t numScanColumns = [&]() -> size_t {
     if (columns.empty() || columns[0] > 3) {
@@ -1180,7 +1148,7 @@ CompressedRelationReader::prepareLocatedTriples(
     AD_CORRECTNESS_CHECK(it - columns.begin() ==
                          static_cast<int>(numScanColumns));
   }
-  return {locatedTriples, numScanColumns, containsGraphId};
+  return {numScanColumns, containsGraphId};
 }
 
 // _____________________________________________________________________________
@@ -1593,13 +1561,12 @@ CompressedRelationReader::getMetadataForSmallRelation(
   return metadata;
 }
 
+// _____________________________________________________________________________
 auto CompressedRelationReader::getScanConfig(
     const ScanSpecification& scanSpec,
     CompressedRelationReader::ColumnIndicesRef additionalColumns,
     const LocatedTriplesPerBlock& locatedTriples) -> ScanImplConfig {
   auto columnIndices = prepareColumnIndices(scanSpec, additionalColumns);
-  auto locatedTriplesConfig =
-      prepareLocatedTriples(columnIndices, locatedTriples);
   // If we need to filter by the graph ID of the triples, then we need to add
   // the graph column to the scan. If the graph column is not needed as an
   // output anyway, then we have to delete it after the filtering. The
@@ -1630,6 +1597,5 @@ auto CompressedRelationReader::getScanConfig(
   }();
   FilterDuplicatesAndGraphs graphFilter{scanSpec.graphsToFilter(),
                                         graphColumnIndex, deleteGraphColumn};
-  return {std::move(columnIndices), locatedTriplesConfig,
-          std::move(graphFilter)};
+  return {std::move(columnIndices), std::move(graphFilter), locatedTriples};
 }

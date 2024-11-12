@@ -129,7 +129,7 @@ class IndexScan final : public Operation {
 
   // Compute the size estimate of the index scan, taking delta triples (from
   // the `queryExecutionContext_`) into account. The `bool` is true iff the
-  // estimate is exact. If not, the esimate is the mean of the lower and upper
+  // estimate is exact. If not, the estimate is the mean of the lower and upper
   // bound.
   std::pair<bool, size_t> computeSizeEstimate() const;
 

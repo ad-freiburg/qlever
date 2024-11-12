@@ -12,9 +12,7 @@
 #include "global/Id.h"
 #include "index/ScanSpecification.h"
 #include "parser/data/LimitOffsetClause.h"
-#include "util/Cache.h"
 #include "util/CancellationHandle.h"
-#include "util/ConcurrentCache.h"
 #include "util/File.h"
 #include "util/Generator.h"
 #include "util/MemorySize/MemorySize.h"
@@ -434,19 +432,10 @@ class CompressedRelationReader {
 
   // Classes holding various subsets of parameters relevant for a scan of a
   // permutation, including a reference to the relevant located triples.
-  struct LocatedTriplesConfiguration {
-    const LocatedTriplesPerBlock& locatedTriples_;
-    size_t numIndexColumns_;
-    bool includeGraphColumn_;
-  };
-  struct LocatedTriplesConfigurationWithBlockIndex
-      : public LocatedTriplesConfiguration {
-    size_t blockIndex;
-  };
   struct ScanImplConfig {
     ColumnIndices scanColumns_;
-    LocatedTriplesConfiguration locatedTriplesConfig_;
     FilterDuplicatesAndGraphs graphFilter_;
+    const LocatedTriplesPerBlock& locatedTriples_;
   };
 
   // The specification of scan, together with the blocks on which this scan is
@@ -496,16 +485,6 @@ class CompressedRelationReader {
   using IdTableGenerator = cppcoro::generator<IdTable, LazyScanMetadata>;
 
  private:
-  // This cache stores a small number of decompressed blocks. Its current
-  // purpose is to make the e2e-tests run fast. They contain many SPARQL queries
-  // with ?s ?p ?o triples in the body.
-  // Note: The cache is thread-safe and using it does not change the semantics
-  // of this class, so it is safe to mark it as `mutable` to make the `scan`
-  // functions below `const`.
-  mutable ad_utility::ConcurrentCache<ad_utility::HeapBasedLRUCache<
-      off_t, DecompressedBlock, DecompressedBlockSizeGetter>>
-      blockCache_{20ul};
-
   // The allocator used to allocate intermediate buffers.
   mutable Allocator allocator_;
 
@@ -710,8 +689,8 @@ class CompressedRelationReader {
       std::initializer_list<ColumnIndex> baseColumns,
       ColumnIndicesRef additionalColumns);
 
-  static LocatedTriplesConfiguration prepareLocatedTriples(
-      ColumnIndicesRef columns, const LocatedTriplesPerBlock& locatedTriples);
+  static std::pair<size_t, bool> prepareLocatedTriples(
+      ColumnIndicesRef columns);
 
   // If `col1Id` is specified, `return {1, additionalColumns...}`, else return
   // `{0, 1, additionalColumns}`.

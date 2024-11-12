@@ -268,27 +268,6 @@ void LocatedTriplesPerBlock::updateAugmentedMetadata() {
     }
     blockIndex++;
   }
-  // Also account for the last block that contains the triples that are larger
-  // than all the inserted triples.
-  if (hasUpdates(blockIndex)) {
-    const auto& blockUpdates = map_.at(blockIndex);
-    auto firstTriple = blockUpdates.begin()->triple_.toPermutedTriple();
-    auto lastTriple = blockUpdates.rbegin()->triple_.toPermutedTriple();
-
-    using O = CompressedBlockMetadata::OffsetAndCompressedSize;
-    O emptyBlock{0, 0};
-
-    // TODO<joka921> We need the appropriate number of columns here, or we need
-    // to make the reading code work regardless of the number of columns.
-    CompressedBlockMetadataNoBlockIndex lastBlockN{
-        std::vector<O>(4, emptyBlock),
-        0,
-        firstTriple,
-        lastTriple,
-        std::nullopt,
-        true};
-    augmentedMetadata_->emplace_back(lastBlockN, blockIndex);
-  }
 }
 
 // ____________________________________________________________________________
@@ -303,20 +282,4 @@ std::ostream& operator<<(std::ostream& os, const LocatedTriples& lts) {
 std::ostream& operator<<(std::ostream& os, const std::vector<IdTriple<0>>& v) {
   std::ranges::copy(v, std::ostream_iterator<IdTriple<0>>(os, ", "));
   return os;
-}
-
-// ____________________________________________________________________________
-bool LocatedTriplesPerBlock::containsTriple(const IdTriple<0>& triple,
-                                            bool shouldExist) const {
-  auto blockContains = [&triple, shouldExist](const LocatedTriples& lt,
-                                              size_t blockIndex) {
-    LocatedTriple locatedTriple{blockIndex, triple, shouldExist};
-    locatedTriple.blockIndex_ = blockIndex;
-    return ad_utility::contains(lt, locatedTriple);
-  };
-
-  return std::ranges::any_of(map_, [&blockContains](auto& indexAndBlock) {
-    const auto& [index, block] = indexAndBlock;
-    return blockContains(block, index);
-  });
 }
