@@ -433,7 +433,8 @@ void Operation::createRuntimeInfoFromEstimates(
 
   _runtimeInfo->costEstimate_ = getCostEstimate();
   _runtimeInfo->sizeEstimate_ = getSizeEstimateBeforeLimit();
-  const auto& [limit, offset, _] = getLimit();
+  // We are interested only in the first two elements of the limit tuple.
+  const auto& [limit, offset, _1, _2] = getLimit();
   if (limit.has_value()) {
     _runtimeInfo->addDetail("limit", limit.value());
   }

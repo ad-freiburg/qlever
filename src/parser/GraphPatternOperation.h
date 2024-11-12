@@ -211,6 +211,7 @@ struct PathQuery : MagicServiceQuery {
 
   GraphPattern childGraphPattern_;
   bool cartesian_ = true;
+  std::optional<uint64_t> numPathsPerTarget_ = std::nullopt;
 
   /**
    * @brief Add a parameter to the PathQuery from the given triple.

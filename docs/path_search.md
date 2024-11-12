@@ -48,6 +48,10 @@ SELECT ?start ?end ?path ?edge WHERE {
   **one target**. Sources and targets are paired based on their index (i.e. the paths
   from the first source to the first target are searched, then the second source and
   target, and so on).
+- **pathSearch:numPathsPerTarget** (optional): The path search will only search and store paths,
+  if the number of found paths is lower or equal to the value of the parameter. Expects an integer.
+  Example: if the value is 5, then the search will enumerate all paths until 5 paths have been found.
+  Other paths will be ignored.
 
 
 ### Example 1: Single Source and Target
@@ -170,7 +174,7 @@ SELECT ?start ?end ?path ?edge WHERE {
 }
 ```
 
-This is esecially useful for [N-ary relations](https://www.w3.org/TR/swbp-n-aryRelations/). 
+This is especially useful for [N-ary relations](https://www.w3.org/TR/swbp-n-aryRelations/). 
 Considering the example above, it is possible to query additional relations of `?middle`:
 
 ```sparql
@@ -249,6 +253,39 @@ SELECT ?start ?end ?path ?edge WHERE {
     {
       SELECT * WHERE {
         ?start <p> ?end.
+      }
+    }
+  }
+}
+```
+
+### Example 5: Limit Number of Paths per Target
+
+It is possible to limit how many paths per target are returned. This is especially useful if
+the query uses a lot of memory. In that case, it is possible to query a limited number of
+paths to debug where the problem is.
+
+The following query for example will only return one path per source and target pair.
+I.e. one path for `(<source1>, <target1>)`, one path for `(<source1>, <target2>)` and so on.
+
+```sparql
+PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>
+
+SELECT ?start ?end ?path ?edge WHERE {
+  SERVICE pathSearch: {
+    _:path pathSearch:algorithm pathSearch:allPaths ;
+           pathSearch:source <source1> ;
+           pathSearch:source <source2> ;
+           pathSearch:target <target1> ;
+           pathSearch:target <target2> ;
+           pathSearch:pathColumn ?path ;
+           pathSearch:edgeColumn ?edge ;
+           pathSearch:start ?start ;
+           pathSearch:end ?end ;
+           pathSearch:numPathsPerTarget 1;
+    {
+      SELECT * WHERE {
+        ?start <predicate> ?end.
       }
     }
   }
