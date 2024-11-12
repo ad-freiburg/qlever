@@ -202,9 +202,9 @@ IdTable CartesianProductJoin::writeAllColumns(
     AD_CORRECTNESS_CHECK(lastTableOffset == 0);
   }
 
-  size_t totalSizeIncludingLimit =
-      LimitOffsetClause{limit, offset}.actualSize(totalResultSize);
-  offset = std::min(offset, totalResultSize);
+  LimitOffsetClause limitOffset{limit, offset};
+  size_t totalSizeIncludingLimit = limitOffset.actualSize(totalResultSize);
+  offset = limitOffset.actualOffset(totalResultSize);
 
   try {
     result.resize(totalSizeIncludingLimit);
