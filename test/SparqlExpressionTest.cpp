@@ -587,8 +587,9 @@ TEST(SparqlExpression, stringOperators) {
 
   // Test the different (optimized) behavior depending on whether the STR()
   // function was applied to the argument.
-  checkStrlen(IdOrLiteralOrIriVec{lit("one"), I(1), D(3.6), lit("")},
-              Ids{I(3), U, U, I(0)});
+  checkStrlen(
+      IdOrLiteralOrIriVec{lit("one"), lit("tschüss"), I(1), D(3.6), lit("")},
+      Ids{I(3), I(7), U, U, I(0)});
   checkStrlenWithStrChild(
       IdOrLiteralOrIriVec{lit("one"), I(1), D(3.6), lit("")},
       Ids{I(3), I(1), I(3), I(0)});
@@ -1117,6 +1118,7 @@ TEST(SparqlExpression, testToNumericExpression) {
 TEST(SparqlExpression, geoSparqlExpressions) {
   auto checkLat = testUnaryExpression<&makeLatitudeExpression>;
   auto checkLong = testUnaryExpression<&makeLongitudeExpression>;
+  auto checkIsGeoPoint = testUnaryExpression<&makeIsGeoPointExpression>;
   auto checkDist = std::bind_front(testNaryExpression, &makeDistExpression);
 
   auto p = GeoPoint(26.8, 24.3);
@@ -1136,9 +1138,11 @@ TEST(SparqlExpression, geoSparqlExpressions) {
 
   checkLat(v, vLat);
   checkLong(v, vLng);
+  checkIsGeoPoint(v, B(true));
   checkDist(D(0.0), v, v);
   checkLat(idOrLitOrStringVec({"NotAPoint", I(12)}), Ids{U, U});
   checkLong(idOrLitOrStringVec({D(4.2), "NotAPoint"}), Ids{U, U});
+  checkIsGeoPoint(IdOrLiteralOrIri{lit("NotAPoint")}, B(false));
   checkDist(U, v, IdOrLiteralOrIri{I(12)});
   checkDist(U, IdOrLiteralOrIri{I(12)}, v);
   checkDist(U, v, IdOrLiteralOrIri{lit("NotAPoint")});

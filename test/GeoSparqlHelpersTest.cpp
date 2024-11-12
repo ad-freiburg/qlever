@@ -42,7 +42,12 @@ TEST(GeoSparqlHelpers, ParseWktPoint) {
   testParseWktPointCorrect("pOiNt(7 -0.0)", 7.0, 0.0);
   testParseWktPointCorrect(" pOiNt\t(  7 \r -0.0 \n ) ", 7.0, 0.0);
   testParseWktPointCorrect("POINT(2.2945 48.8585)", 2.2945, 48.8585);
+  testParseWktPointCorrect("POINT(2 48.8585)", 2.0, 48.8585);
+  testParseWktPointCorrect("POINT(20 48.8585)", 20.0, 48.8585);
   testParseWktPointCorrect("POINT(7.8529 47.9957)", 7.8529, 47.9957);
+  testParseWktPointCorrect("POINT(7.8529 47)", 7.8529, 47.0);
+  testParseWktPointCorrect("POINT(17 47)", 17.0, 47.0);
+  testParseWktPointCorrect("POINT(7 47)", 7.0, 47.0);
 
   // Invalid WKT points because of issues unrelated to the number format (one of
   // the quotes missing, one of the parentheses missing, it must be exactly two

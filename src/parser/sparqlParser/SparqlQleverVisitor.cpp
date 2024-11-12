@@ -87,6 +87,7 @@ ExpressionPtr Visitor::processIriFunctionCall(
       return false;
     }
   };
+
   // Helper lambda that checks the number of arguments and throws an error
   // if it's not right. The `functionName` and `prefixName` are used for the
   // error message.
@@ -102,6 +103,7 @@ ExpressionPtr Visitor::processIriFunctionCall(
                                numArgs == 1 ? " argument" : " arguments"));
     }
   };
+
   // Geo functions.
   if (checkPrefix(GEOF_PREFIX)) {
     if (functionName == "distance") {
@@ -115,7 +117,10 @@ ExpressionPtr Visitor::processIriFunctionCall(
       checkNumArgs(1);
       return sparqlExpression::makeLatitudeExpression(std::move(argList[0]));
     }
-  } else if (checkPrefix(MATH_PREFIX)) {
+  }
+
+  // Math functions.
+  if (checkPrefix(MATH_PREFIX)) {
     if (functionName == "log") {
       checkNumArgs(1);
       return sparqlExpression::makeLogExpression(std::move(argList[0]));
@@ -139,7 +144,10 @@ ExpressionPtr Visitor::processIriFunctionCall(
       return sparqlExpression::makePowExpression(std::move(argList[0]),
                                                  std::move(argList[1]));
     }
-  } else if (checkPrefix(XSD_PREFIX)) {
+  }
+
+  // XSD conversion functions.
+  if (checkPrefix(XSD_PREFIX)) {
     if (functionName == "integer" || functionName == "int") {
       checkNumArgs(1);
       return sparqlExpression::makeConvertToIntExpression(
@@ -150,6 +158,18 @@ ExpressionPtr Visitor::processIriFunctionCall(
           std::move(argList[0]));
     }
   }
+
+  // QLever-internal functions.
+  //
+  // NOTE: Predicates like `ql:has-predicate` etc. are handled elsewhere.
+  if (checkPrefix(QL_PREFIX)) {
+    if (functionName == "isGeoPoint") {
+      checkNumArgs(1);
+      return sparqlExpression::makeIsGeoPointExpression(std::move(argList[0]));
+    }
+  }
+
+  // If none of the above matched, report unknown function.
   reportNotSupported(ctx,
                      "Function \""s + iri.toStringRepresentation() + "\" is");
 }
@@ -191,21 +211,17 @@ ParsedQuery Visitor::visit(Parser::QueryContext* ctx) {
 
 // ____________________________________________________________________________________
 ParsedQuery Visitor::visit(Parser::QueryOrUpdateContext* ctx) {
-  if (ctx->update()) {
+  if (ctx->update() && !ctx->update()->update1()) {
     // An empty query currently matches the `update()` rule. We handle this
     // case manually to get a better error message. If an update query doesn't
     // have an `update1()`, then it consists of a (possibly empty) prologue, but
     // has not actual content, see the grammar in `SparqlAutomatic.g4` for
     // details.
-    if (!ctx->update()->update1()) {
-      reportError(ctx->update(),
-                  "Empty query (this includes queries that only consist "
-                  "of comments or prefix declarations).");
-    }
-    reportNotSupported(ctx->update(), "SPARQL 1.1 Update is");
-  } else {
-    return visit(ctx->query());
+    reportError(ctx->update(),
+                "Empty query (this includes queries that only consist "
+                "of comments or prefix declarations).");
   }
+  return visitAlternative<ParsedQuery>(ctx->query(), ctx->update());
 }
 
 // ____________________________________________________________________________________
@@ -372,16 +388,20 @@ std::optional<Values> Visitor::visit(Parser::ValuesClauseContext* ctx) {
 
 // ____________________________________________________________________________________
 ParsedQuery Visitor::visit(Parser::UpdateContext* ctx) {
+  // The prologue (BASE and PREFIX declarations)  only affects the internal
+  // state of the visitor.
   visit(ctx->prologue());
 
-  auto query = visit(ctx->update1());
+  auto update = visit(ctx->update1());
 
   if (ctx->update()) {
     parsedQuery_ = ParsedQuery{};
     reportNotSupported(ctx->update(), "Multiple updates in one query are");
   }
 
-  return query;
+  update._originalString = ctx->getStart()->getInputStream()->toString();
+
+  return update;
 }
 
 // ____________________________________________________________________________________
@@ -496,13 +516,23 @@ ParsedQuery Visitor::visit(Parser::ModifyContext* ctx) {
       return true;
     }
   };
+  auto isVisibleIfVariableGraph =
+      [this](const SparqlTripleSimpleWithGraph::Graph& graph) {
+        if (std::holds_alternative<Variable>(graph)) {
+          return ad_utility::contains(parsedQuery_.getVisibleVariables(),
+                                      std::get<Variable>(graph));
+        } else {
+          return true;
+        }
+      };
   auto checkTriples =
-      [&isVisibleIfVariable,
-       &ctx](const std::vector<SparqlTripleSimpleWithGraph>& triples) {
+      [&isVisibleIfVariable, &ctx, &isVisibleIfVariableGraph](
+          const std::vector<SparqlTripleSimpleWithGraph>& triples) {
         for (auto& triple : triples) {
           if (!(isVisibleIfVariable(triple.s_) &&
                 isVisibleIfVariable(triple.p_) &&
-                isVisibleIfVariable(triple.o_))) {
+                isVisibleIfVariable(triple.o_) &&
+                isVisibleIfVariableGraph(triple.g_))) {
             reportError(ctx,
                         absl::StrCat("A triple contains a variable that was "
                                      "not bound in the query body."));

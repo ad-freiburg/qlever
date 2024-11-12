@@ -43,8 +43,8 @@ auto iri = ad_utility::testing::iri;
 auto lit = ad_utility::testing::tripleComponentLiteral;
 
 const ad_utility::HashMap<std::string, std::string> defaultPrefixMap{
-    {std::string{INTERNAL_PREDICATE_PREFIX_NAME},
-     std::string{INTERNAL_PREDICATE_PREFIX_IRI}}};
+    {std::string{QLEVER_INTERNAL_PREFIX_NAME},
+     std::string{QLEVER_INTERNAL_PREFIX_IRI}}};
 
 template <auto F, bool testInsideConstructTemplate = false>
 auto parse =
@@ -817,9 +817,10 @@ TEST(SparqlParser, triplesSameSubjectPath) {
       ExpectCompleteParse<&Parser::triplesSameSubjectPath, true>{};
   expectTriplesConstruct("_:1 <bar> ?baz", {{BlankNode(false, "1"),
                                              PathIri("<bar>"), Var{"?baz"}}});
-  expectTriples("_:one <bar> ?baz",
-                {{Var{absl::StrCat(INTERNAL_BLANKNODE_VARIABLE_PREFIX, "one")},
-                  PathIri("<bar>"), Var{"?baz"}}});
+  expectTriples(
+      "_:one <bar> ?baz",
+      {{Var{absl::StrCat(QLEVER_INTERNAL_BLANKNODE_VARIABLE_PREFIX, "one")},
+        PathIri("<bar>"), Var{"?baz"}}});
   expectTriples("10.0 <bar> true",
                 {{Literal(10.0), PathIri("<bar>"), Literal(true)}});
   expectTriples(
@@ -1730,12 +1731,15 @@ TEST(SparqlParser, FunctionCall) {
   auto geof = absl::StrCat("<", GEOF_PREFIX.second);
   auto math = absl::StrCat("<", MATH_PREFIX.second);
   auto xsd = absl::StrCat("<", XSD_PREFIX.second);
+  auto ql = absl::StrCat("<", QL_PREFIX.second);
 
   // Correct function calls. Check that the parser picks the correct expression.
   expectFunctionCall(absl::StrCat(geof, "latitude>(?x)"),
                      matchUnary(&makeLatitudeExpression));
   expectFunctionCall(absl::StrCat(geof, "longitude>(?x)"),
                      matchUnary(&makeLongitudeExpression));
+  expectFunctionCall(absl::StrCat(ql, "isGeoPoint>(?x)"),
+                     matchUnary(&makeIsGeoPointExpression));
   expectFunctionCall(
       absl::StrCat(geof, "distance>(?a, ?b)"),
       matchNary(&makeDistExpression, Variable{"?a"}, Variable{"?b"}));
@@ -1765,10 +1769,14 @@ TEST(SparqlParser, FunctionCall) {
 
   // Wrong number of arguments.
   expectFunctionCallFails(absl::StrCat(geof, "distance>(?a)"));
-  // Unknown function with `geof:`, `math:`, or `xsd:` prefix.
+  expectFunctionCallFails(absl::StrCat(geof, "distance>(?a, ?b, ?c)"));
+
+  // Unknown function with `geof:`, `math:`, `xsd:`, or `ql` prefix.
   expectFunctionCallFails(absl::StrCat(geof, "nada>(?x)"));
   expectFunctionCallFails(absl::StrCat(math, "nada>(?x)"));
   expectFunctionCallFails(absl::StrCat(xsd, "nada>(?x)"));
+  expectFunctionCallFails(absl::StrCat(ql, "nada>(?x)"));
+
   // Prefix for which no function is known.
   std::string prefixNexistepas = "<http://nexiste.pas/>";
   expectFunctionCallFails(absl::StrCat(prefixNexistepas, "nada>(?x)"));
@@ -1918,32 +1926,6 @@ TEST(SparqlParser, aggregateExpressions) {
       matchAggregate<GroupConcatExpression>(true, V{"?x"}, separator(";")));
 }
 
-// Update queries are WIP. The individual parts to parse some update queries
-// are in place the code to process them is still unfinished. Therefore we
-// don't accept update queries.
-TEST(SparqlParser, updateQueryUnsupported) {
-  auto expectUpdateFails = ExpectParseFails<&Parser::queryOrUpdate>{};
-  auto contains = [](const std::string& s) { return ::testing::HasSubstr(s); };
-  auto updateUnsupported =
-      contains("SPARQL 1.1 Update is currently not supported by QLever.");
-
-  // Test all the cases because some functionality will be enabled shortly.
-  expectUpdateFails("INSERT DATA { <a> <b> <c> }", updateUnsupported);
-  expectUpdateFails("DELETE DATA { <a> <b> <c> }", updateUnsupported);
-  expectUpdateFails("DELETE { <a> <b> <c> } WHERE { ?s ?p ?o }",
-                    updateUnsupported);
-  expectUpdateFails("INSERT { <a> <b> <c> } WHERE { ?s ?p ?o }",
-                    updateUnsupported);
-  expectUpdateFails("DELETE WHERE { <a> <b> <c> }", updateUnsupported);
-  expectUpdateFails("LOAD <a>", updateUnsupported);
-  expectUpdateFails("CLEAR GRAPH <a>", updateUnsupported);
-  expectUpdateFails("DROP GRAPH <a>", updateUnsupported);
-  expectUpdateFails("CREATE GRAPH <a>", updateUnsupported);
-  expectUpdateFails("ADD GRAPH <a> TO DEFAULT", updateUnsupported);
-  expectUpdateFails("MOVE DEFAULT TO GRAPH <a>", updateUnsupported);
-  expectUpdateFails("COPY GRAPH <a> TO GRAPH <a>", updateUnsupported);
-}
-
 TEST(SparqlParser, Quads) {
   auto expectQuads = ExpectCompleteParse<&Parser::quads>{defaultPrefixMap};
   auto expectQuadsFails = ExpectParseFails<&Parser::quads>{};
@@ -2003,8 +1985,14 @@ TEST(SparqlParser, QuadData) {
   expectQuadDataFails("{ GRAPH ?foo { <a> <b> <c> } }");
 }
 
-TEST(SparqlParser, UpdateQuery) {
-  auto expectUpdate = ExpectCompleteParse<&Parser::update>{defaultPrefixMap};
+TEST(SparqlParser, Update) {
+  auto expectUpdate_ = ExpectCompleteParse<&Parser::update>{defaultPrefixMap};
+  // Automatically test all updates for their `_originalString`.
+  auto expectUpdate = [&expectUpdate_](const std::string& query,
+                                       auto&& expected) {
+    expectUpdate_(query,
+                  testing::AllOf(expected, m::pq::OriginalString(query)));
+  };
   auto expectUpdateFails = ExpectParseFails<&Parser::update>{};
   auto Iri = [](std::string_view stringWithBrackets) {
     return TripleComponent::Iri::fromIriref(stringWithBrackets);
@@ -2014,6 +2002,7 @@ TEST(SparqlParser, UpdateQuery) {
   };
   auto noGraph = std::monostate{};
 
+  // Test the parsing of the update clause in the ParsedQuery.
   expectUpdate(
       "INSERT DATA { <a> <b> <c> }",
       m::UpdateClause(
@@ -2039,7 +2028,14 @@ TEST(SparqlParser, UpdateQuery) {
           m::GraphUpdate({{Var("?a"), Iri("<b>"), Iri("<c>"), noGraph}}, {},
                          std::nullopt),
           m::GraphPattern(m::Triples({{Iri("<d>"), "<e>", Var{"?a"}}}))));
+  // Use variables that are not visible in the query body. Do this for all parts
+  // of the quad for coverage reasons.
   expectUpdateFails("DELETE { ?a <b> <c> } WHERE { <a> ?b ?c }");
+  expectUpdateFails("DELETE { <c> <d> <c> . <e> ?a <f> } WHERE { <a> ?b ?c }");
+  expectUpdateFails(
+      "DELETE { GRAPH <foo> { <c> <d> <c> . <e> <f> ?a } } WHERE { <a> ?b ?c "
+      "}");
+  expectUpdateFails("DELETE { GRAPH ?a { <c> <d> <c> } } WHERE { <a> ?b ?c }");
   expectUpdate(
       "DELETE { ?a <b> <c> } INSERT { <a> ?a <c> } WHERE { <d> <e> ?a }",
       m::UpdateClause(
@@ -2129,13 +2125,35 @@ TEST(SparqlParser, UpdateQuery) {
                                m::GraphPattern()));
 }
 
-TEST(SparqlParser, EmptyQuery) {
+TEST(SparqlParser, QueryOrUpdate) {
+  auto expectQuery =
+      ExpectCompleteParse<&Parser::queryOrUpdate>{defaultPrefixMap};
   auto expectQueryFails = ExpectParseFails<&Parser::queryOrUpdate>{};
+  auto Iri = [](std::string_view stringWithBrackets) {
+    return TripleComponent::Iri::fromIriref(stringWithBrackets);
+  };
+  // Empty queries (queries without any query or update operation) are
+  // forbidden.
   auto emptyMatcher = ::testing::HasSubstr("Empty quer");
   expectQueryFails("", emptyMatcher);
   expectQueryFails(" ", emptyMatcher);
   expectQueryFails("PREFIX ex: <http://example.org>", emptyMatcher);
   expectQueryFails("### Some comment \n \n #someMoreComments", emptyMatcher);
+  // Hit all paths for coverage.
+  expectQuery("SELECT ?a WHERE { ?a <is-a> <b> }",
+              AllOf(m::SelectQuery(m::Select({Var{"?a"}}),
+                                   m::GraphPattern(m::Triples(
+                                       {{Var{"?a"}, "<is-a>", Iri("<b>")}}))),
+                    m::pq::OriginalString("SELECT ?a WHERE { ?a <is-a> <b> }"),
+                    m::VisibleVariables({Var{"?a"}})));
+  expectQuery(
+      "INSERT DATA { <a> <b> <c> }",
+      AllOf(m::UpdateClause(m::GraphUpdate({},
+                                           {{Iri("<a>"), Iri("<b>"), Iri("<c>"),
+                                             std::monostate{}}},
+                                           std::nullopt),
+                            m::GraphPattern()),
+            m::pq::OriginalString("INSERT DATA { <a> <b> <c> }")));
 }
 
 TEST(SparqlParser, GraphOrDefault) {
@@ -2157,6 +2175,24 @@ TEST(SparqlParser, GraphRef) {
   expectGraphRefAll("NAMED", m::Variant<NAMED>());
   expectGraphRefAll("ALL", m::Variant<ALL>());
   expectGraphRefAll("GRAPH <foo>", m::GraphRefIri("<foo>"));
+}
+
+TEST(SparqlParser, QuadsNotTriples) {
+  auto expectQuadsNotTriples =
+      ExpectCompleteParse<&Parser::quadsNotTriples>{defaultPrefixMap};
+  auto expectQuadsNotTriplesFails =
+      ExpectParseFails<&Parser::quadsNotTriples>{};
+  const auto Iri = TripleComponent::Iri::fromIriref;
+
+  expectQuadsNotTriples(
+      "GRAPH <foo> { <a> <b> <c> }",
+      testing::ElementsAre(
+          m::Quad(Iri("<a>"), Iri("<b>"), Iri("<c>"), ::Iri("<foo>"))));
+  expectQuadsNotTriples(
+      "GRAPH ?f { <a> <b> <c> }",
+      ElementsAre(m::Quad(Iri("<a>"), Iri("<b>"), Iri("<c>"), Var{"?f"})));
+  expectQuadsNotTriplesFails("GRAPH \"foo\" { <a> <b> <c> }");
+  expectQuadsNotTriplesFails("GRAPH _:blankNode { <a> <b> <c> }");
 }
 
 TEST(SparqlParser, SourceSelector) {

@@ -127,14 +127,14 @@ class LocatedTriplesPerBlock {
   IdTable mergeTriples(size_t blockIndex, const IdTable& block,
                        size_t numIndexColumns, bool includeGraphColumn) const;
 
-  // Add `locatedTriples` to the `LocatedTriplesPerBlock`.
+  // Add `getLocatedTriplesForPermutation` to the `LocatedTriplesPerBlock`.
   // Return handles to where they were added (`LocatedTriples` is a sorted set,
   // see above). We need the handles so that we can easily remove the
-  // `locatedTriples` from the set again in case we need to.
+  // `getLocatedTriplesForPermutation` from the set again in case we need to.
   //
   // PRECONDITIONS:
   //
-  // 1. The `locatedTriples` must not already exist in
+  // 1. The `getLocatedTriplesForPermutation` must not already exist in
   // `LocatedTriplesPerBlock`.
   std::vector<LocatedTriples::iterator> add(
       std::span<const LocatedTriple> locatedTriples);
@@ -166,6 +166,10 @@ class LocatedTriplesPerBlock {
     numTriples_ = 0;
     augmentedMetadata_ = originalMetadata_;
   }
+
+  // Only used for testing. Return `true` iff a `LocatedTriple` with the given
+  // value for `shouldExist` is contained in any block.
+  bool containsTriple(const IdTriple<0>& triple, bool shouldExist) const;
 
   // This operator is only for debugging and testing. It returns a
   // human-readable representation.

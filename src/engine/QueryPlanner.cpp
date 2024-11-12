@@ -937,7 +937,7 @@ ParsedQuery::GraphPattern QueryPlanner::uniteGraphPatterns(
 
 // _____________________________________________________________________________
 Variable QueryPlanner::generateUniqueVarName() {
-  return Variable{absl::StrCat(INTERNAL_VARIABLE_QUERY_PLANNER_PREFIX,
+  return Variable{absl::StrCat(QLEVER_INTERNAL_VARIABLE_QUERY_PLANNER_PREFIX,
                                _internalVarCount++)};
 }
 

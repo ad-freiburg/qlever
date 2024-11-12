@@ -8,6 +8,7 @@
 
 #include "parser/data/ConstructQueryExportContext.h"
 
+// TODO: replace usages of this class with `ad_utility::triple_component::Iri`
 class Iri {
   std::string _string;
 
