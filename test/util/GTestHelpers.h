@@ -157,7 +157,6 @@ class CopyShield {
     return *pointer_ == other;
   }
 
-  // TODO<joka921> Add requires clause here...
   friend std::ostream& operator<<(std::ostream& os, const CopyShield& s) {
     os << *s.pointer_;
     return os;

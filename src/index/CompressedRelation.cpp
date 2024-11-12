@@ -1099,6 +1099,10 @@ std::vector<ColumnIndex> CompressedRelationReader::prepareColumnIndices(
 std::pair<size_t, bool> CompressedRelationReader::prepareLocatedTriples(
     ColumnIndicesRef columns) {
   AD_CORRECTNESS_CHECK(std::ranges::is_sorted(columns));
+  // NOTE 1: For example, ?s ?p ?o, then columns = {0, 1, 2, ...}
+  // NOTE 2: columns[0] > 3 can occur if the triple is fixed but there is
+  // payload (probably cannot occur in the current implementation).
+  // NOTE 3: Returns the number of columns that have to be scanned.
   size_t numScanColumns = [&]() -> size_t {
     if (columns.empty() || columns[0] > 3) {
       return 0;
@@ -1106,6 +1110,7 @@ std::pair<size_t, bool> CompressedRelationReader::prepareLocatedTriples(
       return 3 - columns[0];
     }
   }();
+  // Check if one of the columns is the graph column.
   auto it = std::ranges::find(columns, ADDITIONAL_COLUMN_GRAPH_ID);
   bool containsGraphId = it != columns.end();
   if (containsGraphId) {
@@ -1529,6 +1534,14 @@ auto CompressedRelationReader::getScanConfig(
     CompressedRelationReader::ColumnIndicesRef additionalColumns,
     const LocatedTriplesPerBlock& locatedTriples) -> ScanImplConfig {
   auto columnIndices = prepareColumnIndices(scanSpec, additionalColumns);
+  // Determine the index of the graph column and whether we we need it for the
+  // final result or not.
+  //
+  // NOTE: The index of the graph column is also needed in
+  // `prepareLocatedTriples`, where we compute it again. We could also return
+  // it here, so that is stored in the `ScanImplConfig` struct. However, it's
+  // easy to compute, so why bother.
+  //
   // If we need to filter by the graph ID of the triples, then we need to add
   // the graph column to the scan. If the graph column is not needed as an
   // output anyway, then we have to delete it after the filtering. The
@@ -1538,6 +1551,7 @@ auto CompressedRelationReader::getScanConfig(
   // Note: The graph column has to come directly after the triple columns and
   // before any additional payload columns, else the `prepareLocatedTriples`
   // logic will throw an assertion.
+  //
   auto [graphColumnIndex,
         deleteGraphColumn] = [&]() -> std::pair<ColumnIndex, bool> {
     if (!scanSpec.graphsToFilter().has_value()) {
