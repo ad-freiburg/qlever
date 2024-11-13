@@ -306,11 +306,11 @@ std::ostream& operator<<(std::ostream& os, const std::vector<IdTriple<0>>& v) {
 }
 
 // ____________________________________________________________________________
-bool LocatedTriplesPerBlock::containsTriple(const IdTriple<0>& triple,
-                                            bool shouldExist) const {
-  auto blockContains = [&triple, shouldExist](const LocatedTriples& lt,
+bool LocatedTriplesPerBlock::isLocatedTriple(const IdTriple<0>& triple,
+                                             bool isInsertion) const {
+  auto blockContains = [&triple, isInsertion](const LocatedTriples& lt,
                                               size_t blockIndex) {
-    LocatedTriple locatedTriple{blockIndex, triple, shouldExist};
+    LocatedTriple locatedTriple{blockIndex, triple, isInsertion};
     locatedTriple.blockIndex_ = blockIndex;
     return ad_utility::contains(lt, locatedTriple);
   };

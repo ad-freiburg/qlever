@@ -485,9 +485,9 @@ class CompressedRelationReader {
     size_t numElementsYielded_ = 0;
     std::chrono::milliseconds blockingTime_ = std::chrono::milliseconds::zero();
 
-    // Update `*this` s.t. it contains the metadata from `blockAndMetadata`.
-    // This function currently updates `numBlocksPostprocessed_`,
-    // `numBlokcsWithUpdate_`, `numElementsRead_`, and `numBlocksRead_`.
+    // Update this metadata, given the metadata from `blockAndMetadata`.
+    // Currently updates: `numBlocksPostprocessed_`, `numBlocksWithUpdate_`,
+    // `numElementsRead_`, and `numBlocksRead_`.
     void update(const DecompressedBlockAndMetadata& blockAndMetadata);
   };
 
