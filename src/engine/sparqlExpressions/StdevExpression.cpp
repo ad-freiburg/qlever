@@ -12,7 +12,7 @@ namespace sparqlExpression::detail {
 ExpressionResult DeviationExpression::evaluate(
     EvaluationContext* context) const {
   // Helper: Extracts a double or int (as double) from a variant
-  auto numValVisitor = []<typename T>(T& value) -> std::optional<double> {
+  auto numValVisitor = []<typename T>(const T& value) -> std::optional<double> {
     if constexpr (ad_utility::isSimilar<T, double> ||
                   ad_utility::isSimilar<T, int64_t>) {
       return static_cast<double>(value);
@@ -60,8 +60,7 @@ ExpressionResult DeviationExpression::evaluate(
                devImpl](SingleExpressionResult auto&& el) -> ExpressionResult {
     // Prepare space for result
     VectorWithMemoryLimit<IdOrLiteralOrIri> exprResult{context->_allocator};
-    std::fill_n(std::back_inserter(exprResult), context->size(),
-                IdOrLiteralOrIri{Id::makeUndefined()});
+    exprResult.resize(context->size());
     bool undef = false;
 
     auto generator =
