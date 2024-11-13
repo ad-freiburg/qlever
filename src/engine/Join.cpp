@@ -569,7 +569,7 @@ void updateRuntimeInfoForLazyScan(
 
   // Add the pair of `(key, value)` to the runtime info, but only if `value >
   // 0`.
-  auto updateIfPositive = [&rti](const auto& value, std::string_view key) {
+  auto updateIfPositive = [&rti](const auto& value, const std::string& key) {
     if (value > 0) {
       rti.addDetail(key, value);
     }
@@ -579,7 +579,7 @@ void updateRuntimeInfoForLazyScan(
                    "num-blocks-skipped-graph");
   updateIfPositive(metadata.numBlocksPostprocessed_,
                    "num-blocks-postprocessed");
-  updateIfPositive(metadata.numBlocksWithUpdates_, "num-blocks-with-updates");
+  updateIfPositive(metadata.numBlocksWithUpdate_, "num-blocks-with-updateu");
 }
 }  // namespace
 

@@ -128,8 +128,8 @@ CompressedRelationReader::asyncParallelBlockGenerator(
   for (std::optional<DecompressedBlockAndMetadata>& optBlock : queue) {
     popTimer.stop();
     cancellationHandle->throwIfCancelled();
+    details.update(optBlock);
     if (optBlock.has_value()) {
-      details.update(optBlock.value());
       auto& block = optBlock.value().block_;
       pruneBlock(block, limitOffset);
       details.numElementsYielded_ += block.numRows();
@@ -139,8 +139,6 @@ CompressedRelationReader::asyncParallelBlockGenerator(
       if (limitOffset._limit.value_or(1) == 0) {
         co_return;
       }
-    } else {
-      ++details.numBlocksSkippedBecauseOfGraph_;
     }
     popTimer.cont();
   }
@@ -302,9 +300,13 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
   AD_CORRECTNESS_CHECK(!limit.has_value() ||
                        details.numElementsYielded_ <= limit.value());
   AD_CORRECTNESS_CHECK(
-      numBlocksTotal ==
-          (details.numBlocksRead_ + details.numBlocksSkippedBecauseOfGraph_) ||
-      !limitOffset.isUnconstrained());
+      numBlocksTotal == (details.numBlocksRead_ +
+                         details.numBlocksSkippedBecauseOfGraph_) ||
+          !limitOffset.isUnconstrained(),
+      [&]() {
+        return absl::StrCat(numBlocksTotal, " ", details.numBlocksRead_, " ",
+                            details.numBlocksSkippedBecauseOfGraph_);
+      });
 }
 
 // Helper function that enables a comparison of a triple with an `Id` in
@@ -549,12 +551,11 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
   // `readAndDecompressBlock` returns `std::nullopt`.
   const DecompressedBlock& block = [&]() {
     auto result = readAndDecompressBlock(blockMetadata, config);
+    if (scanMetadata.has_value()) {
+      scanMetadata.value().get().update(result);
+    }
     if (result.has_value()) {
-      auto& decompressedBlockAndMetadata = result.value();
-      if (scanMetadata.has_value()) {
-        scanMetadata.value().get().update(decompressedBlockAndMetadata);
-      }
-      return std::move(decompressedBlockAndMetadata.block_);
+      return std::move(result.value().block_);
     } else {
       return DecompressedBlock{config.scanColumns_.size(), allocator_};
     }
@@ -1582,4 +1583,14 @@ void CompressedRelationReader::LazyScanMetadata::update(
       static_cast<size_t>(blockAndMetadata.containsUpdates_);
   ++numBlocksRead_;
   numElementsRead_ += blockAndMetadata.block_.numRows();
+}
+
+// _____________________________________________________________________________
+void CompressedRelationReader::LazyScanMetadata::update(
+    const std::optional<DecompressedBlockAndMetadata>& blockAndMetadata) {
+  if (blockAndMetadata.has_value()) {
+    update(blockAndMetadata.value());
+  } else {
+    ++numBlocksSkippedBecauseOfGraph_;
+  }
 }

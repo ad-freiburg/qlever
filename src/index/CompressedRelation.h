@@ -489,6 +489,10 @@ class CompressedRelationReader {
     // This function currently updates `numBlocksPostprocessed_`,
     // `numBlokcsWithUpdate_`, `numElementsRead_`, and `numBlocksRead_`.
     void update(const DecompressedBlockAndMetadata& blockAndMetadata);
+    // `nullopt` means the block was skipped because of the graph filters, else
+    // call the overload directly above.
+    void update(
+        const std::optional<DecompressedBlockAndMetadata>& blockAndMetadata);
   };
 
   using IdTableGenerator = cppcoro::generator<IdTable, LazyScanMetadata>;
@@ -728,8 +732,7 @@ class CompressedRelationReader {
 
 // TODO<joka921>
 /*
- * 1. Also let the compressedRelationReader know about the contained block data
- * and the number of columns etc. to make the permutation class a thinner
- * wrapper.
+ * 1. Also let the compressedRelationReader know about the number of columns
+ * that the given permutation has.
  * 2. Then add assertions that we only get valid column indices specified.
  */

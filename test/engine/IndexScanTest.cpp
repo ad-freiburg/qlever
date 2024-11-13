@@ -47,7 +47,11 @@ void testLazyScan(Permutation::IdTableGenerator partialLazyScanResult,
 
   if (limitOffset.isUnconstrained()) {
     EXPECT_EQ(numBlocks, partialLazyScanResult.details().numBlocksRead_);
-    EXPECT_EQ(lazyScanRes.size(),
+    // The number of read elements might be a bit larger than the final result
+    // size, because the first and/or last block might be incomplete, meaning
+    // that they have to be completely read, but only partially contribute to
+    // the result.
+    EXPECT_LE(lazyScanRes.size(),
               partialLazyScanResult.details().numElementsRead_);
   }
 
