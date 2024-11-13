@@ -1482,3 +1482,61 @@ TEST(ExportQueryExecutionTrees, convertGeneratorForChunkedTransfer) {
               AllOf(HasSubstr("!!!!>># An error has occurred"),
                     HasSubstr("A very strange")));
 }
+
+TEST(ExportQueryExecutionTrees, idToLiteralOrIriFunctionality1) {
+  std::string kg = "<s> <p> 31 . <s> <o> 42";
+  auto qec = ad_utility::testing::getQec(kg);
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+  using enum Datatype;
+
+  // Case VocabIndex
+  {
+    Id id = getId("<o>");
+    ASSERT_EQ(id.getDatatype(), VocabIndex);
+    auto resultLiteral = ExportQueryExecutionTrees::idToLiteralOrIri(
+        qec->getIndex(), id, LocalVocab{});
+    EXPECT_EQ(resultLiteral.value().toStringRepresentation(), "<o>");
+  }
+
+  // Case Int
+  {
+    Id id = ad_utility::testing::IntId(1);
+    auto resultLiteral = ExportQueryExecutionTrees::idToLiteralOrIri(
+        qec->getIndex(), id, LocalVocab{});
+    EXPECT_EQ(resultLiteral.value().toStringRepresentation(),
+              "\"1\"^^<http://www.w3.org/2001/XMLSchema#int>");
+  }
+
+  // Case Double
+  {
+    Id id = ad_utility::testing::DoubleId(1.2);
+    auto resultLiteral = ExportQueryExecutionTrees::idToLiteralOrIri(
+        qec->getIndex(), id, LocalVocab{});
+    EXPECT_EQ(resultLiteral.value().toStringRepresentation(),
+              "\"1.2\"^^<http://www.w3.org/2001/XMLSchema#double>");
+  }
+  {
+    // Case Bool
+    Id id = ad_utility::testing::BoolId(true);
+    auto resultLiteral = ExportQueryExecutionTrees::idToLiteralOrIri(
+        qec->getIndex(), id, LocalVocab{});
+    EXPECT_EQ(resultLiteral.value().toStringRepresentation(),
+              "\"true\"^^<http://www.w3.org/2001/XMLSchema#boolean>");
+  }
+  {
+    // Case Date
+    Id id = ad_utility::testing::DateId(DateYearOrDuration::parseXsdDate,
+                                        "2024-11-07");
+    auto resultLiteral = ExportQueryExecutionTrees::idToLiteralOrIri(
+        qec->getIndex(), id, LocalVocab{});
+    EXPECT_EQ(resultLiteral.value().toStringRepresentation(),
+              "\"2024-11-07\"^^<http://www.w3.org/2001/XMLSchema#date>");
+  }
+  // Case Undefined
+  {
+    Id id = ad_utility::testing::UndefId();
+    auto resultLiteral = ExportQueryExecutionTrees::idToLiteralOrIri(
+        qec->getIndex(), id, LocalVocab{});
+    EXPECT_EQ(resultLiteral, std::nullopt);
+  }
+}

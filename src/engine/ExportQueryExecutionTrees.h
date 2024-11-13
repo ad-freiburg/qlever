@@ -24,6 +24,7 @@ class ExportQueryExecutionTrees {
  public:
   using MediaType = ad_utility::MediaType;
   using CancellationHandle = ad_utility::SharedCancellationHandle;
+  using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
 
   // Compute the result of the given `parsedQuery` (created by the
   // `SparqlParser`) for which the `QueryExecutionTree` has been previously
@@ -83,6 +84,15 @@ class ExportQueryExecutionTrees {
   // thrown.
   static std::optional<std::pair<std::string, const char*>>
   idToStringAndTypeForEncodedValue(Id id);
+
+  // Same as the 'idToStringAndType' above but returning a LiteralOrIri instead
+  // of a std::pair<std::string, const char*>
+  static std::optional<LiteralOrIri> idToLiteralOrIri(
+      const Index& index, Id id, const LocalVocab& localVocab);
+  // Same as the previous function, but only handles the datatypes for which the
+  // value is encoded directly in the ID. For other datatypes an exception is
+  // thrown.
+  static std::optional<LiteralOrIri> idToLiteralOrIriForEncodedValue(Id id);
 
   // Acts as a helper to retrieve an LiteralOrIri object
   // from an Id, where the Id is of type `VocabIndex` or `LocalVocabIndex`.

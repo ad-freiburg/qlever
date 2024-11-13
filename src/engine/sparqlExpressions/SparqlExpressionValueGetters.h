@@ -141,6 +141,20 @@ struct StringValueGetter : Mixin<StringValueGetter> {
   }
 };
 
+// This class can be used as the `ValueGetter` argument of Expression
+// templates. It produces a LiteralOrIri.
+struct LiteralOrIriValueGetter : Mixin<LiteralOrIriValueGetter> {
+  using Mixin<LiteralOrIriValueGetter>::operator();
+
+  std::optional<LiteralOrIri> operator()(ValueId,
+                                         const EvaluationContext*) const;
+
+  std::optional<LiteralOrIri> operator()(const LiteralOrIri& s,
+                                         const EvaluationContext*) const {
+    return s;
+  }
+};
+
 // Value getter for `isBlank`.
 struct IsBlankNodeValueGetter : Mixin<IsBlankNodeValueGetter> {
   using Mixin<IsBlankNodeValueGetter>::operator();
