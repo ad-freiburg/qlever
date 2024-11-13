@@ -15,6 +15,7 @@ class CartesianProductJoin : public Operation {
 
  private:
   Children children_;
+  size_t chunkSize_;
 
   // Access to the actual operations of the children.
   // TODO<joka921> We can move this whole children management into a base class
@@ -33,9 +34,11 @@ class CartesianProductJoin : public Operation {
 
  public:
   // Constructor. `children` must not be empty and the variables of all the
-  // children must be disjoint, else an `AD_CONTRACT_CHECK` fails.
+  // children must be disjoint, else an `AD_CONTRACT_CHECK` fails. Accept a
+  // custom `chunkSize` for chunking lazy results.
   explicit CartesianProductJoin(QueryExecutionContext* executionContext,
-                                Children children);
+                                Children children,
+                                size_t chunkSize = 1'000'000);
 
   /// get non-owning pointers to all the held subtrees to actually use the
   /// Execution Trees as trees
@@ -77,7 +80,7 @@ class CartesianProductJoin : public Operation {
 
  private:
   //! Compute the result of the query-subtree rooted at this element..
-  ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override;
+  ProtoResult computeResult(bool requestLaziness) override;
 
   // Copy each element from the `inputColumn` `groupSize` times to the
   // `targetColumn`. Repeat until the `targetColumn` is completely filled. Skip
@@ -88,9 +91,38 @@ class CartesianProductJoin : public Operation {
                          size_t offset) const;
 
   // Write all columns of the subresults into an `IdTable` and return it.
-  IdTable writeAllColumns(
-      const std::vector<std::shared_ptr<const Result>>& subResults) const;
+  // `offset` indicates how many rows to skip in the result and `limit` how many
+  // rows to write at most. `lastTableOffset` is the offset of the last table,
+  // to account for cases where the last table does not cover the whole result
+  // and so index 0 of a table does not correspond to row 0 of the result.
+  IdTable writeAllColumns(std::ranges::random_access_range auto idTables,
+                          size_t offset, size_t limit,
+                          size_t lastTableOffset = 0) const;
 
-  // Calculate the subresults of the children and store them into a vector.
-  std::vector<std::shared_ptr<const Result>> calculateSubResults();
+  // Calculate the subresults of the children and store them into a vector. If
+  // the rightmost child can produce a lazy result, it will be stored outside of
+  // the vector and returned as the first element of the pair. Otherwise this
+  // will be an empty shared_ptr. The vector is guaranteed to only contain fully
+  // materialized results.
+  std::pair<std::vector<std::shared_ptr<const Result>>,
+            std::shared_ptr<const Result>>
+  calculateSubResults(bool requestLaziness);
+
+  // Take a range of `IdTable`s and a corresponding `LocalVocab` and yield
+  // `IdTable`s with sizes up to `chunkSize_` until the limit is reached.
+  // `offset` indicates the total offset of the desired result.
+  // `limit` is the maximum number of rows to yield.
+  // `lastTableOffset` is the offset of the last table in the range. This is
+  // used to handle `IdTable`s yielded by generators where the range of indices
+  // they represent do not cover the whole result.
+  Result::Generator produceTablesLazily(LocalVocab mergedVocab,
+                                        std::ranges::range auto idTables,
+                                        size_t offset, size_t limit,
+                                        size_t lastTableOffset = 0) const;
+
+  // Similar to `produceTablesLazily` but can handle a single lazy result.
+  Result::Generator createLazyConsumer(
+      LocalVocab staticMergedVocab,
+      std::vector<std::shared_ptr<const Result>> subresults,
+      std::shared_ptr<const Result> lazyResult) const;
 };
