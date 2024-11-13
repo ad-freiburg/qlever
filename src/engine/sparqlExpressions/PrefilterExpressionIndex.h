@@ -13,13 +13,13 @@
 
 // For certain SparqlExpressions it is possible to perform a prefiltering
 // procedure w.r.t. relevant data blocks / ValueId values by making use of the
-// available metadata (CompressedBlockMetadata; see CompressedRelation.h) while
-// performing the IndexScan. As a result, the actual SparqlExpression evaluation
-// is performed for a smaller IdTable if a PrefilterExpression (declared in this
-// file) for the respective SparqlExpression is available and compatible with
-// the IndexScan.
-// The following SparqlExpressions construct a PrefilterExpression if possible:
-// logical-or, logical-and, not (unary), relational-expressions and strstarts.
+// available metadata (see CompressedBlockMetadata in CompressedRelation.h)
+// while performing the index scan. As a result, the actual SparqlExpression
+// evaluation is performed for a smaller IdTable if a PrefilterExpression
+// (declared in this file) for the respective SparqlExpression is available and
+// compatible with the IndexScan. The following SparqlExpressions construct a
+// PrefilterExpression if possible: logical-or, logical-and, logical-negate
+// (unary), relational-ops. and strstarts.
 
 namespace prefilterExpressions {
 
@@ -59,7 +59,7 @@ class PrefilterExpression {
   virtual std::unique_ptr<PrefilterExpression> clone() const = 0;
 
   // Format content for debugging.
-  virtual std::string info(size_t depth) const = 0;
+  virtual std::string asString(size_t depth) const = 0;
 
   // Needed for implementing the `NotExpression`. This method is required,
   // because we logically operate on `BlockMetadata` values which define ranges
@@ -88,7 +88,7 @@ class PrefilterExpression {
   // Format for debugging
   friend std::ostream& operator<<(std::ostream& str,
                                   const PrefilterExpression& expression) {
-    str << expression.info(0) << "." << std::endl;
+    str << expression.asString(0) << "." << std::endl;
     return str;
   }
 
@@ -120,7 +120,7 @@ class RelationalExpression : public PrefilterExpression {
   std::unique_ptr<PrefilterExpression> logicalComplement() const override;
   bool operator==(const PrefilterExpression& other) const override;
   std::unique_ptr<PrefilterExpression> clone() const override;
-  std::string info([[maybe_unused]] size_t depth) const override;
+  std::string asString(size_t depth) const override;
 
  private:
   std::vector<BlockMetadata> evaluateImpl(
@@ -150,7 +150,7 @@ class LogicalExpression : public PrefilterExpression {
   std::unique_ptr<PrefilterExpression> logicalComplement() const override;
   bool operator==(const PrefilterExpression& other) const override;
   std::unique_ptr<PrefilterExpression> clone() const override;
-  std::string info(size_t depth) const override;
+  std::string asString(size_t depth) const override;
 
  private:
   std::vector<BlockMetadata> evaluateImpl(
@@ -164,17 +164,18 @@ class NotExpression : public PrefilterExpression {
   std::unique_ptr<PrefilterExpression> child_;
 
  public:
+  // `makeCopy` should always be set to `false`, except when it is called within
+  // the implementation of the `clone()` method. For the copy construction,
+  // the `logicalComplement` for the child is omitted because it has
+  // already been complemented for the original expression.
   explicit NotExpression(std::unique_ptr<PrefilterExpression> child,
                          bool makeCopy = false)
-      // If we create a copy, the child expression has already been
-      // complemented while creating the original expression. Thus, just move
-      // the child.
       : child_(makeCopy ? std::move(child) : child->logicalComplement()) {}
 
   std::unique_ptr<PrefilterExpression> logicalComplement() const override;
   bool operator==(const PrefilterExpression& other) const override;
   std::unique_ptr<PrefilterExpression> clone() const override;
-  std::string info(size_t depth) const override;
+  std::string asString(size_t depth) const override;
 
  private:
   std::vector<BlockMetadata> evaluateImpl(

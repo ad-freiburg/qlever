@@ -96,14 +96,24 @@ class SparqlExpression {
       [[maybe_unused]] const std::optional<Variable>& primarySortKeyVariable)
       const;
 
-  // Returns a vector with pairs, each containing a `PrefilterExpression` and
-  // the corresponding `Variable`. The `Variable` indicates which
-  // column is required to be sorted, and hence is as a consequence also binary
-  // evaluable regarding the relational (e.g. `>=`) / logical (`&&`, `||` and
-  // `!`) expressions.
+  // Returns a vector of pairs, each containing a `PrefilterExpression` and its
+  // corresponding `Variable`. The `Variable` corresponds to the column (index
+  // column) for which we want to perform the pre-filter procedure.
+  // For the following SparqlExpressions, a pre-filter procedure can be
+  // performed given a suitable PrefilterExpression can be constructed:
+  // `logical-or`, `logical-and`, `logical-negate` (unary), `relational` and
+  // `strstarts`.
+  // `isNegated` is set to `false` by default. This boolean flag is toggled to
+  // `true` if a `logical-negate` (!) expression (see
+  // `UnaryNegateExpressionImpl` in NumericUnaryExpressions.cpp) is visited,
+  // allowing this negation information to be passed to the children of the
+  // respective expression tree. `isNegated` is used to select the suitable
+  // merge procedure on the children's `PrefilterExpression`s for `logical-and`
+  // and `logical-or` when constructing their corresponding vector of
+  // <`PrefilterExpression`, `Variable`> pairs (see `getMergeFunction` in
+  // NumericBinaryExpression.cpp).
   virtual std::vector<PrefilterExprVariablePair>
-  getPrefilterExpressionForMetadata(
-      [[maybe_unused]] bool isNegated = false) const;
+  getPrefilterExpressionForMetadata(bool isNegated = false) const;
 
   // Returns true iff this expression is a simple constant. Default
   // implementation returns `false`.

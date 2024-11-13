@@ -94,8 +94,8 @@ auto SparqlExpressionPimpl::getEstimatesForFilterExpression(
 
 //_____________________________________________________________________________
 std::vector<PrefilterExprVariablePair>
-SparqlExpressionPimpl::getPrefilterExpressionForMetadata(bool isNegated) const {
-  return _pimpl->getPrefilterExpressionForMetadata(isNegated);
+SparqlExpressionPimpl::getPrefilterExpressionForMetadata() const {
+  return _pimpl->getPrefilterExpressionForMetadata();
 }
 
 // _____________________________________________________________________________
