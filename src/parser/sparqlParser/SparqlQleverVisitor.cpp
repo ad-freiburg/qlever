@@ -1241,9 +1241,8 @@ GraphPatternOperation Visitor::visit(
 void Visitor::warnIfUnboundVariables(const SparqlExpressionPimpl& expression,
                                      std::string_view clauseName) {
   for (const auto& var : expression.containedVariables()) {
-    // TODO<joka921> Code duplication
     if (!ad_utility::contains(visibleVariables_, *var)) {
-      parsedQuery_.addWarning(
+      parsedQuery_.addWarningOrThrow(
           absl::StrCat("The variable ", var->name(),
                        " was used in the expression of a ", clauseName,
                        " clause "
@@ -1257,7 +1256,8 @@ SparqlFilter Visitor::visit(Parser::FilterRContext* ctx) {
   // The second argument means that the expression `LANG(?var) = "language"` is
   // allowed.
   auto expression = visitExpressionPimpl(ctx->constraint(), true);
-  warnIfUnboundVariables(expression, "FILTER");
+  // Note: We cannot add a warning or an exception here, because the variables of the
+  // FILTER might be bound after the filter appears in the query (which is perfectly legal).
   return SparqlFilter{std::move(expression)};
 }
 

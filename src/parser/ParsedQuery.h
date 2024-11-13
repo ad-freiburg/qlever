@@ -168,6 +168,10 @@ class ParsedQuery {
     warnings_.push_back(std::move(warning));
   }
 
+  // If Unbound variables that are used in a query are supposed to throw because
+  // the corresponding `RuntimeParameter` is set, then throw. Else add a warning.
+  void addWarningOrThrow(std::string warning);
+
   // Returns all variables that are visible in the Query Body.
   const std::vector<Variable>& getVisibleVariables() const;
 

@@ -1993,3 +1993,24 @@ TEST(QueryPlanner, DatasetClause) {
       AllOf(HasSubstr("used as the graph specifier"),
             HasSubstr("may not appear in the body")));
 }
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, OrderByUnboundSortKey) {
+  using enum ::OrderBy::AscOrDesc;
+  h::expect(
+      "SELECT * {} ORDER BY ?x",
+      h::QetWithWarnings({"?x was used by ORDER BY"}, h::NeutralElement()));
+  h::expect(
+      "SELECT * { ?x <is-a> <y> } ORDER BY ?x ?y ",
+      h::QetWithWarnings({"?y was used by ORDER BY"},
+                         h::OrderBy({{Variable{"?x"}, Asc}}, ::testing::_)));
+}
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, GroupByUnboundGroupVariable) {
+  h::expect("SELECT ?x {} GROUP BY ?x",
+            h::QetWithWarnings({"?x was used by GROUP BY"}, h::GroupBy({}, {}, h::NeutralElement())));
+  h::expect("SELECT ?x ?y { ?x <is-a> <y> } GROUP BY ?x ?y ",
+            h::QetWithWarnings({"?y was used by GROUP BY"}, h::GroupBy({Variable{"?x"}}, {},
+                       h::IndexScanFromStrings("?x", "<is-a>", "<y>"))));
+}

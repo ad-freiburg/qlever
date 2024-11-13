@@ -18,6 +18,7 @@
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
 #include "util/Conversions.h"
 #include "util/TransparentFunctors.h"
+#include "global/RuntimeParameters.h"
 
 using std::string;
 using std::vector;
@@ -344,7 +345,7 @@ void ParsedQuery::checkVariableIsVisible(
     std::string_view otherPossibleLocationDescription) {
   if (!ad_utility::contains(getVisibleVariables(), variable) &&
       !additionalVisibleVariables.contains(variable)) {
-    addWarning(absl::StrCat("Variable ", variable.name(),
+    addWarningOrThrow(absl::StrCat("Variable ", variable.name(),
                             " was used by " + locationDescription,
                             ", but is not defined in the query body",
                             otherPossibleLocationDescription, "."));
@@ -455,7 +456,7 @@ void ParsedQuery::addOrderByClause(OrderClause orderClause, bool isGroupBy,
       // Check whether grouping is done. The variable being ordered by
       // must then be either grouped or the result of an alias in the select
       // clause.
-      addWarning(absl::StrCat(
+      addWarningOrThrow(absl::StrCat(
           "Variable " + orderKey.variable_.name(),
           " was used in an ORDER BY clause, but is neither grouped nor "
           "created as an alias in the SELECT clause.",
@@ -498,8 +499,18 @@ Variable ParsedQuery::getNewInternalVariable() {
   return variable;
 }
 
+// _____________________________________________________________________________
 Variable ParsedQuery::blankNodeToInternalVariable(std::string_view blankNode) {
   AD_CONTRACT_CHECK(blankNode.starts_with("_:"));
   return Variable{absl::StrCat(QLEVER_INTERNAL_BLANKNODE_VARIABLE_PREFIX,
                                blankNode.substr(2))};
+}
+
+// _____________________________________________________________________________
+void ParsedQuery::addWarningOrThrow(std::string warning) {
+  if (RuntimeParameters().get<"throw-on-unbound-variables">()) {
+    throw InvalidSparqlQueryException(std::move(warning));
+  } else {
+    addWarning(std::move(warning));
+  }
 }

@@ -28,6 +28,7 @@
 #include "engine/sparqlExpressions/UuidExpressions.h"
 #include "parser/ConstructClause.h"
 #include "parser/SparqlParserHelpers.h"
+#include "global/RuntimeParameters.h"
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
 #include "util/AllocatorTestHelpers.h"
 #include "util/SourceLocation.h"
@@ -1290,6 +1291,7 @@ TEST(SparqlParser, AskQuery) {
 TEST(SparqlParser, Query) {
   auto expectQuery = ExpectCompleteParse<&Parser::query>{defaultPrefixMap};
   auto expectQueryFails = ExpectParseFails<&Parser::query>{};
+  auto contains = [](const std::string& s) { return ::testing::HasSubstr(s); };
 
   // Test that `_originalString` is correctly set.
   expectQuery(
@@ -1374,11 +1376,18 @@ TEST(SparqlParser, Query) {
   expectQuery("SELECT * { BIND (?a as ?b) }",
               m::WarningsOfParsedQuery(
                   {"?a was used in the expression of a BIND clause"}));
-  expectQuery("SELECT * { FILTER (?a < 42) }",
-              m::WarningsOfParsedQuery(
-                  {"?a was used in the expression of a FILTER clause"}));
   expectQuery("SELECT * { } ORDER BY ?s",
               m::WarningsOfParsedQuery({"?s was used by ORDER BY"}));
+  // Now test the same queries with exceptions instead of warnings
+  RuntimeParameters().set<"throw-on-unbound-variables">(true);
+  expectQueryFails("SELECT ?x {} GROUP BY ?x",
+              contains("?x was used by GROUP BY"));
+  expectQueryFails("SELECT * { BIND (?a as ?b) }",
+              contains("?a was used in the expression of a BIND clause"));
+  expectQueryFails("SELECT * { } ORDER BY ?s",
+              contains("?s was used by ORDER BY"));
+
+  RuntimeParameters().set<"throw-on-unbound-variables">(false);
 }
 
 // Some helper matchers for the `builtInCall` test below.
