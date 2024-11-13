@@ -102,10 +102,11 @@ CompressedRelationReader::asyncParallelBlockGenerator(
     CompressedBlock compressedBlock =
         readCompressedBlockFromFile(blockMetadata, columnIndices);
     lock.unlock();
-    auto [decompressedBlock, wasPostprocessed] = decompressAndPostprocessBlock(
+    auto decompressedBlockAndMetadata = decompressAndPostprocessBlock(
         compressedBlock, blockMetadata.numRows_, scanConfig, blockMetadata);
-    details.numBlocksPostprocessed_ += static_cast<size_t>(wasPostprocessed);
-    return std::pair{myIndex, std::optional{std::move(decompressedBlock)}};
+    details.update(decompressedBlockAndMetadata);
+    return std::pair{
+        myIndex, std::optional{std::move(decompressedBlockAndMetadata.block_)}};
   };
 
   // Prepare queue for reading and decompressing blocks concurrently using
@@ -552,11 +553,11 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
   const DecompressedBlock& block = [&]() {
     auto result = readAndDecompressBlock(blockMetadata, config);
     if (result.has_value()) {
-      auto& [decompressedBlock, wasPostprocessed] = result.value();
-      if (scanMetadata.has_value() && wasPostprocessed) {
-        ++scanMetadata.value().get().numBlocksPostprocessed_;
+      auto& decompressedBlockAndMetadata = result.value();
+      if (scanMetadata.has_value()) {
+        scanMetadata.value().get().update(decompressedBlockAndMetadata);
       }
-      return std::move(decompressedBlock);
+      return std::move(decompressedBlockAndMetadata.block_);
     } else {
       return DecompressedBlock{config.scanColumns_.size(), allocator_};
     }
@@ -676,7 +677,7 @@ std::pair<size_t, size_t> CompressedRelationReader::getResultSizeImpl(
           // TODO<joka921> We could cache the exact size as soon as we have
           // merged the block once since the last update.
           auto b = readAndDecompressBlock(block, config);
-          numResults += b.has_value() ? b.value().first.numRows() : 0u;
+          numResults += b.has_value() ? b.value().block_.numRows() : 0u;
         }
       });
   return {numResults - std::min(deleted, numResults), numResults + inserted};
@@ -765,7 +766,7 @@ IdTable CompressedRelationReader::getDistinctColIdsAndCountsImpl(
           if (!optionalBlock.has_value()) {
             return std::nullopt;
           }
-          return std::move(optionalBlock.value().first);
+          return std::move(optionalBlock.value().block_);
         }
       }();
       cancellationHandle->throwIfCancelled();
@@ -873,7 +874,7 @@ DecompressedBlock CompressedRelationReader::decompressBlock(
 }
 
 // ____________________________________________________________________________
-std::pair<DecompressedBlock, bool>
+DecompressedBlockAndMetadata
 CompressedRelationReader::decompressAndPostprocessBlock(
     const CompressedBlock& compressedBlock, size_t numRowsToRead,
     const CompressedRelationReader::ScanImplConfig& scanConfig,
@@ -881,14 +882,16 @@ CompressedRelationReader::decompressAndPostprocessBlock(
   auto decompressedBlock = decompressBlock(compressedBlock, numRowsToRead);
   auto [numIndexColumns, includeGraphColumn] =
       prepareLocatedTriples(scanConfig.scanColumns_);
+  bool hasUpdates = false;
   if (scanConfig.locatedTriples_.containsTriples(metadata.blockIndex_)) {
     decompressedBlock = scanConfig.locatedTriples_.mergeTriples(
         metadata.blockIndex_, decompressedBlock, numIndexColumns,
         includeGraphColumn);
+    hasUpdates = true;
   }
   bool wasPostprocessed =
       scanConfig.graphFilter_.postprocessBlock(decompressedBlock, metadata);
-  return {std::move(decompressedBlock), wasPostprocessed};
+  return {std::move(decompressedBlock), wasPostprocessed, hasUpdates};
 }
 
 // ____________________________________________________________________________
@@ -904,7 +907,7 @@ void CompressedRelationReader::decompressColumn(
 }
 
 // ____________________________________________________________________________
-std::optional<std::pair<DecompressedBlock, bool>>
+std::optional<DecompressedBlockAndMetadata>
 CompressedRelationReader::readAndDecompressBlock(
     const CompressedBlockMetadata& blockMetaData,
     const ScanImplConfig& scanConfig) const {
@@ -1578,4 +1581,13 @@ auto CompressedRelationReader::getScanConfig(
   FilterDuplicatesAndGraphs graphFilter{scanSpec.graphsToFilter(),
                                         graphColumnIndex, deleteGraphColumn};
   return {std::move(columnIndices), std::move(graphFilter), locatedTriples};
+}
+
+// _____________________________________________________________________________
+void CompressedRelationReader::LazyScanMetadata::update(
+    const DecompressedBlockAndMetadata& blockAndMetadata) {
+  numBlocksPostprocessed_ +=
+      static_cast<size_t>(blockAndMetadata.wasPostprocessed_);
+  numBlocksWithUpdate_ +=
+      static_cast<size_t>(blockAndMetadata.containsUpdates_);
 }

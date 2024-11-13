@@ -35,13 +35,15 @@ using SmallRelationsBuffer = IdTable;
 // to use a dynamic `IdTable`.
 using DecompressedBlock = IdTable;
 
-// To be able to use `DecompressedBlock` with `Caches`, we need a function for
-// calculating the memory used for it.
-struct DecompressedBlockSizeGetter {
-  ad_utility::MemorySize operator()(const DecompressedBlock& block) const {
-    return ad_utility::MemorySize::bytes(block.numColumns() * block.numRows() *
-                                         sizeof(Id));
-  }
+// A decompressed block together with some metadata about the process of
+// decompressing + postprocessing it.
+struct DecompressedBlockAndMetadata {
+  DecompressedBlock block_;
+  // True iff the block had to be modified because of the contained graphs.
+  bool wasPostprocessed_;
+  // True iff triples this block had to be merged with the `LocatedTriples`
+  // because it contained updates.
+  bool containsUpdates_;
 };
 
 // After compression the columns have different sizes, so we cannot use an
@@ -475,11 +477,20 @@ class CompressedRelationReader {
     // (because the graph IDs of the block did not match the query).
     size_t numBlocksSkippedBecauseOfGraph_ = 0;
     size_t numBlocksPostprocessed_ = 0;
+    // The number of blocks that contain updated (inserted or deleted) triples.
+    size_t numBlocksWithUpdate_ = 0;
     // If a LIMIT or OFFSET is present we possibly read more rows than we
     // actually yield.
     size_t numElementsRead_ = 0;
     size_t numElementsYielded_ = 0;
     std::chrono::milliseconds blockingTime_ = std::chrono::milliseconds::zero();
+
+    // Update `*this` s.t. it contains the metadata from `blockAndMetadata`.
+    // Currently only the information about whether the block was postprocessed
+    // and whether it contains updates is copied. In the future we also could
+    // directly update the information about the number of rows etc., but this
+    // would require additional changes in the code so we postpone it for now.
+    void update(const DecompressedBlockAndMetadata& blockAndMetadata);
   };
 
   using IdTableGenerator = cppcoro::generator<IdTable, LazyScanMetadata>;
@@ -648,14 +659,14 @@ class CompressedRelationReader {
   // Read and decompress the parts of the block given by `blockMetaData` (which
   // identifies the block) and `scanConfig` (which specifies the part of that
   // block).
-  std::optional<std::pair<DecompressedBlock, bool>> readAndDecompressBlock(
+  std::optional<DecompressedBlockAndMetadata> readAndDecompressBlock(
       const CompressedBlockMetadata& blockMetaData,
       const ScanImplConfig& scanConfig) const;
 
   // Like `readAndDecompressBlock`, and postprocess by merging the located
   // triples (if any) and applying the graph filters (if any), both specified
   // as part of the `scanConfig`.
-  std::pair<DecompressedBlock, bool> decompressAndPostprocessBlock(
+  DecompressedBlockAndMetadata decompressAndPostprocessBlock(
       const CompressedBlock& compressedBlock, size_t numRowsToRead,
       const CompressedRelationReader::ScanImplConfig& scanConfig,
       const CompressedBlockMetadata& metadata) const;

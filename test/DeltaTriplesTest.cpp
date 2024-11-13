@@ -371,19 +371,12 @@ TEST_F(DeltaTriplesTest, DeltaTriplesManager) {
           // or deleted (`false`).
           const auto& locatedSPO =
               beforeUpdate->getLocatedTriplesForPermutation(Permutation::SPO);
-          // TODO<joka921> Fix these, given that `containsTriple` was removed.
-          // EXPECT_FALSE(locatedSPO.containsTriple(triplesToInsert.at(1),
-          // true));
-          // EXPECT_FALSE(locatedSPO.containsTriple(triplesToInsert.at(1),
-          // false));
-          // EXPECT_FALSE(locatedSPO.containsTriple(triplesToInsert.at(2),
-          // true));
-          // EXPECT_FALSE(locatedSPO.containsTriple(triplesToInsert.at(2),
-          // false));
-          // EXPECT_FALSE(locatedSPO.containsTriple(triplesToDelete.at(2),
-          // true));
-          // EXPECT_FALSE(locatedSPO.containsTriple(triplesToDelete.at(2),
-          // false));
+          EXPECT_FALSE(locatedSPO.containsTriple(triplesToInsert.at(1), true));
+          EXPECT_FALSE(locatedSPO.containsTriple(triplesToInsert.at(1), false));
+          EXPECT_FALSE(locatedSPO.containsTriple(triplesToInsert.at(2), true));
+          EXPECT_FALSE(locatedSPO.containsTriple(triplesToInsert.at(2), false));
+          EXPECT_FALSE(locatedSPO.containsTriple(triplesToDelete.at(2), true));
+          EXPECT_FALSE(locatedSPO.containsTriple(triplesToDelete.at(2), false));
         }
         {
           // Check for several of the thread-exclusive triples that they are
@@ -392,18 +385,13 @@ TEST_F(DeltaTriplesTest, DeltaTriplesManager) {
           auto p = deltaTriplesManager.getCurrentSnapshot();
           const auto& locatedSPO =
               p->getLocatedTriplesForPermutation(Permutation::SPO);
-          // TODO<joka921> Fix these, given that `containsTriple` was removed.
-          // EXPECT_TRUE(locatedSPO.containsTriple(triplesToInsert.at(1),
-          // true));
-          // // This triple is exclusive to the thread and is inserted and then
-          // // immediately deleted again. The `DeltaTriples` thus only store it
-          // as
-          // // deleted. It might be contained in the original input, hence we
-          // // cannot simply drop it.
-          // EXPECT_TRUE(locatedSPO.containsTriple(triplesToInsert.at(2),
-          // false));
-          // EXPECT_TRUE(locatedSPO.containsTriple(triplesToDelete.at(2),
-          // false));
+          EXPECT_TRUE(locatedSPO.containsTriple(triplesToInsert.at(1), true));
+          // This triple is exclusive to the thread and is inserted and then
+          // immediately deleted again. The `DeltaTriples` thus only store it
+          // as deleted. It might be contained in the original input, hence we
+          // cannot simply drop it.
+          EXPECT_TRUE(locatedSPO.containsTriple(triplesToInsert.at(2), false));
+          EXPECT_TRUE(locatedSPO.containsTriple(triplesToDelete.at(2), false));
         }
       }
     }
