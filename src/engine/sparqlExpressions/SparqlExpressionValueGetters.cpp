@@ -91,6 +91,19 @@ std::optional<std::string> StringValueGetter::operator()(
 }
 
 // ____________________________________________________________________________
+std::optional<LiteralOrIri> LiteralOrIriValueGetter::operator()(
+    Id id, const EvaluationContext* context) const {
+  auto optionalLiteralOrIriAndType =
+      ExportQueryExecutionTrees::idToLiteralOrIri(context->_qec.getIndex(), id,
+                                                  context->_localVocab);
+  if (optionalLiteralOrIriAndType.has_value()) {
+    return std::move(optionalLiteralOrIriAndType.value());
+  } else {
+    return std::nullopt;
+  }
+}
+
+// ____________________________________________________________________________
 template <auto isSomethingFunction, auto prefix>
 Id IsSomethingValueGetter<isSomethingFunction, prefix>::operator()(
     ValueId id, const EvaluationContext* context) const {

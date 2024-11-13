@@ -14,6 +14,9 @@
 #include "util/ConstexprUtils.h"
 #include "util/http/MediaTypes.h"
 
+
+using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
+
 // Return true iff the `result` is nonempty.
 bool getResultForAsk(const std::shared_ptr<const Result>& result) {
   if (result->isFullyMaterialized()) {
@@ -348,10 +351,57 @@ ExportQueryExecutionTrees::idToStringAndTypeForEncodedValue(Id id) {
 }
 
 // _____________________________________________________________________________
+std::optional<LiteralOrIri>
+ExportQueryExecutionTrees::idToLiteralOrIriForEncodedValue(Id id) {
+  using enum Datatype;
+  auto fromIri = TripleComponent::Iri::fromIrirefWithoutBrackets;
+  switch (id.getDatatype()) {
+    case Undefined:
+      return std::nullopt;
+    case Double:
+      // We use the immediately invoked lambda here because putting this block
+      // in braces confuses the test coverage tool.
+      return [id]() -> std::optional<LiteralOrIri> {
+        // Format as integer if fractional part is zero, let C++ decide
+        // otherwise.
+        std::stringstream ss;
+        double d = id.getDouble();
+        double dIntPart;
+        if (std::modf(d, &dIntPart) == 0.0) {
+          ss << std::fixed << std::setprecision(0) << id.getDouble();
+        } else {
+          ss << d;
+        }
+        return LiteralOrIri::literalWithoutQuotes(
+            std::move(ss).str(),
+            TripleComponent::Iri::fromIrirefWithoutBrackets(XSD_DOUBLE_TYPE));
+      }();
+    case Bool:
+      return id.getBool() ? LiteralOrIri::literalWithoutQuotes(
+                                "true", fromIri(XSD_BOOLEAN_TYPE))
+                          : LiteralOrIri::literalWithoutQuotes(
+                                "false", fromIri(XSD_BOOLEAN_TYPE));
+    case Int:
+      return LiteralOrIri::literalWithoutQuotes(std::to_string(id.getInt()),
+                                                fromIri(XSD_INT_TYPE));
+    case Date:
+      return LiteralOrIri::literalWithoutQuotes(
+          id.getDate().toStringAndType().first, fromIri(XSD_DATE_TYPE));
+    case GeoPoint:
+      return LiteralOrIri::literalWithoutQuotes(
+          id.getGeoPoint().toStringAndType().first, fromIri(GEO_WKT_LITERAL));
+    case BlankNodeIndex:
+      return LiteralOrIri::literalWithoutQuotes(
+          absl::StrCat("_:bn", id.getBlankNodeIndex().get()));
+    default:
+      AD_FAIL();
+  }
+}
+
+// _____________________________________________________________________________
 ad_utility::triple_component::LiteralOrIri
 ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
     const Index& index, Id id, const LocalVocab& localVocab) {
-  using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
   switch (id.getDatatype()) {
     case Datatype::LocalVocabIndex:
       return localVocab.getWord(id.getLocalVocabIndex()).asLiteralOrIri();
@@ -412,6 +462,31 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
       return idToStringAndTypeForEncodedValue(id);
   }
 }
+
+// _____________________________________________________________________________
+std::optional<LiteralOrIri> ExportQueryExecutionTrees::idToLiteralOrIri(
+    const Index& index, Id id, const LocalVocab& localVocab) {
+  using enum Datatype;
+  auto handleIriOrLiteral =
+      [](const LiteralOrIri& word) -> std::optional<LiteralOrIri> {
+    return word;
+  };
+  switch (id.getDatatype()) {
+    case WordVocabIndex:
+      // TODO
+      return std::nullopt;
+    case VocabIndex:
+    case LocalVocabIndex:
+      return handleIriOrLiteral(
+          getLiteralOrIriFromVocabIndex(index, id, localVocab));
+    case TextRecordIndex:
+      // TODO
+      return std::nullopt;
+    default:
+      return idToLiteralOrIriForEncodedValue(id);
+  }
+}
+
 // ___________________________________________________________________________
 template std::optional<std::pair<std::string, const char*>>
 ExportQueryExecutionTrees::idToStringAndType<true, false, std::identity>(
