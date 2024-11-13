@@ -173,9 +173,11 @@ class LocatedTriplesPerBlock {
     augmentedMetadata_ = originalMetadata_;
   }
 
-  // Only used for testing. Return `true` iff a `LocatedTriple` with the given
-  // value for `shouldExist` is contained in any block.
-  bool containsTriple(const IdTriple<0>& triple, bool shouldExist) const;
+  // Return `true` iff the given triple is one of the located triples with the
+  // given status (inserted or deleted).
+  //
+  // NOTE: Only used for testing.
+  bool isLocatedTriple(const IdTriple<0>& triple, bool isInsertion) const;
 
   // This operator is only for debugging and testing. It returns a
   // human-readable representation.
