@@ -30,7 +30,7 @@ class DeviationExpression : public SparqlExpression {
   Ptr child_;
 
  public:
-  DeviationExpression(Ptr&& child) : child_{std::move(child)} {}
+  explicit DeviationExpression(Ptr&& child) : child_{std::move(child)} {}
 
   // __________________________________________________________________________
   ExpressionResult evaluate(EvaluationContext* context) const override;
