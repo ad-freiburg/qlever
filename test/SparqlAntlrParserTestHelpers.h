@@ -479,6 +479,14 @@ inline auto GroupByVariables =
                   testing::UnorderedElementsAreArray(vars));
 };
 
+inline auto WarningsOfParsedQuery =
+    [](const vector<std::string>& warnings) -> Matcher<const ParsedQuery&> {
+  auto matchers = ad_utility::transform(
+      warnings, [](const std::string& s) { return ::testing::HasSubstr(s); });
+  return AD_PROPERTY(ParsedQuery, warnings,
+                     testing::UnorderedElementsAreArray(matchers));
+};
+
 inline auto Values = [](const std::vector<::Variable>& vars,
                         const std::vector<vector<TripleComponent>>& values)
     -> Matcher<const p::Values&> {

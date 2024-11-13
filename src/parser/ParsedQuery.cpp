@@ -447,28 +447,19 @@ void ParsedQuery::addOrderByClause(OrderClause orderClause, bool isGroupBy,
   auto processVariableOrderKey = [this, isGroupBy, &noteForImplicitGroupBy,
                                   &variablesFromAliases,
                                   additionalError](VariableOrderKey orderKey) {
-    checkVariableIsVisible(orderKey.variable_, "ORDER BY", variablesFromAliases,
-                           additionalError);
-
-    // Check whether grouping is done. The variable being ordered by
-    // must then be either grouped or the result of an alias in the select
-    // clause.
-    if (isGroupBy &&
-        !ad_utility::contains(_groupByVariables, orderKey.variable_) &&
-        (!variablesFromAliases.contains(orderKey.variable_))) {
-      /*
-      throw InvalidSparqlQueryException(
-          "Variable " + orderKey.variable_.name() +
+    if (!isGroupBy) {
+      checkVariableIsVisible(orderKey.variable_, "ORDER BY",
+                             variablesFromAliases, additionalError);
+    } else if (!ad_utility::contains(_groupByVariables, orderKey.variable_) &&
+               (!variablesFromAliases.contains(orderKey.variable_))) {
+      // Check whether grouping is done. The variable being ordered by
+      // must then be either grouped or the result of an alias in the select
+      // clause.
+      addWarning(absl::StrCat(
+          "Variable " + orderKey.variable_.name(),
           " was used in an ORDER BY clause, but is neither grouped nor "
-          "created as an alias in the SELECT clause." +
-          noteForImplicitGroupBy);
-          */
-      LOG(WARN)
-          << "Variable " + orderKey.variable_.name() +
-                 " was used in an ORDER BY clause, but is neither grouped nor "
-                 "created as an alias in the SELECT clause." +
-                 noteForImplicitGroupBy
-          << std::endl;
+          "created as an alias in the SELECT clause.",
+          noteForImplicitGroupBy));
     }
     _orderBy.push_back(std::move(orderKey));
   };

@@ -209,6 +209,7 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq,
     for (const auto& warning : warnings_) {
       rootOperation.addWarning(warning);
     }
+    warnings_.clear();
     return result;
   } catch (ad_utility::CancellationException& e) {
     e.setOperation("Query planning");

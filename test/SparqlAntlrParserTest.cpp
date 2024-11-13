@@ -1185,7 +1185,6 @@ TEST(SparqlParser, SelectQuery) {
 }
 
 TEST(SparqlParser, ConstructQuery) {
-  auto contains = [](const std::string& s) { return ::testing::HasSubstr(s); };
   auto expectConstructQuery =
       ExpectCompleteParse<&Parser::constructQuery>{defaultPrefixMap};
   auto expectConstructQueryFails = ExpectParseFails<&Parser::constructQuery>{};
@@ -1367,6 +1366,19 @@ TEST(SparqlParser, Query) {
 
   // DESCRIBE queries are not yet supported.
   expectQueryFails("DESCRIBE *");
+
+  // Test the various places where warnings are added in a query
+  expectQuery("SELECT ?x {} GROUP BY ?x ORDER BY ?y",
+              m::WarningsOfParsedQuery({"?x was used by GROUP BY",
+                                        "?y was used in an ORDER BY clause"}));
+  expectQuery("SELECT * { BIND (?a as ?b) }",
+              m::WarningsOfParsedQuery(
+                  {"?a was used in the expression of a BIND clause"}));
+  expectQuery("SELECT * { FILTER (?a < 42) }",
+              m::WarningsOfParsedQuery(
+                  {"?a was used in the expression of a FILTER clause"}));
+  expectQuery("SELECT * { } ORDER BY ?s",
+              m::WarningsOfParsedQuery({"?s was used by ORDER BY"}));
 }
 
 // Some helper matchers for the `builtInCall` test below.
