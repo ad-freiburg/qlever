@@ -9,7 +9,7 @@
 #include <vector>
 
 #include "engine/VariableToColumnMap.h"
-#include "index/CompressedBlockPrefiltering.h"
+#include "engine/sparqlExpressions/PrefilterExpressionIndex.h"
 #include "parser/data/Variable.h"
 #include "util/HashMap.h"
 #include "util/HashSet.h"

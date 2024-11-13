@@ -11,6 +11,16 @@
 #include "global/ValueIdComparators.h"
 #include "index/CompressedRelation.h"
 
+// For certain SparqlExpressions it is possible to perform a prefiltering
+// procedure w.r.t. relevant data blocks / ValueId values by making use of the
+// available metadata (CompressedBlockMetadata; see CompressedRelation.h) while
+// performing the IndexScan. As a result, the actual SparqlExpression evaluation
+// is performed for a smaller IdTable if a PrefilterExpression (declared in this
+// file) for the respective SparqlExpression is available and compatible with
+// the IndexScan.
+// The following SparqlExpressions construct a PrefilterExpression if possible:
+// logical-or, logical-and, not (unary), relational-expressions and strstarts.
+
 namespace prefilterExpressions {
 
 //______________________________________________________________________________
@@ -171,18 +181,6 @@ class NotExpression : public PrefilterExpression {
       const std::vector<BlockMetadata>& input,
       size_t evaluationColumn) const override;
 };
-
-//______________________________________________________________________________
-// Instanitate templates with specializations (for linking accessibility)
-template class RelationalExpression<CompOp::LT>;
-template class RelationalExpression<CompOp::LE>;
-template class RelationalExpression<CompOp::GE>;
-template class RelationalExpression<CompOp::GT>;
-template class RelationalExpression<CompOp::EQ>;
-template class RelationalExpression<CompOp::NE>;
-
-template class LogicalExpression<LogicalOperator::AND>;
-template class LogicalExpression<LogicalOperator::OR>;
 
 //______________________________________________________________________________
 // Definition of the RelationalExpression for LT, LE, EQ, NE, GE and GT.

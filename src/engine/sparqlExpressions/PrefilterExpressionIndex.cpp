@@ -2,7 +2,7 @@
 //                  Chair of Algorithms and Data Structures
 //  Author: Hannes Baumann <baumannh@informatik.uni-freiburg.de>
 
-#include "index/CompressedBlockPrefiltering.h"
+#include "engine/sparqlExpressions/PrefilterExpressionIndex.h"
 
 #include <ranges>
 
@@ -403,6 +403,18 @@ std::string NotExpression::info(size_t depth) const {
          << "child {" << childInfo << "}" << std::endl;
   return stream.str();
 }
+
+//______________________________________________________________________________
+// Instanitate templates with specializations (for linking accessibility)
+template class RelationalExpression<CompOp::LT>;
+template class RelationalExpression<CompOp::LE>;
+template class RelationalExpression<CompOp::GE>;
+template class RelationalExpression<CompOp::GT>;
+template class RelationalExpression<CompOp::EQ>;
+template class RelationalExpression<CompOp::NE>;
+
+template class LogicalExpression<LogicalOperator::AND>;
+template class LogicalExpression<LogicalOperator::OR>;
 
 namespace detail {
 //______________________________________________________________________________

@@ -8,8 +8,8 @@
 
 #include "./SparqlExpressionTestHelpers.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
+#include "engine/sparqlExpressions/PrefilterExpressionIndex.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
-#include "index/CompressedBlockPrefiltering.h"
 #include "util/DateYearDuration.h"
 #include "util/GTestHelpers.h"
 #include "util/IdTestHelpers.h"
