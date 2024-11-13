@@ -99,26 +99,25 @@ ProtoResult Bind::computeResult(bool requestLaziness) {
 
   auto applyBind = [this, subRes](IdTable idTable, LocalVocab* localVocab) {
     return computeExpressionBind(localVocab, std::move(idTable),
-                                 subRes->localVocab(),
                                  _bind._expression.getPimpl());
   };
 
   if (subRes->isFullyMaterialized()) {
     if (requestLaziness && subRes->idTable().size() > CHUNK_SIZE) {
-      auto localVocab =
-          std::make_shared<LocalVocab>(subRes->getCopyOfLocalVocab());
-      auto generator = [](std::shared_ptr<LocalVocab> vocab, auto applyBind,
-                          std::shared_ptr<const Result> result)
-          -> cppcoro::generator<IdTable> {
-        size_t size = result->idTable().size();
-        for (size_t offset = 0; offset < size; offset += CHUNK_SIZE) {
-          co_yield applyBind(
-              cloneSubView(result->idTable(),
-                           {offset, std::min(size, offset + CHUNK_SIZE)}),
-              vocab.get());
-        }
-      }(localVocab, std::move(applyBind), std::move(subRes));
-      return {std::move(generator), resultSortedOn(), std::move(localVocab)};
+      return {
+          [](auto applyBind,
+             std::shared_ptr<const Result> result) -> Result::Generator {
+            size_t size = result->idTable().size();
+            for (size_t offset = 0; offset < size; offset += CHUNK_SIZE) {
+              LocalVocab outVocab = result->getCopyOfLocalVocab();
+              IdTable idTable = applyBind(
+                  cloneSubView(result->idTable(),
+                               {offset, std::min(size, offset + CHUNK_SIZE)}),
+                  &outVocab);
+              co_yield {std::move(idTable), std::move(outVocab)};
+            }
+          }(std::move(applyBind), std::move(subRes)),
+          resultSortedOn()};
     }
     // Make a deep copy of the local vocab from `subRes` and then add to it (in
     // case BIND adds a new word or words).
@@ -132,28 +131,25 @@ ProtoResult Bind::computeResult(bool requestLaziness) {
     LOG(DEBUG) << "BIND result computation done." << std::endl;
     return {std::move(result), resultSortedOn(), std::move(localVocab)};
   }
-  auto localVocab = std::make_shared<LocalVocab>();
   auto generator =
-      [](std::shared_ptr<LocalVocab> vocab, auto applyBind,
-         std::shared_ptr<const Result> result) -> cppcoro::generator<IdTable> {
-    for (IdTable& idTable : result->idTables()) {
-      co_yield applyBind(std::move(idTable), vocab.get());
+      [](auto applyBind,
+         std::shared_ptr<const Result> result) -> Result::Generator {
+    for (auto& [idTable, localVocab] : result->idTables()) {
+      IdTable resultTable = applyBind(std::move(idTable), &localVocab);
+      co_yield {std::move(resultTable), std::move(localVocab)};
     }
-    std::array<const LocalVocab*, 2> vocabs{vocab.get(), &result->localVocab()};
-    *vocab = LocalVocab::merge(std::span{vocabs});
-  }(localVocab, std::move(applyBind), std::move(subRes));
-  return {std::move(generator), resultSortedOn(), std::move(localVocab)};
+  }(std::move(applyBind), std::move(subRes));
+  return {std::move(generator), resultSortedOn()};
 }
 
 // _____________________________________________________________________________
 IdTable Bind::computeExpressionBind(
-    LocalVocab* outputLocalVocab, IdTable idTable,
-    const LocalVocab& inputLocalVocab,
+    LocalVocab* localVocab, IdTable idTable,
     const sparqlExpression::SparqlExpression* expression) const {
   sparqlExpression::EvaluationContext evaluationContext(
       *getExecutionContext(), _subtree->getVariableColumns(), idTable,
-      getExecutionContext()->getAllocator(), inputLocalVocab,
-      cancellationHandle_, deadline_);
+      getExecutionContext()->getAllocator(), *localVocab, cancellationHandle_,
+      deadline_);
 
   sparqlExpression::ExpressionResult expressionResult =
       expression->evaluate(&evaluationContext);
@@ -188,7 +184,7 @@ IdTable Bind::computeExpressionBind(
         if (it != resultGenerator.end()) {
           Id constantId =
               sparqlExpression::detail::constantExpressionResultToId(
-                  std::move(*it), *outputLocalVocab);
+                  std::move(*it), *localVocab);
           checkCancellation();
           ad_utility::chunkedFill(outputColumn, constantId, CHUNK_SIZE,
                                   [this]() { checkCancellation(); });
@@ -199,7 +195,7 @@ IdTable Bind::computeExpressionBind(
         for (auto& resultValue : resultGenerator) {
           outputColumn[i] =
               sparqlExpression::detail::constantExpressionResultToId(
-                  std::move(resultValue), *outputLocalVocab);
+                  std::move(resultValue), *localVocab);
           i++;
           checkCancellation();
         }

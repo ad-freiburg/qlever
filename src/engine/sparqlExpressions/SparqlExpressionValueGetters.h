@@ -154,8 +154,8 @@ struct LiteralOrIriValueGetter : Mixin<LiteralOrIriValueGetter> {
     return s;
   }
 };
-
-// Value getter for `isBlank`.
+ 
+ // Value getter for `isBlank`.
 struct IsBlankNodeValueGetter : Mixin<IsBlankNodeValueGetter> {
   using Mixin<IsBlankNodeValueGetter>::operator();
   Id operator()(ValueId id, const EvaluationContext*) const {
@@ -167,7 +167,35 @@ struct IsBlankNodeValueGetter : Mixin<IsBlankNodeValueGetter> {
   }
 };
 
-// Value getters for `isIRI`, `isBlank`, and `isLiteral`.
+ // Boolean value getter that checks whether the given `Id` is a `ValueId` of the
+// given `datatype`.
+template <Datatype datatype>
+struct IsValueIdValueGetter : Mixin<IsValueIdValueGetter<datatype>> {
+  using Mixin<IsValueIdValueGetter>::operator();
+  Id operator()(Id id, const EvaluationContext*) const {
+    return Id::makeFromBool(id.getDatatype() == datatype);
+  }
+
+  Id operator()(const LiteralOrIri&, const EvaluationContext*) const {
+    return Id::makeFromBool(false);
+  }
+};
+
+// Boolean value getter for `isNumeric`. Regarding which datatypes count as
+// numeric, see https://www.w3.org/TR/sparql11-query/#operandDataTypes .
+struct IsNumericValueGetter : Mixin<IsNumericValueGetter> {
+  using Mixin<IsNumericValueGetter>::operator();
+  Id operator()(ValueId id, const EvaluationContext*) const {
+    Datatype datatype = id.getDatatype();
+    return Id::makeFromBool(datatype == Datatype::Double ||
+                            datatype == Datatype::Int);
+  }
+  Id operator()(const LiteralOrIri&, const EvaluationContext*) const {
+    return Id::makeFromBool(false);
+  }
+};
+
+// Boolean value getters for `isIRI`, `isBlank`, and `isLiteral`.
 template <auto isSomethingFunction, auto isLiteralOrIriSomethingFunction>
 struct IsSomethingValueGetter
     : Mixin<IsSomethingValueGetter<isSomethingFunction,
@@ -190,22 +218,8 @@ using IsIriValueGetter =
 using IsLiteralValueGetter =
     IsSomethingValueGetter<&Index::Vocab::isLiteral, isLiteralPrefix>;
 
-// Value getter for `isNumeric`. Regarding which datatypes count as numeric,
-// see https://www.w3.org/TR/sparql11-query/#operandDataTypes .
-struct IsNumericValueGetter : Mixin<IsNumericValueGetter> {
-  using Mixin<IsNumericValueGetter>::operator();
-  Id operator()(ValueId id, const EvaluationContext*) const {
-    Datatype datatype = id.getDatatype();
-    return Id::makeFromBool(datatype == Datatype::Double ||
-                            datatype == Datatype::Int);
-  }
-  Id operator()(const LiteralOrIri&, const EvaluationContext*) const {
-    return Id::makeFromBool(false);
-  }
-};
-
-/// This class can be used as the `ValueGetter` argument of Expression
-/// templates. It produces a `std::optional<DateYearOrDuration>`.
+// This class can be used as the `ValueGetter` argument of Expression
+// templates. It produces a `std::optional<DateYearOrDuration>`.
 struct DateValueGetter : Mixin<DateValueGetter> {
   using Mixin<DateValueGetter>::operator();
   using Opt = std::optional<DateYearOrDuration>;

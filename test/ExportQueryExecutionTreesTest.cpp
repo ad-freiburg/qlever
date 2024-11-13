@@ -1,6 +1,8 @@
-//  Copyright 2023, University of Freiburg,
-//                  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2023 - 2024, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//          Robin Textor-Falconi <robintf@cs.uni-freiburg.de>
+//          Hannah Bast <bast@cs.uni-freiburg.de>
 
 #include <gmock/gmock.h>
 
@@ -24,10 +26,10 @@ using ::testing::HasSubstr;
 namespace {
 // Run the given SPARQL `query` on the given Turtle `kg` and export the result
 // as the `mediaType`. `mediaType` must be TSV or CSV.
-std::string runQueryStreamableResult(const std::string& kg,
-                                     const std::string& query,
-                                     ad_utility::MediaType mediaType,
-                                     bool useTextIndex = false) {
+std::string runQueryStreamableResult(
+    const std::string& kg, const std::string& query,
+    ad_utility::MediaType mediaType, bool useTextIndex = false,
+    std::optional<size_t> exportLimit = std::nullopt) {
   auto qec =
       ad_utility::testing::getQec(kg, true, true, true, 16_B, useTextIndex);
   // TODO<joka921> There is a bug in the caching that we have yet to trace.
@@ -37,6 +39,7 @@ std::string runQueryStreamableResult(const std::string& kg,
       std::make_shared<ad_utility::CancellationHandle<>>();
   QueryPlanner qp{qec, cancellationHandle};
   auto pq = SparqlParser::parseQuery(query);
+  pq._limitOffset.exportLimit_ = exportLimit;
   auto qet = qp.createExecutionTree(pq);
   ad_utility::Timer timer(ad_utility::Timer::Started);
   auto strGenerator = ExportQueryExecutionTrees::computeResult(
@@ -78,7 +81,7 @@ nlohmann::json runJSONQuery(const std::string& kg, const std::string& query,
 struct TestCaseSelectQuery {
   std::string kg;                   // The knowledge graph (TURTLE)
   std::string query;                // The query (SPARQL)
-  size_t resultSize;                // The expected number of results.
+  uint64_t resultSize;              // The expected number of results.
   std::string resultTsv;            // The expected result in TSV format.
   std::string resultCsv;            // The expected result in CSV format
   nlohmann::json resultQLeverJSON;  // The expected result in QLeverJSOn format.
@@ -89,10 +92,27 @@ struct TestCaseSelectQuery {
   std::string resultXml;
 };
 
+// A test case that tests the correct execution and exporting of an ASK query
+// in various formats.
+struct TestCaseAskQuery {
+  std::string kg;                   // The knowledge graph (TURTLE)
+  std::string query;                // The query (SPARQL)
+  nlohmann::json resultQLeverJSON;  // The expected result in QLeverJSON format.
+  // Note: this member only contains the inner
+  // result array with the bindings and NOT
+  // the metadata.
+  nlohmann::json resultSparqlJSON;  // The expected result in SparqlJSON format.
+  std::string resultXml;
+};
+
+// For a CONSTRUCT query, the `resultSize` of the QLever JSON is the number of
+// results of the WHERE clause.
 struct TestCaseConstructQuery {
   std::string kg;                   // The knowledge graph (TURTLE)
   std::string query;                // The query (SPARQL)
-  size_t resultSize;                // The expected number of results.
+  uint64_t resultSizeTotal;         // The expected number of results,
+                                    // including triples with UNDEF values.
+  uint64_t resultSizeExported;      // The expected number of results exported.
   std::string resultTsv;            // The expected result in TSV format.
   std::string resultCsv;            // The expected result in CSV format
   std::string resultTurtle;         // The expected result in Turtle format
@@ -115,13 +135,14 @@ void runSelectQueryTestCase(
       runQueryStreamableResult(testCase.kg, testCase.query, csv, useTextIndex),
       testCase.resultCsv);
 
-  auto qleverJSONResult = nlohmann::json::parse(runQueryStreamableResult(
+  auto resultJSON = nlohmann::json::parse(runQueryStreamableResult(
       testCase.kg, testCase.query, qleverJson, useTextIndex));
   // TODO<joka921> Test other members of the JSON result (e.g. the selected
   // variables).
-  ASSERT_EQ(qleverJSONResult["query"], testCase.query);
-  ASSERT_EQ(qleverJSONResult["resultsize"], testCase.resultSize);
-  EXPECT_EQ(qleverJSONResult["res"], testCase.resultQLeverJSON);
+  ASSERT_EQ(resultJSON["query"], testCase.query);
+  ASSERT_EQ(resultJSON["resultSizeTotal"], testCase.resultSize);
+  ASSERT_EQ(resultJSON["resultSizeExported"], testCase.resultSize);
+  EXPECT_EQ(resultJSON["res"], testCase.resultQLeverJSON);
 
   EXPECT_EQ(nlohmann::json::parse(runQueryStreamableResult(
                 testCase.kg, testCase.query, sparqlJson, useTextIndex)),
@@ -131,6 +152,16 @@ void runSelectQueryTestCase(
   auto xmlAsString = runQueryStreamableResult(testCase.kg, testCase.query,
                                               sparqlXml, useTextIndex);
   EXPECT_EQ(testCase.resultXml, xmlAsString);
+
+  // Test the interaction of normal limit (the LIMIT of the query) and export
+  // limit (the value of the `send` parameter).
+  for (uint64_t exportLimit = 0ul; exportLimit < 4ul; ++exportLimit) {
+    auto resultJson = nlohmann::json::parse(runQueryStreamableResult(
+        testCase.kg, testCase.query, qleverJson, false, exportLimit));
+    ASSERT_EQ(resultJson["resultSizeTotal"], testCase.resultSize);
+    ASSERT_EQ(resultJson["resultSizeExported"],
+              std::min(exportLimit, testCase.resultSize));
+  }
 }
 
 // Run a single test case for a CONSTRUCT query.
@@ -143,13 +174,52 @@ void runConstructQueryTestCase(
             testCase.resultTsv);
   EXPECT_EQ(runQueryStreamableResult(testCase.kg, testCase.query, csv),
             testCase.resultCsv);
-  auto qleverJSONStreamResult = nlohmann::json::parse(
+  auto resultJson = nlohmann::json::parse(
       runQueryStreamableResult(testCase.kg, testCase.query, qleverJson));
-  ASSERT_EQ(qleverJSONStreamResult["query"], testCase.query);
-  ASSERT_EQ(qleverJSONStreamResult["resultsize"], testCase.resultSize);
-  EXPECT_EQ(qleverJSONStreamResult["res"], testCase.resultQLeverJSON);
+  ASSERT_EQ(resultJson["query"], testCase.query);
+  ASSERT_EQ(resultJson["resultSizeTotal"], testCase.resultSizeTotal);
+  ASSERT_EQ(resultJson["resultSizeExported"], testCase.resultSizeExported);
+  EXPECT_EQ(resultJson["res"], testCase.resultQLeverJSON);
   EXPECT_EQ(runQueryStreamableResult(testCase.kg, testCase.query, turtle),
             testCase.resultTurtle);
+
+  // Test the interaction of normal limit (the LIMIT of the query) and export
+  // limit (the value of the `send` parameter).
+  for (uint64_t exportLimit = 0ul; exportLimit < 4ul; ++exportLimit) {
+    auto resultJson = nlohmann::json::parse(runQueryStreamableResult(
+        testCase.kg, testCase.query, qleverJson, false, exportLimit));
+    ASSERT_EQ(resultJson["resultSizeTotal"], testCase.resultSizeTotal);
+    ASSERT_EQ(resultJson["resultSizeExported"],
+              std::min(exportLimit, testCase.resultSizeExported));
+  }
+}
+
+// Run a single test case for an ASK query.
+void runAskQueryTestCase(
+    const TestCaseAskQuery& testCase,
+    ad_utility::source_location l = ad_utility::source_location::current()) {
+  auto trace = generateLocationTrace(l, "runAskQueryTestCase");
+  using enum ad_utility::MediaType;
+  // TODO<joka921> match the exception
+  EXPECT_ANY_THROW(runQueryStreamableResult(testCase.kg, testCase.query, tsv));
+  EXPECT_ANY_THROW(runQueryStreamableResult(testCase.kg, testCase.query, csv));
+  EXPECT_ANY_THROW(
+      runQueryStreamableResult(testCase.kg, testCase.query, octetStream));
+  EXPECT_ANY_THROW(
+      runQueryStreamableResult(testCase.kg, testCase.query, turtle));
+  auto resultJson = nlohmann::json::parse(
+      runQueryStreamableResult(testCase.kg, testCase.query, qleverJson));
+  ASSERT_EQ(resultJson["query"], testCase.query);
+  ASSERT_EQ(resultJson["resultSizeExported"], 1u);
+  EXPECT_EQ(resultJson["res"], testCase.resultQLeverJSON);
+
+  EXPECT_EQ(nlohmann::json::parse(runQueryStreamableResult(
+                testCase.kg, testCase.query, sparqlJson)),
+            testCase.resultSparqlJSON);
+
+  auto xmlAsString =
+      runQueryStreamableResult(testCase.kg, testCase.query, sparqlXml);
+  EXPECT_EQ(testCase.resultXml, xmlAsString);
 }
 
 // Create a `json` that can be used as the `resultQLeverJSON` of a
@@ -226,10 +296,12 @@ static const std::string xmlTrailer = "\n</results>\n</sparql>";
 
 // Helper function for easier testing of the `IdTable` generator.
 std::vector<IdTable> convertToVector(
-    cppcoro::generator<const IdTable&> generator) {
+    cppcoro::generator<ExportQueryExecutionTrees::TableConstRefWithVocab>
+        generator) {
   std::vector<IdTable> result;
-  for (const IdTable& idTable : generator) {
-    result.push_back(idTable.clone());
+  for (const ExportQueryExecutionTrees::TableConstRefWithVocab& pair :
+       generator) {
+    result.push_back(pair.idTable_.clone());
   }
   return result;
 }
@@ -239,11 +311,11 @@ auto matchesIdTables(const auto&... tables) {
   return ElementsAre(matchesIdTable(tables)...);
 }
 
-// Template is only required because inner class is not visible
-template <typename T>
-std::vector<IdTable> convertToVector(cppcoro::generator<T> generator) {
+std::vector<IdTable> convertToVector(
+    cppcoro::generator<ExportQueryExecutionTrees::TableWithRange> generator) {
   std::vector<IdTable> result;
-  for (const auto& [idTable, range] : generator) {
+  for (const auto& [pair, range] : generator) {
+    const auto& idTable = pair.idTable_;
     result.emplace_back(idTable.numColumns(), idTable.getAllocator());
     result.back().insertAtEnd(idTable.begin() + *range.begin(),
                               idTable.begin() + *(range.end() - 1) + 1);
@@ -301,7 +373,7 @@ TEST(ExportQueryExecutionTrees, Integers) {
   runSelectQueryTestCase(testCase);
 
   TestCaseConstructQuery testCaseConstruct{
-      kg, "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o", 3,
+      kg, "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o", 3, 3,
       // TSV
       "<s>\t<p>\t-42019234865781\n"
       "<s>\t<p>\t42\n"
@@ -359,7 +431,7 @@ TEST(ExportQueryExecutionTrees, Bool) {
   runSelectQueryTestCase(testCase);
 
   TestCaseConstructQuery testCaseConstruct{
-      kg, "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o", 2,
+      kg, "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o", 2, 2,
       // TSV
       "<s>\t<p>\tfalse\n"
       "<s>\t<p>\ttrue\n",
@@ -401,10 +473,10 @@ TEST(ExportQueryExecutionTrees, UnusedVariable) {
       makeExpectedSparqlJSON({}), expectedXml};
   runSelectQueryTestCase(testCase);
 
-  // If we use a variable that is always unbound in a CONSTRUCT triple, then
-  // the result for this triple will be empty.
+  // The `2` is the number of results including triples with UNDEF values. The
+  // `0` is the number of results excluding such triples.
   TestCaseConstructQuery testCaseConstruct{
-      kg, "CONSTRUCT {?x ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o", 0,
+      kg, "CONSTRUCT {?x ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o", 2, 0,
       // TSV
       "",
       // CSV
@@ -459,7 +531,7 @@ TEST(ExportQueryExecutionTrees, Floats) {
   runSelectQueryTestCase(testCaseFloat);
 
   TestCaseConstructQuery testCaseConstruct{
-      kg, "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o", 3,
+      kg, "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o", 3, 3,
       // TSV
       "<s>\t<p>\t-42019234865780982022144\n"
       "<s>\t<p>\t4.01293e-12\n"
@@ -515,6 +587,7 @@ TEST(ExportQueryExecutionTrees, Dates) {
   TestCaseConstructQuery testCaseConstruct{
       kg,
       "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o",
+      1,
       1,
       // TSV
       "<s>\t<p>\t\"1950-01-01T00:00:00\"^^<http://www.w3.org/2001/"
@@ -605,6 +678,7 @@ TEST(ExportQueryExecutionTrees, Entities) {
       kg,
       "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o",
       1,
+      1,
       // TSV
       "<s>\t<p>\t<http://qlever.com/o>\n",
       // CSV
@@ -652,6 +726,7 @@ TEST(ExportQueryExecutionTrees, LiteralWithLanguageTag) {
   TestCaseConstructQuery testCaseConstruct{
       kg,
       "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o",
+      1,
       1,
       // TSV
       "<s>\t<p>\t\"Some\"Where Over,\"@en-ca\n",
@@ -701,6 +776,7 @@ TEST(ExportQueryExecutionTrees, LiteralWithDatatype) {
       kg,
       "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o",
       1,
+      1,
       // TSV
       "<s>\t<p>\t\"something\"^^<www.example.org/bim>\n",
       // CSV
@@ -748,6 +824,7 @@ TEST(ExportQueryExecutionTrees, LiteralPlain) {
       kg,
       "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o",
       1,
+      1,
       // TSV
       "<s>\t<p>\t\"something\"\n",
       // CSV
@@ -792,6 +869,7 @@ testIriKg</uri></binding>
   TestCaseConstructQuery testCaseConstruct{
       kg,
       "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o",
+      1,
       1,
       // TSV
       "<s>\t<p>\t<https:// : )\\ntestIriKg>\n",
@@ -856,6 +934,7 @@ TEST(ExportQueryExecutionTrees, TestWithIriExtendedEscaped) {
       kg,
       "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o",
       1,
+      1,
       // TSV
       "<s>\t<p>\t<iriescaped\x01o\x02"
       "e\x03i\x04o\x05u\x06"
@@ -910,6 +989,7 @@ TEST(ExportQueryExecutionTrees, TestIriWithEscapedIriString) {
       kg,
       "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o",
       1,
+      1,
       // TSV
       "<s>\t<p>\t\" hallo\\n  welt\"\n",
       // CSV
@@ -950,12 +1030,13 @@ TEST(ExportQueryExecutionTrees, UndefinedValues) {
       expectedXml};
   runSelectQueryTestCase(testCase);
 
-  // In CONSTRUCT queries, results with undefined values in the exported
-  // variables are filtered out, so the result is empty.
+  // The `1` is the number of results including triples with UNDEF values. The
+  // `0` is the number of results excluding such triples.
   TestCaseConstructQuery testCaseConstruct{
       kg,
       "CONSTRUCT {?s <pred> ?o} WHERE {?s <p> <o> OPTIONAL {?s <p2> ?o}} ORDER "
       "BY ?o",
+      1,
       0,
       "",
       "",
@@ -1174,6 +1255,52 @@ TEST(ExportQueryExecutionTrees, CornerCases) {
       ::testing::ContainsRegex("should be unreachable"));
 }
 
+// Test the correct exporting of ASK queries.
+TEST(ExportQueryExecutionTrees, AskQuery) {
+  auto askResultTrue = [](bool lazy) {
+    TestCaseAskQuery testCase;
+    if (lazy) {
+      testCase.kg = "<x> <y> <z>";
+      testCase.query = "ASK { <x> ?p ?o}";
+    } else {
+      testCase.query = "ASK { BIND (3 as ?x) FILTER (?x > 0)}";
+    }
+    testCase.resultQLeverJSON = nlohmann::json{std::vector<std::string>{
+        "\"true\"^^<http://www.w3.org/2001/XMLSchema#boolean>"}};
+    testCase.resultSparqlJSON =
+        nlohmann::json::parse(R"({"head":{ }, "boolean" : true})");
+    testCase.resultXml =
+        "<?xml version=\"1.0\"?>\n<sparql "
+        "xmlns=\"http://www.w3.org/2005/sparql-results#\">\n  <head/>\n  "
+        "<boolean>true</boolean>\n</sparql>";
+
+    return testCase;
+  };
+
+  auto askResultFalse = [](bool lazy) {
+    TestCaseAskQuery testCase;
+    if (lazy) {
+      testCase.kg = "<x> <y> <z>";
+      testCase.query = "ASK { <y> ?p ?o}";
+    } else {
+      testCase.query = "ASK { BIND (3 as ?x) FILTER (?x < 0)}";
+    }
+    testCase.resultQLeverJSON = nlohmann::json{std::vector<std::string>{
+        "\"false\"^^<http://www.w3.org/2001/XMLSchema#boolean>"}};
+    testCase.resultSparqlJSON =
+        nlohmann::json::parse(R"({"head":{ }, "boolean" : false})");
+    testCase.resultXml =
+        "<?xml version=\"1.0\"?>\n<sparql "
+        "xmlns=\"http://www.w3.org/2005/sparql-results#\">\n  <head/>\n  "
+        "<boolean>false</boolean>\n</sparql>";
+    return testCase;
+  };
+  runAskQueryTestCase(askResultTrue(true));
+  runAskQueryTestCase(askResultTrue(false));
+  runAskQueryTestCase(askResultFalse(true));
+  runAskQueryTestCase(askResultFalse(false));
+}
+
 using enum ad_utility::MediaType;
 
 // ____________________________________________________________________________
@@ -1227,13 +1354,13 @@ TEST(ExportQueryExecutionTrees, getIdTablesMirrorsGenerator) {
   IdTable idTable1 = makeIdTableFromVector({{1}, {2}, {3}});
   IdTable idTable2 = makeIdTableFromVector({{42}, {1337}});
   auto tableGenerator = [](IdTable idTableA,
-                           IdTable idTableB) -> cppcoro::generator<IdTable> {
-    co_yield idTableA;
+                           IdTable idTableB) -> Result::Generator {
+    co_yield {std::move(idTableA), LocalVocab{}};
 
-    co_yield idTableB;
+    co_yield {std::move(idTableB), LocalVocab{}};
   }(idTable1.clone(), idTable2.clone());
 
-  Result result{std::move(tableGenerator), {}, LocalVocab{}};
+  Result result{std::move(tableGenerator), {}};
   auto generator = ExportQueryExecutionTrees::getIdTables(result);
 
   EXPECT_THAT(convertToVector(std::move(generator)),
@@ -1242,142 +1369,170 @@ TEST(ExportQueryExecutionTrees, getIdTablesMirrorsGenerator) {
 
 // _____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, ensureCorrectSlicingOfSingleIdTable) {
-  auto tableGenerator = []() -> cppcoro::generator<IdTable> {
-    IdTable idTable1 = makeIdTableFromVector({{1}, {2}, {3}});
-    co_yield idTable1;
+  auto tableGenerator = []() -> Result::Generator {
+    Result::IdTableVocabPair pair1{makeIdTableFromVector({{1}, {2}, {3}}),
+                                   LocalVocab{}};
+    co_yield pair1;
   }();
 
-  Result result{std::move(tableGenerator), {}, LocalVocab{}};
+  Result result{std::move(tableGenerator), {}};
+  uint64_t resultSizeTotal = 0;
   auto generator = ExportQueryExecutionTrees::getRowIndices(
-      LimitOffsetClause{._limit = 1, ._offset = 1}, result);
+      LimitOffsetClause{._limit = 1, ._offset = 1}, result, resultSizeTotal);
 
-  auto referenceTable = makeIdTableFromVector({{2}});
+  auto expectedResult = makeIdTableFromVector({{2}});
   EXPECT_THAT(convertToVector(std::move(generator)),
-              matchesIdTables(referenceTable));
+              matchesIdTables(expectedResult));
+  EXPECT_EQ(resultSizeTotal, 1);
 }
 
 // _____________________________________________________________________________
 TEST(ExportQueryExecutionTrees,
      ensureCorrectSlicingOfIdTablesWhenFirstIsSkipped) {
-  auto tableGenerator = []() -> cppcoro::generator<IdTable> {
-    IdTable idTable1 = makeIdTableFromVector({{1}, {2}, {3}});
-    co_yield idTable1;
+  auto tableGenerator = []() -> Result::Generator {
+    Result::IdTableVocabPair pair1{makeIdTableFromVector({{1}, {2}, {3}}),
+                                   LocalVocab{}};
+    co_yield pair1;
 
-    IdTable idTable2 = makeIdTableFromVector({{4}, {5}});
-    co_yield idTable2;
+    Result::IdTableVocabPair pair2{makeIdTableFromVector({{4}, {5}}),
+                                   LocalVocab{}};
+    co_yield pair2;
   }();
 
-  Result result{std::move(tableGenerator), {}, LocalVocab{}};
+  Result result{std::move(tableGenerator), {}};
+  uint64_t resultSizeTotal = 0;
   auto generator = ExportQueryExecutionTrees::getRowIndices(
-      LimitOffsetClause{._limit = std::nullopt, ._offset = 3}, result);
+      LimitOffsetClause{._limit = std::nullopt, ._offset = 3}, result,
+      resultSizeTotal);
 
-  auto referenceTable1 = makeIdTableFromVector({{4}, {5}});
+  auto expectedResult = makeIdTableFromVector({{4}, {5}});
 
   EXPECT_THAT(convertToVector(std::move(generator)),
-              matchesIdTables(referenceTable1));
+              matchesIdTables(expectedResult));
+  EXPECT_EQ(resultSizeTotal, 2);
 }
 
 // _____________________________________________________________________________
 TEST(ExportQueryExecutionTrees,
      ensureCorrectSlicingOfIdTablesWhenLastIsSkipped) {
-  auto tableGenerator = []() -> cppcoro::generator<IdTable> {
-    IdTable idTable1 = makeIdTableFromVector({{1}, {2}, {3}});
-    co_yield idTable1;
+  auto tableGenerator = []() -> Result::Generator {
+    Result::IdTableVocabPair pair1{makeIdTableFromVector({{1}, {2}, {3}}),
+                                   LocalVocab{}};
+    co_yield pair1;
 
-    IdTable idTable2 = makeIdTableFromVector({{4}, {5}});
-    co_yield idTable2;
+    Result::IdTableVocabPair pair2{makeIdTableFromVector({{4}, {5}}),
+                                   LocalVocab{}};
+    co_yield pair2;
   }();
 
-  Result result{std::move(tableGenerator), {}, LocalVocab{}};
+  Result result{std::move(tableGenerator), {}};
+  uint64_t resultSizeTotal = 0;
   auto generator = ExportQueryExecutionTrees::getRowIndices(
-      LimitOffsetClause{._limit = 3}, result);
+      LimitOffsetClause{._limit = 3}, result, resultSizeTotal);
 
-  auto referenceTable1 = makeIdTableFromVector({{1}, {2}, {3}});
+  auto expectedResult = makeIdTableFromVector({{1}, {2}, {3}});
 
   EXPECT_THAT(convertToVector(std::move(generator)),
-              matchesIdTables(referenceTable1));
+              matchesIdTables(expectedResult));
+  EXPECT_EQ(resultSizeTotal, 3);
 }
 
 // _____________________________________________________________________________
 TEST(ExportQueryExecutionTrees,
      ensureCorrectSlicingOfIdTablesWhenFirstAndSecondArePartial) {
-  auto tableGenerator = []() -> cppcoro::generator<IdTable> {
-    IdTable idTable1 = makeIdTableFromVector({{1}, {2}, {3}});
-    co_yield idTable1;
+  auto tableGenerator = []() -> Result::Generator {
+    Result::IdTableVocabPair pair1{makeIdTableFromVector({{1}, {2}, {3}}),
+                                   LocalVocab{}};
+    co_yield pair1;
 
-    IdTable idTable2 = makeIdTableFromVector({{4}, {5}});
-    co_yield idTable2;
+    Result::IdTableVocabPair pair2{makeIdTableFromVector({{4}, {5}}),
+                                   LocalVocab{}};
+    co_yield pair2;
   }();
 
-  Result result{std::move(tableGenerator), {}, LocalVocab{}};
+  Result result{std::move(tableGenerator), {}};
+  uint64_t resultSizeTotal = 0;
   auto generator = ExportQueryExecutionTrees::getRowIndices(
-      LimitOffsetClause{._limit = 3, ._offset = 1}, result);
+      LimitOffsetClause{._limit = 3, ._offset = 1}, result, resultSizeTotal);
 
-  auto referenceTable1 = makeIdTableFromVector({{2}, {3}});
-  auto referenceTable2 = makeIdTableFromVector({{4}});
+  auto expectedResult1 = makeIdTableFromVector({{2}, {3}});
+  auto expectedResult2 = makeIdTableFromVector({{4}});
 
   EXPECT_THAT(convertToVector(std::move(generator)),
-              matchesIdTables(referenceTable1, referenceTable2));
+              matchesIdTables(expectedResult1, expectedResult2));
+  EXPECT_EQ(resultSizeTotal, 3);
 }
 
 // _____________________________________________________________________________
 TEST(ExportQueryExecutionTrees,
      ensureCorrectSlicingOfIdTablesWhenFirstAndLastArePartial) {
-  auto tableGenerator = []() -> cppcoro::generator<IdTable> {
-    IdTable idTable1 = makeIdTableFromVector({{1}, {2}, {3}});
-    co_yield idTable1;
+  auto tableGenerator = []() -> Result::Generator {
+    Result::IdTableVocabPair pair1{makeIdTableFromVector({{1}, {2}, {3}}),
+                                   LocalVocab{}};
+    co_yield pair1;
 
-    IdTable idTable2 = makeIdTableFromVector({{4}, {5}});
-    co_yield idTable2;
+    Result::IdTableVocabPair pair2{makeIdTableFromVector({{4}, {5}}),
+                                   LocalVocab{}};
+    co_yield pair2;
 
-    IdTable idTable3 = makeIdTableFromVector({{6}, {7}, {8}, {9}});
-    co_yield idTable3;
+    Result::IdTableVocabPair pair3{makeIdTableFromVector({{6}, {7}, {8}, {9}}),
+                                   LocalVocab{}};
+    co_yield pair3;
   }();
 
-  Result result{std::move(tableGenerator), {}, LocalVocab{}};
+  Result result{std::move(tableGenerator), {}};
+  uint64_t resultSizeTotal = 0;
   auto generator = ExportQueryExecutionTrees::getRowIndices(
-      LimitOffsetClause{._limit = 5, ._offset = 2}, result);
+      LimitOffsetClause{._limit = 5, ._offset = 2}, result, resultSizeTotal);
 
-  auto referenceTable1 = makeIdTableFromVector({{3}});
-  auto referenceTable2 = makeIdTableFromVector({{4}, {5}});
-  auto referenceTable3 = makeIdTableFromVector({{6}, {7}});
+  auto expectedTable1 = makeIdTableFromVector({{3}});
+  auto expectedTable2 = makeIdTableFromVector({{4}, {5}});
+  auto expectedTable3 = makeIdTableFromVector({{6}, {7}});
 
-  EXPECT_THAT(
-      convertToVector(std::move(generator)),
-      matchesIdTables(referenceTable1, referenceTable2, referenceTable3));
+  EXPECT_THAT(convertToVector(std::move(generator)),
+              matchesIdTables(expectedTable1, expectedTable2, expectedTable3));
+  EXPECT_EQ(resultSizeTotal, 5);
 }
 
 // _____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, ensureGeneratorIsNotConsumedWhenNotRequired) {
   {
-    auto throwingGenerator = []() -> cppcoro::generator<IdTable> {
-      ADD_FAILURE() << "Generator was started" << std::endl;
-      throw std::runtime_error("Generator was started");
+    auto throwingGenerator = []() -> Result::Generator {
+      std::string message = "Generator was started, but should not have been";
+      ADD_FAILURE() << message << std::endl;
+      throw std::runtime_error(message);
       co_return;
     }();
 
-    Result result{std::move(throwingGenerator), {}, LocalVocab{}};
+    Result result{std::move(throwingGenerator), {}};
+    uint64_t resultSizeTotal = 0;
     auto generator = ExportQueryExecutionTrees::getRowIndices(
-        LimitOffsetClause{._limit = 0, ._offset = 0}, result);
+        LimitOffsetClause{._limit = 0, ._offset = 0}, result, resultSizeTotal);
     EXPECT_NO_THROW(convertToVector(std::move(generator)));
   }
 
   {
-    auto throwAfterYieldGenerator = []() -> cppcoro::generator<IdTable> {
-      IdTable idTable1 = makeIdTableFromVector({{1}});
-      co_yield idTable1;
+    auto throwAfterYieldGenerator = []() -> Result::Generator {
+      Result::IdTableVocabPair pair1{makeIdTableFromVector({{1}}),
+                                     LocalVocab{}};
+      co_yield pair1;
 
-      ADD_FAILURE() << "Generator was resumed" << std::endl;
-      throw std::runtime_error("Generator was resumed");
+      std::string message =
+          "Generator was called a second time, but should not "
+          "have been";
+      ADD_FAILURE() << message << std::endl;
+      throw std::runtime_error(message);
     }();
 
-    Result result{std::move(throwAfterYieldGenerator), {}, LocalVocab{}};
+    Result result{std::move(throwAfterYieldGenerator), {}};
+    uint64_t resultSizeTotal = 0;
     auto generator = ExportQueryExecutionTrees::getRowIndices(
-        LimitOffsetClause{._limit = 1, ._offset = 0}, result);
-    IdTable referenceTable1 = makeIdTableFromVector({{1}});
+        LimitOffsetClause{._limit = 1, ._offset = 0}, result, resultSizeTotal);
+    IdTable expectedTable = makeIdTableFromVector({{1}});
     std::vector<IdTable> tables;
     EXPECT_NO_THROW({ tables = convertToVector(std::move(generator)); });
-    EXPECT_THAT(tables, matchesIdTables(referenceTable1));
+    EXPECT_THAT(tables, matchesIdTables(expectedTable));
+    EXPECT_EQ(resultSizeTotal, 1);
   }
 }
 

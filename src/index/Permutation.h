@@ -1,12 +1,14 @@
-// Copyright 2018, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Johannes Kalmbach<joka921> (johannes.kalmbach@gmail.com)
+// Copyright 2018 - 2024, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+
 #pragma once
 
 #include <array>
 #include <string>
 
 #include "global/Constants.h"
+#include "index/CompressedRelation.h"
 #include "index/IndexMetaData.h"
 #include "parser/data/LimitOffsetClause.h"
 #include "util/CancellationHandle.h"
@@ -15,6 +17,10 @@
 
 // Forward declaration of `IdTable`
 class IdTable;
+// Forward declaration of `LocatedTriplesPerBlock`
+class LocatedTriplesPerBlock;
+class SharedLocatedTriplesSnapshot;
+struct LocatedTriplesSnapshot;
 
 // Helper class to store static properties of the different permutations to
 // avoid code duplication. The first template parameter is a search functor for
@@ -62,16 +68,19 @@ class Permutation {
   IdTable scan(const ScanSpecification& scanSpec,
                ColumnIndicesRef additionalColumns,
                const CancellationHandle& cancellationHandle,
+               const LocatedTriplesSnapshot& locatedTriplesSnapshot,
                const LimitOffsetClause& limitOffset = {}) const;
 
   // For a given relation, determine the `col1Id`s and their counts. This is
   // used for `computeGroupByObjectWithCount`. The `col0Id` must have metadata
   // in `meta_`.
   IdTable getDistinctCol1IdsAndCounts(
-      Id col0Id, const CancellationHandle& cancellationHandle) const;
+      Id col0Id, const CancellationHandle& cancellationHandle,
+      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
 
   IdTable getDistinctCol0IdsAndCounts(
-      const CancellationHandle& cancellationHandle) const;
+      const CancellationHandle& cancellationHandle,
+      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
 
   // Typedef to propagate the `MetadataAndblocks` and `IdTableGenerator` type.
   using MetadataAndBlocks =
@@ -95,29 +104,31 @@ class Permutation {
       const ScanSpecification& scanSpec,
       std::optional<std::vector<CompressedBlockMetadata>> blocks,
       ColumnIndicesRef additionalColumns, CancellationHandle cancellationHandle,
+      const LocatedTriplesSnapshot& locatedTriplesSnapshot,
       const LimitOffsetClause& limitOffset = {}) const;
 
-  std::optional<CompressedRelationMetadata> getMetadata(Id col0Id) const;
+  std::optional<CompressedRelationMetadata> getMetadata(
+      Id col0Id, const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
 
   // Return the metadata for the scan specified by the `scanSpecification`
   // along with the metadata for all the blocks that are relevant for this scan.
   // If there are no matching blocks (meaning that the scan result will be
   // empty) return `nullopt`.
   std::optional<MetadataAndBlocks> getMetadataAndBlocks(
-      const ScanSpecification& scanSpec) const;
+      const ScanSpecification& scanSpec,
+      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
 
   /// Similar to the previous `scan` function, but only get the size of the
   /// result
-  size_t getResultSizeOfScan(const ScanSpecification& scanSpec) const;
+  size_t getResultSizeOfScan(
+      const ScanSpecification& scanSpec,
+      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
 
   // _______________________________________________________
   void setKbName(const string& name) { meta_.setName(name); }
 
   // _______________________________________________________
   const std::string& getKbName() const { return meta_.getName(); }
-
-  // _______________________________________________________
-  const CompressedRelationReader& reader() const { return reader_.value(); }
 
   // _______________________________________________________
   const std::string& readableName() const { return readableName_; }
@@ -138,15 +149,21 @@ class Permutation {
   const Permutation& getActualPermutation(const ScanSpecification& spec) const;
   const Permutation& getActualPermutation(Id id) const;
 
- private:
-  // for Log output, e.g. "POS"
-  std::string readableName_;
-  // e.g. ".pos"
-  std::string fileSuffix_;
-  // order of the 3 keys S(0), P(1), and O(2) for which this permutation is
-  // sorted, for example {1, 0, 2} for PSO.
-  array<size_t, 3> keyOrder_;
+  // From the given snapshot, get the located triples for this permutation.
+  const LocatedTriplesPerBlock& getLocatedTriplesForPermutation(
+      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
 
+  const CompressedRelationReader& reader() const { return reader_.value(); }
+
+ private:
+  // Readable name for this permutation, e.g., `POS`.
+  std::string readableName_;
+  // File name suffix for this permutation, e.g., `.pos`.
+  std::string fileSuffix_;
+  // The order of the three components (S=0, P=1, O=2) in this permutation,
+  // e.g., `{1, 0, 2}` for `PSO`.
+  array<size_t, 3> keyOrder_;
+  // The metadata for this permutation.
   MetaData meta_;
 
   // This member is `optional` because we initialize it in a deferred way in the

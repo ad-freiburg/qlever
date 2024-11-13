@@ -130,7 +130,7 @@ class IndexScan final : public Operation {
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 
-  cppcoro::generator<IdTable> scanInChunks() const;
+  Result::Generator scanInChunks() const;
 
   //  Helper functions for the public `getLazyScanFor...` functions (see above).
   Permutation::IdTableGenerator getLazyScan(

@@ -1,4 +1,3 @@
-// Copyright 2015, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author:
 //   2014-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
@@ -23,6 +22,8 @@
 class IdTable;
 class TextBlockMetaData;
 class IndexImpl;
+struct LocatedTriplesSnapshot;
+class DeltaTriplesManager;
 
 class Index {
  private:
@@ -115,13 +116,19 @@ class Index {
   // Get a (non-owning) pointer to the BlankNodeManager of this Index.
   ad_utility::BlankNodeManager* getBlankNodeManager() const;
 
+  // Get a (non-owning) pointer to the BlankNodeManager of this Index.
+  DeltaTriplesManager& deltaTriplesManager();
+  const DeltaTriplesManager& deltaTriplesManager() const;
+
   // --------------------------------------------------------------------------
   // RDF RETRIEVAL
   // --------------------------------------------------------------------------
-  [[nodiscard]] size_t getCardinality(const TripleComponent& comp,
-                                      Permutation::Enum permutation) const;
-  [[nodiscard]] size_t getCardinality(Id id,
-                                      Permutation::Enum permutation) const;
+  [[nodiscard]] size_t getCardinality(
+      const TripleComponent& comp, Permutation::Enum permutation,
+      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
+  [[nodiscard]] size_t getCardinality(
+      Id id, Permutation::Enum permutation,
+      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
 
   // TODO<joka921> Once we have an overview over the folding this logic should
   // probably not be in the index class.
@@ -215,8 +222,9 @@ class Index {
   bool hasAllPermutations() const;
 
   // _____________________________________________________________________________
-  vector<float> getMultiplicities(const TripleComponent& key,
-                                  Permutation::Enum permutation) const;
+  vector<float> getMultiplicities(
+      const TripleComponent& key, Permutation::Enum permutation,
+      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
 
   // ___________________________________________________________________
   vector<float> getMultiplicities(Permutation::Enum p) const;
@@ -240,18 +248,22 @@ class Index {
                Permutation::Enum p,
                Permutation::ColumnIndicesRef additionalColumns,
                const ad_utility::SharedCancellationHandle& cancellationHandle,
+               const LocatedTriplesSnapshot& locatedTriplesSnapshot,
                const LimitOffsetClause& limitOffset = {}) const;
 
   // Similar to the overload of `scan` above, but the keys are specified as IDs.
   IdTable scan(const ScanSpecification& scanSpecification, Permutation::Enum p,
                Permutation::ColumnIndicesRef additionalColumns,
                const ad_utility::SharedCancellationHandle& cancellationHandle,
+               const LocatedTriplesSnapshot& locatedTriplesSnapshot,
                const LimitOffsetClause& limitOffset = {}) const;
 
   // Similar to the previous overload of `scan`, but only get the exact size of
   // the scan result.
-  size_t getResultSizeOfScan(const ScanSpecification& scanSpecification,
-                             const Permutation::Enum& permutation) const;
+  size_t getResultSizeOfScan(
+      const ScanSpecification& scanSpecification,
+      const Permutation::Enum& permutation,
+      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
 
   // Get access to the implementation. This should be used rarely as it
   // requires including the rather expensive `IndexImpl.h` header

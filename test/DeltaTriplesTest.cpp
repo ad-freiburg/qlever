@@ -6,6 +6,7 @@
 
 #include <gtest/gtest.h>
 
+#include "./DeltaTriplesTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "./util/IndexTestHelpers.h"
 #include "absl/strings/str_split.h"
@@ -15,41 +16,7 @@
 #include "index/Permutation.h"
 #include "parser/RdfParser.h"
 
-namespace {
-// A matcher that applies `InnerMatcher` to all `LocatedTriplesPerBlock` of a
-// `DeltaTriples`.
-auto InAllPermutations =
-    [](testing::Matcher<const LocatedTriplesPerBlock&> InnerMatcher)
-    -> testing::Matcher<const DeltaTriples&> {
-  return testing::AllOfArray(ad_utility::transform(
-      Permutation::ALL, [&InnerMatcher](const Permutation::Enum& perm) {
-        return testing::ResultOf(
-            absl::StrCat(".getLocatedTriplesPerBlock(",
-                         Permutation::toString(perm), ")"),
-            [perm](const DeltaTriples& deltaTriples) {
-              return deltaTriples.getLocatedTriplesPerBlock(perm);
-            },
-            InnerMatcher);
-      }));
-};
-// A matcher that checks `numTriples()` for all `LocatedTriplesPerBlock` of a
-// `DeltaTriples`.
-auto NumTriplesInAllPermutations =
-    [](size_t expectedNumTriples) -> testing::Matcher<const DeltaTriples&> {
-  return InAllPermutations(AD_PROPERTY(LocatedTriplesPerBlock, numTriples,
-                                       testing::Eq(expectedNumTriples)));
-};
-// A matcher that checks `numInserted()` and `numDeleted()` of a `DeltaTriples`
-// and `numTriples()` for all `LocatedTriplesPerBlock` of the `DeltaTriples`.
-auto NumTriples =
-    [](size_t inserted, size_t deleted,
-       size_t inAllPermutations) -> testing::Matcher<const DeltaTriples&> {
-  return testing::AllOf(
-      AD_PROPERTY(DeltaTriples, numInserted, testing::Eq(inserted)),
-      AD_PROPERTY(DeltaTriples, numDeleted, testing::Eq(deleted)),
-      NumTriplesInAllPermutations(inAllPermutations));
-};
-}  // namespace
+using namespace deltaTriplesTestHelpers;
 
 // Fixture that sets up a test index.
 class DeltaTriplesTest : public ::testing::Test {
@@ -70,7 +37,8 @@ class DeltaTriplesTest : public ::testing::Test {
       "<b> <prev> <a> . "
       "<c> <prev> <b> . "
       "<B> <prev> <A> . "
-      "<C> <prev> <B>";
+      "<C> <prev> <B> . "
+      "<anon> <x> _:blubb";
 
   // Query execution context with index for testing, see `IndexTestHelpers.h`.
   QueryExecutionContext* testQec = ad_utility::testing::getQec(testTurtle);
@@ -92,11 +60,12 @@ class DeltaTriplesTest : public ::testing::Test {
       const Index::Vocab& vocab, LocalVocab& localVocab,
       const std::vector<std::string>& turtles) {
     auto toID = [&localVocab, &vocab](TurtleTriple triple) {
-      std::array<Id, 3> ids{
+      std::array<Id, 4> ids{
           std::move(triple.subject_).toValueId(vocab, localVocab),
           std::move(TripleComponent(triple.predicate_))
               .toValueId(vocab, localVocab),
-          std::move(triple.object_).toValueId(vocab, localVocab)};
+          std::move(triple.object_).toValueId(vocab, localVocab),
+          std::move(triple.graphIri_).toValueId(vocab, localVocab)};
       return IdTriple<0>(ids);
     };
     return ad_utility::transform(
@@ -273,4 +242,182 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
                        "<A> <low> <a>", "<B> <D> <C>"},
                       {"<A> <B> <D>", "<A> <next> <B>", "<B> <next> <C>",
                        "<C> <prev> <B>", "<B> <prev> <A>"}));
+}
+
+// Test the rewriting of local vocab entries and blank nodes.
+TEST_F(DeltaTriplesTest, rewriteLocalVocabEntriesAndBlankNodes) {
+  // Create a triple with a new local vocab entry and a new blank node. Use the
+  // same new blank node twice (as object ID and graph ID, not important) so
+  // that we can test that both occurrences are rewritten to the same new blank
+  // node.
+  DeltaTriples deltaTriples(testQec->getIndex());
+  auto& vocab = testQec->getIndex().getVocab();
+  LocalVocab localVocabOutside;
+  auto triples =
+      makeIdTriples(vocab, localVocabOutside, {"<A> <notInVocab> <B>"});
+  AD_CORRECTNESS_CHECK(triples.size() == 1);
+  triples[0].ids_[2] =
+      Id::makeFromBlankNodeIndex(BlankNodeIndex::make(999'888'777));
+  triples[0].ids_[3] = triples[0].ids_[2];
+  auto [s1, p1, o1, g1] = triples[0].ids_;
+
+  // Rewrite the IDs in the triple.
+  deltaTriples.rewriteLocalVocabEntriesAndBlankNodes(triples);
+  auto [s2, p2, o2, g2] = triples[0].ids_;
+
+  // The subject <A> is part of the global vocabulary, so it remains unchanged.
+  EXPECT_EQ(s2.getBits(), s1.getBits());
+
+  // The predicate `<notInVocab>` is part of the local vocab, so it gets
+  // rewritten, hence the `EXPECT_NE(p2, p1)`. The `EXPECT_EQ(p1, p2)` tests
+  // that the strings are equal (which they should be).
+  ASSERT_TRUE(p1.getDatatype() == Datatype::LocalVocabIndex);
+  ASSERT_TRUE(p2.getDatatype() == Datatype::LocalVocabIndex);
+  EXPECT_EQ(p1, p2);
+  EXPECT_NE(p2.getBits(), p1.getBits());
+
+  // Test that the rewritten ID is stored (and thereby kept alive) by the
+  // local vocab of the `DeltaTriples` class.
+  auto& localVocab = deltaTriples.localVocab_;
+  auto idx = p2.getLocalVocabIndex();
+  EXPECT_EQ(idx, localVocab.getIndexOrNullopt(*idx));
+
+  // Check that the blank node is rewritten (it gets a new blank node index,
+  // and hence also a new ID).
+  ASSERT_TRUE(o1.getDatatype() == Datatype::BlankNodeIndex);
+  ASSERT_TRUE(o2.getDatatype() == Datatype::BlankNodeIndex);
+  EXPECT_NE(o2, o1);
+  EXPECT_NE(o2.getBits(), o1.getBits());
+
+  // Same for the graph blank node.
+  ASSERT_TRUE(g1.getDatatype() == Datatype::BlankNodeIndex);
+  ASSERT_TRUE(g2.getDatatype() == Datatype::BlankNodeIndex);
+  EXPECT_NE(g2, g1);
+  EXPECT_NE(g2.getBits(), g1.getBits());
+
+  // The object and the graph ID were the same blank node, so they should
+  // be rewritten to the same new ID.
+  EXPECT_EQ(g1.getBits(), o1.getBits());
+  EXPECT_EQ(g2.getBits(), o2.getBits());
+
+  // If we rewrite the already written triples again, nothing should change,
+  // as the `LocalVocab` of the `DeltaTriples` class is aware that it already
+  // stores the corresponding values.
+  deltaTriples.rewriteLocalVocabEntriesAndBlankNodes(triples);
+  ASSERT_EQ(triples.size(), 1);
+  auto [s3, p3, o3, g3] = triples[0].ids_;
+  EXPECT_EQ(s3.getBits(), s2.getBits());
+  EXPECT_EQ(p3.getBits(), p2.getBits());
+  EXPECT_EQ(o3.getBits(), o2.getBits());
+  EXPECT_EQ(g3.getBits(), g2.getBits());
+
+  // If we use a local blank node that is already part of the global vocabulary,
+  // nothing gets rewritten either.
+  auto blank0 = Id::makeFromBlankNodeIndex(BlankNodeIndex::make(0));
+  triples[0].ids_[0] = blank0;
+  deltaTriples.rewriteLocalVocabEntriesAndBlankNodes(triples);
+  auto s4 = triples[0].ids_[0];
+  EXPECT_EQ(s4.getBits(), blank0.getBits());
+}
+
+// _____________________________________________________________________________
+TEST_F(DeltaTriplesTest, DeltaTriplesManager) {
+  // Preparation.
+  DeltaTriplesManager deltaTriplesManager(testQec->getIndex().getImpl());
+  auto& vocab = testQec->getIndex().getVocab();
+  auto cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+  std::vector<ad_utility::JThread> threads;
+  static constexpr size_t numThreads = 18;
+  static constexpr size_t numIterations = 21;
+
+  // Insert and delete a well-defined set of triples, some independent and some
+  // dependent on the thread index. Check that the snapshot before in the
+  // middle of these updates is as expected.
+  auto insertAndDelete = [&](size_t threadIdx) {
+    LocalVocab localVocab;
+    SharedLocatedTriplesSnapshot beforeUpdate =
+        deltaTriplesManager.getCurrentSnapshot();
+    for (size_t i = 0; i < numIterations; ++i) {
+      // The first triple in both vectors is the same for all threads, the
+      // others are exclusive to this thread via the `threadIdx`.
+      auto triplesToInsert = makeIdTriples(
+          vocab, localVocab,
+          {"<A> <B> <C>", absl::StrCat("<A> <B> <D", threadIdx, ">"),
+           absl::StrCat("<A> <B> <E", threadIdx, ">")});
+      auto triplesToDelete = makeIdTriples(
+          vocab, localVocab,
+          {"<A> <C> <E>", absl::StrCat("<A> <B> <E", threadIdx, ">"),
+           absl::StrCat("<A> <B> <F", threadIdx, ">")});
+      // Insert the `triplesToInsert`.
+      deltaTriplesManager.modify([&](DeltaTriples& deltaTriples) {
+        deltaTriples.insertTriples(cancellationHandle, triplesToInsert);
+      });
+      // We should have successfully completed an update, so the snapshot
+      // pointer should have changed.
+      EXPECT_NE(beforeUpdate, deltaTriplesManager.getCurrentSnapshot());
+      // Delete the `triplesToDelete`.
+      deltaTriplesManager.modify([&](DeltaTriples& deltaTriples) {
+        deltaTriples.deleteTriples(cancellationHandle, triplesToDelete);
+      });
+
+      // Make some checks in the middle of these updates (while the other
+      // threads are likely to be in the middle of their updates as well).
+      if (i == numIterations / 2) {
+        {
+          // None of the thread-exclusive triples should be contained in the
+          // original snapshot and this should not change over time. The
+          // Boolean argument specifies whether the triple was inserted (`true`)
+          // or deleted (`false`).
+          const auto& locatedSPO =
+              beforeUpdate->getLocatedTriplesForPermutation(Permutation::SPO);
+          EXPECT_FALSE(locatedSPO.containsTriple(triplesToInsert.at(1), true));
+          EXPECT_FALSE(locatedSPO.containsTriple(triplesToInsert.at(1), false));
+          EXPECT_FALSE(locatedSPO.containsTriple(triplesToInsert.at(2), true));
+          EXPECT_FALSE(locatedSPO.containsTriple(triplesToInsert.at(2), false));
+          EXPECT_FALSE(locatedSPO.containsTriple(triplesToDelete.at(2), true));
+          EXPECT_FALSE(locatedSPO.containsTriple(triplesToDelete.at(2), false));
+        }
+        {
+          // Check for several of the thread-exclusive triples that they are
+          // properly contained in the current snapshot.
+          //
+          auto p = deltaTriplesManager.getCurrentSnapshot();
+          const auto& locatedSPO =
+              p->getLocatedTriplesForPermutation(Permutation::SPO);
+          EXPECT_TRUE(locatedSPO.containsTriple(triplesToInsert.at(1), true));
+          // This triple is exclusive to the thread and is inserted and then
+          // immediately deleted again. The `DeltaTriples` thus only store it as
+          // deleted. It might be contained in the original input, hence we
+          // cannot simply drop it.
+          EXPECT_TRUE(locatedSPO.containsTriple(triplesToInsert.at(2), false));
+          EXPECT_TRUE(locatedSPO.containsTriple(triplesToDelete.at(2), false));
+        }
+      }
+    }
+  };
+
+  // Run the above for each of `numThreads` threads, where each thread knows
+  // its index (used to create the thread-exclusive triples).
+  for (size_t i = 0; i < numThreads; ++i) {
+    threads.emplace_back(insertAndDelete, i);
+  }
+  threads.clear();
+
+  // Check that without updates, the snapshot pointer does not change.
+  auto p1 = deltaTriplesManager.getCurrentSnapshot();
+  auto p2 = deltaTriplesManager.getCurrentSnapshot();
+  EXPECT_EQ(p1, p2);
+
+  // Each of the threads above inserts on thread-exclusive triple, deletes one
+  // thread-exclusive triple and inserts one thread-exclusive triple that is
+  // deleted right after (This triple is stored as deleted in the `DeltaTriples`
+  // because it might be contained in the original input). Additionally, there
+  // is one common triple inserted by// all the threads and one common triple
+  // that is deleted by all the threads.
+  //
+
+  auto deltaImpl = deltaTriplesManager.deltaTriples_.rlock();
+  EXPECT_THAT(*deltaImpl, NumTriples(numThreads + 1, 2 * numThreads + 1,
+                                     3 * numThreads + 2));
 }

@@ -18,6 +18,7 @@
 #include "global/SpecialIds.h"
 #include "index/CompressedRelation.h"
 #include "index/ConstantsIndexBuilding.h"
+#include "index/DeltaTriples.h"
 #include "index/DocsDB.h"
 #include "index/Index.h"
 #include "index/IndexBuilderTypes.h"
@@ -119,7 +120,8 @@ class IndexImpl {
   string onDiskBase_;
   string settingsFileName_;
   bool onlyAsciiTurtlePrefixes_ = false;
-  bool useParallelParser_ = false;
+  // Note: `std::nullopt` means `not specified by the user`.
+  std::optional<bool> useParallelParser_ = std::nullopt;
   TurtleParserIntegerOverflowBehavior turtleParserIntegerOverflowBehavior_ =
       TurtleParserIntegerOverflowBehavior::Error;
   bool turtleParserSkipIllegalLiterals_ = false;
@@ -186,6 +188,8 @@ class IndexImpl {
 
   // BlankNodeManager, initialized during `readConfiguration`
   std::unique_ptr<ad_utility::BlankNodeManager> blankNodeManager_{nullptr};
+
+  std::optional<DeltaTriplesManager> deltaTriples_;
 
  public:
   explicit IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator);
@@ -260,6 +264,11 @@ class IndexImpl {
 
   ad_utility::BlankNodeManager* getBlankNodeManager() const;
 
+  DeltaTriplesManager& deltaTriplesManager() { return deltaTriples_.value(); }
+  const DeltaTriplesManager& deltaTriplesManager() const {
+    return deltaTriples_.value();
+  }
+
   // --------------------------------------------------------------------------
   //  -- RETRIEVAL ---
   // --------------------------------------------------------------------------
@@ -281,11 +290,13 @@ class IndexImpl {
   NumNormalAndInternal numDistinctCol0(Permutation::Enum permutation) const;
 
   // ___________________________________________________________________________
-  size_t getCardinality(Id id, Permutation::Enum permutation) const;
+  size_t getCardinality(Id id, Permutation::Enum permutation,
+                        const LocatedTriplesSnapshot&) const;
 
   // ___________________________________________________________________________
-  size_t getCardinality(const TripleComponent& comp,
-                        Permutation::Enum permutation) const;
+  size_t getCardinality(
+      const TripleComponent& comp, Permutation::Enum permutation,
+      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
 
   // ___________________________________________________________________________
   std::string indexToString(VocabIndex id) const;
@@ -417,8 +428,9 @@ class IndexImpl {
   bool hasAllPermutations() const { return SPO().isLoaded(); }
 
   // _____________________________________________________________________________
-  vector<float> getMultiplicities(const TripleComponent& key,
-                                  Permutation::Enum permutation) const;
+  vector<float> getMultiplicities(
+      const TripleComponent& key, Permutation::Enum permutation,
+      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
 
   // ___________________________________________________________________
   vector<float> getMultiplicities(Permutation::Enum permutation) const;
@@ -428,17 +440,21 @@ class IndexImpl {
                const Permutation::Enum& permutation,
                Permutation::ColumnIndicesRef additionalColumns,
                const ad_utility::SharedCancellationHandle& cancellationHandle,
+               const LocatedTriplesSnapshot& locatedTriplesSnapshot,
                const LimitOffsetClause& limitOffset = {}) const;
 
   // _____________________________________________________________________________
   IdTable scan(const ScanSpecification& scanSpecification, Permutation::Enum p,
                Permutation::ColumnIndicesRef additionalColumns,
                const ad_utility::SharedCancellationHandle& cancellationHandle,
+               const LocatedTriplesSnapshot& locatedTriplesSnapshot,
                const LimitOffsetClause& limitOffset = {}) const;
 
   // _____________________________________________________________________________
-  size_t getResultSizeOfScan(const ScanSpecification& scanSpecification,
-                             const Permutation::Enum& permutation) const;
+  size_t getResultSizeOfScan(
+      const ScanSpecification& scanSpecification,
+      const Permutation::Enum& permutation,
+      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
 
  private:
   // Private member functions
@@ -771,5 +787,5 @@ class IndexImpl {
   // and write a summary to the log.
   static void updateInputFileSpecificationsAndLog(
       std::vector<Index::InputFileSpecification>& spec,
-      bool parallelParsingSpecifiedViaJson);
+      std::optional<bool> parallelParsingSpecifiedViaJson);
 };

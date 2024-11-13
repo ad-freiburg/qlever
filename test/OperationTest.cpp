@@ -4,6 +4,8 @@
 
 #include <gmock/gmock.h>
 
+#include <optional>
+
 #include "engine/NeutralElementOperation.h"
 #include "engine/ValuesForTesting.h"
 #include "util/IdTableHelpers.h"
@@ -159,6 +161,20 @@ TEST_F(OperationTestFixture, verifyCachePreventsInProgressState) {
       ElementsAre(
           ParsedAsJson(HasKeyMatching("status", Eq("not started"))),
           ParsedAsJson(HasKeyMatching("status", Eq("fully materialized")))));
+}
+
+// _____________________________________________________________________________
+
+TEST_F(OperationTestFixture, getPrecomputedResultBecauseSiblingOfService) {
+  // If a precomputedResult is set, it will be returned by `getResult`
+  auto idTable = makeIdTableFromVector({{1, 6, 0}, {2, 5, 0}, {3, 4, 0}});
+  auto result = std::make_shared<const Result>(
+      idTable.clone(), std::vector<ColumnIndex>{0}, LocalVocab{});
+  operation.precomputedResultBecauseSiblingOfService() =
+      std::make_optional(result);
+  EXPECT_EQ(operation.getResult(), result);
+  EXPECT_FALSE(
+      operation.precomputedResultBecauseSiblingOfService().has_value());
 }
 
 // _____________________________________________________________________________
@@ -406,18 +422,18 @@ TEST(Operation, ensureSignalUpdateIsOnlyCalledEvery50msAndAtTheEnd) {
       index, &cache, makeAllocator(ad_utility::MemorySize::megabytes(100)),
       SortPerformanceEstimator{}, [&](std::string) { ++updateCallCounter; }};
   CustomGeneratorOperation operation{
-      &context, [](const IdTable& idTable) -> cppcoro::generator<IdTable> {
+      &context, [](const IdTable& idTable) -> Result::Generator {
         std::this_thread::sleep_for(50ms);
-        co_yield idTable.clone();
+        co_yield {idTable.clone(), LocalVocab{}};
         // This one should not trigger because it's below the 50ms threshold
         std::this_thread::sleep_for(30ms);
-        co_yield idTable.clone();
+        co_yield {idTable.clone(), LocalVocab{}};
         std::this_thread::sleep_for(30ms);
-        co_yield idTable.clone();
+        co_yield {idTable.clone(), LocalVocab{}};
         // This one should not trigger directly, but trigger because it's the
         // last one
         std::this_thread::sleep_for(30ms);
-        co_yield idTable.clone();
+        co_yield {idTable.clone(), LocalVocab{}};
       }(idTable)};
 
   ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
@@ -449,9 +465,9 @@ TEST(Operation, ensureSignalUpdateIsCalledAtTheEndOfPartialConsumption) {
       index, &cache, makeAllocator(ad_utility::MemorySize::megabytes(100)),
       SortPerformanceEstimator{}, [&](std::string) { ++updateCallCounter; }};
   CustomGeneratorOperation operation{
-      &context, [](const IdTable& idTable) -> cppcoro::generator<IdTable> {
-        co_yield idTable.clone();
-        co_yield idTable.clone();
+      &context, [](const IdTable& idTable) -> Result::Generator {
+        co_yield {idTable.clone(), LocalVocab{}};
+        co_yield {idTable.clone(), LocalVocab{}};
       }(idTable)};
 
   {
@@ -523,7 +539,8 @@ TEST(Operation, ensureLazyOperationIsCachedIfSmallEnough) {
       timer, ComputationMode::LAZY_IF_SUPPORTED, "test", false);
   EXPECT_FALSE(qec->getQueryTreeCache().cacheContains("test"));
 
-  for ([[maybe_unused]] IdTable& _ : cacheValue.resultTable().idTables()) {
+  for ([[maybe_unused]] Result::IdTableVocabPair& _ :
+       cacheValue.resultTable().idTables()) {
   }
 
   auto aggregatedValue = qec->getQueryTreeCache().getIfContained("test");
@@ -575,7 +592,8 @@ TEST(Operation, checkLazyOperationIsNotCachedIfTooLarge) {
   EXPECT_FALSE(qec->getQueryTreeCache().cacheContains("test"));
   qec->getQueryTreeCache().setMaxSizeSingleEntry(originalSize);
 
-  for ([[maybe_unused]] IdTable& _ : cacheValue.resultTable().idTables()) {
+  for ([[maybe_unused]] Result::IdTableVocabPair& _ :
+       cacheValue.resultTable().idTables()) {
   }
 
   EXPECT_FALSE(qec->getQueryTreeCache().cacheContains("test"));
@@ -597,7 +615,8 @@ TEST(Operation, checkLazyOperationIsNotCachedIfUnlikelyToFitInCache) {
       timer, ComputationMode::LAZY_IF_SUPPORTED, "test", false);
   EXPECT_FALSE(qec->getQueryTreeCache().cacheContains("test"));
 
-  for ([[maybe_unused]] IdTable& _ : cacheValue.resultTable().idTables()) {
+  for ([[maybe_unused]] Result::IdTableVocabPair& _ :
+       cacheValue.resultTable().idTables()) {
   }
 
   EXPECT_FALSE(qec->getQueryTreeCache().cacheContains("test"));

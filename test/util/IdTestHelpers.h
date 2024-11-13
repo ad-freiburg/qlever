@@ -25,6 +25,10 @@ inline auto VocabId = [](const auto& v) {
   return Id::makeFromVocabIndex(VocabIndex::make(v));
 };
 
+inline auto BlankNodeId = [](const auto& v) {
+  return Id::makeFromBlankNodeIndex(BlankNodeIndex::make(v));
+};
+
 inline auto LocalVocabId = [](std::integral auto v) {
   static ad_utility::Synchronized<LocalVocab> localVocab;
   using namespace ad_utility::triple_component;

@@ -180,12 +180,14 @@ CacheValue Operation::runComputationAndPrepareForCache(
     AD_CONTRACT_CHECK(!pinned);
     result.cacheDuringConsumption(
         [maxSize = cache.getMaxSizeSingleEntry()](
-            const std::optional<IdTable>& currentIdTable,
-            const IdTable& newIdTable) {
-          auto currentSize = currentIdTable.has_value()
-                                 ? CacheValue::getSize(currentIdTable.value())
-                                 : 0_B;
-          return maxSize >= currentSize + CacheValue::getSize(newIdTable);
+            const std::optional<Result::IdTableVocabPair>& currentIdTablePair,
+            const Result::IdTableVocabPair& newIdTable) {
+          auto currentSize =
+              currentIdTablePair.has_value()
+                  ? CacheValue::getSize(currentIdTablePair.value().idTable_)
+                  : 0_B;
+          return maxSize >=
+                 currentSize + CacheValue::getSize(newIdTable.idTable_);
         },
         [runtimeInfo = getRuntimeInfoPointer(), &cache,
          cacheKey](Result aggregatedResult) {
@@ -210,6 +212,13 @@ CacheValue Operation::runComputationAndPrepareForCache(
 // ________________________________________________________________________
 std::shared_ptr<const Result> Operation::getResult(
     bool isRoot, ComputationMode computationMode) {
+  // Use the precomputed Result if it exists.
+  if (precomputedResultBecauseSiblingOfService_.has_value()) {
+    auto result = std::move(precomputedResultBecauseSiblingOfService_).value();
+    precomputedResultBecauseSiblingOfService_.reset();
+    return result;
+  }
+
   ad_utility::Timer timer{ad_utility::Timer::Started};
 
   if (isRoot) {
@@ -424,7 +433,8 @@ void Operation::createRuntimeInfoFromEstimates(
 
   _runtimeInfo->costEstimate_ = getCostEstimate();
   _runtimeInfo->sizeEstimate_ = getSizeEstimateBeforeLimit();
-  const auto& [limit, offset, _] = getLimit();
+  // We are interested only in the first two elements of the limit tuple.
+  const auto& [limit, offset, _1, _2] = getLimit();
   if (limit.has_value()) {
     _runtimeInfo->addDetail("limit", limit.value());
   }

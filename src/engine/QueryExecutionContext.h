@@ -1,8 +1,7 @@
-// Copyright 2011, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author:
-//   2011-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
-//   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
+// Copyright 2011 - 2024, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de> [2011 - 2017]
+//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de> [2017 - 2024]
 
 #pragma once
 
@@ -14,6 +13,7 @@
 #include "engine/RuntimeInformation.h"
 #include "engine/SortPerformanceEstimator.h"
 #include "global/Id.h"
+#include "index/DeltaTriples.h"
 #include "index/Index.h"
 #include "util/Cache.h"
 #include "util/ConcurrentCache.h"
@@ -91,6 +91,11 @@ class QueryExecutionContext {
 
   [[nodiscard]] const Index& getIndex() const { return _index; }
 
+  const LocatedTriplesSnapshot& locatedTriplesSnapshot() const {
+    AD_CORRECTNESS_CHECK(sharedLocatedTriplesSnapshot_ != nullptr);
+    return *sharedLocatedTriplesSnapshot_;
+  }
+
   void clearCacheUnpinnedOnly() { getQueryTreeCache().clearUnpinnedOnly(); }
 
   [[nodiscard]] const SortPerformanceEstimator& getSortPerformanceEstimator()
@@ -120,6 +125,13 @@ class QueryExecutionContext {
 
  private:
   const Index& _index;
+
+  // When the `QueryExecutionContext` is constructed, get a stable read-only
+  // snapshot of the current (located) delta triples. These can then be used
+  // by the respective query without interfering with further incoming
+  // update operations.
+  SharedLocatedTriplesSnapshot sharedLocatedTriplesSnapshot_{
+      _index.deltaTriplesManager().getCurrentSnapshot()};
   QueryResultCache* const _subtreeCache;
   // allocators are copied but hold shared state
   ad_utility::AllocatorWithLimit<Id> _allocator;

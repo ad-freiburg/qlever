@@ -111,7 +111,7 @@ bool Vocabulary<S, C, I>::shouldEntityBeExternalized(
   // Never externalize the internal IRIs as they are sometimes added before or
   // after the externalization happens and we thus get inconsistent behavior
   // etc. for `ql:langtag`.
-  if (word.starts_with(INTERNAL_ENTITIES_URI_PREFIX)) {
+  if (word.starts_with(QLEVER_INTERNAL_PREFIX_IRI_WITHOUT_CLOSING_BRACKET)) {
     return false;
   }
   // Never externalize the special IRIs starting with `@` (for example,

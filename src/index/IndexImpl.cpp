@@ -44,6 +44,7 @@ static constexpr size_t NUM_EXTERNAL_SORTERS_AT_SAME_TIME = 2u;
 IndexImpl::IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator)
     : allocator_{std::move(allocator)} {
   globalSingletonIndex_ = this;
+  deltaTriples_.emplace(*this);
 };
 
 // _____________________________________________________________________________
@@ -268,7 +269,7 @@ std::pair<size_t, size_t> IndexImpl::createInternalPSOandPOS(
     auto&& internalTriplesPsoSorter) {
   auto onDiskBaseBackup = onDiskBase_;
   auto configurationJsonBackup = configurationJson_;
-  onDiskBase_.append(INTERNAL_INDEX_INFIX);
+  onDiskBase_.append(QLEVER_INTERNAL_INDEX_INFIX);
   auto internalTriplesUnique = ad_utility::uniqueBlockView(
       internalTriplesPsoSorter.template getSortedBlocks<0>());
   createPSOAndPOSImpl(NumColumnsIndexBuilding, std::move(internalTriplesUnique),
@@ -289,7 +290,7 @@ std::pair<size_t, size_t> IndexImpl::createInternalPSOandPOS(
 // _____________________________________________________________________________
 void IndexImpl::updateInputFileSpecificationsAndLog(
     std::vector<Index::InputFileSpecification>& spec,
-    bool parallelParsingSpecifiedViaJson) {
+    std::optional<bool> parallelParsingSpecifiedViaJson) {
   if (spec.size() == 1) {
     LOG(INFO) << "Processing triples from " << spec.at(0).filename_ << " ..."
               << std::endl;
@@ -297,7 +298,7 @@ void IndexImpl::updateInputFileSpecificationsAndLog(
     LOG(INFO) << "Processing triples from " << spec.size()
               << " input streams ..." << std::endl;
   }
-  if (parallelParsingSpecifiedViaJson) {
+  if (parallelParsingSpecifiedViaJson.value_or(false) == true) {
     if (spec.size() == 1) {
       LOG(WARN) << "Parallel parsing set to `true` in the `.settings.json` "
                    "file; this is deprecated, please use the command-line "
@@ -310,6 +311,15 @@ void IndexImpl::updateInputFileSpecificationsAndLog(
           "specified via the `.settings.json` file, but has to be specified "
           " via the command-line option --parse-parallel or -p"};
     }
+  }
+
+  if (spec.size() == 1 && !parallelParsingSpecifiedViaJson.has_value()) {
+    LOG(WARN) << "Implicitly using the parallel parser for a single input file "
+                 "for reasons of backward compatibility; this is deprecated, "
+                 "please use the command-line option --parse-parallel or -p "
+                 "instead"
+              << std::endl;
+    spec.at(0).parseInParallel_ = true;
   }
 }
 
@@ -551,7 +561,7 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
   idOfHasPatternDuringIndexBuilding_ =
       mergeRes.specialIdMapping().at(HAS_PATTERN_PREDICATE);
   idOfInternalGraphDuringIndexBuilding_ =
-      mergeRes.specialIdMapping().at(INTERNAL_GRAPH_IRI);
+      mergeRes.specialIdMapping().at(QLEVER_INTERNAL_GRAPH_IRI);
   LOG(INFO) << "Number of words in external vocabulary: "
             << res.vocabularyMetaData_.numWordsTotal() - sizeInternalVocabulary
             << std::endl;
@@ -849,7 +859,7 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
              << vocab_.size() << std::endl;
 
   auto range1 =
-      vocab_.prefixRanges(absl::StrCat("<", INTERNAL_PREDICATE_PREFIX));
+      vocab_.prefixRanges(QLEVER_INTERNAL_PREFIX_IRI_WITHOUT_CLOSING_BRACKET);
   auto range2 = vocab_.prefixRanges("@");
   auto isInternalId = [range1, range2](Id id) {
     // TODO<joka921> What about internal vocab stuff for update queries? this
@@ -1436,8 +1446,11 @@ Index::NumNormalAndInternal IndexImpl::numDistinctCol0(
 }
 
 // ___________________________________________________________________________
-size_t IndexImpl::getCardinality(Id id, Permutation::Enum permutation) const {
-  if (const auto& meta = getPermutation(permutation).getMetadata(id);
+size_t IndexImpl::getCardinality(
+    Id id, Permutation::Enum permutation,
+    const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
+  if (const auto& meta =
+          getPermutation(permutation).getMetadata(id, locatedTriplesSnapshot);
       meta.has_value()) {
     return meta.value().numRows_;
   }
@@ -1445,18 +1458,19 @@ size_t IndexImpl::getCardinality(Id id, Permutation::Enum permutation) const {
 }
 
 // ___________________________________________________________________________
-size_t IndexImpl::getCardinality(const TripleComponent& comp,
-                                 Permutation::Enum permutation) const {
+size_t IndexImpl::getCardinality(
+    const TripleComponent& comp, Permutation::Enum permutation,
+    const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
   // TODO<joka921> This special case is only relevant for the `PSO` and `POS`
   // permutations, but this internal predicate should never appear in subjects
   // or objects anyway.
   // TODO<joka921> Find out what the effect of this special case is for the
   // query planning.
-  if (comp == INTERNAL_TEXT_MATCH_PREDICATE) {
+  if (comp == QLEVER_INTERNAL_TEXT_MATCH_PREDICATE) {
     return TEXT_PREDICATE_CARDINALITY_ESTIMATE;
   }
   if (std::optional<Id> relId = comp.toValueId(getVocab()); relId.has_value()) {
-    return getCardinality(relId.value(), permutation);
+    return getCardinality(relId.value(), permutation, locatedTriplesSnapshot);
   }
   return 0;
 }
@@ -1478,9 +1492,11 @@ Index::Vocab::PrefixRanges IndexImpl::prefixRanges(
 
 // _____________________________________________________________________________
 vector<float> IndexImpl::getMultiplicities(
-    const TripleComponent& key, Permutation::Enum permutation) const {
+    const TripleComponent& key, Permutation::Enum permutation,
+    const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
   if (auto keyId = key.toValueId(getVocab()); keyId.has_value()) {
-    auto meta = getPermutation(permutation).getMetadata(keyId.value());
+    auto meta = getPermutation(permutation)
+                    .getMetadata(keyId.value(), locatedTriplesSnapshot);
     if (meta.has_value()) {
       return {meta.value().getCol1Multiplicity(),
               meta.value().getCol2Multiplicity()};
@@ -1506,26 +1522,31 @@ IdTable IndexImpl::scan(
     const Permutation::Enum& permutation,
     Permutation::ColumnIndicesRef additionalColumns,
     const ad_utility::SharedCancellationHandle& cancellationHandle,
+    const LocatedTriplesSnapshot& locatedTriplesSnapshot,
     const LimitOffsetClause& limitOffset) const {
   auto scanSpecification = scanSpecificationAsTc.toScanSpecification(*this);
   return scan(scanSpecification, permutation, additionalColumns,
-              cancellationHandle, limitOffset);
+              cancellationHandle, locatedTriplesSnapshot, limitOffset);
 }
 // _____________________________________________________________________________
 IdTable IndexImpl::scan(
     const ScanSpecification& scanSpecification, Permutation::Enum p,
     Permutation::ColumnIndicesRef additionalColumns,
     const ad_utility::SharedCancellationHandle& cancellationHandle,
+    const LocatedTriplesSnapshot& locatedTriplesSnapshot,
     const LimitOffsetClause& limitOffset) const {
   return getPermutation(p).scan(scanSpecification, additionalColumns,
-                                cancellationHandle, limitOffset);
+                                cancellationHandle, locatedTriplesSnapshot,
+                                limitOffset);
 }
 
 // _____________________________________________________________________________
 size_t IndexImpl::getResultSizeOfScan(
     const ScanSpecification& scanSpecification,
-    const Permutation::Enum& permutation) const {
-  return getPermutation(permutation).getResultSizeOfScan(scanSpecification);
+    const Permutation::Enum& permutation,
+    const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
+  return getPermutation(permutation)
+      .getResultSizeOfScan(scanSpecification, locatedTriplesSnapshot);
 }
 
 // _____________________________________________________________________________
