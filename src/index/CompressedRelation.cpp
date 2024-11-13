@@ -65,7 +65,6 @@ CompressedRelationReader::asyncParallelBlockGenerator(
   const auto& columnIndices = scanConfig.scanColumns_;
   const auto& blockGraphFilter = scanConfig.graphFilter_;
   LazyScanMetadata& details = co_await cppcoro::getDetails;
-  std::atomic<size_t> numBlocksPostprocessed = 0;
   const size_t queueSize =
       RuntimeParameters().get<"lazy-index-scan-queue-size">();
   auto blockMetadataIterator = beginBlock;
@@ -76,7 +75,8 @@ CompressedRelationReader::asyncParallelBlockGenerator(
   // when `endBlock` is reached. Returns `std::nullopt` for the block if it
   // is skipped due to the graph filter.
   auto readAndDecompressBlock = [&]()
-      -> std::optional<std::pair<size_t, std::optional<DecompressedBlock>>> {
+      -> std::optional<
+          std::pair<size_t, std::optional<DecompressedBlockAndMetadata>>> {
     cancellationHandle->throwIfCancelled();
     std::unique_lock lock{blockIteratorMutex};
     if (blockMetadataIterator == endBlock) {
@@ -104,9 +104,8 @@ CompressedRelationReader::asyncParallelBlockGenerator(
     lock.unlock();
     auto decompressedBlockAndMetadata = decompressAndPostprocessBlock(
         compressedBlock, blockMetadata.numRows_, scanConfig, blockMetadata);
-    details.update(decompressedBlockAndMetadata);
-    return std::pair{
-        myIndex, std::optional{std::move(decompressedBlockAndMetadata.block_)}};
+    return std::pair{myIndex,
+                     std::optional{std::move(decompressedBlockAndMetadata)}};
   };
 
   // Prepare queue for reading and decompressing blocks concurrently using
@@ -120,22 +119,20 @@ CompressedRelationReader::asyncParallelBlockGenerator(
       [&details, &popTimer]() { details.blockingTime_ = popTimer.msecs(); });
   auto queue = ad_utility::data_structures::queueManager<
       ad_utility::data_structures::OrderedThreadSafeQueue<
-          std::optional<IdTable>>>(queueSize, numThreads,
-                                   readAndDecompressBlock);
+          std::optional<DecompressedBlockAndMetadata>>>(queueSize, numThreads,
+                                                        readAndDecompressBlock);
 
   // Yield the blocks (in the right order) as soon as they become available.
   // Stop when all the blocks have been yielded or the LIMIT of the query is
   // reached. Keep track of various statistics.
-  for (std::optional<IdTable>& optBlock : queue) {
+  for (std::optional<DecompressedBlockAndMetadata>& optBlock : queue) {
     popTimer.stop();
     cancellationHandle->throwIfCancelled();
     if (optBlock.has_value()) {
-      auto& block = optBlock.value();
-      ++details.numBlocksRead_;
-      details.numElementsRead_ += block.numRows();
+      details.update(optBlock.value());
+      auto& block = optBlock.value().block_;
       pruneBlock(block, limitOffset);
       details.numElementsYielded_ += block.numRows();
-      details.numBlocksPostprocessed_ = numBlocksPostprocessed;
       if (!block.empty()) {
         co_yield block;
       }
@@ -608,13 +605,6 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
     std::ranges::copy(inputCol.begin() + beginIdx, inputCol.begin() + endIdx,
                       result.getColumn(i).begin());
     ++i;
-  }
-
-  // Update the runtime information.
-  if (scanMetadata.has_value()) {
-    auto& details = scanMetadata.value().get();
-    ++details.numBlocksRead_;
-    details.numElementsRead_ += result.numRows();
   }
 
   // Return the result.
@@ -1590,4 +1580,6 @@ void CompressedRelationReader::LazyScanMetadata::update(
       static_cast<size_t>(blockAndMetadata.wasPostprocessed_);
   numBlocksWithUpdate_ +=
       static_cast<size_t>(blockAndMetadata.containsUpdates_);
+  ++numBlocksRead_;
+  numElementsRead_ += blockAndMetadata.block_.numRows();
 }

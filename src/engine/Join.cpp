@@ -566,13 +566,20 @@ void updateRuntimeInfoForLazyScan(
   rti.addDetail("num-blocks-read", metadata.numBlocksRead_);
   rti.addDetail("num-blocks-all", metadata.numBlocksAll_);
   rti.addDetail("num-elements-read", metadata.numElementsRead_);
-  if (metadata.numBlocksSkippedBecauseOfGraph_ > 0) {
-    rti.addDetail("num-blocks-skipped-graph",
-                  metadata.numBlocksSkippedBecauseOfGraph_);
-  }
-  if (metadata.numBlocksPostprocessed_ > 0) {
-    rti.addDetail("num-blocks-postprocessed", metadata.numBlocksPostprocessed_);
-  }
+
+  // Add the pair of `(key, value)` to the runtime info, but only if `value >
+  // 0`.
+  auto updateIfPositive = [&rti](const auto& value, std::string_view key) {
+    if (value > 0) {
+      rti.addDetail(key, value);
+    }
+  };
+
+  updateIfPositive(metadata.numBlocksSkippedBecauseOfGraph_,
+                   "num-blocks-skipped-graph");
+  updateIfPositive(metadata.numBlocksPostprocessed_,
+                   "num-blocks-postprocessed");
+  updateIfPositive(metadata.numBlocksWithUpdates_, "num-blocks-with-updates");
 }
 }  // namespace
 

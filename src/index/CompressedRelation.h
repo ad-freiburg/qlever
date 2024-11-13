@@ -486,10 +486,8 @@ class CompressedRelationReader {
     std::chrono::milliseconds blockingTime_ = std::chrono::milliseconds::zero();
 
     // Update `*this` s.t. it contains the metadata from `blockAndMetadata`.
-    // Currently only the information about whether the block was postprocessed
-    // and whether it contains updates is copied. In the future we also could
-    // directly update the information about the number of rows etc., but this
-    // would require additional changes in the code so we postpone it for now.
+    // This function currently updates `numBlocksPostprocessed_`,
+    // `numBlokcsWithUpdate_`, `numElementsRead_`, and `numBlocksRead_`.
     void update(const DecompressedBlockAndMetadata& blockAndMetadata);
   };
 
