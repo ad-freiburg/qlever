@@ -44,7 +44,7 @@ Server::Server(unsigned short port, size_t numThreads,
       enablePatternTrick_(usePatternTrick),
       // The number of server threads currently also is the number of queries
       // that can be processed simultaneously.
-      threadPool_{numThreads} {
+      queryThreadPool_{numThreads} {
   // This also directly triggers the update functions and propagates the
   // values of the parameters to the cache.
   RuntimeParameters().setOnUpdateAction<"cache-max-num-entries">(
@@ -398,7 +398,12 @@ Awaitable<void> Server::process(
   } else if (auto cmd = checkParameter("cmd", "clear-delta-triples")) {
     requireValidAccessToken("clear-delta-triples");
     logCommand(cmd, "clear delta triples");
-    index_.deltaTriplesManager().clear();
+    // The function requires a SharedCancellationHandle, but the operation is
+    // not cancellable.
+    auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+    co_await computeInNewThread(
+        updateThreadPool_, [this] { index_.deltaTriplesManager().clear(); },
+        handle);
     response = createOkResponse("Delta triples have been cleared", request,
                                 MediaType::textPlain);
   } else if (auto cmd = checkParameter("cmd", "get-settings")) {
@@ -854,16 +859,11 @@ Awaitable<void> Server::processQuery(
 }
 
 // ____________________________________________________________________________
-Awaitable<void> Server::processUpdate(
+Awaitable<void> Server::processUpdateImpl(
     const ad_utility::url_parser::ParamValueMap& params, const string& update,
-    ad_utility::Timer& requestTimer,
-    const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
-    TimeLimit timeLimit) {
-  auto messageSender = createMessageSender(queryHub_, request, update);
-
-  auto [cancellationHandle, cancelTimeoutOnDestruction] =
-      setupCancellationHandle(messageSender.getQueryId(), timeLimit);
-
+    ad_utility::Timer& requestTimer, TimeLimit timeLimit, auto& messageSender,
+    ad_utility::SharedCancellationHandle cancellationHandle,
+    DeltaTriples& deltaTriples) {
   auto [pinSubtrees, pinResult] = determineResultPinning(params);
   LOG(INFO) << "Processing the following SPARQL update:"
             << (pinResult ? " [pin result]" : "")
@@ -882,24 +882,47 @@ Awaitable<void> Server::processUpdate(
                      "following query was sent instead of an update: ",
                      plannedQuery.parsedQuery_._originalString));
   }
-
-  // Update the delta triples.
-  //
-  // TODO: This does not yet handle concurrent updates correctly, but it should
-  // work fine when a new update is sent only after the previous one has
-  // finished.
-  auto& deltaTriplesManager = index_.deltaTriplesManager();
-  deltaTriplesManager.modify(
-      [this, &plannedQuery, &qet, &cancellationHandle](auto& deltaTriples) {
-        ExecuteUpdate::executeUpdate(index_, plannedQuery.parsedQuery_, qet,
-                                     deltaTriples, cancellationHandle);
-      });
+  ExecuteUpdate::executeUpdate(index_, plannedQuery.parsedQuery_, qet,
+                               deltaTriples, cancellationHandle);
 
   LOG(INFO) << "Done processing update"
             << ", total time was " << requestTimer.msecs().count() << " ms"
             << std::endl;
   LOG(DEBUG) << "Runtime Info:\n"
              << qet.getRootOperation()->runtimeInfo().toString() << std::endl;
+}
+
+// ____________________________________________________________________________
+Awaitable<void> Server::processUpdate(
+    const ad_utility::url_parser::ParamValueMap& params, const string& update,
+    ad_utility::Timer& requestTimer,
+    const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
+    TimeLimit timeLimit) {
+  auto messageSender = createMessageSender(queryHub_, request, update);
+
+  auto [cancellationHandle, cancelTimeoutOnDestruction] =
+      setupCancellationHandle(messageSender.getQueryId(), timeLimit);
+
+  // Update the delta triples.
+  co_await computeInNewThread(
+      updateThreadPool_,
+      [this, &params, &update, &requestTimer, &timeLimit, &messageSender,
+       &cancellationHandle] {
+        index_.deltaTriplesManager().modify(
+            [this, &params, &update, &requestTimer, &timeLimit, &messageSender,
+             &cancellationHandle](auto& deltaTriples) {
+              // TODO<qup42> this must also be possible in a nicer way
+              auto coro = processUpdateImpl(params, update, requestTimer,
+                                            timeLimit, messageSender,
+                                            cancellationHandle, deltaTriples);
+              boost::asio::io_context ioContext;
+              boost::asio::co_spawn(ioContext, std::move(coro),
+                                    boost::asio::detached);
+              ioContext.run();
+            });
+      },
+      cancellationHandle);
+
   // TODO<qup42> send a proper response
   // SPARQL 1.1 Protocol 2.2.4 Successful Responses: "The response body of a
   // successful update request is implementation defined."
@@ -990,7 +1013,8 @@ Awaitable<void> Server::processQueryOrUpdate(
 
 // _____________________________________________________________________________
 template <std::invocable Function, typename T>
-Awaitable<T> Server::computeInNewThread(Function function,
+Awaitable<T> Server::computeInNewThread(net::static_thread_pool& threadPool,
+                                        Function function,
                                         SharedCancellationHandle handle) {
   // `interruptible` will set the shared state of this promise
   // with a function that can be used to cancel the timer.
@@ -1010,13 +1034,13 @@ Awaitable<T> Server::computeInNewThread(Function function,
   // this might still block. However it will make the code check the
   // cancellation handle while waiting for a thread in the pool to become ready.
   return ad_utility::interruptible(
-      ad_utility::runFunctionOnExecutor(threadPool_.get_executor(),
+      ad_utility::runFunctionOnExecutor(threadPool.get_executor(),
                                         std::move(inner), net::use_awaitable),
       std::move(handle), std::move(cancelTimerPromise));
 }
 
 // _____________________________________________________________________________
-net::awaitable<std::optional<Server::PlannedQuery>> Server::parseAndPlan(
+Awaitable<std::optional<Server::PlannedQuery>> Server::parseAndPlan(
     const std::string& query, const vector<DatasetClause>& queryDatasets,
     QueryExecutionContext& qec, SharedCancellationHandle handle,
     TimeLimit timeLimit) {
@@ -1028,6 +1052,7 @@ net::awaitable<std::optional<Server::PlannedQuery>> Server::parseAndPlan(
   // function, because then the conan build fails in a very strange way,
   // probably related to issues in GCC's coroutine implementation.
   return computeInNewThread(
+      queryThreadPool_,
       [&query, &qec, enablePatternTrick = enablePatternTrick_,
        handle = std::move(handle), timeLimit,
        &queryDatasets]() mutable -> std::optional<PlannedQuery> {

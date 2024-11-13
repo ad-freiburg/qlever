@@ -78,7 +78,8 @@ class Server {
   /// the `WebSocketHandler` created for `HttpServer`.
   std::weak_ptr<ad_utility::websocket::QueryHub> queryHub_;
 
-  net::static_thread_pool threadPool_;
+  net::static_thread_pool queryThreadPool_;
+  net::static_thread_pool updateThreadPool_{1};
 
   /// Executor with a single thread that is used to run timers asynchronously.
   net::static_thread_pool timerExecutor_{1};
@@ -173,12 +174,18 @@ class Server {
       const std::string& operation, QueryExecutionContext& qec,
       SharedCancellationHandle handle, TimeLimit timeLimit,
       const ad_utility::Timer& requestTimer);
-
   // Creates a `MessageSender` for the given operation.
   ad_utility::websocket::MessageSender createMessageSender(
       const std::weak_ptr<ad_utility::websocket::QueryHub>& queryHub,
       const ad_utility::httpUtils::HttpRequest auto& request,
       const string& operation);
+  // Execute an update operation. The function must have exclusive access to the
+  // DeltaTriples object.
+  Awaitable<void> processUpdateImpl(
+      const ad_utility::url_parser::ParamValueMap& params, const string& update,
+      ad_utility::Timer& requestTimer, TimeLimit timeLimit, auto& messageSender,
+      ad_utility::SharedCancellationHandle cancellationHandle,
+      DeltaTriples& deltaTriples);
 
   static json composeErrorResponseJson(
       const string& query, const std::string& errorMsg,
@@ -190,10 +197,11 @@ class Server {
   json composeCacheStatsJson() const;
 
   /// Invoke `function` on `threadPool_`, and return an awaitable to wait for
-  /// it's completion, wrapping the result.
+  /// its completion, wrapping the result.
   template <std::invocable Function,
             typename T = std::invoke_result_t<Function>>
-  Awaitable<T> computeInNewThread(Function function,
+  Awaitable<T> computeInNewThread(net::static_thread_pool& threadPool,
+                                  Function function,
                                   SharedCancellationHandle handle);
 
   /// This method extracts a client-defined query id from the passed HTTP
