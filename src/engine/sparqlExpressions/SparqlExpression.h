@@ -96,6 +96,15 @@ class SparqlExpression {
       [[maybe_unused]] const std::optional<Variable>& primarySortKeyVariable)
       const;
 
+  // Returns a vector with pairs, each containing a `PrefilterExpression` and
+  // the corresponding `Variable`. The `Variable` indicates which
+  // column is required to be sorted, and hence is as a consequence also binary
+  // evaluable regarding the relational (e.g. `>=`) / logical (`&&`, `||` and
+  // `!`) expressions.
+  virtual std::vector<PrefilterExprVariablePair>
+  getPrefilterExpressionForMetadata(
+      [[maybe_unused]] bool isNegated = false) const;
+
   // Returns true iff this expression is a simple constant. Default
   // implementation returns `false`.
   virtual bool isConstantExpression() const;

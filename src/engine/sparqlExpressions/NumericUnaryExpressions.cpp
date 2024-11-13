@@ -2,11 +2,14 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
+#include <ranges>
+
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 
 namespace sparqlExpression {
 namespace detail {
 
+// _____________________________________________________________________________
 // Unary negation.
 inline auto unaryNegate = [](TernaryBool a) {
   using enum TernaryBool;
@@ -20,10 +23,67 @@ inline auto unaryNegate = [](TernaryBool a) {
   }
   AD_FAIL();
 };
-NARY_EXPRESSION(UnaryNegateExpression, 1,
-                FV<decltype(unaryNegate), EffectiveBooleanValueGetter>,
-                SET<SetOfIntervals::Complement>);
 
+template <typename NaryOperation>
+requires(isOperation<NaryOperation>)
+class UnaryNegateExpressionImpl : public NaryExpression<NaryOperation> {
+ public:
+  using NaryExpression<NaryOperation>::NaryExpression;
+
+  std::vector<PrefilterExprVariablePair> getPrefilterExpressionForMetadata(
+      bool isNegated) const override {
+    AD_CORRECTNESS_CHECK(this->N == 1);
+    namespace p = prefilterExpressions;
+    // The bool flag isNegated (by default false) acts as decision variable
+    // to select the correct merging procedure while constructing the
+    // PrefilterExpression(s) for a binary expression (AND or OR). For the
+    // negation procedure, we apply (partially over multiple Variables)
+    // De-Morgans law w.r.t. the affected (lower) expression parts, and
+    // isNegated indicates if we should apply it (or not). For more detailed
+    // information see NumericBinaryExpressions.cpp. For UnaryNegate we have to
+    // toggle the value of isNegated to pass the respective negation information
+    // down the expression tree.
+    // Remark:
+    // - Expression sub-tree has an even number of NOT expressions as
+    // parents: the negation cancels out (isNegated = false).
+    // - For an uneven number of NOT expressions as parent nodes: the
+    // sub-tree is actually negated (isNegated = true).
+    //
+    // Example - Apply De-Morgans law in two steps (see (1) and (2)) on
+    // expression !(?x >= IntId(10) || ?y >= IntId(10)) (SparqlExpression)
+    // With De-Morgan's rule we retrieve: ?x < IntId(10) && ?y < IntId(10)
+    //
+    // (1) Merge {<(>= IntId(10)), ?x>} and {<(>= IntId(10)), ?y>}
+    // with mergeChildrenForBinaryOpExpressionImpl (defined in
+    // NumericBinaryExpressions.cpp), which we select based on isNegated = true
+    // (first part of De-Morgans law).
+    // Result (1): {<(>= IntId(10)), ?x>, <(>= IntId(10)), ?y>}
+    //
+    // (2) On each pair <PrefilterExpression, Variable> given the result from
+    // (1), apply NotExpression (see the following implementation part).
+    // Step by step for the given example:
+    // {<(>= IntId(10)), ?x>, <(>= IntId(10)), ?y>} (apply NotExpression) =>
+    // {<(!(>= IntId(10))), ?x>, <(!(>= IntId(10))), ?y>}
+    // => Result (2): {<(< IntId(10)), ?x>, <(< IntId(10)), ?y>}
+    auto child =
+        this->getNthChild(0).value()->getPrefilterExpressionForMetadata(
+            !isNegated);
+    std::ranges::for_each(
+        child | std::views::keys,
+        [](std::unique_ptr<p::PrefilterExpression>& expression) {
+          expression =
+              std::make_unique<p::NotExpression>(std::move(expression));
+        });
+    p::detail::checkPropertiesForPrefilterConstruction(child);
+    return child;
+  }
+};
+
+using UnaryNegateExpression = UnaryNegateExpressionImpl<
+    Operation<1, FV<decltype(unaryNegate), EffectiveBooleanValueGetter>,
+              SET<SetOfIntervals::Complement>>>;
+
+// _____________________________________________________________________________
 // Unary Minus.
 inline auto unaryMinus = makeNumericExpression<std::negate<>>();
 NARY_EXPRESSION(UnaryMinusExpression, 1,

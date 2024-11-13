@@ -13,6 +13,12 @@
 
 namespace prefilterExpressions {
 
+//______________________________________________________________________________
+// The maximum recursion depth for `info()` / `operator<<()`. A depth of `3`
+// should be sufficient for most `PrefilterExpressions` in our use case.
+constexpr size_t maxInfoRecursion = 3;
+
+//______________________________________________________________________________
 // The compressed block metadata (see `CompressedRelation.h`) that we use to
 // filter out the non-relevant blocks by checking their content of
 // `firstTriple_` and `lastTriple_` (`PermutedTriple`)
@@ -37,6 +43,14 @@ class PrefilterExpression {
  public:
   virtual ~PrefilterExpression() = default;
 
+  virtual bool operator==(const PrefilterExpression& other) const = 0;
+
+  // Create a copy of this `PrefilterExpression`.
+  virtual std::unique_ptr<PrefilterExpression> clone() const = 0;
+
+  // Format content for debugging.
+  virtual std::string info(size_t depth) const = 0;
+
   // Needed for implementing the `NotExpression`. This method is required,
   // because we logically operate on `BlockMetadata` values which define ranges
   // given the `ValueIds` from last and first triple.
@@ -60,6 +74,13 @@ class PrefilterExpression {
   // a sorted order (w.r.t. the relevant column).
   std::vector<BlockMetadata> evaluate(const std::vector<BlockMetadata>& input,
                                       size_t evaluationColumn) const;
+
+  // Format for debugging
+  friend std::ostream& operator<<(std::ostream& str,
+                                  const PrefilterExpression& expression) {
+    str << expression.info(0) << "." << std::endl;
+    return str;
+  }
 
  private:
   virtual std::vector<BlockMetadata> evaluateImpl(
@@ -87,6 +108,9 @@ class RelationalExpression : public PrefilterExpression {
       : referenceId_(referenceId) {}
 
   std::unique_ptr<PrefilterExpression> logicalComplement() const override;
+  bool operator==(const PrefilterExpression& other) const override;
+  std::unique_ptr<PrefilterExpression> clone() const override;
+  std::string info([[maybe_unused]] size_t depth) const override;
 
  private:
   std::vector<BlockMetadata> evaluateImpl(
@@ -98,10 +122,10 @@ class RelationalExpression : public PrefilterExpression {
 // Helper struct for a compact class implementation regarding the logical
 // operations `AND` and `OR`. `NOT` is implemented separately given that the
 // expression is unary (single child expression).
-enum struct LogicalOperators { AND, OR };
+enum struct LogicalOperator { AND, OR };
 
 //______________________________________________________________________________
-template <LogicalOperators Operation>
+template <LogicalOperator Operation>
 class LogicalExpression : public PrefilterExpression {
  private:
   std::unique_ptr<PrefilterExpression> child1_;
@@ -114,6 +138,9 @@ class LogicalExpression : public PrefilterExpression {
       : child1_(std::move(child1)), child2_(std::move(child2)) {}
 
   std::unique_ptr<PrefilterExpression> logicalComplement() const override;
+  bool operator==(const PrefilterExpression& other) const override;
+  std::unique_ptr<PrefilterExpression> clone() const override;
+  std::string info(size_t depth) const override;
 
  private:
   std::vector<BlockMetadata> evaluateImpl(
@@ -127,16 +154,35 @@ class NotExpression : public PrefilterExpression {
   std::unique_ptr<PrefilterExpression> child_;
 
  public:
-  explicit NotExpression(std::unique_ptr<PrefilterExpression> child)
-      : child_(child->logicalComplement()) {}
+  explicit NotExpression(std::unique_ptr<PrefilterExpression> child,
+                         bool makeCopy = false)
+      // If we create a copy, the child expression has already been
+      // complemented while creating the original expression. Thus, just move
+      // the child.
+      : child_(makeCopy ? std::move(child) : child->logicalComplement()) {}
 
   std::unique_ptr<PrefilterExpression> logicalComplement() const override;
+  bool operator==(const PrefilterExpression& other) const override;
+  std::unique_ptr<PrefilterExpression> clone() const override;
+  std::string info(size_t depth) const override;
 
  private:
   std::vector<BlockMetadata> evaluateImpl(
       const std::vector<BlockMetadata>& input,
       size_t evaluationColumn) const override;
 };
+
+//______________________________________________________________________________
+// Instanitate templates with specializations (for linking accessibility)
+template class RelationalExpression<CompOp::LT>;
+template class RelationalExpression<CompOp::LE>;
+template class RelationalExpression<CompOp::GE>;
+template class RelationalExpression<CompOp::GT>;
+template class RelationalExpression<CompOp::EQ>;
+template class RelationalExpression<CompOp::NE>;
+
+template class LogicalExpression<LogicalOperator::AND>;
+template class LogicalExpression<LogicalOperator::OR>;
 
 //______________________________________________________________________________
 // Definition of the RelationalExpression for LT, LE, EQ, NE, GE and GT.
@@ -156,8 +202,22 @@ using GreaterThanExpression = prefilterExpressions::RelationalExpression<
 //______________________________________________________________________________
 // Definition of the LogicalExpression for AND and OR.
 using AndExpression = prefilterExpressions::LogicalExpression<
-    prefilterExpressions::LogicalOperators::AND>;
+    prefilterExpressions::LogicalOperator::AND>;
 using OrExpression = prefilterExpressions::LogicalExpression<
-    prefilterExpressions::LogicalOperators::OR>;
+    prefilterExpressions::LogicalOperator::OR>;
 
+namespace detail {
+//______________________________________________________________________________
+// Pair containing a `PrefilterExpression` and its corresponding `Variable`.
+using PrefilterExprVariablePair =
+    std::pair<std::unique_ptr<PrefilterExpression>, Variable>;
+//______________________________________________________________________________
+// Helper function to perform a check regarding the following conditions.
+// (1) For each relevant Variable, the vector contains exactly one pair.
+// (2) The vector contains those pairs (`<PrefilterExpression, Variable>`) in
+// sorted order w.r.t. the Variable value.
+void checkPropertiesForPrefilterConstruction(
+    const std::vector<PrefilterExprVariablePair>& vec);
+
+}  // namespace detail
 }  // namespace prefilterExpressions

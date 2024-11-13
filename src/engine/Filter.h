@@ -10,10 +10,11 @@
 
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
-#include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "parser/ParsedQuery.h"
 
 class Filter : public Operation {
+  using PrefilterVariablePair = sparqlExpression::PrefilterExprVariablePair;
+
  private:
   std::shared_ptr<QueryExecutionTree> _subtree;
   sparqlExpression::SparqlExpressionPimpl _expression;
@@ -57,6 +58,8 @@ class Filter : public Operation {
   VariableToColumnMap computeVariableToColumnMap() const override {
     return _subtree->getVariableColumns();
   }
+
+  void setPrefilterExpressionForIndexScanChildren();
 
   ProtoResult computeResult(bool requestLaziness) override;
 
