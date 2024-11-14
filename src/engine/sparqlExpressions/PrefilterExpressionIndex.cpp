@@ -2,7 +2,9 @@
 //                  Chair of Algorithms and Data Structures
 //  Author: Hannes Baumann <baumannh@informatik.uni-freiburg.de>
 
-#include "index/CompressedBlockPrefiltering.h"
+#include "engine/sparqlExpressions/PrefilterExpressionIndex.h"
+
+#include <ranges>
 
 #include "global/ValueIdComparators.h"
 
@@ -121,6 +123,42 @@ static auto getSetUnion(const std::vector<BlockMetadata>& blocks1,
   return mergedVectors;
 }
 
+//______________________________________________________________________________
+// Return `CompOp`s as string.
+static std::string getRelationalOpStr(const CompOp relOp) {
+  using enum CompOp;
+  switch (relOp) {
+    case LT:
+      return "LT(<)";
+    case LE:
+      return "LE(<=)";
+    case EQ:
+      return "EQ(=)";
+    case NE:
+      return "NE(!=)";
+    case GE:
+      return "GE(>=)";
+    case GT:
+      return "GT(>)";
+    default:
+      AD_FAIL();
+  }
+}
+
+//______________________________________________________________________________
+// Return `LogicalOperator`s as string.
+static std::string getLogicalOpStr(const LogicalOperator logOp) {
+  using enum LogicalOperator;
+  switch (logOp) {
+    case AND:
+      return "AND(&&)";
+    case OR:
+      return "OR(||)";
+    default:
+      AD_FAIL();
+  }
+}
+
 // SECTION PREFILTER EXPRESSION (BASE CLASS)
 //______________________________________________________________________________
 std::vector<BlockMetadata> PrefilterExpression::evaluate(
@@ -227,12 +265,41 @@ std::vector<BlockMetadata> RelationalExpression<Comparison>::evaluateImpl(
   return getSetUnion(relevantBlocks, mixedDatatypeBlocks);
 };
 
+//______________________________________________________________________________
+template <CompOp Comparison>
+bool RelationalExpression<Comparison>::operator==(
+    const PrefilterExpression& other) const {
+  const auto* otherRelational =
+      dynamic_cast<const RelationalExpression<Comparison>*>(&other);
+  if (!otherRelational) {
+    return false;
+  }
+  return referenceId_ == otherRelational->referenceId_;
+};
+
+//______________________________________________________________________________
+template <CompOp Comparison>
+std::unique_ptr<PrefilterExpression> RelationalExpression<Comparison>::clone()
+    const {
+  return std::make_unique<RelationalExpression<Comparison>>(referenceId_);
+};
+
+//______________________________________________________________________________
+template <CompOp Comparison>
+std::string RelationalExpression<Comparison>::asString(
+    [[maybe_unused]] size_t depth) const {
+  std::stringstream stream;
+  stream << "Prefilter RelationalExpression<" << getRelationalOpStr(Comparison)
+         << ">\nValueId: " << referenceId_ << std::endl;
+  return stream.str();
+};
+
 // SECTION LOGICAL OPERATIONS
 //______________________________________________________________________________
-template <LogicalOperators Operation>
+template <LogicalOperator Operation>
 std::unique_ptr<PrefilterExpression>
 LogicalExpression<Operation>::logicalComplement() const {
-  using enum LogicalOperators;
+  using enum LogicalOperator;
   // Source De-Morgan's laws: De Morgan's laws, Wikipedia.
   // Reference: https://en.wikipedia.org/wiki/De_Morgan%27s_laws
   if constexpr (Operation == OR) {
@@ -248,18 +315,10 @@ LogicalExpression<Operation>::logicalComplement() const {
 };
 
 //______________________________________________________________________________
-std::unique_ptr<PrefilterExpression> NotExpression::logicalComplement() const {
-  // Logically we complement (negate) a NOT here => NOT cancels out.
-  // Therefore, we can simply return the child of the respective NOT
-  // expression after undoing its previous complementation.
-  return child_->logicalComplement();
-};
-
-//______________________________________________________________________________
-template <LogicalOperators Operation>
+template <LogicalOperator Operation>
 std::vector<BlockMetadata> LogicalExpression<Operation>::evaluateImpl(
     const std::vector<BlockMetadata>& input, size_t evaluationColumn) const {
-  using enum LogicalOperators;
+  using enum LogicalOperator;
   if constexpr (Operation == AND) {
     auto resultChild1 = child1_->evaluate(input, evaluationColumn);
     return child2_->evaluate(resultChild1, evaluationColumn);
@@ -271,13 +330,82 @@ std::vector<BlockMetadata> LogicalExpression<Operation>::evaluateImpl(
 };
 
 //______________________________________________________________________________
+template <LogicalOperator Operation>
+bool LogicalExpression<Operation>::operator==(
+    const PrefilterExpression& other) const {
+  const auto* otherlogical =
+      dynamic_cast<const LogicalExpression<Operation>*>(&other);
+  if (!otherlogical) {
+    return false;
+  }
+  return *child1_ == *otherlogical->child1_ &&
+         *child2_ == *otherlogical->child2_;
+};
+
+//______________________________________________________________________________
+template <LogicalOperator Operation>
+std::unique_ptr<PrefilterExpression> LogicalExpression<Operation>::clone()
+    const {
+  return std::make_unique<LogicalExpression<Operation>>(child1_->clone(),
+                                                        child2_->clone());
+};
+
+//______________________________________________________________________________
+template <LogicalOperator Operation>
+std::string LogicalExpression<Operation>::asString(size_t depth) const {
+  std::string child1Info =
+      depth < maxInfoRecursion ? child1_->asString(depth + 1) : "MAX_DEPTH";
+  std::string child2Info =
+      depth < maxInfoRecursion ? child2_->asString(depth + 1) : "MAX_DEPTH";
+  std::stringstream stream;
+  stream << "Prefilter LogicalExpression<" << getLogicalOpStr(Operation)
+         << ">\n"
+         << "child1 {" << child1Info << "}"
+         << "child2 {" << child2Info << "}" << std::endl;
+  return stream.str();
+};
+
+// SECTION NOT-EXPRESSION
+//______________________________________________________________________________
+std::unique_ptr<PrefilterExpression> NotExpression::logicalComplement() const {
+  // Logically we complement (negate) a NOT here => NOT cancels out.
+  // Therefore, we can simply return the child of the respective NOT
+  // expression after undoing its previous complementation.
+  return child_->logicalComplement();
+};
+
+//______________________________________________________________________________
 std::vector<BlockMetadata> NotExpression::evaluateImpl(
     const std::vector<BlockMetadata>& input, size_t evaluationColumn) const {
   return child_->evaluate(input, evaluationColumn);
 };
 
 //______________________________________________________________________________
-// Necessary instantiation of template specializations
+bool NotExpression::operator==(const PrefilterExpression& other) const {
+  const auto* otherNotExpression = dynamic_cast<const NotExpression*>(&other);
+  if (!otherNotExpression) {
+    return false;
+  }
+  return *child_ == *otherNotExpression->child_;
+}
+
+//______________________________________________________________________________
+std::unique_ptr<PrefilterExpression> NotExpression::clone() const {
+  return std::make_unique<NotExpression>((child_->clone()), true);
+};
+
+//______________________________________________________________________________
+std::string NotExpression::asString(size_t depth) const {
+  std::string childInfo =
+      depth < maxInfoRecursion ? child_->asString(depth + 1) : "MAX_DEPTH";
+  std::stringstream stream;
+  stream << "Prefilter NotExpression:\n"
+         << "child {" << childInfo << "}" << std::endl;
+  return stream.str();
+}
+
+//______________________________________________________________________________
+// Instanitate templates with specializations (for linking accessibility)
 template class RelationalExpression<CompOp::LT>;
 template class RelationalExpression<CompOp::LE>;
 template class RelationalExpression<CompOp::GE>;
@@ -285,7 +413,26 @@ template class RelationalExpression<CompOp::GT>;
 template class RelationalExpression<CompOp::EQ>;
 template class RelationalExpression<CompOp::NE>;
 
-template class LogicalExpression<LogicalOperators::AND>;
-template class LogicalExpression<LogicalOperators::OR>;
+template class LogicalExpression<LogicalOperator::AND>;
+template class LogicalExpression<LogicalOperator::OR>;
 
+namespace detail {
+//______________________________________________________________________________
+void checkPropertiesForPrefilterConstruction(
+    const std::vector<PrefilterExprVariablePair>& vec) {
+  auto viewVariable = vec | std::views::values;
+  if (!std::ranges::is_sorted(viewVariable, std::less<>{})) {
+    throw std::runtime_error(
+        "The vector must contain the <PrefilterExpression, Variable> pairs in "
+        "sorted order w.r.t. Variable value.");
+  }
+  if (auto it = std::ranges::adjacent_find(viewVariable);
+      it != std::ranges::end(viewVariable)) {
+    throw std::runtime_error(
+        "For each relevant Variable must exist exactly one "
+        "<PrefilterExpression, Variable> pair.");
+  }
+}
+
+}  //  namespace detail
 }  //  namespace prefilterExpressions

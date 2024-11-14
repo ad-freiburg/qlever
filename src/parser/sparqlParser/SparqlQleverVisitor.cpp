@@ -23,6 +23,7 @@
 #include "engine/sparqlExpressions/RegexExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "engine/sparqlExpressions/SampleExpression.h"
+#include "engine/sparqlExpressions/StdevExpression.h"
 #include "engine/sparqlExpressions/UuidExpressions.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/RdfParser.h"
@@ -2372,6 +2373,8 @@ ExpressionPtr Visitor::visit(Parser::AggregateContext* ctx) {
     }
 
     return makePtr.operator()<GroupConcatExpression>(std::move(separator));
+  } else if (functionName == "stdev") {
+    return makePtr.operator()<StdevExpression>();
   } else {
     AD_CORRECTNESS_CHECK(functionName == "sample");
     return makePtr.operator()<SampleExpression>();

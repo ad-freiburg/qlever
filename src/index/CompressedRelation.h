@@ -126,6 +126,18 @@ struct CompressedBlockMetadata : CompressedBlockMetadataNoBlockIndex {
   // the corresponding block from the `LocatedTriples` when only a subset of
   // blocks is being used.
   size_t blockIndex_;
+
+  // Two of these are equal if all members are equal.
+  bool operator==(const CompressedBlockMetadata&) const = default;
+
+  // Format BlockMetadata contents for debugging.
+  friend std::ostream& operator<<(
+      std::ostream& str, const CompressedBlockMetadata& blockMetadata) {
+    str << "#BlockMetadata\n(first) " << blockMetadata.firstTriple_ << "(last) "
+        << blockMetadata.lastTriple_ << "num. rows: " << blockMetadata.numRows_
+        << "." << std::endl;
+    return str;
+  }
 };
 
 // Serialization of the `OffsetAndcompressedSize` subclass.
