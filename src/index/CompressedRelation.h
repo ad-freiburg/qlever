@@ -1,6 +1,6 @@
-// Copyright 2021, University of Freiburg,
+// Copyright 2021 - 2024, University of Freiburg
 // Chair of Algorithms and Data Structures
-// Author: Johannes Kalmbach <johannes.kalmbach@gmail.com>
+// Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
 #pragma once
 
@@ -12,9 +12,7 @@
 #include "global/Id.h"
 #include "index/ScanSpecification.h"
 #include "parser/data/LimitOffsetClause.h"
-#include "util/Cache.h"
 #include "util/CancellationHandle.h"
-#include "util/ConcurrentCache.h"
 #include "util/File.h"
 #include "util/Generator.h"
 #include "util/MemorySize/MemorySize.h"
@@ -37,13 +35,15 @@ using SmallRelationsBuffer = IdTable;
 // to use a dynamic `IdTable`.
 using DecompressedBlock = IdTable;
 
-// To be able to use `DecompressedBlock` with `Caches`, we need a function for
-// calculating the memory used for it.
-struct DecompressedBlockSizeGetter {
-  ad_utility::MemorySize operator()(const DecompressedBlock& block) const {
-    return ad_utility::MemorySize::bytes(block.numColumns() * block.numRows() *
-                                         sizeof(Id));
-  }
+// A decompressed block together with some metadata about the process of
+// decompressing + postprocessing it.
+struct DecompressedBlockAndMetadata {
+  DecompressedBlock block_;
+  // True iff the block had to be modified because of the contained graphs.
+  bool wasPostprocessed_;
+  // True iff triples this block had to be merged with the `LocatedTriples`
+  // because it contained updates.
+  bool containsUpdates_;
 };
 
 // After compression the columns have different sizes, so we cannot use an
@@ -162,6 +162,7 @@ AD_SERIALIZE_FUNCTION(CompressedBlockMetadata) {
 // permutation).
 struct CompressedRelationMetadata {
   Id col0Id_;
+  // TODO: Is this still needed? Same for `offsetInBlock_`.
   size_t numRows_;
   float multiplicityCol1_;  // E.g., in PSO this is the multiplicity of "S".
   float multiplicityCol2_;  // E.g., in PSO this is the multiplicity of "O".
@@ -412,7 +413,7 @@ class CompressedRelationReader {
   // or whether it should be deleted after filtering. It can then filter a given
   // block according to those settings.
   struct FilterDuplicatesAndGraphs {
-    const ScanSpecification::Graphs& desiredGraphs_;
+    ScanSpecification::Graphs desiredGraphs_;
     ColumnIndex graphColumn_;
     bool deleteGraphColumn_;
     // Filter `block` such that it contains only the specified graphs and no
@@ -441,6 +442,14 @@ class CompressedRelationReader {
         IdTable& block, const CompressedBlockMetadata& blockMetadata) const;
     static bool filterDuplicatesIfNecessary(
         IdTable& block, const CompressedBlockMetadata& blockMetadata);
+  };
+
+  // Classes holding various subsets of parameters relevant for a scan of a
+  // permutation, including a reference to the relevant located triples.
+  struct ScanImplConfig {
+    ColumnIndices scanColumns_;
+    FilterDuplicatesAndGraphs graphFilter_;
+    const LocatedTriplesPerBlock& locatedTriples_;
   };
 
   // The specification of scan, together with the blocks on which this scan is
@@ -480,26 +489,27 @@ class CompressedRelationReader {
     // (because the graph IDs of the block did not match the query).
     size_t numBlocksSkippedBecauseOfGraph_ = 0;
     size_t numBlocksPostprocessed_ = 0;
+    // The number of blocks that contain updated (inserted or deleted) triples.
+    size_t numBlocksWithUpdate_ = 0;
     // If a LIMIT or OFFSET is present we possibly read more rows than we
     // actually yield.
     size_t numElementsRead_ = 0;
     size_t numElementsYielded_ = 0;
     std::chrono::milliseconds blockingTime_ = std::chrono::milliseconds::zero();
+
+    // Update this metadata, given the metadata from `blockAndMetadata`.
+    // Currently updates: `numBlocksPostprocessed_`, `numBlocksWithUpdate_`,
+    // `numElementsRead_`, and `numBlocksRead_`.
+    void update(const DecompressedBlockAndMetadata& blockAndMetadata);
+    // `nullopt` means the block was skipped because of the graph filters, else
+    // call the overload directly above.
+    void update(
+        const std::optional<DecompressedBlockAndMetadata>& blockAndMetadata);
   };
 
   using IdTableGenerator = cppcoro::generator<IdTable, LazyScanMetadata>;
 
  private:
-  // This cache stores a small number of decompressed blocks. Its current
-  // purpose is to make the e2e-tests run fast. They contain many SPARQL queries
-  // with ?s ?p ?o triples in the body.
-  // Note: The cache is thread-safe and using it does not change the semantics
-  // of this class, so it is safe to mark it as `mutable` to make the `scan`
-  // functions below `const`.
-  mutable ad_utility::ConcurrentCache<ad_utility::HeapBasedLRUCache<
-      off_t, DecompressedBlock, DecompressedBlockSizeGetter>>
-      blockCache_{20ul};
-
   // The allocator used to allocate intermediate buffers.
   mutable Allocator allocator_;
 
@@ -567,16 +577,33 @@ class CompressedRelationReader {
       const LocatedTriplesPerBlock& locatedTriplesPerBlock,
       LimitOffsetClause limitOffset = {}) const;
 
-  // Only get the size of the result for a given permutation XYZ for a given X
-  // and Y. This can be done by scanning one or two blocks. Note: The overload
-  // of this function where only the X is given is not needed, as the size of
-  // these scans can be retrieved from the `CompressedRelationMetadata`
-  // directly.
+  // Get the exact size of the result of the scan, taking the given located
+  // triples into account. This requires locating the triples exactly in each
+  // of the relevant blocks.
   size_t getResultSizeOfScan(
       const ScanSpecification& scanSpec,
       const vector<CompressedBlockMetadata>& blocks,
       const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
 
+  // Get a lower and an upper bound for the size of the result of the scan. For
+  // this call, it is enough that each located triple knows the block to which
+  // it belongs (which is the case for `LocatedTriplesPerBlock`).
+  std::pair<size_t, size_t> getSizeEstimateForScan(
+      const ScanSpecification& scanSpec,
+      const vector<CompressedBlockMetadata>& blocks,
+      const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
+
+ private:
+  // Common implementation of `getResultSizeOfScan` and `getSizeEstimateForScan`
+  // above.
+  template <bool exactSize>
+  std::pair<size_t, size_t> getResultSizeImpl(
+      const ScanSpecification& scanSpec,
+      const vector<CompressedBlockMetadata>& blocks,
+      [[maybe_unused]] const LocatedTriplesPerBlock& locatedTriplesPerBlock)
+      const;
+
+ public:
   // For a given relation, determine the `col1Id`s and their counts. This is
   // used for `computeGroupByObjectWithCount`.
   IdTable getDistinctCol1IdsAndCounts(
@@ -643,44 +670,55 @@ class CompressedRelationReader {
   static void decompressColumn(const std::vector<char>& compressedColumn,
                                size_t numRowsToRead, Iterator iterator);
 
-  // Read the block that is identified by the `blockMetaData` from the `file`,
-  // decompress and return it. Only the columns specified by the `columnIndices`
-  // are returned.
-  DecompressedBlock readAndDecompressBlock(
+  // Read and decompress the parts of the block given by `blockMetaData` (which
+  // identifies the block) and `scanConfig` (which specifies the part of that
+  // block).
+  std::optional<DecompressedBlockAndMetadata> readAndDecompressBlock(
       const CompressedBlockMetadata& blockMetaData,
-      ColumnIndicesRef columnIndices) const;
+      const ScanImplConfig& scanConfig) const;
 
-  // Read the block identified by `blockMetadata` from disk, decompress it, and
-  // return the part that matches `col1Id` (or the whole block if `col1Id` is
-  // `nullopt`). The block must contain triples from the relation identified by
-  // `relationMetadata`. If `scanMetadata` is not `nullopt`, update information
-  // about the number of blocks and elements read.
+  // Like `readAndDecompressBlock`, and postprocess by merging the located
+  // triples (if any) and applying the graph filters (if any), both specified
+  // as part of the `scanConfig`.
+  DecompressedBlockAndMetadata decompressAndPostprocessBlock(
+      const CompressedBlock& compressedBlock, size_t numRowsToRead,
+      const CompressedRelationReader::ScanImplConfig& scanConfig,
+      const CompressedBlockMetadata& metadata) const;
+
+  // Read, decompress, and postprocess the part of the block according to
+  // `blockMetadata` (which identifies the block) and `scanConfig` (which
+  // specifies the part of that block, graph filters, and located triples).
   //
   // NOTE: When all triples in the block match the `col1Id`, this method makes
   // an unnecessary copy of the block. Therefore, if you know that you need the
   // whole block, use `readAndDecompressBlock` instead.
   DecompressedBlock readPossiblyIncompleteBlock(
-      const ScanSpecification& scanSpec,
+      const ScanSpecification& scanSpec, const ScanImplConfig& scanConfig,
       const CompressedBlockMetadata& blockMetadata,
       std::optional<std::reference_wrapper<LazyScanMetadata>> scanMetadata,
-      ColumnIndicesRef columnIndices) const;
+      const LocatedTriplesPerBlock&) const;
 
   // Yield all the blocks in the range `[beginBlock, endBlock)`. If the
   // `columnIndices` are set, only the specified columns from the blocks
   // are yielded, else all columns are yielded. The blocks are yielded
   // in the correct order, but asynchronously read and decompressed using
   // multiple worker threads.
-
   IdTableGenerator asyncParallelBlockGenerator(
-      auto beginBlock, auto endBlock, ColumnIndices columnIndices,
-      CancellationHandle cancellationHandle, LimitOffsetClause& limitOffset,
-      FilterDuplicatesAndGraphs blockGraphFilter) const;
+      auto beginBlock, auto endBlock, const ScanImplConfig& scanConfig,
+      CancellationHandle cancellationHandle,
+      LimitOffsetClause& limitOffset) const;
 
   // Return a vector that consists of the concatenation of `baseColumns` and
   // `additionalColumns`
   static std::vector<ColumnIndex> prepareColumnIndices(
       std::initializer_list<ColumnIndex> baseColumns,
       ColumnIndicesRef additionalColumns);
+
+  // Return the number of columns that should be read (except for the graph
+  // column and any payload columns, this is one of 0, 1, 2, 3) and whether the
+  // graph column is contained in `columns`.
+  static std::pair<size_t, bool> prepareLocatedTriples(
+      ColumnIndicesRef columns);
 
   // If `col1Id` is specified, `return {1, additionalColumns...}`, else return
   // `{0, 1, additionalColumns}`.
@@ -689,6 +727,10 @@ class CompressedRelationReader {
   static std::vector<ColumnIndex> prepareColumnIndices(
       const ScanSpecification& scanSpec, ColumnIndicesRef additionalColumns);
 
+  static ScanImplConfig getScanConfig(
+      const ScanSpecification& scanSpec, ColumnIndicesRef additionalColumns,
+      const LocatedTriplesPerBlock& locatedTriples);
+
   // The common implementation for `getDistinctCol0IdsAndCounts` and
   // `getCol1IdsAndCounts`.
   IdTable getDistinctColIdsAndCountsImpl(
@@ -696,13 +738,13 @@ class CompressedRelationReader {
           Id, const CompressedBlockMetadata::PermutedTriple&> auto idGetter,
       const ScanSpecification& scanSpec,
       const std::vector<CompressedBlockMetadata>& allBlocksMetadata,
-      const CancellationHandle& cancellationHandle) const;
+      const CancellationHandle& cancellationHandle,
+      const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
 };
 
 // TODO<joka921>
 /*
- * 1. Also let the compressedRelationReader know about the contained block data
- * and the number of columns etc. to make the permutation class a thinner
- * wrapper.
+ * 1. Also let the compressedRelationReader know about the number of columns
+ * that the given permutation has.
  * 2. Then add assertions that we only get valid column indices specified.
  */
