@@ -861,6 +861,16 @@ struct BlockZipperJoinImpl {
     return std::tuple{std::ref(first.fullBlock()), first.subrange(), it};
   }
 
+  // Check if a side contains undefined values.
+  static bool hasUndef(const auto& side) {
+    if constexpr (potentiallyHasUndef) {
+      return !side.undefBlocks_.empty();
+    }
+    return false;
+  }
+
+  // Combine all elements from all blocks on the left with all elements from all
+  // blocks on the right and add them to the result.
   void addCartesianProduct(const auto& blocksLeft, const auto& blocksRight) {
     // TODO<C++23> use `std::views::cartesian_product`.
     for (const auto& lBlock : blocksLeft) {
@@ -875,15 +885,13 @@ struct BlockZipperJoinImpl {
     }
   }
 
+  // Handle non-matching rows from the left side for an optional join or a minus
+  // join.
   template <bool DoOptionalJoin>
   void addNonMatchingRowsFromLeftForOptionalJoin(const auto& blocksLeft,
                                                  const auto& blocksRight) {
     if constexpr (DoOptionalJoin) {
-      bool hasRightUndef = false;
-      if constexpr (potentiallyHasUndef) {
-        hasRightUndef = !rightSide_.undefBlocks_.empty();
-      }
-      if (!hasRightUndef &&
+      if (!hasUndef(rightSide_) &&
           std::ranges::all_of(
               blocksRight | std::views::transform(
                                 [](const auto& inp) { return inp.subrange(); }),
@@ -931,6 +939,7 @@ struct BlockZipperJoinImpl {
                                               T& begL, T& begR,
                                               const auto& undefBlocks) {
     for (const auto& undefBlock : undefBlocks) {
+      // Select proper input table from the stored undef blocks
       if constexpr (left) {
         begL = undefBlock.fullBlock().begin();
         compatibleRowAction_.setInput(undefBlock.fullBlock(),
@@ -941,6 +950,7 @@ struct BlockZipperJoinImpl {
                                       undefBlock.fullBlock());
       }
       const auto& subrange = undefBlock.subrange();
+      // Yield all iterators to the elements within the stored undef blocks.
       for (auto subIt = subrange.begin(); subIt < subrange.end(); ++subIt) {
         co_yield subIt;
       }
@@ -998,14 +1008,8 @@ struct BlockZipperJoinImpl {
 
     auto addNotFoundRowIndex = [&]() {
       if constexpr (DoOptionalJoin) {
-        return [this, begL = fullBlockLeft.get().begin(),
-                &subrangeRight](auto itFromL) {
-          if constexpr (potentiallyHasUndef) {
-            AD_CORRECTNESS_CHECK(!isUndefined_(subrangeRight.front()) &&
-                                 rightSide_.undefBlocks_.empty());
-          } else {
-            (void)subrangeRight;
-          }
+        return [this, begL = fullBlockLeft.get().begin()](auto itFromL) {
+          AD_CORRECTNESS_CHECK(!hasUndef(rightSide_));
           compatibleRowAction_.addOptionalRow(itFromL - begL);
         };
 
@@ -1013,6 +1017,10 @@ struct BlockZipperJoinImpl {
         return ad_utility::noop;
       }
     }();
+    // All undefined values should already be processed at this point.
+    AD_CORRECTNESS_CHECK(!isUndefined_(subrangeRight.front()));
+    // If we have undefined values stored, we need to provide a generator that
+    // yields iterators to the individual undefined values.
     if constexpr (potentiallyHasUndef) {
       [[maybe_unused]] auto res = zipperJoinWithUndef(
           std::ranges::subrange{subrangeLeft.begin(), currentElItL},
@@ -1074,6 +1082,9 @@ struct BlockZipperJoinImpl {
     return fillEqualToCurrentElBothSides(getCurrentEl());
   }
 
+  // Based on `blockStatus` add the Cartesian product of the blocks in
+  // `leftBlocks` and/or `rightBlocks` with their respective counterpart in
+  // `undefBlocks_`.
   void joinWithUndefBlocks(BlockStatus blockStatus, const auto& leftBlocks,
                            const auto& rightBlocks) {
     if (blockStatus == BlockStatus::allFilled ||
@@ -1169,9 +1180,11 @@ struct BlockZipperJoinImpl {
     compatibleRowAction_.flush();
   }
 
+  // Consume all remaining blocks from one side and add the Cartesian product of
+  // those blocks with the undef blocks from the other side.
+  // `reverse` is used to determine if the left or right side is consumed.
   template <bool reversed>
-  bool consumeRemainingBlocks(auto& side, const auto& undefBlocks) {
-    bool hasUndef = false;
+  void consumeRemainingBlocks(auto& side, const auto& undefBlocks) {
     while (side.it_ != side.end_) {
       const auto& lBlock = *side.it_;
       for (const auto& rBlock : undefBlocks) {
@@ -1182,7 +1195,6 @@ struct BlockZipperJoinImpl {
         }
         for (size_t i : ad_utility::integerRange(lBlock.size())) {
           for (size_t j : rBlock.getIndexRange()) {
-            hasUndef = true;
             if constexpr (reversed) {
               compatibleRowAction_.addRow(j, i);
             } else {
@@ -1193,7 +1205,6 @@ struct BlockZipperJoinImpl {
       }
       ++side.it_;
     }
-    return hasUndef;
   }
 
   // If one of the sides is exhausted and has no values to match the pairs
@@ -1211,6 +1222,9 @@ struct BlockZipperJoinImpl {
     }
   }
 
+  // Consume the blocks until the first block is found that does contain a
+  // defined value. All blocks up until that point are stored in
+  // `side.undefBlocks_` and skipped for subsequent processing.
   void findFirstBlockWithoutUndef(auto& side) {
     auto& it = side.it_;
     const auto& end = side.end_;
@@ -1240,6 +1254,7 @@ struct BlockZipperJoinImpl {
     }
   }
 
+  // Find and process all leading undefined values from the blocks.
   void fetchAndProcessUndefinedBlocks() {
     if constexpr (potentiallyHasUndef) {
       findFirstBlockWithoutUndef(leftSide_);
@@ -1257,10 +1272,8 @@ struct BlockZipperJoinImpl {
       if (leftSide_.currentBlocks_.empty() ||
           rightSide_.currentBlocks_.empty()) {
         addRemainingUndefPairs();
-        if constexpr (potentiallyHasUndef) {
-          if (!rightSide_.undefBlocks_.empty()) {
-            return;
-          }
+        if (hasUndef(rightSide_)) {
+          return;
         }
         if constexpr (DoOptionalJoin) {
           fillWithAllFromLeft();
@@ -1333,6 +1346,8 @@ void zipperJoinForBlocksWithoutUndef(LeftBlocks&& leftBlocks,
   impl.template runJoin<DoOptionalJoin>();
 }
 
+// Similar to `zipperJoinForBlocksWithoutUndef`, but allows for UNDEF values in
+// a single column join scenario.
 template <typename LeftBlocks, typename RightBlocks, typename LessThan,
           typename LeftProjection = std::identity,
           typename RightProjection = std::identity,
