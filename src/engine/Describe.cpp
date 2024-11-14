@@ -4,6 +4,7 @@
 
 #include "engine/Describe.h"
 
+#include "../../test/engine/ValuesForTesting.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
 #include "engine/Values.h"
@@ -64,13 +65,62 @@ VariableToColumnMap Describe::computeVariableToColumnMap() const {
           {V("?object"), col(2)}};
 }
 
-// TODO<joka921> Recursively follow the blank nodes etc.
-/*
-static void recursivelyAddBlankNodes(IdTable& result,
-ad_utility::HashSetWithMemoryLimit<Id>& alreadySeen, std::vector<Id> blankNodes)
-{
+static IdTable getNewBlankNodes(const auto& allocator, ad_utility::HashSetWithMemoryLimit<Id>& alreadySeen,
+std::span<Id>  input) {
+  IdTable result{1, allocator};
+  result.resize(input.size());
+  decltype(auto) col = result.getColumn(0);
+  size_t i = 0;
+  for (Id id : input) {
+    if (id.getDatatype() != Datatype::BlankNodeIndex) {
+      continue;
+    }
+    auto [it, wasContained] = alreadySeen.emplace(id);
+    if (wasContained) {
+      continue;
+    }
+    col[i] = id;
+    ++i;
+  }
+  result.resize(i);
+  return result;
 }
- */
+
+// TODO<joka921> Recursively follow the blank nodes etc.
+void Describe::recursivelyAddBlankNodes(
+    IdTable& finalResult, ad_utility::HashSetWithMemoryLimit<Id>& alreadySeen,
+    IdTable blankNodes) {
+  AD_CORRECTNESS_CHECK(blankNodes.numColumns() == 1);
+  if (blankNodes.empty()) {
+    return;
+  }
+  using V = Variable;
+  SparqlTripleSimple triple{V{"?subject"}, V{"?predicate"}, V{"?object"}};
+  auto indexScan = ad_utility::makeExecutionTree<IndexScan>(
+      getExecutionContext(), Permutation::SPO, triple);
+  auto valuesOp = ad_utility::makeExecutionTree<ValuesForTesting>(
+      getExecutionContext(), std::move(blankNodes),
+      std::vector<std::optional<Variable>>{V{"?subject"}});
+
+  // TODO<joka921> It might be, that the Column index is definitely not 0, we
+  // have to store this separately.
+  auto join = ad_utility::makeExecutionTree<Join>(
+      getExecutionContext(), valuesOp, std::move(indexScan), 0, 0);
+
+  auto result = join->getResult();
+  // TODO<joka921> A lot of those things are inefficient, lets get it working first.
+  auto table = result->idTable().clone();
+  finalResult.reserve(finalResult.size() + table.size());
+  auto s = join->getVariableColumn(V{"?subject"});
+  auto p = join->getVariableColumn(V{"?predicate"});
+  auto o = join->getVariableColumn(V{"?object"});
+  table.setColumnSubset(std::vector{s, p, o});
+  finalResult.insertAtEnd(table);
+
+  auto newBlankNodes = getNewBlankNodes(allocator(), alreadySeen, table.getColumn(2));
+  // recurse
+  recursivelyAddBlankNodes(finalResult, alreadySeen, std::move(newBlankNodes));
+}
 
 // _____________________________________________________________________________
 ProtoResult Describe::computeResult([[maybe_unused]] bool requestLaziness) {
@@ -79,7 +129,6 @@ ProtoResult Describe::computeResult([[maybe_unused]] bool requestLaziness) {
     if (std::holds_alternative<TripleComponent::Iri>(resource)) {
       valuesToDescribe.push_back(std::get<TripleComponent::Iri>(resource));
     } else {
-      // TODO<joka921> Implement the recursive following of blank nodes.
       throw std::runtime_error("DESCRIBE with a variable is not yet supported");
     }
   }
@@ -101,13 +150,18 @@ ProtoResult Describe::computeResult([[maybe_unused]] bool requestLaziness) {
       getExecutionContext(), valuesOp, std::move(indexScan), 0, 0);
 
   auto result = join->getResult();
-  auto resultTable = result->idTable().clone();
+  IdTable resultTable = result->idTable().clone();
 
   auto s = join->getVariableColumn(V{"?subject"});
   auto p = join->getVariableColumn(V{"?predicate"});
   auto o = join->getVariableColumn(V{"?object"});
 
   resultTable.setColumnSubset(std::vector{s, p, o});
+
+  // Recursively follow blank nodes
+  ad_utility::HashSetWithMemoryLimit<Id> alreadySeen{allocator()};
+  auto blankNodes = getNewBlankNodes(allocator(), alreadySeen, resultTable.getColumn(2));
+  recursivelyAddBlankNodes(resultTable, alreadySeen, std::move(blankNodes));
   return {std::move(resultTable), resultSortedOn(),
           result->getSharedLocalVocab()};
 }

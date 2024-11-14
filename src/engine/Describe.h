@@ -43,4 +43,9 @@ class Describe : public Operation {
   // Compute the variable to column index mapping. Is used internally by
   // `getInternallyVisibleVariableColumns`.
   VariableToColumnMap computeVariableToColumnMap() const override;
+
+  // TODO<joka921> Comment.
+  void recursivelyAddBlankNodes(
+      IdTable& finalResult, ad_utility::HashSetWithMemoryLimit<Id>& alreadySeen,
+      IdTable blankNodes);
 };
