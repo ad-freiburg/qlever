@@ -1007,7 +1007,7 @@ Awaitable<void> Server::processQueryOrUpdate(
         exceptionErrorMsg.value().append(absl::StrCat(
             " Highlighting an error for the command line log failed: ",
             e.what()));
-        LOG(ERROR) << "Failed to highlight error in query. " << e.what()
+        LOG(ERROR) << "Failed to highlight error in operation. " << e.what()
                    << std::endl;
         LOG(ERROR) << metadata.value().query_ << std::endl;
       }
