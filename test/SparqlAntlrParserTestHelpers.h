@@ -479,6 +479,8 @@ inline auto GroupByVariables =
                   testing::UnorderedElementsAreArray(vars));
 };
 
+// Test that a `ParsedQuery` contains the `warnings` in any order. The
+// `warnings` can be substrings of the full warning messages.
 inline auto WarningsOfParsedQuery =
     [](const vector<std::string>& warnings) -> Matcher<const ParsedQuery&> {
   auto matchers = ad_utility::transform(

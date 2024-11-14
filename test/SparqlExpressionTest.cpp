@@ -1293,7 +1293,8 @@ TEST(SparqlExpression, literalExpression) {
   }
 }
 
-// _____________________________________________________________________________
+// Test a `VariableExpression` for a variable that is not present in the input
+// (and therefore always undefined).
 TEST(SparqlExpression, unboundVariableExpression) {
   TestContext ctx;
   VariableExpression var{Variable{"?notFoundAnywhere"}};

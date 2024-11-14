@@ -204,8 +204,10 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq,
     auto lastRow = createExecutionTrees(pq, isSubquery);
     auto minInd = findCheapestExecutionTree(lastRow);
     LOG(DEBUG) << "Done creating execution plan.\n";
-    auto& result = *lastRow[minInd]._qet;
+    auto result = std::move(*lastRow[minInd]._qet);
     auto& rootOperation = *result.getRootOperation();
+    // Collect all the warnings and pass them to the created tree, s.t. they
+    // become visible to the user once the query is executed.
     for (const auto& warning : warnings_) {
       rootOperation.addWarning(warning);
     }
@@ -406,8 +408,8 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getOrderByRow(
       sortIndices.emplace_back(idx.value(), ord.isDescending_);
     }
 
-    // All variables were not part of the query, so we don't actually have
-    // to add an ORDER BY or INTERNAL SORT BY.
+    // If none of the sort variables was bound in the query we don't actually
+    // have to add an ORDER BY or INTERNAL SORT BY.
     if (sortIndices.empty()) {
       return previous;
     }

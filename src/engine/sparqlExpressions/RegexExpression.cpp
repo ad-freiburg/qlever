@@ -211,10 +211,9 @@ ExpressionResult RegexExpression::evaluatePrefixRegex(
   std::vector<ad_utility::SetOfIntervals> resultSetOfIntervals;
   if (context->isResultSortedBy(variable)) {
     auto optColumn = context->getColumnIndexForVariable(variable);
-    // The variable doesn't exist in the input, always return UNDEF
-    if (!optColumn.has_value()) {
-      return Id::makeUndefined();
-    }
+    AD_CORRECTNESS_CHECK(optColumn.has_value(),
+                         "We have previously asserted that the input is sorted "
+                         "by the variable, so we expect it to exist");
     const auto& column = optColumn.value();
     for (auto [lowerId, upperId] : lowerAndUpperIds) {
       // Two binary searches to find the lower and upper bounds of the range.

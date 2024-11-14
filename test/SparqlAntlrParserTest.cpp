@@ -1379,6 +1379,7 @@ TEST(SparqlParser, Query) {
                   {"?a was used in the expression of a BIND clause"}));
   expectQuery("SELECT * { } ORDER BY ?s",
               m::WarningsOfParsedQuery({"?s was used by ORDER BY"}));
+
   // Now test the same queries with exceptions instead of warnings
   RuntimeParameters().set<"throw-on-unbound-variables">(true);
   expectQueryFails("SELECT ?x {} GROUP BY ?x",

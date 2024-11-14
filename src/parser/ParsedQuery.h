@@ -162,13 +162,17 @@ class ParsedQuery {
   // Add variables, that were found in the query body.
   void registerVariablesVisibleInQueryBody(const vector<Variable>& variables);
 
+  // Return all the warnings that have been added via `addWarning()` or
+  // `addWarningOrThrow`.
   const std::vector<std::string>& warnings() const { return warnings_; }
 
+  // Add a warning to the query. The warning becomes part of the return value of
+  // the `warnings()` function above.
   void addWarning(std::string warning) {
     warnings_.push_back(std::move(warning));
   }
 
-  // If Unbound variables that are used in a query are supposed to throw because
+  // If unbound variables that are used in a query are supposed to throw because
   // the corresponding `RuntimeParameter` is set, then throw. Else add a
   // warning.
   void addWarningOrThrow(std::string warning);
@@ -211,8 +215,9 @@ class ParsedQuery {
   Variable addInternalAlias(sparqlExpression::SparqlExpressionPimpl expression);
 
   // If the `variable` is neither visible in the query body nor contained in the
-  // `additionalVisibleVariables`, add a warning to the `warnings_` member that
-  // uses the `locationDescription` inside the message.
+  // `additionalVisibleVariables`, add a warning or throw an exception (see
+  // `addWarningOrThrow`) that uses the `locationDescription` inside the
+  // message.
   void checkVariableIsVisible(
       const Variable& variable, const std::string& locationDescription,
       const ad_utility::HashSet<Variable>& additionalVisibleVariables = {},
