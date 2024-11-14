@@ -23,6 +23,7 @@
 #include "engine/sparqlExpressions/RegexExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "engine/sparqlExpressions/SampleExpression.h"
+#include "engine/sparqlExpressions/StdevExpression.h"
 #include "engine/sparqlExpressions/UuidExpressions.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/RdfParser.h"
@@ -211,21 +212,17 @@ ParsedQuery Visitor::visit(Parser::QueryContext* ctx) {
 
 // ____________________________________________________________________________________
 ParsedQuery Visitor::visit(Parser::QueryOrUpdateContext* ctx) {
-  if (ctx->update()) {
+  if (ctx->update() && !ctx->update()->update1()) {
     // An empty query currently matches the `update()` rule. We handle this
     // case manually to get a better error message. If an update query doesn't
     // have an `update1()`, then it consists of a (possibly empty) prologue, but
     // has not actual content, see the grammar in `SparqlAutomatic.g4` for
     // details.
-    if (!ctx->update()->update1()) {
-      reportError(ctx->update(),
-                  "Empty query (this includes queries that only consist "
-                  "of comments or prefix declarations).");
-    }
-    reportNotSupported(ctx->update(), "SPARQL 1.1 Update is");
-  } else {
-    return visit(ctx->query());
+    reportError(ctx->update(),
+                "Empty query (this includes queries that only consist "
+                "of comments or prefix declarations).");
   }
+  return visitAlternative<ParsedQuery>(ctx->query(), ctx->update());
 }
 
 // ____________________________________________________________________________________
@@ -426,16 +423,20 @@ std::optional<Values> Visitor::visit(Parser::ValuesClauseContext* ctx) {
 
 // ____________________________________________________________________________________
 ParsedQuery Visitor::visit(Parser::UpdateContext* ctx) {
+  // The prologue (BASE and PREFIX declarations)  only affects the internal
+  // state of the visitor.
   visit(ctx->prologue());
 
-  auto query = visit(ctx->update1());
+  auto update = visit(ctx->update1());
 
   if (ctx->update()) {
     parsedQuery_ = ParsedQuery{};
     reportNotSupported(ctx->update(), "Multiple updates in one query are");
   }
 
-  return query;
+  update._originalString = ctx->getStart()->getInputStream()->toString();
+
+  return update;
 }
 
 // ____________________________________________________________________________________
@@ -550,13 +551,23 @@ ParsedQuery Visitor::visit(Parser::ModifyContext* ctx) {
       return true;
     }
   };
+  auto isVisibleIfVariableGraph =
+      [this](const SparqlTripleSimpleWithGraph::Graph& graph) {
+        if (std::holds_alternative<Variable>(graph)) {
+          return ad_utility::contains(parsedQuery_.getVisibleVariables(),
+                                      std::get<Variable>(graph));
+        } else {
+          return true;
+        }
+      };
   auto checkTriples =
-      [&isVisibleIfVariable,
-       &ctx](const std::vector<SparqlTripleSimpleWithGraph>& triples) {
+      [&isVisibleIfVariable, &ctx, &isVisibleIfVariableGraph](
+          const std::vector<SparqlTripleSimpleWithGraph>& triples) {
         for (auto& triple : triples) {
           if (!(isVisibleIfVariable(triple.s_) &&
                 isVisibleIfVariable(triple.p_) &&
-                isVisibleIfVariable(triple.o_))) {
+                isVisibleIfVariable(triple.o_) &&
+                isVisibleIfVariableGraph(triple.g_))) {
             reportError(ctx,
                         absl::StrCat("A triple contains a variable that was "
                                      "not bound in the query body."));
@@ -2396,6 +2407,8 @@ ExpressionPtr Visitor::visit(Parser::AggregateContext* ctx) {
     }
 
     return makePtr.operator()<GroupConcatExpression>(std::move(separator));
+  } else if (functionName == "stdev") {
+    return makePtr.operator()<StdevExpression>();
   } else {
     AD_CORRECTNESS_CHECK(functionName == "sample");
     return makePtr.operator()<SampleExpression>();

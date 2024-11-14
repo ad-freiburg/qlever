@@ -4,6 +4,7 @@
 
 #include <boost/url.hpp>
 
+#include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 #include "engine/sparqlExpressions/VariadicExpression.h"
 
@@ -231,9 +232,62 @@ using SubstrExpression =
   return Id::makeFromBool(text.starts_with(pattern));
 };
 
-using StrStartsExpression =
-    StringExpressionImpl<2, LiftStringFunction<decltype(strStartsImpl)>,
-                         StringValueGetter>;
+namespace {
+
+template <typename NaryOperation>
+requires(isOperation<NaryOperation>)
+class StrStartsExpressionImpl : public NaryExpression<NaryOperation> {
+ public:
+  using NaryExpression<NaryOperation>::NaryExpression;
+  std::vector<PrefilterExprVariablePair> getPrefilterExpressionForMetadata(
+      [[maybe_unused]] bool isNegated) const override {
+    AD_CORRECTNESS_CHECK(this->N == 2);
+    const SparqlExpression* child0 = this->getNthChild(0).value();
+    const SparqlExpression* child1 = this->getNthChild(1).value();
+    const auto getPrefilterExprVariableVec = [](const SparqlExpression* child0,
+                                                const SparqlExpression* child1,
+                                                bool startsWithVar) {
+      using namespace prefilterExpressions;
+      std::vector<PrefilterExprVariablePair> resVec{};
+      if (const auto* variable =
+              dynamic_cast<const VariableExpression*>(child0)) {
+        if (const auto* valueId = dynamic_cast<const IdExpression*>(child1)) {
+          !startsWithVar
+              // Will return: {<(>= VocabId(n)), ?var>} (Option 1)
+              ? resVec.emplace_back(
+                    std::make_unique<GreaterEqualExpression>(valueId->value()),
+                    variable->value())
+              // Will return: {<(<= VocabId(n)), ?var>} (Option 2)
+              : resVec.emplace_back(
+                    std::make_unique<LessEqualExpression>(valueId->value()),
+                    variable->value());
+        }
+      }
+      return resVec;
+    };
+    // Remark: With the current implementation we only prefilter w.r.t. one
+    // bound.
+    // TODO: It is technically possible to pre-filter more precisely by
+    // introducing a second bound.
+    //
+    // Option 1: STRSTARTS(?var, VocabId(n)); startsWithVar = false
+    // Return PrefilterExpression vector: {<(>= VocabId(n)), ?var>}
+    auto resVec = getPrefilterExprVariableVec(child0, child1, false);
+    if (!resVec.empty()) {
+      return resVec;
+    }
+    // Option 2: STRTSTARTS(VocabId(n), ?var); startsWithVar = true
+    // Return PrefilterExpression vector: {<(<= VocabId(n)), ?var>}
+    // Option 3:
+    // child0 or/and child1 are unsuitable SparqlExpression types, return {}.
+    return getPrefilterExprVariableVec(child1, child0, true);
+  }
+};
+
+}  // namespace
+
+using StrStartsExpression = StrStartsExpressionImpl<Operation<
+    2, FV<LiftStringFunction<decltype(strStartsImpl)>, StringValueGetter>>>;
 
 // STRENDS
 [[maybe_unused]] auto strEndsImpl = [](std::string_view text,
