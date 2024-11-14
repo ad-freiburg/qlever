@@ -690,7 +690,9 @@ auto makeJoinSide(Blocks& blocks, const auto& projection) {
 template <typename T>
 concept IsJoinSide = ad_utility::isInstantiation<T, JoinSide>;
 
-constexpr static auto alwaysFalse = [](const auto&) { return false; };
+struct AlwaysFalse {
+  bool operator()(const auto&) { return false; }
+};
 
 // The class that actually performs the zipper join for blocks without UNDEF.
 // See the public `zipperJoinForBlocksWithoutUndef` function below for details.
@@ -742,7 +744,7 @@ template <IsJoinSide LeftSide, IsJoinSide RightSide, typename LessThan,
           typename CompatibleRowAction,
           ad_utility::InvocableWithExactReturnType<
               bool, typename LeftSide::ProjectedEl>
-              IsUndef = decltype(alwaysFalse)>
+              IsUndef = AlwaysFalse>
 struct BlockZipperJoinImpl {
   // The left and right inputs of the join
   LeftSide leftSide_;
@@ -758,7 +760,7 @@ struct BlockZipperJoinImpl {
   using ProjectedEl = LeftSide::ProjectedEl;
   static_assert(std::same_as<ProjectedEl, typename RightSide::ProjectedEl>);
   static constexpr bool potentiallyHasUndef =
-      !std::is_same_v<IsUndef, decltype(alwaysFalse)>;
+      !std::is_same_v<IsUndef, AlwaysFalse>;
 
   // Create an equality comparison from the `lessThan` predicate.
   bool eq(const auto& el1, const auto& el2) {
@@ -873,10 +875,9 @@ struct BlockZipperJoinImpl {
     }
   }
 
-  // Call `compatibleRowAction` for all pairs of elements in the Cartesian
-  // product of the blocks in `blocksLeft` and `blocksRight`.
   template <bool DoOptionalJoin>
-  void addAll(const auto& blocksLeft, const auto& blocksRight) {
+  void addNonMatchingRowsFromLeftForOptionalJoin(const auto& blocksLeft,
+                                                 const auto& blocksRight) {
     if constexpr (DoOptionalJoin) {
       bool hasRightUndef = false;
       if constexpr (potentiallyHasUndef) {
@@ -896,6 +897,14 @@ struct BlockZipperJoinImpl {
         }
       }
     }
+  }
+
+  // Call `compatibleRowAction` for all pairs of elements in the Cartesian
+  // product of the blocks in `blocksLeft` and `blocksRight`.
+  template <bool DoOptionalJoin>
+  void addAll(const auto& blocksLeft, const auto& blocksRight) {
+    addNonMatchingRowsFromLeftForOptionalJoin<DoOptionalJoin>(blocksLeft,
+                                                              blocksRight);
     addCartesianProduct(blocksLeft, blocksRight);
     compatibleRowAction_.flush();
   }
@@ -1099,6 +1108,18 @@ struct BlockZipperJoinImpl {
     return fillEqualToCurrentElBothSides(getCurrentEl());
   }
 
+  void joinWithUndefBlocks(BlockStatus blockStatus, const auto& leftBlocks,
+                           const auto& rightBlocks) {
+    if (blockStatus == BlockStatus::allFilled ||
+        blockStatus == BlockStatus::leftMissing) {
+      addCartesianProduct(leftBlocks, rightSide_.undefBlocks_);
+    }
+    if (blockStatus == BlockStatus::allFilled ||
+        blockStatus == BlockStatus::rightMissing) {
+      addCartesianProduct(leftSide_.undefBlocks_, rightBlocks);
+    }
+  }
+
   // Combine the above functionality and perform one round of joining.
   // Has to be called alternately with `fillBuffer`.
   template <bool DoOptionalJoin, typename ProjectedEl>
@@ -1134,20 +1155,8 @@ struct BlockZipperJoinImpl {
     // We are only guaranteed to have all relevant blocks from one side, so we
     // also need to pass through the remaining blocks from the other side.
     while (!equalToCurrentElLeft.empty() && !equalToCurrentElRight.empty()) {
-      switch (blockStatus) {
-        case BlockStatus::allFilled:
-          addCartesianProduct(equalToCurrentElLeft, rightSide_.undefBlocks_);
-          addCartesianProduct(leftSide_.undefBlocks_, equalToCurrentElRight);
-          break;
-        case BlockStatus::rightMissing:
-          addCartesianProduct(leftSide_.undefBlocks_, equalToCurrentElRight);
-          break;
-        case BlockStatus::leftMissing:
-          addCartesianProduct(equalToCurrentElLeft, rightSide_.undefBlocks_);
-          break;
-        default:
-          AD_FAIL();
-      }
+      joinWithUndefBlocks(blockStatus, equalToCurrentElLeft,
+                          equalToCurrentElRight);
       addAll<DoOptionalJoin>(equalToCurrentElLeft, equalToCurrentElRight);
       switch (blockStatus) {
         case BlockStatus::allFilled:
@@ -1202,8 +1211,6 @@ struct BlockZipperJoinImpl {
     compatibleRowAction_.flush();
   }
 
-  // The actual join routine that combines all the previous functions.
-  // not been consumed yet and match them against undef blocks.
   template <bool reversed>
   bool consumeRemainingBlocks(auto& side, const auto& undefBlocks) {
     bool hasUndef = false;
@@ -1246,6 +1253,7 @@ struct BlockZipperJoinImpl {
     }
   }
 
+  // The actual join routine that combines all the previous functions.
   template <bool DoOptionalJoin>
   void runJoin() {
     while (true) {
