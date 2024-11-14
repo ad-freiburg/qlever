@@ -1018,6 +1018,7 @@ struct BlockZipperJoinImpl {
       }
     }();
     // All undefined values should already be processed at this point.
+    AD_CORRECTNESS_CHECK(!isUndefined_(subrangeLeft.front()));
     AD_CORRECTNESS_CHECK(!isUndefined_(subrangeRight.front()));
     // If we have undefined values stored, we need to provide a generator that
     // yields iterators to the individual undefined values.
