@@ -524,8 +524,7 @@ class SparqlQleverVisitor {
   // Return the `SparqlExpressionPimpl` for a context that returns a
   // `ExpressionPtr` when visited. The descriptor is set automatically on the
   // `SparqlExpressionPimpl`.
-  SparqlExpressionPimpl visitExpressionPimpl(auto* ctx,
-                                             bool allowLanguageFilters = false);
+  SparqlExpressionPimpl visitExpressionPimpl(auto* ctx);
 
   template <typename Expr>
   ExpressionPtr createExpression(auto... children) {

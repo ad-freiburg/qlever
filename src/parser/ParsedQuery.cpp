@@ -453,9 +453,9 @@ void ParsedQuery::addOrderByClause(OrderClause orderClause, bool isGroupBy,
                              variablesFromAliases, additionalError);
     } else if (!ad_utility::contains(_groupByVariables, orderKey.variable_) &&
                (!variablesFromAliases.contains(orderKey.variable_))) {
-      // Check whether grouping is done. The variable being ordered by
-      // must then be either grouped or the result of an alias in the select
-      // clause.
+      // If the query (in addition to the ORDER BY) also contains a GROUP BY,
+      // the variables in the ORDER BY must be either grouped or the result
+      // of an alias in the SELECT clause.
       addWarningOrThrow(absl::StrCat(
           "Variable " + orderKey.variable_.name(),
           " was used in an ORDER BY clause, but is neither grouped nor "

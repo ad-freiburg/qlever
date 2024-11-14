@@ -65,7 +65,7 @@ class Operation {
   // Add a warning to the `Operation`. The warning will be returned by
   // `collectWarnings()` above.
   void addWarning(std::string warning) {
-    _warnings.push_back(std::move(warning));
+    warnings_.push_back(std::move(warning));
   }
 
   /**
@@ -249,9 +249,9 @@ class Operation {
   [[nodiscard]] virtual vector<ColumnIndex> resultSortedOn() const = 0;
 
   /// interface to the generated warnings of this operation
-  std::vector<std::string>& getWarnings() { return _warnings; }
+  std::vector<std::string>& getWarnings() { return warnings_; }
   [[nodiscard]] const std::vector<std::string>& getWarnings() const {
-    return _warnings;
+    return warnings_;
   }
 
   // Check if the cancellation flag has been set and throw an exception if
@@ -380,7 +380,7 @@ class Operation {
 
   // Collect all the warnings that were created during the creation or
   // execution of this operation.
-  std::vector<std::string> _warnings;
+  std::vector<std::string> warnings_;
 
   // The limit from a SPARQL `LIMIT` clause.
 

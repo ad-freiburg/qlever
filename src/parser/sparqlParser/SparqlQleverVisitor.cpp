@@ -192,8 +192,7 @@ PathObjectPairs joinPredicateAndObject(const VarOrPath& predicate,
 }
 
 // ___________________________________________________________________________
-SparqlExpressionPimpl Visitor::visitExpressionPimpl(
-    auto* ctx, [[maybe_unused]] bool allowLanguageFilters) {
+SparqlExpressionPimpl Visitor::visitExpressionPimpl(auto* ctx) {
   return {visit(ctx), getOriginalInputForContext(ctx)};
 }
 
@@ -1269,14 +1268,11 @@ void Visitor::warnOrThrowIfUnboundVariables(
 
 // ____________________________________________________________________________________
 SparqlFilter Visitor::visit(Parser::FilterRContext* ctx) {
-  // The second argument means that the expression `LANG(?var) = "langtag"` is
-  // allowed.
-  //
   // NOTE: We cannot add a warning or throw an exception if the FILTER
   // expression contains unbound variables, because the variables of the FILTER
   // might be bound after the filter appears in the query (which is perfectly
   // legal).
-  return SparqlFilter{visitExpressionPimpl(ctx->constraint(), true)};
+  return SparqlFilter{visitExpressionPimpl(ctx->constraint())};
 }
 
 // ____________________________________________________________________________________
