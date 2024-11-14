@@ -20,6 +20,7 @@
 #include "engine/sparqlExpressions/SampleExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
+#include "engine/sparqlExpressions/StdevExpression.h"
 #include "global/RuntimeParameters.h"
 #include "index/Index.h"
 #include "index/IndexImpl.h"
@@ -1026,6 +1027,8 @@ GroupBy::isSupportedAggregate(sparqlExpression::SparqlExpression* expr) {
   if (auto val = dynamic_cast<GroupConcatExpression*>(expr)) {
     return H{GROUP_CONCAT, val->getSeparator()};
   }
+  // NOTE: The STDEV function is not suitable for lazy and hash map
+  // optimizations.
   if (dynamic_cast<SampleExpression*>(expr)) return H{SAMPLE};
 
   // `expr` is an unsupported aggregate
