@@ -691,7 +691,7 @@ template <typename T>
 concept IsJoinSide = ad_utility::isInstantiation<T, JoinSide>;
 
 struct AlwaysFalse {
-  bool operator()(const auto&) { return false; }
+  bool operator()(const auto&) const { return false; }
 };
 
 // The class that actually performs the zipper join for blocks without UNDEF.
