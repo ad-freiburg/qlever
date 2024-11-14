@@ -191,8 +191,7 @@ inline auto CountAvailablePredicates =
     [](size_t subjectColumnIdx, const Variable& predicateVar,
        const Variable& countVar,
        const std::same_as<QetMatcher> auto&... childMatchers)
-        requires(sizeof...(childMatchers) <= 1)
-{
+        requires(sizeof...(childMatchers) <= 1) {
   return RootOperation<::CountAvailablePredicates>(AllOf(
       AD_PROPERTY(::CountAvailablePredicates, subjectColumnIndex,
                   Eq(subjectColumnIdx)),
@@ -390,10 +389,12 @@ inline QetMatcher QetWithWarnings(
     const std::vector<std::string>& warningSubstrings,
     QetMatcher actualMatcher) {
   auto warningMatchers = ad_utility::transform(
-      warningSubstrings, [](const std::string& s) { return ::testing::HasSubstr(s); });
-  return AllOf(
-      RootOperationBase(AD_PROPERTY(::Operation, collectWarnings, UnorderedElementsAreArray(warningMatchers))),
-      actualMatcher);
+      warningSubstrings,
+      [](const std::string& s) { return ::testing::HasSubstr(s); });
+  return AllOf(RootOperationBase(
+                   AD_PROPERTY(::Operation, collectWarnings,
+                               UnorderedElementsAreArray(warningMatchers))),
+               actualMatcher);
 }
 
 /// Parse the given SPARQL `query`, pass it to a `QueryPlanner` with empty

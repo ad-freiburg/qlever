@@ -96,9 +96,10 @@ ad_utility::SetOfIntervals evaluateWithBinarySearch(
   // Set up iterators into the `IdTable` that only access the column where the
   // `variable` is stored.
   auto columnIndex = context->getColumnIndexForVariable(variable);
-  if (!columnIndex.has_value()) {
-    return {};
-  }
+  AD_CORRECTNESS_CHECK(
+      columnIndex.has_value(),
+      "The input must be sorted to evaluate a relational expression using "
+      "binary search. This should never happen for unbound variables");
 
   auto getIdFromColumn = ad_utility::makeAssignableLambda(
       [columnIndex = columnIndex.value()](const auto& idTable, auto i) {

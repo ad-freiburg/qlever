@@ -14,11 +14,11 @@
 #include <vector>
 
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
+#include "global/RuntimeParameters.h"
 #include "parser/RdfEscaping.h"
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
 #include "util/Conversions.h"
 #include "util/TransparentFunctors.h"
-#include "global/RuntimeParameters.h"
 
 using std::string;
 using std::vector;
@@ -346,9 +346,9 @@ void ParsedQuery::checkVariableIsVisible(
   if (!ad_utility::contains(getVisibleVariables(), variable) &&
       !additionalVisibleVariables.contains(variable)) {
     addWarningOrThrow(absl::StrCat("Variable ", variable.name(),
-                            " was used by " + locationDescription,
-                            ", but is not defined in the query body",
-                            otherPossibleLocationDescription, "."));
+                                   " was used by " + locationDescription,
+                                   ", but is not defined in the query body",
+                                   otherPossibleLocationDescription, "."));
   }
 }
 

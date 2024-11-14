@@ -1267,8 +1267,9 @@ SparqlFilter Visitor::visit(Parser::FilterRContext* ctx) {
   // The second argument means that the expression `LANG(?var) = "language"` is
   // allowed.
   auto expression = visitExpressionPimpl(ctx->constraint(), true);
-  // Note: We cannot add a warning or an exception here, because the variables of the
-  // FILTER might be bound after the filter appears in the query (which is perfectly legal).
+  // Note: We cannot add a warning or an exception here, because the variables
+  // of the FILTER might be bound after the filter appears in the query (which
+  // is perfectly legal).
   return SparqlFilter{std::move(expression)};
 }
 

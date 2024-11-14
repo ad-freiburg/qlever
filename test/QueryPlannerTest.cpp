@@ -2115,8 +2115,9 @@ TEST(QueryPlanner, DatasetClause) {
 }
 
 // _____________________________________________________________________________
-TEST(QueryPlanner, OrderByUnboundSortKey) {
+TEST(QueryPlanner, WarningsOnUnboundVariables) {
   using enum ::OrderBy::AscOrDesc;
+  // Unbound variable in ORDER BY.
   h::expect(
       "SELECT * {} ORDER BY ?x",
       h::QetWithWarnings({"?x was used by ORDER BY"}, h::NeutralElement()));
@@ -2124,13 +2125,25 @@ TEST(QueryPlanner, OrderByUnboundSortKey) {
       "SELECT * { ?x <is-a> <y> } ORDER BY ?x ?y ",
       h::QetWithWarnings({"?y was used by ORDER BY"},
                          h::OrderBy({{Variable{"?x"}, Asc}}, ::testing::_)));
-}
 
-// _____________________________________________________________________________
-TEST(QueryPlanner, GroupByUnboundGroupVariable) {
+  // Unbound variable in GROUP BY.
   h::expect("SELECT ?x {} GROUP BY ?x",
-            h::QetWithWarnings({"?x was used by GROUP BY"}, h::GroupBy({}, {}, h::NeutralElement())));
+            h::QetWithWarnings({"?x was used by GROUP BY"},
+                               h::GroupBy({}, {}, h::NeutralElement())));
   h::expect("SELECT ?x ?y { ?x <is-a> <y> } GROUP BY ?x ?y ",
-            h::QetWithWarnings({"?y was used by GROUP BY"}, h::GroupBy({Variable{"?x"}}, {},
-                       h::IndexScanFromStrings("?x", "<is-a>", "<y>"))));
+            h::QetWithWarnings(
+                {"?y was used by GROUP BY"},
+                h::GroupBy({Variable{"?x"}}, {},
+                           h::IndexScanFromStrings("?x", "<is-a>", "<y>"))));
+
+  // Unbound variable in BIND.
+  h::expect(
+      "SELECT ?x {BIND (?a as ?x)}",
+      h::QetWithWarnings({"?a was used in the expression of a BIND"},
+                         h::Bind(h::NeutralElement(), "?a", Variable{"?x"})));
+
+  // Unbound variable in Subquery.
+  h::expect("SELECT ?x { {SELECT * {BIND (?a as ?x)}} ?x <p> ?o}",
+            h::QetWithWarnings({"?a was used in the expression of a BIND"},
+                               testing::_));
 }
