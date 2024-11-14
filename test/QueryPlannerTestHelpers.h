@@ -47,7 +47,7 @@ using namespace ::testing;
 // an alias.
 using QetMatcher = Matcher<const QueryExecutionTree&>;
 
-QetMatcher RootOperationBase(Matcher<const Operation&> matcher) {
+inline QetMatcher RootOperationBase(Matcher<const Operation&> matcher) {
   auto getRootOperation =
       [](const QueryExecutionTree& tree) -> const ::Operation& {
     return *tree.getRootOperation().get();
