@@ -7,6 +7,7 @@
 #include "absl/strings/str_cat.h"
 #include "global/Id.h"
 #include "global/ValueId.h"
+#include "util/BlankNodeManager.h"
 
 // _____________________________________________________________________________
 LocalVocab LocalVocab::clone() const {
@@ -84,7 +85,9 @@ BlankNodeIndex LocalVocab::getBlankNodeIndex(
   AD_CONTRACT_CHECK(blankNodeManager);
   // Initialize the `localBlankNodeManager_` if it doesn't exist yet.
   if (!localBlankNodeManager_) [[unlikely]] {
-    localBlankNodeManager_.emplace(blankNodeManager);
+    localBlankNodeManager_ =
+        std::make_shared<ad_utility::BlankNodeManager::LocalBlankNodeManager>(
+            blankNodeManager);
   }
   return BlankNodeIndex::make(localBlankNodeManager_->getId());
 }

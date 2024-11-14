@@ -162,6 +162,24 @@ TEST(LocalVocab, merge) {
   EXPECT_EQ(*indices[1], lit("twoA"));
   EXPECT_EQ(*indices[2], lit("oneB"));
   EXPECT_EQ(*indices[3], lit("twoB"));
+
+  // Test that the `LocalBlankNodeManager` of vocabs is merged correctly.
+  LocalVocab vocC, vocD;
+  ad_utility::BlankNodeManager bnm;
+  auto id = vocC.getBlankNodeIndex(&bnm);
+  auto vocabs2 = std::vector{&std::as_const(vocC), &std::as_const(vocD)};
+  LocalVocab localVocabMerged2 = LocalVocab::merge(vocabs2);
+  localVocabMerged2.isBlankNodeIndexContained(id);
+
+  LocalVocab vocE, vocF;
+  auto id2 = vocE.getBlankNodeIndex(&bnm);
+  auto vocabs3 =
+      std::vector{&std::as_const(localVocabMerged2), &std::as_const(vocF)};
+  vocE.mergeWith(vocabs3 | std::views::transform(
+                               [](const LocalVocab* l) -> const LocalVocab& {
+                                 return *l;
+                               }));
+  vocE.isBlankNodeIndexContained(id2);
 }
 
 // _____________________________________________________________________________

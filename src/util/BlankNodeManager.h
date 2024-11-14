@@ -87,15 +87,29 @@ class BlankNodeManager {
     // Return true iff the `index` was returned by a previous call to `getId()`.
     bool containsBlankNodeIndex(uint64_t index) const;
 
-   private:
-    // Reserved blocks.
-    std::vector<BlankNodeManager::Block> blocks_;
+    // Merge passed `LocalBlankNodeManager`s to keep alive their reserved
+    // BlankNodeIndex blocks.
+    template <std::ranges::range R>
+    void mergeWith(const R& localBlankNodeManagers) {
+      std::ranges::copy_if(
+          localBlankNodeManagers, std::back_inserter(otherManagers_),
+          [](const std::shared_ptr<const LocalBlankNodeManager>& l) -> bool {
+            return l.get() != nullptr;
+          });
+    }
 
     // Reference to the BlankNodeManager, used to free the reserved blocks.
     BlankNodeManager* blankNodeManager_;
 
+   private:
+    // Reserved blocks.
+    std::vector<BlankNodeManager::Block> blocks_;
+
     // The first index after the current Block.
     uint64_t idxAfterCurrentBlock_{0};
+
+    // Other LocalBlankNodeManagers merged into this instance.
+    std::vector<std::shared_ptr<const LocalBlankNodeManager>> otherManagers_;
 
     FRIEND_TEST(BlankNodeManager, LocalBlankNodeManagerGetID);
   };
