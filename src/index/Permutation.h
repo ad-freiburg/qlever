@@ -118,9 +118,17 @@ class Permutation {
       const ScanSpecification& scanSpec,
       const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
 
-  /// Similar to the previous `scan` function, but only get the size of the
-  /// result
+  // Get the exact size of the result of a scan, taking into account the
+  // given located triples. This requires an exact location of the delta triples
+  // within the respective blocks.
   size_t getResultSizeOfScan(
+      const ScanSpecification& scanSpec,
+      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
+
+  // Get a lower and upper bound for the size of the result of a scan, taking
+  // into account the given `deltaTriples`. For this call, it is enough that
+  // each delta triple know to which block it belongs.
+  std::pair<size_t, size_t> getSizeEstimateForScan(
       const ScanSpecification& scanSpec,
       const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
 
