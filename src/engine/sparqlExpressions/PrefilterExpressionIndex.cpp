@@ -2,7 +2,7 @@
 //                  Chair of Algorithms and Data Structures
 //  Author: Hannes Baumann <baumannh@informatik.uni-freiburg.de>
 
-#include "index/CompressedBlockPrefiltering.h"
+#include "engine/sparqlExpressions/PrefilterExpressionIndex.h"
 
 #include <ranges>
 
@@ -286,7 +286,7 @@ std::unique_ptr<PrefilterExpression> RelationalExpression<Comparison>::clone()
 
 //______________________________________________________________________________
 template <CompOp Comparison>
-std::string RelationalExpression<Comparison>::info(
+std::string RelationalExpression<Comparison>::asString(
     [[maybe_unused]] size_t depth) const {
   std::stringstream stream;
   stream << "Prefilter RelationalExpression<" << getRelationalOpStr(Comparison)
@@ -352,11 +352,11 @@ std::unique_ptr<PrefilterExpression> LogicalExpression<Operation>::clone()
 
 //______________________________________________________________________________
 template <LogicalOperator Operation>
-std::string LogicalExpression<Operation>::info(size_t depth) const {
+std::string LogicalExpression<Operation>::asString(size_t depth) const {
   std::string child1Info =
-      depth < maxInfoRecursion ? child1_->info(depth + 1) : "MAX_DEPTH";
+      depth < maxInfoRecursion ? child1_->asString(depth + 1) : "MAX_DEPTH";
   std::string child2Info =
-      depth < maxInfoRecursion ? child2_->info(depth + 1) : "MAX_DEPTH";
+      depth < maxInfoRecursion ? child2_->asString(depth + 1) : "MAX_DEPTH";
   std::stringstream stream;
   stream << "Prefilter LogicalExpression<" << getLogicalOpStr(Operation)
          << ">\n"
@@ -395,14 +395,26 @@ std::unique_ptr<PrefilterExpression> NotExpression::clone() const {
 };
 
 //______________________________________________________________________________
-std::string NotExpression::info(size_t depth) const {
+std::string NotExpression::asString(size_t depth) const {
   std::string childInfo =
-      depth < maxInfoRecursion ? child_->info(depth + 1) : "MAX_DEPTH";
+      depth < maxInfoRecursion ? child_->asString(depth + 1) : "MAX_DEPTH";
   std::stringstream stream;
   stream << "Prefilter NotExpression:\n"
          << "child {" << childInfo << "}" << std::endl;
   return stream.str();
 }
+
+//______________________________________________________________________________
+// Instanitate templates with specializations (for linking accessibility)
+template class RelationalExpression<CompOp::LT>;
+template class RelationalExpression<CompOp::LE>;
+template class RelationalExpression<CompOp::GE>;
+template class RelationalExpression<CompOp::GT>;
+template class RelationalExpression<CompOp::EQ>;
+template class RelationalExpression<CompOp::NE>;
+
+template class LogicalExpression<LogicalOperator::AND>;
+template class LogicalExpression<LogicalOperator::OR>;
 
 namespace detail {
 //______________________________________________________________________________
