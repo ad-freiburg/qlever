@@ -66,17 +66,30 @@ size_t getNumColumns(const std::vector<RelationInput>& vec) {
 void checkThatTablesAreEqual(const auto& expected, const IdTable& actual,
                              source_location l = source_location::current()) {
   auto trace = generateLocationTrace(l);
-  if (!expected.empty()) {
-    ASSERT_EQ(getNumColumns(expected), actual.numColumns());
+
+  VectorTable exp;
+  for (const auto& row : expected) {
+    // exp.emplace_back(row.begin(), row.end());
+    exp.emplace_back();
+    for (auto& el : row) {
+      exp.back().push_back(el);
+    }
   }
-  if (actual.numRows() != expected.size()) {
-    LOG(WARN) << actual.numRows() << "vs " << expected.size() << std::endl;
-    LOG(WARN) << "mismatch" << std::endl;
-  }
-  ASSERT_EQ(actual.numRows(), expected.size());
-  for (size_t i = 0; i < actual.numRows(); ++i) {
-    for (size_t j = 0; j < actual.numColumns(); ++j) {
-      ASSERT_EQ(V(expected[i][j]), actual(i, j));
+  EXPECT_THAT(actual, matchesIdTableFromVector(exp));
+}
+
+// If the `inputs` have no graph column (because the corresponding tests don't
+// care about named graphs), add a constant dummy graph column, such that the
+// assertions inside `CompressedRelation.cpp` (which always expect a graph
+// column) work.
+auto addGraphColumnIfNecessary(std::vector<RelationInput>& inputs) {
+  size_t numColumns = getNumColumns(inputs) + 1;
+  if (numColumns == 3) {
+    ++numColumns;
+    for (auto& input : inputs) {
+      for (auto& row : input.col1And2_) {
+        row.push_back(103496581);
+      }
     }
   }
 }
@@ -104,17 +117,8 @@ compressedRelationTestWriteCompressedRelations(
   }));
 
   // First create the on-disk permutation.
+  addGraphColumnIfNecessary(inputs);
   size_t numColumns = getNumColumns(inputs) + 1;
-  // If the input has no graph info, add a dummy graph value to all inputs,
-  // such that the assertions work.
-  if (numColumns == 3) {
-    ++numColumns;
-    for (auto& input : inputs) {
-      for (auto& row : input.col1And2_) {
-        row.push_back(103496581);
-      }
-    }
-  }
   AD_CORRECTNESS_CHECK(numColumns >= 4);
   CompressedRelationWriter writer{numColumns, ad_utility::File{filename, "w"},
                                   blocksize};
@@ -187,6 +191,46 @@ auto makeCleanup(std::string filename) {
       [filename = std::move(filename)] { ad_utility::deleteFile(filename); });
 }
 
+// From the `inputs` delete each triple with probability `locatedProbab` and
+// add it to a vector of `IdTriple`s which can then be used to build a
+// `LocatedTriples` object. Return the remaining triples and the (not-yet)
+// located triples.
+std::tuple<std::vector<RelationInput>, std::vector<IdTriple<>>>
+makeLocatedTriplesFromPartOfInput(float locatedProbab,
+                                  const std::vector<RelationInput>& inputs) {
+  std::vector<IdTriple<>> locatedTriples;
+  std::vector<RelationInput> result;
+  ad_utility::RandomDoubleGenerator randomGenerator(0.0, 1.0);
+  auto gen = [&randomGenerator, &locatedProbab]() {
+    auto r = randomGenerator();
+    return locatedProbab == 1.0f || r < locatedProbab;
+  };
+
+  auto addLocated = [&locatedTriples](Id col0, const auto& otherCols) {
+    locatedTriples.push_back(IdTriple<>{
+        {col0, V(otherCols.at(0)), V(otherCols.at(1)), V(otherCols.at(2))}});
+  };
+
+  for (const auto& input : inputs) {
+    auto col0 = V(input.col0_);
+    result.emplace_back(input.col0_);
+    auto& row = result.back().col1And2_;
+    for (const auto& otherCols : input.col1And2_) {
+      AD_CORRECTNESS_CHECK(otherCols.size() >= 3);
+      auto isLocated = gen();
+      if (isLocated) {
+        addLocated(col0, otherCols);
+      } else {
+        row.push_back(otherCols);
+      }
+    }
+    if (row.empty()) {
+      result.pop_back();
+    }
+  }
+  return {std::move(result), std::move(locatedTriples)};
+}
+
 // Write the relations specified by the `inputs` to a compressed permutation at
 // `filename`. Return the created metadata for blocks and large relations, as
 // well as a `CompressedRelationReader`. These are exactly the datastructures
@@ -209,12 +253,30 @@ auto writeAndOpenRelations(const std::vector<RelationInput>& inputs,
 // a unique name for the required temporary files and for the implicit cache
 // of the `CompressedRelationMetaData`. `blocksize` is the size of the blocks
 // in which the permutation will be compressed and stored on disk.
-void testCompressedRelations(const auto& inputs, std::string testCaseName,
-                             ad_utility::MemorySize blocksize) {
+void testCompressedRelations(const auto& inputsOriginalBeforeCopy,
+                             std::string testCaseName,
+                             ad_utility::MemorySize blocksize,
+                             float locatedTriplesProbability = 0.5) {
+  auto inputs = inputsOriginalBeforeCopy;
+  addGraphColumnIfNecessary(inputs);
+  auto [inputsWithoutLocated, locatedTriplesInput] =
+      makeLocatedTriplesFromPartOfInput(locatedTriplesProbability, inputs);
+  DeltaTriples deltaTriples{ad_utility::testing::getQec()->getIndex()};
   auto filename = testCaseName + ".dat";
   auto cleanup = makeCleanup(filename);
-  auto [blocks, metaData, readerPtr] =
-      writeAndOpenRelations(inputs, filename, blocksize);
+  auto [blocksOriginal, metaData, readerPtr] =
+      writeAndOpenRelations(inputsWithoutLocated, filename, blocksize);
+  auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+  // deltaTriples.insertTriples(handle, std::move(locatedTriplesInput));
+  // auto locatedTriples =
+  // deltaTriples.getLocatedTriplesPerBlock(Permutation::SPO);
+  auto locatedTriples = LocatedTriplesPerBlock{};
+  auto loc = LocatedTriple::locateTriplesInPermutation(
+      locatedTriplesInput, blocksOriginal, {0, 1, 2}, true, handle);
+  locatedTriples.add(loc);
+  locatedTriples.setOriginalMetadata(blocksOriginal);
+  locatedTriples.updateAugmentedMetadata();
+  auto blocks = locatedTriples.getAugmentedMetadata();
   auto& reader = *readerPtr;
 
   auto cancellationHandle =
@@ -225,18 +287,33 @@ void testCompressedRelations(const auto& inputs, std::string testCaseName,
   std::vector<ColumnIndex> additionalColumns;
   std::ranges::copy(std::views::iota(3ul, getNumColumns(inputs) + 1),
                     std::back_inserter(additionalColumns));
-  for (size_t i = 0; i < metaData.size(); ++i) {
-    const auto& m = metaData[i];
-    ASSERT_EQ(V(inputs[i].col0_), m.col0Id_);
-    ASSERT_EQ(inputs[i].col1And2_.size(), m.numRows_);
-    // The number of distinct elements in `col1` was passed in as `i + 1` for
-    // testing purposes, so this is the expected multiplicity.
-    ASSERT_FLOAT_EQ(m.numRows_ / static_cast<float>(i + 1),
-                    m.multiplicityCol1_);
+  auto getMetadata = [&, &metaData = metaData](size_t i) {
+    Id col0 = V(inputs[i].col0_);
+    auto it = std::ranges::lower_bound(metaData, col0, {},
+                                       &CompressedRelationMetadata::col0Id_);
+    if (it != metaData.end() && it->col0Id_ == col0) {
+      return *it;
+    }
+    return reader.getMetadataForSmallRelation(blocks, col0, locatedTriples)
+        .value();
+  };
+  for (size_t i = 0; i < inputs.size(); ++i) {
+    // The metadata does not include the located triples, so we can only test it
+    // if there are no located triples.
+    if (locatedTriplesProbability == 0) {
+      const auto& m = getMetadata(i);
+      ASSERT_EQ(V(inputs[i].col0_), m.col0Id_);
+      ASSERT_EQ(inputs[i].col1And2_.size(), m.numRows_);
+      //  The number of distinct elements in `col1` was passed in as `i + 1` for
+      //  testing purposes, so this is the expected multiplicity.
+      ASSERT_FLOAT_EQ(m.numRows_ / static_cast<float>(i + 1),
+                      m.multiplicityCol1_);
+    }
+
     // Scan for all distinct `col0` and check that we get the expected result.
-    ScanSpecification scanSpec{metaData[i].col0Id_, std::nullopt, std::nullopt};
+    ScanSpecification scanSpec{V(inputs[i].col0_), std::nullopt, std::nullopt};
     IdTable table = reader.scan(scanSpec, blocks, additionalColumns,
-                                cancellationHandle, emptyLocatedTriples);
+                                cancellationHandle, locatedTriples);
     const auto& col1And2 = inputs[i].col1And2_;
     checkThatTablesAreEqual(col1And2, table);
     table.clear();
@@ -246,7 +323,7 @@ void testCompressedRelations(const auto& inputs, std::string testCaseName,
     for (const auto& limitOffset : limitOffsetClauses) {
       IdTable table =
           reader.scan(scanSpec, blocks, additionalColumns, cancellationHandle,
-                      emptyLocatedTriples, limitOffset);
+                      locatedTriples, limitOffset);
       auto col1And2 = inputs[i].col1And2_;
       col1And2.resize(limitOffset.upperBound(col1And2.size()));
       col1And2.erase(
@@ -256,7 +333,7 @@ void testCompressedRelations(const auto& inputs, std::string testCaseName,
     }
     for (const auto& block :
          reader.lazyScan(scanSpec, blocks, additionalColumns,
-                         cancellationHandle, emptyLocatedTriples)) {
+                         cancellationHandle, locatedTriples)) {
       table.insertAtEnd(block.begin(), block.end());
     }
     checkThatTablesAreEqual(col1And2, table);
@@ -268,20 +345,19 @@ void testCompressedRelations(const auto& inputs, std::string testCaseName,
     std::vector<std::array<int, 1>> col3;
 
     auto scanAndCheck = [&]() {
-      ScanSpecification scanSpec{metaData[i].col0Id_, V(lastCol1Id),
+      ScanSpecification scanSpec{V(inputs[i].col0_), V(lastCol1Id),
                                  std::nullopt};
-      auto size =
-          reader.getResultSizeOfScan(scanSpec, blocks, emptyLocatedTriples);
+      auto size = reader.getResultSizeOfScan(scanSpec, blocks, locatedTriples);
       IdTable tableWidthOne =
           reader.scan(scanSpec, blocks, Permutation::ColumnIndicesRef{},
-                      cancellationHandle, emptyLocatedTriples);
+                      cancellationHandle, locatedTriples);
       ASSERT_EQ(tableWidthOne.numColumns(), 1);
       EXPECT_EQ(size, tableWidthOne.numRows());
       checkThatTablesAreEqual(col3, tableWidthOne);
       tableWidthOne.clear();
       for (const auto& block :
            reader.lazyScan(scanSpec, blocks, Permutation::ColumnIndices{},
-                           cancellationHandle, emptyLocatedTriples)) {
+                           cancellationHandle, locatedTriples)) {
         tableWidthOne.insertAtEnd(block.begin(), block.end());
       }
       checkThatTablesAreEqual(col3, tableWidthOne);
@@ -306,10 +382,14 @@ void testCompressedRelations(const auto& inputs, std::string testCaseName,
 // size, powers of two and odd), to find subtle rounding bugs when creating the
 // blocks.
 void testWithDifferentBlockSizes(const std::vector<RelationInput>& inputs,
-                                 std::string testCaseName) {
-  testCompressedRelations(inputs, testCaseName, 19_B);
-  testCompressedRelations(inputs, testCaseName, 237_B);
-  testCompressedRelations(inputs, testCaseName, 4096_B);
+                                 std::string testCaseName,
+                                 float locatedTriplesProbability = 0.5) {
+  testCompressedRelations(inputs, testCaseName, 19_B,
+                          locatedTriplesProbability);
+  testCompressedRelations(inputs, testCaseName, 237_B,
+                          locatedTriplesProbability);
+  testCompressedRelations(inputs, testCaseName, 4096_B,
+                          locatedTriplesProbability);
 }
 }  // namespace
 
@@ -478,7 +558,9 @@ TEST(CompressedRelationWriter, AdditionalColumns) {
       row.push_back(row.at(1) * 42);
     }
   }
-  testWithDifferentBlockSizes(inputs, "mixedSizes");
+  // The additional columns don't yet work properly with located triples /
+  // SPARQL UPDATE, so we have to disable the
+  testWithDifferentBlockSizes(inputs, "mixedSizes", 0.0);
 }
 
 TEST(CompressedRelationWriter, MultiplicityCornerCases) {
@@ -688,8 +770,7 @@ TEST(CompressedRelationReader, filterDuplicatesAndGraphs) {
   graphs.emplace();
   graphs->insert(ValueId::makeFromVocabIndex(VocabIndex::make(1)));
   graphs->insert(ValueId::makeFromVocabIndex(VocabIndex::make(2)));
-  f.graphColumn_ = 1;
-  f.deleteGraphColumn_ = false;
+  f = Filter{graphs, 1, false};
   EXPECT_TRUE(f.postprocessBlock(table, metadata));
   EXPECT_THAT(table, matchesIdTableFromVector({{3, 1}, {3, 2}}));
 
@@ -709,10 +790,9 @@ TEST(CompressedRelationReader, makeCanBeSkippedForBlock) {
   CompressedBlockMetadata metadata{
       {{}, 0, {V(16), V(0), V(0), g}, {V(38), V(4), V(12), g}, {}, false}, 0};
 
-  using Graphs = ScanSpecification::Graphs;
-  Graphs graphs = std::nullopt;
-  auto filter =
-      CompressedRelationReader::FilterDuplicatesAndGraphs{graphs, 0, false};
+  auto filter = CompressedRelationReader::FilterDuplicatesAndGraphs{
+      std::nullopt, 0, false};
+  auto& graphs = filter.desiredGraphs_;
   // No information about the contained blocks, and no graph filter specified,
   // so we cannot skip.
   EXPECT_FALSE(filter.canBlockBeSkipped(metadata));
