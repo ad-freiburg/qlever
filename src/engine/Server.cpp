@@ -402,7 +402,12 @@ Awaitable<void> Server::process(
     // not cancellable.
     auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
     co_await computeInNewThread(
-        updateThreadPool_, [this] { index_.deltaTriplesManager().clear(); },
+        updateThreadPool_,
+        [this] {
+          // Use `this` explicitly to silence false-positive errors on the
+          // captured `this` being unused.
+          this->index_.deltaTriplesManager().clear();
+        },
         handle);
     response = createOkResponse("Delta triples have been cleared", request,
                                 MediaType::textPlain);
@@ -534,17 +539,17 @@ std::pair<bool, bool> Server::determineResultPinning(
       checkParameter(params, "pinresult", "true").has_value();
   return {pinSubtrees, pinResult};
 }
+
 // ____________________________________________________________________________
-Awaitable<Server::PlannedQuery> Server::setupPlannedQuery(
+Server::PlannedQuery Server::setupPlannedQuery(
     const ad_utility::url_parser::ParamValueMap& params,
     const std::string& operation, QueryExecutionContext& qec,
     SharedCancellationHandle handle, TimeLimit timeLimit,
-    const ad_utility::Timer& requestTimer) {
+    const ad_utility::Timer& requestTimer) const {
   auto queryDatasets = ad_utility::url_parser::parseDatasetClauses(params);
-  std::optional<PlannedQuery> plannedQuery =
-      co_await parseAndPlan(operation, queryDatasets, qec, handle, timeLimit);
-  AD_CORRECTNESS_CHECK(plannedQuery.has_value());
-  auto& qet = plannedQuery.value().queryExecutionTree_;
+  PlannedQuery plannedQuery =
+      parseAndPlan(operation, queryDatasets, qec, handle, timeLimit);
+  auto& qet = plannedQuery.queryExecutionTree_;
   qet.isRoot() = true;  // allow pinning of the final result
   auto timeForQueryPlanning = requestTimer.msecs();
   auto& runtimeInfoWholeQuery =
@@ -554,7 +559,7 @@ Awaitable<Server::PlannedQuery> Server::setupPlannedQuery(
             << " ms" << std::endl;
   LOG(TRACE) << qet.getCacheKey() << std::endl;
 
-  co_return std::move(plannedQuery.value());
+  return plannedQuery;
 }
 // _____________________________________________________________________________
 json Server::composeErrorResponseJson(
@@ -801,8 +806,21 @@ Awaitable<void> Server::processQuery(
   QueryExecutionContext qec(index_, &cache_, allocator_,
                             sortPerformanceEstimator_, std::ref(messageSender),
                             pinSubtrees, pinResult);
-  auto plannedQuery = co_await setupPlannedQuery(
-      params, query, qec, cancellationHandle, timeLimit, requestTimer);
+  // The usage of an `optional` here is required because of a limitation in
+  // Boost::Asio which forces us to use default-constructible result types with
+  // `computeInNewThread`. We also can't unwrap the optional directly in this
+  // function, because then the conan build fails in a very strange way,
+  // probably related to issues in GCC's coroutine implementation.
+  auto plannedQueryOpt = co_await computeInNewThread(
+      queryThreadPool_,
+      [this, &params, &query, &qec, cancellationHandle, &timeLimit,
+       &requestTimer]() -> std::optional<PlannedQuery> {
+        return setupPlannedQuery(params, query, qec, cancellationHandle,
+                                 timeLimit, requestTimer);
+      },
+      cancellationHandle);
+  AD_CORRECTNESS_CHECK(plannedQueryOpt.has_value());
+  auto plannedQuery = std::move(plannedQueryOpt).value();
   auto qet = plannedQuery.queryExecutionTree_;
 
   if (plannedQuery.parsedQuery_.hasUpdateClause()) {
@@ -859,7 +877,7 @@ Awaitable<void> Server::processQuery(
 }
 
 // ____________________________________________________________________________
-Awaitable<void> Server::processUpdateImpl(
+void Server::processUpdateImpl(
     const ad_utility::url_parser::ParamValueMap& params, const string& update,
     ad_utility::Timer& requestTimer, TimeLimit timeLimit, auto& messageSender,
     ad_utility::SharedCancellationHandle cancellationHandle,
@@ -872,8 +890,8 @@ Awaitable<void> Server::processUpdateImpl(
   QueryExecutionContext qec(index_, &cache_, allocator_,
                             sortPerformanceEstimator_, std::ref(messageSender),
                             pinSubtrees, pinResult);
-  auto plannedQuery = co_await setupPlannedQuery(
-      params, update, qec, cancellationHandle, timeLimit, requestTimer);
+  auto plannedQuery = setupPlannedQuery(params, update, qec, cancellationHandle,
+                                        timeLimit, requestTimer);
   auto qet = plannedQuery.queryExecutionTree_;
 
   if (!plannedQuery.parsedQuery_.hasUpdateClause()) {
@@ -911,14 +929,11 @@ Awaitable<void> Server::processUpdate(
         index_.deltaTriplesManager().modify(
             [this, &params, &update, &requestTimer, &timeLimit, &messageSender,
              &cancellationHandle](auto& deltaTriples) {
-              // TODO<qup42> this must also be possible in a nicer way
-              auto coro = processUpdateImpl(params, update, requestTimer,
-                                            timeLimit, messageSender,
-                                            cancellationHandle, deltaTriples);
-              boost::asio::io_context ioContext;
-              boost::asio::co_spawn(ioContext, std::move(coro),
-                                    boost::asio::detached);
-              ioContext.run();
+              // Use `this` explicitly to silence false-positive errors on
+              // captured `this` being unused.
+              this->processUpdateImpl(params, update, requestTimer, timeLimit,
+                                      messageSender, cancellationHandle,
+                                      deltaTriples);
             });
       },
       cancellationHandle);
@@ -1040,43 +1055,29 @@ Awaitable<T> Server::computeInNewThread(net::static_thread_pool& threadPool,
 }
 
 // _____________________________________________________________________________
-Awaitable<std::optional<Server::PlannedQuery>> Server::parseAndPlan(
+Server::PlannedQuery Server::parseAndPlan(
     const std::string& query, const vector<DatasetClause>& queryDatasets,
     QueryExecutionContext& qec, SharedCancellationHandle handle,
-    TimeLimit timeLimit) {
-  auto handleCopy = handle;
+    TimeLimit timeLimit) const {
+  auto pq = SparqlParser::parseQuery(query);
+  handle->throwIfCancelled();
+  // SPARQL Protocol 2.1.4 specifies that the dataset from the query
+  // parameters overrides the dataset from the query itself.
+  if (!queryDatasets.empty()) {
+    pq.datasetClauses_ =
+        parsedQuery::DatasetClauses::fromClauses(queryDatasets);
+  }
+  QueryPlanner qp(&qec, handle);
+  qp.setEnablePatternTrick(enablePatternTrick_);
+  auto qet = qp.createExecutionTree(pq);
+  handle->throwIfCancelled();
+  PlannedQuery plannedQuery{std::move(pq), std::move(qet)};
 
-  // The usage of an `optional` here is required because of a limitation in
-  // Boost::Asio which forces us to use default-constructible result types with
-  // `computeInNewThread`. We also can't unwrap the optional directly in this
-  // function, because then the conan build fails in a very strange way,
-  // probably related to issues in GCC's coroutine implementation.
-  return computeInNewThread(
-      queryThreadPool_,
-      [&query, &qec, enablePatternTrick = enablePatternTrick_,
-       handle = std::move(handle), timeLimit,
-       &queryDatasets]() mutable -> std::optional<PlannedQuery> {
-        auto pq = SparqlParser::parseQuery(query);
-        handle->throwIfCancelled();
-        // SPARQL Protocol 2.1.4 specifies that the dataset from the query
-        // parameters overrides the dataset from the query itself.
-        if (!queryDatasets.empty()) {
-          pq.datasetClauses_ =
-              parsedQuery::DatasetClauses::fromClauses(queryDatasets);
-        }
-        QueryPlanner qp(&qec, handle);
-        qp.setEnablePatternTrick(enablePatternTrick);
-        auto qet = qp.createExecutionTree(pq);
-        handle->throwIfCancelled();
-        PlannedQuery plannedQuery{std::move(pq), std::move(qet)};
-
-        plannedQuery.queryExecutionTree_.getRootOperation()
-            ->recursivelySetCancellationHandle(std::move(handle));
-        plannedQuery.queryExecutionTree_.getRootOperation()
-            ->recursivelySetTimeConstraint(timeLimit);
-        return plannedQuery;
-      },
-      std::move(handleCopy));
+  plannedQuery.queryExecutionTree_.getRootOperation()
+      ->recursivelySetCancellationHandle(std::move(handle));
+  plannedQuery.queryExecutionTree_.getRootOperation()
+      ->recursivelySetTimeConstraint(timeLimit);
+  return plannedQuery;
 }
 
 // _____________________________________________________________________________
