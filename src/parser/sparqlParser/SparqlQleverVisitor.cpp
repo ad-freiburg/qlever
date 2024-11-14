@@ -1255,11 +1255,9 @@ void Visitor::warnOrThrowIfUnboundVariables(
     std::string_view clauseName) {
   for (const auto& var : expression.containedVariables()) {
     if (!ad_utility::contains(visibleVariables_, *var)) {
-      auto message =
-          absl::StrCat("The variable ", var->name(),
-                       " was used in the expression of a ", clauseName,
-                       " clause "
-                       "but was not previously bound in the query.");
+      auto message = absl::StrCat(
+          "The variable ", var->name(), " was used in the expression of a ",
+          clauseName, " clause but was not previously bound in the query");
       if (RuntimeParameters().get<"throw-on-unbound-variables">()) {
         reportError(ctx, message);
       } else {
@@ -1271,9 +1269,10 @@ void Visitor::warnOrThrowIfUnboundVariables(
 
 // ____________________________________________________________________________________
 SparqlFilter Visitor::visit(Parser::FilterRContext* ctx) {
-  // The second argument means that the expression `LANG(?var) = "language"` is
+  // The second argument means that the expression `LANG(?var) = "langtag"` is
   // allowed.
-  // Note: We cannot add a warning or throw an exception if the filter
+  //
+  // NOTE: We cannot add a warning or throw an exception if the FILTER
   // expression contains unbound variables, because the variables of the FILTER
   // might be bound after the filter appears in the query (which is perfectly
   // legal).

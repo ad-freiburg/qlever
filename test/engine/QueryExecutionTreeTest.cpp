@@ -1,7 +1,6 @@
 // Copyright 2024, University of Freiburg
 // Chair of Algorithms and Data Structures
-// Authors:
-//   2024 -    Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 #include <gmock/gmock.h>
 

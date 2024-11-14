@@ -30,7 +30,7 @@
 
 using groupBy::detail::VectorOfAggregationData;
 
-// _______________________________________________________________________________________________
+// _____________________________________________________________________________
 GroupBy::GroupBy(QueryExecutionContext* qec, vector<Variable> groupByVariables,
                  std::vector<Alias> aliases,
                  std::shared_ptr<QueryExecutionTree> subtree)
@@ -38,14 +38,15 @@ GroupBy::GroupBy(QueryExecutionContext* qec, vector<Variable> groupByVariables,
       _groupByVariables{std::move(groupByVariables)},
       _aliases{std::move(aliases)} {
   AD_CORRECTNESS_CHECK(subtree != nullptr);
-  // Ignore all variables that are not contained in the subtree.
+  // Remove all undefined GROUP BY variables (according to the SPARQL standard
+  // they are allowed, but have no effect on the result).
   std::erase_if(_groupByVariables,
                 [&map = subtree->getVariableColumns()](const auto& var) {
                   return !map.contains(var);
                 });
-  // Sort the groupByVariables to ensure that the cache key is order
-  // invariant.
-  // Note: It is tempting to do the same also for the aliases, but that would
+  // Sort `groupByVariables` to ensure that the cache key is order invariant.
+  //
+  // NOTE: It is tempting to do the same also for the aliases, but that would
   // break the case when an alias reuses a variable that was bound by a previous
   // alias.
   std::ranges::sort(_groupByVariables, std::less<>{}, &Variable::name);

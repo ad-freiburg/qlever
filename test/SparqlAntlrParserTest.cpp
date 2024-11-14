@@ -1370,7 +1370,7 @@ TEST(SparqlParser, Query) {
   // DESCRIBE queries are not yet supported.
   expectQueryFails("DESCRIBE *");
 
-  // Test the various places where warnings are added in a query
+  // Test the various places where warnings are added in a query.
   expectQuery("SELECT ?x {} GROUP BY ?x ORDER BY ?y",
               m::WarningsOfParsedQuery({"?x was used by GROUP BY",
                                         "?y was used in an ORDER BY clause"}));
@@ -1380,7 +1380,7 @@ TEST(SparqlParser, Query) {
   expectQuery("SELECT * { } ORDER BY ?s",
               m::WarningsOfParsedQuery({"?s was used by ORDER BY"}));
 
-  // Now test the same queries with exceptions instead of warnings
+  // Now test the same queries with exceptions instead of warnings.
   RuntimeParameters().set<"throw-on-unbound-variables">(true);
   expectQueryFails("SELECT ?x {} GROUP BY ?x",
                    contains("?x was used by GROUP BY"));
@@ -1389,6 +1389,7 @@ TEST(SparqlParser, Query) {
   expectQueryFails("SELECT * { } ORDER BY ?s",
                    contains("?s was used by ORDER BY"));
 
+  // Revert this (global) setting to its original value.
   RuntimeParameters().set<"throw-on-unbound-variables">(false);
 }
 

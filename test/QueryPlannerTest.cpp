@@ -1,6 +1,7 @@
-// Copyright 2015, University of Freiburg, Chair of Algorithms and Data
-// Structures.
-// Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+// Copyright 2015 - 2024, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de> [2015 - 2017]
+//          Johannes Kalmbach <kalmbachqcs.uni-freiburg.de> [2018 - 2024]
 
 #include <gtest/gtest.h>
 
