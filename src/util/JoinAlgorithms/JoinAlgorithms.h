@@ -909,15 +909,6 @@ struct BlockZipperJoinImpl {
     compatibleRowAction_.flush();
   }
 
-  void storeNewlyFoundUndefBlocks(const auto& blockSource, auto& blockSink) {
-    if constexpr (potentiallyHasUndef) {
-      if (isUndefined_(blockSource.front().subrange().front())) {
-        AD_CORRECTNESS_CHECK(isUndefined_(blockSource.back().back()));
-        std::ranges::copy(blockSource, std::back_inserter(blockSink));
-      }
-    }
-  }
-
   // Return a vector of subranges of all elements in `blocks` that are equal to
   // `currentEl`. Effectively, these subranges cover all the blocks completely
   // except maybe the last one, which might contain elements `> currentEl` at
@@ -938,8 +929,7 @@ struct BlockZipperJoinImpl {
   cppcoro::generator<T> findUndefValuesHelper(const auto& fullBlockLeft,
                                               const auto& fullBlockRight,
                                               T& begL, T& begR,
-                                              const auto& undefBlocks, auto it,
-                                              auto end) {
+                                              const auto& undefBlocks) {
     for (const auto& undefBlock : undefBlocks) {
       if constexpr (left) {
         begL = undefBlock.fullBlock().begin();
@@ -955,15 +945,10 @@ struct BlockZipperJoinImpl {
         co_yield subIt;
       }
     }
+    // Reset back to original input
     compatibleRowAction_.setInput(fullBlockLeft.get(), fullBlockRight.get());
-    begL = fullBlockLeft.get().begin();
-    begR = fullBlockRight.get().begin();
-    for (; it != end; ++it) {
-      if (!isUndefined_(*it)) {
-        co_return;
-      }
-      co_yield it;
-    }
+    // No need for further iteration because we know we won't encounter any new
+    // undefined values at this point.
   }
 
   // Create a generator that yields iterators to all undefined values that
@@ -976,7 +961,7 @@ struct BlockZipperJoinImpl {
   auto findUndefValues(const auto& fullBlockLeft, const auto& fullBlockRight,
                        T& begL, T& begR) {
     return [this, &fullBlockLeft, &fullBlockRight, &begL, &begR](
-               const auto&, auto it, auto end, bool) {
+               const auto&, auto, auto, bool) {
       auto currentSide = [this]() {
         if constexpr (left) {
           return std::cref(leftSide_);
@@ -984,9 +969,9 @@ struct BlockZipperJoinImpl {
           return std::cref(rightSide_);
         }
       }();
-      return findUndefValuesHelper<left, T>(
-          fullBlockLeft, fullBlockRight, begL, begR,
-          currentSide.get().undefBlocks_, std::move(it), std::move(end));
+      return findUndefValuesHelper<left, T>(fullBlockLeft, fullBlockRight, begL,
+                                            begR,
+                                            currentSide.get().undefBlocks_);
     };
   }
 
@@ -1043,25 +1028,6 @@ struct BlockZipperJoinImpl {
           addRowIndex, noop, noop, addNotFoundRowIndex);
     }
     compatibleRowAction_.flush();
-
-    // Store the undefined values that have been processed by
-    // `zipperJoinWithUndef` in the undefBlocks for later use.
-    if constexpr (potentiallyHasUndef) {
-      if (subrangeLeft.begin() != currentElItL &&
-          isUndefined_(subrangeLeft.front())) {
-        leftSide_.undefBlocks_.push_back(currentBlocksLeft.at(0));
-        auto& back = leftSide_.undefBlocks_.back();
-        back.setSubrange(std::ranges::equal_range(
-            back.subrange(), subrangeLeft.front(), lessThan_));
-      }
-      if (subrangeRight.begin() != currentElItR &&
-          isUndefined_(subrangeRight.front())) {
-        rightSide_.undefBlocks_.push_back(currentBlocksRight.at(0));
-        auto& back = rightSide_.undefBlocks_.back();
-        back.setSubrange(std::ranges::equal_range(
-            back.subrange(), subrangeRight.front(), lessThan_));
-      }
-    }
 
     // Remove the joined elements.
     currentBlocksLeft.at(0).setSubrange(currentElItL, subrangeLeft.end());
@@ -1160,21 +1126,13 @@ struct BlockZipperJoinImpl {
       addAll<DoOptionalJoin>(equalToCurrentElLeft, equalToCurrentElRight);
       switch (blockStatus) {
         case BlockStatus::allFilled:
-          storeNewlyFoundUndefBlocks(equalToCurrentElRight,
-                                     rightSide_.undefBlocks_);
-          storeNewlyFoundUndefBlocks(equalToCurrentElLeft,
-                                     leftSide_.undefBlocks_);
           removeEqualToCurrentEl(currentBlocksLeft, currentEl);
           removeEqualToCurrentEl(currentBlocksRight, currentEl);
           return;
         case BlockStatus::rightMissing:
-          storeNewlyFoundUndefBlocks(equalToCurrentElRight,
-                                     rightSide_.undefBlocks_);
           getNextBlocks(equalToCurrentElRight, rightSide_);
           continue;
         case BlockStatus::leftMissing:
-          storeNewlyFoundUndefBlocks(equalToCurrentElLeft,
-                                     leftSide_.undefBlocks_);
           getNextBlocks(equalToCurrentElLeft, leftSide_);
           continue;
         default:
@@ -1253,9 +1211,47 @@ struct BlockZipperJoinImpl {
     }
   }
 
+  void findFirstBlockWithoutUndef(auto& side) {
+    auto& it = side.it_;
+    const auto& end = side.end_;
+    while (it != end) {
+      auto& el = *it;
+      if (!std::ranges::empty(el) && isUndefined_(el.front())) {
+        bool endUndefined = isUndefined_(el.back());
+        side.undefBlocks_.emplace_back(std::move(el));
+        ++it;
+        if (!endUndefined) {
+          auto& lastUndefinedBlock = side.undefBlocks_.back();
+          side.currentBlocks_.push_back(lastUndefinedBlock);
+          auto subrange = std::ranges::equal_range(
+              lastUndefinedBlock.subrange(),
+              lastUndefinedBlock.subrange().front(), lessThan_);
+          size_t undefCount = std::ranges::size(subrange);
+          lastUndefinedBlock.setSubrange(std::move(subrange));
+          auto& firstDefinedBlock = side.currentBlocks_.back();
+          firstDefinedBlock.setSubrange(
+              firstDefinedBlock.fullBlock().begin() + undefCount,
+              firstDefinedBlock.fullBlock().end());
+          break;
+        }
+        continue;
+      }
+      break;
+    }
+  }
+
+  void fetchAndProcessUndefinedBlocks() {
+    if constexpr (potentiallyHasUndef) {
+      findFirstBlockWithoutUndef(leftSide_);
+      findFirstBlockWithoutUndef(rightSide_);
+      addCartesianProduct(leftSide_.undefBlocks_, rightSide_.undefBlocks_);
+    }
+  }
+
   // The actual join routine that combines all the previous functions.
   template <bool DoOptionalJoin>
   void runJoin() {
+    fetchAndProcessUndefinedBlocks();
     while (true) {
       BlockStatus blockStatus = fillBuffer();
       if (leftSide_.currentBlocks_.empty() ||
