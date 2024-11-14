@@ -25,6 +25,7 @@
 #include "engine/sparqlExpressions/RegexExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "engine/sparqlExpressions/SampleExpression.h"
+#include "engine/sparqlExpressions/StdevExpression.h"
 #include "engine/sparqlExpressions/UuidExpressions.h"
 #include "parser/ConstructClause.h"
 #include "parser/SparqlParserHelpers.h"
@@ -1854,6 +1855,23 @@ template <typename AggregateExpr>
       AD_PROPERTY(Exp, children, ElementsAre(variableExpressionMatcher(child))),
       WhenDynamicCastTo<const AggregateExpr&>(innerMatcher)));
 }
+
+// Return a matcher that checks whether a given `SparqlExpression::Ptr` actually
+// points to an `AggregateExpr` and that the distinctness of the aggregate
+// expression matches. It does not check the child. This is required to test
+// aggregates that implicitly replace their child, like `StdevExpression`.
+template <typename AggregateExpr>
+::testing::Matcher<const SparqlExpression::Ptr&> matchAggregateWithoutChild(
+    bool distinct) {
+  using namespace ::testing;
+  using namespace builtInCallTestHelpers;
+  using Exp = SparqlExpression;
+
+  using enum SparqlExpression::AggregateStatus;
+  auto aggregateStatus = distinct ? DistinctAggregate : NonDistinctAggregate;
+  return Pointee(AllOf(AD_PROPERTY(Exp, isAggregate, Eq(aggregateStatus)),
+                       WhenDynamicCastTo<const AggregateExpr&>(testing::_)));
+}
 }  // namespace aggregateTestHelpers
 
 // ___________________________________________________________
@@ -1924,6 +1942,17 @@ TEST(SparqlParser, aggregateExpressions) {
   expectAggregate(
       "group_concat(DISTINCT ?x; SEPARATOR=\";\")",
       matchAggregate<GroupConcatExpression>(true, V{"?x"}, separator(";")));
+
+  // The STDEV expression
+  // Here we don't match the child, because StdevExpression replaces it with a
+  // DeviationExpression.
+  expectAggregate("STDEV(?x)",
+                  matchAggregateWithoutChild<StdevExpression>(false));
+  expectAggregate("stdev(?x)",
+                  matchAggregateWithoutChild<StdevExpression>(false));
+  // A distinct stdev is probably not very useful, but should be possible anyway
+  expectAggregate("STDEV(DISTINCT ?x)",
+                  matchAggregateWithoutChild<StdevExpression>(true));
 }
 
 TEST(SparqlParser, Quads) {
