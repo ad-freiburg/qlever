@@ -49,7 +49,7 @@ using QetMatcher = Matcher<const QueryExecutionTree&>;
 
 // Return a matcher that checks that the `rootOperation` of a given
 // `QueryExecutionTree` matches the given `matcher`.
-QetMatcher RootOperationBase(Matcher<const Operation&> matcher) {
+inline QetMatcher RootOperationBase(Matcher<const Operation&> matcher) {
   auto getRootOperation =
       [](const QueryExecutionTree& tree) -> const ::Operation& {
     return *tree.getRootOperation().get();
@@ -386,11 +386,10 @@ constexpr auto OrderBy = [](const ::OrderBy::SortedVariables& sortedVariables,
 // Match a `UNION` operation.
 constexpr auto Union = MatchTypeAndOrderedChildren<::Union>;
 
-// Match a `QueryExecutionTree` that contains warnings (in any order) that
-// contain the `warningSubstrings` and additionally matches the `actualMatcher`.
+//
 inline QetMatcher QetWithWarnings(
     const std::vector<std::string>& warningSubstrings,
-    const QetMatcher& actualMatcher) {
+    QetMatcher actualMatcher) {
   auto warningMatchers = ad_utility::transform(
       warningSubstrings,
       [](const std::string& s) { return ::testing::HasSubstr(s); });
