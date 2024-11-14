@@ -90,6 +90,8 @@ class LocatedTriplesPerBlock {
   // the updated triples.
   std::optional<std::vector<CompressedBlockMetadata>> augmentedMetadata_;
   std::vector<CompressedBlockMetadata> originalMetadata_;
+
+ public:
   void updateAugmentedMetadata();
 
  public:
@@ -127,14 +129,18 @@ class LocatedTriplesPerBlock {
   IdTable mergeTriples(size_t blockIndex, const IdTable& block,
                        size_t numIndexColumns, bool includeGraphColumn) const;
 
-  // Add `getLocatedTriplesForPermutation` to the `LocatedTriplesPerBlock`.
-  // Return handles to where they were added (`LocatedTriples` is a sorted set,
-  // see above). We need the handles so that we can easily remove the
-  // `getLocatedTriplesForPermutation` from the set again in case we need to.
+  // Return true iff there are located triples in the block with the given
+  // index.
+  bool containsTriples(size_t blockIndex) const {
+    return map_.contains(blockIndex);
+  }
+
+  // Add `locatedTriples` to the `LocatedTriplesPerBlock` and return handles to
+  // where they were added (`LocatedTriples` is a sorted set, see above). Using
+  // these handles, we can easily remove the `locatedTriples` from the set again
+  // when we need to.
   //
-  // PRECONDITIONS:
-  //
-  // 1. The `getLocatedTriplesForPermutation` must not already exist in
+  // PRECONDITION: The `locatedTriples` must not already exist in
   // `LocatedTriplesPerBlock`.
   std::vector<LocatedTriples::iterator> add(
       std::span<const LocatedTriple> locatedTriples);
@@ -167,9 +173,11 @@ class LocatedTriplesPerBlock {
     augmentedMetadata_ = originalMetadata_;
   }
 
-  // Only used for testing. Return `true` iff a `LocatedTriple` with the given
-  // value for `shouldExist` is contained in any block.
-  bool containsTriple(const IdTriple<0>& triple, bool shouldExist) const;
+  // Return `true` iff the given triple is one of the located triples with the
+  // given status (inserted or deleted).
+  //
+  // NOTE: Only used for testing.
+  bool isLocatedTriple(const IdTriple<0>& triple, bool isInsertion) const;
 
   // This operator is only for debugging and testing. It returns a
   // human-readable representation.
