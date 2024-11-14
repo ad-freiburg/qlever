@@ -9,6 +9,7 @@
 #include <iterator>
 #include <optional>
 #include <ranges>
+#include <unordered_map>
 #include <variant>
 #include <vector>
 
@@ -262,7 +263,8 @@ Result PathSearch::computeResult([[maybe_unused]] bool requestLaziness) {
       allSources = binSearch.getSources();
       sources = allSources;
     }
-    paths = allPaths(sources, targets, binSearch, config_.cartesian_);
+    paths = allPaths(sources, targets, binSearch, config_.cartesian_,
+                     config_.numPathsPerTarget_);
 
     timer.stop();
     auto searchTime = timer.msecs();
@@ -326,15 +328,16 @@ PathSearch::handleSearchSides() const {
 }
 
 // _____________________________________________________________________________
-PathsLimited PathSearch::findPaths(const Id& source,
-                                   const std::unordered_set<uint64_t>& targets,
-                                   const BinSearchWrapper& binSearch) const {
+PathsLimited PathSearch::findPaths(
+    const Id& source, const std::unordered_set<uint64_t>& targets,
+    const BinSearchWrapper& binSearch,
+    std::optional<uint64_t> numPathsPerTarget) const {
   std::vector<Edge> edgeStack;
   Path currentPath{EdgesLimited(allocator())};
   std::unordered_map<
-      uint64_t, PathsLimited, std::hash<uint64_t>, std::equal_to<uint64_t>,
-      ad_utility::AllocatorWithLimit<std::pair<const uint64_t, PathsLimited>>>
-      pathCache{allocator()};
+      uint64_t, uint64_t, std::hash<uint64_t>, std::equal_to<uint64_t>,
+      ad_utility::AllocatorWithLimit<std::pair<const uint64_t, uint64_t>>>
+      numPathsPerNode{allocator()};
   PathsLimited result{allocator()};
   std::unordered_set<uint64_t, std::hash<uint64_t>, std::equal_to<uint64_t>,
                      ad_utility::AllocatorWithLimit<uint64_t>>
@@ -357,9 +360,18 @@ PathsLimited PathSearch::findPaths(const Id& source,
       currentPath.pop_back();
     }
 
+    auto edgeEnd = edge.end_.getBits();
+    if (numPathsPerTarget) {
+      auto numPaths = ++numPathsPerNode[edgeEnd];
+
+      if (numPaths > numPathsPerTarget) {
+        continue;
+      }
+    }
+
     currentPath.push_back(edge);
 
-    if (targets.empty() || targets.contains(edge.end_.getBits())) {
+    if (targets.empty() || targets.contains(edgeEnd)) {
       result.push_back(currentPath);
     }
 
@@ -374,10 +386,10 @@ PathsLimited PathSearch::findPaths(const Id& source,
 }
 
 // _____________________________________________________________________________
-PathsLimited PathSearch::allPaths(std::span<const Id> sources,
-                                  std::span<const Id> targets,
-                                  const BinSearchWrapper& binSearch,
-                                  bool cartesian) const {
+PathsLimited PathSearch::allPaths(
+    std::span<const Id> sources, std::span<const Id> targets,
+    const BinSearchWrapper& binSearch, bool cartesian,
+    std::optional<uint64_t> numPathsPerTarget) const {
   PathsLimited paths{allocator()};
   Path path{EdgesLimited(allocator())};
 
@@ -387,14 +399,15 @@ PathsLimited PathSearch::allPaths(std::span<const Id> sources,
       targetSet.insert(target.getBits());
     }
     for (auto source : sources) {
-      for (const auto& path : findPaths(source, targetSet, binSearch)) {
+      for (const auto& path :
+           findPaths(source, targetSet, binSearch, numPathsPerTarget)) {
         paths.push_back(path);
       }
     }
   } else {
     for (size_t i = 0; i < sources.size(); i++) {
-      for (const auto& path :
-           findPaths(sources[i], {targets[i].getBits()}, binSearch)) {
+      for (const auto& path : findPaths(sources[i], {targets[i].getBits()},
+                                        binSearch, numPathsPerTarget)) {
         paths.push_back(path);
       }
     }

@@ -92,6 +92,12 @@ auto SparqlExpressionPimpl::getEstimatesForFilterExpression(
                                                  primarySortKeyVariable);
 }
 
+//_____________________________________________________________________________
+std::vector<PrefilterExprVariablePair>
+SparqlExpressionPimpl::getPrefilterExpressionForMetadata() const {
+  return _pimpl->getPrefilterExpressionForMetadata();
+}
+
 // _____________________________________________________________________________
 bool SparqlExpressionPimpl::containsLangExpression() const {
   return _pimpl->containsLangExpression();

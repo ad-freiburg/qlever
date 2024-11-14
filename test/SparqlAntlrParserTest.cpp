@@ -25,6 +25,7 @@
 #include "engine/sparqlExpressions/RegexExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "engine/sparqlExpressions/SampleExpression.h"
+#include "engine/sparqlExpressions/StdevExpression.h"
 #include "engine/sparqlExpressions/UuidExpressions.h"
 #include "parser/ConstructClause.h"
 #include "parser/SparqlParserHelpers.h"
@@ -1842,6 +1843,23 @@ template <typename AggregateExpr>
       AD_PROPERTY(Exp, children, ElementsAre(variableExpressionMatcher(child))),
       WhenDynamicCastTo<const AggregateExpr&>(innerMatcher)));
 }
+
+// Return a matcher that checks whether a given `SparqlExpression::Ptr` actually
+// points to an `AggregateExpr` and that the distinctness of the aggregate
+// expression matches. It does not check the child. This is required to test
+// aggregates that implicitly replace their child, like `StdevExpression`.
+template <typename AggregateExpr>
+::testing::Matcher<const SparqlExpression::Ptr&> matchAggregateWithoutChild(
+    bool distinct) {
+  using namespace ::testing;
+  using namespace builtInCallTestHelpers;
+  using Exp = SparqlExpression;
+
+  using enum SparqlExpression::AggregateStatus;
+  auto aggregateStatus = distinct ? DistinctAggregate : NonDistinctAggregate;
+  return Pointee(AllOf(AD_PROPERTY(Exp, isAggregate, Eq(aggregateStatus)),
+                       WhenDynamicCastTo<const AggregateExpr&>(testing::_)));
+}
 }  // namespace aggregateTestHelpers
 
 // ___________________________________________________________
@@ -1912,32 +1930,17 @@ TEST(SparqlParser, aggregateExpressions) {
   expectAggregate(
       "group_concat(DISTINCT ?x; SEPARATOR=\";\")",
       matchAggregate<GroupConcatExpression>(true, V{"?x"}, separator(";")));
-}
 
-// Update queries are WIP. The individual parts to parse some update queries
-// are in place the code to process them is still unfinished. Therefore we
-// don't accept update queries.
-TEST(SparqlParser, updateQueryUnsupported) {
-  auto expectUpdateFails = ExpectParseFails<&Parser::queryOrUpdate>{};
-  auto contains = [](const std::string& s) { return ::testing::HasSubstr(s); };
-  auto updateUnsupported =
-      contains("SPARQL 1.1 Update is currently not supported by QLever.");
-
-  // Test all the cases because some functionality will be enabled shortly.
-  expectUpdateFails("INSERT DATA { <a> <b> <c> }", updateUnsupported);
-  expectUpdateFails("DELETE DATA { <a> <b> <c> }", updateUnsupported);
-  expectUpdateFails("DELETE { <a> <b> <c> } WHERE { ?s ?p ?o }",
-                    updateUnsupported);
-  expectUpdateFails("INSERT { <a> <b> <c> } WHERE { ?s ?p ?o }",
-                    updateUnsupported);
-  expectUpdateFails("DELETE WHERE { <a> <b> <c> }", updateUnsupported);
-  expectUpdateFails("LOAD <a>", updateUnsupported);
-  expectUpdateFails("CLEAR GRAPH <a>", updateUnsupported);
-  expectUpdateFails("DROP GRAPH <a>", updateUnsupported);
-  expectUpdateFails("CREATE GRAPH <a>", updateUnsupported);
-  expectUpdateFails("ADD GRAPH <a> TO DEFAULT", updateUnsupported);
-  expectUpdateFails("MOVE DEFAULT TO GRAPH <a>", updateUnsupported);
-  expectUpdateFails("COPY GRAPH <a> TO GRAPH <a>", updateUnsupported);
+  // The STDEV expression
+  // Here we don't match the child, because StdevExpression replaces it with a
+  // DeviationExpression.
+  expectAggregate("STDEV(?x)",
+                  matchAggregateWithoutChild<StdevExpression>(false));
+  expectAggregate("stdev(?x)",
+                  matchAggregateWithoutChild<StdevExpression>(false));
+  // A distinct stdev is probably not very useful, but should be possible anyway
+  expectAggregate("STDEV(DISTINCT ?x)",
+                  matchAggregateWithoutChild<StdevExpression>(true));
 }
 
 TEST(SparqlParser, Quads) {
@@ -1999,8 +2002,14 @@ TEST(SparqlParser, QuadData) {
   expectQuadDataFails("{ GRAPH ?foo { <a> <b> <c> } }");
 }
 
-TEST(SparqlParser, UpdateQuery) {
-  auto expectUpdate = ExpectCompleteParse<&Parser::update>{defaultPrefixMap};
+TEST(SparqlParser, Update) {
+  auto expectUpdate_ = ExpectCompleteParse<&Parser::update>{defaultPrefixMap};
+  // Automatically test all updates for their `_originalString`.
+  auto expectUpdate = [&expectUpdate_](const std::string& query,
+                                       auto&& expected) {
+    expectUpdate_(query,
+                  testing::AllOf(expected, m::pq::OriginalString(query)));
+  };
   auto expectUpdateFails = ExpectParseFails<&Parser::update>{};
   auto Iri = [](std::string_view stringWithBrackets) {
     return TripleComponent::Iri::fromIriref(stringWithBrackets);
@@ -2010,6 +2019,7 @@ TEST(SparqlParser, UpdateQuery) {
   };
   auto noGraph = std::monostate{};
 
+  // Test the parsing of the update clause in the ParsedQuery.
   expectUpdate(
       "INSERT DATA { <a> <b> <c> }",
       m::UpdateClause(
@@ -2035,7 +2045,14 @@ TEST(SparqlParser, UpdateQuery) {
           m::GraphUpdate({{Var("?a"), Iri("<b>"), Iri("<c>"), noGraph}}, {},
                          std::nullopt),
           m::GraphPattern(m::Triples({{Iri("<d>"), "<e>", Var{"?a"}}}))));
+  // Use variables that are not visible in the query body. Do this for all parts
+  // of the quad for coverage reasons.
   expectUpdateFails("DELETE { ?a <b> <c> } WHERE { <a> ?b ?c }");
+  expectUpdateFails("DELETE { <c> <d> <c> . <e> ?a <f> } WHERE { <a> ?b ?c }");
+  expectUpdateFails(
+      "DELETE { GRAPH <foo> { <c> <d> <c> . <e> <f> ?a } } WHERE { <a> ?b ?c "
+      "}");
+  expectUpdateFails("DELETE { GRAPH ?a { <c> <d> <c> } } WHERE { <a> ?b ?c }");
   expectUpdate(
       "DELETE { ?a <b> <c> } INSERT { <a> ?a <c> } WHERE { <d> <e> ?a }",
       m::UpdateClause(
@@ -2125,13 +2142,35 @@ TEST(SparqlParser, UpdateQuery) {
                                m::GraphPattern()));
 }
 
-TEST(SparqlParser, EmptyQuery) {
+TEST(SparqlParser, QueryOrUpdate) {
+  auto expectQuery =
+      ExpectCompleteParse<&Parser::queryOrUpdate>{defaultPrefixMap};
   auto expectQueryFails = ExpectParseFails<&Parser::queryOrUpdate>{};
+  auto Iri = [](std::string_view stringWithBrackets) {
+    return TripleComponent::Iri::fromIriref(stringWithBrackets);
+  };
+  // Empty queries (queries without any query or update operation) are
+  // forbidden.
   auto emptyMatcher = ::testing::HasSubstr("Empty quer");
   expectQueryFails("", emptyMatcher);
   expectQueryFails(" ", emptyMatcher);
   expectQueryFails("PREFIX ex: <http://example.org>", emptyMatcher);
   expectQueryFails("### Some comment \n \n #someMoreComments", emptyMatcher);
+  // Hit all paths for coverage.
+  expectQuery("SELECT ?a WHERE { ?a <is-a> <b> }",
+              AllOf(m::SelectQuery(m::Select({Var{"?a"}}),
+                                   m::GraphPattern(m::Triples(
+                                       {{Var{"?a"}, "<is-a>", Iri("<b>")}}))),
+                    m::pq::OriginalString("SELECT ?a WHERE { ?a <is-a> <b> }"),
+                    m::VisibleVariables({Var{"?a"}})));
+  expectQuery(
+      "INSERT DATA { <a> <b> <c> }",
+      AllOf(m::UpdateClause(m::GraphUpdate({},
+                                           {{Iri("<a>"), Iri("<b>"), Iri("<c>"),
+                                             std::monostate{}}},
+                                           std::nullopt),
+                            m::GraphPattern()),
+            m::pq::OriginalString("INSERT DATA { <a> <b> <c> }")));
 }
 
 TEST(SparqlParser, GraphOrDefault) {
@@ -2153,6 +2192,24 @@ TEST(SparqlParser, GraphRef) {
   expectGraphRefAll("NAMED", m::Variant<NAMED>());
   expectGraphRefAll("ALL", m::Variant<ALL>());
   expectGraphRefAll("GRAPH <foo>", m::GraphRefIri("<foo>"));
+}
+
+TEST(SparqlParser, QuadsNotTriples) {
+  auto expectQuadsNotTriples =
+      ExpectCompleteParse<&Parser::quadsNotTriples>{defaultPrefixMap};
+  auto expectQuadsNotTriplesFails =
+      ExpectParseFails<&Parser::quadsNotTriples>{};
+  const auto Iri = TripleComponent::Iri::fromIriref;
+
+  expectQuadsNotTriples(
+      "GRAPH <foo> { <a> <b> <c> }",
+      testing::ElementsAre(
+          m::Quad(Iri("<a>"), Iri("<b>"), Iri("<c>"), ::Iri("<foo>"))));
+  expectQuadsNotTriples(
+      "GRAPH ?f { <a> <b> <c> }",
+      ElementsAre(m::Quad(Iri("<a>"), Iri("<b>"), Iri("<c>"), Var{"?f"})));
+  expectQuadsNotTriplesFails("GRAPH \"foo\" { <a> <b> <c> }");
+  expectQuadsNotTriplesFails("GRAPH _:blankNode { <a> <b> <c> }");
 }
 
 TEST(SparqlParser, SourceSelector) {

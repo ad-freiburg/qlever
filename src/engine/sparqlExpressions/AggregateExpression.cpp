@@ -6,6 +6,7 @@
 #include "engine/sparqlExpressions/AggregateExpression.h"
 
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
+#include "engine/sparqlExpressions/StdevExpression.h"
 
 namespace sparqlExpression::detail {
 
@@ -179,6 +180,11 @@ AggregateExpression<AggregateOperation, FinalOperation>::getVariableForCount()
 
 // Explicit instantiation for the AVG expression.
 template class AggregateExpression<AvgOperation, decltype(avgFinalOperation)>;
+
+// Explicit instantiation for the STDEV expression.
+template class AggregateExpression<AvgOperation, decltype(stdevFinalOperation)>;
+template class DeviationAggExpression<AvgOperation,
+                                      decltype(stdevFinalOperation)>;
 
 // Explicit instantiations for the other aggregate expressions.
 #define INSTANTIATE_AGG_EXP(Function, ValueGetter) \

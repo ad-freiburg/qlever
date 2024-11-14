@@ -398,7 +398,8 @@ inline QetMatcher QetWithWarnings(
 
 /// Parse the given SPARQL `query`, pass it to a `QueryPlanner` with empty
 /// execution context, and return the resulting `QueryExecutionTree`
-QueryExecutionTree parseAndPlan(std::string query, QueryExecutionContext* qec) {
+inline QueryExecutionTree parseAndPlan(std::string query,
+                                       QueryExecutionContext* qec) {
   ParsedQuery pq = SparqlParser::parseQuery(std::move(query));
   // TODO<joka921> make it impossible to pass `nullptr` here, properly mock a
   // queryExecutionContext.

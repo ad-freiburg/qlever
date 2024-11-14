@@ -330,8 +330,15 @@ class IdTable {
   T& at(size_t row, size_t column) requires(!isView) {
     return data().at(column).at(row);
   }
-  const T& at(size_t row, size_t column) const {
+  // TODO<C++26> Remove overload for `isView` and drop requires clause.
+  const T& at(size_t row, size_t column) const requires(!isView) {
     return data().at(column).at(row);
+  }
+  // `std::span::at` is a C++26 feature, so we have to implement it ourselves.
+  const T& at(size_t row, size_t column) const requires(isView) {
+    const auto& col = data().at(column);
+    AD_CONTRACT_CHECK(row < col.size());
+    return col[row];
   }
 
   // Get a reference to the `i`-th row. The returned proxy objects can be

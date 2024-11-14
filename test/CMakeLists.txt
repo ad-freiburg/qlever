@@ -291,6 +291,10 @@ addLinkAndDiscoverTest(AlgorithmTest)
 
 addLinkAndDiscoverTestSerial(CompressedRelationsTest index)
 
+addLinkAndDiscoverTestSerial(PrefilterExpressionIndexTest sparqlExpressions index)
+
+addLinkAndDiscoverTestSerial(GetPrefilterExpressionFromSparqlExpressionTest sparqlExpressions index)
+
 addLinkAndDiscoverTest(ExceptionTest)
 
 addLinkAndDiscoverTestSerial(RandomExpressionTest index)
@@ -414,3 +418,5 @@ addLinkAndDiscoverTest(SparqlExpressionGeneratorsTest engine)
 addLinkAndDiscoverTest(UrlParserTest)
 
 addLinkAndDiscoverTest(ServerTest engine)
+
+addLinkAndDiscoverTest(ExecuteUpdateTest engine)

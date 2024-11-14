@@ -248,3 +248,15 @@ std::shared_ptr<QueryExecutionTree> idTableToExecutionTree(
   return ad_utility::makeExecutionTree<ValuesForTesting>(qec, input.clone(),
                                                          std::move(vars));
 }
+
+// _____________________________________________________________________________
+std::pair<IdTable, std::vector<LocalVocab>> aggregateTables(
+    Result::Generator generator, size_t numColumns) {
+  IdTable aggregateTable{numColumns, ad_utility::makeUnlimitedAllocator<Id>()};
+  std::vector<LocalVocab> localVocabs;
+  for (auto& [idTable, localVocab] : generator) {
+    localVocabs.emplace_back(std::move(localVocab));
+    aggregateTable.insertAtEnd(idTable);
+  }
+  return {std::move(aggregateTable), std::move(localVocabs)};
+}

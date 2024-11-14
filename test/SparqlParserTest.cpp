@@ -953,6 +953,20 @@ TEST(ParserTest, testSolutionModifiers) {
 
   {
     auto pq = SparqlParser::parseQuery(
+        "SELECT ?r (STDEV(?r) as ?stdev) WHERE {"
+        "?a <http://schema.org/name> ?b ."
+        "?a ql:has-relation ?r }"
+        "GROUP BY ?r "
+        "ORDER BY ?stdev");
+    ASSERT_EQ(1u, pq.children().size());
+    ASSERT_EQ(1u, pq._orderBy.size());
+    EXPECT_THAT(pq, m::GroupByVariables({Var{"?r"}}));
+    ASSERT_EQ(Var{"?stdev"}, pq._orderBy[0].variable_);
+    ASSERT_FALSE(pq._orderBy[0].isDescending_);
+  }
+
+  {
+    auto pq = SparqlParser::parseQuery(
         "SELECT ?r (COUNT(DISTINCT ?r) as ?count) WHERE {"
         "?a <http://schema.org/name> ?b ."
         "?a ql:has-relation ?r }"

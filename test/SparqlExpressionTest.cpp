@@ -17,6 +17,7 @@
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/SampleExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
+#include "engine/sparqlExpressions/StdevExpression.h"
 #include "parser/GeoPoint.h"
 #include "util/AllocatorTestHelpers.h"
 #include "util/Conversions.h"
@@ -587,8 +588,9 @@ TEST(SparqlExpression, stringOperators) {
 
   // Test the different (optimized) behavior depending on whether the STR()
   // function was applied to the argument.
-  checkStrlen(IdOrLiteralOrIriVec{lit("one"), I(1), D(3.6), lit("")},
-              Ids{I(3), U, U, I(0)});
+  checkStrlen(
+      IdOrLiteralOrIriVec{lit("one"), lit("tschüss"), I(1), D(3.6), lit("")},
+      Ids{I(3), I(7), U, U, I(0)});
   checkStrlenWithStrChild(
       IdOrLiteralOrIriVec{lit("one"), I(1), D(3.6), lit("")},
       Ids{I(3), I(1), I(3), I(0)});
@@ -1371,6 +1373,9 @@ TEST(SparqlExpression, isAggregateAndIsDistinct) {
 
   EXPECT_THAT(GroupConcatExpression(false, varX(), " "), match(false));
   EXPECT_THAT(GroupConcatExpression(true, varX(), " "), match(true));
+
+  EXPECT_THAT(StdevExpression(false, varX()), match(false));
+  EXPECT_THAT(StdevExpression(true, varX()), match(true));
 
   EXPECT_THAT(SampleExpression(false, varX()), match(false));
   // For `SAMPLE` the distinctness makes no difference, so we always return `not

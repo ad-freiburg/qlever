@@ -74,8 +74,8 @@ class Operation {
 
   const Index& getIndex() const { return _executionContext->getIndex(); }
 
-  const DeltaTriples& deltaTriples() const {
-    return _executionContext->deltaTriples();
+  const auto& locatedTriplesSnapshot() const {
+    return _executionContext->locatedTriplesSnapshot();
   }
 
   // Get a unique, not ambiguous string representation for a subtree.

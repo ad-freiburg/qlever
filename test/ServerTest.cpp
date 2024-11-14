@@ -146,29 +146,79 @@ TEST(ServerTest, checkParameter) {
   const ParamValueMap exampleParams = {{"foo", {"bar"}},
                                        {"baz", {"qux", "quux"}}};
 
-  EXPECT_THAT(Server::checkParameter(exampleParams, "doesNotExist", "", false),
+  EXPECT_THAT(Server::checkParameter(exampleParams, "doesNotExist", ""),
               testing::Eq(std::nullopt));
-  EXPECT_THAT(Server::checkParameter(exampleParams, "foo", "baz", false),
+  EXPECT_THAT(Server::checkParameter(exampleParams, "foo", "baz"),
               testing::Eq(std::nullopt));
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      Server::checkParameter(exampleParams, "foo", "bar", false),
-      testing::StrEq("Access to \"foo=bar\" denied (requires a valid access "
-                     "token), processing of request aborted"));
-  EXPECT_THAT(Server::checkParameter(exampleParams, "foo", "bar", true),
+  EXPECT_THAT(Server::checkParameter(exampleParams, "foo", "bar"),
               testing::Optional(testing::StrEq("bar")));
   AD_EXPECT_THROW_WITH_MESSAGE(
-      Server::checkParameter(exampleParams, "baz", "qux", false),
+      Server::checkParameter(exampleParams, "baz", "qux"),
       testing::StrEq("Parameter \"baz\" must be given exactly once. Is: 2"));
-  EXPECT_THAT(Server::checkParameter(exampleParams, "foo", std::nullopt, true),
+  EXPECT_THAT(Server::checkParameter(exampleParams, "foo", std::nullopt),
               testing::Optional(testing::StrEq("bar")));
   AD_EXPECT_THROW_WITH_MESSAGE(
-      Server::checkParameter(exampleParams, "foo", std::nullopt, false),
-      testing::StrEq("Access to \"foo=bar\" denied (requires a valid access "
-                     "token), processing of request aborted"));
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      Server::checkParameter(exampleParams, "baz", std::nullopt, false),
+      Server::checkParameter(exampleParams, "baz", std::nullopt),
       testing::StrEq("Parameter \"baz\" must be given exactly once. Is: 2"));
   AD_EXPECT_THROW_WITH_MESSAGE(
-      Server::checkParameter(exampleParams, "baz", std::nullopt, true),
+      Server::checkParameter(exampleParams, "baz", std::nullopt),
       testing::StrEq("Parameter \"baz\" must be given exactly once. Is: 2"));
+}
+
+TEST(ServerTest, determineResultPinning) {
+  EXPECT_THAT(Server::determineResultPinning(
+                  {{"pinsubtrees", {"true"}}, {"pinresult", {"true"}}}),
+              testing::Pair(true, true));
+  EXPECT_THAT(Server::determineResultPinning({{"pinresult", {"true"}}}),
+              testing::Pair(false, true));
+  EXPECT_THAT(Server::determineResultPinning({{"pinsubtrees", {"otherValue"}}}),
+              testing::Pair(false, false));
+}
+
+TEST(ServerTest, determineMediaType) {
+  auto MakeRequest = [](const std::optional<std::string>& accept,
+                        const http::verb method = http::verb::get,
+                        const std::string& target = "/",
+                        const std::string& body = "") {
+    auto req = http::request<http::string_body>{method, target, 11};
+    if (accept.has_value()) {
+      req.set(http::field::accept, accept.value());
+    }
+    req.body() = body;
+    req.prepare_payload();
+    return req;
+  };
+  auto checkActionMediatype = [&](const std::string& actionName,
+                                  ad_utility::MediaType expectedMediaType) {
+    EXPECT_THAT(Server::determineMediaType({{"action", {actionName}}},
+                                           MakeRequest(std::nullopt)),
+                testing::Eq(expectedMediaType));
+  };
+  // The media type associated with the action overrides the `Accept` header.
+  EXPECT_THAT(Server::determineMediaType(
+                  {{"action", {"csv_export"}}},
+                  MakeRequest("application/sparql-results+json")),
+              testing::Eq(ad_utility::MediaType::csv));
+  checkActionMediatype("csv_export", ad_utility::MediaType::csv);
+  checkActionMediatype("tsv_export", ad_utility::MediaType::tsv);
+  checkActionMediatype("qlever_json_export", ad_utility::MediaType::qleverJson);
+  checkActionMediatype("sparql_json_export", ad_utility::MediaType::sparqlJson);
+  checkActionMediatype("turtle_export", ad_utility::MediaType::turtle);
+  checkActionMediatype("binary_export", ad_utility::MediaType::octetStream);
+  EXPECT_THAT(Server::determineMediaType(
+                  {}, MakeRequest("application/sparql-results+json")),
+              testing::Eq(ad_utility::MediaType::sparqlJson));
+  // No supported media type in the `Accept` header. (Contrary to it's docstring
+  // and interface) `ad_utility::getMediaTypeFromAcceptHeader` throws an
+  // exception if no supported media type is found.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      Server::determineMediaType({}, MakeRequest("text/css")),
+      testing::HasSubstr("Not a single media type known to this parser was "
+                         "detected in \"text/css\"."));
+  // No `Accept` header means that any content type is allowed.
+  EXPECT_THAT(Server::determineMediaType({}, MakeRequest(std::nullopt)),
+              testing::Eq(ad_utility::MediaType::sparqlJson));
+  // No `Accept` header and an empty `Accept` header are not distinguished.
+  EXPECT_THAT(Server::determineMediaType({}, MakeRequest("")),
+              testing::Eq(ad_utility::MediaType::sparqlJson));
 }
