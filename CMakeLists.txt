@@ -92,7 +92,7 @@ set(ANTLR_BUILD_SHARED OFF CACHE BOOL "We're only interested in the static libra
 FetchContent_Declare(
         antlr
         GIT_REPOSITORY https://github.com/antlr/antlr4.git
-        GIT_TAG 9239e6ff444420516b44b7621e8dc7691fcf0e16
+        GIT_TAG cc82115a4e7f53d71d9d905caa2c2dfa4da58899 # 4.13.12
         SOURCE_SUBDIR runtime/Cpp
 )
 
