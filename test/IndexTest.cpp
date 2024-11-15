@@ -528,7 +528,7 @@ TEST(IndexTest, trivialGettersAndSetters) {
 TEST(IndexTest, updateInputFileSpecificationsAndLog) {
   using enum qlever::Filetype;
   std::vector<qlever::InputFileSpecification> files{
-      {"singleFile.ttl", Turtle, std::nullopt, false}};
+      {"singleFile.ttl", Turtle, std::nullopt, false, false}};
   using namespace ::testing;
   {
     testing::internal::CaptureStdout();

@@ -27,6 +27,10 @@ struct InputFileSpecification {
   // Turtle files with all prefixes at the beginning and no multiline literals.
   bool parseInParallel_ = false;
 
+  // Remember if the value for parallel parsing was set explicitly (via the
+  // command line).
+  bool parseInParallelSetExplicitly_;
+
   bool operator==(const InputFileSpecification&) const = default;
 };
 }  // namespace qlever

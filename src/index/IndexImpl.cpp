@@ -312,12 +312,12 @@ void IndexImpl::updateInputFileSpecificationsAndLog(
           " via the command-line option --parse-parallel or -p"};
     }
   }
-
-  if (spec.size() == 1 && !parallelParsingSpecifiedViaJson.has_value()) {
+  if (spec.size() == 1 && !parallelParsingSpecifiedViaJson.has_value() &&
+      spec.at(0).parseInParallelSetExplicitly_ == false) {
     LOG(WARN) << "Implicitly using the parallel parser for a single input file "
                  "for reasons of backward compatibility; this is deprecated, "
-                 "please use the command-line option --parse-parallel or -p "
-                 "instead"
+                 "please explicitly use the command-line option "
+                 "--parse-parallel or -p instead"
               << std::endl;
     spec.at(0).parseInParallel_ = true;
   }
