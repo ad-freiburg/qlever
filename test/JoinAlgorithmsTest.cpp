@@ -402,6 +402,16 @@ TEST(JoinAlgorithms, JoinWithBlocksOneUndefinedValueMixedWithOtherValues) {
 }
 
 // _____________________________________________________________________________
+TEST(JoinAlgorithms, UndefinedJoinWorksWithoutUndefinedValues) {
+  std::vector<std::vector<FakeId>> a{{{I(1), "a1"}, {I(2), "a2"}}};
+  std::vector<std::vector<FakeId>> b{{{I(2), "b1"}, {I(3), "b2"}}};
+
+  std::vector<std::array<FakeId, 2>> expectedResult{
+      {F{I(2), "a2"}, F{I(2), "b1"}}};
+  testDynamicJoinWithUndef(a, b, expectedResult);
+}
+
+// _____________________________________________________________________________
 TEST(JoinAlgorithms, JoinWithBlocksMultipleGroupsAfterUndefined) {
   auto U = Id::makeUndefined();
   std::vector<std::vector<FakeId>> a{

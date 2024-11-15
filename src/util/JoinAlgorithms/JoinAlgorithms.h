@@ -1269,6 +1269,14 @@ struct BlockZipperJoinImpl {
   template <bool DoOptionalJoin>
   void runJoin() {
     fetchAndProcessUndefinedBlocks();
+    if (potentiallyHasUndef && !hasUndef(leftSide_) && !hasUndef(rightSide_)) {
+      // Run the join without UNDEF values if there are none.
+      BlockZipperJoinImpl<LeftSide, RightSide, LessThan, CompatibleRowAction,
+                          AlwaysFalse>{leftSide_, rightSide_, lessThan_,
+                                       compatibleRowAction_, AlwaysFalse{}}
+          .template runJoin<DoOptionalJoin>();
+      return;
+    }
     while (true) {
       BlockStatus blockStatus = fillBuffer();
       if (leftSide_.currentBlocks_.empty() ||
