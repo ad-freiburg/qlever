@@ -401,7 +401,9 @@ Awaitable<void> Server::process(
     // The function requires a SharedCancellationHandle, but the operation is
     // not cancellable.
     auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
-    co_await computeInNewThread(
+    // We don't directly `co_await` because of lifetime issues (bugs) in the
+    // Conan setup.
+    auto coroutine = computeInNewThread(
         updateThreadPool_,
         [this] {
           // Use `this` explicitly to silence false-positive errors on the
@@ -409,6 +411,7 @@ Awaitable<void> Server::process(
           this->index_.deltaTriplesManager().clear();
         },
         handle);
+    co_await std::move(coroutine);
     response = createOkResponse("Delta triples have been cleared", request,
                                 MediaType::textPlain);
   } else if (auto cmd = checkParameter("cmd", "get-settings")) {
@@ -806,15 +809,14 @@ Awaitable<void> Server::processQuery(
   QueryExecutionContext qec(index_, &cache_, allocator_,
                             sortPerformanceEstimator_, std::ref(messageSender),
                             pinSubtrees, pinResult);
+
   // The usage of an `optional` here is required because of a limitation in
   // Boost::Asio which forces us to use default-constructible result types with
   // `computeInNewThread`. We also can't unwrap the optional directly in this
   // function, because then the conan build fails in a very strange way,
   // probably related to issues in GCC's coroutine implementation.
-  /*
-  auto plannedQuery = setupPlannedQuery(params, query, qec, cancellationHandle,
-                                 timeLimit, requestTimer);
-                                 */
+  // For the same reason (crashes in the conanbuild) we store the coroutine in
+  // an explicit variable instead of directly `co_await`-ing it.
   auto coroutine = computeInNewThread(
       queryThreadPool_,
       [this, &params, &query, &qec, cancellationHandle, &timeLimit,
@@ -927,7 +929,10 @@ Awaitable<void> Server::processUpdate(
       setupCancellationHandle(messageSender.getQueryId(), timeLimit);
 
   // Update the delta triples.
-  co_await computeInNewThread(
+
+  // Note: We don't directly `co_await` because of lifetime issues (probably
+  // bugs in GCC or Boost) that occur in the Conan build.
+  auto coroutine = computeInNewThread(
       updateThreadPool_,
       [this, &params, &update, &requestTimer, &timeLimit, &messageSender,
        &cancellationHandle] {
@@ -942,6 +947,7 @@ Awaitable<void> Server::processUpdate(
             });
       },
       cancellationHandle);
+  co_await std::move(coroutine);
 
   // TODO<qup42> send a proper response
   // SPARQL 1.1 Protocol 2.2.4 Successful Responses: "The response body of a
