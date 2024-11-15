@@ -33,10 +33,10 @@ SpatialJoin::SpatialJoin(
     std::optional<std::shared_ptr<QueryExecutionTree>> childLeft,
     std::optional<std::shared_ptr<QueryExecutionTree>> childRight)
     : Operation(qec), config_{config} {
-  if (childLeft) {
+  if (childLeft.has_value()) {
     childLeft_ = std::move(childLeft.value());
   }
-  if (childRight) {
+  if (childRight.has_value()) {
     childRight_ = std::move(childRight.value());
   }
 }
@@ -144,6 +144,7 @@ size_t SpatialJoin::getResultWidth() const {
     // might contain different positions, which should be kept).
     auto widthChildren =
         childLeft_->getResultWidth() + childRight_->getResultWidth();
+    // return widthChildren;
     if (config_->bindDist_.has_value()) {
       return widthChildren + 1;
     } else {
@@ -337,7 +338,10 @@ VariableToColumnMap SpatialJoin::computeVariableToColumnMap() const {
     addColumns(childLeft_, 0);
     addColumns(childRight_, sizeLeft);
 
+    // TODO<ullingerc>
     if (config_->bindDist_.has_value()) {
+      AD_CONTRACT_CHECK(variableToColumnMap.find(config_->bindDist_.value()) ==
+                        variableToColumnMap.end());
       variableToColumnMap[config_->bindDist_.value()] =
           makeUndefCol(ColumnIndex{sizeLeft + sizeRight});
     }

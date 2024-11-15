@@ -43,6 +43,8 @@ Id SpatialJoinAlgorithms::computeDist(const IdTable* idTableLeft,
   if (!point1.has_value() || !point2.has_value()) {
     return Id::makeUndefined();
   }
+  // TODO<ullingerc> for bindDist it would be better to also have km not m
+  // for consistency between bindDist and geof:distance
   return Id::makeFromInt(static_cast<long long>(
       ad_utility::detail::wktDistImpl(point1.value(), point2.value()) * 1000));
 }
@@ -75,7 +77,7 @@ void SpatialJoinAlgorithms::addResultTableEntry(IdTable* result,
   rescol = addColumns(result, idTableLeft, resrow, rescol, rowLeft);
   rescol = addColumns(result, idTableRight, resrow, rescol, rowRight);
 
-  // TODO<ullingerc> bindDist_ feature
+  // TODO<ullingerc>
   if (config_->bindDist_.has_value()) {
     result->at(resrow, rescol) = distance;
     // rescol isn't used after that in this function, but future updates,
@@ -83,7 +85,7 @@ void SpatialJoinAlgorithms::addResultTableEntry(IdTable* result,
     // rescol at this place otherwise. If they forget to do this, the
     // distance column will be overwritten, the variableToColumnMap will
     // not work and so on
-    // rescol += 1;
+    rescol += 1;
   }
 }
 

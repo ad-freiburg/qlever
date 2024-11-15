@@ -958,8 +958,6 @@ TEST(QueryPlanner, PathSearchMultipleSourcesAndTargetsNonCartesian) {
       h::PathSearch(config, true, true, scan("?start", "<p>", "?end")), qec);
 }
 
-// TODO<ullingerc> Add tests for SERVICE spatialSearch: {...}
-
 // _____________________________________________________________________________
 TEST(QueryPlanner, numPathsPerTarget) {
   auto scan = h::IndexScanFromStrings;
@@ -1318,7 +1316,7 @@ TEST(QueryPlanner, PathSearchMultipleStarts) {
       h::parseAndPlan(std::move(query), qec),
       HasSubstr("parameter 'start' has already been set "
                 "to variable: '?start1'. New variable: '?start2'"),
-      parsedQuery::PathSearchException);
+      parsedQuery::MagicServiceException);
 }
 
 // __________________________________________________________________________
@@ -1368,7 +1366,7 @@ TEST(QueryPlanner, PathSearchMultipleEnds) {
       h::parseAndPlan(std::move(query), qec),
       HasSubstr("parameter 'end' has already been set "
                 "to variable: '?end1'. New variable: '?end2'"),
-      parsedQuery::PathSearchException);
+      parsedQuery::MagicServiceException);
 }
 
 // __________________________________________________________________________
@@ -1393,7 +1391,7 @@ TEST(QueryPlanner, PathSearchStartNotVariable) {
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       h::parseAndPlan(std::move(query), qec),
       HasSubstr("The value <error> for parameter 'start'"),
-      parsedQuery::PathSearchException);
+      parsedQuery::MagicServiceException);
 }
 
 // __________________________________________________________________________
@@ -1605,150 +1603,172 @@ TEST(QueryPlanner, PathSearchWrongArgumentAlgorithm) {
       parsedQuery::PathSearchException);
 }
 
-TEST(QueryPlanner, SpatialJoinViaMaxDistPredicate) {
+// __________________________________________________________________________
+// TODO<ullingerc> Change tests to SERVICE spatialSearch: {...}
+TEST(QueryPlanner, SpatialJoinService) {
   auto scan = h::IndexScanFromStrings;
   h::expect(
-      "SELECT ?x ?y WHERE {"
+      "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+      "SELECT * WHERE {"
       "?x <p> ?y."
-      "?a <p> ?b."
-      "?y <max-distance-in-meters:1> ?b }",
+      "SERVICE spatialSearch: {"
+      "_:config spatialSearch:algorithm spatialSearch:s2 ;"
+      "spatialSearch:left ?y ;"
+      "spatialSearch:right ?b ;"
+      "spatialSearch:maxDistance 1 . "
+      //   "\"1\"^^<http://www.w3.org/2001/XMLSchema#int> ."
+      "{ ?a <p> ?b } }}",
       h::SpatialJoin(1, -1, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
 
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      h::expect("SELECT ?x ?y WHERE {"
-                "?x <p> ?y."
-                "?a <p> ?b."
-                "?y <max-distance-in-meters:1> ?b ."
-                "?y <a> ?b}",
-                ::testing::_),
-      ::testing::ContainsRegex(
-          "Currently, if both sides of a SpatialJoin are variables, then the"
-          "SpatialJoin must be the only connection between these variables"));
+  //   AD_EXPECT_THROW_WITH_MESSAGE(
+  //       h::expect("SELECT ?x ?y WHERE {"
+  //                 "?x <p> ?y."
+  //                 "?a <p> ?b."
+  //                 "?y <max-distance-in-meters:1> ?b ."
+  //                 "?y <a> ?b}",
+  //                 ::testing::_),
+  //       ::testing::ContainsRegex(
+  //           "Currently, if both sides of a SpatialJoin are variables, then
+  //           the" "SpatialJoin must be the only connection between these
+  //           variables"));
+
+  //   AD_EXPECT_THROW_WITH_MESSAGE(
+  //       h::expect("SELECT ?x ?y WHERE {"
+  //                 "?y <p> ?b."
+  //                 "?y <max-distance-in-meters:1> ?b }",
+  //                 ::testing::_),
+  //       ::testing::ContainsRegex(
+  //           "Currently, if both sides of a SpatialJoin are variables, then
+  //           the" "SpatialJoin must be the only connection between these
+  //           variables"));
+
+  //   EXPECT_ANY_THROW(
+  //       h::expect("SELECT ?x ?y WHERE {"
+  //                 "?x <p> ?y."
+  //                 "?y <max-distance-in-meters:1> <a> }",
+  //                 ::testing::_));
+
+  //   EXPECT_ANY_THROW(
+  //       h::expect("SELECT ?x ?y WHERE {"
+  //                 "?x <p> ?y."
+  //                 "<a> <max-distance-in-meters:1> ?y }",
+  //                 ::testing::_));
 
   AD_EXPECT_THROW_WITH_MESSAGE(
-      h::expect("SELECT ?x ?y WHERE {"
-                "?y <p> ?b."
-                "?y <max-distance-in-meters:1> ?b }",
-                ::testing::_),
-      ::testing::ContainsRegex(
-          "Currently, if both sides of a SpatialJoin are variables, then the"
-          "SpatialJoin must be the only connection between these variables"));
-
-  EXPECT_ANY_THROW(
-      h::expect("SELECT ?x ?y WHERE {"
-                "?x <p> ?y."
-                "?y <max-distance-in-meters:1> <a> }",
-                ::testing::_));
-
-  EXPECT_ANY_THROW(
-      h::expect("SELECT ?x ?y WHERE {"
-                "?x <p> ?y."
-                "<a> <max-distance-in-meters:1> ?y }",
-                ::testing::_));
-
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      h::expect("SELECT ?x ?y WHERE {"
-                "?y <max-distance-in-meters:1> ?b }",
-                ::testing::_),
-      ::testing::ContainsRegex(
-          "SpatialJoin needs two children, but at least one is missing"));
-
-  AD_EXPECT_THROW_WITH_MESSAGE(h::expect("SELECT ?x ?y WHERE {"
-                                         "?x <p> ?y."
-                                         "?a <p> ?b."
-                                         "?y <max-distance-in-meters:-1> ?b }",
-                                         ::testing::_),
-                               ::testing::ContainsRegex("unknown triple"));
-}
-
-// __________________________________________________________________________
-TEST(QueryPlanner, SpatialJoinViaNearestNeighborsPredicate) {
-  auto scan = h::IndexScanFromStrings;
-  h::expect(
-      "SELECT ?x ?y WHERE {"
-      "?x <p> ?y."
-      "?a <p> ?b."
-      "?y <nearest-neighbors:2:500> ?b }",
-      h::SpatialJoin(500, 2, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
-  h::expect(
-      "SELECT ?x ?y WHERE {"
-      "?x <p> ?y."
-      "?a <p> ?b."
-      "?y <nearest-neighbors:20> ?b }",
-      h::SpatialJoin(-1, 20, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
-  h::expect(
-      "SELECT ?x ?y WHERE {"
-      "?x <p> ?y."
-      "?a <p> ?b."
-      "?y <nearest-neighbors:0> ?b }",
-      h::SpatialJoin(-1, 0, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
-
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      h::expect("SELECT ?x ?y WHERE {"
-                "?x <p> ?y."
-                "?a <p> ?b."
-                "?y <nearest-neighbors:2:500> ?b ."
-                "?y <a> ?b}",
-                ::testing::_),
-      ::testing::ContainsRegex(
-          "Currently, if both sides of a SpatialJoin are variables, then the"
-          "SpatialJoin must be the only connection between these variables"));
-
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      h::expect("SELECT ?x ?y WHERE {"
-                "?y <p> ?b."
-                "?y <nearest-neighbors:1> ?b }",
-                ::testing::_),
-      ::testing::ContainsRegex(
-          "Currently, if both sides of a SpatialJoin are variables, then the"
-          "SpatialJoin must be the only connection between these variables"));
-
-  EXPECT_ANY_THROW(
-      h::expect("SELECT ?x ?y WHERE {"
-                "?x <p> ?y."
-                "?y <nearest-neighbors:2:500> <a> }",
-                ::testing::_));
-
-  EXPECT_ANY_THROW(
-      h::expect("SELECT ?x ?y WHERE {"
-                "?x <p> ?y."
-                "<a> <nearest-neighbors:2:500> ?y }",
-                ::testing::_));
-
-  EXPECT_ANY_THROW(
-      h::expect("SELECT ?x ?y WHERE {"
-                "?x <p> ?y."
-                "?a <p> ?b."
-                "?y <nearest-neighbors:> ?b }",
-                ::testing::_));
-
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      h::expect("SELECT ?x ?y WHERE {"
-                "?y <nearest-neighbors:2:500> ?b }",
+      h::expect("PREFIX spatialSearch: "
+                "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+                "SELECT * WHERE {"
+                "SERVICE spatialSearch: {"
+                "_:config spatialSearch:left ?y ;"
+                "spatialSearch:right ?b ;"
+                "spatialSearch:maxDistance "
+                "\"1\"^^<http://www.w3.org/2001/XMLSchema#integer> ."
+                "}}",
                 ::testing::_),
       ::testing::ContainsRegex(
           "SpatialJoin needs two children, but at least one is missing"));
 
-  AD_EXPECT_THROW_WITH_MESSAGE(h::expect("SELECT ?x ?y WHERE {"
-                                         "?x <p> ?y."
-                                         "?a <p> ?b."
-                                         "?y <nearest-neighbors:-50:500> ?b }",
-                                         ::testing::_),
-                               ::testing::ContainsRegex("unknown triple"));
+  //   AD_EXPECT_THROW_WITH_MESSAGE(h::expect("SELECT ?x ?y WHERE {"
+  //                                          "?x <p> ?y."
+  //                                          "?a <p> ?b."
+  //                                          "?y <max-distance-in-meters:-1> ?b
+  //                                          }",
+  //                                          ::testing::_),
+  //                                ::testing::ContainsRegex("unknown triple"));
 
-  AD_EXPECT_THROW_WITH_MESSAGE(h::expect("SELECT ?x ?y WHERE {"
-                                         "?x <p> ?y."
-                                         "?a <p> ?b."
-                                         "?y <nearest-neighbors:1:-200> ?b }",
-                                         ::testing::_),
-                               ::testing::ContainsRegex("unknown triple"));
+  //   h::expect(
+  //       "SELECT ?x ?y WHERE {"
+  //       "?x <p> ?y."
+  //       "?a <p> ?b."
+  //       "?y <nearest-neighbors:2:500> ?b }",
+  //       h::SpatialJoin(500, 2, scan("?x", "<p>", "?y"), scan("?a", "<p>",
+  //       "?b")));
+  //   h::expect(
+  //       "SELECT ?x ?y WHERE {"
+  //       "?x <p> ?y."
+  //       "?a <p> ?b."
+  //       "?y <nearest-neighbors:20> ?b }",
+  //       h::SpatialJoin(-1, 20, scan("?x", "<p>", "?y"), scan("?a", "<p>",
+  //       "?b")));
+  //   h::expect(
+  //       "SELECT ?x ?y WHERE {"
+  //       "?x <p> ?y."
+  //       "?a <p> ?b."
+  //       "?y <nearest-neighbors:0> ?b }",
+  //       h::SpatialJoin(-1, 0, scan("?x", "<p>", "?y"), scan("?a", "<p>",
+  //       "?b")));
 
-  AD_EXPECT_THROW_WITH_MESSAGE(h::expect("SELECT ?x ?y WHERE {"
-                                         "?x <p> ?y."
-                                         "?a <p> ?b."
-                                         "?y <nearest-neighbors:0:-1> ?b }",
-                                         ::testing::_),
-                               ::testing::ContainsRegex("unknown triple"));
+  //   AD_EXPECT_THROW_WITH_MESSAGE(
+  //       h::expect("SELECT ?x ?y WHERE {"
+  //                 "?x <p> ?y."
+  //                 "?a <p> ?b."
+  //                 "?y <nearest-neighbors:2:500> ?b ."
+  //                 "?y <a> ?b}",
+  //                 ::testing::_),
+  //       ::testing::ContainsRegex(
+  //           "Currently, if both sides of a SpatialJoin are variables, then
+  //           the" "SpatialJoin must be the only connection between these
+  //           variables"));
+
+  //   AD_EXPECT_THROW_WITH_MESSAGE(
+  //       h::expect("SELECT ?x ?y WHERE {"
+  //                 "?y <p> ?b."
+  //                 "?y <nearest-neighbors:1> ?b }",
+  //                 ::testing::_),
+  //       ::testing::ContainsRegex(
+  //           "Currently, if both sides of a SpatialJoin are variables, then
+  //           the" "SpatialJoin must be the only connection between these
+  //           variables"));
+
+  //   EXPECT_ANY_THROW(
+  //       h::expect("SELECT ?x ?y WHERE {"
+  //                 "?x <p> ?y."
+  //                 "?y <nearest-neighbors:2:500> <a> }",
+  //                 ::testing::_));
+
+  //   EXPECT_ANY_THROW(
+  //       h::expect("SELECT ?x ?y WHERE {"
+  //                 "?x <p> ?y."
+  //                 "<a> <nearest-neighbors:2:500> ?y }",
+  //                 ::testing::_));
+
+  //   EXPECT_ANY_THROW(
+  //       h::expect("SELECT ?x ?y WHERE {"
+  //                 "?x <p> ?y."
+  //                 "?a <p> ?b."
+  //                 "?y <nearest-neighbors:> ?b }",
+  //                 ::testing::_));
+
+  //   AD_EXPECT_THROW_WITH_MESSAGE(
+  //       h::expect("SELECT ?x ?y WHERE {"
+  //                 "?y <nearest-neighbors:2:500> ?b }",
+  //                 ::testing::_),
+  //       ::testing::ContainsRegex(
+  //           "SpatialJoin needs two children, but at least one is missing"));
+
+  //   AD_EXPECT_THROW_WITH_MESSAGE(h::expect("SELECT ?x ?y WHERE {"
+  //                                          "?x <p> ?y."
+  //                                          "?a <p> ?b."
+  //                                          "?y <nearest-neighbors:-50:500> ?b
+  //                                          }",
+  //                                          ::testing::_),
+  //                                ::testing::ContainsRegex("unknown triple"));
+
+  //   AD_EXPECT_THROW_WITH_MESSAGE(h::expect("SELECT ?x ?y WHERE {"
+  //                                          "?x <p> ?y."
+  //                                          "?a <p> ?b."
+  //                                          "?y <nearest-neighbors:1:-200> ?b
+  //                                          }",
+  //                                          ::testing::_),
+  //                                ::testing::ContainsRegex("unknown triple"));
+
+  //   AD_EXPECT_THROW_WITH_MESSAGE(h::expect("SELECT ?x ?y WHERE {"
+  //                                          "?x <p> ?y."
+  //                                          "?a <p> ?b."
+  //                                          "?y <nearest-neighbors:0:-1> ?b
+  //                                          }",
+  //                                          ::testing::_),
+  //                                ::testing::ContainsRegex("unknown triple"));
 }
 
 // __________________________________________________________________________

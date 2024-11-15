@@ -157,6 +157,7 @@ class MagicServiceException : public std::exception {
 // Abstract structure for parsing a magic SERVICE statement (used to invoke
 // QLever-specific features)
 struct MagicServiceQuery {
+  // The graph pattern inside the SERVICE
   GraphPattern childGraphPattern_;
 
   /**
@@ -220,7 +221,6 @@ struct PathQuery : MagicServiceQuery {
   std::vector<Variable> edgeProperties_;
   PathSearchAlgorithm algorithm_;
 
-  GraphPattern childGraphPattern_;
   bool cartesian_ = true;
   std::optional<uint64_t> numPathsPerTarget_ = std::nullopt;
 
@@ -280,10 +280,6 @@ struct SpatialQuery : MagicServiceQuery {
   // Optional further arguments
   std::optional<Variable> bindDist_;
   std::optional<SpatialJoinAlgorithm> algo_;
-
-  // The graph pattern inside the SERVICE (provides the graph for the right_
-  // variable)
-  GraphPattern childGraphPattern_;
 
   // See MagicServiceQuery
   void addParameter(const SparqlTriple& triple) override;

@@ -24,10 +24,12 @@ namespace {  // anonymous namespace to avoid linker problems
 using namespace ad_utility::testing;
 using namespace SpatialJoinTestHelpers;
 
+// Shortcut for SpatialJoin task parameters
 using SJ = std::variant<NearestNeighborsConfig, MaxDistanceConfig>;
 
 // TODO<ullingerc> Most of these tests require refactoring after switching to
 // magic SERVICE invocation instead of predicate
+// + Comments with examples using predicate
 
 namespace computeResultTest {
 
@@ -74,7 +76,7 @@ class SpatialJoinParamTest : public ::testing::TestWithParam<bool> {
     auto firstChild = addLeftChildFirst ? leftChild : rightChild;
     auto secondChild = addLeftChildFirst ? rightChild : leftChild;
     Variable firstVariable = addLeftChildFirst ? left : right;
-    Variable secondVariable = addLeftChildFirst ? left : right;
+    Variable secondVariable = addLeftChildFirst ? right : left;
 
     auto spJoin1 = spatialJoin->addChild(firstChild, firstVariable);
     spatialJoin = static_cast<SpatialJoin*>(spJoin1.get());

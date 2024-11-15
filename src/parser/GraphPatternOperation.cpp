@@ -213,9 +213,9 @@ void MagicServiceQuery::setVariable(std::string_view parameter,
   auto variable = getVariable(parameter, object);
 
   if (existingValue.has_value()) {
-    throw PathSearchException(absl::StrCat(
-        "The parameter '", parameter, "' has already been set to variable:'",
-        existingValue.value().toSparql(), "'.New variable: '",
+    throw MagicServiceException(absl::StrCat(
+        "The parameter '", parameter, "' has already been set to variable: '",
+        existingValue.value().toSparql(), "'. New variable: '",
         object.toString(), "'."));
   }
 
@@ -238,14 +238,14 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
   } else if (predString.ends_with("right>")) {
     setVariable("right", object, right_);
   } else if (predString.ends_with("nearestNeighbors>")) {
-    if (!object.isBool()) {
+    if (!object.isInt()) {
       throw SpatialSearchException(
           "The parameter 'nearestNeighbors' expects an integer (the maximum "
           "number of nearest neighbors)");
     }
     maxResults_ = object.getInt();
   } else if (predString.ends_with("maxDistance>")) {
-    if (!object.isBool()) {
+    if (!object.isInt()) {
       throw SpatialSearchException(
           "The parameter 'maxDistance' expects an integer (the maximum "
           "distance in meters)");

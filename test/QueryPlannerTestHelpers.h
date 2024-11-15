@@ -332,7 +332,7 @@ inline auto SpatialJoin =
        const std::same_as<QetMatcher> auto&... childMatchers) {
       return RootOperation<::SpatialJoin>(
           AllOf(children(childMatchers...),
-                AD_PROPERTY(SpatialJoin, onlyForTestingGetConfig,
+                AD_PROPERTY(SpatialJoin, onlyForTestingGetTask,
                             Eq(std::pair(maxDist, maxResults)))));
     };
 

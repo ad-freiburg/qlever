@@ -128,8 +128,12 @@ class SpatialJoin : public Operation {
 
   void selectAlgorithm(SpatialJoinAlgorithm algo) { config_->algo_ = algo; }
 
-  std::pair<size_t, size_t> onlyForTestingGetConfig() const {
+  std::pair<size_t, size_t> onlyForTestingGetTask() const {
     return std::pair{getMaxDist().value_or(-1), getMaxResults().value_or(-1)};
+  }
+
+  std::optional<Variable> onlyForTestingGetBindDist() const {
+    return config_->bindDist_;
   }
 
   std::shared_ptr<QueryExecutionTree> onlyForTestingGetLeftChild() const {
@@ -140,10 +144,6 @@ class SpatialJoin : public Operation {
     return childRight_;
   }
 
-  const string& getInternalDistanceName() const {
-    return nameDistanceInternal_;
-  }
-
  private:
   // helper function, to initialize various required objects for both algorithms
   PreparedSpatialJoinParams prepareJoin() const;
@@ -152,6 +152,4 @@ class SpatialJoin : public Operation {
   std::shared_ptr<QueryExecutionTree> childRight_ = nullptr;
 
   std::shared_ptr<SpatialJoinConfiguration> config_;
-
-  const string nameDistanceInternal_ = "?distOfTheTwoObjectsAddedInternally";
 };

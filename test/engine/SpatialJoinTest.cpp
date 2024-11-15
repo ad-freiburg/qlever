@@ -261,7 +261,8 @@ void testGetResultWidthOrVariableToColumnMap(bool leftSideBigChild,
       ad_utility::makeExecutionTree<SpatialJoin>(
           qec,
           std::make_shared<SpatialJoinConfiguration>(
-              MaxDistanceConfig{0}, Variable{"?point1"}, Variable{"?point2"}),
+              MaxDistanceConfig{0}, Variable{"?point1"}, Variable{"?point2"},
+              Variable{"?distOfTheTwoObjectsAddedInternally"}),
           std::nullopt, std::nullopt);
   std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
   SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
@@ -591,7 +592,7 @@ void testMultiplicitiesOrSizeEstimate(bool addLeftChildFirst,
   auto firstChild = addLeftChildFirst ? leftChild : rightChild;
   auto secondChild = addLeftChildFirst ? rightChild : leftChild;
   Variable firstVariable = addLeftChildFirst ? subj : obj;
-  Variable secondVariable = addLeftChildFirst ? subj : obj;
+  Variable secondVariable = addLeftChildFirst ? obj : subj;
 
   if (testMultiplicities) {
     multiplicitiesBeforeAllChildrenAdded(spatialJoin);
@@ -613,8 +614,9 @@ void testMultiplicitiesOrSizeEstimate(bool addLeftChildFirst,
       if (varChildLeft == leftVarColMap.end()) {
         inputChild = rightChild;
       }
-      if (varChildRight == rightVarColMap.end() &&
-          var.name() == spatialJoin->getInternalDistanceName()) {
+      auto bindDist = spatialJoin->onlyForTestingGetBindDist();
+      if (  // varChildRight == rightVarColMap.end() &&
+          bindDist.has_value() && var == bindDist.value()) {
         // as each distance is very likely to be unique (even if only after
         // a few decimal places), no multiplicities are assumed
         ASSERT_EQ(spatialJoin->getMultiplicity(i), 1);
@@ -648,8 +650,11 @@ void testMultiplicitiesOrSizeEstimate(bool addLeftChildFirst,
     ASSERT_EQ(spatialJoin->getSizeEstimate(), 1);
     auto spJoin2 = spatialJoin->addChild(secondChild, secondVariable);
     spatialJoin = static_cast<SpatialJoin*>(spJoin2.get());
+    ASSERT_NE(spatialJoin->onlyForTestingGetLeftChild(), nullptr);
+    ASSERT_NE(spatialJoin->onlyForTestingGetRightChild(), nullptr);
     // the size should be at most 49, because both input tables have 7 rows and
     // it is assumed, that in the worst case the whole cross product is build
+    // TODO<ullingerc> Segfault here
     auto estimate =
         spatialJoin->onlyForTestingGetLeftChild()->getSizeEstimate() *
         spatialJoin->onlyForTestingGetRightChild()->getSizeEstimate();
@@ -686,7 +691,9 @@ void testMultiplicitiesOrSizeEstimate(bool addLeftChildFirst,
         ad_utility::makeExecutionTree<SpatialJoin>(
             qec,
             std::make_shared<SpatialJoinConfiguration>(
-                MaxDistanceConfig{10000000}, subj, obj),
+                MaxDistanceConfig{10000000}, subj, obj,
+                // TODO<ullingerc>
+                Variable{"?dist"}),
             std::nullopt, std::nullopt);
 
     // add children and test, that multiplicity is a dummy return before all
@@ -723,7 +730,8 @@ void testMultiplicitiesOrSizeEstimate(bool addLeftChildFirst,
       auto spJoin2 = spatialJoin->addChild(secondChild, secondVariable);
       spatialJoin = static_cast<SpatialJoin*>(spJoin2.get());
       auto varColsMap = spatialJoin->getExternallyVisibleVariableColumns();
-      Variable distance{spatialJoin->getInternalDistanceName()};
+      // TODO<ullingerc>
+      Variable distance{"?todo"};
 
       assertMultiplicity(subj1.getVariable(), 9.8, spatialJoin, varColsMap);
       assertMultiplicity(obj1.getVariable(), 7.0, spatialJoin, varColsMap);
