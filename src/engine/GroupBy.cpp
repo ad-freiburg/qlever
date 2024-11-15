@@ -608,11 +608,11 @@ std::optional<IdTable> GroupBy::computeGroupByForSingleIndexScan() const {
 
   IdTable table{1, getExecutionContext()->getAllocator()};
   table.emplace_back();
-  // For `IndexScan`s with at least two variables the size estimates are
-  // exact as they are read directly from the index metadata.
-  if (indexScan->getResultWidth() == 3) {
+  const auto& var = varAndDistinctness.value().variable_;
+  if (!isVariableBoundInSubtree(var)) {
+    table(0, 0) = Id::makeFromInt(0);
+  } else if (indexScan->getResultWidth() == 3) {
     if (countIsDistinct) {
-      const auto& var = varAndDistinctness.value().variable_;
       auto permutation =
           getPermutationForThreeVariableTriple(*_subtree, var, var);
       AD_CONTRACT_CHECK(permutation.has_value());
@@ -622,8 +622,6 @@ std::optional<IdTable> GroupBy::computeGroupByForSingleIndexScan() const {
       table(0, 0) = Id::makeFromInt(getIndex().numTriples().normal);
     }
   } else {
-    // TODO<joka921> The two variables IndexScans should also account for the
-    // additionally added triples.
     table(0, 0) = Id::makeFromInt(indexScan->getExactSize());
   }
   return table;
@@ -701,14 +699,16 @@ std::optional<IdTable> GroupBy::computeGroupByForFullIndexScan() const {
   // exception (it is easy to reformulate the query to trigger this
   // optimization).
   size_t numCounts = 0;
+  bool variableIsBoundInSubtree = true;
   for (size_t i = 0; i < _aliases.size(); ++i) {
     const auto& alias = _aliases[i];
     if (auto count = alias._expression.getVariableForCount()) {
-      if (count.value().isDistinct_ ||
-          !_subtree->getVariableColumnOrNullopt(count.value().variable_)) {
+      if (count.value().isDistinct_) {
         return std::nullopt;
       }
       numCounts++;
+      variableIsBoundInSubtree =
+          isVariableBoundInSubtree(count.value().variable_);
     } else {
       return std::nullopt;
     }
@@ -730,6 +730,10 @@ std::optional<IdTable> GroupBy::computeGroupByForFullIndexScan() const {
       cancellationHandle_, locatedTriplesSnapshot());
   if (numCounts == 0) {
     table.setColumnSubset({{0}});
+  } else if (!variableIsBoundInSubtree) {
+    // The variable inside the COUNT() is not part of the input, so it is always
+    // unbound and has a count of 0 in each group.
+    std::ranges::fill(table.getColumn(1), Id::makeFromInt(0));
   }
 
   // TODO<joka921> This optimization should probably also apply if
@@ -1571,13 +1575,12 @@ std::optional<Variable> GroupBy::getVariableForNonDistinctCountOfSingleAlias()
 // _____________________________________________________________________________
 std::optional<sparqlExpression::SparqlExpressionPimpl::VariableAndDistinctness>
 GroupBy::getVariableForCountOfSingleAlias() const {
-  auto optVar =  _aliases.size() == 1
+  return _aliases.size() == 1
              ? _aliases.front()._expression.getVariableForCount()
              : std::nullopt;
-  if (!optVar.has_value() ||
-      !_subtree->getVariableColumnOrNullopt(optVar.value().variable_)
-           .has_value()) {
-    return std::nullopt;
-  }
-  return optVar;
+}
+
+// _____________________________________________________________________________
+bool GroupBy::isVariableBoundInSubtree(const Variable& variable) const {
+  return _subtree->getVariableColumnOrNullopt(variable).has_value();
 }

@@ -35,7 +35,6 @@ auto lit = [](auto s) {
 static const Id NaN = D(std::numeric_limits<double>::quiet_NaN());
 }  // namespace
 
-
 // Test that an expression of type `AggregateExpressionT` when run on the
 // `input` yields the `expectedResult`. This function can only be used for
 // aggregate expressions where the input type and the output type are the same,
@@ -62,12 +61,12 @@ auto testAggregateWithVariable =
     [](Variable input, U expectedResult, bool distinct = false,
        source_location l = source_location::current()) {
       auto trace = generateLocationTrace(l);
-  auto d = std::make_unique<VariableExpression>(std::move(input));
-  auto t = TestContext{};
-  AggregateExpressionT m{distinct, std::move(d)};
-  auto resAsVariant = m.evaluate(&t.context);
-  auto res = std::get<U>(resAsVariant);
-  EXPECT_EQ(res, expectedResult);
+      auto d = std::make_unique<VariableExpression>(std::move(input));
+      auto t = TestContext{};
+      AggregateExpressionT m{distinct, std::move(d)};
+      auto resAsVariant = m.evaluate(&t.context);
+      auto res = std::get<U>(resAsVariant);
+      EXPECT_EQ(res, expectedResult);
     };
 
 // Test `CountExpression`.
