@@ -3,6 +3,8 @@
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 #pragma once
 
+// ANTLR runtime uses this as a variable name.
+#undef EOF
 #include <antlr4-runtime.h>
 
 #include "util/ConfigManager/generated/ConfigShorthandParser.h"
