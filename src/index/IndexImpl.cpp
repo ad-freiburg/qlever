@@ -312,8 +312,10 @@ void IndexImpl::updateInputFileSpecificationsAndLog(
           " via the command-line option --parse-parallel or -p"};
     }
   }
-  if (spec.size() == 1 && !parallelParsingSpecifiedViaJson.has_value() &&
-      spec.at(0).parseInParallelSetExplicitly_ == false) {
+  bool setParallelParsingImplicitly =
+      spec.size() == 1 && !parallelParsingSpecifiedViaJson.has_value() &&
+      !spec.at(0).parseInParallelSetExplicitly_;
+  if (setParallelParsingImplicitly) {
     LOG(WARN) << "Implicitly using the parallel parser for a single input file "
                  "for reasons of backward compatibility; this is deprecated, "
                  "please explicitly use the command-line option "
