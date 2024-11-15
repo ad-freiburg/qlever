@@ -22,7 +22,7 @@ struct MaxDistanceConfig {
 };
 
 // Selection of a SpatialJoin algorithm
-enum SpatialJoinAlgorithm {
+enum class SpatialJoinAlgorithm {
   BASELINE,
   S2_GEOMETRY
   // BOUNDING_BOX

@@ -160,6 +160,13 @@ struct MagicServiceQuery {
   // The graph pattern inside the SERVICE
   GraphPattern childGraphPattern_;
 
+  MagicServiceQuery() = default;
+  MagicServiceQuery(MagicServiceQuery&& other) = default;
+  MagicServiceQuery(const MagicServiceQuery& other) = default;
+  MagicServiceQuery& operator=(const MagicServiceQuery& other) = default;
+  MagicServiceQuery& operator=(MagicServiceQuery&& a) noexcept = default;
+  virtual ~MagicServiceQuery() = default;
+
   /**
    * @brief Add a parameter to the query from the given triple.
    * The predicate of the triple determines the parameter name and the object
@@ -187,7 +194,7 @@ struct MagicServiceQuery {
 
   // Utility functions
   Variable getVariable(std::string_view parameter,
-                       const TripleComponent& object);
+                       const TripleComponent& object) const;
 
   void setVariable(std::string_view parameter, const TripleComponent& object,
                    std::optional<Variable>& existingValue);
@@ -223,6 +230,13 @@ struct PathQuery : MagicServiceQuery {
 
   bool cartesian_ = true;
   std::optional<uint64_t> numPathsPerTarget_ = std::nullopt;
+
+  PathQuery() = default;
+  PathQuery(PathQuery&& other) = default;
+  PathQuery(const PathQuery& other) = default;
+  PathQuery& operator=(const PathQuery& other) = default;
+  PathQuery& operator=(PathQuery&& a) noexcept = default;
+  virtual ~PathQuery() = default;
 
   // See MagicServiceQuery
   void addParameter(const SparqlTriple& triple) override;
@@ -280,6 +294,13 @@ struct SpatialQuery : MagicServiceQuery {
   // Optional further arguments
   std::optional<Variable> bindDist_;
   std::optional<SpatialJoinAlgorithm> algo_;
+
+  SpatialQuery() = default;
+  SpatialQuery(SpatialQuery&& other) = default;
+  SpatialQuery(const SpatialQuery& other) = default;
+  SpatialQuery& operator=(const SpatialQuery& other) = default;
+  SpatialQuery& operator=(SpatialQuery&& a) noexcept = default;
+  virtual ~SpatialQuery() = default;
 
   // See MagicServiceQuery
   void addParameter(const SparqlTriple& triple) override;

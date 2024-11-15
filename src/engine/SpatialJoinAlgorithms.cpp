@@ -16,6 +16,9 @@
 #include "engine/SpatialJoin.h"
 #include "util/GeoSparqlHelpers.h"
 
+// TODO<ullingerc> dist (for binddist) should not be floored to whole meters in
+// int and should be in km
+
 // ____________________________________________________________________________
 SpatialJoinAlgorithms::SpatialJoinAlgorithms(
     QueryExecutionContext* qec, PreparedSpatialJoinParams params,

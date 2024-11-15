@@ -196,7 +196,7 @@ PathSearchConfiguration PathQuery::toPathSearchConfiguration(
 
 // ____________________________________________________________________________
 Variable MagicServiceQuery::getVariable(std::string_view parameter,
-                                        const TripleComponent& object) {
+                                        const TripleComponent& object) const {
   if (!object.isVariable()) {
     throw MagicServiceException(absl::StrCat("The value ", object.toString(),
                                              " for parameter '", parameter,
