@@ -76,19 +76,7 @@ FetchContent_Declare(
 ################################
 # NLOHMANN JSON
 ################################
-FetchContent_Declare(
-        nlohmann-json
-        GIT_REPOSITORY https://github.com/nlohmann/json.git
-        GIT_TAG 9cca280a4d0ccf0c08f47a99aa71d1b0e52f8d03 # release-3.11.3
-)
-# We only want to include a single file from the nlohmann GitHub repository, so we initialize the submodule
-# manually
-FetchContent_GetProperties(nlohmann-json)
-if (NOT nlohmann-json_POPULATED)
-    FetchContent_Populate(nlohmann-json)
-    include_directories(SYSTEM ${nlohmann-json_SOURCE_DIR}/single_include)
-endif ()
-
+FetchContent_Declare(nlohmann-json URL https://github.com/nlohmann/json/releases/download/v3.11.3/json.tar.xz)
 
 ###############################
 # ANTLR CPP RUNTIME FOR THE SPARQL PARSER
@@ -184,7 +172,7 @@ find_package(OpenSSL REQUIRED)
 function(qlever_target_link_libraries target)
     target_link_libraries(${target} ${ARGN} absl::flat_hash_map
             absl::flat_hash_set absl::strings absl::str_format ICU::uc
-            ICU::i18n OpenSSL::SSL OpenSSL::Crypto GTest::gtest GTest::gmock stxxl fsst)
+            ICU::i18n OpenSSL::SSL OpenSSL::Crypto GTest::gtest GTest::gmock stxxl fsst nlohmann_json::nlohmann_json)
 
     # memorySize is a utility library for defining memory sizes.
     if (NOT ${target} STREQUAL "memorySize")
@@ -338,7 +326,7 @@ FetchContent_Declare(
 ################################
 # Apply FetchContent
 ################################
-FetchContent_MakeAvailable(googletest ctre abseil re2 stxxl fsst s2)
+FetchContent_MakeAvailable(googletest ctre abseil re2 stxxl fsst s2 nlohmann-json)
 # Disable some warnings in RE2, STXXL, and GTEST
 target_compile_options(s2 PRIVATE -Wno-sign-compare -Wno-unused-parameter -Wno-class-memaccess -Wno-comment -Wno-redundant-move -Wno-unknown-warning-option -Wno-maybe-uninitialized -Wno-class-memaccess)
 target_compile_options(re2 PRIVATE -Wno-unused-parameter)
