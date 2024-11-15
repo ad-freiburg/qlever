@@ -49,7 +49,14 @@ class QueryExecutionTree {
 
   bool isEmpty() const { return !rootOperation_; }
 
+  // Get the column index that the given `variable` will have in the result of
+  // this query. Throw if the variable is not part of the `VariableToColumnMap`.
   size_t getVariableColumn(const Variable& variable) const;
+
+  // Similar to `getVariableColumn` above, but return `nullopt` if the variable
+  // is not part of the `VariableToColumnMap`.
+  std::optional<size_t> getVariableColumnOrNullopt(
+      const Variable& variable) const;
 
   size_t getResultWidth() const { return rootOperation_->getResultWidth(); }
 
