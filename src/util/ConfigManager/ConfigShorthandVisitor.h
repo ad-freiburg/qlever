@@ -8,6 +8,7 @@
 #include <antlr4-runtime.h>
 
 #include "util/ConfigManager/generated/ConfigShorthandParser.h"
+#define EOF std::char_traits<char>::eof()
 #include "util/json.h"
 
 /*
