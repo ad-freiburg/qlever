@@ -38,6 +38,13 @@ class RelationalExpression : public SparqlExpression {
   // the appropriate data.
   std::optional<LangFilterData> getLanguageFilterExpression() const override;
 
+  // If this `RelationalExpression` is binary evaluable, return the
+  // corresponding `PrefilterExpression` for the pre-filtering procedure on
+  // `CompressedBlockMetadata`. In addition we return the `Variable` that
+  // corresponds to the sorted column.
+  std::vector<PrefilterExprVariablePair> getPrefilterExpressionForMetadata(
+      [[maybe_unused]] bool isNegated) const override;
+
   // These expressions are typically used inside `FILTER` clauses, so we need
   // proper estimates.
   Estimates getEstimatesForFilterExpression(

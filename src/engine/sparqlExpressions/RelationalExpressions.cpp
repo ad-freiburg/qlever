@@ -410,6 +410,82 @@ ExpressionResult InExpression::evaluate(
 }
 
 // _____________________________________________________________________________
+template <Comparison comp>
+std::vector<PrefilterExprVariablePair>
+RelationalExpression<comp>::getPrefilterExpressionForMetadata(
+    [[maybe_unused]] bool isNegated) const {
+  namespace p = prefilterExpressions;
+  AD_CORRECTNESS_CHECK(children_.size() == 2);
+  const SparqlExpression* child0 = children_.at(0).get();
+  const SparqlExpression* child1 = children_.at(1).get();
+
+  const auto mirroredExpression =
+      [](const ValueId valueId) -> std::unique_ptr<p::PrefilterExpression> {
+    using enum Comparison;
+    switch (comp) {
+      case LT:
+        // Id < ?var -> ?var > Id
+        return std::make_unique<p::GreaterThanExpression>(valueId);
+      case LE:
+        // Id <= ?var -> ?var >= Id
+        return std::make_unique<p::GreaterEqualExpression>(valueId);
+      case GE:
+        // Id >= ?var -> ?var <= Id
+        return std::make_unique<p::LessEqualExpression>(valueId);
+      case GT:
+        // Id > ?var -> ?var < Id
+        return std::make_unique<p::LessThanExpression>(valueId);
+      case EQ:
+      case NE:
+        // EQ(==) or NE(!=)
+        // Given that these two relations are symmetric w.r.t. ?var and Id,
+        // no swap regarding the relational operator is necessary.
+        return std::make_unique<p::RelationalExpression<comp>>(valueId);
+      default:
+        // Unchecked / new valueIdComparators::Comparison case.
+        AD_FAIL();
+    }
+  };
+
+  const auto tryGetPrefilterExprVariablePairVec =
+      [&mirroredExpression](const SparqlExpression* child0,
+                            const SparqlExpression* child1, bool reversed) {
+        std::vector<PrefilterExprVariablePair> resVec{};
+        if (const auto* variable =
+                dynamic_cast<const VariableExpression*>(child0)) {
+          if (const auto* valueId = dynamic_cast<const IdExpression*>(child1)) {
+            resVec.emplace_back(
+                reversed ? mirroredExpression(valueId->value())
+                         : std::make_unique<p::RelationalExpression<comp>>(
+                               valueId->value()),
+                variable->value());
+          }
+        }
+        return resVec;
+      };
+  // Option 1:
+  // RelationalExpression containing a VariableExpression as the first child
+  // and an IdExpression as the second child.
+  // E.g. for ?x >= 10 (RelationalExpression Sparql), we obtain the following
+  // pair with PrefilterExpression and Variable: <(>= 10), ?x>
+  auto resVec = tryGetPrefilterExprVariablePairVec(child0, child1, false);
+  if (!resVec.empty()) {
+    return resVec;
+  }
+  // Option 2:
+  // RelationalExpression containing an IdExpression as the first child and a
+  // VariableExpression as the second child.
+  // (1) 10 >= ?x (RelationalExpression Sparql), we obtain the following
+  // pair with PrefilterExpression and Variable: <(<= 10), ?x>
+  // (2) 10 != ?x (RelationalExpression Sparql), we obtain the following
+  // pair with PrefilterExpression and Variable: <(!= 10), ?x>;
+  // Option 3:
+  // If no PrefilterExpressions could be constructed for this
+  // RelationalExpression, just return the empty vector.
+  return tryGetPrefilterExprVariablePairVec(child1, child0, true);
+}
+
+// _____________________________________________________________________________
 std::span<SparqlExpression::Ptr> InExpression::childrenImpl() {
   return children_;
 }

@@ -5,11 +5,15 @@
 #include "engine/CartesianProductJoin.h"
 
 #include "engine/CallFixedSize.h"
+#include "util/Views.h"
 
 // ____________________________________________________________________________
 CartesianProductJoin::CartesianProductJoin(
-    QueryExecutionContext* executionContext, Children children)
-    : Operation{executionContext}, children_{std::move(children)} {
+    QueryExecutionContext* executionContext, Children children,
+    size_t chunkSize)
+    : Operation{executionContext},
+      children_{std::move(children)},
+      chunkSize_{chunkSize} {
   AD_CONTRACT_CHECK(!children_.empty());
   AD_CONTRACT_CHECK(std::ranges::all_of(
       children_, [](auto& child) { return child != nullptr; }));
@@ -80,6 +84,8 @@ float CartesianProductJoin::getMultiplicity([[maybe_unused]] size_t col) {
 
 // ____________________________________________________________________________
 bool CartesianProductJoin::knownEmptyResult() {
+  // If children were empty, returning false would be the wrong behavior.
+  AD_CORRECTNESS_CHECK(!children_.empty());
   return std::ranges::any_of(childView(), &Operation::knownEmptyResult);
 }
 
@@ -122,18 +128,40 @@ void CartesianProductJoin::writeResultColumn(std::span<Id> targetColumn,
 }
 
 // ____________________________________________________________________________
-ProtoResult CartesianProductJoin::computeResult(
-    [[maybe_unused]] bool requestLaziness) {
-  std::vector<std::shared_ptr<const Result>> subResults = calculateSubResults();
+ProtoResult CartesianProductJoin::computeResult(bool requestLaziness) {
+  if (knownEmptyResult()) {
+    return {IdTable{getResultWidth(), getExecutionContext()->getAllocator()},
+            resultSortedOn(), LocalVocab{}};
+  }
+  auto [subResults, lazyResult] = calculateSubResults(requestLaziness);
 
-  IdTable result = writeAllColumns(subResults);
+  LocalVocab staticMergedVocab{};
+  staticMergedVocab.mergeWith(
+      subResults |
+      std::views::transform([](const auto& result) -> const LocalVocab& {
+        return result->localVocab();
+      }));
 
-  // Dereference all the subresult pointers because `getSharedLocalVocabFrom...`
-  // requires a range of references, not pointers.
-  auto subResultsDeref = std::views::transform(
-      subResults, [](auto& x) -> decltype(auto) { return *x; });
-  return {std::move(result), resultSortedOn(),
-          Result::getMergedLocalVocab(subResultsDeref)};
+  if (!requestLaziness) {
+    AD_CORRECTNESS_CHECK(!lazyResult);
+    return {
+        writeAllColumns(subResults | std::views::transform(&Result::idTable),
+                        getLimit()._offset, getLimit().limitOrDefault()),
+        resultSortedOn(), std::move(staticMergedVocab)};
+  }
+
+  if (lazyResult) {
+    return {createLazyConsumer(std::move(staticMergedVocab),
+                               std::move(subResults), std::move(lazyResult)),
+            resultSortedOn()};
+  }
+
+  // Owning view wrapper to please gcc 11.
+  return {produceTablesLazily(std::move(staticMergedVocab),
+                              ad_utility::OwningView{std::move(subResults)} |
+                                  std::views::transform(&Result::idTable),
+                              getLimit()._offset, getLimit().limitOrDefault()),
+          resultSortedOn()};
 }
 
 // ____________________________________________________________________________
@@ -156,19 +184,27 @@ VariableToColumnMap CartesianProductJoin::computeVariableToColumnMap() const {
 
 // _____________________________________________________________________________
 IdTable CartesianProductJoin::writeAllColumns(
-    const std::vector<std::shared_ptr<const Result>>& subResults) const {
+    std::ranges::random_access_range auto idTables, size_t offset, size_t limit,
+    size_t lastTableOffset) const {
+  AD_CORRECTNESS_CHECK(offset >= lastTableOffset);
   IdTable result{getResultWidth(), getExecutionContext()->getAllocator()};
   // TODO<joka921> Find a solution to cheaply handle the case, that only a
   // single result is left. This can probably be done by using the
   // `ProtoResult`.
 
-  auto sizesView = std::views::transform(
-      subResults, [](const auto& child) { return child->idTable().size(); });
+  auto sizesView = std::views::transform(idTables, &IdTable::size);
   auto totalResultSize =
       std::reduce(sizesView.begin(), sizesView.end(), 1UL, std::multiplies{});
 
-  size_t totalSizeIncludingLimit = getLimit().actualSize(totalResultSize);
-  size_t offset = getLimit().actualOffset(totalResultSize);
+  if (!std::ranges::empty(idTables) && sizesView.back() != 0) {
+    totalResultSize += (totalResultSize / sizesView.back()) * lastTableOffset;
+  } else {
+    AD_CORRECTNESS_CHECK(lastTableOffset == 0);
+  }
+
+  LimitOffsetClause limitOffset{limit, offset};
+  size_t totalSizeIncludingLimit = limitOffset.actualSize(totalResultSize);
+  offset = limitOffset.actualOffset(totalResultSize);
 
   try {
     result.resize(totalSizeIncludingLimit);
@@ -187,11 +223,12 @@ IdTable CartesianProductJoin::writeAllColumns(
     // The index of the next column in the output that hasn't been written so
     // far.
     size_t resultColIdx = 0;
-    for (auto& subResultPtr : subResults) {
-      const auto& input = subResultPtr->idTable();
+    for (const auto& input : idTables) {
+      size_t extraOffset =
+          &input == &idTables.back() ? lastTableOffset * groupSize : 0;
       for (const auto& inputCol : input.getColumns()) {
         decltype(auto) resultCol = result.getColumn(resultColIdx);
-        writeResultColumn(resultCol, inputCol, groupSize, offset);
+        writeResultColumn(resultCol, inputCol, groupSize, offset - extraOffset);
         ++resultColIdx;
       }
       groupSize *= input.numRows();
@@ -201,8 +238,9 @@ IdTable CartesianProductJoin::writeAllColumns(
 }
 
 // _____________________________________________________________________________
-std::vector<std::shared_ptr<const Result>>
-CartesianProductJoin::calculateSubResults() {
+std::pair<std::vector<std::shared_ptr<const Result>>,
+          std::shared_ptr<const Result>>
+CartesianProductJoin::calculateSubResults(bool requestLaziness) {
   std::vector<std::shared_ptr<const Result>> subResults;
   // We don't need to fully materialize the child results if we have a LIMIT
   // specified and an OFFSET of 0.
@@ -214,23 +252,40 @@ CartesianProductJoin::calculateSubResults() {
     limitIfPresent = std::nullopt;
   }
 
+  std::shared_ptr<const Result> lazyResult = nullptr;
+  auto children = childView();
+  AD_CORRECTNESS_CHECK(!std::ranges::empty(children));
   // Get all child results (possibly with limit, see above).
-  for (auto& child : childView()) {
+  for (Operation& child : children) {
     if (limitIfPresent.has_value() && child.supportsLimit()) {
       child.setLimit(limitIfPresent.value());
     }
-    subResults.push_back(child.getResult());
+    // To preserve order of the columns we can only consume the first child
+    // lazily. In the future this restriction may be lifted by permutating the
+    // columns afterwards.
+    bool isLast = &child == &children.back();
+    bool requestLazy = requestLaziness && isLast;
+    auto result = child.getResult(
+        false, requestLazy ? ComputationMode::LAZY_IF_SUPPORTED
+                           : ComputationMode::FULLY_MATERIALIZED);
 
-    const auto& table = subResults.back()->idTable();
+    if (!result->isFullyMaterialized()) {
+      AD_CORRECTNESS_CHECK(isLast);
+      lazyResult = std::move(result);
+      continue;
+    }
+
+    const auto& table = result->idTable();
     // Early stopping: If one of the results is empty, we can stop early.
     if (table.empty()) {
+      // Push so the total size will be zero.
+      subResults.push_back(std::move(result));
       break;
     }
 
     // If one of the children is the neutral element (because of a triple with
     // zero variables), we can simply ignore it here.
     if (table.numRows() == 1 && table.numColumns() == 0) {
-      subResults.pop_back();
       continue;
     }
     // Example for the following calculation: If we have a LIMIT of 1000 and
@@ -238,10 +293,73 @@ CartesianProductJoin::calculateSubResults() {
     // needs to evaluate only its first 10 results. The +1 is because integer
     // divisions are rounded down by default.
     if (limitIfPresent.has_value()) {
-      limitIfPresent.value()._limit = limitIfPresent.value()._limit.value() /
-                                          subResults.back()->idTable().size() +
-                                      1;
+      limitIfPresent.value()._limit =
+          limitIfPresent.value()._limit.value() / result->idTable().size() + 1;
+    }
+    subResults.push_back(std::move(result));
+  }
+
+  return {std::move(subResults), std::move(lazyResult)};
+}
+
+// _____________________________________________________________________________
+Result::Generator CartesianProductJoin::produceTablesLazily(
+    LocalVocab mergedVocab, std::ranges::range auto idTables, size_t offset,
+    size_t limit, size_t lastTableOffset) const {
+  while (limit > 0) {
+    uint64_t limitWithChunkSize = std::min(limit, chunkSize_);
+    IdTable idTable = writeAllColumns(std::ranges::ref_view(idTables), offset,
+                                      limitWithChunkSize, lastTableOffset);
+    size_t tableSize = idTable.size();
+    AD_CORRECTNESS_CHECK(tableSize <= limit);
+    if (!idTable.empty()) {
+      offset += tableSize;
+      limit -= tableSize;
+      co_yield {std::move(idTable), mergedVocab.clone()};
+    }
+    if (tableSize < limitWithChunkSize) {
+      break;
     }
   }
-  return subResults;
+}
+
+// _____________________________________________________________________________
+Result::Generator CartesianProductJoin::createLazyConsumer(
+    LocalVocab staticMergedVocab,
+    std::vector<std::shared_ptr<const Result>> subresults,
+    std::shared_ptr<const Result> lazyResult) const {
+  AD_CONTRACT_CHECK(lazyResult);
+  size_t limit = getLimit().limitOrDefault();
+  size_t offset = getLimit()._offset;
+  std::vector<std::reference_wrapper<const IdTable>> idTables;
+  idTables.reserve(subresults.size() + 1);
+  for (const auto& result : subresults) {
+    idTables.emplace_back(result->idTable());
+  }
+  size_t lastTableOffset = 0;
+  for (auto& [idTable, localVocab] : lazyResult->idTables()) {
+    if (idTable.empty()) {
+      continue;
+    }
+    idTables.emplace_back(idTable);
+    localVocab.mergeWith(std::span{&staticMergedVocab, 1});
+    size_t producedTableSize = 0;
+    for (auto& idTableAndVocab : produceTablesLazily(
+             std::move(localVocab),
+             std::views::transform(
+                 idTables,
+                 [](const auto& wrapper) -> const IdTable& { return wrapper; }),
+             offset, limit, lastTableOffset)) {
+      producedTableSize += idTableAndVocab.idTable_.size();
+      co_yield idTableAndVocab;
+    }
+    AD_CORRECTNESS_CHECK(limit >= producedTableSize);
+    limit -= producedTableSize;
+    if (limit == 0) {
+      break;
+    }
+    offset += producedTableSize;
+    lastTableOffset += idTable.size();
+    idTables.pop_back();
+  }
 }

@@ -17,6 +17,7 @@
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/SampleExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
+#include "engine/sparqlExpressions/StdevExpression.h"
 #include "parser/GeoPoint.h"
 #include "util/AllocatorTestHelpers.h"
 #include "util/Conversions.h"
@@ -1372,6 +1373,9 @@ TEST(SparqlExpression, isAggregateAndIsDistinct) {
 
   EXPECT_THAT(GroupConcatExpression(false, varX(), " "), match(false));
   EXPECT_THAT(GroupConcatExpression(true, varX(), " "), match(true));
+
+  EXPECT_THAT(StdevExpression(false, varX()), match(false));
+  EXPECT_THAT(StdevExpression(true, varX()), match(true));
 
   EXPECT_THAT(SampleExpression(false, varX()), match(false));
   // For `SAMPLE` the distinctness makes no difference, so we always return `not
