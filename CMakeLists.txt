@@ -76,7 +76,13 @@ FetchContent_Declare(
 ################################
 # NLOHMANN JSON
 ################################
-FetchContent_Declare(nlohmann-json URL https://github.com/nlohmann/json/releases/download/v3.11.3/json.tar.xz)
+# Use URL to avoid downloading large repository as recommended here:
+# https://json.nlohmann.me/integration/cmake/#fetchcontent
+FetchContent_Declare(
+        nlohmann-json
+        URL https://github.com/nlohmann/json/releases/download/v3.11.3/json.tar.xz
+        URL_HASH SHA3_224=b9237e8e8242e915de5be631aa944369c38a377c5e79aa505ba741a9
+)
 
 ###############################
 # ANTLR CPP RUNTIME FOR THE SPARQL PARSER
