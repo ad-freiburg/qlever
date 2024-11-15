@@ -1225,33 +1225,34 @@ struct BlockZipperJoinImpl {
 
   // Consume the blocks until the first block is found that does contain a
   // defined value. All blocks up until that point are stored in
-  // `side.undefBlocks_` and skipped for subsequent processing.
+  // `side.undefBlocks_` and skipped for subsequent processing. The first block
+  // containing defined values is split and the defined part is stored in
+  // `side.currentBlocks_`.
   void findFirstBlockWithoutUndef(auto& side) {
     auto& it = side.it_;
     const auto& end = side.end_;
     while (it != end) {
       auto& el = *it;
-      if (!std::ranges::empty(el) && isUndefined_(el.front())) {
-        bool endUndefined = isUndefined_(el.back());
-        side.undefBlocks_.emplace_back(std::move(el));
-        ++it;
-        if (!endUndefined) {
-          auto& lastUndefinedBlock = side.undefBlocks_.back();
-          side.currentBlocks_.push_back(lastUndefinedBlock);
-          auto subrange = std::ranges::equal_range(
-              lastUndefinedBlock.subrange(),
-              lastUndefinedBlock.subrange().front(), lessThan_);
-          size_t undefCount = std::ranges::size(subrange);
-          lastUndefinedBlock.setSubrange(std::move(subrange));
-          auto& firstDefinedBlock = side.currentBlocks_.back();
-          firstDefinedBlock.setSubrange(
-              firstDefinedBlock.fullBlock().begin() + undefCount,
-              firstDefinedBlock.fullBlock().end());
-          break;
-        }
-        continue;
+      if (std::ranges::empty(el) || !isUndefined_(el.front())) {
+        return;
       }
-      break;
+      bool endUndefined = isUndefined_(el.back());
+      side.undefBlocks_.emplace_back(std::move(el));
+      ++it;
+      if (!endUndefined) {
+        auto& lastUndefinedBlock = side.undefBlocks_.back();
+        side.currentBlocks_.push_back(lastUndefinedBlock);
+        auto subrange = std::ranges::equal_range(
+            lastUndefinedBlock.subrange(),
+            lastUndefinedBlock.subrange().front(), lessThan_);
+        size_t undefCount = std::ranges::size(subrange);
+        lastUndefinedBlock.setSubrange(std::move(subrange));
+        auto& firstDefinedBlock = side.currentBlocks_.back();
+        firstDefinedBlock.setSubrange(
+            firstDefinedBlock.fullBlock().begin() + undefCount,
+            firstDefinedBlock.fullBlock().end());
+        return;
+      }
     }
   }
 
@@ -1273,11 +1274,10 @@ struct BlockZipperJoinImpl {
       if (leftSide_.currentBlocks_.empty() ||
           rightSide_.currentBlocks_.empty()) {
         addRemainingUndefPairs();
-        if (hasUndef(rightSide_)) {
-          return;
-        }
         if constexpr (DoOptionalJoin) {
-          fillWithAllFromLeft();
+          if (!hasUndef(rightSide_)) {
+            fillWithAllFromLeft();
+          }
         }
         return;
       }

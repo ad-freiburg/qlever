@@ -214,7 +214,8 @@ struct FakeId {
   }
 };
 
-// RowAdder implementation that works with FakeIds and can handle undefined.
+// RowAdder implementation that works with FakeIds and allows to tell undefined
+// ids apart from each other.
 struct RowAdderWithUndef {
   const std::vector<FakeId>* left_ = nullptr;
   const std::vector<FakeId>* right_ = nullptr;
@@ -248,25 +249,31 @@ struct RowAdderWithUndef {
   const auto& getOutput() const { return output_; }
 };
 
+// Join both vectors `a` and `b` and assert that the result is equal to the
+// given `expected` result. Joins are performed 2 times, the second time with
+// `a` and `b` swapped.
 void testDynamicJoinWithUndef(const std::vector<std::vector<FakeId>>& a,
                               const std::vector<std::vector<FakeId>>& b,
                               std::vector<std::array<FakeId, 2>> expected,
                               source_location l = source_location::current()) {
+  using namespace std::placeholders;
+  using namespace std::ranges;
   auto trace = generateLocationTrace(l);
-  auto compare = [](auto l, auto r) { return static_cast<Id>(l) < r; };
+  auto compare = [](FakeId l, FakeId r) {
+    return static_cast<Id>(l) < static_cast<Id>(r);
+  };
+  AD_CONTRACT_CHECK(is_sorted(a | views::join, compare));
+  AD_CONTRACT_CHECK(is_sorted(b | views::join, compare));
   auto validationProjection = [](const std::array<FakeId, 2>& fakeIds) -> Id {
-    if (std::get<0>(fakeIds) == Id::makeUndefined()) {
-      return std::get<1>(fakeIds);
-    }
-    return std::get<0>(fakeIds);
+    const auto& [x, y] = fakeIds;
+    return x == Id::makeUndefined() ? y : x;
   };
   {
     RowAdderWithUndef adder{};
     zipperJoinForBlocksWithPotentialUndef(a, b, compare, adder);
     const auto& result = adder.getOutput();
     // The result must be sorted on the first column
-    EXPECT_TRUE(
-        std::ranges::is_sorted(result, std::less<>{}, validationProjection));
+    EXPECT_TRUE(is_sorted(result, std::less<>{}, validationProjection));
     // The exact order of the elements with the same first column is not
     // important and depends on implementation details. We therefore do not
     // enforce it here.
@@ -281,8 +288,7 @@ void testDynamicJoinWithUndef(const std::vector<std::vector<FakeId>>& a,
     RowAdderWithUndef adder{};
     zipperJoinForBlocksWithPotentialUndef(b, a, compare, adder);
     const auto& result = adder.getOutput();
-    EXPECT_TRUE(
-        std::ranges::is_sorted(result, std::less<>{}, validationProjection));
+    EXPECT_TRUE(is_sorted(result, std::less<>{}, validationProjection));
     EXPECT_THAT(result, ::testing::UnorderedElementsAreArray(expected));
   }
 }
