@@ -81,25 +81,13 @@ FetchContent_Declare(nlohmann-json URL https://github.com/nlohmann/json/releases
 ###############################
 # ANTLR CPP RUNTIME FOR THE SPARQL PARSER
 ###############################
+set(ANTLR_BUILD_CPP_TESTS OFF CACHE BOOL "don't try to build googletest twice")
 FetchContent_Declare(
         antlr
         GIT_REPOSITORY https://github.com/antlr/antlr4.git
         GIT_TAG 9239e6ff444420516b44b7621e8dc7691fcf0e16
+        SOURCE_SUBDIR runtime/Cpp
 )
-
-# From ANTLR we actually don't want the toplevel directory (which doesn't
-# have a proper `CMakeLists.txt` anyway), but only the C++ runtime which
-# resides in a subdirectory. We additionally need to suppress some warnings
-# only for ANTLR. We therefore have to perform the initialization for
-# ANTLR using `FetchContent` manually.
-FetchContent_GetProperties(antlr)
-if (NOT antlr_POPULATED)
-    FetchContent_Populate(antlr)
-    set(ANTLR_BUILD_CPP_TESTS OFF CACHE BOOL "don't try to build googletest twice")
-    add_subdirectory(${antlr_SOURCE_DIR}/runtime/Cpp EXCLUDE_FROM_ALL)
-    target_compile_options(antlr4_static PRIVATE -Wno-all -Wno-extra -Wno-unqualified-std-cast-call -Wno-error -Wno-deprecated-declarations)
-    include_directories(SYSTEM ${antlr_SOURCE_DIR}/runtime/Cpp/runtime/src)
-endif ()
 
 ################################
 # Threading
@@ -326,7 +314,7 @@ FetchContent_Declare(
 ################################
 # Apply FetchContent
 ################################
-FetchContent_MakeAvailable(googletest ctre abseil re2 stxxl fsst s2 nlohmann-json)
+FetchContent_MakeAvailable(googletest ctre abseil re2 stxxl fsst s2 nlohmann-json antlr)
 # Disable some warnings in RE2, STXXL, and GTEST
 target_compile_options(s2 PRIVATE -Wno-sign-compare -Wno-unused-parameter -Wno-class-memaccess -Wno-comment -Wno-redundant-move -Wno-unknown-warning-option -Wno-maybe-uninitialized -Wno-class-memaccess)
 target_compile_options(re2 PRIVATE -Wno-unused-parameter)
@@ -338,6 +326,8 @@ include_directories(${ctre_SOURCE_DIR}/single-header)
 target_compile_options(fsst PRIVATE -Wno-extra -Wno-all -Wno-error)
 target_compile_options(fsst12 PRIVATE -Wno-extra -Wno-all -Wno-error)
 include_directories(${fsst_SOURCE_DIR})
+target_compile_options(antlr4_static PRIVATE -Wno-all -Wno-extra -Wno-unqualified-std-cast-call -Wno-error -Wno-deprecated-declarations)
+include_directories(SYSTEM "${antlr_SOURCE_DIR}/runtime/Cpp/runtime/src")
 
 message(STATUS ---)
 message(STATUS "CXX_FLAGS are : " ${CMAKE_CXX_FLAGS})
