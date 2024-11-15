@@ -704,7 +704,8 @@ std::optional<IdTable> GroupBy::computeGroupByForFullIndexScan() const {
   for (size_t i = 0; i < _aliases.size(); ++i) {
     const auto& alias = _aliases[i];
     if (auto count = alias._expression.getVariableForCount()) {
-      if (count.value().isDistinct_) {
+      if (count.value().isDistinct_ ||
+          !_subtree->getVariableColumnOrNullopt(count.value().variable_)) {
         return std::nullopt;
       }
       numCounts++;
@@ -1570,7 +1571,13 @@ std::optional<Variable> GroupBy::getVariableForNonDistinctCountOfSingleAlias()
 // _____________________________________________________________________________
 std::optional<sparqlExpression::SparqlExpressionPimpl::VariableAndDistinctness>
 GroupBy::getVariableForCountOfSingleAlias() const {
-  return _aliases.size() == 1
+  auto optVar =  _aliases.size() == 1
              ? _aliases.front()._expression.getVariableForCount()
              : std::nullopt;
+  if (!optVar.has_value() ||
+      !_subtree->getVariableColumnOrNullopt(optVar.value().variable_)
+           .has_value()) {
+    return std::nullopt;
+  }
+  return optVar;
 }
