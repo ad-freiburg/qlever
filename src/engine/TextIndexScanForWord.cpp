@@ -24,7 +24,6 @@ ProtoResult TextIndexScanForWord::computeResult(
     smallIdTable.resize(idTable.numRows());
     std::ranges::copy(idTable.getColumn(0), smallIdTable.getColumn(0).begin());
     std::ranges::copy(idTable.getColumn(2), smallIdTable.getColumn(1).begin());
-
     return {std::move(smallIdTable), resultSortedOn(), LocalVocab{}};
   }
 

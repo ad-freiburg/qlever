@@ -22,10 +22,52 @@ namespace {
 std::string kg =
     "<a> <p> \"he failed the test\" . <a> <p> \"testing can help\" . <a> <p> "
     "\"some other sentence\" . <b> <p> \"the test on friday was really hard\" "
-    ". <b> <x2> <x> . <b> <x2> <xb2> .";
+    ". <b> <x2> <x> . <b> <x2> <xb2> . <Astronomer> <is-a> <job> .";
 
 TEST(TextIndexScanForWord, WordScanPrefix) {
-  auto qec = getQec(kg, true, true, true, 16_B, true);
+  std::string wordsFileContent;
+  wordsFileContent =
+      "astronomer\t0\t1\t1\n"
+      "<Astronomer>\t1\t1\t0\n"
+      "scientist\t0\t1\t1\n"
+      "field\t0\t1\t1\n"
+      "astronomy\t0\t1\t1\n"
+      "astronomer\t0\t2\t0\n"
+      "<Astronomer>\t1\t2\t0\n"
+      ":s:firstsentence\t0\t2\t0\n"
+      "scientist\t0\t2\t0\n"
+      "field\t0\t2\t0\n"
+      "astronomy\t0\t2\t0\n"
+      "astronomy\t0\t3\t1\n"
+      "concentrates\t0\t3\t1\n"
+      "studies\t0\t3\t1\n"
+      "specific\t0\t3\t1\n"
+      "question\t0\t3\t1\n"
+      "outside\t0\t3\t1\n"
+      "scope\t0\t3\t1\n"
+      "earth\t0\t3\t1\n"
+      "astronomy\t0\t4\t1\n"
+      "concentrates\t0\t4\t1\n"
+      "studies\t0\t4\t1\n"
+      "field\t0\t4\t1\n"
+      "outside\t0\t4\t1\n"
+      "scope\t0\t4\t1\n"
+      "earth\t0\t4\t1\n";
+  std::string docsFileContent;
+  docsFileContent =
+      "4\tAn astronomer is a scientist in the field of astronomy who "
+      "concentrates their studies on a specific question or field outside of "
+      "the scope of Earth.\n";
+  auto qec = getQec(kg, true, true, true, 16_B, true, true, wordsFileContent,
+                    docsFileContent);
+
+  TextIndexScanForWord t1{qec, Variable{"?t1"}, "astronom*"};
+  auto tresult = t1.computeResultOnlyForTesting();
+  ASSERT_EQ(
+      "An astronomer is a scientist in the field of astronomy who concentrates "
+      "their studies on a specific question or field outside of the scope of "
+      "Earth.",
+      h::getTextExcerptFromResultTable(qec, tresult, 0));
 
   TextIndexScanForWord s1{qec, Variable{"?text1"}, "test*"};
   TextIndexScanForWord s2{qec, Variable{"?text2"}, "test*"};
