@@ -34,7 +34,7 @@ IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
     additionalColumns_.push_back(idx);
     additionalVariables_.push_back(variable);
   }
-  sizeEstimate_ = computeSizeEstimate();
+  std::tie(sizeEstimateIsExact_, sizeEstimate_) = computeSizeEstimate();
 
   // Check the following invariant: All the variables must be at the end of the
   // permuted triple. For example in the PSO permutation, either only the O, or
@@ -171,7 +171,18 @@ ProtoResult IndexScan::computeResult(bool requestLaziness) {
 }
 
 // _____________________________________________________________________________
-size_t IndexScan::computeSizeEstimate() const {
+std::pair<bool, size_t> IndexScan::computeSizeEstimate() const {
+  AD_CORRECTNESS_CHECK(_executionContext);
+  auto [lower, upper] = getIndex()
+                            .getImpl()
+                            .getPermutation(permutation())
+                            .getSizeEstimateForScan(getScanSpecification(),
+                                                    locatedTriplesSnapshot());
+  return {lower == upper, std::midpoint(lower, upper)};
+}
+
+// _____________________________________________________________________________
+size_t IndexScan::getExactSize() const {
   AD_CORRECTNESS_CHECK(_executionContext);
   return getIndex().getResultSizeOfScan(getScanSpecification(), permutation_,
                                         locatedTriplesSnapshot());

@@ -20,6 +20,7 @@ class IndexScan final : public Operation {
   Graphs graphsToFilter_;
   size_t numVariables_;
   size_t sizeEstimate_;
+  bool sizeEstimateIsExact_;
   vector<float> multiplicity_;
 
   // Additional columns (e.g. patterns) that are being retrieved in addition to
@@ -59,7 +60,7 @@ class IndexScan final : public Operation {
 
   // Return the exact result size of the index scan. This is always known as it
   // can be read from the Metadata.
-  size_t getExactSize() const { return sizeEstimate_; }
+  size_t getExactSize() const;
 
   // Return two generators that lazily yield the results of `s1` and `s2` in
   // blocks, but only the blocks that can theoretically contain matching rows
@@ -78,7 +79,7 @@ class IndexScan final : public Operation {
  private:
   // TODO<joka921> Make the `getSizeEstimateBeforeLimit()` function `const` for
   // ALL the `Operations`.
-  uint64_t getSizeEstimateBeforeLimit() override { return getExactSize(); }
+  uint64_t getSizeEstimateBeforeLimit() override { return sizeEstimate_; }
 
  public:
   size_t getCostEstimate() override;
@@ -93,7 +94,9 @@ class IndexScan final : public Operation {
     return multiplicity_[col];
   }
 
-  bool knownEmptyResult() override { return getExactSize() == 0; }
+  bool knownEmptyResult() override {
+    return sizeEstimateIsExact_ && sizeEstimate_ == 0;
+  }
 
   bool isIndexScanWithNumVariables(size_t target) const override {
     return numVariables() == target;
@@ -103,7 +106,7 @@ class IndexScan final : public Operation {
   // size of wikidata, so we don't even need to try and waste performance.
   bool unlikelyToFitInCache(
       ad_utility::MemorySize maxCacheableSize) const override {
-    return ad_utility::MemorySize::bytes(getExactSize() * getResultWidth() *
+    return ad_utility::MemorySize::bytes(sizeEstimate_ * getResultWidth() *
                                          sizeof(Id)) > maxCacheableSize;
   }
 
@@ -124,7 +127,11 @@ class IndexScan final : public Operation {
 
   vector<QueryExecutionTree*> getChildren() override { return {}; }
 
-  size_t computeSizeEstimate() const;
+  // Compute the size estimate of the index scan, taking delta triples (from
+  // the `queryExecutionContext_`) into account. The `bool` is true iff the
+  // estimate is exact. If not, the estimate is the mean of the lower and upper
+  // bound.
+  std::pair<bool, size_t> computeSizeEstimate() const;
 
   std::string getCacheKeyImpl() const override;
 

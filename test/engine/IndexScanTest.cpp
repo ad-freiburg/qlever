@@ -47,7 +47,11 @@ void testLazyScan(Permutation::IdTableGenerator partialLazyScanResult,
 
   if (limitOffset.isUnconstrained()) {
     EXPECT_EQ(numBlocks, partialLazyScanResult.details().numBlocksRead_);
-    EXPECT_EQ(lazyScanRes.size(),
+    // The number of read elements might be a bit larger than the final result
+    // size, because the first and/or last block might be incomplete, meaning
+    // that they have to be completely read, but only partially contribute to
+    // the result.
+    EXPECT_LE(lazyScanRes.size(),
               partialLazyScanResult.details().numElementsRead_);
   }
 
@@ -171,7 +175,6 @@ void testLazyScanWithColumnThrows(
 TEST(IndexScan, lazyScanForJoinOfTwoScans) {
   SparqlTriple xpy{Tc{Var{"?x"}}, "<p>", Tc{Var{"?y"}}};
   SparqlTriple xqz{Tc{Var{"?x"}}, "<q>", Tc{Var{"?z"}}};
-  /*
   {
     // In the tests we have a blocksize of two triples per block, and a new
     // block is started for a new relation. That explains the spacing of the
@@ -196,7 +199,6 @@ TEST(IndexScan, lazyScanForJoinOfTwoScans) {
     // graph), so both lazy scans are empty.
     testLazyScanForJoinOfTwoScans(kg, xpy, xqz, {}, {});
   }
-   */
   {
     // No triple for relation <x> (which does appear in the knowledge graph, but
     // not as a predicate), so both lazy scans are empty.

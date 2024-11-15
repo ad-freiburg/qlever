@@ -24,7 +24,7 @@ class LiteralExpression : public SparqlExpression {
   mutable std::atomic<IdOrLiteralOrIri*> cachedResult_ = nullptr;
 
  public:
-  // _________________________________________________________________________
+  // ___________________________________________________________________________
   explicit LiteralExpression(T _value) : _value{std::move(_value)} {}
   ~LiteralExpression() override {
     delete cachedResult_.load(std::memory_order_relaxed);
@@ -83,7 +83,7 @@ class LiteralExpression : public SparqlExpression {
     }
   }
 
-  // _________________________________________________________________________
+  // ___________________________________________________________________________
   vector<Variable> getUnaggregatedVariables() const override {
     if constexpr (std::is_same_v<T, ::Variable>) {
       return {_value};
@@ -92,7 +92,7 @@ class LiteralExpression : public SparqlExpression {
     }
   }
 
-  // ______________________________________________________________________
+  // ___________________________________________________________________________
   string getCacheKey(const VariableToColumnMap& varColMap) const override {
     if constexpr (std::is_same_v<T, ::Variable>) {
       if (!varColMap.contains(_value)) {
@@ -118,13 +118,13 @@ class LiteralExpression : public SparqlExpression {
     }
   }
 
-  // ______________________________________________________________________
+  // ___________________________________________________________________________
   bool isConstantExpression() const override {
     return !std::is_same_v<T, ::Variable>;
   }
 
  protected:
-  // _________________________________________________________________________
+  // ___________________________________________________________________________
   std::optional<::Variable> getVariableOrNullopt() const override {
     if constexpr (std::is_same_v<T, ::Variable>) {
       return _value;

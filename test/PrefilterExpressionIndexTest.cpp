@@ -6,67 +6,21 @@
 
 #include <vector>
 
+#include "./PrefilterExpressionTestHelpers.h"
 #include "./SparqlExpressionTestHelpers.h"
-#include "index/CompressedBlockPrefiltering.h"
-#include "util/DateYearDuration.h"
 #include "util/GTestHelpers.h"
-#include "util/IdTestHelpers.h"
 
-namespace {
 using ad_utility::testing::BlankNodeId;
 using ad_utility::testing::BoolId;
-using ad_utility::testing::DateId;
 using ad_utility::testing::DoubleId;
 using ad_utility::testing::IntId;
 using ad_utility::testing::UndefId;
 using ad_utility::testing::VocabId;
-constexpr auto DateParser = &DateYearOrDuration::parseXsdDate;
+
+namespace {
+
 using namespace prefilterExpressions;
-
-namespace makeFilterExpr {
-//______________________________________________________________________________
-// Make RelationalExpression
-template <typename RelExpr>
-auto relExpr =
-    [](const ValueId& referenceId) -> std::unique_ptr<PrefilterExpression> {
-  return std::make_unique<RelExpr>(referenceId);
-};
-
-// Make AndExpression or OrExpression
-template <typename LogExpr>
-auto logExpr = [](std::unique_ptr<PrefilterExpression> child1,
-                  std::unique_ptr<PrefilterExpression> child2)
-    -> std::unique_ptr<PrefilterExpression> {
-  return std::make_unique<LogExpr>(std::move(child1), std::move(child2));
-};
-
-// Make NotExpression
-auto notExpr = [](std::unique_ptr<PrefilterExpression> child)
-    -> std::unique_ptr<PrefilterExpression> {
-  return std::make_unique<NotExpression>(std::move(child));
-};
-
-}  // namespace makeFilterExpr
-//______________________________________________________________________________
-// instantiation relational
-// LESS THAN (`<`)
-constexpr auto lt = makeFilterExpr::relExpr<LessThanExpression>;
-// LESS EQUAL (`<=`)
-constexpr auto le = makeFilterExpr::relExpr<LessEqualExpression>;
-// GREATER EQUAL (`>=`)
-constexpr auto ge = makeFilterExpr::relExpr<GreaterEqualExpression>;
-// GREATER THAN (`>`)
-constexpr auto gt = makeFilterExpr::relExpr<GreaterThanExpression>;
-// EQUAL (`==`)
-constexpr auto eq = makeFilterExpr::relExpr<EqualExpression>;
-// NOT EQUAL (`!=`)
-constexpr auto neq = makeFilterExpr::relExpr<NotEqualExpression>;
-// AND (`&&`)
-constexpr auto andExpr = makeFilterExpr::logExpr<AndExpression>;
-// OR (`||`)
-constexpr auto orExpr = makeFilterExpr::logExpr<OrExpression>;
-// NOT (`!`)
-constexpr auto notExpr = makeFilterExpr::notExpr;
+using namespace makeFilterExpression;
 
 //______________________________________________________________________________
 /*
@@ -87,7 +41,7 @@ that is also checked during the pre-filtering procedure. The actual evaluation
 column (we filter w.r.t. values of COLUMN 0) contains mixed types.
 */
 //______________________________________________________________________________
-class TestPrefilterExprOnBlockMetadata : public ::testing::Test {
+class PrefilterExpressionOnMetadataTest : public ::testing::Test {
  public:
   const Id referenceDate1 = DateId(DateParser, "1999-11-11");
   const Id referenceDate2 = DateId(DateParser, "2005-02-27");
@@ -178,6 +132,12 @@ class TestPrefilterExprOnBlockMetadata : public ::testing::Test {
                                  ::testing::HasSubstr(expected));
   }
 
+  // Assert that the PrefilterExpression tree is properly copied when calling
+  // method clone.
+  auto makeTestClone(std::unique_ptr<PrefilterExpression> expr) {
+    ASSERT_EQ(*expr, *expr->clone());
+  }
+
   // Check that the provided expression prefilters the correct blocks.
   auto makeTest(std::unique_ptr<PrefilterExpression> expr,
                 std::vector<BlockMetadata>&& expected) {
@@ -196,7 +156,7 @@ class TestPrefilterExprOnBlockMetadata : public ::testing::Test {
 }  // namespace
 
 //______________________________________________________________________________
-TEST_F(TestPrefilterExprOnBlockMetadata, testBlockFormatForDebugging) {
+TEST_F(PrefilterExpressionOnMetadataTest, testBlockFormatForDebugging) {
   EXPECT_EQ(
       "#BlockMetadata\n(first) Triple: I:0 V:10 D:33.000000 V:0\n(last) "
       "Triple: I:0 V:10 D:33.000000 V:0\nnum. rows: 0.\n",
@@ -216,7 +176,7 @@ TEST_F(TestPrefilterExprOnBlockMetadata, testBlockFormatForDebugging) {
 // Test LessThanExpression
 // Note: the `makeTest` function automatically adds the blocks with mixed
 // datatypes to the expected result.
-TEST_F(TestPrefilterExprOnBlockMetadata, testLessThanExpressions) {
+TEST_F(PrefilterExpressionOnMetadataTest, testLessThanExpressions) {
   makeTest(lt(IntId(5)),
            {b5, b6, b9, b10, b11, b12, b13, b14, b15, b16, b17, b18});
   makeTest(lt(IntId(-12)), {b18});
@@ -243,7 +203,7 @@ TEST_F(TestPrefilterExprOnBlockMetadata, testLessThanExpressions) {
 // Test LessEqualExpression
 // Note: the `makeTest` function automatically adds the blocks with mixed
 // datatypes to the expected result.
-TEST_F(TestPrefilterExprOnBlockMetadata, testLessEqualExpressions) {
+TEST_F(PrefilterExpressionOnMetadataTest, testLessEqualExpressions) {
   makeTest(le(IntId(0)), {b5, b6, b9, b10, b11, b15, b16, b17, b18});
   makeTest(le(IntId(-6)), {b9, b11, b15, b16, b17, b18});
   makeTest(le(IntId(7)),
@@ -269,7 +229,7 @@ TEST_F(TestPrefilterExprOnBlockMetadata, testLessEqualExpressions) {
 // Test GreaterThanExpression
 // Note: the `makeTest` function automatically adds the blocks with mixed
 // datatypes to the expected result.
-TEST_F(TestPrefilterExprOnBlockMetadata, testGreaterThanExpression) {
+TEST_F(PrefilterExpressionOnMetadataTest, testGreaterThanExpression) {
   makeTest(gt(DoubleId(5.5375)), {b7, b8, b11, b14, b18});
   makeTest(gt(DoubleId(9.9994)), {b14});
   makeTest(gt(IntId(-5)), {b5, b6, b7, b8, b10, b11, b12, b13, b14, b15});
@@ -297,7 +257,7 @@ TEST_F(TestPrefilterExprOnBlockMetadata, testGreaterThanExpression) {
 // Test GreaterEqualExpression
 // Note: the `makeTest` function automatically adds the blocks with mixed
 // datatypes to the expected result.
-TEST_F(TestPrefilterExprOnBlockMetadata, testGreaterEqualExpression) {
+TEST_F(PrefilterExpressionOnMetadataTest, testGreaterEqualExpression) {
   makeTest(ge(IntId(0)), {b5, b6, b7, b8, b11, b12, b13, b14});
   makeTest(ge(IntId(8)), {b8, b11, b14});
   makeTest(ge(DoubleId(9.98)), {b11, b14});
@@ -325,7 +285,7 @@ TEST_F(TestPrefilterExprOnBlockMetadata, testGreaterEqualExpression) {
 // Test EqualExpression
 // Note: the `makeTest` function automatically adds the blocks with mixed
 // datatypes to the expected result.
-TEST_F(TestPrefilterExprOnBlockMetadata, testEqualExpression) {
+TEST_F(PrefilterExpressionOnMetadataTest, testEqualExpression) {
   makeTest(eq(IntId(0)), {b4, b5, b6, b11});
   makeTest(eq(IntId(5)), {b6, b7, b11, b14});
   makeTest(eq(IntId(22)), {});
@@ -353,7 +313,7 @@ TEST_F(TestPrefilterExprOnBlockMetadata, testEqualExpression) {
 // Test NotEqualExpression
 // Note: the `makeTest` function automatically adds the blocks with mixed
 // datatypes to the expected result.
-TEST_F(TestPrefilterExprOnBlockMetadata, testNotEqualExpression) {
+TEST_F(PrefilterExpressionOnMetadataTest, testNotEqualExpression) {
   makeTest(neq(DoubleId(0.00)),
            {b6, b7, b8, b9, b10, b11, b12, b13, b14, b15, b16, b17, b18});
   makeTest(neq(IntId(-4)),
@@ -383,7 +343,7 @@ TEST_F(TestPrefilterExprOnBlockMetadata, testNotEqualExpression) {
 // Test AndExpression
 // Note: the `makeTest` function automatically adds the blocks with mixed
 // datatypes to the expected result.
-TEST_F(TestPrefilterExprOnBlockMetadata, testAndExpression) {
+TEST_F(PrefilterExpressionOnMetadataTest, testAndExpression) {
   makeTest(andExpr(ge(VocabId(10)), gt(VocabId(10))), {b19, b20, b21, b22});
   makeTest(andExpr(ge(VocabId(10)), ge(VocabId(10))), {b19, b20, b21, b22});
   makeTest(andExpr(ge(VocabId(12)), gt(VocabId(17))), {b22});
@@ -421,7 +381,7 @@ TEST_F(TestPrefilterExprOnBlockMetadata, testAndExpression) {
 // Test OrExpression
 // Note: the `makeTest` function automatically adds the blocks with mixed
 // datatypes to the expected result.
-TEST_F(TestPrefilterExprOnBlockMetadata, testOrExpression) {
+TEST_F(PrefilterExpressionOnMetadataTest, testOrExpression) {
   makeTest(orExpr(lt(VocabId(22)), le(VocabId(0))), {b18, b19, b20, b21});
   makeTest(orExpr(le(VocabId(0)), ge(VocabId(16))), {b18, b21, b22});
   makeTest(orExpr(gt(VocabId(17)), ge(VocabId(17))), {b21, b22});
@@ -458,7 +418,7 @@ TEST_F(TestPrefilterExprOnBlockMetadata, testOrExpression) {
 // Test NotExpression
 // Note: the `makeTest` function automatically adds the blocks with mixed
 // datatypes to the expected result.
-TEST_F(TestPrefilterExprOnBlockMetadata, testNotExpression) {
+TEST_F(PrefilterExpressionOnMetadataTest, testNotExpression) {
   makeTest(notExpr(eq(VocabId(2))), {b18, b19, b20, b21, b22});
   makeTest(notExpr(eq(VocabId(14))), {b18, b19, b21, b22});
   makeTest(notExpr(neq(VocabId(14))), {b19, b20, b21});
@@ -505,7 +465,8 @@ TEST_F(TestPrefilterExprOnBlockMetadata, testNotExpression) {
 // Test PrefilterExpressions mixed
 // Note: the `makeTest` function automatically adds the blocks with mixed
 // datatypes to the expected result.
-TEST_F(TestPrefilterExprOnBlockMetadata, testGeneralPrefilterExprCombinations) {
+TEST_F(PrefilterExpressionOnMetadataTest,
+       testGeneralPrefilterExprCombinations) {
   makeTest(andExpr(notExpr(gt(DoubleId(-14.01))), lt(IntId(0))), {b18});
   makeTest(
       orExpr(andExpr(gt(DoubleId(8.25)), le(IntId(10))), eq(DoubleId(-6.25))),
@@ -533,7 +494,7 @@ TEST_F(TestPrefilterExprOnBlockMetadata, testGeneralPrefilterExprCombinations) {
 
 //______________________________________________________________________________
 // Test that correct errors are thrown for invalid input (condition)
-TEST_F(TestPrefilterExprOnBlockMetadata, testInputConditionCheck) {
+TEST_F(PrefilterExpressionOnMetadataTest, testInputConditionCheck) {
   makeTestErrorCheck(le(IntId(5)), blocksWithDuplicate1,
                      "The provided data blocks must be unique.");
   makeTestErrorCheck(andExpr(gt(VocabId(10)), le(VocabId(20))),
@@ -558,10 +519,82 @@ TEST_F(TestPrefilterExprOnBlockMetadata, testInputConditionCheck) {
 
 //______________________________________________________________________________
 // Check for correctness given only one BlockMetadata value is provided.
-TEST_F(TestPrefilterExprOnBlockMetadata, testWithOneBlockMetadataValue) {
+TEST_F(PrefilterExpressionOnMetadataTest, testWithOneBlockMetadataValue) {
   auto expr = orExpr(eq(DoubleId(-6.25)), eq(IntId(0)));
   std::vector<BlockMetadata> input = {b16};
   EXPECT_EQ(expr->evaluate(input, 0), input);
   EXPECT_EQ(expr->evaluate(input, 1), std::vector<BlockMetadata>{});
   EXPECT_EQ(expr->evaluate(input, 2), std::vector<BlockMetadata>{});
+}
+
+//______________________________________________________________________________
+// Test method clone. clone() creates a copy of the complete PrefilterExpression
+// tree.
+TEST_F(PrefilterExpressionOnMetadataTest, testMethodClonePrefilterExpression) {
+  makeTestClone(lt(VocabId(10)));
+  makeTestClone(gt(referenceDate2));
+  makeTestClone(andExpr(lt(VocabId(20)), gt(VocabId(10))));
+  makeTestClone(neq(IntId(10)));
+  makeTestClone(orExpr(eq(IntId(10)), neq(DoubleId(10))));
+  makeTestClone(notExpr(ge(referenceDate1)));
+  makeTestClone(notExpr(notExpr(neq(VocabId(0)))));
+  makeTestClone(notExpr(andExpr(eq(IntId(10)), neq(DoubleId(10)))));
+  makeTestClone(orExpr(orExpr(eq(VocabId(101)), lt(IntId(100))),
+                       andExpr(gt(referenceDate1), lt(referenceDate2))));
+  makeTestClone(andExpr(andExpr(neq(IntId(10)), neq(DoubleId(100.23))),
+                        orExpr(gt(DoubleId(0.001)), lt(IntId(250)))));
+  makeTestClone(orExpr(orExpr(eq(VocabId(101)), lt(IntId(100))),
+                       notExpr(andExpr(lt(VocabId(0)), neq(IntId(100))))));
+}
+
+//______________________________________________________________________________
+// Test PrefilterExpression equality operator.
+TEST_F(PrefilterExpressionOnMetadataTest, testEqualityOperator) {
+  // Relational PrefilterExpressions
+  ASSERT_FALSE(*ge(referenceDate1) == *ge(referenceDate2));
+  ASSERT_FALSE(*neq(BoolId(true)) == *eq(BoolId(true)));
+  ASSERT_TRUE(*eq(IntId(1)) == *eq(IntId(1)));
+  ASSERT_TRUE(*ge(referenceDate1) == *ge(referenceDate1));
+  // NotExpression
+  ASSERT_TRUE(*notExpr(eq(IntId(0))) == *notExpr(eq(IntId(0))));
+  ASSERT_TRUE(*notExpr(notExpr(ge(VocabId(0)))) ==
+              *notExpr(notExpr(ge(VocabId(0)))));
+  ASSERT_FALSE(*notExpr(gt(IntId(0))) == *eq(IntId(0)));
+  ASSERT_FALSE(*notExpr(andExpr(eq(IntId(1)), eq(IntId(0)))) ==
+               *notExpr(ge(VocabId(0))));
+  // Binary PrefilterExpressions (AND and OR)
+  ASSERT_TRUE(*orExpr(eq(IntId(0)), le(IntId(0))) ==
+              *orExpr(eq(IntId(0)), le(IntId(0))));
+  ASSERT_TRUE(*andExpr(le(VocabId(1)), le(IntId(0))) ==
+              *andExpr(le(VocabId(1)), le(IntId(0))));
+  ASSERT_FALSE(*orExpr(eq(IntId(0)), le(IntId(0))) ==
+               *andExpr(le(VocabId(1)), le(IntId(0))));
+  ASSERT_FALSE(*notExpr(orExpr(eq(IntId(0)), le(IntId(0)))) ==
+               *orExpr(eq(IntId(0)), le(IntId(0))));
+}
+
+//______________________________________________________________________________
+// Test PrefilterExpression content formatting for debugging.
+TEST(PrefilterExpressionExpressionOnMetadataTest,
+     checkPrintFormattedPrefilterExpression) {
+  auto expr = lt(IntId(10));
+  EXPECT_EQ((std::stringstream() << *expr).str(),
+            "Prefilter RelationalExpression<LT(<)>\nValueId: I:10\n.\n");
+  expr = neq(DoubleId(8.21));
+  EXPECT_EQ((std::stringstream() << *expr).str(),
+            "Prefilter RelationalExpression<NE(!=)>\nValueId: D:8.210000\n.\n");
+  expr = notExpr(eq(VocabId(0)));
+  EXPECT_EQ((std::stringstream() << *expr).str(),
+            "Prefilter NotExpression:\nchild {Prefilter "
+            "RelationalExpression<NE(!=)>\nValueId: V:0\n}\n.\n");
+  expr = orExpr(le(IntId(0)), ge(IntId(5)));
+  EXPECT_EQ((std::stringstream() << *expr).str(),
+            "Prefilter LogicalExpression<OR(||)>\nchild1 {Prefilter "
+            "RelationalExpression<LE(<=)>\nValueId: I:0\n}child2 {Prefilter "
+            "RelationalExpression<GE(>=)>\nValueId: I:5\n}\n.\n");
+  expr = andExpr(lt(IntId(20)), gt(IntId(10)));
+  EXPECT_EQ((std::stringstream() << *expr).str(),
+            "Prefilter LogicalExpression<AND(&&)>\nchild1 {Prefilter "
+            "RelationalExpression<LT(<)>\nValueId: I:20\n}child2 {Prefilter "
+            "RelationalExpression<GT(>)>\nValueId: I:10\n}\n.\n");
 }
