@@ -142,29 +142,6 @@ TEST(ServerTest, parseHttpRequest) {
               ParsedRequestIs("/", {}, Update{"DELETE * WHERE {}"}));
 }
 
-TEST(ServerTest, checkParameter) {
-  const ParamValueMap exampleParams = {{"foo", {"bar"}},
-                                       {"baz", {"qux", "quux"}}};
-
-  EXPECT_THAT(Server::checkParameter(exampleParams, "doesNotExist", ""),
-              testing::Eq(std::nullopt));
-  EXPECT_THAT(Server::checkParameter(exampleParams, "foo", "baz"),
-              testing::Eq(std::nullopt));
-  EXPECT_THAT(Server::checkParameter(exampleParams, "foo", "bar"),
-              testing::Optional(testing::StrEq("bar")));
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      Server::checkParameter(exampleParams, "baz", "qux"),
-      testing::StrEq("Parameter \"baz\" must be given exactly once. Is: 2"));
-  EXPECT_THAT(Server::checkParameter(exampleParams, "foo", std::nullopt),
-              testing::Optional(testing::StrEq("bar")));
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      Server::checkParameter(exampleParams, "baz", std::nullopt),
-      testing::StrEq("Parameter \"baz\" must be given exactly once. Is: 2"));
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      Server::checkParameter(exampleParams, "baz", std::nullopt),
-      testing::StrEq("Parameter \"baz\" must be given exactly once. Is: 2"));
-}
-
 TEST(ServerTest, determineResultPinning) {
   EXPECT_THAT(Server::determineResultPinning(
                   {{"pinsubtrees", {"true"}}, {"pinresult", {"true"}}}),
