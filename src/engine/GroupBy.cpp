@@ -610,6 +610,7 @@ std::optional<IdTable> GroupBy::computeGroupByForSingleIndexScan() const {
   table.emplace_back();
   const auto& var = varAndDistinctness.value().variable_;
   if (!isVariableBoundInSubtree(var)) {
+    // The variable is never bound, so its count is zero.
     table(0, 0) = Id::makeFromInt(0);
   } else if (indexScan->getResultWidth() == 3) {
     if (countIsDistinct) {
@@ -697,7 +698,8 @@ std::optional<IdTable> GroupBy::computeGroupByForFullIndexScan() const {
   // Check that all the aliases are non-distinct counts. We currently support
   // only one or no such count. Redundant additional counts will lead to an
   // exception (it is easy to reformulate the query to trigger this
-  // optimization).
+  // optimization). Also keep track of whether the counted variable is actually
+  // bound by the index scan (else all counts will be 0).
   size_t numCounts = 0;
   bool variableIsBoundInSubtree = true;
   for (size_t i = 0; i < _aliases.size(); ++i) {

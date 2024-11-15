@@ -85,10 +85,12 @@ TEST(AggregateExpression, count) {
   testCountString({lit("alpha"), lit("äpfel"), lit(""), lit("unfug")}, I(4));
 }
 
-// Test `CountExpression`.
-TEST(AggregateExpression, countForUnboundVariable) {
+// Test the behavior of COUNT for variables.
+TEST(AggregateExpression, countForVariables) {
   auto testCount = testAggregateWithVariable<CountExpression, Id>;
+  // Unbound variables always have a count of 0.
   testCount(Variable{"?thisVariableIsNotContained"}, I(0));
+  // The static test context has three rows.
   testCount(Variable{"?ints"}, I(3));
 }
 

@@ -1623,6 +1623,8 @@ TEST_F(GroupByOptimizations, computeGroupByForSingleIndexScan) {
   // `chooseInterface == true` means "use the dedicated
   // `computeGroupByForJoinWithFullScan` method", `chooseInterface == false`
   // means use the general `computeOptimizedGroupByIfPossible` function.
+  // `countVarIsUndef == true` means that the COUNT alias is on a variable
+  // that doesn't exist, and therefore always has a count of zero.
   auto testWithBothInterfaces = [&](bool chooseInterface,
                                     bool countVarIsUndef) {
     auto groupBy =
@@ -1694,7 +1696,7 @@ TEST_F(GroupByOptimizations, computeGroupByObjectWithCount) {
   ASSERT_FALSE(isSuited(variablesOnlyX, aliasesCountDistinctX, xyScan));
   ASSERT_FALSE(isSuited(variablesOnlyX, aliasesCountXTwice, xyScan));
 
-  // Unbound count variable
+  // Unbound count variable.
   ASSERT_FALSE(isSuited(variablesOnlyX, aliasesCountNotExisting, xyScan, true));
   ASSERT_FALSE(
       isSuited(variablesOnlyX, aliasesCountNotExisting, xyScan, false));
@@ -1760,6 +1762,8 @@ TEST_F(GroupByOptimizations, computeGroupByForFullIndexScan) {
   // `computeGroupByForJoinWithFullScan` method", `chooseInterface == false`
   // means use the general `computeOptimizedGroupByIfPossible` function.
   auto testWithBothInterfaces = [&](bool chooseInterface, bool includeCount) {
+    // `countVarIsUnbound == true` means that the variable inside the count is
+    // not part of the query and therefore the count always returns zero.
     auto testWithBoundAndUnboundCount = [&](bool countVarIsUnbound) {
       IdTable result{qec->getAllocator()};
       const auto& aliases = [&]() -> const std::vector<Alias>& {
