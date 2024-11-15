@@ -811,10 +811,11 @@ Awaitable<void> Server::processQuery(
   // `computeInNewThread`. We also can't unwrap the optional directly in this
   // function, because then the conan build fails in a very strange way,
   // probably related to issues in GCC's coroutine implementation.
+  /*
   auto plannedQuery = setupPlannedQuery(params, query, qec, cancellationHandle,
                                  timeLimit, requestTimer);
-  /*
-  auto plannedQueryOpt = co_await computeInNewThread(
+                                 */
+  auto coroutine = computeInNewThread(
       queryThreadPool_,
       [this, &params, &query, &qec, cancellationHandle, &timeLimit,
        &requestTimer]() -> std::optional<PlannedQuery> {
@@ -822,9 +823,9 @@ Awaitable<void> Server::processQuery(
                                  timeLimit, requestTimer);
       },
       cancellationHandle);
+  auto plannedQueryOpt = co_await std::move(coroutine);
   AD_CORRECTNESS_CHECK(plannedQueryOpt.has_value());
   auto plannedQuery = std::move(plannedQueryOpt).value();
-  */
   auto qet = plannedQuery.queryExecutionTree_;
 
   if (plannedQuery.parsedQuery_.hasUpdateClause()) {
