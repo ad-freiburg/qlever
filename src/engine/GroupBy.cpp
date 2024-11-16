@@ -20,6 +20,7 @@
 #include "engine/sparqlExpressions/SampleExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
+#include "engine/sparqlExpressions/StdevExpression.h"
 #include "global/RuntimeParameters.h"
 #include "index/Index.h"
 #include "index/IndexImpl.h"
@@ -29,16 +30,23 @@
 
 using groupBy::detail::VectorOfAggregationData;
 
-// _______________________________________________________________________________________________
+// _____________________________________________________________________________
 GroupBy::GroupBy(QueryExecutionContext* qec, vector<Variable> groupByVariables,
                  std::vector<Alias> aliases,
                  std::shared_ptr<QueryExecutionTree> subtree)
     : Operation{qec},
       _groupByVariables{std::move(groupByVariables)},
       _aliases{std::move(aliases)} {
-  // Sort the groupByVariables to ensure that the cache key is order
-  // invariant.
-  // Note: It is tempting to do the same also for the aliases, but that would
+  AD_CORRECTNESS_CHECK(subtree != nullptr);
+  // Remove all undefined GROUP BY variables (according to the SPARQL standard
+  // they are allowed, but have no effect on the result).
+  std::erase_if(_groupByVariables,
+                [&map = subtree->getVariableColumns()](const auto& var) {
+                  return !map.contains(var);
+                });
+  // Sort `groupByVariables` to ensure that the cache key is order invariant.
+  //
+  // NOTE: It is tempting to do the same also for the aliases, but that would
   // break the case when an alias reuses a variable that was bound by a previous
   // alias.
   std::ranges::sort(_groupByVariables, std::less<>{}, &Variable::name);
@@ -600,11 +608,12 @@ std::optional<IdTable> GroupBy::computeGroupByForSingleIndexScan() const {
 
   IdTable table{1, getExecutionContext()->getAllocator()};
   table.emplace_back();
-  // For `IndexScan`s with at least two variables the size estimates are
-  // exact as they are read directly from the index metadata.
-  if (indexScan->getResultWidth() == 3) {
+  const auto& var = varAndDistinctness.value().variable_;
+  if (!isVariableBoundInSubtree(var)) {
+    // The variable is never bound, so its count is zero.
+    table(0, 0) = Id::makeFromInt(0);
+  } else if (indexScan->getResultWidth() == 3) {
     if (countIsDistinct) {
-      const auto& var = varAndDistinctness.value().variable_;
       auto permutation =
           getPermutationForThreeVariableTriple(*_subtree, var, var);
       AD_CONTRACT_CHECK(permutation.has_value());
@@ -614,8 +623,6 @@ std::optional<IdTable> GroupBy::computeGroupByForSingleIndexScan() const {
       table(0, 0) = Id::makeFromInt(getIndex().numTriples().normal);
     }
   } else {
-    // TODO<joka921> The two variables IndexScans should also account for the
-    // additionally added triples.
     table(0, 0) = Id::makeFromInt(indexScan->getExactSize());
   }
   return table;
@@ -665,7 +672,7 @@ std::optional<IdTable> GroupBy::computeGroupByObjectWithCount() const {
       getExecutionContext()->getIndex().getPimpl().getPermutation(
           indexScan->permutation());
   auto result = permutation.getDistinctCol1IdsAndCounts(
-      col0Id.value(), cancellationHandle_, deltaTriples());
+      col0Id.value(), cancellationHandle_, locatedTriplesSnapshot());
   indexScan->updateRuntimeInformationWhenOptimizedOut(
       {}, RuntimeInformation::Status::optimizedOut);
 
@@ -691,8 +698,10 @@ std::optional<IdTable> GroupBy::computeGroupByForFullIndexScan() const {
   // Check that all the aliases are non-distinct counts. We currently support
   // only one or no such count. Redundant additional counts will lead to an
   // exception (it is easy to reformulate the query to trigger this
-  // optimization).
+  // optimization). Also keep track of whether the counted variable is actually
+  // bound by the index scan (else all counts will be 0).
   size_t numCounts = 0;
+  bool variableIsBoundInSubtree = true;
   for (size_t i = 0; i < _aliases.size(); ++i) {
     const auto& alias = _aliases[i];
     if (auto count = alias._expression.getVariableForCount()) {
@@ -700,6 +709,8 @@ std::optional<IdTable> GroupBy::computeGroupByForFullIndexScan() const {
         return std::nullopt;
       }
       numCounts++;
+      variableIsBoundInSubtree =
+          isVariableBoundInSubtree(count.value().variable_);
     } else {
       return std::nullopt;
     }
@@ -717,10 +728,14 @@ std::optional<IdTable> GroupBy::computeGroupByForFullIndexScan() const {
   const auto& permutation =
       getExecutionContext()->getIndex().getPimpl().getPermutation(
           permutationEnum.value());
-  auto table = permutation.getDistinctCol0IdsAndCounts(cancellationHandle_,
-                                                       deltaTriples());
+  auto table = permutation.getDistinctCol0IdsAndCounts(
+      cancellationHandle_, locatedTriplesSnapshot());
   if (numCounts == 0) {
     table.setColumnSubset({{0}});
+  } else if (!variableIsBoundInSubtree) {
+    // The variable inside the COUNT() is not part of the input, so it is always
+    // unbound and has a count of 0 in each group.
+    std::ranges::fill(table.getColumn(1), Id::makeFromInt(0));
   }
 
   // TODO<joka921> This optimization should probably also apply if
@@ -840,7 +855,7 @@ std::optional<IdTable> GroupBy::computeGroupByForJoinWithFullScan() const {
   Id currentId = subresult->idTable()(0, columnIndex);
   size_t currentCount = 0;
   size_t currentCardinality =
-      index.getCardinality(currentId, permutation, deltaTriples());
+      index.getCardinality(currentId, permutation, locatedTriplesSnapshot());
 
   auto pushRow = [&]() {
     // If the count is 0 this means that the element with the `currentId`
@@ -863,7 +878,7 @@ std::optional<IdTable> GroupBy::computeGroupByForJoinWithFullScan() const {
       // without the internally added triples, but that is not easy to
       // retrieve right now.
       currentCardinality =
-          index.getCardinality(id, permutation, deltaTriples());
+          index.getCardinality(id, permutation, locatedTriplesSnapshot());
     }
     currentCount += currentCardinality;
   }
@@ -1026,6 +1041,8 @@ GroupBy::isSupportedAggregate(sparqlExpression::SparqlExpression* expr) {
   if (auto val = dynamic_cast<GroupConcatExpression*>(expr)) {
     return H{GROUP_CONCAT, val->getSeparator()};
   }
+  // NOTE: The STDEV function is not suitable for lazy and hash map
+  // optimizations.
   if (dynamic_cast<SampleExpression*>(expr)) return H{SAMPLE};
 
   // `expr` is an unsupported aggregate
@@ -1563,4 +1580,9 @@ GroupBy::getVariableForCountOfSingleAlias() const {
   return _aliases.size() == 1
              ? _aliases.front()._expression.getVariableForCount()
              : std::nullopt;
+}
+
+// _____________________________________________________________________________
+bool GroupBy::isVariableBoundInSubtree(const Variable& variable) const {
+  return _subtree->getVariableColumnOrNullopt(variable).has_value();
 }

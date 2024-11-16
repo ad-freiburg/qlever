@@ -44,6 +44,7 @@ static constexpr size_t NUM_EXTERNAL_SORTERS_AT_SAME_TIME = 2u;
 IndexImpl::IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator)
     : allocator_{std::move(allocator)} {
   globalSingletonIndex_ = this;
+  deltaTriples_.emplace(*this);
 };
 
 // _____________________________________________________________________________
@@ -290,35 +291,42 @@ std::pair<size_t, size_t> IndexImpl::createInternalPSOandPOS(
 void IndexImpl::updateInputFileSpecificationsAndLog(
     std::vector<Index::InputFileSpecification>& spec,
     std::optional<bool> parallelParsingSpecifiedViaJson) {
+  std::string pleaseUseParallelParsingOption =
+      "please use the command-line option --parse-parallel or -p";
+  // Parallel parsing specified in the `settings.json` file. This is deprecated
+  // for a single input stream and forbidden for multiple input streams.
+  if (parallelParsingSpecifiedViaJson.has_value()) {
+    if (spec.size() == 1) {
+      LOG(WARN) << "Parallel parsing set in the `.settings.json` file; this is "
+                   "deprecated, "
+                << pleaseUseParallelParsingOption << std::endl;
+      spec.at(0).parseInParallel_ = parallelParsingSpecifiedViaJson.value();
+    } else {
+      throw std::runtime_error{absl::StrCat(
+          "Parallel parsing set in the `.settings.json` file; this is "
+          "forbidden for multiple input streams, ",
+          pleaseUseParallelParsingOption)};
+    }
+  }
+  // For a single input stream, if parallel parsing is not specified explicitly
+  // on the command line, we set if implicitly for backward compatibility.
+  if (!parallelParsingSpecifiedViaJson.has_value() && spec.size() == 1 &&
+      !spec.at(0).parseInParallelSetExplicitly_) {
+    LOG(WARN) << "Implicitly using the parallel parser for a single input file "
+                 "for reasons of backward compatibility; this is deprecated, "
+              << pleaseUseParallelParsingOption << std::endl;
+    spec.at(0).parseInParallel_ = true;
+  }
+  // For a single input stream, show the name and whether we parse in parallel.
+  // For multiple input streams, only show the number of streams.
   if (spec.size() == 1) {
-    LOG(INFO) << "Processing triples from " << spec.at(0).filename_ << " ..."
+    LOG(INFO) << "Parsing triples from single input stream "
+              << spec.at(0).filename_ << " (parallel = "
+              << (spec.at(0).parseInParallel_ ? "true" : "false") << ") ..."
               << std::endl;
   } else {
     LOG(INFO) << "Processing triples from " << spec.size()
               << " input streams ..." << std::endl;
-  }
-  if (parallelParsingSpecifiedViaJson.value_or(false) == true) {
-    if (spec.size() == 1) {
-      LOG(WARN) << "Parallel parsing set to `true` in the `.settings.json` "
-                   "file; this is deprecated, please use the command-line "
-                   " option --parse-parallel or -p instead"
-                << std::endl;
-      spec.at(0).parseInParallel_ = true;
-    } else {
-      throw std::runtime_error{
-          "For more than one input file, the parallel parsing must not be "
-          "specified via the `.settings.json` file, but has to be specified "
-          " via the command-line option --parse-parallel or -p"};
-    }
-  }
-
-  if (spec.size() == 1 && !parallelParsingSpecifiedViaJson.has_value()) {
-    LOG(WARN) << "Implicitly using the parallel parser for a single input file "
-                 "for reasons of backward compatibility; this is deprecated, "
-                 "please use the command-line option --parse-parallel or -p "
-                 "instead"
-              << std::endl;
-    spec.at(0).parseInParallel_ = true;
   }
 }
 
@@ -1445,10 +1453,11 @@ Index::NumNormalAndInternal IndexImpl::numDistinctCol0(
 }
 
 // ___________________________________________________________________________
-size_t IndexImpl::getCardinality(Id id, Permutation::Enum permutation,
-                                 const DeltaTriples& deltaTriples) const {
+size_t IndexImpl::getCardinality(
+    Id id, Permutation::Enum permutation,
+    const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
   if (const auto& meta =
-          getPermutation(permutation).getMetadata(id, deltaTriples);
+          getPermutation(permutation).getMetadata(id, locatedTriplesSnapshot);
       meta.has_value()) {
     return meta.value().numRows_;
   }
@@ -1456,9 +1465,9 @@ size_t IndexImpl::getCardinality(Id id, Permutation::Enum permutation,
 }
 
 // ___________________________________________________________________________
-size_t IndexImpl::getCardinality(const TripleComponent& comp,
-                                 Permutation::Enum permutation,
-                                 const DeltaTriples& deltaTriples) const {
+size_t IndexImpl::getCardinality(
+    const TripleComponent& comp, Permutation::Enum permutation,
+    const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
   // TODO<joka921> This special case is only relevant for the `PSO` and `POS`
   // permutations, but this internal predicate should never appear in subjects
   // or objects anyway.
@@ -1468,7 +1477,7 @@ size_t IndexImpl::getCardinality(const TripleComponent& comp,
     return TEXT_PREDICATE_CARDINALITY_ESTIMATE;
   }
   if (std::optional<Id> relId = comp.toValueId(getVocab()); relId.has_value()) {
-    return getCardinality(relId.value(), permutation, deltaTriples);
+    return getCardinality(relId.value(), permutation, locatedTriplesSnapshot);
   }
   return 0;
 }
@@ -1491,10 +1500,10 @@ Index::Vocab::PrefixRanges IndexImpl::prefixRanges(
 // _____________________________________________________________________________
 vector<float> IndexImpl::getMultiplicities(
     const TripleComponent& key, Permutation::Enum permutation,
-    const DeltaTriples& deltaTriples) const {
+    const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
   if (auto keyId = key.toValueId(getVocab()); keyId.has_value()) {
-    auto meta =
-        getPermutation(permutation).getMetadata(keyId.value(), deltaTriples);
+    auto meta = getPermutation(permutation)
+                    .getMetadata(keyId.value(), locatedTriplesSnapshot);
     if (meta.has_value()) {
       return {meta.value().getCol1Multiplicity(),
               meta.value().getCol2Multiplicity()};
@@ -1520,30 +1529,31 @@ IdTable IndexImpl::scan(
     const Permutation::Enum& permutation,
     Permutation::ColumnIndicesRef additionalColumns,
     const ad_utility::SharedCancellationHandle& cancellationHandle,
-    const DeltaTriples& deltaTriples,
+    const LocatedTriplesSnapshot& locatedTriplesSnapshot,
     const LimitOffsetClause& limitOffset) const {
   auto scanSpecification = scanSpecificationAsTc.toScanSpecification(*this);
   return scan(scanSpecification, permutation, additionalColumns,
-              cancellationHandle, deltaTriples, limitOffset);
+              cancellationHandle, locatedTriplesSnapshot, limitOffset);
 }
 // _____________________________________________________________________________
 IdTable IndexImpl::scan(
     const ScanSpecification& scanSpecification, Permutation::Enum p,
     Permutation::ColumnIndicesRef additionalColumns,
     const ad_utility::SharedCancellationHandle& cancellationHandle,
-    const DeltaTriples& deltaTriples,
+    const LocatedTriplesSnapshot& locatedTriplesSnapshot,
     const LimitOffsetClause& limitOffset) const {
   return getPermutation(p).scan(scanSpecification, additionalColumns,
-                                cancellationHandle, deltaTriples, limitOffset);
+                                cancellationHandle, locatedTriplesSnapshot,
+                                limitOffset);
 }
 
 // _____________________________________________________________________________
 size_t IndexImpl::getResultSizeOfScan(
     const ScanSpecification& scanSpecification,
     const Permutation::Enum& permutation,
-    const DeltaTriples& deltaTriples) const {
+    const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
   return getPermutation(permutation)
-      .getResultSizeOfScan(scanSpecification, deltaTriples);
+      .getResultSizeOfScan(scanSpecification, locatedTriplesSnapshot);
 }
 
 // _____________________________________________________________________________

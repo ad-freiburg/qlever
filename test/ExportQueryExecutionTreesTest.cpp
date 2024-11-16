@@ -1,6 +1,8 @@
-//  Copyright 2023, University of Freiburg,
-//                  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2023 - 2024, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//          Robin Textor-Falconi <robintf@cs.uni-freiburg.de>
+//          Hannah Bast <bast@cs.uni-freiburg.de>
 
 #include <gmock/gmock.h>
 
@@ -24,10 +26,10 @@ using ::testing::HasSubstr;
 namespace {
 // Run the given SPARQL `query` on the given Turtle `kg` and export the result
 // as the `mediaType`. `mediaType` must be TSV or CSV.
-std::string runQueryStreamableResult(const std::string& kg,
-                                     const std::string& query,
-                                     ad_utility::MediaType mediaType,
-                                     bool useTextIndex = false) {
+std::string runQueryStreamableResult(
+    const std::string& kg, const std::string& query,
+    ad_utility::MediaType mediaType, bool useTextIndex = false,
+    std::optional<size_t> exportLimit = std::nullopt) {
   auto qec =
       ad_utility::testing::getQec(kg, true, true, true, 16_B, useTextIndex);
   // TODO<joka921> There is a bug in the caching that we have yet to trace.
@@ -37,6 +39,7 @@ std::string runQueryStreamableResult(const std::string& kg,
       std::make_shared<ad_utility::CancellationHandle<>>();
   QueryPlanner qp{qec, cancellationHandle};
   auto pq = SparqlParser::parseQuery(query);
+  pq._limitOffset.exportLimit_ = exportLimit;
   auto qet = qp.createExecutionTree(pq);
   ad_utility::Timer timer(ad_utility::Timer::Started);
   auto strGenerator = ExportQueryExecutionTrees::computeResult(
@@ -78,7 +81,7 @@ nlohmann::json runJSONQuery(const std::string& kg, const std::string& query,
 struct TestCaseSelectQuery {
   std::string kg;                   // The knowledge graph (TURTLE)
   std::string query;                // The query (SPARQL)
-  size_t resultSize;                // The expected number of results.
+  uint64_t resultSize;              // The expected number of results.
   std::string resultTsv;            // The expected result in TSV format.
   std::string resultCsv;            // The expected result in CSV format
   nlohmann::json resultQLeverJSON;  // The expected result in QLeverJSOn format.
@@ -102,10 +105,14 @@ struct TestCaseAskQuery {
   std::string resultXml;
 };
 
+// For a CONSTRUCT query, the `resultSize` of the QLever JSON is the number of
+// results of the WHERE clause.
 struct TestCaseConstructQuery {
   std::string kg;                   // The knowledge graph (TURTLE)
   std::string query;                // The query (SPARQL)
-  size_t resultSize;                // The expected number of results.
+  uint64_t resultSizeTotal;         // The expected number of results,
+                                    // including triples with UNDEF values.
+  uint64_t resultSizeExported;      // The expected number of results exported.
   std::string resultTsv;            // The expected result in TSV format.
   std::string resultCsv;            // The expected result in CSV format
   std::string resultTurtle;         // The expected result in Turtle format
@@ -128,13 +135,14 @@ void runSelectQueryTestCase(
       runQueryStreamableResult(testCase.kg, testCase.query, csv, useTextIndex),
       testCase.resultCsv);
 
-  auto qleverJSONResult = nlohmann::json::parse(runQueryStreamableResult(
+  auto resultJSON = nlohmann::json::parse(runQueryStreamableResult(
       testCase.kg, testCase.query, qleverJson, useTextIndex));
   // TODO<joka921> Test other members of the JSON result (e.g. the selected
   // variables).
-  ASSERT_EQ(qleverJSONResult["query"], testCase.query);
-  ASSERT_EQ(qleverJSONResult["resultsize"], testCase.resultSize);
-  EXPECT_EQ(qleverJSONResult["res"], testCase.resultQLeverJSON);
+  ASSERT_EQ(resultJSON["query"], testCase.query);
+  ASSERT_EQ(resultJSON["resultSizeTotal"], testCase.resultSize);
+  ASSERT_EQ(resultJSON["resultSizeExported"], testCase.resultSize);
+  EXPECT_EQ(resultJSON["res"], testCase.resultQLeverJSON);
 
   EXPECT_EQ(nlohmann::json::parse(runQueryStreamableResult(
                 testCase.kg, testCase.query, sparqlJson, useTextIndex)),
@@ -144,6 +152,16 @@ void runSelectQueryTestCase(
   auto xmlAsString = runQueryStreamableResult(testCase.kg, testCase.query,
                                               sparqlXml, useTextIndex);
   EXPECT_EQ(testCase.resultXml, xmlAsString);
+
+  // Test the interaction of normal limit (the LIMIT of the query) and export
+  // limit (the value of the `send` parameter).
+  for (uint64_t exportLimit = 0ul; exportLimit < 4ul; ++exportLimit) {
+    auto resultJson = nlohmann::json::parse(runQueryStreamableResult(
+        testCase.kg, testCase.query, qleverJson, false, exportLimit));
+    ASSERT_EQ(resultJson["resultSizeTotal"], testCase.resultSize);
+    ASSERT_EQ(resultJson["resultSizeExported"],
+              std::min(exportLimit, testCase.resultSize));
+  }
 }
 
 // Run a single test case for a CONSTRUCT query.
@@ -156,13 +174,24 @@ void runConstructQueryTestCase(
             testCase.resultTsv);
   EXPECT_EQ(runQueryStreamableResult(testCase.kg, testCase.query, csv),
             testCase.resultCsv);
-  auto qleverJSONStreamResult = nlohmann::json::parse(
+  auto resultJson = nlohmann::json::parse(
       runQueryStreamableResult(testCase.kg, testCase.query, qleverJson));
-  ASSERT_EQ(qleverJSONStreamResult["query"], testCase.query);
-  ASSERT_EQ(qleverJSONStreamResult["resultsize"], testCase.resultSize);
-  EXPECT_EQ(qleverJSONStreamResult["res"], testCase.resultQLeverJSON);
+  ASSERT_EQ(resultJson["query"], testCase.query);
+  ASSERT_EQ(resultJson["resultSizeTotal"], testCase.resultSizeTotal);
+  ASSERT_EQ(resultJson["resultSizeExported"], testCase.resultSizeExported);
+  EXPECT_EQ(resultJson["res"], testCase.resultQLeverJSON);
   EXPECT_EQ(runQueryStreamableResult(testCase.kg, testCase.query, turtle),
             testCase.resultTurtle);
+
+  // Test the interaction of normal limit (the LIMIT of the query) and export
+  // limit (the value of the `send` parameter).
+  for (uint64_t exportLimit = 0ul; exportLimit < 4ul; ++exportLimit) {
+    auto resultJson = nlohmann::json::parse(runQueryStreamableResult(
+        testCase.kg, testCase.query, qleverJson, false, exportLimit));
+    ASSERT_EQ(resultJson["resultSizeTotal"], testCase.resultSizeTotal);
+    ASSERT_EQ(resultJson["resultSizeExported"],
+              std::min(exportLimit, testCase.resultSizeExported));
+  }
 }
 
 // Run a single test case for an ASK query.
@@ -178,11 +207,11 @@ void runAskQueryTestCase(
       runQueryStreamableResult(testCase.kg, testCase.query, octetStream));
   EXPECT_ANY_THROW(
       runQueryStreamableResult(testCase.kg, testCase.query, turtle));
-  auto qleverJSONStreamResult = nlohmann::json::parse(
+  auto resultJson = nlohmann::json::parse(
       runQueryStreamableResult(testCase.kg, testCase.query, qleverJson));
-  ASSERT_EQ(qleverJSONStreamResult["query"], testCase.query);
-  ASSERT_EQ(qleverJSONStreamResult["resultsize"], 1u);
-  EXPECT_EQ(qleverJSONStreamResult["res"], testCase.resultQLeverJSON);
+  ASSERT_EQ(resultJson["query"], testCase.query);
+  ASSERT_EQ(resultJson["resultSizeExported"], 1u);
+  EXPECT_EQ(resultJson["res"], testCase.resultQLeverJSON);
 
   EXPECT_EQ(nlohmann::json::parse(runQueryStreamableResult(
                 testCase.kg, testCase.query, sparqlJson)),
@@ -344,7 +373,7 @@ TEST(ExportQueryExecutionTrees, Integers) {
   runSelectQueryTestCase(testCase);
 
   TestCaseConstructQuery testCaseConstruct{
-      kg, "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o", 3,
+      kg, "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o", 3, 3,
       // TSV
       "<s>\t<p>\t-42019234865781\n"
       "<s>\t<p>\t42\n"
@@ -402,7 +431,7 @@ TEST(ExportQueryExecutionTrees, Bool) {
   runSelectQueryTestCase(testCase);
 
   TestCaseConstructQuery testCaseConstruct{
-      kg, "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o", 2,
+      kg, "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o", 2, 2,
       // TSV
       "<s>\t<p>\tfalse\n"
       "<s>\t<p>\ttrue\n",
@@ -444,10 +473,10 @@ TEST(ExportQueryExecutionTrees, UnusedVariable) {
       makeExpectedSparqlJSON({}), expectedXml};
   runSelectQueryTestCase(testCase);
 
-  // If we use a variable that is always unbound in a CONSTRUCT triple, then
-  // the result for this triple will be empty.
+  // The `2` is the number of results including triples with UNDEF values. The
+  // `0` is the number of results excluding such triples.
   TestCaseConstructQuery testCaseConstruct{
-      kg, "CONSTRUCT {?x ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o", 0,
+      kg, "CONSTRUCT {?x ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o", 2, 0,
       // TSV
       "",
       // CSV
@@ -502,7 +531,7 @@ TEST(ExportQueryExecutionTrees, Floats) {
   runSelectQueryTestCase(testCaseFloat);
 
   TestCaseConstructQuery testCaseConstruct{
-      kg, "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o", 3,
+      kg, "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o", 3, 3,
       // TSV
       "<s>\t<p>\t-42019234865780982022144\n"
       "<s>\t<p>\t4.01293e-12\n"
@@ -558,6 +587,7 @@ TEST(ExportQueryExecutionTrees, Dates) {
   TestCaseConstructQuery testCaseConstruct{
       kg,
       "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o",
+      1,
       1,
       // TSV
       "<s>\t<p>\t\"1950-01-01T00:00:00\"^^<http://www.w3.org/2001/"
@@ -648,6 +678,7 @@ TEST(ExportQueryExecutionTrees, Entities) {
       kg,
       "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o",
       1,
+      1,
       // TSV
       "<s>\t<p>\t<http://qlever.com/o>\n",
       // CSV
@@ -695,6 +726,7 @@ TEST(ExportQueryExecutionTrees, LiteralWithLanguageTag) {
   TestCaseConstructQuery testCaseConstruct{
       kg,
       "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o",
+      1,
       1,
       // TSV
       "<s>\t<p>\t\"Some\"Where Over,\"@en-ca\n",
@@ -744,6 +776,7 @@ TEST(ExportQueryExecutionTrees, LiteralWithDatatype) {
       kg,
       "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o",
       1,
+      1,
       // TSV
       "<s>\t<p>\t\"something\"^^<www.example.org/bim>\n",
       // CSV
@@ -791,6 +824,7 @@ TEST(ExportQueryExecutionTrees, LiteralPlain) {
       kg,
       "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o",
       1,
+      1,
       // TSV
       "<s>\t<p>\t\"something\"\n",
       // CSV
@@ -835,6 +869,7 @@ testIriKg</uri></binding>
   TestCaseConstructQuery testCaseConstruct{
       kg,
       "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o",
+      1,
       1,
       // TSV
       "<s>\t<p>\t<https:// : )\\ntestIriKg>\n",
@@ -899,6 +934,7 @@ TEST(ExportQueryExecutionTrees, TestWithIriExtendedEscaped) {
       kg,
       "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o",
       1,
+      1,
       // TSV
       "<s>\t<p>\t<iriescaped\x01o\x02"
       "e\x03i\x04o\x05u\x06"
@@ -953,6 +989,7 @@ TEST(ExportQueryExecutionTrees, TestIriWithEscapedIriString) {
       kg,
       "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o",
       1,
+      1,
       // TSV
       "<s>\t<p>\t\" hallo\\n  welt\"\n",
       // CSV
@@ -993,12 +1030,13 @@ TEST(ExportQueryExecutionTrees, UndefinedValues) {
       expectedXml};
   runSelectQueryTestCase(testCase);
 
-  // In CONSTRUCT queries, results with undefined values in the exported
-  // variables are filtered out, so the result is empty.
+  // The `1` is the number of results including triples with UNDEF values. The
+  // `0` is the number of results excluding such triples.
   TestCaseConstructQuery testCaseConstruct{
       kg,
       "CONSTRUCT {?s <pred> ?o} WHERE {?s <p> <o> OPTIONAL {?s <p2> ?o}} ORDER "
       "BY ?o",
+      1,
       0,
       "",
       "",
@@ -1338,12 +1376,14 @@ TEST(ExportQueryExecutionTrees, ensureCorrectSlicingOfSingleIdTable) {
   }();
 
   Result result{std::move(tableGenerator), {}};
+  uint64_t resultSizeTotal = 0;
   auto generator = ExportQueryExecutionTrees::getRowIndices(
-      LimitOffsetClause{._limit = 1, ._offset = 1}, result);
+      LimitOffsetClause{._limit = 1, ._offset = 1}, result, resultSizeTotal);
 
-  auto referenceTable = makeIdTableFromVector({{2}});
+  auto expectedResult = makeIdTableFromVector({{2}});
   EXPECT_THAT(convertToVector(std::move(generator)),
-              matchesIdTables(referenceTable));
+              matchesIdTables(expectedResult));
+  EXPECT_EQ(resultSizeTotal, 1);
 }
 
 // _____________________________________________________________________________
@@ -1360,13 +1400,16 @@ TEST(ExportQueryExecutionTrees,
   }();
 
   Result result{std::move(tableGenerator), {}};
+  uint64_t resultSizeTotal = 0;
   auto generator = ExportQueryExecutionTrees::getRowIndices(
-      LimitOffsetClause{._limit = std::nullopt, ._offset = 3}, result);
+      LimitOffsetClause{._limit = std::nullopt, ._offset = 3}, result,
+      resultSizeTotal);
 
-  auto referenceTable1 = makeIdTableFromVector({{4}, {5}});
+  auto expectedResult = makeIdTableFromVector({{4}, {5}});
 
   EXPECT_THAT(convertToVector(std::move(generator)),
-              matchesIdTables(referenceTable1));
+              matchesIdTables(expectedResult));
+  EXPECT_EQ(resultSizeTotal, 2);
 }
 
 // _____________________________________________________________________________
@@ -1383,13 +1426,15 @@ TEST(ExportQueryExecutionTrees,
   }();
 
   Result result{std::move(tableGenerator), {}};
+  uint64_t resultSizeTotal = 0;
   auto generator = ExportQueryExecutionTrees::getRowIndices(
-      LimitOffsetClause{._limit = 3}, result);
+      LimitOffsetClause{._limit = 3}, result, resultSizeTotal);
 
-  auto referenceTable1 = makeIdTableFromVector({{1}, {2}, {3}});
+  auto expectedResult = makeIdTableFromVector({{1}, {2}, {3}});
 
   EXPECT_THAT(convertToVector(std::move(generator)),
-              matchesIdTables(referenceTable1));
+              matchesIdTables(expectedResult));
+  EXPECT_EQ(resultSizeTotal, 3);
 }
 
 // _____________________________________________________________________________
@@ -1406,14 +1451,16 @@ TEST(ExportQueryExecutionTrees,
   }();
 
   Result result{std::move(tableGenerator), {}};
+  uint64_t resultSizeTotal = 0;
   auto generator = ExportQueryExecutionTrees::getRowIndices(
-      LimitOffsetClause{._limit = 3, ._offset = 1}, result);
+      LimitOffsetClause{._limit = 3, ._offset = 1}, result, resultSizeTotal);
 
-  auto referenceTable1 = makeIdTableFromVector({{2}, {3}});
-  auto referenceTable2 = makeIdTableFromVector({{4}});
+  auto expectedResult1 = makeIdTableFromVector({{2}, {3}});
+  auto expectedResult2 = makeIdTableFromVector({{4}});
 
   EXPECT_THAT(convertToVector(std::move(generator)),
-              matchesIdTables(referenceTable1, referenceTable2));
+              matchesIdTables(expectedResult1, expectedResult2));
+  EXPECT_EQ(resultSizeTotal, 3);
 }
 
 // _____________________________________________________________________________
@@ -1434,30 +1481,33 @@ TEST(ExportQueryExecutionTrees,
   }();
 
   Result result{std::move(tableGenerator), {}};
+  uint64_t resultSizeTotal = 0;
   auto generator = ExportQueryExecutionTrees::getRowIndices(
-      LimitOffsetClause{._limit = 5, ._offset = 2}, result);
+      LimitOffsetClause{._limit = 5, ._offset = 2}, result, resultSizeTotal);
 
-  auto referenceTable1 = makeIdTableFromVector({{3}});
-  auto referenceTable2 = makeIdTableFromVector({{4}, {5}});
-  auto referenceTable3 = makeIdTableFromVector({{6}, {7}});
+  auto expectedTable1 = makeIdTableFromVector({{3}});
+  auto expectedTable2 = makeIdTableFromVector({{4}, {5}});
+  auto expectedTable3 = makeIdTableFromVector({{6}, {7}});
 
-  EXPECT_THAT(
-      convertToVector(std::move(generator)),
-      matchesIdTables(referenceTable1, referenceTable2, referenceTable3));
+  EXPECT_THAT(convertToVector(std::move(generator)),
+              matchesIdTables(expectedTable1, expectedTable2, expectedTable3));
+  EXPECT_EQ(resultSizeTotal, 5);
 }
 
 // _____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, ensureGeneratorIsNotConsumedWhenNotRequired) {
   {
     auto throwingGenerator = []() -> Result::Generator {
-      ADD_FAILURE() << "Generator was started" << std::endl;
-      throw std::runtime_error("Generator was started");
+      std::string message = "Generator was started, but should not have been";
+      ADD_FAILURE() << message << std::endl;
+      throw std::runtime_error(message);
       co_return;
     }();
 
     Result result{std::move(throwingGenerator), {}};
+    uint64_t resultSizeTotal = 0;
     auto generator = ExportQueryExecutionTrees::getRowIndices(
-        LimitOffsetClause{._limit = 0, ._offset = 0}, result);
+        LimitOffsetClause{._limit = 0, ._offset = 0}, result, resultSizeTotal);
     EXPECT_NO_THROW(convertToVector(std::move(generator)));
   }
 
@@ -1467,17 +1517,22 @@ TEST(ExportQueryExecutionTrees, ensureGeneratorIsNotConsumedWhenNotRequired) {
                                      LocalVocab{}};
       co_yield pair1;
 
-      ADD_FAILURE() << "Generator was resumed" << std::endl;
-      throw std::runtime_error("Generator was resumed");
+      std::string message =
+          "Generator was called a second time, but should not "
+          "have been";
+      ADD_FAILURE() << message << std::endl;
+      throw std::runtime_error(message);
     }();
 
     Result result{std::move(throwAfterYieldGenerator), {}};
+    uint64_t resultSizeTotal = 0;
     auto generator = ExportQueryExecutionTrees::getRowIndices(
-        LimitOffsetClause{._limit = 1, ._offset = 0}, result);
-    IdTable referenceTable1 = makeIdTableFromVector({{1}});
+        LimitOffsetClause{._limit = 1, ._offset = 0}, result, resultSizeTotal);
+    IdTable expectedTable = makeIdTableFromVector({{1}});
     std::vector<IdTable> tables;
     EXPECT_NO_THROW({ tables = convertToVector(std::move(generator)); });
-    EXPECT_THAT(tables, matchesIdTables(referenceTable1));
+    EXPECT_THAT(tables, matchesIdTables(expectedTable));
+    EXPECT_EQ(resultSizeTotal, 1);
   }
 }
 

@@ -2,6 +2,9 @@
 // Chair of Algorithms and Data Structures
 // Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
+#include <optional>
+#include <type_traits>
+
 #include "./SparqlExpressionTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
@@ -11,6 +14,9 @@
 #include "engine/sparqlExpressions/AggregateExpression.h"
 #include "engine/sparqlExpressions/CountStarExpression.h"
 #include "engine/sparqlExpressions/SampleExpression.h"
+#include "engine/sparqlExpressions/SparqlExpressionTypes.h"
+#include "engine/sparqlExpressions/StdevExpression.h"
+#include "global/ValueId.h"
 #include "gtest/gtest.h"
 
 using namespace sparqlExpression;
@@ -49,6 +55,20 @@ auto testAggregate = [](std::vector<T> inputAsVector, U expectedResult,
   EXPECT_EQ(res, expectedResult);
 };
 
+// Same as `testAggregate` above, but the input is specified as a variable.
+template <typename AggregateExpressionT, typename T, typename U = T>
+auto testAggregateWithVariable =
+    [](Variable input, U expectedResult, bool distinct = false,
+       source_location l = source_location::current()) {
+      auto trace = generateLocationTrace(l);
+      auto d = std::make_unique<VariableExpression>(std::move(input));
+      auto t = TestContext{};
+      AggregateExpressionT m{distinct, std::move(d)};
+      auto resAsVariant = m.evaluate(&t.context);
+      auto res = std::get<U>(resAsVariant);
+      EXPECT_EQ(res, expectedResult);
+    };
+
 // Test `CountExpression`.
 TEST(AggregateExpression, count) {
   auto testCountId = testAggregate<CountExpression, Id>;
@@ -63,6 +83,15 @@ TEST(AggregateExpression, count) {
 
   auto testCountString = testAggregate<CountExpression, IdOrLiteralOrIri, Id>;
   testCountString({lit("alpha"), lit("äpfel"), lit(""), lit("unfug")}, I(4));
+}
+
+// Test the behavior of COUNT for variables.
+TEST(AggregateExpression, countForVariables) {
+  auto testCount = testAggregateWithVariable<CountExpression, Id>;
+  // Unbound variables always have a count of 0.
+  testCount(Variable{"?thisVariableIsNotContained"}, I(0));
+  // The static test context has three rows.
+  testCount(Variable{"?ints"}, I(3));
 }
 
 // Test `SumExpression`.
@@ -92,6 +121,33 @@ TEST(AggregateExpression, avg) {
 
   auto testAvgString = testAggregate<AvgExpression, IdOrLiteralOrIri, Id>;
   testAvgString({lit("alpha"), lit("äpfel"), lit("Beta"), lit("unfug")}, U);
+}
+
+// Test `StdevExpression`.
+TEST(StdevExpression, avg) {
+  auto testStdevId = testAggregate<StdevExpression, Id>;
+
+  auto inputAsVector = std::vector{I(3), D(0), I(0), I(4), I(-2)};
+  VectorWithMemoryLimit<ValueId> input(inputAsVector.begin(),
+                                       inputAsVector.end(), makeAllocator());
+  auto d = std::make_unique<SingleUseExpression>(input.clone());
+  auto t = TestContext{};
+  t.context._endIndex = 5;
+  StdevExpression m{false, std::move(d)};
+  auto resAsVariant = m.evaluate(&t.context);
+  ASSERT_NEAR(std::get<ValueId>(resAsVariant).getDouble(), 2.44949, 0.0001);
+
+  testStdevId({D(2), D(2), D(2), D(2)}, D(0), true);
+
+  testStdevId({I(3), U}, U);
+  testStdevId({I(3), NaN}, NaN);
+
+  testStdevId({}, D(0));
+  testStdevId({D(500)}, D(0));
+  testStdevId({D(500), D(500), D(500)}, D(0));
+
+  auto testStdevString = testAggregate<StdevExpression, IdOrLiteralOrIri, Id>;
+  testStdevString({lit("alpha"), lit("äpfel"), lit("Beta"), lit("unfug")}, U);
 }
 
 // Test `MinExpression`.
