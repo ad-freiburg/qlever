@@ -563,8 +563,8 @@ TEST(IndexTest, updateInputFileSpecificationsAndLog) {
 
   // Parallel parsing specified on the command line and not in the
   // `settings.json`. This is normal behavior (no deprecation warning).
-  {
-    singleFileSpec.at(0).parseInParallel_ = true;
+  for (auto parallelParsing : {true, false}) {
+    singleFileSpec.at(0).parseInParallel_ = parallelParsing;
     singleFileSpec.at(0).parseInParallelSetExplicitly_ = true;
     testing::internal::CaptureStdout();
     IndexImpl::updateInputFileSpecificationsAndLog(singleFileSpec,
@@ -572,7 +572,7 @@ TEST(IndexTest, updateInputFileSpecificationsAndLog) {
     EXPECT_THAT(
         testing::internal::GetCapturedStdout(),
         AllOf(HasSubstr("singleFile.ttl"), Not(HasSubstr("deprecated"))));
-    EXPECT_TRUE(singleFileSpec.at(0).parseInParallel_);
+    EXPECT_EQ(singleFileSpec.at(0).parseInParallel_, parallelParsing);
   }
   {
     twoFilesSpec.at(0).parseInParallel_ = true;
