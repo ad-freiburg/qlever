@@ -1,7 +1,7 @@
-// Copyright 2024, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Johannes Kalmbach(joka921) <kalmbach@cs.uni-freiburg.de>
-//
+// Copyright 2024, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+
 #pragma once
 
 #include <optional>
@@ -26,6 +26,10 @@ struct InputFileSpecification {
   // This always works for N-Triples and N-Quads files, and for well-behaved
   // Turtle files with all prefixes at the beginning and no multiline literals.
   bool parseInParallel_ = false;
+
+  // Remember if the value for parallel parsing was set explicitly (via the
+  // command line).
+  bool parseInParallelSetExplicitly_ = false;
 
   bool operator==(const InputFileSpecification&) const = default;
 };
