@@ -1,7 +1,7 @@
-// Copyright 2024, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Johannes Kalmbach(joka921) <kalmbach@cs.uni-freiburg.de>
-//
+// Copyright 2024, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+
 #pragma once
 
 #include <optional>
@@ -29,7 +29,7 @@ struct InputFileSpecification {
 
   // Remember if the value for parallel parsing was set explicitly (via the
   // command line).
-  bool parseInParallelSetExplicitly_;
+  bool parseInParallelSetExplicitly_ = false;
 
   bool operator==(const InputFileSpecification&) const = default;
 };
