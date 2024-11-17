@@ -36,6 +36,7 @@ WORKDIR /qlever
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y wget python3-yaml unzip curl bzip2 pkg-config libicu-dev python3-icu libgomp1 uuid-runtime make lbzip2 libjemalloc-dev libzstd-dev libssl-dev libboost1.83-dev libboost-program-options1.83-dev libboost-iostreams1.83-dev libboost-url1.83-dev pipx bash-completion
 
+# Setup user `qlever`.
 ARG UID=2000
 ARG GID=2000
 RUN groupadd -r -g $GID qlever
@@ -49,9 +50,13 @@ ENV PIPX_MAN_DIR=/qlever/.local/share
 ENV PATH=/qlever:/qlever/.local/bin:$PATH
 RUN pipx install qlever
 RUN echo "eval \"\$(register-python-argcomplete qlever)\"" >> /qlever/.bashrc
-RUN echo "export PATH=$PATH" >> /qlever/.bashrc
-ENV QLEVER_ARGCOMPLETE_ENABLED=1
-ENV QLEVER_IS_RUNNING_IN_CONTAINER=1
+RUN echo "export QLEVER_ARGCOMPLETE_ENABLED=1" >> /qlever/.bashrc
+RUN echo "export QLEVER_IS_RUNNING_IN_CONTAINER=1" >> /qlever/.bashrc
+RUN echo "PATH=$PATH" >> /qlever/.bashrc
+RUN echo 'PS1="\u@docker:\W\$ "' >> /qlever/.bashrc
+RUN echo 'alias ll="ls -l"' >> /qlever/.bashrc
+RUN echo "cd /data" >> /qlever/.bashrc
+RUN echo "source /qlever/.bashrc" >> /qlever/.bash_profile
 
 COPY --from=builder /qlever/build/*Main /qlever/
 COPY --from=builder /qlever/e2e/* /qlever/e2e/
