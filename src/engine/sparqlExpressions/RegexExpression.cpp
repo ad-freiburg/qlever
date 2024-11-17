@@ -210,7 +210,11 @@ ExpressionResult RegexExpression::evaluatePrefixRegex(
   // of binary searches and the result is a set of intervals.
   std::vector<ad_utility::SetOfIntervals> resultSetOfIntervals;
   if (context->isResultSortedBy(variable)) {
-    auto column = context->getColumnIndexForVariable(variable);
+    auto optColumn = context->getColumnIndexForVariable(variable);
+    AD_CORRECTNESS_CHECK(optColumn.has_value(),
+                         "We have previously asserted that the input is sorted "
+                         "by the variable, so we expect it to exist");
+    const auto& column = optColumn.value();
     for (auto [lowerId, upperId] : lowerAndUpperIds) {
       // Two binary searches to find the lower and upper bounds of the range.
       auto lower = std::lower_bound(

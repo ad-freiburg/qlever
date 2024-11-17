@@ -191,24 +191,35 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createExecutionTrees(
 
   checkCancellation();
 
+  for (const auto& warning : pq.warnings()) {
+    warnings_.push_back(warning);
+  }
   return lastRow;
 }
 
-// _____________________________________________________________________
+// _____________________________________________________________________________
 QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq,
                                                      bool isSubquery) {
   try {
     auto lastRow = createExecutionTrees(pq, isSubquery);
     auto minInd = findCheapestExecutionTree(lastRow);
-    LOG(DEBUG) << "Done creating execution plan.\n";
-    return *lastRow[minInd]._qet;
+    LOG(DEBUG) << "Done creating execution plan" << std::endl;
+    auto result = std::move(*lastRow[minInd]._qet);
+    auto& rootOperation = *result.getRootOperation();
+    // Collect all the warnings and pass them to the created tree such that
+    // they become visible to the user once the query is executed.
+    for (const auto& warning : warnings_) {
+      rootOperation.addWarning(warning);
+    }
+    warnings_.clear();
+    return result;
   } catch (ad_utility::CancellationException& e) {
     e.setOperation("Query planning");
     throw;
   }
 }
 
-// _____________________________________________________________________
+// _____________________________________________________________________________
 std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
     ParsedQuery::GraphPattern* rootPattern) {
   QueryPlanner::GraphPatternPlanner optimizer{*this, rootPattern};
@@ -387,9 +398,21 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getOrderByRow(
     plan._idsOfIncludedFilters = parent._idsOfIncludedFilters;
     plan.idsOfIncludedTextLimits_ = parent.idsOfIncludedTextLimits_;
     vector<pair<ColumnIndex, bool>> sortIndices;
+    // Collect the variables of the ORDER BY or INTERNAL SORT BY clause. Ignore
+    // variables that are not visible in the query body (according to the
+    // SPARQL standard, they are allowed but have no effect).
     for (auto& ord : pq._orderBy) {
-      sortIndices.emplace_back(parent._qet->getVariableColumn(ord.variable_),
-                               ord.isDescending_);
+      auto idx = parent._qet->getVariableColumnOrNullopt(ord.variable_);
+      if (!idx.has_value()) {
+        continue;
+      }
+      sortIndices.emplace_back(idx.value(), ord.isDescending_);
+    }
+
+    // If none of these variables was bound, we can omit the whole ORDER BY
+    // or INTERNAL SORT BY clause.
+    if (sortIndices.empty()) {
+      return previous;
     }
 
     if (pq._isInternalSort == IsInternalSort::True) {

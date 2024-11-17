@@ -96,7 +96,7 @@ class LiteralExpression : public SparqlExpression {
   string getCacheKey(const VariableToColumnMap& varColMap) const override {
     if constexpr (std::is_same_v<T, ::Variable>) {
       if (!varColMap.contains(_value)) {
-        AD_THROW(absl::StrCat("Variable ", _value.name(), " not found"));
+        return "Unbound Variable";
       }
       return {"#column_" + std::to_string(varColMap.at(_value).columnIndex_) +
               "#"};
@@ -158,18 +158,24 @@ class LiteralExpression : public SparqlExpression {
         return std::move(resultFromSameRow.value());
       }
     }
+
+    // If the variable is not part of the input, then it is always UNDEF.
+    auto column = context->getColumnIndexForVariable(variable);
+    if (!column.has_value()) {
+      return Id::makeUndefined();
+    }
     // If a variable is grouped, then we know that it always has the same
     // value and can treat it as a constant. This is not possible however when
     // we are inside an aggregate, because for example `SUM(?variable)` must
     // still compute the sum over the whole group.
     if (context->_groupedVariables.contains(variable) && !isInsideAggregate()) {
-      auto column = context->getColumnIndexForVariable(variable);
       const auto& table = context->_inputTable;
-      auto constantValue = table.at(context->_beginIndex, column);
-      assert((std::ranges::all_of(
+      auto constantValue = table.at(context->_beginIndex, column.value());
+      AD_EXPENSIVE_CHECK((std::ranges::all_of(
           table.begin() + context->_beginIndex,
-          table.begin() + context->_endIndex,
-          [&](const auto& row) { return row[column] == constantValue; })));
+          table.begin() + context->_endIndex, [&](const auto& row) {
+            return row[column.value()] == constantValue;
+          })));
       return constantValue;
     } else {
       return variable;
