@@ -97,6 +97,9 @@ class LocalVocab {
   void mergeWith(const R& vocabs) {
     auto inserter = std::back_inserter(otherWordSets_);
     for (const auto& vocab : vocabs) {
+      if (vocab.empty()) {
+        continue;
+      }
       std::ranges::copy(vocab.otherWordSets_, inserter);
       *inserter = vocab.primaryWordSet_;
     }
