@@ -314,8 +314,16 @@ class TransitivePathImpl : public TransitivePathBase {
       // Bound -> var|id
       std::span<const Id> startNodes = startSideResult->idTable().getColumn(
           startSide.treeAndCol_.value().second);
-      co_yield TableColumnWithVocab{&startSideResult->idTable(), startNodes,
-                                    startSideResult->getCopyOfLocalVocab()};
+      // Non-empty local vocab for map is not supported yet.
+      if (!startSideResult->localVocab().empty()) {
+        AD_THROW(
+            "Local vocab in `startSideResult` of `TransitivePath` is not "
+            "supported, please report this issue");
+      }
+      co_yield TableColumnWithVocab{
+          &startSideResult->idTable(), startNodes, {}};
+      // co_yield TableColumnWithVocab{&startSideResult->idTable(), startNodes,
+      //                               startSideResult->getCopyOfLocalVocab()};
     } else {
       for (auto& [idTable, localVocab] : startSideResult->idTables()) {
         // Bound -> var|id
