@@ -11,7 +11,14 @@ FROM base AS builder
 ARG TARGETPLATFORM
 RUN apt-get update && apt-get install -y build-essential cmake libicu-dev tzdata pkg-config uuid-runtime uuid-dev git libjemalloc-dev ninja-build libzstd-dev libssl-dev libboost1.83-dev libboost-program-options1.83-dev libboost-iostreams1.83-dev libboost-url1.83-dev
 
-COPY . /qlever/
+COPY src /qlever/src/
+COPY test /qlever/test/
+COPY e2e /qlever/e2e/
+COPY benchmark /qlever/benchmark/
+COPY .git /qlever/.git/
+COPY CMakeLists.txt /qlever/
+COPY CompilationInfo.cmake /qlever/
+#COPY src test e2e CMakeLists.txt CompilationInfo.cmake .git /qlever/
 
 WORKDIR /qlever/
 ENV DEBIAN_FRONTEND=noninteractive
@@ -30,24 +37,29 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y wget python3-yaml unzip curl bzip2 pkg-config libicu-dev python3-icu libgomp1 uuid-runtime make lbzip2 libjemalloc-dev libzstd-dev libssl-dev libboost1.83-dev libboost-program-options1.83-dev libboost-iostreams1.83-dev libboost-url1.83-dev pipx bash-completion
 
 ARG UID=2000
-RUN groupadd -r qlever && useradd --no-log-init -d /qlever -r -u $UID -g qlever qlever && chown qlever:qlever /qlever
+ARG GID=2000
+RUN groupadd -r -g $GID qlever
+RUN useradd --no-log-init -d /qlever -r -u $UID -g qlever qlever
+RUN chown qlever:qlever /qlever
+RUN apt-get install -y vim sudo && echo "qlever ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 USER qlever
-RUN PIPX_HOME=/qlever/.local PIPX_BIN_DIR=/qlever/.local/bin PIPX_MAN_DIR=/qlever/.local/share pipx install qlever
+ENV PIPX_HOME=/qlever/.local
+ENV PIPX_BIN_DIR=/qlever/.local/bin
+ENV PIPX_MAN_DIR=/qlever/.local/share
+ENV PATH=/qlever:/qlever/.local/bin:$PATH
+RUN pipx install qlever
 RUN echo "eval \"\$(register-python-argcomplete qlever)\"" >> /qlever/.bashrc
+RUN echo "export PATH=$PATH" >> /qlever/.bashrc
 ENV QLEVER_ARGCOMPLETE_ENABLED=1
+ENV QLEVER_IS_RUNNING_IN_CONTAINER=1
 
 COPY --from=builder /qlever/build/*Main /qlever/
 COPY --from=builder /qlever/e2e/* /qlever/e2e/
-ENV PATH=/qlever/:/qlever/.local/bin:$PATH
+COPY docker-entrypoint.sh /qlever/
+RUN sudo chmod +x /qlever/docker-entrypoint.sh
 
 USER qlever
 EXPOSE 7001
 VOLUME ["/data"]
 
-ENTRYPOINT ["bash"]
-
-# Build image:  docker build -t qlever .
-
-# Run container, interactive session:  docker run -it --rm -v "$(pwd)":/data --name qlever qlever
-
-# Run container, create SPARQL endpoint for "Olympics" dataset: docker run -it --rm -v "$(pwd)":/data -p 7001:7001 --name qlever qlever -c "qlever setup-config olympics && qlever get-data && qlever index --system native && qlever start --system native --port 7001 && qlever example-queries --port 7001"
+ENTRYPOINT ["/qlever/docker-entrypoint.sh"]
