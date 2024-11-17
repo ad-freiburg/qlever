@@ -78,26 +78,21 @@ class TransitivePathImpl : public TransitivePathBase {
     // constant overhead, which should be safe to ignore.
     runtimeInfo().addDetail("Initialization time", timer.msecs().count());
 
-    NodeGenerator hull = transitiveHull(
-        edges, yieldOnce ? LocalVocab{} : sub->getCopyOfLocalVocab(),
-        std::move(nodes),
-        targetSide.isVariable()
-            ? std::nullopt
-            : std::optional{std::get<Id>(targetSide.value_)});
+    NodeGenerator hull =
+        transitiveHull(edges, sub->getCopyOfLocalVocab(), std::move(nodes),
+                       targetSide.isVariable()
+                           ? std::nullopt
+                           : std::optional{std::get<Id>(targetSide.value_)},
+                       yieldOnce);
 
     auto result = fillTableWithHull(
         std::move(hull), startSide.outputCol_, targetSide.outputCol_,
         startSide.treeAndCol_.value().second, yieldOnce,
         startSide.treeAndCol_.value().first->getResultWidth());
 
+    // Iterate over generator to prevent lifetime issues
     for (auto& pair : result) {
-      // Skip merging of the same vocab for this case.
-      if (yieldOnce) {
-        co_yield Result::IdTableVocabPair{std::move(pair.first),
-                                          sub->getCopyOfLocalVocab()};
-      } else {
-        co_yield pair;
-      }
+      co_yield pair;
     }
   };
 
@@ -134,23 +129,18 @@ class TransitivePathImpl : public TransitivePathBase {
         nullptr, nodesWithoutDuplicates, LocalVocab{}};
 
     NodeGenerator hull = transitiveHull(
-        edges, yieldOnce ? LocalVocab{} : sub->getCopyOfLocalVocab(),
-        std::span{&tableInfo, 1},
+        edges, sub->getCopyOfLocalVocab(), std::span{&tableInfo, 1},
         targetSide.isVariable()
             ? std::nullopt
-            : std::optional{std::get<Id>(targetSide.value_)});
+            : std::optional{std::get<Id>(targetSide.value_)},
+        yieldOnce);
 
     auto result = fillTableWithHull(std::move(hull), startSide.outputCol_,
                                     targetSide.outputCol_, yieldOnce);
 
+    // Iterate over generator to prevent lifetime issues
     for (auto& pair : result) {
-      // Skip merging of the same vocab for this case.
-      if (yieldOnce) {
-        co_yield Result::IdTableVocabPair{std::move(pair.first),
-                                          sub->getCopyOfLocalVocab()};
-      } else {
-        co_yield pair;
-      }
+      co_yield pair;
     }
   };
 
@@ -256,7 +246,7 @@ class TransitivePathImpl : public TransitivePathBase {
    */
   NodeGenerator transitiveHull(const T& edges, LocalVocab edgesVocab,
                                std::ranges::range auto startNodes,
-                               std::optional<Id> target) const {
+                               std::optional<Id> target, bool yieldOnce) const {
     ad_utility::Timer timer{ad_utility::Timer::Stopped};
     for (auto&& tableColumn : startNodes) {
       timer.cont();
@@ -272,6 +262,10 @@ class TransitivePathImpl : public TransitivePathBase {
                                    mergedVocab.clone(), tableColumn.table_,
                                    currentRow};
           timer.cont();
+          // Reset vocab to prevent merging the same vocab over and over again.
+          if (yieldOnce) {
+            mergedVocab = LocalVocab{};
+          }
         }
         currentRow++;
       }
