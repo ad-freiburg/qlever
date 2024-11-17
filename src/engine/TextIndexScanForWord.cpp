@@ -19,12 +19,9 @@ ProtoResult TextIndexScanForWord::computeResult(
       word_, getExecutionContext()->getAllocator());
 
   if (!isPrefix_) {
-    IdTable smallIdTable{getExecutionContext()->getAllocator()};
-    smallIdTable.setNumColumns(2);
-    smallIdTable.resize(idTable.numRows());
-    std::ranges::copy(idTable.getColumn(0), smallIdTable.getColumn(0).begin());
-    std::ranges::copy(idTable.getColumn(2), smallIdTable.getColumn(1).begin());
-    return {std::move(smallIdTable), resultSortedOn(), LocalVocab{}};
+    ColumnIndex columnsToKeep[] = {0, 2};
+    idTable.setColumnSubset(std::span{columnsToKeep});
+    return {std::move(idTable), resultSortedOn(), LocalVocab{}};
   }
 
   // Add details to the runtimeInfo. This is has no effect on the result.
