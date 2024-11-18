@@ -55,6 +55,20 @@ auto testAggregate = [](std::vector<T> inputAsVector, U expectedResult,
   EXPECT_EQ(res, expectedResult);
 };
 
+// Same as `testAggregate` above, but the input is specified as a variable.
+template <typename AggregateExpressionT, typename T, typename U = T>
+auto testAggregateWithVariable =
+    [](Variable input, U expectedResult, bool distinct = false,
+       source_location l = source_location::current()) {
+      auto trace = generateLocationTrace(l);
+      auto d = std::make_unique<VariableExpression>(std::move(input));
+      auto t = TestContext{};
+      AggregateExpressionT m{distinct, std::move(d)};
+      auto resAsVariant = m.evaluate(&t.context);
+      auto res = std::get<U>(resAsVariant);
+      EXPECT_EQ(res, expectedResult);
+    };
+
 // Test `CountExpression`.
 TEST(AggregateExpression, count) {
   auto testCountId = testAggregate<CountExpression, Id>;
@@ -69,6 +83,15 @@ TEST(AggregateExpression, count) {
 
   auto testCountString = testAggregate<CountExpression, IdOrLiteralOrIri, Id>;
   testCountString({lit("alpha"), lit("äpfel"), lit(""), lit("unfug")}, I(4));
+}
+
+// Test the behavior of COUNT for variables.
+TEST(AggregateExpression, countForVariables) {
+  auto testCount = testAggregateWithVariable<CountExpression, Id>;
+  // Unbound variables always have a count of 0.
+  testCount(Variable{"?thisVariableIsNotContained"}, I(0));
+  // The static test context has three rows.
+  testCount(Variable{"?ints"}, I(3));
 }
 
 // Test `SumExpression`.

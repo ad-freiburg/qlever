@@ -76,42 +76,25 @@ FetchContent_Declare(
 ################################
 # NLOHMANN JSON
 ################################
+# Use URL to avoid downloading large repository as recommended here:
+# https://json.nlohmann.me/integration/cmake/#fetchcontent
 FetchContent_Declare(
         nlohmann-json
-        GIT_REPOSITORY https://github.com/nlohmann/json.git
-        GIT_TAG 9cca280a4d0ccf0c08f47a99aa71d1b0e52f8d03 # release-3.11.3
+        URL https://github.com/nlohmann/json/releases/download/v3.11.3/json.tar.xz
+        URL_HASH SHA3_224=b9237e8e8242e915de5be631aa944369c38a377c5e79aa505ba741a9
 )
-# We only want to include a single file from the nlohmann GitHub repository, so we initialize the submodule
-# manually
-FetchContent_GetProperties(nlohmann-json)
-if (NOT nlohmann-json_POPULATED)
-    FetchContent_Populate(nlohmann-json)
-    include_directories(SYSTEM ${nlohmann-json_SOURCE_DIR}/single_include)
-endif ()
-
 
 ###############################
 # ANTLR CPP RUNTIME FOR THE SPARQL PARSER
 ###############################
+set(ANTLR_BUILD_CPP_TESTS OFF CACHE BOOL "don't try to build googletest twice")
+set(ANTLR_BUILD_SHARED OFF CACHE BOOL "We're only interested in the static library")
 FetchContent_Declare(
         antlr
         GIT_REPOSITORY https://github.com/antlr/antlr4.git
-        GIT_TAG 9239e6ff444420516b44b7621e8dc7691fcf0e16
+        GIT_TAG cc82115a4e7f53d71d9d905caa2c2dfa4da58899 # 4.13.12
+        SOURCE_SUBDIR runtime/Cpp
 )
-
-# From ANTLR we actually don't want the toplevel directory (which doesn't
-# have a proper `CMakeLists.txt` anyway), but only the C++ runtime which
-# resides in a subdirectory. We additionally need to suppress some warnings
-# only for ANTLR. We therefore have to perform the initialization for
-# ANTLR using `FetchContent` manually.
-FetchContent_GetProperties(antlr)
-if (NOT antlr_POPULATED)
-    FetchContent_Populate(antlr)
-    set(ANTLR_BUILD_CPP_TESTS OFF CACHE BOOL "don't try to build googletest twice")
-    add_subdirectory(${antlr_SOURCE_DIR}/runtime/Cpp EXCLUDE_FROM_ALL)
-    target_compile_options(antlr4_static PRIVATE -Wno-all -Wno-extra -Wno-unqualified-std-cast-call -Wno-error -Wno-deprecated-declarations)
-    include_directories(SYSTEM ${antlr_SOURCE_DIR}/runtime/Cpp/runtime/src)
-endif ()
 
 ################################
 # Threading
@@ -184,7 +167,7 @@ find_package(OpenSSL REQUIRED)
 function(qlever_target_link_libraries target)
     target_link_libraries(${target} ${ARGN} absl::flat_hash_map
             absl::flat_hash_set absl::strings absl::str_format ICU::uc
-            ICU::i18n OpenSSL::SSL OpenSSL::Crypto GTest::gtest GTest::gmock stxxl fsst)
+            ICU::i18n OpenSSL::SSL OpenSSL::Crypto GTest::gtest GTest::gmock stxxl fsst nlohmann_json::nlohmann_json)
 
     # memorySize is a utility library for defining memory sizes.
     if (NOT ${target} STREQUAL "memorySize")
@@ -247,11 +230,11 @@ FetchContent_Declare(
 ################################
 # S2 Geometry
 ################################
-SET (BUILD_TESTS OFF CACHE BOOL "no tests for s2")
+set(BUILD_TESTS OFF CACHE BOOL "no tests for s2")
 FetchContent_Declare(
         s2
         GIT_REPOSITORY https://github.com/google/s2geometry.git
-        GI_TAG 5b5eccd54a08ae03b4467e79ffbb076d0b5f221e  #version 0.11.1
+        GIT_TAG 5b5eccd54a08ae03b4467e79ffbb076d0b5f221e  #version 0.11.1
         SYSTEM
 )
 
@@ -338,9 +321,9 @@ FetchContent_Declare(
 ################################
 # Apply FetchContent
 ################################
-FetchContent_MakeAvailable(googletest ctre abseil re2 stxxl fsst s2)
+FetchContent_MakeAvailable(googletest ctre abseil re2 stxxl fsst s2 nlohmann-json antlr)
 # Disable some warnings in RE2, STXXL, and GTEST
-target_compile_options(s2 PRIVATE -Wno-sign-compare -Wno-unused-parameter -Wno-class-memaccess -Wno-comment -Wno-redundant-move -Wno-unknown-warning-option -Wno-maybe-uninitialized -Wno-class-memaccess)
+target_compile_options(s2 PRIVATE -Wno-sign-compare -Wno-unused-parameter -Wno-class-memaccess -Wno-comment -Wno-redundant-move -Wno-unknown-warning-option -Wno-maybe-uninitialized -Wno-class-memaccess -Wno-unused-but-set-variable -Wno-unused-function)
 target_compile_options(re2 PRIVATE -Wno-unused-parameter)
 target_compile_options(stxxl PRIVATE -Wno-deprecated-declarations)
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
@@ -350,6 +333,9 @@ include_directories(${ctre_SOURCE_DIR}/single-header)
 target_compile_options(fsst PRIVATE -Wno-extra -Wno-all -Wno-error)
 target_compile_options(fsst12 PRIVATE -Wno-extra -Wno-all -Wno-error)
 include_directories(${fsst_SOURCE_DIR})
+target_compile_options(antlr4_static PRIVATE -Wno-all -Wno-extra -Wno-error -Wno-deprecated-declarations)
+# Only required because a lot of classes that do not explicitly link against antlr4_static use the headers.
+include_directories(SYSTEM "${antlr_SOURCE_DIR}/runtime/Cpp/runtime/src")
 
 message(STATUS ---)
 message(STATUS "CXX_FLAGS are : " ${CMAKE_CXX_FLAGS})
