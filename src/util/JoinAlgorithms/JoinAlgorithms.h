@@ -1141,7 +1141,8 @@ struct BlockZipperJoinImpl {
                                   typename RightSide::CurrentBlocks> auto&
                 target,
             ad_utility::SameAsAny<LeftSide, RightSide> auto& side) {
-          removeEqualToCurrentEl(side.currentBlocks_, currentEl);
+          // Explicit this to avoid false positive warning in clang.
+          this->removeEqualToCurrentEl(side.currentBlocks_, currentEl);
           bool allBlocksWereFilled = fillEqualToCurrentEl(side, currentEl);
           if (side.currentBlocks_.empty()) {
             AD_CORRECTNESS_CHECK(allBlocksWereFilled);
