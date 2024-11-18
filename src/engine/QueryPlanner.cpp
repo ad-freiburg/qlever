@@ -757,15 +757,19 @@ auto QueryPlanner::seedWithScansAndText(
           "necessary also rebuild the index.");
     }
 
-    // TODO<ullingerc>
-    // const auto& input = node.triple_.p_._iri;
-    // if ((input.starts_with(MAX_DIST_IN_METERS) ||
-    //      input.starts_with(NEAREST_NEIGHBORS)) &&
-    //     input.ends_with('>')) {
-    //   pushPlan(makeSubtreePlan<SpatialJoin>(_qec, node.triple_, std::nullopt,
-    //                                         std::nullopt));
-    //   continue;
-    // }
+    // Backward compatibility with spatial search predicates
+    const auto& input = node.triple_.p_._iri;
+    if ((input.starts_with(MAX_DIST_IN_METERS) ||
+         input.starts_with(NEAREST_NEIGHBORS)) &&
+        input.ends_with('>')) {
+      parsedQuery::SpatialQuery config{node.triple_};
+      pushPlan(makeSubtreePlan<SpatialJoin>(
+          _qec,
+          std::make_shared<SpatialJoinConfiguration>(
+              config.toSpatialJoinConfiguration()),
+          std::nullopt, std::nullopt));
+      continue;
+    }
 
     if (node.triple_.p_._iri == HAS_PREDICATE_PREDICATE) {
       pushPlan(makeSubtreePlan<HasPredicateScan>(_qec, node.triple_));

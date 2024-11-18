@@ -654,7 +654,6 @@ void testMultiplicitiesOrSizeEstimate(bool addLeftChildFirst,
     ASSERT_NE(spatialJoin->onlyForTestingGetRightChild(), nullptr);
     // the size should be at most 49, because both input tables have 7 rows and
     // it is assumed, that in the worst case the whole cross product is build
-    // TODO<ullingerc> Segfault here
     auto estimate =
         spatialJoin->onlyForTestingGetLeftChild()->getSizeEstimate() *
         spatialJoin->onlyForTestingGetRightChild()->getSizeEstimate();

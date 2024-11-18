@@ -93,4 +93,46 @@ SpatialJoinConfiguration SpatialQuery::toSpatialJoinConfiguration() const {
   }
 }
 
+// ____________________________________________________________________________
+SpatialQuery::SpatialQuery(const SparqlTriple& triple) {
+  AD_CONTRACT_CHECK(triple.p_.isIri(),
+                    "The config triple for SpatialJoin must have a special IRI "
+                    "as predicate.");
+  const std::string& input = triple.p_._iri;
+
+  if (input.starts_with(NEAREST_NEIGHBORS)) {
+    throw SpatialSearchException(
+        "The special predicate <nearest-neighbors:...> is no longer supported "
+        "due to confusing semantics. Please use SERVICE spatialSearch: {...} "
+        "instead. For information on its usage, see the QLever Wiki.");
+  }
+
+  // Add variables to configuration object
+  AD_CONTRACT_CHECK(triple.s_.isVariable() && triple.o_.isVariable(),
+                    "Currently, SpatialJoin needs two variables");
+  setVariable("left", triple.s_, left_);
+  setVariable("right", triple.o_, right_);
+
+  // Helper to convert a ctre match to an integer
+  auto matchToInt = [](std::string_view match) -> std::optional<size_t> {
+    if (match.size() > 0) {
+      size_t res = 0;
+      std::from_chars(match.data(), match.data() + match.size(), res);
+      return res;
+    }
+    return std::nullopt;
+  };
+
+  // Extract max distance from predicate
+  if (auto match = ctre::match<MAX_DIST_IN_METERS_REGEX>(input)) {
+    maxDist_ = matchToInt(match.get<"dist">());
+    AD_CORRECTNESS_CHECK(maxDist_.has_value());
+  } else {
+    AD_THROW(absl::StrCat("Tried to perform spatial join with unknown triple ",
+                          input,
+                          ". This must be a valid spatial condition like ",
+                          "<max-distance-in-meters:50>."));
+  }
+}
+
 }  // namespace parsedQuery

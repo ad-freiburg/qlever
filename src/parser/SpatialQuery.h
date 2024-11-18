@@ -42,6 +42,10 @@ struct SpatialQuery : MagicServiceQuery {
   SpatialQuery& operator=(SpatialQuery&& a) noexcept = default;
   virtual ~SpatialQuery() = default;
 
+  // Alternative constructor for backward compatibility (allows initializing a
+  // SpatialJoin using a magic predicate)
+  SpatialQuery(const SparqlTriple& triple);
+
   // See MagicServiceQuery
   void addParameter(const SparqlTriple& triple) override;
 
