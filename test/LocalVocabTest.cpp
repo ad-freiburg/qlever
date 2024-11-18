@@ -164,12 +164,16 @@ TEST(LocalVocab, merge) {
   EXPECT_EQ(*indices[3], lit("twoB"));
 
   // Test that the `LocalBlankNodeManager` of vocabs is merged correctly.
-  LocalVocab vocC, vocD;
   ad_utility::BlankNodeManager bnm;
-  auto id = vocC.getBlankNodeIndex(&bnm);
-  auto vocabs2 = std::vector{&std::as_const(vocC), &std::as_const(vocD)};
-  LocalVocab localVocabMerged2 = LocalVocab::merge(vocabs2);
-  localVocabMerged2.isBlankNodeIndexContained(id);
+  LocalVocab localVocabMerged2;
+  BlankNodeIndex id;
+  {
+    LocalVocab vocC, vocD;
+    id = vocC.getBlankNodeIndex(&bnm);
+    auto vocabs2 = std::vector{&std::as_const(vocC), &std::as_const(vocD)};
+    localVocabMerged2 = LocalVocab::merge(vocabs2);
+  }
+  EXPECT_TRUE(localVocabMerged2.isBlankNodeIndexContained(id));
 
   LocalVocab vocE, vocF;
   auto id2 = vocE.getBlankNodeIndex(&bnm);
@@ -179,7 +183,9 @@ TEST(LocalVocab, merge) {
                                [](const LocalVocab* l) -> const LocalVocab& {
                                  return *l;
                                }));
-  vocE.isBlankNodeIndexContained(id2);
+  EXPECT_TRUE(vocE.isBlankNodeIndexContained(id));
+  EXPECT_TRUE(localVocabMerged2.isBlankNodeIndexContained(id));
+  EXPECT_TRUE(vocE.isBlankNodeIndexContained(id2));
 }
 
 // _____________________________________________________________________________

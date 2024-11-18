@@ -94,7 +94,7 @@ class BlankNodeManager {
       std::ranges::copy_if(
           localBlankNodeManagers, std::back_inserter(otherManagers_),
           [](const std::shared_ptr<const LocalBlankNodeManager>& l) -> bool {
-            return l.get() != nullptr;
+            return l != nullptr;
           });
     }
 

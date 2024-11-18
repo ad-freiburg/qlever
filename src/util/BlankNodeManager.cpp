@@ -64,18 +64,16 @@ uint64_t BlankNodeManager::LocalBlankNodeManager::getId() {
 // _____________________________________________________________________________
 bool BlankNodeManager::LocalBlankNodeManager::containsBlankNodeIndex(
     uint64_t index) const {
-  auto containsIndex = [index](const Block& block) {
-    return index >= block.startIdx_ && index < block.nextIdx_;
-  };
-  auto otherBlocks = std::views::join(
-      otherManagers_ |
-      std::views::transform(
-          [](const std::shared_ptr<const LocalBlankNodeManager>& l) {
-            return l->blocks_;
-          }));
-
-  return std::ranges::any_of(blocks_, containsIndex) ||
-         std::ranges::any_of(otherBlocks, containsIndex);
+  return std::ranges::any_of(blocks_,
+                             [index](const Block& block) {
+                               return index >= block.startIdx_ &&
+                                      index < block.nextIdx_;
+                             }) ||
+         std::ranges::any_of(
+             otherManagers_,
+             [index](const std::shared_ptr<const LocalBlankNodeManager>& l) {
+               return l->containsBlankNodeIndex(index);
+             });
 }
 
 }  // namespace ad_utility
