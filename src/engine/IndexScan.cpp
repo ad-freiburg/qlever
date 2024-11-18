@@ -18,14 +18,14 @@ using std::string;
 // _____________________________________________________________________________
 IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
                      const SparqlTripleSimple& triple, Graphs graphsToFilter,
-                     PrefilterIndexPairs prefilters)
+                     PrefilterIndexPair prefilter)
     : Operation(qec),
       permutation_(permutation),
       subject_(triple.s_),
       predicate_(triple.p_),
       object_(triple.o_),
       graphsToFilter_{std::move(graphsToFilter)},
-      prefilters_{std::move(prefilters)},
+      prefilter_{std::move(prefilter)},
       numVariables_(static_cast<size_t>(subject_.isVariable()) +
                     static_cast<size_t>(predicate_.isVariable()) +
                     static_cast<size_t>(object_.isVariable())) {
@@ -54,9 +54,26 @@ IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
 // _____________________________________________________________________________
 IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
                      const SparqlTriple& triple, Graphs graphsToFilter,
-                     PrefilterIndexPairs prefilters)
+                     PrefilterIndexPair prefilter)
     : IndexScan(qec, permutation, triple.getSimple(), std::move(graphsToFilter),
-                std::move(prefilters)) {}
+                std::move(prefilter)) {}
+
+// _____________________________________________________________________________
+IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
+                     const TripleComponent& s, const TripleComponent& p,
+                     const TripleComponent& o,
+                     const std::vector<ColumnIndex>& additionalColumns,
+                     const std::vector<Variable>& additionalVariables,
+                     Graphs graphsToFilter, PrefilterIndexPair prefilter)
+    : Operation(qec),
+      permutation_(permutation),
+      subject_(s),
+      predicate_(p),
+      object_(o),
+      graphsToFilter_(std::move(graphsToFilter)),
+      prefilter_(std::move(prefilter)),
+      additionalColumns_(additionalColumns),
+      additionalVariables_(additionalVariables) {}
 
 // _____________________________________________________________________________
 string IndexScan::getCacheKeyImpl() const {
@@ -119,21 +136,34 @@ vector<ColumnIndex> IndexScan::resultSortedOn() const {
 }
 
 // _____________________________________________________________________________
-void IndexScan::setPrefilterExpression(
+std::optional<std::shared_ptr<QueryExecutionTree>>
+IndexScan::setPrefilterExprGetUpdatedQetPtr(
     const std::vector<PrefilterVariablePair>& prefilterVariablePairs) {
-  const std::vector<ColumnIndex>& sortedColumns = resultSortedOn();
-  VariableToColumnMap varToColMap = computeVariableToColumnMap();
+  // The column index of the first sorted column.
+  const ColumnIndex sortedIdx = 0;
+  if (numVariables_ < 1) {
+    return std::nullopt;
+  }
 
-  const auto addPrefilterIfSorted = [&](const PrefilterVariablePair& pair) {
-    const Variable& variable = pair.second;
-    if (varToColMap.find(variable) != varToColMap.end()) {
-      const ColumnIndex colIdx = varToColMap[variable].columnIndex_;
-      if (std::ranges::find(sortedColumns, colIdx) != sortedColumns.end()) {
-        prefilters_.push_back(std::make_pair(pair.first->clone(), colIdx));
-      }
+  VariableToColumnMap varToColMap = computeVariableToColumnMap();
+  // Search for a Variable key-value given the sortedIdx (index of first sorted
+  // column) in the VariableToColumnMap.
+  auto mapIt =
+      std::ranges::find_if(varToColMap, [&sortedIdx](const auto& keyValuePair) {
+        return keyValuePair.second.columnIndex_ == sortedIdx;
+      });
+  if (mapIt != varToColMap.end()) {
+    // Check if the previously found Variable (key-value from varToColMap)
+    // matches with a <PrefilterExpression, Variable> pair.
+    auto itPairs = std::ranges::find_if(
+        prefilterVariablePairs,
+        [&mapIt](const auto& pair) { return pair.second == mapIt->first; });
+    if (itPairs != prefilterVariablePairs.end()) {
+      return makeCopyWithAddedPrefilters(
+          std::make_pair(itPairs->first->clone(), sortedIdx));
     }
-  };
-  std::ranges::for_each(prefilterVariablePairs, addPrefilterIfSorted);
+  }
+  return std::nullopt;
 }
 
 // _____________________________________________________________________________
@@ -156,11 +186,22 @@ VariableToColumnMap IndexScan::computeVariableToColumnMap() const {
 }
 
 //______________________________________________________________________________
+std::shared_ptr<QueryExecutionTree> IndexScan::makeCopyWithAddedPrefilters(
+    PrefilterIndexPair prefilter) {
+  return ad_utility::makeExecutionTree<IndexScan>(
+      getExecutionContext(), permutation_, subject_, predicate_, object_,
+      additionalColumns_, additionalVariables_, std::move(graphsToFilter_),
+      std::move(prefilter));
+}
+
+//______________________________________________________________________________
 std::vector<CompressedBlockMetadata> IndexScan::applyFilterBlockMetadata(
-    std::vector<CompressedBlockMetadata>&& blocks) const {
-  std::ranges::for_each(prefilters_, [&blocks](const PrefilterIndexPair& pair) {
-    pair.first->evaluate(blocks, pair.second);
-  });
+    const std::vector<CompressedBlockMetadata> blocks) const {
+  if (prefilter_.has_value()) {
+    auto& prefilterIndexPair = prefilter_.value();
+    return prefilterExpressions::detail::evaluatePrefilterExpressionOnMetadata(
+        prefilterIndexPair.first->clone(), blocks, prefilterIndexPair.second);
+  }
   return blocks;
 };
 
@@ -178,7 +219,7 @@ Result::Generator IndexScan::chunkedIndexScan() const {
 }
 
 // _____________________________________________________________________________
-IdTable IndexScan::completeIndexScan() const {
+IdTable IndexScan::materializedIndexScan() const {
   // Get the blocks.
   auto metadata = getMetadataForScan();
   auto blockSpan =
@@ -189,7 +230,7 @@ IdTable IndexScan::completeIndexScan() const {
                                ? std::optional{applyFilterBlockMetadata(
                                      {blockSpan.begin(), blockSpan.end()})}
                                : std::nullopt;
-  // Create IdTable, fill it with content by performing scan().
+  // Create the IdTable and fill it with content by performing scan().
   using enum Permutation::Enum;
   IdTable idTable{getExecutionContext()->getAllocator()};
   idTable.setNumColumns(numVariables_);
@@ -211,7 +252,7 @@ ProtoResult IndexScan::computeResult(bool requestLaziness) {
   if (requestLaziness) {
     return {chunkedIndexScan(), resultSortedOn()};
   }
-  return {completeIndexScan(), getResultSortedOn(), LocalVocab{}};
+  return {materializedIndexScan(), getResultSortedOn(), LocalVocab{}};
 }
 
 // _____________________________________________________________________________
@@ -287,7 +328,7 @@ ScanSpecificationAsTripleComponent IndexScan::getScanSpecificationTc() const {
 
 // _____________________________________________________________________________
 Permutation::IdTableGenerator IndexScan::getLazyScan(
-    std::vector<CompressedBlockMetadata>&& blocks) const {
+    std::vector<CompressedBlockMetadata> blocks) const {
   // If there is a LIMIT or OFFSET clause that constrains the scan
   // (which can happen with an explicit subquery), we cannot use the prefiltered
   // blocks, as we currently have no mechanism to include limits and offsets
@@ -355,8 +396,7 @@ IndexScan::lazyScanForJoinOfTwoScans(const IndexScan& s1, const IndexScan& s2) {
   auto [blocks1, blocks2] = CompressedRelationReader::getBlocksForJoin(
       metaBlocks1.value(), metaBlocks2.value());
 
-  std::array result{s1.getLazyScan(std::move(blocks1)),
-                    s2.getLazyScan(std::move(blocks2))};
+  std::array result{s1.getLazyScan(blocks1), s2.getLazyScan(blocks2)};
   result[0].details().numBlocksAll_ = metaBlocks1.value().blockMetadata_.size();
   result[1].details().numBlocksAll_ = metaBlocks2.value().blockMetadata_.size();
   return result;
@@ -377,7 +417,7 @@ Permutation::IdTableGenerator IndexScan::lazyScanForJoinOfColumnWithScan(
   auto blocks = CompressedRelationReader::getBlocksForJoin(joinColumn,
                                                            metaBlocks1.value());
 
-  auto result = getLazyScan(std::move(blocks));
+  auto result = getLazyScan(blocks);
   result.details().numBlocksAll_ = metaBlocks1.value().blockMetadata_.size();
   return result;
 }

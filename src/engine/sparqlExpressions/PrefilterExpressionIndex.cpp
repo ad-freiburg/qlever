@@ -418,6 +418,23 @@ template class LogicalExpression<LogicalOperator::OR>;
 
 namespace detail {
 //______________________________________________________________________________
+std::vector<BlockMetadata> evaluatePrefilterExpressionOnMetadata(
+    const std::unique_ptr<PrefilterExpression> prefilterExpr,
+    const std::vector<BlockMetadata>& blocks, const size_t evaluationColumn) {
+  if (blocks.size() <= 2) {
+    return blocks;
+  }
+  BlockMetadata firstBlock = blocks.front();
+  BlockMetadata lastBlock = blocks.back();
+  std::vector<CompressedBlockMetadata> blocksAdjusted(blocks.begin() + 1,
+                                                      blocks.end() - 1);
+  blocksAdjusted = prefilterExpr->evaluate(blocksAdjusted, evaluationColumn);
+  blocksAdjusted.insert(blocksAdjusted.begin(), firstBlock);
+  blocksAdjusted.push_back(lastBlock);
+  return blocksAdjusted;
+}
+
+//______________________________________________________________________________
 void checkPropertiesForPrefilterConstruction(
     const std::vector<PrefilterExprVariablePair>& vec) {
   auto viewVariable = vec | std::views::values;

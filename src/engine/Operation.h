@@ -78,20 +78,21 @@ class Operation {
   }
 
   // Set `PrefilterExpression`s (for `IndexScan`).
-  virtual void setPrefilterExpression(
-      const std::vector<PrefilterVariablePair>&){
-      // The prefiltering procedure is implemented by applying the
-      // PrefilterExpressions directly on the CompressedBlockMetadata.
-      // This is currently done while performing the result computation for
-      // IndexScan.
-      // (1) Overwrite this method for the derived IndexScan class.
-      // (2) The default method for all other derived classes is implemented
-      // here, no PrefilterExpressions need to be set.
+  // The prefiltering procedure is implemented by applying the
+  // PrefilterExpressions directly on the CompressedBlockMetadata.
+  // This is currently done while performing the result computation for
+  // IndexScan.
+  // (1) Overwrite this method for the derived `IndexScan` class. Given
+  // the resulting changes w.r.t. `IndexScan`, we also have to return an updated
+  // `QueryExecutionTree` pointer.
+  // (2) The default method for all other derived classes is implemented here,
+  // no PrefilterExpressions need to be set. Given that no changes occur for an
+  // `Operation` object here, return std::nullopt to indicate that nothing has
+  // changed.
+  virtual std::optional<std::shared_ptr<QueryExecutionTree>>
+  setPrefilterExprGetUpdatedQetPtr(const std::vector<PrefilterVariablePair>&) {
+    return std::nullopt;
   };
-
-  // Apply the provided void function for all descendants. The given function
-  // must be invocable with a `const QueryExecutionTree*` object.
-  void forAllDescendants(std::function<void(const QueryExecutionTree*)>&& func);
 
   // Get a unique, not ambiguous string representation for a subtree.
   // This should act like an ID for each subtree.
@@ -374,11 +375,11 @@ class Operation {
 
   // Recursively call a function on all children.
   template <typename F>
-  void forAllDescendantsImpl(F&& f);
+  void forAllDescendantsImpl(F f);
 
   // Recursively call a function on all children.
   template <typename F>
-  void forAllDescendantsImpl(F&& f) const;
+  void forAllDescendantsImpl(F f) const;
 
   // Holds a precomputed Result of this operation if it is the sibling of a
   // Service operation.

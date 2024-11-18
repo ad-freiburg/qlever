@@ -12,12 +12,10 @@ class SparqlTripleSimple;
 
 class IndexScan final : public Operation {
   using Graphs = ScanSpecificationAsTripleComponent::Graphs;
-  // Pair containing a `PrefilterExpression` with `ColumnIndex` (eval. index)
-  using PrefilterIndexPair =
-      std::pair<std::unique_ptr<prefilterExpressions::PrefilterExpression>,
-                ColumnIndex>;
-  // Vector with `PrefilterIndexPair` values.
-  using PrefilterIndexPairs = std::vector<PrefilterIndexPair>;
+  // Optional pair containing a `PrefilterExpression` with `ColumnIndex` (eval.
+  // index)
+  using PrefilterIndexPair = std::optional<std::pair<
+      std::unique_ptr<prefilterExpressions::PrefilterExpression>, ColumnIndex>>;
 
  private:
   Permutation::Enum permutation_;
@@ -25,7 +23,7 @@ class IndexScan final : public Operation {
   TripleComponent predicate_;
   TripleComponent object_;
   Graphs graphsToFilter_;
-  PrefilterIndexPairs prefilters_;
+  PrefilterIndexPair prefilter_;
   size_t numVariables_;
   size_t sizeEstimate_;
   bool sizeEstimateIsExact_;
@@ -40,11 +38,18 @@ class IndexScan final : public Operation {
  public:
   IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
             const SparqlTriple& triple, Graphs graphsToFilter = std::nullopt,
-            PrefilterIndexPairs prefilters = {});
+            PrefilterIndexPair prefilter = std::nullopt);
   IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
             const SparqlTripleSimple& triple,
             Graphs graphsToFilter = std::nullopt,
-            PrefilterIndexPairs prefilters = {});
+            PrefilterIndexPair prefilter = std::nullopt);
+  // Constructor to simplify copy creation of an `IndexScan`.
+  IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
+            const TripleComponent& s, const TripleComponent& p,
+            const TripleComponent& o,
+            const std::vector<ColumnIndex>& additionalColumns,
+            const std::vector<Variable>& additionalVariables,
+            Graphs graphsToFilter, PrefilterIndexPair prefilter);
 
   ~IndexScan() override = default;
 
@@ -66,9 +71,11 @@ class IndexScan final : public Operation {
 
   vector<ColumnIndex> resultSortedOn() const override;
 
-  // Set `PrefilterExpression`s.
-  void setPrefilterExpression(const std::vector<PrefilterVariablePair>&
-                                  prefilterVariablePairs) override;
+  // Set `PrefilterExpression`s and return updated `QueryExecutionTree` pointer
+  // if necessary.
+  std::optional<std::shared_ptr<QueryExecutionTree>>
+  setPrefilterExprGetUpdatedQetPtr(const std::vector<PrefilterVariablePair>&
+                                       prefilterVariablePairs) override;
 
   size_t numVariables() const { return numVariables_; }
 
@@ -151,19 +158,22 @@ class IndexScan final : public Operation {
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 
+  std::shared_ptr<QueryExecutionTree> makeCopyWithAddedPrefilters(
+      PrefilterIndexPair prefilter);
+
   // Filter relevant `CompressedBlockMetadata` blocks by applying the
   // `PrefilterExpression`s from `prefilters_`.
   std::vector<CompressedBlockMetadata> applyFilterBlockMetadata(
-      std::vector<CompressedBlockMetadata>&& blocks) const;
+      const std::vector<CompressedBlockMetadata> blocks) const;
 
   // Return the (lazy) `IdTable` for this `IndexScan` in chunks.
   Result::Generator chunkedIndexScan() const;
   // Get the `IdTable` for this `IndexScan` in one piece.
-  IdTable completeIndexScan() const;
+  IdTable materializedIndexScan() const;
 
   // Helper functions for the public `getLazyScanFor...` methods and
   // `chunkedIndexScan` (see above).
   Permutation::IdTableGenerator getLazyScan(
-      std::vector<CompressedBlockMetadata>&& blocks) const;
+      std::vector<CompressedBlockMetadata> blocks) const;
   std::optional<Permutation::MetadataAndBlocks> getMetadataForScan() const;
 };

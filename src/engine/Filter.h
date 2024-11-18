@@ -59,7 +59,11 @@ class Filter : public Operation {
     return _subtree->getVariableColumns();
   }
 
-  void setPrefilterExpressionForIndexScanChildren();
+  // This method is directly called by the constructor.
+  // It sets the appropriate `<PrefilterExpression, Variable>` pair for each
+  // `IndexScan` child by invoking `setPrefilterExpression` on all descendants
+  // in the `QueryExecutionTree`.
+  void setPrefilterExpressionForDirectIndexScanChild();
 
   ProtoResult computeResult(bool requestLaziness) override;
 

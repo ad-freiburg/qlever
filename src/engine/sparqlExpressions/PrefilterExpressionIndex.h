@@ -207,6 +207,14 @@ using OrExpression = prefilterExpressions::LogicalExpression<
 
 namespace detail {
 //______________________________________________________________________________
+// Helper function to perform the evaluation for the provided
+// `PrefilterExpression` on the given `BlockMetadata` values, while taking into
+// account possible incomplete blocks.
+std::vector<BlockMetadata> evaluatePrefilterExpressionOnMetadata(
+    const std::unique_ptr<PrefilterExpression> prefilterExpr,
+    const std::vector<BlockMetadata>& blocks, const size_t evaluationColumn);
+
+//______________________________________________________________________________
 // Pair containing a `PrefilterExpression` and its corresponding `Variable`.
 using PrefilterExprVariablePair =
     std::pair<std::unique_ptr<PrefilterExpression>, Variable>;

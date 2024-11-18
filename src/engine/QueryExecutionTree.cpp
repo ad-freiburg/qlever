@@ -99,7 +99,7 @@ size_t QueryExecutionTree::getSizeEstimate() {
 void QueryExecutionTree::setPrefilterExpression(
     const std::vector<Operation::PrefilterVariablePair>& prefilterVec) const {
   AD_CONTRACT_CHECK(rootOperation_);
-  rootOperation_->setPrefilterExpression(prefilterVec);
+  rootOperation_->setPrefilterExprGetUpdatedQetPtr(prefilterVec);
 }
 
 // _____________________________________________________________________________

@@ -28,7 +28,7 @@ Filter::Filter(QueryExecutionContext* qec,
     : Operation(qec),
       _subtree(std::move(subtree)),
       _expression{std::move(expression)} {
-  setPrefilterExpressionForIndexScanChildren();
+  setPrefilterExpressionForDirectIndexScanChild();
 }
 
 // _____________________________________________________________________________
@@ -45,14 +45,26 @@ string Filter::getDescriptor() const {
 }
 
 //______________________________________________________________________________
-void Filter::setPrefilterExpressionForIndexScanChildren() {
-  const std::vector<PrefilterVariablePair>& prefilterVec =
+void Filter::setPrefilterExpressionForDirectIndexScanChild() {
+  std::vector<PrefilterVariablePair> prefilterPairs =
       _expression.getPrefilterExpressionForMetadata();
-  this->forAllDescendants([&prefilterVec](const QueryExecutionTree* ptr) {
-    if (ptr) {
-      ptr->setPrefilterExpression(prefilterVec);
+  std::vector<PrefilterVariablePair> relevantPairs;
+  relevantPairs.reserve(prefilterPairs.size());
+  VariableToColumnMap varToColMap = _subtree->getVariableColumns();
+  // Add all the PrefilterVariable values whose Variable value is
+  // contained in the VariableToColumnMap. This is done to avoid that certain
+  // subqueries filter out too much.
+  for (auto& prefilterPair : prefilterPairs) {
+    if (varToColMap.find(prefilterPair.second) != varToColMap.end()) {
+      relevantPairs.emplace_back(std::move(prefilterPair));
     }
-  });
+  }
+  auto optNewSubTree =
+      _subtree->getRootOperation()->setPrefilterExprGetUpdatedQetPtr(
+          std::move(relevantPairs));
+  if (optNewSubTree.has_value()) {
+    _subtree = std::move(optNewSubTree.value());
+  }
 }
 
 // _____________________________________________________________________________

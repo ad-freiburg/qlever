@@ -84,8 +84,10 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
   const BlockMetadata b24 =
       makeBlock(DateId(DateParser, "2024-10-08"), BlankNodeId(10));
 
-  // All blocks that contain mixed (ValueId) types over column 0
-  const std::vector<BlockMetadata> mixedBlocks = {b2, b4, b11, b18, b22, b24};
+  // All blocks that contain mixed (ValueId) types over column 0,
+  // or possibly incomplete ones.
+  const std::vector<BlockMetadata> mixedAndPossiblyIncompleteBlocks = {
+      b1, b2, b4, b11, b18, b22, b24};
 
   // Ordered and unique vector with BlockMetadata
   const std::vector<BlockMetadata> blocks = {
@@ -142,14 +144,18 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
   auto makeTest(std::unique_ptr<PrefilterExpression> expr,
                 std::vector<BlockMetadata>&& expected) {
     std::vector<BlockMetadata> expectedAdjusted;
-    // This is for convenience, we automatically insert all mixed blocks
-    // which must be always returned.
+    // This is for convenience, we automatically insert all mixed and possibly
+    // incomplete blocks which must be always returned.
     std::ranges::set_union(
-        expected, mixedBlocks, std::back_inserter(expectedAdjusted),
+        expected, mixedAndPossiblyIncompleteBlocks,
+        std::back_inserter(expectedAdjusted),
         [](const BlockMetadata& b1, const BlockMetadata& b2) {
           return b1.blockIndex_ < b2.blockIndex_;
         });
-    ASSERT_EQ(expr->evaluate(blocks, 0), expectedAdjusted);
+    ASSERT_EQ(
+        prefilterExpressions::detail::evaluatePrefilterExpressionOnMetadata(
+            std::move(expr), blocks, 0),
+        expectedAdjusted);
   }
 };
 
@@ -525,6 +531,9 @@ TEST_F(PrefilterExpressionOnMetadataTest, testWithOneBlockMetadataValue) {
   EXPECT_EQ(expr->evaluate(input, 0), input);
   EXPECT_EQ(expr->evaluate(input, 1), std::vector<BlockMetadata>{});
   EXPECT_EQ(expr->evaluate(input, 2), std::vector<BlockMetadata>{});
+  EXPECT_EQ(prefilterExpressions::detail::evaluatePrefilterExpressionOnMetadata(
+                std::move(expr), input, 0),
+            input);
 }
 
 //______________________________________________________________________________

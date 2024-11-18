@@ -12,34 +12,28 @@ using namespace std::chrono_literals;
 
 //______________________________________________________________________________
 template <typename F>
-void Operation::forAllDescendantsImpl(F&& f) {
+void Operation::forAllDescendantsImpl(F f) {
   static_assert(
       std::is_same_v<void, std::invoke_result_t<F, QueryExecutionTree*>>);
   for (auto ptr : getChildren()) {
     if (ptr) {
-      std::forward<F>(f)(ptr);
-      ptr->forAllDescendants(std::forward<F>(f));
+      f(ptr);
+      ptr->forAllDescendants(f);
     }
   }
 }
 
 //______________________________________________________________________________
 template <typename F>
-void Operation::forAllDescendantsImpl(F&& f) const {
+void Operation::forAllDescendantsImpl(F f) const {
   static_assert(
       std::is_same_v<void, std::invoke_result_t<F, const QueryExecutionTree*>>);
   for (auto ptr : getChildren()) {
     if (ptr) {
-      std::forward<F>(f)(ptr);
-      ptr->forAllDescendants(std::forward<F>(f));
+      f(ptr);
+      ptr->forAllDescendants(f);
     }
   }
-}
-
-// _____________________________________________________________________________
-void Operation::forAllDescendants(
-    std::function<void(const QueryExecutionTree*)>&& func) {
-  forAllDescendantsImpl(std::move(func));
 }
 
 // _____________________________________________________________________________
