@@ -12,6 +12,8 @@
 #include "engine/SpatialJoin.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "parser/GraphPattern.h"
+#include "parser/PathQuery.h"
+#include "parser/SpatialQuery.h"
 #include "parser/TripleComponent.h"
 #include "parser/data/Variable.h"
 #include "util/Algorithm.h"
@@ -145,174 +147,6 @@ struct TransPath {
   GraphPattern _childGraphPattern;
 };
 
-class MagicServiceException : public std::exception {
-  std::string message_;
-
- public:
-  explicit MagicServiceException(const std::string& message)
-      : message_(message) {}
-  const char* what() const noexcept override { return message_.data(); }
-};
-
-// Abstract structure for parsing a magic SERVICE statement (used to invoke
-// QLever-specific features)
-struct MagicServiceQuery {
-  // The graph pattern inside the SERVICE
-  GraphPattern childGraphPattern_;
-
-  MagicServiceQuery() = default;
-  MagicServiceQuery(MagicServiceQuery&& other) = default;
-  MagicServiceQuery(const MagicServiceQuery& other) = default;
-  MagicServiceQuery& operator=(const MagicServiceQuery& other) = default;
-  MagicServiceQuery& operator=(MagicServiceQuery&& a) noexcept = default;
-  virtual ~MagicServiceQuery() = default;
-
-  /**
-   * @brief Add a parameter to the query from the given triple.
-   * The predicate of the triple determines the parameter name and the object
-   * of the triple determines the parameter value. The subject is ignored.
-   * Throws an exception if an unsupported algorithm is given or if the
-   * predicate contains an unknown parameter name.
-   *
-   * @param triple A SparqlTriple that contains the parameter info
-   */
-  virtual void addParameter(const SparqlTriple& triple) = 0;
-
-  /**
-   * @brief Add the parameters from a BasicGraphPattern to the query
-   *
-   * @param pattern
-   */
-  void addBasicPattern(const BasicGraphPattern& pattern);
-
-  /**
-   * @brief Add a GraphPatternOperation to the query.
-   *
-   * @param childGraphPattern
-   */
-  void addGraph(const GraphPatternOperation& childGraphPattern);
-
-  // Utility functions
-  Variable getVariable(std::string_view parameter,
-                       const TripleComponent& object) const;
-
-  void setVariable(std::string_view parameter, const TripleComponent& object,
-                   std::optional<Variable>& existingValue);
-};
-
-class PathSearchException : public std::exception {
-  std::string message_;
-
- public:
-  explicit PathSearchException(const std::string& message)
-      : message_(message) {}
-  const char* what() const noexcept override { return message_.data(); }
-};
-
-// The PathQuery object holds intermediate information for the PathSearch.
-// The PathSearchConfiguration requires concrete Ids. The vocabulary from the
-// QueryPlanner is needed to translate the TripleComponents to ValueIds.
-// Also, the members of the PathQuery have defaults and can be set after
-// the object creation, simplifying the parsing process. If a required
-// value has not been set during parsing, the method 'toPathSearchConfiguration'
-// will throw an exception.
-// All the error handling for the PathSearch happens in the PathQuery object.
-// Thus, if a PathSearchConfiguration can be constructed, it is valid.
-struct PathQuery : MagicServiceQuery {
-  std::vector<TripleComponent> sources_;
-  std::vector<TripleComponent> targets_;
-  std::optional<Variable> start_;
-  std::optional<Variable> end_;
-  std::optional<Variable> pathColumn_;
-  std::optional<Variable> edgeColumn_;
-  std::vector<Variable> edgeProperties_;
-  PathSearchAlgorithm algorithm_;
-
-  bool cartesian_ = true;
-  std::optional<uint64_t> numPathsPerTarget_ = std::nullopt;
-
-  PathQuery() = default;
-  PathQuery(PathQuery&& other) = default;
-  PathQuery(const PathQuery& other) = default;
-  PathQuery& operator=(const PathQuery& other) = default;
-  PathQuery& operator=(PathQuery&& a) noexcept = default;
-  virtual ~PathQuery() = default;
-
-  // See MagicServiceQuery
-  void addParameter(const SparqlTriple& triple) override;
-
-  /**
-   * @brief Convert the vector of triple components into a SearchSide
-   * The SeachSide can either be a variable or a list of Ids.
-   * A PathSearchException is thrown if more than one variable is given.
-   *
-   * @param side A vector of TripleComponents, containing either exactly one
-   *             Variable or zero or more ValueIds
-   * @param vocab A Vocabulary containing the Ids of the TripleComponents.
-   *              The Vocab is only used if the given vector contains IRIs.
-   */
-  std::variant<Variable, std::vector<Id>> toSearchSide(
-      std::vector<TripleComponent> side, const Index::Vocab& vocab) const;
-
-  /**
-   * @brief Convert this PathQuery into a PathSearchConfiguration object.
-   * This method checks if all required parameters are set and converts
-   * the PathSearch sources and targets into SearchSides.
-   * A PathSearchException is thrown if required parameters are missing.
-   * The required parameters are start, end, pathColumn and edgeColumn.
-   *
-   * @param vocab A vocab containing the Ids of the IRIs in
-   *              sources_ and targets_
-   * @return A valid PathSearchConfiguration
-   */
-  PathSearchConfiguration toPathSearchConfiguration(
-      const Index::Vocab& vocab) const;
-};
-
-class SpatialSearchException : public std::exception {
-  std::string message_;
-
- public:
-  explicit SpatialSearchException(const std::string& message)
-      : message_(message) {}
-  const char* what() const noexcept override { return message_.data(); }
-};
-
-// Spatial Search feature via SERVICE. This struct holds intermediate or
-// incomplete configuration during the parsing process.
-struct SpatialQuery : MagicServiceQuery {
-  // Required after everything has been added: the left and right join
-  // variables.
-  std::optional<Variable> left_;
-  std::optional<Variable> right_;
-
-  // The spatial join task definition: maximum distance and number of results.
-  // One of both - or both - must be provided.
-  std::optional<size_t> maxDist_;
-  std::optional<size_t> maxResults_;
-
-  // Optional further arguments
-  std::optional<Variable> bindDist_;
-  std::optional<SpatialJoinAlgorithm> algo_;
-
-  SpatialQuery() = default;
-  SpatialQuery(SpatialQuery&& other) = default;
-  SpatialQuery(const SpatialQuery& other) = default;
-  SpatialQuery& operator=(const SpatialQuery& other) = default;
-  SpatialQuery& operator=(SpatialQuery&& a) noexcept = default;
-  virtual ~SpatialQuery() = default;
-
-  // See MagicServiceQuery
-  void addParameter(const SparqlTriple& triple) override;
-
-  // TODO<ullingerc> Errors with bindDist and missing left if it is reused /
-  // there are multiple SERVICE spatial queries
-
-  // Convert this SpatialQuery to a proper SpatialJoinConfiguration. This will
-  // check if all required values have been provided and otherwise throw.
-  SpatialJoinConfiguration toSpatialJoinConfiguration() const;
-};
-
 // A SPARQL Bind construct.
 struct Bind {
   sparqlExpression::SparqlExpressionPimpl _expression;
@@ -343,4 +177,5 @@ struct GraphPatternOperation
     return std::get<BasicGraphPattern>(*this);
   }
 };
+
 }  // namespace parsedQuery
