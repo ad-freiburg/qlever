@@ -408,10 +408,14 @@ void Join::join(const IdTable& a, ColumnIndex jc1, const IdTable& b,
 // _____________________________________________________________________________
 ProtoResult Join::createResult(bool requestedLaziness, auto action) const {
   if (requestedLaziness) {
+    auto startProcessing = std::make_shared<std::atomic_flag>(false);
     auto queue = std::make_shared<
         ad_utility::data_structures::ThreadSafeQueue<Result::IdTableVocabPair>>(
         1);
-    ad_utility::JThread{[queue, action = std::move(action)]() {
+    ad_utility::JThread{[startProcessing, queue, action = std::move(action)]() {
+      // Don't start processing until the main thread has reached the generator
+      // to avoid race conditions.
+      startProcessing->wait(false);
       auto addValue = [&queue](Result::IdTableVocabPair value) {
         if (value.idTable_.empty()) {
           return;
@@ -425,7 +429,9 @@ ProtoResult Join::createResult(bool requestedLaziness, auto action) const {
         queue->pushException(std::current_exception());
       }
     }}.detach();
-    return {[](auto queue) -> Result::Generator {
+    return {[](auto queue, auto startProcessing) -> Result::Generator {
+              startProcessing->test_and_set();
+              startProcessing->notify_one();
               while (true) {
                 auto val = queue->pop();
                 if (!val.has_value()) {
@@ -433,7 +439,7 @@ ProtoResult Join::createResult(bool requestedLaziness, auto action) const {
                 }
                 co_yield val.value();
               }
-            }(std::move(queue)),
+            }(std::move(queue), std::move(startProcessing)),
             resultSortedOn()};
   } else {
     auto [idTable, localVocab] = action(ad_utility::noop);
