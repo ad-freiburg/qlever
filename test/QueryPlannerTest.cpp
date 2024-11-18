@@ -1621,6 +1621,40 @@ TEST(QueryPlanner, SpatialJoinService) {
       "{ ?a <p> ?b } }}",
       h::SpatialJoin(1, -1, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
 
+  // If only maxDistance is used but not nearestNeighbors, the right variable
+  // must not come from inside the SERVICE
+  h::expect(
+      "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "?x <p> ?y ."
+      "SERVICE spatialSearch: {"
+      "_:config spatialSearch:algorithm spatialSearch:s2 ;"
+      "spatialSearch:left ?y ;"
+      "spatialSearch:right ?b ;"
+      "spatialSearch:maxDistance 1 . "
+      " } }",
+      h::SpatialJoin(1, -1, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+
+  // For maxDistance the special predicate remains supported
+  h::expect(
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "?y <max-distance-in-meters:1> ?b ."
+      "?x <p> ?y ."
+      " }",
+      h::SpatialJoin(1, -1, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+
+  // For nearest neighbors, the special predicate is removed and throws an
+  // explanatory error
+  AD_EXPECT_THROW_WITH_MESSAGE(h::expect("SELECT ?y ?b WHERE {"
+                                         "?a <p> ?b ."
+                                         "?x <a> ?y ."
+                                         "?y <nearest-neighbors:1> ?b ."
+                                         "}",
+                                         ::testing::_),
+                               ::testing::ContainsRegex("Please use SERVICE"));
+
   //   AD_EXPECT_THROW_WITH_MESSAGE(
   //       h::expect("SELECT ?x ?y WHERE {"
   //                 "?x <p> ?y."
