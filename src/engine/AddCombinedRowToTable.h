@@ -26,6 +26,7 @@ class AddCombinedRowToIdTable {
   size_t numJoinColumns_;
   std::optional<std::array<IdTableView<0>, 2>> inputLeftAndRight_;
   IdTable resultTable_;
+  LocalVocab mergedVocab_{};
 
   // This struct stores the information, which row indices from the input are
   // combined into a given row index in the output, i.e. "To obtain the
@@ -62,7 +63,7 @@ class AddCombinedRowToIdTable {
   // This callback is called with the result as an argument each time `flush()`
   // is called. It can be used to consume parts of the result early, before the
   // complete operation has finished.
-  using BlockwiseCallback = std::function<void(IdTable&)>;
+  using BlockwiseCallback = std::function<void(IdTable&, LocalVocab&)>;
   [[no_unique_address]] BlockwiseCallback blockwiseCallback_{ad_utility::noop};
 
   using CancellationHandle = ad_utility::SharedCancellationHandle;
@@ -138,10 +139,17 @@ class AddCombinedRowToIdTable {
         return table;
       }
     };
+    auto mergeVocab = [this]<typename T>(const T& table) {
+      if constexpr (requires { table.getLocalVocab(); }) {
+        mergedVocab_.mergeWith(std::span{&table.getLocalVocab(), 1});
+      }
+    };
     if (nextIndex_ != 0) {
       AD_CORRECTNESS_CHECK(inputLeftAndRight_.has_value());
       flush();
     }
+    mergeVocab(inputLeft);
+    mergeVocab(inputRight);
     inputLeftAndRight_ = std::array{toView(inputLeft), toView(inputRight)};
     checkNumColumns();
   }
@@ -187,6 +195,8 @@ class AddCombinedRowToIdTable {
     flush();
     return std::move(resultTable_);
   }
+
+  LocalVocab& localVocab() { return mergedVocab_; }
 
   // Disable copying and moving, it is currently not needed and makes it harder
   // to reason about
@@ -320,7 +330,7 @@ class AddCombinedRowToIdTable {
     indexBuffer_.clear();
     optionalIndexBuffer_.clear();
     nextIndex_ = 0;
-    std::invoke(blockwiseCallback_, result);
+    std::invoke(blockwiseCallback_, result, mergedVocab_);
   }
   const IdTableView<0>& inputLeft() const {
     return inputLeftAndRight_.value()[0];

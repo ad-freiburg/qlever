@@ -192,24 +192,24 @@ IndexImpl::buildOspWithPatterns(
         // them to the queue.
         IdTable outputBufferTable{NumColumnsIndexBuilding + 2,
                                   ad_utility::makeUnlimitedAllocator<Id>()};
-        auto pushToQueue =
-            [&, bufferSize =
-                    BUFFER_SIZE_JOIN_PATTERNS_WITH_OSP.load()](IdTable& table) {
-              if (table.numRows() >= bufferSize) {
-                if (!outputBufferTable.empty()) {
-                  queue.push(std::move(outputBufferTable));
-                  outputBufferTable.clear();
-                }
-                queue.push(std::move(table));
-              } else {
-                outputBufferTable.insertAtEnd(table.begin(), table.end());
-                if (outputBufferTable.size() >= bufferSize) {
-                  queue.push(std::move(outputBufferTable));
-                  outputBufferTable.clear();
-                }
-              }
-              table.clear();
-            };
+        auto pushToQueue = [&, bufferSize =
+                                   BUFFER_SIZE_JOIN_PATTERNS_WITH_OSP.load()](
+                               IdTable& table, LocalVocab&) {
+          if (table.numRows() >= bufferSize) {
+            if (!outputBufferTable.empty()) {
+              queue.push(std::move(outputBufferTable));
+              outputBufferTable.clear();
+            }
+            queue.push(std::move(table));
+          } else {
+            outputBufferTable.insertAtEnd(table.begin(), table.end());
+            if (outputBufferTable.size() >= bufferSize) {
+              queue.push(std::move(outputBufferTable));
+              outputBufferTable.clear();
+            }
+          }
+          table.clear();
+        };
 
         lazyOptionalJoinOnFirstColumn(ospAsBlocksTransformed, lazyPatternScan,
                                       pushToQueue);
