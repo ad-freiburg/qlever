@@ -30,13 +30,13 @@ class SpatialJoinAlgorithms {
 
   std::vector<BoostGeometryNamespace::Box>
   OnlyForTestingWrapperComputeBoundingBox(
-      const BoostGeometryNamespace::Point& startPoint) const {
+      const BoostGeometryNamespace::Point& startPoint) {
     return computeBoundingBox(startPoint);
   }
 
   bool OnlyForTestingWrapperContainedInBoundingBoxes(
       const std::vector<BoostGeometryNamespace::Box>& bbox,
-      const BoostGeometryNamespace::Point& point1) const {
+      const BoostGeometryNamespace::Point& point1) {
     return containedInBoundingBoxes(bbox, point1);
   }
 
@@ -70,7 +70,7 @@ class SpatialJoinAlgorithms {
   // the right, which when seen on the sphere look like a single box, but on the
   // map and in the internal representation it looks like two/more boxes)
   std::vector<BoostGeometryNamespace::Box> computeBoundingBox(
-      const BoostGeometryNamespace::Point& startPoint) const;
+      const BoostGeometryNamespace::Point& startPoint);
 
   // This helper function calculates the bounding boxes based on a box, where
   // definitely no match can occur. This means every element in the anti
@@ -87,7 +87,7 @@ class SpatialJoinAlgorithms {
   // bounding boxes
   bool containedInBoundingBoxes(
       const std::vector<BoostGeometryNamespace::Box>& bbox,
-      BoostGeometryNamespace::Point point1) const;
+      BoostGeometryNamespace::Point point1);
 
   QueryExecutionContext* qec_;
   PreparedSpatialJoinParams params_;
@@ -103,4 +103,10 @@ class SpatialJoinAlgorithms {
   // radius of the earth in meters (as the earth is not exactly a sphere the
   // radius at the equator has been taken)
   static constexpr double radius_ = 6'378'000;
+
+  // convert coordinates to the usual ranges (-180 to 180 and -90 to 90)
+  void convertToNormalCoordinates(BoostGeometryNamespace::Point& point);
+
+  // return whether one of the poles is beeing touched
+  std::array<bool, 2> isAPoleTouched(const double& latitude);
 };
