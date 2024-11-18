@@ -1,6 +1,8 @@
-// Copyright 2015, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+// Copyright 2015 - 2024, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de>
+//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+
 #pragma once
 
 #include <memory>
@@ -47,7 +49,14 @@ class QueryExecutionTree {
 
   bool isEmpty() const { return !rootOperation_; }
 
+  // Get the column index that the given `variable` will have in the result of
+  // this query. Throw if the variable is not part of the `VariableToColumnMap`.
   size_t getVariableColumn(const Variable& variable) const;
+
+  // Similar to `getVariableColumn` above, but return `nullopt` if the variable
+  // is not part of the `VariableToColumnMap`.
+  std::optional<size_t> getVariableColumnOrNullopt(
+      const Variable& variable) const;
 
   size_t getResultWidth() const { return rootOperation_->getResultWidth(); }
 

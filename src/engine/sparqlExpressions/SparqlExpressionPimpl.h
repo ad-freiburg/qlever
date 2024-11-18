@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "engine/VariableToColumnMap.h"
+#include "engine/sparqlExpressions/PrefilterExpressionIndex.h"
 #include "parser/data/Variable.h"
 #include "util/HashMap.h"
 #include "util/HashSet.h"
@@ -17,6 +18,12 @@ namespace sparqlExpression {
 
 class SparqlExpression;
 struct EvaluationContext;
+
+// Improve return type readability.
+// Pair containing `PrefilterExpression` pointer and a `Variable`.
+using PrefilterExprVariablePair =
+    std::pair<std::unique_ptr<prefilterExpressions::PrefilterExpression>,
+              Variable>;
 
 // Hide the `SparqlExpression` implementation in a Pimpl class, so that code
 // using this implementation only has to include the (small and therefore cheap
@@ -110,6 +117,11 @@ class SparqlExpressionPimpl {
   Estimates getEstimatesForFilterExpression(
       uint64_t inputSizeEstimate,
       const std::optional<Variable>& primarySortKeyVariable);
+
+  // For a concise description of this method and its functionality, refer to
+  // the corresponding declaration in SparqlExpression.h.
+  std::vector<PrefilterExprVariablePair> getPrefilterExpressionForMetadata()
+      const;
 
   SparqlExpression* getPimpl() { return _pimpl.get(); }
   [[nodiscard]] const SparqlExpression* getPimpl() const {

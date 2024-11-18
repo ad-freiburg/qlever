@@ -20,6 +20,11 @@
 #define LOGLEVEL INFO
 #endif
 
+// Abseil does also define its own LOG macro, so we need to undefine it here.
+#ifdef LOG
+#undef LOG
+#endif
+
 #define LOG(x)      \
   if (x > LOGLEVEL) \
     ;               \

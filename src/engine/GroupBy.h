@@ -572,6 +572,10 @@ class GroupBy : public Operation {
       sparqlExpression::SparqlExpressionPimpl::VariableAndDistinctness>
   getVariableForCountOfSingleAlias() const;
 
+  // Return true if the `variable` is part of the result of the subtree of this
+  // GROUP BY. This is used by some of the optimizations above.
+  bool isVariableBoundInSubtree(const Variable& variable) const;
+
   // TODO<joka921> implement optimization when *additional* Variables are
   // grouped.
 

@@ -17,6 +17,7 @@
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/SampleExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
+#include "engine/sparqlExpressions/StdevExpression.h"
 #include "parser/GeoPoint.h"
 #include "util/AllocatorTestHelpers.h"
 #include "util/Conversions.h"
@@ -1292,6 +1293,16 @@ TEST(SparqlExpression, literalExpression) {
   }
 }
 
+// Test a `VariableExpression` for a variable that is not present in the input
+// (and therefore always undefined).
+TEST(SparqlExpression, unboundVariableExpression) {
+  TestContext ctx;
+  VariableExpression var{Variable{"?notFoundAnywhere"}};
+  EXPECT_THAT(var.getCacheKey({}), ::testing::HasSubstr("Unbound Variable"));
+  EXPECT_THAT(var.evaluate(&ctx.context),
+              ::testing::VariantWith<Id>(Id::makeUndefined()));
+}
+
 // ______________________________________________________________________________
 TEST(SparqlExpression, encodeForUri) {
   auto checkEncodeForUri = testUnaryExpression<&makeEncodeForUriExpression>;
@@ -1372,6 +1383,9 @@ TEST(SparqlExpression, isAggregateAndIsDistinct) {
 
   EXPECT_THAT(GroupConcatExpression(false, varX(), " "), match(false));
   EXPECT_THAT(GroupConcatExpression(true, varX(), " "), match(true));
+
+  EXPECT_THAT(StdevExpression(false, varX()), match(false));
+  EXPECT_THAT(StdevExpression(true, varX()), match(true));
 
   EXPECT_THAT(SampleExpression(false, varX()), match(false));
   // For `SAMPLE` the distinctness makes no difference, so we always return `not

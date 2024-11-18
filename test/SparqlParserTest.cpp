@@ -953,6 +953,20 @@ TEST(ParserTest, testSolutionModifiers) {
 
   {
     auto pq = SparqlParser::parseQuery(
+        "SELECT ?r (STDEV(?r) as ?stdev) WHERE {"
+        "?a <http://schema.org/name> ?b ."
+        "?a ql:has-relation ?r }"
+        "GROUP BY ?r "
+        "ORDER BY ?stdev");
+    ASSERT_EQ(1u, pq.children().size());
+    ASSERT_EQ(1u, pq._orderBy.size());
+    EXPECT_THAT(pq, m::GroupByVariables({Var{"?r"}}));
+    ASSERT_EQ(Var{"?stdev"}, pq._orderBy[0].variable_);
+    ASSERT_FALSE(pq._orderBy[0].isDescending_);
+  }
+
+  {
+    auto pq = SparqlParser::parseQuery(
         "SELECT ?r (COUNT(DISTINCT ?r) as ?count) WHERE {"
         "?a <http://schema.org/name> ?b ."
         "?a ql:has-relation ?r }"
@@ -1067,13 +1081,6 @@ TEST(ParserTest, Order) {
     auto helperBind = get<p::Bind>(variant);
     ASSERT_EQ(helperBind._expression.getDescriptor(), "(?x - ?y)");
     ASSERT_EQ(pq._orderBy[0].variable_, helperBind._target);
-  }
-  {
-    // Ordering by variables that are not grouped is not allowed.
-    EXPECT_THROW(
-        SparqlParser::parseQuery(
-            "SELECT ?x WHERE { ?x <test/myrel> ?y } GROUP BY ?x ORDER BY ?y"),
-        ParseException);
   }
   // TODO<joka921> This works now. Adapt the unit tests accordingly.
   /*

@@ -1,8 +1,7 @@
-// Copyright 2015, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author:
-//   2015-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
-//   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
+// Copyright 2015 - 2024, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de> [2015 - 2017]
+//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de> [2017 - 2024]
 
 #include "./QueryExecutionTree.h"
 
@@ -30,11 +29,20 @@ std::string QueryExecutionTree::getCacheKey() const {
 
 // _____________________________________________________________________________
 size_t QueryExecutionTree::getVariableColumn(const Variable& variable) const {
+  auto optIdx = getVariableColumnOrNullopt(variable);
+  if (!optIdx.has_value()) {
+    AD_THROW("Variable could not be mapped to result column. Var: " +
+             variable.name());
+  }
+  return optIdx.value();
+}
+// _____________________________________________________________________________
+std::optional<size_t> QueryExecutionTree::getVariableColumnOrNullopt(
+    const Variable& variable) const {
   AD_CONTRACT_CHECK(rootOperation_);
   const auto& varCols = getVariableColumns();
   if (!varCols.contains(variable)) {
-    AD_THROW("Variable could not be mapped to result column. Var: " +
-             variable.name());
+    return std::nullopt;
   }
   return varCols.at(variable).columnIndex_;
 }

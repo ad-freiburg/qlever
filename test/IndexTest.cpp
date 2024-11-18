@@ -1,6 +1,8 @@
-// Copyright 2015, University of Freiburg,
+// Copyright 2015 - 2024, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+// Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de> [2015 - 2017]
+//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//          Hannah Bast <bast@cs.uni-freiburg.de>
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -41,7 +43,7 @@ auto makeTestScanWidthOne = [](const IndexImpl& index,
         IdTable result =
             index.scan({c0, c1, std::nullopt}, permutation, additionalColumns,
                        std::make_shared<ad_utility::CancellationHandle<>>(),
-                       qec.deltaTriples());
+                       qec.locatedTriplesSnapshot());
         ASSERT_EQ(result.numColumns(), 1 + additionalColumns.size());
         ASSERT_EQ(result, makeIdTableFromVector(expected));
       };
@@ -62,7 +64,7 @@ auto makeTestScanWidthTwo = [](const IndexImpl& index,
             index.scan({c0, std::nullopt, std::nullopt}, permutation,
                        Permutation::ColumnIndicesRef{},
                        std::make_shared<ad_utility::CancellationHandle<>>(),
-                       qec.deltaTriples());
+                       qec.locatedTriplesSnapshot());
         ASSERT_EQ(wol, makeIdTableFromVector(expected));
       };
 };
@@ -92,7 +94,7 @@ TEST(IndexTest, createFromTurtleTest) {
         return;
       }
       const auto& [index, qec] = getIndex();
-      const auto& deltaTriples = qec.deltaTriples();
+      const auto& locatedTriplesSnapshot = qec.locatedTriplesSnapshot();
 
       auto getId = makeGetId(getQec(kb)->getIndex());
       Id a = getId("<a>");
@@ -103,33 +105,49 @@ TEST(IndexTest, createFromTurtleTest) {
       Id c2 = getId("<c2>");
 
       // TODO<joka921> We could also test the multiplicities here.
-      ASSERT_TRUE(index.PSO().getMetadata(b, deltaTriples).has_value());
-      ASSERT_TRUE(index.PSO().getMetadata(b2, deltaTriples).has_value());
-      ASSERT_FALSE(index.PSO().getMetadata(a2, deltaTriples).has_value());
-      ASSERT_FALSE(index.PSO().getMetadata(c, deltaTriples).has_value());
+      ASSERT_TRUE(
+          index.PSO().getMetadata(b, locatedTriplesSnapshot).has_value());
+      ASSERT_TRUE(
+          index.PSO().getMetadata(b2, locatedTriplesSnapshot).has_value());
+      ASSERT_FALSE(
+          index.PSO().getMetadata(a2, locatedTriplesSnapshot).has_value());
+      ASSERT_FALSE(
+          index.PSO().getMetadata(c, locatedTriplesSnapshot).has_value());
       ASSERT_FALSE(
           index.PSO()
               .getMetadata(Id::makeFromVocabIndex(VocabIndex::make(735)),
-                           deltaTriples)
+                           locatedTriplesSnapshot)
               .has_value());
-      ASSERT_FALSE(
-          index.PSO().getMetadata(b, deltaTriples).value().isFunctional());
-      ASSERT_TRUE(
-          index.PSO().getMetadata(b2, deltaTriples).value().isFunctional());
+      ASSERT_FALSE(index.PSO()
+                       .getMetadata(b, locatedTriplesSnapshot)
+                       .value()
+                       .isFunctional());
+      ASSERT_TRUE(index.PSO()
+                      .getMetadata(b2, locatedTriplesSnapshot)
+                      .value()
+                      .isFunctional());
 
-      ASSERT_TRUE(index.POS().getMetadata(b, deltaTriples).has_value());
-      ASSERT_TRUE(index.POS().getMetadata(b2, deltaTriples).has_value());
-      ASSERT_FALSE(index.POS().getMetadata(a2, deltaTriples).has_value());
-      ASSERT_FALSE(index.POS().getMetadata(c, deltaTriples).has_value());
+      ASSERT_TRUE(
+          index.POS().getMetadata(b, locatedTriplesSnapshot).has_value());
+      ASSERT_TRUE(
+          index.POS().getMetadata(b2, locatedTriplesSnapshot).has_value());
+      ASSERT_FALSE(
+          index.POS().getMetadata(a2, locatedTriplesSnapshot).has_value());
+      ASSERT_FALSE(
+          index.POS().getMetadata(c, locatedTriplesSnapshot).has_value());
       ASSERT_FALSE(
           index.POS()
               .getMetadata(Id::makeFromVocabIndex(VocabIndex::make(735)),
-                           deltaTriples)
+                           locatedTriplesSnapshot)
               .has_value());
-      ASSERT_TRUE(
-          index.POS().getMetadata(b, deltaTriples).value().isFunctional());
-      ASSERT_TRUE(
-          index.POS().getMetadata(b2, deltaTriples).value().isFunctional());
+      ASSERT_TRUE(index.POS()
+                      .getMetadata(b, locatedTriplesSnapshot)
+                      .value()
+                      .isFunctional());
+      ASSERT_TRUE(index.POS()
+                      .getMetadata(b2, locatedTriplesSnapshot)
+                      .value()
+                      .isFunctional());
 
       // Relation b
       // Pair index
@@ -167,7 +185,7 @@ TEST(IndexTest, createFromTurtleTest) {
 
       const auto& qec = *getQec(kb);
       const IndexImpl& index = qec.getIndex().getImpl();
-      const auto& deltaTriples = qec.deltaTriples();
+      const auto& deltaTriples = qec.locatedTriplesSnapshot();
 
       auto getId = makeGetId(getQec(kb)->getIndex());
       Id zero = getId("<0>");
@@ -224,7 +242,7 @@ TEST(IndexTest, createFromOnDiskIndexTest) {
       "<a2> <b2> <c2> .";
   const auto& qec = *getQec(kb);
   const IndexImpl& index = qec.getIndex().getImpl();
-  const auto& deltaTriples = qec.deltaTriples();
+  const auto& deltaTriples = qec.locatedTriplesSnapshot();
 
   auto getId = makeGetId(getQec(kb)->getIndex());
   Id b = getId("<b>");
@@ -465,8 +483,8 @@ TEST(IndexTest, NumDistinctEntities) {
   EXPECT_FLOAT_EQ(multiplicities[1], 7.0 / 2.0);
   EXPECT_FLOAT_EQ(multiplicities[2], 7.0 / 7.0);
 
-  multiplicities =
-      index.getMultiplicities(iri("<x>"), Permutation::SPO, qec.deltaTriples());
+  multiplicities = index.getMultiplicities(iri("<x>"), Permutation::SPO,
+                                           qec.locatedTriplesSnapshot());
   EXPECT_FLOAT_EQ(multiplicities[0], 2.5);
   EXPECT_FLOAT_EQ(multiplicities[1], 1);
 }
@@ -511,50 +529,82 @@ TEST(IndexTest, trivialGettersAndSetters) {
 
 TEST(IndexTest, updateInputFileSpecificationsAndLog) {
   using enum qlever::Filetype;
-  std::vector<qlever::InputFileSpecification> files{
-      {"singleFile.ttl", Turtle, std::nullopt, false}};
+  std::vector<qlever::InputFileSpecification> singleFileSpec = {
+      {"singleFile.ttl", Turtle, std::nullopt}};
+  std::vector<qlever::InputFileSpecification> twoFilesSpec = {
+      {"firstFile.ttl", Turtle, std::nullopt},
+      {"secondFile.ttl", Turtle, std::nullopt}};
   using namespace ::testing;
+
+  // Parallel parsing not specified anywhere. For a single input stream, we then
+  // default to `true` for reasons of backwards compatibility, but this is
+  // deprecated. For multiple input streams, we default to `false` and this is
+  // normal behavior.
   {
+    singleFileSpec.at(0).parseInParallelSetExplicitly_ = false;
     testing::internal::CaptureStdout();
-    IndexImpl::updateInputFileSpecificationsAndLog(files, false);
+    IndexImpl::updateInputFileSpecificationsAndLog(singleFileSpec,
+                                                   std::nullopt);
+    EXPECT_THAT(testing::internal::GetCapturedStdout(),
+                AllOf(HasSubstr("singleFile.ttl"), HasSubstr("deprecated")));
+    EXPECT_TRUE(singleFileSpec.at(0).parseInParallel_);
+  }
+  {
+    twoFilesSpec.at(0).parseInParallelSetExplicitly_ = false;
+    twoFilesSpec.at(1).parseInParallelSetExplicitly_ = false;
+    testing::internal::CaptureStdout();
+    IndexImpl::updateInputFileSpecificationsAndLog(twoFilesSpec, std::nullopt);
     EXPECT_THAT(
         testing::internal::GetCapturedStdout(),
-        AllOf(HasSubstr("from singleFile.ttl"), Not(HasSubstr("parallel"))));
-    EXPECT_FALSE(files.at(0).parseInParallel_);
+        AllOf(HasSubstr("from 2 input streams"), Not(HasSubstr("deprecated"))));
+    EXPECT_FALSE(twoFilesSpec.at(0).parseInParallel_);
+    EXPECT_FALSE(twoFilesSpec.at(1).parseInParallel_);
   }
 
-  {
+  // Parallel parsing specified on the command line and not in the
+  // `settings.json`. This is normal behavior (no deprecation warning).
+  for (auto parallelParsing : {true, false}) {
+    singleFileSpec.at(0).parseInParallel_ = parallelParsing;
+    singleFileSpec.at(0).parseInParallelSetExplicitly_ = true;
     testing::internal::CaptureStdout();
-    IndexImpl::updateInputFileSpecificationsAndLog(files, true);
-    EXPECT_THAT(testing::internal::GetCapturedStdout(),
-                AllOf(HasSubstr("from singleFile.ttl"),
-                      HasSubstr("settings.json"), HasSubstr("deprecated")));
-    EXPECT_TRUE(files.at(0).parseInParallel_);
+    IndexImpl::updateInputFileSpecificationsAndLog(singleFileSpec,
+                                                   std::nullopt);
+    EXPECT_THAT(
+        testing::internal::GetCapturedStdout(),
+        AllOf(HasSubstr("singleFile.ttl"), Not(HasSubstr("deprecated"))));
+    EXPECT_EQ(singleFileSpec.at(0).parseInParallel_, parallelParsing);
   }
   {
+    twoFilesSpec.at(0).parseInParallel_ = true;
+    twoFilesSpec.at(1).parseInParallel_ = false;
+    twoFilesSpec.at(0).parseInParallelSetExplicitly_ = true;
+    twoFilesSpec.at(1).parseInParallelSetExplicitly_ = true;
     testing::internal::CaptureStdout();
-    IndexImpl::updateInputFileSpecificationsAndLog(files, std::nullopt);
-    EXPECT_THAT(testing::internal::GetCapturedStdout(),
-                AllOf(HasSubstr("from singleFile.ttl"),
-                      HasSubstr("single input"), HasSubstr("deprecated")));
-    EXPECT_TRUE(files.at(0).parseInParallel_);
+    IndexImpl::updateInputFileSpecificationsAndLog(twoFilesSpec, std::nullopt);
+    EXPECT_THAT(
+        testing::internal::GetCapturedStdout(),
+        AllOf(HasSubstr("from 2 input streams"), Not(HasSubstr("deprecated"))));
+    EXPECT_TRUE(twoFilesSpec.at(0).parseInParallel_);
+    EXPECT_FALSE(twoFilesSpec.at(1).parseInParallel_);
   }
 
+  // Parallel parsing not specified on the command line, but explicitly set in
+  // the `settings.json` file. This is deprecated for a single input
+  // stream and forbidden for multiple input streams.
   {
-    files.emplace_back("secondFile.ttl", Turtle, std::nullopt, false);
-    auto filesCopy = files;
+    singleFileSpec.at(0).parseInParallelSetExplicitly_ = false;
     testing::internal::CaptureStdout();
-    IndexImpl::updateInputFileSpecificationsAndLog(files, false);
+    IndexImpl::updateInputFileSpecificationsAndLog(singleFileSpec, true);
     EXPECT_THAT(testing::internal::GetCapturedStdout(),
-                AllOf(HasSubstr("from 2 input streams"),
-                      Not(HasSubstr("is deprecated"))));
-    EXPECT_EQ(files, filesCopy);
+                AllOf(HasSubstr("singleFile.ttl"), HasSubstr("deprecated")));
+    EXPECT_TRUE(singleFileSpec.at(0).parseInParallel_);
   }
-
   {
+    twoFilesSpec.at(0).parseInParallelSetExplicitly_ = false;
+    twoFilesSpec.at(1).parseInParallelSetExplicitly_ = false;
     AD_EXPECT_THROW_WITH_MESSAGE(
-        IndexImpl::updateInputFileSpecificationsAndLog(files, true),
-        HasSubstr("but has to be specified"));
+        IndexImpl::updateInputFileSpecificationsAndLog(twoFilesSpec, true),
+        AllOf(Not(HasSubstr("from 2 input streams")), HasSubstr("forbidden")));
   }
 }
 
