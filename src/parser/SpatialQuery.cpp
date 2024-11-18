@@ -67,13 +67,19 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
 SpatialJoinConfiguration SpatialQuery::toSpatialJoinConfiguration() const {
   if (!left_.has_value()) {
     throw SpatialSearchException("Missing parameter 'left' in spatial search.");
-  } else if (!right_.has_value()) {
-    throw SpatialSearchException(
-        "Missing parameter 'right' in spatial search.");
   } else if (!maxDist_.has_value() && !maxResults_.has_value()) {
     throw SpatialSearchException(
         "Neither 'nearestNeighbors' nor 'maxDistance' were provided. At least "
         "one of both is required.");
+  } else if (!right_.has_value() && maxResults_.has_value()) {
+    // Only if the number of results is limited, it is mandatory that the right
+    // variable must be selected inside the service. If only the distance is
+    // limited, it may be declared inside or outside of the service.
+    throw SpatialSearchException(
+        "Missing parameter 'right' in spatial search. A spatial search with "
+        "a maximum number of results must have its right variable declared "
+        "inside the service using a graph pattern: SERVICE spatialSearch: { "
+        "... { ... ?right } }.");
   }
 
   // Default algorithm
