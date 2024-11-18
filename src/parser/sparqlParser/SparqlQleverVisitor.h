@@ -12,6 +12,7 @@
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/StdevExpression.h"
 #include "parser/data/GraphRef.h"
+#include "parser/sparqlParser/DatasetClause.h"
 #undef EOF
 #include "parser/sparqlParser/generated/SparqlAutomaticVisitor.h"
 #define EOF std::char_traits<char>::eof()
@@ -26,15 +27,6 @@ class Reversed {
   auto begin() { return _iterable.rbegin(); };
 
   auto end() { return _iterable.rend(); }
-};
-
-// A named or default graph
-struct DatasetClause {
-  TripleComponent::Iri dataset_;
-  bool isNamed_;
-
-  // For testing
-  bool operator==(const DatasetClause& other) const = default;
 };
 
 /**
@@ -523,8 +515,7 @@ class SparqlQleverVisitor {
   // Return the `SparqlExpressionPimpl` for a context that returns a
   // `ExpressionPtr` when visited. The descriptor is set automatically on the
   // `SparqlExpressionPimpl`.
-  SparqlExpressionPimpl visitExpressionPimpl(auto* ctx,
-                                             bool allowLanguageFilters = false);
+  SparqlExpressionPimpl visitExpressionPimpl(auto* ctx);
 
   template <typename Expr>
   ExpressionPtr createExpression(auto... children) {
@@ -590,4 +581,11 @@ class SparqlQleverVisitor {
 
   // Constructs a TripleComponent from a GraphTerm.
   static TripleComponent visitGraphTerm(const GraphTerm& graphTerm);
+
+  // If any of the variables used in `expression` did not appear previously in
+  // the query, add a warning or throw an exception (depending on the setting of
+  // the corresponding `RuntimeParameter`).
+  void warnOrThrowIfUnboundVariables(auto* ctx,
+                                     const SparqlExpressionPimpl& expression,
+                                     std::string_view clauseName);
 };

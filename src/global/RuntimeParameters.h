@@ -49,7 +49,8 @@ inline auto& RuntimeParameters() {
         Bool<"group-by-hash-map-enabled">{false},
         Bool<"group-by-disable-index-scan-optimizations">{false},
         SizeT<"service-max-value-rows">{10'000},
-        SizeT<"query-planning-budget">{1500}};
+        SizeT<"query-planning-budget">{1500},
+        Bool<"throw-on-unbound-variables">{false}};
   }();
   return params;
 }

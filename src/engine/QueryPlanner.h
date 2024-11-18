@@ -235,6 +235,11 @@ class QueryPlanner {
 
   std::optional<size_t> textLimit_ = std::nullopt;
 
+  // Used to collect warnings (created by the parser or the query planner) which
+  // are then passed on to the created `QueryExecutionTree` such that they can
+  // be reported as part of the query result if desired.
+  std::vector<std::string> warnings_;
+
   [[nodiscard]] std::vector<QueryPlanner::SubtreePlan> optimize(
       ParsedQuery::GraphPattern* rootPattern);
 

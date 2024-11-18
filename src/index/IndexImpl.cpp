@@ -291,35 +291,42 @@ std::pair<size_t, size_t> IndexImpl::createInternalPSOandPOS(
 void IndexImpl::updateInputFileSpecificationsAndLog(
     std::vector<Index::InputFileSpecification>& spec,
     std::optional<bool> parallelParsingSpecifiedViaJson) {
+  std::string pleaseUseParallelParsingOption =
+      "please use the command-line option --parse-parallel or -p";
+  // Parallel parsing specified in the `settings.json` file. This is deprecated
+  // for a single input stream and forbidden for multiple input streams.
+  if (parallelParsingSpecifiedViaJson.has_value()) {
+    if (spec.size() == 1) {
+      LOG(WARN) << "Parallel parsing set in the `.settings.json` file; this is "
+                   "deprecated, "
+                << pleaseUseParallelParsingOption << std::endl;
+      spec.at(0).parseInParallel_ = parallelParsingSpecifiedViaJson.value();
+    } else {
+      throw std::runtime_error{absl::StrCat(
+          "Parallel parsing set in the `.settings.json` file; this is "
+          "forbidden for multiple input streams, ",
+          pleaseUseParallelParsingOption)};
+    }
+  }
+  // For a single input stream, if parallel parsing is not specified explicitly
+  // on the command line, we set if implicitly for backward compatibility.
+  if (!parallelParsingSpecifiedViaJson.has_value() && spec.size() == 1 &&
+      !spec.at(0).parseInParallelSetExplicitly_) {
+    LOG(WARN) << "Implicitly using the parallel parser for a single input file "
+                 "for reasons of backward compatibility; this is deprecated, "
+              << pleaseUseParallelParsingOption << std::endl;
+    spec.at(0).parseInParallel_ = true;
+  }
+  // For a single input stream, show the name and whether we parse in parallel.
+  // For multiple input streams, only show the number of streams.
   if (spec.size() == 1) {
-    LOG(INFO) << "Processing triples from " << spec.at(0).filename_ << " ..."
+    LOG(INFO) << "Parsing triples from single input stream "
+              << spec.at(0).filename_ << " (parallel = "
+              << (spec.at(0).parseInParallel_ ? "true" : "false") << ") ..."
               << std::endl;
   } else {
     LOG(INFO) << "Processing triples from " << spec.size()
               << " input streams ..." << std::endl;
-  }
-  if (parallelParsingSpecifiedViaJson.value_or(false) == true) {
-    if (spec.size() == 1) {
-      LOG(WARN) << "Parallel parsing set to `true` in the `.settings.json` "
-                   "file; this is deprecated, please use the command-line "
-                   " option --parse-parallel or -p instead"
-                << std::endl;
-      spec.at(0).parseInParallel_ = true;
-    } else {
-      throw std::runtime_error{
-          "For more than one input file, the parallel parsing must not be "
-          "specified via the `.settings.json` file, but has to be specified "
-          " via the command-line option --parse-parallel or -p"};
-    }
-  }
-
-  if (spec.size() == 1 && !parallelParsingSpecifiedViaJson.has_value()) {
-    LOG(WARN) << "Implicitly using the parallel parser for a single input file "
-                 "for reasons of backward compatibility; this is deprecated, "
-                 "please use the command-line option --parse-parallel or -p "
-                 "instead"
-              << std::endl;
-    spec.at(0).parseInParallel_ = true;
   }
 }
 
