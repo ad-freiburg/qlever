@@ -47,17 +47,21 @@ using namespace ::testing;
 // an alias.
 using QetMatcher = Matcher<const QueryExecutionTree&>;
 
+// Return a matcher that checks that the `rootOperation` of a given
+// `QueryExecutionTree` matches the given `matcher`.
+inline QetMatcher RootOperationBase(Matcher<const Operation&> matcher) {
+  auto getRootOperation =
+      [](const QueryExecutionTree& tree) -> const ::Operation& {
+    return *tree.getRootOperation().get();
+  };
+  return ResultOf(getRootOperation, matcher);
+}
 /// Returns a matcher that checks that a given `QueryExecutionTree`'s
 /// `rootOperation` can by dynamically cast to `OperationType`, and that
 /// `matcher` matches the result of this cast.
 template <typename OperationType>
 QetMatcher RootOperation(auto matcher) {
-  auto getRootOperation =
-      [](const QueryExecutionTree& tree) -> const ::Operation& {
-    return *tree.getRootOperation().get();
-  };
-  return ResultOf(getRootOperation,
-                  WhenDynamicCastTo<const OperationType&>(matcher));
+  return RootOperationBase(WhenDynamicCastTo<const OperationType&>(matcher));
 }
 
 // Match the `getChildren` method of an `Operation`.
@@ -381,6 +385,19 @@ constexpr auto OrderBy = [](const ::OrderBy::SortedVariables& sortedVariables,
 
 // Match a `UNION` operation.
 constexpr auto Union = MatchTypeAndOrderedChildren<::Union>;
+
+//
+inline QetMatcher QetWithWarnings(
+    const std::vector<std::string>& warningSubstrings,
+    QetMatcher actualMatcher) {
+  auto warningMatchers = ad_utility::transform(
+      warningSubstrings,
+      [](const std::string& s) { return ::testing::HasSubstr(s); });
+  return AllOf(RootOperationBase(
+                   AD_PROPERTY(::Operation, collectWarnings,
+                               UnorderedElementsAreArray(warningMatchers))),
+               actualMatcher);
+}
 
 /// Parse the given SPARQL `query`, pass it to a `QueryPlanner` with empty
 /// execution context, and return the resulting `QueryExecutionTree`

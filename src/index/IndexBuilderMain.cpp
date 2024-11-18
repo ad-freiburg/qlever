@@ -305,12 +305,14 @@ int main(int argc, char** argv) {
         }
 
         bool parseInParallel = getParameterValue(i, parseParallel, false);
+        bool parseInParallelSetExplicitly = i < parseParallel.size();
         auto& filename = inputFile.at(i);
         if (filename == "-") {
           filename = "/dev/stdin";
         }
         fileSpecs.emplace_back(filename, getFiletype(type, filename),
-                               std::move(defaultGraph), parseInParallel);
+                               std::move(defaultGraph), parseInParallel,
+                               parseInParallelSetExplicitly);
       }
       return fileSpecs;
     };

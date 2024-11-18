@@ -11,7 +11,7 @@
 #include <string>
 #include <string_view>
 
-#include "parser/sparqlParser/SparqlQleverVisitor.h"
+#include "parser/sparqlParser/DatasetClause.h"
 #include "util/HashMap.h"
 
 /**

@@ -1,6 +1,8 @@
-// Copyright 2015, University of Freiburg,
+// Copyright 2015 - 2024, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+// Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de> [2015 - 2017]
+//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//          Hannah Bast <bast@cs.uni-freiburg.de>
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -527,50 +529,82 @@ TEST(IndexTest, trivialGettersAndSetters) {
 
 TEST(IndexTest, updateInputFileSpecificationsAndLog) {
   using enum qlever::Filetype;
-  std::vector<qlever::InputFileSpecification> files{
-      {"singleFile.ttl", Turtle, std::nullopt, false}};
+  std::vector<qlever::InputFileSpecification> singleFileSpec = {
+      {"singleFile.ttl", Turtle, std::nullopt}};
+  std::vector<qlever::InputFileSpecification> twoFilesSpec = {
+      {"firstFile.ttl", Turtle, std::nullopt},
+      {"secondFile.ttl", Turtle, std::nullopt}};
   using namespace ::testing;
+
+  // Parallel parsing not specified anywhere. For a single input stream, we then
+  // default to `true` for reasons of backwards compatibility, but this is
+  // deprecated. For multiple input streams, we default to `false` and this is
+  // normal behavior.
   {
+    singleFileSpec.at(0).parseInParallelSetExplicitly_ = false;
     testing::internal::CaptureStdout();
-    IndexImpl::updateInputFileSpecificationsAndLog(files, false);
+    IndexImpl::updateInputFileSpecificationsAndLog(singleFileSpec,
+                                                   std::nullopt);
+    EXPECT_THAT(testing::internal::GetCapturedStdout(),
+                AllOf(HasSubstr("singleFile.ttl"), HasSubstr("deprecated")));
+    EXPECT_TRUE(singleFileSpec.at(0).parseInParallel_);
+  }
+  {
+    twoFilesSpec.at(0).parseInParallelSetExplicitly_ = false;
+    twoFilesSpec.at(1).parseInParallelSetExplicitly_ = false;
+    testing::internal::CaptureStdout();
+    IndexImpl::updateInputFileSpecificationsAndLog(twoFilesSpec, std::nullopt);
     EXPECT_THAT(
         testing::internal::GetCapturedStdout(),
-        AllOf(HasSubstr("from singleFile.ttl"), Not(HasSubstr("parallel"))));
-    EXPECT_FALSE(files.at(0).parseInParallel_);
+        AllOf(HasSubstr("from 2 input streams"), Not(HasSubstr("deprecated"))));
+    EXPECT_FALSE(twoFilesSpec.at(0).parseInParallel_);
+    EXPECT_FALSE(twoFilesSpec.at(1).parseInParallel_);
   }
 
-  {
+  // Parallel parsing specified on the command line and not in the
+  // `settings.json`. This is normal behavior (no deprecation warning).
+  for (auto parallelParsing : {true, false}) {
+    singleFileSpec.at(0).parseInParallel_ = parallelParsing;
+    singleFileSpec.at(0).parseInParallelSetExplicitly_ = true;
     testing::internal::CaptureStdout();
-    IndexImpl::updateInputFileSpecificationsAndLog(files, true);
-    EXPECT_THAT(testing::internal::GetCapturedStdout(),
-                AllOf(HasSubstr("from singleFile.ttl"),
-                      HasSubstr("settings.json"), HasSubstr("deprecated")));
-    EXPECT_TRUE(files.at(0).parseInParallel_);
+    IndexImpl::updateInputFileSpecificationsAndLog(singleFileSpec,
+                                                   std::nullopt);
+    EXPECT_THAT(
+        testing::internal::GetCapturedStdout(),
+        AllOf(HasSubstr("singleFile.ttl"), Not(HasSubstr("deprecated"))));
+    EXPECT_EQ(singleFileSpec.at(0).parseInParallel_, parallelParsing);
   }
   {
+    twoFilesSpec.at(0).parseInParallel_ = true;
+    twoFilesSpec.at(1).parseInParallel_ = false;
+    twoFilesSpec.at(0).parseInParallelSetExplicitly_ = true;
+    twoFilesSpec.at(1).parseInParallelSetExplicitly_ = true;
     testing::internal::CaptureStdout();
-    IndexImpl::updateInputFileSpecificationsAndLog(files, std::nullopt);
-    EXPECT_THAT(testing::internal::GetCapturedStdout(),
-                AllOf(HasSubstr("from singleFile.ttl"),
-                      HasSubstr("single input"), HasSubstr("deprecated")));
-    EXPECT_TRUE(files.at(0).parseInParallel_);
+    IndexImpl::updateInputFileSpecificationsAndLog(twoFilesSpec, std::nullopt);
+    EXPECT_THAT(
+        testing::internal::GetCapturedStdout(),
+        AllOf(HasSubstr("from 2 input streams"), Not(HasSubstr("deprecated"))));
+    EXPECT_TRUE(twoFilesSpec.at(0).parseInParallel_);
+    EXPECT_FALSE(twoFilesSpec.at(1).parseInParallel_);
   }
 
+  // Parallel parsing not specified on the command line, but explicitly set in
+  // the `settings.json` file. This is deprecated for a single input
+  // stream and forbidden for multiple input streams.
   {
-    files.emplace_back("secondFile.ttl", Turtle, std::nullopt, false);
-    auto filesCopy = files;
+    singleFileSpec.at(0).parseInParallelSetExplicitly_ = false;
     testing::internal::CaptureStdout();
-    IndexImpl::updateInputFileSpecificationsAndLog(files, false);
+    IndexImpl::updateInputFileSpecificationsAndLog(singleFileSpec, true);
     EXPECT_THAT(testing::internal::GetCapturedStdout(),
-                AllOf(HasSubstr("from 2 input streams"),
-                      Not(HasSubstr("is deprecated"))));
-    EXPECT_EQ(files, filesCopy);
+                AllOf(HasSubstr("singleFile.ttl"), HasSubstr("deprecated")));
+    EXPECT_TRUE(singleFileSpec.at(0).parseInParallel_);
   }
-
   {
+    twoFilesSpec.at(0).parseInParallelSetExplicitly_ = false;
+    twoFilesSpec.at(1).parseInParallelSetExplicitly_ = false;
     AD_EXPECT_THROW_WITH_MESSAGE(
-        IndexImpl::updateInputFileSpecificationsAndLog(files, true),
-        HasSubstr("but has to be specified"));
+        IndexImpl::updateInputFileSpecificationsAndLog(twoFilesSpec, true),
+        AllOf(Not(HasSubstr("from 2 input streams")), HasSubstr("forbidden")));
   }
 }
 

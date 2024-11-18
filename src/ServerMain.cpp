@@ -111,6 +111,12 @@ int main(int argc, char** argv) {
       optionFactory.getProgramOption<"service-max-value-rows">(),
       "The maximal number of result rows to be passed to a SERVICE operation "
       "as a VALUES clause to optimize its computation.");
+  add("throw-on-unbound-variables",
+      optionFactory.getProgramOption<"throw-on-unbound-variables">(),
+      "If set to true, the queries that use GROUP BY, BIND, or ORDER BY with "
+      "variables that are unbound in the query throw an exception. These "
+      "queries technically are allowed by the SPARQL standard, but typically "
+      "are the result of typos and unintended by the user");
   po::variables_map optionsMap;
 
   try {

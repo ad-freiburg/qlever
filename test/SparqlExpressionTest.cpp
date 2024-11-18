@@ -1293,6 +1293,16 @@ TEST(SparqlExpression, literalExpression) {
   }
 }
 
+// Test a `VariableExpression` for a variable that is not present in the input
+// (and therefore always undefined).
+TEST(SparqlExpression, unboundVariableExpression) {
+  TestContext ctx;
+  VariableExpression var{Variable{"?notFoundAnywhere"}};
+  EXPECT_THAT(var.getCacheKey({}), ::testing::HasSubstr("Unbound Variable"));
+  EXPECT_THAT(var.evaluate(&ctx.context),
+              ::testing::VariantWith<Id>(Id::makeUndefined()));
+}
+
 // ______________________________________________________________________________
 TEST(SparqlExpression, encodeForUri) {
   auto checkEncodeForUri = testUnaryExpression<&makeEncodeForUriExpression>;
