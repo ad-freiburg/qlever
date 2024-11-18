@@ -4,7 +4,7 @@
 # user `qlever` inside the container to the UID and GID specified in the call of
 # `docker run`, typically the UID and GID of the user outside the container.
 # That way, we don't need to set special permissions for the mounted volume,
-# and everthing looks nice inside of the container, too.
+# and everything looks nice inside of the container, too.
 #
 # NOTE: The container should be started with `-e UID=... -e GID=...` and not
 # `-u ...:...` for the following reason. In order to change the UID and GID of
