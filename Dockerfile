@@ -60,6 +60,7 @@ RUN echo "source /qlever/.bashrc" >> /qlever/.bash_profile
 
 # Copy the binaries and the entrypoint script.
 COPY --from=builder /qlever/build/*Main /qlever/
+COPY --from=builder /qlever/e2e/* /qlever/e2e/
 COPY docker-entrypoint.sh /qlever/
 RUN sudo chmod +x /qlever/docker-entrypoint.sh
 
