@@ -22,21 +22,39 @@
 namespace ad_utility {
 
 // _________________________________________________________
-triple_component::Iri convertLangtagToEntityUri(const string& tag) {
+triple_component::Iri convertLangtagToEntityUri(std::string_view tag) {
   return triple_component::Iri::fromIriref(makeQleverInternalIri("@", tag));
 }
 
 // _________________________________________________________
-std::string convertToLanguageTaggedPredicate(const string& pred,
-                                             const string& langtag) {
+std::string convertToLanguageTaggedPredicate(std::string_view pred,
+                                             std::string_view langtag) {
   return absl::StrCat("@", langtag, "@", pred);
+}
+
+static std::string_view getPrimaryLanguage(std::string_view language) {
+  return language.substr(0, language.find('-'));
 }
 
 // _________________________________________________________
 triple_component::Iri convertToLanguageTaggedPredicate(
-    const triple_component::Iri& pred, const std::string& langtag) {
+    const triple_component::Iri& pred, std::string_view langtag) {
   return triple_component::Iri::fromIriref(absl::StrCat(
       "@", langtag, "@<", asStringViewUnsafe(pred.getContent()), ">"));
+}
+
+// _________________________________________________________
+std::string convertToLangmatchesTaggedPredicate(std::string_view pred,
+                                                std::string_view langtag) {
+  return absl::StrCat("@@", getPrimaryLanguage(langtag), "@@", pred);
+}
+
+// _________________________________________________________
+triple_component::Iri convertToLangmatchesTaggedPredicate(
+    const triple_component::Iri& pred, std::string_view langtag) {
+  return triple_component::Iri::fromIriref(
+      absl::StrCat("@@", getPrimaryLanguage(langtag), "@@<",
+                   asStringViewUnsafe(pred.getContent()), ">"));
 }
 
 }  // namespace ad_utility

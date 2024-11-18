@@ -703,8 +703,12 @@ GraphPattern Visitor::visit(Parser::GroupGraphPatternContext* ctx) {
       if (auto langFilterData =
               filter.expression_.getLanguageFilterExpression();
           langFilterData.has_value()) {
-        const auto& [variable, language] = langFilterData.value();
-        pattern.addLanguageFilter(variable, language);
+        const auto& [variable, language, isLangmatches] =
+            langFilterData.value();
+        if (!pattern.addLanguageFilter(variable, language, isLangmatches)) {
+          // TODO<joka921> Code duplication.
+          pattern._filters.push_back(std::move(filter));
+        }
       } else {
         pattern._filters.push_back(std::move(filter));
       }

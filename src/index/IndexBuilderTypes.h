@@ -243,7 +243,7 @@ auto getIdMapLambdas(
     // the allocation and deallocation of these hash maps (that are newly
     // created for each batch) much cheaper (see `CachingMemoryResource.h` and
     // `IndexImpl.cpp`).
-    itemArray[j]->map_.map_.reserve(5 * maxNumberOfTriples / NumThreads);
+    itemArray[j]->map_.map_.reserve(6 * maxNumberOfTriples / NumThreads);
     // The LANGUAGE_PREDICATE gets the first ID in each map. TODO<joka921>
     // This is not necessary for the actual QLever code, but certain unit tests
     // currently fail without it.
@@ -251,7 +251,7 @@ auto getIdMapLambdas(
         ad_utility::triple_component::Iri::fromIriref(LANGUAGE_PREDICATE)});
   }
   using OptionalIds =
-      std::array<std::optional<std::array<Id, NumColumnsIndexBuilding>>, 3>;
+      std::array<std::optional<std::array<Id, NumColumnsIndexBuilding>>, 4>;
 
   /* given an index idx, returns a lambda that
    * - Takes a triple and a language tag
@@ -278,6 +278,8 @@ auto getIdMapLambdas(
                 .iriOrLiteral_.getIri();
         auto langTaggedPredId = map.getId(TripleComponent{
             ad_utility::convertToLanguageTaggedPredicate(iri, lt.langtag_)});
+        auto langMatchesTaggedPredId = map.getId(TripleComponent{
+            ad_utility::convertToLangmatchesTaggedPredicate(iri, lt.langtag_)});
         auto& spoIds = *res[0];  // ids of original triple
         // TODO replace the std::array by an explicit IdTriple class,
         //  then the emplace calls don't need the explicit type.
@@ -299,6 +301,8 @@ auto getIdMapLambdas(
                                ad_utility::triple_component::Iri::fromIriref(
                                    LANGUAGE_PREDICATE)}),
                            langTagId, tripleGraphId});
+        res[3].emplace(
+            Arr{spoIds[0], langMatchesTaggedPredId, spoIds[2], tripleGraphId});
       }
       return res;
     };
