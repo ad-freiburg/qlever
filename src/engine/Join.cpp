@@ -142,7 +142,7 @@ ProtoResult Join::computeResult(bool requestLaziness) {
     if (rightResIfCached && !leftResIfCached) {
       AD_CORRECTNESS_CHECK(rightResIfCached->isFullyMaterialized());
       return computeResultForIndexScanAndIdTable<true>(
-          requestLaziness, rightResIfCached->idTable(), _rightJoinCol,
+          requestLaziness, std::move(rightResIfCached), _rightJoinCol,
           leftIndexScan, _leftJoinCol);
 
     } else if (!leftResIfCached) {
@@ -172,10 +172,9 @@ ProtoResult Join::computeResult(bool requestLaziness) {
   auto rightIndexScan =
       std::dynamic_pointer_cast<IndexScan>(_right->getRootOperation());
   if (rightIndexScan && !rightResIfCached && leftRes->isFullyMaterialized()) {
-    const auto& leftIdTable = leftRes->idTable();
     return computeResultForIndexScanAndIdTable<false>(
-        requestLaziness, leftIdTable, _leftJoinCol, rightIndexScan,
-        _rightJoinCol, leftRes);
+        requestLaziness, std::move(leftRes), _leftJoinCol, rightIndexScan,
+        _rightJoinCol);
   }
 
   std::shared_ptr<const Result> rightRes =
@@ -758,15 +757,17 @@ ProtoResult Join::computeResultForTwoIndexScans(bool requestLaziness) const {
 // ______________________________________________________________________________________________________
 template <bool idTableIsRightInput>
 ProtoResult Join::computeResultForIndexScanAndIdTable(
-    bool requestLaziness, const IdTable& idTable, ColumnIndex joinColTable,
-    std::shared_ptr<IndexScan> scan, ColumnIndex joinColScan,
-    const std::shared_ptr<const Result>& subResult) const {
-  return createResult(requestLaziness, [this, &idTable, joinColTable,
+    bool requestLaziness, std::shared_ptr<const Result> resultWithIdTable,
+    ColumnIndex joinColTable, std::shared_ptr<IndexScan> scan,
+    ColumnIndex joinColScan) const {
+  return createResult(requestLaziness, [this, joinColTable,
                                         scan = std::move(scan), joinColScan,
-                                        subResult = std::move(subResult)](
+                                        resultWithIdTable =
+                                            std::move(resultWithIdTable)](
                                            std::invocable<
                                                Result::IdTableVocabPair> auto
                                                yieldTable) {
+    const IdTable& idTable = resultWithIdTable->idTable();
     // We first have to permute the columns.
     auto [jcLeft, jcRight, numColsLeft, numColsRight] = [&]() {
       return idTableIsRightInput
@@ -781,12 +782,13 @@ ProtoResult Join::computeResultForIndexScanAndIdTable(
     ad_utility::AddCombinedRowToIdTable rowAdder{
         1, IdTable{getResultWidth(), getExecutionContext()->getAllocator()},
         cancellationHandle_, CHUNK_SIZE,
-        [&yieldTable, &joinColMap](IdTable& idTable, LocalVocab& localVocab) {
-          if (idTable.size() < CHUNK_SIZE) {
+        [&yieldTable, &joinColMap](IdTable& partialIdTable,
+                                   LocalVocab& localVocab) {
+          if (partialIdTable.size() < CHUNK_SIZE) {
             return;
           }
-          idTable.setColumnSubset(joinColMap.permutationResult());
-          yieldTable(Result::IdTableVocabPair{std::move(idTable),
+          partialIdTable.setColumnSubset(joinColMap.permutationResult());
+          yieldTable(Result::IdTableVocabPair{std::move(partialIdTable),
                                               std::move(localVocab)});
         }};
 

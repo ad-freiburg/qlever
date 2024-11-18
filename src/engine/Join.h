@@ -94,13 +94,26 @@ class Join : public Operation {
   void join(const IdTable& a, ColumnIndex jc1, const IdTable& b,
             ColumnIndex jc2, IdTable* result) const;
 
-  // action is a lambda with signature
+  // Helper function to compute the result of a join operation and conditionally
+  // return a lazy or fully materialized result depending on `requestLaziness`.
+  // This is achieved by running the `action` lambda in a separate thread and
+  // returning a lazy result that reads from the queue of the thread. If
+  // `requestLaziness` is false, the result is fully materialized and returned
+  // directly.
+  // `action` is a lambda with signature
   // Result::IdTableVocabPair(void(Result::IdTableVocabPair))
   ProtoResult createResult(bool requestedLaziness, auto action) const;
 
+  // Helper function that cheaply checks if a join could contain undefined. For
+  // fully materialized tables it can just look at the first element. For lazy
+  // tables it has to look at the meta information which could potentially
+  // indicate undefinedness even when all values are defined.
   static bool couldContainUndef(const auto& blocks, const auto& tree,
                                 ColumnIndex joinColumn);
 
+  // Fallback implementation of a join that is used when at least one of the two
+  // inputs is not fully materialized. This represents the general case where we
+  // don't have any optimization left to try.
   ProtoResult lazyJoin(std::shared_ptr<const Result> a, ColumnIndex jc1,
                        std::shared_ptr<const Result> b, ColumnIndex jc2,
                        bool requestLaziness) const;
@@ -140,9 +153,9 @@ class Join : public Operation {
   // determine the correct order of the columns in the result.
   template <bool scanIsLeft>
   ProtoResult computeResultForIndexScanAndIdTable(
-      bool requestLaziness, const IdTable& idTable, ColumnIndex joinColTable,
-      std::shared_ptr<IndexScan> scan, ColumnIndex joinColScan,
-      const std::shared_ptr<const Result>& subResult = nullptr) const;
+      bool requestLaziness, std::shared_ptr<const Result> resultWithIdTable,
+      ColumnIndex joinColTable, std::shared_ptr<IndexScan> scan,
+      ColumnIndex joinColScan) const;
 
   /*
    * @brief Combines 2 rows like in a join and inserts the result in the
