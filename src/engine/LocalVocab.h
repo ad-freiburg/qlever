@@ -96,10 +96,8 @@ class LocalVocab {
   template <std::ranges::range R>
   void mergeWith(const R& vocabs) {
     auto inserter = std::back_inserter(otherWordSets_);
-    for (const auto& vocab : vocabs) {
-      if (vocab.empty()) {
-        continue;
-      }
+    using std::views::filter;
+    for (const auto& vocab : vocabs | filter(std::not_fn(&LocalVocab::empty))) {
       std::ranges::copy(vocab.otherWordSets_, inserter);
       *inserter = vocab.primaryWordSet_;
     }

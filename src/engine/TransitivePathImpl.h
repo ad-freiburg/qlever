@@ -242,6 +242,10 @@ class TransitivePathImpl : public TransitivePathBase {
    * `TableColumnWithVocab` that can be consumed to create a transitive hull.
    * @param target Optional target Id. If supplied, only paths which end
    * in this Id are added to the hull.
+   * @param yieldOnce This has to be set to the same value as the consuming
+   * code. When set to true, this will prevent yielding the same LocalVocab over
+   * and over again to make merging faster (because merging with an empty
+   * LocalVocab is a no-op).
    * @return Map Maps each Id to its connected Ids in the transitive hull
    */
   NodeGenerator transitiveHull(const T& edges, LocalVocab edgesVocab,
