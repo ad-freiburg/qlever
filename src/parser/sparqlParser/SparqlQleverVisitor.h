@@ -12,6 +12,7 @@
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/StdevExpression.h"
 #include "parser/data/GraphRef.h"
+#include "parser/sparqlParser/DatasetClause.h"
 #undef EOF
 #include "parser/sparqlParser/generated/SparqlAutomaticVisitor.h"
 #define EOF std::char_traits<char>::eof()
@@ -26,15 +27,6 @@ class Reversed {
   auto begin() { return _iterable.rbegin(); };
 
   auto end() { return _iterable.rend(); }
-};
-
-// A named or default graph
-struct DatasetClause {
-  TripleComponent::Iri dataset_;
-  bool isNamed_;
-
-  // For testing
-  bool operator==(const DatasetClause& other) const = default;
 };
 
 /**
