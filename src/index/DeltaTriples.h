@@ -196,10 +196,15 @@ class DeltaTriplesManager {
   FRIEND_TEST(DeltaTriplesTest, DeltaTriplesManager);
 
   // Modify the underlying `DeltaTriples` by applying `function` and then update
-  // the current snapshot. Concurrent calls to `modify` will be serialized, and
-  // each call to `getCurrentSnapshot` will either return the snapshot before or
-  // after a modification, but never one of an ongoing modification.
+  // the current snapshot. Concurrent calls to `modify` and `clear` will be
+  // serialized, and each call to `getCurrentSnapshot` will either return the
+  // snapshot before or after a modification, but never one of an ongoing
+  // modification.
   void modify(const std::function<void(DeltaTriples&)>& function);
+
+  // Reset the updates represented by the underlying `DeltaTriples` and then
+  // update the current snapshot.
+  void clear();
 
   // Return a shared pointer to a deep copy of the current snapshot. This can
   // be safely used to execute a query without interfering with future updates.
