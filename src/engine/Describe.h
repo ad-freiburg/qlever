@@ -5,6 +5,7 @@
 #pragma once
 
 #include "engine/Operation.h"
+#include "parser/GraphPatternOperation.h"
 
 class Describe : public Operation {
  private:

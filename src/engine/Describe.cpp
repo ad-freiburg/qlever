@@ -65,8 +65,9 @@ VariableToColumnMap Describe::computeVariableToColumnMap() const {
           {V("?object"), col(2)}};
 }
 
-static IdTable getNewBlankNodes(const auto& allocator, ad_utility::HashSetWithMemoryLimit<Id>& alreadySeen,
-std::span<Id>  input) {
+static IdTable getNewBlankNodes(
+    const auto& allocator, ad_utility::HashSetWithMemoryLimit<Id>& alreadySeen,
+    std::span<Id> input) {
   IdTable result{1, allocator};
   result.resize(input.size());
   decltype(auto) col = result.getColumn(0);
@@ -75,8 +76,8 @@ std::span<Id>  input) {
     if (id.getDatatype() != Datatype::BlankNodeIndex) {
       continue;
     }
-    auto [it, wasContained] = alreadySeen.emplace(id);
-    if (wasContained) {
+    auto [it, isNew] = alreadySeen.emplace(id);
+    if (!isNew) {
       continue;
     }
     col[i] = id;
@@ -108,7 +109,8 @@ void Describe::recursivelyAddBlankNodes(
       getExecutionContext(), valuesOp, std::move(indexScan), 0, 0);
 
   auto result = join->getResult();
-  // TODO<joka921> A lot of those things are inefficient, lets get it working first.
+  // TODO<joka921> A lot of those things are inefficient, lets get it working
+  // first.
   auto table = result->idTable().clone();
   finalResult.reserve(finalResult.size() + table.size());
   auto s = join->getVariableColumn(V{"?subject"});
@@ -117,7 +119,8 @@ void Describe::recursivelyAddBlankNodes(
   table.setColumnSubset(std::vector{s, p, o});
   finalResult.insertAtEnd(table);
 
-  auto newBlankNodes = getNewBlankNodes(allocator(), alreadySeen, table.getColumn(2));
+  auto newBlankNodes =
+      getNewBlankNodes(allocator(), alreadySeen, table.getColumn(2));
   // recurse
   recursivelyAddBlankNodes(finalResult, alreadySeen, std::move(newBlankNodes));
 }
@@ -160,7 +163,8 @@ ProtoResult Describe::computeResult([[maybe_unused]] bool requestLaziness) {
 
   // Recursively follow blank nodes
   ad_utility::HashSetWithMemoryLimit<Id> alreadySeen{allocator()};
-  auto blankNodes = getNewBlankNodes(allocator(), alreadySeen, resultTable.getColumn(2));
+  auto blankNodes =
+      getNewBlankNodes(allocator(), alreadySeen, resultTable.getColumn(2));
   recursivelyAddBlankNodes(resultTable, alreadySeen, std::move(blankNodes));
   return {std::move(resultTable), resultSortedOn(),
           result->getSharedLocalVocab()};
