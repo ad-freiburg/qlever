@@ -1229,17 +1229,15 @@ struct BlockZipperJoinImpl {
   // containing defined values is split and the defined part is stored in
   // `side.currentBlocks_`.
   void findFirstBlockWithoutUndef(auto& side) {
-    auto& it = side.it_;
-    const auto& end = side.end_;
-    while (it != end) {
+    // The reference of `it` is there on purpose.
+    for (auto& it = side.it_; it != side.end_; ++it) {
       auto& el = *it;
       if (std::ranges::empty(el) || !isUndefined_(el.front())) {
         return;
       }
-      bool endUndefined = isUndefined_(el.back());
+      bool endIsUndefined = isUndefined_(el.back());
       side.undefBlocks_.emplace_back(std::move(el));
-      ++it;
-      if (!endUndefined) {
+      if (!endIsUndefined) {
         auto& lastUndefinedBlock = side.undefBlocks_.back();
         side.currentBlocks_.push_back(lastUndefinedBlock);
         auto subrange = std::ranges::equal_range(
@@ -1251,6 +1249,8 @@ struct BlockZipperJoinImpl {
         firstDefinedBlock.setSubrange(
             firstDefinedBlock.fullBlock().begin() + undefCount,
             firstDefinedBlock.fullBlock().end());
+        // Make sure this block is not accessed with moved-out value.
+        ++it;
         return;
       }
     }
@@ -1270,7 +1270,8 @@ struct BlockZipperJoinImpl {
   void runJoin() {
     fetchAndProcessUndefinedBlocks();
     if (potentiallyHasUndef && !hasUndef(leftSide_) && !hasUndef(rightSide_)) {
-      // Run the join without UNDEF values if there are none.
+      // Run the join without UNDEF values if there are none. No need to move
+      // since LeftSide and RightSide are references.
       BlockZipperJoinImpl<LeftSide, RightSide, LessThan, CompatibleRowAction,
                           AlwaysFalse>{leftSide_, rightSide_, lessThan_,
                                        compatibleRowAction_, AlwaysFalse{}}

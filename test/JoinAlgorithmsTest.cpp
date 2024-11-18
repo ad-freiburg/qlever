@@ -262,8 +262,8 @@ void testDynamicJoinWithUndef(const std::vector<std::vector<FakeId>>& a,
   auto compare = [](FakeId l, FakeId r) {
     return static_cast<Id>(l) < static_cast<Id>(r);
   };
-  AD_CONTRACT_CHECK(is_sorted(a | views::join, compare));
-  AD_CONTRACT_CHECK(is_sorted(b | views::join, compare));
+  AD_CONTRACT_CHECK(is_sorted(a | views::join, {}, ad_utility::staticCast<Id>));
+  AD_CONTRACT_CHECK(is_sorted(b | views::join, {}, ad_utility::staticCast<Id>));
   auto validationProjection = [](const std::array<FakeId, 2>& fakeIds) -> Id {
     const auto& [x, y] = fakeIds;
     return x == Id::makeUndefined() ? y : x;
