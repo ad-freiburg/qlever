@@ -27,8 +27,8 @@ struct MagicServiceQuery {
   GraphPattern childGraphPattern_;
 
   MagicServiceQuery() = default;
-  MagicServiceQuery(MagicServiceQuery&& other) = default;
-  MagicServiceQuery(const MagicServiceQuery& other) = default;
+  MagicServiceQuery(MagicServiceQuery&& other) noexcept = default;
+  MagicServiceQuery(const MagicServiceQuery& other) noexcept = default;
   MagicServiceQuery& operator=(const MagicServiceQuery& other) = default;
   MagicServiceQuery& operator=(MagicServiceQuery&& a) noexcept = default;
   virtual ~MagicServiceQuery() = default;

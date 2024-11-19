@@ -36,15 +36,15 @@ struct SpatialQuery : MagicServiceQuery {
   std::optional<SpatialJoinAlgorithm> algo_;
 
   SpatialQuery() = default;
-  SpatialQuery(SpatialQuery&& other) = default;
-  SpatialQuery(const SpatialQuery& other) = default;
+  SpatialQuery(SpatialQuery&& other) noexcept = default;
+  SpatialQuery(const SpatialQuery& other) noexcept = default;
   SpatialQuery& operator=(const SpatialQuery& other) = default;
   SpatialQuery& operator=(SpatialQuery&& a) noexcept = default;
-  virtual ~SpatialQuery() = default;
+  ~SpatialQuery() noexcept override = default;
 
   // Alternative constructor for backward compatibility (allows initializing a
   // SpatialJoin using a magic predicate)
-  SpatialQuery(const SparqlTriple& triple);
+  explicit SpatialQuery(const SparqlTriple& triple);
 
   // See MagicServiceQuery
   void addParameter(const SparqlTriple& triple) override;

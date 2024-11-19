@@ -43,11 +43,11 @@ struct PathQuery : MagicServiceQuery {
   std::optional<uint64_t> numPathsPerTarget_ = std::nullopt;
 
   PathQuery() = default;
-  PathQuery(PathQuery&& other) = default;
-  PathQuery(const PathQuery& other) = default;
+  PathQuery(PathQuery&& other) noexcept = default;
+  PathQuery(const PathQuery& other) noexcept = default;
   PathQuery& operator=(const PathQuery& other) = default;
   PathQuery& operator=(PathQuery&& a) noexcept = default;
-  virtual ~PathQuery() = default;
+  ~PathQuery() noexcept override = default;
 
   // See MagicServiceQuery
   void addParameter(const SparqlTriple& triple) override;
