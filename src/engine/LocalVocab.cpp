@@ -32,7 +32,7 @@ LocalVocab LocalVocab::merge(std::span<const LocalVocab*> vocabs) {
 template <typename WordT>
 LocalVocabIndex LocalVocab::getIndexAndAddIfNotContainedImpl(WordT&& word) {
   auto [wordIterator, isNewWord] = primaryWordSet().insert(AD_FWD(word));
-  size_ += isNewWord;
+  size_ += static_cast<size_t>(isNewWord);
   // TODO<Libc++18> Use std::to_address (more idiomatic, but currently breaks
   // the MacOS build.
   return &(*wordIterator);
