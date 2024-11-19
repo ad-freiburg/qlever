@@ -584,6 +584,11 @@ TEST(JoinTest, joinLazyAndNonLazyOperationWithAndWithoutUndefValues) {
     auto l = generateLocationTrace(loc);
     auto qec = ad_utility::testing::getQec();
     RuntimeParameters().set<"lazy-index-scan-max-size-materialization">(0);
+    absl::Cleanup cleanup{[]() {
+      // Reset back to original value to not influence other tests.
+      RuntimeParameters().set<"lazy-index-scan-max-size-materialization">(
+          1'000'000);
+    }};
     auto leftTree =
         ad_utility::makeExecutionTree<ValuesForTestingNoKnownEmptyResult>(
             qec, std::move(leftTable), Vars{Variable{"?s"}}, false,
