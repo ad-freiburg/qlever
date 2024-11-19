@@ -71,7 +71,8 @@ const LocalVocab::LiteralOrIri& LocalVocab::getWord(
 std::vector<LocalVocab::LiteralOrIri> LocalVocab::getAllWordsForTesting()
     const {
   std::vector<LiteralOrIri> result;
-  std::ranges::copy(primaryWordSet(), std::back_inserter(result));
+  std::ranges::copy(primaryWordSet().begin(), primaryWordSet().end(),
+                    std::back_inserter(result));
   for (const auto& previous : otherWordSets_) {
     std::ranges::copy(*previous, std::back_inserter(result));
   }

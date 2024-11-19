@@ -48,6 +48,11 @@ class Iri {
   // Return the string value of the iri object without any leading or trailing
   // angled brackets.
   NormalizedStringView getContent() const;
+
+  // Calculate the memory usage of the `Iri` string. This might overestimate the
+  // memory usage as this does not currently take into account small string
+  // optimization of `std::string`
+  size_t getDynamicMemoryUsage() const { return iri_.capacity(); }
 };
 
 }  // namespace ad_utility::triple_component

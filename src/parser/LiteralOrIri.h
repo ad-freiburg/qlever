@@ -128,6 +128,12 @@ class alignas(16) LiteralOrIri {
     auto& s = *os;
     s << literalOrIri.toStringRepresentation();
   }
+
+  // Return the memory usage of the `LitaralOrIri` variant
+  size_t getDynamicMemoryUsage() const {
+    return std::visit(
+        [](const auto& val) { return val.getDynamicMemoryUsage(); }, data_);
+  }
 };
 
 }  // namespace ad_utility::triple_component
