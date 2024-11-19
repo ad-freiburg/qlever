@@ -71,10 +71,15 @@ SpatialJoinConfiguration SpatialQuery::toSpatialJoinConfiguration() const {
     throw SpatialSearchException(
         "Neither 'nearestNeighbors' nor 'maxDistance' were provided. At least "
         "one of both is required.");
-  } else if (!right_.has_value() && maxResults_.has_value()) {
-    // Only if the number of results is limited, it is mandatory that the right
-    // variable must be selected inside the service. If only the distance is
-    // limited, it may be declared inside or outside of the service.
+  } else if (!right_.has_value()) {
+    throw SpatialSearchException(
+        "Missing parameter 'right' in spatial search.");
+  }
+
+  // Only if the number of results is limited, it is mandatory that the right
+  // variable must be selected inside the service. If only the distance is
+  // limited, it may be declared inside or outside of the service.
+  if (!maxResults_.has_value() && childGraphPattern_._graphPatterns.empty()) {
     throw SpatialSearchException(
         "Missing parameter 'right' in spatial search. A spatial search with "
         "a maximum number of results must have its right variable declared "
