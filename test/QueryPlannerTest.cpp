@@ -1706,9 +1706,37 @@ TEST(QueryPlanner, SpatialJoinServiceMaxDistOutside) {
 }
 
 TEST(QueryPlanner, SpatialJoinMultipleServiceSharedLeft) {
-  auto scan = h::IndexScanFromStrings;
   // Test two spatial join SERVICEs that share a common ?left variable
   // TODO<ullingerc>
+  /*
+  auto scan = h::IndexScanFromStrings;
+  h::expect(
+      "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+      "SELECT * WHERE {"
+      "?x <p> ?y ."
+      "SERVICE spatialSearch: {"
+      "  _:config spatialSearch:algorithm spatialSearch:s2 ;"
+      "    spatialSearch:left ?y ;"
+      "    spatialSearch:right ?b ;"
+      "    spatialSearch:nearestNeighbors 5 ; "
+      "    spatialSearch:bindDistance ?db ."
+      "  { ?ab <p1> ?b } "
+      "}"
+      "SERVICE spatialSearch: {"
+      "  _:config spatialSearch:algorithm spatialSearch:s2 ;"
+      "    spatialSearch:left ?y ;"
+      "    spatialSearch:right ?c ;"
+      "    spatialSearch:nearestNeighbors 5 ; "
+      "    spatialSearch:maxDistance 500 ; "
+      "    spatialSearch:bindDistance ?dc ."
+      "  { ?ac <p2> ?c }"
+      " }"
+      "}",
+      h::SpatialJoin(500, 5,
+                     h::SpatialJoin(-1, 5, scan("?x", "<p>", "?y"),
+                                    scan("?ac", "<p2>", "?c")),
+                     scan("?ab", "<p1>", "?b")));
+    */
 }
 
 TEST(QueryPlanner, SpatialJoinMissingConfig) {
