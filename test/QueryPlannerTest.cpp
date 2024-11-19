@@ -1657,6 +1657,9 @@ TEST(QueryPlanner, SpatialJoinService) {
 
   // TODO<ullingerc> change / add tests
 
+  // TODO<ullingerc> Migrate tests from (SpatialJoin, maxDistanceParsingTest)
+  // here
+
   AD_EXPECT_THROW_WITH_MESSAGE(
       h::expect("SELECT ?x ?y WHERE {"
                 "?x <p> ?y."

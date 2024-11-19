@@ -107,7 +107,7 @@ class SpatialJoinParamTest : public ::testing::TestWithParam<bool> {
     for (size_t i = 0; i < vec.size(); ++i) {
       EXPECT_STREQ(vec.at(i).c_str(), expectedOutput.at(i).c_str());
     }*/
-
+    // TODO<ullingerc> double dist ... ?
     EXPECT_THAT(vec, ::testing::UnorderedElementsAreArray(expectedOutput));
   }
 
@@ -277,7 +277,8 @@ auto expectedDist = [](const GeoPoint& p1, const GeoPoint& p2) {
   auto p1_ = S2Point{S2LatLng::FromDegrees(p1.getLat(), p1.getLng())};
   auto p2_ = S2Point{S2LatLng::FromDegrees(p2.getLat(), p2.getLng())};
 
-  return std::to_string(static_cast<int>(S2Earth::ToMeters(S1Angle(p1_, p2_))));
+  // TODO<ullingerc>
+  return std::to_string(S2Earth::ToKm(S1Angle(p1_, p2_)));
 };
 
 // Places for testing
