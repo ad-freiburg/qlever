@@ -341,7 +341,6 @@ VariableToColumnMap SpatialJoin::computeVariableToColumnMap() const {
     addColumns(childLeft_, 0);
     addColumns(childRight_, sizeLeft);
 
-    // TODO<ullingerc>
     if (config_->bindDist_.has_value()) {
       AD_CONTRACT_CHECK(variableToColumnMap.find(config_->bindDist_.value()) ==
                         variableToColumnMap.end());

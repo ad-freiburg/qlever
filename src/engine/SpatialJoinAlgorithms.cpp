@@ -75,7 +75,6 @@ void SpatialJoinAlgorithms::addResultTableEntry(IdTable* result,
   rescol = addColumns(result, idTableLeft, resrow, rescol, rowLeft);
   rescol = addColumns(result, idTableRight, resrow, rescol, rowRight);
 
-  // TODO<ullingerc>
   if (config_->bindDist_.has_value()) {
     result->at(resrow, rescol) = distance;
     // rescol isn't used after that in this function, but future updates,
@@ -83,7 +82,7 @@ void SpatialJoinAlgorithms::addResultTableEntry(IdTable* result,
     // rescol at this place otherwise. If they forget to do this, the
     // distance column will be overwritten, the variableToColumnMap will
     // not work and so on
-    rescol += 1;
+    // rescol += 1;
   }
 }
 

@@ -27,10 +27,6 @@ using namespace SpatialJoinTestHelpers;
 // Shortcut for SpatialJoin task parameters
 using SJ = std::variant<NearestNeighborsConfig, MaxDistanceConfig>;
 
-// TODO<ullingerc> Most of these tests require refactoring after switching to
-// magic SERVICE invocation instead of predicate
-// + Comments with examples using predicate
-
 namespace computeResultTest {
 
 class SpatialJoinParamTest : public ::testing::TestWithParam<bool> {

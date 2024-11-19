@@ -49,9 +49,6 @@ struct SpatialQuery : MagicServiceQuery {
   // See MagicServiceQuery
   void addParameter(const SparqlTriple& triple) override;
 
-  // TODO<ullingerc> Errors with bindDist and missing left if it is reused /
-  // there are multiple SERVICE spatial queries
-
   // Convert this SpatialQuery to a proper SpatialJoinConfiguration. This will
   // check if all required values have been provided and otherwise throw.
   SpatialJoinConfiguration toSpatialJoinConfiguration() const;
