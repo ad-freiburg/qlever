@@ -16,9 +16,6 @@
 #include "engine/SpatialJoin.h"
 #include "util/GeoSparqlHelpers.h"
 
-// TODO<ullingerc> dist (for binddist) should not be floored to whole meters in
-// int and should be in km
-
 // ____________________________________________________________________________
 SpatialJoinAlgorithms::SpatialJoinAlgorithms(
     QueryExecutionContext* qec, PreparedSpatialJoinParams params,
@@ -46,10 +43,8 @@ Id SpatialJoinAlgorithms::computeDist(const IdTable* idTableLeft,
   if (!point1.has_value() || !point2.has_value()) {
     return Id::makeUndefined();
   }
-  // TODO<ullingerc> for bindDist it would be better to also have km not m
-  // for consistency between bindDist and geof:distance
-  return Id::makeFromInt(static_cast<long long>(
-      ad_utility::detail::wktDistImpl(point1.value(), point2.value()) * 1000));
+  return Id::makeFromDouble(
+      ad_utility::detail::wktDistImpl(point1.value(), point2.value()));
 }
 
 // ____________________________________________________________________________
@@ -105,12 +100,12 @@ Result SpatialJoinAlgorithms::BaselineAlgorithm() {
     // is used. Each intermediate result is stored as a pair of its `rowRight`
     // and distance. Since the queue will hold at most `maxResults_ + 1` items,
     // it is not a memory concern.
-    auto compare = [](std::pair<size_t, int64_t> a,
-                      std::pair<size_t, int64_t> b) {
+    auto compare = [](std::pair<size_t, double> a,
+                      std::pair<size_t, double> b) {
       return a.second < b.second;
     };
-    std::priority_queue<std::pair<size_t, int64_t>,
-                        std::vector<std::pair<size_t, int64_t>>,
+    std::priority_queue<std::pair<size_t, double>,
+                        std::vector<std::pair<size_t, double>>,
                         decltype(compare)>
         intermediate(compare);
 
@@ -122,7 +117,7 @@ Result SpatialJoinAlgorithms::BaselineAlgorithm() {
       // Ensure `maxDist_` constraint
       if (dist.getDatatype() != Datatype::Int ||
           (maxDist.has_value() &&
-           dist.getInt() > static_cast<int64_t>(maxDist.value()))) {
+           (dist.getDouble() * 1000) > static_cast<double>(maxDist.value()))) {
         continue;
       }
 
@@ -134,7 +129,7 @@ Result SpatialJoinAlgorithms::BaselineAlgorithm() {
       }
 
       // Ensure `maxResults_` constraint using priority queue
-      intermediate.push(std::pair{rowRight, dist.getInt()});
+      intermediate.push(std::pair{rowRight, dist.getDouble()});
       // Too many results? Drop the worst one
       if (intermediate.size() > maxResults.value()) {
         intermediate.pop();
@@ -151,7 +146,7 @@ Result SpatialJoinAlgorithms::BaselineAlgorithm() {
         intermediate.pop();
 
         addResultTableEntry(&result, idTableLeft, idTableRight, rowLeft,
-                            rowRight, Id::makeFromInt(dist));
+                            rowRight, Id::makeFromDouble(dist));
       }
     }
   }
@@ -221,12 +216,12 @@ Result SpatialJoinAlgorithms::S2geometryAlgorithm() {
       // In this loop we only receive points that already satisfy the given
       // criteria
       auto indexRow = neighbor.data();
-      auto dist = static_cast<int64_t>(S2Earth::ToMeters(neighbor.distance()));
+      auto dist = S2Earth::ToKm(neighbor.distance());
 
       auto rowLeft = indexOfRight ? searchRow : indexRow;
       auto rowRight = indexOfRight ? indexRow : searchRow;
       addResultTableEntry(&result, idTableLeft, idTableRight, rowLeft, rowRight,
-                          Id::makeFromInt(dist));
+                          Id::makeFromDouble(dist));
     }
   }
 
