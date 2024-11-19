@@ -144,7 +144,7 @@ size_t SpatialJoin::getResultWidth() const {
     // might contain different positions, which should be kept).
     auto widthChildren =
         childLeft_->getResultWidth() + childRight_->getResultWidth();
-    // return widthChildren;
+
     if (config_->bindDist_.has_value()) {
       return widthChildren + 1;
     } else {
