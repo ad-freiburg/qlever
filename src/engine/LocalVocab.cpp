@@ -10,11 +10,9 @@
 
 // _____________________________________________________________________________
 LocalVocab LocalVocab::clone() const {
-  LocalVocab localVocabClone;
-  localVocabClone.otherWordSets_ = otherWordSets_;
-  localVocabClone.otherWordSets_.push_back(primaryWordSet_);
-  // Return the clone.
-  return localVocabClone;
+  LocalVocab clone;
+  clone.mergeWith(std::span{this, 1});
+  return clone;
 }
 
 // _____________________________________________________________________________

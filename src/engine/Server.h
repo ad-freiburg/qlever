@@ -32,6 +32,8 @@ using std::vector;
 //! The HTTP Server used.
 class Server {
   FRIEND_TEST(ServerTest, parseHttpRequest);
+  FRIEND_TEST(ServerTest, getQueryId);
+  FRIEND_TEST(ServerTest, createMessageSender);
 
  public:
   explicit Server(unsigned short port, size_t numThreads,
@@ -76,7 +78,8 @@ class Server {
   /// the `WebSocketHandler` created for `HttpServer`.
   std::weak_ptr<ad_utility::websocket::QueryHub> queryHub_;
 
-  net::static_thread_pool threadPool_;
+  net::static_thread_pool queryThreadPool_;
+  net::static_thread_pool updateThreadPool_{1};
 
   /// Executor with a single thread that is used to run timers asynchronously.
   net::static_thread_pool timerExecutor_{1};
@@ -147,6 +150,12 @@ class Server {
       ad_utility::Timer& requestTimer,
       const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
       TimeLimit timeLimit);
+  // Do the actual execution of an update.
+  Awaitable<void> processUpdate(
+      const ad_utility::url_parser::ParamValueMap& params, const string& update,
+      ad_utility::Timer& requestTimer,
+      const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
+      TimeLimit timeLimit);
 
   // Determine the media type to be used for the result. The media type is
   // determined (in this order) by the current action (e.g.,
@@ -160,11 +169,23 @@ class Server {
       const ad_utility::url_parser::ParamValueMap& params);
   FRIEND_TEST(ServerTest, determineResultPinning);
   // Sets up the PlannedQuery s.t. it is ready to be executed.
-  Awaitable<PlannedQuery> setupPlannedQuery(
+  PlannedQuery setupPlannedQuery(
       const ad_utility::url_parser::ParamValueMap& params,
       const std::string& operation, QueryExecutionContext& qec,
       SharedCancellationHandle handle, TimeLimit timeLimit,
-      const ad_utility::Timer& requestTimer);
+      const ad_utility::Timer& requestTimer) const;
+  // Creates a `MessageSender` for the given operation.
+  ad_utility::websocket::MessageSender createMessageSender(
+      const std::weak_ptr<ad_utility::websocket::QueryHub>& queryHub,
+      const ad_utility::httpUtils::HttpRequest auto& request,
+      const string& operation);
+  // Execute an update operation. The function must have exclusive access to the
+  // DeltaTriples object.
+  void processUpdateImpl(
+      const ad_utility::url_parser::ParamValueMap& params, const string& update,
+      ad_utility::Timer& requestTimer, TimeLimit timeLimit, auto& messageSender,
+      ad_utility::SharedCancellationHandle cancellationHandle,
+      DeltaTriples& deltaTriples);
 
   static json composeErrorResponseJson(
       const string& query, const std::string& errorMsg,
@@ -176,10 +197,11 @@ class Server {
   json composeCacheStatsJson() const;
 
   /// Invoke `function` on `threadPool_`, and return an awaitable to wait for
-  /// it's completion, wrapping the result.
+  /// its completion, wrapping the result.
   template <std::invocable Function,
             typename T = std::invoke_result_t<Function>>
-  Awaitable<T> computeInNewThread(Function function,
+  Awaitable<T> computeInNewThread(net::static_thread_pool& threadPool,
+                                  Function function,
                                   SharedCancellationHandle handle);
 
   /// This method extracts a client-defined query id from the passed HTTP
@@ -210,13 +232,11 @@ class Server {
 
   /// Run the SPARQL parser and then the query planner on the `query`. All
   /// computation is performed on the `threadPool_`.
-  /// Note: This function *never* returns `nullopt`. It either returns a value
-  /// or throws an exception. We still need to return an `optional` though for
-  /// technical reasons that are described in the definition of this function.
-  net::awaitable<std::optional<PlannedQuery>> parseAndPlan(
-      const std::string& query, const vector<DatasetClause>& queryDatasets,
-      QueryExecutionContext& qec, SharedCancellationHandle handle,
-      TimeLimit timeLimit);
+  PlannedQuery parseAndPlan(const std::string& query,
+                            const vector<DatasetClause>& queryDatasets,
+                            QueryExecutionContext& qec,
+                            SharedCancellationHandle handle,
+                            TimeLimit timeLimit) const;
 
   /// Acquire the `CancellationHandle` for the given `QueryId`, start the
   /// watchdog and call `cancelAfterDeadline` to set the timeout after
