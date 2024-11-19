@@ -21,11 +21,22 @@
 #endif
 
 // Abseil does also define its own LOG macro, so we need to undefine it here.
+// NOTE: In case you run into trouble with this conflict, in particular if you
+// use the `LOG()` macro and you get compilation errors that mention `abseil`,
+// use the (otherwise identical) `AD_LOG` macro below. Same goes for the
+// loglevels, use for example `AD_DEBUG` instead of `DEBUG`.
+// TODO<joka921> Consistently replace the `LOG` macro by `AD_LOG`.
 #ifdef LOG
 #undef LOG
 #endif
 
 #define LOG(x)      \
+  if (x > LOGLEVEL) \
+    ;               \
+  else              \
+    ad_utility::Log::getLog<x>()  // NOLINT
+
+#define AD_LOG(x)   \
   if (x > LOGLEVEL) \
     ;               \
   else              \
@@ -40,6 +51,16 @@ enum class LogLevel {
   TIMING = 5,
   TRACE = 6
 };
+
+// These should be used in new code to avoid clashes with `abseil` (similar to
+// `AD_LOG` vs `LOG`), see above for details.
+static constexpr auto AD_FATAL = LogLevel::FATAL;
+static constexpr auto AD_ERROR = LogLevel::ERROR;
+static constexpr auto AD_WARN = LogLevel::WARN;
+static constexpr auto AD_INFO = LogLevel::INFO;
+static constexpr auto AD_DEBUG = LogLevel::DEBUG;
+static constexpr auto AD_TIMING = LogLevel::TIMING;
+static constexpr auto AD_TRACE = LogLevel::TRACE;
 
 using enum LogLevel;
 
