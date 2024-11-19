@@ -21,7 +21,7 @@
 // `LiteralOrIri`s that are not part of the original vocabulary (which stems
 // from the input data). The implementation is subtle and quite clever:
 //
-// The entrys of the local vocabulary are `LocalVocabEntry`s, each of which
+// The entries of the local vocabulary are `LocalVocabEntry`s, each of which
 // holds a `LiteralOrIri` and remembers its position in the original vocabulary
 // after it has been computed once.
 //
