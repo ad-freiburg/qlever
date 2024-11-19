@@ -493,12 +493,16 @@ struct GroupByOptimizations : ::testing::Test {
       std::make_unique<VariableExpression>(varX);
   SparqlExpressionPimpl countXPimpl = makeCountPimpl(varX, false);
   SparqlExpressionPimpl countYPimpl = makeCountPimpl(varY, false);
+  SparqlExpressionPimpl countNotExistingPimpl =
+      makeCountPimpl(Variable{"?notExistingVar"}, false);
   SparqlExpressionPimpl countDistinctXPimpl = makeCountPimpl(varX, true);
   std::vector<Alias> aliasesXAsV{Alias{varxExpressionPimpl, Variable{"?v"}}};
   std::vector<Alias> aliasesCountDistinctX{
       Alias{countDistinctXPimpl, Variable{"?count"}}};
   std::vector<Alias> aliasesCountX{Alias{countXPimpl, Variable{"?count"}}};
   std::vector<Alias> aliasesCountY{Alias{countYPimpl, Variable{"?count"}}};
+  std::vector<Alias> aliasesCountNotExisting{
+      Alias{countNotExistingPimpl, Variable{"?count"}}};
 
   std::vector<Alias> aliasesCountXTwice{
       Alias{makeCountPimpl(varX, false), Variable{"?count"}},
@@ -1619,18 +1623,29 @@ TEST_F(GroupByOptimizations, computeGroupByForSingleIndexScan) {
   // `chooseInterface == true` means "use the dedicated
   // `computeGroupByForJoinWithFullScan` method", `chooseInterface == false`
   // means use the general `computeOptimizedGroupByIfPossible` function.
-  auto testWithBothInterfaces = [&](bool chooseInterface) {
+  // `countVarIsUndef == true` means that the COUNT alias is on a variable
+  // that doesn't exist, and therefore always has a count of zero.
+  auto testWithBothInterfaces = [&](bool chooseInterface,
+                                    bool countVarIsUndef) {
     auto groupBy =
-        GroupBy{qec, emptyVariables, aliasesCountX, xyzScanSortedByX};
+        GroupBy{qec, emptyVariables,
+                countVarIsUndef ? aliasesCountNotExisting : aliasesCountX,
+                xyzScanSortedByX};
     auto optional = chooseInterface
                         ? groupBy.computeGroupByForSingleIndexScan()
                         : groupBy.computeOptimizedGroupByIfPossible();
 
     // The test index currently consists of 15 triples.
-    EXPECT_THAT(optional, optionalHasTable({{I(15)}}));
+    if (countVarIsUndef) {
+      EXPECT_THAT(optional, optionalHasTable({{I(0)}}));
+    } else {
+      EXPECT_THAT(optional, optionalHasTable({{I(15)}}));
+    }
   };
-  testWithBothInterfaces(true);
-  testWithBothInterfaces(false);
+  testWithBothInterfaces(true, true);
+  testWithBothInterfaces(true, false);
+  testWithBothInterfaces(false, true);
+  testWithBothInterfaces(false, false);
 
   {
     auto groupBy = GroupBy{qec, emptyVariables, aliasesCountX, xyScan};
@@ -1680,6 +1695,11 @@ TEST_F(GroupByOptimizations, computeGroupByObjectWithCount) {
   ASSERT_FALSE(isSuited(variablesOnlyX, aliasesXAsV, xyScan));
   ASSERT_FALSE(isSuited(variablesOnlyX, aliasesCountDistinctX, xyScan));
   ASSERT_FALSE(isSuited(variablesOnlyX, aliasesCountXTwice, xyScan));
+
+  // Unbound count variable.
+  ASSERT_FALSE(isSuited(variablesOnlyX, aliasesCountNotExisting, xyScan, true));
+  ASSERT_FALSE(
+      isSuited(variablesOnlyX, aliasesCountNotExisting, xyScan, false));
 
   // The following two checks use a scan of the `<label>` predicate from the
   // test index; see `turtleInput` above. There are five triples, four with
@@ -1742,34 +1762,50 @@ TEST_F(GroupByOptimizations, computeGroupByForFullIndexScan) {
   // `computeGroupByForJoinWithFullScan` method", `chooseInterface == false`
   // means use the general `computeOptimizedGroupByIfPossible` function.
   auto testWithBothInterfaces = [&](bool chooseInterface, bool includeCount) {
-    IdTable result{qec->getAllocator()};
-    auto groupBy =
-        includeCount
-            ? GroupBy{qec, variablesOnlyX, aliasesCountX, xyzScanSortedByX}
-            : GroupBy{qec, variablesOnlyX, emptyAliases, xyzScanSortedByX};
-    auto optional = chooseInterface
-                        ? groupBy.computeGroupByForFullIndexScan()
-                        : groupBy.computeOptimizedGroupByIfPossible();
-    ASSERT_TRUE(optional.has_value());
-    result = std::move(optional).value();
+    // `countVarIsUnbound == true` means that the variable inside the count is
+    // not part of the query and therefore the count always returns zero.
+    auto testWithBoundAndUnboundCount = [&](bool countVarIsUnbound) {
+      IdTable result{qec->getAllocator()};
+      const auto& aliases = [&]() -> const std::vector<Alias>& {
+        if (!includeCount) {
+          return emptyAliases;
+        }
+        return countVarIsUnbound ? aliasesCountNotExisting : aliasesCountX;
+      }();
+      auto groupBy = GroupBy{qec, variablesOnlyX, aliases, xyzScanSortedByX};
+      auto optional = chooseInterface
+                          ? groupBy.computeGroupByForFullIndexScan()
+                          : groupBy.computeOptimizedGroupByIfPossible();
+      ASSERT_TRUE(optional.has_value());
+      result = std::move(optional).value();
 
-    // Six distinct subjects.
-    ASSERT_EQ(result.size(), 6);
-    if (includeCount) {
-      ASSERT_EQ(result.numColumns(), 2);
-    } else {
-      ASSERT_EQ(result.numColumns(), 1);
-    }
+      // Six distinct subjects.
+      ASSERT_EQ(result.size(), 6);
+      if (includeCount) {
+        ASSERT_EQ(result.numColumns(), 2);
+      } else {
+        ASSERT_EQ(result.numColumns(), 1);
+      }
 
-    auto getId = makeGetId(qec->getIndex());
-    EXPECT_THAT(
-        result.getColumn(0),
-        ::testing::ElementsAre(getId("<a>"), getId("<b>"), getId("<c>"),
-                               getId("<x>"), getId("<y>"), getId("<z>")));
-    if (includeCount) {
-      EXPECT_THAT(result.getColumn(1),
-                  ::testing::ElementsAre(I(2), I(2), I(2), I(7), I(1), I(1)));
-    }
+      auto getId = makeGetId(qec->getIndex());
+      EXPECT_THAT(
+          result.getColumn(0),
+          ::testing::ElementsAre(getId("<a>"), getId("<b>"), getId("<c>"),
+                                 getId("<x>"), getId("<y>"), getId("<z>")));
+      if (includeCount) {
+        if (countVarIsUnbound) {
+          EXPECT_THAT(
+              result.getColumn(1),
+              ::testing::ElementsAre(I(0), I(0), I(0), I(0), I(0), I(0)));
+        } else {
+          EXPECT_THAT(
+              result.getColumn(1),
+              ::testing::ElementsAre(I(2), I(2), I(2), I(7), I(1), I(1)));
+        }
+      }
+    };
+    testWithBoundAndUnboundCount(true);
+    testWithBoundAndUnboundCount(false);
   };
   testWithBothInterfaces(true, true);
   testWithBothInterfaces(true, false);

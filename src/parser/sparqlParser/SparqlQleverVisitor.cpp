@@ -25,6 +25,7 @@
 #include "engine/sparqlExpressions/SampleExpression.h"
 #include "engine/sparqlExpressions/StdevExpression.h"
 #include "engine/sparqlExpressions/UuidExpressions.h"
+#include "global/RuntimeParameters.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/RdfParser.h"
 #include "parser/SparqlParser.h"
@@ -191,8 +192,7 @@ PathObjectPairs joinPredicateAndObject(const VarOrPath& predicate,
 }
 
 // ___________________________________________________________________________
-SparqlExpressionPimpl Visitor::visitExpressionPimpl(
-    auto* ctx, [[maybe_unused]] bool allowLanguageFilters) {
+SparqlExpressionPimpl Visitor::visitExpressionPimpl(auto* ctx) {
   return {visit(ctx), getOriginalInputForContext(ctx)};
 }
 
@@ -352,17 +352,7 @@ GraphPatternOperation Visitor::visit(Parser::BindContext* ctx) {
   }
 
   auto expression = visitExpressionPimpl(ctx->expression());
-  if (disableSomeChecksOnlyForTesting_ ==
-      DisableSomeChecksOnlyForTesting::False) {
-    for (const auto& var : expression.containedVariables()) {
-      if (!ad_utility::contains(visibleVariables_, *var)) {
-        reportError(ctx,
-                    absl::StrCat("The variable ", var->name(),
-                                 " was used in the expression of a BIND clause "
-                                 "but was not previously bound in the query."));
-      }
-    }
-  }
+  warnOrThrowIfUnboundVariables(ctx, expression, "BIND");
   addVisibleVariable(target);
   return GraphPatternOperation{Bind{std::move(expression), std::move(target)}};
 }
@@ -1259,10 +1249,30 @@ GraphPatternOperation Visitor::visit(
 }
 
 // ____________________________________________________________________________________
+void Visitor::warnOrThrowIfUnboundVariables(
+    auto* ctx, const SparqlExpressionPimpl& expression,
+    std::string_view clauseName) {
+  for (const auto& var : expression.containedVariables()) {
+    if (!ad_utility::contains(visibleVariables_, *var)) {
+      auto message = absl::StrCat(
+          "The variable ", var->name(), " was used in the expression of a ",
+          clauseName, " clause but was not previously bound in the query");
+      if (RuntimeParameters().get<"throw-on-unbound-variables">()) {
+        reportError(ctx, message);
+      } else {
+        parsedQuery_.addWarning(std::move(message));
+      }
+    }
+  }
+}
+
+// ____________________________________________________________________________________
 SparqlFilter Visitor::visit(Parser::FilterRContext* ctx) {
-  // The second argument means that the expression `LANG(?var) = "language"` is
-  // allowed.
-  return SparqlFilter{visitExpressionPimpl(ctx->constraint(), true)};
+  // NOTE: We cannot add a warning or throw an exception if the FILTER
+  // expression contains unbound variables, because the variables of the FILTER
+  // might be bound after the filter appears in the query (which is perfectly
+  // legal).
+  return SparqlFilter{visitExpressionPimpl(ctx->constraint())};
 }
 
 // ____________________________________________________________________________________

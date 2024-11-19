@@ -211,7 +211,7 @@ struct EvaluationContext {
   [[nodiscard]] size_t size() const;
 
   // ____________________________________________________________________________
-  [[nodiscard]] ColumnIndex getColumnIndexForVariable(
+  [[nodiscard]] std::optional<ColumnIndex> getColumnIndexForVariable(
       const Variable& var) const;
 
   // _____________________________________________________________________________
