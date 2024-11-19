@@ -10,6 +10,7 @@
 #include "engine/SpatialJoin.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/SparqlParser.h"
+#include "parser/SpatialQuery.h"
 #include "parser/data/Variable.h"
 #include "util/TripleComponentTestHelpers.h"
 
@@ -1634,6 +1635,33 @@ TEST(QueryPlanner, SpatialJoinService) {
       " } }",
       h::SpatialJoin(1, -1, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
 
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("PREFIX spatialSearch: "
+                "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+                "SELECT * WHERE {"
+                "SERVICE spatialSearch: {"
+                "_:config spatialSearch:left ?y ;"
+                "spatialSearch:right ?b ;"
+                "spatialSearch:maxDistance "
+                "\"1\"^^<http://www.w3.org/2001/XMLSchema#integer> ."
+                "}}",
+                ::testing::_),
+      ::testing::ContainsRegex(
+          "SpatialJoin needs two children, but at least one is missing"));
+
+  // TODO<ullingerc> test two SERVICE spatial that share ?left
+
+  // TODO<ullingerc> change / add tests
+
+  // TODO<ullingerc> tests with incomplete config
+
+  // TODO<ullingerc> Migrate tests from (SpatialJoin, maxDistanceParsingTest)
+  // here
+}
+
+TEST(QueryPlanner, SpatialJoinLegacyPredicateSupport) {
+  auto scan = h::IndexScanFromStrings;
+
   // For maxDistance the special predicate remains supported
   h::expect(
       "SELECT * WHERE {"
@@ -1652,13 +1680,6 @@ TEST(QueryPlanner, SpatialJoinService) {
                                          "}",
                                          ::testing::_),
                                ::testing::ContainsRegex("Please use SERVICE"));
-
-  // TODO<ullingerc> test two SERVICE spatial that share ?left
-
-  // TODO<ullingerc> change / add tests
-
-  // TODO<ullingerc> Migrate tests from (SpatialJoin, maxDistanceParsingTest)
-  // here
 
   AD_EXPECT_THROW_WITH_MESSAGE(
       h::expect("SELECT ?x ?y WHERE {"
@@ -1691,20 +1712,6 @@ TEST(QueryPlanner, SpatialJoinService) {
                 "?x <p> ?y."
                 "<a> <max-distance-in-meters:1> ?y }",
                 ::testing::_));
-
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      h::expect("PREFIX spatialSearch: "
-                "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
-                "SELECT * WHERE {"
-                "SERVICE spatialSearch: {"
-                "_:config spatialSearch:left ?y ;"
-                "spatialSearch:right ?b ;"
-                "spatialSearch:maxDistance "
-                "\"1\"^^<http://www.w3.org/2001/XMLSchema#integer> ."
-                "}}",
-                ::testing::_),
-      ::testing::ContainsRegex(
-          "SpatialJoin needs two children, but at least one is missing"));
 
   AD_EXPECT_THROW_WITH_MESSAGE(h::expect("SELECT ?x ?y WHERE {"
                                          "?x <p> ?y."
@@ -1798,6 +1805,90 @@ TEST(QueryPlanner, SpatialJoinService) {
                                          "?y <nearest-neighbors:0:-1> ?b }",
                                          ::testing::_),
                                ::testing::ContainsRegex("unknown triple"));
+}
+
+TEST(QueryPlanner, SpatialJoinLegacyMaxDistanceParsing) {
+  // test if the SpatialJoin operation parses the maximum distance correctly
+  auto testMaxDistance = [](std::string distanceIRI, long long distance,
+                            bool shouldThrow) {
+    auto qec = ad_utility::testing::getQec();
+    TripleComponent subject{Variable{"?subject"}};
+    TripleComponent object{Variable{"?object"}};
+    SparqlTriple triple{subject, distanceIRI, object};
+    if (shouldThrow) {
+      ASSERT_ANY_THROW(
+          parsedQuery::SpatialQuery{triple}.toSpatialJoinConfiguration());
+    } else {
+      auto config = std::make_shared<SpatialJoinConfiguration>(
+          parsedQuery::SpatialQuery{triple}.toSpatialJoinConfiguration());
+      std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
+          ad_utility::makeExecutionTree<SpatialJoin>(qec, config, std::nullopt,
+                                                     std::nullopt);
+      std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
+      SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
+      ASSERT_TRUE(spatialJoin->getMaxDist().has_value());
+      ASSERT_EQ(spatialJoin->getMaxDist(), distance);
+      ASSERT_FALSE(spatialJoin->getMaxResults().has_value());
+    }
+  };
+
+  testMaxDistance("<max-distance-in-meters:1000>", 1000, false);
+
+  testMaxDistance("<max-distance-in-meters:0>", 0, false);
+
+  testMaxDistance("<max-distance-in-meters:20000000>", 20000000, false);
+
+  testMaxDistance("<max-distance-in-meters:123456789>", 123456789, false);
+
+  // the following distance is slightly bigger than earths circumference.
+  // This distance should still be representable
+  testMaxDistance("<max-distance-in-meters:45000000000>", 45000000000, false);
+
+  // distance must be positive
+  testMaxDistance("<max-distance-in-meters:-10>", -10, true);
+
+  // some words start with an upper case
+  testMaxDistance("<max-Distance-In-Meters:1000>", 1000, true);
+
+  // wrong keyword for the spatialJoin operation
+  testMaxDistance("<maxDistanceInMeters:1000>", 1000, true);
+
+  // "M" in meters is upper case
+  testMaxDistance("<max-distance-in-Meters:1000>", 1000, true);
+
+  // two > at the end
+  testMaxDistance("<maxDistanceInMeters:1000>>", 1000, true);
+
+  // distance must be given as integer
+  testMaxDistance("<maxDistanceInMeters:oneThousand>", 1000, true);
+
+  // distance must be given as integer
+  testMaxDistance("<maxDistanceInMeters:1000.54>>", 1000, true);
+
+  // missing > at the end
+  testMaxDistance("<maxDistanceInMeters:1000", 1000, true);
+
+  // prefix before correct iri
+  testMaxDistance("<asdfmax-distance-in-meters:1000>", 1000, true);
+
+  // suffix after correct iri
+  testMaxDistance("<max-distance-in-metersjklö:1000>", 1000, true);
+
+  // suffix after correct iri
+  testMaxDistance("<max-distance-in-meters:qwer1000>", 1000, true);
+
+  // suffix after number.
+  // Note that the usual stoll function would return
+  // 1000 instead of throwing an exception. To fix this mistake, a for loop
+  // has been added to the parsing, which checks, if each character (which
+  // should be converted to a number) is a digit
+  testMaxDistance("<max-distance-in-meters:1000asff>", 1000, true);
+
+  // prefix before <
+  testMaxDistance("yxcv<max-distance-in-metersjklö:1000>", 1000, true);
+
+  // suffix after >
+  testMaxDistance("<max-distance-in-metersjklö:1000>dfgh", 1000, true);
 }
 
 // __________________________________________________________________________
