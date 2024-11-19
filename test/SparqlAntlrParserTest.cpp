@@ -1367,13 +1367,19 @@ TEST(SparqlParser, Query) {
                          {Var{"?s"}, Var{"?p"}, Var{"?o"}}, "{ ?s ?p ?o }",
                          "PREFIX doof: <http://doof.org/>"))));
 
-  // DESCRIBE queries are not yet supported.
+  // DESCRIBE * queries are not yet supported.
   expectQueryFails("DESCRIBE *");
 
-  // Test the various places where warnings are added in a query.
-  expectQuery("SELECT ?x {} GROUP BY ?x ORDER BY ?y",
-              m::WarningsOfParsedQuery({"?x was used by GROUP BY",
-                                        "?y was used in an ORDER BY clause"}));
+  expectQuery(
+      "DESCRIBE <x>",
+      m::ConstructQuery({{Var{"?subject"}, Var{"?predicate"}, Var{"?object"}}}),
+      m::GraphPattern(m::));
+
+      // Test the various places where warnings are added in a query.
+      expectQuery(
+          "SELECT ?x {} GROUP BY ?x ORDER BY ?y",
+          m::WarningsOfParsedQuery({"?x was used by GROUP BY",
+                                    "?y was used in an ORDER BY clause"}));
   expectQuery("SELECT * { BIND (?a as ?b) }",
               m::WarningsOfParsedQuery(
                   {"?a was used in the expression of a BIND clause"}));

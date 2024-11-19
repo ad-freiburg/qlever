@@ -29,9 +29,10 @@ string Describe::getCacheKeyImpl() const {
       resourceKey.append(
           std::get<TripleComponent::Iri>(resource).toStringRepresentation());
     } else {
-      // TODO<joka921> Don't throw on unknown variables
       resourceKey.append(absl::StrCat(
-          "column #", subtree_->getVariableColumn(std::get<Variable>(resource)),
+          "column #",
+          subtree_->getVariableColumnOrNullopt(std::get<Variable>(resource))
+              .value_or(static_cast<size_t>(-1)),
           " "));
     }
   }
@@ -53,7 +54,7 @@ uint64_t Describe::getSizeEstimateBeforeLimit() {
 
 float Describe::getMultiplicity([[maybe_unused]] size_t col) { return 1.0f; }
 
-bool Describe::knownEmptyResult() { return subtree_->knownEmptyResult(); }
+bool Describe::knownEmptyResult() { return false; }
 
 vector<ColumnIndex> Describe::resultSortedOn() const { return {}; }
 

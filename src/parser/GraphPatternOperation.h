@@ -135,7 +135,7 @@ class Subquery {
 struct Describe {
   using VarOrIri = std::variant<TripleComponent::Iri, Variable>;
   std::vector<VarOrIri> resources_;
-
+  Dataset
   Subquery whereClause_;
 };
 

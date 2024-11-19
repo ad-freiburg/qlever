@@ -22,6 +22,7 @@
 #include "engine/MultiColumnJoin.h"
 #include "engine/NeutralElementOperation.h"
 #include "engine/OptionalJoin.h"
+#include "engine/Describe.h"
 #include "engine/OrderBy.h"
 #include "engine/PathSearch.h"
 #include "engine/QueryExecutionTree.h"
@@ -193,7 +194,8 @@ inline auto CountAvailablePredicates =
     [](size_t subjectColumnIdx, const Variable& predicateVar,
        const Variable& countVar,
        const std::same_as<QetMatcher> auto&... childMatchers)
-        requires(sizeof...(childMatchers) <= 1) {
+        requires(sizeof...(childMatchers) <= 1)
+{
   return RootOperation<::CountAvailablePredicates>(AllOf(
       AD_PROPERTY(::CountAvailablePredicates, subjectColumnIndex,
                   Eq(subjectColumnIdx)),
@@ -385,6 +387,15 @@ constexpr auto OrderBy = [](const ::OrderBy::SortedVariables& sortedVariables,
 
 // Match a `UNION` operation.
 constexpr auto Union = MatchTypeAndOrderedChildren<::Union>;
+
+// Match a `DESCRIBE` operationl
+inline QetMatcher Describe(
+    const Matcher<const parsedQuery::Describe&> describeMatcher,
+    const QetMatcher& childMatcher) {
+  return RootOperation<::Describe>(
+      AllOf(children(childMatcher),
+            AD_PROPERTY(::Describe, getDescribe, describeMatcher)));
+}
 
 //
 inline QetMatcher QetWithWarnings(

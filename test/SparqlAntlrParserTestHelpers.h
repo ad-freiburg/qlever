@@ -676,6 +676,13 @@ inline auto Triples = [](const vector<SparqlTriple>& triples)
                testing::UnorderedElementsAreArray(triples)));
 };
 
+inline auto Describe = []()
+    -> Matcher<const p::GraphPatternOperation&> {
+  return detail::GraphPatternOperation<p::Describe>(
+      AD_FIELD(p::BasicGraphPattern, _triples,
+               testing::UnorderedElementsAreArray(triples)));
+};
+
 namespace detail {
 inline auto Optional =
     [](auto&& subMatcher) -> Matcher<const p::GraphPatternOperation&> {

@@ -2148,3 +2148,13 @@ TEST(QueryPlanner, WarningsOnUnboundVariables) {
             h::QetWithWarnings({"?a was used in the expression of a BIND"},
                                testing::_));
 }
+
+// ___________________________________________________________________________
+TEST(QueryPlanner, Describe) {
+  // TODO<joka921> Properly match the describe clause.
+  h::expect("DESCRIBE <x>", h::Describe(::testing::_, h::NeutralElement()));
+  h::expect("DESCRIBE ?x", h::Describe(::testing::_, h::NeutralElement()));
+  h::expect(
+      "Describe ?y { ?y <p> <o>}",
+      h::Describe(::testing::_, h::IndexScanFromStrings("?y", "<p>", "<o>")));
+}

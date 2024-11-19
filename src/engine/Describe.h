@@ -13,19 +13,18 @@ class Describe : public Operation {
   parsedQuery::Describe describe_;
 
  public:
-  // TODO<joka921> The column should rather be a variable etc.
   Describe(QueryExecutionContext* qec,
            std::shared_ptr<QueryExecutionTree> subtree,
            parsedQuery::Describe describe);
 
+  // Getter for testing.
+  const auto& getDescribe() const {return describe_;}
+
   std::vector<QueryExecutionTree*> getChildren() override;
-  // The individual implementation of `getCacheKey` (see above) that has to be
-  // customized by every child class.
+
   string getCacheKeyImpl() const override;
 
  public:
-  // Gets a very short (one line without line ending) descriptor string for
-  // this Operation.  This string is used in the RuntimeInformation
   string getDescriptor() const override;
   size_t getResultWidth() const override;
 
