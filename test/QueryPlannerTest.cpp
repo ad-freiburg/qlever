@@ -1608,6 +1608,8 @@ TEST(QueryPlanner, PathSearchWrongArgumentAlgorithm) {
 // __________________________________________________________________________
 TEST(QueryPlanner, SpatialJoinService) {
   auto scan = h::IndexScanFromStrings;
+
+  // Simple base cases
   h::expect(
       "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
       "SELECT * WHERE {"
@@ -1619,9 +1621,47 @@ TEST(QueryPlanner, SpatialJoinService) {
       "spatialSearch:maxDistance 1 . "
       "{ ?a <p> ?b } }}",
       h::SpatialJoin(1, -1, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+  h::expect(
+      "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+      "SELECT * WHERE {"
+      "?x <p> ?y."
+      "SERVICE spatialSearch: {"
+      "_:config spatialSearch:algorithm spatialSearch:baseline ;"
+      "spatialSearch:left ?y ;"
+      "spatialSearch:right ?b ;"
+      "spatialSearch:maxDistance 1 . "
+      "{ ?a <p> ?b } }}",
+      h::SpatialJoin(1, -1, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+  h::expect(
+      "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+      "SELECT * WHERE {"
+      "?x <p> ?y."
+      "SERVICE spatialSearch: {"
+      "_:config spatialSearch:algorithm spatialSearch:s2 ;"
+      "spatialSearch:left ?y ;"
+      "spatialSearch:right ?b ;"
+      "spatialSearch:maxDistance 100 ;"
+      "spatialSearch:nearestNeighbors 2 ;"
+      "spatialSearch:bindDistance ?dist ."
+      "{ ?a <p> ?b } }}",
+      h::SpatialJoin(100, 2, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+  h::expect(
+      "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+      "SELECT * WHERE {"
+      "?x <p> ?y."
+      "SERVICE spatialSearch: {"
+      "_:config spatialSearch:algorithm spatialSearch:s2 ;"
+      "spatialSearch:right ?b ;"
+      "spatialSearch:nearestNeighbors 5 . "
+      "_:config spatialSearch:left ?y ."
+      "{ ?a <p> ?b } }}",
+      h::SpatialJoin(-1, 5, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+}
 
+TEST(QueryPlanner, SpatialJoinServiceMaxDistOutside) {
   // If only maxDistance is used but not nearestNeighbors, the right variable
   // must not come from inside the SERVICE
+  auto scan = h::IndexScanFromStrings;
   h::expect(
       "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
       "SELECT * WHERE {"
@@ -1634,6 +1674,21 @@ TEST(QueryPlanner, SpatialJoinService) {
       "spatialSearch:maxDistance 1 . "
       " } }",
       h::SpatialJoin(1, -1, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("PREFIX spatialSearch: "
+                "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+                "SELECT * WHERE {"
+                "?a <p> ?b ."
+                "?x <p> ?y ."
+                "SERVICE spatialSearch: {"
+                "_:config spatialSearch:algorithm spatialSearch:s2 ;"
+                "spatialSearch:left ?y ;"
+                "spatialSearch:right ?b ;"
+                "spatialSearch:maxDistance 1 ; "
+                "spatialSearch:nearestNeighbors 5 ."
+                "}}",
+                ::testing::_),
+      ::testing::ContainsRegex("Missing parameter 'right'"));
 
   AD_EXPECT_THROW_WITH_MESSAGE(
       h::expect("PREFIX spatialSearch: "
@@ -1648,15 +1703,206 @@ TEST(QueryPlanner, SpatialJoinService) {
                 ::testing::_),
       ::testing::ContainsRegex(
           "SpatialJoin needs two children, but at least one is missing"));
+}
 
-  // TODO<ullingerc> test two SERVICE spatial that share ?left
+TEST(QueryPlanner, SpatialJoinMultipleServiceSharedLeft) {
+  auto scan = h::IndexScanFromStrings;
+  // Test two spatial join SERVICEs that share a common ?left variable
+  // TODO<ullingerc>
+}
 
-  // TODO<ullingerc> change / add tests
+TEST(QueryPlanner, SpatialJoinMissingConfig) {
+  // Tests with incomplete config
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("PREFIX spatialSearch: "
+                "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+                "SELECT * WHERE {"
+                "?x <p> ?y ."
+                "SERVICE spatialSearch: {"
+                "_:config spatialSearch:right ?b ;"
+                "spatialSearch:maxDistance 5 . "
+                " { ?a <p> ?b . }"
+                "}}",
+                ::testing::_),
+      ::testing::ContainsRegex("Missing parameter 'left'"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("PREFIX spatialSearch: "
+                "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+                "SELECT * WHERE {"
+                "?x <p> ?y ."
+                "SERVICE spatialSearch: {"
+                "_:config spatialSearch:right ?b ;"
+                "spatialSearch:nearestNeighbors 5 . "
+                " { ?a <p> ?b . }"
+                "}}",
+                ::testing::_),
+      ::testing::ContainsRegex("Missing parameter 'left'"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("PREFIX spatialSearch: "
+                "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+                "SELECT * WHERE {"
+                "?x <p> ?y ."
+                "SERVICE spatialSearch: {"
+                "_:config spatialSearch:left ?y ;"
+                "spatialSearch:maxDistance 5 . "
+                " { ?a <p> ?b . }"
+                "}}",
+                ::testing::_),
+      ::testing::ContainsRegex("Missing parameter 'right'"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("PREFIX spatialSearch: "
+                "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+                "SELECT * WHERE {"
+                "?x <p> ?y ."
+                "SERVICE spatialSearch: {"
+                "_:config spatialSearch:left ?y ;"
+                "spatialSearch:nearestNeighbors 5 . "
+                " { ?a <p> ?b . }"
+                "}}",
+                ::testing::_),
+      ::testing::ContainsRegex("Missing parameter 'right'"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("PREFIX spatialSearch: "
+                "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+                "SELECT * WHERE {"
+                "?x <p> ?y ."
+                "SERVICE spatialSearch: {"
+                "_:config spatialSearch:left ?y ;"
+                " spatialSearch:right ?b ."
+                " { ?a <p> ?b . }"
+                "}}",
+                ::testing::_),
+      ::testing::ContainsRegex(
+          "Neither 'nearestNeighbors' nor 'maxDistance' were provided"));
+}
 
-  // TODO<ullingerc> tests with incomplete config
-
-  // TODO<ullingerc> Migrate tests from (SpatialJoin, maxDistanceParsingTest)
-  // here
+TEST(QueryPlanner, SpatialJoinIncorrectConfigValues) {
+  // Tests with mistakes in the config
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("PREFIX spatialSearch: "
+                "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+                "SELECT * WHERE {"
+                "?x <p> ?y ."
+                "SERVICE spatialSearch: {"
+                "_:config spatialSearch:right ?b ;"
+                "spatialSearch:left ?y ;"
+                "spatialSearch:maxDistance \"5\" . "
+                " { ?a <p> ?b . }"
+                "}}",
+                ::testing::_),
+      ::testing::ContainsRegex("'maxDistance' expects an integer"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("PREFIX spatialSearch: "
+                "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+                "SELECT * WHERE {"
+                "?x <p> ?y ."
+                "SERVICE spatialSearch: {"
+                "_:config spatialSearch:right ?b ;"
+                "spatialSearch:left ?y ;"
+                "spatialSearch:maxDistance 5 ;"
+                "spatialSearch:nearestNeighbors \"1\" ."
+                " { ?a <p> ?b . }"
+                "}}",
+                ::testing::_),
+      ::testing::ContainsRegex("'nearestNeighbors' expects an integer"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("PREFIX spatialSearch: "
+                "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+                "SELECT * WHERE {"
+                "?x <p> ?y ."
+                "SERVICE spatialSearch: {"
+                "_:config spatialSearch:right ?b ;"
+                "spatialSearch:left ?y ;"
+                "spatialSearch:maxDistance 5 ;"
+                "spatialSearch:algorithm \"1\" ."
+                " { ?a <p> ?b . }"
+                "}}",
+                ::testing::_),
+      ::testing::ContainsRegex("parameter 'algorithm' needs an IRI"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("PREFIX spatialSearch: "
+                "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+                "SELECT * WHERE {"
+                "?x <p> ?y ."
+                "SERVICE spatialSearch: {"
+                "_:config spatialSearch:right ?b ;"
+                "spatialSearch:left ?y ;"
+                "spatialSearch:maxDistance 5 ;"
+                "spatialSearch:algorithm <http://example.com/some-nonsense> ."
+                " { ?a <p> ?b . }"
+                "}}",
+                ::testing::_),
+      ::testing::ContainsRegex("'algorithm' does not refer to a supported "
+                               "spatial search algorithm"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("PREFIX spatialSearch: "
+                "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+                "SELECT * WHERE {"
+                "?x <p> ?y ."
+                "SERVICE spatialSearch: {"
+                "_:config spatialSearch:right ?b ;"
+                "spatialSearch:left ?y ;"
+                "spatialSearch:maxDistance 5 ;"
+                "<http://example.com/some-nonsense> 123 ."
+                " { ?a <p> ?b . }"
+                "}}",
+                ::testing::_),
+      ::testing::ContainsRegex("Unsupported argument"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("PREFIX spatialSearch: "
+                "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+                "SELECT * WHERE {"
+                "?x <p> ?y ."
+                "SERVICE spatialSearch: {"
+                "_:config spatialSearch:right ?b ;"
+                "spatialSearch:left ?y ;"
+                "spatialSearch:maxDistance 5 ;"
+                "spatialSearch:bindDistance 123 ."
+                " { ?a <p> ?b . }"
+                "}}",
+                ::testing::_),
+      ::testing::ContainsRegex("'bindDistance' has to be a variable"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("PREFIX spatialSearch: "
+                "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+                "SELECT * WHERE {"
+                "?x <p> ?y ."
+                "SERVICE spatialSearch: {"
+                "_:config spatialSearch:right ?b ;"
+                "spatialSearch:left ?y ;"
+                "spatialSearch:maxDistance 5 ;"
+                "spatialSearch:bindDistance ?dist_a ;"
+                "spatialSearch:bindDistance ?dist_b ."
+                " { ?a <p> ?b . }"
+                "}}",
+                ::testing::_),
+      ::testing::ContainsRegex("'bindDistance' has already been set"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("PREFIX spatialSearch: "
+                "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+                "SELECT * WHERE {"
+                "?x <p> ?y ."
+                "SERVICE spatialSearch: {"
+                "_:config spatialSearch:right 123 ;"
+                "spatialSearch:left ?y ;"
+                "spatialSearch:maxDistance 5 ."
+                " { ?a <p> ?b . }"
+                "}}",
+                ::testing::_),
+      ::testing::ContainsRegex("'right' has to be a variable"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("PREFIX spatialSearch: "
+                "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+                "SELECT * WHERE {"
+                "?x <p> ?y ."
+                "SERVICE spatialSearch: {"
+                "_:config spatialSearch:right ?b ;"
+                "spatialSearch:left \"abc\" ;"
+                "spatialSearch:maxDistance 5 ."
+                " { ?a <p> ?b . }"
+                "}}",
+                ::testing::_),
+      ::testing::ContainsRegex("'left' has to be a variable"));
 }
 
 TEST(QueryPlanner, SpatialJoinLegacyPredicateSupport) {
@@ -1670,6 +1916,14 @@ TEST(QueryPlanner, SpatialJoinLegacyPredicateSupport) {
       "?x <p> ?y ."
       " }",
       h::SpatialJoin(1, -1, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+  h::expect(
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "?y <max-distance-in-meters:5000> ?b ."
+      "?x <p> ?y ."
+      " }",
+      h::SpatialJoin(5000, -1, scan("?x", "<p>", "?y"),
+                     scan("?a", "<p>", "?b")));
 
   // For nearest neighbors, the special predicate is removed and throws an
   // explanatory error
@@ -1720,44 +1974,40 @@ TEST(QueryPlanner, SpatialJoinLegacyPredicateSupport) {
                                          ::testing::_),
                                ::testing::ContainsRegex("unknown triple"));
 
-  h::expect(
-      "SELECT ?x ?y WHERE {"
-      "?x <p> ?y."
-      "?a <p> ?b."
-      "?y <nearest-neighbors:2:500> ?b }",
-      h::SpatialJoin(500, 2, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
-  h::expect(
-      "SELECT ?x ?y WHERE {"
-      "?x <p> ?y."
-      "?a <p> ?b."
-      "?y <nearest-neighbors:20> ?b }",
-      h::SpatialJoin(-1, 20, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
-  h::expect(
-      "SELECT ?x ?y WHERE {"
-      "?x <p> ?y."
-      "?a <p> ?b."
-      "?y <nearest-neighbors:0> ?b }",
-      h::SpatialJoin(-1, 0, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+  // All previously implemented test cases for the nearest neighbors predicate
+  // shall now throw an exception.
+  EXPECT_ANY_THROW(
+      h::expect("SELECT ?x ?y WHERE {"
+                "?x <p> ?y."
+                "?a <p> ?b."
+                "?y <nearest-neighbors:2:500> ?b }",
+                ::testing::_));
+  EXPECT_ANY_THROW(
+      h::expect("SELECT ?x ?y WHERE {"
+                "?x <p> ?y."
+                "?a <p> ?b."
+                "?y <nearest-neighbors:20> ?b }",
+                ::testing::_));
+  EXPECT_ANY_THROW(
+      h::expect("SELECT ?x ?y WHERE {"
+                "?x <p> ?y."
+                "?a <p> ?b."
+                "?y <nearest-neighbors:0> ?b }",
+                ::testing::_));
 
-  AD_EXPECT_THROW_WITH_MESSAGE(
+  EXPECT_ANY_THROW(
       h::expect("SELECT ?x ?y WHERE {"
                 "?x <p> ?y."
                 "?a <p> ?b."
                 "?y <nearest-neighbors:2:500> ?b ."
                 "?y <a> ?b}",
-                ::testing::_),
-      ::testing::ContainsRegex(
-          "Currently, if both sides of a SpatialJoin are variables, then the"
-          "SpatialJoin must be the only connection between these variables"));
+                ::testing::_));
 
-  AD_EXPECT_THROW_WITH_MESSAGE(
+  EXPECT_ANY_THROW(
       h::expect("SELECT ?x ?y WHERE {"
                 "?y <p> ?b."
                 "?y <nearest-neighbors:1> ?b }",
-                ::testing::_),
-      ::testing::ContainsRegex(
-          "Currently, if both sides of a SpatialJoin are variables, then the"
-          "SpatialJoin must be the only connection between these variables"));
+                ::testing::_));
 
   EXPECT_ANY_THROW(
       h::expect("SELECT ?x ?y WHERE {"
@@ -1778,33 +2028,31 @@ TEST(QueryPlanner, SpatialJoinLegacyPredicateSupport) {
                 "?y <nearest-neighbors:> ?b }",
                 ::testing::_));
 
-  AD_EXPECT_THROW_WITH_MESSAGE(
+  EXPECT_ANY_THROW(
       h::expect("SELECT ?x ?y WHERE {"
                 "?y <nearest-neighbors:2:500> ?b }",
-                ::testing::_),
-      ::testing::ContainsRegex(
-          "SpatialJoin needs two children, but at least one is missing"));
+                ::testing::_));
 
-  AD_EXPECT_THROW_WITH_MESSAGE(h::expect("SELECT ?x ?y WHERE {"
-                                         "?x <p> ?y."
-                                         "?a <p> ?b."
-                                         "?y <nearest-neighbors:-50:500> ?b }",
-                                         ::testing::_),
-                               ::testing::ContainsRegex("unknown triple"));
+  EXPECT_ANY_THROW(
+      h::expect("SELECT ?x ?y WHERE {"
+                "?x <p> ?y."
+                "?a <p> ?b."
+                "?y <nearest-neighbors:-50:500> ?b }",
+                ::testing::_));
 
-  AD_EXPECT_THROW_WITH_MESSAGE(h::expect("SELECT ?x ?y WHERE {"
-                                         "?x <p> ?y."
-                                         "?a <p> ?b."
-                                         "?y <nearest-neighbors:1:-200> ?b }",
-                                         ::testing::_),
-                               ::testing::ContainsRegex("unknown triple"));
+  EXPECT_ANY_THROW(
+      h::expect("SELECT ?x ?y WHERE {"
+                "?x <p> ?y."
+                "?a <p> ?b."
+                "?y <nearest-neighbors:1:-200> ?b }",
+                ::testing::_));
 
-  AD_EXPECT_THROW_WITH_MESSAGE(h::expect("SELECT ?x ?y WHERE {"
-                                         "?x <p> ?y."
-                                         "?a <p> ?b."
-                                         "?y <nearest-neighbors:0:-1> ?b }",
-                                         ::testing::_),
-                               ::testing::ContainsRegex("unknown triple"));
+  EXPECT_ANY_THROW(
+      h::expect("SELECT ?x ?y WHERE {"
+                "?x <p> ?y."
+                "?a <p> ?b."
+                "?y <nearest-neighbors:0:-1> ?b }",
+                ::testing::_));
 }
 
 TEST(QueryPlanner, SpatialJoinLegacyMaxDistanceParsing) {
