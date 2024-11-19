@@ -28,6 +28,19 @@ using std::string;
 
 namespace {
 // Convert a `generator<IdTableVocab>` to a `generator<IdTableAndFirstCol>` for
+// more efficient access in the join columns below and apply the given
+// permutation to each table.
+cppcoro::generator<ad_utility::IdTableAndFirstCol<IdTable>> convertGenerator(
+    Result::Generator gen, std::vector<ColumnIndex> permutation) {
+  for (auto& [table, localVocab] : gen) {
+    // Make sure to actually move the table into the wrapper so that the tables
+    // live as long as the wrapper.
+    table.setColumnSubset(permutation);
+    ad_utility::IdTableAndFirstCol t{std::move(table), std::move(localVocab)};
+    co_yield t;
+  }
+}
+// Convert a `generator<IdTableVocab>` to a `generator<IdTableAndFirstCol>` for
 // more efficient access in the join columns below.
 cppcoro::generator<ad_utility::IdTableAndFirstCol<IdTable>> convertGenerator(
     Result::Generator gen) {
@@ -483,8 +496,10 @@ ProtoResult Join::lazyJoin(std::shared_ptr<const Result> a, ColumnIndex jc1,
           if (idTable.size() < CHUNK_SIZE) {
             return;
           }
-          idTable.setColumnSubset(joinColMap.permutationResult());
-          yieldTable(Result::IdTableVocabPair{std::move(idTable),
+          // Don't modify the columns of the reference.
+          IdTable movedTable = std::move(idTable);
+          movedTable.setColumnSubset(joinColMap.permutationResult());
+          yieldTable(Result::IdTableVocabPair{std::move(movedTable),
                                               std::move(localVocab)});
         }};
     auto asSingleTableView = [](const Result& result,
@@ -493,20 +508,19 @@ ProtoResult Join::lazyJoin(std::shared_ptr<const Result> a, ColumnIndex jc1,
           result.idTable().asColumnSubsetView(permutation),
           result.getCopyOfLocalVocab()}};
     };
-    auto toVariant = []<typename T>(T variantObject)
-        -> std::variant<
-            cppcoro::generator<ad_utility::IdTableAndFirstCol<IdTable>>,
-            std::array<ad_utility::IdTableAndFirstCol<IdTableView<0>>, 1>> {
-      return variantObject;
-    };
+    using Blocks = std::variant<
+        cppcoro::generator<ad_utility::IdTableAndFirstCol<IdTable>>,
+        std::array<ad_utility::IdTableAndFirstCol<IdTableView<0>>, 1>>;
     auto leftRange =
         a->isFullyMaterialized()
-            ? toVariant(asSingleTableView(*a, joinColMap.permutationLeft()))
-            : toVariant(convertGenerator(std::move(a->idTables())));
+            ? Blocks{asSingleTableView(*a, joinColMap.permutationLeft())}
+            : Blocks{convertGenerator(std::move(a->idTables()),
+                                      joinColMap.permutationLeft())};
     auto rightRange =
         b->isFullyMaterialized()
-            ? toVariant(asSingleTableView(*b, joinColMap.permutationRight()))
-            : toVariant(convertGenerator(std::move(b->idTables())));
+            ? Blocks{asSingleTableView(*b, joinColMap.permutationRight())}
+            : Blocks{convertGenerator(std::move(b->idTables()),
+                                      joinColMap.permutationRight())};
     std::visit(
         [this, &rowAdder, jc1, jc2](auto& leftBlocks, auto& rightBlocks) {
           bool containsUndef = couldContainUndef(leftBlocks, _left, jc1) ||
@@ -784,8 +798,10 @@ ProtoResult Join::computeResultForIndexScanAndIdTable(
           if (partialIdTable.size() < CHUNK_SIZE) {
             return;
           }
-          partialIdTable.setColumnSubset(joinColMap.permutationResult());
-          yieldTable(Result::IdTableVocabPair{std::move(partialIdTable),
+          // Don't modify the columns of the reference.
+          IdTable movedTable = std::move(partialIdTable);
+          movedTable.setColumnSubset(joinColMap.permutationResult());
+          yieldTable(Result::IdTableVocabPair{std::move(movedTable),
                                               std::move(localVocab)});
         }};
 
