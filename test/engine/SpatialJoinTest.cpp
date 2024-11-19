@@ -688,8 +688,7 @@ void testMultiplicitiesOrSizeEstimate(bool addLeftChildFirst,
             qec,
             std::make_shared<SpatialJoinConfiguration>(
                 MaxDistanceConfig{10000000}, subj, obj,
-                // TODO<ullingerc>
-                Variable{"?dist"}),
+                Variable{"?distanceForTesting"}),
             std::nullopt, std::nullopt);
 
     // add children and test, that multiplicity is a dummy return before all
@@ -699,7 +698,7 @@ void testMultiplicitiesOrSizeEstimate(bool addLeftChildFirst,
     auto firstChild = addLeftChildFirst ? leftChild : rightChild;
     auto secondChild = addLeftChildFirst ? rightChild : leftChild;
     Variable firstVariable = addLeftChildFirst ? subj : obj;
-    Variable secondVariable = addLeftChildFirst ? subj : obj;
+    Variable secondVariable = addLeftChildFirst ? obj : subj;
 
     // each of the input child result tables should look like this:
     // ?geometry           ?point
@@ -726,14 +725,14 @@ void testMultiplicitiesOrSizeEstimate(bool addLeftChildFirst,
       auto spJoin2 = spatialJoin->addChild(secondChild, secondVariable);
       spatialJoin = static_cast<SpatialJoin*>(spJoin2.get());
       auto varColsMap = spatialJoin->getExternallyVisibleVariableColumns();
-      // TODO<ullingerc>
-      Variable distance{"?todo"};
 
       assertMultiplicity(subj1.getVariable(), 9.8, spatialJoin, varColsMap);
       assertMultiplicity(obj1.getVariable(), 7.0, spatialJoin, varColsMap);
       assertMultiplicity(subj2.getVariable(), 9.8, spatialJoin, varColsMap);
       assertMultiplicity(obj2.getVariable(), 7.0, spatialJoin, varColsMap);
-      assertMultiplicity(distance, 1, spatialJoin, varColsMap);
+      ASSERT_TRUE(spatialJoin->onlyForTestingGetBindDist().has_value());
+      assertMultiplicity(Variable{"?distanceForTesting"}, 1, spatialJoin,
+                         varColsMap);
     } else {
       ASSERT_EQ(leftChild->getSizeEstimate(), 7);
       ASSERT_EQ(rightChild->getSizeEstimate(), 7);
