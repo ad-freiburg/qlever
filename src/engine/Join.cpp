@@ -487,30 +487,26 @@ ProtoResult Join::lazyJoin(std::shared_ptr<const Result> a, ColumnIndex jc1,
           yieldTable(Result::IdTableVocabPair{std::move(idTable),
                                               std::move(localVocab)});
         }};
-    auto toBlockRange =
-        []<typename T>(
-            T& blockOrBlocks,
-            [[maybe_unused]] std::span<const ColumnIndex> columnIndices = {})
+    auto asSingleTableView = [](const Result& result,
+                                const std::vector<ColumnIndex>& permutation) {
+      return std::array{ad_utility::IdTableAndFirstCol{
+          result.idTable().asColumnSubsetView(permutation),
+          result.getCopyOfLocalVocab()}};
+    };
+    auto toVariant = []<typename T>(T variantObject)
         -> std::variant<
             cppcoro::generator<ad_utility::IdTableAndFirstCol<IdTable>>,
             std::array<ad_utility::IdTableAndFirstCol<IdTableView<0>>, 1>> {
-      if constexpr (ad_utility::isSimilar<T, IdTable>) {
-        return std::array{ad_utility::IdTableAndFirstCol{
-            blockOrBlocks.asColumnSubsetView(columnIndices)}};
-      } else if constexpr (std::ranges::range<T>) {
-        return convertGenerator(std::move(blockOrBlocks));
-      } else {
-        static_assert(ad_utility::alwaysFalse<T>, "Unexpected type");
-      }
+      return variantObject;
     };
     auto leftRange =
         a->isFullyMaterialized()
-            ? toBlockRange(a->idTable(), joinColMap.permutationLeft())
-            : toBlockRange(a->idTables());
+            ? toVariant(asSingleTableView(*a, joinColMap.permutationLeft()))
+            : toVariant(convertGenerator(std::move(a->idTables())));
     auto rightRange =
         b->isFullyMaterialized()
-            ? toBlockRange(b->idTable(), joinColMap.permutationRight())
-            : toBlockRange(b->idTables());
+            ? toVariant(asSingleTableView(*b, joinColMap.permutationRight()))
+            : toVariant(convertGenerator(std::move(b->idTables())));
     std::visit(
         [this, &rowAdder, jc1, jc2](auto& leftBlocks, auto& rightBlocks) {
           bool containsUndef = couldContainUndef(leftBlocks, _left, jc1) ||
@@ -671,7 +667,8 @@ convertGenerator(Permutation::IdTableGenerator gen) {
   co_await cppcoro::getDetails = gen.details();
   gen.setDetailsPointer(&co_await cppcoro::getDetails);
   for (auto& table : gen) {
-    ad_utility::IdTableAndFirstCol t{std::move(table)};
+    // IndexScans don't have a local vocabulary, so we can just use an empty one
+    ad_utility::IdTableAndFirstCol t{std::move(table), LocalVocab{}};
     co_yield t;
   }
 }
@@ -793,10 +790,11 @@ ProtoResult Join::computeResultForIndexScanAndIdTable(
         }};
 
     AD_CORRECTNESS_CHECK(joinColScan == 0);
-    auto permutationIdTable =
-        ad_utility::IdTableAndFirstCol{idTable.asColumnSubsetView(
-            idTableIsRightInput ? joinColMap.permutationRight()
-                                : joinColMap.permutationLeft())};
+    auto permutationIdTable = ad_utility::IdTableAndFirstCol{
+        idTable.asColumnSubsetView(idTableIsRightInput
+                                       ? joinColMap.permutationRight()
+                                       : joinColMap.permutationLeft()),
+        resultWithIdTable->getCopyOfLocalVocab()};
 
     ad_utility::Timer timer{ad_utility::timer::Timer::InitialStatus::Started};
     bool idTableHasUndef =

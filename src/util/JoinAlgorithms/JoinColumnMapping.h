@@ -118,7 +118,6 @@ struct IdTableAndFirstCol {
       std::decay_t<decltype(std::as_const(table_).getColumn(0).begin())>;
 
   // Construct by taking ownership of the table.
-  explicit IdTableAndFirstCol(Table t) : table_{std::move(t)}, localVocab_{} {}
   IdTableAndFirstCol(Table t, LocalVocab localVocab)
       : table_{std::move(t)}, localVocab_{std::move(localVocab)} {}
 
