@@ -9,7 +9,9 @@
 #include "global/ValueId.h"
 
 // _____________________________________________________________________________
-LocalVocab LocalVocab::clone() const { return merge(std::span{this, 1}); }
+LocalVocab LocalVocab::clone() const {
+  return merge(std::array<const LocalVocab*, 1>{this});
+}
 
 // _____________________________________________________________________________
 LocalVocab LocalVocab::merge(std::span<const LocalVocab*> vocabs) {
