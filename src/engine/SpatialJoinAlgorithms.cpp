@@ -114,7 +114,7 @@ Result SpatialJoinAlgorithms::BaselineAlgorithm() {
                             leftJoinCol, rightJoinCol);
 
       // Ensure `maxDist_` constraint
-      if (dist.getDatatype() != Datatype::Int ||
+      if (dist.getDatatype() != Datatype::Double ||
           (maxDist.has_value() &&
            (dist.getDouble() * 1000) > static_cast<double>(maxDist.value()))) {
         continue;
