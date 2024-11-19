@@ -26,12 +26,17 @@
 // after it has been computed once.
 //
 // A `LocalVocab` has a primary set of `LocalVocabEntry`s, which can grow
-// dynamically, and a collection of other sets of `LocalVocabEntry`s, which are
-// static. A `LocalVocabEntry` lives exactly as long as it is contained in at
-// least one of the (primary or other) sets of a `LocalVocab`.
+// dynamically, and a collection of other sets of `LocalVocabEntry`s, which
+// cannot be modified by this class. A `LocalVocabEntry` lives exactly as long
+// as it is contained in at least one of the (primary or other) sets of a
+// `LocalVocab`.
 class LocalVocab {
  private:
   // The primary set of `LocalVocabEntry`s, which can grow dynamically.
+  //
+  // NOTE: This is a `absl::node_hash_set` because we hand out pointers to
+  // the `LocalVocabEntry`s and it is hence essential that their addresses
+  // remain stable over their lifetime in the hash set.
   using Set = absl::node_hash_set<LocalVocabEntry>;
   std::shared_ptr<Set> primaryWordSet_ = std::make_shared<Set>();
 
@@ -54,9 +59,10 @@ class LocalVocab {
   LocalVocab(const LocalVocab&) = delete;
   LocalVocab& operator=(const LocalVocab&) = delete;
 
-  // Make a logical copy, where all sets of `LocalVocabEntry`s become static
-  // and the primary set becomes empty. This only copies shared pointers and
-  // takes time linear in the number of sets.
+  // Make a logical copy, where all sets of `LocalVocabEntry`s become "other"
+  // sets, that is, they cannot be modified by the copy. The primary set becomes
+  // empty. This only copies shared pointers and takes time linear in the number
+  // of sets.
   LocalVocab clone() const;
 
   // Moving a local vocabulary is not problematic (though the typical use case
@@ -92,6 +98,9 @@ class LocalVocab {
   bool empty() const { return size() == 0; }
 
   // Get the `LocalVocabEntry` corresponding to the given `LocalVocabIndex`.
+  //
+  // NOTE: This used to be a more complex function but is now a simple
+  // dereference. It could be thrown out in the future.
   const LocalVocabEntry& getWord(LocalVocabIndex localVocabIndex) const;
 
   // Add all sets (primary and other) of the given local vocabs as other sets

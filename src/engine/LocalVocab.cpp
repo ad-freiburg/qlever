@@ -8,6 +8,7 @@
 #include "absl/strings/str_cat.h"
 #include "global/Id.h"
 #include "global/ValueId.h"
+#include "util/TransparentFunctors.h"
 
 // _____________________________________________________________________________
 LocalVocab LocalVocab::clone() const {
@@ -20,11 +21,7 @@ LocalVocab LocalVocab::clone() const {
 // _____________________________________________________________________________
 LocalVocab LocalVocab::merge(std::span<const LocalVocab*> vocabs) {
   LocalVocab result;
-  result.mergeWith(vocabs |
-                   std::views::transform(
-                       [](const LocalVocab* localVocab) -> const LocalVocab& {
-                         return *localVocab;
-                       }));
+  result.mergeWith(vocabs | std::views::transform(ad_utility::dereference));
   return result;
 }
 
