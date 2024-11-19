@@ -2479,7 +2479,13 @@ void QueryPlanner::GraphPatternPlanner::visitSpatialSearch(
   auto config = spatialQuery.toSpatialJoinConfiguration();
 
   for (auto& sub : candidatesIn) {
-    auto add = [this, &sub, &config, &candidatesOut](bool rightVarOutside) {
+    // This helper function adds a subtree plan to the output candidates, which
+    // either has the child graph pattern as a right child or no child at all.
+    // If it has no child at all, the query planner may look for the right child
+    // of the SpatialJoin outside of the SERVICE. This is only allowed for max
+    // distance joins.
+    auto addCandidateSpatialJoin = [this, &sub, &config,
+                                    &candidatesOut](bool rightVarOutside) {
       std::optional<std::shared_ptr<QueryExecutionTree>> right = std::nullopt;
       if (!rightVarOutside) {
         right = std::move(sub._qet);
@@ -2490,9 +2496,15 @@ void QueryPlanner::GraphPatternPlanner::visitSpatialSearch(
       auto plan = makeSubtreePlan<SpatialJoin>(std::move(spatialJoin));
       candidatesOut.push_back(std::move(plan));
     };
-    add(false);
-    if (std::holds_alternative<MaxDistanceConfig>(config.task_)) {
-      add(true);
+
+    if (!spatialQuery.childGraphPattern_._graphPatterns.empty()) {
+      // The version using the child graph pattern
+      addCandidateSpatialJoin(false);
+    } else {
+      // The version without using the child graph pattern
+      if (std::holds_alternative<MaxDistanceConfig>(config.task_)) {
+        addCandidateSpatialJoin(true);
+      }
     }
   }
   visitGroupOptionalOrMinus(std::move(candidatesOut));
