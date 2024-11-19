@@ -265,10 +265,10 @@ std::vector<Box> SpatialJoinAlgorithms::computeBoundingBox(
   double maxDistInDegrees = maxDistInMetersBuffer * (360 / circumferenceMax_);
   double upperLatBound = startPoint.get<1>() + maxDistInDegrees;
   double lowerLatBound = startPoint.get<1>() - maxDistInDegrees;
-  
+
   auto southPoleReached = isAPoleTouched(lowerLatBound).at(1);
   auto northPoleReached = isAPoleTouched(upperLatBound).at(0);
-  
+
   if (southPoleReached || northPoleReached) {
     return {Box(Point(-180.0f, lowerLatBound), Point(180.0f, upperLatBound))};
   }
@@ -388,27 +388,6 @@ std::vector<Box> SpatialJoinAlgorithms::computeUsingAntiBoundingBox(
     boxes.emplace_back(Point(rightBound, -90), Point(180, 90));
   }
   return boxes;
-}
-
-// ____________________________________________________________________________
-bool SpatialJoinAlgorithms::containedInBoundingBoxes(
-    const std::vector<Box>& bbox, Point point1) {
-  // correct lon and lat bounds if necessary
-  while (point1.get<0>() < -180) {
-    point1.set<0>(point1.get<0>() + 360);
-  }
-  while (point1.get<0>() > 180) {
-    point1.set<0>(point1.get<0>() - 360);
-  }
-  if (point1.get<1>() < -90) {
-    point1.set<1>(-90);
-  } else if (point1.get<1>() > 90) {
-    point1.set<1>(90);
-  }
-
-  return std::ranges::any_of(bbox, [point1](const Box& aBox) {
-    return boost::geometry::covered_by(point1, aBox);
-  });
 }
 
 // ____________________________________________________________________________
