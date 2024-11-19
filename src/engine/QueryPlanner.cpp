@@ -1910,7 +1910,7 @@ auto QueryPlanner::createSpatialJoin(
   auto bIs = static_cast<bool>(bIsSpatialJoin);
 
   // Exactly one of the inputs must be a SpatialJoin.
-  if ((aIs && bIs) || (!aIs && !bIs)) {
+  if (aIs == bIs) {
     return std::nullopt;
   }
 
@@ -1932,6 +1932,9 @@ auto QueryPlanner::createSpatialJoin(
   ColumnIndex ind = aIsSpatialJoin ? jcs[0][1] : jcs[0][0];
   const Variable& var =
       otherSubtreePlan._qet->getVariableAndInfoByColumnIndex(ind).first;
+  std::cout << spatialJoin->onlyForTestingGetTask().first << " "
+            << spatialJoin->onlyForTestingGetTask().second << " Add variable "
+            << var.name() << "\n";
 
   auto newSpatialJoin = spatialJoin->addChild(otherSubtreePlan._qet, var);
 
