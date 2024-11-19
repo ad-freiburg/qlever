@@ -3,8 +3,6 @@
 // Authors: Johannes Herrmann <johannes.r.herrmann(at)gmail.com>
 //          Christoph Ullinger <ullingec@informatik.uni-freiburg.de>
 
-#pragma once
-
 #include "parser/PathQuery.h"
 
 namespace parsedQuery {
