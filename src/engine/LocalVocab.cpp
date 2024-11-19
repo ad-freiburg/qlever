@@ -10,9 +10,7 @@
 
 // _____________________________________________________________________________
 LocalVocab LocalVocab::clone() const {
-  LocalVocab clone;
-  clone.mergeWith(std::span{this, 1});
-  return clone;
+ return merge(std::span{this, 1});
 }
 
 // _____________________________________________________________________________
