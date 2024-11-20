@@ -246,9 +246,9 @@ IndexImpl::buildOspWithPatterns(
   // Add the `ql:has-pattern` predicate to the sorter such that it will become
   // part of the PSO and POS permutation.
   AD_LOG_INFO << "Adding " << hasPatternPredicateSortedByPSO->size()
-                  << " triples to the POS and PSO permutation for "
-                     "the internal `ql:has-pattern` ..."
-                  << std::endl;
+              << " triples to the POS and PSO permutation for "
+                 "the internal `ql:has-pattern` ..."
+              << std::endl;
   static_assert(NumColumnsIndexBuilding == 4,
                 "When adding additional payload columns, the following code "
                 "has to be changed");
@@ -323,12 +323,12 @@ void IndexImpl::updateInputFileSpecificationsAndLog(
   // For multiple input streams, only show the number of streams.
   if (spec.size() == 1) {
     AD_LOG_INFO << "Parsing triples from single input stream "
-                    << spec.at(0).filename_ << " (parallel = "
-                    << (spec.at(0).parseInParallel_ ? "true" : "false")
-                    << ") ..." << std::endl;
+                << spec.at(0).filename_ << " (parallel = "
+                << (spec.at(0).parseInParallel_ ? "true" : "false") << ") ..."
+                << std::endl;
   } else {
     AD_LOG_INFO << "Processing triples from " << spec.size()
-                    << " input streams ..." << std::endl;
+                << " input streams ..." << std::endl;
   }
 }
 
@@ -441,10 +441,9 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
   ad_utility::Synchronized<std::unique_ptr<TripleVec>> idTriples(
       std::make_unique<TripleVec>(onDiskBase_ + ".unsorted-triples.dat", 1_GB,
                                   allocator_));
-  AD_LOG_INFO
-      << "Parsing input triples and creating partial vocabularies, one "
-         "per batch ..."
-      << std::endl;
+  AD_LOG_INFO << "Parsing input triples and creating partial vocabularies, one "
+                 "per batch ..."
+              << std::endl;
   bool parserExhausted = false;
 
   // already count the numbers of triples that will be used for the language
@@ -546,10 +545,9 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
       future.get();
     }
   }
-  AD_LOG_INFO
-      << "Number of triples created (including QLever-internal ones): "
-      << (*idTriples.wlock())->size() << " [may contain duplicates]"
-      << std::endl;
+  AD_LOG_INFO << "Number of triples created (including QLever-internal ones): "
+              << (*idTriples.wlock())->size() << " [may contain duplicates]"
+              << std::endl;
 
   size_t sizeInternalVocabulary = 0;
   std::vector<std::string> prefixes;
@@ -574,9 +572,9 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
   idOfInternalGraphDuringIndexBuilding_ =
       mergeRes.specialIdMapping().at(QLEVER_INTERNAL_GRAPH_IRI);
   AD_LOG_INFO << "Number of words in external vocabulary: "
-                  << res.vocabularyMetaData_.numWordsTotal() -
-                         sizeInternalVocabulary
-                  << std::endl;
+              << res.vocabularyMetaData_.numWordsTotal() -
+                     sizeInternalVocabulary
+              << std::endl;
 
   res.idTriples = std::move(*idTriples.wlock());
   res.actualPartialSizes = std::move(actualPartialSizes);
@@ -595,9 +593,9 @@ auto IndexImpl::convertPartialToGlobalIds(
     size_t linesPerPartial, auto isQLeverInternalTriple)
     -> FirstPermutationSorterAndInternalTriplesAsPso {
   AD_LOG_INFO << "Converting triples from local IDs to global IDs ..."
-                  << std::endl;
+              << std::endl;
   AD_LOG_DEBUG << "Triples per partial vocabulary: " << linesPerPartial
-                   << std::endl;
+               << std::endl;
 
   // Iterate over all partial vocabularies.
   auto resultPtr =
@@ -817,7 +815,7 @@ IndexImpl::createPermutations(size_t numColumns, auto&& sortedTriples,
                               const Permutation& p1, const Permutation& p2,
                               auto&&... perTripleCallbacks) {
   AD_LOG_INFO << "Creating permutations " << p1.readableName() << " and "
-                  << p2.readableName() << " ..." << std::endl;
+              << p2.readableName() << " ..." << std::endl;
   auto metaData = createPermutationPairImpl(
       numColumns, onDiskBase_ + ".index" + p1.fileSuffix(),
       onDiskBase_ + ".index" + p2.fileSuffix(), AD_FWD(sortedTriples),
@@ -827,9 +825,9 @@ IndexImpl::createPermutations(size_t numColumns, auto&& sortedTriples,
   meta1.calculateStatistics(numDistinctCol0);
   meta2.calculateStatistics(numDistinctCol0);
   AD_LOG_INFO << "Statistics for " << p1.readableName() << ": "
-                  << meta1.statistics() << std::endl;
+              << meta1.statistics() << std::endl;
   AD_LOG_INFO << "Statistics for " << p2.readableName() << ": "
-                  << meta2.statistics() << std::endl;
+              << meta2.statistics() << std::endl;
 
   return metaData;
 }
@@ -854,7 +852,7 @@ size_t IndexImpl::createPermutationPair(size_t numColumns,
     metaData.appendToFile(&f);
   };
   AD_LOG_DEBUG << "Writing meta data for " << p1.readableName() << " and "
-                   << p2.readableName() << " ..." << std::endl;
+               << p2.readableName() << " ..." << std::endl;
   writeMetadata(metaData1, p1);
   writeMetadata(metaData2, p2);
   return numDistinctC0;
@@ -868,7 +866,7 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
   globalSingletonComparator_ = &vocab_.getCaseComparator();
 
   AD_LOG_DEBUG << "Number of words in internal and external vocabulary: "
-                   << vocab_.size() << std::endl;
+               << vocab_.size() << std::endl;
 
   auto range1 =
       vocab_.prefixRanges(QLEVER_INTERNAL_PREFIX_IRI_WITHOUT_CLOSING_BRACKET);
@@ -1004,7 +1002,7 @@ void IndexImpl::readConfiguration() {
   f >> configurationJson_;
   if (configurationJson_.find("git-hash") != configurationJson_.end()) {
     AD_LOG_INFO << "The git hash used to build this index was "
-                    << configurationJson_["git-hash"] << std::endl;
+                << configurationJson_["git-hash"] << std::endl;
   } else {
     AD_LOG_INFO
         << "The index was built before git commit hashes were stored in "
@@ -1218,15 +1216,14 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
       country = std::string{j["locale"]["country"]};
       ignorePunctuation = bool{j["locale"]["ignore-punctuation"]};
     } else {
-      AD_LOG_INFO
-          << "Locale was not specified in settings file, default is "
-             "en_US"
-          << std::endl;
+      AD_LOG_INFO << "Locale was not specified in settings file, default is "
+                     "en_US"
+                  << std::endl;
     }
     AD_LOG_INFO << "You specified \"locale = " << lang << "_" << country
-                    << "\" "
-                    << "and \"ignore-punctuation = " << ignorePunctuation
-                    << "\"" << std::endl;
+                << "\" "
+                << "and \"ignore-punctuation = " << ignorePunctuation << "\""
+                << std::endl;
 
     if (lang != LOCALE_DEFAULT_LANG || country != LOCALE_DEFAULT_COUNTRY) {
       AD_LOG_WARN
@@ -1274,9 +1271,9 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
   if (j.count("parser-batch-size")) {
     parserBatchSize_ = size_t{j["parser-batch-size"]};
     AD_LOG_INFO << "Overriding setting parser-batch-size to "
-                    << parserBatchSize_
-                    << " This might influence performance during index build."
-                    << std::endl;
+                << parserBatchSize_
+                << " This might influence performance during index build."
+                << std::endl;
   }
 
   std::string overflowingIntegersThrow = "overflowing-integers-throw";
@@ -1290,38 +1287,34 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
   if (j.count(key)) {
     auto value = static_cast<std::string>(j[key]);
     if (value == overflowingIntegersThrow) {
-      AD_LOG_INFO
-          << "Integers that cannot be represented by QLever will throw "
-             "an exception"
-          << std::endl;
+      AD_LOG_INFO << "Integers that cannot be represented by QLever will throw "
+                     "an exception"
+                  << std::endl;
       turtleParserIntegerOverflowBehavior_ =
           TurtleParserIntegerOverflowBehavior::Error;
     } else if (value == overflowingIntegersBecomeDoubles) {
-      AD_LOG_INFO
-          << "Integers that cannot be represented by QLever will be "
-             "converted to doubles"
-          << std::endl;
+      AD_LOG_INFO << "Integers that cannot be represented by QLever will be "
+                     "converted to doubles"
+                  << std::endl;
       turtleParserIntegerOverflowBehavior_ =
           TurtleParserIntegerOverflowBehavior::OverflowingToDouble;
     } else if (value == allIntegersBecomeDoubles) {
-      AD_LOG_INFO << "All integers will be converted to doubles"
-                      << std::endl;
+      AD_LOG_INFO << "All integers will be converted to doubles" << std::endl;
       turtleParserIntegerOverflowBehavior_ =
           TurtleParserIntegerOverflowBehavior::OverflowingToDouble;
     } else {
       AD_CONTRACT_CHECK(std::ranges::find(allModes, value) == allModes.end());
       AD_LOG_ERROR << "Invalid value for " << key << std::endl;
       AD_LOG_INFO << "The currently supported values are "
-                      << absl::StrJoin(allModes, ",") << std::endl;
+                  << absl::StrJoin(allModes, ",") << std::endl;
     }
   } else {
     turtleParserIntegerOverflowBehavior_ =
         TurtleParserIntegerOverflowBehavior::Error;
-    AD_LOG_INFO
-        << "By default, integers that cannot be represented by QLever "
-           "will throw an "
-           "exception"
-        << std::endl;
+    AD_LOG_INFO << "By default, integers that cannot be represented by QLever "
+                   "will throw an "
+                   "exception"
+                << std::endl;
   }
 }
 
@@ -1332,7 +1325,7 @@ std::future<void> IndexImpl::writeNextPartialVocabulary(
     ad_utility::Synchronized<std::unique_ptr<TripleVec>>* globalWritePtr) {
   using namespace ad_utility::vocabulary_merger;
   AD_LOG_DEBUG << "Input triples read in this section: " << numLines
-                   << std::endl;
+               << std::endl;
   AD_LOG_DEBUG
       << "Triples processed, also counting internal triples added by QLever: "
       << actualCurrentPartialSize << std::endl;
