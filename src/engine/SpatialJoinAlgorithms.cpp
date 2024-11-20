@@ -432,7 +432,7 @@ std::array<bool, 2> SpatialJoinAlgorithms::isAPoleTouched(
 // ____________________________________________________________________________
 Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
   auto printWarning = []() {
-    AD_LOG(AD_WARN)
+    AD_LOG_WARN
         << "expected a point here, but no point is given. Skipping this point"
         << std::endl;
   };
@@ -479,7 +479,8 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
 
     // query the other rtree for every point using the following bounding box
     std::vector<Box> bbox = computeBoundingBox(p);
-    std::vector<Value, ad_utility::AllocatorWithLimit<Value>> results;
+    std::vector<Value, ad_utility::AllocatorWithLimit<Value>> results{
+        qec_->getAllocator()};
 
     std::ranges::for_each(bbox, [&](const Box& bbox) {
       rtree.query(bgi::intersects(bbox), std::back_inserter(results));
