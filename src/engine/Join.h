@@ -103,7 +103,7 @@ class Join : public Operation {
   // `permutation` indicates a permutation to apply to the result columns before
   // yielding/returning them. An empty vector means no permutation is applied.
   // `action` is a lambda that can be used to send partial chunks to a consumer
-  // in addition to returning the remaining result. If lazyness is not required
+  // in addition to returning the remaining result. If laziness is not required
   // it is a no-op.
   ProtoResult createResult(
       bool requestedLaziness,
