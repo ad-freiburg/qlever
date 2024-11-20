@@ -31,20 +31,13 @@ namespace {
 // more efficient access in the join columns below and apply the given
 // permutation to each table.
 cppcoro::generator<ad_utility::IdTableAndFirstCol<IdTable>> convertGenerator(
-    Result::Generator gen, std::vector<ColumnIndex> permutation) {
+    Result::Generator gen, std::vector<ColumnIndex> permutation = {}) {
   for (auto& [table, localVocab] : gen) {
     // Make sure to actually move the table into the wrapper so that the tables
     // live as long as the wrapper.
-    table.setColumnSubset(permutation);
-    ad_utility::IdTableAndFirstCol t{std::move(table), std::move(localVocab)};
-    co_yield t;
-  }
-}
-// Convert a `generator<IdTableVocab>` to a `generator<IdTableAndFirstCol>` for
-// more efficient access in the join columns below.
-cppcoro::generator<ad_utility::IdTableAndFirstCol<IdTable>> convertGenerator(
-    Result::Generator gen) {
-  for (auto& [table, localVocab] : gen) {
+    if (!permutation.empty()) {
+      table.setColumnSubset(permutation);
+    }
     ad_utility::IdTableAndFirstCol t{std::move(table), std::move(localVocab)};
     co_yield t;
   }
