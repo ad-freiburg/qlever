@@ -245,7 +245,7 @@ IndexImpl::buildOspWithPatterns(
   secondSorter->clear();
   // Add the `ql:has-pattern` predicate to the sorter such that it will become
   // part of the PSO and POS permutation.
-  AD_LOG(AD_INFO) << "Adding " << hasPatternPredicateSortedByPSO->size()
+  AD_LOG_INFO << "Adding " << hasPatternPredicateSortedByPSO->size()
                   << " triples to the POS and PSO permutation for "
                      "the internal `ql:has-pattern` ..."
                   << std::endl;
@@ -297,7 +297,7 @@ void IndexImpl::updateInputFileSpecificationsAndLog(
   // for a single input stream and forbidden for multiple input streams.
   if (parallelParsingSpecifiedViaJson.has_value()) {
     if (spec.size() == 1) {
-      AD_LOG(AD_WARN)
+      AD_LOG_WARN
           << "Parallel parsing set in the `.settings.json` file; this is "
              "deprecated, "
           << pleaseUseParallelParsingOption << std::endl;
@@ -313,7 +313,7 @@ void IndexImpl::updateInputFileSpecificationsAndLog(
   // on the command line, we set if implicitly for backward compatibility.
   if (!parallelParsingSpecifiedViaJson.has_value() && spec.size() == 1 &&
       !spec.at(0).parseInParallelSetExplicitly_) {
-    AD_LOG(AD_WARN)
+    AD_LOG_WARN
         << "Implicitly using the parallel parser for a single input file "
            "for reasons of backward compatibility; this is deprecated, "
         << pleaseUseParallelParsingOption << std::endl;
@@ -322,12 +322,12 @@ void IndexImpl::updateInputFileSpecificationsAndLog(
   // For a single input stream, show the name and whether we parse in parallel.
   // For multiple input streams, only show the number of streams.
   if (spec.size() == 1) {
-    AD_LOG(AD_INFO) << "Parsing triples from single input stream "
+    AD_LOG_INFO << "Parsing triples from single input stream "
                     << spec.at(0).filename_ << " (parallel = "
                     << (spec.at(0).parseInParallel_ ? "true" : "false")
                     << ") ..." << std::endl;
   } else {
-    AD_LOG(AD_INFO) << "Processing triples from " << spec.size()
+    AD_LOG_INFO << "Processing triples from " << spec.size()
                     << " input streams ..." << std::endl;
   }
 }
@@ -414,7 +414,7 @@ void IndexImpl::createFromFiles(
 
   addInternalStatisticsToConfiguration(numTriplesInternal,
                                        numPredicatesInternal);
-  AD_LOG(AD_INFO) << "Index build completed" << std::endl;
+  AD_LOG_INFO << "Index build completed" << std::endl;
 }
 
 // _____________________________________________________________________________
@@ -441,7 +441,7 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
   ad_utility::Synchronized<std::unique_ptr<TripleVec>> idTriples(
       std::make_unique<TripleVec>(onDiskBase_ + ".unsorted-triples.dat", 1_GB,
                                   allocator_));
-  AD_LOG(AD_INFO)
+  AD_LOG_INFO
       << "Parsing input triples and creating partial vocabularies, one "
          "per batch ..."
       << std::endl;
@@ -495,12 +495,12 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
         }
         numTriplesProcessed++;
         if (progressBar.update()) {
-          AD_LOG(AD_INFO) << progressBar.getProgressString() << std::flush;
+          AD_LOG_INFO << progressBar.getProgressString() << std::flush;
         }
       }
-      AD_LOG(AD_TIMING) << "WaitTimes for Pipeline in msecs\n";
+      AD_LOG_TIMING << "WaitTimes for Pipeline in msecs\n";
       for (const auto& t : p.getWaitingTime()) {
-        AD_LOG(AD_TIMING)
+        AD_LOG_TIMING
             << std::chrono::duration_cast<std::chrono::milliseconds>(t).count()
             << " msecs" << std::endl;
       }
@@ -517,7 +517,7 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
     if (writePartialVocabularyFuture[0].valid()) {
       writePartialVocabularyFuture[0].get();
     }
-    AD_LOG(AD_TIMING)
+    AD_LOG_TIMING
         << "Time spent waiting for the writing of a previous vocabulary: "
         << sortFutureTimer.msecs().count() << "ms." << std::endl;
     auto moveMap = [](std::optional<ItemMapManager>&& el) {
@@ -540,13 +540,13 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
     // ids
     actualPartialSizes.push_back(actualCurrentPartialSize);
   }
-  AD_LOG(AD_INFO) << progressBar.getFinalProgressString() << std::flush;
+  AD_LOG_INFO << progressBar.getFinalProgressString() << std::flush;
   for (auto& future : writePartialVocabularyFuture) {
     if (future.valid()) {
       future.get();
     }
   }
-  AD_LOG(AD_INFO)
+  AD_LOG_INFO
       << "Number of triples created (including QLever-internal ones): "
       << (*idTriples.wlock())->size() << " [may contain duplicates]"
       << std::endl;
@@ -554,7 +554,7 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
   size_t sizeInternalVocabulary = 0;
   std::vector<std::string> prefixes;
 
-  AD_LOG(AD_INFO) << "Merging partial vocabularies ..." << std::endl;
+  AD_LOG_INFO << "Merging partial vocabularies ..." << std::endl;
   const ad_utility::vocabulary_merger::VocabularyMetaData mergeRes = [&]() {
     auto sortPred = [cmp = &(vocab_.getCaseComparator())](std::string_view a,
                                                           std::string_view b) {
@@ -566,14 +566,14 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
         onDiskBase_, numFiles, sortPred, wordCallback,
         memoryLimitIndexBuilding());
   }();
-  AD_LOG(AD_DEBUG) << "Finished merging partial vocabularies" << std::endl;
+  AD_LOG_DEBUG << "Finished merging partial vocabularies" << std::endl;
   IndexBuilderDataAsStxxlVector res;
   res.vocabularyMetaData_ = mergeRes;
   idOfHasPatternDuringIndexBuilding_ =
       mergeRes.specialIdMapping().at(HAS_PATTERN_PREDICATE);
   idOfInternalGraphDuringIndexBuilding_ =
       mergeRes.specialIdMapping().at(QLEVER_INTERNAL_GRAPH_IRI);
-  AD_LOG(AD_INFO) << "Number of words in external vocabulary: "
+  AD_LOG_INFO << "Number of words in external vocabulary: "
                   << res.vocabularyMetaData_.numWordsTotal() -
                          sizeInternalVocabulary
                   << std::endl;
@@ -581,7 +581,7 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
   res.idTriples = std::move(*idTriples.wlock());
   res.actualPartialSizes = std::move(actualPartialSizes);
 
-  AD_LOG(AD_DEBUG) << "Removing temporary files ..." << std::endl;
+  AD_LOG_DEBUG << "Removing temporary files ..." << std::endl;
   for (size_t n = 0; n < numFiles; ++n) {
     deleteTemporaryFile(absl::StrCat(onDiskBase_, PARTIAL_VOCAB_FILE_NAME, n));
   }
@@ -594,9 +594,9 @@ auto IndexImpl::convertPartialToGlobalIds(
     TripleVec& data, const vector<size_t>& actualLinesPerPartial,
     size_t linesPerPartial, auto isQLeverInternalTriple)
     -> FirstPermutationSorterAndInternalTriplesAsPso {
-  AD_LOG(AD_INFO) << "Converting triples from local IDs to global IDs ..."
+  AD_LOG_INFO << "Converting triples from local IDs to global IDs ..."
                   << std::endl;
-  AD_LOG(AD_DEBUG) << "Triples per partial vocabulary: " << linesPerPartial
+  AD_LOG_DEBUG << "Triples per partial vocabulary: " << linesPerPartial
                    << std::endl;
 
   // Iterate over all partial vocabularies.
@@ -665,7 +665,7 @@ auto IndexImpl::convertPartialToGlobalIds(
       numTriplesConverted += triples->size();
       numTriplesConverted += internalTriples->size();
       if (progressBar.update()) {
-        AD_LOG(AD_INFO) << progressBar.getProgressString() << std::flush;
+        AD_LOG_INFO << progressBar.getProgressString() << std::flush;
       }
     };
   };
@@ -756,7 +756,7 @@ auto IndexImpl::convertPartialToGlobalIds(
   }
   lookupQueue.finish();
   writeQueue.finish();
-  AD_LOG(AD_INFO) << progressBar.getFinalProgressString() << std::flush;
+  AD_LOG_INFO << progressBar.getFinalProgressString() << std::flush;
   return {std::move(resultPtr), std::move(internalTriplesPtr)};
 }
 
@@ -816,7 +816,7 @@ std::tuple<size_t, IndexImpl::IndexMetaDataMmapDispatcher::WriteType,
 IndexImpl::createPermutations(size_t numColumns, auto&& sortedTriples,
                               const Permutation& p1, const Permutation& p2,
                               auto&&... perTripleCallbacks) {
-  AD_LOG(AD_INFO) << "Creating permutations " << p1.readableName() << " and "
+  AD_LOG_INFO << "Creating permutations " << p1.readableName() << " and "
                   << p2.readableName() << " ..." << std::endl;
   auto metaData = createPermutationPairImpl(
       numColumns, onDiskBase_ + ".index" + p1.fileSuffix(),
@@ -826,9 +826,9 @@ IndexImpl::createPermutations(size_t numColumns, auto&& sortedTriples,
   auto& [numDistinctCol0, meta1, meta2] = metaData;
   meta1.calculateStatistics(numDistinctCol0);
   meta2.calculateStatistics(numDistinctCol0);
-  AD_LOG(AD_INFO) << "Statistics for " << p1.readableName() << ": "
+  AD_LOG_INFO << "Statistics for " << p1.readableName() << ": "
                   << meta1.statistics() << std::endl;
-  AD_LOG(AD_INFO) << "Statistics for " << p2.readableName() << ": "
+  AD_LOG_INFO << "Statistics for " << p2.readableName() << ": "
                   << meta2.statistics() << std::endl;
 
   return metaData;
@@ -853,7 +853,7 @@ size_t IndexImpl::createPermutationPair(size_t numColumns,
         absl::StrCat(onDiskBase_, ".index", permutation.fileSuffix()), "r+");
     metaData.appendToFile(&f);
   };
-  AD_LOG(AD_DEBUG) << "Writing meta data for " << p1.readableName() << " and "
+  AD_LOG_DEBUG << "Writing meta data for " << p1.readableName() << " and "
                    << p2.readableName() << " ..." << std::endl;
   writeMetadata(metaData1, p1);
   writeMetadata(metaData2, p2);
@@ -867,7 +867,7 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
   vocab_.readFromFile(onDiskBase_ + VOCAB_SUFFIX);
   globalSingletonComparator_ = &vocab_.getCaseComparator();
 
-  AD_LOG(AD_DEBUG) << "Number of words in internal and external vocabulary: "
+  AD_LOG_DEBUG << "Number of words in internal and external vocabulary: "
                    << vocab_.size() << std::endl;
 
   auto range1 =
@@ -892,7 +892,7 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
     spo_.loadFromDisk(onDiskBase_, isInternalId);
     sop_.loadFromDisk(onDiskBase_, isInternalId);
   } else {
-    AD_LOG(AD_INFO)
+    AD_LOG_INFO
         << "Only the PSO and POS permutation were loaded, SPARQL queries "
            "with predicate variables will therefore not work"
         << std::endl;
@@ -907,7 +907,7 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
           avgNumDistinctPredicatesPerSubject_,
           numDistinctSubjectPredicatePairs_, patterns_);
     } catch (const std::exception& e) {
-      AD_LOG(AD_WARN)
+      AD_LOG_WARN
           << "Could not load the patterns. The internal predicate "
              "`ql:has-predicate` is therefore not available (and certain "
              "queries that benefit from that predicate will be slower)."
@@ -1003,10 +1003,10 @@ void IndexImpl::readConfiguration() {
   auto f = ad_utility::makeIfstream(onDiskBase_ + CONFIGURATION_FILE);
   f >> configurationJson_;
   if (configurationJson_.find("git-hash") != configurationJson_.end()) {
-    AD_LOG(AD_INFO) << "The git hash used to build this index was "
+    AD_LOG_INFO << "The git hash used to build this index was "
                     << configurationJson_["git-hash"] << std::endl;
   } else {
-    AD_LOG(AD_INFO)
+    AD_LOG_INFO
         << "The index was built before git commit hashes were stored in "
            "the index meta data"
         << std::endl;
@@ -1019,7 +1019,7 @@ void IndexImpl::readConfiguration() {
     const auto& currentVersion = qlever::indexFormatVersion;
     if (indexFormatVersion != currentVersion) {
       if (indexFormatVersion.date_.toBits() > currentVersion.date_.toBits()) {
-        AD_LOG(AD_ERROR)
+        AD_LOG_ERROR
             << "The version of QLever you are using is too old for this "
                "index. Please use a version of QLever that is "
                "compatible with this index"
@@ -1028,7 +1028,7 @@ void IndexImpl::readConfiguration() {
             << ", Date = " << indexFormatVersion.date_.toStringAndType().first
             << ")." << std::endl;
       } else {
-        AD_LOG(AD_ERROR)
+        AD_LOG_ERROR
             << "The index is too old for this version of QLever. "
                "We recommend that you rebuild the index and start the "
                "server with the current master. Alternatively start the "
@@ -1042,7 +1042,7 @@ void IndexImpl::readConfiguration() {
           "Incompatible index format, see log message for details"};
     }
   } else {
-    AD_LOG(AD_ERROR)
+    AD_LOG_ERROR
         << "This index was built before versioning was introduced for "
            "QLever's index format. Please rebuild your index using the "
            "current version of QLever."
@@ -1058,7 +1058,7 @@ void IndexImpl::readConfiguration() {
   }
 
   if (configurationJson_.count("ignore-case")) {
-    AD_LOG(AD_ERROR) << ERROR_IGNORE_CASE_UNSUPPORTED << '\n';
+    AD_LOG_ERROR << ERROR_IGNORE_CASE_UNSUPPORTED << '\n';
     throw std::runtime_error("Deprecated key \"ignore-case\" in index build");
   }
 
@@ -1069,7 +1069,7 @@ void IndexImpl::readConfiguration() {
     vocab_.setLocale(lang, country, ignorePunctuation);
     textVocab_.setLocale(lang, country, ignorePunctuation);
   } else {
-    AD_LOG(AD_ERROR)
+    AD_LOG_ERROR
         << "Key \"locale\" is missing in the metadata. This is probably "
            "and old index build that is no longer supported by QLever. "
            "Please rebuild your index\n";
@@ -1198,7 +1198,7 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
   }
 
   if (j.count("ignore-case")) {
-    AD_LOG(AD_ERROR) << ERROR_IGNORE_CASE_UNSUPPORTED << '\n';
+    AD_LOG_ERROR << ERROR_IGNORE_CASE_UNSUPPORTED << '\n';
     throw std::runtime_error("Deprecated key \"ignore-case\" in settings JSON");
   }
 
@@ -1218,18 +1218,18 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
       country = std::string{j["locale"]["country"]};
       ignorePunctuation = bool{j["locale"]["ignore-punctuation"]};
     } else {
-      AD_LOG(AD_INFO)
+      AD_LOG_INFO
           << "Locale was not specified in settings file, default is "
              "en_US"
           << std::endl;
     }
-    AD_LOG(AD_INFO) << "You specified \"locale = " << lang << "_" << country
+    AD_LOG_INFO << "You specified \"locale = " << lang << "_" << country
                     << "\" "
                     << "and \"ignore-punctuation = " << ignorePunctuation
                     << "\"" << std::endl;
 
     if (lang != LOCALE_DEFAULT_LANG || country != LOCALE_DEFAULT_COUNTRY) {
-      AD_LOG(AD_WARN)
+      AD_LOG_WARN
           << "You are using Locale settings that differ from the default "
              "language or country.\n\t"
           << "This should work but is untested by the QLever team. If "
@@ -1253,19 +1253,19 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
     onlyAsciiTurtlePrefixes_ = static_cast<bool>(j["ascii-prefixes-only"]);
   }
   if (onlyAsciiTurtlePrefixes_) {
-    AD_LOG(AD_INFO) << WARNING_ASCII_ONLY_PREFIXES << std::endl;
+    AD_LOG_INFO << WARNING_ASCII_ONLY_PREFIXES << std::endl;
   }
 
   if (j.count("parallel-parsing")) {
     useParallelParser_ = static_cast<bool>(j["parallel-parsing"]);
   }
   if (useParallelParser_) {
-    AD_LOG(AD_INFO) << WARNING_PARALLEL_PARSING << std::endl;
+    AD_LOG_INFO << WARNING_PARALLEL_PARSING << std::endl;
   }
 
   if (j.count("num-triples-per-batch")) {
     numTriplesPerBatch_ = size_t{j["num-triples-per-batch"]};
-    AD_LOG(AD_INFO)
+    AD_LOG_INFO
         << "You specified \"num-triples-per-batch = " << numTriplesPerBatch_
         << "\", choose a lower value if the index builder runs out of memory"
         << std::endl;
@@ -1273,7 +1273,7 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
 
   if (j.count("parser-batch-size")) {
     parserBatchSize_ = size_t{j["parser-batch-size"]};
-    AD_LOG(AD_INFO) << "Overriding setting parser-batch-size to "
+    AD_LOG_INFO << "Overriding setting parser-batch-size to "
                     << parserBatchSize_
                     << " This might influence performance during index build."
                     << std::endl;
@@ -1290,34 +1290,34 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
   if (j.count(key)) {
     auto value = static_cast<std::string>(j[key]);
     if (value == overflowingIntegersThrow) {
-      AD_LOG(AD_INFO)
+      AD_LOG_INFO
           << "Integers that cannot be represented by QLever will throw "
              "an exception"
           << std::endl;
       turtleParserIntegerOverflowBehavior_ =
           TurtleParserIntegerOverflowBehavior::Error;
     } else if (value == overflowingIntegersBecomeDoubles) {
-      AD_LOG(AD_INFO)
+      AD_LOG_INFO
           << "Integers that cannot be represented by QLever will be "
              "converted to doubles"
           << std::endl;
       turtleParserIntegerOverflowBehavior_ =
           TurtleParserIntegerOverflowBehavior::OverflowingToDouble;
     } else if (value == allIntegersBecomeDoubles) {
-      AD_LOG(AD_INFO) << "All integers will be converted to doubles"
+      AD_LOG_INFO << "All integers will be converted to doubles"
                       << std::endl;
       turtleParserIntegerOverflowBehavior_ =
           TurtleParserIntegerOverflowBehavior::OverflowingToDouble;
     } else {
       AD_CONTRACT_CHECK(std::ranges::find(allModes, value) == allModes.end());
-      AD_LOG(AD_ERROR) << "Invalid value for " << key << std::endl;
-      AD_LOG(AD_INFO) << "The currently supported values are "
+      AD_LOG_ERROR << "Invalid value for " << key << std::endl;
+      AD_LOG_INFO << "The currently supported values are "
                       << absl::StrJoin(allModes, ",") << std::endl;
     }
   } else {
     turtleParserIntegerOverflowBehavior_ =
         TurtleParserIntegerOverflowBehavior::Error;
-    AD_LOG(AD_INFO)
+    AD_LOG_INFO
         << "By default, integers that cannot be represented by QLever "
            "will throw an "
            "exception"
@@ -1331,9 +1331,9 @@ std::future<void> IndexImpl::writeNextPartialVocabulary(
     std::unique_ptr<ItemMapArray> items, auto localIds,
     ad_utility::Synchronized<std::unique_ptr<TripleVec>>* globalWritePtr) {
   using namespace ad_utility::vocabulary_merger;
-  AD_LOG(AD_DEBUG) << "Input triples read in this section: " << numLines
+  AD_LOG_DEBUG << "Input triples read in this section: " << numLines
                    << std::endl;
-  AD_LOG(AD_DEBUG)
+  AD_LOG_DEBUG
       << "Triples processed, also counting internal triples added by QLever: "
       << actualCurrentPartialSize << std::endl;
   std::future<void> resultFuture;
@@ -1362,7 +1362,7 @@ std::future<void> IndexImpl::writeNextPartialVocabulary(
       ad_utility::TimeBlockAndLog l{"creating internal mapping"};
       return createInternalMapping(&vec);
     }();
-    AD_LOG(AD_TRACE) << "Finished creating of Mapping vocabulary" << std::endl;
+    AD_LOG_TRACE << "Finished creating of Mapping vocabulary" << std::endl;
     // since now adjacent duplicates also have the same Ids, it suffices to
     // compare those
     {
@@ -1389,7 +1389,7 @@ std::future<void> IndexImpl::writeNextPartialVocabulary(
       ad_utility::TimeBlockAndLog l{"write partial vocabulary"};
       writePartialVocabularyToFile(vec, partialFilename);
     }
-    AD_LOG(AD_TRACE) << "Finished writing the partial vocabulary" << std::endl;
+    AD_LOG_TRACE << "Finished writing the partial vocabulary" << std::endl;
     vec.clear();
     {
       ad_utility::TimeBlockAndLog l{"writing to global file"};
