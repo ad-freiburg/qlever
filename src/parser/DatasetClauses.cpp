@@ -2,7 +2,7 @@
 // Chair of Algorithms and Data Structures
 // Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
-#include "DatasetClauses.h"
+#include "parser/DatasetClauses.h"
 
 // _____________________________________________________________________________
 parsedQuery::DatasetClauses parsedQuery::DatasetClauses::fromClauses(

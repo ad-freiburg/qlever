@@ -132,11 +132,16 @@ class Subquery {
   const ParsedQuery& get() const;
 };
 
-// A SPARQL `DESCRIBE` construct.
+// A SPARQL `DESCRIBE` query.
 struct Describe {
   using VarOrIri = std::variant<TripleComponent::Iri, Variable>;
+  // The resources (variables or IRIs) that are to be described, for example
+  // `?x` and `<y>` in `DESCRIBE ?x <y>`.
   std::vector<VarOrIri> resources_;
+  // The FROM clauses of the DESCRIBE query
   DatasetClauses datasetClauses_;
+  // The WHERE clause of the describe query. It is used to compute the values
+  // for variables that are to be described.
   Subquery whereClause_;
 };
 

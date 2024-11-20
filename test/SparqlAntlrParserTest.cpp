@@ -1368,23 +1368,32 @@ TEST(SparqlParser, Query) {
                          "PREFIX doof: <http://doof.org/>"))));
 
   {
-    // DESCRIBE * queries are not yet supported.
-    expectQueryFails("DESCRIBE *");
     using R = std::vector<parsedQuery::Describe::VarOrIri>;
     auto i = [](const auto& x) { return TripleComponent::Iri::fromIriref(x); };
     // The tested describe queries will always DESCRIBE <x> ?y <z>
     R xyz{i("<x>"), Var{"?y"}, i("<z>")};
 
+    // A matcher for `?y <is-a> ?v`
+    auto yIsAVGraphPattern =
+        m::GraphPattern(m::Triples({{Var{"?y"}, "<is-a>", Var{"?v"}}}));
     // A matcher for the subquery `SELECT ?y { ?y <is-a> ?v}`
     // This subquery computes the values for `?y` that are to
     // be described.
-    auto yIsAVMatcher = m::SelectQuery(
-        m::Select({Var{"?y"}}),
-        m::GraphPattern(m::Triples({{Var{"?y"}, "<is-a>", Var{"?v"}}})));
+    auto yIsAVMatcher =
+        m::SelectQuery(m::Select({Var{"?y"}}), yIsAVGraphPattern);
 
     // A test with empty dataset clauses (no FROM and FROM NAMED).
     expectQuery("DESCRIBE <x> ?y <z> { ?y <is-a> ?v }",
                 m::DescribeQuery(m::Describe(xyz, {}, yIsAVMatcher)));
+
+    // A test with DESCRIBE *
+    // `DESCRIBE * { ?y <is-a> ?v}` is equivalent to
+    // `DESCRIBE ?y ?v { ?y <is-a> ?v}`
+    auto yIsAVSelectBothMatcher =
+        m::SelectQuery(m::Select({Var{"?y"}, Var{"?v"}}), yIsAVGraphPattern);
+    R yv{Var{"?y"}, Var{"?v"}};
+    expectQuery("DESCRIBE * { ?y <is-a> ?v }",
+                m::DescribeQuery(m::Describe(yv, {}, yIsAVSelectBothMatcher)));
 
     // A test with nonempty dataset clauses.
     // Note that the clauses are relevant for the retrieval of the values for

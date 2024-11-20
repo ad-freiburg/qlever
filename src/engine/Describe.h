@@ -7,12 +7,20 @@
 #include "engine/Operation.h"
 #include "parser/GraphPatternOperation.h"
 
+// An `Operation` which implements SPARQL DESCRIBE queries according to the
+// Concise Bounded Description (CBD, see
+// https://www.w3.org/submissions/2005/SUBM-CBD-20050603/)
 class Describe : public Operation {
  private:
+  // The subtree that computes the WHERE clause of the DESCRIBE query.
   std::shared_ptr<QueryExecutionTree> subtree_;
+
+  // The specification of the DESCRIBE clause.
   parsedQuery::Describe describe_;
 
  public:
+  // Constructor. For details see the documentation of the member variables
+  // above.
   Describe(QueryExecutionContext* qec,
            std::shared_ptr<QueryExecutionTree> subtree,
            parsedQuery::Describe describe);
@@ -20,14 +28,14 @@ class Describe : public Operation {
   // Getter for testing.
   const auto& getDescribe() const { return describe_; }
 
+  // The following functions are all overridden from the base class `Operation`,
+  // see there for documentation.
   std::vector<QueryExecutionTree*> getChildren() override;
-
   string getCacheKeyImpl() const override;
 
  public:
   string getDescriptor() const override;
   size_t getResultWidth() const override;
-
   size_t getCostEstimate() override;
 
  private:
@@ -40,11 +48,18 @@ class Describe : public Operation {
  private:
   [[nodiscard]] vector<ColumnIndex> resultSortedOn() const override;
   ProtoResult computeResult(bool requestLaziness) override;
-  // Compute the variable to column index mapping. Is used internally by
-  // `getInternallyVisibleVariableColumns`.
   VariableToColumnMap computeVariableToColumnMap() const override;
 
-  // TODO<joka921> Comment.
+  // Add all triples, where the subject is one of the `blankNodes` to the
+  // `finalResult`. `blankNodes` is a table with one column. Recursively
+  // continue for all newly found blank nodes (objects of the newly found
+  // triples, which are not contained in `alreadySeen`). This is a recursive
+  // implementation of breadth-first-search (BFS) where `blankNodes` is the set
+  // of start nodes, and `alreadySeen` is the set of nodes which have already
+  // been explored, which is needed to handle cycles in the graph. The explored
+  // graph is `all triples currently stored by QLever`.
+  // TODO<joka921> We have to extend this by the information of the allowed
+  // graphs.
   void recursivelyAddBlankNodes(
       IdTable& finalResult, ad_utility::HashSetWithMemoryLimit<Id>& alreadySeen,
       IdTable blankNodes);

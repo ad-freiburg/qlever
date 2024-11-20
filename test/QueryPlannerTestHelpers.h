@@ -389,19 +389,17 @@ constexpr auto Union = MatchTypeAndOrderedChildren<::Union>;
 
 // Match a `DESCRIBE` operation
 inline QetMatcher Describe(
-    const Matcher<const parsedQuery::Describe&> describeMatcher,
+    const Matcher<const parsedQuery::Describe&>& describeMatcher,
     const QetMatcher& childMatcher) {
   return RootOperation<::Describe>(
       AllOf(children(childMatcher),
             AD_PROPERTY(::Describe, getDescribe, describeMatcher)));
 }
 
-// Match a `DISTINCT` operation
-
 //
 inline QetMatcher QetWithWarnings(
     const std::vector<std::string>& warningSubstrings,
-    QetMatcher actualMatcher) {
+    const QetMatcher& actualMatcher) {
   auto warningMatchers = ad_utility::transform(
       warningSubstrings,
       [](const std::string& s) { return ::testing::HasSubstr(s); });

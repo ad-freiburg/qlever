@@ -279,45 +279,71 @@ ParsedQuery Visitor::visit(Parser::ConstructQueryContext* ctx) {
 
 // ____________________________________________________________________________________
 ParsedQuery Visitor::visit(Parser::DescribeQueryContext* ctx) {
-  auto clause = parsedQuery::Describe{};
-  auto specs = visitVector(ctx->varOrIri());
-  if (specs.empty()) {
-    reportNotSupported(ctx, "DESCRIBE * is");
-  }
+  auto describeClause = parsedQuery::Describe{};
+  auto describedResources = visitVector(ctx->varOrIri());
 
   std::vector<Variable> describedVariables;
-  for (GraphTerm& spec : specs) {
-    if (std::holds_alternative<Variable>(spec)) {
-      const auto& variable = std::get<Variable>(spec);
-      clause.resources_.push_back(variable);
-      describedVariables.push_back(variable);
-    } else if (std::holds_alternative<Iri>(spec)) {
-      auto iri =
-          TripleComponent::Iri::fromIriref(std::get<Iri>(spec).toSparql());
-      clause.resources_.push_back(std::move(iri));
-    }
+  // Convert the describe resources (variables or IRIs) from the format that the
+  // parser delivers to the one that the `Describe` struct expects.
+
+  auto addDescribedVariable = [&describeClause,
+                         &describedVariables](const Variable& variable) {
+    describeClause.resources_.push_back(variable);
+    describedVariables.push_back(variable);
+  };
+  auto addDescribedIri = [&describeClause](const Iri& iri) {
+    auto iriTc =
+        TripleComponent::Iri::fromIriref(std::get<Iri>(resource).toSparql());
+    describeClause.resources_.push_back(std::move(iriTc));
+  };
+
+  for (GraphTerm& resource : describedResources) {
+    std::visit(ad_utility::OverloadCallOperator{addDescribedVariable, addDescribedIri},
+               resource);
   }
 
+  // Parse the FROM (NAMED) clauses and store them in the `describeClause`.
   auto datasetClauses = parsedQuery::DatasetClauses::fromClauses(
       visitVector(ctx->datasetClause()));
-  clause.datasetClauses_ = datasetClauses;
+  describeClause.datasetClauses_ = datasetClauses;
+
+  // Parse the WHERE clause.
+  // TODO<joka921> The following for lines are duplicated for all the different
+  // types of queries. add a `visitWhereClause` function.
   if (ctx->whereClause()) {
     auto [pattern, visibleVariables] = visit(ctx->whereClause());
     parsedQuery_._rootGraphPattern = std::move(pattern);
     parsedQuery_.registerVariablesVisibleInQueryBody(visibleVariables);
   }
 
-  parsedQuery_.addSolutionModifiers(visit(ctx->solutionModifier()));
+  // HANDLE `DESCRIBE *`
+  if (describedResources.empty()) {
+    std::ranges::for_each(parsedQuery_.selectClause().getVisibleVariables(),
+                          addDescribedVariable);
+  }
 
   auto& selectClause = parsedQuery_.selectClause();
   selectClause.setSelected(std::move(describedVariables));
-  clause.whereClause_ = std::move(parsedQuery_);
+
+  // So far we have actually computed the subquery/WHERE clause of the DESCRIBE.
+  // We now store it inside the `describeClause` and setup the outer query,
+  // which is implemented as a CONSTRUCT query with a special DESCRIBE
+  // operation.
+  describeClause.whereClause_ = std::move(parsedQuery_);
+
   parsedQuery_ = ParsedQuery{};
-  parsedQuery_._rootGraphPattern._graphPatterns.push_back(std::move(clause));
+  // The solution modifiers (in particular ORDER BY) have to be part of the
+  // outer query.
+  parsedQuery_.addSolutionModifiers(visit(ctx->solutionModifier()));
+
+  parsedQuery_._rootGraphPattern._graphPatterns.push_back(
+      std::move(describeClause));
   parsedQuery_.datasetClauses_ = datasetClauses;
   auto constructClause = ParsedQuery::ConstructClause{};
   using G = GraphTerm;
   using V = Variable;
+  // The outer query has the form `CONSTRUCT { ?subject ?predicate ?object}
+  // {...}`
   constructClause.triples_.push_back(
       std::array{G(V("?subject")), G(V("?predicate")), G(V("?object"))});
   parsedQuery_._clause = std::move(constructClause);
