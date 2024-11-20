@@ -10,6 +10,8 @@
 // An `Operation` which implements SPARQL DESCRIBE queries according to the
 // Concise Bounded Description (CBD, see
 // https://www.w3.org/submissions/2005/SUBM-CBD-20050603/)
+// Note: This implementation currently only recursively expands blank nodes, but
+// not other custom reification schemes that might be used.
 class Describe : public Operation {
  private:
   // The subtree that computes the WHERE clause of the DESCRIBE query.
@@ -58,9 +60,20 @@ class Describe : public Operation {
   // of start nodes, and `alreadySeen` is the set of nodes which have already
   // been explored, which is needed to handle cycles in the graph. The explored
   // graph is `all triples currently stored by QLever`.
-  // TODO<joka921> We have to extend this by the information of the allowed
-  // graphs.
   void recursivelyAddBlankNodes(
-      IdTable& finalResult, ad_utility::HashSetWithMemoryLimit<Id>& alreadySeen,
-      IdTable blankNodes);
+      IdTable& finalResult, LocalVocab& localVocab,
+      ad_utility::HashSetWithMemoryLimit<Id>& alreadySeen, IdTable blankNodes);
+
+  // Join the `input` (a single column) with the full index on the subject
+  // column. The result has three columns: the subject, predicate, and object of
+  // the matching triples. The `localVocab` is updated to contain all local
+  // vocab IDs that are possibly contained in the result.
+  IdTable makeAndExecuteJoinWithFullIndex(IdTable input,
+                                          LocalVocab& localVocab) const;
+
+  // Get the set of (unique) IDs, that match the DESCRIBE clause and the
+  // `result` of the WHERE clause. For example, in `DESCRIBE <x> ?y WHERE { ?y
+  // <p> <o>}` The result consists of `<x>` and of all IRIs that match `?y` in
+  // the WHERE clause, with all duplicates removed.
+  IdTable getIdsToDescribe(const Result& result, LocalVocab& localVocab) const;
 };

@@ -7,7 +7,6 @@
 #include "../../test/engine/ValuesForTesting.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
-#include "engine/Values.h"
 
 // _____________________________________________________________________________
 Describe::Describe(QueryExecutionContext* qec,
@@ -26,7 +25,7 @@ std::vector<QueryExecutionTree*> Describe::getChildren() {
 
 // _____________________________________________________________________________
 string Describe::getCacheKeyImpl() const {
-  // The cache key must repesent the `resources_` as well as the `subtree_`.
+  // The cache key must represent the `resources_` as well as the `subtree_`.
   std::string resourceKey;
   for (const auto& resource : describe_.resources_) {
     if (std::holds_alternative<TripleComponent::Iri>(resource)) {
@@ -107,41 +106,17 @@ static IdTable getNewBlankNodes(
 
 // _____________________________________________________________________________
 void Describe::recursivelyAddBlankNodes(
-    IdTable& finalResult, ad_utility::HashSetWithMemoryLimit<Id>& alreadySeen,
-    IdTable blankNodes) {
+    IdTable& finalResult, LocalVocab& localVocab,
+    ad_utility::HashSetWithMemoryLimit<Id>& alreadySeen, IdTable blankNodes) {
   AD_CORRECTNESS_CHECK(blankNodes.numColumns() == 1);
 
   // Stop condition for the recursion, no new start nodes found.
   if (blankNodes.empty()) {
     return;
   }
+  auto table =
+      makeAndExecuteJoinWithFullIndex(std::move(blankNodes), localVocab);
 
-  // Set up a join between the `blankNodes` and the full index.
-  using V = Variable;
-  auto subjectVar = V{"?subject"};
-  SparqlTripleSimple triple{subjectVar, V{"?predicate"}, V{"?object"}};
-  auto indexScan = ad_utility::makeExecutionTree<IndexScan>(
-      getExecutionContext(), Permutation::SPO, triple);
-  auto valuesOp = ad_utility::makeExecutionTree<ValuesForTesting>(
-      getExecutionContext(), std::move(blankNodes),
-      std::vector<std::optional<Variable>>{subjectVar});
-
-  auto joinColValues = valuesOp->getVariableColumn(subjectVar);
-  auto joinColScan = indexScan->getVariableColumn(subjectVar);
-
-  auto join = ad_utility::makeExecutionTree<Join>(
-      getExecutionContext(), std::move(valuesOp), std::move(indexScan),
-      joinColValues, joinColScan);
-
-  auto result = join->getResult();
-  // TODO<joka921, RobinTF> As soon as the join is lazy, we can compute the
-  // result lazy, and therefore avoid the copy via `clone` of the IdTable.
-  auto table = result->idTable().clone();
-  using CI = ColumnIndex;
-  CI s = join->getVariableColumn(V{"?subject"});
-  CI p = join->getVariableColumn(V{"?predicate"});
-  CI o = join->getVariableColumn(V{"?object"});
-  table.setColumnSubset(std::vector{s, p, o});
   // TODO<joka921> Make the result of DESCRIBE lazy, then we avoid the
   // additional Copying here.
   finalResult.insertAtEnd(table);
@@ -150,48 +125,30 @@ void Describe::recursivelyAddBlankNodes(
   // Note: The stop condition is at the beginning of the recursive call.
   auto newBlankNodes =
       getNewBlankNodes(allocator(), alreadySeen, table.getColumn(2));
-  recursivelyAddBlankNodes(finalResult, alreadySeen, std::move(newBlankNodes));
+  recursivelyAddBlankNodes(finalResult, localVocab, alreadySeen,
+                           std::move(newBlankNodes));
 }
 
 // _____________________________________________________________________________
-ProtoResult Describe::computeResult([[maybe_unused]] bool requestLaziness) {
-  std::vector<TripleComponent> valuesToDescribe;
-  for (const auto& resource : describe_.resources_) {
-    if (std::holds_alternative<TripleComponent::Iri>(resource)) {
-      valuesToDescribe.push_back(std::get<TripleComponent::Iri>(resource));
-    } else {
-      // TODO<joka921> Implement this, it should be fairly simple.
-      throw std::runtime_error("DESCRIBE with a variable is not yet supported");
-    }
-  }
-  parsedQuery::SparqlValues values;
+IdTable Describe::makeAndExecuteJoinWithFullIndex(
+    IdTable input, LocalVocab& localVocab) const {
+  AD_CORRECTNESS_CHECK(input.numColumns() == 1);
   using V = Variable;
-  Variable subjectVar = V{"?subject"};
-  values._variables.push_back(subjectVar);
-
-  // Set up and execute a JOIN between the described IRIs and the full index.
-  // TODO<joka921> There is a lot of code duplication in the following block
-  // with the recursive BFS on the blank nodes, factor that out.
-  for (const auto& v : valuesToDescribe) {
-    values._values.push_back(std::vector{v});
-  }
+  auto subjectVar = V{"?subject"};
+  auto valuesOp = ad_utility::makeExecutionTree<ValuesForTesting>(
+      getExecutionContext(), std::move(input),
+      std::vector<std::optional<Variable>>{subjectVar});
   SparqlTripleSimple triple{subjectVar, V{"?predicate"}, V{"?object"}};
   auto indexScan = ad_utility::makeExecutionTree<IndexScan>(
-      getExecutionContext(), Permutation::SPO, triple);
-  auto valuesOp =
-      ad_utility::makeExecutionTree<Values>(getExecutionContext(), values);
+      getExecutionContext(), Permutation::SPO, triple,
+      describe_.datasetClauses_.defaultGraphs_);
   auto joinColValues = valuesOp->getVariableColumn(subjectVar);
   auto joinColScan = indexScan->getVariableColumn(subjectVar);
 
-  // TODO<joka921> We have to (here, as well as in the recursion) also respect
-  // the GRAPHS by which the result is filtered ( + add unit tests for that
-  // case).
   auto join = ad_utility::makeExecutionTree<Join>(
       getExecutionContext(), std::move(valuesOp), std::move(indexScan),
       joinColValues, joinColScan);
 
-  // TODO<joka921> The following code (which extracts the required columns and
-  // writes the initial triples) is also duplicated, factor it out.
   auto result = join->getResult();
   IdTable resultTable = result->idTable().clone();
 
@@ -201,12 +158,54 @@ ProtoResult Describe::computeResult([[maybe_unused]] bool requestLaziness) {
   CI o = join->getVariableColumn(V{"?object"});
 
   resultTable.setColumnSubset(std::vector{s, p, o});
+  localVocab.mergeWith(std::span{&result->localVocab(), 1});
+  return resultTable;
+}
+
+// _____________________________________________________________________________
+IdTable Describe::getIdsToDescribe(const Result& result,
+                                   LocalVocab& localVocab) const {
+  ad_utility::HashSetWithMemoryLimit<Id> idsToDescribe{allocator()};
+  const auto& vocab = getIndex().getVocab();
+  for (const auto& resource : describe_.resources_) {
+    if (std::holds_alternative<TripleComponent::Iri>(resource)) {
+      idsToDescribe.insert(
+          TripleComponent{std::get<TripleComponent::Iri>(resource)}.toValueId(
+              vocab, localVocab));
+    } else {
+      auto var = std::get<Variable>(resource);
+      auto column = subtree_->getVariableColumnOrNullopt(var);
+      if (!column.has_value()) {
+        continue;
+      }
+      for (Id id : result.idTable().getColumn(column.value())) {
+        idsToDescribe.insert(id);
+      }
+    }
+  }
+  IdTable idsAsTable{1, allocator()};
+  idsAsTable.resize(idsToDescribe.size());
+  std::ranges::copy(idsToDescribe, idsAsTable.getColumn(0).begin());
+  return idsAsTable;
+}
+
+// _____________________________________________________________________________
+ProtoResult Describe::computeResult([[maybe_unused]] bool requestLaziness) {
+  LocalVocab localVocab;
+  // TODO<joka921> Do we benefit from laziness here? Probably not, because we
+  // have to deduplicate the whole input anyway.
+  auto subresult = subtree_->getResult();
+  auto idsAsTable = getIdsToDescribe(*subresult, localVocab);
+
+  auto resultTable =
+      makeAndExecuteJoinWithFullIndex(std::move(idsAsTable), localVocab);
 
   // Recursively follow all blank nodes.
   ad_utility::HashSetWithMemoryLimit<Id> alreadySeen{allocator()};
   auto blankNodes =
       getNewBlankNodes(allocator(), alreadySeen, resultTable.getColumn(2));
-  recursivelyAddBlankNodes(resultTable, alreadySeen, std::move(blankNodes));
-  return {std::move(resultTable), resultSortedOn(),
-          result->getSharedLocalVocab()};
+  recursivelyAddBlankNodes(resultTable, localVocab, alreadySeen,
+                           std::move(blankNodes));
+
+  return {std::move(resultTable), resultSortedOn(), std::move(localVocab)};
 }

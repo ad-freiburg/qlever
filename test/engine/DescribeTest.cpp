@@ -7,10 +7,23 @@
 #include "../util/GTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "engine/Describe.h"
+#include "engine/IndexScan.h"
 #include "engine/NeutralElementOperation.h"
 #include "engine/QueryExecutionTree.h"
 
 using namespace ad_utility::testing;
+
+namespace {
+// Return a matcher that matches a `span<const Id>` or something similar  that
+// contains `expectedNumUnique` elements.
+auto numUnique = [](size_t expectedNumUnique) {
+  using namespace ::testing;
+  auto getNumUnique = [](const auto& col) {
+    return ad_utility::HashSet<Id>(col.begin(), col.end()).size();
+  };
+  return ResultOf(getNumUnique, expectedNumUnique);
+};
+}  // namespace
 
 // _____________________________________________________________________________
 TEST(Describe, recursiveBlankNodes) {
@@ -35,13 +48,6 @@ TEST(Describe, recursiveBlankNodes) {
   // As the blank nodes are renamed, we cannot easily assert the exact result,
   // but we can at least check the statisticts.
   EXPECT_EQ(table.size(), 6);
-  auto numUnique = [](size_t size) {
-    using namespace ::testing;
-    auto getNumUnique = [](const auto& col) {
-      return ad_utility::HashSet<Id>(col.begin(), col.end()).size();
-    };
-    return ResultOf(getNumUnique, size);
-  };
   EXPECT_THAT(table.getColumn(0), numUnique(3));
   EXPECT_THAT(table.getColumn(1), numUnique(2));
   EXPECT_THAT(table.getColumn(2), numUnique(5));
@@ -49,18 +55,46 @@ TEST(Describe, recursiveBlankNodes) {
 
 // _____________________________________________________________________________
 TEST(Describe, describeWithVariable) {
-  auto qec = getQec();
+  auto qec = getQec(
+      "<s> <p> <o> . <s> <p> _:g1 . _:g1 <p2> <o2> . <s2> <p> <o> . <s2> <p2> "
+      "_:g1 . <s2> <p2> _:g2 . _:g2 <p3> <o3> . <s3> <p2> <o> . <s4> <p2> <o2> "
+      ".");
+  // On the above knowledge graph, evaluate `DESCRIBE <s2> ?x { ?x <p> <o>}`.
   parsedQuery::Describe parsedDescribe;
+  parsedDescribe.resources_.push_back(TripleComponent::Iri::fromIriref("<s4>"));
   parsedDescribe.resources_.push_back(Variable{"?x"});
+  SparqlTripleSimple triple{Variable{"?x"},
+                            TripleComponent::Iri::fromIriref("<p>"),
+                            TripleComponent::Iri::fromIriref("<o>")};
   Describe describe{qec,
-                    ad_utility::makeExecutionTree<NeutralElementOperation>(qec),
+                    ad_utility::makeExecutionTree<IndexScan>(
+                        qec, Permutation::Enum::POS, triple),
                     parsedDescribe};
-
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      describe.computeResultOnlyForTesting(),
-      ::testing::HasSubstr("DESCRIBE with a variable"));
+  auto res = describe.computeResultOnlyForTesting();
+  const auto& table = res.idTable();
+  /* The expected result is: (Expand <s> and <s2> because they match the WHERE
+     clause for ?x, and expand <s4> because it was explicitly requested)
+     <s> <p> <o>
+     <s> <p> _:g1
+     _:g1 <p2> <o2>
+     <s2> <p> <o>
+     <s2> <p2> _:g1>  // Note: _:g1 has already been expanded above.
+     <s2> <p2> _:g2>
+     _:g2 <p3> <o3>
+     <s4> <p2> <o2>
+  */
+  // As the blank nodes are renamed, we cannot easily assert the exact result,
+  // but we can at least check the statisticts.
+  EXPECT_EQ(table.size(), 8);
+  EXPECT_THAT(table.getColumn(0), numUnique(5));
+  EXPECT_THAT(table.getColumn(1), numUnique(3));
+  EXPECT_THAT(table.getColumn(2), numUnique(5));
 }
 
+// TODO<joka921> We need tests with inputs in a different graph, but those are
+// Currently hard to do with the given `getQec` function.
+
+// _____________________________________________________________________________
 TEST(Describe, simpleMembers) {
   auto qec = getQec(
       "<s> <p> <o> . <s> <p> _:g1 . _:g1 <p2> <o2> . _:g1 <p2> _:g1 . _:g1 "

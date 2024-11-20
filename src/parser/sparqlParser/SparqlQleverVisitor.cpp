@@ -265,9 +265,7 @@ ParsedQuery Visitor::visit(Parser::ConstructQueryContext* ctx) {
   if (ctx->constructTemplate()) {
     query._clause = visit(ctx->constructTemplate())
                         .value_or(parsedQuery::ConstructClause{});
-    auto [pattern, visibleVariables] = visit(ctx->whereClause());
-    query._rootGraphPattern = std::move(pattern);
-    query.registerVariablesVisibleInQueryBody(visibleVariables);
+    visitWhereClause(ctx->whereClause(), query);
   } else {
     query._clause = parsedQuery::ConstructClause{
         visitOptional(ctx->triplesTemplate()).value_or(Triples{})};
@@ -304,13 +302,7 @@ ParsedQuery Visitor::visit(Parser::DescribeQueryContext* ctx) {
   describeClause.datasetClauses_ = datasetClauses;
 
   // Parse the WHERE clause.
-  // TODO<joka921> The following for lines are duplicated for all the different
-  // types of queries. add a `visitWhereClause` function.
-  if (ctx->whereClause()) {
-    auto [pattern, visibleVariables] = visit(ctx->whereClause());
-    parsedQuery_._rootGraphPattern = std::move(pattern);
-    parsedQuery_.registerVariablesVisibleInQueryBody(visibleVariables);
-  }
+  visitWhereClause(ctx->whereClause(), parsedQuery_);
 
   // HANDLE `DESCRIBE *`
   if (describedResources.empty()) {
@@ -354,9 +346,7 @@ ParsedQuery Visitor::visit(Parser::AskQueryContext* ctx) {
   parsedQuery_._clause = ParsedQuery::AskClause{};
   parsedQuery_.datasetClauses_ = parsedQuery::DatasetClauses::fromClauses(
       visitVector(ctx->datasetClause()));
-  auto [pattern, visibleVariables] = visit(ctx->whereClause());
-  parsedQuery_._rootGraphPattern = std::move(pattern);
-  parsedQuery_.registerVariablesVisibleInQueryBody(visibleVariables);
+  visitWhereClause(ctx->whereClause(), parsedQuery_);
   // NOTE: It can make sense to have solution modifiers with an ASK query, for
   // example, a GROUP BY with a HAVING.
   auto getSolutionModifiers = [this, ctx]() {
@@ -1141,9 +1131,7 @@ ParsedQuery Visitor::visit(Parser::SelectQueryContext* ctx) {
   parsedQuery_._clause = visit(ctx->selectClause());
   parsedQuery_.datasetClauses_ = parsedQuery::DatasetClauses::fromClauses(
       visitVector(ctx->datasetClause()));
-  auto [pattern, visibleVariables] = visit(ctx->whereClause());
-  parsedQuery_._rootGraphPattern = std::move(pattern);
-  parsedQuery_.registerVariablesVisibleInQueryBody(visibleVariables);
+  visitWhereClause(ctx->whereClause(), parsedQuery_);
   parsedQuery_.addSolutionModifiers(visit(ctx->solutionModifier()));
   return parsedQuery_;
 }
@@ -1152,10 +1140,8 @@ ParsedQuery Visitor::visit(Parser::SelectQueryContext* ctx) {
 Visitor::SubQueryAndMaybeValues Visitor::visit(Parser::SubSelectContext* ctx) {
   ParsedQuery& query = parsedQuery_;
   query._clause = visit(ctx->selectClause());
-  auto [pattern, visibleVariables] = visit(ctx->whereClause());
-  query._rootGraphPattern = std::move(pattern);
+  visitWhereClause(ctx->whereClause(), query);
   query.setNumInternalVariables(numInternalVariables_);
-  query.registerVariablesVisibleInQueryBody(visibleVariables);
   query.addSolutionModifiers(visit(ctx->solutionModifier()));
   numInternalVariables_ = query.getNumInternalVariables();
   auto values = visit(ctx->valuesClause());
@@ -2645,4 +2631,15 @@ TripleComponent SparqlQleverVisitor::visitGraphTerm(
       return element.toSparql();
     }
   });
+}
+
+// _____________________________________________________________________________
+void SparqlQleverVisitor::visitWhereClause(
+    Parser::WhereClauseContext* whereClauseContext, ParsedQuery& query) {
+  if (!whereClauseContext) {
+    return;
+  }
+  auto [pattern, visibleVariables] = visit(whereClauseContext);
+  query._rootGraphPattern = std::move(pattern);
+  query.registerVariablesVisibleInQueryBody(visibleVariables);
 }

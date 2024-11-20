@@ -154,6 +154,12 @@ class SparqlQleverVisitor {
 
   PatternAndVisibleVariables visit(Parser::WhereClauseContext* ctx);
 
+  // Parse the WHERE clause represented by the `whereClauseContext` and store
+  // its result (the GroupGraphPattern representing the where clause + the set
+  // of visible variables) in the `query`.
+  void visitWhereClause(Parser::WhereClauseContext* whereClauseContext,
+                        ParsedQuery& query);
+
   SolutionModifiers visit(Parser::SolutionModifierContext* ctx);
 
   vector<GroupKey> visit(Parser::GroupClauseContext* ctx);
