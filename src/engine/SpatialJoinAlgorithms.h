@@ -107,6 +107,6 @@ class SpatialJoinAlgorithms {
   // convert coordinates to the usual ranges (-180 to 180 and -90 to 90)
   void convertToNormalCoordinates(BoostGeometryNamespace::Point& point);
 
-  // return whether one of the poles is beeing touched
+  // return whether one of the poles is being touched
   std::array<bool, 2> isAPoleTouched(const double& latitude);
 };

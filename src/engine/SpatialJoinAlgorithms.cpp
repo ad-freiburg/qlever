@@ -416,10 +416,23 @@ void SpatialJoinAlgorithms::convertToNormalCoordinates(Point& point) {
   }
 }
 
+std::array<bool, 2> SpatialJoinAlgorithms::isAPoleTouched(
+    const double& latitude) {
+  bool northPoleReached = false;
+  bool southPoleReached = false;
+  if (latitude >= 90) {
+    northPoleReached = true;
+  }
+  if (latitude <= -90) {
+    southPoleReached = true;
+  }
+  return std::array{northPoleReached, southPoleReached};
+}
+
 // ____________________________________________________________________________
 Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
   auto printWarning = []() {
-    LOG(WARN)
+    AD_LOG(AD_WARN)
         << "expected a point here, but no point is given. Skipping this point"
         << std::endl;
   };
@@ -452,7 +465,7 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
     Point p(geopoint.value().getLng(), geopoint.value().getLat());
 
     // add every point together with the row number into the rtree
-    rtree.insert(std::make_pair(p, i));
+    rtree.insert(std::make_pair(std::move(p), i));
   }
   for (size_t i = 0; i < otherResult->numRows(); i++) {
     auto geopoint1 = getPoint(otherResult, i, otherResJoinCol);
@@ -466,7 +479,7 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
 
     // query the other rtree for every point using the following bounding box
     std::vector<Box> bbox = computeBoundingBox(p);
-    std::vector<Value> results;
+    std::vector<Value, ad_utility::AllocatorWithLimit<Value>> results;
 
     std::ranges::for_each(bbox, [&](const Box& bbox) {
       rtree.query(bgi::intersects(bbox), std::back_inserter(results));

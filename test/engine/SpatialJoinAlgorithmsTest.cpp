@@ -803,7 +803,7 @@ using BoostGeometryNamespace::Value;
 // function, the other time move it slightly outside of the bounding box and
 // give 'shouldBeTrue' = false to the function. Do this for all edges. Note
 // that this function is not taking a set of boxes, as neighboring boxes would
-// not work with this approach (slighly outside of one box can be inside the
+// not work with this approach (slightly outside of one box can be inside the
 // neighboring box. For a set of boxes, check each box separately)
 void testBounds(double x, double y, const Box& bbox, bool shouldBeWithin) {
   // correct lon bounds if necessary
