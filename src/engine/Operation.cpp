@@ -12,7 +12,7 @@ using namespace std::chrono_literals;
 
 //______________________________________________________________________________
 template <typename F>
-void Operation::forAllDescendantsImpl(F f) {
+void Operation::forAllDescendants(F f) {
   static_assert(
       std::is_same_v<void, std::invoke_result_t<F, QueryExecutionTree*>>);
   for (auto ptr : getChildren()) {
@@ -25,7 +25,7 @@ void Operation::forAllDescendantsImpl(F f) {
 
 //______________________________________________________________________________
 template <typename F>
-void Operation::forAllDescendantsImpl(F f) const {
+void Operation::forAllDescendants(F f) const {
   static_assert(
       std::is_same_v<void, std::invoke_result_t<F, const QueryExecutionTree*>>);
   for (auto ptr : getChildren()) {
@@ -55,7 +55,7 @@ vector<string> Operation::collectWarnings() const {
 void Operation::recursivelySetCancellationHandle(
     SharedCancellationHandle cancellationHandle) {
   AD_CORRECTNESS_CHECK(cancellationHandle);
-  forAllDescendantsImpl([&cancellationHandle](auto child) {
+  forAllDescendants([&cancellationHandle](auto child) {
     child->getRootOperation()->cancellationHandle_ = cancellationHandle;
   });
   cancellationHandle_ = std::move(cancellationHandle);
@@ -66,7 +66,7 @@ void Operation::recursivelySetCancellationHandle(
 void Operation::recursivelySetTimeConstraint(
     std::chrono::steady_clock::time_point deadline) {
   deadline_ = deadline;
-  forAllDescendantsImpl([deadline](auto child) {
+  forAllDescendants([deadline](auto child) {
     child->getRootOperation()->deadline_ = deadline;
   });
 }

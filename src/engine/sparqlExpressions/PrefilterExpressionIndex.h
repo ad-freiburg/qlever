@@ -80,10 +80,19 @@ class PrefilterExpression {
   // take a look at the actual implementation for derived classes.
   virtual std::unique_ptr<PrefilterExpression> logicalComplement() const = 0;
 
-  // The respective metadata to the blocks is expected to be provided in
-  // a sorted order (w.r.t. the relevant column).
-  std::vector<BlockMetadata> evaluate(const std::vector<BlockMetadata>& input,
-                                      size_t evaluationColumn) const;
+  // Expects that the provided `BlockMetadata` vector adheres to the following
+  // conditions:
+  // (1) unqiueness of blocks
+  // (2) sorted (order)
+  // (3) consistent column values
+  // To indicate that the possibly incomplete first and last block should
+  // be handled appropriately, the `stripIncompleteBlocks` flag is set to
+  // `true`. The flag value shouldn't be changed in general, because
+  // `evaluate()` only removes the respective block if it is conditionally
+  // (inconsistent columns) necessary.
+  std::vector<BlockMetadata> evaluate(std::vector<BlockMetadata>& input,
+                                      size_t evaluationColumn,
+                                      bool stripIncompleteBlocks = true) const;
 
   // Format for debugging
   friend std::ostream& operator<<(std::ostream& str,
@@ -93,9 +102,20 @@ class PrefilterExpression {
   }
 
  private:
+  // Performs the following conditional checks on the provided `BlockMetadata`
+  // values:
+  // (1) unqiueness of blocks
+  // (2) sorted (order)
+  // (3) consistent column values
+  // This function subsequently invokes the `evaluateImpl` method and
+  // checks the corresponding result for those conditions again.
+  // If a respective condition is violated, the function performing the checks
+  // will throw a `std::runtime_error`.
+  std::vector<BlockMetadata> evaluateAndCheckImpl(
+      std::vector<BlockMetadata>& input, size_t evaluationColumn) const;
+
   virtual std::vector<BlockMetadata> evaluateImpl(
-      const std::vector<BlockMetadata>& input,
-      size_t evaluationColumn) const = 0;
+      std::vector<BlockMetadata>& input, size_t evaluationColumn) const = 0;
 };
 
 //______________________________________________________________________________
@@ -124,7 +144,7 @@ class RelationalExpression : public PrefilterExpression {
 
  private:
   std::vector<BlockMetadata> evaluateImpl(
-      const std::vector<BlockMetadata>& input,
+      std::vector<BlockMetadata>& input,
       size_t evaluationColumn) const override;
 };
 
@@ -154,7 +174,7 @@ class LogicalExpression : public PrefilterExpression {
 
  private:
   std::vector<BlockMetadata> evaluateImpl(
-      const std::vector<BlockMetadata>& input,
+      std::vector<BlockMetadata>& input,
       size_t evaluationColumn) const override;
 };
 
@@ -179,7 +199,7 @@ class NotExpression : public PrefilterExpression {
 
  private:
   std::vector<BlockMetadata> evaluateImpl(
-      const std::vector<BlockMetadata>& input,
+      std::vector<BlockMetadata>& input,
       size_t evaluationColumn) const override;
 };
 
@@ -206,13 +226,6 @@ using OrExpression = prefilterExpressions::LogicalExpression<
     prefilterExpressions::LogicalOperator::OR>;
 
 namespace detail {
-//______________________________________________________________________________
-// Helper function to perform the evaluation for the provided
-// `PrefilterExpression` on the given `BlockMetadata` values, while taking into
-// account possible incomplete blocks.
-std::vector<BlockMetadata> evaluatePrefilterExpressionOnMetadata(
-    const std::unique_ptr<PrefilterExpression> prefilterExpr,
-    const std::vector<BlockMetadata>& blocks, const size_t evaluationColumn);
 
 //______________________________________________________________________________
 // Pair containing a `PrefilterExpression` and its corresponding `Variable`.

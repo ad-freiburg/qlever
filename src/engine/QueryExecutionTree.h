@@ -94,8 +94,14 @@ class QueryExecutionTree {
     return rootOperation_->getMultiplicity(col);
   }
 
-  void setPrefilterExpression(
-      const std::vector<Operation::PrefilterVariablePair>& prefilterVec) const;
+  // If the `rootOperation_` of this `QueryExecutionTree` is an `IndexScan`
+  // operation, this method adds the suitable `PrefilterExpression` to the
+  // `IndexScan` given a suitable `Variable` / `ColumnIndex` is public.
+  // If a `PrefilterExpression` was sucsessfully set, the updated
+  // `QueryExecutionTree` is returned.
+  std::optional<std::shared_ptr<QueryExecutionTree>>
+  setPrefilterExprGetUpdatedQetPtr(
+      std::vector<Operation::PrefilterVariablePair> prefilterPairs) const;
 
   size_t getDistinctEstimate(size_t col) const {
     return static_cast<size_t>(rootOperation_->getSizeEstimate() /

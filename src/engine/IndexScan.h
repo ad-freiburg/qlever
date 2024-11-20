@@ -47,9 +47,9 @@ class IndexScan final : public Operation {
   IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
             const TripleComponent& s, const TripleComponent& p,
             const TripleComponent& o,
-            const std::vector<ColumnIndex>& additionalColumns,
-            const std::vector<Variable>& additionalVariables,
-            Graphs graphsToFilter, PrefilterIndexPair prefilter);
+            std::vector<ColumnIndex> additionalColumns,
+            std::vector<Variable> additionalVariables, Graphs graphsToFilter,
+            PrefilterIndexPair prefilter);
 
   ~IndexScan() override = default;
 
@@ -74,8 +74,8 @@ class IndexScan final : public Operation {
   // Set `PrefilterExpression`s and return updated `QueryExecutionTree` pointer
   // if necessary.
   std::optional<std::shared_ptr<QueryExecutionTree>>
-  setPrefilterExprGetUpdatedQetPtr(const std::vector<PrefilterVariablePair>&
-                                       prefilterVariablePairs) override;
+  setPrefilterExprGetUpdatedQetPtr(
+      std::vector<PrefilterVariablePair> prefilterVariablePairs) override;
 
   size_t numVariables() const { return numVariables_; }
 
@@ -159,17 +159,23 @@ class IndexScan final : public Operation {
   VariableToColumnMap computeVariableToColumnMap() const override;
 
   std::shared_ptr<QueryExecutionTree> makeCopyWithAddedPrefilters(
-      PrefilterIndexPair prefilter);
-
-  // Filter relevant `CompressedBlockMetadata` blocks by applying the
-  // `PrefilterExpression`s from `prefilters_`.
-  std::vector<CompressedBlockMetadata> applyFilterBlockMetadata(
-      const std::vector<CompressedBlockMetadata> blocks) const;
+      PrefilterIndexPair prefilter) const;
 
   // Return the (lazy) `IdTable` for this `IndexScan` in chunks.
   Result::Generator chunkedIndexScan() const;
   // Get the `IdTable` for this `IndexScan` in one piece.
   IdTable materializedIndexScan() const;
+
+  // Helper to retrieve the `CompressedBlockMetadata` span for this scan.
+  std::optional<std::span<const CompressedBlockMetadata>> getOptionalBlockSpan()
+      const;
+
+  // If `isUnconstrained()` yields true, return the blocks as given or the
+  // prefiltered blocks (if `prefilter_` has value). If `isUnconstrained()` is
+  // false, return `std::nullopt`.
+  std::optional<std::vector<CompressedBlockMetadata>>
+  getOptionalPrefilteredBlocks(
+      std::vector<CompressedBlockMetadata> blocks) const;
 
   // Helper functions for the public `getLazyScanFor...` methods and
   // `chunkedIndexScan` (see above).

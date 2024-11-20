@@ -48,20 +48,8 @@ string Filter::getDescriptor() const {
 void Filter::setPrefilterExpressionForDirectIndexScanChild() {
   std::vector<PrefilterVariablePair> prefilterPairs =
       _expression.getPrefilterExpressionForMetadata();
-  std::vector<PrefilterVariablePair> relevantPairs;
-  relevantPairs.reserve(prefilterPairs.size());
-  VariableToColumnMap varToColMap = _subtree->getVariableColumns();
-  // Add all the PrefilterVariable values whose Variable value is
-  // contained in the VariableToColumnMap. This is done to avoid that certain
-  // subqueries filter out too much.
-  for (auto& prefilterPair : prefilterPairs) {
-    if (varToColMap.find(prefilterPair.second) != varToColMap.end()) {
-      relevantPairs.emplace_back(std::move(prefilterPair));
-    }
-  }
   auto optNewSubTree =
-      _subtree->getRootOperation()->setPrefilterExprGetUpdatedQetPtr(
-          std::move(relevantPairs));
+      _subtree->setPrefilterExprGetUpdatedQetPtr(std::move(prefilterPairs));
   if (optNewSubTree.has_value()) {
     _subtree = std::move(optNewSubTree.value());
   }

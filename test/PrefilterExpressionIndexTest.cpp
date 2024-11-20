@@ -86,8 +86,7 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
 
   // All blocks that contain mixed (ValueId) types over column 0,
   // or possibly incomplete ones.
-  const std::vector<BlockMetadata> mixedAndPossiblyIncompleteBlocks = {
-      b1, b2, b4, b11, b18, b22, b24};
+  const std::vector<BlockMetadata> mixedBlocks = {b2, b4, b11, b18, b22, b24};
 
   // Ordered and unique vector with BlockMetadata
   const std::vector<BlockMetadata> blocks = {
@@ -130,7 +129,8 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
                           const std::vector<BlockMetadata>& input,
                           const std::string& expected,
                           size_t evaluationColumn = 0) {
-    AD_EXPECT_THROW_WITH_MESSAGE(expr->evaluate(input, evaluationColumn),
+    std::vector<BlockMetadata> testBlocks = input;
+    AD_EXPECT_THROW_WITH_MESSAGE(expr->evaluate(testBlocks, evaluationColumn),
                                  ::testing::HasSubstr(expected));
   }
 
@@ -147,15 +147,12 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
     // This is for convenience, we automatically insert all mixed and possibly
     // incomplete blocks which must be always returned.
     std::ranges::set_union(
-        expected, mixedAndPossiblyIncompleteBlocks,
-        std::back_inserter(expectedAdjusted),
+        expected, mixedBlocks, std::back_inserter(expectedAdjusted),
         [](const BlockMetadata& b1, const BlockMetadata& b2) {
           return b1.blockIndex_ < b2.blockIndex_;
         });
-    ASSERT_EQ(
-        prefilterExpressions::detail::evaluatePrefilterExpressionOnMetadata(
-            std::move(expr), blocks, 0),
-        expectedAdjusted);
+    std::vector<BlockMetadata> testBlocks = blocks;
+    ASSERT_EQ(expr->evaluate(testBlocks, 0), expectedAdjusted);
   }
 };
 
@@ -525,15 +522,15 @@ TEST_F(PrefilterExpressionOnMetadataTest, testInputConditionCheck) {
 
 //______________________________________________________________________________
 // Check for correctness given only one BlockMetadata value is provided.
-TEST_F(PrefilterExpressionOnMetadataTest, testWithOneBlockMetadataValue) {
+TEST_F(PrefilterExpressionOnMetadataTest, testWithFewBlockMetadataValues) {
   auto expr = orExpr(eq(DoubleId(-6.25)), eq(IntId(0)));
   std::vector<BlockMetadata> input = {b16};
   EXPECT_EQ(expr->evaluate(input, 0), input);
-  EXPECT_EQ(expr->evaluate(input, 1), std::vector<BlockMetadata>{});
-  EXPECT_EQ(expr->evaluate(input, 2), std::vector<BlockMetadata>{});
-  EXPECT_EQ(prefilterExpressions::detail::evaluatePrefilterExpressionOnMetadata(
-                std::move(expr), input, 0),
-            input);
+  EXPECT_EQ(expr->evaluate(input, 1), input);
+  EXPECT_EQ(expr->evaluate(input, 2), input);
+  expr = eq(DoubleId(-6.25));
+  input = {b15, b16, b17};
+  EXPECT_EQ(expr->evaluate(input, 0), (std::vector<BlockMetadata>{b15, b16}));
 }
 
 //______________________________________________________________________________

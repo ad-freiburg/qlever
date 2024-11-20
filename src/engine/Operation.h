@@ -96,7 +96,8 @@ class Operation {
   // `Operation` object here, return std::nullopt to indicate that nothing has
   // changed.
   virtual std::optional<std::shared_ptr<QueryExecutionTree>>
-  setPrefilterExprGetUpdatedQetPtr(const std::vector<PrefilterVariablePair>&) {
+  setPrefilterExprGetUpdatedQetPtr(
+      [[maybe_unused]] std::vector<PrefilterVariablePair> prefilterPairs) {
     return std::nullopt;
   };
 
@@ -381,11 +382,11 @@ class Operation {
 
   // Recursively call a function on all children.
   template <typename F>
-  void forAllDescendantsImpl(F f);
+  void forAllDescendants(F f);
 
   // Recursively call a function on all children.
   template <typename F>
-  void forAllDescendantsImpl(F f) const;
+  void forAllDescendants(F f) const;
 
   // Holds a precomputed Result of this operation if it is the sibling of a
   // Service operation.
