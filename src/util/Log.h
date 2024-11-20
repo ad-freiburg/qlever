@@ -54,13 +54,13 @@ enum class LogLevel {
 
 // These should be used in new code to avoid clashes with `abseil` (similar to
 // `AD_LOG` vs `LOG`), see above for details.
-static constexpr auto AD_FATAL = LogLevel::FATAL;
-static constexpr auto AD_ERROR = LogLevel::ERROR;
-static constexpr auto AD_WARN = LogLevel::WARN;
-static constexpr auto AD_INFO = LogLevel::INFO;
-static constexpr auto AD_DEBUG = LogLevel::DEBUG;
-static constexpr auto AD_TIMING = LogLevel::TIMING;
-static constexpr auto AD_TRACE = LogLevel::TRACE;
+#define AD_LOG_FATAL AD_LOG(LogLevel::FATAL)
+#define AD_LOG_ERROR AD_LOG(LogLevel::ERROR)
+#define AD_LOG_WARN AD_LOG(LogLevel::WARN)
+#define AD_LOG_INFO AD_LOG(LogLevel::INFO)
+#define AD_LOG_DEBUG AD_LOG(LogLevel::DEBUG)
+#define AD_LOG_TIMING AD_LOG(LogLevel::TIMING)
+#define AD_LOG_TRACE AD_LOG(LogLevel::TRACE)
 
 using enum LogLevel;
 
