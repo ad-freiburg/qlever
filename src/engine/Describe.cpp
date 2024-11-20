@@ -137,6 +137,7 @@ void Describe::recursivelyAddBlankNodes(
   // TODO<joka921, RobinTF> As soon as the join is lazy, we can compute the
   // result lazy, and therefore avoid the copy via `clone` of the IdTable.
   auto table = result->idTable().clone();
+  using CI = ColumnIndex;
   CI s = join->getVariableColumn(V{"?subject"});
   CI p = join->getVariableColumn(V{"?predicate"});
   CI o = join->getVariableColumn(V{"?object"});
