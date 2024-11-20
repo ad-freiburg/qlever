@@ -122,16 +122,17 @@ class LocalVocab {
     // Also merge the `vocabs` `LocalBlankNodeManager`s, if they exist.
     using LocalBlankNodeManager =
         ad_utility::BlankNodeManager::LocalBlankNodeManager;
-    using sharedManager = std::shared_ptr<const LocalBlankNodeManager>;
-
     auto localManagersView =
-        vocabs | std::views::transform(
-                     [](const LocalVocab& vocab) -> const sharedManager {
-                       return vocab.localBlankNodeManager_;
-                     });
+        vocabs |
+        std::views::transform([](const LocalVocab& vocab) -> const auto& {
+          return vocab.localBlankNodeManager_;
+        });
 
     auto it = std::ranges::find_if(
-        localManagersView, [](const sharedManager& l) { return l != nullptr; });
+        localManagersView,
+        [](const std::shared_ptr<const LocalBlankNodeManager>& l) {
+          return l != nullptr;
+        });
     if (it == localManagersView.end()) {
       return;
     }

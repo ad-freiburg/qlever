@@ -113,8 +113,8 @@ class BlankNodeManager {
     // Reserved blocks.
     using Blocks = std::vector<BlankNodeManager::Block>;
     std::shared_ptr<Blocks> blocks_{
-        new Blocks(), [this](auto blocksPtr) {
-          auto ptr = blankNodeManager_->usedBlocksSet_.wlock();
+        new Blocks(), [blankNodeManager = blankNodeManager()](auto blocksPtr) {
+          auto ptr = blankNodeManager->usedBlocksSet_.wlock();
           for (const auto& block : *blocksPtr) {
             AD_CONTRACT_CHECK(ptr->contains(block.blockIdx_));
             ptr->erase(block.blockIdx_);
