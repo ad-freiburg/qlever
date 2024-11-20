@@ -106,9 +106,6 @@ class LocalVocab {
   // dereference. It could be thrown out in the future.
   const LocalVocabEntry& getWord(LocalVocabIndex localVocabIndex) const;
 
-  // Return a const reference to the word.
-  const LiteralOrIri& getWord(LocalVocabIndex localVocabIndex) const;
-
   // Add all sets (primary and other) of the given local vocabs as other sets
   // to this local vocab. The purpose is to keep all the contained
   // `LocalVocabEntry`s alive as long as this `LocalVocab` is alive. The
