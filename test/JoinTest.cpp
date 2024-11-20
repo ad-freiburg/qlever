@@ -28,6 +28,7 @@
 #include "global/RuntimeParameters.h"
 #include "util/Forward.h"
 #include "util/IndexTestHelpers.h"
+#include "util/OperationTestHelpers.h"
 #include "util/Random.h"
 #include "util/SourceLocation.h"
 
@@ -671,4 +672,31 @@ TEST(JoinTest, joinLazyAndNonLazyOperationWithAndWithoutUndefValues) {
   auto expected7 = createIdTableOfSizeWithValue(Join::CHUNK_SIZE, I(1));
   performJoin(createIdTableOfSizeWithValue(Join::CHUNK_SIZE, I(1)),
               std::move(rightTables), expected7, false);
+}
+
+// _____________________________________________________________________________
+TEST(JoinTest, errorInSeparateThreadIsPropagatedCorrectly) {
+  auto qec = ad_utility::testing::getQec();
+  RuntimeParameters().set<"lazy-index-scan-max-size-materialization">(0);
+  absl::Cleanup cleanup{[]() {
+    // Reset back to original value to not influence other tests.
+    RuntimeParameters().set<"lazy-index-scan-max-size-materialization">(
+        1'000'000);
+  }};
+  auto leftTree =
+      ad_utility::makeExecutionTree<AlwaysFailOperation>(qec, Variable{"?s"});
+  auto rightTree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{I(1)}}), Vars{Variable{"?s"}}, false,
+      std::vector<ColumnIndex>{0});
+  VariableToColumnMap expectedVariables{
+      {Variable{"?s"}, makeAlwaysDefinedColumn(0)}};
+  Join join{qec, leftTree, rightTree, 0, 0};
+
+  auto result = join.getResult(false, ComputationMode::LAZY_IF_SUPPORTED);
+  ASSERT_FALSE(result->isFullyMaterialized());
+
+  auto& idTables = result->idTables();
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(idTables.begin(),
+                                        testing::StrEq("AlwaysFailOperation"),
+                                        std::runtime_error);
 }
