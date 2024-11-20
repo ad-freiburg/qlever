@@ -14,6 +14,7 @@
 #include "index/ScanSpecification.h"
 #include "parser/Alias.h"
 #include "parser/ConstructClause.h"
+#include "parser/DatasetClauses.h"
 #include "parser/GraphPattern.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/PropertyPath.h"
@@ -36,21 +37,6 @@
 
 using std::string;
 using std::vector;
-
-// Forward declaration
-struct DatasetClause;
-
-namespace parsedQuery {
-// A struct for the FROM and FROM NAMED clauses;
-struct DatasetClauses {
-  // FROM clauses.
-  ScanSpecificationAsTripleComponent::Graphs defaultGraphs_{};
-  // FROM NAMED clauses.
-  ScanSpecificationAsTripleComponent::Graphs namedGraphs_{};
-
-  static DatasetClauses fromClauses(const std::vector<DatasetClause>& clauses);
-};
-}  // namespace parsedQuery
 
 // Data container for prefixes
 class SparqlPrefix {

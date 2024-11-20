@@ -1367,19 +1367,46 @@ TEST(SparqlParser, Query) {
                          {Var{"?s"}, Var{"?p"}, Var{"?o"}}, "{ ?s ?p ?o }",
                          "PREFIX doof: <http://doof.org/>"))));
 
-  // DESCRIBE * queries are not yet supported.
-  expectQueryFails("DESCRIBE *");
+  {
+    // DESCRIBE * queries are not yet supported.
+    expectQueryFails("DESCRIBE *");
+    using R = std::vector<parsedQuery::Describe::VarOrIri>;
+    auto i = [](const auto& x) { return TripleComponent::Iri::fromIriref(x); };
+    // The tested describe queries will always DESCRIBE <x> ?y <z>
+    R xyz{i("<x>"), Var{"?y"}, i("<z>")};
 
-  expectQuery(
-      "DESCRIBE <x>",
-      m::ConstructQuery({{Var{"?subject"}, Var{"?predicate"}, Var{"?object"}}}),
-      m::GraphPattern(m::));
+    // A matcher for the subquery `SELECT ?y { ?y <is-a> ?v}`
+    // This subquery computes the values for `?y` that are to
+    // be described.
+    auto yIsAVMatcher = m::SelectQuery(
+        m::Select({Var{"?y"}}),
+        m::GraphPattern(m::Triples({{Var{"?y"}, "<is-a>", Var{"?v"}}})));
 
-      // Test the various places where warnings are added in a query.
-      expectQuery(
-          "SELECT ?x {} GROUP BY ?x ORDER BY ?y",
-          m::WarningsOfParsedQuery({"?x was used by GROUP BY",
-                                    "?y was used in an ORDER BY clause"}));
+    // A test with empty dataset clauses (no FROM and FROM NAMED).
+    expectQuery("DESCRIBE <x> ?y <z> { ?y <is-a> ?v }",
+                m::DescribeQuery(m::Describe(xyz, {}, yIsAVMatcher)));
+
+    // A test with nonempty dataset clauses.
+    // Note that the clauses are relevant for the retrieval of the values for
+    // `?y`, as well as for the actual descriptions, so they have to be part of
+    // the outer query as well as of the internals of the DESCRIBE operation.
+    using Graphs = ScanSpecificationAsTripleComponent::Graphs;
+    Graphs defaultGraphs;
+    Graphs namedGraphs;
+    defaultGraphs.emplace({i("<default-graph>")});
+    namedGraphs.emplace({i("<named-graph>")});
+    parsedQuery::DatasetClauses clauses{defaultGraphs, namedGraphs};
+    clauses.defaultGraphs_ = defaultGraphs;
+    clauses.namedGraphs_ = namedGraphs;
+    expectQuery(
+        "DESCRIBE <x> ?y <z> FROM <default-graph> FROM NAMED <named-graph>",
+        m::DescribeQuery(m::Describe(xyz, clauses, ::testing::_), defaultGraphs,
+                         namedGraphs));
+  }
+  // Test the various places where warnings are added in a query.
+  expectQuery("SELECT ?x {} GROUP BY ?x ORDER BY ?y",
+              m::WarningsOfParsedQuery({"?x was used by GROUP BY",
+                                        "?y was used in an ORDER BY clause"}));
   expectQuery("SELECT * { BIND (?a as ?b) }",
               m::WarningsOfParsedQuery(
                   {"?a was used in the expression of a BIND clause"}));

@@ -88,7 +88,7 @@ static IdTable getNewBlankNodes(
   return result;
 }
 
-// TODO<joka921> Recursively follow the blank nodes etc.
+// TODO<joka921> Comment.
 void Describe::recursivelyAddBlankNodes(
     IdTable& finalResult, ad_utility::HashSetWithMemoryLimit<Id>& alreadySeen,
     IdTable blankNodes) {
@@ -150,6 +150,9 @@ ProtoResult Describe::computeResult([[maybe_unused]] bool requestLaziness) {
 
   // TODO<joka921> It might be, that the Column index is definitely not 0, we
   // have to store this separately.
+  // TODO<joka921> We have to (here, as well as in the recursion) also respect
+  // the GRAPHS by which the result is filtered ( + add unit tests for that
+  // case).
   auto join = ad_utility::makeExecutionTree<Join>(
       getExecutionContext(), valuesOp, std::move(indexScan), 0, 0);
 

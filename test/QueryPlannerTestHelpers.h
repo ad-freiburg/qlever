@@ -14,6 +14,7 @@
 #include "engine/Bind.h"
 #include "engine/CartesianProductJoin.h"
 #include "engine/CountAvailablePredicates.h"
+#include "engine/Describe.h"
 #include "engine/Filter.h"
 #include "engine/GroupBy.h"
 #include "engine/IndexScan.h"
@@ -22,7 +23,6 @@
 #include "engine/MultiColumnJoin.h"
 #include "engine/NeutralElementOperation.h"
 #include "engine/OptionalJoin.h"
-#include "engine/Describe.h"
 #include "engine/OrderBy.h"
 #include "engine/PathSearch.h"
 #include "engine/QueryExecutionTree.h"
@@ -194,8 +194,7 @@ inline auto CountAvailablePredicates =
     [](size_t subjectColumnIdx, const Variable& predicateVar,
        const Variable& countVar,
        const std::same_as<QetMatcher> auto&... childMatchers)
-        requires(sizeof...(childMatchers) <= 1)
-{
+        requires(sizeof...(childMatchers) <= 1) {
   return RootOperation<::CountAvailablePredicates>(AllOf(
       AD_PROPERTY(::CountAvailablePredicates, subjectColumnIndex,
                   Eq(subjectColumnIdx)),
@@ -388,7 +387,7 @@ constexpr auto OrderBy = [](const ::OrderBy::SortedVariables& sortedVariables,
 // Match a `UNION` operation.
 constexpr auto Union = MatchTypeAndOrderedChildren<::Union>;
 
-// Match a `DESCRIBE` operationl
+// Match a `DESCRIBE` operation
 inline QetMatcher Describe(
     const Matcher<const parsedQuery::Describe&> describeMatcher,
     const QetMatcher& childMatcher) {
@@ -396,6 +395,8 @@ inline QetMatcher Describe(
       AllOf(children(childMatcher),
             AD_PROPERTY(::Describe, getDescribe, describeMatcher)));
 }
+
+// Match a `DISTINCT` operation
 
 //
 inline QetMatcher QetWithWarnings(

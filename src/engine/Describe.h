@@ -18,7 +18,7 @@ class Describe : public Operation {
            parsedQuery::Describe describe);
 
   // Getter for testing.
-  const auto& getDescribe() const {return describe_;}
+  const auto& getDescribe() const { return describe_; }
 
   std::vector<QueryExecutionTree*> getChildren() override;
 

@@ -10,6 +10,7 @@
 
 #include "engine/PathSearch.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
+#include "parser/DatasetClauses.h"
 #include "parser/GraphPattern.h"
 #include "parser/TripleComponent.h"
 #include "parser/data/Variable.h"
@@ -135,7 +136,7 @@ class Subquery {
 struct Describe {
   using VarOrIri = std::variant<TripleComponent::Iri, Variable>;
   std::vector<VarOrIri> resources_;
-  Dataset
+  DatasetClauses datasetClauses_;
   Subquery whereClause_;
 };
 

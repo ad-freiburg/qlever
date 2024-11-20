@@ -285,9 +285,12 @@ ParsedQuery Visitor::visit(Parser::DescribeQueryContext* ctx) {
     reportNotSupported(ctx, "DESCRIBE * is");
   }
 
+  std::vector<Variable> describedVariables;
   for (GraphTerm& spec : specs) {
     if (std::holds_alternative<Variable>(spec)) {
-      clause.resources_.push_back(std::get<Variable>(spec));
+      const auto& variable = std::get<Variable>(spec);
+      clause.resources_.push_back(variable);
+      describedVariables.push_back(variable);
     } else if (std::holds_alternative<Iri>(spec)) {
       auto iri =
           TripleComponent::Iri::fromIriref(std::get<Iri>(spec).toSparql());
@@ -295,8 +298,9 @@ ParsedQuery Visitor::visit(Parser::DescribeQueryContext* ctx) {
     }
   }
 
-  parsedQuery_.datasetClauses_ = parsedQuery::DatasetClauses::fromClauses(
+  auto datasetClauses = parsedQuery::DatasetClauses::fromClauses(
       visitVector(ctx->datasetClause()));
+  clause.datasetClauses_ = datasetClauses;
   if (ctx->whereClause()) {
     auto [pattern, visibleVariables] = visit(ctx->whereClause());
     parsedQuery_._rootGraphPattern = std::move(pattern);
@@ -304,9 +308,13 @@ ParsedQuery Visitor::visit(Parser::DescribeQueryContext* ctx) {
   }
 
   parsedQuery_.addSolutionModifiers(visit(ctx->solutionModifier()));
+
+  auto& selectClause = parsedQuery_.selectClause();
+  selectClause.setSelected(std::move(describedVariables));
   clause.whereClause_ = std::move(parsedQuery_);
   parsedQuery_ = ParsedQuery{};
   parsedQuery_._rootGraphPattern._graphPatterns.push_back(std::move(clause));
+  parsedQuery_.datasetClauses_ = datasetClauses;
   auto constructClause = ParsedQuery::ConstructClause{};
   using G = GraphTerm;
   using V = Variable;
