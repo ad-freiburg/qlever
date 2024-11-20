@@ -87,21 +87,37 @@ class ShallowParentOperation : public Operation {
 
 // Operation that will throw on `computeResult` for testing.
 class AlwaysFailOperation : public Operation {
+  static std::atomic_uint32_t cacheCounter;
+
+  std::optional<Variable> variable_ = std::nullopt;
+
   std::vector<QueryExecutionTree*> getChildren() override { return {}; }
-  string getCacheKeyImpl() const override { AD_FAIL(); }
+  string getCacheKeyImpl() const override {
+    // Every operation gets a unique cache key
+    return absl::StrCat("AlwaysFailCacheKey_", cacheCounter++);
+  }
   string getDescriptor() const override {
     return "AlwaysFailOperationDescriptor";
   }
-  size_t getResultWidth() const override { return 0; }
+  size_t getResultWidth() const override { return 1; }
   size_t getCostEstimate() override { return 0; }
   uint64_t getSizeEstimateBeforeLimit() override { return 0; }
   float getMultiplicity([[maybe_unused]] size_t) override { return 0; }
   bool knownEmptyResult() override { return false; }
-  vector<ColumnIndex> resultSortedOn() const override { return {}; }
-  VariableToColumnMap computeVariableToColumnMap() const override { return {}; }
+  vector<ColumnIndex> resultSortedOn() const override { return {0}; }
+  VariableToColumnMap computeVariableToColumnMap() const override {
+    if (!variable_.has_value()) {
+      return {};
+    }
+    return {{variable_.value(),
+             ColumnIndexAndTypeInfo{
+                 0, ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined}}};
+  }
 
  public:
   using Operation::Operation;
+  AlwaysFailOperation(QueryExecutionContext* qec, Variable variable)
+      : Operation{qec}, variable_{std::move(variable)} {}
   ProtoResult computeResult(bool requestLaziness) override {
     if (!requestLaziness) {
       throw std::runtime_error{"AlwaysFailOperation"};
@@ -114,6 +130,8 @@ class AlwaysFailOperation : public Operation {
             resultSortedOn()};
   }
 };
+
+std::atomic_uint32_t AlwaysFailOperation::cacheCounter = 0;
 
 // Lazy operation that will yield a result with a custom generator you can
 // provide via the constructor.
