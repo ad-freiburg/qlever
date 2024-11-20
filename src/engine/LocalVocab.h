@@ -97,11 +97,17 @@ class LocalVocab {
   // Return true if and only if the local vocabulary is empty.
   bool empty() const { return size() == 0; }
 
+  // The number of set stores (primary set and other sets).
+  size_t numSets() const { return 1 + otherWordSets_.size(); }
+
   // Get the `LocalVocabEntry` corresponding to the given `LocalVocabIndex`.
   //
   // NOTE: This used to be a more complex function but is now a simple
   // dereference. It could be thrown out in the future.
   const LocalVocabEntry& getWord(LocalVocabIndex localVocabIndex) const;
+
+  // Return a const reference to the word.
+  const LiteralOrIri& getWord(LocalVocabIndex localVocabIndex) const;
 
   // Add all sets (primary and other) of the given local vocabs as other sets
   // to this local vocab. The purpose is to keep all the contained
