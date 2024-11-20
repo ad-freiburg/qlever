@@ -195,3 +195,279 @@ TEST(JoinAlgorithms, JoinWithBlocksMultipleBlocksPerElementBothSides) {
   // the optional join stays the same.
   testOptionalJoin(a, b, expectedResult);
 }
+
+namespace {
+
+// Replacement for `Id`, but with an additional tag to distinguish between ids
+// with the same value for testing.
+struct FakeId {
+  Id value_;
+  std::string_view tag_;
+
+  operator Id() const { return value_; }
+  auto operator==(const FakeId& other) const {
+    return value_.getBits() == other.value_.getBits() && tag_ == other.tag_;
+  }
+
+  friend std::ostream& operator<<(std::ostream& os, const FakeId& id) {
+    return os << "FakeId{" << id.value_ << ", " << id.tag_ << "}";
+  }
+};
+
+// RowAdder implementation that works with FakeIds and allows to tell undefined
+// ids apart from each other.
+struct RowAdderWithUndef {
+  const std::vector<FakeId>* left_ = nullptr;
+  const std::vector<FakeId>* right_ = nullptr;
+  std::vector<std::array<FakeId, 2>> output_{};
+
+  void setInput(const std::vector<FakeId>& left,
+                const std::vector<FakeId>& right) {
+    left_ = &left;
+    right_ = &right;
+  }
+
+  void setOnlyLeftInputForOptionalJoin(const std::vector<FakeId>& left) {
+    left_ = &left;
+  }
+
+  void addRow(size_t leftIndex, size_t rightIndex) {
+    auto id1 = (*left_)[leftIndex];
+    auto id2 = (*right_)[rightIndex];
+    output_.push_back({id1, id2});
+  }
+
+  void addOptionalRow(size_t leftIndex) {
+    auto id = (*left_)[leftIndex];
+    output_.push_back({id, FakeId{Id::makeUndefined(), "OPTIONAL"}});
+  }
+
+  void flush() const {
+    // Does nothing, but is required for the interface.
+  }
+
+  const auto& getOutput() const { return output_; }
+};
+
+// Join both vectors `a` and `b` and assert that the result is equal to the
+// given `expected` result. Joins are performed 2 times, the second time with
+// `a` and `b` swapped.
+void testDynamicJoinWithUndef(const std::vector<std::vector<FakeId>>& a,
+                              const std::vector<std::vector<FakeId>>& b,
+                              std::vector<std::array<FakeId, 2>> expected,
+                              source_location l = source_location::current()) {
+  using namespace std::placeholders;
+  using namespace std::ranges;
+  auto trace = generateLocationTrace(l);
+  auto compare = [](FakeId l, FakeId r) {
+    return static_cast<Id>(l) < static_cast<Id>(r);
+  };
+  AD_CONTRACT_CHECK(is_sorted(a | views::join, {}, ad_utility::staticCast<Id>));
+  AD_CONTRACT_CHECK(is_sorted(b | views::join, {}, ad_utility::staticCast<Id>));
+  auto validationProjection = [](const std::array<FakeId, 2>& fakeIds) -> Id {
+    const auto& [x, y] = fakeIds;
+    return x == Id::makeUndefined() ? y : x;
+  };
+  {
+    RowAdderWithUndef adder{};
+    zipperJoinForBlocksWithPotentialUndef(a, b, compare, adder);
+    const auto& result = adder.getOutput();
+    // The result must be sorted on the first column
+    EXPECT_TRUE(is_sorted(result, std::less<>{}, validationProjection));
+    // The exact order of the elements with the same first column is not
+    // important and depends on implementation details. We therefore do not
+    // enforce it here.
+    EXPECT_THAT(result, ::testing::UnorderedElementsAreArray(expected));
+  }
+
+  for (auto& [x, y] : expected) {
+    std::swap(x, y);
+  }
+
+  {
+    RowAdderWithUndef adder{};
+    zipperJoinForBlocksWithPotentialUndef(b, a, compare, adder);
+    const auto& result = adder.getOutput();
+    EXPECT_TRUE(is_sorted(result, std::less<>{}, validationProjection));
+    EXPECT_THAT(result, ::testing::UnorderedElementsAreArray(expected));
+  }
+}
+using F = FakeId;
+auto I = Id::makeFromInt;
+}  // namespace
+
+// ________________________________________________________________________________________
+TEST(JoinAlgorithms, JoinWithBlocksWithUndefOnOneSide) {
+  auto U = Id::makeUndefined();
+  std::vector<std::vector<FakeId>> a{{{U, "a0"}},
+                                     {{I(42), "a1"}, {I(42), "a2"}},
+                                     {{I(42), "a3"}, {I(67), "a4"}},
+                                     {{I(67), "a5"}},
+                                     {{I(67), "a6"}},
+                                     {{I(67), "a7"}},
+                                     {{I(67), "a8"}},
+                                     {{I(67), "a9"}},
+                                     {{I(67), "a10"}},
+                                     {{I(68), "a11"}},
+                                     {{I(68), "a12"}},
+                                     {{I(68), "a13"}},
+                                     {{I(68), "a14"}},
+                                     {{I(68), "a15"}},
+                                     {{I(68), "a16"}},
+                                     {{I(68), "a17"}}};
+  std::vector<std::vector<FakeId>> b{{{I(2), "b0"}, {I(42), "b1"}},
+                                     {{I(42), "b2"}, {I(67), "b3"}}};
+  std::vector<std::array<FakeId, 2>> expectedResult{
+      {F{U, "a0"}, F{I(2), "b0"}},       {F{U, "a0"}, F{I(42), "b1"}},
+      {F{U, "a0"}, F{I(42), "b2"}},      {F{I(42), "a1"}, F{I(42), "b1"}},
+      {F{I(42), "a1"}, F{I(42), "b2"}},  {F{I(42), "a2"}, F{I(42), "b1"}},
+      {F{I(42), "a2"}, F{I(42), "b2"}},  {F{I(42), "a3"}, F{I(42), "b1"}},
+      {F{I(42), "a3"}, F{I(42), "b2"}},  {F{U, "a0"}, F{I(67), "b3"}},
+      {F{I(67), "a4"}, F{I(67), "b3"}},  {F{I(67), "a5"}, F{I(67), "b3"}},
+      {F{I(67), "a6"}, F{I(67), "b3"}},  {F{I(67), "a7"}, F{I(67), "b3"}},
+      {F{I(67), "a8"}, F{I(67), "b3"}},  {F{I(67), "a9"}, F{I(67), "b3"}},
+      {F{I(67), "a10"}, F{I(67), "b3"}},
+  };
+  testDynamicJoinWithUndef(a, b, expectedResult);
+}
+
+// ________________________________________________________________________________________
+TEST(JoinAlgorithms, JoinWithBlocksWithUndefOnBothSides) {
+  auto U = Id::makeUndefined();
+  std::vector<std::vector<FakeId>> a{{{U, "a0"}},
+                                     {{I(42), "a1"}, {I(42), "a2"}},
+                                     {{I(42), "a3"}, {I(67), "a4"}},
+                                     {{I(67), "a5"}},
+                                     {{I(67), "a6"}},
+                                     {{I(67), "a7"}},
+                                     {{I(67), "a8"}},
+                                     {{I(68), "a9"}},
+                                     {{I(68), "a10"}},
+                                     {{I(68), "a11"}},
+                                     {{I(68), "a12"}}};
+  std::vector<std::vector<FakeId>> b{{{U, "b0"}},
+                                     {{U, "b1"}, {I(2), "b2"}, {I(42), "b3"}},
+                                     {{I(42), "b4"}, {I(67), "b5"}}};
+  std::vector<std::array<FakeId, 2>> expectedResult{
+      {F{U, "a0"}, F{U, "b0"}},         {F{U, "a0"}, F{U, "b1"}},
+      {F{U, "a0"}, F{I(2), "b2"}},      {F{U, "a0"}, F{I(42), "b3"}},
+      {F{U, "a0"}, F{I(42), "b4"}},     {F{I(42), "a1"}, F{U, "b0"}},
+      {F{I(42), "a1"}, F{U, "b1"}},     {F{I(42), "a2"}, F{U, "b0"}},
+      {F{I(42), "a2"}, F{U, "b1"}},     {F{I(42), "a3"}, F{U, "b0"}},
+      {F{I(42), "a3"}, F{U, "b1"}},     {F{I(42), "a1"}, F{I(42), "b3"}},
+      {F{I(42), "a2"}, F{I(42), "b3"}}, {F{I(42), "a3"}, F{I(42), "b3"}},
+      {F{I(42), "a1"}, F{I(42), "b4"}}, {F{I(42), "a2"}, F{I(42), "b4"}},
+      {F{I(42), "a3"}, F{I(42), "b4"}}, {F{U, "a0"}, F{I(67), "b5"}},
+      {F{I(67), "a4"}, F{U, "b0"}},     {F{I(67), "a4"}, F{U, "b1"}},
+      {F{I(67), "a5"}, F{U, "b0"}},     {F{I(67), "a5"}, F{U, "b1"}},
+      {F{I(67), "a6"}, F{U, "b0"}},     {F{I(67), "a6"}, F{U, "b1"}},
+      {F{I(67), "a7"}, F{U, "b0"}},     {F{I(67), "a7"}, F{U, "b1"}},
+      {F{I(67), "a8"}, F{U, "b0"}},     {F{I(67), "a8"}, F{U, "b1"}},
+      {F{I(67), "a4"}, F{I(67), "b5"}}, {F{I(67), "a5"}, F{I(67), "b5"}},
+      {F{I(67), "a6"}, F{I(67), "b5"}}, {F{I(67), "a7"}, F{I(67), "b5"}},
+      {F{I(67), "a8"}, F{I(67), "b5"}}, {F{I(68), "a9"}, F{U, "b0"}},
+      {F{I(68), "a9"}, F{U, "b1"}},     {F{I(68), "a10"}, F{U, "b0"}},
+      {F{I(68), "a10"}, F{U, "b1"}},    {F{I(68), "a11"}, F{U, "b0"}},
+      {F{I(68), "a11"}, F{U, "b1"}},    {F{I(68), "a12"}, F{U, "b0"}},
+      {F{I(68), "a12"}, F{U, "b1"}},
+  };
+  testDynamicJoinWithUndef(a, b, expectedResult);
+}
+
+// _____________________________________________________________________________
+TEST(JoinAlgorithms, JoinWithBlocksOneSideSingleUndef) {
+  auto U = Id::makeUndefined();
+  std::vector<std::vector<FakeId>> a{{{U, "a0"}}};
+  std::vector<std::vector<FakeId>> b{{{I(1), "b0"}, {I(2), "b1"}}};
+
+  std::vector<std::array<FakeId, 2>> expectedResult{
+      {F{U, "a0"}, F{I(1), "b0"}},
+      {F{U, "a0"}, F{I(2), "b1"}},
+  };
+  testDynamicJoinWithUndef(a, b, expectedResult);
+}
+
+// _____________________________________________________________________________
+TEST(JoinAlgorithms, JoinWithBlocksOneUndefinedValueMixedWithOtherValues) {
+  auto U = Id::makeUndefined();
+  std::vector<std::vector<FakeId>> a{{{U, "a0"}, {I(1), "a1"}, {I(2), "a2"}}};
+  std::vector<std::vector<FakeId>> b{{{U, "b0"}, {I(2), "b1"}, {I(3), "b2"}}};
+
+  std::vector<std::array<FakeId, 2>> expectedResult{
+      {F{U, "a0"}, F{U, "b0"}},       {F{I(1), "a1"}, F{U, "b0"}},
+      {F{U, "a0"}, F{I(2), "b1"}},    {F{I(2), "a2"}, F{U, "b0"}},
+      {F{I(2), "a2"}, F{I(2), "b1"}}, {F{U, "a0"}, F{I(3), "b2"}},
+  };
+  testDynamicJoinWithUndef(a, b, expectedResult);
+}
+
+// _____________________________________________________________________________
+TEST(JoinAlgorithms, UndefinedJoinWorksWithoutUndefinedValues) {
+  std::vector<std::vector<FakeId>> a{{{I(1), "a1"}, {I(2), "a2"}}};
+  std::vector<std::vector<FakeId>> b{{{I(2), "b1"}, {I(3), "b2"}}};
+
+  std::vector<std::array<FakeId, 2>> expectedResult{
+      {F{I(2), "a2"}, F{I(2), "b1"}}};
+  testDynamicJoinWithUndef(a, b, expectedResult);
+}
+
+// _____________________________________________________________________________
+TEST(JoinAlgorithms, JoinWithBlocksMultipleGroupsAfterUndefined) {
+  auto U = Id::makeUndefined();
+  std::vector<std::vector<FakeId>> a{
+      {{U, "a0"}, {I(1), "a1"}, {I(2), "a2"}, {I(3), "a3"}}};
+  std::vector<std::vector<FakeId>> b{
+      {{U, "b0"}, {I(1), "b1"}, {I(2), "b2"}, {I(3), "b3"}}};
+
+  std::vector<std::array<FakeId, 2>> expectedResult{
+      {F{U, "a0"}, F{U, "b0"}},       {F{I(1), "a1"}, F{U, "b0"}},
+      {F{U, "a0"}, F{I(1), "b1"}},    {F{I(1), "a1"}, F{I(1), "b1"}},
+      {F{U, "a0"}, F{I(2), "b2"}},    {F{I(2), "a2"}, F{U, "b0"}},
+      {F{I(2), "a2"}, F{I(2), "b2"}}, {F{U, "a0"}, F{I(3), "b3"}},
+      {F{I(3), "a3"}, F{U, "b0"}},    {F{I(3), "a3"}, F{I(3), "b3"}},
+  };
+  testDynamicJoinWithUndef(a, b, expectedResult);
+}
+
+// _____________________________________________________________________________
+TEST(JoinAlgorithms, TrailingEmptyBlocksAreHandledWell) {
+  auto U = Id::makeUndefined();
+  std::vector<std::vector<FakeId>> a{
+      {{U, "a0"}}, {{I(1), "a1"}}, {{I(2), "a2"}}, {{I(3), "a3"}}};
+  std::vector<std::vector<FakeId>> b{{{I(3), "b0"}}, {}, {}, {}, {}};
+
+  std::vector<std::array<FakeId, 2>> expectedResult{
+      {F{U, "a0"}, F{I(3), "b0"}}, {F{I(3), "a3"}, F{I(3), "b0"}}};
+  testDynamicJoinWithUndef(a, b, expectedResult);
+}
+
+// _____________________________________________________________________________
+TEST(JoinAlgorithms, EmptyBlocksInTheMiddleAreHandledWell) {
+  auto U = Id::makeUndefined();
+  std::vector<std::vector<FakeId>> a{
+      {{U, "a0"}}, {{I(1), "a1"}}, {{I(2), "a2"}}, {{I(3), "a3"}}};
+  std::vector<std::vector<FakeId>> b{{{I(1), "b0"}}, {}, {{I(1), "b1"}}, {}, {},
+                                     {{I(3), "b2"}}};
+
+  std::vector<std::array<FakeId, 2>> expectedResult{
+      {F{U, "a0"}, F{I(1), "b0"}},    {F{U, "a0"}, F{I(1), "b1"}},
+      {F{I(1), "a1"}, F{I(1), "b0"}}, {F{I(1), "a1"}, F{I(1), "b1"}},
+      {F{U, "a0"}, F{I(3), "b2"}},    {F{I(3), "a3"}, F{I(3), "b2"}}};
+  testDynamicJoinWithUndef(a, b, expectedResult);
+}
+
+// _____________________________________________________________________________
+TEST(JoinAlgorithm, DefaultIsUndefinedFunctionAlwaysReturnsFalse) {
+  // This test is mostly for coverage purposes.
+  RowAdderWithUndef adder{};
+  std::vector<std::vector<FakeId>> dummyBlocks{};
+  auto compare = [](auto l, auto r) { return static_cast<Id>(l) < r; };
+  auto joinSide =
+      ad_utility::detail::makeJoinSide(dummyBlocks, std::identity{});
+  ad_utility::detail::BlockZipperJoinImpl impl{joinSide, joinSide, compare,
+                                               adder};
+  EXPECT_FALSE(impl.isUndefined_("Something"));
+  EXPECT_FALSE(impl.isUndefined_(1));
+  EXPECT_FALSE(impl.isUndefined_(I(1)));
+  EXPECT_FALSE(impl.isUndefined_(Id::makeUndefined()));
+}

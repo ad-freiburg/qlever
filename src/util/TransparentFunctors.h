@@ -118,6 +118,16 @@ struct Noop {
 };
 [[maybe_unused]] static constexpr Noop noop{};
 
+template <typename T>
+struct StaticCast {
+  constexpr decltype(auto) operator()(auto&& x) const {
+    return static_cast<T>(AD_FWD(x));
+  }
+};
+
+template <typename T>
+static constexpr StaticCast<T> staticCast{};
+
 }  // namespace ad_utility
 
 #endif  // QLEVER_TRANSPARENTFUNCTORS_H
