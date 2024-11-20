@@ -100,9 +100,17 @@ class Join : public Operation {
   // returning a lazy result that reads from the queue of the thread. If
   // `requestLaziness` is false, the result is fully materialized and returned
   // directly.
-  // `action` is a lambda with signature
-  // Result::IdTableVocabPair(void(Result::IdTableVocabPair))
-  ProtoResult createResult(bool requestedLaziness, auto action) const;
+  // `permutation` indicates a permutation to apply to the result columns before
+  // yielding/returning them. An empty vector means no permutation is applied.
+  // `action` is a lambda that can be used to send partial chunks to a consumer
+  // in addition to returning the remaining result. If lazyness is not required
+  // it is a no-op.
+  ProtoResult createResult(
+      bool requestedLaziness,
+      ad_utility::InvocableWithExactReturnType<
+          Result::IdTableVocabPair,
+          std::function<void(IdTable&, LocalVocab&)>> auto action,
+      std::vector<ColumnIndex> permutation = {}) const;
 
   // Helper function that cheaply checks if a join could contain undefined. For
   // fully materialized tables it can just look at the first element. For lazy
