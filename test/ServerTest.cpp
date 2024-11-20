@@ -9,6 +9,7 @@
 #include <boost/beast/http.hpp>
 
 #include "util/GTestHelpers.h"
+#include "util/HttpRequestHelpers.h"
 #include "util/http/HttpUtils.h"
 #include "util/http/UrlParser.h"
 
@@ -30,24 +31,6 @@ auto ParsedRequestIs = [](const std::string& path,
 }  // namespace
 
 TEST(ServerTest, parseHttpRequest) {
-  namespace http = boost::beast::http;
-
-  auto MakeBasicRequest = [](http::verb method, const std::string& target) {
-    // version 11 stands for HTTP/1.1
-    return http::request<http::string_body>{method, target, 11};
-  };
-  auto MakeGetRequest = [&MakeBasicRequest](const std::string& target) {
-    return MakeBasicRequest(http::verb::get, target);
-  };
-  auto MakePostRequest = [&MakeBasicRequest](const std::string& target,
-                                             const std::string& contentType,
-                                             const std::string& body) {
-    auto req = MakeBasicRequest(http::verb::post, target);
-    req.set(http::field::content_type, contentType);
-    req.body() = body;
-    req.prepare_payload();
-    return req;
-  };
   auto parse = [](const ad_utility::httpUtils::HttpRequest auto& request) {
     return Server::parseHttpRequest(request);
   };
@@ -120,7 +103,7 @@ TEST(ServerTest, parseHttpRequest) {
       parse(MakePostRequest("/?send=100", QUERY, "SELECT * WHERE {}")),
       ParsedRequestIs("/", {{"send", {"100"}}}, Query{"SELECT * WHERE {}"}));
   AD_EXPECT_THROW_WITH_MESSAGE(
-      parse(MakeBasicRequest(http::verb::patch, "/")),
+      parse(MakeRequest(http::verb::patch, "/")),
       testing::StrEq(
           "Request method \"PATCH\" not supported (has to be GET or POST)"));
   AD_EXPECT_THROW_WITH_MESSAGE(
