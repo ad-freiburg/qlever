@@ -141,5 +141,5 @@ class SpatialJoin : public Operation {
   // between the two objects
   bool addDistToResult_ = true;
   const string nameDistanceInternal_ = "?distOfTheTwoObjectsAddedInternally";
-  Algorithm algorithm_ = Algorithm::BoundingBox;
+  Algorithm algorithm_ = Algorithm::S2Geometry;
 };

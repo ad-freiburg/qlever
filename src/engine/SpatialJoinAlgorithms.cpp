@@ -6,7 +6,7 @@
 #include <s2/s2point_index.h>
 #include <s2/util/units/length-units.h>
 
-#include "math.h"
+#include <cmath>
 #include "util/GeoSparqlHelpers.h"
 
 using namespace BoostGeometryNamespace;
@@ -232,9 +232,7 @@ std::vector<Box> SpatialJoinAlgorithms::computeBoundingBox(
     const Point& startPoint) {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
               rightJoinCol, numColumns, maxDist, maxResults] = params_;
-  if (!maxDist.has_value()) {
-    AD_THROW("Max distance must have a value for this operation");
-  }
+  AD_CORRECTNESS_CHECK(maxDist.has_value(), "Max distance must have a value for this operation");
   // haversine function
   auto haversine = [](double theta) { return (1 - std::cos(theta)) / 2; };
 
@@ -258,7 +256,7 @@ std::vector<Box> SpatialJoinAlgorithms::computeBoundingBox(
   // a single bounding box for the whole planet, do an optimized version
   if (static_cast<double>(maxDist.value()) > circumferenceMax_ / 4.0 &&
       static_cast<double>(maxDist.value()) < circumferenceMax_ / 2.01) {
-    return computeUsingAntiBoundingBox(startPoint);
+    return computeBoundingBoxForLargeDistances(startPoint);
   }
 
   // compute latitude bound
@@ -311,13 +309,11 @@ std::vector<Box> SpatialJoinAlgorithms::computeBoundingBox(
 }
 
 // ____________________________________________________________________________
-std::vector<Box> SpatialJoinAlgorithms::computeUsingAntiBoundingBox(
+std::vector<Box> SpatialJoinAlgorithms::computeBoundingBoxForLargeDistances(
     const Point& startPoint) const {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
               rightJoinCol, numColumns, maxDist, maxResults] = params_;
-  if (!maxDist.has_value()) {
-    AD_THROW("Max distance must have a value for this operation");
-  }
+  AD_CORRECTNESS_CHECK(maxDist.has_value(), "Max distance must have a value for this operation");
 
   // point on the opposite side of the globe
   Point antiPoint(startPoint.get<0>() + 180, startPoint.get<1>() * -1);
@@ -391,17 +387,17 @@ std::vector<Box> SpatialJoinAlgorithms::computeUsingAntiBoundingBox(
 }
 
 // ____________________________________________________________________________
-bool SpatialJoinAlgorithms::containedInBoundingBoxes(
-    const std::vector<Box>& bbox, Point point1) {
-  convertToNormalCoordinates(point1);
+bool SpatialJoinAlgorithms::isContainedInBoundingBoxes(
+    const std::vector<Box>& boundingBox, Point point) {
+  convertToNormalCoordinates(point);
 
-  return std::ranges::any_of(bbox, [point1](const Box& aBox) {
-    return boost::geometry::covered_by(point1, aBox);
+  return std::ranges::any_of(boundingBox, [point](const Box& aBox) {
+    return boost::geometry::covered_by(point, aBox);
   });
 }
 
 // ____________________________________________________________________________
-void SpatialJoinAlgorithms::convertToNormalCoordinates(Point& point) {
+void SpatialJoinAlgorithms::convertToNormalCoordinates(Point& point) const {
   // correct lon and lat bounds if necessary
   while (point.get<0>() < -180) {
     point.set<0>(point.get<0>() + 360);
@@ -416,8 +412,9 @@ void SpatialJoinAlgorithms::convertToNormalCoordinates(Point& point) {
   }
 }
 
+// ____________________________________________________________________________
 std::array<bool, 2> SpatialJoinAlgorithms::isAPoleTouched(
-    const double& latitude) {
+    const double& latitude) const {
   bool northPoleReached = false;
   bool southPoleReached = false;
   if (latitude >= 90) {
@@ -431,11 +428,17 @@ std::array<bool, 2> SpatialJoinAlgorithms::isAPoleTouched(
 
 // ____________________________________________________________________________
 Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
-  auto printWarning = []() {
-    AD_LOG_WARN
-        << "expected a point here, but no point is given. Skipping this point"
-        << std::endl;
+  bool alreadyWarned = false;
+  
+  auto printWarning = [&]() {
+    if (!alreadyWarned) {
+      AD_LOG_WARN
+          << "expected a point here, but no point is given. Skipping this point and future 'non points' of this query"
+          << std::endl;
+      alreadyWarned = true;
+    }
   };
+  
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
               rightJoinCol, numColumns, maxDist, maxResults] = params_;
   IdTable result{numColumns, qec_->getAllocator()};
@@ -453,6 +456,10 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
   }
 
   bgi::rtree<Value, bgi::quadratic<16>> rtree;
+  // bgi::rtree<Value, bgi::quadratic<16>, index::indexable<Value>, index::equal_to<Value>, ad_utility::AllocatorWithLimit<Value>> rtree(parameters_type(), indexable_getter(), value_equal(), qec_->getAllocator());
+  // bgi::rtree<Value, bgi::quadratic<16>, ad_utility::AllocatorWithLimit<Value>> rtree{qec_->getAllocator()};
+  // bgi::rtree<Value, bgi::quadratic<16>> dummyRtree;
+  // bgi::rtree<Value, bgi::quadratic<16>, ad_utility::AllocatorWithLimit<Value>> rtree(dummyRtree, qec_->getAllocator());
   for (size_t i = 0; i < smallerResult->numRows(); i++) {
     // get point of row i
     auto geopoint = getPoint(smallerResult, i, smallerResJoinCol);

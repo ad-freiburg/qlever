@@ -934,7 +934,7 @@ TEST(SpatialJoin, computeBoundingBox) {
   }
 }
 
-TEST(SpatialJoin, containedInBoundingBoxes) {
+TEST(SpatialJoin, isContainedInBoundingBoxes) {
   // build dummy join to access the containedInBoundingBox and
   // computeBoundingBox functions
   auto qec = buildTestQEC();

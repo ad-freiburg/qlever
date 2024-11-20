@@ -35,9 +35,9 @@ class SpatialJoinAlgorithms {
   }
 
   bool OnlyForTestingWrapperContainedInBoundingBoxes(
-      const std::vector<BoostGeometryNamespace::Box>& bbox,
-      const BoostGeometryNamespace::Point& point1) {
-    return containedInBoundingBoxes(bbox, point1);
+      const std::vector<BoostGeometryNamespace::Box>& boundingBox,
+      const BoostGeometryNamespace::Point& point) {
+    return isContainedInBoundingBoxes(boundingBox, point);
   }
 
  private:
@@ -80,14 +80,14 @@ class SpatialJoinAlgorithms {
   // gets used, when the usual procedure, would just result in taking a big
   // bounding box, which covers the whole planet (so for extremely large max
   // distances)
-  std::vector<BoostGeometryNamespace::Box> computeUsingAntiBoundingBox(
+  std::vector<BoostGeometryNamespace::Box> computeBoundingBoxForLargeDistances(
       const BoostGeometryNamespace::Point& startPoint) const;
 
   // This function returns true, iff the given point is contained in any of the
   // bounding boxes
-  bool containedInBoundingBoxes(
-      const std::vector<BoostGeometryNamespace::Box>& bbox,
-      BoostGeometryNamespace::Point point1);
+  bool isContainedInBoundingBoxes(
+      const std::vector<BoostGeometryNamespace::Box>& boundingBox,
+      BoostGeometryNamespace::Point point);
 
   QueryExecutionContext* qec_;
   PreparedSpatialJoinParams params_;
@@ -105,8 +105,8 @@ class SpatialJoinAlgorithms {
   static constexpr double radius_ = 6'378'000;
 
   // convert coordinates to the usual ranges (-180 to 180 and -90 to 90)
-  void convertToNormalCoordinates(BoostGeometryNamespace::Point& point);
+  void convertToNormalCoordinates(BoostGeometryNamespace::Point& point) const;
 
   // return whether one of the poles is being touched
-  std::array<bool, 2> isAPoleTouched(const double& latitude);
+  std::array<bool, 2> isAPoleTouched(const double& latitude) const;
 };
