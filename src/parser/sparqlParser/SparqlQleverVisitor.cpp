@@ -285,21 +285,17 @@ ParsedQuery Visitor::visit(Parser::DescribeQueryContext* ctx) {
   std::vector<Variable> describedVariables;
   // Convert the describe resources (variables or IRIs) from the format that the
   // parser delivers to the one that the `Describe` struct expects.
-
-  auto addDescribedVariable = [&describeClause,
-                         &describedVariables](const Variable& variable) {
-    describeClause.resources_.push_back(variable);
-    describedVariables.push_back(variable);
-  };
-  auto addDescribedIri = [&describeClause](const Iri& iri) {
-    auto iriTc =
-        TripleComponent::Iri::fromIriref(std::get<Iri>(resource).toSparql());
-    describeClause.resources_.push_back(std::move(iriTc));
-  };
-
   for (GraphTerm& resource : describedResources) {
-    std::visit(ad_utility::OverloadCallOperator{addDescribedVariable, addDescribedIri},
-               resource);
+    if (std::holds_alternative<Variable>(resource)) {
+      const auto& variable = std::get<Variable>(resource);
+      describeClause.resources_.push_back(variable);
+      describedVariables.push_back(variable);
+    } else {
+      AD_CORRECTNESS_CHECK(std::holds_alternative<Iri>(resource));
+      auto iri =
+          TripleComponent::Iri::fromIriref(std::get<Iri>(resource).toSparql());
+      describeClause.resources_.push_back(std::move(iri));
+    }
   }
 
   // Parse the FROM (NAMED) clauses and store them in the `describeClause`.
@@ -318,8 +314,11 @@ ParsedQuery Visitor::visit(Parser::DescribeQueryContext* ctx) {
 
   // HANDLE `DESCRIBE *`
   if (describedResources.empty()) {
-    std::ranges::for_each(parsedQuery_.selectClause().getVisibleVariables(),
-                          addDescribedVariable);
+    const auto& visibleVariables =
+        parsedQuery_.selectClause().getVisibleVariables();
+    std::ranges::copy(visibleVariables,
+                      std::back_inserter(describeClause.resources_));
+    describedVariables = visibleVariables;
   }
 
   auto& selectClause = parsedQuery_.selectClause();
