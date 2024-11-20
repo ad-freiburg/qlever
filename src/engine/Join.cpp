@@ -422,32 +422,33 @@ ProtoResult Join::createResult(
         [](auto innerAction, auto innerPermutation) -> Result::Generator {
           ad_utility::data_structures::ThreadSafeQueue<Result::IdTableVocabPair>
               queue{1};
-          ad_utility::JThread{[&queue, &innerAction, &innerPermutation]() {
-            auto addValue = [&queue, &innerPermutation](
-                                IdTable& idTable, LocalVocab& localVocab) {
-              if (idTable.size() < CHUNK_SIZE) {
-                return;
-              }
-              Result::IdTableVocabPair pair{std::move(idTable),
-                                            std::move(localVocab)};
-              if (!innerPermutation.empty()) {
-                pair.idTable_.setColumnSubset(innerPermutation);
-              }
-              queue.push(std::move(pair));
-            };
-            try {
-              auto finalValue = innerAction(addValue);
-              if (!finalValue.idTable_.empty()) {
-                if (!innerPermutation.empty()) {
-                  finalValue.idTable_.setColumnSubset(innerPermutation);
+          ad_utility::JThread thread{
+              [&queue, &innerAction, &innerPermutation]() {
+                auto addValue = [&queue, &innerPermutation](
+                                    IdTable& idTable, LocalVocab& localVocab) {
+                  if (idTable.size() < CHUNK_SIZE) {
+                    return;
+                  }
+                  Result::IdTableVocabPair pair{std::move(idTable),
+                                                std::move(localVocab)};
+                  if (!innerPermutation.empty()) {
+                    pair.idTable_.setColumnSubset(innerPermutation);
+                  }
+                  queue.push(std::move(pair));
+                };
+                try {
+                  auto finalValue = innerAction(addValue);
+                  if (!finalValue.idTable_.empty()) {
+                    if (!innerPermutation.empty()) {
+                      finalValue.idTable_.setColumnSubset(innerPermutation);
+                    }
+                    queue.push(std::move(finalValue));
+                  }
+                  queue.finish();
+                } catch (...) {
+                  queue.pushException(std::current_exception());
                 }
-                queue.push(std::move(finalValue));
-              }
-              queue.finish();
-            } catch (...) {
-              queue.pushException(std::current_exception());
-            }
-          }};
+              }};
           while (true) {
             auto val = queue.pop();
             if (!val.has_value()) {
