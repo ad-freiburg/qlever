@@ -1,6 +1,7 @@
-// Copyright 2022, University of Freiburg
+// Copyright 2022 - 2024, University of Freiburg
 // Chair of Algorithms and Data Structures
-// Author: Hannah Bast <bast@cs.uni-freiburg.de>
+// Authors: Hannah Bast <bast@cs.uni-freiburg.de>
+//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 #pragma once
 
@@ -14,31 +15,39 @@
 #include "global/Id.h"
 #include "parser/LiteralOrIri.h"
 #include "util/BlankNodeManager.h"
+#include "util/Exception.h"
 
-// A class for maintaining a local vocabulary with contiguous (local) IDs. This
-// is meant for words that are not part of the normal vocabulary (constructed
-// from the input data at indexing time).
+// A class for maintaining a local vocabulary, which conceptually is a set of
+// `LiteralOrIri`s that are not part of the original vocabulary (which stems
+// from the input data). The implementation is subtle and quite clever:
 //
-
+// The entries of the local vocabulary are `LocalVocabEntry`s, each of which
+// holds a `LiteralOrIri` and remembers its position in the original vocabulary
+// after it has been computed once.
+//
+// A `LocalVocab` has a primary set of `LocalVocabEntry`s, which can grow
+// dynamically, and a collection of other sets of `LocalVocabEntry`s, which
+// cannot be modified by this class. A `LocalVocabEntry` lives exactly as long
+// as it is contained in at least one of the (primary or other) sets of a
+// `LocalVocab`.
 class LocalVocab {
  private:
-  using Entry = LocalVocabEntry;
-  using LiteralOrIri = LocalVocabEntry;
-  // A map of the words in the local vocabulary to their local IDs. This is a
-  // node hash map because we need the addresses of the words (which are of type
-  // `LiteralOrIri`) to remain stable over their lifetime in the hash map
-  // because we hand out pointers to them.
-  using Set = absl::node_hash_set<LiteralOrIri>;
+  // The primary set of `LocalVocabEntry`s, which can grow dynamically.
+  //
+  // NOTE: This is a `absl::node_hash_set` because we hand out pointers to
+  // the `LocalVocabEntry`s and it is hence essential that their addresses
+  // remain stable over their lifetime in the hash set.
+  using Set = absl::node_hash_set<LocalVocabEntry>;
   std::shared_ptr<Set> primaryWordSet_ = std::make_shared<Set>();
 
-  // Local vocabularies from child operations that were merged into this
-  // vocabulary s.t. the pointers are kept alive. They have to be `const`
-  // because they are possibly shared concurrently (for example via the cache).
+  // The other sets of `LocalVocabEntry`s, which are static.
   std::vector<std::shared_ptr<const Set>> otherWordSets_;
 
-  auto& primaryWordSet() { return *primaryWordSet_; }
-  const auto& primaryWordSet() const { return *primaryWordSet_; }
+  // The number of words (so that we can compute `size()` in constant time).
+  size_t size_ = 0;
 
+  // Each `LocalVocab` has its own `LocalBlankNodeManager` to generate blank
+  // nodes when needed (e.g., when parsing the result of a SERVICE query).
   std::optional<ad_utility::BlankNodeManager::LocalBlankNodeManager>
       localBlankNodeManager_;
 
@@ -50,49 +59,54 @@ class LocalVocab {
   LocalVocab(const LocalVocab&) = delete;
   LocalVocab& operator=(const LocalVocab&) = delete;
 
-  // Make a logical copy. The clone will have an empty primary set so it can
-  // safely be modified. The contents are copied as shared pointers to const, so
-  // the function runs in linear time in the number of word sets.
+  // Make a logical copy, where all sets of `LocalVocabEntry`s become "other"
+  // sets, that is, they cannot be modified by the copy. The primary set becomes
+  // empty. This only copies shared pointers and takes time linear in the number
+  // of sets.
   LocalVocab clone() const;
 
   // Moving a local vocabulary is not problematic (though the typical use case
-  // in our code is to copy shared pointers to local vocabularies).
+  // in our code is to copy shared pointers from one `LocalVocab` to another).
   LocalVocab(LocalVocab&&) = default;
   LocalVocab& operator=(LocalVocab&&) = default;
 
-  // Get the index of a word in the local vocabulary. If the word was already
-  // contained, return the already existing index. If the word was not yet
-  // contained, add it, and return the new index.
-  LocalVocabIndex getIndexAndAddIfNotContained(const LiteralOrIri& word);
-  LocalVocabIndex getIndexAndAddIfNotContained(LiteralOrIri&& word);
+  // For a given `LocalVocabEntry`, return the corresponding `LocalVocabIndex`
+  // (which is just the address of the `LocalVocabEntry`). If the
+  // `LocalVocabEntry` is not contained in any of the sets, add it to the
+  // primary.
+  LocalVocabIndex getIndexAndAddIfNotContained(const LocalVocabEntry& word);
+  LocalVocabIndex getIndexAndAddIfNotContained(LocalVocabEntry&& word);
 
-  // Get the index of a word in the local vocabulary, or std::nullopt if it is
-  // not contained. This is useful for testing.
+  // Like `getIndexAndAddIfNotContained`, but if the `LocalVocabEntry` is not
+  // contained in any of the sets, do not add it and return `std::nullopt`.
   std::optional<LocalVocabIndex> getIndexOrNullopt(
-      const LiteralOrIri& word) const;
+      const LocalVocabEntry& word) const;
 
-  // The number of words in the vocabulary.
-  // Note: This is not constant time, but linear in the number of word sets.
+  // The number of words in this local vocabulary.
   size_t size() const {
-    auto result = primaryWordSet().size();
-    for (const auto& previous : otherWordSets_) {
-      result += previous->size();
+    if constexpr (ad_utility::areExpensiveChecksEnabled) {
+      auto size = primaryWordSet().size();
+      for (const auto& previous : otherWordSets_) {
+        size += previous->size();
+      }
+      AD_CORRECTNESS_CHECK(size == size_);
     }
-    return result;
+    return size_;
   }
 
   // Return true if and only if the local vocabulary is empty.
   bool empty() const { return size() == 0; }
 
-  // Return a const reference to the word.
-  const LiteralOrIri& getWord(LocalVocabIndex localVocabIndex) const;
+  // Get the `LocalVocabEntry` corresponding to the given `LocalVocabIndex`.
+  //
+  // NOTE: This used to be a more complex function but is now a simple
+  // dereference. It could be thrown out in the future.
+  const LocalVocabEntry& getWord(LocalVocabIndex localVocabIndex) const;
 
-  // Create a local vocab that contains and keeps alive all the words from each
-  // of the `vocabs`. The primary word set of the newly created vocab is empty.
-  static LocalVocab merge(std::span<const LocalVocab*> vocabs);
-
-  // Merge all passed local vocabs to keep alive all the words from each of the
-  // `vocabs`.
+  // Add all sets (primary and other) of the given local vocabs as other sets
+  // to this local vocab. The purpose is to keep all the contained
+  // `LocalVocabEntry`s alive as long as this `LocalVocab` is alive. The
+  // primary set of this `LocalVocab` remains unchanged.
   template <std::ranges::range R>
   void mergeWith(const R& vocabs) {
     auto inserter = std::back_inserter(otherWordSets_);
@@ -100,11 +114,17 @@ class LocalVocab {
     for (const auto& vocab : vocabs | filter(std::not_fn(&LocalVocab::empty))) {
       std::ranges::copy(vocab.otherWordSets_, inserter);
       *inserter = vocab.primaryWordSet_;
+      size_ += vocab.size_;
     }
   }
 
-  // Return all the words from all the word sets as a vector.
-  std::vector<LiteralOrIri> getAllWordsForTesting() const;
+  // Create a new local vocab with empty set and other sets that are the union
+  // of all sets (primary and other) of the given local vocabs.
+  static LocalVocab merge(std::span<const LocalVocab*> vocabs);
+
+  // Return all the words from all the word sets as a vector. This is useful
+  // for testing.
+  std::vector<LocalVocabEntry> getAllWordsForTesting() const;
 
   // Get a new BlankNodeIndex using the LocalBlankNodeManager.
   [[nodiscard]] BlankNodeIndex getBlankNodeIndex(
@@ -115,8 +135,12 @@ class LocalVocab {
   bool isBlankNodeIndexContained(BlankNodeIndex blankNodeIndex) const;
 
  private:
-  // Common implementation for the two variants of
-  // `getIndexAndAddIfNotContainedImpl` above.
+  // Accessors for the primary set.
+  Set& primaryWordSet() { return *primaryWordSet_; }
+  const Set& primaryWordSet() const { return *primaryWordSet_; }
+
+  // Common implementation for the two methods `getIndexAndAddIfNotContained`
+  // and `getIndexOrNullopt` above.
   template <typename WordT>
   LocalVocabIndex getIndexAndAddIfNotContainedImpl(WordT&& word);
 };
