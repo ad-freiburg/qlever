@@ -87,14 +87,12 @@ class ShallowParentOperation : public Operation {
 
 // Operation that will throw on `computeResult` for testing.
 class AlwaysFailOperation : public Operation {
-  static std::atomic_uint32_t cacheCounter;
-
   std::optional<Variable> variable_ = std::nullopt;
 
   std::vector<QueryExecutionTree*> getChildren() override { return {}; }
   string getCacheKeyImpl() const override {
-    // Every operation gets a unique cache key
-    return absl::StrCat("AlwaysFailCacheKey_", cacheCounter++);
+    // Because this operation always fails, it should never be cached.
+    return "AlwaysFailOperationCacheKey";
   }
   string getDescriptor() const override {
     return "AlwaysFailOperationDescriptor";
@@ -130,8 +128,6 @@ class AlwaysFailOperation : public Operation {
             resultSortedOn()};
   }
 };
-
-std::atomic_uint32_t AlwaysFailOperation::cacheCounter = 0;
 
 // Lazy operation that will yield a result with a custom generator you can
 // provide via the constructor.
