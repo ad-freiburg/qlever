@@ -420,39 +420,33 @@ void Join::join(const IdTable& a, ColumnIndex jc1, const IdTable& b,
 // _____________________________________________________________________________
 ProtoResult Join::createResult(bool requestedLaziness, auto action) const {
   if (requestedLaziness) {
-    auto startProcessing = std::make_shared<std::atomic_flag>(false);
-    auto queue = std::make_shared<
-        ad_utility::data_structures::ThreadSafeQueue<Result::IdTableVocabPair>>(
-        1);
-    ad_utility::JThread{[startProcessing, queue, action = std::move(action)]() {
-      // Don't start processing until the main thread has reached the generator
-      // to avoid race conditions.
-      startProcessing->wait(false);
-      auto addValue = [&queue](Result::IdTableVocabPair value) {
-        if (value.idTable_.empty()) {
-          return;
-        }
-        queue->push(std::move(value));
-      };
-      try {
-        addValue(action(addValue));
-        queue->finish();
-      } catch (...) {
-        queue->pushException(std::current_exception());
-      }
-    }}.detach();
-    return {[](auto queue, auto startProcessing) -> Result::Generator {
-              startProcessing->test_and_set();
-              startProcessing->notify_one();
-              while (true) {
-                auto val = queue->pop();
-                if (!val.has_value()) {
-                  break;
-                }
-                co_yield val.value();
+    return {
+        [](auto innerAction) -> Result::Generator {
+          ad_utility::data_structures::ThreadSafeQueue<Result::IdTableVocabPair>
+              queue{1};
+          ad_utility::JThread{[&queue, &innerAction]() {
+            auto addValue = [&queue](Result::IdTableVocabPair value) {
+              if (value.idTable_.empty()) {
+                return;
               }
-            }(std::move(queue), std::move(startProcessing)),
-            resultSortedOn()};
+              queue.push(std::move(value));
+            };
+            try {
+              addValue(innerAction(addValue));
+              queue.finish();
+            } catch (...) {
+              queue.pushException(std::current_exception());
+            }
+          }};
+          while (true) {
+            auto val = queue.pop();
+            if (!val.has_value()) {
+              break;
+            }
+            co_yield val.value();
+          }
+        }(std::move(action)),
+        resultSortedOn()};
   } else {
     auto [idTable, localVocab] = action(ad_utility::noop);
     return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
