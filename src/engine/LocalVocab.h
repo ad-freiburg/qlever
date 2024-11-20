@@ -106,25 +106,24 @@ class LocalVocab {
     // Also merge the `vocabs` `LocalBlankNodeManager`s, if they exist.
     using LocalBlankNodeManager =
         ad_utility::BlankNodeManager::LocalBlankNodeManager;
-    using sharedLbnm = std::shared_ptr<const LocalBlankNodeManager>;
+    using sharedManager = std::shared_ptr<const LocalBlankNodeManager>;
 
-    auto lbnmView =
-        vocabs |
-        std::views::transform([](const LocalVocab& vocab) -> const sharedLbnm {
-          return vocab.localBlankNodeManager_;
-        });
+    auto localManagersView =
+        vocabs | std::views::transform(
+                     [](const LocalVocab& vocab) -> const sharedManager {
+                       return vocab.localBlankNodeManager_;
+                     });
 
     auto it = std::ranges::find_if(
-        lbnmView, [](const sharedLbnm& l) -> bool { return l != nullptr; });
-    if (it == lbnmView.end()) {
+        localManagersView, [](const sharedManager& l) { return l != nullptr; });
+    if (it == localManagersView.end()) {
       return;
     }
-
     if (!localBlankNodeManager_) {
       localBlankNodeManager_ =
-          std::make_shared<LocalBlankNodeManager>((*it)->blankNodeManager_);
+          std::make_shared<LocalBlankNodeManager>((*it)->blankNodeManager());
     }
-    localBlankNodeManager_->mergeWith(lbnmView);
+    localBlankNodeManager_->mergeWith(localManagersView);
   }
 
   // Return all the words from all the word sets as a vector.

@@ -134,6 +134,14 @@ TEST(LocalVocab, clone) {
   for (size_t i = 0; i < inputWords.size(); ++i) {
     EXPECT_EQ(*indices[i], inputWords[i]);
   }
+
+  // Test that a BlankNodeIndex obtained by a `LocalVocab` is also contained
+  // in the clone.
+  ad_utility::BlankNodeManager bnm;
+  LocalVocab v;
+  auto id = v.getBlankNodeIndex(&bnm);
+  LocalVocab vClone = v.clone();
+  EXPECT_TRUE(vClone.isBlankNodeIndexContained(id));
 }
 // _____________________________________________________________________________
 TEST(LocalVocab, merge) {
