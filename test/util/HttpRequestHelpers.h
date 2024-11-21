@@ -4,13 +4,17 @@
 
 #pragma once
 
-namespace http = boost::beast::http;
+#include "util/HashMap.h"
+#include "util/http/beast.h"
 
-using Headers = ad_utility::HashMap<http::field, std::string>;
-inline auto MakeRequest(const http::verb method = http::verb::get,
-                        const std::string& target = "/",
-                        const Headers& headers = {},
-                        const std::optional<std::string>& body = std::nullopt) {
+namespace ad_utility::testing {
+
+namespace http = beast::http;
+
+inline auto MakeRequest(
+    const http::verb method = http::verb::get, const std::string& target = "/",
+    const ad_utility::HashMap<http::field, std::string>& headers = {},
+    const std::optional<std::string>& body = std::nullopt) {
   // version 11 stands for HTTP/1.1
   auto req = http::request<http::string_body>{method, target, 11};
   for (const auto& [key, value] : headers) {
@@ -26,9 +30,12 @@ inline auto MakeRequest(const http::verb method = http::verb::get,
 inline auto MakeGetRequest(const std::string& target) {
   return MakeRequest(http::verb::get, target);
 }
+
 inline auto MakePostRequest(const std::string& target,
                             const std::string& contentType,
                             const std::string& body) {
   return MakeRequest(http::verb::post, target,
                      {{http::field::content_type, contentType}}, body);
 }
+
+}  // namespace ad_utility::testing
