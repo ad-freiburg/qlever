@@ -26,20 +26,33 @@ std::vector<QueryExecutionTree*> Describe::getChildren() {
 // _____________________________________________________________________________
 string Describe::getCacheKeyImpl() const {
   // The cache key must represent the `resources_` as well as the `subtree_`.
-  std::string resourceKey;
+  std::string result = absl::StrCat("DESCRIBE ", subtree_->getCacheKey(), " ");
   for (const auto& resource : describe_.resources_) {
     if (std::holds_alternative<TripleComponent::Iri>(resource)) {
-      resourceKey.append(
+      result.append(
           std::get<TripleComponent::Iri>(resource).toStringRepresentation());
     } else {
-      resourceKey.append(absl::StrCat(
+      result.append(absl::StrCat(
           "column #",
           subtree_->getVariableColumnOrNullopt(std::get<Variable>(resource))
               .value_or(static_cast<size_t>(-1)),
           " "));
     }
   }
-  return absl::StrCat("DESCRIBE ", subtree_->getCacheKey(), resourceKey);
+
+  const auto& defaultGraphs = describe_.datasetClauses_.defaultGraphs_;
+  if (defaultGraphs.has_value()) {
+    // The graphs are stored as a hash set, but we need a deterministic order.
+    std::vector<std::string> graphIdVec;
+    std::ranges::transform(defaultGraphs.value(),
+                           std::back_inserter(graphIdVec),
+                           &TripleComponent::toRdfLiteral);
+    std::ranges::sort(graphIdVec);
+    absl::StrAppend(&result,
+    "\nFiltered by Graphs:",
+    absl::StrJoin(graphIdVec, " "));
+  }
+  return result;
 }
 
 // _____________________________________________________________________________
