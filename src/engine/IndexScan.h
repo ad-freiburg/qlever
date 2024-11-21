@@ -49,7 +49,8 @@ class IndexScan final : public Operation {
             const TripleComponent& s, const TripleComponent& p,
             const TripleComponent& o,
             std::vector<ColumnIndex> additionalColumns,
-            std::vector<Variable> additionalVariables, Graphs graphsToFilter,
+            std::vector<Variable> additionalVariables,
+            const size_t numVariables, Graphs graphsToFilter,
             PrefilterIndexPair prefilter);
 
   ~IndexScan() override = default;
@@ -167,10 +168,9 @@ class IndexScan final : public Operation {
   // Get the `IdTable` for this `IndexScan` in one piece.
   IdTable materializedIndexScan() const;
 
-  // Get the mapping for all `Variable` values mapped to sorted `ColumnIndex`
-  // values.
-  ad_utility::HashMap<Variable, ColumnIndex> getVariableToSortedIndexMap()
-      const;
+  // Get the first sorted 'Variable' with corresponding `ColumnIndex`.
+  std::optional<std::pair<Variable, ColumnIndex>>
+  getFirstSortedtVariableWithColumnIndex() const;
 
   // Helper to retrieve the `CompressedBlockMetadata` span for this scan.
   std::optional<std::span<const CompressedBlockMetadata>> getOptionalBlockSpan()

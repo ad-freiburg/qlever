@@ -64,7 +64,8 @@ IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
                      const TripleComponent& o,
                      std::vector<ColumnIndex> additionalColumns,
                      std::vector<Variable> additionalVariables,
-                     Graphs graphsToFilter, PrefilterIndexPair prefilter)
+                     const size_t numVariables, Graphs graphsToFilter,
+                     PrefilterIndexPair prefilter)
     : Operation(qec),
       permutation_(permutation),
       subject_(s),
@@ -72,8 +73,11 @@ IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
       object_(o),
       graphsToFilter_(std::move(graphsToFilter)),
       prefilter_(std::move(prefilter)),
+      numVariables_(numVariables),
       additionalColumns_(std::move(additionalColumns)),
-      additionalVariables_(std::move(additionalVariables)) {}
+      additionalVariables_(std::move(additionalVariables)) {
+  std::tie(sizeEstimateIsExact_, sizeEstimate_) = computeSizeEstimate();
+}
 
 // _____________________________________________________________________________
 string IndexScan::getCacheKeyImpl() const {
@@ -145,15 +149,15 @@ vector<ColumnIndex> IndexScan::resultSortedOn() const {
 std::optional<std::shared_ptr<QueryExecutionTree>>
 IndexScan::setPrefilterExprGetUpdatedQetPtr(
     std::vector<PrefilterVariablePair> prefilterVariablePairs) {
-  if (numVariables_ < 1) {
+  auto optSortedVarColIdxPair = getFirstSortedtVariableWithColumnIndex();
+  if (!optSortedVarColIdxPair.has_value()) {
     return std::nullopt;
   }
-
-  auto map = getVariableToSortedIndexMap();
+  const auto& [sortedVar, colIdx] = optSortedVarColIdxPair.value();
   for (auto& [prefilterExpr, variable] : prefilterVariablePairs) {
-    if (map.find(variable) != map.end()) {
+    if (sortedVar == variable) {
       return makeCopyWithAddedPrefilters(
-          std::make_pair(prefilterExpr->clone(), map[variable]));
+          std::make_pair(prefilterExpr->clone(), colIdx));
     }
   }
   return std::nullopt;
@@ -183,7 +187,7 @@ std::shared_ptr<QueryExecutionTree> IndexScan::makeCopyWithAddedPrefilters(
     PrefilterIndexPair prefilter) const {
   return ad_utility::makeExecutionTree<IndexScan>(
       getExecutionContext(), permutation_, subject_, predicate_, object_,
-      additionalColumns_, additionalVariables_, graphsToFilter_,
+      additionalColumns_, additionalVariables_, numVariables_, graphsToFilter_,
       std::move(prefilter));
 }
 
@@ -306,18 +310,16 @@ ScanSpecificationAsTripleComponent IndexScan::getScanSpecificationTc() const {
 }
 
 // _____________________________________________________________________________
-ad_utility::HashMap<Variable, ColumnIndex>
-IndexScan::getVariableToSortedIndexMap() const {
-  ad_utility::HashMap<Variable, ColumnIndex> map;
-  ColumnIndex idx = 0;
-  for (const TripleComponent* const ptr : getPermutedTriple()) {
-    if (ptr->isVariable()) {
-      map[ptr->getVariable()] = idx;
-      break;
-    }
-    idx++;
+std::optional<std::pair<Variable, ColumnIndex>>
+IndexScan::getFirstSortedtVariableWithColumnIndex() const {
+  if (numVariables_ < 1) {
+    return std::nullopt;
   }
-  return map;
+  const auto& permutedTriple = getPermutedTriple();
+  size_t colIdx = 3 - numVariables_;
+  const auto& tripleComp = permutedTriple.at(colIdx);
+  AD_CORRECTNESS_CHECK(tripleComp->isVariable());
+  return std::make_pair(tripleComp->getVariable(), colIdx);
 }
 
 // _____________________________________________________________________________
