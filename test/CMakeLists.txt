@@ -420,3 +420,5 @@ addLinkAndDiscoverTest(UrlParserTest)
 addLinkAndDiscoverTest(ServerTest engine)
 
 addLinkAndDiscoverTest(ExecuteUpdateTest engine)
+
+addLinkAndDiscoverTest(GraphStoreProtocolTest engine)
