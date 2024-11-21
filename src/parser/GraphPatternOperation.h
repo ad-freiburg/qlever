@@ -140,8 +140,8 @@ struct Describe {
   std::vector<VarOrIri> resources_;
   // The FROM clauses of the DESCRIBE query
   DatasetClauses datasetClauses_;
-  // The WHERE clause of the describe query. It is used to compute the values
-  // for variables that are to be described.
+  // The WHERE clause of the DESCRIBE query. It is used to compute the values
+  // for the variables in the DESCRIBE clause.
   Subquery whereClause_;
 };
 

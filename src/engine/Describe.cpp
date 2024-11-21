@@ -39,6 +39,7 @@ string Describe::getCacheKeyImpl() const {
           " "));
     }
   }
+  // TODO: Add the graphs from `describe_.datasetClauses_` to the cache key.
   return absl::StrCat("DESCRIBE ", subtree_->getCacheKey(), resourceKey);
 }
 
@@ -76,12 +77,9 @@ VariableToColumnMap Describe::computeVariableToColumnMap() const {
           {V("?object"), col(2)}};
 }
 
-// A helper function for the recursive BFS. Return the subset of `input` (as an
-// `IdTable` with one column) that fulfills  the following properties:
-// 1. The ID is a blank node
-// 2. The ID is not part of `alreadySeen`.
-// The returned IDs are then also added to `alreadySeen`. The result contains no
-// duplicates.
+// A helper function for the recursive BFS. Return those `Id`s from `input` (an
+// `IdTable` with one column) that are blank nodes and not in `alreadySeen`,
+// with duplicates removed. The retuned `Id`s are added to `alreadySeen`.
 static IdTable getNewBlankNodes(
     const auto& allocator, ad_utility::HashSetWithMemoryLimit<Id>& alreadySeen,
     std::span<Id> input) {
