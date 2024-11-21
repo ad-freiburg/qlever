@@ -77,6 +77,7 @@ IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
       additionalColumns_(std::move(additionalColumns)),
       additionalVariables_(std::move(additionalVariables)) {
   std::tie(sizeEstimateIsExact_, sizeEstimate_) = computeSizeEstimate();
+  determineMultiplicities();
 }
 
 // _____________________________________________________________________________
@@ -343,6 +344,7 @@ IndexScan::getOptionalPrefilteredBlocks(
   if (prefilter_.has_value()) {
     // Apply the prefilter on given blocks.
     auto& [prefilterExpr, columnIndex] = prefilter_.value();
+    std::cout << "Use prefiltering" << std::endl;
     return prefilterExpr->evaluate(blocks, columnIndex);
   } else {
     return blocks;
