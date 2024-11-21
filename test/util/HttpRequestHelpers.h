@@ -9,7 +9,7 @@
 
 namespace ad_utility::testing {
 
-namespace http = beast::http;
+namespace http = boost::beast::http;
 
 inline auto MakeRequest(
     const http::verb method = http::verb::get, const std::string& target = "/",
