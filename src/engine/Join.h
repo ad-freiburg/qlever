@@ -94,6 +94,18 @@ class Join : public Operation {
   void join(const IdTable& a, ColumnIndex jc1, const IdTable& b,
             ColumnIndex jc2, IdTable* result) const;
 
+ private:
+  // Part of the implementation of `createResult`. This function is called when
+  // the result should be yielded lazily.
+  // The semantics of action can be seen as
+  // runJoinAndReturnFinalResult(callbackForIntermediateResults).
+  Result::Generator yieldOnCallbackCalled(
+      ad_utility::InvocableWithExactReturnType<
+          Result::IdTableVocabPair,
+          std::function<void(IdTable&, LocalVocab&)>> auto action,
+      std::vector<ColumnIndex> permutation) const;
+
+ public:
   // Helper function to compute the result of a join operation and conditionally
   // return a lazy or fully materialized result depending on `requestLaziness`.
   // This is achieved by running the `action` lambda in a separate thread and
@@ -111,13 +123,6 @@ class Join : public Operation {
           Result::IdTableVocabPair,
           std::function<void(IdTable&, LocalVocab&)>> auto action,
       std::vector<ColumnIndex> permutation = {}) const;
-
-  // Helper function that cheaply checks if a join could contain undefined. For
-  // fully materialized tables it can just look at the first element. For lazy
-  // tables it has to look at the meta information which could potentially
-  // indicate undefinedness even when all values are defined.
-  static bool couldContainUndef(const auto& blocks, const auto& tree,
-                                ColumnIndex joinColumn);
 
   // Fallback implementation of a join that is used when at least one of the two
   // inputs is not fully materialized. This represents the general case where we
@@ -165,6 +170,11 @@ class Join : public Operation {
       ColumnIndex joinColTable, std::shared_ptr<IndexScan> scan,
       ColumnIndex joinColScan) const;
 
+  // Default case where both inputs are fully materialized.
+  ProtoResult computeResultForTwoMaterializedInputs(
+      std::shared_ptr<const Result> leftRes,
+      std::shared_ptr<const Result> rightRes) const;
+
   /*
    * @brief Combines 2 rows like in a join and inserts the result in the
    * given table.
@@ -179,7 +189,7 @@ class Join : public Operation {
    */
   template <typename ROW_A, typename ROW_B, int TABLE_WIDTH>
   static void addCombinedRowToIdTable(const ROW_A& rowA, const ROW_B& rowB,
-                                      const ColumnIndex jcRowB,
+                                      ColumnIndex jcRowB,
                                       IdTableStatic<TABLE_WIDTH>* table);
 
   /*
@@ -189,4 +199,7 @@ class Join : public Operation {
   static void hashJoinImpl(const IdTable& dynA, ColumnIndex jc1,
                            const IdTable& dynB, ColumnIndex jc2,
                            IdTable* dynRes);
+
+  // Commonly used code for the various known-to-be-empty cases.
+  ProtoResult createEmptyResult() const;
 };
