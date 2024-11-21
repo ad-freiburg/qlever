@@ -1,6 +1,8 @@
-// Copyright 2011, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+// Copyright 2011 - 2024, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de> [2011 - 2014]
+//          Johannes Kalmbach <bast@cs.uni-freiburg.de>
+//          Hannah Bast <bast@cs.uni-freiburg.de>
 
 #pragma once
 
@@ -20,12 +22,25 @@
 #define LOGLEVEL INFO
 #endif
 
-// Abseil does also define its own LOG macro, so we need to undefine it here.
+// Abseil also defines its own LOG macro, so we need to undefine it here.
+//
+// NOTE: In case you run into trouble with this conflict, in particular, if you
+// use the `LOG(INFO)` macro and you get compilation errors that mention
+// `abseil`, use the (otherwise identical) `AD_LOG_INFO` macro below.
+//
+// TODO<joka921>: Eventually replace the `LOG` macro by `AD_LOG` everywhere.
+
 #ifdef LOG
 #undef LOG
 #endif
 
 #define LOG(x)      \
+  if (x > LOGLEVEL) \
+    ;               \
+  else              \
+    ad_utility::Log::getLog<x>()  // NOLINT
+
+#define AD_LOG(x)   \
   if (x > LOGLEVEL) \
     ;               \
   else              \
@@ -41,13 +56,21 @@ enum class LogLevel {
   TRACE = 6
 };
 
+// Macros for the different log levels. Always use these instead of the old
+// `LOG(...)` macro to avoid conflicts with `abseil`.
+#define AD_LOG_FATAL AD_LOG(LogLevel::FATAL)
+#define AD_LOG_ERROR AD_LOG(LogLevel::ERROR)
+#define AD_LOG_WARN AD_LOG(LogLevel::WARN)
+#define AD_LOG_INFO AD_LOG(LogLevel::INFO)
+#define AD_LOG_DEBUG AD_LOG(LogLevel::DEBUG)
+#define AD_LOG_TIMING AD_LOG(LogLevel::TIMING)
+#define AD_LOG_TRACE AD_LOG(LogLevel::TRACE)
+
 using enum LogLevel;
 
 namespace ad_utility {
-/* A singleton (According to Scott Meyer's pattern) that holds
- * a pointer to a single std::ostream. This enables us to globally
- * redirect the LOG(LEVEL) macros to another location.
- */
+// A singleton that holds a pointer to a single `std::ostream`. This enables us
+// to globally redirect the `AD_LOG_...` macros to another output stream.
 struct LogstreamChoice {
   std::ostream& getStream() { return *_stream; }
   void setStream(std::ostream* stream) { _stream = stream; }
@@ -65,19 +88,15 @@ struct LogstreamChoice {
 
   // default to cout since it was the default before
   std::ostream* _stream = &std::cout;
+};
 
-};  // struct LogstreamChoice
-
-/** @brief Redirect every LOG(LEVEL) macro that is called afterwards
- *         to the stream that the argument points to.
- *         Typically called in the main function of an executable.
- */
-inline void setGlobalLoggingStream(std::ostream* streamPtr) {
-  LogstreamChoice::get().setStream(streamPtr);
+// After this call, every use of `AD_LOG_...` will use the specified stream.
+// Used in various tests to redirect or suppress logging output.
+inline void setGlobalLoggingStream(std::ostream* stream) {
+  LogstreamChoice::get().setStream(stream);
 }
 
-using std::string;
-//! Helper class to get thousandth separators in a locale
+// Helper class to get thousandth separators in a locale
 class CommaNumPunct : public std::numpunct<char> {
  protected:
   virtual char do_thousands_sep() const { return ','; }
@@ -87,7 +106,7 @@ class CommaNumPunct : public std::numpunct<char> {
 
 const static std::locale commaLocale(std::locale(), new CommaNumPunct());
 
-//! Log
+// The class that actually does the logging.
 class Log {
  public:
   template <LogLevel LEVEL>
@@ -99,7 +118,7 @@ class Log {
 
   static void imbue(const std::locale& locale) { std::cout.imbue(locale); }
 
-  static string getTimeStamp() {
+  static std::string getTimeStamp() {
     return absl::FormatTime("%Y-%m-%d %H:%M:%E3S", absl::Now(),
                             absl::LocalTimeZone());
   }
