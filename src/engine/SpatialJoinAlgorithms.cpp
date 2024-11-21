@@ -455,11 +455,12 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
     std::swap(smallerResJoinCol, otherResJoinCol);
   }
 
-  bgi::rtree<Value, bgi::quadratic<16>> rtree;
-  // bgi::rtree<Value, bgi::quadratic<16>, index::indexable<Value>, index::equal_to<Value>, ad_utility::AllocatorWithLimit<Value>> rtree(parameters_type(), indexable_getter(), value_equal(), qec_->getAllocator());
+  // bgi::rtree<Value, bgi::quadratic<16>> rtree;
+  bgi::rtree<Value, bgi::quadratic<16>, bgi::indexable<Value>, bgi::equal_to<Value>, ad_utility::AllocatorWithLimit<Value>>
+            rtree(bgi::quadratic<16>{}, bgi::indexable<Value>{}, bgi::equal_to<Value>{}, qec_->getAllocator());
   // bgi::rtree<Value, bgi::quadratic<16>, ad_utility::AllocatorWithLimit<Value>> rtree{qec_->getAllocator()};
-  // bgi::rtree<Value, bgi::quadratic<16>> dummyRtree;
-  // bgi::rtree<Value, bgi::quadratic<16>, ad_utility::AllocatorWithLimit<Value>> rtree(dummyRtree, qec_->getAllocator());
+  //bgi::rtree<Value, bgi::quadratic<16>> dummyRtree;
+  //bgi::rtree<Value, bgi::quadratic<16>, ad_utility::AllocatorWithLimit<Value>> rtree(dummyRtree, qec_->getAllocator());
   for (size_t i = 0; i < smallerResult->numRows(); i++) {
     // get point of row i
     auto geopoint = getPoint(smallerResult, i, smallerResJoinCol);
@@ -474,6 +475,8 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
     // add every point together with the row number into the rtree
     rtree.insert(std::make_pair(std::move(p), i));
   }
+  std::vector<Value, ad_utility::AllocatorWithLimit<Value>> results{
+        qec_->getAllocator()};
   for (size_t i = 0; i < otherResult->numRows(); i++) {
     auto geopoint1 = getPoint(otherResult, i, otherResJoinCol);
 
@@ -486,8 +489,7 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
 
     // query the other rtree for every point using the following bounding box
     std::vector<Box> bbox = computeBoundingBox(p);
-    std::vector<Value, ad_utility::AllocatorWithLimit<Value>> results{
-        qec_->getAllocator()};
+    results.clear();
 
     std::ranges::for_each(bbox, [&](const Box& bbox) {
       rtree.query(bgi::intersects(bbox), std::back_inserter(results));
