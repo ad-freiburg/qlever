@@ -134,6 +134,14 @@ TEST(LocalVocab, clone) {
   for (size_t i = 0; i < inputWords.size(); ++i) {
     EXPECT_EQ(*indices[i], inputWords[i]);
   }
+
+  // Test that a BlankNodeIndex obtained by a `LocalVocab` is also contained
+  // in the clone.
+  ad_utility::BlankNodeManager bnm;
+  LocalVocab v;
+  auto id = v.getBlankNodeIndex(&bnm);
+  LocalVocab vClone = v.clone();
+  EXPECT_TRUE(vClone.isBlankNodeIndexContained(id));
 }
 // _____________________________________________________________________________
 TEST(LocalVocab, merge) {
@@ -162,6 +170,30 @@ TEST(LocalVocab, merge) {
   EXPECT_EQ(*indices[1], lit("twoA"));
   EXPECT_EQ(*indices[2], lit("oneB"));
   EXPECT_EQ(*indices[3], lit("twoB"));
+
+  // Test that the `LocalBlankNodeManager` of vocabs is merged correctly.
+  ad_utility::BlankNodeManager bnm;
+  LocalVocab localVocabMerged2;
+  BlankNodeIndex id;
+  {
+    LocalVocab vocC, vocD;
+    id = vocC.getBlankNodeIndex(&bnm);
+    auto vocabs2 = std::vector{&std::as_const(vocC), &std::as_const(vocD)};
+    localVocabMerged2 = LocalVocab::merge(vocabs2);
+  }
+  EXPECT_TRUE(localVocabMerged2.isBlankNodeIndexContained(id));
+
+  LocalVocab vocE, vocF;
+  auto id2 = vocE.getBlankNodeIndex(&bnm);
+  auto vocabs3 =
+      std::vector{&std::as_const(localVocabMerged2), &std::as_const(vocF)};
+  vocE.mergeWith(vocabs3 | std::views::transform(
+                               [](const LocalVocab* l) -> const LocalVocab& {
+                                 return *l;
+                               }));
+  EXPECT_TRUE(vocE.isBlankNodeIndexContained(id));
+  EXPECT_TRUE(localVocabMerged2.isBlankNodeIndexContained(id));
+  EXPECT_TRUE(vocE.isBlankNodeIndexContained(id2));
 }
 
 // _____________________________________________________________________________

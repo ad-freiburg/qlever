@@ -82,7 +82,8 @@ class TransitivePathImpl : public TransitivePathBase {
         transitiveHull(edges, sub->getCopyOfLocalVocab(), std::move(nodes),
                        targetSide.isVariable()
                            ? std::nullopt
-                           : std::optional{std::get<Id>(targetSide.value_)});
+                           : std::optional{std::get<Id>(targetSide.value_)},
+                       yieldOnce);
 
     auto result = fillTableWithHull(
         std::move(hull), startSide.outputCol_, targetSide.outputCol_,
@@ -131,7 +132,8 @@ class TransitivePathImpl : public TransitivePathBase {
         edges, sub->getCopyOfLocalVocab(), std::span{&tableInfo, 1},
         targetSide.isVariable()
             ? std::nullopt
-            : std::optional{std::get<Id>(targetSide.value_)});
+            : std::optional{std::get<Id>(targetSide.value_)},
+        yieldOnce);
 
     auto result = fillTableWithHull(std::move(hull), startSide.outputCol_,
                                     targetSide.outputCol_, yieldOnce);
@@ -240,11 +242,15 @@ class TransitivePathImpl : public TransitivePathBase {
    * `TableColumnWithVocab` that can be consumed to create a transitive hull.
    * @param target Optional target Id. If supplied, only paths which end
    * in this Id are added to the hull.
+   * @param yieldOnce This has to be set to the same value as the consuming
+   * code. When set to true, this will prevent yielding the same LocalVocab over
+   * and over again to make merging faster (because merging with an empty
+   * LocalVocab is a no-op).
    * @return Map Maps each Id to its connected Ids in the transitive hull
    */
   NodeGenerator transitiveHull(const T& edges, LocalVocab edgesVocab,
                                std::ranges::range auto startNodes,
-                               std::optional<Id> target) const {
+                               std::optional<Id> target, bool yieldOnce) const {
     ad_utility::Timer timer{ad_utility::Timer::Stopped};
     for (auto&& tableColumn : startNodes) {
       timer.cont();
@@ -260,6 +266,10 @@ class TransitivePathImpl : public TransitivePathBase {
                                    mergedVocab.clone(), tableColumn.table_,
                                    currentRow};
           timer.cont();
+          // Reset vocab to prevent merging the same vocab over and over again.
+          if (yieldOnce) {
+            mergedVocab = LocalVocab{};
+          }
         }
         currentRow++;
       }
