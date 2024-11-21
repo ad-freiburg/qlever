@@ -5,8 +5,10 @@
 
 #pragma once
 
+#include <algorithm>
 #include <cstdlib>
 #include <memory>
+#include <ranges>
 #include <span>
 #include <string>
 #include <vector>
@@ -48,7 +50,7 @@ class LocalVocab {
 
   // Each `LocalVocab` has its own `LocalBlankNodeManager` to generate blank
   // nodes when needed (e.g., when parsing the result of a SERVICE query).
-  std::optional<ad_utility::BlankNodeManager::LocalBlankNodeManager>
+  std::shared_ptr<ad_utility::BlankNodeManager::LocalBlankNodeManager>
       localBlankNodeManager_;
 
  public:
@@ -116,6 +118,26 @@ class LocalVocab {
       *inserter = vocab.primaryWordSet_;
       size_ += vocab.size_;
     }
+
+    // Also merge the `vocabs` `LocalBlankNodeManager`s, if they exist.
+    using LocalBlankNodeManager =
+        ad_utility::BlankNodeManager::LocalBlankNodeManager;
+    auto localManagersView =
+        vocabs |
+        std::views::transform([](const LocalVocab& vocab) -> const auto& {
+          return vocab.localBlankNodeManager_;
+        });
+
+    auto it = std::ranges::find_if(localManagersView,
+                                   [](const auto& l) { return l != nullptr; });
+    if (it == localManagersView.end()) {
+      return;
+    }
+    if (!localBlankNodeManager_) {
+      localBlankNodeManager_ =
+          std::make_shared<LocalBlankNodeManager>((*it)->blankNodeManager());
+    }
+    localBlankNodeManager_->mergeWith(localManagersView);
   }
 
   // Create a new local vocab with empty set and other sets that are the union

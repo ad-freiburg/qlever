@@ -58,6 +58,7 @@ class BlankNodeManager {
 
    public:
     ~Block() = default;
+
     // The index of this block.
     const uint64_t blockIdx_;
 
@@ -71,7 +72,7 @@ class BlankNodeManager {
   class LocalBlankNodeManager {
    public:
     explicit LocalBlankNodeManager(BlankNodeManager* blankNodeManager);
-    ~LocalBlankNodeManager();
+    ~LocalBlankNodeManager() = default;
 
     // No copy, as the managed blocks should not be duplicated.
     LocalBlankNodeManager(const LocalBlankNodeManager&) = delete;
@@ -87,15 +88,45 @@ class BlankNodeManager {
     // Return true iff the `index` was returned by a previous call to `getId()`.
     bool containsBlankNodeIndex(uint64_t index) const;
 
-   private:
-    // Reserved blocks.
-    std::vector<BlankNodeManager::Block> blocks_;
+    // Merge passed `LocalBlankNodeManager`s to keep alive their reserved
+    // BlankNodeIndex blocks.
+    template <std::ranges::range R>
+    void mergeWith(const R& localBlankNodeManagers) {
+      auto inserter = std::back_inserter(otherBlocks_);
+      for (const auto& l : localBlankNodeManagers) {
+        if (l == nullptr) {
+          continue;
+        }
+        std::ranges::copy(l->otherBlocks_, inserter);
+        *inserter = l->blocks_;
+      }
+    }
 
+    // Getter for the `blankNodeManager_` pointer required in
+    // `LocalVocab::mergeWith`.
+    BlankNodeManager* blankNodeManager() const { return blankNodeManager_; }
+
+   private:
     // Reference to the BlankNodeManager, used to free the reserved blocks.
     BlankNodeManager* blankNodeManager_;
 
+    // Reserved blocks.
+    using Blocks = std::vector<BlankNodeManager::Block>;
+    std::shared_ptr<Blocks> blocks_{
+        new Blocks(), [blankNodeManager = blankNodeManager()](auto blocksPtr) {
+          auto ptr = blankNodeManager->usedBlocksSet_.wlock();
+          for (const auto& block : *blocksPtr) {
+            AD_CONTRACT_CHECK(ptr->contains(block.blockIdx_));
+            ptr->erase(block.blockIdx_);
+          }
+          delete blocksPtr;
+        }};
+
     // The first index after the current Block.
     uint64_t idxAfterCurrentBlock_{0};
+
+    // Blocks merged from other `LocalBlankNodeManager`s.
+    std::vector<std::shared_ptr<const Blocks>> otherBlocks_;
 
     FRIEND_TEST(BlankNodeManager, LocalBlankNodeManagerGetID);
   };
