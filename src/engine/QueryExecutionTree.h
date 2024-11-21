@@ -97,7 +97,7 @@ class QueryExecutionTree {
   // If the `rootOperation_` of this `QueryExecutionTree` is an `IndexScan`
   // operation, this method adds the suitable `PrefilterExpression` to the
   // `IndexScan` given a suitable `Variable` / `ColumnIndex` is public.
-  // If a `PrefilterExpression` was sucsessfully set, the updated
+  // If a `PrefilterExpression` was successfully set, the updated
   // `QueryExecutionTree` is returned.
   std::optional<std::shared_ptr<QueryExecutionTree>>
   setPrefilterExprGetUpdatedQetPtr(

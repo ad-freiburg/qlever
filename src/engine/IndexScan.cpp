@@ -145,27 +145,15 @@ vector<ColumnIndex> IndexScan::resultSortedOn() const {
 std::optional<std::shared_ptr<QueryExecutionTree>>
 IndexScan::setPrefilterExprGetUpdatedQetPtr(
     std::vector<PrefilterVariablePair> prefilterVariablePairs) {
-  // The column index of the first sorted column.
-  const ColumnIndex sortedIdx = 0;
   if (numVariables_ < 1) {
     return std::nullopt;
   }
 
-  VariableToColumnMap varToColMap = computeVariableToColumnMap();
-  // Search for a Variable key-value given the sortedIdx (index of first sorted
-  // column) in the VariableToColumnMap.
-  auto mapIt = std::ranges::find_if(varToColMap, [](const auto& keyValuePair) {
-    return keyValuePair.second.columnIndex_ == sortedIdx;
-  });
-  if (mapIt != varToColMap.end()) {
-    // Check if the previously found Variable (key-value from varToColMap)
-    // matches with a <PrefilterExpression, Variable> pair.
-    auto itPairs = std::ranges::find_if(
-        prefilterVariablePairs,
-        [&mapIt](const auto& pair) { return pair.second == mapIt->first; });
-    if (itPairs != prefilterVariablePairs.end()) {
+  auto map = getVariableToSortedIndexMap();
+  for (auto& [prefilterExpr, variable] : prefilterVariablePairs) {
+    if (map.find(variable) != map.end()) {
       return makeCopyWithAddedPrefilters(
-          std::make_pair(itPairs->first->clone(), sortedIdx));
+          std::make_pair(prefilterExpr->clone(), map[variable]));
     }
   }
   return std::nullopt;
@@ -318,6 +306,21 @@ ScanSpecificationAsTripleComponent IndexScan::getScanSpecificationTc() const {
 }
 
 // _____________________________________________________________________________
+ad_utility::HashMap<Variable, ColumnIndex>
+IndexScan::getVariableToSortedIndexMap() const {
+  ad_utility::HashMap<Variable, ColumnIndex> map;
+  ColumnIndex idx = 0;
+  for (const TripleComponent* const ptr : getPermutedTriple()) {
+    if (!ptr->isVariable()) {
+      break;
+    }
+    map[ptr->getVariable()] = idx;
+    idx++;
+  }
+  return map;
+}
+
+// _____________________________________________________________________________
 std::optional<std::span<const CompressedBlockMetadata>>
 IndexScan::getOptionalBlockSpan() const {
   auto metadata = getMetadataForScan();
@@ -340,7 +343,7 @@ IndexScan::getOptionalPrefilteredBlocks(
     auto& [prefilterExpr, columnIndex] = prefilter_.value();
     return prefilterExpr->evaluate(blocks, columnIndex);
   } else {
-    return std::move(blocks);
+    return blocks;
   }
 }
 

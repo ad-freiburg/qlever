@@ -6,6 +6,7 @@
 #include <string>
 
 #include "./Operation.h"
+#include "util/HashMap.h"
 
 class SparqlTriple;
 class SparqlTripleSimple;
@@ -165,6 +166,11 @@ class IndexScan final : public Operation {
   Result::Generator chunkedIndexScan() const;
   // Get the `IdTable` for this `IndexScan` in one piece.
   IdTable materializedIndexScan() const;
+
+  // Get the mapping for all `Variable` values mapped to sorted `ColumnIndex`
+  // values.
+  ad_utility::HashMap<Variable, ColumnIndex> getVariableToSortedIndexMap()
+      const;
 
   // Helper to retrieve the `CompressedBlockMetadata` span for this scan.
   std::optional<std::span<const CompressedBlockMetadata>> getOptionalBlockSpan()
