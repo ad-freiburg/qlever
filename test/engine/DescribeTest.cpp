@@ -113,9 +113,10 @@ TEST(Describe, simpleMembers) {
   EXPECT_FALSE(describe.knownEmptyResult());
 
   using namespace ::testing;
-  EXPECT_THAT(describe.getCacheKey(),
-              AllOf(HasSubstr("DESCRIBE"), HasSubstr("<s>"),
-                    Not(HasSubstr("<p>")), HasSubstr("Neutral Element"), Not(HasSubstr("Filtered"))));
+  EXPECT_THAT(
+      describe.getCacheKey(),
+      AllOf(HasSubstr("DESCRIBE"), HasSubstr("<s>"), Not(HasSubstr("<p>")),
+            HasSubstr("Neutral Element"), Not(HasSubstr("Filtered"))));
   {
     auto parsedDescribe2 = parsedDescribe;
     parsedDescribe2.datasetClauses_.defaultGraphs_.emplace(

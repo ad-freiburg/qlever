@@ -49,8 +49,7 @@ string Describe::getCacheKeyImpl() const {
                            &TripleComponent::toRdfLiteral);
     std::ranges::sort(graphIdVec);
     absl::StrAppend(&result,
-    "\nFiltered by Graphs:",
-    absl::StrJoin(graphIdVec, " "));
+                    "\nFiltered by Graphs:", absl::StrJoin(graphIdVec, " "));
   }
   return result;
 }
