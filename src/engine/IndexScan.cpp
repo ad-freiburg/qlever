@@ -311,10 +311,10 @@ IndexScan::getVariableToSortedIndexMap() const {
   ad_utility::HashMap<Variable, ColumnIndex> map;
   ColumnIndex idx = 0;
   for (const TripleComponent* const ptr : getPermutedTriple()) {
-    if (!ptr->isVariable()) {
+    if (ptr->isVariable()) {
+      map[ptr->getVariable()] = idx;
       break;
     }
-    map[ptr->getVariable()] = idx;
     idx++;
   }
   return map;
