@@ -5,6 +5,9 @@
 
 #pragma once
 
+#include <absl/container/flat_hash_set.h>
+#include <absl/container/node_hash_set.h>
+
 #include <algorithm>
 #include <cstdlib>
 #include <memory>
@@ -13,9 +16,7 @@
 #include <string>
 #include <vector>
 
-#include "absl/container/node_hash_set.h"
-#include "global/Id.h"
-#include "parser/LiteralOrIri.h"
+#include "index/LocalVocabEntry.h"
 #include "util/BlankNodeManager.h"
 #include "util/Exception.h"
 
@@ -43,7 +44,7 @@ class LocalVocab {
   std::shared_ptr<Set> primaryWordSet_ = std::make_shared<Set>();
 
   // The other sets of `LocalVocabEntry`s, which are static.
-  std::vector<std::shared_ptr<const Set>> otherWordSets_;
+  absl::flat_hash_set<std::shared_ptr<const Set>> otherWordSets_;
 
   // The number of words (so that we can compute `size()` in constant time).
   size_t size_ = 0;
@@ -111,11 +112,11 @@ class LocalVocab {
   // primary set of this `LocalVocab` remains unchanged.
   template <std::ranges::range R>
   void mergeWith(const R& vocabs) {
-    auto inserter = std::back_inserter(otherWordSets_);
     using std::views::filter;
     for (const auto& vocab : vocabs | filter(std::not_fn(&LocalVocab::empty))) {
-      std::ranges::copy(vocab.otherWordSets_, inserter);
-      *inserter = vocab.primaryWordSet_;
+      otherWordSets_.insert(vocab.otherWordSets_.begin(),
+                            vocab.otherWordSets_.end());
+      otherWordSets_.insert(vocab.primaryWordSet_);
       size_ += vocab.size_;
     }
 
