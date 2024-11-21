@@ -217,32 +217,37 @@ class SpatialJoinParamTest
         columnNames);
   }
 
-  void testDiffSizeIdTables(std::string specialPredicate, bool addLeftChildFirst,
+  void testDiffSizeIdTables(
+      std::string specialPredicate, bool addLeftChildFirst,
       std::vector<std::vector<std::string>> expectedOutput,
       std::vector<std::string> columnNames, bool bigChildLeft) {
-  auto qec = buildTestQEC();
-  auto numTriples = qec->getIndex().numTriples().normal;
-  ASSERT_EQ(numTriples, 15);
-  // ====================== build small input =================================
-  TripleComponent point1{Variable{"?point1"}};
-  TripleComponent subject{ad_utility::triple_component::Iri::fromIriref("<geometry1>")};
-  auto smallChild = ad_utility::makeExecutionTree<IndexScan>(
-      qec, Permutation::Enum::PSO, SparqlTriple{subject, std::string{"<asWKT>"}, point1});
-  // ====================== build big input ==================================
-  auto bigChild = buildIndexScan(qec, {"?obj2", std::string{"<asWKT>"}, "?point2"});
-  
-  auto firstChild = bigChildLeft ? bigChild : smallChild;
-  auto secondChild = bigChildLeft ? smallChild : bigChild;
-  auto firstVariable =
+    auto qec = buildTestQEC();
+    auto numTriples = qec->getIndex().numTriples().normal;
+    ASSERT_EQ(numTriples, 15);
+    // ====================== build small input
+    // =================================
+    TripleComponent point1{Variable{"?point1"}};
+    TripleComponent subject{
+        ad_utility::triple_component::Iri::fromIriref("<geometry1>")};
+    auto smallChild = ad_utility::makeExecutionTree<IndexScan>(
+        qec, Permutation::Enum::PSO,
+        SparqlTriple{subject, std::string{"<asWKT>"}, point1});
+    // ====================== build big input ==================================
+    auto bigChild =
+        buildIndexScan(qec, {"?obj2", std::string{"<asWKT>"}, "?point2"});
+
+    auto firstChild = bigChildLeft ? bigChild : smallChild;
+    auto secondChild = bigChildLeft ? smallChild : bigChild;
+    auto firstVariable =
         bigChildLeft ? TripleComponent{Variable{"?point2"}} : point1;
     auto secondVariable =
         bigChildLeft ? point1 : TripleComponent{Variable{"?point2"}};
-  
-  createAndTestSpatialJoin(
+
+    createAndTestSpatialJoin(
         qec, SparqlTriple{firstVariable, specialPredicate, secondVariable},
         firstChild, secondChild, addLeftChildFirst, expectedOutput,
         columnNames);
-}
+  }
 
  protected:
   bool useBaselineAlgorithm_;
@@ -592,25 +597,29 @@ std::vector<std::vector<std::string>> expectedMaxDist10000000_rows_diff{
     mergeToRow(Eif, sLib, expectedDistEifLib)};
 
 std::vector<std::vector<std::string>> expectedMaxDist1_rows_diffIDTable{
-  mergeToRow({sTF.at(1)}, sTF, expectedDistSelf)
-};
+    mergeToRow({sTF.at(1)}, sTF, expectedDistSelf)};
 
 std::vector<std::vector<std::string>> expectedMaxDist5000_rows_diffIDTable{
-  mergeToRow({sTF.at(1)}, sTF, expectedDistSelf),
-  mergeToRow({sTF.at(1)}, sMun, expectedDistUniMun)
-};
+    mergeToRow({sTF.at(1)}, sTF, expectedDistSelf),
+    mergeToRow({sTF.at(1)}, sMun, expectedDistUniMun)};
 
 std::vector<std::vector<std::string>> expectedMaxDist500000_rows_diffIDTable{
-  mergeToRow({sTF.at(1)}, sTF, expectedDistSelf)
-};
+    mergeToRow({sTF.at(1)}, sTF, expectedDistSelf),
+    mergeToRow({sTF.at(1)}, sMun, expectedDistUniMun),
+    mergeToRow({sTF.at(1)}, sEif, expectedDistUniEif)};
 
 std::vector<std::vector<std::string>> expectedMaxDist1000000_rows_diffIDTable{
-  mergeToRow({sTF.at(1)}, sTF, expectedDistSelf)
-};
+    mergeToRow({sTF.at(1)}, sTF, expectedDistSelf),
+    mergeToRow({sTF.at(1)}, sMun, expectedDistUniMun),
+    mergeToRow({sTF.at(1)}, sEif, expectedDistUniEif),
+    mergeToRow({sTF.at(1)}, sEye, expectedDistUniEye)};
 
 std::vector<std::vector<std::string>> expectedMaxDist10000000_rows_diffIDTable{
-  mergeToRow({sTF.at(1)}, sTF, expectedDistSelf)
-};
+    mergeToRow({sTF.at(1)}, sTF, expectedDistSelf),
+    mergeToRow({sTF.at(1)}, sMun, expectedDistUniMun),
+    mergeToRow({sTF.at(1)}, sEif, expectedDistUniEif),
+    mergeToRow({sTF.at(1)}, sEye, expectedDistUniEye),
+    mergeToRow({sTF.at(1)}, sLib, expectedDistUniLib)};
 
 std::vector<std::vector<std::string>> expectedNearestNeighbors1{
     mergeToRow(TF, TF, expectedDistSelf),
@@ -828,30 +837,62 @@ TEST_P(SpatialJoinParamTest, computeResultSmallDatasetDifferentSizeChildren) {
 }
 
 TEST_P(SpatialJoinParamTest, diffSizeIdTables) {
-  std::vector<std::string> columnNames{"?point1",
-                                       "?obj2",
-                                       "?point2",
+  std::vector<std::string> columnNames{"?point1", "?obj2", "?point2",
                                        "?distOfTheTwoObjectsAddedInternally"};
-  /*testDiffSizeIdTables("<max-distance-in-meters:1>", true, expectedMaxDist1_rows_diffIDTable, columnNames, true);
-  testDiffSizeIdTables("<max-distance-in-meters:1>", true, expectedMaxDist1_rows_diffIDTable, columnNames, false);
-  testDiffSizeIdTables("<max-distance-in-meters:1>", false, expectedMaxDist1_rows_diffIDTable, columnNames, true);
-  testDiffSizeIdTables("<max-distance-in-meters:1>", false, expectedMaxDist1_rows_diffIDTable, columnNames, false);
-  testDiffSizeIdTables("<max-distance-in-meters:5000>", true, expectedMaxDist5000_rows_diffIDTable, columnNames, true);
-  testDiffSizeIdTables("<max-distance-in-meters:5000>", true, expectedMaxDist5000_rows_diffIDTable, columnNames, false);
-  testDiffSizeIdTables("<max-distance-in-meters:5000>", false, expectedMaxDist5000_rows_diffIDTable, columnNames, true);
-  testDiffSizeIdTables("<max-distance-in-meters:5000>", false, expectedMaxDist5000_rows_diffIDTable, columnNames, false);
-  testDiffSizeIdTables("<max-distance-in-meters:500000>", true, expectedMaxDist500000_rows_diffIDTable, columnNames, true);
-  testDiffSizeIdTables("<max-distance-in-meters:500000>", true, expectedMaxDist500000_rows_diffIDTable, columnNames, false);
-  testDiffSizeIdTables("<max-distance-in-meters:500000>", false, expectedMaxDist500000_rows_diffIDTable, columnNames, true);
-  testDiffSizeIdTables("<max-distance-in-meters:500000>", false, expectedMaxDist500000_rows_diffIDTable, columnNames, false);
-  testDiffSizeIdTables("<max-distance-in-meters:1000000>", true, expectedMaxDist1000000_rows_diffIDTable, columnNames, true);
-  testDiffSizeIdTables("<max-distance-in-meters:1000000>", true, expectedMaxDist1000000_rows_diffIDTable, columnNames, false);
-  testDiffSizeIdTables("<max-distance-in-meters:1000000>", false, expectedMaxDist1000000_rows_diffIDTable, columnNames, true);
-  testDiffSizeIdTables("<max-distance-in-meters:1000000>", false, expectedMaxDist1000000_rows_diffIDTable, columnNames, false);
-  testDiffSizeIdTables("<max-distance-in-meters:10000000>", true, expectedMaxDist10000000_rows_diffIDTable, columnNames, true);
-  testDiffSizeIdTables("<max-distance-in-meters:10000000>", true, expectedMaxDist10000000_rows_diffIDTable, columnNames, false);
-  testDiffSizeIdTables("<max-distance-in-meters:10000000>", false, expectedMaxDist10000000_rows_diffIDTable, columnNames, true);
-  testDiffSizeIdTables("<max-distance-in-meters:10000000>", false, expectedMaxDist10000000_rows_diffIDTable, columnNames, false);*/
+  testDiffSizeIdTables("<max-distance-in-meters:1>", true,
+                       expectedMaxDist1_rows_diffIDTable, columnNames, true);
+  testDiffSizeIdTables("<max-distance-in-meters:1>", true,
+                       expectedMaxDist1_rows_diffIDTable, columnNames, false);
+  testDiffSizeIdTables("<max-distance-in-meters:1>", false,
+                       expectedMaxDist1_rows_diffIDTable, columnNames, true);
+  testDiffSizeIdTables("<max-distance-in-meters:1>", false,
+                       expectedMaxDist1_rows_diffIDTable, columnNames, false);
+  testDiffSizeIdTables("<max-distance-in-meters:5000>", true,
+                       expectedMaxDist5000_rows_diffIDTable, columnNames, true);
+  testDiffSizeIdTables("<max-distance-in-meters:5000>", true,
+                       expectedMaxDist5000_rows_diffIDTable, columnNames,
+                       false);
+  testDiffSizeIdTables("<max-distance-in-meters:5000>", false,
+                       expectedMaxDist5000_rows_diffIDTable, columnNames, true);
+  testDiffSizeIdTables("<max-distance-in-meters:5000>", false,
+                       expectedMaxDist5000_rows_diffIDTable, columnNames,
+                       false);
+  testDiffSizeIdTables("<max-distance-in-meters:500000>", true,
+                       expectedMaxDist500000_rows_diffIDTable, columnNames,
+                       true);
+  testDiffSizeIdTables("<max-distance-in-meters:500000>", true,
+                       expectedMaxDist500000_rows_diffIDTable, columnNames,
+                       false);
+  testDiffSizeIdTables("<max-distance-in-meters:500000>", false,
+                       expectedMaxDist500000_rows_diffIDTable, columnNames,
+                       true);
+  testDiffSizeIdTables("<max-distance-in-meters:500000>", false,
+                       expectedMaxDist500000_rows_diffIDTable, columnNames,
+                       false);
+  testDiffSizeIdTables("<max-distance-in-meters:1000000>", true,
+                       expectedMaxDist1000000_rows_diffIDTable, columnNames,
+                       true);
+  testDiffSizeIdTables("<max-distance-in-meters:1000000>", true,
+                       expectedMaxDist1000000_rows_diffIDTable, columnNames,
+                       false);
+  testDiffSizeIdTables("<max-distance-in-meters:1000000>", false,
+                       expectedMaxDist1000000_rows_diffIDTable, columnNames,
+                       true);
+  testDiffSizeIdTables("<max-distance-in-meters:1000000>", false,
+                       expectedMaxDist1000000_rows_diffIDTable, columnNames,
+                       false);
+  testDiffSizeIdTables("<max-distance-in-meters:10000000>", true,
+                       expectedMaxDist10000000_rows_diffIDTable, columnNames,
+                       true);
+  testDiffSizeIdTables("<max-distance-in-meters:10000000>", true,
+                       expectedMaxDist10000000_rows_diffIDTable, columnNames,
+                       false);
+  testDiffSizeIdTables("<max-distance-in-meters:10000000>", false,
+                       expectedMaxDist10000000_rows_diffIDTable, columnNames,
+                       true);
+  testDiffSizeIdTables("<max-distance-in-meters:10000000>", false,
+                       expectedMaxDist10000000_rows_diffIDTable, columnNames,
+                       false);
 }
 
 INSTANTIATE_TEST_SUITE_P(

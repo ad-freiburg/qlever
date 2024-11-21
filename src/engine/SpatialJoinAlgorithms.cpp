@@ -7,6 +7,7 @@
 #include <s2/util/units/length-units.h>
 
 #include <cmath>
+
 #include "util/GeoSparqlHelpers.h"
 
 using namespace BoostGeometryNamespace;
@@ -232,7 +233,8 @@ std::vector<Box> SpatialJoinAlgorithms::computeBoundingBox(
     const Point& startPoint) {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
               rightJoinCol, numColumns, maxDist, maxResults] = params_;
-  AD_CORRECTNESS_CHECK(maxDist.has_value(), "Max distance must have a value for this operation");
+  AD_CORRECTNESS_CHECK(maxDist.has_value(),
+                       "Max distance must have a value for this operation");
   // haversine function
   auto haversine = [](double theta) { return (1 - std::cos(theta)) / 2; };
 
@@ -313,7 +315,8 @@ std::vector<Box> SpatialJoinAlgorithms::computeBoundingBoxForLargeDistances(
     const Point& startPoint) const {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
               rightJoinCol, numColumns, maxDist, maxResults] = params_;
-  AD_CORRECTNESS_CHECK(maxDist.has_value(), "Max distance must have a value for this operation");
+  AD_CORRECTNESS_CHECK(maxDist.has_value(),
+                       "Max distance must have a value for this operation");
 
   // point on the opposite side of the globe
   Point antiPoint(startPoint.get<0>() + 180, startPoint.get<1>() * -1);
@@ -429,16 +432,16 @@ std::array<bool, 2> SpatialJoinAlgorithms::isAPoleTouched(
 // ____________________________________________________________________________
 Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
   bool alreadyWarned = false;
-  
+
   auto printWarning = [&]() {
     if (!alreadyWarned) {
-      AD_LOG_WARN
-          << "expected a point here, but no point is given. Skipping this point and future 'non points' of this query"
-          << std::endl;
+      AD_LOG_WARN << "expected a point here, but no point is given. Skipping "
+                     "this point and future 'non points' of this query"
+                  << std::endl;
       alreadyWarned = true;
     }
   };
-  
+
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
               rightJoinCol, numColumns, maxDist, maxResults] = params_;
   IdTable result{numColumns, qec_->getAllocator()};
@@ -455,12 +458,10 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
     std::swap(smallerResJoinCol, otherResJoinCol);
   }
 
-  // bgi::rtree<Value, bgi::quadratic<16>> rtree;
-  bgi::rtree<Value, bgi::quadratic<16>, bgi::indexable<Value>, bgi::equal_to<Value>, ad_utility::AllocatorWithLimit<Value>>
-            rtree(bgi::quadratic<16>{}, bgi::indexable<Value>{}, bgi::equal_to<Value>{}, qec_->getAllocator());
-  // bgi::rtree<Value, bgi::quadratic<16>, ad_utility::AllocatorWithLimit<Value>> rtree{qec_->getAllocator()};
-  //bgi::rtree<Value, bgi::quadratic<16>> dummyRtree;
-  //bgi::rtree<Value, bgi::quadratic<16>, ad_utility::AllocatorWithLimit<Value>> rtree(dummyRtree, qec_->getAllocator());
+  bgi::rtree<Value, bgi::quadratic<16>, bgi::indexable<Value>,
+             bgi::equal_to<Value>, ad_utility::AllocatorWithLimit<Value>>
+      rtree(bgi::quadratic<16>{}, bgi::indexable<Value>{},
+            bgi::equal_to<Value>{}, qec_->getAllocator());
   for (size_t i = 0; i < smallerResult->numRows(); i++) {
     // get point of row i
     auto geopoint = getPoint(smallerResult, i, smallerResJoinCol);
@@ -476,7 +477,7 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
     rtree.insert(std::make_pair(std::move(p), i));
   }
   std::vector<Value, ad_utility::AllocatorWithLimit<Value>> results{
-        qec_->getAllocator()};
+      qec_->getAllocator()};
   for (size_t i = 0; i < otherResult->numRows(); i++) {
     auto geopoint1 = getPoint(otherResult, i, otherResJoinCol);
 
