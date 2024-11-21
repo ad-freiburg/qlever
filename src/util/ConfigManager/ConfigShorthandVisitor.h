@@ -3,9 +3,14 @@
 // Author: Andre Schlegel (March of 2023, schlegea@informatik.uni-freiburg.de)
 #pragma once
 
+// ANTLR runtime uses this as a variable name.
+#ifdef EOF
+#undef EOF
+#endif
 #include <antlr4-runtime.h>
 
 #include "util/ConfigManager/generated/ConfigShorthandParser.h"
+#define EOF std::char_traits<char>::eof()
 #include "util/json.h"
 
 /*

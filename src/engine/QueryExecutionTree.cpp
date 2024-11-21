@@ -29,11 +29,20 @@ std::string QueryExecutionTree::getCacheKey() const {
 
 // _____________________________________________________________________________
 size_t QueryExecutionTree::getVariableColumn(const Variable& variable) const {
+  auto optIdx = getVariableColumnOrNullopt(variable);
+  if (!optIdx.has_value()) {
+    AD_THROW("Variable could not be mapped to result column. Var: " +
+             variable.name());
+  }
+  return optIdx.value();
+}
+// _____________________________________________________________________________
+std::optional<size_t> QueryExecutionTree::getVariableColumnOrNullopt(
+    const Variable& variable) const {
   AD_CONTRACT_CHECK(rootOperation_);
   const auto& varCols = getVariableColumns();
   if (!varCols.contains(variable)) {
-    AD_THROW("Variable could not be mapped to result column. Var: " +
-             variable.name());
+    return std::nullopt;
   }
   return varCols.at(variable).columnIndex_;
 }

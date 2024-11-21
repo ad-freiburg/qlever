@@ -182,3 +182,65 @@ TEST(ServerTest, determineMediaType) {
   EXPECT_THAT(Server::determineMediaType({}, MakeRequest("")),
               testing::Eq(ad_utility::MediaType::sparqlJson));
 }
+
+TEST(ServerTest, getQueryId) {
+  using namespace ad_utility::websocket;
+  Server server{9999, 1, ad_utility::MemorySize::megabytes(1), "accessToken"};
+  auto reqWithExplicitQueryId = MakeGetRequest("/");
+  reqWithExplicitQueryId.set("Query-Id", "100");
+  const auto req = MakeGetRequest("/");
+  {
+    // A request with a custom query id.
+    auto queryId1 = server.getQueryId(reqWithExplicitQueryId,
+                                      "SELECT * WHERE { ?a ?b ?c }");
+    // Another request with the same custom query id. This throws an error,
+    // because query id cannot be used for multiple queries at the same time.
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        server.getQueryId(reqWithExplicitQueryId,
+                          "SELECT * WHERE { ?a ?b ?c }"),
+        testing::HasSubstr("Query id '100' is already in use!"));
+  }
+  // The custom query id can be reused, once the query is finished.
+  auto queryId1 =
+      server.getQueryId(reqWithExplicitQueryId, "SELECT * WHERE { ?a ?b ?c }");
+  // Without custom query ids, unique ids are generated.
+  auto queryId2 = server.getQueryId(req, "SELECT * WHERE { ?a ?b ?c }");
+  auto queryId3 = server.getQueryId(req, "SELECT * WHERE { ?a ?b ?c }");
+}
+
+TEST(ServerTest, createMessageSender) {
+  Server server{9999, 1, ad_utility::MemorySize::megabytes(1), "accessToken"};
+  auto reqWithExplicitQueryId = MakeGetRequest("/");
+  std::string customQueryId = "100";
+  reqWithExplicitQueryId.set("Query-Id", customQueryId);
+  const auto req = MakeGetRequest("/");
+  // The query hub is only valid once, the server has been started.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      server.createMessageSender(server.queryHub_, req,
+                                 "SELECT * WHERE { ?a ?b ?c }"),
+      testing::HasSubstr("Assertion `queryHubLock` failed."));
+  {
+    // Set a dummy query hub.
+    boost::asio::io_context io_context;
+    auto queryHub =
+        std::make_shared<ad_utility::websocket::QueryHub>(io_context);
+    server.queryHub_ = queryHub;
+    // MessageSenders are created normally.
+    server.createMessageSender(server.queryHub_, req,
+                               "SELECT * WHERE { ?a ?b ?c }");
+    server.createMessageSender(server.queryHub_, req,
+                               "INSERT DATA { <foo> <bar> <baz> }");
+    EXPECT_THAT(
+        server.createMessageSender(server.queryHub_, reqWithExplicitQueryId,
+                                   "INSERT DATA { <foo> <bar> <baz> }"),
+        AD_PROPERTY(ad_utility::websocket::MessageSender, getQueryId,
+                    testing::Eq(ad_utility::websocket::QueryId::idFromString(
+                        customQueryId))));
+  }
+  // Once the query hub expires (e.g. because the io context dies), message
+  // senders can no longer be created.
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      server.createMessageSender(server.queryHub_, req,
+                                 "SELECT * WHERE { ?a ?b ?c }"),
+      testing::HasSubstr("Assertion `queryHubLock` failed."));
+}

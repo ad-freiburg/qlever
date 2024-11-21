@@ -213,6 +213,9 @@ void DeltaTriplesManager::modify(
 }
 
 // _____________________________________________________________________________
+void DeltaTriplesManager::clear() { modify(&DeltaTriples::clear); }
+
+// _____________________________________________________________________________
 SharedLocatedTriplesSnapshot DeltaTriplesManager::getCurrentSnapshot() const {
   return *currentLocatedTriplesSnapshot_.rlock();
 }

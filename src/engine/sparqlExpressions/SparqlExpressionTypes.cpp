@@ -56,12 +56,11 @@ bool EvaluationContext::isResultSortedBy(const Variable& variable) {
 }
 
 // _____________________________________________________________________________
-[[nodiscard]] ColumnIndex EvaluationContext::getColumnIndexForVariable(
-    const Variable& var) const {
+[[nodiscard]] std::optional<ColumnIndex>
+EvaluationContext::getColumnIndexForVariable(const Variable& var) const {
   const auto& map = _variableToColumnMap;
   if (!map.contains(var)) {
-    throw std::runtime_error(absl::StrCat(
-        "Variable ", var.name(), " was not found in input to expression."));
+    return std::nullopt;
   }
   return map.at(var).columnIndex_;
 }
