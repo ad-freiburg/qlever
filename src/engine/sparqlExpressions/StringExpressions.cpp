@@ -21,6 +21,14 @@ constexpr auto toLiteral = [](std::string_view normalizedContent) {
           asNormalizedStringViewUnsafe(normalizedContent))};
 };
 
+constexpr auto toLiteralWithDescriptor =
+    [](std::string_view normalizedContent,
+       std::optional<std::variant<Iri, std::string>> descriptor) {
+      return LiteralOrIri{
+          ad_utility::triple_component::Literal::literalWithNormalizedContent(
+              asNormalizedStringViewUnsafe(normalizedContent), descriptor)};
+    };
+
 // String functions.
 [[maybe_unused]] auto strImpl =
     [](std::optional<std::string> s) -> IdOrLiteralOrIri {
@@ -183,7 +191,7 @@ class SubstrImpl {
  public:
   // TODO<DuDaAG> Statt s vom Typ std::optional<std::string>, s vom Typ
   // std::optional<LiteralOrIri>
-  IdOrLiteralOrIri operator()(std::optional<std::string> s, NumericValue start,
+  IdOrLiteralOrIri operator()(std::optional<LiteralOrIri> s, NumericValue start,
                               NumericValue length) const {
     if (!s.has_value() || std::holds_alternative<NotNumeric>(start) ||
         std::holds_alternative<NotNumeric>(length)) {
@@ -204,7 +212,21 @@ class SubstrImpl {
       lengthInt += startInt;
     }
 
-    const auto& str = s.value();
+    const auto& str = asStringViewUnsafe(s.value().getContent());
+    std::optional<std::variant<Iri, std::string>> descriptor;
+
+    if (s->isLiteral()) {
+      if (s->hasLanguageTag()) {
+        descriptor = std::string(asStringViewUnsafe(s->getLanguageTag()));
+      } else if (s->hasDatatype()) {
+        descriptor =
+            ad_utility::triple_component::Iri::fromIrirefWithoutBrackets(
+                asStringViewUnsafe(s->getDatatype()));
+      }
+    } else {
+      descriptor = std::nullopt;
+    }
+
     // Clamp the number such that it is in `[0, str.size()]`. That way we end up
     // with valid arguments for the `getUTF8Substring` method below for both
     // starting position and length since all the other corner cases have been
@@ -219,13 +241,16 @@ class SubstrImpl {
       return static_cast<size_t>(n);
     };
 
-    return toLiteral(
-        ad_utility::getUTF8Substring(str, clamp(startInt), clamp(lengthInt)));
+    return toLiteralWithDescriptor(
+        ad_utility::getUTF8Substring(str, clamp(startInt), clamp(lengthInt)),
+        descriptor);
   }
 };
 
-using SubstrExpression =
-    StringExpressionImpl<3, SubstrImpl, NumericValueGetter, NumericValueGetter>;
+using SubstrExpression = NARY<3, FV<SubstrImpl, LiteralOrIriValueGetter,
+                                    NumericValueGetter, NumericValueGetter>>;
+// using SubstrExpression =
+// StringExpressionImpl<3, SubstrImpl, NumericValueGetter, NumericValueGetter>;
 
 // STRSTARTS
 [[maybe_unused]] auto strStartsImpl = [](std::string_view text,

@@ -70,14 +70,27 @@ class ExportQueryExecutionTrees {
   static std::optional<std::pair<std::string, const char*>>
   idToStringAndTypeForEncodedValue(Id id);
 
-  // Same as the 'idToStringAndType' above but returning a LiteralOrIri instead
-  // of a std::pair<std::string, const char*>
+  // Converts an Id to a LiteralOrIri based on its type and value.
+  // For VocabIndex or LocalVocabIndex: Return Literal or Iri. If
+  // `onlyReturnLiteralsWithXsdString` is true, return only literals (no IRIs)
+  // with no datatype or datatype `xsd:string`; otherwise, return any literal,
+  // but strip datatypes other than `xsd:string`. For Double, Int, Bool, Date,
+  // or GeoPoint: Return the literal without the datatype. If
+  // `onlyReturnLiteralsWithXsdString` is true return `std::nullopt`. For
+  // Undefined Id: Always return `std::nullopt`
+  template <bool returnOnlyLiterals = false>
   static std::optional<LiteralOrIri> idToLiteralOrIri(
-      const Index& index, Id id, const LocalVocab& localVocab);
+      const Index& index, Id id, const LocalVocab& localVocab,
+      bool onlyReturnLiteralsWithXsdString = false);
+
   // Same as the previous function, but only handles the datatypes for which the
   // value is encoded directly in the ID. For other datatypes an exception is
   // thrown.
-  static std::optional<LiteralOrIri> idToLiteralOrIriForEncodedValue(Id id);
+  // If `onlyReturnLiteralsWithXsdString` is `true`, returns `std::nullopt`.
+  // If `onlyReturnLiteralsWithXsdString` is `false`, removes datatypes from
+  // literals (e.g., `42^^xsd:integer` becomes `"42"`).
+  static std::optional<LiteralOrIri> idToLiteralOrIriForEncodedValue(
+      Id id, bool onlyReturnLiteralsWithXsdString = false);
 
   // Acts as a helper to retrieve an LiteralOrIri object
   // from an Id, where the Id is of type `VocabIndex` or `LocalVocabIndex`.

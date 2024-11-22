@@ -14,7 +14,6 @@
 #include "util/ConstexprUtils.h"
 #include "util/http/MediaTypes.h"
 
-
 using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
 
 // Return true iff the `result` is nonempty.
@@ -352,50 +351,14 @@ ExportQueryExecutionTrees::idToStringAndTypeForEncodedValue(Id id) {
 
 // _____________________________________________________________________________
 std::optional<LiteralOrIri>
-ExportQueryExecutionTrees::idToLiteralOrIriForEncodedValue(Id id) {
-  using enum Datatype;
-  auto fromIri = TripleComponent::Iri::fromIrirefWithoutBrackets;
-  switch (id.getDatatype()) {
-    case Undefined:
-      return std::nullopt;
-    case Double:
-      // We use the immediately invoked lambda here because putting this block
-      // in braces confuses the test coverage tool.
-      return [id]() -> std::optional<LiteralOrIri> {
-        // Format as integer if fractional part is zero, let C++ decide
-        // otherwise.
-        std::stringstream ss;
-        double d = id.getDouble();
-        double dIntPart;
-        if (std::modf(d, &dIntPart) == 0.0) {
-          ss << std::fixed << std::setprecision(0) << id.getDouble();
-        } else {
-          ss << d;
-        }
-        return LiteralOrIri::literalWithoutQuotes(
-            std::move(ss).str(),
-            TripleComponent::Iri::fromIrirefWithoutBrackets(XSD_DOUBLE_TYPE));
-      }();
-    case Bool:
-      return id.getBool() ? LiteralOrIri::literalWithoutQuotes(
-                                "true", fromIri(XSD_BOOLEAN_TYPE))
-                          : LiteralOrIri::literalWithoutQuotes(
-                                "false", fromIri(XSD_BOOLEAN_TYPE));
-    case Int:
-      return LiteralOrIri::literalWithoutQuotes(std::to_string(id.getInt()),
-                                                fromIri(XSD_INT_TYPE));
-    case Date:
-      return LiteralOrIri::literalWithoutQuotes(
-          id.getDate().toStringAndType().first, fromIri(XSD_DATE_TYPE));
-    case GeoPoint:
-      return LiteralOrIri::literalWithoutQuotes(
-          id.getGeoPoint().toStringAndType().first, fromIri(GEO_WKT_LITERAL));
-    case BlankNodeIndex:
-      return LiteralOrIri::literalWithoutQuotes(
-          absl::StrCat("_:bn", id.getBlankNodeIndex().get()));
-    default:
-      AD_FAIL();
+ExportQueryExecutionTrees::idToLiteralOrIriForEncodedValue(
+    Id id, bool onlyReturnLiteralsWithXsdString) {
+  auto optionalStringAndType = idToStringAndTypeForEncodedValue(id);
+  if (!optionalStringAndType || onlyReturnLiteralsWithXsdString) {
+    return std::nullopt;
   }
+
+  return LiteralOrIri::literalWithoutQuotes(optionalStringAndType->first);
 }
 
 // _____________________________________________________________________________
@@ -464,17 +427,57 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
 }
 
 // _____________________________________________________________________________
+template <bool onlyReturnLiterals>
 std::optional<LiteralOrIri> ExportQueryExecutionTrees::idToLiteralOrIri(
-    const Index& index, Id id, const LocalVocab& localVocab) {
+    const Index& index, Id id, const LocalVocab& localVocab,
+    bool onlyReturnLiteralsWithXsdString) {
   using enum Datatype;
+  auto datatype = id.getDatatype();
+  if constexpr (onlyReturnLiterals) {
+    if (!(datatype == VocabIndex || datatype == LocalVocabIndex)) {
+      return std::nullopt;
+    }
+  }
   auto handleIriOrLiteral =
-      [](const LiteralOrIri& word) -> std::optional<LiteralOrIri> {
+      [onlyReturnLiteralsWithXsdString](
+          const LiteralOrIri& word) -> std::optional<LiteralOrIri> {
+    if constexpr (onlyReturnLiterals) {
+      if (!word.isLiteral()) {
+        return std::nullopt;
+      }
+    }
+    // Return only literals without datatype or literals with xsd:string
+    // datatype
+    if (onlyReturnLiteralsWithXsdString) {
+      if (word.isLiteral()) {
+        if (!word.hasDatatype() ||
+            (word.hasDatatype() &&
+             std::string_view(
+                 reinterpret_cast<const char*>(word.getDatatype().data()),
+                 word.getDatatype().size()) == XSD_STRING)) {
+          return word;
+        }
+      }
+      return std::nullopt;
+    }
+
+    // If the literal has a datatype that is not xsd:string, remove the datatype
+    if (word.isLiteral()) {
+      if (word.hasDatatype() &&
+          std::string_view(
+              reinterpret_cast<const char*>(word.getDatatype().data()),
+              word.getDatatype().size()) != XSD_STRING) {
+        return LiteralOrIri{
+            ad_utility::triple_component::Literal::literalWithNormalizedContent(
+                word.getContent())};
+      }
+    }
     return word;
   };
-  switch (id.getDatatype()) {
+  switch (datatype) {
     case WordVocabIndex:
-      // TODO
-      return std::nullopt;
+      return LiteralOrIri::literalWithoutQuotes(
+          index.indexToString(id.getWordVocabIndex()));
     case VocabIndex:
     case LocalVocabIndex:
       return handleIriOrLiteral(
@@ -483,7 +486,8 @@ std::optional<LiteralOrIri> ExportQueryExecutionTrees::idToLiteralOrIri(
       // TODO
       return std::nullopt;
     default:
-      return idToLiteralOrIriForEncodedValue(id);
+      return idToLiteralOrIriForEncodedValue(id,
+                                             onlyReturnLiteralsWithXsdString);
   }
 }
 
@@ -507,6 +511,18 @@ template std::optional<std::pair<std::string, const char*>>
 ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
                                              const LocalVocab& localVocab,
                                              std::identity&& escapeFunction);
+
+// ___________________________________________________________________________
+template std::optional<LiteralOrIri>
+ExportQueryExecutionTrees::idToLiteralOrIri<false>(
+    const Index& index, Id id, const LocalVocab& localVocab,
+    bool onlyReturnLiteralsWithXsdString);
+
+// ___________________________________________________________________________
+template std::optional<LiteralOrIri>
+ExportQueryExecutionTrees::idToLiteralOrIri<true>(
+    const Index& index, Id id, const LocalVocab& localVocab,
+    bool onlyReturnLiteralsWithXsdString);
 
 // Convert a stringvalue and optional type to JSON binding.
 static nlohmann::json stringAndTypeToBinding(std::string_view entitystr,
