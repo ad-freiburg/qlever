@@ -87,11 +87,14 @@ std::optional<size_t> SpatialJoin::getMaxResults() const {
 
 // ____________________________________________________________________________
 std::vector<QueryExecutionTree*> SpatialJoin::getChildren() {
-  if (!(childLeft_ && childRight_)) {
-    AD_THROW("SpatialJoin needs two children, but at least one is missing");
+  std::vector<QueryExecutionTree*> result;
+  if (childLeft_) {
+    result.push_back(childLeft_.get());
   }
-
-  return {childLeft_.get(), childRight_.get()};
+  if (childRight_) {
+    result.push_back(childRight_.get());
+  }
+  return result;
 }
 
 // ____________________________________________________________________________

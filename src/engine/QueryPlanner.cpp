@@ -1827,6 +1827,13 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
     return candidates;
   }
 
+  // If both sides are spatial joins, return immediately to prevent a regular
+  // join on the variables, which would lead to the spatial join never having
+  // children.
+  if (checkSpatialJoin(a, b) == std::pair<bool, bool>{true, true}) {
+    return candidates;
+  }
+
   if (a.type == SubtreePlan::MINUS) {
     AD_THROW(
         "MINUS can only appear after"
@@ -1897,25 +1904,31 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
 }
 
 // _____________________________________________________________________________
-auto QueryPlanner::createSpatialJoin(
-    const SubtreePlan& a, const SubtreePlan& b,
-    const std::vector<std::array<ColumnIndex, 2>>& jcs)
-    -> std::optional<SubtreePlan> {
+std::pair<bool, bool> QueryPlanner::checkSpatialJoin(const SubtreePlan& a,
+                                                     const SubtreePlan& b) {
   auto aIsSpatialJoin =
       std::dynamic_pointer_cast<const SpatialJoin>(a._qet->getRootOperation());
   auto bIsSpatialJoin =
       std::dynamic_pointer_cast<const SpatialJoin>(b._qet->getRootOperation());
 
-  auto aIs = static_cast<bool>(aIsSpatialJoin);
-  auto bIs = static_cast<bool>(bIsSpatialJoin);
+  return std::pair<bool, bool>{static_cast<bool>(aIsSpatialJoin),
+                               static_cast<bool>(bIsSpatialJoin)};
+}
+
+// _____________________________________________________________________________
+auto QueryPlanner::createSpatialJoin(
+    const SubtreePlan& a, const SubtreePlan& b,
+    const std::vector<std::array<ColumnIndex, 2>>& jcs)
+    -> std::optional<SubtreePlan> {
+  auto [aIs, bIs] = checkSpatialJoin(a, b);
 
   // Exactly one of the inputs must be a SpatialJoin.
   if (aIs == bIs) {
     return std::nullopt;
   }
 
-  const SubtreePlan& spatialSubtreePlan = aIsSpatialJoin ? a : b;
-  const SubtreePlan& otherSubtreePlan = aIsSpatialJoin ? b : a;
+  const SubtreePlan& spatialSubtreePlan = aIs ? a : b;
+  const SubtreePlan& otherSubtreePlan = aIs ? b : a;
 
   std::shared_ptr<Operation> op = spatialSubtreePlan._qet->getRootOperation();
   auto spatialJoin = static_cast<SpatialJoin*>(op.get());
@@ -1929,7 +1942,7 @@ auto QueryPlanner::createSpatialJoin(
         "Currently, if both sides of a SpatialJoin are variables, then the"
         "SpatialJoin must be the only connection between these variables");
   }
-  ColumnIndex ind = aIsSpatialJoin ? jcs[0][1] : jcs[0][0];
+  ColumnIndex ind = aIs ? jcs[0][1] : jcs[0][0];
   const Variable& var =
       otherSubtreePlan._qet->getVariableAndInfoByColumnIndex(ind).first;
   std::cout << spatialJoin->onlyForTestingGetTask().first << " "

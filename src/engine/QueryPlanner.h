@@ -348,6 +348,10 @@ class QueryPlanner {
       const SubtreePlan& a, const SubtreePlan& b,
       const std::vector<std::array<ColumnIndex, 2>>& jcs);
 
+  // Helper to check if subtree plans are spatial join
+  [[nodiscard]] static std::pair<bool, bool> checkSpatialJoin(
+      const SubtreePlan& a, const SubtreePlan& b);
+
   // if one of the inputs is a spatial join which is compatible with the other
   // input, then add that other input to the spatial join as a child instead of
   // creating a normal join.
