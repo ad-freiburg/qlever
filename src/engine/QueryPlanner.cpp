@@ -1945,9 +1945,6 @@ auto QueryPlanner::createSpatialJoin(
   ColumnIndex ind = aIs ? jcs[0][1] : jcs[0][0];
   const Variable& var =
       otherSubtreePlan._qet->getVariableAndInfoByColumnIndex(ind).first;
-  std::cout << spatialJoin->onlyForTestingGetTask().first << " "
-            << spatialJoin->onlyForTestingGetTask().second << " Add variable "
-            << var.name() << "\n";
 
   auto newSpatialJoin = spatialJoin->addChild(otherSubtreePlan._qet, var);
 
