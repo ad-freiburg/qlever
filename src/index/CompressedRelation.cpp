@@ -77,8 +77,8 @@ CompressedRelationReader::asyncParallelBlockGenerator(
   auto readAndDecompressBlock = [&]()
       -> std::optional<
           std::pair<size_t, std::optional<DecompressedBlockAndMetadata>>> {
-    cancellationHandle->throwIfCancelled();
     std::unique_lock lock{blockIteratorMutex};
+    cancellationHandle->throwIfCancelled();
     if (blockMetadataIterator == endBlock) {
       return std::nullopt;
     }
@@ -102,8 +102,10 @@ CompressedRelationReader::asyncParallelBlockGenerator(
     CompressedBlock compressedBlock =
         readCompressedBlockFromFile(blockMetadata, columnIndices);
     lock.unlock();
+    cancellationHandle->throwIfCancelled();
     auto decompressedBlockAndMetadata = decompressAndPostprocessBlock(
         compressedBlock, blockMetadata.numRows_, scanConfig, blockMetadata);
+    cancellationHandle->throwIfCancelled();
     return std::pair{myIndex,
                      std::optional{std::move(decompressedBlockAndMetadata)}};
   };
