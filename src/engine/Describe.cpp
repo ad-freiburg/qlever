@@ -185,7 +185,7 @@ IdTable Describe::getIdsToDescribe(const Result& result,
           TripleComponent{std::get<TripleComponent::Iri>(resource)}.toValueId(
               vocab, localVocab));
     } else {
-      auto var = std::get<Variable>(resource);
+      const auto& var = std::get<Variable>(resource);
       auto column = subtree_->getVariableColumnOrNullopt(var);
       if (!column.has_value()) {
         continue;

@@ -286,13 +286,13 @@ ParsedQuery Visitor::visit(Parser::DescribeQueryContext* ctx) {
   for (GraphTerm& resource : describedResources) {
     if (std::holds_alternative<Variable>(resource)) {
       const auto& variable = std::get<Variable>(resource);
-      describeClause.resources_.push_back(variable);
+      describeClause.resources_.emplace_back(variable);
       describedVariables.push_back(variable);
     } else {
       AD_CORRECTNESS_CHECK(std::holds_alternative<Iri>(resource));
       auto iri =
           TripleComponent::Iri::fromIriref(std::get<Iri>(resource).toSparql());
-      describeClause.resources_.push_back(std::move(iri));
+      describeClause.resources_.emplace_back(std::move(iri));
     }
   }
 
@@ -327,7 +327,7 @@ ParsedQuery Visitor::visit(Parser::DescribeQueryContext* ctx) {
   // outer query.
   parsedQuery_.addSolutionModifiers(visit(ctx->solutionModifier()));
 
-  parsedQuery_._rootGraphPattern._graphPatterns.push_back(
+  parsedQuery_._rootGraphPattern._graphPatterns.emplace_back(
       std::move(describeClause));
   parsedQuery_.datasetClauses_ = datasetClauses;
   auto constructClause = ParsedQuery::ConstructClause{};
