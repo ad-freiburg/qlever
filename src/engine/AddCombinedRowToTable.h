@@ -27,6 +27,7 @@ class AddCombinedRowToIdTable {
   std::optional<std::array<IdTableView<0>, 2>> inputLeftAndRight_;
   IdTable resultTable_;
   LocalVocab mergedVocab_{};
+  std::array<const LocalVocab*, 2> currentVocabs_{nullptr, nullptr};
 
   // This struct stores the information, which row indices from the input are
   // combined into a given row index in the output, i.e. "To obtain the
@@ -139,17 +140,21 @@ class AddCombinedRowToIdTable {
         return table;
       }
     };
-    auto mergeVocab = [this]<typename T>(const T& table) {
+    auto mergeVocab = [this]<typename T>(const T& table,
+                                         const LocalVocab*& currentVocab) {
       if constexpr (requires { table.getLocalVocab(); }) {
+        currentVocab = &table.getLocalVocab();
         mergedVocab_.mergeWith(std::span{&table.getLocalVocab(), 1});
+      } else {
+        currentVocab = nullptr;
       }
     };
     if (nextIndex_ != 0) {
       AD_CORRECTNESS_CHECK(inputLeftAndRight_.has_value());
       flush();
     }
-    mergeVocab(inputLeft);
-    mergeVocab(inputRight);
+    mergeVocab(inputLeft, currentVocabs_.at(0));
+    mergeVocab(inputRight, currentVocabs_.at(1));
     inputLeftAndRight_ = std::array{toView(inputLeft), toView(inputRight)};
     checkNumColumns();
   }
@@ -331,6 +336,13 @@ class AddCombinedRowToIdTable {
     optionalIndexBuffer_.clear();
     nextIndex_ = 0;
     std::invoke(blockwiseCallback_, result, mergedVocab_);
+    // The current `IdTable`s might still be active, so we have to merge the
+    // local vocabs again if all other sets were moved-out.
+    if (mergedVocab_.numSets() == 1) {
+      // Only merge non-null vocabs.
+      mergedVocab_.mergeWith(currentVocabs_ | std::views::filter(toBool) |
+                             std::views::transform(dereference));
+    }
   }
   const IdTableView<0>& inputLeft() const {
     return inputLeftAndRight_.value()[0];
