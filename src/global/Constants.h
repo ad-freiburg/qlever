@@ -53,11 +53,6 @@ inline std::string makeQleverInternalIri(const auto&... suffixes) {
                       suffixes..., ">");
 }
 
-const inline char PATH_SEARCH_IRI[] =
-    "<https://qlever.cs.uni-freiburg.de/pathSearch/>";
-const inline char SPATIAL_SEARCH_IRI[] =
-    "<https://qlever.cs.uni-freiburg.de/spatialSearch/>";
-
 constexpr inline std::string_view QLEVER_INTERNAL_PREFIX_IRI =
     makeQleverInternalIriConst<"">();
 constexpr inline std::string_view
