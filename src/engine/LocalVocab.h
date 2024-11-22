@@ -113,11 +113,10 @@ class LocalVocab {
   // `LocalVocabEntry`s alive as long as this `LocalVocab` is alive. The
   // primary set of this `LocalVocab` remains unchanged.
   template <std::ranges::range R>
-  void mergeWith(R&& vocabs) {
+  void mergeWith(const R& vocabs) {
     auto inserter = std::back_inserter(otherWordSets_);
     using std::views::filter;
-    for (const auto& vocab :
-         AD_FWD(vocabs) | filter(std::not_fn(&LocalVocab::empty))) {
+    for (const auto& vocab : vocabs | filter(std::not_fn(&LocalVocab::empty))) {
       std::ranges::copy(vocab.otherWordSets_, inserter);
       *inserter = vocab.primaryWordSet_;
       size_ += vocab.size_;
