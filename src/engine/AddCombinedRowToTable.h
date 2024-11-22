@@ -340,8 +340,9 @@ class AddCombinedRowToIdTable {
     // local vocabs again if all other sets were moved-out.
     if (mergedVocab_.numSets() == 1) {
       // Only merge non-null vocabs.
-      mergedVocab_.mergeWith(currentVocabs_ | std::views::filter(toBool) |
-                             std::views::transform(dereference));
+      auto range = currentVocabs_ | std::views::filter(toBool) |
+                   std::views::transform(dereference);
+      mergedVocab_.mergeWith(std::ranges::ref_view{range});
     }
   }
   const IdTableView<0>& inputLeft() const {
