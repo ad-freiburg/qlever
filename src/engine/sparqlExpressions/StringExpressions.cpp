@@ -189,8 +189,6 @@ class SubstrImpl {
   };
 
  public:
-  // TODO<DuDaAG> Statt s vom Typ std::optional<std::string>, s vom Typ
-  // std::optional<LiteralOrIri>
   IdOrLiteralOrIri operator()(std::optional<LiteralOrIri> s, NumericValue start,
                               NumericValue length) const {
     if (!s.has_value() || std::holds_alternative<NotNumeric>(start) ||

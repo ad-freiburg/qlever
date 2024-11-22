@@ -330,7 +330,6 @@ std::chrono::milliseconds toChrono(std::string_view string) {
 }
 }  // namespace
 
-/*
 // ____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, Integers) {
   std::string kg =
@@ -339,16 +338,13 @@ TEST(ExportQueryExecutionTrees, Integers) {
   std::string expectedXml = makeXMLHeader({"o"}) +
                             R"(
   <result>
-    <binding name="o"><literal
-datatype="http://www.w3.org/2001/XMLSchema#int">-42019234865781</literal></binding>
+    <binding name="o"><literal datatype="http://www.w3.org/2001/XMLSchema#int">-42019234865781</literal></binding>
   </result>
   <result>
-    <binding name="o"><literal
-datatype="http://www.w3.org/2001/XMLSchema#int">42</literal></binding>
+    <binding name="o"><literal datatype="http://www.w3.org/2001/XMLSchema#int">42</literal></binding>
   </result>
   <result>
-    <binding name="o"><literal
-datatype="http://www.w3.org/2001/XMLSchema#int">4012934858173560</literal></binding>
+    <binding name="o"><literal datatype="http://www.w3.org/2001/XMLSchema#int">4012934858173560</literal></binding>
   </result>)" + xmlTrailer;
   TestCaseSelectQuery testCase{
       kg, query, 3,
@@ -408,12 +404,10 @@ TEST(ExportQueryExecutionTrees, Bool) {
   std::string expectedXml = makeXMLHeader({"o"}) +
                             R"(
   <result>
-    <binding name="o"><literal
-datatype="http://www.w3.org/2001/XMLSchema#boolean">false</literal></binding>
+    <binding name="o"><literal datatype="http://www.w3.org/2001/XMLSchema#boolean">false</literal></binding>
   </result>
   <result>
-    <binding name="o"><literal
-datatype="http://www.w3.org/2001/XMLSchema#boolean">true</literal></binding>
+    <binding name="o"><literal datatype="http://www.w3.org/2001/XMLSchema#boolean">true</literal></binding>
   </result>)" + xmlTrailer;
   TestCaseSelectQuery testCase{
       kg, query, 2,
@@ -502,16 +496,13 @@ TEST(ExportQueryExecutionTrees, Floats) {
   std::string expectedXml = makeXMLHeader({"o"}) +
                             R"(
   <result>
-    <binding name="o"><literal
-datatype="http://www.w3.org/2001/XMLSchema#decimal">-42019234865780982022144</literal></binding>
+    <binding name="o"><literal datatype="http://www.w3.org/2001/XMLSchema#decimal">-42019234865780982022144</literal></binding>
   </result>
   <result>
-    <binding name="o"><literal
-datatype="http://www.w3.org/2001/XMLSchema#decimal">4.01293e-12</literal></binding>
+    <binding name="o"><literal datatype="http://www.w3.org/2001/XMLSchema#decimal">4.01293e-12</literal></binding>
   </result>
   <result>
-    <binding name="o"><literal
-datatype="http://www.w3.org/2001/XMLSchema#decimal">42.2</literal></binding>
+    <binding name="o"><literal datatype="http://www.w3.org/2001/XMLSchema#decimal">42.2</literal></binding>
   </result>)" + xmlTrailer;
   TestCaseSelectQuery testCaseFloat{
       kg, query, 3,
@@ -572,8 +563,7 @@ TEST(ExportQueryExecutionTrees, Dates) {
   std::string expectedXml = makeXMLHeader({"o"}) +
                             R"(
   <result>
-    <binding name="o"><literal
-datatype="http://www.w3.org/2001/XMLSchema#dateTime">1950-01-01T00:00:00</literal></binding>
+    <binding name="o"><literal datatype="http://www.w3.org/2001/XMLSchema#dateTime">1950-01-01T00:00:00</literal></binding>
   </result>)" + xmlTrailer;
   TestCaseSelectQuery testCase{
       kg, query, 1,
@@ -581,8 +571,7 @@ datatype="http://www.w3.org/2001/XMLSchema#dateTime">1950-01-01T00:00:00</litera
       "?o\n"
       "1950-01-01T00:00:00\n",
       // should be
-      //
-"\"1950-01-01T00:00:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime>\n",
+      // "\"1950-01-01T00:00:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime>\n",
       // but that is a bug in the TSV export for another PR. Note: the duplicate
       // quotes are due to the escaping for CSV.
       "o\n"
@@ -603,8 +592,7 @@ datatype="http://www.w3.org/2001/XMLSchema#dateTime">1950-01-01T00:00:00</litera
       // TSV
       "<s>\t<p>\t\"1950-01-01T00:00:00\"^^<http://www.w3.org/2001/"
       "XMLSchema#dateTime>\n",  // missing
-                                //
-"^^<http://www.w3.org/2001/XMLSchema#dateTime>\n",
+                                // "^^<http://www.w3.org/2001/XMLSchema#dateTime>\n",
       // CSV
       // TODO<joka921> This format is wrong, but this is is due to the way that
       // CONSTRUCT queries are currently exported. This has to be fixed in a
@@ -636,8 +624,7 @@ TEST(ExportQueryExecutionTrees, GeoPoints) {
   std::string expectedXml = makeXMLHeader({"o"}) +
                             R"(
   <result>
-    <binding name="o"><literal
-datatype="http://www.opengis.net/ont/geosparql#wktLiteral">POINT(50.000000 50.000000)</literal></binding>
+    <binding name="o"><literal datatype="http://www.opengis.net/ont/geosparql#wktLiteral">POINT(50.000000 50.000000)</literal></binding>
   </result>)" + xmlTrailer;
   TestCaseSelectQuery testCase{
       kg, query, 1,
@@ -645,8 +632,7 @@ datatype="http://www.opengis.net/ont/geosparql#wktLiteral">POINT(50.000000 50.00
       "?o\n"
       "POINT(50.000000 50.000000)\n",
       // should be
-      //
-"\"POINT(50.000000 50.000000)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>\n",
+      // "\"POINT(50.000000 50.000000)\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>\n",
       // but that is a bug in the TSV export for another PR. Note: the duplicate
       // quotes are due to the escaping for CSV.
       "o\n"
@@ -765,8 +751,7 @@ TEST(ExportQueryExecutionTrees, LiteralWithDatatype) {
   std::string expectedXml = makeXMLHeader({"o"}) +
                             R"(
   <result>
-    <binding name="o"><literal
-datatype="www.example.org/bim">something</literal></binding>
+    <binding name="o"><literal datatype="www.example.org/bim">something</literal></binding>
   </result>)" + xmlTrailer;
   TestCaseSelectQuery testCase{
       kg, query, 1,
@@ -1652,7 +1637,7 @@ TEST(ExportQueryExecutionTrees, convertGeneratorForChunkedTransfer) {
               AllOf(HasSubstr("!!!!>># An error has occurred"),
                     HasSubstr("A very strange")));
 }
-*/
+
 TEST(ExportQueryExecutionTrees, idToLiteralOrIriFunctionality) {
   std::string kg =
       "<s> <p> \"something\" . <s> <p> 1. <s> <p> "

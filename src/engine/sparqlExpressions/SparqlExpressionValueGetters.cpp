@@ -93,14 +93,9 @@ std::optional<std::string> StringValueGetter::operator()(
 // ____________________________________________________________________________
 std::optional<LiteralOrIri> LiteralOrIriValueGetter::operator()(
     Id id, const EvaluationContext* context) const {
-  auto optionalLiteralOrIriAndType =
-      ExportQueryExecutionTrees::idToLiteralOrIri(context->_qec.getIndex(), id,
-                                                  context->_localVocab);
-  if (optionalLiteralOrIriAndType.has_value()) {
-    return std::move(optionalLiteralOrIriAndType.value());
-  } else {
-    return std::nullopt;
-  }
+  //true means that immediately returns nullopt for everything that is not a literal
+  return ExportQueryExecutionTrees::idToLiteralOrIri<false>(
+      context->_qec.getIndex(), id, context->_localVocab);
 }
 
 // ____________________________________________________________________________
