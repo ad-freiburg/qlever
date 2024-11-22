@@ -33,7 +33,8 @@ class SpatialJoinParamTest
       std::shared_ptr<QueryExecutionTree> leftChild,
       std::shared_ptr<QueryExecutionTree> rightChild, bool addLeftChildFirst,
       std::vector<std::vector<std::string>> expectedOutputUnorderedRows,
-      std::vector<std::string> columnNames) {
+      std::vector<std::string> columnNames,
+      bool isWrongPointInputTest = false) {
     // this function is like transposing a matrix. An entry which has been
     // stored at (i, k) is now stored at (k, i). The reason this is needed is
     // the following: this function receives the input as a vector of vector of
@@ -107,6 +108,23 @@ class SpatialJoinParamTest
     }*/
 
     EXPECT_THAT(vec, ::testing::UnorderedElementsAreArray(expectedOutput));
+
+    if (isWrongPointInputTest &&
+        GetParam() == SpatialJoin::Algorithm::BoundingBox) {
+      auto warnings = spatialJoin->collectWarnings();
+      bool containsWrongPointWarning = false;
+      std::string warningMessage =
+          "The input to a spatial join contained at least one element, "
+          "that is not a point geometry and is thus skipped. Note that "
+          "QLever currently only accepts point geometries for the "
+          "spatial joins";
+      for (const auto& warning : warnings) {
+        if (warning == warningMessage) {
+          containsWrongPointWarning = true;
+        }
+      }
+      ASSERT_TRUE(containsWrongPointWarning);
+    }
   }
 
   // build the test using the small dataset. Let the SpatialJoin operation be
@@ -224,15 +242,14 @@ class SpatialJoinParamTest
     auto qec = buildTestQEC();
     auto numTriples = qec->getIndex().numTriples().normal;
     ASSERT_EQ(numTriples, 15);
-    // ====================== build small input
-    // =================================
+    // ====================== build small input ==============================
     TripleComponent point1{Variable{"?point1"}};
     TripleComponent subject{
         ad_utility::triple_component::Iri::fromIriref("<geometry1>")};
     auto smallChild = ad_utility::makeExecutionTree<IndexScan>(
         qec, Permutation::Enum::PSO,
         SparqlTriple{subject, std::string{"<asWKT>"}, point1});
-    // ====================== build big input ==================================
+    // ====================== build big input ================================
     auto bigChild =
         buildIndexScan(qec, {"?obj2", std::string{"<asWKT>"}, "?point2"});
 
@@ -247,6 +264,33 @@ class SpatialJoinParamTest
         qec, SparqlTriple{firstVariable, specialPredicate, secondVariable},
         firstChild, secondChild, addLeftChildFirst, expectedOutput,
         columnNames);
+  }
+
+  void testWrongPointInInput(
+      std::string specialPredicate, bool addLeftChildFirst,
+      std::vector<std::vector<std::string>> expectedOutput,
+      std::vector<std::string> columnNames) {
+    auto kg = createSmallDatasetWithPoints();
+    // make first point wrong:
+    auto pos = kg.find("POINT(");
+    kg = kg.insert(pos + 7, "wrongStuff");
+
+    ad_utility::MemorySize blocksizePermutations = 128_MB;
+    auto qec = ad_utility::testing::getQec(kg, true, true, false,
+                                           blocksizePermutations, false);
+    auto numTriples = qec->getIndex().numTriples().normal;
+    ASSERT_EQ(numTriples, 15);
+    // ====================== build inputs ================================
+    TripleComponent point1{Variable{"?point1"}};
+    TripleComponent point2{Variable{"?point2"}};
+    auto leftChild =
+        buildIndexScan(qec, {"?obj1", std::string{"<asWKT>"}, "?point1"});
+    auto rightChild =
+        buildIndexScan(qec, {"?obj2", std::string{"<asWKT>"}, "?point2"});
+
+    createAndTestSpatialJoin(
+        qec, SparqlTriple{point1, specialPredicate, point2}, leftChild,
+        rightChild, addLeftChildFirst, expectedOutput, columnNames, true);
   }
 
  protected:
@@ -517,6 +561,63 @@ std::vector<std::vector<std::string>> expectedMaxDist10000000_rows_small{
     mergeToRow(sEif, sMun, expectedDistMunEif),
     mergeToRow(sEif, sEye, expectedDistEyeEif),
     mergeToRow(sEif, sLib, expectedDistEifLib)};
+
+std::vector<std::vector<std::string>> expectedMaxDist1_rows_small_wrong_point{
+    mergeToRow(sMun, sMun, expectedDistSelf),
+    mergeToRow(sEye, sEye, expectedDistSelf),
+    mergeToRow(sLib, sLib, expectedDistSelf),
+    mergeToRow(sEif, sEif, expectedDistSelf),
+};
+
+std::vector<std::vector<std::string>>
+    expectedMaxDist5000_rows_small_wrong_point{
+        mergeToRow(sMun, sMun, expectedDistSelf),
+        mergeToRow(sEye, sEye, expectedDistSelf),
+        mergeToRow(sLib, sLib, expectedDistSelf),
+        mergeToRow(sEif, sEif, expectedDistSelf)};
+
+std::vector<std::vector<std::string>>
+    expectedMaxDist500000_rows_small_wrong_point{
+        mergeToRow(sMun, sMun, expectedDistSelf),
+        mergeToRow(sMun, sEif, expectedDistMunEif),
+        mergeToRow(sEye, sEye, expectedDistSelf),
+        mergeToRow(sEye, sEif, expectedDistEyeEif),
+        mergeToRow(sLib, sLib, expectedDistSelf),
+        mergeToRow(sEif, sEif, expectedDistSelf),
+        mergeToRow(sEif, sMun, expectedDistMunEif),
+        mergeToRow(sEif, sEye, expectedDistEyeEif)};
+
+std::vector<std::vector<std::string>>
+    expectedMaxDist1000000_rows_small_wrong_point{
+        mergeToRow(sMun, sMun, expectedDistSelf),
+        mergeToRow(sMun, sEif, expectedDistMunEif),
+        mergeToRow(sMun, sEye, expectedDistMunEye),
+        mergeToRow(sEye, sEye, expectedDistSelf),
+        mergeToRow(sEye, sEif, expectedDistEyeEif),
+        mergeToRow(sEye, sMun, expectedDistMunEye),
+        mergeToRow(sLib, sLib, expectedDistSelf),
+        mergeToRow(sEif, sEif, expectedDistSelf),
+        mergeToRow(sEif, sMun, expectedDistMunEif),
+        mergeToRow(sEif, sEye, expectedDistEyeEif)};
+
+std::vector<std::vector<std::string>>
+    expectedMaxDist10000000_rows_small_wrong_point{
+        mergeToRow(sMun, sMun, expectedDistSelf),
+        mergeToRow(sMun, sEif, expectedDistMunEif),
+        mergeToRow(sMun, sEye, expectedDistMunEye),
+        mergeToRow(sMun, sLib, expectedDistMunLib),
+        mergeToRow(sEye, sEye, expectedDistSelf),
+        mergeToRow(sEye, sEif, expectedDistEyeEif),
+        mergeToRow(sEye, sMun, expectedDistMunEye),
+        mergeToRow(sEye, sLib, expectedDistEyeLib),
+        mergeToRow(sLib, sLib, expectedDistSelf),
+        mergeToRow(sLib, sMun, expectedDistMunLib),
+        mergeToRow(sLib, sEye, expectedDistEyeLib),
+        mergeToRow(sLib, sEif, expectedDistEifLib),
+        mergeToRow(sEif, sEif, expectedDistSelf),
+        mergeToRow(sEif, sMun, expectedDistMunEif),
+        mergeToRow(sEif, sEye, expectedDistEyeEif),
+        mergeToRow(sEif, sLib, expectedDistEifLib)};
 
 std::vector<std::vector<std::string>> expectedMaxDist1_rows_diff{
     mergeToRow(TF, sTF, expectedDistSelf),
@@ -893,6 +994,40 @@ TEST_P(SpatialJoinParamTest, diffSizeIdTables) {
   testDiffSizeIdTables("<max-distance-in-meters:10000000>", false,
                        expectedMaxDist10000000_rows_diffIDTable, columnNames,
                        false);
+}
+
+TEST_P(SpatialJoinParamTest, wrongPointInInput) {
+  // expected behavior: point is skipped
+  std::vector<std::string> columnNames{"?obj1", "?point1", "?obj2", "?point2",
+                                       "?distOfTheTwoObjectsAddedInternally"};
+  testWrongPointInInput("<max-distance-in-meters:1>", true,
+                        expectedMaxDist1_rows_small_wrong_point, columnNames);
+  testWrongPointInInput("<max-distance-in-meters:1>", false,
+                        expectedMaxDist1_rows_small_wrong_point, columnNames);
+  testWrongPointInInput("<max-distance-in-meters:5000>", true,
+                        expectedMaxDist5000_rows_small_wrong_point,
+                        columnNames);
+  testWrongPointInInput("<max-distance-in-meters:5000>", false,
+                        expectedMaxDist5000_rows_small_wrong_point,
+                        columnNames);
+  testWrongPointInInput("<max-distance-in-meters:500000>", true,
+                        expectedMaxDist500000_rows_small_wrong_point,
+                        columnNames);
+  testWrongPointInInput("<max-distance-in-meters:500000>", false,
+                        expectedMaxDist500000_rows_small_wrong_point,
+                        columnNames);
+  testWrongPointInInput("<max-distance-in-meters:1000000>", true,
+                        expectedMaxDist1000000_rows_small_wrong_point,
+                        columnNames);
+  testWrongPointInInput("<max-distance-in-meters:1000000>", false,
+                        expectedMaxDist1000000_rows_small_wrong_point,
+                        columnNames);
+  testWrongPointInInput("<max-distance-in-meters:10000000>", true,
+                        expectedMaxDist10000000_rows_small_wrong_point,
+                        columnNames);
+  testWrongPointInInput("<max-distance-in-meters:10000000>", false,
+                        expectedMaxDist10000000_rows_small_wrong_point,
+                        columnNames);
 }
 
 INSTANTIATE_TEST_SUITE_P(

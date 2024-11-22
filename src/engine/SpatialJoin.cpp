@@ -336,12 +336,13 @@ PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
 // ____________________________________________________________________________
 Result SpatialJoin::computeResult([[maybe_unused]] bool requestLaziness) {
   SpatialJoinAlgorithms algorithms{_executionContext, prepareJoin(),
-                                   addDistToResult_, config_};
+                                   addDistToResult_, config_, this};
   if (algorithm_ == Algorithm::Baseline) {
     return algorithms.BaselineAlgorithm();
   } else if (algorithm_ == Algorithm::S2Geometry) {
     return algorithms.S2geometryAlgorithm();
-  } else if (algorithm_ == Algorithm::BoundingBox) {
+  } else {
+    AD_CORRECTNESS_CHECK(algorithm_ == Algorithm::BoundingBox);
     // as the BoundingBoxAlgorithms only works for max distance and not for
     // nearest neighbors, S2geometry gets called as a backup, if the query is
     // asking for the nearest neighbors
@@ -350,8 +351,6 @@ Result SpatialJoin::computeResult([[maybe_unused]] bool requestLaziness) {
     } else {
       return algorithms.S2geometryAlgorithm();
     }
-  } else {
-    AD_THROW("choose a valid Algorithm");
   }
 }
 

@@ -23,20 +23,21 @@ class SpatialJoinAlgorithms {
   SpatialJoinAlgorithms(
       QueryExecutionContext* qec, PreparedSpatialJoinParams params,
       bool addDistToResult,
-      std::variant<NearestNeighborsConfig, MaxDistanceConfig> config);
+      std::variant<NearestNeighborsConfig, MaxDistanceConfig> config,
+      std::optional<SpatialJoin*> spatialJoin = std::nullopt);
   Result BaselineAlgorithm();
   Result S2geometryAlgorithm();
   Result BoundingBoxAlgorithm();
 
   std::vector<BoostGeometryNamespace::Box>
   OnlyForTestingWrapperComputeBoundingBox(
-      const BoostGeometryNamespace::Point& startPoint) {
+      const BoostGeometryNamespace::Point& startPoint) const {
     return computeBoundingBox(startPoint);
   }
 
   bool OnlyForTestingWrapperContainedInBoundingBoxes(
       const std::vector<BoostGeometryNamespace::Box>& boundingBox,
-      const BoostGeometryNamespace::Point& point) {
+      const BoostGeometryNamespace::Point& point) const {
     return isContainedInBoundingBoxes(boundingBox, point);
   }
 
@@ -70,7 +71,7 @@ class SpatialJoinAlgorithms {
   // the right, which when seen on the sphere look like a single box, but on the
   // map and in the internal representation it looks like two/more boxes)
   std::vector<BoostGeometryNamespace::Box> computeBoundingBox(
-      const BoostGeometryNamespace::Point& startPoint);
+      const BoostGeometryNamespace::Point& startPoint) const;
 
   // This helper function calculates the bounding boxes based on a box, where
   // definitely no match can occur. This means every element in the anti
@@ -87,12 +88,13 @@ class SpatialJoinAlgorithms {
   // bounding boxes
   bool isContainedInBoundingBoxes(
       const std::vector<BoostGeometryNamespace::Box>& boundingBox,
-      BoostGeometryNamespace::Point point);
+      BoostGeometryNamespace::Point point) const;
 
   QueryExecutionContext* qec_;
   PreparedSpatialJoinParams params_;
   bool addDistToResult_;
   std::variant<NearestNeighborsConfig, MaxDistanceConfig> config_;
+  std::optional<SpatialJoin*> spatialJoin_;
 
   // circumference in meters at the equator (max) and the pole (min) (as the
   // earth is not exactly a sphere the circumference is different. Note that

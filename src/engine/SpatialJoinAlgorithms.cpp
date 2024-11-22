@@ -16,11 +16,13 @@ using namespace BoostGeometryNamespace;
 SpatialJoinAlgorithms::SpatialJoinAlgorithms(
     QueryExecutionContext* qec, PreparedSpatialJoinParams params,
     bool addDistToResult,
-    std::variant<NearestNeighborsConfig, MaxDistanceConfig> config)
+    std::variant<NearestNeighborsConfig, MaxDistanceConfig> config,
+    std::optional<SpatialJoin*> spatialJoin)
     : qec_{qec},
       params_{std::move(params)},
       addDistToResult_{addDistToResult},
-      config_{std::move(config)} {}
+      config_{std::move(config)},
+      spatialJoin_{spatialJoin} {}
 
 // ____________________________________________________________________________
 std::optional<GeoPoint> SpatialJoinAlgorithms::getPoint(const IdTable* restable,
@@ -230,7 +232,7 @@ Result SpatialJoinAlgorithms::S2geometryAlgorithm() {
 
 // ____________________________________________________________________________
 std::vector<Box> SpatialJoinAlgorithms::computeBoundingBox(
-    const Point& startPoint) {
+    const Point& startPoint) const {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
               rightJoinCol, numColumns, maxDist, maxResults] = params_;
   AD_CORRECTNESS_CHECK(maxDist.has_value(),
@@ -391,7 +393,7 @@ std::vector<Box> SpatialJoinAlgorithms::computeBoundingBoxForLargeDistances(
 
 // ____________________________________________________________________________
 bool SpatialJoinAlgorithms::isContainedInBoundingBoxes(
-    const std::vector<Box>& boundingBox, Point point) {
+    const std::vector<Box>& boundingBox, Point point) const {
   convertToNormalCoordinates(point);
 
   return std::ranges::any_of(boundingBox, [point](const Box& aBox) {
@@ -431,16 +433,21 @@ std::array<bool, 2> SpatialJoinAlgorithms::isAPoleTouched(
 
 // ____________________________________________________________________________
 Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
-  bool alreadyWarned = false;
-
-  auto printWarning = [&]() {
-    if (!alreadyWarned) {
-      AD_LOG_WARN << "expected a point here, but no point is given. Skipping "
-                     "this point and future 'non points' of this query"
-                  << std::endl;
-      alreadyWarned = true;
-    }
-  };
+  auto printWarning =
+      [alreadyWarned = false](std::optional<SpatialJoin*> spatialJoin) mutable {
+        if (!alreadyWarned) {
+          std::string warning =
+              "The input to a spatial join contained at least one element, "
+              "that is not a point geometry and is thus skipped. Note that "
+              "QLever currently only accepts point geometries for the "
+              "spatial joins";
+          AD_LOG_WARN << warning << std::endl;
+          alreadyWarned = true;
+          if (spatialJoin) {
+            spatialJoin.value()->addWarning(warning);
+          }
+        }
+      };
 
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
               rightJoinCol, numColumns, maxDist, maxResults] = params_;
@@ -467,7 +474,7 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
     auto geopoint = getPoint(smallerResult, i, smallerResJoinCol);
 
     if (!geopoint) {
-      printWarning();
+      printWarning(spatialJoin_);
       continue;
     }
 
@@ -482,7 +489,7 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
     auto geopoint1 = getPoint(otherResult, i, otherResJoinCol);
 
     if (!geopoint1) {
-      printWarning();
+      printWarning(spatialJoin_);
       continue;
     }
 
@@ -504,8 +511,8 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
       }
       auto distance = computeDist(idTableLeft, idTableRight, rowLeft, rowRight,
                                   leftJoinCol, rightJoinCol);
-      if (distance.getDatatype() == Datatype::Int &&
-          distance.getInt() <= maxDist) {
+      if (distance.getInt() <= maxDist) {
+        AD_CORRECTNESS_CHECK(distance.getDatatype() == Datatype::Int);
         addResultTableEntry(&result, idTableLeft, idTableRight, rowLeft,
                             rowRight, distance);
       }
