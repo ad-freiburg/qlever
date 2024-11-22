@@ -675,18 +675,6 @@ class IdTable {
   // otherwise the behavior is undefined.
   void erase(const iterator& it) requires(!isView) { erase(it, it + 1); }
 
-  // Insert all the elements in the range `(beginIt, endIt]` at the end
-  // of this `IdTable`. `beginIt` and `endIt` must *not* point into this
-  // IdTable, else the behavior is undefined.
-  //
-  // Note: If the input comes from a different `IdTable`, then the overload
-  // below should be used, which is much more efficient.
-  void insertAtEnd(auto beginIt, auto endIt) {
-    for (; beginIt != endIt; ++beginIt) {
-      push_back(*beginIt);
-    }
-  }
-
   // Add all entries from the `table` at the end of this IdTable.
   // If `beginIdx` and/or `endIdx` are specified, then only the subrange
   // `[beginIdx, endIdx)` from the input is taken.
