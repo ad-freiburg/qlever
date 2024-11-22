@@ -166,12 +166,12 @@ TEST(SpatialJoin, getChildren) {
   std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
   SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
 
-  ASSERT_ANY_THROW(spatialJoin->getChildren());
+  ASSERT_EQ(spatialJoin->getChildren().size(), 0);
 
   auto spJoin1 = spatialJoin->addChild(leftChild, point1.getVariable());
   spatialJoin = static_cast<SpatialJoin*>(spJoin1.get());
 
-  ASSERT_ANY_THROW(spatialJoin->getChildren());
+  ASSERT_EQ(spatialJoin->getChildren().size(), 1);
 
   auto spJoin2 = spatialJoin->addChild(rightChild, point2.getVariable());
   spatialJoin = static_cast<SpatialJoin*>(spJoin2.get());

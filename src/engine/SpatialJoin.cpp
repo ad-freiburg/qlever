@@ -299,7 +299,7 @@ PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
 Result SpatialJoin::computeResult([[maybe_unused]] bool requestLaziness) {
   AD_CONTRACT_CHECK(
       isConstructed(),
-      "SpatialJoin cannot be computed because at least one child is missing.");
+      "SpatialJoin needs two children, but at least one is missing");
   SpatialJoinAlgorithms algorithms{_executionContext, prepareJoin(), config_};
   if (config_->algo_ == SpatialJoinAlgorithm::BASELINE) {
     return algorithms.BaselineAlgorithm();
