@@ -26,24 +26,38 @@ using std::endl;
 using std::string;
 
 namespace {
+void applyPermutation(
+    IdTable& idTable,
+    const std::optional<std::vector<ColumnIndex>>& permutation) {
+  if (permutation.has_value()) {
+    idTable.setColumnSubset(permutation.value());
+  }
+}
+
+using LazyInputView =
+    cppcoro::generator<ad_utility::IdTableAndFirstCol<IdTable>>;
 // Convert a `generator<IdTableVocab>` to a `generator<IdTableAndFirstCol>` for
 // more efficient access in the join columns below and apply the given
 // permutation to each table.
-cppcoro::generator<ad_utility::IdTableAndFirstCol<IdTable>> convertGenerator(
-    Result::Generator gen, std::vector<ColumnIndex> permutation = {}) {
+LazyInputView convertGenerator(
+    Result::Generator gen,
+    std::optional<std::vector<ColumnIndex>> permutation = {}) {
   for (auto& [table, localVocab] : gen) {
+    applyPermutation(table, permutation);
     // Make sure to actually move the table into the wrapper so that the tables
     // live as long as the wrapper.
-    if (!permutation.empty()) {
-      table.setColumnSubset(permutation);
-    }
     ad_utility::IdTableAndFirstCol t{std::move(table), std::move(localVocab)};
     co_yield t;
   }
 }
 
-// Wrap a fully materialized result in a `IdTableAndFirstCol` and an array.
-std::array<ad_utility::IdTableAndFirstCol<IdTableView<0>>, 1> asSingleTableView(
+using MaterializedInputView =
+    std::array<ad_utility::IdTableAndFirstCol<IdTableView<0>>, 1>;
+// Wrap a fully materialized result in a `IdTableAndFirstCol` and an array. It
+// then fulfills the concept `view<IdTableAndFirstCol>` which is required by the
+// lazy join algorithms. Note: The `convertGenerator` function above
+// conceptually does exactly the same for lazy inputs.
+MaterializedInputView asSingleTableView(
     const Result& result, const std::vector<ColumnIndex>& permutation) {
   return std::array{ad_utility::IdTableAndFirstCol{
       result.idTable().asColumnSubsetView(permutation),
@@ -51,11 +65,10 @@ std::array<ad_utility::IdTableAndFirstCol<IdTableView<0>>, 1> asSingleTableView(
 }
 
 // Wrap a result either in an array with a single element or in a range wrapping
-// the lazy result generator.
-std::variant<decltype(convertGenerator(std::declval<Result::Generator>())),
-             std::array<ad_utility::IdTableAndFirstCol<IdTableView<0>>, 1>>
-resultToRange(const Result& result,
-              const std::vector<ColumnIndex>& permutation) {
+// the lazy result generator. Note that the lifetime of the view is coupled to
+// the lifetime of the result.
+std::variant<LazyInputView, MaterializedInputView> resultToView(
+    const Result& result, const std::vector<ColumnIndex>& permutation) {
   if (result.isFullyMaterialized()) {
     return asSingleTableView(result, permutation);
   }
@@ -418,11 +431,11 @@ void Join::join(const IdTable& a, ColumnIndex jc1, const IdTable& b,
 }
 
 // _____________________________________________________________________________
-Result::Generator Join::yieldOnCallbackCalled(
+Result::Generator Join::runLazyJoinAndConvertToGenerator(
     ad_utility::InvocableWithExactReturnType<
         Result::IdTableVocabPair,
         std::function<void(IdTable&, LocalVocab&)>> auto action,
-    std::vector<ColumnIndex> permutation) const {
+    std::optional<std::vector<ColumnIndex>> permutation) const {
   std::atomic_flag write = true;
   std::variant<std::monostate, Result::IdTableVocabPair, std::exception_ptr>
       storage;
@@ -435,9 +448,7 @@ Result::Generator Join::yieldOnCallbackCalled(
     auto writeValueAndWait = [&permutation, &write,
                               &writeValue](Result::IdTableVocabPair value) {
       AD_CORRECTNESS_CHECK(write.test());
-      if (!permutation.empty()) {
-        value.idTable_.setColumnSubset(permutation);
-      }
+      applyPermutation(value.idTable_, permutation);
       writeValue(std::move(value));
       // Wait until we are allowed to write again.
       write.wait(false);
@@ -447,8 +458,7 @@ Result::Generator Join::yieldOnCallbackCalled(
       if (idTable.size() < CHUNK_SIZE) {
         return;
       }
-      writeValueAndWait(
-          Result::IdTableVocabPair{std::move(idTable), std::move(localVocab)});
+      writeValueAndWait({std::move(idTable), std::move(localVocab)});
     };
     try {
       auto finalValue = action(addValue);
@@ -482,15 +492,14 @@ ProtoResult Join::createResult(
     ad_utility::InvocableWithExactReturnType<
         Result::IdTableVocabPair,
         std::function<void(IdTable&, LocalVocab&)>> auto action,
-    std::vector<ColumnIndex> permutation) const {
+    std::optional<std::vector<ColumnIndex>> permutation) const {
   if (requestedLaziness) {
-    return {yieldOnCallbackCalled(std::move(action), std::move(permutation)),
+    return {runLazyJoinAndConvertToGenerator(std::move(action),
+                                             std::move(permutation)),
             resultSortedOn()};
   } else {
     auto [idTable, localVocab] = action(ad_utility::noop);
-    if (!permutation.empty()) {
-      idTable.setColumnSubset(permutation);
-    }
+    applyPermutation(idTable, permutation);
     return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
   }
 }
@@ -515,8 +524,8 @@ ProtoResult Join::lazyJoin(std::shared_ptr<const Result> a, ColumnIndex jc1,
         ad_utility::AddCombinedRowToIdTable rowAdder{
             1, IdTable{getResultWidth(), allocator()}, cancellationHandle_,
             CHUNK_SIZE, std::move(yieldTable)};
-        auto leftRange = resultToRange(*a, joinColMap.permutationLeft());
-        auto rightRange = resultToRange(*b, joinColMap.permutationRight());
+        auto leftRange = resultToView(*a, joinColMap.permutationLeft());
+        auto rightRange = resultToView(*b, joinColMap.permutationRight());
         std::visit(
             [&rowAdder](auto& leftBlocks, auto& rightBlocks) {
               ad_utility::zipperJoinForBlocksWithPotentialUndef(
@@ -662,11 +671,12 @@ void Join::addCombinedRowToIdTable(const ROW_A& rowA, const ROW_B& rowB,
 }
 
 namespace {
+using GeneratorWithDetails =
+    cppcoro::generator<ad_utility::IdTableAndFirstCol<IdTable>,
+                       CompressedRelationReader::LazyScanMetadata>;
 // Convert a `generator<IdTable` to a `generator<IdTableAndFirstCol>` for more
 // efficient access in the join columns below.
-cppcoro::generator<ad_utility::IdTableAndFirstCol<IdTable>,
-                   CompressedRelationReader::LazyScanMetadata>
-convertGenerator(Permutation::IdTableGenerator gen) {
+GeneratorWithDetails convertGenerator(Permutation::IdTableGenerator gen) {
   co_await cppcoro::getDetails = gen.details();
   gen.setDetailsPointer(&co_await cppcoro::getDetails);
   for (auto& table : gen) {
@@ -790,13 +800,9 @@ ProtoResult Join::computeResultForIndexScanAndIdTable(
             !idTable.empty() && idTable.at(0, joinColTable).isUndefined();
         std::optional<std::shared_ptr<const Result>> indexScanResult =
             std::nullopt;
-        using GenWithDetails = decltype(convertGenerator(
-            std::declval<Permutation::IdTableGenerator>()));
         auto rightBlocks = [&scan, idTableHasUndef, &permutationIdTable,
                             &indexScanResult]()
-            -> std::variant<decltype(convertGenerator(
-                                std::declval<Result::Generator>())),
-                            GenWithDetails> {
+            -> std::variant<LazyInputView, GeneratorWithDetails> {
           if (idTableHasUndef) {
             indexScanResult =
                 scan->getResult(false, ComputationMode::LAZY_IF_SUPPORTED);
@@ -813,10 +819,9 @@ ProtoResult Join::computeResultForIndexScanAndIdTable(
 
         runtimeInfo().addDetail("time-for-filtering-blocks", timer.msecs());
         auto doJoin = [&rowAdder](auto& left, auto& right) mutable {
-          // Technically we could use the zipperJoinForBlocksWithoutUndef when
-          // checking for `idTableHasUndef`, but the implementation of the join
-          // algorithm consumes all undef blocks at the start and falls back to
-          // the other implementation when no undef blocks could be found.
+          // Note: The `zipperJoinForBlocksWithPotentialUndef` automatically
+          // switches to a more efficient implementation if there are no UNDEF
+          // values in any of the inputs.
           ad_utility::zipperJoinForBlocksWithPotentialUndef(
               left, right, std::less{}, rowAdder);
         };
@@ -831,9 +836,9 @@ ProtoResult Join::computeResultForIndexScanAndIdTable(
             },
             rightBlocks);
 
-        if (std::holds_alternative<GenWithDetails>(rightBlocks)) {
+        if (std::holds_alternative<GeneratorWithDetails>(rightBlocks)) {
           updateRuntimeInfoForLazyScan(
-              *scan, std::get<GenWithDetails>(rightBlocks).details());
+              *scan, std::get<GeneratorWithDetails>(rightBlocks).details());
         }
 
         auto localVocab = std::move(rowAdder.localVocab());

@@ -97,13 +97,16 @@ class Join : public Operation {
  private:
   // Part of the implementation of `createResult`. This function is called when
   // the result should be yielded lazily.
-  // The semantics of action can be seen as
-  // runJoinAndReturnFinalResult(callbackForIntermediateResults).
-  Result::Generator yieldOnCallbackCalled(
+  // Action is a lambda that itself runs the join operation in a blocking
+  // manner. It is passed a special function that is supposed to be the callback
+  // being passed to the `AddCombinedRowToIdTable` so that the partial results
+  // can be yielded during execution. This is achieved by spawning a separate
+  // thread.
+  Result::Generator runLazyJoinAndConvertToGenerator(
       ad_utility::InvocableWithExactReturnType<
           Result::IdTableVocabPair,
           std::function<void(IdTable&, LocalVocab&)>> auto action,
-      std::vector<ColumnIndex> permutation) const;
+      std::optional<std::vector<ColumnIndex>> permutation) const;
 
  public:
   // Helper function to compute the result of a join operation and conditionally
@@ -122,7 +125,7 @@ class Join : public Operation {
       ad_utility::InvocableWithExactReturnType<
           Result::IdTableVocabPair,
           std::function<void(IdTable&, LocalVocab&)>> auto action,
-      std::vector<ColumnIndex> permutation = {}) const;
+      std::optional<std::vector<ColumnIndex>> permutation = {}) const;
 
   // Fallback implementation of a join that is used when at least one of the two
   // inputs is not fully materialized. This represents the general case where we
