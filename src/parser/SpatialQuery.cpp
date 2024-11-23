@@ -55,8 +55,7 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
     if (!object.isIri()) {
       throw SpatialSearchException(
           "The parameter <algorithm> needs an IRI that selects the algorithm "
-          "to employ. Currently supported are 'spatialSearch:baseline' and "
-          "'spatialSearch:s2'.");
+          "to employ. Currently supported are <baseline> and <s2>.");
     }
     auto algoIri = object.getIri().toStringRepresentation();
     if (algoIri.ends_with("baseline>")) {
@@ -67,13 +66,13 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
       throw SpatialSearchException(
           "The IRI given for the parameter <algorithm> does not refer to a "
           "supported spatial search algorithm. Please select either "
-          "'spatialSearch:baseline' or 'spatialSearch:s2'.");
+          "<baseline> or <s2>.");
     }
   } else {
     throw SpatialSearchException(
         "Unsupported argument " + predString +
-        " in Spatial Search. Supported Arguments: left, right, "
-        "nearestNeighbors, maxDistance, bindDistance and algorithm.");
+        " in Spatial Search. Supported Arguments: <left>, <right>, "
+        "<nearestNeighbors>, <maxDistance>, <bindDistance> and <algorithm>.");
   }
 }
 
@@ -95,10 +94,10 @@ SpatialJoinConfiguration SpatialQuery::toSpatialJoinConfiguration() const {
   // limited, it may be declared inside or outside of the service.
   if (maxResults_.has_value() && childGraphPattern_._graphPatterns.empty()) {
     throw SpatialSearchException(
-        "Missing parameter <right> in spatial search. A spatial search with "
-        "a maximum number of results must have its right variable declared "
-        "inside the service using a graph pattern: SERVICE spatialSearch: { "
-        "... { ... ?right } }.");
+        "A spatial search with a maximum number of results must have its right "
+        "variable declared inside the service using a graph pattern: SERVICE "
+        "spatialSearch: { [Config Triples] { <Something> <ThatSelects> ?right "
+        "} }.");
   }
 
   // Default algorithm

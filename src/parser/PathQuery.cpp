@@ -60,7 +60,7 @@ void PathQuery::addParameter(const SparqlTriple& triple) {
     numPathsPerTarget_ = object.getInt();
   } else if (predString == "algorithm") {
     if (!object.isIri()) {
-      throw PathSearchException("The <algorithm> value has to be an Iri");
+      throw PathSearchException("The <algorithm> value has to be an IRI");
     }
     auto objString = object.getIri().toStringRepresentation();
 
@@ -69,16 +69,13 @@ void PathQuery::addParameter(const SparqlTriple& triple) {
     } else {
       throw PathSearchException(
           "Unsupported algorithm in pathSearch: " + objString +
-          ". Supported Algorithms: "
-          "allPaths.");
+          ". Supported Algorithms: <allPaths>.");
     }
   } else {
     throw PathSearchException(
         "Unsupported argument " + predString +
-        " in PathSearch. "
-        "Supported Arguments: source, target, start, end, "
-        "pathColumn, edgeColumn, "
-        "edgeProperty, algorithm.");
+        " in PathSearch. Supported Arguments: <source>, <target>, <start>, "
+        "<end>, <pathColumn>, <edgeColumn>, <edgeProperty>, <algorithm>.");
   }
 }
 
