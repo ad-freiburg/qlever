@@ -4,6 +4,8 @@
 
 #include "parser/SpatialQuery.h"
 
+#include "parser/MagicServiceIriConstants.h"
+
 namespace parsedQuery {
 
 // ____________________________________________________________________________
@@ -16,31 +18,43 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
     throw SpatialSearchException("Predicates must be IRIs");
   }
 
+  // Get IRI without brackets
+  std::string_view iri =
+      SPATIAL_SEARCH_IRI.substr(0, SPATIAL_SEARCH_IRI.size() - 1);
+
+  // Remove prefix and brackets
   std::string predString = predicate.getIri().toStringRepresentation();
-  if (predString.ends_with("left>")) {
+  if (predString.starts_with(iri)) {
+    predString = predString.substr(0, iri.size() - 1);
+  } else {
+    predString = predString.substr(1);
+  }
+  predString = predString.substr(0, predString.size() - 2);
+
+  if (predString == "left") {
     setVariable("left", object, left_);
-  } else if (predString.ends_with("right>")) {
+  } else if (predString == "right") {
     setVariable("right", object, right_);
-  } else if (predString.ends_with("nearestNeighbors>")) {
+  } else if (predString == "nearestNeighbors") {
     if (!object.isInt()) {
       throw SpatialSearchException(
-          "The parameter 'nearestNeighbors' expects an integer (the maximum "
+          "The parameter <nearestNeighbors> expects an integer (the maximum "
           "number of nearest neighbors)");
     }
     maxResults_ = object.getInt();
-  } else if (predString.ends_with("maxDistance>")) {
+  } else if (predString == "maxDistance") {
     if (!object.isInt()) {
       throw SpatialSearchException(
-          "The parameter 'maxDistance' expects an integer (the maximum "
+          "The parameter <maxDistance> expects an integer (the maximum "
           "distance in meters)");
     }
     maxDist_ = object.getInt();
-  } else if (predString.ends_with("bindDistance>")) {
+  } else if (predString == "bindDistance") {
     setVariable("bindDistance", object, bindDist_);
-  } else if (predString.ends_with("algorithm>")) {
+  } else if (predString == "algorithm") {
     if (!object.isIri()) {
       throw SpatialSearchException(
-          "The parameter 'algorithm' needs an IRI that selects the algorithm "
+          "The parameter <algorithm> needs an IRI that selects the algorithm "
           "to employ. Currently supported are 'spatialSearch:baseline' and "
           "'spatialSearch:s2'.");
     }
@@ -51,7 +65,7 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
       algo_ = SpatialJoinAlgorithm::S2_GEOMETRY;
     } else {
       throw SpatialSearchException(
-          "The IRI given for the parameter 'algorithm' does not refer to a "
+          "The IRI given for the parameter <algorithm> does not refer to a "
           "supported spatial search algorithm. Please select either "
           "'spatialSearch:baseline' or 'spatialSearch:s2'.");
     }
@@ -66,14 +80,14 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
 // ____________________________________________________________________________
 SpatialJoinConfiguration SpatialQuery::toSpatialJoinConfiguration() const {
   if (!left_.has_value()) {
-    throw SpatialSearchException("Missing parameter 'left' in spatial search.");
+    throw SpatialSearchException("Missing parameter <left> in spatial search.");
   } else if (!maxDist_.has_value() && !maxResults_.has_value()) {
     throw SpatialSearchException(
-        "Neither 'nearestNeighbors' nor 'maxDistance' were provided. At least "
+        "Neither <nearestNeighbors> nor <maxDistance> were provided. At least "
         "one of both is required.");
   } else if (!right_.has_value()) {
     throw SpatialSearchException(
-        "Missing parameter 'right' in spatial search.");
+        "Missing parameter <right> in spatial search.");
   }
 
   // Only if the number of results is limited, it is mandatory that the right
@@ -81,7 +95,7 @@ SpatialJoinConfiguration SpatialQuery::toSpatialJoinConfiguration() const {
   // limited, it may be declared inside or outside of the service.
   if (maxResults_.has_value() && childGraphPattern_._graphPatterns.empty()) {
     throw SpatialSearchException(
-        "Missing parameter 'right' in spatial search. A spatial search with "
+        "Missing parameter <right> in spatial search. A spatial search with "
         "a maximum number of results must have its right variable declared "
         "inside the service using a graph pattern: SERVICE spatialSearch: { "
         "... { ... ?right } }.");

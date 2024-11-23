@@ -29,8 +29,8 @@ Variable MagicServiceQuery::getVariable(std::string_view parameter,
                                         const TripleComponent& object) const {
   if (!object.isVariable()) {
     throw MagicServiceException(absl::StrCat("The value ", object.toString(),
-                                             " for parameter '", parameter,
-                                             "' has to be a variable"));
+                                             " for parameter <", parameter,
+                                             "> has to be a variable"));
   }
 
   return object.getVariable();
@@ -44,7 +44,7 @@ void MagicServiceQuery::setVariable(std::string_view parameter,
 
   if (existingValue.has_value()) {
     throw MagicServiceException(absl::StrCat(
-        "The parameter '", parameter, "' has already been set to variable: '",
+        "The parameter <", parameter, "> has already been set to variable: '",
         existingValue.value().toSparql(), "'. New variable: '",
         object.toString(), "'."));
   }

@@ -4,7 +4,8 @@
 
 #pragma once
 
-const inline char PATH_SEARCH_IRI[] =
+constexpr inline std::string_view PATH_SEARCH_IRI =
     "<https://qlever.cs.uni-freiburg.de/pathSearch/>";
-const inline char SPATIAL_SEARCH_IRI[] =
+
+constexpr inline std::string_view SPATIAL_SEARCH_IRI =
     "<https://qlever.cs.uni-freiburg.de/spatialSearch/>";

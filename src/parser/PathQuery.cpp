@@ -5,6 +5,10 @@
 
 #include "parser/PathQuery.h"
 
+#include <string_view>
+
+#include "parser/MagicServiceIriConstants.h"
+
 namespace parsedQuery {
 
 // ____________________________________________________________________________
@@ -17,35 +21,46 @@ void PathQuery::addParameter(const SparqlTriple& triple) {
     throw PathSearchException("Predicates must be IRIs");
   }
 
+  // Get IRI without brackets
+  std::string_view iri = PATH_SEARCH_IRI.substr(0, PATH_SEARCH_IRI.size() - 1);
+
+  // Remove prefix and brackets
   std::string predString = predicate.getIri().toStringRepresentation();
-  if (predString.ends_with("source>")) {
+  if (predString.starts_with(iri)) {
+    predString = predString.substr(0, iri.size() - 1);
+  } else {
+    predString = predString.substr(1);
+  }
+  predString = predString.substr(0, predString.size() - 2);
+
+  if (predString == "source") {
     sources_.push_back(std::move(object));
-  } else if (predString.ends_with("target>")) {
+  } else if (predString == "target") {
     targets_.push_back(std::move(object));
-  } else if (predString.ends_with("start>")) {
+  } else if (predString == "start") {
     setVariable("start", object, start_);
-  } else if (predString.ends_with("end>")) {
+  } else if (predString == "end") {
     setVariable("end", object, end_);
-  } else if (predString.ends_with("pathColumn>")) {
+  } else if (predString == "pathColumn") {
     setVariable("pathColumn", object, pathColumn_);
-  } else if (predString.ends_with("edgeColumn>")) {
+  } else if (predString == "edgeColumn") {
     setVariable("edgeColumn", object, edgeColumn_);
-  } else if (predString.ends_with("edgeProperty>")) {
+  } else if (predString == "edgeProperty") {
     edgeProperties_.push_back(getVariable("edgeProperty", object));
-  } else if (predString.ends_with("cartesian>")) {
+  } else if (predString == "cartesian") {
     if (!object.isBool()) {
-      throw PathSearchException("The parameter 'cartesian' expects a boolean");
+      throw PathSearchException("The parameter <cartesian> expects a boolean");
     }
     cartesian_ = object.getBool();
-  } else if (predString.ends_with("numPathsPerTarget>")) {
+  } else if (predString == "numPathsPerTarget") {
     if (!object.isInt()) {
       throw PathSearchException(
-          "The parameter 'numPathsPerTarget' expects an integer");
+          "The parameter <numPathsPerTarget> expects an integer");
     }
     numPathsPerTarget_ = object.getInt();
-  } else if (predString.ends_with("algorithm>")) {
+  } else if (predString == "algorithm") {
     if (!object.isIri()) {
-      throw PathSearchException("The 'algorithm' value has to be an Iri");
+      throw PathSearchException("The <algorithm> value has to be an Iri");
     }
     auto objString = object.getIri().toStringRepresentation();
 
@@ -97,13 +112,13 @@ PathSearchConfiguration PathQuery::toPathSearchConfiguration(
   auto targets = toSearchSide(targets_, vocab);
 
   if (!start_.has_value()) {
-    throw PathSearchException("Missing parameter 'start' in path search.");
+    throw PathSearchException("Missing parameter <start> in path search.");
   } else if (!end_.has_value()) {
-    throw PathSearchException("Missing parameter 'end' in path search.");
+    throw PathSearchException("Missing parameter <end> in path search.");
   } else if (!pathColumn_.has_value()) {
-    throw PathSearchException("Missing parameter 'pathColumn' in path search.");
+    throw PathSearchException("Missing parameter <pathColumn> in path search.");
   } else if (!edgeColumn_.has_value()) {
-    throw PathSearchException("Missing parameter 'edgeColumn' in path search.");
+    throw PathSearchException("Missing parameter <edgeColumn> in path search.");
   }
 
   return PathSearchConfiguration{

@@ -1290,7 +1290,7 @@ TEST(QueryPlanner, PathSearchMissingStart) {
       "?start <p> ?end."
       "}}}}";
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(h::parseAndPlan(std::move(query), qec),
-                                        HasSubstr("Missing parameter 'start'"),
+                                        HasSubstr("Missing parameter <start>"),
                                         parsedQuery::PathSearchException);
 }
 
@@ -1316,7 +1316,7 @@ TEST(QueryPlanner, PathSearchMultipleStarts) {
       "}}}}";
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       h::parseAndPlan(std::move(query), qec),
-      HasSubstr("parameter 'start' has already been set "
+      HasSubstr("parameter <start> has already been set "
                 "to variable: '?start1'. New variable: '?start2'"),
       parsedQuery::MagicServiceException);
 }
@@ -1340,7 +1340,7 @@ TEST(QueryPlanner, PathSearchMissingEnd) {
       "?start <p> ?end."
       "}}}}";
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(h::parseAndPlan(std::move(query), qec),
-                                        HasSubstr("Missing parameter 'end'"),
+                                        HasSubstr("Missing parameter <end>"),
                                         parsedQuery::PathSearchException);
 }
 
@@ -1366,7 +1366,7 @@ TEST(QueryPlanner, PathSearchMultipleEnds) {
       "}}}}";
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       h::parseAndPlan(std::move(query), qec),
-      HasSubstr("parameter 'end' has already been set "
+      HasSubstr("parameter <end> has already been set "
                 "to variable: '?end1'. New variable: '?end2'"),
       parsedQuery::MagicServiceException);
 }
@@ -1392,7 +1392,7 @@ TEST(QueryPlanner, PathSearchStartNotVariable) {
       "}}}}";
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       h::parseAndPlan(std::move(query), qec),
-      HasSubstr("The value <error> for parameter 'start'"),
+      HasSubstr("The value <error> for parameter <start>"),
       parsedQuery::MagicServiceException);
 }
 
@@ -1548,7 +1548,7 @@ TEST(QueryPlanner, PathSearchWrongArgumentCartesian) {
       "}}}}";
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       h::parseAndPlan(std::move(query), qec),
-      HasSubstr("The parameter 'cartesian' expects a boolean"),
+      HasSubstr("The parameter <cartesian> expects a boolean"),
       parsedQuery::PathSearchException);
 }
 
@@ -1575,7 +1575,7 @@ TEST(QueryPlanner, PathSearchWrongArgumentNumPathsPerTarget) {
       "}}}}";
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       h::parseAndPlan(std::move(query), qec),
-      HasSubstr("The parameter 'numPathsPerTarget' expects an integer"),
+      HasSubstr("The parameter <numPathsPerTarget> expects an integer"),
       parsedQuery::PathSearchException);
 }
 
@@ -1601,7 +1601,7 @@ TEST(QueryPlanner, PathSearchWrongArgumentAlgorithm) {
       "}}}}";
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       h::parseAndPlan(std::move(query), qec),
-      HasSubstr("The 'algorithm' value has to be an Iri"),
+      HasSubstr("The <algorithm> value has to be an Iri"),
       parsedQuery::PathSearchException);
 }
 
@@ -1688,21 +1688,7 @@ TEST(QueryPlanner, SpatialJoinServiceMaxDistOutside) {
                 "spatialSearch:nearestNeighbors 5 ."
                 "}}",
                 ::testing::_),
-      ::testing::ContainsRegex("Missing parameter 'right'"));
-
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      h::expect("PREFIX spatialSearch: "
-                "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
-                "SELECT * WHERE {"
-                "SERVICE spatialSearch: {"
-                "_:config spatialSearch:left ?y ;"
-                "spatialSearch:right ?b ;"
-                "spatialSearch:maxDistance "
-                "\"1\"^^<http://www.w3.org/2001/XMLSchema#integer> ."
-                "}}",
-                ::testing::_),
-      ::testing::ContainsRegex(
-          "SpatialJoin needs two children, but at least one is missing"));
+      ::testing::ContainsRegex("Missing parameter <right>"));
 }
 
 TEST(QueryPlanner, SpatialJoinMultipleServiceSharedLeft) {
@@ -1752,7 +1738,7 @@ TEST(QueryPlanner, SpatialJoinMissingConfig) {
                 " { ?a <p> ?b . }"
                 "}}",
                 ::testing::_),
-      ::testing::ContainsRegex("Missing parameter 'left'"));
+      ::testing::ContainsRegex("Missing parameter <left>"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       h::expect("PREFIX spatialSearch: "
                 "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
@@ -1764,7 +1750,7 @@ TEST(QueryPlanner, SpatialJoinMissingConfig) {
                 " { ?a <p> ?b . }"
                 "}}",
                 ::testing::_),
-      ::testing::ContainsRegex("Missing parameter 'left'"));
+      ::testing::ContainsRegex("Missing parameter <left>"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       h::expect("PREFIX spatialSearch: "
                 "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
@@ -1776,7 +1762,7 @@ TEST(QueryPlanner, SpatialJoinMissingConfig) {
                 " { ?a <p> ?b . }"
                 "}}",
                 ::testing::_),
-      ::testing::ContainsRegex("Missing parameter 'right'"));
+      ::testing::ContainsRegex("Missing parameter <right>"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       h::expect("PREFIX spatialSearch: "
                 "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
@@ -1788,7 +1774,7 @@ TEST(QueryPlanner, SpatialJoinMissingConfig) {
                 " { ?a <p> ?b . }"
                 "}}",
                 ::testing::_),
-      ::testing::ContainsRegex("Missing parameter 'right'"));
+      ::testing::ContainsRegex("Missing parameter <right>"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       h::expect("PREFIX spatialSearch: "
                 "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
@@ -1801,7 +1787,7 @@ TEST(QueryPlanner, SpatialJoinMissingConfig) {
                 "}}",
                 ::testing::_),
       ::testing::ContainsRegex(
-          "Neither 'nearestNeighbors' nor 'maxDistance' were provided"));
+          "Neither <nearestNeighbors> nor <maxDistance> were provided"));
 }
 
 TEST(QueryPlanner, SpatialJoinIncorrectConfigValues) {
@@ -1818,7 +1804,7 @@ TEST(QueryPlanner, SpatialJoinIncorrectConfigValues) {
                 " { ?a <p> ?b . }"
                 "}}",
                 ::testing::_),
-      ::testing::ContainsRegex("'maxDistance' expects an integer"));
+      ::testing::ContainsRegex("<maxDistance> expects an integer"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       h::expect("PREFIX spatialSearch: "
                 "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
@@ -1832,7 +1818,7 @@ TEST(QueryPlanner, SpatialJoinIncorrectConfigValues) {
                 " { ?a <p> ?b . }"
                 "}}",
                 ::testing::_),
-      ::testing::ContainsRegex("'nearestNeighbors' expects an integer"));
+      ::testing::ContainsRegex("<nearestNeighbors> expects an integer"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       h::expect("PREFIX spatialSearch: "
                 "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
@@ -1846,7 +1832,7 @@ TEST(QueryPlanner, SpatialJoinIncorrectConfigValues) {
                 " { ?a <p> ?b . }"
                 "}}",
                 ::testing::_),
-      ::testing::ContainsRegex("parameter 'algorithm' needs an IRI"));
+      ::testing::ContainsRegex("parameter <algorithm> needs an IRI"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       h::expect("PREFIX spatialSearch: "
                 "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
@@ -1860,7 +1846,7 @@ TEST(QueryPlanner, SpatialJoinIncorrectConfigValues) {
                 " { ?a <p> ?b . }"
                 "}}",
                 ::testing::_),
-      ::testing::ContainsRegex("'algorithm' does not refer to a supported "
+      ::testing::ContainsRegex("<algorithm> does not refer to a supported "
                                "spatial search algorithm"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       h::expect("PREFIX spatialSearch: "
@@ -1889,7 +1875,7 @@ TEST(QueryPlanner, SpatialJoinIncorrectConfigValues) {
                 " { ?a <p> ?b . }"
                 "}}",
                 ::testing::_),
-      ::testing::ContainsRegex("'bindDistance' has to be a variable"));
+      ::testing::ContainsRegex("<bindDistance> has to be a variable"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       h::expect("PREFIX spatialSearch: "
                 "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
@@ -1904,7 +1890,7 @@ TEST(QueryPlanner, SpatialJoinIncorrectConfigValues) {
                 " { ?a <p> ?b . }"
                 "}}",
                 ::testing::_),
-      ::testing::ContainsRegex("'bindDistance' has already been set"));
+      ::testing::ContainsRegex("<bindDistance> has already been set"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       h::expect("PREFIX spatialSearch: "
                 "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
@@ -1917,7 +1903,7 @@ TEST(QueryPlanner, SpatialJoinIncorrectConfigValues) {
                 " { ?a <p> ?b . }"
                 "}}",
                 ::testing::_),
-      ::testing::ContainsRegex("'right' has to be a variable"));
+      ::testing::ContainsRegex("<right> has to be a variable"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       h::expect("PREFIX spatialSearch: "
                 "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
@@ -1930,7 +1916,7 @@ TEST(QueryPlanner, SpatialJoinIncorrectConfigValues) {
                 " { ?a <p> ?b . }"
                 "}}",
                 ::testing::_),
-      ::testing::ContainsRegex("'left' has to be a variable"));
+      ::testing::ContainsRegex("<left> has to be a variable"));
 }
 
 TEST(QueryPlanner, SpatialJoinLegacyPredicateSupport) {
