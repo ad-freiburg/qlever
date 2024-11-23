@@ -49,8 +49,7 @@ class IndexScan final : public Operation {
             const TripleComponent& s, const TripleComponent& p,
             const TripleComponent& o,
             std::vector<ColumnIndex> additionalColumns,
-            std::vector<Variable> additionalVariables,
-            const size_t numVariables, Graphs graphsToFilter,
+            std::vector<Variable> additionalVariables, Graphs graphsToFilter,
             PrefilterIndexPair prefilter);
 
   ~IndexScan() override = default;
@@ -150,6 +149,10 @@ class IndexScan final : public Operation {
 
   vector<QueryExecutionTree*> getChildren() override { return {}; }
 
+  // Retrieve the `Permutation` entity for the `Permutation::Enum` value of this
+  // `IndexScan`.
+  const Permutation& getScanPermutation() const;
+
   // Compute the size estimate of the index scan, taking delta triples (from
   // the `queryExecutionContext_`) into account. The `bool` is true iff the
   // estimate is exact. If not, the estimate is the mean of the lower and upper
@@ -160,6 +163,10 @@ class IndexScan final : public Operation {
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 
+  // Return an updated QueryExecutionTree containing the new IndexScan that is a
+  // copy of this (`IndexScan`), but with added corresponding
+  // `PrefilterExpression` (`PrefilterIndexPair`). This method is called in the
+  // implementation part of `setPrefilterExprGetUpdatedQetPtr()`.
   std::shared_ptr<QueryExecutionTree> makeCopyWithAddedPrefilters(
       PrefilterIndexPair prefilter) const;
 
@@ -168,20 +175,28 @@ class IndexScan final : public Operation {
   // Get the `IdTable` for this `IndexScan` in one piece.
   IdTable materializedIndexScan() const;
 
-  // Get the first sorted 'Variable' with corresponding `ColumnIndex`.
+  // Returns the first sorted 'Variable' with corresponding `ColumnIndex`. If
+  // `numVariables_` is 0, `std::nullopt` is returned.
+  // The returned `ColumnIndex` corresponds to the `CompressedBlockMetadata`
+  // blocks, NOT to a `ColumnIndex` of the resulting `IdTable`.
   std::optional<std::pair<Variable, ColumnIndex>>
-  getFirstSortedtVariableWithColumnIndex() const;
+  getSortedVariableAndMetadataColumnIndexForPrefiltering() const;
 
-  // Helper to retrieve the `CompressedBlockMetadata` span for this scan.
-  std::optional<std::span<const CompressedBlockMetadata>> getOptionalBlockSpan()
+  // Retrieve all the relevant `CompressedBlockMetadata` for this scan without
+  // applying any additional pre-filter procedure.
+  std::optional<std::span<const CompressedBlockMetadata>> getBlockMetadata()
       const;
+
+  // This method retrieves all relevant `CompressedBlockMetadata` and performs
+  // the pre-filtering procedure given a `PrefilterIndexPair` is available.
+  std::optional<std::vector<CompressedBlockMetadata>>
+  getBlockMetadataOptionallyPrefiltered() const;
 
   // If `isUnconstrained()` yields true, return the blocks as given or the
   // prefiltered blocks (if `prefilter_` has value). If `isUnconstrained()` is
   // false, return `std::nullopt`.
-  std::optional<std::vector<CompressedBlockMetadata>>
-  getOptionalPrefilteredBlocks(
-      std::vector<CompressedBlockMetadata> blocks) const;
+  void applyPefilterIfPossible(
+      std::vector<CompressedBlockMetadata>& blocks) const;
 
   // Helper functions for the public `getLazyScanFor...` methods and
   // `chunkedIndexScan` (see above).

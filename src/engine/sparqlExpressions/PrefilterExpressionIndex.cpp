@@ -188,14 +188,14 @@ std::vector<BlockMetadata> PrefilterExpression::evaluate(
     lastBlock = input.back();
     input.pop_back();
   }
-  auto result = evaluateAndCheckImpl(input, evaluationColumn);
+  input = evaluateAndCheckImpl(input, evaluationColumn);
   if (firstBlock.has_value()) {
-    result.insert(result.begin(), firstBlock.value());
+    input.insert(input.begin(), firstBlock.value());
   }
   if (lastBlock.has_value()) {
-    result.push_back(lastBlock.value());
+    input.push_back(lastBlock.value());
   }
-  return result;
+  return input;
 };
 
 // _____________________________________________________________________________

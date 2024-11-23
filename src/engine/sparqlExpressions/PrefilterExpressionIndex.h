@@ -61,12 +61,12 @@ class PrefilterExpression {
   // Format content for debugging.
   virtual std::string asString(size_t depth) const = 0;
 
-  // Needed for implementing the `NotExpression`. This method is required,
-  // because we logically operate on `BlockMetadata` values which define ranges
-  // given the `ValueIds` from last and first triple.
-  // E.g. the `BlockMetadata` that defines the range [IntId(0),... IntId(5)],
-  // should be considered relevant for the expression `?x >= IntId(3)`, but also
-  // for expression `!(?x >= IntId(3))`. Thus we can't retrieve the negation by
+  // This method is required for implementing the `NotExpression`. This method
+  // is required, because we logically operate on `BlockMetadata` values which
+  // define ranges given the `ValueIds` from last and first triple. E.g. the
+  // `BlockMetadata` that defines the range [IntId(0),... IntId(5)], should be
+  // considered relevant for the expression `?x >= IntId(3)`, but also for
+  // expression `!(?x >= IntId(3))`. Thus we can't retrieve the negation by
   // simply taking the complementing set of `BlockMetadata`, instead we
   // retrieve it by directly negating/complementing the child expression itself.
   // Every derived class can return it's respective logical complement
@@ -80,16 +80,16 @@ class PrefilterExpression {
   // take a look at the actual implementation for derived classes.
   virtual std::unique_ptr<PrefilterExpression> logicalComplement() const = 0;
 
-  // Expects that the provided `BlockMetadata` vector adheres to the following
-  // conditions:
+  // It's expected that the provided `BlockMetadata` vector adheres to the
+  // following conditions:
   // (1) unqiueness of blocks
   // (2) sorted (order)
-  // (3) consistent column values
-  // To indicate that the possibly incomplete first and last block should
-  // be handled appropriately, the `stripIncompleteBlocks` flag is set to
-  // `true`. The flag value shouldn't be changed in general, because
-  // `evaluate()` only removes the respective block if it is conditionally
-  // (inconsistent columns) necessary.
+  // (3) Constant values for all columns `< evaluationColumn`
+  // To indicate that the possibly incomplete first and last block should be
+  // handled appropriately, the `stripIncompleteBlocks` flag is set to `true`.
+  // The flag value shouldn't be changed in general, because `evaluate()` only
+  // removes the respective block if it is conditionally (inconsistent columns)
+  // necessary.
   std::vector<BlockMetadata> evaluate(std::vector<BlockMetadata>& input,
                                       size_t evaluationColumn,
                                       bool stripIncompleteBlocks = true) const;
@@ -106,7 +106,7 @@ class PrefilterExpression {
   // values:
   // (1) unqiueness of blocks
   // (2) sorted (order)
-  // (3) consistent column values
+  // (3) Constant values for all columns `< evaluationColumn`
   // This function subsequently invokes the `evaluateImpl` method and
   // checks the corresponding result for those conditions again.
   // If a respective condition is violated, the function performing the checks

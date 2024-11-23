@@ -74,20 +74,22 @@ IdTable Permutation::scan(
 // _____________________________________________________________________
 size_t Permutation::getResultSizeOfScan(
     const ScanSpecification& scanSpec,
-    const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
+    const LocatedTriplesSnapshot& locatedTriplesSnapshot,
+    std::optional<std::vector<CompressedBlockMetadata>> blocks) const {
   const auto& p = getActualPermutation(scanSpec);
   return p.reader().getResultSizeOfScan(
-      scanSpec, p.meta_.blockData(),
+      scanSpec, blocks.has_value() ? blocks.value() : p.meta_.blockData(),
       getLocatedTriplesForPermutation(locatedTriplesSnapshot));
 }
 
 // _____________________________________________________________________
 std::pair<size_t, size_t> Permutation::getSizeEstimateForScan(
     const ScanSpecification& scanSpec,
-    const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
+    const LocatedTriplesSnapshot& locatedTriplesSnapshot,
+    std::optional<std::vector<CompressedBlockMetadata>> blocks) const {
   const auto& p = getActualPermutation(scanSpec);
   return p.reader().getSizeEstimateForScan(
-      scanSpec, p.meta_.blockData(),
+      scanSpec, blocks.has_value() ? blocks.value() : p.meta_.blockData(),
       getLocatedTriplesForPermutation(locatedTriplesSnapshot));
 }
 
