@@ -11,13 +11,9 @@ namespace parsedQuery {
 
 struct BasicGraphPattern;
 
-class MagicServiceException : public std::exception {
-  std::string message_;
-
- public:
-  explicit MagicServiceException(const std::string& message)
-      : message_(message) {}
-  const char* what() const noexcept override { return message_.data(); }
+class MagicServiceException : public std::runtime_error {
+  // Constructors have to be explicitly inherited
+  using std::runtime_error::runtime_error;
 };
 
 // Abstract structure for parsing a magic SERVICE statement (used to invoke

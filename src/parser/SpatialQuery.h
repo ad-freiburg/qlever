@@ -9,13 +9,9 @@
 
 namespace parsedQuery {
 
-class SpatialSearchException : public std::exception {
-  std::string message_;
-
- public:
-  explicit SpatialSearchException(const std::string& message)
-      : message_(message) {}
-  const char* what() const noexcept override { return message_.data(); }
+class SpatialSearchException : public std::runtime_error {
+  // Constructors have to be explicitly inherited
+  using std::runtime_error::runtime_error;
 };
 
 // Spatial Search feature via SERVICE. This struct holds intermediate or

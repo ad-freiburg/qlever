@@ -11,13 +11,9 @@ class SparqlTriple;
 
 namespace parsedQuery {
 
-class PathSearchException : public std::exception {
-  std::string message_;
-
- public:
-  explicit PathSearchException(const std::string& message)
-      : message_(message) {}
-  const char* what() const noexcept override { return message_.data(); }
+class PathSearchException : public std::runtime_error {
+  // Constructors have to be explicitly inherited
+  using std::runtime_error::runtime_error;
 };
 
 // The PathQuery object holds intermediate information for the PathSearch.
