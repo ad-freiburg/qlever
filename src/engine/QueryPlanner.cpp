@@ -1817,6 +1817,13 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
     return candidates;
   }
 
+  // If both sides are spatial joins, return immediately to prevent a regular
+  // join on the variables, which would lead to the spatial join never having
+  // children.
+  if (checkSpatialJoin(a, b) == std::pair<bool, bool>{true, true}) {
+    return candidates;
+  }
+
   // if one of the inputs is the spatial join and the other input is compatible
   // with the SpatialJoin, add it as a child to the spatialJoin. As unbound
   // SpatialJoin operations are incompatible with normal join operations, we
@@ -1825,13 +1832,6 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
   // join options get considered, when one of the candidates is a SpatialJoin.
   if (auto opt = createSpatialJoin(a, b, jcs)) {
     candidates.push_back(std::move(opt.value()));
-    return candidates;
-  }
-
-  // If both sides are spatial joins, return immediately to prevent a regular
-  // join on the variables, which would lead to the spatial join never having
-  // children.
-  if (checkSpatialJoin(a, b) == std::pair<bool, bool>{true, true}) {
     return candidates;
   }
 
