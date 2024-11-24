@@ -2477,9 +2477,7 @@ void QueryPlanner::GraphPatternPlanner::visitPathSearch(
   if (pathQuery.childGraphPattern_.has_value()) {
     candidatesIn = planner_.optimize(&pathQuery.childGraphPattern_.value());
   } else {
-    auto neutralElement = makeExecutionTree<NeutralElementOperation>(qec_);
-    candidatesIn = {
-        makeSubtreePlan<PathSearch>(qec_, std::move(neutralElement), config)};
+    candidatesIn = {makeSubtreePlan<NeutralElementOperation>(qec_)};
   }
   std::vector<SubtreePlan> candidatesOut;
 
@@ -2502,11 +2500,7 @@ void QueryPlanner::GraphPatternPlanner::visitSpatialSearch(
   if (spatialQuery.childGraphPattern_.has_value()) {
     candidatesIn = planner_.optimize(&spatialQuery.childGraphPattern_.value());
   } else {
-    auto neutralElementLeft = makeExecutionTree<NeutralElementOperation>(qec_);
-    auto neutralElementRight = makeExecutionTree<NeutralElementOperation>(qec_);
-    candidatesIn = {makeSubtreePlan<SpatialJoin>(
-        qec_, std::make_shared<SpatialJoinConfiguration>(config),
-        std::move(neutralElementLeft), std::move(neutralElementRight))};
+    candidatesIn = {makeSubtreePlan<NeutralElementOperation>(qec_)};
   }
   std::vector<SubtreePlan> candidatesOut;
 
@@ -2529,7 +2523,7 @@ void QueryPlanner::GraphPatternPlanner::visitSpatialSearch(
       candidatesOut.push_back(std::move(plan));
     };
 
-    if (!spatialQuery.childGraphPattern_.has_value()) {
+    if (spatialQuery.childGraphPattern_.has_value()) {
       // The version using the child graph pattern
       addCandidateSpatialJoin(false);
     } else {
