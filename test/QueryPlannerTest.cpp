@@ -1417,7 +1417,7 @@ TEST(QueryPlanner, PathSearchPredicateNotIri) {
       "?start <p> ?end."
       "}}}}";
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(h::parseAndPlan(std::move(query), qec),
-                                        HasSubstr("Predicates must be IRIs"),
+                                        HasSubstr("Parameters must be IRIs"),
                                         parsedQuery::MagicServiceException);
 }
 
