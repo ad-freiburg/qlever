@@ -126,7 +126,9 @@ class SpatialJoin : public Operation {
   // purposes
   std::optional<size_t> getMaxResults() const;
 
-  void selectAlgorithm(SpatialJoinAlgorithm algo) { config_->algo_ = algo; }
+  void selectAlgorithm(SpatialJoinAlgorithm algo) const {
+    config_->algo_ = algo;
+  }
 
   std::pair<size_t, size_t> onlyForTestingGetTask() const {
     return std::pair{getMaxDist().value_or(-1), getMaxResults().value_or(-1)};

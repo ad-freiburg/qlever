@@ -64,7 +64,7 @@ struct MagicServiceQuery {
                        const TripleComponent& object) const;
 
   void setVariable(std::string_view parameter, const TripleComponent& object,
-                   std::optional<Variable>& existingValue);
+                   std::optional<Variable>& existingValue) const;
 
   // Utility function to extract the name of a parameter in a magic service
   // configuration. That is, remove the magic IRI predicate if applicable.

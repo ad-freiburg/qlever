@@ -42,9 +42,9 @@ Variable MagicServiceQuery::getVariable(std::string_view parameter,
 };
 
 // ____________________________________________________________________________
-void MagicServiceQuery::setVariable(std::string_view parameter,
-                                    const TripleComponent& object,
-                                    std::optional<Variable>& existingValue) {
+void MagicServiceQuery::setVariable(
+    std::string_view parameter, const TripleComponent& object,
+    std::optional<Variable>& existingValue) const {
   auto variable = getVariable(parameter, object);
 
   if (existingValue.has_value()) {
