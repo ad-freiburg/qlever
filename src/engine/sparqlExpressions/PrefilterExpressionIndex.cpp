@@ -52,7 +52,7 @@ static auto getMaskedTriple(const BlockMetadata::PermutedTriple& triple,
 };
 
 //______________________________________________________________________________
-// Ckeck for constant values in all columns `< evaluationColumn`
+// Check for constant values in all columns `< evaluationColumn`
 static bool checkBlockIsInconsistent(const BlockMetadata& block,
                                      size_t evaluationColumn) {
   return getMaskedTriple(block.firstTriple_, evaluationColumn) !=
