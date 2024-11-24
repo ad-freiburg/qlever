@@ -126,6 +126,42 @@ class AddCombinedRowToIdTable {
     }
   }
 
+  // Unwrap type `T` to get an `IdTableView<0>`, even if it's not an
+  // `IdTableView<0>`. Identity for `IdTableView<0>`.
+  template <typename T>
+  static IdTableView<0> toView(const T& table) {
+    if constexpr (requires { table.template asStaticView<0>(); }) {
+      return table.template asStaticView<0>();
+    } else {
+      return table;
+    }
+  }
+
+  // Merge the vocab contained in `T` with the `mergedVocab_` and set the passed
+  // pointer reference to the proper value.
+  template <typename T>
+  void mergeVocab(const T& table, const LocalVocab*& currentVocab) {
+    if constexpr (requires { table.getLocalVocab(); }) {
+      currentVocab = &table.getLocalVocab();
+      mergedVocab_.mergeWith(std::span{&table.getLocalVocab(), 1});
+    } else {
+      currentVocab = nullptr;
+    }
+  }
+
+  // Flush remaining pending entries before changing the input.
+  void flushBeforeInputChange() {
+    // Clear to avoid unecessary merge.
+    currentVocabs_ = {nullptr, nullptr};
+    if (nextIndex_ != 0) {
+      AD_CORRECTNESS_CHECK(inputLeftAndRight_.has_value());
+      flush();
+    } else {
+      // Clear vocab when no rows were written.
+      mergedVocab_ = LocalVocab{};
+    }
+  }
+
   // Set or reset the input. All following calls to `addRow` then refer to
   // indices in the new input. Before resetting, `flush()` is called, so all the
   // rows from the previous inputs get materialized before deleting the old
@@ -133,26 +169,7 @@ class AddCombinedRowToIdTable {
   // `IdTable` or `IdTableView<0>`, or any other type that has a
   // `asStaticView<0>` method that returns an `IdTableView<0>`.
   void setInput(const auto& inputLeft, const auto& inputRight) {
-    auto toView = []<typename T>(const T& table) {
-      if constexpr (requires { table.template asStaticView<0>(); }) {
-        return table.template asStaticView<0>();
-      } else {
-        return table;
-      }
-    };
-    auto mergeVocab = [this]<typename T>(const T& table,
-                                         const LocalVocab*& currentVocab) {
-      if constexpr (requires { table.getLocalVocab(); }) {
-        currentVocab = &table.getLocalVocab();
-        mergedVocab_.mergeWith(std::span{&table.getLocalVocab(), 1});
-      } else {
-        currentVocab = nullptr;
-      }
-    };
-    if (nextIndex_ != 0) {
-      AD_CORRECTNESS_CHECK(inputLeftAndRight_.has_value());
-      flush();
-    }
+    flushBeforeInputChange();
     mergeVocab(inputLeft, currentVocabs_.at(0));
     mergeVocab(inputRight, currentVocabs_.at(1));
     inputLeftAndRight_ = std::array{toView(inputLeft), toView(inputRight)};
@@ -162,17 +179,8 @@ class AddCombinedRowToIdTable {
   // Only set the left input. After this it is only allowed to call
   // `addOptionalRow` and not `addRow` until `setInput` has been called again.
   void setOnlyLeftInputForOptionalJoin(const auto& inputLeft) {
-    auto toView = []<typename T>(const T& table) {
-      if constexpr (requires { table.template asStaticView<0>(); }) {
-        return table.template asStaticView<0>();
-      } else {
-        return table;
-      }
-    };
-    if (nextIndex_ != 0) {
-      AD_CORRECTNESS_CHECK(inputLeftAndRight_.has_value());
-      flush();
-    }
+    flushBeforeInputChange();
+    mergeVocab(inputLeft, currentVocabs_.at(0));
     // The right input will be empty, but with the correct number of columns.
     inputLeftAndRight_ = std::array{
         toView(inputLeft),
@@ -339,6 +347,8 @@ class AddCombinedRowToIdTable {
     // The current `IdTable`s might still be active, so we have to merge the
     // local vocabs again if all other sets were moved-out.
     if (mergedVocab_.numSets() == 1) {
+      // Make sure to reset `mergedVocab_` so it is in a valid state again.
+      mergedVocab_ = LocalVocab{};
       // Only merge non-null vocabs.
       auto range = currentVocabs_ | std::views::filter(toBool) |
                    std::views::transform(dereference);
