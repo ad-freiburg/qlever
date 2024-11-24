@@ -295,3 +295,28 @@ TEST(AddCombinedRowToTable, verifyLocalVocabIsUpdatedCorrectly) {
   EXPECT_FALSE(vocabContainsString(localVocabs[4], "b"));
   EXPECT_FALSE(vocabContainsString(localVocabs[4], "c"));
 }
+
+// _____________________________________________________________________________
+TEST(AddCombinedRowToTable, verifyLocalVocabIsRetainedWhenNotMoving) {
+  auto outputTable = makeIdTableFromVector({});
+  outputTable.setNumColumns(3);
+  ad_utility::AddCombinedRowToIdTable adder{
+      1, std::move(outputTable),
+      std::make_shared<ad_utility::CancellationHandle<>>(), 1};
+
+  IdTableWithVocab input1{makeIdTableFromVector({{0, 1}}),
+                          createVocabWithSingleString("a")};
+  IdTableWithVocab input2{makeIdTableFromVector({{0, 2}}),
+                          createVocabWithSingleString("b")};
+
+  adder.setInput(input1, input2);
+  adder.addRow(0, 0);
+  adder.flush();
+  adder.addRow(0, 0);
+
+  LocalVocab localVocab = std::move(adder.localVocab());
+
+  EXPECT_TRUE(vocabContainsString(localVocab, "a"));
+  EXPECT_TRUE(vocabContainsString(localVocab, "b"));
+  EXPECT_THAT(localVocab.getAllWordsForTesting(), ::testing::SizeIs(2));
+}
