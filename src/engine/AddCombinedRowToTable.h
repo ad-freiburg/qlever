@@ -141,11 +141,10 @@ class AddCombinedRowToIdTable {
   // pointer reference to the proper value.
   template <typename T>
   void mergeVocab(const T& table, const LocalVocab*& currentVocab) {
+    AD_CORRECTNESS_CHECK(currentVocab == nullptr);
     if constexpr (requires { table.getLocalVocab(); }) {
       currentVocab = &table.getLocalVocab();
       mergedVocab_.mergeWith(std::span{&table.getLocalVocab(), 1});
-    } else {
-      currentVocab = nullptr;
     }
   }
 
