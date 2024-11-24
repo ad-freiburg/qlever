@@ -90,7 +90,7 @@ class PrefilterExpression {
   // The flag value shouldn't be changed in general, because `evaluate()` only
   // removes the respective block if it is conditionally (inconsistent columns)
   // necessary.
-  std::vector<BlockMetadata> evaluate(std::vector<BlockMetadata>& input,
+  std::vector<BlockMetadata> evaluate(std::span<const BlockMetadata> input,
                                       size_t evaluationColumn,
                                       bool stripIncompleteBlocks = true) const;
 
@@ -112,10 +112,10 @@ class PrefilterExpression {
   // If a respective condition is violated, the function performing the checks
   // will throw a `std::runtime_error`.
   std::vector<BlockMetadata> evaluateAndCheckImpl(
-      std::vector<BlockMetadata>& input, size_t evaluationColumn) const;
+      std::span<const BlockMetadata> input, size_t evaluationColumn) const;
 
   virtual std::vector<BlockMetadata> evaluateImpl(
-      std::vector<BlockMetadata>& input, size_t evaluationColumn) const = 0;
+      std::span<const BlockMetadata> input, size_t evaluationColumn) const = 0;
 };
 
 //______________________________________________________________________________
@@ -144,7 +144,7 @@ class RelationalExpression : public PrefilterExpression {
 
  private:
   std::vector<BlockMetadata> evaluateImpl(
-      std::vector<BlockMetadata>& input,
+      std::span<const BlockMetadata> input,
       size_t evaluationColumn) const override;
 };
 
@@ -174,7 +174,7 @@ class LogicalExpression : public PrefilterExpression {
 
  private:
   std::vector<BlockMetadata> evaluateImpl(
-      std::vector<BlockMetadata>& input,
+      std::span<const BlockMetadata> input,
       size_t evaluationColumn) const override;
 };
 
@@ -199,7 +199,7 @@ class NotExpression : public PrefilterExpression {
 
  private:
   std::vector<BlockMetadata> evaluateImpl(
-      std::vector<BlockMetadata>& input,
+      std::span<const BlockMetadata> input,
       size_t evaluationColumn) const override;
 };
 

@@ -106,22 +106,20 @@ size_t QueryExecutionTree::getSizeEstimate() {
 
 //_____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
-QueryExecutionTree::setPrefilterExprGetUpdatedQetPtr(
+QueryExecutionTree::setPrefilterGetUpdatedQueryExecutionTree(
     std::vector<Operation::PrefilterVariablePair> prefilterPairs) const {
   AD_CONTRACT_CHECK(rootOperation_);
-  std::vector<Operation::PrefilterVariablePair> relevantPairs;
-  relevantPairs.reserve(prefilterPairs.size());
   VariableToColumnMap varToColMap = getVariableColumns();
-  // Add all the PrefilterVariable values whose Variable value is
-  // contained in the VariableToColumnMap. This is done to avoid that certain
-  // subqueries filter out too much.
-  for (auto& prefilterPair : prefilterPairs) {
-    if (varToColMap.find(prefilterPair.second) != varToColMap.end()) {
-      relevantPairs.emplace_back(std::move(prefilterPair));
-    }
+  std::erase_if(prefilterPairs, [&varToColMap](const auto& pair) {
+    return !varToColMap.contains(pair.second);
+  });
+
+  if (prefilterPairs.empty()) {
+    return std::nullopt;
+  } else {
+    return rootOperation_->setPrefilterGetUpdatedQueryExecutionTree(
+        std::move(prefilterPairs));
   }
-  return rootOperation_->setPrefilterExprGetUpdatedQetPtr(
-      std::move(relevantPairs));
 }
 
 // _____________________________________________________________________________

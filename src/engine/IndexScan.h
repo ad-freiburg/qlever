@@ -75,7 +75,7 @@ class IndexScan final : public Operation {
   // Set `PrefilterExpression`s and return updated `QueryExecutionTree` pointer
   // if necessary.
   std::optional<std::shared_ptr<QueryExecutionTree>>
-  setPrefilterExprGetUpdatedQetPtr(
+  setPrefilterGetUpdatedQueryExecutionTree(
       std::vector<PrefilterVariablePair> prefilterVariablePairs) override;
 
   size_t numVariables() const { return numVariables_; }
@@ -163,10 +163,10 @@ class IndexScan final : public Operation {
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 
-  // Return an updated QueryExecutionTree containing the new IndexScan that is a
-  // copy of this (`IndexScan`), but with added corresponding
+  // Return an updated QueryExecutionTree containing the new IndexScan which is
+  // a copy of this (`IndexScan`), but with added corresponding
   // `PrefilterExpression` (`PrefilterIndexPair`). This method is called in the
-  // implementation part of `setPrefilterExprGetUpdatedQetPtr()`.
+  // implementation part of `setPrefilterGetUpdatedQueryExecutionTree()`.
   std::shared_ptr<QueryExecutionTree> makeCopyWithAddedPrefilters(
       PrefilterIndexPair prefilter) const;
 
@@ -178,7 +178,7 @@ class IndexScan final : public Operation {
   // Returns the first sorted 'Variable' with corresponding `ColumnIndex`. If
   // `numVariables_` is 0, `std::nullopt` is returned.
   // The returned `ColumnIndex` corresponds to the `CompressedBlockMetadata`
-  // blocks, NOT to a `ColumnIndex` of the resulting `IdTable`.
+  // blocks, NOT to a column of the resulting `IdTable`.
   std::optional<std::pair<Variable, ColumnIndex>>
   getSortedVariableAndMetadataColumnIndexForPrefiltering() const;
 

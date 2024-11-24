@@ -83,20 +83,16 @@ class Operation {
     return _executionContext->locatedTriplesSnapshot();
   }
 
-  // Set `PrefilterExpression`s (for `IndexScan`).
-  // The prefiltering procedure is implemented by applying the
-  // PrefilterExpressions directly on the CompressedBlockMetadata.
-  // This is currently done while performing the result computation for
-  // IndexScan.
-  // (1) Overwrite this method for the derived `IndexScan` class. Given
-  // the resulting changes w.r.t. `IndexScan`, we also have to return an updated
-  // `QueryExecutionTree` pointer.
-  // (2) The default method for all other derived classes is implemented here,
-  // no PrefilterExpressions need to be set. Given that no changes occur for an
-  // `Operation` object here, return std::nullopt to indicate that nothing has
-  // changed.
+  // Get an updated `QueryExecutionTree` that applies as many of the given
+  // `PrefilterExpression`s over `IndexScan` as possible. Returns `nullopt`
+  // if no `PrefilterExpression` is applicable and thus the `QueryExecutionTree`
+  // is not changed.
+  // Note: The default implementation always returns `nullopt` while this
+  // function is currently only overridden for `IndexScan`. In the future also
+  // other operations could pass on the `PrefilterExpressions` to the
+  // `IndexScan` in their subtree.
   virtual std::optional<std::shared_ptr<QueryExecutionTree>>
-  setPrefilterExprGetUpdatedQetPtr(
+  setPrefilterGetUpdatedQueryExecutionTree(
       [[maybe_unused]] std::vector<PrefilterVariablePair> prefilterPairs) {
     return std::nullopt;
   };

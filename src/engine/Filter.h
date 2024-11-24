@@ -59,11 +59,13 @@ class Filter : public Operation {
     return _subtree->getVariableColumns();
   }
 
-  // This method is directly called by the constructor.
-  // It sets the appropriate `<PrefilterExpression, Variable>` pair for each
-  // `IndexScan` child by invoking `setPrefilterExpression` on all descendants
-  // in the `QueryExecutionTree`.
-  void setPrefilterExpressionForDirectIndexScanChild();
+  // The method is directly invoked with the construction of this `Filter`
+  // object. Its implementation retrieves <PrefilterExpression, Variable> pairs
+  // from the corresponding `SparqlExpression` and calls
+  // `QueryExecutionTree::setPrefilterGetUpdatedQueryExecutionTree()` on those
+  // pair values. If necessary the `QueryExecutionTree` for this entity will be
+  // updated.
+  void setPrefilterExpressionForChildren();
 
   ProtoResult computeResult(bool requestLaziness) override;
 

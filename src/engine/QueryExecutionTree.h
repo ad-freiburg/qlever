@@ -94,13 +94,12 @@ class QueryExecutionTree {
     return rootOperation_->getMultiplicity(col);
   }
 
-  // If the `rootOperation_` of this `QueryExecutionTree` is an `IndexScan`
-  // operation, this method adds the suitable `PrefilterExpression` to the
-  // `IndexScan` given a suitable `Variable` / `ColumnIndex` is public.
-  // If a `PrefilterExpression` was successfully set, the updated
-  // `QueryExecutionTree` is returned.
+  // The implementation of this method calls
+  // `Operation::setPrefilterGetUpdatedQueryExecutionTree()` for the root
+  // operation. Only `<PrefilterExpression, Variable>` pairs are passed, where
+  // the corresponding `Variable` is visible in the `VariableToColumnMap`.
   std::optional<std::shared_ptr<QueryExecutionTree>>
-  setPrefilterExprGetUpdatedQetPtr(
+  setPrefilterGetUpdatedQueryExecutionTree(
       std::vector<Operation::PrefilterVariablePair> prefilterPairs) const;
 
   size_t getDistinctEstimate(size_t col) const {

@@ -28,7 +28,7 @@ Filter::Filter(QueryExecutionContext* qec,
     : Operation(qec),
       _subtree(std::move(subtree)),
       _expression{std::move(expression)} {
-  setPrefilterExpressionForDirectIndexScanChild();
+  setPrefilterExpressionForChildren();
 }
 
 // _____________________________________________________________________________
@@ -45,11 +45,11 @@ string Filter::getDescriptor() const {
 }
 
 //______________________________________________________________________________
-void Filter::setPrefilterExpressionForDirectIndexScanChild() {
+void Filter::setPrefilterExpressionForChildren() {
   std::vector<PrefilterVariablePair> prefilterPairs =
       _expression.getPrefilterExpressionForMetadata();
-  auto optNewSubTree =
-      _subtree->setPrefilterExprGetUpdatedQetPtr(std::move(prefilterPairs));
+  auto optNewSubTree = _subtree->setPrefilterGetUpdatedQueryExecutionTree(
+      std::move(prefilterPairs));
   if (optNewSubTree.has_value()) {
     _subtree = std::move(optNewSubTree.value());
   }
