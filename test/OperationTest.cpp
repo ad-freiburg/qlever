@@ -8,6 +8,7 @@
 
 #include "engine/NeutralElementOperation.h"
 #include "engine/ValuesForTesting.h"
+#include "global/RuntimeParameters.h"
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
@@ -582,21 +583,21 @@ TEST(Operation, checkLazyOperationIsNotCachedIfTooLarge) {
 
   ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
 
-  auto originalSize = qec->getQueryTreeCache().getMaxSizeSingleEntry();
+  auto originalSize = RuntimeParameters().get<"lazy-result-max-cache-size">();
 
   // Too small for storage
-  qec->getQueryTreeCache().setMaxSizeSingleEntry(1_B);
+  RuntimeParameters().set<"lazy-result-max-cache-size">(1_B);
 
   auto cacheValue = valuesForTesting.runComputationAndPrepareForCache(
       timer, ComputationMode::LAZY_IF_SUPPORTED, "test", false);
   EXPECT_FALSE(qec->getQueryTreeCache().cacheContains("test"));
-  qec->getQueryTreeCache().setMaxSizeSingleEntry(originalSize);
 
   for ([[maybe_unused]] Result::IdTableVocabPair& _ :
        cacheValue.resultTable().idTables()) {
   }
 
   EXPECT_FALSE(qec->getQueryTreeCache().cacheContains("test"));
+  RuntimeParameters().set<"lazy-result-max-cache-size">(originalSize);
 }
 
 // _____________________________________________________________________________

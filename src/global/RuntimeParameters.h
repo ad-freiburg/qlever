@@ -50,7 +50,8 @@ inline auto& RuntimeParameters() {
         Bool<"group-by-disable-index-scan-optimizations">{false},
         SizeT<"service-max-value-rows">{10'000},
         SizeT<"query-planning-budget">{1500},
-        Bool<"throw-on-unbound-variables">{false}};
+        Bool<"throw-on-unbound-variables">{false},
+        MemorySizeParameter<"lazy-result-max-cache-size">{500_MB}};
   }();
   return params;
 }

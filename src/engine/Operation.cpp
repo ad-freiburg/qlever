@@ -5,6 +5,7 @@
 #include "engine/Operation.h"
 
 #include "engine/QueryExecutionTree.h"
+#include "global/RuntimeParameters.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/TransparentFunctors.h"
 
@@ -179,14 +180,13 @@ CacheValue Operation::runComputationAndPrepareForCache(
       !unlikelyToFitInCache(cache.getMaxSizeSingleEntry())) {
     AD_CONTRACT_CHECK(!pinned);
     result.cacheDuringConsumption(
-        [maxSize = cache.getMaxSizeSingleEntry()](
-            const std::optional<Result::IdTableVocabPair>& currentIdTablePair,
-            const Result::IdTableVocabPair& newIdTable) {
+        [](const std::optional<Result::IdTableVocabPair>& currentIdTablePair,
+           const Result::IdTableVocabPair& newIdTable) {
           auto currentSize =
               currentIdTablePair.has_value()
                   ? CacheValue::getSize(currentIdTablePair.value().idTable_)
                   : 0_B;
-          return maxSize >=
+          return RuntimeParameters().get<"lazy-result-max-cache-size">() >=
                  currentSize + CacheValue::getSize(newIdTable.idTable_);
         },
         [runtimeInfo = getRuntimeInfoPointer(), &cache,
