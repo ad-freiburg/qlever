@@ -35,7 +35,7 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
     }
     maxDist_ = object.getInt();
   } else if (predString == "bindDistance") {
-    setVariable("bindDistance", object, bindDist_);
+    setVariable("bindDistance", object, distanceVariable_);
   } else if (predString == "algorithm") {
     if (!object.isIri()) {
       // This 'if' is redundant with extractParameterName, but we want to throw
@@ -96,11 +96,11 @@ SpatialJoinConfiguration SpatialQuery::toSpatialJoinConfiguration() const {
   if (maxResults_.has_value()) {
     return SpatialJoinConfiguration{
         NearestNeighborsConfig{maxResults_.value(), maxDist_}, left_.value(),
-        right_.value(), bindDist_, algo};
+        right_.value(), distanceVariable_, algo};
   } else {
     return SpatialJoinConfiguration{MaxDistanceConfig{maxDist_.value()},
-                                    left_.value(), right_.value(), bindDist_,
-                                    algo};
+                                    left_.value(), right_.value(),
+                                    distanceVariable_, algo};
   }
 }
 

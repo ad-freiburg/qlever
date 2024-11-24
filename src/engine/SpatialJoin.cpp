@@ -148,7 +148,7 @@ size_t SpatialJoin::getResultWidth() const {
     auto widthChildren =
         childLeft_->getResultWidth() + childRight_->getResultWidth();
 
-    if (config_->bindDist_.has_value()) {
+    if (config_->distanceVariable_.has_value()) {
       return widthChildren + 1;
     } else {
       return widthChildren;
@@ -226,7 +226,7 @@ float SpatialJoin::getMultiplicity(size_t col) {
   if (childLeft_ && childRight_) {
     std::shared_ptr<QueryExecutionTree> child;
     size_t column = col;
-    if (config_->bindDist_.has_value() && col == getResultWidth() - 1) {
+    if (config_->distanceVariable_.has_value() && col == getResultWidth() - 1) {
       // as each distance is very likely to be unique (even if only after
       // a few decimal places), no multiplicities are assumed
       return 1;
@@ -344,10 +344,11 @@ VariableToColumnMap SpatialJoin::computeVariableToColumnMap() const {
     addColumns(childLeft_, 0);
     addColumns(childRight_, sizeLeft);
 
-    if (config_->bindDist_.has_value()) {
-      AD_CONTRACT_CHECK(variableToColumnMap.find(config_->bindDist_.value()) ==
-                        variableToColumnMap.end());
-      variableToColumnMap[config_->bindDist_.value()] =
+    if (config_->distanceVariable_.has_value()) {
+      AD_CONTRACT_CHECK(
+          variableToColumnMap.find(config_->distanceVariable_.value()) ==
+          variableToColumnMap.end());
+      variableToColumnMap[config_->distanceVariable_.value()] =
           makeUndefCol(ColumnIndex{sizeLeft + sizeRight});
     }
   }

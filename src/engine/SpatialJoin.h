@@ -41,7 +41,7 @@ struct SpatialJoinConfiguration {
 
   // If given, the distance will be added to the result and be bound to this
   // variable.
-  std::optional<Variable> bindDist_ = std::nullopt;
+  std::optional<Variable> distanceVariable_ = std::nullopt;
 
   // Choice of algorithm. Both algorithms have equal results, but different
   // runtime characteristics.
@@ -132,8 +132,8 @@ class SpatialJoin : public Operation {
     return std::pair{getMaxDist().value_or(-1), getMaxResults().value_or(-1)};
   }
 
-  std::optional<Variable> onlyForTestingGetBindDist() const {
-    return config_->bindDist_;
+  std::optional<Variable> onlyForTestingGetDistanceVariable() const {
+    return config_->distanceVariable_;
   }
 
   std::shared_ptr<QueryExecutionTree> onlyForTestingGetLeftChild() const {

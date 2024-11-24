@@ -75,7 +75,7 @@ void SpatialJoinAlgorithms::addResultTableEntry(IdTable* result,
   rescol = addColumns(result, idTableLeft, resrow, rescol, rowLeft);
   rescol = addColumns(result, idTableRight, resrow, rescol, rowRight);
 
-  if (config_->bindDist_.has_value()) {
+  if (config_->distanceVariable_.has_value()) {
     result->at(resrow, rescol) = distance;
     // rescol isn't used after that in this function, but future updates,
     // which add additional columns, would need to remember to increase

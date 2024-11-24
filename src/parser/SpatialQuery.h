@@ -27,8 +27,12 @@ struct SpatialQuery : MagicServiceQuery {
   std::optional<size_t> maxDist_;
   std::optional<size_t> maxResults_;
 
-  // Optional further arguments
-  std::optional<Variable> bindDist_;
+  // Optional further argument: a variable to which the distance between spatial
+  // search results is bound
+  std::optional<Variable> distanceVariable_;
+
+  // Optional further argument: the join algorithm. If it is not given, the
+  // default algorithm is used implicitly.
   std::optional<SpatialJoinAlgorithm> algo_;
 
   SpatialQuery() = default;

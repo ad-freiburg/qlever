@@ -611,9 +611,9 @@ void testMultiplicitiesOrSizeEstimate(bool addLeftChildFirst,
       if (varChildLeft == leftVarColMap.end()) {
         inputChild = rightChild;
       }
-      auto bindDist = spatialJoin->onlyForTestingGetBindDist();
+      auto distanceVariable = spatialJoin->onlyForTestingGetDistanceVariable();
       if (  // varChildRight == rightVarColMap.end() &&
-          bindDist.has_value() && var == bindDist.value()) {
+          distanceVariable.has_value() && var == distanceVariable.value()) {
         // as each distance is very likely to be unique (even if only after
         // a few decimal places), no multiplicities are assumed
         ASSERT_EQ(spatialJoin->getMultiplicity(i), 1);
@@ -730,7 +730,7 @@ void testMultiplicitiesOrSizeEstimate(bool addLeftChildFirst,
       assertMultiplicity(obj1.getVariable(), 7.0, spatialJoin, varColsMap);
       assertMultiplicity(subj2.getVariable(), 9.8, spatialJoin, varColsMap);
       assertMultiplicity(obj2.getVariable(), 7.0, spatialJoin, varColsMap);
-      ASSERT_TRUE(spatialJoin->onlyForTestingGetBindDist().has_value());
+      ASSERT_TRUE(spatialJoin->onlyForTestingGetDistanceVariable().has_value());
       assertMultiplicity(Variable{"?distanceForTesting"}, 1, spatialJoin,
                          varColsMap);
     } else {
