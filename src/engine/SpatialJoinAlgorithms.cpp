@@ -433,21 +433,22 @@ std::array<bool, 2> SpatialJoinAlgorithms::isAPoleTouched(
 
 // ____________________________________________________________________________
 Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
-  auto printWarning =
-      [alreadyWarned = false](std::optional<SpatialJoin*> spatialJoin) mutable {
-        if (!alreadyWarned) {
-          std::string warning =
-              "The input to a spatial join contained at least one element, "
-              "that is not a point geometry and is thus skipped. Note that "
-              "QLever currently only accepts point geometries for the "
-              "spatial joins";
-          AD_LOG_WARN << warning << std::endl;
-          alreadyWarned = true;
-          if (spatialJoin) {
-            spatialJoin.value()->addWarning(warning);
-          }
-        }
-      };
+  auto printWarning = [alreadyWarned = false,
+                       &spatialJoin = spatialJoin_]() mutable {
+    if (!alreadyWarned) {
+      std::string warning =
+          "The input to a spatial join contained at least one element, "
+          "that is not a point geometry and is thus skipped. Note that "
+          "QLever currently only accepts point geometries for the "
+          "spatial joins";
+      AD_LOG_WARN << warning << std::endl;
+      alreadyWarned = true;
+      if (spatialJoin.has_value()) {
+        AD_CORRECTNESS_CHECK(spatialJoin.value() != nullptr);
+        spatialJoin.value()->addWarning(warning);
+      }
+    }
+  };
 
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
               rightJoinCol, numColumns, maxDist, maxResults] = params_;
@@ -474,7 +475,7 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
     auto geopoint = getPoint(smallerResult, i, smallerResJoinCol);
 
     if (!geopoint) {
-      printWarning(spatialJoin_);
+      printWarning();
       continue;
     }
 
@@ -489,7 +490,7 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
     auto geopoint1 = getPoint(otherResult, i, otherResJoinCol);
 
     if (!geopoint1) {
-      printWarning(spatialJoin_);
+      printWarning();
       continue;
     }
 
@@ -511,8 +512,8 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
       }
       auto distance = computeDist(idTableLeft, idTableRight, rowLeft, rowRight,
                                   leftJoinCol, rightJoinCol);
+      AD_CORRECTNESS_CHECK(distance.getDatatype() == Datatype::Int);
       if (distance.getInt() <= maxDist) {
-        AD_CORRECTNESS_CHECK(distance.getDatatype() == Datatype::Int);
         addResultTableEntry(&result, idTableLeft, idTableRight, rowLeft,
                             rowRight, distance);
       }

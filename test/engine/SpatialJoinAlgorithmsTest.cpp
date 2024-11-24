@@ -937,6 +937,42 @@ TEST_P(SpatialJoinParamTest, computeResultSmallDatasetDifferentSizeChildren) {
       expectedMaxDist10000000_rows_diff, columnNames, false);
 }
 
+TEST_P(SpatialJoinParamTest, maxSizeMaxDistanceTest) {
+  auto maxDist = std::numeric_limits<long long>::max();
+  std::string maxDistStr =
+      absl::StrCat("<max-distance-in-meters:", maxDist, ">");
+
+  // test small children
+  std::vector<std::string> columnNames{"?obj1", "?point1", "?obj2", "?point2",
+                                       "?distOfTheTwoObjectsAddedInternally"};
+  buildAndTestSmallTestSetSmallChildren(
+      maxDistStr, true, expectedMaxDist10000000_rows_small, columnNames);
+  buildAndTestSmallTestSetSmallChildren(
+      maxDistStr, false, expectedMaxDist10000000_rows_small, columnNames);
+
+  // test diff size children
+  columnNames = {"?name1",
+                 "?obj1",
+                 "?geo1",
+                 "?point1",
+                 "?obj2",
+                 "?point2",
+                 "?distOfTheTwoObjectsAddedInternally"};
+  buildAndTestSmallTestSetDiffSizeChildren(
+      maxDistStr, true, expectedMaxDist10000000_rows_diff, columnNames, false);
+  buildAndTestSmallTestSetDiffSizeChildren(
+      maxDistStr, false, expectedMaxDist10000000_rows_diff, columnNames, false);
+
+  // test large size children
+  columnNames = {"?name1",  "?obj1",   "?geo1",
+                 "?point1", "?name2",  "?obj2",
+                 "?geo2",   "?point2", "?distOfTheTwoObjectsAddedInternally"};
+  buildAndTestSmallTestSetLargeChildren(
+      maxDistStr, true, expectedMaxDist10000000_rows, columnNames);
+  buildAndTestSmallTestSetLargeChildren(
+      maxDistStr, false, expectedMaxDist10000000_rows, columnNames);
+}
+
 TEST_P(SpatialJoinParamTest, diffSizeIdTables) {
   std::vector<std::string> columnNames{"?point1", "?obj2", "?point2",
                                        "?distOfTheTwoObjectsAddedInternally"};
