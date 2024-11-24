@@ -8,6 +8,8 @@
 
 #include "global/RuntimeParameters.h"
 
+// Set a runtime parameter to a specific value for the duration of the current
+// scope. The original value is restored when the scope is left.
 template <ad_utility::ParameterName Name, typename Value>
 [[nodiscard]] auto setRuntimeParameterForTest(Value&& value) {
   auto originalValue = RuntimeParameters().get<Name>();

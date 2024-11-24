@@ -33,6 +33,8 @@ class Join : public Operation {
        std::shared_ptr<QueryExecutionTree> t2, ColumnIndex t1JoinCol,
        ColumnIndex t2JoinCol);
 
+  using OptionalPermutation = std::optional<std::vector<ColumnIndex>>;
+
   static constexpr size_t CHUNK_SIZE = 100'000;
   // A very explicit constructor, which initializes an invalid join object (it
   // has no subtrees, which violates class invariants). These invalid Join
@@ -106,7 +108,7 @@ class Join : public Operation {
       ad_utility::InvocableWithExactReturnType<
           Result::IdTableVocabPair,
           std::function<void(IdTable&, LocalVocab&)>> auto action,
-      std::optional<std::vector<ColumnIndex>> permutation) const;
+      OptionalPermutation permutation) const;
 
  public:
   // Helper function to compute the result of a join operation and conditionally
@@ -125,7 +127,7 @@ class Join : public Operation {
       ad_utility::InvocableWithExactReturnType<
           Result::IdTableVocabPair,
           std::function<void(IdTable&, LocalVocab&)>> auto action,
-      std::optional<std::vector<ColumnIndex>> permutation = {}) const;
+      OptionalPermutation permutation = {}) const;
 
   // Fallback implementation of a join that is used when at least one of the two
   // inputs is not fully materialized. This represents the general case where we

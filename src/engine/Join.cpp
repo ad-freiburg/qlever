@@ -26,9 +26,9 @@ using std::endl;
 using std::string;
 
 namespace {
-void applyPermutation(
-    IdTable& idTable,
-    const std::optional<std::vector<ColumnIndex>>& permutation) {
+using OptionalPermutation = Join::OptionalPermutation;
+void applyPermutation(IdTable& idTable,
+                      const OptionalPermutation& permutation) {
   if (permutation.has_value()) {
     idTable.setColumnSubset(permutation.value());
   }
@@ -39,9 +39,8 @@ using LazyInputView =
 // Convert a `generator<IdTableVocab>` to a `generator<IdTableAndFirstCol>` for
 // more efficient access in the join columns below and apply the given
 // permutation to each table.
-LazyInputView convertGenerator(
-    Result::Generator gen,
-    std::optional<std::vector<ColumnIndex>> permutation = {}) {
+LazyInputView convertGenerator(Result::Generator gen,
+                               OptionalPermutation permutation = {}) {
   for (auto& [table, localVocab] : gen) {
     applyPermutation(table, permutation);
     // Make sure to actually move the table into the wrapper so that the tables
@@ -435,7 +434,7 @@ Result::Generator Join::runLazyJoinAndConvertToGenerator(
     ad_utility::InvocableWithExactReturnType<
         Result::IdTableVocabPair,
         std::function<void(IdTable&, LocalVocab&)>> auto action,
-    std::optional<std::vector<ColumnIndex>> permutation) const {
+    OptionalPermutation permutation) const {
   std::atomic_flag write = true;
   std::variant<std::monostate, Result::IdTableVocabPair, std::exception_ptr>
       storage;
