@@ -92,6 +92,11 @@ class ExportQueryExecutionTrees {
   static std::optional<LiteralOrIri> idToLiteralOrIriForEncodedValue(
       Id id, bool onlyReturnLiteralsWithXsdString = false);
 
+  // Checks and processes a LiteralOrIri based on the given flags.
+  static std::optional<LiteralOrIri> handleIriOrLiteral(
+      const LiteralOrIri& word, bool onlyReturnLiterals,
+      bool onlyReturnLiteralsWithXsdString);
+
   // Acts as a helper to retrieve an LiteralOrIri object
   // from an Id, where the Id is of type `VocabIndex` or `LocalVocabIndex`.
   // This function should only be called with suitable `Datatype` Id's,

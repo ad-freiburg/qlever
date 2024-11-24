@@ -23,7 +23,7 @@ constexpr auto toLiteral = [](std::string_view normalizedContent) {
 
 constexpr auto toLiteralWithDescriptor =
     [](std::string_view normalizedContent,
-       std::optional<std::variant<Iri, std::string>> descriptor) {
+       const std::optional<std::variant<Iri, std::string>> descriptor) {
       return LiteralOrIri{
           ad_utility::triple_component::Literal::literalWithNormalizedContent(
               asNormalizedStringViewUnsafe(normalizedContent), descriptor)};
@@ -247,8 +247,6 @@ class SubstrImpl {
 
 using SubstrExpression = NARY<3, FV<SubstrImpl, LiteralOrIriValueGetter,
                                     NumericValueGetter, NumericValueGetter>>;
-// using SubstrExpression =
-// StringExpressionImpl<3, SubstrImpl, NumericValueGetter, NumericValueGetter>;
 
 // STRSTARTS
 [[maybe_unused]] auto strStartsImpl = [](std::string_view text,

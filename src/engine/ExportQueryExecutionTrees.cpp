@@ -362,6 +362,35 @@ ExportQueryExecutionTrees::idToLiteralOrIriForEncodedValue(
 }
 
 // _____________________________________________________________________________
+std::optional<LiteralOrIri> ExportQueryExecutionTrees::handleIriOrLiteral(
+    const LiteralOrIri& word, bool onlyReturnLiterals,
+    bool onlyReturnLiteralsWithXsdString) {
+  auto datatypeIsXSDString = [](const LiteralOrIri& word) -> bool {
+    return word.hasDatatype() &&
+           std::string_view(
+               reinterpret_cast<const char*>(word.getDatatype().data()),
+               word.getDatatype().size()) == XSD_STRING;
+  };
+
+  if (onlyReturnLiterals && !word.isLiteral()) {
+    return std::nullopt;
+  }
+  if (onlyReturnLiteralsWithXsdString) {
+    if (word.isLiteral() &&
+        (!word.hasDatatype() || datatypeIsXSDString(word))) {
+      return word;
+    }
+    return std::nullopt;
+  }
+  if (word.isLiteral() && word.hasDatatype() && !datatypeIsXSDString(word)) {
+    return LiteralOrIri{
+        ad_utility::triple_component::Literal::literalWithNormalizedContent(
+            word.getContent())};
+  }
+  return word;
+}
+
+// _____________________________________________________________________________
 ad_utility::triple_component::LiteralOrIri
 ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
     const Index& index, Id id, const LocalVocab& localVocab) {
@@ -433,47 +462,13 @@ std::optional<LiteralOrIri> ExportQueryExecutionTrees::idToLiteralOrIri(
     bool onlyReturnLiteralsWithXsdString) {
   using enum Datatype;
   auto datatype = id.getDatatype();
+
   if constexpr (onlyReturnLiterals) {
     if (!(datatype == VocabIndex || datatype == LocalVocabIndex)) {
       return std::nullopt;
     }
   }
-  auto handleIriOrLiteral =
-      [onlyReturnLiteralsWithXsdString](
-          const LiteralOrIri& word) -> std::optional<LiteralOrIri> {
-    if constexpr (onlyReturnLiterals) {
-      if (!word.isLiteral()) {
-        return std::nullopt;
-      }
-    }
-    // Return only literals without datatype or literals with xsd:string
-    // datatype
-    if (onlyReturnLiteralsWithXsdString) {
-      if (word.isLiteral()) {
-        if (!word.hasDatatype() ||
-            (word.hasDatatype() &&
-             std::string_view(
-                 reinterpret_cast<const char*>(word.getDatatype().data()),
-                 word.getDatatype().size()) == XSD_STRING)) {
-          return word;
-        }
-      }
-      return std::nullopt;
-    }
 
-    // If the literal has a datatype that is not xsd:string, remove the datatype
-    if (word.isLiteral()) {
-      if (word.hasDatatype() &&
-          std::string_view(
-              reinterpret_cast<const char*>(word.getDatatype().data()),
-              word.getDatatype().size()) != XSD_STRING) {
-        return LiteralOrIri{
-            ad_utility::triple_component::Literal::literalWithNormalizedContent(
-                word.getContent())};
-      }
-    }
-    return word;
-  };
   switch (datatype) {
     case WordVocabIndex:
       return LiteralOrIri::literalWithoutQuotes(
@@ -481,9 +476,10 @@ std::optional<LiteralOrIri> ExportQueryExecutionTrees::idToLiteralOrIri(
     case VocabIndex:
     case LocalVocabIndex:
       return handleIriOrLiteral(
-          getLiteralOrIriFromVocabIndex(index, id, localVocab));
+          getLiteralOrIriFromVocabIndex(index, id, localVocab),
+          onlyReturnLiterals, onlyReturnLiteralsWithXsdString);
     case TextRecordIndex:
-      // TODO
+      // TODO: Handle TextRecordIndex if needed
       return std::nullopt;
     default:
       return idToLiteralOrIriForEncodedValue(id,
