@@ -23,7 +23,7 @@ constexpr auto toLiteral = [](std::string_view normalizedContent) {
 
 constexpr auto toLiteralWithDescriptor =
     [](std::string_view normalizedContent,
-       const std::optional<std::variant<Iri, std::string>> descriptor) {
+       const std::optional<std::variant<Iri, std::string>>& descriptor) {
       return LiteralOrIri{
           ad_utility::triple_component::Literal::literalWithNormalizedContent(
               asNormalizedStringViewUnsafe(normalizedContent), descriptor)};

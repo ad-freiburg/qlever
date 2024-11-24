@@ -365,7 +365,7 @@ ExportQueryExecutionTrees::idToLiteralOrIriForEncodedValue(
 std::optional<LiteralOrIri> ExportQueryExecutionTrees::handleIriOrLiteral(
     const LiteralOrIri& word, bool onlyReturnLiterals,
     bool onlyReturnLiteralsWithXsdString) {
-  auto datatypeIsXSDString = [](const LiteralOrIri& word) -> bool {
+  auto datatypeIsXSDString = [](const LiteralOrIri& word) {
     return word.hasDatatype() &&
            std::string_view(
                reinterpret_cast<const char*>(word.getDatatype().data()),
@@ -479,7 +479,6 @@ std::optional<LiteralOrIri> ExportQueryExecutionTrees::idToLiteralOrIri(
           getLiteralOrIriFromVocabIndex(index, id, localVocab),
           onlyReturnLiterals, onlyReturnLiteralsWithXsdString);
     case TextRecordIndex:
-      // TODO: Handle TextRecordIndex if needed
       return std::nullopt;
     default:
       return idToLiteralOrIriForEncodedValue(id,
