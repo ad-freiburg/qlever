@@ -2175,28 +2175,24 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
   using namespace sparqlExpression;
   // Create the expression using the matching factory function from
   // `NaryExpression.h`.
-  auto createUnary =
-      [&argList]<typename Function>(Function function)
-          requires std::is_invocable_r_v<ExpressionPtr, Function, ExpressionPtr>
-  {
+  auto createUnary = [&argList]<typename Function>(Function function)
+      requires std::is_invocable_r_v<ExpressionPtr, Function, ExpressionPtr> {
     AD_CORRECTNESS_CHECK(argList.size() == 1, argList.size());
     return function(std::move(argList[0]));
   };
-  auto createBinary =
-      [&argList]<typename Function>(Function function)
-          requires std::is_invocable_r_v<ExpressionPtr, Function, ExpressionPtr,
-                                         ExpressionPtr> {
-            AD_CORRECTNESS_CHECK(argList.size() == 2);
-            return function(std::move(argList[0]), std::move(argList[1]));
-          };
-  auto createTernary =
-      [&argList]<typename Function>(Function function)
-          requires std::is_invocable_r_v<ExpressionPtr, Function, ExpressionPtr,
-                                         ExpressionPtr, ExpressionPtr> {
-            AD_CORRECTNESS_CHECK(argList.size() == 3);
-            return function(std::move(argList[0]), std::move(argList[1]),
-                            std::move(argList[2]));
-          };
+  auto createBinary = [&argList]<typename Function>(Function function)
+      requires std::is_invocable_r_v<ExpressionPtr, Function, ExpressionPtr,
+                                     ExpressionPtr> {
+    AD_CORRECTNESS_CHECK(argList.size() == 2);
+    return function(std::move(argList[0]), std::move(argList[1]));
+  };
+  auto createTernary = [&argList]<typename Function>(Function function)
+      requires std::is_invocable_r_v<ExpressionPtr, Function, ExpressionPtr,
+                                     ExpressionPtr, ExpressionPtr> {
+    AD_CORRECTNESS_CHECK(argList.size() == 3);
+    return function(std::move(argList[0]), std::move(argList[1]),
+                    std::move(argList[2]));
+  };
   if (functionName == "str") {
     return createUnary(&makeStrExpression);
   } else if (functionName == "iri" || functionName == "uri") {
