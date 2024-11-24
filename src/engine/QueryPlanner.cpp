@@ -31,6 +31,7 @@
 #include "engine/OptionalJoin.h"
 #include "engine/OrderBy.h"
 #include "engine/PathSearch.h"
+#include "engine/QueryExecutionTree.h"
 #include "engine/Service.h"
 #include "engine/Sort.h"
 #include "engine/SpatialJoin.h"
@@ -2468,11 +2469,19 @@ void QueryPlanner::GraphPatternPlanner::visitTransitivePath(
 // _______________________________________________________________
 void QueryPlanner::GraphPatternPlanner::visitPathSearch(
     parsedQuery::PathQuery& pathQuery) {
-  auto candidatesIn = planner_.optimize(&pathQuery.childGraphPattern_);
-  std::vector<SubtreePlan> candidatesOut;
-
   const auto& vocab = planner_._qec->getIndex().getVocab();
   auto config = pathQuery.toPathSearchConfiguration(vocab);
+
+  // If there is no child graph pattern, we need to construct a neutral element
+  std::vector<SubtreePlan> candidatesIn;
+  if (pathQuery.childGraphPattern_.has_value()) {
+    candidatesIn = planner_.optimize(&pathQuery.childGraphPattern_.value());
+  } else {
+    auto neutralElement = makeExecutionTree<NeutralElementOperation>(qec_);
+    candidatesIn = {
+        makeSubtreePlan<PathSearch>(qec_, std::move(neutralElement), config)};
+  }
+  std::vector<SubtreePlan> candidatesOut;
 
   for (auto& sub : candidatesIn) {
     auto pathSearch =
@@ -2486,10 +2495,20 @@ void QueryPlanner::GraphPatternPlanner::visitPathSearch(
 // _______________________________________________________________
 void QueryPlanner::GraphPatternPlanner::visitSpatialSearch(
     parsedQuery::SpatialQuery& spatialQuery) {
-  auto candidatesIn = planner_.optimize(&spatialQuery.childGraphPattern_);
-  std::vector<SubtreePlan> candidatesOut;
-
   auto config = spatialQuery.toSpatialJoinConfiguration();
+
+  // If there is no child graph pattern, we need to construct a neutral element
+  std::vector<SubtreePlan> candidatesIn;
+  if (spatialQuery.childGraphPattern_.has_value()) {
+    candidatesIn = planner_.optimize(&spatialQuery.childGraphPattern_.value());
+  } else {
+    auto neutralElementLeft = makeExecutionTree<NeutralElementOperation>(qec_);
+    auto neutralElementRight = makeExecutionTree<NeutralElementOperation>(qec_);
+    candidatesIn = {makeSubtreePlan<SpatialJoin>(
+        qec_, std::make_shared<SpatialJoinConfiguration>(config),
+        std::move(neutralElementLeft), std::move(neutralElementRight))};
+  }
+  std::vector<SubtreePlan> candidatesOut;
 
   for (auto& sub : candidatesIn) {
     // This helper function adds a subtree plan to the output candidates, which
@@ -2510,7 +2529,7 @@ void QueryPlanner::GraphPatternPlanner::visitSpatialSearch(
       candidatesOut.push_back(std::move(plan));
     };
 
-    if (!spatialQuery.childGraphPattern_._graphPatterns.empty()) {
+    if (!spatialQuery.childGraphPattern_.has_value()) {
       // The version using the child graph pattern
       addCandidateSpatialJoin(false);
     } else {

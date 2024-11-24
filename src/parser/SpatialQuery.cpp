@@ -14,22 +14,7 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
   TripleComponent predicate = simpleTriple.p_;
   TripleComponent object = simpleTriple.o_;
 
-  if (!predicate.isIri()) {
-    throw SpatialSearchException("Predicates must be IRIs");
-  }
-
-  // Get IRI without brackets
-  std::string_view iri =
-      SPATIAL_SEARCH_IRI.substr(0, SPATIAL_SEARCH_IRI.size() - 1);
-
-  // Remove prefix and brackets
-  std::string predString = predicate.getIri().toStringRepresentation();
-  if (predString.starts_with(iri)) {
-    predString = predString.substr(0, iri.size() - 1);
-  } else {
-    predString = predString.substr(1);
-  }
-  predString = predString.substr(0, predString.size() - 2);
+  auto predString = extractParameterName(predicate, SPATIAL_SEARCH_IRI);
 
   if (predString == "left") {
     setVariable("left", object, left_);
@@ -53,14 +38,16 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
     setVariable("bindDistance", object, bindDist_);
   } else if (predString == "algorithm") {
     if (!object.isIri()) {
+      // This 'if' is redundant with extractParameterName, but we want to throw
+      // a more precise error description
       throw SpatialSearchException(
           "The parameter <algorithm> needs an IRI that selects the algorithm "
           "to employ. Currently supported are <baseline> and <s2>.");
     }
-    auto algoIri = object.getIri().toStringRepresentation();
-    if (algoIri.ends_with("baseline>")) {
+    auto algo = extractParameterName(object, SPATIAL_SEARCH_IRI);
+    if (algo == "baseline") {
       algo_ = SpatialJoinAlgorithm::BASELINE;
-    } else if (algoIri.ends_with("s2>")) {
+    } else if (algo == "s2") {
       algo_ = SpatialJoinAlgorithm::S2_GEOMETRY;
     } else {
       throw SpatialSearchException(
@@ -83,7 +70,7 @@ SpatialJoinConfiguration SpatialQuery::toSpatialJoinConfiguration() const {
   } else if (!maxDist_.has_value() && !maxResults_.has_value()) {
     throw SpatialSearchException(
         "Neither <nearestNeighbors> nor <maxDistance> were provided. At least "
-        "one of both is required.");
+        "one of them is required.");
   } else if (!right_.has_value()) {
     throw SpatialSearchException(
         "Missing parameter <right> in spatial search.");
@@ -92,7 +79,7 @@ SpatialJoinConfiguration SpatialQuery::toSpatialJoinConfiguration() const {
   // Only if the number of results is limited, it is mandatory that the right
   // variable must be selected inside the service. If only the distance is
   // limited, it may be declared inside or outside of the service.
-  if (maxResults_.has_value() && childGraphPattern_._graphPatterns.empty()) {
+  if (maxResults_.has_value() && !childGraphPattern_.has_value()) {
     throw SpatialSearchException(
         "A spatial search with a maximum number of results must have its right "
         "variable declared inside the service using a graph pattern: SERVICE "
@@ -138,19 +125,16 @@ SpatialQuery::SpatialQuery(const SparqlTriple& triple) {
   setVariable("right", triple.o_, right_);
 
   // Helper to convert a ctre match to an integer
-  auto matchToInt = [](std::string_view match) -> std::optional<size_t> {
-    if (match.size() > 0) {
-      size_t res = 0;
-      std::from_chars(match.data(), match.data() + match.size(), res);
-      return res;
-    }
-    return std::nullopt;
+  auto matchToInt = [](std::string_view match) {
+    AD_CORRECTNESS_CHECK(match.size() > 0);
+    size_t res = 0;
+    std::from_chars(match.data(), match.data() + match.size(), res);
+    return res;
   };
 
   // Extract max distance from predicate
   if (auto match = ctre::match<MAX_DIST_IN_METERS_REGEX>(input)) {
     maxDist_ = matchToInt(match.get<"dist">());
-    AD_CORRECTNESS_CHECK(maxDist_.has_value());
   } else {
     AD_THROW(absl::StrCat("Tried to perform spatial join with unknown triple ",
                           input,

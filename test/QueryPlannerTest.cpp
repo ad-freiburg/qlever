@@ -9,6 +9,7 @@
 #include "engine/QueryPlanner.h"
 #include "engine/SpatialJoin.h"
 #include "parser/GraphPatternOperation.h"
+#include "parser/MagicServiceQuery.h"
 #include "parser/SparqlParser.h"
 #include "parser/SpatialQuery.h"
 #include "parser/data/Variable.h"
@@ -1417,7 +1418,7 @@ TEST(QueryPlanner, PathSearchPredicateNotIri) {
       "}}}}";
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(h::parseAndPlan(std::move(query), qec),
                                         HasSubstr("Predicates must be IRIs"),
-                                        parsedQuery::PathSearchException);
+                                        parsedQuery::MagicServiceException);
 }
 
 // __________________________________________________________________________
@@ -1688,7 +1689,9 @@ TEST(QueryPlanner, SpatialJoinServiceMaxDistOutside) {
                 "spatialSearch:nearestNeighbors 5 ."
                 "}}",
                 ::testing::_),
-      ::testing::ContainsRegex("Missing parameter <right>"));
+      ::testing::ContainsRegex(
+          "must have its right "
+          "variable declared inside the service using a graph pattern"));
 }
 
 TEST(QueryPlanner, SpatialJoinMultipleServiceSharedLeft) {

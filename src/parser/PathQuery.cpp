@@ -17,21 +17,7 @@ void PathQuery::addParameter(const SparqlTriple& triple) {
   TripleComponent predicate = simpleTriple.p_;
   TripleComponent object = simpleTriple.o_;
 
-  if (!predicate.isIri()) {
-    throw PathSearchException("Predicates must be IRIs");
-  }
-
-  // Get IRI without brackets
-  std::string_view iri = PATH_SEARCH_IRI.substr(0, PATH_SEARCH_IRI.size() - 1);
-
-  // Remove prefix and brackets
-  std::string predString = predicate.getIri().toStringRepresentation();
-  if (predString.starts_with(iri)) {
-    predString = predString.substr(0, iri.size() - 1);
-  } else {
-    predString = predString.substr(1);
-  }
-  predString = predString.substr(0, predString.size() - 2);
+  auto predString = extractParameterName(predicate, PATH_SEARCH_IRI);
 
   if (predString == "source") {
     sources_.push_back(std::move(object));
@@ -62,9 +48,9 @@ void PathQuery::addParameter(const SparqlTriple& triple) {
     if (!object.isIri()) {
       throw PathSearchException("The <algorithm> value has to be an IRI");
     }
-    auto objString = object.getIri().toStringRepresentation();
+    auto objString = extractParameterName(object, PATH_SEARCH_IRI);
 
-    if (objString.ends_with("allPaths>")) {
+    if (objString == "allPaths") {
       algorithm_ = PathSearchAlgorithm::ALL_PATHS;
     } else {
       throw PathSearchException(
