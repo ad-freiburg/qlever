@@ -93,7 +93,8 @@ std::optional<std::string> StringValueGetter::operator()(
 // ____________________________________________________________________________
 std::optional<LiteralOrIri> LiteralOrIriValueGetter::operator()(
     Id id, const EvaluationContext* context) const {
-  //true means that immediately returns nullopt for everything that is not a literal
+  // true means that immediately returns nullopt for everything that is not a
+  // literal
   return ExportQueryExecutionTrees::idToLiteralOrIri<false>(
       context->_qec.getIndex(), id, context->_localVocab);
 }

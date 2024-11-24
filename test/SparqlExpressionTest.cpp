@@ -777,7 +777,7 @@ TEST(SparqlExpression, substr) {
   // Invalid datatypes
   // First must be LiteralOrIri
   auto Ux = IdOrLiteralOrIri{U};
-  //checkSubstr(Ux, I(3), I(4), I(7));
+  // checkSubstr(Ux, I(3), I(4), I(7));
   checkSubstr(Ux, U, I(4), I(7));
   checkSubstr(Ux, Ux, I(4), I(7));
   // Second and third must be numeric;
@@ -787,14 +787,17 @@ TEST(SparqlExpression, substr) {
   checkSubstr(Ux, IdOrLiteralOrIri{lit("hello")}, I(4), U);
   checkSubstr(Ux, IdOrLiteralOrIri{lit("hello")}, I(4),
               IdOrLiteralOrIri{lit("bye")});
-  
-  //WithDataType  
-  checkSubstr(IdOrLiteralOrIriVec{lit("Hel", 
-    "^^<http://www.w3.org/2001/XMLSchema#string>")},
-    IdOrLiteralOrIriVec{lit("Hello", "^^<http://www.w3.org/2001/XMLSchema#string>")}, I(1), I(3));
 
-  //WithLanguageTag
-  checkSubstr(IdOrLiteralOrIriVec{lit("cha", "@en")}, IdOrLiteralOrIriVec{lit("chat", "@en")}, I(1), I(3));
+  // WithDataType
+  checkSubstr(IdOrLiteralOrIriVec{lit(
+                  "Hel", "^^<http://www.w3.org/2001/XMLSchema#string>")},
+              IdOrLiteralOrIriVec{
+                  lit("Hello", "^^<http://www.w3.org/2001/XMLSchema#string>")},
+              I(1), I(3));
+
+  // WithLanguageTag
+  checkSubstr(IdOrLiteralOrIriVec{lit("cha", "@en")},
+              IdOrLiteralOrIriVec{lit("chat", "@en")}, I(1), I(3));
 }
 
 // _____________________________________________________________________________________
