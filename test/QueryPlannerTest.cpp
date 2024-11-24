@@ -1602,7 +1602,7 @@ TEST(QueryPlanner, PathSearchWrongArgumentAlgorithm) {
       "}}}}";
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       h::parseAndPlan(std::move(query), qec),
-      HasSubstr("The <algorithm> value has to be an Iri"),
+      HasSubstr("The <algorithm> value has to be an IRI"),
       parsedQuery::PathSearchException);
 }
 

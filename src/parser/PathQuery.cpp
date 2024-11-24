@@ -59,8 +59,8 @@ void PathQuery::addParameter(const SparqlTriple& triple) {
     }
   } else {
     throw PathSearchException(
-        "Unsupported argument " + predString +
-        " in PathSearch. Supported Arguments: <source>, <target>, <start>, "
+        "Unsupported argument <" + predString +
+        "> in PathSearch. Supported Arguments: <source>, <target>, <start>, "
         "<end>, <pathColumn>, <edgeColumn>, <edgeProperty>, <algorithm>.");
   }
 }
