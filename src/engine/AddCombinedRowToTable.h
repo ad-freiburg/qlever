@@ -151,7 +151,7 @@ class AddCombinedRowToIdTable {
 
   // Flush remaining pending entries before changing the input.
   void flushBeforeInputChange() {
-    // Clear to avoid unecessary merge.
+    // Clear to avoid unnecessary merge.
     currentVocabs_ = {nullptr, nullptr};
     if (nextIndex_ != 0) {
       AD_CORRECTNESS_CHECK(inputLeftAndRight_.has_value());
