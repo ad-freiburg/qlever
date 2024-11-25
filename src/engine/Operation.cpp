@@ -183,14 +183,16 @@ CacheValue Operation::runComputationAndPrepareForCache(
   if (!result.isFullyMaterialized() &&
       !unlikelyToFitInCache(cache.getMaxSizeSingleEntry())) {
     AD_CONTRACT_CHECK(!pinned);
+    auto maxSize = RuntimeParameters().get<"lazy-result-max-cache-size">();
     result.cacheDuringConsumption(
-        [](const std::optional<Result::IdTableVocabPair>& currentIdTablePair,
-           const Result::IdTableVocabPair& newIdTable) {
+        [maxSize](
+            const std::optional<Result::IdTableVocabPair>& currentIdTablePair,
+            const Result::IdTableVocabPair& newIdTable) {
           auto currentSize =
               currentIdTablePair.has_value()
                   ? CacheValue::getSize(currentIdTablePair.value().idTable_)
                   : 0_B;
-          return RuntimeParameters().get<"lazy-result-max-cache-size">() >=
+          return maxSize >=
                  currentSize + CacheValue::getSize(newIdTable.idTable_);
         },
         [runtimeInfo = getRuntimeInfoPointer(), &cache,

@@ -12,6 +12,7 @@
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
+#include "util/RuntimeParametersTestHelpers.h"
 
 using namespace ad_utility::testing;
 using namespace ::testing;
@@ -583,21 +584,24 @@ TEST(Operation, checkLazyOperationIsNotCachedIfTooLarge) {
 
   ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
 
-  auto originalSize = RuntimeParameters().get<"lazy-result-max-cache-size">();
+  std::optional<CacheValue> cacheValue = std::nullopt;
+  {
+    // Too small for storage, make sure to change back before consuming
+    // generator to additionally assert sure it is not re-read on every
+    // iteration.
+    auto cleanup =
+        setRuntimeParameterForTest<"lazy-result-max-cache-size">(1_B);
 
-  // Too small for storage
-  RuntimeParameters().set<"lazy-result-max-cache-size">(1_B);
-
-  auto cacheValue = valuesForTesting.runComputationAndPrepareForCache(
-      timer, ComputationMode::LAZY_IF_SUPPORTED, "test", false);
-  EXPECT_FALSE(qec->getQueryTreeCache().cacheContains("test"));
+    cacheValue = valuesForTesting.runComputationAndPrepareForCache(
+        timer, ComputationMode::LAZY_IF_SUPPORTED, "test", false);
+    EXPECT_FALSE(qec->getQueryTreeCache().cacheContains("test"));
+  }
 
   for ([[maybe_unused]] Result::IdTableVocabPair& _ :
-       cacheValue.resultTable().idTables()) {
+       cacheValue->resultTable().idTables()) {
   }
 
   EXPECT_FALSE(qec->getQueryTreeCache().cacheContains("test"));
-  RuntimeParameters().set<"lazy-result-max-cache-size">(originalSize);
 }
 
 // _____________________________________________________________________________
