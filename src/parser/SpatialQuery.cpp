@@ -43,18 +43,21 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
       // a more precise error description
       throw SpatialSearchException(
           "The parameter <algorithm> needs an IRI that selects the algorithm "
-          "to employ. Currently supported are <baseline> and <s2>.");
+          "to employ. Currently supported are <baseline>, <s2> or "
+          "<boundingBox>.");
     }
     auto algo = extractParameterName(object, SPATIAL_SEARCH_IRI);
     if (algo == "baseline") {
       algo_ = SpatialJoinAlgorithm::BASELINE;
     } else if (algo == "s2") {
       algo_ = SpatialJoinAlgorithm::S2_GEOMETRY;
+    } else if (algo == "boundingBox") {
+      algo_ = SpatialJoinAlgorithm::BOUNDING_BOX;
     } else {
       throw SpatialSearchException(
           "The IRI given for the parameter <algorithm> does not refer to a "
           "supported spatial search algorithm. Please select either "
-          "<baseline> or <s2>.");
+          "<baseline>, <s2> or <boundingBox>.");
     }
   } else if (predString == "payload") {
     payloadVariables_.push_back(getVariable("payload", object));

@@ -379,6 +379,9 @@ Result SpatialJoin::computeResult([[maybe_unused]] bool requestLaziness) {
     if (std::get_if<MaxDistanceConfig>(&config_->task_)) {
       return algorithms.BoundingBoxAlgorithm();
     } else {
+      addWarning(
+          "The bounding box spatial join algorithm does not support nearest "
+          "neighbor search. Using s2 geometry algorithm instead.");
       return algorithms.S2geometryAlgorithm();
     }
   } else {
