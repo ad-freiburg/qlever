@@ -348,7 +348,9 @@ class QueryPlanner {
       const SubtreePlan& a, const SubtreePlan& b,
       const std::vector<std::array<ColumnIndex, 2>>& jcs);
 
-  // Helper to check if subtree plans are spatial join
+  // Helper that returns `true` for each of the subtree plans `a` and `b` iff
+  // the subtree plan is a spatial join and it is not yet fully constructed
+  // (it does not have both children set)
   [[nodiscard]] static std::pair<bool, bool> checkSpatialJoin(
       const SubtreePlan& a, const SubtreePlan& b);
 
