@@ -96,12 +96,18 @@ class SpatialJoin : public Operation {
   // purposes
   std::optional<size_t> getMaxResults() const;
 
-  void selectAlgorithm(bool useBaselineAlgorithm) {
-    useBaselineAlgorithm_ = useBaselineAlgorithm;
-  }
+  // options which can be used for the algorithm, which calculates the result
+  enum class Algorithm { Baseline, S2Geometry, BoundingBox };
+
+  void selectAlgorithm(Algorithm algorithm) { algorithm_ = algorithm; }
 
   std::pair<size_t, size_t> onlyForTestingGetConfig() const {
     return std::pair{getMaxDist().value_or(-1), getMaxResults().value_or(-1)};
+  }
+
+  std::variant<NearestNeighborsConfig, MaxDistanceConfig>
+  onlyForTestingGetActualConfig() const {
+    return config_;
   }
 
   std::shared_ptr<QueryExecutionTree> onlyForTestingGetLeftChild() const {
@@ -135,5 +141,5 @@ class SpatialJoin : public Operation {
   // between the two objects
   bool addDistToResult_ = true;
   const string nameDistanceInternal_ = "?distOfTheTwoObjectsAddedInternally";
-  bool useBaselineAlgorithm_ = false;
+  Algorithm algorithm_ = Algorithm::S2Geometry;
 };
