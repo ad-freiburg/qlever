@@ -4,6 +4,7 @@
 
 #include "parser/SpatialQuery.h"
 
+#include "engine/SpatialJoin.h"
 #include "parser/MagicServiceIriConstants.h"
 
 namespace parsedQuery {
@@ -55,11 +56,14 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
           "supported spatial search algorithm. Please select either "
           "<baseline> or <s2>.");
     }
+  } else if (predString == "payload") {
+    payloadVariables_.push_back(getVariable("payload", object));
   } else {
     throw SpatialSearchException(
         "Unsupported argument " + predString +
         " in Spatial Search. Supported Arguments: <left>, <right>, "
-        "<nearestNeighbors>, <maxDistance>, <bindDistance> and <algorithm>.");
+        "<nearestNeighbors>, <maxDistance>, <bindDistance>, <payload> and "
+        "<algorithm>.");
   }
 }
 
@@ -85,6 +89,12 @@ SpatialJoinConfiguration SpatialQuery::toSpatialJoinConfiguration() const {
         "variable declared inside the service using a graph pattern: SERVICE "
         "spatialSearch: { [Config Triples] { <Something> <ThatSelects> ?right "
         "} }.");
+  } else if (!childGraphPattern_.has_value() && !payloadVariables_.empty()) {
+    throw SpatialSearchException(
+        "The right variable for the spatial search is declared outside the "
+        "SERVICE, but the <payload> parameter was set. Please move the "
+        "declaration of the right variable into the SERVICE if you wish to use "
+        "<payload>.");
   }
 
   // Default algorithm
@@ -93,15 +103,24 @@ SpatialJoinConfiguration SpatialQuery::toSpatialJoinConfiguration() const {
     algo = algo_.value();
   }
 
-  if (maxResults_.has_value()) {
-    return SpatialJoinConfiguration{
-        NearestNeighborsConfig{maxResults_.value(), maxDist_}, left_.value(),
-        right_.value(), distanceVariable_, algo};
+  // Payload variables
+  PayloadVariables pv;
+  if (!childGraphPattern_.has_value()) {
+    pv = PayloadAllVariables{};
   } else {
-    return SpatialJoinConfiguration{MaxDistanceConfig{maxDist_.value()},
-                                    left_.value(), right_.value(),
-                                    distanceVariable_, algo};
+    pv = payloadVariables_;
   }
+
+  // Task specification
+  SpatialJoinTask task;
+  if (maxResults_.has_value()) {
+    task = NearestNeighborsConfig{maxResults_.value(), maxDist_};
+  } else {
+    task = MaxDistanceConfig{maxDist_.value()};
+  }
+
+  return SpatialJoinConfiguration{
+      task, left_.value(), right_.value(), distanceVariable_, pv, algo};
 }
 
 // ____________________________________________________________________________

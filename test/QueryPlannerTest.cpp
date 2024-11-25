@@ -1658,6 +1658,18 @@ TEST(QueryPlanner, SpatialJoinService) {
       "_:config spatialSearch:left ?y ."
       "{ ?a <p> ?b } }}",
       h::SpatialJoin(-1, 5, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+  h::expect(
+      "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+      "SELECT * WHERE {"
+      "?x <p> ?y."
+      "SERVICE spatialSearch: {"
+      "_:config spatialSearch:algorithm spatialSearch:s2 ;"
+      "spatialSearch:right ?b ;"
+      "spatialSearch:nearestNeighbors 5 . "
+      "_:config spatialSearch:left ?y ."
+      "_:config spatialSearch:payload ?a ."
+      "{ ?a <p> ?b } }}",
+      h::SpatialJoin(-1, 5, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
 }
 
 TEST(QueryPlanner, SpatialJoinServiceMaxDistOutside) {
@@ -1693,6 +1705,23 @@ TEST(QueryPlanner, SpatialJoinServiceMaxDistOutside) {
       ::testing::ContainsRegex(
           "must have its right "
           "variable declared inside the service using a graph pattern"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("PREFIX spatialSearch: "
+                "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+                "SELECT * WHERE {"
+                "?a <p> ?b ."
+                "?x <p> ?y ."
+                "SERVICE spatialSearch: {"
+                "_:config spatialSearch:algorithm spatialSearch:s2 ;"
+                "spatialSearch:left ?y ;"
+                "spatialSearch:right ?b ;"
+                "spatialSearch:maxDistance 1 ; "
+                "spatialSearch:payload ?a ."
+                "}}",
+                ::testing::_),
+      ::testing::ContainsRegex(
+          "right variable for the spatial search is declared outside the "
+          "SERVICE, but the <payload> parameter was set"));
 }
 
 TEST(QueryPlanner, SpatialJoinMultipleServiceSharedLeft) {
@@ -1899,6 +1928,20 @@ TEST(QueryPlanner, SpatialJoinIncorrectConfigValues) {
                 "}}",
                 ::testing::_),
       ::testing::ContainsRegex("<bindDistance> has to be a variable"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("PREFIX spatialSearch: "
+                "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+                "SELECT * WHERE {"
+                "?x <p> ?y ."
+                "SERVICE spatialSearch: {"
+                "_:config spatialSearch:right ?b ;"
+                "spatialSearch:left ?y ;"
+                "spatialSearch:maxDistance 5 ;"
+                "spatialSearch:payload 123 ."
+                " { ?a <p> ?b . }"
+                "}}",
+                ::testing::_),
+      ::testing::ContainsRegex("<payload> has to be a variable"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       h::expect("PREFIX spatialSearch: "
                 "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"

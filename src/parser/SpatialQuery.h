@@ -31,6 +31,16 @@ struct SpatialQuery : MagicServiceQuery {
   // search results is bound
   std::optional<Variable> distanceVariable_;
 
+  // A list of variables from the right join table that shall be part of the
+  // result table. If empty, only the join column - given by `right_` - will
+  // be in the result together with the all left columns and (optionally) the
+  // distance variable. If the `right_` variable is selected outside of the
+  // SERVICE statement (which is allowed for only maxDist spatial joins), than
+  // this vector is required to be empty - the user may not specify the payload
+  // configuration parameter. It will then be automatically set to
+  // `PayloadAllVariables` to ensure appropriate semantics.
+  std::vector<Variable> payloadVariables_;
+
   // Optional further argument: the join algorithm. If it is not given, the
   // default algorithm is used implicitly.
   std::optional<SpatialJoinAlgorithm> algo_;

@@ -24,6 +24,8 @@ namespace {  // anonymous namespace to avoid linker problems
 using namespace ad_utility::testing;
 using namespace SpatialJoinTestHelpers;
 
+// TODO<ullingerc> Test payload variables
+
 // Shortcut for SpatialJoin task parameters
 using SJ = std::variant<NearestNeighborsConfig, MaxDistanceConfig>;
 

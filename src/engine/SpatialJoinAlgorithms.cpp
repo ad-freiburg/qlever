@@ -53,19 +53,22 @@ void SpatialJoinAlgorithms::addResultTableEntry(IdTable* result,
                                                 const IdTable* idTableRight,
                                                 size_t rowLeft, size_t rowRight,
                                                 Id distance) const {
-  // this lambda function copies elements from copyFrom
-  // into the table res. It copies them into the row
-  // rowIndRes and column column colIndRes. It returns the column number
-  // until which elements were copied
+  // this lambda function copies values from copyFrom into the table res only if
+  // the column of the value is specified in sourceColumns. If sourceColumns is
+  // nullopt, all columns are added. It copies them into the row rowIndRes and
+  // column column colIndRes. It returns the column number until which elements
+  // were copied
   auto addColumns = [](IdTable* res, const IdTable* copyFrom, size_t rowIndRes,
-                       size_t colIndRes, size_t rowIndCopy) {
-    size_t col = 0;
-    while (col < copyFrom->numColumns()) {
-      res->at(rowIndRes, colIndRes) = (*copyFrom).at(rowIndCopy, col);
-      colIndRes += 1;
-      col += 1;
+                       size_t colIndRes, size_t rowIndCopy,
+                       std::optional<std::vector<ColumnIndex>> sourceColumns =
+                           std::nullopt) {
+    size_t nCols = sourceColumns.has_value() ? sourceColumns.value().size()
+                                             : copyFrom->numColumns();
+    for (size_t i = 0; i < nCols; i++) {
+      auto col = sourceColumns.has_value() ? sourceColumns.value()[i] : i;
+      res->at(rowIndRes, colIndRes + i) = (*copyFrom).at(rowIndCopy, col);
     }
-    return colIndRes;
+    return colIndRes + nCols;
   };
 
   auto resrow = result->numRows();
@@ -73,7 +76,8 @@ void SpatialJoinAlgorithms::addResultTableEntry(IdTable* result,
   // add columns to result table
   size_t rescol = 0;
   rescol = addColumns(result, idTableLeft, resrow, rescol, rowLeft);
-  rescol = addColumns(result, idTableRight, resrow, rescol, rowRight);
+  rescol = addColumns(result, idTableRight, resrow, rescol, rowRight,
+                      params_.rightSelectedCols_);
 
   if (config_->distanceVariable_.has_value()) {
     result->at(resrow, rescol) = distance;
@@ -89,7 +93,8 @@ void SpatialJoinAlgorithms::addResultTableEntry(IdTable* result,
 // ____________________________________________________________________________
 Result SpatialJoinAlgorithms::BaselineAlgorithm() {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
-              rightJoinCol, numColumns, maxDist, maxResults] = params_;
+              rightJoinCol, rightSelectedCols, numColumns, maxDist,
+              maxResults] = params_;
   IdTable result{numColumns, qec_->getAllocator()};
 
   // cartesian product between the two tables, pairs are restricted according to
@@ -156,7 +161,8 @@ Result SpatialJoinAlgorithms::BaselineAlgorithm() {
 // ____________________________________________________________________________
 Result SpatialJoinAlgorithms::S2geometryAlgorithm() {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
-              rightJoinCol, numColumns, maxDist, maxResults] = params_;
+              rightJoinCol, rightSelectedCols, numColumns, maxDist,
+              maxResults] = params_;
   IdTable result{numColumns, qec_->getAllocator()};
 
   // Helper function to convert `GeoPoint` to `S2Point`

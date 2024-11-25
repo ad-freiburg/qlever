@@ -3,6 +3,7 @@
 //  Author: @Jonathan24680
 //  Author: Christoph Ullinger <ullingec@informatik.uni-freiburg.de>
 
+#include <absl/strings/str_cat.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <s2/s2earth.h>
@@ -22,6 +23,7 @@
 #include "engine/Join.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/SpatialJoin.h"
+#include "engine/VariableToColumnMap.h"
 #include "global/Constants.h"
 #include "parser/data/Variable.h"
 

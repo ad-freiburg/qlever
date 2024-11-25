@@ -20,6 +20,13 @@ struct NearestNeighborsConfig {
 struct MaxDistanceConfig {
   size_t maxDist_;
 };
+using SpatialJoinTask = std::variant<NearestNeighborsConfig, MaxDistanceConfig>;
+
+// Configuration to select which columns of the right join table should be
+// part of the result.
+struct PayloadAllVariables {};
+using PayloadVariables =
+    std::variant<PayloadAllVariables, std::vector<Variable>>;
 
 // Selection of a SpatialJoin algorithm
 enum class SpatialJoinAlgorithm {
@@ -33,7 +40,7 @@ const SpatialJoinAlgorithm SPATIAL_JOIN_DEFAULT_ALGORITHM =
 // The configuration object that will be provided by the special SERVICE.
 struct SpatialJoinConfiguration {
   // The task defines search parameters
-  std::variant<NearestNeighborsConfig, MaxDistanceConfig> task_;
+  SpatialJoinTask task_;
 
   // The variables for the two tables to be joined
   Variable left_;
@@ -42,6 +49,11 @@ struct SpatialJoinConfiguration {
   // If given, the distance will be added to the result and be bound to this
   // variable.
   std::optional<Variable> distanceVariable_ = std::nullopt;
+
+  // If given a vector of variables, the selected variables will be part of the
+  // result table - the join column will automatically be part of the result.
+  // You may use PayloadAllVariables to select all columns of the right table.
+  PayloadVariables payloadVariables_ = PayloadAllVariables{};
 
   // Choice of algorithm. Both algorithms have equal results, but different
   // runtime characteristics.
@@ -56,6 +68,7 @@ struct PreparedSpatialJoinParams {
   std::shared_ptr<const Result> resultRight_;
   ColumnIndex leftJoinCol_;
   ColumnIndex rightJoinCol_;
+  std::vector<ColumnIndex> rightSelectedCols_;
   size_t numColumns_;
   std::optional<size_t> maxDist_;
   std::optional<size_t> maxResults_;
@@ -147,6 +160,11 @@ class SpatialJoin : public Operation {
   }
 
  private:
+  // helper function to generate a variable to column map from `childRight_`
+  // that only contains the columns selected by `config_->payloadVariables_`
+  // and excluding the `config_->right_` variable.
+  VariableToColumnMap getVarColMapPayloadVars(bool withJoinCol = false) const;
+
   // helper function, to initialize various required objects for both algorithms
   PreparedSpatialJoinParams prepareJoin() const;
 
