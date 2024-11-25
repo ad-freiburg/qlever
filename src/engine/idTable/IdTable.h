@@ -466,9 +466,9 @@ class IdTable {
   }
 
   // Move or clone returns a copied or moved IdTable depending on the value
-  // categroy of `*this`. The typical usage is
+  // category of `*this`. The typical usage is
   // `auto newTable = AD_FWD(oldTable).moveOrClone()` which is equivalent to the
-  // pattern `auto newX = AD_FWD(oldX)` where the type is copy constructible
+  // pattern `auto newX = AD_FWD(oldX)` where the type is copy-constructible
   // (which `IdTable` is not.).
   auto moveOrClone() const& requires isCloneable { return clone(); }
   IdTable&& moveOrClone() && requires isCloneable { return std::move(*this); }

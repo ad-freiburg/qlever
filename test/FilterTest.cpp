@@ -7,6 +7,8 @@
 #include "engine/Filter.h"
 #include "engine/ValuesForTesting.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
+#include "engine/sparqlExpressions/NaryExpression.h"
+#include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
 
@@ -133,4 +135,41 @@ TEST(Filter,
   EXPECT_EQ(
       result->idTable(),
       makeIdTableFromVector({{true}, {true}, {true}, {true}, {true}}, asBool));
+}
+
+template <typename Expr, typename... Args>
+static constexpr auto make(Args&&... args) {
+  return std::make_unique<Expr>(AD_FWD(args)...);
+}
+
+// _____________________________________________________________________________
+TEST(Filter, lazyChildMaterializedResultBinaryFilter) {
+  QueryExecutionContext* qec = ad_utility::testing::getQec();
+  qec->getQueryTreeCache().clearAll();
+  std::vector<IdTable> idTables;
+  auto I = ad_utility::testing::IntId;
+  idTables.push_back(makeIdTableFromVector({{1}, {2}, {3}, {3}, {4}}, I));
+  idTables.push_back(makeIdTableFromVector({{4}, {5}}, I));
+  idTables.push_back(makeIdTableFromVector({{6}, {7}}, I));
+  idTables.push_back(makeIdTableFromVector({{8}, {8}}, I));
+
+  auto varX = Variable{"?x"};
+  using namespace sparqlExpression;
+  auto expr = makeUnaryNegateExpression(
+      make<LessThanExpression>(std::array<SparqlExpression::Ptr, 2>{
+          make<VariableExpression>(varX), make<IdExpression>(I(5))}));
+
+  ValuesForTesting values{
+      qec, std::move(idTables), {Variable{"?x"}}, false, {0}};
+  QueryExecutionTree subTree{
+      qec, std::make_shared<ValuesForTesting>(std::move(values))};
+  Filter filter{qec,
+                std::make_shared<QueryExecutionTree>(std::move(subTree)),
+                {std::move(expr), "!?x < 5"}};
+
+  auto result = filter.getResult(false, ComputationMode::FULLY_MATERIALIZED);
+  ASSERT_TRUE(result->isFullyMaterialized());
+
+  EXPECT_EQ(result->idTable(),
+            makeIdTableFromVector({{5}, {6}, {7}, {8}, {8}}, I));
 }

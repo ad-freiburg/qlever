@@ -76,8 +76,8 @@ ProtoResult Filter::computeResult(bool requestLaziness) {
   ad_utility::callFixedSize(
       width, [this, &subRes, &result, &resultLocalVocab]<int WIDTH>() {
         for (Result::IdTableVocabPair& pair : subRes->idTables()) {
-          computeFilterImpl<WIDTH>(result, std::move(pair.idTable_), pair.localVocab_,
-                                   subRes->sortedBy());
+          computeFilterImpl<WIDTH>(result, std::move(pair.idTable_),
+                                   pair.localVocab_, subRes->sortedBy());
           resultLocalVocab.mergeWith(std::span{&pair.localVocab_, 1});
         }
       });
@@ -163,7 +163,7 @@ void Filter::computeFilterImpl(IdTable& dynamicResultTable, Table&& inputTable,
             resultTable.insertAtEnd(inputTable, intervalBegin, intervalEnd);
             checkCancellation();
           }
-          AD_CONTRACT_CHECK(resultTable.size() == totalSize);
+          AD_CORRECTNESS_CHECK(resultTable.size() == totalSize);
         } else {
           // In the general case, we generate all expression results and apply
           // the `EffectiveBooleanValueGetter` to each.

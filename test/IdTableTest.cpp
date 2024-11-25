@@ -1136,6 +1136,20 @@ TEST(IdTable, addEmptyColumn) {
   EXPECT_EQ(table.getColumn(1).size(), 2);
 }
 
+// _____________________________________________________________________________
+TEST(IdTable, moveOrClone) {
+  IdTable table{1, ad_utility::makeUnlimitedAllocator<Id>()};
+  table.push_back({V(1)});
+  table.push_back({V(2)});
+
+  auto t2 = table.moveOrClone();
+  EXPECT_EQ(table, t2);
+  auto t3 = std::move(table).moveOrClone();
+  EXPECT_EQ(t3, t2);
+  // `table` was moved from.
+  EXPECT_TRUE(table.empty());
+}
+
 // Check that we can completely instantiate `IdTable`s with a different value
 // type and a different underlying storage.
 
