@@ -1639,6 +1639,18 @@ TEST(QueryPlanner, SpatialJoinService) {
       "SELECT * WHERE {"
       "?x <p> ?y."
       "SERVICE spatialSearch: {"
+      "_:config spatialSearch:algorithm spatialSearch:boundingBox ;"
+      "spatialSearch:left ?y ;"
+      "spatialSearch:right ?b ;"
+      "spatialSearch:maxDistance 100 . "
+      "{ ?a <p> ?b } }}",
+      h::SpatialJoin(100, -1, scan("?x", "<p>", "?y"),
+                     scan("?a", "<p>", "?b")));
+  h::expect(
+      "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+      "SELECT * WHERE {"
+      "?x <p> ?y."
+      "SERVICE spatialSearch: {"
       "_:config spatialSearch:algorithm spatialSearch:s2 ;"
       "spatialSearch:left ?y ;"
       "spatialSearch:right ?b ;"
@@ -1840,6 +1852,44 @@ TEST(QueryPlanner, SpatialJoinMissingConfig) {
                 ::testing::_),
       ::testing::ContainsRegex(
           "Neither <nearestNeighbors> nor <maxDistance> were provided"));
+}
+
+TEST(QueryPlanner, SpatialJoinInvalidOperationsInService) {
+  // Test that unallowed operations inside the SERVICE statement throw
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("PREFIX spatialSearch: "
+                "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+                "SELECT * WHERE {"
+                "?x <p> ?y."
+                "SERVICE spatialSearch: {"
+                "_:config spatialSearch:algorithm spatialSearch:s2 ;"
+                "spatialSearch:left ?y ;"
+                "spatialSearch:right ?b ;"
+                "spatialSearch:maxDistance 1 . "
+                "{ ?a <p> ?b }"
+                "SERVICE <http://example.com/> { ?a <something> <else> }"
+                " }}",
+                ::testing::_),
+      ::testing::ContainsRegex("Unsupported element in spatialQuery"));
+}
+
+TEST(QueryPlanner, SpatialJoinServiceMultipleGraphPatterns) {
+  // Test that the SERVICE statement may only contain at most one graph pattern
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("PREFIX spatialSearch: "
+                "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+                "SELECT * WHERE {"
+                "?x <p> ?y."
+                "SERVICE spatialSearch: {"
+                "_:config spatialSearch:algorithm spatialSearch:s2 ;"
+                "spatialSearch:left ?y ;"
+                "spatialSearch:right ?b ;"
+                "spatialSearch:maxDistance 1 . "
+                "{ ?a <p> ?b }"
+                "{ ?a <p2> ?c } }}",
+                ::testing::_),
+      ::testing::ContainsRegex("A magic SERVICE query must not contain more "
+                               "than one graph pattern"));
 }
 
 TEST(QueryPlanner, SpatialJoinIncorrectConfigValues) {
