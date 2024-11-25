@@ -28,7 +28,8 @@ class SpatialJoinAlgorithms {
   // initialize the Algorithm with the needed parameters
   SpatialJoinAlgorithms(QueryExecutionContext* qec,
                         PreparedSpatialJoinParams params,
-                        std::shared_ptr<SpatialJoinConfiguration> config);
+                        std::shared_ptr<SpatialJoinConfiguration> config,
+                        std::optional<SpatialJoin*> spatialJoin = std::nullopt);
   Result BaselineAlgorithm();
   Result S2geometryAlgorithm();
   Result BoundingBoxAlgorithm();
@@ -97,6 +98,7 @@ class SpatialJoinAlgorithms {
   QueryExecutionContext* qec_;
   PreparedSpatialJoinParams params_;
   std::shared_ptr<SpatialJoinConfiguration> config_;
+  std::optional<SpatialJoin*> spatialJoin_;
 
   // circumference in meters at the equator (max) and the pole (min) (as the
   // earth is not exactly a sphere the circumference is different. Note that

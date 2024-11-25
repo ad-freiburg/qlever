@@ -192,6 +192,13 @@ size_t SpatialJoin::getCostEstimate() {
       auto logm = static_cast<size_t>(
           log(static_cast<double>(childRight_->getSizeEstimate())));
       return (n * logm) + (m * logm);
+    } else if (config_->algo_ == SpatialJoinAlgorithm::BOUNDING_BOX) {
+      // TODO<Jonathan24680> The cost estimate for bounding box was missing.
+      // Please add the correct estimate here.
+      auto n = childLeft_->getSizeEstimate();
+      auto logm = static_cast<size_t>(
+          log(static_cast<double>(childRight_->getSizeEstimate())));
+      return n * logm;
     } else {
       AD_THROW("Unknown SpatialJoin Algorithm.");
     }
@@ -359,7 +366,8 @@ Result SpatialJoin::computeResult([[maybe_unused]] bool requestLaziness) {
   AD_CONTRACT_CHECK(
       isConstructed(),
       "SpatialJoin needs two children, but at least one is missing");
-  SpatialJoinAlgorithms algorithms{_executionContext, prepareJoin(), config_};
+  SpatialJoinAlgorithms algorithms{_executionContext, prepareJoin(), config_,
+                                   this};
   if (config_->algo_ == SpatialJoinAlgorithm::BASELINE) {
     return algorithms.BaselineAlgorithm();
   } else if (config_->algo_ == SpatialJoinAlgorithm::S2_GEOMETRY) {

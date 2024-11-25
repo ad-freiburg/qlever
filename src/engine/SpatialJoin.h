@@ -143,6 +143,10 @@ class SpatialJoin : public Operation {
     return std::pair{getMaxDist().value_or(-1), getMaxResults().value_or(-1)};
   }
 
+  std::shared_ptr<SpatialJoinConfiguration> onlyForTestingGetConfig() const {
+    return config_;
+  }
+
   std::optional<Variable> onlyForTestingGetDistanceVariable() const {
     return config_->distanceVariable_;
   }

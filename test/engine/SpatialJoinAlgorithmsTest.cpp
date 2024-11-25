@@ -232,7 +232,7 @@ class SpatialJoinParamTest
   }
 
   void testDiffSizeIdTables(
-      std::string specialPredicate, bool addLeftChildFirst,
+      SJ task, bool addLeftChildFirst,
       std::vector<std::vector<std::string>> expectedOutput,
       std::vector<std::string> columnNames, bool bigChildLeft) {
     auto qec = buildTestQEC();
@@ -252,9 +252,9 @@ class SpatialJoinParamTest
     auto firstChild = bigChildLeft ? bigChild : smallChild;
     auto secondChild = bigChildLeft ? smallChild : bigChild;
     auto firstVariable =
-        bigChildLeft ? TripleComponent{Variable{"?point2"}} : point1;
+        bigChildLeft ? Variable{"?point2"} : point1.getVariable();
     auto secondVariable =
-        bigChildLeft ? point1 : TripleComponent{Variable{"?point2"}};
+        bigChildLeft ? point1.getVariable() : Variable{"?point2"};
 
     createAndTestSpatialJoin(qec, firstVariable, task, secondVariable,
                              firstChild, secondChild, addLeftChildFirst,
@@ -262,7 +262,7 @@ class SpatialJoinParamTest
   }
 
   void testWrongPointInInput(
-      std::string specialPredicate, bool addLeftChildFirst,
+      SJ task, bool addLeftChildFirst,
       std::vector<std::vector<std::string>> expectedOutput,
       std::vector<std::string> columnNames) {
     auto kg = createSmallDatasetWithPoints();
@@ -276,16 +276,16 @@ class SpatialJoinParamTest
     auto numTriples = qec->getIndex().numTriples().normal;
     ASSERT_EQ(numTriples, 15);
     // ====================== build inputs ================================
-    TripleComponent point1{Variable{"?point1"}};
-    TripleComponent point2{Variable{"?point2"}};
+    Variable point1{"?point1"};
+    Variable point2{"?point2"};
     auto leftChild =
         buildIndexScan(qec, {"?obj1", std::string{"<asWKT>"}, "?point1"});
     auto rightChild =
         buildIndexScan(qec, {"?obj2", std::string{"<asWKT>"}, "?point2"});
 
-    createAndTestSpatialJoin(
-        qec, SparqlTriple{point1, specialPredicate, point2}, leftChild,
-        rightChild, addLeftChildFirst, expectedOutput, columnNames, true);
+    createAndTestSpatialJoin(qec, point1, task, point2, leftChild, rightChild,
+                             addLeftChildFirst, expectedOutput, columnNames,
+                             true);
   }
 
  protected:
@@ -931,17 +931,16 @@ TEST_P(SpatialJoinParamTest, computeResultSmallDatasetDifferentSizeChildren) {
 }
 
 TEST_P(SpatialJoinParamTest, maxSizeMaxDistanceTest) {
-  auto maxDist = std::numeric_limits<long long>::max();
-  std::string maxDistStr =
-      absl::StrCat("<max-distance-in-meters:", maxDist, ">");
+  auto maxDist = std::numeric_limits<size_t>::max();
+  MaxDistanceConfig maxDistConf{maxDist};
 
   // test small children
   std::vector<std::string> columnNames{"?obj1", "?point1", "?obj2", "?point2",
                                        "?distOfTheTwoObjectsAddedInternally"};
   buildAndTestSmallTestSetSmallChildren(
-      maxDistStr, true, expectedMaxDist10000000_rows_small, columnNames);
+      maxDistConf, true, expectedMaxDist10000000_rows_small, columnNames);
   buildAndTestSmallTestSetSmallChildren(
-      maxDistStr, false, expectedMaxDist10000000_rows_small, columnNames);
+      maxDistConf, false, expectedMaxDist10000000_rows_small, columnNames);
 
   // test diff size children
   columnNames = {"?name1",
@@ -952,75 +951,76 @@ TEST_P(SpatialJoinParamTest, maxSizeMaxDistanceTest) {
                  "?point2",
                  "?distOfTheTwoObjectsAddedInternally"};
   buildAndTestSmallTestSetDiffSizeChildren(
-      maxDistStr, true, expectedMaxDist10000000_rows_diff, columnNames, false);
-  buildAndTestSmallTestSetDiffSizeChildren(
-      maxDistStr, false, expectedMaxDist10000000_rows_diff, columnNames, false);
+      maxDistConf, true, expectedMaxDist10000000_rows_diff, columnNames, false);
+  buildAndTestSmallTestSetDiffSizeChildren(maxDistConf, false,
+                                           expectedMaxDist10000000_rows_diff,
+                                           columnNames, false);
 
   // test large size children
   columnNames = {"?name1",  "?obj1",   "?geo1",
                  "?point1", "?name2",  "?obj2",
                  "?geo2",   "?point2", "?distOfTheTwoObjectsAddedInternally"};
   buildAndTestSmallTestSetLargeChildren(
-      maxDistStr, true, expectedMaxDist10000000_rows, columnNames);
+      maxDistConf, true, expectedMaxDist10000000_rows, columnNames);
   buildAndTestSmallTestSetLargeChildren(
-      maxDistStr, false, expectedMaxDist10000000_rows, columnNames);
+      maxDistConf, false, expectedMaxDist10000000_rows, columnNames);
 }
 
 TEST_P(SpatialJoinParamTest, diffSizeIdTables) {
   std::vector<std::string> columnNames{"?point1", "?obj2", "?point2",
                                        "?distOfTheTwoObjectsAddedInternally"};
-  testDiffSizeIdTables("<max-distance-in-meters:1>", true,
+  testDiffSizeIdTables(MaxDistanceConfig{1}, true,
                        expectedMaxDist1_rows_diffIDTable, columnNames, true);
-  testDiffSizeIdTables("<max-distance-in-meters:1>", true,
+  testDiffSizeIdTables(MaxDistanceConfig{1}, true,
                        expectedMaxDist1_rows_diffIDTable, columnNames, false);
-  testDiffSizeIdTables("<max-distance-in-meters:1>", false,
+  testDiffSizeIdTables(MaxDistanceConfig{1}, false,
                        expectedMaxDist1_rows_diffIDTable, columnNames, true);
-  testDiffSizeIdTables("<max-distance-in-meters:1>", false,
+  testDiffSizeIdTables(MaxDistanceConfig{1}, false,
                        expectedMaxDist1_rows_diffIDTable, columnNames, false);
-  testDiffSizeIdTables("<max-distance-in-meters:5000>", true,
+  testDiffSizeIdTables(MaxDistanceConfig{5000}, true,
                        expectedMaxDist5000_rows_diffIDTable, columnNames, true);
-  testDiffSizeIdTables("<max-distance-in-meters:5000>", true,
+  testDiffSizeIdTables(MaxDistanceConfig{5000}, true,
                        expectedMaxDist5000_rows_diffIDTable, columnNames,
                        false);
-  testDiffSizeIdTables("<max-distance-in-meters:5000>", false,
+  testDiffSizeIdTables(MaxDistanceConfig{5000}, false,
                        expectedMaxDist5000_rows_diffIDTable, columnNames, true);
-  testDiffSizeIdTables("<max-distance-in-meters:5000>", false,
+  testDiffSizeIdTables(MaxDistanceConfig{5000}, false,
                        expectedMaxDist5000_rows_diffIDTable, columnNames,
                        false);
-  testDiffSizeIdTables("<max-distance-in-meters:500000>", true,
+  testDiffSizeIdTables(MaxDistanceConfig{500000}, true,
                        expectedMaxDist500000_rows_diffIDTable, columnNames,
                        true);
-  testDiffSizeIdTables("<max-distance-in-meters:500000>", true,
+  testDiffSizeIdTables(MaxDistanceConfig{500000}, true,
                        expectedMaxDist500000_rows_diffIDTable, columnNames,
                        false);
-  testDiffSizeIdTables("<max-distance-in-meters:500000>", false,
+  testDiffSizeIdTables(MaxDistanceConfig{500000}, false,
                        expectedMaxDist500000_rows_diffIDTable, columnNames,
                        true);
-  testDiffSizeIdTables("<max-distance-in-meters:500000>", false,
+  testDiffSizeIdTables(MaxDistanceConfig{500000}, false,
                        expectedMaxDist500000_rows_diffIDTable, columnNames,
                        false);
-  testDiffSizeIdTables("<max-distance-in-meters:1000000>", true,
+  testDiffSizeIdTables(MaxDistanceConfig{1000000}, true,
                        expectedMaxDist1000000_rows_diffIDTable, columnNames,
                        true);
-  testDiffSizeIdTables("<max-distance-in-meters:1000000>", true,
+  testDiffSizeIdTables(MaxDistanceConfig{1000000}, true,
                        expectedMaxDist1000000_rows_diffIDTable, columnNames,
                        false);
-  testDiffSizeIdTables("<max-distance-in-meters:1000000>", false,
+  testDiffSizeIdTables(MaxDistanceConfig{1000000}, false,
                        expectedMaxDist1000000_rows_diffIDTable, columnNames,
                        true);
-  testDiffSizeIdTables("<max-distance-in-meters:1000000>", false,
+  testDiffSizeIdTables(MaxDistanceConfig{1000000}, false,
                        expectedMaxDist1000000_rows_diffIDTable, columnNames,
                        false);
-  testDiffSizeIdTables("<max-distance-in-meters:10000000>", true,
+  testDiffSizeIdTables(MaxDistanceConfig{10000000}, true,
                        expectedMaxDist10000000_rows_diffIDTable, columnNames,
                        true);
-  testDiffSizeIdTables("<max-distance-in-meters:10000000>", true,
+  testDiffSizeIdTables(MaxDistanceConfig{10000000}, true,
                        expectedMaxDist10000000_rows_diffIDTable, columnNames,
                        false);
-  testDiffSizeIdTables("<max-distance-in-meters:10000000>", false,
+  testDiffSizeIdTables(MaxDistanceConfig{10000000}, false,
                        expectedMaxDist10000000_rows_diffIDTable, columnNames,
                        true);
-  testDiffSizeIdTables("<max-distance-in-meters:10000000>", false,
+  testDiffSizeIdTables(MaxDistanceConfig{10000000}, false,
                        expectedMaxDist10000000_rows_diffIDTable, columnNames,
                        false);
 }
@@ -1029,41 +1029,40 @@ TEST_P(SpatialJoinParamTest, wrongPointInInput) {
   // expected behavior: point is skipped
   std::vector<std::string> columnNames{"?obj1", "?point1", "?obj2", "?point2",
                                        "?distOfTheTwoObjectsAddedInternally"};
-  testWrongPointInInput("<max-distance-in-meters:1>", true,
+  testWrongPointInInput(MaxDistanceConfig{1}, true,
                         expectedMaxDist1_rows_small_wrong_point, columnNames);
-  testWrongPointInInput("<max-distance-in-meters:1>", false,
+  testWrongPointInInput(MaxDistanceConfig{1}, false,
                         expectedMaxDist1_rows_small_wrong_point, columnNames);
-  testWrongPointInInput("<max-distance-in-meters:5000>", true,
+  testWrongPointInInput(MaxDistanceConfig{5000}, true,
                         expectedMaxDist5000_rows_small_wrong_point,
                         columnNames);
-  testWrongPointInInput("<max-distance-in-meters:5000>", false,
+  testWrongPointInInput(MaxDistanceConfig{5000}, false,
                         expectedMaxDist5000_rows_small_wrong_point,
                         columnNames);
-  testWrongPointInInput("<max-distance-in-meters:500000>", true,
+  testWrongPointInInput(MaxDistanceConfig{500000}, true,
                         expectedMaxDist500000_rows_small_wrong_point,
                         columnNames);
-  testWrongPointInInput("<max-distance-in-meters:500000>", false,
+  testWrongPointInInput(MaxDistanceConfig{500000}, false,
                         expectedMaxDist500000_rows_small_wrong_point,
                         columnNames);
-  testWrongPointInInput("<max-distance-in-meters:1000000>", true,
+  testWrongPointInInput(MaxDistanceConfig{1000000}, true,
                         expectedMaxDist1000000_rows_small_wrong_point,
                         columnNames);
-  testWrongPointInInput("<max-distance-in-meters:1000000>", false,
+  testWrongPointInInput(MaxDistanceConfig{1000000}, false,
                         expectedMaxDist1000000_rows_small_wrong_point,
                         columnNames);
-  testWrongPointInInput("<max-distance-in-meters:10000000>", true,
+  testWrongPointInInput(MaxDistanceConfig{10000000}, true,
                         expectedMaxDist10000000_rows_small_wrong_point,
                         columnNames);
-  testWrongPointInInput("<max-distance-in-meters:10000000>", false,
+  testWrongPointInInput(MaxDistanceConfig{10000000}, false,
                         expectedMaxDist10000000_rows_small_wrong_point,
                         columnNames);
 }
 
-INSTANTIATE_TEST_SUITE_P(
-    SpatialJoin, SpatialJoinParamTest,
-    ::testing::Values(SpatialJoin::Algorithm::Baseline,
-                      SpatialJoin::Algorithm::S2Geometry,
-                      SpatialJoin::Algorithm::BoundingBox));
+INSTANTIATE_TEST_SUITE_P(SpatialJoin, SpatialJoinParamTest,
+                         ::testing::Values(SpatialJoinAlgorithm::BASELINE,
+                                           SpatialJoinAlgorithm::S2_GEOMETRY,
+                                           SpatialJoinAlgorithm::BOUNDING_BOX));
 
 }  // end of Namespace computeResultTest
 
@@ -1132,14 +1131,24 @@ void testBoundingBox(const size_t& maxDistInMeters, const Point& startPoint) {
     }
   };
 
-  PreparedSpatialJoinParams params{
-      nullptr, nullptr, nullptr,         nullptr,     0,
-      0,       1,       maxDistInMeters, std::nullopt};
+  PreparedSpatialJoinParams params{nullptr,
+                                   nullptr,
+                                   nullptr,
+                                   nullptr,
+                                   0,
+                                   0,
+                                   std::vector<ColumnIndex>{},
+                                   1,
+                                   maxDistInMeters,
+                                   std::nullopt};
 
-  std::variant<NearestNeighborsConfig, MaxDistanceConfig> config{
+  std::variant<NearestNeighborsConfig, MaxDistanceConfig> task{
       MaxDistanceConfig{maxDistInMeters}};
+  SpatialJoinConfiguration config{task, Variable{"?x"}, Variable{"?y"}};
 
-  SpatialJoinAlgorithms spatialJoinAlgs{buildTestQEC(), params, true, config};
+  SpatialJoinAlgorithms spatialJoinAlgs{
+      buildTestQEC(), params,
+      std::make_shared<SpatialJoinConfiguration>(config)};
 
   std::vector<Box> bbox =
       spatialJoinAlgs.OnlyForTestingWrapperComputeBoundingBox(startPoint);
@@ -1216,23 +1225,30 @@ TEST(SpatialJoin, isContainedInBoundingBoxes) {
   // build dummy join to access the containedInBoundingBox and
   // computeBoundingBox functions
   auto qec = buildTestQEC();
-  auto spatialJoinTriple = SparqlTriple{TripleComponent{Variable{"?point1"}},
-                                        "<max-distance-in-meters:1000>",
-                                        TripleComponent{Variable{"?point2"}}};
+  MaxDistanceConfig task{1000};
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
-      ad_utility::makeExecutionTree<SpatialJoin>(qec, spatialJoinTriple,
-                                                 std::nullopt, std::nullopt);
+      ad_utility::makeExecutionTree<SpatialJoin>(
+          qec,
+          std::make_shared<SpatialJoinConfiguration>(task, Variable{"?point1"},
+                                                     Variable{"?point2"}),
+          std::nullopt, std::nullopt);
 
   std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
   SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
 
-  PreparedSpatialJoinParams params{
-      nullptr,     nullptr, nullptr, nullptr,
-      0,           0,       1,       spatialJoin->getMaxDist(),
-      std::nullopt};
+  PreparedSpatialJoinParams params{nullptr,
+                                   nullptr,
+                                   nullptr,
+                                   nullptr,
+                                   0,
+                                   0,
+                                   std::vector<ColumnIndex>{},
+                                   1,
+                                   spatialJoin->getMaxDist(),
+                                   std::nullopt};
 
-  SpatialJoinAlgorithms spatialJoinAlgs{
-      qec, params, true, spatialJoin->onlyForTestingGetActualConfig()};
+  SpatialJoinAlgorithms spatialJoinAlgs{qec, params,
+                                        spatialJoin->onlyForTestingGetConfig()};
 
   // note that none of the boxes is overlapping, therefore we can check, that
   // none of the points which should be contained in one box are contained in

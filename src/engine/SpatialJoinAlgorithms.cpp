@@ -22,8 +22,12 @@ using namespace BoostGeometryNamespace;
 // ____________________________________________________________________________
 SpatialJoinAlgorithms::SpatialJoinAlgorithms(
     QueryExecutionContext* qec, PreparedSpatialJoinParams params,
-    std::shared_ptr<SpatialJoinConfiguration> config)
-    : qec_{qec}, params_{std::move(params)}, config_{config} {}
+    std::shared_ptr<SpatialJoinConfiguration> config,
+    std::optional<SpatialJoin*> spatialJoin)
+    : qec_{qec},
+      params_{std::move(params)},
+      config_{config},
+      spatialJoin_{spatialJoin} {}
 
 // ____________________________________________________________________________
 std::optional<GeoPoint> SpatialJoinAlgorithms::getPoint(const IdTable* restable,
@@ -241,7 +245,8 @@ Result SpatialJoinAlgorithms::S2geometryAlgorithm() {
 std::vector<Box> SpatialJoinAlgorithms::computeBoundingBox(
     const Point& startPoint) const {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
-              rightJoinCol, numColumns, maxDist, maxResults] = params_;
+              rightJoinCol, rightSelectedCols, numColumns, maxDist,
+              maxResults] = params_;
   AD_CORRECTNESS_CHECK(maxDist.has_value(),
                        "Max distance must have a value for this operation");
   // haversine function
@@ -323,7 +328,8 @@ std::vector<Box> SpatialJoinAlgorithms::computeBoundingBox(
 std::vector<Box> SpatialJoinAlgorithms::computeBoundingBoxForLargeDistances(
     const Point& startPoint) const {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
-              rightJoinCol, numColumns, maxDist, maxResults] = params_;
+              rightJoinCol, rightSelectedCols, numColumns, maxDist,
+              maxResults] = params_;
   AD_CORRECTNESS_CHECK(maxDist.has_value(),
                        "Max distance must have a value for this operation");
 
@@ -458,7 +464,8 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
   };
 
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
-              rightJoinCol, numColumns, maxDist, maxResults] = params_;
+              rightJoinCol, rightSelectedCols, numColumns, maxDist,
+              maxResults] = params_;
   IdTable result{numColumns, qec_->getAllocator()};
 
   // create r-tree for smaller result table
@@ -519,8 +526,8 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
       }
       auto distance = computeDist(idTableLeft, idTableRight, rowLeft, rowRight,
                                   leftJoinCol, rightJoinCol);
-      AD_CORRECTNESS_CHECK(distance.getDatatype() == Datatype::Int);
-      if (distance.getInt() <= maxDist) {
+      AD_CORRECTNESS_CHECK(distance.getDatatype() == Datatype::Double);
+      if (distance.getDouble() * 1000 <= static_cast<double>(maxDist.value())) {
         addResultTableEntry(&result, idTableLeft, idTableRight, rowLeft,
                             rowRight, distance);
       }
