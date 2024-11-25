@@ -8,6 +8,7 @@
 #include "QueryPlannerTestHelpers.h"
 #include "engine/QueryPlanner.h"
 #include "engine/SpatialJoin.h"
+#include "gmock/gmock.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/MagicServiceQuery.h"
 #include "parser/SparqlParser.h"
@@ -1706,10 +1707,15 @@ TEST(QueryPlanner, SpatialJoinMultipleServiceSharedLeft) {
       "?y <max-distance-in-meters:500> ?c ."
       "?ac <p2> ?c ."
       "}",
-      h::SpatialJoin(100, -1,
-                     h::SpatialJoin(500, -1, scan("?x", "<p>", "?y"),
-                                    scan("?ac", "<p2>", "?c")),
-                     scan("?ab", "<p1>", "?b")));
+      ::testing::AnyOf(
+          h::SpatialJoin(100, -1,
+                         h::SpatialJoin(500, -1, scan("?x", "<p>", "?y"),
+                                        scan("?ac", "<p2>", "?c")),
+                         scan("?ab", "<p1>", "?b")),
+          h::SpatialJoin(500, -1,
+                         h::SpatialJoin(100, -1, scan("?x", "<p>", "?y"),
+                                        scan("?ab", "<p1>", "?b")),
+                         scan("?ac", "<p2>", "?c"))));
   h::expect(
       "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
       "SELECT * WHERE {"
@@ -1732,10 +1738,15 @@ TEST(QueryPlanner, SpatialJoinMultipleServiceSharedLeft) {
       "  { ?ac <p2> ?c }"
       " }"
       "}",
-      h::SpatialJoin(500, 5,
-                     h::SpatialJoin(-1, 5, scan("?x", "<p>", "?y"),
-                                    scan("?ac", "<p2>", "?c")),
-                     scan("?ab", "<p1>", "?b")));
+      ::testing::AnyOf(
+          h::SpatialJoin(500, 5,
+                         h::SpatialJoin(-1, 5, scan("?x", "<p>", "?y"),
+                                        scan("?ab", "<p1>", "?b")),
+                         scan("?ac", "<p2>", "?c")),
+          h::SpatialJoin(-1, 5,
+                         h::SpatialJoin(500, 5, scan("?x", "<p>", "?y"),
+                                        scan("?ac", "<p2>", "?c")),
+                         scan("?ab", "<p1>", "?b"))));
 }
 
 TEST(QueryPlanner, SpatialJoinMissingConfig) {

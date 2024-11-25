@@ -1817,9 +1817,9 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
     return candidates;
   }
 
-  // If both sides are spatial joins, return immediately to prevent a regular
-  // join on the variables, which would lead to the spatial join never having
-  // children.
+  // If both sides are spatial joins that are still missing children, return
+  // immediately to prevent a regular join on the variables, which would lead to
+  // the spatial join never having children.
   if (checkSpatialJoin(a, b) == std::pair<bool, bool>{true, true}) {
     return candidates;
   }
@@ -1912,8 +1912,12 @@ std::pair<bool, bool> QueryPlanner::checkSpatialJoin(const SubtreePlan& a,
   auto bIsSpatialJoin =
       std::dynamic_pointer_cast<const SpatialJoin>(b._qet->getRootOperation());
 
-  return std::pair<bool, bool>{static_cast<bool>(aIsSpatialJoin),
-                               static_cast<bool>(bIsSpatialJoin)};
+  auto isIncompleteSpatialJoin = [](const auto& sj) {
+    return sj != nullptr && !sj->isConstructed();
+  };
+
+  return {isIncompleteSpatialJoin(aIsSpatialJoin),
+          isIncompleteSpatialJoin(bIsSpatialJoin)};
 }
 
 // _____________________________________________________________________________
