@@ -1697,7 +1697,6 @@ TEST(QueryPlanner, SpatialJoinServiceMaxDistOutside) {
 
 TEST(QueryPlanner, SpatialJoinMultipleServiceSharedLeft) {
   // Test two spatial join SERVICEs that share a common ?left variable
-  // TODO<ullingerc>
   auto scan = h::IndexScanFromStrings;
   h::expect(
       "SELECT * WHERE {"
