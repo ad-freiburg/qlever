@@ -99,6 +99,9 @@ class LocalVocab {
   // Return true if and only if the local vocabulary is empty.
   bool empty() const { return size() == 0; }
 
+  // The number of set stores (primary set and other sets).
+  size_t numSets() const { return 1 + otherWordSets_.size(); }
+
   // Get the `LocalVocabEntry` corresponding to the given `LocalVocabIndex`.
   //
   // NOTE: This used to be a more complex function but is now a simple

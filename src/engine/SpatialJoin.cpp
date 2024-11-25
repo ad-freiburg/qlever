@@ -209,7 +209,7 @@ size_t SpatialJoin::getCostEstimate() {
   if (childLeft_ && childRight_) {
     size_t inputEstimate =
         childLeft_->getSizeEstimate() * childRight_->getSizeEstimate();
-    if (useBaselineAlgorithm_) {
+    if (algorithm_ == Algorithm::Baseline) {
       return inputEstimate * inputEstimate;
     } else {
       // Let n be the size of the left table and m the size of the right table.
@@ -336,11 +336,21 @@ PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
 // ____________________________________________________________________________
 Result SpatialJoin::computeResult([[maybe_unused]] bool requestLaziness) {
   SpatialJoinAlgorithms algorithms{_executionContext, prepareJoin(),
-                                   addDistToResult_, config_};
-  if (useBaselineAlgorithm_) {
+                                   addDistToResult_, config_, this};
+  if (algorithm_ == Algorithm::Baseline) {
     return algorithms.BaselineAlgorithm();
-  } else {
+  } else if (algorithm_ == Algorithm::S2Geometry) {
     return algorithms.S2geometryAlgorithm();
+  } else {
+    AD_CORRECTNESS_CHECK(algorithm_ == Algorithm::BoundingBox);
+    // as the BoundingBoxAlgorithms only works for max distance and not for
+    // nearest neighbors, S2geometry gets called as a backup, if the query is
+    // asking for the nearest neighbors
+    if (std::get_if<MaxDistanceConfig>(&config_)) {
+      return algorithms.BoundingBoxAlgorithm();
+    } else {
+      return algorithms.S2geometryAlgorithm();
+    }
   }
 }
 
