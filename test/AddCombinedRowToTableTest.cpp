@@ -240,8 +240,11 @@ TEST(AddCombinedRowToTable, verifyLocalVocabIsUpdatedCorrectly) {
   ad_utility::AddCombinedRowToIdTable adder{
       1, std::move(outputTable),
       std::make_shared<ad_utility::CancellationHandle<>>(), 1,
-      [&localVocabs](IdTable&, LocalVocab& localVocab) {
+      [&localVocabs](IdTable& idTable, LocalVocab& localVocab) {
         localVocabs.push_back(std::move(localVocab));
+        // Clear to trigger new merging of local vocabs, in practice
+        // `localVocab` is not altered without altering `idTable` as well.
+        idTable.clear();
       }};
 
   IdTableWithVocab input1{makeIdTableFromVector({{0, 1}}),
