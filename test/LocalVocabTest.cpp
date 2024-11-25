@@ -410,3 +410,20 @@ TEST(LocalVocab, getBlankNodeIndex) {
   BlankNodeIndex b = v.getBlankNodeIndex(&bnm);
   EXPECT_NE(a, b);
 }
+
+// _____________________________________________________________________________
+TEST(LocalVocab, otherWordSetIsTransitivelyPropagated) {
+  using ad_utility::triple_component::LiteralOrIri;
+  LocalVocab original;
+  original.getIndexAndAddIfNotContained(
+      LocalVocabEntry{LiteralOrIri::literalWithoutQuotes("test")});
+
+  LocalVocab clone = original.clone();
+  LocalVocab mergeCandidate;
+  mergeCandidate.mergeWith(std::span{&clone, 1});
+
+  EXPECT_EQ(mergeCandidate.size(), 1);
+  EXPECT_THAT(mergeCandidate.getAllWordsForTesting(),
+              ::testing::UnorderedElementsAre(
+                  LiteralOrIri::literalWithoutQuotes("test")));
+}
