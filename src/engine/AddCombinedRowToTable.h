@@ -137,8 +137,8 @@ class AddCombinedRowToIdTable {
     }
   }
 
-  // Merge the vocab contained in `T` with the `mergedVocab_` and set the passed
-  // pointer reference to the proper value.
+  // Merge the local vocab contained in `T` with the `mergedVocab_` and set the
+  // passed pointer reference to that vocab.
   template <typename T>
   void mergeVocab(const T& table, const LocalVocab*& currentVocab) {
     AD_CORRECTNESS_CHECK(currentVocab == nullptr);
@@ -345,7 +345,7 @@ class AddCombinedRowToIdTable {
     std::invoke(blockwiseCallback_, result, mergedVocab_);
     // The current `IdTable`s might still be active, so we have to merge the
     // local vocabs again if all other sets were moved-out.
-    if (mergedVocab_.numSets() == 1) {
+    if (resultTable_.empty()) {
       // Make sure to reset `mergedVocab_` so it is in a valid state again.
       mergedVocab_ = LocalVocab{};
       // Only merge non-null vocabs.
