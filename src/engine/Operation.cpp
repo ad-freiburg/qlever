@@ -180,10 +180,11 @@ CacheValue Operation::runComputationAndPrepareForCache(
     const std::string& cacheKey, bool pinned) {
   auto& cache = _executionContext->getQueryTreeCache();
   auto result = runComputation(timer, computationMode);
-  if (!result.isFullyMaterialized() &&
-      !unlikelyToFitInCache(cache.getMaxSizeSingleEntry())) {
+  auto maxSize =
+      std::min(RuntimeParameters().get<"lazy-result-max-cache-size">(),
+               cache.getMaxSizeSingleEntry());
+  if (!result.isFullyMaterialized() && !unlikelyToFitInCache(maxSize)) {
     AD_CONTRACT_CHECK(!pinned);
-    auto maxSize = RuntimeParameters().get<"lazy-result-max-cache-size">();
     result.cacheDuringConsumption(
         [maxSize](
             const std::optional<Result::IdTableVocabPair>& currentIdTablePair,
