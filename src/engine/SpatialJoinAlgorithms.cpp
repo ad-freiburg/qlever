@@ -6,17 +6,23 @@
 #include <s2/s2point_index.h>
 #include <s2/util/units/length-units.h>
 
+#include <cmath>
+
 #include "util/GeoSparqlHelpers.h"
+
+using namespace BoostGeometryNamespace;
 
 // ____________________________________________________________________________
 SpatialJoinAlgorithms::SpatialJoinAlgorithms(
     QueryExecutionContext* qec, PreparedSpatialJoinParams params,
     bool addDistToResult,
-    std::variant<NearestNeighborsConfig, MaxDistanceConfig> config)
+    std::variant<NearestNeighborsConfig, MaxDistanceConfig> config,
+    std::optional<SpatialJoin*> spatialJoin)
     : qec_{qec},
       params_{std::move(params)},
       addDistToResult_{addDistToResult},
-      config_{std::move(config)} {}
+      config_{std::move(config)},
+      spatialJoin_{spatialJoin} {}
 
 // ____________________________________________________________________________
 std::optional<GeoPoint> SpatialJoinAlgorithms::getPoint(const IdTable* restable,
@@ -222,4 +228,299 @@ Result SpatialJoinAlgorithms::S2geometryAlgorithm() {
 
   return Result(std::move(result), std::vector<ColumnIndex>{},
                 Result::getMergedLocalVocab(*resultLeft, *resultRight));
+}
+
+// ____________________________________________________________________________
+std::vector<Box> SpatialJoinAlgorithms::computeBoundingBox(
+    const Point& startPoint) const {
+  const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
+              rightJoinCol, numColumns, maxDist, maxResults] = params_;
+  AD_CORRECTNESS_CHECK(maxDist.has_value(),
+                       "Max distance must have a value for this operation");
+  // haversine function
+  auto haversine = [](double theta) { return (1 - std::cos(theta)) / 2; };
+
+  // inverse haversine function
+  auto archaversine = [](double theta) { return std::acos(1 - 2 * theta); };
+
+  // safety buffer for numerical inaccuracies
+  double maxDistInMetersBuffer;
+  if (maxDist.value() < 10) {
+    maxDistInMetersBuffer = 10;
+  } else if (static_cast<double>(maxDist.value()) <
+             static_cast<double>(std::numeric_limits<long long>::max()) /
+                 1.02) {
+    maxDistInMetersBuffer = 1.01 * static_cast<double>(maxDist.value());
+  } else {
+    maxDistInMetersBuffer =
+        static_cast<double>(std::numeric_limits<long long>::max());
+  }
+
+  // for large distances, where the lower calculation would just result in
+  // a single bounding box for the whole planet, do an optimized version
+  if (static_cast<double>(maxDist.value()) > circumferenceMax_ / 4.0 &&
+      static_cast<double>(maxDist.value()) < circumferenceMax_ / 2.01) {
+    return computeBoundingBoxForLargeDistances(startPoint);
+  }
+
+  // compute latitude bound
+  double maxDistInDegrees = maxDistInMetersBuffer * (360 / circumferenceMax_);
+  double upperLatBound = startPoint.get<1>() + maxDistInDegrees;
+  double lowerLatBound = startPoint.get<1>() - maxDistInDegrees;
+
+  auto southPoleReached = isAPoleTouched(lowerLatBound).at(1);
+  auto northPoleReached = isAPoleTouched(upperLatBound).at(0);
+
+  if (southPoleReached || northPoleReached) {
+    return {Box(Point(-180.0f, lowerLatBound), Point(180.0f, upperLatBound))};
+  }
+
+  // compute longitude bound. For an explanation of the calculation and the
+  // naming convention see my master thesis
+  double alpha = maxDistInMetersBuffer / radius_;
+  double gamma = (90 - std::abs(startPoint.get<1>())) * (2 * M_PI / 360);
+  double beta = std::acos(std::cos(gamma) / std::cos(alpha));
+  double delta = 0;
+  if (maxDistInMetersBuffer > circumferenceMax_ / 20) {
+    // use law of cosines
+    delta = std::acos((std::cos(alpha) - std::cos(gamma) * std::cos(beta)) /
+                      (std::sin(gamma) * std::sin(beta)));
+  } else {
+    // use law of haversines for numerical stability
+    delta = archaversine((haversine(alpha - haversine(gamma - beta))) /
+                         (std::sin(gamma) * std::sin(beta)));
+  }
+  double lonRange = delta * 360 / (2 * M_PI);
+  double leftLonBound = startPoint.get<0>() - lonRange;
+  double rightLonBound = startPoint.get<0>() + lonRange;
+  // test for "overflows" and create two bounding boxes if necessary
+  if (leftLonBound < -180) {
+    auto box1 =
+        Box(Point(-180, lowerLatBound), Point(rightLonBound, upperLatBound));
+    auto box2 = Box(Point(leftLonBound + 360, lowerLatBound),
+                    Point(180, upperLatBound));
+    return {box1, box2};
+  } else if (rightLonBound > 180) {
+    auto box1 =
+        Box(Point(leftLonBound, lowerLatBound), Point(180, upperLatBound));
+    auto box2 = Box(Point(-180, lowerLatBound),
+                    Point(rightLonBound - 360, upperLatBound));
+    return {box1, box2};
+  }
+  // default case, when no bound has an "overflow"
+  return {Box(Point(leftLonBound, lowerLatBound),
+              Point(rightLonBound, upperLatBound))};
+}
+
+// ____________________________________________________________________________
+std::vector<Box> SpatialJoinAlgorithms::computeBoundingBoxForLargeDistances(
+    const Point& startPoint) const {
+  const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
+              rightJoinCol, numColumns, maxDist, maxResults] = params_;
+  AD_CORRECTNESS_CHECK(maxDist.has_value(),
+                       "Max distance must have a value for this operation");
+
+  // point on the opposite side of the globe
+  Point antiPoint(startPoint.get<0>() + 180, startPoint.get<1>() * -1);
+  if (antiPoint.get<0>() > 180) {
+    antiPoint.set<0>(antiPoint.get<0>() - 360);
+  }
+  // for an explanation of the formula see the master thesis. Divide by two two
+  // only consider the distance from the point to the antiPoint, subtract
+  // maxDist and a safety margine from that
+  double antiDist =
+      (circumferenceMin_ / 2.0) - static_cast<double>(maxDist.value()) * 1.01;
+  // use the bigger circumference as an additional safety margin, use 2.01
+  // instead of 2.0 because of rounding inaccuracies in floating point
+  // operations
+  double distToAntiPoint = (360 / circumferenceMax_) * (antiDist / 2.01);
+  double upperBound = antiPoint.get<1>() + distToAntiPoint;
+  double lowerBound = antiPoint.get<1>() - distToAntiPoint;
+  double leftBound = antiPoint.get<0>() - distToAntiPoint;
+  double rightBound = antiPoint.get<0>() + distToAntiPoint;
+  bool northPoleTouched = false;
+  bool southPoleTouched = false;
+  bool boxCrosses180Longitude = false;  // if the 180 to -180 line is touched
+  // if a pole is crossed, ignore the part after the crossing
+  if (upperBound > 90) {
+    upperBound = 90;
+    northPoleTouched = true;
+  }
+  if (lowerBound < -90) {
+    lowerBound = -90;
+    southPoleTouched = true;
+  }
+  if (leftBound < -180) {
+    leftBound += 360;
+  }
+  if (rightBound > 180) {
+    rightBound -= 360;
+  }
+  if (rightBound < leftBound) {
+    boxCrosses180Longitude = true;
+  }
+  // compute bounding boxes using the anti bounding box from above
+  std::vector<Box> boxes;
+  if (!northPoleTouched) {
+    // add upper bounding box(es)
+    if (boxCrosses180Longitude) {
+      boxes.emplace_back(Point(leftBound, upperBound), Point(180, 90));
+      boxes.emplace_back(Point(-180, upperBound), Point(rightBound, 90));
+    } else {
+      boxes.emplace_back(Point(leftBound, upperBound), Point(rightBound, 90));
+    }
+  }
+  if (!southPoleTouched) {
+    // add lower bounding box(es)
+    if (boxCrosses180Longitude) {
+      boxes.emplace_back(Point(leftBound, -90), Point(180, lowerBound));
+      boxes.emplace_back(Point(-180, -90), Point(rightBound, lowerBound));
+    } else {
+      boxes.emplace_back(Point(leftBound, -90), Point(rightBound, lowerBound));
+    }
+  }
+  // add the box(es) inbetween the longitude lines
+  if (boxCrosses180Longitude) {
+    // only one box needed to cover the longitudes
+    boxes.emplace_back(Point(rightBound, -90), Point(leftBound, 90));
+  } else {
+    // two boxes needed, one left and one right of the anti bounding box
+    boxes.emplace_back(Point(-180, -90), Point(leftBound, 90));
+    boxes.emplace_back(Point(rightBound, -90), Point(180, 90));
+  }
+  return boxes;
+}
+
+// ____________________________________________________________________________
+bool SpatialJoinAlgorithms::isContainedInBoundingBoxes(
+    const std::vector<Box>& boundingBox, Point point) const {
+  convertToNormalCoordinates(point);
+
+  return std::ranges::any_of(boundingBox, [point](const Box& aBox) {
+    return boost::geometry::covered_by(point, aBox);
+  });
+}
+
+// ____________________________________________________________________________
+void SpatialJoinAlgorithms::convertToNormalCoordinates(Point& point) const {
+  // correct lon and lat bounds if necessary
+  while (point.get<0>() < -180) {
+    point.set<0>(point.get<0>() + 360);
+  }
+  while (point.get<0>() > 180) {
+    point.set<0>(point.get<0>() - 360);
+  }
+  if (point.get<1>() < -90) {
+    point.set<1>(-90);
+  } else if (point.get<1>() > 90) {
+    point.set<1>(90);
+  }
+}
+
+// ____________________________________________________________________________
+std::array<bool, 2> SpatialJoinAlgorithms::isAPoleTouched(
+    const double& latitude) const {
+  bool northPoleReached = false;
+  bool southPoleReached = false;
+  if (latitude >= 90) {
+    northPoleReached = true;
+  }
+  if (latitude <= -90) {
+    southPoleReached = true;
+  }
+  return std::array{northPoleReached, southPoleReached};
+}
+
+// ____________________________________________________________________________
+Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
+  auto printWarning = [alreadyWarned = false,
+                       &spatialJoin = spatialJoin_]() mutable {
+    if (!alreadyWarned) {
+      std::string warning =
+          "The input to a spatial join contained at least one element, "
+          "that is not a point geometry and is thus skipped. Note that "
+          "QLever currently only accepts point geometries for the "
+          "spatial joins";
+      AD_LOG_WARN << warning << std::endl;
+      alreadyWarned = true;
+      if (spatialJoin.has_value()) {
+        AD_CORRECTNESS_CHECK(spatialJoin.value() != nullptr);
+        spatialJoin.value()->addWarning(warning);
+      }
+    }
+  };
+
+  const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
+              rightJoinCol, numColumns, maxDist, maxResults] = params_;
+  IdTable result{numColumns, qec_->getAllocator()};
+
+  // create r-tree for smaller result table
+  auto smallerResult = idTableLeft;
+  auto otherResult = idTableRight;
+  bool leftResSmaller = true;
+  auto smallerResJoinCol = leftJoinCol;
+  auto otherResJoinCol = rightJoinCol;
+  if (idTableLeft->numRows() > idTableRight->numRows()) {
+    std::swap(smallerResult, otherResult);
+    leftResSmaller = false;
+    std::swap(smallerResJoinCol, otherResJoinCol);
+  }
+
+  bgi::rtree<Value, bgi::quadratic<16>, bgi::indexable<Value>,
+             bgi::equal_to<Value>, ad_utility::AllocatorWithLimit<Value>>
+      rtree(bgi::quadratic<16>{}, bgi::indexable<Value>{},
+            bgi::equal_to<Value>{}, qec_->getAllocator());
+  for (size_t i = 0; i < smallerResult->numRows(); i++) {
+    // get point of row i
+    auto geopoint = getPoint(smallerResult, i, smallerResJoinCol);
+
+    if (!geopoint) {
+      printWarning();
+      continue;
+    }
+
+    Point p(geopoint.value().getLng(), geopoint.value().getLat());
+
+    // add every point together with the row number into the rtree
+    rtree.insert(std::make_pair(std::move(p), i));
+  }
+  std::vector<Value, ad_utility::AllocatorWithLimit<Value>> results{
+      qec_->getAllocator()};
+  for (size_t i = 0; i < otherResult->numRows(); i++) {
+    auto geopoint1 = getPoint(otherResult, i, otherResJoinCol);
+
+    if (!geopoint1) {
+      printWarning();
+      continue;
+    }
+
+    Point p(geopoint1.value().getLng(), geopoint1.value().getLat());
+
+    // query the other rtree for every point using the following bounding box
+    std::vector<Box> bbox = computeBoundingBox(p);
+    results.clear();
+
+    std::ranges::for_each(bbox, [&](const Box& bbox) {
+      rtree.query(bgi::intersects(bbox), std::back_inserter(results));
+    });
+
+    std::ranges::for_each(results, [&](const Value& res) {
+      size_t rowLeft = res.second;
+      size_t rowRight = i;
+      if (!leftResSmaller) {
+        std::swap(rowLeft, rowRight);
+      }
+      auto distance = computeDist(idTableLeft, idTableRight, rowLeft, rowRight,
+                                  leftJoinCol, rightJoinCol);
+      AD_CORRECTNESS_CHECK(distance.getDatatype() == Datatype::Int);
+      if (distance.getInt() <= maxDist) {
+        addResultTableEntry(&result, idTableLeft, idTableRight, rowLeft,
+                            rowRight, distance);
+      }
+    });
+  }
+  auto resTable =
+      Result(std::move(result), std::vector<ColumnIndex>{},
+             Result::getMergedLocalVocab(*resultLeft, *resultRight));
+  return resTable;
 }
