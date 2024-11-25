@@ -11,6 +11,7 @@
 #include "absl/strings/str_join.h"
 #include "index/CompressedRelation.h"
 #include "util/ChunkedForLoop.h"
+#include "index/ConstantsIndexBuilding.h"
 
 // ____________________________________________________________________________
 std::vector<LocatedTriple> LocatedTriple::locateTriplesInPermutation(
@@ -250,6 +251,25 @@ void LocatedTriplesPerBlock::setOriginalMetadata(
   updateAugmentedMetadata();
 }
 
+static auto updateGraphMetadata(CompressedBlockMetadata& blockMetadata, const LocatedTriples& locatedTriples) {
+  auto& graphs = blockMetadata.graphInfo_;
+  if (!graphs.has_value()) {
+    return;
+  }
+  ad_utility::HashSet<Id> newGraphs(graphs.value().begin(), graphs.value().end());
+  for (auto& lt : locatedTriples) {
+    if (!lt.shouldTripleExist_) {
+      continue;
+    }
+    newGraphs.insert(lt.triple_.ids_.at(ADDITIONAL_COLUMN_GRAPH_ID));
+    if (newGraphs.size() > MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA) {
+      graphs.reset();
+      return;
+    }
+  }
+  graphs.emplace(newGraphs.begin(), newGraphs.end());
+}
+
 // ____________________________________________________________________________
 void LocatedTriplesPerBlock::updateAugmentedMetadata() {
   // TODO<C++23> use view::enumerate
@@ -265,6 +285,7 @@ void LocatedTriplesPerBlock::updateAugmentedMetadata() {
       blockMetadata.lastTriple_ =
           std::max(blockMetadata.lastTriple_,
                    blockUpdates.rbegin()->triple_.toPermutedTriple());
+      updateGraphMetadata(blockMetadata, blockUpdates);
     }
     blockIndex++;
   }
@@ -287,7 +308,10 @@ void LocatedTriplesPerBlock::updateAugmentedMetadata() {
         lastTriple,
         std::nullopt,
         true};
-    augmentedMetadata_->emplace_back(lastBlockN, blockIndex);
+    lastBlockN.graphInfo_.emplace();
+    CompressedBlockMetadata lastBlock{lastBlockN, blockIndex};
+    updateGraphMetadata(lastBlock, blockUpdates);
+    augmentedMetadata_->push_back(lastBlock);
   }
 }
 
