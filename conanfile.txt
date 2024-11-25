@@ -6,7 +6,6 @@ zstd/1.5.5
 # The jemalloc recipe for Conan2 is currently broken, uncomment this line as soon as this is fixed.
 #jemalloc/5.3.0
 
-
 [generators]
 CMakeDeps
 CMakeToolchain
