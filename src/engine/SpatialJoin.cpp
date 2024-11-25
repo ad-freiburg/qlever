@@ -364,6 +364,15 @@ Result SpatialJoin::computeResult([[maybe_unused]] bool requestLaziness) {
     return algorithms.BaselineAlgorithm();
   } else if (config_->algo_ == SpatialJoinAlgorithm::S2_GEOMETRY) {
     return algorithms.S2geometryAlgorithm();
+  } else if (config_->algo_ == SpatialJoinAlgorithm::BOUNDING_BOX) {
+    // as the BoundingBoxAlgorithms only works for max distance and not for
+    // nearest neighbors, S2geometry gets called as a backup, if the query is
+    // asking for the nearest neighbors
+    if (std::get_if<MaxDistanceConfig>(&config_->task_)) {
+      return algorithms.BoundingBoxAlgorithm();
+    } else {
+      return algorithms.S2geometryAlgorithm();
+    }
   } else {
     AD_THROW("Unknown SpatialJoin Algorithm.");
   }

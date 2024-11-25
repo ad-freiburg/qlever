@@ -27,7 +27,7 @@ class alignas(16) LocalVocabEntry
   // the first *larger* word in the vocabulary. Note: we store the cache as
   // three separate atomics to avoid mutexes. The downside is, that in parallel
   // code multiple threads might look up the position concurrently, which wastes
-  // a bit of resources. We however don't consider this case to be likely.
+  // a bit of resources. However, we don't consider this case to be likely.
   mutable ad_utility::CopyableAtomic<VocabIndex> lowerBoundInVocab_;
   mutable ad_utility::CopyableAtomic<VocabIndex> upperBoundInVocab_;
   mutable ad_utility::CopyableAtomic<bool> positionInVocabKnown_ = false;

@@ -29,11 +29,7 @@ using PayloadVariables =
     std::variant<PayloadAllVariables, std::vector<Variable>>;
 
 // Selection of a SpatialJoin algorithm
-enum class SpatialJoinAlgorithm {
-  BASELINE,
-  S2_GEOMETRY
-  // BOUNDING_BOX
-};
+enum class SpatialJoinAlgorithm { BASELINE, S2_GEOMETRY, BOUNDING_BOX };
 const SpatialJoinAlgorithm SPATIAL_JOIN_DEFAULT_ALGORITHM =
     SpatialJoinAlgorithm::S2_GEOMETRY;
 

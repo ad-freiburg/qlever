@@ -120,6 +120,10 @@ ProtoResult Operation::runComputation(const ad_utility::Timer& timer,
   // correctly because the result was computed, so we can pass `nullopt` as
   // the last argument.
   if (result.isFullyMaterialized()) {
+    size_t numLocalVocabs = result.localVocab().numSets();
+    if (numLocalVocabs > 1) {
+      runtimeInfo().addDetail("num-local-vocabs", numLocalVocabs);
+    }
     updateRuntimeInformationOnSuccess(result.idTable().size(),
                                       ad_utility::CacheStatus::computed,
                                       timer.msecs(), std::nullopt);
