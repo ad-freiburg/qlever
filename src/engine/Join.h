@@ -11,7 +11,7 @@
 #include "engine/QueryExecutionTree.h"
 #include "util/HashMap.h"
 #include "util/HashSet.h"
-#include "util/JoinAlgorithms/JoinAlgorithms.h"
+#include "util/TypeTraits.h"
 
 class Join : public Operation {
  private:
@@ -33,6 +33,9 @@ class Join : public Operation {
        std::shared_ptr<QueryExecutionTree> t2, ColumnIndex t1JoinCol,
        ColumnIndex t2JoinCol);
 
+  using OptionalPermutation = std::optional<std::vector<ColumnIndex>>;
+
+  static constexpr size_t CHUNK_SIZE = 100'000;
   // A very explicit constructor, which initializes an invalid join object (it
   // has no subtrees, which violates class invariants). These invalid Join
   // objects can be used for unit tests that only test member functions which
@@ -93,6 +96,46 @@ class Join : public Operation {
   void join(const IdTable& a, ColumnIndex jc1, const IdTable& b,
             ColumnIndex jc2, IdTable* result) const;
 
+ private:
+  // Part of the implementation of `createResult`. This function is called when
+  // the result should be yielded lazily.
+  // Action is a lambda that itself runs the join operation in a blocking
+  // manner. It is passed a special function that is supposed to be the callback
+  // being passed to the `AddCombinedRowToIdTable` so that the partial results
+  // can be yielded during execution. This is achieved by spawning a separate
+  // thread.
+  Result::Generator runLazyJoinAndConvertToGenerator(
+      ad_utility::InvocableWithExactReturnType<
+          Result::IdTableVocabPair,
+          std::function<void(IdTable&, LocalVocab&)>> auto action,
+      OptionalPermutation permutation) const;
+
+ public:
+  // Helper function to compute the result of a join operation and conditionally
+  // return a lazy or fully materialized result depending on `requestLaziness`.
+  // This is achieved by running the `action` lambda in a separate thread and
+  // returning a lazy result that reads from the queue of the thread. If
+  // `requestLaziness` is false, the result is fully materialized and returned
+  // directly.
+  // `permutation` indicates a permutation to apply to the result columns before
+  // yielding/returning them. An empty vector means no permutation is applied.
+  // `action` is a lambda that can be used to send partial chunks to a consumer
+  // in addition to returning the remaining result. If laziness is not required
+  // it is a no-op.
+  ProtoResult createResult(
+      bool requestedLaziness,
+      ad_utility::InvocableWithExactReturnType<
+          Result::IdTableVocabPair,
+          std::function<void(IdTable&, LocalVocab&)>> auto action,
+      OptionalPermutation permutation = {}) const;
+
+  // Fallback implementation of a join that is used when at least one of the two
+  // inputs is not fully materialized. This represents the general case where we
+  // don't have any optimization left to try.
+  ProtoResult lazyJoin(std::shared_ptr<const Result> a, ColumnIndex jc1,
+                       std::shared_ptr<const Result> b, ColumnIndex jc2,
+                       bool requestLaziness) const;
+
   /**
    * @brief Joins IdTables dynA and dynB on join column jc2, returning
    * the result in dynRes. Creates a cross product for matching rows by putting
@@ -113,24 +156,29 @@ class Join : public Operation {
   virtual string getCacheKeyImpl() const override;
 
  private:
-  ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override;
+  ProtoResult computeResult(bool requestLaziness) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 
   // A special implementation that is called when both children are
   // `IndexScan`s. Uses the lazy scans to only retrieve the subset of the
   // `IndexScan`s that is actually needed without fully materializing them.
-  IdTable computeResultForTwoIndexScans();
+  ProtoResult computeResultForTwoIndexScans(bool requestLaziness) const;
 
   // A special implementation that is called when one of the children is an
   // `IndexScan`. The argument `scanIsLeft` determines whether the `IndexScan`
   // is the left or the right child of this `Join`. This needs to be known to
   // determine the correct order of the columns in the result.
   template <bool scanIsLeft>
-  IdTable computeResultForIndexScanAndIdTable(const IdTable& idTable,
-                                              ColumnIndex joinColTable,
-                                              IndexScan& scan,
-                                              ColumnIndex joinColScan);
+  ProtoResult computeResultForIndexScanAndIdTable(
+      bool requestLaziness, std::shared_ptr<const Result> resultWithIdTable,
+      ColumnIndex joinColTable, std::shared_ptr<IndexScan> scan,
+      ColumnIndex joinColScan) const;
+
+  // Default case where both inputs are fully materialized.
+  ProtoResult computeResultForTwoMaterializedInputs(
+      std::shared_ptr<const Result> leftRes,
+      std::shared_ptr<const Result> rightRes) const;
 
   /*
    * @brief Combines 2 rows like in a join and inserts the result in the
@@ -146,7 +194,7 @@ class Join : public Operation {
    */
   template <typename ROW_A, typename ROW_B, int TABLE_WIDTH>
   static void addCombinedRowToIdTable(const ROW_A& rowA, const ROW_B& rowB,
-                                      const ColumnIndex jcRowB,
+                                      ColumnIndex jcRowB,
                                       IdTableStatic<TABLE_WIDTH>* table);
 
   /*
@@ -156,4 +204,7 @@ class Join : public Operation {
   static void hashJoinImpl(const IdTable& dynA, ColumnIndex jc1,
                            const IdTable& dynB, ColumnIndex jc2,
                            IdTable* dynRes);
+
+  // Commonly used code for the various known-to-be-empty cases.
+  ProtoResult createEmptyResult() const;
 };

@@ -71,18 +71,16 @@ ProtoResult Filter::computeResult(bool requestLaziness) {
   // single IdTable.
   size_t width = getSubtree().get()->getResultWidth();
   IdTable result{width, getExecutionContext()->getAllocator()};
-  std::vector<LocalVocab> localVocabs;
-  ad_utility::callFixedSize(
-      width, [this, &subRes, &result, &localVocabs]<int WIDTH>() {
-        for (Result::IdTableVocabPair& pair : subRes->idTables()) {
-          computeFilterImpl<WIDTH>(result, std::move(pair.idTable_),
-                                   pair.localVocab_, subRes->sortedBy());
-          localVocabs.emplace_back(std::move(pair.localVocab_));
-        }
-      });
 
   LocalVocab resultLocalVocab{};
-  resultLocalVocab.mergeWith(localVocabs);
+  ad_utility::callFixedSize(
+      width, [this, &subRes, &result, &resultLocalVocab]<int WIDTH>() {
+        for (Result::IdTableVocabPair& pair : subRes->idTables()) {
+          computeFilterImpl<WIDTH>(result, std::move(pair.idTable_), pair.localVocab_,
+                                   subRes->sortedBy());
+          resultLocalVocab.mergeWith(std::span{&pair.localVocab_, 1});
+        }
+      });
 
   LOG(DEBUG) << "Filter result computation done." << endl;
 
