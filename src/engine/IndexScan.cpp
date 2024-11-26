@@ -351,7 +351,11 @@ struct SharedGeneratorState {
   bool fetchFirst() {
     AD_CORRECTNESS_CHECK(!iterator_.has_value());
     iterator_ = generator_.begin();
-    if (iterator_ != generator_.end()) {
+    while (iterator_ != generator_.end()) {
+      if (iterator_.value()->idTable_.empty()) {
+        ++iterator_.value();
+        continue;
+      }
       hasUndef_ = iterator_.value()->idTable_.at(0, joinColumn_).isUndefined();
       return false;
     }
@@ -362,8 +366,11 @@ struct SharedGeneratorState {
     bool exhausted;
     if (iterator_.has_value()) {
       AD_CONTRACT_CHECK(iterator_.value() != generator_.end());
-      ++iterator_.value();
-      exhausted = iterator_.value() == generator_.end();
+      do {
+        // Skip empty tables
+        ++iterator_.value();
+        exhausted = iterator_.value() == generator_.end();
+      } while (!exhausted && iterator_.value()->idTable_.empty());
     } else {
       exhausted = fetchFirst();
     }
