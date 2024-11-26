@@ -1697,7 +1697,7 @@ TEST(QueryPlanner, SpatialJoinService) {
       "SERVICE spatialSearch: {"
       "_:config spatialSearch:algorithm spatialSearch:s2 ;"
       "spatialSearch:right ?b ;"
-      "spatialSearch:bindDistance ?dist ."
+      "spatialSearch:bindDistance ?dist ;"
       "spatialSearch:nearestNeighbors 5 . "
       "_:config spatialSearch:left ?y ."
       "_:config spatialSearch:payload ?a ."
