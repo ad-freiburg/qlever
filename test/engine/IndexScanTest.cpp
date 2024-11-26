@@ -41,7 +41,7 @@ void testLazyScan(Permutation::IdTableGenerator partialLazyScanResult,
     if (lazyScanRes.empty()) {
       lazyScanRes.setNumColumns(block.numColumns());
     }
-    lazyScanRes.insertAtEnd(block.begin(), block.end());
+    lazyScanRes.insertAtEnd(block);
     ++numBlocks;
   }
 
