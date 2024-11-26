@@ -132,9 +132,8 @@ string SpatialJoin::getCacheKeyImpl() const {
     }
     os << "\n";
 
-    // Algorithm
-    os << "algorithm: " << static_cast<int>(config_->algo_) << "\n";
-
+    // Algorithm is not included here because it should not have any impact on
+    // the result.
     return std::move(os).str();
   } else {
     return "incomplete SpatialJoin class";
