@@ -417,7 +417,9 @@ Row expectedDistEyeLib{expectedDist(PEye, PLib)};
 // google maps
 Row expectedDistEifLib{expectedDist(PEif, PLib)};
 
-std::unordered_map<size_t, Rows> expectedMaxDistRows = {
+using ExpectedRowsMaxDist = std::unordered_map<size_t, Rows>;
+
+ExpectedRowsMaxDist expectedMaxDistRows = {
     {1,
      {mergeToRow(TF, TF, expectedDistSelf),
       mergeToRow(Mun, Mun, expectedDistSelf),
@@ -491,290 +493,294 @@ std::unordered_map<size_t, Rows> expectedMaxDistRows = {
       mergeToRow(Eif, Eye, expectedDistEyeEif),
       mergeToRow(Eif, Lib, expectedDistEifLib)}}};
 
-Rows expectedMaxDist1_rows_small{
-    mergeToRow(sTF, sTF, expectedDistSelf),
-    mergeToRow(sMun, sMun, expectedDistSelf),
-    mergeToRow(sEye, sEye, expectedDistSelf),
-    mergeToRow(sLib, sLib, expectedDistSelf),
-    mergeToRow(sEif, sEif, expectedDistSelf),
-};
+ExpectedRowsMaxDist expectedMaxDistRowsSmall = {
+    {1,
+     {
+         mergeToRow(sTF, sTF, expectedDistSelf),
+         mergeToRow(sMun, sMun, expectedDistSelf),
+         mergeToRow(sEye, sEye, expectedDistSelf),
+         mergeToRow(sLib, sLib, expectedDistSelf),
+         mergeToRow(sEif, sEif, expectedDistSelf),
+     }},
+    {5000,
+     {mergeToRow(sTF, sTF, expectedDistSelf),
+      mergeToRow(sTF, sMun, expectedDistUniMun),
+      mergeToRow(sMun, sMun, expectedDistSelf),
+      mergeToRow(sMun, sTF, expectedDistUniMun),
+      mergeToRow(sEye, sEye, expectedDistSelf),
+      mergeToRow(sLib, sLib, expectedDistSelf),
+      mergeToRow(sEif, sEif, expectedDistSelf)}},
+    {500000,
+     {mergeToRow(sTF, sTF, expectedDistSelf),
+      mergeToRow(sTF, sMun, expectedDistUniMun),
+      mergeToRow(sTF, sEif, expectedDistUniEif),
+      mergeToRow(sMun, sMun, expectedDistSelf),
+      mergeToRow(sMun, sTF, expectedDistUniMun),
+      mergeToRow(sMun, sEif, expectedDistMunEif),
+      mergeToRow(sEye, sEye, expectedDistSelf),
+      mergeToRow(sEye, sEif, expectedDistEyeEif),
+      mergeToRow(sLib, sLib, expectedDistSelf),
+      mergeToRow(sEif, sEif, expectedDistSelf),
+      mergeToRow(sEif, sTF, expectedDistUniEif),
+      mergeToRow(sEif, sMun, expectedDistMunEif),
+      mergeToRow(sEif, sEye, expectedDistEyeEif)}},
+    {1000000,
+     {mergeToRow(sTF, sTF, expectedDistSelf),
+      mergeToRow(sTF, sMun, expectedDistUniMun),
+      mergeToRow(sTF, sEif, expectedDistUniEif),
+      mergeToRow(sTF, sEye, expectedDistUniEye),
+      mergeToRow(sMun, sMun, expectedDistSelf),
+      mergeToRow(sMun, sTF, expectedDistUniMun),
+      mergeToRow(sMun, sEif, expectedDistMunEif),
+      mergeToRow(sMun, sEye, expectedDistMunEye),
+      mergeToRow(sEye, sEye, expectedDistSelf),
+      mergeToRow(sEye, sEif, expectedDistEyeEif),
+      mergeToRow(sEye, sTF, expectedDistUniEye),
+      mergeToRow(sEye, sMun, expectedDistMunEye),
+      mergeToRow(sLib, sLib, expectedDistSelf),
+      mergeToRow(sEif, sEif, expectedDistSelf),
+      mergeToRow(sEif, sTF, expectedDistUniEif),
+      mergeToRow(sEif, sMun, expectedDistMunEif),
+      mergeToRow(sEif, sEye, expectedDistEyeEif)}},
+    {10000000,
+     {mergeToRow(sTF, sTF, expectedDistSelf),
+      mergeToRow(sTF, sMun, expectedDistUniMun),
+      mergeToRow(sTF, sEif, expectedDistUniEif),
+      mergeToRow(sTF, sEye, expectedDistUniEye),
+      mergeToRow(sTF, sLib, expectedDistUniLib),
+      mergeToRow(sMun, sMun, expectedDistSelf),
+      mergeToRow(sMun, sTF, expectedDistUniMun),
+      mergeToRow(sMun, sEif, expectedDistMunEif),
+      mergeToRow(sMun, sEye, expectedDistMunEye),
+      mergeToRow(sMun, sLib, expectedDistMunLib),
+      mergeToRow(sEye, sEye, expectedDistSelf),
+      mergeToRow(sEye, sEif, expectedDistEyeEif),
+      mergeToRow(sEye, sTF, expectedDistUniEye),
+      mergeToRow(sEye, sMun, expectedDistMunEye),
+      mergeToRow(sEye, sLib, expectedDistEyeLib),
+      mergeToRow(sLib, sLib, expectedDistSelf),
+      mergeToRow(sLib, sTF, expectedDistUniLib),
+      mergeToRow(sLib, sMun, expectedDistMunLib),
+      mergeToRow(sLib, sEye, expectedDistEyeLib),
+      mergeToRow(sLib, sEif, expectedDistEifLib),
+      mergeToRow(sEif, sEif, expectedDistSelf),
+      mergeToRow(sEif, sTF, expectedDistUniEif),
+      mergeToRow(sEif, sMun, expectedDistMunEif),
+      mergeToRow(sEif, sEye, expectedDistEyeEif),
+      mergeToRow(sEif, sLib, expectedDistEifLib)}}};
 
-Rows expectedMaxDist5000_rows_small{mergeToRow(sTF, sTF, expectedDistSelf),
-                                    mergeToRow(sTF, sMun, expectedDistUniMun),
-                                    mergeToRow(sMun, sMun, expectedDistSelf),
-                                    mergeToRow(sMun, sTF, expectedDistUniMun),
-                                    mergeToRow(sEye, sEye, expectedDistSelf),
-                                    mergeToRow(sLib, sLib, expectedDistSelf),
-                                    mergeToRow(sEif, sEif, expectedDistSelf)};
+ExpectedRowsMaxDist expectedMaxDistRowsSmallWrongPoint = {
+    {1,
+     {
+         mergeToRow(sMun, sMun, expectedDistSelf),
+         mergeToRow(sEye, sEye, expectedDistSelf),
+         mergeToRow(sLib, sLib, expectedDistSelf),
+         mergeToRow(sEif, sEif, expectedDistSelf),
+     }},
+    {5000,
+     {mergeToRow(sMun, sMun, expectedDistSelf),
+      mergeToRow(sEye, sEye, expectedDistSelf),
+      mergeToRow(sLib, sLib, expectedDistSelf),
+      mergeToRow(sEif, sEif, expectedDistSelf)}},
+    {500000,
+     {mergeToRow(sMun, sMun, expectedDistSelf),
+      mergeToRow(sMun, sEif, expectedDistMunEif),
+      mergeToRow(sEye, sEye, expectedDistSelf),
+      mergeToRow(sEye, sEif, expectedDistEyeEif),
+      mergeToRow(sLib, sLib, expectedDistSelf),
+      mergeToRow(sEif, sEif, expectedDistSelf),
+      mergeToRow(sEif, sMun, expectedDistMunEif),
+      mergeToRow(sEif, sEye, expectedDistEyeEif)}},
+    {1000000,
+     {mergeToRow(sMun, sMun, expectedDistSelf),
+      mergeToRow(sMun, sEif, expectedDistMunEif),
+      mergeToRow(sMun, sEye, expectedDistMunEye),
+      mergeToRow(sEye, sEye, expectedDistSelf),
+      mergeToRow(sEye, sEif, expectedDistEyeEif),
+      mergeToRow(sEye, sMun, expectedDistMunEye),
+      mergeToRow(sLib, sLib, expectedDistSelf),
+      mergeToRow(sEif, sEif, expectedDistSelf),
+      mergeToRow(sEif, sMun, expectedDistMunEif),
+      mergeToRow(sEif, sEye, expectedDistEyeEif)}},
+    {10000000,
+     {mergeToRow(sMun, sMun, expectedDistSelf),
+      mergeToRow(sMun, sEif, expectedDistMunEif),
+      mergeToRow(sMun, sEye, expectedDistMunEye),
+      mergeToRow(sMun, sLib, expectedDistMunLib),
+      mergeToRow(sEye, sEye, expectedDistSelf),
+      mergeToRow(sEye, sEif, expectedDistEyeEif),
+      mergeToRow(sEye, sMun, expectedDistMunEye),
+      mergeToRow(sEye, sLib, expectedDistEyeLib),
+      mergeToRow(sLib, sLib, expectedDistSelf),
+      mergeToRow(sLib, sMun, expectedDistMunLib),
+      mergeToRow(sLib, sEye, expectedDistEyeLib),
+      mergeToRow(sLib, sEif, expectedDistEifLib),
+      mergeToRow(sEif, sEif, expectedDistSelf),
+      mergeToRow(sEif, sMun, expectedDistMunEif),
+      mergeToRow(sEif, sEye, expectedDistEyeEif),
+      mergeToRow(sEif, sLib, expectedDistEifLib)}}};
 
-Rows expectedMaxDist500000_rows_small{
-    mergeToRow(sTF, sTF, expectedDistSelf),
-    mergeToRow(sTF, sMun, expectedDistUniMun),
-    mergeToRow(sTF, sEif, expectedDistUniEif),
-    mergeToRow(sMun, sMun, expectedDistSelf),
-    mergeToRow(sMun, sTF, expectedDistUniMun),
-    mergeToRow(sMun, sEif, expectedDistMunEif),
-    mergeToRow(sEye, sEye, expectedDistSelf),
-    mergeToRow(sEye, sEif, expectedDistEyeEif),
-    mergeToRow(sLib, sLib, expectedDistSelf),
-    mergeToRow(sEif, sEif, expectedDistSelf),
-    mergeToRow(sEif, sTF, expectedDistUniEif),
-    mergeToRow(sEif, sMun, expectedDistMunEif),
-    mergeToRow(sEif, sEye, expectedDistEyeEif)};
+ExpectedRowsMaxDist expectedMaxDistRowsDiff = {
+    {1,
+     {mergeToRow(TF, sTF, expectedDistSelf),
+      mergeToRow(Mun, sMun, expectedDistSelf),
+      mergeToRow(Eye, sEye, expectedDistSelf),
+      mergeToRow(Lib, sLib, expectedDistSelf),
+      mergeToRow(Eif, sEif, expectedDistSelf)}},
+    {5000,
+     {mergeToRow(TF, sTF, expectedDistSelf),
+      mergeToRow(TF, sMun, expectedDistUniMun),
+      mergeToRow(Mun, sMun, expectedDistSelf),
+      mergeToRow(Mun, sTF, expectedDistUniMun),
+      mergeToRow(Eye, sEye, expectedDistSelf),
+      mergeToRow(Lib, sLib, expectedDistSelf),
+      mergeToRow(Eif, sEif, expectedDistSelf)}},
+    {500000,
+     {mergeToRow(TF, sTF, expectedDistSelf),
+      mergeToRow(TF, sMun, expectedDistUniMun),
+      mergeToRow(TF, sEif, expectedDistUniEif),
+      mergeToRow(Mun, sMun, expectedDistSelf),
+      mergeToRow(Mun, sTF, expectedDistUniMun),
+      mergeToRow(Mun, sEif, expectedDistMunEif),
+      mergeToRow(Eye, sEye, expectedDistSelf),
+      mergeToRow(Eye, sEif, expectedDistEyeEif),
+      mergeToRow(Lib, sLib, expectedDistSelf),
+      mergeToRow(Eif, sEif, expectedDistSelf),
+      mergeToRow(Eif, sTF, expectedDistUniEif),
+      mergeToRow(Eif, sMun, expectedDistMunEif),
+      mergeToRow(Eif, sEye, expectedDistEyeEif)}},
+    {1000000,
+     {mergeToRow(TF, sTF, expectedDistSelf),
+      mergeToRow(TF, sMun, expectedDistUniMun),
+      mergeToRow(TF, sEif, expectedDistUniEif),
+      mergeToRow(TF, sEye, expectedDistUniEye),
+      mergeToRow(Mun, sMun, expectedDistSelf),
+      mergeToRow(Mun, sTF, expectedDistUniMun),
+      mergeToRow(Mun, sEif, expectedDistMunEif),
+      mergeToRow(Mun, sEye, expectedDistMunEye),
+      mergeToRow(Eye, sEye, expectedDistSelf),
+      mergeToRow(Eye, sEif, expectedDistEyeEif),
+      mergeToRow(Eye, sTF, expectedDistUniEye),
+      mergeToRow(Eye, sMun, expectedDistMunEye),
+      mergeToRow(Lib, sLib, expectedDistSelf),
+      mergeToRow(Eif, sEif, expectedDistSelf),
+      mergeToRow(Eif, sTF, expectedDistUniEif),
+      mergeToRow(Eif, sMun, expectedDistMunEif),
+      mergeToRow(Eif, sEye, expectedDistEyeEif)}},
+    {10000000,
+     {mergeToRow(TF, sTF, expectedDistSelf),
+      mergeToRow(TF, sMun, expectedDistUniMun),
+      mergeToRow(TF, sEif, expectedDistUniEif),
+      mergeToRow(TF, sEye, expectedDistUniEye),
+      mergeToRow(TF, sLib, expectedDistUniLib),
+      mergeToRow(Mun, sMun, expectedDistSelf),
+      mergeToRow(Mun, sTF, expectedDistUniMun),
+      mergeToRow(Mun, sEif, expectedDistMunEif),
+      mergeToRow(Mun, sEye, expectedDistMunEye),
+      mergeToRow(Mun, sLib, expectedDistMunLib),
+      mergeToRow(Eye, sEye, expectedDistSelf),
+      mergeToRow(Eye, sEif, expectedDistEyeEif),
+      mergeToRow(Eye, sTF, expectedDistUniEye),
+      mergeToRow(Eye, sMun, expectedDistMunEye),
+      mergeToRow(Eye, sLib, expectedDistEyeLib),
+      mergeToRow(Lib, sLib, expectedDistSelf),
+      mergeToRow(Lib, sTF, expectedDistUniLib),
+      mergeToRow(Lib, sMun, expectedDistMunLib),
+      mergeToRow(Lib, sEye, expectedDistEyeLib),
+      mergeToRow(Lib, sEif, expectedDistEifLib),
+      mergeToRow(Eif, sEif, expectedDistSelf),
+      mergeToRow(Eif, sTF, expectedDistUniEif),
+      mergeToRow(Eif, sMun, expectedDistMunEif),
+      mergeToRow(Eif, sEye, expectedDistEyeEif),
+      mergeToRow(Eif, sLib, expectedDistEifLib)}}};
 
-Rows expectedMaxDist1000000_rows_small{
-    mergeToRow(sTF, sTF, expectedDistSelf),
-    mergeToRow(sTF, sMun, expectedDistUniMun),
-    mergeToRow(sTF, sEif, expectedDistUniEif),
-    mergeToRow(sTF, sEye, expectedDistUniEye),
-    mergeToRow(sMun, sMun, expectedDistSelf),
-    mergeToRow(sMun, sTF, expectedDistUniMun),
-    mergeToRow(sMun, sEif, expectedDistMunEif),
-    mergeToRow(sMun, sEye, expectedDistMunEye),
-    mergeToRow(sEye, sEye, expectedDistSelf),
-    mergeToRow(sEye, sEif, expectedDistEyeEif),
-    mergeToRow(sEye, sTF, expectedDistUniEye),
-    mergeToRow(sEye, sMun, expectedDistMunEye),
-    mergeToRow(sLib, sLib, expectedDistSelf),
-    mergeToRow(sEif, sEif, expectedDistSelf),
-    mergeToRow(sEif, sTF, expectedDistUniEif),
-    mergeToRow(sEif, sMun, expectedDistMunEif),
-    mergeToRow(sEif, sEye, expectedDistEyeEif)};
+ExpectedRowsMaxDist expectedMaxDistRowsDiffIDTable = {
+    {1, {mergeToRow({sTF.at(1)}, sTF, expectedDistSelf)}},
+    {5000,
+     {mergeToRow({sTF.at(1)}, sTF, expectedDistSelf),
+      mergeToRow({sTF.at(1)}, sMun, expectedDistUniMun)}},
+    {500000,
+     {mergeToRow({sTF.at(1)}, sTF, expectedDistSelf),
+      mergeToRow({sTF.at(1)}, sMun, expectedDistUniMun),
+      mergeToRow({sTF.at(1)}, sEif, expectedDistUniEif)}},
+    {1000000,
+     {mergeToRow({sTF.at(1)}, sTF, expectedDistSelf),
+      mergeToRow({sTF.at(1)}, sMun, expectedDistUniMun),
+      mergeToRow({sTF.at(1)}, sEif, expectedDistUniEif),
+      mergeToRow({sTF.at(1)}, sEye, expectedDistUniEye)}},
+    {10000000,
+     {mergeToRow({sTF.at(1)}, sTF, expectedDistSelf),
+      mergeToRow({sTF.at(1)}, sMun, expectedDistUniMun),
+      mergeToRow({sTF.at(1)}, sEif, expectedDistUniEif),
+      mergeToRow({sTF.at(1)}, sEye, expectedDistUniEye),
+      mergeToRow({sTF.at(1)}, sLib, expectedDistUniLib)}}};
 
-Rows expectedMaxDist10000000_rows_small{
-    mergeToRow(sTF, sTF, expectedDistSelf),
-    mergeToRow(sTF, sMun, expectedDistUniMun),
-    mergeToRow(sTF, sEif, expectedDistUniEif),
-    mergeToRow(sTF, sEye, expectedDistUniEye),
-    mergeToRow(sTF, sLib, expectedDistUniLib),
-    mergeToRow(sMun, sMun, expectedDistSelf),
-    mergeToRow(sMun, sTF, expectedDistUniMun),
-    mergeToRow(sMun, sEif, expectedDistMunEif),
-    mergeToRow(sMun, sEye, expectedDistMunEye),
-    mergeToRow(sMun, sLib, expectedDistMunLib),
-    mergeToRow(sEye, sEye, expectedDistSelf),
-    mergeToRow(sEye, sEif, expectedDistEyeEif),
-    mergeToRow(sEye, sTF, expectedDistUniEye),
-    mergeToRow(sEye, sMun, expectedDistMunEye),
-    mergeToRow(sEye, sLib, expectedDistEyeLib),
-    mergeToRow(sLib, sLib, expectedDistSelf),
-    mergeToRow(sLib, sTF, expectedDistUniLib),
-    mergeToRow(sLib, sMun, expectedDistMunLib),
-    mergeToRow(sLib, sEye, expectedDistEyeLib),
-    mergeToRow(sLib, sEif, expectedDistEifLib),
-    mergeToRow(sEif, sEif, expectedDistSelf),
-    mergeToRow(sEif, sTF, expectedDistUniEif),
-    mergeToRow(sEif, sMun, expectedDistMunEif),
-    mergeToRow(sEif, sEye, expectedDistEyeEif),
-    mergeToRow(sEif, sLib, expectedDistEifLib)};
+// The expected values for nearest nneighbors are stored in a nested map. The
+// key in the outer map is the maximum number of results and the key in the
+// inner map is the maximum distance or std::nullopt.
+using ExpectedRowsNearestNeighborsMaxDist =
+    std::unordered_map<std::optional<size_t>, Rows>;
+using ExpectedRowsNearestNeighbors =
+    std::unordered_map<size_t, ExpectedRowsNearestNeighborsMaxDist>;
 
-Rows expectedMaxDist1_rows_small_wrong_point{
-    mergeToRow(sMun, sMun, expectedDistSelf),
-    mergeToRow(sEye, sEye, expectedDistSelf),
-    mergeToRow(sLib, sLib, expectedDistSelf),
-    mergeToRow(sEif, sEif, expectedDistSelf),
-};
-
-Rows expectedMaxDist5000_rows_small_wrong_point{
-    mergeToRow(sMun, sMun, expectedDistSelf),
-    mergeToRow(sEye, sEye, expectedDistSelf),
-    mergeToRow(sLib, sLib, expectedDistSelf),
-    mergeToRow(sEif, sEif, expectedDistSelf)};
-
-Rows expectedMaxDist500000_rows_small_wrong_point{
-    mergeToRow(sMun, sMun, expectedDistSelf),
-    mergeToRow(sMun, sEif, expectedDistMunEif),
-    mergeToRow(sEye, sEye, expectedDistSelf),
-    mergeToRow(sEye, sEif, expectedDistEyeEif),
-    mergeToRow(sLib, sLib, expectedDistSelf),
-    mergeToRow(sEif, sEif, expectedDistSelf),
-    mergeToRow(sEif, sMun, expectedDistMunEif),
-    mergeToRow(sEif, sEye, expectedDistEyeEif)};
-
-Rows expectedMaxDist1000000_rows_small_wrong_point{
-    mergeToRow(sMun, sMun, expectedDistSelf),
-    mergeToRow(sMun, sEif, expectedDistMunEif),
-    mergeToRow(sMun, sEye, expectedDistMunEye),
-    mergeToRow(sEye, sEye, expectedDistSelf),
-    mergeToRow(sEye, sEif, expectedDistEyeEif),
-    mergeToRow(sEye, sMun, expectedDistMunEye),
-    mergeToRow(sLib, sLib, expectedDistSelf),
-    mergeToRow(sEif, sEif, expectedDistSelf),
-    mergeToRow(sEif, sMun, expectedDistMunEif),
-    mergeToRow(sEif, sEye, expectedDistEyeEif)};
-
-Rows expectedMaxDist10000000_rows_small_wrong_point{
-    mergeToRow(sMun, sMun, expectedDistSelf),
-    mergeToRow(sMun, sEif, expectedDistMunEif),
-    mergeToRow(sMun, sEye, expectedDistMunEye),
-    mergeToRow(sMun, sLib, expectedDistMunLib),
-    mergeToRow(sEye, sEye, expectedDistSelf),
-    mergeToRow(sEye, sEif, expectedDistEyeEif),
-    mergeToRow(sEye, sMun, expectedDistMunEye),
-    mergeToRow(sEye, sLib, expectedDistEyeLib),
-    mergeToRow(sLib, sLib, expectedDistSelf),
-    mergeToRow(sLib, sMun, expectedDistMunLib),
-    mergeToRow(sLib, sEye, expectedDistEyeLib),
-    mergeToRow(sLib, sEif, expectedDistEifLib),
-    mergeToRow(sEif, sEif, expectedDistSelf),
-    mergeToRow(sEif, sMun, expectedDistMunEif),
-    mergeToRow(sEif, sEye, expectedDistEyeEif),
-    mergeToRow(sEif, sLib, expectedDistEifLib)};
-
-Rows expectedMaxDist1_rows_diff{
-    mergeToRow(TF, sTF, expectedDistSelf),
-    mergeToRow(Mun, sMun, expectedDistSelf),
-    mergeToRow(Eye, sEye, expectedDistSelf),
-    mergeToRow(Lib, sLib, expectedDistSelf),
-    mergeToRow(Eif, sEif, expectedDistSelf),
-};
-
-Rows expectedMaxDist5000_rows_diff{mergeToRow(TF, sTF, expectedDistSelf),
-                                   mergeToRow(TF, sMun, expectedDistUniMun),
-                                   mergeToRow(Mun, sMun, expectedDistSelf),
-                                   mergeToRow(Mun, sTF, expectedDistUniMun),
-                                   mergeToRow(Eye, sEye, expectedDistSelf),
-                                   mergeToRow(Lib, sLib, expectedDistSelf),
-                                   mergeToRow(Eif, sEif, expectedDistSelf)};
-
-Rows expectedMaxDist500000_rows_diff{mergeToRow(TF, sTF, expectedDistSelf),
-                                     mergeToRow(TF, sMun, expectedDistUniMun),
-                                     mergeToRow(TF, sEif, expectedDistUniEif),
-                                     mergeToRow(Mun, sMun, expectedDistSelf),
-                                     mergeToRow(Mun, sTF, expectedDistUniMun),
-                                     mergeToRow(Mun, sEif, expectedDistMunEif),
-                                     mergeToRow(Eye, sEye, expectedDistSelf),
-                                     mergeToRow(Eye, sEif, expectedDistEyeEif),
-                                     mergeToRow(Lib, sLib, expectedDistSelf),
-                                     mergeToRow(Eif, sEif, expectedDistSelf),
-                                     mergeToRow(Eif, sTF, expectedDistUniEif),
-                                     mergeToRow(Eif, sMun, expectedDistMunEif),
-                                     mergeToRow(Eif, sEye, expectedDistEyeEif)};
-
-Rows expectedMaxDist1000000_rows_diff{
-    mergeToRow(TF, sTF, expectedDistSelf),
-    mergeToRow(TF, sMun, expectedDistUniMun),
-    mergeToRow(TF, sEif, expectedDistUniEif),
-    mergeToRow(TF, sEye, expectedDistUniEye),
-    mergeToRow(Mun, sMun, expectedDistSelf),
-    mergeToRow(Mun, sTF, expectedDistUniMun),
-    mergeToRow(Mun, sEif, expectedDistMunEif),
-    mergeToRow(Mun, sEye, expectedDistMunEye),
-    mergeToRow(Eye, sEye, expectedDistSelf),
-    mergeToRow(Eye, sEif, expectedDistEyeEif),
-    mergeToRow(Eye, sTF, expectedDistUniEye),
-    mergeToRow(Eye, sMun, expectedDistMunEye),
-    mergeToRow(Lib, sLib, expectedDistSelf),
-    mergeToRow(Eif, sEif, expectedDistSelf),
-    mergeToRow(Eif, sTF, expectedDistUniEif),
-    mergeToRow(Eif, sMun, expectedDistMunEif),
-    mergeToRow(Eif, sEye, expectedDistEyeEif)};
-
-Rows expectedMaxDist10000000_rows_diff{
-    mergeToRow(TF, sTF, expectedDistSelf),
-    mergeToRow(TF, sMun, expectedDistUniMun),
-    mergeToRow(TF, sEif, expectedDistUniEif),
-    mergeToRow(TF, sEye, expectedDistUniEye),
-    mergeToRow(TF, sLib, expectedDistUniLib),
-    mergeToRow(Mun, sMun, expectedDistSelf),
-    mergeToRow(Mun, sTF, expectedDistUniMun),
-    mergeToRow(Mun, sEif, expectedDistMunEif),
-    mergeToRow(Mun, sEye, expectedDistMunEye),
-    mergeToRow(Mun, sLib, expectedDistMunLib),
-    mergeToRow(Eye, sEye, expectedDistSelf),
-    mergeToRow(Eye, sEif, expectedDistEyeEif),
-    mergeToRow(Eye, sTF, expectedDistUniEye),
-    mergeToRow(Eye, sMun, expectedDistMunEye),
-    mergeToRow(Eye, sLib, expectedDistEyeLib),
-    mergeToRow(Lib, sLib, expectedDistSelf),
-    mergeToRow(Lib, sTF, expectedDistUniLib),
-    mergeToRow(Lib, sMun, expectedDistMunLib),
-    mergeToRow(Lib, sEye, expectedDistEyeLib),
-    mergeToRow(Lib, sEif, expectedDistEifLib),
-    mergeToRow(Eif, sEif, expectedDistSelf),
-    mergeToRow(Eif, sTF, expectedDistUniEif),
-    mergeToRow(Eif, sMun, expectedDistMunEif),
-    mergeToRow(Eif, sEye, expectedDistEyeEif),
-    mergeToRow(Eif, sLib, expectedDistEifLib)};
-
-Rows expectedMaxDist1_rows_diffIDTable{
-    mergeToRow({sTF.at(1)}, sTF, expectedDistSelf)};
-
-Rows expectedMaxDist5000_rows_diffIDTable{
-    mergeToRow({sTF.at(1)}, sTF, expectedDistSelf),
-    mergeToRow({sTF.at(1)}, sMun, expectedDistUniMun)};
-
-Rows expectedMaxDist500000_rows_diffIDTable{
-    mergeToRow({sTF.at(1)}, sTF, expectedDistSelf),
-    mergeToRow({sTF.at(1)}, sMun, expectedDistUniMun),
-    mergeToRow({sTF.at(1)}, sEif, expectedDistUniEif)};
-
-Rows expectedMaxDist1000000_rows_diffIDTable{
-    mergeToRow({sTF.at(1)}, sTF, expectedDistSelf),
-    mergeToRow({sTF.at(1)}, sMun, expectedDistUniMun),
-    mergeToRow({sTF.at(1)}, sEif, expectedDistUniEif),
-    mergeToRow({sTF.at(1)}, sEye, expectedDistUniEye)};
-
-Rows expectedMaxDist10000000_rows_diffIDTable{
-    mergeToRow({sTF.at(1)}, sTF, expectedDistSelf),
-    mergeToRow({sTF.at(1)}, sMun, expectedDistUniMun),
-    mergeToRow({sTF.at(1)}, sEif, expectedDistUniEif),
-    mergeToRow({sTF.at(1)}, sEye, expectedDistUniEye),
-    mergeToRow({sTF.at(1)}, sLib, expectedDistUniLib)};
-
-Rows expectedNearestNeighbors1{mergeToRow(TF, TF, expectedDistSelf),
-                               mergeToRow(Mun, Mun, expectedDistSelf),
-                               mergeToRow(Eye, Eye, expectedDistSelf),
-                               mergeToRow(Lib, Lib, expectedDistSelf),
-                               mergeToRow(Eif, Eif, expectedDistSelf)};
-
-Rows expectedNearestNeighbors2{mergeToRow(TF, TF, expectedDistSelf),
-                               mergeToRow(Mun, Mun, expectedDistSelf),
-                               mergeToRow(Eye, Eye, expectedDistSelf),
-                               mergeToRow(Lib, Lib, expectedDistSelf),
-                               mergeToRow(Eif, Eif, expectedDistSelf),
-                               mergeToRow(TF, Mun, expectedDistUniMun),
-                               mergeToRow(Mun, TF, expectedDistUniMun),
-                               mergeToRow(Eye, Eif, expectedDistEyeEif),
-                               mergeToRow(Lib, Eye, expectedDistEyeLib),
-                               mergeToRow(Eif, Eye, expectedDistEyeEif)};
-
-Rows expectedNearestNeighbors2_400000{mergeToRow(TF, TF, expectedDistSelf),
-                                      mergeToRow(Mun, Mun, expectedDistSelf),
-                                      mergeToRow(Eye, Eye, expectedDistSelf),
-                                      mergeToRow(Lib, Lib, expectedDistSelf),
-                                      mergeToRow(Eif, Eif, expectedDistSelf),
-                                      mergeToRow(TF, Mun, expectedDistUniMun),
-                                      mergeToRow(Mun, TF, expectedDistUniMun),
-                                      mergeToRow(Eye, Eif, expectedDistEyeEif),
-                                      mergeToRow(Eif, Eye, expectedDistEyeEif)};
-
-Rows expectedNearestNeighbors2_4000{mergeToRow(TF, TF, expectedDistSelf),
-                                    mergeToRow(Mun, Mun, expectedDistSelf),
-                                    mergeToRow(Eye, Eye, expectedDistSelf),
-                                    mergeToRow(Lib, Lib, expectedDistSelf),
-                                    mergeToRow(Eif, Eif, expectedDistSelf),
-                                    mergeToRow(TF, Mun, expectedDistUniMun),
-                                    mergeToRow(Mun, TF, expectedDistUniMun)};
-
-Rows expectedNearestNeighbors2_40{mergeToRow(TF, TF, expectedDistSelf),
-                                  mergeToRow(Mun, Mun, expectedDistSelf),
-                                  mergeToRow(Eye, Eye, expectedDistSelf),
-                                  mergeToRow(Lib, Lib, expectedDistSelf),
-                                  mergeToRow(Eif, Eif, expectedDistSelf)};
-
-Rows expectedNearestNeighbors3_500000{mergeToRow(TF, TF, expectedDistSelf),
-                                      mergeToRow(Mun, Mun, expectedDistSelf),
-                                      mergeToRow(Eye, Eye, expectedDistSelf),
-                                      mergeToRow(Lib, Lib, expectedDistSelf),
-                                      mergeToRow(Eif, Eif, expectedDistSelf),
-                                      mergeToRow(TF, Mun, expectedDistUniMun),
-                                      mergeToRow(Mun, TF, expectedDistUniMun),
-                                      mergeToRow(Mun, Eif, expectedDistMunEif),
-                                      mergeToRow(TF, Eif, expectedDistUniEif),
-                                      mergeToRow(Eye, Eif, expectedDistEyeEif),
-                                      mergeToRow(Eif, Eye, expectedDistEyeEif),
-                                      mergeToRow(Eif, TF, expectedDistUniEif)};
+ExpectedRowsNearestNeighbors expectedNearestNeighbors = {
+    {1,
+     {{std::nullopt,
+       {mergeToRow(TF, TF, expectedDistSelf),
+        mergeToRow(Mun, Mun, expectedDistSelf),
+        mergeToRow(Eye, Eye, expectedDistSelf),
+        mergeToRow(Lib, Lib, expectedDistSelf),
+        mergeToRow(Eif, Eif, expectedDistSelf)}}}},
+    {2,
+     {{std::nullopt,
+       {mergeToRow(TF, TF, expectedDistSelf),
+        mergeToRow(Mun, Mun, expectedDistSelf),
+        mergeToRow(Eye, Eye, expectedDistSelf),
+        mergeToRow(Lib, Lib, expectedDistSelf),
+        mergeToRow(Eif, Eif, expectedDistSelf),
+        mergeToRow(TF, Mun, expectedDistUniMun),
+        mergeToRow(Mun, TF, expectedDistUniMun),
+        mergeToRow(Eye, Eif, expectedDistEyeEif),
+        mergeToRow(Lib, Eye, expectedDistEyeLib),
+        mergeToRow(Eif, Eye, expectedDistEyeEif)}},
+      {40,
+       {mergeToRow(TF, TF, expectedDistSelf),
+        mergeToRow(Mun, Mun, expectedDistSelf),
+        mergeToRow(Eye, Eye, expectedDistSelf),
+        mergeToRow(Lib, Lib, expectedDistSelf),
+        mergeToRow(Eif, Eif, expectedDistSelf)}},
+      {4000,
+       {mergeToRow(TF, TF, expectedDistSelf),
+        mergeToRow(Mun, Mun, expectedDistSelf),
+        mergeToRow(Eye, Eye, expectedDistSelf),
+        mergeToRow(Lib, Lib, expectedDistSelf),
+        mergeToRow(Eif, Eif, expectedDistSelf),
+        mergeToRow(TF, Mun, expectedDistUniMun),
+        mergeToRow(Mun, TF, expectedDistUniMun)}},
+      {400000,
+       {mergeToRow(TF, TF, expectedDistSelf),
+        mergeToRow(Mun, Mun, expectedDistSelf),
+        mergeToRow(Eye, Eye, expectedDistSelf),
+        mergeToRow(Lib, Lib, expectedDistSelf),
+        mergeToRow(Eif, Eif, expectedDistSelf),
+        mergeToRow(TF, Mun, expectedDistUniMun),
+        mergeToRow(Mun, TF, expectedDistUniMun),
+        mergeToRow(Eye, Eif, expectedDistEyeEif),
+        mergeToRow(Eif, Eye, expectedDistEyeEif)}}}},
+    {3,
+     {{500000,
+       {mergeToRow(TF, TF, expectedDistSelf),
+        mergeToRow(Mun, Mun, expectedDistSelf),
+        mergeToRow(Eye, Eye, expectedDistSelf),
+        mergeToRow(Lib, Lib, expectedDistSelf),
+        mergeToRow(Eif, Eif, expectedDistSelf),
+        mergeToRow(TF, Mun, expectedDistUniMun),
+        mergeToRow(Mun, TF, expectedDistUniMun),
+        mergeToRow(Mun, Eif, expectedDistMunEif),
+        mergeToRow(TF, Eif, expectedDistUniEif),
+        mergeToRow(Eye, Eif, expectedDistEyeEif),
+        mergeToRow(Eif, Eye, expectedDistEyeEif),
+        mergeToRow(Eif, TF, expectedDistUniEif)}}}}};
 
 // test the compute result method on small examples
 TEST_P(SpatialJoinParamTest, computeResultSmallDatasetLargeChildren) {
@@ -784,31 +790,21 @@ TEST_P(SpatialJoinParamTest, computeResultSmallDatasetLargeChildren) {
       "?geo2",   "?point2", "?distOfTheTwoObjectsAddedInternally"};
   bool addLeftChildFirst = std::get<1>(GetParam());
 
+  auto nearestNeighborsTask = getNearestNeighbors();
   auto maxDistTask = getMaxDist();
   if (maxDistTask.has_value()) {
     buildAndTestSmallTestSetLargeChildren(
         maxDistTask.value(), addLeftChildFirst,
         expectedMaxDistRows[maxDistTask.value().maxDist_], columnNames);
+  } else if (nearestNeighborsTask.has_value()) {
+    buildAndTestSmallTestSetLargeChildren(
+        nearestNeighborsTask.value(), addLeftChildFirst,
+        expectedNearestNeighbors[nearestNeighborsTask.value().maxResults_]
+                                [nearestNeighborsTask.value().maxDist_],
+        columnNames);
+  } else {
+    AD_THROW("Invalid config");
   }
-
-  buildAndTestSmallTestSetLargeChildren(NearestNeighborsConfig{1},
-                                        addLeftChildFirst,
-                                        expectedNearestNeighbors1, columnNames);
-  buildAndTestSmallTestSetLargeChildren(NearestNeighborsConfig{2},
-                                        addLeftChildFirst,
-                                        expectedNearestNeighbors2, columnNames);
-  buildAndTestSmallTestSetLargeChildren(
-      NearestNeighborsConfig{2, 400000}, addLeftChildFirst,
-      expectedNearestNeighbors2_400000, columnNames);
-  buildAndTestSmallTestSetLargeChildren(
-      NearestNeighborsConfig{2, 4000}, addLeftChildFirst,
-      expectedNearestNeighbors2_4000, columnNames);
-  buildAndTestSmallTestSetLargeChildren(
-      NearestNeighborsConfig{2, 40}, addLeftChildFirst,
-      expectedNearestNeighbors2_40, columnNames);
-  buildAndTestSmallTestSetLargeChildren(
-      NearestNeighborsConfig{3, 500000}, addLeftChildFirst,
-      expectedNearestNeighbors3_500000, columnNames);
 }
 
 TEST_P(SpatialJoinParamTest, computeResultSmallDatasetSmallChildren) {
@@ -816,21 +812,12 @@ TEST_P(SpatialJoinParamTest, computeResultSmallDatasetSmallChildren) {
                   "?distOfTheTwoObjectsAddedInternally"};
   bool addLeftChildFirst = std::get<1>(GetParam());
 
-  buildAndTestSmallTestSetSmallChildren(MaxDistanceConfig{1}, addLeftChildFirst,
-                                        expectedMaxDist1_rows_small,
-                                        columnNames);
-  buildAndTestSmallTestSetSmallChildren(
-      MaxDistanceConfig{5000}, addLeftChildFirst,
-      expectedMaxDist5000_rows_small, columnNames);
-  buildAndTestSmallTestSetSmallChildren(
-      MaxDistanceConfig{500000}, addLeftChildFirst,
-      expectedMaxDist500000_rows_small, columnNames);
-  buildAndTestSmallTestSetSmallChildren(
-      MaxDistanceConfig{1000000}, addLeftChildFirst,
-      expectedMaxDist1000000_rows_small, columnNames);
-  buildAndTestSmallTestSetSmallChildren(
-      MaxDistanceConfig{10000000}, addLeftChildFirst,
-      expectedMaxDist10000000_rows_small, columnNames);
+  auto maxDistTask = getMaxDist();
+  if (maxDistTask.has_value()) {
+    buildAndTestSmallTestSetSmallChildren(
+        maxDistTask.value(), addLeftChildFirst,
+        expectedMaxDistRowsSmall[maxDistTask.value().maxDist_], columnNames);
+  }
 }
 
 TEST_P(SpatialJoinParamTest, computeResultSmallDatasetDifferentSizeChildren) {
@@ -844,21 +831,13 @@ TEST_P(SpatialJoinParamTest, computeResultSmallDatasetDifferentSizeChildren) {
   bool addLeftChildFirst = std::get<1>(GetParam());
   bool bigChildLeft = std::get<2>(GetParam());
 
-  buildAndTestSmallTestSetDiffSizeChildren(
-      MaxDistanceConfig{1}, addLeftChildFirst, expectedMaxDist1_rows_diff,
-      columnNames, bigChildLeft);
-  buildAndTestSmallTestSetDiffSizeChildren(
-      MaxDistanceConfig{5000}, addLeftChildFirst, expectedMaxDist5000_rows_diff,
-      columnNames, bigChildLeft);
-  buildAndTestSmallTestSetDiffSizeChildren(
-      MaxDistanceConfig{500000}, addLeftChildFirst,
-      expectedMaxDist500000_rows_diff, columnNames, bigChildLeft);
-  buildAndTestSmallTestSetDiffSizeChildren(
-      MaxDistanceConfig{1000000}, addLeftChildFirst,
-      expectedMaxDist1000000_rows_diff, columnNames, bigChildLeft);
-  buildAndTestSmallTestSetDiffSizeChildren(
-      MaxDistanceConfig{10000000}, addLeftChildFirst,
-      expectedMaxDist10000000_rows_diff, columnNames, bigChildLeft);
+  auto maxDistTask = getMaxDist();
+  if (maxDistTask.has_value()) {
+    buildAndTestSmallTestSetDiffSizeChildren(
+        maxDistTask.value(), addLeftChildFirst,
+        expectedMaxDistRowsDiff[maxDistTask.value().maxDist_], columnNames,
+        bigChildLeft);
+  }
 }
 
 TEST_P(SpatialJoinParamTest, maxSizeMaxDistanceTest) {
@@ -870,7 +849,7 @@ TEST_P(SpatialJoinParamTest, maxSizeMaxDistanceTest) {
   Row columnNames{"?obj1", "?point1", "?obj2", "?point2",
                   "?distOfTheTwoObjectsAddedInternally"};
   buildAndTestSmallTestSetSmallChildren(maxDistConf, addLeftChildFirst,
-                                        expectedMaxDist10000000_rows_small,
+                                        expectedMaxDistRowsSmall[10000000],
                                         columnNames);
 
   // test diff size children
@@ -882,7 +861,7 @@ TEST_P(SpatialJoinParamTest, maxSizeMaxDistanceTest) {
                  "?point2",
                  "?distOfTheTwoObjectsAddedInternally"};
   buildAndTestSmallTestSetDiffSizeChildren(maxDistConf, addLeftChildFirst,
-                                           expectedMaxDist10000000_rows_diff,
+                                           expectedMaxDistRowsDiff[10000000],
                                            columnNames, false);
 
   // test large size children
@@ -900,21 +879,13 @@ TEST_P(SpatialJoinParamTest, diffSizeIdTables) {
   bool addLeftChildFirst = std::get<1>(GetParam());
   bool bigChildLeft = std::get<2>(GetParam());
 
-  testDiffSizeIdTables(MaxDistanceConfig{1}, addLeftChildFirst,
-                       expectedMaxDist1_rows_diffIDTable, columnNames,
-                       bigChildLeft);
-  testDiffSizeIdTables(MaxDistanceConfig{5000}, addLeftChildFirst,
-                       expectedMaxDist5000_rows_diffIDTable, columnNames,
-                       bigChildLeft);
-  testDiffSizeIdTables(MaxDistanceConfig{500000}, addLeftChildFirst,
-                       expectedMaxDist500000_rows_diffIDTable, columnNames,
-                       bigChildLeft);
-  testDiffSizeIdTables(MaxDistanceConfig{1000000}, addLeftChildFirst,
-                       expectedMaxDist1000000_rows_diffIDTable, columnNames,
-                       bigChildLeft);
-  testDiffSizeIdTables(MaxDistanceConfig{10000000}, addLeftChildFirst,
-                       expectedMaxDist10000000_rows_diffIDTable, columnNames,
-                       bigChildLeft);
+  auto maxDistTask = getMaxDist();
+  if (maxDistTask.has_value()) {
+    testDiffSizeIdTables(
+        maxDistTask.value(), addLeftChildFirst,
+        expectedMaxDistRowsDiffIDTable[maxDistTask.value().maxDist_],
+        columnNames, bigChildLeft);
+  }
 }
 
 TEST_P(SpatialJoinParamTest, wrongPointInInput) {
@@ -923,33 +894,30 @@ TEST_P(SpatialJoinParamTest, wrongPointInInput) {
                   "?distOfTheTwoObjectsAddedInternally"};
   bool addLeftChildFirst = std::get<1>(GetParam());
 
-  testWrongPointInInput(MaxDistanceConfig{1}, addLeftChildFirst,
-                        expectedMaxDist1_rows_small_wrong_point, columnNames);
-  testWrongPointInInput(MaxDistanceConfig{5000}, addLeftChildFirst,
-                        expectedMaxDist5000_rows_small_wrong_point,
-                        columnNames);
-  testWrongPointInInput(MaxDistanceConfig{500000}, addLeftChildFirst,
-                        expectedMaxDist500000_rows_small_wrong_point,
-                        columnNames);
-  testWrongPointInInput(MaxDistanceConfig{1000000}, addLeftChildFirst,
-                        expectedMaxDist1000000_rows_small_wrong_point,
-                        columnNames);
-  testWrongPointInInput(MaxDistanceConfig{10000000}, addLeftChildFirst,
-                        expectedMaxDist10000000_rows_small_wrong_point,
-                        columnNames);
+  auto maxDistTask = getMaxDist();
+  if (maxDistTask.has_value()) {
+    testWrongPointInInput(
+        maxDistTask.value(), addLeftChildFirst,
+        expectedMaxDistRowsSmallWrongPoint[maxDistTask.value().maxDist_],
+        columnNames);
+  }
 }
 
 INSTANTIATE_TEST_SUITE_P(
     SpatialJoin, SpatialJoinParamTest,
-    ::testing::Combine(::testing::Values(SpatialJoinAlgorithm::BASELINE,
-                                         SpatialJoinAlgorithm::S2_GEOMETRY,
-                                         SpatialJoinAlgorithm::BOUNDING_BOX),
-                       ::testing::Bool(), ::testing::Bool(),
-                       ::testing::Values(MaxDistanceConfig{1},
-                                         MaxDistanceConfig{5000},
-                                         MaxDistanceConfig{500000},
-                                         MaxDistanceConfig{1000000},
-                                         MaxDistanceConfig{10000000})));
+    ::testing::Combine(
+        ::testing::Values(SpatialJoinAlgorithm::BASELINE,
+                          SpatialJoinAlgorithm::S2_GEOMETRY,
+                          SpatialJoinAlgorithm::BOUNDING_BOX),
+        ::testing::Bool(), ::testing::Bool(),
+        ::testing::Values(MaxDistanceConfig{1}, MaxDistanceConfig{5000},
+                          MaxDistanceConfig{500000}, MaxDistanceConfig{1000000},
+                          MaxDistanceConfig{10000000},
+                          NearestNeighborsConfig{1}, NearestNeighborsConfig{2},
+                          NearestNeighborsConfig{2, 400000},
+                          NearestNeighborsConfig{2, 4000},
+                          NearestNeighborsConfig{2, 40},
+                          NearestNeighborsConfig{3, 500000})));
 
 }  // end of Namespace computeResultTest
 
