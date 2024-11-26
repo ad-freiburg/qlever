@@ -76,6 +76,9 @@ class IndexScan final : public Operation {
   Permutation::IdTableGenerator lazyScanForJoinOfColumnWithScan(
       std::span<const Id> joinColumn) const;
 
+  std::pair<Result::Generator, Result::Generator> prefilterTables(
+      Result::Generator input, ColumnIndex joinColumn);
+
  private:
   // TODO<joka921> Make the `getSizeEstimateBeforeLimit()` function `const` for
   // ALL the `Operations`.
@@ -143,4 +146,7 @@ class IndexScan final : public Operation {
   Permutation::IdTableGenerator getLazyScan(
       std::vector<CompressedBlockMetadata> blocks) const;
   std::optional<Permutation::MetadataAndBlocks> getMetadataForScan() const;
+
+  void updateRuntimeInfoForLazyScan(
+      const CompressedRelationReader::LazyScanMetadata& metadata);
 };

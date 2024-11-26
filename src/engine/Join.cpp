@@ -203,8 +203,13 @@ ProtoResult Join::computeResult(bool requestLaziness) {
   // constructor that it is the right child.
   auto rightIndexScan =
       std::dynamic_pointer_cast<IndexScan>(_right->getRootOperation());
-  if (rightIndexScan && !rightResIfCached && leftRes->isFullyMaterialized()) {
-    return computeResultForIndexScanAndIdTable<false>(
+  if (rightIndexScan && !rightResIfCached) {
+    if (leftRes->isFullyMaterialized()) {
+      return computeResultForIndexScanAndIdTable<false>(
+          requestLaziness, std::move(leftRes), _leftJoinCol, rightIndexScan,
+          _rightJoinCol);
+    }
+    return computeResultForIndexScanAndLazyOperation<false>(
         requestLaziness, std::move(leftRes), _leftJoinCol, rightIndexScan,
         _rightJoinCol);
   }
@@ -838,6 +843,73 @@ ProtoResult Join::computeResultForIndexScanAndIdTable(
         if (std::holds_alternative<GeneratorWithDetails>(rightBlocks)) {
           updateRuntimeInfoForLazyScan(
               *scan, std::get<GeneratorWithDetails>(rightBlocks).details());
+        }
+
+        auto localVocab = std::move(rowAdder.localVocab());
+        return Result::IdTableVocabPair{std::move(rowAdder).resultTable(),
+                                        std::move(localVocab)};
+      },
+      std::move(resultPermutation));
+}
+
+// ______________________________________________________________________________________________________
+template <bool idTableIsRightInput>
+ProtoResult Join::computeResultForIndexScanAndLazyOperation(
+    bool requestLaziness, std::shared_ptr<const Result> resultWithIdTable,
+    ColumnIndex joinColTable, std::shared_ptr<IndexScan> scan,
+    ColumnIndex joinColScan) const {
+  // We first have to permute the columns.
+  auto [jcLeft, jcRight, numColsLeft, numColsRight] = [&]() {
+    return idTableIsRightInput
+               ? std::tuple{joinColScan, joinColTable, scan->getResultWidth(),
+                            _right->getResultWidth()}
+               : std::tuple{joinColTable, joinColScan, _left->getResultWidth(),
+                            scan->getResultWidth()};
+  }();
+
+  AD_CORRECTNESS_CHECK(joinColScan == 0);
+
+  ad_utility::JoinColumnMapping joinColMap{
+      {{jcLeft, jcRight}}, numColsLeft, numColsRight};
+  auto resultPermutation = joinColMap.permutationResult();
+  return createResult(
+      requestLaziness,
+      [this, scan = std::move(scan),
+       resultWithIdTable = std::move(resultWithIdTable),
+       joinColMap = std::move(joinColMap)](
+          std::function<void(IdTable&, LocalVocab&)> yieldTable) {
+        ad_utility::AddCombinedRowToIdTable rowAdder{
+            1, IdTable{getResultWidth(), allocator()}, cancellationHandle_,
+            CHUNK_SIZE, std::move(yieldTable)};
+
+        ad_utility::Timer timer{
+            ad_utility::timer::Timer::InitialStatus::Started};
+        auto [joinSide, indexScanSide] =
+            scan->prefilterTables(std::move(resultWithIdTable->idTables()), 0);
+
+        runtimeInfo().addDetail("time-for-filtering-blocks", timer.msecs());
+        auto doJoin = [&rowAdder](LazyInputView left,
+                                  LazyInputView right) mutable {
+          // Note: The `zipperJoinForBlocksWithPotentialUndef` automatically
+          // switches to a more efficient implementation if there are no UNDEF
+          // values in any of the inputs.
+          ad_utility::zipperJoinForBlocksWithPotentialUndef(
+              left, right, std::less{}, rowAdder);
+        };
+        const auto& indexScanPermutation = idTableIsRightInput
+                                               ? joinColMap.permutationLeft()
+                                               : joinColMap.permutationRight();
+        const auto& joinSidePermutation = idTableIsRightInput
+                                              ? joinColMap.permutationRight()
+                                              : joinColMap.permutationLeft();
+        if constexpr (idTableIsRightInput) {
+          doJoin(
+              convertGenerator(std::move(indexScanSide), indexScanPermutation),
+              convertGenerator(std::move(joinSide), joinSidePermutation));
+        } else {
+          doJoin(
+              convertGenerator(std::move(joinSide), joinSidePermutation),
+              convertGenerator(std::move(indexScanSide), indexScanPermutation));
         }
 
         auto localVocab = std::move(rowAdder.localVocab());
