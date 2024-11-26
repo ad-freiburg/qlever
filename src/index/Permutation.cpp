@@ -68,7 +68,7 @@ IdTable Permutation::scan(const ScanSpecification& scanSpec,
   return p.reader().scan(
       scanSpec, p.getAugmentedMetadataForPermutation(locatedTriplesSnapshot),
       additionalColumns, cancellationHandle,
-      getLocatedTriplesForPermutation(locatedTriplesSnapshot), limitOffset);
+      p.getLocatedTriplesForPermutation(locatedTriplesSnapshot), limitOffset);
 }
 
 // _____________________________________________________________________
@@ -78,7 +78,7 @@ size_t Permutation::getResultSizeOfScan(
   const auto& p = getActualPermutation(scanSpec);
   return p.reader().getResultSizeOfScan(
       scanSpec, p.getAugmentedMetadataForPermutation(locatedTriplesSnapshot),
-      getLocatedTriplesForPermutation(locatedTriplesSnapshot));
+      p.getLocatedTriplesForPermutation(locatedTriplesSnapshot));
 }
 
 // _____________________________________________________________________
@@ -88,7 +88,7 @@ std::pair<size_t, size_t> Permutation::getSizeEstimateForScan(
   const auto& p = getActualPermutation(scanSpec);
   return p.reader().getSizeEstimateForScan(
       scanSpec, p.getAugmentedMetadataForPermutation(locatedTriplesSnapshot),
-      getLocatedTriplesForPermutation(locatedTriplesSnapshot));
+      p.getLocatedTriplesForPermutation(locatedTriplesSnapshot));
 }
 
 // ____________________________________________________________________________
@@ -99,7 +99,7 @@ IdTable Permutation::getDistinctCol1IdsAndCounts(
   return p.reader().getDistinctCol1IdsAndCounts(
       col0Id, p.getAugmentedMetadataForPermutation(locatedTriplesSnapshot),
       cancellationHandle,
-      getLocatedTriplesForPermutation(locatedTriplesSnapshot));
+      p.getLocatedTriplesForPermutation(locatedTriplesSnapshot));
 }
 
 // ____________________________________________________________________________
@@ -161,7 +161,7 @@ std::optional<CompressedRelationMetadata> Permutation::getMetadata(
   }
   return p.reader().getMetadataForSmallRelation(
       p.getAugmentedMetadataForPermutation(locatedTriplesSnapshot), col0Id,
-      getLocatedTriplesForPermutation(locatedTriplesSnapshot));
+      p.getLocatedTriplesForPermutation(locatedTriplesSnapshot));
 }
 
 // _____________________________________________________________________
@@ -175,7 +175,7 @@ std::optional<Permutation::MetadataAndBlocks> Permutation::getMetadataAndBlocks(
                                   locatedTriplesSnapshot))};
 
   auto firstAndLastTriple = p.reader().getFirstAndLastTriple(
-      mb, getLocatedTriplesForPermutation(locatedTriplesSnapshot));
+      mb, p.getLocatedTriplesForPermutation(locatedTriplesSnapshot));
   if (!firstAndLastTriple.has_value()) {
     return std::nullopt;
   }
@@ -201,7 +201,7 @@ Permutation::IdTableGenerator Permutation::lazyScan(
   return p.reader().lazyScan(
       scanSpec, std::move(blocks.value()), std::move(columns),
       std::move(cancellationHandle),
-      getLocatedTriplesForPermutation(locatedTriplesSnapshot), limitOffset);
+      p.getLocatedTriplesForPermutation(locatedTriplesSnapshot), limitOffset);
 }
 
 // ______________________________________________________________________
@@ -230,10 +230,18 @@ const Permutation& Permutation::getActualPermutation(Id id) const {
       ScanSpecification{id, std::nullopt, std::nullopt});
 }
 
+// TODO<joka921> The following two functions always assume that there were no
+// updates to the additional triples (which is technically true for now, because
+// we never modify the additional triples with the delta triples, because there
+// is some functionality missing for this. We have to fix this here and in the `DeltaTriples` class.
+
 // ______________________________________________________________________
 const LocatedTriplesPerBlock& Permutation::getLocatedTriplesForPermutation(
     const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
-  return locatedTriplesSnapshot.getLocatedTriplesForPermutation(permutation_);
+  static const LocatedTriplesSnapshot emptySnapshot;
+  const auto& actualSnapshot =
+      isInternalPermutation_ ? emptySnapshot : locatedTriplesSnapshot;
+  return actualSnapshot.getLocatedTriplesForPermutation(permutation_);
 }
 
 // ______________________________________________________________________
