@@ -7,24 +7,35 @@
 
 #include <memory>
 #include <optional>
+#include <variant>
 
 #include "engine/Operation.h"
 #include "global/Id.h"
 #include "parser/data/Variable.h"
 
-// Configuration to restrict the results provided by the SpatialJoin
+// A nearest neighbor search with optionally a maximum distance.
 struct NearestNeighborsConfig {
   size_t maxResults_;
   std::optional<size_t> maxDist_ = std::nullopt;
 };
+
+// A spatial search limited only by a maximum distance.
 struct MaxDistanceConfig {
   size_t maxDist_;
 };
+
+// Configuration to restrict the results provided by the SpatialJoin
 using SpatialJoinTask = std::variant<NearestNeighborsConfig, MaxDistanceConfig>;
+
+// Represents the selection of all variables of the right join table as payload
+struct PayloadAllVariables : std::monostate {
+  bool operator==([[maybe_unused]] const std::vector<Variable>& other) const {
+    return false;
+  };
+};
 
 // Configuration to select which columns of the right join table should be
 // part of the result.
-struct PayloadAllVariables {};
 using PayloadVariables =
     std::variant<PayloadAllVariables, std::vector<Variable>>;
 
@@ -128,17 +139,21 @@ class SpatialJoin : public Operation {
   // already constructed
   bool isConstructed() const;
 
-  // this function is used to give the maximum distance for internal purposes
+  // this function is used to give the maximum
   std::optional<size_t> getMaxDist() const;
 
-  // this function is used to give the maximum number of results for internal
-  // purposes
+  // this function is used to give the maximum number of results
   std::optional<size_t> getMaxResults() const;
 
+  // switch the algorithm set in the config parameter at construction time
   void selectAlgorithm(SpatialJoinAlgorithm algo) const {
     config_->algo_ = algo;
   }
 
+  // retrieve the currently selected algorithm
+  SpatialJoinAlgorithm getAlgorithm() const { return config_->algo_; }
+
+  // Helper functions for unit tests
   std::pair<size_t, size_t> onlyForTestingGetTask() const {
     return std::pair{getMaxDist().value_or(-1), getMaxResults().value_or(-1)};
   }
@@ -147,8 +162,16 @@ class SpatialJoin : public Operation {
     return config_;
   }
 
+  std::pair<Variable, Variable> onlyForTestingGetVariables() const {
+    return std::pair{config_->left_, config_->right_};
+  }
+
   std::optional<Variable> onlyForTestingGetDistanceVariable() const {
     return config_->distanceVariable_;
+  }
+
+  PayloadVariables onlyForTestingGetPayloadVariables() const {
+    return config_->payloadVariables_;
   }
 
   std::shared_ptr<QueryExecutionTree> onlyForTestingGetLeftChild() const {
@@ -162,8 +185,8 @@ class SpatialJoin : public Operation {
  private:
   // helper function to generate a variable to column map from `childRight_`
   // that only contains the columns selected by `config_->payloadVariables_`
-  // and excluding the `config_->right_` variable.
-  VariableToColumnMap getVarColMapPayloadVars(bool withJoinCol = false) const;
+  // and (automatically added) the `config_->right_` variable.
+  VariableToColumnMap getVarColMapPayloadVars() const;
 
   // helper function, to initialize various required objects for both algorithms
   PreparedSpatialJoinParams prepareJoin() const;
