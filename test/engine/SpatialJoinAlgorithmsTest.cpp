@@ -17,6 +17,7 @@
 #include "engine/QueryExecutionTree.h"
 #include "engine/SpatialJoin.h"
 #include "engine/SpatialJoinAlgorithms.h"
+#include "gtest/gtest.h"
 #include "parser/data/Variable.h"
 
 namespace {  // anonymous namespace to avoid linker problems
@@ -29,16 +30,25 @@ using SJ = std::variant<NearestNeighborsConfig, MaxDistanceConfig>;
 
 namespace computeResultTest {
 
+// Represents from left to right: the algorithm, addLeftChildFirst,
+// bigChildLeft, a spatial join task
+using SpatialJoinTestParam =
+    std::tuple<SpatialJoinAlgorithm, bool, bool, SpatialJoinTask>;
+
+using Row = std::vector<std::string>;
+using Rows = std::vector<Row>;
+
 class SpatialJoinParamTest
-    : public ::testing::TestWithParam<SpatialJoinAlgorithm> {
+    : public ::testing::TestWithParam<SpatialJoinTestParam> {
  public:
-  void createAndTestSpatialJoin(
-      QueryExecutionContext* qec, Variable left, SJ task, Variable right,
-      std::shared_ptr<QueryExecutionTree> leftChild,
-      std::shared_ptr<QueryExecutionTree> rightChild, bool addLeftChildFirst,
-      std::vector<std::vector<std::string>> expectedOutputUnorderedRows,
-      std::vector<std::string> columnNames,
-      bool isWrongPointInputTest = false) {
+  void createAndTestSpatialJoin(QueryExecutionContext* qec, Variable left,
+                                SJ task, Variable right,
+                                std::shared_ptr<QueryExecutionTree> leftChild,
+                                std::shared_ptr<QueryExecutionTree> rightChild,
+                                bool addLeftChildFirst,
+                                Rows expectedOutputUnorderedRows,
+                                Row columnNames,
+                                bool isWrongPointInputTest = false) {
     // this function is like transposing a matrix. An entry which has been
     // stored at (i, k) is now stored at (k, i). The reason this is needed is
     // the following: this function receives the input as a vector of vector of
@@ -47,13 +57,13 @@ class SpatialJoinParamTest
     // contains a vector, which contains all entries of one column. As now each
     // of the vectors contain only one column, we can later order them according
     // to the variable to column map and then compare the result.
-    auto swapColumns = [&](std::vector<std::vector<std::string>> toBeSwapped) {
-      std::vector<std::vector<std::string>> result;
+    auto swapColumns = [&](Rows toBeSwapped) {
+      Rows result;
       bool firstIteration = true;
       for (size_t i = 0; i < toBeSwapped.size(); i++) {
         for (size_t k = 0; k < toBeSwapped.at(i).size(); k++) {
           if (firstIteration) {
-            result.push_back(std::vector<std::string>{toBeSwapped.at(i).at(k)});
+            result.push_back(Row{toBeSwapped.at(i).at(k)});
           } else {
             result.at(k).push_back(toBeSwapped.at(i).at(k));
           }
@@ -93,7 +103,7 @@ class SpatialJoinParamTest
         createRowVectorFromColumnVector(expectedOutputOrdered);
 
     // Select algorithm
-    spatialJoin->selectAlgorithm(GetParam());
+    spatialJoin->selectAlgorithm(std::get<0>(GetParam()));
 
     // At worst quadratic time
     ASSERT_LE(
@@ -110,7 +120,7 @@ class SpatialJoinParamTest
     EXPECT_THAT(vec, ::testing::UnorderedElementsAreArray(expectedOutput));
 
     if (isWrongPointInputTest &&
-        GetParam() == SpatialJoinAlgorithm::BOUNDING_BOX) {
+        std::get<0>(GetParam()) == SpatialJoinAlgorithm::BOUNDING_BOX) {
       auto warnings = spatialJoin->collectWarnings();
       bool containsWrongPointWarning = false;
       std::string warningMessage =
@@ -139,10 +149,9 @@ class SpatialJoinParamTest
   //   ?geo2 <asWKT> ?point2
   //   ?point1 <max-distance-in-meters:XXXX> ?point2 .
   // }
-  void buildAndTestSmallTestSetLargeChildren(
-      SJ task, bool addLeftChildFirst,
-      std::vector<std::vector<std::string>> expectedOutput,
-      std::vector<std::string> columnNames) {
+  void buildAndTestSmallTestSetLargeChildren(SJ task, bool addLeftChildFirst,
+                                             Rows expectedOutput,
+                                             Row columnNames) {
     auto qec = buildTestQEC();
     auto numTriples = qec->getIndex().numTriples().normal;
     ASSERT_EQ(numTriples, 15);
@@ -173,10 +182,9 @@ class SpatialJoinParamTest
   //   ?geo2 <asWKT> ?point2
   //   ?point1 <max-distance-in-meters:XXXX> ?point2 .
   // }
-  void buildAndTestSmallTestSetSmallChildren(
-      SJ task, bool addLeftChildFirst,
-      std::vector<std::vector<std::string>> expectedOutput,
-      std::vector<std::string> columnNames) {
+  void buildAndTestSmallTestSetSmallChildren(SJ task, bool addLeftChildFirst,
+                                             Rows expectedOutput,
+                                             Row columnNames) {
     auto qec = buildTestQEC();
     auto numTriples = qec->getIndex().numTriples().normal;
     ASSERT_EQ(numTriples, 15);
@@ -200,10 +208,10 @@ class SpatialJoinParamTest
   //   ?geo2 <asWKT> ?point2
   //   ?point1 <max-distance-in-meters:XXXX> ?point2 .
   // }
-  void buildAndTestSmallTestSetDiffSizeChildren(
-      SJ task, bool addLeftChildFirst,
-      std::vector<std::vector<std::string>> expectedOutput,
-      std::vector<std::string> columnNames, bool bigChildLeft) {
+  void buildAndTestSmallTestSetDiffSizeChildren(SJ task, bool addLeftChildFirst,
+                                                Rows expectedOutput,
+                                                Row columnNames,
+                                                bool bigChildLeft) {
     auto qec = buildTestQEC();
     auto numTriples = qec->getIndex().numTriples().normal;
     ASSERT_EQ(numTriples, 15);
@@ -229,10 +237,9 @@ class SpatialJoinParamTest
                              expectedOutput, columnNames);
   }
 
-  void testDiffSizeIdTables(
-      SJ task, bool addLeftChildFirst,
-      std::vector<std::vector<std::string>> expectedOutput,
-      std::vector<std::string> columnNames, bool bigChildLeft) {
+  void testDiffSizeIdTables(SJ task, bool addLeftChildFirst,
+                            Rows expectedOutput, Row columnNames,
+                            bool bigChildLeft) {
     auto qec = buildTestQEC();
     auto numTriples = qec->getIndex().numTriples().normal;
     ASSERT_EQ(numTriples, 15);
@@ -259,10 +266,8 @@ class SpatialJoinParamTest
                              expectedOutput, columnNames);
   }
 
-  void testWrongPointInInput(
-      SJ task, bool addLeftChildFirst,
-      std::vector<std::vector<std::string>> expectedOutput,
-      std::vector<std::string> columnNames) {
+  void testWrongPointInInput(SJ task, bool addLeftChildFirst,
+                             Rows expectedOutput, Row columnNames) {
     auto kg = createSmallDatasetWithPoints();
     // make first point wrong:
     auto pos = kg.find("POINT(");
@@ -286,14 +291,27 @@ class SpatialJoinParamTest
                              true);
   }
 
- protected:
-  bool useBaselineAlgorithm_;
+  std::optional<MaxDistanceConfig> getMaxDist() {
+    auto task = std::get<3>(GetParam());
+
+    if (std::holds_alternative<MaxDistanceConfig>(task)) {
+      return std::get<MaxDistanceConfig>(task);
+    }
+    return std::nullopt;
+  }
+
+  std::optional<NearestNeighborsConfig> getNearestNeighbors() {
+    auto task = std::get<3>(GetParam());
+
+    if (std::holds_alternative<NearestNeighborsConfig>(task)) {
+      return std::get<NearestNeighborsConfig>(task);
+    }
+    return std::nullopt;
+  }
 };
 
-std::vector<std::string> mergeToRow(std::vector<std::string> part1,
-                                    std::vector<std::string> part2,
-                                    std::vector<std::string> part3) {
-  std::vector<std::string> result = part1;
+Row mergeToRow(Row part1, Row part2, Row part3) {
+  Row result = part1;
   for (size_t i = 0; i < part2.size(); i++) {
     result.push_back(part2.at(i));
   }
@@ -303,17 +321,17 @@ std::vector<std::string> mergeToRow(std::vector<std::string> part1,
   return result;
 };
 
-std::vector<std::vector<std::string>> unordered_rows{
-    std::vector<std::string>{"\"Uni Freiburg TF\"", "<node_1>", "<geometry1>",
-                             "POINT(7.835050 48.012670)"},
-    std::vector<std::string>{"\"Minster Freiburg\"", "<node_2>", "<geometry2>",
-                             "POINT(7.852980 47.995570)"},
-    std::vector<std::string>{"\"London Eye\"", "<node_3>", "<geometry3>",
-                             "POINT(-0.119570 51.503330)"},
-    std::vector<std::string>{"\"Statue of liberty\"", "<node_4>", "<geometry4>",
-                             "POINT(-74.044540 40.689250)"},
-    std::vector<std::string>{"\"eiffel tower\"", "<node_5>", "<geometry5>",
-                             "POINT(2.294510 48.858250)"},
+Rows unordered_rows{
+    Row{"\"Uni Freiburg TF\"", "<node_1>", "<geometry1>",
+        "POINT(7.835050 48.012670)"},
+    Row{"\"Minster Freiburg\"", "<node_2>", "<geometry2>",
+        "POINT(7.852980 47.995570)"},
+    Row{"\"London Eye\"", "<node_3>", "<geometry3>",
+        "POINT(-0.119570 51.503330)"},
+    Row{"\"Statue of liberty\"", "<node_4>", "<geometry4>",
+        "POINT(-74.044540 40.689250)"},
+    Row{"\"eiffel tower\"", "<node_5>", "<geometry5>",
+        "POINT(2.294510 48.858250)"},
 };
 
 // Shortcuts
@@ -323,12 +341,11 @@ auto Eye = unordered_rows.at(2);
 auto Lib = unordered_rows.at(3);
 auto Eif = unordered_rows.at(4);
 
-std::vector<std::vector<std::string>> unordered_rows_small{
-    std::vector<std::string>{"<geometry1>", "POINT(7.835050 48.012670)"},
-    std::vector<std::string>{"<geometry2>", "POINT(7.852980 47.995570)"},
-    std::vector<std::string>{"<geometry3>", "POINT(-0.119570 51.503330)"},
-    std::vector<std::string>{"<geometry4>", "POINT(-74.044540 40.689250)"},
-    std::vector<std::string>{"<geometry5>", "POINT(2.294510 48.858250)"}};
+Rows unordered_rows_small{Row{"<geometry1>", "POINT(7.835050 48.012670)"},
+                          Row{"<geometry2>", "POINT(7.852980 47.995570)"},
+                          Row{"<geometry3>", "POINT(-0.119570 51.503330)"},
+                          Row{"<geometry4>", "POINT(-74.044540 40.689250)"},
+                          Row{"<geometry5>", "POINT(2.294510 48.858250)"}};
 
 // Shortcuts
 auto sTF = unordered_rows_small.at(0);
@@ -340,7 +357,7 @@ auto sEif = unordered_rows_small.at(4);
 // in all calculations below, the factor 1000 is used to convert from km to m
 
 // distance from the object to itself should be zero
-std::vector<std::string> expectedDistSelf{"0"};
+Row expectedDistSelf{"0"};
 
 // helper functions
 auto P = [](double x, double y) { return GeoPoint(y, x); };
@@ -362,122 +379,119 @@ auto testPlaces = std::vector{PUni, PMun, PEif, PEye, PLib};
 
 // distance from Uni Freiburg to Freiburger Münster is 2,33 km according to
 // google maps
-std::vector<std::string> expectedDistUniMun{expectedDist(PUni, PMun)};
+Row expectedDistUniMun{expectedDist(PUni, PMun)};
 
 // distance from Uni Freiburg to Eiffel Tower is 419,32 km according to
 // google maps
-std::vector<std::string> expectedDistUniEif{expectedDist(PUni, PEif)};
+Row expectedDistUniEif{expectedDist(PUni, PEif)};
 
 // distance from Minster Freiburg to eiffel tower is 421,09 km according to
 // google maps
-std::vector<std::string> expectedDistMunEif{expectedDist(PMun, PEif)};
+Row expectedDistMunEif{expectedDist(PMun, PEif)};
 
 // distance from london eye to eiffel tower is 340,62 km according to
 // google maps
-std::vector<std::string> expectedDistEyeEif{expectedDist(PEye, PEif)};
+Row expectedDistEyeEif{expectedDist(PEye, PEif)};
 
 // distance from Uni Freiburg to London Eye is 690,18 km according to
 // google maps
-std::vector<std::string> expectedDistUniEye{expectedDist(PUni, PEye)};
+Row expectedDistUniEye{expectedDist(PUni, PEye)};
 
 // distance from Minster Freiburg to London Eye is 692,39 km according to
 // google maps
-std::vector<std::string> expectedDistMunEye{expectedDist(PMun, PEye)};
+Row expectedDistMunEye{expectedDist(PMun, PEye)};
 
 // distance from Uni Freiburg to Statue of Liberty is 6249,55 km according to
 // google maps
-std::vector<std::string> expectedDistUniLib{expectedDist(PUni, PLib)};
+Row expectedDistUniLib{expectedDist(PUni, PLib)};
 
 // distance from Minster Freiburg to Statue of Liberty is 6251,58 km
 // according to google maps
-std::vector<std::string> expectedDistMunLib{expectedDist(PMun, PLib)};
+Row expectedDistMunLib{expectedDist(PMun, PLib)};
 
 // distance from london eye to statue of liberty is 5575,08 km according to
 // google maps
-std::vector<std::string> expectedDistEyeLib{expectedDist(PEye, PLib)};
+Row expectedDistEyeLib{expectedDist(PEye, PLib)};
 
 // distance from eiffel tower to Statue of liberty is 5837,42 km according to
 // google maps
-std::vector<std::string> expectedDistEifLib{expectedDist(PEif, PLib)};
+Row expectedDistEifLib{expectedDist(PEif, PLib)};
 
-std::vector<std::vector<std::string>> expectedMaxDist1_rows{
-    mergeToRow(TF, TF, expectedDistSelf),
-    mergeToRow(Mun, Mun, expectedDistSelf),
-    mergeToRow(Eye, Eye, expectedDistSelf),
-    mergeToRow(Lib, Lib, expectedDistSelf),
-    mergeToRow(Eif, Eif, expectedDistSelf)};
+std::unordered_map<size_t, Rows> expectedMaxDistRows = {
+    {1,
+     {mergeToRow(TF, TF, expectedDistSelf),
+      mergeToRow(Mun, Mun, expectedDistSelf),
+      mergeToRow(Eye, Eye, expectedDistSelf),
+      mergeToRow(Lib, Lib, expectedDistSelf),
+      mergeToRow(Eif, Eif, expectedDistSelf)}},
+    {5000,
+     {mergeToRow(TF, TF, expectedDistSelf),
+      mergeToRow(TF, Mun, expectedDistUniMun),
+      mergeToRow(Mun, Mun, expectedDistSelf),
+      mergeToRow(Mun, TF, expectedDistUniMun),
+      mergeToRow(Eye, Eye, expectedDistSelf),
+      mergeToRow(Lib, Lib, expectedDistSelf),
+      mergeToRow(Eif, Eif, expectedDistSelf)}},
+    {500000,
+     {mergeToRow(TF, TF, expectedDistSelf),
+      mergeToRow(TF, Mun, expectedDistUniMun),
+      mergeToRow(TF, Eif, expectedDistUniEif),
+      mergeToRow(Mun, Mun, expectedDistSelf),
+      mergeToRow(Mun, TF, expectedDistUniMun),
+      mergeToRow(Mun, Eif, expectedDistMunEif),
+      mergeToRow(Eye, Eye, expectedDistSelf),
+      mergeToRow(Eye, Eif, expectedDistEyeEif),
+      mergeToRow(Lib, Lib, expectedDistSelf),
+      mergeToRow(Eif, Eif, expectedDistSelf),
+      mergeToRow(Eif, TF, expectedDistUniEif),
+      mergeToRow(Eif, Mun, expectedDistMunEif),
+      mergeToRow(Eif, Eye, expectedDistEyeEif)}},
+    {1000000,
+     {mergeToRow(TF, TF, expectedDistSelf),
+      mergeToRow(TF, Mun, expectedDistUniMun),
+      mergeToRow(TF, Eif, expectedDistUniEif),
+      mergeToRow(TF, Eye, expectedDistUniEye),
+      mergeToRow(Mun, Mun, expectedDistSelf),
+      mergeToRow(Mun, TF, expectedDistUniMun),
+      mergeToRow(Mun, Eif, expectedDistMunEif),
+      mergeToRow(Mun, Eye, expectedDistMunEye),
+      mergeToRow(Eye, Eye, expectedDistSelf),
+      mergeToRow(Eye, Eif, expectedDistEyeEif),
+      mergeToRow(Eye, TF, expectedDistUniEye),
+      mergeToRow(Eye, Mun, expectedDistMunEye),
+      mergeToRow(Lib, Lib, expectedDistSelf),
+      mergeToRow(Eif, Eif, expectedDistSelf),
+      mergeToRow(Eif, TF, expectedDistUniEif),
+      mergeToRow(Eif, Mun, expectedDistMunEif),
+      mergeToRow(Eif, Eye, expectedDistEyeEif)}},
+    {10000000,
+     {mergeToRow(TF, TF, expectedDistSelf),
+      mergeToRow(TF, Mun, expectedDistUniMun),
+      mergeToRow(TF, Eif, expectedDistUniEif),
+      mergeToRow(TF, Eye, expectedDistUniEye),
+      mergeToRow(TF, Lib, expectedDistUniLib),
+      mergeToRow(Mun, Mun, expectedDistSelf),
+      mergeToRow(Mun, TF, expectedDistUniMun),
+      mergeToRow(Mun, Eif, expectedDistMunEif),
+      mergeToRow(Mun, Eye, expectedDistMunEye),
+      mergeToRow(Mun, Lib, expectedDistMunLib),
+      mergeToRow(Eye, Eye, expectedDistSelf),
+      mergeToRow(Eye, Eif, expectedDistEyeEif),
+      mergeToRow(Eye, TF, expectedDistUniEye),
+      mergeToRow(Eye, Mun, expectedDistMunEye),
+      mergeToRow(Eye, Lib, expectedDistEyeLib),
+      mergeToRow(Lib, Lib, expectedDistSelf),
+      mergeToRow(Lib, TF, expectedDistUniLib),
+      mergeToRow(Lib, Mun, expectedDistMunLib),
+      mergeToRow(Lib, Eye, expectedDistEyeLib),
+      mergeToRow(Lib, Eif, expectedDistEifLib),
+      mergeToRow(Eif, Eif, expectedDistSelf),
+      mergeToRow(Eif, TF, expectedDistUniEif),
+      mergeToRow(Eif, Mun, expectedDistMunEif),
+      mergeToRow(Eif, Eye, expectedDistEyeEif),
+      mergeToRow(Eif, Lib, expectedDistEifLib)}}};
 
-std::vector<std::vector<std::string>> expectedMaxDist5000_rows{
-    mergeToRow(TF, TF, expectedDistSelf),
-    mergeToRow(TF, Mun, expectedDistUniMun),
-    mergeToRow(Mun, Mun, expectedDistSelf),
-    mergeToRow(Mun, TF, expectedDistUniMun),
-    mergeToRow(Eye, Eye, expectedDistSelf),
-    mergeToRow(Lib, Lib, expectedDistSelf),
-    mergeToRow(Eif, Eif, expectedDistSelf)};
-
-std::vector<std::vector<std::string>> expectedMaxDist500000_rows{
-    mergeToRow(TF, TF, expectedDistSelf),
-    mergeToRow(TF, Mun, expectedDistUniMun),
-    mergeToRow(TF, Eif, expectedDistUniEif),
-    mergeToRow(Mun, Mun, expectedDistSelf),
-    mergeToRow(Mun, TF, expectedDistUniMun),
-    mergeToRow(Mun, Eif, expectedDistMunEif),
-    mergeToRow(Eye, Eye, expectedDistSelf),
-    mergeToRow(Eye, Eif, expectedDistEyeEif),
-    mergeToRow(Lib, Lib, expectedDistSelf),
-    mergeToRow(Eif, Eif, expectedDistSelf),
-    mergeToRow(Eif, TF, expectedDistUniEif),
-    mergeToRow(Eif, Mun, expectedDistMunEif),
-    mergeToRow(Eif, Eye, expectedDistEyeEif)};
-
-std::vector<std::vector<std::string>> expectedMaxDist1000000_rows{
-    mergeToRow(TF, TF, expectedDistSelf),
-    mergeToRow(TF, Mun, expectedDistUniMun),
-    mergeToRow(TF, Eif, expectedDistUniEif),
-    mergeToRow(TF, Eye, expectedDistUniEye),
-    mergeToRow(Mun, Mun, expectedDistSelf),
-    mergeToRow(Mun, TF, expectedDistUniMun),
-    mergeToRow(Mun, Eif, expectedDistMunEif),
-    mergeToRow(Mun, Eye, expectedDistMunEye),
-    mergeToRow(Eye, Eye, expectedDistSelf),
-    mergeToRow(Eye, Eif, expectedDistEyeEif),
-    mergeToRow(Eye, TF, expectedDistUniEye),
-    mergeToRow(Eye, Mun, expectedDistMunEye),
-    mergeToRow(Lib, Lib, expectedDistSelf),
-    mergeToRow(Eif, Eif, expectedDistSelf),
-    mergeToRow(Eif, TF, expectedDistUniEif),
-    mergeToRow(Eif, Mun, expectedDistMunEif),
-    mergeToRow(Eif, Eye, expectedDistEyeEif)};
-
-std::vector<std::vector<std::string>> expectedMaxDist10000000_rows{
-    mergeToRow(TF, TF, expectedDistSelf),
-    mergeToRow(TF, Mun, expectedDistUniMun),
-    mergeToRow(TF, Eif, expectedDistUniEif),
-    mergeToRow(TF, Eye, expectedDistUniEye),
-    mergeToRow(TF, Lib, expectedDistUniLib),
-    mergeToRow(Mun, Mun, expectedDistSelf),
-    mergeToRow(Mun, TF, expectedDistUniMun),
-    mergeToRow(Mun, Eif, expectedDistMunEif),
-    mergeToRow(Mun, Eye, expectedDistMunEye),
-    mergeToRow(Mun, Lib, expectedDistMunLib),
-    mergeToRow(Eye, Eye, expectedDistSelf),
-    mergeToRow(Eye, Eif, expectedDistEyeEif),
-    mergeToRow(Eye, TF, expectedDistUniEye),
-    mergeToRow(Eye, Mun, expectedDistMunEye),
-    mergeToRow(Eye, Lib, expectedDistEyeLib),
-    mergeToRow(Lib, Lib, expectedDistSelf),
-    mergeToRow(Lib, TF, expectedDistUniLib),
-    mergeToRow(Lib, Mun, expectedDistMunLib),
-    mergeToRow(Lib, Eye, expectedDistEyeLib),
-    mergeToRow(Lib, Eif, expectedDistEifLib),
-    mergeToRow(Eif, Eif, expectedDistSelf),
-    mergeToRow(Eif, TF, expectedDistUniEif),
-    mergeToRow(Eif, Mun, expectedDistMunEif),
-    mergeToRow(Eif, Eye, expectedDistEyeEif),
-    mergeToRow(Eif, Lib, expectedDistEifLib)};
-
-std::vector<std::vector<std::string>> expectedMaxDist1_rows_small{
+Rows expectedMaxDist1_rows_small{
     mergeToRow(sTF, sTF, expectedDistSelf),
     mergeToRow(sMun, sMun, expectedDistSelf),
     mergeToRow(sEye, sEye, expectedDistSelf),
@@ -485,16 +499,15 @@ std::vector<std::vector<std::string>> expectedMaxDist1_rows_small{
     mergeToRow(sEif, sEif, expectedDistSelf),
 };
 
-std::vector<std::vector<std::string>> expectedMaxDist5000_rows_small{
-    mergeToRow(sTF, sTF, expectedDistSelf),
-    mergeToRow(sTF, sMun, expectedDistUniMun),
-    mergeToRow(sMun, sMun, expectedDistSelf),
-    mergeToRow(sMun, sTF, expectedDistUniMun),
-    mergeToRow(sEye, sEye, expectedDistSelf),
-    mergeToRow(sLib, sLib, expectedDistSelf),
-    mergeToRow(sEif, sEif, expectedDistSelf)};
+Rows expectedMaxDist5000_rows_small{mergeToRow(sTF, sTF, expectedDistSelf),
+                                    mergeToRow(sTF, sMun, expectedDistUniMun),
+                                    mergeToRow(sMun, sMun, expectedDistSelf),
+                                    mergeToRow(sMun, sTF, expectedDistUniMun),
+                                    mergeToRow(sEye, sEye, expectedDistSelf),
+                                    mergeToRow(sLib, sLib, expectedDistSelf),
+                                    mergeToRow(sEif, sEif, expectedDistSelf)};
 
-std::vector<std::vector<std::string>> expectedMaxDist500000_rows_small{
+Rows expectedMaxDist500000_rows_small{
     mergeToRow(sTF, sTF, expectedDistSelf),
     mergeToRow(sTF, sMun, expectedDistUniMun),
     mergeToRow(sTF, sEif, expectedDistUniEif),
@@ -509,7 +522,7 @@ std::vector<std::vector<std::string>> expectedMaxDist500000_rows_small{
     mergeToRow(sEif, sMun, expectedDistMunEif),
     mergeToRow(sEif, sEye, expectedDistEyeEif)};
 
-std::vector<std::vector<std::string>> expectedMaxDist1000000_rows_small{
+Rows expectedMaxDist1000000_rows_small{
     mergeToRow(sTF, sTF, expectedDistSelf),
     mergeToRow(sTF, sMun, expectedDistUniMun),
     mergeToRow(sTF, sEif, expectedDistUniEif),
@@ -528,7 +541,7 @@ std::vector<std::vector<std::string>> expectedMaxDist1000000_rows_small{
     mergeToRow(sEif, sMun, expectedDistMunEif),
     mergeToRow(sEif, sEye, expectedDistEyeEif)};
 
-std::vector<std::vector<std::string>> expectedMaxDist10000000_rows_small{
+Rows expectedMaxDist10000000_rows_small{
     mergeToRow(sTF, sTF, expectedDistSelf),
     mergeToRow(sTF, sMun, expectedDistUniMun),
     mergeToRow(sTF, sEif, expectedDistUniEif),
@@ -555,64 +568,60 @@ std::vector<std::vector<std::string>> expectedMaxDist10000000_rows_small{
     mergeToRow(sEif, sEye, expectedDistEyeEif),
     mergeToRow(sEif, sLib, expectedDistEifLib)};
 
-std::vector<std::vector<std::string>> expectedMaxDist1_rows_small_wrong_point{
+Rows expectedMaxDist1_rows_small_wrong_point{
     mergeToRow(sMun, sMun, expectedDistSelf),
     mergeToRow(sEye, sEye, expectedDistSelf),
     mergeToRow(sLib, sLib, expectedDistSelf),
     mergeToRow(sEif, sEif, expectedDistSelf),
 };
 
-std::vector<std::vector<std::string>>
-    expectedMaxDist5000_rows_small_wrong_point{
-        mergeToRow(sMun, sMun, expectedDistSelf),
-        mergeToRow(sEye, sEye, expectedDistSelf),
-        mergeToRow(sLib, sLib, expectedDistSelf),
-        mergeToRow(sEif, sEif, expectedDistSelf)};
+Rows expectedMaxDist5000_rows_small_wrong_point{
+    mergeToRow(sMun, sMun, expectedDistSelf),
+    mergeToRow(sEye, sEye, expectedDistSelf),
+    mergeToRow(sLib, sLib, expectedDistSelf),
+    mergeToRow(sEif, sEif, expectedDistSelf)};
 
-std::vector<std::vector<std::string>>
-    expectedMaxDist500000_rows_small_wrong_point{
-        mergeToRow(sMun, sMun, expectedDistSelf),
-        mergeToRow(sMun, sEif, expectedDistMunEif),
-        mergeToRow(sEye, sEye, expectedDistSelf),
-        mergeToRow(sEye, sEif, expectedDistEyeEif),
-        mergeToRow(sLib, sLib, expectedDistSelf),
-        mergeToRow(sEif, sEif, expectedDistSelf),
-        mergeToRow(sEif, sMun, expectedDistMunEif),
-        mergeToRow(sEif, sEye, expectedDistEyeEif)};
+Rows expectedMaxDist500000_rows_small_wrong_point{
+    mergeToRow(sMun, sMun, expectedDistSelf),
+    mergeToRow(sMun, sEif, expectedDistMunEif),
+    mergeToRow(sEye, sEye, expectedDistSelf),
+    mergeToRow(sEye, sEif, expectedDistEyeEif),
+    mergeToRow(sLib, sLib, expectedDistSelf),
+    mergeToRow(sEif, sEif, expectedDistSelf),
+    mergeToRow(sEif, sMun, expectedDistMunEif),
+    mergeToRow(sEif, sEye, expectedDistEyeEif)};
 
-std::vector<std::vector<std::string>>
-    expectedMaxDist1000000_rows_small_wrong_point{
-        mergeToRow(sMun, sMun, expectedDistSelf),
-        mergeToRow(sMun, sEif, expectedDistMunEif),
-        mergeToRow(sMun, sEye, expectedDistMunEye),
-        mergeToRow(sEye, sEye, expectedDistSelf),
-        mergeToRow(sEye, sEif, expectedDistEyeEif),
-        mergeToRow(sEye, sMun, expectedDistMunEye),
-        mergeToRow(sLib, sLib, expectedDistSelf),
-        mergeToRow(sEif, sEif, expectedDistSelf),
-        mergeToRow(sEif, sMun, expectedDistMunEif),
-        mergeToRow(sEif, sEye, expectedDistEyeEif)};
+Rows expectedMaxDist1000000_rows_small_wrong_point{
+    mergeToRow(sMun, sMun, expectedDistSelf),
+    mergeToRow(sMun, sEif, expectedDistMunEif),
+    mergeToRow(sMun, sEye, expectedDistMunEye),
+    mergeToRow(sEye, sEye, expectedDistSelf),
+    mergeToRow(sEye, sEif, expectedDistEyeEif),
+    mergeToRow(sEye, sMun, expectedDistMunEye),
+    mergeToRow(sLib, sLib, expectedDistSelf),
+    mergeToRow(sEif, sEif, expectedDistSelf),
+    mergeToRow(sEif, sMun, expectedDistMunEif),
+    mergeToRow(sEif, sEye, expectedDistEyeEif)};
 
-std::vector<std::vector<std::string>>
-    expectedMaxDist10000000_rows_small_wrong_point{
-        mergeToRow(sMun, sMun, expectedDistSelf),
-        mergeToRow(sMun, sEif, expectedDistMunEif),
-        mergeToRow(sMun, sEye, expectedDistMunEye),
-        mergeToRow(sMun, sLib, expectedDistMunLib),
-        mergeToRow(sEye, sEye, expectedDistSelf),
-        mergeToRow(sEye, sEif, expectedDistEyeEif),
-        mergeToRow(sEye, sMun, expectedDistMunEye),
-        mergeToRow(sEye, sLib, expectedDistEyeLib),
-        mergeToRow(sLib, sLib, expectedDistSelf),
-        mergeToRow(sLib, sMun, expectedDistMunLib),
-        mergeToRow(sLib, sEye, expectedDistEyeLib),
-        mergeToRow(sLib, sEif, expectedDistEifLib),
-        mergeToRow(sEif, sEif, expectedDistSelf),
-        mergeToRow(sEif, sMun, expectedDistMunEif),
-        mergeToRow(sEif, sEye, expectedDistEyeEif),
-        mergeToRow(sEif, sLib, expectedDistEifLib)};
+Rows expectedMaxDist10000000_rows_small_wrong_point{
+    mergeToRow(sMun, sMun, expectedDistSelf),
+    mergeToRow(sMun, sEif, expectedDistMunEif),
+    mergeToRow(sMun, sEye, expectedDistMunEye),
+    mergeToRow(sMun, sLib, expectedDistMunLib),
+    mergeToRow(sEye, sEye, expectedDistSelf),
+    mergeToRow(sEye, sEif, expectedDistEyeEif),
+    mergeToRow(sEye, sMun, expectedDistMunEye),
+    mergeToRow(sEye, sLib, expectedDistEyeLib),
+    mergeToRow(sLib, sLib, expectedDistSelf),
+    mergeToRow(sLib, sMun, expectedDistMunLib),
+    mergeToRow(sLib, sEye, expectedDistEyeLib),
+    mergeToRow(sLib, sEif, expectedDistEifLib),
+    mergeToRow(sEif, sEif, expectedDistSelf),
+    mergeToRow(sEif, sMun, expectedDistMunEif),
+    mergeToRow(sEif, sEye, expectedDistEyeEif),
+    mergeToRow(sEif, sLib, expectedDistEifLib)};
 
-std::vector<std::vector<std::string>> expectedMaxDist1_rows_diff{
+Rows expectedMaxDist1_rows_diff{
     mergeToRow(TF, sTF, expectedDistSelf),
     mergeToRow(Mun, sMun, expectedDistSelf),
     mergeToRow(Eye, sEye, expectedDistSelf),
@@ -620,31 +629,29 @@ std::vector<std::vector<std::string>> expectedMaxDist1_rows_diff{
     mergeToRow(Eif, sEif, expectedDistSelf),
 };
 
-std::vector<std::vector<std::string>> expectedMaxDist5000_rows_diff{
-    mergeToRow(TF, sTF, expectedDistSelf),
-    mergeToRow(TF, sMun, expectedDistUniMun),
-    mergeToRow(Mun, sMun, expectedDistSelf),
-    mergeToRow(Mun, sTF, expectedDistUniMun),
-    mergeToRow(Eye, sEye, expectedDistSelf),
-    mergeToRow(Lib, sLib, expectedDistSelf),
-    mergeToRow(Eif, sEif, expectedDistSelf)};
+Rows expectedMaxDist5000_rows_diff{mergeToRow(TF, sTF, expectedDistSelf),
+                                   mergeToRow(TF, sMun, expectedDistUniMun),
+                                   mergeToRow(Mun, sMun, expectedDistSelf),
+                                   mergeToRow(Mun, sTF, expectedDistUniMun),
+                                   mergeToRow(Eye, sEye, expectedDistSelf),
+                                   mergeToRow(Lib, sLib, expectedDistSelf),
+                                   mergeToRow(Eif, sEif, expectedDistSelf)};
 
-std::vector<std::vector<std::string>> expectedMaxDist500000_rows_diff{
-    mergeToRow(TF, sTF, expectedDistSelf),
-    mergeToRow(TF, sMun, expectedDistUniMun),
-    mergeToRow(TF, sEif, expectedDistUniEif),
-    mergeToRow(Mun, sMun, expectedDistSelf),
-    mergeToRow(Mun, sTF, expectedDistUniMun),
-    mergeToRow(Mun, sEif, expectedDistMunEif),
-    mergeToRow(Eye, sEye, expectedDistSelf),
-    mergeToRow(Eye, sEif, expectedDistEyeEif),
-    mergeToRow(Lib, sLib, expectedDistSelf),
-    mergeToRow(Eif, sEif, expectedDistSelf),
-    mergeToRow(Eif, sTF, expectedDistUniEif),
-    mergeToRow(Eif, sMun, expectedDistMunEif),
-    mergeToRow(Eif, sEye, expectedDistEyeEif)};
+Rows expectedMaxDist500000_rows_diff{mergeToRow(TF, sTF, expectedDistSelf),
+                                     mergeToRow(TF, sMun, expectedDistUniMun),
+                                     mergeToRow(TF, sEif, expectedDistUniEif),
+                                     mergeToRow(Mun, sMun, expectedDistSelf),
+                                     mergeToRow(Mun, sTF, expectedDistUniMun),
+                                     mergeToRow(Mun, sEif, expectedDistMunEif),
+                                     mergeToRow(Eye, sEye, expectedDistSelf),
+                                     mergeToRow(Eye, sEif, expectedDistEyeEif),
+                                     mergeToRow(Lib, sLib, expectedDistSelf),
+                                     mergeToRow(Eif, sEif, expectedDistSelf),
+                                     mergeToRow(Eif, sTF, expectedDistUniEif),
+                                     mergeToRow(Eif, sMun, expectedDistMunEif),
+                                     mergeToRow(Eif, sEye, expectedDistEyeEif)};
 
-std::vector<std::vector<std::string>> expectedMaxDist1000000_rows_diff{
+Rows expectedMaxDist1000000_rows_diff{
     mergeToRow(TF, sTF, expectedDistSelf),
     mergeToRow(TF, sMun, expectedDistUniMun),
     mergeToRow(TF, sEif, expectedDistUniEif),
@@ -663,7 +670,7 @@ std::vector<std::vector<std::string>> expectedMaxDist1000000_rows_diff{
     mergeToRow(Eif, sMun, expectedDistMunEif),
     mergeToRow(Eif, sEye, expectedDistEyeEif)};
 
-std::vector<std::vector<std::string>> expectedMaxDist10000000_rows_diff{
+Rows expectedMaxDist10000000_rows_diff{
     mergeToRow(TF, sTF, expectedDistSelf),
     mergeToRow(TF, sMun, expectedDistUniMun),
     mergeToRow(TF, sEif, expectedDistUniEif),
@@ -690,255 +697,181 @@ std::vector<std::vector<std::string>> expectedMaxDist10000000_rows_diff{
     mergeToRow(Eif, sEye, expectedDistEyeEif),
     mergeToRow(Eif, sLib, expectedDistEifLib)};
 
-std::vector<std::vector<std::string>> expectedMaxDist1_rows_diffIDTable{
+Rows expectedMaxDist1_rows_diffIDTable{
     mergeToRow({sTF.at(1)}, sTF, expectedDistSelf)};
 
-std::vector<std::vector<std::string>> expectedMaxDist5000_rows_diffIDTable{
+Rows expectedMaxDist5000_rows_diffIDTable{
     mergeToRow({sTF.at(1)}, sTF, expectedDistSelf),
     mergeToRow({sTF.at(1)}, sMun, expectedDistUniMun)};
 
-std::vector<std::vector<std::string>> expectedMaxDist500000_rows_diffIDTable{
+Rows expectedMaxDist500000_rows_diffIDTable{
     mergeToRow({sTF.at(1)}, sTF, expectedDistSelf),
     mergeToRow({sTF.at(1)}, sMun, expectedDistUniMun),
     mergeToRow({sTF.at(1)}, sEif, expectedDistUniEif)};
 
-std::vector<std::vector<std::string>> expectedMaxDist1000000_rows_diffIDTable{
+Rows expectedMaxDist1000000_rows_diffIDTable{
     mergeToRow({sTF.at(1)}, sTF, expectedDistSelf),
     mergeToRow({sTF.at(1)}, sMun, expectedDistUniMun),
     mergeToRow({sTF.at(1)}, sEif, expectedDistUniEif),
     mergeToRow({sTF.at(1)}, sEye, expectedDistUniEye)};
 
-std::vector<std::vector<std::string>> expectedMaxDist10000000_rows_diffIDTable{
+Rows expectedMaxDist10000000_rows_diffIDTable{
     mergeToRow({sTF.at(1)}, sTF, expectedDistSelf),
     mergeToRow({sTF.at(1)}, sMun, expectedDistUniMun),
     mergeToRow({sTF.at(1)}, sEif, expectedDistUniEif),
     mergeToRow({sTF.at(1)}, sEye, expectedDistUniEye),
     mergeToRow({sTF.at(1)}, sLib, expectedDistUniLib)};
 
-std::vector<std::vector<std::string>> expectedNearestNeighbors1{
-    mergeToRow(TF, TF, expectedDistSelf),
-    mergeToRow(Mun, Mun, expectedDistSelf),
-    mergeToRow(Eye, Eye, expectedDistSelf),
-    mergeToRow(Lib, Lib, expectedDistSelf),
-    mergeToRow(Eif, Eif, expectedDistSelf)};
+Rows expectedNearestNeighbors1{mergeToRow(TF, TF, expectedDistSelf),
+                               mergeToRow(Mun, Mun, expectedDistSelf),
+                               mergeToRow(Eye, Eye, expectedDistSelf),
+                               mergeToRow(Lib, Lib, expectedDistSelf),
+                               mergeToRow(Eif, Eif, expectedDistSelf)};
 
-std::vector<std::vector<std::string>> expectedNearestNeighbors2{
-    mergeToRow(TF, TF, expectedDistSelf),
-    mergeToRow(Mun, Mun, expectedDistSelf),
-    mergeToRow(Eye, Eye, expectedDistSelf),
-    mergeToRow(Lib, Lib, expectedDistSelf),
-    mergeToRow(Eif, Eif, expectedDistSelf),
-    mergeToRow(TF, Mun, expectedDistUniMun),
-    mergeToRow(Mun, TF, expectedDistUniMun),
-    mergeToRow(Eye, Eif, expectedDistEyeEif),
-    mergeToRow(Lib, Eye, expectedDistEyeLib),
-    mergeToRow(Eif, Eye, expectedDistEyeEif)};
+Rows expectedNearestNeighbors2{mergeToRow(TF, TF, expectedDistSelf),
+                               mergeToRow(Mun, Mun, expectedDistSelf),
+                               mergeToRow(Eye, Eye, expectedDistSelf),
+                               mergeToRow(Lib, Lib, expectedDistSelf),
+                               mergeToRow(Eif, Eif, expectedDistSelf),
+                               mergeToRow(TF, Mun, expectedDistUniMun),
+                               mergeToRow(Mun, TF, expectedDistUniMun),
+                               mergeToRow(Eye, Eif, expectedDistEyeEif),
+                               mergeToRow(Lib, Eye, expectedDistEyeLib),
+                               mergeToRow(Eif, Eye, expectedDistEyeEif)};
 
-std::vector<std::vector<std::string>> expectedNearestNeighbors2_400000{
-    mergeToRow(TF, TF, expectedDistSelf),
-    mergeToRow(Mun, Mun, expectedDistSelf),
-    mergeToRow(Eye, Eye, expectedDistSelf),
-    mergeToRow(Lib, Lib, expectedDistSelf),
-    mergeToRow(Eif, Eif, expectedDistSelf),
-    mergeToRow(TF, Mun, expectedDistUniMun),
-    mergeToRow(Mun, TF, expectedDistUniMun),
-    mergeToRow(Eye, Eif, expectedDistEyeEif),
-    mergeToRow(Eif, Eye, expectedDistEyeEif)};
+Rows expectedNearestNeighbors2_400000{mergeToRow(TF, TF, expectedDistSelf),
+                                      mergeToRow(Mun, Mun, expectedDistSelf),
+                                      mergeToRow(Eye, Eye, expectedDistSelf),
+                                      mergeToRow(Lib, Lib, expectedDistSelf),
+                                      mergeToRow(Eif, Eif, expectedDistSelf),
+                                      mergeToRow(TF, Mun, expectedDistUniMun),
+                                      mergeToRow(Mun, TF, expectedDistUniMun),
+                                      mergeToRow(Eye, Eif, expectedDistEyeEif),
+                                      mergeToRow(Eif, Eye, expectedDistEyeEif)};
 
-std::vector<std::vector<std::string>> expectedNearestNeighbors2_4000{
-    mergeToRow(TF, TF, expectedDistSelf),
-    mergeToRow(Mun, Mun, expectedDistSelf),
-    mergeToRow(Eye, Eye, expectedDistSelf),
-    mergeToRow(Lib, Lib, expectedDistSelf),
-    mergeToRow(Eif, Eif, expectedDistSelf),
-    mergeToRow(TF, Mun, expectedDistUniMun),
-    mergeToRow(Mun, TF, expectedDistUniMun)};
+Rows expectedNearestNeighbors2_4000{mergeToRow(TF, TF, expectedDistSelf),
+                                    mergeToRow(Mun, Mun, expectedDistSelf),
+                                    mergeToRow(Eye, Eye, expectedDistSelf),
+                                    mergeToRow(Lib, Lib, expectedDistSelf),
+                                    mergeToRow(Eif, Eif, expectedDistSelf),
+                                    mergeToRow(TF, Mun, expectedDistUniMun),
+                                    mergeToRow(Mun, TF, expectedDistUniMun)};
 
-std::vector<std::vector<std::string>> expectedNearestNeighbors2_40{
-    mergeToRow(TF, TF, expectedDistSelf),
-    mergeToRow(Mun, Mun, expectedDistSelf),
-    mergeToRow(Eye, Eye, expectedDistSelf),
-    mergeToRow(Lib, Lib, expectedDistSelf),
-    mergeToRow(Eif, Eif, expectedDistSelf)};
+Rows expectedNearestNeighbors2_40{mergeToRow(TF, TF, expectedDistSelf),
+                                  mergeToRow(Mun, Mun, expectedDistSelf),
+                                  mergeToRow(Eye, Eye, expectedDistSelf),
+                                  mergeToRow(Lib, Lib, expectedDistSelf),
+                                  mergeToRow(Eif, Eif, expectedDistSelf)};
 
-std::vector<std::vector<std::string>> expectedNearestNeighbors3_500000{
-    mergeToRow(TF, TF, expectedDistSelf),
-    mergeToRow(Mun, Mun, expectedDistSelf),
-    mergeToRow(Eye, Eye, expectedDistSelf),
-    mergeToRow(Lib, Lib, expectedDistSelf),
-    mergeToRow(Eif, Eif, expectedDistSelf),
-    mergeToRow(TF, Mun, expectedDistUniMun),
-    mergeToRow(Mun, TF, expectedDistUniMun),
-    mergeToRow(Mun, Eif, expectedDistMunEif),
-    mergeToRow(TF, Eif, expectedDistUniEif),
-    mergeToRow(Eye, Eif, expectedDistEyeEif),
-    mergeToRow(Eif, Eye, expectedDistEyeEif),
-    mergeToRow(Eif, TF, expectedDistUniEif)};
+Rows expectedNearestNeighbors3_500000{mergeToRow(TF, TF, expectedDistSelf),
+                                      mergeToRow(Mun, Mun, expectedDistSelf),
+                                      mergeToRow(Eye, Eye, expectedDistSelf),
+                                      mergeToRow(Lib, Lib, expectedDistSelf),
+                                      mergeToRow(Eif, Eif, expectedDistSelf),
+                                      mergeToRow(TF, Mun, expectedDistUniMun),
+                                      mergeToRow(Mun, TF, expectedDistUniMun),
+                                      mergeToRow(Mun, Eif, expectedDistMunEif),
+                                      mergeToRow(TF, Eif, expectedDistUniEif),
+                                      mergeToRow(Eye, Eif, expectedDistEyeEif),
+                                      mergeToRow(Eif, Eye, expectedDistEyeEif),
+                                      mergeToRow(Eif, TF, expectedDistUniEif)};
 
 // test the compute result method on small examples
 TEST_P(SpatialJoinParamTest, computeResultSmallDatasetLargeChildren) {
-  std::vector<std::string> columnNames = {
+  Row columnNames = {
       "?name1",  "?obj1",   "?geo1",
       "?point1", "?name2",  "?obj2",
       "?geo2",   "?point2", "?distOfTheTwoObjectsAddedInternally"};
+  bool addLeftChildFirst = std::get<1>(GetParam());
 
-  buildAndTestSmallTestSetLargeChildren(MaxDistanceConfig{1}, true,
-                                        expectedMaxDist1_rows, columnNames);
-  buildAndTestSmallTestSetLargeChildren(MaxDistanceConfig{1}, false,
-                                        expectedMaxDist1_rows, columnNames);
-  buildAndTestSmallTestSetLargeChildren(MaxDistanceConfig{5000}, true,
-                                        expectedMaxDist5000_rows, columnNames);
-  buildAndTestSmallTestSetLargeChildren(MaxDistanceConfig{5000}, false,
-                                        expectedMaxDist5000_rows, columnNames);
-  buildAndTestSmallTestSetLargeChildren(
-      MaxDistanceConfig{500000}, true, expectedMaxDist500000_rows, columnNames);
-  buildAndTestSmallTestSetLargeChildren(MaxDistanceConfig{500000}, false,
-                                        expectedMaxDist500000_rows,
-                                        columnNames);
-  buildAndTestSmallTestSetLargeChildren(MaxDistanceConfig{1000000}, true,
-                                        expectedMaxDist1000000_rows,
-                                        columnNames);
-  buildAndTestSmallTestSetLargeChildren(MaxDistanceConfig{1000000}, false,
-                                        expectedMaxDist1000000_rows,
-                                        columnNames);
-  buildAndTestSmallTestSetLargeChildren(MaxDistanceConfig{10000000}, true,
-                                        expectedMaxDist10000000_rows,
-                                        columnNames);
-  buildAndTestSmallTestSetLargeChildren(MaxDistanceConfig{10000000}, false,
-                                        expectedMaxDist10000000_rows,
-                                        columnNames);
-  buildAndTestSmallTestSetLargeChildren(NearestNeighborsConfig{1}, true,
+  auto maxDistTask = getMaxDist();
+  if (maxDistTask.has_value()) {
+    buildAndTestSmallTestSetLargeChildren(
+        maxDistTask.value(), addLeftChildFirst,
+        expectedMaxDistRows[maxDistTask.value().maxDist_], columnNames);
+  }
+
+  buildAndTestSmallTestSetLargeChildren(NearestNeighborsConfig{1},
+                                        addLeftChildFirst,
                                         expectedNearestNeighbors1, columnNames);
-  buildAndTestSmallTestSetLargeChildren(NearestNeighborsConfig{2}, true,
+  buildAndTestSmallTestSetLargeChildren(NearestNeighborsConfig{2},
+                                        addLeftChildFirst,
                                         expectedNearestNeighbors2, columnNames);
-  buildAndTestSmallTestSetLargeChildren(NearestNeighborsConfig{2, 400000}, true,
-                                        expectedNearestNeighbors2_400000,
-                                        columnNames);
-  buildAndTestSmallTestSetLargeChildren(NearestNeighborsConfig{2, 4000}, true,
-                                        expectedNearestNeighbors2_4000,
-                                        columnNames);
-  buildAndTestSmallTestSetLargeChildren(NearestNeighborsConfig{2, 40}, true,
-                                        expectedNearestNeighbors2_40,
-                                        columnNames);
-  buildAndTestSmallTestSetLargeChildren(NearestNeighborsConfig{3, 500000}, true,
-                                        expectedNearestNeighbors3_500000,
-                                        columnNames);
+  buildAndTestSmallTestSetLargeChildren(
+      NearestNeighborsConfig{2, 400000}, addLeftChildFirst,
+      expectedNearestNeighbors2_400000, columnNames);
+  buildAndTestSmallTestSetLargeChildren(
+      NearestNeighborsConfig{2, 4000}, addLeftChildFirst,
+      expectedNearestNeighbors2_4000, columnNames);
+  buildAndTestSmallTestSetLargeChildren(
+      NearestNeighborsConfig{2, 40}, addLeftChildFirst,
+      expectedNearestNeighbors2_40, columnNames);
+  buildAndTestSmallTestSetLargeChildren(
+      NearestNeighborsConfig{3, 500000}, addLeftChildFirst,
+      expectedNearestNeighbors3_500000, columnNames);
 }
 
 TEST_P(SpatialJoinParamTest, computeResultSmallDatasetSmallChildren) {
-  std::vector<std::string> columnNames{"?obj1", "?point1", "?obj2", "?point2",
-                                       "?distOfTheTwoObjectsAddedInternally"};
+  Row columnNames{"?obj1", "?point1", "?obj2", "?point2",
+                  "?distOfTheTwoObjectsAddedInternally"};
+  bool addLeftChildFirst = std::get<1>(GetParam());
+
+  buildAndTestSmallTestSetSmallChildren(MaxDistanceConfig{1}, addLeftChildFirst,
+                                        expectedMaxDist1_rows_small,
+                                        columnNames);
   buildAndTestSmallTestSetSmallChildren(
-      MaxDistanceConfig{1}, true, expectedMaxDist1_rows_small, columnNames);
+      MaxDistanceConfig{5000}, addLeftChildFirst,
+      expectedMaxDist5000_rows_small, columnNames);
   buildAndTestSmallTestSetSmallChildren(
-      MaxDistanceConfig{1}, false, expectedMaxDist1_rows_small, columnNames);
-  buildAndTestSmallTestSetSmallChildren(MaxDistanceConfig{5000}, true,
-                                        expectedMaxDist5000_rows_small,
-                                        columnNames);
-  buildAndTestSmallTestSetSmallChildren(MaxDistanceConfig{5000}, false,
-                                        expectedMaxDist5000_rows_small,
-                                        columnNames);
-  buildAndTestSmallTestSetSmallChildren(MaxDistanceConfig{500000}, true,
-                                        expectedMaxDist500000_rows_small,
-                                        columnNames);
-  buildAndTestSmallTestSetSmallChildren(MaxDistanceConfig{500000}, false,
-                                        expectedMaxDist500000_rows_small,
-                                        columnNames);
-  buildAndTestSmallTestSetSmallChildren(MaxDistanceConfig{1000000}, true,
-                                        expectedMaxDist1000000_rows_small,
-                                        columnNames);
-  buildAndTestSmallTestSetSmallChildren(MaxDistanceConfig{1000000}, false,
-                                        expectedMaxDist1000000_rows_small,
-                                        columnNames);
-  buildAndTestSmallTestSetSmallChildren(MaxDistanceConfig{10000000}, true,
-                                        expectedMaxDist10000000_rows_small,
-                                        columnNames);
-  buildAndTestSmallTestSetSmallChildren(MaxDistanceConfig{10000000}, false,
-                                        expectedMaxDist10000000_rows_small,
-                                        columnNames);
+      MaxDistanceConfig{500000}, addLeftChildFirst,
+      expectedMaxDist500000_rows_small, columnNames);
+  buildAndTestSmallTestSetSmallChildren(
+      MaxDistanceConfig{1000000}, addLeftChildFirst,
+      expectedMaxDist1000000_rows_small, columnNames);
+  buildAndTestSmallTestSetSmallChildren(
+      MaxDistanceConfig{10000000}, addLeftChildFirst,
+      expectedMaxDist10000000_rows_small, columnNames);
 }
 
 TEST_P(SpatialJoinParamTest, computeResultSmallDatasetDifferentSizeChildren) {
-  std::vector<std::string> columnNames{"?name1",
-                                       "?obj1",
-                                       "?geo1",
-                                       "?point1",
-                                       "?obj2",
-                                       "?point2",
-                                       "?distOfTheTwoObjectsAddedInternally"};
-  buildAndTestSmallTestSetDiffSizeChildren(MaxDistanceConfig{1}, true,
-                                           expectedMaxDist1_rows_diff,
-                                           columnNames, true);
-  buildAndTestSmallTestSetDiffSizeChildren(MaxDistanceConfig{1}, false,
-                                           expectedMaxDist1_rows_diff,
-                                           columnNames, true);
-  buildAndTestSmallTestSetDiffSizeChildren(MaxDistanceConfig{1}, true,
-                                           expectedMaxDist1_rows_diff,
-                                           columnNames, false);
-  buildAndTestSmallTestSetDiffSizeChildren(MaxDistanceConfig{1}, false,
-                                           expectedMaxDist1_rows_diff,
-                                           columnNames, false);
-  buildAndTestSmallTestSetDiffSizeChildren(MaxDistanceConfig{5000}, true,
-                                           expectedMaxDist5000_rows_diff,
-                                           columnNames, true);
-  buildAndTestSmallTestSetDiffSizeChildren(MaxDistanceConfig{5000}, false,
-                                           expectedMaxDist5000_rows_diff,
-                                           columnNames, true);
-  buildAndTestSmallTestSetDiffSizeChildren(MaxDistanceConfig{5000}, true,
-                                           expectedMaxDist5000_rows_diff,
-                                           columnNames, false);
-  buildAndTestSmallTestSetDiffSizeChildren(MaxDistanceConfig{5000}, false,
-                                           expectedMaxDist5000_rows_diff,
-                                           columnNames, false);
-  buildAndTestSmallTestSetDiffSizeChildren(MaxDistanceConfig{500000}, true,
-                                           expectedMaxDist500000_rows_diff,
-                                           columnNames, true);
-  buildAndTestSmallTestSetDiffSizeChildren(MaxDistanceConfig{500000}, false,
-                                           expectedMaxDist500000_rows_diff,
-                                           columnNames, true);
-  buildAndTestSmallTestSetDiffSizeChildren(MaxDistanceConfig{500000}, true,
-                                           expectedMaxDist500000_rows_diff,
-                                           columnNames, false);
-  buildAndTestSmallTestSetDiffSizeChildren(MaxDistanceConfig{500000}, false,
-                                           expectedMaxDist500000_rows_diff,
-                                           columnNames, false);
-  buildAndTestSmallTestSetDiffSizeChildren(MaxDistanceConfig{1000000}, true,
-                                           expectedMaxDist1000000_rows_diff,
-                                           columnNames, true);
-  buildAndTestSmallTestSetDiffSizeChildren(MaxDistanceConfig{1000000}, false,
-                                           expectedMaxDist1000000_rows_diff,
-                                           columnNames, true);
-  buildAndTestSmallTestSetDiffSizeChildren(MaxDistanceConfig{1000000}, true,
-                                           expectedMaxDist1000000_rows_diff,
-                                           columnNames, false);
-  buildAndTestSmallTestSetDiffSizeChildren(MaxDistanceConfig{1000000}, false,
-                                           expectedMaxDist1000000_rows_diff,
-                                           columnNames, false);
-  buildAndTestSmallTestSetDiffSizeChildren(MaxDistanceConfig{10000000}, true,
-                                           expectedMaxDist10000000_rows_diff,
-                                           columnNames, true);
-  buildAndTestSmallTestSetDiffSizeChildren(MaxDistanceConfig{10000000}, false,
-                                           expectedMaxDist10000000_rows_diff,
-                                           columnNames, true);
-  buildAndTestSmallTestSetDiffSizeChildren(MaxDistanceConfig{10000000}, true,
-                                           expectedMaxDist10000000_rows_diff,
-                                           columnNames, false);
-  buildAndTestSmallTestSetDiffSizeChildren(MaxDistanceConfig{10000000}, false,
-                                           expectedMaxDist10000000_rows_diff,
-                                           columnNames, false);
+  Row columnNames{"?name1",
+                  "?obj1",
+                  "?geo1",
+                  "?point1",
+                  "?obj2",
+                  "?point2",
+                  "?distOfTheTwoObjectsAddedInternally"};
+  bool addLeftChildFirst = std::get<1>(GetParam());
+  bool bigChildLeft = std::get<2>(GetParam());
+
+  buildAndTestSmallTestSetDiffSizeChildren(
+      MaxDistanceConfig{1}, addLeftChildFirst, expectedMaxDist1_rows_diff,
+      columnNames, bigChildLeft);
+  buildAndTestSmallTestSetDiffSizeChildren(
+      MaxDistanceConfig{5000}, addLeftChildFirst, expectedMaxDist5000_rows_diff,
+      columnNames, bigChildLeft);
+  buildAndTestSmallTestSetDiffSizeChildren(
+      MaxDistanceConfig{500000}, addLeftChildFirst,
+      expectedMaxDist500000_rows_diff, columnNames, bigChildLeft);
+  buildAndTestSmallTestSetDiffSizeChildren(
+      MaxDistanceConfig{1000000}, addLeftChildFirst,
+      expectedMaxDist1000000_rows_diff, columnNames, bigChildLeft);
+  buildAndTestSmallTestSetDiffSizeChildren(
+      MaxDistanceConfig{10000000}, addLeftChildFirst,
+      expectedMaxDist10000000_rows_diff, columnNames, bigChildLeft);
 }
 
 TEST_P(SpatialJoinParamTest, maxSizeMaxDistanceTest) {
   auto maxDist = std::numeric_limits<size_t>::max();
   MaxDistanceConfig maxDistConf{maxDist};
+  bool addLeftChildFirst = std::get<1>(GetParam());
 
   // test small children
-  std::vector<std::string> columnNames{"?obj1", "?point1", "?obj2", "?point2",
-                                       "?distOfTheTwoObjectsAddedInternally"};
-  buildAndTestSmallTestSetSmallChildren(
-      maxDistConf, true, expectedMaxDist10000000_rows_small, columnNames);
-  buildAndTestSmallTestSetSmallChildren(
-      maxDistConf, false, expectedMaxDist10000000_rows_small, columnNames);
+  Row columnNames{"?obj1", "?point1", "?obj2", "?point2",
+                  "?distOfTheTwoObjectsAddedInternally"};
+  buildAndTestSmallTestSetSmallChildren(maxDistConf, addLeftChildFirst,
+                                        expectedMaxDist10000000_rows_small,
+                                        columnNames);
 
   // test diff size children
   columnNames = {"?name1",
@@ -948,9 +881,7 @@ TEST_P(SpatialJoinParamTest, maxSizeMaxDistanceTest) {
                  "?obj2",
                  "?point2",
                  "?distOfTheTwoObjectsAddedInternally"};
-  buildAndTestSmallTestSetDiffSizeChildren(
-      maxDistConf, true, expectedMaxDist10000000_rows_diff, columnNames, false);
-  buildAndTestSmallTestSetDiffSizeChildren(maxDistConf, false,
+  buildAndTestSmallTestSetDiffSizeChildren(maxDistConf, addLeftChildFirst,
                                            expectedMaxDist10000000_rows_diff,
                                            columnNames, false);
 
@@ -958,109 +889,67 @@ TEST_P(SpatialJoinParamTest, maxSizeMaxDistanceTest) {
   columnNames = {"?name1",  "?obj1",   "?geo1",
                  "?point1", "?name2",  "?obj2",
                  "?geo2",   "?point2", "?distOfTheTwoObjectsAddedInternally"};
-  buildAndTestSmallTestSetLargeChildren(
-      maxDistConf, true, expectedMaxDist10000000_rows, columnNames);
-  buildAndTestSmallTestSetLargeChildren(
-      maxDistConf, false, expectedMaxDist10000000_rows, columnNames);
+  buildAndTestSmallTestSetLargeChildren(maxDistConf, addLeftChildFirst,
+                                        expectedMaxDistRows[10000000],
+                                        columnNames);
 }
 
 TEST_P(SpatialJoinParamTest, diffSizeIdTables) {
-  std::vector<std::string> columnNames{"?point1", "?obj2", "?point2",
-                                       "?distOfTheTwoObjectsAddedInternally"};
-  testDiffSizeIdTables(MaxDistanceConfig{1}, true,
-                       expectedMaxDist1_rows_diffIDTable, columnNames, true);
-  testDiffSizeIdTables(MaxDistanceConfig{1}, true,
-                       expectedMaxDist1_rows_diffIDTable, columnNames, false);
-  testDiffSizeIdTables(MaxDistanceConfig{1}, false,
-                       expectedMaxDist1_rows_diffIDTable, columnNames, true);
-  testDiffSizeIdTables(MaxDistanceConfig{1}, false,
-                       expectedMaxDist1_rows_diffIDTable, columnNames, false);
-  testDiffSizeIdTables(MaxDistanceConfig{5000}, true,
-                       expectedMaxDist5000_rows_diffIDTable, columnNames, true);
-  testDiffSizeIdTables(MaxDistanceConfig{5000}, true,
+  Row columnNames{"?point1", "?obj2", "?point2",
+                  "?distOfTheTwoObjectsAddedInternally"};
+  bool addLeftChildFirst = std::get<1>(GetParam());
+  bool bigChildLeft = std::get<2>(GetParam());
+
+  testDiffSizeIdTables(MaxDistanceConfig{1}, addLeftChildFirst,
+                       expectedMaxDist1_rows_diffIDTable, columnNames,
+                       bigChildLeft);
+  testDiffSizeIdTables(MaxDistanceConfig{5000}, addLeftChildFirst,
                        expectedMaxDist5000_rows_diffIDTable, columnNames,
-                       false);
-  testDiffSizeIdTables(MaxDistanceConfig{5000}, false,
-                       expectedMaxDist5000_rows_diffIDTable, columnNames, true);
-  testDiffSizeIdTables(MaxDistanceConfig{5000}, false,
-                       expectedMaxDist5000_rows_diffIDTable, columnNames,
-                       false);
-  testDiffSizeIdTables(MaxDistanceConfig{500000}, true,
+                       bigChildLeft);
+  testDiffSizeIdTables(MaxDistanceConfig{500000}, addLeftChildFirst,
                        expectedMaxDist500000_rows_diffIDTable, columnNames,
-                       true);
-  testDiffSizeIdTables(MaxDistanceConfig{500000}, true,
-                       expectedMaxDist500000_rows_diffIDTable, columnNames,
-                       false);
-  testDiffSizeIdTables(MaxDistanceConfig{500000}, false,
-                       expectedMaxDist500000_rows_diffIDTable, columnNames,
-                       true);
-  testDiffSizeIdTables(MaxDistanceConfig{500000}, false,
-                       expectedMaxDist500000_rows_diffIDTable, columnNames,
-                       false);
-  testDiffSizeIdTables(MaxDistanceConfig{1000000}, true,
+                       bigChildLeft);
+  testDiffSizeIdTables(MaxDistanceConfig{1000000}, addLeftChildFirst,
                        expectedMaxDist1000000_rows_diffIDTable, columnNames,
-                       true);
-  testDiffSizeIdTables(MaxDistanceConfig{1000000}, true,
-                       expectedMaxDist1000000_rows_diffIDTable, columnNames,
-                       false);
-  testDiffSizeIdTables(MaxDistanceConfig{1000000}, false,
-                       expectedMaxDist1000000_rows_diffIDTable, columnNames,
-                       true);
-  testDiffSizeIdTables(MaxDistanceConfig{1000000}, false,
-                       expectedMaxDist1000000_rows_diffIDTable, columnNames,
-                       false);
-  testDiffSizeIdTables(MaxDistanceConfig{10000000}, true,
+                       bigChildLeft);
+  testDiffSizeIdTables(MaxDistanceConfig{10000000}, addLeftChildFirst,
                        expectedMaxDist10000000_rows_diffIDTable, columnNames,
-                       true);
-  testDiffSizeIdTables(MaxDistanceConfig{10000000}, true,
-                       expectedMaxDist10000000_rows_diffIDTable, columnNames,
-                       false);
-  testDiffSizeIdTables(MaxDistanceConfig{10000000}, false,
-                       expectedMaxDist10000000_rows_diffIDTable, columnNames,
-                       true);
-  testDiffSizeIdTables(MaxDistanceConfig{10000000}, false,
-                       expectedMaxDist10000000_rows_diffIDTable, columnNames,
-                       false);
+                       bigChildLeft);
 }
 
 TEST_P(SpatialJoinParamTest, wrongPointInInput) {
   // expected behavior: point is skipped
-  std::vector<std::string> columnNames{"?obj1", "?point1", "?obj2", "?point2",
-                                       "?distOfTheTwoObjectsAddedInternally"};
-  testWrongPointInInput(MaxDistanceConfig{1}, true,
+  Row columnNames{"?obj1", "?point1", "?obj2", "?point2",
+                  "?distOfTheTwoObjectsAddedInternally"};
+  bool addLeftChildFirst = std::get<1>(GetParam());
+
+  testWrongPointInInput(MaxDistanceConfig{1}, addLeftChildFirst,
                         expectedMaxDist1_rows_small_wrong_point, columnNames);
-  testWrongPointInInput(MaxDistanceConfig{1}, false,
-                        expectedMaxDist1_rows_small_wrong_point, columnNames);
-  testWrongPointInInput(MaxDistanceConfig{5000}, true,
+  testWrongPointInInput(MaxDistanceConfig{5000}, addLeftChildFirst,
                         expectedMaxDist5000_rows_small_wrong_point,
                         columnNames);
-  testWrongPointInInput(MaxDistanceConfig{5000}, false,
-                        expectedMaxDist5000_rows_small_wrong_point,
-                        columnNames);
-  testWrongPointInInput(MaxDistanceConfig{500000}, true,
+  testWrongPointInInput(MaxDistanceConfig{500000}, addLeftChildFirst,
                         expectedMaxDist500000_rows_small_wrong_point,
                         columnNames);
-  testWrongPointInInput(MaxDistanceConfig{500000}, false,
-                        expectedMaxDist500000_rows_small_wrong_point,
-                        columnNames);
-  testWrongPointInInput(MaxDistanceConfig{1000000}, true,
+  testWrongPointInInput(MaxDistanceConfig{1000000}, addLeftChildFirst,
                         expectedMaxDist1000000_rows_small_wrong_point,
                         columnNames);
-  testWrongPointInInput(MaxDistanceConfig{1000000}, false,
-                        expectedMaxDist1000000_rows_small_wrong_point,
-                        columnNames);
-  testWrongPointInInput(MaxDistanceConfig{10000000}, true,
-                        expectedMaxDist10000000_rows_small_wrong_point,
-                        columnNames);
-  testWrongPointInInput(MaxDistanceConfig{10000000}, false,
+  testWrongPointInInput(MaxDistanceConfig{10000000}, addLeftChildFirst,
                         expectedMaxDist10000000_rows_small_wrong_point,
                         columnNames);
 }
 
-INSTANTIATE_TEST_SUITE_P(SpatialJoin, SpatialJoinParamTest,
-                         ::testing::Values(SpatialJoinAlgorithm::BASELINE,
-                                           SpatialJoinAlgorithm::S2_GEOMETRY,
-                                           SpatialJoinAlgorithm::BOUNDING_BOX));
+INSTANTIATE_TEST_SUITE_P(
+    SpatialJoin, SpatialJoinParamTest,
+    ::testing::Combine(::testing::Values(SpatialJoinAlgorithm::BASELINE,
+                                         SpatialJoinAlgorithm::S2_GEOMETRY,
+                                         SpatialJoinAlgorithm::BOUNDING_BOX),
+                       ::testing::Bool(), ::testing::Bool(),
+                       ::testing::Values(MaxDistanceConfig{1},
+                                         MaxDistanceConfig{5000},
+                                         MaxDistanceConfig{500000},
+                                         MaxDistanceConfig{1000000},
+                                         MaxDistanceConfig{10000000})));
 
 }  // end of Namespace computeResultTest
 
