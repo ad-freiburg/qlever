@@ -59,6 +59,9 @@ struct CompressedBlockMetadataNoBlockIndex {
     size_t compressedSize_;
     bool operator==(const OffsetAndCompressedSize&) const = default;
   };
+
+  using GraphInfo = std::optional<std::vector<Id>>;
+
   std::vector<OffsetAndCompressedSize> offsetsAndCompressedSize_;
   size_t numRows_;
 
@@ -112,12 +115,7 @@ struct CompressedBlockMetadataNoBlockIndex {
   // Format BlockMetadata contents for debugging.
   friend std::ostream& operator<<(
       std::ostream& str,
-      const CompressedBlockMetadataNoBlockIndex& blockMetadata) {
-    str << "#BlockMetadata\n(first) " << blockMetadata.firstTriple_ << "(last) "
-        << blockMetadata.lastTriple_ << "num. rows: " << blockMetadata.numRows_
-        << "." << std::endl;
-    return str;
-  }
+      const CompressedBlockMetadataNoBlockIndex& blockMetadata);
 };
 
 // The same as the above struct, but this block additionally knows its index.
@@ -131,13 +129,8 @@ struct CompressedBlockMetadata : CompressedBlockMetadataNoBlockIndex {
   bool operator==(const CompressedBlockMetadata&) const = default;
 
   // Format BlockMetadata contents for debugging.
-  friend std::ostream& operator<<(
-      std::ostream& str, const CompressedBlockMetadata& blockMetadata) {
-    str << "#BlockMetadata\n(first) " << blockMetadata.firstTriple_ << "(last) "
-        << blockMetadata.lastTriple_ << "num. rows: " << blockMetadata.numRows_
-        << "." << std::endl;
-    return str;
-  }
+  friend std::ostream& operator<<(std::ostream& str,
+                                  const CompressedBlockMetadata& blockMetadata);
 };
 
 // Serialization of the `OffsetAndcompressedSize` subclass.

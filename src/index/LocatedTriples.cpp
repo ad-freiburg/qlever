@@ -10,8 +10,8 @@
 
 #include "absl/strings/str_join.h"
 #include "index/CompressedRelation.h"
-#include "util/ChunkedForLoop.h"
 #include "index/ConstantsIndexBuilding.h"
+#include "util/ChunkedForLoop.h"
 
 // ____________________________________________________________________________
 std::vector<LocatedTriple> LocatedTriple::locateTriplesInPermutation(
@@ -251,23 +251,45 @@ void LocatedTriplesPerBlock::setOriginalMetadata(
   updateAugmentedMetadata();
 }
 
-static auto updateGraphMetadata(CompressedBlockMetadata& blockMetadata, const LocatedTriples& locatedTriples) {
+// Update the `blockMetadata`, such that its metadata pertaining to the
+// contained graphs is consistent with the `locatedTriples` which are added to
+// that block. In particular, all graphs to which at least one triple is added
+// is added to the graph metadata, and if the number of total graphs is larger
+// than the configured threshold, then the graph metadata is set to `nullopt`,
+// which means that there is no metadata.
+static auto updateGraphMetadata(CompressedBlockMetadata& blockMetadata,
+                                const LocatedTriples& locatedTriples) {
+  // We do not know anything about the triples contained in the block, so we
+  // also Cannot know if the `locatedTriples` introduces duplicates. We thus
+  // have to be conservative and assume that there are duplicates.
+  blockMetadata.containsDuplicatesWithDifferentGraphs_ = true;
   auto& graphs = blockMetadata.graphInfo_;
   if (!graphs.has_value()) {
+    // The original block already contains too many graphs, don't store any
+    // metadata.
     return;
   }
-  ad_utility::HashSet<Id> newGraphs(graphs.value().begin(), graphs.value().end());
+
+  // Compute a hash set of all graphs that are originally contained in the block
+  // and all the graphs that are added via the `locatedTriples`.
+  ad_utility::HashSet<Id> newGraphs(graphs.value().begin(),
+                                    graphs.value().end());
   for (auto& lt : locatedTriples) {
     if (!lt.shouldTripleExist_) {
+      // Don't update the graph info for triples that are deleted.
       continue;
     }
     newGraphs.insert(lt.triple_.ids_.at(ADDITIONAL_COLUMN_GRAPH_ID));
+    // Handle the case that with the newly added triples we have too many
+    // distinct graphs to store them in the metadata.
     if (newGraphs.size() > MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA) {
       graphs.reset();
       return;
     }
   }
   graphs.emplace(newGraphs.begin(), newGraphs.end());
+  // Sort the stored graphs, to make the testing easier.
+  std::ranges::sort(graphs.value());
 }
 
 // ____________________________________________________________________________
