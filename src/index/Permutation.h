@@ -161,6 +161,12 @@ class Permutation {
   const LocatedTriplesPerBlock& getLocatedTriplesForPermutation(
       const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
 
+  // From the given snapshot, get the augmented block metadata for this
+  // permutation.
+  const std::vector<CompressedBlockMetadata>&
+  getAugmentedMetadataForPermutation(
+      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
+
   const CompressedRelationReader& reader() const { return reader_.value(); }
 
  private:
