@@ -321,8 +321,16 @@ VariableToColumnMap SpatialJoin::getVarColMapPayloadVars() const {
     } else {
       static_assert(std::is_same_v<T, std::vector<Variable>>);
       for (auto var : value) {
+        AD_CONTRACT_CHECK(varColMap.contains(var), [&]() {
+          return absl::StrCat("Variable '", var.name(),
+                              "' selected as payload to spatial join but not "
+                              "present in right child.");
+        });
         newVarColMap[var] = varColMap[var];
       }
+      AD_CONTRACT_CHECK(
+          varColMap.contains(config_->right_),
+          "Right variable is not defined in right child of spatial join.");
       newVarColMap[config_->right_] = varColMap[config_->right_];
     }
     return newVarColMap;
@@ -432,15 +440,28 @@ VariableToColumnMap SpatialJoin::computeVariableToColumnMap() const {
     // table that are actually selected by the payload variables, plus the join
     // column
     auto sizeLeft = childLeft_->getResultWidth();
-    auto varColMapAfterPayloadVars = getVarColMapPayloadVars();
-    auto sizeRight = varColMapAfterPayloadVars.size();
-    addColumns(childLeft_->getVariableColumns(), 0);
-    addColumns(varColMapAfterPayloadVars, sizeLeft);
+    auto varColMapLeft = childLeft_->getVariableColumns();
+    AD_CONTRACT_CHECK(
+        !varColMapLeft.contains(config_->right_),
+        "Right variable may not be defined in left child of spatial join.");
+    AD_CONTRACT_CHECK(
+        varColMapLeft.contains(config_->left_),
+        "Left variable is not defined in left child of spatial join.");
+    addColumns(varColMapLeft, 0);
 
+    auto varColMapRightFiltered = getVarColMapPayloadVars();
+    auto sizeRight = varColMapRightFiltered.size();
+    AD_CONTRACT_CHECK(
+        !varColMapRightFiltered.contains(config_->left_),
+        "Left variable may not be defined in right child of spatial join.");
+    addColumns(varColMapRightFiltered, sizeLeft);
+
+    // Column for the distance
     if (config_->distanceVariable_.has_value()) {
       AD_CONTRACT_CHECK(
-          variableToColumnMap.find(config_->distanceVariable_.value()) ==
-          variableToColumnMap.end());
+          !variableToColumnMap.contains(config_->distanceVariable_.value()),
+          "The distance variable of a spatial join may not be previously "
+          "defined.");
       variableToColumnMap[config_->distanceVariable_.value()] =
           makeUndefCol(ColumnIndex{sizeLeft + sizeRight});
     }
