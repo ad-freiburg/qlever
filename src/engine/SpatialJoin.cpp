@@ -98,8 +98,13 @@ std::vector<QueryExecutionTree*> SpatialJoin::getChildren() {
 string SpatialJoin::getCacheKeyImpl() const {
   if (childLeft_ && childRight_) {
     std::ostringstream os;
+    // This includes all attributes that change the result
+
+    // Children
     os << "SpatialJoin\nChild1:\n" << childLeft_->getCacheKey() << "\n";
     os << "Child2:\n" << childRight_->getCacheKey() << "\n";
+
+    // Task
     auto maxDist = getMaxDist();
     if (maxDist.has_value()) {
       os << "maxDist: " << maxDist.value() << "\n";
@@ -108,6 +113,28 @@ string SpatialJoin::getCacheKeyImpl() const {
     if (maxResults.has_value()) {
       os << "maxResults: " << maxResults.value() << "\n";
     }
+
+    // Uses distance variable?
+    if (config_->distanceVariable_.has_value()) {
+      os << "withDistanceVariable\n";
+    }
+
+    // Selected payload variables
+    os << "payload:";
+    if (std::holds_alternative<PayloadAllVariables>(
+            config_->payloadVariables_)) {
+      os << " AllVariables";
+    } else {
+      auto vec = std::get<std::vector<Variable>>(config_->payloadVariables_);
+      for (auto v : vec) {
+        os << " " << v.name();
+      }
+    }
+    os << "\n";
+
+    // Algorithm
+    os << "algorithm: " << static_cast<int>(config_->algo_) << "\n";
+
     return std::move(os).str();
   } else {
     return "incomplete SpatialJoin class";
@@ -280,37 +307,25 @@ vector<ColumnIndex> SpatialJoin::resultSortedOn() const {
 }
 
 // ____________________________________________________________________________
-VariableToColumnMap SpatialJoin::getVarColMapPayloadVars(
-    bool withJoinCol) const {
+VariableToColumnMap SpatialJoin::getVarColMapPayloadVars() const {
   AD_CONTRACT_CHECK(childRight_,
                     "Child right must be added before payload variable to "
                     "column map can be computed.");
 
-  auto payloadVariablesVisitor = [this,
-                                  withJoinCol]<typename T>(const T& value) {
+  auto payloadVariablesVisitor = [this]<typename T>(const T& value) {
     auto varColMap =
         childRight_->getRootOperation()->getExternallyVisibleVariableColumns();
     VariableToColumnMap newVarColMap;
 
     if constexpr (std::is_same_v<T, PayloadAllVariables>) {
       newVarColMap = VariableToColumnMap{varColMap};
-      if (!withJoinCol) {
-        newVarColMap.erase(config_->right_);
-      }
     } else {
       static_assert(std::is_same_v<T, std::vector<Variable>>);
-      for (size_t i = 0; i < value.size(); i++) {
-        Variable v = value[i];
-        AD_CONTRACT_CHECK(v != config_->right_,
-                          "The right join variable may not be part of the "
-                          "payload variables.");
-        newVarColMap[v] = varColMap[v];
+      for (auto var : value) {
+        newVarColMap[var] = varColMap[var];
       }
-      if (withJoinCol) {
-        newVarColMap[config_->right_] = varColMap[config_->right_];
-      }
+      newVarColMap[config_->right_] = varColMap[config_->right_];
     }
-
     return newVarColMap;
   };
 
@@ -346,10 +361,10 @@ PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
   ColumnIndex rightJoinCol = getJoinCol(rightVarColMap, config_->right_);
 
   // Payload cols and join col
-  auto varsAndColInfo = copySortedByColumnIndex(getVarColMapPayloadVars(true));
+  auto varsAndColInfo = copySortedByColumnIndex(getVarColMapPayloadVars());
   std::vector<ColumnIndex> rightSelectedCols;
-  for (size_t i = 0; i < varsAndColInfo.size(); i++) {
-    rightSelectedCols.push_back(varsAndColInfo[i].second.columnIndex_);
+  for (auto varAndColInfo : varsAndColInfo) {
+    rightSelectedCols.push_back(varAndColInfo.second.columnIndex_);
   }
 
   // Size of output table
@@ -418,7 +433,7 @@ VariableToColumnMap SpatialJoin::computeVariableToColumnMap() const {
     // table that are actually selected by the payload variables, plus the join
     // column
     auto sizeLeft = childLeft_->getResultWidth();
-    auto varColMapAfterPayloadVars = getVarColMapPayloadVars(true);
+    auto varColMapAfterPayloadVars = getVarColMapPayloadVars();
     auto sizeRight = varColMapAfterPayloadVars.size();
     addColumns(childLeft_->getVariableColumns(), 0);
     addColumns(varColMapAfterPayloadVars, sizeLeft);
