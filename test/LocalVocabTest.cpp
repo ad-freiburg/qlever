@@ -427,3 +427,28 @@ TEST(LocalVocab, otherWordSetIsTransitivelyPropagated) {
               ::testing::UnorderedElementsAre(
                   LiteralOrIri::literalWithoutQuotes("test")));
 }
+
+// _____________________________________________________________________________
+TEST(LocalVocab, sizeIsProperlyUpdatedOnMerge) {
+  using ad_utility::triple_component::LiteralOrIri;
+  using ::testing::UnorderedElementsAre;
+  LocalVocab original;
+  original.getIndexAndAddIfNotContained(
+      LocalVocabEntry{LiteralOrIri::literalWithoutQuotes("test")});
+
+  LocalVocab clone1 = original.clone();
+  LocalVocab clone2 = original.clone();
+  clone2.mergeWith(std::span{&original, 1});
+  original.mergeWith(std::span{&clone1, 1});
+
+  // Implementation detail, merging does add to the "other word set" but does
+  // not deduplicate with the primary word set.
+  EXPECT_EQ(original.size(), 2);
+  EXPECT_THAT(original.getAllWordsForTesting(),
+              UnorderedElementsAre(LiteralOrIri::literalWithoutQuotes("test"),
+                                   LiteralOrIri::literalWithoutQuotes("test")));
+
+  EXPECT_EQ(clone2.size(), 1);
+  EXPECT_THAT(clone2.getAllWordsForTesting(),
+              UnorderedElementsAre(LiteralOrIri::literalWithoutQuotes("test")));
+}

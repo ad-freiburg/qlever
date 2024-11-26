@@ -116,15 +116,17 @@ class LocalVocab {
   template <std::ranges::range R>
   void mergeWith(const R& vocabs) {
     using std::views::filter;
+    auto addWordSet = [this](const std::shared_ptr<const Set>& set) {
+      bool added = otherWordSets_.insert(set).second;
+      size_ += added * set->size();
+    };
     // Note: Even though the `otherWordsSet_`is a hash set that filters out
     // duplicates, we still manually filter out empty sets, because these
     // typically don't compare equal to each other because of the`shared_ptr`
     // semantics.
     for (const auto& vocab : vocabs | filter(std::not_fn(&LocalVocab::empty))) {
-      otherWordSets_.insert(vocab.otherWordSets_.begin(),
-                            vocab.otherWordSets_.end());
-      otherWordSets_.insert(vocab.primaryWordSet_);
-      size_ += vocab.size_;
+      std::ranges::for_each(vocab.otherWordSets_, addWordSet);
+      addWordSet(vocab.primaryWordSet_);
     }
 
     // Also merge the `vocabs` `LocalBlankNodeManager`s, if they exist.
