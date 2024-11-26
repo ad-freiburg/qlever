@@ -5,6 +5,7 @@
 
 #include "engine/SpatialJoin.h"
 
+#include <absl/container/flat_hash_set.h>
 #include <absl/strings/charconv.h>
 
 #include <cstdint>
@@ -14,6 +15,7 @@
 #include <queue>
 #include <tuple>
 #include <type_traits>
+#include <unordered_set>
 #include <variant>
 
 #include "engine/ExportQueryExecutionTrees.h"
@@ -164,15 +166,20 @@ string SpatialJoin::getDescriptor() const {
 // ____________________________________________________________________________
 size_t SpatialJoin::getResultWidth() const {
   if (childLeft_ && childRight_) {
-    // Helper lambda to determine the size of the right child after selecting
-    // only the join column and explicitly requested payload columns
-    auto sizeRight = [this]() {
-      if (std::holds_alternative<PayloadAllVariables>(
-              config_->payloadVariables_)) {
+    // Helper visitor lambda to determine the size of the right child after
+    // selecting only the join column and explicitly requested payload columns
+    auto sizeRight = [this]<typename T>(const T& value) {
+      if constexpr (std::is_same_v<T, PayloadAllVariables>) {
         return childRight_->getResultWidth();
       } else {
-        return 1 + std::get<std::vector<Variable>>(config_->payloadVariables_)
-                       .size();
+        static_assert(std::is_same_v<T, std::vector<Variable>>);
+
+        // We convert to a set here, because we allow multiple occurrences of
+        // variables in payloadVariables_
+        absl::flat_hash_set<Variable> pvSet{value.begin(), value.end()};
+
+        // The payloadVariables_ may contain the right join variable
+        return pvSet.size() + (pvSet.contains(config_->right_) ? 0 : 1);
       }
     };
 
@@ -181,7 +188,8 @@ size_t SpatialJoin::getResultWidth() const {
     // objects with a distance of at most 500m to each other, then each object
     // might contain different positions, which should be kept).
     // For the right join table we only use the selected columns.
-    auto widthChildren = childLeft_->getResultWidth() + sizeRight();
+    auto widthChildren = childLeft_->getResultWidth() +
+                         std::visit(sizeRight, config_->payloadVariables_);
 
     if (config_->distanceVariable_.has_value()) {
       return widthChildren + 1;
