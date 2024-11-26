@@ -439,14 +439,48 @@ class SpatialJoinVarColParamTest
             if (withName && rightSideBigChild) {
               payloadVars.push_back(Variable{"?name2"});
             }
+
+            // Test the regular and valid payloadVars
             auto exp = makeExpected(leftSideBigChild, rightSideBigChild,
                                     addDist, withObj, withName, withGeo);
             computeAndCompareVarToColMaps(addDist, payloadVars, exp);
-            if (withGeo && withObj && withName) {
-              // Also test the PayloadAllVariables version
+
+            // Also test the PayloadAllVariables version
+            if (withGeo && withObj && (withName || !rightSideBigChild)) {
               computeAndCompareVarToColMaps(addDist, PayloadAllVariables{},
                                             exp);
             }
+
+            // Test multiple occurrences of variables
+            if (withObj) {
+              payloadVars.push_back(Variable{"?obj2"});
+              // Variable ?obj2 is now contained twice
+              computeAndCompareVarToColMaps(addDist, payloadVars, exp);
+              payloadVars.pop_back();
+            }
+
+            // Test contained right variable in payloadVars
+            payloadVars.push_back(Variable{"?point2"});
+            computeAndCompareVarToColMaps(addDist, payloadVars, exp);
+            payloadVars.pop_back();
+
+            // Test throw if left join variable contained
+            payloadVars.push_back(Variable{"?point1"});
+            ASSERT_ANY_THROW(
+                computeAndCompareVarToColMaps(addDist, payloadVars, exp));
+            payloadVars.pop_back();
+
+            // Test throw if left other variable contained
+            payloadVars.push_back(Variable{"?obj1"});
+            ASSERT_ANY_THROW(
+                computeAndCompareVarToColMaps(addDist, payloadVars, exp));
+            payloadVars.pop_back();
+
+            // Test throw if unbound contained
+            payloadVars.push_back(Variable{"?isThereSomebodyHere"});
+            ASSERT_ANY_THROW(
+                computeAndCompareVarToColMaps(addDist, payloadVars, exp));
+            payloadVars.pop_back();
           }
         }
       }
