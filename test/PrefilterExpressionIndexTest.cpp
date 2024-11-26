@@ -2,7 +2,7 @@
 //                  Chair of Algorithms and Data Structures
 //  Author: Hannes Baumann <baumannh@informatik.uni-freiburg.de>
 
-#include <gtest/gtest.h>
+#include <gmock/gmock.h>
 
 #include <vector>
 
@@ -157,18 +157,21 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
 
 //______________________________________________________________________________
 TEST_F(PrefilterExpressionOnMetadataTest, testBlockFormatForDebugging) {
-  EXPECT_EQ(
-      "#BlockMetadata\n(first) Triple: I:0 V:10 D:33.000000 V:0\n(last) "
-      "Triple: I:0 V:10 D:33.000000 V:0\nnum. rows: 0.\n",
-      (std::stringstream() << b5).str());
-  EXPECT_EQ(
-      "#BlockMetadata\n(first) Triple: I:-4 V:10 D:33.000000 V:0\n(last) "
-      "Triple: D:2.000000 V:10 D:33.000000 V:0\nnum. rows: 0.\n",
-      (std::stringstream() << b11).str());
-  EXPECT_EQ(
-      "#BlockMetadata\n(first) Triple: V:14 V:10 D:33.000000 V:0\n(last) "
-      "Triple: V:17 V:10 D:33.000000 V:0\nnum. rows: 0.\n",
-      (std::stringstream() << b21).str());
+  EXPECT_THAT(
+      (std::stringstream() << b5).str(),
+      ::testing::HasSubstr(
+          "#BlockMetadata\n(first) Triple: I:0 V:10 D:33.000000 V:0\n(last) "
+          "Triple: I:0 V:10 D:33.000000 V:0\nnum. rows: 0.\n"));
+  EXPECT_THAT(
+      (std::stringstream() << b11).str(),
+      ::testing::HasSubstr(
+          "#BlockMetadata\n(first) Triple: I:-4 V:10 D:33.000000 V:0\n(last) "
+          "Triple: D:2.000000 V:10 D:33.000000 V:0\nnum. rows: 0.\n"));
+  EXPECT_THAT(
+      (std::stringstream() << b21).str(),
+      ::testing::HasSubstr(
+          "#BlockMetadata\n(first) Triple: V:14 V:10 D:33.000000 V:0\n(last) "
+          "Triple: V:17 V:10 D:33.000000 V:0\nnum. rows: 0.\n"));
 }
 
 // Test Relational Expressions

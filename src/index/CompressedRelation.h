@@ -115,7 +115,19 @@ struct CompressedBlockMetadataNoBlockIndex {
   // Format BlockMetadata contents for debugging.
   friend std::ostream& operator<<(
       std::ostream& str,
-      const CompressedBlockMetadataNoBlockIndex& blockMetadata);
+      const CompressedBlockMetadataNoBlockIndex& blockMetadata) {
+    str << "#BlockMetadata\n(first) " << blockMetadata.firstTriple_ << "(last) "
+        << blockMetadata.lastTriple_ << "num. rows: " << blockMetadata.numRows_
+        << ".\n";
+    if (blockMetadata.graphInfo_.has_value()) {
+      str << "Graphs: ";
+      ad_utility::lazyStrJoin(&str, blockMetadata.graphInfo_.value(), ", ");
+      str << '\n';
+    }
+    str << "[possibly] contains duplicates: "
+        << blockMetadata.containsDuplicatesWithDifferentGraphs_ << '\n';
+    return str;
+  }
 };
 
 // The same as the above struct, but this block additionally knows its index.
@@ -129,8 +141,13 @@ struct CompressedBlockMetadata : CompressedBlockMetadataNoBlockIndex {
   bool operator==(const CompressedBlockMetadata&) const = default;
 
   // Format BlockMetadata contents for debugging.
-  friend std::ostream& operator<<(std::ostream& str,
-                                  const CompressedBlockMetadata& blockMetadata);
+  friend std::ostream& operator<<(
+      std::ostream& str, const CompressedBlockMetadata& blockMetadata) {
+    str << static_cast<const CompressedBlockMetadataNoBlockIndex&>(
+        blockMetadata);
+    str << "block index: " << blockMetadata.blockIndex_ << "\n";
+    return str;
+  }
 };
 
 // Serialization of the `OffsetAndcompressedSize` subclass.
