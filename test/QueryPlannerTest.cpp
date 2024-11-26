@@ -1690,6 +1690,16 @@ TEST(QueryPlanner, SpatialJoinService) {
       "{ ?a <p> ?b } }}",
       h::SpatialJoin(-1, 5, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload, S2,
                      scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+}
+
+TEST(QueryPlanner, SpatialJoinServicePayloadVars) {
+  // Test the <payload> option which allows selecting columns from the graph
+  // pattern inside the service.
+
+  auto scan = h::IndexScanFromStrings;
+  using V = Variable;
+  auto S2 = SpatialJoinAlgorithm::S2_GEOMETRY;
+
   h::expect(
       "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
       "SELECT * WHERE {"
@@ -1705,6 +1715,22 @@ TEST(QueryPlanner, SpatialJoinService) {
       h::SpatialJoin(-1, 5, V{"?y"}, V{"?b"}, V{"?dist"},
                      std::vector<V>{V{"?a"}}, S2, scan("?x", "<p>", "?y"),
                      scan("?a", "<p>", "?b")));
+  h::expect(
+      "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+      "SELECT * WHERE {"
+      "?x <p> ?y."
+      "SERVICE spatialSearch: {"
+      "_:config spatialSearch:algorithm spatialSearch:s2 ;"
+      "spatialSearch:right ?b ;"
+      "spatialSearch:bindDistance ?dist ;"
+      "spatialSearch:nearestNeighbors 5 . "
+      "_:config spatialSearch:left ?y ."
+      "_:config spatialSearch:payload ?a , ?a2 ."
+      "{ ?a <p> ?a2 . ?a2 <p> ?b } }}",
+      h::SpatialJoin(
+          -1, 5, V{"?y"}, V{"?b"}, V{"?dist"},
+          std::vector<V>{V{"?a"}, V{"?a2"}}, S2, scan("?x", "<p>", "?y"),
+          h::Join(scan("?a", "<p>", "?a2"), scan("?a2", "<p>", "?b"))));
 }
 
 TEST(QueryPlanner, SpatialJoinServiceMaxDistOutside) {
