@@ -169,6 +169,8 @@ class Permutation {
 
   const CompressedRelationReader& reader() const { return reader_.value(); }
 
+  Enum permutation() const { return permutation_; }
+
  private:
   // Readable name for this permutation, e.g., `POS`.
   std::string readableName_;
@@ -191,4 +193,6 @@ class Permutation {
   std::unique_ptr<Permutation> internalPermutation_ = nullptr;
 
   std::function<bool(Id)> isInternalId_;
+
+  bool isInternalPermutation_ = false;
 };
