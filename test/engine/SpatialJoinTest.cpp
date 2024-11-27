@@ -15,6 +15,7 @@
 #include <regex>
 #include <sstream>
 
+#include "../util/GTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "./../../src/global/ValueId.h"
 #include "./../../src/util/GeoSparqlHelpers.h"
@@ -392,7 +393,7 @@ class SpatialJoinVarColParamTest
         };
 
     // Expected variables
-    V distVar{"?distOfTheTwoObjectsAddedInternally"};
+    V distVar{"?distOfTheTwoObjects"};
     V obj{"?obj"};
     V geo{"?geo"};
     V name{"?name"};
@@ -473,21 +474,41 @@ class SpatialJoinVarColParamTest
 
             // Test throw if left join variable contained
             payloadVars.push_back(Variable{"?point1"});
-            ASSERT_ANY_THROW(
-                computeAndCompareVarToColMaps(addDist, payloadVars, exp));
+            AD_EXPECT_THROW_WITH_MESSAGE(
+                computeAndCompareVarToColMaps(addDist, payloadVars, exp),
+                ::testing::ContainsRegex(
+                    "Variable '?point1' selected as payload to "
+                    "spatial join but not present in right child"));
             payloadVars.pop_back();
 
             // Test throw if left other variable contained
             payloadVars.push_back(Variable{"?obj1"});
-            ASSERT_ANY_THROW(
-                computeAndCompareVarToColMaps(addDist, payloadVars, exp));
+            AD_EXPECT_THROW_WITH_MESSAGE(
+                computeAndCompareVarToColMaps(addDist, payloadVars, exp),
+                ::testing::ContainsRegex(
+                    "Variable '?obj1' selected as payload to "
+                    "spatial join but not present in right child"));
             payloadVars.pop_back();
 
             // Test throw if unbound contained
             payloadVars.push_back(Variable{"?isThereSomebodyHere"});
-            ASSERT_ANY_THROW(
-                computeAndCompareVarToColMaps(addDist, payloadVars, exp));
+            AD_EXPECT_THROW_WITH_MESSAGE(
+                computeAndCompareVarToColMaps(addDist, payloadVars, exp),
+                ::testing::ContainsRegex(
+                    "Variable '?isThereSomebodyHere' selected as payload to "
+                    "spatial join but not present in right child"));
             payloadVars.pop_back();
+
+            // Test throw if distance variable contained
+            if (addDist) {
+              payloadVars.push_back(distVar);
+              AD_EXPECT_THROW_WITH_MESSAGE(
+                  computeAndCompareVarToColMaps(addDist, payloadVars, exp),
+                  ::testing::ContainsRegex(
+                      "Variable '?distOfTheTwoObjects' selected as payload to "
+                      "spatial join but not present in right child"));
+              payloadVars.pop_back();
+            }
           }
         }
       }
