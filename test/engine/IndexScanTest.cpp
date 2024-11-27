@@ -602,14 +602,15 @@ TEST(IndexScan, prefilterTablesDoesFilterCorrectly) {
   IndexScan scan{qec, Permutation::PSO, xpy};
 
   auto makeJoinSide = [](QueryExecutionContext* qec) -> Result::Generator {
-    co_yield Result::IdTableVocabPair{
-        makeIdTable(qec, {iri("<a>"), iri("<c>")}), LocalVocab{}};
+    using P = Result::IdTableVocabPair;
+    P p1{makeIdTable(qec, {iri("<a>"), iri("<c>")}), LocalVocab{}};
+    co_yield p1;
     LocalVocab vocab;
     vocab.getIndexAndAddIfNotContained(LocalVocabEntry{
         ad_utility::triple_component::Literal::literalWithoutQuotes("Test")});
-    co_yield Result::IdTableVocabPair{
-        makeIdTable(qec, {iri("<c>"), iri("<q>"), iri("<xb>")}),
-        std::move(vocab)};
+    P p2{makeIdTable(qec, {iri("<c>"), iri("<q>"), iri("<xb>")}),
+         std::move(vocab)};
+    co_yield p2;
   };
 
   auto [leftGenerator, rightGenerator] =
@@ -665,11 +666,13 @@ TEST(IndexScan, prefilterTablesDoesNotFilterOnUndefined) {
   IndexScan scan{qec, Permutation::PSO, xpy};
 
   auto makeJoinSide = [](QueryExecutionContext* qec) -> Result::Generator {
-    co_yield {makeIdTableFromVector({{Id::makeUndefined()}}), LocalVocab{}};
-    co_yield Result::IdTableVocabPair{
-        makeIdTable(qec, {iri("<a>"), iri("<c>")}), LocalVocab{}};
-    co_yield Result::IdTableVocabPair{
-        makeIdTable(qec, {iri("<c>"), iri("<q>"), iri("<xb>")}), LocalVocab{}};
+    using P = Result::IdTableVocabPair;
+    P p1{makeIdTableFromVector({{Id::makeUndefined()}}), LocalVocab{}};
+    co_yield p1;
+    P p2{makeIdTable(qec, {iri("<a>"), iri("<c>")}), LocalVocab{}};
+    co_yield p2;
+    P p3{makeIdTable(qec, {iri("<c>"), iri("<q>"), iri("<xb>")}), LocalVocab{}};
+    co_yield p3;
   };
 
   auto [_, rightGenerator] = scan.prefilterTables(makeJoinSide(qec), 0);
