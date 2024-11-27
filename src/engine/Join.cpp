@@ -73,6 +73,21 @@ std::variant<LazyInputView, MaterializedInputView> resultToView(
   }
   return convertGenerator(std::move(result.idTables()), permutation);
 }
+
+using GeneratorWithDetails =
+    cppcoro::generator<ad_utility::IdTableAndFirstCol<IdTable>,
+                       CompressedRelationReader::LazyScanMetadata>;
+// Convert a `generator<IdTable` to a `generator<IdTableAndFirstCol>` for more
+// efficient access in the join columns below.
+GeneratorWithDetails convertGenerator(Permutation::IdTableGenerator gen) {
+  co_await cppcoro::getDetails = gen.details();
+  gen.setDetailsPointer(&co_await cppcoro::getDetails);
+  for (auto& table : gen) {
+    // IndexScans don't have a local vocabulary, so we can just use an empty one
+    ad_utility::IdTableAndFirstCol t{std::move(table), LocalVocab{}};
+    co_yield t;
+  }
+}
 }  // namespace
 
 // _____________________________________________________________________________
@@ -664,23 +679,6 @@ void Join::addCombinedRowToIdTable(const ROW_A& rowA, const ROW_B& rowB,
     (*table)(backIndex, h + rowA.numColumns() - 1) = rowB[h];
   }
 }
-
-namespace {
-using GeneratorWithDetails =
-    cppcoro::generator<ad_utility::IdTableAndFirstCol<IdTable>,
-                       CompressedRelationReader::LazyScanMetadata>;
-// Convert a `generator<IdTable` to a `generator<IdTableAndFirstCol>` for more
-// efficient access in the join columns below.
-GeneratorWithDetails convertGenerator(Permutation::IdTableGenerator gen) {
-  co_await cppcoro::getDetails = gen.details();
-  gen.setDetailsPointer(&co_await cppcoro::getDetails);
-  for (auto& table : gen) {
-    // IndexScans don't have a local vocabulary, so we can just use an empty one
-    ad_utility::IdTableAndFirstCol t{std::move(table), LocalVocab{}};
-    co_yield t;
-  }
-}
-}  // namespace
 
 // ______________________________________________________________________________________________________
 ProtoResult Join::computeResultForTwoIndexScans(bool requestLaziness) const {

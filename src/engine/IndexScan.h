@@ -76,10 +76,30 @@ class IndexScan final : public Operation {
   Permutation::IdTableGenerator lazyScanForJoinOfColumnWithScan(
       std::span<const Id> joinColumn) const;
 
+  // Return 2 generators, one that basically is the same as `input` and one that
+  // yields the matching rows of this index scan, skipping the rows that don't
+  // match the tables yielded by `input` to speed up join algorithms when no
+  // undef values are presend. When there are undef values, the second generator
+  // represents the full index scan.
   std::pair<Result::Generator, Result::Generator> prefilterTables(
       Result::Generator input, ColumnIndex joinColumn);
 
  private:
+  // Implementation detail that allows to consume a generator from two other
+  // kooperating generators.
+  struct SharedGeneratorState;
+
+  // Helper function that creates a generator that re-yields the generator
+  // wrapped by `innerState`.
+  static Result::Generator createPrefilteredJoinSide(
+      std::shared_ptr<SharedGeneratorState> innerState);
+
+  // Helper function that creates a generator yielding matching rows of this
+  // index scan, that match the tables yielded by thegenerator wrapped by
+  // `innerState`.
+  Result::Generator createPrefilteredIndexScanSide(
+      std::shared_ptr<SharedGeneratorState> innerState);
+
   // TODO<joka921> Make the `getSizeEstimateBeforeLimit()` function `const` for
   // ALL the `Operations`.
   uint64_t getSizeEstimateBeforeLimit() override { return sizeEstimate_; }

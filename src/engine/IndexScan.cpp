@@ -15,6 +15,23 @@
 
 using std::string;
 
+namespace {
+using LazyScanMetadata = CompressedRelationReader::LazyScanMetadata;
+// Add the values of two LazyScanMetadata objects to the first one.
+void aggregateMetadata(LazyScanMetadata& aggregate,
+                       const LazyScanMetadata& newValue) {
+  aggregate.numElementsYielded_ += newValue.numElementsYielded_;
+  aggregate.blockingTime_ += newValue.blockingTime_;
+  aggregate.numBlocksRead_ += newValue.numBlocksRead_;
+  aggregate.numBlocksAll_ += newValue.numBlocksAll_;
+  aggregate.numElementsRead_ += newValue.numElementsRead_;
+  aggregate.numBlocksSkippedBecauseOfGraph_ +=
+      newValue.numBlocksSkippedBecauseOfGraph_;
+  aggregate.numBlocksPostprocessed_ += newValue.numBlocksPostprocessed_;
+  aggregate.numBlocksWithUpdate_ += newValue.numBlocksWithUpdate_;
+}
+}  // namespace
+
 // _____________________________________________________________________________
 IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
                      const SparqlTripleSimple& triple, Graphs graphsToFilter)
@@ -337,78 +354,8 @@ Permutation::IdTableGenerator IndexScan::lazyScanForJoinOfColumnWithScan(
   return result;
 }
 
-struct SharedGeneratorState {
-  Result::Generator generator_;
-  ColumnIndex joinColumn_;
-  Permutation::MetadataAndBlocks metaBlocks_;
-  std::optional<Result::Generator::iterator> iterator_ = std::nullopt;
-  std::optional<Id> lastValue_ = std::nullopt;
-  std::deque<Result::IdTableVocabPair> prefetchedValues_{};
-  std::vector<CompressedBlockMetadata> pendingBlocks_{};
-  bool hasUndef_ = false;
-  bool doneFetching_ = false;
-
-  bool fetchFirst() {
-    AD_CORRECTNESS_CHECK(!iterator_.has_value());
-    iterator_ = generator_.begin();
-    while (iterator_ != generator_.end()) {
-      if (iterator_.value()->idTable_.empty()) {
-        ++iterator_.value();
-        continue;
-      }
-      hasUndef_ = iterator_.value()->idTable_.at(0, joinColumn_).isUndefined();
-      return false;
-    }
-    return true;
-  }
-
-  void fetch() {
-    bool exhausted;
-    if (iterator_.has_value()) {
-      AD_CONTRACT_CHECK(iterator_.value() != generator_.end());
-      do {
-        // Skip empty tables
-        ++iterator_.value();
-        exhausted = iterator_.value() == generator_.end();
-      } while (!exhausted && iterator_.value()->idTable_.empty());
-    } else {
-      exhausted = fetchFirst();
-    }
-    if (!exhausted) {
-      prefetchedValues_.push_back(std::move(*iterator_.value()));
-      auto joinColumn =
-          prefetchedValues_.back().idTable_.getColumn(joinColumn_);
-      AD_EXPENSIVE_CHECK(std::ranges::is_sorted(joinColumn));
-      // Skip processing for undef case, it will be handled differently
-      if (joinColumn.empty() || !joinColumn[0].isUndefined()) {
-        size_t offset = std::ranges::find_if_not(joinColumn,
-                                                 [this](const auto& element) {
-                                                   return element == lastValue_;
-                                                 }) -
-                        joinColumn.begin();
-        auto newValues = joinColumn.subspan(offset);
-        if (!newValues.empty()) {
-          std::ranges::move(CompressedRelationReader::getBlocksForJoin(
-                                newValues, metaBlocks_),
-                            std::back_inserter(pendingBlocks_));
-          lastValue_ = newValues.back();
-        }
-      }
-    }
-    doneFetching_ = exhausted;
-  }
-
-  bool hasUndef() {
-    if (!iterator_.has_value() && !doneFetching_) {
-      fetch();
-    }
-    return hasUndef_;
-  }
-};
-
 // _____________________________________________________________________________
-void IndexScan::updateRuntimeInfoForLazyScan(
-    const CompressedRelationReader::LazyScanMetadata& metadata) {
+void IndexScan::updateRuntimeInfoForLazyScan(const LazyScanMetadata& metadata) {
   updateRuntimeInformationWhenOptimizedOut(
       RuntimeInformation::Status::lazilyMaterialized);
   auto& rti = runtimeInfo();
@@ -431,19 +378,143 @@ void IndexScan::updateRuntimeInfoForLazyScan(
   updateIfPositive(metadata.numBlocksWithUpdate_, "num-blocks-with-update");
 }
 
+// Store a Generator and its corresponding iterator as well as unconsumed values
+// resulting from the generator.
+struct IndexScan::SharedGeneratorState {
+  Result::Generator generator_;
+  ColumnIndex joinColumn_;
+  Permutation::MetadataAndBlocks metaBlocks_;
+  std::optional<Result::Generator::iterator> iterator_ = std::nullopt;
+  std::optional<Id> lastValue_ = std::nullopt;
+  std::deque<Result::IdTableVocabPair> prefetchedValues_{};
+  std::vector<CompressedBlockMetadata> pendingBlocks_{};
+  bool hasUndef_ = false;
+  bool doneFetching_ = false;
+
+  // Fetch the first value from the generator and skip empty tables.
+  bool fetchFirst() {
+    AD_CORRECTNESS_CHECK(!iterator_.has_value());
+    iterator_ = generator_.begin();
+    while (iterator_ != generator_.end()) {
+      if (iterator_.value()->idTable_.empty()) {
+        ++iterator_.value();
+        continue;
+      }
+      hasUndef_ = iterator_.value()->idTable_.at(0, joinColumn_).isUndefined();
+      return false;
+    }
+    return true;
+  }
+
+  // Consume the next non-empty table from the generator and calculate the next
+  // matching blocks from the index scan.
+  void fetch() {
+    bool exhausted;
+    if (iterator_.has_value()) {
+      AD_CONTRACT_CHECK(iterator_.value() != generator_.end());
+      do {
+        // Skip empty tables
+        ++iterator_.value();
+        exhausted = iterator_.value() == generator_.end();
+      } while (!exhausted && iterator_.value()->idTable_.empty());
+    } else {
+      exhausted = fetchFirst();
+    }
+    if (!exhausted) {
+      prefetchedValues_.push_back(std::move(*iterator_.value()));
+      auto joinColumn =
+          prefetchedValues_.back().idTable_.getColumn(joinColumn_);
+      AD_EXPENSIVE_CHECK(std::ranges::is_sorted(joinColumn));
+      // Skip processing for undef case, it will be handled differently
+      if (joinColumn.empty() || !joinColumn[0].isUndefined()) {
+        AD_CORRECTNESS_CHECK(!hasUndef_);
+        // Find first value that differs from the last one that was used to find
+        // matching blocks.
+        size_t offset = std::ranges::find_if_not(joinColumn,
+                                                 [this](const auto& element) {
+                                                   return element == lastValue_;
+                                                 }) -
+                        joinColumn.begin();
+        auto newValues = joinColumn.subspan(offset);
+        if (!newValues.empty()) {
+          std::ranges::move(CompressedRelationReader::getBlocksForJoin(
+                                newValues, metaBlocks_),
+                            std::back_inserter(pendingBlocks_));
+          lastValue_ = newValues.back();
+        }
+      }
+    }
+    doneFetching_ = exhausted;
+  }
+
+  // Check if there are any undefined values yielded by the original generator.
+  // If the generator hasn't been started to get consumes, this will start it.
+  bool hasUndef() {
+    if (!iterator_.has_value() && !doneFetching_) {
+      fetch();
+    }
+    return hasUndef_;
+  }
+};
+
 // _____________________________________________________________________________
-void aggregateMetadata(
-    CompressedRelationReader::LazyScanMetadata& aggregate,
-    const CompressedRelationReader::LazyScanMetadata& newValue) {
-  aggregate.numElementsYielded_ += newValue.numElementsYielded_;
-  aggregate.blockingTime_ += newValue.blockingTime_;
-  aggregate.numBlocksRead_ += newValue.numBlocksRead_;
-  aggregate.numBlocksAll_ += newValue.numBlocksAll_;
-  aggregate.numElementsRead_ += newValue.numElementsRead_;
-  aggregate.numBlocksSkippedBecauseOfGraph_ +=
-      newValue.numBlocksSkippedBecauseOfGraph_;
-  aggregate.numBlocksPostprocessed_ += newValue.numBlocksPostprocessed_;
-  aggregate.numBlocksWithUpdate_ += newValue.numBlocksWithUpdate_;
+Result::Generator IndexScan::createPrefilteredJoinSide(
+    std::shared_ptr<SharedGeneratorState> innerState) {
+  if (innerState->hasUndef()) {
+    for (Result::IdTableVocabPair& pair : innerState->prefetchedValues_) {
+      co_yield pair;
+    }
+    innerState->prefetchedValues_.clear();
+    if (innerState->iterator_.value() != innerState->generator_.end()) {
+      ++innerState->iterator_.value();
+    }
+    while (innerState->iterator_.value() != innerState->generator_.end()) {
+      co_yield *innerState->iterator_.value();
+      ++innerState->iterator_.value();
+    }
+  } else {
+    while (true) {
+      if (innerState->prefetchedValues_.empty()) {
+        if (innerState->doneFetching_) {
+          co_return;
+        }
+        innerState->fetch();
+      }
+      while (!innerState->prefetchedValues_.empty()) {
+        co_yield innerState->prefetchedValues_.front();
+        innerState->prefetchedValues_.pop_front();
+      }
+    }
+  }
+}
+
+// _____________________________________________________________________________
+Result::Generator IndexScan::createPrefilteredIndexScanSide(
+    std::shared_ptr<SharedGeneratorState> innerState) {
+  if (innerState->hasUndef()) {
+    for (auto& pair : scanInChunks()) {
+      co_yield pair;
+    }
+  } else {
+    LazyScanMetadata metadata;
+    while (true) {
+      if (innerState->pendingBlocks_.empty()) {
+        if (innerState->doneFetching_) {
+          metadata.numBlocksAll_ =
+              innerState->metaBlocks_.blockMetadata_.size();
+          updateRuntimeInfoForLazyScan(metadata);
+          co_return;
+        }
+        innerState->fetch();
+      }
+      auto blocks = std::move(innerState->pendingBlocks_);
+      auto scan = getLazyScan(std::move(blocks));
+      for (IdTable& idTable : scan) {
+        co_yield {std::move(idTable), LocalVocab{}};
+      }
+      aggregateMetadata(metadata, scan.details());
+    }
+  }
 }
 
 // _____________________________________________________________________________
@@ -458,59 +529,6 @@ std::pair<Result::Generator, Result::Generator> IndexScan::prefilterTables(
   std::shared_ptr<SharedGeneratorState> state =
       std::make_shared<SharedGeneratorState>(std::move(input), joinColumn,
                                              std::move(metaBlocks.value()));
-  auto joinSide = [](auto innerState) -> Result::Generator {
-    if (innerState->hasUndef()) {
-      for (Result::IdTableVocabPair& pair : innerState->prefetchedValues_) {
-        co_yield pair;
-      }
-      innerState->prefetchedValues_.clear();
-      if (innerState->iterator_.value() != innerState->generator_.end()) {
-        ++innerState->iterator_.value();
-      }
-      while (innerState->iterator_.value() != innerState->generator_.end()) {
-        co_yield *innerState->iterator_.value();
-        ++innerState->iterator_.value();
-      }
-    } else {
-      while (true) {
-        if (innerState->prefetchedValues_.empty()) {
-          if (innerState->doneFetching_) {
-            co_return;
-          }
-          innerState->fetch();
-        }
-        while (!innerState->prefetchedValues_.empty()) {
-          co_yield innerState->prefetchedValues_.front();
-          innerState->prefetchedValues_.pop_front();
-        }
-      }
-    }
-  };
-  auto indexScan = [](auto* self, auto innerState) -> Result::Generator {
-    if (innerState->hasUndef()) {
-      for (auto& pair : self->scanInChunks()) {
-        co_yield pair;
-      }
-    } else {
-      CompressedRelationReader::LazyScanMetadata metadata;
-      while (true) {
-        if (innerState->pendingBlocks_.empty()) {
-          if (innerState->doneFetching_) {
-            metadata.numBlocksAll_ =
-                innerState->metaBlocks_.blockMetadata_.size();
-            self->updateRuntimeInfoForLazyScan(metadata);
-            co_return;
-          }
-          innerState->fetch();
-        }
-        auto blocks = std::move(innerState->pendingBlocks_);
-        auto scan = self->getLazyScan(std::move(blocks));
-        for (IdTable& idTable : scan) {
-          co_yield {std::move(idTable), LocalVocab{}};
-        }
-        aggregateMetadata(metadata, scan.details());
-      }
-    }
-  };
-  return {joinSide(state), indexScan(this, state)};
+  return {createPrefilteredJoinSide(state),
+          createPrefilteredIndexScanSide(state)};
 }

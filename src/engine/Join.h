@@ -172,6 +172,10 @@ class Join : public Operation {
       bool requestLaziness, std::shared_ptr<const Result> resultWithIdTable,
       std::shared_ptr<IndexScan> scan) const;
 
+  // Special implementation that is called when the right child is an
+  // `IndexScan` and the left child is a lazy result. (The children might be
+  // swapped in the constructor.). This allows the `IndexScan` to skip rows that
+  // won't match in the join operation.
   ProtoResult computeResultForIndexScanAndLazyOperation(
       bool requestLaziness, std::shared_ptr<const Result> resultWithIdTable,
       std::shared_ptr<IndexScan> scan) const;
@@ -209,5 +213,9 @@ class Join : public Operation {
   // Commonly used code for the various known-to-be-empty cases.
   ProtoResult createEmptyResult() const;
 
+  // Get permutation of input and output columns to apply before and after
+  // joining. This is required because the join algorithms expect the join
+  // columns to be the first columns of the input tables and the result to be in
+  // the order of the input tables.
   ad_utility::JoinColumnMapping getJoinColumnMapping() const;
 };
