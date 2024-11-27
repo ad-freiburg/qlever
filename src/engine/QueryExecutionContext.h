@@ -61,11 +61,23 @@ class CacheValue {
   };
 };
 
+struct QueryCacheKey {
+  std::string key_;
+  const LocatedTriplesSnapshot* locatedTriplesSnapshotKey_;
+
+  bool operator==(const QueryCacheKey&) const = default;
+
+  template <typename H>
+  friend H AbslHashValue(H h, const QueryCacheKey& key) {
+    return H::combine(std::move(h), key.key_, key.locatedTriplesSnapshotKey_);
+  }
+};
+
 // Threadsafe LRU cache for (partial) query results, that
 // checks on insertion, if the result is currently being computed
 // by another query.
 using QueryResultCache = ad_utility::ConcurrentCache<
-    ad_utility::LRUCache<string, CacheValue, CacheValue::SizeGetter>>;
+    ad_utility::LRUCache<QueryCacheKey, CacheValue, CacheValue::SizeGetter>>;
 
 // Execution context for queries.
 // Holds references to index and engine, implements caching.

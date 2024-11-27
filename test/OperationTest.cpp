@@ -523,6 +523,13 @@ TEST(Operation, verifyLimitIsProperlyAppliedAndUpdatesRuntimeInfoCorrectly) {
   expectRtiHasDimensions(childRti, 2, 3);
 }
 
+namespace {
+QueryCacheKey toCacheKey(std::string s) {
+  return {std::move(s), reinterpret_cast<const LocatedTriplesSnapshot*>(
+                            std::intptr_t{102394857})};
+}
+}  // namespace
+
 // _____________________________________________________________________________
 TEST(Operation, ensureLazyOperationIsCachedIfSmallEnough) {
   auto qec = getQec();
@@ -536,14 +543,15 @@ TEST(Operation, ensureLazyOperationIsCachedIfSmallEnough) {
   ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
 
   auto cacheValue = valuesForTesting.runComputationAndPrepareForCache(
-      timer, ComputationMode::LAZY_IF_SUPPORTED, "test", false);
-  EXPECT_FALSE(qec->getQueryTreeCache().cacheContains("test"));
+      timer, ComputationMode::LAZY_IF_SUPPORTED, toCacheKey("test"), false);
+  EXPECT_FALSE(qec->getQueryTreeCache().cacheContains(toCacheKey("test")));
 
   for ([[maybe_unused]] Result::IdTableVocabPair& _ :
        cacheValue.resultTable().idTables()) {
   }
 
-  auto aggregatedValue = qec->getQueryTreeCache().getIfContained("test");
+  auto aggregatedValue =
+      qec->getQueryTreeCache().getIfContained(toCacheKey("test"));
   ASSERT_TRUE(aggregatedValue.has_value());
 
   ASSERT_TRUE(aggregatedValue.value()._resultPointer);
@@ -588,15 +596,15 @@ TEST(Operation, checkLazyOperationIsNotCachedIfTooLarge) {
   qec->getQueryTreeCache().setMaxSizeSingleEntry(1_B);
 
   auto cacheValue = valuesForTesting.runComputationAndPrepareForCache(
-      timer, ComputationMode::LAZY_IF_SUPPORTED, "test", false);
-  EXPECT_FALSE(qec->getQueryTreeCache().cacheContains("test"));
+      timer, ComputationMode::LAZY_IF_SUPPORTED, toCacheKey("test"), false);
+  EXPECT_FALSE(qec->getQueryTreeCache().cacheContains(toCacheKey("test")));
   qec->getQueryTreeCache().setMaxSizeSingleEntry(originalSize);
 
   for ([[maybe_unused]] Result::IdTableVocabPair& _ :
        cacheValue.resultTable().idTables()) {
   }
 
-  EXPECT_FALSE(qec->getQueryTreeCache().cacheContains("test"));
+  EXPECT_FALSE(qec->getQueryTreeCache().cacheContains(toCacheKey("test")));
 }
 
 // _____________________________________________________________________________
@@ -612,12 +620,12 @@ TEST(Operation, checkLazyOperationIsNotCachedIfUnlikelyToFitInCache) {
   ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
 
   auto cacheValue = valuesForTesting.runComputationAndPrepareForCache(
-      timer, ComputationMode::LAZY_IF_SUPPORTED, "test", false);
-  EXPECT_FALSE(qec->getQueryTreeCache().cacheContains("test"));
+      timer, ComputationMode::LAZY_IF_SUPPORTED, toCacheKey("test"), false);
+  EXPECT_FALSE(qec->getQueryTreeCache().cacheContains(toCacheKey("test")));
 
   for ([[maybe_unused]] Result::IdTableVocabPair& _ :
        cacheValue.resultTable().idTables()) {
   }
 
-  EXPECT_FALSE(qec->getQueryTreeCache().cacheContains("test"));
+  EXPECT_FALSE(qec->getQueryTreeCache().cacheContains(toCacheKey("test")));
 }
