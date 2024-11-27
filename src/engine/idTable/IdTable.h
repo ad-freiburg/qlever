@@ -444,6 +444,11 @@ class IdTable {
     push_back(std::ranges::ref_view{newRow});
   }
 
+  // True iff we can make a copy (via the `clone` function below), because the
+  // underlying storage types are copyable.
+  static constexpr bool isCloneable =
+      std::is_copy_constructible_v<Storage> &&
+      std::is_copy_constructible_v<ColumnStorage>;
   // Create a deep copy of this `IdTable` that owns its memory. In most cases
   // this behaves exactly like the copy constructor with the following
   // exception: If `this` is a view (because the `isView` template parameter is
@@ -451,8 +456,7 @@ class IdTable {
   // non-owning) view, but `clone` will create a mutable deep copy of the data
   // that the view points to
   IdTable<T, NumColumns, ColumnStorage, IsView::False> clone() const
-      requires std::is_copy_constructible_v<Storage> &&
-               std::is_copy_constructible_v<ColumnStorage> {
+      requires isCloneable {
     Storage storage;
     for (const auto& column : getColumns()) {
       storage.emplace_back(column.begin(), column.end(), getAllocator());
@@ -460,6 +464,14 @@ class IdTable {
     return IdTable<T, NumColumns, ColumnStorage, IsView::False>{
         std::move(storage), numColumns_, numRows_, allocator_};
   }
+
+  // Move or clone returns a copied or moved IdTable depending on the value
+  // category of `*this`. The typical usage is
+  // `auto newTable = AD_FWD(oldTable).moveOrClone()` which is equivalent to the
+  // pattern `auto newX = AD_FWD(oldX)` where the type is copy-constructible
+  // (which `IdTable` is not.).
+  auto moveOrClone() const& requires isCloneable { return clone(); }
+  IdTable&& moveOrClone() && requires isCloneable { return std::move(*this); }
 
   // Overload of `clone` for `Storage` types that are not copy constructible.
   // It requires a preconstructed but empty argument of type `Storage` that
@@ -663,29 +675,28 @@ class IdTable {
   // otherwise the behavior is undefined.
   void erase(const iterator& it) requires(!isView) { erase(it, it + 1); }
 
-  // Insert all the elements in the range `(beginIt, endIt]` at the end
-  // of this `IdTable`. `beginIt` and `endIt` must *not* point into this
-  // IdTable, else the behavior is undefined.
-  //
-  // TODO<joka921> Insert can be done much more efficiently when `beginIt` and
-  // `endIt` are iterators to a different column-major `IdTable`. Implement
-  // this case.
-  void insertAtEnd(auto beginIt, auto endIt) {
-    for (; beginIt != endIt; ++beginIt) {
-      push_back(*beginIt);
-    }
-  }
-
   // Add all entries from the `table` at the end of this IdTable.
-  void insertAtEnd(const IdTable& table) {
+  // If `beginIdx` and/or `endIdx` are specified, then only the subrange
+  // `[beginIdx, endIdx)` from the input is taken.
+  // The input must be some kind of `IdTable`.
+  // TODO<joka921> Can/should we constraint this functions by a concept?
+  template <typename Table>
+  void insertAtEnd(const Table& table,
+                   std::optional<size_t> beginIdx = std::nullopt,
+                   std::optional<size_t> endIdx = std::nullopt) {
     AD_CORRECTNESS_CHECK(table.numColumns() == numColumns());
+    auto begin = beginIdx.value_or(0);
+    auto end = endIdx.value_or(table.size());
+    AD_CORRECTNESS_CHECK(begin <= end && end <= table.size());
+    auto numInserted = end - begin;
     auto oldSize = size();
-    resize(numRows() + table.numRows_);
-    std::ranges::for_each(ad_utility::integerRange(numColumns()),
-                          [this, &table, oldSize](size_t i) {
-                            std::ranges::copy(table.getColumn(i),
-                                              getColumn(i).begin() + oldSize);
-                          });
+    resize(numRows() + numInserted);
+    std::ranges::for_each(
+        ad_utility::integerRange(numColumns()),
+        [this, &table, oldSize, begin, numInserted](size_t i) {
+          std::ranges::copy(table.getColumn(i).subspan(begin, numInserted),
+                            getColumn(i).begin() + oldSize);
+        });
   }
 
   // Check whether two `IdTables` have the same content. Mostly used for unit

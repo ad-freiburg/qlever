@@ -686,7 +686,7 @@ class CompressedExternalIdTableSorter
           auto curBlock = IdTableStatic<NumStaticCols>(
               this->numColumns_, this->writer_.allocator());
           curBlock.reserve(upper - i);
-          curBlock.insertAtEnd(block.begin() + i, block.begin() + upper);
+          curBlock.insertAtEnd(block, i, upper);
           co_yield std::move(curBlock).template toStatic<N>();
         }
       }
