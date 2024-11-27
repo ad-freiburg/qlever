@@ -27,6 +27,7 @@
 #include "engine/SpatialJoin.h"
 #include "engine/VariableToColumnMap.h"
 #include "global/Constants.h"
+#include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "parser/data/Variable.h"
 
@@ -217,6 +218,10 @@ namespace variableColumnMapAndResultWidth {
 // addLeftChildFirst, testVarToColMap
 using VarColTestSuiteParam = std::tuple<bool, bool, bool, bool>;
 
+// Internal testing shorthands
+using V = Variable;
+using VarToColVec = std::vector<std::pair<V, ColumnIndexAndTypeInfo>>;
+
 class SpatialJoinVarColParamTest
     : public ::testing::TestWithParam<VarColTestSuiteParam> {
  public:
@@ -376,55 +381,57 @@ class SpatialJoinVarColParamTest
 
     auto computeAndCompareVarToColMaps =
         [&](bool addDist, PayloadVariables pv,
-            std::string expectedVarToColMapStr) {
+            VariableToColumnMap expectedVarToColVec) {
           auto qec = buildTestQEC();
           auto spJoin2 = makeSpatialJoin(qec, parameters, addDist, pv);
           auto spatialJoin = static_cast<SpatialJoin*>(spJoin2.get());
           auto vc = spatialJoin->computeVariableToColumnMap();
-          ASSERT_EQ(stringifyVariableToColumnMap(vc), expectedVarToColMapStr);
+          VarToColVec vcVec = copySortedByColumnIndex(vc);
+          VarToColVec expVcVec = copySortedByColumnIndex(expectedVarToColVec);
+          ASSERT_THAT(vcVec, ::testing::ContainerEq(expVcVec));
         };
 
-    Variable distVar{"?distOfTheTwoObjectsAddedInternally"};
-
-    std::vector<std::string> smallChild{"?obj", "?geo"};
-    std::vector<std::string> bigChild{"?obj", "?geo", "?name"};
-
-    std::vector<bool> bools{true, false};
+    // Expected variables
+    V distVar{"?distOfTheTwoObjectsAddedInternally"};
+    V obj{"?obj"};
+    V geo{"?geo"};
+    V name{"?name"};
+    std::vector<V> smallChild{obj, geo};
+    std::vector<V> bigChild{obj, geo, name};
 
     auto makeExpected = [&](bool leftSideBigChild, bool rightSideBigChild,
                             bool addDist, bool withObj, bool withName,
-                            bool withGeo) -> std::string {
+                            bool withGeo) -> VariableToColumnMap {
       size_t currentColumn = 0;
-      std::ostringstream expected;
+      VariableToColumnMap expected;
 
-      auto addV = [&](std::vector<std::string> vec, bool right = false) {
-        std::ostringstream expected_inner;
+      auto addV = [&](std::vector<V> vec, bool right = false) {
         for (auto v : vec) {
-          if (right &&
-              ((v == "?obj" && !withObj) || (v == "?name" && !withName) ||
-               (v == "?geo" && !withGeo))) {
+          if (right && ((v == obj && !withObj) || (v == name && !withName) ||
+                        (v == geo && !withGeo))) {
             continue;
           }
-          expected_inner << "(" << v << (right ? "2" : "1") << " => "
-                         << currentColumn << ")";
+          V expectedVar{absl::StrCat(v.name(), right ? "2" : "1")};
+          expected[expectedVar] = ColumnIndexAndTypeInfo{
+              currentColumn,
+              ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined};
           currentColumn++;
         }
-        return expected_inner.str();
       };
 
-      // Left
-      expected << (leftSideBigChild ? addV(bigChild) : addV(smallChild))
-               << addV({"?point"})
-               // Right
-               << (rightSideBigChild ? addV(bigChild, true)
-                                     : addV(smallChild, true))
-               << addV({"?point"}, "2");
+      addV(leftSideBigChild ? bigChild : smallChild);
+      addV({V{"?point"}});
+      addV(rightSideBigChild ? bigChild : smallChild, true);
+      addV({V{"?point"}}, true);
       if (addDist) {
-        expected << "(" << distVar.name() << " => " << currentColumn << ")";
+        expected[distVar] = ColumnIndexAndTypeInfo{
+            currentColumn,
+            ColumnIndexAndTypeInfo::UndefStatus::PossiblyUndefined};
       }
-      return expected.str();
+      return expected;
     };
 
+    std::vector<bool> bools{true, false};
     for (bool withObj : bools) {
       for (bool withGeo : bools) {
         for (bool withName : bools) {
