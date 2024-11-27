@@ -87,12 +87,13 @@ std::optional<size_t> SpatialJoin::getMaxResults() const {
 // ____________________________________________________________________________
 std::vector<QueryExecutionTree*> SpatialJoin::getChildren() {
   std::vector<QueryExecutionTree*> result;
-  if (childLeft_) {
-    result.push_back(childLeft_.get());
-  }
-  if (childRight_) {
-    result.push_back(childRight_.get());
-  }
+  auto addChild = [&](std::shared_ptr<QueryExecutionTree> child) {
+    if (child) {
+      result.push_back(child.get());
+    }
+  };
+  addChild(childLeft_);
+  addChild(childRight_);
   return result;
 }
 
