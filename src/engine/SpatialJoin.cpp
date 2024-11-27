@@ -214,8 +214,12 @@ size_t SpatialJoin::getCostEstimate() {
         childLeft_->getSizeEstimate() * childRight_->getSizeEstimate();
     if (config_->algo_ == SpatialJoinAlgorithm::BASELINE) {
       return inputEstimate * inputEstimate;
-    } else if (config_->algo_ == SpatialJoinAlgorithm::S2_GEOMETRY ||
-               config_->algo_ == SpatialJoinAlgorithm::BOUNDING_BOX) {
+    } else {
+      AD_CORRECTNESS_CHECK(
+          config_->algo_ == SpatialJoinAlgorithm::S2_GEOMETRY ||
+              config_->algo_ == SpatialJoinAlgorithm::BOUNDING_BOX,
+          "Unknown SpatialJoin Algorithm.");
+
       // Let n be the size of the left table and m the size of the right table.
       // When using the S2Point index, we first create the index for the right
       // table in O(m * log(m)). We then iterate over the left table in O(n) and
@@ -227,8 +231,6 @@ size_t SpatialJoin::getCostEstimate() {
       auto logm = static_cast<size_t>(
           log(static_cast<double>(childRight_->getSizeEstimate())));
       return (n * logm) + (m * logm);
-    } else {
-      AD_THROW("Unknown SpatialJoin Algorithm.");
     }
   }
   return 1;  // dummy return, as the class does not have its children yet
@@ -396,7 +398,9 @@ Result SpatialJoin::computeResult([[maybe_unused]] bool requestLaziness) {
     return algorithms.BaselineAlgorithm();
   } else if (config_->algo_ == SpatialJoinAlgorithm::S2_GEOMETRY) {
     return algorithms.S2geometryAlgorithm();
-  } else if (config_->algo_ == SpatialJoinAlgorithm::BOUNDING_BOX) {
+  } else {
+    AD_CORRECTNESS_CHECK(config_->algo_ == SpatialJoinAlgorithm::BOUNDING_BOX,
+                         "Unknown SpatialJoin Algorithm.");
     // as the BoundingBoxAlgorithms only works for max distance and not for
     // nearest neighbors, S2geometry gets called as a backup, if the query is
     // asking for the nearest neighbors
@@ -408,8 +412,6 @@ Result SpatialJoin::computeResult([[maybe_unused]] bool requestLaziness) {
           "neighbor search. Using s2 geometry algorithm instead.");
       return algorithms.S2geometryAlgorithm();
     }
-  } else {
-    AD_THROW("Unknown SpatialJoin Algorithm.");
   }
 }
 
