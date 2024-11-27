@@ -766,9 +766,18 @@ auto QueryPlanner::seedWithScansAndText(
          input.starts_with(NEAREST_NEIGHBORS)) &&
         input.ends_with('>')) {
       parsedQuery::SpatialQuery config{node.triple_};
-      pushPlan(makeSubtreePlan<SpatialJoin>(_qec,
-                                            config.toSpatialJoinConfiguration(),
-                                            std::nullopt, std::nullopt));
+      auto plan = makeSubtreePlan<SpatialJoin>(
+          _qec, config.toSpatialJoinConfiguration(), std::nullopt,
+          std::nullopt);
+      if (input.starts_with(NEAREST_NEIGHBORS)) {
+        plan._qet->getRootOperation()->addWarning(absl::StrCat(
+            "The special predicate <nearest-neighbors:...> is deprecated due "
+            "to confusing semantics. Please upgrade your query to the new "
+            "syntax 'SERVICE ",
+            SPATIAL_SEARCH_IRI,
+            " { ... }'. For more information, please see the QLever Wiki."));
+      }
+      pushPlan(plan);
       continue;
     }
 
