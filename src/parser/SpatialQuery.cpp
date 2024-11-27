@@ -21,10 +21,10 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
     setVariable("left", object, left_);
   } else if (predString == "right") {
     setVariable("right", object, right_);
-  } else if (predString == "nearestNeighbors") {
+  } else if (predString == "numNearestNeighbors") {
     if (!object.isInt()) {
       throw SpatialSearchException(
-          "The parameter <nearestNeighbors> expects an integer (the maximum "
+          "The parameter <numNearestNeighbors> expects an integer (the maximum "
           "number of nearest neighbors)");
     }
     maxResults_ = object.getInt();
@@ -65,7 +65,7 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
     throw SpatialSearchException(
         "Unsupported argument " + predString +
         " in Spatial Search. Supported Arguments: <left>, <right>, "
-        "<nearestNeighbors>, <maxDistance>, <bindDistance>, <payload> and "
+        "<numNearestNeighbors>, <maxDistance>, <bindDistance>, <payload> and "
         "<algorithm>.");
   }
 }
@@ -76,7 +76,8 @@ SpatialJoinConfiguration SpatialQuery::toSpatialJoinConfiguration() const {
     throw SpatialSearchException("Missing parameter <left> in spatial search.");
   } else if (!maxDist_.has_value() && !maxResults_.has_value()) {
     throw SpatialSearchException(
-        "Neither <nearestNeighbors> nor <maxDistance> were provided. At least "
+        "Neither <numNearestNeighbors> nor <maxDistance> were provided. At "
+        "least "
         "one of them is required.");
   } else if (!right_.has_value()) {
     throw SpatialSearchException(

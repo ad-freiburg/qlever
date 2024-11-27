@@ -1672,7 +1672,7 @@ TEST(QueryPlanner, SpatialJoinService) {
       "spatialSearch:left ?y ;"
       "spatialSearch:right ?b ;"
       "spatialSearch:maxDistance 100 ;"
-      "spatialSearch:nearestNeighbors 2 ;"
+      "spatialSearch:numNearestNeighbors 2 ;"
       "spatialSearch:bindDistance ?dist ."
       "{ ?a <p> ?b } }}",
       h::SpatialJoin(100, 2, V{"?y"}, V{"?b"}, V{"?dist"}, emptyPayload, S2,
@@ -1684,7 +1684,7 @@ TEST(QueryPlanner, SpatialJoinService) {
       "SERVICE spatialSearch: {"
       "_:config spatialSearch:algorithm spatialSearch:s2 ;"
       "spatialSearch:right ?b ;"
-      "spatialSearch:nearestNeighbors 5 . "
+      "spatialSearch:numNearestNeighbors 5 . "
       "_:config spatialSearch:left ?y ."
       "{ ?a <p> ?b } }}",
       h::SpatialJoin(-1, 5, V{"?y"}, V{"?b"}, std::nullopt, emptyPayload, S2,
@@ -1707,7 +1707,7 @@ TEST(QueryPlanner, SpatialJoinServicePayloadVars) {
       "_:config spatialSearch:algorithm spatialSearch:s2 ;"
       "spatialSearch:right ?b ;"
       "spatialSearch:bindDistance ?dist ;"
-      "spatialSearch:nearestNeighbors 5 . "
+      "spatialSearch:numNearestNeighbors 5 . "
       "_:config spatialSearch:left ?y ."
       "_:config spatialSearch:payload ?a ."
       "{ ?a <p> ?b } }}",
@@ -1722,7 +1722,7 @@ TEST(QueryPlanner, SpatialJoinServicePayloadVars) {
       "_:config spatialSearch:algorithm spatialSearch:s2 ;"
       "spatialSearch:right ?b ;"
       "spatialSearch:bindDistance ?dist ;"
-      "spatialSearch:nearestNeighbors 5 . "
+      "spatialSearch:numNearestNeighbors 5 . "
       "_:config spatialSearch:left ?y ."
       "_:config spatialSearch:payload ?a , ?a2 ."
       "{ ?a <p> ?a2 . ?a2 <p> ?b } }}",
@@ -1741,7 +1741,7 @@ TEST(QueryPlanner, SpatialJoinServicePayloadVars) {
       "_:config spatialSearch:algorithm spatialSearch:s2 ;"
       "spatialSearch:right ?b ;"
       "spatialSearch:bindDistance ?dist ;"
-      "spatialSearch:nearestNeighbors 5 . "
+      "spatialSearch:numNearestNeighbors 5 . "
       "_:config spatialSearch:left ?y ."
       "_:config spatialSearch:payload ?a, ?a, ?b, ?a2 ."
       "{ ?a <p> ?a2 . ?a2 <p> ?b } }}",
@@ -1753,7 +1753,7 @@ TEST(QueryPlanner, SpatialJoinServicePayloadVars) {
 }
 
 TEST(QueryPlanner, SpatialJoinServiceMaxDistOutside) {
-  // If only maxDistance is used but not nearestNeighbors, the right variable
+  // If only maxDistance is used but not numNearestNeighbors, the right variable
   // must not come from inside the SERVICE
 
   auto scan = h::IndexScanFromStrings;
@@ -1785,7 +1785,7 @@ TEST(QueryPlanner, SpatialJoinServiceMaxDistOutside) {
                 "spatialSearch:left ?y ;"
                 "spatialSearch:right ?b ;"
                 "spatialSearch:maxDistance 1 ; "
-                "spatialSearch:nearestNeighbors 5 ."
+                "spatialSearch:numNearestNeighbors 5 ."
                 "}}",
                 ::testing::_),
       ::testing::ContainsRegex(
@@ -1851,7 +1851,7 @@ TEST(QueryPlanner, SpatialJoinMultipleServiceSharedLeft) {
       "  _:config spatialSearch:algorithm spatialSearch:s2 ;"
       "    spatialSearch:left ?y ;"
       "    spatialSearch:right ?b ;"
-      "    spatialSearch:nearestNeighbors 5 ; "
+      "    spatialSearch:numNearestNeighbors 5 ; "
       "    spatialSearch:bindDistance ?db ."
       "  { ?ab <p1> ?b } "
       "}"
@@ -1859,7 +1859,7 @@ TEST(QueryPlanner, SpatialJoinMultipleServiceSharedLeft) {
       "  _:config spatialSearch:algorithm spatialSearch:s2 ;"
       "    spatialSearch:left ?y ;"
       "    spatialSearch:right ?c ;"
-      "    spatialSearch:nearestNeighbors 5 ; "
+      "    spatialSearch:numNearestNeighbors 5 ; "
       "    spatialSearch:maxDistance 500 ; "
       "    spatialSearch:payload ?ac ; "
       "    spatialSearch:bindDistance ?dc ."
@@ -1905,7 +1905,7 @@ TEST(QueryPlanner, SpatialJoinMissingConfig) {
                 "?x <p> ?y ."
                 "SERVICE spatialSearch: {"
                 "_:config spatialSearch:right ?b ;"
-                "spatialSearch:nearestNeighbors 5 . "
+                "spatialSearch:numNearestNeighbors 5 . "
                 " { ?a <p> ?b . }"
                 "}}",
                 ::testing::_),
@@ -1929,7 +1929,7 @@ TEST(QueryPlanner, SpatialJoinMissingConfig) {
                 "?x <p> ?y ."
                 "SERVICE spatialSearch: {"
                 "_:config spatialSearch:left ?y ;"
-                "spatialSearch:nearestNeighbors 5 . "
+                "spatialSearch:numNearestNeighbors 5 . "
                 " { ?a <p> ?b . }"
                 "}}",
                 ::testing::_),
@@ -1946,7 +1946,7 @@ TEST(QueryPlanner, SpatialJoinMissingConfig) {
                 "}}",
                 ::testing::_),
       ::testing::ContainsRegex(
-          "Neither <nearestNeighbors> nor <maxDistance> were provided"));
+          "Neither <numNearestNeighbors> nor <maxDistance> were provided"));
 }
 
 TEST(QueryPlanner, SpatialJoinInvalidOperationsInService) {
@@ -2011,11 +2011,11 @@ TEST(QueryPlanner, SpatialJoinIncorrectConfigValues) {
                 "_:config spatialSearch:right ?b ;"
                 "spatialSearch:left ?y ;"
                 "spatialSearch:maxDistance 5 ;"
-                "spatialSearch:nearestNeighbors \"1\" ."
+                "spatialSearch:numNearestNeighbors \"1\" ."
                 " { ?a <p> ?b . }"
                 "}}",
                 ::testing::_),
-      ::testing::ContainsRegex("<nearestNeighbors> expects an integer"));
+      ::testing::ContainsRegex("<numNearestNeighbors> expects an integer"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       h::expect("PREFIX spatialSearch: "
                 "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
