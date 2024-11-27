@@ -616,10 +616,10 @@ INSTANTIATE_TEST_SUITE_P(
     [](const testing::TestParamInfo<
         std::tuple<bool, size_t, std::optional<size_t>>>& info) {
       std::ostringstream stream;
-      if (std::get<0>(info.param) == 0) {
-        stream << "FullyMaterialized";
-      } else {
+      if (std::get<0>(info.param)) {
         stream << "WithSplitTables";
+      } else {
+        stream << "FullyMaterialized";
       }
       stream << "_Offset_" << std::get<1>(info.param);
       stream << "_Limit_";
