@@ -233,7 +233,8 @@ const Permutation& Permutation::getActualPermutation(Id id) const {
 // TODO<joka921> The following two functions always assume that there were no
 // updates to the additional triples (which is technically true for now, because
 // we never modify the additional triples with the delta triples, because there
-// is some functionality missing for this. We have to fix this here and in the `DeltaTriples` class.
+// is some functionality missing for this. We have to fix this here and in the
+// `DeltaTriples` class.
 
 // ______________________________________________________________________
 const LocatedTriplesPerBlock& Permutation::getLocatedTriplesForPermutation(
