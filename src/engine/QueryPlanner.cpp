@@ -1907,17 +1907,12 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
 // _____________________________________________________________________________
 std::pair<bool, bool> QueryPlanner::checkSpatialJoin(const SubtreePlan& a,
                                                      const SubtreePlan& b) {
-  auto aIsSpatialJoin =
-      std::dynamic_pointer_cast<const SpatialJoin>(a._qet->getRootOperation());
-  auto bIsSpatialJoin =
-      std::dynamic_pointer_cast<const SpatialJoin>(b._qet->getRootOperation());
-
-  auto isIncompleteSpatialJoin = [](const auto& sj) {
-    return sj != nullptr && !sj->isConstructed();
+  auto isIncompleteSpatialJoin = [](const SubtreePlan& sj) {
+    auto sjCasted = std::dynamic_pointer_cast<const SpatialJoin>(
+        sj._qet->getRootOperation());
+    return sjCasted != nullptr && !sjCasted->isConstructed();
   };
-
-  return {isIncompleteSpatialJoin(aIsSpatialJoin),
-          isIncompleteSpatialJoin(bIsSpatialJoin)};
+  return {isIncompleteSpatialJoin(a), isIncompleteSpatialJoin(b)};
 }
 
 // _____________________________________________________________________________
