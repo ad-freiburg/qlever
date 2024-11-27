@@ -29,8 +29,10 @@
 #include "global/RuntimeParameters.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/MagicServiceIriConstants.h"
+#include "parser/MagicServiceQuery.h"
 #include "parser/RdfParser.h"
 #include "parser/SparqlParser.h"
+#include "parser/SpatialQuery.h"
 #include "parser/TokenizerCtre.h"
 #include "parser/data/Variable.h"
 #include "util/StringUtils.h"
@@ -854,6 +856,17 @@ GraphPatternOperation Visitor::visitSpatialQuery(
   parsedQuery::SpatialQuery spatialQuery;
   for (const auto& op : graphPattern._graphPatterns) {
     parseSpatialQuery(spatialQuery, op);
+  }
+
+  try {
+    // We convert the spatial query to a spatial join configuration and discard
+    // its result here to detect errors early and report them to the user with
+    // highlighting. It's only a small struct so not much is wasted.
+    spatialQuery.toSpatialJoinConfiguration();
+  } catch (const parsedQuery::MagicServiceException& magicExc) {
+    reportError(ctx, magicExc.what());
+  } catch (const parsedQuery::SpatialSearchException& magicExc) {
+    reportError(ctx, magicExc.what());
   }
 
   return spatialQuery;
