@@ -9,8 +9,7 @@
 #include "engine/IndexScan.h"
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
-#include "util/HashMap.h"
-#include "util/HashSet.h"
+#include "util/JoinAlgorithms/JoinColumnMapping.h"
 #include "util/TypeTraits.h"
 
 class Join : public Operation {
@@ -93,8 +92,7 @@ class Join : public Operation {
    * TODO Move the merge join into it's own function and make this function
    * a proper switch.
    **/
-  void join(const IdTable& a, ColumnIndex jc1, const IdTable& b,
-            ColumnIndex jc2, IdTable* result) const;
+  void join(const IdTable& a, const IdTable& b, IdTable* result) const;
 
  private:
   // Part of the implementation of `createResult`. This function is called when
@@ -132,8 +130,8 @@ class Join : public Operation {
   // Fallback implementation of a join that is used when at least one of the two
   // inputs is not fully materialized. This represents the general case where we
   // don't have any optimization left to try.
-  ProtoResult lazyJoin(std::shared_ptr<const Result> a, ColumnIndex jc1,
-                       std::shared_ptr<const Result> b, ColumnIndex jc2,
+  ProtoResult lazyJoin(std::shared_ptr<const Result> a,
+                       std::shared_ptr<const Result> b,
                        bool requestLaziness) const;
 
   /**
@@ -166,19 +164,17 @@ class Join : public Operation {
   ProtoResult computeResultForTwoIndexScans(bool requestLaziness) const;
 
   // A special implementation that is called when one of the children is an
-  // `IndexScan`. The argument `scanIsLeft` determines whether the `IndexScan`
-  // is the left or the right child of this `Join`. This needs to be known to
-  // determine the correct order of the columns in the result.
-  template <bool scanIsLeft>
+  // `IndexScan`. The argument `idTableIsRightInput` determines whether the
+  // `IndexScan` is the left or the right child of this `Join`. This needs to be
+  // known to determine the correct order of the columns in the result.
+  template <bool idTableIsRightInput>
   ProtoResult computeResultForIndexScanAndIdTable(
       bool requestLaziness, std::shared_ptr<const Result> resultWithIdTable,
-      ColumnIndex joinColTable, std::shared_ptr<IndexScan> scan,
-      ColumnIndex joinColScan) const;
+      std::shared_ptr<IndexScan> scan) const;
 
   ProtoResult computeResultForIndexScanAndLazyOperation(
       bool requestLaziness, std::shared_ptr<const Result> resultWithIdTable,
-      ColumnIndex joinColTable, std::shared_ptr<IndexScan> scan,
-      ColumnIndex joinColScan) const;
+      std::shared_ptr<IndexScan> scan) const;
 
   // Default case where both inputs are fully materialized.
   ProtoResult computeResultForTwoMaterializedInputs(
@@ -212,4 +208,6 @@ class Join : public Operation {
 
   // Commonly used code for the various known-to-be-empty cases.
   ProtoResult createEmptyResult() const;
+
+  ad_utility::JoinColumnMapping getJoinColumnMapping() const;
 };
