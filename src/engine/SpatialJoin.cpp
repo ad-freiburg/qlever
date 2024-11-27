@@ -214,7 +214,8 @@ size_t SpatialJoin::getCostEstimate() {
         childLeft_->getSizeEstimate() * childRight_->getSizeEstimate();
     if (config_->algo_ == SpatialJoinAlgorithm::BASELINE) {
       return inputEstimate * inputEstimate;
-    } else if (config_->algo_ == SpatialJoinAlgorithm::S2_GEOMETRY) {
+    } else if (config_->algo_ == SpatialJoinAlgorithm::S2_GEOMETRY ||
+               config_->algo_ == SpatialJoinAlgorithm::BOUNDING_BOX) {
       // Let n be the size of the left table and m the size of the right table.
       // When using the S2Point index, we first create the index for the right
       // table in O(m * log(m)). We then iterate over the left table in O(n) and
@@ -226,13 +227,6 @@ size_t SpatialJoin::getCostEstimate() {
       auto logm = static_cast<size_t>(
           log(static_cast<double>(childRight_->getSizeEstimate())));
       return (n * logm) + (m * logm);
-    } else if (config_->algo_ == SpatialJoinAlgorithm::BOUNDING_BOX) {
-      // TODO<Jonathan24680> The cost estimate for bounding box was missing.
-      // Please add the correct estimate here.
-      auto n = childLeft_->getSizeEstimate();
-      auto logm = static_cast<size_t>(
-          log(static_cast<double>(childRight_->getSizeEstimate())));
-      return n * logm;
     } else {
       AD_THROW("Unknown SpatialJoin Algorithm.");
     }

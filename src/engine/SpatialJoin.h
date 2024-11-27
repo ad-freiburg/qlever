@@ -139,7 +139,7 @@ class SpatialJoin : public Operation {
   // already constructed
   bool isConstructed() const;
 
-  // this function is used to give the maximum
+  // this function is used to give the maximum distance for internal purposes
   std::optional<size_t> getMaxDist() const;
 
   // this function is used to give the maximum number of results
