@@ -2471,13 +2471,10 @@ void QueryPlanner::GraphPatternPlanner::visitPathSearch(
   const auto& vocab = planner_._qec->getIndex().getVocab();
   auto config = pathQuery.toPathSearchConfiguration(vocab);
 
-  // If there is no child graph pattern, we need to construct a neutral element
-  std::vector<SubtreePlan> candidatesIn;
-  if (pathQuery.childGraphPattern_.has_value()) {
-    candidatesIn = planner_.optimize(&pathQuery.childGraphPattern_.value());
-  } else {
-    candidatesIn = {makeSubtreePlan<NeutralElementOperation>(qec_)};
-  }
+  // The path search requires a child graph pattern
+  AD_CORRECTNESS_CHECK(pathQuery.childGraphPattern_.has_value());
+  std::vector<SubtreePlan> candidatesIn =
+      planner_.optimize(&pathQuery.childGraphPattern_.value());
   std::vector<SubtreePlan> candidatesOut;
 
   for (auto& sub : candidatesIn) {
