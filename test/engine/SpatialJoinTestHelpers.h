@@ -151,14 +151,4 @@ inline std::shared_ptr<QueryExecutionTree> buildSmallChild(
   return buildJoin(qec, scan1, scan2, joinVariable);
 }
 
-inline std::string stringifyVariableToColumnMap(VariableToColumnMap vc) {
-  std::string result = "";
-  auto vec = copySortedByColumnIndex(vc);
-  for (auto [var, info] : vec) {
-    result =
-        absl::StrCat(result, "(", var.name(), " => ", info.columnIndex_, ")");
-  }
-  return result;
-}
-
 }  // namespace SpatialJoinTestHelpers
