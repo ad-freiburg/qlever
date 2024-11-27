@@ -126,7 +126,7 @@ string IndexScan::getCacheKeyImpl() const {
     auto& [prefilterExpr, columnIdx] = prefilter_.value();
     os << "Added PrefiterExpression: \n";
     os << *prefilterExpr;
-    os << "\n Applied on: " << columnIdx << ".";
+    os << "\nApplied on column: " << columnIdx << ".";
   }
   return std::move(os).str();
 }
