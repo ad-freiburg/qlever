@@ -447,7 +447,7 @@ VariableToColumnMap SpatialJoin::computeVariableToColumnMap() const {
     auto varColMapLeft = childLeft_->getVariableColumns();
     AD_CONTRACT_CHECK(
         !varColMapLeft.contains(config_->right_),
-        "Right variable may not be defined in left child of spatial join.");
+        "Right variable must not be defined in left child of spatial join.");
     AD_CONTRACT_CHECK(
         varColMapLeft.contains(config_->left_),
         "Left variable is not defined in left child of spatial join.");
@@ -457,14 +457,14 @@ VariableToColumnMap SpatialJoin::computeVariableToColumnMap() const {
     auto sizeRight = varColMapRightFiltered.size();
     AD_CONTRACT_CHECK(
         !varColMapRightFiltered.contains(config_->left_),
-        "Left variable may not be defined in right child of spatial join.");
+        "Left variable must not be defined in right child of spatial join.");
     addColumns(varColMapRightFiltered, sizeLeft);
 
     // Column for the distance
     if (config_->distanceVariable_.has_value()) {
       AD_CONTRACT_CHECK(
           !variableToColumnMap.contains(config_->distanceVariable_.value()),
-          "The distance variable of a spatial join may not be previously "
+          "The distance variable of a spatial join must not be previously "
           "defined.");
       variableToColumnMap[config_->distanceVariable_.value()] =
           makeUndefCol(ColumnIndex{sizeLeft + sizeRight});
