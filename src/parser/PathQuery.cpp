@@ -54,14 +54,14 @@ void PathQuery::addParameter(const SparqlTriple& triple) {
       algorithm_ = PathSearchAlgorithm::ALL_PATHS;
     } else {
       throw PathSearchException(
-          "Unsupported algorithm in pathSearch: " + objString +
-          ". Supported Algorithms: <allPaths>.");
+          absl::StrCat("Unsupported algorithm in pathSearch: ", objString,
+                       ". Supported Algorithms: <allPaths>."));
     }
   } else {
-    throw PathSearchException(
-        "Unsupported argument <" + predString +
+    throw PathSearchException(absl::StrCat(
+        "Unsupported argument <", predString,
         "> in PathSearch. Supported Arguments: <source>, <target>, <start>, "
-        "<end>, <pathColumn>, <edgeColumn>, <edgeProperty>, <algorithm>.");
+        "<end>, <pathColumn>, <edgeColumn>, <edgeProperty>, <algorithm>."));
   }
 }
 

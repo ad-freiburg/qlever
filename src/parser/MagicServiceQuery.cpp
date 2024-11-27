@@ -8,6 +8,7 @@
 #include <string_view>
 
 #include "parser/GraphPatternOperation.h"
+#include "parser/NormalizedString.h"
 #include "util/Exception.h"
 
 namespace parsedQuery {
@@ -59,7 +60,7 @@ void MagicServiceQuery::setVariable(
 };
 
 // ____________________________________________________________________________
-std::string MagicServiceQuery::extractParameterName(
+std::string_view MagicServiceQuery::extractParameterName(
     const TripleComponent& tripleComponent,
     const std::string_view& magicIRI) const {
   if (!tripleComponent.isIri()) {
@@ -67,16 +68,16 @@ std::string MagicServiceQuery::extractParameterName(
   }
 
   // Get IRI without brackets
-  std::string_view iri = magicIRI.substr(0, magicIRI.size() - 1);
+  auto iri =
+      ad_utility::triple_component::Iri::fromIriref(magicIRI).getContent();
 
-  // Remove prefix and brackets
-  std::string paramString = tripleComponent.getIri().toStringRepresentation();
+  // Remove prefix if applicable: this allows users to define the parameter
+  // either as magicServicePrefix:parameterName or <parameterName>.
+  auto paramString = tripleComponent.getIri().getContent();
   if (paramString.starts_with(iri)) {
-    paramString = paramString.substr(iri.size(), paramString.size() - 1);
-  } else {
-    paramString = paramString.substr(1);
+    paramString.remove_prefix(iri.size());
   }
-  return paramString.substr(0, paramString.size() - 1);
+  return asStringViewUnsafe(paramString);
 };
 
 }  // namespace parsedQuery

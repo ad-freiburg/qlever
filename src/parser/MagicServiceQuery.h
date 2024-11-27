@@ -70,8 +70,8 @@ struct MagicServiceQuery {
   // Utility function to extract the name of a parameter in a magic service
   // configuration. That is, remove the magic IRI predicate if applicable.
   // Always remove the brackets around the IRI.
-  std::string extractParameterName(const TripleComponent& tripleComponent,
-                                   const std::string_view& magicIRI) const;
+  std::string_view extractParameterName(const TripleComponent& tripleComponent,
+                                        const std::string_view& magicIRI) const;
 };
 
 }  // namespace parsedQuery

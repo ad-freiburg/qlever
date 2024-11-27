@@ -62,11 +62,11 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
   } else if (predString == "payload") {
     payloadVariables_.push_back(getVariable("payload", object));
   } else {
-    throw SpatialSearchException(
-        "Unsupported argument " + predString +
+    throw SpatialSearchException(absl::StrCat(
+        "Unsupported argument ", predString,
         " in Spatial Search. Supported Arguments: <left>, <right>, "
         "<numNearestNeighbors>, <maxDistance>, <bindDistance>, <payload> and "
-        "<algorithm>.");
+        "<algorithm>."));
   }
 }
 
