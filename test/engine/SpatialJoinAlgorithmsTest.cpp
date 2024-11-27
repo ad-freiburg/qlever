@@ -322,16 +322,15 @@ Row mergeToRow(Row part1, Row part2, Row part3) {
 };
 
 Rows unordered_rows{
-    Row{"\"Uni Freiburg TF\"", "<node_1>", "<geometry1>",
-        "POINT(7.835050 48.012670)"},
-    Row{"\"Minster Freiburg\"", "<node_2>", "<geometry2>",
-        "POINT(7.852980 47.995570)"},
-    Row{"\"London Eye\"", "<node_3>", "<geometry3>",
-        "POINT(-0.119570 51.503330)"},
-    Row{"\"Statue of liberty\"", "<node_4>", "<geometry4>",
-        "POINT(-74.044540 40.689250)"},
-    Row{"\"eiffel tower\"", "<node_5>", "<geometry5>",
-        "POINT(2.294510 48.858250)"},
+    {"\"Uni Freiburg TF\"", "<node_1>", "<geometry1>",
+     "POINT(7.835050 48.012670)"},
+    {"\"Minster Freiburg\"", "<node_2>", "<geometry2>",
+     "POINT(7.852980 47.995570)"},
+    {"\"London Eye\"", "<node_3>", "<geometry3>", "POINT(-0.119570 51.503330)"},
+    {"\"Statue of liberty\"", "<node_4>", "<geometry4>",
+     "POINT(-74.044540 40.689250)"},
+    {"\"eiffel tower\"", "<node_5>", "<geometry5>",
+     "POINT(2.294510 48.858250)"},
 };
 
 // Shortcuts
@@ -341,11 +340,11 @@ auto Eye = unordered_rows.at(2);
 auto Lib = unordered_rows.at(3);
 auto Eif = unordered_rows.at(4);
 
-Rows unordered_rows_small{Row{"<geometry1>", "POINT(7.835050 48.012670)"},
-                          Row{"<geometry2>", "POINT(7.852980 47.995570)"},
-                          Row{"<geometry3>", "POINT(-0.119570 51.503330)"},
-                          Row{"<geometry4>", "POINT(-74.044540 40.689250)"},
-                          Row{"<geometry5>", "POINT(2.294510 48.858250)"}};
+Rows unordered_rows_small{{"<geometry1>", "POINT(7.835050 48.012670)"},
+                          {"<geometry2>", "POINT(7.852980 47.995570)"},
+                          {"<geometry3>", "POINT(-0.119570 51.503330)"},
+                          {"<geometry4>", "POINT(-74.044540 40.689250)"},
+                          {"<geometry5>", "POINT(2.294510 48.858250)"}};
 
 // Shortcuts
 auto sTF = unordered_rows_small.at(0);
