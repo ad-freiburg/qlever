@@ -886,9 +886,25 @@ TEST_F(LocatedTriplesTest, augmentedMetadataGraphInfo) {
 
     // Note: the GraphInfo hasn't changed, because the new triples all were
     // deleted.
-    auto m = locatedTriplesPerBlock.getAugmentedMetadata();
-    EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
+    auto actualMetadata = locatedTriplesPerBlock.getAugmentedMetadata();
+    EXPECT_THAT(actualMetadata,
                 testing::ElementsAreArray(expectedAugmentedMetadata));
+
+    // Test the case that a block loses its graph info if the added located
+    // triples have too many distinct graphs.
+    ASSERT_TRUE(actualMetadata[1].graphInfo_.has_value());
+    std::vector<IdTriple<0>> triples;
+    for (size_t i = 30; i < 30 + 2 * MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA;
+         ++i) {
+      auto tr = T3;
+      tr.ids_.at(ADDITIONAL_COLUMN_GRAPH_ID) = V(i);
+      triples.push_back(tr);
+    }
+    // Add the located triples.
+    locatedTriplesPerBlock.add(LocatedTriple::locateTriplesInPermutation(
+        triples, metadata, {0, 1, 2}, true, handle));
+    actualMetadata = locatedTriplesPerBlock.getAugmentedMetadata();
+    ASSERT_FALSE(actualMetadata[1].graphInfo_.has_value());
   }
 }
 

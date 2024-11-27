@@ -157,21 +157,32 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
 
 //______________________________________________________________________________
 TEST_F(PrefilterExpressionOnMetadataTest, testBlockFormatForDebugging) {
+  auto toString = [](const CompressedBlockMetadata& b) {
+    return (std::stringstream{} << b).str();
+  };
+
+  auto matcher = [&toString](const std::string& substring) {
+    return ::testing::ResultOf(toString, ::testing::HasSubstr(substring));
+  };
   EXPECT_THAT(
-      (std::stringstream() << b5).str(),
-      ::testing::HasSubstr(
+      b5,
+      matcher(
           "#BlockMetadata\n(first) Triple: I:0 V:10 D:33.000000 V:0\n(last) "
           "Triple: I:0 V:10 D:33.000000 V:0\nnum. rows: 0.\n"));
   EXPECT_THAT(
-      (std::stringstream() << b11).str(),
-      ::testing::HasSubstr(
+      b11,
+      matcher(
           "#BlockMetadata\n(first) Triple: I:-4 V:10 D:33.000000 V:0\n(last) "
           "Triple: D:2.000000 V:10 D:33.000000 V:0\nnum. rows: 0.\n"));
   EXPECT_THAT(
-      (std::stringstream() << b21).str(),
-      ::testing::HasSubstr(
+      b21,
+      matcher(
           "#BlockMetadata\n(first) Triple: V:14 V:10 D:33.000000 V:0\n(last) "
           "Triple: V:17 V:10 D:33.000000 V:0\nnum. rows: 0.\n"));
+
+  auto blockWithGraphInfo = b21;
+  blockWithGraphInfo.graphInfo_.emplace({IntId(12), IntId(13)});
+  EXPECT_THAT(blockWithGraphInfo, matcher("Graphs: I:12, I:13\n"));
 }
 
 // Test Relational Expressions
