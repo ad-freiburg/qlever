@@ -315,8 +315,7 @@ VariableToColumnMap SpatialJoin::getVarColMapPayloadVars() const {
                     "column map can be computed.");
 
   auto payloadVariablesVisitor = [this]<typename T>(const T& value) {
-    auto varColMap =
-        childRight_->getRootOperation()->getExternallyVisibleVariableColumns();
+    auto varColMap = childRight_->getVariableColumns();
     VariableToColumnMap newVarColMap;
 
     if constexpr (std::is_same_v<T, PayloadAllVariables>) {
