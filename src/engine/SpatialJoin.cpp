@@ -440,7 +440,7 @@ VariableToColumnMap SpatialJoin::computeVariableToColumnMap() const {
       }
     };
 
-    // We add all columns from the left table, but only those from the left
+    // We add all columns from the left table, but only those from the right
     // table that are actually selected by the payload variables, plus the join
     // column
     auto sizeLeft = childLeft_->getResultWidth();
