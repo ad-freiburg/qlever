@@ -556,75 +556,112 @@ TEST(IndexScan, unlikelyToFitInCacheCalculatesSizeCorrectly) {
   }
 }
 
-namespace {
-// Convert a TripleComponent to a ValueId.
-Id toValueId(QueryExecutionContext* qec, const TripleComponent& tc) {
-  return tc.toValueId(qec->getIndex().getVocab()).value();
-}
+class IndexScanWithLazyJoin : public ::testing::TestWithParam<bool> {
+ protected:
+  QueryExecutionContext* qec_ = nullptr;
 
-// Create an id table with a single column from a vector of `TripleComponent`s.
-IdTable makeIdTable(QueryExecutionContext* qec,
-                    std::vector<TripleComponent> entries) {
-  IdTable result{1, makeAllocator()};
-  result.reserve(entries.size());
-  for (const TripleComponent& entry : entries) {
-    result.emplace_back();
-    result.back()[0] = toValueId(qec, entry);
+  void SetUp() override {
+    std::string kg =
+        "<a> <p> <A> . <a> <p> <A2> . "
+        "<b> <p> <B> . <b> <p> <B2> . "
+        "<c> <p> <C> . <c> <p> <C2> . "
+        "<b> <q> <xb> . <b> <q> <xb2> .";
+    qec_ = getQec(std::move(kg));
   }
-  return result;
-}
 
-// Convert a vector of a tuple of triples to an id table.
-IdTable makeTableFromTriples(
-    QueryExecutionContext* qec,
-    std::vector<std::array<TripleComponent, 2>> triples) {
-  IdTable result{2, makeAllocator()};
-  result.reserve(triples.size());
-  for (const auto& triple : triples) {
-    result.emplace_back();
-    result.back()[0] = toValueId(qec, triple.at(0));
-    result.back()[1] = toValueId(qec, triple.at(1));
+  // Convert a TripleComponent to a ValueId.
+  Id toValueId(const TripleComponent& tc) const {
+    return tc.toValueId(qec_->getIndex().getVocab()).value();
   }
-  return result;
-}
-}  // namespace
+
+  // Create an id table with a single column from a vector of
+  // `TripleComponent`s.
+  IdTable makeIdTable(std::vector<TripleComponent> entries) const {
+    IdTable result{1, makeAllocator()};
+    result.reserve(entries.size());
+    for (const TripleComponent& entry : entries) {
+      result.emplace_back();
+      result.back()[0] = toValueId(entry);
+    }
+    return result;
+  }
+
+  // Convert a vector of a tuple of triples to an id table.
+  IdTable tableFromTriples(
+      std::vector<std::array<TripleComponent, 2>> triples) const {
+    IdTable result{2, makeAllocator()};
+    result.reserve(triples.size());
+    for (const auto& triple : triples) {
+      result.emplace_back();
+      result.back()[0] = toValueId(triple.at(0));
+      result.back()[1] = toValueId(triple.at(1));
+    }
+    return result;
+  }
+
+  // Create a common `IndexScan` instance.
+  IndexScan makeScan() const {
+    SparqlTriple xpy{Tc{Var{"?x"}}, "<p>", Tc{Var{"?y"}}};
+    // We need to scan all the blocks that contain the `<p>` predicate.
+    return IndexScan{qec_, Permutation::PSO, xpy};
+  }
+
+  // Consume generator `first` first and store it in a vector, then do the same
+  // with `second`.
+  static std::pair<std::vector<Result::IdTableVocabPair>,
+                   std::vector<Result::IdTableVocabPair>>
+  consumeSequentially(Result::Generator first, Result::Generator second) {
+    std::vector<Result::IdTableVocabPair> firstResult;
+    std::vector<Result::IdTableVocabPair> secondResult;
+
+    for (Result::IdTableVocabPair& element : first) {
+      firstResult.push_back(std::move(element));
+    }
+    for (Result::IdTableVocabPair& element : second) {
+      secondResult.push_back(std::move(element));
+    }
+    return {std::move(firstResult), std::move(secondResult)};
+  }
+
+  // Consume the generators and store the results in vectors using the
+  // parameterized strategy.
+  static std::pair<std::vector<Result::IdTableVocabPair>,
+                   std::vector<Result::IdTableVocabPair>>
+  consumeGenerators(
+      std::pair<Result::Generator, Result::Generator> generatorPair) {
+    std::vector<Result::IdTableVocabPair> joinSideResults;
+    std::vector<Result::IdTableVocabPair> scanResults;
+
+    bool rightFirst = GetParam();
+    if (rightFirst) {
+      std::tie(scanResults, joinSideResults) = consumeSequentially(
+          std::move(generatorPair.second), std::move(generatorPair.first));
+    } else {
+      std::tie(joinSideResults, scanResults) = consumeSequentially(
+          std::move(generatorPair.first), std::move(generatorPair.second));
+    }
+    return {std::move(joinSideResults), std::move(scanResults)};
+  }
+};
 
 // _____________________________________________________________________________
-TEST(IndexScan, prefilterTablesDoesFilterCorrectly) {
-  std::string kg =
-      "<a> <p> <A> . <a> <p> <A2> . "
-      "<b> <p> <B> . <b> <p> <B2> . "
-      "<c> <p> <C> . <c> <p> <C2> . "
-      "<b> <q> <xb> . <b> <q> <xb2> .";
-  auto qec = getQec(kg);
-  SparqlTriple xpy{Tc{Var{"?x"}}, "<p>", Tc{Var{"?y"}}};
-  // We need to scan all the blocks that contain the `<p>` predicate.
-  IndexScan scan{qec, Permutation::PSO, xpy};
+TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesFilterCorrectly) {
+  IndexScan scan = makeScan();
 
-  auto makeJoinSide = [](QueryExecutionContext* qec) -> Result::Generator {
+  auto makeJoinSide = [](auto* self) -> Result::Generator {
     using P = Result::IdTableVocabPair;
-    P p1{makeIdTable(qec, {iri("<a>"), iri("<c>")}), LocalVocab{}};
+    P p1{self->makeIdTable({iri("<a>"), iri("<c>")}), LocalVocab{}};
     co_yield p1;
     LocalVocab vocab;
     vocab.getIndexAndAddIfNotContained(LocalVocabEntry{
         ad_utility::triple_component::Literal::literalWithoutQuotes("Test")});
-    P p2{makeIdTable(qec, {iri("<c>"), iri("<q>"), iri("<xb>")}),
+    P p2{self->makeIdTable({iri("<c>"), iri("<q>"), iri("<xb>")}),
          std::move(vocab)};
     co_yield p2;
   };
 
-  auto [leftGenerator, rightGenerator] =
-      scan.prefilterTables(makeJoinSide(qec), 0);
-
-  std::vector<Result::IdTableVocabPair> scanResults;
-  for (Result::IdTableVocabPair& element : rightGenerator) {
-    scanResults.push_back(std::move(element));
-  }
-
-  std::vector<Result::IdTableVocabPair> joinSideResults;
-  for (Result::IdTableVocabPair& element : leftGenerator) {
-    joinSideResults.push_back(std::move(element));
-  }
+  auto [joinSideResults, scanResults] =
+      consumeGenerators(scan.prefilterTables(makeJoinSide(this), 0));
 
   ASSERT_EQ(scanResults.size(), 2);
   ASSERT_EQ(joinSideResults.size(), 2);
@@ -635,72 +672,90 @@ TEST(IndexScan, prefilterTablesDoesFilterCorrectly) {
   EXPECT_TRUE(scanResults.at(1).localVocab_.empty());
   EXPECT_FALSE(joinSideResults.at(1).localVocab_.empty());
 
-  auto partialIndexScan =
-      [qec](std::vector<std::array<TripleComponent, 2>> triples) {
-        return makeTableFromTriples(qec, std::move(triples));
-      };
-
   EXPECT_EQ(
       scanResults.at(0).idTable_,
-      partialIndexScan({{iri("<a>"), iri("<A>")}, {iri("<a>"), iri("<A2>")}}));
+      tableFromTriples({{iri("<a>"), iri("<A>")}, {iri("<a>"), iri("<A2>")}}));
   EXPECT_EQ(joinSideResults.at(0).idTable_,
-            makeIdTable(qec, {iri("<a>"), iri("<c>")}));
+            makeIdTable({iri("<a>"), iri("<c>")}));
 
   EXPECT_EQ(
       scanResults.at(1).idTable_,
-      partialIndexScan({{iri("<c>"), iri("<C>")}, {iri("<c>"), iri("<C2>")}}));
+      tableFromTriples({{iri("<c>"), iri("<C>")}, {iri("<c>"), iri("<C2>")}}));
   EXPECT_EQ(joinSideResults.at(1).idTable_,
-            makeIdTable(qec, {iri("<c>"), iri("<q>"), iri("<xb>")}));
+            makeIdTable({iri("<c>"), iri("<q>"), iri("<xb>")}));
 }
 
 // _____________________________________________________________________________
-TEST(IndexScan, prefilterTablesDoesNotFilterOnUndefined) {
-  std::string kg =
-      "<a> <p> <A> . <a> <p> <A2> . "
-      "<b> <p> <B> . <b> <p> <B2> . "
-      "<c> <p> <C> . <c> <p> <C2> . "
-      "<b> <q> <xb> . <b> <q> <xb2> .";
-  auto qec = getQec(kg);
-  SparqlTriple xpy{Tc{Var{"?x"}}, "<p>", Tc{Var{"?y"}}};
-  // We need to scan all the blocks that contain the `<p>` predicate.
-  IndexScan scan{qec, Permutation::PSO, xpy};
+TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesNotFilterOnUndefined) {
+  IndexScan scan = makeScan();
 
-  auto makeJoinSide = [](QueryExecutionContext* qec) -> Result::Generator {
+  auto makeJoinSide = [](auto* self) -> Result::Generator {
     using P = Result::IdTableVocabPair;
-    P p1{makeIdTableFromVector({{Id::makeUndefined()}}), LocalVocab{}};
+    P p1{IdTable{1, makeAllocator()}, LocalVocab{}};
     co_yield p1;
-    P p2{makeIdTable(qec, {iri("<a>"), iri("<c>")}), LocalVocab{}};
+    P p2{makeIdTableFromVector({{Id::makeUndefined()}}), LocalVocab{}};
     co_yield p2;
-    P p3{makeIdTable(qec, {iri("<c>"), iri("<q>"), iri("<xb>")}), LocalVocab{}};
+    P p3{IdTable{1, makeAllocator()}, LocalVocab{}};
     co_yield p3;
+    P p4{self->makeIdTable({iri("<a>"), iri("<c>")}), LocalVocab{}};
+    co_yield p4;
+    P p5{self->makeIdTable({iri("<c>"), iri("<q>"), iri("<xb>")}),
+         LocalVocab{}};
+    co_yield p5;
   };
 
-  auto [_, rightGenerator] = scan.prefilterTables(makeJoinSide(qec), 0);
-
-  std::vector<Result::IdTableVocabPair> scanResults;
-  for (Result::IdTableVocabPair& element : rightGenerator) {
-    scanResults.push_back(std::move(element));
-  }
+  auto [_, scanResults] =
+      consumeGenerators(scan.prefilterTables(makeJoinSide(this), 0));
 
   ASSERT_EQ(scanResults.size(), 3);
   EXPECT_TRUE(scanResults.at(0).localVocab_.empty());
   EXPECT_TRUE(scanResults.at(1).localVocab_.empty());
   EXPECT_TRUE(scanResults.at(2).localVocab_.empty());
 
-  auto partialIndexScan =
-      [qec](std::vector<std::array<TripleComponent, 2>> triples) {
-        return makeTableFromTriples(qec, std::move(triples));
-      };
-
   EXPECT_EQ(
       scanResults.at(0).idTable_,
-      partialIndexScan({{iri("<a>"), iri("<A>")}, {iri("<a>"), iri("<A2>")}}));
+      tableFromTriples({{iri("<a>"), iri("<A>")}, {iri("<a>"), iri("<A2>")}}));
 
   EXPECT_EQ(
       scanResults.at(1).idTable_,
-      partialIndexScan({{iri("<b>"), iri("<B>")}, {iri("<b>"), iri("<B2>")}}));
+      tableFromTriples({{iri("<b>"), iri("<B>")}, {iri("<b>"), iri("<B2>")}}));
 
   EXPECT_EQ(
       scanResults.at(2).idTable_,
-      partialIndexScan({{iri("<c>"), iri("<C>")}, {iri("<c>"), iri("<C2>")}}));
+      tableFromTriples({{iri("<c>"), iri("<C>")}, {iri("<c>"), iri("<C2>")}}));
 }
+
+// _____________________________________________________________________________
+TEST_P(IndexScanWithLazyJoin, prefilterTablesWorksWithSingleEmptyTable) {
+  IndexScan scan = makeScan();
+
+  auto makeJoinSide = []() -> Result::Generator {
+    using P = Result::IdTableVocabPair;
+    P p{IdTable{1, makeAllocator()}, LocalVocab{}};
+    co_yield p;
+  };
+
+  auto [_, scanResults] =
+      consumeGenerators(scan.prefilterTables(makeJoinSide(), 0));
+
+  ASSERT_EQ(scanResults.size(), 0);
+}
+
+// _____________________________________________________________________________
+TEST_P(IndexScanWithLazyJoin, prefilterTablesWorksWithEmptyGenerator) {
+  IndexScan scan = makeScan();
+
+  auto makeJoinSide = []() -> Result::Generator { co_return; };
+
+  auto [_, scanResults] =
+      consumeGenerators(scan.prefilterTables(makeJoinSide(), 0));
+
+  ASSERT_EQ(scanResults.size(), 0);
+}
+
+INSTANTIATE_TEST_SUITE_P(IndexScanWithLazyJoinSuite, IndexScanWithLazyJoin,
+                         ::testing::Bool(),
+                         [](const testing::TestParamInfo<bool>& info) {
+                           return info.param ? "RightSideFirst"
+                                             : "LeftSideFirst";
+                         });
