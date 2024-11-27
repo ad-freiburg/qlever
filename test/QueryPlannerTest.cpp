@@ -3,12 +3,11 @@
 // Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de> [2015 - 2017]
 //          Johannes Kalmbach <kalmbachqcs.uni-freiburg.de> [2018 - 2024]
 
-#include <gtest/gtest.h>
+#include <gmock/gmock.h>
 
 #include "QueryPlannerTestHelpers.h"
 #include "engine/QueryPlanner.h"
 #include "engine/SpatialJoin.h"
-#include "gmock/gmock.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/MagicServiceQuery.h"
 #include "parser/SparqlParser.h"
