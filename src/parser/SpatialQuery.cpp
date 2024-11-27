@@ -87,13 +87,15 @@ SpatialJoinConfiguration SpatialQuery::toSpatialJoinConfiguration() const {
   // Only if the number of results is limited, it is mandatory that the right
   // variable must be selected inside the service. If only the distance is
   // limited, it may be declared inside or outside of the service.
-  if (maxResults_.has_value() && !childGraphPattern_.has_value()) {
+  if (!ignoreMissingRightChild_ && maxResults_.has_value() &&
+      !childGraphPattern_.has_value()) {
     throw SpatialSearchException(
         "A spatial search with a maximum number of results must have its right "
         "variable declared inside the service using a graph pattern: SERVICE "
         "spatialSearch: { [Config Triples] { <Something> <ThatSelects> ?right "
         "} }.");
-  } else if (!childGraphPattern_.has_value() && !payloadVariables_.empty()) {
+  } else if (!ignoreMissingRightChild_ && !childGraphPattern_.has_value() &&
+             !payloadVariables_.empty()) {
     throw SpatialSearchException(
         "The right variable for the spatial search is declared outside the "
         "SERVICE, but the <payload> parameter was set. Please move the "
@@ -158,6 +160,7 @@ SpatialQuery::SpatialQuery(const SparqlTriple& triple) {
   } else if (auto match = ctre::search<NEAREST_NEIGHBORS_REGEX>(input)) {
     maxResults_ = matchToInt(match.get<"results">());
     maxDist_ = matchToInt(match.get<"dist">());
+    ignoreMissingRightChild_ = true;
     AD_CORRECTNESS_CHECK(maxResults_.has_value());
   } else {
     AD_THROW(absl::StrCat("Tried to perform spatial join with unknown triple ",

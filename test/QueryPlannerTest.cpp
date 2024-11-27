@@ -2155,16 +2155,7 @@ TEST(QueryPlanner, SpatialJoinLegacyPredicateSupport) {
                      PayloadAllVariables{}, S2, scan("?x", "<p>", "?y"),
                      scan("?a", "<p>", "?b")));
 
-  // For nearest neighbors, the special predicate is removed and throws an
-  // explanatory error
-  AD_EXPECT_THROW_WITH_MESSAGE(h::expect("SELECT ?y ?b WHERE {"
-                                         "?a <p> ?b ."
-                                         "?x <a> ?y ."
-                                         "?y <nearest-neighbors:1> ?b ."
-                                         "}",
-                                         ::testing::_),
-                               ::testing::ContainsRegex("Please use SERVICE"));
-
+  // Test that invalid triples throw an error
   AD_EXPECT_THROW_WITH_MESSAGE(
       h::expect("SELECT ?x ?y WHERE {"
                 "?x <p> ?y."
@@ -2204,26 +2195,23 @@ TEST(QueryPlanner, SpatialJoinLegacyPredicateSupport) {
                                          ::testing::_),
                                ::testing::ContainsRegex("unknown triple"));
 
-  // All previously implemented test cases for the nearest neighbors predicate
-  // shall now throw an exception.
-  EXPECT_ANY_THROW(
-      h::expect("SELECT ?x ?y WHERE {"
-                "?x <p> ?y."
-                "?a <p> ?b."
-                "?y <nearest-neighbors:2:500> ?b }",
-                ::testing::_));
-  EXPECT_ANY_THROW(
-      h::expect("SELECT ?x ?y WHERE {"
-                "?x <p> ?y."
-                "?a <p> ?b."
-                "?y <nearest-neighbors:20> ?b }",
-                ::testing::_));
-  EXPECT_ANY_THROW(
-      h::expect("SELECT ?x ?y WHERE {"
-                "?x <p> ?y."
-                "?a <p> ?b."
-                "?y <nearest-neighbors:0> ?b }",
-                ::testing::_));
+  // Nearest neighbors special predicate
+  h::expect(
+      "SELECT ?x ?y WHERE {"
+      "?x <p> ?y."
+      "?a <p> ?b."
+      "?y <nearest-neighbors:2:500> ?b }",
+      h::SpatialJoin(500, 2, V{"?y"}, V{"?b"}, std::nullopt,
+                     PayloadAllVariables{}, S2, scan("?x", "<p>", "?y"),
+                     scan("?a", "<p>", "?b")));
+  h::expect(
+      "SELECT ?x ?y WHERE {"
+      "?x <p> ?y."
+      "?a <p> ?b."
+      "?y <nearest-neighbors:20> ?b }",
+      h::SpatialJoin(-1, 20, V{"?y"}, V{"?b"}, std::nullopt,
+                     PayloadAllVariables{}, S2, scan("?x", "<p>", "?y"),
+                     scan("?a", "<p>", "?b")));
 
   EXPECT_ANY_THROW(
       h::expect("SELECT ?x ?y WHERE {"
@@ -2256,11 +2244,6 @@ TEST(QueryPlanner, SpatialJoinLegacyPredicateSupport) {
                 "?x <p> ?y."
                 "?a <p> ?b."
                 "?y <nearest-neighbors:> ?b }",
-                ::testing::_));
-
-  EXPECT_ANY_THROW(
-      h::expect("SELECT ?x ?y WHERE {"
-                "?y <nearest-neighbors:2:500> ?b }",
                 ::testing::_));
 
   EXPECT_ANY_THROW(
