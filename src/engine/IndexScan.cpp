@@ -465,25 +465,26 @@ Result::Generator IndexScan::createPrefilteredJoinSide(
       co_yield pair;
     }
     innerState->prefetchedValues_.clear();
-    if (innerState->iterator_.value() != innerState->generator_.end()) {
-      ++innerState->iterator_.value();
+    auto& iterator = innerState->iterator_.value();
+    if (iterator != innerState->generator_.end()) {
+      ++iterator;
     }
-    while (innerState->iterator_.value() != innerState->generator_.end()) {
-      co_yield *innerState->iterator_.value();
-      ++innerState->iterator_.value();
+    while (iterator != innerState->generator_.end()) {
+      co_yield *iterator;
+      ++iterator;
     }
-  } else {
-    while (true) {
-      if (innerState->prefetchedValues_.empty()) {
-        if (innerState->doneFetching_) {
-          co_return;
-        }
-        innerState->fetch();
+    co_return;
+  }
+  while (true) {
+    if (innerState->prefetchedValues_.empty()) {
+      if (innerState->doneFetching_) {
+        co_return;
       }
-      while (!innerState->prefetchedValues_.empty()) {
-        co_yield innerState->prefetchedValues_.front();
-        innerState->prefetchedValues_.pop_front();
-      }
+      innerState->fetch();
+    }
+    while (!innerState->prefetchedValues_.empty()) {
+      co_yield innerState->prefetchedValues_.front();
+      innerState->prefetchedValues_.pop_front();
     }
   }
 }
@@ -495,25 +496,23 @@ Result::Generator IndexScan::createPrefilteredIndexScanSide(
     for (auto& pair : scanInChunks()) {
       co_yield pair;
     }
-  } else {
-    LazyScanMetadata metadata;
-    while (true) {
-      if (innerState->pendingBlocks_.empty()) {
-        if (innerState->doneFetching_) {
-          metadata.numBlocksAll_ =
-              innerState->metaBlocks_.blockMetadata_.size();
-          updateRuntimeInfoForLazyScan(metadata);
-          co_return;
-        }
-        innerState->fetch();
+    co_return;
+  }
+  LazyScanMetadata metadata;
+  while (true) {
+    if (innerState->pendingBlocks_.empty()) {
+      if (innerState->doneFetching_) {
+        metadata.numBlocksAll_ = innerState->metaBlocks_.blockMetadata_.size();
+        updateRuntimeInfoForLazyScan(metadata);
+        co_return;
       }
-      auto blocks = std::move(innerState->pendingBlocks_);
-      auto scan = getLazyScan(std::move(blocks));
-      for (IdTable& idTable : scan) {
-        co_yield {std::move(idTable), LocalVocab{}};
-      }
-      aggregateMetadata(metadata, scan.details());
+      innerState->fetch();
     }
+    auto scan = getLazyScan(std::move(innerState->pendingBlocks_));
+    for (IdTable& idTable : scan) {
+      co_yield {std::move(idTable), LocalVocab{}};
+    }
+    aggregateMetadata(metadata, scan.details());
   }
 }
 
@@ -526,9 +525,8 @@ std::pair<Result::Generator, Result::Generator> IndexScan::prefilterTables(
   if (!metaBlocks.has_value()) {
     return {Result::Generator{}, Result::Generator{}};
   }
-  std::shared_ptr<SharedGeneratorState> state =
-      std::make_shared<SharedGeneratorState>(std::move(input), joinColumn,
-                                             std::move(metaBlocks.value()));
+  auto state = std::make_shared<SharedGeneratorState>(
+      std::move(input), joinColumn, std::move(metaBlocks.value()));
   return {createPrefilteredJoinSide(state),
           createPrefilteredIndexScanSide(state)};
 }
