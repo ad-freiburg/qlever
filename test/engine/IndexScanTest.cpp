@@ -652,25 +652,29 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesFilterCorrectly) {
     using P = Result::IdTableVocabPair;
     P p1{self->makeIdTable({iri("<a>"), iri("<c>")}), LocalVocab{}};
     co_yield p1;
+    P p2{self->makeIdTable({iri("<c>")}), LocalVocab{}};
+    co_yield p2;
     LocalVocab vocab;
     vocab.getIndexAndAddIfNotContained(LocalVocabEntry{
         ad_utility::triple_component::Literal::literalWithoutQuotes("Test")});
-    P p2{self->makeIdTable({iri("<c>"), iri("<q>"), iri("<xb>")}),
+    P p3{self->makeIdTable({iri("<c>"), iri("<q>"), iri("<xb>")}),
          std::move(vocab)};
-    co_yield p2;
+    co_yield p3;
   };
 
   auto [joinSideResults, scanResults] =
       consumeGenerators(scan.prefilterTables(makeJoinSide(this), 0));
 
   ASSERT_EQ(scanResults.size(), 2);
-  ASSERT_EQ(joinSideResults.size(), 2);
+  ASSERT_EQ(joinSideResults.size(), 3);
 
   EXPECT_TRUE(scanResults.at(0).localVocab_.empty());
   EXPECT_TRUE(joinSideResults.at(0).localVocab_.empty());
 
   EXPECT_TRUE(scanResults.at(1).localVocab_.empty());
-  EXPECT_FALSE(joinSideResults.at(1).localVocab_.empty());
+  EXPECT_TRUE(joinSideResults.at(1).localVocab_.empty());
+
+  EXPECT_FALSE(joinSideResults.at(2).localVocab_.empty());
 
   EXPECT_EQ(
       scanResults.at(0).idTable_,
@@ -681,7 +685,9 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesFilterCorrectly) {
   EXPECT_EQ(
       scanResults.at(1).idTable_,
       tableFromTriples({{iri("<c>"), iri("<C>")}, {iri("<c>"), iri("<C2>")}}));
-  EXPECT_EQ(joinSideResults.at(1).idTable_,
+  EXPECT_EQ(joinSideResults.at(1).idTable_, makeIdTable({iri("<c>")}));
+
+  EXPECT_EQ(joinSideResults.at(2).idTable_,
             makeIdTable({iri("<c>"), iri("<q>"), iri("<xb>")}));
 }
 
@@ -695,17 +701,52 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesNotFilterOnUndefined) {
     co_yield p1;
     P p2{makeIdTableFromVector({{Id::makeUndefined()}}), LocalVocab{}};
     co_yield p2;
-    P p3{IdTable{1, makeAllocator()}, LocalVocab{}};
+    P p3{makeIdTableFromVector({{Id::makeUndefined()}}), LocalVocab{}};
     co_yield p3;
-    P p4{self->makeIdTable({iri("<a>"), iri("<c>")}), LocalVocab{}};
+    P p4{IdTable{1, makeAllocator()}, LocalVocab{}};
     co_yield p4;
-    P p5{self->makeIdTable({iri("<c>"), iri("<q>"), iri("<xb>")}),
-         LocalVocab{}};
+    P p5{self->makeIdTable({iri("<a>"), iri("<c>")}), LocalVocab{}};
     co_yield p5;
+    P p6{self->makeIdTable({iri("<c>"), iri("<q>"), iri("<xb>")}),
+         LocalVocab{}};
+    co_yield p6;
+    P p7{IdTable{1, makeAllocator()}, LocalVocab{}};
+    co_yield p7;
   };
 
   auto [_, scanResults] =
       consumeGenerators(scan.prefilterTables(makeJoinSide(this), 0));
+
+  ASSERT_EQ(scanResults.size(), 3);
+  EXPECT_TRUE(scanResults.at(0).localVocab_.empty());
+  EXPECT_TRUE(scanResults.at(1).localVocab_.empty());
+  EXPECT_TRUE(scanResults.at(2).localVocab_.empty());
+
+  EXPECT_EQ(
+      scanResults.at(0).idTable_,
+      tableFromTriples({{iri("<a>"), iri("<A>")}, {iri("<a>"), iri("<A2>")}}));
+
+  EXPECT_EQ(
+      scanResults.at(1).idTable_,
+      tableFromTriples({{iri("<b>"), iri("<B>")}, {iri("<b>"), iri("<B2>")}}));
+
+  EXPECT_EQ(
+      scanResults.at(2).idTable_,
+      tableFromTriples({{iri("<c>"), iri("<C>")}, {iri("<c>"), iri("<C2>")}}));
+}
+
+// _____________________________________________________________________________
+TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesNotFilterWithSingleUndefined) {
+  IndexScan scan = makeScan();
+
+  auto makeJoinSide = []() -> Result::Generator {
+    using P = Result::IdTableVocabPair;
+    P p1{makeIdTableFromVector({{Id::makeUndefined()}}), LocalVocab{}};
+    co_yield p1;
+  };
+
+  auto [_, scanResults] =
+      consumeGenerators(scan.prefilterTables(makeJoinSide(), 0));
 
   ASSERT_EQ(scanResults.size(), 3);
   EXPECT_TRUE(scanResults.at(0).localVocab_.empty());
