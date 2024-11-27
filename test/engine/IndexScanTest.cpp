@@ -800,3 +800,24 @@ INSTANTIATE_TEST_SUITE_P(IndexScanWithLazyJoinSuite, IndexScanWithLazyJoin,
                            return info.param ? "RightSideFirst"
                                              : "LeftSideFirst";
                          });
+
+// _____________________________________________________________________________
+TEST(IndexScan, prefilterTablesWithEmptyIndexScanReturnsEmptyGenerators) {
+  auto* qec = getQec("<a> <p> <A>");
+  // Match with something that does not match.
+  SparqlTriple xpy{Tc{Var{"?x"}}, "<not_p>", Tc{Var{"?y"}}};
+  IndexScan scan{qec, Permutation::PSO, xpy};
+
+  auto makeJoinSide = []() -> Result::Generator {
+    ADD_FAILURE()
+        << "The generator should not be consumed when the IndexScan is empty."
+        << std::endl;
+    co_return;
+  };
+
+  auto [leftGenerator, rightGenerator] =
+      scan.prefilterTables(makeJoinSide(), 0);
+
+  EXPECT_EQ(leftGenerator.begin(), leftGenerator.end());
+  EXPECT_EQ(rightGenerator.begin(), rightGenerator.end());
+}
