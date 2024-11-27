@@ -1984,7 +1984,7 @@ TEST(QueryPlanner, SpatialJoinServiceMultipleGraphPatterns) {
                 "{ ?a <p2> ?c } }}",
                 ::testing::_),
       ::testing::ContainsRegex("A magic SERVICE query must not contain more "
-                               "than one graph pattern"));
+                               "than one nested group graph pattern"));
 }
 
 TEST(QueryPlanner, SpatialJoinIncorrectConfigValues) {
