@@ -1731,6 +1731,26 @@ TEST(QueryPlanner, SpatialJoinServicePayloadVars) {
           -1, 5, V{"?y"}, V{"?b"}, V{"?dist"},
           std::vector<V>{V{"?a"}, V{"?a2"}}, S2, scan("?x", "<p>", "?y"),
           h::Join(scan("?a", "<p>", "?a2"), scan("?a2", "<p>", "?b"))));
+
+  // Right variable and duplicates are possible (silently deduplicated during
+  // query result computation)
+  h::expect(
+      "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+      "SELECT * WHERE {"
+      "?x <p> ?y."
+      "SERVICE spatialSearch: {"
+      "_:config spatialSearch:algorithm spatialSearch:s2 ;"
+      "spatialSearch:right ?b ;"
+      "spatialSearch:bindDistance ?dist ;"
+      "spatialSearch:nearestNeighbors 5 . "
+      "_:config spatialSearch:left ?y ."
+      "_:config spatialSearch:payload ?a, ?a, ?b, ?a2 ."
+      "{ ?a <p> ?a2 . ?a2 <p> ?b } }}",
+      h::SpatialJoin(
+          -1, 5, V{"?y"}, V{"?b"}, V{"?dist"},
+          std::vector<V>{V{"?a"}, V{"?a"}, V{"?b"}, V{"?a2"}}, S2,
+          scan("?x", "<p>", "?y"),
+          h::Join(scan("?a", "<p>", "?a2"), scan("?a2", "<p>", "?b"))));
 }
 
 TEST(QueryPlanner, SpatialJoinServiceMaxDistOutside) {
@@ -1806,6 +1826,9 @@ TEST(QueryPlanner, SpatialJoinMultipleServiceSharedLeft) {
       "?y <max-distance-in-meters:500> ?c ."
       "?ac <p2> ?c ."
       "}",
+      // Use two matchers using AnyOf here because the query planner may add the
+      // children one way or the other depending on cost estimates. Both
+      // versions are semantically correct.
       ::testing::AnyOf(
           h::SpatialJoin(
               100, -1, V{"?y"}, V{"?b"}, std::nullopt, PayloadAllVariables{},
@@ -1844,6 +1867,9 @@ TEST(QueryPlanner, SpatialJoinMultipleServiceSharedLeft) {
       "  { ?ac <p2> ?c }"
       " }"
       "}",
+      // Use two matchers using AnyOf here because the query planner may add the
+      // children one way or the other depending on cost estimates. Both
+      // versions are semantically correct.
       ::testing::AnyOf(
           h::SpatialJoin(
               500, 5, V{"?y"}, V{"?c"}, V{"?dc"}, std::vector<V>{V{"?ac"}}, S2,
