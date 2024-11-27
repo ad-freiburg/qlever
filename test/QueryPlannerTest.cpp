@@ -2297,8 +2297,8 @@ TEST(QueryPlanner, SpatialJoinLegacyMaxDistanceParsing) {
       ASSERT_ANY_THROW(
           parsedQuery::SpatialQuery{triple}.toSpatialJoinConfiguration());
     } else {
-      auto config = std::make_shared<SpatialJoinConfiguration>(
-          parsedQuery::SpatialQuery{triple}.toSpatialJoinConfiguration());
+      auto config =
+          parsedQuery::SpatialQuery{triple}.toSpatialJoinConfiguration();
       std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
           ad_utility::makeExecutionTree<SpatialJoin>(qec, config, std::nullopt,
                                                      std::nullopt);
