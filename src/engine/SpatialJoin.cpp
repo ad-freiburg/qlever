@@ -106,6 +106,10 @@ string SpatialJoin::getCacheKeyImpl() const {
     os << "SpatialJoin\nChild1:\n" << childLeft_->getCacheKey() << "\n";
     os << "Child2:\n" << childRight_->getCacheKey() << "\n";
 
+    // Join Variables
+    os << "JoinColLeft:" << childLeft_->getVariableColumn(config_.left_);
+    os << "JoinColRight:" << childRight_->getVariableColumn(config_.right_);
+
     // Task
     auto maxDist = getMaxDist();
     if (maxDist.has_value()) {
@@ -123,14 +127,9 @@ string SpatialJoin::getCacheKeyImpl() const {
 
     // Selected payload variables
     os << "payload:";
-    if (std::holds_alternative<PayloadAllVariables>(
-            config_.payloadVariables_)) {
-      os << " AllVariables";
-    } else {
-      auto vec = std::get<std::vector<Variable>>(config_.payloadVariables_);
-      for (auto v : vec) {
-        os << " " << v.name();
-      }
+    auto rightVarColFiltered = getVarColMapPayloadVars();
+    for (auto [var, info] : rightVarColFiltered) {
+      os << " " << info.columnIndex_;
     }
     os << "\n";
 
