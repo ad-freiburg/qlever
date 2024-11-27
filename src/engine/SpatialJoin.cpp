@@ -128,7 +128,7 @@ string SpatialJoin::getCacheKeyImpl() const {
     // Selected payload variables
     os << "payload:";
     auto rightVarColFiltered = getVarColMapPayloadVars();
-    for (auto [var, info] : rightVarColFiltered) {
+    for (const auto& [var, info] : rightVarColFiltered) {
       os << " " << info.columnIndex_;
     }
     os << "\n";
@@ -322,7 +322,7 @@ VariableToColumnMap SpatialJoin::getVarColMapPayloadVars() const {
       newVarColMap = VariableToColumnMap{varColMap};
     } else {
       static_assert(std::is_same_v<T, std::vector<Variable>>);
-      for (auto var : value) {
+      for (const auto& var : value) {
         AD_CONTRACT_CHECK(varColMap.contains(var), [&]() {
           return absl::StrCat("Variable '", var.name(),
                               "' selected as payload to spatial join but not "
@@ -367,8 +367,8 @@ PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
   // Payload cols and join col
   auto varsAndColInfo = copySortedByColumnIndex(getVarColMapPayloadVars());
   std::vector<ColumnIndex> rightSelectedCols;
-  for (auto varAndColInfo : varsAndColInfo) {
-    rightSelectedCols.push_back(varAndColInfo.second.columnIndex_);
+  for (const auto& [var, colInfo] : varsAndColInfo) {
+    rightSelectedCols.push_back(colInfo.columnIndex_);
   }
 
   // Size of output table
