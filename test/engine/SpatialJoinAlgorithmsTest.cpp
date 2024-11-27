@@ -75,8 +75,8 @@ class SpatialJoinParamTest
 
     std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
         ad_utility::makeExecutionTree<SpatialJoin>(
-            qec, std::make_shared<SpatialJoinConfiguration>(task, left, right),
-            std::nullopt, std::nullopt);
+            qec, SpatialJoinConfiguration{task, left, right}, std::nullopt,
+            std::nullopt);
 
     // add first child
     std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
@@ -1000,9 +1000,7 @@ void testBoundingBox(const size_t& maxDistInMeters, const Point& startPoint) {
       MaxDistanceConfig{maxDistInMeters}};
   SpatialJoinConfiguration config{task, Variable{"?x"}, Variable{"?y"}};
 
-  SpatialJoinAlgorithms spatialJoinAlgs{
-      buildTestQEC(), params,
-      std::make_shared<SpatialJoinConfiguration>(config)};
+  SpatialJoinAlgorithms spatialJoinAlgs{buildTestQEC(), params, config};
 
   std::vector<Box> bbox =
       spatialJoinAlgs.OnlyForTestingWrapperComputeBoundingBox(startPoint);
@@ -1083,8 +1081,8 @@ TEST(SpatialJoin, isContainedInBoundingBoxes) {
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
       ad_utility::makeExecutionTree<SpatialJoin>(
           qec,
-          std::make_shared<SpatialJoinConfiguration>(task, Variable{"?point1"},
-                                                     Variable{"?point2"}),
+          SpatialJoinConfiguration{task, Variable{"?point1"},
+                                   Variable{"?point2"}},
           std::nullopt, std::nullopt);
 
   std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();

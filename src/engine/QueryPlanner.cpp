@@ -765,11 +765,9 @@ auto QueryPlanner::seedWithScansAndText(
          input.starts_with(NEAREST_NEIGHBORS)) &&
         input.ends_with('>')) {
       parsedQuery::SpatialQuery config{node.triple_};
-      pushPlan(makeSubtreePlan<SpatialJoin>(
-          _qec,
-          std::make_shared<SpatialJoinConfiguration>(
-              config.toSpatialJoinConfiguration()),
-          std::nullopt, std::nullopt));
+      pushPlan(makeSubtreePlan<SpatialJoin>(_qec,
+                                            config.toSpatialJoinConfiguration(),
+                                            std::nullopt, std::nullopt));
       continue;
     }
 
@@ -2512,9 +2510,8 @@ void QueryPlanner::GraphPatternPlanner::visitSpatialSearch(
       if (!rightVarOutside) {
         right = std::move(sub._qet);
       }
-      auto spatialJoin = std::make_shared<SpatialJoin>(
-          qec_, std::make_shared<SpatialJoinConfiguration>(config),
-          std::nullopt, right);
+      auto spatialJoin =
+          std::make_shared<SpatialJoin>(qec_, config, std::nullopt, right);
       auto plan = makeSubtreePlan<SpatialJoin>(std::move(spatialJoin));
       candidatesOut.push_back(std::move(plan));
     };

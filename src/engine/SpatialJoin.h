@@ -92,8 +92,7 @@ class SpatialJoin : public Operation {
   // distance, which two objects can be apart, which will still be accepted
   // as a match and therefore be part of the result table. The distance is
   // parsed from the triple.
-  SpatialJoin(QueryExecutionContext* qec,
-              std::shared_ptr<SpatialJoinConfiguration> config,
+  SpatialJoin(QueryExecutionContext* qec, SpatialJoinConfiguration config,
               std::optional<std::shared_ptr<QueryExecutionTree>> childLeft_,
               std::optional<std::shared_ptr<QueryExecutionTree>> childRight_);
 
@@ -146,32 +145,30 @@ class SpatialJoin : public Operation {
   std::optional<size_t> getMaxResults() const;
 
   // switch the algorithm set in the config parameter at construction time
-  void selectAlgorithm(SpatialJoinAlgorithm algo) const {
-    config_->algo_ = algo;
-  }
+  void selectAlgorithm(SpatialJoinAlgorithm algo) { config_.algo_ = algo; }
 
   // retrieve the currently selected algorithm
-  SpatialJoinAlgorithm getAlgorithm() const { return config_->algo_; }
+  SpatialJoinAlgorithm getAlgorithm() const { return config_.algo_; }
 
   // Helper functions for unit tests
   std::pair<size_t, size_t> onlyForTestingGetTask() const {
     return std::pair{getMaxDist().value_or(-1), getMaxResults().value_or(-1)};
   }
 
-  std::shared_ptr<SpatialJoinConfiguration> onlyForTestingGetConfig() const {
+  const SpatialJoinConfiguration& onlyForTestingGetConfig() const {
     return config_;
   }
 
   std::pair<Variable, Variable> onlyForTestingGetVariables() const {
-    return std::pair{config_->left_, config_->right_};
+    return std::pair{config_.left_, config_.right_};
   }
 
   std::optional<Variable> onlyForTestingGetDistanceVariable() const {
-    return config_->distanceVariable_;
+    return config_.distanceVariable_;
   }
 
   PayloadVariables onlyForTestingGetPayloadVariables() const {
-    return config_->payloadVariables_;
+    return config_.payloadVariables_;
   }
 
   std::shared_ptr<QueryExecutionTree> onlyForTestingGetLeftChild() const {
@@ -184,8 +181,8 @@ class SpatialJoin : public Operation {
 
  private:
   // helper function to generate a variable to column map from `childRight_`
-  // that only contains the columns selected by `config_->payloadVariables_`
-  // and (automatically added) the `config_->right_` variable.
+  // that only contains the columns selected by `config_.payloadVariables_`
+  // and (automatically added) the `config_.right_` variable.
   VariableToColumnMap getVarColMapPayloadVars() const;
 
   // helper function, to initialize various required objects for both algorithms
@@ -194,5 +191,5 @@ class SpatialJoin : public Operation {
   std::shared_ptr<QueryExecutionTree> childLeft_ = nullptr;
   std::shared_ptr<QueryExecutionTree> childRight_ = nullptr;
 
-  std::shared_ptr<SpatialJoinConfiguration> config_;
+  SpatialJoinConfiguration config_;
 };

@@ -12,7 +12,6 @@
 #include <s2/util/units/length-units.h>
 
 #include <cmath>
-#include <memory>
 
 #include "engine/SpatialJoin.h"
 #include "util/GeoSparqlHelpers.h"
@@ -22,11 +21,10 @@ using namespace BoostGeometryNamespace;
 // ____________________________________________________________________________
 SpatialJoinAlgorithms::SpatialJoinAlgorithms(
     QueryExecutionContext* qec, PreparedSpatialJoinParams params,
-    std::shared_ptr<SpatialJoinConfiguration> config,
-    std::optional<SpatialJoin*> spatialJoin)
+    SpatialJoinConfiguration config, std::optional<SpatialJoin*> spatialJoin)
     : qec_{qec},
       params_{std::move(params)},
-      config_{config},
+      config_{std::move(config)},
       spatialJoin_{spatialJoin} {}
 
 // ____________________________________________________________________________
@@ -86,7 +84,7 @@ void SpatialJoinAlgorithms::addResultTableEntry(IdTable* result,
   rescol = addColumns(result, idTableRight, resrow, rescol, rowRight,
                       params_.rightSelectedCols_);
 
-  if (config_->distanceVariable_.has_value()) {
+  if (config_.distanceVariable_.has_value()) {
     result->at(resrow, rescol) = distance;
     // rescol isn't used after that in this function, but future updates,
     // which add additional columns, would need to remember to increase
