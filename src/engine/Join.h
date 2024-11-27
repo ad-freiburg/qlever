@@ -30,22 +30,11 @@ class Join : public Operation {
  public:
   Join(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
        std::shared_ptr<QueryExecutionTree> t2, ColumnIndex t1JoinCol,
-       ColumnIndex t2JoinCol);
+       ColumnIndex t2JoinCol, bool allowSwappingChildren = true);
 
   using OptionalPermutation = std::optional<std::vector<ColumnIndex>>;
 
   static constexpr size_t CHUNK_SIZE = 100'000;
-  // A very explicit constructor, which initializes an invalid join object (it
-  // has no subtrees, which violates class invariants). These invalid Join
-  // objects can be used for unit tests that only test member functions which
-  // don't access the subtrees.
-  //
-  // @param qec Needed for creating some dummies, so that the time out checker
-  //  in Join::join doesn't create a seg fault, when it detects a time out and
-  //  tries to create an error message. (test/IndexTestHelpers.h has a function
-  //  `getQec` for easily creating one for tests.)
-  struct InvalidOnlyForTestingJoinTag {};
-  explicit Join(InvalidOnlyForTestingJoinTag, QueryExecutionContext* qec);
 
   virtual string getDescriptor() const override;
 

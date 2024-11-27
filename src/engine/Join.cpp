@@ -93,7 +93,7 @@ GeneratorWithDetails convertGenerator(Permutation::IdTableGenerator gen) {
 // _____________________________________________________________________________
 Join::Join(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
            std::shared_ptr<QueryExecutionTree> t2, ColumnIndex t1JoinCol,
-           ColumnIndex t2JoinCol)
+           ColumnIndex t2JoinCol, bool allowSwappingChildren)
     : Operation(qec) {
   AD_CONTRACT_CHECK(t1 && t2);
   // Currently all join algorithms require both inputs to be sorted, so we
@@ -105,8 +105,11 @@ Join::Join(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
   // are identical except for the order of the join operands, are easier to
   // identify.
   auto swapChildren = [&]() {
-    std::swap(t1, t2);
-    std::swap(t1JoinCol, t2JoinCol);
+    // This can be disabled by tests to fix the order of the subtrees.
+    if (allowSwappingChildren) {
+      std::swap(t1, t2);
+      std::swap(t1JoinCol, t2JoinCol);
+    }
   };
   if (t1->getCacheKey() > t2->getCacheKey()) {
     swapChildren();
@@ -131,15 +134,6 @@ Join::Join(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
   };
   _joinVar = findJoinVar(*_left, _leftJoinCol);
   AD_CONTRACT_CHECK(_joinVar == findJoinVar(*_right, _rightJoinCol));
-}
-
-// _____________________________________________________________________________
-Join::Join(InvalidOnlyForTestingJoinTag, QueryExecutionContext* qec)
-    : Operation(qec) {
-  // Needed, so that the timeout checker in Join::join doesn't create a seg
-  // fault if it tries to create a message about the timeout.
-  _left = std::make_shared<QueryExecutionTree>(qec);
-  _right = _left;
 }
 
 // _____________________________________________________________________________
