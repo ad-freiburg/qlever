@@ -352,11 +352,6 @@ PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
     return std::pair{idTablePtr, std::move(resTable)};
   };
 
-  auto getVarColMap =
-      [](const std::shared_ptr<const QueryExecutionTree>& child) {
-        return child->getRootOperation()->getExternallyVisibleVariableColumns();
-      };
-
   auto getJoinCol = [](VariableToColumnMap varColMap,
                        const Variable& childVariable) {
     return varColMap[childVariable].columnIndex_;
@@ -368,8 +363,8 @@ PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
 
   // Input table columns for the join
   ColumnIndex leftJoinCol =
-      getJoinCol(getVarColMap(childLeft_), config_->left_);
-  VariableToColumnMap rightVarColMap = getVarColMap(childRight_);
+      getJoinCol(childLeft_->getVariableColumns(), config_->left_);
+  VariableToColumnMap rightVarColMap = childRight_->getVariableColumns();
   ColumnIndex rightJoinCol = getJoinCol(rightVarColMap, config_->right_);
 
   // Payload cols and join col
