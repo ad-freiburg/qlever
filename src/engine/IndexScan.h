@@ -125,6 +125,11 @@ class IndexScan final : public Operation {
   ScanSpecification getScanSpecification() const;
   ScanSpecificationAsTripleComponent getScanSpecificationTc() const;
 
+  // Set the runtime info of the `scanTree` when it was lazily executed during a
+  // join.
+  void updateRuntimeInfoForLazyScan(
+      const CompressedRelationReader::LazyScanMetadata& metadata);
+
  private:
   ProtoResult computeResult(bool requestLaziness) override;
 
@@ -146,7 +151,4 @@ class IndexScan final : public Operation {
   Permutation::IdTableGenerator getLazyScan(
       std::vector<CompressedBlockMetadata> blocks) const;
   std::optional<Permutation::MetadataAndBlocks> getMetadataForScan() const;
-
-  void updateRuntimeInfoForLazyScan(
-      const CompressedRelationReader::LazyScanMetadata& metadata);
 };

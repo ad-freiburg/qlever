@@ -175,7 +175,6 @@ class Join : public Operation {
       ColumnIndex joinColTable, std::shared_ptr<IndexScan> scan,
       ColumnIndex joinColScan) const;
 
-  template <bool scanIsLeft>
   ProtoResult computeResultForIndexScanAndLazyOperation(
       bool requestLaziness, std::shared_ptr<const Result> resultWithIdTable,
       ColumnIndex joinColTable, std::shared_ptr<IndexScan> scan,

@@ -209,7 +209,7 @@ ProtoResult Join::computeResult(bool requestLaziness) {
           requestLaziness, std::move(leftRes), _leftJoinCol, rightIndexScan,
           _rightJoinCol);
     }
-    return computeResultForIndexScanAndLazyOperation<false>(
+    return computeResultForIndexScanAndLazyOperation(
         requestLaziness, std::move(leftRes), _leftJoinCol, rightIndexScan,
         _rightJoinCol);
   }
@@ -689,33 +689,6 @@ GeneratorWithDetails convertGenerator(Permutation::IdTableGenerator gen) {
     co_yield t;
   }
 }
-
-// Set the runtime info of the `scanTree` when it was lazily executed during a
-// join.
-void updateRuntimeInfoForLazyScan(
-    IndexScan& scanTree,
-    const CompressedRelationReader::LazyScanMetadata& metadata) {
-  scanTree.updateRuntimeInformationWhenOptimizedOut(
-      RuntimeInformation::Status::lazilyMaterialized);
-  auto& rti = scanTree.runtimeInfo();
-  rti.numRows_ = metadata.numElementsYielded_;
-  rti.totalTime_ = metadata.blockingTime_;
-  rti.addDetail("num-blocks-read", metadata.numBlocksRead_);
-  rti.addDetail("num-blocks-all", metadata.numBlocksAll_);
-  rti.addDetail("num-elements-read", metadata.numElementsRead_);
-
-  // Add more details, but only if the respective value is non-zero.
-  auto updateIfPositive = [&rti](const auto& value, const std::string& key) {
-    if (value > 0) {
-      rti.addDetail(key, value);
-    }
-  };
-  updateIfPositive(metadata.numBlocksSkippedBecauseOfGraph_,
-                   "num-blocks-skipped-graph");
-  updateIfPositive(metadata.numBlocksPostprocessed_,
-                   "num-blocks-postprocessed");
-  updateIfPositive(metadata.numBlocksWithUpdate_, "num-blocks-with-update");
-}
 }  // namespace
 
 // ______________________________________________________________________________________________________
@@ -748,8 +721,8 @@ ProtoResult Join::computeResultForTwoIndexScans(bool requestLaziness) const {
         ad_utility::zipperJoinForBlocksWithoutUndef(leftBlocks, rightBlocks,
                                                     std::less{}, rowAdder);
 
-        updateRuntimeInfoForLazyScan(*leftScan, leftBlocks.details());
-        updateRuntimeInfoForLazyScan(*rightScan, rightBlocks.details());
+        leftScan->updateRuntimeInfoForLazyScan(leftBlocks.details());
+        rightScan->updateRuntimeInfoForLazyScan(rightBlocks.details());
 
         AD_CORRECTNESS_CHECK(leftBlocks.details().numBlocksRead_ <=
                              rightBlocks.details().numElementsRead_);
@@ -841,8 +814,8 @@ ProtoResult Join::computeResultForIndexScanAndIdTable(
             rightBlocks);
 
         if (std::holds_alternative<GeneratorWithDetails>(rightBlocks)) {
-          updateRuntimeInfoForLazyScan(
-              *scan, std::get<GeneratorWithDetails>(rightBlocks).details());
+          scan->updateRuntimeInfoForLazyScan(
+              std::get<GeneratorWithDetails>(rightBlocks).details());
         }
 
         auto localVocab = std::move(rowAdder.localVocab());
@@ -853,24 +826,16 @@ ProtoResult Join::computeResultForIndexScanAndIdTable(
 }
 
 // ______________________________________________________________________________________________________
-template <bool idTableIsRightInput>
 ProtoResult Join::computeResultForIndexScanAndLazyOperation(
     bool requestLaziness, std::shared_ptr<const Result> resultWithIdTable,
     ColumnIndex joinColTable, std::shared_ptr<IndexScan> scan,
     ColumnIndex joinColScan) const {
   // We first have to permute the columns.
-  auto [jcLeft, jcRight, numColsLeft, numColsRight] = [&]() {
-    return idTableIsRightInput
-               ? std::tuple{joinColScan, joinColTable, scan->getResultWidth(),
-                            _right->getResultWidth()}
-               : std::tuple{joinColTable, joinColScan, _left->getResultWidth(),
-                            scan->getResultWidth()};
-  }();
-
   AD_CORRECTNESS_CHECK(joinColScan == 0);
 
-  ad_utility::JoinColumnMapping joinColMap{
-      {{jcLeft, jcRight}}, numColsLeft, numColsRight};
+  ad_utility::JoinColumnMapping joinColMap{{{joinColTable, joinColScan}},
+                                           _left->getResultWidth(),
+                                           scan->getResultWidth()};
   auto resultPermutation = joinColMap.permutationResult();
   return createResult(
       requestLaziness,
@@ -893,24 +858,13 @@ ProtoResult Join::computeResultForIndexScanAndLazyOperation(
           // Note: The `zipperJoinForBlocksWithPotentialUndef` automatically
           // switches to a more efficient implementation if there are no UNDEF
           // values in any of the inputs.
-          ad_utility::zipperJoinForBlocksWithPotentialUndef(
-              left, right, std::less{}, rowAdder);
+          zipperJoinForBlocksWithPotentialUndef(left, right, std::less{},
+                                                rowAdder);
         };
-        const auto& indexScanPermutation = idTableIsRightInput
-                                               ? joinColMap.permutationLeft()
-                                               : joinColMap.permutationRight();
-        const auto& joinSidePermutation = idTableIsRightInput
-                                              ? joinColMap.permutationRight()
-                                              : joinColMap.permutationLeft();
-        if constexpr (idTableIsRightInput) {
-          doJoin(
-              convertGenerator(std::move(indexScanSide), indexScanPermutation),
-              convertGenerator(std::move(joinSide), joinSidePermutation));
-        } else {
-          doJoin(
-              convertGenerator(std::move(joinSide), joinSidePermutation),
-              convertGenerator(std::move(indexScanSide), indexScanPermutation));
-        }
+        doJoin(
+            convertGenerator(std::move(joinSide), joinColMap.permutationLeft()),
+            convertGenerator(std::move(indexScanSide),
+                             joinColMap.permutationRight()));
 
         auto localVocab = std::move(rowAdder.localVocab());
         return Result::IdTableVocabPair{std::move(rowAdder).resultTable(),

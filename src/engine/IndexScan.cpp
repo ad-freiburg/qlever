@@ -406,8 +406,7 @@ struct SharedGeneratorState {
   }
 };
 
-// Set the runtime info of the `scanTree` when it was lazily executed during a
-// join.
+// _____________________________________________________________________________
 void IndexScan::updateRuntimeInfoForLazyScan(
     const CompressedRelationReader::LazyScanMetadata& metadata) {
   updateRuntimeInformationWhenOptimizedOut(
