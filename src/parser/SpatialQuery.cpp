@@ -142,7 +142,8 @@ SpatialQuery::SpatialQuery(const SparqlTriple& triple) {
 
   // Add variables to configuration object
   AD_CONTRACT_CHECK(triple.s_.isVariable() && triple.o_.isVariable(),
-                    "Currently, SpatialJoin needs two variables");
+                    "Currently, both the subject and the object of the triple "
+                    "that specifices a spatial join have to be variables.");
   setVariable("left", triple.s_, left_);
   setVariable("right", triple.o_, right_);
 
