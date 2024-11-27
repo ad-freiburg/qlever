@@ -38,7 +38,7 @@ struct MagicServiceQuery {
    * @brief Add a parameter to the query from the given triple.
    * The predicate of the triple determines the parameter name and the object
    * of the triple determines the parameter value. The subject is ignored.
-   * Throws an exception if an unsupported algorithm is given or if the
+   * Throw an exception if an unsupported algorithm is given or if the
    * predicate contains an unknown parameter name.
    *
    * @param triple A SparqlTriple that contains the parameter info
@@ -59,6 +59,7 @@ struct MagicServiceQuery {
    */
   void addGraph(const GraphPatternOperation& childGraphPattern);
 
+ protected:
   // Utility functions for variables in the magic service configuration triples
   Variable getVariable(std::string_view parameter,
                        const TripleComponent& object) const;
