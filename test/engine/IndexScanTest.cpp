@@ -289,7 +289,7 @@ void testSetAndMakeScanWithPrefilterExpr(
                                         std::move(clonedPair),
                                         firstLastIncomplete, evaluationColumn);
   } else {
-    // Check our predicition that the prefilter with the given
+    // Check our prediction that the prefilter with the given
     // <PrefilterExpression, Variable> pair is not applicable (no updated
     // QueryExecutionTree is returned).
     ASSERT_FALSE(prefilterCanBeSet);

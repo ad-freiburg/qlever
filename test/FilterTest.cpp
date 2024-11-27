@@ -8,9 +8,8 @@
 #include "engine/Filter.h"
 #include "engine/ValuesForTesting.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
-#include "engine/sparqlExpressions/RelationalExpressions.h"
-#include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
+#include "engine/sparqlExpressions/SparqlExpression.h"
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
 
@@ -34,14 +33,13 @@ std::vector<IdTable> toVector(Result::Generator generator) {
   return result;
 }
 
-using namespace sparqlExpression;
-using namespace prefilterExpressions;
-
+// _____________________________________________________________________________
 void checkSetPrefilterExpressionVariablePair(
     QueryExecutionContext* qec, const Permutation::Enum& permutation,
-    SparqlTriple triple, std::unique_ptr<SparqlExpression> sparqlExpr,
-    std::unique_ptr<PrefilterExpression> prefilterExpr, ColumnIndex columnIdx,
-    bool prefilterIsApplicable) {
+    SparqlTriple triple,
+    std::unique_ptr<sparqlExpression::SparqlExpression> sparqlExpr,
+    std::unique_ptr<prefilterExpressions::PrefilterExpression> prefilterExpr,
+    ColumnIndex columnIdx, bool prefilterIsApplicable) {
   Filter filter{
       qec,
       ad_utility::makeExecutionTree<IndexScan>(qec, permutation, triple),
@@ -197,13 +195,9 @@ TEST(Filter, verifySetPrefilterExpressionVariablePairForIndexScanChild) {
       gtSprql(Variable{"?x"}, VocabId(10)), gt(VocabId(10)), 1, false);
 }
 
-template <typename Expr, typename... Args>
-static constexpr auto make(Args&&... args) {
-  return std::make_unique<Expr>(AD_FWD(args)...);
-}
-
 // _____________________________________________________________________________
 TEST(Filter, lazyChildMaterializedResultBinaryFilter) {
+  using namespace makeSparqlExpression;
   QueryExecutionContext* qec = ad_utility::testing::getQec();
   qec->getQueryTreeCache().clearAll();
   std::vector<IdTable> idTables;
@@ -214,10 +208,7 @@ TEST(Filter, lazyChildMaterializedResultBinaryFilter) {
   idTables.push_back(makeIdTableFromVector({{8}, {8}}, I));
 
   auto varX = Variable{"?x"};
-  using namespace sparqlExpression;
-  auto expr = makeUnaryNegateExpression(
-      make<LessThanExpression>(std::array<SparqlExpression::Ptr, 2>{
-          make<VariableExpression>(varX), make<IdExpression>(I(5))}));
+  auto expr = notSprqlExpr(ltSprql(varX, I(5)));
 
   ValuesForTesting values{
       qec, std::move(idTables), {Variable{"?x"}}, false, {0}};
