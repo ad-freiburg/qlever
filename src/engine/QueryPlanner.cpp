@@ -47,6 +47,7 @@
 #include "global/RuntimeParameters.h"
 #include "parser/Alias.h"
 #include "parser/GraphPatternOperation.h"
+#include "parser/MagicServiceIriConstants.h"
 #include "parser/SparqlParserHelpers.h"
 #include "util/Exception.h"
 

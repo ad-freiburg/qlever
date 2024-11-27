@@ -81,6 +81,12 @@ struct PreparedSpatialJoinParams {
   std::optional<size_t> maxResults_;
 };
 
+// The spatial join operation without a limit on the maximum number of results
+// can, in the worst case have a square number of results, but usually this is
+// not the case. 1 divided by this constant is the damping factor for the
+// estimated number of results.
+static const size_t SPATIAL_JOIN_MAX_DIST_SIZE_ESTIMATE = 1000;
+
 // This class is implementing a SpatialJoin operation. This operations joins
 // two tables, using their positional column. It supports nearest neighbor
 // search as well as search of all points within a given range.

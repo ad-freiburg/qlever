@@ -100,18 +100,6 @@ constexpr inline std::string_view MATCHINGWORD_VARIABLE_PREFIX =
 constexpr inline std::string_view LANGUAGE_PREDICATE =
     makeQleverInternalIriConst<"langtag">();
 
-// For backward compatibility: invocation of SpatialJoin via special predicates.
-static const std::string MAX_DIST_IN_METERS = "<max-distance-in-meters:";
-static const std::string NEAREST_NEIGHBORS = "<nearest-neighbors:";
-static constexpr auto MAX_DIST_IN_METERS_REGEX =
-    ctll::fixed_string{"<max-distance-in-meters:(?<dist>[0-9]+)>"};
-
-// The spatial join operation without a limit on the maximum number of results
-// can, in the worst case have a square number of results, but usually this is
-// not the case. 1 divided by this constant is the damping factor for the
-// estimated number of results.
-static const size_t SPATIAL_JOIN_MAX_DIST_SIZE_ESTIMATE = 1000;
-
 // TODO<joka921> Move them to their own file, make them strings, remove
 // duplications, etc.
 constexpr inline char XSD_STRING[] = "http://www.w3.org/2001/XMLSchema#string";
