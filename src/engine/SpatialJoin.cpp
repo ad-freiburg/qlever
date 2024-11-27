@@ -424,7 +424,7 @@ VariableToColumnMap SpatialJoin::computeVariableToColumnMap() const {
     // only the right child has been added
     variableToColumnMap[config_.left_] = makeUndefCol(ColumnIndex{0});
   } else {
-    auto addColumns = [&](VariableToColumnMap varColMap, size_t offset) {
+    auto addColumns = [&](const VariableToColumnMap& varColMap, size_t offset) {
       auto varColsVec = copySortedByColumnIndex(varColMap);
       for (size_t i = 0; i < varColsVec.size(); i++) {
         auto [var, colAndType] = varColsVec[i];
