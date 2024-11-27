@@ -476,7 +476,7 @@ class SpatialJoinVarColParamTest
             payloadVars.push_back(Variable{"?point1"});
             AD_EXPECT_THROW_WITH_MESSAGE(
                 computeAndCompareVarToColMaps(addDist, payloadVars, exp),
-                ::testing::ContainsRegex(
+                ::testing::HasSubstr(
                     "Variable '?point1' selected as payload to "
                     "spatial join but not present in right child"));
             payloadVars.pop_back();
@@ -485,7 +485,7 @@ class SpatialJoinVarColParamTest
             payloadVars.push_back(Variable{"?obj1"});
             AD_EXPECT_THROW_WITH_MESSAGE(
                 computeAndCompareVarToColMaps(addDist, payloadVars, exp),
-                ::testing::ContainsRegex(
+                ::testing::HasSubstr(
                     "Variable '?obj1' selected as payload to "
                     "spatial join but not present in right child"));
             payloadVars.pop_back();
@@ -494,7 +494,7 @@ class SpatialJoinVarColParamTest
             payloadVars.push_back(Variable{"?isThereSomebodyHere"});
             AD_EXPECT_THROW_WITH_MESSAGE(
                 computeAndCompareVarToColMaps(addDist, payloadVars, exp),
-                ::testing::ContainsRegex(
+                ::testing::HasSubstr(
                     "Variable '?isThereSomebodyHere' selected as payload to "
                     "spatial join but not present in right child"));
             payloadVars.pop_back();
@@ -504,7 +504,7 @@ class SpatialJoinVarColParamTest
               payloadVars.push_back(distVar);
               AD_EXPECT_THROW_WITH_MESSAGE(
                   computeAndCompareVarToColMaps(addDist, payloadVars, exp),
-                  ::testing::ContainsRegex(
+                  ::testing::HasSubstr(
                       "Variable '?distOfTheTwoObjects' selected as payload to "
                       "spatial join but not present in right child"));
               payloadVars.pop_back();
