@@ -14,7 +14,7 @@ namespace parsedQuery {
 
 // ____________________________________________________________________________
 void MagicServiceQuery::addBasicPattern(const BasicGraphPattern& pattern) {
-  for (SparqlTriple triple : pattern._triples) {
+  for (const SparqlTriple& triple : pattern._triples) {
     addParameter(triple);
   }
 }
@@ -23,7 +23,8 @@ void MagicServiceQuery::addBasicPattern(const BasicGraphPattern& pattern) {
 void MagicServiceQuery::addGraph(const GraphPatternOperation& op) {
   if (childGraphPattern_.has_value()) {
     throw MagicServiceException(
-        "A magic SERVICE query must not contain more than one graph pattern.");
+        "A magic SERVICE query must not contain more than one nested group "
+        "graph pattern.");
   }
   auto pattern = std::get<parsedQuery::GroupGraphPattern>(op);
   childGraphPattern_ = std::move(pattern._child);
