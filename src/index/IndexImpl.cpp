@@ -322,7 +322,7 @@ void IndexImpl::updateInputFileSpecificationsAndLog(
   // For a single input stream, show the name and whether we parse in parallel.
   // For multiple input streams, only show the number of streams.
   if (spec.size() == 1) {
-    AD_LOG_INFO << "Parsing triples from single input stream "
+    AD_LOG_INFO << "Processing triples from single input stream "
                 << spec.at(0).filename_ << " (parallel = "
                 << (spec.at(0).parseInParallel_ ? "true" : "false") << ") ..."
                 << std::endl;
