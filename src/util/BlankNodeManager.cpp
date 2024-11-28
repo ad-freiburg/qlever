@@ -4,6 +4,8 @@
 
 #include "util/BlankNodeManager.h"
 
+#include "util/Exception.h"
+
 namespace ad_utility {
 
 // _____________________________________________________________________________
@@ -42,29 +44,27 @@ BlankNodeManager::LocalBlankNodeManager::LocalBlankNodeManager(
     : blankNodeManager_(blankNodeManager) {}
 
 // _____________________________________________________________________________
-BlankNodeManager::LocalBlankNodeManager::~LocalBlankNodeManager() {
-  auto ptr = blankNodeManager_->usedBlocksSet_.wlock();
-  for (const auto& block : blocks_) {
-    AD_CONTRACT_CHECK(ptr->contains(block.blockIdx_));
-    ptr->erase(block.blockIdx_);
-  }
-}
-
-// _____________________________________________________________________________
 uint64_t BlankNodeManager::LocalBlankNodeManager::getId() {
-  if (blocks_.empty() || blocks_.back().nextIdx_ == idxAfterCurrentBlock_) {
-    blocks_.emplace_back(blankNodeManager_->allocateBlock());
-    idxAfterCurrentBlock_ = blocks_.back().nextIdx_ + blockSize_;
+  if (blocks_->empty() || blocks_->back().nextIdx_ == idxAfterCurrentBlock_) {
+    blocks_->emplace_back(blankNodeManager_->allocateBlock());
+    idxAfterCurrentBlock_ = blocks_->back().nextIdx_ + blockSize_;
   }
-  return blocks_.back().nextIdx_++;
+  return blocks_->back().nextIdx_++;
 }
 
 // _____________________________________________________________________________
 bool BlankNodeManager::LocalBlankNodeManager::containsBlankNodeIndex(
     uint64_t index) const {
-  return std::ranges::any_of(blocks_, [index](const Block& block) {
+  auto containsIndex = [index](const Block& block) {
     return index >= block.startIdx_ && index < block.nextIdx_;
-  });
+  };
+
+  return std::ranges::any_of(*blocks_, containsIndex) ||
+         std::ranges::any_of(
+             otherBlocks_,
+             [&](const std::shared_ptr<const std::vector<Block>>& blocks) {
+               return std::ranges::any_of(*blocks, containsIndex);
+             });
 }
 
 }  // namespace ad_utility

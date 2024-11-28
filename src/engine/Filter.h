@@ -61,13 +61,13 @@ class Filter : public Operation {
   ProtoResult computeResult(bool requestLaziness) override;
 
   // Perform the actual filter operation of the data provided.
-  template <int WIDTH>
-  void computeFilterImpl(IdTable& dynamicResultTable, const IdTable& input,
+  template <int WIDTH, ad_utility::SimilarTo<IdTable> Table>
+  void computeFilterImpl(IdTable& dynamicResultTable, Table&& input,
                          const LocalVocab& localVocab,
                          std::vector<ColumnIndex> sortedBy) const;
 
   // Run `computeFilterImpl` on the provided IdTable
-  IdTable filterIdTable(std::vector<ColumnIndex> sortedBy,
-                        const IdTable& idTable,
+  template <ad_utility::SimilarTo<IdTable> Table>
+  IdTable filterIdTable(std::vector<ColumnIndex> sortedBy, Table&& idTable,
                         const LocalVocab& localVocab) const;
 };
