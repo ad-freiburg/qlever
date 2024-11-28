@@ -68,6 +68,11 @@ class Operation {
     warnings_.push_back(std::move(warning));
   }
 
+  // If unbound variables that are used in a query are supposed to throw because
+  // the corresponding `RuntimeParameter` is set, then throw. Else add a
+  // warning.
+  void addWarningOrThrow(std::string warning);
+
   /**
    * @return A list of columns on which the result of this operation is sorted.
    */
