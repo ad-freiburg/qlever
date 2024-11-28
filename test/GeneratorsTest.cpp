@@ -96,6 +96,7 @@ TEST(Generators, generatorFromActionWithCallbackCreatesProperGenerator) {
     EXPECT_EQ(element, counter);
     ++counter;
   }
+  EXPECT_EQ(counter, 3);
 }
 
 // _____________________________________________________________________________
