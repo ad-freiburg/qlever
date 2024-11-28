@@ -142,6 +142,11 @@ class DeltaTriples {
   // `DeltaTriples` object.
   SharedLocatedTriplesSnapshot getSnapshot() const;
 
+  // Register the original `metadata` for the given `permutation`. This has to
+  // be called before any updates are processed.
+  void setOriginalMetadata(Permutation::Enum permutation,
+                           std::vector<CompressedBlockMetadata> metadata);
+
  private:
   // Find the position of the given triple in the given permutation and add it
   // to each of the six `LocatedTriplesPerBlock` maps (one per permutation).
