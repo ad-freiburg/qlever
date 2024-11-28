@@ -68,8 +68,8 @@ std::string_view MagicServiceQuery::extractParameterName(
   }
 
   // Get IRI without brackets
-  auto iri =
-      ad_utility::triple_component::Iri::fromIriref(magicIRI).getContent();
+  auto iriObj = ad_utility::triple_component::Iri::fromIriref(magicIRI);
+  auto iri = iriObj.getContent();
 
   // Remove prefix if applicable: this allows users to define the parameter
   // either as magicServicePrefix:parameterName or <parameterName>.

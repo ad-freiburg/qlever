@@ -863,10 +863,8 @@ GraphPatternOperation Visitor::visitSpatialQuery(
     // its result here to detect errors early and report them to the user with
     // highlighting. It's only a small struct so not much is wasted.
     spatialQuery.toSpatialJoinConfiguration();
-  } catch (const parsedQuery::MagicServiceException& magicExc) {
-    reportError(ctx, magicExc.what());
-  } catch (const parsedQuery::SpatialSearchException& magicExc) {
-    reportError(ctx, magicExc.what());
+  } catch (const std::exception& ex) {
+    reportError(ctx, ex.what());
   }
 
   return spatialQuery;

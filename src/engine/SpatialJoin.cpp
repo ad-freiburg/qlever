@@ -48,15 +48,24 @@ SpatialJoin::SpatialJoin(
 std::shared_ptr<SpatialJoin> SpatialJoin::addChild(
     std::shared_ptr<QueryExecutionTree> child,
     const Variable& varOfChild) const {
+  std::shared_ptr<SpatialJoin> sj;
   if (varOfChild == config_.left_) {
-    return std::make_shared<SpatialJoin>(getExecutionContext(), config_,
-                                         std::move(child), childRight_);
+    sj = std::make_shared<SpatialJoin>(getExecutionContext(), config_,
+                                       std::move(child), childRight_);
   } else if (varOfChild == config_.right_) {
-    return std::make_shared<SpatialJoin>(getExecutionContext(), config_,
-                                         childLeft_, std::move(child));
+    sj = std::make_shared<SpatialJoin>(getExecutionContext(), config_,
+                                       childLeft_, std::move(child));
   } else {
     AD_THROW("variable does not match");
   }
+
+  // The new spatial join after adding a child needs to inherit the warnings of
+  // its predecessor.
+  for (const auto& warning : getWarnings()) {
+    sj->addWarning(warning);
+  }
+
+  return sj;
 }
 
 // ____________________________________________________________________________
@@ -127,7 +136,8 @@ string SpatialJoin::getCacheKeyImpl() const {
 
     // Selected payload variables
     os << "payload:";
-    auto rightVarColFiltered = getVarColMapPayloadVars();
+    auto rightVarColFiltered =
+        copySortedByColumnIndex(getVarColMapPayloadVars());
     for (const auto& [var, info] : rightVarColFiltered) {
       os << " " << info.columnIndex_;
     }
@@ -315,7 +325,7 @@ VariableToColumnMap SpatialJoin::getVarColMapPayloadVars() const {
                     "column map can be computed.");
 
   auto payloadVariablesVisitor = [this]<typename T>(const T& value) {
-    auto varColMap = childRight_->getVariableColumns();
+    const auto& varColMap = childRight_->getVariableColumns();
     VariableToColumnMap newVarColMap;
 
     if constexpr (std::is_same_v<T, PayloadAllVariables>) {
@@ -323,17 +333,21 @@ VariableToColumnMap SpatialJoin::getVarColMapPayloadVars() const {
     } else {
       static_assert(std::is_same_v<T, std::vector<Variable>>);
       for (const auto& var : value) {
-        AD_CONTRACT_CHECK(varColMap.contains(var), [&]() {
-          return absl::StrCat("Variable '", var.name(),
-                              "' selected as payload to spatial join but not "
-                              "present in right child.");
-        });
-        newVarColMap[var] = varColMap[var];
+        if (varColMap.contains(var)) {
+          newVarColMap.insert_or_assign(var, varColMap.at(var));
+        } else {
+          // TODO<ullingerc> Find solution here: const - not-const
+          // addWarningOrThrow(
+          AD_THROW(absl::StrCat("Variable '", var.name(),
+                                "' selected as payload to spatial join but not "
+                                "present in right child."));
+        }
       }
       AD_CONTRACT_CHECK(
           varColMap.contains(config_.right_),
           "Right variable is not defined in right child of spatial join.");
-      newVarColMap[config_.right_] = varColMap[config_.right_];
+      newVarColMap.insert_or_assign(config_.right_,
+                                    varColMap.at(config_.right_));
     }
     return newVarColMap;
   };
@@ -349,8 +363,9 @@ PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
     return std::pair{idTablePtr, std::move(resTable)};
   };
 
-  auto getJoinCol = [](VariableToColumnMap varColMap,
+  auto getJoinCol = [](std::shared_ptr<QueryExecutionTree> child,
                        const Variable& childVariable) {
+    VariableToColumnMap varColMap = child->getVariableColumns();
     return varColMap[childVariable].columnIndex_;
   };
 
@@ -359,10 +374,8 @@ PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
   auto [idTableRight, resultRight] = getIdTable(childRight_);
 
   // Input table columns for the join
-  ColumnIndex leftJoinCol =
-      getJoinCol(childLeft_->getVariableColumns(), config_.left_);
-  VariableToColumnMap rightVarColMap = childRight_->getVariableColumns();
-  ColumnIndex rightJoinCol = getJoinCol(rightVarColMap, config_.right_);
+  ColumnIndex leftJoinCol = getJoinCol(childLeft_, config_.left_);
+  ColumnIndex rightJoinCol = getJoinCol(childRight_, config_.right_);
 
   // Payload cols and join col
   auto varsAndColInfo = copySortedByColumnIndex(getVarColMapPayloadVars());

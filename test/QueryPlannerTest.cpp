@@ -2195,23 +2195,42 @@ TEST(QueryPlanner, SpatialJoinLegacyPredicateSupport) {
                                          ::testing::_),
                                ::testing::ContainsRegex("unknown triple"));
 
-  // Nearest neighbors special predicate
+  // Test that the nearest neighbors special predicate is still accepted but
+  // produces a warning
   h::expect(
       "SELECT ?x ?y WHERE {"
       "?x <p> ?y."
       "?a <p> ?b."
       "?y <nearest-neighbors:2:500> ?b }",
-      h::SpatialJoin(500, 2, V{"?y"}, V{"?b"}, std::nullopt,
-                     PayloadAllVariables{}, S2, scan("?x", "<p>", "?y"),
-                     scan("?a", "<p>", "?b")));
+      h::QetWithWarnings(
+          {"special predicate <nearest-neighbors:...> is deprecated"},
+          h::SpatialJoin(500, 2, V{"?y"}, V{"?b"}, std::nullopt,
+                         PayloadAllVariables{}, S2, scan("?x", "<p>", "?y"),
+                         scan("?a", "<p>", "?b"))));
   h::expect(
       "SELECT ?x ?y WHERE {"
       "?x <p> ?y."
       "?a <p> ?b."
       "?y <nearest-neighbors:20> ?b }",
-      h::SpatialJoin(-1, 20, V{"?y"}, V{"?b"}, std::nullopt,
-                     PayloadAllVariables{}, S2, scan("?x", "<p>", "?y"),
-                     scan("?a", "<p>", "?b")));
+      h::QetWithWarnings(
+          {"special predicate <nearest-neighbors:...> is deprecated"},
+          h::SpatialJoin(-1, 20, V{"?y"}, V{"?b"}, std::nullopt,
+                         PayloadAllVariables{}, S2, scan("?x", "<p>", "?y"),
+                         scan("?a", "<p>", "?b"))));
+
+  AD_EXPECT_THROW_WITH_MESSAGE(h::expect("SELECT ?x ?y WHERE {"
+                                         "?x <p> ?y."
+                                         "?a <p> ?b."
+                                         "?y <nearest-neighbors:1:-200> ?b }",
+                                         ::testing::_),
+                               ::testing::ContainsRegex("unknown triple"));
+
+  AD_EXPECT_THROW_WITH_MESSAGE(h::expect("SELECT ?x ?y WHERE {"
+                                         "?x <p> ?y."
+                                         "?a <p> ?b."
+                                         "?y <nearest-neighbors:0:-1> ?b }",
+                                         ::testing::_),
+                               ::testing::ContainsRegex("unknown triple"));
 
   EXPECT_ANY_THROW(
       h::expect("SELECT ?x ?y WHERE {"

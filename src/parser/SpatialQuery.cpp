@@ -146,6 +146,8 @@ SpatialQuery::SpatialQuery(const SparqlTriple& triple) {
   // Helper to convert a ctre match to an integer
   auto matchToInt = [](std::string_view match) -> std::optional<size_t> {
     if (match.size() == 0) {
+      // We need to accept empty matches because the maximum distance argument
+      // to a <nearest-neighbors:...> predicate is optional.
       return std::nullopt;
     }
     size_t res = 0;
