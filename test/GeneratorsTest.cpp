@@ -4,6 +4,7 @@
 
 #include <gmock/gmock.h>
 
+#include "util/GTestHelpers.h"
 #include "util/Generator.h"
 #include "util/Generators.h"
 
@@ -109,4 +110,17 @@ TEST(Generators, generatorFromActionWithCallbackAbortsProperly) {
 
   // The end of the scope should clean up the generator without triggering the
   // test failure.
+}
+
+// _____________________________________________________________________________
+TEST(Generators, generatorFromActionWithCallbackPropagatesException) {
+  auto generator = generatorFromActionWithCallback<int>([](auto callback) {
+    callback(0);
+    throw std::runtime_error{"Test Exception"};
+  });
+  auto iterator = generator.begin();
+  ASSERT_NE(iterator, generator.end());
+  EXPECT_EQ(*iterator, 0);
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      ++iterator, ::testing::StrEq("Test Exception"), std::runtime_error);
 }
