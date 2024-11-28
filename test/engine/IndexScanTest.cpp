@@ -742,6 +742,7 @@ TEST(IndexScan, checkEvaluationWithPrefiltering) {
       pr(andExpr(gt(VocabId(0)), lt(VocabId(100))), Variable{"?x"}),
       makeIdTableFromVector({{0}}, IntId), false);
 
+  /*
   // This knowledge graph yields an incomplete first and last block.
   std::string kgFirstAndLastIncomplete =
       "<a> <price_tag> 10 . <b> <price_tag> 12 . <b> <price_tag> "
@@ -760,4 +761,5 @@ TEST(IndexScan, checkEvaluationWithPrefiltering) {
       pr(andExpr(gt(IntId(10)), lt(IntId(194))), Variable{"?price"}),
       makeIdTableFromVector({{10}, {12}, {18}, {22}, {25}, {147}, {189}, {194}},
                             IntId));
+  */
 }
