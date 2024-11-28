@@ -202,7 +202,7 @@ IndexImpl::buildOspWithPatterns(
             }
             queue.push(std::move(table));
           } else {
-            outputBufferTable.insertAtEnd(table.begin(), table.end());
+            outputBufferTable.insertAtEnd(table);
             if (outputBufferTable.size() >= bufferSize) {
               queue.push(std::move(outputBufferTable));
               outputBufferTable.clear();
@@ -674,30 +674,31 @@ auto IndexImpl::convertPartialToGlobalIds(
   auto getLookupTask = [&isQLeverInternalTriple, &writeQueue, &transformTriple,
                         &getWriteTask](Buffer triples,
                                        std::shared_ptr<Map> idMap) {
-    return
-        [&isQLeverInternalTriple, &writeQueue,
-         triples = std::make_shared<Buffer>(std::move(triples)),
-         idMap = std::move(idMap), &getWriteTask, &transformTriple]() mutable {
-          for (Buffer::row_reference triple : *triples) {
-            transformTriple(triple, *idMap);
-          }
-          auto [beginInternal, endInternal] = std::ranges::partition(
-              *triples, [&isQLeverInternalTriple](const auto& row) {
-                return !isQLeverInternalTriple(row);
-              });
-          IdTableStatic<NumColumnsIndexBuilding> internalTriples(
-              triples->getAllocator());
-          // TODO<joka921> We could leave the partitioned complete block as is,
-          // and change the interface of the compressed sorters s.t. we can
-          // push only a part of a block. We then would safe the copy of the
-          // internal triples here, but I am not sure whether this is worth it.
-          internalTriples.insertAtEnd(beginInternal, endInternal);
-          triples->resize(beginInternal - triples->begin());
+    return [&isQLeverInternalTriple, &writeQueue,
+            triples = std::make_shared<Buffer>(std::move(triples)),
+            idMap = std::move(idMap), &getWriteTask,
+            &transformTriple]() mutable {
+      for (Buffer::row_reference triple : *triples) {
+        transformTriple(triple, *idMap);
+      }
+      auto [beginInternal, endInternal] = std::ranges::partition(
+          *triples, [&isQLeverInternalTriple](const auto& row) {
+            return !isQLeverInternalTriple(row);
+          });
+      IdTableStatic<NumColumnsIndexBuilding> internalTriples(
+          triples->getAllocator());
+      // TODO<joka921> We could leave the partitioned complete block as is,
+      // and change the interface of the compressed sorters s.t. we can
+      // push only a part of a block. We then would safe the copy of the
+      // internal triples here, but I am not sure whether this is worth it.
+      internalTriples.insertAtEnd(*triples, beginInternal - triples->begin(),
+                                  endInternal - triples->begin());
+      triples->resize(beginInternal - triples->begin());
 
-          Buffers buffers{std::move(*triples), std::move(internalTriples)};
+      Buffers buffers{std::move(*triples), std::move(internalTriples)};
 
-          writeQueue.push(getWriteTask(std::move(buffers)));
-        };
+      writeQueue.push(getWriteTask(std::move(buffers)));
+    };
   };
 
   std::atomic<size_t> nextPartialVocabulary = 0;

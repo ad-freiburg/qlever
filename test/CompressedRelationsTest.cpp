@@ -334,7 +334,7 @@ void testCompressedRelations(const auto& inputsOriginalBeforeCopy,
     for (const auto& block :
          reader.lazyScan(scanSpec, blocks, additionalColumns,
                          cancellationHandle, locatedTriples)) {
-      table.insertAtEnd(block.begin(), block.end());
+      table.insertAtEnd(block);
     }
     checkThatTablesAreEqual(col1And2, table);
 
@@ -358,7 +358,7 @@ void testCompressedRelations(const auto& inputsOriginalBeforeCopy,
       for (const auto& block :
            reader.lazyScan(scanSpec, blocks, Permutation::ColumnIndices{},
                            cancellationHandle, locatedTriples)) {
-        tableWidthOne.insertAtEnd(block.begin(), block.end());
+        tableWidthOne.insertAtEnd(block);
       }
       checkThatTablesAreEqual(col3, tableWidthOne);
     };
