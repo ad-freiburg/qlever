@@ -758,7 +758,10 @@ struct BlockZipperJoinImpl {
   using LeftBlocks = typename LeftSide::CurrentBlocks;
   using RightBlocks = typename RightSide::CurrentBlocks;
 
-  // We can't define aliases for these concepts, so we use macros instead.
+// We can't define aliases for these concepts, so we use macros instead.
+#if defined(Side) || defined(Blocks)
+#error Side or Blocks are already defined
+#endif
 #define Side SameAsAny<LeftSide, RightSide> auto
 #define Blocks SameAsAny<LeftBlocks, RightBlocks> auto
 
