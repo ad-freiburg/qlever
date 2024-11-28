@@ -33,7 +33,6 @@ class Describe : public Operation {
   std::vector<QueryExecutionTree*> getChildren() override;
   string getCacheKeyImpl() const override;
 
- public:
   string getDescriptor() const override;
   size_t getResultWidth() const override;
   size_t getCostEstimate() override;

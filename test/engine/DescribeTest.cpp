@@ -113,9 +113,22 @@ TEST(Describe, simpleMembers) {
   EXPECT_FALSE(describe.knownEmptyResult());
 
   using namespace ::testing;
-  EXPECT_THAT(describe.getCacheKey(),
-              AllOf(HasSubstr("DESCRIBE"), HasSubstr("<s>"),
-                    Not(HasSubstr("<p>")), HasSubstr("Neutral Element")));
+  EXPECT_THAT(
+      describe.getCacheKey(),
+      AllOf(HasSubstr("DESCRIBE"), HasSubstr("<s>"), Not(HasSubstr("<p>")),
+            HasSubstr("Neutral Element"), Not(HasSubstr("Filtered"))));
+  {
+    auto parsedDescribe2 = parsedDescribe;
+    parsedDescribe2.datasetClauses_.defaultGraphs_.emplace(
+        {TripleComponent::Iri::fromIriref("<default-graph-1>")});
+    Describe describe2{
+        qec, ad_utility::makeExecutionTree<NeutralElementOperation>(qec),
+        parsedDescribe2};
+    EXPECT_THAT(describe2.getCacheKey(),
+                AllOf(HasSubstr("DESCRIBE"), HasSubstr("<s>"),
+                      Not(HasSubstr("<p>")), HasSubstr("Neutral Element"),
+                      HasSubstr("Filtered by Graphs:<default-graph-1>")));
+  }
 
   auto col = makeAlwaysDefinedColumn;
   using V = Variable;
