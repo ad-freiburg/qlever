@@ -19,6 +19,7 @@
 #include "global/Id.h"
 #include "global/RuntimeParameters.h"
 #include "util/Exception.h"
+#include "util/Generators.h"
 #include "util/HashMap.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 
@@ -435,76 +436,23 @@ Result::Generator Join::runLazyJoinAndConvertToGenerator(
         Result::IdTableVocabPair,
         std::function<void(IdTable&, LocalVocab&)>> auto action,
     OptionalPermutation permutation) const {
-  // TODO<joka921, RobinTF> This heavily mixes a synchronization algorithm with
-  // the actual logic. This should be refactored.
-  std::mutex mutex;
-  std::condition_variable cv;
-  enum struct State { Inner, Outer, Finished };
-  State state = State::Inner;
-  struct CancelException : public std::exception {};
-  std::variant<std::monostate, Result::IdTableVocabPair, std::exception_ptr>
-      storage;
-  ad_utility::JThread thread{
-      [&mutex, &cv, &state, &storage, &action, &permutation]() {
-        std::unique_lock lock(mutex);
-        auto wait = [&]() {
-          cv.wait(lock, [&]() { return state != State::Outer; });
-          if (state == State::Finished) {
-            throw CancelException{};
-          }
+  return ad_utility::generatorFromActionWithCallback<Result::IdTableVocabPair>(
+      [action = std::move(action), permutation = std::move(permutation)](
+          std::function<void(Result::IdTableVocabPair)> callback) {
+        auto yieldValue = [&permutation,
+                           &callback](Result::IdTableVocabPair value) {
+          applyPermutation(value.idTable_, permutation);
+          callback(std::move(value));
         };
 
-        auto writeValue = [&cv, &state, &storage](auto value) noexcept {
-          storage = std::move(value);
-          state = State::Outer;
-          cv.notify_one();
-        };
-        auto writeValueAndWait = [&state, &permutation, &writeValue,
-                                  &wait](Result::IdTableVocabPair value) {
-          AD_CORRECTNESS_CHECK(state == State::Inner);
-          applyPermutation(value.idTable_, permutation);
-          writeValue(std::move(value));
-          wait();
-        };
-        auto addValue = [&writeValueAndWait](IdTable& idTable,
-                                             LocalVocab& localVocab) {
-          if (idTable.size() < CHUNK_SIZE) {
-            return;
-          }
-          writeValueAndWait({std::move(idTable), std::move(localVocab)});
-        };
-        try {
-          auto finalValue = action(addValue);
-          if (!finalValue.idTable_.empty()) {
-            writeValueAndWait(std::move(finalValue));
-          }
-          writeValue(std::monostate{});
-        } catch (...) {
-          writeValue(std::current_exception());
-        }
-      }};
-  std::unique_lock lock{mutex};
-  cv.wait(lock, [&state]() { return state == State::Outer; });
-  auto cleanup = absl::Cleanup{[&cv, &state, &lock]() {
-    state = State::Finished;
-    lock.unlock();
-    cv.notify_one();
-  }};
-  while (true) {
-    // Wait for read phase.
-    cv.wait(lock, [&state] { return state == State::Outer; });
-    if (std::holds_alternative<std::monostate>(storage)) {
-      break;
-    }
-    if (std::holds_alternative<std::exception_ptr>(storage)) {
-      std::rethrow_exception(std::get<std::exception_ptr>(storage));
-    }
-    co_yield std::get<Result::IdTableVocabPair>(storage);
-    state = State::Inner;
-    lock.unlock();
-    cv.notify_one();
-    lock.lock();
-  }
+        yieldValue(
+            action([&yieldValue](IdTable& idTable, LocalVocab& localVocab) {
+              if (idTable.size() < CHUNK_SIZE) {
+                return;
+              }
+              yieldValue({std::move(idTable), std::move(localVocab)});
+            }));
+      });
 }
 
 // _____________________________________________________________________________

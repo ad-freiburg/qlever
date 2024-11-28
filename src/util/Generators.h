@@ -4,10 +4,13 @@
 
 #pragma once
 
+#include <absl/cleanup/cleanup.h>
+
 #include <optional>
 
 #include "util/Generator.h"
 #include "util/TypeTraits.h"
+#include "util/jthread.h"
 
 namespace ad_utility {
 
@@ -35,6 +38,67 @@ cppcoro::generator<T> wrapGeneratorWithCache(
   }
   if (aggregatedData.has_value()) {
     onFullyCached(std::move(aggregatedData).value());
+  }
+}
+
+// Convert a callback-based action into a generator. The action is expected to
+// call a callback being passed to it with the next value to yield.
+template <typename T>
+cppcoro::generator<T> generatorFromActionWithCallback(
+    std::invocable<std::function<void(T)>> auto action) {
+  std::mutex mutex;
+  std::condition_variable cv;
+  enum struct State { Inner, Outer, Finished };
+  State state = State::Inner;
+  struct CancelException : public std::exception {};
+  std::variant<std::monostate, T, std::exception_ptr> storage;
+  ad_utility::JThread thread{[&mutex, &cv, &state, &storage, &action]() {
+    std::unique_lock lock(mutex);
+    auto wait = [&]() {
+      cv.wait(lock, [&]() { return state != State::Outer; });
+      if (state == State::Finished) {
+        throw CancelException{};
+      }
+    };
+
+    auto writeValue = [&cv, &state, &storage](auto value) noexcept {
+      storage = std::move(value);
+      state = State::Outer;
+      cv.notify_one();
+    };
+    auto writeValueAndWait = [&state, &writeValue, &wait](T value) {
+      AD_CORRECTNESS_CHECK(state == State::Inner);
+      writeValue(std::move(value));
+      wait();
+    };
+    try {
+      action(writeValueAndWait);
+      writeValue(std::monostate{});
+    } catch (...) {
+      writeValue(std::current_exception());
+    }
+  }};
+  std::unique_lock lock{mutex};
+  cv.wait(lock, [&state]() { return state == State::Outer; });
+  auto cleanup = absl::Cleanup{[&cv, &state, &lock]() {
+    state = State::Finished;
+    lock.unlock();
+    cv.notify_one();
+  }};
+  while (true) {
+    // Wait for read phase.
+    cv.wait(lock, [&state] { return state == State::Outer; });
+    if (std::holds_alternative<std::monostate>(storage)) {
+      break;
+    }
+    if (std::holds_alternative<std::exception_ptr>(storage)) {
+      std::rethrow_exception(std::get<std::exception_ptr>(storage));
+    }
+    co_yield std::get<T>(storage);
+    state = State::Inner;
+    lock.unlock();
+    cv.notify_one();
+    lock.lock();
   }
 }
 };  // namespace ad_utility

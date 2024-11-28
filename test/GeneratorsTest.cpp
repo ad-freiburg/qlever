@@ -7,6 +7,7 @@
 #include "util/Generator.h"
 #include "util/Generators.h"
 
+using ad_utility::generatorFromActionWithCallback;
 using ad_utility::wrapGeneratorWithCache;
 using cppcoro::generator;
 using ::testing::Optional;
@@ -80,4 +81,32 @@ TEST(Generators, testAggregationCutoff) {
   EXPECT_EQ(loopCounter, 2);
   EXPECT_EQ(callCounter, 1);
   EXPECT_FALSE(called);
+}
+
+// _____________________________________________________________________________
+TEST(Generators, generatorFromActionWithCallbackCreatesProperGenerator) {
+  auto generator = generatorFromActionWithCallback<int>([](auto callback) {
+    callback(0);
+    callback(1);
+    callback(2);
+  });
+  int counter = 0;
+  for (int element : generator) {
+    EXPECT_EQ(element, counter);
+    ++counter;
+  }
+}
+
+// _____________________________________________________________________________
+TEST(Generators, generatorFromActionWithCallbackAbortsProperly) {
+  auto generator = generatorFromActionWithCallback<int>([](auto callback) {
+    callback(0);
+    ADD_FAILURE() << "Code should abort before this";
+  });
+  auto iterator = generator.begin();
+  ASSERT_NE(iterator, generator.end());
+  EXPECT_EQ(*iterator, 0);
+
+  // The end of the scope should clean up the generator without triggering the
+  // test failure.
 }
