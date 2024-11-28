@@ -894,15 +894,31 @@ TEST_F(LocatedTriplesTest, augmentedMetadataGraphInfo) {
     // triples have too many distinct graphs.
     ASSERT_TRUE(actualMetadata[1].graphInfo_.has_value());
     std::vector<IdTriple<0>> triples;
+    // Note: The `30` is an offset to guarantee that the added graphs are not
+    // contained in the located triples before.
     for (size_t i = 30; i < 30 + 2 * MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA;
          ++i) {
       auto tr = T3;
       tr.ids_.at(ADDITIONAL_COLUMN_GRAPH_ID) = V(i);
       triples.push_back(tr);
     }
-    // Add the located triples.
+
+    size_t numGraphsBefore = actualMetadata[1].graphInfo_.value().size();
+    size_t numGraphsToMax =
+        MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA - numGraphsBefore;
+
+    // Add the exact amount of graphs such that we are at the maximum number of
+    // stored graphs.
     locatedTriplesPerBlock.add(LocatedTriple::locateTriplesInPermutation(
-        triples, metadata, {0, 1, 2}, true, handle));
+        std::span{triples}.subspan(0, numGraphsToMax), metadata, {0, 1, 2},
+        true, handle));
+    actualMetadata = locatedTriplesPerBlock.getAugmentedMetadata();
+    ASSERT_TRUE(actualMetadata[1].graphInfo_.has_value());
+
+    // Adding one more graph will exceed the maximum.
+    locatedTriplesPerBlock.add(LocatedTriple::locateTriplesInPermutation(
+        std::span{triples}.subspan(numGraphsToMax, numGraphsToMax + 1),
+        metadata, {0, 1, 2}, true, handle));
     actualMetadata = locatedTriplesPerBlock.getAugmentedMetadata();
     ASSERT_FALSE(actualMetadata[1].graphInfo_.has_value());
   }
