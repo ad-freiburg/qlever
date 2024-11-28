@@ -888,7 +888,7 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
   // `Permutation`class, but we first have to deal with The delta triples for
   // the additional permutations.
   auto setMetadata = [this](const Permutation& p) {
-    deltaTriplesManager().modify([&](DeltaTriples& deltaTriples) {
+    deltaTriplesManager().modify([&p](DeltaTriples& deltaTriples) {
       deltaTriples.setOriginalMetadata(p.permutation(),
                                        p.metaData().blockData());
     });
