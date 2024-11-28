@@ -4,8 +4,8 @@
 
 #include <gmock/gmock.h>
 
-#include "util/CacheableGenerator.h"
 #include "util/Generator.h"
+#include "util/Generators.h"
 
 using ad_utility::wrapGeneratorWithCache;
 using cppcoro::generator;
@@ -18,7 +18,7 @@ generator<uint32_t> testGenerator(uint32_t range) {
 }
 
 // _____________________________________________________________________________
-TEST(CacheableGenerator, testAggregation) {
+TEST(Generators, testAggregation) {
   bool called = false;
   auto gen = wrapGeneratorWithCache(
       testGenerator(4),
@@ -44,7 +44,7 @@ TEST(CacheableGenerator, testAggregation) {
 }
 
 // _____________________________________________________________________________
-TEST(CacheableGenerator, testEmptyGenerator) {
+TEST(Generators, testEmptyGenerator) {
   bool called = false;
   auto gen = wrapGeneratorWithCache(
       testGenerator(0),
@@ -62,7 +62,7 @@ TEST(CacheableGenerator, testEmptyGenerator) {
 }
 
 // _____________________________________________________________________________
-TEST(CacheableGenerator, testAggregationCutoff) {
+TEST(Generators, testAggregationCutoff) {
   uint32_t callCounter = 0;
   bool called = false;
   auto gen = wrapGeneratorWithCache(
