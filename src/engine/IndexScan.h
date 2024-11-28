@@ -76,7 +76,8 @@ class IndexScan final : public Operation {
   // if necessary.
   std::optional<std::shared_ptr<QueryExecutionTree>>
   setPrefilterGetUpdatedQueryExecutionTree(
-      std::vector<PrefilterVariablePair> prefilterVariablePairs) override;
+      const std::vector<PrefilterVariablePair>& prefilterVariablePairs)
+      const override;
 
   size_t numVariables() const { return numVariables_; }
 
@@ -195,7 +196,7 @@ class IndexScan final : public Operation {
   // If `isUnconstrained()` yields true, return the blocks as given or the
   // prefiltered blocks (if `prefilter_` has value). If `isUnconstrained()` is
   // false, return `std::nullopt`.
-  void applyPefilterIfPossible(
+  void applyPrefilterIfPossible(
       std::vector<CompressedBlockMetadata>& blocks) const;
 
   // Helper functions for the public `getLazyScanFor...` methods and

@@ -157,7 +157,7 @@ vector<ColumnIndex> IndexScan::resultSortedOn() const {
 // _____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
 IndexScan::setPrefilterGetUpdatedQueryExecutionTree(
-    std::vector<PrefilterVariablePair> prefilterVariablePairs) {
+    const std::vector<PrefilterVariablePair>& prefilterVariablePairs) const {
   auto optSortedVarColIdxPair =
       getSortedVariableAndMetadataColumnIndexForPrefiltering();
   if (!optSortedVarColIdxPair.has_value()) {
@@ -342,15 +342,15 @@ IndexScan::getBlockMetadataOptionallyPrefiltered() const {
   if (optBlockSpan.has_value()) {
     const auto& blockSpan = optBlockSpan.value();
     optBlocks = {blockSpan.begin(), blockSpan.end()};
-    applyPefilterIfPossible(optBlocks.value());
+    applyPrefilterIfPossible(optBlocks.value());
   }
   return optBlocks;
 }
 
 // _____________________________________________________________________________
-void IndexScan::applyPefilterIfPossible(
+void IndexScan::applyPrefilterIfPossible(
     std::vector<CompressedBlockMetadata>& blocks) const {
-  if (prefilter_.has_value() && getLimit().isUnconstrained()) {
+  if (prefilter_.has_value()) {
     // Apply the prefilter on given blocks.
     auto& [prefilterExpr, columnIndex] = prefilter_.value();
     blocks = prefilterExpr->evaluate(blocks, columnIndex);
@@ -360,7 +360,6 @@ void IndexScan::applyPefilterIfPossible(
 // _____________________________________________________________________________
 Permutation::IdTableGenerator IndexScan::getLazyScan(
     std::vector<CompressedBlockMetadata> blocks) const {
-  applyPefilterIfPossible(blocks);
   // If there is a LIMIT or OFFSET clause that constrains the scan
   // (which can happen with an explicit subquery), we cannot use the prefiltered
   // blocks, as we currently have no mechanism to include limits and offsets
@@ -368,6 +367,13 @@ Permutation::IdTableGenerator IndexScan::getLazyScan(
   auto filteredBlocks = getLimit().isUnconstrained()
                             ? std::optional(std::move(blocks))
                             : std::nullopt;
+  if (filteredBlocks.has_value()) {
+    // Note: The prefilter expression applied with applyPrefilterIfPossible()
+    // is not related to the prefilter procedure mentioned in the comment above.
+    // If this IndexScan owns a <PrefilterExpression, ColumnIdx> pair, it can
+    // be applied.
+    applyPrefilterIfPossible(filteredBlocks.value());
+  }
   return getScanPermutation().lazyScan(getScanSpecification(), filteredBlocks,
                                        additionalColumns(), cancellationHandle_,
                                        locatedTriplesSnapshot(), getLimit());

@@ -107,7 +107,7 @@ size_t QueryExecutionTree::getSizeEstimate() {
 //_____________________________________________________________________________
 std::optional<std::shared_ptr<QueryExecutionTree>>
 QueryExecutionTree::setPrefilterGetUpdatedQueryExecutionTree(
-    std::vector<Operation::PrefilterVariablePair> prefilterPairs) const {
+    std::vector<Operation::PrefilterVariablePair>& prefilterPairs) const {
   AD_CONTRACT_CHECK(rootOperation_);
   VariableToColumnMap varToColMap = getVariableColumns();
   std::erase_if(prefilterPairs, [&varToColMap](const auto& pair) {
@@ -118,7 +118,7 @@ QueryExecutionTree::setPrefilterGetUpdatedQueryExecutionTree(
     return std::nullopt;
   } else {
     return rootOperation_->setPrefilterGetUpdatedQueryExecutionTree(
-        std::move(prefilterPairs));
+        prefilterPairs);
   }
 }
 

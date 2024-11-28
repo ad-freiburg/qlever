@@ -61,10 +61,10 @@ class Filter : public Operation {
 
   // The method is directly invoked with the construction of this `Filter`
   // object. Its implementation retrieves <PrefilterExpression, Variable> pairs
-  // from the corresponding `SparqlExpression` and calls
-  // `QueryExecutionTree::setPrefilterGetUpdatedQueryExecutionTree()` on those
-  // pair values. If necessary the `QueryExecutionTree` for this entity will be
-  // updated.
+  // from the corresponding `SparqlExpression` and uses them to call
+  // `QueryExecutionTree::setPrefilterGetUpdatedQueryExecutionTree()` on the
+  // `subtree_`. If necessary the `QueryExecutionTree` for this
+  // entity will be updated.
   void setPrefilterExpressionForChildren();
 
   ProtoResult computeResult(bool requestLaziness) override;

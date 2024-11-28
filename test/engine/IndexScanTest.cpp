@@ -186,6 +186,7 @@ const auto testSetAndMakeScanWithPrefilterExpr =
        source_location l = source_location::current()) {
       auto t = generateLocationTrace(l);
       IndexScan scan{getQec(kg), permutation, triple};
+      auto variable = pr.second;
       auto optUpdatedQet = scan.setPrefilterGetUpdatedQueryExecutionTree(
           makeFilterExpression::filterHelper::makePrefilterVec(std::move(pr)));
       if (optUpdatedQet.has_value()) {
@@ -197,7 +198,8 @@ const auto testSetAndMakeScanWithPrefilterExpr =
         const IdTable& idTableFiltered = updatedQet->getRootOperation()
                                              ->computeResultOnlyForTesting()
                                              .idTable();
-        auto isColumnIdSpan = idTableFiltered.getColumn(0);
+        auto isColumnIdSpan =
+            idTableFiltered.getColumn(updatedQet->getVariableColumn(variable));
         auto expectedColumnIdSpan = idTableWithExpectedColumn.getColumn(0);
         ASSERT_EQ(
             (std::vector<Id>{isColumnIdSpan.begin(), isColumnIdSpan.end()}),
@@ -695,7 +697,6 @@ TEST(IndexScan, SetPrefilterVariablePairAndCheckCacheKey) {
 TEST(IndexScan, checkEvaluationWithPrefiltering) {
   using namespace makeFilterExpression;
   using namespace filterHelper;
-  using I = TripleComponent::Iri;
   std::string kg =
       "<P1> <price_tag> 10 . <P2> <price_tag> 12 . <P3> <price_tag> "
       "18 . <P4> <price_tag> 22 . <P5> <price_tag> 25 . <P6> "
@@ -747,16 +748,16 @@ TEST(IndexScan, checkEvaluationWithPrefiltering) {
       "18 . <b> <price_tag> 22 . <b> <price_tag> 25 . <b> "
       "<price_tag> 147 . <b> <price_tag> 189 . <c> <price_tag> 194 "
       ".";
-  triple = {I::fromIriref("<b>"), "<price_tag>", Tc{Variable{"?price"}}};
   // The following test verifies that the prefilter procedure is successfully
   // applicable under the condition that the first and last block are
   // potentially incomplete.
   testSetAndMakeScanWithPrefilterExpr(
-      kgFirstAndLastIncomplete, triple, Permutation::PSO,
+      kgFirstAndLastIncomplete, triple, Permutation::POS,
       pr(orExpr(gt(IntId(100)), le(IntId(10))), Variable{"?price"}),
-      makeIdTableFromVector({{12}, {25}, {147}, {189}}, IntId));
+      makeIdTableFromVector({{10}, {12}, {25}, {147}, {189}, {194}}, IntId));
   testSetAndMakeScanWithPrefilterExpr(
-      kgFirstAndLastIncomplete, triple, Permutation::SPO,
+      kgFirstAndLastIncomplete, triple, Permutation::POS,
       pr(andExpr(gt(IntId(10)), lt(IntId(194))), Variable{"?price"}),
-      makeIdTableFromVector({{12}, {18}, {22}, {25}, {147}, {189}}, IntId));
+      makeIdTableFromVector({{10}, {12}, {18}, {22}, {25}, {147}, {189}, {194}},
+                            IntId));
 }
