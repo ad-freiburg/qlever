@@ -743,8 +743,7 @@ struct AlwaysFalse {
 // if they become empty at one point in the algorithm.
 template <IsJoinSide LeftSide, IsJoinSide RightSide, typename LessThan,
           typename CompatibleRowAction,
-          ad_utility::InvocableWithExactReturnType<
-              bool, typename LeftSide::ProjectedEl>
+          InvocableWithExactReturnType<bool, typename LeftSide::ProjectedEl>
               IsUndef = AlwaysFalse>
 struct BlockZipperJoinImpl {
   // The left and right inputs of the join
@@ -755,6 +754,13 @@ struct BlockZipperJoinImpl {
   // The callback that is called for each pair of matching rows.
   CompatibleRowAction& compatibleRowAction_;
   [[no_unique_address]] IsUndef isUndefined_{};
+
+  using LeftBlocks = typename LeftSide::CurrentBlocks;
+  using RightBlocks = typename RightSide::CurrentBlocks;
+
+  // We can't define aliases for these concepts, so we use macros instead.
+#define Side SameAsAny<LeftSide, RightSide> auto
+#define Blocks SameAsAny<LeftBlocks, RightBlocks> auto
 
   // Type alias for the result of the projection. Elements from the left and
   // right input must be projected to the same type.
@@ -771,10 +777,9 @@ struct BlockZipperJoinImpl {
   // Recompute the `currentEl`. It is the minimum of the last element in the
   // first block of either of the join sides.
   ProjectedEl getCurrentEl() {
-    auto getFirst =
-        [](const ad_utility::SameAsAny<LeftSide, RightSide> auto& side) {
-          return side.projection_(side.currentBlocks_.front().back());
-        };
+    auto getFirst = [](const Side& side) {
+      return side.projection_(side.currentBlocks_.front().back());
+    };
     return std::min(getFirst(leftSide_), getFirst(rightSide_), lessThan_);
   }
 
@@ -786,9 +791,7 @@ struct BlockZipperJoinImpl {
   // blocks that contain elements <= `currentEl` have been added, and `false` if
   // the function returned because 3 blocks were added without fulfilling the
   // condition.
-  bool fillEqualToCurrentEl(
-      ad_utility::SameAsAny<LeftSide, RightSide> auto& side,
-      const ProjectedEl& currentEl) {
+  bool fillEqualToCurrentEl(Side& side, const ProjectedEl& currentEl) {
     auto& it = side.it_;
     auto& end = side.end_;
     for (size_t numBlocksRead = 0; it != end && numBlocksRead < 3;
@@ -832,10 +835,8 @@ struct BlockZipperJoinImpl {
   // `rightSide_.currentBlocks`) s.t. only elements `> lastProcessedElement`
   // remain. This effectively removes all blocks completely, except maybe the
   // last one.
-  void removeEqualToCurrentEl(
-      ad_utility::SameAsAny<typename LeftSide::CurrentBlocks,
-                            typename RightSide::CurrentBlocks> auto& blocks,
-      const ProjectedEl& lastProcessedElement) {
+  void removeEqualToCurrentEl(Blocks& blocks,
+                              const ProjectedEl& lastProcessedElement) {
     // Erase all but the last block.
     AD_CORRECTNESS_CHECK(!blocks.empty());
     if (blocks.size() > 1 && !blocks.front().empty()) {
@@ -859,9 +860,7 @@ struct BlockZipperJoinImpl {
   // * A reference to the first full block
   // * The currently active subrange of that block
   // * An iterator pointing to the first element ` >= currentEl` in the block.
-  auto getFirstBlock(ad_utility::SameAsAny<
-                         typename LeftSide::CurrentBlocks,
-                         typename RightSide::CurrentBlocks> auto& currentBlocks,
+  auto getFirstBlock(const Blocks& currentBlocks,
                      const ProjectedEl& currentEl) {
     AD_CORRECTNESS_CHECK(!currentBlocks.empty());
     const auto& first = currentBlocks.at(0);
@@ -870,8 +869,7 @@ struct BlockZipperJoinImpl {
   }
 
   // Check if a side contains undefined values.
-  static bool hasUndef(
-      const ad_utility::SameAsAny<LeftSide, RightSide> auto& side) {
+  static bool hasUndef(const Side& side) {
     if constexpr (potentiallyHasUndef) {
       return !side.undefBlocks_.empty();
     }
@@ -880,8 +878,8 @@ struct BlockZipperJoinImpl {
 
   // Combine all elements from all blocks on the left with all elements from all
   // blocks on the right and add them to the result.
-  void addCartesianProduct(const LeftSide::CurrentBlocks& blocksLeft,
-                           const RightSide::CurrentBlocks& blocksRight) {
+  void addCartesianProduct(const LeftBlocks& blocksLeft,
+                           const RightBlocks& blocksRight) {
     // TODO<C++23> use `std::views::cartesian_product`.
     for (const auto& lBlock : blocksLeft) {
       for (const auto& rBlock : blocksRight) {
@@ -899,8 +897,7 @@ struct BlockZipperJoinImpl {
   // join.
   template <bool DoOptionalJoin>
   void addNonMatchingRowsFromLeftForOptionalJoin(
-      const LeftSide::CurrentBlocks& blocksLeft,
-      const RightSide::CurrentBlocks& blocksRight) {
+      const LeftBlocks& blocksLeft, const RightBlocks& blocksRight) {
     if constexpr (DoOptionalJoin) {
       if (!hasUndef(rightSide_) &&
           std::ranges::all_of(
@@ -921,8 +918,7 @@ struct BlockZipperJoinImpl {
   // Call `compatibleRowAction` for all pairs of elements in the Cartesian
   // product of the blocks in `blocksLeft` and `blocksRight`.
   template <bool DoOptionalJoin>
-  void addAll(const LeftSide::CurrentBlocks& blocksLeft,
-              const RightSide::CurrentBlocks& blocksRight) {
+  void addAll(const LeftBlocks& blocksLeft, const RightBlocks& blocksRight) {
     addNonMatchingRowsFromLeftForOptionalJoin<DoOptionalJoin>(blocksLeft,
                                                               blocksRight);
     addCartesianProduct(blocksLeft, blocksRight);
@@ -933,10 +929,7 @@ struct BlockZipperJoinImpl {
   // `currentEl`. Effectively, these subranges cover all the blocks completely
   // except maybe the last one, which might contain elements `> currentEl` at
   // the end.
-  auto getEqualToCurrentEl(const ad_utility::SameAsAny<
-                               typename LeftSide::CurrentBlocks,
-                               typename RightSide::CurrentBlocks> auto& blocks,
-                           const ProjectedEl& currentEl) {
+  auto getEqualToCurrentEl(const Blocks& blocks, const ProjectedEl& currentEl) {
     auto result = blocks;
     if (result.empty()) {
       return result;
@@ -1005,10 +998,9 @@ struct BlockZipperJoinImpl {
   // The fully joined parts of the block are then removed from
   // `currentBlocksLeft/Right`, as they are not needed anymore.
   template <bool DoOptionalJoin>
-  void joinAndRemoveLessThanCurrentEl(
-      LeftSide::CurrentBlocks& currentBlocksLeft,
-      RightSide::CurrentBlocks& currentBlocksRight,
-      const ProjectedEl& currentEl) {
+  void joinAndRemoveLessThanCurrentEl(LeftBlocks& currentBlocksLeft,
+                                      RightBlocks& currentBlocksRight,
+                                      const ProjectedEl& currentEl) {
     // Get the first blocks.
     auto [fullBlockLeft, subrangeLeft, currentElItL] =
         getFirstBlock(currentBlocksLeft, currentEl);
@@ -1061,8 +1053,7 @@ struct BlockZipperJoinImpl {
 
   // If the `targetBuffer` is empty, read the next nonempty block from `[it,
   // end)` if there is one.
-  void fillWithAtLeastOne(
-      ad_utility::SameAsAny<LeftSide, RightSide> auto& side) {
+  void fillWithAtLeastOne(Side& side) {
     auto& targetBuffer = side.currentBlocks_;
     auto& it = side.it_;
     const auto& end = side.end_;
@@ -1104,8 +1095,8 @@ struct BlockZipperJoinImpl {
   // `leftBlocks` and/or `rightBlocks` with their respective counterpart in
   // `undefBlocks_`.
   void joinWithUndefBlocks(BlockStatus blockStatus,
-                           const LeftSide::CurrentBlocks& leftBlocks,
-                           const RightSide::CurrentBlocks& rightBlocks) {
+                           const LeftBlocks& leftBlocks,
+                           const RightBlocks& rightBlocks) {
     if (blockStatus == BlockStatus::allFilled ||
         blockStatus == BlockStatus::leftMissing) {
       addCartesianProduct(leftBlocks, rightSide_.undefBlocks_);
@@ -1135,23 +1126,19 @@ struct BlockZipperJoinImpl {
     auto equalToCurrentElRight =
         getEqualToCurrentEl(currentBlocksRight, currentEl);
 
-    auto getNextBlocks =
-        [this, &currentEl, &blockStatus](
-            ad_utility::SameAsAny<typename LeftSide::CurrentBlocks,
-                                  typename RightSide::CurrentBlocks> auto&
-                target,
-            ad_utility::SameAsAny<LeftSide, RightSide> auto& side) {
-          // Explicit this to avoid false positive warning in clang.
-          this->removeEqualToCurrentEl(side.currentBlocks_, currentEl);
-          bool allBlocksWereFilled = fillEqualToCurrentEl(side, currentEl);
-          if (side.currentBlocks_.empty()) {
-            AD_CORRECTNESS_CHECK(allBlocksWereFilled);
-          }
-          target = getEqualToCurrentEl(side.currentBlocks_, currentEl);
-          if (allBlocksWereFilled) {
-            blockStatus = BlockStatus::allFilled;
-          }
-        };
+    auto getNextBlocks = [this, &currentEl, &blockStatus](Blocks& target,
+                                                          Side& side) {
+      // Explicit this to avoid false positive warning in clang.
+      this->removeEqualToCurrentEl(side.currentBlocks_, currentEl);
+      bool allBlocksWereFilled = fillEqualToCurrentEl(side, currentEl);
+      if (side.currentBlocks_.empty()) {
+        AD_CORRECTNESS_CHECK(allBlocksWereFilled);
+      }
+      target = getEqualToCurrentEl(side.currentBlocks_, currentEl);
+      if (allBlocksWereFilled) {
+        blockStatus = BlockStatus::allFilled;
+      }
+    };
 
     // We are only guaranteed to have all relevant blocks from one side, so we
     // also need to pass through the remaining blocks from the other side.
@@ -1208,9 +1195,7 @@ struct BlockZipperJoinImpl {
   // those blocks with the undef blocks from the other side.
   // `reverse` is used to determine if the left or right side is consumed.
   template <bool reversed>
-  void consumeRemainingBlocks(
-      ad_utility::SameAsAny<LeftSide, RightSide> auto& side,
-      const auto& undefBlocks) {
+  void consumeRemainingBlocks(Side& side, const Blocks& undefBlocks) {
     while (side.it_ != side.end_) {
       const auto& lBlock = *side.it_;
       for (const auto& rBlock : undefBlocks) {
@@ -1253,8 +1238,7 @@ struct BlockZipperJoinImpl {
   // `side.undefBlocks_` and skipped for subsequent processing. The first block
   // containing defined values is split and the defined part is stored in
   // `side.currentBlocks_`.
-  void findFirstBlockWithoutUndef(
-      ad_utility::SameAsAny<LeftSide, RightSide> auto& side) {
+  void findFirstBlockWithoutUndef(Side& side) {
     // The reference of `it` is there on purpose.
     for (auto& it = side.it_; it != side.end_; ++it) {
       auto& el = *it;
@@ -1319,6 +1303,9 @@ struct BlockZipperJoinImpl {
       joinBuffers<DoOptionalJoin, ProjectedEl>(blockStatus);
     }
   }
+  // Don't clutter other compilation units with these aliases.
+#undef Side
+#undef Blocks
 };
 
 // Deduction guide for the above struct.
