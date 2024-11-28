@@ -120,8 +120,8 @@ class Subquery {
 
   // Deliberately not explicit, because semantically those are copy/move
   // constructors.
-  explicit Subquery(const ParsedQuery&);
-  explicit Subquery(ParsedQuery&&) noexcept;
+  Subquery(const ParsedQuery&);
+  Subquery(ParsedQuery&&) noexcept;
   Subquery();
   ~Subquery();
   Subquery(const Subquery&);
