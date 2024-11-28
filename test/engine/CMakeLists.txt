@@ -1,6 +1,6 @@
 add_subdirectory(idTable)
 addLinkAndDiscoverTest(IndexScanTest engine)
-addLinkAndDiscoverTest(CartesianProductJoinTest engine)
+addLinkAndRunAsSingleTest(CartesianProductJoinTest engine)
 addLinkAndDiscoverTest(TextIndexScanForWordTest engine)
 addLinkAndDiscoverTest(TextIndexScanForEntityTest engine)
 addLinkAndDiscoverTest(SpatialJoinTest engine)
