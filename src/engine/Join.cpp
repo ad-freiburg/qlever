@@ -435,22 +435,33 @@ Result::Generator Join::runLazyJoinAndConvertToGenerator(
         Result::IdTableVocabPair,
         std::function<void(IdTable&, LocalVocab&)>> auto action,
     OptionalPermutation permutation) const {
-  std::atomic_flag write = true;
+  std::mutex mutex;
+  std::condition_variable cv;
+  enum struct State {Inner, Outer, Finished};
+  State state = State::Inner;
+  struct CancelException : public std::exception {};
   std::variant<std::monostate, Result::IdTableVocabPair, std::exception_ptr>
       storage;
-  ad_utility::JThread thread{[&write, &storage, &action, &permutation]() {
-    auto writeValue = [&write, &storage](auto value) noexcept {
-      storage = std::move(value);
-      write.clear();
-      write.notify_one();
+  ad_utility::JThread thread{[&mutex, &cv, &state, &storage, &action, &permutation]() {
+    std::unique_lock lock(mutex);
+    auto wait = [&](){
+      cv.wait(lock, [&](){return state != State::Outer;});
+      if (state == State::Finished) {
+        throw CancelException{};
+      }
     };
-    auto writeValueAndWait = [&permutation, &write,
-                              &writeValue](Result::IdTableVocabPair value) {
-      AD_CORRECTNESS_CHECK(write.test());
+
+    auto writeValue = [&mutex, &cv, &state, &storage](auto value) noexcept {
+      storage = std::move(value);
+      state = State::Outer;
+      cv.notify_one();
+    };
+    auto writeValueAndWait = [&permutation,
+                              &writeValue, &wait](Result::IdTableVocabPair value) {
+      AD_CORRECTNESS_CHECK(state == State::Inner);
       applyPermutation(value.idTable_, permutation);
       writeValue(std::move(value));
-      // Wait until we are allowed to write again.
-      write.wait(false);
+      wait();
     };
     auto addValue = [&writeValueAndWait](IdTable& idTable,
                                          LocalVocab& localVocab) {
@@ -469,9 +480,16 @@ Result::Generator Join::runLazyJoinAndConvertToGenerator(
       writeValue(std::current_exception());
     }
   }};
+  std::unique_lock lock{mutex};
+  cv.wait(lock, [&state](){return state == State::Outer;});
+  auto cleanup = absl::Cleanup{[&cv, &state, &lock]() {
+    state = State::Finished;
+    lock.unlock();
+    cv.notify_one();
+  }};
   while (true) {
     // Wait for read phase.
-    write.wait(true);
+    cv.wait(lock, [&state]{return state == State::Outer;});
     if (std::holds_alternative<std::monostate>(storage)) {
       break;
     }
@@ -479,9 +497,10 @@ Result::Generator Join::runLazyJoinAndConvertToGenerator(
       std::rethrow_exception(std::get<std::exception_ptr>(storage));
     }
     co_yield std::get<Result::IdTableVocabPair>(storage);
-    // Initiate write phase.
-    write.test_and_set();
-    write.notify_one();
+    state = State::Inner;
+    lock.unlock();
+    cv.notify_one();
+    lock.lock();
   }
 }
 
