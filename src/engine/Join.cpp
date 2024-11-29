@@ -19,6 +19,7 @@
 #include "global/Id.h"
 #include "global/RuntimeParameters.h"
 #include "util/Exception.h"
+#include "util/Generators.h"
 #include "util/HashMap.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 
@@ -433,56 +434,30 @@ void Join::join(const IdTable& a, ColumnIndex jc1, const IdTable& b,
 Result::Generator Join::runLazyJoinAndConvertToGenerator(
     ad_utility::InvocableWithExactReturnType<
         Result::IdTableVocabPair,
-        std::function<void(IdTable&, LocalVocab&)>> auto action,
+        std::function<void(IdTable&, LocalVocab&)>> auto runLazyJoin,
     OptionalPermutation permutation) const {
-  std::atomic_flag write = true;
-  std::variant<std::monostate, Result::IdTableVocabPair, std::exception_ptr>
-      storage;
-  ad_utility::JThread thread{[&write, &storage, &action, &permutation]() {
-    auto writeValue = [&write, &storage](auto value) noexcept {
-      storage = std::move(value);
-      write.clear();
-      write.notify_one();
-    };
-    auto writeValueAndWait = [&permutation, &write,
-                              &writeValue](Result::IdTableVocabPair value) {
-      AD_CORRECTNESS_CHECK(write.test());
-      applyPermutation(value.idTable_, permutation);
-      writeValue(std::move(value));
-      // Wait until we are allowed to write again.
-      write.wait(false);
-    };
-    auto addValue = [&writeValueAndWait](IdTable& idTable,
-                                         LocalVocab& localVocab) {
-      if (idTable.size() < CHUNK_SIZE) {
-        return;
-      }
-      writeValueAndWait({std::move(idTable), std::move(localVocab)});
-    };
-    try {
-      auto finalValue = action(addValue);
-      if (!finalValue.idTable_.empty()) {
-        writeValueAndWait(std::move(finalValue));
-      }
-      writeValue(std::monostate{});
-    } catch (...) {
-      writeValue(std::current_exception());
-    }
-  }};
-  while (true) {
-    // Wait for read phase.
-    write.wait(true);
-    if (std::holds_alternative<std::monostate>(storage)) {
-      break;
-    }
-    if (std::holds_alternative<std::exception_ptr>(storage)) {
-      std::rethrow_exception(std::get<std::exception_ptr>(storage));
-    }
-    co_yield std::get<Result::IdTableVocabPair>(storage);
-    // Initiate write phase.
-    write.test_and_set();
-    write.notify_one();
-  }
+  return ad_utility::generatorFromActionWithCallback<Result::IdTableVocabPair>(
+      [runLazyJoin = std::move(runLazyJoin),
+       permutation = std::move(permutation)](
+          std::function<void(Result::IdTableVocabPair)> callback) {
+        auto yieldValue = [&permutation,
+                           &callback](Result::IdTableVocabPair value) {
+          applyPermutation(value.idTable_, permutation);
+          callback(std::move(value));
+        };
+
+        // The lazy join implementation calls its callback for each but the last
+        // block. The last block (which also is the only block in case the
+        // result is to be fully materialized)
+        auto lastBlock = runLazyJoin(
+            [&yieldValue](IdTable& idTable, LocalVocab& localVocab) {
+              if (idTable.size() < CHUNK_SIZE) {
+                return;
+              }
+              yieldValue({std::move(idTable), std::move(localVocab)});
+            });
+        yieldValue(std::move(lastBlock));
+      });
 }
 
 // _____________________________________________________________________________

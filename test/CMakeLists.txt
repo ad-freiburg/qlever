@@ -421,7 +421,7 @@ addLinkAndDiscoverTest(CopyableSynchronizationTest)
 
 addLinkAndDiscoverTest(LazyJsonParserTest)
 
-addLinkAndDiscoverTest(CacheableGeneratorTest)
+addLinkAndDiscoverTest(GeneratorsTest)
 
 addLinkAndDiscoverTest(FilterTest engine)
 
