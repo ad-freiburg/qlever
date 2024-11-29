@@ -316,10 +316,10 @@ class GroupBy : public Operation {
   // Create result IdTable by using a HashMap mapping groups to aggregation data
   // and subsequently calling `createResultFromHashMap`.
   template <size_t NUM_GROUP_COLUMNS>
-  IdTable computeGroupByForHashMapOptimization(
+  Result computeGroupByForHashMapOptimization(
       std::vector<HashMapAliasInformation>& aggregateAliases,
-      const IdTable& subresult, const std::vector<size_t>& columnIndices,
-      LocalVocab* localVocab) const;
+      auto subresults,
+      const std::vector<size_t>& columnIndices) const;
 
   using AggregationData =
       std::variant<AvgAggregationData, CountAggregationData, MinAggregationData,
