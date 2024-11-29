@@ -268,6 +268,11 @@ class SubstrExpressionImpl : public SparqlExpression {
   std::string getCacheKey(const VariableToColumnMap& varColMap) const override {
     return impl_->getCacheKey(varColMap);
   }
+
+ private:
+  std::span<SparqlExpression::Ptr> childrenImpl() override {
+    return impl_->children();
+  }
 };
 
 using SubstrExpression = SubstrExpressionImpl;
