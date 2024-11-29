@@ -274,6 +274,25 @@ TEST(QueryPlanner, joinOfTwoScans) {
       h::Join(scan("?y", "<pre/r>", "?x"), scan("?z", "<pre/r>", "?x")));
 }
 
+// _____________________________________________________________________________
+TEST(QueryPlanner, joinOfFullScans) {
+  auto scan = h::IndexScanFromStrings;
+  // Join between two full index scans on a single column
+  h::expect("SELECT * {?s ?p ?x. ?x ?p2 ?o2 .}",
+            h::Join(scan("?s", "?p", "?x"), scan("?x", "?p2", "?o2")));
+
+  // Join between two full index scans on two columns.
+  h::expect(
+      "SELECT * {?s ?p ?x. ?x ?p2 ?s .}",
+      h::MultiColumnJoin(scan("?s", "?p", "?x"), scan("?x", "?p2", "?s")));
+
+  // Join between two full index scans, one of which has a FILTER which can be
+  // applied before the JOIN.
+  h::expect("SELECT * {?s ?p ?x. ?x ?p2 ?o2 . FILTER (?s = ?p)}",
+            h::Join(h::Filter("?s = ?p", scan("?s", "?p", "?x")),
+                    scan("?x", "?p2", "?o2")));
+}
+
 TEST(QueryPlanner, testActorsBornInEurope) {
   auto scan = h::IndexScanFromStrings;
   using enum ::OrderBy::AscOrDesc;

@@ -322,7 +322,7 @@ void IndexImpl::updateInputFileSpecificationsAndLog(
   // For a single input stream, show the name and whether we parse in parallel.
   // For multiple input streams, only show the number of streams.
   if (spec.size() == 1) {
-    AD_LOG_INFO << "Parsing triples from single input stream "
+    AD_LOG_INFO << "Processing triples from single input stream "
                 << spec.at(0).filename_ << " (parallel = "
                 << (spec.at(0).parseInParallel_ ? "true" : "false") << ") ..."
                 << std::endl;
@@ -882,14 +882,33 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
            range2.contain(id.getVocabIndex());
   };
 
-  pso_.loadFromDisk(onDiskBase_, isInternalId, true);
-  pos_.loadFromDisk(onDiskBase_, isInternalId, true);
+  // Load the permutations and register the original metadata for the delta
+  // triples.
+  // TODO<joka921> We could delegate the setting of the metadata to the
+  // `Permutation`class, but we first have to deal with The delta triples for
+  // the additional permutations.
+  auto setMetadata = [this](const Permutation& p) {
+    deltaTriplesManager().modify([&p](DeltaTriples& deltaTriples) {
+      deltaTriples.setOriginalMetadata(p.permutation(),
+                                       p.metaData().blockData());
+    });
+  };
 
+  auto load = [this, &isInternalId, &setMetadata](
+                  Permutation& permutation,
+                  bool loadInternalPermutation = false) {
+    permutation.loadFromDisk(onDiskBase_, isInternalId,
+                             loadInternalPermutation);
+    setMetadata(permutation);
+  };
+
+  load(pso_, true);
+  load(pos_, true);
   if (loadAllPermutations_) {
-    ops_.loadFromDisk(onDiskBase_, isInternalId);
-    osp_.loadFromDisk(onDiskBase_, isInternalId);
-    spo_.loadFromDisk(onDiskBase_, isInternalId);
-    sop_.loadFromDisk(onDiskBase_, isInternalId);
+    load(ops_);
+    load(osp_);
+    load(spo_);
+    load(sop_);
   } else {
     AD_LOG_INFO
         << "Only the PSO and POS permutation were loaded, SPARQL queries "

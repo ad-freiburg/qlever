@@ -219,3 +219,12 @@ void DeltaTriplesManager::clear() { modify(&DeltaTriples::clear); }
 SharedLocatedTriplesSnapshot DeltaTriplesManager::getCurrentSnapshot() const {
   return *currentLocatedTriplesSnapshot_.rlock();
 }
+
+// _____________________________________________________________________________
+void DeltaTriples::setOriginalMetadata(
+    Permutation::Enum permutation,
+    std::vector<CompressedBlockMetadata> metadata) {
+  locatedTriples()
+      .at(static_cast<size_t>(permutation))
+      .setOriginalMetadata(std::move(metadata));
+}
