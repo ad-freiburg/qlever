@@ -59,6 +59,9 @@ struct CompressedBlockMetadataNoBlockIndex {
     size_t compressedSize_;
     bool operator==(const OffsetAndCompressedSize&) const = default;
   };
+
+  using GraphInfo = std::optional<std::vector<Id>>;
+
   std::vector<OffsetAndCompressedSize> offsetsAndCompressedSize_;
   size_t numRows_;
 
@@ -115,7 +118,14 @@ struct CompressedBlockMetadataNoBlockIndex {
       const CompressedBlockMetadataNoBlockIndex& blockMetadata) {
     str << "#BlockMetadata\n(first) " << blockMetadata.firstTriple_ << "(last) "
         << blockMetadata.lastTriple_ << "num. rows: " << blockMetadata.numRows_
-        << "." << std::endl;
+        << ".\n";
+    if (blockMetadata.graphInfo_.has_value()) {
+      str << "Graphs: ";
+      ad_utility::lazyStrJoin(&str, blockMetadata.graphInfo_.value(), ", ");
+      str << '\n';
+    }
+    str << "[possibly] contains duplicates: "
+        << blockMetadata.containsDuplicatesWithDifferentGraphs_ << '\n';
     return str;
   }
 };
@@ -133,9 +143,9 @@ struct CompressedBlockMetadata : CompressedBlockMetadataNoBlockIndex {
   // Format BlockMetadata contents for debugging.
   friend std::ostream& operator<<(
       std::ostream& str, const CompressedBlockMetadata& blockMetadata) {
-    str << "#BlockMetadata\n(first) " << blockMetadata.firstTriple_ << "(last) "
-        << blockMetadata.lastTriple_ << "num. rows: " << blockMetadata.numRows_
-        << "." << std::endl;
+    str << static_cast<const CompressedBlockMetadataNoBlockIndex&>(
+        blockMetadata);
+    str << "block index: " << blockMetadata.blockIndex_ << "\n";
     return str;
   }
 };
