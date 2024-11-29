@@ -50,6 +50,16 @@ const Literal& LiteralOrIri::getLiteral() const {
 }
 
 // __________________________________________
+Literal& LiteralOrIri::getLiteral(){
+  if (!isLiteral()) {
+    AD_THROW(
+        "LiteralOrIri object does not contain an Literal object and "
+        "thus cannot return it");
+  }
+  return std::get<Literal>(data_);
+}
+
+// __________________________________________
 bool LiteralOrIri::hasLanguageTag() const {
   return getLiteral().hasLanguageTag();
 }

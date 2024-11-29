@@ -90,5 +90,8 @@ class Literal {
   static Literal literalWithoutQuotes(
       std::string_view rdfContentWithoutQuotes,
       std::optional<std::variant<Iri, std::string>> descriptor = std::nullopt);
+
+  // Set the substring of the current literal directly, based on start and length.
+  void setSubstr(std::size_t start, std::size_t length);
 };
 }  // namespace ad_utility::triple_component

@@ -353,8 +353,11 @@ ExportQueryExecutionTrees::idToStringAndTypeForEncodedValue(Id id) {
 std::optional<LiteralOrIri>
 ExportQueryExecutionTrees::idToLiteralOrIriForEncodedValue(
     Id id, bool onlyReturnLiteralsWithXsdString) {
+  if(onlyReturnLiteralsWithXsdString){
+    return std::nullopt;
+  }
   auto optionalStringAndType = idToStringAndTypeForEncodedValue(id);
-  if (!optionalStringAndType || onlyReturnLiteralsWithXsdString) {
+  if (!optionalStringAndType) {
     return std::nullopt;
   }
 
@@ -363,29 +366,31 @@ ExportQueryExecutionTrees::idToLiteralOrIriForEncodedValue(
 
 // _____________________________________________________________________________
 std::optional<LiteralOrIri> ExportQueryExecutionTrees::handleIriOrLiteral(
-    const LiteralOrIri& word, bool onlyReturnLiterals,
+    LiteralOrIri word, bool onlyReturnLiterals,
     bool onlyReturnLiteralsWithXsdString) {
   auto datatypeIsXSDString = [](const LiteralOrIri& word) {
     return word.hasDatatype() &&
-           std::string_view(
-               reinterpret_cast<const char*>(word.getDatatype().data()),
-               word.getDatatype().size()) == XSD_STRING;
+           asStringViewUnsafe(word.getDatatype()) == XSD_STRING;
   };
 
-  if (onlyReturnLiterals && !word.isLiteral()) {
-    return std::nullopt;
+  if (!word.isLiteral()) {
+    if(onlyReturnLiterals || onlyReturnLiteralsWithXsdString){
+      return std::nullopt;
+    }
+    return word;
   }
+
   if (onlyReturnLiteralsWithXsdString) {
-    if (word.isLiteral() &&
-        (!word.hasDatatype() || datatypeIsXSDString(word))) {
+    if (!word.hasDatatype() || datatypeIsXSDString(word)) {
       return word;
     }
     return std::nullopt;
   }
-  if (word.isLiteral() && word.hasDatatype() && !datatypeIsXSDString(word)) {
+
+  if (word.hasDatatype() && !datatypeIsXSDString(word)) {
     return LiteralOrIri{
         ad_utility::triple_component::Literal::literalWithNormalizedContent(
-            word.getContent())};
+            std::move(word.getContent()))};
   }
   return word;
 }

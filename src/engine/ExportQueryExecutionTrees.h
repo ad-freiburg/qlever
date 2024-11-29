@@ -70,14 +70,10 @@ class ExportQueryExecutionTrees {
   static std::optional<std::pair<std::string, const char*>>
   idToStringAndTypeForEncodedValue(Id id);
 
-  // Converts an Id to a LiteralOrIri based on its type and value.
-  // For VocabIndex or LocalVocabIndex: Return Literal or Iri. If
-  // `onlyReturnLiteralsWithXsdString` is true, return only literals (no IRIs)
-  // with no datatype or datatype `xsd:string`; otherwise, return any literal,
-  // but strip datatypes other than `xsd:string`. For Double, Int, Bool, Date,
-  // or GeoPoint: Return the literal without the datatype. If
-  // `onlyReturnLiteralsWithXsdString` is true return `std::nullopt`. For
-  // Undefined Id: Always return `std::nullopt`
+  // Convert the `id` to a 'LiteralOrIri'.Datatypes are always stripped unless they are 'xsd:string', 
+  // so for literals with non-'xsd:string' datatypes (this includes IDs that directly store their value, like Doubles) the datatypes are always empty.
+  // If 'onlyReturnLiteralsWithXsdString' is true, all IRIs and literals with non-'xsd:string' datatypes (including encoded IDs) return std::nullopt.
+  // These semantics are useful for the string expressions in StringExpressions.cpp.
   template <bool returnOnlyLiterals = false>
   static std::optional<LiteralOrIri> idToLiteralOrIri(
       const Index& index, Id id, const LocalVocab& localVocab,
@@ -88,13 +84,13 @@ class ExportQueryExecutionTrees {
   // thrown.
   // If `onlyReturnLiteralsWithXsdString` is `true`, returns `std::nullopt`.
   // If `onlyReturnLiteralsWithXsdString` is `false`, removes datatypes from
-  // literals (e.g., `42^^xsd:integer` becomes `"42"`).
+  // literals (e.g. the integer `42` is converted to the plain literal `"42"`).
   static std::optional<LiteralOrIri> idToLiteralOrIriForEncodedValue(
       Id id, bool onlyReturnLiteralsWithXsdString = false);
 
-  // Checks and processes a LiteralOrIri based on the given flags.
+   // A helper function for the `idToLiteralOrIri` function. Checks and processes a LiteralOrIri based on the given parameters.
   static std::optional<LiteralOrIri> handleIriOrLiteral(
-      const LiteralOrIri& word, bool onlyReturnLiterals,
+      LiteralOrIri word, bool onlyReturnLiterals,
       bool onlyReturnLiteralsWithXsdString);
 
   // Acts as a helper to retrieve an LiteralOrIri object

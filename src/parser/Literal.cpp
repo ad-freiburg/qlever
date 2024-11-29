@@ -135,4 +135,13 @@ Literal Literal::fromStringRepresentation(std::string internal) {
   return Literal{std::move(internal), endIdx + 1};
 }
 
+// __________________________________________
+void Literal::setSubstr(std::size_t start, std::size_t length){
+  auto contentWithoutParentesis = content_.substr(1, beginOfSuffix_ - 2); 
+  auto shortenedContent = ad_utility::getUTF8Substring(contentWithoutParentesis, start, length);
+  auto suffix = content_.substr(beginOfSuffix_);
+  content_ = absl::StrCat("\"", shortenedContent, "\"", suffix);
+  beginOfSuffix_ = content_.size() - suffix.size();
+}
+
 }  // namespace ad_utility::triple_component

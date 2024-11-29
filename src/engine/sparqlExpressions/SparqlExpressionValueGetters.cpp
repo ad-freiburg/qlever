@@ -93,10 +93,28 @@ std::optional<std::string> StringValueGetter::operator()(
 // ____________________________________________________________________________
 std::optional<LiteralOrIri> LiteralOrIriValueGetter::operator()(
     Id id, const EvaluationContext* context) const {
-  // true means that immediately returns nullopt for everything that is not a
-  // literal
-  return ExportQueryExecutionTrees::idToLiteralOrIri<false>(
+  return ExportQueryExecutionTrees::idToLiteralOrIri(
       context->_qec.getIndex(), id, context->_localVocab);
+}
+
+// ____________________________________________________________________________
+std::optional<LiteralOrIri> LiteralOrIriValueGetterWithXsdStringFilter::operator()(
+    Id id, const EvaluationContext* context) const {
+  return ExportQueryExecutionTrees::idToLiteralOrIri(
+      context->_qec.getIndex(), id, context->_localVocab, true);
+}
+
+// ____________________________________________________________________________
+std::optional<LiteralOrIri> LiteralOrIriValueGetterWithXsdStringFilter::operator()(
+    const LiteralOrIri& s, const EvaluationContext*) const {
+  auto datatypeIsXSDString = [](const LiteralOrIri& word) {
+    return word.hasDatatype() &&
+           asStringViewUnsafe(word.getDatatype()) == XSD_STRING;
+  };
+  if (!s.hasDatatype() || datatypeIsXSDString(s)) {
+    return s;
+  }
+  return std::nullopt;
 }
 
 // ____________________________________________________________________________

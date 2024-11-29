@@ -211,20 +211,6 @@ class SubstrImpl {
     }
 
     const auto& str = asStringViewUnsafe(s.value().getContent());
-    std::optional<std::variant<Iri, std::string>> descriptor;
-
-    if (s->isLiteral()) {
-      if (s->hasLanguageTag()) {
-        descriptor = std::string(asStringViewUnsafe(s->getLanguageTag()));
-      } else if (s->hasDatatype()) {
-        descriptor =
-            ad_utility::triple_component::Iri::fromIrirefWithoutBrackets(
-                asStringViewUnsafe(s->getDatatype()));
-      }
-    } else {
-      descriptor = std::nullopt;
-    }
-
     // Clamp the number such that it is in `[0, str.size()]`. That way we end up
     // with valid arguments for the `getUTF8Substring` method below for both
     // starting position and length since all the other corner cases have been
@@ -239,14 +225,52 @@ class SubstrImpl {
       return static_cast<size_t>(n);
     };
 
-    return toLiteralWithDescriptor(
-        ad_utility::getUTF8Substring(str, clamp(startInt), clamp(lengthInt)),
-        descriptor);
+    s.value().getLiteral().setSubstr(clamp(startInt), clamp(lengthInt));
+    return s.value();
   }
 };
 
-using SubstrExpression = NARY<3, FV<SubstrImpl, LiteralOrIriValueGetter,
-                                    NumericValueGetter, NumericValueGetter>>;
+// Implementation of the `SUBSTR` SPARQL function. It dynamically 
+// selects the appropriate value getter for the first argument based on whether 
+// it is a `STR()` expression (using `LiteralOrIriValueGetterWithXsdStringFilter`) 
+// or another type (using `LiteralOrIriValueGetter`).
+class SubstrExpressionImpl : public SparqlExpression {
+ private:
+  using ExpressionWithStr = NARY<3, FV<SubstrImpl, LiteralOrIriValueGetterWithXsdStringFilter,
+                                       NumericValueGetter, NumericValueGetter>>;
+  using ExpressionWithoutStr = NARY<3, FV<SubstrImpl, LiteralOrIriValueGetter,
+                                          NumericValueGetter, NumericValueGetter>>;
+
+  SparqlExpression::Ptr impl_;
+
+ public:
+  explicit SubstrExpressionImpl(
+      SparqlExpression::Ptr child,
+      std::same_as<SparqlExpression::Ptr> auto... children)
+      requires(sizeof...(children) + 1 == 3) {
+    AD_CORRECTNESS_CHECK(child != nullptr);
+
+    if (child->isStrExpression()) {
+      auto childrenOfStr = std::move(*child).moveChildrenOut();
+      AD_CORRECTNESS_CHECK(childrenOfStr.size() == 1);
+      impl_ = std::make_unique<ExpressionWithStr>(
+          std::move(childrenOfStr.at(0)), std::move(children)...);
+    } else {
+      impl_ = std::make_unique<ExpressionWithoutStr>(std::move(child),
+                                                     std::move(children)...);
+    }
+  }
+
+  ExpressionResult evaluate(EvaluationContext* context) const override {
+    return impl_->evaluate(context);
+  }
+
+  std::string getCacheKey(const VariableToColumnMap& varColMap) const override {
+    return impl_->getCacheKey(varColMap);
+  }
+};
+
+using SubstrExpression = SubstrExpressionImpl;
 
 // STRSTARTS
 [[maybe_unused]] auto strStartsImpl = [](std::string_view text,

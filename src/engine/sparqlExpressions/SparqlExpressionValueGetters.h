@@ -155,6 +155,17 @@ struct LiteralOrIriValueGetter : Mixin<LiteralOrIriValueGetter> {
   }
 };
 
+// Same as above but only literals with 'xsd:string' datatype or no datatype are returned. So only literals w
+struct LiteralOrIriValueGetterWithXsdStringFilter : Mixin<LiteralOrIriValueGetterWithXsdStringFilter> {
+  using Mixin<LiteralOrIriValueGetterWithXsdStringFilter>::operator();
+
+  std::optional<LiteralOrIri> operator()(ValueId,
+                                         const EvaluationContext*) const;
+
+  std::optional<LiteralOrIri> operator()(const LiteralOrIri& s,
+                                         const EvaluationContext*) const;
+};
+
 // Value getter for `isBlank`.
 struct IsBlankNodeValueGetter : Mixin<IsBlankNodeValueGetter> {
   using Mixin<IsBlankNodeValueGetter>::operator();
