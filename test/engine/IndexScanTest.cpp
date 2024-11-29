@@ -182,7 +182,8 @@ void testLazyScanWithColumnThrows(
 const auto testSetAndMakeScanWithPrefilterExpr =
     [](const std::string& kg, const SparqlTriple& triple,
        const Permutation::Enum permutation, IndexScan::PrefilterVariablePair pr,
-       const IdTable& idTableWithExpectedColumn, bool prefilterCanBeSet = true,
+       const std::vector<ValueId>& expectedIdsOnFilterColumn,
+       bool prefilterCanBeSet = true,
        source_location l = source_location::current()) {
       auto t = generateLocationTrace(l);
       IndexScan scan{getQec(kg), permutation, triple};
@@ -195,16 +196,15 @@ const auto testSetAndMakeScanWithPrefilterExpr =
         // Check that the prefiltering procedure yields the correct result given
         // that the <PrefilterExpression, Variable> pair is correctly assigned
         // to the IndexScan.
-        const IdTable& idTableFiltered = updatedQet->getRootOperation()
-                                             ->computeResultOnlyForTesting()
-                                             .idTable();
+        IdTable idTableFiltered = updatedQet->getRootOperation()
+                                      ->computeResultOnlyForTesting()
+                                      .idTable()
+                                      .clone();
         auto isColumnIdSpan =
             idTableFiltered.getColumn(updatedQet->getVariableColumn(variable));
-        auto expectedColumnIdSpan = idTableWithExpectedColumn.getColumn(0);
         ASSERT_EQ(
             (std::vector<Id>{isColumnIdSpan.begin(), isColumnIdSpan.end()}),
-            (std::vector<Id>{expectedColumnIdSpan.begin(),
-                             expectedColumnIdSpan.end()}));
+            expectedIdsOnFilterColumn);
       } else {
         // Check our prediction that the prefilter with the given
         // <PrefilterExpression, Variable> pair is not applicable (no updated
@@ -697,6 +697,7 @@ TEST(IndexScan, SetPrefilterVariablePairAndCheckCacheKey) {
 TEST(IndexScan, checkEvaluationWithPrefiltering) {
   using namespace makeFilterExpression;
   using namespace filterHelper;
+  auto I = ad_utility::testing::IntId;
   std::string kg =
       "<P1> <price_tag> 10 . <P2> <price_tag> 12 . <P3> <price_tag> "
       "18 . <P4> <price_tag> 22 . <P5> <price_tag> 25 . <P6> "
@@ -707,27 +708,26 @@ TEST(IndexScan, checkEvaluationWithPrefiltering) {
 
   // For the following tests, the <PrefilterExpression, Variable> pair is set
   // and applied for the respective IndexScan.
-  testSetAndMakeScanWithPrefilterExpr(
-      kg, triple, Permutation::POS, pr(ge(IntId(10)), Variable{"?price"}),
-      makeIdTableFromVector(
-          {{10}, {12}, {18}, {22}, {25}, {147}, {174}, {174}, {189}, {194}},
-          IntId));
+  testSetAndMakeScanWithPrefilterExpr(kg, triple, Permutation::POS,
+                                      pr(ge(IntId(10)), Variable{"?price"}),
+                                      {I(10), I(12), I(18), I(22), I(25),
+                                       I(147), I(174), I(174), I(189), I(194)});
   testSetAndMakeScanWithPrefilterExpr(
       kg, triple, Permutation::POS,
       pr(lt(DoubleId(147.32)), Variable{"?price"}),
-      makeIdTableFromVector({{10}, {12}, {18}, {22}, {25}, {147}}, IntId));
+      {I(10), I(12), I(18), I(22), I(25), I(147)});
   testSetAndMakeScanWithPrefilterExpr(
       kg, triple, Permutation::POS,
       pr(andExpr(gt(DoubleId(12.00)), le(IntId(174))), Variable{"?price"}),
-      makeIdTableFromVector({{18}, {22}, {25}, {147}, {174}, {174}}, IntId));
+      {I(18), I(22), I(25), I(147), I(174), I(174)});
 
   // For the following test, the Variable value doesn't match any of the scan
   // triple Variable values. We expect that the prefilter is not applicable (=>
   // set bool flag to false).
   testSetAndMakeScanWithPrefilterExpr(
       kg, triple, Permutation::POS,
-      pr(andExpr(gt(DoubleId(12.00)), le(IntId(174))), Variable{"?y"}),
-      makeIdTableFromVector({{0}}, IntId), false);
+      pr(andExpr(gt(DoubleId(12.00)), le(IntId(174))), Variable{"?y"}), {},
+      false);
 
   // For the following tests, the first sorted column given the permutation
   // doesn't match with the corresponding column for the Variable of the
@@ -735,14 +735,12 @@ TEST(IndexScan, checkEvaluationWithPrefiltering) {
   // is not applicable (and can't be set).
   testSetAndMakeScanWithPrefilterExpr(
       kg, triple, Permutation::PSO,
-      pr(andExpr(gt(DoubleId(12.00)), le(IntId(174))), Variable{"?price"}),
-      makeIdTableFromVector({{0}}, IntId), false);
+      pr(andExpr(gt(DoubleId(12.00)), le(IntId(174))), Variable{"?price"}), {},
+      false);
   testSetAndMakeScanWithPrefilterExpr(
       kg, triple, Permutation::POS,
-      pr(andExpr(gt(VocabId(0)), lt(VocabId(100))), Variable{"?x"}),
-      makeIdTableFromVector({{0}}, IntId), false);
+      pr(andExpr(gt(VocabId(0)), lt(VocabId(100))), Variable{"?x"}), {}, false);
 
-  /*
   // This knowledge graph yields an incomplete first and last block.
   std::string kgFirstAndLastIncomplete =
       "<a> <price_tag> 10 . <b> <price_tag> 12 . <b> <price_tag> "
@@ -755,11 +753,9 @@ TEST(IndexScan, checkEvaluationWithPrefiltering) {
   testSetAndMakeScanWithPrefilterExpr(
       kgFirstAndLastIncomplete, triple, Permutation::POS,
       pr(orExpr(gt(IntId(100)), le(IntId(10))), Variable{"?price"}),
-      makeIdTableFromVector({{10}, {12}, {25}, {147}, {189}, {194}}, IntId));
+      {I(10), I(12), I(25), I(147), I(189), I(194)});
   testSetAndMakeScanWithPrefilterExpr(
       kgFirstAndLastIncomplete, triple, Permutation::POS,
       pr(andExpr(gt(IntId(10)), lt(IntId(194))), Variable{"?price"}),
-      makeIdTableFromVector({{10}, {12}, {18}, {22}, {25}, {147}, {189}, {194}},
-                            IntId));
-  */
+      {I(10), I(12), I(18), I(22), I(25), I(147), I(189), I(194)});
 }
