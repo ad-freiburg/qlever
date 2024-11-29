@@ -161,7 +161,15 @@ class Permutation {
   const LocatedTriplesPerBlock& getLocatedTriplesForPermutation(
       const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
 
+  // From the given snapshot, get the augmented block metadata for this
+  // permutation.
+  const std::vector<CompressedBlockMetadata>&
+  getAugmentedMetadataForPermutation(
+      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
+
   const CompressedRelationReader& reader() const { return reader_.value(); }
+
+  Enum permutation() const { return permutation_; }
 
  private:
   // Readable name for this permutation, e.g., `POS`.
@@ -185,4 +193,6 @@ class Permutation {
   std::unique_ptr<Permutation> internalPermutation_ = nullptr;
 
   std::function<bool(Id)> isInternalId_;
+
+  bool isInternalPermutation_ = false;
 };
