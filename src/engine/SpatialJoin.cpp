@@ -336,11 +336,10 @@ VariableToColumnMap SpatialJoin::getVarColMapPayloadVars() const {
         if (varColMap.contains(var)) {
           newVarColMap.insert_or_assign(var, varColMap.at(var));
         } else {
-          // TODO<ullingerc> Find solution here: const - not-const
-          // addWarningOrThrow(
-          AD_THROW(absl::StrCat("Variable '", var.name(),
-                                "' selected as payload to spatial join but not "
-                                "present in right child."));
+          addWarningOrThrow(
+              absl::StrCat("Variable '", var.name(),
+                           "' selected as payload to spatial join but not "
+                           "present in right child."));
         }
       }
       AD_CONTRACT_CHECK(
@@ -363,19 +362,13 @@ PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
     return std::pair{idTablePtr, std::move(resTable)};
   };
 
-  auto getJoinCol = [](std::shared_ptr<QueryExecutionTree> child,
-                       const Variable& childVariable) {
-    VariableToColumnMap varColMap = child->getVariableColumns();
-    return varColMap[childVariable].columnIndex_;
-  };
-
   // Input tables
   auto [idTableLeft, resultLeft] = getIdTable(childLeft_);
   auto [idTableRight, resultRight] = getIdTable(childRight_);
 
   // Input table columns for the join
-  ColumnIndex leftJoinCol = getJoinCol(childLeft_, config_.left_);
-  ColumnIndex rightJoinCol = getJoinCol(childRight_, config_.right_);
+  ColumnIndex leftJoinCol = childLeft_->getVariableColumn(config_.left_);
+  ColumnIndex rightJoinCol = childRight_->getVariableColumn(config_.right_);
 
   // Payload cols and join col
   auto varsAndColInfo = copySortedByColumnIndex(getVarColMapPayloadVars());
