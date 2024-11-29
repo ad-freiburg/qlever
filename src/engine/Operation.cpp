@@ -233,8 +233,8 @@ std::shared_ptr<const Result> Operation::getResult(
     signalQueryUpdate();
   }
   auto& cache = _executionContext->getQueryTreeCache();
-  const QueryCacheKey cacheKey = {getCacheKey(),
-                                  _executionContext->locatedTriplesSnapshot().index_};
+  const QueryCacheKey cacheKey = {
+      getCacheKey(), _executionContext->locatedTriplesSnapshot().index_};
   const bool pinFinalResultButNotSubtrees =
       _executionContext->_pinResult && isRoot;
   const bool pinResult =

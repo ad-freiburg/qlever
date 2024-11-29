@@ -19,6 +19,8 @@
 #include "util/ConcurrentCache.h"
 #include "util/Synchronized.h"
 
+// The value of the `QueryResultCache` below. It consists of a `Result` together
+// with its `RuntimeInfo`.
 class CacheValue {
  private:
   std::shared_ptr<Result> result_;
@@ -61,6 +63,12 @@ class CacheValue {
   };
 };
 
+// The key for the `QueryResultCache` below. It consists of a `string` (the
+// actual cache key of a `QueryExecutionTree` and the index of the
+// `LocatedTriplesSnapshot` that was used to create the corresponding value.
+// That way, two identical trees with different snapshot indices will have a
+// different cache key. This has the (desired!) effect that UPDATE requests
+// correctly invalidate preexisting cache results.
 struct QueryCacheKey {
   std::string key_;
   size_t locatedTriplesSnapshotIndex_;

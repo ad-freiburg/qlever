@@ -525,8 +525,7 @@ TEST(Operation, verifyLimitIsProperlyAppliedAndUpdatesRuntimeInfoCorrectly) {
 
 namespace {
 QueryCacheKey makeQueryCacheKey(std::string s) {
-  return {std::move(s), reinterpret_cast<const LocatedTriplesSnapshot*>(
-                            std::intptr_t{102394857})};
+  return {std::move(s), 102394857};
 }
 }  // namespace
 
