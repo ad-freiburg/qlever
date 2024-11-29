@@ -239,7 +239,7 @@ const Permutation& Permutation::getActualPermutation(Id id) const {
 // ______________________________________________________________________
 const LocatedTriplesPerBlock& Permutation::getLocatedTriplesForPermutation(
     const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
-  static const LocatedTriplesSnapshot emptySnapshot;
+  static const LocatedTriplesSnapshot emptySnapshot{{}, {}, 0};
   const auto& actualSnapshot =
       isInternalPermutation_ ? emptySnapshot : locatedTriplesSnapshot;
   return actualSnapshot.getLocatedTriplesForPermutation(permutation_);
