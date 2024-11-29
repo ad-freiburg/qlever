@@ -67,7 +67,10 @@ IdTable Permutation::scan(
   const auto& p = getActualPermutation(scanSpec);
 
   return p.reader().scan(
-      scanSpec, p.getAugmentedMetadataForPermutation(locatedTriplesSnapshot),
+      scanSpec,
+      blocks.has_value()
+          ? blocks.value()
+          : p.getAugmentedMetadataForPermutation(locatedTriplesSnapshot),
       additionalColumns, cancellationHandle,
       p.getLocatedTriplesForPermutation(locatedTriplesSnapshot), limitOffset);
 }
@@ -79,7 +82,10 @@ size_t Permutation::getResultSizeOfScan(
     std::optional<std::vector<CompressedBlockMetadata>> blocks) const {
   const auto& p = getActualPermutation(scanSpec);
   return p.reader().getResultSizeOfScan(
-      scanSpec, p.getAugmentedMetadataForPermutation(locatedTriplesSnapshot),
+      scanSpec,
+      blocks.has_value()
+          ? blocks.value()
+          : p.getAugmentedMetadataForPermutation(locatedTriplesSnapshot),
       p.getLocatedTriplesForPermutation(locatedTriplesSnapshot));
 }
 
@@ -90,7 +96,10 @@ std::pair<size_t, size_t> Permutation::getSizeEstimateForScan(
     std::optional<std::vector<CompressedBlockMetadata>> blocks) const {
   const auto& p = getActualPermutation(scanSpec);
   return p.reader().getSizeEstimateForScan(
-      scanSpec, p.getAugmentedMetadataForPermutation(locatedTriplesSnapshot),
+      scanSpec,
+      blocks.has_value()
+          ? blocks.value()
+          : p.getAugmentedMetadataForPermutation(locatedTriplesSnapshot),
       p.getLocatedTriplesForPermutation(locatedTriplesSnapshot));
 }
 
