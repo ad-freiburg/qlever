@@ -7,6 +7,7 @@
 #include "util/GTestHelpers.h"
 #include "util/Generator.h"
 #include "util/Generators.h"
+#include "util/Views.h"
 
 using ad_utility::generatorFromActionWithCallback;
 using ad_utility::wrapGeneratorWithCache;
@@ -99,18 +100,59 @@ TEST(Generators, generatorFromActionWithCallbackCreatesProperGenerator) {
   EXPECT_EQ(counter, 3);
 }
 
+// Test that in `generatorFromActionWithCallback` the inner and outer thread
+// run mutually exclusive.
+TEST(Generators, generatorFromActionWithCallbackThreadSafety) {
+  size_t counter = 0;
+  static constexpr size_t numValues = 20'000;
+  auto generator =
+      generatorFromActionWithCallback<int>([&counter](auto callback) {
+        for (size_t i = 0; i < numValues; ++i) {
+          // The counter is modified concurrently directly here, as well as by
+          // the outer thread.
+          ++counter;
+          callback(1);
+        }
+      });
+  for (auto element : generator) {
+    counter += element;
+  }
+  EXPECT_EQ(counter, 2 * numValues);
+}
+
 // _____________________________________________________________________________
 TEST(Generators, generatorFromActionWithCallbackAbortsProperly) {
-  auto generator = generatorFromActionWithCallback<int>([](auto callback) {
-    callback(0);
-    ADD_FAILURE() << "Code should abort before this";
-  });
-  auto iterator = generator.begin();
-  ASSERT_NE(iterator, generator.end());
-  EXPECT_EQ(*iterator, 0);
+  bool unreachableReached = false;
+  auto functionWithCallback = [&](auto callback) {
+    callback(634);
+    unreachableReached = true;
+    callback(1);
+  };
+  {
+    auto generator = generatorFromActionWithCallback<int>(functionWithCallback);
+    auto iterator = generator.begin();
+    ASSERT_NE(iterator, generator.end());
+    EXPECT_EQ(*iterator, 634);
+    // Prematurely destroy the generator (simulate cancellation).
+  }
+  ASSERT_FALSE(unreachableReached);
 
-  // The end of the scope should clean up the generator without triggering the
-  // test failure.
+  // Destruction of the generator without consuming any values
+  {
+    auto generator = generatorFromActionWithCallback<int>(functionWithCallback);
+  }
+  ASSERT_FALSE(unreachableReached);
+
+  // Exception after consuming the first value
+  auto consumeAndThrow = [&]() {
+    auto generator = generatorFromActionWithCallback<int>(functionWithCallback);
+    auto iterator = generator.begin();
+    ASSERT_NE(iterator, generator.end());
+    EXPECT_EQ(*iterator, 634);
+    throw std::runtime_error("bum");
+    // Prematurely destroy the generator (simulate cancellation).
+  };
+  AD_EXPECT_THROW_WITH_MESSAGE(consumeAndThrow(), ::testing::StrEq("bum"));
 }
 
 // _____________________________________________________________________________

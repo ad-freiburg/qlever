@@ -434,10 +434,11 @@ void Join::join(const IdTable& a, ColumnIndex jc1, const IdTable& b,
 Result::Generator Join::runLazyJoinAndConvertToGenerator(
     ad_utility::InvocableWithExactReturnType<
         Result::IdTableVocabPair,
-        std::function<void(IdTable&, LocalVocab&)>> auto action,
+        std::function<void(IdTable&, LocalVocab&)>> auto runLazyJoin,
     OptionalPermutation permutation) const {
   return ad_utility::generatorFromActionWithCallback<Result::IdTableVocabPair>(
-      [action = std::move(action), permutation = std::move(permutation)](
+      [runLazyJoin = std::move(runLazyJoin),
+       permutation = std::move(permutation)](
           std::function<void(Result::IdTableVocabPair)> callback) {
         auto yieldValue = [&permutation,
                            &callback](Result::IdTableVocabPair value) {
@@ -445,13 +446,17 @@ Result::Generator Join::runLazyJoinAndConvertToGenerator(
           callback(std::move(value));
         };
 
-        yieldValue(
-            action([&yieldValue](IdTable& idTable, LocalVocab& localVocab) {
+        // The lazy join implementation calls its callback for each but the last
+        // block. The last block (which also is the only block in case the
+        // result is to be fully materialized)
+        auto lastBlock = runLazyJoin(
+            [&yieldValue](IdTable& idTable, LocalVocab& localVocab) {
               if (idTable.size() < CHUNK_SIZE) {
                 return;
               }
               yieldValue({std::move(idTable), std::move(localVocab)});
-            }));
+            });
+        yieldValue(std::move(lastBlock));
       });
 }
 
