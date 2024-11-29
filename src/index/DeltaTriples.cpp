@@ -178,12 +178,14 @@ LocatedTriplesSnapshot::getLocatedTriplesForPermutation(
 }
 
 // ____________________________________________________________________________
-SharedLocatedTriplesSnapshot DeltaTriples::getSnapshot() const {
+SharedLocatedTriplesSnapshot DeltaTriples::getSnapshot() {
   // NOTE: Both members of the `LocatedTriplesSnapshot` are copied, but the
   // `localVocab_` has no copy constructor (in order to avoid accidental
   // copies), hence the explicit `clone`.
+  auto snapshotIndex = nextSnapshotIndex_;
+  ++nextSnapshotIndex_;
   return SharedLocatedTriplesSnapshot{std::make_shared<LocatedTriplesSnapshot>(
-      locatedTriples(), localVocab_.clone())};
+      locatedTriples(), localVocab_.clone(), snapshotIndex)};
 }
 
 // ____________________________________________________________________________
@@ -193,7 +195,7 @@ DeltaTriples::DeltaTriples(const Index& index)
 // ____________________________________________________________________________
 DeltaTriplesManager::DeltaTriplesManager(const IndexImpl& index)
     : deltaTriples_{index},
-      currentLocatedTriplesSnapshot_{deltaTriples_.rlock()->getSnapshot()} {}
+      currentLocatedTriplesSnapshot_{deltaTriples_.wlock()->getSnapshot()} {}
 
 // _____________________________________________________________________________
 void DeltaTriplesManager::modify(

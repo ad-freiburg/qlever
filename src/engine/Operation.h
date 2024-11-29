@@ -307,7 +307,7 @@ class Operation {
   // into the cache.
   CacheValue runComputationAndPrepareForCache(const ad_utility::Timer& timer,
                                               ComputationMode computationMode,
-                                              const std::string& cacheKey,
+                                              const QueryCacheKey& cacheKey,
                                               bool pinned);
 
   // Create and store the complete runtime information for this operation after

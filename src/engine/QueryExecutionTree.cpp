@@ -125,7 +125,8 @@ void QueryExecutionTree::readFromCache() {
     return;
   }
   auto& cache = qec_->getQueryTreeCache();
-  auto res = cache.getIfContained(getCacheKey());
+  auto res = cache.getIfContained(
+      {getCacheKey(), qec_->locatedTriplesSnapshot().index_});
   if (res.has_value()) {
     cachedResult_ = res->_resultPointer->resultTablePtr();
   }
