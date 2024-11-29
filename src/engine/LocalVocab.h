@@ -118,7 +118,7 @@ class LocalVocab {
     using std::views::filter;
     auto addWordSet = [this](const std::shared_ptr<const Set>& set) {
       bool added = otherWordSets_.insert(set).second;
-      size_ += added * set->size();
+      size_ += static_cast<size_t>(added) * set->size();
     };
     // Note: Even though the `otherWordsSet_`is a hash set that filters out
     // duplicates, we still manually filter out empty sets, because these
