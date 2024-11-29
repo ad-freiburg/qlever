@@ -234,7 +234,7 @@ std::shared_ptr<const Result> Operation::getResult(
   }
   auto& cache = _executionContext->getQueryTreeCache();
   const QueryCacheKey cacheKey = {getCacheKey(),
-                                  &_executionContext->locatedTriplesSnapshot()};
+                                  _executionContext->locatedTriplesSnapshot().index_};
   const bool pinFinalResultButNotSubtrees =
       _executionContext->_pinResult && isRoot;
   const bool pinResult =
@@ -455,7 +455,7 @@ void Operation::createRuntimeInfoFromEstimates(
   _runtimeInfo->multiplicityEstimates_ = multiplicityEstimates;
 
   auto cachedResult = _executionContext->getQueryTreeCache().getIfContained(
-      {getCacheKey(), &locatedTriplesSnapshot()});
+      {getCacheKey(), locatedTriplesSnapshot().index_});
   if (cachedResult.has_value()) {
     const auto& [resultPointer, cacheStatus] = cachedResult.value();
     _runtimeInfo->cacheStatus_ = cacheStatus;

@@ -63,13 +63,13 @@ class CacheValue {
 
 struct QueryCacheKey {
   std::string key_;
-  const LocatedTriplesSnapshot* locatedTriplesSnapshotKey_;
+  size_t locatedTriplesSnapshotIndex_;
 
   bool operator==(const QueryCacheKey&) const = default;
 
   template <typename H>
   friend H AbslHashValue(H h, const QueryCacheKey& key) {
-    return H::combine(std::move(h), key.key_, key.locatedTriplesSnapshotKey_);
+    return H::combine(std::move(h), key.key_, key.locatedTriplesSnapshotIndex_);
   }
 };
 

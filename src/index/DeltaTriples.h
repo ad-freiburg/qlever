@@ -26,6 +26,8 @@ using LocatedTriplesPerBlockAllPermutations =
 struct LocatedTriplesSnapshot {
   LocatedTriplesPerBlockAllPermutations locatedTriplesPerBlock_;
   LocalVocab localVocab_;
+  // A unique index for this snapshot that is used in the query cache.
+  size_t index_;
   // Get `TripleWithPosition` objects for given permutation.
   const LocatedTriplesPerBlock& getLocatedTriplesForPermutation(
       Permutation::Enum permutation) const;
@@ -63,6 +65,7 @@ class DeltaTriples {
  private:
   // The index to which these triples are added.
   const IndexImpl& index_;
+  size_t nextSnapshotIndex_ = 0;
 
   // The located triples for all the 6 permutations.
   LocatedTriplesPerBlockAllPermutations locatedTriples_;
@@ -140,7 +143,7 @@ class DeltaTriples {
   // Return a deep copy of the `LocatedTriples` and the corresponding
   // `LocalVocab` which form a snapshot of the current status of this
   // `DeltaTriples` object.
-  SharedLocatedTriplesSnapshot getSnapshot() const;
+  SharedLocatedTriplesSnapshot getSnapshot();
 
  private:
   // Find the position of the given triple in the given permutation and add it

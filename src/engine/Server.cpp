@@ -916,10 +916,9 @@ void Server::processUpdateImpl(
   LOG(DEBUG) << "Runtime Info:\n"
              << qet.getRootOperation()->runtimeInfo().toString() << std::endl;
 
-  // Clear the cache, because all new queries won't benefit from the old cached
-  // values, which have been invalidated by the UPDATE operation.
-  // TODO<joka921> Should we do this before or after the above logging?.
-  // Or even only after we have reported the update as successful?
+  // Clear the cache, because all cache entries have been invalidated by the
+  // update anyway (The index of the located triples snapshot is part of the
+  // cache key).
   cache_.clearAll();
 }
 
