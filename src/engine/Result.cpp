@@ -208,7 +208,8 @@ void Result::checkDefinedness(const VariableToColumnMap& varColMap) {
 
 // _____________________________________________________________________________
 void Result::runOnNewChunkComputed(
-    std::function<void(const IdTableVocabPair&, std::chrono::microseconds)> onNewChunk,
+    std::function<void(const IdTableVocabPair&, std::chrono::microseconds)>
+        onNewChunk,
     std::function<void(bool)> onGeneratorFinished) {
   AD_CONTRACT_CHECK(!isFullyMaterialized());
   auto generator = [](Generator original, auto onNewChunk,
