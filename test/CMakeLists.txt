@@ -307,7 +307,7 @@ addLinkAndDiscoverTest(AlgorithmTest)
 
 addLinkAndDiscoverTestSerial(CompressedRelationsTest index)
 
-addLinkAndDiscoverTestSerial(PrefilterExpressionIndexTest sparqlExpressions index)
+addLinkAndDiscoverTestSerial(PrefilterExpressionIndexTest sparqlExpressions sparqlExpressions parser index)
 
 addLinkAndDiscoverTestSerial(GetPrefilterExpressionFromSparqlExpressionTest sparqlExpressions index)
 
@@ -421,7 +421,7 @@ addLinkAndDiscoverTest(CopyableSynchronizationTest)
 
 addLinkAndDiscoverTest(LazyJsonParserTest)
 
-addLinkAndDiscoverTest(CacheableGeneratorTest)
+addLinkAndDiscoverTest(GeneratorsTest)
 
 addLinkAndDiscoverTest(FilterTest engine)
 
