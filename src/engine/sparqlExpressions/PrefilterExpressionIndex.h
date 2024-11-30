@@ -23,6 +23,8 @@
 
 namespace prefilterExpressions {
 
+using IdOrLocalVocabEntry = std::variant<ValueId, LocalVocabEntry>;
+
 //______________________________________________________________________________
 // The maximum recursion depth for `info()` / `operator<<()`. A depth of `3`
 // should be sufficient for most `PrefilterExpressions` in our use case.
@@ -130,12 +132,12 @@ using CompOp = valueIdComparators::Comparison;
 template <CompOp Comparison>
 class RelationalExpression : public PrefilterExpression {
  private:
-  // The ValueId on which we perform the relational comparison on.
-  ValueId referenceId_;
+  // The value that represents our reference value for filtering.
+  IdOrLocalVocabEntry referenceValue_;
 
  public:
-  explicit RelationalExpression(const ValueId referenceId)
-      : referenceId_(referenceId) {}
+  explicit RelationalExpression(const IdOrLocalVocabEntry& referenceValue)
+      : referenceValue_(referenceValue) {}
 
   std::unique_ptr<PrefilterExpression> logicalComplement() const override;
   bool operator==(const PrefilterExpression& other) const override;
@@ -238,6 +240,12 @@ using PrefilterExprVariablePair =
 // sorted order w.r.t. the Variable value.
 void checkPropertiesForPrefilterConstruction(
     const std::vector<PrefilterExprVariablePair>& vec);
+
+//______________________________________________________________________________
+template <CompOp comparison>
+std::vector<PrefilterExprVariablePair> makePrefilterExpressionVec(
+    const IdOrLocalVocabEntry& referenceValue, const Variable& variable,
+    const bool reversed);
 
 }  // namespace detail
 }  // namespace prefilterExpressions

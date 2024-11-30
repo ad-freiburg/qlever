@@ -363,8 +363,6 @@ TEST(GetPrefilterExpressionFromSparqlExpression,
   const Iri iri = I("<Iri>");
   const Literal lit = L("\"lit\"");
   evalAndEqualityCheck(leSprql(var, var));
-  evalAndEqualityCheck(neqSprql(iri, var));
-  evalAndEqualityCheck(eqSprql(var, iri));
   evalAndEqualityCheck(neqSprql(IntId(10), DoubleId(23.3)));
   evalAndEqualityCheck(gtSprql(DoubleId(10), lit));
   evalAndEqualityCheck(ltSprql(VocabId(10), BoolId(10)));
