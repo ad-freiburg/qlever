@@ -219,20 +219,18 @@ TEST_F(PrefilterExpressionOnMetadataTest, testBlockFormatForDebugging) {
     return ::testing::ResultOf(toString, ::testing::HasSubstr(substring));
   };
   EXPECT_THAT(
-      b5,
-      matcher(
-          "#BlockMetadata\n(first) Triple: I:0 V:10 D:33.000000 V:0\n(last) "
-          "Triple: I:0 V:10 D:33.000000 V:0\nnum. rows: 0.\n"));
+      b5, matcher("#BlockMetadata\n(first) Triple: V:10 D:33.000000 I:0 "
+                  "V:0\n(last) Triple: V:10 D:33.000000 I:0 V:0\nnum. rows: "
+                  "0.\n"));
   EXPECT_THAT(
       b11,
-      matcher(
-          "#BlockMetadata\n(first) Triple: I:-4 V:10 D:33.000000 V:0\n(last) "
-          "Triple: D:2.000000 V:10 D:33.000000 V:0\nnum. rows: 0.\n"));
+      matcher("#BlockMetadata\n(first) Triple: V:10 D:33.000000 I:-4 "
+              "V:0\n(last) Triple: V:10 D:33.000000 D:2.000000 V:0\nnum. rows: "
+              "0.\n"));
   EXPECT_THAT(
-      b21,
-      matcher(
-          "#BlockMetadata\n(first) Triple: V:14 V:10 D:33.000000 V:0\n(last) "
-          "Triple: V:17 V:10 D:33.000000 V:0\nnum. rows: 0.\n"));
+      b21, matcher("#BlockMetadata\n(first) Triple: V:10 D:33.000000 V:14 "
+                   "V:0\n(last) Triple: V:10 D:33.000000 V:17 V:0\nnum. rows: "
+                   "0.\n"));
 
   auto blockWithGraphInfo = b21;
   blockWithGraphInfo.graphInfo_.emplace({IntId(12), IntId(13)});
