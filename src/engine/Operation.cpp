@@ -177,7 +177,7 @@ ProtoResult Operation::runComputation(const ad_utility::Timer& timer,
 // _____________________________________________________________________________
 CacheValue Operation::runComputationAndPrepareForCache(
     const ad_utility::Timer& timer, ComputationMode computationMode,
-    const std::string& cacheKey, bool pinned) {
+    const QueryCacheKey& cacheKey, bool pinned) {
   auto& cache = _executionContext->getQueryTreeCache();
   auto result = runComputation(timer, computationMode);
   auto maxSize =
@@ -236,7 +236,8 @@ std::shared_ptr<const Result> Operation::getResult(
     signalQueryUpdate();
   }
   auto& cache = _executionContext->getQueryTreeCache();
-  const string cacheKey = getCacheKey();
+  const QueryCacheKey cacheKey = {
+      getCacheKey(), _executionContext->locatedTriplesSnapshot().index_};
   const bool pinFinalResultButNotSubtrees =
       _executionContext->_pinResult && isRoot;
   const bool pinResult =
@@ -456,8 +457,8 @@ void Operation::createRuntimeInfoFromEstimates(
   }
   _runtimeInfo->multiplicityEstimates_ = multiplicityEstimates;
 
-  auto cachedResult =
-      _executionContext->getQueryTreeCache().getIfContained(getCacheKey());
+  auto cachedResult = _executionContext->getQueryTreeCache().getIfContained(
+      {getCacheKey(), locatedTriplesSnapshot().index_});
   if (cachedResult.has_value()) {
     const auto& [resultPointer, cacheStatus] = cachedResult.value();
     _runtimeInfo->cacheStatus_ = cacheStatus;

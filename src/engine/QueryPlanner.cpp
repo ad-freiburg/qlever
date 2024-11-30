@@ -1185,13 +1185,6 @@ void QueryPlanner::applyFiltersIfPossible(
   // in one go. Changing `row` inside the loop would invalidate the iterators.
   std::vector<SubtreePlan> addedPlans;
   for (auto& plan : row) {
-    if constexpr (!replace) {
-      if (plan._qet->getRootOperation()->isIndexScanWithNumVariables(3)) {
-        // Do not apply filters to dummies, except at the very end of query
-        // planning.
-        continue;
-      }
-    }
     for (size_t i = 0; i < filters.size(); ++i) {
       if (((plan._idsOfIncludedFilters >> i) & 1) != 0) {
         continue;
@@ -1856,12 +1849,6 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
   }
 
   // CASE: JOIN ON ONE COLUMN ONLY.
-
-  // Skip if we have two operations, where all three positions are variables.
-  if (a._qet->getRootOperation()->isIndexScanWithNumVariables(3) &&
-      b._qet->getRootOperation()->isIndexScanWithNumVariables(3)) {
-    return candidates;
-  }
 
   // Check if one of the two operations is a HAS_PREDICATE_SCAN.
   // If the join column corresponds to the has-predicate scan's

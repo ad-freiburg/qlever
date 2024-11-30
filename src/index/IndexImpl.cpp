@@ -202,7 +202,7 @@ IndexImpl::buildOspWithPatterns(
             }
             queue.push(std::move(table));
           } else {
-            outputBufferTable.insertAtEnd(table.begin(), table.end());
+            outputBufferTable.insertAtEnd(table);
             if (outputBufferTable.size() >= bufferSize) {
               queue.push(std::move(outputBufferTable));
               outputBufferTable.clear();
@@ -322,7 +322,7 @@ void IndexImpl::updateInputFileSpecificationsAndLog(
   // For a single input stream, show the name and whether we parse in parallel.
   // For multiple input streams, only show the number of streams.
   if (spec.size() == 1) {
-    AD_LOG_INFO << "Parsing triples from single input stream "
+    AD_LOG_INFO << "Processing triples from single input stream "
                 << spec.at(0).filename_ << " (parallel = "
                 << (spec.at(0).parseInParallel_ ? "true" : "false") << ") ..."
                 << std::endl;
@@ -674,30 +674,31 @@ auto IndexImpl::convertPartialToGlobalIds(
   auto getLookupTask = [&isQLeverInternalTriple, &writeQueue, &transformTriple,
                         &getWriteTask](Buffer triples,
                                        std::shared_ptr<Map> idMap) {
-    return
-        [&isQLeverInternalTriple, &writeQueue,
-         triples = std::make_shared<Buffer>(std::move(triples)),
-         idMap = std::move(idMap), &getWriteTask, &transformTriple]() mutable {
-          for (Buffer::row_reference triple : *triples) {
-            transformTriple(triple, *idMap);
-          }
-          auto [beginInternal, endInternal] = std::ranges::partition(
-              *triples, [&isQLeverInternalTriple](const auto& row) {
-                return !isQLeverInternalTriple(row);
-              });
-          IdTableStatic<NumColumnsIndexBuilding> internalTriples(
-              triples->getAllocator());
-          // TODO<joka921> We could leave the partitioned complete block as is,
-          // and change the interface of the compressed sorters s.t. we can
-          // push only a part of a block. We then would safe the copy of the
-          // internal triples here, but I am not sure whether this is worth it.
-          internalTriples.insertAtEnd(beginInternal, endInternal);
-          triples->resize(beginInternal - triples->begin());
+    return [&isQLeverInternalTriple, &writeQueue,
+            triples = std::make_shared<Buffer>(std::move(triples)),
+            idMap = std::move(idMap), &getWriteTask,
+            &transformTriple]() mutable {
+      for (Buffer::row_reference triple : *triples) {
+        transformTriple(triple, *idMap);
+      }
+      auto [beginInternal, endInternal] = std::ranges::partition(
+          *triples, [&isQLeverInternalTriple](const auto& row) {
+            return !isQLeverInternalTriple(row);
+          });
+      IdTableStatic<NumColumnsIndexBuilding> internalTriples(
+          triples->getAllocator());
+      // TODO<joka921> We could leave the partitioned complete block as is,
+      // and change the interface of the compressed sorters s.t. we can
+      // push only a part of a block. We then would safe the copy of the
+      // internal triples here, but I am not sure whether this is worth it.
+      internalTriples.insertAtEnd(*triples, beginInternal - triples->begin(),
+                                  endInternal - triples->begin());
+      triples->resize(beginInternal - triples->begin());
 
-          Buffers buffers{std::move(*triples), std::move(internalTriples)};
+      Buffers buffers{std::move(*triples), std::move(internalTriples)};
 
-          writeQueue.push(getWriteTask(std::move(buffers)));
-        };
+      writeQueue.push(getWriteTask(std::move(buffers)));
+    };
   };
 
   std::atomic<size_t> nextPartialVocabulary = 0;
@@ -881,14 +882,33 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
            range2.contain(id.getVocabIndex());
   };
 
-  pso_.loadFromDisk(onDiskBase_, isInternalId, true);
-  pos_.loadFromDisk(onDiskBase_, isInternalId, true);
+  // Load the permutations and register the original metadata for the delta
+  // triples.
+  // TODO<joka921> We could delegate the setting of the metadata to the
+  // `Permutation`class, but we first have to deal with The delta triples for
+  // the additional permutations.
+  auto setMetadata = [this](const Permutation& p) {
+    deltaTriplesManager().modify([&p](DeltaTriples& deltaTriples) {
+      deltaTriples.setOriginalMetadata(p.permutation(),
+                                       p.metaData().blockData());
+    });
+  };
 
+  auto load = [this, &isInternalId, &setMetadata](
+                  Permutation& permutation,
+                  bool loadInternalPermutation = false) {
+    permutation.loadFromDisk(onDiskBase_, isInternalId,
+                             loadInternalPermutation);
+    setMetadata(permutation);
+  };
+
+  load(pso_, true);
+  load(pos_, true);
   if (loadAllPermutations_) {
-    ops_.loadFromDisk(onDiskBase_, isInternalId);
-    osp_.loadFromDisk(onDiskBase_, isInternalId);
-    spo_.loadFromDisk(onDiskBase_, isInternalId);
-    sop_.loadFromDisk(onDiskBase_, isInternalId);
+    load(ops_);
+    load(osp_);
+    load(spo_);
+    load(sop_);
   } else {
     AD_LOG_INFO
         << "Only the PSO and POS permutation were loaded, SPARQL queries "
