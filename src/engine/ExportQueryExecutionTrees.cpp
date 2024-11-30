@@ -390,7 +390,7 @@ std::optional<LiteralOrIri> ExportQueryExecutionTrees::handleIriOrLiteral(
   if (word.hasDatatype() && !datatypeIsXSDString(word)) {
     return LiteralOrIri{
         ad_utility::triple_component::Literal::literalWithNormalizedContent(
-            std::move(word.getContent()))};
+            word.getContent())};
   }
   return word;
 }

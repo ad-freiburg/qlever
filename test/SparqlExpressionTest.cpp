@@ -788,7 +788,7 @@ TEST(SparqlExpression, substr) {
   checkSubstr(Ux, IdOrLiteralOrIri{lit("hello")}, I(4),
               IdOrLiteralOrIri{lit("bye")});
 
-  // WithDataType
+  // WithDataType xsd:string
   checkSubstr(IdOrLiteralOrIriVec{lit(
                   "Hel", "^^<http://www.w3.org/2001/XMLSchema#string>")},
               IdOrLiteralOrIriVec{
