@@ -64,14 +64,16 @@ class Operation {
 
   // Add a warning to the `Operation`. The warning will be returned by
   // `collectWarnings()` above.
-  void addWarning(std::string warning) {
+  void addWarning(std::string warning) const {
+    // TODO<ullingerc>
+    // warnings_.wlock()->push_back(std::move(warning));
     warnings_.push_back(std::move(warning));
   }
 
   // If unbound variables that are used in a query are supposed to throw because
   // the corresponding `RuntimeParameter` is set, then throw. Else add a
   // warning.
-  void addWarningOrThrow(std::string warning);
+  void addWarningOrThrow(std::string warning) const;
 
   /**
    * @return A list of columns on which the result of this operation is sorted.
@@ -254,6 +256,7 @@ class Operation {
   [[nodiscard]] virtual vector<ColumnIndex> resultSortedOn() const = 0;
 
   /// interface to the generated warnings of this operation
+  // TODO<ullingerc>
   std::vector<std::string>& getWarnings() { return warnings_; }
   [[nodiscard]] const std::vector<std::string>& getWarnings() const {
     return warnings_;
@@ -384,8 +387,11 @@ class Operation {
   RuntimeInformationWholeQuery _runtimeInfoWholeQuery;
 
   // Collect all the warnings that were created during the creation or
-  // execution of this operation.
-  std::vector<std::string> warnings_;
+  // execution of this operation. This attribute is declared mutable in order to
+  // allow const-functions in subclasses of Operation to add warnings.
+  // TODO<ullingerc> use a
+  // ad_utility::Synchronized<std::vector<std::string>, std::shared_mutex>?
+  mutable std::vector<std::string> warnings_;
 
   // The limit from a SPARQL `LIMIT` clause.
 

@@ -29,6 +29,7 @@
 #include "engine/SpatialJoin.h"
 #include "engine/VariableToColumnMap.h"
 #include "global/Constants.h"
+#include "gmock/gmock.h"
 #include "parser/data/Variable.h"
 
 namespace {  // anonymous namespace to avoid linker problems
@@ -377,13 +378,19 @@ class SpatialJoinVarColParamTest
 
     auto computeAndCompareVarToColMaps =
         [&](bool addDist, PayloadVariables pv,
-            VariableToColumnMap expectedVarToColMap) {
+            VariableToColumnMap expectedVarToColMap,
+            std::optional<std::string> matchWarning = std::nullopt) {
           auto qec = buildTestQEC();
           auto spJoin2 = makeSpatialJoin(qec, parameters, addDist, pv);
           auto spatialJoin = static_cast<SpatialJoin*>(spJoin2.get());
           auto vc = spatialJoin->computeVariableToColumnMap();
           ASSERT_THAT(
               vc, ::testing::UnorderedElementsAreArray(expectedVarToColMap));
+          if (matchWarning) {
+            ASSERT_THAT(spatialJoin->collectWarnings(),
+                        ::testing::Contains(
+                            ::testing::HasSubstr(matchWarning.value())));
+          }
         };
 
     // Expected variables
@@ -466,43 +473,36 @@ class SpatialJoinVarColParamTest
             computeAndCompareVarToColMaps(addDist, payloadVars, exp);
             payloadVars.pop_back();
 
-            // Test throw if left join variable contained
+            // Test warnings for unbound variables
             payloadVars.push_back(Variable{"?point1"});
-            AD_EXPECT_THROW_WITH_MESSAGE(
-                computeAndCompareVarToColMaps(addDist, payloadVars, exp),
-                ::testing::HasSubstr(
-                    "Variable '?point1' selected as payload to "
-                    "spatial join but not present in right child"));
+            computeAndCompareVarToColMaps(
+                addDist, payloadVars, exp,
+                "Variable '?point1' selected as payload to "
+                "spatial join but not present in right child");
             payloadVars.pop_back();
 
-            // Test throw if left other variable contained
             payloadVars.push_back(Variable{"?obj1"});
-            AD_EXPECT_THROW_WITH_MESSAGE(
-                computeAndCompareVarToColMaps(addDist, payloadVars, exp),
-                ::testing::HasSubstr(
-                    "Variable '?obj1' selected as payload to "
-                    "spatial join but not present in right child"));
+            computeAndCompareVarToColMaps(
+                addDist, payloadVars, exp,
+                "Variable '?obj1' selected as payload to "
+                "spatial join but not present in right child");
             payloadVars.pop_back();
 
-            // Test throw if unbound contained
-            // TODO<ullingerc> Switch to warning
             payloadVars.push_back(Variable{"?isThereSomebodyHere"});
-            AD_EXPECT_THROW_WITH_MESSAGE(
-                computeAndCompareVarToColMaps(addDist, payloadVars, exp),
-                ::testing::HasSubstr(
-                    "Variable '?isThereSomebodyHere' selected as payload to "
-                    "spatial join but not present in right child"));
+            computeAndCompareVarToColMaps(
+                addDist, payloadVars, exp,
+                "Variable '?isThereSomebodyHere' selected as payload to "
+                "spatial join but not present in right child");
             payloadVars.pop_back();
 
-            // Test throw if distance variable contained
+            // Test if distance variable contained
             if (addDist) {
               payloadVars.push_back(distVar);
-              AD_EXPECT_THROW_WITH_MESSAGE(
-                  computeAndCompareVarToColMaps(addDist, payloadVars, exp),
-                  ::testing::HasSubstr(
-                      "Variable '?distOfTheTwoObjectsAddedInternally' selected "
-                      "as payload to spatial join but not present in right "
-                      "child"));
+              computeAndCompareVarToColMaps(
+                  addDist, payloadVars, exp,
+                  "Variable '?distOfTheTwoObjectsAddedInternally' selected "
+                  "as payload to spatial join but not present in right "
+                  "child");
               payloadVars.pop_back();
             }
           }

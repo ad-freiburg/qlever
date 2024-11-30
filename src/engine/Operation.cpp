@@ -51,7 +51,7 @@ vector<string> Operation::collectWarnings() const {
 }
 
 // _____________________________________________________________________________
-void Operation::addWarningOrThrow(std::string warning) {
+void Operation::addWarningOrThrow(std::string warning) const {
   if (RuntimeParameters().get<"throw-on-unbound-variables">()) {
     throw InvalidSparqlQueryException(std::move(warning));
   } else {
