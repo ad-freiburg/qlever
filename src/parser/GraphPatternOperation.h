@@ -10,6 +10,7 @@
 
 #include "engine/PathSearch.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
+#include "parser/DatasetClauses.h"
 #include "parser/GraphPattern.h"
 #include "parser/TripleComponent.h"
 #include "parser/data/Variable.h"
@@ -120,15 +121,28 @@ class Subquery {
   // Deliberately not explicit, because semantically those are copy/move
   // constructors.
   Subquery(const ParsedQuery&);
-  Subquery(ParsedQuery&&);
+  Subquery(ParsedQuery&&) noexcept;
   Subquery();
   ~Subquery();
   Subquery(const Subquery&);
-  Subquery(Subquery&&);
+  Subquery(Subquery&&) noexcept;
   Subquery& operator=(const Subquery&);
-  Subquery& operator=(Subquery&&);
+  Subquery& operator=(Subquery&&) noexcept;
   ParsedQuery& get();
   const ParsedQuery& get() const;
+};
+
+// A SPARQL `DESCRIBE` query.
+struct Describe {
+  using VarOrIri = std::variant<TripleComponent::Iri, Variable>;
+  // The resources (variables or IRIs) that are to be described, for example
+  // `?x` and `<y>` in `DESCRIBE ?x <y>`.
+  std::vector<VarOrIri> resources_;
+  // The FROM clauses of the DESCRIBE query
+  DatasetClauses datasetClauses_;
+  // The WHERE clause of the describe query. It is used to compute the values
+  // for variables that are to be described.
+  Subquery whereClause_;
 };
 
 struct TransPath {
@@ -246,7 +260,8 @@ struct Bind {
 // class actually becomes `using GraphPatternOperation = std::variant<...>`
 using GraphPatternOperationVariant =
     std::variant<Optional, Union, Subquery, TransPath, Bind, BasicGraphPattern,
-                 Values, Service, PathQuery, Minus, GroupGraphPattern>;
+                 Values, Service, PathQuery, Minus, GroupGraphPattern,
+                 Describe>;
 struct GraphPatternOperation
     : public GraphPatternOperationVariant,
       public VisitMixin<GraphPatternOperation, GraphPatternOperationVariant> {

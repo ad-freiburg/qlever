@@ -140,12 +140,7 @@ class SparqlQleverVisitor {
 
   ParsedQuery visit(Parser::ConstructQueryContext* ctx);
 
-  // The parser rules for which the visit overload is annotated [[noreturn]]
-  // will always throw an exception because the corresponding feature is not
-  // (yet) supported by QLever. If they have return types other than void this
-  // is to make the usage of abstractions like `visitAlternative` easier.
-  [[noreturn]] static ParsedQuery visit(
-      const Parser::DescribeQueryContext* ctx);
+  ParsedQuery visit(Parser::DescribeQueryContext* ctx);
 
   ParsedQuery visit(Parser::AskQueryContext* ctx);
 
@@ -158,6 +153,12 @@ class SparqlQleverVisitor {
   TripleComponent::Iri visit(Parser::NamedGraphClauseContext* ctx);
 
   PatternAndVisibleVariables visit(Parser::WhereClauseContext* ctx);
+
+  // Parse the WHERE clause represented by the `whereClauseContext` and store
+  // its result (the GroupGraphPattern representing the where clause + the set
+  // of visible variables) in the `query`.
+  void visitWhereClause(Parser::WhereClauseContext* whereClauseContext,
+                        ParsedQuery& query);
 
   SolutionModifiers visit(Parser::SolutionModifierContext* ctx);
 
@@ -339,6 +340,10 @@ class SparqlQleverVisitor {
 
   PropertyPath visit(Parser::PathEltOrInverseContext* ctx);
 
+  // The parser rules for which the visit overload is annotated [[noreturn]]
+  // will always throw an exception because the corresponding feature is not
+  // (yet) supported by QLever. If they have return types other than void this
+  // is to make the usage of abstractions like `visitAlternative` easier.
   [[noreturn]] static void visit(Parser::PathModContext* ctx);
 
   PropertyPath visit(Parser::PathPrimaryContext* ctx);
