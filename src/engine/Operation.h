@@ -256,6 +256,8 @@ class Operation {
 
   /// interface to the generated warnings of this operation
   std::vector<std::string>& getWarnings() {
+    // TODO<ullingerc> How do we keep this lock alive? Or copy the warnings
+    // (should be small usually)?
     std::lock_guard l{warningsMutex_};
     return warnings_;
   }
