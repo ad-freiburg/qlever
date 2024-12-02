@@ -184,6 +184,7 @@ std::vector<BlockMetadata> PrefilterExpression::evaluate(
     lastBlock = input.back();
     input = input.subspan(0, input.size() - 1);
   }
+
   auto result = evaluateAndCheckImpl(input, evaluationColumn, vocab);
   if (firstBlock.has_value()) {
     result.insert(result.begin(), firstBlock.value());
@@ -487,6 +488,7 @@ template class LogicalExpression<LogicalOperator::AND>;
 template class LogicalExpression<LogicalOperator::OR>;
 
 namespace detail {
+
 
 //______________________________________________________________________________
 template <CompOp comparison>
