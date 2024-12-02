@@ -198,3 +198,128 @@ TEST(AddCombinedRowToTable, flushDoesCheckCancellation) {
   cancellationHandle->cancel(ad_utility::CancellationState::MANUAL);
   EXPECT_THROW(adder.flush(), ad_utility::CancellationException);
 }
+
+namespace {
+struct IdTableWithVocab {
+  IdTable idTable_;
+  LocalVocab localVocab_;
+
+  const LocalVocab& getLocalVocab() const { return localVocab_; }
+
+  template <size_t I = 0>
+  IdTableView<I> asStaticView() const {
+    return idTable_.asStaticView<I>();
+  }
+};
+
+using ad_utility::triple_component::Literal;
+
+Literal fromString(std::string_view string) {
+  return Literal::fromStringRepresentation(absl::StrCat("\"", string, "\""));
+}
+
+// _____________________________________________________________________________
+LocalVocab createVocabWithSingleString(std::string_view string) {
+  LocalVocab localVocab;
+  localVocab.getIndexAndAddIfNotContained(LocalVocabEntry{fromString(string)});
+  return localVocab;
+}
+
+// _____________________________________________________________________________
+bool vocabContainsString(const LocalVocab& vocab, std::string_view string) {
+  return ad_utility::contains(vocab.getAllWordsForTesting(),
+                              LocalVocabEntry{fromString(string)});
+}
+}  // namespace
+
+// _____________________________________________________________________________
+TEST(AddCombinedRowToTable, verifyLocalVocabIsUpdatedCorrectly) {
+  auto outputTable = makeIdTableFromVector({});
+  outputTable.setNumColumns(3);
+  std::vector<LocalVocab> localVocabs;
+  ad_utility::AddCombinedRowToIdTable adder{
+      1, std::move(outputTable),
+      std::make_shared<ad_utility::CancellationHandle<>>(), 1,
+      [&localVocabs](IdTable& idTable, LocalVocab& localVocab) {
+        localVocabs.push_back(std::move(localVocab));
+        // Clear to trigger new merging of local vocabs, in practice
+        // `localVocab` is not altered without altering `idTable` as well.
+        idTable.clear();
+      }};
+
+  IdTableWithVocab input1{makeIdTableFromVector({{0, 1}}),
+                          createVocabWithSingleString("a")};
+  IdTableWithVocab input2{makeIdTableFromVector({{0, 2}}),
+                          createVocabWithSingleString("b")};
+  IdTableWithVocab input3{makeIdTableFromVector({{0, 3}}),
+                          createVocabWithSingleString("c")};
+
+  using ::testing::SizeIs;
+
+  adder.setInput(input1, input2);
+  adder.addRow(0, 0);
+  adder.addRow(0, 0);
+  EXPECT_THAT(localVocabs, SizeIs(1));
+  adder.addRow(0, 0);
+
+  adder.setInput(input2, input3);
+  EXPECT_THAT(localVocabs, SizeIs(2));
+  adder.addRow(0, 0);
+  adder.flush();
+  EXPECT_THAT(localVocabs, SizeIs(3));
+
+  adder.setOnlyLeftInputForOptionalJoin(input1);
+  adder.addOptionalRow(0);
+  adder.addOptionalRow(0);
+  EXPECT_THAT(localVocabs, SizeIs(4));
+  adder.addOptionalRow(0);
+
+  localVocabs.push_back(std::move(adder.localVocab()));
+
+  ASSERT_THAT(localVocabs, SizeIs(5));
+
+  EXPECT_TRUE(vocabContainsString(localVocabs[0], "a"));
+  EXPECT_TRUE(vocabContainsString(localVocabs[0], "b"));
+  EXPECT_FALSE(vocabContainsString(localVocabs[0], "c"));
+
+  EXPECT_TRUE(vocabContainsString(localVocabs[1], "a"));
+  EXPECT_TRUE(vocabContainsString(localVocabs[1], "b"));
+  EXPECT_FALSE(vocabContainsString(localVocabs[1], "c"));
+
+  EXPECT_FALSE(vocabContainsString(localVocabs[2], "a"));
+  EXPECT_TRUE(vocabContainsString(localVocabs[2], "b"));
+  EXPECT_TRUE(vocabContainsString(localVocabs[2], "c"));
+
+  EXPECT_TRUE(vocabContainsString(localVocabs[3], "a"));
+  EXPECT_FALSE(vocabContainsString(localVocabs[3], "b"));
+  EXPECT_FALSE(vocabContainsString(localVocabs[3], "c"));
+
+  EXPECT_TRUE(vocabContainsString(localVocabs[4], "a"));
+  EXPECT_FALSE(vocabContainsString(localVocabs[4], "b"));
+  EXPECT_FALSE(vocabContainsString(localVocabs[4], "c"));
+}
+
+// _____________________________________________________________________________
+TEST(AddCombinedRowToTable, verifyLocalVocabIsRetainedWhenNotMoving) {
+  auto outputTable = makeIdTableFromVector({});
+  outputTable.setNumColumns(3);
+  ad_utility::AddCombinedRowToIdTable adder{
+      1, std::move(outputTable),
+      std::make_shared<ad_utility::CancellationHandle<>>(), 1};
+
+  IdTableWithVocab input1{makeIdTableFromVector({{0, 1}}),
+                          createVocabWithSingleString("a")};
+  IdTableWithVocab input2{makeIdTableFromVector({{0, 2}}),
+                          createVocabWithSingleString("b")};
+
+  adder.setInput(input1, input2);
+  adder.addRow(0, 0);
+  adder.flush();
+  adder.addRow(0, 0);
+
+  LocalVocab localVocab = std::move(adder.localVocab());
+
+  EXPECT_TRUE(vocabContainsString(localVocab, "a"));
+  EXPECT_TRUE(vocabContainsString(localVocab, "b"));
+  EXPECT_THAT(localVocab.getAllWordsForTesting(), ::testing::SizeIs(2));
+}

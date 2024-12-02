@@ -98,8 +98,8 @@ class CancellationException : public std::exception {
       : message_{std::move(message)} {}
   explicit CancellationException(CancellationState reason)
       : message_{reason == CancellationState::TIMEOUT
-                     ? "Query timed out."
-                     : "Query was manually cancelled."} {
+                     ? "Operation timed out."
+                     : "Operation was manually cancelled."} {
     AD_CONTRACT_CHECK(detail::isCancelled(reason));
   }
 

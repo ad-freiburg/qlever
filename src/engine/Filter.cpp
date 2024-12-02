@@ -27,7 +27,9 @@ Filter::Filter(QueryExecutionContext* qec,
                sparqlExpression::SparqlExpressionPimpl expression)
     : Operation(qec),
       _subtree(std::move(subtree)),
-      _expression{std::move(expression)} {}
+      _expression{std::move(expression)} {
+  setPrefilterExpressionForChildren();
+}
 
 // _____________________________________________________________________________
 string Filter::getCacheKeyImpl() const {
@@ -37,8 +39,20 @@ string Filter::getCacheKeyImpl() const {
   return std::move(os).str();
 }
 
+//______________________________________________________________________________
 string Filter::getDescriptor() const {
   return absl::StrCat("Filter ", _expression.getDescriptor());
+}
+
+//______________________________________________________________________________
+void Filter::setPrefilterExpressionForChildren() {
+  std::vector<PrefilterVariablePair> prefilterPairs =
+      _expression.getPrefilterExpressionForMetadata();
+  auto optNewSubTree = _subtree->setPrefilterGetUpdatedQueryExecutionTree(
+      std::move(prefilterPairs));
+  if (optNewSubTree.has_value()) {
+    _subtree = std::move(optNewSubTree.value());
+  }
 }
 
 // _____________________________________________________________________________
@@ -71,18 +85,16 @@ ProtoResult Filter::computeResult(bool requestLaziness) {
   // single IdTable.
   size_t width = getSubtree().get()->getResultWidth();
   IdTable result{width, getExecutionContext()->getAllocator()};
-  std::vector<LocalVocab> localVocabs;
-  ad_utility::callFixedSize(
-      width, [this, &subRes, &result, &localVocabs]<int WIDTH>() {
-        for (Result::IdTableVocabPair& pair : subRes->idTables()) {
-          computeFilterImpl<WIDTH>(result, pair.idTable_, pair.localVocab_,
-                                   subRes->sortedBy());
-          localVocabs.emplace_back(std::move(pair.localVocab_));
-        }
-      });
 
   LocalVocab resultLocalVocab{};
-  resultLocalVocab.mergeWith(localVocabs);
+  ad_utility::callFixedSize(
+      width, [this, &subRes, &result, &resultLocalVocab]<int WIDTH>() {
+        for (Result::IdTableVocabPair& pair : subRes->idTables()) {
+          computeFilterImpl<WIDTH>(result, std::move(pair.idTable_),
+                                   pair.localVocab_, subRes->sortedBy());
+          resultLocalVocab.mergeWith(std::span{&pair.localVocab_, 1});
+        }
+      });
 
   LOG(DEBUG) << "Filter result computation done." << endl;
 
@@ -90,20 +102,24 @@ ProtoResult Filter::computeResult(bool requestLaziness) {
 }
 
 // _____________________________________________________________________________
+template <ad_utility::SimilarTo<IdTable> Table>
 IdTable Filter::filterIdTable(std::vector<ColumnIndex> sortedBy,
-                              const IdTable& idTable,
+                              Table&& idTable,
                               const LocalVocab& localVocab) const {
   size_t width = idTable.numColumns();
   IdTable result{width, getExecutionContext()->getAllocator()};
-  CALL_FIXED_SIZE(width, &Filter::computeFilterImpl, this, result, idTable,
-                  localVocab, std::move(sortedBy));
+
+  auto impl = [this, &result, &idTable, &localVocab, &sortedBy]<int WIDTH> {
+    return this->computeFilterImpl<WIDTH>(result, AD_FWD(idTable), localVocab,
+                                          std::move(sortedBy));
+  };
+  ad_utility::callFixedSize(width, impl);
   return result;
 }
 
 // _____________________________________________________________________________
-template <int WIDTH>
-void Filter::computeFilterImpl(IdTable& dynamicResultTable,
-                               const IdTable& inputTable,
+template <int WIDTH, ad_utility::SimilarTo<IdTable> Table>
+void Filter::computeFilterImpl(IdTable& dynamicResultTable, Table&& inputTable,
                                const LocalVocab& localVocab,
                                std::vector<ColumnIndex> sortedBy) const {
   AD_CONTRACT_CHECK(inputTable.numColumns() == WIDTH || WIDTH == 0);
@@ -129,7 +145,8 @@ void Filter::computeFilterImpl(IdTable& dynamicResultTable,
   // required to work around a bug in Clang 17, see
   // https://github.com/llvm/llvm-project/issues/61267
   auto computeResult =
-      [this, &resultTable = resultTable, &input,
+      [this, &resultTable = resultTable, &input, &inputTable,
+       &dynamicResultTable,
        &evaluationContext]<sparqlExpression::SingleExpressionResult T>(
           T&& singleResult) {
         if constexpr (std::is_same_v<T, ad_utility::SetOfIntervals>) {
@@ -147,15 +164,20 @@ void Filter::computeFilterImpl(IdTable& dynamicResultTable,
                 size_t intervalEnd = std::min(interval.second, input.size());
                 return sum + (intervalEnd - intervalBegin);
               });
-          resultTable.reserve(totalSize);
+          if (resultTable.empty() && totalSize == inputTable.size()) {
+            // The binary filter contains all elements of the input, and we have
+            // no previous results, so we can simply copy or move the complete
+            // table.
+            dynamicResultTable = AD_FWD(inputTable).moveOrClone();
+            return;
+          }
           checkCancellation();
           for (auto [intervalBegin, intervalEnd] : singleResult._intervals) {
             intervalEnd = std::min(intervalEnd, input.size());
-            resultTable.insertAtEnd(input.cbegin() + intervalBegin,
-                                    input.cbegin() + intervalEnd);
+            resultTable.insertAtEnd(inputTable, intervalBegin, intervalEnd);
             checkCancellation();
           }
-          AD_CONTRACT_CHECK(resultTable.size() == totalSize);
+          AD_CORRECTNESS_CHECK(resultTable.size() == totalSize);
         } else {
           // In the general case, we generate all expression results and apply
           // the `EffectiveBooleanValueGetter` to each.
@@ -188,7 +210,11 @@ void Filter::computeFilterImpl(IdTable& dynamicResultTable,
       };
   std::visit(computeResult, std::move(expressionResult));
 
-  dynamicResultTable = std::move(resultTable).toDynamic();
+  // Detect the case that we have directly written the `dynamicResultTable`
+  // in the binary search filter case.
+  if (dynamicResultTable.empty()) {
+    dynamicResultTable = std::move(resultTable).toDynamic();
+  }
   checkCancellation();
 }
 

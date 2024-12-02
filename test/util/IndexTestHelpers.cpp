@@ -55,7 +55,7 @@ namespace {
 // folded into the permutations as additional columns.
 void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
     const Index& index) {
-  DeltaTriplesManager deltaTriplesManager(index.getImpl());
+  const DeltaTriplesManager& deltaTriplesManager{index.deltaTriplesManager()};
   auto sharedLocatedTriplesSnapshot = deltaTriplesManager.getCurrentSnapshot();
   const auto& locatedTriplesSnapshot = *sharedLocatedTriplesSnapshot;
   static constexpr size_t col0IdTag = 43;

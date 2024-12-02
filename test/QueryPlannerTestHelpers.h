@@ -332,12 +332,21 @@ inline auto ValuesClause = [](string cacheKey) {
 
 // Match a SpatialJoin operation, set arguments to ignore to -1
 inline auto SpatialJoin =
-    [](size_t maxDist, size_t maxResults,
+    [](size_t maxDist, size_t maxResults, Variable left, Variable right,
+       std::optional<Variable> distanceVariable,
+       PayloadVariables payloadVariables, SpatialJoinAlgorithm algorithm,
        const std::same_as<QetMatcher> auto&... childMatchers) {
       return RootOperation<::SpatialJoin>(
           AllOf(children(childMatchers...),
-                AD_PROPERTY(SpatialJoin, onlyForTestingGetConfig,
-                            Eq(std::pair(maxDist, maxResults)))));
+                AD_PROPERTY(SpatialJoin, onlyForTestingGetTask,
+                            Eq(std::pair(maxDist, maxResults))),
+                AD_PROPERTY(SpatialJoin, onlyForTestingGetVariables,
+                            Eq(std::pair(left, right))),
+                AD_PROPERTY(SpatialJoin, onlyForTestingGetDistanceVariable,
+                            Eq(distanceVariable)),
+                AD_PROPERTY(SpatialJoin, onlyForTestingGetPayloadVariables,
+                            Eq(payloadVariables)),
+                AD_PROPERTY(SpatialJoin, getAlgorithm, Eq(algorithm))));
     };
 
 // Match a GroupBy operation
