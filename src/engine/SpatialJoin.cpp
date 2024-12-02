@@ -9,7 +9,6 @@
 #include <absl/strings/charconv.h>
 
 #include <cstdint>
-#include <ctre-unicode.hpp>
 #include <limits>
 #include <optional>
 #include <queue>
@@ -61,7 +60,8 @@ std::shared_ptr<SpatialJoin> SpatialJoin::addChild(
 
   // The new spatial join after adding a child needs to inherit the warnings of
   // its predecessor.
-  for (const auto& warning : getWarnings()) {
+  auto warnings = getWarnings().rlock();
+  for (const auto& warning : *warnings) {
     sj->addWarning(warning);
   }
 
