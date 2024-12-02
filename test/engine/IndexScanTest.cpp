@@ -896,6 +896,59 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesFilterCorrectly) {
 }
 
 // _____________________________________________________________________________
+TEST_P(IndexScanWithLazyJoin,
+       prefilterTablesDoesFilterCorrectlyWithOverlappingValues) {
+  std::string kg = "<a> <p> <A> . <b> <p> <B>. ";
+  qec_ = getQec(std::move(kg));
+  IndexScan scan = makeScan();
+
+  auto makeJoinSide = [](auto* self) -> Result::Generator {
+    using P = Result::IdTableVocabPair;
+    P p1{self->makeIdTable({iri("<a>")}), LocalVocab{}};
+    co_yield p1;
+    P p2{self->makeIdTable({iri("<b>")}), LocalVocab{}};
+    co_yield p2;
+  };
+
+  auto [joinSideResults, scanResults] =
+      consumeGenerators(scan.prefilterTables(makeJoinSide(this), 0));
+
+  ASSERT_EQ(scanResults.size(), 1);
+  ASSERT_EQ(joinSideResults.size(), 2);
+
+  EXPECT_TRUE(scanResults.at(0).localVocab_.empty());
+  EXPECT_TRUE(joinSideResults.at(0).localVocab_.empty());
+  EXPECT_TRUE(joinSideResults.at(1).localVocab_.empty());
+
+  EXPECT_EQ(
+      scanResults.at(0).idTable_,
+      tableFromTriples({{iri("<a>"), iri("<A>")}, {iri("<b>"), iri("<B>")}}));
+  EXPECT_EQ(joinSideResults.at(0).idTable_, makeIdTable({iri("<a>")}));
+
+  EXPECT_EQ(joinSideResults.at(1).idTable_, makeIdTable({iri("<b>")}));
+}
+
+// _____________________________________________________________________________
+TEST_P(IndexScanWithLazyJoin,
+       prefilterTablesDoesFilterCorrectlyWithSkipTablesWithoutMatchingBlock) {
+  std::string kg = "<a> <p> <A> . <b> <p> <B>. ";
+  qec_ = getQec(std::move(kg));
+  IndexScan scan = makeScan();
+
+  auto makeJoinSide = []() -> Result::Generator {
+    using P = Result::IdTableVocabPair;
+    P p1{makeIdTableFromVector({{Id::makeFromBool(true)}}), LocalVocab{}};
+    co_yield p1;
+  };
+
+  auto [joinSideResults, scanResults] =
+      consumeGenerators(scan.prefilterTables(makeJoinSide(), 0));
+
+  ASSERT_EQ(scanResults.size(), 0);
+  ASSERT_EQ(joinSideResults.size(), 0);
+}
+
+// _____________________________________________________________________________
 TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesNotFilterOnUndefined) {
   IndexScan scan = makeScan();
 

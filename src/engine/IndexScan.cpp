@@ -507,7 +507,8 @@ struct IndexScan::SharedGeneratorState {
   Permutation::MetadataAndBlocks metaBlocks_;
   // The iterator of the generator that is currently being consumed.
   std::optional<Result::Generator::iterator> iterator_ = std::nullopt;
-  std::optional<Id> lastValue_ = std::nullopt;
+  // The index of the last matching block that was found using the join column.
+  std::optional<size_t> lastBlockIndex_ = std::nullopt;
   // Values returned by the generator that have not been re-yielded yet.
   std::deque<Result::IdTableVocabPair> prefetchedValues_{};
   // Metadata of blocks that still need to be read.
@@ -551,29 +552,32 @@ struct IndexScan::SharedGeneratorState {
     if (exhausted) {
       return;
     }
-    prefetchedValues_.push_back(std::move(*iterator_.value()));
-    auto joinColumn = prefetchedValues_.back().idTable_.getColumn(joinColumn_);
+    auto& [idTable, localVocab] = *iterator_.value();
+    auto joinColumn = idTable.getColumn(joinColumn_);
     AD_EXPENSIVE_CHECK(std::ranges::is_sorted(joinColumn));
     AD_CORRECTNESS_CHECK(!joinColumn.empty());
     // Skip processing for undef case, it will be handled differently
     if (hasUndef_) {
+      prefetchedValues_.push_back(std::move(*iterator_.value()));
       return;
     }
     AD_CORRECTNESS_CHECK(!joinColumn[0].isUndefined());
+    auto newBlocks =
+        CompressedRelationReader::getBlocksForJoin(joinColumn, metaBlocks_);
+    if (newBlocks.empty()) {
+      return;
+    }
+    prefetchedValues_.push_back(std::move(*iterator_.value()));
     // Find first value that differs from the last one that was used to find
     // matching blocks.
-    size_t offset = std::ranges::find_if_not(joinColumn,
-                                             [this](const auto& element) {
-                                               return element == lastValue_;
-                                             }) -
-                    joinColumn.begin();
-    auto newValues = joinColumn.subspan(offset);
-    if (!newValues.empty()) {
-      std::ranges::move(
-          CompressedRelationReader::getBlocksForJoin(newValues, metaBlocks_),
-          std::back_inserter(pendingBlocks_));
-      lastValue_ = newValues.back();
-    }
+    auto startIterator =
+        lastBlockIndex_.has_value()
+            ? std::ranges::upper_bound(newBlocks, lastBlockIndex_.value(), {},
+                                       &CompressedBlockMetadata::blockIndex_)
+            : newBlocks.begin();
+    std::ranges::move(startIterator, newBlocks.end(),
+                      std::back_inserter(pendingBlocks_));
+    lastBlockIndex_ = newBlocks.back().blockIndex_;
   }
 
   // Check if there are any undefined values yielded by the original generator.
