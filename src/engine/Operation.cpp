@@ -132,11 +132,13 @@ ProtoResult Operation::runComputation(const ad_utility::Timer& timer,
   } else {
     runtimeInfo().status_ = RuntimeInformation::lazilyMaterialized;
     result.runOnNewChunkComputed(
-        [this, timeSizeUpdate = 0us](
+        [this, timeSizeUpdate = 0us, numBlocks = 0ul](
             const IdTable& idTable,
             std::chrono::microseconds duration) mutable {
           updateRuntimeStats(false, idTable.numRows(), idTable.numColumns(),
                              duration);
+          ++numBlocks;
+          runtimeInfo().addDetail("num-lazy-blocks", numBlocks);
           LOG(DEBUG) << "Computed partial chunk of size " << idTable.numRows()
                      << " x " << idTable.numColumns() << std::endl;
           timeSizeUpdate += duration;

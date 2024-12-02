@@ -87,14 +87,19 @@ ProtoResult Filter::computeResult(bool requestLaziness) {
   IdTable result{width, getExecutionContext()->getAllocator()};
 
   LocalVocab resultLocalVocab{};
-  ad_utility::callFixedSize(
-      width, [this, &subRes, &result, &resultLocalVocab]<int WIDTH>() {
-        for (Result::IdTableVocabPair& pair : subRes->idTables()) {
-          computeFilterImpl<WIDTH>(result, std::move(pair.idTable_),
-                                   pair.localVocab_, subRes->sortedBy());
-          resultLocalVocab.mergeWith(std::span{&pair.localVocab_, 1});
-        }
-      });
+  ad_utility::Timer computationTimer{ad_utility::Timer::InitialStatus::Stopped};
+  ad_utility::callFixedSize(width, [this, &subRes, &result, &resultLocalVocab,
+                                    &computationTimer]<int WIDTH>() {
+    for (Result::IdTableVocabPair& pair : subRes->idTables()) {
+      computationTimer.cont();
+      computeFilterImpl<WIDTH>(result, std::move(pair.idTable_),
+                               pair.localVocab_, subRes->sortedBy());
+      computationTimer.stop();
+      resultLocalVocab.mergeWith(std::span{&pair.localVocab_, 1});
+    }
+  });
+  runtimeInfo().addDetail("time-filter-computation-ms",
+                          computationTimer.msecs().count());
 
   LOG(DEBUG) << "Filter result computation done." << endl;
 
