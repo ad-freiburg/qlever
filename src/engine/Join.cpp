@@ -172,6 +172,14 @@ ProtoResult Join::computeResult(bool requestLaziness) {
   auto rightResIfCached = getCachedOrSmallResult(*_right);
   checkCancellation();
 
+  std::span joinVarSpan{&_joinVar, 1};
+  auto leftIndexScans = _left->getIndexScansForSortVariables(joinVarSpan);
+  auto rightIndexScans = _right->getIndexScansForSortVariables(joinVarSpan);
+  for (auto* left : leftIndexScans) {
+    for (auto* right : rightIndexScans) {
+      IndexScan::setBlocksForJoinOfIndexScans(left, right);
+    }
+  }
   auto leftIndexScan =
       std::dynamic_pointer_cast<IndexScan>(_left->getRootOperation());
   if (leftIndexScan &&

@@ -36,6 +36,8 @@ class IndexScan final : public Operation {
   std::vector<ColumnIndex> additionalColumns_;
   std::vector<Variable> additionalVariables_;
 
+  std::optional<std::vector<CompressedBlockMetadata>> prefilteredBlocks_;
+
  public:
   IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
             const SparqlTriple& triple, Graphs graphsToFilter = std::nullopt,
@@ -98,6 +100,8 @@ class IndexScan final : public Operation {
   // Requires that the `joinColumn` is sorted, else the behavior is undefined.
   Permutation::IdTableGenerator lazyScanForJoinOfColumnWithScan(
       std::span<const Id> joinColumn) const;
+
+  static void setBlocksForJoinOfIndexScans(Operation* left, Operation* right);
 
  private:
   // TODO<joka921> Make the `getSizeEstimateBeforeLimit()` function `const` for
@@ -204,4 +208,14 @@ class IndexScan final : public Operation {
   Permutation::IdTableGenerator getLazyScan(
       std::vector<CompressedBlockMetadata> blocks) const;
   std::optional<Permutation::MetadataAndBlocks> getMetadataForScan() const;
+
+  // TODO<joka921> Comment.
+  void setPrefilteredBlocks(
+      std::vector<CompressedBlockMetadata> prefilteredBlocks) {
+    prefilteredBlocks_ = std::move(prefilteredBlocks);
+    disableCaching();
+  }
+
+  std::vector<Operation*> getIndexScansForSortVariables(
+      std::span<const Variable> variables) override;
 };

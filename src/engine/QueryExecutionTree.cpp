@@ -11,6 +11,8 @@
 #include <string>
 #include <vector>
 
+#include "engine/Filter.h"
+#include "engine/IndexScan.h"
 #include "engine/Sort.h"
 #include "parser/RdfEscaping.h"
 
@@ -164,8 +166,26 @@ std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
   }
 
   QueryExecutionContext* qec = qet->getRootOperation()->getExecutionContext();
+  /*
+  bool isResortedFilter = false;
+  if (auto filter = dynamic_cast<const Filter*>(qet->rootOperation_.get())) {
+    if (dynamic_cast<const
+  IndexScan*>(filter->getSubtree()->rootOperation_.get())) { isResortedFilter =
+  true;
+    }
+  }
+  */
   auto sort = std::make_shared<Sort>(qec, std::move(qet), sortColumns);
-  return std::make_shared<QueryExecutionTree>(qec, std::move(sort));
+  auto result = std::make_shared<QueryExecutionTree>(qec, std::move(sort));
+  /*
+  // TODO<joka921> This currently is a hack for the pubchem queries, let's
+  // discuss the options to do this.
+  if (isResortedFilter) {
+    result->getSizeEstimate();
+    result->sizeEstimate_.value() *= 20;
+  }
+  */
+  return result;
 }
 
 // _____________________________________________________________________________

@@ -337,7 +337,14 @@ IndexScan::getBlockMetadata() const {
 // _____________________________________________________________________________
 std::optional<std::vector<CompressedBlockMetadata>>
 IndexScan::getBlockMetadataOptionallyPrefiltered() const {
-  auto optBlockSpan = getBlockMetadata();
+  auto optBlockSpan =
+      [&]() -> std::optional<std::span<const CompressedBlockMetadata>> {
+    if (prefilteredBlocks_.has_value()) {
+      return prefilteredBlocks_.value();
+    } else {
+      return getBlockMetadata();
+    }
+  }();
   std::optional<std::vector<CompressedBlockMetadata>> optBlocks = std::nullopt;
   if (optBlockSpan.has_value()) {
     const auto& blockSpan = optBlockSpan.value();
@@ -436,6 +443,34 @@ IndexScan::lazyScanForJoinOfTwoScans(const IndexScan& s1, const IndexScan& s2) {
 }
 
 // _____________________________________________________________________________
+void IndexScan::setBlocksForJoinOfIndexScans(Operation* left,
+                                             Operation* right) {
+  auto& leftScan = dynamic_cast<IndexScan&>(*left);
+  auto& rightScan = dynamic_cast<IndexScan&>(*right);
+
+  auto getBlocks = [](IndexScan& scan) {
+    auto metaBlocks = scan.getMetadataForScan();
+    if (!metaBlocks.has_value()) {
+      return metaBlocks;
+    }
+    if (scan.prefilteredBlocks_.has_value()) {
+      metaBlocks.value().blockMetadata_ = scan.prefilteredBlocks_.value();
+    }
+    return metaBlocks;
+  };
+
+  auto metaBlocks1 = getBlocks(leftScan);
+  auto metaBlocks2 = getBlocks(rightScan);
+  if (!metaBlocks1.has_value() || !metaBlocks2.has_value()) {
+    return;
+  }
+  auto [blocks1, blocks2] = CompressedRelationReader::getBlocksForJoin(
+      metaBlocks1.value(), metaBlocks2.value());
+  leftScan.prefilteredBlocks_ = std::move(blocks1);
+  rightScan.prefilteredBlocks_ = std::move(blocks2);
+}
+
+// _____________________________________________________________________________
 Permutation::IdTableGenerator IndexScan::lazyScanForJoinOfColumnWithScan(
     std::span<const Id> joinColumn) const {
   AD_EXPENSIVE_CHECK(std::ranges::is_sorted(joinColumn));
@@ -453,4 +488,22 @@ Permutation::IdTableGenerator IndexScan::lazyScanForJoinOfColumnWithScan(
   auto result = getLazyScan(blocks);
   result.details().numBlocksAll_ = metaBlocks1.value().blockMetadata_.size();
   return result;
+}
+
+// _____________________________________________________________________________
+std::vector<Operation*> IndexScan::getIndexScansForSortVariables(
+    std::span<const Variable> variables) {
+  const auto& sorted = resultSortedOn();
+  if (resultSortedOn().size() < variables.size()) {
+    return {};
+  }
+  const auto& varColMap = getExternallyVisibleVariableColumns();
+  for (size_t i = 0; i < variables.size(); ++i) {
+    auto it = varColMap.find(variables[i]);
+    if (it == varColMap.end() ||
+        it->second.columnIndex_ != resultSortedOn().at(i)) {
+      return {};
+    }
+  }
+  return {this};
 }

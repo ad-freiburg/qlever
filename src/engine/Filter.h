@@ -54,6 +54,11 @@ class Filter : public Operation {
     return _subtree->getMultiplicity(col);
   }
 
+  std::vector<Operation*> getIndexScansForSortVariables(
+      std::span<const Variable> variables) override {
+    return _subtree->getIndexScansForSortVariables(variables);
+  }
+
  private:
   VariableToColumnMap computeVariableToColumnMap() const override {
     return _subtree->getVariableColumns();

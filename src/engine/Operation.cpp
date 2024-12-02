@@ -190,8 +190,9 @@ CacheValue Operation::runComputationAndPrepareForCache(
     const ad_utility::Timer& timer, ComputationMode computationMode,
     const QueryCacheKey& cacheKey, bool pinned) {
   auto& cache = _executionContext->getQueryTreeCache();
+  bool suitableForCaching = isSuitableForCaching();
   auto result = runComputation(timer, computationMode);
-  if (!result.isFullyMaterialized() &&
+  if (suitableForCaching && !result.isFullyMaterialized() &&
       !unlikelyToFitInCache(cache.getMaxSizeSingleEntry())) {
     AD_CONTRACT_CHECK(!pinned);
     result.cacheDuringConsumption(

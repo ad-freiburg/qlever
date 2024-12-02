@@ -23,6 +23,7 @@
 
 // forward declaration needed to break dependencies
 class QueryExecutionTree;
+class IndexScan;
 
 enum class ComputationMode {
   FULLY_MATERIALIZED,
@@ -89,6 +90,8 @@ class Operation {
   // True if this operation does not support limits/offsets natively and a
   // limit/offset is applied post computation.
   bool externalLimitApplied_ = false;
+
+  bool isSuitableForCaching_ = true;
 
  public:
   // Holds a `PrefilterExpression` with its corresponding `Variable`.
@@ -175,7 +178,8 @@ class Operation {
 
   // If this function returns `false`, then the result of this `Operation` will
   // never be stored in the cache.
-  virtual bool isSuitableForCaching() const { return true; }
+  virtual bool isSuitableForCaching() const { return isSuitableForCaching_; }
+  virtual void disableCaching() final { isSuitableForCaching_ = true; }
 
  private:
   // The individual implementation of `getCacheKey` (see above) that has to be
@@ -429,6 +433,11 @@ class Operation {
   virtual void updateRuntimeInformationWhenOptimizedOut(
       RuntimeInformation::Status status =
           RuntimeInformation::Status::optimizedOut);
+
+  virtual std::vector<Operation*> getIndexScansForSortVariables(
+      [[maybe_unused]] std::span<const Variable> variables) {
+    return {};
+  }
 
  private:
   // Create the runtime information in case the evaluation of this operation has

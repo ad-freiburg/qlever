@@ -102,6 +102,18 @@ class QueryExecutionTree {
   setPrefilterGetUpdatedQueryExecutionTree(
       std::vector<Operation::PrefilterVariablePair> prefilterPairs) const;
 
+  virtual std::vector<Operation*> getIndexScansForSortVariables(
+      std::span<const Variable> variables) final {
+    auto result = rootOperation_->getIndexScansForSortVariables(variables);
+    if (result.empty()) {
+      return result;
+    }
+    rootOperation_->disableCaching();
+    cachedResult_.reset();
+    sizeEstimate_.reset();
+    return result;
+  }
+
   size_t getDistinctEstimate(size_t col) const {
     return static_cast<size_t>(rootOperation_->getSizeEstimate() /
                                rootOperation_->getMultiplicity(col));
