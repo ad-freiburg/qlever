@@ -207,4 +207,13 @@ class Join : public Operation {
 
   // Commonly used code for the various known-to-be-empty cases.
   ProtoResult createEmptyResult() const;
+
+ public:
+  std::vector<Operation*> getIndexScansForSortVariables(
+      std::span<const Variable> variables) override {
+    auto result = _left->getIndexScansForSortVariables(variables);
+    auto right = _right->getIndexScansForSortVariables(variables);
+    result.insert(result.end(), right.begin(), right.end());
+    return result;
+  }
 };
