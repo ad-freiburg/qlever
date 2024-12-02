@@ -555,7 +555,6 @@ struct IndexScan::SharedGeneratorState {
     AD_CORRECTNESS_CHECK(!joinColumn.empty());
     // Skip processing for undef case, it will be handled differently
     if (hasUndef_) {
-      prefetchedValues_.push_back(std::move(*iterator_.value()));
       return;
     }
     AD_CORRECTNESS_CHECK(!joinColumn[0].isUndefined());
@@ -591,14 +590,8 @@ struct IndexScan::SharedGeneratorState {
 Result::Generator IndexScan::createPrefilteredJoinSide(
     std::shared_ptr<SharedGeneratorState> innerState) {
   if (innerState->hasUndef()) {
-    for (Result::IdTableVocabPair& pair : innerState->prefetchedValues_) {
-      co_yield pair;
-    }
-    innerState->prefetchedValues_.clear();
+    AD_CORRECTNESS_CHECK(innerState->prefetchedValues_.empty());
     auto& iterator = innerState->iterator_.value();
-    if (iterator != innerState->generator_.end()) {
-      ++iterator;
-    }
     while (iterator != innerState->generator_.end()) {
       co_yield *iterator;
       ++iterator;
