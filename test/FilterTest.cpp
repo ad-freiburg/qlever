@@ -4,11 +4,12 @@
 
 #include <gmock/gmock.h>
 
+#include "./PrefilterExpressionTestHelpers.h"
 #include "engine/Filter.h"
 #include "engine/ValuesForTesting.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
-#include "engine/sparqlExpressions/RelationalExpressions.h"
+#include "engine/sparqlExpressions/SparqlExpression.h"
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
 
@@ -31,6 +32,30 @@ std::vector<IdTable> toVector(Result::Generator generator) {
   }
   return result;
 }
+
+// _____________________________________________________________________________
+void checkSetPrefilterExpressionVariablePair(
+    QueryExecutionContext* qec, const Permutation::Enum& permutation,
+    SparqlTriple triple,
+    std::unique_ptr<sparqlExpression::SparqlExpression> sparqlExpr,
+    std::unique_ptr<prefilterExpressions::PrefilterExpression> prefilterExpr,
+    ColumnIndex columnIdx, bool prefilterIsApplicable) {
+  Filter filter{
+      qec,
+      ad_utility::makeExecutionTree<IndexScan>(qec, permutation, triple),
+      {std::move(sparqlExpr), "Expression ?x"}};
+  std::stringstream os;
+  os << "Added PrefiterExpression: \n";
+  os << *prefilterExpr;
+  os << "\nApplied on column: " << columnIdx << ".";
+  if (prefilterIsApplicable) {
+    EXPECT_THAT(filter.getCacheKey(), ::testing::HasSubstr(os.str()));
+  } else {
+    EXPECT_THAT(filter.getCacheKey(),
+                ::testing::Not(::testing::HasSubstr(os.str())));
+  }
+}
+
 }  // namespace
 
 // _____________________________________________________________________________
@@ -137,13 +162,42 @@ TEST(Filter,
       makeIdTableFromVector({{true}, {true}, {true}, {true}, {true}}, asBool));
 }
 
-template <typename Expr, typename... Args>
-static constexpr auto make(Args&&... args) {
-  return std::make_unique<Expr>(AD_FWD(args)...);
+// _____________________________________________________________________________
+TEST(Filter, verifySetPrefilterExpressionVariablePairForIndexScanChild) {
+  using namespace makeFilterExpression;
+  using namespace makeSparqlExpression;
+  using namespace ad_utility::testing;
+  std::string kg = "<a> <p> 22.5 .";
+  QueryExecutionContext* qec = ad_utility::testing::getQec(kg);
+  // For the following tests a <PrefilterExpression, Variable> pair should be
+  // assigned to the IndexScan child (prefiltering is possible) with Filter
+  // construction.
+  checkSetPrefilterExpressionVariablePair(
+      qec, Permutation::POS, {Variable{"?x"}, "<p>", Variable{"?z"}},
+      ltSprql(Variable{"?z"}, IntId(10)), lt(IntId(10)), 1, true);
+  checkSetPrefilterExpressionVariablePair(
+      qec, Permutation::POS, {Variable{"?x"}, "<p>", Variable{"?z"}},
+      andSprqlExpr(neqSprql(Variable{"?z"}, IntId(10)),
+                   gtSprql(Variable{"?y"}, DoubleId(0))),
+      neq(IntId(10)), 1, true);
+  checkSetPrefilterExpressionVariablePair(
+      qec, Permutation::PSO,
+      {makeSparqlExpression::Iri::fromIriref("<a>"), "<p>", Variable{"?z"}},
+      eqSprql(Variable{"?z"}, DoubleId(22.5)), eq(DoubleId(22.5)), 2, true);
+
+  // We expect that no <PrefilterExpression, Variable> pair is assigned
+  // (no prefilter procedure applicable) with Filter construction.
+  checkSetPrefilterExpressionVariablePair(
+      qec, Permutation::PSO, {Variable{"?x"}, "<p>", Variable{"?z"}},
+      eqSprql(Variable{"?z"}, DoubleId(22.5)), eq(DoubleId(22.5)), 1, false);
+  checkSetPrefilterExpressionVariablePair(
+      qec, Permutation::POS, {Variable{"?x"}, "<p>", Variable{"?z"}},
+      gtSprql(Variable{"?x"}, VocabId(10)), gt(VocabId(10)), 1, false);
 }
 
 // _____________________________________________________________________________
 TEST(Filter, lazyChildMaterializedResultBinaryFilter) {
+  using namespace makeSparqlExpression;
   QueryExecutionContext* qec = ad_utility::testing::getQec();
   qec->getQueryTreeCache().clearAll();
   std::vector<IdTable> idTables;
@@ -154,10 +208,7 @@ TEST(Filter, lazyChildMaterializedResultBinaryFilter) {
   idTables.push_back(makeIdTableFromVector({{8}, {8}}, I));
 
   auto varX = Variable{"?x"};
-  using namespace sparqlExpression;
-  auto expr = makeUnaryNegateExpression(
-      make<LessThanExpression>(std::array<SparqlExpression::Ptr, 2>{
-          make<VariableExpression>(varX), make<IdExpression>(I(5))}));
+  auto expr = notSprqlExpr(ltSprql(varX, I(5)));
 
   ValuesForTesting values{
       qec, std::move(idTables), {Variable{"?x"}}, false, {0}};

@@ -1,3 +1,8 @@
+//  Copyright 2024, University of Freiburg,
+//  Chair of Algorithms and Data Structures.
+//  Author: @Jonathan24680
+//  Author: Christoph Ullinger <ullingec@informatik.uni-freiburg.de>
+
 #include "engine/SpatialJoinAlgorithms.h"
 
 #include <s2/s2closest_point_query.h>
@@ -8,6 +13,7 @@
 
 #include <cmath>
 
+#include "engine/SpatialJoin.h"
 #include "util/GeoSparqlHelpers.h"
 
 using namespace BoostGeometryNamespace;
@@ -15,12 +21,9 @@ using namespace BoostGeometryNamespace;
 // ____________________________________________________________________________
 SpatialJoinAlgorithms::SpatialJoinAlgorithms(
     QueryExecutionContext* qec, PreparedSpatialJoinParams params,
-    bool addDistToResult,
-    std::variant<NearestNeighborsConfig, MaxDistanceConfig> config,
-    std::optional<SpatialJoin*> spatialJoin)
+    SpatialJoinConfiguration config, std::optional<SpatialJoin*> spatialJoin)
     : qec_{qec},
       params_{std::move(params)},
-      addDistToResult_{addDistToResult},
       config_{std::move(config)},
       spatialJoin_{spatialJoin} {}
 
@@ -45,8 +48,8 @@ Id SpatialJoinAlgorithms::computeDist(const IdTable* idTableLeft,
   if (!point1.has_value() || !point2.has_value()) {
     return Id::makeUndefined();
   }
-  return Id::makeFromInt(static_cast<long long>(
-      ad_utility::detail::wktDistImpl(point1.value(), point2.value()) * 1000));
+  return Id::makeFromDouble(
+      ad_utility::detail::wktDistImpl(point1.value(), point2.value()));
 }
 
 // ____________________________________________________________________________
@@ -55,19 +58,22 @@ void SpatialJoinAlgorithms::addResultTableEntry(IdTable* result,
                                                 const IdTable* idTableRight,
                                                 size_t rowLeft, size_t rowRight,
                                                 Id distance) const {
-  // this lambda function copies elements from copyFrom
-  // into the table res. It copies them into the row
-  // rowIndRes and column column colIndRes. It returns the column number
-  // until which elements were copied
+  // this lambda function copies values from copyFrom into the table res only if
+  // the column of the value is specified in sourceColumns. If sourceColumns is
+  // nullopt, all columns are added. It copies them into the row rowIndRes and
+  // column column colIndRes. It returns the column number until which elements
+  // were copied
   auto addColumns = [](IdTable* res, const IdTable* copyFrom, size_t rowIndRes,
-                       size_t colIndRes, size_t rowIndCopy) {
-    size_t col = 0;
-    while (col < copyFrom->numColumns()) {
-      res->at(rowIndRes, colIndRes) = (*copyFrom).at(rowIndCopy, col);
-      colIndRes += 1;
-      col += 1;
+                       size_t colIndRes, size_t rowIndCopy,
+                       std::optional<std::vector<ColumnIndex>> sourceColumns =
+                           std::nullopt) {
+    size_t nCols = sourceColumns.has_value() ? sourceColumns.value().size()
+                                             : copyFrom->numColumns();
+    for (size_t i = 0; i < nCols; i++) {
+      auto col = sourceColumns.has_value() ? sourceColumns.value()[i] : i;
+      res->at(rowIndRes, colIndRes + i) = (*copyFrom).at(rowIndCopy, col);
     }
-    return colIndRes;
+    return colIndRes + nCols;
   };
 
   auto resrow = result->numRows();
@@ -75,9 +81,10 @@ void SpatialJoinAlgorithms::addResultTableEntry(IdTable* result,
   // add columns to result table
   size_t rescol = 0;
   rescol = addColumns(result, idTableLeft, resrow, rescol, rowLeft);
-  rescol = addColumns(result, idTableRight, resrow, rescol, rowRight);
+  rescol = addColumns(result, idTableRight, resrow, rescol, rowRight,
+                      params_.rightSelectedCols_);
 
-  if (addDistToResult_) {
+  if (config_.distanceVariable_.has_value()) {
     result->at(resrow, rescol) = distance;
     // rescol isn't used after that in this function, but future updates,
     // which add additional columns, would need to remember to increase
@@ -91,7 +98,8 @@ void SpatialJoinAlgorithms::addResultTableEntry(IdTable* result,
 // ____________________________________________________________________________
 Result SpatialJoinAlgorithms::BaselineAlgorithm() {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
-              rightJoinCol, numColumns, maxDist, maxResults] = params_;
+              rightJoinCol, rightSelectedCols, numColumns, maxDist,
+              maxResults] = params_;
   IdTable result{numColumns, qec_->getAllocator()};
 
   // cartesian product between the two tables, pairs are restricted according to
@@ -101,12 +109,12 @@ Result SpatialJoinAlgorithms::BaselineAlgorithm() {
     // is used. Each intermediate result is stored as a pair of its `rowRight`
     // and distance. Since the queue will hold at most `maxResults_ + 1` items,
     // it is not a memory concern.
-    auto compare = [](std::pair<size_t, int64_t> a,
-                      std::pair<size_t, int64_t> b) {
+    auto compare = [](std::pair<size_t, double> a,
+                      std::pair<size_t, double> b) {
       return a.second < b.second;
     };
-    std::priority_queue<std::pair<size_t, int64_t>,
-                        std::vector<std::pair<size_t, int64_t>>,
+    std::priority_queue<std::pair<size_t, double>,
+                        std::vector<std::pair<size_t, double>>,
                         decltype(compare)>
         intermediate(compare);
 
@@ -116,9 +124,9 @@ Result SpatialJoinAlgorithms::BaselineAlgorithm() {
                             leftJoinCol, rightJoinCol);
 
       // Ensure `maxDist_` constraint
-      if (dist.getDatatype() != Datatype::Int ||
+      if (dist.getDatatype() != Datatype::Double ||
           (maxDist.has_value() &&
-           dist.getInt() > static_cast<int64_t>(maxDist.value()))) {
+           (dist.getDouble() * 1000) > static_cast<double>(maxDist.value()))) {
         continue;
       }
 
@@ -130,7 +138,7 @@ Result SpatialJoinAlgorithms::BaselineAlgorithm() {
       }
 
       // Ensure `maxResults_` constraint using priority queue
-      intermediate.push(std::pair{rowRight, dist.getInt()});
+      intermediate.push(std::pair{rowRight, dist.getDouble()});
       // Too many results? Drop the worst one
       if (intermediate.size() > maxResults.value()) {
         intermediate.pop();
@@ -147,7 +155,7 @@ Result SpatialJoinAlgorithms::BaselineAlgorithm() {
         intermediate.pop();
 
         addResultTableEntry(&result, idTableLeft, idTableRight, rowLeft,
-                            rowRight, Id::makeFromInt(dist));
+                            rowRight, Id::makeFromDouble(dist));
       }
     }
   }
@@ -158,7 +166,8 @@ Result SpatialJoinAlgorithms::BaselineAlgorithm() {
 // ____________________________________________________________________________
 Result SpatialJoinAlgorithms::S2geometryAlgorithm() {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
-              rightJoinCol, numColumns, maxDist, maxResults] = params_;
+              rightJoinCol, rightSelectedCols, numColumns, maxDist,
+              maxResults] = params_;
   IdTable result{numColumns, qec_->getAllocator()};
 
   // Helper function to convert `GeoPoint` to `S2Point`
@@ -217,12 +226,12 @@ Result SpatialJoinAlgorithms::S2geometryAlgorithm() {
       // In this loop we only receive points that already satisfy the given
       // criteria
       auto indexRow = neighbor.data();
-      auto dist = static_cast<int64_t>(S2Earth::ToMeters(neighbor.distance()));
+      auto dist = S2Earth::ToKm(neighbor.distance());
 
       auto rowLeft = indexOfRight ? searchRow : indexRow;
       auto rowRight = indexOfRight ? indexRow : searchRow;
       addResultTableEntry(&result, idTableLeft, idTableRight, rowLeft, rowRight,
-                          Id::makeFromInt(dist));
+                          Id::makeFromDouble(dist));
     }
   }
 
@@ -234,7 +243,8 @@ Result SpatialJoinAlgorithms::S2geometryAlgorithm() {
 std::vector<Box> SpatialJoinAlgorithms::computeBoundingBox(
     const Point& startPoint) const {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
-              rightJoinCol, numColumns, maxDist, maxResults] = params_;
+              rightJoinCol, rightSelectedCols, numColumns, maxDist,
+              maxResults] = params_;
   AD_CORRECTNESS_CHECK(maxDist.has_value(),
                        "Max distance must have a value for this operation");
   // haversine function
@@ -316,7 +326,8 @@ std::vector<Box> SpatialJoinAlgorithms::computeBoundingBox(
 std::vector<Box> SpatialJoinAlgorithms::computeBoundingBoxForLargeDistances(
     const Point& startPoint) const {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
-              rightJoinCol, numColumns, maxDist, maxResults] = params_;
+              rightJoinCol, rightSelectedCols, numColumns, maxDist,
+              maxResults] = params_;
   AD_CORRECTNESS_CHECK(maxDist.has_value(),
                        "Max distance must have a value for this operation");
 
@@ -451,7 +462,8 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
   };
 
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
-              rightJoinCol, numColumns, maxDist, maxResults] = params_;
+              rightJoinCol, rightSelectedCols, numColumns, maxDist,
+              maxResults] = params_;
   IdTable result{numColumns, qec_->getAllocator()};
 
   // create r-tree for smaller result table
@@ -512,8 +524,8 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
       }
       auto distance = computeDist(idTableLeft, idTableRight, rowLeft, rowRight,
                                   leftJoinCol, rightJoinCol);
-      AD_CORRECTNESS_CHECK(distance.getDatatype() == Datatype::Int);
-      if (distance.getInt() <= maxDist) {
+      AD_CORRECTNESS_CHECK(distance.getDatatype() == Datatype::Double);
+      if (distance.getDouble() * 1000 <= static_cast<double>(maxDist.value())) {
         addResultTableEntry(&result, idTableLeft, idTableRight, rowLeft,
                             rowRight, distance);
       }

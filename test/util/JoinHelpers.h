@@ -57,7 +57,7 @@ IdTable useJoinFunctionOnIdTables(const IdTableAndJoinColumn& tableA,
  * @brief Returns a lambda for calling `Join::hashJoin` via
  *  `ad_utility::callFixedSize`.
  */
-auto makeHashJoinLambda() {
+inline auto makeHashJoinLambda() {
   return []<int A, int B, int C>(auto&&... args) {
     return Join::hashJoin(AD_FWD(args)...);
   };
@@ -67,7 +67,7 @@ auto makeHashJoinLambda() {
  * @brief Returns a lambda for calling `Join::join` via
  *  `ad_utility::callFixedSize`.
  */
-auto makeJoinLambda() {
+inline auto makeJoinLambda() {
   return []<int A, int B, int C>(const IdTable& a, ColumnIndex jc1,
                                  const IdTable& b, ColumnIndex jc2,
                                  IdTable* result) {

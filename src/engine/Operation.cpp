@@ -5,11 +5,13 @@
 #include "engine/Operation.h"
 
 #include "engine/QueryExecutionTree.h"
+#include "global/RuntimeParameters.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/TransparentFunctors.h"
 
 using namespace std::chrono_literals;
 
+//______________________________________________________________________________
 template <typename F>
 void Operation::forAllDescendants(F f) {
   static_assert(
@@ -22,6 +24,7 @@ void Operation::forAllDescendants(F f) {
   }
 }
 
+//______________________________________________________________________________
 template <typename F>
 void Operation::forAllDescendants(F f) const {
   static_assert(
@@ -34,9 +37,9 @@ void Operation::forAllDescendants(F f) const {
   }
 }
 
-// __________________________________________________________________________________________________________
+// _____________________________________________________________________________
 vector<string> Operation::collectWarnings() const {
-  vector<string> res = getWarnings();
+  vector<string> res{*getWarnings().rlock()};
   for (auto child : getChildren()) {
     if (!child) {
       continue;
@@ -47,6 +50,15 @@ vector<string> Operation::collectWarnings() const {
   }
 
   return res;
+}
+
+// _____________________________________________________________________________
+void Operation::addWarningOrThrow(std::string warning) const {
+  if (RuntimeParameters().get<"throw-on-unbound-variables">()) {
+    throw InvalidSparqlQueryException(std::move(warning));
+  } else {
+    addWarning(std::move(warning));
+  }
 }
 
 // ________________________________________________________________________
@@ -176,7 +188,7 @@ ProtoResult Operation::runComputation(const ad_utility::Timer& timer,
 // _____________________________________________________________________________
 CacheValue Operation::runComputationAndPrepareForCache(
     const ad_utility::Timer& timer, ComputationMode computationMode,
-    const std::string& cacheKey, bool pinned) {
+    const QueryCacheKey& cacheKey, bool pinned) {
   auto& cache = _executionContext->getQueryTreeCache();
   auto result = runComputation(timer, computationMode);
   if (!result.isFullyMaterialized() &&
@@ -233,7 +245,8 @@ std::shared_ptr<const Result> Operation::getResult(
     signalQueryUpdate();
   }
   auto& cache = _executionContext->getQueryTreeCache();
-  const string cacheKey = getCacheKey();
+  const QueryCacheKey cacheKey = {
+      getCacheKey(), _executionContext->locatedTriplesSnapshot().index_};
   const bool pinFinalResultButNotSubtrees =
       _executionContext->_pinResult && isRoot;
   const bool pinResult =
@@ -453,8 +466,8 @@ void Operation::createRuntimeInfoFromEstimates(
   }
   _runtimeInfo->multiplicityEstimates_ = multiplicityEstimates;
 
-  auto cachedResult =
-      _executionContext->getQueryTreeCache().getIfContained(getCacheKey());
+  auto cachedResult = _executionContext->getQueryTreeCache().getIfContained(
+      {getCacheKey(), locatedTriplesSnapshot().index_});
   if (cachedResult.has_value()) {
     const auto& [resultPointer, cacheStatus] = cachedResult.value();
     _runtimeInfo->cacheStatus_ = cacheStatus;
