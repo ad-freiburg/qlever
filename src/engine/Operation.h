@@ -31,8 +31,64 @@ enum class ComputationMode {
 };
 
 class Operation {
+ private:
   using SharedCancellationHandle = ad_utility::SharedCancellationHandle;
   using Milliseconds = std::chrono::milliseconds;
+
+  // Holds a precomputed Result of this operation if it is the sibling of a
+  // Service operation.
+  std::optional<std::shared_ptr<const Result>>
+      precomputedResultBecauseSiblingOfService_;
+
+  std::shared_ptr<RuntimeInformation> _runtimeInfo =
+      std::make_shared<RuntimeInformation>();
+  /// Pointer to the head of the `RuntimeInformation`.
+  /// Used in `signalQueryUpdate()`, reset in `createRuntimeInfoFromEstimates()`
+  std::shared_ptr<const RuntimeInformation> _rootRuntimeInfo = _runtimeInfo;
+  RuntimeInformationWholeQuery _runtimeInfoWholeQuery;
+
+  // Collect all the warnings that were created during the creation or
+  // execution of this operation. This attribute is declared mutable in order to
+  // allow const-functions in subclasses of Operation to add warnings.
+  using ThreadsafeWarnings = ad_utility::Synchronized<std::vector<std::string>>;
+  mutable ThreadsafeWarnings warnings_;
+
+  // The limit from a SPARQL `LIMIT` clause.
+
+  // Note: This limit will only be set in the following cases:
+  // 1. This operation is the last operation of a subquery
+  // 2. This operation is the last operation of a query AND it supports an
+  //    efficient calculation of the limit (see also the `supportsLimit()`
+  //    function).
+  // We have chosen this design (in contrast to a dedicated subclass
+  // of `Operation`) to favor such efficient implementations of a limit in the
+  // future.
+  LimitOffsetClause _limit;
+
+  // Mutex that protects the `variableToColumnMap_` below.
+  mutable ad_utility::CopyableMutex variableToColumnMapMutex_;
+  // Store the mapping from variables to column indices. `nullopt` means that
+  // this map has not yet been computed. This computation is typically performed
+  // in the const member function `getInternallyVisibleVariableColumns`, so we
+  // have to make it threadsafe.
+  mutable std::optional<VariableToColumnMap> variableToColumnMap_;
+
+  // Store the mapping from variables to column indices that is externally
+  // visible. This might be different from the `variableToColumnMap_` in case of
+  // a subquery that doesn't select all variables.
+  mutable std::optional<VariableToColumnMap>
+      externallyVisibleVariableToColumnMap_;
+
+  // Mutex that protects the `_resultSortedColumns` below.
+  mutable ad_utility::CopyableMutex _resultSortedColumnsMutex;
+
+  // Store the list of columns by which the result is sorted.
+  mutable std::optional<vector<ColumnIndex>> _resultSortedColumns =
+      std::nullopt;
+
+  // True if this operation does not support limits/offsets natively and a
+  // limit/offset is applied post computation.
+  bool externalLimitApplied_ = false;
 
  public:
   // Holds a `PrefilterExpression` with its corresponding `Variable`.
@@ -68,9 +124,14 @@ class Operation {
 
   // Add a warning to the `Operation`. The warning will be returned by
   // `collectWarnings()` above.
-  void addWarning(std::string warning) {
-    warnings_.push_back(std::move(warning));
+  void addWarning(std::string warning) const {
+    warnings_.wlock()->push_back(std::move(warning));
   }
+
+  // If unbound variables that are used in a query are supposed to throw because
+  // the corresponding `RuntimeParameter` is set, then throw. Else add a
+  // warning.
+  void addWarningOrThrow(std::string warning) const;
 
   /**
    * @return A list of columns on which the result of this operation is sorted.
@@ -267,11 +328,8 @@ class Operation {
    */
   [[nodiscard]] virtual vector<ColumnIndex> resultSortedOn() const = 0;
 
-  /// interface to the generated warnings of this operation
-  std::vector<std::string>& getWarnings() { return warnings_; }
-  [[nodiscard]] const std::vector<std::string>& getWarnings() const {
-    return warnings_;
-  }
+  // get access to the generated warnings of this operation.
+  const ThreadsafeWarnings& getWarnings() const { return warnings_; }
 
   // Check if the cancellation flag has been set and throw an exception if
   // that's the case. This will be called at strategic places on code that
@@ -384,59 +442,6 @@ class Operation {
   // Recursively call a function on all children.
   template <typename F>
   void forAllDescendants(F f) const;
-
-  // Holds a precomputed Result of this operation if it is the sibling of a
-  // Service operation.
-  std::optional<std::shared_ptr<const Result>>
-      precomputedResultBecauseSiblingOfService_;
-
-  std::shared_ptr<RuntimeInformation> _runtimeInfo =
-      std::make_shared<RuntimeInformation>();
-  /// Pointer to the head of the `RuntimeInformation`.
-  /// Used in `signalQueryUpdate()`, reset in `createRuntimeInfoFromEstimates()`
-  std::shared_ptr<const RuntimeInformation> _rootRuntimeInfo = _runtimeInfo;
-  RuntimeInformationWholeQuery _runtimeInfoWholeQuery;
-
-  // Collect all the warnings that were created during the creation or
-  // execution of this operation.
-  std::vector<std::string> warnings_;
-
-  // The limit from a SPARQL `LIMIT` clause.
-
-  // Note: This limit will only be set in the following cases:
-  // 1. This operation is the last operation of a subquery
-  // 2. This operation is the last operation of a query AND it supports an
-  //    efficient calculation of the limit (see also the `supportsLimit()`
-  //    function).
-  // We have chosen this design (in contrast to a dedicated subclass
-  // of `Operation`) to favor such efficient implementations of a limit in the
-  // future.
-  LimitOffsetClause _limit;
-
-  // Mutex that protects the `variableToColumnMap_` below.
-  mutable ad_utility::CopyableMutex variableToColumnMapMutex_;
-  // Store the mapping from variables to column indices. `nullopt` means that
-  // this map has not yet been computed. This computation is typically performed
-  // in the const member function `getInternallyVisibleVariableColumns`, so we
-  // have to make it threadsafe.
-  mutable std::optional<VariableToColumnMap> variableToColumnMap_;
-
-  // Store the mapping from variables to column indices that is externally
-  // visible. This might be different from the `variableToColumnMap_` in case of
-  // a subquery that doesn't select all variables.
-  mutable std::optional<VariableToColumnMap>
-      externallyVisibleVariableToColumnMap_;
-
-  // Mutex that protects the `_resultSortedColumns` below.
-  mutable ad_utility::CopyableMutex _resultSortedColumnsMutex;
-
-  // Store the list of columns by which the result is sorted.
-  mutable std::optional<vector<ColumnIndex>> _resultSortedColumns =
-      std::nullopt;
-
-  // True if this operation does not support limits/offsets natively and a
-  // limit/offset is applied post computation.
-  bool externalLimitApplied_ = false;
 
   FRIEND_TEST(Operation, updateRuntimeStatsWorksCorrectly);
   FRIEND_TEST(Operation, verifyRuntimeInformationIsUpdatedForLazyOperations);

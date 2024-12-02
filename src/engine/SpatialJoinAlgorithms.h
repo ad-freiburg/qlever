@@ -1,9 +1,15 @@
+//  Copyright 2024, University of Freiburg,
+//  Chair of Algorithms and Data Structures.
+//  Author: @Jonathan24680
+//  Author: Christoph Ullinger <ullingec@informatik.uni-freiburg.de>
+
 #pragma once
 
 #include <boost/foreach.hpp>
 #include <boost/geometry.hpp>
 #include <boost/geometry/geometries/box.hpp>
 #include <boost/geometry/geometries/point.hpp>
+#include <memory>
 
 #include "engine/Result.h"
 #include "engine/SpatialJoin.h"
@@ -19,12 +25,11 @@ using Value = std::pair<Point, size_t>;
 
 class SpatialJoinAlgorithms {
  public:
-  // Initialize the Algorithm with the needed parameters
-  SpatialJoinAlgorithms(
-      QueryExecutionContext* qec, PreparedSpatialJoinParams params,
-      bool addDistToResult,
-      std::variant<NearestNeighborsConfig, MaxDistanceConfig> config,
-      std::optional<SpatialJoin*> spatialJoin = std::nullopt);
+  // initialize the Algorithm with the needed parameters
+  SpatialJoinAlgorithms(QueryExecutionContext* qec,
+                        PreparedSpatialJoinParams params,
+                        SpatialJoinConfiguration config,
+                        std::optional<SpatialJoin*> spatialJoin = std::nullopt);
   Result BaselineAlgorithm();
   Result S2geometryAlgorithm();
   Result BoundingBoxAlgorithm();
@@ -92,8 +97,7 @@ class SpatialJoinAlgorithms {
 
   QueryExecutionContext* qec_;
   PreparedSpatialJoinParams params_;
-  bool addDistToResult_;
-  std::variant<NearestNeighborsConfig, MaxDistanceConfig> config_;
+  SpatialJoinConfiguration config_;
   std::optional<SpatialJoin*> spatialJoin_;
 
   // circumference in meters at the equator (max) and the pole (min) (as the
