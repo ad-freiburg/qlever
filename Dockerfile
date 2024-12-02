@@ -41,13 +41,13 @@ RUN if [ $TARGETPLATFORM = "linux/arm64" ] ; then echo "Skipping tests for ARM64
 FROM base AS runtime
 WORKDIR /qlever
 ENV DEBIAN_FRONTEND=noninteractive
-RUN apt-get update && apt-get install -y wget python3-yaml unzip curl bzip2 pkg-config libicu-dev python3-icu libgomp1 uuid-runtime make lbzip2 libjemalloc-dev libzstd-dev libssl-dev libboost1.83-dev libboost-program-options1.83-dev libboost-iostreams1.83-dev libboost-url1.83-dev pipx bash-completion
+RUN apt-get update && apt-get install -y wget python3-yaml unzip curl bzip2 pkg-config libicu-dev python3-icu libgomp1 uuid-runtime make lbzip2 libjemalloc-dev libzstd-dev libssl-dev libboost1.83-dev libboost-program-options1.83-dev libboost-iostreams1.83-dev libboost-url1.83-dev pipx bash-completion vim sudo && rm -rf /var/lib/apt/lists/*
 
 # Set up user `qlever` with temporary sudo rights (which will be removed again
 # by the `docker-entrypoint.sh` script, see the comments in that file).
 RUN groupadd -r qlever && useradd --no-log-init -d /qlever -r -g qlever qlever
 RUN chown qlever:qlever /qlever
-RUN apt-get install -y vim sudo && echo "qlever ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+RUN echo "qlever ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 USER qlever
 RUN pipx install qlever
 ENV PATH=/qlever:/qlever/.local/bin:$PATH
