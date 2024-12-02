@@ -518,38 +518,35 @@ struct IndexScan::SharedGeneratorState {
   // Indicates if the generator has been fully consumed.
   bool doneFetching_ = false;
 
-  // Fetch the first value from the generator and skip empty tables. Return true
-  // if the generator was completely consumed, false otherwise.
-  bool fetchFirst() {
-    AD_CORRECTNESS_CHECK(!iterator_.has_value());
-    iterator_ = generator_.begin();
-    while (iterator_ != generator_.end()) {
-      if (iterator_.value()->idTable_.empty()) {
-        ++iterator_.value();
-        continue;
-      }
-      hasUndef_ = iterator_.value()->idTable_.at(0, joinColumn_).isUndefined();
-      return false;
+  // Advance the iterator to the next non-empty table. Set `hasUndef_` to true
+  // if the first table is undefined. Also set `doneFetching_` if the generator
+  // has been fully consumed.
+  void advanceInputToFirstNonEmptyTable() {
+    bool firstStep = !iterator_.has_value();
+    if (iterator_.has_value()) {
+      ++iterator_.value();
+    } else {
+      iterator_ = generator_.begin();
     }
-    return true;
+    while (iterator_ != generator_.end()) {
+      if (!iterator_.value()->idTable_.empty()) {
+        break;
+      }
+      ++iterator_.value();
+    }
+    doneFetching_ = iterator_ == generator_.end();
+    // Set the undef flag if the first table is undefined.
+    if (firstStep) {
+      hasUndef_ = !doneFetching_ &&
+                  iterator_.value()->idTable_.at(0, joinColumn_).isUndefined();
+    }
   }
 
   // Consume the next non-empty table from the generator and calculate the next
   // matching blocks from the index scan.
   void fetch() {
-    bool exhausted;
-    if (iterator_.has_value()) {
-      AD_CONTRACT_CHECK(iterator_.value() != generator_.end());
-      do {
-        // Skip empty tables
-        ++iterator_.value();
-        exhausted = iterator_.value() == generator_.end();
-      } while (!exhausted && iterator_.value()->idTable_.empty());
-    } else {
-      exhausted = fetchFirst();
-    }
-    doneFetching_ = exhausted;
-    if (exhausted) {
+    advanceInputToFirstNonEmptyTable();
+    if (doneFetching_) {
       return;
     }
     auto& [idTable, localVocab] = *iterator_.value();
