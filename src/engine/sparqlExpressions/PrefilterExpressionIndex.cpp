@@ -52,8 +52,16 @@ static auto getMaskedTriple(const BlockMetadata::PermutedTriple& triple,
 };
 
 //______________________________________________________________________________
+// Check for constant values in all columns `< evaluationColumn`
+static bool checkBlockIsInconsistent(const BlockMetadata& block,
+                                     size_t evaluationColumn) {
+  return getMaskedTriple(block.firstTriple_, evaluationColumn) !=
+         getMaskedTriple(block.lastTriple_, evaluationColumn);
+}
+
+//______________________________________________________________________________
 // Check required conditions.
-static void checkEvalRequirements(const std::vector<BlockMetadata>& input,
+static void checkEvalRequirements(std::span<const BlockMetadata> input,
                                   size_t evaluationColumn) {
   const auto throwRuntimeError = [](const std::string& errorMessage) {
     throw std::runtime_error(errorMessage);
@@ -88,12 +96,10 @@ static void checkEvalRequirements(const std::vector<BlockMetadata>& input,
   // `b1` and `b2` up to the evaluation are inconsistent.
   const auto checkColumnConsistency =
       [evaluationColumn](const BlockMetadata& b1, const BlockMetadata& b2) {
-        const auto& b1Last = getMaskedTriple(b1.lastTriple_, evaluationColumn);
-        const auto& b2First =
-            getMaskedTriple(b2.firstTriple_, evaluationColumn);
-        return getMaskedTriple(b1.firstTriple_, evaluationColumn) != b1Last ||
-               b1Last != b2First ||
-               b2First != getMaskedTriple(b2.lastTriple_, evaluationColumn);
+        return checkBlockIsInconsistent(b1, evaluationColumn) ||
+               getMaskedTriple(b1.lastTriple_, evaluationColumn) !=
+                   getMaskedTriple(b2.firstTriple_, evaluationColumn) ||
+               checkBlockIsInconsistent(b2, evaluationColumn);
       };
   if (auto it = std::ranges::adjacent_find(input, checkColumnConsistency);
       it != input.end()) {
@@ -162,12 +168,44 @@ static std::string getLogicalOpStr(const LogicalOperator logOp) {
 // SECTION PREFILTER EXPRESSION (BASE CLASS)
 //______________________________________________________________________________
 std::vector<BlockMetadata> PrefilterExpression::evaluate(
-    const std::vector<BlockMetadata>& input, size_t evaluationColumn) const {
+    std::span<const BlockMetadata> input, size_t evaluationColumn,
+    bool stripIncompleteBlocks) const {
+  if (!stripIncompleteBlocks) {
+    return evaluateAndCheckImpl(input, evaluationColumn);
+  }
+  if (input.size() < 3) {
+    return std::vector<BlockMetadata>(input.begin(), input.end());
+  }
+
+  std::optional<BlockMetadata> firstBlock = std::nullopt;
+  std::optional<BlockMetadata> lastBlock = std::nullopt;
+  if (checkBlockIsInconsistent(input.front(), evaluationColumn)) {
+    firstBlock = input.front();
+    input = input.subspan(1);
+  }
+  if (checkBlockIsInconsistent(input.back(), evaluationColumn)) {
+    lastBlock = input.back();
+    input = input.subspan(0, input.size() - 1);
+  }
+
+  auto result = evaluateAndCheckImpl(input, evaluationColumn);
+  if (firstBlock.has_value()) {
+    result.insert(result.begin(), firstBlock.value());
+  }
+  if (lastBlock.has_value()) {
+    result.push_back(lastBlock.value());
+  }
+  return result;
+};
+
+// _____________________________________________________________________________
+std::vector<BlockMetadata> PrefilterExpression::evaluateAndCheckImpl(
+    std::span<const BlockMetadata> input, size_t evaluationColumn) const {
   checkEvalRequirements(input, evaluationColumn);
   const auto& relevantBlocks = evaluateImpl(input, evaluationColumn);
   checkEvalRequirements(relevantBlocks, evaluationColumn);
   return relevantBlocks;
-};
+}
 
 // SECTION RELATIONAL OPERATIONS
 //______________________________________________________________________________
@@ -202,7 +240,7 @@ RelationalExpression<Comparison>::logicalComplement() const {
 //______________________________________________________________________________
 template <CompOp Comparison>
 std::vector<BlockMetadata> RelationalExpression<Comparison>::evaluateImpl(
-    const std::vector<BlockMetadata>& input, size_t evaluationColumn) const {
+    std::span<const BlockMetadata> input, size_t evaluationColumn) const {
   using namespace valueIdComparators;
   std::vector<ValueId> valueIdsInput;
   // For each BlockMetadata value in vector input, we have a respective Id for
@@ -317,15 +355,15 @@ LogicalExpression<Operation>::logicalComplement() const {
 //______________________________________________________________________________
 template <LogicalOperator Operation>
 std::vector<BlockMetadata> LogicalExpression<Operation>::evaluateImpl(
-    const std::vector<BlockMetadata>& input, size_t evaluationColumn) const {
+    std::span<const BlockMetadata> input, size_t evaluationColumn) const {
   using enum LogicalOperator;
   if constexpr (Operation == AND) {
-    auto resultChild1 = child1_->evaluate(input, evaluationColumn);
-    return child2_->evaluate(resultChild1, evaluationColumn);
+    auto resultChild1 = child1_->evaluate(input, evaluationColumn, false);
+    return child2_->evaluate(resultChild1, evaluationColumn, false);
   } else {
     static_assert(Operation == OR);
-    return getSetUnion(child1_->evaluate(input, evaluationColumn),
-                       child2_->evaluate(input, evaluationColumn));
+    return getSetUnion(child1_->evaluate(input, evaluationColumn, false),
+                       child2_->evaluate(input, evaluationColumn, false));
   }
 };
 
@@ -376,8 +414,8 @@ std::unique_ptr<PrefilterExpression> NotExpression::logicalComplement() const {
 
 //______________________________________________________________________________
 std::vector<BlockMetadata> NotExpression::evaluateImpl(
-    const std::vector<BlockMetadata>& input, size_t evaluationColumn) const {
-  return child_->evaluate(input, evaluationColumn);
+    std::span<const BlockMetadata> input, size_t evaluationColumn) const {
+  return child_->evaluate(input, evaluationColumn, false);
 };
 
 //______________________________________________________________________________
@@ -417,6 +455,7 @@ template class LogicalExpression<LogicalOperator::AND>;
 template class LogicalExpression<LogicalOperator::OR>;
 
 namespace detail {
+
 //______________________________________________________________________________
 void checkPropertiesForPrefilterConstruction(
     const std::vector<PrefilterExprVariablePair>& vec) {

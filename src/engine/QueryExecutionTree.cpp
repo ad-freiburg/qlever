@@ -104,6 +104,24 @@ size_t QueryExecutionTree::getSizeEstimate() {
   return sizeEstimate_.value();
 }
 
+//_____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+QueryExecutionTree::setPrefilterGetUpdatedQueryExecutionTree(
+    std::vector<Operation::PrefilterVariablePair> prefilterPairs) const {
+  AD_CONTRACT_CHECK(rootOperation_);
+  VariableToColumnMap varToColMap = getVariableColumns();
+  std::erase_if(prefilterPairs, [&varToColMap](const auto& pair) {
+    return !varToColMap.contains(pair.second);
+  });
+
+  if (prefilterPairs.empty()) {
+    return std::nullopt;
+  } else {
+    return rootOperation_->setPrefilterGetUpdatedQueryExecutionTree(
+        prefilterPairs);
+  }
+}
+
 // _____________________________________________________________________________
 bool QueryExecutionTree::knownEmptyResult() {
   if (cachedResult_) {

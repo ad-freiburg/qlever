@@ -36,10 +36,16 @@ Order ValueIds for (signed) doubles values - [0.0... max, -0.0... -max]
 Order ValueIds for Vocab and LocalVocab values given the vocabulary with
 indices (up to N) - [VocabId(0), .... VocabId(N)]
 
-COLUMN 1 and COLUMN 2 contain fixed values, this is a necessary condition
+COLUMN 0 and COLUMN 1 contain fixed values, this is a necessary condition
 that is also checked during the pre-filtering procedure. The actual evaluation
-column (we filter w.r.t. values of COLUMN 0) contains mixed types.
+column (we filter w.r.t. values of COLUMN 2) contains mixed types.
 */
+
+// Fixed column ValueIds for our test-metadata.
+const Id VocabId10 = VocabId(10);
+const Id DoubleId33 = DoubleId(33);
+const Id GraphId = VocabId(0);
+
 //______________________________________________________________________________
 class PrefilterExpressionOnMetadataTest : public ::testing::Test {
  public:
@@ -50,17 +56,18 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
   const Id trueId = BoolId(true);
   const Id referenceDateEqual = DateId(DateParser, "2000-01-01");
 
-  // Fixed column ValueIds
-  const Id VocabId10 = VocabId(10);
-  const Id DoubleId33 = DoubleId(33);
-  const Id GraphId = VocabId(0);
-
   // Define BlockMetadata
   const BlockMetadata b1 = makeBlock(undef, undef);
+  const BlockMetadata bFirstIncomplete =
+      makeBlock(undef, undef, IntId(10), IntId(10), IntId(10), IntId(11));
   const BlockMetadata b2 = makeBlock(undef, falseId);
   const BlockMetadata b3 = makeBlock(falseId, falseId);
   const BlockMetadata b4 = makeBlock(trueId, IntId(0));
+  const BlockMetadata b4Incomplete = makeBlock(
+      trueId, IntId(0), VocabId(10), DoubleId(33), VocabId(11), DoubleId(33));
   const BlockMetadata b5 = makeBlock(IntId(0), IntId(0));
+  const BlockMetadata b5Incomplete = makeBlock(
+      IntId(0), IntId(0), VocabId(10), DoubleId(33), VocabId(10), DoubleId(34));
   const BlockMetadata b6 = makeBlock(IntId(0), IntId(5));
   const BlockMetadata b7 = makeBlock(IntId(5), IntId(6));
   const BlockMetadata b8 = makeBlock(IntId(8), IntId(9));
@@ -83,14 +90,48 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
                                       DateId(DateParser, "2000-01-01"));
   const BlockMetadata b24 =
       makeBlock(DateId(DateParser, "2024-10-08"), BlankNodeId(10));
+  const BlockMetadata bLastIncomplete = makeBlock(
+      DateId(DateParser, "2024-10-08"), DateId(DateParser, "2025-10-08"),
+      VocabId(0), VocabId(0), VocabId(1), VocabId(0));
 
-  // All blocks that contain mixed (ValueId) types over column 0
+  // All blocks that contain mixed (ValueId) types over column 2,
+  // or possibly incomplete ones.
   const std::vector<BlockMetadata> mixedBlocks = {b2, b4, b11, b18, b22, b24};
+
+  // All blocks that contain mixed types over column 2 + the first and last
+  // incomplete block.
+  const std::vector<BlockMetadata> mixedAndIncompleteBlocks = {
+      bFirstIncomplete, b2, b4, b11, b18, b22, bLastIncomplete};
 
   // Ordered and unique vector with BlockMetadata
   const std::vector<BlockMetadata> blocks = {
       b1,  b2,  b3,  b4,  b5,  b6,  b7,  b8,  b9,  b10, b11, b12,
       b13, b14, b15, b16, b17, b18, b19, b20, b21, b22, b23, b24};
+
+  const std::vector<BlockMetadata> blocksIncomplete = {bFirstIncomplete,
+                                                       b2,
+                                                       b3,
+                                                       b4,
+                                                       b5,
+                                                       b6,
+                                                       b7,
+                                                       b8,
+                                                       b9,
+                                                       b10,
+                                                       b11,
+                                                       b12,
+                                                       b13,
+                                                       b14,
+                                                       b15,
+                                                       b16,
+                                                       b17,
+                                                       b18,
+                                                       b19,
+                                                       b20,
+                                                       b21,
+                                                       b22,
+                                                       b23,
+                                                       bLastIncomplete};
 
   const std::vector<BlockMetadata> blocksInvalidOrder1 = {
       b1,  b2,  b3,  b4,  b5,  b6,  b7,  b8,  b9,  b10, b11, b12,
@@ -100,24 +141,32 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
       b1,  b2,  b3,  b4,  b5,  b6,  b7,  b8,  b9,  b10, b11, b12,
       b14, b10, b15, b16, b17, b18, b19, b20, b21, b22, b23, b24};
 
-  const std::vector<BlockMetadata> blocksWithDuplicate1 = {
-      b1,  b1,  b2,  b3,  b4,  b5,  b6,  b7,  b8,  b9,  b10, b11, b12,
-      b13, b14, b15, b16, b17, b18, b19, b20, b21, b22, b23, b24};
+  const std::vector<BlockMetadata> blocksWithDuplicate1 = {b1, b1, b2,
+                                                           b3, b4, b5};
 
-  const std::vector<BlockMetadata> blocksWithDuplicate2 = {
-      b1,  b2,  b3,  b4,  b5,  b6,  b7,  b8,  b9,  b10, b11, b12, b13,
-      b14, b15, b16, b17, b18, b19, b20, b21, b22, b23, b24, b24};
+  const std::vector<BlockMetadata> blocksWithDuplicate2 = {b1,  b2,  b3,
+                                                           b23, b24, b24};
+
+  const std::vector<BlockMetadata> blocksInconsistent1 = {
+      b1, b2, b3, b4Incomplete, b5, b6, b7};
+
+  const std::vector<BlockMetadata> blocksInconsistent2 = {
+      b1, b2, b3, b4, b5Incomplete, b6, b7};
 
   // Function to create BlockMetadata
-  const BlockMetadata makeBlock(const ValueId& firstId, const ValueId& lastId) {
-    assert(firstId <= lastId);
+  const BlockMetadata makeBlock(const ValueId& first2Id, const ValueId& last2Id,
+                                const ValueId& first0Id = VocabId10,
+                                const ValueId& first1Id = DoubleId33,
+                                const ValueId& last0Id = VocabId10,
+                                const ValueId& last1Id = DoubleId33) {
+    assert(first2Id <= last2Id);
     static size_t blockIdx = 0;
     ++blockIdx;
     return {{{},
              0,
              // COLUMN 0  |  COLUMN 1  |  COLUMN 2
-             {firstId, VocabId10, DoubleId33, GraphId},  // firstTriple
-             {lastId, VocabId10, DoubleId33, GraphId},   // lastTriple
+             {first0Id, first1Id, first2Id, GraphId},  // firstTriple
+             {last0Id, last1Id, last2Id, GraphId},     // lastTriple
              {},
              false},
             blockIdx};
@@ -127,8 +176,9 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
   auto makeTestErrorCheck(std::unique_ptr<PrefilterExpression> expr,
                           const std::vector<BlockMetadata>& input,
                           const std::string& expected,
-                          size_t evaluationColumn = 0) {
-    AD_EXPECT_THROW_WITH_MESSAGE(expr->evaluate(input, evaluationColumn),
+                          size_t evaluationColumn = 2) {
+    std::vector<BlockMetadata> testBlocks = input;
+    AD_EXPECT_THROW_WITH_MESSAGE(expr->evaluate(testBlocks, evaluationColumn),
                                  ::testing::HasSubstr(expected));
   }
 
@@ -140,16 +190,20 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
 
   // Check that the provided expression prefilters the correct blocks.
   auto makeTest(std::unique_ptr<PrefilterExpression> expr,
-                std::vector<BlockMetadata>&& expected) {
+                std::vector<BlockMetadata>&& expected,
+                bool useBlocksIncomplete = false) {
     std::vector<BlockMetadata> expectedAdjusted;
-    // This is for convenience, we automatically insert all mixed blocks
-    // which must be always returned.
+    // This is for convenience, we automatically insert all mixed and possibly
+    // incomplete blocks which must be always returned.
     std::ranges::set_union(
-        expected, mixedBlocks, std::back_inserter(expectedAdjusted),
+        expected, useBlocksIncomplete ? mixedAndIncompleteBlocks : mixedBlocks,
+        std::back_inserter(expectedAdjusted),
         [](const BlockMetadata& b1, const BlockMetadata& b2) {
           return b1.blockIndex_ < b2.blockIndex_;
         });
-    ASSERT_EQ(expr->evaluate(blocks, 0), expectedAdjusted);
+    std::vector<BlockMetadata> testBlocks =
+        useBlocksIncomplete ? blocksIncomplete : blocks;
+    ASSERT_EQ(expr->evaluate(testBlocks, 2), expectedAdjusted);
   }
 };
 
@@ -165,20 +219,18 @@ TEST_F(PrefilterExpressionOnMetadataTest, testBlockFormatForDebugging) {
     return ::testing::ResultOf(toString, ::testing::HasSubstr(substring));
   };
   EXPECT_THAT(
-      b5,
-      matcher(
-          "#BlockMetadata\n(first) Triple: I:0 V:10 D:33.000000 V:0\n(last) "
-          "Triple: I:0 V:10 D:33.000000 V:0\nnum. rows: 0.\n"));
+      b5, matcher("#BlockMetadata\n(first) Triple: V:10 D:33.000000 I:0 "
+                  "V:0\n(last) Triple: V:10 D:33.000000 I:0 V:0\nnum. rows: "
+                  "0.\n"));
   EXPECT_THAT(
       b11,
-      matcher(
-          "#BlockMetadata\n(first) Triple: I:-4 V:10 D:33.000000 V:0\n(last) "
-          "Triple: D:2.000000 V:10 D:33.000000 V:0\nnum. rows: 0.\n"));
+      matcher("#BlockMetadata\n(first) Triple: V:10 D:33.000000 I:-4 "
+              "V:0\n(last) Triple: V:10 D:33.000000 D:2.000000 V:0\nnum. rows: "
+              "0.\n"));
   EXPECT_THAT(
-      b21,
-      matcher(
-          "#BlockMetadata\n(first) Triple: V:14 V:10 D:33.000000 V:0\n(last) "
-          "Triple: V:17 V:10 D:33.000000 V:0\nnum. rows: 0.\n"));
+      b21, matcher("#BlockMetadata\n(first) Triple: V:10 D:33.000000 V:14 "
+                   "V:0\n(last) Triple: V:10 D:33.000000 V:17 V:0\nnum. rows: "
+                   "0.\n"));
 
   auto blockWithGraphInfo = b21;
   blockWithGraphInfo.graphInfo_.emplace({IntId(12), IntId(13)});
@@ -192,23 +244,23 @@ TEST_F(PrefilterExpressionOnMetadataTest, testBlockFormatForDebugging) {
 // datatypes to the expected result.
 TEST_F(PrefilterExpressionOnMetadataTest, testLessThanExpressions) {
   makeTest(lt(IntId(5)),
-           {b5, b6, b9, b10, b11, b12, b13, b14, b15, b16, b17, b18});
+           {b5, b6, b9, b10, b11, b12, b13, b14, b15, b16, b17, b18}, true);
   makeTest(lt(IntId(-12)), {b18});
-  makeTest(lt(IntId(0)), {b9, b10, b15, b16, b17, b18});
+  makeTest(lt(IntId(0)), {b9, b10, b15, b16, b17, b18}, true);
   makeTest(lt(DoubleId(-14.01)), {b18});
-  makeTest(lt(DoubleId(-11.22)), {b17, b18});
+  makeTest(lt(DoubleId(-11.22)), {b17, b18}, true);
   makeTest(lt(DoubleId(-4.121)), {b9, b15, b16, b17, b18});
   makeTest(lt(VocabId(0)), {b18});
   makeTest(lt(VocabId(12)), {b18, b19});
-  makeTest(lt(VocabId(14)), {b18, b19});
+  makeTest(lt(VocabId(14)), {b18, b19}, true);
   makeTest(lt(VocabId(16)), {b18, b19, b20, b21});
   makeTest(lt(IntId(100)),
            {b5, b6, b7, b8, b9, b10, b12, b13, b14, b15, b16, b17, b18});
   makeTest(lt(undef), {});
-  makeTest(lt(falseId), {});
+  makeTest(lt(falseId), {}, true);
   makeTest(lt(trueId), {b2, b3});
   makeTest(lt(referenceDate1), {});
-  makeTest(lt(referenceDateEqual), {b22});
+  makeTest(lt(referenceDateEqual), {b22}, true);
   makeTest(lt(referenceDate2), {b22, b23, b24});
   makeTest(lt(BlankNodeId(11)), {b24});
 }
@@ -221,20 +273,20 @@ TEST_F(PrefilterExpressionOnMetadataTest, testLessEqualExpressions) {
   makeTest(le(IntId(0)), {b5, b6, b9, b10, b11, b15, b16, b17, b18});
   makeTest(le(IntId(-6)), {b9, b11, b15, b16, b17, b18});
   makeTest(le(IntId(7)),
-           {b5, b6, b7, b9, b10, b11, b12, b13, b14, b15, b16, b17, b18});
+           {b5, b6, b7, b9, b10, b11, b12, b13, b14, b15, b16, b17, b18}, true);
   makeTest(le(IntId(-9)), {b9, b11, b17, b18});
   makeTest(le(DoubleId(-9.131)), {b9, b11, b17, b18});
   makeTest(le(DoubleId(1.1415)), {b5, b6, b9, b10, b11, b15, b16, b17, b18});
   makeTest(le(DoubleId(3.1415)),
            {b5, b6, b9, b10, b11, b12, b15, b16, b17, b18});
-  makeTest(le(DoubleId(-11.99999999999999)), {b17, b18});
+  makeTest(le(DoubleId(-11.99999999999999)), {b17, b18}, true);
   makeTest(le(DoubleId(-14.03)), {b18});
   makeTest(le(VocabId(0)), {b18});
   makeTest(le(VocabId(11)), {b18, b19});
-  makeTest(le(VocabId(14)), {b18, b19, b20, b21});
+  makeTest(le(VocabId(14)), {b18, b19, b20, b21}, true);
   makeTest(le(undef), {});
   makeTest(le(falseId), {b2, b3});
-  makeTest(le(trueId), {b2, b3, b4});
+  makeTest(le(trueId), {b2, b3, b4}, true);
   makeTest(le(referenceDateEqual), {b22, b23});
   makeTest(le(BlankNodeId(11)), {b24});
 }
@@ -245,26 +297,26 @@ TEST_F(PrefilterExpressionOnMetadataTest, testLessEqualExpressions) {
 // datatypes to the expected result.
 TEST_F(PrefilterExpressionOnMetadataTest, testGreaterThanExpression) {
   makeTest(gt(DoubleId(5.5375)), {b7, b8, b11, b14, b18});
-  makeTest(gt(DoubleId(9.9994)), {b14});
+  makeTest(gt(DoubleId(9.9994)), {b14}, true);
   makeTest(gt(IntId(-5)), {b5, b6, b7, b8, b10, b11, b12, b13, b14, b15});
   makeTest(gt(DoubleId(-5.5375)),
-           {b5, b6, b7, b8, b10, b11, b12, b13, b14, b15});
+           {b5, b6, b7, b8, b10, b11, b12, b13, b14, b15}, true);
   makeTest(gt(DoubleId(-6.2499999)),
-           {b5, b6, b7, b8, b10, b11, b12, b13, b14, b15});
+           {b5, b6, b7, b8, b10, b11, b12, b13, b14, b15}, true);
   makeTest(gt(IntId(1)), {b6, b7, b8, b11, b12, b13, b14});
-  makeTest(gt(IntId(3)), {b6, b7, b8, b11, b13, b14});
+  makeTest(gt(IntId(3)), {b6, b7, b8, b11, b13, b14}, true);
   makeTest(gt(IntId(4)), {b6, b7, b8, b11, b14});
   makeTest(gt(IntId(-4)), {b5, b6, b7, b8, b11, b12, b13, b14, b15});
   makeTest(gt(IntId(33)), {});
   makeTest(gt(VocabId(22)), {b22});
-  makeTest(gt(VocabId(14)), {b21, b22});
+  makeTest(gt(VocabId(14)), {b21, b22}, true);
   makeTest(gt(VocabId(12)), {b19, b20, b21, b22});
-  makeTest(gt(undef), {});
-  makeTest(gt(falseId), {b4});
+  makeTest(gt(undef), {}, true);
+  makeTest(gt(falseId), {b4}, true);
   makeTest(gt(trueId), {});
   makeTest(gt(referenceDateEqual), {b24});
-  makeTest(gt(referenceDate1), {b22, b23, b24});
-  makeTest(gt(referenceDate2), {b24});
+  makeTest(gt(referenceDate1), {b22, b23, bLastIncomplete}, true);
+  makeTest(gt(referenceDate2), {bLastIncomplete}, true);
 }
 
 //______________________________________________________________________________
@@ -274,8 +326,8 @@ TEST_F(PrefilterExpressionOnMetadataTest, testGreaterThanExpression) {
 TEST_F(PrefilterExpressionOnMetadataTest, testGreaterEqualExpression) {
   makeTest(ge(IntId(0)), {b5, b6, b7, b8, b11, b12, b13, b14});
   makeTest(ge(IntId(8)), {b8, b11, b14});
-  makeTest(ge(DoubleId(9.98)), {b11, b14});
-  makeTest(ge(IntId(-3)), {b5, b6, b7, b8, b11, b12, b13, b14, b15});
+  makeTest(ge(DoubleId(9.98)), {b11, b14}, true);
+  makeTest(ge(IntId(-3)), {b5, b6, b7, b8, b11, b12, b13, b14, b15}, true);
   makeTest(ge(IntId(-10)),
            {b5, b6, b7, b8, b9, b10, b11, b12, b13, b14, b15, b16});
   makeTest(ge(DoubleId(-3.1415)), {b5, b6, b7, b8, b11, b12, b13, b14, b15});
@@ -286,11 +338,11 @@ TEST_F(PrefilterExpressionOnMetadataTest, testGreaterEqualExpression) {
            {b5, b6, b7, b8, b9, b10, b11, b12, b13, b14, b15, b16, b17, b18});
   makeTest(ge(DoubleId(7.999999)), {b8, b11, b14});
   makeTest(ge(DoubleId(10.0001)), {});
-  makeTest(ge(VocabId(14)), {b18, b19, b20, b21, b22});
+  makeTest(ge(VocabId(14)), {b18, b19, b20, b21, b22}, true);
   makeTest(ge(VocabId(10)), {b18, b19, b20, b21, b22});
   makeTest(ge(VocabId(17)), {b18, b21, b22});
-  makeTest(ge(undef), {});
-  makeTest(ge(falseId), {b2, b3, b4});
+  makeTest(ge(undef), {}, true);
+  makeTest(ge(falseId), {b2, b3, b4}, true);
   makeTest(ge(trueId), {b4});
   makeTest(ge(referenceDateEqual), {b23, b24});
 }
@@ -301,25 +353,25 @@ TEST_F(PrefilterExpressionOnMetadataTest, testGreaterEqualExpression) {
 // datatypes to the expected result.
 TEST_F(PrefilterExpressionOnMetadataTest, testEqualExpression) {
   makeTest(eq(IntId(0)), {b4, b5, b6, b11});
-  makeTest(eq(IntId(5)), {b6, b7, b11, b14});
+  makeTest(eq(IntId(5)), {b6, b7, b11, b14}, true);
   makeTest(eq(IntId(22)), {});
   makeTest(eq(IntId(-10)), {b9, b11, b18});
   makeTest(eq(DoubleId(-6.25)), {b15, b16});
-  makeTest(eq(IntId(-11)), {b17});
+  makeTest(eq(IntId(-11)), {b17}, true);
   makeTest(eq(DoubleId(-14.02)), {b18});
   makeTest(eq(DoubleId(-0.001)), {b11});
-  makeTest(eq(DoubleId(0)), {b4, b5, b6, b11});
-  makeTest(eq(IntId(2)), {b6, b11, b12});
+  makeTest(eq(DoubleId(0)), {b4, b5, b6, b11}, true);
+  makeTest(eq(IntId(2)), {b6, b11, b12}, true);
   makeTest(eq(DoubleId(5.5)), {b7, b11, b14});
   makeTest(eq(DoubleId(1.5)), {b6, b11});
   makeTest(eq(VocabId(1)), {b18});
-  makeTest(eq(VocabId(14)), {b18, b19, b20, b21});
+  makeTest(eq(VocabId(14)), {b18, b19, b20, b21}, true);
   makeTest(eq(VocabId(11)), {b18, b19});
   makeTest(eq(VocabId(17)), {b18, b21});
-  makeTest(eq(IntId(-4)), {b10, b11, b15});
+  makeTest(eq(IntId(-4)), {b10, b11, b15}, true);
   makeTest(eq(trueId), {b4});
   makeTest(eq(referenceDate1), {b22});
-  makeTest(eq(referenceDateEqual), {b23});
+  makeTest(eq(referenceDateEqual), {b23}, true);
   makeTest(eq(referenceDate2), {});
 }
 
@@ -329,25 +381,28 @@ TEST_F(PrefilterExpressionOnMetadataTest, testEqualExpression) {
 // datatypes to the expected result.
 TEST_F(PrefilterExpressionOnMetadataTest, testNotEqualExpression) {
   makeTest(neq(DoubleId(0.00)),
-           {b6, b7, b8, b9, b10, b11, b12, b13, b14, b15, b16, b17, b18});
+           {b6, b7, b8, b9, b10, b11, b12, b13, b14, b15, b16, b17, b18}, true);
   makeTest(neq(IntId(-4)),
            {b5, b6, b7, b8, b9, b11, b12, b13, b14, b15, b16, b17, b18});
   makeTest(neq(DoubleId(0.001)),
-           {b5, b6, b7, b8, b9, b10, b11, b12, b13, b14, b15, b16, b17, b18});
+           {b5, b6, b7, b8, b9, b10, b11, b12, b13, b14, b15, b16, b17, b18},
+           true);
   makeTest(neq(IntId(2)),
            {b5, b6, b7, b8, b9, b10, b11, b13, b14, b15, b16, b17, b18});
   makeTest(neq(DoubleId(-6.2500)),
            {b5, b6, b7, b8, b9, b10, b11, b12, b13, b14, b15, b17, b18});
   makeTest(neq(IntId(5)),
-           {b5, b6, b7, b8, b9, b10, b11, b12, b13, b14, b15, b16, b17, b18});
+           {b5, b6, b7, b8, b9, b10, b11, b12, b13, b14, b15, b16, b17, b18},
+           true);
   makeTest(neq(DoubleId(-101.23)),
-           {b5, b6, b7, b8, b9, b10, b11, b12, b13, b14, b15, b16, b17, b18});
+           {b5, b6, b7, b8, b9, b10, b11, b12, b13, b14, b15, b16, b17, b18},
+           true);
   makeTest(neq(VocabId(0)), {b19, b20, b21, b22});
-  makeTest(neq(VocabId(7)), {b18, b19, b20, b21, b22});
+  makeTest(neq(VocabId(7)), {b18, b19, b20, b21, b22}, true);
   makeTest(neq(VocabId(14)), {b18, b19, b21, b22});
   makeTest(neq(VocabId(17)), {b18, b19, b20, b21, b22});
   makeTest(neq(undef), {});
-  makeTest(neq(falseId), {b4});
+  makeTest(neq(falseId), {b4}, true);
   makeTest(neq(referenceDateEqual), {b22, b24});
   makeTest(neq(referenceDate1), {b22, b23, b24});
 }
@@ -359,25 +414,27 @@ TEST_F(PrefilterExpressionOnMetadataTest, testNotEqualExpression) {
 // datatypes to the expected result.
 TEST_F(PrefilterExpressionOnMetadataTest, testAndExpression) {
   makeTest(andExpr(ge(VocabId(10)), gt(VocabId(10))), {b19, b20, b21, b22});
-  makeTest(andExpr(ge(VocabId(10)), ge(VocabId(10))), {b19, b20, b21, b22});
+  makeTest(andExpr(ge(VocabId(10)), ge(VocabId(10))), {b19, b20, b21, b22},
+           true);
   makeTest(andExpr(ge(VocabId(12)), gt(VocabId(17))), {b22});
-  makeTest(andExpr(ge(VocabId(12)), gt(VocabId(17))), {b22});
-  makeTest(andExpr(ge(VocabId(10)), lt(VocabId(14))), {b19});
+  makeTest(andExpr(ge(VocabId(12)), gt(VocabId(17))), {b22}, true);
+  makeTest(andExpr(ge(VocabId(10)), lt(VocabId(14))), {b19}, true);
   makeTest(andExpr(le(VocabId(0)), lt(VocabId(10))), {b18});
   makeTest(andExpr(le(VocabId(17)), lt(VocabId(17))), {b18, b19, b20, b21});
   makeTest(andExpr(ge(DoubleId(-6.25)), lt(IntId(-7))), {});
   makeTest(andExpr(gt(DoubleId(-6.25)), lt(DoubleId(-6.25))), {});
   makeTest(andExpr(gt(IntId(0)), lt(IntId(0))), {});
-  makeTest(andExpr(gt(IntId(-10)), lt(DoubleId(0))), {b9, b10, b11, b15, b16});
+  makeTest(andExpr(gt(IntId(-10)), lt(DoubleId(0))), {b9, b10, b11, b15, b16},
+           true);
   makeTest(andExpr(gt(IntId(0)), eq(DoubleId(0))), {b6, b11});
-  makeTest(andExpr(ge(IntId(0)), eq(IntId(0))), {b5, b6, b11});
-  makeTest(andExpr(gt(DoubleId(-34.23)), ge(DoubleId(15.1))), {});
+  makeTest(andExpr(ge(IntId(0)), eq(IntId(0))), {b5, b6, b11}, true);
+  makeTest(andExpr(gt(DoubleId(-34.23)), ge(DoubleId(15.1))), {}, true);
   makeTest(andExpr(lt(IntId(0)), le(DoubleId(-4))),
            {b9, b10, b11, b15, b16, b17, b18});
   makeTest(andExpr(neq(IntId(0)), neq(IntId(-4))),
            {b6, b7, b8, b9, b11, b12, b13, b14, b15, b16, b17, b18});
   makeTest(andExpr(neq(DoubleId(-3.141)), eq(DoubleId(4.5))),
-           {b6, b11, b14, b18});
+           {b6, b11, b14, b18}, true);
   makeTest(andExpr(neq(DoubleId(-6.25)), lt(IntId(0))),
            {b9, b10, b11, b15, b17, b18});
   makeTest(andExpr(le(DoubleId(-4)), ge(DoubleId(1))), {});
@@ -385,7 +442,7 @@ TEST_F(PrefilterExpressionOnMetadataTest, testAndExpression) {
   makeTest(andExpr(andExpr(le(IntId(10)), gt(DoubleId(0))), eq(undef)), {});
   makeTest(andExpr(gt(referenceDate1), le(IntId(10))), {});
   makeTest(andExpr(gt(IntId(4)), andExpr(gt(DoubleId(8)), lt(IntId(10)))),
-           {b8, b14});
+           {b8, b14}, true);
   makeTest(andExpr(eq(IntId(0)), andExpr(lt(IntId(-20)), gt(IntId(30)))), {});
   makeTest(andExpr(eq(IntId(0)), andExpr(le(IntId(0)), ge(IntId(0)))),
            {b4, b5, b6, b11});
@@ -402,19 +459,19 @@ TEST_F(PrefilterExpressionOnMetadataTest, testOrExpression) {
   makeTest(orExpr(lt(DoubleId(-5.95)), eq(VocabId(14))),
            {b9, b15, b16, b17, b18, b19, b20, b21});
   makeTest(orExpr(eq(DoubleId(0)), neq(VocabId(14))),
-           {b5, b6, b11, b18, b19, b21});
+           {b5, b6, b11, b18, b19, b21}, true);
   makeTest(orExpr(eq(DoubleId(0)), eq(DoubleId(-6.25))),
-           {b5, b6, b11, b15, b16, b18});
+           {b5, b6, b11, b15, b16, b18}, true);
   makeTest(orExpr(gt(undef), le(IntId(-6))), {b9, b15, b16, b17, b18});
   makeTest(orExpr(le(trueId), gt(referenceDate1)), {b2, b3, b4, b22, b23, b24});
   makeTest(orExpr(eq(IntId(0)), orExpr(lt(IntId(-10)), gt(IntId(8)))),
-           {b5, b6, b8, b11, b14, b17, b18});
+           {b5, b6, b8, b11, b14, b17, b18}, true);
   makeTest(orExpr(gt(referenceDate2), eq(trueId)), {b4});
   makeTest(orExpr(eq(VocabId(17)), orExpr(lt(VocabId(0)), gt(VocabId(20)))),
-           {b21, b22});
+           {b21, b22}, true);
   makeTest(orExpr(eq(undef), gt(referenceDateEqual)), {b24});
   makeTest(orExpr(gt(IntId(8)), gt(DoubleId(22.1))), {b8, b14});
-  makeTest(orExpr(lt(DoubleId(-8.25)), le(IntId(-10))), {b9, b17, b18});
+  makeTest(orExpr(lt(DoubleId(-8.25)), le(IntId(-10))), {b9, b17, b18}, true);
   makeTest(orExpr(eq(IntId(0)), neq(DoubleId(0.25))),
            {b5, b6, b7, b8, b9, b10, b11, b12, b13, b14, b15, b16, b17, b18});
   makeTest(orExpr(gt(referenceDate1), orExpr(gt(trueId), eq(IntId(0)))),
@@ -424,8 +481,8 @@ TEST_F(PrefilterExpressionOnMetadataTest, testOrExpression) {
   makeTest(orExpr(orExpr(eq(IntId(0)), eq(IntId(5))),
                   orExpr(eq(DoubleId(-6.25)), lt(DoubleId(-12)))),
            {b4, b5, b6, b7, b11, b14, b15, b16, b18});
-  makeTest(orExpr(le(trueId), gt(falseId)), {b2, b3, b4});
-  makeTest(orExpr(eq(VocabId(0)), eq(DoubleId(0.25))), {b6, b11, b18});
+  makeTest(orExpr(le(trueId), gt(falseId)), {b2, b3, b4}, true);
+  makeTest(orExpr(eq(VocabId(0)), eq(DoubleId(0.25))), {b6, b11, b18}, true);
 }
 
 //______________________________________________________________________________
@@ -433,29 +490,31 @@ TEST_F(PrefilterExpressionOnMetadataTest, testOrExpression) {
 // Note: the `makeTest` function automatically adds the blocks with mixed
 // datatypes to the expected result.
 TEST_F(PrefilterExpressionOnMetadataTest, testNotExpression) {
-  makeTest(notExpr(eq(VocabId(2))), {b18, b19, b20, b21, b22});
+  makeTest(notExpr(eq(VocabId(2))), {b18, b19, b20, b21, b22}, true);
   makeTest(notExpr(eq(VocabId(14))), {b18, b19, b21, b22});
-  makeTest(notExpr(neq(VocabId(14))), {b19, b20, b21});
+  makeTest(notExpr(neq(VocabId(14))), {b19, b20, b21}, true);
   makeTest(notExpr(gt(VocabId(2))), {b18});
   makeTest(notExpr(lt(DoubleId(-14.01))),
            {b5, b6, b7, b8, b9, b10, b11, b12, b13, b14, b15, b16, b17, b18});
   makeTest(notExpr(ge(DoubleId(-14.01))), {b18});
-  makeTest(notExpr(gt(DoubleId(-4.00))), {b9, b10, b11, b15, b16, b17, b18});
+  makeTest(notExpr(gt(DoubleId(-4.00))), {b9, b10, b11, b15, b16, b17, b18},
+           true);
   makeTest(notExpr(ge(DoubleId(-24.4))), {b18});
   makeTest(notExpr(gt(referenceDate2)), {b22, b23});
   makeTest(notExpr(le(trueId)), {});
-  makeTest(notExpr(le(IntId(0))), {b6, b7, b8, b11, b12, b13, b14});
+  makeTest(notExpr(le(IntId(0))), {b6, b7, b8, b11, b12, b13, b14}, true);
   makeTest(notExpr(gt(undef)), {});
   makeTest(notExpr(eq(DoubleId(-6.25))),
            {b5, b6, b7, b8, b9, b10, b11, b12, b13, b14, b15, b17, b18});
   makeTest(notExpr(neq(DoubleId(4))), {b6, b11, b13, b14, b18});
   makeTest(notExpr(gt(DoubleId(0))),
-           {b4, b5, b6, b9, b10, b11, b15, b16, b17, b18});
-  makeTest(notExpr(notExpr(eq(IntId(0)))), {b4, b5, b6, b11});
+           {b4, b5, b6, b9, b10, b11, b15, b16, b17, b18}, true);
+  makeTest(notExpr(notExpr(eq(IntId(0)))), {b4, b5, b6, b11}, true);
   makeTest(notExpr(notExpr(neq(DoubleId(-6.25)))),
            {b4, b5, b6, b7, b8, b9, b10, b11, b12, b13, b14, b15, b17, b18});
   makeTest(notExpr(notExpr(lt(VocabId(10)))), {b18});
-  makeTest(notExpr(notExpr(ge(DoubleId(3.99)))), {b6, b7, b8, b11, b13, b14});
+  makeTest(notExpr(notExpr(ge(DoubleId(3.99)))), {b6, b7, b8, b11, b13, b14},
+           true);
   makeTest(notExpr(andExpr(le(IntId(0)), ge(IntId(0)))),
            {b6, b7, b8, b9, b10, b11, b12, b13, b14, b15, b16, b17, b18});
   makeTest(notExpr(andExpr(neq(IntId(-10)), neq(DoubleId(-14.02)))), {b9, b18});
@@ -466,12 +525,13 @@ TEST_F(PrefilterExpressionOnMetadataTest, testNotExpression) {
       notExpr(andExpr(lt(DoubleId(-7)), ge(IntId(6)))),
       {b4, b5, b6, b7, b8, b9, b10, b11, b12, b13, b14, b15, b16, b17, b18});
   makeTest(notExpr(orExpr(le(IntId(0)), ge(DoubleId(6)))),
-           {b6, b7, b11, b12, b13, b14});
+           {b6, b7, b11, b12, b13, b14}, true);
   makeTest(notExpr(orExpr(ge(DoubleId(0)), gt(IntId(-10)))),
-           {b9, b11, b17, b18});
+           {b9, b11, b17, b18}, true);
   makeTest(notExpr(orExpr(lt(VocabId(10)), gt(VocabId(10)))), {b19});
-  makeTest(notExpr(orExpr(lt(DoubleId(-4)), gt(IntId(-4)))), {b10, b11, b15});
-  makeTest(notExpr(orExpr(gt(IntId(-42)), ge(VocabId(0)))), {b11});
+  makeTest(notExpr(orExpr(lt(DoubleId(-4)), gt(IntId(-4)))), {b10, b11, b15},
+           true);
+  makeTest(notExpr(orExpr(gt(IntId(-42)), ge(VocabId(0)))), {b11}, true);
   makeTest(notExpr(orExpr(ge(VocabId(14)), gt(VocabId(15)))), {b18, b19});
 }
 
@@ -484,26 +544,27 @@ TEST_F(PrefilterExpressionOnMetadataTest,
   makeTest(andExpr(notExpr(gt(DoubleId(-14.01))), lt(IntId(0))), {b18});
   makeTest(
       orExpr(andExpr(gt(DoubleId(8.25)), le(IntId(10))), eq(DoubleId(-6.25))),
-      {b8, b14, b15, b16});
+      {b8, b14, b15, b16}, true);
   makeTest(
       orExpr(andExpr(gt(DoubleId(8.25)), le(IntId(10))), lt(DoubleId(-6.25))),
       {b8, b9, b14, b17, b18});
   makeTest(andExpr(orExpr(ge(trueId), le(falseId)), eq(referenceDate1)), {});
-  makeTest(andExpr(eq(IntId(0)), orExpr(lt(IntId(-11)), le(IntId(-12)))), {});
+  makeTest(andExpr(eq(IntId(0)), orExpr(lt(IntId(-11)), le(IntId(-12)))), {},
+           true);
   makeTest(
       andExpr(eq(DoubleId(-4)), orExpr(gt(IntId(-4)), lt(DoubleId(-1.25)))),
       {b10, b11, b15});
   makeTest(orExpr(notExpr(andExpr(lt(IntId(10)), gt(IntId(5)))), eq(IntId(0))),
            {b4, b5, b6, b7, b9, b10, b11, b12, b13, b14, b15, b16, b17, b18});
   makeTest(andExpr(orExpr(gt(VocabId(16)), le(VocabId(5))), gt(DoubleId(7.25))),
-           {});
+           {}, true);
   makeTest(andExpr(lt(falseId), orExpr(lt(IntId(10)), gt(DoubleId(17.25)))),
            {});
   makeTest(
       orExpr(andExpr(gt(VocabId(16)), ge(VocabId(17))), gt(DoubleId(7.25))),
       {b8, b14, b18, b21, b22});
   makeTest(orExpr(eq(trueId), andExpr(gt(referenceDate1), lt(referenceDate2))),
-           {b4, b22, b23});
+           {b4, b22, b23}, true);
 }
 
 //______________________________________________________________________________
@@ -520,12 +581,12 @@ TEST_F(PrefilterExpressionOnMetadataTest, testInputConditionCheck) {
                      blocksInvalidOrder2,
                      "The blocks must be provided in sorted order.");
   makeTestErrorCheck(
-      gt(DoubleId(2)), blocks,
+      gt(DoubleId(2)), blocksInconsistent1,
       "The values in the columns up to the evaluation column must be "
       "consistent.",
       1);
   makeTestErrorCheck(
-      gt(DoubleId(2)), blocks,
+      gt(DoubleId(2)), blocksInconsistent2,
       "The values in the columns up to the evaluation column must be "
       "consistent.",
       2);
@@ -533,12 +594,17 @@ TEST_F(PrefilterExpressionOnMetadataTest, testInputConditionCheck) {
 
 //______________________________________________________________________________
 // Check for correctness given only one BlockMetadata value is provided.
-TEST_F(PrefilterExpressionOnMetadataTest, testWithOneBlockMetadataValue) {
+TEST_F(PrefilterExpressionOnMetadataTest, testWithFewBlockMetadataValues) {
   auto expr = orExpr(eq(DoubleId(-6.25)), eq(IntId(0)));
   std::vector<BlockMetadata> input = {b16};
   EXPECT_EQ(expr->evaluate(input, 0), input);
+  EXPECT_EQ(expr->evaluate(input, 1), input);
+  EXPECT_EQ(expr->evaluate(input, 2), input);
+  expr = eq(DoubleId(-6.25));
+  input = {b15, b16, b17};
+  EXPECT_EQ(expr->evaluate(input, 2), (std::vector<BlockMetadata>{b15, b16}));
   EXPECT_EQ(expr->evaluate(input, 1), std::vector<BlockMetadata>{});
-  EXPECT_EQ(expr->evaluate(input, 2), std::vector<BlockMetadata>{});
+  EXPECT_EQ(expr->evaluate(input, 0), std::vector<BlockMetadata>{});
 }
 
 //______________________________________________________________________________
@@ -594,6 +660,11 @@ TEST(PrefilterExpressionExpressionOnMetadataTest,
   auto expr = lt(IntId(10));
   EXPECT_EQ((std::stringstream() << *expr).str(),
             "Prefilter RelationalExpression<LT(<)>\nValueId: I:10\n.\n");
+  expr = orExpr(eq(VocabId(0)), eq(VocabId(10)));
+  EXPECT_EQ((std::stringstream() << *expr).str(),
+            "Prefilter LogicalExpression<OR(||)>\nchild1 {Prefilter "
+            "RelationalExpression<EQ(=)>\nValueId: V:0\n}child2 {Prefilter "
+            "RelationalExpression<EQ(=)>\nValueId: V:10\n}\n.\n");
   expr = neq(DoubleId(8.21));
   EXPECT_EQ((std::stringstream() << *expr).str(),
             "Prefilter RelationalExpression<NE(!=)>\nValueId: D:8.210000\n.\n");

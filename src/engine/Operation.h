@@ -14,6 +14,7 @@
 #include "engine/Result.h"
 #include "engine/RuntimeInformation.h"
 #include "engine/VariableToColumnMap.h"
+#include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "parser/data/LimitOffsetClause.h"
 #include "parser/data/Variable.h"
 #include "util/CancellationHandle.h"
@@ -34,6 +35,9 @@ class Operation {
   using Milliseconds = std::chrono::milliseconds;
 
  public:
+  // Holds a `PrefilterExpression` with its corresponding `Variable`.
+  using PrefilterVariablePair = sparqlExpression::PrefilterExprVariablePair;
+
   // Default Constructor.
   Operation() : _executionContext(nullptr) {}
 
@@ -78,6 +82,21 @@ class Operation {
   const auto& locatedTriplesSnapshot() const {
     return _executionContext->locatedTriplesSnapshot();
   }
+
+  // Get an updated `QueryExecutionTree` that applies as many of the given
+  // `PrefilterExpression`s over `IndexScan` as possible. Returns `nullopt`
+  // if no `PrefilterExpression` is applicable and thus the `QueryExecutionTree`
+  // is not changed.
+  // Note: The default implementation always returns `nullopt` while this
+  // function is currently only overridden for `IndexScan`. In the future also
+  // other operations could pass on the `PrefilterExpressions` to the
+  // `IndexScan` in their subtree.
+  virtual std::optional<std::shared_ptr<QueryExecutionTree>>
+  setPrefilterGetUpdatedQueryExecutionTree(
+      [[maybe_unused]] const std::vector<PrefilterVariablePair>& prefilterPairs)
+      const {
+    return std::nullopt;
+  };
 
   // Get a unique, not ambiguous string representation for a subtree.
   // This should act like an ID for each subtree.

@@ -10,6 +10,7 @@
 
 using namespace std::chrono_literals;
 
+//______________________________________________________________________________
 template <typename F>
 void Operation::forAllDescendants(F f) {
   static_assert(
@@ -22,6 +23,7 @@ void Operation::forAllDescendants(F f) {
   }
 }
 
+//______________________________________________________________________________
 template <typename F>
 void Operation::forAllDescendants(F f) const {
   static_assert(
@@ -34,7 +36,7 @@ void Operation::forAllDescendants(F f) const {
   }
 }
 
-// __________________________________________________________________________________________________________
+// _____________________________________________________________________________
 vector<string> Operation::collectWarnings() const {
   vector<string> res = getWarnings();
   for (auto child : getChildren()) {

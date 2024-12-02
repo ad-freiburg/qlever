@@ -4,11 +4,15 @@
 
 #include <gtest/gtest.h>
 
+#include <memory>
+
+#include "../test/PrefilterExpressionTestHelpers.h"
 #include "../util/GTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
 #include "../util/TripleComponentTestHelpers.h"
 #include "engine/IndexScan.h"
+#include "index/IndexImpl.h"
 #include "parser/ParsedQuery.h"
 
 using namespace ad_utility::testing;
@@ -169,6 +173,45 @@ void testLazyScanWithColumnThrows(
   };
   EXPECT_ANY_THROW(makeScan());
 }
+
+//______________________________________________________________________________
+// Check that the `IndexScan` computes correct prefiltered `IdTable`s w.r.t.
+// the applied `PrefilterExpression` given a <PrefilterExpression, Variable>
+// pair was successfully set. For convenience we assert this for the IdTable
+// column on which the `PrefilterExpression` was applied.
+const auto testSetAndMakeScanWithPrefilterExpr =
+    [](const std::string& kg, const SparqlTriple& triple,
+       const Permutation::Enum permutation, IndexScan::PrefilterVariablePair pr,
+       const std::vector<ValueId>& expectedIdsOnFilterColumn,
+       bool prefilterCanBeSet = true,
+       source_location l = source_location::current()) {
+      auto t = generateLocationTrace(l);
+      IndexScan scan{getQec(kg), permutation, triple};
+      auto variable = pr.second;
+      auto optUpdatedQet = scan.setPrefilterGetUpdatedQueryExecutionTree(
+          makeFilterExpression::filterHelper::makePrefilterVec(std::move(pr)));
+      if (optUpdatedQet.has_value()) {
+        auto updatedQet = optUpdatedQet.value();
+        ASSERT_TRUE(prefilterCanBeSet);
+        // Check that the prefiltering procedure yields the correct result given
+        // that the <PrefilterExpression, Variable> pair is correctly assigned
+        // to the IndexScan.
+        IdTable idTableFiltered = updatedQet->getRootOperation()
+                                      ->computeResultOnlyForTesting()
+                                      .idTable()
+                                      .clone();
+        auto isColumnIdSpan =
+            idTableFiltered.getColumn(updatedQet->getVariableColumn(variable));
+        ASSERT_EQ(
+            (std::vector<Id>{isColumnIdSpan.begin(), isColumnIdSpan.end()}),
+            expectedIdsOnFilterColumn);
+      } else {
+        // Check our prediction that the prefilter with the given
+        // <PrefilterExpression, Variable> pair is not applicable (no updated
+        // QueryExecutionTree is returned).
+        ASSERT_FALSE(prefilterCanBeSet);
+      }
+    };
 
 }  // namespace
 
@@ -554,4 +597,165 @@ TEST(IndexScan, unlikelyToFitInCacheCalculatesSizeCorrectly) {
     IndexScan scan{qec, SPO, {x, p2, V{"?z"}}};
     expectMaximumCacheableSize(scan, 1, 1);
   }
+}
+
+// _____________________________________________________________________________
+TEST(IndexScan, getSizeEstimateAndExactSizeWithAppliedPrefilter) {
+  using namespace makeFilterExpression;
+  using namespace filterHelper;
+  using I = TripleComponent::Iri;
+
+  std::string kg =
+      "<a> <price_tag> 10.00 . <b> <price_tag> 12.00 . <b> <price_tag> "
+      "12.001 . <b> <price_tag> 21.99 . <b> <price_tag> 24.33 . <b> "
+      "<price_tag> 147.32 . <b> <price_tag> 189.99 . <b> <price_tag> 194.67 "
+      ".";
+  auto qec = getQec(kg);
+
+  auto assertEstimatedAndExactSize = [](IndexScan& indexScan,
+                                        IndexScan::PrefilterVariablePair pair,
+                                        const size_t estimateSize,
+                                        const size_t exactSize) {
+    auto optUpdatedQet = indexScan.setPrefilterGetUpdatedQueryExecutionTree(
+        makePrefilterVec(std::move(pair)));
+    ASSERT_TRUE(optUpdatedQet.has_value());
+    auto updatedQet = optUpdatedQet.value();
+    ASSERT_EQ(updatedQet->getSizeEstimate(), estimateSize);
+    std::shared_ptr<IndexScan> scanPtr =
+        std::dynamic_pointer_cast<IndexScan>(updatedQet->getRootOperation());
+    ASSERT_EQ(scanPtr->getExactSize(), exactSize);
+  };
+
+  {
+    SparqlTriple triple{Tc{Variable{"?b"}}, "<price_tag>",
+                        Tc{Variable{"?price"}}};
+    IndexScan scan{qec, Permutation::POS, triple};
+    assertEstimatedAndExactSize(
+        scan,
+        pr(andExpr(gt(IntId(0)), lt(DoubleId(234.35))), Variable{"?price"}), 8,
+        8);
+    assertEstimatedAndExactSize(
+        scan,
+        pr(andExpr(gt(DoubleId(12.00)), lt(IntId(190))), Variable{"?price"}), 6,
+        6);
+    assertEstimatedAndExactSize(
+        scan, pr(le(DoubleId(21.99)), Variable{"?price"}), 4, 4);
+  }
+
+  {
+    SparqlTriple triple{I::fromIriref("<b>"), "<price_tag>",
+                        Variable{"?price"}};
+    IndexScan scan{qec, Permutation::PSO, triple};
+    assertEstimatedAndExactSize(
+        scan, pr(le(DoubleId(21.99)), Variable{"?price"}), 3, 3);
+    assertEstimatedAndExactSize(
+        scan, pr(eq(DoubleId(24.33)), Variable{"?price"}), 3, 3);
+    assertEstimatedAndExactSize(
+        scan, pr(orExpr(le(IntId(12)), gt(IntId(22))), Variable{"?price"}), 5,
+        5);
+  }
+}
+
+// _____________________________________________________________________________
+TEST(IndexScan, SetPrefilterVariablePairAndCheckCacheKey) {
+  using namespace makeFilterExpression;
+  using namespace filterHelper;
+  using V = Variable;
+  auto qec = getQec("<x> <y> <z>.");
+  SparqlTriple triple{V{"?x"}, "<y>", V{"?z"}};
+  auto scan = IndexScan{qec, Permutation::PSO, triple};
+  auto prefilterPairs =
+      makePrefilterVec(pr(lt(IntId(10)), V{"?a"}), pr(gt(IntId(5)), V{"?b"}),
+                       pr(lt(IntId(5)), V{"?x"}));
+  auto updatedQet =
+      scan.setPrefilterGetUpdatedQueryExecutionTree(std::move(prefilterPairs));
+  // We have a corresponding column for ?x (ColumnIndex 1), which is also the
+  // first sorted variable column. Thus, we expect that PrefilterExpression (<
+  // 5, ?x) will be set as a prefilter for this IndexScan.
+  auto setPrefilterExpr = lt(IntId(5));
+  ColumnIndex columnIdx = 1;
+  std::stringstream os;
+  os << "Added PrefiterExpression: \n";
+  os << *setPrefilterExpr;
+  os << "\nApplied on column: " << columnIdx << ".";
+  EXPECT_THAT(updatedQet.value()->getRootOperation()->getCacheKey(),
+              ::testing::HasSubstr(os.str()));
+
+  // Assert that we don't set a <PrefilterExpression, ColumnIndex> pair for the
+  // second Variable.
+  prefilterPairs = makePrefilterVec(pr(lt(IntId(10)), V{"?a"}),
+                                    pr(gt(DoubleId(22)), V{"?z"}),
+                                    pr(gt(IntId(10)), V{"?b"}));
+  updatedQet =
+      scan.setPrefilterGetUpdatedQueryExecutionTree(std::move(prefilterPairs));
+  // No PrefilterExpression should be set for this IndexScan, we don't expect a
+  // updated QueryExecutionTree.
+  EXPECT_TRUE(!updatedQet.has_value());
+}
+
+// _____________________________________________________________________________
+TEST(IndexScan, checkEvaluationWithPrefiltering) {
+  using namespace makeFilterExpression;
+  using namespace filterHelper;
+  auto I = ad_utility::testing::IntId;
+  std::string kg =
+      "<P1> <price_tag> 10 . <P2> <price_tag> 12 . <P3> <price_tag> "
+      "18 . <P4> <price_tag> 22 . <P5> <price_tag> 25 . <P6> "
+      "<price_tag> 147 . <P7> <price_tag> 174 . <P8> <price_tag> 174 "
+      ". <P9> <price_tag> 189 . <P10> <price_tag> 194 .";
+  SparqlTriple triple{Tc{Variable{"?x"}}, "<price_tag>",
+                      Tc{Variable{"?price"}}};
+
+  // For the following tests, the <PrefilterExpression, Variable> pair is set
+  // and applied for the respective IndexScan.
+  testSetAndMakeScanWithPrefilterExpr(kg, triple, Permutation::POS,
+                                      pr(ge(IntId(10)), Variable{"?price"}),
+                                      {I(10), I(12), I(18), I(22), I(25),
+                                       I(147), I(174), I(174), I(189), I(194)});
+  testSetAndMakeScanWithPrefilterExpr(
+      kg, triple, Permutation::POS,
+      pr(lt(DoubleId(147.32)), Variable{"?price"}),
+      {I(10), I(12), I(18), I(22), I(25), I(147)});
+  testSetAndMakeScanWithPrefilterExpr(
+      kg, triple, Permutation::POS,
+      pr(andExpr(gt(DoubleId(12.00)), le(IntId(174))), Variable{"?price"}),
+      {I(18), I(22), I(25), I(147), I(174), I(174)});
+
+  // For the following test, the Variable value doesn't match any of the scan
+  // triple Variable values. We expect that the prefilter is not applicable (=>
+  // set bool flag to false).
+  testSetAndMakeScanWithPrefilterExpr(
+      kg, triple, Permutation::POS,
+      pr(andExpr(gt(DoubleId(12.00)), le(IntId(174))), Variable{"?y"}), {},
+      false);
+
+  // For the following tests, the first sorted column given the permutation
+  // doesn't match with the corresponding column for the Variable of the
+  // <PrefilterExpression, Variable> pair. We expect that the provided prefilter
+  // is not applicable (and can't be set).
+  testSetAndMakeScanWithPrefilterExpr(
+      kg, triple, Permutation::PSO,
+      pr(andExpr(gt(DoubleId(12.00)), le(IntId(174))), Variable{"?price"}), {},
+      false);
+  testSetAndMakeScanWithPrefilterExpr(
+      kg, triple, Permutation::POS,
+      pr(andExpr(gt(VocabId(0)), lt(VocabId(100))), Variable{"?x"}), {}, false);
+
+  // This knowledge graph yields an incomplete first and last block.
+  std::string kgFirstAndLastIncomplete =
+      "<a> <price_tag> 10 . <b> <price_tag> 12 . <b> <price_tag> "
+      "18 . <b> <price_tag> 22 . <b> <price_tag> 25 . <b> "
+      "<price_tag> 147 . <b> <price_tag> 189 . <c> <price_tag> 194 "
+      ".";
+  // The following test verifies that the prefilter procedure is successfully
+  // applicable under the condition that the first and last block are
+  // potentially incomplete.
+  testSetAndMakeScanWithPrefilterExpr(
+      kgFirstAndLastIncomplete, triple, Permutation::POS,
+      pr(orExpr(gt(IntId(100)), le(IntId(10))), Variable{"?price"}),
+      {I(10), I(12), I(25), I(147), I(189), I(194)});
+  testSetAndMakeScanWithPrefilterExpr(
+      kgFirstAndLastIncomplete, triple, Permutation::POS,
+      pr(andExpr(gt(IntId(10)), lt(IntId(194))), Variable{"?price"}),
+      {I(10), I(12), I(18), I(22), I(25), I(147), I(189), I(194)});
 }
