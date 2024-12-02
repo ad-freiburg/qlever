@@ -93,8 +93,7 @@ class PrefilterExpression {
   // removes the respective block if it is conditionally (inconsistent columns)
   // necessary.
   std::vector<BlockMetadata> evaluate(std::span<const BlockMetadata> input,
-                                      size_t evaluationColumn,
-                                      bool stripIncompleteBlocks = true) const;
+                                      size_t evaluationColumn) const;
 
   // Format for debugging
   friend std::ostream& operator<<(std::ostream& str,
@@ -103,21 +102,23 @@ class PrefilterExpression {
     return str;
   }
 
- private:
-  // Performs the following conditional checks on the provided `BlockMetadata`
-  // values:
-  // (1) unqiueness of blocks
-  // (2) sorted (order)
-  // (3) Constant values for all columns `< evaluationColumn`
-  // This function subsequently invokes the `evaluateImpl` method and
-  // checks the corresponding result for those conditions again.
-  // If a respective condition is violated, the function performing the checks
-  // will throw a `std::runtime_error`.
+  // Note: Use `evaluate` for general evaluation of `PrefilterExpression`
+  // instead of this method.
+  // Performs the following conditional checks on
+  // the provided `BlockMetadata` values: (1) unqiueness of blocks (2) sorted
+  // (order) (3) Constant values for all columns `< evaluationColumn` This
+  // function subsequently invokes the `evaluateImpl` method and checks the
+  // corresponding result for those conditions again. If a respective condition
+  // is violated, the function performing the checks will throw a
+  // `std::runtime_error`.
   std::vector<BlockMetadata> evaluateAndCheckImpl(
-      std::span<const BlockMetadata> input, size_t evaluationColumn) const;
+      std::span<const BlockMetadata> input, size_t evaluationColumn,
+      LocalVocab& vocab) const;
 
+ private:
   virtual std::vector<BlockMetadata> evaluateImpl(
-      std::span<const BlockMetadata> input, size_t evaluationColumn) const = 0;
+      std::span<const BlockMetadata> input, size_t evaluationColumn,
+      LocalVocab& vocab) const = 0;
 };
 
 //______________________________________________________________________________
@@ -145,9 +146,9 @@ class RelationalExpression : public PrefilterExpression {
   std::string asString(size_t depth) const override;
 
  private:
-  std::vector<BlockMetadata> evaluateImpl(
-      std::span<const BlockMetadata> input,
-      size_t evaluationColumn) const override;
+  std::vector<BlockMetadata> evaluateImpl(std::span<const BlockMetadata> input,
+                                          size_t evaluationColumn,
+                                          LocalVocab& vocab) const override;
 };
 
 //______________________________________________________________________________
@@ -175,9 +176,9 @@ class LogicalExpression : public PrefilterExpression {
   std::string asString(size_t depth) const override;
 
  private:
-  std::vector<BlockMetadata> evaluateImpl(
-      std::span<const BlockMetadata> input,
-      size_t evaluationColumn) const override;
+  std::vector<BlockMetadata> evaluateImpl(std::span<const BlockMetadata> input,
+                                          size_t evaluationColumn,
+                                          LocalVocab& vocab) const override;
 };
 
 //______________________________________________________________________________
@@ -200,9 +201,9 @@ class NotExpression : public PrefilterExpression {
   std::string asString(size_t depth) const override;
 
  private:
-  std::vector<BlockMetadata> evaluateImpl(
-      std::span<const BlockMetadata> input,
-      size_t evaluationColumn) const override;
+  std::vector<BlockMetadata> evaluateImpl(std::span<const BlockMetadata> input,
+                                          size_t evaluationColumn,
+                                          LocalVocab& vocab) const override;
 };
 
 //______________________________________________________________________________
