@@ -99,17 +99,19 @@ class IndexScan final : public Operation {
   Permutation::IdTableGenerator lazyScanForJoinOfColumnWithScan(
       std::span<const Id> joinColumn) const;
 
-  // Return 2 generators, one that basically is the same as `input` and one that
-  // yields the matching rows of this index scan, skipping the rows that don't
-  // match the tables yielded by `input` to speed up join algorithms when no
-  // undef values are presend. When there are undef values, the second generator
-  // represents the full index scan.
+  // Return two generators, the first of which yields exactly the elements of
+  // `input` and the second of which yields the matching blocks, skipping the
+  // blocks consisting only of rows that don't match the tables yielded by
+  // `input` to speed up join algorithms when no undef values are presend. When
+  // there are undef values, the second generator represents the full index
+  // scan.
   std::pair<Result::Generator, Result::Generator> prefilterTables(
       Result::Generator input, ColumnIndex joinColumn);
 
  private:
   // Implementation detail that allows to consume a generator from two other
-  // kooperating generators.
+  // cooperating generators. Needs to be forward declared as it is used by
+  // several member functions below.
   struct SharedGeneratorState;
 
   // Helper function that creates a generator that re-yields the generator
@@ -117,9 +119,9 @@ class IndexScan final : public Operation {
   static Result::Generator createPrefilteredJoinSide(
       std::shared_ptr<SharedGeneratorState> innerState);
 
-  // Helper function that creates a generator yielding matching rows of this
-  // index scan, that match the tables yielded by thegenerator wrapped by
-  // `innerState`.
+  // Helper function that creates a generator yielding prefiltered rows of this
+  // index scan according to the block metadata, that match the tables yielded
+  // by the generator wrapped by `innerState`.
   Result::Generator createPrefilteredIndexScanSide(
       std::shared_ptr<SharedGeneratorState> innerState);
 

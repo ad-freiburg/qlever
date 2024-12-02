@@ -94,7 +94,7 @@ GeneratorWithDetails convertGenerator(Permutation::IdTableGenerator gen) {
 // _____________________________________________________________________________
 Join::Join(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
            std::shared_ptr<QueryExecutionTree> t2, ColumnIndex t1JoinCol,
-           ColumnIndex t2JoinCol, bool allowSwappingChildren)
+           ColumnIndex t2JoinCol, bool allowSwappingChildrenOnlyForTesting)
     : Operation(qec) {
   AD_CONTRACT_CHECK(t1 && t2);
   // Currently all join algorithms require both inputs to be sorted, so we
@@ -107,7 +107,7 @@ Join::Join(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
   // identify.
   auto swapChildren = [&]() {
     // This can be disabled by tests to fix the order of the subtrees.
-    if (allowSwappingChildren) {
+    if (allowSwappingChildrenOnlyForTesting) {
       std::swap(t1, t2);
       std::swap(t1JoinCol, t2JoinCol);
     }
@@ -500,9 +500,8 @@ ProtoResult Join::lazyJoin(std::shared_ptr<const Result> a,
       [this, a = std::move(a), b = std::move(b),
        joinColMap = std::move(joinColMap)](
           std::function<void(IdTable&, LocalVocab&)> yieldTable) {
-        ad_utility::AddCombinedRowToIdTable rowAdder{
-            1, IdTable{getResultWidth(), allocator()}, cancellationHandle_,
-            CHUNK_SIZE, std::move(yieldTable)};
+        ad_utility::AddCombinedRowToIdTable rowAdder =
+            makeRowAdder(std::move(yieldTable));
         auto leftRange = resultToView(*a, joinColMap.permutationLeft());
         auto rightRange = resultToView(*b, joinColMap.permutationRight());
         std::visit(
@@ -663,9 +662,8 @@ ProtoResult Join::computeResultForTwoIndexScans(bool requestLaziness) const {
         // don't have to permute the inputs and results for the
         // `AddCombinedRowToIdTable` class to work correctly.
         AD_CORRECTNESS_CHECK(_leftJoinCol == 0 && _rightJoinCol == 0);
-        ad_utility::AddCombinedRowToIdTable rowAdder{
-            1, IdTable{getResultWidth(), allocator()}, cancellationHandle_,
-            CHUNK_SIZE, std::move(yieldTable)};
+        ad_utility::AddCombinedRowToIdTable rowAdder =
+            makeRowAdder(std::move(yieldTable));
 
         ad_utility::Timer timer{
             ad_utility::timer::Timer::InitialStatus::Started};
@@ -708,9 +706,8 @@ ProtoResult Join::computeResultForIndexScanAndIdTable(
        joinColMap = std::move(joinColMap)](
           std::function<void(IdTable&, LocalVocab&)> yieldTable) {
         const IdTable& idTable = resultWithIdTable->idTable();
-        ad_utility::AddCombinedRowToIdTable rowAdder{
-            1, IdTable{getResultWidth(), allocator()}, cancellationHandle_,
-            CHUNK_SIZE, std::move(yieldTable)};
+        ad_utility::AddCombinedRowToIdTable rowAdder =
+            makeRowAdder(std::move(yieldTable));
 
         auto permutationIdTable = ad_utility::IdTableAndFirstCol{
             idTable.asColumnSubsetView(idTableIsRightInput
@@ -788,16 +785,12 @@ ProtoResult Join::computeResultForIndexScanAndLazyOperation(
        resultWithIdTable = std::move(resultWithIdTable),
        joinColMap = std::move(joinColMap)](
           std::function<void(IdTable&, LocalVocab&)> yieldTable) {
-        ad_utility::AddCombinedRowToIdTable rowAdder{
-            1, IdTable{getResultWidth(), allocator()}, cancellationHandle_,
-            CHUNK_SIZE, std::move(yieldTable)};
+        ad_utility::AddCombinedRowToIdTable rowAdder =
+            makeRowAdder(std::move(yieldTable));
 
-        ad_utility::Timer timer{
-            ad_utility::timer::Timer::InitialStatus::Started};
         auto [joinSide, indexScanSide] =
             scan->prefilterTables(std::move(resultWithIdTable->idTables()), 0);
 
-        runtimeInfo().addDetail("time-for-filtering-blocks", timer.msecs());
         auto doJoin = [&rowAdder](LazyInputView left,
                                   LazyInputView right) mutable {
           // Note: The `zipperJoinForBlocksWithPotentialUndef` automatically
@@ -840,4 +833,12 @@ ad_utility::JoinColumnMapping Join::getJoinColumnMapping() const {
   return ad_utility::JoinColumnMapping{{{_leftJoinCol, _rightJoinCol}},
                                        _left->getResultWidth(),
                                        _right->getResultWidth()};
+}
+
+// _____________________________________________________________________________
+ad_utility::AddCombinedRowToIdTable Join::makeRowAdder(
+    std::function<void(IdTable&, LocalVocab&)> callback) const {
+  return ad_utility::AddCombinedRowToIdTable{
+      1, IdTable{getResultWidth(), allocator()}, cancellationHandle_,
+      CHUNK_SIZE, std::move(callback)};
 }

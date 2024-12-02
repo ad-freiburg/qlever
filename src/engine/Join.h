@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include "engine/AddCombinedRowToTable.h"
 #include "engine/IndexScan.h"
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
@@ -28,9 +29,10 @@ class Join : public Operation {
   vector<float> _multiplicities;
 
  public:
+  // `allowSwappingChildrenOnlyForTesting` should only ever be changed by tests.
   Join(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
        std::shared_ptr<QueryExecutionTree> t2, ColumnIndex t1JoinCol,
-       ColumnIndex t2JoinCol, bool allowSwappingChildren = true);
+       ColumnIndex t2JoinCol, bool allowSwappingChildrenOnlyForTesting = true);
 
   using OptionalPermutation = std::optional<std::vector<ColumnIndex>>;
 
@@ -152,19 +154,20 @@ class Join : public Operation {
   // `IndexScan`s that is actually needed without fully materializing them.
   ProtoResult computeResultForTwoIndexScans(bool requestLaziness) const;
 
-  // A special implementation that is called when one of the children is an
-  // `IndexScan`. The argument `idTableIsRightInput` determines whether the
-  // `IndexScan` is the left or the right child of this `Join`. This needs to be
-  // known to determine the correct order of the columns in the result.
+  // A special implementation that is called when exactly one of the children is
+  // an `IndexScan` and the other one is a fully materialized result. The
+  // argument `idTableIsRightInput` determines whether the `IndexScan` is the
+  // left or the right child of this `Join`. This needs to be known to determine
+  // the correct order of the columns in the result.
   template <bool idTableIsRightInput>
   ProtoResult computeResultForIndexScanAndIdTable(
       bool requestLaziness, std::shared_ptr<const Result> resultWithIdTable,
       std::shared_ptr<IndexScan> scan) const;
 
   // Special implementation that is called when the right child is an
-  // `IndexScan` and the left child is a lazy result. (The children might be
-  // swapped in the constructor.). This allows the `IndexScan` to skip rows that
-  // won't match in the join operation.
+  // `IndexScan` and the left child is a lazy result. (The constructor will
+  // ensure the correct order if they are initially swapped). This allows the
+  // `IndexScan` to skip rows that won't match in the join operation.
   ProtoResult computeResultForIndexScanAndLazyOperation(
       bool requestLaziness, std::shared_ptr<const Result> resultWithIdTable,
       std::shared_ptr<IndexScan> scan) const;
@@ -207,4 +210,8 @@ class Join : public Operation {
   // columns to be the first columns of the input tables and the result to be in
   // the order of the input tables.
   ad_utility::JoinColumnMapping getJoinColumnMapping() const;
+
+  // Helper function to create the commonly used instance of this class.
+  ad_utility::AddCombinedRowToIdTable makeRowAdder(
+      std::function<void(IdTable&, LocalVocab&)> callback) const;
 };

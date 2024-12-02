@@ -499,17 +499,26 @@ void IndexScan::updateRuntimeInfoForLazyScan(const LazyScanMetadata& metadata) {
 // Store a Generator and its corresponding iterator as well as unconsumed values
 // resulting from the generator.
 struct IndexScan::SharedGeneratorState {
+  // The generator that yields the tables to be joined with the index scan.
   Result::Generator generator_;
+  // The column index of the join column in the tables yielded by the generator.
   ColumnIndex joinColumn_;
+  // Metadata and blocks of this index scan.
   Permutation::MetadataAndBlocks metaBlocks_;
+  // The iterator of the generator that is currently being consumed.
   std::optional<Result::Generator::iterator> iterator_ = std::nullopt;
   std::optional<Id> lastValue_ = std::nullopt;
+  // Values returned by the generator that have not been re-yielded yet.
   std::deque<Result::IdTableVocabPair> prefetchedValues_{};
+  // Metadata of blocks that still need to be read.
   std::vector<CompressedBlockMetadata> pendingBlocks_{};
+  // Indicates if the generator has yielded any undefined values.
   bool hasUndef_ = false;
+  // Indicates if the generator has been fully consumed.
   bool doneFetching_ = false;
 
-  // Fetch the first value from the generator and skip empty tables.
+  // Fetch the first value from the generator and skip empty tables. Return true
+  // if the generator was completely consumed, false otherwise.
   bool fetchFirst() {
     AD_CORRECTNESS_CHECK(!iterator_.has_value());
     iterator_ = generator_.begin();
@@ -538,31 +547,33 @@ struct IndexScan::SharedGeneratorState {
     } else {
       exhausted = fetchFirst();
     }
-    if (!exhausted) {
-      prefetchedValues_.push_back(std::move(*iterator_.value()));
-      auto joinColumn =
-          prefetchedValues_.back().idTable_.getColumn(joinColumn_);
-      AD_EXPENSIVE_CHECK(std::ranges::is_sorted(joinColumn));
-      // Skip processing for undef case, it will be handled differently
-      if (joinColumn.empty() || !joinColumn[0].isUndefined()) {
-        AD_CORRECTNESS_CHECK(!hasUndef_);
-        // Find first value that differs from the last one that was used to find
-        // matching blocks.
-        size_t offset = std::ranges::find_if_not(joinColumn,
-                                                 [this](const auto& element) {
-                                                   return element == lastValue_;
-                                                 }) -
-                        joinColumn.begin();
-        auto newValues = joinColumn.subspan(offset);
-        if (!newValues.empty()) {
-          std::ranges::move(CompressedRelationReader::getBlocksForJoin(
-                                newValues, metaBlocks_),
-                            std::back_inserter(pendingBlocks_));
-          lastValue_ = newValues.back();
-        }
-      }
-    }
     doneFetching_ = exhausted;
+    if (exhausted) {
+      return;
+    }
+    prefetchedValues_.push_back(std::move(*iterator_.value()));
+    auto joinColumn = prefetchedValues_.back().idTable_.getColumn(joinColumn_);
+    AD_EXPENSIVE_CHECK(std::ranges::is_sorted(joinColumn));
+    AD_CORRECTNESS_CHECK(!joinColumn.empty());
+    // Skip processing for undef case, it will be handled differently
+    if (hasUndef_) {
+      return;
+    }
+    AD_CORRECTNESS_CHECK(!joinColumn[0].isUndefined());
+    // Find first value that differs from the last one that was used to find
+    // matching blocks.
+    size_t offset = std::ranges::find_if_not(joinColumn,
+                                             [this](const auto& element) {
+                                               return element == lastValue_;
+                                             }) -
+                    joinColumn.begin();
+    auto newValues = joinColumn.subspan(offset);
+    if (!newValues.empty()) {
+      std::ranges::move(
+          CompressedRelationReader::getBlocksForJoin(newValues, metaBlocks_),
+          std::back_inserter(pendingBlocks_));
+      lastValue_ = newValues.back();
+    }
   }
 
   // Check if there are any undefined values yielded by the original generator.
