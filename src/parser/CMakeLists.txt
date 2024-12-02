@@ -17,6 +17,9 @@ add_library(parser
         TripleComponent.cpp
         GeoPoint.cpp
         GraphPatternOperation.cpp
+        MagicServiceQuery.cpp
+        PathQuery.cpp
+        SpatialQuery.cpp
         PropertyPath.cpp
         data/SparqlFilter.cpp
         SelectClause.cpp

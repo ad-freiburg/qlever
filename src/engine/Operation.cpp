@@ -5,6 +5,7 @@
 #include "engine/Operation.h"
 
 #include "engine/QueryExecutionTree.h"
+#include "global/RuntimeParameters.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/TransparentFunctors.h"
 
@@ -38,7 +39,7 @@ void Operation::forAllDescendants(F f) const {
 
 // _____________________________________________________________________________
 vector<string> Operation::collectWarnings() const {
-  vector<string> res = getWarnings();
+  vector<string> res{*getWarnings().rlock()};
   for (auto child : getChildren()) {
     if (!child) {
       continue;
@@ -49,6 +50,15 @@ vector<string> Operation::collectWarnings() const {
   }
 
   return res;
+}
+
+// _____________________________________________________________________________
+void Operation::addWarningOrThrow(std::string warning) const {
+  if (RuntimeParameters().get<"throw-on-unbound-variables">()) {
+    throw InvalidSparqlQueryException(std::move(warning));
+  } else {
+    addWarning(std::move(warning));
+  }
 }
 
 // ________________________________________________________________________
