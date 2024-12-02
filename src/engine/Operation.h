@@ -101,7 +101,7 @@ class Operation {
   // Get a unique, not ambiguous string representation for a subtree.
   // This should act like an ID for each subtree.
   // Calls  `getCacheKeyImpl` and adds the information about the `LIMIT` clause.
-  virtual string getCacheKey() const final {
+  virtual std::string getCacheKey() const final {
     auto result = getCacheKeyImpl();
     if (_limit._limit.has_value()) {
       absl::StrAppend(&result, " LIMIT ", _limit._limit.value());
@@ -111,6 +111,10 @@ class Operation {
     }
     return result;
   }
+
+  // If this function returns `false`, then the result of this `Operation` will
+  // never be stored in the cache.
+  virtual bool isSuitableForCaching() const { return true; }
 
  private:
   // The individual implementation of `getCacheKey` (see above) that has to be

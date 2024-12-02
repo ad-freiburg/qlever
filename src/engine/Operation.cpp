@@ -266,12 +266,16 @@ std::shared_ptr<const Result> Operation::getResult(
 
     bool onlyReadFromCache = computationMode == ComputationMode::ONLY_IF_CACHED;
 
-    auto result =
-        pinResult ? cache.computeOncePinned(cacheKey, cacheSetup,
-                                            onlyReadFromCache, suitedForCache)
-                  : cache.computeOnce(cacheKey, cacheSetup, onlyReadFromCache,
-                                      suitedForCache);
-
+    auto result = [&]() -> QueryResultCache::ResultAndCacheStatus {
+      auto compute = [&](auto&&... args) {
+        if (!isSuitableForCaching()) {
+          return cache.computeWithoutCache(AD_FWD(args)...);
+        }
+        return pinResult ? cache.computeOncePinned(AD_FWD(args)...)
+                         : cache.computeOnce(AD_FWD(args)...);
+      };
+      return compute(cacheKey, cacheSetup, onlyReadFromCache, suitedForCache);
+    }();
     if (result._resultPointer == nullptr) {
       AD_CORRECTNESS_CHECK(onlyReadFromCache);
       return nullptr;
