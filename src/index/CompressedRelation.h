@@ -515,6 +515,9 @@ class CompressedRelationReader {
     // call the overload directly above.
     void update(
         const std::optional<DecompressedBlockAndMetadata>& blockAndMetadata);
+
+    // Aggregate the metadata from `newValue` into this metadata.
+    void aggregate(const LazyScanMetadata& newValue);
   };
 
   using IdTableGenerator = cppcoro::generator<IdTable, LazyScanMetadata>;
