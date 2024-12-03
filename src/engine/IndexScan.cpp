@@ -232,6 +232,11 @@ IdTable IndexScan::materializedIndexScan() const {
 // _____________________________________________________________________________
 ProtoResult IndexScan::computeResult(bool requestLaziness) {
   LOG(DEBUG) << "IndexScan result computation...\n";
+  if (explicitLazyResult_.has_value()) {
+    AD_CORRECTNESS_CHECK(requestLaziness);
+    absl::Cleanup cleanup{[this]() { explicitLazyResult_.reset(); }};
+    return {std::move(explicitLazyResult_.value()), resultSortedOn()};
+  }
   if (requestLaziness) {
     return {chunkedIndexScan(), resultSortedOn()};
   }

@@ -37,6 +37,7 @@ class IndexScan final : public Operation {
   std::vector<Variable> additionalVariables_;
 
   std::optional<std::vector<CompressedBlockMetadata>> prefilteredBlocks_;
+  std::optional<Result::Generator> explicitLazyResult_ = std::nullopt;
 
  public:
   IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
@@ -111,6 +112,10 @@ class IndexScan final : public Operation {
       Result::Generator input, ColumnIndex joinColumn);
 
   static void setBlocksForJoinOfIndexScans(Operation* left, Operation* right);
+
+  void setLazyResultManually(Result::Generator lazyResult) {
+    explicitLazyResult_ = std::move(lazyResult);
+  }
 
  private:
   // Implementation detail that allows to consume a generator from two other

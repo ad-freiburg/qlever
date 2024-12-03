@@ -197,9 +197,6 @@ ProtoResult Join::computeResult(bool requestLaziness) {
       AD_CORRECTNESS_CHECK(rightResIfCached->isFullyMaterialized());
       return computeResultForIndexScanAndIdTable<true>(
           requestLaziness, std::move(rightResIfCached), leftIndexScan);
-
-    } else if (!leftResIfCached) {
-      return computeResultForTwoIndexScans(requestLaziness);
     }
   }
 
@@ -653,47 +650,6 @@ void Join::addCombinedRowToIdTable(const ROW_A& rowA, const ROW_B& rowB,
   for (auto h = jcRowB + 1; h < rowB.numColumns(); h++) {
     (*table)(backIndex, h + rowA.numColumns() - 1) = rowB[h];
   }
-}
-
-// ______________________________________________________________________________________________________
-ProtoResult Join::computeResultForTwoIndexScans(bool requestLaziness) const {
-  return createResult(
-      requestLaziness,
-      [this](std::function<void(IdTable&, LocalVocab&)> yieldTable) {
-        auto leftScan =
-            std::dynamic_pointer_cast<IndexScan>(_left->getRootOperation());
-        auto rightScan =
-            std::dynamic_pointer_cast<IndexScan>(_right->getRootOperation());
-        AD_CORRECTNESS_CHECK(leftScan && rightScan);
-        // The join column already is the first column in both inputs, so we
-        // don't have to permute the inputs and results for the
-        // `AddCombinedRowToIdTable` class to work correctly.
-        AD_CORRECTNESS_CHECK(_leftJoinCol == 0 && _rightJoinCol == 0);
-        auto rowAdder = makeRowAdder(std::move(yieldTable));
-
-        ad_utility::Timer timer{
-            ad_utility::timer::Timer::InitialStatus::Started};
-        auto [leftBlocksInternal, rightBlocksInternal] =
-            IndexScan::lazyScanForJoinOfTwoScans(*leftScan, *rightScan);
-        runtimeInfo().addDetail("time-for-filtering-blocks", timer.msecs());
-
-        auto leftBlocks = convertGenerator(std::move(leftBlocksInternal));
-        auto rightBlocks = convertGenerator(std::move(rightBlocksInternal));
-
-        ad_utility::zipperJoinForBlocksWithoutUndef(leftBlocks, rightBlocks,
-                                                    std::less{}, rowAdder);
-
-        leftScan->updateRuntimeInfoForLazyScan(leftBlocks.details());
-        rightScan->updateRuntimeInfoForLazyScan(rightBlocks.details());
-
-        AD_CORRECTNESS_CHECK(leftBlocks.details().numBlocksRead_ <=
-                             rightBlocks.details().numElementsRead_);
-        AD_CORRECTNESS_CHECK(rightBlocks.details().numBlocksRead_ <=
-                             leftBlocks.details().numElementsRead_);
-        auto localVocab = std::move(rowAdder.localVocab());
-        return Result::IdTableVocabPair{std::move(rowAdder).resultTable(),
-                                        std::move(localVocab)};
-      });
 }
 
 // ______________________________________________________________________________________________________
