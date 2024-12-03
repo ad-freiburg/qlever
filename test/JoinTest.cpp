@@ -390,7 +390,7 @@ TEST(JoinTest, joinWithColumnAndScan) {
 }
 
 TEST(JoinTest, joinWithColumnAndScanEmptyInput) {
-  auto test = [](size_t materializationThreshold) {
+  auto test = [](size_t materializationThreshold, bool lazyJoinValues) {
     auto qec = ad_utility::testing::getQec("<x> <p> 1. <x2> <p> 2. <x> <a> 3.");
     auto cleanup =
         setRuntimeParameterForTest<"lazy-index-scan-max-size-materialization">(
@@ -400,7 +400,9 @@ TEST(JoinTest, joinWithColumnAndScanEmptyInput) {
         qec, PSO, SparqlTriple{Var{"?s"}, "<p>", Var{"?o"}});
     auto valuesTree =
         ad_utility::makeExecutionTree<ValuesForTestingNoKnownEmptyResult>(
-            qec, IdTable{1, qec->getAllocator()}, Vars{Variable{"?s"}});
+            qec, IdTable{1, qec->getAllocator()}, Vars{Variable{"?s"}}, false,
+            std::vector<ColumnIndex>{0}, LocalVocab{}, std::nullopt,
+            !lazyJoinValues);
     auto join = Join{qec, fullScanPSO, valuesTree, 0, 0};
     EXPECT_EQ(join.getDescriptor(), "Join on ?s");
 
@@ -414,15 +416,17 @@ TEST(JoinTest, joinWithColumnAndScanEmptyInput) {
     testJoinOperation(joinSwitched,
                       makeExpectedColumns(expectedVariables, expected));
   };
-  test(0);
-  test(1);
-  test(2);
-  test(3);
-  test(1'000'000);
+  for (bool lazyJoinValues : {true, false}) {
+    test(0, lazyJoinValues);
+    test(1, lazyJoinValues);
+    test(2, lazyJoinValues);
+    test(3, lazyJoinValues);
+    test(1'000'000, lazyJoinValues);
+  }
 }
 
 TEST(JoinTest, joinWithColumnAndScanUndefValues) {
-  auto test = [](size_t materializationThreshold) {
+  auto test = [](size_t materializationThreshold, bool lazyJoinValues) {
     auto qec = ad_utility::testing::getQec("<x> <p> 1. <x2> <p> 2. <x> <a> 3.");
     auto cleanup =
         setRuntimeParameterForTest<"lazy-index-scan-max-size-materialization">(
@@ -432,7 +436,9 @@ TEST(JoinTest, joinWithColumnAndScanUndefValues) {
         qec, PSO, SparqlTriple{Var{"?s"}, "<p>", Var{"?o"}});
     auto U = Id::makeUndefined();
     auto valuesTree = ad_utility::makeExecutionTree<ValuesForTesting>(
-        qec, makeIdTableFromVector({{U}}), Vars{Variable{"?s"}});
+        qec, makeIdTableFromVector({{U}}), Vars{Variable{"?s"}}, false,
+        std::vector<ColumnIndex>{0}, LocalVocab{}, std::nullopt,
+        !lazyJoinValues);
     auto join = Join{qec, fullScanPSO, valuesTree, 0, 0};
     EXPECT_EQ(join.getDescriptor(), "Join on ?s");
 
@@ -458,11 +464,13 @@ TEST(JoinTest, joinWithColumnAndScanUndefValues) {
     qec->getQueryTreeCache().clearAll();
     testJoinOperation(joinSwitched, expectedColumns, false);
   };
-  test(0);
-  test(1);
-  test(2);
-  test(3);
-  test(1'000'000);
+  for (bool lazyJoinValues : {true, false}) {
+    test(0, lazyJoinValues);
+    test(1, lazyJoinValues);
+    test(2, lazyJoinValues);
+    test(3, lazyJoinValues);
+    test(1'000'000, lazyJoinValues);
+  }
 }
 
 TEST(JoinTest, joinTwoScans) {
