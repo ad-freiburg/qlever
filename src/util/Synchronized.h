@@ -82,9 +82,13 @@ class Synchronized {
   /// is this a shared_mutex?
   constexpr static bool isShared = AllowsSharedLocking<Mutex>::value;
 
-  /// Not copyable because of the Mutex
-  Synchronized(const Synchronized&) = delete;
-  Synchronized& operator=(const Synchronized&) = delete;
+ public:
+  /// Copying will copy the data, but not request ordering index or the mutex.
+  Synchronized(const Synchronized& rhs) : data_{*rhs.wlock()} {}
+  Synchronized& operator=(const Synchronized& rhs) {
+    *wlock() = *rhs.wlock();
+    return *this;
+  }
   /// default Movable
   Synchronized(Synchronized&&) noexcept = default;
   Synchronized& operator=(Synchronized&&) noexcept = default;
