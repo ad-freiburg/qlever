@@ -788,21 +788,17 @@ ProtoResult Join::computeResultForIndexScanAndLazyOperation(
         ad_utility::AddCombinedRowToIdTable rowAdder =
             makeRowAdder(std::move(yieldTable));
 
-        auto [joinSide, indexScanSide] =
-            scan->prefilterTables(std::move(resultWithIdTable->idTables()), 0);
+        auto [joinSide, indexScanSide] = scan->prefilterTables(
+            std::move(resultWithIdTable->idTables()), _leftJoinCol);
 
-        auto doJoin = [&rowAdder](LazyInputView left,
-                                  LazyInputView right) mutable {
-          // Note: The `zipperJoinForBlocksWithPotentialUndef` automatically
-          // switches to a more efficient implementation if there are no UNDEF
-          // values in any of the inputs.
-          zipperJoinForBlocksWithPotentialUndef(left, right, std::less{},
-                                                rowAdder);
-        };
-        doJoin(
+        // Note: The `zipperJoinForBlocksWithPotentialUndef` automatically
+        // switches to a more efficient implementation if there are no UNDEF
+        // values in any of the inputs.
+        zipperJoinForBlocksWithPotentialUndef(
             convertGenerator(std::move(joinSide), joinColMap.permutationLeft()),
             convertGenerator(std::move(indexScanSide),
-                             joinColMap.permutationRight()));
+                             joinColMap.permutationRight()),
+            std::less{}, rowAdder);
 
         auto localVocab = std::move(rowAdder.localVocab());
         return Result::IdTableVocabPair{std::move(rowAdder).resultTable(),
