@@ -5,6 +5,8 @@
 
 #pragma once
 
+#include "engine/Filter.h"
+#include "engine/IndexScan.h"
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 
@@ -53,7 +55,21 @@ class Sort : public Operation {
     // Return  at least 1, s.t. the query planner will never emit an unnecessary
     // sort of an empty `IndexScan`. This makes the testing of the query
     // planner much easier.
-    return std::max(1UL, nlogn + subcost);
+    size_t sizeEstimateOfFilteredScan = 0;
+    if (auto filter =
+            dynamic_cast<const Filter*>(subtree_->getRootOperation().get())) {
+      if (dynamic_cast<const IndexScan*>(
+              filter->getSubtree()->getRootOperation().get())) {
+        sizeEstimateOfFilteredScan = subtree_->getSizeEstimate();
+      }
+    }
+    auto result = std::max(1UL, nlogn + subcost);
+    // TODO<joka921> proper constants.
+    if (sizeEstimateOfFilteredScan > 1'000'000) {
+      result *= 10'000;
+    } else if (sizeEstimateOfFilteredScan > 0) {
+      result *= 20;
+    }
   }
 
   virtual bool knownEmptyResult() override {
