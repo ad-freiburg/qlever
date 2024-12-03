@@ -70,6 +70,7 @@ class Sort : public Operation {
     } else if (sizeEstimateOfFilteredScan > 0) {
       result *= 20;
     }
+    return result;
   }
 
   virtual bool knownEmptyResult() override {
