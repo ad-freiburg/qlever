@@ -577,9 +577,9 @@ struct IndexScan::SharedGeneratorState {
   }
 
   // Check if there are any undefined values yielded by the original generator.
-  // If the generator hasn't been started to get consumes, this will start it.
+  // If the generator hasn't been started to get consumed, this will start it.
   bool hasUndef() {
-    if (!iterator_.has_value() && !doneFetching_) {
+    if (!iterator_.has_value()) {
       fetch();
     }
     return hasUndef_;
@@ -598,16 +598,19 @@ Result::Generator IndexScan::createPrefilteredJoinSide(
     }
     co_return;
   }
+  auto& prefetchedValues = innerState->prefetchedValues_;
   while (true) {
-    if (innerState->prefetchedValues_.empty()) {
+    if (prefetchedValues.empty()) {
       if (innerState->doneFetching_) {
         co_return;
       }
       innerState->fetch();
+      AD_CORRECTNESS_CHECK(!prefetchedValues.empty() ||
+                           innerState->doneFetching_);
     }
-    while (!innerState->prefetchedValues_.empty()) {
-      co_yield innerState->prefetchedValues_.front();
-      innerState->prefetchedValues_.pop_front();
+    while (!prefetchedValues.empty()) {
+      co_yield prefetchedValues.front();
+      prefetchedValues.pop_front();
     }
   }
 }
@@ -622,8 +625,9 @@ Result::Generator IndexScan::createPrefilteredIndexScanSide(
     co_return;
   }
   LazyScanMetadata metadata;
+  auto& pendingBlocks = innerState->pendingBlocks_;
   while (true) {
-    if (innerState->pendingBlocks_.empty()) {
+    if (pendingBlocks.empty()) {
       if (innerState->doneFetching_) {
         metadata.numBlocksAll_ = innerState->metaBlocks_.blockMetadata_.size();
         updateRuntimeInfoForLazyScan(metadata);
@@ -631,7 +635,8 @@ Result::Generator IndexScan::createPrefilteredIndexScanSide(
       }
       innerState->fetch();
     }
-    auto scan = getLazyScan(std::move(innerState->pendingBlocks_));
+    auto scan = getLazyScan(std::move(pendingBlocks));
+    AD_CORRECTNESS_CHECK(pendingBlocks.empty());
     for (IdTable& idTable : scan) {
       co_yield {std::move(idTable), LocalVocab{}};
     }
