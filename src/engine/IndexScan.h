@@ -99,7 +99,32 @@ class IndexScan final : public Operation {
   Permutation::IdTableGenerator lazyScanForJoinOfColumnWithScan(
       std::span<const Id> joinColumn) const;
 
+  // Return two generators, the first of which yields exactly the elements of
+  // `input` and the second of which yields the matching blocks, skipping the
+  // blocks consisting only of rows that don't match the tables yielded by
+  // `input` to speed up join algorithms when no undef values are presend. When
+  // there are undef values, the second generator represents the full index
+  // scan.
+  std::pair<Result::Generator, Result::Generator> prefilterTables(
+      Result::Generator input, ColumnIndex joinColumn);
+
  private:
+  // Implementation detail that allows to consume a generator from two other
+  // cooperating generators. Needs to be forward declared as it is used by
+  // several member functions below.
+  struct SharedGeneratorState;
+
+  // Helper function that creates a generator that re-yields the generator
+  // wrapped by `innerState`.
+  static Result::Generator createPrefilteredJoinSide(
+      std::shared_ptr<SharedGeneratorState> innerState);
+
+  // Helper function that creates a generator yielding prefiltered rows of this
+  // index scan according to the block metadata, that match the tables yielded
+  // by the generator wrapped by `innerState`.
+  Result::Generator createPrefilteredIndexScanSide(
+      std::shared_ptr<SharedGeneratorState> innerState);
+
   // TODO<joka921> Make the `getSizeEstimateBeforeLimit()` function `const` for
   // ALL the `Operations`.
   uint64_t getSizeEstimateBeforeLimit() override { return sizeEstimate_; }
@@ -144,6 +169,11 @@ class IndexScan final : public Operation {
   std::array<const TripleComponent* const, 3> getPermutedTriple() const;
   ScanSpecification getScanSpecification() const;
   ScanSpecificationAsTripleComponent getScanSpecificationTc() const;
+
+  // Set the runtime info of the `scanTree` when it was lazily executed during a
+  // join.
+  void updateRuntimeInfoForLazyScan(
+      const CompressedRelationReader::LazyScanMetadata& metadata);
 
  private:
   ProtoResult computeResult(bool requestLaziness) override;
