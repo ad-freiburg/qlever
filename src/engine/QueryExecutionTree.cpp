@@ -104,6 +104,24 @@ size_t QueryExecutionTree::getSizeEstimate() {
   return sizeEstimate_.value();
 }
 
+//_____________________________________________________________________________
+std::optional<std::shared_ptr<QueryExecutionTree>>
+QueryExecutionTree::setPrefilterGetUpdatedQueryExecutionTree(
+    std::vector<Operation::PrefilterVariablePair> prefilterPairs) const {
+  AD_CONTRACT_CHECK(rootOperation_);
+  VariableToColumnMap varToColMap = getVariableColumns();
+  std::erase_if(prefilterPairs, [&varToColMap](const auto& pair) {
+    return !varToColMap.contains(pair.second);
+  });
+
+  if (prefilterPairs.empty()) {
+    return std::nullopt;
+  } else {
+    return rootOperation_->setPrefilterGetUpdatedQueryExecutionTree(
+        prefilterPairs);
+  }
+}
+
 // _____________________________________________________________________________
 bool QueryExecutionTree::knownEmptyResult() {
   if (cachedResult_) {
@@ -125,7 +143,8 @@ void QueryExecutionTree::readFromCache() {
     return;
   }
   auto& cache = qec_->getQueryTreeCache();
-  auto res = cache.getIfContained(getCacheKey());
+  auto res = cache.getIfContained(
+      {getCacheKey(), qec_->locatedTriplesSnapshot().index_});
   if (res.has_value()) {
     cachedResult_ = res->_resultPointer->resultTablePtr();
   }

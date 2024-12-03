@@ -915,6 +915,11 @@ void Server::processUpdateImpl(
             << std::endl;
   LOG(DEBUG) << "Runtime Info:\n"
              << qet.getRootOperation()->runtimeInfo().toString() << std::endl;
+
+  // Clear the cache, because all cache entries have been invalidated by the
+  // update anyway (The index of the located triples snapshot is part of the
+  // cache key).
+  cache_.clearAll();
 }
 
 // ____________________________________________________________________________

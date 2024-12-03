@@ -67,4 +67,111 @@ constexpr auto orExpr = logExpr<OrExpression>;
 // NOT (`!`)
 constexpr auto notExpr = notPrefilterExpression;
 
+namespace filterHelper {
+//______________________________________________________________________________
+// Construct a `PAIR` with the given `PrefilterExpression` and `Variable` value.
+auto pr =
+    [](std::unique_ptr<prefilterExpressions::PrefilterExpression> expr,
+       const Variable& var) -> sparqlExpression::PrefilterExprVariablePair {
+  return {std::move(expr), var};
+};
+
+//______________________________________________________________________________
+// Create a vector containing the provided `<PrefilterExpression, Variable>`
+// pairs.
+auto makePrefilterVec =
+    [](std::convertible_to<
+        sparqlExpression::PrefilterExprVariablePair> auto&&... prefilterArgs) {
+      std::vector<sparqlExpression::PrefilterExprVariablePair>
+          prefilterVarPairs = {};
+      if constexpr (sizeof...(prefilterArgs) > 0) {
+        (prefilterVarPairs.emplace_back(
+             std::forward<sparqlExpression::PrefilterExprVariablePair>(
+                 prefilterArgs)),
+         ...);
+      }
+      return prefilterVarPairs;
+    };
+
+}  // namespace filterHelper
+
 }  // namespace makeFilterExpression
+
+namespace makeSparqlExpression {
+using namespace sparqlExpression;
+
+namespace {
+using Literal = ad_utility::triple_component::Literal;
+using Iri = ad_utility::triple_component::Iri;
+using RelValues = std::variant<Variable, ValueId, Iri, Literal>;
+
+//______________________________________________________________________________
+const auto makeLiteralSparqlExpr =
+    [](const auto& child) -> std::unique_ptr<SparqlExpression> {
+  using T = std::decay_t<decltype(child)>;
+  if constexpr (std::is_same_v<T, ValueId>) {
+    return std::make_unique<IdExpression>(child);
+  } else if constexpr (std::is_same_v<T, Variable>) {
+    return std::make_unique<VariableExpression>(child);
+  } else if constexpr (std::is_same_v<T, Literal>) {
+    return std::make_unique<StringLiteralExpression>(child);
+  } else if constexpr (std::is_same_v<T, Iri>) {
+    return std::make_unique<IriExpression>(child);
+  } else {
+    throw std::runtime_error(
+        "Can't create a LiteralExpression from provided (input) type.");
+  }
+};
+
+//______________________________________________________________________________
+auto getExpr = [](const auto& variantVal) -> std::unique_ptr<SparqlExpression> {
+  return makeLiteralSparqlExpr(variantVal);
+};
+
+//______________________________________________________________________________
+template <typename RelExpr>
+std::unique_ptr<SparqlExpression> makeRelationalSparqlExprImpl(
+    const RelValues& child0, const RelValues& child1) {
+  return std::make_unique<RelExpr>(std::array<SparqlExpression::Ptr, 2>{
+      std::visit(getExpr, child0), std::visit(getExpr, child1)});
+};
+
+//______________________________________________________________________________
+std::unique_ptr<SparqlExpression> makeStringStartsWithSparqlExpression(
+    const RelValues& child0, const RelValues& child1) {
+  return makeStrStartsExpression(std::visit(getExpr, child0),
+                                 std::visit(getExpr, child1));
+};
+}  // namespace
+
+//______________________________________________________________________________
+// LESS THAN (`<`, `SparqlExpression`)
+constexpr auto ltSprql =
+    &makeRelationalSparqlExprImpl<sparqlExpression::LessThanExpression>;
+// LESS EQUAL (`<=`, `SparqlExpression`)
+constexpr auto leSprql =
+    &makeRelationalSparqlExprImpl<sparqlExpression::LessEqualExpression>;
+// EQUAL (`==`, `SparqlExpression`)
+constexpr auto eqSprql =
+    &makeRelationalSparqlExprImpl<sparqlExpression::EqualExpression>;
+// NOT EQUAL (`!=`, `SparqlExpression`)
+constexpr auto neqSprql =
+    &makeRelationalSparqlExprImpl<sparqlExpression::NotEqualExpression>;
+// GREATER EQUAL (`>=`, `SparqlExpression`)
+constexpr auto geSprql =
+    &makeRelationalSparqlExprImpl<sparqlExpression::GreaterEqualExpression>;
+// GREATER THAN (`>`, `SparqlExpression`)
+constexpr auto gtSprql =
+    &makeRelationalSparqlExprImpl<sparqlExpression::GreaterThanExpression>;
+// AND (`&&`, `SparqlExpression`)
+constexpr auto andSprqlExpr = &makeAndExpression;
+// OR (`||`, `SparqlExpression`)
+constexpr auto orSprqlExpr = &makeOrExpression;
+// NOT (`!`, `SparqlExpression`)
+constexpr auto notSprqlExpr = &makeUnaryNegateExpression;
+
+//______________________________________________________________________________
+// Create SparqlExpression `STRSTARTS`.
+constexpr auto strStartsSprql = &makeStringStartsWithSparqlExpression;
+
+}  // namespace makeSparqlExpression

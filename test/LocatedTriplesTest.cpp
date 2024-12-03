@@ -29,10 +29,12 @@ auto IT = [](const auto& c1, const auto& c2, const auto& c3, int graph = g) {
 auto PT = [](const auto& c1, const auto& c2, const auto& c3, int graph = g) {
   return CompressedBlockMetadata::PermutedTriple{V(c1), V(c2), V(c3), V(graph)};
 };
-auto CBM = [](const auto firstTriple, const auto lastTriple) {
+auto CBM = [](const auto firstTriple, const auto lastTriple,
+              CompressedBlockMetadata::GraphInfo graphs = std::nullopt) {
   size_t dummyBlockIndex = 0;
-  return CompressedBlockMetadata{{{}, 0, firstTriple, lastTriple, {}, false},
-                                 dummyBlockIndex};
+  return CompressedBlockMetadata{
+      {{}, 0, firstTriple, lastTriple, std::move(graphs), false},
+      dummyBlockIndex};
 };
 
 auto numBlocks =
@@ -750,10 +752,12 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
         Span{T1}, metadata, {0, 1, 2}, false, handle));
 
     expectedAugmentedMetadata[0] = CBM(T1.toPermutedTriple(), PT1);
+    expectedAugmentedMetadata[0].containsDuplicatesWithDifferentGraphs_ = true;
     EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
                 testing::ElementsAreArray(expectedAugmentedMetadata));
 
     // T2 is inside block 1. Borders don't change.
+    expectedAugmentedMetadata[1].containsDuplicatesWithDifferentGraphs_ = true;
     locatedTriplesPerBlock.add(LocatedTriple::locateTriplesInPermutation(
         Span{T2}, metadata, {0, 1, 2}, true, handle));
 
@@ -762,6 +766,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
 
     // T3 is equal to PT4, the beginning of block 2. All update (update and
     // delete) add to the block borders. Borders don't change.
+    expectedAugmentedMetadata[2].containsDuplicatesWithDifferentGraphs_ = true;
     locatedTriplesPerBlock.add(LocatedTriple::locateTriplesInPermutation(
         Span{T3}, metadata, {0, 1, 2}, false, handle));
 
@@ -774,6 +779,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
             Span{T4}, metadata, {0, 1, 2}, true, handle));
 
     expectedAugmentedMetadata[4] = CBM(T4.toPermutedTriple(), PT8);
+    expectedAugmentedMetadata[4].containsDuplicatesWithDifferentGraphs_ = true;
     EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
                 testing::ElementsAreArray(expectedAugmentedMetadata));
 
@@ -781,6 +787,9 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
     locatedTriplesPerBlock.erase(4, handles[0]);
 
     expectedAugmentedMetadata[4] = CBM(PT8, PT8);
+    // The block 4 has no more updates, so we restore the info about the block
+    // having no duplicates from the original metadata.
+    expectedAugmentedMetadata[4].containsDuplicatesWithDifferentGraphs_ = false;
     EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
                 testing::ElementsAreArray(expectedAugmentedMetadata));
 
@@ -794,6 +803,124 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
   {
     LocatedTriplesPerBlock ltpb;
     EXPECT_THROW(ltpb.getAugmentedMetadata(), ad_utility::Exception);
+  }
+}
+
+// _____________________________________________________________________________
+TEST_F(LocatedTriplesTest, augmentedMetadataGraphInfo) {
+  // Create a vector that is automatically converted to a span.
+  using Span = std::vector<IdTriple<0>>;
+
+  auto PT1 = PT(1, 10, 10);
+  auto PT2 = PT(2, 10, 10);
+  auto PT3 = PT(2, 15, 20);
+  // Two blocks, one without graph info, and one with graph info.
+  const std::vector<CompressedBlockMetadata> metadata = {
+      CBM(PT1, PT1), CBM(PT2, PT3, std::vector<Id>{V(13)})};
+  std::vector<CompressedBlockMetadata> expectedAugmentedMetadata{metadata};
+
+  auto T1 = IT(
+      1, 10, 10,
+      12);  // Before block 0 (because `12` is smaller than the default graph)
+  auto T2 = IT(1, 10, 10,
+               99999999);  // Becomes the lower bound of block 1, although it
+                           // only differs in the graph info.
+  auto T3 = IT(2, 12, 10, 17);  // Inside block 1, add graph 17.
+  auto T4 = IT(2, 12, 10, 18);  // Inside block 1, add graph 18.
+
+  auto T5 = IT(20, 30, 40, 19);  // After the last block.
+
+  ad_utility::SharedCancellationHandle handle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+
+  {
+    LocatedTriplesPerBlock locatedTriplesPerBlock;
+    locatedTriplesPerBlock.setOriginalMetadata(metadata);
+
+    // Delete the located triples {T1 ... T4}
+    locatedTriplesPerBlock.add(LocatedTriple::locateTriplesInPermutation(
+        Span{T1, T2, T3, T4}, metadata, {0, 1, 2}, false, handle));
+
+    // All the blocks have updates, so their value of `containsDuplicates..` is
+    // set to `true`.
+    expectedAugmentedMetadata[0] = CBM(T1.toPermutedTriple(), PT1);
+    expectedAugmentedMetadata[1].firstTriple_ = T2.toPermutedTriple();
+    expectedAugmentedMetadata[0].containsDuplicatesWithDifferentGraphs_ = true;
+    expectedAugmentedMetadata[1].containsDuplicatesWithDifferentGraphs_ = true;
+
+    // Note: the GraphInfo hasn't changed, because the new triples all were
+    // deleted.
+    EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
+                testing::ElementsAreArray(expectedAugmentedMetadata));
+  }
+  {
+    expectedAugmentedMetadata = metadata;
+    LocatedTriplesPerBlock locatedTriplesPerBlock;
+    locatedTriplesPerBlock.setOriginalMetadata(metadata);
+
+    // Add the located triples {T1 ... T5}
+    locatedTriplesPerBlock.add(LocatedTriple::locateTriplesInPermutation(
+        Span{T1, T2, T3, T4, T5}, metadata, {0, 1, 2}, true, handle));
+
+    expectedAugmentedMetadata[0] = CBM(T1.toPermutedTriple(), PT1);
+    expectedAugmentedMetadata[1].firstTriple_ = T2.toPermutedTriple();
+    expectedAugmentedMetadata[1].graphInfo_.value() =
+        std::vector{V(13), V(17), V(18), V(99999999)};
+
+    // We have added a triple `T5` after the last block, so there now is an
+    // additional block, which also stores the correct graph info.
+    expectedAugmentedMetadata.push_back(
+        CBM(T5.toPermutedTriple(), T5.toPermutedTriple(), std::vector{V(19)}));
+
+    // The automatically added metadata for the last block also has the correct
+    // block index and number of columns, so we have to properly initialize it.
+    expectedAugmentedMetadata.back().blockIndex_ = 2;
+    expectedAugmentedMetadata.back().offsetsAndCompressedSize_.resize(4,
+                                                                      {0, 0});
+
+    // All the blocks have updates, so their value of `containsDuplicates..` is
+    // set to `true`.
+    expectedAugmentedMetadata[0].containsDuplicatesWithDifferentGraphs_ = true;
+    expectedAugmentedMetadata[1].containsDuplicatesWithDifferentGraphs_ = true;
+    expectedAugmentedMetadata[2].containsDuplicatesWithDifferentGraphs_ = true;
+
+    // Note: the GraphInfo hasn't changed, because the new triples all were
+    // deleted.
+    auto actualMetadata = locatedTriplesPerBlock.getAugmentedMetadata();
+    EXPECT_THAT(actualMetadata,
+                testing::ElementsAreArray(expectedAugmentedMetadata));
+
+    // Test the case that a block loses its graph info if the added located
+    // triples have too many distinct graphs.
+    ASSERT_TRUE(actualMetadata[1].graphInfo_.has_value());
+    std::vector<IdTriple<0>> triples;
+    // Note: The `30` is an offset to guarantee that the added graphs are not
+    // contained in the located triples before.
+    for (size_t i = 30; i < 30 + 2 * MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA;
+         ++i) {
+      auto tr = T3;
+      tr.ids_.at(ADDITIONAL_COLUMN_GRAPH_ID) = V(i);
+      triples.push_back(tr);
+    }
+
+    size_t numGraphsBefore = actualMetadata[1].graphInfo_.value().size();
+    size_t numGraphsToMax =
+        MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA - numGraphsBefore;
+
+    // Add the exact amount of graphs such that we are at the maximum number of
+    // stored graphs.
+    locatedTriplesPerBlock.add(LocatedTriple::locateTriplesInPermutation(
+        std::span{triples}.subspan(0, numGraphsToMax), metadata, {0, 1, 2},
+        true, handle));
+    actualMetadata = locatedTriplesPerBlock.getAugmentedMetadata();
+    ASSERT_TRUE(actualMetadata[1].graphInfo_.has_value());
+
+    // Adding one more graph will exceed the maximum.
+    locatedTriplesPerBlock.add(LocatedTriple::locateTriplesInPermutation(
+        std::span{triples}.subspan(numGraphsToMax, numGraphsToMax + 1),
+        metadata, {0, 1, 2}, true, handle));
+    actualMetadata = locatedTriplesPerBlock.getAugmentedMetadata();
+    ASSERT_FALSE(actualMetadata[1].graphInfo_.has_value());
   }
 }
 

@@ -8,8 +8,8 @@
 
 #include <absl/cleanup/cleanup.h>
 
-#include "util/CacheableGenerator.h"
 #include "util/Exception.h"
+#include "util/Generators.h"
 #include "util/Log.h"
 #include "util/Timer.h"
 
