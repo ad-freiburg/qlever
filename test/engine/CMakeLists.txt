@@ -1,4 +1,5 @@
 add_subdirectory(idTable)
+add_subdirectory(joinOrdering)
 addLinkAndDiscoverTest(IndexScanTest engine)
 addLinkAndRunAsSingleTest(CartesianProductJoinTest engine)
 addLinkAndDiscoverTest(TextIndexScanForWordTest engine)
