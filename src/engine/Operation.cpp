@@ -22,9 +22,9 @@ struct LocalVocabTracking {
   size_t nonEmptyVocabs_ = 0;
 
   float avgSize() const {
-    return nonEmptyVocabs_ == 0
-               ? 0
-               : static_cast<float>(sizeSum_) / nonEmptyVocabs_;
+    return nonEmptyVocabs_ == 0 ? 0
+                                : static_cast<float>(sizeSum_) /
+                                      static_cast<float>(nonEmptyVocabs_);
   }
 };
 
@@ -33,7 +33,7 @@ void mergeStats(LocalVocabTracking& stats, const LocalVocab& vocab) {
   stats.maxSize_ = std::max(stats.maxSize_, vocab.size());
   stats.sizeSum_ += vocab.size();
   ++stats.totalVocabs_;
-  if (vocab.size() > 0) {
+  if (!vocab.empty()) {
     ++stats.nonEmptyVocabs_;
   }
 }
