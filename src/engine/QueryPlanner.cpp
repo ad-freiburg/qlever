@@ -9,7 +9,10 @@
 #include <absl/strings/str_split.h>
 
 #include <algorithm>
+#include <memory>
 #include <optional>
+#include <type_traits>
+#include <variant>
 
 #include "engine/Bind.h"
 #include "engine/CartesianProductJoin.h"
@@ -28,6 +31,7 @@
 #include "engine/OptionalJoin.h"
 #include "engine/OrderBy.h"
 #include "engine/PathSearch.h"
+#include "engine/QueryExecutionTree.h"
 #include "engine/Service.h"
 #include "engine/Sort.h"
 #include "engine/SpatialJoin.h"
@@ -42,6 +46,8 @@
 #include "global/Id.h"
 #include "global/RuntimeParameters.h"
 #include "parser/Alias.h"
+#include "parser/GraphPatternOperation.h"
+#include "parser/MagicServiceIriConstants.h"
 #include "parser/SparqlParserHelpers.h"
 #include "util/Exception.h"
 
@@ -754,12 +760,24 @@ auto QueryPlanner::seedWithScansAndText(
           "necessary also rebuild the index.");
     }
 
+    // Backward compatibility with spatial search predicates
     const auto& input = node.triple_.p_._iri;
     if ((input.starts_with(MAX_DIST_IN_METERS) ||
          input.starts_with(NEAREST_NEIGHBORS)) &&
         input.ends_with('>')) {
-      pushPlan(makeSubtreePlan<SpatialJoin>(_qec, node.triple_, std::nullopt,
-                                            std::nullopt));
+      parsedQuery::SpatialQuery config{node.triple_};
+      auto plan = makeSubtreePlan<SpatialJoin>(
+          _qec, config.toSpatialJoinConfiguration(), std::nullopt,
+          std::nullopt);
+      if (input.starts_with(NEAREST_NEIGHBORS)) {
+        plan._qet->getRootOperation()->addWarning(absl::StrCat(
+            "The special predicate <nearest-neighbors:...> is deprecated due "
+            "to confusing semantics. Please upgrade your query to the new "
+            "syntax 'SERVICE ",
+            SPATIAL_SEARCH_IRI,
+            " { ... }'. For more information, please see the QLever Wiki."));
+      }
+      pushPlan(plan);
       continue;
     }
 
@@ -1800,6 +1818,13 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
     return candidates;
   }
 
+  // If both sides are spatial joins that are still missing children, return
+  // immediately to prevent a regular join on the variables, which would lead to
+  // the spatial join never having children.
+  if (checkSpatialJoin(a, b) == std::pair<bool, bool>{true, true}) {
+    return candidates;
+  }
+
   // if one of the inputs is the spatial join and the other input is compatible
   // with the SpatialJoin, add it as a child to the spatialJoin. As unbound
   // SpatialJoin operations are incompatible with normal join operations, we
@@ -1875,25 +1900,30 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
 }
 
 // _____________________________________________________________________________
+std::pair<bool, bool> QueryPlanner::checkSpatialJoin(const SubtreePlan& a,
+                                                     const SubtreePlan& b) {
+  auto isIncompleteSpatialJoin = [](const SubtreePlan& sj) {
+    auto sjCasted = std::dynamic_pointer_cast<const SpatialJoin>(
+        sj._qet->getRootOperation());
+    return sjCasted != nullptr && !sjCasted->isConstructed();
+  };
+  return {isIncompleteSpatialJoin(a), isIncompleteSpatialJoin(b)};
+}
+
+// _____________________________________________________________________________
 auto QueryPlanner::createSpatialJoin(
     const SubtreePlan& a, const SubtreePlan& b,
     const std::vector<std::array<ColumnIndex, 2>>& jcs)
     -> std::optional<SubtreePlan> {
-  auto aIsSpatialJoin =
-      std::dynamic_pointer_cast<const SpatialJoin>(a._qet->getRootOperation());
-  auto bIsSpatialJoin =
-      std::dynamic_pointer_cast<const SpatialJoin>(b._qet->getRootOperation());
-
-  auto aIs = static_cast<bool>(aIsSpatialJoin);
-  auto bIs = static_cast<bool>(bIsSpatialJoin);
+  auto [aIs, bIs] = checkSpatialJoin(a, b);
 
   // Exactly one of the inputs must be a SpatialJoin.
-  if ((aIs && bIs) || (!aIs && !bIs)) {
+  if (aIs == bIs) {
     return std::nullopt;
   }
 
-  const SubtreePlan& spatialSubtreePlan = aIsSpatialJoin ? a : b;
-  const SubtreePlan& otherSubtreePlan = aIsSpatialJoin ? b : a;
+  const SubtreePlan& spatialSubtreePlan = aIs ? a : b;
+  const SubtreePlan& otherSubtreePlan = aIs ? b : a;
 
   std::shared_ptr<Operation> op = spatialSubtreePlan._qet->getRootOperation();
   auto spatialJoin = static_cast<SpatialJoin*>(op.get());
@@ -1907,7 +1937,7 @@ auto QueryPlanner::createSpatialJoin(
         "Currently, if both sides of a SpatialJoin are variables, then the"
         "SpatialJoin must be the only connection between these variables");
   }
-  ColumnIndex ind = aIsSpatialJoin ? jcs[0][1] : jcs[0][0];
+  ColumnIndex ind = aIs ? jcs[0][1] : jcs[0][0];
   const Variable& var =
       otherSubtreePlan._qet->getVariableAndInfoByColumnIndex(ind).first;
 
@@ -2321,6 +2351,8 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
     visitGroupOptionalOrMinus(std::move(candidates));
   } else if constexpr (std::is_same_v<T, p::PathQuery>) {
     visitPathSearch(arg);
+  } else if constexpr (std::is_same_v<T, p::SpatialQuery>) {
+    visitSpatialSearch(arg);
   } else {
     static_assert(std::is_same_v<T, p::BasicGraphPattern>);
     visitBasicGraphPattern(arg);
@@ -2431,17 +2463,65 @@ void QueryPlanner::GraphPatternPlanner::visitTransitivePath(
 // _______________________________________________________________
 void QueryPlanner::GraphPatternPlanner::visitPathSearch(
     parsedQuery::PathQuery& pathQuery) {
-  auto candidatesIn = planner_.optimize(&pathQuery.childGraphPattern_);
-  std::vector<SubtreePlan> candidatesOut;
-
   const auto& vocab = planner_._qec->getIndex().getVocab();
   auto config = pathQuery.toPathSearchConfiguration(vocab);
+
+  // The path search requires a child graph pattern
+  AD_CORRECTNESS_CHECK(pathQuery.childGraphPattern_.has_value());
+  std::vector<SubtreePlan> candidatesIn =
+      planner_.optimize(&pathQuery.childGraphPattern_.value());
+  std::vector<SubtreePlan> candidatesOut;
 
   for (auto& sub : candidatesIn) {
     auto pathSearch =
         std::make_shared<PathSearch>(qec_, std::move(sub._qet), config);
     auto plan = makeSubtreePlan<PathSearch>(std::move(pathSearch));
     candidatesOut.push_back(std::move(plan));
+  }
+  visitGroupOptionalOrMinus(std::move(candidatesOut));
+}
+
+// _______________________________________________________________
+void QueryPlanner::GraphPatternPlanner::visitSpatialSearch(
+    parsedQuery::SpatialQuery& spatialQuery) {
+  auto config = spatialQuery.toSpatialJoinConfiguration();
+
+  // If there is no child graph pattern, we need to construct a neutral element
+  std::vector<SubtreePlan> candidatesIn;
+  if (spatialQuery.childGraphPattern_.has_value()) {
+    candidatesIn = planner_.optimize(&spatialQuery.childGraphPattern_.value());
+  } else {
+    candidatesIn = {makeSubtreePlan<NeutralElementOperation>(qec_)};
+  }
+  std::vector<SubtreePlan> candidatesOut;
+
+  for (auto& sub : candidatesIn) {
+    // This helper function adds a subtree plan to the output candidates, which
+    // either has the child graph pattern as a right child or no child at all.
+    // If it has no child at all, the query planner may look for the right child
+    // of the SpatialJoin outside of the SERVICE. This is only allowed for max
+    // distance joins.
+    auto addCandidateSpatialJoin = [this, &sub, &config,
+                                    &candidatesOut](bool rightVarOutside) {
+      std::optional<std::shared_ptr<QueryExecutionTree>> right = std::nullopt;
+      if (!rightVarOutside) {
+        right = std::move(sub._qet);
+      }
+      auto spatialJoin =
+          std::make_shared<SpatialJoin>(qec_, config, std::nullopt, right);
+      auto plan = makeSubtreePlan<SpatialJoin>(std::move(spatialJoin));
+      candidatesOut.push_back(std::move(plan));
+    };
+
+    if (spatialQuery.childGraphPattern_.has_value()) {
+      // The version using the child graph pattern
+      addCandidateSpatialJoin(false);
+    } else {
+      // The version without using the child graph pattern
+      if (std::holds_alternative<MaxDistanceConfig>(config.task_)) {
+        addCandidateSpatialJoin(true);
+      }
+    }
   }
   visitGroupOptionalOrMinus(std::move(candidatesOut));
 }

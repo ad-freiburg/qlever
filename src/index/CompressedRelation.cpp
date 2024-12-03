@@ -1594,3 +1594,16 @@ void CompressedRelationReader::LazyScanMetadata::update(
     ++numBlocksSkippedBecauseOfGraph_;
   }
 }
+
+// _____________________________________________________________________________
+void CompressedRelationReader::LazyScanMetadata::aggregate(
+    const LazyScanMetadata& newValue) {
+  numElementsYielded_ += newValue.numElementsYielded_;
+  blockingTime_ += newValue.blockingTime_;
+  numBlocksRead_ += newValue.numBlocksRead_;
+  numBlocksAll_ += newValue.numBlocksAll_;
+  numElementsRead_ += newValue.numElementsRead_;
+  numBlocksSkippedBecauseOfGraph_ += newValue.numBlocksSkippedBecauseOfGraph_;
+  numBlocksPostprocessed_ += newValue.numBlocksPostprocessed_;
+  numBlocksWithUpdate_ += newValue.numBlocksWithUpdate_;
+}

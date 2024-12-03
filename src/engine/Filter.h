@@ -10,10 +10,11 @@
 
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
-#include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "parser/ParsedQuery.h"
 
 class Filter : public Operation {
+  using PrefilterVariablePair = sparqlExpression::PrefilterExprVariablePair;
+
  private:
   std::shared_ptr<QueryExecutionTree> _subtree;
   sparqlExpression::SparqlExpressionPimpl _expression;
@@ -57,6 +58,14 @@ class Filter : public Operation {
   VariableToColumnMap computeVariableToColumnMap() const override {
     return _subtree->getVariableColumns();
   }
+
+  // The method is directly invoked with the construction of this `Filter`
+  // object. Its implementation retrieves <PrefilterExpression, Variable> pairs
+  // from the corresponding `SparqlExpression` and uses them to call
+  // `QueryExecutionTree::setPrefilterGetUpdatedQueryExecutionTree()` on the
+  // `subtree_`. If necessary the `QueryExecutionTree` for this
+  // entity will be updated.
+  void setPrefilterExpressionForChildren();
 
   ProtoResult computeResult(bool requestLaziness) override;
 

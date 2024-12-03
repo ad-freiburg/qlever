@@ -11,6 +11,7 @@
 
 using namespace std::chrono_literals;
 
+//______________________________________________________________________________
 template <typename F>
 void Operation::forAllDescendants(F f) {
   static_assert(
@@ -23,6 +24,7 @@ void Operation::forAllDescendants(F f) {
   }
 }
 
+//______________________________________________________________________________
 template <typename F>
 void Operation::forAllDescendants(F f) const {
   static_assert(
@@ -35,9 +37,9 @@ void Operation::forAllDescendants(F f) const {
   }
 }
 
-// __________________________________________________________________________________________________________
+// _____________________________________________________________________________
 vector<string> Operation::collectWarnings() const {
-  vector<string> res = getWarnings();
+  vector<string> res{*getWarnings().rlock()};
   for (auto child : getChildren()) {
     if (!child) {
       continue;
@@ -48,6 +50,15 @@ vector<string> Operation::collectWarnings() const {
   }
 
   return res;
+}
+
+// _____________________________________________________________________________
+void Operation::addWarningOrThrow(std::string warning) const {
+  if (RuntimeParameters().get<"throw-on-unbound-variables">()) {
+    throw InvalidSparqlQueryException(std::move(warning));
+  } else {
+    addWarning(std::move(warning));
+  }
 }
 
 // ________________________________________________________________________

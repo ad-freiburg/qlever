@@ -5,19 +5,66 @@
 
 #pragma once
 
+#include <memory>
 #include <optional>
+#include <variant>
 
 #include "engine/Operation.h"
 #include "global/Id.h"
-#include "parser/ParsedQuery.h"
+#include "parser/data/Variable.h"
 
-// Configuration to restrict the results provided by the SpatialJoin
+// A nearest neighbor search with optionally a maximum distance.
 struct NearestNeighborsConfig {
   size_t maxResults_;
   std::optional<size_t> maxDist_ = std::nullopt;
 };
+
+// A spatial search limited only by a maximum distance.
 struct MaxDistanceConfig {
   size_t maxDist_;
+};
+
+// Configuration to restrict the results provided by the SpatialJoin
+using SpatialJoinTask = std::variant<NearestNeighborsConfig, MaxDistanceConfig>;
+
+// Represents the selection of all variables of the right join table as payload
+struct PayloadAllVariables : std::monostate {
+  bool operator==([[maybe_unused]] const std::vector<Variable>& other) const {
+    return false;
+  };
+};
+
+// Configuration to select which columns of the right join table should be
+// part of the result.
+using PayloadVariables =
+    std::variant<PayloadAllVariables, std::vector<Variable>>;
+
+// Selection of a SpatialJoin algorithm
+enum class SpatialJoinAlgorithm { BASELINE, S2_GEOMETRY, BOUNDING_BOX };
+const SpatialJoinAlgorithm SPATIAL_JOIN_DEFAULT_ALGORITHM =
+    SpatialJoinAlgorithm::S2_GEOMETRY;
+
+// The configuration object that will be provided by the special SERVICE.
+struct SpatialJoinConfiguration {
+  // The task defines search parameters
+  SpatialJoinTask task_;
+
+  // The variables for the two tables to be joined
+  Variable left_;
+  Variable right_;
+
+  // If given, the distance will be added to the result and be bound to this
+  // variable.
+  std::optional<Variable> distanceVariable_ = std::nullopt;
+
+  // If given a vector of variables, the selected variables will be part of the
+  // result table - the join column will automatically be part of the result.
+  // You may use PayloadAllVariables to select all columns of the right table.
+  PayloadVariables payloadVariables_ = PayloadAllVariables{};
+
+  // Choice of algorithm. Both algorithms have equal results, but different
+  // runtime characteristics.
+  SpatialJoinAlgorithm algo_ = SPATIAL_JOIN_DEFAULT_ALGORITHM;
 };
 
 // helper struct to improve readability in prepareJoin()
@@ -28,10 +75,17 @@ struct PreparedSpatialJoinParams {
   std::shared_ptr<const Result> resultRight_;
   ColumnIndex leftJoinCol_;
   ColumnIndex rightJoinCol_;
+  std::vector<ColumnIndex> rightSelectedCols_;
   size_t numColumns_;
   std::optional<size_t> maxDist_;
   std::optional<size_t> maxResults_;
 };
+
+// The spatial join operation without a limit on the maximum number of results
+// can, in the worst case have a square number of results, but usually this is
+// not the case. 1 divided by this constant is the damping factor for the
+// estimated number of results.
+static const size_t SPATIAL_JOIN_MAX_DIST_SIZE_ESTIMATE = 1000;
 
 // This class is implementing a SpatialJoin operation. This operations joins
 // two tables, using their positional column. It supports nearest neighbor
@@ -44,9 +98,10 @@ class SpatialJoin : public Operation {
   // distance, which two objects can be apart, which will still be accepted
   // as a match and therefore be part of the result table. The distance is
   // parsed from the triple.
-  SpatialJoin(QueryExecutionContext* qec, SparqlTriple triple,
+  SpatialJoin(QueryExecutionContext* qec, SpatialJoinConfiguration config,
               std::optional<std::shared_ptr<QueryExecutionTree>> childLeft_,
               std::optional<std::shared_ptr<QueryExecutionTree>> childRight_);
+
   std::vector<QueryExecutionTree*> getChildren() override;
   string getCacheKeyImpl() const override;
   string getDescriptor() const override;
@@ -92,22 +147,34 @@ class SpatialJoin : public Operation {
   // this function is used to give the maximum distance for internal purposes
   std::optional<size_t> getMaxDist() const;
 
-  // this function is used to give the maximum number of results for internal
-  // purposes
+  // this function is used to give the maximum number of results
   std::optional<size_t> getMaxResults() const;
 
-  // options which can be used for the algorithm, which calculates the result
-  enum class Algorithm { Baseline, S2Geometry, BoundingBox };
+  // switch the algorithm set in the config parameter at construction time
+  void selectAlgorithm(SpatialJoinAlgorithm algo) { config_.algo_ = algo; }
 
-  void selectAlgorithm(Algorithm algorithm) { algorithm_ = algorithm; }
+  // retrieve the currently selected algorithm
+  SpatialJoinAlgorithm getAlgorithm() const { return config_.algo_; }
 
-  std::pair<size_t, size_t> onlyForTestingGetConfig() const {
+  // Helper functions for unit tests
+  std::pair<size_t, size_t> onlyForTestingGetTask() const {
     return std::pair{getMaxDist().value_or(-1), getMaxResults().value_or(-1)};
   }
 
-  std::variant<NearestNeighborsConfig, MaxDistanceConfig>
-  onlyForTestingGetActualConfig() const {
+  const SpatialJoinConfiguration& onlyForTestingGetConfig() const {
     return config_;
+  }
+
+  std::pair<Variable, Variable> onlyForTestingGetVariables() const {
+    return std::pair{config_.left_, config_.right_};
+  }
+
+  std::optional<Variable> onlyForTestingGetDistanceVariable() const {
+    return config_.distanceVariable_;
+  }
+
+  PayloadVariables onlyForTestingGetPayloadVariables() const {
+    return config_.payloadVariables_;
   }
 
   std::shared_ptr<QueryExecutionTree> onlyForTestingGetLeftChild() const {
@@ -118,28 +185,17 @@ class SpatialJoin : public Operation {
     return childRight_;
   }
 
-  const string& getInternalDistanceName() const {
-    return nameDistanceInternal_;
-  }
-
  private:
-  // helper function, which parses a triple and populates config_
-  void parseConfigFromTriple();
+  // helper function to generate a variable to column map from `childRight_`
+  // that only contains the columns selected by `config_.payloadVariables_`
+  // and (automatically added) the `config_.right_` variable.
+  VariableToColumnMap getVarColMapPayloadVars() const;
 
   // helper function, to initialize various required objects for both algorithms
   PreparedSpatialJoinParams prepareJoin() const;
 
-  SparqlTriple triple_;
-  Variable leftChildVariable_;
-  Variable rightChildVariable_;
   std::shared_ptr<QueryExecutionTree> childLeft_ = nullptr;
   std::shared_ptr<QueryExecutionTree> childRight_ = nullptr;
 
-  std::variant<NearestNeighborsConfig, MaxDistanceConfig> config_;
-
-  // adds an extra column to the result, which contains the actual distance,
-  // between the two objects
-  bool addDistToResult_ = true;
-  const string nameDistanceInternal_ = "?distOfTheTwoObjectsAddedInternally";
-  Algorithm algorithm_ = Algorithm::S2Geometry;
+  SpatialJoinConfiguration config_;
 };

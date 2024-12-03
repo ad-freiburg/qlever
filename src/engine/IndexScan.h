@@ -6,18 +6,25 @@
 #include <string>
 
 #include "./Operation.h"
+#include "util/HashMap.h"
 
 class SparqlTriple;
 class SparqlTripleSimple;
 
 class IndexScan final : public Operation {
+  using Graphs = ScanSpecificationAsTripleComponent::Graphs;
+  // Optional pair containing a `PrefilterExpression` with `ColumnIndex` (eval.
+  // index)
+  using PrefilterIndexPair = std::optional<std::pair<
+      std::unique_ptr<prefilterExpressions::PrefilterExpression>, ColumnIndex>>;
+
  private:
   Permutation::Enum permutation_;
   TripleComponent subject_;
   TripleComponent predicate_;
   TripleComponent object_;
-  using Graphs = ScanSpecificationAsTripleComponent::Graphs;
   Graphs graphsToFilter_;
+  PrefilterIndexPair prefilter_;
   size_t numVariables_;
   size_t sizeEstimate_;
   bool sizeEstimateIsExact_;
@@ -31,10 +38,19 @@ class IndexScan final : public Operation {
 
  public:
   IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
-            const SparqlTriple& triple, Graphs graphsToFilter = std::nullopt);
+            const SparqlTriple& triple, Graphs graphsToFilter = std::nullopt,
+            PrefilterIndexPair prefilter = std::nullopt);
   IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
             const SparqlTripleSimple& triple,
-            Graphs graphsToFilter = std::nullopt);
+            Graphs graphsToFilter = std::nullopt,
+            PrefilterIndexPair prefilter = std::nullopt);
+  // Constructor to simplify copy creation of an `IndexScan`.
+  IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
+            const TripleComponent& s, const TripleComponent& p,
+            const TripleComponent& o,
+            std::vector<ColumnIndex> additionalColumns,
+            std::vector<Variable> additionalVariables, Graphs graphsToFilter,
+            PrefilterIndexPair prefilter);
 
   ~IndexScan() override = default;
 
@@ -56,6 +72,13 @@ class IndexScan final : public Operation {
 
   vector<ColumnIndex> resultSortedOn() const override;
 
+  // Set `PrefilterExpression`s and return updated `QueryExecutionTree` pointer
+  // if necessary.
+  std::optional<std::shared_ptr<QueryExecutionTree>>
+  setPrefilterGetUpdatedQueryExecutionTree(
+      const std::vector<PrefilterVariablePair>& prefilterVariablePairs)
+      const override;
+
   size_t numVariables() const { return numVariables_; }
 
   // Return the exact result size of the index scan. This is always known as it
@@ -76,7 +99,32 @@ class IndexScan final : public Operation {
   Permutation::IdTableGenerator lazyScanForJoinOfColumnWithScan(
       std::span<const Id> joinColumn) const;
 
+  // Return two generators, the first of which yields exactly the elements of
+  // `input` and the second of which yields the matching blocks, skipping the
+  // blocks consisting only of rows that don't match the tables yielded by
+  // `input` to speed up join algorithms when no undef values are presend. When
+  // there are undef values, the second generator represents the full index
+  // scan.
+  std::pair<Result::Generator, Result::Generator> prefilterTables(
+      Result::Generator input, ColumnIndex joinColumn);
+
  private:
+  // Implementation detail that allows to consume a generator from two other
+  // cooperating generators. Needs to be forward declared as it is used by
+  // several member functions below.
+  struct SharedGeneratorState;
+
+  // Helper function that creates a generator that re-yields the generator
+  // wrapped by `innerState`.
+  static Result::Generator createPrefilteredJoinSide(
+      std::shared_ptr<SharedGeneratorState> innerState);
+
+  // Helper function that creates a generator yielding prefiltered rows of this
+  // index scan according to the block metadata, that match the tables yielded
+  // by the generator wrapped by `innerState`.
+  Result::Generator createPrefilteredIndexScanSide(
+      std::shared_ptr<SharedGeneratorState> innerState);
+
   // TODO<joka921> Make the `getSizeEstimateBeforeLimit()` function `const` for
   // ALL the `Operations`.
   uint64_t getSizeEstimateBeforeLimit() override { return sizeEstimate_; }
@@ -122,10 +170,19 @@ class IndexScan final : public Operation {
   ScanSpecification getScanSpecification() const;
   ScanSpecificationAsTripleComponent getScanSpecificationTc() const;
 
+  // Set the runtime info of the `scanTree` when it was lazily executed during a
+  // join.
+  void updateRuntimeInfoForLazyScan(
+      const CompressedRelationReader::LazyScanMetadata& metadata);
+
  private:
   ProtoResult computeResult(bool requestLaziness) override;
 
   vector<QueryExecutionTree*> getChildren() override { return {}; }
+
+  // Retrieve the `Permutation` entity for the `Permutation::Enum` value of this
+  // `IndexScan`.
+  const Permutation& getScanPermutation() const;
 
   // Compute the size estimate of the index scan, taking delta triples (from
   // the `queryExecutionContext_`) into account. The `bool` is true iff the
@@ -137,9 +194,43 @@ class IndexScan final : public Operation {
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 
-  Result::Generator scanInChunks() const;
+  // Return an updated QueryExecutionTree containing the new IndexScan which is
+  // a copy of this (`IndexScan`), but with added corresponding
+  // `PrefilterExpression` (`PrefilterIndexPair`). This method is called in the
+  // implementation part of `setPrefilterGetUpdatedQueryExecutionTree()`.
+  std::shared_ptr<QueryExecutionTree> makeCopyWithAddedPrefilters(
+      PrefilterIndexPair prefilter) const;
 
-  //  Helper functions for the public `getLazyScanFor...` functions (see above).
+  // Return the (lazy) `IdTable` for this `IndexScan` in chunks.
+  Result::Generator chunkedIndexScan() const;
+  // Get the `IdTable` for this `IndexScan` in one piece.
+  IdTable materializedIndexScan() const;
+
+  // Returns the first sorted 'Variable' with corresponding `ColumnIndex`. If
+  // `numVariables_` is 0, `std::nullopt` is returned.
+  // The returned `ColumnIndex` corresponds to the `CompressedBlockMetadata`
+  // blocks, NOT to a column of the resulting `IdTable`.
+  std::optional<std::pair<Variable, ColumnIndex>>
+  getSortedVariableAndMetadataColumnIndexForPrefiltering() const;
+
+  // Retrieve all the relevant `CompressedBlockMetadata` for this scan without
+  // applying any additional pre-filter procedure.
+  std::optional<std::span<const CompressedBlockMetadata>> getBlockMetadata()
+      const;
+
+  // This method retrieves all relevant `CompressedBlockMetadata` and performs
+  // the pre-filtering procedure given a `PrefilterIndexPair` is available.
+  std::optional<std::vector<CompressedBlockMetadata>>
+  getBlockMetadataOptionallyPrefiltered() const;
+
+  // If `isUnconstrained()` yields true, return the blocks as given or the
+  // prefiltered blocks (if `prefilter_` has value). If `isUnconstrained()` is
+  // false, return `std::nullopt`.
+  void applyPrefilterIfPossible(
+      std::vector<CompressedBlockMetadata>& blocks) const;
+
+  // Helper functions for the public `getLazyScanFor...` methods and
+  // `chunkedIndexScan` (see above).
   Permutation::IdTableGenerator getLazyScan(
       std::vector<CompressedBlockMetadata> blocks) const;
   std::optional<Permutation::MetadataAndBlocks> getMetadataForScan() const;
