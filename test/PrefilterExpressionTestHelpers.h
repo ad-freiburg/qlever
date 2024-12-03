@@ -25,8 +25,8 @@ namespace {
 //______________________________________________________________________________
 // Make RelationalExpression
 template <typename RelExpr>
-auto relExpr =
-    [](const ValueId& referenceId) -> std::unique_ptr<PrefilterExpression> {
+auto relExpr = [](const IdOrLocalVocabEntry& referenceId)
+    -> std::unique_ptr<PrefilterExpression> {
   return std::make_unique<RelExpr>(referenceId);
 };
 
@@ -68,6 +68,15 @@ constexpr auto orExpr = logExpr<OrExpression>;
 constexpr auto notExpr = notPrefilterExpression;
 
 namespace filterHelper {
+
+//______________________________________________________________________________
+// Create `LocalVocabEntry` / `LiteralOrIri`.
+// Note: `Iri` string value must start and end with `<`/`>` and the `Literal`
+// value with `'`/`'`.
+const auto LVE = [](const std::string& litOrIri) -> LocalVocabEntry {
+  return LocalVocabEntry::fromStringRepresentation(litOrIri);
+};
+
 //______________________________________________________________________________
 // Construct a `PAIR` with the given `PrefilterExpression` and `Variable` value.
 auto pr =
@@ -96,6 +105,21 @@ auto makePrefilterVec =
 }  // namespace filterHelper
 
 }  // namespace makeFilterExpression
+
+// _____________________________________________________________________________
+// Helper to retrieve a `ValueId` from `IdOrLocalVocabEntry`.
+const auto getValueIdFromIdOrLocalVocabEntry =
+    [](const prefilterExpressions::IdOrLocalVocabEntry& value,
+       LocalVocab& localVocab) {
+      if (std::holds_alternative<ValueId>(value)) {
+        return std::get<ValueId>(value);
+      } else {
+        assert(std::holds_alternative<LocalVocabEntry>(value));
+        return Id::makeFromLocalVocabIndex(
+            localVocab.getIndexAndAddIfNotContained(
+                std::get<LocalVocabEntry>(value)));
+      }
+    };
 
 namespace makeSparqlExpression {
 using namespace sparqlExpression;

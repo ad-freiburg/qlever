@@ -262,18 +262,19 @@ std::vector<BlockMetadata> RelationalExpression<Comparison>::evaluateImpl(
 
   // Helper to retrieve the reference `ValueId` from `IdOrLocalVocabEntry`
   // variant.
-  const auto getValueIdFromReferenceValue =
-      [](const IdOrLocalVocabEntry& referenceValue, LocalVocab& localVocab) {
-        if (std::holds_alternative<ValueId>(referenceValue)) {
-          return std::get<ValueId>(referenceValue);
-        } else if (std::holds_alternative<LocalVocabEntry>(referenceValue)) {
-          return Id::makeFromLocalVocabIndex(
-              localVocab.getIndexAndAddIfNotContained(
-                  std::get<LocalVocabEntry>(referenceValue)));
-        } else {
-          AD_FAIL();
-        }
-      };
+  auto getValueIdFromReferenceValue =
+      [](const IdOrLocalVocabEntry& referenceValue,
+         LocalVocab& localVocab) -> ValueId {
+    if (std::holds_alternative<ValueId>(referenceValue)) {
+      return std::get<ValueId>(referenceValue);
+    } else if (std::holds_alternative<LocalVocabEntry>(referenceValue)) {
+      return Id::makeFromLocalVocabIndex(
+          localVocab.getIndexAndAddIfNotContained(
+              std::get<LocalVocabEntry>(referenceValue)));
+    } else {
+      AD_FAIL();
+    }
+  };
 
   auto referenceId = getValueIdFromReferenceValue(referenceValue_, vocab);
   // Use getRangesForId (from valueIdComparators) to extract the ranges
@@ -488,7 +489,6 @@ template class LogicalExpression<LogicalOperator::AND>;
 template class LogicalExpression<LogicalOperator::OR>;
 
 namespace detail {
-
 
 //______________________________________________________________________________
 template <CompOp comparison>
