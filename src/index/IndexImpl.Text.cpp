@@ -235,6 +235,7 @@ void IndexImpl::processWordsForInvertedLists(const string& contextFile,
   ad_utility::HashMap<WordIndex, Score> wordsInContext;
   ad_utility::HashMap<Id, Score> entitiesInContext;
   auto currentContext = TextRecordIndex::make(0);
+  // The nofContexts can be misleading since it also counts empty contexts
   size_t nofContexts = 0;
   size_t nofWordPostings = 0;
   size_t nofEntityPostings = 0;
@@ -298,7 +299,7 @@ void IndexImpl::processWordsForInvertedLists(const string& contextFile,
   textMeta_.setNofTextRecords(nofContexts);
   textMeta_.setNofWordPostings(nofWordPostings);
   textMeta_.setNofEntityPostings(nofEntityPostings);
-  textMeta_.setNofNonLiterals(nofContexts - nofLiterals);
+  textMeta_.setNofLiterals(nofLiterals);
 
   writer.finish();
   LOG(TRACE) << "END IndexImpl::passContextFileIntoVector" << std::endl;

@@ -24,50 +24,95 @@ std::string kg =
     "\"some other sentence\" . <b> <p> \"the test on friday was really hard\" "
     ". <b> <x2> <x> . <b> <x2> <xb2> . <Astronomer> <is-a> <job> .";
 
+std::string wordsFileContent =
+    "astronomer\t0\t1\t1\n"
+    "<Astronomer>\t1\t1\t0\n"
+    "scientist\t0\t1\t1\n"
+    "field\t0\t1\t1\n"
+    "astronomy\t0\t1\t1\n"
+    "astronomer\t0\t2\t0\n"
+    "<Astronomer>\t1\t2\t0\n"
+    ":s:firstsentence\t0\t2\t0\n"
+    "scientist\t0\t2\t0\n"
+    "field\t0\t2\t0\n"
+    "astronomy\t0\t2\t0\n"
+    "astronomy\t0\t3\t1\n"
+    "concentrates\t0\t3\t1\n"
+    "studies\t0\t3\t1\n"
+    "specific\t0\t3\t1\n"
+    "question\t0\t3\t1\n"
+    "outside\t0\t3\t1\n"
+    "scope\t0\t3\t1\n"
+    "earth\t0\t3\t1\n"
+    "astronomy\t0\t4\t1\n"
+    "concentrates\t0\t4\t1\n"
+    "studies\t0\t4\t1\n"
+    "field\t0\t4\t1\n"
+    "outside\t0\t4\t1\n"
+    "scope\t0\t4\t1\n"
+    "earth\t0\t4\t1\n"
+    "tester\t0\t5\t1\n"
+    "rockets\t0\t5\t1\n"
+    "astronomer\t0\t5\t1\n"
+    "<Astronomer>\t1\t5\t0\n"
+    "although\t0\t5\t1\n"
+    "astronomer\t0\t6\t0\n"
+    "<Astronomer>\t1\t6\t0\n"
+    "although\t0\t6\t0\n"
+    "<Astronomer>\t1\t6\t0\n"
+    "space\t0\t6\t1\n"
+    "<Astronomer>\t1\t7\t0\n"
+    "space\t0\t7\t0\n"
+    "earth\t0\t7\t1\n";
+
+std::string docsFileContent =
+    "4\tAn astronomer is a scientist in the field of astronomy who "
+    "concentrates their studies on a specific question or field outside of "
+    "the scope of Earth.\n"
+    "7\tThe Tester of the rockets can be an astronomer too although they "
+    "might not be in space but on earth.\n";
+
+std::string firstDocText =
+    "An astronomer is a scientist in the field of "
+    "astronomy who concentrates their studies on a "
+    "specific question or field outside of the scope of "
+    "Earth.";
+
+std::string secondDocText =
+    "The Tester of the rockets can be an astronomer "
+    "too although they might not be in space but on "
+    "earth.";
+
 TEST(TextIndexScanForWord, WordScanPrefix) {
-  std::string wordsFileContent;
-  wordsFileContent =
-      "astronomer\t0\t1\t1\n"
-      "<Astronomer>\t1\t1\t0\n"
-      "scientist\t0\t1\t1\n"
-      "field\t0\t1\t1\n"
-      "astronomy\t0\t1\t1\n"
-      "astronomer\t0\t2\t0\n"
-      "<Astronomer>\t1\t2\t0\n"
-      ":s:firstsentence\t0\t2\t0\n"
-      "scientist\t0\t2\t0\n"
-      "field\t0\t2\t0\n"
-      "astronomy\t0\t2\t0\n"
-      "astronomy\t0\t3\t1\n"
-      "concentrates\t0\t3\t1\n"
-      "studies\t0\t3\t1\n"
-      "specific\t0\t3\t1\n"
-      "question\t0\t3\t1\n"
-      "outside\t0\t3\t1\n"
-      "scope\t0\t3\t1\n"
-      "earth\t0\t3\t1\n"
-      "astronomy\t0\t4\t1\n"
-      "concentrates\t0\t4\t1\n"
-      "studies\t0\t4\t1\n"
-      "field\t0\t4\t1\n"
-      "outside\t0\t4\t1\n"
-      "scope\t0\t4\t1\n"
-      "earth\t0\t4\t1\n";
-  std::string docsFileContent;
-  docsFileContent =
-      "4\tAn astronomer is a scientist in the field of astronomy who "
-      "concentrates their studies on a specific question or field outside of "
-      "the scope of Earth.\n";
   auto qec = getQec(kg, true, true, true, 16_B, true, true, wordsFileContent,
                     docsFileContent);
 
   TextIndexScanForWord t1{qec, Variable{"?t1"}, "astronom*"};
   auto tresult = t1.computeResultOnlyForTesting();
-  ASSERT_EQ(
-      "An astronomer is a scientist in the field of astronomy who concentrates "
-      "their studies on a specific question or field outside of the scope of "
-      "Earth.",
-      h::getTextExcerptFromResultTable(qec, tresult, 0));
+  ASSERT_EQ(firstDocText, h::getTextRecordFromResultTable(qec, tresult, 0));
+  ASSERT_EQ(TextRecordIndex::make(1),
+            h::getTextRecordIdFromResultTable(qec, tresult, 0));
+  ASSERT_EQ(firstDocText, h::getTextRecordFromResultTable(qec, tresult, 1));
+  ASSERT_EQ(TextRecordIndex::make(1),
+            h::getTextRecordIdFromResultTable(qec, tresult, 1));
+  ASSERT_EQ(firstDocText, h::getTextRecordFromResultTable(qec, tresult, 2));
+  ASSERT_EQ(TextRecordIndex::make(2),
+            h::getTextRecordIdFromResultTable(qec, tresult, 2));
+  ASSERT_EQ(firstDocText, h::getTextRecordFromResultTable(qec, tresult, 3));
+  ASSERT_EQ(TextRecordIndex::make(2),
+            h::getTextRecordIdFromResultTable(qec, tresult, 3));
+  ASSERT_EQ(firstDocText, h::getTextRecordFromResultTable(qec, tresult, 4));
+  ASSERT_EQ(TextRecordIndex::make(3),
+            h::getTextRecordIdFromResultTable(qec, tresult, 4));
+  ASSERT_EQ(firstDocText, h::getTextRecordFromResultTable(qec, tresult, 5));
+  ASSERT_EQ(TextRecordIndex::make(4),
+            h::getTextRecordIdFromResultTable(qec, tresult, 5));
+  ASSERT_EQ(secondDocText, h::getTextRecordFromResultTable(qec, tresult, 6));
+  ASSERT_EQ(TextRecordIndex::make(5),
+            h::getTextRecordIdFromResultTable(qec, tresult, 6));
+  ASSERT_EQ(secondDocText, h::getTextRecordFromResultTable(qec, tresult, 7));
+  ASSERT_EQ(TextRecordIndex::make(6),
+            h::getTextRecordIdFromResultTable(qec, tresult, 7));
 
   TextIndexScanForWord s1{qec, Variable{"?text1"}, "test*"};
   TextIndexScanForWord s2{qec, Variable{"?text2"}, "test*"};
@@ -76,7 +121,7 @@ TEST(TextIndexScanForWord, WordScanPrefix) {
 
   auto result = s1.computeResultOnlyForTesting();
   ASSERT_EQ(result.idTable().numColumns(), 3);
-  ASSERT_EQ(result.idTable().size(), 3);
+  ASSERT_EQ(result.idTable().size(), 4);
   s2.getExternallyVisibleVariableColumns();
 
   using enum ColumnIndexAndTypeInfo::UndefStatus;
@@ -87,20 +132,25 @@ TEST(TextIndexScanForWord, WordScanPrefix) {
   EXPECT_THAT(s2.getExternallyVisibleVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVariables));
 
-  ASSERT_EQ(h::combineToString("\"he failed the test\"", "test"),
+  ASSERT_EQ(h::combineToString(secondDocText, "tester"),
             h::combineToString(h::getTextRecordFromResultTable(qec, result, 0),
                                h::getWordFromResultTable(qec, result, 0)));
-  ASSERT_EQ(h::combineToString("\"testing can help\"", "testing"),
+
+  ASSERT_EQ(h::combineToString("\"he failed the test\"", "test"),
             h::combineToString(h::getTextRecordFromResultTable(qec, result, 1),
                                h::getWordFromResultTable(qec, result, 1)));
+  ASSERT_EQ(h::combineToString("\"testing can help\"", "testing"),
+            h::combineToString(h::getTextRecordFromResultTable(qec, result, 2),
+                               h::getWordFromResultTable(qec, result, 2)));
   ASSERT_EQ(
       h::combineToString("\"the test on friday was really hard\"", "test"),
-      h::combineToString(h::getTextRecordFromResultTable(qec, result, 2),
-                         h::getWordFromResultTable(qec, result, 2)));
+      h::combineToString(h::getTextRecordFromResultTable(qec, result, 3),
+                         h::getWordFromResultTable(qec, result, 3)));
 }
 
 TEST(TextIndexScanForWord, WordScanBasic) {
-  auto qec = getQec(kg, true, true, true, 16_B, true);
+  auto qec = getQec(kg, true, true, true, 16_B, true, true, wordsFileContent,
+                    docsFileContent);
 
   TextIndexScanForWord s1{qec, Variable{"?text1"}, "test"};
 
@@ -125,10 +175,21 @@ TEST(TextIndexScanForWord, WordScanBasic) {
 
   ASSERT_EQ("\"testing can help\"",
             h::getTextRecordFromResultTable(qec, result, 0));
+
+  TextIndexScanForWord s3{qec, Variable{"?text1"}, "tester"};
+
+  ASSERT_EQ(s3.getResultWidth(), 2);
+
+  result = s3.computeResultOnlyForTesting();
+  ASSERT_EQ(result.idTable().numColumns(), 2);
+  ASSERT_EQ(result.idTable().size(), 1);
+
+  ASSERT_EQ(secondDocText, h::getTextRecordFromResultTable(qec, result, 0));
 }
 
 TEST(TextIndexScanForWord, CacheKey) {
-  auto qec = getQec(kg, true, true, true, 16_B, true);
+  auto qec = getQec(kg, true, true, true, 16_B, true, true, wordsFileContent,
+                    docsFileContent);
 
   TextIndexScanForWord s1{qec, Variable{"?text1"}, "test*"};
   TextIndexScanForWord s2{qec, Variable{"?text2"}, "test*"};
@@ -151,7 +212,8 @@ TEST(TextIndexScanForWord, CacheKey) {
 }
 
 TEST(TextIndexScanForWord, KnownEmpty) {
-  auto qec = getQec(kg, true, true, true, 16_B, true);
+  auto qec = getQec(kg, true, true, true, 16_B, true, true, wordsFileContent,
+                    docsFileContent);
 
   TextIndexScanForWord s1{qec, Variable{"?text1"}, "nonExistentWord*"};
   ASSERT_TRUE(s1.knownEmptyResult());

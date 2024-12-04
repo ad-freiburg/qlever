@@ -98,9 +98,9 @@ class TextMetaData {
 
   void setNofEntityPostings(size_t n) { _nofEntityPostings = n; }
 
-  size_t getNofNonLiterals() const { return _nofNonLiterals; }
+  size_t getNofLiterals() const { return _nofLiterals; }
 
-  void setNofNonLiterals(size_t n) { _nofNonLiterals = n; }
+  void setNofLiterals(size_t n) { _nofLiterals = n; }
 
   const string& getName() const { return _name; }
 
@@ -113,7 +113,7 @@ class TextMetaData {
   size_t _nofTextRecords = 0;
   size_t _nofWordPostings = 0;
   size_t _nofEntityPostings = 0;
-  size_t _nofNonLiterals = 0;
+  size_t _nofLiterals = 0;
   string _name;
   vector<TextBlockMetaData> _blocks;
 
@@ -123,7 +123,7 @@ class TextMetaData {
     serializer | arg._nofTextRecords;
     serializer | arg._nofWordPostings;
     serializer | arg._nofEntityPostings;
-    serializer | arg._nofNonLiterals;
+    serializer | arg._nofLiterals;
     serializer | arg._name;
     serializer | arg._blocks;
   }

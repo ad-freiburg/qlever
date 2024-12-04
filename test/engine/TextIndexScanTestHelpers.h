@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "global/IndexTypes.h"
 namespace textIndexScanTestHelpers {
 // NOTE: this function exploits a "lucky accident" that allows us to
 // obtain the textRecord using indexToString.
@@ -16,18 +17,25 @@ namespace textIndexScanTestHelpers {
 inline string getTextRecordFromResultTable(const QueryExecutionContext* qec,
                                            const ProtoResult& result,
                                            const size_t& rowIndex) {
-  uint64_t offset = qec->getIndex().getNofNonLiterals();
-  uint64_t shiftedTextRecordId =
-      result.idTable().getColumn(0)[rowIndex].getTextRecordIndex().get() -
-      offset;
-  return qec->getIndex().indexToString(VocabIndex::make(shiftedTextRecordId));
+  uint64_t nofLiterals = qec->getIndex().getNofLiterals();
+  uint64_t nofContexts = qec->getIndex().getNofTextRecords();
+  uint64_t textRecordIdFromTable =
+      result.idTable().getColumn(0)[rowIndex].getTextRecordIndex().get();
+  if ((nofContexts - nofLiterals) <= textRecordIdFromTable) {
+    // Return when from Literals
+    return qec->getIndex().indexToString(
+        VocabIndex::make(textRecordIdFromTable - (nofContexts - nofLiterals)));
+  } else {
+    // Return when from DocsDB
+    return qec->getIndex().getTextExcerpt(
+        result.idTable().getColumn(0)[rowIndex].getTextRecordIndex());
+  }
 }
 
-inline string getTextExcerptFromResultTable(const QueryExecutionContext* qec,
-                                            const ProtoResult& result,
-                                            const size_t& rowIndex) {
-  return qec->getIndex().getTextExcerpt(
-      result.idTable().getColumn(0)[rowIndex].getTextRecordIndex());
+inline const TextRecordIndex getTextRecordIdFromResultTable(
+    [[maybe_unused]] const QueryExecutionContext* qec,
+    const ProtoResult& result, const size_t& rowIndex) {
+  return result.idTable().getColumn(0)[rowIndex].getTextRecordIndex();
 }
 
 inline string getEntityFromResultTable(const QueryExecutionContext* qec,
