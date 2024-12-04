@@ -7,12 +7,13 @@ ENV LC_ALL=C.UTF-8
 ENV LC_CTYPE=C.UTF-8
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y software-properties-common wget && add-apt-repository -y ppa:mhier/libboost-latest
-RUN wget https://apt.kitware.com/kitware-archive.sh && chmod +x kitware-archive.sh &&./kitware-archive.sh
 
-# Stage 1: Build the binaries.
+# Install the packages needed for building the binaries (this is a separate
+# stage to keep the final image small).
 FROM base AS builder
 ARG TARGETPLATFORM
 ENV DEBIAN_FRONTEND=noninteractive
+RUN wget https://apt.kitware.com/kitware-archive.sh && chmod +x kitware-archive.sh &&./kitware-archive.sh
 RUN apt-get update && apt-get install -y build-essential cmake libicu-dev tzdata pkg-config uuid-runtime uuid-dev git libjemalloc-dev ninja-build libzstd-dev libssl-dev libboost1.83-dev libboost-program-options1.83-dev libboost-iostreams1.83-dev libboost-url1.83-dev
 
 # Copy everything we need to build the binaries.
@@ -37,26 +38,37 @@ RUN if  [ $TARGETPLATFORM = "linux/arm64" ] ; then echo "target is ARM64, don't 
 RUN if [ $TARGETPLATFORM = "linux/arm64" ] ; then cmake --build . --target IndexBuilderMain ServerMain; else cmake --build . ; fi
 RUN if [ $TARGETPLATFORM = "linux/arm64" ] ; then echo "Skipping tests for ARM64" ; else ctest --rerun-failed --output-on-failure ; fi
 
-# Stage 2: Create the final image.
+# Install the packages needed for the final image.
 FROM base AS runtime
 WORKDIR /qlever
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y wget python3-yaml unzip curl bzip2 pkg-config libicu-dev python3-icu libgomp1 uuid-runtime make lbzip2 libjemalloc-dev libzstd-dev libssl-dev libboost1.83-dev libboost-program-options1.83-dev libboost-iostreams1.83-dev libboost-url1.83-dev pipx bash-completion vim sudo && rm -rf /var/lib/apt/lists/*
 
 # Set up user `qlever` with temporary sudo rights (which will be removed again
-# by the `docker-entrypoint.sh` script, see the comments in that file).
+# by the `docker-entrypoint.sh` script, see there).
 RUN groupadd -r qlever && useradd --no-log-init -d /qlever -r -g qlever qlever
 RUN chown qlever:qlever /qlever
 RUN echo "qlever ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+
+# Set up a profile script that is sourced whenever a new login shell is
+# started (by any user, hence in `/etc/profile.d/`). For some reason, podman
+# wants it in `/qlever/.bashrc`, so we also copy it there.
+ENV QLEVER_PROFILE=/etc/profile.d/qlever.sh
+RUN echo "eval \"\$(register-python-argcomplete qlever)\"" >> $QLEVER_PROFILE
+RUN echo "export QLEVER_ARGCOMPLETE_ENABLED=1 && export QLEVER_IS_RUNNING_IN_CONTAINER=1" >> $QLEVER_PROFILE
+RUN echo "PATH=/qlever:/qlever/.local/bin:$PATH && PS1=\"\u@docker:\W\$ \"" >> $QLEVER_PROFILE
+RUN echo 'alias ll="ls -l"' >> $QLEVER_PROFILE
+RUN echo "if [ -d /data ]; then cd /data; fi" >> $QLEVER_PROFILE
+RUN cp $QLEVER_PROFILE /qlever/.bashrc
+
+# Install the `qlever` command line tool. We have t set the two environment
+# variables again here because in batch mode, the profile script above is not
+# sourced. The `PATH` is set again to avoid a warning from `pipx`.
 USER qlever
-RUN pipx install qlever
 ENV PATH=/qlever:/qlever/.local/bin:$PATH
-RUN echo "eval \"\$(register-python-argcomplete qlever)\"" >> /qlever/.bashrc
-RUN echo "export QLEVER_ARGCOMPLETE_ENABLED=1 && export QLEVER_IS_RUNNING_IN_CONTAINER=1" >> /qlever/.bashrc
-RUN echo "PATH=$PATH && PS1=\"\u@docker:\W\$ \"" >> /qlever/.bashrc
-RUN echo 'alias ll="ls -l"' >> /qlever/.bashrc
-RUN echo "cd /data" >> /qlever/.bashrc
-RUN echo "source /qlever/.bashrc" >> /qlever/.bash_profile
+RUN pipx install qlever
+ENV QLEVER_ARGCOMPLETE_ENABLED=1
+ENV QLEVER_IS_RUNNING_IN_CONTAINER=1
 
 # Copy the binaries and the entrypoint script.
 COPY --from=builder /qlever/build/*Main /qlever/
