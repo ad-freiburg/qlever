@@ -82,6 +82,11 @@ int main(int argc, char** argv) {
       optionFactory.getProgramOption<"cache-max-size-single-entry">(),
       "Maximum size for a single cache entry. That is, "
       "results larger than this will not be cached unless pinned.");
+  add("lazy-result-max-cache-size,E",
+      optionFactory.getProgramOption<"lazy-result-max-cache-size">(),
+      "Maximum size up to which lazy results will be cached by aggregating "
+      "partial results. Caching does cause significant overhead for this "
+      "case.");
   add("cache-max-num-entries,k",
       optionFactory.getProgramOption<"cache-max-num-entries">(),
       "Maximum number of entries in the cache. If exceeded, remove "
