@@ -51,7 +51,8 @@ class ValuesForTesting : public Operation {
                             std::vector<IdTable> tables,
                             std::vector<std::optional<Variable>> variables,
                             bool unlikelyToFitInCache = false,
-                            std::vector<ColumnIndex> sortedColumns = {})
+                            std::vector<ColumnIndex> sortedColumns = {},
+                            LocalVocab localVocab = LocalVocab{})
       : Operation{ctx},
         tables_{std::move(tables)},
         variables_{std::move(variables)},
@@ -60,7 +61,7 @@ class ValuesForTesting : public Operation {
         costEstimate_{0},
         unlikelyToFitInCache_{unlikelyToFitInCache},
         resultSortedColumns_{std::move(sortedColumns)},
-        localVocab_{LocalVocab{}},
+        localVocab_{std::move(localVocab)},
         multiplicity_{std::nullopt} {
     AD_CONTRACT_CHECK(
         std::ranges::all_of(tables_, [this](const IdTable& table) {

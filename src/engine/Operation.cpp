@@ -4,12 +4,40 @@
 
 #include "engine/Operation.h"
 
+#include <absl/cleanup/cleanup.h>
+
 #include "engine/QueryExecutionTree.h"
 #include "global/RuntimeParameters.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/TransparentFunctors.h"
 
 using namespace std::chrono_literals;
+
+namespace {
+// Keep track of some statistics about the local vocabs of the results.
+struct LocalVocabTracking {
+  size_t maxSize_ = 0;
+  size_t sizeSum_ = 0;
+  size_t totalVocabs_ = 0;
+  size_t nonEmptyVocabs_ = 0;
+
+  float avgSize() const {
+    return nonEmptyVocabs_ == 0 ? 0
+                                : static_cast<float>(sizeSum_) /
+                                      static_cast<float>(nonEmptyVocabs_);
+  }
+};
+
+// Merge the stats of a single local vocab into the overall stats.
+void mergeStats(LocalVocabTracking& stats, const LocalVocab& vocab) {
+  stats.maxSize_ = std::max(stats.maxSize_, vocab.size());
+  stats.sizeSum_ += vocab.size();
+  ++stats.totalVocabs_;
+  if (!vocab.empty()) {
+    ++stats.nonEmptyVocabs_;
+  }
+}
+}  // namespace
 
 //______________________________________________________________________________
 template <typename F>
@@ -132,9 +160,9 @@ ProtoResult Operation::runComputation(const ad_utility::Timer& timer,
   // correctly because the result was computed, so we can pass `nullopt` as
   // the last argument.
   if (result.isFullyMaterialized()) {
-    size_t numLocalVocabs = result.localVocab().numSets();
-    if (numLocalVocabs > 1) {
-      runtimeInfo().addDetail("num-local-vocabs", numLocalVocabs);
+    size_t vocabSize = result.localVocab().size();
+    if (vocabSize > 1) {
+      runtimeInfo().addDetail("local-vocab-size", vocabSize);
     }
     updateRuntimeInformationOnSuccess(result.idTable().size(),
                                       ad_utility::CacheStatus::computed,
@@ -142,13 +170,23 @@ ProtoResult Operation::runComputation(const ad_utility::Timer& timer,
   } else {
     runtimeInfo().status_ = RuntimeInformation::lazilyMaterialized;
     result.runOnNewChunkComputed(
-        [this, timeSizeUpdate = 0us](
-            const IdTable& idTable,
+        [this, timeSizeUpdate = 0us, vocabStats = LocalVocabTracking{}](
+            const Result::IdTableVocabPair& pair,
             std::chrono::microseconds duration) mutable {
+          const IdTable& idTable = pair.idTable_;
           updateRuntimeStats(false, idTable.numRows(), idTable.numColumns(),
                              duration);
           LOG(DEBUG) << "Computed partial chunk of size " << idTable.numRows()
                      << " x " << idTable.numColumns() << std::endl;
+          mergeStats(vocabStats, pair.localVocab_);
+          if (vocabStats.sizeSum_ > 0) {
+            runtimeInfo().addDetail(
+                "non-empty-local-vocabs",
+                absl::StrCat(vocabStats.nonEmptyVocabs_, " / ",
+                             vocabStats.totalVocabs_,
+                             ", Ø = ", vocabStats.avgSize(),
+                             ", max = ", vocabStats.maxSize_));
+          }
           timeSizeUpdate += duration;
           if (timeSizeUpdate > 50ms) {
             timeSizeUpdate = 0us;

@@ -353,8 +353,12 @@ TEST(Operation, verifyRuntimeInformationIsUpdatedForLazyOperations) {
   std::vector<IdTable> idTablesVector{};
   idTablesVector.push_back(makeIdTableFromVector({{3, 4}}));
   idTablesVector.push_back(makeIdTableFromVector({{7, 8}}));
+  LocalVocab localVocab{};
+  localVocab.getIndexAndAddIfNotContained(LocalVocabEntry{
+      ad_utility::triple_component::Literal::literalWithoutQuotes("Test")});
   ValuesForTesting valuesForTesting{
-      qec, std::move(idTablesVector), {Variable{"?x"}, Variable{"?y"}}};
+      qec,   std::move(idTablesVector),  {Variable{"?x"}, Variable{"?y"}},
+      false, std::vector<ColumnIndex>{}, std::move(localVocab)};
 
   ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
   EXPECT_THROW(
@@ -376,14 +380,22 @@ TEST(Operation, verifyRuntimeInformationIsUpdatedForLazyOperations) {
       {[&]() {
          EXPECT_EQ(rti.status_, Status::lazilyMaterialized);
          expectRtiHasDimensions(rti, 2, 1);
+         ASSERT_TRUE(rti.details_.contains("non-empty-local-vocabs"));
+         EXPECT_EQ(rti.details_["non-empty-local-vocabs"],
+                   "1 / 1, Ø = 1, max = 1");
        },
        [&]() {
          EXPECT_EQ(rti.status_, Status::lazilyMaterialized);
          expectRtiHasDimensions(rti, 2, 2);
+         ASSERT_TRUE(rti.details_.contains("non-empty-local-vocabs"));
+         EXPECT_EQ(rti.details_["non-empty-local-vocabs"],
+                   "2 / 2, Ø = 1, max = 1");
        }});
 
   EXPECT_EQ(rti.status_, Status::lazilyMaterialized);
   expectRtiHasDimensions(rti, 2, 2);
+  ASSERT_TRUE(rti.details_.contains("non-empty-local-vocabs"));
+  EXPECT_EQ(rti.details_["non-empty-local-vocabs"], "2 / 2, Ø = 1, max = 1");
 }
 
 // _____________________________________________________________________________
