@@ -590,14 +590,14 @@ Result::Generator IndexScan::createPrefilteredJoinSide(
   }
   auto& prefetchedValues = innerState->prefetchedValues_;
   while (true) {
-    if (prefetchedValues.empty()) {
+    while (prefetchedValues.empty()) {
       if (innerState->doneFetching_) {
         co_return;
       }
       innerState->fetch();
-      AD_CORRECTNESS_CHECK(!prefetchedValues.empty() ||
-                           innerState->doneFetching_);
     }
+    AD_CORRECTNESS_CHECK(!prefetchedValues.empty() ||
+                         innerState->doneFetching_);
     // Make a defensive copy of the values to avoid modification during
     // iteration when yielding.
     auto copy = std::move(prefetchedValues);
