@@ -8,9 +8,11 @@
 
 #include "engine/NeutralElementOperation.h"
 #include "engine/ValuesForTesting.h"
+#include "global/RuntimeParameters.h"
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
+#include "util/RuntimeParametersTestHelpers.h"
 
 using namespace ad_utility::testing;
 using namespace ::testing;
@@ -351,8 +353,12 @@ TEST(Operation, verifyRuntimeInformationIsUpdatedForLazyOperations) {
   std::vector<IdTable> idTablesVector{};
   idTablesVector.push_back(makeIdTableFromVector({{3, 4}}));
   idTablesVector.push_back(makeIdTableFromVector({{7, 8}}));
+  LocalVocab localVocab{};
+  localVocab.getIndexAndAddIfNotContained(LocalVocabEntry{
+      ad_utility::triple_component::Literal::literalWithoutQuotes("Test")});
   ValuesForTesting valuesForTesting{
-      qec, std::move(idTablesVector), {Variable{"?x"}, Variable{"?y"}}};
+      qec,   std::move(idTablesVector),  {Variable{"?x"}, Variable{"?y"}},
+      false, std::vector<ColumnIndex>{}, std::move(localVocab)};
 
   ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
   EXPECT_THROW(
@@ -374,14 +380,22 @@ TEST(Operation, verifyRuntimeInformationIsUpdatedForLazyOperations) {
       {[&]() {
          EXPECT_EQ(rti.status_, Status::lazilyMaterialized);
          expectRtiHasDimensions(rti, 2, 1);
+         ASSERT_TRUE(rti.details_.contains("non-empty-local-vocabs"));
+         EXPECT_EQ(rti.details_["non-empty-local-vocabs"],
+                   "1 / 1, Ø = 1, max = 1");
        },
        [&]() {
          EXPECT_EQ(rti.status_, Status::lazilyMaterialized);
          expectRtiHasDimensions(rti, 2, 2);
+         ASSERT_TRUE(rti.details_.contains("non-empty-local-vocabs"));
+         EXPECT_EQ(rti.details_["non-empty-local-vocabs"],
+                   "2 / 2, Ø = 1, max = 1");
        }});
 
   EXPECT_EQ(rti.status_, Status::lazilyMaterialized);
   expectRtiHasDimensions(rti, 2, 2);
+  ASSERT_TRUE(rti.details_.contains("non-empty-local-vocabs"));
+  EXPECT_EQ(rti.details_["non-empty-local-vocabs"], "2 / 2, Ø = 1, max = 1");
 }
 
 // _____________________________________________________________________________
@@ -591,20 +605,23 @@ TEST(Operation, checkLazyOperationIsNotCachedIfTooLarge) {
 
   ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
 
-  auto originalSize = qec->getQueryTreeCache().getMaxSizeSingleEntry();
+  std::optional<CacheValue> cacheValue = std::nullopt;
+  {
+    // Too small for storage, make sure to change back before consuming
+    // generator to additionally assert sure it is not re-read on every
+    // iteration.
+    auto cleanup =
+        setRuntimeParameterForTest<"lazy-result-max-cache-size">(1_B);
 
-  // Too small for storage
-  qec->getQueryTreeCache().setMaxSizeSingleEntry(1_B);
-
-  auto cacheValue = valuesForTesting.runComputationAndPrepareForCache(
-      timer, ComputationMode::LAZY_IF_SUPPORTED, makeQueryCacheKey("test"),
-      false);
-  EXPECT_FALSE(
-      qec->getQueryTreeCache().cacheContains(makeQueryCacheKey("test")));
-  qec->getQueryTreeCache().setMaxSizeSingleEntry(originalSize);
+    cacheValue = valuesForTesting.runComputationAndPrepareForCache(
+        timer, ComputationMode::LAZY_IF_SUPPORTED, makeQueryCacheKey("test"),
+        false);
+    EXPECT_FALSE(
+        qec->getQueryTreeCache().cacheContains(makeQueryCacheKey("test")));
+  }
 
   for ([[maybe_unused]] Result::IdTableVocabPair& _ :
-       cacheValue.resultTable().idTables()) {
+       cacheValue->resultTable().idTables()) {
   }
 
   EXPECT_FALSE(
