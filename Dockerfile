@@ -61,7 +61,7 @@ RUN echo 'alias ll="ls -l"' >> $QLEVER_PROFILE
 RUN echo "if [ -d /data ]; then cd /data; fi" >> $QLEVER_PROFILE
 RUN cp $QLEVER_PROFILE /qlever/.bashrc
 
-# Install the `qlever` command line tool. We have t set the two environment
+# Install the `qlever` command line tool. We have to set the two environment
 # variables again here because in batch mode, the profile script above is not
 # sourced. The `PATH` is set again to avoid a warning from `pipx`.
 USER qlever
