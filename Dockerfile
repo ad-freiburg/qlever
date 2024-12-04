@@ -6,13 +6,13 @@ ENV LANG=C.UTF-8
 ENV LC_ALL=C.UTF-8
 ENV LC_CTYPE=C.UTF-8
 ENV DEBIAN_FRONTEND=noninteractive
-RUN apt-get update && apt-get install -y software-properties-common wget && add-apt-repository -y ppa:mhier/libboost-latest
 
 # Install the packages needed for building the binaries (this is a separate
 # stage to keep the final image small).
 FROM base AS builder
 ARG TARGETPLATFORM
 ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y wget
 RUN wget https://apt.kitware.com/kitware-archive.sh && chmod +x kitware-archive.sh && ./kitware-archive.sh
 RUN apt-get update && apt-get install -y build-essential cmake libicu-dev tzdata pkg-config uuid-runtime uuid-dev git libjemalloc-dev ninja-build libzstd-dev libssl-dev libboost1.83-dev libboost-program-options1.83-dev libboost-iostreams1.83-dev libboost-url1.83-dev
 
