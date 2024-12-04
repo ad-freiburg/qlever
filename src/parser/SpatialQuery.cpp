@@ -4,8 +4,12 @@
 
 #include "parser/SpatialQuery.h"
 
+#include <type_traits>
+#include <variant>
+
 #include "engine/SpatialJoin.h"
 #include "parser/MagicServiceIriConstants.h"
+#include "parser/data/Variable.h"
 
 namespace parsedQuery {
 
@@ -60,7 +64,25 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
           "<baseline>, <s2> or <boundingBox>.");
     }
   } else if (predString == "payload") {
-    payloadVariables_.push_back(getVariable("payload", object));
+    if (object.isVariable()) {
+      // Single selected variable
+
+      // If we have already selected all payload variables, we can ignore
+      // another explicitly selected variable.
+      if (std::holds_alternative<std::vector<Variable>>(payloadVariables_)) {
+        std::get<std::vector<Variable>>(payloadVariables_)
+            .push_back(getVariable("payload", object));
+      }
+    } else if (object.isIri() &&
+               extractParameterName(object, SPATIAL_SEARCH_IRI) == "all") {
+      // All variables selected
+      payloadVariables_ = PayloadAllVariables{};
+    } else {
+      throw SpatialSearchException(
+          "The argument to the <payload> parameter must be either a variable "
+          "to be selected or <all>.");
+    }
+
   } else {
     throw SpatialSearchException(absl::StrCat(
         "Unsupported argument ", predString,
@@ -84,6 +106,16 @@ SpatialJoinConfiguration SpatialQuery::toSpatialJoinConfiguration() const {
         "Missing parameter <right> in spatial search.");
   }
 
+  // Helper visitor to check if the payload variables are empty
+  auto emptyPayload = []<typename T>(const T& value) -> bool {
+    if constexpr (std::is_same_v<T, PayloadAllVariables>) {
+      return false;
+    } else {
+      static_assert(std::is_same_v<T, std::vector<Variable>>);
+      return value.empty();
+    }
+  };
+
   // Only if the number of results is limited, it is mandatory that the right
   // variable must be selected inside the service. If only the distance is
   // limited, it may be declared inside or outside of the service.
@@ -95,7 +127,7 @@ SpatialJoinConfiguration SpatialQuery::toSpatialJoinConfiguration() const {
         "spatialSearch: { [Config Triples] { <Something> <ThatSelects> ?right "
         "} }.");
   } else if (!ignoreMissingRightChild_ && !childGraphPattern_.has_value() &&
-             !payloadVariables_.empty()) {
+             !std::visit(emptyPayload, payloadVariables_)) {
     throw SpatialSearchException(
         "The right variable for the spatial search is declared outside the "
         "SERVICE, but the <payload> parameter was set. Please move the "

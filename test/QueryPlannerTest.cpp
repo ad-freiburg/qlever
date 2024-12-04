@@ -1769,6 +1769,59 @@ TEST(QueryPlanner, SpatialJoinServicePayloadVars) {
           std::vector<V>{V{"?a"}, V{"?a"}, V{"?b"}, V{"?a2"}}, S2,
           scan("?x", "<p>", "?y"),
           h::Join(scan("?a", "<p>", "?a2"), scan("?a2", "<p>", "?b"))));
+
+  // Selecting all payload variables using "all"
+  h::expect(
+      "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+      "SELECT * WHERE {"
+      "?x <p> ?y."
+      "SERVICE spatialSearch: {"
+      "_:config spatialSearch:algorithm spatialSearch:s2 ;"
+      "spatialSearch:right ?b ;"
+      "spatialSearch:bindDistance ?dist ;"
+      "spatialSearch:numNearestNeighbors 5 . "
+      "_:config spatialSearch:left ?y ."
+      "_:config spatialSearch:payload <all> ."
+      "{ ?a <p> ?a2 . ?a2 <p> ?b } }}",
+      h::SpatialJoin(
+          -1, 5, V{"?y"}, V{"?b"}, V{"?dist"}, PayloadAllVariables{}, S2,
+          scan("?x", "<p>", "?y"),
+          h::Join(scan("?a", "<p>", "?a2"), scan("?a2", "<p>", "?b"))));
+  h::expect(
+      "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+      "SELECT * WHERE {"
+      "?x <p> ?y."
+      "SERVICE spatialSearch: {"
+      "_:config spatialSearch:algorithm spatialSearch:s2 ;"
+      "spatialSearch:right ?b ;"
+      "spatialSearch:bindDistance ?dist ;"
+      "spatialSearch:numNearestNeighbors 5 . "
+      "_:config spatialSearch:left ?y ."
+      "_:config spatialSearch:payload spatialSearch:all ."
+      "{ ?a <p> ?a2 . ?a2 <p> ?b } }}",
+      h::SpatialJoin(
+          -1, 5, V{"?y"}, V{"?b"}, V{"?dist"}, PayloadAllVariables{}, S2,
+          scan("?x", "<p>", "?y"),
+          h::Join(scan("?a", "<p>", "?a2"), scan("?a2", "<p>", "?b"))));
+
+  // All and explicitly named ones just select all
+  h::expect(
+      "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+      "SELECT * WHERE {"
+      "?x <p> ?y."
+      "SERVICE spatialSearch: {"
+      "_:config spatialSearch:algorithm spatialSearch:s2 ;"
+      "spatialSearch:right ?b ;"
+      "spatialSearch:bindDistance ?dist ;"
+      "spatialSearch:numNearestNeighbors 5 . "
+      "_:config spatialSearch:left ?y ."
+      "_:config spatialSearch:payload <all> ."
+      "_:config spatialSearch:payload ?a ."
+      "{ ?a <p> ?a2 . ?a2 <p> ?b } }}",
+      h::SpatialJoin(
+          -1, 5, V{"?y"}, V{"?b"}, V{"?dist"}, PayloadAllVariables{}, S2,
+          scan("?x", "<p>", "?y"),
+          h::Join(scan("?a", "<p>", "?a2"), scan("?a2", "<p>", "?b"))));
 }
 
 TEST(QueryPlanner, SpatialJoinServiceMaxDistOutside) {
@@ -2105,7 +2158,8 @@ TEST(QueryPlanner, SpatialJoinIncorrectConfigValues) {
                 " { ?a <p> ?b . }"
                 "}}",
                 ::testing::_),
-      ::testing::ContainsRegex("<payload> has to be a variable"));
+      ::testing::ContainsRegex("<payload> parameter must be either a variable "
+                               "to be selected or <all>"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       h::expect("PREFIX spatialSearch: "
                 "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
