@@ -93,7 +93,8 @@ class PrefilterExpression {
   // removes the respective block if it is conditionally (inconsistent columns)
   // necessary.
   std::vector<BlockMetadata> evaluate(std::span<const BlockMetadata> input,
-                                      size_t evaluationColumn) const;
+                                      size_t evaluationColumn,
+                                      bool stripIncompleteBlocks = true) const;
 
   // Format for debugging
   friend std::ostream& operator<<(std::ostream& str,
@@ -102,6 +103,7 @@ class PrefilterExpression {
     return str;
   }
 
+ private:
   // Note: Use `evaluate` for general evaluation of `PrefilterExpression`
   // instead of this method.
   // Performs the following conditional checks on
@@ -112,13 +114,10 @@ class PrefilterExpression {
   // is violated, the function performing the checks will throw a
   // `std::runtime_error`.
   std::vector<BlockMetadata> evaluateAndCheckImpl(
-      std::span<const BlockMetadata> input, size_t evaluationColumn,
-      LocalVocab& vocab) const;
+      std::span<const BlockMetadata> input, size_t evaluationColumn) const;
 
- private:
   virtual std::vector<BlockMetadata> evaluateImpl(
-      std::span<const BlockMetadata> input, size_t evaluationColumn,
-      LocalVocab& vocab) const = 0;
+      std::span<const BlockMetadata> input, size_t evaluationColumn) const = 0;
 };
 
 //______________________________________________________________________________
@@ -146,9 +145,9 @@ class RelationalExpression : public PrefilterExpression {
   std::string asString(size_t depth) const override;
 
  private:
-  std::vector<BlockMetadata> evaluateImpl(std::span<const BlockMetadata> input,
-                                          size_t evaluationColumn,
-                                          LocalVocab& vocab) const override;
+  std::vector<BlockMetadata> evaluateImpl(
+      std::span<const BlockMetadata> input,
+      size_t evaluationColumn) const override;
 };
 
 //______________________________________________________________________________
@@ -176,9 +175,9 @@ class LogicalExpression : public PrefilterExpression {
   std::string asString(size_t depth) const override;
 
  private:
-  std::vector<BlockMetadata> evaluateImpl(std::span<const BlockMetadata> input,
-                                          size_t evaluationColumn,
-                                          LocalVocab& vocab) const override;
+  std::vector<BlockMetadata> evaluateImpl(
+      std::span<const BlockMetadata> input,
+      size_t evaluationColumn) const override;
 };
 
 //______________________________________________________________________________
@@ -201,9 +200,9 @@ class NotExpression : public PrefilterExpression {
   std::string asString(size_t depth) const override;
 
  private:
-  std::vector<BlockMetadata> evaluateImpl(std::span<const BlockMetadata> input,
-                                          size_t evaluationColumn,
-                                          LocalVocab& vocab) const override;
+  std::vector<BlockMetadata> evaluateImpl(
+      std::span<const BlockMetadata> input,
+      size_t evaluationColumn) const override;
 };
 
 //______________________________________________________________________________
@@ -243,10 +242,18 @@ void checkPropertiesForPrefilterConstruction(
     const std::vector<PrefilterExprVariablePair>& vec);
 
 //______________________________________________________________________________
+// Creates a `RelationalExpression<comparison>` prefilter expression based on
+// the templated `CompOp` comparison operation and the reference
+// `IdOrLocalVocabEntry` value. With the next step, the corresponding
+// `<RelationalExpression<comparison>, Variable>` pair is created, and finally
+// returned in a vector. The `mirrored` flag indicates if the given
+// `RelationalExpression<comparison>` should be mirrored. The mirroring
+// procedure changes the (asymmetrical) comparison operations:
+// e.g. `5 < ?x` is changed to `?x > 5`.
 template <CompOp comparison>
 std::vector<PrefilterExprVariablePair> makePrefilterExpressionVec(
     const IdOrLocalVocabEntry& referenceValue, const Variable& variable,
-    const bool reversed);
+    const bool mirrored);
 
 }  // namespace detail
 }  // namespace prefilterExpressions

@@ -234,6 +234,10 @@ using IdOrLocalVocabEntry = prefilterExpressions::IdOrLocalVocabEntry;
 // function retrieves a corresponding `IdOrLocalVocabEntry` variant
 // (`std::variant<ValueId, LocalVocabEntry>`) for `LiteralExpression`s that
 // contain a suitable type.
+// Given the boolean flag `stringAndIriOnly` is set to `true`, only `Literal`s,
+// `Iri`s and `ValueId`s of type `VocabIndex`/`LocalVocabIndex` are returned. If
+// `stringAndIriOnly` is set to `false` (default), all `ValueId` types retrieved
+// from `LiteralExpression<ValueId>` will be returned.
 inline std::optional<IdOrLocalVocabEntry>
 getIdOrLocalVocabEntryFromLiteralExpression(const SparqlExpression* child,
                                             bool stringAndIriOnly = false) {

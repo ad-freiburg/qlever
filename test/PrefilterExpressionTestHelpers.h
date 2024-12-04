@@ -111,14 +111,14 @@ auto makePrefilterVec =
 const auto getValueIdFromIdOrLocalVocabEntry =
     [](const prefilterExpressions::IdOrLocalVocabEntry& value,
        LocalVocab& localVocab) {
-      if (std::holds_alternative<ValueId>(value)) {
-        return std::get<ValueId>(value);
-      } else {
-        assert(std::holds_alternative<LocalVocabEntry>(value));
-        return Id::makeFromLocalVocabIndex(
-            localVocab.getIndexAndAddIfNotContained(
-                std::get<LocalVocabEntry>(value)));
-      }
+      return std::visit(
+          ad_utility::OverloadCallOperator{
+              [](const ValueId& referenceId) { return referenceId; },
+              [&localVocab](const LocalVocabEntry& referenceValue) {
+                return Id::makeFromLocalVocabIndex(
+                    localVocab.getIndexAndAddIfNotContained(referenceValue));
+              }},
+          value);
     };
 
 namespace makeSparqlExpression {

@@ -432,11 +432,11 @@ RelationalExpression<comp>::getPrefilterExpressionForMetadata(
 
     const auto& optReferenceValue =
         detail::getIdOrLocalVocabEntryFromLiteralExpression(child1);
-    if (optReferenceValue.has_value()) {
-      return prefilterExpressions::detail::makePrefilterExpressionVec<comp>(
-          optReferenceValue.value(), variableExpr->value(), reversed);
+    if (!optReferenceValue.has_value()) {
+      return {};
     }
-    return {};
+    return prefilterExpressions::detail::makePrefilterExpressionVec<comp>(
+        optReferenceValue.value(), variableExpr->value(), reversed);
   };
   // Option 1:
   // RelationalExpression containing a VariableExpression as the first child

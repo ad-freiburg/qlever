@@ -7,6 +7,7 @@
 #include <ranges>
 
 #include "global/ValueIdComparators.h"
+#include "util/OverloadCallOperator.h"
 
 namespace prefilterExpressions {
 
@@ -168,12 +169,15 @@ static std::string getLogicalOpStr(const LogicalOperator logOp) {
 // SECTION PREFILTER EXPRESSION (BASE CLASS)
 //______________________________________________________________________________
 std::vector<BlockMetadata> PrefilterExpression::evaluate(
-    std::span<const BlockMetadata> input, size_t evaluationColumn) const {
+    std::span<const BlockMetadata> input, size_t evaluationColumn,
+    bool stripIncompleteBlocks) const {
+  if (!stripIncompleteBlocks) {
+    return evaluateAndCheckImpl(input, evaluationColumn);
+  }
   if (input.size() < 3) {
     return std::vector<BlockMetadata>(input.begin(), input.end());
   }
 
-  LocalVocab vocab{};
   std::optional<BlockMetadata> firstBlock = std::nullopt;
   std::optional<BlockMetadata> lastBlock = std::nullopt;
   if (checkBlockIsInconsistent(input.front(), evaluationColumn)) {
@@ -185,7 +189,7 @@ std::vector<BlockMetadata> PrefilterExpression::evaluate(
     input = input.subspan(0, input.size() - 1);
   }
 
-  auto result = evaluateAndCheckImpl(input, evaluationColumn, vocab);
+  auto result = evaluateAndCheckImpl(input, evaluationColumn);
   if (firstBlock.has_value()) {
     result.insert(result.begin(), firstBlock.value());
   }
@@ -197,10 +201,9 @@ std::vector<BlockMetadata> PrefilterExpression::evaluate(
 
 // _____________________________________________________________________________
 std::vector<BlockMetadata> PrefilterExpression::evaluateAndCheckImpl(
-    std::span<const BlockMetadata> input, size_t evaluationColumn,
-    LocalVocab& vocab) const {
+    std::span<const BlockMetadata> input, size_t evaluationColumn) const {
   checkEvalRequirements(input, evaluationColumn);
-  const auto& relevantBlocks = evaluateImpl(input, evaluationColumn, vocab);
+  const auto& relevantBlocks = evaluateImpl(input, evaluationColumn);
   checkEvalRequirements(relevantBlocks, evaluationColumn);
   return relevantBlocks;
 }
@@ -238,8 +241,7 @@ RelationalExpression<Comparison>::logicalComplement() const {
 //______________________________________________________________________________
 template <CompOp Comparison>
 std::vector<BlockMetadata> RelationalExpression<Comparison>::evaluateImpl(
-    std::span<const BlockMetadata> input, size_t evaluationColumn,
-    LocalVocab& vocab) const {
+    std::span<const BlockMetadata> input, size_t evaluationColumn) const {
   using namespace valueIdComparators;
   std::vector<ValueId> valueIdsInput;
   // For each BlockMetadata value in vector input, we have a respective Id for
@@ -263,19 +265,20 @@ std::vector<BlockMetadata> RelationalExpression<Comparison>::evaluateImpl(
   // Helper to retrieve the reference `ValueId` from `IdOrLocalVocabEntry`
   // variant.
   auto getValueIdFromReferenceValue =
-      [](const IdOrLocalVocabEntry& referenceValue,
-         LocalVocab& localVocab) -> ValueId {
-    if (std::holds_alternative<ValueId>(referenceValue)) {
-      return std::get<ValueId>(referenceValue);
-    } else if (std::holds_alternative<LocalVocabEntry>(referenceValue)) {
-      return Id::makeFromLocalVocabIndex(
-          localVocab.getIndexAndAddIfNotContained(
-              std::get<LocalVocabEntry>(referenceValue)));
-    } else {
-      AD_FAIL();
-    }
-  };
+      [](const IdOrLocalVocabEntry& referenceValue, LocalVocab& vocab) {
+        return std::visit(
+            ad_utility::OverloadCallOperator{
+                [](const ValueId& referenceId) -> ValueId {
+                  return referenceId;
+                },
+                [&vocab](const LocalVocabEntry& referenceLVE) -> ValueId {
+                  return Id::makeFromLocalVocabIndex(
+                      vocab.getIndexAndAddIfNotContained(referenceLVE));
+                }},
+            referenceValue);
+      };
 
+  LocalVocab vocab{};
   auto referenceId = getValueIdFromReferenceValue(referenceValue_, vocab);
   // Use getRangesForId (from valueIdComparators) to extract the ranges
   // containing the relevant ValueIds.
@@ -344,14 +347,13 @@ std::string RelationalExpression<Comparison>::asString(
     [[maybe_unused]] size_t depth) const {
   auto referenceValueToString = [](std::stringstream& stream,
                                    const IdOrLocalVocabEntry& referenceValue) {
-    if (std::holds_alternative<ValueId>(referenceValue)) {
-      stream << std::get<ValueId>(referenceValue);
-    } else if (std::holds_alternative<LocalVocabEntry>(referenceValue)) {
-      stream
-          << std::get<LocalVocabEntry>(referenceValue).toStringRepresentation();
-    } else {
-      AD_FAIL();
-    }
+    std::visit(
+        ad_utility::OverloadCallOperator{
+            [&stream](const ValueId& referenceId) { stream << referenceId; },
+            [&stream](const LocalVocabEntry& referenceValue) {
+              stream << referenceValue.toStringRepresentation();
+            }},
+        referenceValue);
   };
 
   std::stringstream stream;
@@ -385,18 +387,15 @@ LogicalExpression<Operation>::logicalComplement() const {
 //______________________________________________________________________________
 template <LogicalOperator Operation>
 std::vector<BlockMetadata> LogicalExpression<Operation>::evaluateImpl(
-    std::span<const BlockMetadata> input, size_t evaluationColumn,
-    LocalVocab& vocab) const {
+    std::span<const BlockMetadata> input, size_t evaluationColumn) const {
   using enum LogicalOperator;
   if constexpr (Operation == AND) {
-    auto resultChild1 =
-        child1_->evaluateAndCheckImpl(input, evaluationColumn, vocab);
-    return child2_->evaluateAndCheckImpl(resultChild1, evaluationColumn, vocab);
+    auto resultChild1 = child1_->evaluate(input, evaluationColumn, false);
+    return child2_->evaluate(resultChild1, evaluationColumn, false);
   } else {
     static_assert(Operation == OR);
-    return getSetUnion(
-        child1_->evaluateAndCheckImpl(input, evaluationColumn, vocab),
-        child2_->evaluateAndCheckImpl(input, evaluationColumn, vocab));
+    return getSetUnion(child1_->evaluate(input, evaluationColumn, false),
+                       child2_->evaluate(input, evaluationColumn, false));
   }
 };
 
@@ -447,9 +446,8 @@ std::unique_ptr<PrefilterExpression> NotExpression::logicalComplement() const {
 
 //______________________________________________________________________________
 std::vector<BlockMetadata> NotExpression::evaluateImpl(
-    std::span<const BlockMetadata> input, size_t evaluationColumn,
-    LocalVocab& vocab) const {
-  return child_->evaluateAndCheckImpl(input, evaluationColumn, vocab);
+    std::span<const BlockMetadata> input, size_t evaluationColumn) const {
+  return child_->evaluate(input, evaluationColumn, false);
 };
 
 //______________________________________________________________________________
@@ -542,10 +540,10 @@ void checkPropertiesForPrefilterConstruction(
 template <CompOp comparison>
 std::vector<PrefilterExprVariablePair> makePrefilterExpressionVec(
     const IdOrLocalVocabEntry& referenceValue, const Variable& variable,
-    const bool reversed) {
+    const bool mirrored) {
   std::vector<PrefilterExprVariablePair> resVec{};
   resVec.emplace_back(
-      reversed
+      mirrored
           ? makeMirroredExpression<comparison>(referenceValue)
           : std::make_unique<RelationalExpression<comparison>>(referenceValue),
       variable);
