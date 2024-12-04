@@ -2169,6 +2169,21 @@ TEST(QueryPlanner, SpatialJoinIncorrectConfigValues) {
                 "_:config spatialSearch:right ?b ;"
                 "spatialSearch:left ?y ;"
                 "spatialSearch:maxDistance 5 ;"
+                "spatialSearch:payload <http://some.iri.that.is.not.all> ."
+                " { ?a <p> ?b . }"
+                "}}",
+                ::testing::_),
+      ::testing::ContainsRegex("<payload> parameter must be either a variable "
+                               "to be selected or <all>"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("PREFIX spatialSearch: "
+                "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+                "SELECT * WHERE {"
+                "?x <p> ?y ."
+                "SERVICE spatialSearch: {"
+                "_:config spatialSearch:right ?b ;"
+                "spatialSearch:left ?y ;"
+                "spatialSearch:maxDistance 5 ;"
                 "spatialSearch:bindDistance ?dist_a ;"
                 "spatialSearch:bindDistance ?dist_b ."
                 " { ?a <p> ?b . }"
