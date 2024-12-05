@@ -80,4 +80,8 @@ class Variable {
   }
 
   static bool isValidVariableName(std::string_view var);
+
+  // The method escapes all special chars in word to "_ASCIICODE_" and appends
+  // it at the end of target
+  void appendEscapedWord(std::string_view word, std::string& target) const;
 };
