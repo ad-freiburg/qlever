@@ -23,7 +23,7 @@ using namespace prefilterExpressions;
 using namespace makeFilterExpression;
 using namespace filterHelper;
 
-constexpr auto getId = getValueIdFromIdOrLocalVocabEntry;
+constexpr auto getId = PrefilterExpression::getValueIdFromIdOrLocalVocabEntry;
 
 //______________________________________________________________________________
 /*

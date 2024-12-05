@@ -103,6 +103,11 @@ class PrefilterExpression {
     return str;
   }
 
+  // Static helper to retrieve the reference `ValueId` from the
+  // `IdOrLocalVocabEntry` variant.
+  static ValueId getValueIdFromIdOrLocalVocabEntry(
+      const IdOrLocalVocabEntry& refernceValue, LocalVocab& vocab);
+
  private:
   // Note: Use `evaluate` for general evaluation of `PrefilterExpression`
   // instead of this method.
@@ -132,12 +137,18 @@ using CompOp = valueIdComparators::Comparison;
 template <CompOp Comparison>
 class RelationalExpression : public PrefilterExpression {
  private:
-  // The value that represents our reference value for filtering.
-  IdOrLocalVocabEntry referenceValue_;
+  // This is the right hand side value of the relational expression. The left
+  // hand value is indirectly supplied during the evaluation process via the
+  // `evaluationColumn` argument. `evaluationColumn` represents the column index
+  // associated with the `Variable` column of the `IndexScan`.
+  // E.g., a less-than expression with a value of 3 will represent the logical
+  // relation ?var < 3. A equal-to expression with a value of "Freiburg" will
+  // represent ?var = "Freiburg".
+  IdOrLocalVocabEntry rightSideReferenceValue_;
 
  public:
   explicit RelationalExpression(const IdOrLocalVocabEntry& referenceValue)
-      : referenceValue_(referenceValue) {}
+      : rightSideReferenceValue_(referenceValue) {}
 
   std::unique_ptr<PrefilterExpression> logicalComplement() const override;
   bool operator==(const PrefilterExpression& other) const override;
@@ -253,7 +264,7 @@ void checkPropertiesForPrefilterConstruction(
 template <CompOp comparison>
 std::vector<PrefilterExprVariablePair> makePrefilterExpressionVec(
     const IdOrLocalVocabEntry& referenceValue, const Variable& variable,
-    const bool mirrored);
+    bool mirrored);
 
 }  // namespace detail
 }  // namespace prefilterExpressions

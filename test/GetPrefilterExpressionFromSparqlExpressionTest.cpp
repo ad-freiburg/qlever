@@ -478,6 +478,8 @@ TEST(GetPrefilterExpressionFromSparqlExpression,
                        pr(ge(LVE("\"de\"")), varX));
   evalAndEqualityCheck(strStartsSprql(L("\"\""), varX),
                        pr(le(LVE("\"\"")), varX));
+  evalAndEqualityCheck(strStartsSprql(varX, IntId(33)));
+  evalAndEqualityCheck(strStartsSprql(DoubleId(0.001), varY));
   evalAndEqualityCheck(strStartsSprql(varX, varY));
   evalAndEqualityCheck(strStartsSprql(VocabId(0), VocabId(10)));
 }

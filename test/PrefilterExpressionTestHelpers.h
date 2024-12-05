@@ -106,21 +106,6 @@ auto makePrefilterVec =
 
 }  // namespace makeFilterExpression
 
-// _____________________________________________________________________________
-// Helper to retrieve a `ValueId` from `IdOrLocalVocabEntry`.
-const auto getValueIdFromIdOrLocalVocabEntry =
-    [](const prefilterExpressions::IdOrLocalVocabEntry& value,
-       LocalVocab& localVocab) {
-      return std::visit(
-          ad_utility::OverloadCallOperator{
-              [](const ValueId& referenceId) { return referenceId; },
-              [&localVocab](const LocalVocabEntry& referenceValue) {
-                return Id::makeFromLocalVocabIndex(
-                    localVocab.getIndexAndAddIfNotContained(referenceValue));
-              }},
-          value);
-    };
-
 namespace makeSparqlExpression {
 using namespace sparqlExpression;
 
