@@ -80,9 +80,12 @@ std::string secondDocText =
 std::string docsFileContent = h::createDocsFileLine(4, firstDocText) +
                               h::createDocsFileLine(7, secondDocText);
 
+std::pair<std::string, std::string> contentsOfWordsFileAndDocsFile = {
+    wordsFileContent, docsFileContent};
+
 TEST(TextIndexScanForWord, WordScanPrefix) {
-  auto qec = getQec(kg, true, true, true, 16_B, true, true, wordsFileContent,
-                    docsFileContent);
+  auto qec = getQec(kg, true, true, true, 16_B, true, true,
+                    contentsOfWordsFileAndDocsFile);
 
   TextIndexScanForWord s1{qec, Variable{"?text1"}, "test*"};
   TextIndexScanForWord s2{qec, Variable{"?text2"}, "test*"};
@@ -171,8 +174,8 @@ TEST(TextIndexScanForWord, WordScanPrefix) {
 }
 
 TEST(TextIndexScanForWord, WordScanBasic) {
-  auto qec = getQec(kg, true, true, true, 16_B, true, true, wordsFileContent,
-                    docsFileContent);
+  auto qec = getQec(kg, true, true, true, 16_B, true, true,
+                    contentsOfWordsFileAndDocsFile);
 
   TextIndexScanForWord s1{qec, Variable{"?text1"}, "test"};
 
@@ -210,8 +213,8 @@ TEST(TextIndexScanForWord, WordScanBasic) {
 }
 
 TEST(TextIndexScanForWord, CacheKey) {
-  auto qec = getQec(kg, true, true, true, 16_B, true, true, wordsFileContent,
-                    docsFileContent);
+  auto qec = getQec(kg, true, true, true, 16_B, true, true,
+                    contentsOfWordsFileAndDocsFile);
 
   TextIndexScanForWord s1{qec, Variable{"?text1"}, "test*"};
   TextIndexScanForWord s2{qec, Variable{"?text2"}, "test*"};
@@ -234,8 +237,8 @@ TEST(TextIndexScanForWord, CacheKey) {
 }
 
 TEST(TextIndexScanForWord, KnownEmpty) {
-  auto qec = getQec(kg, true, true, true, 16_B, true, true, wordsFileContent,
-                    docsFileContent);
+  auto qec = getQec(kg, true, true, true, 16_B, true, true,
+                    contentsOfWordsFileAndDocsFile);
 
   TextIndexScanForWord s1{qec, Variable{"?text1"}, "nonExistentWord*"};
   ASSERT_TRUE(s1.knownEmptyResult());
