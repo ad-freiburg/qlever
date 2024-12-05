@@ -227,28 +227,19 @@ template <CompOp Comparison>
 std::unique_ptr<PrefilterExpression>
 RelationalExpression<Comparison>::logicalComplement() const {
   using enum CompOp;
-  switch (Comparison) {
-    case LT:
-      // Complement X < Y: X >= Y
-      return std::make_unique<GreaterEqualExpression>(rightSideReferenceValue_);
-    case LE:
-      // Complement X <= Y: X > Y
-      return std::make_unique<GreaterThanExpression>(rightSideReferenceValue_);
-    case EQ:
-      // Complement X == Y: X != Y
-      return std::make_unique<NotEqualExpression>(rightSideReferenceValue_);
-    case NE:
-      // Complement X != Y: X == Y
-      return std::make_unique<EqualExpression>(rightSideReferenceValue_);
-    case GE:
-      // Complement X >= Y: X < Y
-      return std::make_unique<LessThanExpression>(rightSideReferenceValue_);
-    case GT:
-      // Complement X > Y: X <= Y
-      return std::make_unique<LessEqualExpression>(rightSideReferenceValue_);
-    default:
-      AD_FAIL();
-  }
+  using namespace ad_utility;
+  using P = std::pair<CompOp, CompOp>;
+  // The complementation logic implemented with the following mapping procedure:
+  // (1) ?var < referenceValue -> ?var >= referenceValue
+  // (2) ?var <= referenceValue -> ?var > referenceValue
+  // (3) ?var >= referenceValue -> ?var < referenceValue
+  // (4) ?var > referenceValue -> ?var <= referenceValue
+  // (5) ?var = referenceValue -> ?var != referenceValue
+  // (6) ?var != referenceValue -> ?var = referenceValue
+  constexpr ConstexprMap<CompOp, CompOp, 6> complementMap(
+      {P{LT, GE}, P{LE, GT}, P{GE, LT}, P{GT, LE}, P{EQ, NE}, P{NE, EQ}});
+  return std::make_unique<RelationalExpression<complementMap.at(Comparison)>>(
+      rightSideReferenceValue_);
 };
 
 //______________________________________________________________________________
@@ -496,11 +487,10 @@ template <CompOp comparison>
 static std::unique_ptr<PrefilterExpression> makeMirroredExpression(
     const IdOrLocalVocabEntry& referenceValue) {
   using enum CompOp;
-  using P = std::pair<CompOp, CompOp>;
   using namespace ad_utility;
-  constexpr static std::array mirrorPairs{P{LT, GT}, P{LE, GE}, P{GE, LE},
-                                          P{GT, LT}, P{EQ, EQ}, P{NE, NE}};
-  constexpr ConstexprMap<CompOp, CompOp, 6> mirrorMap(mirrorPairs);
+  using P = std::pair<CompOp, CompOp>;
+  constexpr ConstexprMap<CompOp, CompOp, 6> mirrorMap(
+      {P{LT, GT}, P{LE, GE}, P{GE, LE}, P{GT, LT}, P{EQ, EQ}, P{NE, NE}});
   return std::make_unique<RelationalExpression<mirrorMap.at(comparison)>>(
       referenceValue);
 }
