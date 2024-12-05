@@ -1828,13 +1828,12 @@ TEST(QueryPlanner, SpatialJoinServicePayloadVars) {
 }
 
 TEST(QueryPlanner, SpatialJoinServiceMaxDistOutside) {
-  // If only maxDistance is used but not numNearestNeighbors, the right variable
-  // must not come from inside the SERVICE
-
   auto scan = h::IndexScanFromStrings;
   using V = Variable;
   auto S2 = SpatialJoinAlgorithm::S2_GEOMETRY;
 
+  // If only maxDistance is used but not numNearestNeighbors, the right variable
+  // must not come from inside the SERVICE
   h::expect(
       "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
       "SELECT * WHERE {"
@@ -1847,8 +1846,31 @@ TEST(QueryPlanner, SpatialJoinServiceMaxDistOutside) {
       "spatialSearch:maxDistance 1 . "
       " } }",
       h::SpatialJoin(1, -1, V{"?y"}, V{"?b"}, std::nullopt,
+                     // Payload variables have the default all instead of empty
+                     // in this case
                      PayloadVariables::all(), S2, scan("?x", "<p>", "?y"),
                      scan("?a", "<p>", "?b")));
+
+  // If the user explicitly states that they want all payload variables (which
+  // is enforced and the default anyway), this should also work
+  h::expect(
+      "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "?x <p> ?y ."
+      "SERVICE spatialSearch: {"
+      "_:config spatialSearch:algorithm spatialSearch:s2 ;"
+      "spatialSearch:left ?y ;"
+      "spatialSearch:right ?b ;"
+      "spatialSearch:maxDistance 1 ; "
+      "spatialSearch:payload spatialSearch:all ."
+      " } }",
+      h::SpatialJoin(1, -1, V{"?y"}, V{"?b"}, std::nullopt,
+                     PayloadVariables::all(), S2, scan("?x", "<p>", "?y"),
+                     scan("?a", "<p>", "?b")));
+
+  // Nearest neighbors search requires the right child to be defined inside the
+  // service
   AD_EXPECT_THROW_WITH_MESSAGE(
       h::expect("PREFIX spatialSearch: "
                 "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
@@ -1866,6 +1888,11 @@ TEST(QueryPlanner, SpatialJoinServiceMaxDistOutside) {
       ::testing::ContainsRegex(
           "must have its right "
           "variable declared inside the service using a graph pattern"));
+
+  // The user may not select specific payload variables if the right join table
+  // is declared outside because this would mess up the query semantics and may
+  // not have deterministic results on different inputs because of query planner
+  // decisions
   AD_EXPECT_THROW_WITH_MESSAGE(
       h::expect("PREFIX spatialSearch: "
                 "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
