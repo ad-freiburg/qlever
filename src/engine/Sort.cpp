@@ -9,6 +9,8 @@
 
 #include "engine/CallFixedSize.h"
 #include "engine/Engine.h"
+#include "engine/Filter.h"
+#include "engine/IndexScan.h"
 #include "engine/QueryExecutionTree.h"
 #include "global/RuntimeParameters.h"
 
@@ -73,4 +75,49 @@ ProtoResult Sort::computeResult([[maybe_unused]] bool requestLaziness) {
 
   LOG(DEBUG) << "Sort result computation done." << endl;
   return {std::move(idTable), resultSortedOn(), subRes->getSharedLocalVocab()};
+}
+
+// _____________________________________________________________________________
+size_t Sort::getCostEstimate() {
+  size_t size = getSizeEstimateBeforeLimit();
+  size_t logSize =
+      size < 4 ? 2 : static_cast<size_t>(logb(static_cast<double>(size)));
+  size_t nlogn = size * logSize;
+  size_t subcost = subtree_->getCostEstimate();
+  // Return  at least 1, s.t. the query planner will never emit an unnecessary
+  // sort of an empty `IndexScan`. This makes the testing of the query
+  // planner much easier.
+
+  // Don't return plain `n log n` but also incorporate the number of columns and
+  // a constant multiplicator for the inherent complexity of sorting.
+  auto result = std::max(1UL, 20 * getResultWidth() * (nlogn + subcost));
+
+  // Determine if the subtree is a FILTER of an INDEX SCAN. This case can be
+  // useful if the FILTER can be applied via binary search and the result is
+  // then so small that the SORT doesn't hurt anymore. But in case the FILTER
+  // doesn't filter out much, and the result size is beyond a configurable
+  // threshold, we want to heavily discourage the plan with the binary filter +
+  // sorting, because it breaks the lazy evaluation.
+  auto sizeEstimateOfFilteredScan = [&]() -> size_t {
+    if (auto filter =
+            dynamic_cast<const Filter*>(subtree_->getRootOperation().get())) {
+      if (dynamic_cast<const IndexScan*>(
+              filter->getSubtree()->getRootOperation().get())) {
+        return subtree_->getSizeEstimate();
+      }
+    }
+    return 0;
+  }();
+  size_t maxSizeFilteredScan =
+      RuntimeParameters()
+          .get<"max-materialization-size-filtered-scan">()
+          .getBytes() /
+      sizeof(Id) / subtree_->getResultWidth();
+  if (sizeEstimateOfFilteredScan > maxSizeFilteredScan) {
+    // If the filtered result is larger than the defined threshold, make the
+    // cost estimate much larger, s.t. the query planner will prefer a plan
+    // without the `SORT`.
+    result *= 10'000;
+  }
+  return result;
 }
