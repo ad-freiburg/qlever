@@ -44,7 +44,7 @@ class PayloadVariables {
   bool isAll() const;
 
   // Returns a vector of variables if all has not been set. Otherwise throws.
-  std::vector<Variable> getVariables() const;
+  const std::vector<Variable>& getVariables() const;
 
   // For testing: equality operator
   bool operator==(const PayloadVariables& other) const {

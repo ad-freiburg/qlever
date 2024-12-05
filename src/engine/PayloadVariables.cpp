@@ -50,24 +50,15 @@ bool PayloadVariables::empty() const {
 
 // ____________________________________________________________________________
 bool PayloadVariables::isAll() const {
-  // Helper visitor to check if the payload variables has been set to all
-  auto allVisitor = []<typename T>(const T&) -> bool {
-    if constexpr (std::is_same_v<T, detail::PayloadAllVariables>) {
-      return true;
-    } else {
-      static_assert(std::is_same_v<T, std::vector<Variable>>);
-      return false;
-    }
-  };
-
-  return std::visit(allVisitor, variables_);
+  return std::holds_alternative<detail::PayloadAllVariables>(variables_);
 };
 
 // ____________________________________________________________________________
-std::vector<Variable> PayloadVariables::getVariables() const {
+const std::vector<Variable>& PayloadVariables::getVariables() const {
   // Helper visitor to check if the payload variables has been set to all: then
   // throw, otherwise return the vector
-  auto getVarVisitor = []<typename T>(const T& value) -> std::vector<Variable> {
+  auto getVarVisitor =
+      []<typename T>(const T& value) -> const std::vector<Variable>& {
     if constexpr (std::is_same_v<T, std::vector<Variable>>) {
       return value;
     } else {
