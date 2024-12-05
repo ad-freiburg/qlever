@@ -17,7 +17,7 @@ namespace textIndexScanTestHelpers {
 inline string getTextRecordFromResultTable(const QueryExecutionContext* qec,
                                            const ProtoResult& result,
                                            const size_t& rowIndex) {
-  uint64_t nofLiterals = qec->getIndex().getNofLiterals();
+  uint64_t nofLiterals = qec->getIndex().getNofLiteralsInTextIndex();
   uint64_t nofContexts = qec->getIndex().getNofTextRecords();
   uint64_t textRecordIdFromTable =
       result.idTable().getColumn(0)[rowIndex].getTextRecordIndex().get();

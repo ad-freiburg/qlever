@@ -424,7 +424,9 @@ class IndexImpl {
   size_t getNofEntityPostings() const {
     return textMeta_.getNofEntityPostings();
   }
-  size_t getNofLiterals() const { return textMeta_.getNofLiterals(); }
+  size_t getNofLiteralsInTextIndex() const {
+    return textMeta_.getNofLiteralsInTextIndex();
+  }
 
   bool hasAllPermutations() const { return SPO().isLoaded(); }
 
