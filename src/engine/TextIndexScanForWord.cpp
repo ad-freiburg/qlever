@@ -18,9 +18,11 @@ ProtoResult TextIndexScanForWord::computeResult(
   IdTable idTable = getExecutionContext()->getIndex().getWordPostingsForTerm(
       word_, getExecutionContext()->getAllocator());
 
+  // This filters out the word column. When the searchword is a prefix this
+  // column shows the word the prefix got extended to
   if (!isPrefix_) {
-    ColumnIndex columnsToKeep[] = {0, 2};
-    idTable.setColumnSubset(std::span{columnsToKeep});
+    using CI = ColumnIndex;
+    idTable.setColumnSubset(std::array{CI{0}, CI{2}});
     return {std::move(idTable), resultSortedOn(), LocalVocab{}};
   }
 
