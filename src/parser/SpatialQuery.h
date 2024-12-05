@@ -40,7 +40,7 @@ struct SpatialQuery : MagicServiceQuery {
   // this vector is required to be empty - the user may not specify the payload
   // configuration parameter. It will then be automatically set to
   // `PayloadAllVariables` to ensure appropriate semantics.
-  PayloadVariables payloadVariables_ = std::vector<Variable>{};
+  PayloadVariables payloadVariables_;
 
   // Optional further argument: the join algorithm. If it is not given, the
   // default algorithm is used implicitly.

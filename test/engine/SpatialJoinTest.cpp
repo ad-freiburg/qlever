@@ -14,6 +14,7 @@
 #include <regex>
 #include <sstream>
 
+#include "../printers/PayloadVariablePrinters.h"
 #include "../printers/VariablePrinters.h"
 #include "../printers/VariableToColumnMapPrinters.h"
 #include "../util/GTestHelpers.h"
@@ -261,7 +262,7 @@ class SpatialJoinVarColParamTest
 
   std::shared_ptr<SpatialJoin> makeSpatialJoin(
       QueryExecutionContext* qec, VarColTestSuiteParam parameters,
-      bool addDist = true, PayloadVariables pv = PayloadAllVariables{}) {
+      bool addDist = true, PayloadVariables pv = PayloadVariables::all()) {
     auto [leftSideBigChild, rightSideBigChild, addLeftChildFirst,
           testVarToColMap] = parameters;
     auto leftChild = getChild(qec, leftSideBigChild, "1");
@@ -456,7 +457,7 @@ class SpatialJoinVarColParamTest
 
             // Also test the PayloadAllVariables version
             if (withGeo && withObj && (withName || !rightSideBigChild)) {
-              computeAndCompareVarToColMaps(addDist, PayloadAllVariables{},
+              computeAndCompareVarToColMaps(addDist, PayloadVariables::all(),
                                             exp);
             }
 
