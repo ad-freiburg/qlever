@@ -939,6 +939,8 @@ TEST_P(IndexScanWithLazyJoin,
     using P = Result::IdTableVocabPair;
     P p1{makeIdTableFromVector({{Id::makeFromBool(true)}}), LocalVocab{}};
     co_yield p1;
+    P p2{makeIdTableFromVector({{Id::makeFromBool(true)}}), LocalVocab{}};
+    co_yield p2;
   };
 
   auto [joinSideResults, scanResults] =
