@@ -19,58 +19,52 @@ using ad_utility::source_location;
 namespace h = textIndexScanTestHelpers;
 
 namespace {
+
 std::string kg =
     "<a> <p> \"he failed the test\" . <a> <p> \"testing can help\" . <a> <p> "
     "\"some other sentence\" . <b> <p> \"the test on friday was really hard\" "
     ". <b> <x2> <x> . <b> <x2> <xb2> . <Astronomer> <is-a> <job> .";
 
 std::string wordsFileContent =
-    "astronomer\t0\t1\t1\n"
-    "<Astronomer>\t1\t1\t0\n"
-    "scientist\t0\t1\t1\n"
-    "field\t0\t1\t1\n"
-    "astronomy\t0\t1\t1\n"
-    "astronomer\t0\t2\t0\n"
-    "<Astronomer>\t1\t2\t0\n"
-    ":s:firstsentence\t0\t2\t0\n"
-    "scientist\t0\t2\t0\n"
-    "field\t0\t2\t0\n"
-    "astronomy\t0\t2\t0\n"
-    "astronomy\t0\t3\t1\n"
-    "concentrates\t0\t3\t1\n"
-    "studies\t0\t3\t1\n"
-    "specific\t0\t3\t1\n"
-    "question\t0\t3\t1\n"
-    "outside\t0\t3\t1\n"
-    "scope\t0\t3\t1\n"
-    "earth\t0\t3\t1\n"
-    "astronomy\t0\t4\t1\n"
-    "concentrates\t0\t4\t1\n"
-    "studies\t0\t4\t1\n"
-    "field\t0\t4\t1\n"
-    "outside\t0\t4\t1\n"
-    "scope\t0\t4\t1\n"
-    "earth\t0\t4\t1\n"
-    "tester\t0\t5\t1\n"
-    "rockets\t0\t5\t1\n"
-    "astronomer\t0\t5\t1\n"
-    "<Astronomer>\t1\t5\t0\n"
-    "although\t0\t5\t1\n"
-    "astronomer\t0\t6\t0\n"
-    "<Astronomer>\t1\t6\t0\n"
-    "although\t0\t6\t0\n"
-    "<Astronomer>\t1\t6\t0\n"
-    "space\t0\t6\t1\n"
-    "<Astronomer>\t1\t7\t0\n"
-    "space\t0\t7\t0\n"
-    "earth\t0\t7\t1\n";
-
-std::string docsFileContent =
-    "4\tAn astronomer is a scientist in the field of astronomy who "
-    "concentrates their studies on a specific question or field outside of "
-    "the scope of Earth.\n"
-    "7\tThe Tester of the rockets can be an astronomer too although they "
-    "might not be in space but on earth.\n";
+    h::createWordsFileLine("astronomer", false, 1, 1) +
+    h::createWordsFileLine("<Astronomer>", true, 1, 0) +
+    h::createWordsFileLine("scientist", false, 1, 1) +
+    h::createWordsFileLine("field", false, 1, 1) +
+    h::createWordsFileLine("astronomy", false, 1, 1) +
+    h::createWordsFileLine("astronomer", false, 2, 0) +
+    h::createWordsFileLine("<Astronomer>", true, 2, 0) +
+    h::createWordsFileLine(":s:firstsentence", false, 2, 0) +
+    h::createWordsFileLine("scientist", false, 2, 0) +
+    h::createWordsFileLine("field", false, 2, 0) +
+    h::createWordsFileLine("astronomy", false, 2, 0) +
+    h::createWordsFileLine("astronomy", false, 3, 1) +
+    h::createWordsFileLine("concentrates", false, 3, 1) +
+    h::createWordsFileLine("studies", false, 3, 1) +
+    h::createWordsFileLine("specific", false, 3, 1) +
+    h::createWordsFileLine("question", false, 3, 1) +
+    h::createWordsFileLine("outside", false, 3, 1) +
+    h::createWordsFileLine("scope", false, 3, 1) +
+    h::createWordsFileLine("earth", false, 3, 1) +
+    h::createWordsFileLine("astronomy", false, 4, 1) +
+    h::createWordsFileLine("concentrates", false, 4, 1) +
+    h::createWordsFileLine("studies", false, 4, 1) +
+    h::createWordsFileLine("field", false, 4, 1) +
+    h::createWordsFileLine("outside", false, 4, 1) +
+    h::createWordsFileLine("scope", false, 4, 1) +
+    h::createWordsFileLine("earth", false, 4, 1) +
+    h::createWordsFileLine("tester", false, 5, 1) +
+    h::createWordsFileLine("rockets", false, 5, 1) +
+    h::createWordsFileLine("astronomer", false, 5, 1) +
+    h::createWordsFileLine("<Astronomer>", true, 5, 0) +
+    h::createWordsFileLine("although", false, 5, 1) +
+    h::createWordsFileLine("astronomer", false, 6, 0) +
+    h::createWordsFileLine("<Astronomer>", true, 6, 0) +
+    h::createWordsFileLine("although", false, 6, 0) +
+    h::createWordsFileLine("<Astronomer>", true, 6, 0) +
+    h::createWordsFileLine("space", false, 6, 1) +
+    h::createWordsFileLine("<Astronomer>", true, 7, 0) +
+    h::createWordsFileLine("space", false, 7, 0) +
+    h::createWordsFileLine("earth", false, 7, 1);
 
 std::string firstDocText =
     "An astronomer is a scientist in the field of "
@@ -82,6 +76,9 @@ std::string secondDocText =
     "The Tester of the rockets can be an astronomer "
     "too although they might not be in space but on "
     "earth.";
+
+std::string docsFileContent = h::createDocsFileLine(4, firstDocText) +
+                              h::createDocsFileLine(7, secondDocText);
 
 TEST(TextIndexScanForWord, WordScanPrefix) {
   auto qec = getQec(kg, true, true, true, 16_B, true, true, wordsFileContent,

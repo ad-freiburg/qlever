@@ -57,4 +57,18 @@ inline string combineToString(const string& text, const string& word) {
   ss << "Text: " << text << ", Word: " << word << std::endl;
   return ss.str();
 }
+
+std::string inlineSeperator = "\t";
+std::string lineSeperator = "\n";
+
+inline string createWordsFileLine(std::string word, bool isEntity,
+                                  size_t contextId, size_t score) {
+  return word + inlineSeperator + (isEntity ? "1" : "0") + inlineSeperator +
+         std::to_string(contextId) + inlineSeperator + std::to_string(score) +
+         lineSeperator;
+};
+
+inline string createDocsFileLine(size_t docId, std::string docContent) {
+  return std::to_string(docId) + inlineSeperator + docContent + lineSeperator;
+};
 }  // namespace textIndexScanTestHelpers
