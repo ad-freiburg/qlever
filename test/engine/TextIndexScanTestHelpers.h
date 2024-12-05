@@ -38,6 +38,7 @@ inline const TextRecordIndex getTextRecordIdFromResultTable(
   return result.idTable().getColumn(0)[rowIndex].getTextRecordIndex();
 }
 
+// Only use on prefix search results
 inline string getEntityFromResultTable(const QueryExecutionContext* qec,
                                        const ProtoResult& result,
                                        const size_t& rowIndex) {
@@ -45,11 +46,20 @@ inline string getEntityFromResultTable(const QueryExecutionContext* qec,
       result.idTable().getColumn(1)[rowIndex].getVocabIndex());
 }
 
+// Only use on prefix search results
 inline string getWordFromResultTable(const QueryExecutionContext* qec,
                                      const ProtoResult& result,
                                      const size_t& rowIndex) {
   return std::string{qec->getIndex().indexToString(
       result.idTable().getColumn(1)[rowIndex].getWordVocabIndex())};
+}
+
+inline size_t getScoreFromResultTable(
+    [[maybe_unused]] const QueryExecutionContext* qec,
+    const ProtoResult& result, const size_t& rowIndex, bool wasPrefixSearch) {
+  size_t colToRetrieve = wasPrefixSearch ? 2 : 1;
+  return static_cast<size_t>(
+      result.idTable().getColumn(colToRetrieve)[rowIndex].getInt());
 }
 
 inline string combineToString(const string& text, const string& word) {
