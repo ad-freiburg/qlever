@@ -299,7 +299,7 @@ void IndexImpl::processWordsForInvertedLists(const string& contextFile,
   textMeta_.setNofTextRecords(nofContexts);
   textMeta_.setNofWordPostings(nofWordPostings);
   textMeta_.setNofEntityPostings(nofEntityPostings);
-  textMeta_.setNofLiterals(nofLiterals);
+  textMeta_.setNofLiteralsInTextIndex(nofLiterals);
 
   writer.finish();
   LOG(TRACE) << "END IndexImpl::passContextFileIntoVector" << std::endl;
