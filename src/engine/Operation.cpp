@@ -319,7 +319,7 @@ std::shared_ptr<const Result> Operation::getResult(
 
     auto result = [&]() {
       auto compute = [&](auto&&... args) {
-        if (!canResultBeCached_()) {
+        if (!canResultBeCached()) {
           return cache.computeButDontStore(AD_FWD(args)...);
         }
         return pinResult ? cache.computeOncePinned(AD_FWD(args)...)
