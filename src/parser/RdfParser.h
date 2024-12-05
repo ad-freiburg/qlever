@@ -187,7 +187,7 @@ class TurtleParser : public RdfParserBase {
   // `TripleComponent` since it can hold any parsing result, not only objects.
   TripleComponent lastParseResult_;
 
-  // Maps prefixes to their expanded form, initialized with the empty base
+  // Maps prefixes to their expanded form, initialized with the empty prefix
   // (i.e. the prefix ":" maps to the empty IRI).
   ad_utility::HashMap<std::string, TripleComponent::Iri> prefixMap_{{{}, {}}};
 

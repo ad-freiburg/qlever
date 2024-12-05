@@ -55,7 +55,7 @@ template <class T>
 bool TurtleParser<T>::base() {
   if (skip<TurtleTokenId::TurtleBase>()) {
     if (iriref() && check(skip<TurtleTokenId::Dot>())) {
-      prefixMap_[""] = lastParseResult_.getIri();
+      prefixMap_["_BASE"] = lastParseResult_.getIri();
       return true;
     } else {
       raise("Parsing @base definition failed");
@@ -85,7 +85,7 @@ template <class T>
 bool TurtleParser<T>::sparqlBase() {
   if (skip<TurtleTokenId::SparqlBase>()) {
     if (iriref()) {
-      prefixMap_[""] = lastParseResult_.getIri();
+      prefixMap_["_BASE"] = lastParseResult_.getIri();
       return true;
     } else {
       raise("Parsing BASE definition failed");
@@ -740,13 +740,29 @@ bool TurtleParser<T>::iriref() {
         "Unterminated IRI reference (found '<' but no '>' before "
         "one of the following characters: <, \", newline)");
   }
+  // Helper lambda that calls `fromIriref` for absolute IRIs and
+  // `fromPrefixAndSuffix` with the BASE prefix for relative IRIs.
+  auto makeIri = [this](std::string_view iri) {
+    if (iri.find("://") != std::string_view::npos || iri.size() == 2) {
+      return TripleComponent::Iri::fromIriref(iri);
+    } else {
+      AD_CORRECTNESS_CHECK(iri.size() >= 2);
+      AD_CORRECTNESS_CHECK(iri[0] == '<' && iri[iri.size() - 1] == '>');
+      auto basePrefix = prefixMap_.find("_BASE");
+      if (basePrefix == prefixMap_.end()) {
+        raise(absl::StrCat("Relative IRI reference `", iri,
+                           "` found but no base IRI defined"));
+      }
+      return TripleComponent::Iri::fromPrefixAndSuffix(
+          basePrefix->second, iri.substr(1, iri.size() - 2));
+    }
+  };
   // In relaxed mode, that is all we check. Otherwise, we check if the IRI is
   // standard-compliant. If not, we output a warning and try to parse it in a
   // more relaxed way.
   if constexpr (UseRelaxedParsing) {
     tok_.remove_prefix(endPos + 1);
-    lastParseResult_ =
-        TripleComponent::Iri::fromIriref(view.substr(0, endPos + 1));
+    lastParseResult_ = makeIri(view.substr(0, endPos + 1));
     return true;
   } else {
     if (!parseTerminal<TurtleTokenId::Iriref>()) {
@@ -756,8 +772,7 @@ bool TurtleParser<T>::iriref() {
         return false;
       }
     }
-    lastParseResult_ =
-        TripleComponent::Iri::fromIriref(lastParseResult_.getString());
+    lastParseResult_ = makeIri(lastParseResult_.getString());
     return true;
   }
 }
