@@ -4,7 +4,7 @@
 
 #pragma once
 
-#include "engine/SpatialJoin.h"
+#include "engine/PayloadVariables.h"
 #include "parser/GraphPattern.h"
 #include "parser/MagicServiceQuery.h"
 
