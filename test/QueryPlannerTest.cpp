@@ -7,11 +7,11 @@
 
 #include "./printers/PayloadVariablePrinters.h"
 #include "QueryPlannerTestHelpers.h"
-#include "engine/PayloadVariables.h"
 #include "engine/QueryPlanner.h"
 #include "engine/SpatialJoin.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/MagicServiceQuery.h"
+#include "parser/PayloadVariables.h"
 #include "parser/SparqlParser.h"
 #include "parser/SpatialQuery.h"
 #include "parser/data/Variable.h"

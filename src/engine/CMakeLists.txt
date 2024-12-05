@@ -10,7 +10,7 @@ add_library(engine
         Union.cpp MultiColumnJoin.cpp TransitivePathBase.cpp
         TransitivePathHashMap.cpp TransitivePathBinSearch.cpp Service.cpp
         Values.cpp Bind.cpp Minus.cpp RuntimeInformation.cpp CheckUsePatternTrick.cpp
-        VariableToColumnMap.cpp ExportQueryExecutionTrees.cpp PayloadVariables.cpp
+        VariableToColumnMap.cpp ExportQueryExecutionTrees.cpp
         CartesianProductJoin.cpp TextIndexScanForWord.cpp TextIndexScanForEntity.cpp
         TextLimit.cpp LazyGroupBy.cpp GroupByHashMapOptimization.cpp SpatialJoin.cpp
         CountConnectedSubgraphs.cpp SpatialJoinAlgorithms.cpp PathSearch.cpp ExecuteUpdate.cpp)

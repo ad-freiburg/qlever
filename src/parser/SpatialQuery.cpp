@@ -7,9 +7,9 @@
 #include <type_traits>
 #include <variant>
 
-#include "engine/PayloadVariables.h"
 #include "engine/SpatialJoin.h"
 #include "parser/MagicServiceIriConstants.h"
+#include "parser/PayloadVariables.h"
 #include "parser/data/Variable.h"
 
 namespace parsedQuery {

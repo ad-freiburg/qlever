@@ -4,9 +4,9 @@
 
 #pragma once
 
-#include "engine/PayloadVariables.h"
 #include "parser/GraphPattern.h"
 #include "parser/MagicServiceQuery.h"
+#include "parser/PayloadVariables.h"
 
 namespace parsedQuery {
 

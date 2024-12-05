@@ -6,8 +6,8 @@
 
 #include "../printers/PayloadVariablePrinters.h"
 #include "../util/GTestHelpers.h"
-#include "engine/PayloadVariables.h"
 #include "gmock/gmock.h"
+#include "parser/PayloadVariables.h"
 #include "parser/data/Variable.h"
 
 namespace {  // anonymous namespace to avoid linker problems
