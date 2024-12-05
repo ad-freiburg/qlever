@@ -204,15 +204,25 @@ std::shared_ptr<QueryExecutionTree> IndexScan::makeCopyWithAddedPrefilters(
 }
 
 // _____________________________________________________________________________
-Result::Generator IndexScan::chunkedIndexScan() const {
+Result::Generator IndexScan::chunkedIndexScan() {
   auto optBlockSpan = getBlockMetadata();
   if (!optBlockSpan.has_value()) {
     co_return;
   }
   const auto& blockSpan = optBlockSpan.value();
+  size_t numBlocksAll = blockSpan.size();
   // Note: Given a `PrefilterIndexPair` is available, the corresponding
   // prefiltering will be applied in `getLazyScan`.
-  for (IdTable& idTable : getLazyScan({blockSpan.begin(), blockSpan.end()})) {
+  auto innerGenerator = getLazyScan({blockSpan.begin(), blockSpan.end()});
+  auto setDetails = ad_utility::makeOnDestructionDontThrowDuringStackUnwinding(
+      [
+
+          this, numBlocksAll, &innerGenerator]() {
+        auto details = innerGenerator.details();
+        details.numBlocksAll_ = numBlocksAll;
+        updateRuntimeInfoForLazyScan(details);
+      });
+  for (IdTable& idTable : innerGenerator) {
     co_yield {std::move(idTable), LocalVocab{}};
   }
 }
@@ -339,7 +349,14 @@ IndexScan::getBlockMetadata() const {
 // _____________________________________________________________________________
 std::optional<std::vector<CompressedBlockMetadata>>
 IndexScan::getBlockMetadataOptionallyPrefiltered() const {
-  auto optBlockSpan = getBlockMetadata();
+  auto optBlockSpan =
+      [&]() -> std::optional<std::span<const CompressedBlockMetadata>> {
+    if (prefilteredBlocks_.has_value()) {
+      return prefilteredBlocks_.value();
+    } else {
+      return getBlockMetadata();
+    }
+  }();
   std::optional<std::vector<CompressedBlockMetadata>> optBlocks = std::nullopt;
   if (optBlockSpan.has_value()) {
     const auto& blockSpan = optBlockSpan.value();
@@ -389,6 +406,7 @@ std::optional<Permutation::MetadataAndBlocks> IndexScan::getMetadataForScan()
 };
 
 // _____________________________________________________________________________
+// TODO<joka921> This can be removed now.
 std::array<Permutation::IdTableGenerator, 2>
 IndexScan::lazyScanForJoinOfTwoScans(const IndexScan& s1, const IndexScan& s2) {
   AD_CONTRACT_CHECK(s1.numVariables_ <= 3 && s2.numVariables_ <= 3);
@@ -655,4 +673,58 @@ std::pair<Result::Generator, Result::Generator> IndexScan::prefilterTables(
       std::move(input), joinColumn, std::move(metaBlocks.value()));
   return {createPrefilteredJoinSide(state),
           createPrefilteredIndexScanSide(state)};
+}
+
+// _____________________________________________________________________________
+void IndexScan::setBlocksForJoinOfIndexScans(Operation* left,
+                                             Operation* right) {
+  auto& leftScan = dynamic_cast<IndexScan&>(*left);
+  auto& rightScan = dynamic_cast<IndexScan&>(*right);
+
+  auto getBlocks = [](IndexScan& scan) {
+    auto metaBlocks = scan.getMetadataForScan();
+    if (!metaBlocks.has_value()) {
+      return metaBlocks;
+    }
+    if (scan.prefilteredBlocks_.has_value()) {
+      metaBlocks.value().blockMetadata_ = scan.prefilteredBlocks_.value();
+    }
+    return metaBlocks;
+  };
+
+  auto metaBlocks1 = getBlocks(leftScan);
+  auto metaBlocks2 = getBlocks(rightScan);
+  if (!metaBlocks1.has_value() || !metaBlocks2.has_value()) {
+    return;
+  }
+  auto [blocks1, blocks2] = CompressedRelationReader::getBlocksForJoin(
+      metaBlocks1.value(), metaBlocks2.value());
+  leftScan.prefilteredBlocks_ = std::move(blocks1);
+  rightScan.prefilteredBlocks_ = std::move(blocks2);
+}
+
+// _____________________________________________________________________________
+std::vector<Operation*> IndexScan::getIndexScansForSortVariables(
+    std::span<const Variable> variables) {
+  const auto& sorted = resultSortedOn();
+  if (resultSortedOn().size() < variables.size()) {
+    return {};
+  }
+  const auto& varColMap = getExternallyVisibleVariableColumns();
+  for (size_t i = 0; i < variables.size(); ++i) {
+    auto it = varColMap.find(variables[i]);
+    if (it == varColMap.end() ||
+        it->second.columnIndex_ != resultSortedOn().at(i)) {
+      return {};
+    }
+  }
+  return {this};
+}
+
+// _____________________________________________________________________________
+void IndexScan::setPrefilteredBlocks(
+    std::vector<CompressedBlockMetadata> prefilteredBlocks) {
+  prefilteredBlocks_ = std::move(prefilteredBlocks);
+  // TODO<joka921> once the other PR is merged we have to assert that the result
+  // is never cached AD_CORRECTNESS_CHECK(!canBeStoredInCache());
 }

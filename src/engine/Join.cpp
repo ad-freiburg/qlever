@@ -181,6 +181,16 @@ ProtoResult Join::computeResult(bool requestLaziness) {
   auto rightResIfCached = getCachedOrSmallResult(*_right);
   checkCancellation();
 
+  // TODO<joka921> Copy and move to separate function.
+  std::span joinVarSpan{&_joinVar, 1};
+  auto leftIndexScans = _left->getIndexScansForSortVariables(joinVarSpan);
+  auto rightIndexScans = _right->getIndexScansForSortVariables(joinVarSpan);
+  for (auto* left : leftIndexScans) {
+    for (auto* right : rightIndexScans) {
+      IndexScan::setBlocksForJoinOfIndexScans(left, right);
+    }
+  }
+
   auto leftIndexScan =
       std::dynamic_pointer_cast<IndexScan>(_left->getRootOperation());
   if (leftIndexScan &&
@@ -189,9 +199,6 @@ ProtoResult Join::computeResult(bool requestLaziness) {
       AD_CORRECTNESS_CHECK(rightResIfCached->isFullyMaterialized());
       return computeResultForIndexScanAndIdTable<true>(
           requestLaziness, std::move(rightResIfCached), leftIndexScan);
-
-    } else if (!leftResIfCached) {
-      return computeResultForTwoIndexScans(requestLaziness);
     }
   }
 
@@ -216,9 +223,10 @@ ProtoResult Join::computeResult(bool requestLaziness) {
     if (leftRes->isFullyMaterialized()) {
       return computeResultForIndexScanAndIdTable<false>(
           requestLaziness, std::move(leftRes), rightIndexScan);
+    } else if (!leftIndexScan) {
+      return computeResultForIndexScanAndLazyOperation(
+          requestLaziness, std::move(leftRes), rightIndexScan);
     }
-    return computeResultForIndexScanAndLazyOperation(
-        requestLaziness, std::move(leftRes), rightIndexScan);
   }
 
   std::shared_ptr<const Result> rightRes =
@@ -648,47 +656,6 @@ void Join::addCombinedRowToIdTable(const ROW_A& rowA, const ROW_B& rowB,
 }
 
 // ______________________________________________________________________________________________________
-ProtoResult Join::computeResultForTwoIndexScans(bool requestLaziness) const {
-  return createResult(
-      requestLaziness,
-      [this](std::function<void(IdTable&, LocalVocab&)> yieldTable) {
-        auto leftScan =
-            std::dynamic_pointer_cast<IndexScan>(_left->getRootOperation());
-        auto rightScan =
-            std::dynamic_pointer_cast<IndexScan>(_right->getRootOperation());
-        AD_CORRECTNESS_CHECK(leftScan && rightScan);
-        // The join column already is the first column in both inputs, so we
-        // don't have to permute the inputs and results for the
-        // `AddCombinedRowToIdTable` class to work correctly.
-        AD_CORRECTNESS_CHECK(_leftJoinCol == 0 && _rightJoinCol == 0);
-        auto rowAdder = makeRowAdder(std::move(yieldTable));
-
-        ad_utility::Timer timer{
-            ad_utility::timer::Timer::InitialStatus::Started};
-        auto [leftBlocksInternal, rightBlocksInternal] =
-            IndexScan::lazyScanForJoinOfTwoScans(*leftScan, *rightScan);
-        runtimeInfo().addDetail("time-for-filtering-blocks", timer.msecs());
-
-        auto leftBlocks = convertGenerator(std::move(leftBlocksInternal));
-        auto rightBlocks = convertGenerator(std::move(rightBlocksInternal));
-
-        ad_utility::zipperJoinForBlocksWithoutUndef(leftBlocks, rightBlocks,
-                                                    std::less{}, rowAdder);
-
-        leftScan->updateRuntimeInfoForLazyScan(leftBlocks.details());
-        rightScan->updateRuntimeInfoForLazyScan(rightBlocks.details());
-
-        AD_CORRECTNESS_CHECK(leftBlocks.details().numBlocksRead_ <=
-                             rightBlocks.details().numElementsRead_);
-        AD_CORRECTNESS_CHECK(rightBlocks.details().numBlocksRead_ <=
-                             leftBlocks.details().numElementsRead_);
-        auto localVocab = std::move(rowAdder.localVocab());
-        return Result::IdTableVocabPair{std::move(rowAdder).resultTable(),
-                                        std::move(localVocab)};
-      });
-}
-
-// ______________________________________________________________________________________________________
 template <bool idTableIsRightInput>
 ProtoResult Join::computeResultForIndexScanAndIdTable(
     bool requestLaziness, std::shared_ptr<const Result> resultWithIdTable,
@@ -833,4 +800,12 @@ ad_utility::AddCombinedRowToIdTable Join::makeRowAdder(
   return ad_utility::AddCombinedRowToIdTable{
       1, IdTable{getResultWidth(), allocator()}, cancellationHandle_,
       CHUNK_SIZE, std::move(callback)};
+}
+// _____________________________________________________________________________
+std::vector<Operation*> Join::getIndexScansForSortVariables(
+    std::span<const Variable> variables) {
+  auto result = _left->getIndexScansForSortVariables(variables);
+  auto right = _right->getIndexScansForSortVariables(variables);
+  result.insert(result.end(), right.begin(), right.end());
+  return result;
 }

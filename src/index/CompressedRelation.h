@@ -466,7 +466,7 @@ class CompressedRelationReader {
   // to be performed.
   struct ScanSpecAndBlocks {
     ScanSpecification scanSpec_;
-    const std::span<const CompressedBlockMetadata> blockMetadata_;
+    std::span<const CompressedBlockMetadata> blockMetadata_;
   };
 
   // This struct additionally contains the first and last triple of the scan
