@@ -44,17 +44,7 @@ class Sort : public Operation {
 
   std::shared_ptr<QueryExecutionTree> getSubtree() const { return subtree_; }
 
-  virtual size_t getCostEstimate() override {
-    size_t size = getSizeEstimateBeforeLimit();
-    size_t logSize =
-        size < 4 ? 2 : static_cast<size_t>(logb(static_cast<double>(size)));
-    size_t nlogn = size * logSize;
-    size_t subcost = subtree_->getCostEstimate();
-    // Return  at least 1, s.t. the query planner will never emit an unnecessary
-    // sort of an empty `IndexScan`. This makes the testing of the query
-    // planner much easier.
-    return std::max(1UL, nlogn + subcost);
-  }
+  size_t getCostEstimate() override;
 
   virtual bool knownEmptyResult() override {
     return subtree_->knownEmptyResult();
