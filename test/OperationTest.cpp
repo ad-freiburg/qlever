@@ -653,3 +653,40 @@ TEST(Operation, checkLazyOperationIsNotCachedIfUnlikelyToFitInCache) {
   EXPECT_FALSE(
       qec->getQueryTreeCache().cacheContains(makeQueryCacheKey("test")));
 }
+
+TEST(OperationTest, disableCaching) {
+  auto qec = getQec();
+  qec->getQueryTreeCache().clearAll();
+  std::vector<IdTable> idTablesVector{};
+  idTablesVector.push_back(makeIdTableFromVector({{3, 4}}));
+  idTablesVector.push_back(makeIdTableFromVector({{7, 8}, {9, 123}}));
+  ValuesForTesting valuesForTesting{
+      qec, std::move(idTablesVector), {Variable{"?x"}, Variable{"?y"}}, true};
+
+  QueryCacheKey cacheKey{valuesForTesting.getCacheKey(),
+                         qec->locatedTriplesSnapshot().index_};
+
+  // By default, the result of `valuesForTesting` is cached because it is
+  // sufficiently small, no matter if it was computed lazily or fully
+  // materialized.
+  EXPECT_FALSE(qec->getQueryTreeCache().cacheContains(cacheKey));
+  valuesForTesting.getResult(true);
+  EXPECT_TRUE(qec->getQueryTreeCache().cacheContains(cacheKey));
+  qec->getQueryTreeCache().clearAll();
+  EXPECT_FALSE(qec->getQueryTreeCache().cacheContains(cacheKey));
+  valuesForTesting.getResult(false);
+  EXPECT_TRUE(qec->getQueryTreeCache().cacheContains(cacheKey));
+
+  // We now disable caching for the `valuesForTesting`. Then the result is never
+  // cached, no matter if it is computed lazily or fully materialized.
+  valuesForTesting.disableStoringInCache();
+  qec->getQueryTreeCache().clearAll();
+
+  EXPECT_FALSE(qec->getQueryTreeCache().cacheContains(cacheKey));
+  valuesForTesting.getResult(true);
+  EXPECT_FALSE(qec->getQueryTreeCache().cacheContains(cacheKey));
+  qec->getQueryTreeCache().clearAll();
+  EXPECT_FALSE(qec->getQueryTreeCache().cacheContains(cacheKey));
+  valuesForTesting.getResult(false);
+  EXPECT_FALSE(qec->getQueryTreeCache().cacheContains(cacheKey));
+}
