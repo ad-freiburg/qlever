@@ -232,7 +232,7 @@ CacheValue Operation::runComputationAndPrepareForCache(
   auto maxSize =
       std::min(RuntimeParameters().get<"lazy-result-max-cache-size">(),
                cache.getMaxSizeSingleEntry());
-  if (canResultBeCached_() && !result.isFullyMaterialized() &&
+  if (canResultBeCached() && !result.isFullyMaterialized() &&
       !unlikelyToFitInCache(maxSize)) {
     AD_CONTRACT_CHECK(!pinned);
     result.cacheDuringConsumption(
