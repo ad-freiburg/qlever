@@ -190,7 +190,7 @@ VariableToColumnMap IndexScan::computeVariableToColumnMap() const {
       addCol(ptr->getVariable());
     }
   }
-  std::ranges::for_each(additionalVariables_, addCol);
+  ql::ranges::for_each(additionalVariables_, addCol);
   return variableToColumnMap;
 }
 

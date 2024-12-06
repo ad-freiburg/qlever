@@ -396,7 +396,7 @@ class ConcatExpression : public detail::VariadicExpression {
           // One of the previous children was not a constant, so we already
           // store a vector.
           auto& resultAsVector = std::get<StringVec>(result);
-          std::ranges::for_each(resultAsVector, [&](std::string& target) {
+          ql::ranges::for_each(resultAsVector, [&](std::string& target) {
             target.append(strFromConstant);
           });
         }
@@ -433,7 +433,7 @@ class ConcatExpression : public detail::VariadicExpression {
       }
       ctx->cancellationHandle_->throwIfCancelled();
     };
-    std::ranges::for_each(
+    ql::ranges::for_each(
         childrenVec(), [&ctx, &visitSingleExpressionResult](const auto& child) {
           std::visit(visitSingleExpressionResult, child->evaluate(ctx));
         });

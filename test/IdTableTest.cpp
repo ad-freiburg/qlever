@@ -7,6 +7,7 @@
 #include <gtest/gtest.h>
 
 #include <array>
+#include <range/v3/iterator/access.hpp>
 #include <vector>
 
 #include "./util/AllocatorTestHelpers.h"
@@ -1148,6 +1149,8 @@ TEST(IdTable, moveOrClone) {
   EXPECT_EQ(t3, t2);
   // `table` was moved from.
   EXPECT_TRUE(table.empty());
+
+  auto it = ::ranges::iter_move(table.begin());
 }
 
 // Check that we can completely instantiate `IdTable`s with a different value

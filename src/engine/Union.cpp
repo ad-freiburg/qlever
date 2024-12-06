@@ -86,7 +86,7 @@ VariableToColumnMap Union::computeVariableToColumnMap() const {
 
   // Note: it is tempting to declare `nextColumnIndex` inside the lambda
   // `addVariableColumnIfNotExists`, but that doesn't work because
-  // `std::ranges::for_each` takes the lambda by value and creates a new
+  // `ql::ranges::for_each` takes the lambda by value and creates a new
   // variable at every invocation.
   size_t nextColumnIndex = 0;
   auto addVariableColumnIfNotExists =
@@ -102,14 +102,13 @@ VariableToColumnMap Union::computeVariableToColumnMap() const {
         }
       };
 
-  auto addVariablesForSubtree =
-      [&addVariableColumnIfNotExists](const auto& subtree) {
-        std::ranges::for_each(
-            copySortedByColumnIndex(subtree->getVariableColumns()),
-            addVariableColumnIfNotExists);
-      };
+  auto addVariablesForSubtree = [&addVariableColumnIfNotExists](
+                                    const auto& subtree) {
+    ql::ranges::for_each(copySortedByColumnIndex(subtree->getVariableColumns()),
+                         addVariableColumnIfNotExists);
+  };
 
-  std::ranges::for_each(_subtrees, addVariablesForSubtree);
+  ql::ranges::for_each(_subtrees, addVariablesForSubtree);
   return variableColumns;
 }
 

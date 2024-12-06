@@ -151,7 +151,7 @@ auto fixBlockAfterPatternJoin(auto block) {
   static constexpr auto permutation =
       makePermutationFirstThirdSwitched<NumColumnsIndexBuilding + 2>();
   block.value().setColumnSubset(permutation);
-  std::ranges::for_each(
+  ql::ranges::for_each(
       block.value().getColumn(ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN),
       [](Id& id) { id = id.isUndefined() ? Id::makeFromInt(NO_PATTERN) : id; });
   return std::move(block.value()).template toStatic<0>();
@@ -782,7 +782,7 @@ IndexImpl::createPermutationPairImpl(size_t numColumns, const string& fileName1,
   // blocks.
   auto liftCallback = [](auto callback) {
     return [callback](const auto& block) mutable {
-      std::ranges::for_each(block, callback);
+      ql::ranges::for_each(block, callback);
     };
   };
   auto callback1 =

@@ -661,7 +661,7 @@ std::pair<size_t, size_t> CompressedRelationReader::getResultSizeImpl(
   // First accumulate the complete blocks in the "middle"
   std::size_t inserted = 0;
   std::size_t deleted = 0;
-  std::ranges::for_each(
+  ql::ranges::for_each(
       std::ranges::subrange{beginBlock, endBlock}, [&](const auto& block) {
         const auto [ins, del] =
             locatedTriplesPerBlock.numTriples(block.blockIndex_);
@@ -1282,7 +1282,7 @@ CompressedRelationMetadata CompressedRelationWriter::addCompleteLargeRelation(
     Id col0Id, auto&& sortedBlocks) {
   DistinctIdCounter distinctCol1Counter;
   for (auto& block : sortedBlocks) {
-    std::ranges::for_each(block.getColumn(1), std::ref(distinctCol1Counter));
+    ql::ranges::for_each(block.getColumn(1), std::ref(distinctCol1Counter));
     addBlockForLargeRelation(
         col0Id, std::make_shared<IdTable>(std::move(block).toDynamic()));
   }

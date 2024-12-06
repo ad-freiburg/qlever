@@ -9,6 +9,7 @@
 
 #include <string_view>
 
+#include "backports/algorithm.h"
 #include "util/Concepts.h"
 #include "util/ConstexprSmallString.h"
 #include "util/CtreHelpers.h"
@@ -200,11 +201,11 @@ void lazyStrJoin(std::ostream* stream, Range&& r, std::string_view separator) {
 
   // Add the remaining entries.
   ++begin;
-  std::ranges::for_each(begin, end,
-                        [&stream, &separator](const auto& listItem) {
-                          *stream << separator << listItem;
-                        },
-                        {});
+  ql::ranges::for_each(begin, end,
+                       [&stream, &separator](const auto& listItem) {
+                         *stream << separator << listItem;
+                       },
+                       {});
 }
 
 // _________________________________________________________________________

@@ -125,7 +125,7 @@ class LocalVocab {
     // typically don't compare equal to each other because of the`shared_ptr`
     // semantics.
     for (const auto& vocab : vocabs | filter(std::not_fn(&LocalVocab::empty))) {
-      std::ranges::for_each(vocab.otherWordSets_, addWordSet);
+      ql::ranges::for_each(vocab.otherWordSets_, addWordSet);
       addWordSet(vocab.primaryWordSet_);
     }
 

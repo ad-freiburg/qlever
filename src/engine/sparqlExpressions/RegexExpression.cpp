@@ -270,7 +270,7 @@ ExpressionResult RegexExpression::evaluateGeneralCase(
   // `std::nullopt` for a row, the result is `UNDEF`. Otherwise, we have a
   // string and evaluate the regex on it.
   auto computeResult = [&]<typename ValueGetter>(const ValueGetter& getter) {
-    std::ranges::for_each(
+    ql::ranges::for_each(
         detail::makeGenerator(AD_FWD(input), resultSize, context),
         [&getter, &context, &result, this](const auto& id) {
           auto str = getter(id, context);

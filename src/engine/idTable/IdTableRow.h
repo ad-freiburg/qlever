@@ -325,11 +325,13 @@ class RowReferenceImpl {
     // `https://en.cppreference.com/w/cpp/iterator/indirectly_writable`
     This& operator=(const Row<T, numStaticColumns>& other) const&&;
 
-   protected:
+   public:
     // No need to copy this internal type, but the implementation of the
     // `RowReference` class below requires it,
     // so the copy Constructor is protected.
     RowReferenceWithRestrictedAccess(const RowReferenceWithRestrictedAccess&) =
+        default;
+    RowReferenceWithRestrictedAccess(RowReferenceWithRestrictedAccess&&) =
         default;
   };
 };

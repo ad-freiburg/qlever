@@ -21,7 +21,7 @@ LocatedTriples::iterator& DeltaTriples::LocatedTripleHandles::forPermutation(
 void DeltaTriples::clear() {
   triplesInserted_.clear();
   triplesDeleted_.clear();
-  std::ranges::for_each(locatedTriples(), &LocatedTriplesPerBlock::clear);
+  ql::ranges::for_each(locatedTriples(), &LocatedTriplesPerBlock::clear);
 }
 
 // ____________________________________________________________________________
@@ -133,9 +133,9 @@ void DeltaTriples::rewriteLocalVocabEntriesAndBlankNodes(Triples& triples) {
   };
 
   // Convert all local vocab and blank node `Id`s in all `triples`.
-  std::ranges::for_each(triples, [&convertId](IdTriple<0>& triple) {
-    std::ranges::for_each(triple.ids_, convertId);
-    std::ranges::for_each(triple.payload_, convertId);
+  ql::ranges::for_each(triples, [&convertId](IdTriple<0>& triple) {
+    ql::ranges::for_each(triple.ids_, convertId);
+    ql::ranges::for_each(triple.payload_, convertId);
   });
 }
 
@@ -151,14 +151,13 @@ void DeltaTriples::modifyTriplesImpl(CancellationHandle cancellationHandle,
   std::erase_if(triples, [&targetMap](const IdTriple<0>& triple) {
     return targetMap.contains(triple);
   });
-  std::ranges::for_each(triples,
-                        [this, &inverseMap](const IdTriple<0>& triple) {
-                          auto handle = inverseMap.find(triple);
-                          if (handle != inverseMap.end()) {
-                            eraseTripleInAllPermutations(handle->second);
-                            inverseMap.erase(triple);
-                          }
-                        });
+  ql::ranges::for_each(triples, [this, &inverseMap](const IdTriple<0>& triple) {
+    auto handle = inverseMap.find(triple);
+    if (handle != inverseMap.end()) {
+      eraseTripleInAllPermutations(handle->second);
+      inverseMap.erase(triple);
+    }
+  });
 
   std::vector<LocatedTripleHandles> handles =
       locateAndAddTriples(std::move(cancellationHandle), triples, shouldExist);

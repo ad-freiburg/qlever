@@ -72,7 +72,7 @@ void PatternCreator::finishSubject(Id subject, const Pattern& pattern) {
   // Note: This has to be done for all triples, including those where the
   // subject has no pattern.
   auto curSubject = currentSubject_.value();
-  std::ranges::for_each(
+  ql::ranges::for_each(
       tripleBuffer_, [this, patternId, &curSubject](const auto& t) {
         static_assert(NumColumnsIndexBuilding == 4,
                       "The following lines have to be changed when additional "

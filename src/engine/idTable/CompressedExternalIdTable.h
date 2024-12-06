@@ -189,7 +189,7 @@ class CompressedExternalIdTableWriter {
     file_.wlock()->close();
     ad_utility::deleteFile(filename_);
     file_.wlock()->open(filename_, "w+");
-    std::ranges::for_each(blocksPerColumn_, [](auto& block) { block.clear(); });
+    ql::ranges::for_each(blocksPerColumn_, [](auto& block) { block.clear(); });
     startOfSingleIdTables_.clear();
   }
 
@@ -643,8 +643,9 @@ class CompressedExternalIdTableSorter
   // once.
   void pushBlock(const IdTableStatic<0>& block) override {
     AD_CONTRACT_CHECK(block.numColumns() == this->numColumns_);
-    std::ranges::for_each(block,
-                          [ptr = this](const auto& row) { ptr->push(row); });
+    // TODO<joka921>
+    std::for_each(block.begin(), block.end(),
+                  [ptr = this](const auto& row) { ptr->push(row); });
   }
 
   // The implementation of the type-erased interface. Get the sorted blocks as

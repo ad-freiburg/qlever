@@ -92,7 +92,7 @@ Result::Result(Generator idTables, std::vector<ColumnIndex> sortedBy)
 // _____________________________________________________________________________
 // Apply `LimitOffsetClause` to given `IdTable`.
 void resizeIdTable(IdTable& idTable, const LimitOffsetClause& limitOffset) {
-  std::ranges::for_each(
+  ql::ranges::for_each(
       idTable.getColumns(),
       [offset = limitOffset.actualOffset(idTable.numRows()),
        upperBound =

@@ -262,7 +262,7 @@ std::string insertThousandSeparator(const std::string_view str,
       "(?:^|[^\\d" + adjustFloatingPointSignifierForRegex() +
       "])(?<digit>\\d{4,})"};
   auto parseIterator = std::begin(str);
-  std::ranges::for_each(
+  ql::ranges::for_each(
       ctre::range<regexPatDigitSequence>(str),
       [&parseIterator, &ostream, &insertSeparator](const auto& match) {
         /*

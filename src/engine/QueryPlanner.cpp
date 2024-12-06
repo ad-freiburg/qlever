@@ -1461,7 +1461,7 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
   uint64_t nodes = 0;
   uint64_t filterIds = 0;
   uint64_t textLimitIds = 0;
-  std::ranges::for_each(
+  ql::ranges::for_each(
       lastDpRowFromComponents |
           std::views::transform([this](auto& vec) -> decltype(auto) {
             return vec.at(findCheapestExecutionTree(vec));
@@ -2240,7 +2240,7 @@ void QueryPlanner::GraphPatternPlanner::visitGroupOptionalOrMinus(
   // All variables seen so far are considered bound and cannot appear as the
   // RHS of a BIND operation. This is also true for variables from OPTIONALs
   // and MINUS clauses (this used to be a bug in an old version of the code).
-  std::ranges::for_each(
+  ql::ranges::for_each(
       variables, [this](const Variable& var) { boundVariables_.insert(var); });
 
   // If our input is not OPTIONAL and not a MINUS, this means that we can still
@@ -2568,9 +2568,9 @@ void QueryPlanner::GraphPatternPlanner::visitSubquery(
     plan._qet->getRootOperation()->setSelectedVariablesForSubquery(
         selectedVariables);
   };
-  std::ranges::for_each(candidatesForSubquery, setSelectedVariables);
+  ql::ranges::for_each(candidatesForSubquery, setSelectedVariables);
   // A subquery must also respect LIMIT and OFFSET clauses
-  std::ranges::for_each(candidatesForSubquery, [&](SubtreePlan& plan) {
+  ql::ranges::for_each(candidatesForSubquery, [&](SubtreePlan& plan) {
     plan._qet->getRootOperation()->setLimit(arg.get()._limitOffset);
   });
   visitGroupOptionalOrMinus(std::move(candidatesForSubquery));

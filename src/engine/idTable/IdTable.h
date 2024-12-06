@@ -382,8 +382,8 @@ class IdTable {
   // Note: The semantics of this function is similar to `std::vector::resize`.
   // To set the capacity, use the `reserve` function.
   void resize(size_t numRows) requires(!isView) {
-    std::ranges::for_each(data(),
-                          [numRows](auto& column) { column.resize(numRows); });
+    ql::ranges::for_each(data(),
+                         [numRows](auto& column) { column.resize(numRows); });
     numRows_ = numRows;
   }
 
@@ -394,8 +394,8 @@ class IdTable {
   // of the next `numRows - size()` elements (via `insert` or `push_back`) can
   // be done in O(1) time without dynamic allocations.
   void reserve(size_t numRows) requires(!isView) {
-    std::ranges::for_each(data(),
-                          [numRows](auto& column) { column.reserve(numRows); });
+    ql::ranges::for_each(data(),
+                         [numRows](auto& column) { column.reserve(numRows); });
   }
 
   // Delete all the elements, but keep the allocated memory (`capacityRows_`
@@ -403,14 +403,14 @@ class IdTable {
   // `shrinkToFit()` after calling `clear()` .
   void clear() requires(!isView) {
     numRows_ = 0;
-    std::ranges::for_each(data(), [](auto& column) { column.clear(); });
+    ql::ranges::for_each(data(), [](auto& column) { column.clear(); });
   }
 
   // Adjust the capacity to exactly match the size. This optimizes the memory
   // consumption of this table. This operation runs in O(size()), allocates
   // memory, and invalidates all iterators.
   void shrinkToFit() requires(!isView) {
-    std::ranges::for_each(data(), [](auto& column) { column.shrink_to_fit(); });
+    ql::ranges::for_each(data(), [](auto& column) { column.shrink_to_fit(); });
   }
 
   // Note: The following functions `emplace_back` and `push_back` all have the
@@ -421,7 +421,7 @@ class IdTable {
 
   // Insert a new uninitialized row at the end.
   void emplace_back() requires(!isView) {
-    std::ranges::for_each(data(), [](auto& column) { column.emplace_back(); });
+    ql::ranges::for_each(data(), [](auto& column) { column.emplace_back(); });
     ++numRows_;
   }
 
@@ -434,10 +434,10 @@ class IdTable {
   void push_back(const RowLike& newRow) requires(!isView) {
     AD_EXPENSIVE_CHECK(newRow.size() == numColumns());
     ++numRows_;
-    std::ranges::for_each(ad_utility::integerRange(numColumns()),
-                          [this, &newRow](auto i) {
-                            data()[i].push_back(*(std::begin(newRow) + i));
-                          });
+    ql::ranges::for_each(ad_utility::integerRange(numColumns()),
+                         [this, &newRow](auto i) {
+                           data()[i].push_back(*(std::begin(newRow) + i));
+                         });
   }
 
   void push_back(const std::initializer_list<T>& newRow) requires(!isView) {
@@ -482,7 +482,7 @@ class IdTable {
     AD_CONTRACT_CHECK(newColumns.size() >= numColumns());
     Data newStorage(std::make_move_iterator(newColumns.begin()),
                     std::make_move_iterator(newColumns.begin() + numColumns()));
-    std::ranges::for_each(
+    ql::ranges::for_each(
         ad_utility::integerRange(numColumns()), [this, &newStorage](auto i) {
           newStorage[i].insert(newStorage[i].end(), data()[i].begin(),
                                data()[i].end());
@@ -586,7 +586,7 @@ class IdTable {
 
     Data newData;
     newData.reserve(subset.size());
-    std::ranges::for_each(subset, [this, &newData](ColumnIndex colIdx) {
+    ql::ranges::for_each(subset, [this, &newData](ColumnIndex colIdx) {
       newData.push_back(std::move(data().at(colIdx)));
     });
     data() = std::move(newData);
@@ -691,12 +691,12 @@ class IdTable {
     auto numInserted = end - begin;
     auto oldSize = size();
     resize(numRows() + numInserted);
-    std::ranges::for_each(
-        ad_utility::integerRange(numColumns()),
-        [this, &table, oldSize, begin, numInserted](size_t i) {
-          std::ranges::copy(table.getColumn(i).subspan(begin, numInserted),
-                            getColumn(i).begin() + oldSize);
-        });
+    ql::ranges::for_each(ad_utility::integerRange(numColumns()),
+                         [this, &table, oldSize, begin, numInserted](size_t i) {
+                           std::ranges::copy(
+                               table.getColumn(i).subspan(begin, numInserted),
+                               getColumn(i).begin() + oldSize);
+                         });
   }
 
   // Check whether two `IdTables` have the same content. Mostly used for unit

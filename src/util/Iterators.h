@@ -169,22 +169,6 @@ class IteratorForAccessOperator {
   }
 };
 
-// TODO<joka921> This is probably hacky + wrong + all kinds of other things
-// (temporary vs rvlaue reference, taking the iterator by value, etc.)
-template <typename RandomAccessContainer, typename Accessor, IsConst isConstTag,
-          typename ValueType, typename Reference>
-auto&& iter_move(IteratorForAccessOperator<RandomAccessContainer, Accessor,
-                                           isConstTag, Reference>& iterator) {
-  return std::move(*iterator);
-}
-template <typename RandomAccessContainer, typename Accessor, IsConst isConstTag,
-          typename ValueType, typename Reference>
-auto&& iter_move(
-    IteratorForAccessOperator<const RandomAccessContainer, Accessor, isConstTag,
-                              Reference>& iterator) {
-  return std::move(*iterator);
-}
-
 /// If `T` is a type that can safely be moved from (e.g. std::vector<int> or
 /// std::vector<int>&&), then return `std::make_move_iterator(iterator)`. Else
 /// (for example if `T` is `std::vector<int>&` or `const std::vector<int>&` the
