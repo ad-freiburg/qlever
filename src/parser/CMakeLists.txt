@@ -20,6 +20,7 @@ add_library(parser
         MagicServiceQuery.cpp
         PathQuery.cpp
         SpatialQuery.cpp
+        PayloadVariables.cpp
         PropertyPath.cpp
         data/SparqlFilter.cpp
         SelectClause.cpp
