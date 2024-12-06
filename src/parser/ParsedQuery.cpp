@@ -265,8 +265,9 @@ void ParsedQuery::registerVariableVisibleInQueryBody(const Variable& variable) {
 ParsedQuery::GraphPattern::GraphPattern() : _optional(false) {}
 
 // __________________________________________________________________________
-void ParsedQuery::GraphPattern::addLanguageFilter(const Variable& variable,
-                                                  const std::string& langTag) {
+bool ParsedQuery::GraphPattern::addLanguageFilter(const Variable& variable,
+                                                  const std::string& langTag,
+                                                  bool isLangmatches) {
   // Find all triples where the object is the `variable` and the predicate is
   // a simple `IRIREF` (neither a variable nor a complex property path).
   // Search in all the basic graph patterns, as filters have the complete
@@ -275,6 +276,10 @@ void ParsedQuery::GraphPattern::addLanguageFilter(const Variable& variable,
   // Subqueries etc.
   // TODO<joka921> Also support property paths (^rdfs:label,
   // skos:altLabel|rdfs:label, ...)
+
+  if (isLangmatches && langTag.find('-') != std::string::npos) {
+    return false;
+  }
   std::vector<SparqlTriple*> matchingTriples;
   using BasicPattern = parsedQuery::BasicGraphPattern;
   namespace ad = ad_utility;
@@ -295,14 +300,20 @@ void ParsedQuery::GraphPattern::addLanguageFilter(const Variable& variable,
 
   // Replace all the matching triples.
   for (auto* triplePtr : matchingTriples) {
-    triplePtr->p_._iri = ad_utility::convertToLanguageTaggedPredicate(
-        triplePtr->p_._iri, langTag);
+    triplePtr->p_._iri = isLangmatches
+                             ? ad_utility::convertToLangmatchesTaggedPredicate(
+                                   triplePtr->p_._iri, langTag)
+                             : ad_utility::convertToLanguageTaggedPredicate(
+                                   triplePtr->p_._iri, langTag);
   }
 
   // Handle the case, that no suitable triple (see above) was found. In this
   // case a triple `?variable ql:langtag "language"` is added at the end of
   // the graph pattern.
   if (matchingTriples.empty()) {
+    if (isLangmatches) {
+      return false;
+    }
     LOG(DEBUG) << "language filter variable " + variable.name() +
                       " did not appear as object in any suitable "
                       "triple. "
@@ -326,6 +337,7 @@ void ParsedQuery::GraphPattern::addLanguageFilter(const Variable& variable,
                         langEntity);
     t.push_back(std::move(triple));
   }
+  return true;
 }
 
 // ____________________________________________________________________________
