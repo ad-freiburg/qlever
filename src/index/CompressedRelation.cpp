@@ -156,8 +156,10 @@ bool CompressedRelationReader::FilterDuplicatesAndGraphs::
   if (!metadata.graphInfo_.has_value()) {
     return true;
   }
-  return !std::ranges::all_of(
-      metadata.graphInfo_.value(),
+  // TODO<joka921> ql::ranges
+  const auto& graphInfo = metadata.graphInfo_.value();
+  return !std::all_of(
+      graphInfo.begin(), graphInfo.end(),
       [&wantedGraphs = desiredGraphs_.value()](Id containedGraph) {
         return wantedGraphs.contains(containedGraph);
       });
@@ -182,9 +184,12 @@ bool CompressedRelationReader::FilterDuplicatesAndGraphs::
         block, std::not_fn(isDesiredGraphId()), graphIdFromRow);
     block.erase(beginOfRemoved, block.end());
   } else {
+    // TODO<joka921> Range-v3 for idTables.
+    /*
     AD_EXPENSIVE_CHECK(
         !desiredGraphs_.has_value() ||
-        std::ranges::all_of(block, isDesiredGraphId(), graphIdFromRow));
+        ql::ranges::all_of(block, isDesiredGraphId(), graphIdFromRow));
+        */
   }
   return needsFilteringByGraph;
 }

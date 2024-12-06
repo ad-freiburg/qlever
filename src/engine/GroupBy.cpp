@@ -420,7 +420,7 @@ size_t GroupBy::searchBlockBoundaries(
   for (size_t pos = 0; pos < idTable.size(); pos++) {
     checkCancellation();
     bool rowMatchesCurrentBlock =
-        std::ranges::all_of(currentGroupBlock, [&](const auto& colIdxAndValue) {
+        ql::ranges::all_of(currentGroupBlock, [&](const auto& colIdxAndValue) {
           return idTable(pos, colIdxAndValue.first) == colIdxAndValue.second;
         });
     if (!rowMatchesCurrentBlock) {

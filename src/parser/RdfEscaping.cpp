@@ -326,8 +326,8 @@ std::string normalizedContentFromLiteralOrIri(std::string&& input) {
 static NormalizedString toNormalizedString(std::string_view input) {
   NormalizedString normalizedString;
   normalizedString.resize(input.size());
-  std::ranges::transform(input.begin(), input.end(), normalizedString.begin(),
-                         [](char c) { return NormalizedChar{c}; });
+  ql::ranges::transform(input.begin(), input.end(), normalizedString.begin(),
+                        [](char c) { return NormalizedChar{c}; });
 
   return normalizedString;
 }

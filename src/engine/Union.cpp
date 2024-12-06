@@ -42,7 +42,7 @@ Union::Union(QueryExecutionContext* qec,
       _columnOrigins[it.second.columnIndex_][1] = NO_COLUMN;
     }
   }
-  AD_CORRECTNESS_CHECK(std::ranges::all_of(_columnOrigins, [](const auto& el) {
+  AD_CORRECTNESS_CHECK(ql::ranges::all_of(_columnOrigins, [](const auto& el) {
     return el[0] != NO_COLUMN || el[1] != NO_COLUMN;
   }));
 }

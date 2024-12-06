@@ -1208,10 +1208,10 @@ void QueryPlanner::applyFiltersIfPossible(
         continue;
       }
 
-      if (std::ranges::all_of(filters[i].expression_.containedVariables(),
-                              [&plan](const auto& variable) {
-                                return plan._qet->isVariableCovered(*variable);
-                              })) {
+      if (ql::ranges::all_of(filters[i].expression_.containedVariables(),
+                             [&plan](const auto& variable) {
+                               return plan._qet->isVariableCovered(*variable);
+                             })) {
         // Apply this filter.
         SubtreePlan newPlan =
             makeSubtreePlan<Filter>(_qec, plan._qet, filters[i].expression_);
@@ -1297,7 +1297,7 @@ size_t QueryPlanner::findUniqueNodeIds(
                  std::views::transform(&SubtreePlan::_idsOfIncludedNodes);
   // Check that all the `_idsOfIncludedNodes` are one-hot encodings of a single
   // value, i.e. they have exactly one bit set.
-  AD_CORRECTNESS_CHECK(std::ranges::all_of(
+  AD_CORRECTNESS_CHECK(ql::ranges::all_of(
       nodeIds, [](auto nodeId) { return std::popcount(nodeId) == 1; }));
   std::ranges::copy(nodeIds, std::inserter(uniqueNodeIds, uniqueNodeIds.end()));
   return uniqueNodeIds.size();
@@ -2221,7 +2221,7 @@ void QueryPlanner::GraphPatternPlanner::visitGroupOptionalOrMinus(
   using enum SubtreePlan::Type;
   if (auto type = candidates[0].type;
       (type == OPTIONAL || type == MINUS) &&
-      std::ranges::all_of(variables, [this](const Variable& var) {
+      ql::ranges::all_of(variables, [this](const Variable& var) {
         return !boundVariables_.contains(var);
       })) {
     // A MINUS clause that doesn't share any variable with the preceding

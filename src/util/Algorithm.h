@@ -75,7 +75,7 @@ auto transform(Range&& input, F unaryOp) {
       unaryOp, *ad_utility::makeForwardingIterator<Range>(input.begin())))>;
   std::vector<Output> out;
   out.reserve(input.size());
-  std::ranges::transform(
+  ql::ranges::transform(
       ad_utility::makeForwardingIterator<Range>(input.begin()),
       ad_utility::makeForwardingIterator<Range>(input.end()),
       std::back_inserter(out), unaryOp);
@@ -95,7 +95,7 @@ std::vector<std::pair<T1, T2>> zipVectors(const std::vector<T1>& vectorA,
   std::vector<std::pair<T1, T2>> vectorsPairedUp{};
   vectorsPairedUp.reserve(vectorA.size());
 
-  std::ranges::transform(
+  ql::ranges::transform(
       vectorA, vectorB, std::back_inserter(vectorsPairedUp),
       [](const auto& a, const auto& b) { return std::make_pair(a, b); });
 

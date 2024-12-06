@@ -41,8 +41,8 @@ auto findSmallerUndefRangesForRowsWithoutUndef(
   assert(row.size() == (*begin).size());
   assert(
       std::ranges::is_sorted(begin, end, std::ranges::lexicographical_compare));
-  assert((std::ranges::all_of(
-      row, [](Id id) { return id != Id::makeUndefined(); })));
+  assert((ql::ranges::all_of(row,
+                             [](Id id) { return id != Id::makeUndefined(); })));
   size_t numJoinColumns = row.size();
   // TODO<joka921> This can be done without copying.
   Row rowLower = row;

@@ -342,15 +342,15 @@ SparqlExpression::Estimates getEstimatesForFilterExpressionImpl(
   // filtering on the `LocalVocab`.
   // Check iff all the pairs `(children[0], someOtherChild)` can be evaluated
   // using binary search.
-  if (std::ranges::all_of(children | std::views::drop(1),
-                          [&lhs = children.at(0),
-                           &canBeEvaluatedWithBinarySearch](const auto& child) {
-                            // The implementation automatically chooses the
-                            // cheaper direction, so we can do the same when
-                            // estimating the cost.
-                            return canBeEvaluatedWithBinarySearch(lhs, child) ||
-                                   canBeEvaluatedWithBinarySearch(child, lhs);
-                          })) {
+  if (ql::ranges::all_of(children | std::views::drop(1),
+                         [&lhs = children.at(0),
+                          &canBeEvaluatedWithBinarySearch](const auto& child) {
+                           // The implementation automatically chooses the
+                           // cheaper direction, so we can do the same when
+                           // estimating the cost.
+                           return canBeEvaluatedWithBinarySearch(lhs, child) ||
+                                  canBeEvaluatedWithBinarySearch(child, lhs);
+                         })) {
     // When evaluating via binary search, the only significant cost that occurs
     // is that of writing the output.
     costEstimate = sizeEstimate;

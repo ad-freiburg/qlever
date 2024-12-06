@@ -214,7 +214,7 @@ class IdTable {
     if (data().size() > numColumns_) {
       data().erase(data().begin() + numColumns_, data().end());
     }
-    AD_CONTRACT_CHECK(std::ranges::all_of(
+    AD_CONTRACT_CHECK(ql::ranges::all_of(
         data(), [](const auto& column) { return column.empty(); }));
   }
 
@@ -263,7 +263,7 @@ class IdTable {
       AD_CORRECTNESS_CHECK(numColumns == NumColumns);
     }
     AD_CORRECTNESS_CHECK(this->data().size() == numColumns_);
-    AD_CORRECTNESS_CHECK(std::ranges::all_of(
+    AD_CORRECTNESS_CHECK(ql::ranges::all_of(
         this->data(),
         [this](const auto& column) { return column.size() == numRows_; }));
   }
@@ -549,7 +549,7 @@ class IdTable {
   // the argument `columnIndices`.
   IdTable<T, 0, ColumnStorage, IsView::True> asColumnSubsetView(
       std::span<const ColumnIndex> columnIndices) const requires isDynamic {
-    AD_CONTRACT_CHECK(std::ranges::all_of(
+    AD_CONTRACT_CHECK(ql::ranges::all_of(
         columnIndices, [this](size_t idx) { return idx < numColumns(); }));
     ViewSpans viewSpans;
     viewSpans.reserve(columnIndices.size());
@@ -710,7 +710,7 @@ class IdTable {
     }
 
     // TODO<joka921, C++23> This can be implemented using `zip_view` and
-    // `std::ranges::all_of`. The iteration over the columns is cache-friendly.
+    // `ql::ranges::all_of`. The iteration over the columns is cache-friendly.
     const auto& cols = getColumns();
     const auto& otherCols = other.getColumns();
     for (size_t i = 0; i < numColumns(); ++i) {

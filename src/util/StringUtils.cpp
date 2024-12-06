@@ -60,10 +60,10 @@ bool isLanguageMatch(string& languageTag, string& languageRange) {
     if (languageRange.ends_with("*")) {
       languageRange.pop_back();
     }
-    std::ranges::transform(languageTag, std::begin(languageTag),
-                           [](unsigned char c) { return std::tolower(c); });
-    std::ranges::transform(languageRange, std::begin(languageRange),
-                           [](unsigned char c) { return std::tolower(c); });
+    ql::ranges::transform(languageTag, std::begin(languageTag),
+                          [](unsigned char c) { return std::tolower(c); });
+    ql::ranges::transform(languageRange, std::begin(languageRange),
+                          [](unsigned char c) { return std::tolower(c); });
     return languageTag.compare(0, languageRange.length(), languageRange) == 0;
   }
 }
