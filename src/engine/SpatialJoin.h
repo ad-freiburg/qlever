@@ -11,6 +11,7 @@
 
 #include "engine/Operation.h"
 #include "global/Id.h"
+#include "parser/PayloadVariables.h"
 #include "parser/data/Variable.h"
 
 // A nearest neighbor search with optionally a maximum distance.
@@ -26,18 +27,6 @@ struct MaxDistanceConfig {
 
 // Configuration to restrict the results provided by the SpatialJoin
 using SpatialJoinTask = std::variant<NearestNeighborsConfig, MaxDistanceConfig>;
-
-// Represents the selection of all variables of the right join table as payload
-struct PayloadAllVariables : std::monostate {
-  bool operator==([[maybe_unused]] const std::vector<Variable>& other) const {
-    return false;
-  };
-};
-
-// Configuration to select which columns of the right join table should be
-// part of the result.
-using PayloadVariables =
-    std::variant<PayloadAllVariables, std::vector<Variable>>;
 
 // Selection of a SpatialJoin algorithm
 enum class SpatialJoinAlgorithm { BASELINE, S2_GEOMETRY, BOUNDING_BOX };
@@ -60,7 +49,7 @@ struct SpatialJoinConfiguration {
   // If given a vector of variables, the selected variables will be part of the
   // result table - the join column will automatically be part of the result.
   // You may use PayloadAllVariables to select all columns of the right table.
-  PayloadVariables payloadVariables_ = PayloadAllVariables{};
+  PayloadVariables payloadVariables_ = PayloadVariables::all();
 
   // Choice of algorithm. Both algorithms have equal results, but different
   // runtime characteristics.
