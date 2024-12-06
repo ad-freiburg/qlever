@@ -56,7 +56,7 @@ Variable::Variable(std::string name, bool checkName) : _name{std::move(name)} {
 }
 
 // _____________________________________________________________________________
-Variable Variable::getScoreVariable(
+Variable Variable::getEntityScoreVariable(
     const std::variant<Variable, std::string>& varOrEntity) const {
   std::string_view type;
   std::string entity;
@@ -65,18 +65,27 @@ Variable Variable::getScoreVariable(
     entity = std::get<Variable>(varOrEntity).name().substr(1);
   } else {
     type = "_fixedEntity_";
-    // Converts input string to unambiguous result string not containing any
-    // special characters. "_" is used as an escaping character.
-    for (char c : std::get<std::string>(varOrEntity)) {
-      if (isalpha(static_cast<unsigned char>(c))) {
-        entity += c;
-      } else {
-        absl::StrAppend(&entity, "_", std::to_string(c), "_");
-      }
-    }
+    appendEscapedWord(std::get<std::string>(varOrEntity), entity);
   }
   return Variable{
       absl::StrCat(SCORE_VARIABLE_PREFIX, name().substr(1), type, entity)};
+}
+
+// _____________________________________________________________________________
+Variable Variable::getWordScoreVariable(std::string_view word,
+                                        bool isPrefix) const {
+  std::string_view type;
+  std::string convertedWord;
+  if (isPrefix) {
+    word.remove_suffix(1);
+    type = "prefix_";
+  } else {
+    type = "word_";
+  }
+  convertedWord = "_";
+  appendEscapedWord(word, convertedWord);
+  return Variable{absl::StrCat(SCORE_VARIABLE_PREFIX, type, name().substr(1),
+                               convertedWord)};
 }
 
 // _____________________________________________________________________________
@@ -94,5 +103,17 @@ bool Variable::isValidVariableName(std::string_view var) {
     return remaining.empty();
   } catch (...) {
     return false;
+  }
+}
+
+// _____________________________________________________________________________
+void Variable::appendEscapedWord(std::string_view word,
+                                 std::string& target) const {
+  for (char c : word) {
+    if (isalpha(static_cast<unsigned char>(c))) {
+      target += c;
+    } else {
+      absl::StrAppend(&target, "_", std::to_string(c), "_");
+    }
   }
 }
