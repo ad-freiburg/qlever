@@ -7,6 +7,8 @@
 #include <ranges>
 
 #include "global/ValueIdComparators.h"
+#include "util/ConstexprMap.h"
+#include "util/OverloadCallOperator.h"
 
 namespace prefilterExpressions {
 
@@ -207,34 +209,37 @@ std::vector<BlockMetadata> PrefilterExpression::evaluateAndCheckImpl(
   return relevantBlocks;
 }
 
+//______________________________________________________________________________
+ValueId PrefilterExpression::getValueIdFromIdOrLocalVocabEntry(
+    const IdOrLocalVocabEntry& referenceValue, LocalVocab& vocab) {
+  return std::visit(ad_utility::OverloadCallOperator{
+                        [](const ValueId& referenceId) { return referenceId; },
+                        [&vocab](const LocalVocabEntry& referenceLVE) {
+                          return Id::makeFromLocalVocabIndex(
+                              vocab.getIndexAndAddIfNotContained(referenceLVE));
+                        }},
+                    referenceValue);
+}
+
 // SECTION RELATIONAL OPERATIONS
 //______________________________________________________________________________
 template <CompOp Comparison>
 std::unique_ptr<PrefilterExpression>
 RelationalExpression<Comparison>::logicalComplement() const {
   using enum CompOp;
-  switch (Comparison) {
-    case LT:
-      // Complement X < Y: X >= Y
-      return std::make_unique<GreaterEqualExpression>(referenceId_);
-    case LE:
-      // Complement X <= Y: X > Y
-      return std::make_unique<GreaterThanExpression>(referenceId_);
-    case EQ:
-      // Complement X == Y: X != Y
-      return std::make_unique<NotEqualExpression>(referenceId_);
-    case NE:
-      // Complement X != Y: X == Y
-      return std::make_unique<EqualExpression>(referenceId_);
-    case GE:
-      // Complement X >= Y: X < Y
-      return std::make_unique<LessThanExpression>(referenceId_);
-    case GT:
-      // Complement X > Y: X <= Y
-      return std::make_unique<LessEqualExpression>(referenceId_);
-    default:
-      AD_FAIL();
-  }
+  using namespace ad_utility;
+  using P = std::pair<CompOp, CompOp>;
+  // The complementation logic implemented with the following mapping procedure:
+  // (1) ?var < referenceValue -> ?var >= referenceValue
+  // (2) ?var <= referenceValue -> ?var > referenceValue
+  // (3) ?var >= referenceValue -> ?var < referenceValue
+  // (4) ?var > referenceValue -> ?var <= referenceValue
+  // (5) ?var = referenceValue -> ?var != referenceValue
+  // (6) ?var != referenceValue -> ?var = referenceValue
+  constexpr ConstexprMap<CompOp, CompOp, 6> complementMap(
+      {P{LT, GE}, P{LE, GT}, P{GE, LT}, P{GT, LE}, P{EQ, NE}, P{NE, EQ}});
+  return std::make_unique<RelationalExpression<complementMap.at(Comparison)>>(
+      rightSideReferenceValue_);
 };
 
 //______________________________________________________________________________
@@ -261,18 +266,21 @@ std::vector<BlockMetadata> RelationalExpression<Comparison>::evaluateImpl(
     }
   }
 
+  LocalVocab vocab{};
+  auto referenceId =
+      getValueIdFromIdOrLocalVocabEntry(rightSideReferenceValue_, vocab);
   // Use getRangesForId (from valueIdComparators) to extract the ranges
   // containing the relevant ValueIds.
   // For pre-filtering with CompOp::EQ, we have to consider empty ranges.
-  // Reason: The referenceId_ could be contained within the bounds formed by
+  // Reason: The referenceId could be contained within the bounds formed by
   // the IDs of firstTriple_ and lastTriple_ (set false flag to keep
   // empty ranges).
   auto relevantIdRanges =
       Comparison != CompOp::EQ
           ? getRangesForId(valueIdsInput.begin(), valueIdsInput.end(),
-                           referenceId_, Comparison)
+                           referenceId, Comparison)
           : getRangesForId(valueIdsInput.begin(), valueIdsInput.end(),
-                           referenceId_, Comparison, false);
+                           referenceId, Comparison, false);
 
   // The vector for relevant BlockMetadata values which contain ValueIds
   // defined as relevant by relevantIdRanges.
@@ -312,23 +320,37 @@ bool RelationalExpression<Comparison>::operator==(
   if (!otherRelational) {
     return false;
   }
-  return referenceId_ == otherRelational->referenceId_;
+  return rightSideReferenceValue_ == otherRelational->rightSideReferenceValue_;
 };
 
 //______________________________________________________________________________
 template <CompOp Comparison>
 std::unique_ptr<PrefilterExpression> RelationalExpression<Comparison>::clone()
     const {
-  return std::make_unique<RelationalExpression<Comparison>>(referenceId_);
+  return std::make_unique<RelationalExpression<Comparison>>(
+      rightSideReferenceValue_);
 };
 
 //______________________________________________________________________________
 template <CompOp Comparison>
 std::string RelationalExpression<Comparison>::asString(
     [[maybe_unused]] size_t depth) const {
+  auto referenceValueToString = [](std::stringstream& stream,
+                                   const IdOrLocalVocabEntry& referenceValue) {
+    std::visit(
+        ad_utility::OverloadCallOperator{
+            [&stream](const ValueId& referenceId) { stream << referenceId; },
+            [&stream](const LocalVocabEntry& referenceValue) {
+              stream << referenceValue.toStringRepresentation();
+            }},
+        referenceValue);
+  };
+
   std::stringstream stream;
   stream << "Prefilter RelationalExpression<" << getRelationalOpStr(Comparison)
-         << ">\nValueId: " << referenceId_ << std::endl;
+         << ">\nreferenceValue_ : ";
+  referenceValueToString(stream, rightSideReferenceValue_);
+  stream << " ." << std::endl;
   return stream.str();
 };
 
@@ -457,6 +479,23 @@ template class LogicalExpression<LogicalOperator::OR>;
 namespace detail {
 
 //______________________________________________________________________________
+// Returns the corresponding mirrored `RelationalExpression<mirrored
+// comparison>` for the given `CompOp comparison` template argument. For
+// example, the mirroring procedure will transform the relational expression
+// `referenceValue > ?var` into `?var < referenceValue`.
+template <CompOp comparison>
+static std::unique_ptr<PrefilterExpression> makeMirroredExpression(
+    const IdOrLocalVocabEntry& referenceValue) {
+  using enum CompOp;
+  using namespace ad_utility;
+  using P = std::pair<CompOp, CompOp>;
+  constexpr ConstexprMap<CompOp, CompOp, 6> mirrorMap(
+      {P{LT, GT}, P{LE, GE}, P{GE, LE}, P{GT, LT}, P{EQ, EQ}, P{NE, NE}});
+  return std::make_unique<RelationalExpression<mirrorMap.at(comparison)>>(
+      referenceValue);
+}
+
+//______________________________________________________________________________
 void checkPropertiesForPrefilterConstruction(
     const std::vector<PrefilterExprVariablePair>& vec) {
   auto viewVariable = vec | std::views::values;
@@ -472,6 +511,32 @@ void checkPropertiesForPrefilterConstruction(
         "<PrefilterExpression, Variable> pair.");
   }
 }
+
+//______________________________________________________________________________
+template <CompOp comparison>
+std::vector<PrefilterExprVariablePair> makePrefilterExpressionVec(
+    const IdOrLocalVocabEntry& referenceValue, const Variable& variable,
+    const bool mirrored) {
+  std::vector<PrefilterExprVariablePair> resVec{};
+  resVec.emplace_back(
+      mirrored
+          ? makeMirroredExpression<comparison>(referenceValue)
+          : std::make_unique<RelationalExpression<comparison>>(referenceValue),
+      variable);
+  return resVec;
+}
+
+//______________________________________________________________________________
+#define INSTANTIATE_MAKE_PREFILTER(Comparison)                       \
+  template std::vector<PrefilterExprVariablePair>                    \
+  makePrefilterExpressionVec<Comparison>(const IdOrLocalVocabEntry&, \
+                                         const Variable&, const bool);
+INSTANTIATE_MAKE_PREFILTER(CompOp::LT);
+INSTANTIATE_MAKE_PREFILTER(CompOp::LE);
+INSTANTIATE_MAKE_PREFILTER(CompOp::GE);
+INSTANTIATE_MAKE_PREFILTER(CompOp::GT);
+INSTANTIATE_MAKE_PREFILTER(CompOp::EQ);
+INSTANTIATE_MAKE_PREFILTER(CompOp::NE);
 
 }  //  namespace detail
 }  //  namespace prefilterExpressions
