@@ -4,11 +4,11 @@
 
 #pragma once
 
-#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <ranges>
 
+#include "backports/algorithm.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "util/Generator.h"

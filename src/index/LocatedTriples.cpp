@@ -6,9 +6,8 @@
 
 #include "index/LocatedTriples.h"
 
-#include <algorithm>
-
 #include "absl/strings/str_join.h"
+#include "backports/algorithm.h"
 #include "index/CompressedRelation.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "util/ChunkedForLoop.h"
@@ -290,7 +289,7 @@ static auto updateGraphMetadata(CompressedBlockMetadata& blockMetadata,
 
   // Sort the stored graphs. Note: this is currently not expected by the code
   // that uses the graph info, but makes testing much easier.
-  std::ranges::sort(graphs.value());
+  ql::ranges::sort(graphs.value());
 }
 
 // ____________________________________________________________________________

@@ -49,7 +49,7 @@ GroupBy::GroupBy(QueryExecutionContext* qec, vector<Variable> groupByVariables,
   // NOTE: It is tempting to do the same also for the aliases, but that would
   // break the case when an alias reuses a variable that was bound by a previous
   // alias.
-  std::ranges::sort(_groupByVariables, std::less<>{}, &Variable::name);
+  ql::ranges::sort(_groupByVariables, std::less<>{}, &Variable::name);
 
   auto sortColumns = computeSortColumns(subtree.get());
   _subtree =
@@ -1276,7 +1276,7 @@ GroupBy::HashMapAggregationData<NUM_GROUP_COLUMNS>::getSortedGroupColumns()
   }
 
   // Sort data.
-  std::ranges::sort(sortedKeys.begin(), sortedKeys.end());
+  ql::ranges::sort(sortedKeys.begin(), sortedKeys.end());
 
   // Get data in a column-wise manner.
   ArrayOrVector<std::vector<Id>> result;

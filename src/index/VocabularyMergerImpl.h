@@ -342,10 +342,10 @@ void sortVocabVector(ItemVec* vecPtr, StringSortComparator comp,
       ad_utility::parallel_sort(std::ranges::begin(els), std::ranges::end(els),
                                 comp, ad_utility::parallel_tag(10));
     } else {
-      std::ranges::sort(els, comp);
+      ql::ranges::sort(els, comp);
     }
   } else {
-    std::ranges::sort(els, comp);
+    ql::ranges::sort(els, comp);
     (void)doParallelSort;  // avoid compiler warning for unused value.
   }
 }

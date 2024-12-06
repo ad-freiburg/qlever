@@ -9,7 +9,6 @@
 #include <absl/strings/str_cat.h>
 #include <antlr4-runtime.h>
 
-#include <algorithm>
 #include <functional>
 #include <iostream>
 #include <iterator>
@@ -23,6 +22,7 @@
 #include <utility>
 #include <variant>
 
+#include "backports/algorithm.h"
 #include "util/Algorithm.h"
 #include "util/ComparisonWithNan.h"
 #include "util/ConfigManager/ConfigExceptions.h"
@@ -165,14 +165,14 @@ void ConfigManager::visitHashMapEntries(Visitor&& vis, bool sortByCreationOrder,
     verifyHashMapEntry(absl::StrCat(pathPrefix, jsonPath), hashMapEntry);
   });
 
-  // `std::reference_wrapper` works with `std::ranges::sort`. `const
+  // `std::reference_wrapper` works with `ql::ranges::sort`. `const
   // Pair&` does not.
   std::vector<std::reference_wrapper<const Pair>> hashMapEntries(
       configurationOptions_.begin(), configurationOptions_.end());
 
   // Sort the collected `HashMapEntry`s, if wanted.
   if (sortByCreationOrder) {
-    std::ranges::sort(hashMapEntries, {}, [](const Pair& pair) {
+    ql::ranges::sort(hashMapEntries, {}, [](const Pair& pair) {
       const HashMapEntry& hashMapEntry = pair.second;
       return hashMapEntry.getInitializationId();
     });
@@ -831,10 +831,10 @@ ConfigManager::validators(const bool sortByInitialization) const {
 
   // Sort the validators, if wanted.
   if (sortByInitialization) {
-    std::ranges::sort(allValidators, {},
-                      [](const ConfigOptionValidatorManager& validator) {
-                        return validator.getInitializationId();
-                      });
+    ql::ranges::sort(allValidators, {},
+                     [](const ConfigOptionValidatorManager& validator) {
+                       return validator.getInitializationId();
+                     });
   }
   return allValidators;
 }

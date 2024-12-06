@@ -5,9 +5,10 @@
 #ifndef QLEVER_CHUNKEDFORLOOP_H
 #define QLEVER_CHUNKEDFORLOOP_H
 
-#include <algorithm>
 #include <concepts>
 #include <cstdint>
+
+#include "backports/algorithm.h"
 
 namespace ad_utility {
 

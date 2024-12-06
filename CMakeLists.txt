@@ -96,6 +96,17 @@ FetchContent_Declare(
         SOURCE_SUBDIR runtime/Cpp
 )
 
+#################################
+# Range v3 (for C++-17 backwards compatibility)
+################################
+FetchContent_Declare(
+        range-v3
+        GIT_REPOSITORY https://github.com/ericniebler/range-v3
+        GIT_TAG a81477931a8aa2ad025c6bda0609f38e09e4d7ec # 0.12.0
+)
+
+
+
 ################################
 # Threading
 ################################
@@ -321,7 +332,7 @@ FetchContent_Declare(
 ################################
 # Apply FetchContent
 ################################
-FetchContent_MakeAvailable(googletest ctre abseil re2 stxxl fsst s2 nlohmann-json antlr)
+FetchContent_MakeAvailable(googletest ctre abseil re2 stxxl fsst s2 nlohmann-json antlr range-v3)
 # Disable some warnings in RE2, STXXL, and GTEST
 target_compile_options(s2 PRIVATE -Wno-sign-compare -Wno-unused-parameter -Wno-class-memaccess -Wno-comment -Wno-redundant-move -Wno-unknown-warning-option -Wno-maybe-uninitialized -Wno-class-memaccess -Wno-unused-but-set-variable -Wno-unused-function)
 target_compile_options(re2 PRIVATE -Wno-unused-parameter)
@@ -333,6 +344,7 @@ include_directories(${ctre_SOURCE_DIR}/single-header)
 target_compile_options(fsst PRIVATE -Wno-extra -Wno-all -Wno-error)
 target_compile_options(fsst12 PRIVATE -Wno-extra -Wno-all -Wno-error)
 include_directories(${fsst_SOURCE_DIR})
+include_directories(${range-v3_SOURCE_DIR}/include)
 target_compile_options(antlr4_static PRIVATE -Wno-all -Wno-extra -Wno-error -Wno-deprecated-declarations)
 # Only required because a lot of classes that do not explicitly link against antlr4_static use the headers.
 include_directories(SYSTEM "${antlr_SOURCE_DIR}/runtime/Cpp/runtime/src")

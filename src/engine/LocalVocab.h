@@ -8,7 +8,6 @@
 #include <absl/container/flat_hash_set.h>
 #include <absl/container/node_hash_set.h>
 
-#include <algorithm>
 #include <cstdlib>
 #include <memory>
 #include <ranges>
@@ -16,6 +15,7 @@
 #include <string>
 #include <vector>
 
+#include "backports/algorithm.h"
 #include "index/LocalVocabEntry.h"
 #include "util/BlankNodeManager.h"
 #include "util/Exception.h"

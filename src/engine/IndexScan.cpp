@@ -120,7 +120,7 @@ string IndexScan::getCacheKeyImpl() const {
     std::ranges::transform(graphsToFilter_.value(),
                            std::back_inserter(graphIdVec),
                            &TripleComponent::toRdfLiteral);
-    std::ranges::sort(graphIdVec);
+    ql::ranges::sort(graphIdVec);
     os << "\nFiltered by Graphs:";
     os << absl::StrJoin(graphIdVec, " ");
   }

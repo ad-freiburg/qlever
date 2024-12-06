@@ -8,13 +8,13 @@
 
 #include <absl/strings/str_split.h>
 
-#include <algorithm>
 #include <charconv>
 #include <ranges>
 #include <stxxl/algorithm>
 #include <tuple>
 #include <utility>
 
+#include "backports/algorithm.h"
 #include "engine/CallFixedSize.h"
 #include "index/FTSAlgorithms.h"
 #include "parser/ContextFileParser.h"

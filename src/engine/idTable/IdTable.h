@@ -574,7 +574,7 @@ class IdTable {
     // First check that the `subset` is indeed a subset of the column
     // indices.
     std::vector<ColumnIndex> check{subset.begin(), subset.end()};
-    std::ranges::sort(check);
+    ql::ranges::sort(check);
     AD_CONTRACT_CHECK(std::unique(check.begin(), check.end()) == check.end());
     AD_CONTRACT_CHECK(!subset.empty() && subset.back() < numColumns());
 

@@ -5,6 +5,8 @@
 #ifndef QLEVER_ITERATORS_H
 #define QLEVER_ITERATORS_H
 
+// #include <engine/sparqlExpressions/RelationalExpressionHelpers.h>
+
 #include <cstdint>
 #include <iterator>
 #include <type_traits>
@@ -166,6 +168,22 @@ class IteratorForAccessOperator {
     return _accessor(*_vector, _index + n);
   }
 };
+
+// TODO<joka921> This is probably hacky + wrong + all kinds of other things
+// (temporary vs rvlaue reference, taking the iterator by value, etc.)
+template <typename RandomAccessContainer, typename Accessor, IsConst isConstTag,
+          typename ValueType, typename Reference>
+auto&& iter_move(IteratorForAccessOperator<RandomAccessContainer, Accessor,
+                                           isConstTag, Reference>& iterator) {
+  return std::move(*iterator);
+}
+template <typename RandomAccessContainer, typename Accessor, IsConst isConstTag,
+          typename ValueType, typename Reference>
+auto&& iter_move(
+    IteratorForAccessOperator<const RandomAccessContainer, Accessor, isConstTag,
+                              Reference>& iterator) {
+  return std::move(*iterator);
+}
 
 /// If `T` is a type that can safely be moved from (e.g. std::vector<int> or
 /// std::vector<int>&&), then return `std::make_move_iterator(iterator)`. Else

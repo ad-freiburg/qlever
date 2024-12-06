@@ -6,12 +6,12 @@
 #ifndef QLEVER_ALGORITHM_H
 #define QLEVER_ALGORITHM_H
 
-#include <algorithm>
 #include <numeric>
 #include <string>
 #include <string_view>
 #include <utility>
 
+#include "backports/algorithm.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
 #include "util/HashSet.h"

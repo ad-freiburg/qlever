@@ -4,10 +4,10 @@
 
 #include "./CheckUsePatternTrick.h"
 
-#include <algorithm>
 #include <ranges>
 #include <type_traits>
 
+#include "backports/algorithm.h"
 #include "parser/GraphPatternOperation.h"
 
 namespace checkUsePatternTrick {
@@ -231,7 +231,7 @@ std::optional<PatternTrickTuple> isTripleSuitableForPatternTrick(
       std::vector<string> variables{triple.s_.getVariable().name(),
                                     triple.o_.getVariable().name(),
                                     triple.p_.asString()};
-      std::ranges::sort(variables);
+      ql::ranges::sort(variables);
       if (std::unique(variables.begin(), variables.end()) != variables.end()) {
         return std::nullopt;
       }

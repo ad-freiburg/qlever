@@ -8,12 +8,12 @@
 
 #include <absl/strings/str_split.h>
 
-#include <algorithm>
 #include <memory>
 #include <optional>
 #include <type_traits>
 #include <variant>
 
+#include "backports/algorithm.h"
 #include "engine/Bind.h"
 #include "engine/CartesianProductJoin.h"
 #include "engine/CheckUsePatternTrick.h"
@@ -1341,7 +1341,7 @@ size_t QueryPlanner::countSubgraphs(
     std::vector<const QueryPlanner::SubtreePlan*> graph, size_t budget) {
   // Remove duplicate plans from `graph`.
   auto getId = [](const SubtreePlan* v) { return v->_idsOfIncludedNodes; };
-  std::ranges::sort(graph, std::ranges::less{}, getId);
+  ql::ranges::sort(graph, std::ranges::less{}, getId);
   graph.erase(
       std::ranges::unique(graph, std::ranges::equal_to{}, getId).begin(),
       graph.end());

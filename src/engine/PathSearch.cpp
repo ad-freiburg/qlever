@@ -4,7 +4,6 @@
 
 #include "PathSearch.h"
 
-#include <algorithm>
 #include <functional>
 #include <iterator>
 #include <optional>
@@ -13,6 +12,7 @@
 #include <variant>
 #include <vector>
 
+#include "backports/algorithm.h"
 #include "engine/CallFixedSize.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/VariableToColumnMap.h"

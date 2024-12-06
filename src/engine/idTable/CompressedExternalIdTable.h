@@ -7,10 +7,10 @@
 
 #include <absl/strings/str_cat.h>
 
-#include <algorithm>
 #include <future>
 #include <ranges>
 
+#include "backports/algorithm.h"
 #include "engine/CallFixedSize.h"
 #include "engine/idTable/IdTable.h"
 #include "util/AsyncStream.h"
@@ -534,7 +534,8 @@ struct BlockSorter {
 #ifdef _PARALLEL_SORT
     ad_utility::parallel_sort(std::begin(block), std::end(block), comparator_);
 #else
-    std::ranges::sort(block, comparator_);
+    std::sort(block.begin(), block.end(), comparator_);
+    // ql::ranges::sort(block, comparator_);
 #endif
   }
 };
@@ -749,7 +750,7 @@ class CompressedExternalIdTableSorter
 #ifdef _PARALLEL_SORT
     ad_utility::parallel_sort(block.begin(), block.end(), comparator_);
 #else
-    std::ranges::sort(block, comparator_);
+    ql::ranges::sort(block, comparator_);
 #endif
   }
 

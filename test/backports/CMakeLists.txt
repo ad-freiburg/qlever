@@ -1,0 +1,4 @@
+
+add_executable(AlgorithmBackportTests algorithmTest.cpp)
+target_link_libraries(AlgorithmBackportTests GTest::gtest GTest::gmock_main)
+gtest_discover_tests(AlgorithmBackportTests AlgorithmBackportTests)

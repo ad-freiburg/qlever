@@ -4,11 +4,11 @@
 
 #pragma once
 
-#include <algorithm>
 #include <cstdint>
 #include <optional>
 #include <utility>
 
+#include "backports/algorithm.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "util/Algorithm.h"
 

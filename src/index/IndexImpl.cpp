@@ -6,7 +6,6 @@
 
 #include "./IndexImpl.h"
 
-#include <algorithm>
 #include <cstdio>
 #include <future>
 #include <numeric>
@@ -16,6 +15,7 @@
 #include "CompilationInfo.h"
 #include "Index.h"
 #include "absl/strings/str_join.h"
+#include "backports/algorithm.h"
 #include "engine/AddCombinedRowToTable.h"
 #include "engine/CallFixedSize.h"
 #include "index/IndexFormatVersion.h"
