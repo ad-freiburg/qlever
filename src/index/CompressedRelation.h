@@ -4,10 +4,10 @@
 
 #pragma once
 
-#include <algorithm>
 #include <type_traits>
 #include <vector>
 
+#include "backports/algorithm.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "index/ScanSpecification.h"
@@ -299,7 +299,7 @@ class CompressedRelationWriter {
   std::vector<CompressedBlockMetadata> getFinishedBlocks() && {
     finish();
     auto blocks = std::move(*(blockBuffer_.wlock()));
-    std::ranges::sort(
+    ql::ranges::sort(
         blocks, {}, [](const CompressedBlockMetadataNoBlockIndex& bl) {
           return std::tie(bl.firstTriple_.col0Id_, bl.firstTriple_.col1Id_,
                           bl.firstTriple_.col2Id_);

@@ -68,7 +68,7 @@ class UnaryNegateExpressionImpl : public NaryExpression<NaryOperation> {
     auto child =
         this->getNthChild(0).value()->getPrefilterExpressionForMetadata(
             !isNegated);
-    std::ranges::for_each(
+    ql::ranges::for_each(
         child | std::views::keys,
         [](std::unique_ptr<p::PrefilterExpression>& expression) {
           expression =

@@ -37,8 +37,7 @@ inline const ad_utility::HashMap<std::string, Id>& specialIds() {
       return id != Id::makeUndefined() &&
              id.getDatatype() == Datatype::Undefined;
     };
-    AD_CORRECTNESS_CHECK(
-        std::ranges::all_of(values, undefTypeButNotUndefValue));
+    AD_CORRECTNESS_CHECK(ql::ranges::all_of(values, undefTypeButNotUndefValue));
     ad_utility::HashSet<Id> uniqueIds(values.begin(), values.end());
     AD_CORRECTNESS_CHECK(uniqueIds.size() == result.size());
     return result;

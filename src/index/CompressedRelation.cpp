@@ -156,8 +156,10 @@ bool CompressedRelationReader::FilterDuplicatesAndGraphs::
   if (!metadata.graphInfo_.has_value()) {
     return true;
   }
-  return !std::ranges::all_of(
-      metadata.graphInfo_.value(),
+  // TODO<joka921> ql::ranges
+  const auto& graphInfo = metadata.graphInfo_.value();
+  return !std::all_of(
+      graphInfo.begin(), graphInfo.end(),
       [&wantedGraphs = desiredGraphs_.value()](Id containedGraph) {
         return wantedGraphs.contains(containedGraph);
       });
@@ -182,9 +184,12 @@ bool CompressedRelationReader::FilterDuplicatesAndGraphs::
         block, std::not_fn(isDesiredGraphId()), graphIdFromRow);
     block.erase(beginOfRemoved, block.end());
   } else {
+    // TODO<joka921> Range-v3 for idTables.
+    /*
     AD_EXPENSIVE_CHECK(
         !desiredGraphs_.has_value() ||
-        std::ranges::all_of(block, isDesiredGraphId(), graphIdFromRow));
+        ql::ranges::all_of(block, isDesiredGraphId(), graphIdFromRow));
+        */
   }
   return needsFilteringByGraph;
 }
@@ -656,7 +661,7 @@ std::pair<size_t, size_t> CompressedRelationReader::getResultSizeImpl(
   // First accumulate the complete blocks in the "middle"
   std::size_t inserted = 0;
   std::size_t deleted = 0;
-  std::ranges::for_each(
+  ql::ranges::for_each(
       std::ranges::subrange{beginBlock, endBlock}, [&](const auto& block) {
         const auto [ins, del] =
             locatedTriplesPerBlock.numTriples(block.blockIndex_);
@@ -946,7 +951,7 @@ static std::pair<bool, std::optional<std::vector<Id>>> getGraphInfo(
     std::vector<Id> graphColumn;
     std::ranges::copy(block->getColumn(ADDITIONAL_COLUMN_GRAPH_ID),
                       std::back_inserter(graphColumn));
-    std::ranges::sort(graphColumn);
+    ql::ranges::sort(graphColumn);
     auto [endOfUnique, _] = std::ranges::unique(graphColumn);
     size_t numGraphs = endOfUnique - graphColumn.begin();
     if (numGraphs > MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA) {
@@ -1277,7 +1282,7 @@ CompressedRelationMetadata CompressedRelationWriter::addCompleteLargeRelation(
     Id col0Id, auto&& sortedBlocks) {
   DistinctIdCounter distinctCol1Counter;
   for (auto& block : sortedBlocks) {
-    std::ranges::for_each(block.getColumn(1), std::ref(distinctCol1Counter));
+    ql::ranges::for_each(block.getColumn(1), std::ref(distinctCol1Counter));
     addBlockForLargeRelation(
         col0Id, std::make_shared<IdTable>(std::move(block).toDynamic()));
   }
@@ -1373,7 +1378,8 @@ auto CompressedRelationWriter::createPermutationPair(
           return std::tie(a[0], a[1], a[2], a[3]) <
                  std::tie(b[0], b[1], b[2], b[3]);
         };
-        std::ranges::sort(relation, compare);
+        // ql::ranges::sort(relation, compare);
+        std::sort(relation.begin(), relation.end(), compare);
         AD_CORRECTNESS_CHECK(!relation.empty());
         writer2.compressAndWriteBlock(relation.at(0, 0),
                                       relation.at(relation.size() - 1, 0),

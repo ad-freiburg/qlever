@@ -175,9 +175,9 @@ ProtoResult Service::computeResultImpl([[maybe_unused]] bool requestLaziness) {
   // for the variables sent in the response as they're maybe not read before
   // the bindings.
   std::vector<std::string> expVariableKeys;
-  std::ranges::transform(parsedServiceClause_.visibleVariables_,
-                         std::back_inserter(expVariableKeys),
-                         [](const Variable& v) { return v.name().substr(1); });
+  ql::ranges::transform(parsedServiceClause_.visibleVariables_,
+                        std::back_inserter(expVariableKeys),
+                        [](const Variable& v) { return v.name().substr(1); });
 
   auto body = ad_utility::LazyJsonParser::parse(std::move(response.body_),
                                                 {"results", "bindings"});

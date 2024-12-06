@@ -145,7 +145,7 @@ class TaskQueue {
   // that set `startedFinishing_` from false to true.
   void finishImpl() {
     queuedTasks_.finish();
-    std::ranges::for_each(threads_, [](auto& thread) {
+    ql::ranges::for_each(threads_, [](auto& thread) {
       // If `finish` was called from inside the queue, the calling thread cannot
       // join itself.
       AD_CORRECTNESS_CHECK(thread.joinable());

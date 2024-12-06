@@ -182,7 +182,7 @@ std::vector<std::array<ColumnIndex, 2>> QueryExecutionTree::getJoinColumns(
     }
   }
 
-  std::ranges::sort(jcs, std::ranges::lexicographical_compare);
+  ql::ranges::sort(jcs, std::ranges::lexicographical_compare);
   return jcs;
 }
 

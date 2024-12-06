@@ -110,7 +110,7 @@ struct PrefixCompressionWrapper : detail::DecoderMultiplexer<PrefixCompressor> {
   static BulkResult compressAll(const Strings& strings) {
     PrefixCompressor compressor;
     auto stringsCopy = strings;
-    std::ranges::sort(stringsCopy);
+    ql::ranges::sort(stringsCopy);
     auto prefixes =
         calculatePrefixes(stringsCopy, NUM_COMPRESSION_PREFIXES, 1, true);
     compressor.buildCodebook(prefixes);

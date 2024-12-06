@@ -5,8 +5,9 @@
 #ifndef QLEVER_CONSTEXPRMAP_H
 #define QLEVER_CONSTEXPRMAP_H
 
-#include <algorithm>
 #include <stdexcept>
+
+#include "backports/algorithm.h"
 
 namespace ad_utility {
 

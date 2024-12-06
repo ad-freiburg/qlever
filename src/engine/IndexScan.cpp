@@ -117,10 +117,10 @@ string IndexScan::getCacheKeyImpl() const {
   if (graphsToFilter_.has_value()) {
     // The graphs are stored as a hash set, but we need a deterministic order.
     std::vector<std::string> graphIdVec;
-    std::ranges::transform(graphsToFilter_.value(),
-                           std::back_inserter(graphIdVec),
-                           &TripleComponent::toRdfLiteral);
-    std::ranges::sort(graphIdVec);
+    ql::ranges::transform(graphsToFilter_.value(),
+                          std::back_inserter(graphIdVec),
+                          &TripleComponent::toRdfLiteral);
+    ql::ranges::sort(graphIdVec);
     os << "\nFiltered by Graphs:";
     os << absl::StrJoin(graphIdVec, " ");
   }
@@ -190,7 +190,7 @@ VariableToColumnMap IndexScan::computeVariableToColumnMap() const {
       addCol(ptr->getVariable());
     }
   }
-  std::ranges::for_each(additionalVariables_, addCol);
+  ql::ranges::for_each(additionalVariables_, addCol);
   return variableToColumnMap;
 }
 

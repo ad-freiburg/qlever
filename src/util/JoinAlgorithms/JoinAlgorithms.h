@@ -4,11 +4,11 @@
 
 #pragma once
 
-#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <ranges>
 
+#include "backports/algorithm.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "util/Generator.h"
@@ -903,7 +903,7 @@ struct BlockZipperJoinImpl {
       const LeftBlocks& blocksLeft, const RightBlocks& blocksRight) {
     if constexpr (DoOptionalJoin) {
       if (!hasUndef(rightSide_) &&
-          std::ranges::all_of(
+          ql::ranges::all_of(
               blocksRight | std::views::transform(
                                 [](const auto& inp) { return inp.subrange(); }),
               std::ranges::empty)) {

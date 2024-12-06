@@ -8,7 +8,6 @@
 #include <absl/container/flat_hash_set.h>
 #include <absl/container/node_hash_set.h>
 
-#include <algorithm>
 #include <cstdlib>
 #include <memory>
 #include <ranges>
@@ -16,6 +15,7 @@
 #include <string>
 #include <vector>
 
+#include "backports/algorithm.h"
 #include "index/LocalVocabEntry.h"
 #include "util/BlankNodeManager.h"
 #include "util/Exception.h"
@@ -125,7 +125,7 @@ class LocalVocab {
     // typically don't compare equal to each other because of the`shared_ptr`
     // semantics.
     for (const auto& vocab : vocabs | filter(std::not_fn(&LocalVocab::empty))) {
-      std::ranges::for_each(vocab.otherWordSets_, addWordSet);
+      ql::ranges::for_each(vocab.otherWordSets_, addWordSet);
       addWordSet(vocab.primaryWordSet_);
     }
 

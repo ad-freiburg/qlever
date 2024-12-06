@@ -15,7 +15,7 @@ CartesianProductJoin::CartesianProductJoin(
       children_{std::move(children)},
       chunkSize_{chunkSize} {
   AD_CONTRACT_CHECK(!children_.empty());
-  AD_CONTRACT_CHECK(std::ranges::all_of(
+  AD_CONTRACT_CHECK(ql::ranges::all_of(
       children_, [](auto& child) { return child != nullptr; }));
 
   // Check that the variables of the passed in operations are in fact
@@ -25,13 +25,13 @@ CartesianProductJoin::CartesianProductJoin(
     // false as soon as a duplicate is encountered.
     ad_utility::HashSet<Variable> vars;
     auto checkVarsForOp = [&vars](const Operation& op) {
-      return std::ranges::all_of(
+      return ql::ranges::all_of(
           op.getExternallyVisibleVariableColumns() | std::views::keys,
           [&vars](const Variable& variable) {
             return vars.insert(variable).second;
           });
     };
-    return std::ranges::all_of(childView(), checkVarsForOp);
+    return ql::ranges::all_of(childView(), checkVarsForOp);
   }();
   AD_CONTRACT_CHECK(variablesAreDisjoint);
 }

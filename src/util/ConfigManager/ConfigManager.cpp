@@ -9,7 +9,6 @@
 #include <absl/strings/str_cat.h>
 #include <antlr4-runtime.h>
 
-#include <algorithm>
 #include <functional>
 #include <iostream>
 #include <iterator>
@@ -23,6 +22,7 @@
 #include <utility>
 #include <variant>
 
+#include "backports/algorithm.h"
 #include "util/Algorithm.h"
 #include "util/ComparisonWithNan.h"
 #include "util/ConfigManager/ConfigExceptions.h"
@@ -160,26 +160,26 @@ void ConfigManager::visitHashMapEntries(Visitor&& vis, bool sortByCreationOrder,
   using Pair = decltype(configurationOptions_)::value_type;
 
   // Check the hash map entries before using them.
-  std::ranges::for_each(configurationOptions_, [&pathPrefix](const Pair& pair) {
+  ql::ranges::for_each(configurationOptions_, [&pathPrefix](const Pair& pair) {
     const auto& [jsonPath, hashMapEntry] = pair;
     verifyHashMapEntry(absl::StrCat(pathPrefix, jsonPath), hashMapEntry);
   });
 
-  // `std::reference_wrapper` works with `std::ranges::sort`. `const
+  // `std::reference_wrapper` works with `ql::ranges::sort`. `const
   // Pair&` does not.
   std::vector<std::reference_wrapper<const Pair>> hashMapEntries(
       configurationOptions_.begin(), configurationOptions_.end());
 
   // Sort the collected `HashMapEntry`s, if wanted.
   if (sortByCreationOrder) {
-    std::ranges::sort(hashMapEntries, {}, [](const Pair& pair) {
+    ql::ranges::sort(hashMapEntries, {}, [](const Pair& pair) {
       const HashMapEntry& hashMapEntry = pair.second;
       return hashMapEntry.getInitializationId();
     });
   }
 
   // Call a wrapper for `vis` with the `HashMapEntry::visit` of every entry.
-  std::ranges::for_each(hashMapEntries, [&vis](const Pair& pair) {
+  ql::ranges::for_each(hashMapEntries, [&vis](const Pair& pair) {
     auto& [jsonPath, hashMapEntry] = pair;
     hashMapEntry.visit(
         [&jsonPath, &vis](auto& data) { std::invoke(vis, jsonPath, data); });
@@ -248,8 +248,7 @@ requires std::is_object_v<HashMapType> auto ConfigManager::allHashMapEntries(
   };
 
   // Collect all the entries in the given `hashMap`.
-  std::ranges::for_each(hashMap, addHashMapEntryToCollectedOptions,
-                        verifyEntry);
+  ql::ranges::for_each(hashMap, addHashMapEntryToCollectedOptions, verifyEntry);
 
   return allHashMapEntry;
 }
@@ -299,7 +298,7 @@ std::string ConfigManager::createJsonPointerString(
 
   // We don't use a `lazyStrJoin` here, so that an empty `keys` produces an
   // empty string.
-  std::ranges::for_each(
+  ql::ranges::for_each(
       keys, [&escapeSpecialCharacters, &pointerString](std::string_view key) {
         pointerString << "/" << escapeSpecialCharacters(key);
       });
@@ -346,7 +345,7 @@ void ConfigManager::verifyPath(const std::vector<std::string>& path) const {
   - The path of an already exiting option/manager is a prefix of the new path.
   The reasons, why it's not allowed, are basically the same.
   */
-  std::ranges::for_each(
+  ql::ranges::for_each(
       std::views::keys(configurationOptions_),
       [&path, this](std::string_view alreadyAddedPath) {
         const std::string pathAsJsonPointerString =
@@ -729,7 +728,7 @@ auto ConfigManager::getValidatorAssignment() const
 
   // Assign to the configuration options.
   const auto& allValidators = validators(true);
-  std::ranges::for_each(
+  ql::ranges::for_each(
       std::views::filter(allValidators,
                          [](const ConfigOptionValidatorManager& val) {
                            return val.configOptionToBeChecked().size() == 1;
@@ -752,18 +751,17 @@ auto ConfigManager::getValidatorAssignment() const
                 *pair.second.getSubManager().value());
           })};
   allManager.emplace_back(*this);
-  std::ranges::for_each(
-      allManager, [&assignment](const ConfigManager& manager) {
-        std::ranges::for_each(
-            std::views::filter(
-                manager.validators_,
-                [](const auto& validator) {
-                  return validator.configOptionToBeChecked().size() > 1;
-                }),
-            [&assignment, &manager](const auto& validator) {
-              assignment.addEntryUnderKey(manager, validator);
-            });
-      });
+  ql::ranges::for_each(allManager, [&assignment](const ConfigManager& manager) {
+    ql::ranges::for_each(
+        std::views::filter(manager.validators_,
+                           [](const auto& validator) {
+                             return validator.configOptionToBeChecked().size() >
+                                    1;
+                           }),
+        [&assignment, &manager](const auto& validator) {
+          assignment.addEntryUnderKey(manager, validator);
+        });
+  });
 
   return assignment;
 }
@@ -802,7 +800,7 @@ std::string ConfigManager::printConfigurationDoc(bool detailed) const {
 std::string ConfigManager::vectorOfKeysForJsonToString(
     const std::vector<std::string>& keys) {
   std::ostringstream keysToString;
-  std::ranges::for_each(keys, [&keysToString](std::string_view key) {
+  ql::ranges::for_each(keys, [&keysToString](std::string_view key) {
     keysToString << "[" << key << "]";
   });
   return std::move(keysToString).str();
@@ -822,7 +820,7 @@ ConfigManager::validators(const bool sortByInitialization) const {
       allSubManager{allHashMapEntries(
           configurationOptions_, "",
           [](const HashMapEntry& entry) { return entry.holdsSubManager(); })};
-  std::ranges::for_each(
+  ql::ranges::for_each(
       std::views::values(allSubManager),
       [&allValidators](const ConfigManager::HashMapEntry& entry) {
         appendVector(allValidators,
@@ -831,17 +829,17 @@ ConfigManager::validators(const bool sortByInitialization) const {
 
   // Sort the validators, if wanted.
   if (sortByInitialization) {
-    std::ranges::sort(allValidators, {},
-                      [](const ConfigOptionValidatorManager& validator) {
-                        return validator.getInitializationId();
-                      });
+    ql::ranges::sort(allValidators, {},
+                     [](const ConfigOptionValidatorManager& validator) {
+                       return validator.getInitializationId();
+                     });
   }
   return allValidators;
 }
 
 // ____________________________________________________________________________
 void ConfigManager::verifyWithValidators() const {
-  std::ranges::for_each(validators(false), [](auto& validator) {
+  ql::ranges::for_each(validators(false), [](auto& validator) {
     validator.get().checkValidator();
   });
 };

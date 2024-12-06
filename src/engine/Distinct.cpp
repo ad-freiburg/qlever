@@ -84,8 +84,8 @@ ProtoResult Distinct::computeResult(bool requestLaziness) {
 
 // _____________________________________________________________________________
 bool Distinct::matchesRow(const auto& a, const auto& b) const {
-  return std::ranges::all_of(keepIndices_,
-                             [&a, &b](ColumnIndex i) { return a[i] == b[i]; });
+  return ql::ranges::all_of(keepIndices_,
+                            [&a, &b](ColumnIndex i) { return a[i] == b[i]; });
 }
 
 // _____________________________________________________________________________

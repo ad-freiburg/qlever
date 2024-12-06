@@ -11,8 +11,8 @@ std::vector<std::pair<Variable, ColumnIndexAndTypeInfo>>
 copySortedByColumnIndex(VariableToColumnMap map) {
   std::vector<std::pair<Variable, ColumnIndexAndTypeInfo>> result{
       std::make_move_iterator(map.begin()), std::make_move_iterator(map.end())};
-  std::ranges::sort(result, std::less<>{},
-                    [](const auto& pair) { return pair.second.columnIndex_; });
+  ql::ranges::sort(result, std::less<>{},
+                   [](const auto& pair) { return pair.second.columnIndex_; });
   return result;
 }
 

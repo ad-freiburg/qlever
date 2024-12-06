@@ -34,11 +34,11 @@ ProtoResult TextLimit::computeResult([[maybe_unused]] bool requestLaziness) {
   auto compareScores = [this](const auto& lhs, const auto& rhs) {
     size_t lhsScore = 0;
     size_t rhsScore = 0;
-    std::ranges::for_each(scoreColumns_,
-                          [&lhs, &rhs, &lhsScore, &rhsScore](const auto& col) {
-                            lhsScore += lhs[col].getInt();
-                            rhsScore += rhs[col].getInt();
-                          });
+    ql::ranges::for_each(scoreColumns_,
+                         [&lhs, &rhs, &lhsScore, &rhsScore](const auto& col) {
+                           lhsScore += lhs[col].getInt();
+                           rhsScore += rhs[col].getInt();
+                         });
     if (lhsScore > rhsScore) {
       return 1;
     } else if (lhsScore < rhsScore) {
@@ -64,14 +64,16 @@ ProtoResult TextLimit::computeResult([[maybe_unused]] bool requestLaziness) {
     return 0;
   };
 
-  std::ranges::sort(idTable, [this, compareScores, compareEntities](
-                                 const auto& lhs, const auto& rhs) {
-    return compareEntities(lhs, rhs) == 1 ||
-           (compareEntities(lhs, rhs) == 0 &&
-            (compareScores(lhs, rhs) == 1 ||
-             (compareScores(lhs, rhs) == 0 &&
-              (lhs[textRecordColumn_] > rhs[textRecordColumn_]))));
-  });
+  // TODO<joka921> idTables don't work with ranges-v3.
+  std::sort(
+      idTable.begin(), idTable.end(),
+      [this, compareScores, compareEntities](const auto& lhs, const auto& rhs) {
+        return compareEntities(lhs, rhs) == 1 ||
+               (compareEntities(lhs, rhs) == 0 &&
+                (compareScores(lhs, rhs) == 1 ||
+                 (compareScores(lhs, rhs) == 0 &&
+                  (lhs[textRecordColumn_] > rhs[textRecordColumn_]))));
+      });
 
   // Go through the table and add the first n texts for each
   // entity to a new empty table (where n is the limit).

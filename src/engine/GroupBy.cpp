@@ -49,7 +49,7 @@ GroupBy::GroupBy(QueryExecutionContext* qec, vector<Variable> groupByVariables,
   // NOTE: It is tempting to do the same also for the aliases, but that would
   // break the case when an alias reuses a variable that was bound by a previous
   // alias.
-  std::ranges::sort(_groupByVariables, std::less<>{}, &Variable::name);
+  ql::ranges::sort(_groupByVariables, std::less<>{}, &Variable::name);
 
   auto sortColumns = computeSortColumns(subtree.get());
   _subtree =
@@ -420,7 +420,7 @@ size_t GroupBy::searchBlockBoundaries(
   for (size_t pos = 0; pos < idTable.size(); pos++) {
     checkCancellation();
     bool rowMatchesCurrentBlock =
-        std::ranges::all_of(currentGroupBlock, [&](const auto& colIdxAndValue) {
+        ql::ranges::all_of(currentGroupBlock, [&](const auto& colIdxAndValue) {
           return idTable(pos, colIdxAndValue.first) == colIdxAndValue.second;
         });
     if (!rowMatchesCurrentBlock) {
@@ -735,7 +735,7 @@ std::optional<IdTable> GroupBy::computeGroupByForFullIndexScan() const {
   } else if (!variableIsBoundInSubtree) {
     // The variable inside the COUNT() is not part of the input, so it is always
     // unbound and has a count of 0 in each group.
-    std::ranges::fill(table.getColumn(1), Id::makeFromInt(0));
+    ql::ranges::fill(table.getColumn(1), Id::makeFromInt(0));
   }
 
   // TODO<joka921> This optimization should probably also apply if
@@ -1276,7 +1276,7 @@ GroupBy::HashMapAggregationData<NUM_GROUP_COLUMNS>::getSortedGroupColumns()
   }
 
   // Sort data.
-  std::ranges::sort(sortedKeys.begin(), sortedKeys.end());
+  ql::ranges::sort(sortedKeys.begin(), sortedKeys.end());
 
   // Get data in a column-wise manner.
   ArrayOrVector<std::vector<Id>> result;
