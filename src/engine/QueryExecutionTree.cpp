@@ -225,3 +225,18 @@ QueryExecutionTree::getVariableAndInfoByColumnIndex(ColumnIndex colIdx) const {
   AD_CONTRACT_CHECK(it != varColMap.end());
   return *it;
 }
+
+// _____________________________________________________________________________
+std::vector<Operation*> QueryExecutionTree::getIndexScansForSortVariables(
+    std::span<const Variable> variables) {
+  auto result = rootOperation_->getIndexScansForSortVariables(variables);
+  if (result.empty()) {
+    return result;
+  }
+  // TODO<joka921> We have to disable the caching as soon as the PR for that is
+  // merged.
+  // rootOperation_->disableCaching();
+  cachedResult_.reset();
+  sizeEstimate_.reset();
+  return result;
+}
