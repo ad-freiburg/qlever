@@ -735,7 +735,7 @@ std::optional<IdTable> GroupBy::computeGroupByForFullIndexScan() const {
   } else if (!variableIsBoundInSubtree) {
     // The variable inside the COUNT() is not part of the input, so it is always
     // unbound and has a count of 0 in each group.
-    std::ranges::fill(table.getColumn(1), Id::makeFromInt(0));
+    ql::ranges::fill(table.getColumn(1), Id::makeFromInt(0));
   }
 
   // TODO<joka921> This optimization should probably also apply if

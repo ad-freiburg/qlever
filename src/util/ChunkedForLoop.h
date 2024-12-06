@@ -96,7 +96,7 @@ template <typename R, typename T>
 concept SizedOutputRange =
     std::ranges::sized_range<R> && std::ranges::output_range<R, T>;
 
-// Similar to `std::ranges::fill`, but invokes `chunkOperation` every
+// Similar to `ql::ranges::fill`, but invokes `chunkOperation` every
 // `chunkSize` elements. (Round up to the next chunk size if the range size is
 // not a multiple of `chunkSize`.)
 template <typename T, SizedOutputRange<T> R>
@@ -108,10 +108,10 @@ inline void chunkedFill(R&& outputRange, const T& value,
   while (std::ranges::distance(begin, end) >= chunkSize) {
     auto start = begin;
     std::ranges::advance(begin, chunkSize);
-    std::ranges::fill(start, begin, value);
+    ql::ranges::fill(start, begin, value);
     chunkOperation();
   }
-  std::ranges::fill(begin, end, value);
+  ql::ranges::fill(begin, end, value);
   chunkOperation();
 }
 }  // namespace ad_utility
