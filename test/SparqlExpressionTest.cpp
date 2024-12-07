@@ -743,28 +743,23 @@ TEST(SparqlExpression, substr) {
               I(0), I(12));
   checkSubstr(strs({"one", "two", "three"}), strs({"one", "two", "three"}),
               I(-2), I(12));
-
   checkSubstr(strs({"ne", "wo", "hree"}), strs({"one", "two", "three"}), I(2),
               I(12));
   checkSubstr(strs({"ne", "wo", "hree"}), strs({"one", "two", "three"}), D(1.8),
               D(11.7));
   checkSubstr(strs({"ne", "wo", "hree"}), strs({"one", "two", "three"}),
               D(2.449), D(12.449));
-
   // An actual substring from the middle
   checkSubstr(strs({"es", "os", "re"}), strs({"ones", "twos", "threes"}), I(3),
               I(2));
-
   // Subtle corner case if the starting position is negative
   // Only the letters at positions  `p < -3 + 6 = 3` are exported (the first two
   // letters, remember that the positions are 1-based).
   checkSubstr(strs({"on", "tw", "th"}), strs({"ones", "twos", "threes"}), I(-3),
               I(6));
-
   // Correct handling of UTF-8 multibyte characters.
   checkSubstr(strs({"pfel", "pfel", "pfel"}),
               strs({"uApfel", "uÄpfel", "uöpfel"}), I(3), I(18));
-
   // corner cases: 0 or negative length, or invalid numeric parameter
   checkSubstr(strs({"", "", ""}), strs({"ones", "twos", "threes"}), D(naN),
               I(2));
@@ -786,7 +781,6 @@ TEST(SparqlExpression, substr) {
   checkSubstr(Ux, IdOrLiteralOrIri{lit("hello")}, I(4), U);
   checkSubstr(Ux, IdOrLiteralOrIri{lit("hello")}, I(4),
               IdOrLiteralOrIri{lit("bye")});
-
   // WithDataType xsd:string
   checkSubstr(
       IdOrLiteralOrIriVec{lit(

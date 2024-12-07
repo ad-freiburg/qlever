@@ -21,13 +21,28 @@ constexpr auto toLiteral = [](std::string_view normalizedContent) {
           asNormalizedStringViewUnsafe(normalizedContent))};
 };
 
-static constexpr auto toLiteralWithDescriptor =
-    [](std::string_view normalizedContent,
-       const std::optional<std::variant<Iri, std::string>>& descriptor) {
-      return LiteralOrIri{
-          ad_utility::triple_component::Literal::literalWithNormalizedContent(
-              asNormalizedStringViewUnsafe(normalizedContent), descriptor)};
-    };
+// Count UTF-8 characters by skipping continuation bytes (those starting with
+  // "10").
+inline std::size_t utf8Length(std::string_view s) {
+    return std::ranges::count_if(
+        s, [](char c) { return (static_cast<unsigned char>(c) & 0xC0) != 0x80; });
+}
+
+// Convert UTF-8 position to byte offset
+inline std::size_t utf8ToByteOffset(std::string_view str, int64_t utf8Pos) {
+    std::size_t byteOffset = 0;
+    int64_t charCount = 0;
+
+    for (char c : str) {
+        if ((static_cast<unsigned char>(c) & 0xC0) != 0x80) {
+            if (charCount++ == utf8Pos) {
+                break;
+            }
+        }
+        ++byteOffset;
+    }
+    return byteOffset;
+}
 
 // String functions.
 [[maybe_unused]] auto strImpl =
@@ -133,11 +148,7 @@ using IriOrUriExpression = NARY<1, FV<std::identity, IriOrUriValueGetter>>;
 
 // STRLEN
 [[maybe_unused]] auto strlen = [](std::string_view s) {
-  // Count UTF-8 characters by skipping continuation bytes (those starting with
-  // "10").
-  auto utf8Len = std::ranges::count_if(
-      s, [](char c) { return (static_cast<unsigned char>(c) & 0xC0) != 0x80; });
-  return Id::makeFromInt(utf8Len);
+  return Id::makeFromInt(utf8Length(s));
 };
 using StrlenExpression =
     StringExpressionImpl<1, LiftStringFunction<decltype(strlen)>>;
@@ -209,23 +220,28 @@ class SubstrImpl {
     if (startInt < 0) {
       lengthInt += startInt;
     }
-
     const auto& str = asStringViewUnsafe(s.value().getContent());
+    std::size_t utf8len = utf8Length(str);
     // Clamp the number such that it is in `[0, str.size()]`. That way we end up
     // with valid arguments for the `setSubstr` method below for both
     // starting position and length since all the other corner cases have been
     // dealt with above.
-    auto clamp = [sz = str.size()](int64_t n) -> std::size_t {
+    auto clamp = [utf8len](int64_t n) -> std::size_t {
       if (n < 0) {
         return 0;
       }
-      if (static_cast<size_t>(n) > sz) {
-        return sz;
+      if (static_cast<size_t>(n) > utf8len) {
+        return utf8len;
       }
       return static_cast<size_t>(n);
     };
 
-    s.value().getLiteral().setSubstr(clamp(startInt), clamp(lengthInt));
+    startInt = clamp(startInt);
+    lengthInt = clamp(lengthInt);
+    std::size_t startByteOffset = utf8ToByteOffset(str, startInt);
+    std::size_t endByteOffset = utf8ToByteOffset(str, startInt + lengthInt);
+    std::size_t byteLength = endByteOffset - startByteOffset;
+    s.value().getLiteral().setSubstr(startByteOffset, byteLength);
     return std::move(s.value());
   }
 };

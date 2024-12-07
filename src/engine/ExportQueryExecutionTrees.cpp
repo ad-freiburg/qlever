@@ -375,11 +375,7 @@ bool ExportQueryExecutionTrees::isPlainLiteralOrLiteralWithXsdString(
 std::optional<LiteralOrIri> ExportQueryExecutionTrees::handleIriOrLiteral(
     LiteralOrIri word, bool onlyReturnLiterals,
     bool onlyReturnLiteralsWithXsdString) {
-  auto datatypeIsXSDString = [](const LiteralOrIri& word) {
-    return word.hasDatatype() &&
-           asStringViewUnsafe(word.getDatatype()) == XSD_STRING;
-  };
-
+  
   if (!word.isLiteral()) {
     if (onlyReturnLiterals || onlyReturnLiteralsWithXsdString) {
       return std::nullopt;
