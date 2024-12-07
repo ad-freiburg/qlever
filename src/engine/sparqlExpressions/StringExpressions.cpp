@@ -22,26 +22,26 @@ constexpr auto toLiteral = [](std::string_view normalizedContent) {
 };
 
 // Count UTF-8 characters by skipping continuation bytes (those starting with
-  // "10").
+// "10").
 inline std::size_t utf8Length(std::string_view s) {
-    return std::ranges::count_if(
-        s, [](char c) { return (static_cast<unsigned char>(c) & 0xC0) != 0x80; });
+  return std::ranges::count_if(
+      s, [](char c) { return (static_cast<unsigned char>(c) & 0xC0) != 0x80; });
 }
 
 // Convert UTF-8 position to byte offset
 inline std::size_t utf8ToByteOffset(std::string_view str, int64_t utf8Pos) {
-    std::size_t byteOffset = 0;
-    int64_t charCount = 0;
+  std::size_t byteOffset = 0;
+  int64_t charCount = 0;
 
-    for (char c : str) {
-        if ((static_cast<unsigned char>(c) & 0xC0) != 0x80) {
-            if (charCount++ == utf8Pos) {
-                break;
-            }
-        }
-        ++byteOffset;
+  for (char c : str) {
+    if ((static_cast<unsigned char>(c) & 0xC0) != 0x80) {
+      if (charCount++ == utf8Pos) {
+        break;
+      }
     }
-    return byteOffset;
+    ++byteOffset;
+  }
+  return byteOffset;
 }
 
 // String functions.

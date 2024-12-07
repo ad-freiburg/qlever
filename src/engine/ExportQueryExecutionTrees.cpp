@@ -375,7 +375,6 @@ bool ExportQueryExecutionTrees::isPlainLiteralOrLiteralWithXsdString(
 std::optional<LiteralOrIri> ExportQueryExecutionTrees::handleIriOrLiteral(
     LiteralOrIri word, bool onlyReturnLiterals,
     bool onlyReturnLiteralsWithXsdString) {
-  
   if (!word.isLiteral()) {
     if (onlyReturnLiterals || onlyReturnLiteralsWithXsdString) {
       return std::nullopt;
