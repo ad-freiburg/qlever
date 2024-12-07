@@ -790,11 +790,11 @@ TEST(SparqlExpression, substr) {
   // WithDataType xsd:string
   checkSubstr(
       IdOrLiteralOrIriVec{lit(
-          "Hel", // codespell-ignore
+          "Hello",
           "^^<http://www.w3.org/2001/XMLSchema#string>")},
       IdOrLiteralOrIriVec{
-          lit("Hello", "^^<http://www.w3.org/2001/XMLSchema#string>")},
-      I(1), I(3));
+          lit("Hello World", "^^<http://www.w3.org/2001/XMLSchema#string>")},
+      I(1), I(5));
 
   // WithLanguageTag
   checkSubstr(IdOrLiteralOrIriVec{lit("cha", "@en")},
