@@ -4,9 +4,11 @@
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
+#include <parser/SparqlParserHelpers.h>
 
 #include "./util/GTestHelpers.h"
 #include "./util/HttpRequestHelpers.h"
+#include "SparqlAntlrParserTestHelpers.h"
 #include "engine/GraphStoreProtocol.h"
 
 TEST(GraphStoreProtocolTest, extractTargetGraph) {
@@ -28,12 +30,73 @@ TEST(GraphStoreProtocolTest, extractTargetGraph) {
 }
 
 TEST(GraphStoreProtocolTest, transformGraphStoreProtocol) {
-  ad_utility::httpUtils::HttpRequest auto f =
-      ad_utility::testing::MakeGetRequest("/?default");
-  ad_utility::url_parser::ParsedRequest ff =
-      ad_utility::url_parser::ParsedRequest{};
-  GraphStoreProtocol::transformGraphStoreProtocol(f, ff);
+  using Var = Variable;
+  using TC = TripleComponent;
+  auto Iri = [](std::string_view stringWithBrackets) {
+    return TripleComponent::Iri::fromIriref(stringWithBrackets);
+  };
+  namespace m = matchers;
   EXPECT_THAT(GraphStoreProtocol::transformGraphStoreProtocol(
-                  f, ad_utility::url_parser::ParsedRequest{}),
-              testing::_);
+                  ad_utility::testing::MakeGetRequest("/?default")),
+              m::ConstructQuery({{Var{"?s"}, Var{"?p"}, Var{"?o"}}},
+                                m::GraphPattern(matchers::Triples({SparqlTriple(
+                                    TC(Var{"?s"}), "?p", TC(Var{"?o"}))}))));
+  EXPECT_THAT(
+      GraphStoreProtocol::transformGraphStoreProtocol(
+          ad_utility::testing::MakeGetRequest("/?graph=foo")),
+      m::ConstructQuery({{Var{"?s"}, Var{"?p"}, Var{"?o"}}},
+                        m::GraphPattern(m::GroupGraphPatternWithGraph(
+                            {}, TC::Iri::fromIriref("<foo>"),
+                            matchers::Triples({SparqlTriple(
+                                TC(Var{"?s"}), "?p", TC(Var{"?o"}))})))));
+  EXPECT_THAT(GraphStoreProtocol::transformGraphStoreProtocol(
+                  ad_utility::testing::MakePostRequest(
+                      "/?default", "text/turtle", "<a> <b> <c> .")),
+              m::UpdateClause(m::GraphUpdate({},
+                                             {{Iri("<a>"), Iri("<b>"),
+                                               Iri("<c>"), std::monostate{}}},
+                                             std::nullopt),
+                              m::GraphPattern()));
+  EXPECT_THAT(GraphStoreProtocol::transformGraphStoreProtocol(
+                  ad_utility::testing::MakePostRequest(
+                      "/?default", "application/n-triples", "<a> <b> <c> .")),
+              m::UpdateClause(m::GraphUpdate({},
+                                             {{Iri("<a>"), Iri("<b>"),
+                                               Iri("<c>"), std::monostate{}}},
+                                             std::nullopt),
+                              m::GraphPattern()));
+  EXPECT_THAT(GraphStoreProtocol::transformGraphStoreProtocol(
+                  ad_utility::testing::MakePostRequest(
+                      "/?default", "application/n-quads", "<a> <b> <c> <d> .")),
+              m::UpdateClause(
+                  m::GraphUpdate(
+                      {}, {{Iri("<a>"), Iri("<b>"), Iri("<c>"), ::Iri("<d>")}},
+                      std::nullopt),
+                  m::GraphPattern()));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      GraphStoreProtocol::transformGraphStoreProtocol(
+          ad_utility::testing::MakePostRequest(
+              "/?default", "application/unknown", "fantasy")),
+      testing::HasSubstr("Not a single media type known to this parser was "
+                         "detected in \"application/unknown\"."));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      GraphStoreProtocol::transformGraphStoreProtocol(
+          ad_utility::testing::MakeRequest(boost::beast::http::verb::put,
+                                           "/?default")),
+      testing::HasSubstr("PUT in the SPARQL Graph Store HTTP Protocol"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      GraphStoreProtocol::transformGraphStoreProtocol(
+          ad_utility::testing::MakeRequest(boost::beast::http::verb::delete_,
+                                           "/?default")),
+      testing::HasSubstr("DELETE in the SPARQL Graph Store HTTP Protocol"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      GraphStoreProtocol::transformGraphStoreProtocol(
+          ad_utility::testing::MakeRequest(boost::beast::http::verb::head,
+                                           "/?default")),
+      testing::HasSubstr("HEAD in the SPARQL Graph Store HTTP Protocol"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      GraphStoreProtocol::transformGraphStoreProtocol(
+          ad_utility::testing::MakeRequest(boost::beast::http::verb::patch,
+                                           "/?default")),
+      testing::HasSubstr("PATCH in the SPARQL Graph Store HTTP Protocol"));
 }
