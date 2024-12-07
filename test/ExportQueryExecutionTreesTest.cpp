@@ -1647,94 +1647,83 @@ TEST(ExportQueryExecutionTrees, idToLiteralOrIriFunctionality) {
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
   using enum Datatype;
 
-  // Case Literal With no Datatype
-  {
-    Id id = getId("\"something\"");
-    auto resultLiteral = ExportQueryExecutionTrees::idToLiteralOrIri(
-        qec->getIndex(), id, LocalVocab{});
-    EXPECT_EQ(resultLiteral.value().toStringRepresentation(), "\"something\"");
-    // Case onlyReturnLiterals
-    resultLiteral = ExportQueryExecutionTrees::idToLiteralOrIri<true>(
-        qec->getIndex(), id, LocalVocab{});
-    EXPECT_EQ(resultLiteral.value().toStringRepresentation(), "\"something\"");
-    // Case onlyReturnLiteralsWithXsdString
-    resultLiteral = ExportQueryExecutionTrees::idToLiteralOrIri(
-        qec->getIndex(), id, LocalVocab{}, true);
-    EXPECT_EQ(resultLiteral.value().toStringRepresentation(), "\"something\"");
-  }
+  auto callIdToLiteralOrIri = [&](Id id, bool onlyLiterals,
+                                  bool onlyLiteralsWithXsdString = false) {
+    if (onlyLiterals) {
+      return ExportQueryExecutionTrees::idToLiteralOrIri<true>(
+          qec->getIndex(), id, LocalVocab{}, onlyLiteralsWithXsdString);
+    } else {
+      return ExportQueryExecutionTrees::idToLiteralOrIri<false>(
+          qec->getIndex(), id, LocalVocab{}, onlyLiteralsWithXsdString);
+    }
+  };
 
-  // Case Literal With Datatype String
-  {
-    Id id = getId("\"some\"^^<http://www.w3.org/2001/XMLSchema#string>");
-    auto resultLiteral = ExportQueryExecutionTrees::idToLiteralOrIri(
-        qec->getIndex(), id, LocalVocab{});
-    EXPECT_EQ(resultLiteral.value().toStringRepresentation(),
-              "\"some\"^^<http://www.w3.org/2001/XMLSchema#string>");
-    // Case onlyReturnLiterals
-    resultLiteral = ExportQueryExecutionTrees::idToLiteralOrIri<true>(
-        qec->getIndex(), id, LocalVocab{});
-    EXPECT_EQ(resultLiteral.value().toStringRepresentation(),
-              "\"some\"^^<http://www.w3.org/2001/XMLSchema#string>");
-    // Case onlyReturnLiteralsWithXsdString
-    resultLiteral = ExportQueryExecutionTrees::idToLiteralOrIri(
-        qec->getIndex(), id, LocalVocab{}, true);
-    EXPECT_EQ(resultLiteral.value().toStringRepresentation(),
-              "\"some\"^^<http://www.w3.org/2001/XMLSchema#string>");
-  }
+  auto checkIdToLiteralOrIri =
+      [&](Id id,
+          const std::vector<std::tuple<bool, bool, std::optional<std::string>>>&
+              cases) {
+        for (const auto& [onlyLiterals, onlyLiteralsWithXsdString, expected] :
+             cases) {
+          auto result =
+              callIdToLiteralOrIri(id, onlyLiterals, onlyLiteralsWithXsdString);
+          if (expected) {
+            EXPECT_THAT(result,
+                        ::testing::Optional(::testing::ResultOf(
+                            [](const auto& literalOrIri) {
+                              return literalOrIri.toStringRepresentation();
+                            },
+                            ::testing::StrEq(*expected))));
+          } else {
+            EXPECT_EQ(result, std::nullopt);
+          }
+        }
+      };
 
-  // Case Literal With Datatype not equal String
-  {
-    Id id = getId("\"dadudeldu\"^^<http://www.dadudeldu.com/NoSuchDatatype>");
-    auto resultLiteral = ExportQueryExecutionTrees::idToLiteralOrIri(
-        qec->getIndex(), id, LocalVocab{});
-    EXPECT_EQ(resultLiteral.value().toStringRepresentation(), "\"dadudeldu\"");
-    // Case onlyReturnLiterals
-    resultLiteral = ExportQueryExecutionTrees::idToLiteralOrIri<true>(
-        qec->getIndex(), id, LocalVocab{});
-    EXPECT_EQ(resultLiteral.value().toStringRepresentation(), "\"dadudeldu\"");
-    // Case onlyReturnLiteralsWithXsdString
-    resultLiteral = ExportQueryExecutionTrees::idToLiteralOrIri(
-        qec->getIndex(), id, LocalVocab{}, true);
-    EXPECT_EQ(resultLiteral, std::nullopt);
-  }
+  // Test cases: Each tuple describes one test case.
+  // The first element is the ID of the element to test.
+  // The second element is a list of 3 configurations:
+  // 1. no restrictions 2.only literals are considered
+  // 3.only literals with `xsd:string` or no datatype are considered
+  std::vector<std::tuple<
+      Id, std::vector<std::tuple<bool, bool, std::optional<std::string>>>>>
+      testCases = {
+          // Case: Literal without datatype
+          {getId("\"something\""),
+           {{false, false, "\"something\""},
+            {true, false, "\"something\""},
+            {false, true, "\"something\""}}},
 
-  // Case Iri
-  {
-    Id id = getId("<s>");
-    auto resultLiteral = ExportQueryExecutionTrees::idToLiteralOrIri(
-        qec->getIndex(), id, LocalVocab{});
-    EXPECT_EQ(resultLiteral.value().toStringRepresentation(), "<s>");
-    // Case onlyReturnLiterals
-    resultLiteral = ExportQueryExecutionTrees::idToLiteralOrIri<true>(
-        qec->getIndex(), id, LocalVocab{});
-    EXPECT_EQ(resultLiteral, std::nullopt);
-    // Case onlyReturnLiteralsWithXsdString
-    resultLiteral = ExportQueryExecutionTrees::idToLiteralOrIri(
-        qec->getIndex(), id, LocalVocab{}, true);
-    EXPECT_EQ(resultLiteral, std::nullopt);
-  }
+          // Case: Literal with datatype `xsd:string`
+          {getId("\"some\"^^<http://www.w3.org/2001/XMLSchema#string>"),
+           {{false, false,
+             "\"some\"^^<http://www.w3.org/2001/XMLSchema#string>"},
+            {true, false,
+             "\"some\"^^<http://www.w3.org/2001/XMLSchema#string>"},
+            {false, true,
+             "\"some\"^^<http://www.w3.org/2001/XMLSchema#string>"}}},
 
-  // Case Datatype Int
-  {
-    Id id = ad_utility::testing::IntId(1);
-    auto resultLiteral = ExportQueryExecutionTrees::idToLiteralOrIri(
-        qec->getIndex(), id, LocalVocab{});
-    EXPECT_EQ(resultLiteral.value().toStringRepresentation(), "\"1\"");
-    // Case onlyReturnLiterals
-    resultLiteral = ExportQueryExecutionTrees::idToLiteralOrIri<true>(
-        qec->getIndex(), id, LocalVocab{});
-    EXPECT_EQ(resultLiteral, std::nullopt);
-    // Case onlyReturnLiteralsWithXsdString
-    resultLiteral = ExportQueryExecutionTrees::idToLiteralOrIri(
-        qec->getIndex(), id, LocalVocab{}, true);
-    EXPECT_EQ(resultLiteral, std::nullopt);
-  }
+          // Case: Literal with unknown datatype
+          {getId("\"dadudeldu\"^^<http://www.dadudeldu.com/NoSuchDatatype>"),
+           {{false, false, "\"dadudeldu\""},
+            {true, false, "\"dadudeldu\""},
+            {false, true, std::nullopt}}},
 
-  // Case Undefined
-  {
-    Id id = ad_utility::testing::UndefId();
-    auto resultLiteral = ExportQueryExecutionTrees::idToLiteralOrIri(
-        qec->getIndex(), id, LocalVocab{});
-    EXPECT_EQ(resultLiteral, std::nullopt);
+          // Case: IRI
+          {getId("<s>"),
+           {{false, false, "<s>"},
+            {true, false, std::nullopt},
+            {false, true, std::nullopt}}},
+
+          // Case: datatype `Int`
+          {ad_utility::testing::IntId(1),
+           {{false, false, "\"1\""},
+            {true, false, std::nullopt},
+            {false, true, std::nullopt}}},
+
+          // Case: Undefined ID
+          {ad_utility::testing::UndefId(), {{false, false, std::nullopt}}}};
+
+  for (const auto& [id, cases] : testCases) {
+    checkIdToLiteralOrIri(id, cases);
   }
 }

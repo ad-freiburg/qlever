@@ -93,25 +93,23 @@ std::optional<std::string> StringValueGetter::operator()(
 // ____________________________________________________________________________
 std::optional<LiteralOrIri> LiteralOrIriValueGetter::operator()(
     Id id, const EvaluationContext* context) const {
-  return ExportQueryExecutionTrees::idToLiteralOrIri(
-      context->_qec.getIndex(), id, context->_localVocab);
+  return ExportQueryExecutionTrees::idToLiteralOrIri(context->_qec.getIndex(),
+                                                     id, context->_localVocab);
 }
 
 // ____________________________________________________________________________
-std::optional<LiteralOrIri> LiteralOrIriValueGetterWithXsdStringFilter::operator()(
+std::optional<LiteralOrIri>
+LiteralOrIriValueGetterWithXsdStringFilter::operator()(
     Id id, const EvaluationContext* context) const {
   return ExportQueryExecutionTrees::idToLiteralOrIri(
       context->_qec.getIndex(), id, context->_localVocab, true);
 }
 
 // ____________________________________________________________________________
-std::optional<LiteralOrIri> LiteralOrIriValueGetterWithXsdStringFilter::operator()(
+std::optional<LiteralOrIri>
+LiteralOrIriValueGetterWithXsdStringFilter::operator()(
     const LiteralOrIri& s, const EvaluationContext*) const {
-  auto datatypeIsXSDString = [](const LiteralOrIri& word) {
-    return word.hasDatatype() &&
-           asStringViewUnsafe(word.getDatatype()) == XSD_STRING;
-  };
-  if (!s.hasDatatype() || datatypeIsXSDString(s)) {
+  if (ExportQueryExecutionTrees::isPlainLiteralOrLiteralWithXsdString(s)) {
     return s;
   }
   return std::nullopt;

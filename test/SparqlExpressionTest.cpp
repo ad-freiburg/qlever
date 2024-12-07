@@ -777,7 +777,6 @@ TEST(SparqlExpression, substr) {
   // Invalid datatypes
   // First must be LiteralOrIri
   auto Ux = IdOrLiteralOrIri{U};
-  // checkSubstr(Ux, I(3), I(4), I(7));
   checkSubstr(Ux, U, I(4), I(7));
   checkSubstr(Ux, Ux, I(4), I(7));
   // Second and third must be numeric;
@@ -789,11 +788,13 @@ TEST(SparqlExpression, substr) {
               IdOrLiteralOrIri{lit("bye")});
 
   // WithDataType xsd:string
-  checkSubstr(IdOrLiteralOrIriVec{lit(
-                  "Hel", "^^<http://www.w3.org/2001/XMLSchema#string>")},
-              IdOrLiteralOrIriVec{
-                  lit("Hello", "^^<http://www.w3.org/2001/XMLSchema#string>")},
-              I(1), I(3));
+  checkSubstr(
+      IdOrLiteralOrIriVec{lit(
+          "Hel",
+          "^^<http://www.w3.org/2001/XMLSchema#string>")},  // codespell-ignore
+      IdOrLiteralOrIriVec{
+          lit("Hello", "^^<http://www.w3.org/2001/XMLSchema#string>")},
+      I(1), I(3));
 
   // WithLanguageTag
   checkSubstr(IdOrLiteralOrIriVec{lit("cha", "@en")},

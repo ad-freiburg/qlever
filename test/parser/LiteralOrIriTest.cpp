@@ -209,3 +209,35 @@ TEST(LiteralOrIri, Hashing) {
   ad_utility::HashSet<LiteralOrIri> set{lit, iri};
   EXPECT_THAT(set, ::testing::UnorderedElementsAre(lit, iri));
 }
+
+// _______________________________________________________________________
+TEST(LiteralTest, SetSubstr) {
+  LiteralOrIri literal = LiteralOrIri::literalWithoutQuotes(
+      "Hello World!",
+      Iri::fromIriref("<http://www.w3.org/2001/XMLSchema#string>"));
+  literal.getLiteral().setSubstr(0, 5);
+  EXPECT_THAT("Hello",
+              asStringViewUnsafe(literal.getContent()));
+  EXPECT_THAT("http://www.w3.org/2001/XMLSchema#string",
+              asStringViewUnsafe(literal.getDatatype()));
+  
+  literal = LiteralOrIri::literalWithoutQuotes(
+      "Hello World!",
+      Iri::fromIriref("<http://www.w3.org/2001/XMLSchema#string>"));
+  literal.getLiteral().setSubstr(6, 5);
+  EXPECT_THAT("World",
+              asStringViewUnsafe(literal.getContent()));
+  EXPECT_THAT("http://www.w3.org/2001/XMLSchema#string",
+              asStringViewUnsafe(literal.getDatatype()));
+}
+
+// _______________________________________________________________________
+TEST(LiteralTest, RemoveDatatype) {
+  LiteralOrIri literal = LiteralOrIri::literalWithoutQuotes(
+      "Hello World!",
+      Iri::fromIriref("<http://www.w3.org/2001/XMLSchema#string>"));
+  literal.getLiteral().removeDatatype();
+  EXPECT_THAT("Hello World!", asStringViewUnsafe(literal.getContent()));
+  EXPECT_FALSE(literal.hasDatatype());
+  EXPECT_THROW(literal.getDatatype(), ad_utility::Exception);
+}

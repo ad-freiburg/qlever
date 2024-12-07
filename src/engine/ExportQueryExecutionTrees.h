@@ -70,10 +70,13 @@ class ExportQueryExecutionTrees {
   static std::optional<std::pair<std::string, const char*>>
   idToStringAndTypeForEncodedValue(Id id);
 
-  // Convert the `id` to a 'LiteralOrIri'.Datatypes are always stripped unless they are 'xsd:string', 
-  // so for literals with non-'xsd:string' datatypes (this includes IDs that directly store their value, like Doubles) the datatypes are always empty.
-  // If 'onlyReturnLiteralsWithXsdString' is true, all IRIs and literals with non-'xsd:string' datatypes (including encoded IDs) return std::nullopt.
-  // These semantics are useful for the string expressions in StringExpressions.cpp.
+  // Convert the `id` to a 'LiteralOrIri. Datatypes are always stripped unless
+  // they are 'xsd:string', so for literals with non-'xsd:string' datatypes
+  // (this includes IDs that directly store their value, like Doubles) the
+  // datatype is always empty. If 'onlyReturnLiteralsWithXsdString' is true, all
+  // IRIs and literals with non'-xsd:string' datatypes (including encoded IDs)
+  // return 'std::nullopt'. These semantics are useful for the string
+  // expressions in StringExpressions.cpp.
   template <bool returnOnlyLiterals = false>
   static std::optional<LiteralOrIri> idToLiteralOrIri(
       const Index& index, Id id, const LocalVocab& localVocab,
@@ -88,10 +91,15 @@ class ExportQueryExecutionTrees {
   static std::optional<LiteralOrIri> idToLiteralOrIriForEncodedValue(
       Id id, bool onlyReturnLiteralsWithXsdString = false);
 
-   // A helper function for the `idToLiteralOrIri` function. Checks and processes a LiteralOrIri based on the given parameters.
+  // A helper function for the `idToLiteralOrIri` function. Checks and processes
+  // a LiteralOrIri based on the given parameters.
   static std::optional<LiteralOrIri> handleIriOrLiteral(
       LiteralOrIri word, bool onlyReturnLiterals,
       bool onlyReturnLiteralsWithXsdString);
+
+  // Checks if a LiteralOrIri is either a plain literal (without datatype)
+  // or a literal with the `xsd:string` datatype.
+  static bool isPlainLiteralOrLiteralWithXsdString(const LiteralOrIri& word);
 
   // Acts as a helper to retrieve an LiteralOrIri object
   // from an Id, where the Id is of type `VocabIndex` or `LocalVocabIndex`.

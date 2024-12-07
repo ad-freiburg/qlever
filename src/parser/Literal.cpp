@@ -136,12 +136,17 @@ Literal Literal::fromStringRepresentation(std::string internal) {
 }
 
 // __________________________________________
-void Literal::setSubstr(std::size_t start, std::size_t length){
-  auto contentWithoutParentesis = content_.substr(1, beginOfSuffix_ - 2); 
-  auto shortenedContent = ad_utility::getUTF8Substring(contentWithoutParentesis, start, length);
-  auto suffix = content_.substr(beginOfSuffix_);
-  content_ = absl::StrCat("\"", shortenedContent, "\"", suffix);
-  beginOfSuffix_ = content_.size() - suffix.size();
+void Literal::setSubstr(std::size_t start, std::size_t length) {
+  std::size_t contentLength = beginOfSuffix_ - 2;
+  content_.erase(1 + start + length, contentLength - start - length);
+  content_.erase(1, start);
+  beginOfSuffix_ = beginOfSuffix_ - (contentLength - length);
+}
+
+// __________________________________________
+void Literal::removeDatatype() {
+  content_.erase(beginOfSuffix_);
+  beginOfSuffix_ = content_.size();
 }
 
 }  // namespace ad_utility::triple_component

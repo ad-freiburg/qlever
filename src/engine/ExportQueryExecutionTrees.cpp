@@ -353,7 +353,7 @@ ExportQueryExecutionTrees::idToStringAndTypeForEncodedValue(Id id) {
 std::optional<LiteralOrIri>
 ExportQueryExecutionTrees::idToLiteralOrIriForEncodedValue(
     Id id, bool onlyReturnLiteralsWithXsdString) {
-  if(onlyReturnLiteralsWithXsdString){
+  if (onlyReturnLiteralsWithXsdString) {
     return std::nullopt;
   }
   auto optionalStringAndType = idToStringAndTypeForEncodedValue(id);
@@ -362,6 +362,13 @@ ExportQueryExecutionTrees::idToLiteralOrIriForEncodedValue(
   }
 
   return LiteralOrIri::literalWithoutQuotes(optionalStringAndType->first);
+}
+
+// _____________________________________________________________________________
+bool ExportQueryExecutionTrees::isPlainLiteralOrLiteralWithXsdString(
+    const LiteralOrIri& word) {
+  return !word.hasDatatype() ||
+         asStringViewUnsafe(word.getDatatype()) == XSD_STRING;
 }
 
 // _____________________________________________________________________________
@@ -374,23 +381,21 @@ std::optional<LiteralOrIri> ExportQueryExecutionTrees::handleIriOrLiteral(
   };
 
   if (!word.isLiteral()) {
-    if(onlyReturnLiterals || onlyReturnLiteralsWithXsdString){
+    if (onlyReturnLiterals || onlyReturnLiteralsWithXsdString) {
       return std::nullopt;
     }
     return word;
   }
 
   if (onlyReturnLiteralsWithXsdString) {
-    if (!word.hasDatatype() || datatypeIsXSDString(word)) {
+    if (isPlainLiteralOrLiteralWithXsdString(word)) {
       return word;
     }
     return std::nullopt;
   }
 
-  if (word.hasDatatype() && !datatypeIsXSDString(word)) {
-    return LiteralOrIri{
-        ad_utility::triple_component::Literal::literalWithNormalizedContent(
-            word.getContent())};
+  if (word.hasDatatype() && !isPlainLiteralOrLiteralWithXsdString(word)) {
+    word.getLiteral().removeDatatype();
   }
   return word;
 }

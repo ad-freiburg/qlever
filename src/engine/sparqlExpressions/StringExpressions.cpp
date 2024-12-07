@@ -21,7 +21,7 @@ constexpr auto toLiteral = [](std::string_view normalizedContent) {
           asNormalizedStringViewUnsafe(normalizedContent))};
 };
 
-constexpr auto toLiteralWithDescriptor =
+static constexpr auto toLiteralWithDescriptor =
     [](std::string_view normalizedContent,
        const std::optional<std::variant<Iri, std::string>>& descriptor) {
       return LiteralOrIri{
@@ -212,7 +212,7 @@ class SubstrImpl {
 
     const auto& str = asStringViewUnsafe(s.value().getContent());
     // Clamp the number such that it is in `[0, str.size()]`. That way we end up
-    // with valid arguments for the `getUTF8Substring` method below for both
+    // with valid arguments for the `setSubstr` method below for both
     // starting position and length since all the other corner cases have been
     // dealt with above.
     auto clamp = [sz = str.size()](int64_t n) -> std::size_t {
@@ -226,20 +226,23 @@ class SubstrImpl {
     };
 
     s.value().getLiteral().setSubstr(clamp(startInt), clamp(lengthInt));
-    return s.value();
+    return std::move(s.value());
   }
 };
 
-// Implementation of the `SUBSTR` SPARQL function. It dynamically 
-// selects the appropriate value getter for the first argument based on whether 
-// it is a `STR()` expression (using `LiteralOrIriValueGetterWithXsdStringFilter`) 
-// or another type (using `LiteralOrIriValueGetter`).
+// Implementation of the `SUBSTR` SPARQL function. It dynamically
+// selects the appropriate value getter for the first argument based on whether
+// it is a `STR()` expression (using
+// `LiteralOrIriValueGetterWithXsdStringFilter`) or another type (using
+// `LiteralOrIriValueGetter`).
 class SubstrExpressionImpl : public SparqlExpression {
  private:
-  using ExpressionWithStr = NARY<3, FV<SubstrImpl, LiteralOrIriValueGetterWithXsdStringFilter,
-                                       NumericValueGetter, NumericValueGetter>>;
-  using ExpressionWithoutStr = NARY<3, FV<SubstrImpl, LiteralOrIriValueGetter,
-                                          NumericValueGetter, NumericValueGetter>>;
+  using ExpressionWithStr =
+      NARY<3, FV<SubstrImpl, LiteralOrIriValueGetterWithXsdStringFilter,
+                 NumericValueGetter, NumericValueGetter>>;
+  using ExpressionWithoutStr =
+      NARY<3, FV<SubstrImpl, LiteralOrIriValueGetter, NumericValueGetter,
+                 NumericValueGetter>>;
 
   SparqlExpression::Ptr impl_;
 

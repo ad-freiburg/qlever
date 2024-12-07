@@ -41,21 +41,17 @@ bool LiteralOrIri::isLiteral() const {
 
 // __________________________________________
 const Literal& LiteralOrIri::getLiteral() const {
-  if (!isLiteral()) {
-    AD_THROW(
-        "LiteralOrIri object does not contain an Literal object and "
-        "thus cannot return it");
-  }
+  AD_CONTRACT_CHECK(isLiteral(),
+                    "LiteralOrIri object does not contain a Literal object and "
+                    "thus cannot return it");
   return std::get<Literal>(data_);
 }
 
 // __________________________________________
-Literal& LiteralOrIri::getLiteral(){
-  if (!isLiteral()) {
-    AD_THROW(
-        "LiteralOrIri object does not contain an Literal object and "
-        "thus cannot return it");
-  }
+Literal& LiteralOrIri::getLiteral() {
+  AD_CONTRACT_CHECK(isLiteral(),
+                    "LiteralOrIri object does not contain a Literal object and "
+                    "thus cannot return it");
   return std::get<Literal>(data_);
 }
 
