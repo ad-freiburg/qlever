@@ -11,6 +11,8 @@
 #include "SparqlAntlrParserTestHelpers.h"
 #include "engine/GraphStoreProtocol.h"
 
+namespace m = matchers;
+
 TEST(GraphStoreProtocolTest, extractTargetGraph) {
   EXPECT_THAT(GraphStoreProtocol::extractTargetGraph({{"default", {""}}}),
               DEFAULT{});
@@ -33,7 +35,6 @@ TEST(GraphStoreProtocolTest, transformPost) {
   auto Iri = [](std::string_view stringWithBrackets) {
     return TripleComponent::Iri::fromIriref(stringWithBrackets);
   };
-  namespace m = matchers;
   auto expectTransformPost =
       [](const ad_utility::httpUtils::HttpRequest auto& request,
          const testing::Matcher<const ParsedQuery&>& matcher,
@@ -99,7 +100,6 @@ TEST(GraphStoreProtocolTest, transformPost) {
 TEST(GraphStoreProtocolTest, transformGet) {
   using Var = Variable;
   using TC = TripleComponent;
-  namespace m = matchers;
   auto expectTransformGet =
       [](const ad_utility::httpUtils::HttpRequest auto& request,
          const testing::Matcher<const ParsedQuery&>& matcher,
@@ -127,7 +127,6 @@ TEST(GraphStoreProtocolTest, transformGet) {
 }
 
 TEST(GraphStoreProtocolTest, transformGraphStoreProtocol) {
-  namespace m = matchers;
   // TODO: re-add some simple tests for POST and GET
   AD_EXPECT_THROW_WITH_MESSAGE(
       GraphStoreProtocol::transformGraphStoreProtocol(
