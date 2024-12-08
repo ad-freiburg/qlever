@@ -14,7 +14,7 @@
 TEST(GraphStoreProtocolTest, extractTargetGraph) {
   EXPECT_THAT(GraphStoreProtocol::extractTargetGraph({{"default", {""}}}),
               DEFAULT{});
-  EXPECT_THAT(GraphStoreProtocol::extractTargetGraph({{"graph", {"<foo>"}}}),
+  EXPECT_THAT(GraphStoreProtocol::extractTargetGraph({{"graph", {"foo"}}}),
               TripleComponent::Iri::fromIriref("<foo>"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       GraphStoreProtocol::extractTargetGraph({}),
@@ -24,79 +24,111 @@ TEST(GraphStoreProtocolTest, extractTargetGraph) {
       testing::HasSubstr("No graph IRI specified in the request."));
   AD_EXPECT_THROW_WITH_MESSAGE(
       GraphStoreProtocol::extractTargetGraph(
-          {{"default", {""}}, {"graph", {"<foo>"}}}),
+          {{"default", {""}}, {"graph", {"foo"}}}),
       testing::HasSubstr("Only one of `default` and `graph` may be used for "
                          "graph identification."));
 }
 
-TEST(GraphStoreProtocolTest, transformGraphStoreProtocol) {
-  using Var = Variable;
-  using TC = TripleComponent;
+TEST(GraphStoreProtocolTest, transformPost) {
   auto Iri = [](std::string_view stringWithBrackets) {
     return TripleComponent::Iri::fromIriref(stringWithBrackets);
   };
   namespace m = matchers;
-  EXPECT_THAT(GraphStoreProtocol::transformGraphStoreProtocol(
-                  ad_utility::testing::MakeGetRequest("/?default")),
-              m::ConstructQuery({{Var{"?s"}, Var{"?p"}, Var{"?o"}}},
-                                m::GraphPattern(matchers::Triples({SparqlTriple(
-                                    TC(Var{"?s"}), "?p", TC(Var{"?o"}))}))));
-  EXPECT_THAT(
-      GraphStoreProtocol::transformGraphStoreProtocol(
-          ad_utility::testing::MakeGetRequest("/?graph=foo")),
-      m::ConstructQuery({{Var{"?s"}, Var{"?p"}, Var{"?o"}}},
-                        m::GraphPattern(m::GroupGraphPatternWithGraph(
-                            {}, TC::Iri::fromIriref("<foo>"),
-                            matchers::Triples({SparqlTriple(
-                                TC(Var{"?s"}), "?p", TC(Var{"?o"}))})))));
-  EXPECT_THAT(GraphStoreProtocol::transformGraphStoreProtocol(
-                  ad_utility::testing::MakePostRequest(
-                      "/?default", "text/turtle", "<a> <b> <c> .")),
-              m::UpdateClause(m::GraphUpdate({},
-                                             {{Iri("<a>"), Iri("<b>"),
-                                               Iri("<c>"), std::monostate{}}},
-                                             std::nullopt),
-                              m::GraphPattern()));
-  EXPECT_THAT(GraphStoreProtocol::transformGraphStoreProtocol(
-                  ad_utility::testing::MakePostRequest(
-                      "/?default", "application/n-triples", "<a> <b> <c> .")),
-              m::UpdateClause(m::GraphUpdate({},
-                                             {{Iri("<a>"), Iri("<b>"),
-                                               Iri("<c>"), std::monostate{}}},
-                                             std::nullopt),
-                              m::GraphPattern()));
-  EXPECT_THAT(
-      GraphStoreProtocol::transformGraphStoreProtocol(
-          ad_utility::testing::MakePostRequest(
-              "/?graph=bar", "application/n-triples", "<a> <b> <c> .")),
+  auto expectTransformPost =
+      [](const ad_utility::httpUtils::HttpRequest auto& request,
+         const testing::Matcher<const ParsedQuery&>& matcher,
+         ad_utility::source_location l =
+             ad_utility::source_location::current()) {
+        auto trace = generateLocationTrace(l);
+        const ad_utility::url_parser::ParsedUrl parsedUrl =
+            ad_utility::url_parser::parseRequestTarget(request.target());
+        const GraphOrDefault graph =
+            GraphStoreProtocol::extractTargetGraph(parsedUrl.parameters_);
+        EXPECT_THAT(GraphStoreProtocol::transformPost(request, graph), matcher);
+      };
+
+  expectTransformPost(
+      ad_utility::testing::MakePostRequest("/?default", "text/turtle",
+                                           "<a> <b> <c> ."),
+      m::UpdateClause(
+          m::GraphUpdate(
+              {}, {{Iri("<a>"), Iri("<b>"), Iri("<c>"), std::monostate{}}},
+              std::nullopt),
+          m::GraphPattern()));
+  expectTransformPost(
+      ad_utility::testing::MakePostRequest("/?default", "application/n-triples",
+                                           "<a> <b> <c> ."),
+      m::UpdateClause(
+          m::GraphUpdate(
+              {}, {{Iri("<a>"), Iri("<b>"), Iri("<c>"), std::monostate{}}},
+              std::nullopt),
+          m::GraphPattern()));
+  expectTransformPost(
+      ad_utility::testing::MakePostRequest(
+          "/?graph=bar", "application/n-triples", "<a> <b> <c> ."),
       m::UpdateClause(
           m::GraphUpdate({},
                          {{Iri("<a>"), Iri("<b>"), Iri("<c>"), ::Iri("<bar>")}},
                          std::nullopt),
           m::GraphPattern()));
-  EXPECT_THAT(GraphStoreProtocol::transformGraphStoreProtocol(
-                  ad_utility::testing::MakePostRequest(
-                      "/?default", "application/n-quads", "<a> <b> <c> <d> .")),
-              m::UpdateClause(
-                  m::GraphUpdate(
-                      {}, {{Iri("<a>"), Iri("<b>"), Iri("<c>"), ::Iri("<d>")}},
-                      std::nullopt),
-                  m::GraphPattern()));
-  EXPECT_THAT(
-      GraphStoreProtocol::transformGraphStoreProtocol(
-          ad_utility::testing::MakePostRequest(
-              "/?graph=baz", "application/n-quads", "<a> <b> <c> <d> .")),
+  expectTransformPost(
+      ad_utility::testing::MakePostRequest("/?default", "application/n-quads",
+                                           "<a> <b> <c> <d> ."),
+      m::UpdateClause(
+          m::GraphUpdate({},
+                         {{Iri("<a>"), Iri("<b>"), Iri("<c>"), ::Iri("<d>")}},
+                         std::nullopt),
+          m::GraphPattern()));
+  expectTransformPost(
+      ad_utility::testing::MakePostRequest("/?graph=baz", "application/n-quads",
+                                           "<a> <b> <c> <d> ."),
       m::UpdateClause(
           m::GraphUpdate({},
                          {{Iri("<a>"), Iri("<b>"), Iri("<c>"), ::Iri("<baz>")}},
                          std::nullopt),
           m::GraphPattern()));
   AD_EXPECT_THROW_WITH_MESSAGE(
-      GraphStoreProtocol::transformGraphStoreProtocol(
+      GraphStoreProtocol::transformPost(
           ad_utility::testing::MakePostRequest(
-              "/?default", "application/unknown", "fantasy")),
+              "/?default", "application/unknown", "fantasy"),
+          DEFAULT{}),
       testing::HasSubstr("Not a single media type known to this parser was "
                          "detected in \"application/unknown\"."));
+}
+
+TEST(GraphStoreProtocolTest, transformGet) {
+  using Var = Variable;
+  using TC = TripleComponent;
+  namespace m = matchers;
+  auto expectTransformGet =
+      [](const ad_utility::httpUtils::HttpRequest auto& request,
+         const testing::Matcher<const ParsedQuery&>& matcher,
+         ad_utility::source_location l =
+             ad_utility::source_location::current()) {
+        auto trace = generateLocationTrace(l);
+        const ad_utility::url_parser::ParsedUrl parsedUrl =
+            ad_utility::url_parser::parseRequestTarget(request.target());
+        const GraphOrDefault graph =
+            GraphStoreProtocol::extractTargetGraph(parsedUrl.parameters_);
+        EXPECT_THAT(GraphStoreProtocol::transformGet(graph), matcher);
+      };
+  expectTransformGet(
+      ad_utility::testing::MakeGetRequest("/?default"),
+      m::ConstructQuery({{Var{"?s"}, Var{"?p"}, Var{"?o"}}},
+                        m::GraphPattern(matchers::Triples({SparqlTriple(
+                            TC(Var{"?s"}), "?p", TC(Var{"?o"}))}))));
+  expectTransformGet(
+      ad_utility::testing::MakeGetRequest("/?graph=foo"),
+      m::ConstructQuery({{Var{"?s"}, Var{"?p"}, Var{"?o"}}},
+                        m::GraphPattern(m::GroupGraphPatternWithGraph(
+                            {}, TC::Iri::fromIriref("<foo>"),
+                            matchers::Triples({SparqlTriple(
+                                TC(Var{"?s"}), "?p", TC(Var{"?o"}))})))));
+}
+
+TEST(GraphStoreProtocolTest, transformGraphStoreProtocol) {
+  namespace m = matchers;
+  // TODO: re-add some simple tests for POST and GET
   AD_EXPECT_THROW_WITH_MESSAGE(
       GraphStoreProtocol::transformGraphStoreProtocol(
           ad_utility::testing::MakeRequest(boost::beast::http::verb::put,

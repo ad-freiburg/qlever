@@ -71,6 +71,7 @@ class GraphStoreProtocol {
     res._clause = parsedQuery::UpdateClause{up};
     return res;
   }
+  FRIEND_TEST(GraphStoreProtocolTest, transformPost);
 
   static ParsedQuery transformGet(const GraphOrDefault& graph) {
     ParsedQuery res;
@@ -93,6 +94,7 @@ class GraphStoreProtocol {
     }
     return res;
   }
+  FRIEND_TEST(GraphStoreProtocolTest, transformGet);
 
  public:
   // Every Graph Store Protocol requests has equivalent SPARQL Query or Update.
