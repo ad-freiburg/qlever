@@ -66,26 +66,26 @@ Iri Iri::getBaseIri() const {
 
 // ____________________________________________________________________________
 Iri Iri::fromIrirefConsiderBase(std::string_view iriStringWithBrackets,
-                                const Iri* basePrefixForRelativeIris,
-                                const Iri* basePrefixForAbsoluteIris) {
+                                const Iri& basePrefixForRelativeIris,
+                                const Iri& basePrefixForAbsoluteIris) {
   auto iriSv = iriStringWithBrackets;
   AD_CORRECTNESS_CHECK(iriSv.size() >= 2);
   AD_CORRECTNESS_CHECK(iriSv[0] == '<' && iriSv[iriSv.size() - 1] == '>');
   if (iriSv.find("://") != std::string_view::npos ||
-      basePrefixForAbsoluteIris == nullptr) {
+      basePrefixForAbsoluteIris.empty()) {
     // Case 1: IRI with scheme (like `<http://...>`) or `BASE_IRI_FOR_TESTING`
     // (which is `<@>`, and no valid base IRI has length 3).
     return TripleComponent::Iri::fromIriref(iriSv);
   } else if (iriSv[1] == '/') {
     // Case 2: Absolute IRI without scheme (like `</prosite/PS51927>`).
-    AD_CORRECTNESS_CHECK(basePrefixForAbsoluteIris != nullptr);
+    AD_CORRECTNESS_CHECK(!basePrefixForAbsoluteIris.empty());
     return TripleComponent::Iri::fromPrefixAndSuffix(
-        *basePrefixForAbsoluteIris, iriSv.substr(2, iriSv.size() - 3));
+        basePrefixForAbsoluteIris, iriSv.substr(2, iriSv.size() - 3));
   } else {
     // Case 3: Relative IRI (like `<UPI001AF4585D>`).
-    AD_CORRECTNESS_CHECK(basePrefixForRelativeIris != nullptr);
+    AD_CORRECTNESS_CHECK(!basePrefixForRelativeIris.empty());
     return TripleComponent::Iri::fromPrefixAndSuffix(
-        *basePrefixForRelativeIris, iriSv.substr(1, iriSv.size() - 2));
+        basePrefixForRelativeIris, iriSv.substr(1, iriSv.size() - 2));
   }
 }
 

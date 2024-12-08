@@ -35,34 +35,41 @@ TEST(IriTest, getBaseIri) {
   EXPECT_THAT("<>", iri3.getBaseIri().toStringRepresentation());
 }
 
+TEST(IriTest, emptyIri) {
+  EXPECT_TRUE(Iri{}.empty());
+  EXPECT_FALSE(Iri::fromIriref("<http://www.wikidata.org>").empty());
+}
+
 TEST(IriTest, fromIrirefConsiderBase) {
-  // Check that it works for "real" base IRIs.
-  auto baseForRelativeIris = Iri::fromIriref("<http://.../uniprot/>");
-  auto baseForAbsoluteIris = Iri::fromIriref("<http://.../>");
-  auto fromIrirefWithBase = [&baseForRelativeIris, &baseForAbsoluteIris](
-                                std::string_view iriStringWithBrackets) {
+  // Helper lambda that calls `Iri::fromIrirefConsiderBase` with the two base
+  // IRIs and returns the results as a string (including the angle brackets).
+  Iri baseForRelativeIris;
+  Iri baseForAbsoluteIris;
+  auto fromIrirefConsiderBase = [&baseForRelativeIris, &baseForAbsoluteIris](
+                                    std::string_view iriStringWithBrackets) {
     return Iri::fromIrirefConsiderBase(iriStringWithBrackets,
-                                       &baseForRelativeIris,
-                                       &baseForAbsoluteIris)
+                                       baseForRelativeIris, baseForAbsoluteIris)
         .toStringRepresentation();
   };
-  EXPECT_THAT(fromIrirefWithBase("<http://purl.uniprot.org/uniprot/>"),
+
+  // Check that it works for "real" base IRIs.
+  baseForRelativeIris = Iri::fromIriref("<http://.../uniprot/>");
+  baseForAbsoluteIris = Iri::fromIriref("<http://.../>");
+  EXPECT_THAT(fromIrirefConsiderBase("<http://purl.uniprot.org/uniprot/>"),
               "<http://purl.uniprot.org/uniprot/>");
-  EXPECT_THAT(fromIrirefWithBase("<UPI001AF4585D>"),
+  EXPECT_THAT(fromIrirefConsiderBase("<UPI001AF4585D>"),
               "<http://.../uniprot/UPI001AF4585D>");
-  EXPECT_THAT(fromIrirefWithBase("</prosite/PS51927>"),
+  EXPECT_THAT(fromIrirefConsiderBase("</prosite/PS51927>"),
               "<http://.../prosite/PS51927>");
 
-  // Check that without base IRIs, the IRIs remain unchanged.
-  auto fromIrirefWithoutBase = [](std::string_view iriStringWithBrackets) {
-    return Iri::fromIrirefConsiderBase(iriStringWithBrackets, nullptr, nullptr)
-        .toStringRepresentation();
-  };
-  EXPECT_THAT(fromIrirefWithoutBase("<http://purl.uniprot.org/uniprot/>"),
+  // Check that with the default base, all IRIs remain unchanged.
+  baseForRelativeIris = Iri{};
+  baseForAbsoluteIris = Iri{};
+  EXPECT_THAT(fromIrirefConsiderBase("<http://purl.uniprot.org/uniprot/>"),
               "<http://purl.uniprot.org/uniprot/>");
-  EXPECT_THAT(fromIrirefWithoutBase("</a>"), "</a>");
-  EXPECT_THAT(fromIrirefWithoutBase("<a>"), "<a>");
-  EXPECT_THAT(fromIrirefWithoutBase("<>"), "<>");
+  EXPECT_THAT(fromIrirefConsiderBase("</a>"), "</a>");
+  EXPECT_THAT(fromIrirefConsiderBase("<a>"), "<a>");
+  EXPECT_THAT(fromIrirefConsiderBase("<>"), "<>");
 }
 
 TEST(LiteralTest, LiteralTest) {

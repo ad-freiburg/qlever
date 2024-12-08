@@ -194,25 +194,27 @@ class TurtleParser : public RdfParserBase {
   TripleComponent lastParseResult_;
 
   // Map that maps prefix names to their IRI, initially empty.
-  //
-  // NOTE: If we add default values for `baseForRelativeIriKey_` and
-  // `baseForAbsoluteIriKey_` to the map, many of our tests will fail.
-  ad_utility::HashMap<std::string, TripleComponent::Iri> prefixMap_;
+  ad_utility::HashMap<std::string, TripleComponent::Iri> prefixMap_{
+      {baseForRelativeIriKey_, TripleComponent::Iri{}},
+      {baseForAbsoluteIriKey_, TripleComponent::Iri{}}};
 
-  // Getters for the two base prefixes.
-  const TripleComponent::Iri* baseForRelativeIri() const {
-    auto it = prefixMap_.find(baseForRelativeIriKey_);
-    if (it == prefixMap_.end()) {
-      return nullptr;
-    }
-    return &it->second;
+  // Getters for the two base prefixes. Without BASE declaration, these will
+  // both return the empty IRI.
+  //
+  // TODO<hannah> I would prefer to just call `prefixMap_.at(...)`, but then
+  // some of the tests fails because the keys are not in the map (despite the
+  // initialization above).
+  const TripleComponent::Iri& baseForRelativeIri() {
+    // return prefixMap_.at(baseForRelativeIriKey_);
+    return prefixMap_
+        .try_emplace(baseForRelativeIriKey_, TripleComponent::Iri{})
+        .first->second;
   }
-  const TripleComponent::Iri* baseForAbsoluteIri() const {
-    auto it = prefixMap_.find(baseForAbsoluteIriKey_);
-    if (it == prefixMap_.end()) {
-      return nullptr;
-    }
-    return &it->second;
+  const TripleComponent::Iri& baseForAbsoluteIri() {
+    // return prefixMap_.at(baseForAbsoluteIriKey_);
+    return prefixMap_
+        .try_emplace(baseForAbsoluteIriKey_, TripleComponent::Iri{})
+        .first->second;
   }
 
   // There are turtle constructs that reuse prefixes, subjects and predicates

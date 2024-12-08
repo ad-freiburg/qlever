@@ -51,12 +51,15 @@ class Iri {
   // scheme, prepend the base prefix for relative IRIs (like `<UPI001AF4585D>`)
   // or for absolute IRIs (like `</prosite/PS51927>`).
   static Iri fromIrirefConsiderBase(std::string_view iriStringWithBrackets,
-                                    const Iri* basePrefixForRelativeIris,
-                                    const Iri* basePrefixForAbsoluteIris);
+                                    const Iri& basePrefixForRelativeIris,
+                                    const Iri& basePrefixForAbsoluteIris);
 
   // Get the base IRI from this `Iri` object. For example, the base IRI of
   // `<http://purl.uniprot.org/uniprot/>` is `<http://purl.uniprot.org/>`.
   Iri getBaseIri() const;
+
+  // Return true iff the IRI is empty.
+  bool empty() const { return iri_.empty(); }
 
   // Return the string value of the iri object without any leading or trailing
   // angled brackets.
