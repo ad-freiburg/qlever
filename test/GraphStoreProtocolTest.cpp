@@ -65,6 +65,15 @@ TEST(GraphStoreProtocolTest, transformGraphStoreProtocol) {
                                                Iri("<c>"), std::monostate{}}},
                                              std::nullopt),
                               m::GraphPattern()));
+  EXPECT_THAT(
+      GraphStoreProtocol::transformGraphStoreProtocol(
+          ad_utility::testing::MakePostRequest(
+              "/?graph=bar", "application/n-triples", "<a> <b> <c> .")),
+      m::UpdateClause(
+          m::GraphUpdate({},
+                         {{Iri("<a>"), Iri("<b>"), Iri("<c>"), ::Iri("<bar>")}},
+                         std::nullopt),
+          m::GraphPattern()));
   EXPECT_THAT(GraphStoreProtocol::transformGraphStoreProtocol(
                   ad_utility::testing::MakePostRequest(
                       "/?default", "application/n-quads", "<a> <b> <c> <d> .")),
@@ -73,6 +82,15 @@ TEST(GraphStoreProtocolTest, transformGraphStoreProtocol) {
                       {}, {{Iri("<a>"), Iri("<b>"), Iri("<c>"), ::Iri("<d>")}},
                       std::nullopt),
                   m::GraphPattern()));
+  EXPECT_THAT(
+      GraphStoreProtocol::transformGraphStoreProtocol(
+          ad_utility::testing::MakePostRequest(
+              "/?graph=baz", "application/n-quads", "<a> <b> <c> <d> .")),
+      m::UpdateClause(
+          m::GraphUpdate({},
+                         {{Iri("<a>"), Iri("<b>"), Iri("<c>"), ::Iri("<baz>")}},
+                         std::nullopt),
+          m::GraphPattern()));
   AD_EXPECT_THROW_WITH_MESSAGE(
       GraphStoreProtocol::transformGraphStoreProtocol(
           ad_utility::testing::MakePostRequest(

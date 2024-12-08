@@ -97,9 +97,6 @@ class GraphStoreProtocol {
       };
       updateClause::GraphUpdate up{
           ad_utility::transform(triples, transformTurtleTriple), {}};
-      if (std::holds_alternative<ad_utility::triple_component::Iri>(graph)) {
-        up.with_ = std::get<ad_utility::triple_component::Iri>(graph);
-      }
       res._clause = parsedQuery::UpdateClause{up};
       return res;
     };
