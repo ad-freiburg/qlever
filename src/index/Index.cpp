@@ -25,9 +25,10 @@ void Index::createFromOnDiskIndex(const std::string& onDiskBase) {
 }
 
 // ____________________________________________________________________________
-void Index::addTextFromContextFile(const std::string& contextFile,
-                                   bool addWordsFromLiterals) {
-  pimpl_->addTextFromContextFile(contextFile, addWordsFromLiterals);
+void Index::buildTextIndexFile(
+    const std::pair<std::string, std::string>& wordsAndDocsFile,
+    bool addWordsFromLiterals) {
+  pimpl_->buildTextIndexFile(wordsAndDocsFile, addWordsFromLiterals);
 }
 
 // ____________________________________________________________________________

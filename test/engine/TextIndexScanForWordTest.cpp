@@ -163,14 +163,29 @@ TEST(TextIndexScanForWord, WordScanPrefix) {
   ASSERT_EQ("astronomer", h::getWordFromResultTable(qec, tresult, 7));
 
   // Tests if the correct scores are retrieved from the non literal texts
-  ASSERT_EQ(1, h::getScoreFromResultTable(qec, tresult, 0, true));
-  ASSERT_EQ(1, h::getScoreFromResultTable(qec, tresult, 1, true));
-  ASSERT_EQ(0, h::getScoreFromResultTable(qec, tresult, 2, true));
-  ASSERT_EQ(0, h::getScoreFromResultTable(qec, tresult, 3, true));
-  ASSERT_EQ(1, h::getScoreFromResultTable(qec, tresult, 4, true));
-  ASSERT_EQ(1, h::getScoreFromResultTable(qec, tresult, 5, true));
-  ASSERT_EQ(1, h::getScoreFromResultTable(qec, tresult, 6, true));
-  ASSERT_EQ(0, h::getScoreFromResultTable(qec, tresult, 7, true));
+  float bm25Word1Doc4 =
+      h::calculateBM25FromParameters(1, 2, 6, 7, 15, 0.75, 1.75);
+  float bm25Word1Doc7 =
+      h::calculateBM25FromParameters(1, 2, 6, 7, 10, 0.75, 1.75);
+  float bm25Word2Doc4 =
+      h::calculateBM25FromParameters(1, 1, 6, 7, 15, 0.75, 1.75);
+  ASSERT_EQ(bm25Word1Doc4, h::getScoreFromResultTable(qec, tresult, 0, true));
+  ASSERT_EQ(bm25Word2Doc4, h::getScoreFromResultTable(qec, tresult, 1, true));
+  ASSERT_EQ(bm25Word1Doc4, h::getScoreFromResultTable(qec, tresult, 2, true));
+  ASSERT_EQ(bm25Word2Doc4, h::getScoreFromResultTable(qec, tresult, 3, true));
+  ASSERT_EQ(bm25Word2Doc4, h::getScoreFromResultTable(qec, tresult, 4, true));
+  ASSERT_EQ(bm25Word2Doc4, h::getScoreFromResultTable(qec, tresult, 5, true));
+  ASSERT_EQ(bm25Word1Doc7, h::getScoreFromResultTable(qec, tresult, 6, true));
+  ASSERT_EQ(bm25Word1Doc7, h::getScoreFromResultTable(qec, tresult, 7, true));
+
+  // ASSERT_EQ(1, h::getScoreFromResultTable(qec, tresult, 0, true));
+  // ASSERT_EQ(1, h::getScoreFromResultTable(qec, tresult, 1, true));
+  // ASSERT_EQ(0, h::getScoreFromResultTable(qec, tresult, 2, true));
+  // ASSERT_EQ(0, h::getScoreFromResultTable(qec, tresult, 3, true));
+  // ASSERT_EQ(1, h::getScoreFromResultTable(qec, tresult, 4, true));
+  // ASSERT_EQ(1, h::getScoreFromResultTable(qec, tresult, 5, true));
+  // ASSERT_EQ(1, h::getScoreFromResultTable(qec, tresult, 6, true));
+  // ASSERT_EQ(0, h::getScoreFromResultTable(qec, tresult, 7, true));
 }
 
 TEST(TextIndexScanForWord, WordScanBasic) {

@@ -252,6 +252,22 @@ bool Vocabulary<S, C, I>::getId(std::string_view word, IndexType* idx) const {
   return wordAndIndex.word() == word;
 }
 
+// _____________________________________________________________________________
+template <typename S, typename C, typename I>
+bool Vocabulary<S, C, I>::getRawId(std::string_view word, IndexType* idx,
+                                   uint64_t& returnValue) const {
+  auto wordAndIndex = vocabulary_.lower_bound(word, SortLevel::TOTAL);
+  if (wordAndIndex.isEnd()) {
+    return false;
+  }
+  idx->get() = wordAndIndex.index();
+  if (wordAndIndex.word() == word) {
+    returnValue = static_cast<uint64_t>(idx->get());
+    return true;
+  }
+  return false;
+}
+
 // ___________________________________________________________________________
 template <typename S, typename C, typename I>
 auto Vocabulary<S, C, I>::prefixRanges(std::string_view prefix) const

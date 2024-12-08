@@ -323,8 +323,10 @@ int main(int argc, char** argv) {
       index.createFromFiles(fileSpecifications);
     }
 
-    if (!wordsfile.empty() || addWordsFromLiterals) {
-      index.addTextFromContextFile(wordsfile, addWordsFromLiterals);
+    if ((!wordsfile.empty() && !docsfile.empty()) || addWordsFromLiterals) {
+      index.buildTextIndexFile(
+          std::pair<std::string, std::string>{wordsfile, docsfile},
+          addWordsFromLiterals);
     }
 
     if (!docsfile.empty()) {
