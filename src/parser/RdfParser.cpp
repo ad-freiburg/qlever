@@ -1,6 +1,7 @@
-// Copyright 2018, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Johannes Kalmbach(joka921) <johannes.kalmbach@gmail.com>
+// Copyright 2018 - 2024, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//          Hannah Bast <bast@cs.uni-freiburg.de>
 
 #include "parser/RdfParser.h"
 
@@ -55,7 +56,9 @@ template <class T>
 bool TurtleParser<T>::base() {
   if (skip<TurtleTokenId::TurtleBase>()) {
     if (iriref() && check(skip<TurtleTokenId::Dot>())) {
-      prefixMap_["_BASE"] = lastParseResult_.getIri();
+      auto iri = lastParseResult_.getIri();
+      prefixMap_[baseForRelativeIriKey_] = iri;
+      prefixMap_[baseForAbsoluteIriKey_] = iri.getBaseIri();
       return true;
     } else {
       raise("Parsing @base definition failed");
@@ -85,7 +88,9 @@ template <class T>
 bool TurtleParser<T>::sparqlBase() {
   if (skip<TurtleTokenId::SparqlBase>()) {
     if (iriref()) {
-      prefixMap_["_BASE"] = lastParseResult_.getIri();
+      auto iri = lastParseResult_.getIri();
+      prefixMap_[baseForRelativeIriKey_] = iri;
+      prefixMap_[baseForAbsoluteIriKey_] = iri.getBaseIri();
       return true;
     } else {
       raise("Parsing BASE definition failed");
@@ -740,29 +745,13 @@ bool TurtleParser<T>::iriref() {
         "Unterminated IRI reference (found '<' but no '>' before "
         "one of the following characters: <, \", newline)");
   }
-  // Helper lambda that calls `fromIriref` for absolute IRIs and
-  // `fromPrefixAndSuffix` with the BASE prefix for relative IRIs.
-  auto makeIri = [this](std::string_view iri) {
-    if (iri.find("://") != std::string_view::npos || iri.size() == 2) {
-      return TripleComponent::Iri::fromIriref(iri);
-    } else {
-      AD_CORRECTNESS_CHECK(iri.size() >= 2);
-      AD_CORRECTNESS_CHECK(iri[0] == '<' && iri[iri.size() - 1] == '>');
-      auto basePrefix = prefixMap_.find("_BASE");
-      if (basePrefix == prefixMap_.end()) {
-        raise(absl::StrCat("Relative IRI reference `", iri,
-                           "` found but no base IRI defined"));
-      }
-      return TripleComponent::Iri::fromPrefixAndSuffix(
-          basePrefix->second, iri.substr(1, iri.size() - 2));
-    }
-  };
   // In relaxed mode, that is all we check. Otherwise, we check if the IRI is
   // standard-compliant. If not, we output a warning and try to parse it in a
   // more relaxed way.
   if constexpr (UseRelaxedParsing) {
     tok_.remove_prefix(endPos + 1);
-    lastParseResult_ = makeIri(view.substr(0, endPos + 1));
+    lastParseResult_ = TripleComponent::Iri::fromIrirefConsiderBase(
+        view.substr(0, endPos + 1), baseForRelativeIri(), baseForAbsoluteIri());
     return true;
   } else {
     if (!parseTerminal<TurtleTokenId::Iriref>()) {
@@ -772,7 +761,9 @@ bool TurtleParser<T>::iriref() {
         return false;
       }
     }
-    lastParseResult_ = makeIri(lastParseResult_.getString());
+    lastParseResult_ = TripleComponent::Iri::fromIrirefConsiderBase(
+        lastParseResult_.getString(), baseForRelativeIri(),
+        baseForAbsoluteIri());
     return true;
   }
 }

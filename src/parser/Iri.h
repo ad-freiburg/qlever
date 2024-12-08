@@ -1,6 +1,7 @@
-// Copyright 2023, University of Freiburg,
-//                 Chair of Algorithms and Data Structures.
-// Author: Benedikt Maria Beckermann <benedikt.beckermann@dagstuhl.de>
+// Copyright 2023 - 2024, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Authors: Benedikt Maria Beckermann <benedikt.beckermann@dagstuhl.de>
+//          Hannah Bast <bast@cs.uni-freiburg.de>
 
 #pragma once
 
@@ -17,10 +18,10 @@ class Iri {
   // brackets.
   std::string iri_;
 
-  // Create a new iri object
+  // Create a new `Iri` object
   explicit Iri(std::string iri);
 
-  // Create a new iri using a prefix
+  // Create a new `Iri` using a prefix
   Iri(const Iri& prefix, NormalizedStringView suffix);
 
  public:
@@ -36,14 +37,26 @@ class Iri {
   const std::string& toStringRepresentation() const;
   std::string& toStringRepresentation();
 
-  // Create a new `Iri` given an iri string with brackets.
+  // Create a new `Ìri` given an IRI string with brackets.
   static Iri fromIriref(std::string_view stringWithBrackets);
 
-  // Create a new `Iri` given an iri string without brackets.
+  // Create a new `Iri` given an IRI string without brackets.
   static Iri fromIrirefWithoutBrackets(std::string_view stringWithoutBrackets);
 
-  // Create a new iri given a prefix iri and its suffix
+  // Create a new `Iri` given a prefix IRI and its suffix
   static Iri fromPrefixAndSuffix(const Iri& prefix, std::string_view suffix);
+
+  // Create a new `Iri` object, considering the base IRI. For IRIs with a scheme
+  // (like `<http://...>`), this is the same as `fromIriref`. For IRIs without a
+  // scheme, prepend the base prefix for relative IRIs (like `<UPI001AF4585D>`)
+  // or for absolute IRIs (like `</prosite/PS51927>`).
+  static Iri fromIrirefConsiderBase(std::string_view iriStringWithBrackets,
+                                    const Iri* basePrefixForRelativeIris,
+                                    const Iri* basePrefixForAbsoluteIris);
+
+  // Get the base IRI from this `Iri` object. For example, the base IRI of
+  // `<http://purl.uniprot.org/uniprot/>` is `<http://purl.uniprot.org/>`.
+  Iri getBaseIri() const;
 
   // Return the string value of the iri object without any leading or trailing
   // angled brackets.

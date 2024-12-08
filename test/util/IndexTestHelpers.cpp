@@ -142,7 +142,6 @@ Index makeTestIndex(const std::string& indexBasename,
   std::string inputFilename = indexBasename + ".ttl";
   if (!turtleInput.has_value()) {
     turtleInput =
-        "BASE <> "
         "<x> <label> \"alpha\" . <x> <label> \"älpha\" . <x> <label> \"A\" . "
         "<x> "
         "<label> \"Beta\". <x> <is-a> <y>. <y> <is-a> <x>. <z> <label> "

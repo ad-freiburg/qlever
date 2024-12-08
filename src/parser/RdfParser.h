@@ -169,6 +169,12 @@ class TurtleParser : public RdfParserBase {
   static constexpr std::array<const char*, 3> floatDatatypes_ = {
       XSD_DECIMAL_TYPE, XSD_DOUBLE_TYPE, XSD_FLOAT_TYPE};
 
+  // The keys for storing the base prefix (for relative and absolute IRIs) in
+  // the prefix map. The only thing that is important about these keys is that
+  // they are different from each other and from any valid prefix name.
+  static constexpr const char* baseForRelativeIriKey_ = "@";
+  static constexpr const char* baseForAbsoluteIriKey_ = "@@";
+
  protected:
   // Data members.
 
@@ -187,9 +193,27 @@ class TurtleParser : public RdfParserBase {
   // `TripleComponent` since it can hold any parsing result, not only objects.
   TripleComponent lastParseResult_;
 
-  // Maps prefixes to their expanded form, initialized with the empty prefix
-  // (i.e. the prefix ":" maps to the empty IRI).
-  ad_utility::HashMap<std::string, TripleComponent::Iri> prefixMap_{{{}, {}}};
+  // Map that maps prefix names to their IRI, initially empty.
+  //
+  // NOTE: If we add default values for `baseForRelativeIriKey_` and
+  // `baseForAbsoluteIriKey_` to the map, many of our tests will fail.
+  ad_utility::HashMap<std::string, TripleComponent::Iri> prefixMap_;
+
+  // Getters for the two base prefixes.
+  const TripleComponent::Iri* baseForRelativeIri() const {
+    auto it = prefixMap_.find(baseForRelativeIriKey_);
+    if (it == prefixMap_.end()) {
+      return nullptr;
+    }
+    return &it->second;
+  }
+  const TripleComponent::Iri* baseForAbsoluteIri() const {
+    auto it = prefixMap_.find(baseForAbsoluteIriKey_);
+    if (it == prefixMap_.end()) {
+      return nullptr;
+    }
+    return &it->second;
+  }
 
   // There are turtle constructs that reuse prefixes, subjects and predicates
   // so we have to save the last seen ones.

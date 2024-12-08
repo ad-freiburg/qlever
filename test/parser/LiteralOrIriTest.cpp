@@ -1,6 +1,7 @@
-// Copyright 2023, University of Freiburg,
-//                 Chair of Algorithms and Data Structures.
-// Author: Benedikt Maria Beckermann <benedikt.beckermann@dagstuhl.de>
+// Copyright 2023 - 2024, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Authors: Benedikt Maria Beckermann <benedikt.beckermann@dagstuhl.de>
+//          Hannah Bast <bast@cs.uni-freiburg.de>
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -19,6 +20,49 @@ TEST(IriTest, IriCreation) {
 
   EXPECT_THAT("http://www.wikidata.org/entity/Q3138",
               asStringViewUnsafe(iri.getContent()));
+}
+
+TEST(IriTest, getBaseIri) {
+  Iri iri1 = Iri::fromIriref("<http://purl.uniprot.org/uniprot/>");
+  EXPECT_THAT("<http://purl.uniprot.org/>",
+              iri1.getBaseIri().toStringRepresentation());
+  EXPECT_THAT("<http://purl.uniprot.org/>",
+              iri1.getBaseIri().getBaseIri().toStringRepresentation());
+  Iri iri2 = Iri::fromIriref("<http://purl.uniprot.org>");
+  EXPECT_THAT("<http://purl.uniprot.org>",
+              iri2.getBaseIri().toStringRepresentation());
+  Iri iri3 = Iri::fromIriref("<>");
+  EXPECT_THAT("<>", iri3.getBaseIri().toStringRepresentation());
+}
+
+TEST(IriTest, fromIrirefConsiderBase) {
+  // Check that it works for "real" base IRIs.
+  auto baseForRelativeIris = Iri::fromIriref("<http://.../uniprot/>");
+  auto baseForAbsoluteIris = Iri::fromIriref("<http://.../>");
+  auto fromIrirefWithBase = [&baseForRelativeIris, &baseForAbsoluteIris](
+                                std::string_view iriStringWithBrackets) {
+    return Iri::fromIrirefConsiderBase(iriStringWithBrackets,
+                                       &baseForRelativeIris,
+                                       &baseForAbsoluteIris)
+        .toStringRepresentation();
+  };
+  EXPECT_THAT(fromIrirefWithBase("<http://purl.uniprot.org/uniprot/>"),
+              "<http://purl.uniprot.org/uniprot/>");
+  EXPECT_THAT(fromIrirefWithBase("<UPI001AF4585D>"),
+              "<http://.../uniprot/UPI001AF4585D>");
+  EXPECT_THAT(fromIrirefWithBase("</prosite/PS51927>"),
+              "<http://.../prosite/PS51927>");
+
+  // Check that without base IRIs, the IRIs remain unchanged.
+  auto fromIrirefWithoutBase = [](std::string_view iriStringWithBrackets) {
+    return Iri::fromIrirefConsiderBase(iriStringWithBrackets, nullptr, nullptr)
+        .toStringRepresentation();
+  };
+  EXPECT_THAT(fromIrirefWithoutBase("<http://purl.uniprot.org/uniprot/>"),
+              "<http://purl.uniprot.org/uniprot/>");
+  EXPECT_THAT(fromIrirefWithoutBase("</a>"), "</a>");
+  EXPECT_THAT(fromIrirefWithoutBase("<a>"), "<a>");
+  EXPECT_THAT(fromIrirefWithoutBase("<>"), "<>");
 }
 
 TEST(LiteralTest, LiteralTest) {
