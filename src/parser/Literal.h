@@ -90,5 +90,12 @@ class Literal {
   static Literal literalWithoutQuotes(
       std::string_view rdfContentWithoutQuotes,
       std::optional<std::variant<Iri, std::string>> descriptor = std::nullopt);
+
+  // Set the substring of the literal by erasing the part between the
+  // end of the prefix and the trailing " from content_.
+  void setSubstr(std::size_t start, std::size_t length);
+
+  // Remove the datatype suffix from the Literal.
+  void removeDatatype();
 };
 }  // namespace ad_utility::triple_component
