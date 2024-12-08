@@ -159,6 +159,12 @@ ProtoResult Join::computeResult(bool requestLaziness) {
     return createEmptyResult();
   }
 
+  // If one of the RootOperations is a Service, precompute the result of its
+  // sibling.
+  Service::precomputeSiblingResult(_left->getRootOperation(),
+                                   _right->getRootOperation(), false,
+                                   requestLaziness);
+
   // Always materialize results that meet one of the following criteria:
   // * They are already present in the cache
   // * Their result is small
@@ -195,11 +201,6 @@ ProtoResult Join::computeResult(bool requestLaziness) {
     }
   }
 
-  // If one of the RootOperations is a Service, precompute the result of its
-  // sibling.
-  Service::precomputeSiblingResult(_left->getRootOperation(),
-                                   _right->getRootOperation(), false,
-                                   requestLaziness);
   std::shared_ptr<const Result> leftRes =
       leftResIfCached ? leftResIfCached : _left->getResult(true);
   checkCancellation();
