@@ -14,16 +14,21 @@
 namespace m = matchers;
 
 TEST(GraphStoreProtocolTest, extractTargetGraph) {
+  // Equivalent to `/?default`
   EXPECT_THAT(GraphStoreProtocol::extractTargetGraph({{"default", {""}}}),
               DEFAULT{});
+  // Equivalent to `/?graph=foo`
   EXPECT_THAT(GraphStoreProtocol::extractTargetGraph({{"graph", {"foo"}}}),
               TripleComponent::Iri::fromIriref("<foo>"));
+  // Equivalent to `/` or `/?`
   AD_EXPECT_THROW_WITH_MESSAGE(
       GraphStoreProtocol::extractTargetGraph({}),
       testing::HasSubstr("No graph IRI specified in the request."));
+  // Equivalent to `/?unrelated=a&unrelated=b`
   AD_EXPECT_THROW_WITH_MESSAGE(
       GraphStoreProtocol::extractTargetGraph({{"unrelated", {"a", "b"}}}),
       testing::HasSubstr("No graph IRI specified in the request."));
+  // Equivalent to `/?default&graph=foo`
   AD_EXPECT_THROW_WITH_MESSAGE(
       GraphStoreProtocol::extractTargetGraph(
           {{"default", {""}}, {"graph", {"foo"}}}),
