@@ -9,6 +9,7 @@
 #include <boost/beast/http.hpp>
 
 #include "util/GTestHelpers.h"
+#include "util/HttpRequestHelpers.h"
 #include "util/http/HttpUtils.h"
 #include "util/http/UrlParser.h"
 
@@ -27,27 +28,9 @@ auto ParsedRequestIs = [](const std::string& path,
       AD_FIELD(ad_utility::url_parser::ParsedRequest, operation_,
                testing::Eq(operation)));
 };
-auto MakeBasicRequest = [](http::verb method, const std::string& target) {
-  // version 11 stands for HTTP/1.1
-  return http::request<http::string_body>{method, target, 11};
-};
-auto MakeGetRequest = [](const std::string& target) {
-  return MakeBasicRequest(http::verb::get, target);
-};
-auto MakePostRequest = [](const std::string& target,
-                          const std::string& contentType,
-                          const std::string& body) {
-  auto req = MakeBasicRequest(http::verb::post, target);
-  req.set(http::field::content_type, contentType);
-  req.body() = body;
-  req.prepare_payload();
-  return req;
-};
 }  // namespace
 
 TEST(ServerTest, parseHttpRequest) {
-  namespace http = boost::beast::http;
-
   auto parse = [](const ad_utility::httpUtils::HttpRequest auto& request) {
     return Server::parseHttpRequest(request);
   };
@@ -120,7 +103,7 @@ TEST(ServerTest, parseHttpRequest) {
       parse(MakePostRequest("/?send=100", QUERY, "SELECT * WHERE {}")),
       ParsedRequestIs("/", {{"send", {"100"}}}, Query{"SELECT * WHERE {}"}));
   AD_EXPECT_THROW_WITH_MESSAGE(
-      parse(MakeBasicRequest(http::verb::patch, "/")),
+      parse(MakeRequest(http::verb::patch, "/")),
       testing::StrEq(
           "Request method \"PATCH\" not supported (has to be GET or POST)"));
   AD_EXPECT_THROW_WITH_MESSAGE(
@@ -140,29 +123,6 @@ TEST(ServerTest, parseHttpRequest) {
   EXPECT_THAT(parse(MakePostRequest("/", URLENCODED,
                                     "update=DELETE+%2A+WHERE%20%7B%7D")),
               ParsedRequestIs("/", {}, Update{"DELETE * WHERE {}"}));
-}
-
-TEST(ServerTest, checkParameter) {
-  const ParamValueMap exampleParams = {{"foo", {"bar"}},
-                                       {"baz", {"qux", "quux"}}};
-
-  EXPECT_THAT(Server::checkParameter(exampleParams, "doesNotExist", ""),
-              testing::Eq(std::nullopt));
-  EXPECT_THAT(Server::checkParameter(exampleParams, "foo", "baz"),
-              testing::Eq(std::nullopt));
-  EXPECT_THAT(Server::checkParameter(exampleParams, "foo", "bar"),
-              testing::Optional(testing::StrEq("bar")));
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      Server::checkParameter(exampleParams, "baz", "qux"),
-      testing::StrEq("Parameter \"baz\" must be given exactly once. Is: 2"));
-  EXPECT_THAT(Server::checkParameter(exampleParams, "foo", std::nullopt),
-              testing::Optional(testing::StrEq("bar")));
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      Server::checkParameter(exampleParams, "baz", std::nullopt),
-      testing::StrEq("Parameter \"baz\" must be given exactly once. Is: 2"));
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      Server::checkParameter(exampleParams, "baz", std::nullopt),
-      testing::StrEq("Parameter \"baz\" must be given exactly once. Is: 2"));
 }
 
 TEST(ServerTest, determineResultPinning) {
