@@ -11,9 +11,9 @@ GraphOrDefault GraphStoreProtocol::extractTargetGraph(
     const ad_utility::url_parser::ParamValueMap& params) {
   // Extract the graph to be acted upon using `Indirect Graph
   // Identification`.
-  const auto graphIri =
+  const std::optional<std::string> graphIri =
       ad_utility::url_parser::checkParameter(params, "graph", std::nullopt);
-  const auto isDefault =
+  const bool isDefault =
       ad_utility::url_parser::checkParameter(params, "default", "").has_value();
   if (!(graphIri.has_value() || isDefault)) {
     throw std::runtime_error("No graph IRI specified in the request.");
