@@ -229,7 +229,7 @@ bool CompressedRelationReader::FilterDuplicatesAndGraphs::canBlockBeSkipped(
     return false;
   }
   const auto& containedGraphs = block.graphInfo_.value();
-  return std::ranges::none_of(
+  return ql::ranges::none_of(
       desiredGraphs_.value(), [&containedGraphs](const auto& desiredGraph) {
         return ad_utility::contains(containedGraphs, desiredGraph);
       });
