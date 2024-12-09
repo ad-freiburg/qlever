@@ -154,13 +154,13 @@ IdTable Distinct::outOfPlaceDistinct(const IdTable& dynInput) const {
   auto end = inputView.end();
   while (begin < end) {
     int64_t allowedOffset = std::min(end - begin, CHUNK_SIZE);
-    begin = std::ranges::unique_copy(begin, begin + allowedOffset,
-                                     std::back_inserter(output),
-                                     [this](const auto& a, const auto& b) {
-                                       // Without explicit this clang seems to
-                                       // think the this capture is redundant.
-                                       return this->matchesRow(a, b);
-                                     })
+    begin = ql::ranges::unique_copy(begin, begin + allowedOffset,
+                                    std::back_inserter(output),
+                                    [this](const auto& a, const auto& b) {
+                                      // Without explicit this clang seems to
+                                      // think the this capture is redundant.
+                                      return this->matchesRow(a, b);
+                                    })
                 .in;
     checkCancellation();
     // Skip to next unique value
