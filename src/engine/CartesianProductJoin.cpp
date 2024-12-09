@@ -196,7 +196,7 @@ IdTable CartesianProductJoin::writeAllColumns(
   auto totalResultSize =
       std::reduce(sizesView.begin(), sizesView.end(), 1UL, std::multiplies{});
 
-  if (!std::ranges::empty(idTables) && sizesView.back() != 0) {
+  if (!ql::ranges::empty(idTables) && sizesView.back() != 0) {
     totalResultSize += (totalResultSize / sizesView.back()) * lastTableOffset;
   } else {
     AD_CORRECTNESS_CHECK(lastTableOffset == 0);
@@ -254,7 +254,7 @@ CartesianProductJoin::calculateSubResults(bool requestLaziness) {
 
   std::shared_ptr<const Result> lazyResult = nullptr;
   auto children = childView();
-  AD_CORRECTNESS_CHECK(!std::ranges::empty(children));
+  AD_CORRECTNESS_CHECK(!ql::ranges::empty(children));
   // Get all child results (possibly with limit, see above).
   for (Operation& child : children) {
     if (limitIfPresent.has_value() && child.supportsLimit()) {

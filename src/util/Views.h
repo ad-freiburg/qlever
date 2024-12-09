@@ -164,13 +164,13 @@ requires std::movable<UnderlyingRange> class OwningView
   }
 
   constexpr bool empty()
-      requires requires { std::ranges::empty(underlyingRange_); } {
-    return std::ranges::empty(underlyingRange_);
+      requires requires { ql::ranges::empty(underlyingRange_); } {
+    return ql::ranges::empty(underlyingRange_);
   }
 
   constexpr bool empty() const
-      requires requires { std::ranges::empty(underlyingRange_); } {
-    return std::ranges::empty(underlyingRange_);
+      requires requires { ql::ranges::empty(underlyingRange_); } {
+    return ql::ranges::empty(underlyingRange_);
   }
 
   constexpr auto size() requires std::ranges::sized_range<UnderlyingRange> {

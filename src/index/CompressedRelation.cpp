@@ -251,7 +251,7 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
   // Compute the sequence of relevant blocks. If the sequence is empty, there
   // is nothing to yield.
   auto relevantBlocks = getRelevantBlocks(scanSpec, blockMetadata);
-  if (std::ranges::empty(relevantBlocks)) {
+  if (ql::ranges::empty(relevantBlocks)) {
     co_return;
   }
 

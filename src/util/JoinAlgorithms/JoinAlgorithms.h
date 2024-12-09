@@ -799,7 +799,7 @@ struct BlockZipperJoinImpl {
     auto& end = side.end_;
     for (size_t numBlocksRead = 0; it != end && numBlocksRead < 3;
          ++it, ++numBlocksRead) {
-      if (std::ranges::empty(*it)) {
+      if (ql::ranges::empty(*it)) {
         continue;
       }
       if (!eq((*it)[0], currentEl)) {
@@ -906,7 +906,7 @@ struct BlockZipperJoinImpl {
           ql::ranges::all_of(
               blocksRight | std::views::transform(
                                 [](const auto& inp) { return inp.subrange(); }),
-              std::ranges::empty)) {
+              ql::ranges::empty)) {
         for (const auto& lBlock : blocksLeft) {
           compatibleRowAction_.setOnlyLeftInputForOptionalJoin(
               lBlock.fullBlock());
@@ -1245,7 +1245,7 @@ struct BlockZipperJoinImpl {
     // The reference of `it` is there on purpose.
     for (auto& it = side.it_; it != side.end_; ++it) {
       auto& el = *it;
-      if (std::ranges::empty(el) || !isUndefined_(el.front())) {
+      if (ql::ranges::empty(el) || !isUndefined_(el.front())) {
         return;
       }
       bool endIsUndefined = isUndefined_(el.back());
