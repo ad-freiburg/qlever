@@ -25,13 +25,13 @@ class GraphStoreProtocol {
     switch (contentType.value()) {
       case ad_utility::MediaType::turtle:
       case ad_utility::MediaType::ntriples: {
-        Re2Parser parser = Re2Parser();
+        auto parser = Re2Parser();
         parser.setInputStream(rawRequest.body());
         triples = parser.parseAndReturnAllTriples();
         break;
       }
       case ad_utility::MediaType::nquads: {
-        NQuadRe2Parser parser = NQuadRe2Parser();
+        auto parser = NQuadRe2Parser();
         parser.setInputStream(rawRequest.body());
         triples = parser.parseAndReturnAllTriples();
         break;
@@ -45,8 +45,7 @@ class GraphStoreProtocol {
       }
     }
     ParsedQuery res;
-    auto transformTurtleTriple =
-        [&graph](const TurtleTriple& triple) -> SparqlTripleSimpleWithGraph {
+    auto transformTurtleTriple = [&graph](const TurtleTriple& triple) {
       auto triplesGraph =
           [&triple]() -> std::variant<std::monostate, Iri, Variable> {
         if (triple.graphIri_.isIri()) {
@@ -106,25 +105,25 @@ class GraphStoreProtocol {
         ad_utility::url_parser::parseRequestTarget(rawRequest.target());
     GraphOrDefault graph = extractTargetGraph(parsedUrl.parameters_);
 
-    using namespace boost::beast::http;
+    using enum boost::beast::http::verb;
     auto method = rawRequest.method();
-    if (method == verb::get) {
+    if (method == get) {
       return transformGet(graph);
-    } else if (method == verb::put) {
+    } else if (method == put) {
       throw std::runtime_error(
           "PUT in the SPARQL Graph Store HTTP Protocol is not yet implemented "
           "in QLever.");
-    } else if (method == verb::delete_) {
+    } else if (method == delete_) {
       throw std::runtime_error(
           "DELETE in the SPARQL Graph Store HTTP Protocol is not yet "
           "implemented in QLever.");
-    } else if (method == verb::post) {
+    } else if (method == post) {
       return transformPost(rawRequest, graph);
-    } else if (method == verb::head) {
+    } else if (method == head) {
       throw std::runtime_error(
           "HEAD in the SPARQL Graph Store HTTP Protocol is not yet implemented "
           "in QLever.");
-    } else if (method == verb::patch) {
+    } else if (method == patch) {
       throw std::runtime_error(
           "PATCH in the SPARQL Graph Store HTTP Protocol is not yet "
           "implemented in QLever.");
