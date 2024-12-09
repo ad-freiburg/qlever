@@ -137,6 +137,12 @@ number.
 
 @param str The input string.
 @param separatorSymbol What symbol to put between groups of thousands.
+
+Note: To avoid cyclic dependencies, this function is defined in a separate file
+`StringUtilsImpl.h`. This file is then included in the `StringUtils.cpp` with an
+explicit instantiation for the default template argument `.`. The tests include
+the impl file directly to exhaustively test the behavior for other template
+arguments.
 */
 template <const char floatingPointSignifier = '.'>
 std::string insertThousandSeparator(const std::string_view str,

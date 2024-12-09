@@ -5,8 +5,6 @@
 #ifndef QLEVER_ITERATORS_H
 #define QLEVER_ITERATORS_H
 
-// #include <engine/sparqlExpressions/RelationalExpressionHelpers.h>
-
 #include <cstdint>
 #include <iterator>
 #include <type_traits>

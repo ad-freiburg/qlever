@@ -156,11 +156,9 @@ bool CompressedRelationReader::FilterDuplicatesAndGraphs::
   if (!metadata.graphInfo_.has_value()) {
     return true;
   }
-  // TODO<joka921> ql::ranges
   const auto& graphInfo = metadata.graphInfo_.value();
-  return !std::all_of(
-      graphInfo.begin(), graphInfo.end(),
-      [&wantedGraphs = desiredGraphs_.value()](Id containedGraph) {
+  return !ql::ranges::all_of(
+      graphInfo, [&wantedGraphs = desiredGraphs_.value()](Id containedGraph) {
         return wantedGraphs.contains(containedGraph);
       });
 }
@@ -184,12 +182,9 @@ bool CompressedRelationReader::FilterDuplicatesAndGraphs::
         block, std::not_fn(isDesiredGraphId()), graphIdFromRow);
     block.erase(beginOfRemoved, block.end());
   } else {
-    // TODO<joka921> Range-v3 for idTables.
-    /*
     AD_EXPENSIVE_CHECK(
         !desiredGraphs_.has_value() ||
         ql::ranges::all_of(block, isDesiredGraphId(), graphIdFromRow));
-        */
   }
   return needsFilteringByGraph;
 }
@@ -1379,8 +1374,7 @@ auto CompressedRelationWriter::createPermutationPair(
           return std::tie(a[0], a[1], a[2], a[3]) <
                  std::tie(b[0], b[1], b[2], b[3]);
         };
-        // ql::ranges::sort(relation, compare);
-        std::sort(relation.begin(), relation.end(), compare);
+        ql::ranges::sort(relation, compare);
         AD_CORRECTNESS_CHECK(!relation.empty());
         writer2.compressAndWriteBlock(relation.at(0, 0),
                                       relation.at(relation.size() - 1, 0),

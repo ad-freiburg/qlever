@@ -64,16 +64,14 @@ ProtoResult TextLimit::computeResult([[maybe_unused]] bool requestLaziness) {
     return 0;
   };
 
-  // TODO<joka921> idTables don't work with ranges-v3.
-  std::sort(
-      idTable.begin(), idTable.end(),
-      [this, compareScores, compareEntities](const auto& lhs, const auto& rhs) {
-        return compareEntities(lhs, rhs) == 1 ||
-               (compareEntities(lhs, rhs) == 0 &&
-                (compareScores(lhs, rhs) == 1 ||
-                 (compareScores(lhs, rhs) == 0 &&
-                  (lhs[textRecordColumn_] > rhs[textRecordColumn_]))));
-      });
+  ql::ranges::sort(idTable, [this, compareScores, compareEntities](
+                                const auto& lhs, const auto& rhs) {
+    return compareEntities(lhs, rhs) == 1 ||
+           (compareEntities(lhs, rhs) == 0 &&
+            (compareScores(lhs, rhs) == 1 ||
+             (compareScores(lhs, rhs) == 0 &&
+              (lhs[textRecordColumn_] > rhs[textRecordColumn_]))));
+  });
 
   // Go through the table and add the first n texts for each
   // entity to a new empty table (where n is the limit).

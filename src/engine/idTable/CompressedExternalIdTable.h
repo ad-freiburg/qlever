@@ -534,8 +534,7 @@ struct BlockSorter {
 #ifdef _PARALLEL_SORT
     ad_utility::parallel_sort(std::begin(block), std::end(block), comparator_);
 #else
-    std::sort(block.begin(), block.end(), comparator_);
-    // ql::ranges::sort(block, comparator_);
+    ql::ranges::sort(block, comparator_);
 #endif
   }
 };
@@ -643,9 +642,8 @@ class CompressedExternalIdTableSorter
   // once.
   void pushBlock(const IdTableStatic<0>& block) override {
     AD_CONTRACT_CHECK(block.numColumns() == this->numColumns_);
-    // TODO<joka921>
-    std::for_each(block.begin(), block.end(),
-                  [ptr = this](const auto& row) { ptr->push(row); });
+    ql::ranges::for_each(block,
+                         [ptr = this](const auto& row) { ptr->push(row); });
   }
 
   // The implementation of the type-erased interface. Get the sorted blocks as

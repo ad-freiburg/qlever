@@ -17,6 +17,7 @@
 #include "util/Forward.h"
 #include "util/Generator.h"
 #include "util/StringUtils.h"
+#include "util/StringUtilsImpl.h"
 
 using ad_utility::constantTimeEquals;
 using ad_utility::constexprStrCat;
@@ -168,7 +169,6 @@ TEST(StringUtilsTest, addIndentation) {
             ad_utility::addIndentation(withLineBreaks, "Not "));
 }
 
-#if false
 TEST(StringUtilsTest, insertThousandSeparator) {
   /*
   Do the tests, that are not exception tests, with the given arguments for
@@ -317,7 +317,6 @@ TEST(StringUtilsTest, insertThousandSeparator) {
   forbiddenSymbolTest
       .template operator()<'0', '1', '2', '3', '4', '5', '6', '7', '8', '9'>();
 }
-#endif
 
 TEST(StringUtilsTest, findLiteralEnd) {
   using namespace ad_utility;
