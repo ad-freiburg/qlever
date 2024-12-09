@@ -663,7 +663,7 @@ std::pair<size_t, size_t> CompressedRelationReader::getResultSizeImpl(
   std::size_t inserted = 0;
   std::size_t deleted = 0;
   ql::ranges::for_each(
-      std::ranges::subrange{beginBlock, endBlock}, [&](const auto& block) {
+      ql::ranges::subrange{beginBlock, endBlock}, [&](const auto& block) {
         const auto [ins, del] =
             locatedTriplesPerBlock.numTriples(block.blockIndex_);
         if (!exactSize || (ins == 0 && del == 0)) {

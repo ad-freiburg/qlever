@@ -596,17 +596,17 @@ class BlockAndSubrange {
 
   bool empty() const { return subrange_.second == subrange_.first; }
 
-  // Return the currently specified subrange as a `std::ranges::subrange`
+  // Return the currently specified subrange as a `ql::ranges::subrange`
   // object.
   auto subrange() {
-    return std::ranges::subrange{fullBlock().begin() + subrange_.first,
-                                 fullBlock().begin() + subrange_.second};
+    return ql::ranges::subrange{fullBlock().begin() + subrange_.first,
+                                fullBlock().begin() + subrange_.second};
   }
 
   // The const overload of the `subrange` method (see above).
   auto subrange() const {
-    return std::ranges::subrange{fullBlock().begin() + subrange_.first,
-                                 fullBlock().begin() + subrange_.second};
+    return ql::ranges::subrange{fullBlock().begin() + subrange_.first,
+                                fullBlock().begin() + subrange_.second};
   }
 
   // Get a view that iterates over all the indices that belong to the subrange.
@@ -1040,16 +1040,16 @@ struct BlockZipperJoinImpl {
     // yields iterators to the individual undefined values.
     if constexpr (potentiallyHasUndef) {
       [[maybe_unused]] auto res = zipperJoinWithUndef(
-          std::ranges::subrange{subrangeLeft.begin(), currentElItL},
-          std::ranges::subrange{subrangeRight.begin(), currentElItR}, lessThan_,
+          ql::ranges::subrange{subrangeLeft.begin(), currentElItL},
+          ql::ranges::subrange{subrangeRight.begin(), currentElItR}, lessThan_,
           addRowIndex,
           findUndefValues<true>(fullBlockLeft, fullBlockRight, begL, begR),
           findUndefValues<false>(fullBlockLeft, fullBlockRight, begL, begR),
           addNotFoundRowIndex);
     } else {
       [[maybe_unused]] auto res = zipperJoinWithUndef(
-          std::ranges::subrange{subrangeLeft.begin(), currentElItL},
-          std::ranges::subrange{subrangeRight.begin(), currentElItR}, lessThan_,
+          ql::ranges::subrange{subrangeLeft.begin(), currentElItL},
+          ql::ranges::subrange{subrangeRight.begin(), currentElItR}, lessThan_,
           addRowIndex, noop, noop, addNotFoundRowIndex);
     }
     compatibleRowAction_.flush();

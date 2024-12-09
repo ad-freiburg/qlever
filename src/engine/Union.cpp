@@ -202,7 +202,7 @@ IdTable Union::computeUnion(
                               [this]() { checkCancellation(); });
     } else {
       ad_utility::chunkedFill(
-          std::ranges::subrange{
+          ql::ranges::subrange{
               targetColumn.begin() + offset,
               targetColumn.begin() + offset + inputTable.size()},
           Id::makeUndefined(), chunkSize, [this]() { checkCancellation(); });

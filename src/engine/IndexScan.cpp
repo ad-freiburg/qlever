@@ -586,8 +586,8 @@ Result::Generator IndexScan::createPrefilteredJoinSide(
     std::shared_ptr<SharedGeneratorState> innerState) {
   if (innerState->hasUndef()) {
     AD_CORRECTNESS_CHECK(innerState->prefetchedValues_.empty());
-    for (auto& value : std::ranges::subrange{innerState->iterator_.value(),
-                                             innerState->generator_.end()}) {
+    for (auto& value : ql::ranges::subrange{innerState->iterator_.value(),
+                                            innerState->generator_.end()}) {
       co_yield value;
     }
     co_return;

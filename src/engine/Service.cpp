@@ -569,7 +569,7 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
     for (auto& pair : pairs) {
       co_yield pair;
     }
-    for (auto& pair : std::ranges::subrange{it, prevGenerator.end()}) {
+    for (auto& pair : ql::ranges::subrange{it, prevGenerator.end()}) {
       co_yield pair;
     }
   };

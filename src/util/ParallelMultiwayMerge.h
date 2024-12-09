@@ -126,7 +126,7 @@ cppcoro::generator<std::vector<T>> lazyBinaryMerge(
   auto yieldRemainder =
       [&buffer, &isBufferLargeEnough, &clearBuffer,
        &pushToBuffer](auto& itPair) -> cppcoro::generator<std::vector<T>> {
-    for (auto& el : std::ranges::subrange(itPair.first, itPair.second)) {
+    for (auto& el : ql::ranges::subrange(itPair.first, itPair.second)) {
       pushToBuffer(el);
       if (isBufferLargeEnough()) {
         co_yield buffer;
@@ -206,8 +206,7 @@ cppcoro::generator<std::vector<T>> parallelMultiwayMergeImpl(
     auto parallelMerge = [join, blocksize, comparison, maxMemPerNode](
                              auto it, auto end) {
       return join(parallelMultiwayMergeImpl<T, moveElements, SizeGetter>(
-          maxMemPerNode, blocksize, std::ranges::subrange{it, end},
-          comparison));
+          maxMemPerNode, blocksize, ql::ranges::subrange{it, end}, comparison));
     };
 
     return ad_utility::streams::runStreamAsync(
