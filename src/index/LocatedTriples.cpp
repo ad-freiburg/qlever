@@ -52,7 +52,7 @@ NumAddedAndDeleted LocatedTriplesPerBlock::numTriples(size_t blockIndex) const {
   }
 
   auto blockUpdateTriples = map_.at(blockIndex);
-  size_t countInserts = std::ranges::count_if(
+  size_t countInserts = ql::ranges::count_if(
       blockUpdateTriples, &LocatedTriple::shouldTripleExist_);
   return {countInserts, blockUpdateTriples.size() - countInserts};
 }
