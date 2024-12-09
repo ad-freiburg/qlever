@@ -466,7 +466,7 @@ void checkPropertiesForPrefilterConstruction(
         "sorted order w.r.t. Variable value.");
   }
   if (auto it = std::ranges::adjacent_find(viewVariable);
-      it != std::ranges::end(viewVariable)) {
+      it != ql::ranges::end(viewVariable)) {
     throw std::runtime_error(
         "For each relevant Variable must exist exactly one "
         "<PrefilterExpression, Variable> pair.");

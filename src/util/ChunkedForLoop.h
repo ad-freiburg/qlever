@@ -79,7 +79,7 @@ inline void chunkedCopy(R&& inputRange, O result,
                         const std::invocable auto& chunkOperation)
     requires std::indirectly_copyable<std::ranges::iterator_t<R>, O> {
   auto begin = ql::ranges::begin(inputRange);
-  auto end = std::ranges::end(inputRange);
+  auto end = ql::ranges::end(inputRange);
   auto target = result;
   while (std::ranges::distance(begin, end) >= chunkSize) {
     auto start = begin;
@@ -104,7 +104,7 @@ inline void chunkedFill(R&& outputRange, const T& value,
                         std::ranges::range_difference_t<R> chunkSize,
                         const std::invocable auto& chunkOperation) {
   auto begin = ql::ranges::begin(outputRange);
-  auto end = std::ranges::end(outputRange);
+  auto end = ql::ranges::end(outputRange);
   while (std::ranges::distance(begin, end) >= chunkSize) {
     auto start = begin;
     std::ranges::advance(begin, chunkSize);

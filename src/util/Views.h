@@ -150,7 +150,7 @@ requires std::movable<UnderlyingRange> class OwningView
   }
 
   constexpr std::ranges::sentinel_t<UnderlyingRange> end() {
-    return std::ranges::end(underlyingRange_);
+    return ql::ranges::end(underlyingRange_);
   }
 
   constexpr auto begin() const
@@ -160,7 +160,7 @@ requires std::movable<UnderlyingRange> class OwningView
 
   constexpr auto end() const requires std::ranges::range<const UnderlyingRange>
   {
-    return std::ranges::end(underlyingRange_);
+    return ql::ranges::end(underlyingRange_);
   }
 
   constexpr bool empty()
