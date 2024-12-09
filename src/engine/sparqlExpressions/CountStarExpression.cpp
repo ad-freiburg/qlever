@@ -60,7 +60,7 @@ ExpressionResult CountStarExpression::evaluate(
       table.numRows(), table.numColumns(), ctx->deadline_,
       "Sort for COUNT(DISTINCT *)");
   ad_utility::callFixedSize(table.numColumns(), [&table]<int I>() {
-    Engine::sort<I>(&table, std::ranges::lexicographical_compare);
+    Engine::sort<I>(&table, ql::ranges::lexicographical_compare);
   });
   return Id::makeFromInt(
       static_cast<int64_t>(Engine::countDistinct(table, checkCancellation)));

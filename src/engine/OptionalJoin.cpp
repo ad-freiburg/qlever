@@ -308,7 +308,7 @@ void OptionalJoin::optionalJoin(
   auto rightPermuted =
       right.asColumnSubsetView(joinColumnData.permutationRight());
 
-  auto lessThanBoth = std::ranges::lexicographical_compare;
+  auto lessThanBoth = ql::ranges::lexicographical_compare;
 
   auto rowAdder = ad_utility::AddCombinedRowToIdTable(
       joinColumns.size(), leftPermuted, rightPermuted, std::move(*result),
