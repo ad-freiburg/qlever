@@ -81,7 +81,7 @@ inline void chunkedCopy(R&& inputRange, O result,
   auto begin = ql::ranges::begin(inputRange);
   auto end = ql::ranges::end(inputRange);
   auto target = result;
-  while (std::ranges::distance(begin, end) >= chunkSize) {
+  while (ql::ranges::distance(begin, end) >= chunkSize) {
     auto start = begin;
     std::ranges::advance(begin, chunkSize);
     target = ql::ranges::copy(start, begin, target).out;
@@ -105,7 +105,7 @@ inline void chunkedFill(R&& outputRange, const T& value,
                         const std::invocable auto& chunkOperation) {
   auto begin = ql::ranges::begin(outputRange);
   auto end = ql::ranges::end(outputRange);
-  while (std::ranges::distance(begin, end) >= chunkSize) {
+  while (ql::ranges::distance(begin, end) >= chunkSize) {
     auto start = begin;
     std::ranges::advance(begin, chunkSize);
     ql::ranges::fill(start, begin, value);

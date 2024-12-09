@@ -41,7 +41,7 @@ ExpressionResult CountStarExpression::evaluate(
         return !varAndIdx.first.name().starts_with(
             QLEVER_INTERNAL_VARIABLE_PREFIX);
       });
-  table.setNumColumns(std::ranges::distance(varToColNoInternalVariables));
+  table.setNumColumns(ql::ranges::distance(varToColNoInternalVariables));
   table.resize(ctx->size());
   auto checkCancellation = [ctx]() {
     ctx->cancellationHandle_->throwIfCancelled();
