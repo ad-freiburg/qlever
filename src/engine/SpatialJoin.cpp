@@ -190,7 +190,7 @@ size_t SpatialJoin::getResultWidth() const {
       absl::flat_hash_set<Variable> pvSet{pv.begin(), pv.end()};
 
       // The payloadVariables_ may contain the right join variable
-      return pvSet.size() + (pvSet.contains(config_.right_) ? 0 : 1);
+      sizeRight = pvSet.size() + (pvSet.contains(config_.right_) ? 0 : 1);
     }
     auto widthChildren = childLeft_->getResultWidth() + sizeRight;
 
@@ -283,7 +283,13 @@ float SpatialJoin::getMultiplicity(size_t col) {
       child = childLeft_;
     } else {
       child = childRight_;
-      column -= childLeft_->getResultWidth();
+      // Since we only select the payload variables into the result and
+      // potentially omit some columns from the right child, we need to
+      // translate the column index on the spatial join to a column index in the
+      // right child.
+      auto filteredColumns = copySortedByColumnIndex(getVarColMapPayloadVars());
+      column = filteredColumns.at(column - childLeft_->getResultWidth())
+                   .second.columnIndex_;
     }
     auto distinctnessChild = getDistinctness(child, column);
     return static_cast<float>(childLeft_->getSizeEstimate() *
