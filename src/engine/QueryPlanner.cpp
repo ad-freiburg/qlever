@@ -1342,9 +1342,8 @@ size_t QueryPlanner::countSubgraphs(
   // Remove duplicate plans from `graph`.
   auto getId = [](const SubtreePlan* v) { return v->_idsOfIncludedNodes; };
   ql::ranges::sort(graph, ql::ranges::less{}, getId);
-  graph.erase(
-      std::ranges::unique(graph, std::ranges::equal_to{}, getId).begin(),
-      graph.end());
+  graph.erase(std::ranges::unique(graph, ql::ranges::equal_to{}, getId).begin(),
+              graph.end());
 
   // Qlever currently limits the number of triples etc. per group to be <= 64
   // anyway, so we can simply assert here.
