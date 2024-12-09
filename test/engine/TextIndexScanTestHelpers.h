@@ -71,6 +71,12 @@ inline float calculateBM25FromParameters(size_t tf, size_t df, size_t nofDocs,
   return tf_star * idf;
 }
 
+inline float calculateTFIDFFromParameters(size_t tf, size_t df,
+                                          size_t nofDocs) {
+  float idf = log2f(nofDocs / df);
+  return tf * idf;
+}
+
 inline string combineToString(const string& text, const string& word) {
   std::stringstream ss;
   ss << "Text: " << text << ", Word: " << word << std::endl;

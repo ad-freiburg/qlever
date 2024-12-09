@@ -39,15 +39,17 @@ std::vector<std::string> getAllIndexFilenames(const std::string& indexBasename);
 // "älpha", "A", "Beta"`. These vocabulary entries are expected by the tests
 // for the subclasses of `SparqlExpression`.
 // The concrete triple contents are currently used in `GroupByTest.cpp`.
-Index makeTestIndex(const std::string& indexBasename,
-                    std::optional<std::string> turtleInput = std::nullopt,
-                    bool loadAllPermutations = true, bool usePatterns = true,
-                    bool usePrefixCompression = true,
-                    ad_utility::MemorySize blocksizePermutations = 16_B,
-                    bool createTextIndex = false,
-                    bool addWordsFromLiterals = true,
-                    std::optional<std::pair<std::string, std::string>>
-                        contentsOfWordsFileAndDocsfile = std::nullopt);
+Index makeTestIndex(
+    const std::string& indexBasename,
+    std::optional<std::string> turtleInput = std::nullopt,
+    bool loadAllPermutations = true, bool usePatterns = true,
+    bool usePrefixCompression = true,
+    ad_utility::MemorySize blocksizePermutations = 16_B,
+    bool createTextIndex = false, bool addWordsFromLiterals = true,
+    std::optional<std::pair<std::string, std::string>>
+        contentsOfWordsFileAndDocsfile = std::nullopt,
+    std::optional<Index::ScoringMetric> scoringMetric = std::nullopt,
+    std::optional<std::pair<float, float>> bAndKParam = std::nullopt);
 
 // Return a static  `QueryExecutionContext` that refers to an index that was
 // build using `makeTestIndex` (see above). The index (most notably its
@@ -60,7 +62,9 @@ QueryExecutionContext* getQec(
     ad_utility::MemorySize blocksizePermutations = 16_B,
     bool createTextIndex = false, bool addWordsFromLiterals = true,
     std::optional<std::pair<std::string, std::string>>
-        contentsOfWordsFileAndDocsfile = std::nullopt);
+        contentsOfWordsFileAndDocsfile = std::nullopt,
+    std::optional<Index::ScoringMetric> scoringMetric = std::nullopt,
+    std::optional<std::pair<float, float>> bAndKParam = std::nullopt);
 
 // Return a lambda that takes a string and converts it into an ID by looking
 // it up in the vocabulary of `index`. An `AD_CONTRACT_CHECK` will fail if the

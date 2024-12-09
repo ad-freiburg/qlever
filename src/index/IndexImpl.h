@@ -121,6 +121,37 @@ class IndexImpl {
 
   using NumNormalAndInternal = Index::NumNormalAndInternal;
 
+  // Struct to keep track of metrics used to calculate Scores
+  struct ScoreData {
+    Index::ScoringMetric scoringMetric;
+    InvertedIndex invertedIndex;
+    DocLengthMap docLengthMap;
+    std::set<TextRecordIndex> docIdSet;
+    size_t nofDocuments = 0;
+    size_t totalDocumentLength = 0;
+    float averageDocumentLength;
+    float b;
+    float k;
+    bool isDocEmpty = true;
+
+    ScoreData()
+        : scoringMetric(Index::ScoringMetric::COUNT), b(0.75), k(1.75){};
+
+    ScoreData(Index::ScoringMetric scoringMetric)
+        : scoringMetric(scoringMetric), b(0.75), k(1.75){};
+
+    ScoreData(Index::ScoringMetric scoringMetric,
+              std::pair<float, float> kAndBParam)
+        : scoringMetric(scoringMetric),
+          b(kAndBParam.second),
+          k(kAndBParam.first){};
+
+    void calculateAVDL() {
+      averageDocumentLength =
+          nofDocuments ? (totalDocumentLength / nofDocuments) : 0;
+    }
+  };
+
   // Private data members.
  private:
   string onDiskBase_;
@@ -139,6 +170,7 @@ class IndexImpl {
   json configurationJson_;
   Index::Vocab vocab_;
   Index::TextVocab textVocab_;
+  ScoreData scoreData_;
 
   TextMetaData textMeta_;
   DocsDB docsDB_;
@@ -259,25 +291,6 @@ class IndexImpl {
   void buildTextIndexFile(const std::pair<string, string>& wordsAndDocsFile,
                           bool addWordsFromLiterals);
 
-  // Struct to keep track of metrics used to calculate Scores in
-  // buildTextIndexFile
-  struct ScoreData {
-    InvertedIndex invertedIndex;
-    DocLengthMap docLengthMap;
-    std::set<TextRecordIndex> docIdSet;
-    size_t nofDocuments = 0;
-    size_t totalDocumentLength = 0;
-    float averageDocumentLength;
-    const float b = 0.75f;
-    const float k = 1.75f;
-    bool isDocEmpty = true;
-
-    void calculateAVDL() {
-      averageDocumentLength =
-          nofDocuments ? (totalDocumentLength / nofDocuments) : 0;
-    }
-  };
-
   // Helper method to fill the ScoreData with actual useful data. This doesn't
   // lead to the final scores since they can be calculated when iterating over
   // the words again in processWordsForInvertedLists thus saving one iteration
@@ -292,8 +305,7 @@ class IndexImpl {
   // average dl. it also leads to slightly increased scores for words that
   // occur in literals and docs but not in the wordsfile, leading to an
   // increased score for literals on average.
-  void calculateScoreData(ScoreData& scoreDataOutput,
-                          const string& docsFileName,
+  void calculateScoreData(const string& docsFileName,
                           bool addWordsFromLiterals);
 
   // This method checks if the given word is in the vocabulary (returns false
@@ -301,11 +313,10 @@ class IndexImpl {
   // this id it adds it to the inverted index or modifies it in the intended
   // way.
   bool addWordToScoreDataInvertedIndex(std::string_view word,
-                                       ScoreData& scoreData,
                                        TextRecordIndex currentContextId);
 
-  float calculateBM25(ScoreData& scoreData, WordIndex wordIndex,
-                      TextRecordIndex contextId);
+  float calculateBM25OrTFIDF(WordIndex wordIndex, TextRecordIndex contextId,
+                             bool calcBM25);
 
   // Build docsDB file from given file (one text record per line).
   void buildDocsDB(const string& docsFile) const;
@@ -318,6 +329,8 @@ class IndexImpl {
   auto& getNonConstVocabForTesting() { return vocab_; }
 
   const auto& getTextVocab() const { return textVocab_; };
+
+  const auto& getScoreData() const { return scoreData_; }
 
   ad_utility::BlankNodeManager* getBlankNodeManager() const;
 
@@ -470,6 +483,17 @@ class IndexImpl {
     numTriplesPerBatch_ = numTriplesPerBatch;
   }
 
+  void setScoringMetricsUsed(Index::ScoringMetric scoringMetric) {
+    scoreData_.scoringMetric = scoringMetric;
+  }
+
+  void setBM25Parameters(float b, float k) {
+    b = (b < 0 || b > 1) ? 0.75 : b;
+    k = k < 0 ? 1.75 : k;
+    scoreData_.b = b;
+    scoreData_.k = k;
+  }
+
   const string& getTextName() const { return textMeta_.getName(); }
 
   const string& getKbName() const { return pso_.getKbName(); }
@@ -574,8 +598,7 @@ class IndexImpl {
                                    bool addWordsFromLiterals);
 
   void processWordsForInvertedLists(const string& contextFile,
-                                    bool addWordsFromLiterals, TextVec& vec,
-                                    ScoreData& scoreData);
+                                    bool addWordsFromLiterals, TextVec& vec);
 
   // TODO<joka921> Get rid of the `numColumns` by including them into the
   // `sortedTriples` argument.

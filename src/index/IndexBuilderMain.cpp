@@ -164,6 +164,9 @@ int main(int argc, char** argv) {
   bool keepTemporaryFiles = false;
   bool onlyPsoAndPos = false;
   bool addWordsFromLiterals = false;
+  float bScoringParam = 0.75;
+  float kScoringParam = 1.75;
+  size_t scoringMetric = 0;
   std::optional<ad_utility::MemorySize> stxxlMemory;
   optind = 1;
 
@@ -213,6 +216,15 @@ int main(int argc, char** argv) {
   add("add-text-index,A", po::bool_switch(&onlyAddTextIndex),
       "Only build the text index. Assumes that a knowledge graph index with "
       "the same `index-basename` already exists.");
+  add("set-bm25-b-param,bm25-b", po::value(&bScoringParam),
+      "Sets the b param in the BM25 scoring metric. This has to be between "
+      "(including) 0 and 1. The default is 0.75.");
+  add("set-bm25-k-param,bm25-k", po::value(&kScoringParam),
+      "Sets the k param in the BM25 scoring metric. This has to be greater "
+      "than or equal to 0. The default is 1.75.");
+  add("set-scoring-metric,S", po::value(&scoringMetric),
+      "Sets the scoring metric used. Options are 0 for count, 1 for tf idf "
+      "and 2 for bm25. The default is 0 (count).");
 
   // Options for the knowledge graph index.
   add("settings-file,s", po::value(&settingsFile),
@@ -241,6 +253,14 @@ int main(int argc, char** argv) {
       return EXIT_SUCCESS;
     }
     po::notify(optionsMap);
+    if (kScoringParam < 0) {
+      throw std::invalid_argument("The value of bm25-k must be >= 0");
+    }
+    if (bScoringParam < 0 || bScoringParam > 1) {
+      throw std::invalid_argument(
+          "The value of bm25-b must be between and "
+          "including 0 and 1");
+    }
   } catch (const std::exception& e) {
     std::cerr << "Error in command-line argument: " << e.what() << '\n';
     std::cerr << boostOptions << '\n';
@@ -324,6 +344,23 @@ int main(int argc, char** argv) {
     }
 
     if ((!wordsfile.empty() && !docsfile.empty()) || addWordsFromLiterals) {
+      Index::ScoringMetric scoring;
+      switch (scoringMetric) {
+        case 0:
+          scoring = Index::ScoringMetric::COUNT;
+          break;
+        case 1:
+          scoring = Index::ScoringMetric::TFIDF;
+          break;
+        case 2:
+          scoring = Index::ScoringMetric::BM25;
+          break;
+        default:
+          scoring = Index::ScoringMetric::COUNT;
+          break;
+      }
+      index.setScoringMetricsUsed(scoring);
+      index.setBM25Parmeters(bScoringParam, kScoringParam);
       index.buildTextIndexFile(
           std::pair<std::string, std::string>{wordsfile, docsfile},
           addWordsFromLiterals);

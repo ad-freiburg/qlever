@@ -66,6 +66,8 @@ class Index {
     vector<Score> scores_;
   };
 
+  enum class ScoringMetric { COUNT, TFIDF, BM25 };
+
   using Filetype = qlever::Filetype;
   using InputFileSpecification = qlever::InputFileSpecification;
 
@@ -204,6 +206,10 @@ class Index {
   void setSettingsFile(const std::string& filename);
 
   void setNumTriplesPerBatch(uint64_t numTriplesPerBatch);
+
+  void setScoringMetricsUsed(ScoringMetric scoringMetric);
+
+  void setBM25Parmeters(float b, float k);
 
   const std::string& getTextName() const;
 

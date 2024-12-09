@@ -117,19 +117,18 @@ void IndexImpl::buildTextIndexFile(
   vocab_.readFromFile(onDiskBase_ + VOCAB_SUFFIX);
 
   // Build the text vocabulary (first scan over the text records).
-  LOG(INFO) << "Building text vocabulary ..." << std::endl;
   size_t nofLines =
       processWordsForVocabulary(wordsAndDocsFile.first, addWordsFromLiterals);
   // Calculate the score data for the words
-  ScoreData scoreData;
-  calculateScoreData(scoreData, wordsAndDocsFile.second, addWordsFromLiterals);
+  if (scoreData_.scoringMetric != Index::ScoringMetric::COUNT) {
+    calculateScoreData(wordsAndDocsFile.second, addWordsFromLiterals);
+  }
   // Build the half-inverted lists (second scan over the text records).
   LOG(INFO) << "Building the half-inverted index lists ..." << std::endl;
   calculateBlockBoundaries();
   TextVec v;
   v.reserve(nofLines);
-  processWordsForInvertedLists(wordsAndDocsFile.first, addWordsFromLiterals, v,
-                               scoreData);
+  processWordsForInvertedLists(wordsAndDocsFile.first, addWordsFromLiterals, v);
   LOG(DEBUG) << "Sorting text index, #elements = " << v.size() << std::endl;
   stxxl::sort(begin(v), end(v), SortText(),
               memoryLimitIndexBuilding().getBytes() / 3);
@@ -139,10 +138,9 @@ void IndexImpl::buildTextIndexFile(
 }
 
 // _____________________________________________________________________________
-void IndexImpl::calculateScoreData(ScoreData& scoreDataOutput,
-                                   const string& docsFileName,
+void IndexImpl::calculateScoreData(const string& docsFileName,
                                    bool addWordsFromLiterals) {
-  scoreDataOutput.invertedIndex.reserve(textVocab_.size());
+  scoreData_.invertedIndex.reserve(textVocab_.size());
   // Initialize localemanager which is used when parsing the docTexts and
   // iterator contextId
   auto localeManager = textVocab_.getLocaleManager();
@@ -154,7 +152,7 @@ void IndexImpl::calculateScoreData(ScoreData& scoreDataOutput,
     string line;
     line.reserve(BUFFER_SIZE_DOCSFILE_LINE);
     while (std::getline(docsFile, line)) {
-      scoreDataOutput.isDocEmpty = true;
+      scoreData_.isDocEmpty = true;
       std::string_view lineView = line;
       size_t tab = lineView.find('\t');
       // Get contextId from line
@@ -169,18 +167,17 @@ void IndexImpl::calculateScoreData(ScoreData& scoreDataOutput,
         auto wordNormalized = localeManager.getLowercaseUtf8(word);
         // Check if word exists and retrieve wordId
         if (!addWordToScoreDataInvertedIndex(
-                wordNormalized, scoreDataOutput,
-                TextRecordIndex::make(contextId))) {
+                wordNormalized, TextRecordIndex::make(contextId))) {
           continue;
         }
       }
 
-      if (!scoreDataOutput.isDocEmpty) {
-        ++scoreDataOutput.nofDocuments;
-        scoreDataOutput.docIdSet.insert(TextRecordIndex::make(contextId));
+      if (!scoreData_.isDocEmpty) {
+        ++scoreData_.nofDocuments;
+        scoreData_.docIdSet.insert(TextRecordIndex::make(contextId));
       }
     }
-    scoreDataOutput.calculateAVDL();
+    scoreData_.calculateAVDL();
   }
 
   // Parse literals if added
@@ -195,7 +192,7 @@ void IndexImpl::calculateScoreData(ScoreData& scoreDataOutput,
     }
     // Reset parameters for loop
     ++contextId;
-    scoreDataOutput.isDocEmpty = true;
+    scoreData_.isDocEmpty = true;
     std::string_view textView = text;
 
     // Parse words in literal
@@ -203,50 +200,49 @@ void IndexImpl::calculateScoreData(ScoreData& scoreDataOutput,
                                     absl::SkipEmpty{})) {
       auto wordNormalized = localeManager.getLowercaseUtf8(word);
       // Check if word exists and retrieve wordId
-      if (!addWordToScoreDataInvertedIndex(wordNormalized, scoreDataOutput,
+      if (!addWordToScoreDataInvertedIndex(wordNormalized,
                                            TextRecordIndex::make(contextId))) {
         continue;
       }
     }
 
-    if (!scoreDataOutput.isDocEmpty) {
-      ++scoreDataOutput.nofDocuments;
-      scoreDataOutput.docIdSet.insert(TextRecordIndex::make(contextId));
+    if (!scoreData_.isDocEmpty) {
+      ++scoreData_.nofDocuments;
+      scoreData_.docIdSet.insert(TextRecordIndex::make(contextId));
     }
   }
-  scoreDataOutput.calculateAVDL();
+  scoreData_.calculateAVDL();
 }
 
 // _____________________________________________________________________________
 bool IndexImpl::addWordToScoreDataInvertedIndex(
-    std::string_view word, ScoreData& scoreData,
-    TextRecordIndex currentContextId) {
+    std::string_view word, TextRecordIndex currentContextId) {
   WordVocabIndex wvi;
   // Check if word exists and retrieve wordId
   WordIndex currentWordId;
   if (!textVocab_.getRawId(word, &wvi, currentWordId)) {
     return false;
   }
-  scoreData.isDocEmpty = false;
+  scoreData_.isDocEmpty = false;
   // Emplaces or increases the docLengthMap
-  if (scoreData.docLengthMap.contains(currentContextId)) {
-    ++scoreData.docLengthMap[currentContextId];
+  if (scoreData_.docLengthMap.contains(currentContextId)) {
+    ++scoreData_.docLengthMap[currentContextId];
   } else {
-    scoreData.docLengthMap[currentContextId] = 1;
+    scoreData_.docLengthMap[currentContextId] = 1;
   }
-  ++scoreData.totalDocumentLength;
+  ++scoreData_.totalDocumentLength;
   // Check if wordId already is a key in the InvertedIndex
-  if (scoreData.invertedIndex.contains(currentWordId)) {
+  if (scoreData_.invertedIndex.contains(currentWordId)) {
     // Check if the word is seen in a new context or not
-    if (scoreData.invertedIndex[currentWordId].back().first ==
+    if (scoreData_.invertedIndex[currentWordId].back().first ==
         currentContextId) {
-      ++scoreData.invertedIndex[currentWordId].back().second;
+      ++scoreData_.invertedIndex[currentWordId].back().second;
     } else {
-      scoreData.invertedIndex[currentWordId].emplace_back(
+      scoreData_.invertedIndex[currentWordId].emplace_back(
           std::make_pair(currentContextId, 1));
     }
   } else {
-    scoreData.invertedIndex[currentWordId] =
+    scoreData_.invertedIndex[currentWordId] =
         std::vector<std::pair<TextRecordIndex, TermFrequency>>{
             std::make_pair(currentContextId, 1)};
   }
@@ -254,11 +250,9 @@ bool IndexImpl::addWordToScoreDataInvertedIndex(
 }
 
 // _____________________________________________________________________________
-float IndexImpl::calculateBM25(ScoreData& scoreData, WordIndex wordIndex,
-                               TextRecordIndex contextId) {
-  // For testing
-  string_view test = indexToString(WordVocabIndex::make(wordIndex));
-
+float IndexImpl::calculateBM25OrTFIDF(WordIndex wordIndex,
+                                      TextRecordIndex contextId,
+                                      bool calcBM25) {
   // Lambda to binary search a sorted vector and pass the found value by ref.
   // Is not the typical binary search but gives back the next biggest element
   // This can maybe be extended to a template function in the ad_utility
@@ -291,38 +285,40 @@ float IndexImpl::calculateBM25(ScoreData& scoreData, WordIndex wordIndex,
     return vector[endSearchFrame].second;
   };
 
-  uint64_t testContextId = contextId.get();
-
   // Check if values exist and retrieve them
   TextRecordIndex docId;
-  if (!scoreData.docIdSet.contains(contextId)) {
-    auto it = scoreData.docIdSet.upper_bound(contextId);
-    if (it == scoreData.docIdSet.end()) {
+  if (!scoreData_.docIdSet.contains(contextId)) {
+    auto it = scoreData_.docIdSet.upper_bound(contextId);
+    if (it == scoreData_.docIdSet.end()) {
       return 0;
     }
     docId = *it;
   } else {
     docId = contextId;
   }
-  auto docLengthKeyValue = scoreData.docLengthMap.find(docId);
-  if (docLengthKeyValue == scoreData.docLengthMap.end()) {
+  auto docLengthKeyValue = scoreData_.docLengthMap.find(docId);
+  if (docLengthKeyValue == scoreData_.docLengthMap.end()) {
     return 0;
   }
   uint64_t dl = docLengthKeyValue->second;
 
-  auto invertedIndexKeyValue = scoreData.invertedIndex.find(wordIndex);
-  if (invertedIndexKeyValue == scoreData.invertedIndex.end()) {
+  auto invertedIndexKeyValue = scoreData_.invertedIndex.find(wordIndex);
+  if (invertedIndexKeyValue == scoreData_.invertedIndex.end()) {
     return 0;
   }
   const vector<std::pair<TextRecordIndex, TermFrequency>>& docVecRef =
       invertedIndexKeyValue->second;
   size_t df = docVecRef.size();
   TermFrequency tf = getVectorEntry(docVecRef, contextId);
-  float alpha =
-      (1 - scoreData.b + scoreData.b * (dl / scoreData.averageDocumentLength));
-  float tf_star = (tf * (scoreData.k + 1)) / (scoreData.k * alpha + tf);
-  float idf = std::log2f(scoreData.nofDocuments / df);
-  return tf_star * idf;
+  float idf = std::log2f(scoreData_.nofDocuments / df);
+  if (calcBM25) {
+    float alpha = (1 - scoreData_.b +
+                   scoreData_.b * (dl / scoreData_.averageDocumentLength));
+    float tf_star = (tf * (scoreData_.k + 1)) / (scoreData_.k * alpha + tf);
+    return tf_star * idf;
+  } else {
+    return tf * idf;
+  }
 }
 
 // _____________________________________________________________________________
@@ -386,7 +382,20 @@ void IndexImpl::addTextFromOnDiskIndex() {
   serializer >> textMeta_;
   textIndexFile_ = std::move(serializer).file();
   LOG(INFO) << "Registered text index: " << textMeta_.statistics() << std::endl;
-
+  switch (textMeta_.getScoringType()) {
+    case 0:
+      scoreData_.scoringMetric = Index::ScoringMetric::COUNT;
+      break;
+    case 1:
+      scoreData_.scoringMetric = Index::ScoringMetric::TFIDF;
+      break;
+    case 2:
+      scoreData_.scoringMetric = Index::ScoringMetric::BM25;
+      break;
+    default:
+      scoreData_.scoringMetric = Index::ScoringMetric::COUNT;
+      break;
+  }
   // Initialize the text records file aka docsDB. NOTE: The search also works
   // without this, but then there is no content to show when a text record
   // matches. This is perfectly fine when the text records come from IRIs or
@@ -428,8 +437,7 @@ size_t IndexImpl::processWordsForVocabulary(string const& contextFile,
 // _____________________________________________________________________________
 void IndexImpl::processWordsForInvertedLists(const string& contextFile,
                                              bool addWordsFromLiterals,
-                                             IndexImpl::TextVec& vec,
-                                             IndexImpl::ScoreData& scoreData) {
+                                             IndexImpl::TextVec& vec) {
   LOG(TRACE) << "BEGIN IndexImpl::passContextFileIntoVector" << std::endl;
   TextVec::bufwriter_type writer(vec);
   ad_utility::HashMap<WordIndex, Score> wordsInContext;
@@ -485,7 +493,19 @@ void IndexImpl::processWordsForInvertedLists(const string& contextFile,
                    << "not found in textVocab. Terminating\n";
         AD_FAIL();
       }
-      wordsInContext[wid] = calculateBM25(scoreData, wid, line._contextId);
+      switch (scoreData_.scoringMetric) {
+        case Index::ScoringMetric::COUNT:
+          wordsInContext[wid] += line._score;
+          break;
+        case Index::ScoringMetric::TFIDF:
+          wordsInContext[wid] =
+              calculateBM25OrTFIDF(wid, line._contextId, false);
+          break;
+        case Index::ScoringMetric::BM25:
+          wordsInContext[wid] =
+              calculateBM25OrTFIDF(wid, line._contextId, true);
+          break;
+      }
     }
   }
   if (entityNotFoundErrorMsgCount > 0) {

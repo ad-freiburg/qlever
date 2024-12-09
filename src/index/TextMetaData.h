@@ -106,6 +106,13 @@ class TextMetaData {
 
   void setName(const string& name) { _name = name; }
 
+  // 0 for Count
+  // 1 for TFIDF
+  // 2 for BM25
+  void setScoringType(size_t n) { _scoringType = n; }
+
+  size_t getScoringType() { return _scoringType; }
+
   float getAverageNofEntityContexts() const { return 1.0f; };
 
  private:
@@ -116,6 +123,7 @@ class TextMetaData {
   size_t _nofLiteralsInTextIndex = 0;
   string _name;
   vector<TextBlockMetaData> _blocks;
+  size_t _scoringType;
 
   // ___________________________________________________________________________
   AD_SERIALIZE_FRIEND_FUNCTION(TextMetaData) {
@@ -126,5 +134,6 @@ class TextMetaData {
     serializer | arg._nofLiteralsInTextIndex;
     serializer | arg._name;
     serializer | arg._blocks;
+    serializer | arg._scoringType;
   }
 };
