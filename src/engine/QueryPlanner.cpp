@@ -1775,7 +1775,7 @@ size_t QueryPlanner::findCheapestExecutionTree(
       return aCost < bCost;
     }
   };
-  return std::ranges::min_element(lastRow, compare) - lastRow.begin();
+  return ql::ranges::min_element(lastRow, compare) - lastRow.begin();
 };
 
 // _________________________________________________________________________________
@@ -1788,7 +1788,7 @@ size_t QueryPlanner::findSmallestExecutionTree(
     };
     return tie(a) < tie(b);
   };
-  return std::ranges::min_element(lastRow, compare) - lastRow.begin();
+  return ql::ranges::min_element(lastRow, compare) - lastRow.begin();
 };
 
 // _____________________________________________________________________________

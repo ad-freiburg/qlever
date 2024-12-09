@@ -109,7 +109,7 @@ void RuntimeInformation::setColumnNames(const VariableToColumnMap& columnMap) {
 
   // Resize the `columnNames_` vector such that we can use the keys from
   // columnMap (which are not necessarily consecutive) as indexes.
-  ColumnIndex maxColumnIndex = std::ranges::max(
+  ColumnIndex maxColumnIndex = ql::ranges::max(
       columnMap | std::views::values |
       std::views::transform(&ColumnIndexAndTypeInfo::columnIndex_));
   columnNames_.resize(maxColumnIndex + 1);

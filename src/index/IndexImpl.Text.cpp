@@ -961,7 +961,7 @@ size_t IndexImpl::getSizeEstimate(const string& words) const {
     }
     return 1 + optTbmd.value().tbmd_._entityCl._nofElements / 100;
   };
-  return std::ranges::min(terms | std::views::transform(termToEstimate));
+  return ql::ranges::min(terms | std::views::transform(termToEstimate));
 }
 
 // _____________________________________________________________________________

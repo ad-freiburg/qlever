@@ -179,7 +179,7 @@ uint64_t GroupBy::getSizeEstimateBeforeLimit() {
 
   // TODO<joka921> Once we can use `std::views` this can be solved
   // more elegantly.
-  float minMultiplicity = std::ranges::min(
+  float minMultiplicity = ql::ranges::min(
       _groupByVariables | std::views::transform(varToMultiplicity));
   return _subtree->getSizeEstimate() / minMultiplicity;
 }
