@@ -337,6 +337,32 @@ TEST(RdfParserTest, blankNodePropertyList) {
   testPropertyListAsSubject(CtreParser{});
 }
 
+TEST(RdfParserTest, base) {
+  auto testForGivenParser = [](auto parser) {
+    parser.setInputStream("@base <http://www.example.org/path/> .");
+    ASSERT_TRUE(parser.base());
+    ASSERT_EQ(parser.baseForRelativeIri().toStringRepresentation(),
+              "<http://www.example.org/path/>");
+    ASSERT_EQ(parser.baseForAbsoluteIri().toStringRepresentation(),
+              "<http://www.example.org/>");
+  };
+  testForGivenParser(Re2Parser{});
+  testForGivenParser(CtreParser{});
+}
+
+TEST(RdfParserTest, sparqlBase) {
+  auto testForGivenParser = [](auto parser) {
+    parser.setInputStream("BASE <http://www.example.org/path/> .");
+    ASSERT_TRUE(parser.sparqlBase());
+    ASSERT_EQ(parser.baseForRelativeIri().toStringRepresentation(),
+              "<http://www.example.org/path/>");
+    ASSERT_EQ(parser.baseForAbsoluteIri().toStringRepresentation(),
+              "<http://www.example.org/>");
+  };
+  testForGivenParser(Re2Parser{});
+  testForGivenParser(CtreParser{});
+}
+
 TEST(RdfParserTest, object) {
   auto runCommonTests = [](auto p) {
     auto sub = iri("<sub>");
@@ -939,7 +965,9 @@ TEST(RdfParserTest, exceptionPropagation) {
         ::testing::ContainsRegex("Parse error"));
     ad_utility::deleteFile(filename);
   };
-  forAllParsers(testWithParser, "<missing> <object> .");
+  // Make sure that the `.` is not the final character because we (need to)
+  // handle that as a special case in `RdfStreamParser<T>::getLineImpl`.
+  forAllParsers(testWithParser, "<missing> <object> . ");
 }
 
 // Test that exceptions in the batched reading of the input file are properly

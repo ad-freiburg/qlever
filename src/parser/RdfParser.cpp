@@ -852,9 +852,16 @@ bool RdfStreamParser<T>::getLineImpl(TurtleTriple* triple) {
       // If this buffer reads from a memory-mapped file, then exceptions are
       // immediately rethrown. If we are reading from a stream in chunks of
       // bytes, we can try again with a larger buffer.
+      //
+      // IMPORTANT: When the buffer ends with a `.`, always extend it because
+      // we might be in the middle of a `PN_LOCAL` that continues and taking
+      // the `.` to be the final `.` of the statement would be wrong.
+      //
+      // TODO: How to detect that there are no more bytes in the buffer?
       try {
-        // variable parsedStatement will be true iff a statement can
-        // successfully be parsed
+        if (byteVec_.size() > 0 && byteVec_.back() == '.') {
+          throw typename T::ParseException("Buffer ends with a `.`");
+        }
         parsedStatement = T::statement();
       } catch (const typename T::ParseException& p) {
         parsedStatement = false;

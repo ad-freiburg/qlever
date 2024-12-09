@@ -26,13 +26,14 @@ TEST(IriTest, getBaseIri) {
   Iri iri1 = Iri::fromIriref("<http://purl.uniprot.org/uniprot/>");
   EXPECT_THAT("<http://purl.uniprot.org/>",
               iri1.getBaseIri().toStringRepresentation());
+  Iri iri2 = Iri::fromIriref("<http://purl.uniprot.org/>");
   EXPECT_THAT("<http://purl.uniprot.org/>",
-              iri1.getBaseIri().getBaseIri().toStringRepresentation());
-  Iri iri2 = Iri::fromIriref("<http://purl.uniprot.org>");
-  EXPECT_THAT("<http://purl.uniprot.org>",
               iri2.getBaseIri().toStringRepresentation());
-  Iri iri3 = Iri::fromIriref("<>");
-  EXPECT_THAT("<>", iri3.getBaseIri().toStringRepresentation());
+  Iri iri3 = Iri::fromIriref("<http://purl.uniprot.org>");
+  EXPECT_THAT("<http://purl.uniprot.org>",
+              iri3.getBaseIri().toStringRepresentation());
+  Iri iri4 = Iri::fromIriref("<>");
+  EXPECT_THAT("<>", iri4.getBaseIri().toStringRepresentation());
 }
 
 TEST(IriTest, emptyIri) {
