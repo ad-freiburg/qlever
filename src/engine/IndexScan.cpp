@@ -167,7 +167,7 @@ IndexScan::setPrefilterGetUpdatedQueryExecutionTree(
   }
   const auto& [sortedVar, colIdx] = optSortedVarColIdxPair.value();
   auto it =
-      std::ranges::find(prefilterVariablePairs, sortedVar, ad_utility::second);
+      ql::ranges::find(prefilterVariablePairs, sortedVar, ad_utility::second);
   if (it != prefilterVariablePairs.end()) {
     return makeCopyWithAddedPrefilters(
         std::make_pair(it->first->clone(), colIdx));

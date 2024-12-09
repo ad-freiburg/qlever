@@ -407,7 +407,7 @@ bool SpatialJoinAlgorithms::isContainedInBoundingBoxes(
     const std::vector<Box>& boundingBox, Point point) const {
   convertToNormalCoordinates(point);
 
-  return std::ranges::any_of(boundingBox, [point](const Box& aBox) {
+  return ql::ranges::any_of(boundingBox, [point](const Box& aBox) {
     return boost::geometry::covered_by(point, aBox);
   });
 }

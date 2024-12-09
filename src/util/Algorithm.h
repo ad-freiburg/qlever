@@ -34,8 +34,8 @@ constexpr bool contains(Container&& container, const T& element) {
                 ad_utility::isSimilar<Container, std::string_view>) {
     return container.find(element) != container.npos;
   } else {
-    return std::ranges::find(std::begin(container), std::end(container),
-                             element) != std::end(container);
+    return ql::ranges::find(std::begin(container), std::end(container),
+                            element) != std::end(container);
   }
 }
 

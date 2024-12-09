@@ -693,7 +693,7 @@ class IdTable {
     resize(numRows() + numInserted);
     ql::ranges::for_each(ad_utility::integerRange(numColumns()),
                          [this, &table, oldSize, begin, numInserted](size_t i) {
-                           std::ranges::copy(
+                           ql::ranges::copy(
                                table.getColumn(i).subspan(begin, numInserted),
                                getColumn(i).begin() + oldSize);
                          });
@@ -795,7 +795,7 @@ class IdTableStatic
   friend std::ostream& operator<<(std::ostream& os,
                                   const IdTableStatic& idTable) {
     os << "{ ";
-    std::ranges::copy(
+    ql::ranges::copy(
         idTable, std::ostream_iterator<columnBasedIdTable::Row<Id>>(os, " "));
     os << "}";
     return os;

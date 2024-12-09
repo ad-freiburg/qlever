@@ -340,14 +340,14 @@ void LocatedTriplesPerBlock::updateAugmentedMetadata() {
 // ____________________________________________________________________________
 std::ostream& operator<<(std::ostream& os, const LocatedTriples& lts) {
   os << "{ ";
-  std::ranges::copy(lts, std::ostream_iterator<LocatedTriple>(os, " "));
+  ql::ranges::copy(lts, std::ostream_iterator<LocatedTriple>(os, " "));
   os << "}";
   return os;
 }
 
 // ____________________________________________________________________________
 std::ostream& operator<<(std::ostream& os, const std::vector<IdTriple<0>>& v) {
-  std::ranges::copy(v, std::ostream_iterator<IdTriple<0>>(os, ", "));
+  ql::ranges::copy(v, std::ostream_iterator<IdTriple<0>>(os, ", "));
   return os;
 }
 
@@ -361,7 +361,7 @@ bool LocatedTriplesPerBlock::isLocatedTriple(const IdTriple<0>& triple,
     return ad_utility::contains(lt, locatedTriple);
   };
 
-  return std::ranges::any_of(map_, [&blockContains](auto& indexAndBlock) {
+  return ql::ranges::any_of(map_, [&blockContains](auto& indexAndBlock) {
     const auto& [index, block] = indexAndBlock;
     return blockContains(block, index);
   });

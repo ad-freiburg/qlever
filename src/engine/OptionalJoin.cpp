@@ -258,7 +258,7 @@ auto OptionalJoin::computeImplementationFromIdTables(
     -> Implementation {
   auto implementation = Implementation::NoUndef;
   auto anyIsUndefined = [](auto column) {
-    return std::ranges::any_of(column, &Id::isUndefined);
+    return ql::ranges::any_of(column, &Id::isUndefined);
   };
   for (size_t i = 0; i < joinColumns.size(); ++i) {
     auto [leftCol, rightCol] = joinColumns.at(i);

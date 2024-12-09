@@ -319,7 +319,7 @@ void ConfigManager::verifyPath(const std::vector<std::string>& path) const {
   A string must be a valid `NAME` in the short hand. Otherwise, an option
   can't get accessed with the short hand.
   */
-  if (auto failedKey = std::ranges::find_if_not(path, isNameInShortHand);
+  if (auto failedKey = ql::ranges::find_if_not(path, isNameInShortHand);
       failedKey != path.end()) {
     /*
     One of the keys failed. `failedKey` is an iterator pointing to the key.

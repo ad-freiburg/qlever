@@ -49,7 +49,7 @@ ProtoResult TextLimit::computeResult([[maybe_unused]] bool requestLaziness) {
 
   auto compareEntities = [this](const auto& lhs, const auto& rhs) {
     auto it =
-        std::ranges::find_if(entityColumns_, [&lhs, &rhs](const auto& col) {
+        ql::ranges::find_if(entityColumns_, [&lhs, &rhs](const auto& col) {
           return lhs[col] < rhs[col] || lhs[col] > rhs[col];
         });
 

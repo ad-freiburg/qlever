@@ -50,9 +50,9 @@ ExpressionResult CountStarExpression::evaluate(
   for (const auto& [sourceColIdx, _] :
        varToColNoInternalVariables | std::views::values) {
     const auto& sourceColumn = ctx->_inputTable.getColumn(sourceColIdx);
-    std::ranges::copy(sourceColumn.begin() + ctx->_beginIndex,
-                      sourceColumn.begin() + ctx->_endIndex,
-                      table.getColumn(targetColIdx).begin());
+    ql::ranges::copy(sourceColumn.begin() + ctx->_beginIndex,
+                     sourceColumn.begin() + ctx->_endIndex,
+                     table.getColumn(targetColIdx).begin());
     ++targetColIdx;
     checkCancellation();
   }

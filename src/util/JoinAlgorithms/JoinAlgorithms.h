@@ -525,7 +525,7 @@ void specialOptionalJoin(
     // TODO<joka921> We could probably also apply this optimization if both
     // inputs contain UNDEF values only in the last column, and possibly
     // also not only for `OPTIONAL` joins.
-    auto endOfUndef = std::ranges::find_if_not(leftSub, &Id::isUndefined);
+    auto endOfUndef = ql::ranges::find_if_not(leftSub, &Id::isUndefined);
     auto findSmallerUndefRangeLeft =
         [leftSub,
          endOfUndef](auto&&...) -> cppcoro::generator<decltype(endOfUndef)> {

@@ -15,7 +15,7 @@ namespace checkUsePatternTrick {
 bool isVariableContainedInGraphPattern(
     const Variable& variable, const ParsedQuery::GraphPattern& graphPattern,
     const SparqlTriple* tripleToIgnore) {
-  if (std::ranges::any_of(
+  if (ql::ranges::any_of(
           graphPattern._filters, [&variable](const SparqlFilter& filter) {
             return filter.expression_.isVariableContained(variable);
           })) {
@@ -25,7 +25,7 @@ bool isVariableContainedInGraphPattern(
     return isVariableContainedInGraphPatternOperation(variable, op,
                                                       tripleToIgnore);
   };
-  return std::ranges::any_of(graphPattern._graphPatterns, check);
+  return ql::ranges::any_of(graphPattern._graphPatterns, check);
 }
 
 namespace p = parsedQuery;
@@ -101,7 +101,7 @@ static void rewriteTriplesForPatternTrick(const PatternTrickTuple& subAndPred,
   auto findAndRewriteMatchingTriple = [&subAndPred, &triples](
                                           auto triplePosition,
                                           size_t additionalScanColumn) {
-    auto matchingTriple = std::ranges::find_if(
+    auto matchingTriple = ql::ranges::find_if(
         triples, [&subAndPred, triplePosition](const SparqlTriple& t) {
           return std::invoke(triplePosition, t) == subAndPred.subject_ &&
                  t.p_.isIri() && !isVariable(t.p_);
@@ -270,12 +270,12 @@ std::optional<PatternTrickTuple> isTripleSuitableForPatternTrick(
   // Check that the pattern trick triple is the only place in the query
   // where the predicate variable (and the object variable in the three
   // variables case) occurs.
-  if (std::ranges::any_of(patternTrickData.variablesNotAllowedInRestOfQuery_,
-                          [&](const Variable& variable) {
-                            return isVariableContainedInGraphPattern(
-                                variable, parsedQuery->_rootGraphPattern,
-                                &triple);
-                          })) {
+  if (ql::ranges::any_of(patternTrickData.variablesNotAllowedInRestOfQuery_,
+                         [&](const Variable& variable) {
+                           return isVariableContainedInGraphPattern(
+                               variable, parsedQuery->_rootGraphPattern,
+                               &triple);
+                         })) {
     return std::nullopt;
   }
 

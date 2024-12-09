@@ -131,7 +131,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createExecutionTrees(
   // this is handled correctly in all cases.
   bool doGroupBy = !pq._groupByVariables.empty() ||
                    patternTrickTuple.has_value() ||
-                   std::ranges::any_of(pq.getAliases(), [](const Alias& alias) {
+                   ql::ranges::any_of(pq.getAliases(), [](const Alias& alias) {
                      return alias._expression.containsAggregate();
                    });
 
@@ -1299,7 +1299,7 @@ size_t QueryPlanner::findUniqueNodeIds(
   // value, i.e. they have exactly one bit set.
   AD_CORRECTNESS_CHECK(ql::ranges::all_of(
       nodeIds, [](auto nodeId) { return std::popcount(nodeId) == 1; }));
-  std::ranges::copy(nodeIds, std::inserter(uniqueNodeIds, uniqueNodeIds.end()));
+  ql::ranges::copy(nodeIds, std::inserter(uniqueNodeIds, uniqueNodeIds.end()));
   return uniqueNodeIds.size();
 }
 
@@ -1603,7 +1603,7 @@ vector<SparqlFilter> QueryPlanner::TripleGraph::pickFilters(
     coveredVariables.insert(node._variables.begin(), node._variables.end());
   }
   for (auto& f : origFilters) {
-    if (std::ranges::any_of(
+    if (ql::ranges::any_of(
             f.expression_.containedVariables(),
             [&](const auto* var) { return coveredVariables.contains(*var); })) {
       ret.push_back(f);

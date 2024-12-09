@@ -97,7 +97,7 @@ cppcoro::generator<typename SortedBlockView::value_type> uniqueBlockView(
     }
     numInputs += block.size();
     auto beg = lastValueFromPreviousBlock
-                   ? std::ranges::find_if(
+                   ? ql::ranges::find_if(
                          block, [&p = lastValueFromPreviousBlock.value()](
                                     const auto& el) { return el != p; })
                    : block.begin();

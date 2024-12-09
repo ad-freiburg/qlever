@@ -100,7 +100,7 @@ IdTable Distinct::distinct(
   // Variant of `std::ranges::unique` that allows to skip the begin rows of
   // elements found in the previous table.
   auto begin =
-      std::ranges::find_if(result, [this, &previousRow](const auto& row) {
+      ql::ranges::find_if(result, [this, &previousRow](const auto& row) {
         // Without explicit this clang seems to
         // think the this capture is redundant.
         return !previousRow.has_value() ||
@@ -169,12 +169,12 @@ IdTable Distinct::outOfPlaceDistinct(const IdTable& dynInput) const {
       // This can only be called when dynInput is not empty, so `begin[-1]` is
       // always valid.
       auto lastRow = begin[-1];
-      begin = std::ranges::find_if(begin, begin + allowedOffset,
-                                   [this, &lastRow](const auto& row) {
-                                     // Without explicit this clang seems to
-                                     // think the this capture is redundant.
-                                     return !this->matchesRow(row, lastRow);
-                                   });
+      begin = ql::ranges::find_if(begin, begin + allowedOffset,
+                                  [this, &lastRow](const auto& row) {
+                                    // Without explicit this clang seems to
+                                    // think the this capture is redundant.
+                                    return !this->matchesRow(row, lastRow);
+                                  });
       checkCancellation();
     } while (begin != end && matchesRow(*begin, begin[-1]));
   }

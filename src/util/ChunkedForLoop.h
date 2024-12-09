@@ -70,7 +70,7 @@ template <typename R>
 concept SizedInputRange =
     std::ranges::sized_range<R> && std::ranges::input_range<R>;
 
-// Similar to `std::ranges::copy`, but invokes `chunkOperation` every
+// Similar to `ql::ranges::copy`, but invokes `chunkOperation` every
 // `chunkSize` elements. (Round up to the next chunk size if the range size is
 // not a multiple of `chunkSize`.)
 template <SizedInputRange R, std::weakly_incrementable O>
@@ -84,10 +84,10 @@ inline void chunkedCopy(R&& inputRange, O result,
   while (std::ranges::distance(begin, end) >= chunkSize) {
     auto start = begin;
     std::ranges::advance(begin, chunkSize);
-    target = std::ranges::copy(start, begin, target).out;
+    target = ql::ranges::copy(start, begin, target).out;
     chunkOperation();
   }
-  std::ranges::copy(begin, end, target);
+  ql::ranges::copy(begin, end, target);
   chunkOperation();
 }
 

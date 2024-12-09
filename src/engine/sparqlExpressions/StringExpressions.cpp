@@ -446,8 +446,8 @@ class ConcatExpression : public detail::VariadicExpression {
       auto& stringVec = std::get<StringVec>(result);
       VectorWithMemoryLimit<IdOrLiteralOrIri> resultAsVec(ctx->_allocator);
       resultAsVec.reserve(stringVec.size());
-      std::ranges::copy(stringVec | std::views::transform(toLiteral),
-                        std::back_inserter(resultAsVec));
+      ql::ranges::copy(stringVec | std::views::transform(toLiteral),
+                       std::back_inserter(resultAsVec));
       return resultAsVec;
     }
   }

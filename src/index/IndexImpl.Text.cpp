@@ -750,7 +750,7 @@ IdTable IndexImpl::readWordEntityCl(
   idTable.resize(cids.size());
   ql::ranges::transform(cids, idTable.getColumn(0).begin(),
                         &Id::makeFromTextRecordIndex);
-  std::ranges::copy(
+  ql::ranges::copy(
       readFreqComprList<Id>(tbmd._entityCl._nofElements,
                             tbmd._entityCl._startWordlist,
                             static_cast<size_t>(tbmd._entityCl._startScorelist -

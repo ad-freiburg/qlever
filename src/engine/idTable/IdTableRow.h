@@ -91,7 +91,7 @@ class Row {
   explicit operator std::array<T, numStaticColumns>() const
       requires(numStaticColumns != 0) {
     std::array<T, numStaticColumns> result;
-    std::ranges::copy(*this, result.begin());
+    ql::ranges::copy(*this, result.begin());
     return result;
   }
 
@@ -282,7 +282,7 @@ class RowReferenceImpl {
     explicit operator std::array<T, numStaticColumns>() const
         requires(numStaticColumns != 0) {
       std::array<T, numStaticColumns> result;
-      std::ranges::copy(*this, result.begin());
+      ql::ranges::copy(*this, result.begin());
       return result;
     }
 

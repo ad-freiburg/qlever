@@ -34,7 +34,7 @@ VariableToColumnMap makeVarToColMapForJoinOperation(
     const auto& colIdxRight = columnIndexWithType.columnIndex_;
     // Figure out if the column (from the right operand) is a join column.
     auto joinColumnIt =
-        std::ranges::find(joinColumns, colIdxRight, ad_utility::second);
+        ql::ranges::find(joinColumns, colIdxRight, ad_utility::second);
     if (joinColumnIt != joinColumns.end()) {
       // For non-optional joins, a join column is `AlwaysDefined` if it is
       // always defined in ANY of the inputs. For optional joins a join column

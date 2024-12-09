@@ -1021,7 +1021,7 @@ GroupBy::isSupportedAggregate(sparqlExpression::SparqlExpression* expr) {
     return std::nullopt;
 
   // `expr` is not a nested aggregated
-  if (std::ranges::any_of(expr->children(), [](const auto& ptr) {
+  if (ql::ranges::any_of(expr->children(), [](const auto& ptr) {
         return ptr->containsAggregate();
       })) {
     return std::nullopt;
@@ -1164,7 +1164,7 @@ void GroupBy::substituteGroupVariable(
   for (const auto& occurrence : occurrences) {
     sparqlExpression::VectorWithMemoryLimit<ValueId> values(allocator);
     values.resize(groupValues.size());
-    std::ranges::copy(groupValues, values.begin());
+    ql::ranges::copy(groupValues, values.begin());
 
     auto newExpression = std::make_unique<sparqlExpression::VectorIdExpression>(
         std::move(values));
@@ -1307,7 +1307,7 @@ void GroupBy::evaluateAlias(
   // have to be substituted away before evaluation
 
   auto substitutions = alias.groupedVariables_;
-  auto topLevelGroupedVariable = std::ranges::find_if(
+  auto topLevelGroupedVariable = ql::ranges::find_if(
       substitutions, [](HashMapGroupedVariableInformation& val) {
         return std::get_if<OccurAsRoot>(&val.occurrences_);
       });
@@ -1320,13 +1320,13 @@ void GroupBy::evaluateAlias(
         result->getColumn(topLevelGroupedVariable->resultColumnIndex_)
             .subspan(evaluationContext._beginIndex, evaluationContext.size());
     decltype(auto) outValues = result->getColumn(alias.outCol_);
-    std::ranges::copy(groupValues,
-                      outValues.begin() + evaluationContext._beginIndex);
+    ql::ranges::copy(groupValues,
+                     outValues.begin() + evaluationContext._beginIndex);
 
     // We also need to store it for possible future use
     sparqlExpression::VectorWithMemoryLimit<ValueId> values(allocator);
     values.resize(groupValues.size());
-    std::ranges::copy(groupValues, values.begin());
+    ql::ranges::copy(groupValues, values.begin());
 
     evaluationContext._previousResultsFromSameGroup.at(alias.outCol_) =
         sparqlExpression::copyExpressionResult(
@@ -1345,8 +1345,8 @@ void GroupBy::evaluateAlias(
 
     // Copy to result table
     decltype(auto) outValues = result->getColumn(alias.outCol_);
-    std::ranges::copy(aggregateResults,
-                      outValues.begin() + evaluationContext._beginIndex);
+    ql::ranges::copy(aggregateResults,
+                     outValues.begin() + evaluationContext._beginIndex);
 
     // Copy the result so that future aliases may reuse it
     evaluationContext._previousResultsFromSameGroup.at(alias.outCol_) =
@@ -1434,7 +1434,7 @@ IdTable GroupBy::createResultFromHashMap(
 
   // Copy grouped by values
   for (size_t idx = 0; idx < aggregationData.numOfGroupedColumns_; ++idx) {
-    std::ranges::copy(sortedKeys.at(idx), result.getColumn(idx).begin());
+    ql::ranges::copy(sortedKeys.at(idx), result.getColumn(idx).begin());
   }
 
   // Initialize evaluation context

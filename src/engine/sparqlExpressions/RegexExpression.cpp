@@ -247,7 +247,7 @@ ExpressionResult RegexExpression::evaluatePrefixRegex(
   result.reserve(resultSize);
   for (auto id : detail::makeGenerator(variable, resultSize, context)) {
     result.push_back(Id::makeFromBool(
-        std::ranges::any_of(lowerAndUpperIds, [&](const auto& lowerUpper) {
+        ql::ranges::any_of(lowerAndUpperIds, [&](const auto& lowerUpper) {
           return !valueIdComparators::compareByBits(id, lowerUpper.first) &&
                  valueIdComparators::compareByBits(id, lowerUpper.second);
         })));

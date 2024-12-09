@@ -424,8 +424,8 @@ std::vector<CompressedBlockMetadata> CompressedRelationReader::getBlocksForJoin(
   auto blockIsNeeded = [&joinColumn, &lessThan](const auto& block) {
     return !std::ranges::equal_range(joinColumn, block, lessThan).empty();
   };
-  std::ranges::copy(relevantBlocks | std::views::filter(blockIsNeeded),
-                    std::back_inserter(result));
+  ql::ranges::copy(relevantBlocks | std::views::filter(blockIsNeeded),
+                   std::back_inserter(result));
   // The following check is cheap as there are only few blocks.
   AD_CORRECTNESS_CHECK(std::ranges::unique(result).empty());
   return result;
@@ -539,7 +539,7 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
 
   // We first scan the complete block including ALL columns.
   std::vector<ColumnIndex> allAdditionalColumns;
-  std::ranges::copy(
+  ql::ranges::copy(
       std::views::iota(ADDITIONAL_COLUMN_GRAPH_ID,
                        blockMetadata.offsetsAndCompressedSize_.size()),
       std::back_inserter(allAdditionalColumns));
@@ -608,8 +608,8 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
          return !manuallyDeleteGraphColumn || idx != ADDITIONAL_COLUMN_GRAPH_ID;
        })) {
     const auto& inputCol = block.getColumn(inputColIdx);
-    std::ranges::copy(inputCol.begin() + beginIdx, inputCol.begin() + endIdx,
-                      result.getColumn(i).begin());
+    ql::ranges::copy(inputCol.begin() + beginIdx, inputCol.begin() + endIdx,
+                     result.getColumn(i).begin());
     ++i;
   }
 
@@ -949,8 +949,8 @@ static std::pair<bool, std::optional<std::vector<Id>>> getGraphInfo(
   // Return the contained graphs, or  `nullopt` if there are too many of them.
   auto graphInfo = [&block]() -> std::optional<std::vector<Id>> {
     std::vector<Id> graphColumn;
-    std::ranges::copy(block->getColumn(ADDITIONAL_COLUMN_GRAPH_ID),
-                      std::back_inserter(graphColumn));
+    ql::ranges::copy(block->getColumn(ADDITIONAL_COLUMN_GRAPH_ID),
+                     std::back_inserter(graphColumn));
     ql::ranges::sort(graphColumn);
     auto [endOfUnique, _] = std::ranges::unique(graphColumn);
     size_t numGraphs = endOfUnique - graphColumn.begin();
@@ -1092,8 +1092,8 @@ std::vector<ColumnIndex> CompressedRelationReader::prepareColumnIndices(
     ColumnIndicesRef additionalColumns) {
   std::vector<ColumnIndex> result;
   result.reserve(baseColumns.size() + additionalColumns.size());
-  std::ranges::copy(baseColumns, std::back_inserter(result));
-  std::ranges::copy(additionalColumns, std::back_inserter(result));
+  ql::ranges::copy(baseColumns, std::back_inserter(result));
+  ql::ranges::copy(additionalColumns, std::back_inserter(result));
   return result;
 }
 
@@ -1125,7 +1125,7 @@ std::pair<size_t, bool> CompressedRelationReader::prepareLocatedTriples(
     }
   }();
   // Check if one of the columns is the graph column.
-  auto it = std::ranges::find(columns, ADDITIONAL_COLUMN_GRAPH_ID);
+  auto it = ql::ranges::find(columns, ADDITIONAL_COLUMN_GRAPH_ID);
   bool containsGraphId = it != columns.end();
   if (containsGraphId) {
     AD_CORRECTNESS_CHECK(it - columns.begin() ==
@@ -1158,7 +1158,7 @@ CompressedRelationMetadata CompressedRelationWriter::addSmallRelation(
 
   smallRelationsBuffer_.resize(offsetInBlock + numRows);
   for (size_t i = 0; i < relation.numColumns(); ++i) {
-    std::ranges::copy(
+    ql::ranges::copy(
         relation.getColumn(i),
         smallRelationsBuffer_.getColumn(i).begin() + offsetInBlock);
   }
@@ -1564,7 +1564,7 @@ auto CompressedRelationReader::getScanConfig(
       return {0, false};
     }
     auto idx = static_cast<size_t>(
-        std::ranges::find(columnIndices, ADDITIONAL_COLUMN_GRAPH_ID) -
+        ql::ranges::find(columnIndices, ADDITIONAL_COLUMN_GRAPH_ID) -
         columnIndices.begin());
     bool deleteColumn = false;
     if (idx == columnIndices.size()) {

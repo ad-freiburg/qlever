@@ -219,7 +219,7 @@ auto QueryExecutionTree::getSortedSubtreesAndJoinColumns(
 const VariableToColumnMap::value_type&
 QueryExecutionTree::getVariableAndInfoByColumnIndex(ColumnIndex colIdx) const {
   const auto& varColMap = getVariableColumns();
-  auto it = std::ranges::find_if(varColMap, [leftCol = colIdx](const auto& el) {
+  auto it = ql::ranges::find_if(varColMap, [leftCol = colIdx](const auto& el) {
     return el.second.columnIndex_ == leftCol;
   });
   AD_CONTRACT_CHECK(it != varColMap.end());

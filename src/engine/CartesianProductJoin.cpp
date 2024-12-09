@@ -39,7 +39,7 @@ CartesianProductJoin::CartesianProductJoin(
 // ____________________________________________________________________________
 std::vector<QueryExecutionTree*> CartesianProductJoin::getChildren() {
   std::vector<QueryExecutionTree*> result;
-  std::ranges::copy(
+  ql::ranges::copy(
       children_ | std::views::transform([](auto& ptr) { return ptr.get(); }),
       std::back_inserter(result));
   return result;
@@ -86,7 +86,7 @@ float CartesianProductJoin::getMultiplicity([[maybe_unused]] size_t col) {
 bool CartesianProductJoin::knownEmptyResult() {
   // If children were empty, returning false would be the wrong behavior.
   AD_CORRECTNESS_CHECK(!children_.empty());
-  return std::ranges::any_of(childView(), &Operation::knownEmptyResult);
+  return ql::ranges::any_of(childView(), &Operation::knownEmptyResult);
 }
 
 // ____________________________________________________________________________

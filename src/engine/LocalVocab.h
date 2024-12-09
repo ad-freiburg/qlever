@@ -138,8 +138,8 @@ class LocalVocab {
           return vocab.localBlankNodeManager_;
         });
 
-    auto it = std::ranges::find_if(localManagersView,
-                                   [](const auto& l) { return l != nullptr; });
+    auto it = ql::ranges::find_if(localManagersView,
+                                  [](const auto& l) { return l != nullptr; });
     if (it == localManagersView.end()) {
       return;
     }
