@@ -1256,7 +1256,7 @@ struct BlockZipperJoinImpl {
         auto subrange = std::ranges::equal_range(
             lastUndefinedBlock.subrange(),
             lastUndefinedBlock.subrange().front(), lessThan_);
-        size_t undefCount = std::ranges::size(subrange);
+        size_t undefCount = ql::ranges::size(subrange);
         lastUndefinedBlock.setSubrange(std::move(subrange));
         auto& firstDefinedBlock = side.currentBlocks_.back();
         firstDefinedBlock.setSubrange(

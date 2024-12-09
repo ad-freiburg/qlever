@@ -194,7 +194,7 @@ cppcoro::generator<std::vector<T>> parallelMultiwayMergeImpl(
         maxMemPerNode, blocksize, moveIf(rangeOfRanges[0]),
         moveIf(rangeOfRanges[1]), comparison);
   } else {
-    size_t size = std::ranges::size(rangeOfRanges);
+    size_t size = ql::ranges::size(rangeOfRanges);
     size_t split = size / 2;
     auto beg = rangeOfRanges.begin();
     auto splitIt = beg + split;
@@ -233,7 +233,7 @@ cppcoro::generator<std::vector<T>> parallelMultiwayMerge(
     size_t blocksize = 100) {
   // There is one suboperation per input in the recursion tree, so we have to
   // divide the memory limit.
-  auto maxMemPerNode = memoryLimit / std::ranges::size(rangeOfRanges);
+  auto maxMemPerNode = memoryLimit / ql::ranges::size(rangeOfRanges);
   return detail::parallelMultiwayMergeImpl<T, moveElements, SizeGetter>(
       maxMemPerNode, blocksize, AD_FWD(rangeOfRanges), std::move(comparison));
 }

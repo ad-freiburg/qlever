@@ -174,12 +174,12 @@ requires std::movable<UnderlyingRange> class OwningView
   }
 
   constexpr auto size() requires std::ranges::sized_range<UnderlyingRange> {
-    return std::ranges::size(underlyingRange_);
+    return ql::ranges::size(underlyingRange_);
   }
 
   constexpr auto size() const
       requires std::ranges::sized_range<const UnderlyingRange> {
-    return std::ranges::size(underlyingRange_);
+    return ql::ranges::size(underlyingRange_);
   }
 
   constexpr auto data() requires std::ranges::contiguous_range<UnderlyingRange>
