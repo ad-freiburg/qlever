@@ -569,7 +569,7 @@ std::optional<Variable> Operation::getPrimarySortKeyVariable() const {
     return std::nullopt;
   }
 
-  auto it = std::ranges::find(
+  auto it = ql::ranges::find(
       varToColMap, sortedIndices.front(),
       [](const auto& keyValue) { return keyValue.second.columnIndex_; });
   if (it == varToColMap.end()) {

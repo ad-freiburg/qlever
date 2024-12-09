@@ -182,7 +182,7 @@ std::vector<std::array<ColumnIndex, 2>> QueryExecutionTree::getJoinColumns(
     }
   }
 
-  std::ranges::sort(jcs, std::ranges::lexicographical_compare);
+  ql::ranges::sort(jcs, ql::ranges::lexicographical_compare);
   return jcs;
 }
 
@@ -219,7 +219,7 @@ auto QueryExecutionTree::getSortedSubtreesAndJoinColumns(
 const VariableToColumnMap::value_type&
 QueryExecutionTree::getVariableAndInfoByColumnIndex(ColumnIndex colIdx) const {
   const auto& varColMap = getVariableColumns();
-  auto it = std::ranges::find_if(varColMap, [leftCol = colIdx](const auto& el) {
+  auto it = ql::ranges::find_if(varColMap, [leftCol = colIdx](const auto& el) {
     return el.second.columnIndex_ == leftCol;
   });
   AD_CONTRACT_CHECK(it != varColMap.end());

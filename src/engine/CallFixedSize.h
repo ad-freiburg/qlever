@@ -56,7 +56,7 @@ template <int maxValue, size_t NumValues, std::integral Int>
 auto callLambdaForIntArray(std::array<Int, NumValues> array, auto&& lambda,
                            auto&&... args) {
   AD_CONTRACT_CHECK(
-      std::ranges::all_of(array, [](auto el) { return el <= maxValue; }));
+      ql::ranges::all_of(array, [](auto el) { return el <= maxValue; }));
   using ArrayType = std::array<Int, NumValues>;
 
   // Call the `lambda` when the correct compile-time `Int`s are given as a
@@ -131,7 +131,7 @@ decltype(auto) callFixedSize(std::array<Int, NumIntegers> ints, auto&& functor,
   static_assert(NumIntegers > 0);
   // TODO<joka921, C++23> Use `std::bind_back`
   auto p = [](int i) { return detail::mapToZeroIfTooLarge(i, MaxValue); };
-  std::ranges::transform(ints, ints.begin(), p);
+  ql::ranges::transform(ints, ints.begin(), p);
 
   // The only step that remains is to lift our single runtime `value` which
   // is in the range `[0, (MaxValue +1)^ NumIntegers]` to a compile-time

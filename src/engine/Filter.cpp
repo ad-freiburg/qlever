@@ -6,9 +6,9 @@
 
 #include "./Filter.h"
 
-#include <algorithm>
 #include <sstream>
 
+#include "backports/algorithm.h"
 #include "engine/CallFixedSize.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"

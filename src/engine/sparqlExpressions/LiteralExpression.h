@@ -171,11 +171,11 @@ class LiteralExpression : public SparqlExpression {
     if (context->_groupedVariables.contains(variable) && !isInsideAggregate()) {
       const auto& table = context->_inputTable;
       auto constantValue = table.at(context->_beginIndex, column.value());
-      AD_EXPENSIVE_CHECK((std::ranges::all_of(
-          table.begin() + context->_beginIndex,
-          table.begin() + context->_endIndex, [&](const auto& row) {
-            return row[column.value()] == constantValue;
-          })));
+      AD_EXPENSIVE_CHECK((
+          std::all_of(table.begin() + context->_beginIndex,
+                      table.begin() + context->_endIndex, [&](const auto& row) {
+                        return row[column.value()] == constantValue;
+                      })));
       return constantValue;
     } else {
       return variable;

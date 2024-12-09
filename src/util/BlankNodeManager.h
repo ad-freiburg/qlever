@@ -97,7 +97,7 @@ class BlankNodeManager {
         if (l == nullptr) {
           continue;
         }
-        std::ranges::copy(l->otherBlocks_, inserter);
+        ql::ranges::copy(l->otherBlocks_, inserter);
         *inserter = l->blocks_;
       }
     }

@@ -8,7 +8,6 @@
 
 #pragma once
 
-#include <algorithm>
 #include <cassert>
 #include <fstream>
 #include <functional>
@@ -17,6 +16,7 @@
 #include <string_view>
 #include <vector>
 
+#include "backports/algorithm.h"
 #include "global/Constants.h"
 #include "global/Id.h"
 #include "global/Pattern.h"

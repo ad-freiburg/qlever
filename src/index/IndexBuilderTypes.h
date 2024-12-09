@@ -102,7 +102,7 @@ class MonotonicBuffer {
   // the buffer.
   std::string_view addString(std::string_view input) {
     auto ptr = charAllocator_->allocate(input.size());
-    std::ranges::copy(input, ptr);
+    ql::ranges::copy(input, ptr);
     return {ptr, ptr + input.size()};
   }
 };

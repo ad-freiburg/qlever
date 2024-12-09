@@ -69,7 +69,7 @@ class InExpression : public SparqlExpression {
   explicit InExpression(SparqlExpression::Ptr lhs, Children children) {
     children_.reserve(children.size() + 1);
     children_.push_back(std::move(lhs));
-    std::ranges::move(children, std::back_inserter(children_));
+    ql::ranges::move(children, std::back_inserter(children_));
   }
 
   ExpressionResult evaluate(EvaluationContext* context) const override;

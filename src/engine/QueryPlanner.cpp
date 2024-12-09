@@ -8,12 +8,12 @@
 
 #include <absl/strings/str_split.h>
 
-#include <algorithm>
 #include <memory>
 #include <optional>
 #include <type_traits>
 #include <variant>
 
+#include "backports/algorithm.h"
 #include "engine/Bind.h"
 #include "engine/CartesianProductJoin.h"
 #include "engine/CheckUsePatternTrick.h"
@@ -131,7 +131,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createExecutionTrees(
   // this is handled correctly in all cases.
   bool doGroupBy = !pq._groupByVariables.empty() ||
                    patternTrickTuple.has_value() ||
-                   std::ranges::any_of(pq.getAliases(), [](const Alias& alias) {
+                   ql::ranges::any_of(pq.getAliases(), [](const Alias& alias) {
                      return alias._expression.containsAggregate();
                    });
 
@@ -1208,10 +1208,10 @@ void QueryPlanner::applyFiltersIfPossible(
         continue;
       }
 
-      if (std::ranges::all_of(filters[i].expression_.containedVariables(),
-                              [&plan](const auto& variable) {
-                                return plan._qet->isVariableCovered(*variable);
-                              })) {
+      if (ql::ranges::all_of(filters[i].expression_.containedVariables(),
+                             [&plan](const auto& variable) {
+                               return plan._qet->isVariableCovered(*variable);
+                             })) {
         // Apply this filter.
         SubtreePlan newPlan =
             makeSubtreePlan<Filter>(_qec, plan._qet, filters[i].expression_);
@@ -1297,9 +1297,9 @@ size_t QueryPlanner::findUniqueNodeIds(
                  std::views::transform(&SubtreePlan::_idsOfIncludedNodes);
   // Check that all the `_idsOfIncludedNodes` are one-hot encodings of a single
   // value, i.e. they have exactly one bit set.
-  AD_CORRECTNESS_CHECK(std::ranges::all_of(
+  AD_CORRECTNESS_CHECK(ql::ranges::all_of(
       nodeIds, [](auto nodeId) { return std::popcount(nodeId) == 1; }));
-  std::ranges::copy(nodeIds, std::inserter(uniqueNodeIds, uniqueNodeIds.end()));
+  ql::ranges::copy(nodeIds, std::inserter(uniqueNodeIds, uniqueNodeIds.end()));
   return uniqueNodeIds.size();
 }
 
@@ -1341,10 +1341,9 @@ size_t QueryPlanner::countSubgraphs(
     std::vector<const QueryPlanner::SubtreePlan*> graph, size_t budget) {
   // Remove duplicate plans from `graph`.
   auto getId = [](const SubtreePlan* v) { return v->_idsOfIncludedNodes; };
-  std::ranges::sort(graph, std::ranges::less{}, getId);
-  graph.erase(
-      std::ranges::unique(graph, std::ranges::equal_to{}, getId).begin(),
-      graph.end());
+  ql::ranges::sort(graph, ql::ranges::less{}, getId);
+  graph.erase(std::ranges::unique(graph, ql::ranges::equal_to{}, getId).begin(),
+              graph.end());
 
   // Qlever currently limits the number of triples etc. per group to be <= 64
   // anyway, so we can simply assert here.
@@ -1409,7 +1408,7 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
     const vector<vector<QueryPlanner::SubtreePlan>>& children) {
   auto [initialPlans, additionalFilters] =
       seedWithScansAndText(tg, children, textLimits);
-  std::ranges::move(additionalFilters, std::back_inserter(filters));
+  ql::ranges::move(additionalFilters, std::back_inserter(filters));
   if (filters.size() > 64) {
     AD_THROW("At most 64 filters allowed at the moment.");
   }
@@ -1461,7 +1460,7 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
   uint64_t nodes = 0;
   uint64_t filterIds = 0;
   uint64_t textLimitIds = 0;
-  std::ranges::for_each(
+  ql::ranges::for_each(
       lastDpRowFromComponents |
           std::views::transform([this](auto& vec) -> decltype(auto) {
             return vec.at(findCheapestExecutionTree(vec));
@@ -1603,7 +1602,7 @@ vector<SparqlFilter> QueryPlanner::TripleGraph::pickFilters(
     coveredVariables.insert(node._variables.begin(), node._variables.end());
   }
   for (auto& f : origFilters) {
-    if (std::ranges::any_of(
+    if (ql::ranges::any_of(
             f.expression_.containedVariables(),
             [&](const auto* var) { return coveredVariables.contains(*var); })) {
       ret.push_back(f);
@@ -1775,7 +1774,7 @@ size_t QueryPlanner::findCheapestExecutionTree(
       return aCost < bCost;
     }
   };
-  return std::ranges::min_element(lastRow, compare) - lastRow.begin();
+  return ql::ranges::min_element(lastRow, compare) - lastRow.begin();
 };
 
 // _________________________________________________________________________________
@@ -1788,7 +1787,7 @@ size_t QueryPlanner::findSmallestExecutionTree(
     };
     return tie(a) < tie(b);
   };
-  return std::ranges::min_element(lastRow, compare) - lastRow.begin();
+  return ql::ranges::min_element(lastRow, compare) - lastRow.begin();
 };
 
 // _____________________________________________________________________________
@@ -2221,7 +2220,7 @@ void QueryPlanner::GraphPatternPlanner::visitGroupOptionalOrMinus(
   using enum SubtreePlan::Type;
   if (auto type = candidates[0].type;
       (type == OPTIONAL || type == MINUS) &&
-      std::ranges::all_of(variables, [this](const Variable& var) {
+      ql::ranges::all_of(variables, [this](const Variable& var) {
         return !boundVariables_.contains(var);
       })) {
     // A MINUS clause that doesn't share any variable with the preceding
@@ -2240,7 +2239,7 @@ void QueryPlanner::GraphPatternPlanner::visitGroupOptionalOrMinus(
   // All variables seen so far are considered bound and cannot appear as the
   // RHS of a BIND operation. This is also true for variables from OPTIONALs
   // and MINUS clauses (this used to be a bug in an old version of the code).
-  std::ranges::for_each(
+  ql::ranges::for_each(
       variables, [this](const Variable& var) { boundVariables_.insert(var); });
 
   // If our input is not OPTIONAL and not a MINUS, this means that we can still
@@ -2568,9 +2567,9 @@ void QueryPlanner::GraphPatternPlanner::visitSubquery(
     plan._qet->getRootOperation()->setSelectedVariablesForSubquery(
         selectedVariables);
   };
-  std::ranges::for_each(candidatesForSubquery, setSelectedVariables);
+  ql::ranges::for_each(candidatesForSubquery, setSelectedVariables);
   // A subquery must also respect LIMIT and OFFSET clauses
-  std::ranges::for_each(candidatesForSubquery, [&](SubtreePlan& plan) {
+  ql::ranges::for_each(candidatesForSubquery, [&](SubtreePlan& plan) {
     plan._qet->getRootOperation()->setLimit(arg.get()._limitOffset);
   });
   visitGroupOptionalOrMinus(std::move(candidatesForSubquery));

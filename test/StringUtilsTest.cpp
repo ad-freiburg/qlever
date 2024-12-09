@@ -17,6 +17,7 @@
 #include "util/Forward.h"
 #include "util/Generator.h"
 #include "util/StringUtils.h"
+#include "util/StringUtilsImpl.h"
 
 using ad_utility::constantTimeEquals;
 using ad_utility::constexprStrCat;

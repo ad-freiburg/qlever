@@ -98,7 +98,7 @@ void ConfigOption::setValueWithJson(const nlohmann::json& json) {
       */
       return j.is_array() && [&j, &isValueTypeSubType]<typename InnerType>(
                                  const std::vector<InnerType>&) {
-        return std::ranges::all_of(j, [&isValueTypeSubType](const auto& entry) {
+        return ql::ranges::all_of(j, [&isValueTypeSubType](const auto& entry) {
           return isValueTypeSubType.template operator()<InnerType>(
               entry, AD_FWD(isValueTypeSubType));
         });

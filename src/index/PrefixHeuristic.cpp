@@ -4,7 +4,6 @@
 
 #include "./PrefixHeuristic.h"
 
-#include <algorithm>
 #include <fstream>
 
 #include "../parser/RdfEscaping.h"
@@ -13,6 +12,7 @@
 #include "../util/File.h"
 #include "../util/Log.h"
 #include "../util/StringUtils.h"
+#include "backports/algorithm.h"
 
 using std::string;
 

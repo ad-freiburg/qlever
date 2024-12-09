@@ -6,7 +6,6 @@
 
 #pragma once
 
-#include <algorithm>
 #include <array>
 #include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid_io.hpp>
@@ -15,6 +14,7 @@
 #include <type_traits>
 #include <vector>
 
+#include "backports/algorithm.h"
 #include "global/TypedIndex.h"
 
 namespace ad_utility {

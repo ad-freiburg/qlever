@@ -4,9 +4,9 @@
 
 #include "parser/LiteralOrIri.h"
 
-#include <algorithm>
 #include <utility>
 
+#include "backports/algorithm.h"
 #include "index/IndexImpl.h"
 
 namespace ad_utility::triple_component {

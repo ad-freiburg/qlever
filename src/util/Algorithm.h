@@ -6,12 +6,12 @@
 #ifndef QLEVER_ALGORITHM_H
 #define QLEVER_ALGORITHM_H
 
-#include <algorithm>
 #include <numeric>
 #include <string>
 #include <string_view>
 #include <utility>
 
+#include "backports/algorithm.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
 #include "util/HashSet.h"
@@ -34,8 +34,8 @@ constexpr bool contains(Container&& container, const T& element) {
                 ad_utility::isSimilar<Container, std::string_view>) {
     return container.find(element) != container.npos;
   } else {
-    return std::ranges::find(std::begin(container), std::end(container),
-                             element) != std::end(container);
+    return ql::ranges::find(std::begin(container), std::end(container),
+                            element) != std::end(container);
   }
 }
 
@@ -75,7 +75,7 @@ auto transform(Range&& input, F unaryOp) {
       unaryOp, *ad_utility::makeForwardingIterator<Range>(input.begin())))>;
   std::vector<Output> out;
   out.reserve(input.size());
-  std::ranges::transform(
+  ql::ranges::transform(
       ad_utility::makeForwardingIterator<Range>(input.begin()),
       ad_utility::makeForwardingIterator<Range>(input.end()),
       std::back_inserter(out), unaryOp);
@@ -95,7 +95,7 @@ std::vector<std::pair<T1, T2>> zipVectors(const std::vector<T1>& vectorA,
   std::vector<std::pair<T1, T2>> vectorsPairedUp{};
   vectorsPairedUp.reserve(vectorA.size());
 
-  std::ranges::transform(
+  ql::ranges::transform(
       vectorA, vectorB, std::back_inserter(vectorsPairedUp),
       [](const auto& a, const auto& b) { return std::make_pair(a, b); });
 

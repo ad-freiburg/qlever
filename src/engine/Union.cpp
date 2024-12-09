@@ -42,7 +42,7 @@ Union::Union(QueryExecutionContext* qec,
       _columnOrigins[it.second.columnIndex_][1] = NO_COLUMN;
     }
   }
-  AD_CORRECTNESS_CHECK(std::ranges::all_of(_columnOrigins, [](const auto& el) {
+  AD_CORRECTNESS_CHECK(ql::ranges::all_of(_columnOrigins, [](const auto& el) {
     return el[0] != NO_COLUMN || el[1] != NO_COLUMN;
   }));
 }
@@ -75,7 +75,7 @@ VariableToColumnMap Union::computeVariableToColumnMap() const {
   // A variable is only guaranteed to always be bound if it exists in all the
   // subtrees and if it is guaranteed to be bound in all the subtrees.
   auto mightContainUndef = [this](const Variable& var) {
-    return std::ranges::any_of(
+    return ql::ranges::any_of(
         _subtrees, [&](const std::shared_ptr<QueryExecutionTree>& subtree) {
           const auto& varCols = subtree->getVariableColumns();
           return !varCols.contains(var) ||
@@ -86,7 +86,7 @@ VariableToColumnMap Union::computeVariableToColumnMap() const {
 
   // Note: it is tempting to declare `nextColumnIndex` inside the lambda
   // `addVariableColumnIfNotExists`, but that doesn't work because
-  // `std::ranges::for_each` takes the lambda by value and creates a new
+  // `ql::ranges::for_each` takes the lambda by value and creates a new
   // variable at every invocation.
   size_t nextColumnIndex = 0;
   auto addVariableColumnIfNotExists =
@@ -102,14 +102,13 @@ VariableToColumnMap Union::computeVariableToColumnMap() const {
         }
       };
 
-  auto addVariablesForSubtree =
-      [&addVariableColumnIfNotExists](const auto& subtree) {
-        std::ranges::for_each(
-            copySortedByColumnIndex(subtree->getVariableColumns()),
-            addVariableColumnIfNotExists);
-      };
+  auto addVariablesForSubtree = [&addVariableColumnIfNotExists](
+                                    const auto& subtree) {
+    ql::ranges::for_each(copySortedByColumnIndex(subtree->getVariableColumns()),
+                         addVariableColumnIfNotExists);
+  };
 
-  std::ranges::for_each(_subtrees, addVariablesForSubtree);
+  ql::ranges::for_each(_subtrees, addVariablesForSubtree);
   return variableColumns;
 }
 
@@ -203,7 +202,7 @@ IdTable Union::computeUnion(
                               [this]() { checkCancellation(); });
     } else {
       ad_utility::chunkedFill(
-          std::ranges::subrange{
+          ql::ranges::subrange{
               targetColumn.begin() + offset,
               targetColumn.begin() + offset + inputTable.size()},
           Id::makeUndefined(), chunkSize, [this]() { checkCancellation(); });

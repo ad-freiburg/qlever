@@ -15,7 +15,7 @@ CartesianProductJoin::CartesianProductJoin(
       children_{std::move(children)},
       chunkSize_{chunkSize} {
   AD_CONTRACT_CHECK(!children_.empty());
-  AD_CONTRACT_CHECK(std::ranges::all_of(
+  AD_CONTRACT_CHECK(ql::ranges::all_of(
       children_, [](auto& child) { return child != nullptr; }));
 
   // Check that the variables of the passed in operations are in fact
@@ -25,13 +25,13 @@ CartesianProductJoin::CartesianProductJoin(
     // false as soon as a duplicate is encountered.
     ad_utility::HashSet<Variable> vars;
     auto checkVarsForOp = [&vars](const Operation& op) {
-      return std::ranges::all_of(
+      return ql::ranges::all_of(
           op.getExternallyVisibleVariableColumns() | std::views::keys,
           [&vars](const Variable& variable) {
             return vars.insert(variable).second;
           });
     };
-    return std::ranges::all_of(childView(), checkVarsForOp);
+    return ql::ranges::all_of(childView(), checkVarsForOp);
   }();
   AD_CONTRACT_CHECK(variablesAreDisjoint);
 }
@@ -39,7 +39,7 @@ CartesianProductJoin::CartesianProductJoin(
 // ____________________________________________________________________________
 std::vector<QueryExecutionTree*> CartesianProductJoin::getChildren() {
   std::vector<QueryExecutionTree*> result;
-  std::ranges::copy(
+  ql::ranges::copy(
       children_ | std::views::transform([](auto& ptr) { return ptr.get(); }),
       std::back_inserter(result));
   return result;
@@ -86,7 +86,7 @@ float CartesianProductJoin::getMultiplicity([[maybe_unused]] size_t col) {
 bool CartesianProductJoin::knownEmptyResult() {
   // If children were empty, returning false would be the wrong behavior.
   AD_CORRECTNESS_CHECK(!children_.empty());
-  return std::ranges::any_of(childView(), &Operation::knownEmptyResult);
+  return ql::ranges::any_of(childView(), &Operation::knownEmptyResult);
 }
 
 // ____________________________________________________________________________
@@ -196,7 +196,7 @@ IdTable CartesianProductJoin::writeAllColumns(
   auto totalResultSize =
       std::reduce(sizesView.begin(), sizesView.end(), 1UL, std::multiplies{});
 
-  if (!std::ranges::empty(idTables) && sizesView.back() != 0) {
+  if (!ql::ranges::empty(idTables) && sizesView.back() != 0) {
     totalResultSize += (totalResultSize / sizesView.back()) * lastTableOffset;
   } else {
     AD_CORRECTNESS_CHECK(lastTableOffset == 0);
@@ -254,7 +254,7 @@ CartesianProductJoin::calculateSubResults(bool requestLaziness) {
 
   std::shared_ptr<const Result> lazyResult = nullptr;
   auto children = childView();
-  AD_CORRECTNESS_CHECK(!std::ranges::empty(children));
+  AD_CORRECTNESS_CHECK(!ql::ranges::empty(children));
   // Get all child results (possibly with limit, see above).
   for (Operation& child : children) {
     if (limitIfPresent.has_value() && child.supportsLimit()) {

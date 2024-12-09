@@ -59,11 +59,11 @@ bool BlankNodeManager::LocalBlankNodeManager::containsBlankNodeIndex(
     return index >= block.startIdx_ && index < block.nextIdx_;
   };
 
-  return std::ranges::any_of(*blocks_, containsIndex) ||
-         std::ranges::any_of(
+  return ql::ranges::any_of(*blocks_, containsIndex) ||
+         ql::ranges::any_of(
              otherBlocks_,
              [&](const std::shared_ptr<const std::vector<Block>>& blocks) {
-               return std::ranges::any_of(*blocks, containsIndex);
+               return ql::ranges::any_of(*blocks, containsIndex);
              });
 }
 

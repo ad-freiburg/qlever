@@ -73,7 +73,7 @@ void SparqlExpressionPimpl::setDescriptor(std::string descriptor) {
 // _____________________________________________________________________________
 bool SparqlExpressionPimpl::isVariableContained(
     const Variable& variable) const {
-  return std::ranges::any_of(
+  return ql::ranges::any_of(
       containedVariables(),
       [&variable](const auto* varPtr) { return *varPtr == variable; });
 }

@@ -214,7 +214,7 @@ class IdTable {
     if (data().size() > numColumns_) {
       data().erase(data().begin() + numColumns_, data().end());
     }
-    AD_CONTRACT_CHECK(std::ranges::all_of(
+    AD_CONTRACT_CHECK(ql::ranges::all_of(
         data(), [](const auto& column) { return column.empty(); }));
   }
 
@@ -263,7 +263,7 @@ class IdTable {
       AD_CORRECTNESS_CHECK(numColumns == NumColumns);
     }
     AD_CORRECTNESS_CHECK(this->data().size() == numColumns_);
-    AD_CORRECTNESS_CHECK(std::ranges::all_of(
+    AD_CORRECTNESS_CHECK(ql::ranges::all_of(
         this->data(),
         [this](const auto& column) { return column.size() == numRows_; }));
   }
@@ -382,8 +382,8 @@ class IdTable {
   // Note: The semantics of this function is similar to `std::vector::resize`.
   // To set the capacity, use the `reserve` function.
   void resize(size_t numRows) requires(!isView) {
-    std::ranges::for_each(data(),
-                          [numRows](auto& column) { column.resize(numRows); });
+    ql::ranges::for_each(data(),
+                         [numRows](auto& column) { column.resize(numRows); });
     numRows_ = numRows;
   }
 
@@ -394,8 +394,8 @@ class IdTable {
   // of the next `numRows - size()` elements (via `insert` or `push_back`) can
   // be done in O(1) time without dynamic allocations.
   void reserve(size_t numRows) requires(!isView) {
-    std::ranges::for_each(data(),
-                          [numRows](auto& column) { column.reserve(numRows); });
+    ql::ranges::for_each(data(),
+                         [numRows](auto& column) { column.reserve(numRows); });
   }
 
   // Delete all the elements, but keep the allocated memory (`capacityRows_`
@@ -403,14 +403,14 @@ class IdTable {
   // `shrinkToFit()` after calling `clear()` .
   void clear() requires(!isView) {
     numRows_ = 0;
-    std::ranges::for_each(data(), [](auto& column) { column.clear(); });
+    ql::ranges::for_each(data(), [](auto& column) { column.clear(); });
   }
 
   // Adjust the capacity to exactly match the size. This optimizes the memory
   // consumption of this table. This operation runs in O(size()), allocates
   // memory, and invalidates all iterators.
   void shrinkToFit() requires(!isView) {
-    std::ranges::for_each(data(), [](auto& column) { column.shrink_to_fit(); });
+    ql::ranges::for_each(data(), [](auto& column) { column.shrink_to_fit(); });
   }
 
   // Note: The following functions `emplace_back` and `push_back` all have the
@@ -421,7 +421,7 @@ class IdTable {
 
   // Insert a new uninitialized row at the end.
   void emplace_back() requires(!isView) {
-    std::ranges::for_each(data(), [](auto& column) { column.emplace_back(); });
+    ql::ranges::for_each(data(), [](auto& column) { column.emplace_back(); });
     ++numRows_;
   }
 
@@ -434,10 +434,10 @@ class IdTable {
   void push_back(const RowLike& newRow) requires(!isView) {
     AD_EXPENSIVE_CHECK(newRow.size() == numColumns());
     ++numRows_;
-    std::ranges::for_each(ad_utility::integerRange(numColumns()),
-                          [this, &newRow](auto i) {
-                            data()[i].push_back(*(std::begin(newRow) + i));
-                          });
+    ql::ranges::for_each(ad_utility::integerRange(numColumns()),
+                         [this, &newRow](auto i) {
+                           data()[i].push_back(*(std::begin(newRow) + i));
+                         });
   }
 
   void push_back(const std::initializer_list<T>& newRow) requires(!isView) {
@@ -482,7 +482,7 @@ class IdTable {
     AD_CONTRACT_CHECK(newColumns.size() >= numColumns());
     Data newStorage(std::make_move_iterator(newColumns.begin()),
                     std::make_move_iterator(newColumns.begin() + numColumns()));
-    std::ranges::for_each(
+    ql::ranges::for_each(
         ad_utility::integerRange(numColumns()), [this, &newStorage](auto i) {
           newStorage[i].insert(newStorage[i].end(), data()[i].begin(),
                                data()[i].end());
@@ -549,7 +549,7 @@ class IdTable {
   // the argument `columnIndices`.
   IdTable<T, 0, ColumnStorage, IsView::True> asColumnSubsetView(
       std::span<const ColumnIndex> columnIndices) const requires isDynamic {
-    AD_CONTRACT_CHECK(std::ranges::all_of(
+    AD_CONTRACT_CHECK(ql::ranges::all_of(
         columnIndices, [this](size_t idx) { return idx < numColumns(); }));
     ViewSpans viewSpans;
     viewSpans.reserve(columnIndices.size());
@@ -574,7 +574,7 @@ class IdTable {
     // First check that the `subset` is indeed a subset of the column
     // indices.
     std::vector<ColumnIndex> check{subset.begin(), subset.end()};
-    std::ranges::sort(check);
+    ql::ranges::sort(check);
     AD_CONTRACT_CHECK(std::unique(check.begin(), check.end()) == check.end());
     AD_CONTRACT_CHECK(!subset.empty() && subset.back() < numColumns());
 
@@ -586,7 +586,7 @@ class IdTable {
 
     Data newData;
     newData.reserve(subset.size());
-    std::ranges::for_each(subset, [this, &newData](ColumnIndex colIdx) {
+    ql::ranges::for_each(subset, [this, &newData](ColumnIndex colIdx) {
       newData.push_back(std::move(data().at(colIdx)));
     });
     data() = std::move(newData);
@@ -691,12 +691,12 @@ class IdTable {
     auto numInserted = end - begin;
     auto oldSize = size();
     resize(numRows() + numInserted);
-    std::ranges::for_each(
-        ad_utility::integerRange(numColumns()),
-        [this, &table, oldSize, begin, numInserted](size_t i) {
-          std::ranges::copy(table.getColumn(i).subspan(begin, numInserted),
-                            getColumn(i).begin() + oldSize);
-        });
+    ql::ranges::for_each(ad_utility::integerRange(numColumns()),
+                         [this, &table, oldSize, begin, numInserted](size_t i) {
+                           ql::ranges::copy(
+                               table.getColumn(i).subspan(begin, numInserted),
+                               getColumn(i).begin() + oldSize);
+                         });
   }
 
   // Check whether two `IdTables` have the same content. Mostly used for unit
@@ -710,7 +710,7 @@ class IdTable {
     }
 
     // TODO<joka921, C++23> This can be implemented using `zip_view` and
-    // `std::ranges::all_of`. The iteration over the columns is cache-friendly.
+    // `ql::ranges::all_of`. The iteration over the columns is cache-friendly.
     const auto& cols = getColumns();
     const auto& otherCols = other.getColumns();
     for (size_t i = 0; i < numColumns(); ++i) {
@@ -795,7 +795,7 @@ class IdTableStatic
   friend std::ostream& operator<<(std::ostream& os,
                                   const IdTableStatic& idTable) {
     os << "{ ";
-    std::ranges::copy(
+    ql::ranges::copy(
         idTable, std::ostream_iterator<columnBasedIdTable::Row<Id>>(os, " "));
     os << "}";
     return os;

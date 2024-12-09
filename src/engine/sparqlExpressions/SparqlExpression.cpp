@@ -49,7 +49,7 @@ bool SparqlExpression::containsAggregate() const {
     return true;
   }
 
-  return std::ranges::any_of(
+  return ql::ranges::any_of(
       children(), [](const Ptr& child) { return child->containsAggregate(); });
 }
 
@@ -84,10 +84,9 @@ std::optional<::Variable> SparqlExpression::getVariableOrNullopt() const {
 
 // _____________________________________________________________________________
 bool SparqlExpression::containsLangExpression() const {
-  return std::ranges::any_of(children(),
-                             [](const SparqlExpression::Ptr& child) {
-                               return child->containsLangExpression();
-                             });
+  return ql::ranges::any_of(children(), [](const SparqlExpression::Ptr& child) {
+    return child->containsLangExpression();
+  });
 }
 
 // _____________________________________________________________________________
