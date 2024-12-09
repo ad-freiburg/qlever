@@ -8,104 +8,92 @@
 
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
+#include "engine/ExportQueryExecutionTrees.h"
+#include "engine/QueryExecutionContext.h"
+#include "engine/QueryPlanner.h"
+#include "global/RuntimeParameters.h"
 #include "index/Index.h"
 #include "index/InputFileSpecification.h"
+#include "parser/SparqlParser.h"
 #include "util/AllocatorWithLimit.h"
+#include "util/http/MediaTypes.h"
 
 namespace qlever {
 
-struct IndexBuilderConfig {
+// A configuration for a QLever instance.
+struct QleverConfig {
+  // A basename for all files that QLever will write as part of the index
+  // building.
   std::string baseName;
+
+  // The specification of the input files (Turtle/NT or NQuad) from which the
+  // index will be built.
+  std::vector<qlever::InputFileSpecification> inputFiles;
+
+  // A memory limit that will be applied during the index building as well as
+  // during the query processing.
+  std::optional<ad_utility::MemorySize> memoryLimit =
+      ad_utility::MemorySize::gigabytes(1);
+
+  // If set to true, then no so-called patterns will be built. Patterns are
+  // useful for autocompletion and for certain statistics queries, but not for
+  // typical SELECT queries.
+  bool noPatterns = false;
+
+  // Only build two permutations. This is sufficient if all queries have a fixed
+  // predicate.
+  // TODO<joka921> We haven't tested this mode in a while, it is currently
+  // probably broken because the UPDATE mechanism doesn't support only two
+  // permutations.
+  bool onlyPsoAndPos = false;
+
+  // Optionally a filename to a .json file with additional settings...
+  // TODO<joka921> Make these settings part of this struct directly
+  // TODO<joka921> Document these additional settings.
+  std::string settingsFile;
+
+  // The following members are only required if QLever's full-text search
+  // extension is to be used, see `IndexBuilderMain.cpp` for additional details.
+  bool addWordsFromLiterals = false;
+  std::string kbIndexName;
   std::string wordsfile;
   std::string docsfile;
   std::string textIndexName;
-  std::string kbIndexName;
-  std::string settingsFile;
-  std::vector<qlever::InputFileSpecification> inputFiles;
-  bool noPatterns = false;
   bool onlyAddTextIndex = false;
+
+  // If set to true, then certain temporary files which are created while
+  // building the index are not deleted. This can be useful for debugging.
   bool keepTemporaryFiles = false;
-  bool onlyPsoAndPos = false;
-  bool addWordsFromLiterals = false;
-  std::optional<ad_utility::MemorySize> stxxlMemory;
 };
 
-string getStxxlConfigFileName(const string& location) {
-  return absl::StrCat(location, ".stxxl");
-}
-
-string getStxxlDiskFileName(const string& location, const string& tail) {
-  return absl::StrCat(location, tail, ".stxxl-disk");
-}
-
-// Write a .stxxl config-file.
-// All we want is sufficient space somewhere with enough space.
-// We can use the location of input files and use a constant size for now.
-// The required size can only be estimated anyway, since index size
-// depends on the structure of words files rather than their size only,
-// because of the "multiplications" performed.
-void writeStxxlConfigFile(const string& location, const string& tail) {
-  string stxxlConfigFileName = getStxxlConfigFileName(location);
-  ad_utility::File stxxlConfig(stxxlConfigFileName, "w");
-  auto configFile = ad_utility::makeOfstream(stxxlConfigFileName);
-  // Inform stxxl about .stxxl location
-  setenv("STXXLCFG", stxxlConfigFileName.c_str(), true);
-  configFile << "disk=" << getStxxlDiskFileName(location, tail) << ","
-             << STXXL_DISK_SIZE_INDEX_BUILDER << ",syscall\n";
-}
-
+// A class that can be used to use QLever without the HTTP server, e.g. as part
+// of another program.
 class Qlever {
-  void buildIndex(IndexBuilderConfig config) {
-    Index index{ad_utility::makeUnlimitedAllocator<Id>()};
+ private:
+  QueryResultCache cache_;
+  ad_utility::AllocatorWithLimit<Id> allocator_;
+  SortPerformanceEstimator sortPerformanceEstimator_;
+  Index index_;
+  bool enablePatternTrick_;
+  static inline std::ostringstream ignoreLogStream;
 
-    if (config.stxxlMemory.has_value()) {
-      index.memoryLimitIndexBuilding() = config.stxxlMemory.value();
-    }
-    // If no text index name was specified, take the part of the wordsfile after
-    // the last slash.
-    if (config.textIndexName.empty() && !config.wordsfile.empty()) {
-      config.textIndexName =
-          ad_utility::getLastPartOfString(config.wordsfile, '/');
-    }
-    try {
-      LOG(TRACE) << "Configuring STXXL..." << std::endl;
-      size_t posOfLastSlash = config.baseName.rfind('/');
-      string location = config.baseName.substr(0, posOfLastSlash + 1);
-      string tail = config.baseName.substr(posOfLastSlash + 1);
-      writeStxxlConfigFile(location, tail);
-      string stxxlFileName = getStxxlDiskFileName(location, tail);
-      LOG(TRACE) << "done." << std::endl;
+ public:
+  // Build a persistent on disk index using the `config`.
+  static void buildIndex(QleverConfig config);
 
-      index.setKbName(config.kbIndexName);
-      index.setTextName(config.textIndexName);
-      index.usePatterns() = !config.noPatterns;
-      index.setOnDiskBase(config.baseName);
-      index.setKeepTempFiles(config.keepTemporaryFiles);
-      index.setSettingsFile(config.settingsFile);
-      index.loadAllPermutations() = !config.onlyPsoAndPos;
+  // Load the qlever index from file.
+  explicit Qlever(const QleverConfig& config);
 
-      if (!config.onlyAddTextIndex) {
-        AD_CONTRACT_CHECK(!config.inputFiles.empty());
-        index.createFromFiles(config.inputFiles);
-      }
+  // Run the given query on the index. Currently only SELECT and ASK queries are
+  // supported, and the result will always be in sparql-results+json format.
+  // TODO<joka921> Support other formats + CONSTRUCT queries, support
+  // cancellation, time limits, and observable queries.
+  std::string query(std::string query);
 
-      if (!config.wordsfile.empty() || config.addWordsFromLiterals) {
-        index.addTextFromContextFile(config.wordsfile,
-                                     config.addWordsFromLiterals);
-      }
-
-      if (!config.docsfile.empty()) {
-        index.buildDocsDB(config.docsfile);
-      }
-      ad_utility::deleteFile(stxxlFileName, false);
-    } catch (std::exception& e) {
-      LOG(ERROR) << "Creating the index for QLever failed with the following "
-                    "exception: "
-                 << e.what() << std::endl;
-      throw;
-    }
-  }
+  // TODO<joka921> Give access to the RuntimeParameters() which allow for
+  // further tweaking of the qlever instance.
 };
 }  // namespace qlever
