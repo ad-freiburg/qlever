@@ -111,12 +111,12 @@ IdTable Distinct::distinct(
   auto dest = result.begin();
   if (begin == dest) {
     // Optimization to avoid redundant move operations.
-    begin = std::ranges::adjacent_find(begin, end,
-                                       [this](const auto& a, const auto& b) {
-                                         // Without explicit this clang seems to
-                                         // think the this capture is redundant.
-                                         return this->matchesRow(a, b);
-                                       });
+    begin = ql::ranges::adjacent_find(begin, end,
+                                      [this](const auto& a, const auto& b) {
+                                        // Without explicit this clang seems to
+                                        // think the this capture is redundant.
+                                        return this->matchesRow(a, b);
+                                      });
     dest = begin;
     if (begin != end) {
       ++begin;

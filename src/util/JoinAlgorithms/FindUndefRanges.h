@@ -171,8 +171,8 @@ auto findSmallerUndefRanges(const auto& row, It begin, It end,
     -> cppcoro::generator<It> {
   size_t numLastUndefined = 0;
   assert(row.size() > 0);
-  auto it = std::ranges::rbegin(row);
-  auto rend = std::ranges::rend(row);
+  auto it = ql::ranges::rbegin(row);
+  auto rend = ql::ranges::rend(row);
   for (; it < rend; ++it) {
     if (*it != Id::makeUndefined()) {
       break;
