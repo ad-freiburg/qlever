@@ -388,11 +388,11 @@ void Join::join(const IdTable& a, const IdTable& b, IdTable* result) const {
     auto inverseAddRow = [&addRow](const auto& rowA, const auto& rowB) {
       addRow(rowB, rowA);
     };
-    ad_utility::gallopingJoin(joinColumnR, joinColumnL, std::ranges::less{},
+    ad_utility::gallopingJoin(joinColumnR, joinColumnL, ql::ranges::less{},
                               inverseAddRow, {}, cancellationCallback);
   } else if (b.size() / a.size() > GALLOP_THRESHOLD && numUndefA == 0 &&
              numUndefB == 0) {
-    ad_utility::gallopingJoin(joinColumnL, joinColumnR, std::ranges::less{},
+    ad_utility::gallopingJoin(joinColumnL, joinColumnR, ql::ranges::less{},
                               addRow, {}, cancellationCallback);
   } else {
     auto findSmallerUndefRangeLeft =
@@ -413,12 +413,12 @@ void Join::join(const IdTable& a, const IdTable& b, IdTable* result) const {
     auto numOutOfOrder = [&]() {
       if (numUndefB == 0 && numUndefA == 0) {
         return ad_utility::zipperJoinWithUndef(
-            joinColumnL, joinColumnR, std::ranges::less{}, addRow,
+            joinColumnL, joinColumnR, ql::ranges::less{}, addRow,
             ad_utility::noop, ad_utility::noop, {}, cancellationCallback);
 
       } else {
         return ad_utility::zipperJoinWithUndef(
-            joinColumnL, joinColumnR, std::ranges::less{}, addRow,
+            joinColumnL, joinColumnR, ql::ranges::less{}, addRow,
             findSmallerUndefRangeLeft, findSmallerUndefRangeRight, {},
             cancellationCallback);
       }

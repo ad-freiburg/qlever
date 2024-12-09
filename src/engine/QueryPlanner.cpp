@@ -1341,7 +1341,7 @@ size_t QueryPlanner::countSubgraphs(
     std::vector<const QueryPlanner::SubtreePlan*> graph, size_t budget) {
   // Remove duplicate plans from `graph`.
   auto getId = [](const SubtreePlan* v) { return v->_idsOfIncludedNodes; };
-  ql::ranges::sort(graph, std::ranges::less{}, getId);
+  ql::ranges::sort(graph, ql::ranges::less{}, getId);
   graph.erase(
       std::ranges::unique(graph, std::ranges::equal_to{}, getId).begin(),
       graph.end());
