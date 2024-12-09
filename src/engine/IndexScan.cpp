@@ -566,8 +566,8 @@ struct IndexScan::SharedGeneratorState {
                                          &CompressedBlockMetadata::blockIndex_)
               : newBlocks.begin();
       lastBlockIndex_ = newBlocks.back().blockIndex_;
-      std::ranges::move(startIterator, newBlocks.end(),
-                        std::back_inserter(pendingBlocks_));
+      ql::ranges::move(startIterator, newBlocks.end(),
+                       std::back_inserter(pendingBlocks_));
     }
   }
 

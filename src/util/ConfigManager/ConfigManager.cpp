@@ -242,8 +242,8 @@ requires std::is_object_v<HashMapType> auto ConfigManager::allHashMapEntries(
           hashMapEntry.getSubManager().value()->configurationOptions_,
           pathToCurrentEntry, predicate);
       allHashMapEntry.reserve(recursiveResults.size());
-      std::ranges::move(std::move(recursiveResults),
-                        std::back_inserter(allHashMapEntry));
+      ql::ranges::move(std::move(recursiveResults),
+                       std::back_inserter(allHashMapEntry));
     }
   };
 

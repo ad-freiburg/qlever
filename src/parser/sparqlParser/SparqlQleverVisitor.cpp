@@ -643,8 +643,8 @@ vector<SparqlTripleSimpleWithGraph> Visitor::visit(Parser::QuadsContext* ctx) {
       ctx->triplesTemplate(), [this](Parser::TriplesTemplateContext* ctx) {
         return transformTriplesTemplate(ctx, std::monostate{});
       });
-  std::ranges::move(visitVector(ctx->quadsNotTriples()),
-                    std::back_inserter(triplesWithGraph));
+  ql::ranges::move(visitVector(ctx->quadsNotTriples()),
+                   std::back_inserter(triplesWithGraph));
   return ad_utility::flatten(std::move(triplesWithGraph));
 }
 
@@ -1599,8 +1599,8 @@ PathObjectPairsAndTriples Visitor::visit(
   vector<PathObjectPairsAndTriples> pairsAndTriples =
       visitVector(ctx->tupleWithoutPath());
   for (auto& [newPairs, newTriples] : pairsAndTriples) {
-    std::ranges::move(newPairs, std::back_inserter(pairs));
-    std::ranges::move(newTriples, std::back_inserter(triples));
+    ql::ranges::move(newPairs, std::back_inserter(pairs));
+    ql::ranges::move(newTriples, std::back_inserter(triples));
   }
   return result;
 }
