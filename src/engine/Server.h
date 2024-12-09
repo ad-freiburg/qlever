@@ -181,7 +181,7 @@ class Server {
       const string& operation);
   // Execute an update operation. The function must have exclusive access to the
   // DeltaTriples object.
-  void processUpdateImpl(
+  nlohmann::json processUpdateImpl(
       const ad_utility::url_parser::ParamValueMap& params, const string& update,
       ad_utility::Timer& requestTimer, TimeLimit timeLimit, auto& messageSender,
       ad_utility::SharedCancellationHandle cancellationHandle,
