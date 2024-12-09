@@ -562,8 +562,8 @@ struct IndexScan::SharedGeneratorState {
       // matching blocks.
       auto startIterator =
           lastBlockIndex_.has_value()
-              ? std::ranges::upper_bound(newBlocks, lastBlockIndex_.value(), {},
-                                         &CompressedBlockMetadata::blockIndex_)
+              ? ql::ranges::upper_bound(newBlocks, lastBlockIndex_.value(), {},
+                                        &CompressedBlockMetadata::blockIndex_)
               : newBlocks.begin();
       lastBlockIndex_ = newBlocks.back().blockIndex_;
       ql::ranges::move(startIterator, newBlocks.end(),

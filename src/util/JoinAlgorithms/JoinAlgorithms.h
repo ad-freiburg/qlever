@@ -850,7 +850,7 @@ struct BlockZipperJoinImpl {
 
     // Delete the part from the last block that is `<= lastProcessedElement`.
     decltype(auto) remainingBlock = blocks.at(0).subrange();
-    auto beginningOfUnjoined = std::ranges::upper_bound(
+    auto beginningOfUnjoined = ql::ranges::upper_bound(
         remainingBlock, lastProcessedElement, lessThan_);
     blocks.at(0).setSubrange(beginningOfUnjoined, remainingBlock.end());
     if (blocks.at(0).empty()) {

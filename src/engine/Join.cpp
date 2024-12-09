@@ -370,10 +370,10 @@ void Join::join(const IdTable& a, const IdTable& b, IdTable* result) const {
 
   // The UNDEF values are right at the start, so this calculation works.
   size_t numUndefA =
-      std::ranges::upper_bound(joinColumnL, ValueId::makeUndefined()) -
+      ql::ranges::upper_bound(joinColumnL, ValueId::makeUndefined()) -
       joinColumnL.begin();
   size_t numUndefB =
-      std::ranges::upper_bound(joinColumnR, ValueId::makeUndefined()) -
+      ql::ranges::upper_bound(joinColumnR, ValueId::makeUndefined()) -
       joinColumnR.begin();
   std::pair undefRangeA{joinColumnL.begin(), joinColumnL.begin() + numUndefA};
   std::pair undefRangeB{joinColumnR.begin(), joinColumnR.begin() + numUndefB};
