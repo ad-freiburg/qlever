@@ -646,7 +646,7 @@ std::string ConfigManager::generateConfigurationDocDetailedList(
     if (const auto& validators = assignment.getEntriesUnderKey(key);
         !validators.empty()) {
       // Validators should be sorted by their creation order.
-      AD_CORRECTNESS_CHECK(std::ranges::is_sorted(
+      AD_CORRECTNESS_CHECK(ql::ranges::is_sorted(
           validators, {}, [](const ConfigOptionValidatorManager& validator) {
             return validator.getInitializationId();
           }));

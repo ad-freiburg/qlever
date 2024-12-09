@@ -806,7 +806,7 @@ struct BlockZipperJoinImpl {
         AD_CORRECTNESS_CHECK(lessThan_(currentEl, (*it)[0]));
         return true;
       }
-      AD_CORRECTNESS_CHECK(std::ranges::is_sorted(*it, lessThan_));
+      AD_CORRECTNESS_CHECK(ql::ranges::is_sorted(*it, lessThan_));
       side.currentBlocks_.emplace_back(std::move(*it));
     }
     return it == end;
@@ -1063,7 +1063,7 @@ struct BlockZipperJoinImpl {
     while (targetBuffer.empty() && it != end) {
       auto& el = *it;
       if (!el.empty()) {
-        AD_CORRECTNESS_CHECK(std::ranges::is_sorted(el, lessThan_));
+        AD_CORRECTNESS_CHECK(ql::ranges::is_sorted(el, lessThan_));
         targetBuffer.emplace_back(std::move(el));
       }
       ++it;

@@ -89,7 +89,7 @@ static void checkEvalRequirements(std::span<const BlockMetadata> input,
     }
     return false;
   };
-  if (!std::ranges::is_sorted(input, checkOrder)) {
+  if (!ql::ranges::is_sorted(input, checkOrder)) {
     throwRuntimeError("The blocks must be provided in sorted order.");
   }
   // Helper to check for column consistency. Returns `true` if the columns for
@@ -460,7 +460,7 @@ namespace detail {
 void checkPropertiesForPrefilterConstruction(
     const std::vector<PrefilterExprVariablePair>& vec) {
   auto viewVariable = vec | std::views::values;
-  if (!std::ranges::is_sorted(viewVariable, std::less<>{})) {
+  if (!ql::ranges::is_sorted(viewVariable, std::less<>{})) {
     throw std::runtime_error(
         "The vector must contain the <PrefilterExpression, Variable> pairs in "
         "sorted order w.r.t. Variable value.");

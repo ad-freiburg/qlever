@@ -451,21 +451,22 @@ CompressedRelationReader::getBlocksForJoin(
 
   // Transform all the relevant blocks from a `ScanSpecAndBlocksAndBounds` a
   // `BlockWithFirstAndLastId` struct (see above).
-  auto getBlocksWithFirstAndLastId = [&blockLessThanBlock](
-                                         const ScanSpecAndBlocksAndBounds&
-                                             metadataAndBlocks) {
-    auto getSingleBlock =
-        [&metadataAndBlocks](
-            const CompressedBlockMetadata& block) -> BlockWithFirstAndLastId {
-      return {block,
+  auto getBlocksWithFirstAndLastId =
+      [&blockLessThanBlock](
+          const ScanSpecAndBlocksAndBounds& metadataAndBlocks) {
+        auto getSingleBlock =
+            [&metadataAndBlocks](const CompressedBlockMetadata& block)
+            -> BlockWithFirstAndLastId {
+          return {
+              block,
               getRelevantIdFromTriple(block.firstTriple_, metadataAndBlocks),
               getRelevantIdFromTriple(block.lastTriple_, metadataAndBlocks)};
-    };
-    auto result = std::views::transform(
-        getBlocksFromMetadata(metadataAndBlocks), getSingleBlock);
-    AD_CORRECTNESS_CHECK(std::ranges::is_sorted(result, blockLessThanBlock));
-    return result;
-  };
+        };
+        auto result = std::views::transform(
+            getBlocksFromMetadata(metadataAndBlocks), getSingleBlock);
+        AD_CORRECTNESS_CHECK(ql::ranges::is_sorted(result, blockLessThanBlock));
+        return result;
+      };
 
   auto blocksWithFirstAndLastId1 =
       getBlocksWithFirstAndLastId(metadataAndBlocks1);
@@ -1114,7 +1115,7 @@ std::vector<ColumnIndex> CompressedRelationReader::prepareColumnIndices(
 // ___________________________________________________________________________
 std::pair<size_t, bool> CompressedRelationReader::prepareLocatedTriples(
     ColumnIndicesRef columns) {
-  AD_CORRECTNESS_CHECK(std::ranges::is_sorted(columns));
+  AD_CORRECTNESS_CHECK(ql::ranges::is_sorted(columns));
   // Compute number of columns that should be read (except the graph column
   // and any payload columns).
   size_t numScanColumns = [&]() -> size_t {

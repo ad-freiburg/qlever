@@ -40,7 +40,7 @@ auto findSmallerUndefRangesForRowsWithoutUndef(
   using Row = typename std::iterator_traits<It>::value_type;
   assert(row.size() == (*begin).size());
   assert(
-      std::ranges::is_sorted(begin, end, std::ranges::lexicographical_compare));
+      ql::ranges::is_sorted(begin, end, std::ranges::lexicographical_compare));
   assert((ql::ranges::all_of(row,
                              [](Id id) { return id != Id::makeUndefined(); })));
   size_t numJoinColumns = row.size();
@@ -80,7 +80,7 @@ auto findSmallerUndefRangesForRowsWithUndefInLastColumns(
   assert(row.size() == (*begin).size());
   assert(numJoinColumns >= numLastUndefined);
   assert(
-      std::ranges::is_sorted(begin, end, std::ranges::lexicographical_compare));
+      ql::ranges::is_sorted(begin, end, std::ranges::lexicographical_compare));
   const size_t numDefinedColumns = numJoinColumns - numLastUndefined;
   for (size_t i = 0; i < numDefinedColumns; ++i) {
     assert(row[i] != Id::makeUndefined());
@@ -127,7 +127,7 @@ auto findSmallerUndefRangesArbitrary(const auto& row, It begin, It end,
     -> cppcoro::generator<It> {
   assert(row.size() == (*begin).size());
   assert(
-      std::ranges::is_sorted(begin, end, std::ranges::lexicographical_compare));
+      ql::ranges::is_sorted(begin, end, std::ranges::lexicographical_compare));
 
   // To only get smaller entries, we first find a suitable upper bound in the
   // input range. We use `std::lower_bound` because the input row itself is not

@@ -440,7 +440,7 @@ IndexScan::lazyScanForJoinOfTwoScans(const IndexScan& s1, const IndexScan& s2) {
 // _____________________________________________________________________________
 Permutation::IdTableGenerator IndexScan::lazyScanForJoinOfColumnWithScan(
     std::span<const Id> joinColumn) const {
-  AD_EXPENSIVE_CHECK(std::ranges::is_sorted(joinColumn));
+  AD_EXPENSIVE_CHECK(ql::ranges::is_sorted(joinColumn));
   AD_CORRECTNESS_CHECK(numVariables_ <= 3 && numVariables_ > 0);
   AD_CONTRACT_CHECK(joinColumn.empty() || !joinColumn[0].isUndefined());
 
@@ -543,7 +543,7 @@ struct IndexScan::SharedGeneratorState {
       }
       auto& idTable = iterator_.value()->idTable_;
       auto joinColumn = idTable.getColumn(joinColumn_);
-      AD_EXPENSIVE_CHECK(std::ranges::is_sorted(joinColumn));
+      AD_EXPENSIVE_CHECK(ql::ranges::is_sorted(joinColumn));
       AD_CORRECTNESS_CHECK(!joinColumn.empty());
       // Skip processing for undef case, it will be handled differently
       if (hasUndef_) {

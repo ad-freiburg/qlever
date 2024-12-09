@@ -244,7 +244,7 @@ void Result::assertSortOrderIsRespected(
       }));
 
   AD_EXPENSIVE_CHECK(
-      std::ranges::is_sorted(idTable, compareRowsBySortColumns(sortedBy)));
+      ql::ranges::is_sorted(idTable, compareRowsBySortColumns(sortedBy)));
 }
 
 // _____________________________________________________________________________
