@@ -1,6 +1,7 @@
-// Copyright 2018, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Johannes Kalmbach(joka921) <johannes.kalmbach@gmail.com>
+// Copyright 2018 - 2024, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//          Hannah Bast <bast@cs.uni-freiburg.de>
 
 #include "parser/RdfParser.h"
 
@@ -55,7 +56,9 @@ template <class T>
 bool TurtleParser<T>::base() {
   if (skip<TurtleTokenId::TurtleBase>()) {
     if (iriref() && check(skip<TurtleTokenId::Dot>())) {
-      prefixMap_[""] = lastParseResult_.getIri();
+      auto iri = lastParseResult_.getIri();
+      prefixMap_[baseForRelativeIriKey_] = iri;
+      prefixMap_[baseForAbsoluteIriKey_] = iri.getBaseIri();
       return true;
     } else {
       raise("Parsing @base definition failed");
@@ -85,7 +88,9 @@ template <class T>
 bool TurtleParser<T>::sparqlBase() {
   if (skip<TurtleTokenId::SparqlBase>()) {
     if (iriref()) {
-      prefixMap_[""] = lastParseResult_.getIri();
+      auto iri = lastParseResult_.getIri();
+      prefixMap_[baseForRelativeIriKey_] = iri;
+      prefixMap_[baseForAbsoluteIriKey_] = iri.getBaseIri();
       return true;
     } else {
       raise("Parsing BASE definition failed");
@@ -745,8 +750,8 @@ bool TurtleParser<T>::iriref() {
   // more relaxed way.
   if constexpr (UseRelaxedParsing) {
     tok_.remove_prefix(endPos + 1);
-    lastParseResult_ =
-        TripleComponent::Iri::fromIriref(view.substr(0, endPos + 1));
+    lastParseResult_ = TripleComponent::Iri::fromIrirefConsiderBase(
+        view.substr(0, endPos + 1), baseForRelativeIri(), baseForAbsoluteIri());
     return true;
   } else {
     if (!parseTerminal<TurtleTokenId::Iriref>()) {
@@ -756,8 +761,9 @@ bool TurtleParser<T>::iriref() {
         return false;
       }
     }
-    lastParseResult_ =
-        TripleComponent::Iri::fromIriref(lastParseResult_.getString());
+    lastParseResult_ = TripleComponent::Iri::fromIrirefConsiderBase(
+        lastParseResult_.getString(), baseForRelativeIri(),
+        baseForAbsoluteIri());
     return true;
   }
 }
@@ -846,9 +852,16 @@ bool RdfStreamParser<T>::getLineImpl(TurtleTriple* triple) {
       // If this buffer reads from a memory-mapped file, then exceptions are
       // immediately rethrown. If we are reading from a stream in chunks of
       // bytes, we can try again with a larger buffer.
+      //
+      // IMPORTANT: When the buffer ends with a `.`, always extend it because
+      // we might be in the middle of a `PN_LOCAL` that continues and taking
+      // the `.` to be the final `.` of the statement would be wrong.
+      //
+      // TODO: How to detect that there are no more bytes in the buffer?
       try {
-        // variable parsedStatement will be true iff a statement can
-        // successfully be parsed
+        if (byteVec_.size() > 0 && byteVec_.back() == '.') {
+          throw typename T::ParseException("Buffer ends with a `.`");
+        }
         parsedStatement = T::statement();
       } catch (const typename T::ParseException& p) {
         parsedStatement = false;

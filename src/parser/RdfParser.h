@@ -169,6 +169,12 @@ class TurtleParser : public RdfParserBase {
   static constexpr std::array<const char*, 3> floatDatatypes_ = {
       XSD_DECIMAL_TYPE, XSD_DOUBLE_TYPE, XSD_FLOAT_TYPE};
 
+  // The keys for storing the base prefix (for relative and absolute IRIs) in
+  // the prefix map. The only thing that is important about these keys is that
+  // they are different from each other and from any valid prefix name.
+  static constexpr const char* baseForRelativeIriKey_ = "@";
+  static constexpr const char* baseForAbsoluteIriKey_ = "@@";
+
  protected:
   // Data members.
 
@@ -187,9 +193,29 @@ class TurtleParser : public RdfParserBase {
   // `TripleComponent` since it can hold any parsing result, not only objects.
   TripleComponent lastParseResult_;
 
-  // Maps prefixes to their expanded form, initialized with the empty base
-  // (i.e. the prefix ":" maps to the empty IRI).
-  ad_utility::HashMap<std::string, TripleComponent::Iri> prefixMap_{{{}, {}}};
+  // Map that maps prefix names to their IRI, initially empty.
+  ad_utility::HashMap<std::string, TripleComponent::Iri> prefixMap_{
+      {baseForRelativeIriKey_, TripleComponent::Iri{}},
+      {baseForAbsoluteIriKey_, TripleComponent::Iri{}}};
+
+  // Getters for the two base prefixes. Without BASE declaration, these will
+  // both return the empty IRI.
+  //
+  // TODO<hannah> I would prefer to just call `prefixMap_.at(...)`, but then
+  // some of the tests fails because the keys are not in the map (despite the
+  // initialization above).
+  const TripleComponent::Iri& baseForRelativeIri() {
+    // return prefixMap_.at(baseForRelativeIriKey_);
+    return prefixMap_
+        .try_emplace(baseForRelativeIriKey_, TripleComponent::Iri{})
+        .first->second;
+  }
+  const TripleComponent::Iri& baseForAbsoluteIri() {
+    // return prefixMap_.at(baseForAbsoluteIriKey_);
+    return prefixMap_
+        .try_emplace(baseForAbsoluteIriKey_, TripleComponent::Iri{})
+        .first->second;
+  }
 
   // There are turtle constructs that reuse prefixes, subjects and predicates
   // so we have to save the last seen ones.
@@ -400,6 +426,8 @@ class TurtleParser : public RdfParserBase {
   FRIEND_TEST(RdfParserTest, predicateObjectList);
   FRIEND_TEST(RdfParserTest, objectList);
   FRIEND_TEST(RdfParserTest, object);
+  FRIEND_TEST(RdfParserTest, base);
+  FRIEND_TEST(RdfParserTest, sparqlBase);
   FRIEND_TEST(RdfParserTest, blankNode);
   FRIEND_TEST(RdfParserTest, blankNodePropertyList);
   FRIEND_TEST(RdfParserTest, numericLiteral);
