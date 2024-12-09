@@ -31,7 +31,7 @@ BinSearchWrapper::BinSearchWrapper(const IdTable& table, size_t startCol,
 // _____________________________________________________________________________
 std::vector<Edge> BinSearchWrapper::outgoingEdes(const Id node) const {
   auto startIds = table_.getColumn(startCol_);
-  auto range = std::ranges::equal_range(startIds, node);
+  auto range = ql::ranges::equal_range(startIds, node);
   auto startIndex = std::distance(startIds.begin(), range.begin());
 
   std::vector<Edge> edges;

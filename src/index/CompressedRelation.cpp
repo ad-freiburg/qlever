@@ -422,7 +422,7 @@ std::vector<CompressedBlockMetadata> CompressedRelationReader::getBlocksForJoin(
   // `!lessThan(a,b) && !lessThan(b, a)` is not transitive.
   std::vector<CompressedBlockMetadata> result;
   auto blockIsNeeded = [&joinColumn, &lessThan](const auto& block) {
-    return !std::ranges::equal_range(joinColumn, block, lessThan).empty();
+    return !ql::ranges::equal_range(joinColumn, block, lessThan).empty();
   };
   ql::ranges::copy(relevantBlocks | std::views::filter(blockIsNeeded),
                    std::back_inserter(result));
@@ -481,7 +481,7 @@ CompressedRelationReader::getBlocksForJoin(
                                                   const auto& otherBlocks) {
     std::vector<CompressedBlockMetadata> result;
     for (const auto& block : blocks) {
-      if (!std::ranges::equal_range(otherBlocks, block, blockLessThanBlock)
+      if (!ql::ranges::equal_range(otherBlocks, block, blockLessThanBlock)
                .empty()) {
         result.push_back(block.block_);
       }
@@ -584,7 +584,7 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
       return;
     }
     const auto& column = block.getColumn(columnIdx);
-    auto matchingRange = std::ranges::equal_range(
+    auto matchingRange = ql::ranges::equal_range(
         column.begin() + beginIdx, column.begin() + endIdx, relevantId.value());
     beginIdx = matchingRange.begin() - column.begin();
     endIdx = matchingRange.end() - column.begin();
@@ -1036,7 +1036,7 @@ CompressedRelationReader::getRelevantBlocks(
     return blockA.lastTriple_ < blockB.firstTriple_;
   };
 
-  return std::ranges::equal_range(blockMetadata, key, comp);
+  return ql::ranges::equal_range(blockMetadata, key, comp);
 }
 
 // _____________________________________________________________________________

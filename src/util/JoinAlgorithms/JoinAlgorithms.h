@@ -940,8 +940,11 @@ struct BlockZipperJoinImpl {
       return result;
     }
     auto& last = result.back();
-    last.setSubrange(
-        std::ranges::equal_range(last.subrange(), currentEl, lessThan_));
+    // TODO<joka921> `ql::ranges::equal_range` doesn't work here for some
+    // reason.
+    auto [begin, end] = std::equal_range(
+        last.subrange().begin(), last.subrange().end(), currentEl, lessThan_);
+    last.setSubrange(begin, end);
     return result;
   }
 
@@ -1255,11 +1258,12 @@ struct BlockZipperJoinImpl {
       if (!endIsUndefined) {
         auto& lastUndefinedBlock = side.undefBlocks_.back();
         side.currentBlocks_.push_back(lastUndefinedBlock);
-        auto subrange = std::ranges::equal_range(
-            lastUndefinedBlock.subrange(),
-            lastUndefinedBlock.subrange().front(), lessThan_);
-        size_t undefCount = ql::ranges::size(subrange);
-        lastUndefinedBlock.setSubrange(std::move(subrange));
+        // TODO<joka921> ql::ranges::equal_range doesn't work for some reason.
+        decltype(auto) subrange = lastUndefinedBlock.subrange();
+        auto [begin, end] = std::equal_range(subrange.begin(), subrange.end(),
+                                             subrange.front(), lessThan_);
+        size_t undefCount = std::distance(begin, end);
+        lastUndefinedBlock.setSubrange(begin, end);
         auto& firstDefinedBlock = side.currentBlocks_.back();
         firstDefinedBlock.setSubrange(
             firstDefinedBlock.fullBlock().begin() + undefCount,
