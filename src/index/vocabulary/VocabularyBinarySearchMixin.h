@@ -40,7 +40,7 @@ class VocabularyBinarySearchMixin {
                            Idx endIdx = std::nullopt) const {
     auto [begin, end] = getIterators(beginIdx, endIdx);
     return impl().iteratorToWordAndIndex(
-        std::ranges::lower_bound(begin, end, word, comparator));
+        ql::ranges::lower_bound(begin, end, word, comparator));
   }
 
   // Return the first entry that is greater than `word`. The interface is the

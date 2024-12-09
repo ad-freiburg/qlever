@@ -867,7 +867,9 @@ struct BlockZipperJoinImpl {
                      const ProjectedEl& currentEl) {
     AD_CORRECTNESS_CHECK(!currentBlocks.empty());
     const auto& first = currentBlocks.at(0);
-    auto it = std::ranges::lower_bound(first.subrange(), currentEl, lessThan_);
+    // TODO<joka921> ql::ranges::lower_bound doesn't work here.
+    auto it = std::lower_bound(first.subrange().begin(), first.subrange().end(),
+                               currentEl, lessThan_);
     return std::tuple{std::ref(first.fullBlock()), first.subrange(), it};
   }
 

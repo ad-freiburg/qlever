@@ -28,9 +28,9 @@ std::vector<LocatedTriple> LocatedTriple::locateTriplesInPermutation(
         // that larger than or equal to the triple. See `LocatedTriples.h` for a
         // discussion of the corner cases.
         size_t blockIndex =
-            std::ranges::lower_bound(blockMetadata, triple.toPermutedTriple(),
-                                     std::less<>{},
-                                     &CompressedBlockMetadata::lastTriple_) -
+            ql::ranges::lower_bound(blockMetadata, triple.toPermutedTriple(),
+                                    std::less<>{},
+                                    &CompressedBlockMetadata::lastTriple_) -
             blockMetadata.begin();
         out.emplace_back(blockIndex, triple, shouldExist);
       },
