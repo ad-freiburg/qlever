@@ -146,7 +146,7 @@ requires std::movable<UnderlyingRange> class OwningView
   }
 
   constexpr std::ranges::iterator_t<UnderlyingRange> begin() {
-    return std::ranges::begin(underlyingRange_);
+    return ql::ranges::begin(underlyingRange_);
   }
 
   constexpr std::ranges::sentinel_t<UnderlyingRange> end() {
@@ -155,7 +155,7 @@ requires std::movable<UnderlyingRange> class OwningView
 
   constexpr auto begin() const
       requires std::ranges::range<const UnderlyingRange> {
-    return std::ranges::begin(underlyingRange_);
+    return ql::ranges::begin(underlyingRange_);
   }
 
   constexpr auto end() const requires std::ranges::range<const UnderlyingRange>

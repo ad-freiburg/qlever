@@ -649,7 +649,7 @@ class BlockAndSubrange {
   // Overload of `setSubrange` for an actual subrange object.
   template <typename Subrange>
   void setSubrange(const Subrange& subrange) {
-    setSubrange(std::ranges::begin(subrange), std::ranges::end(subrange));
+    setSubrange(ql::ranges::begin(subrange), std::ranges::end(subrange));
   }
 };
 
@@ -683,7 +683,7 @@ JoinSide(It, End, const Projection&) -> JoinSide<It, End, Projection>;
 // keeping them valid until the join is completed.
 template <typename Blocks>
 auto makeJoinSide(Blocks& blocks, const auto& projection) {
-  return JoinSide{std::ranges::begin(blocks), std::ranges::end(blocks),
+  return JoinSide{ql::ranges::begin(blocks), std::ranges::end(blocks),
                   projection};
 }
 

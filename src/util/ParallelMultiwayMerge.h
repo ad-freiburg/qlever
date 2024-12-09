@@ -71,7 +71,7 @@ cppcoro::generator<std::vector<T>> lazyBinaryMerge(
 
   // Turn the ranges into `(iterator, end)` pairs.
   auto makeItPair = [](auto& range) {
-    return std::pair{std::ranges::begin(range), std::ranges::end(range)};
+    return std::pair{ql::ranges::begin(range), std::ranges::end(range)};
   };
 
   auto it1 = makeItPair(range1);

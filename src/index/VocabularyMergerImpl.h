@@ -339,7 +339,7 @@ void sortVocabVector(ItemVec* vecPtr, StringSortComparator comp,
   auto& els = *vecPtr;
   if constexpr (USE_PARALLEL_SORT) {
     if (doParallelSort) {
-      ad_utility::parallel_sort(std::ranges::begin(els), std::ranges::end(els),
+      ad_utility::parallel_sort(ql::ranges::begin(els), std::ranges::end(els),
                                 comp, ad_utility::parallel_tag(10));
     } else {
       ql::ranges::sort(els, comp);

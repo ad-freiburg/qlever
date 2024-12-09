@@ -78,7 +78,7 @@ inline void chunkedCopy(R&& inputRange, O result,
                         std::ranges::range_difference_t<R> chunkSize,
                         const std::invocable auto& chunkOperation)
     requires std::indirectly_copyable<std::ranges::iterator_t<R>, O> {
-  auto begin = std::ranges::begin(inputRange);
+  auto begin = ql::ranges::begin(inputRange);
   auto end = std::ranges::end(inputRange);
   auto target = result;
   while (std::ranges::distance(begin, end) >= chunkSize) {
@@ -103,7 +103,7 @@ template <typename T, SizedOutputRange<T> R>
 inline void chunkedFill(R&& outputRange, const T& value,
                         std::ranges::range_difference_t<R> chunkSize,
                         const std::invocable auto& chunkOperation) {
-  auto begin = std::ranges::begin(outputRange);
+  auto begin = ql::ranges::begin(outputRange);
   auto end = std::ranges::end(outputRange);
   while (std::ranges::distance(begin, end) >= chunkSize) {
     auto start = begin;
