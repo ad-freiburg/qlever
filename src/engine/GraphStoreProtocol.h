@@ -18,9 +18,12 @@ class GraphStoreProtocol {
       const GraphOrDefault& graph) {
     using namespace boost::beast::http;
     using Re2Parser = RdfStringParser<TurtleParser<Tokenizer>>;
-    using NQuadRe2Parser = RdfStringParser<NQuadParser<Tokenizer>>;
-    auto contentType = ad_utility::getMediaTypeFromAcceptHeader(
-        rawRequest.at(field::content_type));
+    const std::string contentTypeString = rawRequest.at(field::content_type);
+    if (contentTypeString.empty()) {
+      // No ContentType specified; we don't try to guess -> 400 Bad Request
+    }
+    const auto contentType =
+        ad_utility::getMediaTypeFromAcceptHeader(contentTypeString);
     std::vector<TurtleTriple> triples;
     switch (contentType.value()) {
       case ad_utility::MediaType::turtle:
@@ -30,13 +33,8 @@ class GraphStoreProtocol {
         triples = parser.parseAndReturnAllTriples();
         break;
       }
-      case ad_utility::MediaType::nquads: {
-        auto parser = NQuadRe2Parser();
-        parser.setInputStream(rawRequest.body());
-        triples = parser.parseAndReturnAllTriples();
-        break;
-      }
       default: {
+        // Unsupported media type -> 415 Unsupported Media Type
         throw std::runtime_error(absl::StrCat(
             "Mediatype \"", ad_utility::toString(contentType.value()),
             "\" is not supported for SPARQL Graph Store HTTP "
@@ -46,24 +44,15 @@ class GraphStoreProtocol {
     }
     ParsedQuery res;
     auto transformTurtleTriple = [&graph](const TurtleTriple& triple) {
-      auto triplesGraph =
-          [&triple]() -> std::variant<std::monostate, Iri, Variable> {
-        if (triple.graphIri_.isIri()) {
-          return Iri(triple.graphIri_.getIri().toStringRepresentation());
-        } else if (triple.graphIri_.isVariable()) {
-          return triple.graphIri_.getVariable();
-        } else {
-          AD_CORRECTNESS_CHECK(triple.graphIri_.isId());
-          AD_CORRECTNESS_CHECK(triple.graphIri_.getId() ==
+      AD_CORRECTNESS_CHECK(triple.graphIri_.isId() &&
+                           triple.graphIri_.getId() ==
                                qlever::specialIds().at(DEFAULT_GRAPH_IRI));
-          return std::monostate{};
-        }
-      }();
+      SparqlTripleSimpleWithGraph::Graph g{std::monostate{}};
       if (std::holds_alternative<GraphRef>(graph)) {
-        triplesGraph = Iri(std::get<GraphRef>(graph).toStringRepresentation());
+        g = Iri(std::get<GraphRef>(graph).toStringRepresentation());
       }
       return SparqlTripleSimpleWithGraph(triple.subject_, triple.predicate_,
-                                         triple.object_, triplesGraph);
+                                         triple.object_, g);
     };
     updateClause::GraphUpdate up{
         ad_utility::transform(triples, transformTurtleTriple), {}};
@@ -80,7 +69,6 @@ class GraphStoreProtocol {
     parsedQuery::GraphPattern selectSPO;
     selectSPO._graphPatterns.emplace_back(parsedQuery::BasicGraphPattern{
         {SparqlTriple(Variable("?s"), "?p", Variable("?o"))}});
-    // TODO: extract this wrapping into a lambda
     if (std::holds_alternative<ad_utility::triple_component::Iri>(graph)) {
       parsedQuery::GroupGraphPattern selectSPOWithGraph{
           std::move(selectSPO),

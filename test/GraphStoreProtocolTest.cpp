@@ -77,22 +77,13 @@ TEST(GraphStoreProtocolTest, transformPost) {
                          {{Iri("<a>"), Iri("<b>"), Iri("<c>"), ::Iri("<bar>")}},
                          std::nullopt),
           m::GraphPattern()));
-  expectTransformPost(
-      ad_utility::testing::MakePostRequest("/?default", "application/n-quads",
-                                           "<a> <b> <c> <d> ."),
-      m::UpdateClause(
-          m::GraphUpdate({},
-                         {{Iri("<a>"), Iri("<b>"), Iri("<c>"), ::Iri("<d>")}},
-                         std::nullopt),
-          m::GraphPattern()));
-  expectTransformPost(
-      ad_utility::testing::MakePostRequest("/?graph=baz", "application/n-quads",
-                                           "<a> <b> <c> <d> ."),
-      m::UpdateClause(
-          m::GraphUpdate({},
-                         {{Iri("<a>"), Iri("<b>"), Iri("<c>"), ::Iri("<baz>")}},
-                         std::nullopt),
-          m::GraphPattern()));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      GraphStoreProtocol::transformPost(
+          ad_utility::testing::MakePostRequest(
+              "/?default", "application/n-quads", "<a> <b> <c> <d> ."),
+          DEFAULT{}),
+      testing::HasSubstr("Not a single media type known to this parser was "
+                         "detected in \"application/n-quads\"."));
   AD_EXPECT_THROW_WITH_MESSAGE(
       GraphStoreProtocol::transformPost(
           ad_utility::testing::MakePostRequest(
