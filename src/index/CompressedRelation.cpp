@@ -536,8 +536,8 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
   // We first scan the complete block including ALL columns.
   std::vector<ColumnIndex> allAdditionalColumns;
   ql::ranges::copy(
-      std::views::iota(ADDITIONAL_COLUMN_GRAPH_ID,
-                       blockMetadata.offsetsAndCompressedSize_.size()),
+      ql::views::iota(ADDITIONAL_COLUMN_GRAPH_ID,
+                      blockMetadata.offsetsAndCompressedSize_.size()),
       std::back_inserter(allAdditionalColumns));
   ScanSpecification specForAllColumns{std::nullopt,
                                       std::nullopt,

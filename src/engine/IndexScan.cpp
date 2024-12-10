@@ -146,8 +146,10 @@ size_t IndexScan::getResultWidth() const {
 
 // _____________________________________________________________________________
 vector<ColumnIndex> IndexScan::resultSortedOn() const {
-  auto resAsView = ad_utility::integerRange(ColumnIndex{numVariables_});
-  std::vector<ColumnIndex> result{resAsView.begin(), resAsView.end()};
+  std::vector<ColumnIndex> result;
+  for (auto i : ad_utility::integerRange(ColumnIndex{numVariables_})) {
+    result.push_back(i);
+  }
   for (size_t i = 0; i < additionalColumns_.size(); ++i) {
     if (additionalColumns_.at(i) == ADDITIONAL_COLUMN_GRAPH_ID) {
       result.push_back(numVariables_ + i);
@@ -285,7 +287,7 @@ void IndexScan::determineMultiplicities() {
     }
   }();
   for ([[maybe_unused]] size_t i :
-       std::views::iota(multiplicity_.size(), getResultWidth())) {
+       ql::views::iota(multiplicity_.size(), getResultWidth())) {
     multiplicity_.emplace_back(1);
   }
   AD_CONTRACT_CHECK(multiplicity_.size() == getResultWidth());

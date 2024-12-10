@@ -611,7 +611,7 @@ class BlockAndSubrange {
 
   // Get a view that iterates over all the indices that belong to the subrange.
   auto getIndexRange() const {
-    return std::views::iota(subrange_.first, subrange_.second);
+    return ql::views::iota(subrange_.first, subrange_.second);
   }
 
   Range getIndices() const { return subrange_; }

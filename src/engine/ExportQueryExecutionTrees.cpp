@@ -139,7 +139,7 @@ ExportQueryExecutionTrees::getRowIndices(LimitOffsetClause limitOffset,
     // If there is something to be exported, yield it.
     if (numRowsToBeExported > 0) {
       co_yield {std::move(tableWithVocab),
-                std::views::iota(rangeBegin, rangeBegin + numRowsToBeExported)};
+                ql::views::iota(rangeBegin, rangeBegin + numRowsToBeExported)};
     }
 
     // Add to `resultSize` and update the effective offset (which becomes zero

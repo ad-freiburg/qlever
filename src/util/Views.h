@@ -223,14 +223,14 @@ constexpr auto allView(Range&& range) {
 }
 
 // Returns a view that contains all the values in `[0, upperBound)`, similar to
-// Python's `range` function. Avoids the common pitfall in `std::views::iota`
+// Python's `range` function. Avoids the common pitfall in `ql::views::iota`
 // that the count variable is only derived from the first argument. For example,
-// `std::views::iota(0, size_t(INT_MAX) + 1)` leads to undefined behavior
+// `ql::views::iota(0, size_t(INT_MAX) + 1)` leads to undefined behavior
 // because of an integer overflow, but `ad_utility::integerRange(size_t(INT_MAX)
 // + 1)` is perfectly safe and behaves as expected.
 template <std::unsigned_integral Int>
 auto integerRange(Int upperBound) {
-  return std::views::iota(Int{0}, upperBound);
+  return ql::views::iota(Int{0}, upperBound);
 }
 
 // The implementation of `inPlaceTransformView`, see below for details.

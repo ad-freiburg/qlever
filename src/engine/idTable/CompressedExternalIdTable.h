@@ -116,7 +116,7 @@ class CompressedExternalIdTableWriter {
     // fine-grained) but only once we have a reasonable abstraction for
     // parallelism.
     std::vector<std::future<void>> compressColumFutures;
-    for (auto i : std::views::iota(0u, numColumns())) {
+    for (auto i : ql::views::iota(0u, numColumns())) {
       compressColumFutures.push_back(
           std::async(std::launch::async, [this, i, blockSize, &table]() {
             auto& blockMetadata = blocksPerColumn_.at(i);
@@ -151,7 +151,7 @@ class CompressedExternalIdTableWriter {
     file_.wlock()->flush();
     std::vector<cppcoro::generator<const IdTableStatic<N>>> result;
     result.reserve(startOfSingleIdTables_.size());
-    for (auto i : std::views::iota(0u, startOfSingleIdTables_.size())) {
+    for (auto i : ql::views::iota(0u, startOfSingleIdTables_.size())) {
       result.push_back(makeGeneratorForIdTable<N>(i));
     }
     return result;
@@ -164,7 +164,7 @@ class CompressedExternalIdTableWriter {
     file_.wlock()->flush();
     std::vector<decltype(makeGeneratorForRows<N>(0))> result;
     result.reserve(startOfSingleIdTables_.size());
-    for (auto i : std::views::iota(0u, startOfSingleIdTables_.size())) {
+    for (auto i : ql::views::iota(0u, startOfSingleIdTables_.size())) {
       result.push_back(makeGeneratorForRows<N>(i));
     }
     return result;
@@ -255,7 +255,7 @@ class CompressedExternalIdTableWriter {
         blocksPerColumn_.at(0).at(blockIdx).uncompressedSize_ / sizeof(Id);
     block.resize(blockSize);
     std::vector<std::future<void>> readColumnFutures;
-    for (auto i : std::views::iota(0u, numColumns())) {
+    for (auto i : ql::views::iota(0u, numColumns())) {
       readColumnFutures.push_back(
           std::async(std::launch::async, [&block, this, i, blockIdx]() {
             decltype(auto) col = block.getColumn(i);
