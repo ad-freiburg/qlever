@@ -56,7 +56,7 @@ template <class T>
 bool TurtleParser<T>::base() {
   if (skip<TurtleTokenId::TurtleBase>()) {
     if (iriref() && check(skip<TurtleTokenId::Dot>())) {
-      auto iri = lastParseResult_.getIri();
+      const auto& iri = lastParseResult_.getIri();
       prefixMap_[baseForRelativeIriKey_] = iri.getBaseIri(false);
       prefixMap_[baseForAbsoluteIriKey_] = iri.getBaseIri(true);
       return true;
