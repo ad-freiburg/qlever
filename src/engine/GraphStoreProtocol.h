@@ -117,7 +117,8 @@ class GraphStoreProtocol {
           "implemented in QLever.");
     } else {
       throw std::runtime_error(
-          absl::StrCat("Unsupported HTTP method \"", "",
+          absl::StrCat("Unsupported HTTP method \"",
+                       std::string_view{rawRequest.method_string()},
                        "\" for the SPARQL Graph Store HTTP Protocol."));
     }
   }

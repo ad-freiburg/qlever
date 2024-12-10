@@ -80,6 +80,14 @@ TEST(GraphStoreProtocolTest, transformPost) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       GraphStoreProtocol::transformPost(
           ad_utility::testing::MakePostRequest(
+              "/?default", "application/sparql-results+json", "{}"),
+          DEFAULT{}),
+      testing::HasSubstr(
+          "Mediatype \"application/sparql-results+json\" is not supported for "
+          "SPARQL Graph Store HTTP Protocol in QLever."));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      GraphStoreProtocol::transformPost(
+          ad_utility::testing::MakePostRequest(
               "/?default", "application/n-quads", "<a> <b> <c> <d> ."),
           DEFAULT{}),
       testing::HasSubstr("Not a single media type known to this parser was "
@@ -144,4 +152,9 @@ TEST(GraphStoreProtocolTest, transformGraphStoreProtocol) {
           ad_utility::testing::MakeRequest(boost::beast::http::verb::patch,
                                            "/?default")),
       testing::HasSubstr("PATCH in the SPARQL Graph Store HTTP Protocol"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      GraphStoreProtocol::transformGraphStoreProtocol(
+          ad_utility::testing::MakeRequest(boost::beast::http::verb::connect,
+                                           "/?default")),
+      testing::HasSubstr("Unsupported HTTP method \"CONNECT\""));
 }
