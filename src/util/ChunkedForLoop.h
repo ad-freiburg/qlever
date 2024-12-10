@@ -5,9 +5,10 @@
 #ifndef QLEVER_CHUNKEDFORLOOP_H
 #define QLEVER_CHUNKEDFORLOOP_H
 
-#include <algorithm>
 #include <concepts>
 #include <cstdint>
+
+#include "backports/algorithm.h"
 
 namespace ad_utility {
 
@@ -69,7 +70,7 @@ template <typename R>
 concept SizedInputRange =
     std::ranges::sized_range<R> && std::ranges::input_range<R>;
 
-// Similar to `std::ranges::copy`, but invokes `chunkOperation` every
+// Similar to `ql::ranges::copy`, but invokes `chunkOperation` every
 // `chunkSize` elements. (Round up to the next chunk size if the range size is
 // not a multiple of `chunkSize`.)
 template <SizedInputRange R, std::weakly_incrementable O>
@@ -77,16 +78,16 @@ inline void chunkedCopy(R&& inputRange, O result,
                         std::ranges::range_difference_t<R> chunkSize,
                         const std::invocable auto& chunkOperation)
     requires std::indirectly_copyable<std::ranges::iterator_t<R>, O> {
-  auto begin = std::ranges::begin(inputRange);
-  auto end = std::ranges::end(inputRange);
+  auto begin = ql::ranges::begin(inputRange);
+  auto end = ql::ranges::end(inputRange);
   auto target = result;
-  while (std::ranges::distance(begin, end) >= chunkSize) {
+  while (ql::ranges::distance(begin, end) >= chunkSize) {
     auto start = begin;
     std::ranges::advance(begin, chunkSize);
-    target = std::ranges::copy(start, begin, target).out;
+    target = ql::ranges::copy(start, begin, target).out;
     chunkOperation();
   }
-  std::ranges::copy(begin, end, target);
+  ql::ranges::copy(begin, end, target);
   chunkOperation();
 }
 
@@ -95,22 +96,22 @@ template <typename R, typename T>
 concept SizedOutputRange =
     std::ranges::sized_range<R> && std::ranges::output_range<R, T>;
 
-// Similar to `std::ranges::fill`, but invokes `chunkOperation` every
+// Similar to `ql::ranges::fill`, but invokes `chunkOperation` every
 // `chunkSize` elements. (Round up to the next chunk size if the range size is
 // not a multiple of `chunkSize`.)
 template <typename T, SizedOutputRange<T> R>
 inline void chunkedFill(R&& outputRange, const T& value,
                         std::ranges::range_difference_t<R> chunkSize,
                         const std::invocable auto& chunkOperation) {
-  auto begin = std::ranges::begin(outputRange);
-  auto end = std::ranges::end(outputRange);
-  while (std::ranges::distance(begin, end) >= chunkSize) {
+  auto begin = ql::ranges::begin(outputRange);
+  auto end = ql::ranges::end(outputRange);
+  while (ql::ranges::distance(begin, end) >= chunkSize) {
     auto start = begin;
     std::ranges::advance(begin, chunkSize);
-    std::ranges::fill(start, begin, value);
+    ql::ranges::fill(start, begin, value);
     chunkOperation();
   }
-  std::ranges::fill(begin, end, value);
+  ql::ranges::fill(begin, end, value);
   chunkOperation();
 }
 }  // namespace ad_utility

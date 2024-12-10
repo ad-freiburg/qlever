@@ -19,7 +19,7 @@ bool getResultForAsk(const std::shared_ptr<const Result>& result) {
   if (result->isFullyMaterialized()) {
     return !result->idTable().empty();
   } else {
-    return std::ranges::any_of(result->idTables(), [](const auto& pair) {
+    return ql::ranges::any_of(result->idTables(), [](const auto& pair) {
       return !pair.idTable_.empty();
     });
   }
@@ -565,8 +565,8 @@ ExportQueryExecutionTrees::selectQueryResultToStream(
       selectClause.getSelectedVariablesAsStrings();
   // In the CSV format, the variables don't include the question mark.
   if (format == MediaType::csv) {
-    std::ranges::for_each(variables,
-                          [](std::string& var) { var = var.substr(1); });
+    ql::ranges::for_each(variables,
+                         [](std::string& var) { var = var.substr(1); });
   }
   co_yield absl::StrJoin(variables, std::string_view{&separator, 1});
   co_yield '\n';
@@ -740,7 +740,7 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
       qet.selectedVariablesToColumnIndices(selectClause, false);
 
   auto vars = selectClause.getSelectedVariablesAsStrings();
-  std::ranges::for_each(vars, [](std::string& var) { var = var.substr(1); });
+  ql::ranges::for_each(vars, [](std::string& var) { var = var.substr(1); });
   nlohmann::json jsonVars = vars;
   co_yield absl::StrCat(R"({"head":{"vars":)", jsonVars.dump(),
                         R"(},"results":{"bindings":[)");

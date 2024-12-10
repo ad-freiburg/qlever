@@ -96,10 +96,10 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
 
   const bool isExplicitGroupBy = !_groupByVariables.empty();
   const bool isImplicitGroupBy =
-      std::ranges::any_of(getAliases(),
-                          [](const Alias& alias) {
-                            return alias._expression.containsAggregate();
-                          }) &&
+      ql::ranges::any_of(getAliases(),
+                         [](const Alias& alias) {
+                           return alias._expression.containsAggregate();
+                         }) &&
       !isExplicitGroupBy;
   const bool isGroupBy = isExplicitGroupBy || isImplicitGroupBy;
   using namespace std::string_literals;
@@ -176,7 +176,7 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
       // part of the group by statement.
       const auto& aliases = selectClause().getAliases();
       for (const Variable& var : selectClause().getSelectedVariables()) {
-        if (auto it = std::ranges::find(aliases, var, &Alias::_target);
+        if (auto it = ql::ranges::find(aliases, var, &Alias::_target);
             it != aliases.end()) {
           const auto& alias = *it;
           auto relevantVariables = groupVariables;

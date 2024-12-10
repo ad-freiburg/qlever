@@ -11,8 +11,8 @@ std::vector<std::pair<Variable, ColumnIndexAndTypeInfo>>
 copySortedByColumnIndex(VariableToColumnMap map) {
   std::vector<std::pair<Variable, ColumnIndexAndTypeInfo>> result{
       std::make_move_iterator(map.begin()), std::make_move_iterator(map.end())};
-  std::ranges::sort(result, std::less<>{},
-                    [](const auto& pair) { return pair.second.columnIndex_; });
+  ql::ranges::sort(result, std::less<>{},
+                   [](const auto& pair) { return pair.second.columnIndex_; });
   return result;
 }
 
@@ -34,7 +34,7 @@ VariableToColumnMap makeVarToColMapForJoinOperation(
     const auto& colIdxRight = columnIndexWithType.columnIndex_;
     // Figure out if the column (from the right operand) is a join column.
     auto joinColumnIt =
-        std::ranges::find(joinColumns, colIdxRight, ad_utility::second);
+        ql::ranges::find(joinColumns, colIdxRight, ad_utility::second);
     if (joinColumnIt != joinColumns.end()) {
       // For non-optional joins, a join column is `AlwaysDefined` if it is
       // always defined in ANY of the inputs. For optional joins a join column

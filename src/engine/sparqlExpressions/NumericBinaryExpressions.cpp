@@ -223,8 +223,8 @@ std::vector<PrefilterExprVariablePair> mergeChildrenForBinaryOpExpressionImpl(
     }
   }
   if constexpr (binOp == AND) {
-    std::ranges::move(itLeft, leftChild.end(), std::back_inserter(resPairs));
-    std::ranges::move(itRight, rightChild.end(), std::back_inserter(resPairs));
+    ql::ranges::move(itLeft, leftChild.end(), std::back_inserter(resPairs));
+    ql::ranges::move(itRight, rightChild.end(), std::back_inserter(resPairs));
   }
   pd::checkPropertiesForPrefilterConstruction(resPairs);
   return resPairs;

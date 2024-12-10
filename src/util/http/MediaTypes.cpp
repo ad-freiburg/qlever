@@ -151,12 +151,12 @@ std::optional<MediaType> getMediaTypeFromAcceptHeader(
       return detail::SUPPORTED_MEDIA_TYPES.at(0);
     } else if constexpr (ad_utility::isSimilar<
                              T, MediaTypeWithQuality::TypeWithWildcard>) {
-      auto it = std::ranges::find_if(
+      auto it = ql::ranges::find_if(
           detail::SUPPORTED_MEDIA_TYPES,
           [&part](const auto& el) { return getType(el) == part._type; });
       return it == detail::SUPPORTED_MEDIA_TYPES.end() ? noValue : *it;
     } else if constexpr (ad_utility::isSimilar<T, MediaType>) {
-      auto it = std::ranges::find(detail::SUPPORTED_MEDIA_TYPES, part);
+      auto it = ql::ranges::find(detail::SUPPORTED_MEDIA_TYPES, part);
       return it != detail::SUPPORTED_MEDIA_TYPES.end() ? part : noValue;
     } else {
       static_assert(ad_utility::alwaysFalse<T>);
