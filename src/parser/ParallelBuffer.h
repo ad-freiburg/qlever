@@ -85,7 +85,7 @@ class ParallelBufferWithEndRegex : public ParallelBuffer {
         endRegex_{endRegex},
         endRegexAsString_{std::move(endRegex)} {}
 
-  // Get the data read asynchonously after the previous call to this
+  // Get the data that was read asynchronously after the previous call to this
   // function. Returns the part of the data until `endRegex` is found, with the
   // part after `endRegex` from the previous call prepended. If `endRegex` is
   // not found, simply return the rest of the data.

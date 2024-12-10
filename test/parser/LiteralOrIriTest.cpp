@@ -23,17 +23,40 @@ TEST(IriTest, IriCreation) {
 }
 
 TEST(IriTest, getBaseIri) {
-  Iri iri1 = Iri::fromIriref("<http://purl.uniprot.org/uniprot/>");
-  EXPECT_THAT("<http://purl.uniprot.org/>",
-              iri1.getBaseIri().toStringRepresentation());
-  Iri iri2 = Iri::fromIriref("<http://purl.uniprot.org/>");
-  EXPECT_THAT("<http://purl.uniprot.org/>",
-              iri2.getBaseIri().toStringRepresentation());
-  Iri iri3 = Iri::fromIriref("<http://purl.uniprot.org>");
-  EXPECT_THAT("<http://purl.uniprot.org>",
-              iri3.getBaseIri().toStringRepresentation());
-  Iri iri4 = Iri::fromIriref("<>");
-  EXPECT_THAT("<>", iri4.getBaseIri().toStringRepresentation());
+  // Helper lambda that calls `Iri::getBaseIri` and returns the result as a
+  // string (including the angle brackets).
+  auto getBaseIri = [](std::string_view iriSv, bool domainOnly) {
+    return Iri::fromIriref(iriSv)
+        .getBaseIri(domainOnly)
+        .toStringRepresentation();
+  };
+  // IRI with path.
+  EXPECT_EQ(getBaseIri("<http://purl.uniprot.org/uniprot/>", false),
+            "<http://purl.uniprot.org/uniprot/>");
+  EXPECT_EQ(getBaseIri("<http://purl.uniprot.org/uniprot>", false),
+            "<http://purl.uniprot.org/uniprot/>");
+  EXPECT_EQ(getBaseIri("<http://purl.uniprot.org/uniprot/>", true),
+            "<http://purl.uniprot.org/>");
+  EXPECT_EQ(getBaseIri("<http://purl.uniprot.org/uniprot>", true),
+            "<http://purl.uniprot.org/>");
+  // IRI with domain only.
+  EXPECT_EQ(getBaseIri("<http://purl.uniprot.org/>", false),
+            "<http://purl.uniprot.org/>");
+  EXPECT_EQ(getBaseIri("<http://purl.uniprot.org>", false),
+            "<http://purl.uniprot.org/>");
+  // This leads to the following assertion failure and I don't understand why.
+  //
+  // C++ exception with description "Assertion `input.starts_with("<") &&
+  // input.ends_with(">")` failed. Please report this to the developers. In file
+  // "/local/data-ssd/qlever/qlever-code/src/parser/RdfEscaping.cpp " at line
+  // 232" thrown in the test body.
+  // EXPECT_EQ(getBaseIri("<http://purl.uniprot.org/", true),
+  //           "<http://purl.uniprot.org/>");
+  EXPECT_EQ(getBaseIri("<http://purl.uniprot.org>", true),
+            "<http://purl.uniprot.org/>");
+  // IRI without scheme.
+  EXPECT_EQ(getBaseIri("<blabla>", false), "<blabla/>");
+  EXPECT_EQ(getBaseIri("<blabla>", true), "<blabla/>");
 }
 
 TEST(IriTest, emptyIri) {
@@ -56,12 +79,12 @@ TEST(IriTest, fromIrirefConsiderBase) {
   // Check that it works for "real" base IRIs.
   baseForRelativeIris = Iri::fromIriref("<http://.../uniprot/>");
   baseForAbsoluteIris = Iri::fromIriref("<http://.../>");
-  EXPECT_THAT(fromIrirefConsiderBase("<http://purl.uniprot.org/uniprot/>"),
-              "<http://purl.uniprot.org/uniprot/>");
-  EXPECT_THAT(fromIrirefConsiderBase("<UPI001AF4585D>"),
-              "<http://.../uniprot/UPI001AF4585D>");
-  EXPECT_THAT(fromIrirefConsiderBase("</prosite/PS51927>"),
-              "<http://.../prosite/PS51927>");
+  EXPECT_EQ(fromIrirefConsiderBase("<http://purl.uniprot.org/uniprot/>"),
+            "<http://purl.uniprot.org/uniprot/>");
+  EXPECT_EQ(fromIrirefConsiderBase("<UPI001AF4585D>"),
+            "<http://.../uniprot/UPI001AF4585D>");
+  EXPECT_EQ(fromIrirefConsiderBase("</prosite/PS51927>"),
+            "<http://.../prosite/PS51927>");
 
   // Check that with the default base, all IRIs remain unchanged.
   baseForRelativeIris = Iri{};

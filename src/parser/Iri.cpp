@@ -49,19 +49,32 @@ Iri Iri::fromPrefixAndSuffix(const Iri& prefix, std::string_view suffix) {
 }
 
 // ____________________________________________________________________________
-Iri Iri::getBaseIri() const {
-  // Find the first `/` after the scheme.
-  size_t pos = iri_.find("://");
-  if (pos != std::string::npos) {
-    pos = iri_.find('/', pos + 3);
+Iri Iri::getBaseIri(bool domainOnly) const {
+  AD_CORRECTNESS_CHECK(iri_.starts_with('<') && iri_.ends_with('>'), iri_);
+  // Check if we have a scheme and find the first `/` after that (or the first
+  // `/` at all if there is no scheme).
+  size_t pos = iri_.find(schemePattern);
+  if (pos == std::string::npos) {
+    LOG(WARN) << "No scheme found in base IRI: \"" << iri_ << "\""
+              << " (but we accept it anyway)" << std::endl;
+    pos = 1;
+  } else {
+    pos += schemePattern.size();
   }
-  // If there is no `/` after the scheme or the first such `/` is the last
-  // character, the base IRI is the IRI itself.
-  if (pos == std::string::npos || pos + 2 == iri_.size()) {
-    return *this;
+  pos = iri_.find('/', pos);
+  // Return the IRI with `/` appended in the following two cases: the IRI has
+  // the empty path, or `domainOnly` is false and the final `/` is missing.
+  if (pos == std::string::npos ||
+      (!domainOnly && iri_[iri_.size() - 2] != '/')) {
+    return fromIrirefWithoutBrackets(
+        absl::StrCat(std::string_view(iri_).substr(1, iri_.size() - 2), "/"sv));
   }
-  // Otherwise, remove everything after the last `/`.
-  return fromIrirefWithoutBrackets(iri_.substr(1, pos));
+  // If `domainOnly` is true, remove the path part.
+  if (domainOnly) {
+    return fromIrirefWithoutBrackets(std::string_view(iri_).substr(1, pos));
+  }
+  // Otherwise, return the IRI as is.
+  return *this;
 }
 
 // ____________________________________________________________________________

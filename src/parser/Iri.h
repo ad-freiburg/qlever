@@ -23,6 +23,10 @@ class Iri {
   // Create a new `Iri` using a prefix
   Iri(const Iri& prefix, NormalizedStringView suffix);
 
+  // Pattern used to identify the scheme in an IRI. Note that we do not
+  // check the validity of the part before the `://` according to RFC 3987.
+  static constexpr std::string_view schemePattern = "://";
+
  public:
   // A default constructed IRI is empty.
   Iri() = default;
@@ -53,9 +57,11 @@ class Iri {
                                     const Iri& basePrefixForRelativeIris,
                                     const Iri& basePrefixForAbsoluteIris);
 
-  // Get the base IRI from this `Iri` object. For example, the base IRI of
-  // `<http://purl.uniprot.org/uniprot/>` is `<http://purl.uniprot.org/>`.
-  Iri getBaseIri() const;
+  // Get the base IRI from this `Iri` object. The returned `Iri` always has a
+  // `/` at the end. If `domainOnly` is true, remove the path part, for
+  // example, for `<http://purl.uniprot.org/uniprot/>` the method returns
+  // `<http://purl.uniprot.org/>`.
+  Iri getBaseIri(bool domainOnly) const;
 
   // Return true iff the IRI is empty.
   bool empty() const { return iri_.empty(); }

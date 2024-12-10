@@ -345,6 +345,8 @@ TEST(RdfParserTest, base) {
               "<http://www.example.org/path/>");
     ASSERT_EQ(parser.baseForAbsoluteIri().toStringRepresentation(),
               "<http://www.example.org/>");
+    parser.setInputStream("@base \"no iriref\" .");
+    ASSERT_THROW(parser.base(), TurtleParser<Tokenizer>::ParseException);
   };
   testForGivenParser(Re2Parser{});
   testForGivenParser(CtreParser{});
@@ -358,6 +360,8 @@ TEST(RdfParserTest, sparqlBase) {
               "<http://www.example.org/path/>");
     ASSERT_EQ(parser.baseForAbsoluteIri().toStringRepresentation(),
               "<http://www.example.org/>");
+    parser.setInputStream("BASE \"no iriref\" .");
+    ASSERT_THROW(parser.sparqlBase(), TurtleParser<Tokenizer>::ParseException);
   };
   testForGivenParser(Re2Parser{});
   testForGivenParser(CtreParser{});
@@ -965,9 +969,7 @@ TEST(RdfParserTest, exceptionPropagation) {
         ::testing::ContainsRegex("Parse error"));
     ad_utility::deleteFile(filename);
   };
-  // Make sure that the `.` is not the final character because we (need to)
-  // handle that as a special case in `RdfStreamParser<T>::getLineImpl`.
-  forAllParsers(testWithParser, "<missing> <object> . ");
+  forAllParsers(testWithParser, "<missing> <object> .");
 }
 
 // Test that exceptions in the batched reading of the input file are properly

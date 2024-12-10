@@ -57,8 +57,8 @@ bool TurtleParser<T>::base() {
   if (skip<TurtleTokenId::TurtleBase>()) {
     if (iriref() && check(skip<TurtleTokenId::Dot>())) {
       auto iri = lastParseResult_.getIri();
-      prefixMap_[baseForRelativeIriKey_] = iri;
-      prefixMap_[baseForAbsoluteIriKey_] = iri.getBaseIri();
+      prefixMap_[baseForRelativeIriKey_] = iri.getBaseIri(false);
+      prefixMap_[baseForAbsoluteIriKey_] = iri.getBaseIri(true);
       return true;
     } else {
       raise("Parsing @base definition failed");
@@ -89,8 +89,8 @@ bool TurtleParser<T>::sparqlBase() {
   if (skip<TurtleTokenId::SparqlBase>()) {
     if (iriref()) {
       auto iri = lastParseResult_.getIri();
-      prefixMap_[baseForRelativeIriKey_] = iri;
-      prefixMap_[baseForAbsoluteIriKey_] = iri.getBaseIri();
+      prefixMap_[baseForRelativeIriKey_] = iri.getBaseIri(false);
+      prefixMap_[baseForAbsoluteIriKey_] = iri.getBaseIri(true);
       return true;
     } else {
       raise("Parsing BASE definition failed");
@@ -823,7 +823,7 @@ bool RdfStreamParser<T>::resetStateAndRead(
 template <class T>
 void RdfStreamParser<T>::initialize(const string& filename) {
   this->clear();
-  // IMPORTANT: The current buffer must not end wih a `.` (unless we are at the
+  // IMPORTANT: The current buffer must not end with a `.` (unless we are at the
   // end of the file). The reason is that with a `.` at the end, we cannot
   // decide whether we are in the middle of a `PN_LOCAL` (that continues in the
   // next buffer) or at the end of a statement.
