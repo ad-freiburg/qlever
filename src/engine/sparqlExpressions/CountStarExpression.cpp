@@ -48,7 +48,7 @@ ExpressionResult CountStarExpression::evaluate(
   };
   size_t targetColIdx = 0;
   for (const auto& [sourceColIdx, _] :
-       varToColNoInternalVariables | std::views::values) {
+       varToColNoInternalVariables | ql::views::values) {
     const auto& sourceColumn = ctx->_inputTable.getColumn(sourceColIdx);
     ql::ranges::copy(sourceColumn.begin() + ctx->_beginIndex,
                      sourceColumn.begin() + ctx->_endIndex,

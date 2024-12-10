@@ -1417,7 +1417,7 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
     components[componentIndices.at(i)].push_back(std::move(initialPlans.at(i)));
   }
   vector<vector<SubtreePlan>> lastDpRowFromComponents;
-  for (auto& component : components | std::views::values) {
+  for (auto& component : components | ql::views::values) {
     std::vector<const SubtreePlan*> g;
     for (const auto& plan : component) {
       g.push_back(&plan);
@@ -2148,7 +2148,7 @@ void QueryPlanner::QueryGraph::setupGraph(
   ad_utility::HashMap<Node*, ad_utility::HashSet<Node*>> adjacentNodes =
       [&varToNode]() {
         ad_utility::HashMap<Node*, ad_utility::HashSet<Node*>> result;
-        for (auto& nodesThatContainSameVar : varToNode | std::views::values) {
+        for (auto& nodesThatContainSameVar : varToNode | ql::views::values) {
           // TODO<C++23> Use std::views::cartesian_product
           for (auto* n1 : nodesThatContainSameVar) {
             for (auto* n2 : nodesThatContainSameVar) {

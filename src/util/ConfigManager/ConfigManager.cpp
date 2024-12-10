@@ -821,7 +821,7 @@ ConfigManager::validators(const bool sortByInitialization) const {
           configurationOptions_, "",
           [](const HashMapEntry& entry) { return entry.holdsSubManager(); })};
   ql::ranges::for_each(
-      std::views::values(allSubManager),
+      ql::views::values(allSubManager),
       [&allValidators](const ConfigManager::HashMapEntry& entry) {
         appendVector(allValidators,
                      entry.getSubManager().value()->validators(false));
@@ -848,7 +848,7 @@ void ConfigManager::verifyWithValidators() const {
 bool ConfigManager::containsOption(const ConfigOption& opt) const {
   const auto allOptions = configurationOptions();
   return ad_utility::contains(
-      std::views::values(allOptions) |
+      ql::views::values(allOptions) |
           ql::views::transform(
               [](const ConfigOption& option) { return &option; }),
       &opt);

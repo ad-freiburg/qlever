@@ -459,7 +459,7 @@ namespace detail {
 //______________________________________________________________________________
 void checkPropertiesForPrefilterConstruction(
     const std::vector<PrefilterExprVariablePair>& vec) {
-  auto viewVariable = vec | std::views::values;
+  auto viewVariable = vec | ql::views::values;
   if (!ql::ranges::is_sorted(viewVariable, std::less<>{})) {
     throw std::runtime_error(
         "The vector must contain the <PrefilterExpression, Variable> pairs in "
