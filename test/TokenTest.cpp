@@ -189,8 +189,8 @@ TEST(TokenizerTest, Entities) {
   string iriref4 = "<escaped\\uAA34\\U000ABC34end>";
   string noIriref1 = "< >";
   string noIriref2 = "<{}|^`>";
-  string noIriref4 = "<\">";
   string noIriref3 = "<\n>";
+  string noIriref4 = "<abc";
 
   // Strict Iriref parsing.
   ASSERT_TRUE(RE2::FullMatch(iriref1, t.Iriref, nullptr));
