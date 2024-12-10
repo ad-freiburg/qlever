@@ -216,10 +216,10 @@ int main(int argc, char** argv) {
   add("add-text-index,A", po::bool_switch(&onlyAddTextIndex),
       "Only build the text index. Assumes that a knowledge graph index with "
       "the same `index-basename` already exists.");
-  add("set-bm25-b-param,bm25-b", po::value(&bScoringParam),
+  add("set-bm25-b-param", po::value(&bScoringParam),
       "Sets the b param in the BM25 scoring metric. This has to be between "
       "(including) 0 and 1. The default is 0.75.");
-  add("set-bm25-k-param,bm25-k", po::value(&kScoringParam),
+  add("set-bm25-k-param", po::value(&kScoringParam),
       "Sets the k param in the BM25 scoring metric. This has to be greater "
       "than or equal to 0. The default is 1.75.");
   add("set-scoring-metric,S", po::value(&scoringMetric),

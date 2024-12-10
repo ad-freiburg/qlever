@@ -110,8 +110,8 @@ class IndexImpl {
   // Inverted index mapping WordIndex to a list of pairs of TextRecordIndex, and
   // a TermFrequency
   using TermFrequency = uint32_t;
-  using InvertedIndex = ad_utility::HashMap<
-      WordIndex, std::vector<std::pair<TextRecordIndex, TermFrequency>>>;
+  using InnerMap = ad_utility::HashMap<TextRecordIndex, TermFrequency>;
+  using InvertedIndex = ad_utility::HashMap<WordIndex, InnerMap>;
   using DocLengthMap = ad_utility::HashMap<TextRecordIndex, size_t>;
 
   struct IndexMetaDataMmapDispatcher {

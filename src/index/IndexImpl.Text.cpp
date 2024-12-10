@@ -215,8 +215,8 @@ void IndexImpl::calculateScoreData(const string& docsFileName,
 }
 
 // _____________________________________________________________________________
-bool IndexImpl::addWordToScoreDataInvertedIndex(
-    std::string_view word, TextRecordIndex currentContextId) {
+bool IndexImpl::addWordToScoreDataInvertedIndex(std::string_view word,
+                                                TextRecordIndex currentDocId) {
   WordVocabIndex wvi;
   // Check if word exists and retrieve wordId
   WordIndex currentWordId;
@@ -225,26 +225,27 @@ bool IndexImpl::addWordToScoreDataInvertedIndex(
   }
   scoreData_.isDocEmpty = false;
   // Emplaces or increases the docLengthMap
-  if (scoreData_.docLengthMap.contains(currentContextId)) {
-    ++scoreData_.docLengthMap[currentContextId];
+  if (scoreData_.docLengthMap.contains(currentDocId)) {
+    ++scoreData_.docLengthMap[currentDocId];
   } else {
-    scoreData_.docLengthMap[currentContextId] = 1;
+    scoreData_.docLengthMap[currentDocId] = 1;
   }
   ++scoreData_.totalDocumentLength;
   // Check if wordId already is a key in the InvertedIndex
   if (scoreData_.invertedIndex.contains(currentWordId)) {
     // Check if the word is seen in a new context or not
-    if (scoreData_.invertedIndex[currentWordId].back().first ==
-        currentContextId) {
-      ++scoreData_.invertedIndex[currentWordId].back().second;
+    InnerMap& innerMap = scoreData_.invertedIndex.find(currentWordId)->second;
+    auto ret = innerMap.find(currentDocId);
+    // Seen in new context
+    if (ret == innerMap.end()) {
+      innerMap.emplace(currentDocId, 1);
+      // Seen in known context
     } else {
-      scoreData_.invertedIndex[currentWordId].emplace_back(
-          std::make_pair(currentContextId, 1));
+      ret->second += 1;
     }
   } else {
-    scoreData_.invertedIndex[currentWordId] =
-        std::vector<std::pair<TextRecordIndex, TermFrequency>>{
-            std::make_pair(currentContextId, 1)};
+    scoreData_.invertedIndex.emplace(currentWordId,
+                                     InnerMap{{currentDocId, 1}});
   }
   return true;
 }
@@ -253,72 +254,65 @@ bool IndexImpl::addWordToScoreDataInvertedIndex(
 float IndexImpl::calculateBM25OrTFIDF(WordIndex wordIndex,
                                       TextRecordIndex contextId,
                                       bool calcBM25) {
-  // Lambda to binary search a sorted vector and pass the found value by ref.
-  // Is not the typical binary search but gives back the next biggest element
-  // This can maybe be extended to a template function in the ad_utility
-  // namespace
-  auto getVectorEntry =
-      [](const std::vector<std::pair<TextRecordIndex, TermFrequency>>& vector,
-         TextRecordIndex searchValue) -> TermFrequency {
-    size_t startSearchFrame = 0;
-    size_t endSearchFrame = vector.size() - 1;
-    size_t currentIndex =
-        startSearchFrame + (endSearchFrame - startSearchFrame) / 2;
-    while (!(endSearchFrame - startSearchFrame <= 1)) {
-      if (vector[currentIndex].first == searchValue) {
-        return vector[currentIndex].second;
-      } else if (vector[currentIndex].first < searchValue) {
-        startSearchFrame = currentIndex;
-        currentIndex =
-            startSearchFrame + (endSearchFrame - startSearchFrame) / 2;
-      } else {
-        endSearchFrame = currentIndex;
-        currentIndex =
-            startSearchFrame + (endSearchFrame - startSearchFrame) / 2;
-      }
-    }
-    if (searchValue < vector[startSearchFrame].first) {
-      return vector[startSearchFrame].second;
-    } else if (searchValue > vector[endSearchFrame].first) {
-      AD_FAIL();
-    }
-    return vector[endSearchFrame].second;
-  };
+  // Retrieve inner map
+  if (!scoreData_.invertedIndex.contains(wordIndex)) {
+    LOG(DEBUG) << "Didn't find word in Inverted Scoring Index. WordId: "
+               << wordIndex
+               << " Word: " << indexToString(WordVocabIndex::make(wordIndex))
+               << std::endl;
+    return 0;
+  }
+  InnerMap& innerMap = scoreData_.invertedIndex.find(wordIndex)->second;
+  size_t df = innerMap.size();
+  float idf = std::log2f(scoreData_.nofDocuments / df);
 
-  // Check if values exist and retrieve them
+  // Retrieve the matching docId for contextId. Since contextId are continuous
+  // or at least increased in smaller steps than the docIds but the
+  // InvertedIndex uses the docIds one has to find the next biggest docId
+  // or the matching docId
   TextRecordIndex docId;
-  if (!scoreData_.docIdSet.contains(contextId)) {
+  if (scoreData_.docIdSet.contains(contextId)) {
+    docId = contextId;
+  } else {
     auto it = scoreData_.docIdSet.upper_bound(contextId);
     if (it == scoreData_.docIdSet.end()) {
+      if (scoreData_.docIdSet.empty()) {
+        AD_THROW("docIdSet is empty and shouldn't be");
+      }
+      LOG(DEBUG) << "Requesting a contextId that is bigger than the largest "
+                    "docId. contextId: "
+                 << contextId.get()
+                 << " Largest docId: " << *scoreData_.docIdSet.rbegin()
+                 << std::endl;
       return 0;
+    } else {
+      docId = *it;
     }
-    docId = *it;
-  } else {
-    docId = contextId;
   }
-  auto docLengthKeyValue = scoreData_.docLengthMap.find(docId);
-  if (docLengthKeyValue == scoreData_.docLengthMap.end()) {
+  auto ret1 = innerMap.find(docId);
+  if (ret1 == innerMap.end()) {
+    LOG(DEBUG) << "The calculated docId doesn't exist in the inner Map. docId: "
+               << docId << std::endl;
     return 0;
   }
-  uint64_t dl = docLengthKeyValue->second;
+  TermFrequency tf = ret1->second;
 
-  auto invertedIndexKeyValue = scoreData_.invertedIndex.find(wordIndex);
-  if (invertedIndexKeyValue == scoreData_.invertedIndex.end()) {
-    return 0;
-  }
-  const vector<std::pair<TextRecordIndex, TermFrequency>>& docVecRef =
-      invertedIndexKeyValue->second;
-  size_t df = docVecRef.size();
-  TermFrequency tf = getVectorEntry(docVecRef, contextId);
-  float idf = std::log2f(scoreData_.nofDocuments / df);
-  if (calcBM25) {
-    float alpha = (1 - scoreData_.b +
-                   scoreData_.b * (dl / scoreData_.averageDocumentLength));
-    float tf_star = (tf * (scoreData_.k + 1)) / (scoreData_.k * alpha + tf);
-    return tf_star * idf;
-  } else {
+  if (!calcBM25) {
     return tf * idf;
   }
+
+  auto ret2 = scoreData_.docLengthMap.find(docId);
+  if (ret2 == scoreData_.docLengthMap.end()) {
+    LOG(DEBUG)
+        << "The calculated docId doesn't exist in the dochLengthMap. docId: "
+        << docId << std::endl;
+    return 0;
+  }
+  size_t dl = ret2->second;
+  float alpha = (1 - scoreData_.b +
+                 scoreData_.b * (dl / scoreData_.averageDocumentLength));
+  float tf_star = (tf * (scoreData_.k + 1)) / (scoreData_.k * alpha + tf);
+  return tf_star * idf;
 }
 
 // _____________________________________________________________________________
