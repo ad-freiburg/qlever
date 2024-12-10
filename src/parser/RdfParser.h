@@ -193,28 +193,22 @@ class TurtleParser : public RdfParserBase {
   // `TripleComponent` since it can hold any parsing result, not only objects.
   TripleComponent lastParseResult_;
 
-  // Map that maps prefix names to their IRI, initially empty.
-  ad_utility::HashMap<std::string, TripleComponent::Iri> prefixMap_{
-      {baseForRelativeIriKey_, TripleComponent::Iri{}},
-      {baseForAbsoluteIriKey_, TripleComponent::Iri{}}};
+  // Map that maps prefix names to their IRI. For our tests, it is important
+  // that without any BASE declaration, the two base prefixes are mapped to the
+  // empty IRI.
+  static const inline ad_utility::HashMap<std::string, TripleComponent::Iri>
+      prefixMapDefault_{{baseForRelativeIriKey_, TripleComponent::Iri{}},
+                        {baseForAbsoluteIriKey_, TripleComponent::Iri{}}};
+  ad_utility::HashMap<std::string, TripleComponent::Iri> prefixMap_ =
+      prefixMapDefault_;
 
   // Getters for the two base prefixes. Without BASE declaration, these will
   // both return the empty IRI.
-  //
-  // TODO<hannah> I would prefer to just call `prefixMap_.at(...)`, but then
-  // some of the tests fails because the keys are not in the map (despite the
-  // initialization above).
   const TripleComponent::Iri& baseForRelativeIri() {
-    // return prefixMap_.at(baseForRelativeIriKey_);
-    return prefixMap_
-        .try_emplace(baseForRelativeIriKey_, TripleComponent::Iri{})
-        .first->second;
+    return prefixMap_.at(baseForRelativeIriKey_);
   }
   const TripleComponent::Iri& baseForAbsoluteIri() {
-    // return prefixMap_.at(baseForAbsoluteIriKey_);
-    return prefixMap_
-        .try_emplace(baseForAbsoluteIriKey_, TripleComponent::Iri{})
-        .first->second;
+    return prefixMap_.at(baseForAbsoluteIriKey_);
   }
 
   // There are turtle constructs that reuse prefixes, subjects and predicates
@@ -248,7 +242,7 @@ class TurtleParser : public RdfParserBase {
     activePredicate_ = TripleComponent::Iri::fromIriref("<>");
     activePrefix_.clear();
 
-    prefixMap_.clear();
+    prefixMap_ = prefixMapDefault_;
 
     tok_.reset(nullptr, 0);
     triples_.clear();
@@ -543,8 +537,6 @@ class RdfStringParser : public Parser {
     tmpToParse_.insert(tmpToParse_.end(), toParse.begin(), toParse.end());
     this->tok_.reset(tmpToParse_.data(), tmpToParse_.size());
   }
-
-  void setPrefixMap(decltype(prefixMap_) m) { prefixMap_ = std::move(m); }
 
   const auto& getPrefixMap() const { return prefixMap_; }
 

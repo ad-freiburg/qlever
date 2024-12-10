@@ -44,14 +44,8 @@ TEST(IriTest, getBaseIri) {
             "<http://purl.uniprot.org/>");
   EXPECT_EQ(getBaseIri("<http://purl.uniprot.org>", false),
             "<http://purl.uniprot.org/>");
-  // This leads to the following assertion failure and I don't understand why.
-  //
-  // C++ exception with description "Assertion `input.starts_with("<") &&
-  // input.ends_with(">")` failed. Please report this to the developers. In file
-  // "/local/data-ssd/qlever/qlever-code/src/parser/RdfEscaping.cpp " at line
-  // 232" thrown in the test body.
-  // EXPECT_EQ(getBaseIri("<http://purl.uniprot.org/", true),
-  //           "<http://purl.uniprot.org/>");
+  EXPECT_EQ(getBaseIri("<http://purl.uniprot.org/>", true),
+            "<http://purl.uniprot.org/>");
   EXPECT_EQ(getBaseIri("<http://purl.uniprot.org>", true),
             "<http://purl.uniprot.org/>");
   // IRI without scheme.

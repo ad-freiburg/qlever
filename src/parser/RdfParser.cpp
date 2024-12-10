@@ -823,10 +823,17 @@ bool RdfStreamParser<T>::resetStateAndRead(
 template <class T>
 void RdfStreamParser<T>::initialize(const string& filename) {
   this->clear();
-  // IMPORTANT: The current buffer must not end with a `.` (unless we are at the
-  // end of the file). The reason is that with a `.` at the end, we cannot
-  // decide whether we are in the middle of a `PN_LOCAL` (that continues in the
-  // next buffer) or at the end of a statement.
+  // Make sure that a block of data ends with a newline. This is important for
+  // two reasons:
+  //
+  // 1. A block of data must not end in the middle of a comment. Otherwise the
+  // remaining part of the comment, which is prepended to the next block, is
+  // not recognized as a comment.
+  //
+  // 2. A block of data must not end with a `.` (without subsequent newline).
+  // The reason is that with a `.` at the end, we cannot decide whether we are
+  // in the middle of a `PN_LOCAL` (that continues in the next buffer) or at the
+  // end of a statement.
   fileBuffer_ =
       std::make_unique<ParallelBufferWithEndRegex>(bufferSize_, "([\\r\\n]+)");
   fileBuffer_->open(filename);
