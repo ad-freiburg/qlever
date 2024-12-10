@@ -1,6 +1,7 @@
-// Copyright 2018, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Johannes Kalmbach(joka921) <johannes.kalmbach@gmail.com>
+// Copyright 2018 - 2024, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//          Hannah Bast <bast@cs.uni-freiburg.de>
 
 #include "parser/RdfParser.h"
 
@@ -55,7 +56,9 @@ template <class T>
 bool TurtleParser<T>::base() {
   if (skip<TurtleTokenId::TurtleBase>()) {
     if (iriref() && check(skip<TurtleTokenId::Dot>())) {
-      prefixMap_[""] = lastParseResult_.getIri();
+      const auto& iri = lastParseResult_.getIri();
+      prefixMap_[baseForRelativeIriKey_] = iri.getBaseIri(false);
+      prefixMap_[baseForAbsoluteIriKey_] = iri.getBaseIri(true);
       return true;
     } else {
       raise("Parsing @base definition failed");
@@ -85,7 +88,9 @@ template <class T>
 bool TurtleParser<T>::sparqlBase() {
   if (skip<TurtleTokenId::SparqlBase>()) {
     if (iriref()) {
-      prefixMap_[""] = lastParseResult_.getIri();
+      auto iri = lastParseResult_.getIri();
+      prefixMap_[baseForRelativeIriKey_] = iri.getBaseIri(false);
+      prefixMap_[baseForAbsoluteIriKey_] = iri.getBaseIri(true);
       return true;
     } else {
       raise("Parsing BASE definition failed");
@@ -745,8 +750,8 @@ bool TurtleParser<T>::iriref() {
   // more relaxed way.
   if constexpr (UseRelaxedParsing) {
     tok_.remove_prefix(endPos + 1);
-    lastParseResult_ =
-        TripleComponent::Iri::fromIriref(view.substr(0, endPos + 1));
+    lastParseResult_ = TripleComponent::Iri::fromIrirefConsiderBase(
+        view.substr(0, endPos + 1), baseForRelativeIri(), baseForAbsoluteIri());
     return true;
   } else {
     if (!parseTerminal<TurtleTokenId::Iriref>()) {
@@ -756,8 +761,9 @@ bool TurtleParser<T>::iriref() {
         return false;
       }
     }
-    lastParseResult_ =
-        TripleComponent::Iri::fromIriref(lastParseResult_.getString());
+    lastParseResult_ = TripleComponent::Iri::fromIrirefConsiderBase(
+        lastParseResult_.getString(), baseForRelativeIri(),
+        baseForAbsoluteIri());
     return true;
   }
 }
@@ -817,7 +823,19 @@ bool RdfStreamParser<T>::resetStateAndRead(
 template <class T>
 void RdfStreamParser<T>::initialize(const string& filename) {
   this->clear();
-  fileBuffer_ = std::make_unique<ParallelFileBuffer>(bufferSize_);
+  // Make sure that a block of data ends with a newline. This is important for
+  // two reasons:
+  //
+  // 1. A block of data must not end in the middle of a comment. Otherwise the
+  // remaining part of the comment, which is prepended to the next block, is
+  // not recognized as a comment.
+  //
+  // 2. A block of data must not end with a `.` (without subsequent newline).
+  // The reason is that with a `.` at the end, we cannot decide whether we are
+  // in the middle of a `PN_LOCAL` (that continues in the next buffer) or at the
+  // end of a statement.
+  fileBuffer_ =
+      std::make_unique<ParallelBufferWithEndRegex>(bufferSize_, "([\\r\\n]+)");
   fileBuffer_->open(filename);
   byteVec_.resize(bufferSize_);
   // decompress the first block and initialize Tokenizer
@@ -847,8 +865,6 @@ bool RdfStreamParser<T>::getLineImpl(TurtleTriple* triple) {
       // immediately rethrown. If we are reading from a stream in chunks of
       // bytes, we can try again with a larger buffer.
       try {
-        // variable parsedStatement will be true iff a statement can
-        // successfully be parsed
         parsedStatement = T::statement();
       } catch (const typename T::ParseException& p) {
         parsedStatement = false;
