@@ -632,10 +632,10 @@ class RdfStreamParser : public Parser {
   // that's why we need the backupState() and resetStateAndRead() methods
   ParallelBuffer::BufferType byteVec_;
 
-  std::unique_ptr<ParallelBuffer> fileBuffer_;
+  size_t bufferSize_ = FILE_BUFFER_SIZE;
+  std::unique_ptr<ParallelBufferWithEndRegex> fileBuffer_;
   // this many characters will be buffered at once,
   // defaults to a global constant
-  size_t bufferSize_ = FILE_BUFFER_SIZE;
 
   // that many bytes were already parsed before dealing with the current batch
   // in member byteVec_

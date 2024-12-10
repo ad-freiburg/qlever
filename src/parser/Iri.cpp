@@ -57,7 +57,7 @@ Iri Iri::getBaseIri() const {
   }
   // If there is no `/` after the scheme or the first such `/` is the last
   // character, the base IRI is the IRI itself.
-  if (pos == std::string::npos || pos + 1 == iri_.size()) {
+  if (pos == std::string::npos || pos + 2 == iri_.size()) {
     return *this;
   }
   // Otherwise, remove everything after the last `/`.

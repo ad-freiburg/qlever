@@ -15,7 +15,6 @@ namespace ad_utility::triple_component {
 class Iri {
  private:
   // Store the string value of the IRI including the angle brackets.
-  // brackets.
   std::string iri_;
 
   // Create a new `Iri` object

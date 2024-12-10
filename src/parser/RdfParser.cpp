@@ -823,7 +823,12 @@ bool RdfStreamParser<T>::resetStateAndRead(
 template <class T>
 void RdfStreamParser<T>::initialize(const string& filename) {
   this->clear();
-  fileBuffer_ = std::make_unique<ParallelFileBuffer>(bufferSize_);
+  // IMPORTANT: The current buffer must not end wih a `.` (unless we are at the
+  // end of the file). The reason is that with a `.` at the end, we cannot
+  // decide whether we are in the middle of a `PN_LOCAL` (that continues in the
+  // next buffer) or at the end of a statement.
+  fileBuffer_ =
+      std::make_unique<ParallelBufferWithEndRegex>(bufferSize_, "([\\r\\n]+)");
   fileBuffer_->open(filename);
   byteVec_.resize(bufferSize_);
   // decompress the first block and initialize Tokenizer
@@ -852,16 +857,7 @@ bool RdfStreamParser<T>::getLineImpl(TurtleTriple* triple) {
       // If this buffer reads from a memory-mapped file, then exceptions are
       // immediately rethrown. If we are reading from a stream in chunks of
       // bytes, we can try again with a larger buffer.
-      //
-      // IMPORTANT: When the buffer ends with a `.`, always extend it because
-      // we might be in the middle of a `PN_LOCAL` that continues and taking
-      // the `.` to be the final `.` of the statement would be wrong.
-      //
-      // TODO: How to detect that there are no more bytes in the buffer?
       try {
-        if (byteVec_.size() > 0 && byteVec_.back() == '.') {
-          throw typename T::ParseException("Buffer ends with a `.`");
-        }
         parsedStatement = T::statement();
       } catch (const typename T::ParseException& p) {
         parsedStatement = false;

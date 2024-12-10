@@ -72,7 +72,12 @@ std::optional<size_t> ParallelBufferWithEndRegex::findRegexNearEnd(
 // _____________________________________________________________________________
 std::optional<ParallelBuffer::BufferType>
 ParallelBufferWithEndRegex::getNextBlock() {
+  // Get the block of data read asynchronously after the previous call
+  // to `getNextBlock`.
   auto rawInput = rawBuffer_.getNextBlock();
+
+  // If there was no more data, return the remainder or `std::nullopt` if
+  // it is empty.
   if (!rawInput || exhausted_) {
     exhausted_ = true;
     if (remainder_.empty()) {
@@ -85,7 +90,15 @@ ParallelBufferWithEndRegex::getNextBlock() {
     return copy;
   }
 
+  // Find `endRegex_` in the data (searching from the back, in chunks of
+  // exponentially increasing size). Note that this does not necessarily
+  // find the last match of `endRegex_` in the data, but the first match in the
+  // last chunk (from the back), where there is a match.
   auto endPosition = findRegexNearEnd(rawInput.value(), endRegex_);
+
+  // If no match was found at all, report an error, except when this is the
+  // last block (then `getNextBlock` will return `std::nullopt`, and we simply
+  // concatenate it to the remainder).
   if (!endPosition) {
     if (rawBuffer_.getNextBlock()) {
       throw std::runtime_error(absl::StrCat(
@@ -95,10 +108,13 @@ ParallelBufferWithEndRegex::getNextBlock() {
           "increase the FILE_BUFFER_SIZE "
           "or set \"parallel-parsing: false\" in the settings file."));
     }
-    // This was the last (possibly incomplete) block, simply concatenate
     endPosition = rawInput->size();
     exhausted_ = true;
   }
+
+  // Concatenate the remainder (part after `endRegex_`) of the block from the
+  // previous round with the part of the block until `endRegex_` from this
+  // round.
   BufferType result;
   result.reserve(remainder_.size() + *endPosition);
   result.insert(result.end(), remainder_.begin(), remainder_.end());

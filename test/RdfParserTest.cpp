@@ -913,8 +913,8 @@ TEST(RdfParserTest, multilineComments) {
     ad_utility::deleteFile(filename);
   };
 
-  // Test an input with many lines that only comments and whitespace. There
-  // was a bug for this case in a previous version of the parser.
+  // Test an input with many lines that contain only comments and whitespace.
+  // There was a bug for this case in a previous version of the parser.
   std::string input = R"(#Comments
   #at
 ##the beginning
