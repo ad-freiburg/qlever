@@ -283,14 +283,11 @@ auto inPlaceTransformViewImpl(Range range, Transformation transformation) {
 CPP_template(typename Range, typename Transformation)(
     requires ql::ranges::input_range<Range> CPP_and
         ad_utility::InvocableWithExactReturnType<
-            Transformation, void, ql::ranges::range_reference_t<Range>>)
-    /*
-                template <ql::ranges::input_range Range,
-                                  ad_utility::InvocableWithExactReturnType<
-                                      void,
-       ql::ranges::range_reference_t<Range>> Transformation>
-                                      */
-    auto inPlaceTransformView(Range&& range, Transformation transformation) {
+            Transformation, void,
+            ql::ranges::range_reference_t<
+                Range>>) auto inPlaceTransformView(Range&& range,
+                                                   Transformation
+                                                       transformation) {
   return detail::inPlaceTransformViewImpl(std::views::all(AD_FWD(range)),
                                           std::move(transformation));
 }
@@ -318,7 +315,8 @@ inline cppcoro::generator<std::span<ElementType>> reChunkAtSeparator(
 
 }  // namespace ad_utility
 
-// TODO<joka921> hide behind `ifdef`
+// Enabling of "borrowed" ranges for `OwningView`.
+#ifdef QLEVER_CPP_17
 namespace ranges {
 // Enabling of "borrowed" ranges for `OwningView`.
 template <typename T>
@@ -326,9 +324,9 @@ inline constexpr bool enable_borrowed_range<ad_utility::OwningView<T>> =
     enable_borrowed_range<T>;
 }  // namespace ranges
 
-namespace std::ranges {
-// Enabling of "borrowed" ranges for `OwningView`.
+#else
 template <typename T>
-inline constexpr bool enable_borrowed_range<ad_utility::OwningView<T>> =
-    enable_borrowed_range<T>;
-}  // namespace std::ranges
+inline constexpr bool
+    std::ranges::enable_borrowed_range<ad_utility::OwningView<T>> =
+        std::rangesenable_borrowed_range<T>;
+#endif

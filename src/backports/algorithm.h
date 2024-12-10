@@ -1,4 +1,4 @@
-//  Copyright 2023, University of Freiburg,
+//  Copyright 2024, University of Freiburg,
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
@@ -9,10 +9,11 @@
 #include <range/v3/all.hpp>
 #include <utility>
 
+#include "backports/backportSelectionMacros.h"
+
 namespace ql {
 
-// #if __cplusplus < 202002L || defined (_QLEVER_CPP_17)
-#if true
+#ifdef QLEVER_CPP_17
 namespace ranges {
 using namespace ::ranges;
 }
