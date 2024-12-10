@@ -786,32 +786,31 @@ auto QueryPlanner::seedWithScansAndText(
       continue;
     }
 
-    auto addIndexScan = [this, pushPlan, node,
-                         &relevantGraphs =
-                             activeDatasetClauses_.defaultGraphs_](
-                            Permutation::Enum permutation,
-                            std::optional<SparqlTripleSimple> triple =
-                                std::nullopt) {
-      if (!triple.has_value()) {
-        triple = node.triple_.getSimple();
-      }
+    auto addIndexScan =
+        [this, pushPlan, node,
+         &relevantGraphs = activeDatasetClauses_.defaultGraphs_](
+            Permutation::Enum permutation,
+            std::optional<SparqlTripleSimple> triple = std::nullopt) {
+          if (!triple.has_value()) {
+            triple = node.triple_.getSimple();
+          }
 
-      // We are inside a `GRAPH ?var {...}` clause, so all index scans have
-      // to add the graph variable as an additional column.
-      auto& additionalColumns = triple.value().additionalScanColumns_;
-      AD_CORRECTNESS_CHECK(!ad_utility::contains(
-          additionalColumns | std::views::keys, ADDITIONAL_COLUMN_GRAPH_ID));
-      if (activeGraphVariable_.has_value()) {
-        additionalColumns.emplace_back(ADDITIONAL_COLUMN_GRAPH_ID,
-                                       activeGraphVariable_.value());
-      }
+          // We are inside a `GRAPH ?var {...}` clause, so all index scans have
+          // to add the graph variable as an additional column.
+          auto& additionalColumns = triple.value().additionalScanColumns_;
+          AD_CORRECTNESS_CHECK(!ad_utility::contains(
+              additionalColumns | ql::views::keys, ADDITIONAL_COLUMN_GRAPH_ID));
+          if (activeGraphVariable_.has_value()) {
+            additionalColumns.emplace_back(ADDITIONAL_COLUMN_GRAPH_ID,
+                                           activeGraphVariable_.value());
+          }
 
-      // TODO<joka921> Handle the case, that the Graph variable is also used
-      // inside the `GRAPH` clause, e.g. by being used inside a triple.
+          // TODO<joka921> Handle the case, that the Graph variable is also used
+          // inside the `GRAPH` clause, e.g. by being used inside a triple.
 
-      pushPlan(makeSubtreePlan<IndexScan>(
-          _qec, permutation, std::move(triple.value()), relevantGraphs));
-    };
+          pushPlan(makeSubtreePlan<IndexScan>(
+              _qec, permutation, std::move(triple.value()), relevantGraphs));
+        };
 
     auto addFilter = [&filters = result.filters_](SparqlFilter filter) {
       filters.push_back(std::move(filter));
@@ -2137,7 +2136,7 @@ void QueryPlanner::QueryGraph::setupGraph(
     ad_utility::HashMap<Variable, std::vector<Node*>> result;
     for (const auto& node : nodes_) {
       for (const auto& var :
-           node->plan_->_qet->getVariableColumns() | std::views::keys) {
+           node->plan_->_qet->getVariableColumns() | ql::views::keys) {
         result[var].push_back(node.get());
       }
     }
@@ -2215,7 +2214,7 @@ void QueryPlanner::GraphPatternPlanner::visitGroupOptionalOrMinus(
 
   // Optionals that occur before any of their variables have been bound,
   // actually behave like ordinary (Group)GraphPatterns.
-  auto variables = candidates[0]._qet->getVariableColumns() | std::views::keys;
+  auto variables = candidates[0]._qet->getVariableColumns() | ql::views::keys;
 
   using enum SubtreePlan::Type;
   if (auto type = candidates[0].type;

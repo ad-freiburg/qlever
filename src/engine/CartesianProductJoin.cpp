@@ -26,7 +26,7 @@ CartesianProductJoin::CartesianProductJoin(
     ad_utility::HashSet<Variable> vars;
     auto checkVarsForOp = [&vars](const Operation& op) {
       return ql::ranges::all_of(
-          op.getExternallyVisibleVariableColumns() | std::views::keys,
+          op.getExternallyVisibleVariableColumns() | ql::views::keys,
           [&vars](const Variable& variable) {
             return vars.insert(variable).second;
           });

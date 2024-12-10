@@ -113,7 +113,7 @@ void PatternCreator::finish() {
                    [](const auto& a) { return a.second.patternId_; });
   CompactVectorOfStrings<Pattern::value_type>::Writer patternWriter{
       std::move(patternSerializer_).file()};
-  for (const auto& pattern : orderedPatterns | std::views::keys) {
+  for (const auto& pattern : orderedPatterns | ql::views::keys) {
     patternWriter.push(pattern.data(), pattern.size());
   }
   patternWriter.finish();

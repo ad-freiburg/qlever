@@ -346,7 +346,7 @@ void ConfigManager::verifyPath(const std::vector<std::string>& path) const {
   The reasons, why it's not allowed, are basically the same.
   */
   ql::ranges::for_each(
-      std::views::keys(configurationOptions_),
+      ql::views::keys(configurationOptions_),
       [&path, this](std::string_view alreadyAddedPath) {
         const std::string pathAsJsonPointerString =
             createJsonPointerString(path);
