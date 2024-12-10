@@ -178,7 +178,7 @@ std::optional<MediaType> getMediaTypeFromAcceptHeader(
 std::string getErrorMessageForSupportedMediaTypes() {
   return "Currently the following media types are supported: " +
          lazyStrJoin(
-             detail::SUPPORTED_MEDIA_TYPES | std::views::transform(toString),
+             detail::SUPPORTED_MEDIA_TYPES | ql::views::transform(toString),
              ", ");
 }
 

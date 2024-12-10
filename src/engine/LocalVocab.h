@@ -115,7 +115,7 @@ class LocalVocab {
   // primary set of this `LocalVocab` remains unchanged.
   template <std::ranges::range R>
   void mergeWith(const R& vocabs) {
-    using std::views::filter;
+    using ql::views::filter;
     auto addWordSet = [this](const std::shared_ptr<const Set>& set) {
       bool added = otherWordSets_.insert(set).second;
       size_ += static_cast<size_t>(added) * set->size();
@@ -134,7 +134,7 @@ class LocalVocab {
         ad_utility::BlankNodeManager::LocalBlankNodeManager;
     auto localManagersView =
         vocabs |
-        std::views::transform([](const LocalVocab& vocab) -> const auto& {
+        ql::views::transform([](const LocalVocab& vocab) -> const auto& {
           return vocab.localBlankNodeManager_;
         });
 

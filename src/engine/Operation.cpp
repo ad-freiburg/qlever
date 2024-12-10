@@ -436,7 +436,7 @@ void Operation::updateRuntimeInformationWhenOptimizedOut(
   // `totalTime_ - #sum of childrens' total time#` in `getOperationTime()`.
   // To set it to zero we thus have to set the `totalTime_` to that sum.
   auto timesOfChildren = _runtimeInfo->children_ |
-                         std::views::transform(&RuntimeInformation::totalTime_);
+                         ql::views::transform(&RuntimeInformation::totalTime_);
   _runtimeInfo->totalTime_ =
       std::reduce(timesOfChildren.begin(), timesOfChildren.end(), 0us);
 

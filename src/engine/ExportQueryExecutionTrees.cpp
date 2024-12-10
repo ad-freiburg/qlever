@@ -688,7 +688,7 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
   std::shared_ptr<const Result> result = qet.getResult(true);
 
   // In the XML format, the variables don't include the question mark.
-  auto varsWithoutQuestionMark = std::views::transform(
+  auto varsWithoutQuestionMark = ql::views::transform(
       variables, [](std::string_view var) { return var.substr(1); });
   for (std::string_view var : varsWithoutQuestionMark) {
     co_yield absl::StrCat("\n  <variable name=\""sv, var, "\"/>"sv);

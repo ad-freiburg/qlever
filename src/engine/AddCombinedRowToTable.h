@@ -349,8 +349,8 @@ class AddCombinedRowToIdTable {
       // Make sure to reset `mergedVocab_` so it is in a valid state again.
       mergedVocab_ = LocalVocab{};
       // Only merge non-null vocabs.
-      auto range = currentVocabs_ | std::views::filter(toBool) |
-                   std::views::transform(dereference);
+      auto range = currentVocabs_ | ql::views::filter(toBool) |
+                   ql::views::transform(dereference);
       mergedVocab_.mergeWith(std::ranges::ref_view{range});
     }
   }

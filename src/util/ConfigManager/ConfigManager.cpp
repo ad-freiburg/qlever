@@ -729,10 +729,10 @@ auto ConfigManager::getValidatorAssignment() const
   // Assign to the configuration options.
   const auto& allValidators = validators(true);
   ql::ranges::for_each(
-      std::views::filter(allValidators,
-                         [](const ConfigOptionValidatorManager& val) {
-                           return val.configOptionToBeChecked().size() == 1;
-                         }),
+      ql::views::filter(allValidators,
+                        [](const ConfigOptionValidatorManager& val) {
+                          return val.configOptionToBeChecked().size() == 1;
+                        }),
       [&assignment](const ConfigOptionValidatorManager& val) {
         // The validator manager only has one element, so this should be okay.
         const ConfigOption& opt = **val.configOptionToBeChecked().begin();
@@ -753,11 +753,11 @@ auto ConfigManager::getValidatorAssignment() const
   allManager.emplace_back(*this);
   ql::ranges::for_each(allManager, [&assignment](const ConfigManager& manager) {
     ql::ranges::for_each(
-        std::views::filter(manager.validators_,
-                           [](const auto& validator) {
-                             return validator.configOptionToBeChecked().size() >
-                                    1;
-                           }),
+        ql::views::filter(manager.validators_,
+                          [](const auto& validator) {
+                            return validator.configOptionToBeChecked().size() >
+                                   1;
+                          }),
         [&assignment, &manager](const auto& validator) {
           assignment.addEntryUnderKey(manager, validator);
         });
@@ -849,7 +849,7 @@ bool ConfigManager::containsOption(const ConfigOption& opt) const {
   const auto allOptions = configurationOptions();
   return ad_utility::contains(
       std::views::values(allOptions) |
-          std::views::transform(
+          ql::views::transform(
               [](const ConfigOption& option) { return &option; }),
       &opt);
 }

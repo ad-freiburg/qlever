@@ -1657,13 +1657,13 @@ ObjectsAndPathTriples Visitor::visit(Parser::ObjectListPathContext* ctx) {
   // First collect all the objects.
   std::vector<GraphTerm> objects;
   ql::ranges::copy(
-      objectAndTriplesVec | std::views::transform(ad_utility::first),
+      objectAndTriplesVec | ql::views::transform(ad_utility::first),
       std::back_inserter(objects));
 
   // Collect all the triples. Node: `views::join` flattens the input.
   std::vector<TripleWithPropertyPath> triples;
   ql::ranges::copy(objectAndTriplesVec |
-                       std::views::transform(ad_utility::second) |
+                       ql::views::transform(ad_utility::second) |
                        std::views::join,
                    std::back_inserter(triples));
   return {std::move(objects), std::move(triples)};

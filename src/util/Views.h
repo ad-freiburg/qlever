@@ -136,6 +136,11 @@ CPP_template(typename UnderlyingRange)(
   OwningView(OwningView&&) = default;
   OwningView& operator=(OwningView&&) = default;
 
+  // TODO<joka921> range-v3 seems to require these...
+  // Let's see if we can manage without them.
+  OwningView(const OwningView&);
+  OwningView& operator=(const OwningView&);
+
   constexpr UnderlyingRange& base() & noexcept { return underlyingRange_; }
 
   constexpr const UnderlyingRange& base() const& noexcept {
@@ -254,7 +259,7 @@ auto inPlaceTransformViewImpl(Range range, Transformation transformation) {
 
   // Lift the transformation to work on the result of `makePtrAndBool` and to
   // only apply the transformation once for each element.
-  // Note: This works because `std::views::transform` calls the transformation
+  // Note: This works because `ql::views::transform` calls the transformation
   // each time an iterator is dereferenced, so the following lambda is called
   // multiple times for the same element if the same iterator is dereferenced
   // multiple times and we therefore have to remember whether the transformation
@@ -271,13 +276,13 @@ auto inPlaceTransformViewImpl(Range range, Transformation transformation) {
   };
 
   // Combine everything to the actual result range.
-  return std::views::transform(
+  return ql::views::transform(
       ad_utility::OwningView{makeElementPtrAndBool(std::move(range))},
       actualTransformation);
 }
 }  // namespace detail
 
-// Similar to `std::views::transform` but for transformation functions that
+// Similar to `ql::views::transform` but for transformation functions that
 // transform a value in place. The result is always only an input range,
 // independent of the actual range category of the input.
 CPP_template(typename Range, typename Transformation)(
@@ -322,6 +327,9 @@ namespace ranges {
 template <typename T>
 inline constexpr bool enable_borrowed_range<ad_utility::OwningView<T>> =
     enable_borrowed_range<T>;
+
+template <typename T>
+inline constexpr bool enable_view<ad_utility::OwningView<T>> = true;
 }  // namespace ranges
 
 #else
@@ -330,3 +338,5 @@ inline constexpr bool
     std::ranges::enable_borrowed_range<ad_utility::OwningView<T>> =
         std::rangesenable_borrowed_range<T>;
 #endif
+
+static_assert(ql::ranges::view_<ad_utility::OwningView<std::vector<int>>>);

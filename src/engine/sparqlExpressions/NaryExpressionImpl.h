@@ -186,7 +186,7 @@ requires(isOperation<Op>) [[nodiscard]] string NaryExpression<Op>::getCacheKey(
     const VariableToColumnMap& varColMap) const {
   string key = typeid(*this).name();
   key += ad_utility::lazyStrJoin(
-      children_ | std::views::transform([&varColMap](const auto& child) {
+      children_ | ql::views::transform([&varColMap](const auto& child) {
         return child->getCacheKey(varColMap);
       }),
       "");

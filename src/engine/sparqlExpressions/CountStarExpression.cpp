@@ -37,7 +37,7 @@ ExpressionResult CountStarExpression::evaluate(
   // part of the DISTINCT computation.
 
   auto varToColNoInternalVariables =
-      ctx->_variableToColumnMap | std::views::filter([](const auto& varAndIdx) {
+      ctx->_variableToColumnMap | ql::views::filter([](const auto& varAndIdx) {
         return !varAndIdx.first.name().starts_with(
             QLEVER_INTERNAL_VARIABLE_PREFIX);
       });

@@ -419,7 +419,7 @@ std::vector<CompressedBlockMetadata> CompressedRelationReader::getBlocksForJoin(
   auto blockIsNeeded = [&joinColumn, &lessThan](const auto& block) {
     return !ql::ranges::equal_range(joinColumn, block, lessThan).empty();
   };
-  ql::ranges::copy(relevantBlocks | std::views::filter(blockIsNeeded),
+  ql::ranges::copy(relevantBlocks | ql::views::filter(blockIsNeeded),
                    std::back_inserter(result));
   // The following check is cheap as there are only few blocks.
   AD_CORRECTNESS_CHECK(std::ranges::unique(result).empty());
@@ -457,7 +457,7 @@ CompressedRelationReader::getBlocksForJoin(
               getRelevantIdFromTriple(block.firstTriple_, metadataAndBlocks),
               getRelevantIdFromTriple(block.lastTriple_, metadataAndBlocks)};
         };
-        auto result = std::views::transform(
+        auto result = ql::views::transform(
             getBlocksFromMetadata(metadataAndBlocks), getSingleBlock);
         AD_CORRECTNESS_CHECK(ql::ranges::is_sorted(result, blockLessThanBlock));
         return result;
@@ -505,8 +505,8 @@ IdTable CompressedRelationReader::scan(
   // Compute an upper bound for the size and reserve enough space in the
   // result.
   auto relevantBlocks = getRelevantBlocks(scanSpec, blocks);
-  auto sizes = relevantBlocks |
-               std::views::transform(&CompressedBlockMetadata::numRows_);
+  auto sizes =
+      relevantBlocks | ql::views::transform(&CompressedBlockMetadata::numRows_);
   auto upperBoundSize = std::accumulate(sizes.begin(), sizes.end(), size_t{0});
   if (limitOffset._limit.has_value()) {
     upperBoundSize = std::min(upperBoundSize,
@@ -600,7 +600,7 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
   size_t i = 0;
   const auto& columnIndices = scanConfig.scanColumns_;
   for (const auto& inputColIdx :
-       columnIndices | std::views::filter([&](const auto& idx) {
+       columnIndices | ql::views::filter([&](const auto& idx) {
          return !manuallyDeleteGraphColumn || idx != ADDITIONAL_COLUMN_GRAPH_ID;
        })) {
     const auto& inputCol = block.getColumn(inputColIdx);

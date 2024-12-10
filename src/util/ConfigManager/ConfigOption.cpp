@@ -177,7 +177,7 @@ std::string ConfigOption::contentOfAvailableTypesToString(
       stream << "[";
       ad_utility::lazyStrJoin(
           &stream,
-          std::views::transform(
+          ql::views::transform(
               content,
               [&variantSubTypeToString](const VectorEntryType& entry) {
                 return variantSubTypeToString(entry, variantSubTypeToString);

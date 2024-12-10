@@ -170,7 +170,7 @@ IdTable LocatedTriplesPerBlock::mergeTriplesImpl(size_t blockIndex,
     AD_CORRECTNESS_CHECK(rowIt == block.end());
     ql::ranges::for_each(
         ql::ranges::subrange(locatedTripleIt, locatedTriples.end()) |
-            std::views::filter(&LocatedTriple::shouldTripleExist_),
+            ql::views::filter(&LocatedTriple::shouldTripleExist_),
         writeLocatedTripleToResult);
   }
   if (rowIt != block.end()) {

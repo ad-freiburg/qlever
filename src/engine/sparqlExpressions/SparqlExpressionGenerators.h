@@ -54,6 +54,7 @@ template <typename T, typename Transformation = std::identity>
 requires(std::ranges::input_range<T>)
 auto resultGenerator(T&& vector, size_t numItems, Transformation transformation = {}) {
   AD_CONTRACT_CHECK(numItems == vector.size());
+  // TODO<joka921> This one place has to be fixed because of the `allView/OwningView` business.
   return ad_utility::allView(AD_FWD(vector)) | std::views::transform(std::move(transformation));
 }
 

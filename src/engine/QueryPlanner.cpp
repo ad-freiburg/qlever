@@ -1294,7 +1294,7 @@ size_t QueryPlanner::findUniqueNodeIds(
     const std::vector<SubtreePlan>& connectedComponent) {
   ad_utility::HashSet<uint64_t> uniqueNodeIds;
   auto nodeIds = connectedComponent |
-                 std::views::transform(&SubtreePlan::_idsOfIncludedNodes);
+                 ql::views::transform(&SubtreePlan::_idsOfIncludedNodes);
   // Check that all the `_idsOfIncludedNodes` are one-hot encodings of a single
   // value, i.e. they have exactly one bit set.
   AD_CORRECTNESS_CHECK(ql::ranges::all_of(
@@ -1462,7 +1462,7 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
   uint64_t textLimitIds = 0;
   ql::ranges::for_each(
       lastDpRowFromComponents |
-          std::views::transform([this](auto& vec) -> decltype(auto) {
+          ql::views::transform([this](auto& vec) -> decltype(auto) {
             return vec.at(findCheapestExecutionTree(vec));
           }),
       [&](SubtreePlan& plan) {

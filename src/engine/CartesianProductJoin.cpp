@@ -40,7 +40,7 @@ CartesianProductJoin::CartesianProductJoin(
 std::vector<QueryExecutionTree*> CartesianProductJoin::getChildren() {
   std::vector<QueryExecutionTree*> result;
   ql::ranges::copy(
-      children_ | std::views::transform([](auto& ptr) { return ptr.get(); }),
+      children_ | ql::views::transform([](auto& ptr) { return ptr.get(); }),
       std::back_inserter(result));
   return result;
 }
@@ -49,28 +49,28 @@ std::vector<QueryExecutionTree*> CartesianProductJoin::getChildren() {
 string CartesianProductJoin::getCacheKeyImpl() const {
   return "CARTESIAN PRODUCT JOIN " +
          ad_utility::lazyStrJoin(
-             std::views::transform(
+             ql::views::transform(
                  childView(), [](auto& child) { return child.getCacheKey(); }),
              " ");
 }
 
 // ____________________________________________________________________________
 size_t CartesianProductJoin::getResultWidth() const {
-  auto view = childView() | std::views::transform(&Operation::getResultWidth);
+  auto view = childView() | ql::views::transform(&Operation::getResultWidth);
   return std::reduce(view.begin(), view.end(), 0UL, std::plus{});
 }
 
 // ____________________________________________________________________________
 size_t CartesianProductJoin::getCostEstimate() {
   auto childSizes =
-      childView() | std::views::transform(&Operation::getCostEstimate);
+      childView() | ql::views::transform(&Operation::getCostEstimate);
   return getSizeEstimate() +
          std::reduce(childSizes.begin(), childSizes.end(), 0UL, std::plus{});
 }
 
 // ____________________________________________________________________________
 uint64_t CartesianProductJoin::getSizeEstimateBeforeLimit() {
-  auto view = childView() | std::views::transform(&Operation::getSizeEstimate);
+  auto view = childView() | ql::views::transform(&Operation::getSizeEstimate);
   return std::reduce(view.begin(), view.end(), 1UL, std::multiplies{});
 }
 
@@ -138,16 +138,15 @@ ProtoResult CartesianProductJoin::computeResult(bool requestLaziness) {
   LocalVocab staticMergedVocab{};
   staticMergedVocab.mergeWith(
       subResults |
-      std::views::transform([](const auto& result) -> const LocalVocab& {
+      ql::views::transform([](const auto& result) -> const LocalVocab& {
         return result->localVocab();
       }));
 
   if (!requestLaziness) {
     AD_CORRECTNESS_CHECK(!lazyResult);
-    return {
-        writeAllColumns(subResults | std::views::transform(&Result::idTable),
-                        getLimit()._offset, getLimit().limitOrDefault()),
-        resultSortedOn(), std::move(staticMergedVocab)};
+    return {writeAllColumns(subResults | ql::views::transform(&Result::idTable),
+                            getLimit()._offset, getLimit().limitOrDefault()),
+            resultSortedOn(), std::move(staticMergedVocab)};
   }
 
   if (lazyResult) {
@@ -159,7 +158,7 @@ ProtoResult CartesianProductJoin::computeResult(bool requestLaziness) {
   // Owning view wrapper to please gcc 11.
   return {produceTablesLazily(std::move(staticMergedVocab),
                               ad_utility::OwningView{std::move(subResults)} |
-                                  std::views::transform(&Result::idTable),
+                                  ql::views::transform(&Result::idTable),
                               getLimit()._offset, getLimit().limitOrDefault()),
           resultSortedOn()};
 }
@@ -192,7 +191,7 @@ IdTable CartesianProductJoin::writeAllColumns(
   // single result is left. This can probably be done by using the
   // `ProtoResult`.
 
-  auto sizesView = std::views::transform(idTables, &IdTable::size);
+  auto sizesView = ql::views::transform(idTables, &IdTable::size);
   auto totalResultSize =
       std::reduce(sizesView.begin(), sizesView.end(), 1UL, std::multiplies{});
 
@@ -346,7 +345,7 @@ Result::Generator CartesianProductJoin::createLazyConsumer(
     size_t producedTableSize = 0;
     for (auto& idTableAndVocab : produceTablesLazily(
              std::move(localVocab),
-             std::views::transform(
+             ql::views::transform(
                  idTables,
                  [](const auto& wrapper) -> const IdTable& { return wrapper; }),
              offset, limit, lastTableOffset)) {

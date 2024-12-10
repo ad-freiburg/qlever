@@ -906,7 +906,7 @@ struct BlockZipperJoinImpl {
     if constexpr (DoOptionalJoin) {
       if (!hasUndef(rightSide_) &&
           ql::ranges::all_of(
-              blocksRight | std::views::transform(
+              blocksRight | ql::views::transform(
                                 [](const auto& inp) { return inp.subrange(); }),
               ql::ranges::empty)) {
         for (const auto& lBlock : blocksLeft) {
