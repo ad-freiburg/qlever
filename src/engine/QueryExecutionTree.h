@@ -122,6 +122,10 @@ class QueryExecutionTree {
     return rootOperation_->collectWarnings();
   }
 
+  // TODO<joka921> Comment.
+  virtual std::vector<Operation*> getIndexScansForSortVariables(
+      std::span<const Variable> variables) final;
+
   template <typename F>
   void forAllDescendants(F f) {
     static_assert(

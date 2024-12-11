@@ -426,6 +426,12 @@ class Operation {
       RuntimeInformation::Status status =
           RuntimeInformation::Status::optimizedOut);
 
+  // TODO<joka921> Comment.
+  virtual std::vector<Operation*> getIndexScansForSortVariables(
+      [[maybe_unused]] std::span<const Variable> variables) {
+    return {};
+  }
+
  private:
   // Create the runtime information in case the evaluation of this operation has
   // failed.

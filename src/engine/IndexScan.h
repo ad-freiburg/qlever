@@ -36,6 +36,9 @@ class IndexScan final : public Operation {
   std::vector<ColumnIndex> additionalColumns_;
   std::vector<Variable> additionalVariables_;
 
+  // TODO<joka921> Comment
+  std::optional<std::vector<CompressedBlockMetadata>> prefilteredBlocks_;
+
  public:
   IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
             const SparqlTriple& triple, Graphs graphsToFilter = std::nullopt,
@@ -107,6 +110,9 @@ class IndexScan final : public Operation {
   // scan.
   std::pair<Result::Generator, Result::Generator> prefilterTables(
       Result::Generator input, ColumnIndex joinColumn);
+
+  // TODO<joka921> Comment
+  static void setBlocksForJoinOfIndexScans(Operation* left, Operation* right);
 
  private:
   // Implementation detail that allows to consume a generator from two other
@@ -202,7 +208,7 @@ class IndexScan final : public Operation {
       PrefilterIndexPair prefilter) const;
 
   // Return the (lazy) `IdTable` for this `IndexScan` in chunks.
-  Result::Generator chunkedIndexScan() const;
+  Result::Generator chunkedIndexScan();
   // Get the `IdTable` for this `IndexScan` in one piece.
   IdTable materializedIndexScan() const;
 
@@ -234,4 +240,11 @@ class IndexScan final : public Operation {
   Permutation::IdTableGenerator getLazyScan(
       std::vector<CompressedBlockMetadata> blocks) const;
   std::optional<Permutation::MetadataAndBlocks> getMetadataForScan() const;
+
+  // TODO<joka921> Comment.
+  void setPrefilteredBlocks(
+      std::vector<CompressedBlockMetadata> prefilteredBlocks);
+
+  std::vector<Operation*> getIndexScansForSortVariables(
+      std::span<const Variable> variables) override;
 };
