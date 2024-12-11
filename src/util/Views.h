@@ -219,9 +219,10 @@ concept can_ref_view =
     requires(Range&& range) { ql::ranges::ref_view{AD_FWD(range)}; };
 }  // namespace detail
 
-// A simple drop-in replacement for `std::views::all` which is required because
-// GCC 11 doesn't support `std::owning_view` (see above). As soon as we don't
-// support GCC 11 anymore, we can throw out those implementations.
+// A simple drop-in replacement for `ql::views::all` which is required because
+// GCC 11 and range-v3 currently don't support `std::owning_view` (see above).
+// As soon as we don't support GCC 11 anymore, we can throw out those
+// implementations.
 template <typename Range>
 constexpr auto allView(Range&& range) {
   if constexpr (std::ranges::view<std::decay_t<Range>>) {
@@ -250,7 +251,7 @@ template <ql::ranges::input_range Range,
           ad_utility::InvocableWithExactReturnType<
               void, ql::ranges::range_reference_t<Range>>
               Transformation>
-requires std::ranges::view<Range>
+requires ql::ranges::cpp20::view<Range>
 auto inPlaceTransformViewImpl(Range range, Transformation transformation) {
   // Take a range and yield pairs of [pointerToElementOfRange,
   // boolThatIsInitiallyFalse]. The bool is yielded as a reference and if its
@@ -304,7 +305,7 @@ CPP_template(typename Range, typename Transformation)(
                 Range>>) auto inPlaceTransformView(Range&& range,
                                                    Transformation
                                                        transformation) {
-  return detail::inPlaceTransformViewImpl(std::views::all(AD_FWD(range)),
+  return detail::inPlaceTransformViewImpl(ql::views::all(AD_FWD(range)),
                                           std::move(transformation));
 }
 
