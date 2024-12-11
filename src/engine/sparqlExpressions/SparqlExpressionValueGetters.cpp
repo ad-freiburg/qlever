@@ -91,6 +91,31 @@ std::optional<std::string> StringValueGetter::operator()(
 }
 
 // ____________________________________________________________________________
+std::optional<LiteralOrIri> LiteralOrIriValueGetter::operator()(
+    Id id, const EvaluationContext* context) const {
+  return ExportQueryExecutionTrees::idToLiteralOrIri(context->_qec.getIndex(),
+                                                     id, context->_localVocab);
+}
+
+// ____________________________________________________________________________
+std::optional<LiteralOrIri>
+LiteralOrIriValueGetterWithXsdStringFilter::operator()(
+    Id id, const EvaluationContext* context) const {
+  return ExportQueryExecutionTrees::idToLiteralOrIri(
+      context->_qec.getIndex(), id, context->_localVocab, true);
+}
+
+// ____________________________________________________________________________
+std::optional<LiteralOrIri>
+LiteralOrIriValueGetterWithXsdStringFilter::operator()(
+    const LiteralOrIri& s, const EvaluationContext*) const {
+  if (ExportQueryExecutionTrees::isPlainLiteralOrLiteralWithXsdString(s)) {
+    return s;
+  }
+  return std::nullopt;
+}
+
+// ____________________________________________________________________________
 template <auto isSomethingFunction, auto prefix>
 Id IsSomethingValueGetter<isSomethingFunction, prefix>::operator()(
     ValueId id, const EvaluationContext* context) const {
