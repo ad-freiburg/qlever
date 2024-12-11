@@ -612,6 +612,8 @@ auto IndexImpl::convertPartialToGlobalIds(
   auto& result = *resultPtr;
   auto& internalResult = *internalTriplesPtr;
   auto triplesGenerator = data.getRows();
+  // static_assert(!std::is_const_v<decltype(triplesGenerator)>);
+  // static_assert(std::is_const_v<decltype(triplesGenerator)>);
   auto it = triplesGenerator.begin();
   using Buffer = IdTableStatic<NumColumnsIndexBuilding>;
   struct Buffers {

@@ -1664,7 +1664,7 @@ ObjectsAndPathTriples Visitor::visit(Parser::ObjectListPathContext* ctx) {
   std::vector<TripleWithPropertyPath> triples;
   ql::ranges::copy(objectAndTriplesVec |
                        ql::views::transform(ad_utility::second) |
-                       std::views::join,
+                       ql::views::join,
                    std::back_inserter(triples));
   return {std::move(objects), std::move(triples)};
 }

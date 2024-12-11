@@ -116,7 +116,7 @@ cppcoro::generator<typename SortedBlockView::value_type> uniqueBlockView(
 // A view that owns its underlying storage. It is a replacement for
 // `std::ranges::owning_view` which is not yet supported by `GCC 11`. The
 // implementation is taken from libstdc++-13.
-CPP_template(typename UnderlyingRange)(
+CPP_template(typename UnderlyingRange, bool disallowConst = false)(
     requires ql::ranges::range<UnderlyingRange>)
     /*
     template <std::ranges::range UnderlyingRange>
@@ -138,8 +138,10 @@ CPP_template(typename UnderlyingRange)(
 
   // TODO<joka921> range-v3 seems to require these...
   // Let's see if we can manage without them.
-  OwningView(const OwningView&);
-  OwningView& operator=(const OwningView&);
+  /*
+  OwningView(const OwningView&) { AD_FAIL();}
+  OwningView& operator=(const OwningView&) {AD_FAIL();};
+  */
 
   constexpr UnderlyingRange& base() & noexcept { return underlyingRange_; }
 
@@ -163,12 +165,13 @@ CPP_template(typename UnderlyingRange)(
     return ql::ranges::end(underlyingRange_);
   }
 
-  constexpr auto begin() const requires ql::ranges::range<const UnderlyingRange>
-  {
+  constexpr auto begin() const
+      requires(!disallowConst && ql::ranges::range<const UnderlyingRange>) {
     return ql::ranges::begin(underlyingRange_);
   }
 
-  constexpr auto end() const requires ql::ranges::range<const UnderlyingRange> {
+  constexpr auto end() const
+      requires(!disallowConst && ql::ranges::range<const UnderlyingRange>) {
     return ql::ranges::end(underlyingRange_);
   }
 
@@ -200,6 +203,14 @@ CPP_template(typename UnderlyingRange)(
     return ql::ranges::data(underlyingRange_);
   }
 };
+
+template <typename T>
+struct OwningViewNoConst : OwningView<T, true> {
+  using OwningView<T, true>::OwningView;
+};
+
+template <typename T>
+OwningViewNoConst(T&&) -> OwningViewNoConst<T>;
 
 // Helper concept for `ad_utility::allView`.
 namespace detail {

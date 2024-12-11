@@ -173,8 +173,9 @@ class CompressedExternalIdTableWriter {
   template <size_t N = 0>
   auto getGeneratorForAllRows() {
     // Note: As soon as we drop the support for GCC11 this can be
-    // `return getAllRowGenerators<N>() | std::views::join;
-    return std::views::join(ad_utility::OwningView{getAllRowGenerators<N>()});
+    // `return getAllRowGenerators<N>() | ql::views::join;
+    return ql::views::join(
+        ad_utility::OwningViewNoConst{getAllRowGenerators<N>()});
   }
 
   // Clear the underlying file and completely reset the data structure s.t. it
@@ -197,7 +198,7 @@ class CompressedExternalIdTableWriter {
   // Get the row generator for a single IdTable, specified by the `index`.
   template <size_t N = 0>
   auto makeGeneratorForRows(size_t index) {
-    return std::views::join(
+    return ql::views::join(
         ad_utility::OwningView{makeGeneratorForIdTable<N>(index)});
   }
   // Get the block generator for a single IdTable, specified by the `index`.
@@ -478,10 +479,10 @@ class CompressedExternalIdTable
         co_yield block;
       }(this->currentBlock_);
       auto rowView =
-          std::views::join(ad_utility::OwningView{std::move(generator)});
+          ql::views::join(ad_utility::OwningView{std::move(generator)});
       std::vector<decltype(rowView)> vec;
       vec.push_back(std::move(rowView));
-      return std::views::join(ad_utility::OwningView(std::move(vec)));
+      return ql::views::join(ad_utility::OwningViewNoConst(std::move(vec)));
     }
     this->pushBlock(std::move(this->currentBlock_));
     this->resetCurrentBlock(false);
@@ -612,7 +613,7 @@ class CompressedExternalIdTableSorter
   // one. Either this function or the following function must be called exactly
   // once.
   auto sortedView() {
-    return std::views::join(ad_utility::OwningView{getSortedBlocks()});
+    return ql::views::join(ad_utility::OwningView{getSortedBlocks()});
   }
 
   // Similar to `sortedView` (see above), but the elements are yielded in

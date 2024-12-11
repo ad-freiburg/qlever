@@ -101,8 +101,8 @@ FetchContent_Declare(
 ################################
 FetchContent_Declare(
         range-v3
-        GIT_REPOSITORY https://github.com/ericniebler/range-v3
-        GIT_TAG a81477931a8aa2ad025c6bda0609f38e09e4d7ec # 0.12.0
+        GIT_REPOSITORY https://github.com/joka921/range-v3
+        GIT_TAG 1dc0b09abab1bdc7d085a78754abd5c6e37a5d0c # 0.12.0
 )
 
 

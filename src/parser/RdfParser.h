@@ -516,7 +516,7 @@ class RdfStringParser : public Parser {
     this->tok_.reset(tmpToParse_.data(), tmpToParse_.size());
   }
 
-  void setPrefixMap(decltype(prefixMap_) m) { prefixMap_ = std::move(m); }
+  // void setPrefixMap(decltype(prefixMap_) m) { prefixMap_ = std::move(m); }
 
   const auto& getPrefixMap() const { return prefixMap_; }
 

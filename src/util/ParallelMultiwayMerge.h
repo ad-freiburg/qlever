@@ -200,7 +200,7 @@ cppcoro::generator<std::vector<T>> parallelMultiwayMergeImpl(
     auto splitIt = beg + split;
     auto end = rangeOfRanges.end();
     auto join = [](auto&& view) {
-      return std::views::join(ad_utility::OwningView{AD_FWD(view)});
+      return ql::views::join(ad_utility::OwningView{AD_FWD(view)});
     };
 
     auto parallelMerge = [join, blocksize, comparison, maxMemPerNode](

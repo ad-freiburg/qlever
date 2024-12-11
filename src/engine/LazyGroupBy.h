@@ -53,7 +53,7 @@ class LazyGroupBy {
     return aggregateAliases_ |
            ql::views::transform(
                &GroupBy::HashMapAliasInformation::aggregateInfo_) |
-           std::views::join;
+           ql::views::join;
   }
 
   FRIEND_TEST(LazyGroupBy, verifyGroupConcatIsCorrectlyInitialized);

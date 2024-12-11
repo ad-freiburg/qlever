@@ -114,7 +114,7 @@ void testExternalSorterImpl(size_t numDynamicColumns, size_t numRows,
       // number of inputs.
       auto blocksize = k == 1 ? 1 : 17;
       using namespace ::testing;
-      auto generator = k == 0 ? std::views::join(ad_utility::OwningView{
+      auto generator = k == 0 ? ql::views::join(ad_utility::OwningView{
                                     writer.getSortedBlocks(blocksize)})
                               : writer.sortedView();
       if (mergeMultipleTimes || k == 0) {

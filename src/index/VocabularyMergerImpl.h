@@ -94,7 +94,7 @@ auto VocabularyMerger::mergeVocabulary(const std::string& basename,
           0.8 * memoryToUse, generators, lessThanForQueue);
   ad_utility::ProgressBar progressBar{metaData_.numWordsTotal(),
                                       "Words merged: "};
-  for (QueueWord& currentWord : std::views::join(mergedWords)) {
+  for (QueueWord& currentWord : ql::views::join(mergedWords)) {
     // Accumulate the globally ordered queue words in a buffer.
     sortedBuffer.push_back(std::move(currentWord));
 
