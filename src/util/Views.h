@@ -251,7 +251,7 @@ template <ql::ranges::input_range Range,
           ad_utility::InvocableWithExactReturnType<
               void, ql::ranges::range_reference_t<Range>>
               Transformation>
-requires ql::ranges::cpp20::view<Range>
+requires ql::ranges::view<Range>
 auto inPlaceTransformViewImpl(Range range, Transformation transformation) {
   // Take a range and yield pairs of [pointerToElementOfRange,
   // boolThatIsInitiallyFalse]. The bool is yielded as a reference and if its
@@ -348,7 +348,5 @@ inline constexpr bool enable_view<ad_utility::OwningView<T>> = true;
 template <typename T>
 inline constexpr bool
     std::ranges::enable_borrowed_range<ad_utility::OwningView<T>> =
-        std::rangesenable_borrowed_range<T>;
+        std::ranges::enable_borrowed_range<T>;
 #endif
-
-static_assert(ql::ranges::view_<ad_utility::OwningView<std::vector<int>>>);

@@ -296,10 +296,4 @@ T getSingleElement(generator<T, Details> g) {
 }
 }  // namespace cppcoro
 
-// static_assert(!std::same_as<ql::ranges::iterator_t<cppcoro::generator<int>>,
-// ql::ranges::iterator_t<const cppcoro::generator<int>>>);
-static_assert(!ql::ranges::simple_view<cppcoro::generator<int>>());
-// using x = decltype(ql::ranges::begin(std::declval<const
-// cppcoro::generator<int>&>()));
-
 #endif

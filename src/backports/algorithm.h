@@ -9,6 +9,10 @@
 #include <range/v3/all.hpp>
 #include <utility>
 
+#ifndef QLEVER_CPP_17
+#include <ranges>
+#endif
+
 #include "backports/backportSelectionMacros.h"
 
 namespace ql {
@@ -16,6 +20,8 @@ namespace ql {
 namespace ranges {
 #ifdef QLEVER_CPP_17
 using namespace ::ranges;
+template <typename T>
+CPP_concept view = ::ranges::cpp20::view<T>;
 #else
 using namespace std::ranges;
 #endif
