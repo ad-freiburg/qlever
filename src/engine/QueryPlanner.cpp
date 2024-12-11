@@ -2149,7 +2149,7 @@ void QueryPlanner::QueryGraph::setupGraph(
       [&varToNode]() {
         ad_utility::HashMap<Node*, ad_utility::HashSet<Node*>> result;
         for (auto& nodesThatContainSameVar : varToNode | ql::views::values) {
-          // TODO<C++23> Use std::views::cartesian_product
+          // TODO<C++23> Use ql::views::cartesian_product
           for (auto* n1 : nodesThatContainSameVar) {
             for (auto* n2 : nodesThatContainSameVar) {
               if (n1 != n2) {

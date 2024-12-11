@@ -885,7 +885,7 @@ struct BlockZipperJoinImpl {
   // blocks on the right and add them to the result.
   void addCartesianProduct(const LeftBlocks& blocksLeft,
                            const RightBlocks& blocksRight) {
-    // TODO<C++23> use `std::views::cartesian_product`.
+    // TODO<C++23> use `ql::views::cartesian_product`.
     for (const auto& lBlock : blocksLeft) {
       for (const auto& rBlock : blocksRight) {
         compatibleRowAction_.setInput(lBlock.fullBlock(), rBlock.fullBlock());
