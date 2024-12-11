@@ -798,9 +798,11 @@ struct BlockZipperJoinImpl {
     auto& it = side.it_;
     auto& end = side.end_;
     for (size_t numBlocksRead = 0; it != end && numBlocksRead < 3;
-         ++it, ++numBlocksRead) {
+         ++it) {
       if (std::ranges::empty(*it)) {
         continue;
+      } else {
+        ++numBlocksRead;
       }
       if (!eq((*it)[0], currentEl)) {
         AD_CORRECTNESS_CHECK(lessThan_(currentEl, (*it)[0]));
