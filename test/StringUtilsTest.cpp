@@ -114,15 +114,15 @@ TEST(StringUtilsTest, listToString) {
   called with one, that returns r-values.
   */
   /*
-  TODO Do a test, where the `std::views::transform` uses an r-value vector,
+  TODO Do a test, where the `ql::views::transform` uses an r-value vector,
   once we no longer support `gcc-11`. The compiler has a bug, where it
   doesn't allow that code, even though it's correct.
   */
-  auto plus10View = std::views::transform(
+  auto plus10View = ql::views::transform(
       multiValueVector, [](const int& num) -> int { return num + 10; });
   doTestForAllOverloads("50,51,52,53", plus10View, plus10View, ",");
 
-  auto identityView = std::views::transform(multiValueVector, std::identity{});
+  auto identityView = ql::views::transform(multiValueVector, std::identity{});
   doTestForAllOverloads("40,41,42,43", identityView, identityView, ",");
 
   // Test, that uses an actual `std::ranges::input_range`. That is, a range who

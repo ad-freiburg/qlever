@@ -25,7 +25,7 @@ void compareIdTableWithExpectedContent(
   auto writeIdTableToStream = [&traceMessage](const IdTable& idTable) {
     std::ranges::for_each(idTable,
                           [&traceMessage](const auto& row) {
-                            // TODO<C++23> Use std::views::join_with for both
+                            // TODO<C++23> Use ql::views::join_with for both
                             // loops.
                             for (size_t i = 0; i < row.numColumns(); i++) {
                               traceMessage << row[i] << " ";
@@ -105,8 +105,8 @@ IdTable createRandomlyFilledIdTable(
   AD_CONTRACT_CHECK(numberRows > 0 && numberColumns > 0);
 
   // Views for clearer access.
-  auto joinColumnNumberView = std::views::keys(joinColumnWithGenerator);
-  auto joinColumnGeneratorView = std::views::values(joinColumnWithGenerator);
+  auto joinColumnNumberView = ql::views::keys(joinColumnWithGenerator);
+  auto joinColumnGeneratorView = ql::views::values(joinColumnWithGenerator);
 
   // Are all the join column numbers within the max column number?
   AD_CONTRACT_CHECK(std::ranges::all_of(

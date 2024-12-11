@@ -125,7 +125,7 @@ class ValuesForTesting : public Operation {
   // ___________________________________________________________________________
   string getCacheKeyImpl() const override {
     std::stringstream str;
-    auto numRowsView = tables_ | std::views::transform(&IdTable::numRows);
+    auto numRowsView = tables_ | ql::views::transform(&IdTable::numRows);
     auto totalNumRows = std::reduce(numRowsView.begin(), numRowsView.end(), 0);
     auto numCols = tables_.empty() ? 0 : tables_.at(0).numColumns();
     str << "Values for testing with " << numCols << " columns and "

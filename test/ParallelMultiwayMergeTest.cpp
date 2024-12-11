@@ -17,7 +17,7 @@ using namespace ad_utility::memory_literals;
 auto join = []<typename Range>(Range&& range) {
   std::vector<std::ranges::range_value_t<std::ranges::range_value_t<Range>>>
       result;
-  auto view = std::views::join(ad_utility::OwningView{AD_FWD(range)});
+  auto view = ql::views::join(ad_utility::OwningView{AD_FWD(range)});
   std::ranges::copy(view, std::back_inserter(result));
   return result;
 };
@@ -46,7 +46,7 @@ void testRandomInts() {
   std::ranges::sort(expected);
 
   std::vector<size_t> result;
-  std::ranges::copy(std::views::join(ad_utility::OwningView{
+  std::ranges::copy(ql::views::join(ad_utility::OwningView{
                         ad_utility::parallelMultiwayMerge<size_t, false>(
                             1_GB, input, std::less<>{}, blocksize)}),
                     std::back_inserter(result));

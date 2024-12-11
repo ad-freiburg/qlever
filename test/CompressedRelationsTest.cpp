@@ -285,8 +285,8 @@ void testCompressedRelations(const auto& inputsOriginalBeforeCopy,
 
   // TODO<C++23> `std::ranges::to<vector>`.
   std::vector<ColumnIndex> additionalColumns;
-  std::ranges::copy(std::views::iota(3ul, getNumColumns(inputs) + 1),
-                    std::back_inserter(additionalColumns));
+  ql::ranges::copy(ql::views::iota(3ul, getNumColumns(inputs) + 1),
+                   std::back_inserter(additionalColumns));
   auto getMetadata = [&, &metaData = metaData](size_t i) {
     Id col0 = V(inputs[i].col0_);
     auto it = std::ranges::lower_bound(metaData, col0, {},

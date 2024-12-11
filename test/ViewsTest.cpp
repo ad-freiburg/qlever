@@ -107,7 +107,7 @@ TEST(Views, uniqueBlockView) {
     i = nextI;
   }
 
-  auto unique = std::views::join(
+  auto unique = ql::views::join(
       ad_utility::OwningView{ad_utility::uniqueBlockView(inputs)});
   std::vector<int> result;
   for (const auto& element : unique) {
@@ -202,7 +202,7 @@ std::string_view toView(std::span<char> span) {
 TEST(Views, verifyLineByLineWorksWithMinimalChunks) {
   auto range =
       std::string_view{"\nabc\ndefghij\n"} |
-      std::views::transform([](char c) { return std::ranges::single_view(c); });
+      ql::views::transform([](char c) { return std::ranges::single_view(c); });
   auto lineByLineGenerator =
       ad_utility::reChunkAtSeparator(std::move(range), '\n');
 
@@ -224,7 +224,7 @@ TEST(Views, verifyLineByLineWorksWithMinimalChunks) {
 
 // __________________________________________________________________________
 TEST(Views, verifyLineByLineWorksWithNoTrailingNewline) {
-  auto range = std::string_view{"abc"} | std::views::transform([](char c) {
+  auto range = std::string_view{"abc"} | ql::views::transform([](char c) {
                  return std::ranges::single_view(c);
                });
 

@@ -33,7 +33,7 @@ auto idTableFromBlockGenerator = [](auto& generator) -> CopyableIdTable<0> {
     size_t numColumns = result.numColumns();
     size_t size = result.size();
     result.resize(result.size() + block.size());
-    for (auto i : std::views::iota(0U, numColumns)) {
+    for (auto i : ql::views::iota(0U, numColumns)) {
       decltype(auto) blockCol = block.getColumn(i);
       decltype(auto) resultCol = result.getColumn(i);
       std::ranges::copy(blockCol, resultCol.begin() + size);

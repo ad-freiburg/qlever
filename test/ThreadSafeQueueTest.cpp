@@ -259,7 +259,7 @@ TEST(ThreadSafeQueue, DisablePush) {
       // For the ordered queue we have the guarantee that all the pushed values
       // were in order.
       EXPECT_THAT(result,
-                  ::testing::ElementsAreArray(std::views::iota(0U, 400U)));
+                  ::testing::ElementsAreArray(ql::views::iota(0U, 400U)));
     }
   };
   runWithBothQueueTypes(runTest);
@@ -309,7 +309,7 @@ TEST(ThreadSafeQueue, SafeExceptionHandling) {
       // 1. Queue, 2. WorkerThreads, 3. `Cleanup` that finishes the queue.
       absl::Cleanup cleanup{[&queue] { queue.finish(); }};
 
-      for ([[maybe_unused]] auto i : std::views::iota(0u, numValues)) {
+      for ([[maybe_unused]] auto i : ql::views::iota(0u, numValues)) {
         auto opt = queue.pop();
         if (!opt) {
           return;

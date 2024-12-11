@@ -7,6 +7,7 @@
 #include <concepts>
 #include <ranges>
 
+#include "backports/algorithm.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
 #include "util/TypeTraits.h"

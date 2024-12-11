@@ -71,7 +71,7 @@ void testSeed(
         for (size_t numCall = 0; numCall < NUM_RANDOM_NUMBER; numCall++) {
           const NumberType expectedNumber = std::invoke(generators.front());
 
-          std::ranges::for_each(std::views::drop(generators, 1),
+          std::ranges::for_each(ql::views::drop(generators, 1),
                                 [&expectedNumber](GeneratorType& g) {
                                   ASSERT_EQ(std::invoke(g), expectedNumber);
                                 });
@@ -253,8 +253,7 @@ TEST(RandomShuffleTest, Seed) {
         // other 'slots'.
         std::ranges::generate(inputArrays.front(),
                               FastRandomIntGenerator<int>{});
-        std::ranges::fill(std::views::drop(inputArrays, 1),
-                          inputArrays.front());
+        std::ranges::fill(ql::views::drop(inputArrays, 1), inputArrays.front());
 
         // Shuffle and compare, if they are all the same.
         std::ranges::for_each(
@@ -262,7 +261,7 @@ TEST(RandomShuffleTest, Seed) {
               randomShuffle(inputArray.begin(), inputArray.end(), seed);
             });
         std::ranges::for_each(
-            std::views::drop(inputArrays, 1),
+            ql::views::drop(inputArrays, 1),
             [&inputArrays](const std::array<int, ARRAY_LENGTH>& inputArray) {
               ASSERT_EQ(inputArrays.front(), inputArray);
             });

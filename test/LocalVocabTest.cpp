@@ -187,7 +187,7 @@ TEST(LocalVocab, merge) {
   auto id2 = vocE.getBlankNodeIndex(&bnm);
   auto vocabs3 =
       std::vector{&std::as_const(localVocabMerged2), &std::as_const(vocF)};
-  vocE.mergeWith(vocabs3 | std::views::transform(
+  vocE.mergeWith(vocabs3 | ql::views::transform(
                                [](const LocalVocab* l) -> const LocalVocab& {
                                  return *l;
                                }));
