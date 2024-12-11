@@ -21,6 +21,7 @@ class ContextFileParser {
     bool _isEntity;
     TextRecordIndex _contextId;
     Score _score;
+    bool _isLiteralEntity = false;
   };
 
   explicit ContextFileParser(const string& contextFile,

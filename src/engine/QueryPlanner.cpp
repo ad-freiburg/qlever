@@ -1002,14 +1002,14 @@ QueryPlanner::SubtreePlan QueryPlanner::getTextLeafPlan(
                           : *(node._variables.begin());
       plan = makeSubtreePlan<TextIndexScanForEntity>(_qec, cvar, evar, word);
       textLimits[cvar].entityVars_.push_back(evar);
-      textLimits[cvar].scoreVars_.push_back(cvar.getScoreVariable(evar));
+      textLimits[cvar].scoreVars_.push_back(cvar.getEntityScoreVariable(evar));
     } else {
       // Fixed entity case
       AD_CORRECTNESS_CHECK(node._variables.size() == 1);
       plan = makeSubtreePlan<TextIndexScanForEntity>(
           _qec, cvar, node.triple_.o_.toString(), word);
       textLimits[cvar].scoreVars_.push_back(
-          cvar.getScoreVariable(node.triple_.o_.toString()));
+          cvar.getEntityScoreVariable(node.triple_.o_.toString()));
     }
   } else {
     plan = makeSubtreePlan<TextIndexScanForWord>(_qec, cvar, word);
