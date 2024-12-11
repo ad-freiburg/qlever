@@ -848,7 +848,7 @@ std::optional<IdTable> GroupBy::computeGroupByForJoinWithFullScan() const {
   const auto& index = getExecutionContext()->getIndex();
 
   // TODO<joka921, C++23> Simplify the following pattern by using
-  // `std::views::chunk_by` and implement a lazy version of this view for
+  // `ql::views::chunkd_by` and implement a lazy version of this view for
   // input iterators.
 
   // Take care of duplicate values in the input.

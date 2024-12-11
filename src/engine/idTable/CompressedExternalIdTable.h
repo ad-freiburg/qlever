@@ -121,7 +121,7 @@ class CompressedExternalIdTableWriter {
           std::async(std::launch::async, [this, i, blockSize, &table]() {
             auto& blockMetadata = blocksPerColumn_.at(i);
             decltype(auto) column = table.getColumn(i);
-            // TODO<C++23> Use `std::views::chunk`
+            // TODO<C++23> Use `ql::views::chunkd`
             for (size_t lower = 0; lower < column.size(); lower += blockSize) {
               size_t upper = std::min(lower + blockSize, column.size());
               auto thisBlockSizeUncompressed = (upper - lower) * sizeof(Id);
@@ -681,7 +681,7 @@ class CompressedExternalIdTableSorter
           co_yield blockAsStatic;
         }
       } else {
-        // TODO<C++23> Use `std::views::chunk`.
+        // TODO<C++23> Use `ql::views::chunkd`.
         for (size_t i = 0; i < block.numRows(); i += blocksizeOutput) {
           size_t upper = std::min(i + blocksizeOutput, block.numRows());
           auto curBlock = IdTableStatic<NumStaticCols>(

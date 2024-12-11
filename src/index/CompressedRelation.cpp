@@ -767,7 +767,7 @@ IdTable CompressedRelationReader::getDistinctColIdsAndCountsImpl(
         continue;
       }
       const auto& block = optionalBlock.value();
-      // TODO<C++23>: use `std::views::chunk_by`.
+      // TODO<C++23>: use `ql::views::chunkd_by`.
       for (size_t j = 0; j < block.numRows(); ++j) {
         Id colId = block(j, 0);
         processColId(colId, 1);
