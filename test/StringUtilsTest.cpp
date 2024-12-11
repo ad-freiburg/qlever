@@ -110,7 +110,7 @@ TEST(StringUtilsTest, listToString) {
                         multiValueVector, " -> ");
 
   /*
-  `std::ranges::views` can cause dangling pointers, if a `std::identity` is
+  `ql::ranges::views` can cause dangling pointers, if a `std::identity` is
   called with one, that returns r-values.
   */
   /*
@@ -125,7 +125,7 @@ TEST(StringUtilsTest, listToString) {
   auto identityView = ql::views::transform(multiValueVector, std::identity{});
   doTestForAllOverloads("40,41,42,43", identityView, identityView, ",");
 
-  // Test, that uses an actual `std::ranges::input_range`. That is, a range who
+  // Test, that uses an actual `ql::ranges::input_range`. That is, a range who
   // doesn't know it's own size and can only be iterated once.
 
   // Returns the content of a given vector, element by element.

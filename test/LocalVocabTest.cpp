@@ -219,8 +219,8 @@ TEST(LocalVocab, propagation) {
         return LiteralOrIri::literalWithoutQuotes(word);
       }
     };
-    std::ranges::transform(expectedWordsAsStrings,
-                           std::back_inserter(expectedWords), toLitOrIri);
+    ql::ranges::transform(expectedWordsAsStrings,
+                          std::back_inserter(expectedWords), toLitOrIri);
     std::shared_ptr<const Result> resultTable = operation.getResult();
     ASSERT_TRUE(resultTable)
         << "Operation: " << operation.getDescriptor() << std::endl;
@@ -228,7 +228,7 @@ TEST(LocalVocab, propagation) {
         resultTable->localVocab().getAllWordsForTesting();
     // We currently allow the local vocab to have multiple IDs for the same
     // word, so we have to deduplicate first.
-    std::ranges::sort(localVocabWords);
+    ql::ranges::sort(localVocabWords);
     localVocabWords.erase(std::ranges::unique(localVocabWords).begin(),
                           localVocabWords.end());
     ASSERT_THAT(localVocabWords,

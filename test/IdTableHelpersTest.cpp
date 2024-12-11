@@ -29,30 +29,29 @@ elements will not be ignored.
 @param setToCalculateFor The container to calculate all sub-sets for. Will only
 be read.
 */
-template <std::ranges::forward_range R,
-          typename E = std::iter_value_t<std::ranges::iterator_t<R>>>
+template <ql::ranges::forward_range R,
+          typename E = std::iter_value_t<ql::ranges::iterator_t<R>>>
 std::vector<std::vector<E>> calculateAllSubSets(R&& setToCalculateFor) {
   // Getting rid of duplicated elements.
 
   std::vector<std::vector<E>> calculatedSubSets;
   // There will be exactly $setToCalculateFor.size()^2$ items added.
   calculatedSubSets.reserve(
-      ad_utility::pow(2, std::ranges::size(setToCalculateFor)));
+      ad_utility::pow(2, ql::ranges::size(setToCalculateFor)));
 
   // The empty set is always a sub-set.
   calculatedSubSets.push_back({});
 
   // Calculate all sub-sets.
-  std::ranges::for_each(
-      setToCalculateFor, [&calculatedSubSets](const E& entry) {
-        ad_utility::appendVector(
-            calculatedSubSets,
-            ad_utility::transform(calculatedSubSets,
-                                  [&entry](std::vector<E> subSet) {
-                                    subSet.push_back(entry);
-                                    return subSet;
-                                  }));
-      });
+  ql::ranges::for_each(setToCalculateFor, [&calculatedSubSets](const E& entry) {
+    ad_utility::appendVector(
+        calculatedSubSets,
+        ad_utility::transform(calculatedSubSets,
+                              [&entry](std::vector<E> subSet) {
+                                subSet.push_back(entry);
+                                return subSet;
+                              }));
+  });
 
   return calculatedSubSets;
 }
@@ -64,8 +63,8 @@ TEST(IdTableHelpersHelpersTest, calculateAllSubSets) {
     std::vector<std::vector<size_t>> result{calculateAllSubSets(input)};
 
     // For comparison, we have to sort both vectors.
-    std::ranges::sort(expectedOutput, std::ranges::lexicographical_compare);
-    std::ranges::sort(result, std::ranges::lexicographical_compare);
+    ql::ranges::sort(expectedOutput, ql::ranges::lexicographical_compare);
+    ql::ranges::sort(result, ql::ranges::lexicographical_compare);
 
     ASSERT_EQ(expectedOutput, result);
   };
@@ -96,8 +95,8 @@ void generalIdTableCheck(const IdTable& table,
   ASSERT_EQ(table.numColumns(), expectedNumberOfColumns);
 
   if (allEntriesWereSet) {
-    ASSERT_TRUE(std::ranges::all_of(table, [](const auto& row) {
-      return std::ranges::all_of(row, [](const ValueId& entry) {
+    ASSERT_TRUE(ql::ranges::all_of(table, [](const auto& row) {
+      return ql::ranges::all_of(row, [](const ValueId& entry) {
         return ad_utility::testing::VocabId(0) <= entry &&
                entry <= ad_utility::testing::VocabId(ValueId::maxIndex);
       });
@@ -136,7 +135,7 @@ TEST(IdTableHelpersTest, createRandomlyFilledIdTableWithoutGenerators) {
   // Checks, if all entries of are within a given inclusive range.
   auto checkColumn = [](const IdTable& table, const size_t& columnNumber,
                         const size_t& lowerBound, const size_t& upperBound) {
-    ASSERT_TRUE(std::ranges::all_of(
+    ASSERT_TRUE(ql::ranges::all_of(
         table.getColumn(columnNumber),
         [&lowerBound, &upperBound](const ValueId& entry) {
           return ad_utility::testing::VocabId(lowerBound) <= entry &&
@@ -165,7 +164,7 @@ TEST(IdTableHelpersTest, createRandomlyFilledIdTableWithoutGenerators) {
   `JoinColumnAndBounds`, in the case of generating tables with 40 rows and
   10 columns.
   */
-  std::ranges::for_each(
+  ql::ranges::for_each(
       calculateAllSubSets(std::vector<size_t>{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}),
       [&checkColumn, &result](const std::vector<size_t>& joinColumns) {
         result = createRandomlyFilledIdTable(
@@ -177,10 +176,10 @@ TEST(IdTableHelpersTest, createRandomlyFilledIdTableWithoutGenerators) {
         generalIdTableCheck(result, 40, 10, true);
 
         // Are the join columns like we wanted them?
-        std::ranges::for_each(joinColumns,
-                              [&result, &checkColumn](const size_t& jc) {
-                                checkColumn(result, jc, jc * 10, jc * 10 + 9);
-                              });
+        ql::ranges::for_each(joinColumns,
+                             [&result, &checkColumn](const size_t& jc) {
+                               checkColumn(result, jc, jc * 10, jc * 10 + 9);
+                             });
       });
 }
 
@@ -229,7 +228,7 @@ TEST(IdTableHelpersTest, createRandomlyFilledIdTableWithGenerators) {
 
   // Exhaustive test, if the creation of a randomly filled table works,
   // regardless of the amount of join columns and their position.
-  std::ranges::for_each(
+  ql::ranges::for_each(
       calculateAllSubSets(std::vector<size_t>{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}),
       [&createCountUpGenerator,
        &compareColumnsWithVectors](const std::vector<size_t>& joinColumns) {
@@ -247,7 +246,7 @@ TEST(IdTableHelpersTest, createRandomlyFilledIdTableWithGenerators) {
         // have the correct content.
         generalIdTableCheck(resultMultiGenerator, 10, 10, true);
         generalIdTableCheck(resultSingleGenerator, 10, 10, true);
-        std::ranges::for_each(
+        ql::ranges::for_each(
             joinColumns,
             [&resultMultiGenerator, &resultSingleGenerator, &joinColumns,
              &compareColumnsWithVectors](const size_t& num) {
@@ -255,7 +254,7 @@ TEST(IdTableHelpersTest, createRandomlyFilledIdTableWithGenerators) {
                                         {0, 1, 2, 3, 4, 5, 6, 7, 8, 9});
 
               const size_t indexOfTheColumn =
-                  std::ranges::find(joinColumns, num) - joinColumns.begin();
+                  ql::ranges::find(joinColumns, num) - joinColumns.begin();
               compareColumnsWithVectors(
                   resultSingleGenerator, num,
                   {indexOfTheColumn, indexOfTheColumn + joinColumns.size(),
@@ -294,7 +293,7 @@ TEST(IdTableHelpersTest, generateIdTable) {
       std::vector<ValueId> row(width);
 
       // Fill the row.
-      std::ranges::fill(row, ad_utility::testing::VocabId(i));
+      ql::ranges::fill(row, ad_utility::testing::VocabId(i));
 
       i++;
       return row;
@@ -312,7 +311,7 @@ TEST(IdTableHelpersTest, generateIdTable) {
     std::vector<ValueId> row(i < 3 ? 5 : 20);
 
     // Fill the row.
-    std::ranges::fill(row, ad_utility::testing::VocabId(4));
+    ql::ranges::fill(row, ad_utility::testing::VocabId(4));
 
     i++;
     return row;
@@ -322,7 +321,7 @@ TEST(IdTableHelpersTest, generateIdTable) {
   IdTable table{generateIdTable(5, 5, createCountUpGenerator(5))};
   generalIdTableCheck(table, 5, 5, true);
   for (size_t row = 0; row < 5; row++) {
-    ASSERT_TRUE(std::ranges::all_of(table[row], [&row](const auto& entry) {
+    ASSERT_TRUE(ql::ranges::all_of(table[row], [&row](const auto& entry) {
       return entry == ad_utility::testing::VocabId(row);
     }));
   }
@@ -337,7 +336,7 @@ TEST(IdTableHelpersTest, randomSeed) {
   constexpr size_t NUM_ROWS = 100;
   constexpr size_t NUM_COLUMNS = 200;
 
-  std::ranges::for_each(
+  ql::ranges::for_each(
       createArrayOfRandomSeeds<5>(), [](const ad_utility::RandomSeed seed) {
         // Simply generate and compare.
         ASSERT_EQ(

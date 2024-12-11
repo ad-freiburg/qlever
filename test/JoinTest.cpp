@@ -97,14 +97,14 @@ void runTestCasesForAllJoinAlgorithms(
 
   // For sorting IdTableAndJoinColumn by their join column.
   auto sortByJoinColumn = [](IdTableAndJoinColumn& idTableAndJC) {
-    std::ranges::sort(idTableAndJC.idTable, {},
-                      [&idTableAndJC](const auto& row) {
-                        return row[idTableAndJC.joinColumn];
-                      });
+    ql::ranges::sort(idTableAndJC.idTable, {},
+                     [&idTableAndJC](const auto& row) {
+                       return row[idTableAndJC.joinColumn];
+                     });
   };
 
   // Random shuffle both tables, run hashJoin, check result.
-  std::ranges::for_each(testSet, [](JoinTestCase& testCase) {
+  ql::ranges::for_each(testSet, [](JoinTestCase& testCase) {
     randomShuffle(testCase.leftInput.idTable.begin(),
                   testCase.leftInput.idTable.end());
     randomShuffle(testCase.rightInput.idTable.begin(),
@@ -115,7 +115,7 @@ void runTestCasesForAllJoinAlgorithms(
 
   // Sort the larger table by join column, run hashJoin, check result (this time
   // it's sorted).
-  std::ranges::for_each(testSet, [&sortByJoinColumn](JoinTestCase& testCase) {
+  ql::ranges::for_each(testSet, [&sortByJoinColumn](JoinTestCase& testCase) {
     IdTableAndJoinColumn& largerInputTable =
         (testCase.leftInput.idTable.size() >=
          testCase.rightInput.idTable.size())
@@ -128,7 +128,7 @@ void runTestCasesForAllJoinAlgorithms(
 
   // Sort both tables, run merge join and hash join, check result. (Which has to
   // be sorted.)
-  std::ranges::for_each(testSet, [&sortByJoinColumn](JoinTestCase& testCase) {
+  ql::ranges::for_each(testSet, [&sortByJoinColumn](JoinTestCase& testCase) {
     sortByJoinColumn(testCase.leftInput);
     sortByJoinColumn(testCase.rightInput);
     testCase.resultMustBeSortedByJoinColumn = true;
@@ -213,7 +213,7 @@ std::vector<JoinTestCase> createJoinTestSet() {
 IdTable createIdTableOfSizeWithValue(size_t size, Id value) {
   IdTable idTable{1, ad_utility::testing::makeAllocator()};
   idTable.resize(size);
-  std::ranges::fill(idTable.getColumn(0), value);
+  ql::ranges::fill(idTable.getColumn(0), value);
   return idTable;
 }
 }  // namespace

@@ -36,7 +36,7 @@ auto idTableFromBlockGenerator = [](auto& generator) -> CopyableIdTable<0> {
     for (auto i : ql::views::iota(0U, numColumns)) {
       decltype(auto) blockCol = block.getColumn(i);
       decltype(auto) resultCol = result.getColumn(i);
-      std::ranges::copy(blockCol, resultCol.begin() + size);
+      ql::ranges::copy(blockCol, resultCol.begin() + size);
     }
   }
   return result;
@@ -75,8 +75,8 @@ TEST(CompressedExternalIdTable, compressedExternalIdTableWriter) {
 
   using namespace ::testing;
   std::vector<CopyableIdTable<0>> result;
-  auto tr = std::ranges::transform_view(generators, idTableFromBlockGenerator);
-  std::ranges::copy(tr, std::back_inserter(result));
+  auto tr = ql::ranges::transform_view(generators, idTableFromBlockGenerator);
+  ql::ranges::copy(tr, std::back_inserter(result));
   ASSERT_THAT(result, ElementsAreArray(tables));
 }
 
@@ -103,7 +103,7 @@ void testExternalSorterImpl(size_t numDynamicColumns, size_t numRows,
       writer.push(row);
     }
 
-    std::ranges::sort(randomTable, SortByOSP{});
+    ql::ranges::sort(randomTable, SortByOSP{});
 
     if (mergeMultipleTimes) {
       writer.moveResultOnMerge() = false;

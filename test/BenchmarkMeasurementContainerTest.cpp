@@ -158,7 +158,7 @@ TEST(BenchmarkMeasurementContainerTest, ResultTable) {
   on creation, because you can't add columns after creation and a table without
   columns is quite the stupid idea. Additionally, operations on such an empty
   table can create segmentation faults. The string conversion of `Result`
-  uses `std::ranges::max`, which really doesn't play well with empty vectors.
+  uses `ql::ranges::max`, which really doesn't play well with empty vectors.
   */
   ASSERT_ANY_THROW(ResultTable("1 by 0 table", {"Test"}, {}));
 
@@ -352,11 +352,11 @@ TEST(BenchmarkMeasurementContainerTest, ResultGroupDeleteMember) {
     group.deleteMeasurement(*entryToDelete);
     group.deleteTable(*tableToDelete);
     auto getAddressOfObject = [](const auto& obj) { return obj.get(); };
-    ASSERT_TRUE(std::ranges::find(group.resultEntries_, entryToDelete,
-                                  getAddressOfObject) ==
+    ASSERT_TRUE(ql::ranges::find(group.resultEntries_, entryToDelete,
+                                 getAddressOfObject) ==
                 std::end(group.resultEntries_));
-    ASSERT_TRUE(std::ranges::find(group.resultTables_, tableToDelete,
-                                  getAddressOfObject) ==
+    ASSERT_TRUE(ql::ranges::find(group.resultTables_, tableToDelete,
+                                 getAddressOfObject) ==
                 std::end(group.resultTables_));
 
     // Test, if trying to delete a non-existent member results in an error.

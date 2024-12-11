@@ -476,8 +476,8 @@ TEST_P(CartesianProductJoinLazyTest, leftTableBiggerThanChunk) {
   bigTable.addEmptyColumn();
   bigTable.addEmptyColumn();
   auto fillWithVocabValue = [&bigTable](size_t column, uint64_t vocabIndex) {
-    std::ranges::fill(bigTable.getColumn(column),
-                      Id::makeFromVocabIndex(VocabIndex::make(vocabIndex)));
+    ql::ranges::fill(bigTable.getColumn(column),
+                     Id::makeFromVocabIndex(VocabIndex::make(vocabIndex)));
   };
   fillWithVocabValue(3, 100);
 
