@@ -910,8 +910,8 @@ json Server::processUpdateImpl(
   }
 
   DeltaTriplesCount countBefore = deltaTriples.getCounts();
-  ExecuteUpdate::executeUpdate(index_, plannedQuery.parsedQuery_, qet,
-                               deltaTriples, cancellationHandle);
+  UpdateMetadata updateMetadata = ExecuteUpdate::executeUpdate(
+      index_, plannedQuery.parsedQuery_, qet, deltaTriples, cancellationHandle);
   DeltaTriplesCount countAfter = deltaTriples.getCounts();
 
   LOG(INFO) << "Done processing update"
@@ -943,12 +943,20 @@ json Server::processUpdateImpl(
   response["delta-triples"]["after"] = nlohmann::json(countAfter);
   response["delta-triples"]["difference"] =
       nlohmann::json(countAfter - countBefore);
-  // This includes parsing and planing
-  // TODO<qup42> choose a better name
-  response["time"]["parse"] =
+  response["time"]["planing"] =
       absl::StrCat(runtimeInfoWholeOp.timeQueryPlanning.count(), "ms");
   response["time"]["where"] =
-      absl::StrCat(runtimeInfo.totalTime_.count(), "ms");
+      absl::StrCat(runtimeInfo.totalTime_.count() / 1000, "ms");
+  json updateTime{
+      {"total", absl::StrCat(updateMetadata.triplePreparationTime_.count() +
+                                 updateMetadata.deletionTime_.count() +
+                                 updateMetadata.insertionTime_.count(),
+                             "ms")},
+      {"triplePreparation",
+       absl::StrCat(updateMetadata.triplePreparationTime_.count(), "ms")},
+      {"deletion", absl::StrCat(updateMetadata.deletionTime_.count(), "ms")},
+      {"insertion", absl::StrCat(updateMetadata.insertionTime_.count(), "ms")}};
+  response["time"]["update"] = updateTime;
   response["time"]["total"] = absl::StrCat(requestTimer.msecs().count(), "ms");
   for (auto permutation : Permutation::ALL) {
     response["located-triples"][Permutation::toString(
