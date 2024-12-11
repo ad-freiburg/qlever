@@ -128,3 +128,26 @@ TEST(UrlParserTest, parseDatasetClauses) {
                   {iri("<https://w3.org/3>"), true},
                   {iri("<https://w3.org/4>"), true}}));
 }
+
+TEST(UrlParserTest, checkParameter) {
+  const url_parser::ParamValueMap exampleParams = {{"foo", {"bar"}},
+                                                   {"baz", {"qux", "quux"}}};
+
+  EXPECT_THAT(url_parser::checkParameter(exampleParams, "doesNotExist", ""),
+              ::testing::Eq(std::nullopt));
+  EXPECT_THAT(url_parser::checkParameter(exampleParams, "foo", "baz"),
+              ::testing::Eq(std::nullopt));
+  EXPECT_THAT(url_parser::checkParameter(exampleParams, "foo", "bar"),
+              ::testing::Optional(::testing::StrEq("bar")));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      url_parser::checkParameter(exampleParams, "baz", "qux"),
+      ::testing::StrEq("Parameter \"baz\" must be given exactly once. Is: 2"));
+  EXPECT_THAT(url_parser::checkParameter(exampleParams, "foo", std::nullopt),
+              ::testing::Optional(::testing::StrEq("bar")));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      url_parser::checkParameter(exampleParams, "baz", std::nullopt),
+      ::testing::StrEq("Parameter \"baz\" must be given exactly once. Is: 2"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      url_parser::checkParameter(exampleParams, "baz", std::nullopt),
+      ::testing::StrEq("Parameter \"baz\" must be given exactly once. Is: 2"));
+}

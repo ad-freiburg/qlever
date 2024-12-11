@@ -28,6 +28,7 @@ enum class MediaType {
   tsv,
   csv,
   turtle,
+  ntriples,
   octetStream
 };
 

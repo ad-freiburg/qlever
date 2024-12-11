@@ -69,6 +69,24 @@ TEST(TripleComponent, setAndGetVariable) {
   ASSERT_EQ(tc.getVariable(), Variable{"?x"});
 }
 
+TEST(TripleComponent, setAndGetId) {
+  Id id = Id::makeFromVocabIndex(VocabIndex::make(1));
+  TripleComponent tc{id};
+  ASSERT_TRUE(tc.isId());
+  ASSERT_FALSE(tc.isVariable());
+  ASSERT_FALSE(tc.isString());
+  ASSERT_FALSE(tc.isDouble());
+  ASSERT_FALSE(tc.isInt());
+  ASSERT_FALSE(tc.isBool());
+  ASSERT_FALSE(tc.isIri());
+  ASSERT_FALSE(tc.isLiteral());
+  ASSERT_FALSE(tc.isUndef());
+  ASSERT_EQ(tc, id);
+  ASSERT_EQ(tc.getId(), id);
+  const TripleComponent tcConst = std::move(tc);
+  ASSERT_EQ(tcConst.getId(), id);
+}
+
 TEST(TripleComponent, assignmentOperator) {
   TripleComponent object;
   object = -12.435;
