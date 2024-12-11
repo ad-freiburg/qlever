@@ -79,11 +79,19 @@ TEST(GraphStoreProtocolTest, transformPost) {
           m::GraphPattern()));
   AD_EXPECT_THROW_WITH_MESSAGE(
       GraphStoreProtocol::transformPost(
-          ad_utility::testing::MakePostRequest(
-              "/?default", "application/sparql-results+json", "{}"),
+          ad_utility::testing::MakeRequest(boost::beast::http::verb::post,
+                                           "/?default", {}, "<a> <b> <c>"),
           DEFAULT{}),
       testing::HasSubstr(
           "Mediatype \"application/sparql-results+json\" is not supported for "
+          "SPARQL Graph Store HTTP Protocol in QLever."));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      GraphStoreProtocol::transformPost(
+          ad_utility::testing::MakePostRequest(
+              "/?default", "application/sparql-results+xml", ""),
+          DEFAULT{}),
+      testing::HasSubstr(
+          "Mediatype \"application/sparql-results+xml\" is not supported for "
           "SPARQL Graph Store HTTP Protocol in QLever."));
   AD_EXPECT_THROW_WITH_MESSAGE(
       GraphStoreProtocol::transformPost(
@@ -131,7 +139,25 @@ TEST(GraphStoreProtocolTest, transformGet) {
 }
 
 TEST(GraphStoreProtocolTest, transformGraphStoreProtocol) {
-  // TODO: re-add some simple tests for POST and GET
+  using Var = Variable;
+  using TC = TripleComponent;
+  auto Iri = [](std::string_view stringWithBrackets) {
+    return TripleComponent::Iri::fromIriref(stringWithBrackets);
+  };
+  EXPECT_THAT(GraphStoreProtocol::transformGraphStoreProtocol(
+                  ad_utility::testing::MakeGetRequest("/?default")),
+              m::ConstructQuery({{Var{"?s"}, Var{"?p"}, Var{"?o"}}},
+                                m::GraphPattern(matchers::Triples({SparqlTriple(
+                                    TC(Var{"?s"}), "?p", TC(Var{"?o"}))}))));
+  EXPECT_THAT(
+      GraphStoreProtocol::transformGraphStoreProtocol(
+          ad_utility::testing::MakePostRequest(
+              "/?default", "application/n-triples", "<foo> <bar> <baz> .")),
+      m::UpdateClause(m::GraphUpdate({},
+                                     {{Iri("<foo>"), Iri("<bar>"), Iri("<baz>"),
+                                       std::monostate{}}},
+                                     std::nullopt),
+                      m::GraphPattern()));
   AD_EXPECT_THROW_WITH_MESSAGE(
       GraphStoreProtocol::transformGraphStoreProtocol(
           ad_utility::testing::MakeRequest(boost::beast::http::verb::put,

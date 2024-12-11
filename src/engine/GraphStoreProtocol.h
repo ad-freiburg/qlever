@@ -18,9 +18,12 @@ class GraphStoreProtocol {
       const GraphOrDefault& graph) {
     using namespace boost::beast::http;
     using Re2Parser = RdfStringParser<TurtleParser<Tokenizer>>;
-    const std::string contentTypeString = rawRequest.at(field::content_type);
+    std::string contentTypeString;
+    if (rawRequest.find(field::content_type) != rawRequest.end()) {
+      contentTypeString = rawRequest.at(field::content_type);
+    }
     if (contentTypeString.empty()) {
-      // No ContentType specified; we don't try to guess -> 400 Bad Request
+      // ContentType not set or empty; we don't try to guess -> 400 Bad Request
     }
     const auto contentType =
         ad_utility::getMediaTypeFromAcceptHeader(contentTypeString);
@@ -39,7 +42,6 @@ class GraphStoreProtocol {
             "Mediatype \"", ad_utility::toString(contentType.value()),
             "\" is not supported for SPARQL Graph Store HTTP "
             "Protocol in QLever."));
-        break;
       }
     }
     ParsedQuery res;
