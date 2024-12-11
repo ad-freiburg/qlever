@@ -169,7 +169,7 @@ template <std::integral Int, size_t NumIntegers>
 constexpr std::array<Int, NumIntegers> integerToArray(Int value,
                                                       Int numValues) {
   std::array<Int, NumIntegers> res;
-  for (auto& el : res | std::views::reverse) {
+  for (auto& el : res | ql::views::reverse) {
     el = value % numValues;
     value /= numValues;
   }
