@@ -842,7 +842,7 @@ CompressedBlock CompressedRelationReader::readCompressedBlockFromFile(
     ColumnIndicesRef columnIndices) const {
   CompressedBlock compressedBuffer;
   compressedBuffer.resize(columnIndices.size());
-  // TODO<C++23> Use `std::views::zip`
+  // TODO<C++23> Use `ql::views::zip`
   for (size_t i = 0; i < compressedBuffer.size(); ++i) {
     const auto& offset =
         blockMetaData.offsetsAndCompressedSize_.at(columnIndices[i]);

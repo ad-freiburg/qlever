@@ -163,7 +163,7 @@ void DeltaTriples::modifyTriplesImpl(CancellationHandle cancellationHandle,
       locateAndAddTriples(std::move(cancellationHandle), triples, shouldExist);
 
   AD_CORRECTNESS_CHECK(triples.size() == handles.size());
-  // TODO<qup42>: replace with std::views::zip in C++23
+  // TODO<qup42>: replace with ql::views::zip in C++23
   for (size_t i = 0; i < triples.size(); i++) {
     targetMap.insert({triples[i], handles[i]});
   }

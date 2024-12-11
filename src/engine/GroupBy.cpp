@@ -1375,7 +1375,7 @@ void GroupBy::evaluateAlias(
 
     // Restore original children. Only necessary when the expression will be
     // used in the future (not the case for the hash map optimization).
-    // TODO<C++23> Use `std::views::zip(info, originalChildren)`.
+    // TODO<C++23> Use `ql::views::zip(info, originalChildren)`.
     for (size_t i = 0; i < info.size(); ++i) {
       auto& aggregate = info.at(i);
       auto parentAndIndex = aggregate.parentAndIndex_.value();

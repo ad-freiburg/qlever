@@ -420,7 +420,7 @@ class ConcatExpression : public detail::VariadicExpression {
         // The `result` already is a vector, and the current child also returns
         // multiple results, so we do the `natural` way.
         auto& resultAsVec = std::get<StringVec>(result);
-        // TODO<C++23> Use `std::views::zip` or `enumerate`.
+        // TODO<C++23> Use `ql::views::zip` or `enumerate`.
         size_t i = 0;
         for (auto& el : gen) {
           if (auto str = StringValueGetter{}(std::move(el), ctx);
