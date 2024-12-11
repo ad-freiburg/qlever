@@ -65,6 +65,11 @@ void DeltaTriples::eraseTripleInAllPermutations(LocatedTripleHandles& handles) {
 }
 
 // ____________________________________________________________________________
+DeltaTriplesCount DeltaTriples::getCounts() const {
+  return {numInserted(), numDeleted()};
+}
+
+// ____________________________________________________________________________
 void DeltaTriples::insertTriples(CancellationHandle cancellationHandle,
                                  Triples triples) {
   LOG(DEBUG) << "Inserting"
@@ -186,6 +191,20 @@ SharedLocatedTriplesSnapshot DeltaTriples::getSnapshot() {
   ++nextSnapshotIndex_;
   return SharedLocatedTriplesSnapshot{std::make_shared<LocatedTriplesSnapshot>(
       locatedTriples(), localVocab_.clone(), snapshotIndex)};
+}
+
+// ____________________________________________________________________________
+void to_json(nlohmann::json& j, const DeltaTriplesCount& count) {
+  j = nlohmann::json{{"inserted", count.triplesInserted_},
+                     {"deleted", count.triplesDeleted_},
+                     {"total", count.triplesInserted_ + count.triplesDeleted_}};
+}
+
+// ____________________________________________________________________________
+DeltaTriplesCount DeltaTriplesCount::operator-(
+    const DeltaTriplesCount& other) const {
+  return {triplesInserted_ - other.triplesInserted_,
+          triplesDeleted_ - other.triplesDeleted_};
 }
 
 // ____________________________________________________________________________
