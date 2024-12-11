@@ -165,7 +165,6 @@ int main(int argc, char** argv) {
   bool onlyPsoAndPos = false;
   bool addWordsFromLiterals = false;
   std::optional<ad_utility::MemorySize> stxxlMemory;
-  optind = 1;
 
   Index index{ad_utility::makeUnlimitedAllocator<Id>()};
 
