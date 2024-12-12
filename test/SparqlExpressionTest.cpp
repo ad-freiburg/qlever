@@ -601,6 +601,12 @@ TEST(SparqlExpression, stringOperators) {
            IdOrLiteralOrIriVec{lit("true"), lit("false"), lit("true")});
   checkStr(IdOrLiteralOrIriVec{lit("one"), lit("two"), lit("three")},
            IdOrLiteralOrIriVec{lit("one"), lit("two"), lit("three")});
+  checkStr(IdOrLiteralOrIriVec{iriref("<http://example.org/str>"),
+                               iriref("<http://example.org/int>"),
+                               iriref("<http://example.org/bool>")},
+           IdOrLiteralOrIriVec{lit("http://example.org/str"),
+                               lit("http://example.org/int"),
+                               lit("http://example.org/bool")});
 
   auto T = Id::makeFromBool(true);
   auto F = Id::makeFromBool(false);
