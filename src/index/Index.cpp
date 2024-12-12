@@ -233,9 +233,7 @@ size_t Index::getNofEntityPostings() const {
 }
 
 // ____________________________________________________________________________
-size_t Index::getNofLiteralsInTextIndex() const {
-  return pimpl_->getNofLiteralsInTextIndex();
-}
+size_t Index::getNofNonLiterals() const { return pimpl_->getNofNonLiterals(); }
 
 // ____________________________________________________________________________
 Index::NumNormalAndInternal Index::numDistinctSubjects() const {
