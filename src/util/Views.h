@@ -9,6 +9,7 @@
 #include <span>
 
 #include "backports/algorithm.h"
+#include "backports/concepts.h"
 #include "util/Generator.h"
 #include "util/Log.h"
 
@@ -114,14 +115,13 @@ cppcoro::generator<typename SortedBlockView::value_type> uniqueBlockView(
 }
 
 // A view that owns its underlying storage. It is a replacement for
-// `std::ranges::owning_view` which is not yet supported by `GCC 11`. The
-// implementation is taken from libstdc++-13.
+// `std::ranges::owning_view` which is not yet supported by `GCC 11` and
+// `range-v3`. The implementation is taken from libstdc++-13. The additional
+// optional `disallowConst` argument explicitly disables const iteration for
+// this view, see `OwningViewNoConst` below for details.
 CPP_template(typename UnderlyingRange, bool disallowConst = false)(
-    requires ql::ranges::range<UnderlyingRange>)
-    /*
-    template <std::ranges::range UnderlyingRange>
-    requires std::movable<UnderlyingRange>*/
-    class OwningView
+    requires ql::ranges::range<UnderlyingRange> CPP_and
+        ql::concepts::movable<UnderlyingRange>) class OwningView
     : public ql::ranges::view_interface<OwningView<UnderlyingRange>> {
  private:
   UnderlyingRange underlyingRange_ = UnderlyingRange();
@@ -135,13 +135,6 @@ CPP_template(typename UnderlyingRange, bool disallowConst = false)(
 
   OwningView(OwningView&&) = default;
   OwningView& operator=(OwningView&&) = default;
-
-  // TODO<joka921> range-v3 seems to require these...
-  // Let's see if we can manage without them.
-  /*
-  OwningView(const OwningView&) { AD_FAIL();}
-  OwningView& operator=(const OwningView&) {AD_FAIL();};
-  */
 
   constexpr UnderlyingRange& base() & noexcept { return underlyingRange_; }
 
@@ -204,6 +197,11 @@ CPP_template(typename UnderlyingRange, bool disallowConst = false)(
   }
 };
 
+// Like `OwningView` above, but the const overloads to `begin()` and `end()` do
+// not exist. This is currently used in the `CompressedExternalIdTable.h`, where
+// have a deeply nested stack of views, one of which is `OnwingView<vector>`
+// which doesn't properly propagate the possibility of const iteration in
+// range-v3`.
 template <typename T>
 struct OwningViewNoConst : OwningView<T, true> {
   using OwningView<T, true>::OwningView;
@@ -215,8 +213,10 @@ OwningViewNoConst(T&&) -> OwningViewNoConst<T>;
 // Helper concept for `ad_utility::allView`.
 namespace detail {
 template <typename Range>
-concept can_ref_view =
-    requires(Range&& range) { ql::ranges::ref_view{AD_FWD(range)}; };
+CPP_requires(can_ref_view,
+             requires(Range&& range)(ql::ranges::ref_view{AD_FWD(range)}));
+template <typename Range>
+CPP_concept can_ref_view = CPP_requires_ref(can_ref_view, Range);
 }  // namespace detail
 
 // A simple drop-in replacement for `ql::views::all` which is required because
@@ -247,11 +247,10 @@ auto integerRange(Int upperBound) {
 
 // The implementation of `inPlaceTransformView`, see below for details.
 namespace detail {
-template <ql::ranges::input_range Range,
-          ad_utility::InvocableWithExactReturnType<
-              void, ql::ranges::range_reference_t<Range>>
-              Transformation>
-requires ql::ranges::view<Range>
+template <typename Range, ad_utility::InvocableWithExactReturnType<
+                              void, ql::ranges::range_reference_t<Range>>
+                              Transformation>
+requires(ql::ranges::view<Range> && ql::ranges::input_range<Range>)
 auto inPlaceTransformViewImpl(Range range, Transformation transformation) {
   // Take a range and yield pairs of [pointerToElementOfRange,
   // boolThatIsInitiallyFalse]. The bool is yielded as a reference and if its
@@ -311,11 +310,12 @@ CPP_template(typename Range, typename Transformation)(
 
 /// Create a generator the consumes the input generator until it finds the given
 /// separator and the yields spans of the chunks of data received inbetween.
-template <ql::ranges::input_range Range, typename ElementType>
-inline cppcoro::generator<std::span<ElementType>> reChunkAtSeparator(
-    Range generator, ElementType separator) {
+CPP_template(typename Range, typename ElementType)(
+    requires ql::ranges::input_range<Range>) inline cppcoro::
+    generator<std::span<ElementType>> reChunkAtSeparator(
+        Range generator, ElementType separator) {
   std::vector<ElementType> buffer;
-  for (ql::ranges::input_range auto chunk : generator) {
+  for (QL_OPT_CONCEPT(ql::ranges::input_range) auto const& chunk : generator) {
     for (ElementType c : chunk) {
       if (c == separator) {
         co_yield std::span{buffer.data(), buffer.size()};
