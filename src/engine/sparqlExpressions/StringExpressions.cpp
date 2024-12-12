@@ -244,26 +244,23 @@ class StrStartsExpressionImpl : public NaryExpression<NaryOperation> {
     AD_CORRECTNESS_CHECK(this->N == 2);
     const SparqlExpression* child0 = this->getNthChild(0).value();
     const SparqlExpression* child1 = this->getNthChild(1).value();
-    const auto getPrefilterExprVariableVec = [](const SparqlExpression* child0,
-                                                const SparqlExpression* child1,
-                                                bool startsWithVar) {
-      using namespace prefilterExpressions;
-      std::vector<PrefilterExprVariablePair> resVec{};
-      if (const auto* variable =
-              dynamic_cast<const VariableExpression*>(child0)) {
-        if (const auto* valueId = dynamic_cast<const IdExpression*>(child1)) {
-          !startsWithVar
-              // Will return: {<(>= VocabId(n)), ?var>} (Option 1)
-              ? resVec.emplace_back(
-                    std::make_unique<GreaterEqualExpression>(valueId->value()),
-                    variable->value())
-              // Will return: {<(<= VocabId(n)), ?var>} (Option 2)
-              : resVec.emplace_back(
-                    std::make_unique<LessEqualExpression>(valueId->value()),
-                    variable->value());
-        }
+
+    const auto getPrefilterExprVariableVec =
+        [](const SparqlExpression* child0, const SparqlExpression* child1,
+           bool startsWithVar) -> std::vector<PrefilterExprVariablePair> {
+      const auto* varExpr = dynamic_cast<const VariableExpression*>(child0);
+      if (!varExpr) {
+        return {};
       }
-      return resVec;
+
+      const auto& optReferenceValue =
+          getIdOrLocalVocabEntryFromLiteralExpression(child1, true);
+      if (optReferenceValue.has_value()) {
+        return prefilterExpressions::detail::makePrefilterExpressionVec<
+            prefilterExpressions::CompOp::GE>(optReferenceValue.value(),
+                                              varExpr->value(), startsWithVar);
+      }
+      return {};
     };
     // Remark: With the current implementation we only prefilter w.r.t. one
     // bound.

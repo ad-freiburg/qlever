@@ -21,6 +21,9 @@ namespace {
 
 using namespace prefilterExpressions;
 using namespace makeFilterExpression;
+using namespace filterHelper;
+
+constexpr auto getId = PrefilterExpression::getValueIdFromIdOrLocalVocabEntry;
 
 //______________________________________________________________________________
 /*
@@ -49,12 +52,32 @@ const Id GraphId = VocabId(0);
 //______________________________________________________________________________
 class PrefilterExpressionOnMetadataTest : public ::testing::Test {
  public:
+  // Not directly used. However, given that we depend on LocalVocab values
+  // during evaluation an active Index + global vocabulary is required.
+  QueryExecutionContext* qet = ad_utility::testing::getQec();
+  LocalVocab vocab{};
   const Id referenceDate1 = DateId(DateParser, "1999-11-11");
   const Id referenceDate2 = DateId(DateParser, "2005-02-27");
   const Id undef = Id::makeUndefined();
   const Id falseId = BoolId(false);
   const Id trueId = BoolId(true);
   const Id referenceDateEqual = DateId(DateParser, "2000-01-01");
+  const LocalVocabEntry augsburg = LVE("\"Augsburg\"");
+  const LocalVocabEntry berlin = LVE("\"Berlin\"");
+  const LocalVocabEntry düsseldorf = LVE("\"Düsseldorf\"");
+  const LocalVocabEntry frankfurt = LVE("\"Frankfurt\"");
+  const LocalVocabEntry hamburg = LVE("\"Hamburg\"");
+  const LocalVocabEntry köln = LVE("\"Köln\"");
+  const LocalVocabEntry münchen = LVE("\"München\"");
+  const LocalVocabEntry stuttgart = LVE("\"Stuttgart\"");
+  const Id idAugsburg = getId(augsburg, vocab);
+  const Id idBerlin = getId(berlin, vocab);
+  const Id idDüsseldorf = getId(düsseldorf, vocab);
+  const Id idFrankfurt = getId(frankfurt, vocab);
+  const Id idHamburg = getId(hamburg, vocab);
+  const Id idKöln = getId(köln, vocab);
+  const Id idMünchen = getId(münchen, vocab);
+  const Id idStuttgart = getId(stuttgart, vocab);
 
   // Define BlockMetadata
   const BlockMetadata b1 = makeBlock(undef, undef);
@@ -80,12 +103,12 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
   const BlockMetadata b15 = makeBlock(DoubleId(-1.23), DoubleId(-6.25));
   const BlockMetadata b16 = makeBlock(DoubleId(-6.25), DoubleId(-6.25));
   const BlockMetadata b17 = makeBlock(DoubleId(-10.42), DoubleId(-12.00));
-  const BlockMetadata b18 = makeBlock(DoubleId(-14.01), VocabId(0));
-  const BlockMetadata b19 = makeBlock(VocabId(10), VocabId(14));
-  const BlockMetadata b20 = makeBlock(VocabId(14), VocabId(14));
-  const BlockMetadata b21 = makeBlock(VocabId(14), VocabId(17));
+  const BlockMetadata b18 = makeBlock(DoubleId(-14.01), idAugsburg);
+  const BlockMetadata b19 = makeBlock(idDüsseldorf, idHamburg);
+  const BlockMetadata b20 = makeBlock(idHamburg, idHamburg);
+  const BlockMetadata b21 = makeBlock(idHamburg, idMünchen);
   const BlockMetadata b22 =
-      makeBlock(VocabId(20), DateId(DateParser, "1999-12-12"));
+      makeBlock(idStuttgart, DateId(DateParser, "1999-12-12"));
   const BlockMetadata b23 = makeBlock(DateId(DateParser, "2000-01-01"),
                                       DateId(DateParser, "2000-01-01"));
   const BlockMetadata b24 =
@@ -228,9 +251,10 @@ TEST_F(PrefilterExpressionOnMetadataTest, testBlockFormatForDebugging) {
               "V:0\n(last) Triple: V:10 D:33.000000 D:2.000000 V:0\nnum. rows: "
               "0.\n"));
   EXPECT_THAT(
-      b21, matcher("#BlockMetadata\n(first) Triple: V:10 D:33.000000 V:14 "
-                   "V:0\n(last) Triple: V:10 D:33.000000 V:17 V:0\nnum. rows: "
-                   "0.\n"));
+      b21,
+      matcher("#BlockMetadata\n(first) Triple: V:10 D:33.000000 L:\"Hamburg\" "
+              "V:0\n(last) Triple: V:10 D:33.000000 L:\"M\xC3\xBCnchen\" "
+              "V:0\nnum. rows: 0.\n"));
 
   auto blockWithGraphInfo = b21;
   blockWithGraphInfo.graphInfo_.emplace({IntId(12), IntId(13)});
@@ -250,10 +274,10 @@ TEST_F(PrefilterExpressionOnMetadataTest, testLessThanExpressions) {
   makeTest(lt(DoubleId(-14.01)), {b18});
   makeTest(lt(DoubleId(-11.22)), {b17, b18}, true);
   makeTest(lt(DoubleId(-4.121)), {b9, b15, b16, b17, b18});
-  makeTest(lt(VocabId(0)), {b18});
-  makeTest(lt(VocabId(12)), {b18, b19});
-  makeTest(lt(VocabId(14)), {b18, b19}, true);
-  makeTest(lt(VocabId(16)), {b18, b19, b20, b21});
+  makeTest(lt(augsburg), {b18});
+  makeTest(lt(frankfurt), {b18, b19});
+  makeTest(lt(hamburg), {b18, b19}, true);
+  makeTest(lt(münchen), {b18, b19, b20, b21});
   makeTest(lt(IntId(100)),
            {b5, b6, b7, b8, b9, b10, b12, b13, b14, b15, b16, b17, b18});
   makeTest(lt(undef), {});
@@ -281,9 +305,9 @@ TEST_F(PrefilterExpressionOnMetadataTest, testLessEqualExpressions) {
            {b5, b6, b9, b10, b11, b12, b15, b16, b17, b18});
   makeTest(le(DoubleId(-11.99999999999999)), {b17, b18}, true);
   makeTest(le(DoubleId(-14.03)), {b18});
-  makeTest(le(VocabId(0)), {b18});
-  makeTest(le(VocabId(11)), {b18, b19});
-  makeTest(le(VocabId(14)), {b18, b19, b20, b21}, true);
+  makeTest(le(LVE("\"Aachen\"")), {b18});
+  makeTest(le(frankfurt), {b18, b19});
+  makeTest(le(hamburg), {b18, b19, b20, b21}, true);
   makeTest(le(undef), {});
   makeTest(le(falseId), {b2, b3});
   makeTest(le(trueId), {b2, b3, b4}, true);
@@ -308,9 +332,9 @@ TEST_F(PrefilterExpressionOnMetadataTest, testGreaterThanExpression) {
   makeTest(gt(IntId(4)), {b6, b7, b8, b11, b14});
   makeTest(gt(IntId(-4)), {b5, b6, b7, b8, b11, b12, b13, b14, b15});
   makeTest(gt(IntId(33)), {});
-  makeTest(gt(VocabId(22)), {b22});
-  makeTest(gt(VocabId(14)), {b21, b22}, true);
-  makeTest(gt(VocabId(12)), {b19, b20, b21, b22});
+  makeTest(gt(stuttgart), {b22});
+  makeTest(gt(hamburg), {b21, b22}, true);
+  makeTest(gt(berlin), {b19, b20, b21, b22});
   makeTest(gt(undef), {}, true);
   makeTest(gt(falseId), {b4}, true);
   makeTest(gt(trueId), {});
@@ -338,9 +362,9 @@ TEST_F(PrefilterExpressionOnMetadataTest, testGreaterEqualExpression) {
            {b5, b6, b7, b8, b9, b10, b11, b12, b13, b14, b15, b16, b17, b18});
   makeTest(ge(DoubleId(7.999999)), {b8, b11, b14});
   makeTest(ge(DoubleId(10.0001)), {});
-  makeTest(ge(VocabId(14)), {b18, b19, b20, b21, b22}, true);
-  makeTest(ge(VocabId(10)), {b18, b19, b20, b21, b22});
-  makeTest(ge(VocabId(17)), {b18, b21, b22});
+  makeTest(ge(hamburg), {b18, b19, b20, b21, b22}, true);
+  makeTest(ge(düsseldorf), {b18, b19, b20, b21, b22});
+  makeTest(ge(münchen), {b18, b21, b22});
   makeTest(ge(undef), {}, true);
   makeTest(ge(falseId), {b2, b3, b4}, true);
   makeTest(ge(trueId), {b4});
@@ -364,10 +388,10 @@ TEST_F(PrefilterExpressionOnMetadataTest, testEqualExpression) {
   makeTest(eq(IntId(2)), {b6, b11, b12}, true);
   makeTest(eq(DoubleId(5.5)), {b7, b11, b14});
   makeTest(eq(DoubleId(1.5)), {b6, b11});
-  makeTest(eq(VocabId(1)), {b18});
-  makeTest(eq(VocabId(14)), {b18, b19, b20, b21}, true);
-  makeTest(eq(VocabId(11)), {b18, b19});
-  makeTest(eq(VocabId(17)), {b18, b21});
+  makeTest(eq(berlin), {b18});
+  makeTest(eq(hamburg), {b18, b19, b20, b21}, true);
+  makeTest(eq(frankfurt), {b18, b19});
+  makeTest(eq(köln), {b18, b21});
   makeTest(eq(IntId(-4)), {b10, b11, b15}, true);
   makeTest(eq(trueId), {b4});
   makeTest(eq(referenceDate1), {b22});
@@ -397,10 +421,10 @@ TEST_F(PrefilterExpressionOnMetadataTest, testNotEqualExpression) {
   makeTest(neq(DoubleId(-101.23)),
            {b5, b6, b7, b8, b9, b10, b11, b12, b13, b14, b15, b16, b17, b18},
            true);
-  makeTest(neq(VocabId(0)), {b19, b20, b21, b22});
-  makeTest(neq(VocabId(7)), {b18, b19, b20, b21, b22}, true);
-  makeTest(neq(VocabId(14)), {b18, b19, b21, b22});
-  makeTest(neq(VocabId(17)), {b18, b19, b20, b21, b22});
+  makeTest(neq(augsburg), {b19, b20, b21, b22});
+  makeTest(neq(berlin), {b18, b19, b20, b21, b22}, true);
+  makeTest(neq(hamburg), {b18, b19, b21, b22});
+  makeTest(neq(münchen), {b18, b19, b20, b21, b22});
   makeTest(neq(undef), {});
   makeTest(neq(falseId), {b4}, true);
   makeTest(neq(referenceDateEqual), {b22, b24});
@@ -413,14 +437,13 @@ TEST_F(PrefilterExpressionOnMetadataTest, testNotEqualExpression) {
 // Note: the `makeTest` function automatically adds the blocks with mixed
 // datatypes to the expected result.
 TEST_F(PrefilterExpressionOnMetadataTest, testAndExpression) {
-  makeTest(andExpr(ge(VocabId(10)), gt(VocabId(10))), {b19, b20, b21, b22});
-  makeTest(andExpr(ge(VocabId(10)), ge(VocabId(10))), {b19, b20, b21, b22},
-           true);
-  makeTest(andExpr(ge(VocabId(12)), gt(VocabId(17))), {b22});
-  makeTest(andExpr(ge(VocabId(12)), gt(VocabId(17))), {b22}, true);
-  makeTest(andExpr(ge(VocabId(10)), lt(VocabId(14))), {b19}, true);
-  makeTest(andExpr(le(VocabId(0)), lt(VocabId(10))), {b18});
-  makeTest(andExpr(le(VocabId(17)), lt(VocabId(17))), {b18, b19, b20, b21});
+  makeTest(andExpr(ge(düsseldorf), gt(düsseldorf)), {b19, b20, b21, b22});
+  makeTest(andExpr(ge(düsseldorf), ge(düsseldorf)), {b19, b20, b21, b22}, true);
+  makeTest(andExpr(ge(frankfurt), gt(münchen)), {b22});
+  makeTest(andExpr(ge(frankfurt), gt(münchen)), {b22}, true);
+  makeTest(andExpr(ge(düsseldorf), lt(hamburg)), {b19}, true);
+  makeTest(andExpr(le(augsburg), lt(düsseldorf)), {b18});
+  makeTest(andExpr(le(münchen), lt(münchen)), {b18, b19, b20, b21});
   makeTest(andExpr(ge(DoubleId(-6.25)), lt(IntId(-7))), {});
   makeTest(andExpr(gt(DoubleId(-6.25)), lt(DoubleId(-6.25))), {});
   makeTest(andExpr(gt(IntId(0)), lt(IntId(0))), {});
@@ -453,13 +476,13 @@ TEST_F(PrefilterExpressionOnMetadataTest, testAndExpression) {
 // Note: the `makeTest` function automatically adds the blocks with mixed
 // datatypes to the expected result.
 TEST_F(PrefilterExpressionOnMetadataTest, testOrExpression) {
-  makeTest(orExpr(lt(VocabId(22)), le(VocabId(0))), {b18, b19, b20, b21});
-  makeTest(orExpr(le(VocabId(0)), ge(VocabId(16))), {b18, b21, b22});
-  makeTest(orExpr(gt(VocabId(17)), ge(VocabId(17))), {b21, b22});
-  makeTest(orExpr(lt(DoubleId(-5.95)), eq(VocabId(14))),
+  makeTest(orExpr(lt(stuttgart), le(augsburg)), {b18, b19, b20, b21});
+  makeTest(orExpr(le(augsburg), ge(köln)), {b18, b21, b22});
+  makeTest(orExpr(gt(münchen), ge(münchen)), {b21, b22});
+  makeTest(orExpr(lt(DoubleId(-5.95)), eq(hamburg)),
            {b9, b15, b16, b17, b18, b19, b20, b21});
-  makeTest(orExpr(eq(DoubleId(0)), neq(VocabId(14))),
-           {b5, b6, b11, b18, b19, b21}, true);
+  makeTest(orExpr(eq(DoubleId(0)), neq(hamburg)), {b5, b6, b11, b18, b19, b21},
+           true);
   makeTest(orExpr(eq(DoubleId(0)), eq(DoubleId(-6.25))),
            {b5, b6, b11, b15, b16, b18}, true);
   makeTest(orExpr(gt(undef), le(IntId(-6))), {b9, b15, b16, b17, b18});
@@ -467,8 +490,8 @@ TEST_F(PrefilterExpressionOnMetadataTest, testOrExpression) {
   makeTest(orExpr(eq(IntId(0)), orExpr(lt(IntId(-10)), gt(IntId(8)))),
            {b5, b6, b8, b11, b14, b17, b18}, true);
   makeTest(orExpr(gt(referenceDate2), eq(trueId)), {b4});
-  makeTest(orExpr(eq(VocabId(17)), orExpr(lt(VocabId(0)), gt(VocabId(20)))),
-           {b21, b22}, true);
+  makeTest(orExpr(eq(münchen), orExpr(lt(augsburg), gt(stuttgart))), {b21, b22},
+           true);
   makeTest(orExpr(eq(undef), gt(referenceDateEqual)), {b24});
   makeTest(orExpr(gt(IntId(8)), gt(DoubleId(22.1))), {b8, b14});
   makeTest(orExpr(lt(DoubleId(-8.25)), le(IntId(-10))), {b9, b17, b18}, true);
@@ -482,7 +505,7 @@ TEST_F(PrefilterExpressionOnMetadataTest, testOrExpression) {
                   orExpr(eq(DoubleId(-6.25)), lt(DoubleId(-12)))),
            {b4, b5, b6, b7, b11, b14, b15, b16, b18});
   makeTest(orExpr(le(trueId), gt(falseId)), {b2, b3, b4}, true);
-  makeTest(orExpr(eq(VocabId(0)), eq(DoubleId(0.25))), {b6, b11, b18}, true);
+  makeTest(orExpr(eq(augsburg), eq(DoubleId(0.25))), {b6, b11, b18}, true);
 }
 
 //______________________________________________________________________________
@@ -490,10 +513,10 @@ TEST_F(PrefilterExpressionOnMetadataTest, testOrExpression) {
 // Note: the `makeTest` function automatically adds the blocks with mixed
 // datatypes to the expected result.
 TEST_F(PrefilterExpressionOnMetadataTest, testNotExpression) {
-  makeTest(notExpr(eq(VocabId(2))), {b18, b19, b20, b21, b22}, true);
-  makeTest(notExpr(eq(VocabId(14))), {b18, b19, b21, b22});
-  makeTest(notExpr(neq(VocabId(14))), {b19, b20, b21}, true);
-  makeTest(notExpr(gt(VocabId(2))), {b18});
+  makeTest(notExpr(eq(berlin)), {b18, b19, b20, b21, b22}, true);
+  makeTest(notExpr(eq(hamburg)), {b18, b19, b21, b22});
+  makeTest(notExpr(neq(hamburg)), {b19, b20, b21}, true);
+  makeTest(notExpr(gt(berlin)), {b18});
   makeTest(notExpr(lt(DoubleId(-14.01))),
            {b5, b6, b7, b8, b9, b10, b11, b12, b13, b14, b15, b16, b17, b18});
   makeTest(notExpr(ge(DoubleId(-14.01))), {b18});
@@ -512,7 +535,7 @@ TEST_F(PrefilterExpressionOnMetadataTest, testNotExpression) {
   makeTest(notExpr(notExpr(eq(IntId(0)))), {b4, b5, b6, b11}, true);
   makeTest(notExpr(notExpr(neq(DoubleId(-6.25)))),
            {b4, b5, b6, b7, b8, b9, b10, b11, b12, b13, b14, b15, b17, b18});
-  makeTest(notExpr(notExpr(lt(VocabId(10)))), {b18});
+  makeTest(notExpr(notExpr(lt(düsseldorf))), {b18});
   makeTest(notExpr(notExpr(ge(DoubleId(3.99)))), {b6, b7, b8, b11, b13, b14},
            true);
   makeTest(notExpr(andExpr(le(IntId(0)), ge(IntId(0)))),
@@ -528,11 +551,11 @@ TEST_F(PrefilterExpressionOnMetadataTest, testNotExpression) {
            {b6, b7, b11, b12, b13, b14}, true);
   makeTest(notExpr(orExpr(ge(DoubleId(0)), gt(IntId(-10)))),
            {b9, b11, b17, b18}, true);
-  makeTest(notExpr(orExpr(lt(VocabId(10)), gt(VocabId(10)))), {b19});
+  makeTest(notExpr(orExpr(lt(düsseldorf), gt(düsseldorf))), {b19});
   makeTest(notExpr(orExpr(lt(DoubleId(-4)), gt(IntId(-4)))), {b10, b11, b15},
            true);
-  makeTest(notExpr(orExpr(gt(IntId(-42)), ge(VocabId(0)))), {b11}, true);
-  makeTest(notExpr(orExpr(ge(VocabId(14)), gt(VocabId(15)))), {b18, b19});
+  makeTest(notExpr(orExpr(gt(IntId(-42)), ge(augsburg))), {b11}, true);
+  makeTest(notExpr(orExpr(ge(hamburg), gt(köln))), {b18, b19});
 }
 
 //______________________________________________________________________________
@@ -556,13 +579,11 @@ TEST_F(PrefilterExpressionOnMetadataTest,
       {b10, b11, b15});
   makeTest(orExpr(notExpr(andExpr(lt(IntId(10)), gt(IntId(5)))), eq(IntId(0))),
            {b4, b5, b6, b7, b9, b10, b11, b12, b13, b14, b15, b16, b17, b18});
-  makeTest(andExpr(orExpr(gt(VocabId(16)), le(VocabId(5))), gt(DoubleId(7.25))),
-           {}, true);
+  makeTest(andExpr(orExpr(gt(köln), le(berlin)), gt(DoubleId(7.25))), {}, true);
   makeTest(andExpr(lt(falseId), orExpr(lt(IntId(10)), gt(DoubleId(17.25)))),
            {});
-  makeTest(
-      orExpr(andExpr(gt(VocabId(16)), ge(VocabId(17))), gt(DoubleId(7.25))),
-      {b8, b14, b18, b21, b22});
+  makeTest(orExpr(andExpr(gt(köln), ge(münchen)), gt(DoubleId(7.25))),
+           {b8, b14, b18, b21, b22});
   makeTest(orExpr(eq(trueId), andExpr(gt(referenceDate1), lt(referenceDate2))),
            {b4, b22, b23}, true);
 }
@@ -615,6 +636,7 @@ TEST_F(PrefilterExpressionOnMetadataTest, testMethodClonePrefilterExpression) {
   makeTestClone(gt(referenceDate2));
   makeTestClone(andExpr(lt(VocabId(20)), gt(VocabId(10))));
   makeTestClone(neq(IntId(10)));
+  makeTestClone(le(LVE("\"Hello World\"")));
   makeTestClone(orExpr(eq(IntId(10)), neq(DoubleId(10))));
   makeTestClone(notExpr(ge(referenceDate1)));
   makeTestClone(notExpr(notExpr(neq(VocabId(0)))));
@@ -625,6 +647,8 @@ TEST_F(PrefilterExpressionOnMetadataTest, testMethodClonePrefilterExpression) {
                         orExpr(gt(DoubleId(0.001)), lt(IntId(250)))));
   makeTestClone(orExpr(orExpr(eq(VocabId(101)), lt(IntId(100))),
                        notExpr(andExpr(lt(VocabId(0)), neq(IntId(100))))));
+  makeTestClone(orExpr(orExpr(le(LVE("<iri/id5>")), gt(LVE("<iri/id22>"))),
+                       neq(LVE("<iri/id10>"))));
 }
 
 //______________________________________________________________________________
@@ -635,16 +659,21 @@ TEST_F(PrefilterExpressionOnMetadataTest, testEqualityOperator) {
   ASSERT_FALSE(*neq(BoolId(true)) == *eq(BoolId(true)));
   ASSERT_TRUE(*eq(IntId(1)) == *eq(IntId(1)));
   ASSERT_TRUE(*ge(referenceDate1) == *ge(referenceDate1));
+  ASSERT_TRUE(*eq(LVE("<iri>")) == *eq(LVE("<iri>")));
+  ASSERT_FALSE(*gt(LVE("<iri>")) == *gt(LVE("\"iri\"")));
   // NotExpression
   ASSERT_TRUE(*notExpr(eq(IntId(0))) == *notExpr(eq(IntId(0))));
   ASSERT_TRUE(*notExpr(notExpr(ge(VocabId(0)))) ==
               *notExpr(notExpr(ge(VocabId(0)))));
+  ASSERT_TRUE(*notExpr(le(LVE("<iri>"))) == *notExpr(le(LVE("<iri>"))));
   ASSERT_FALSE(*notExpr(gt(IntId(0))) == *eq(IntId(0)));
   ASSERT_FALSE(*notExpr(andExpr(eq(IntId(1)), eq(IntId(0)))) ==
                *notExpr(ge(VocabId(0))));
   // Binary PrefilterExpressions (AND and OR)
   ASSERT_TRUE(*orExpr(eq(IntId(0)), le(IntId(0))) ==
               *orExpr(eq(IntId(0)), le(IntId(0))));
+  ASSERT_TRUE(*orExpr(lt(LVE("\"L\"")), gt(LVE("\"O\""))) ==
+              *orExpr(lt(LVE("\"L\"")), gt(LVE("\"O\""))));
   ASSERT_TRUE(*andExpr(le(VocabId(1)), le(IntId(0))) ==
               *andExpr(le(VocabId(1)), le(IntId(0))));
   ASSERT_FALSE(*orExpr(eq(IntId(0)), le(IntId(0))) ==
@@ -657,29 +686,65 @@ TEST_F(PrefilterExpressionOnMetadataTest, testEqualityOperator) {
 // Test PrefilterExpression content formatting for debugging.
 TEST(PrefilterExpressionExpressionOnMetadataTest,
      checkPrintFormattedPrefilterExpression) {
-  auto expr = lt(IntId(10));
-  EXPECT_EQ((std::stringstream() << *expr).str(),
-            "Prefilter RelationalExpression<LT(<)>\nValueId: I:10\n.\n");
-  expr = orExpr(eq(VocabId(0)), eq(VocabId(10)));
-  EXPECT_EQ((std::stringstream() << *expr).str(),
-            "Prefilter LogicalExpression<OR(||)>\nchild1 {Prefilter "
-            "RelationalExpression<EQ(=)>\nValueId: V:0\n}child2 {Prefilter "
-            "RelationalExpression<EQ(=)>\nValueId: V:10\n}\n.\n");
-  expr = neq(DoubleId(8.21));
-  EXPECT_EQ((std::stringstream() << *expr).str(),
-            "Prefilter RelationalExpression<NE(!=)>\nValueId: D:8.210000\n.\n");
-  expr = notExpr(eq(VocabId(0)));
-  EXPECT_EQ((std::stringstream() << *expr).str(),
-            "Prefilter NotExpression:\nchild {Prefilter "
-            "RelationalExpression<NE(!=)>\nValueId: V:0\n}\n.\n");
-  expr = orExpr(le(IntId(0)), ge(IntId(5)));
-  EXPECT_EQ((std::stringstream() << *expr).str(),
-            "Prefilter LogicalExpression<OR(||)>\nchild1 {Prefilter "
-            "RelationalExpression<LE(<=)>\nValueId: I:0\n}child2 {Prefilter "
-            "RelationalExpression<GE(>=)>\nValueId: I:5\n}\n.\n");
-  expr = andExpr(lt(IntId(20)), gt(IntId(10)));
-  EXPECT_EQ((std::stringstream() << *expr).str(),
-            "Prefilter LogicalExpression<AND(&&)>\nchild1 {Prefilter "
-            "RelationalExpression<LT(<)>\nValueId: I:20\n}child2 {Prefilter "
-            "RelationalExpression<GT(>)>\nValueId: I:10\n}\n.\n");
+  auto exprToString = [](const PrefilterExpression& expr) {
+    return (std::stringstream{} << expr).str();
+  };
+
+  auto matcher = [&exprToString](const std::string& substring) {
+    return ::testing::ResultOf(exprToString, ::testing::Eq(substring));
+  };
+
+  EXPECT_THAT(*lt(IntId(10)),
+              matcher("Prefilter RelationalExpression<LT(<)>\nreferenceValue_ "
+                      ": I:10 .\n.\n"));
+  EXPECT_THAT(
+      *orExpr(eq(VocabId(0)), eq(VocabId(10))),
+      matcher("Prefilter LogicalExpression<OR(||)>\nchild1 {Prefilter "
+              "RelationalExpression<EQ(=)>\nreferenceValue_ : V:0 .\n}child2 "
+              "{Prefilter RelationalExpression<EQ(=)>\nreferenceValue_ : V:10 "
+              ".\n}\n.\n"));
+  EXPECT_THAT(
+      *neq(DoubleId(8.21)),
+      matcher("Prefilter RelationalExpression<NE(!=)>\nreferenceValue_ : "
+              "D:8.210000 .\n.\n"));
+  EXPECT_THAT(
+      *notExpr(eq(VocabId(0))),
+      matcher("Prefilter NotExpression:\nchild {Prefilter "
+              "RelationalExpression<NE(!=)>\nreferenceValue_ : V:0 .\n}\n.\n"));
+  EXPECT_THAT(
+      *orExpr(le(IntId(0)), ge(IntId(5))),
+      matcher("Prefilter LogicalExpression<OR(||)>\nchild1 {Prefilter "
+              "RelationalExpression<LE(<=)>\nreferenceValue_ : I:0 .\n}child2 "
+              "{Prefilter RelationalExpression<GE(>=)>\nreferenceValue_ : I:5 "
+              ".\n}\n.\n"));
+  EXPECT_THAT(
+      *andExpr(lt(IntId(20)), gt(IntId(10))),
+      matcher("Prefilter LogicalExpression<AND(&&)>\nchild1 {Prefilter "
+              "RelationalExpression<LT(<)>\nreferenceValue_ : I:20 .\n}child2 "
+              "{Prefilter RelationalExpression<GT(>)>\nreferenceValue_ : I:10 "
+              ".\n}\n.\n"));
+  EXPECT_THAT(*eq(LVE("\"Sophia\"")),
+              matcher("Prefilter RelationalExpression<EQ(=)>\nreferenceValue_ "
+                      ": \"Sophia\" .\n.\n"));
+  EXPECT_THAT(*neq(LVE("<Iri/custom/value>")),
+              matcher("Prefilter RelationalExpression<NE(!=)>\nreferenceValue_ "
+                      ": <Iri/custom/value> .\n.\n"));
+  EXPECT_THAT(
+      *andExpr(orExpr(lt(LVE("\"Bob\"")), ge(LVE("\"Max\""))),
+               neq(LVE("\"Lars\""))),
+      matcher(
+          "Prefilter LogicalExpression<AND(&&)>\nchild1 {Prefilter "
+          "LogicalExpression<OR(||)>\nchild1 {Prefilter "
+          "RelationalExpression<LT(<)>\nreferenceValue_ : \"Bob\" .\n}child2 "
+          "{Prefilter RelationalExpression<GE(>=)>\nreferenceValue_ : \"Max\" "
+          ".\n}\n}child2 {Prefilter "
+          "RelationalExpression<NE(!=)>\nreferenceValue_ : \"Lars\" "
+          ".\n}\n.\n"));
+  EXPECT_THAT(
+      *orExpr(neq(LVE("<iri/custom/v10>")), neq(LVE("<iri/custom/v66>"))),
+      matcher(
+          "Prefilter LogicalExpression<OR(||)>\nchild1 {Prefilter "
+          "RelationalExpression<NE(!=)>\nreferenceValue_ : <iri/custom/v10> "
+          ".\n}child2 {Prefilter RelationalExpression<NE(!=)>\nreferenceValue_ "
+          ": <iri/custom/v66> .\n}\n.\n"));
 }

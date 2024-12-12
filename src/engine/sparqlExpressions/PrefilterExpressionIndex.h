@@ -23,6 +23,8 @@
 
 namespace prefilterExpressions {
 
+using IdOrLocalVocabEntry = std::variant<ValueId, LocalVocabEntry>;
+
 //______________________________________________________________________________
 // The maximum recursion depth for `info()` / `operator<<()`. A depth of `3`
 // should be sufficient for most `PrefilterExpressions` in our use case.
@@ -101,16 +103,21 @@ class PrefilterExpression {
     return str;
   }
 
+  // Static helper to retrieve the reference `ValueId` from the
+  // `IdOrLocalVocabEntry` variant.
+  static ValueId getValueIdFromIdOrLocalVocabEntry(
+      const IdOrLocalVocabEntry& refernceValue, LocalVocab& vocab);
+
  private:
-  // Performs the following conditional checks on the provided `BlockMetadata`
-  // values:
-  // (1) unqiueness of blocks
-  // (2) sorted (order)
-  // (3) Constant values for all columns `< evaluationColumn`
-  // This function subsequently invokes the `evaluateImpl` method and
-  // checks the corresponding result for those conditions again.
-  // If a respective condition is violated, the function performing the checks
-  // will throw a `std::runtime_error`.
+  // Note: Use `evaluate` for general evaluation of `PrefilterExpression`
+  // instead of this method.
+  // Performs the following conditional checks on
+  // the provided `BlockMetadata` values: (1) unqiueness of blocks (2) sorted
+  // (order) (3) Constant values for all columns `< evaluationColumn` This
+  // function subsequently invokes the `evaluateImpl` method and checks the
+  // corresponding result for those conditions again. If a respective condition
+  // is violated, the function performing the checks will throw a
+  // `std::runtime_error`.
   std::vector<BlockMetadata> evaluateAndCheckImpl(
       std::span<const BlockMetadata> input, size_t evaluationColumn) const;
 
@@ -130,12 +137,18 @@ using CompOp = valueIdComparators::Comparison;
 template <CompOp Comparison>
 class RelationalExpression : public PrefilterExpression {
  private:
-  // The ValueId on which we perform the relational comparison on.
-  ValueId referenceId_;
+  // This is the right hand side value of the relational expression. The left
+  // hand value is indirectly supplied during the evaluation process via the
+  // `evaluationColumn` argument. `evaluationColumn` represents the column index
+  // associated with the `Variable` column of the `IndexScan`.
+  // E.g., a less-than expression with a value of 3 will represent the logical
+  // relation ?var < 3. A equal-to expression with a value of "Freiburg" will
+  // represent ?var = "Freiburg".
+  IdOrLocalVocabEntry rightSideReferenceValue_;
 
  public:
-  explicit RelationalExpression(const ValueId referenceId)
-      : referenceId_(referenceId) {}
+  explicit RelationalExpression(const IdOrLocalVocabEntry& referenceValue)
+      : rightSideReferenceValue_(referenceValue) {}
 
   std::unique_ptr<PrefilterExpression> logicalComplement() const override;
   bool operator==(const PrefilterExpression& other) const override;
@@ -238,6 +251,20 @@ using PrefilterExprVariablePair =
 // sorted order w.r.t. the Variable value.
 void checkPropertiesForPrefilterConstruction(
     const std::vector<PrefilterExprVariablePair>& vec);
+
+//______________________________________________________________________________
+// Creates a `RelationalExpression<comparison>` prefilter expression based on
+// the templated `CompOp` comparison operation and the reference
+// `IdOrLocalVocabEntry` value. With the next step, the corresponding
+// `<RelationalExpression<comparison>, Variable>` pair is created, and finally
+// returned in a vector. The `mirrored` flag indicates if the given
+// `RelationalExpression<comparison>` should be mirrored. The mirroring
+// procedure changes the (asymmetrical) comparison operations:
+// e.g. `5 < ?x` is changed to `?x > 5`.
+template <CompOp comparison>
+std::vector<PrefilterExprVariablePair> makePrefilterExpressionVec(
+    const IdOrLocalVocabEntry& referenceValue, const Variable& variable,
+    bool mirrored);
 
 }  // namespace detail
 }  // namespace prefilterExpressions

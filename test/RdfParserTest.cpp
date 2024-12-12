@@ -1,7 +1,7 @@
 // Copyright 2018, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach(joka921) <johannes.kalmbach@gmail.com>
-//
+
 #include <iostream>
 #include <string>
 
@@ -335,6 +335,36 @@ TEST(RdfParserTest, blankNodePropertyList) {
   };
   testPropertyListAsSubject(Re2Parser{});
   testPropertyListAsSubject(CtreParser{});
+}
+
+TEST(RdfParserTest, base) {
+  auto testForGivenParser = [](auto parser) {
+    parser.setInputStream("@base <http://www.example.org/path/> .");
+    ASSERT_TRUE(parser.base());
+    ASSERT_EQ(parser.baseForRelativeIri().toStringRepresentation(),
+              "<http://www.example.org/path/>");
+    ASSERT_EQ(parser.baseForAbsoluteIri().toStringRepresentation(),
+              "<http://www.example.org/>");
+    parser.setInputStream("@base \"no iriref\" .");
+    ASSERT_THROW(parser.base(), TurtleParser<Tokenizer>::ParseException);
+  };
+  testForGivenParser(Re2Parser{});
+  testForGivenParser(CtreParser{});
+}
+
+TEST(RdfParserTest, sparqlBase) {
+  auto testForGivenParser = [](auto parser) {
+    parser.setInputStream("BASE <http://www.example.org/path/> .");
+    ASSERT_TRUE(parser.sparqlBase());
+    ASSERT_EQ(parser.baseForRelativeIri().toStringRepresentation(),
+              "<http://www.example.org/path/>");
+    ASSERT_EQ(parser.baseForAbsoluteIri().toStringRepresentation(),
+              "<http://www.example.org/>");
+    parser.setInputStream("BASE \"no iriref\" .");
+    ASSERT_THROW(parser.sparqlBase(), TurtleParser<Tokenizer>::ParseException);
+  };
+  testForGivenParser(Re2Parser{});
+  testForGivenParser(CtreParser{});
 }
 
 TEST(RdfParserTest, object) {
@@ -887,8 +917,8 @@ TEST(RdfParserTest, multilineComments) {
     ad_utility::deleteFile(filename);
   };
 
-  // Test an input with many lines that only comments and whitespace. There
-  // was a bug for this case in a previous version of the parser.
+  // Test an input with many lines that contain only comments and whitespace.
+  // There was a bug for this case in a previous version of the parser.
   std::string input = R"(#Comments
   #at
 ##the beginning

@@ -308,7 +308,7 @@ addLinkAndDiscoverTest(AlgorithmTest)
 
 addLinkAndDiscoverTestSerial(CompressedRelationsTest index)
 
-addLinkAndDiscoverTestSerial(PrefilterExpressionIndexTest sparqlExpressions sparqlExpressions parser index)
+addLinkAndDiscoverTestSerial(PrefilterExpressionIndexTest engine)
 
 addLinkAndDiscoverTestSerial(GetPrefilterExpressionFromSparqlExpressionTest sparqlExpressions index)
 
