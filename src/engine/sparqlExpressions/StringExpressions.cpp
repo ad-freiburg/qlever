@@ -242,7 +242,7 @@ class SubstrImpl {
     std::size_t endByteOffset = utf8ToByteOffset(str, startInt + lengthInt);
     std::size_t byteLength = endByteOffset - startByteOffset;
 
-    if (!s.value.has_value()) {
+    if (!s.value().has_value()) {
       throw std::runtime_error("Substr called on an object without a value.");
     }
     s.value().getLiteral().setSubstr(startByteOffset, byteLength);
