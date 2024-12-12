@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "./util/IdTableHelpers.h"
+#include "backports/algorithm.h"
 #include "engine/idTable/IdTable.h"
 #include "global/ValueId.h"
 #include "util/Algorithm.h"
@@ -29,9 +30,10 @@ elements will not be ignored.
 @param setToCalculateFor The container to calculate all sub-sets for. Will only
 be read.
 */
-template <ql::ranges::forward_range R,
-          typename E = std::iter_value_t<ql::ranges::iterator_t<R>>>
-std::vector<std::vector<E>> calculateAllSubSets(R&& setToCalculateFor) {
+CPP_template(typename R,
+             typename E = std::iter_value_t<ql::ranges::iterator_t<R>>)(
+    requires ql::ranges::forward_range<R>)
+    std::vector<std::vector<E>> calculateAllSubSets(R&& setToCalculateFor) {
   // Getting rid of duplicated elements.
 
   std::vector<std::vector<E>> calculatedSubSets;
