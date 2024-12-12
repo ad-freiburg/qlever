@@ -232,7 +232,8 @@ CacheValue Operation::runComputationAndPrepareForCache(
   auto maxSize =
       std::min(RuntimeParameters().get<"lazy-result-max-cache-size">(),
                cache.getMaxSizeSingleEntry());
-  if (!result.isFullyMaterialized() && !unlikelyToFitInCache(maxSize)) {
+  if (canResultBeCached() && !result.isFullyMaterialized() &&
+      !unlikelyToFitInCache(maxSize)) {
     AD_CONTRACT_CHECK(!pinned);
     result.cacheDuringConsumption(
         [maxSize](
@@ -316,11 +317,16 @@ std::shared_ptr<const Result> Operation::getResult(
 
     bool onlyReadFromCache = computationMode == ComputationMode::ONLY_IF_CACHED;
 
-    auto result =
-        pinResult ? cache.computeOncePinned(cacheKey, cacheSetup,
-                                            onlyReadFromCache, suitedForCache)
-                  : cache.computeOnce(cacheKey, cacheSetup, onlyReadFromCache,
-                                      suitedForCache);
+    auto result = [&]() {
+      auto compute = [&](auto&&... args) {
+        if (!canResultBeCached()) {
+          return cache.computeButDontStore(AD_FWD(args)...);
+        }
+        return pinResult ? cache.computeOncePinned(AD_FWD(args)...)
+                         : cache.computeOnce(AD_FWD(args)...);
+      };
+      return compute(cacheKey, cacheSetup, onlyReadFromCache, suitedForCache);
+    }();
 
     if (result._resultPointer == nullptr) {
       AD_CORRECTNESS_CHECK(onlyReadFromCache);
@@ -594,5 +600,26 @@ const vector<ColumnIndex>& Operation::getResultSortedOn() const {
 void Operation::signalQueryUpdate() const {
   if (_executionContext) {
     _executionContext->signalQueryUpdate(*_rootRuntimeInfo);
+  }
+}
+
+// _____________________________________________________________________________
+std::string Operation::getCacheKey() const {
+  auto result = getCacheKeyImpl();
+  if (_limit._limit.has_value()) {
+    absl::StrAppend(&result, " LIMIT ", _limit._limit.value());
+  }
+  if (_limit._offset != 0) {
+    absl::StrAppend(&result, " OFFSET ", _limit._offset);
+  }
+  return result;
+}
+
+// _____________________________________________________________________________
+uint64_t Operation::getSizeEstimate() {
+  if (_limit._limit.has_value()) {
+    return std::min(_limit._limit.value(), getSizeEstimateBeforeLimit());
+  } else {
+    return getSizeEstimateBeforeLimit();
   }
 }
