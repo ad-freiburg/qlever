@@ -117,9 +117,9 @@ cppcoro::generator<typename SortedBlockView::value_type> uniqueBlockView(
 // A view that owns its underlying storage. It is a replacement for
 // `std::ranges::owning_view` which is not yet supported by `GCC 11` and
 // `range-v3`. The implementation is taken from libstdc++-13. The additional
-// optional `disallowConst` argument explicitly disables const iteration for
-// this view, see `OwningViewNoConst` below for details.
-CPP_template(typename UnderlyingRange, bool disallowConst = false)(
+// optional `supportsConst` argument explicitly disables const iteration for
+// this view when set to false, see `OwningViewNoConst` below for details.
+CPP_template(typename UnderlyingRange, bool supportConst = true)(
     requires ql::ranges::range<UnderlyingRange> CPP_and
         ql::concepts::movable<UnderlyingRange>) class OwningView
     : public ql::ranges::view_interface<OwningView<UnderlyingRange>> {
@@ -159,12 +159,12 @@ CPP_template(typename UnderlyingRange, bool disallowConst = false)(
   }
 
   constexpr auto begin() const
-      requires(!disallowConst && ql::ranges::range<const UnderlyingRange>) {
+      requires(supportConst && ql::ranges::range<const UnderlyingRange>) {
     return ql::ranges::begin(underlyingRange_);
   }
 
   constexpr auto end() const
-      requires(!disallowConst && ql::ranges::range<const UnderlyingRange>) {
+      requires(supportConst && ql::ranges::range<const UnderlyingRange>) {
     return ql::ranges::end(underlyingRange_);
   }
 
@@ -203,8 +203,8 @@ CPP_template(typename UnderlyingRange, bool disallowConst = false)(
 // which doesn't properly propagate the possibility of const iteration in
 // range-v3`.
 template <typename T>
-struct OwningViewNoConst : OwningView<T, true> {
-  using OwningView<T, true>::OwningView;
+struct OwningViewNoConst : OwningView<T, false> {
+  using OwningView<T, false>::OwningView;
 };
 
 template <typename T>
@@ -334,15 +334,9 @@ CPP_template(typename Range, typename ElementType)(
 
 // Enabling of "borrowed" ranges for `OwningView`.
 #ifdef QLEVER_CPP_17
-namespace ranges {
-// Enabling of "borrowed" ranges for `OwningView`.
 template <typename T>
-inline constexpr bool enable_borrowed_range<ad_utility::OwningView<T>> =
-    enable_borrowed_range<T>;
-
-template <typename T>
-inline constexpr bool enable_view<ad_utility::OwningView<T>> = true;
-}  // namespace ranges
+inline constexpr bool ::ranges::enable_borrowed_range<
+    ad_utility::OwningView<T>> = enable_borrowed_range<T>;
 
 #else
 template <typename T>

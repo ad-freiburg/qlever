@@ -51,17 +51,8 @@ using namespace std::views;
 namespace concepts {
 #ifdef QLEVER_CPP_17
 using namespace ::concepts;
-
-/*
-template <typename T>
-CPP_concept movable = ::ranges::movable<T>;
-*/
 #else
 using namespace std;
-/*
-template <typename T>
-CPP_concept movable = std::movable<T>;
-*/
 #endif
 }  // namespace concepts
 
