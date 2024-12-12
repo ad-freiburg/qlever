@@ -17,13 +17,14 @@ namespace textIndexScanTestHelpers {
 inline string getTextRecordFromResultTable(const QueryExecutionContext* qec,
                                            const ProtoResult& result,
                                            const size_t& rowIndex) {
-  size_t nofNonLiterals = qec->getIndex().getNofNonLiterals();
+  uint64_t nofLiterals = qec->getIndex().getNofLiteralsInTextIndex();
+  uint64_t nofContexts = qec->getIndex().getNofTextRecords();
   uint64_t textRecordIdFromTable =
       result.idTable().getColumn(0)[rowIndex].getTextRecordIndex().get();
-  if (nofNonLiterals <= textRecordIdFromTable) {
+  if ((nofContexts - nofLiterals) <= textRecordIdFromTable) {
     // Return when from Literals
     return qec->getIndex().indexToString(
-        VocabIndex::make(textRecordIdFromTable - nofNonLiterals));
+        VocabIndex::make(textRecordIdFromTable - (nofContexts - nofLiterals)));
   } else {
     // Return when from DocsDB
     return qec->getIndex().getTextExcerpt(
