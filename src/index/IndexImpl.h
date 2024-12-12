@@ -424,6 +424,7 @@ class IndexImpl {
   size_t getNofEntityPostings() const {
     return textMeta_.getNofEntityPostings();
   }
+  size_t getNofNonLiterals() const { return textMeta_.getNofNonLiterals(); }
 
   bool hasAllPermutations() const { return SPO().isLoaded(); }
 
@@ -624,14 +625,17 @@ class IndexImpl {
                    ad_utility::File& file) const;
 
   // TODO<joka921> understand what the "codes" are, are they better just ints?
-  typedef ad_utility::HashMap<WordIndex, CompressionCode> WordToCodeMap;
+  // After using createCodebooks on these types, the lowest codes refer to the
+  // most frequent WordIndex/Score. The maps are mapping those codes to their
+  // respective frequency.
+  typedef ad_utility::HashMap<WordIndex, CompressionCode> WordCodeMap;
   typedef ad_utility::HashMap<Score, Score> ScoreCodeMap;
   typedef vector<CompressionCode> WordCodebook;
   typedef vector<Score> ScoreCodebook;
 
   //! Creates codebooks for lists that are supposed to be entropy encoded.
   void createCodebooks(const vector<Posting>& postings,
-                       WordToCodeMap& wordCodemap, WordCodebook& wordCodebook,
+                       WordCodeMap& wordCodemap, WordCodebook& wordCodebook,
                        ScoreCodeMap& scoreCodemap,
                        ScoreCodebook& scoreCodebook) const;
 
