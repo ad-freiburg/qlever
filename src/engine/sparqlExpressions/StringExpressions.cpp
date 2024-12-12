@@ -204,7 +204,7 @@ class SubstrImpl {
                               NumericValue length) const {
     if (!s.has_value() || std::holds_alternative<NotNumeric>(start) ||
         std::holds_alternative<NotNumeric>(length)) {
-      throw std::runtime_error("Substr called on an object without a value.");
+      AD_THROW("Substr called on an object that isn't a literal");
       return Id::makeUndefined();
     }
 
@@ -243,9 +243,6 @@ class SubstrImpl {
     std::size_t endByteOffset = utf8ToByteOffset(str, startInt + lengthInt);
     std::size_t byteLength = endByteOffset - startByteOffset;
 
-    if (!s.value().isLiteral()){
-      throw std::runtime_error("Substr called on an object that isn't a literal");
-    }
     s.value().getLiteral().setSubstr(startByteOffset, byteLength);
     return std::move(s.value());
   }
