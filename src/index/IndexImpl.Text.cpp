@@ -718,7 +718,7 @@ std::string_view IndexImpl::wordIdToString(WordIndex wordIndex) const {
 IdTable IndexImpl::readWordCl(
     const TextBlockMetaData& tbmd,
     const ad_utility::AllocatorWithLimit<Id>& allocator) const {
-  IdTable idTable{2, allocator};
+  IdTable idTable{3, allocator};
   vector<TextRecordIndex> cids = readGapComprList<TextRecordIndex>(
       tbmd._cl._nofElements, tbmd._cl._startContextlist,
       static_cast<size_t>(tbmd._cl._startWordlist - tbmd._cl._startContextlist),
@@ -734,6 +734,11 @@ IdTable IndexImpl::readWordCl(
       idTable.getColumn(1).begin(), [](WordIndex id) {
         return Id::makeFromWordVocabIndex(WordVocabIndex::make(id));
       });
+  std::ranges::transform(
+      readFreqComprList<Score>(tbmd._cl._nofElements, tbmd._cl._startScorelist,
+                               static_cast<size_t>(tbmd._cl._lastByte + 1 -
+                                                   tbmd._cl._startScorelist)),
+      idTable.getColumn(2).begin(), &Id::makeFromInt);
   return idTable;
 }
 
@@ -772,7 +777,7 @@ IdTable IndexImpl::getWordPostingsForTerm(
     const ad_utility::AllocatorWithLimit<Id>& allocator) const {
   LOG(DEBUG) << "Getting word postings for term: " << term << '\n';
   IdTable idTable{allocator};
-  idTable.setNumColumns(term.ends_with('*') ? 2 : 1);
+  idTable.setNumColumns(term.ends_with('*') ? 3 : 2);
   auto optionalTbmd = getTextBlockMetadataForWordOrPrefix(term);
   if (!optionalTbmd.has_value()) {
     return idTable;
