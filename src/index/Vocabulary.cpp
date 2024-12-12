@@ -30,7 +30,7 @@ Vocabulary<StringType, ComparatorType, IndexT>::PrefixRanges::PrefixRanges(
 template <typename StringType, typename ComparatorType, typename IndexT>
 bool Vocabulary<StringType, ComparatorType, IndexT>::PrefixRanges::contain(
     IndexT index) const {
-  return std::ranges::any_of(
+  return ql::ranges::any_of(
       ranges_, [index](const std::pair<IndexT, IndexT>& range) {
         return range.first <= index && index < range.second;
       });
@@ -125,7 +125,7 @@ bool Vocabulary<S, C, I>::shouldEntityBeExternalized(
   }
   // Otherwise, externalize if and only if there is a prefix match for one of
   // `externalizedPrefixes_`.
-  return std::ranges::any_of(externalizedPrefixes_, [&word](const auto& p) {
+  return ql::ranges::any_of(externalizedPrefixes_, [&word](const auto& p) {
     return word.starts_with(p);
   });
 }

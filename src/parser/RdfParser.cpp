@@ -1040,8 +1040,8 @@ void RdfParallelParser<Tokenizer_T>::initialize(const string& filename) {
     this->prefixMap_ = std::move(declarationParser.getPrefixMap());
     auto remainder = declarationParser.getUnparsedRemainder();
     remainingBatchFromInitialization.reserve(remainder.size());
-    std::ranges::copy(remainder,
-                      std::back_inserter(remainingBatchFromInitialization));
+    ql::ranges::copy(remainder,
+                     std::back_inserter(remainingBatchFromInitialization));
   }
 
   auto feedBatches = [this, firstBatch = std::move(

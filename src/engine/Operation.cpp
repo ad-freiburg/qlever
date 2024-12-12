@@ -442,7 +442,7 @@ void Operation::updateRuntimeInformationWhenOptimizedOut(
   // `totalTime_ - #sum of childrens' total time#` in `getOperationTime()`.
   // To set it to zero we thus have to set the `totalTime_` to that sum.
   auto timesOfChildren = _runtimeInfo->children_ |
-                         std::views::transform(&RuntimeInformation::totalTime_);
+                         ql::views::transform(&RuntimeInformation::totalTime_);
   _runtimeInfo->totalTime_ =
       std::reduce(timesOfChildren.begin(), timesOfChildren.end(), 0us);
 
@@ -575,7 +575,7 @@ std::optional<Variable> Operation::getPrimarySortKeyVariable() const {
     return std::nullopt;
   }
 
-  auto it = std::ranges::find(
+  auto it = ql::ranges::find(
       varToColMap, sortedIndices.front(),
       [](const auto& keyValue) { return keyValue.second.columnIndex_; });
   if (it == varToColMap.end()) {

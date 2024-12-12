@@ -175,7 +175,7 @@ TEST(CallFixedSize, CallFixedSize2) {
       }
     };
     // TODO<joka921, Clang16> the ranges of the loop can be greatly simplified
-    // using `std::views::iota`, but views don't work yet on clang.
+    // using `ql::views::iota`, but views don't work yet on clang.
     // TODO<joka921> We can then also setup a lambda that does the loop,
     // going from 4*4 to just 4 lines of calling code.
     for (int i = 0; i <= m; ++i) {

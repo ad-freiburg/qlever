@@ -342,15 +342,15 @@ SparqlExpression::Estimates getEstimatesForFilterExpressionImpl(
   // filtering on the `LocalVocab`.
   // Check iff all the pairs `(children[0], someOtherChild)` can be evaluated
   // using binary search.
-  if (std::ranges::all_of(children | std::views::drop(1),
-                          [&lhs = children.at(0),
-                           &canBeEvaluatedWithBinarySearch](const auto& child) {
-                            // The implementation automatically chooses the
-                            // cheaper direction, so we can do the same when
-                            // estimating the cost.
-                            return canBeEvaluatedWithBinarySearch(lhs, child) ||
-                                   canBeEvaluatedWithBinarySearch(child, lhs);
-                          })) {
+  if (ql::ranges::all_of(children | ql::views::drop(1),
+                         [&lhs = children.at(0),
+                          &canBeEvaluatedWithBinarySearch](const auto& child) {
+                           // The implementation automatically chooses the
+                           // cheaper direction, so we can do the same when
+                           // estimating the cost.
+                           return canBeEvaluatedWithBinarySearch(lhs, child) ||
+                                  canBeEvaluatedWithBinarySearch(child, lhs);
+                         })) {
     // When evaluating via binary search, the only significant cost that occurs
     // is that of writing the output.
     costEstimate = sizeEstimate;
@@ -385,7 +385,7 @@ ExpressionResult InExpression::evaluate(
   auto lhs = children_.at(0)->evaluate(context);
   ExpressionResult result{ad_utility::SetOfIntervals{}};
   bool firstChild = true;
-  for (const auto& child : children_ | std::views::drop(1)) {
+  for (const auto& child : children_ | ql::views::drop(1)) {
     auto rhs = child->evaluate(context);
     auto evaluateEqualsExpression = [context](const auto& a,
                                               auto b) -> ExpressionResult {

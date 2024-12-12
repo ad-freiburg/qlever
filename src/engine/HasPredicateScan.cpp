@@ -347,7 +347,7 @@ void HasPredicateScan::computeFreeO(
   for (Id patternId : hasPattern.getColumn(0)) {
     const auto& pattern = patterns[patternId.getInt()];
     resultTable->resize(pattern.size());
-    std::ranges::copy(pattern, resultTable->getColumn(0).begin());
+    ql::ranges::copy(pattern, resultTable->getColumn(0).begin());
   }
 }
 

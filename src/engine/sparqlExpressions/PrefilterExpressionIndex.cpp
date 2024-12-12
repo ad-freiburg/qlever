@@ -69,7 +69,7 @@ static void checkEvalRequirements(std::span<const BlockMetadata> input,
     throw std::runtime_error(errorMessage);
   };
   // Check for duplicates.
-  if (auto it = std::ranges::adjacent_find(input); it != input.end()) {
+  if (auto it = ql::ranges::adjacent_find(input); it != input.end()) {
     throwRuntimeError("The provided data blocks must be unique.");
   }
   // Helper to check for fully sorted blocks. Return `true` if `b1 < b2` is
@@ -91,7 +91,7 @@ static void checkEvalRequirements(std::span<const BlockMetadata> input,
     }
     return false;
   };
-  if (!std::ranges::is_sorted(input, checkOrder)) {
+  if (!ql::ranges::is_sorted(input, checkOrder)) {
     throwRuntimeError("The blocks must be provided in sorted order.");
   }
   // Helper to check for column consistency. Returns `true` if the columns for
@@ -103,7 +103,7 @@ static void checkEvalRequirements(std::span<const BlockMetadata> input,
                    getMaskedTriple(b2.firstTriple_, evaluationColumn) ||
                checkBlockIsInconsistent(b2, evaluationColumn);
       };
-  if (auto it = std::ranges::adjacent_find(input, checkColumnConsistency);
+  if (auto it = ql::ranges::adjacent_find(input, checkColumnConsistency);
       it != input.end()) {
     throwRuntimeError(
         "The values in the columns up to the evaluation column must be "
@@ -498,14 +498,14 @@ static std::unique_ptr<PrefilterExpression> makeMirroredExpression(
 //______________________________________________________________________________
 void checkPropertiesForPrefilterConstruction(
     const std::vector<PrefilterExprVariablePair>& vec) {
-  auto viewVariable = vec | std::views::values;
-  if (!std::ranges::is_sorted(viewVariable, std::less<>{})) {
+  auto viewVariable = vec | ql::views::values;
+  if (!ql::ranges::is_sorted(viewVariable, std::less<>{})) {
     throw std::runtime_error(
         "The vector must contain the <PrefilterExpression, Variable> pairs in "
         "sorted order w.r.t. Variable value.");
   }
-  if (auto it = std::ranges::adjacent_find(viewVariable);
-      it != std::ranges::end(viewVariable)) {
+  if (auto it = ql::ranges::adjacent_find(viewVariable);
+      it != ql::ranges::end(viewVariable)) {
     throw std::runtime_error(
         "For each relevant Variable must exist exactly one "
         "<PrefilterExpression, Variable> pair.");

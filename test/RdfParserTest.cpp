@@ -1132,7 +1132,7 @@ TEST(RdfParserTest, multifileParser) {
     Parser p{specs};
     std::vector<TurtleTriple> result;
     while (auto batch = p.getBatch()) {
-      std::ranges::copy(batch.value(), std::back_inserter(result));
+      ql::ranges::copy(batch.value(), std::back_inserter(result));
     }
     EXPECT_THAT(result, ::testing::UnorderedElementsAreArray(expected));
   };

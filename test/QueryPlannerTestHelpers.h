@@ -357,8 +357,8 @@ static constexpr auto GroupBy =
   // TODO<joka921> Also test the aliases.
   auto aliasesToStrings = [](const std::vector<Alias>& aliases) {
     std::vector<std::string> result;
-    std::ranges::transform(aliases, std::back_inserter(result),
-                           &Alias::getDescriptor);
+    ql::ranges::transform(aliases, std::back_inserter(result),
+                          &Alias::getDescriptor);
     return result;
   };
 

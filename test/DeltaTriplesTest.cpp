@@ -47,7 +47,7 @@ class DeltaTriplesTest : public ::testing::Test {
   std::vector<TurtleTriple> makeTurtleTriples(
       const std::vector<std::string>& turtles) {
     RdfStringParser<TurtleParser<Tokenizer>> parser;
-    std::ranges::for_each(turtles, [&parser](const std::string& turtle) {
+    ql::ranges::for_each(turtles, [&parser](const std::string& turtle) {
       parser.parseUtf8String(turtle);
     });
     AD_CONTRACT_CHECK(parser.getTriples().size() == turtles.size());

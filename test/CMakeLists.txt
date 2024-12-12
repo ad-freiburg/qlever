@@ -103,6 +103,7 @@ endfunction()
 add_subdirectory(engine)
 add_subdirectory(parser)
 add_subdirectory(index)
+add_subdirectory(backports)
 
 addLinkAndDiscoverTest(ValueIdComparatorsTest util)
 

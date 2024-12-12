@@ -18,7 +18,7 @@
 Values::Values(QueryExecutionContext* qec, SparqlValues parsedValues)
     : Operation(qec), parsedValues_(std::move(parsedValues)) {
   AD_CONTRACT_CHECK(
-      std::ranges::all_of(parsedValues_._values, [&](const auto& row) {
+      ql::ranges::all_of(parsedValues_._values, [&](const auto& row) {
         return row.size() == parsedValues_._variables.size();
       }));
 }
