@@ -74,7 +74,7 @@ TEST(Distinct, testChunkEdgeCases) {
   {
     input.resize(1);
     row[0] = Id::makeFromInt(0);
-    std::ranges::fill(input, row);
+    ql::ranges::fill(input, row);
     IdTable result = distinct.outOfPlaceDistinct<1>(input);
 
     ASSERT_EQ(makeIdTableFromVector({{0}}, &Id::makeFromInt), result);
@@ -83,7 +83,7 @@ TEST(Distinct, testChunkEdgeCases) {
   {
     input.resize(Distinct::CHUNK_SIZE + 1);
     row[0] = Id::makeFromInt(0);
-    std::ranges::fill(input, row);
+    ql::ranges::fill(input, row);
     IdTable result = distinct.outOfPlaceDistinct<1>(input);
 
     ASSERT_EQ(makeIdTableFromVector({{0}}, &Id::makeFromInt), result);
@@ -92,7 +92,7 @@ TEST(Distinct, testChunkEdgeCases) {
   {
     input.resize(Distinct::CHUNK_SIZE + 1);
     row[0] = Id::makeFromInt(0);
-    std::ranges::fill(input, row);
+    ql::ranges::fill(input, row);
     input.at(Distinct::CHUNK_SIZE, 0) = Id::makeFromInt(1);
     IdTable result = distinct.outOfPlaceDistinct<1>(input);
 
@@ -102,7 +102,7 @@ TEST(Distinct, testChunkEdgeCases) {
   {
     input.resize(2 * Distinct::CHUNK_SIZE);
     row[0] = Id::makeFromInt(0);
-    std::ranges::fill(input, row);
+    ql::ranges::fill(input, row);
     IdTable result = distinct.outOfPlaceDistinct<1>(input);
 
     ASSERT_EQ(makeIdTableFromVector({{0}}, &Id::makeFromInt), result);
@@ -111,7 +111,7 @@ TEST(Distinct, testChunkEdgeCases) {
   {
     input.resize(2 * Distinct::CHUNK_SIZE + 2);
     row[0] = Id::makeFromInt(0);
-    std::ranges::fill(input, row);
+    ql::ranges::fill(input, row);
     input.at(2 * Distinct::CHUNK_SIZE + 1, 0) = Id::makeFromInt(1);
     IdTable result = distinct.outOfPlaceDistinct<1>(input);
 

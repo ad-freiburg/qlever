@@ -128,7 +128,7 @@ using IriOrUriExpression = NARY<1, FV<std::identity, IriOrUriValueGetter>>;
 [[maybe_unused]] auto strlen = [](std::string_view s) {
   // Count UTF-8 characters by skipping continuation bytes (those starting with
   // "10").
-  auto utf8Len = std::ranges::count_if(
+  auto utf8Len = ql::ranges::count_if(
       s, [](char c) { return (static_cast<unsigned char>(c) & 0xC0) != 0x80; });
   return Id::makeFromInt(utf8Len);
 };
@@ -393,7 +393,7 @@ class ConcatExpression : public detail::VariadicExpression {
           // One of the previous children was not a constant, so we already
           // store a vector.
           auto& resultAsVector = std::get<StringVec>(result);
-          std::ranges::for_each(resultAsVector, [&](std::string& target) {
+          ql::ranges::for_each(resultAsVector, [&](std::string& target) {
             target.append(strFromConstant);
           });
         }
@@ -417,7 +417,7 @@ class ConcatExpression : public detail::VariadicExpression {
         // The `result` already is a vector, and the current child also returns
         // multiple results, so we do the `natural` way.
         auto& resultAsVec = std::get<StringVec>(result);
-        // TODO<C++23> Use `std::views::zip` or `enumerate`.
+        // TODO<C++23> Use `ql::views::zip` or `enumerate`.
         size_t i = 0;
         for (auto& el : gen) {
           if (auto str = StringValueGetter{}(std::move(el), ctx);
@@ -430,7 +430,7 @@ class ConcatExpression : public detail::VariadicExpression {
       }
       ctx->cancellationHandle_->throwIfCancelled();
     };
-    std::ranges::for_each(
+    ql::ranges::for_each(
         childrenVec(), [&ctx, &visitSingleExpressionResult](const auto& child) {
           std::visit(visitSingleExpressionResult, child->evaluate(ctx));
         });
@@ -443,8 +443,8 @@ class ConcatExpression : public detail::VariadicExpression {
       auto& stringVec = std::get<StringVec>(result);
       VectorWithMemoryLimit<IdOrLiteralOrIri> resultAsVec(ctx->_allocator);
       resultAsVec.reserve(stringVec.size());
-      std::ranges::copy(stringVec | std::views::transform(toLiteral),
-                        std::back_inserter(resultAsVec));
+      ql::ranges::copy(stringVec | ql::views::transform(toLiteral),
+                       std::back_inserter(resultAsVec));
       return resultAsVec;
     }
   }

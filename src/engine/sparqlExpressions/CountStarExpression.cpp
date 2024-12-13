@@ -37,22 +37,22 @@ ExpressionResult CountStarExpression::evaluate(
   // part of the DISTINCT computation.
 
   auto varToColNoInternalVariables =
-      ctx->_variableToColumnMap | std::views::filter([](const auto& varAndIdx) {
+      ctx->_variableToColumnMap | ql::views::filter([](const auto& varAndIdx) {
         return !varAndIdx.first.name().starts_with(
             QLEVER_INTERNAL_VARIABLE_PREFIX);
       });
-  table.setNumColumns(std::ranges::distance(varToColNoInternalVariables));
+  table.setNumColumns(ql::ranges::distance(varToColNoInternalVariables));
   table.resize(ctx->size());
   auto checkCancellation = [ctx]() {
     ctx->cancellationHandle_->throwIfCancelled();
   };
   size_t targetColIdx = 0;
   for (const auto& [sourceColIdx, _] :
-       varToColNoInternalVariables | std::views::values) {
+       varToColNoInternalVariables | ql::views::values) {
     const auto& sourceColumn = ctx->_inputTable.getColumn(sourceColIdx);
-    std::ranges::copy(sourceColumn.begin() + ctx->_beginIndex,
-                      sourceColumn.begin() + ctx->_endIndex,
-                      table.getColumn(targetColIdx).begin());
+    ql::ranges::copy(sourceColumn.begin() + ctx->_beginIndex,
+                     sourceColumn.begin() + ctx->_endIndex,
+                     table.getColumn(targetColIdx).begin());
     ++targetColIdx;
     checkCancellation();
   }
@@ -60,7 +60,7 @@ ExpressionResult CountStarExpression::evaluate(
       table.numRows(), table.numColumns(), ctx->deadline_,
       "Sort for COUNT(DISTINCT *)");
   ad_utility::callFixedSize(table.numColumns(), [&table]<int I>() {
-    Engine::sort<I>(&table, std::ranges::lexicographical_compare);
+    Engine::sort<I>(&table, ql::ranges::lexicographical_compare);
   });
   return Id::makeFromInt(
       static_cast<int64_t>(Engine::countDistinct(table, checkCancellation)));

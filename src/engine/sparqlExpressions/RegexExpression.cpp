@@ -247,7 +247,7 @@ ExpressionResult RegexExpression::evaluatePrefixRegex(
   result.reserve(resultSize);
   for (auto id : detail::makeGenerator(variable, resultSize, context)) {
     result.push_back(Id::makeFromBool(
-        std::ranges::any_of(lowerAndUpperIds, [&](const auto& lowerUpper) {
+        ql::ranges::any_of(lowerAndUpperIds, [&](const auto& lowerUpper) {
           return !valueIdComparators::compareByBits(id, lowerUpper.first) &&
                  valueIdComparators::compareByBits(id, lowerUpper.second);
         })));
@@ -270,7 +270,7 @@ ExpressionResult RegexExpression::evaluateGeneralCase(
   // `std::nullopt` for a row, the result is `UNDEF`. Otherwise, we have a
   // string and evaluate the regex on it.
   auto computeResult = [&]<typename ValueGetter>(const ValueGetter& getter) {
-    std::ranges::for_each(
+    ql::ranges::for_each(
         detail::makeGenerator(AD_FWD(input), resultSize, context),
         [&getter, &context, &result, this](const auto& id) {
           auto str = getter(id, context);

@@ -44,7 +44,7 @@ size_t getNumColumns(const std::vector<Inner>& input) {
     return 2;
   }
   auto result = input.at(0).size();
-  AD_CONTRACT_CHECK(std::ranges::all_of(
+  AD_CONTRACT_CHECK(ql::ranges::all_of(
       input, [result](const auto& vec) { return vec.size() == result; }));
   return result;
 }
@@ -54,7 +54,7 @@ size_t getNumColumns(const std::vector<RelationInput>& vec) {
     return 2;
   }
   auto result = getNumColumns(vec.at(0).col1And2_);
-  AD_CONTRACT_CHECK(std::ranges::all_of(vec, [&result](const auto& relation) {
+  AD_CONTRACT_CHECK(ql::ranges::all_of(vec, [&result](const auto& relation) {
     return getNumColumns(relation.col1And2_) == result;
   }));
   return result;
@@ -107,13 +107,12 @@ compressedRelationTestWriteCompressedRelations(
     auto inputs, std::string filename, ad_utility::MemorySize blocksize) {
   // First check the invariants of the `inputs`. They must be sorted by the
   // `col0_` and for each of the `inputs` the `col1And2_` must also be sorted.
-  AD_CONTRACT_CHECK(std::ranges::is_sorted(
+  AD_CONTRACT_CHECK(ql::ranges::is_sorted(
       inputs, {}, [](const RelationInput& r) { return r.col0_; }));
-  AD_CONTRACT_CHECK(std::ranges::all_of(inputs, [](const RelationInput& r) {
-    return std::ranges::is_sorted(
-        r.col1And2_, [](const auto& a, const auto& b) {
-          return std::ranges::lexicographical_compare(a, b);
-        });
+  AD_CONTRACT_CHECK(ql::ranges::all_of(inputs, [](const RelationInput& r) {
+    return ql::ranges::is_sorted(r.col1And2_, [](const auto& a, const auto& b) {
+      return ql::ranges::lexicographical_compare(a, b);
+    });
   }));
 
   // First create the on-disk permutation.
@@ -142,7 +141,7 @@ compressedRelationTestWriteCompressedRelations(
       };
       for (const auto& arr : input.col1And2_) {
         std::vector row{V(input.col0_)};
-        std::ranges::transform(arr, std::back_inserter(row), V);
+        ql::ranges::transform(arr, std::back_inserter(row), V);
         buffer.push_back(row);
         if (buffer.numRows() > writer.blocksize()) {
           addBlock();
@@ -283,14 +282,14 @@ void testCompressedRelations(const auto& inputsOriginalBeforeCopy,
       std::make_shared<ad_utility::CancellationHandle<>>();
   // Check the contents of the metadata.
 
-  // TODO<C++23> `std::ranges::to<vector>`.
+  // TODO<C++23> `ql::ranges::to<vector>`.
   std::vector<ColumnIndex> additionalColumns;
-  std::ranges::copy(std::views::iota(3ul, getNumColumns(inputs) + 1),
-                    std::back_inserter(additionalColumns));
+  ql::ranges::copy(ql::views::iota(3ul, getNumColumns(inputs) + 1),
+                   std::back_inserter(additionalColumns));
   auto getMetadata = [&, &metaData = metaData](size_t i) {
     Id col0 = V(inputs[i].col0_);
-    auto it = std::ranges::lower_bound(metaData, col0, {},
-                                       &CompressedRelationMetadata::col0Id_);
+    auto it = ql::ranges::lower_bound(metaData, col0, {},
+                                      &CompressedRelationMetadata::col0Id_);
     if (it != metaData.end() && it->col0Id_ == col0) {
       return *it;
     }

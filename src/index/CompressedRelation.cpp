@@ -26,7 +26,7 @@ using namespace std::chrono_literals;
 
 // A small helper function to obtain the begin and end iterator of a range
 static auto getBeginAndEnd(auto& range) {
-  return std::pair{std::ranges::begin(range), std::ranges::end(range)};
+  return std::pair{ql::ranges::begin(range), ql::ranges::end(range)};
 }
 
 // modify the `block` according to the `limitOffset`. Also modify the
@@ -156,9 +156,9 @@ bool CompressedRelationReader::FilterDuplicatesAndGraphs::
   if (!metadata.graphInfo_.has_value()) {
     return true;
   }
-  return !std::ranges::all_of(
-      metadata.graphInfo_.value(),
-      [&wantedGraphs = desiredGraphs_.value()](Id containedGraph) {
+  const auto& graphInfo = metadata.graphInfo_.value();
+  return !ql::ranges::all_of(
+      graphInfo, [&wantedGraphs = desiredGraphs_.value()](Id containedGraph) {
         return wantedGraphs.contains(containedGraph);
       });
 }
@@ -184,7 +184,7 @@ bool CompressedRelationReader::FilterDuplicatesAndGraphs::
   } else {
     AD_EXPENSIVE_CHECK(
         !desiredGraphs_.has_value() ||
-        std::ranges::all_of(block, isDesiredGraphId(), graphIdFromRow));
+        ql::ranges::all_of(block, isDesiredGraphId(), graphIdFromRow));
   }
   return needsFilteringByGraph;
 }
@@ -224,7 +224,7 @@ bool CompressedRelationReader::FilterDuplicatesAndGraphs::canBlockBeSkipped(
     return false;
   }
   const auto& containedGraphs = block.graphInfo_.value();
-  return std::ranges::none_of(
+  return ql::ranges::none_of(
       desiredGraphs_.value(), [&containedGraphs](const auto& desiredGraph) {
         return ad_utility::contains(containedGraphs, desiredGraph);
       });
@@ -246,7 +246,7 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
   // Compute the sequence of relevant blocks. If the sequence is empty, there
   // is nothing to yield.
   auto relevantBlocks = getRelevantBlocks(scanSpec, blockMetadata);
-  if (std::ranges::empty(relevantBlocks)) {
+  if (ql::ranges::empty(relevantBlocks)) {
     co_return;
   }
 
@@ -417,10 +417,10 @@ std::vector<CompressedBlockMetadata> CompressedRelationReader::getBlocksForJoin(
   // `!lessThan(a,b) && !lessThan(b, a)` is not transitive.
   std::vector<CompressedBlockMetadata> result;
   auto blockIsNeeded = [&joinColumn, &lessThan](const auto& block) {
-    return !std::ranges::equal_range(joinColumn, block, lessThan).empty();
+    return !ql::ranges::equal_range(joinColumn, block, lessThan).empty();
   };
-  std::ranges::copy(relevantBlocks | std::views::filter(blockIsNeeded),
-                    std::back_inserter(result));
+  ql::ranges::copy(relevantBlocks | ql::views::filter(blockIsNeeded),
+                   std::back_inserter(result));
   // The following check is cheap as there are only few blocks.
   AD_CORRECTNESS_CHECK(std::ranges::unique(result).empty());
   return result;
@@ -446,21 +446,22 @@ CompressedRelationReader::getBlocksForJoin(
 
   // Transform all the relevant blocks from a `ScanSpecAndBlocksAndBounds` a
   // `BlockWithFirstAndLastId` struct (see above).
-  auto getBlocksWithFirstAndLastId = [&blockLessThanBlock](
-                                         const ScanSpecAndBlocksAndBounds&
-                                             metadataAndBlocks) {
-    auto getSingleBlock =
-        [&metadataAndBlocks](
-            const CompressedBlockMetadata& block) -> BlockWithFirstAndLastId {
-      return {block,
+  auto getBlocksWithFirstAndLastId =
+      [&blockLessThanBlock](
+          const ScanSpecAndBlocksAndBounds& metadataAndBlocks) {
+        auto getSingleBlock =
+            [&metadataAndBlocks](const CompressedBlockMetadata& block)
+            -> BlockWithFirstAndLastId {
+          return {
+              block,
               getRelevantIdFromTriple(block.firstTriple_, metadataAndBlocks),
               getRelevantIdFromTriple(block.lastTriple_, metadataAndBlocks)};
-    };
-    auto result = std::views::transform(
-        getBlocksFromMetadata(metadataAndBlocks), getSingleBlock);
-    AD_CORRECTNESS_CHECK(std::ranges::is_sorted(result, blockLessThanBlock));
-    return result;
-  };
+        };
+        auto result = ql::views::transform(
+            getBlocksFromMetadata(metadataAndBlocks), getSingleBlock);
+        AD_CORRECTNESS_CHECK(ql::ranges::is_sorted(result, blockLessThanBlock));
+        return result;
+      };
 
   auto blocksWithFirstAndLastId1 =
       getBlocksWithFirstAndLastId(metadataAndBlocks1);
@@ -475,7 +476,7 @@ CompressedRelationReader::getBlocksForJoin(
                                                   const auto& otherBlocks) {
     std::vector<CompressedBlockMetadata> result;
     for (const auto& block : blocks) {
-      if (!std::ranges::equal_range(otherBlocks, block, blockLessThanBlock)
+      if (!ql::ranges::equal_range(otherBlocks, block, blockLessThanBlock)
                .empty()) {
         result.push_back(block.block_);
       }
@@ -504,8 +505,8 @@ IdTable CompressedRelationReader::scan(
   // Compute an upper bound for the size and reserve enough space in the
   // result.
   auto relevantBlocks = getRelevantBlocks(scanSpec, blocks);
-  auto sizes = relevantBlocks |
-               std::views::transform(&CompressedBlockMetadata::numRows_);
+  auto sizes =
+      relevantBlocks | ql::views::transform(&CompressedBlockMetadata::numRows_);
   auto upperBoundSize = std::accumulate(sizes.begin(), sizes.end(), size_t{0});
   if (limitOffset._limit.has_value()) {
     upperBoundSize = std::min(upperBoundSize,
@@ -534,9 +535,9 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
 
   // We first scan the complete block including ALL columns.
   std::vector<ColumnIndex> allAdditionalColumns;
-  std::ranges::copy(
-      std::views::iota(ADDITIONAL_COLUMN_GRAPH_ID,
-                       blockMetadata.offsetsAndCompressedSize_.size()),
+  ql::ranges::copy(
+      ql::views::iota(ADDITIONAL_COLUMN_GRAPH_ID,
+                      blockMetadata.offsetsAndCompressedSize_.size()),
       std::back_inserter(allAdditionalColumns));
   ScanSpecification specForAllColumns{std::nullopt,
                                       std::nullopt,
@@ -578,7 +579,7 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
       return;
     }
     const auto& column = block.getColumn(columnIdx);
-    auto matchingRange = std::ranges::equal_range(
+    auto matchingRange = ql::ranges::equal_range(
         column.begin() + beginIdx, column.begin() + endIdx, relevantId.value());
     beginIdx = matchingRange.begin() - column.begin();
     endIdx = matchingRange.end() - column.begin();
@@ -599,12 +600,12 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
   size_t i = 0;
   const auto& columnIndices = scanConfig.scanColumns_;
   for (const auto& inputColIdx :
-       columnIndices | std::views::filter([&](const auto& idx) {
+       columnIndices | ql::views::filter([&](const auto& idx) {
          return !manuallyDeleteGraphColumn || idx != ADDITIONAL_COLUMN_GRAPH_ID;
        })) {
     const auto& inputCol = block.getColumn(inputColIdx);
-    std::ranges::copy(inputCol.begin() + beginIdx, inputCol.begin() + endIdx,
-                      result.getColumn(i).begin());
+    ql::ranges::copy(inputCol.begin() + beginIdx, inputCol.begin() + endIdx,
+                     result.getColumn(i).begin());
     ++i;
   }
 
@@ -656,8 +657,8 @@ std::pair<size_t, size_t> CompressedRelationReader::getResultSizeImpl(
   // First accumulate the complete blocks in the "middle"
   std::size_t inserted = 0;
   std::size_t deleted = 0;
-  std::ranges::for_each(
-      std::ranges::subrange{beginBlock, endBlock}, [&](const auto& block) {
+  ql::ranges::for_each(
+      ql::ranges::subrange{beginBlock, endBlock}, [&](const auto& block) {
         const auto [ins, del] =
             locatedTriplesPerBlock.numTriples(block.blockIndex_);
         if (!exactSize || (ins == 0 && del == 0)) {
@@ -766,7 +767,7 @@ IdTable CompressedRelationReader::getDistinctColIdsAndCountsImpl(
         continue;
       }
       const auto& block = optionalBlock.value();
-      // TODO<C++23>: use `std::views::chunk_by`.
+      // TODO<C++23>: use `ql::views::chunkd_by`.
       for (size_t j = 0; j < block.numRows(); ++j) {
         Id colId = block(j, 0);
         processColId(colId, 1);
@@ -841,7 +842,7 @@ CompressedBlock CompressedRelationReader::readCompressedBlockFromFile(
     ColumnIndicesRef columnIndices) const {
   CompressedBlock compressedBuffer;
   compressedBuffer.resize(columnIndices.size());
-  // TODO<C++23> Use `std::views::zip`
+  // TODO<C++23> Use `ql::views::zip`
   for (size_t i = 0; i < compressedBuffer.size(); ++i) {
     const auto& offset =
         blockMetaData.offsetsAndCompressedSize_.at(columnIndices[i]);
@@ -944,9 +945,9 @@ static std::pair<bool, std::optional<std::vector<Id>>> getGraphInfo(
   // Return the contained graphs, or  `nullopt` if there are too many of them.
   auto graphInfo = [&block]() -> std::optional<std::vector<Id>> {
     std::vector<Id> graphColumn;
-    std::ranges::copy(block->getColumn(ADDITIONAL_COLUMN_GRAPH_ID),
-                      std::back_inserter(graphColumn));
-    std::ranges::sort(graphColumn);
+    ql::ranges::copy(block->getColumn(ADDITIONAL_COLUMN_GRAPH_ID),
+                     std::back_inserter(graphColumn));
+    ql::ranges::sort(graphColumn);
     auto [endOfUnique, _] = std::ranges::unique(graphColumn);
     size_t numGraphs = endOfUnique - graphColumn.begin();
     if (numGraphs > MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA) {
@@ -1030,7 +1031,7 @@ CompressedRelationReader::getRelevantBlocks(
     return blockA.lastTriple_ < blockB.firstTriple_;
   };
 
-  return std::ranges::equal_range(blockMetadata, key, comp);
+  return ql::ranges::equal_range(blockMetadata, key, comp);
 }
 
 // _____________________________________________________________________________
@@ -1087,8 +1088,8 @@ std::vector<ColumnIndex> CompressedRelationReader::prepareColumnIndices(
     ColumnIndicesRef additionalColumns) {
   std::vector<ColumnIndex> result;
   result.reserve(baseColumns.size() + additionalColumns.size());
-  std::ranges::copy(baseColumns, std::back_inserter(result));
-  std::ranges::copy(additionalColumns, std::back_inserter(result));
+  ql::ranges::copy(baseColumns, std::back_inserter(result));
+  ql::ranges::copy(additionalColumns, std::back_inserter(result));
   return result;
 }
 
@@ -1109,7 +1110,7 @@ std::vector<ColumnIndex> CompressedRelationReader::prepareColumnIndices(
 // ___________________________________________________________________________
 std::pair<size_t, bool> CompressedRelationReader::prepareLocatedTriples(
     ColumnIndicesRef columns) {
-  AD_CORRECTNESS_CHECK(std::ranges::is_sorted(columns));
+  AD_CORRECTNESS_CHECK(ql::ranges::is_sorted(columns));
   // Compute number of columns that should be read (except the graph column
   // and any payload columns).
   size_t numScanColumns = [&]() -> size_t {
@@ -1120,7 +1121,7 @@ std::pair<size_t, bool> CompressedRelationReader::prepareLocatedTriples(
     }
   }();
   // Check if one of the columns is the graph column.
-  auto it = std::ranges::find(columns, ADDITIONAL_COLUMN_GRAPH_ID);
+  auto it = ql::ranges::find(columns, ADDITIONAL_COLUMN_GRAPH_ID);
   bool containsGraphId = it != columns.end();
   if (containsGraphId) {
     AD_CORRECTNESS_CHECK(it - columns.begin() ==
@@ -1153,7 +1154,7 @@ CompressedRelationMetadata CompressedRelationWriter::addSmallRelation(
 
   smallRelationsBuffer_.resize(offsetInBlock + numRows);
   for (size_t i = 0; i < relation.numColumns(); ++i) {
-    std::ranges::copy(
+    ql::ranges::copy(
         relation.getColumn(i),
         smallRelationsBuffer_.getColumn(i).begin() + offsetInBlock);
   }
@@ -1277,7 +1278,7 @@ CompressedRelationMetadata CompressedRelationWriter::addCompleteLargeRelation(
     Id col0Id, auto&& sortedBlocks) {
   DistinctIdCounter distinctCol1Counter;
   for (auto& block : sortedBlocks) {
-    std::ranges::for_each(block.getColumn(1), std::ref(distinctCol1Counter));
+    ql::ranges::for_each(block.getColumn(1), std::ref(distinctCol1Counter));
     addBlockForLargeRelation(
         col0Id, std::make_shared<IdTable>(std::move(block).toDynamic()));
   }
@@ -1373,7 +1374,7 @@ auto CompressedRelationWriter::createPermutationPair(
           return std::tie(a[0], a[1], a[2], a[3]) <
                  std::tie(b[0], b[1], b[2], b[3]);
         };
-        std::ranges::sort(relation, compare);
+        ql::ranges::sort(relation, compare);
         AD_CORRECTNESS_CHECK(!relation.empty());
         writer2.compressAndWriteBlock(relation.at(0, 0),
                                       relation.at(relation.size() - 1, 0),
@@ -1558,7 +1559,7 @@ auto CompressedRelationReader::getScanConfig(
       return {0, false};
     }
     auto idx = static_cast<size_t>(
-        std::ranges::find(columnIndices, ADDITIONAL_COLUMN_GRAPH_ID) -
+        ql::ranges::find(columnIndices, ADDITIONAL_COLUMN_GRAPH_ID) -
         columnIndices.begin());
     bool deleteColumn = false;
     if (idx == columnIndices.size()) {

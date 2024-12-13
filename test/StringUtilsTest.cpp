@@ -17,6 +17,7 @@
 #include "util/Forward.h"
 #include "util/Generator.h"
 #include "util/StringUtils.h"
+#include "util/StringUtilsImpl.h"
 
 using ad_utility::constantTimeEquals;
 using ad_utility::constexprStrCat;
@@ -109,22 +110,22 @@ TEST(StringUtilsTest, listToString) {
                         multiValueVector, " -> ");
 
   /*
-  `std::ranges::views` can cause dangling pointers, if a `std::identity` is
+  `ql::ranges::views` can cause dangling pointers, if a `std::identity` is
   called with one, that returns r-values.
   */
   /*
-  TODO Do a test, where the `std::views::transform` uses an r-value vector,
+  TODO Do a test, where the `ql::views::transform` uses an r-value vector,
   once we no longer support `gcc-11`. The compiler has a bug, where it
   doesn't allow that code, even though it's correct.
   */
-  auto plus10View = std::views::transform(
+  auto plus10View = ql::views::transform(
       multiValueVector, [](const int& num) -> int { return num + 10; });
   doTestForAllOverloads("50,51,52,53", plus10View, plus10View, ",");
 
-  auto identityView = std::views::transform(multiValueVector, std::identity{});
+  auto identityView = ql::views::transform(multiValueVector, std::identity{});
   doTestForAllOverloads("40,41,42,43", identityView, identityView, ",");
 
-  // Test, that uses an actual `std::ranges::input_range`. That is, a range who
+  // Test, that uses an actual `ql::ranges::input_range`. That is, a range who
   // doesn't know it's own size and can only be iterated once.
 
   // Returns the content of a given vector, element by element.

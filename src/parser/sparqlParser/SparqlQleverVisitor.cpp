@@ -504,8 +504,8 @@ ParsedQuery Visitor::visit(Parser::DeleteWhereContext* ctx) {
 ParsedQuery Visitor::visit(Parser::ModifyContext* ctx) {
   auto isVisibleIfVariable = [this](const TripleComponent& component) {
     if (component.isVariable()) {
-      return std::ranges::find(parsedQuery_.getVisibleVariables(),
-                               component.getVariable()) !=
+      return ql::ranges::find(parsedQuery_.getVisibleVariables(),
+                              component.getVariable()) !=
              parsedQuery_.getVisibleVariables().end();
     } else {
       return true;
@@ -643,8 +643,8 @@ vector<SparqlTripleSimpleWithGraph> Visitor::visit(Parser::QuadsContext* ctx) {
       ctx->triplesTemplate(), [this](Parser::TriplesTemplateContext* ctx) {
         return transformTriplesTemplate(ctx, std::monostate{});
       });
-  std::ranges::move(visitVector(ctx->quadsNotTriples()),
-                    std::back_inserter(triplesWithGraph));
+  ql::ranges::move(visitVector(ctx->quadsNotTriples()),
+                   std::back_inserter(triplesWithGraph));
   return ad_utility::flatten(std::move(triplesWithGraph));
 }
 
@@ -994,7 +994,7 @@ OrderClause Visitor::visit(Parser::OrderClauseContext* ctx) {
     auto isDescending = [](const auto& variant) {
       return std::visit([](const auto& k) { return k.isDescending_; }, variant);
     };
-    if (std::ranges::any_of(orderKeys, isDescending)) {
+    if (ql::ranges::any_of(orderKeys, isDescending)) {
       reportError(ctx,
                   "When using the `INTERNAL SORT BY` modifier, all sorted "
                   "variables have to be ascending");
@@ -1560,7 +1560,7 @@ vector<TripleWithPropertyPath> Visitor::visit(
     for (auto&& [predicate, object] : std::move(predicateObjectPairs)) {
       triples.emplace_back(subject, std::move(predicate), std::move(object));
     }
-    std::ranges::copy(additionalTriples, std::back_inserter(triples));
+    ql::ranges::copy(additionalTriples, std::back_inserter(triples));
     for (const auto& triple : triples) {
       setMatchingWordAndScoreVisibleIfPresent(ctx, triple);
     }
@@ -1599,8 +1599,8 @@ PathObjectPairsAndTriples Visitor::visit(
   vector<PathObjectPairsAndTriples> pairsAndTriples =
       visitVector(ctx->tupleWithoutPath());
   for (auto& [newPairs, newTriples] : pairsAndTriples) {
-    std::ranges::move(newPairs, std::back_inserter(pairs));
-    std::ranges::move(newTriples, std::back_inserter(triples));
+    ql::ranges::move(newPairs, std::back_inserter(pairs));
+    ql::ranges::move(newTriples, std::back_inserter(triples));
   }
   return result;
 }
@@ -1656,16 +1656,16 @@ ObjectsAndPathTriples Visitor::visit(Parser::ObjectListPathContext* ctx) {
   auto objectAndTriplesVec = visitVector(ctx->objectPath());
   // First collect all the objects.
   std::vector<GraphTerm> objects;
-  std::ranges::copy(
-      objectAndTriplesVec | std::views::transform(ad_utility::first),
+  ql::ranges::copy(
+      objectAndTriplesVec | ql::views::transform(ad_utility::first),
       std::back_inserter(objects));
 
   // Collect all the triples. Node: `views::join` flattens the input.
   std::vector<TripleWithPropertyPath> triples;
-  std::ranges::copy(objectAndTriplesVec |
-                        std::views::transform(ad_utility::second) |
-                        std::views::join,
-                    std::back_inserter(triples));
+  ql::ranges::copy(objectAndTriplesVec |
+                       ql::views::transform(ad_utility::second) |
+                       ql::views::join,
+                   std::back_inserter(triples));
   return {std::move(objects), std::move(triples)};
 }
 
@@ -2380,7 +2380,7 @@ ExpressionPtr Visitor::visit(Parser::AggregateContext* ctx) {
   std::string functionName =
       ad_utility::getLowercase(children.at(0)->getText());
 
-  const bool distinct = std::ranges::any_of(children, [](auto* child) {
+  const bool distinct = ql::ranges::any_of(children, [](auto* child) {
     return ad_utility::getLowercase(child->getText()) == "distinct";
   });
   // the only case that there is no child expression is COUNT(*), so we can

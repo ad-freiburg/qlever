@@ -51,9 +51,9 @@ class LazyGroupBy {
 
   auto allAggregateInfoView() const {
     return aggregateAliases_ |
-           std::views::transform(
+           ql::views::transform(
                &GroupBy::HashMapAliasInformation::aggregateInfo_) |
-           std::views::join;
+           ql::views::join;
   }
 
   FRIEND_TEST(LazyGroupBy, verifyGroupConcatIsCorrectlyInitialized);

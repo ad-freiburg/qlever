@@ -11,7 +11,7 @@ namespace {
 static constexpr auto U = Id::makeUndefined();
 
 void testWithAllBuffersizes(const auto& testFunction) {
-  for (auto bufferSize : std::views::iota(0, 10)) {
+  for (auto bufferSize : ql::views::iota(0, 10)) {
     testFunction(bufferSize);
   }
   testFunction(100'000);
