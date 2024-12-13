@@ -260,12 +260,12 @@ void MultiColumnJoin::computeMultiColumnJoin(
     if (isCheap) {
       return ad_utility::zipperJoinWithUndef(
           leftJoinColumns, rightJoinColumns,
-          std::ranges::lexicographical_compare, addRow, ad_utility::noop,
+          ql::ranges::lexicographical_compare, addRow, ad_utility::noop,
           ad_utility::noop, ad_utility::noop, checkCancellationLambda);
     } else {
       return ad_utility::zipperJoinWithUndef(
           leftJoinColumns, rightJoinColumns,
-          std::ranges::lexicographical_compare, addRow, findUndef, findUndef,
+          ql::ranges::lexicographical_compare, addRow, findUndef, findUndef,
           ad_utility::noop, checkCancellationLambda);
     }
   }();

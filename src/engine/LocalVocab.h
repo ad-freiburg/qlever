@@ -5,15 +5,18 @@
 
 #pragma once
 
+#include <absl/container/flat_hash_set.h>
+#include <absl/container/node_hash_set.h>
+
 #include <cstdlib>
 #include <memory>
+#include <ranges>
 #include <span>
 #include <string>
 #include <vector>
 
-#include "absl/container/node_hash_set.h"
-#include "global/Id.h"
-#include "parser/LiteralOrIri.h"
+#include "backports/algorithm.h"
+#include "index/LocalVocabEntry.h"
 #include "util/BlankNodeManager.h"
 #include "util/Exception.h"
 
@@ -41,14 +44,14 @@ class LocalVocab {
   std::shared_ptr<Set> primaryWordSet_ = std::make_shared<Set>();
 
   // The other sets of `LocalVocabEntry`s, which are static.
-  std::vector<std::shared_ptr<const Set>> otherWordSets_;
+  absl::flat_hash_set<std::shared_ptr<const Set>> otherWordSets_;
 
   // The number of words (so that we can compute `size()` in constant time).
   size_t size_ = 0;
 
   // Each `LocalVocab` has its own `LocalBlankNodeManager` to generate blank
   // nodes when needed (e.g., when parsing the result of a SERVICE query).
-  std::optional<ad_utility::BlankNodeManager::LocalBlankNodeManager>
+  std::shared_ptr<ad_utility::BlankNodeManager::LocalBlankNodeManager>
       localBlankNodeManager_;
 
  public:
@@ -97,6 +100,9 @@ class LocalVocab {
   // Return true if and only if the local vocabulary is empty.
   bool empty() const { return size() == 0; }
 
+  // The number of set stores (primary set and other sets).
+  size_t numSets() const { return 1 + otherWordSets_.size(); }
+
   // Get the `LocalVocabEntry` corresponding to the given `LocalVocabIndex`.
   //
   // NOTE: This used to be a more complex function but is now a simple
@@ -109,13 +115,39 @@ class LocalVocab {
   // primary set of this `LocalVocab` remains unchanged.
   template <std::ranges::range R>
   void mergeWith(const R& vocabs) {
-    auto inserter = std::back_inserter(otherWordSets_);
-    using std::views::filter;
+    using ql::views::filter;
+    auto addWordSet = [this](const std::shared_ptr<const Set>& set) {
+      bool added = otherWordSets_.insert(set).second;
+      size_ += static_cast<size_t>(added) * set->size();
+    };
+    // Note: Even though the `otherWordsSet_`is a hash set that filters out
+    // duplicates, we still manually filter out empty sets, because these
+    // typically don't compare equal to each other because of the`shared_ptr`
+    // semantics.
     for (const auto& vocab : vocabs | filter(std::not_fn(&LocalVocab::empty))) {
-      std::ranges::copy(vocab.otherWordSets_, inserter);
-      *inserter = vocab.primaryWordSet_;
-      size_ += vocab.size_;
+      ql::ranges::for_each(vocab.otherWordSets_, addWordSet);
+      addWordSet(vocab.primaryWordSet_);
     }
+
+    // Also merge the `vocabs` `LocalBlankNodeManager`s, if they exist.
+    using LocalBlankNodeManager =
+        ad_utility::BlankNodeManager::LocalBlankNodeManager;
+    auto localManagersView =
+        vocabs |
+        ql::views::transform([](const LocalVocab& vocab) -> const auto& {
+          return vocab.localBlankNodeManager_;
+        });
+
+    auto it = ql::ranges::find_if(localManagersView,
+                                  [](const auto& l) { return l != nullptr; });
+    if (it == localManagersView.end()) {
+      return;
+    }
+    if (!localBlankNodeManager_) {
+      localBlankNodeManager_ =
+          std::make_shared<LocalBlankNodeManager>((*it)->blankNodeManager());
+    }
+    localBlankNodeManager_->mergeWith(localManagersView);
   }
 
   // Create a new local vocab with empty set and other sets that are the union

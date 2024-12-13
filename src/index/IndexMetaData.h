@@ -6,7 +6,6 @@
 
 #include <stdio.h>
 
-#include <algorithm>
 #include <array>
 #include <cmath>
 #include <exception>
@@ -14,6 +13,7 @@
 #include <utility>
 #include <vector>
 
+#include "backports/algorithm.h"
 #include "global/Id.h"
 #include "index/CompressedRelation.h"
 #include "index/MetaDataHandler.h"

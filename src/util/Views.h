@@ -8,6 +8,8 @@
 #include <ranges>
 #include <span>
 
+#include "backports/algorithm.h"
+#include "backports/concepts.h"
 #include "util/Generator.h"
 #include "util/Log.h"
 
@@ -83,8 +85,8 @@ cppcoro::generator<ValueType> uniqueView(SortedView view) {
 // Takes a view of blocks and yields the elements of the same view, but removes
 // consecutive duplicates inside the blocks and across block boundaries.
 template <typename SortedBlockView,
-          typename ValueType = std::ranges::range_value_t<
-              std::ranges::range_value_t<SortedBlockView>>>
+          typename ValueType = ql::ranges::range_value_t<
+              ql::ranges::range_value_t<SortedBlockView>>>
 cppcoro::generator<typename SortedBlockView::value_type> uniqueBlockView(
     SortedBlockView view) {
   size_t numInputs = 0;
@@ -97,7 +99,7 @@ cppcoro::generator<typename SortedBlockView::value_type> uniqueBlockView(
     }
     numInputs += block.size();
     auto beg = lastValueFromPreviousBlock
-                   ? std::ranges::find_if(
+                   ? ql::ranges::find_if(
                          block, [&p = lastValueFromPreviousBlock.value()](
                                     const auto& el) { return el != p; })
                    : block.begin();
@@ -113,11 +115,14 @@ cppcoro::generator<typename SortedBlockView::value_type> uniqueBlockView(
 }
 
 // A view that owns its underlying storage. It is a replacement for
-// `std::ranges::owning_view` which is not yet supported by `GCC 11`. The
-// implementation is taken from libstdc++-13.
-template <std::ranges::range UnderlyingRange>
-requires std::movable<UnderlyingRange> class OwningView
-    : public std::ranges::view_interface<OwningView<UnderlyingRange>> {
+// `std::ranges::owning_view` which is not yet supported by `GCC 11` and
+// `range-v3`. The implementation is taken from libstdc++-13. The additional
+// optional `supportsConst` argument explicitly disables const iteration for
+// this view when set to false, see `OwningViewNoConst` below for details.
+CPP_template(typename UnderlyingRange, bool supportConst = true)(
+    requires ql::ranges::range<UnderlyingRange> CPP_and
+        ql::concepts::movable<UnderlyingRange>) class OwningView
+    : public ql::ranges::view_interface<OwningView<UnderlyingRange>> {
  private:
   UnderlyingRange underlyingRange_ = UnderlyingRange();
 
@@ -145,93 +150,107 @@ requires std::movable<UnderlyingRange> class OwningView
     return std::move(underlyingRange_);
   }
 
-  constexpr std::ranges::iterator_t<UnderlyingRange> begin() {
-    return std::ranges::begin(underlyingRange_);
+  constexpr ql::ranges::iterator_t<UnderlyingRange> begin() {
+    return ql::ranges::begin(underlyingRange_);
   }
 
-  constexpr std::ranges::sentinel_t<UnderlyingRange> end() {
-    return std::ranges::end(underlyingRange_);
+  constexpr ql::ranges::sentinel_t<UnderlyingRange> end() {
+    return ql::ranges::end(underlyingRange_);
   }
 
   constexpr auto begin() const
-      requires std::ranges::range<const UnderlyingRange> {
-    return std::ranges::begin(underlyingRange_);
+      requires(supportConst && ql::ranges::range<const UnderlyingRange>) {
+    return ql::ranges::begin(underlyingRange_);
   }
 
-  constexpr auto end() const requires std::ranges::range<const UnderlyingRange>
-  {
-    return std::ranges::end(underlyingRange_);
+  constexpr auto end() const
+      requires(supportConst && ql::ranges::range<const UnderlyingRange>) {
+    return ql::ranges::end(underlyingRange_);
   }
 
   constexpr bool empty()
-      requires requires { std::ranges::empty(underlyingRange_); } {
-    return std::ranges::empty(underlyingRange_);
+      requires requires { ql::ranges::empty(underlyingRange_); } {
+    return ql::ranges::empty(underlyingRange_);
   }
 
   constexpr bool empty() const
-      requires requires { std::ranges::empty(underlyingRange_); } {
-    return std::ranges::empty(underlyingRange_);
+      requires requires { ql::ranges::empty(underlyingRange_); } {
+    return ql::ranges::empty(underlyingRange_);
   }
 
-  constexpr auto size() requires std::ranges::sized_range<UnderlyingRange> {
-    return std::ranges::size(underlyingRange_);
+  constexpr auto size() requires ql::ranges::sized_range<UnderlyingRange> {
+    return ql::ranges::size(underlyingRange_);
   }
 
   constexpr auto size() const
-      requires std::ranges::sized_range<const UnderlyingRange> {
-    return std::ranges::size(underlyingRange_);
+      requires ql::ranges::sized_range<const UnderlyingRange> {
+    return ql::ranges::size(underlyingRange_);
   }
 
-  constexpr auto data() requires std::ranges::contiguous_range<UnderlyingRange>
-  {
-    return std::ranges::data(underlyingRange_);
+  constexpr auto data() requires ql::ranges::contiguous_range<UnderlyingRange> {
+    return ql::ranges::data(underlyingRange_);
   }
 
   constexpr auto data() const
-      requires std::ranges::contiguous_range<const UnderlyingRange> {
-    return std::ranges::data(underlyingRange_);
+      requires ql::ranges::contiguous_range<const UnderlyingRange> {
+    return ql::ranges::data(underlyingRange_);
   }
 };
+
+// Like `OwningView` above, but the const overloads to `begin()` and `end()` do
+// not exist. This is currently used in the `CompressedExternalIdTable.h`, where
+// have a deeply nested stack of views, one of which is `OnwingView<vector>`
+// which doesn't properly propagate the possibility of const iteration in
+// range-v3`.
+template <typename T>
+struct OwningViewNoConst : OwningView<T, false> {
+  using OwningView<T, false>::OwningView;
+};
+
+template <typename T>
+OwningViewNoConst(T&&) -> OwningViewNoConst<T>;
 
 // Helper concept for `ad_utility::allView`.
 namespace detail {
 template <typename Range>
-concept can_ref_view =
-    requires(Range&& range) { std::ranges::ref_view{AD_FWD(range)}; };
-}
+CPP_requires(can_ref_view,
+             requires(Range&& range)(ql::ranges::ref_view{AD_FWD(range)}));
+template <typename Range>
+CPP_concept can_ref_view = CPP_requires_ref(can_ref_view, Range);
+}  // namespace detail
 
-// A simple drop-in replacement for `std::views::all` which is required because
-// GCC 11 doesn't support `std::owning_view` (see above). As soon as we don't
-// support GCC 11 anymore, we can throw out those implementations.
+// A simple drop-in replacement for `ql::views::all` which is required because
+// GCC 11 and range-v3 currently don't support `std::owning_view` (see above).
+// As soon as we don't support GCC 11 anymore, we can throw out those
+// implementations.
 template <typename Range>
 constexpr auto allView(Range&& range) {
   if constexpr (std::ranges::view<std::decay_t<Range>>) {
     return AD_FWD(range);
   } else if constexpr (detail::can_ref_view<Range>) {
-    return std::ranges::ref_view{AD_FWD(range)};
+    return ql::ranges::ref_view{AD_FWD(range)};
   } else {
     return ad_utility::OwningView{AD_FWD(range)};
   }
 }
 
 // Returns a view that contains all the values in `[0, upperBound)`, similar to
-// Python's `range` function. Avoids the common pitfall in `std::views::iota`
+// Python's `range` function. Avoids the common pitfall in `ql::views::iota`
 // that the count variable is only derived from the first argument. For example,
-// `std::views::iota(0, size_t(INT_MAX) + 1)` leads to undefined behavior
+// `ql::views::iota(0, size_t(INT_MAX) + 1)` leads to undefined behavior
 // because of an integer overflow, but `ad_utility::integerRange(size_t(INT_MAX)
 // + 1)` is perfectly safe and behaves as expected.
 template <std::unsigned_integral Int>
 auto integerRange(Int upperBound) {
-  return std::views::iota(Int{0}, upperBound);
+  return ql::views::iota(Int{0}, upperBound);
 }
 
 // The implementation of `inPlaceTransformView`, see below for details.
 namespace detail {
-template <std::ranges::input_range Range,
-          ad_utility::InvocableWithExactReturnType<
-              void, std::ranges::range_reference_t<Range>>
-              Transformation>
-requires std::ranges::view<Range>
+template <typename Range, ad_utility::InvocableWithExactReturnType<
+                              void, ql::ranges::range_reference_t<Range>>
+                              Transformation>
+requires(ql::ranges::view<Range> && ql::ranges::input_range<Range>)
 auto inPlaceTransformViewImpl(Range range, Transformation transformation) {
   // Take a range and yield pairs of [pointerToElementOfRange,
   // boolThatIsInitiallyFalse]. The bool is yielded as a reference and if its
@@ -251,7 +270,7 @@ auto inPlaceTransformViewImpl(Range range, Transformation transformation) {
 
   // Lift the transformation to work on the result of `makePtrAndBool` and to
   // only apply the transformation once for each element.
-  // Note: This works because `std::views::transform` calls the transformation
+  // Note: This works because `ql::views::transform` calls the transformation
   // each time an iterator is dereferenced, so the following lambda is called
   // multiple times for the same element if the same iterator is dereferenced
   // multiple times and we therefore have to remember whether the transformation
@@ -268,31 +287,35 @@ auto inPlaceTransformViewImpl(Range range, Transformation transformation) {
   };
 
   // Combine everything to the actual result range.
-  return std::views::transform(
+  return ql::views::transform(
       ad_utility::OwningView{makeElementPtrAndBool(std::move(range))},
       actualTransformation);
 }
 }  // namespace detail
 
-// Similar to `std::views::transform` but for transformation functions that
+// Similar to `ql::views::transform` but for transformation functions that
 // transform a value in place. The result is always only an input range,
 // independent of the actual range category of the input.
-template <std::ranges::input_range Range,
-          ad_utility::InvocableWithExactReturnType<
-              void, std::ranges::range_reference_t<Range>>
-              Transformation>
-auto inPlaceTransformView(Range&& range, Transformation transformation) {
-  return detail::inPlaceTransformViewImpl(std::views::all(AD_FWD(range)),
+CPP_template(typename Range, typename Transformation)(
+    requires ql::ranges::input_range<Range> CPP_and
+        ad_utility::InvocableWithExactReturnType<
+            Transformation, void,
+            ql::ranges::range_reference_t<
+                Range>>) auto inPlaceTransformView(Range&& range,
+                                                   Transformation
+                                                       transformation) {
+  return detail::inPlaceTransformViewImpl(ql::views::all(AD_FWD(range)),
                                           std::move(transformation));
 }
 
 /// Create a generator the consumes the input generator until it finds the given
 /// separator and the yields spans of the chunks of data received inbetween.
-template <std::ranges::input_range Range, typename ElementType>
-inline cppcoro::generator<std::span<ElementType>> reChunkAtSeparator(
-    Range generator, ElementType separator) {
+CPP_template(typename Range, typename ElementType)(
+    requires ql::ranges::input_range<Range>) inline cppcoro::
+    generator<std::span<ElementType>> reChunkAtSeparator(
+        Range generator, ElementType separator) {
   std::vector<ElementType> buffer;
-  for (std::ranges::input_range auto chunk : generator) {
+  for (QL_OPT_CONCEPT(ql::ranges::input_range) auto const& chunk : generator) {
     for (ElementType c : chunk) {
       if (c == separator) {
         co_yield std::span{buffer.data(), buffer.size()};
@@ -310,7 +333,14 @@ inline cppcoro::generator<std::span<ElementType>> reChunkAtSeparator(
 }  // namespace ad_utility
 
 // Enabling of "borrowed" ranges for `OwningView`.
+#ifdef QLEVER_CPP_17
+template <typename T>
+inline constexpr bool ::ranges::enable_borrowed_range<
+    ad_utility::OwningView<T>> = enable_borrowed_range<T>;
+
+#else
 template <typename T>
 inline constexpr bool
     std::ranges::enable_borrowed_range<ad_utility::OwningView<T>> =
         std::ranges::enable_borrowed_range<T>;
+#endif

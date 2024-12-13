@@ -4,9 +4,9 @@
 
 #include <gtest/gtest.h>
 
-#include <algorithm>
 #include <functional>
 
+#include "backports/algorithm.h"
 #include "util/ComparisonWithNan.h"
 
 namespace {
@@ -25,7 +25,7 @@ auto gt = ad_utility::makeComparatorForNans(std::greater{});
 TEST(ComparisonWithNan, Sorting) {
   std::vector<double> input{NaN, 3.0, -3.0, NaN, negInf, NaN, inf};
   std::vector<double> expected{negInf, -3.0, 3.0, inf, NaN, NaN, NaN};
-  std::ranges::sort(input, lt);
+  ql::ranges::sort(input, lt);
   ASSERT_EQ(input.size(), expected.size());
   for (size_t i = 0; i < input.size(); ++i) {
     auto a = input[i];

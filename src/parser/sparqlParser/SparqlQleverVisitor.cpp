@@ -25,10 +25,14 @@
 #include "engine/sparqlExpressions/SampleExpression.h"
 #include "engine/sparqlExpressions/StdevExpression.h"
 #include "engine/sparqlExpressions/UuidExpressions.h"
+#include "global/Constants.h"
 #include "global/RuntimeParameters.h"
 #include "parser/GraphPatternOperation.h"
+#include "parser/MagicServiceIriConstants.h"
+#include "parser/MagicServiceQuery.h"
 #include "parser/RdfParser.h"
 #include "parser/SparqlParser.h"
+#include "parser/SpatialQuery.h"
 #include "parser/TokenizerCtre.h"
 #include "parser/data/Variable.h"
 #include "util/StringUtils.h"
@@ -557,8 +561,8 @@ ParsedQuery Visitor::visit(Parser::DeleteWhereContext* ctx) {
 ParsedQuery Visitor::visit(Parser::ModifyContext* ctx) {
   auto isVisibleIfVariable = [this](const TripleComponent& component) {
     if (component.isVariable()) {
-      return std::ranges::find(parsedQuery_.getVisibleVariables(),
-                               component.getVariable()) !=
+      return ql::ranges::find(parsedQuery_.getVisibleVariables(),
+                              component.getVariable()) !=
              parsedQuery_.getVisibleVariables().end();
     } else {
       return true;
@@ -696,8 +700,8 @@ vector<SparqlTripleSimpleWithGraph> Visitor::visit(Parser::QuadsContext* ctx) {
       ctx->triplesTemplate(), [this](Parser::TriplesTemplateContext* ctx) {
         return transformTriplesTemplate(ctx, std::monostate{});
       });
-  std::ranges::move(visitVector(ctx->quadsNotTriples()),
-                    std::back_inserter(triplesWithGraph));
+  ql::ranges::move(visitVector(ctx->quadsNotTriples()),
+                   std::back_inserter(triplesWithGraph));
   return ad_utility::flatten(std::move(triplesWithGraph));
 }
 
@@ -887,6 +891,42 @@ GraphPatternOperation Visitor::visitPathQuery(
   return pathQuery;
 }
 
+GraphPatternOperation Visitor::visitSpatialQuery(
+    Parser::ServiceGraphPatternContext* ctx) {
+  auto parseSpatialQuery = [ctx](parsedQuery::SpatialQuery& spatialQuery,
+                                 const parsedQuery::GraphPatternOperation& op) {
+    if (std::holds_alternative<parsedQuery::BasicGraphPattern>(op)) {
+      spatialQuery.addBasicPattern(
+          std::get<parsedQuery::BasicGraphPattern>(op));
+    } else if (std::holds_alternative<parsedQuery::GroupGraphPattern>(op)) {
+      spatialQuery.addGraph(op);
+    } else {
+      reportError(
+          ctx,
+          "Unsupported element in spatialQuery."
+          "spatialQuery may only consist of triples for configuration"
+          "And a { group graph pattern } specifying the right join table.");
+    }
+  };
+
+  parsedQuery::GraphPattern graphPattern = visit(ctx->groupGraphPattern());
+  parsedQuery::SpatialQuery spatialQuery;
+  for (const auto& op : graphPattern._graphPatterns) {
+    parseSpatialQuery(spatialQuery, op);
+  }
+
+  try {
+    // We convert the spatial query to a spatial join configuration and discard
+    // its result here to detect errors early and report them to the user with
+    // highlighting. It's only a small struct so not much is wasted.
+    spatialQuery.toSpatialJoinConfiguration();
+  } catch (const std::exception& ex) {
+    reportError(ctx, ex.what());
+  }
+
+  return spatialQuery;
+}
+
 // Parsing for the `serviceGraphPattern` rule.
 GraphPatternOperation Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
   // Get the IRI and if a variable is specified, report that we do not support
@@ -907,9 +947,10 @@ GraphPatternOperation Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
   auto serviceIri =
       TripleComponent::Iri::fromIriref(std::get<Iri>(varOrIri).iri());
 
-  if (serviceIri.toStringRepresentation() ==
-      "<https://qlever.cs.uni-freiburg.de/pathSearch/>") {
+  if (serviceIri.toStringRepresentation() == PATH_SEARCH_IRI) {
     return visitPathQuery(ctx);
+  } else if (serviceIri.toStringRepresentation() == SPATIAL_SEARCH_IRI) {
+    return visitSpatialQuery(ctx);
   }
   // Parse the body of the SERVICE query. Add the visible variables from the
   // SERVICE clause to the visible variables so far, but also remember them
@@ -1010,7 +1051,7 @@ OrderClause Visitor::visit(Parser::OrderClauseContext* ctx) {
     auto isDescending = [](const auto& variant) {
       return std::visit([](const auto& k) { return k.isDescending_; }, variant);
     };
-    if (std::ranges::any_of(orderKeys, isDescending)) {
+    if (ql::ranges::any_of(orderKeys, isDescending)) {
       reportError(ctx,
                   "When using the `INTERNAL SORT BY` modifier, all sorted "
                   "variables have to be ascending");
@@ -1572,7 +1613,7 @@ vector<TripleWithPropertyPath> Visitor::visit(
     for (auto&& [predicate, object] : std::move(predicateObjectPairs)) {
       triples.emplace_back(subject, std::move(predicate), std::move(object));
     }
-    std::ranges::copy(additionalTriples, std::back_inserter(triples));
+    ql::ranges::copy(additionalTriples, std::back_inserter(triples));
     for (const auto& triple : triples) {
       setMatchingWordAndScoreVisibleIfPresent(ctx, triple);
     }
@@ -1611,8 +1652,8 @@ PathObjectPairsAndTriples Visitor::visit(
   vector<PathObjectPairsAndTriples> pairsAndTriples =
       visitVector(ctx->tupleWithoutPath());
   for (auto& [newPairs, newTriples] : pairsAndTriples) {
-    std::ranges::move(newPairs, std::back_inserter(pairs));
-    std::ranges::move(newTriples, std::back_inserter(triples));
+    ql::ranges::move(newPairs, std::back_inserter(pairs));
+    ql::ranges::move(newTriples, std::back_inserter(triples));
   }
   return result;
 }
@@ -1668,16 +1709,16 @@ ObjectsAndPathTriples Visitor::visit(Parser::ObjectListPathContext* ctx) {
   auto objectAndTriplesVec = visitVector(ctx->objectPath());
   // First collect all the objects.
   std::vector<GraphTerm> objects;
-  std::ranges::copy(
-      objectAndTriplesVec | std::views::transform(ad_utility::first),
+  ql::ranges::copy(
+      objectAndTriplesVec | ql::views::transform(ad_utility::first),
       std::back_inserter(objects));
 
   // Collect all the triples. Node: `views::join` flattens the input.
   std::vector<TripleWithPropertyPath> triples;
-  std::ranges::copy(objectAndTriplesVec |
-                        std::views::transform(ad_utility::second) |
-                        std::views::join,
-                    std::back_inserter(triples));
+  ql::ranges::copy(objectAndTriplesVec |
+                       ql::views::transform(ad_utility::second) |
+                       ql::views::join,
+                   std::back_inserter(triples));
   return {std::move(objects), std::move(triples)};
 }
 
@@ -2392,7 +2433,7 @@ ExpressionPtr Visitor::visit(Parser::AggregateContext* ctx) {
   std::string functionName =
       ad_utility::getLowercase(children.at(0)->getText());
 
-  const bool distinct = std::ranges::any_of(children, [](auto* child) {
+  const bool distinct = ql::ranges::any_of(children, [](auto* child) {
     return ad_utility::getLowercase(child->getText()) == "distinct";
   });
   // the only case that there is no child expression is COUNT(*), so we can

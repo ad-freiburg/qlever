@@ -54,10 +54,10 @@ void testSort(IdTable input, const IdTable& expected,
     // Apply the current permutation of the `sortColumns` to `expected` and
     // `input`.
     for (size_t i = 0; i < sortColumns.size(); ++i) {
-      std::ranges::copy(input.getColumn(sortColumns[i]),
-                        permutedInput.getColumn(i).begin());
-      std::ranges::copy(expected.getColumn(sortColumns[i]),
-                        permutedExpected.getColumn(i).begin());
+      ql::ranges::copy(input.getColumn(sortColumns[i]),
+                       permutedInput.getColumn(i).begin());
+      ql::ranges::copy(expected.getColumn(sortColumns[i]),
+                       permutedExpected.getColumn(i).begin());
     }
 
     for (size_t i = 0; i < 5; ++i) {

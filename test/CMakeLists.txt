@@ -63,6 +63,22 @@ function(addLinkAndDiscoverTest basename)
 
 endfunction()
 
+# Add a GTest/GMock test case that is called `basename` and compiled from a file called
+# `basename.cpp`. All tests are linked against `gmock_main` and the threading library.
+# In contrast to `addLinkAndDiscoverTest` this doesn't let ctest run all subtests individually,
+# but all at once to reduce overhead in the CI pipeline.
+function(addLinkAndRunAsSingleTest basename)
+    if (SINGLE_TEST_BINARY)
+        target_sources(QLeverAllUnitTestsMain PUBLIC ${basename}.cpp)
+        qlever_target_link_libraries(QLeverAllUnitTestsMain ${ARGN})
+    else ()
+        addTest(${basename})
+        linkTest(${basename} ${ARGN})
+        add_test(NAME ${basename} COMMAND ${basename})
+    endif ()
+
+endfunction()
+
 # Usage: `addAndLinkTestSerial(basename, [additionalLibraries...]`
 # Similar to `addAndLinkTest` but also requires that the test is run serially
 # (without any of the other test cases running in parallel). This can be
@@ -87,6 +103,7 @@ endfunction()
 add_subdirectory(engine)
 add_subdirectory(parser)
 add_subdirectory(index)
+add_subdirectory(backports)
 
 addLinkAndDiscoverTest(ValueIdComparatorsTest util)
 
@@ -291,7 +308,7 @@ addLinkAndDiscoverTest(AlgorithmTest)
 
 addLinkAndDiscoverTestSerial(CompressedRelationsTest index)
 
-addLinkAndDiscoverTestSerial(PrefilterExpressionIndexTest sparqlExpressions index)
+addLinkAndDiscoverTestSerial(PrefilterExpressionIndexTest engine)
 
 addLinkAndDiscoverTestSerial(GetPrefilterExpressionFromSparqlExpressionTest sparqlExpressions index)
 
@@ -405,7 +422,7 @@ addLinkAndDiscoverTest(CopyableSynchronizationTest)
 
 addLinkAndDiscoverTest(LazyJsonParserTest)
 
-addLinkAndDiscoverTest(CacheableGeneratorTest)
+addLinkAndDiscoverTest(GeneratorsTest)
 
 addLinkAndDiscoverTest(FilterTest engine)
 

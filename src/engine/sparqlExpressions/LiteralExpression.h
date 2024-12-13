@@ -171,11 +171,11 @@ class LiteralExpression : public SparqlExpression {
     if (context->_groupedVariables.contains(variable) && !isInsideAggregate()) {
       const auto& table = context->_inputTable;
       auto constantValue = table.at(context->_beginIndex, column.value());
-      AD_EXPENSIVE_CHECK((std::ranges::all_of(
-          table.begin() + context->_beginIndex,
-          table.begin() + context->_endIndex, [&](const auto& row) {
-            return row[column.value()] == constantValue;
-          })));
+      AD_EXPENSIVE_CHECK((
+          std::all_of(table.begin() + context->_beginIndex,
+                      table.begin() + context->_endIndex, [&](const auto& row) {
+                        return row[column.value()] == constantValue;
+                      })));
       return constantValue;
     } else {
       return variable;
@@ -213,6 +213,7 @@ struct SingleUseExpression : public SparqlExpression {
 
   std::span<SparqlExpression::Ptr> childrenImpl() override { return {}; }
 };
+
 }  // namespace detail
 
 ///  The actual instantiations and aliases of LiteralExpressions.
@@ -224,4 +225,38 @@ using IdExpression = detail::LiteralExpression<ValueId>;
 using VectorIdExpression =
     detail::LiteralExpression<VectorWithMemoryLimit<ValueId>>;
 using SingleUseExpression = detail::SingleUseExpression;
+
+namespace detail {
+
+//______________________________________________________________________________
+using IdOrLocalVocabEntry = prefilterExpressions::IdOrLocalVocabEntry;
+// Given a `SparqlExpression*` pointing to a `LiteralExpression`, this helper
+// function retrieves a corresponding `IdOrLocalVocabEntry` variant
+// (`std::variant<ValueId, LocalVocabEntry>`) for `LiteralExpression`s that
+// contain a suitable type.
+// Given the boolean flag `stringAndIriOnly` is set to `true`, only `Literal`s,
+// `Iri`s and `ValueId`s of type `VocabIndex`/`LocalVocabIndex` are returned. If
+// `stringAndIriOnly` is set to `false` (default), all `ValueId` types retrieved
+// from `LiteralExpression<ValueId>` will be returned.
+inline std::optional<IdOrLocalVocabEntry>
+getIdOrLocalVocabEntryFromLiteralExpression(const SparqlExpression* child,
+                                            bool stringAndIriOnly = false) {
+  using enum Datatype;
+  if (const auto* idExpr = dynamic_cast<const IdExpression*>(child)) {
+    auto idType = idExpr->value().getDatatype();
+    if (stringAndIriOnly && idType != VocabIndex && idType != LocalVocabIndex) {
+      return std::nullopt;
+    }
+    return idExpr->value();
+  } else if (const auto* literalExpr =
+                 dynamic_cast<const StringLiteralExpression*>(child)) {
+    return LocalVocabEntry{literalExpr->value()};
+  } else if (const auto* iriExpr = dynamic_cast<const IriExpression*>(child)) {
+    return LocalVocabEntry{iriExpr->value()};
+  } else {
+    return std::nullopt;
+  }
+}
+}  // namespace detail
+
 }  // namespace sparqlExpression

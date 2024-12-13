@@ -19,7 +19,7 @@ bool getResultForAsk(const std::shared_ptr<const Result>& result) {
   if (result->isFullyMaterialized()) {
     return !result->idTable().empty();
   } else {
-    return std::ranges::any_of(result->idTables(), [](const auto& pair) {
+    return ql::ranges::any_of(result->idTables(), [](const auto& pair) {
       return !pair.idTable_.empty();
     });
   }
@@ -139,7 +139,7 @@ ExportQueryExecutionTrees::getRowIndices(LimitOffsetClause limitOffset,
     // If there is something to be exported, yield it.
     if (numRowsToBeExported > 0) {
       co_yield {std::move(tableWithVocab),
-                std::views::iota(rangeBegin, rangeBegin + numRowsToBeExported)};
+                ql::views::iota(rangeBegin, rangeBegin + numRowsToBeExported)};
     }
 
     // Add to `resultSize` and update the effective offset (which becomes zero
@@ -565,8 +565,8 @@ ExportQueryExecutionTrees::selectQueryResultToStream(
       selectClause.getSelectedVariablesAsStrings();
   // In the CSV format, the variables don't include the question mark.
   if (format == MediaType::csv) {
-    std::ranges::for_each(variables,
-                          [](std::string& var) { var = var.substr(1); });
+    ql::ranges::for_each(variables,
+                         [](std::string& var) { var = var.substr(1); });
   }
   co_yield absl::StrJoin(variables, std::string_view{&separator, 1});
   co_yield '\n';
@@ -688,7 +688,7 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
   std::shared_ptr<const Result> result = qet.getResult(true);
 
   // In the XML format, the variables don't include the question mark.
-  auto varsWithoutQuestionMark = std::views::transform(
+  auto varsWithoutQuestionMark = ql::views::transform(
       variables, [](std::string_view var) { return var.substr(1); });
   for (std::string_view var : varsWithoutQuestionMark) {
     co_yield absl::StrCat("\n  <variable name=\""sv, var, "\"/>"sv);
@@ -740,7 +740,7 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
       qet.selectedVariablesToColumnIndices(selectClause, false);
 
   auto vars = selectClause.getSelectedVariablesAsStrings();
-  std::ranges::for_each(vars, [](std::string& var) { var = var.substr(1); });
+  ql::ranges::for_each(vars, [](std::string& var) { var = var.substr(1); });
   nlohmann::json jsonVars = vars;
   co_yield absl::StrCat(R"({"head":{"vars":)", jsonVars.dump(),
                         R"(},"results":{"bindings":[)");

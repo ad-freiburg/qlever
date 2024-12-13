@@ -12,6 +12,7 @@
 #include <type_traits>
 #include <utility>
 
+#include "backports/algorithm.h"
 #include "util/Exception.h"
 #include "util/TypeTraits.h"
 
@@ -115,7 +116,7 @@ class generator_promise {
 
 struct generator_sentinel {};
 
-template <typename T, typename Details>
+template <typename T, typename Details, bool ConstDummy = false>
 class generator_iterator {
   using promise_type = generator_promise<T, Details>;
   using coroutine_handle = std::coroutine_handle<promise_type>;
@@ -180,7 +181,9 @@ template <typename T, typename Details>
 class [[nodiscard]] generator {
  public:
   using promise_type = detail::generator_promise<T, Details>;
-  using iterator = detail::generator_iterator<T, Details>;
+  using iterator = detail::generator_iterator<T, Details, false>;
+  // TODO<joka921> Check if this fixes anything wrt ::ranges
+  // using const_iterator = detail::generator_iterator<T, Details, true>;
   using value_type = typename iterator::value_type;
 
   generator() noexcept : m_coroutine(nullptr) {}
@@ -213,9 +216,20 @@ class [[nodiscard]] generator {
     return iterator{m_coroutine};
   }
 
+  /*
+  iterator begin() const;
+  detail::generator_sentinel end() const;
+  */
+
   detail::generator_sentinel end() noexcept {
     return detail::generator_sentinel{};
   }
+
+  /*
+  // Not defined and not useful, but required for range-v3
+  const_iterator begin() const;
+  const_iterator end() const;
+  */
 
   void swap(generator& other) noexcept {
     std::swap(m_coroutine, other.m_coroutine);

@@ -35,7 +35,7 @@ inline std::array<ad_utility::RandomSeed, NumSeeds> createArrayOfRandomSeeds(
         ad_utility::RandomSeed::make(std::random_device{}())) {
   RandomSeedGenerator generator{std::move(seed)};
   std::array<ad_utility::RandomSeed, NumSeeds> seeds{};
-  std::ranges::generate(seeds,
-                        [&generator]() { return std::invoke(generator); });
+  ql::ranges::generate(seeds,
+                       [&generator]() { return std::invoke(generator); });
   return seeds;
 }

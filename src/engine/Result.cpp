@@ -8,8 +8,8 @@
 
 #include <absl/cleanup/cleanup.h>
 
-#include "util/CacheableGenerator.h"
 #include "util/Exception.h"
+#include "util/Generators.h"
 #include "util/Log.h"
 #include "util/Timer.h"
 
@@ -92,7 +92,7 @@ Result::Result(Generator idTables, std::vector<ColumnIndex> sortedBy)
 // _____________________________________________________________________________
 // Apply `LimitOffsetClause` to given `IdTable`.
 void resizeIdTable(IdTable& idTable, const LimitOffsetClause& limitOffset) {
-  std::ranges::for_each(
+  ql::ranges::for_each(
       idTable.getColumns(),
       [offset = limitOffset.actualOffset(idTable.numRows()),
        upperBound =
@@ -178,10 +178,10 @@ void Result::assertThatLimitWasRespected(const LimitOffsetClause& limitOffset) {
 // _____________________________________________________________________________
 void Result::checkDefinedness(const VariableToColumnMap& varColMap) {
   auto performCheck = [](const auto& map, IdTable& idTable) {
-    return std::ranges::all_of(map, [&](const auto& varAndCol) {
+    return ql::ranges::all_of(map, [&](const auto& varAndCol) {
       const auto& [columnIndex, mightContainUndef] = varAndCol.second;
       if (mightContainUndef == ColumnIndexAndTypeInfo::AlwaysDefined) {
-        return std::ranges::all_of(idTable.getColumn(columnIndex), [](Id id) {
+        return ql::ranges::all_of(idTable.getColumn(columnIndex), [](Id id) {
           return id.getDatatype() != Datatype::Undefined;
         });
       }
@@ -208,7 +208,8 @@ void Result::checkDefinedness(const VariableToColumnMap& varColMap) {
 
 // _____________________________________________________________________________
 void Result::runOnNewChunkComputed(
-    std::function<void(const IdTable&, std::chrono::microseconds)> onNewChunk,
+    std::function<void(const IdTableVocabPair&, std::chrono::microseconds)>
+        onNewChunk,
     std::function<void(bool)> onGeneratorFinished) {
   AD_CONTRACT_CHECK(!isFullyMaterialized());
   auto generator = [](Generator original, auto onNewChunk,
@@ -220,7 +221,7 @@ void Result::runOnNewChunkComputed(
     try {
       ad_utility::timer::Timer timer{ad_utility::timer::Timer::Started};
       for (IdTableVocabPair& pair : original) {
-        onNewChunk(pair.idTable_, timer.value());
+        onNewChunk(pair, timer.value());
         co_yield pair;
         timer.start();
       }
@@ -238,12 +239,12 @@ void Result::runOnNewChunkComputed(
 void Result::assertSortOrderIsRespected(
     const IdTable& idTable, const std::vector<ColumnIndex>& sortedBy) {
   AD_CONTRACT_CHECK(
-      std::ranges::all_of(sortedBy, [&idTable](ColumnIndex colIndex) {
+      ql::ranges::all_of(sortedBy, [&idTable](ColumnIndex colIndex) {
         return colIndex < idTable.numColumns();
       }));
 
   AD_EXPENSIVE_CHECK(
-      std::ranges::is_sorted(idTable, compareRowsBySortColumns(sortedBy)));
+      ql::ranges::is_sorted(idTable, compareRowsBySortColumns(sortedBy)));
 }
 
 // _____________________________________________________________________________

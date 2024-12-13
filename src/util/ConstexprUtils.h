@@ -7,6 +7,7 @@
 #include <concepts>
 #include <ranges>
 
+#include "backports/algorithm.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
 #include "util/TypeTraits.h"
@@ -169,7 +170,7 @@ template <std::integral Int, size_t NumIntegers>
 constexpr std::array<Int, NumIntegers> integerToArray(Int value,
                                                       Int numValues) {
   std::array<Int, NumIntegers> res;
-  for (auto& el : res | std::views::reverse) {
+  for (auto& el : res | ql::views::reverse) {
     el = value % numValues;
     value /= numValues;
   }

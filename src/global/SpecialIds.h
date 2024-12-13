@@ -32,13 +32,12 @@ inline const ad_utility::HashMap<std::string, Id>& specialIds() {
     // Perform the following checks: All the special IDs are unique, all of them
     // have the `Undefined` datatype, but none of them is equal to the "actual"
     // UNDEF value.
-    auto values = std::views::values(result);
+    auto values = ql::views::values(result);
     auto undefTypeButNotUndefValue = [](Id id) {
       return id != Id::makeUndefined() &&
              id.getDatatype() == Datatype::Undefined;
     };
-    AD_CORRECTNESS_CHECK(
-        std::ranges::all_of(values, undefTypeButNotUndefValue));
+    AD_CORRECTNESS_CHECK(ql::ranges::all_of(values, undefTypeButNotUndefValue));
     ad_utility::HashSet<Id> uniqueIds(values.begin(), values.end());
     AD_CORRECTNESS_CHECK(uniqueIds.size() == result.size());
     return result;

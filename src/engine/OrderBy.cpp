@@ -25,7 +25,7 @@ OrderBy::OrderBy(QueryExecutionContext* qec,
       subtree_{std::move(subtree)},
       sortIndices_{std::move(sortIndices)} {
   AD_CONTRACT_CHECK(!sortIndices_.empty());
-  AD_CONTRACT_CHECK(std::ranges::all_of(
+  AD_CONTRACT_CHECK(ql::ranges::all_of(
       sortIndices_,
       [this](ColumnIndex index) { return index < getResultWidth(); },
       ad_utility::first));

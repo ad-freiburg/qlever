@@ -94,7 +94,7 @@ auto VocabularyMerger::mergeVocabulary(const std::string& basename,
           0.8 * memoryToUse, generators, lessThanForQueue);
   ad_utility::ProgressBar progressBar{metaData_.numWordsTotal(),
                                       "Words merged: "};
-  for (QueueWord& currentWord : std::views::join(mergedWords)) {
+  for (QueueWord& currentWord : ql::views::join(mergedWords)) {
     // Accumulate the globally ordered queue words in a buffer.
     sortedBuffer.push_back(std::move(currentWord));
 
@@ -318,10 +318,10 @@ inline ItemVec vocabMapsToVector(ItemMapArray& map) {
     futures.push_back(
         std::async(std::launch::async, [&singleMap, &els, &offsets, i] {
           using T = ItemVec::value_type;
-          std::ranges::transform(singleMap.map_, els.begin() + offsets[i],
-                                 [](auto& el) -> T {
-                                   return {el.first, std::move(el.second)};
-                                 });
+          ql::ranges::transform(singleMap.map_, els.begin() + offsets[i],
+                                [](auto& el) -> T {
+                                  return {el.first, std::move(el.second)};
+                                });
         }));
     ++i;
   }
@@ -339,13 +339,13 @@ void sortVocabVector(ItemVec* vecPtr, StringSortComparator comp,
   auto& els = *vecPtr;
   if constexpr (USE_PARALLEL_SORT) {
     if (doParallelSort) {
-      ad_utility::parallel_sort(std::ranges::begin(els), std::ranges::end(els),
+      ad_utility::parallel_sort(ql::ranges::begin(els), ql::ranges::end(els),
                                 comp, ad_utility::parallel_tag(10));
     } else {
-      std::ranges::sort(els, comp);
+      ql::ranges::sort(els, comp);
     }
   } else {
-    std::ranges::sort(els, comp);
+    ql::ranges::sort(els, comp);
     (void)doParallelSort;  // avoid compiler warning for unused value.
   }
 }
