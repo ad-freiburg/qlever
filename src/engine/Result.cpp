@@ -161,7 +161,7 @@ void Result::assertThatLimitWasRespected(const LimitOffsetClause& limitOffset) {
     AD_CONTRACT_CHECK(!limit.has_value() || numRows <= limit.value());
   } else {
     auto generator = [](LazyResult original,
-                        LimitOffsetClause limitOffset) -> ActualGenerator {
+                        LimitOffsetClause limitOffset) -> Generator {
       auto limit = limitOffset._limit;
       uint64_t elementCount = 0;
       for (IdTableVocabPair& pair : original) {
