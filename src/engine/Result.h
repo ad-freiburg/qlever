@@ -33,8 +33,11 @@ class Result {
         : idTable_{std::move(idTable)}, localVocab_{std::move(localVocab)} {}
   };
 
-  using ActualGenerator = cppcoro::generator<IdTableVocabPair>;
+  // The current implementation of (most of the) lazy results. Will be replaced
+  // in the future to make QLever compatible with C++17 again.
   using Generator = cppcoro::generator<IdTableVocabPair>;
+  // The lazy result type that is actually stored. It is type-erased and allows
+  // explicit conversion from the `Generator` above.
   using LazyResult =
       ad_utility::TypeErasedInputRangeOptionalMixin<IdTableVocabPair>;
 
@@ -46,7 +49,7 @@ class Result {
         std::make_unique<std::atomic_bool>(false);
     explicit GenContainer(LazyResult generator)
         : generator_{std::move(generator)} {}
-    explicit GenContainer(ActualGenerator generator)
+    explicit GenContainer(Generator generator)
         : generator_{Generator{std::move(generator)}} {}
   };
 
