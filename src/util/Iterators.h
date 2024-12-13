@@ -5,11 +5,15 @@
 #ifndef QLEVER_ITERATORS_H
 #define QLEVER_ITERATORS_H
 
+#include <c++/11/bits/ranges_base.h>
+
+#include <boost/range/any_range.hpp>
 #include <cstdint>
 #include <iterator>
 #include <type_traits>
 
 #include "util/Enums.h"
+#include "util/TypeTraits.h"
 
 namespace ad_utility {
 
@@ -232,6 +236,273 @@ class InputRangeMixin {
   }
   Sentinel end() const { return {}; };
 };
+
+// TODO <joka921> Comment.
+template <typename ValueType>
+class InputRangeOptionalMixin {
+ public:
+  using Storage = std::optional<ValueType>;
+  Storage storage = std::nullopt;
+  bool isDone = false;
+
+ private:
+  virtual Storage get() = 0;
+
+ public:
+  virtual ~InputRangeOptionalMixin() = default;
+
+  void getNext() {
+    storage = get();
+    isDone = !storage.has_value();
+  }
+
+  struct Sentinel {};
+  class Iterator {
+   public:
+    using iterator_category = std::input_iterator_tag;
+    using difference_type = std::int64_t;
+    using value_type = typename InputRangeOptionalMixin::Storage::value_type;
+    using reference_type = std::add_lvalue_reference_t<value_type>;
+    using const_reference_type = std::add_const_t<reference_type>;
+    InputRangeOptionalMixin* mixin_;
+
+   public:
+    explicit Iterator(InputRangeOptionalMixin* mixin) : mixin_{mixin} {}
+    Iterator& operator++() {
+      mixin_->getNext();
+      return *this;
+    }
+
+    // Needed for the `range` concept.
+    void operator++(int) { (void)operator++(); }
+
+    reference_type operator*() { return mixin_->storage.value(); }
+    const_reference_type operator*() const { return mixin_->storage.value(); }
+    decltype(auto) operator->() { return std::addressof(operator*()); }
+    decltype(auto) operator->() const { return std::addressof(operator*()); }
+
+    friend bool operator==(const Iterator& it, Sentinel) {
+      return it.mixin_->isDone;
+    }
+    friend bool operator==(Sentinel s, const Iterator& it) { return it == s; }
+    friend bool operator!=(const Iterator& it, Sentinel s) {
+      return !(it == s);
+    }
+    friend bool operator!=(Sentinel s, const Iterator& it) {
+      return !(it == s);
+    }
+  };
+
+ public:
+  Iterator begin() {
+    getNext();
+    return Iterator{this};
+  }
+  Sentinel end() const { return {}; };
+};
+
+template <typename Range>
+class InputRangeToOptional
+    : public InputRangeOptionalMixin<std::ranges::range_value_t<Range>> {
+  Range range_;
+  using Iterator = std::ranges::iterator_t<Range>;
+  std::optional<Iterator> iterator_ = std::nullopt;
+  bool isDone() const { return iterator_ == std::ranges::end(range_); }
+
+ public:
+  explicit InputRangeToOptional(Range range) : range_{std::move(range)} {}
+  std::optional<std::ranges::range_value_t<Range>> get() override {
+    if (!iterator_.has_value()) {
+      iterator_ = std::ranges::begin(range_);
+      if (isDone()) {
+        return std::nullopt;
+      }
+    } else {
+      if (isDone()) {
+        return std::nullopt;
+      }
+      ++iterator_.value();
+    }
+    if (isDone()) {
+      return std::nullopt;
+    }
+    return std::move(*iterator_.value());
+  }
+};
+
+template <typename ValueType>
+class TypeEraseInputRangeOptionalMixin {
+  std::unique_ptr<InputRangeOptionalMixin<ValueType>> impl_;
+
+ public:
+  template <typename Range>
+  requires std::is_base_of_v<InputRangeOptionalMixin<ValueType>, Range>
+  explicit TypeEraseInputRangeOptionalMixin(Range range)
+      : impl_{std::make_unique<Range>(std::move(range))} {}
+
+  template <typename Range>
+  requires(!std::is_base_of_v<InputRangeOptionalMixin<ValueType>, Range> &&
+           std::ranges::range<Range> &&
+           std::same_as<std::ranges::range_value_t<Range>, ValueType>)
+  explicit TypeEraseInputRangeOptionalMixin(Range range)
+      : impl_{std::make_unique<InputRangeToOptional<Range>>(std::move(range))} {
+  }
+  // TODO<joka921> For performance implications we could implement a function
+  // that perfectly forwards the arguments. This would also work for non-movable
+  // ranges...
+  decltype(auto) begin() { return impl_->begin(); }
+  decltype(auto) end() { return impl_->end(); }
+};
+
+/*
+template <typename ValueType>
+class TypeErasedRange {
+  std::unique_ptr<InputRangeOptionalMixin<ValueType>> impl_;
+}
+
+namespace typeErasedIterators {
+  struct Sentinel {};
+
+  template <typename ValueType, typename ReferenceType,
+            typename ConstReferenceType>
+  class Iterator {
+   public:
+    using iterator_category = std::input_iterator_tag;
+    using difference_type = std::int64_t;
+    using value_type = ValueType;
+    using reference_type = ReferenceType;
+    using const_reference_type = ConstReferenceType;
+
+    // TODO<joka921> Currently we require the underlying iterators to be
+    // copyable...
+    std::any underlyingIterator_;
+    std::any underlyingSentinel_;
+
+    using Increment = std::function<void(Iterator&)>;
+    Increment increment_;
+    using IsDone = std::function<bool(const Iterator&)>;
+    IsDone isDone_;
+    using Get = std::function<reference_type(Iterator&)>;
+    Get get_;
+
+    template <typename It>
+    static Increment makeIncrement() {
+      return [](Iterator& iterator) {
+        auto* it = std::any_cast<It>(&iterator.underlyingIterator_);
+        AD_CORRECTNESS_CHECK(it != nullptr);
+        ++(*it);
+      };
+    }
+
+    template <typename It, typename Sentinel>
+    static IsDone makeIsDone() {
+      return [](Iterator& iterator) {
+        auto* it = std::any_cast<It>(&iterator.underlyingIterator_);
+        auto* sentinel = std::any_cast<Sentinel>(&iterator.underlyingSentinel_);
+        AD_CORRECTNESS_CHECK(it != nullptr && sentinel != nullptr);
+        return (*it == *sentinel);
+      };
+    }
+
+    template <typename It>
+    static Get makeGet() {
+      return [](Iterator& iterator) -> decltype(auto) {
+        auto* it = std::any_cast<It>(&iterator.underlyingIterator_);
+        AD_CORRECTNESS_CHECK(it != nullptr);
+        return *it;
+      };
+    }
+
+   public:
+    template <typename It, typename Sentinel>
+    explicit Iterator(It iterator, Sentinel sentinel)
+        : underlyingIterator_(std::move(iterator)),
+          underlyingSentinel_(std::move(sentinel)),
+          increment_(makeIncrement<It>()),
+          isDone_(makeIsDone<It, Sentinel>()),
+          get_(makeGet<It>) {}
+    Iterator& operator++() {
+      std::invoke(increment_, *this);
+      return *this;
+    }
+
+    // Needed for the `range` concept.
+    void operator++(int) { (void)operator++(); }
+
+    reference_type operator*() { return std::invoke(get_, *this); }
+    // TODO<joka921> Does this adding of constness always work?
+    const_reference_type operator*() const { return std::invoke(get_, *this); }
+    decltype(auto) operator->() { return std::addressof(operator*()); }
+    decltype(auto) operator->() const { return std::addressof(operator*()); }
+
+    friend bool operator==(const Iterator& it, Sentinel) {
+      return it.isDone_(it);
+    }
+    friend bool operator==(Sentinel s, const Iterator& it) { return it == s; }
+    friend bool operator!=(const Iterator& it, Sentinel s) {
+      return !(it == s);
+    }
+    friend bool operator!=(Sentinel s, const Iterator& it) {
+      return !(it == s);
+    }
+  };
+};  // namespace typeErasedIterators
+
+template <typename ValueType,
+          typename ReferenceType = std::add_lvalue_reference_t<ValueType>>
+class TypeErasedInputRange {
+ public:
+  void* range_;
+  using Iterator =
+      typeErasedIterators::Iterator<ValueType, ReferenceType,
+                                    std::add_const_t<ReferenceType>>;
+  using Sentinel = typeErasedIterators::Sentinel;
+  std::function<Iterator()> begin_;
+
+ public:
+  Iterator begin() {
+    getNext();
+    return Iterator{this};
+  }
+  Sentinel end() const { return {}; };
+};
+*/
+
+/*
+template <typename ValueType,
+          typename ReferenceType = std::add_lvalue_reference_t<ValueType>>
+class TypeErasedInputRange {
+  using AnyRange = boost::any_range<ValueType,
+boost::single_pass_traversal_tag, ReferenceType>; struct TypeErasedDeleter {
+  private:
+    std::function<void(void*)> delete_;
+    explicit TypeErasedDeleter(std::function<void(void*)> deleter)
+        : delete_{std::move(deleter)} {}
+
+  public:
+    void operator()(void* ptr) const { delete_(ptr); }
+    template <typename T>
+    static TypeErasedDeleter make() {
+      return TypeErasedDeleter{[](void* ptr) { delete static_cast<T*>(ptr);
+}};
+    }
+  };
+  std::unique_ptr<void, TypeErasedDeleter> underlyingRange_;
+  AnyRange anyRange_;
+
+public:
+  // TODO<joka921> Constrain by concepts.
+  template <typename Range>
+  explicit TypeErasedInputRange(Range r)
+      : underlyingRange_{new Range{std::move(r)},
+                         TypeErasedDeleter::template make<Range>()},
+        anyRange_{*static_cast<Range*>(underlyingRange_.get())} {}
+
+  auto begin() {return anyRange_.begin(); }
+  auto end() { return anyRange_.end(); }
+  // TODO<joka921> If this works, add const overloads.
+};
+*/
 
 }  // namespace ad_utility
 

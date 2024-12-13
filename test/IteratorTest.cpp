@@ -117,11 +117,97 @@ TEST(Iterator, InputRangeMixin) {
   for (auto s : Iota{0, 5}) {
     sum += s;
   }
-  EXPECT_EQ(sum, 13);
+  EXPECT_EQ(sum, 10);
 
   Iota iota;
   auto view = iota | std::views::drop(3) | std::views::take(7);
   sum = 0;
+  auto add = [&sum](auto val) { sum += val; };
+  std::ranges::for_each(view, add);
+
+  // 42 == 3 + 4 + ... + 9
+  EXPECT_EQ(sum, 42);
+}
+
+// _____________________________________________________________________________
+TEST(Iterator, InputRangeOptionalMixin) {
+  using namespace ad_utility;
+  struct Iota : InputRangeOptionalMixin<size_t> {
+    size_t value_ = 0;
+    std::optional<size_t> upper_;
+    explicit Iota(size_t value = 0, std::optional<size_t> upper = {})
+        : value_{value}, upper_{upper} {}
+    std::optional<size_t> get() override {
+      if (value_ == upper_) {
+        return std::nullopt;
+      }
+      return value_++;
+    }
+  };
+  static_assert(std::ranges::input_range<Iota>);
+  static_assert(!std::ranges::forward_range<Iota>);
+  size_t sum = 0;
+  for (auto s : Iota{0, 5}) {
+    sum += s;
+  }
+  EXPECT_EQ(sum, 10);
+
+  Iota iota;
+  auto view = iota | std::views::drop(3) | std::views::take(7);
+  sum = 0;
+  auto add = [&sum](auto val) { sum += val; };
+  std::ranges::for_each(view, add);
+
+  // 42 == 3 + 4 + ... + 9
+  EXPECT_EQ(sum, 42);
+}
+
+// _____________________________________________________________________________
+TEST(Iterator, TypeErasedInputRangeOptionalMixin) {
+  using namespace ad_utility;
+  struct IotaImpl : InputRangeOptionalMixin<size_t> {
+    size_t value_ = 0;
+    std::optional<size_t> upper_;
+    explicit IotaImpl(size_t value = 0, std::optional<size_t> upper = {})
+        : value_{value}, upper_{upper} {}
+    std::optional<size_t> get() override {
+      if (value_ == upper_) {
+        return std::nullopt;
+      }
+      return value_++;
+    }
+  };
+
+  using Iota = TypeEraseInputRangeOptionalMixin<size_t>;
+  static_assert(std::ranges::input_range<Iota>);
+  static_assert(!std::ranges::forward_range<Iota>);
+  {
+    size_t sum = 0;
+    for (auto s : Iota{IotaImpl{0, 5}}) {
+      sum += s;
+    }
+    EXPECT_EQ(sum, 10);
+  }
+  {
+    size_t sum = 0;
+    [[maybe_unused]] InputRangeToOptional blubb{
+        std::views::iota(size_t{0}, size_t{5})};
+    auto ptr = std::make_unique<decltype(blubb)>(std::move(blubb));
+    static_assert(
+        std::is_base_of_v<InputRangeOptionalMixin<size_t>, decltype(blubb)>);
+    static_assert(
+        std::derived_from<decltype(blubb), InputRangeOptionalMixin<size_t>>);
+    std::unique_ptr<InputRangeOptionalMixin<size_t>> ptr2 = std::move(ptr);
+    // Iota iota{std::move(blubb)};
+    for (auto s : Iota{std::views::iota(size_t{0}, size_t{5})}) {
+      sum += s;
+    }
+    EXPECT_EQ(sum, 10);
+  }
+
+  Iota iota{IotaImpl{}};
+  auto view = iota | std::views::drop(3) | std::views::take(7);
+  size_t sum = 0;
   auto add = [&sum](auto val) { sum += val; };
   std::ranges::for_each(view, add);
 
