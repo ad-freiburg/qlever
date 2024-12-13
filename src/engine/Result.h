@@ -33,16 +33,21 @@ class Result {
         : idTable_{std::move(idTable)}, localVocab_{std::move(localVocab)} {}
   };
 
+  using ActualGenerator = cppcoro::generator<IdTableVocabPair>;
   using Generator = cppcoro::generator<IdTableVocabPair>;
+  using LazyResult =
+      ad_utility::TypeEraseInputRangeOptionalMixin<IdTableVocabPair>;
 
  private:
   // Needs to be mutable in order to be consumable from a const result.
   struct GenContainer {
-    mutable Generator generator_;
+    mutable LazyResult generator_;
     mutable std::unique_ptr<std::atomic_bool> consumed_ =
         std::make_unique<std::atomic_bool>(false);
-    explicit GenContainer(Generator generator)
+    explicit GenContainer(LazyResult generator)
         : generator_{std::move(generator)} {}
+    explicit GenContainer(ActualGenerator generator)
+        : generator_{Generator{std::move(generator)}} {}
   };
 
   using LocalVocabPtr = std::shared_ptr<const LocalVocab>;
@@ -155,7 +160,7 @@ class Result {
 
   // Access to the underlying `IdTable`s. Throw an `ad_utility::Exception`
   // if the underlying `data_` member holds the wrong variant.
-  Generator& idTables() const;
+  LazyResult& idTables() const;
 
   // Const access to the columns by which the `idTable()` is sorted.
   const std::vector<ColumnIndex>& sortedBy() const { return sortedBy_; }

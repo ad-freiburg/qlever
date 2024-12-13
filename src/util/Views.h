@@ -71,7 +71,7 @@ struct BufferedAsyncView : InputRangeMixin<BufferedAsyncView<View>> {
 
 template <typename View>
 auto bufferedAsyncView(View view, uint64_t blockSize) {
-  return std::views::join(BufferedAsyncView<View>{view, blockSize});
+  return std::views::join(BufferedAsyncView<View>{std::move(view), blockSize});
 }
 /*
 template <typename View>
@@ -109,7 +109,8 @@ cppcoro::generator<typename View::value_type> bufferedAsyncView(
 
 /// Takes a view and yields the elements of the same view, but skips over
 /// consecutive duplicates.
-template <typename SortedView, typename ValueType = SortedView::value_type>
+template <typename SortedView,
+          typename ValueType = std::ranges::range_value_t<SortedView>>
 cppcoro::generator<ValueType> uniqueView(SortedView view) {
   size_t numInputs = 0;
   size_t numUnique = 0;

@@ -260,4 +260,4 @@ std::shared_ptr<QueryExecutionTree> idTableToExecutionTree(
 // Fully consume a given generator and store it in an `IdTable` and store the
 // local vocabs in a vector.
 std::pair<IdTable, std::vector<LocalVocab>> aggregateTables(
-    Result::Generator generator, size_t numColumns);
+    Result::LazyResult generator, size_t numColumns);

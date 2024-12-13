@@ -307,7 +307,7 @@ class InputRangeToOptional
   Range range_;
   using Iterator = std::ranges::iterator_t<Range>;
   std::optional<Iterator> iterator_ = std::nullopt;
-  bool isDone() const { return iterator_ == std::ranges::end(range_); }
+  bool isDone() { return iterator_ == std::ranges::end(range_); }
 
  public:
   explicit InputRangeToOptional(Range range) : range_{std::move(range)} {}
@@ -352,6 +352,7 @@ class TypeEraseInputRangeOptionalMixin {
   // ranges...
   decltype(auto) begin() { return impl_->begin(); }
   decltype(auto) end() { return impl_->end(); }
+  using iterator = typename InputRangeOptionalMixin<ValueType>::Iterator;
 };
 
 /*

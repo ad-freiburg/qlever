@@ -14,7 +14,7 @@ using V = Variable;
 
 namespace {
 // Convert a generator to a vector for easier comparison in assertions
-std::vector<IdTable> toVector(Result::Generator generator) {
+std::vector<IdTable> toVector(Result::LazyResult generator) {
   std::vector<IdTable> result;
   for (auto& [table, vocab] : generator) {
     // IMPORTANT: The `vocab` will go out of scope here, but the tests don't use

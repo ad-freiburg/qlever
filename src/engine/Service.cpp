@@ -564,8 +564,8 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
   // Creates a `Result::Generator` from partially materialized result data.
   auto partialResultGenerator =
       [](std::vector<Result::IdTableVocabPair> pairs,
-         Result::Generator prevGenerator,
-         Result::Generator::iterator it) -> Result::Generator {
+         Result::LazyResult prevGenerator,
+         std::ranges::iterator_t<Result::LazyResult> it) -> Result::Generator {
     for (auto& pair : pairs) {
       co_yield pair;
     }

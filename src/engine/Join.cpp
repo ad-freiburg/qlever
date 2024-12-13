@@ -50,6 +50,18 @@ LazyInputView convertGenerator(Result::Generator gen,
     co_yield t;
   }
 }
+// TODO<joka921> Do we need this duplicate overload, or can we get away with one
+// of them/templated
+LazyInputView convertGenerator(Result::LazyResult gen,
+                               OptionalPermutation permutation = {}) {
+  for (auto& [table, localVocab] : gen) {
+    applyPermutation(table, permutation);
+    // Make sure to actually move the table into the wrapper so that the tables
+    // live as long as the wrapper.
+    ad_utility::IdTableAndFirstCol t{std::move(table), std::move(localVocab)};
+    co_yield t;
+  }
+}
 
 using MaterializedInputView =
     std::array<ad_utility::IdTableAndFirstCol<IdTableView<0>>, 1>;
