@@ -36,7 +36,7 @@ class Result {
   using ActualGenerator = cppcoro::generator<IdTableVocabPair>;
   using Generator = cppcoro::generator<IdTableVocabPair>;
   using LazyResult =
-      ad_utility::TypeEraseInputRangeOptionalMixin<IdTableVocabPair>;
+      ad_utility::TypeErasedInputRangeOptionalMixin<IdTableVocabPair>;
 
  private:
   // Needs to be mutable in order to be consumable from a const result.

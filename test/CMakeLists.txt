@@ -47,11 +47,8 @@ else ()
     message(STATUS "The tests are split over multiple binaries")
 
 endif ()
-# Usage: `addAndLinkTest(basename, [additionalLibraries...]`
-# Add a GTest/GMock test case that is called `basename` and compiled from a file called
-# `basename.cpp`. All tests are linked against `gmock_main` and the threading library.
-# additional libraries against which the test case has to be linked can be specified as
-# additional arguments after the `basename`
+
+# The implementation of `addLinkAndDiscoverTest` and `addLinkandDiscoverTestNoLibs` below.
 function(addLinkAndDiscoverTestImpl basename)
     if (SINGLE_TEST_BINARY)
         target_sources(QLeverAllUnitTestsMain PUBLIC ${basename}.cpp)
@@ -63,10 +60,19 @@ function(addLinkAndDiscoverTestImpl basename)
 
 endfunction()
 
+# Usage: `addAndLinkTest[NoLibs](basename, [additionalLibraries...]`
+# Add a GTest/GMock test case that is called `basename` and compiled from a file called
+# `basename.cpp`. All tests are linked against `gmock_main` and the threading library.
+# additional libraries against which the test case has to be linked can be specified as
+# additional arguments after the `basename`
+
+# This function links the test against `testUtil` (basically all of QLever).
 function(addLinkAndDiscoverTest basename)
     addLinkAndDiscoverTestImpl(${basename} ${ARGN} testUtil)
 endfunction()
 
+# This function links only against Gtest + the explicitly specified libraries.
+# It can be used for tests of standalone utils that don't require the rest of QLever.
 function(addLinkAndDiscoverTestNoLibs basename)
     addLinkAndDiscoverTestImpl(${basename} ${ARGN})
 endfunction()

@@ -73,7 +73,7 @@ struct BufferedAsyncView : InputRangeMixin<BufferedAsyncView<View>> {
 
 template <typename View>
 auto bufferedAsyncView(View view, uint64_t blockSize) {
-  return std::views::join(BufferedAsyncView<View>{std::move(view), blockSize});
+  return ql::views::join(BufferedAsyncView<View>{std::move(view), blockSize});
 }
 /*
 template <typename View>

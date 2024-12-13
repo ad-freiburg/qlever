@@ -6,10 +6,10 @@
 
 #include <algorithm>
 #include <c++/11/numeric>
-#include <ranges>
 #include <string>
 
 #include "../src/util/Iterators.h"
+#include "backports/algorithm.h"
 
 auto testIterator = [](const auto& input, auto begin, auto end) {
   auto it = begin;
@@ -98,35 +98,57 @@ TEST(Iterator, makeForwardingIterator) {
   ASSERT_TRUE(vector[0].empty());
 }
 
-// _____________________________________________________________________________
-TEST(Iterator, InputRangeMixin) {
-  using namespace ad_utility;
-  struct Iota : InputRangeMixin<Iota> {
-    size_t value_ = 0;
-    std::optional<size_t> upper_;
-    Iota(size_t value = 0, std::optional<size_t> upper = {})
-        : value_{value}, upper_{upper} {}
-    void start() {}
-    bool isFinished() { return value_ == upper_; }
-    size_t get() const { return value_; }
-    void next() { ++value_; }
-  };
-  static_assert(std::ranges::input_range<Iota>);
-  static_assert(!std::ranges::forward_range<Iota>);
+namespace {
+template <typename MakeIotaRange>
+// This function tests a view that behaves like `ql::views::iota`.
+// The argument `makeIotaRange` is given a lower bound (size_t, `0` if not
+// specified) and an upper bound (`optional<size_t>`, unlimited (nullopt) if not
+// specified) and must return a `ql::ranges::input_range` that yields the
+// elements in the range `(lower, upper]`.
+void testIota(MakeIotaRange makeIotaRange) {
   size_t sum = 0;
-  for (auto s : Iota{0, 5}) {
+  // Test manual iteration.
+  for (auto s : makeIotaRange(0, 5)) {
     sum += s;
   }
   EXPECT_EQ(sum, 10);
 
-  Iota iota;
-  auto view = iota | std::views::drop(3) | std::views::take(7);
+  // Check that the range is an input range, but fulfills none of the stricter
+  // categories.
+  auto iota = makeIotaRange();
+  using Iota = decltype(iota);
+  static_assert(std::ranges::input_range<Iota>);
+  static_assert(!std::ranges::forward_range<Iota>);
+
+  // Test the interaction with the `ql::views` and `ql::ranges` machinery.
+  auto view = iota | ql::views::drop(3) | ql::views::take(7);
   sum = 0;
   auto add = [&sum](auto val) { sum += val; };
   std::ranges::for_each(view, add);
 
   // 42 == 3 + 4 + ... + 9
   EXPECT_EQ(sum, 42);
+}
+}  // namespace
+
+// _____________________________________________________________________________
+TEST(Iterator, InputRangeMixin) {
+  using namespace ad_utility;
+  struct Iota : InputRangeMixin<Iota> {
+    size_t value_ = 0;
+    std::optional<size_t> upper_;
+    explicit Iota(size_t value = 0, std::optional<size_t> upper = {})
+        : value_{value}, upper_{upper} {}
+    void start() {}
+    bool isFinished() const { return value_ == upper_; }
+    size_t get() const { return value_; }
+    void next() { ++value_; }
+  };
+
+  auto makeIota = [](size_t value = 0, std::optional<size_t> upper = {}) {
+    return Iota{value, upper};
+  };
+  testIota(makeIota);
 }
 
 // _____________________________________________________________________________
@@ -144,22 +166,10 @@ TEST(Iterator, InputRangeOptionalMixin) {
       return value_++;
     }
   };
-  static_assert(std::ranges::input_range<Iota>);
-  static_assert(!std::ranges::forward_range<Iota>);
-  size_t sum = 0;
-  for (auto s : Iota{0, 5}) {
-    sum += s;
-  }
-  EXPECT_EQ(sum, 10);
-
-  Iota iota;
-  auto view = iota | std::views::drop(3) | std::views::take(7);
-  sum = 0;
-  auto add = [&sum](auto val) { sum += val; };
-  std::ranges::for_each(view, add);
-
-  // 42 == 3 + 4 + ... + 9
-  EXPECT_EQ(sum, 42);
+  auto makeIota = [](size_t value = 0, std::optional<size_t> upper = {}) {
+    return Iota{value, upper};
+  };
+  testIota(makeIota);
 }
 
 // _____________________________________________________________________________
@@ -178,39 +188,9 @@ TEST(Iterator, TypeErasedInputRangeOptionalMixin) {
     }
   };
 
-  using Iota = TypeEraseInputRangeOptionalMixin<size_t>;
-  static_assert(std::ranges::input_range<Iota>);
-  static_assert(!std::ranges::forward_range<Iota>);
-  {
-    size_t sum = 0;
-    for (auto s : Iota{IotaImpl{0, 5}}) {
-      sum += s;
-    }
-    EXPECT_EQ(sum, 10);
-  }
-  {
-    size_t sum = 0;
-    [[maybe_unused]] InputRangeToOptional blubb{
-        std::views::iota(size_t{0}, size_t{5})};
-    auto ptr = std::make_unique<decltype(blubb)>(std::move(blubb));
-    static_assert(
-        std::is_base_of_v<InputRangeOptionalMixin<size_t>, decltype(blubb)>);
-    static_assert(
-        std::derived_from<decltype(blubb), InputRangeOptionalMixin<size_t>>);
-    std::unique_ptr<InputRangeOptionalMixin<size_t>> ptr2 = std::move(ptr);
-    // Iota iota{std::move(blubb)};
-    for (auto s : Iota{std::views::iota(size_t{0}, size_t{5})}) {
-      sum += s;
-    }
-    EXPECT_EQ(sum, 10);
-  }
-
-  Iota iota{IotaImpl{}};
-  auto view = iota | std::views::drop(3) | std::views::take(7);
-  size_t sum = 0;
-  auto add = [&sum](auto val) { sum += val; };
-  std::ranges::for_each(view, add);
-
-  // 42 == 3 + 4 + ... + 9
-  EXPECT_EQ(sum, 42);
+  using Iota = TypeErasedInputRangeOptionalMixin<size_t>;
+  auto makeIota = [](size_t value = 0, std::optional<size_t> upper = {}) {
+    return Iota{IotaImpl{value, upper}};
+  };
+  testIota(makeIota);
 }
