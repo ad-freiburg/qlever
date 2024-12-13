@@ -9,13 +9,14 @@
 #include "parser/sparqlParser/DatasetClause.h"
 
 namespace parsedQuery {
-// A struct for the FROM and FROM NAMED clauses;
+// A struct for the FROM clause (default graphs) and FROM NAMED clauses (named
+// graphs).
 struct DatasetClauses {
-  // FROM clauses.
   ScanSpecificationAsTripleComponent::Graphs defaultGraphs_{};
-  // FROM NAMED clauses.
   ScanSpecificationAsTripleComponent::Graphs namedGraphs_{};
 
+  // Divide the dataset clause from `clauses` into default and named graphs, as
+  // needed for a `DatasetClauses` object.
   static DatasetClauses fromClauses(const std::vector<DatasetClause>& clauses);
 
   bool operator==(const DatasetClauses& other) const = default;

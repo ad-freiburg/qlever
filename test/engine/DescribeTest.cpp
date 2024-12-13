@@ -1,6 +1,6 @@
-//  Copyright 2024, University of Freiburg,
-//                  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2024, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 #include <gmock/gmock.h>
 
@@ -25,11 +25,18 @@ auto numUnique = [](size_t expectedNumUnique) {
 };
 }  // namespace
 
-// _____________________________________________________________________________
+// Test a DESCRIBE query with a fixed IRI and sveral blank nodes that need to
+// be expanded.
 TEST(Describe, recursiveBlankNodes) {
   auto qec = getQec(
-      "<s> <p> <o> . <s> <p> _:g1 . _:g1 <p2> <o2> . _:g1 <p2> _:g1 . _:g1 "
-      "<p2> _:g2 . _:g2 <p> <o4>. <s2> <p> <o> . _:g4 <p> _:g5");
+      " <s> <p>   <o> ."
+      " <s> <p>  _:g1 ."
+      "_:g1 <p2> <o2> ."
+      "_:g1 <p2> _:g1 ."
+      "_:g1 <p2> _:g2 ."
+      "_:g2 <p>  <o4> ."
+      "<s2> <p>   <o> ."
+      "_:g4 <p>  _:g5 .");
   parsedQuery::Describe parsedDescribe;
   parsedDescribe.resources_.push_back(TripleComponent::Iri::fromIriref("<s>"));
   Describe describe{qec,
@@ -37,29 +44,38 @@ TEST(Describe, recursiveBlankNodes) {
                     parsedDescribe};
   auto res = describe.computeResultOnlyForTesting();
   const auto& table = res.idTable();
-  /* The expected result is:
-     <s> <p> <o>
-     <s> <p> _:g1
-     _:g1 <p2> <o2>
-     _:g1 <p2> _:g1
-     _:g1 <p2> _:g2
-     _:g2 <p> <o4>
-  */
-  // As the blank nodes are renamed, we cannot easily assert the exact result,
-  // but we can at least check the statisticts.
+  // The expected result is as follows:
+  //
+  //   <s> <p>   <o>
+  //   <s> <p>  _:g1
+  //  _:g1 <p2> <o2>
+  //  _:g1 <p2> _:g1
+  //  _:g1 <p2> _:g2
+  //  _:g2 <p>  <o4>
+  //
+  // However, we cannot control the names given to the blank nodes, but we can
+  // at least check the statistics.
   EXPECT_EQ(table.size(), 6);
   EXPECT_THAT(table.getColumn(0), numUnique(3));
   EXPECT_THAT(table.getColumn(1), numUnique(2));
   EXPECT_THAT(table.getColumn(2), numUnique(5));
 }
 
-// _____________________________________________________________________________
+// A DESCRIBE query with a fixed IRI and a variable in the DESCIRBE clause, and
+// various blank nodes that need to be expanded.
 TEST(Describe, describeWithVariable) {
   auto qec = getQec(
-      "<s> <p> <o> . <s> <p> _:g1 . _:g1 <p2> <o2> . <s2> <p> <o> . <s2> <p2> "
-      "_:g1 . <s2> <p2> _:g2 . _:g2 <p3> <o3> . <s3> <p2> <o> . <s4> <p2> <o2> "
-      ".");
-  // On the above knowledge graph, evaluate `DESCRIBE <s2> ?x { ?x <p> <o>}`.
+      " <s> <p>   <o> ."
+      " <s> <p>  _:g1 ."
+      "_:g1 <p2> <o2> ."
+      "<s2> <p>   <o> ."
+      "<s2> <p2> _:g1 ."
+      "<s2> <p2> _:g2 ."
+      "_:g2 <p3> <o3> ."
+      "<s3> <p2>  <o> ."
+      "<s4> <p2> <o2> .");
+
+  // On the above knowledge graph, evaluate `DESCRIBE <s4> ?x { ?x <p> <o> }`.
   parsedQuery::Describe parsedDescribe;
   parsedDescribe.resources_.push_back(TripleComponent::Iri::fromIriref("<s4>"));
   parsedDescribe.resources_.push_back(Variable{"?x"});
@@ -72,33 +88,41 @@ TEST(Describe, describeWithVariable) {
                     parsedDescribe};
   auto res = describe.computeResultOnlyForTesting();
   const auto& table = res.idTable();
-  /* The expected result is: (Expand <s> and <s2> because they match the WHERE
-     clause for ?x, and expand <s4> because it was explicitly requested)
-     <s> <p> <o>
-     <s> <p> _:g1
-     _:g1 <p2> <o2>
-     <s2> <p> <o>
-     <s2> <p2> _:g1>  // Note: _:g1 has already been expanded above.
-     <s2> <p2> _:g2>
-     _:g2 <p3> <o3>
-     <s4> <p2> <o2>
-  */
-  // As the blank nodes are renamed, we cannot easily assert the exact result,
-  // but we can at least check the statisticts.
+  // The expected result is as follows (the resources are `<s4>`, which is
+  // explicitly requested, and `<s>` and `<s2>`, which match `?x` in the WHERE
+  // clause):
+  //
+  //   <s> <p>   <o>
+  //   <s> <p>  _:g1
+  //  _:g1 <p2> <o2>
+  //  <s2> <p>   <o>
+  //  <s2> <p2> _:g1    [note that _:g1 has already been expanded above]
+  //  <s2> <p2> _:g2
+  //  _:g2 <p3> <o3>
+  //  <s4> <p2> <o2>
+  //
+  // However, we cannot control the names given to the blank nodes, but we can
+  // at least check the statistics.
   EXPECT_EQ(table.size(), 8);
   EXPECT_THAT(table.getColumn(0), numUnique(5));
   EXPECT_THAT(table.getColumn(1), numUnique(3));
   EXPECT_THAT(table.getColumn(2), numUnique(5));
 }
 
-// TODO<joka921> We need tests with inputs in a different graph, but those are
+// TODO<joka921> Add tests with inputs from a different graph, but those are
 // Currently hard to do with the given `getQec` function.
 
-// _____________________________________________________________________________
+// Test the various membre functions of the `Describe` operation.
 TEST(Describe, simpleMembers) {
   auto qec = getQec(
-      "<s> <p> <o> . <s> <p> _:g1 . _:g1 <p2> <o2> . _:g1 <p2> _:g1 . _:g1 "
-      "<p2> _:g2 . _:g2 <p> <o4>. <s2> <p> <o> . _:g4 <p> _:g5");
+      " <s> <p>   <o> ."
+      " <s> <p>  _:g1 ."
+      "_:g1 <p2> <o2> ."
+      "_:g1 <p2> _:g1 ."
+      "_:g1 <p2> _:g2 ."
+      "_:g2 <p>  <o4> ."
+      "<s2> <p>   <o> ."
+      "_:g4 <p>  _:g5 .");
   parsedQuery::Describe parsedDescribe;
   parsedDescribe.resources_.push_back(TripleComponent::Iri::fromIriref("<s>"));
   Describe describe{qec,
@@ -112,29 +136,29 @@ TEST(Describe, simpleMembers) {
   EXPECT_FLOAT_EQ(describe.getMultiplicity(42), 1.0f);
   EXPECT_FALSE(describe.knownEmptyResult());
 
+  // Test the cache key.
   using namespace ::testing;
   EXPECT_THAT(
       describe.getCacheKey(),
       AllOf(HasSubstr("DESCRIBE"), HasSubstr("<s>"), Not(HasSubstr("<p>")),
             HasSubstr("Neutral Element"), Not(HasSubstr("Filtered"))));
-  {
-    auto parsedDescribe2 = parsedDescribe;
-    parsedDescribe2.datasetClauses_.defaultGraphs_.emplace(
-        {TripleComponent::Iri::fromIriref("<default-graph-1>")});
-    Describe describe2{
-        qec, ad_utility::makeExecutionTree<NeutralElementOperation>(qec),
-        parsedDescribe2};
-    EXPECT_THAT(describe2.getCacheKey(),
-                AllOf(HasSubstr("DESCRIBE"), HasSubstr("<s>"),
-                      Not(HasSubstr("<p>")), HasSubstr("Neutral Element"),
-                      HasSubstr("Filtered by Graphs:<default-graph-1>")));
-  }
+
+  // Test the cache key of the same query, but with a FROM clause.
+  auto parsedDescribe2 = parsedDescribe;
+  parsedDescribe2.datasetClauses_.defaultGraphs_.emplace(
+      {TripleComponent::Iri::fromIriref("<default-graph-1>")});
+  Describe describe2{
+      qec, ad_utility::makeExecutionTree<NeutralElementOperation>(qec),
+      parsedDescribe2};
+  EXPECT_THAT(describe2.getCacheKey(),
+              AllOf(HasSubstr("DESCRIBE"), HasSubstr("<s>"),
+                    Not(HasSubstr("<p>")), HasSubstr("Neutral Element"),
+                    HasSubstr("Filtered by Graphs:<default-graph-1>")));
 
   auto col = makeAlwaysDefinedColumn;
-  using V = Variable;
-  VariableToColumnMap expected{{V{"?subject"}, col(0)},
-                               {V{"?predicate"}, col(1)},
-                               {V{"?object"}, col(2)}};
+  VariableToColumnMap expected{{Variable{"?subject"}, col(0)},
+                               {Variable{"?predicate"}, col(1)},
+                               {Variable{"?object"}, col(2)}};
 
   auto children = describe.getChildren();
   ASSERT_EQ(children.size(), 1);

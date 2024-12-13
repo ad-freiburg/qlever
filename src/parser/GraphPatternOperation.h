@@ -121,8 +121,9 @@ class Subquery {
  public:
   // TODO<joka921> Make this an abstraction `TypeErasingPimpl`.
 
-  // Deliberately not explicit, because semantically those are copy/move
-  // constructors.
+  // NOTE: The constructor is deliberately not `explicit` because we want to
+  // used them like copy/move constructors (semantically, a `Subquery` is a
+  // `ParsedQuery`, just with an own type).
   Subquery(const ParsedQuery&);
   Subquery(ParsedQuery&&) noexcept;
   Subquery();

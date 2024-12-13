@@ -15,6 +15,8 @@ Describe::Describe(QueryExecutionContext* qec,
     : Operation{qec},
       subtree_{std::move(subtree)},
       describe_{std::move(describe)} {
+  // If the DESCRIBE query has no WHERE clause, `subtree_` is the neutral
+  // element, but never `nullptr`.
   AD_CORRECTNESS_CHECK(subtree_ != nullptr);
 }
 
@@ -25,7 +27,8 @@ std::vector<QueryExecutionTree*> Describe::getChildren() {
 
 // _____________________________________________________________________________
 string Describe::getCacheKeyImpl() const {
-  // The cache key must represent the `resources_` as well as the `subtree_`.
+  // The cache key must represent the `resources_` (the variables and IRIs of
+  // the DESCRIBE clause) and the `subtree_` (the WHERE clause).
   std::string result = absl::StrCat("DESCRIBE ", subtree_->getCacheKey(), " ");
   for (const auto& resource : describe_.resources_) {
     if (std::holds_alternative<TripleComponent::Iri>(resource)) {
@@ -40,8 +43,10 @@ string Describe::getCacheKeyImpl() const {
     }
   }
 
-  // Add the named of the default graphs to the cache key, in a deterministic
-  // order.
+  // Add the names of the default graphs (from the FROM clauses) to the cache
+  // key, in a deterministic order.
+  //
+  // TODO: What about the FROM NAMED clauses?
   const auto& defaultGraphs = describe_.datasetClauses_.defaultGraphs_;
   if (defaultGraphs.has_value()) {
     std::vector<std::string> graphIdVec;
@@ -64,23 +69,20 @@ size_t Describe::getResultWidth() const { return 3; }
 // As DESCRIBE is never part of the query planning (it is always the root
 // operation), we can return dummy values for the following functions.
 size_t Describe::getCostEstimate() { return 2 * subtree_->getCostEstimate(); }
-
 uint64_t Describe::getSizeEstimateBeforeLimit() {
   return subtree_->getSizeEstimate() * 2;
 }
-
 float Describe::getMultiplicity([[maybe_unused]] size_t col) { return 1.0f; }
-
 bool Describe::knownEmptyResult() { return false; }
 
 // The result cannot easily be sorted, as it involves recursive expanding of
 // graphs.
 vector<ColumnIndex> Describe::resultSortedOn() const { return {}; }
 
-// The result always consists of three hardcoded variables `?subject`,
-// `?predicate`, `?object`. Note: The variable names must be in sync with the
-// implicit CONSTRUCT query created by the parser (see
-// `SparqlQleverVisitor::visitDescribe`) for details.
+// The result always has three variables `?subject`, `?predicate`, `?object`.
+//
+// NOTE: These variable names are hardcoded in the implicit CONSTRUCT query
+// created in `SparqlQleverVisitor::visitDescribe`.
 VariableToColumnMap Describe::computeVariableToColumnMap() const {
   using V = Variable;
   auto col = makeAlwaysDefinedColumn;
@@ -97,7 +99,7 @@ static IdTable getNewBlankNodes(
     std::span<Id> input) {
   IdTable result{1, allocator};
   result.resize(input.size());
-  decltype(auto) col = result.getColumn(0);
+  decltype(auto) resultColumn = result.getColumn(0);
   size_t i = 0;
   for (Id id : input) {
     if (id.getDatatype() != Datatype::BlankNodeIndex) {
@@ -107,7 +109,7 @@ static IdTable getNewBlankNodes(
     if (!isNew) {
       continue;
     }
-    col[i] = id;
+    resultColumn[i] = id;
     ++i;
   }
   result.resize(i);
@@ -120,19 +122,21 @@ void Describe::recursivelyAddBlankNodes(
     ad_utility::HashSetWithMemoryLimit<Id>& alreadySeen, IdTable blankNodes) {
   AD_CORRECTNESS_CHECK(blankNodes.numColumns() == 1);
 
-  // Stop condition for the recursion, no new start nodes found.
+  // If there are no more `blankNodes` to explore, we are done.
   if (blankNodes.empty()) {
     return;
   }
+
+  // Expand the `blankNodes` by joining them with the full index and add the
+  // resulting triples to the `finalResult`.
+  //
+  // TODO<joka921> Make the result of DESCRIBE lazy, then we can avoid the
+  // additional copy here.
   auto table =
       makeAndExecuteJoinWithFullIndex(std::move(blankNodes), localVocab);
-
-  // TODO<joka921> Make the result of DESCRIBE lazy, then we avoid the
-  // additional Copying here.
   finalResult.insertAtEnd(table);
 
   // Compute the set of newly found blank nodes and recurse.
-  // Note: The stop condition is at the beginning of the recursive call.
   auto newBlankNodes =
       getNewBlankNodes(allocator(), alreadySeen, table.getColumn(2));
   recursivelyAddBlankNodes(finalResult, localVocab, alreadySeen,
@@ -143,6 +147,10 @@ void Describe::recursivelyAddBlankNodes(
 IdTable Describe::makeAndExecuteJoinWithFullIndex(
     IdTable input, LocalVocab& localVocab) const {
   AD_CORRECTNESS_CHECK(input.numColumns() == 1);
+
+  // Create a `Join` operation that joins `input` (with column `?subject`) with
+  // the full index (with columns `?subject`, `?predicate`, `?object`) on the
+  // `?subject` column.
   using V = Variable;
   auto subjectVar = V{"?subject"};
   auto valuesOp = ad_utility::makeExecutionTree<ValuesForTesting>(
@@ -154,35 +162,43 @@ IdTable Describe::makeAndExecuteJoinWithFullIndex(
       describe_.datasetClauses_.defaultGraphs_);
   auto joinColValues = valuesOp->getVariableColumn(subjectVar);
   auto joinColScan = indexScan->getVariableColumn(subjectVar);
-
   auto join = ad_utility::makeExecutionTree<Join>(
       getExecutionContext(), std::move(valuesOp), std::move(indexScan),
       joinColValues, joinColScan);
 
+  // Compute the result of the `join` and select the columns `?subject`,
+  // `?predicate`, `?object`.
+  //
+  // TODO: How can the `result` have more columns than those?
   auto result = join->getResult();
   IdTable resultTable = result->idTable().clone();
-
-  using CI = ColumnIndex;
-  CI s = join->getVariableColumn(V{"?subject"});
-  CI p = join->getVariableColumn(V{"?predicate"});
-  CI o = join->getVariableColumn(V{"?object"});
-
+  ColumnIndex s = join->getVariableColumn(V{"?subject"});
+  ColumnIndex p = join->getVariableColumn(V{"?predicate"});
+  ColumnIndex o = join->getVariableColumn(V{"?object"});
   resultTable.setColumnSubset(std::vector{s, p, o});
+
+  // The `indexScan` might have added some delta triples with local vocab IDs,
+  // so make sure to merge them into the `localVocab`.
   localVocab.mergeWith(std::span{&result->localVocab(), 1});
+
   return resultTable;
 }
 
 // _____________________________________________________________________________
 IdTable Describe::getIdsToDescribe(const Result& result,
                                    LocalVocab& localVocab) const {
+  // First collect the `Id`s in a hash set, in order to remove duplicates.
   ad_utility::HashSetWithMemoryLimit<Id> idsToDescribe{allocator()};
   const auto& vocab = getIndex().getVocab();
   for (const auto& resource : describe_.resources_) {
     if (std::holds_alternative<TripleComponent::Iri>(resource)) {
+      // For an IRI, add the corresponding ID to `idsToDescribe`.
       idsToDescribe.insert(
           TripleComponent{std::get<TripleComponent::Iri>(resource)}.toValueId(
               vocab, localVocab));
     } else {
+      // For a variable, add all IDs that match the variable in the `result` of
+      // the WHERE clause to `idsToDescribe`.
       const auto& var = std::get<Variable>(resource);
       auto column = subtree_->getVariableColumnOrNullopt(var);
       if (!column.has_value()) {
@@ -193,6 +209,8 @@ IdTable Describe::getIdsToDescribe(const Result& result,
       }
     }
   }
+
+  // Copy the `Id`s from the hash set to an `IdTable`.
   IdTable idsAsTable{1, allocator()};
   idsAsTable.resize(idsToDescribe.size());
   std::ranges::copy(idsToDescribe, idsAsTable.getColumn(0).begin());
@@ -202,11 +220,14 @@ IdTable Describe::getIdsToDescribe(const Result& result,
 // _____________________________________________________________________________
 ProtoResult Describe::computeResult([[maybe_unused]] bool requestLaziness) {
   LocalVocab localVocab;
-  // TODO<joka921> Do we benefit from laziness here? Probably not, because we
-  // have to deduplicate the whole input anyway.
-  auto subresult = subtree_->getResult();
-  auto idsAsTable = getIdsToDescribe(*subresult, localVocab);
+  // Compute the results of the WHERE clause and extract the `Id`s to describe.
+  //
+  // TODO<joka921> Would we benefit from computing `resultOfWhereClause` lazily?
+  // Probably not, because we have to deduplicate the whole input anyway.
+  auto resultOfWhereClause = subtree_->getResult();
+  auto idsAsTable = getIdsToDescribe(*resultOfWhereClause, localVocab);
 
+  // Get all triples with the `Id`s as subject.
   auto resultTable =
       makeAndExecuteJoinWithFullIndex(std::move(idsAsTable), localVocab);
 

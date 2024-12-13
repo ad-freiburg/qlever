@@ -300,15 +300,14 @@ ParsedQuery Visitor::visit(Parser::DescribeQueryContext* ctx) {
     }
   }
 
-  // Parse the FROM (NAMED) clauses and store them in the `describeClause`.
+  // Parse the FROM and FROM NAMED clauses and store them in the
+  // `describeClause`.
   auto datasetClauses = parsedQuery::DatasetClauses::fromClauses(
       visitVector(ctx->datasetClause()));
   describeClause.datasetClauses_ = datasetClauses;
 
-  // Parse the WHERE clause.
+  // Parse the WHERE clause and handle the special case of `DESCRIBE *`.
   visitWhereClause(ctx->whereClause(), parsedQuery_);
-
-  // HANDLE `DESCRIBE *`
   if (describedResources.empty()) {
     const auto& visibleVariables =
         parsedQuery_.selectClause().getVisibleVariables();
@@ -316,32 +315,26 @@ ParsedQuery Visitor::visit(Parser::DescribeQueryContext* ctx) {
                       std::back_inserter(describeClause.resources_));
     describedVariables = visibleVariables;
   }
-
   auto& selectClause = parsedQuery_.selectClause();
   selectClause.setSelected(std::move(describedVariables));
-
-  // So far we have actually computed the subquery/WHERE clause of the DESCRIBE.
-  // We now store it inside the `describeClause` and setup the outer query,
-  // which is implemented as a CONSTRUCT query with a special DESCRIBE
-  // operation.
   describeClause.whereClause_ = std::move(parsedQuery_);
 
+  // Set up the actual DESCRIBE query, which is implemented as a CONSTRUCT query
+  // of the form `CONSTRUCT { ?subject ?predicate ?object} { ... }`. Note that
+  // the solution modifiers (in particular ORDER BY) are part of this query, not
+  // of the WHERE clause.
   parsedQuery_ = ParsedQuery{};
-  // The solution modifiers (in particular ORDER BY) have to be part of the
-  // outer query.
   parsedQuery_.addSolutionModifiers(visit(ctx->solutionModifier()));
-
   parsedQuery_._rootGraphPattern._graphPatterns.emplace_back(
       std::move(describeClause));
   parsedQuery_.datasetClauses_ = datasetClauses;
   auto constructClause = ParsedQuery::ConstructClause{};
   using G = GraphTerm;
   using V = Variable;
-  // The outer query has the form `CONSTRUCT { ?subject ?predicate ?object}
-  // {...}`
   constructClause.triples_.push_back(
       std::array{G(V("?subject")), G(V("?predicate")), G(V("?object"))});
   parsedQuery_._clause = std::move(constructClause);
+
   return parsedQuery_;
 }
 
