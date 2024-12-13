@@ -299,8 +299,9 @@ void IndexImpl::processWordsForInvertedLists(const string& contextFile,
   textMeta_.setNofTextRecords(nofContexts);
   textMeta_.setNofWordPostings(nofWordPostings);
   textMeta_.setNofEntityPostings(nofEntityPostings);
-  nofNonLiterals_ = nofContexts - nofLiterals;
-  configurationJson_["num-non-literals"] = nofNonLiterals_;
+  nofNonLiteralsInTextIndex_ = nofContexts - nofLiterals;
+  configurationJson_["num-non-literals-text-index"] =
+      nofNonLiteralsInTextIndex_;
   writeConfiguration();
 
   writer.finish();

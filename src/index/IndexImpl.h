@@ -161,7 +161,7 @@ class IndexImpl {
   // Keeps track of the number of nonLiteral contexts in the index this is used
   // in the test retrieval of the texts. This only works reliably if the
   // wordsFile.tsv starts with contextId 1 and is continuous.
-  size_t nofNonLiterals_;
+  size_t nofNonLiteralsInTextIndex_;
 
   // Global static pointers to the currently active index and comparator.
   // Those are used to compare LocalVocab entries with each other as well as
@@ -429,7 +429,9 @@ class IndexImpl {
   size_t getNofEntityPostings() const {
     return textMeta_.getNofEntityPostings();
   }
-  size_t getNofNonLiteralsInTextIndex() const { return nofNonLiterals_; }
+  size_t getNofNonLiteralsInTextIndex() const {
+    return nofNonLiteralsInTextIndex_;
+  }
 
   bool hasAllPermutations() const { return SPO().isLoaded(); }
 
