@@ -61,7 +61,7 @@ TEST(Describe, recursiveBlankNodes) {
   EXPECT_THAT(table.getColumn(2), numUnique(5));
 }
 
-// A DESCRIBE query with a fixed IRI and a variable in the DESCIRBE clause, and
+// A DESCRIBE query with a fixed IRI and a variable in the DESCRIBE clause, and
 // various blank nodes that need to be expanded.
 TEST(Describe, describeWithVariable) {
   auto qec = getQec(
