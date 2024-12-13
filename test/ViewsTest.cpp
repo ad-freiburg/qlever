@@ -19,7 +19,7 @@ TEST(Views, BufferedAsyncView) {
     for (const auto& element : view) {
       result.push_back(element);
     }
-    ASSERT_EQ(result, inputVector);
+    EXPECT_THAT(result, ::testing::ContainerEq(inputVector));
   };
 
   uint64_t numElements = 1000;

@@ -4,11 +4,14 @@
 
 #pragma once
 
+#include <c++/11/bits/ranges_base.h>
+
 #include <future>
 #include <ranges>
 #include <span>
 
 #include "util/Generator.h"
+#include "util/Iterators.h"
 #include "util/Log.h"
 
 namespace ad_utility {
@@ -17,6 +20,60 @@ namespace ad_utility {
 /// effect). The iteration over the input view is done on a separate thread with
 /// a buffer size of `blockSize`. This might speed up the computation when the
 /// values of the input view are expensive to compute.
+
+template <typename View>
+struct BufferedAsyncView : InputRangeMixin<BufferedAsyncView<View>> {
+  View view_;
+  uint64_t blockSize_;
+  bool finished_ = false;
+
+  explicit BufferedAsyncView(View view, uint64_t blockSize)
+      : view_{std::move(view)}, blockSize_{blockSize} {
+    AD_CONTRACT_CHECK(blockSize_ > 0);
+  }
+
+  std::ranges::iterator_t<View> it_;
+  std::ranges::sentinel_t<View> end_ = std::ranges::end(view_);
+  using value_type = std::ranges::range_value_t<View>;
+  std::future<std::vector<value_type>> future_;
+
+  std::vector<value_type> buffer_;
+  std::vector<value_type> getNextBlock() {
+    std::vector<value_type> buffer;
+    buffer.reserve(blockSize_);
+    size_t i = 0;
+    while (i < blockSize_ && it_ != end_) {
+      buffer.push_back(*it_);
+      ++it_;
+      ++i;
+    }
+    return buffer;
+  };
+
+  void start() {
+    it_ = view_.begin();
+    buffer_ = getNextBlock();
+    finished_ = buffer_.empty();
+    future_ =
+        std::async(std::launch::async, [this]() { return getNextBlock(); });
+  }
+  bool isFinished() { return finished_; }
+  auto& get() { return buffer_; }
+  const auto& get() const { return buffer_; }
+
+  void next() {
+    buffer_ = future_.get();
+    finished_ = buffer_.empty();
+    future_ =
+        std::async(std::launch::async, [this]() { return getNextBlock(); });
+  }
+};
+
+template <typename View>
+auto bufferedAsyncView(View view, uint64_t blockSize) {
+  return std::views::join(BufferedAsyncView<View>{view, blockSize});
+}
+/*
 template <typename View>
 cppcoro::generator<typename View::value_type> bufferedAsyncView(
     View view, uint64_t blockSize) {
@@ -48,6 +105,7 @@ cppcoro::generator<typename View::value_type> bufferedAsyncView(
     future = std::async(std::launch::async, getNextBlock);
   }
 }
+*/
 
 /// Takes a view and yields the elements of the same view, but skips over
 /// consecutive duplicates.
@@ -198,7 +256,7 @@ namespace detail {
 template <typename Range>
 concept can_ref_view =
     requires(Range&& range) { std::ranges::ref_view{AD_FWD(range)}; };
-}
+}  // namespace detail
 
 // A simple drop-in replacement for `std::views::all` which is required because
 // GCC 11 doesn't support `std::owning_view` (see above). As soon as we don't

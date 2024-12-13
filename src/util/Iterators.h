@@ -182,6 +182,57 @@ auto makeForwardingIterator(It iterator) {
   }
 }
 
+// TODO <joka921> Comment.
+template <typename Derived>
+class InputRangeMixin {
+ public:
+  Derived& derived() { return static_cast<Derived&>(*this); }
+  const Derived& derived() const { return static_cast<const Derived&>(*this); }
+
+  struct Sentinel {};
+  class Iterator {
+   public:
+    using iterator_category = std::input_iterator_tag;
+    using difference_type = std::int64_t;
+    using reference_type = decltype(std::declval<Derived&>().get());
+    using value_type = std::remove_reference_t<reference_type>;
+    InputRangeMixin* mixin_;
+
+   public:
+    explicit Iterator(InputRangeMixin* mixin) : mixin_{mixin} {}
+    Iterator& operator++() {
+      mixin_->derived().next();
+      return *this;
+    }
+
+    // Needed for the `range` concept.
+    void operator++(int) { (void)operator++(); }
+
+    decltype(auto) operator*() { return mixin_->derived().get(); }
+    decltype(auto) operator*() const { return mixin_->derived().get(); }
+    decltype(auto) operator->() { return std::addressof(operator*()); }
+    decltype(auto) operator->() const { return std::addressof(operator*()); }
+
+    friend bool operator==(const Iterator& it, Sentinel) {
+      return it.mixin_->derived().isFinished();
+    }
+    friend bool operator==(Sentinel s, const Iterator& it) { return it == s; }
+    friend bool operator!=(const Iterator& it, Sentinel s) {
+      return !(it == s);
+    }
+    friend bool operator!=(Sentinel s, const Iterator& it) {
+      return !(it == s);
+    }
+  };
+
+ public:
+  Iterator begin() {
+    derived().start();
+    return Iterator{this};
+  }
+  Sentinel end() const { return {}; };
+};
+
 }  // namespace ad_utility
 
 #endif  // QLEVER_ITERATORS_H

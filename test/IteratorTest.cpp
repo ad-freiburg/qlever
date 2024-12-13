@@ -5,6 +5,8 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <c++/11/numeric>
+#include <ranges>
 #include <string>
 
 #include "../src/util/Iterators.h"
@@ -94,4 +96,35 @@ TEST(Iterator, makeForwardingIterator) {
   // The first element in the vector was now moved from.
   ASSERT_EQ(1u, vector.size());
   ASSERT_TRUE(vector[0].empty());
+}
+
+// _____________________________________________________________________________
+TEST(Iterator, InputRangeMixin) {
+  using namespace ad_utility;
+  struct Iota : InputRangeMixin<Iota> {
+    size_t value_ = 0;
+    std::optional<size_t> upper_;
+    Iota(size_t value = 0, std::optional<size_t> upper = {})
+        : value_{value}, upper_{upper} {}
+    void start() {}
+    bool isFinished() { return value_ == upper_; }
+    size_t get() const { return value_; }
+    void next() { ++value_; }
+  };
+  static_assert(std::ranges::input_range<Iota>);
+  static_assert(!std::ranges::forward_range<Iota>);
+  size_t sum = 0;
+  for (auto s : Iota{0, 5}) {
+    sum += s;
+  }
+  EXPECT_EQ(sum, 13);
+
+  Iota iota;
+  auto view = iota | std::views::drop(3) | std::views::take(7);
+  sum = 0;
+  auto add = [&sum](auto val) { sum += val; };
+  std::ranges::for_each(view, add);
+
+  // 42 == 3 + 4 + ... + 9
+  EXPECT_EQ(sum, 42);
 }
