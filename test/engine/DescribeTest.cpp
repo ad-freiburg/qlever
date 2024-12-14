@@ -25,8 +25,8 @@ auto numUnique = [](size_t expectedNumUnique) {
 };
 }  // namespace
 
-// Test a DESCRIBE query with a fixed IRI and sveral blank nodes that need to
-// be expanded.
+// Test DESCRIBE query with a fixed IRI and sveral blank nodes that need to be
+// expanded.
 TEST(Describe, recursiveBlankNodes) {
   auto qec = getQec(
       " <s> <p>   <o> ."
@@ -61,8 +61,8 @@ TEST(Describe, recursiveBlankNodes) {
   EXPECT_THAT(table.getColumn(2), numUnique(5));
 }
 
-// A DESCRIBE query with a fixed IRI and a variable in the DESCRIBE clause, and
-// various blank nodes that need to be expanded.
+// Test DESCRIBE query with a fixed IRI and a variable in the DESCRIBE clause,
+// and various blank nodes that need to be expanded.
 TEST(Describe, describeWithVariable) {
   auto qec = getQec(
       " <s> <p>   <o> ."
@@ -109,10 +109,23 @@ TEST(Describe, describeWithVariable) {
   EXPECT_THAT(table.getColumn(2), numUnique(5));
 }
 
+// Test DESCRIBE query with a variable but not WHERE clause (which should
+// return an empty result).
+TEST(Describe, describeWithVariableButNoWhereClause) {
+  auto qec = getQec("<s> <p> <o>");
+  parsedQuery::Describe parsedDescribe;
+  parsedDescribe.resources_.push_back(Variable{"?x"});
+  auto noWhere = ad_utility::makeExecutionTree<NeutralElementOperation>(qec);
+  Describe describe{qec, noWhere, parsedDescribe};
+  auto result = describe.computeResultOnlyForTesting();
+  EXPECT_EQ(result.idTable().size(), 0);
+  EXPECT_EQ(result.idTable().numColumns(), 3);
+}
+
 // TODO<joka921> Add tests with inputs from a different graph, but those are
 // Currently hard to do with the given `getQec` function.
 
-// Test the various membre functions of the `Describe` operation.
+// Test the various member functions of the `Describe` operation.
 TEST(Describe, simpleMembers) {
   auto qec = getQec(
       " <s> <p>   <o> ."
