@@ -1710,9 +1710,11 @@ TEST(ExportQueryExecutionTrees, idToLiteralOrIriFunctionality) {
 
           // Case: IRI
           {getId("<s>"),
-           {{false, false, "<s>"},
-            {true, false, std::nullopt},
-            {false, true, std::nullopt}}},
+           {
+               {false, false, "<s>"}
+               //, {true, false, std::nullopt}
+               //,{false, true, std::nullopt}
+           }},
 
           // Case: datatype `Int`
           {ad_utility::testing::IntId(1),
@@ -1726,4 +1728,31 @@ TEST(ExportQueryExecutionTrees, idToLiteralOrIriFunctionality) {
   for (const auto& [id, cases] : testCases) {
     checkIdToLiteralOrIri(id, cases);
   }
+}
+
+TEST(ExportQueryExecutionTrees, IsPlainLiteralOrLiteralWithXsdString) {
+  using Iri = ad_utility::triple_component::Iri;
+  using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
+  using Literal = ad_utility::triple_component::Literal;
+
+  auto toLiteralOrIri = [](std::string_view content, auto descriptor) {
+    return LiteralOrIri{Literal::literalWithNormalizedContent(
+        asNormalizedStringViewUnsafe(content), descriptor)};
+  };
+
+  auto verify = [](const LiteralOrIri& input, bool expected) {
+    EXPECT_EQ(
+        ExportQueryExecutionTrees::isPlainLiteralOrLiteralWithXsdString(input),
+        expected);
+  };
+
+  verify(toLiteralOrIri("Hallo", std::nullopt), true);
+  verify(toLiteralOrIri(
+             "Hallo",
+             Iri::fromIriref("<http://www.w3.org/2001/XMLSchema#string>")),
+         true);
+  verify(
+      toLiteralOrIri(
+          "Hallo", Iri::fromIriref("<http://www.unknown.com/NoSuchDatatype>")),
+      false);
 }

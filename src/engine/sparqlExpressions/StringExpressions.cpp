@@ -204,13 +204,6 @@ class SubstrImpl {
                               NumericValue length) const {
     if (!s.has_value() || std::holds_alternative<NotNumeric>(start) ||
         std::holds_alternative<NotNumeric>(length)) {
-      if(!s.has_value()){
-        AD_THROW("Substr called on an object without a value.");
-      }
-      else if(std::holds_alternative<NotNumeric>(start) ||
-        std::holds_alternative<NotNumeric>(length)){
-          AD_THROW("Invalid arguments: 'start' and 'length' must be numeric values.");
-        }
       return Id::makeUndefined();
     }
 

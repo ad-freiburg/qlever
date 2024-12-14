@@ -387,7 +387,6 @@ std::optional<LiteralOrIri> ExportQueryExecutionTrees::handleIriOrLiteral(
     if (isPlainLiteralOrLiteralWithXsdString(word)) {
       return word;
     }
-    AD_THROW("The literal must either have no datatype or datatype xsd:string.");
     return std::nullopt;
   }
 
@@ -486,7 +485,7 @@ std::optional<LiteralOrIri> ExportQueryExecutionTrees::idToLiteralOrIri(
           getLiteralOrIriFromVocabIndex(index, id, localVocab),
           onlyReturnLiterals, onlyReturnLiteralsWithXsdString);
     case TextRecordIndex:
-       AD_THROW("TextRecordIndex case is not implemented.");
+      AD_THROW("TextRecordIndex case is not implemented.");
       return std::nullopt;
     default:
       return idToLiteralOrIriForEncodedValue(id,
