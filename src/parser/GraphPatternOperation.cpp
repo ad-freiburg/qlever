@@ -53,14 +53,15 @@ auto m(auto&&... args) {
 // Special member functions for the `Subquery` class
 Subquery::Subquery() : _subquery{m()} {}
 Subquery::Subquery(const ParsedQuery& pq) : _subquery{m(pq)} {}
-Subquery::Subquery(ParsedQuery&& pq) : _subquery{m(std::move(pq))} {}
-Subquery::Subquery(Subquery&& pq) : _subquery{m(std::move(pq.get()))} {}
+Subquery::Subquery(ParsedQuery&& pq) noexcept : _subquery{m(std::move(pq))} {}
+Subquery::Subquery(Subquery&& pq) noexcept
+    : _subquery{m(std::move(pq.get()))} {}
 Subquery::Subquery(const Subquery& pq) : _subquery{m(pq.get())} {}
 Subquery& Subquery::operator=(const Subquery& pq) {
   _subquery = m(pq.get());
   return *this;
 }
-Subquery& Subquery::operator=(Subquery&& pq) {
+Subquery& Subquery::operator=(Subquery&& pq) noexcept {
   _subquery = m(std::move(pq.get()));
   return *this;
 }

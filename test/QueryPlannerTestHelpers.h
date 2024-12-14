@@ -14,6 +14,7 @@
 #include "engine/Bind.h"
 #include "engine/CartesianProductJoin.h"
 #include "engine/CountAvailablePredicates.h"
+#include "engine/Describe.h"
 #include "engine/Filter.h"
 #include "engine/GroupBy.h"
 #include "engine/IndexScan.h"
@@ -395,10 +396,19 @@ constexpr auto OrderBy = [](const ::OrderBy::SortedVariables& sortedVariables,
 // Match a `UNION` operation.
 constexpr auto Union = MatchTypeAndOrderedChildren<::Union>;
 
+// Match a `DESCRIBE` operation
+inline QetMatcher Describe(
+    const Matcher<const parsedQuery::Describe&>& describeMatcher,
+    const QetMatcher& childMatcher) {
+  return RootOperation<::Describe>(
+      AllOf(children(childMatcher),
+            AD_PROPERTY(::Describe, getDescribe, describeMatcher)));
+}
+
 //
 inline QetMatcher QetWithWarnings(
     const std::vector<std::string>& warningSubstrings,
-    QetMatcher actualMatcher) {
+    const QetMatcher& actualMatcher) {
   auto warningMatchers = ad_utility::transform(
       warningSubstrings,
       [](const std::string& s) { return ::testing::HasSubstr(s); });

@@ -1,6 +1,8 @@
-// Copyright 2014, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+// Copyright 2014 - 2024, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de> [2014 - 2017]
+//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+
 #pragma once
 
 #include <initializer_list>
@@ -14,6 +16,7 @@
 #include "index/ScanSpecification.h"
 #include "parser/Alias.h"
 #include "parser/ConstructClause.h"
+#include "parser/DatasetClauses.h"
 #include "parser/GraphPattern.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/PropertyPath.h"
@@ -36,21 +39,6 @@
 
 using std::string;
 using std::vector;
-
-// Forward declaration
-struct DatasetClause;
-
-namespace parsedQuery {
-// A struct for the FROM and FROM NAMED clauses;
-struct DatasetClauses {
-  // FROM clauses.
-  ScanSpecificationAsTripleComponent::Graphs defaultGraphs_{};
-  // FROM NAMED clauses.
-  ScanSpecificationAsTripleComponent::Graphs namedGraphs_{};
-
-  static DatasetClauses fromClauses(const std::vector<DatasetClause>& clauses);
-};
-}  // namespace parsedQuery
 
 // Data container for prefixes
 class SparqlPrefix {

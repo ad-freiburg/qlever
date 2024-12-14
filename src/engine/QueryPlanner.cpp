@@ -19,6 +19,7 @@
 #include "engine/CheckUsePatternTrick.h"
 #include "engine/CountAvailablePredicates.h"
 #include "engine/CountConnectedSubgraphs.h"
+#include "engine/Describe.h"
 #include "engine/Distinct.h"
 #include "engine/Filter.h"
 #include "engine/GroupBy.h"
@@ -2349,6 +2350,8 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
     visitGroupOptionalOrMinus(std::move(candidates));
   } else if constexpr (std::is_same_v<T, p::PathQuery>) {
     visitPathSearch(arg);
+  } else if constexpr (std::is_same_v<T, p::Describe>) {
+    visitDescribe(arg);
   } else if constexpr (std::is_same_v<T, p::SpatialQuery>) {
     visitSpatialSearch(arg);
   } else {
@@ -2585,5 +2588,16 @@ void QueryPlanner::GraphPatternPlanner::optimizeCommutatively() {
   candidateTriples_._triples.clear();
   candidatePlans_.clear();
   candidatePlans_.push_back(std::move(lastRow));
+  planner_.checkCancellation();
+}
+
+// _______________________________________________________________
+void QueryPlanner::GraphPatternPlanner::visitDescribe(
+    parsedQuery::Describe& describe) {
+  auto tree = std::make_shared<QueryExecutionTree>(
+      planner_.createExecutionTree(describe.whereClause_.get(), true));
+  auto describeOp =
+      makeSubtreePlan<Describe>(planner_._qec, std::move(tree), describe);
+  candidatePlans_.push_back(std::vector{std::move(describeOp)});
   planner_.checkCancellation();
 }

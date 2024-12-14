@@ -1,7 +1,7 @@
 // Copyright 2015 - 2024, University of Freiburg
 // Chair of Algorithms and Data Structures
 // Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de> [2015 - 2017]
-//          Johannes Kalmbach <kalmbachqcs.uni-freiburg.de> [2018 - 2024]
+//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de> [2018 - 2024]
 
 #include <gmock/gmock.h>
 
@@ -2883,4 +2883,22 @@ TEST(QueryPlanner, WarningsOnUnboundVariables) {
   h::expect("SELECT ?x { {SELECT * {BIND (?a as ?x)}} ?x <p> ?o}",
             h::QetWithWarnings({"?a was used in the expression of a BIND"},
                                testing::_));
+}
+
+// ___________________________________________________________________________
+TEST(QueryPlanner, Describe) {
+  // Note: We deliberately don't test the contents of the actual DESCRIBE
+  // clause, because they have been extensively tested already in
+  // `SparqlAntlrParserTest.cpp` where we have access to proper matchers for
+  // them.
+  h::expect("DESCRIBE <x>", h::Describe(::testing::_, h::NeutralElement()));
+  h::expect("DESCRIBE ?x", h::Describe(::testing::_, h::NeutralElement()));
+  h::expect(
+      "Describe ?y { ?y <p> <o>}",
+      h::Describe(::testing::_, h::IndexScanFromStrings("?y", "<p>", "<o>")));
+  h::expect(
+      "Describe ?y FROM <g> { ?y <p> <o>}",
+      h::Describe(::testing::_, h::IndexScanFromStrings(
+                                    "?y", "<p>", "<o>", {},
+                                    ad_utility::HashSet<std::string>{"<g>"})));
 }
