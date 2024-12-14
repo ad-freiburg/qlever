@@ -48,7 +48,7 @@ string Describe::getCacheKeyImpl() const {
   //
   // NOTE: The default and named graphs are also part of the cache key of the
   // `subtree_`. However, the named graphs only determine the result for
-  // `subtree_` (the resouces to be described), whereas the default graphs
+  // `subtree_` (the resources to be described), whereas the default graphs
   // also determine which triples for these resources become part of the result.
   const auto& defaultGraphs = describe_.datasetClauses_.defaultGraphs_;
   if (defaultGraphs.has_value()) {
