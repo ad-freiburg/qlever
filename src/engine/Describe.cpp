@@ -46,7 +46,10 @@ string Describe::getCacheKeyImpl() const {
   // Add the names of the default graphs (from the FROM clauses) to the cache
   // key, in a deterministic order.
   //
-  // TODO: What about the FROM NAMED clauses?
+  // NOTE: The default and named graphs are also part of the cache key of the
+  // `subtree_`. However, the named graphs only determine the result for
+  // `subtree_` (the resouces to be described), whereas the default graphs
+  // also determine which triples for these resources become part of the result.
   const auto& defaultGraphs = describe_.datasetClauses_.defaultGraphs_;
   if (defaultGraphs.has_value()) {
     std::vector<std::string> graphIdVec;
@@ -169,7 +172,9 @@ IdTable Describe::makeAndExecuteJoinWithFullIndex(
   // Compute the result of the `join` and select the columns `?subject`,
   // `?predicate`, `?object`.
   //
-  // TODO: How can the `result` have more columns than those?
+  // NOTE: Typically, the join result has already those exact columns, in which
+  // case the `selectColumns` operation is a no-op. Note sure when this is not
+  // the case, but better safe than sorry.
   auto result = join->getResult();
   IdTable resultTable = result->idTable().clone();
   ColumnIndex s = join->getVariableColumn(V{"?subject"});

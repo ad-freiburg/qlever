@@ -284,9 +284,9 @@ ParsedQuery Visitor::visit(Parser::DescribeQueryContext* ctx) {
   auto describeClause = parsedQuery::Describe{};
   auto describedResources = visitVector(ctx->varOrIri());
 
-  std::vector<Variable> describedVariables;
   // Convert the describe resources (variables or IRIs) from the format that the
-  // parser delivers to the one that the `Describe` struct expects.
+  // parser delivers to the one that the `parsedQuery::Describe` struct expects.
+  std::vector<Variable> describedVariables;
   for (GraphTerm& resource : describedResources) {
     if (std::holds_alternative<Variable>(resource)) {
       const auto& variable = std::get<Variable>(resource);
@@ -300,13 +300,13 @@ ParsedQuery Visitor::visit(Parser::DescribeQueryContext* ctx) {
     }
   }
 
-  // Parse the FROM and FROM NAMED clauses and store them in the
-  // `describeClause`.
+  // Parse the FROM and FROM NAMED clauses.
   auto datasetClauses = parsedQuery::DatasetClauses::fromClauses(
       visitVector(ctx->datasetClause()));
   describeClause.datasetClauses_ = datasetClauses;
 
-  // Parse the WHERE clause and handle the special case of `DESCRIBE *`.
+  // Parse the WHERE clause and construct a SELECT query from it. For `DESCRIBE
+  // *`, add each visible variable as a resource to describe.
   visitWhereClause(ctx->whereClause(), parsedQuery_);
   if (describedResources.empty()) {
     const auto& visibleVariables =
@@ -319,10 +319,17 @@ ParsedQuery Visitor::visit(Parser::DescribeQueryContext* ctx) {
   selectClause.setSelected(std::move(describedVariables));
   describeClause.whereClause_ = std::move(parsedQuery_);
 
-  // Set up the actual DESCRIBE query, which is implemented as a CONSTRUCT query
-  // of the form `CONSTRUCT { ?subject ?predicate ?object} { ... }`. Note that
-  // the solution modifiers (in particular ORDER BY) are part of this query, not
-  // of the WHERE clause.
+  // Set up the final `ParsedQuery` object for the DESCRIBE query. The clause is
+  // a CONSTRUCT query of the form `CONSTRUCT { ?subject ?predicate ?object} {
+  // ... }`, with the `parsedQuery::Describe` object from above as the root
+  // graph pattern. The solution modifiers (in particular ORDER BY) are part of
+  // the CONSTRUCT query.
+  //
+  // NOTE: The dataset clauses are stored once in `parsedQuery_.datasetClauses_`
+  // (which pertains to the CONSTRUCT query that computes the result of the
+  // DESCRIBE), and once in `parsedQuery_.describeClause_.datasetClauses_`
+  // (which pertains to the SELECT query that computes the resources to be
+  // described).
   parsedQuery_ = ParsedQuery{};
   parsedQuery_.addSolutionModifiers(visit(ctx->solutionModifier()));
   parsedQuery_._rootGraphPattern._graphPatterns.emplace_back(
