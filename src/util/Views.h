@@ -4,9 +4,6 @@
 
 #pragma once
 
-#include <c++/11/bits/ranges_base.h>
-
-#include <future>
 #include <ranges>
 #include <span>
 
