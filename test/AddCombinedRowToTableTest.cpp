@@ -323,3 +323,39 @@ TEST(AddCombinedRowToTable, verifyLocalVocabIsRetainedWhenNotMoving) {
   EXPECT_TRUE(vocabContainsString(localVocab, "b"));
   EXPECT_THAT(localVocab.getAllWordsForTesting(), ::testing::SizeIs(2));
 }
+
+// _____________________________________________________________________________
+TEST(AddCombinedRowToTable, localVocabIsOnlyClearedWhenLegal) {
+  auto outputTable = makeIdTableFromVector({});
+  outputTable.setNumColumns(3);
+  ad_utility::AddCombinedRowToIdTable adder{
+      1, std::move(outputTable),
+      std::make_shared<ad_utility::CancellationHandle<>>(), 1};
+
+  IdTableWithVocab input1{makeIdTableFromVector({{0, 1}}),
+                          createVocabWithSingleString("a")};
+  IdTableWithVocab input2{makeIdTableFromVector({{0, 2}}),
+                          createVocabWithSingleString("b")};
+
+  adder.setInput(input1, input2);
+  adder.addRow(0, 0);
+  IdTableWithVocab input3{makeIdTableFromVector({{3, 1}}),
+                          createVocabWithSingleString("c")};
+  IdTableWithVocab input4{makeIdTableFromVector({{3, 2}}),
+                          createVocabWithSingleString("d")};
+  // NOTE: This seemingly redundant call to `setInput` is important, as it tests
+  // a previous bug: Each call to `setInput` implicitly also calls `flush` and
+  // also possibly clears the local vocab if it is not used anymore. In this
+  // case however we may not clear the local vocab, as the result of the
+  // previous calls to `addRow` has not yet been extracted.
+  adder.setInput(input1, input2);
+  adder.setInput(input3, input4);
+  adder.addRow(0, 0);
+  auto localVocab = adder.localVocab().clone();
+
+  EXPECT_TRUE(vocabContainsString(localVocab, "a"));
+  EXPECT_TRUE(vocabContainsString(localVocab, "b"));
+  EXPECT_TRUE(vocabContainsString(localVocab, "c"));
+  EXPECT_TRUE(vocabContainsString(localVocab, "d"));
+  EXPECT_THAT(localVocab.getAllWordsForTesting(), ::testing::SizeIs(4));
+}
