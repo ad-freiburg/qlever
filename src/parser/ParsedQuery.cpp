@@ -265,7 +265,7 @@ void ParsedQuery::GraphPattern::addLanguageFilter(const Variable& variable,
   std::vector<SparqlTriple*> matchingTriples;
   using BasicPattern = parsedQuery::BasicGraphPattern;
   namespace ad = ad_utility;
-  namespace stdv = std::views;
+  namespace stdv = ql::views;
   for (BasicPattern* basicPattern :
        _graphPatterns | stdv::transform(ad::getIf<BasicPattern>) |
            stdv::filter(ad::toBool)) {

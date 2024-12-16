@@ -106,7 +106,7 @@ class IndexScan final : public Operation {
   // there are undef values, the second generator represents the full index
   // scan.
   std::pair<Result::Generator, Result::Generator> prefilterTables(
-      Result::Generator input, ColumnIndex joinColumn);
+      Result::LazyResult input, ColumnIndex joinColumn);
 
  private:
   // Implementation detail that allows to consume a generator from two other
