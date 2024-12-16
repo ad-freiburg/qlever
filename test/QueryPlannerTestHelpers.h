@@ -131,7 +131,7 @@ constexpr auto TextIndexScanForWord = [](Variable textRecordVar,
                                          string word) -> QetMatcher {
   return RootOperation<::TextIndexScanForWord>(AllOf(
       AD_PROPERTY(::TextIndexScanForWord, getResultWidth,
-                  Eq(1 + word.ends_with('*'))),
+                  Eq(2 + word.ends_with('*'))),
       AD_PROPERTY(::TextIndexScanForWord, textRecordVar, Eq(textRecordVar)),
       AD_PROPERTY(::TextIndexScanForWord, word, word)));
 };

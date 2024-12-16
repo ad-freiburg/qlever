@@ -65,7 +65,7 @@ cppcoro::generator<ContextFileParser::Line> IndexImpl::wordsInTextRecords(
       if (!isLiteral(text)) {
         continue;
       }
-      ContextFileParser::Line entityLine{text, true, contextId, 1};
+      ContextFileParser::Line entityLine{text, true, contextId, 1, true};
       co_yield entityLine;
       std::string_view textView = text;
       textView = textView.substr(0, textView.rfind('"'));
@@ -235,10 +235,12 @@ void IndexImpl::processWordsForInvertedLists(const string& contextFile,
   ad_utility::HashMap<WordIndex, Score> wordsInContext;
   ad_utility::HashMap<Id, Score> entitiesInContext;
   auto currentContext = TextRecordIndex::make(0);
+  // The nofContexts can be misleading since it also counts empty contexts
   size_t nofContexts = 0;
   size_t nofWordPostings = 0;
   size_t nofEntityPostings = 0;
   size_t entityNotFoundErrorMsgCount = 0;
+  size_t nofLiterals = 0;
 
   for (auto line : wordsInTextRecords(contextFile, addWordsFromLiterals)) {
     if (line._contextId != currentContext) {
@@ -258,6 +260,9 @@ void IndexImpl::processWordsForInvertedLists(const string& contextFile,
         // Note that `entitiesInContext` is a HashMap, so the `Id`s don't have
         // to be contiguous.
         entitiesInContext[Id::makeFromVocabIndex(eid)] += line._score;
+        if (line._isLiteralEntity) {
+          ++nofLiterals;
+        }
       } else {
         if (entityNotFoundErrorMsgCount < 20) {
           LOG(WARN) << "Entity from text not in KB: " << line._word << '\n';
@@ -294,6 +299,10 @@ void IndexImpl::processWordsForInvertedLists(const string& contextFile,
   textMeta_.setNofTextRecords(nofContexts);
   textMeta_.setNofWordPostings(nofWordPostings);
   textMeta_.setNofEntityPostings(nofEntityPostings);
+  nofNonLiteralsInTextIndex_ = nofContexts - nofLiterals;
+  configurationJson_["num-non-literals-text-index"] =
+      nofNonLiteralsInTextIndex_;
+  writeConfiguration();
 
   writer.finish();
   LOG(TRACE) << "END IndexImpl::passContextFileIntoVector" << std::endl;
@@ -415,7 +424,7 @@ ContextListMetaData IndexImpl::writePostings(ad_utility::File& out,
 
   size_t n = 0;
 
-  WordToCodeMap wordCodeMap;
+  WordCodeMap wordCodeMap;
   WordCodebook wordCodebook;
   ScoreCodeMap scoreCodeMap;
   ScoreCodebook scoreCodebook;
@@ -646,10 +655,11 @@ size_t IndexImpl::writeList(Numeric* data, size_t nofElements,
 
 // _____________________________________________________________________________
 void IndexImpl::createCodebooks(const vector<IndexImpl::Posting>& postings,
-                                IndexImpl::WordToCodeMap& wordCodemap,
+                                IndexImpl::WordCodeMap& wordCodemap,
                                 IndexImpl::WordCodebook& wordCodebook,
                                 IndexImpl::ScoreCodeMap& scoreCodemap,
                                 IndexImpl::ScoreCodebook& scoreCodebook) const {
+  // There should be a more efficient way to do this (Felix Meisen)
   ad_utility::HashMap<WordIndex, size_t> wfMap;
   ad_utility::HashMap<Score, size_t> sfMap;
   for (const auto& p : postings) {
@@ -718,7 +728,7 @@ std::string_view IndexImpl::wordIdToString(WordIndex wordIndex) const {
 IdTable IndexImpl::readWordCl(
     const TextBlockMetaData& tbmd,
     const ad_utility::AllocatorWithLimit<Id>& allocator) const {
-  IdTable idTable{2, allocator};
+  IdTable idTable{3, allocator};
   vector<TextRecordIndex> cids = readGapComprList<TextRecordIndex>(
       tbmd._cl._nofElements, tbmd._cl._startContextlist,
       static_cast<size_t>(tbmd._cl._startWordlist - tbmd._cl._startContextlist),
@@ -734,6 +744,11 @@ IdTable IndexImpl::readWordCl(
       idTable.getColumn(1).begin(), [](WordIndex id) {
         return Id::makeFromWordVocabIndex(WordVocabIndex::make(id));
       });
+  std::ranges::transform(
+      readFreqComprList<Score>(tbmd._cl._nofElements, tbmd._cl._startScorelist,
+                               static_cast<size_t>(tbmd._cl._lastByte + 1 -
+                                                   tbmd._cl._startScorelist)),
+      idTable.getColumn(2).begin(), &Id::makeFromInt);
   return idTable;
 }
 
@@ -772,7 +787,7 @@ IdTable IndexImpl::getWordPostingsForTerm(
     const ad_utility::AllocatorWithLimit<Id>& allocator) const {
   LOG(DEBUG) << "Getting word postings for term: " << term << '\n';
   IdTable idTable{allocator};
-  idTable.setNumColumns(term.ends_with('*') ? 2 : 1);
+  idTable.setNumColumns(term.ends_with('*') ? 3 : 2);
   auto optionalTbmd = getTextBlockMetadataForWordOrPrefix(term);
   if (!optionalTbmd.has_value()) {
     return idTable;

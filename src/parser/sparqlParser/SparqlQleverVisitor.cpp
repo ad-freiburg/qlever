@@ -1543,6 +1543,7 @@ void Visitor::setMatchingWordAndScoreVisibleIfPresent(
     }
     for (std::string_view s : std::vector<std::string>(
              absl::StrSplit(name.substr(1, name.size() - 2), ' '))) {
+      addVisibleVariable(var->getWordScoreVariable(s, s.ends_with('*')));
       if (!s.ends_with('*')) {
         continue;
       }
@@ -1551,9 +1552,9 @@ void Visitor::setMatchingWordAndScoreVisibleIfPresent(
     }
   } else if (propertyPath->asString() == CONTAINS_ENTITY_PREDICATE) {
     if (const auto* entVar = std::get_if<Variable>(&object)) {
-      addVisibleVariable(var->getScoreVariable(*entVar));
+      addVisibleVariable(var->getEntityScoreVariable(*entVar));
     } else {
-      addVisibleVariable(var->getScoreVariable(object.toSparql()));
+      addVisibleVariable(var->getEntityScoreVariable(object.toSparql()));
     }
   }
 }

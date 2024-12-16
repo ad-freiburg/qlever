@@ -214,6 +214,7 @@ class Index {
   size_t getNofTextRecords() const;
   size_t getNofWordPostings() const;
   size_t getNofEntityPostings() const;
+  size_t getNofNonLiteralsInTextIndex() const;
 
   NumNormalAndInternal numDistinctSubjects() const;
   NumNormalAndInternal numDistinctObjects() const;

@@ -18,13 +18,12 @@ ProtoResult TextIndexScanForWord::computeResult(
   IdTable idTable = getExecutionContext()->getIndex().getWordPostingsForTerm(
       word_, getExecutionContext()->getAllocator());
 
+  // This filters out the word column. When the searchword is a prefix this
+  // column shows the word the prefix got extended to
   if (!isPrefix_) {
-    IdTable smallIdTable{getExecutionContext()->getAllocator()};
-    smallIdTable.setNumColumns(1);
-    smallIdTable.resize(idTable.numRows());
-    ql::ranges::copy(idTable.getColumn(0), smallIdTable.getColumn(0).begin());
-
-    return {std::move(smallIdTable), resultSortedOn(), LocalVocab{}};
+    using CI = ColumnIndex;
+    idTable.setColumnSubset(std::array{CI{0}, CI{2}});
+    return {std::move(idTable), resultSortedOn(), LocalVocab{}};
   }
 
   // Add details to the runtimeInfo. This is has no effect on the result.
@@ -46,12 +45,13 @@ VariableToColumnMap TextIndexScanForWord::computeVariableToColumnMap() const {
     addDefinedVar(textRecordVar_.getMatchingWordVariable(
         std::string_view(word_).substr(0, word_.size() - 1)));
   }
+  addDefinedVar(textRecordVar_.getWordScoreVariable(word_, isPrefix_));
   return vcmap;
 }
 
 // _____________________________________________________________________________
 size_t TextIndexScanForWord::getResultWidth() const {
-  return 1 + (isPrefix_ ? 1 : 0);
+  return 2 + (isPrefix_ ? 1 : 0);
 }
 
 // _____________________________________________________________________________
