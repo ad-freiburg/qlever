@@ -64,7 +64,7 @@ void testLazyScan(Permutation::IdTableGenerator partialLazyScanResult,
 
   if (limitOffset.isUnconstrained()) {
     for (auto [lower, upper] : expectedRows) {
-      for (auto index : std::views::iota(lower, upper)) {
+      for (auto index : ql::views::iota(lower, upper)) {
         expected.push_back(resFullScan.at(index));
       }
     }

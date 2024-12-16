@@ -146,7 +146,7 @@ TEST(ThreadSafeQueue, Concurrency) {
     // order, for the `ThreadSafeQueue` the order is unspecified and we only
     // check the content.
     if (ad_utility::isInstantiation<Queue, ThreadSafeQueue>) {
-      std::ranges::sort(result);
+      ql::ranges::sort(result);
     }
     EXPECT_THAT(result, ::testing::ElementsAreArray(
                             std::views::iota(0UL, numValues * numThreads)));
@@ -253,13 +253,13 @@ TEST(ThreadSafeQueue, DisablePush) {
     if (ad_utility::similarToInstantiation<Queue, ThreadSafeQueue>) {
       // When terminating early, we cannot actually say much about the result,
       // other than that it contains no duplicate values
-      std::ranges::sort(result);
+      ql::ranges::sort(result);
       EXPECT_TRUE(std::unique(result.begin(), result.end()) == result.end());
     } else {
       // For the ordered queue we have the guarantee that all the pushed values
       // were in order.
       EXPECT_THAT(result,
-                  ::testing::ElementsAreArray(std::views::iota(0U, 400U)));
+                  ::testing::ElementsAreArray(ql::views::iota(0U, 400U)));
     }
   };
   runWithBothQueueTypes(runTest);
@@ -309,7 +309,7 @@ TEST(ThreadSafeQueue, SafeExceptionHandling) {
       // 1. Queue, 2. WorkerThreads, 3. `Cleanup` that finishes the queue.
       absl::Cleanup cleanup{[&queue] { queue.finish(); }};
 
-      for ([[maybe_unused]] auto i : std::views::iota(0u, numValues)) {
+      for ([[maybe_unused]] auto i : ql::views::iota(0u, numValues)) {
         auto opt = queue.pop();
         if (!opt) {
           return;
@@ -400,7 +400,7 @@ TEST(ThreadSafeQueue, queueManager) {
       // order, for the `ThreadSafeQueue` the order is unspecified and we only
       // check the content.
       if (ad_utility::isInstantiation<Queue, ThreadSafeQueue>) {
-        std::ranges::sort(result);
+        ql::ranges::sort(result);
       }
       EXPECT_THAT(result, ::testing::ElementsAreArray(
                               std::views::iota(0UL, numValues)));

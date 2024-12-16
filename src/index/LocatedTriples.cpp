@@ -6,9 +6,8 @@
 
 #include "index/LocatedTriples.h"
 
-#include <algorithm>
-
 #include "absl/strings/str_join.h"
+#include "backports/algorithm.h"
 #include "index/CompressedRelation.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "util/ChunkedForLoop.h"
@@ -29,9 +28,9 @@ std::vector<LocatedTriple> LocatedTriple::locateTriplesInPermutation(
         // that larger than or equal to the triple. See `LocatedTriples.h` for a
         // discussion of the corner cases.
         size_t blockIndex =
-            std::ranges::lower_bound(blockMetadata, triple.toPermutedTriple(),
-                                     std::less<>{},
-                                     &CompressedBlockMetadata::lastTriple_) -
+            ql::ranges::lower_bound(blockMetadata, triple.toPermutedTriple(),
+                                    std::less<>{},
+                                    &CompressedBlockMetadata::lastTriple_) -
             blockMetadata.begin();
         out.emplace_back(blockIndex, triple, shouldExist);
       },
@@ -53,7 +52,7 @@ NumAddedAndDeleted LocatedTriplesPerBlock::numTriples(size_t blockIndex) const {
   }
 
   auto blockUpdateTriples = map_.at(blockIndex);
-  size_t countInserts = std::ranges::count_if(
+  size_t countInserts = ql::ranges::count_if(
       blockUpdateTriples, &LocatedTriple::shouldTripleExist_);
   return {countInserts, blockUpdateTriples.size() - countInserts};
 }
@@ -169,9 +168,9 @@ IdTable LocatedTriplesPerBlock::mergeTriplesImpl(size_t blockIndex,
 
   if (locatedTripleIt != locatedTriples.end()) {
     AD_CORRECTNESS_CHECK(rowIt == block.end());
-    std::ranges::for_each(
-        std::ranges::subrange(locatedTripleIt, locatedTriples.end()) |
-            std::views::filter(&LocatedTriple::shouldTripleExist_),
+    ql::ranges::for_each(
+        ql::ranges::subrange(locatedTripleIt, locatedTriples.end()) |
+            ql::views::filter(&LocatedTriple::shouldTripleExist_),
         writeLocatedTripleToResult);
   }
   if (rowIt != block.end()) {
@@ -290,7 +289,7 @@ static auto updateGraphMetadata(CompressedBlockMetadata& blockMetadata,
 
   // Sort the stored graphs. Note: this is currently not expected by the code
   // that uses the graph info, but makes testing much easier.
-  std::ranges::sort(graphs.value());
+  ql::ranges::sort(graphs.value());
 }
 
 // ____________________________________________________________________________
@@ -341,14 +340,14 @@ void LocatedTriplesPerBlock::updateAugmentedMetadata() {
 // ____________________________________________________________________________
 std::ostream& operator<<(std::ostream& os, const LocatedTriples& lts) {
   os << "{ ";
-  std::ranges::copy(lts, std::ostream_iterator<LocatedTriple>(os, " "));
+  ql::ranges::copy(lts, std::ostream_iterator<LocatedTriple>(os, " "));
   os << "}";
   return os;
 }
 
 // ____________________________________________________________________________
 std::ostream& operator<<(std::ostream& os, const std::vector<IdTriple<0>>& v) {
-  std::ranges::copy(v, std::ostream_iterator<IdTriple<0>>(os, ", "));
+  ql::ranges::copy(v, std::ostream_iterator<IdTriple<0>>(os, ", "));
   return os;
 }
 
@@ -362,7 +361,7 @@ bool LocatedTriplesPerBlock::isLocatedTriple(const IdTriple<0>& triple,
     return ad_utility::contains(lt, locatedTriple);
   };
 
-  return std::ranges::any_of(map_, [&blockContains](auto& indexAndBlock) {
+  return ql::ranges::any_of(map_, [&blockContains](auto& indexAndBlock) {
     const auto& [index, block] = indexAndBlock;
     return blockContains(block, index);
   });

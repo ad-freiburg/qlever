@@ -6,7 +6,6 @@
 
 #include "./IndexImpl.h"
 
-#include <algorithm>
 #include <cstdio>
 #include <future>
 #include <numeric>
@@ -16,6 +15,7 @@
 #include "CompilationInfo.h"
 #include "Index.h"
 #include "absl/strings/str_join.h"
+#include "backports/algorithm.h"
 #include "engine/AddCombinedRowToTable.h"
 #include "engine/CallFixedSize.h"
 #include "index/IndexFormatVersion.h"
@@ -151,7 +151,7 @@ auto fixBlockAfterPatternJoin(auto block) {
   static constexpr auto permutation =
       makePermutationFirstThirdSwitched<NumColumnsIndexBuilding + 2>();
   block.value().setColumnSubset(permutation);
-  std::ranges::for_each(
+  ql::ranges::for_each(
       block.value().getColumn(ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN),
       [](Id& id) { id = id.isUndefined() ? Id::makeFromInt(NO_PATTERN) : id; });
   return std::move(block.value()).template toStatic<0>();
@@ -612,6 +612,8 @@ auto IndexImpl::convertPartialToGlobalIds(
   auto& result = *resultPtr;
   auto& internalResult = *internalTriplesPtr;
   auto triplesGenerator = data.getRows();
+  // static_assert(!std::is_const_v<decltype(triplesGenerator)>);
+  // static_assert(std::is_const_v<decltype(triplesGenerator)>);
   auto it = triplesGenerator.begin();
   using Buffer = IdTableStatic<NumColumnsIndexBuilding>;
   struct Buffers {
@@ -782,7 +784,7 @@ IndexImpl::createPermutationPairImpl(size_t numColumns, const string& fileName1,
   // blocks.
   auto liftCallback = [](auto callback) {
     return [callback](const auto& block) mutable {
-      std::ranges::for_each(block, callback);
+      ql::ranges::for_each(block, callback);
     };
   };
   auto callback1 =
@@ -1323,7 +1325,7 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
       turtleParserIntegerOverflowBehavior_ =
           TurtleParserIntegerOverflowBehavior::OverflowingToDouble;
     } else {
-      AD_CONTRACT_CHECK(std::ranges::find(allModes, value) == allModes.end());
+      AD_CONTRACT_CHECK(ql::ranges::find(allModes, value) == allModes.end());
       AD_LOG_ERROR << "Invalid value for " << key << std::endl;
       AD_LOG_INFO << "The currently supported values are "
                   << absl::StrJoin(allModes, ",") << std::endl;

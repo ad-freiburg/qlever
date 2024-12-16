@@ -1207,10 +1207,10 @@ TEST_F(GroupByOptimizations, hashMapOptimizationMinMaxSumIntegers) {
   auto unsignedLongToValueId = [](unsigned long value) {
     return ValueId::makeFromInt(static_cast<int64_t>(value));
   };
-  std::ranges::transform(firstColumn.begin(), firstColumn.end(),
-                         firstTableColumn.begin(), unsignedLongToValueId);
-  std::ranges::transform(secondColumn.begin(), secondColumn.end(),
-                         secondTableColumn.begin(), unsignedLongToValueId);
+  ql::ranges::transform(firstColumn.begin(), firstColumn.end(),
+                        firstTableColumn.begin(), unsignedLongToValueId);
+  ql::ranges::transform(secondColumn.begin(), secondColumn.end(),
+                        secondTableColumn.begin(), unsignedLongToValueId);
 
   auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, std::move(testTable), variables, false);

@@ -169,6 +169,12 @@ class TurtleParser : public RdfParserBase {
   static constexpr std::array<const char*, 3> floatDatatypes_ = {
       XSD_DECIMAL_TYPE, XSD_DOUBLE_TYPE, XSD_FLOAT_TYPE};
 
+  // The keys for storing the base prefix (for relative and absolute IRIs) in
+  // the prefix map. The only thing that is important about these keys is that
+  // they are different from each other and from any valid prefix name.
+  static constexpr const char* baseForRelativeIriKey_ = "@";
+  static constexpr const char* baseForAbsoluteIriKey_ = "@@";
+
  protected:
   // Data members.
 
@@ -187,9 +193,23 @@ class TurtleParser : public RdfParserBase {
   // `TripleComponent` since it can hold any parsing result, not only objects.
   TripleComponent lastParseResult_;
 
-  // Maps prefixes to their expanded form, initialized with the empty base
-  // (i.e. the prefix ":" maps to the empty IRI).
-  ad_utility::HashMap<std::string, TripleComponent::Iri> prefixMap_{{{}, {}}};
+  // Map that maps prefix names to their IRI. For our tests, it is important
+  // that without any BASE declaration, the two base prefixes are mapped to the
+  // empty IRI.
+  static const inline ad_utility::HashMap<std::string, TripleComponent::Iri>
+      prefixMapDefault_{{baseForRelativeIriKey_, TripleComponent::Iri{}},
+                        {baseForAbsoluteIriKey_, TripleComponent::Iri{}}};
+  ad_utility::HashMap<std::string, TripleComponent::Iri> prefixMap_ =
+      prefixMapDefault_;
+
+  // Getters for the two base prefixes. Without BASE declaration, these will
+  // both return the empty IRI.
+  const TripleComponent::Iri& baseForRelativeIri() {
+    return prefixMap_.at(baseForRelativeIriKey_);
+  }
+  const TripleComponent::Iri& baseForAbsoluteIri() {
+    return prefixMap_.at(baseForAbsoluteIriKey_);
+  }
 
   // There are turtle constructs that reuse prefixes, subjects and predicates
   // so we have to save the last seen ones.
@@ -222,7 +242,7 @@ class TurtleParser : public RdfParserBase {
     activePredicate_ = TripleComponent::Iri::fromIriref("<>");
     activePrefix_.clear();
 
-    prefixMap_.clear();
+    prefixMap_ = prefixMapDefault_;
 
     tok_.reset(nullptr, 0);
     triples_.clear();
@@ -400,6 +420,8 @@ class TurtleParser : public RdfParserBase {
   FRIEND_TEST(RdfParserTest, predicateObjectList);
   FRIEND_TEST(RdfParserTest, objectList);
   FRIEND_TEST(RdfParserTest, object);
+  FRIEND_TEST(RdfParserTest, base);
+  FRIEND_TEST(RdfParserTest, sparqlBase);
   FRIEND_TEST(RdfParserTest, blankNode);
   FRIEND_TEST(RdfParserTest, blankNodePropertyList);
   FRIEND_TEST(RdfParserTest, numericLiteral);
@@ -516,8 +538,6 @@ class RdfStringParser : public Parser {
     this->tok_.reset(tmpToParse_.data(), tmpToParse_.size());
   }
 
-  void setPrefixMap(decltype(prefixMap_) m) { prefixMap_ = std::move(m); }
-
   const auto& getPrefixMap() const { return prefixMap_; }
 
   // __________________________________________________________
@@ -604,10 +624,10 @@ class RdfStreamParser : public Parser {
   // that's why we need the backupState() and resetStateAndRead() methods
   ParallelBuffer::BufferType byteVec_;
 
-  std::unique_ptr<ParallelBuffer> fileBuffer_;
+  size_t bufferSize_ = FILE_BUFFER_SIZE;
+  std::unique_ptr<ParallelBufferWithEndRegex> fileBuffer_;
   // this many characters will be buffered at once,
   // defaults to a global constant
-  size_t bufferSize_ = FILE_BUFFER_SIZE;
 
   // that many bytes were already parsed before dealing with the current batch
   // in member byteVec_

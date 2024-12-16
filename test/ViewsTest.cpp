@@ -107,7 +107,7 @@ TEST(Views, uniqueBlockView) {
     i = nextI;
   }
 
-  auto unique = std::views::join(
+  auto unique = ql::views::join(
       ad_utility::OwningView{ad_utility::uniqueBlockView(inputs)});
   std::vector<int> result;
   for (const auto& element : unique) {
@@ -124,14 +124,14 @@ TEST(Views, uniqueBlockView) {
 TEST(Views, owningView) {
   using namespace ad_utility;
   // Static asserts for the desired concepts.
-  static_assert(std::ranges::input_range<OwningView<cppcoro::generator<int>>>);
+  static_assert(ql::ranges::input_range<OwningView<cppcoro::generator<int>>>);
   static_assert(
-      !std::ranges::forward_range<OwningView<cppcoro::generator<int>>>);
-  static_assert(std::ranges::random_access_range<OwningView<std::vector<int>>>);
+      !ql::ranges::forward_range<OwningView<cppcoro::generator<int>>>);
+  static_assert(ql::ranges::random_access_range<OwningView<std::vector<int>>>);
 
   auto toVec = [](auto& range) {
     std::vector<std::string> result;
-    std::ranges::copy(range, std::back_inserter(result));
+    ql::ranges::copy(range, std::back_inserter(result));
     return result;
   };
 
@@ -166,7 +166,7 @@ TEST(Views, integerRange) {
   }
 
   std::vector<size_t> actual;
-  std::ranges::copy(ad_utility::integerRange(42u), std::back_inserter(actual));
+  ql::ranges::copy(ad_utility::integerRange(42u), std::back_inserter(actual));
   ASSERT_THAT(actual, ::testing::ElementsAreArray(expected));
 }
 
@@ -202,7 +202,7 @@ std::string_view toView(std::span<char> span) {
 TEST(Views, verifyLineByLineWorksWithMinimalChunks) {
   auto range =
       std::string_view{"\nabc\ndefghij\n"} |
-      std::views::transform([](char c) { return std::ranges::single_view(c); });
+      ql::views::transform([](char c) { return ql::ranges::single_view(c); });
   auto lineByLineGenerator =
       ad_utility::reChunkAtSeparator(std::move(range), '\n');
 
@@ -224,8 +224,8 @@ TEST(Views, verifyLineByLineWorksWithMinimalChunks) {
 
 // __________________________________________________________________________
 TEST(Views, verifyLineByLineWorksWithNoTrailingNewline) {
-  auto range = std::string_view{"abc"} | std::views::transform([](char c) {
-                 return std::ranges::single_view(c);
+  auto range = std::string_view{"abc"} | ql::views::transform([](char c) {
+                 return ql::ranges::single_view(c);
                });
 
   auto lineByLineGenerator =

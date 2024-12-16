@@ -95,7 +95,7 @@ class FsstRepeatedDecoder {
       nextInput = result;
     };
 
-    std::ranges::for_each(std::views::reverse(decoders_), decompressSingle);
+    ql::ranges::for_each(ql::views::reverse(decoders_), decompressSingle);
     return result;
   }
   // Allow this type to be trivially serializable,

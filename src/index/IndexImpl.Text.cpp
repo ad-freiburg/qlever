@@ -8,13 +8,13 @@
 
 #include <absl/strings/str_split.h>
 
-#include <algorithm>
 #include <charconv>
 #include <ranges>
 #include <stxxl/algorithm>
 #include <tuple>
 #include <utility>
 
+#include "backports/algorithm.h"
 #include "engine/CallFixedSize.h"
 #include "index/FTSAlgorithms.h"
 #include "parser/ContextFileParser.h"
@@ -724,9 +724,9 @@ IdTable IndexImpl::readWordCl(
       static_cast<size_t>(tbmd._cl._startWordlist - tbmd._cl._startContextlist),
       &TextRecordIndex::make);
   idTable.resize(cids.size());
-  std::ranges::transform(cids, idTable.getColumn(0).begin(),
-                         &Id::makeFromTextRecordIndex);
-  std::ranges::transform(
+  ql::ranges::transform(cids, idTable.getColumn(0).begin(),
+                        &Id::makeFromTextRecordIndex);
+  ql::ranges::transform(
       readFreqComprList<WordIndex>(
           tbmd._cl._nofElements, tbmd._cl._startWordlist,
           static_cast<size_t>(tbmd._cl._startScorelist -
@@ -748,16 +748,16 @@ IdTable IndexImpl::readWordEntityCl(
                           tbmd._entityCl._startContextlist),
       &TextRecordIndex::make);
   idTable.resize(cids.size());
-  std::ranges::transform(cids, idTable.getColumn(0).begin(),
-                         &Id::makeFromTextRecordIndex);
-  std::ranges::copy(
+  ql::ranges::transform(cids, idTable.getColumn(0).begin(),
+                        &Id::makeFromTextRecordIndex);
+  ql::ranges::copy(
       readFreqComprList<Id>(tbmd._entityCl._nofElements,
                             tbmd._entityCl._startWordlist,
                             static_cast<size_t>(tbmd._entityCl._startScorelist -
                                                 tbmd._entityCl._startWordlist),
                             &Id::fromBits),
       idTable.getColumn(1).begin());
-  std::ranges::transform(
+  ql::ranges::transform(
       readFreqComprList<Score>(
           tbmd._entityCl._nofElements, tbmd._entityCl._startScorelist,
           static_cast<size_t>(tbmd._entityCl._lastByte + 1 -
@@ -961,7 +961,7 @@ size_t IndexImpl::getSizeEstimate(const string& words) const {
     }
     return 1 + optTbmd.value().tbmd_._entityCl._nofElements / 100;
   };
-  return std::ranges::min(terms | std::views::transform(termToEstimate));
+  return ql::ranges::min(terms | ql::views::transform(termToEstimate));
 }
 
 // _____________________________________________________________________________

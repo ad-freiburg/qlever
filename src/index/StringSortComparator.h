@@ -797,7 +797,7 @@ class TripleComponentComparator {
         auto alloc =
             std::pmr::polymorphic_allocator<Char>(allocator->resource());
         auto ptr = alloc.allocate(s.size());
-        std::ranges::copy(s, ptr);
+        ql::ranges::copy(s, ptr);
         return {ptr, ptr + s.size()};
       };
       LocaleManager::SortKeyView sortKey;
