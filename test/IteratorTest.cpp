@@ -117,14 +117,14 @@ void testIota(MakeIotaRange makeIotaRange) {
   // categories.
   auto iota = makeIotaRange();
   using Iota = decltype(iota);
-  static_assert(std::ranges::input_range<Iota>);
-  static_assert(!std::ranges::forward_range<Iota>);
+  static_assert(ql::ranges::input_range<Iota>);
+  static_assert(!ql::ranges::forward_range<Iota>);
 
   // Test the interaction with the `ql::views` and `ql::ranges` machinery.
   auto view = iota | ql::views::drop(3) | ql::views::take(7);
   sum = 0;
   auto add = [&sum](auto val) { sum += val; };
-  std::ranges::for_each(view, add);
+  ql::ranges::for_each(view, add);
 
   // 42 == 3 + 4 + ... + 9
   EXPECT_EQ(sum, 42);
@@ -137,16 +137,16 @@ TEST(Iterator, InputRangeMixin) {
   struct Iota : InputRangeMixin<Iota> {
     size_t value_ = 0;
     std::optional<size_t> upper_;
-    explicit Iota(size_t value = 0, std::optional<size_t> upper = {})
-        : value_{value}, upper_{upper} {}
+    explicit Iota(size_t lower = 0, std::optional<size_t> upper = {})
+        : value_{lower}, upper_{upper} {}
     void start() {}
     bool isFinished() const { return value_ == upper_; }
     size_t get() const { return value_; }
     void next() { ++value_; }
   };
 
-  auto makeIota = [](size_t value = 0, std::optional<size_t> upper = {}) {
-    return Iota{value, upper};
+  auto makeIota = [](size_t lower = 0, std::optional<size_t> upper = {}) {
+    return Iota{lower, upper};
   };
   testIota(makeIota);
 }
@@ -157,8 +157,8 @@ TEST(Iterator, InputRangeOptionalMixin) {
   struct Iota : InputRangeOptionalMixin<size_t> {
     size_t value_ = 0;
     std::optional<size_t> upper_;
-    explicit Iota(size_t value = 0, std::optional<size_t> upper = {})
-        : value_{value}, upper_{upper} {}
+    explicit Iota(size_t lower = 0, std::optional<size_t> upper = {})
+        : value_{lower}, upper_{upper} {}
     std::optional<size_t> get() override {
       if (value_ == upper_) {
         return std::nullopt;
@@ -166,8 +166,8 @@ TEST(Iterator, InputRangeOptionalMixin) {
       return value_++;
     }
   };
-  auto makeIota = [](size_t value = 0, std::optional<size_t> upper = {}) {
-    return Iota{value, upper};
+  auto makeIota = [](size_t lower = 0, std::optional<size_t> upper = {}) {
+    return Iota{lower, upper};
   };
   testIota(makeIota);
 }
@@ -178,8 +178,8 @@ TEST(Iterator, TypeErasedInputRangeOptionalMixin) {
   struct IotaImpl : InputRangeOptionalMixin<size_t> {
     size_t value_ = 0;
     std::optional<size_t> upper_;
-    explicit IotaImpl(size_t value = 0, std::optional<size_t> upper = {})
-        : value_{value}, upper_{upper} {}
+    explicit IotaImpl(size_t lower = 0, std::optional<size_t> upper = {})
+        : value_{lower}, upper_{upper} {}
     std::optional<size_t> get() override {
       if (value_ == upper_) {
         return std::nullopt;
@@ -189,8 +189,8 @@ TEST(Iterator, TypeErasedInputRangeOptionalMixin) {
   };
 
   using Iota = TypeErasedInputRangeOptionalMixin<size_t>;
-  auto makeIota = [](size_t value = 0, std::optional<size_t> upper = {}) {
-    return Iota{IotaImpl{value, upper}};
+  auto makeIota = [](size_t lower = 0, std::optional<size_t> upper = {}) {
+    return Iota{IotaImpl{lower, upper}};
   };
   testIota(makeIota);
 }
