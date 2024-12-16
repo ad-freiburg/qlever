@@ -356,17 +356,27 @@ void ParsedQuery::checkUsedVariablesAreVisible(
 
 // ____________________________________________________________________________
 void ParsedQuery::addGroupByClause(std::vector<GroupKey> groupKeys) {
-  // Process groupClause
-  auto processVariable = [this](const Variable& groupKey) {
+  // Deduplicate the group by variables to support e.g. `GROUP BY ?x ?x ?x`.
+  // Note: The `GroupBy` class expects the grouped variables to be unique.
+  ad_utility::HashSet<Variable> deduplicatedGroupByVars;
+  auto processVariable = [this,
+                          &deduplicatedGroupByVars](const Variable& groupKey) {
     checkVariableIsVisible(groupKey, "GROUP BY");
-
-    _groupByVariables.push_back(groupKey);
+    if (deduplicatedGroupByVars.insert(groupKey).second) {
+      _groupByVariables.push_back(groupKey);
+    }
   };
 
   ad_utility::HashSet<Variable> variablesDefinedInGroupBy;
   auto processExpression =
-      [this, &variablesDefinedInGroupBy](
-          sparqlExpression::SparqlExpressionPimpl groupKey) {
+      [this, &variablesDefinedInGroupBy,
+       &processVariable](sparqlExpression::SparqlExpressionPimpl groupKey) {
+        // Handle the case of redundant braces around a variable, e.g. `GROUP BY
+        // (?x)`, which is parsed as an expression by the parser.
+        if (auto var = groupKey.getVariableOrNullopt(); var.has_value()) {
+          processVariable(var.value());
+          return;
+        }
         checkUsedVariablesAreVisible(groupKey, "GROUP BY",
                                      variablesDefinedInGroupBy,
                                      " or previously in the same GROUP BY");
