@@ -61,9 +61,12 @@ class Index {
     // Stores the index of the entity of each result.
     vector<Id> eids_;
     // Stores for each result how often an entity
-    // appears in its associated TextRecord.
+    // appears in its associated TextRecord. [[OLD DEFINITION]]
+    // Now scores BM25 scores for all words that are in the voacabulary
     vector<Score> scores_;
   };
+
+  enum class ScoringMetric { COUNT, TFIDF, BM25 };
 
   using Filetype = qlever::Filetype;
   using InputFileSpecification = qlever::InputFileSpecification;
@@ -94,8 +97,9 @@ class Index {
 
   // Add a text index to a complete KB index. First read the given context
   // file (if file name not empty), then add words from literals (if true).
-  void addTextFromContextFile(const std::string& contextFile,
-                              bool addWordsFromLiterals);
+  void buildTextIndexFile(
+      const std::pair<std::string, std::string>& wordsAndDocsFile,
+      bool addWordsFromLiterals);
 
   // Build docsDB file from given file (one text record per line).
   void buildDocsDB(const std::string& docsFile);
@@ -202,6 +206,10 @@ class Index {
   void setSettingsFile(const std::string& filename);
 
   void setNumTriplesPerBatch(uint64_t numTriplesPerBatch);
+
+  void setScoringMetricsUsed(ScoringMetric scoringMetric);
+
+  void setBM25Parmeters(float b, float k);
 
   const std::string& getTextName() const;
 

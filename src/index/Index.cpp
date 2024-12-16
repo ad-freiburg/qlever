@@ -25,9 +25,10 @@ void Index::createFromOnDiskIndex(const std::string& onDiskBase) {
 }
 
 // ____________________________________________________________________________
-void Index::addTextFromContextFile(const std::string& contextFile,
-                                   bool addWordsFromLiterals) {
-  pimpl_->addTextFromContextFile(contextFile, addWordsFromLiterals);
+void Index::buildTextIndexFile(
+    const std::pair<std::string, std::string>& wordsAndDocsFile,
+    bool addWordsFromLiterals) {
+  pimpl_->buildTextIndexFile(wordsAndDocsFile, addWordsFromLiterals);
 }
 
 // ____________________________________________________________________________
@@ -203,6 +204,16 @@ void Index::setSettingsFile(const std::string& filename) {
 // ____________________________________________________________________________
 void Index::setNumTriplesPerBatch(uint64_t numTriplesPerBatch) {
   return pimpl_->setNumTriplesPerBatch(numTriplesPerBatch);
+}
+
+// ____________________________________________________________________________
+void Index::setScoringMetricsUsed(ScoringMetric scoringMetric) {
+  return pimpl_->setScoringMetricsUsed(scoringMetric);
+}
+
+// ____________________________________________________________________________
+void Index::setBM25Parmeters(float b, float k) {
+  return pimpl_->setBM25Parameters(b, k);
 }
 
 // ____________________________________________________________________________
