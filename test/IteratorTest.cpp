@@ -122,6 +122,7 @@ void testIota(MakeIotaRange makeIotaRange) {
 
   // Test the interaction with the `ql::views` and `ql::ranges` machinery.
   auto view = iota | ql::views::drop(3) | ql::views::take(7);
+  static_assert(ql::ranges::input_range<decltype(view)>);
   sum = 0;
   auto add = [&sum](auto val) { sum += val; };
   ql::ranges::for_each(view, add);
@@ -151,7 +152,7 @@ TEST(Iterator, InputRangeMixin) {
   testIota(makeIota);
 }
 
-// _____________________________________________________________________________
+//_____________________________________________________________________________
 TEST(Iterator, InputRangeOptionalMixin) {
   using namespace ad_utility;
   struct Iota : InputRangeOptionalMixin<size_t> {
@@ -171,8 +172,7 @@ TEST(Iterator, InputRangeOptionalMixin) {
   };
   testIota(makeIota);
 }
-
-// _____________________________________________________________________________
+//_____________________________________________________________________________
 TEST(Iterator, TypeErasedInputRangeOptionalMixin) {
   using namespace ad_utility;
   struct IotaImpl : InputRangeOptionalMixin<size_t> {

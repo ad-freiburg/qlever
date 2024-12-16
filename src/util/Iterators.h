@@ -5,9 +5,6 @@
 #ifndef QLEVER_ITERATORS_H
 #define QLEVER_ITERATORS_H
 
-#include <c++/11/bits/ranges_base.h>
-
-#include <boost/range/any_range.hpp>
 #include <cstdint>
 #include <iterator>
 #include <type_traits>
@@ -53,7 +50,7 @@ class IteratorForAccessOperator {
   using iterator_category = std::random_access_iterator_tag;
   using difference_type = int64_t;
   using index_type = uint64_t;
-  // It is possible to explicitly specify the `value_type` and `reference_type`
+  // It is possible to explicitly specify the `value_type` and `reference`
   // if they differ from the defaults. For an example, see the `IdTable` class
   // which uses a proxy type as its `reference`.
   using value_type = std::conditional_t<
@@ -194,7 +191,7 @@ auto makeForwardingIterator(It iterator) {
 // element, or `isFinished()` must return true ( for an empty range).
 // * `bool isFinished()` -> has to return true if there are no more values, and
 // calls to `get()` are thus impossible.
-// * `reference_type get()` -> get the current value (typically as a reference).
+// * `reference get()` -> get the current value (typically as a reference).
 // * `void next()` advance to the next value. After calling `next()` either
 // `isFinished()` must be true, or `get()` must return the next value.
 template <typename Derived>
@@ -212,11 +209,13 @@ class InputRangeMixin {
    public:
     using iterator_category = std::input_iterator_tag;
     using difference_type = std::int64_t;
-    using reference_type = decltype(std::declval<Derived&>().get());
-    using value_type = std::remove_reference_t<reference_type>;
-    InputRangeMixin* mixin_;
+    using reference = decltype(std::declval<Derived&>().get());
+    using value_type = std::remove_reference_t<reference>;
+    using pointer = value_type*;
+    InputRangeMixin* mixin_ = nullptr;
 
    public:
+    Iterator() = default;
     explicit Iterator(InputRangeMixin* mixin) : mixin_{mixin} {}
     Iterator& operator++() {
       mixin_->derived().next();
@@ -287,11 +286,13 @@ class InputRangeOptionalMixin {
     using iterator_category = std::input_iterator_tag;
     using difference_type = std::int64_t;
     using value_type = typename InputRangeOptionalMixin::Storage::value_type;
-    using reference_type = std::add_lvalue_reference_t<value_type>;
-    using const_reference_type = std::add_const_t<reference_type>;
-    InputRangeOptionalMixin* mixin_;
+    using pointer = value_type*;
+    using reference = std::add_lvalue_reference_t<value_type>;
+    using const_reference = std::add_const_t<reference>;
+    InputRangeOptionalMixin* mixin_ = nullptr;
 
    public:
+    Iterator() = default;
     explicit Iterator(InputRangeOptionalMixin* mixin) : mixin_{mixin} {}
     Iterator& operator++() {
       mixin_->getNextAndStore();
@@ -301,8 +302,8 @@ class InputRangeOptionalMixin {
     // Needed for the `range` concept.
     void operator++(int) { (void)operator++(); }
 
-    reference_type operator*() { return mixin_->storage_.value(); }
-    const_reference_type operator*() const { return mixin_->storage_.value(); }
+    reference operator*() { return mixin_->storage_.value(); }
+    const_reference operator*() const { return mixin_->storage_.value(); }
     decltype(auto) operator->() { return std::addressof(operator*()); }
     decltype(auto) operator->() const { return std::addressof(operator*()); }
 
