@@ -14,6 +14,7 @@
 #include "engine/Bind.h"
 #include "engine/CartesianProductJoin.h"
 #include "engine/CountAvailablePredicates.h"
+#include "engine/Describe.h"
 #include "engine/Filter.h"
 #include "engine/GroupBy.h"
 #include "engine/IndexScan.h"
@@ -130,7 +131,7 @@ constexpr auto TextIndexScanForWord = [](Variable textRecordVar,
                                          string word) -> QetMatcher {
   return RootOperation<::TextIndexScanForWord>(AllOf(
       AD_PROPERTY(::TextIndexScanForWord, getResultWidth,
-                  Eq(1 + word.ends_with('*'))),
+                  Eq(2 + word.ends_with('*'))),
       AD_PROPERTY(::TextIndexScanForWord, textRecordVar, Eq(textRecordVar)),
       AD_PROPERTY(::TextIndexScanForWord, word, word)));
 };
@@ -332,12 +333,21 @@ inline auto ValuesClause = [](string cacheKey) {
 
 // Match a SpatialJoin operation, set arguments to ignore to -1
 inline auto SpatialJoin =
-    [](size_t maxDist, size_t maxResults,
+    [](size_t maxDist, size_t maxResults, Variable left, Variable right,
+       std::optional<Variable> distanceVariable,
+       PayloadVariables payloadVariables, SpatialJoinAlgorithm algorithm,
        const std::same_as<QetMatcher> auto&... childMatchers) {
       return RootOperation<::SpatialJoin>(
           AllOf(children(childMatchers...),
-                AD_PROPERTY(SpatialJoin, onlyForTestingGetConfig,
-                            Eq(std::pair(maxDist, maxResults)))));
+                AD_PROPERTY(SpatialJoin, onlyForTestingGetTask,
+                            Eq(std::pair(maxDist, maxResults))),
+                AD_PROPERTY(SpatialJoin, onlyForTestingGetVariables,
+                            Eq(std::pair(left, right))),
+                AD_PROPERTY(SpatialJoin, onlyForTestingGetDistanceVariable,
+                            Eq(distanceVariable)),
+                AD_PROPERTY(SpatialJoin, onlyForTestingGetPayloadVariables,
+                            Eq(payloadVariables)),
+                AD_PROPERTY(SpatialJoin, getAlgorithm, Eq(algorithm))));
     };
 
 // Match a GroupBy operation
@@ -348,8 +358,8 @@ static constexpr auto GroupBy =
   // TODO<joka921> Also test the aliases.
   auto aliasesToStrings = [](const std::vector<Alias>& aliases) {
     std::vector<std::string> result;
-    std::ranges::transform(aliases, std::back_inserter(result),
-                           &Alias::getDescriptor);
+    ql::ranges::transform(aliases, std::back_inserter(result),
+                          &Alias::getDescriptor);
     return result;
   };
 
@@ -386,10 +396,19 @@ constexpr auto OrderBy = [](const ::OrderBy::SortedVariables& sortedVariables,
 // Match a `UNION` operation.
 constexpr auto Union = MatchTypeAndOrderedChildren<::Union>;
 
+// Match a `DESCRIBE` operation
+inline QetMatcher Describe(
+    const Matcher<const parsedQuery::Describe&>& describeMatcher,
+    const QetMatcher& childMatcher) {
+  return RootOperation<::Describe>(
+      AllOf(children(childMatcher),
+            AD_PROPERTY(::Describe, getDescribe, describeMatcher)));
+}
+
 //
 inline QetMatcher QetWithWarnings(
     const std::vector<std::string>& warningSubstrings,
-    QetMatcher actualMatcher) {
+    const QetMatcher& actualMatcher) {
   auto warningMatchers = ad_utility::transform(
       warningSubstrings,
       [](const std::string& s) { return ::testing::HasSubstr(s); });

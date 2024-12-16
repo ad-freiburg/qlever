@@ -84,8 +84,8 @@ ProtoResult Distinct::computeResult(bool requestLaziness) {
 
 // _____________________________________________________________________________
 bool Distinct::matchesRow(const auto& a, const auto& b) const {
-  return std::ranges::all_of(keepIndices_,
-                             [&a, &b](ColumnIndex i) { return a[i] == b[i]; });
+  return ql::ranges::all_of(keepIndices_,
+                            [&a, &b](ColumnIndex i) { return a[i] == b[i]; });
 }
 
 // _____________________________________________________________________________
@@ -100,7 +100,7 @@ IdTable Distinct::distinct(
   // Variant of `std::ranges::unique` that allows to skip the begin rows of
   // elements found in the previous table.
   auto begin =
-      std::ranges::find_if(result, [this, &previousRow](const auto& row) {
+      ql::ranges::find_if(result, [this, &previousRow](const auto& row) {
         // Without explicit this clang seems to
         // think the this capture is redundant.
         return !previousRow.has_value() ||
@@ -111,12 +111,12 @@ IdTable Distinct::distinct(
   auto dest = result.begin();
   if (begin == dest) {
     // Optimization to avoid redundant move operations.
-    begin = std::ranges::adjacent_find(begin, end,
-                                       [this](const auto& a, const auto& b) {
-                                         // Without explicit this clang seems to
-                                         // think the this capture is redundant.
-                                         return this->matchesRow(a, b);
-                                       });
+    begin = ql::ranges::adjacent_find(begin, end,
+                                      [this](const auto& a, const auto& b) {
+                                        // Without explicit this clang seems to
+                                        // think the this capture is redundant.
+                                        return this->matchesRow(a, b);
+                                      });
     dest = begin;
     if (begin != end) {
       ++begin;
@@ -154,13 +154,13 @@ IdTable Distinct::outOfPlaceDistinct(const IdTable& dynInput) const {
   auto end = inputView.end();
   while (begin < end) {
     int64_t allowedOffset = std::min(end - begin, CHUNK_SIZE);
-    begin = std::ranges::unique_copy(begin, begin + allowedOffset,
-                                     std::back_inserter(output),
-                                     [this](const auto& a, const auto& b) {
-                                       // Without explicit this clang seems to
-                                       // think the this capture is redundant.
-                                       return this->matchesRow(a, b);
-                                     })
+    begin = ql::ranges::unique_copy(begin, begin + allowedOffset,
+                                    std::back_inserter(output),
+                                    [this](const auto& a, const auto& b) {
+                                      // Without explicit this clang seems to
+                                      // think the this capture is redundant.
+                                      return this->matchesRow(a, b);
+                                    })
                 .in;
     checkCancellation();
     // Skip to next unique value
@@ -169,12 +169,12 @@ IdTable Distinct::outOfPlaceDistinct(const IdTable& dynInput) const {
       // This can only be called when dynInput is not empty, so `begin[-1]` is
       // always valid.
       auto lastRow = begin[-1];
-      begin = std::ranges::find_if(begin, begin + allowedOffset,
-                                   [this, &lastRow](const auto& row) {
-                                     // Without explicit this clang seems to
-                                     // think the this capture is redundant.
-                                     return !this->matchesRow(row, lastRow);
-                                   });
+      begin = ql::ranges::find_if(begin, begin + allowedOffset,
+                                  [this, &lastRow](const auto& row) {
+                                    // Without explicit this clang seems to
+                                    // think the this capture is redundant.
+                                    return !this->matchesRow(row, lastRow);
+                                  });
       checkCancellation();
     } while (begin != end && matchesRow(*begin, begin[-1]));
   }

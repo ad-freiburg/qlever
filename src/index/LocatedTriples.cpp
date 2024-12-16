@@ -6,10 +6,10 @@
 
 #include "index/LocatedTriples.h"
 
-#include <algorithm>
-
 #include "absl/strings/str_join.h"
+#include "backports/algorithm.h"
 #include "index/CompressedRelation.h"
+#include "index/ConstantsIndexBuilding.h"
 #include "util/ChunkedForLoop.h"
 
 // ____________________________________________________________________________
@@ -28,9 +28,9 @@ std::vector<LocatedTriple> LocatedTriple::locateTriplesInPermutation(
         // that larger than or equal to the triple. See `LocatedTriples.h` for a
         // discussion of the corner cases.
         size_t blockIndex =
-            std::ranges::lower_bound(blockMetadata, triple.toPermutedTriple(),
-                                     std::less<>{},
-                                     &CompressedBlockMetadata::lastTriple_) -
+            ql::ranges::lower_bound(blockMetadata, triple.toPermutedTriple(),
+                                    std::less<>{},
+                                    &CompressedBlockMetadata::lastTriple_) -
             blockMetadata.begin();
         out.emplace_back(blockIndex, triple, shouldExist);
       },
@@ -52,7 +52,7 @@ NumAddedAndDeleted LocatedTriplesPerBlock::numTriples(size_t blockIndex) const {
   }
 
   auto blockUpdateTriples = map_.at(blockIndex);
-  size_t countInserts = std::ranges::count_if(
+  size_t countInserts = ql::ranges::count_if(
       blockUpdateTriples, &LocatedTriple::shouldTripleExist_);
   return {countInserts, blockUpdateTriples.size() - countInserts};
 }
@@ -168,9 +168,9 @@ IdTable LocatedTriplesPerBlock::mergeTriplesImpl(size_t blockIndex,
 
   if (locatedTripleIt != locatedTriples.end()) {
     AD_CORRECTNESS_CHECK(rowIt == block.end());
-    std::ranges::for_each(
-        std::ranges::subrange(locatedTripleIt, locatedTriples.end()) |
-            std::views::filter(&LocatedTriple::shouldTripleExist_),
+    ql::ranges::for_each(
+        ql::ranges::subrange(locatedTripleIt, locatedTriples.end()) |
+            ql::views::filter(&LocatedTriple::shouldTripleExist_),
         writeLocatedTripleToResult);
   }
   if (rowIt != block.end()) {
@@ -250,6 +250,48 @@ void LocatedTriplesPerBlock::setOriginalMetadata(
   updateAugmentedMetadata();
 }
 
+// Update the `blockMetadata`, such that its graph info is consistent with the
+// `locatedTriples` which are added to that block. In particular, all graphs to
+// which at least one triple is inserted become part of the graph info, and if
+// the number of total graphs becomes larger than the configured threshold, then
+// the graph info is set to `nullopt`, which means that there is no info.
+static auto updateGraphMetadata(CompressedBlockMetadata& blockMetadata,
+                                const LocatedTriples& locatedTriples) {
+  // We do not know anything about the triples contained in the block, so we
+  // also cannot know if the `locatedTriples` introduces duplicates. We thus
+  // have to be conservative and assume that there are duplicates.
+  blockMetadata.containsDuplicatesWithDifferentGraphs_ = true;
+  auto& graphs = blockMetadata.graphInfo_;
+  if (!graphs.has_value()) {
+    // The original block already contains too many graphs, don't store any
+    // graph info.
+    return;
+  }
+
+  // Compute a hash set of all graphs that are originally contained in the block
+  // and all the graphs that are added via the `locatedTriples`.
+  ad_utility::HashSet<Id> newGraphs(graphs.value().begin(),
+                                    graphs.value().end());
+  for (auto& lt : locatedTriples) {
+    if (!lt.shouldTripleExist_) {
+      // Don't update the graph info for triples that are deleted.
+      continue;
+    }
+    newGraphs.insert(lt.triple_.ids_.at(ADDITIONAL_COLUMN_GRAPH_ID));
+    // Handle the case that with the newly added triples we have too many
+    // distinct graphs to store them in the graph info.
+    if (newGraphs.size() > MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA) {
+      graphs.reset();
+      return;
+    }
+  }
+  graphs.emplace(newGraphs.begin(), newGraphs.end());
+
+  // Sort the stored graphs. Note: this is currently not expected by the code
+  // that uses the graph info, but makes testing much easier.
+  ql::ranges::sort(graphs.value());
+}
+
 // ____________________________________________________________________________
 void LocatedTriplesPerBlock::updateAugmentedMetadata() {
   // TODO<C++23> use view::enumerate
@@ -265,6 +307,7 @@ void LocatedTriplesPerBlock::updateAugmentedMetadata() {
       blockMetadata.lastTriple_ =
           std::max(blockMetadata.lastTriple_,
                    blockUpdates.rbegin()->triple_.toPermutedTriple());
+      updateGraphMetadata(blockMetadata, blockUpdates);
     }
     blockIndex++;
   }
@@ -287,21 +330,24 @@ void LocatedTriplesPerBlock::updateAugmentedMetadata() {
         lastTriple,
         std::nullopt,
         true};
-    augmentedMetadata_->emplace_back(lastBlockN, blockIndex);
+    lastBlockN.graphInfo_.emplace();
+    CompressedBlockMetadata lastBlock{lastBlockN, blockIndex};
+    updateGraphMetadata(lastBlock, blockUpdates);
+    augmentedMetadata_->push_back(lastBlock);
   }
 }
 
 // ____________________________________________________________________________
 std::ostream& operator<<(std::ostream& os, const LocatedTriples& lts) {
   os << "{ ";
-  std::ranges::copy(lts, std::ostream_iterator<LocatedTriple>(os, " "));
+  ql::ranges::copy(lts, std::ostream_iterator<LocatedTriple>(os, " "));
   os << "}";
   return os;
 }
 
 // ____________________________________________________________________________
 std::ostream& operator<<(std::ostream& os, const std::vector<IdTriple<0>>& v) {
-  std::ranges::copy(v, std::ostream_iterator<IdTriple<0>>(os, ", "));
+  ql::ranges::copy(v, std::ostream_iterator<IdTriple<0>>(os, ", "));
   return os;
 }
 
@@ -315,7 +361,7 @@ bool LocatedTriplesPerBlock::isLocatedTriple(const IdTriple<0>& triple,
     return ad_utility::contains(lt, locatedTriple);
   };
 
-  return std::ranges::any_of(map_, [&blockContains](auto& indexAndBlock) {
+  return ql::ranges::any_of(map_, [&blockContains](auto& indexAndBlock) {
     const auto& [index, block] = indexAndBlock;
     return blockContains(block, index);
   });

@@ -19,6 +19,8 @@
 #include "util/ConcurrentCache.h"
 #include "util/Synchronized.h"
 
+// The value of the `QueryResultCache` below. It consists of a `Result` together
+// with its `RuntimeInfo`.
 class CacheValue {
  private:
   std::shared_ptr<Result> result_;
@@ -61,11 +63,29 @@ class CacheValue {
   };
 };
 
+// The key for the `QueryResultCache` below. It consists of a `string` (the
+// actual cache key of a `QueryExecutionTree` and the index of the
+// `LocatedTriplesSnapshot` that was used to create the corresponding value.
+// That way, two identical trees with different snapshot indices will have a
+// different cache key. This has the (desired!) effect that UPDATE requests
+// correctly invalidate preexisting cache results.
+struct QueryCacheKey {
+  std::string key_;
+  size_t locatedTriplesSnapshotIndex_;
+
+  bool operator==(const QueryCacheKey&) const = default;
+
+  template <typename H>
+  friend H AbslHashValue(H h, const QueryCacheKey& key) {
+    return H::combine(std::move(h), key.key_, key.locatedTriplesSnapshotIndex_);
+  }
+};
+
 // Threadsafe LRU cache for (partial) query results, that
 // checks on insertion, if the result is currently being computed
 // by another query.
 using QueryResultCache = ad_utility::ConcurrentCache<
-    ad_utility::LRUCache<string, CacheValue, CacheValue::SizeGetter>>;
+    ad_utility::LRUCache<QueryCacheKey, CacheValue, CacheValue::SizeGetter>>;
 
 // Execution context for queries.
 // Holds references to index and engine, implements caching.

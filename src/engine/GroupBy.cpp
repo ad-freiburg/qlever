@@ -49,7 +49,7 @@ GroupBy::GroupBy(QueryExecutionContext* qec, vector<Variable> groupByVariables,
   // NOTE: It is tempting to do the same also for the aliases, but that would
   // break the case when an alias reuses a variable that was bound by a previous
   // alias.
-  std::ranges::sort(_groupByVariables, std::less<>{}, &Variable::name);
+  ql::ranges::sort(_groupByVariables, std::less<>{}, &Variable::name);
 
   auto sortColumns = computeSortColumns(subtree.get());
   _subtree =
@@ -179,8 +179,8 @@ uint64_t GroupBy::getSizeEstimateBeforeLimit() {
 
   // TODO<joka921> Once we can use `std::views` this can be solved
   // more elegantly.
-  float minMultiplicity = std::ranges::min(
-      _groupByVariables | std::views::transform(varToMultiplicity));
+  float minMultiplicity = ql::ranges::min(
+      _groupByVariables | ql::views::transform(varToMultiplicity));
   return _subtree->getSizeEstimate() / minMultiplicity;
 }
 
@@ -420,7 +420,7 @@ size_t GroupBy::searchBlockBoundaries(
   for (size_t pos = 0; pos < idTable.size(); pos++) {
     checkCancellation();
     bool rowMatchesCurrentBlock =
-        std::ranges::all_of(currentGroupBlock, [&](const auto& colIdxAndValue) {
+        ql::ranges::all_of(currentGroupBlock, [&](const auto& colIdxAndValue) {
           return idTable(pos, colIdxAndValue.first) == colIdxAndValue.second;
         });
     if (!rowMatchesCurrentBlock) {
@@ -735,7 +735,7 @@ std::optional<IdTable> GroupBy::computeGroupByForFullIndexScan() const {
   } else if (!variableIsBoundInSubtree) {
     // The variable inside the COUNT() is not part of the input, so it is always
     // unbound and has a count of 0 in each group.
-    std::ranges::fill(table.getColumn(1), Id::makeFromInt(0));
+    ql::ranges::fill(table.getColumn(1), Id::makeFromInt(0));
   }
 
   // TODO<joka921> This optimization should probably also apply if
@@ -848,7 +848,7 @@ std::optional<IdTable> GroupBy::computeGroupByForJoinWithFullScan() const {
   const auto& index = getExecutionContext()->getIndex();
 
   // TODO<joka921, C++23> Simplify the following pattern by using
-  // `std::views::chunk_by` and implement a lazy version of this view for
+  // `ql::views::chunkd_by` and implement a lazy version of this view for
   // input iterators.
 
   // Take care of duplicate values in the input.
@@ -1021,7 +1021,7 @@ GroupBy::isSupportedAggregate(sparqlExpression::SparqlExpression* expr) {
     return std::nullopt;
 
   // `expr` is not a nested aggregated
-  if (std::ranges::any_of(expr->children(), [](const auto& ptr) {
+  if (ql::ranges::any_of(expr->children(), [](const auto& ptr) {
         return ptr->containsAggregate();
       })) {
     return std::nullopt;
@@ -1164,7 +1164,7 @@ void GroupBy::substituteGroupVariable(
   for (const auto& occurrence : occurrences) {
     sparqlExpression::VectorWithMemoryLimit<ValueId> values(allocator);
     values.resize(groupValues.size());
-    std::ranges::copy(groupValues, values.begin());
+    ql::ranges::copy(groupValues, values.begin());
 
     auto newExpression = std::make_unique<sparqlExpression::VectorIdExpression>(
         std::move(values));
@@ -1276,7 +1276,7 @@ GroupBy::HashMapAggregationData<NUM_GROUP_COLUMNS>::getSortedGroupColumns()
   }
 
   // Sort data.
-  std::ranges::sort(sortedKeys.begin(), sortedKeys.end());
+  ql::ranges::sort(sortedKeys.begin(), sortedKeys.end());
 
   // Get data in a column-wise manner.
   ArrayOrVector<std::vector<Id>> result;
@@ -1307,7 +1307,7 @@ void GroupBy::evaluateAlias(
   // have to be substituted away before evaluation
 
   auto substitutions = alias.groupedVariables_;
-  auto topLevelGroupedVariable = std::ranges::find_if(
+  auto topLevelGroupedVariable = ql::ranges::find_if(
       substitutions, [](HashMapGroupedVariableInformation& val) {
         return std::get_if<OccurAsRoot>(&val.occurrences_);
       });
@@ -1320,13 +1320,13 @@ void GroupBy::evaluateAlias(
         result->getColumn(topLevelGroupedVariable->resultColumnIndex_)
             .subspan(evaluationContext._beginIndex, evaluationContext.size());
     decltype(auto) outValues = result->getColumn(alias.outCol_);
-    std::ranges::copy(groupValues,
-                      outValues.begin() + evaluationContext._beginIndex);
+    ql::ranges::copy(groupValues,
+                     outValues.begin() + evaluationContext._beginIndex);
 
     // We also need to store it for possible future use
     sparqlExpression::VectorWithMemoryLimit<ValueId> values(allocator);
     values.resize(groupValues.size());
-    std::ranges::copy(groupValues, values.begin());
+    ql::ranges::copy(groupValues, values.begin());
 
     evaluationContext._previousResultsFromSameGroup.at(alias.outCol_) =
         sparqlExpression::copyExpressionResult(
@@ -1345,8 +1345,8 @@ void GroupBy::evaluateAlias(
 
     // Copy to result table
     decltype(auto) outValues = result->getColumn(alias.outCol_);
-    std::ranges::copy(aggregateResults,
-                      outValues.begin() + evaluationContext._beginIndex);
+    ql::ranges::copy(aggregateResults,
+                     outValues.begin() + evaluationContext._beginIndex);
 
     // Copy the result so that future aliases may reuse it
     evaluationContext._previousResultsFromSameGroup.at(alias.outCol_) =
@@ -1375,7 +1375,7 @@ void GroupBy::evaluateAlias(
 
     // Restore original children. Only necessary when the expression will be
     // used in the future (not the case for the hash map optimization).
-    // TODO<C++23> Use `std::views::zip(info, originalChildren)`.
+    // TODO<C++23> Use `ql::views::zip(info, originalChildren)`.
     for (size_t i = 0; i < info.size(); ++i) {
       auto& aggregate = info.at(i);
       auto parentAndIndex = aggregate.parentAndIndex_.value();
@@ -1434,7 +1434,7 @@ IdTable GroupBy::createResultFromHashMap(
 
   // Copy grouped by values
   for (size_t idx = 0; idx < aggregationData.numOfGroupedColumns_; ++idx) {
-    std::ranges::copy(sortedKeys.at(idx), result.getColumn(idx).begin());
+    ql::ranges::copy(sortedKeys.at(idx), result.getColumn(idx).begin());
   }
 
   // Initialize evaluation context

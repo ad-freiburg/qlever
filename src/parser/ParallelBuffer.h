@@ -76,9 +76,8 @@ class ParallelFileBuffer : public ParallelBuffer {
   std::future<size_t> fut_;
 };
 
-/// A parallel buffer, where each of the blocks except for the last one has to
-/// end with a certain regex (e.g. a full stop followed by whitespace and a
-/// newline to denote the end of a triple in a .ttl file).
+// A parallel buffer that reads input from the file in blocks, where each block,
+// except possibly the last, ends with `endRegex`.
 class ParallelBufferWithEndRegex : public ParallelBuffer {
  public:
   ParallelBufferWithEndRegex(size_t blocksize, std::string endRegex)
@@ -86,7 +85,10 @@ class ParallelBufferWithEndRegex : public ParallelBuffer {
         endRegex_{endRegex},
         endRegexAsString_{std::move(endRegex)} {}
 
-  // __________________________________________________________________________
+  // Get the data that was read asynchronously after the previous call to this
+  // function. Returns the part of the data until `endRegex` is found, with the
+  // part after `endRegex` from the previous call prepended. If `endRegex` is
+  // not found, simply return the rest of the data.
   std::optional<BufferType> getNextBlock() override;
 
   // Open the file from which the blocks are read.

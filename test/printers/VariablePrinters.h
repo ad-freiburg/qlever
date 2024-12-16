@@ -6,7 +6,7 @@
 #include "parser/data/Variable.h"
 
 // _____________________________________________________________
-void PrintTo(const Variable& var, std::ostream* os) {
+inline void PrintTo(const Variable& var, std::ostream* os) {
   auto& s = *os;
   s << var.name();
 }

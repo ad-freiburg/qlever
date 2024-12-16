@@ -23,6 +23,8 @@
 
 namespace prefilterExpressions {
 
+using IdOrLocalVocabEntry = std::variant<ValueId, LocalVocabEntry>;
+
 //______________________________________________________________________________
 // The maximum recursion depth for `info()` / `operator<<()`. A depth of `3`
 // should be sufficient for most `PrefilterExpressions` in our use case.
@@ -61,12 +63,12 @@ class PrefilterExpression {
   // Format content for debugging.
   virtual std::string asString(size_t depth) const = 0;
 
-  // Needed for implementing the `NotExpression`. This method is required,
-  // because we logically operate on `BlockMetadata` values which define ranges
-  // given the `ValueIds` from last and first triple.
-  // E.g. the `BlockMetadata` that defines the range [IntId(0),... IntId(5)],
-  // should be considered relevant for the expression `?x >= IntId(3)`, but also
-  // for expression `!(?x >= IntId(3))`. Thus we can't retrieve the negation by
+  // This method is required for implementing the `NotExpression`. This method
+  // is required, because we logically operate on `BlockMetadata` values which
+  // define ranges given the `ValueIds` from last and first triple. E.g. the
+  // `BlockMetadata` that defines the range [IntId(0),... IntId(5)], should be
+  // considered relevant for the expression `?x >= IntId(3)`, but also for
+  // expression `!(?x >= IntId(3))`. Thus we can't retrieve the negation by
   // simply taking the complementing set of `BlockMetadata`, instead we
   // retrieve it by directly negating/complementing the child expression itself.
   // Every derived class can return it's respective logical complement
@@ -80,10 +82,19 @@ class PrefilterExpression {
   // take a look at the actual implementation for derived classes.
   virtual std::unique_ptr<PrefilterExpression> logicalComplement() const = 0;
 
-  // The respective metadata to the blocks is expected to be provided in
-  // a sorted order (w.r.t. the relevant column).
-  std::vector<BlockMetadata> evaluate(const std::vector<BlockMetadata>& input,
-                                      size_t evaluationColumn) const;
+  // It's expected that the provided `BlockMetadata` vector adheres to the
+  // following conditions:
+  // (1) unqiueness of blocks
+  // (2) sorted (order)
+  // (3) Constant values for all columns `< evaluationColumn`
+  // To indicate that the possibly incomplete first and last block should be
+  // handled appropriately, the `stripIncompleteBlocks` flag is set to `true`.
+  // The flag value shouldn't be changed in general, because `evaluate()` only
+  // removes the respective block if it is conditionally (inconsistent columns)
+  // necessary.
+  std::vector<BlockMetadata> evaluate(std::span<const BlockMetadata> input,
+                                      size_t evaluationColumn,
+                                      bool stripIncompleteBlocks = true) const;
 
   // Format for debugging
   friend std::ostream& operator<<(std::ostream& str,
@@ -92,10 +103,26 @@ class PrefilterExpression {
     return str;
   }
 
+  // Static helper to retrieve the reference `ValueId` from the
+  // `IdOrLocalVocabEntry` variant.
+  static ValueId getValueIdFromIdOrLocalVocabEntry(
+      const IdOrLocalVocabEntry& refernceValue, LocalVocab& vocab);
+
  private:
+  // Note: Use `evaluate` for general evaluation of `PrefilterExpression`
+  // instead of this method.
+  // Performs the following conditional checks on
+  // the provided `BlockMetadata` values: (1) unqiueness of blocks (2) sorted
+  // (order) (3) Constant values for all columns `< evaluationColumn` This
+  // function subsequently invokes the `evaluateImpl` method and checks the
+  // corresponding result for those conditions again. If a respective condition
+  // is violated, the function performing the checks will throw a
+  // `std::runtime_error`.
+  std::vector<BlockMetadata> evaluateAndCheckImpl(
+      std::span<const BlockMetadata> input, size_t evaluationColumn) const;
+
   virtual std::vector<BlockMetadata> evaluateImpl(
-      const std::vector<BlockMetadata>& input,
-      size_t evaluationColumn) const = 0;
+      std::span<const BlockMetadata> input, size_t evaluationColumn) const = 0;
 };
 
 //______________________________________________________________________________
@@ -110,12 +137,18 @@ using CompOp = valueIdComparators::Comparison;
 template <CompOp Comparison>
 class RelationalExpression : public PrefilterExpression {
  private:
-  // The ValueId on which we perform the relational comparison on.
-  ValueId referenceId_;
+  // This is the right hand side value of the relational expression. The left
+  // hand value is indirectly supplied during the evaluation process via the
+  // `evaluationColumn` argument. `evaluationColumn` represents the column index
+  // associated with the `Variable` column of the `IndexScan`.
+  // E.g., a less-than expression with a value of 3 will represent the logical
+  // relation ?var < 3. A equal-to expression with a value of "Freiburg" will
+  // represent ?var = "Freiburg".
+  IdOrLocalVocabEntry rightSideReferenceValue_;
 
  public:
-  explicit RelationalExpression(const ValueId referenceId)
-      : referenceId_(referenceId) {}
+  explicit RelationalExpression(const IdOrLocalVocabEntry& referenceValue)
+      : rightSideReferenceValue_(referenceValue) {}
 
   std::unique_ptr<PrefilterExpression> logicalComplement() const override;
   bool operator==(const PrefilterExpression& other) const override;
@@ -124,7 +157,7 @@ class RelationalExpression : public PrefilterExpression {
 
  private:
   std::vector<BlockMetadata> evaluateImpl(
-      const std::vector<BlockMetadata>& input,
+      std::span<const BlockMetadata> input,
       size_t evaluationColumn) const override;
 };
 
@@ -154,7 +187,7 @@ class LogicalExpression : public PrefilterExpression {
 
  private:
   std::vector<BlockMetadata> evaluateImpl(
-      const std::vector<BlockMetadata>& input,
+      std::span<const BlockMetadata> input,
       size_t evaluationColumn) const override;
 };
 
@@ -179,7 +212,7 @@ class NotExpression : public PrefilterExpression {
 
  private:
   std::vector<BlockMetadata> evaluateImpl(
-      const std::vector<BlockMetadata>& input,
+      std::span<const BlockMetadata> input,
       size_t evaluationColumn) const override;
 };
 
@@ -206,6 +239,7 @@ using OrExpression = prefilterExpressions::LogicalExpression<
     prefilterExpressions::LogicalOperator::OR>;
 
 namespace detail {
+
 //______________________________________________________________________________
 // Pair containing a `PrefilterExpression` and its corresponding `Variable`.
 using PrefilterExprVariablePair =
@@ -217,6 +251,20 @@ using PrefilterExprVariablePair =
 // sorted order w.r.t. the Variable value.
 void checkPropertiesForPrefilterConstruction(
     const std::vector<PrefilterExprVariablePair>& vec);
+
+//______________________________________________________________________________
+// Creates a `RelationalExpression<comparison>` prefilter expression based on
+// the templated `CompOp` comparison operation and the reference
+// `IdOrLocalVocabEntry` value. With the next step, the corresponding
+// `<RelationalExpression<comparison>, Variable>` pair is created, and finally
+// returned in a vector. The `mirrored` flag indicates if the given
+// `RelationalExpression<comparison>` should be mirrored. The mirroring
+// procedure changes the (asymmetrical) comparison operations:
+// e.g. `5 < ?x` is changed to `?x > 5`.
+template <CompOp comparison>
+std::vector<PrefilterExprVariablePair> makePrefilterExpressionVec(
+    const IdOrLocalVocabEntry& referenceValue, const Variable& variable,
+    bool mirrored);
 
 }  // namespace detail
 }  // namespace prefilterExpressions

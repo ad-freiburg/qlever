@@ -1,6 +1,7 @@
-// Copyright 2014, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+// Copyright 2014 - 2024, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de> [2014 - 2017]
+//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 #include "ParsedQuery.h"
 
@@ -22,20 +23,6 @@
 
 using std::string;
 using std::vector;
-
-// _____________________________________________________________________________
-parsedQuery::DatasetClauses parsedQuery::DatasetClauses::fromClauses(
-    const std::vector<DatasetClause>& clauses) {
-  DatasetClauses result;
-  for (auto& [dataset, isNamed] : clauses) {
-    auto& graphs = isNamed ? result.namedGraphs_ : result.defaultGraphs_;
-    if (!graphs.has_value()) {
-      graphs.emplace();
-    }
-    graphs.value().insert(dataset);
-  }
-  return result;
-}
 
 // _____________________________________________________________________________
 string SparqlPrefix::asString() const {
@@ -96,10 +83,10 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
 
   const bool isExplicitGroupBy = !_groupByVariables.empty();
   const bool isImplicitGroupBy =
-      std::ranges::any_of(getAliases(),
-                          [](const Alias& alias) {
-                            return alias._expression.containsAggregate();
-                          }) &&
+      ql::ranges::any_of(getAliases(),
+                         [](const Alias& alias) {
+                           return alias._expression.containsAggregate();
+                         }) &&
       !isExplicitGroupBy;
   const bool isGroupBy = isExplicitGroupBy || isImplicitGroupBy;
   using namespace std::string_literals;
@@ -176,7 +163,7 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
       // part of the group by statement.
       const auto& aliases = selectClause().getAliases();
       for (const Variable& var : selectClause().getSelectedVariables()) {
-        if (auto it = std::ranges::find(aliases, var, &Alias::_target);
+        if (auto it = ql::ranges::find(aliases, var, &Alias::_target);
             it != aliases.end()) {
           const auto& alias = *it;
           auto relevantVariables = groupVariables;

@@ -50,7 +50,10 @@ inline auto& RuntimeParameters() {
         Bool<"group-by-disable-index-scan-optimizations">{false},
         SizeT<"service-max-value-rows">{10'000},
         SizeT<"query-planning-budget">{1500},
-        Bool<"throw-on-unbound-variables">{false}};
+        Bool<"throw-on-unbound-variables">{false},
+        // Control up until which size lazy results should be cached. Caching
+        // does cause significant overhead for this case.
+        MemorySizeParameter<"lazy-result-max-cache-size">{5_MB}};
   }();
   return params;
 }

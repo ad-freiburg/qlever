@@ -15,6 +15,8 @@ using ::testing::Not;
 using ::testing::Values;
 
 namespace {
+using IdTableVocabPair = Result::IdTableVocabPair;
+
 // Helper function to generate all possible splits of an IdTable in order to
 // exhaustively test generator variants.
 std::vector<Result::Generator> getAllSubSplits(const IdTable& idTable) {
@@ -35,7 +37,7 @@ std::vector<Result::Generator> getAllSubSplits(const IdTable& idTable) {
       for (size_t i = 0; i < clone.size(); ++i) {
         subSplit.push_back(clone[i]);
         if (splitIndex < split.size() && split[splitIndex] == i) {
-          Result::IdTableVocabPair pair{std::move(subSplit), LocalVocab{}};
+          IdTableVocabPair pair{std::move(subSplit), LocalVocab{}};
           co_yield pair;
           // Move back if not moved out to reuse buffer.
           subSplit = std::move(pair.idTable_);
@@ -54,7 +56,7 @@ std::vector<Result::Generator> getAllSubSplits(const IdTable& idTable) {
 
 // _____________________________________________________________________________
 void consumeGenerator(Result::Generator& generator) {
-  for ([[maybe_unused]] Result::IdTableVocabPair& _ : generator) {
+  for ([[maybe_unused]] IdTableVocabPair& _ : generator) {
   }
 }
 }  // namespace
@@ -69,7 +71,7 @@ TEST(Result, verifyIdTableThrowsWhenActuallyLazy) {
 TEST(Result, verifyIdTableThrowsOnSecondAccess) {
   const Result result{[]() -> Result::Generator { co_return; }(), {}};
   // First access should work
-  for ([[maybe_unused]] Result::IdTableVocabPair& _ : result.idTables()) {
+  for ([[maybe_unused]] IdTableVocabPair& _ : result.idTables()) {
     ADD_FAILURE() << "Generator is empty";
   }
   // Now it should throw
@@ -159,10 +161,10 @@ TEST(Result,
 TEST(Result, verifyRunOnNewChunkComputedThrowsWithFullyMaterializedResult) {
   Result result{makeIdTableFromVector({{}}), {}, LocalVocab{}};
 
-  EXPECT_THROW(
-      result.runOnNewChunkComputed(
-          [](const IdTable&, std::chrono::microseconds) {}, [](bool) {}),
-      ad_utility::Exception);
+  EXPECT_THROW(result.runOnNewChunkComputed(
+                   [](const IdTableVocabPair&, std::chrono::microseconds) {},
+                   [](bool) {}),
+               ad_utility::Exception);
 }
 
 // _____________________________________________________________________________
@@ -171,29 +173,38 @@ TEST(Result, verifyRunOnNewChunkComputedFiresCorrectly) {
   auto idTable2 = makeIdTableFromVector({{3, 4, 0}});
   auto idTable3 = makeIdTableFromVector({{1, 6, 0}, {2, 5, 0}, {3, 4, 0}});
 
-  Result result{[](auto& t1, auto& t2, auto& t3) -> Result::Generator {
-                  std::this_thread::sleep_for(1ms);
-                  co_yield {t1.clone(), LocalVocab{}};
-                  std::this_thread::sleep_for(3ms);
-                  co_yield {t2.clone(), LocalVocab{}};
-                  std::this_thread::sleep_for(5ms);
-                  co_yield {t3.clone(), LocalVocab{}};
-                }(idTable1, idTable2, idTable3),
-                {}};
+  Result result{
+      [](auto& t1, auto& t2, auto& t3) -> Result::Generator {
+        std::this_thread::sleep_for(1ms);
+        LocalVocab localVocab{};
+        localVocab.getIndexAndAddIfNotContained(LocalVocabEntry{
+            ad_utility::triple_component::Literal::literalWithoutQuotes(
+                "Test")});
+        co_yield {t1.clone(), std::move(localVocab)};
+        std::this_thread::sleep_for(3ms);
+        co_yield {t2.clone(), LocalVocab{}};
+        std::this_thread::sleep_for(5ms);
+        co_yield {t3.clone(), LocalVocab{}};
+      }(idTable1, idTable2, idTable3),
+      {}};
   uint32_t callCounter = 0;
   bool finishedConsuming = false;
 
   result.runOnNewChunkComputed(
-      [&](const IdTable& idTable, std::chrono::microseconds duration) {
+      [&](const IdTableVocabPair& pair, std::chrono::microseconds duration) {
+        const IdTable& idTable = pair.idTable_;
         ++callCounter;
         if (callCounter == 1) {
           EXPECT_EQ(idTable1, idTable);
+          EXPECT_EQ(pair.localVocab_.size(), 1);
           EXPECT_GE(duration, 1ms);
         } else if (callCounter == 2) {
           EXPECT_EQ(idTable2, idTable);
+          EXPECT_EQ(pair.localVocab_.size(), 0);
           EXPECT_GE(duration, 3ms);
         } else if (callCounter == 3) {
           EXPECT_EQ(idTable3, idTable);
+          EXPECT_EQ(pair.localVocab_.size(), 0);
           EXPECT_GE(duration, 5ms);
         }
       },
@@ -220,7 +231,7 @@ TEST(Result, verifyRunOnNewChunkCallsFinishOnError) {
   uint32_t callCounterFinished = 0;
 
   result.runOnNewChunkComputed(
-      [&](const IdTable&, std::chrono::microseconds) {
+      [&](const IdTableVocabPair&, std::chrono::microseconds) {
         ++callCounterGenerator;
       },
       [&](bool error) {
@@ -248,7 +259,7 @@ TEST(Result, verifyRunOnNewChunkCallsFinishOnPartialConsumption) {
                   {}};
 
     result.runOnNewChunkComputed(
-        [&](const IdTable&, std::chrono::microseconds) {
+        [&](const IdTableVocabPair&, std::chrono::microseconds) {
           ++callCounterGenerator;
         },
         [&](bool error) {
@@ -267,8 +278,8 @@ TEST(Result, verifyRunOnNewChunkCallsFinishOnPartialConsumption) {
 TEST(Result, verifyCacheDuringConsumptionThrowsWhenFullyMaterialized) {
   Result result{makeIdTableFromVector({{}}), {}, LocalVocab{}};
   EXPECT_THROW(result.cacheDuringConsumption(
-                   [](const std::optional<Result::IdTableVocabPair>&,
-                      const Result::IdTableVocabPair&) { return true; },
+                   [](const std::optional<IdTableVocabPair>&,
+                      const IdTableVocabPair&) { return true; },
                    [](Result) {}),
                ad_utility::Exception);
 }
@@ -281,9 +292,8 @@ TEST(Result, verifyCacheDuringConsumptionRespectsPassedParameters) {
   for (auto& generator : getAllSubSplits(idTable)) {
     Result result{std::move(generator), {0}};
     result.cacheDuringConsumption(
-        [predictedSize = 0](
-            const std::optional<Result::IdTableVocabPair>& aggregator,
-            const Result::IdTableVocabPair& newTable) mutable {
+        [predictedSize = 0](const std::optional<IdTableVocabPair>& aggregator,
+                            const IdTableVocabPair& newTable) mutable {
           if (aggregator.has_value()) {
             EXPECT_EQ(aggregator.value().idTable_.numColumns(), predictedSize);
           } else {
@@ -304,8 +314,8 @@ TEST(Result, verifyCacheDuringConsumptionRespectsPassedParameters) {
     uint32_t callCounter = 0;
     Result result{std::move(generator), {}};
     result.cacheDuringConsumption(
-        [&](const std::optional<Result::IdTableVocabPair>& aggregator,
-            const Result::IdTableVocabPair&) {
+        [&](const std::optional<IdTableVocabPair>& aggregator,
+            const IdTableVocabPair&) {
           EXPECT_FALSE(aggregator.has_value());
           ++callCounter;
           return false;
@@ -329,8 +339,9 @@ TEST(Result, cacheDuringConsumptionAbortsValueWhenRunningIntoMemoryLimit) {
                 }(flag),
                 {0}};
   result.cacheDuringConsumption(
-      [](const std::optional<Result::IdTableVocabPair>&,
-         const Result::IdTableVocabPair&) { return true; },
+      [](const std::optional<IdTableVocabPair>&, const IdTableVocabPair&) {
+        return true;
+      },
       [&](Result) { ADD_FAILURE() << "The result should not get cached."; });
   consumeGenerator(result.idTables());
   EXPECT_TRUE(flag);
@@ -351,8 +362,9 @@ TEST(
                 }(flag),
                 {0}};
   result.cacheDuringConsumption(
-      [](const std::optional<Result::IdTableVocabPair>&,
-         const Result::IdTableVocabPair&) { return true; },
+      [](const std::optional<IdTableVocabPair>&, const IdTableVocabPair&) {
+        return true;
+      },
       [&](Result) { ADD_FAILURE() << "The result should not get cached."; });
   consumeGenerator(result.idTables());
   EXPECT_TRUE(flag);

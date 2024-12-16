@@ -40,9 +40,9 @@ auto findSmallerUndefRangesForRowsWithoutUndef(
   using Row = typename std::iterator_traits<It>::value_type;
   assert(row.size() == (*begin).size());
   assert(
-      std::ranges::is_sorted(begin, end, std::ranges::lexicographical_compare));
-  assert((std::ranges::all_of(
-      row, [](Id id) { return id != Id::makeUndefined(); })));
+      ql::ranges::is_sorted(begin, end, ql::ranges::lexicographical_compare));
+  assert((ql::ranges::all_of(row,
+                             [](Id id) { return id != Id::makeUndefined(); })));
   size_t numJoinColumns = row.size();
   // TODO<joka921> This can be done without copying.
   Row rowLower = row;
@@ -56,7 +56,7 @@ auto findSmallerUndefRangesForRowsWithoutUndef(
     }
 
     auto [begOfUndef, endOfUndef] = std::equal_range(
-        begin, end, rowLower, std::ranges::lexicographical_compare);
+        begin, end, rowLower, ql::ranges::lexicographical_compare);
     for (auto it = begOfUndef; it != endOfUndef; ++it) {
       co_yield it;
     }
@@ -80,7 +80,7 @@ auto findSmallerUndefRangesForRowsWithUndefInLastColumns(
   assert(row.size() == (*begin).size());
   assert(numJoinColumns >= numLastUndefined);
   assert(
-      std::ranges::is_sorted(begin, end, std::ranges::lexicographical_compare));
+      ql::ranges::is_sorted(begin, end, ql::ranges::lexicographical_compare));
   const size_t numDefinedColumns = numJoinColumns - numLastUndefined;
   for (size_t i = 0; i < numDefinedColumns; ++i) {
     assert(row[i] != Id::makeUndefined());
@@ -107,11 +107,11 @@ auto findSmallerUndefRangesForRowsWithUndefInLastColumns(
     }
 
     auto begOfUndef = std::lower_bound(begin, end, rowLower,
-                                       std::ranges::lexicographical_compare);
+                                       ql::ranges::lexicographical_compare);
     rowLower[numDefinedColumns - 1] =
         Id::fromBits(rowLower[numDefinedColumns - 1].getBits() + 1);
     auto endOfUndef = std::lower_bound(begin, end, rowLower,
-                                       std::ranges::lexicographical_compare);
+                                       ql::ranges::lexicographical_compare);
     for (; begOfUndef != endOfUndef; ++begOfUndef) {
       resultMightBeUnsorted = true;
       co_yield begOfUndef;
@@ -127,12 +127,12 @@ auto findSmallerUndefRangesArbitrary(const auto& row, It begin, It end,
     -> cppcoro::generator<It> {
   assert(row.size() == (*begin).size());
   assert(
-      std::ranges::is_sorted(begin, end, std::ranges::lexicographical_compare));
+      ql::ranges::is_sorted(begin, end, ql::ranges::lexicographical_compare));
 
   // To only get smaller entries, we first find a suitable upper bound in the
   // input range. We use `std::lower_bound` because the input row itself is not
   // a valid match.
-  end = std::lower_bound(begin, end, row, std::ranges::lexicographical_compare);
+  end = std::lower_bound(begin, end, row, ql::ranges::lexicographical_compare);
 
   const size_t numJoinColumns = row.size();
   auto isCompatible = [&](const auto& otherRow) {
@@ -171,8 +171,8 @@ auto findSmallerUndefRanges(const auto& row, It begin, It end,
     -> cppcoro::generator<It> {
   size_t numLastUndefined = 0;
   assert(row.size() > 0);
-  auto it = std::ranges::rbegin(row);
-  auto rend = std::ranges::rend(row);
+  auto it = ql::ranges::rbegin(row);
+  auto rend = ql::ranges::rend(row);
   for (; it < rend; ++it) {
     if (*it != Id::makeUndefined()) {
       break;

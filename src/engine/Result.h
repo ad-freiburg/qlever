@@ -119,9 +119,9 @@ class Result {
   Result& operator=(Result&& other) = default;
 
   // Wrap the generator stored in `data_` within a new generator that calls
-  // `onNewChunk` every time a new `IdTable` is yielded by the original
-  // generator and passed this new `IdTable` along with microsecond precision
-  // timing information on how long it took to compute this new chunk.
+  // `onNewChunk` every time a new `IdTableVocabPair` is yielded by the original
+  // generator and passed this new `IdTableVocabPair` along with microsecond
+  // precision timing information on how long it took to compute this new chunk.
   // `onGeneratorFinished` is guaranteed to be called eventually as long as the
   // generator is consumed at least partially, with `true` if an exception
   // occurred during consumption or with `false` when the generator is done
@@ -130,7 +130,8 @@ class Result {
   // Throw an `ad_utility::Exception` if the underlying `data_` member holds the
   // wrong variant.
   void runOnNewChunkComputed(
-      std::function<void(const IdTable&, std::chrono::microseconds)> onNewChunk,
+      std::function<void(const IdTableVocabPair&, std::chrono::microseconds)>
+          onNewChunk,
       std::function<void(bool)> onGeneratorFinished);
 
   // Wrap the generator stored in `data_` within a new generator that aggregates

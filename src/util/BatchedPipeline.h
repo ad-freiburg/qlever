@@ -129,7 +129,7 @@ class Batcher {
       }
       res.isPipelineGood_ = true;
       res.content_.reserve(opt->size());
-      std::ranges::move(*opt, std::back_inserter(res.content_));
+      ql::ranges::move(*opt, std::back_inserter(res.content_));
       return res;
     } else {
       res.isPipelineGood_ = true;

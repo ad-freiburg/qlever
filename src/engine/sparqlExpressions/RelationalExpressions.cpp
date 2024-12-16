@@ -342,15 +342,15 @@ SparqlExpression::Estimates getEstimatesForFilterExpressionImpl(
   // filtering on the `LocalVocab`.
   // Check iff all the pairs `(children[0], someOtherChild)` can be evaluated
   // using binary search.
-  if (std::ranges::all_of(children | std::views::drop(1),
-                          [&lhs = children.at(0),
-                           &canBeEvaluatedWithBinarySearch](const auto& child) {
-                            // The implementation automatically chooses the
-                            // cheaper direction, so we can do the same when
-                            // estimating the cost.
-                            return canBeEvaluatedWithBinarySearch(lhs, child) ||
-                                   canBeEvaluatedWithBinarySearch(child, lhs);
-                          })) {
+  if (ql::ranges::all_of(children | ql::views::drop(1),
+                         [&lhs = children.at(0),
+                          &canBeEvaluatedWithBinarySearch](const auto& child) {
+                           // The implementation automatically chooses the
+                           // cheaper direction, so we can do the same when
+                           // estimating the cost.
+                           return canBeEvaluatedWithBinarySearch(lhs, child) ||
+                                  canBeEvaluatedWithBinarySearch(child, lhs);
+                         })) {
     // When evaluating via binary search, the only significant cost that occurs
     // is that of writing the output.
     costEstimate = sizeEstimate;
@@ -385,7 +385,7 @@ ExpressionResult InExpression::evaluate(
   auto lhs = children_.at(0)->evaluate(context);
   ExpressionResult result{ad_utility::SetOfIntervals{}};
   bool firstChild = true;
-  for (const auto& child : children_ | std::views::drop(1)) {
+  for (const auto& child : children_ | ql::views::drop(1)) {
     auto rhs = child->evaluate(context);
     auto evaluateEqualsExpression = [context](const auto& a,
                                               auto b) -> ExpressionResult {
@@ -418,58 +418,29 @@ template <Comparison comp>
 std::vector<PrefilterExprVariablePair>
 RelationalExpression<comp>::getPrefilterExpressionForMetadata(
     [[maybe_unused]] bool isNegated) const {
-  namespace p = prefilterExpressions;
   AD_CORRECTNESS_CHECK(children_.size() == 2);
   const SparqlExpression* child0 = children_.at(0).get();
   const SparqlExpression* child1 = children_.at(1).get();
 
-  const auto mirroredExpression =
-      [](const ValueId valueId) -> std::unique_ptr<p::PrefilterExpression> {
-    using enum Comparison;
-    switch (comp) {
-      case LT:
-        // Id < ?var -> ?var > Id
-        return std::make_unique<p::GreaterThanExpression>(valueId);
-      case LE:
-        // Id <= ?var -> ?var >= Id
-        return std::make_unique<p::GreaterEqualExpression>(valueId);
-      case GE:
-        // Id >= ?var -> ?var <= Id
-        return std::make_unique<p::LessEqualExpression>(valueId);
-      case GT:
-        // Id > ?var -> ?var < Id
-        return std::make_unique<p::LessThanExpression>(valueId);
-      case EQ:
-      case NE:
-        // EQ(==) or NE(!=)
-        // Given that these two relations are symmetric w.r.t. ?var and Id,
-        // no swap regarding the relational operator is necessary.
-        return std::make_unique<p::RelationalExpression<comp>>(valueId);
-      default:
-        // Unchecked / new valueIdComparators::Comparison case.
-        AD_FAIL();
-    }
-  };
-
   const auto tryGetPrefilterExprVariablePairVec =
-      [&mirroredExpression](const SparqlExpression* child0,
-                            const SparqlExpression* child1, bool reversed) {
-        std::vector<PrefilterExprVariablePair> resVec{};
-        if (const auto* variable =
-                dynamic_cast<const VariableExpression*>(child0)) {
-          if (const auto* valueId = dynamic_cast<const IdExpression*>(child1)) {
-            resVec.emplace_back(
-                reversed ? mirroredExpression(valueId->value())
-                         : std::make_unique<p::RelationalExpression<comp>>(
-                               valueId->value()),
-                variable->value());
-          }
-        }
-        return resVec;
-      };
+      [](const SparqlExpression* child0, const SparqlExpression* child1,
+         bool reversed) -> std::vector<PrefilterExprVariablePair> {
+    const auto* variableExpr = dynamic_cast<const VariableExpression*>(child0);
+    if (!variableExpr) {
+      return {};
+    }
+
+    const auto& optReferenceValue =
+        detail::getIdOrLocalVocabEntryFromLiteralExpression(child1);
+    if (!optReferenceValue.has_value()) {
+      return {};
+    }
+    return prefilterExpressions::detail::makePrefilterExpressionVec<comp>(
+        optReferenceValue.value(), variableExpr->value(), reversed);
+  };
   // Option 1:
   // RelationalExpression containing a VariableExpression as the first child
-  // and an IdExpression as the second child.
+  // and an IdExpression, IdExpression or IriExpression as the second child.
   // E.g. for ?x >= 10 (RelationalExpression Sparql), we obtain the following
   // pair with PrefilterExpression and Variable: <(>= 10), ?x>
   auto resVec = tryGetPrefilterExprVariablePairVec(child0, child1, false);
@@ -477,9 +448,9 @@ RelationalExpression<comp>::getPrefilterExpressionForMetadata(
     return resVec;
   }
   // Option 2:
-  // RelationalExpression containing an IdExpression as the first child and a
-  // VariableExpression as the second child.
-  // (1) 10 >= ?x (RelationalExpression Sparql), we obtain the following
+  // RelationalExpression containing an IdExpression, LiteralExpression or
+  // IriExpression as the first child and a VariableExpression as the second
+  // child. (1) 10 >= ?x (RelationalExpression Sparql), we obtain the following
   // pair with PrefilterExpression and Variable: <(<= 10), ?x>
   // (2) 10 != ?x (RelationalExpression Sparql), we obtain the following
   // pair with PrefilterExpression and Variable: <(!= 10), ?x>;

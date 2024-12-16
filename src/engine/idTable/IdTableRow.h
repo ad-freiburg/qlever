@@ -91,7 +91,7 @@ class Row {
   explicit operator std::array<T, numStaticColumns>() const
       requires(numStaticColumns != 0) {
     std::array<T, numStaticColumns> result;
-    std::ranges::copy(*this, result.begin());
+    ql::ranges::copy(*this, result.begin());
     return result;
   }
 
@@ -282,7 +282,7 @@ class RowReferenceImpl {
     explicit operator std::array<T, numStaticColumns>() const
         requires(numStaticColumns != 0) {
       std::array<T, numStaticColumns> result;
-      std::ranges::copy(*this, result.begin());
+      ql::ranges::copy(*this, result.begin());
       return result;
     }
 
@@ -319,17 +319,18 @@ class RowReferenceImpl {
 
     // This strange overload needs to be declared to make `Row` a
     // `std::random_access_range` that can be used e.g. with
-    // `std::ranges::sort`. There is no need to define it, as it is only
+    // `ql::ranges::sort`. There is no need to define it, as it is only
     // needed to fulfill the concept `std::indirectly_writable`. For more
     // details on this "esoteric" overload see the notes at the end of
     // `https://en.cppreference.com/w/cpp/iterator/indirectly_writable`
     This& operator=(const Row<T, numStaticColumns>& other) const&&;
 
-   protected:
     // No need to copy this internal type, but the implementation of the
-    // `RowReference` class below requires it,
-    // so the copy Constructor is protected.
+    // `RowReference` class and the `input_range` concept from `range-v3`
+    // require it.
     RowReferenceWithRestrictedAccess(const RowReferenceWithRestrictedAccess&) =
+        default;
+    RowReferenceWithRestrictedAccess(RowReferenceWithRestrictedAccess&&) =
         default;
   };
 };

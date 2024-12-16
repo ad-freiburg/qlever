@@ -208,6 +208,28 @@ class ConcurrentCache {
                            suitedForCache);
   }
 
+  // If the result is contained in the cache, read and return it. Otherwise,
+  // compute it, but do not store it in the cache. The interface is the same as
+  // for the above two functions, therefore some of the arguments are unused.
+  ResultAndCacheStatus computeButDontStore(
+      const Key& key,
+      const InvocableWithConvertibleReturnType<Value> auto& computeFunction,
+      bool onlyReadFromCache,
+      [[maybe_unused]] const InvocableWithConvertibleReturnType<
+          bool, const Value&> auto& suitedForCache) {
+    {
+      auto resultPtr = _cacheAndInProgressMap.wlock()->_cache[key];
+      if (resultPtr != nullptr) {
+        return {std::move(resultPtr), CacheStatus::cachedNotPinned};
+      }
+    }
+    if (onlyReadFromCache) {
+      return {nullptr, CacheStatus::notInCacheAndNotComputed};
+    }
+    auto value = std::make_shared<Value>(computeFunction());
+    return {std::move(value), CacheStatus::computed};
+  }
+
   // Insert `value` into the cache, if the `key` is not already present. In case
   // `pinned` is true and the key is already present, the existing value is
   // pinned in case it is not pinned yet.
