@@ -200,10 +200,10 @@ void to_json(nlohmann::json& j, const DeltaTriplesCount& count) {
 }
 
 // ____________________________________________________________________________
-DeltaTriplesCount DeltaTriplesCount::operator-(
-    const DeltaTriplesCount& other) const {
-  return {triplesInserted_ - other.triplesInserted_,
-          triplesDeleted_ - other.triplesDeleted_};
+DeltaTriplesCount operator-(const DeltaTriplesCount& lhs,
+                            const DeltaTriplesCount& rhs) {
+  return {lhs.triplesInserted_ - rhs.triplesInserted_,
+          lhs.triplesDeleted_ - rhs.triplesDeleted_};
 }
 
 // ____________________________________________________________________________

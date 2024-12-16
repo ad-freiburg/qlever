@@ -47,7 +47,8 @@ struct DeltaTriplesCount {
   /// library to allow for implicit conversion.
   friend void to_json(nlohmann::json& j, const DeltaTriplesCount& count);
 
-  DeltaTriplesCount operator-(const DeltaTriplesCount& other) const;
+  friend DeltaTriplesCount operator-(const DeltaTriplesCount& lhs,
+                                     const DeltaTriplesCount& rhs);
 };
 
 // A class for maintaining triples that are inserted or deleted after index
