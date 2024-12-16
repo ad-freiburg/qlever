@@ -4,9 +4,8 @@
 
 #pragma once
 
-#ifdef QLEVER_CPP_17
 #include <concepts/concepts.hpp>
-#else
+#ifndef QLEVER_CPP_17
 #include <concepts>
 #endif
 
