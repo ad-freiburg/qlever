@@ -136,7 +136,7 @@ concept SimilarToAny = (... || isSimilar<T, Ts>);
 
 /// True iff `T` is the same as any of the `Ts...`.
 template <typename T, typename... Ts>
-CPP_concept SameAsAny = (... || ql::concepts::same_as<T, Ts>);
+concept SameAsAny = (... || ql::concepts::same_as<T, Ts>);
 
 /*
 The implementation for `SimilarToAnyTypeIn` and `SameAsAnyTypeIn` (see below
