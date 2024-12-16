@@ -5,7 +5,6 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
-#include <c++/11/numeric>
 #include <string>
 
 #include "../src/util/Iterators.h"
