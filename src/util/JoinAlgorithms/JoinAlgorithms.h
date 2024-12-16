@@ -762,8 +762,13 @@ struct BlockZipperJoinImpl {
 #if defined(Side) || defined(Blocks)
 #error Side or Blocks are already defined
 #endif
+#ifdef QLEVER_CPP_17
+#define Side auto
+#define Blocks auto
+#else
 #define Side SameAsAny<LeftSide, RightSide> auto
 #define Blocks SameAsAny<LeftBlocks, RightBlocks> auto
+#endif
 
   // Type alias for the result of the projection. Elements from the left and
   // right input must be projected to the same type.

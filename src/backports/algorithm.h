@@ -9,6 +9,8 @@
 #include <range/v3/all.hpp>
 #include <utility>
 
+#include "backports/concepts.h"
+
 // The following defines namespaces `ql::ranges` and `ql::views` that are almost
 // drop-in replacements for `std::ranges` and `std::views`. In C++20 mode (when
 // the `QLEVER_CPP_17` macro is not used), these namespaces are simply aliases
@@ -19,7 +21,6 @@
 // currently not aware of, because they only affect functions that we currently
 // don't use. For those, the following header can be expanded in the future.
 #ifndef QLEVER_CPP_17
-#include <concepts>
 #include <ranges>
 #endif
 
@@ -45,15 +46,5 @@ using namespace ::ranges::views;
 using namespace std::views;
 #endif
 }  // namespace views
-
-// The namespace `ql::concepts` includes concepts that are contained in the
-// C++20 standard as well as in `range-v3`.
-namespace concepts {
-#ifdef QLEVER_CPP_17
-using namespace ::concepts;
-#else
-using namespace std;
-#endif
-}  // namespace concepts
 
 }  // namespace ql
