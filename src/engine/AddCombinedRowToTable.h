@@ -156,13 +156,12 @@ class AddCombinedRowToIdTable {
       AD_CORRECTNESS_CHECK(inputLeftAndRight_.has_value());
       flush();
     } else if (resultTable_.empty()) {
-      // Clear vocab when no rows were written.
-      // TODO<joka921, robinTF> We could optize the case that there were no
-      // calls to `addRow` for the current input, but we still have rows in the
-      // `resultTable_` from previous inputs. Possibly we could only merge in
-      // the local vocab from the inputs when calling `flush` the first time,
-      // and not right when on `setInput`. But this requires further thought and
-      // thinking, while this comment was written as part of a crucial bugfix.
+      // Clear local vocab when no rows were written.
+      //
+      // TODO<joka921, robinTF> This is a conservative approach. We could
+      // optimize this case (clear the local vocab more often, but still
+      // correctly) by considering the situation after all the relevant inputs
+      // have been processed.
       mergedVocab_ = LocalVocab{};
     }
   }
