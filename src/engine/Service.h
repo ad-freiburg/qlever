@@ -12,6 +12,10 @@
 #include "util/LazyJsonParser.h"
 #include "util/http/HttpClient.h"
 
+// Forward declarations to reduce dependencies
+struct HttpOrHttpsResponse;
+namespace ad_utility {}
+
 // The SERVICE operation. Sends a query to the remote endpoint specified by the
 // service IRI, gets the result as JSON, parses it, and writes it into a result
 // table.
