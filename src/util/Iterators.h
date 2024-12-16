@@ -264,7 +264,7 @@ class InputRangeMixin {
 // less efficient for very simple generators, because the compiler might be able
 // to optimize this mixin as well as the one above.
 template <typename ValueType>
-class InputRangeOptionalMixin {
+class InputRangeFromGet {
  public:
   using Storage = std::optional<ValueType>;
   Storage storage_ = std::nullopt;
@@ -275,7 +275,7 @@ class InputRangeOptionalMixin {
   virtual Storage get() = 0;
 
  public:
-  virtual ~InputRangeOptionalMixin() = default;
+  virtual ~InputRangeFromGet() = default;
 
   // Get the next value and store it.
   void getNextAndStore() { storage_ = get(); }
@@ -285,15 +285,15 @@ class InputRangeOptionalMixin {
    public:
     using iterator_category = std::input_iterator_tag;
     using difference_type = std::int64_t;
-    using value_type = typename InputRangeOptionalMixin::Storage::value_type;
+    using value_type = typename InputRangeFromGet::Storage::value_type;
     using pointer = value_type*;
     using reference = std::add_lvalue_reference_t<value_type>;
     using const_reference = std::add_const_t<reference>;
-    InputRangeOptionalMixin* mixin_ = nullptr;
+    InputRangeFromGet* mixin_ = nullptr;
 
    public:
     Iterator() = default;
-    explicit Iterator(InputRangeOptionalMixin* mixin) : mixin_{mixin} {}
+    explicit Iterator(InputRangeFromGet* mixin) : mixin_{mixin} {}
     Iterator& operator++() {
       mixin_->getNextAndStore();
       return *this;
@@ -327,26 +327,26 @@ class InputRangeOptionalMixin {
 };
 
 // This class takes an arbitrary input range, and turns it into a class that
-// inherits from `InputRangeOptionalMixin` (see above). While this adds another
-// layer of indirection, it makes type erasure between input ranges with the
-// same value type very simple.
+// inherits from `InputRangeFromGet` (see above). While this adds a layer of
+// indirection, it makes type erasure between input ranges with the same value
+// type very simple.
 template <typename Range>
-class InputRangeToOptional
-    : public InputRangeOptionalMixin<std::ranges::range_value_t<Range>> {
+class RangeToInputRangeFromGet
+    : public InputRangeFromGet<ql::ranges::range_value_t<Range>> {
   Range range_;
-  using Iterator = std::ranges::iterator_t<Range>;
+  using Iterator = ql::ranges::iterator_t<Range>;
   std::optional<Iterator> iterator_ = std::nullopt;
-  bool isDone() { return iterator_ == std::ranges::end(range_); }
+  bool isDone() { return iterator_ == ql::ranges::end(range_); }
 
  public:
-  explicit InputRangeToOptional(Range range) : range_{std::move(range)} {}
+  explicit RangeToInputRangeFromGet(Range range) : range_{std::move(range)} {}
 
   // As we use the `InputRangeOptionalMixin`, we only have to override the
   // single `get()` method.
-  std::optional<std::ranges::range_value_t<Range>> get() override {
+  std::optional<ql::ranges::range_value_t<Range>> get() override {
     if (!iterator_.has_value()) {
       // For the very first value we have to call `begin()`.
-      iterator_ = std::ranges::begin(range_);
+      iterator_ = ql::ranges::begin(range_);
       if (isDone()) {
         return std::nullopt;
       }
@@ -367,35 +367,36 @@ class InputRangeToOptional
   }
 };
 
-// A simple type-erased input range that internally uses the
-// `InputRangeOptionalMixin` from above as an implementation detail.
+// A simple type-erased input range (that is, one class for *any* input range
+// with the given `ValueType`). It internally uses the `InputRangeOptionalMixin`
+// from above as an implementation detail.
 template <typename ValueType>
-class TypeErasedInputRangeOptionalMixin {
+class InputRangeTypeErased {
   // Unique (and therefore owning) pointer to the virtual base class.
-  std::unique_ptr<InputRangeOptionalMixin<ValueType>> impl_;
+  std::unique_ptr<InputRangeFromGet<ValueType>> impl_;
 
  public:
   // Constructor for ranges that directly inherit from
   // `InputRangeOptionalMixin`.
   template <typename Range>
-  requires std::is_base_of_v<InputRangeOptionalMixin<ValueType>, Range>
-  explicit TypeErasedInputRangeOptionalMixin(Range range)
+  requires std::is_base_of_v<InputRangeFromGet<ValueType>, Range>
+  explicit InputRangeTypeErased(Range range)
       : impl_{std::make_unique<Range>(std::move(range))} {}
 
   // Constructor for all other ranges. We first pass them through the
   // `InputRangeToOptional` class from above to make it compatible with the base
   // class.
   template <typename Range>
-  requires(!std::is_base_of_v<InputRangeOptionalMixin<ValueType>, Range> &&
-           std::ranges::range<Range> &&
-           std::same_as<std::ranges::range_value_t<Range>, ValueType>)
-  explicit TypeErasedInputRangeOptionalMixin(Range range)
-      : impl_{std::make_unique<InputRangeToOptional<Range>>(std::move(range))} {
-  }
+  requires(!std::is_base_of_v<InputRangeFromGet<ValueType>, Range> &&
+           ql::ranges::range<Range> &&
+           std::same_as<ql::ranges::range_value_t<Range>, ValueType>)
+  explicit InputRangeTypeErased(Range range)
+      : impl_{std::make_unique<RangeToInputRangeFromGet<Range>>(
+            std::move(range))} {}
 
   decltype(auto) begin() { return impl_->begin(); }
   decltype(auto) end() { return impl_->end(); }
-  using iterator = typename InputRangeOptionalMixin<ValueType>::Iterator;
+  using iterator = typename InputRangeFromGet<ValueType>::Iterator;
 };
 }  // namespace ad_utility
 

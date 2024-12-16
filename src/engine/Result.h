@@ -38,8 +38,7 @@ class Result {
   using Generator = cppcoro::generator<IdTableVocabPair>;
   // The lazy result type that is actually stored. It is type-erased and allows
   // explicit conversion from the `Generator` above.
-  using LazyResult =
-      ad_utility::TypeErasedInputRangeOptionalMixin<IdTableVocabPair>;
+  using LazyResult = ad_utility::InputRangeTypeErased<IdTableVocabPair>;
 
  private:
   // Needs to be mutable in order to be consumable from a const result.

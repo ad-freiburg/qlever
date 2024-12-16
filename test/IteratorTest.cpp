@@ -152,9 +152,9 @@ TEST(Iterator, InputRangeMixin) {
 }
 
 //_____________________________________________________________________________
-TEST(Iterator, InputRangeOptionalMixin) {
+TEST(Iterator, InputRangeFromGet) {
   using namespace ad_utility;
-  struct Iota : InputRangeOptionalMixin<size_t> {
+  struct Iota : InputRangeFromGet<size_t> {
     size_t value_ = 0;
     std::optional<size_t> upper_;
     explicit Iota(size_t lower = 0, std::optional<size_t> upper = {})
@@ -172,9 +172,9 @@ TEST(Iterator, InputRangeOptionalMixin) {
   testIota(makeIota);
 }
 //_____________________________________________________________________________
-TEST(Iterator, TypeErasedInputRangeOptionalMixin) {
+TEST(Iterator, InputRangeTypeErased) {
   using namespace ad_utility;
-  struct IotaImpl : InputRangeOptionalMixin<size_t> {
+  struct IotaImpl : InputRangeFromGet<size_t> {
     size_t value_ = 0;
     std::optional<size_t> upper_;
     explicit IotaImpl(size_t lower = 0, std::optional<size_t> upper = {})
@@ -187,9 +187,21 @@ TEST(Iterator, TypeErasedInputRangeOptionalMixin) {
     }
   };
 
-  using Iota = TypeErasedInputRangeOptionalMixin<size_t>;
+  using Iota = InputRangeTypeErased<size_t>;
   auto makeIota = [](size_t lower = 0, std::optional<size_t> upper = {}) {
     return Iota{IotaImpl{lower, upper}};
   };
   testIota(makeIota);
+
+  // We can also type-erase any input range with the correct value type, in
+  // particular ranges and views from the standard library.
+  auto makeIotaFromStdIota = [](size_t lower = 0,
+                                std::optional<size_t> upper = {}) {
+    if (!upper.has_value()) {
+      return Iota{ql::views::iota(lower)};
+    } else {
+      return Iota{ql::views::iota(lower, upper.value())};
+    }
+  };
+  testIota(makeIotaFromStdIota);
 }
