@@ -1329,7 +1329,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
   bool addNewRowToBenchmarkTable(
       ResultTable* table,
       const QL_OPT_CONCEPT(
-          (ad_utility::SameAsAny<float, size_t>)) auto changingParameterValue,
+          ad_utility::SameAsAny<float, size_t>) auto changingParameterValue,
       ad_utility::InvocableWithExactReturnType<bool, float, size_t, size_t,
                                                size_t, size_t, float,
                                                float> auto stopFunction,

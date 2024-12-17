@@ -580,7 +580,8 @@ class ConfigManager {
   @tparam ReturnReference Should be either `ConfigOption&`, or `const
   ConfigOption&`.
   */
-  template <typename ReturnReference>
+  template <QL_CONCEPT_OR_TYPENAME(
+      SameAsAny<ConfigOption&, const ConfigOption&>) ReturnReference>
   static std::vector<std::pair<std::string, ReturnReference>>
   configurationOptionsImpl(
       SimilarTo<ad_utility::HashMap<std::string, HashMapEntry>> auto&

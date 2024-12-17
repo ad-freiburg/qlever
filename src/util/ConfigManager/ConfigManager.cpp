@@ -255,8 +255,8 @@ requires std::is_object_v<HashMapType> auto ConfigManager::allHashMapEntries(
 }
 
 // ____________________________________________________________________________
-template <QL_CONCEPT_OR_TYPENAME(
-    (SameAsAny<ConfigOption&, const ConfigOption&>)) ReturnReference>
+template <QL_CONCEPT_OR_TYPENAME(SameAsAny<ConfigOption&, const ConfigOption&>)
+              ReturnReference>
 std::vector<std::pair<std::string, ReturnReference>>
 ConfigManager::configurationOptionsImpl(
     SimilarTo<ad_utility::HashMap<std::string, HashMapEntry>> auto&

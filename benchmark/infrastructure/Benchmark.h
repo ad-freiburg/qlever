@@ -69,7 +69,7 @@ class BenchmarkResults {
   that the new `CopyableUniquePtr` will own.
   */
   template <QL_CONCEPT_OR_TYPENAME(
-      (ad_utility::SameAsAny<ResultTable, ResultEntry, ResultGroup>)) EntryType>
+      ad_utility::SameAsAny<ResultTable, ResultEntry, ResultGroup>) EntryType>
   static EntryType& addEntryToContainerVector(
       PointerVector<EntryType>& targetVector, auto&&... constructorArgs) {
     targetVector.push_back(ad_utility::make_copyable_unique<EntryType>(

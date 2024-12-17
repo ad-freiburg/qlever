@@ -13,14 +13,22 @@
 // `QL_OPT_CONCEPT(arg)` which expands to `arg` in C++20 mode, and to nothing in
 // C++17 mode. It can be used to easily opt out of concepts that are only used
 // for documentation and increased safety and not for overload resolution.
-// Example usage:
+// Example usages:
 // `(QL_OPT_CONCEPT(std::view) auto x = someFunction();`
+// `void f(QL_OPT_CONCEPT(std::view) auto x) {...}`
+//
+// `QL_CONCEPT_OR_TYPENAME(arg)` which expands to `arg` in C++20 mode, and to
+// `typename` in C++17 mode. Example: `template
+// <QL_CONCEPT_OR_TYPENAME(ql::same_as<int>) T> void f(){...}`
+//
+// Note: The macros are variadic to allow for commas in the argument (e.g.
+// `QL_OPT_CONCEPT(SameAsAny<int, float>)`.
 #ifdef QLEVER_CPP_17
-#define QL_OPT_CONCEPT(arg)
-#define QL_CONCEPT_OR_TYPENAME(arg) typename
+#define QL_OPT_CONCEPT(...)
+#define QL_CONCEPT_OR_TYPENAME(...) typename
 #else
-#define QL_OPT_CONCEPT(arg) arg
-#define QL_CONCEPT_OR_TYPENAME(arg) arg
+#define QL_OPT_CONCEPT(...) __VA_ARGS__
+#define QL_CONCEPT_OR_TYPENAME(...) __VA_ARGS__
 #endif
 
 // The namespace `ql::concepts` includes concepts that are contained in the
