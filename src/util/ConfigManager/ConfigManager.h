@@ -6,7 +6,6 @@
 
 #include <absl/container/flat_hash_map.h>
 #include <absl/strings/str_cat.h>
-#include <backports/concepts.h>
 #include <gtest/gtest_prod.h>
 
 #include <concepts>
@@ -19,6 +18,7 @@
 #include <variant>
 #include <vector>
 
+#include "backports/concepts.h"
 #include "util/ConfigManager/ConfigExceptions.h"
 #include "util/ConfigManager/ConfigOption.h"
 #include "util/ConfigManager/ConfigOptionProxy.h"

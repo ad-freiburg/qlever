@@ -8,7 +8,6 @@
 #include <CommonTokenStream.h>
 #include <absl/strings/str_cat.h>
 #include <antlr4-runtime.h>
-#include <backports/concepts.h>
 
 #include <functional>
 #include <iostream>
@@ -24,6 +23,7 @@
 #include <variant>
 
 #include "backports/algorithm.h"
+#include "backports/concepts.h"
 #include "util/Algorithm.h"
 #include "util/ComparisonWithNan.h"
 #include "util/ConfigManager/ConfigExceptions.h"
