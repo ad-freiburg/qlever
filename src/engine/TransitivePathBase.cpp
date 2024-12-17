@@ -363,7 +363,7 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindLeftOrRightSide(
         maxDist_));
   }
 
-  auto& p = *std::ranges::min_element(
+  auto& p = *ql::ranges::min_element(
       candidates, {}, [](const auto& tree) { return tree->getCostEstimate(); });
 
   // Note: The `variable` in the following structured binding is `const`, even

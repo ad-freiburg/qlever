@@ -101,8 +101,8 @@ class ValueId {
 
   // Assert that the types in `stringTypes_` are directly adjacent. This is
   // required to make the comparison of IDs in `ValueIdComparators.h` work.
-  static constexpr Datatype maxStringType_ = std::ranges::max(stringTypes_);
-  static constexpr Datatype minStringType_ = std::ranges::min(stringTypes_);
+  static constexpr Datatype maxStringType_ = ql::ranges::max(stringTypes_);
+  static constexpr Datatype minStringType_ = ql::ranges::min(stringTypes_);
   static_assert(static_cast<size_t>(maxStringType_) -
                     static_cast<size_t>(minStringType_) + 1 ==
                 stringTypes_.size());

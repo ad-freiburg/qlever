@@ -542,6 +542,7 @@ class QueryPlanner {
     void visitSpatialSearch(parsedQuery::SpatialQuery& config);
     void visitUnion(parsedQuery::Union& un);
     void visitSubquery(parsedQuery::Subquery& subquery);
+    void visitDescribe(parsedQuery::Describe& describe);
 
     // This function is called for groups, optional, or minus clauses.
     // The `candidates` are the result of planning the pattern inside the

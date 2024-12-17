@@ -92,7 +92,7 @@ Result::Result(Generator idTables, std::vector<ColumnIndex> sortedBy)
 // _____________________________________________________________________________
 // Apply `LimitOffsetClause` to given `IdTable`.
 void resizeIdTable(IdTable& idTable, const LimitOffsetClause& limitOffset) {
-  std::ranges::for_each(
+  ql::ranges::for_each(
       idTable.getColumns(),
       [offset = limitOffset.actualOffset(idTable.numRows()),
        upperBound =
@@ -124,7 +124,7 @@ void Result::applyLimitOffset(
                   limitOffset);
     limitTimeCallback(limitTimer.msecs(), idTable());
   } else {
-    auto generator = [](Generator original, LimitOffsetClause limitOffset,
+    auto generator = [](LazyResult original, LimitOffsetClause limitOffset,
                         auto limitTimeCallback) -> Generator {
       if (limitOffset._limit.value_or(1) == 0) {
         co_return;
@@ -160,7 +160,7 @@ void Result::assertThatLimitWasRespected(const LimitOffsetClause& limitOffset) {
     auto limit = limitOffset._limit;
     AD_CONTRACT_CHECK(!limit.has_value() || numRows <= limit.value());
   } else {
-    auto generator = [](Generator original,
+    auto generator = [](LazyResult original,
                         LimitOffsetClause limitOffset) -> Generator {
       auto limit = limitOffset._limit;
       uint64_t elementCount = 0;
@@ -178,10 +178,10 @@ void Result::assertThatLimitWasRespected(const LimitOffsetClause& limitOffset) {
 // _____________________________________________________________________________
 void Result::checkDefinedness(const VariableToColumnMap& varColMap) {
   auto performCheck = [](const auto& map, IdTable& idTable) {
-    return std::ranges::all_of(map, [&](const auto& varAndCol) {
+    return ql::ranges::all_of(map, [&](const auto& varAndCol) {
       const auto& [columnIndex, mightContainUndef] = varAndCol.second;
       if (mightContainUndef == ColumnIndexAndTypeInfo::AlwaysDefined) {
-        return std::ranges::all_of(idTable.getColumn(columnIndex), [](Id id) {
+        return ql::ranges::all_of(idTable.getColumn(columnIndex), [](Id id) {
           return id.getDatatype() != Datatype::Undefined;
         });
       }
@@ -192,7 +192,7 @@ void Result::checkDefinedness(const VariableToColumnMap& varColMap) {
     AD_EXPENSIVE_CHECK(performCheck(
         varColMap, std::get<IdTableSharedLocalVocabPair>(data_).idTable_));
   } else {
-    auto generator = [](Generator original,
+    auto generator = [](LazyResult original,
                         [[maybe_unused]] VariableToColumnMap varColMap,
                         [[maybe_unused]] auto performCheck) -> Generator {
       for (IdTableVocabPair& pair : original) {
@@ -212,7 +212,7 @@ void Result::runOnNewChunkComputed(
         onNewChunk,
     std::function<void(bool)> onGeneratorFinished) {
   AD_CONTRACT_CHECK(!isFullyMaterialized());
-  auto generator = [](Generator original, auto onNewChunk,
+  auto generator = [](LazyResult original, auto onNewChunk,
                       auto onGeneratorFinished) -> Generator {
     // Call this within destructor to make sure it is also called when an
     // operation stops iterating before reaching the end.
@@ -239,12 +239,12 @@ void Result::runOnNewChunkComputed(
 void Result::assertSortOrderIsRespected(
     const IdTable& idTable, const std::vector<ColumnIndex>& sortedBy) {
   AD_CONTRACT_CHECK(
-      std::ranges::all_of(sortedBy, [&idTable](ColumnIndex colIndex) {
+      ql::ranges::all_of(sortedBy, [&idTable](ColumnIndex colIndex) {
         return colIndex < idTable.numColumns();
       }));
 
   AD_EXPENSIVE_CHECK(
-      std::ranges::is_sorted(idTable, compareRowsBySortColumns(sortedBy)));
+      ql::ranges::is_sorted(idTable, compareRowsBySortColumns(sortedBy)));
 }
 
 // _____________________________________________________________________________
@@ -254,7 +254,7 @@ const IdTable& Result::idTable() const {
 }
 
 // _____________________________________________________________________________
-Result::Generator& Result::idTables() const {
+Result::LazyResult& Result::idTables() const {
   AD_CONTRACT_CHECK(!isFullyMaterialized());
   const auto& container = std::get<GenContainer>(data_);
   AD_CONTRACT_CHECK(!container.consumed_->exchange(true));

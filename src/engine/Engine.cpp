@@ -55,7 +55,7 @@ void Engine::sort(IdTable& idTable, const std::vector<ColumnIndex>& sortCols) {
 size_t Engine::countDistinct(IdTableView<0> input,
                              const std::function<void()>& checkCancellation) {
   AD_EXPENSIVE_CHECK(
-      std::ranges::is_sorted(input, std::ranges::lexicographical_compare),
+      ql::ranges::is_sorted(input, ql::ranges::lexicographical_compare),
       "Input to Engine::countDistinct must be sorted");
   if (input.empty()) {
     return 0;

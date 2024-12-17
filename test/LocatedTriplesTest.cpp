@@ -20,7 +20,7 @@ int g = 123948;
 
 void addGraphColumn(IdTable& block) {
   block.addEmptyColumn();
-  std::ranges::fill(block.getColumn(block.numColumns() - 1), V(g));
+  ql::ranges::fill(block.getColumn(block.numColumns() - 1), V(g));
 }
 
 auto IT = [](const auto& c1, const auto& c2, const auto& c3, int graph = g) {
