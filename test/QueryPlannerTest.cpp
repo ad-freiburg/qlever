@@ -2904,3 +2904,12 @@ TEST(QueryPlanner, Describe) {
                                     "?y", "<p>", "<o>", {},
                                     ad_utility::HashSet<std::string>{"<g>"})));
 }
+
+// ____________________________________________________________________________
+TEST(QueryPlanner, GroupByRedundanteParensAndVariables) {
+  auto matcher = h::GroupBy({Variable{"?x"}}, {},
+                            h::IndexScanFromStrings("?x", "?y", "?z"));
+  h::expect("SELECT ?x { ?x ?y ?z} GROUP BY (?x)", matcher);
+  h::expect("SELECT ?x { ?x ?y ?z} GROUP BY ?x ?x", matcher);
+  h::expect("SELECT ?x { ?x ?y ?z} GROUP BY ?x ?x (?x)", matcher);
+}

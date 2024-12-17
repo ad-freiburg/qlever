@@ -242,7 +242,10 @@ std::vector<ColumnIndex> Union::computePermutation() const {
 // _____________________________________________________________________________
 IdTable Union::transformToCorrectColumnFormat(
     IdTable idTable, const std::vector<ColumnIndex>& permutation) const {
-  while (idTable.numColumns() < getResultWidth()) {
+  // NOTE: previously the check was for `getResultWidth()`, but that is wrong if
+  // some variables in the subtree are invisible because of a subquery.
+  auto maxNumRequiredColumns = ql::ranges::max(permutation) + 1;
+  while (idTable.numColumns() < maxNumRequiredColumns) {
     idTable.addEmptyColumn();
     ad_utility::chunkedFill(idTable.getColumn(idTable.numColumns() - 1),
                             Id::makeUndefined(), chunkSize,

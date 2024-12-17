@@ -74,17 +74,34 @@ TEST(Union, computeUnionLarge) {
 
 // _____________________________________________________________________________
 TEST(Union, computeUnionLazy) {
-  auto runTest = [](bool nonLazyChildren,
+  auto runTest = [](bool nonLazyChildren, bool invisibleSubtreeColumns,
                     ad_utility::source_location loc =
                         ad_utility::source_location::current()) {
     auto l = generateLocationTrace(loc);
     auto* qec = ad_utility::testing::getQec();
     qec->getQueryTreeCache().clearAll();
-    IdTable left = makeIdTableFromVector({{V(1)}, {V(2)}, {V(3)}});
-    auto leftT = ad_utility::makeExecutionTree<ValuesForTesting>(
-        qec, std::move(left), Vars{Variable{"?x"}}, false,
-        std::vector<ColumnIndex>{}, LocalVocab{}, std::nullopt,
-        nonLazyChildren);
+    auto leftT = [&]() {
+      if (!invisibleSubtreeColumns) {
+        IdTable left = makeIdTableFromVector({{V(1)}, {V(2)}, {V(3)}});
+        return ad_utility::makeExecutionTree<ValuesForTesting>(
+            qec, std::move(left), Vars{Variable{"?x"}}, false,
+            std::vector<ColumnIndex>{}, LocalVocab{}, std::nullopt,
+            nonLazyChildren);
+      } else {
+        // With the `invisibleSubtreeColumns==true` case we test the case, that
+        // the input contains variables that are not visible because of a
+        // subquery. This case was previously buggy and triggered an assertion.
+        IdTable left = makeIdTableFromVector(
+            {{V(1), V(3)}, {V(2), V(27)}, {V(3), V(123)}});
+        auto tree = ad_utility::makeExecutionTree<ValuesForTesting>(
+            qec, std::move(left), Vars{Variable{"?x"}, Variable{"?invisible"}},
+            false, std::vector<ColumnIndex>{}, LocalVocab{}, std::nullopt,
+            nonLazyChildren);
+        tree->getRootOperation()->setSelectedVariablesForSubquery(
+            {Variable{"?x"}});
+        return tree;
+      }
+    }();
 
     IdTable right = makeIdTableFromVector({{V(4), V(5)}, {V(6), V(7)}});
     auto rightT = ad_utility::makeExecutionTree<ValuesForTesting>(
@@ -112,8 +129,10 @@ TEST(Union, computeUnionLazy) {
     ASSERT_EQ(++iterator, result.end());
   };
 
-  runTest(false);
-  runTest(true);
+  runTest(false, false);
+  runTest(false, true);
+  runTest(true, false);
+  runTest(true, true);
 }
 
 // _____________________________________________________________________________
