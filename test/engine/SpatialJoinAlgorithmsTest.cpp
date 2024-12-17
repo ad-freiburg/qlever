@@ -1204,4 +1204,85 @@ TEST(SpatialJoin, isContainedInBoundingBoxes) {
 
 }  // namespace boundingBox
 
+// ===================================== DEV starting =========================
+namespace development {
+
+using BoostGeometryNamespace::Box;
+using BoostGeometryNamespace::Point;
+using BoostGeometryNamespace::Value;
+// move this to BoostGeometryNamespace
+typedef boost::geometry::model::polygon<boost::geometry::model::d2::point_xy<double>> Polygon;
+
+
+// move to SpatialJoinTestHelpers, see comment of buildAreaTestQEC
+std::string createAreaTestDataset() {
+  auto addArea = [](std::string& kg, std::string number, std::string name,
+              std::string area) {
+    kg += absl::StrCat("<node_", number, "> <name> ", name, " . \n",
+        "<node_", number, "> <highway> \"crossing\" .\n",
+        "<node_", number, "> <envelope> ", area, " .\n" );
+  };
+
+  std::string kg;
+  // note that i removed all prefixes
+  addArea(kg, "1", "\"zebra\"", "\"POLYGON((9.3340635 47.4266650,9.3340635 47.4266650,9.3340635 47.4266650,9.3340635 47.4266650,9.3340635 47.4266650))\"^^<https://www.invented.de/a#wktLiteral>");
+  addArea(kg, "2", "\"trafficLight\"", "\"POLYGON((9.3054501 47.4066706,9.3054501 47.4066706,9.3054501 47.4066706,9.3054501 47.4066706,9.3054501 47.4066706))\"^^<https://www.invented.de/a#wktLiteral>");
+  addArea(kg, "3", "\"bridge\"", "\"POLYGON((9.3769786 47.4222885,9.3769786 47.4222885,9.3769786 47.4222885,9.3769786 47.4222885,9.3769786 47.4222885))\"^^<https://www.invented.de/a#wktLiteral>");
+  std::cerr << kg << std::endl;
+  return kg;
+}
+
+// move to SpatialJoinTestHelpers, but adapt the existing buildTestQEC method by
+// adding a parameter bool usePointDataset, which when set to false calls the
+// createAreaDataset method or give this parameter to the existing createDataset
+// method, which has an if(usePointDataset)... else ...
+QueryExecutionContext* buildAreaTestQEC() {
+  std::string kg = createAreaTestDataset();
+  ad_utility::MemorySize blocksizePermutations = 16_MB;
+  auto qec = ad_utility::testing::getQec(kg, true, true, false, blocksizePermutations,
+            false);
+  return qec;
+}
+
+// this function calculates the bounding box of a geometry, which is an area.
+// This is different to the query box, which is a box, which contains the area
+// where all results are contained in
+Box calculateBoundingBoxOfArea(std::string wktString) {
+  Polygon polygon;
+  boost::geometry::read_wkt(wktString, polygon);
+  double minLng = std::numeric_limits<double>::infinity();
+  double maxLng = -std::numeric_limits<double>::infinity();
+  double minLat = std::numeric_limits<double>::infinity();
+  double maxLat = -std::numeric_limits<double>::infinity();
+  for (const auto& point : polygon.outer()) {
+    double lng = boost::geometry::get<0>(point);
+    double lat = boost::geometry::get<1>(point);
+    if (lng < minLng){ minLng = lng; }
+    if (lng > maxLng){ maxLng = lng; }
+    if (lat < minLat){ minLat = lat; }
+    if (lat > maxLat){ maxLat = lat; }
+  }
+  return Box(Point(minLng, minLat), Point(maxLng, maxLat));
+}
+
+// calculates the midpoint of the Box
+Point calculateMidpointOfBox(Box box) {
+  double lng = (box.min_corner().get<0>() + box.max_corner().get<0>()) / 2.0;
+  double lat = (box.min_corner().get<1>() + box.max_corner().get<1>()) / 2.0;
+  return Point(lng, lat);
+}
+
+TEST(SpatialJoin, development) {
+  auto qec = buildAreaTestQEC();
+  // if the object in the kg has both a point and a polygon representation, then
+  // the point representation should be used by default. Add this case to the
+  // test kg to test this behaviour
+
+  // next step: create bounding box for the area of the polygon
+}
+
+}
+
+// ===================================== DEV ending ===========================
+
 }  // namespace
