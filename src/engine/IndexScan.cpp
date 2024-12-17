@@ -704,21 +704,32 @@ void IndexScan::setBlocksForJoinOfIndexScans(Operation* left,
 }
 
 // _____________________________________________________________________________
-std::vector<Operation*> IndexScan::getIndexScansForSortVariables(
-    std::span<const Variable> variables) {
+bool IndexScan::hasIndexScansForJoinPrefiltering(
+    std::span<const Variable> joinVariables) const {
   const auto& sorted = resultSortedOn();
-  if (resultSortedOn().size() < variables.size()) {
-    return {};
+  if (resultSortedOn().size() < joinVariables.size()) {
+    return false;
   }
   const auto& varColMap = getExternallyVisibleVariableColumns();
-  for (size_t i = 0; i < variables.size(); ++i) {
-    auto it = varColMap.find(variables[i]);
+  for (size_t i = 0; i < joinVariables.size(); ++i) {
+    auto it = varColMap.find(joinVariables[i]);
     if (it == varColMap.end() ||
         it->second.columnIndex_ != resultSortedOn().at(i)) {
-      return {};
+      return false;
     }
   }
-  return {this};
+  return true;
+}
+
+// _____________________________________________________________________________
+std::vector<Operation*>
+IndexScan::getIndexScansForJoinPrefilteringAndDisableCaching(
+    std::span<const Variable> variables) {
+  if (hasIndexScansForJoinPrefiltering(variables)) {
+    return {this};
+  } else {
+    return {};
+  }
 }
 
 // _____________________________________________________________________________

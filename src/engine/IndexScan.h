@@ -245,6 +245,8 @@ class IndexScan final : public Operation {
   void setPrefilteredBlocks(
       std::vector<CompressedBlockMetadata> prefilteredBlocks);
 
-  std::vector<Operation*> getIndexScansForSortVariables(
+  bool hasIndexScansForJoinPrefiltering(
+      std::span<const Variable> joinVariables) const override;
+  std::vector<Operation*> getIndexScansForJoinPrefilteringAndDisableCaching(
       std::span<const Variable> variables) override;
 };

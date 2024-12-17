@@ -13,6 +13,7 @@
 
 #include "engine/Sort.h"
 #include "parser/RdfEscaping.h"
+#include "util/http/UrlParser.h"
 
 using std::string;
 
@@ -227,9 +228,18 @@ QueryExecutionTree::getVariableAndInfoByColumnIndex(ColumnIndex colIdx) const {
 }
 
 // _____________________________________________________________________________
-std::vector<Operation*> QueryExecutionTree::getIndexScansForSortVariables(
-    std::span<const Variable> variables) {
-  auto result = rootOperation_->getIndexScansForSortVariables(variables);
+bool QueryExecutionTree::hasIndexScansForJoinPrefiltering(
+    std::span<const Variable> joinVariables) const {
+  return rootOperation_->hasIndexScansForJoinPrefiltering(joinVariables);
+}
+
+// _____________________________________________________________________________
+std::vector<Operation*>
+QueryExecutionTree::getIndexScansForJoinPrefilteringAndDisableCaching(
+    std::span<const Variable> joinVariables) {
+  auto result =
+      rootOperation_->getIndexScansForJoinPrefilteringAndDisableCaching(
+          joinVariables);
   if (result.empty()) {
     return result;
   }

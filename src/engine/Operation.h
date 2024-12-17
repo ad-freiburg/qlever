@@ -426,9 +426,15 @@ class Operation {
       RuntimeInformation::Status status =
           RuntimeInformation::Status::optimizedOut);
 
-  // TODO<joka921> Comment.
-  virtual std::vector<Operation*> getIndexScansForSortVariables(
-      [[maybe_unused]] std::span<const Variable> variables) {
+  // See the functions with the same name in `QueryExecutionTree.h` for
+  // documentation.
+  virtual bool hasIndexScansForJoinPrefiltering(
+      [[maybe_unused]] std::span<const Variable> joinVariables) const {
+    return false;
+  }
+  virtual std::vector<Operation*>
+  getIndexScansForJoinPrefilteringAndDisableCaching(
+      [[maybe_unused]] std::span<const Variable> joinVariables) {
     return {};
   }
 

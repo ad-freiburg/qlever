@@ -183,11 +183,16 @@ ProtoResult Join::computeResult(bool requestLaziness) {
 
   // TODO<joka921> Copy and move to separate function.
   std::span joinVarSpan{&_joinVar, 1};
-  auto leftIndexScans = _left->getIndexScansForSortVariables(joinVarSpan);
-  auto rightIndexScans = _right->getIndexScansForSortVariables(joinVarSpan);
-  for (auto* left : leftIndexScans) {
-    for (auto* right : rightIndexScans) {
-      IndexScan::setBlocksForJoinOfIndexScans(left, right);
+  if (_left->hasIndexScansForJoinPrefiltering(joinVarSpan) &&
+      _right->hasIndexScansForJoinPrefiltering(joinVarSpan)) {
+    auto leftIndexScans =
+        _left->getIndexScansForJoinPrefilteringAndDisableCaching(joinVarSpan);
+    auto rightIndexScans =
+        _right->getIndexScansForJoinPrefilteringAndDisableCaching(joinVarSpan);
+    for (auto* left : leftIndexScans) {
+      for (auto* right : rightIndexScans) {
+        IndexScan::setBlocksForJoinOfIndexScans(left, right);
+      }
     }
   }
 
@@ -801,11 +806,21 @@ ad_utility::AddCombinedRowToIdTable Join::makeRowAdder(
       1, IdTable{getResultWidth(), allocator()}, cancellationHandle_,
       CHUNK_SIZE, std::move(callback)};
 }
+
 // _____________________________________________________________________________
-std::vector<Operation*> Join::getIndexScansForSortVariables(
+bool Join::hasIndexScansForJoinPrefiltering(
+    std::span<const Variable> variables) const {
+  return _left->hasIndexScansForJoinPrefiltering(variables) ||
+         _right->hasIndexScansForJoinPrefiltering(variables);
+}
+
+// _____________________________________________________________________________
+std::vector<Operation*> Join::getIndexScansForJoinPrefilteringAndDisableCaching(
     std::span<const Variable> variables) {
-  auto result = _left->getIndexScansForSortVariables(variables);
-  auto right = _right->getIndexScansForSortVariables(variables);
+  auto result =
+      _left->getIndexScansForJoinPrefilteringAndDisableCaching(variables);
+  auto right =
+      _right->getIndexScansForJoinPrefilteringAndDisableCaching(variables);
   result.insert(result.end(), right.begin(), right.end());
   return result;
 }

@@ -141,8 +141,9 @@ class Join : public Operation {
   static void hashJoin(const IdTable& dynA, ColumnIndex jc1,
                        const IdTable& dynB, ColumnIndex jc2, IdTable* dynRes);
 
-  // TODO<joka921> Comment.
-  std::vector<Operation*> getIndexScansForSortVariables(
+  bool hasIndexScansForJoinPrefiltering(
+      std::span<const Variable> variables) const override;
+  std::vector<Operation*> getIndexScansForJoinPrefilteringAndDisableCaching(
       std::span<const Variable> variables) override;
 
  protected:
