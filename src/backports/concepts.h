@@ -13,12 +13,17 @@
 // `QL_CONCEPT_OR_NOTHING(arg)` which expands to `arg` in C++20 mode, and to
 // nothing in C++17 mode. It can be used to easily opt out of concepts that are
 // only used for documentation and increased safety and not for overload
-// resolution. Example usages: `QL_CONCEPT_OR_NOTHING(std::view) auto x =
-// someFunction();` `void f(QL_CONCEPT_OR_NOTHING(std::view) auto x) {...}`
+// resolution.
+//
+// Example usages:
+// `QL_CONCEPT_OR_NOTHING(std::view) auto x = someFunction();`
+// `void f(QL_CONCEPT_OR_NOTHING(std::view) auto x) {...}`
 //
 // `QL_CONCEPT_OR_TYPENAME(arg)` which expands to `arg` in C++20 mode, and to
-// `typename` in C++17 mode. Example: `template
-// <QL_CONCEPT_OR_TYPENAME(ql::same_as<int>) T> void f(){...}`
+// `typename` in C++17 mode.
+//
+// Example usage:
+// `template <QL_CONCEPT_OR_TYPENAME(ql::same_as<int>) T> void f(){...}`
 //
 // Note: The macros are variadic to allow for commas in the argument (e.g.
 // `QL_CONCEPT_OR_NOTHING(SameAsAny<int, float>)`.
