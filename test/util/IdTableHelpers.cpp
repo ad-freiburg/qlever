@@ -251,7 +251,7 @@ std::shared_ptr<QueryExecutionTree> idTableToExecutionTree(
 
 // _____________________________________________________________________________
 std::pair<IdTable, std::vector<LocalVocab>> aggregateTables(
-    Result::Generator generator, size_t numColumns) {
+    Result::LazyResult generator, size_t numColumns) {
   IdTable aggregateTable{numColumns, ad_utility::makeUnlimitedAllocator<Id>()};
   std::vector<LocalVocab> localVocabs;
   for (auto& [idTable, localVocab] : generator) {

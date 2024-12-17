@@ -155,8 +155,13 @@ class AddCombinedRowToIdTable {
     if (nextIndex_ != 0) {
       AD_CORRECTNESS_CHECK(inputLeftAndRight_.has_value());
       flush();
-    } else {
-      // Clear vocab when no rows were written.
+    } else if (resultTable_.empty()) {
+      // Clear local vocab when no rows were written.
+      //
+      // TODO<joka921, robinTF> This is a conservative approach. We could
+      // optimize this case (clear the local vocab more often, but still
+      // correctly) by considering the situation after all the relevant inputs
+      // have been processed.
       mergedVocab_ = LocalVocab{};
     }
   }

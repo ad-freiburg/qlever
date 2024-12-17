@@ -40,8 +40,10 @@ using LazyInputView =
 // Convert a `generator<IdTableVocab>` to a `generator<IdTableAndFirstCol>` for
 // more efficient access in the join columns below and apply the given
 // permutation to each table.
-LazyInputView convertGenerator(Result::Generator gen,
-                               OptionalPermutation permutation = {}) {
+CPP_template(typename Input)(
+    requires ad_utility::SameAsAny<Input, Result::Generator,
+                                   Result::LazyResult>) LazyInputView
+    convertGenerator(Input gen, OptionalPermutation permutation = {}) {
   for (auto& [table, localVocab] : gen) {
     applyPermutation(table, permutation);
     // Make sure to actually move the table into the wrapper so that the tables

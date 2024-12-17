@@ -35,7 +35,7 @@ VariableToColumnMap Distinct::computeVariableToColumnMap() const {
 
 // _____________________________________________________________________________
 template <size_t WIDTH>
-Result::Generator Distinct::lazyDistinct(Result::Generator input,
+Result::Generator Distinct::lazyDistinct(Result::LazyResult input,
                                          bool yieldOnce) const {
   IdTable aggregateTable{subtree_->getResultWidth(), allocator()};
   LocalVocab aggregateVocab{};
