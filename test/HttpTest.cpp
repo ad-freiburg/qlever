@@ -22,7 +22,7 @@ namespace {
 /// Join all of the bytes into a big string.
 std::string toString(cppcoro::generator<std::span<std::byte>> generator) {
   std::string result;
-  for (std::byte byte : generator | std::ranges::views::join) {
+  for (std::byte byte : generator | ql::ranges::views::join) {
     result.push_back(static_cast<char>(byte));
   }
   return result;

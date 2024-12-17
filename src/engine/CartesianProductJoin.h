@@ -21,15 +21,14 @@ class CartesianProductJoin : public Operation {
   // TODO<joka921> We can move this whole children management into a base class
   // and clean up the implementation of several other children.
   auto childView() {
-    return std::views::transform(children_, [](auto& child) -> Operation& {
+    return ql::views::transform(children_, [](auto& child) -> Operation& {
       return *child->getRootOperation();
     });
   }
   auto childView() const {
-    return std::views::transform(children_,
-                                 [](auto& child) -> const Operation& {
-                                   return *child->getRootOperation();
-                                 });
+    return ql::views::transform(children_, [](auto& child) -> const Operation& {
+      return *child->getRootOperation();
+    });
   }
 
  public:

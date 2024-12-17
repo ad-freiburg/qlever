@@ -8,7 +8,6 @@
 #include <absl/container/flat_hash_set.h>
 #include <absl/container/node_hash_set.h>
 
-#include <algorithm>
 #include <cstdlib>
 #include <memory>
 #include <ranges>
@@ -16,6 +15,7 @@
 #include <string>
 #include <vector>
 
+#include "backports/algorithm.h"
 #include "index/LocalVocabEntry.h"
 #include "util/BlankNodeManager.h"
 #include "util/Exception.h"
@@ -115,7 +115,7 @@ class LocalVocab {
   // primary set of this `LocalVocab` remains unchanged.
   template <std::ranges::range R>
   void mergeWith(const R& vocabs) {
-    using std::views::filter;
+    using ql::views::filter;
     auto addWordSet = [this](const std::shared_ptr<const Set>& set) {
       bool added = otherWordSets_.insert(set).second;
       size_ += static_cast<size_t>(added) * set->size();
@@ -125,7 +125,7 @@ class LocalVocab {
     // typically don't compare equal to each other because of the`shared_ptr`
     // semantics.
     for (const auto& vocab : vocabs | filter(std::not_fn(&LocalVocab::empty))) {
-      std::ranges::for_each(vocab.otherWordSets_, addWordSet);
+      ql::ranges::for_each(vocab.otherWordSets_, addWordSet);
       addWordSet(vocab.primaryWordSet_);
     }
 
@@ -134,12 +134,12 @@ class LocalVocab {
         ad_utility::BlankNodeManager::LocalBlankNodeManager;
     auto localManagersView =
         vocabs |
-        std::views::transform([](const LocalVocab& vocab) -> const auto& {
+        ql::views::transform([](const LocalVocab& vocab) -> const auto& {
           return vocab.localBlankNodeManager_;
         });
 
-    auto it = std::ranges::find_if(localManagersView,
-                                   [](const auto& l) { return l != nullptr; });
+    auto it = ql::ranges::find_if(localManagersView,
+                                  [](const auto& l) { return l != nullptr; });
     if (it == localManagersView.end()) {
       return;
     }

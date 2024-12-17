@@ -407,7 +407,7 @@ bool SpatialJoinAlgorithms::isContainedInBoundingBoxes(
     const std::vector<Box>& boundingBox, Point point) const {
   convertToNormalCoordinates(point);
 
-  return std::ranges::any_of(boundingBox, [point](const Box& aBox) {
+  return ql::ranges::any_of(boundingBox, [point](const Box& aBox) {
     return boost::geometry::covered_by(point, aBox);
   });
 }
@@ -512,11 +512,11 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
     std::vector<Box> bbox = computeBoundingBox(p);
     results.clear();
 
-    std::ranges::for_each(bbox, [&](const Box& bbox) {
+    ql::ranges::for_each(bbox, [&](const Box& bbox) {
       rtree.query(bgi::intersects(bbox), std::back_inserter(results));
     });
 
-    std::ranges::for_each(results, [&](const Value& res) {
+    ql::ranges::for_each(results, [&](const Value& res) {
       size_t rowLeft = res.second;
       size_t rowRight = i;
       if (!leftResSmaller) {

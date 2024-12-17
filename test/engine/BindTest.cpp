@@ -95,7 +95,7 @@ TEST(
   auto* qec = ad_utility::testing::getQec();
   IdTable table{1, ad_utility::makeUnlimitedAllocator<Id>()};
   table.resize(Bind::CHUNK_SIZE + 1);
-  std::ranges::fill(table, row);
+  ql::ranges::fill(table, row);
   auto valuesTree = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, table.clone(), Vars{Variable{"?a"}}, false,
       std::vector<ColumnIndex>{}, LocalVocab{}, std::nullopt, true);
@@ -109,7 +109,7 @@ TEST(
   row = IdTable::row_type{2};
   row[0] = val;
   row[1] = val;
-  std::ranges::fill(table, row);
+  ql::ranges::fill(table, row);
   {
     qec->getQueryTreeCache().clearAll();
     auto result = bind.getResult(false, ComputationMode::FULLY_MATERIALIZED);

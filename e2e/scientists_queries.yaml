@@ -55,31 +55,43 @@ queries:
           ?t ql:contains-word "RElaT* phySIKalische rela*"
       }
     checks:
-      - num_cols: 5
-      - selected: [ "?x", "?ql_score_t_var_x", "?t", "?ql_matchingword_t_relat", "?ql_matchingword_t_rela" ]
+      - num_cols: 8
+      - selected: [ "?x", "?ql_score_t_var_x", "?t", "?ql_score_prefix_t_RElaT", "?ql_matchingword_t_relat", "?ql_score_word_t_phySIKalische", "?ql_score_prefix_t_rela", "?ql_matchingword_t_rela" ]
       - contains_row:
           - "<Albert_Einstein>"
           - null
           - null
+          - null
           - "relationship"
+          - null
+          - null
           - "relationship"
       - contains_row:
           - "<Albert_Einstein>"
           - null
           - null
+          - null
           - "relationship"
+          - null
+          - null
           - "relativity"
       - contains_row:
           - "<Albert_Einstein>"
           - null
           - null
+          - null
           - "relativity"
+          - null
+          - null
           - "relationship"
       - contains_row:
           - "<Albert_Einstein>"
           - null
           - null
+          - null
           - "relativity"
+          - null
+          - null
           - "relativity"
 
   - query: algo-star-female-scientists
@@ -151,7 +163,7 @@ queries:
       }
       TEXTLIMIT 2
     checks:
-      - num_cols: 7
+      - num_cols: 9
       - num_rows: 18
 
   - query: algor-star-female-born-before-1940
@@ -192,7 +204,7 @@ queries:
       }
       ORDER BY DESC(?ql_score_text_fixedEntity__60_Ada_95_Lovelace_62_)
     checks:
-      - num_cols: 5
+      - num_cols: 6
       - num_rows: 7
       - contains_row:
         - "<Ada_Lovelace>"
@@ -201,6 +213,7 @@ queries:
         working relationship and friendship with fellow British mathematician
         Charles Babbage, also known as' the father of computers', and in
         particular, Babbage's work on the Analytical Engine."
+        - null
         - null
         - "relationship"
       - order_numeric: {"dir": "DESC", 
@@ -219,7 +232,7 @@ queries:
       ORDER BY DESC(?ql_score_text_fixedEntity__60_Ada_95_Lovelace_62_)
       TEXTLIMIT 2
     checks:
-      - num_cols: 5
+      - num_cols: 6
       - num_rows: 3
       - contains_row:
         - "<Ada_Lovelace>"
@@ -228,6 +241,7 @@ queries:
         working relationship and friendship with fellow British mathematician
         Charles Babbage, also known as' the father of computers', and in
         particular, Babbage's work on the Analytical Engine."
+        - null
         - null
         - "relationship"
       - order_numeric: {"dir": "DESC", 
@@ -246,13 +260,14 @@ queries:
       }
       TEXTLIMIT 1
     checks:
-      - num_cols: 6
+      - num_cols: 7
       - num_rows: 2
       - contains_row:
         - "<Ada_Lovelace>"
         - null
         - "She became fascinated with the machine and used her relationship
         with Somerville to visit Babbage as often as she could."
+        - null
         - null
         - null
         - "relationship"
@@ -1391,10 +1406,10 @@ queries:
           ?t ql:contains-word "algo* herm* primary"
       }
     checks:
-      - num_cols: 5
+      - num_cols: 8
       - num_rows: 1
-      - selected: [ "?x", "?ql_score_t_var_x", "?t", "?ql_matchingword_t_algo", "?ql_matchingword_t_herm" ]
-      - contains_row: [ "<Grete_Hermann>",null,"Hermann's algorithm for primary decomposition is still in use now.","algorithm","hermann" ]
+      - selected: [ "?x", "?ql_score_t_var_x", "?t", "?ql_score_prefix_t_algo", "?ql_matchingword_t_algo", "?ql_score_prefix_t_herm", "?ql_matchingword_t_herm", "?ql_score_word_t_primary" ]
+      - contains_row: [ "<Grete_Hermann>",null,"Hermann's algorithm for primary decomposition is still in use now.",null,"algorithm",null,"hermann",null ]
 
 
   - query : select_asterisk_regex-lastname-stein

@@ -47,7 +47,7 @@ struct BinSearchMap {
    * startIds_ == node.
    */
   auto successors(const Id node) const {
-    auto range = std::ranges::equal_range(startIds_, node);
+    auto range = ql::ranges::equal_range(startIds_, node);
 
     auto startIndex = std::distance(startIds_.begin(), range.begin());
 

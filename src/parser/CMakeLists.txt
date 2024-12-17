@@ -20,6 +20,7 @@ add_library(parser
         MagicServiceQuery.cpp
         PathQuery.cpp
         SpatialQuery.cpp
+        PayloadVariables.cpp
         PropertyPath.cpp
         data/SparqlFilter.cpp
         SelectClause.cpp
@@ -28,6 +29,8 @@ add_library(parser
         GraphPattern.cpp data/Variable.cpp
         Iri.cpp
         Literal.cpp
-        LiteralOrIri.cpp)
+        LiteralOrIri.cpp
+        DatasetClauses.cpp
+)
 qlever_target_link_libraries(parser sparqlParser parserData sparqlExpressions rdfEscaping re2::re2 util engine index)
 

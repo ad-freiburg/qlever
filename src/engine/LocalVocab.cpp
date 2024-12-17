@@ -19,7 +19,7 @@ LocalVocab LocalVocab::clone() const {
 // _____________________________________________________________________________
 LocalVocab LocalVocab::merge(std::span<const LocalVocab*> vocabs) {
   LocalVocab result;
-  result.mergeWith(vocabs | std::views::transform(ad_utility::dereference));
+  result.mergeWith(vocabs | ql::views::transform(ad_utility::dereference));
   return result;
 }
 
@@ -67,9 +67,9 @@ const LocalVocabEntry& LocalVocab::getWord(
 // _____________________________________________________________________________
 std::vector<LocalVocabEntry> LocalVocab::getAllWordsForTesting() const {
   std::vector<LocalVocabEntry> result;
-  std::ranges::copy(primaryWordSet(), std::back_inserter(result));
+  ql::ranges::copy(primaryWordSet(), std::back_inserter(result));
   for (const auto& previous : otherWordSets_) {
-    std::ranges::copy(*previous, std::back_inserter(result));
+    ql::ranges::copy(*previous, std::back_inserter(result));
   }
   return result;
 }

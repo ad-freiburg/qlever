@@ -4,8 +4,13 @@
 
 #include "parser/SpatialQuery.h"
 
+#include <type_traits>
+#include <variant>
+
 #include "engine/SpatialJoin.h"
 #include "parser/MagicServiceIriConstants.h"
+#include "parser/PayloadVariables.h"
+#include "parser/data/Variable.h"
 
 namespace parsedQuery {
 
@@ -60,7 +65,22 @@ void SpatialQuery::addParameter(const SparqlTriple& triple) {
           "<baseline>, <s2> or <boundingBox>.");
     }
   } else if (predString == "payload") {
-    payloadVariables_.push_back(getVariable("payload", object));
+    if (object.isVariable()) {
+      // Single selected variable
+
+      // If we have already selected all payload variables, we can ignore
+      // another explicitly selected variable.
+      payloadVariables_.addVariable(getVariable("payload", object));
+    } else if (object.isIri() &&
+               extractParameterName(object, SPATIAL_SEARCH_IRI) == "all") {
+      // All variables selected
+      payloadVariables_.setToAll();
+    } else {
+      throw SpatialSearchException(
+          "The argument to the <payload> parameter must be either a variable "
+          "to be selected or <all>.");
+    }
+
   } else {
     throw SpatialSearchException(absl::StrCat(
         "Unsupported argument ", predString,
@@ -95,7 +115,7 @@ SpatialJoinConfiguration SpatialQuery::toSpatialJoinConfiguration() const {
         "spatialSearch: { [Config Triples] { <Something> <ThatSelects> ?right "
         "} }.");
   } else if (!ignoreMissingRightChild_ && !childGraphPattern_.has_value() &&
-             !payloadVariables_.empty()) {
+             !payloadVariables_.isAll() && !payloadVariables_.empty()) {
     throw SpatialSearchException(
         "The right variable for the spatial search is declared outside the "
         "SERVICE, but the <payload> parameter was set. Please move the "
@@ -112,7 +132,7 @@ SpatialJoinConfiguration SpatialQuery::toSpatialJoinConfiguration() const {
   // Payload variables
   PayloadVariables pv;
   if (!childGraphPattern_.has_value()) {
-    pv = PayloadAllVariables{};
+    pv = PayloadVariables::all();
   } else {
     pv = payloadVariables_;
   }

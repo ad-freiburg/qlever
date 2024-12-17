@@ -158,6 +158,11 @@ class IndexImpl {
   NumNormalAndInternal numTriples_;
   string indexId_;
 
+  // Keeps track of the number of nonLiteral contexts in the index this is used
+  // in the test retrieval of the texts. This only works reliably if the
+  // wordsFile.tsv starts with contextId 1 and is continuous.
+  size_t nofNonLiteralsInTextIndex_;
+
   // Global static pointers to the currently active index and comparator.
   // Those are used to compare LocalVocab entries with each other as well as
   // with Vocab entries.
@@ -424,6 +429,9 @@ class IndexImpl {
   size_t getNofEntityPostings() const {
     return textMeta_.getNofEntityPostings();
   }
+  size_t getNofNonLiteralsInTextIndex() const {
+    return nofNonLiteralsInTextIndex_;
+  }
 
   bool hasAllPermutations() const { return SPO().isLoaded(); }
 
@@ -624,14 +632,17 @@ class IndexImpl {
                    ad_utility::File& file) const;
 
   // TODO<joka921> understand what the "codes" are, are they better just ints?
-  typedef ad_utility::HashMap<WordIndex, CompressionCode> WordToCodeMap;
+  // After using createCodebooks on these types, the lowest codes refer to the
+  // most frequent WordIndex/Score. The maps are mapping those codes to their
+  // respective frequency.
+  typedef ad_utility::HashMap<WordIndex, CompressionCode> WordCodeMap;
   typedef ad_utility::HashMap<Score, Score> ScoreCodeMap;
   typedef vector<CompressionCode> WordCodebook;
   typedef vector<Score> ScoreCodebook;
 
   //! Creates codebooks for lists that are supposed to be entropy encoded.
   void createCodebooks(const vector<Posting>& postings,
-                       WordToCodeMap& wordCodemap, WordCodebook& wordCodebook,
+                       WordCodeMap& wordCodemap, WordCodebook& wordCodebook,
                        ScoreCodeMap& scoreCodemap,
                        ScoreCodebook& scoreCodebook) const;
 

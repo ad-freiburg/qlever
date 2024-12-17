@@ -175,30 +175,24 @@ string SpatialJoin::getDescriptor() const {
 // ____________________________________________________________________________
 size_t SpatialJoin::getResultWidth() const {
   if (childLeft_ && childRight_) {
-    // Helper visitor lambda to determine the size of the right child after
-    // selecting only the join column and explicitly requested payload columns
-    auto sizeRight = [this]<typename T>(const T& value) {
-      if constexpr (std::is_same_v<T, PayloadAllVariables>) {
-        return childRight_->getResultWidth();
-      } else {
-        static_assert(std::is_same_v<T, std::vector<Variable>>);
-
-        // We convert to a set here, because we allow multiple occurrences of
-        // variables in payloadVariables_
-        absl::flat_hash_set<Variable> pvSet{value.begin(), value.end()};
-
-        // The payloadVariables_ may contain the right join variable
-        return pvSet.size() + (pvSet.contains(config_.right_) ? 0 : 1);
-      }
-    };
-
     // don't subtract anything because of a common join column. In the case
     // of the spatial join, the join column is different for both sides (e.g.
     // objects with a distance of at most 500m to each other, then each object
     // might contain different positions, which should be kept).
     // For the right join table we only use the selected columns.
-    auto widthChildren = childLeft_->getResultWidth() +
-                         std::visit(sizeRight, config_.payloadVariables_);
+    size_t sizeRight;
+    if (config_.payloadVariables_.isAll()) {
+      sizeRight = childRight_->getResultWidth();
+    } else {
+      // We convert to a set here, because we allow multiple occurrences of
+      // variables in payloadVariables_
+      std::vector<Variable> pv = config_.payloadVariables_.getVariables();
+      absl::flat_hash_set<Variable> pvSet{pv.begin(), pv.end()};
+
+      // The payloadVariables_ may contain the right join variable
+      sizeRight = pvSet.size() + (pvSet.contains(config_.right_) ? 0 : 1);
+    }
+    auto widthChildren = childLeft_->getResultWidth() + sizeRight;
 
     if (config_.distanceVariable_.has_value()) {
       return widthChildren + 1;
@@ -289,7 +283,13 @@ float SpatialJoin::getMultiplicity(size_t col) {
       child = childLeft_;
     } else {
       child = childRight_;
-      column -= childLeft_->getResultWidth();
+      // Since we only select the payload variables into the result and
+      // potentially omit some columns from the right child, we need to
+      // translate the column index on the spatial join to a column index in the
+      // right child.
+      auto filteredColumns = copySortedByColumnIndex(getVarColMapPayloadVars());
+      column = filteredColumns.at(column - childLeft_->getResultWidth())
+                   .second.columnIndex_;
     }
     auto distinctnessChild = getDistinctness(child, column);
     return static_cast<float>(childLeft_->getSizeEstimate() *
@@ -324,34 +324,29 @@ VariableToColumnMap SpatialJoin::getVarColMapPayloadVars() const {
                     "Child right must be added before payload variable to "
                     "column map can be computed.");
 
-  auto payloadVariablesVisitor = [this]<typename T>(const T& value) {
-    const auto& varColMap = childRight_->getVariableColumns();
-    VariableToColumnMap newVarColMap;
+  const auto& varColMap = childRight_->getVariableColumns();
+  VariableToColumnMap newVarColMap;
 
-    if constexpr (std::is_same_v<T, PayloadAllVariables>) {
-      newVarColMap = VariableToColumnMap{varColMap};
-    } else {
-      static_assert(std::is_same_v<T, std::vector<Variable>>);
-      for (const auto& var : value) {
-        if (varColMap.contains(var)) {
-          newVarColMap.insert_or_assign(var, varColMap.at(var));
-        } else {
-          addWarningOrThrow(
-              absl::StrCat("Variable '", var.name(),
-                           "' selected as payload to spatial join but not "
-                           "present in right child."));
-        }
+  if (config_.payloadVariables_.isAll()) {
+    newVarColMap = VariableToColumnMap{varColMap};
+  } else {
+    for (const auto& var : config_.payloadVariables_.getVariables()) {
+      if (varColMap.contains(var)) {
+        newVarColMap.insert_or_assign(var, varColMap.at(var));
+      } else {
+        addWarningOrThrow(
+            absl::StrCat("Variable '", var.name(),
+                         "' selected as payload to spatial join but not "
+                         "present in right child."));
       }
-      AD_CONTRACT_CHECK(
-          varColMap.contains(config_.right_),
-          "Right variable is not defined in right child of spatial join.");
-      newVarColMap.insert_or_assign(config_.right_,
-                                    varColMap.at(config_.right_));
     }
-    return newVarColMap;
-  };
+    AD_CONTRACT_CHECK(
+        varColMap.contains(config_.right_),
+        "Right variable is not defined in right child of spatial join.");
+    newVarColMap.insert_or_assign(config_.right_, varColMap.at(config_.right_));
+  }
 
-  return std::visit(payloadVariablesVisitor, config_.payloadVariables_);
+  return newVarColMap;
 }
 
 // ____________________________________________________________________________

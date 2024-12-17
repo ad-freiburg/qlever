@@ -1,15 +1,17 @@
 // Copyright 2015 - 2024, University of Freiburg
 // Chair of Algorithms and Data Structures
 // Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de> [2015 - 2017]
-//          Johannes Kalmbach <kalmbachqcs.uni-freiburg.de> [2018 - 2024]
+//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de> [2018 - 2024]
 
 #include <gmock/gmock.h>
 
+#include "./printers/PayloadVariablePrinters.h"
 #include "QueryPlannerTestHelpers.h"
 #include "engine/QueryPlanner.h"
 #include "engine/SpatialJoin.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/MagicServiceQuery.h"
+#include "parser/PayloadVariables.h"
 #include "parser/SparqlParser.h"
 #include "parser/SpatialQuery.h"
 #include "parser/data/Variable.h"
@@ -1632,7 +1634,7 @@ TEST(QueryPlanner, SpatialJoinService) {
   auto S2 = SpatialJoinAlgorithm::S2_GEOMETRY;
   auto Basel = SpatialJoinAlgorithm::BASELINE;
   auto BBox = SpatialJoinAlgorithm::BOUNDING_BOX;
-  std::vector<Variable> emptyPayload{};
+  PayloadVariables emptyPayload{};
 
   // Simple base cases
   h::expect(
@@ -1717,6 +1719,7 @@ TEST(QueryPlanner, SpatialJoinServicePayloadVars) {
   auto scan = h::IndexScanFromStrings;
   using V = Variable;
   auto S2 = SpatialJoinAlgorithm::S2_GEOMETRY;
+  using PV = PayloadVariables;
 
   h::expect(
       "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
@@ -1731,7 +1734,7 @@ TEST(QueryPlanner, SpatialJoinServicePayloadVars) {
       "_:config spatialSearch:payload ?a ."
       "{ ?a <p> ?b } }}",
       h::SpatialJoin(-1, 5, V{"?y"}, V{"?b"}, V{"?dist"},
-                     std::vector<V>{V{"?a"}}, S2, scan("?x", "<p>", "?y"),
+                     PV{std::vector<V>{V{"?a"}}}, S2, scan("?x", "<p>", "?y"),
                      scan("?a", "<p>", "?b")));
   h::expect(
       "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
@@ -1747,7 +1750,7 @@ TEST(QueryPlanner, SpatialJoinServicePayloadVars) {
       "{ ?a <p> ?a2 . ?a2 <p> ?b } }}",
       h::SpatialJoin(
           -1, 5, V{"?y"}, V{"?b"}, V{"?dist"},
-          std::vector<V>{V{"?a"}, V{"?a2"}}, S2, scan("?x", "<p>", "?y"),
+          PV{std::vector<V>{V{"?a"}, V{"?a2"}}}, S2, scan("?x", "<p>", "?y"),
           h::Join(scan("?a", "<p>", "?a2"), scan("?a2", "<p>", "?b"))));
 
   // Right variable and duplicates are possible (silently deduplicated during
@@ -1766,19 +1769,71 @@ TEST(QueryPlanner, SpatialJoinServicePayloadVars) {
       "{ ?a <p> ?a2 . ?a2 <p> ?b } }}",
       h::SpatialJoin(
           -1, 5, V{"?y"}, V{"?b"}, V{"?dist"},
-          std::vector<V>{V{"?a"}, V{"?a"}, V{"?b"}, V{"?a2"}}, S2,
+          PV{std::vector<V>{V{"?a"}, V{"?a"}, V{"?b"}, V{"?a2"}}}, S2,
+          scan("?x", "<p>", "?y"),
+          h::Join(scan("?a", "<p>", "?a2"), scan("?a2", "<p>", "?b"))));
+
+  // Selecting all payload variables using "all"
+  h::expect(
+      "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+      "SELECT * WHERE {"
+      "?x <p> ?y."
+      "SERVICE spatialSearch: {"
+      "_:config spatialSearch:algorithm spatialSearch:s2 ;"
+      "spatialSearch:right ?b ;"
+      "spatialSearch:bindDistance ?dist ;"
+      "spatialSearch:numNearestNeighbors 5 . "
+      "_:config spatialSearch:left ?y ."
+      "_:config spatialSearch:payload <all> ."
+      "{ ?a <p> ?a2 . ?a2 <p> ?b } }}",
+      h::SpatialJoin(
+          -1, 5, V{"?y"}, V{"?b"}, V{"?dist"}, PayloadVariables::all(), S2,
+          scan("?x", "<p>", "?y"),
+          h::Join(scan("?a", "<p>", "?a2"), scan("?a2", "<p>", "?b"))));
+  h::expect(
+      "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+      "SELECT * WHERE {"
+      "?x <p> ?y."
+      "SERVICE spatialSearch: {"
+      "_:config spatialSearch:algorithm spatialSearch:s2 ;"
+      "spatialSearch:right ?b ;"
+      "spatialSearch:bindDistance ?dist ;"
+      "spatialSearch:numNearestNeighbors 5 . "
+      "_:config spatialSearch:left ?y ."
+      "_:config spatialSearch:payload spatialSearch:all ."
+      "{ ?a <p> ?a2 . ?a2 <p> ?b } }}",
+      h::SpatialJoin(
+          -1, 5, V{"?y"}, V{"?b"}, V{"?dist"}, PayloadVariables::all(), S2,
+          scan("?x", "<p>", "?y"),
+          h::Join(scan("?a", "<p>", "?a2"), scan("?a2", "<p>", "?b"))));
+
+  // All and explicitly named ones just select all
+  h::expect(
+      "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+      "SELECT * WHERE {"
+      "?x <p> ?y."
+      "SERVICE spatialSearch: {"
+      "_:config spatialSearch:algorithm spatialSearch:s2 ;"
+      "spatialSearch:right ?b ;"
+      "spatialSearch:bindDistance ?dist ;"
+      "spatialSearch:numNearestNeighbors 5 . "
+      "_:config spatialSearch:left ?y ."
+      "_:config spatialSearch:payload <all> ."
+      "_:config spatialSearch:payload ?a ."
+      "{ ?a <p> ?a2 . ?a2 <p> ?b } }}",
+      h::SpatialJoin(
+          -1, 5, V{"?y"}, V{"?b"}, V{"?dist"}, PayloadVariables::all(), S2,
           scan("?x", "<p>", "?y"),
           h::Join(scan("?a", "<p>", "?a2"), scan("?a2", "<p>", "?b"))));
 }
 
 TEST(QueryPlanner, SpatialJoinServiceMaxDistOutside) {
-  // If only maxDistance is used but not numNearestNeighbors, the right variable
-  // must not come from inside the SERVICE
-
   auto scan = h::IndexScanFromStrings;
   using V = Variable;
   auto S2 = SpatialJoinAlgorithm::S2_GEOMETRY;
 
+  // If only maxDistance is used but not numNearestNeighbors, the right variable
+  // must not come from inside the SERVICE
   h::expect(
       "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
       "SELECT * WHERE {"
@@ -1791,8 +1846,31 @@ TEST(QueryPlanner, SpatialJoinServiceMaxDistOutside) {
       "spatialSearch:maxDistance 1 . "
       " } }",
       h::SpatialJoin(1, -1, V{"?y"}, V{"?b"}, std::nullopt,
-                     PayloadAllVariables{}, S2, scan("?x", "<p>", "?y"),
+                     // Payload variables have the default all instead of empty
+                     // in this case
+                     PayloadVariables::all(), S2, scan("?x", "<p>", "?y"),
                      scan("?a", "<p>", "?b")));
+
+  // If the user explicitly states that they want all payload variables (which
+  // is enforced and the default anyway), this should also work
+  h::expect(
+      "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+      "SELECT * WHERE {"
+      "?a <p> ?b ."
+      "?x <p> ?y ."
+      "SERVICE spatialSearch: {"
+      "_:config spatialSearch:algorithm spatialSearch:s2 ;"
+      "spatialSearch:left ?y ;"
+      "spatialSearch:right ?b ;"
+      "spatialSearch:maxDistance 1 ; "
+      "spatialSearch:payload spatialSearch:all ."
+      " } }",
+      h::SpatialJoin(1, -1, V{"?y"}, V{"?b"}, std::nullopt,
+                     PayloadVariables::all(), S2, scan("?x", "<p>", "?y"),
+                     scan("?a", "<p>", "?b")));
+
+  // Nearest neighbors search requires the right child to be defined inside the
+  // service
   AD_EXPECT_THROW_WITH_MESSAGE(
       h::expect("PREFIX spatialSearch: "
                 "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
@@ -1810,6 +1888,11 @@ TEST(QueryPlanner, SpatialJoinServiceMaxDistOutside) {
       ::testing::ContainsRegex(
           "must have its right "
           "variable declared inside the service using a graph pattern"));
+
+  // The user may not select specific payload variables if the right join table
+  // is declared outside because this would mess up the query semantics and may
+  // not have deterministic results on different inputs because of query planner
+  // decisions
   AD_EXPECT_THROW_WITH_MESSAGE(
       h::expect("PREFIX spatialSearch: "
                 "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
@@ -1835,6 +1918,7 @@ TEST(QueryPlanner, SpatialJoinMultipleServiceSharedLeft) {
   auto scan = h::IndexScanFromStrings;
   using V = Variable;
   auto S2 = SpatialJoinAlgorithm::S2_GEOMETRY;
+  using PV = PayloadVariables;
 
   h::expect(
       "SELECT * WHERE {"
@@ -1848,20 +1932,16 @@ TEST(QueryPlanner, SpatialJoinMultipleServiceSharedLeft) {
       // children one way or the other depending on cost estimates. Both
       // versions are semantically correct.
       ::testing::AnyOf(
-          h::SpatialJoin(
-              100, -1, V{"?y"}, V{"?b"}, std::nullopt, PayloadAllVariables{},
-              S2,
-              h::SpatialJoin(500, -1, V{"?y"}, V{"?c"}, std::nullopt,
-                             PayloadAllVariables{}, S2, scan("?x", "<p>", "?y"),
-                             scan("?ac", "<p2>", "?c")),
-              scan("?ab", "<p1>", "?b")),
-          h::SpatialJoin(
-              500, -1, V{"?y"}, V{"?c"}, std::nullopt, PayloadAllVariables{},
-              S2,
-              h::SpatialJoin(100, -1, V{"?y"}, V{"?b"}, std::nullopt,
-                             PayloadAllVariables{}, S2, scan("?x", "<p>", "?y"),
-                             scan("?ab", "<p1>", "?b")),
-              scan("?ac", "<p2>", "?c"))));
+          h::SpatialJoin(100, -1, V{"?y"}, V{"?b"}, std::nullopt, PV::all(), S2,
+                         h::SpatialJoin(500, -1, V{"?y"}, V{"?c"}, std::nullopt,
+                                        PV::all(), S2, scan("?x", "<p>", "?y"),
+                                        scan("?ac", "<p2>", "?c")),
+                         scan("?ab", "<p1>", "?b")),
+          h::SpatialJoin(500, -1, V{"?y"}, V{"?c"}, std::nullopt, PV::all(), S2,
+                         h::SpatialJoin(100, -1, V{"?y"}, V{"?b"}, std::nullopt,
+                                        PV::all(), S2, scan("?x", "<p>", "?y"),
+                                        scan("?ab", "<p1>", "?b")),
+                         scan("?ac", "<p2>", "?c"))));
   h::expect(
       "PREFIX spatialSearch: <https://qlever.cs.uni-freiburg.de/spatialSearch/>"
       "SELECT * WHERE {"
@@ -1889,18 +1969,18 @@ TEST(QueryPlanner, SpatialJoinMultipleServiceSharedLeft) {
       // children one way or the other depending on cost estimates. Both
       // versions are semantically correct.
       ::testing::AnyOf(
-          h::SpatialJoin(
-              500, 5, V{"?y"}, V{"?c"}, V{"?dc"}, std::vector<V>{V{"?ac"}}, S2,
-              h::SpatialJoin(-1, 5, V{"?y"}, V{"?b"}, V{"?db"},
-                             std::vector<V>{}, S2, scan("?x", "<p>", "?y"),
-                             scan("?ab", "<p1>", "?b")),
-              scan("?ac", "<p2>", "?c")),
-          h::SpatialJoin(
-              -1, 5, V{"?y"}, V{"?b"}, V{"?db"}, std::vector<V>{}, S2,
-              h::SpatialJoin(
-                  500, 5, V{"?y"}, V{"?c"}, V{"?dc"}, std::vector<V>{V{"?ac"}},
-                  S2, scan("?x", "<p>", "?y"), scan("?ac", "<p2>", "?c")),
-              scan("?ab", "<p1>", "?b"))));
+          h::SpatialJoin(500, 5, V{"?y"}, V{"?c"}, V{"?dc"},
+                         PV{std::vector<V>{V{"?ac"}}}, S2,
+                         h::SpatialJoin(-1, 5, V{"?y"}, V{"?b"}, V{"?db"}, PV{},
+                                        S2, scan("?x", "<p>", "?y"),
+                                        scan("?ab", "<p1>", "?b")),
+                         scan("?ac", "<p2>", "?c")),
+          h::SpatialJoin(-1, 5, V{"?y"}, V{"?b"}, V{"?db"}, PV{}, S2,
+                         h::SpatialJoin(500, 5, V{"?y"}, V{"?c"}, V{"?dc"},
+                                        PV{std::vector<V>{V{"?ac"}}}, S2,
+                                        scan("?x", "<p>", "?y"),
+                                        scan("?ac", "<p2>", "?c")),
+                         scan("?ab", "<p1>", "?b"))));
 }
 
 TEST(QueryPlanner, SpatialJoinMissingConfig) {
@@ -2105,7 +2185,23 @@ TEST(QueryPlanner, SpatialJoinIncorrectConfigValues) {
                 " { ?a <p> ?b . }"
                 "}}",
                 ::testing::_),
-      ::testing::ContainsRegex("<payload> has to be a variable"));
+      ::testing::ContainsRegex("<payload> parameter must be either a variable "
+                               "to be selected or <all>"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("PREFIX spatialSearch: "
+                "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
+                "SELECT * WHERE {"
+                "?x <p> ?y ."
+                "SERVICE spatialSearch: {"
+                "_:config spatialSearch:right ?b ;"
+                "spatialSearch:left ?y ;"
+                "spatialSearch:maxDistance 5 ;"
+                "spatialSearch:payload <http://some.iri.that.is.not.all> ."
+                " { ?a <p> ?b . }"
+                "}}",
+                ::testing::_),
+      ::testing::ContainsRegex("<payload> parameter must be either a variable "
+                               "to be selected or <all>"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       h::expect("PREFIX spatialSearch: "
                 "<https://qlever.cs.uni-freiburg.de/spatialSearch/>"
@@ -2162,7 +2258,7 @@ TEST(QueryPlanner, SpatialJoinLegacyPredicateSupport) {
       "?x <p> ?y ."
       " }",
       h::SpatialJoin(1, -1, V{"?y"}, V{"?b"}, std::nullopt,
-                     PayloadAllVariables{}, S2, scan("?x", "<p>", "?y"),
+                     PayloadVariables::all(), S2, scan("?x", "<p>", "?y"),
                      scan("?a", "<p>", "?b")));
   h::expect(
       "SELECT * WHERE {"
@@ -2171,7 +2267,7 @@ TEST(QueryPlanner, SpatialJoinLegacyPredicateSupport) {
       "?x <p> ?y ."
       " }",
       h::SpatialJoin(5000, -1, V{"?y"}, V{"?b"}, std::nullopt,
-                     PayloadAllVariables{}, S2, scan("?x", "<p>", "?y"),
+                     PayloadVariables::all(), S2, scan("?x", "<p>", "?y"),
                      scan("?a", "<p>", "?b")));
 
   // Test that invalid triples throw an error
@@ -2224,7 +2320,7 @@ TEST(QueryPlanner, SpatialJoinLegacyPredicateSupport) {
       h::QetWithWarnings(
           {"special predicate <nearest-neighbors:...> is deprecated"},
           h::SpatialJoin(500, 2, V{"?y"}, V{"?b"}, std::nullopt,
-                         PayloadAllVariables{}, S2, scan("?x", "<p>", "?y"),
+                         PayloadVariables::all(), S2, scan("?x", "<p>", "?y"),
                          scan("?a", "<p>", "?b"))));
   h::expect(
       "SELECT ?x ?y WHERE {"
@@ -2234,7 +2330,7 @@ TEST(QueryPlanner, SpatialJoinLegacyPredicateSupport) {
       h::QetWithWarnings(
           {"special predicate <nearest-neighbors:...> is deprecated"},
           h::SpatialJoin(-1, 20, V{"?y"}, V{"?b"}, std::nullopt,
-                         PayloadAllVariables{}, S2, scan("?x", "<p>", "?y"),
+                         PayloadVariables::all(), S2, scan("?x", "<p>", "?y"),
                          scan("?a", "<p>", "?b"))));
 
   AD_EXPECT_THROW_WITH_MESSAGE(h::expect("SELECT ?x ?y WHERE {"
@@ -2503,12 +2599,12 @@ TEST(QueryPlanner, TextLimit) {
   h::expect(
       "SELECT * WHERE { ?text ql:contains-word \"test*\" . ?text "
       "ql:contains-entity <testEntity> } TEXTLIMIT 10",
-      h::TextLimit(
-          10,
-          h::Join(wordScan(Var{"?text"}, "test*"),
-                  entityScan(Var{"?text"}, "<testEntity>", "test*")),
-          Var{"?text"}, vector<Variable>{},
-          vector<Variable>{Var{"?text"}.getScoreVariable("<testEntity>")}),
+      h::TextLimit(10,
+                   h::Join(wordScan(Var{"?text"}, "test*"),
+                           entityScan(Var{"?text"}, "<testEntity>", "test*")),
+                   Var{"?text"}, vector<Variable>{},
+                   vector<Variable>{
+                       Var{"?text"}.getEntityScoreVariable("<testEntity>")}),
       qec);
 
   // Contains entity
@@ -2520,7 +2616,8 @@ TEST(QueryPlanner, TextLimit) {
           h::Join(wordScan(Var{"?text"}, "test*"),
                   entityScan(Var{"?text"}, Var{"?scientist"}, "test*")),
           Var{"?text"}, vector<Variable>{Var{"?scientist"}},
-          vector<Variable>{Var{"?text"}.getScoreVariable(Var{"?scientist"})}),
+          vector<Variable>{
+              Var{"?text"}.getEntityScoreVariable(Var{"?scientist"})}),
       qec);
 
   // Contains entity and fixed entity
@@ -2528,15 +2625,15 @@ TEST(QueryPlanner, TextLimit) {
       "SELECT * WHERE { ?text ql:contains-entity ?scientist . ?text "
       "ql:contains-word \"test*\" . ?text ql:contains-entity <testEntity>} "
       "TEXTLIMIT 5",
-      h::TextLimit(
-          5,
-          h::UnorderedJoins(
-              wordScan(Var{"?text"}, "test*"),
-              entityScan(Var{"?text"}, Var{"?scientist"}, "test*"),
-              entityScan(Var{"?text"}, "<testEntity>", "test*")),
-          Var{"?text"}, vector<Variable>{Var{"?scientist"}},
-          vector<Variable>{Var{"?text"}.getScoreVariable(Var{"?scientist"}),
-                           Var{"?text"}.getScoreVariable("<testEntity>")}),
+      h::TextLimit(5,
+                   h::UnorderedJoins(
+                       wordScan(Var{"?text"}, "test*"),
+                       entityScan(Var{"?text"}, Var{"?scientist"}, "test*"),
+                       entityScan(Var{"?text"}, "<testEntity>", "test*")),
+                   Var{"?text"}, vector<Variable>{Var{"?scientist"}},
+                   vector<Variable>{
+                       Var{"?text"}.getEntityScoreVariable(Var{"?scientist"}),
+                       Var{"?text"}.getEntityScoreVariable("<testEntity>")}),
       qec);
 
   // Contains two entities
@@ -2551,8 +2648,9 @@ TEST(QueryPlanner, TextLimit) {
               entityScan(Var{"?text"}, Var{"?scientist"}, "test*"),
               entityScan(Var{"?text"}, Var{"?scientist2"}, "test*")),
           Var{"?text"}, vector<Variable>{Var{"?scientist"}, Var{"?scientist2"}},
-          vector<Variable>{Var{"?text"}.getScoreVariable(Var{"?scientist"}),
-                           Var{"?text"}.getScoreVariable(Var{"?scientist2"})}),
+          vector<Variable>{
+              Var{"?text"}.getEntityScoreVariable(Var{"?scientist"}),
+              Var{"?text"}.getEntityScoreVariable(Var{"?scientist2"})}),
       qec);
 
   // Contains two text variables. Also checks if the textlimit at an efficient
@@ -2569,17 +2667,17 @@ TEST(QueryPlanner, TextLimit) {
                       entityScan(Var{"?text1"}, Var{"?scientist1"}, "test*")),
               Var{"?text1"}, vector<Variable>{Var{"?scientist1"}},
               vector<Variable>{
-                  Var{"?text1"}.getScoreVariable(Var{"?scientist1"})}),
-          h::TextLimit(5,
-                       h::UnorderedJoins(
-                           wordScan(Var{"?text2"}, "test*"),
-                           entityScan(Var{"?text2"}, Var{"?author1"}, "test*"),
-                           entityScan(Var{"?text2"}, Var{"?author2"}, "test*")),
-                       Var{"?text2"},
-                       vector<Variable>{Var{"?author1"}, Var{"?author2"}},
-                       vector<Variable>{
-                           Var{"?text2"}.getScoreVariable(Var{"?author1"}),
-                           Var{"?text2"}.getScoreVariable(Var{"?author2"})})),
+                  Var{"?text1"}.getEntityScoreVariable(Var{"?scientist1"})}),
+          h::TextLimit(
+              5,
+              h::UnorderedJoins(
+                  wordScan(Var{"?text2"}, "test*"),
+                  entityScan(Var{"?text2"}, Var{"?author1"}, "test*"),
+                  entityScan(Var{"?text2"}, Var{"?author2"}, "test*")),
+              Var{"?text2"}, vector<Variable>{Var{"?author1"}, Var{"?author2"}},
+              vector<Variable>{
+                  Var{"?text2"}.getEntityScoreVariable(Var{"?author1"}),
+                  Var{"?text2"}.getEntityScoreVariable(Var{"?author2"})})),
       qec);
 }
 
@@ -2787,4 +2885,31 @@ TEST(QueryPlanner, WarningsOnUnboundVariables) {
   h::expect("SELECT ?x { {SELECT * {BIND (?a as ?x)}} ?x <p> ?o}",
             h::QetWithWarnings({"?a was used in the expression of a BIND"},
                                testing::_));
+}
+
+// ___________________________________________________________________________
+TEST(QueryPlanner, Describe) {
+  // Note: We deliberately don't test the contents of the actual DESCRIBE
+  // clause, because they have been extensively tested already in
+  // `SparqlAntlrParserTest.cpp` where we have access to proper matchers for
+  // them.
+  h::expect("DESCRIBE <x>", h::Describe(::testing::_, h::NeutralElement()));
+  h::expect("DESCRIBE ?x", h::Describe(::testing::_, h::NeutralElement()));
+  h::expect(
+      "Describe ?y { ?y <p> <o>}",
+      h::Describe(::testing::_, h::IndexScanFromStrings("?y", "<p>", "<o>")));
+  h::expect(
+      "Describe ?y FROM <g> { ?y <p> <o>}",
+      h::Describe(::testing::_, h::IndexScanFromStrings(
+                                    "?y", "<p>", "<o>", {},
+                                    ad_utility::HashSet<std::string>{"<g>"})));
+}
+
+// ____________________________________________________________________________
+TEST(QueryPlanner, GroupByRedundanteParensAndVariables) {
+  auto matcher = h::GroupBy({Variable{"?x"}}, {},
+                            h::IndexScanFromStrings("?x", "?y", "?z"));
+  h::expect("SELECT ?x { ?x ?y ?z} GROUP BY (?x)", matcher);
+  h::expect("SELECT ?x { ?x ?y ?z} GROUP BY ?x ?x", matcher);
+  h::expect("SELECT ?x { ?x ?y ?z} GROUP BY ?x ?x (?x)", matcher);
 }

@@ -40,6 +40,10 @@ jobs:
           - compiler: clang
             compiler-version: 13
         include:
+          - compiler: gcc
+            compiler-version: 11
+            additional-cmake-options: "-DUSE_CPP_17_BACKPORTS=ON"
+            build-type: Release
           - compiler: clang
             compiler-version: 16
             asan-flags: "-fsanitize=address -fno-omit-frame-pointer"
