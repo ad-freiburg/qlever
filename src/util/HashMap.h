@@ -20,9 +20,5 @@ template <class K, class V,
           class HashFct = absl::container_internal::hash_default_hash<K>,
           class EqualElem = absl::container_internal::hash_default_eq<K>,
           class Alloc = ad_utility::AllocatorWithLimit<std::pair<const K, V>>>
-using HashMapWithMemoryLimit =
-    std::conditional_t<std::is_trivially_destructible_v<K> &&
-                           std::is_trivially_destructible_v<V>,
-                       HashMap<K, V, HashFct, EqualElem, Alloc>,
-                       std::unordered_map<K, V, HashFct, EqualElem, Alloc>>;
+using HashMapWithMemoryLimit = HashMap<K, V, HashFct, EqualElem, Alloc>;
 }  // namespace ad_utility

@@ -802,8 +802,6 @@ struct BlockZipperJoinImpl {
          ++it, ++numBlocksRead) {
       if (ql::ranges::empty(*it)) {
         continue;
-      } else {
-        ++numBlocksRead;
       }
       if (!eq((*it)[0], currentEl)) {
         AD_CORRECTNESS_CHECK(lessThan_(currentEl, (*it)[0]));
