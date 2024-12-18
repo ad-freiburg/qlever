@@ -574,8 +574,8 @@ Result::Generator GroupBy::computeResultLazily(
 
   // Process remaining items in the last group.  For those we have already
   // called `lazyGroupBy.processBlock()` but the call to `commitRow` is still
-  // missing. We have to setup a dummy input table and evaluation context,
-  // that have the values of the `currentGroupBlock` in the correct columns.
+  // missing. We have to setup a dummy input table and evaluation context, that
+  // have the values of the `currentGroupBlock` in the correct columns.
   IdTable idTable{inWidth, ad_utility::makeAllocatorWithLimit<Id>(
                                1_B * sizeof(Id) * inWidth)};
   idTable.emplace_back();
@@ -709,8 +709,8 @@ std::optional<IdTable> GroupBy::computeGroupByForFullIndexScan() const {
   // Check that all the aliases are non-distinct counts. We currently support
   // only one or no such count. Redundant additional counts will lead to an
   // exception (it is easy to reformulate the query to trigger this
-  // optimization). Also keep track of whether the counted variable is
-  // actually bound by the index scan (else all counts will be 0).
+  // optimization). Also keep track of whether the counted variable is actually
+  // bound by the index scan (else all counts will be 0).
   size_t numCounts = 0;
   bool variableIsBoundInSubtree = true;
   for (size_t i = 0; i < _aliases.size(); ++i) {
@@ -730,8 +730,7 @@ std::optional<IdTable> GroupBy::computeGroupByForFullIndexScan() const {
   if (numCounts > 1) {
     throw std::runtime_error{
         "This query contains two or more COUNT expressions in the same GROUP "
-        "BY that would lead to identical values. This redundancy is "
-        "currently "
+        "BY that would lead to identical values. This redundancy is currently "
         "not supported."};
   }
 
@@ -1043,9 +1042,9 @@ GroupBy::isSupportedAggregate(sparqlExpression::SparqlExpression* expr) {
 
   if (dynamic_cast<AvgExpression*>(expr)) return H{AVG};
   if (dynamic_cast<CountExpression*>(expr)) return H{COUNT};
-  // We reuse the COUNT implementation which works, but leaves some
-  // optimization potential on the table because `COUNT(*)` doesn't need to
-  // check for undefined values.
+  // We reuse the COUNT implementation which works, but leaves some optimization
+  // potential on the table because `COUNT(*)` doesn't need to check for
+  // undefined values.
   if (dynamic_cast<CountStarExpression*>(expr)) return H{COUNT};
   if (dynamic_cast<MinExpression*>(expr)) return H{MIN};
   if (dynamic_cast<MaxExpression*>(expr)) return H{MAX};
@@ -1227,8 +1226,8 @@ GroupBy::HashMapAggregationData<NUM_GROUP_COLUMNS>::getHashEntries(
   hashEntries.reserve(numberOfEntries);
 
   // TODO: We pass the `Id`s column-wise into this function, and then handle
-  //       them row-wise. Is there any advantage to this, or should we
-  //       transform the data into a row-wise format before passing it?
+  //       them row-wise. Is there any advantage to this, or should we transform
+  //       the data into a row-wise format before passing it?
   for (size_t i = 0; i < numberOfEntries; ++i) {
     ArrayOrVector<Id> row;
     resizeIfVector(row, numOfGroupedColumns_);
@@ -1312,10 +1311,9 @@ void GroupBy::evaluateAlias(
   auto& info = alias.aggregateInfo_;
 
   // Either:
-  // - One of the variables occurs at the top. This can be copied as the
-  // result
-  // - There is only one aggregate, and it appears at the top. No
-  // substitutions necessary, can evaluate aggregate and copy results
+  // - One of the variables occurs at the top. This can be copied as the result
+  // - There is only one aggregate, and it appears at the top. No substitutions
+  // necessary, can evaluate aggregate and copy results
   // - Possibly multiple aggregates and occurrences of grouped variables. All
   // have to be substituted away before evaluation
 
