@@ -28,6 +28,11 @@ class alignas(16) LiteralOrIri {
   // otherwise
   const Literal& getLiteral() const;
 
+  // Return a modifiable reference to the contained Literal object if available,
+  // throw exception otherwise. Allows the caller to modify the Literal object
+  // e.g. for SubStr in StringExpressions.cpp
+  Literal& getLiteral();
+
   // Create a new LiteralOrIri based on a Literal object
   explicit LiteralOrIri(Literal literal);
 
