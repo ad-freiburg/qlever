@@ -162,15 +162,76 @@ TEST(TextIndexScanForWord, WordScanPrefix) {
   ASSERT_EQ("astronomer", h::getWordFromResultTable(qec, tresult, 6));
   ASSERT_EQ("astronomer", h::getWordFromResultTable(qec, tresult, 7));
 
-  // Tests if the correct scores are retrieved from the non literal texts
-  ASSERT_EQ(1, h::getScoreFromResultTable(qec, tresult, 0, true));
-  ASSERT_EQ(1, h::getScoreFromResultTable(qec, tresult, 1, true));
-  ASSERT_EQ(0, h::getScoreFromResultTable(qec, tresult, 2, true));
-  ASSERT_EQ(0, h::getScoreFromResultTable(qec, tresult, 3, true));
-  ASSERT_EQ(1, h::getScoreFromResultTable(qec, tresult, 4, true));
-  ASSERT_EQ(1, h::getScoreFromResultTable(qec, tresult, 5, true));
-  ASSERT_EQ(1, h::getScoreFromResultTable(qec, tresult, 6, true));
-  ASSERT_EQ(0, h::getScoreFromResultTable(qec, tresult, 7, true));
+  // Tests if the correct scores are retrieved from the non literal texts for
+  // Count
+  qec = getQec(kg, true, true, true, 16_B, true, true,
+               contentsOfWordsFileAndDocsFile, Index::ScoringMetric::COUNT);
+
+  TextIndexScanForWord score1{qec, Variable{"?t1"}, "astronom*"};
+  auto scoreResultCount = score1.computeResultOnlyForTesting();
+  ASSERT_EQ(1, h::getScoreFromResultTable(qec, scoreResultCount, 0, true));
+  ASSERT_EQ(1, h::getScoreFromResultTable(qec, scoreResultCount, 1, true));
+  ASSERT_EQ(0, h::getScoreFromResultTable(qec, scoreResultCount, 2, true));
+  ASSERT_EQ(0, h::getScoreFromResultTable(qec, scoreResultCount, 3, true));
+  ASSERT_EQ(1, h::getScoreFromResultTable(qec, scoreResultCount, 4, true));
+  ASSERT_EQ(1, h::getScoreFromResultTable(qec, scoreResultCount, 5, true));
+  ASSERT_EQ(1, h::getScoreFromResultTable(qec, scoreResultCount, 6, true));
+  ASSERT_EQ(0, h::getScoreFromResultTable(qec, scoreResultCount, 7, true));
+
+  // Tests if the correct scores are retrieved from the non literal texts for
+  // TFIDF
+  qec = getQec(kg, true, true, true, 16_B, true, true,
+               contentsOfWordsFileAndDocsFile, Index::ScoringMetric::TFIDF);
+  TextIndexScanForWord score2{qec, Variable{"?t1"}, "astronom*"};
+  auto scoreResultTFIDF = score2.computeResultOnlyForTesting();
+  float tfidfWord1Doc4 = h::calculateTFIDFFromParameters(1, 2, 6);
+  float tfidfWord1Doc7 = h::calculateTFIDFFromParameters(1, 2, 6);
+  float tfidfWord2Doc4 = h::calculateTFIDFFromParameters(1, 1, 6);
+  ASSERT_EQ(tfidfWord1Doc4,
+            h::getScoreFromResultTable(qec, scoreResultTFIDF, 0, true));
+  ASSERT_EQ(tfidfWord2Doc4,
+            h::getScoreFromResultTable(qec, scoreResultTFIDF, 1, true));
+  ASSERT_EQ(tfidfWord1Doc4,
+            h::getScoreFromResultTable(qec, scoreResultTFIDF, 2, true));
+  ASSERT_EQ(tfidfWord2Doc4,
+            h::getScoreFromResultTable(qec, scoreResultTFIDF, 3, true));
+  ASSERT_EQ(tfidfWord2Doc4,
+            h::getScoreFromResultTable(qec, scoreResultTFIDF, 4, true));
+  ASSERT_EQ(tfidfWord2Doc4,
+            h::getScoreFromResultTable(qec, scoreResultTFIDF, 5, true));
+  ASSERT_EQ(tfidfWord1Doc7,
+            h::getScoreFromResultTable(qec, scoreResultTFIDF, 6, true));
+  ASSERT_EQ(tfidfWord1Doc7,
+            h::getScoreFromResultTable(qec, scoreResultTFIDF, 7, true));
+
+  // Tests if the correct scores are retrieved from the non literal texts for
+  // BM25
+  qec = getQec(kg, true, true, true, 16_B, true, true,
+               contentsOfWordsFileAndDocsFile, Index::ScoringMetric::BM25);
+  TextIndexScanForWord score3{qec, Variable{"?t1"}, "astronom*"};
+  auto scoreResultBM25 = score3.computeResultOnlyForTesting();
+  float bm25Word1Doc4 =
+      h::calculateBM25FromParameters(1, 2, 6, 7, 15, 0.75, 1.75);
+  float bm25Word1Doc7 =
+      h::calculateBM25FromParameters(1, 2, 6, 7, 10, 0.75, 1.75);
+  float bm25Word2Doc4 =
+      h::calculateBM25FromParameters(1, 1, 6, 7, 15, 0.75, 1.75);
+  ASSERT_EQ(bm25Word1Doc4,
+            h::getScoreFromResultTable(qec, scoreResultBM25, 0, true));
+  ASSERT_EQ(bm25Word2Doc4,
+            h::getScoreFromResultTable(qec, scoreResultBM25, 1, true));
+  ASSERT_EQ(bm25Word1Doc4,
+            h::getScoreFromResultTable(qec, scoreResultBM25, 2, true));
+  ASSERT_EQ(bm25Word2Doc4,
+            h::getScoreFromResultTable(qec, scoreResultBM25, 3, true));
+  ASSERT_EQ(bm25Word2Doc4,
+            h::getScoreFromResultTable(qec, scoreResultBM25, 4, true));
+  ASSERT_EQ(bm25Word2Doc4,
+            h::getScoreFromResultTable(qec, scoreResultBM25, 5, true));
+  ASSERT_EQ(bm25Word1Doc7,
+            h::getScoreFromResultTable(qec, scoreResultBM25, 6, true));
+  ASSERT_EQ(bm25Word1Doc7,
+            h::getScoreFromResultTable(qec, scoreResultBM25, 7, true));
 }
 
 TEST(TextIndexScanForWord, WordScanBasic) {

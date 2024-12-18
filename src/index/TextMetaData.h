@@ -98,9 +98,20 @@ class TextMetaData {
 
   void setNofEntityPostings(size_t n) { _nofEntityPostings = n; }
 
+  size_t getNofLiteralsInTextIndex() const { return _nofLiteralsInTextIndex; }
+
+  void setNofLiteralsInTextIndex(size_t n) { _nofLiteralsInTextIndex = n; }
+
   const string& getName() const { return _name; }
 
   void setName(const string& name) { _name = name; }
+
+  // 0 for Count
+  // 1 for TFIDF
+  // 2 for BM25
+  void setScoringType(size_t n) { _scoringType = n; }
+
+  size_t getScoringType() { return _scoringType; }
 
   float getAverageNofEntityContexts() const { return 1.0f; };
 
@@ -109,8 +120,10 @@ class TextMetaData {
   size_t _nofTextRecords = 0;
   size_t _nofWordPostings = 0;
   size_t _nofEntityPostings = 0;
+  size_t _nofLiteralsInTextIndex = 0;
   string _name;
   vector<TextBlockMetaData> _blocks;
+  size_t _scoringType;
 
   // ___________________________________________________________________________
   AD_SERIALIZE_FRIEND_FUNCTION(TextMetaData) {
@@ -118,7 +131,9 @@ class TextMetaData {
     serializer | arg._nofTextRecords;
     serializer | arg._nofWordPostings;
     serializer | arg._nofEntityPostings;
+    serializer | arg._nofLiteralsInTextIndex;
     serializer | arg._name;
     serializer | arg._blocks;
+    serializer | arg._scoringType;
   }
 };

@@ -107,6 +107,12 @@ class IndexImpl {
   using TextVec = stxxl::vector<
       tuple<TextBlockIndex, TextRecordIndex, WordOrEntityIndex, Score, bool>>;
   using Posting = std::tuple<TextRecordIndex, WordIndex, Score>;
+  // Inverted index mapping WordIndex to a list of pairs of TextRecordIndex, and
+  // a TermFrequency
+  using TermFrequency = uint32_t;
+  using InnerMap = ad_utility::HashMap<TextRecordIndex, TermFrequency>;
+  using InvertedIndex = ad_utility::HashMap<WordIndex, InnerMap>;
+  using DocLengthMap = ad_utility::HashMap<TextRecordIndex, size_t>;
 
   struct IndexMetaDataMmapDispatcher {
     using WriteType = IndexMetaDataMmap;
@@ -114,6 +120,37 @@ class IndexImpl {
   };
 
   using NumNormalAndInternal = Index::NumNormalAndInternal;
+
+  // Struct to keep track of metrics used to calculate Scores
+  struct ScoreData {
+    Index::ScoringMetric scoringMetric;
+    InvertedIndex invertedIndex;
+    DocLengthMap docLengthMap;
+    std::set<TextRecordIndex> docIdSet;
+    size_t nofDocuments = 0;
+    size_t totalDocumentLength = 0;
+    float averageDocumentLength;
+    float b;
+    float k;
+    bool isDocEmpty = true;
+
+    ScoreData()
+        : scoringMetric(Index::ScoringMetric::COUNT), b(0.75), k(1.75){};
+
+    ScoreData(Index::ScoringMetric scoringMetric)
+        : scoringMetric(scoringMetric), b(0.75), k(1.75){};
+
+    ScoreData(Index::ScoringMetric scoringMetric,
+              std::pair<float, float> kAndBParam)
+        : scoringMetric(scoringMetric),
+          b(kAndBParam.second),
+          k(kAndBParam.first){};
+
+    void calculateAVDL() {
+      averageDocumentLength =
+          nofDocuments ? (totalDocumentLength / nofDocuments) : 0;
+    }
+  };
 
   // Private data members.
  private:
@@ -133,6 +170,7 @@ class IndexImpl {
   json configurationJson_;
   Index::Vocab vocab_;
   Index::TextVocab textVocab_;
+  ScoreData scoreData_;
 
   TextMetaData textMeta_;
   DocsDB docsDB_;
@@ -250,10 +288,40 @@ class IndexImpl {
   // constructed. Read necessary meta data into memory and opens file handles.
   void createFromOnDiskIndex(const string& onDiskBase);
 
-  // Adds a text index to a complete KB index. First reads the given context
-  // file (if file name not empty), then adds words from literals (if true).
-  void addTextFromContextFile(const string& contextFile,
-                              bool addWordsFromLiterals);
+  // Adds a text index to a complete KB index. Reads words from the given
+  // wordsfile and calculates bm25 scores with the docsfile if given.
+  // Additionally adds words from literals of the existing KB. Can't be called
+  // with only words or only docsfile, but with or without both. Also can't be
+  // called with the pair empty and bool false
+  void buildTextIndexFile(const std::pair<string, string>& wordsAndDocsFile,
+                          bool addWordsFromLiterals);
+
+  // Helper method to fill the ScoreData with actual useful data. This doesn't
+  // lead to the final scores since they can be calculated when iterating over
+  // the words again in processWordsForInvertedLists thus saving one iteration
+  // Problem right now is the missing info on how the wordsFile is created.
+  // Since not knowing that, the same tokenzier that splits the literals is used
+  // to split the docs. This leads to some words not getting filtered that got
+  // filtered for the wordsFile. The only method right now to get 100% accuracy
+  // would be scanning over the wordsFile too. This would increase the runtime
+  // significantly. A much cleaner and better way is the easy possibility to add
+  // a parameter for a tokenizer and let this split the docs. For now the
+  // problem introduces a small error in some document lengths and thus the
+  // average dl. it also leads to slightly increased scores for words that
+  // occur in literals and docs but not in the wordsfile, leading to an
+  // increased score for literals on average.
+  void calculateScoreData(const string& docsFileName,
+                          bool addWordsFromLiterals);
+
+  // This method checks if the given word is in the vocabulary (returns false
+  // without changing anything if it's not) and gets its raw uint64_t id. With
+  // this id it adds it to the inverted index or modifies it in the intended
+  // way.
+  bool addWordToScoreDataInvertedIndex(std::string_view word,
+                                       TextRecordIndex currentContextId);
+
+  float calculateBM25OrTFIDF(WordIndex wordIndex, TextRecordIndex contextId,
+                             bool calcBM25);
 
   // Build docsDB file from given file (one text record per line).
   void buildDocsDB(const string& docsFile) const;
@@ -266,6 +334,8 @@ class IndexImpl {
   auto& getNonConstVocabForTesting() { return vocab_; }
 
   const auto& getTextVocab() const { return textVocab_; };
+
+  const auto& getScoreData() const { return scoreData_; }
 
   ad_utility::BlankNodeManager* getBlankNodeManager() const;
 
@@ -416,6 +486,17 @@ class IndexImpl {
 
   void setNumTriplesPerBatch(uint64_t numTriplesPerBatch) {
     numTriplesPerBatch_ = numTriplesPerBatch;
+  }
+
+  void setScoringMetricsUsed(Index::ScoringMetric scoringMetric) {
+    scoreData_.scoringMetric = scoringMetric;
+  }
+
+  void setBM25Parameters(float b, float k) {
+    b = (b < 0 || b > 1) ? 0.75 : b;
+    k = k < 0 ? 1.75 : k;
+    scoreData_.b = b;
+    scoreData_.k = k;
   }
 
   const string& getTextName() const { return textMeta_.getName(); }
@@ -590,6 +671,9 @@ class IndexImpl {
       size_t nofElements, off_t from, size_t nofBytes,
       MakeFromUint64t makeFromUint = MakeFromUint64t{}) const;
 
+  template <typename T>
+  vector<T> readUncomprList(size_t nofElements, off_t from) const;
+
   // Get the metadata for the block from the text index that contains the
   // `word`. Also works for prefixes that are terminated with `PREFIX_CHAR` like
   // "astro*". Returns `nullopt` if no suitable block was found because no
@@ -631,20 +715,23 @@ class IndexImpl {
   size_t writeList(Numeric* data, size_t nofElements,
                    ad_utility::File& file) const;
 
+  // Does the same as writeList but for floats (currently they are not being
+  // compressed)
+  template <typename T>
+  size_t writeUncomprList(T* data, size_t nofElements,
+                          ad_utility::File& file) const;
+
   // TODO<joka921> understand what the "codes" are, are they better just ints?
   // After using createCodebooks on these types, the lowest codes refer to the
   // most frequent WordIndex/Score. The maps are mapping those codes to their
   // respective frequency.
   typedef ad_utility::HashMap<WordIndex, CompressionCode> WordCodeMap;
-  typedef ad_utility::HashMap<Score, Score> ScoreCodeMap;
   typedef vector<CompressionCode> WordCodebook;
-  typedef vector<Score> ScoreCodebook;
 
   //! Creates codebooks for lists that are supposed to be entropy encoded.
   void createCodebooks(const vector<Posting>& postings,
-                       WordCodeMap& wordCodemap, WordCodebook& wordCodebook,
-                       ScoreCodeMap& scoreCodemap,
-                       ScoreCodebook& scoreCodebook) const;
+                       WordCodeMap& wordCodemap,
+                       WordCodebook& wordCodebook) const;
 
   template <class T>
   size_t writeCodebook(const vector<T>& codebook, ad_utility::File& file) const;
