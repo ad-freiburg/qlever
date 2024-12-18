@@ -120,6 +120,8 @@ class ValuesForTesting : public Operation {
   }
   bool supportsLimit() const override { return supportsLimit_; }
 
+  bool& forceFullyMaterialized() { return forceFullyMaterialized_; }
+
  private:
   // ___________________________________________________________________________
   string getCacheKeyImpl() const override {
