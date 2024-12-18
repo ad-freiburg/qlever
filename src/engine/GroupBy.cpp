@@ -366,25 +366,23 @@ ProtoResult GroupBy::computeResult(bool requestLaziness) {
   }
 
   if (useHashMapOptimization) {
-    if (subresult->isFullyMaterialized()) {
-      using Pair = std::pair<std::reference_wrapper<const IdTable>, LocalVocab>;
-      auto gen = [](const Result& input) -> cppcoro::generator<Pair> {
-        Pair p{input.idTable(), input.getCopyOfLocalVocab()};
-        co_yield p;
-      }(*subresult);
+    auto computeWithHashMap = [this, &metadataForUnsequentialData,
+                               &groupByCols](auto&& subresults) {
       auto doCompute = [&]<int NumCols> {
         return computeGroupByForHashMapOptimization<NumCols>(
-            metadataForUnsequentialData->aggregateAliases_, std::move(gen),
+            metadataForUnsequentialData->aggregateAliases_, AD_FWD(subresults),
             groupByCols);
       };
       return ad_utility::callFixedSize(groupByCols.size(), doCompute);
+    };
+
+    if (subresult->isFullyMaterialized()) {
+      // `computeWithHashMap` takes a range, so we artificially create one with
+      // a single input.
+      return computeWithHashMap(std::array{std::pair{
+          std::ref(subresult->idTable()), subresult->getCopyOfLocalVocab()}});
     } else {
-      auto doCompute = [&]<int NumCols> {
-        return computeGroupByForHashMapOptimization<NumCols>(
-            metadataForUnsequentialData->aggregateAliases_,
-            std::move(subresult->idTables()), groupByCols);
-      };
-      return ad_utility::callFixedSize(groupByCols.size(), doCompute);
+      return computeWithHashMap(std::move(subresult->idTables()));
     }
   }
 
@@ -1512,6 +1510,8 @@ Result GroupBy::computeGroupByForHashMapOptimization(
       getExecutionContext()->getAllocator(), aggregateAliases,
       columnIndices.size());
 
+  ad_utility::Timer lookupTimer{ad_utility::Timer::Stopped};
+  ad_utility::Timer aggregationTimer{ad_utility::Timer::Stopped};
   for (const auto& [inputTableRef, inputLocalVocab] : subresults) {
     const IdTable& inputTable = inputTableRef;
     localVocab.mergeWith(std::span{&inputLocalVocab, 1});
@@ -1525,8 +1525,6 @@ Result GroupBy::computeGroupByForHashMapOptimization(
         _groupByVariables.begin(), _groupByVariables.end()};
     evaluationContext._isPartOfGroupBy = true;
 
-    ad_utility::Timer lookupTimer{ad_utility::Timer::Stopped};
-    ad_utility::Timer aggregationTimer{ad_utility::Timer::Stopped};
     for (size_t i = 0; i < inputTable.size();
          i += GROUP_BY_HASH_MAP_BLOCK_SIZE) {
       checkCancellation();
@@ -1572,10 +1570,10 @@ Result GroupBy::computeGroupByForHashMapOptimization(
       }
       aggregationTimer.stop();
     }
-    runtimeInfo().addDetail("timeMapLookup", lookupTimer.msecs());
-    runtimeInfo().addDetail("timeAggregation", aggregationTimer.msecs());
   }
 
+  runtimeInfo().addDetail("timeMapLookup", lookupTimer.msecs());
+  runtimeInfo().addDetail("timeAggregation", aggregationTimer.msecs());
   IdTable resultTable =
       createResultFromHashMap(aggregationData, aggregateAliases, &localVocab);
   return {std::move(resultTable), resultSortedOn(), std::move(localVocab)};
