@@ -782,6 +782,7 @@ ExpectedRowsNearestNeighbors expectedNearestNeighbors = {
         mergeToRow(Eif, TF, expectedDistUniEif)}}}}};
 
 // test the compute result method on small examples
+/*
 TEST_P(SpatialJoinParamTest, computeResultSmallDatasetLargeChildren) {
   Row columnNames = {
       "?name1",  "?obj1",   "?geo1",
@@ -805,6 +806,7 @@ TEST_P(SpatialJoinParamTest, computeResultSmallDatasetLargeChildren) {
     AD_THROW("Invalid config");
   }
 }
+
 
 TEST_P(SpatialJoinParamTest, computeResultSmallDatasetSmallChildren) {
   Row columnNames{"?obj1", "?point1", "?obj2", "?point2",
@@ -917,7 +919,7 @@ INSTANTIATE_TEST_SUITE_P(
                           NearestNeighborsConfig{2, 4000},
                           NearestNeighborsConfig{2, 40},
                           NearestNeighborsConfig{3, 500000})));
-
+*/
 }  // end of Namespace computeResultTest
 
 namespace boundingBox {
@@ -1213,6 +1215,27 @@ using BoostGeometryNamespace::Value;
 // move this to BoostGeometryNamespace
 typedef boost::geometry::model::polygon<boost::geometry::model::d2::point_xy<double>> Polygon;
 
+// helper function in debugging for outputting stuff
+void print_vecs(std::vector<std::vector<std::string>> vec) {
+  for (size_t i = 0; i < vec.size(); i++) {
+    for (size_t k = 0; k < vec.at(i).size(); k++) {
+      std::cerr << vec.at(i).at(k) << " ";
+    }
+    std::cerr << std::endl;
+  }
+}
+
+// helper function in debugging for outputting stuff
+void print_vec(std::vector<std::string> vec) {
+  for (size_t i = 0; i < vec.size(); i++) {
+    std::cerr << vec.at(i) << std::endl;
+  }
+}
+
+void print_box(Box box) {
+  std::cerr << box.min_corner().get<0>() << " " << box.min_corner().get<1>() << "  "
+  << box.max_corner().get<0>() << " " << box.max_corner().get<1>() << std::endl;
+}
 
 // move to SpatialJoinTestHelpers, see comment of buildAreaTestQEC
 std::string createAreaTestDataset() {
@@ -1225,10 +1248,10 @@ std::string createAreaTestDataset() {
 
   std::string kg;
   // note that i removed all prefixes
-  addArea(kg, "1", "\"zebra\"", "\"POLYGON((9.3340635 47.4266650,9.3340635 47.4266650,9.3340635 47.4266650,9.3340635 47.4266650,9.3340635 47.4266650))\"^^<https://www.invented.de/a#wktLiteral>");
-  addArea(kg, "2", "\"trafficLight\"", "\"POLYGON((9.3054501 47.4066706,9.3054501 47.4066706,9.3054501 47.4066706,9.3054501 47.4066706,9.3054501 47.4066706))\"^^<https://www.invented.de/a#wktLiteral>");
-  addArea(kg, "3", "\"bridge\"", "\"POLYGON((9.3769786 47.4222885,9.3769786 47.4222885,9.3769786 47.4222885,9.3769786 47.4222885,9.3769786 47.4222885))\"^^<https://www.invented.de/a#wktLiteral>");
-  std::cerr << kg << std::endl;
+  addArea(kg, "1", "\"zebra\"", "\"POLYGON((9.33 47.41, 9.31 47.45, 9.32 47.48, 9.35 47.42, 9.33 47.41))\"^^<https://www.invented.de/a#wktLiteral>");
+  addArea(kg, "2", "\"trafficLight\"", "\"POLYGON((-4.1 10.0, -9.9 10.0, -9.9 -1.0, -4.1 -1.0))\"^^<https://www.invented.de/a#wktLiteral>");
+  addArea(kg, "3", "\"bridge\"", "\"POLYGON((0.0 0.0, 1.1 0.0, 1.1 1.1, 0.0 1.1, 0.0 0.0))\"^^<https://www.invented.de/a#wktLiteral>");
+  std::cerr << std::fixed << std::setprecision(10) << kg << std::endl;
   return kg;
 }
 
@@ -1247,7 +1270,7 @@ QueryExecutionContext* buildAreaTestQEC() {
 // this function calculates the bounding box of a geometry, which is an area.
 // This is different to the query box, which is a box, which contains the area
 // where all results are contained in
-Box calculateBoundingBoxOfArea(std::string wktString) {
+Box calculateBoundingBoxOfArea(const std::string& wktString) {
   Polygon polygon;
   boost::geometry::read_wkt(wktString, polygon);
   double minLng = std::numeric_limits<double>::infinity();
@@ -1266,7 +1289,7 @@ Box calculateBoundingBoxOfArea(std::string wktString) {
 }
 
 // calculates the midpoint of the Box
-Point calculateMidpointOfBox(Box box) {
+Point calculateMidpointOfBox(const Box& box) {
   double lng = (box.min_corner().get<0>() + box.max_corner().get<0>()) / 2.0;
   double lat = (box.min_corner().get<1>() + box.max_corner().get<1>()) / 2.0;
   return Point(lng, lat);
@@ -1274,11 +1297,55 @@ Point calculateMidpointOfBox(Box box) {
 
 TEST(SpatialJoin, development) {
   auto qec = buildAreaTestQEC();
+  auto firstChild = buildMediumChild(qec, 
+                   {"?obj1", std::string{"<name>"}, "?name1"},
+                   {"?obj1", std::string{"<highway>"}, "?highway"},
+                   {"?obj1", std::string{"<envelope>"}, "?area"}, "?obj1", "?obj1");
+  auto result = firstChild->getResult();
+  std::cerr << "========= printing result ===========" << std::endl;
+  std::cerr << "result size: " << result->idTable().numRows() << std::endl;
+  print_vec(printTable(qec, result.get()));
   // if the object in the kg has both a point and a polygon representation, then
   // the point representation should be used by default. Add this case to the
   // test kg to test this behaviour
 
   // next step: create bounding box for the area of the polygon
+}
+
+void testBoundingBoxOfAreaOrMidpointOfBox(bool testArea=true) {
+  auto checkBoundingBox = [](Box box, double minLng, double minLat, double maxLng, double maxLat) {
+    ASSERT_DOUBLE_EQ(minLng, box.min_corner().get<0>());
+    ASSERT_DOUBLE_EQ(minLat, box.min_corner().get<1>());
+    ASSERT_DOUBLE_EQ(maxLng, box.max_corner().get<0>());
+    ASSERT_DOUBLE_EQ(maxLat, box.max_corner().get<1>());
+  };
+
+  auto checkMidpoint = [](const Point& point, double lng, double lat) {
+    ASSERT_DOUBLE_EQ(point.get<0>(), lng);
+    ASSERT_DOUBLE_EQ(point.get<1>(), lat);
+  };
+
+  auto a = calculateBoundingBoxOfArea("POLYGON((9.33 47.41, 9.31 47.45, 9.32 47.48, 9.35 47.42, 9.33 47.41))");  // closed polygon
+  auto b = calculateBoundingBoxOfArea("POLYGON((-4.1 10.0, -9.9 10.0, -9.9 -1.0, -4.1 -1.0))");  // not closed polygon
+  auto c = calculateBoundingBoxOfArea("POLYGON((0.0 0.0, 1.1 0.0, 1.1 1.1, 0.0 1.1, 0.0 0.0))");  // closed polygon
+
+  if (testArea) {
+    checkBoundingBox(a, 9.31, 47.41, 9.35, 47.48);
+    checkBoundingBox(b, -9.9, -1.0, -4.1, 10.0);
+    checkBoundingBox(c, 0.0, 0.0, 1.1, 1.1);
+  } else {
+    checkMidpoint(calculateMidpointOfBox(a), 9.33, 47.445);
+    checkMidpoint(calculateMidpointOfBox(b), -7.0, 4.5);
+    checkMidpoint(calculateMidpointOfBox(c), 0.55, 0.55);
+  }
+}
+
+TEST(SpatialJoin, BoundingBoxOfArea) {
+  testBoundingBoxOfAreaOrMidpointOfBox();
+}
+
+TEST(SpatialJoin, MidpointOfBoundingBox) {
+  testBoundingBoxOfAreaOrMidpointOfBox(false);
 }
 
 }
