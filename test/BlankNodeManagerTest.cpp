@@ -37,24 +37,32 @@ TEST(BlankNodeManager, blockAllocationAndFree) {
 // _____________________________________________________________________________
 TEST(BlankNodeManager, LocalBlankNodeManagerGetID) {
   BlankNodeManager bnm(0);
-  BlankNodeManager::LocalBlankNodeManager l(&bnm);
+  auto l = std::make_shared<BlankNodeManager::LocalBlankNodeManager>(&bnm);
 
   // initially the LocalBlankNodeManager doesn't have any blocks
-  EXPECT_EQ(l.blocks_.size(), 0);
+  EXPECT_EQ(l->blocks_->size(), 0);
 
   // A new Block is allocated, if
   // no blocks are allocated yet
-  uint64_t id = l.getId();
-  EXPECT_EQ(l.blocks_.size(), 1);
-  EXPECT_TRUE(l.containsBlankNodeIndex(id));
-  EXPECT_FALSE(l.containsBlankNodeIndex(id + 1));
-  EXPECT_FALSE(l.containsBlankNodeIndex(id - 1));
+  uint64_t id = l->getId();
+  EXPECT_EQ(l->blocks_->size(), 1);
+  EXPECT_TRUE(l->containsBlankNodeIndex(id));
+  EXPECT_FALSE(l->containsBlankNodeIndex(id + 1));
+  EXPECT_FALSE(l->containsBlankNodeIndex(id - 1));
 
   // or the ids of the last block are all used
-  l.blocks_.back().nextIdx_ = id + BlankNodeManager::blockSize_;
-  id = l.getId();
-  EXPECT_TRUE(l.containsBlankNodeIndex(id));
-  EXPECT_EQ(l.blocks_.size(), 2);
+  l->blocks_->back().nextIdx_ = id + BlankNodeManager::blockSize_;
+  id = l->getId();
+  EXPECT_TRUE(l->containsBlankNodeIndex(id));
+  EXPECT_EQ(l->blocks_->size(), 2);
+
+  // The `LocalBlankNodeManager` still works when recursively merged.
+  std::vector itSelf{l};
+  l->mergeWith(itSelf);
+
+  EXPECT_TRUE(l->containsBlankNodeIndex(id));
+  EXPECT_TRUE(l->containsBlankNodeIndex(l->getId()));
+  EXPECT_EQ(l->blocks_, l->otherBlocks_[0]);
 }
 
 // _____________________________________________________________________________

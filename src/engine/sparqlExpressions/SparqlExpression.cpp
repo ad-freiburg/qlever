@@ -49,7 +49,7 @@ bool SparqlExpression::containsAggregate() const {
     return true;
   }
 
-  return std::ranges::any_of(
+  return ql::ranges::any_of(
       children(), [](const Ptr& child) { return child->containsAggregate(); });
 }
 
@@ -84,10 +84,9 @@ std::optional<::Variable> SparqlExpression::getVariableOrNullopt() const {
 
 // _____________________________________________________________________________
 bool SparqlExpression::containsLangExpression() const {
-  return std::ranges::any_of(children(),
-                             [](const SparqlExpression::Ptr& child) {
-                               return child->containsLangExpression();
-                             });
+  return ql::ranges::any_of(children(), [](const SparqlExpression::Ptr& child) {
+    return child->containsLangExpression();
+  });
 }
 
 // _____________________________________________________________________________
@@ -107,6 +106,20 @@ Estimates SparqlExpression::getEstimatesForFilterExpression(
   // filtered out.
   return {inputSizeEstimate, inputSizeEstimate};
 }
+
+// _____________________________________________________________________________
+// The default implementation returns an empty vector given that for most
+// `SparqlExpressions` no pre-filter procedure is available. Only specific
+// expressions that yield boolean values support the construction of
+// <`PrefilterExpression`, `Variable`> pairs. For more information, refer to the
+// declaration of this method in SparqlExpression.h. `SparqlExpression`s for
+// which pre-filtering over the `IndexScan` is supported, override the virtual
+// `getPrefilterExpressionForMetadata` method declared there.
+std::vector<PrefilterExprVariablePair>
+SparqlExpression::getPrefilterExpressionForMetadata(
+    [[maybe_unused]] bool isNegated) const {
+  return {};
+};
 
 // _____________________________________________________________________________
 bool SparqlExpression::isConstantExpression() const { return false; }

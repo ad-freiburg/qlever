@@ -4,11 +4,11 @@
 
 #pragma once
 
-#include <algorithm>
 #include <cstdint>
 #include <optional>
 #include <utility>
 
+#include "backports/algorithm.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "util/Algorithm.h"
 
@@ -40,7 +40,7 @@ class VocabularyBinarySearchMixin {
                            Idx endIdx = std::nullopt) const {
     auto [begin, end] = getIterators(beginIdx, endIdx);
     return impl().iteratorToWordAndIndex(
-        std::ranges::lower_bound(begin, end, word, comparator));
+        ql::ranges::lower_bound(begin, end, word, comparator));
   }
 
   // Return the first entry that is greater than `word`. The interface is the
@@ -51,7 +51,7 @@ class VocabularyBinarySearchMixin {
                            Idx endIdx = std::nullopt) const {
     auto [begin, end] = getIterators(beginIdx, endIdx);
     return impl().iteratorToWordAndIndex(
-        std::ranges::upper_bound(begin, end, word, comparator));
+        ql::ranges::upper_bound(begin, end, word, comparator));
   }
 
   // These functions are similar to `lower_bound` and `upper_bound` (see above),

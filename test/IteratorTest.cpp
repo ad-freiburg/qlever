@@ -8,6 +8,7 @@
 #include <string>
 
 #include "../src/util/Iterators.h"
+#include "backports/algorithm.h"
 
 auto testIterator = [](const auto& input, auto begin, auto end) {
   auto it = begin;
@@ -94,4 +95,113 @@ TEST(Iterator, makeForwardingIterator) {
   // The first element in the vector was now moved from.
   ASSERT_EQ(1u, vector.size());
   ASSERT_TRUE(vector[0].empty());
+}
+
+namespace {
+template <typename MakeIotaRange>
+// This function tests a view that behaves like `ql::views::iota`.
+// The argument `makeIotaRange` is given a lower bound (size_t, `0` if not
+// specified) and an upper bound (`optional<size_t>`, unlimited (nullopt) if not
+// specified) and must return a `ql::ranges::input_range` that yields the
+// elements in the range `(lower, upper]`.
+void testIota(MakeIotaRange makeIotaRange) {
+  size_t sum = 0;
+  // Test manual iteration.
+  for (auto s : makeIotaRange(0, 5)) {
+    sum += s;
+  }
+  EXPECT_EQ(sum, 10);
+
+  // Check that the range is an input range, but fulfills none of the stricter
+  // categories.
+  auto iota = makeIotaRange();
+  using Iota = decltype(iota);
+  static_assert(ql::ranges::input_range<Iota>);
+  static_assert(!ql::ranges::forward_range<Iota>);
+
+  // Test the interaction with the `ql::views` and `ql::ranges` machinery.
+  auto view = iota | ql::views::drop(3) | ql::views::take(7);
+  static_assert(ql::ranges::input_range<decltype(view)>);
+  sum = 0;
+  auto add = [&sum](auto val) { sum += val; };
+  ql::ranges::for_each(view, add);
+
+  // 42 == 3 + 4 + ... + 9
+  EXPECT_EQ(sum, 42);
+}
+}  // namespace
+
+// _____________________________________________________________________________
+TEST(Iterator, InputRangeMixin) {
+  using namespace ad_utility;
+  struct Iota : InputRangeMixin<Iota> {
+    size_t value_ = 0;
+    std::optional<size_t> upper_;
+    explicit Iota(size_t lower = 0, std::optional<size_t> upper = {})
+        : value_{lower}, upper_{upper} {}
+    void start() {}
+    bool isFinished() const { return value_ == upper_; }
+    size_t get() const { return value_; }
+    void next() { ++value_; }
+  };
+
+  auto makeIota = [](size_t lower = 0, std::optional<size_t> upper = {}) {
+    return Iota{lower, upper};
+  };
+  testIota(makeIota);
+}
+
+//_____________________________________________________________________________
+TEST(Iterator, InputRangeFromGet) {
+  using namespace ad_utility;
+  struct Iota : InputRangeFromGet<size_t> {
+    size_t value_ = 0;
+    std::optional<size_t> upper_;
+    explicit Iota(size_t lower = 0, std::optional<size_t> upper = {})
+        : value_{lower}, upper_{upper} {}
+    std::optional<size_t> get() override {
+      if (value_ == upper_) {
+        return std::nullopt;
+      }
+      return value_++;
+    }
+  };
+  auto makeIota = [](size_t lower = 0, std::optional<size_t> upper = {}) {
+    return Iota{lower, upper};
+  };
+  testIota(makeIota);
+}
+//_____________________________________________________________________________
+TEST(Iterator, InputRangeTypeErased) {
+  using namespace ad_utility;
+  struct IotaImpl : InputRangeFromGet<size_t> {
+    size_t value_ = 0;
+    std::optional<size_t> upper_;
+    explicit IotaImpl(size_t lower = 0, std::optional<size_t> upper = {})
+        : value_{lower}, upper_{upper} {}
+    std::optional<size_t> get() override {
+      if (value_ == upper_) {
+        return std::nullopt;
+      }
+      return value_++;
+    }
+  };
+
+  using Iota = InputRangeTypeErased<size_t>;
+  auto makeIota = [](size_t lower = 0, std::optional<size_t> upper = {}) {
+    return Iota{IotaImpl{lower, upper}};
+  };
+  testIota(makeIota);
+
+  // We can also type-erase any input range with the correct value type, in
+  // particular ranges and views from the standard library.
+  auto makeIotaFromStdIota = [](size_t lower = 0,
+                                std::optional<size_t> upper = {}) {
+    if (!upper.has_value()) {
+      return Iota{ql::views::iota(lower)};
+    } else {
+      return Iota{ql::views::iota(lower, upper.value())};
+    }
+  };
+  testIota(makeIotaFromStdIota);
 }

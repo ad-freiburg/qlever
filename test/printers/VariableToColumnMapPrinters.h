@@ -7,7 +7,7 @@
 #include "engine/VariableToColumnMap.h"
 
 // __________________________________________________________________
-void PrintTo(const ColumnIndexAndTypeInfo& colIdx, std::ostream* os) {
+inline void PrintTo(const ColumnIndexAndTypeInfo& colIdx, std::ostream* os) {
   auto& s = *os;
   s << "col: " << colIdx.columnIndex_
     << " might be undef: " << static_cast<bool>(colIdx.mightContainUndef_);

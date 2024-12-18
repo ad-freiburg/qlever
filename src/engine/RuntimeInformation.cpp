@@ -109,9 +109,9 @@ void RuntimeInformation::setColumnNames(const VariableToColumnMap& columnMap) {
 
   // Resize the `columnNames_` vector such that we can use the keys from
   // columnMap (which are not necessarily consecutive) as indexes.
-  ColumnIndex maxColumnIndex = std::ranges::max(
-      columnMap | std::views::values |
-      std::views::transform(&ColumnIndexAndTypeInfo::columnIndex_));
+  ColumnIndex maxColumnIndex = ql::ranges::max(
+      columnMap | ql::views::values |
+      ql::views::transform(&ColumnIndexAndTypeInfo::columnIndex_));
   columnNames_.resize(maxColumnIndex + 1);
 
   // Now copy the `variable, index` pairs from the map to the vector. If the
@@ -145,7 +145,7 @@ std::chrono::microseconds RuntimeInformation::getOperationTime() const {
     // computing that child is *not* included in this operation's
     // `totalTime_`. That's why we skip such children in the following loop.
     auto timesOfChildren =
-        children_ | std::views::transform(&RuntimeInformation::totalTime_);
+        children_ | ql::views::transform(&RuntimeInformation::totalTime_);
     // Prevent "negative" computation times in case totalTime_ was not
     // computed for this yet.
     return std::max(0us, totalTime_ - std::reduce(timesOfChildren.begin(),

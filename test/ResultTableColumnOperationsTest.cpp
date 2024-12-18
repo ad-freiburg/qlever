@@ -317,7 +317,7 @@ TEST(ResultTableColumnOperations, calculateSpeedupOfColumn) {
   };
 
   // Test things for a range of speedups.
-  std::ranges::for_each(
+  ql::ranges::for_each(
       std::array{2.f, 16.f, 73.696f, 4.2f},
       [&fillColumnsForSpeedup](const float wantedSpeedup,
                                ad_utility::source_location l =

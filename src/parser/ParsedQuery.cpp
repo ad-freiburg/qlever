@@ -1,6 +1,7 @@
-// Copyright 2014, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+// Copyright 2014 - 2024, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de> [2014 - 2017]
+//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 #include "ParsedQuery.h"
 
@@ -14,6 +15,7 @@
 #include <vector>
 
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
+#include "global/RuntimeParameters.h"
 #include "parser/RdfEscaping.h"
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
 #include "util/Conversions.h"
@@ -21,20 +23,6 @@
 
 using std::string;
 using std::vector;
-
-// _____________________________________________________________________________
-parsedQuery::DatasetClauses parsedQuery::DatasetClauses::fromClauses(
-    const std::vector<DatasetClause>& clauses) {
-  DatasetClauses result;
-  for (auto& [dataset, isNamed] : clauses) {
-    auto& graphs = isNamed ? result.namedGraphs_ : result.defaultGraphs_;
-    if (!graphs.has_value()) {
-      graphs.emplace();
-    }
-    graphs.value().insert(dataset);
-  }
-  return result;
-}
 
 // _____________________________________________________________________________
 string SparqlPrefix::asString() const {
@@ -95,10 +83,10 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
 
   const bool isExplicitGroupBy = !_groupByVariables.empty();
   const bool isImplicitGroupBy =
-      std::ranges::any_of(getAliases(),
-                          [](const Alias& alias) {
-                            return alias._expression.containsAggregate();
-                          }) &&
+      ql::ranges::any_of(getAliases(),
+                         [](const Alias& alias) {
+                           return alias._expression.containsAggregate();
+                         }) &&
       !isExplicitGroupBy;
   const bool isGroupBy = isExplicitGroupBy || isImplicitGroupBy;
   using namespace std::string_literals;
@@ -175,7 +163,7 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
       // part of the group by statement.
       const auto& aliases = selectClause().getAliases();
       for (const Variable& var : selectClause().getSelectedVariables()) {
-        if (auto it = std::ranges::find(aliases, var, &Alias::_target);
+        if (auto it = ql::ranges::find(aliases, var, &Alias::_target);
             it != aliases.end()) {
           const auto& alias = *it;
           auto relevantVariables = groupVariables;
@@ -277,7 +265,7 @@ void ParsedQuery::GraphPattern::addLanguageFilter(const Variable& variable,
   std::vector<SparqlTriple*> matchingTriples;
   using BasicPattern = parsedQuery::BasicGraphPattern;
   namespace ad = ad_utility;
-  namespace stdv = std::views;
+  namespace stdv = ql::views;
   for (BasicPattern* basicPattern :
        _graphPatterns | stdv::transform(ad::getIf<BasicPattern>) |
            stdv::filter(ad::toBool)) {
@@ -341,13 +329,13 @@ const std::vector<Alias>& ParsedQuery::getAliases() const {
 void ParsedQuery::checkVariableIsVisible(
     const Variable& variable, const std::string& locationDescription,
     const ad_utility::HashSet<Variable>& additionalVisibleVariables,
-    std::string_view otherPossibleLocationDescription) const {
+    std::string_view otherPossibleLocationDescription) {
   if (!ad_utility::contains(getVisibleVariables(), variable) &&
       !additionalVisibleVariables.contains(variable)) {
-    throw InvalidSparqlQueryException(absl::StrCat(
-        "Variable ", variable.name(), " was used by " + locationDescription,
-        ", but is not defined in the query body",
-        otherPossibleLocationDescription, "."));
+    addWarningOrThrow(absl::StrCat("Variable ", variable.name(),
+                                   " was used by " + locationDescription,
+                                   ", but is not defined in the query body",
+                                   otherPossibleLocationDescription, "."));
   }
 }
 
@@ -356,7 +344,7 @@ void ParsedQuery::checkUsedVariablesAreVisible(
     const sparqlExpression::SparqlExpressionPimpl& expression,
     const std::string& locationDescription,
     const ad_utility::HashSet<Variable>& additionalVisibleVariables,
-    std::string_view otherPossibleLocationDescription) const {
+    std::string_view otherPossibleLocationDescription) {
   for (const auto* var : expression.containedVariables()) {
     checkVariableIsVisible(*var,
                            locationDescription + " in expression \"" +
@@ -368,17 +356,27 @@ void ParsedQuery::checkUsedVariablesAreVisible(
 
 // ____________________________________________________________________________
 void ParsedQuery::addGroupByClause(std::vector<GroupKey> groupKeys) {
-  // Process groupClause
-  auto processVariable = [this](const Variable& groupKey) {
+  // Deduplicate the group by variables to support e.g. `GROUP BY ?x ?x ?x`.
+  // Note: The `GroupBy` class expects the grouped variables to be unique.
+  ad_utility::HashSet<Variable> deduplicatedGroupByVars;
+  auto processVariable = [this,
+                          &deduplicatedGroupByVars](const Variable& groupKey) {
     checkVariableIsVisible(groupKey, "GROUP BY");
-
-    _groupByVariables.push_back(groupKey);
+    if (deduplicatedGroupByVars.insert(groupKey).second) {
+      _groupByVariables.push_back(groupKey);
+    }
   };
 
   ad_utility::HashSet<Variable> variablesDefinedInGroupBy;
   auto processExpression =
-      [this, &variablesDefinedInGroupBy](
-          sparqlExpression::SparqlExpressionPimpl groupKey) {
+      [this, &variablesDefinedInGroupBy,
+       &processVariable](sparqlExpression::SparqlExpressionPimpl groupKey) {
+        // Handle the case of redundant braces around a variable, e.g. `GROUP BY
+        // (?x)`, which is parsed as an expression by the parser.
+        if (auto var = groupKey.getVariableOrNullopt(); var.has_value()) {
+          processVariable(var.value());
+          return;
+        }
         checkUsedVariablesAreVisible(groupKey, "GROUP BY",
                                      variablesDefinedInGroupBy,
                                      " or previously in the same GROUP BY");
@@ -447,20 +445,19 @@ void ParsedQuery::addOrderByClause(OrderClause orderClause, bool isGroupBy,
   auto processVariableOrderKey = [this, isGroupBy, &noteForImplicitGroupBy,
                                   &variablesFromAliases,
                                   additionalError](VariableOrderKey orderKey) {
-    checkVariableIsVisible(orderKey.variable_, "ORDER BY", variablesFromAliases,
-                           additionalError);
-
-    // Check whether grouping is done. The variable being ordered by
-    // must then be either grouped or the result of an alias in the select
-    // clause.
-    if (isGroupBy &&
-        !ad_utility::contains(_groupByVariables, orderKey.variable_) &&
-        (!variablesFromAliases.contains(orderKey.variable_))) {
-      throw InvalidSparqlQueryException(
-          "Variable " + orderKey.variable_.name() +
+    if (!isGroupBy) {
+      checkVariableIsVisible(orderKey.variable_, "ORDER BY",
+                             variablesFromAliases, additionalError);
+    } else if (!ad_utility::contains(_groupByVariables, orderKey.variable_) &&
+               (!variablesFromAliases.contains(orderKey.variable_))) {
+      // If the query (in addition to the ORDER BY) also contains a GROUP BY,
+      // the variables in the ORDER BY must be either grouped or the result
+      // of an alias in the SELECT clause.
+      addWarningOrThrow(absl::StrCat(
+          "Variable " + orderKey.variable_.name(),
           " was used in an ORDER BY clause, but is neither grouped nor "
-          "created as an alias in the SELECT clause." +
-          noteForImplicitGroupBy);
+          "created as an alias in the SELECT clause.",
+          noteForImplicitGroupBy));
     }
     _orderBy.push_back(std::move(orderKey));
   };
@@ -499,8 +496,18 @@ Variable ParsedQuery::getNewInternalVariable() {
   return variable;
 }
 
+// _____________________________________________________________________________
 Variable ParsedQuery::blankNodeToInternalVariable(std::string_view blankNode) {
   AD_CONTRACT_CHECK(blankNode.starts_with("_:"));
   return Variable{absl::StrCat(QLEVER_INTERNAL_BLANKNODE_VARIABLE_PREFIX,
                                blankNode.substr(2))};
+}
+
+// _____________________________________________________________________________
+void ParsedQuery::addWarningOrThrow(std::string warning) {
+  if (RuntimeParameters().get<"throw-on-unbound-variables">()) {
+    throw InvalidSparqlQueryException(std::move(warning));
+  } else {
+    addWarning(std::move(warning));
+  }
 }

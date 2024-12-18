@@ -1,9 +1,8 @@
 // Copyright 2021 - 2024, University of Freiburg
 // Chair of Algorithms and Data Structures
-// Authors:
-//   2021 -    Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
-//   2022 -    Julian Mundhahs <mundhahj@cs.uni-freiburg.de>
-//   2022 -    Hannah Bast <bast@cs.uni-freiburg.de>
+// Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//          Julian Mundhahs <mundhahj@cs.uni-freiburg.de>
+//          Hannah Bast <bast@cs.uni-freiburg.de>
 
 #include <gtest/gtest.h>
 
@@ -25,7 +24,9 @@
 #include "engine/sparqlExpressions/RegexExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "engine/sparqlExpressions/SampleExpression.h"
+#include "engine/sparqlExpressions/StdevExpression.h"
 #include "engine/sparqlExpressions/UuidExpressions.h"
+#include "global/RuntimeParameters.h"
 #include "parser/ConstructClause.h"
 #include "parser/SparqlParserHelpers.h"
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
@@ -915,8 +916,10 @@ TEST(SparqlParser, GroupGraphPattern) {
       m::GraphPattern(false, {"(?a = 10)"}, DummyTriplesMatcher));
   expectGraphPattern("{ BIND (3 as ?c) }",
                      m::GraphPattern(m::Bind(Var{"?c"}, "3")));
-  // The variables `?f` and `?b` have not been used before the BIND clause.
-  expectGroupGraphPatternFails("{ BIND (?f - ?b as ?c) }");
+  // The variables `?f` and `?b` have not been used before the BIND clause, but
+  // this is valid according to the SPARQL standard.
+  expectGraphPattern("{ BIND (?f - ?b as ?c) }",
+                     m::GraphPattern(m::Bind(Var{"?c"}, "?f - ?b")));
   expectGraphPattern("{ VALUES (?a ?b) { (<foo> <bar>) (<a> <b>) } }",
                      m::GraphPattern(m::InlineData(
                          {Var{"?a"}, Var{"?b"}}, {{iri("<foo>"), iri("<bar>")},
@@ -963,15 +966,11 @@ TEST(SparqlParser, GroupGraphPattern) {
       m::GraphPattern(m::Triples({{Var{"?x"}, "<is-a>", iri("<Actor>")}}),
                       m::Bind(Var{"?y"}, "10 - ?x"),
                       m::Triples({{Var{"?a"}, "?b", Var{"?c"}}})));
-  expectGroupGraphPatternFails("{?x <is-a> <Actor> . {BIND(10 - ?x as ?y)}}");
   expectGroupGraphPatternFails("{?x <is-a> <Actor> . BIND(3 as ?x)}");
   expectGraphPattern(
       "{?x <is-a> <Actor> . {BIND(3 as ?x)} }",
       m::GraphPattern(m::Triples({{Var{"?x"}, "<is-a>", iri("<Actor>")}}),
                       m::GroupGraphPattern(m::Bind(Var{"?x"}, "3"))));
-  expectGroupGraphPatternFails(
-      "{?x <is-a> <Actor> . OPTIONAL {BIND(?x as ?y)}}");
-
   expectGraphPattern(
       "{?x <is-a> <Actor> . OPTIONAL {BIND(3 as ?x)} }",
       m::GraphPattern(m::Triples({{Var{"?x"}, "<is-a>", iri("<Actor>")}}),
@@ -1082,13 +1081,6 @@ TEST(SparqlParser, SelectQuery) {
                                                   DummyGraphPatternMatcher),
                                    m::pq::OrderKeys({{Var{"?y"}, false}})));
 
-  // Ordering by a variable or expression which contains a variable that is not
-  // visible in the query body is not allowed.
-  expectSelectQueryFails("SELECT ?a WHERE { ?a ?b ?c } ORDER BY ?x",
-                         contains("Variable ?x was used by "
-                                  "ORDER BY, but is not"));
-  expectSelectQueryFails("SELECT ?a WHERE { ?a ?b ?c } ORDER BY (?x - 10)");
-
   // Explicit GROUP BY
   expectSelectQuery("SELECT ?x WHERE { ?x ?y ?z } GROUP BY ?x",
                     testing::AllOf(m::SelectQuery(m::VariablesSelect({"?x"}),
@@ -1126,15 +1118,6 @@ TEST(SparqlParser, SelectQuery) {
   expectSelectQueryFails(
       "SELECT (SUM(?y) AS ?y) WHERE { ?x <is-a> ?y } GROUP BY ?x");
 
-  // Grouping by a variable or expression which contains a variable
-  // that is not visible in the query body is not allowed.
-  expectSelectQueryFails("SELECT ?x WHERE { ?a ?b ?c } GROUP BY ?x");
-  expectSelectQueryFails(
-      "SELECT (COUNT(?a) as ?d) WHERE { ?a ?b ?c } GROUP BY (?x - 10)");
-
-  // All variables used in an aggregate must be visible in the query body.
-  expectSelectQueryFails(
-      "SELECT (COUNT(?x) as ?y) WHERE { ?a ?b ?c } GROUP BY ?a");
   // `SELECT *` is not allowed while grouping.
   expectSelectQueryFails("SELECT * WHERE { ?x ?y ?z } GROUP BY ?x");
   // When grouping selected variables must either be grouped by or aggregated.
@@ -1203,7 +1186,6 @@ TEST(SparqlParser, SelectQuery) {
 }
 
 TEST(SparqlParser, ConstructQuery) {
-  auto contains = [](const std::string& s) { return ::testing::HasSubstr(s); };
   auto expectConstructQuery =
       ExpectCompleteParse<&Parser::constructQuery>{defaultPrefixMap};
   auto expectConstructQueryFails = ExpectParseFails<&Parser::constructQuery>{};
@@ -1241,11 +1223,6 @@ TEST(SparqlParser, ConstructQuery) {
       "CONSTRUCT { } FROM <foo> FROM NAMED <foo2> FROM NAMED <foo3> WHERE { }",
       m::ConstructQuery({}, m::GraphPattern(), m::Graphs{iri("<foo>")},
                         m::Graphs{iri("<foo2>"), iri("<foo3>")}));
-  // GROUP BY and ORDER BY, but the ordered variable is not grouped
-  expectConstructQueryFails(
-      "CONSTRUCT {?a <b> <c> } WHERE { ?a ?b ?c } GROUP BY ?a ORDER BY ?b",
-      contains("Variable ?b was used in an ORDER BY clause, but is neither "
-               "grouped nor created as an alias in the SELECT clause"));
 }
 
 // Test that ASK queries are parsed as they should.
@@ -1296,12 +1273,6 @@ TEST(SparqlParser, AskQuery) {
                  testing::AllOf(m::AskQuery(DummyGraphPatternMatcher),
                                 m::pq::OrderKeys({{Var{"?y"}, false}})));
 
-  // The variables of the ORDER BY must be visible in the query body.
-  expectAskQueryFails("ASK { ?a ?b ?c } ORDER BY ?x",
-                      contains("Variable ?x was used by "
-                               "ORDER BY, but is not"));
-  expectAskQueryFails("ASK { ?a ?b ?c } ORDER BY (?x - 10)");
-
   // ASK with GROUP BY is allowed.
   expectAskQuery("ASK { ?x ?y ?z } GROUP BY ?x",
                  testing::AllOf(m::AskQuery(DummyGraphPatternMatcher),
@@ -1309,10 +1280,6 @@ TEST(SparqlParser, AskQuery) {
   expectAskQuery("ASK { ?x ?y ?z } GROUP BY ?x",
                  testing::AllOf(m::AskQuery(DummyGraphPatternMatcher),
                                 m::pq::GroupKeys({Var{"?x"}})));
-
-  // The variables of the GROUP BY must be visible in the query body.
-  expectAskQueryFails("ASK { ?a ?b ?c } GROUP BY ?x");
-  expectAskQueryFails("ASK { ?a ?b ?c } GROUP BY (?x - 10)");
 
   // HAVING is not allowed without GROUP BY
   expectAskQueryFails(
@@ -1324,6 +1291,7 @@ TEST(SparqlParser, AskQuery) {
 TEST(SparqlParser, Query) {
   auto expectQuery = ExpectCompleteParse<&Parser::query>{defaultPrefixMap};
   auto expectQueryFails = ExpectParseFails<&Parser::query>{};
+  auto contains = [](const std::string& s) { return ::testing::HasSubstr(s); };
 
   // Test that `_originalString` is correctly set.
   expectQuery(
@@ -1398,8 +1366,74 @@ TEST(SparqlParser, Query) {
                          {Var{"?s"}, Var{"?p"}, Var{"?o"}}, "{ ?s ?p ?o }",
                          "PREFIX doof: <http://doof.org/>"))));
 
-  // DESCRIBE queries are not yet supported.
-  expectQueryFails("DESCRIBE *");
+  // Tests around DESCRIBE.
+  {
+    // The tested DESCRIBE queries all describe `<x>`, `?y`, and `<z>`.
+    using Resources = std::vector<parsedQuery::Describe::VarOrIri>;
+    auto Iri = [](const auto& x) {
+      return TripleComponent::Iri::fromIriref(x);
+    };
+    Resources xyz{Iri("<x>"), Var{"?y"}, Iri("<z>")};
+
+    // A matcher for `?y <is-a> ?v`.
+    auto graphPatternMatcher =
+        m::GraphPattern(m::Triples({{Var{"?y"}, "<is-a>", Var{"?v"}}}));
+
+    // A matcher for the subquery `SELECT ?y { ?y <is-a> ?v }`, which we will
+    // use to compute the values for `?y` that are to be described.
+    auto selectQueryMatcher1 =
+        m::SelectQuery(m::Select({Var{"?y"}}), graphPatternMatcher);
+
+    // DESCRIBE with neither FROM nor FROM NAMED clauses.
+    expectQuery("DESCRIBE <x> ?y <z> { ?y <is-a> ?v }",
+                m::DescribeQuery(m::Describe(xyz, {}, selectQueryMatcher1)));
+
+    // `DESCRIBE *` query that is equivalent to `DESCRIBE <x> ?y <z> { ... }`.
+    auto selectQueryMatcher2 =
+        m::SelectQuery(m::Select({Var{"?y"}, Var{"?v"}}), graphPatternMatcher);
+    Resources yv{Var{"?y"}, Var{"?v"}};
+    expectQuery("DESCRIBE * { ?y <is-a> ?v }",
+                m::DescribeQuery(m::Describe(yv, {}, selectQueryMatcher2)));
+
+    // DESCRIBE with FROM and FROM NAMED clauses.
+    //
+    // NOTE: The clauses are relevant *both* for the retrieval of the resources
+    // to describe (the `Id`s matching `?y`), as well as for computing the
+    // triples for each of these resources.
+    using Graphs = ScanSpecificationAsTripleComponent::Graphs;
+    Graphs expectedDefaultGraphs;
+    Graphs expectedNamedGraphs;
+    expectedDefaultGraphs.emplace({Iri("<default-graph>")});
+    expectedNamedGraphs.emplace({Iri("<named-graph>")});
+    parsedQuery::DatasetClauses expectedClauses{expectedDefaultGraphs,
+                                                expectedNamedGraphs};
+    expectQuery(
+        "DESCRIBE <x> ?y <z> FROM <default-graph> FROM NAMED <named-graph>",
+        m::DescribeQuery(m::Describe(xyz, expectedClauses, ::testing::_),
+                         expectedDefaultGraphs, expectedNamedGraphs));
+  }
+
+  // Test the various places where warnings are added in a query.
+  expectQuery("SELECT ?x {} GROUP BY ?x ORDER BY ?y",
+              m::WarningsOfParsedQuery({"?x was used by GROUP BY",
+                                        "?y was used in an ORDER BY clause"}));
+  expectQuery("SELECT * { BIND (?a as ?b) }",
+              m::WarningsOfParsedQuery(
+                  {"?a was used in the expression of a BIND clause"}));
+  expectQuery("SELECT * { } ORDER BY ?s",
+              m::WarningsOfParsedQuery({"?s was used by ORDER BY"}));
+
+  // Now test the same queries with exceptions instead of warnings.
+  RuntimeParameters().set<"throw-on-unbound-variables">(true);
+  expectQueryFails("SELECT ?x {} GROUP BY ?x",
+                   contains("?x was used by GROUP BY"));
+  expectQueryFails("SELECT * { BIND (?a as ?b) }",
+                   contains("?a was used in the expression of a BIND clause"));
+  expectQueryFails("SELECT * { } ORDER BY ?s",
+                   contains("?s was used by ORDER BY"));
+
+  // Revert this (global) setting to its original value.
+  RuntimeParameters().set<"throw-on-unbound-variables">(false);
 }
 
 // Some helper matchers for the `builtInCall` test below.
@@ -1854,6 +1888,23 @@ template <typename AggregateExpr>
       AD_PROPERTY(Exp, children, ElementsAre(variableExpressionMatcher(child))),
       WhenDynamicCastTo<const AggregateExpr&>(innerMatcher)));
 }
+
+// Return a matcher that checks whether a given `SparqlExpression::Ptr` actually
+// points to an `AggregateExpr` and that the distinctness of the aggregate
+// expression matches. It does not check the child. This is required to test
+// aggregates that implicitly replace their child, like `StdevExpression`.
+template <typename AggregateExpr>
+::testing::Matcher<const SparqlExpression::Ptr&> matchAggregateWithoutChild(
+    bool distinct) {
+  using namespace ::testing;
+  using namespace builtInCallTestHelpers;
+  using Exp = SparqlExpression;
+
+  using enum SparqlExpression::AggregateStatus;
+  auto aggregateStatus = distinct ? DistinctAggregate : NonDistinctAggregate;
+  return Pointee(AllOf(AD_PROPERTY(Exp, isAggregate, Eq(aggregateStatus)),
+                       WhenDynamicCastTo<const AggregateExpr&>(testing::_)));
+}
 }  // namespace aggregateTestHelpers
 
 // ___________________________________________________________
@@ -1924,6 +1975,17 @@ TEST(SparqlParser, aggregateExpressions) {
   expectAggregate(
       "group_concat(DISTINCT ?x; SEPARATOR=\";\")",
       matchAggregate<GroupConcatExpression>(true, V{"?x"}, separator(";")));
+
+  // The STDEV expression
+  // Here we don't match the child, because StdevExpression replaces it with a
+  // DeviationExpression.
+  expectAggregate("STDEV(?x)",
+                  matchAggregateWithoutChild<StdevExpression>(false));
+  expectAggregate("stdev(?x)",
+                  matchAggregateWithoutChild<StdevExpression>(false));
+  // A distinct stdev is probably not very useful, but should be possible anyway
+  expectAggregate("STDEV(DISTINCT ?x)",
+                  matchAggregateWithoutChild<StdevExpression>(true));
 }
 
 TEST(SparqlParser, Quads) {

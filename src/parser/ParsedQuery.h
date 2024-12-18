@@ -1,6 +1,8 @@
-// Copyright 2014, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+// Copyright 2014 - 2024, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de> [2014 - 2017]
+//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+
 #pragma once
 
 #include <initializer_list>
@@ -14,6 +16,7 @@
 #include "index/ScanSpecification.h"
 #include "parser/Alias.h"
 #include "parser/ConstructClause.h"
+#include "parser/DatasetClauses.h"
 #include "parser/GraphPattern.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/PropertyPath.h"
@@ -36,21 +39,6 @@
 
 using std::string;
 using std::vector;
-
-// Forward declaration
-struct DatasetClause;
-
-namespace parsedQuery {
-// A struct for the FROM and FROM NAMED clauses;
-struct DatasetClauses {
-  // FROM clauses.
-  ScanSpecificationAsTripleComponent::Graphs defaultGraphs_{};
-  // FROM NAMED clauses.
-  ScanSpecificationAsTripleComponent::Graphs namedGraphs_{};
-
-  static DatasetClauses fromClauses(const std::vector<DatasetClause>& clauses);
-};
-}  // namespace parsedQuery
 
 // Data container for prefixes
 class SparqlPrefix {
@@ -102,6 +90,10 @@ class ParsedQuery {
   vector<Variable> _groupByVariables;
   LimitOffsetClause _limitOffset{};
   string _originalString;
+
+  // Contains warnings about queries that are valid according to the SPARQL
+  // standard, but are probably semantically wrong.
+  std::vector<std::string> warnings_;
 
   using HeaderClause =
       std::variant<SelectClause, ConstructClause, UpdateClause, AskClause>;
@@ -158,6 +150,21 @@ class ParsedQuery {
   // Add variables, that were found in the query body.
   void registerVariablesVisibleInQueryBody(const vector<Variable>& variables);
 
+  // Return all the warnings that have been added via `addWarning()` or
+  // `addWarningOrThrow`.
+  const std::vector<std::string>& warnings() const { return warnings_; }
+
+  // Add a warning to the query. The warning becomes part of the return value of
+  // the `warnings()` function above.
+  void addWarning(std::string warning) {
+    warnings_.push_back(std::move(warning));
+  }
+
+  // If unbound variables that are used in a query are supposed to throw because
+  // the corresponding `RuntimeParameter` is set, then throw. Else add a
+  // warning.
+  void addWarningOrThrow(std::string warning);
+
   // Returns all variables that are visible in the Query Body.
   const std::vector<Variable>& getVisibleVariables() const;
 
@@ -196,12 +203,13 @@ class ParsedQuery {
   Variable addInternalAlias(sparqlExpression::SparqlExpressionPimpl expression);
 
   // If the `variable` is neither visible in the query body nor contained in the
-  // `additionalVisibleVariables`, throw an `InvalidQueryException` that uses
-  // the `locationDescription` inside the message.
+  // `additionalVisibleVariables`, add a warning or throw an exception (see
+  // `addWarningOrThrow`) that uses the `locationDescription` inside the
+  // message.
   void checkVariableIsVisible(
       const Variable& variable, const std::string& locationDescription,
       const ad_utility::HashSet<Variable>& additionalVisibleVariables = {},
-      std::string_view otherPossibleLocationDescription = "") const;
+      std::string_view otherPossibleLocationDescription = "");
 
   // Similar to `checkVariableIsVisible` above, but performs the check for each
   // of the variables that are used inside the `expression`.
@@ -209,7 +217,7 @@ class ParsedQuery {
       const sparqlExpression::SparqlExpressionPimpl& expression,
       const std::string& locationDescription,
       const ad_utility::HashSet<Variable>& additionalVisibleVariables = {},
-      std::string_view otherPossibleLocationDescription = "") const;
+      std::string_view otherPossibleLocationDescription = "");
 
   // Add the `groupKeys` (either variables or expressions) to the query and
   // check whether all the variables are visible inside the query body.

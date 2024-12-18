@@ -5,8 +5,14 @@
 
 #include "util/StringUtils.h"
 
+#include <absl/strings/str_cat.h>
 #include <unicode/bytestream.h>
 #include <unicode/casemap.h>
+
+#include "util/Algorithm.h"
+#include "util/Exception.h"
+#include "util/Forward.h"
+#include "util/StringUtilsImpl.h"
 
 namespace ad_utility {
 // ____________________________________________________________________________
@@ -55,10 +61,10 @@ bool isLanguageMatch(string& languageTag, string& languageRange) {
     if (languageRange.ends_with("*")) {
       languageRange.pop_back();
     }
-    std::ranges::transform(languageTag, std::begin(languageTag),
-                           [](unsigned char c) { return std::tolower(c); });
-    std::ranges::transform(languageRange, std::begin(languageRange),
-                           [](unsigned char c) { return std::tolower(c); });
+    ql::ranges::transform(languageTag, std::begin(languageTag),
+                          [](unsigned char c) { return std::tolower(c); });
+    ql::ranges::transform(languageRange, std::begin(languageRange),
+                          [](unsigned char c) { return std::tolower(c); });
     return languageTag.compare(0, languageRange.length(), languageRange) == 0;
   }
 }
@@ -192,5 +198,4 @@ std::string addIndentation(std::string_view str,
       absl::StrReplaceAll(str,
                           {{"\n", absl::StrCat("\n", indentationSymbol)}}));
 }
-
 }  // namespace ad_utility

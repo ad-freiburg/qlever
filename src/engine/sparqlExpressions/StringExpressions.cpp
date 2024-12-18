@@ -4,6 +4,7 @@
 
 #include <boost/url.hpp>
 
+#include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 #include "engine/sparqlExpressions/VariadicExpression.h"
 
@@ -24,7 +25,7 @@ constexpr auto toLiteral = [](std::string_view normalizedContent) {
 // Count UTF-8 characters by skipping continuation bytes (those starting with
 // "10").
 inline std::size_t utf8Length(std::string_view s) {
-  return std::ranges::count_if(
+  return ql::ranges::count_if(
       s, [](char c) { return (static_cast<unsigned char>(c) & 0xC0) != 0x80; });
 }
 
@@ -303,9 +304,59 @@ using SubstrExpression = SubstrExpressionImpl;
   return Id::makeFromBool(text.starts_with(pattern));
 };
 
-using StrStartsExpression =
-    StringExpressionImpl<2, LiftStringFunction<decltype(strStartsImpl)>,
-                         StringValueGetter>;
+namespace {
+
+template <typename NaryOperation>
+requires(isOperation<NaryOperation>)
+class StrStartsExpressionImpl : public NaryExpression<NaryOperation> {
+ public:
+  using NaryExpression<NaryOperation>::NaryExpression;
+  std::vector<PrefilterExprVariablePair> getPrefilterExpressionForMetadata(
+      [[maybe_unused]] bool isNegated) const override {
+    AD_CORRECTNESS_CHECK(this->N == 2);
+    const SparqlExpression* child0 = this->getNthChild(0).value();
+    const SparqlExpression* child1 = this->getNthChild(1).value();
+
+    const auto getPrefilterExprVariableVec =
+        [](const SparqlExpression* child0, const SparqlExpression* child1,
+           bool startsWithVar) -> std::vector<PrefilterExprVariablePair> {
+      const auto* varExpr = dynamic_cast<const VariableExpression*>(child0);
+      if (!varExpr) {
+        return {};
+      }
+
+      const auto& optReferenceValue =
+          getIdOrLocalVocabEntryFromLiteralExpression(child1, true);
+      if (optReferenceValue.has_value()) {
+        return prefilterExpressions::detail::makePrefilterExpressionVec<
+            prefilterExpressions::CompOp::GE>(optReferenceValue.value(),
+                                              varExpr->value(), startsWithVar);
+      }
+      return {};
+    };
+    // Remark: With the current implementation we only prefilter w.r.t. one
+    // bound.
+    // TODO: It is technically possible to pre-filter more precisely by
+    // introducing a second bound.
+    //
+    // Option 1: STRSTARTS(?var, VocabId(n)); startsWithVar = false
+    // Return PrefilterExpression vector: {<(>= VocabId(n)), ?var>}
+    auto resVec = getPrefilterExprVariableVec(child0, child1, false);
+    if (!resVec.empty()) {
+      return resVec;
+    }
+    // Option 2: STRTSTARTS(VocabId(n), ?var); startsWithVar = true
+    // Return PrefilterExpression vector: {<(<= VocabId(n)), ?var>}
+    // Option 3:
+    // child0 or/and child1 are unsuitable SparqlExpression types, return {}.
+    return getPrefilterExprVariableVec(child1, child0, true);
+  }
+};
+
+}  // namespace
+
+using StrStartsExpression = StrStartsExpressionImpl<Operation<
+    2, FV<LiftStringFunction<decltype(strStartsImpl)>, StringValueGetter>>>;
 
 // STRENDS
 [[maybe_unused]] auto strEndsImpl = [](std::string_view text,
@@ -414,7 +465,7 @@ class ConcatExpression : public detail::VariadicExpression {
           // One of the previous children was not a constant, so we already
           // store a vector.
           auto& resultAsVector = std::get<StringVec>(result);
-          std::ranges::for_each(resultAsVector, [&](std::string& target) {
+          ql::ranges::for_each(resultAsVector, [&](std::string& target) {
             target.append(strFromConstant);
           });
         }
@@ -438,7 +489,7 @@ class ConcatExpression : public detail::VariadicExpression {
         // The `result` already is a vector, and the current child also returns
         // multiple results, so we do the `natural` way.
         auto& resultAsVec = std::get<StringVec>(result);
-        // TODO<C++23> Use `std::views::zip` or `enumerate`.
+        // TODO<C++23> Use `ql::views::zip` or `enumerate`.
         size_t i = 0;
         for (auto& el : gen) {
           if (auto str = StringValueGetter{}(std::move(el), ctx);
@@ -451,7 +502,7 @@ class ConcatExpression : public detail::VariadicExpression {
       }
       ctx->cancellationHandle_->throwIfCancelled();
     };
-    std::ranges::for_each(
+    ql::ranges::for_each(
         childrenVec(), [&ctx, &visitSingleExpressionResult](const auto& child) {
           std::visit(visitSingleExpressionResult, child->evaluate(ctx));
         });
@@ -464,8 +515,8 @@ class ConcatExpression : public detail::VariadicExpression {
       auto& stringVec = std::get<StringVec>(result);
       VectorWithMemoryLimit<IdOrLiteralOrIri> resultAsVec(ctx->_allocator);
       resultAsVec.reserve(stringVec.size());
-      std::ranges::copy(stringVec | std::views::transform(toLiteral),
-                        std::back_inserter(resultAsVec));
+      ql::ranges::copy(stringVec | ql::views::transform(toLiteral),
+                       std::back_inserter(resultAsVec));
       return resultAsVec;
     }
   }

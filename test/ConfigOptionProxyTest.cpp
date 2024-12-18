@@ -22,9 +22,9 @@ namespace ad_utility {
 @tparam OptionType Exists to define, if the test should be done with
 `ConfigOption`, or `const ConfigOption`.
 */
-template <template <typename> typename ProxyType,
-          SameAsAny<ConfigOption, const ConfigOption> OptionType>
-void basicConstructorTest() {
+CPP_template(template <typename> typename ProxyType, typename OptionType)(
+    requires SameAsAny<OptionType, ConfigOption,
+                       const ConfigOption>) void basicConstructorTest() {
   // Test construction for a given type.
   auto doTest = []<typename T>() {
     // Does the normal constructor work?

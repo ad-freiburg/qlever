@@ -164,7 +164,7 @@ TEST(IdTable, rowIterators) {
     ASSERT_FALSE(
         std::is_sorted(std::as_const(row).begin(), std::as_const(row).end()));
 
-    std::ranges::sort(row.begin(), row.end());
+    ql::ranges::sort(row.begin(), row.end());
     ASSERT_EQ(-1, row[0]);
     ASSERT_EQ(0, row[1]);
     ASSERT_EQ(1, row[2]);
@@ -203,8 +203,8 @@ TEST(IdTable, rowIterators) {
     std::sort(std::move(row).begin(), std::move(row).end());
     // The following calls all would not compile:
     // std::sort(row.begin(), row.end());
-    // std::ranges::sort(row);
-    // std::ranges::sort(std::move(row));
+    // ql::ranges::sort(row);
+    // ql::ranges::sort(std::move(row));
     ASSERT_EQ(-1, row[0]);
     ASSERT_EQ(0, row[1]);
     ASSERT_EQ(1, row[2]);
@@ -358,7 +358,7 @@ TEST(IdTable, insertAtEnd) {
 
     Table t2 = clone(init, std::move(additionalArgs.at(2))...);
     // Test inserting at the end
-    t2.insertAtEnd(t1.begin(), t1.end());
+    t2.insertAtEnd(t1);
     for (size_t i = 0; i < init.size(); i++) {
       ASSERT_EQ(init[i], t2[i]) << i;
     }
@@ -570,8 +570,7 @@ TEST(IdTable, sortTest) {
 
   // Now try the actual sort
   test = orig.clone();
-  std::ranges::sort(test, std::less<>{},
-                    [](const auto& row) { return row[0]; });
+  ql::ranges::sort(test, std::less<>{}, [](const auto& row) { return row[0]; });
 
   // The sorted order of the orig tables should be:
   // 3, 2, 0, 4, 5, 1
@@ -646,7 +645,7 @@ TEST(IdTableStaticTest, insert) {
   IdTableStatic<4> t2 = init.clone();
 
   // Test inserting at the end
-  t2.insertAtEnd(t1.begin(), t1.end());
+  t2.insertAtEnd(t1);
   for (size_t i = 0; i < init.size(); i++) {
     for (size_t j = 0; j < init.numColumns(); j++) {
       EXPECT_EQ(init(i, j), t2(i, j)) << i << ", " << j;
@@ -1100,8 +1099,8 @@ TEST(IdTable, shrinkToFit) {
 TEST(IdTable, staticAsserts) {
   static_assert(std::is_trivially_copyable_v<IdTableStatic<1>::iterator>);
   static_assert(std::is_trivially_copyable_v<IdTableStatic<1>::const_iterator>);
-  static_assert(std::ranges::random_access_range<IdTable>);
-  static_assert(std::ranges::random_access_range<IdTableStatic<1>>);
+  static_assert(ql::ranges::random_access_range<IdTable>);
+  static_assert(ql::ranges::random_access_range<IdTableStatic<1>>);
 }
 
 TEST(IdTable, constructorsAreSfinaeFriendly) {
@@ -1134,6 +1133,20 @@ TEST(IdTable, addEmptyColumn) {
   // The new column is uninitialized, so we can't make any more specific
   // assertions about its content here.
   EXPECT_EQ(table.getColumn(1).size(), 2);
+}
+
+// _____________________________________________________________________________
+TEST(IdTable, moveOrClone) {
+  IdTable table{1, ad_utility::makeUnlimitedAllocator<Id>()};
+  table.push_back({V(1)});
+  table.push_back({V(2)});
+
+  auto t2 = table.moveOrClone();
+  EXPECT_EQ(table, t2);
+  auto t3 = std::move(table).moveOrClone();
+  EXPECT_EQ(t3, t2);
+  // `table` was moved from.
+  EXPECT_TRUE(table.empty());
 }
 
 // Check that we can completely instantiate `IdTable`s with a different value

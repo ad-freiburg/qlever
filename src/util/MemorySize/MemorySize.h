@@ -7,7 +7,6 @@
 
 #include <absl/strings/str_cat.h>
 
-#include <algorithm>
 #include <cassert>
 #include <concepts>
 #include <cstddef>
@@ -17,6 +16,7 @@
 #include <string>
 #include <type_traits>
 
+#include "backports/algorithm.h"
 #include "util/ConstexprMap.h"
 #include "util/ConstexprUtils.h"
 #include "util/Exception.h"

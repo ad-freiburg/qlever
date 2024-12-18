@@ -169,7 +169,7 @@ auto expectUndefined = [](const SparqlExpression& expression,
     AD_CORRECTNESS_CHECK(
         (std::holds_alternative<VectorWithMemoryLimit<Id>>(result)));
     const auto& vec = std::get<VectorWithMemoryLimit<Id>>(result);
-    EXPECT_TRUE(std::ranges::all_of(
+    EXPECT_TRUE(ql::ranges::all_of(
         vec, [](Id id) { return id == Id::makeUndefined(); }));
   }
 };
@@ -679,8 +679,8 @@ void testWithExplicitResult(auto leftValue, auto rightValue,
                             source_location l = source_location::current()) {
   auto t = generateLocationTrace(l);
   std::vector<Id> expected;
-  std::ranges::transform(expectedAsBool, std::back_inserter(expected),
-                         Id::makeFromBool);
+  ql::ranges::transform(expectedAsBool, std::back_inserter(expected),
+                        Id::makeFromBool);
 
   testWithExplicitIdResult<Comp>(std::move(leftValue), std::move(rightValue),
                                  expected);

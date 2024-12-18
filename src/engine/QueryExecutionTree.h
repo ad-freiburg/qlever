@@ -49,7 +49,14 @@ class QueryExecutionTree {
 
   bool isEmpty() const { return !rootOperation_; }
 
+  // Get the column index that the given `variable` will have in the result of
+  // this query. Throw if the variable is not part of the `VariableToColumnMap`.
   size_t getVariableColumn(const Variable& variable) const;
+
+  // Similar to `getVariableColumn` above, but return `nullopt` if the variable
+  // is not part of the `VariableToColumnMap`.
+  std::optional<size_t> getVariableColumnOrNullopt(
+      const Variable& variable) const;
 
   size_t getResultWidth() const { return rootOperation_->getResultWidth(); }
 
@@ -86,6 +93,14 @@ class QueryExecutionTree {
   float getMultiplicity(size_t col) const {
     return rootOperation_->getMultiplicity(col);
   }
+
+  // The implementation of this method calls
+  // `Operation::setPrefilterGetUpdatedQueryExecutionTree()` for the root
+  // operation. Only `<PrefilterExpression, Variable>` pairs are passed, where
+  // the corresponding `Variable` is visible in the `VariableToColumnMap`.
+  std::optional<std::shared_ptr<QueryExecutionTree>>
+  setPrefilterGetUpdatedQueryExecutionTree(
+      std::vector<Operation::PrefilterVariablePair> prefilterPairs) const;
 
   size_t getDistinctEstimate(size_t col) const {
     return static_cast<size_t>(rootOperation_->getSizeEstimate() /

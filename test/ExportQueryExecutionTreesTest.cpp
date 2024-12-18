@@ -317,8 +317,7 @@ std::vector<IdTable> convertToVector(
   for (const auto& [pair, range] : generator) {
     const auto& idTable = pair.idTable_;
     result.emplace_back(idTable.numColumns(), idTable.getAllocator());
-    result.back().insertAtEnd(idTable.begin() + *range.begin(),
-                              idTable.begin() + *(range.end() - 1) + 1);
+    result.back().insertAtEnd(idTable, *range.begin(), *(range.end() - 1) + 1);
   }
   return result;
 }

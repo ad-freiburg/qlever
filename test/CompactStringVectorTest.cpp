@@ -50,7 +50,7 @@ TEST(CompactVectorOfStrings, Iterator) {
     s.build(input);
 
     auto it = s.begin();
-    using std::ranges::equal;
+    using ql::ranges::equal;
     ASSERT_TRUE(equal(input[0], *it));
     ASSERT_TRUE(equal(input[0], *it++));
     ASSERT_TRUE(equal(input[1], *it));
