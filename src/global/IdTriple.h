@@ -30,8 +30,8 @@ struct IdTriple {
 
   friend std::ostream& operator<<(std::ostream& os, const IdTriple& triple) {
     os << "IdTriple(";
-    std::ranges::copy(triple.ids_, std::ostream_iterator<Id>(os, ", "));
-    std::ranges::copy(triple.payload_, std::ostream_iterator<Id>(os, ", "));
+    ql::ranges::copy(triple.ids_, std::ostream_iterator<Id>(os, ", "));
+    ql::ranges::copy(triple.payload_, std::ostream_iterator<Id>(os, ", "));
     os << ")";
     return os;
   }

@@ -51,7 +51,8 @@ class ValuesForTesting : public Operation {
                             std::vector<IdTable> tables,
                             std::vector<std::optional<Variable>> variables,
                             bool unlikelyToFitInCache = false,
-                            std::vector<ColumnIndex> sortedColumns = {})
+                            std::vector<ColumnIndex> sortedColumns = {},
+                            LocalVocab localVocab = LocalVocab{})
       : Operation{ctx},
         tables_{std::move(tables)},
         variables_{std::move(variables)},
@@ -60,12 +61,11 @@ class ValuesForTesting : public Operation {
         costEstimate_{0},
         unlikelyToFitInCache_{unlikelyToFitInCache},
         resultSortedColumns_{std::move(sortedColumns)},
-        localVocab_{LocalVocab{}},
+        localVocab_{std::move(localVocab)},
         multiplicity_{std::nullopt} {
-    AD_CONTRACT_CHECK(
-        std::ranges::all_of(tables_, [this](const IdTable& table) {
-          return variables_.size() == table.numColumns();
-        }));
+    AD_CONTRACT_CHECK(ql::ranges::all_of(tables_, [this](const IdTable& table) {
+      return variables_.size() == table.numColumns();
+    }));
     size_t totalRows = 0;
     for (const IdTable& idTable : tables_) {
       totalRows += idTable.numRows();
@@ -124,7 +124,7 @@ class ValuesForTesting : public Operation {
   // ___________________________________________________________________________
   string getCacheKeyImpl() const override {
     std::stringstream str;
-    auto numRowsView = tables_ | std::views::transform(&IdTable::numRows);
+    auto numRowsView = tables_ | ql::views::transform(&IdTable::numRows);
     auto totalNumRows = std::reduce(numRowsView.begin(), numRowsView.end(), 0);
     auto numCols = tables_.empty() ? 0 : tables_.at(0).numColumns();
     str << "Values for testing with " << numCols << " columns and "
@@ -176,7 +176,7 @@ class ValuesForTesting : public Operation {
   vector<QueryExecutionTree*> getChildren() override { return {}; }
 
   bool knownEmptyResult() override {
-    return std::ranges::all_of(
+    return ql::ranges::all_of(
         tables_, [](const IdTable& table) { return table.empty(); });
   }
 
@@ -188,9 +188,9 @@ class ValuesForTesting : public Operation {
         continue;
       }
       bool containsUndef =
-          std::ranges::any_of(tables_, [&i](const IdTable& table) {
-            return std::ranges::any_of(table.getColumn(i),
-                                       [](Id id) { return id.isUndefined(); });
+          ql::ranges::any_of(tables_, [&i](const IdTable& table) {
+            return ql::ranges::any_of(table.getColumn(i),
+                                      [](Id id) { return id.isUndefined(); });
           });
       using enum ColumnIndexAndTypeInfo::UndefStatus;
       m[variables_.at(i).value()] = ColumnIndexAndTypeInfo{

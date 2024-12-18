@@ -406,8 +406,8 @@ class CartesianProductJoinLazyTest
   // `start` to `end` wrapped as Ids.
   static void fillColumn(IdTable& table, size_t column, int64_t start,
                          int64_t end) {
-    std::ranges::copy(
-        std::views::iota(start, end) | std::views::transform(Id::makeFromInt),
+    ql::ranges::copy(
+        ql::views::iota(start, end) | ql::views::transform(Id::makeFromInt),
         table.getColumn(column).begin());
   }
 };
@@ -476,8 +476,8 @@ TEST_P(CartesianProductJoinLazyTest, leftTableBiggerThanChunk) {
   bigTable.addEmptyColumn();
   bigTable.addEmptyColumn();
   auto fillWithVocabValue = [&bigTable](size_t column, uint64_t vocabIndex) {
-    std::ranges::fill(bigTable.getColumn(column),
-                      Id::makeFromVocabIndex(VocabIndex::make(vocabIndex)));
+    ql::ranges::fill(bigTable.getColumn(column),
+                     Id::makeFromVocabIndex(VocabIndex::make(vocabIndex)));
   };
   fillWithVocabValue(3, 100);
 

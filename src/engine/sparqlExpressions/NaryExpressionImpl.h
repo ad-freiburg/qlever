@@ -82,7 +82,7 @@ class NaryExpression : public SparqlExpression {
     using ResultType = typename decltype(resultGenerator)::value_type;
     VectorWithMemoryLimit<ResultType> result{context->_allocator};
     result.reserve(targetSize);
-    std::ranges::move(resultGenerator, std::back_inserter(result));
+    ql::ranges::move(resultGenerator, std::back_inserter(result));
 
     if constexpr (resultIsConstant) {
       AD_CORRECTNESS_CHECK(result.size() == 1);
@@ -186,7 +186,7 @@ requires(isOperation<Op>) [[nodiscard]] string NaryExpression<Op>::getCacheKey(
     const VariableToColumnMap& varColMap) const {
   string key = typeid(*this).name();
   key += ad_utility::lazyStrJoin(
-      children_ | std::views::transform([&varColMap](const auto& child) {
+      children_ | ql::views::transform([&varColMap](const auto& child) {
         return child->getCacheKey(varColMap);
       }),
       "");

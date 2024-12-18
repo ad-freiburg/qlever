@@ -1,6 +1,6 @@
 add_subdirectory(sparqlExpressions)
 add_library(SortPerformanceEstimator SortPerformanceEstimator.cpp)
-qlever_target_link_libraries(SortPerformanceEstimator)
+qlever_target_link_libraries(SortPerformanceEstimator parser)
 add_library(engine
         Engine.cpp QueryExecutionTree.cpp Operation.cpp Result.cpp LocalVocab.cpp
         IndexScan.cpp Join.cpp Sort.cpp
@@ -13,5 +13,6 @@ add_library(engine
         VariableToColumnMap.cpp ExportQueryExecutionTrees.cpp
         CartesianProductJoin.cpp TextIndexScanForWord.cpp TextIndexScanForEntity.cpp
         TextLimit.cpp LazyGroupBy.cpp GroupByHashMapOptimization.cpp SpatialJoin.cpp
-        CountConnectedSubgraphs.cpp SpatialJoinAlgorithms.cpp PathSearch.cpp ExecuteUpdate.cpp)
+        CountConnectedSubgraphs.cpp SpatialJoinAlgorithms.cpp PathSearch.cpp ExecuteUpdate.cpp
+        Describe.cpp)
 qlever_target_link_libraries(engine util index parser sparqlExpressions http SortPerformanceEstimator Boost::iostreams s2)

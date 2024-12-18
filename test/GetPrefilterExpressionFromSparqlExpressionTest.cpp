@@ -13,79 +13,12 @@ using ad_utility::testing::IntId;
 using ad_utility::testing::UndefId;
 using ad_utility::testing::VocabId;
 
-using Literal = ad_utility::triple_component::Literal;
-using Iri = ad_utility::triple_component::Iri;
-using RelValues = std::variant<Variable, ValueId, Iri, Literal>;
+using namespace makeSparqlExpression;
+using namespace makeFilterExpression;
+using namespace makeFilterExpression::filterHelper;
 
 namespace {
-
 using namespace sparqlExpression;
-
-namespace makeSparqlExpression {
-
-//______________________________________________________________________________
-const auto makeLiteralSparqlExpr =
-    [](const auto& child) -> std::unique_ptr<SparqlExpression> {
-  using T = std::decay_t<decltype(child)>;
-  if constexpr (std::is_same_v<T, ValueId>) {
-    return std::make_unique<IdExpression>(child);
-  } else if constexpr (std::is_same_v<T, Variable>) {
-    return std::make_unique<VariableExpression>(child);
-  } else if constexpr (std::is_same_v<T, Literal>) {
-    return std::make_unique<StringLiteralExpression>(child);
-  } else if constexpr (std::is_same_v<T, Iri>) {
-    return std::make_unique<IriExpression>(child);
-  } else {
-    throw std::runtime_error(
-        "Can't create a LiteralExpression from provided (input) type.");
-  }
-};
-
-//______________________________________________________________________________
-auto getExpr = [](const auto& variantVal) -> std::unique_ptr<SparqlExpression> {
-  return makeLiteralSparqlExpr(variantVal);
-};
-
-//______________________________________________________________________________
-template <typename RelExpr>
-std::unique_ptr<SparqlExpression> makeRelationalSparqlExprImpl(
-    const RelValues& child0, const RelValues& child1) {
-  return std::make_unique<RelExpr>(std::array<SparqlExpression::Ptr, 2>{
-      std::visit(getExpr, child0), std::visit(getExpr, child1)});
-};
-
-//______________________________________________________________________________
-std::unique_ptr<SparqlExpression> makeStringStartsWithSparqlExpression(
-    const RelValues& child0, const RelValues& child1) {
-  return makeStrStartsExpression(std::visit(getExpr, child0),
-                                 std::visit(getExpr, child1));
-};
-
-//______________________________________________________________________________
-// LESS THAN (`<`, `SparqlExpression`)
-constexpr auto ltSprql = &makeRelationalSparqlExprImpl<LessThanExpression>;
-// LESS EQUAL (`<=`, `SparqlExpression`)
-constexpr auto leSprql = &makeRelationalSparqlExprImpl<LessEqualExpression>;
-// EQUAL (`==`, `SparqlExpression`)
-constexpr auto eqSprql = &makeRelationalSparqlExprImpl<EqualExpression>;
-// NOT EQUAL (`!=`, `SparqlExpression`)
-constexpr auto neqSprql = &makeRelationalSparqlExprImpl<NotEqualExpression>;
-// GREATER EQUAL (`>=`, `SparqlExpression`)
-constexpr auto geSprql = &makeRelationalSparqlExprImpl<GreaterEqualExpression>;
-// GREATER THAN (`>`, `SparqlExpression`)
-constexpr auto gtSprql = &makeRelationalSparqlExprImpl<GreaterThanExpression>;
-// AND (`&&`, `SparqlExpression`)
-constexpr auto andSprqlExpr = &makeAndExpression;
-// OR (`||`, `SparqlExpression`)
-constexpr auto orSprqlExpr = &makeOrExpression;
-// NOT (`!`, `SparqlExpression`)
-constexpr auto notSprqlExpr = &makeUnaryNegateExpression;
-
-//______________________________________________________________________________
-// Create SparqlExpression `STRSTARTS`.
-constexpr auto strStartsSprql = &makeStringStartsWithSparqlExpression;
-
-}  // namespace makeSparqlExpression
 
 //______________________________________________________________________________
 // make `Literal`
@@ -149,19 +82,7 @@ const auto evalAndEqualityCheck =
           std::move(prefilterVarPair));
     };
 
-//______________________________________________________________________________
-// Construct a `PAIR` with the given `PrefilterExpression` and `Variable` value.
-auto pr =
-    [](std::unique_ptr<prefilterExpressions::PrefilterExpression> expr,
-       const Variable& var) -> sparqlExpression::PrefilterExprVariablePair {
-  return {std::move(expr), var};
-};
-
 }  // namespace
-
-using namespace makeSparqlExpression;
-using namespace makeFilterExpression;
-using namespace makeSparqlExpression;
 
 //______________________________________________________________________________
 // Test coverage for the default implementation of
@@ -255,14 +176,21 @@ TEST(GetPrefilterExpressionFromSparqlExpression,
   evalAndEqualityCheck(
       andSprqlExpr(geSprql(varX, IntId(10)), neqSprql(varX, IntId(20))),
       pr(andExpr(ge(IntId(10)), neq(IntId(20))), varX));
-  // ?z > VocabId(0) AND ?y > 0 AND ?x < 30.00
+  // ?x >= "berlin" AND ?x != "hamburg"
+  // expected prefilter pairs:
+  // {<((>= "berlin") AND (!= "hamburg")), ?x>}
+  evalAndEqualityCheck(
+      andSprqlExpr(geSprql(varX, L("\"berlin\"")),
+                   neqSprql(varX, L("\"hamburg\""))),
+      pr(andExpr(ge(LVE("\"berlin\"")), neq(LVE("\"hamburg\""))), varX));
+  // ?z > <iri> AND ?y > 0 AND ?x < 30.00
   // expected prefilter pairs
-  // {<(< 30.00), ?x>, <(> 0), ?y>, <(> VocabId(0)), ?z>}
-  evalAndEqualityCheck(andSprqlExpr(andSprqlExpr(gtSprql(varZ, VocabId(0)),
+  // {<(< 30.00), ?x>, <(> 0), ?y>, <(> <iri>), ?z>}
+  evalAndEqualityCheck(andSprqlExpr(andSprqlExpr(gtSprql(varZ, I("<iri>")),
                                                  gtSprql(varY, IntId(0))),
                                     ltSprql(varX, DoubleId(30.00))),
                        pr(lt(DoubleId(30.00)), varX), pr(gt(IntId(0)), varY),
-                       pr(gt(VocabId(0)), varZ));
+                       pr(gt(LVE("<iri>")), varZ));
 
   // ?x == VocabId(10) AND ?y >= VocabId(10)
   // expected prefilter pairs:
@@ -291,21 +219,23 @@ TEST(GetPrefilterExpressionFromSparqlExpression,
                                     neqSprql(DoubleId(22.1), varY)),
                        pr(eq(VocabId(10)), varX), pr(neq(DoubleId(22.1)), varY),
                        pr(eq(VocabId(0)), varZ));
-  // (?z >= 1000 AND ?x == VocabId(10)) OR ?z >= 10000
+  // (?z >= 1000 AND ?x == "hamburg") OR ?z >= 10000
   // expected prefilter pairs:
   // {<((>=1000) OR (>= 10000)), ?z>}
-  evalAndEqualityCheck(orSprqlExpr(andSprqlExpr(geSprql(varZ, IntId(1000)),
-                                                eqSprql(varX, VocabId(10))),
-                                   geSprql(varZ, IntId(10000))),
-                       pr(orExpr(ge(IntId(1000)), ge(IntId(10000))), varZ));
-  // !((?z <= VocabId(10) OR ?y <= VocabId(10)) OR ?x <= VocabId(10))
+  evalAndEqualityCheck(
+      orSprqlExpr(andSprqlExpr(geSprql(varZ, IntId(1000)),
+                               eqSprql(varX, L("\"hamburg\""))),
+                  geSprql(varZ, IntId(10000))),
+      pr(orExpr(ge(IntId(1000)), ge(IntId(10000))), varZ));
+  // !((?z <= VocabId(10) OR ?y <= "world") OR ?x <= VocabId(10))
   // expected prefilter pairs:
   // {<!(<= VocabId(10)), ?x>, <!(<= VocabId(10)), ?y>, <!(<= VocabId(10)), ?z>}
   evalAndEqualityCheck(
-      notSprqlExpr(orSprqlExpr(
-          orSprqlExpr(leSprql(varZ, VocabId(10)), leSprql(varY, VocabId(10))),
-          leSprql(varX, VocabId(10)))),
-      pr(notExpr(le(VocabId(10))), varX), pr(notExpr(le(VocabId(10))), varY),
+      notSprqlExpr(orSprqlExpr(orSprqlExpr(leSprql(varZ, VocabId(10)),
+                                           leSprql(varY, L("\"world\""))),
+                               leSprql(varX, VocabId(10)))),
+      pr(notExpr(le(VocabId(10))), varX),
+      pr(notExpr(le(LVE("\"world\""))), varY),
       pr(notExpr(le(VocabId(10))), varZ));
   // ?x >= 10 AND ?y >= 10
   // expected prefilter pairs:
@@ -338,16 +268,16 @@ TEST(GetPrefilterExpressionFromSparqlExpression,
                                            leSprql(varY, IntId(0))))),
       pr(orExpr(notExpr(ge(IntId(10))), notExpr(le(IntId(0)))), varX),
       pr(orExpr(notExpr(ge(IntId(10))), notExpr(le(IntId(0)))), varY));
-  // !(?x == VocabId(10) OR ?x == VocabId(20)) AND !(?z >= 10.00 OR ?y == false)
+  // !(?x == <iri/ref1> OR ?x == <iri/ref10>) AND !(?z >= 10.00 OR ?y == false)
   // expected prefilter pairs:
-  // {<!((== VocabId(10)) OR (== VocabId(20))), ?x>, <!(== false), ?y>,
+  // {<!((== <iri/ref1>) OR (== <iri/ref10>)), ?x>, <!(== false), ?y>,
   // <!(>= 10), ?z>}
   evalAndEqualityCheck(
-      andSprqlExpr(notSprqlExpr(orSprqlExpr(eqSprql(varX, VocabId(10)),
-                                            eqSprql(varX, VocabId(20)))),
+      andSprqlExpr(notSprqlExpr(orSprqlExpr(eqSprql(varX, I("<iri/ref1>")),
+                                            eqSprql(varX, I("<iri/ref10>")))),
                    notSprqlExpr(orSprqlExpr(geSprql(varZ, DoubleId(10)),
                                             eqSprql(varY, BoolId(false))))),
-      pr(notExpr(orExpr(eq(VocabId(10)), eq(VocabId(20)))), varX),
+      pr(notExpr(orExpr(eq(LVE("<iri/ref1>")), eq(LVE("<iri/ref10>")))), varX),
       pr(notExpr(eq(BoolId(false))), varY),
       pr(notExpr(ge(DoubleId(10))), varZ));
   // !(!(?x >= 10 AND ?y >= 10)) OR !(!(?x <= 0 AND ?y <= 0))
@@ -374,15 +304,15 @@ TEST(GetPrefilterExpressionFromSparqlExpression,
       pr(notExpr(orExpr(andExpr(ge(VocabId(0)), le(VocabId(10))),
                         notExpr(neq(VocabId(99))))),
          varX));
-  // !((?y >= 10 AND ?y <= 100) OR !(?x >= VocabId(99)))
+  // !((?y >= VocabId(0) AND ?y <= "W") OR !(?x >= <iri>))
   // expected prefilter pairs:
-  // {<!((>= VocabId(0)) AND (<= VocabId(10)), ?y>, <!(!(>= VocabId(99))), ?x>}
+  // {<!((>= VocabId(0)) AND (<= "W"), ?y>, <!(!(>= <iri>)), ?x>}
   evalAndEqualityCheck(
       notSprqlExpr(orSprqlExpr(
-          andSprqlExpr(geSprql(varY, VocabId(0)), leSprql(varY, VocabId(10))),
-          notSprqlExpr(geSprql(varX, VocabId(99))))),
-      pr(notExpr(notExpr(ge(VocabId(99)))), varX),
-      pr(notExpr(andExpr(ge(VocabId(0)), le(VocabId(10)))), varY));
+          andSprqlExpr(geSprql(varY, VocabId(0)), leSprql(varY, L("\"W\""))),
+          notSprqlExpr(geSprql(varX, I("<iri>"))))),
+      pr(notExpr(notExpr(ge(LVE("<iri>")))), varX),
+      pr(notExpr(andExpr(ge(VocabId(0)), le(LVE("\"W\"")))), varY));
   // ?z >= 10 AND ?z <= 100 AND ?x >= 10 AND ?x != 50 AND !(?y <= 10) AND
   // !(?city <= VocabId(1000) OR ?city == VocabId(1005))
   // expected prefilter pairs:
@@ -442,8 +372,6 @@ TEST(GetPrefilterExpressionFromSparqlExpression,
   const Iri iri = I("<Iri>");
   const Literal lit = L("\"lit\"");
   evalAndEqualityCheck(leSprql(var, var));
-  evalAndEqualityCheck(neqSprql(iri, var));
-  evalAndEqualityCheck(eqSprql(var, iri));
   evalAndEqualityCheck(neqSprql(IntId(10), DoubleId(23.3)));
   evalAndEqualityCheck(gtSprql(DoubleId(10), lit));
   evalAndEqualityCheck(ltSprql(VocabId(10), BoolId(10)));
@@ -546,10 +474,12 @@ TEST(GetPrefilterExpressionFromSparqlExpression,
      getPrefilterExprForStrStartsExpr) {
   const auto varX = Variable{"?x"};
   const auto varY = Variable{"?y"};
-  evalAndEqualityCheck(strStartsSprql(varX, VocabId(0)),
-                       pr(ge(VocabId(0)), varX));
-  evalAndEqualityCheck(strStartsSprql(VocabId(0), varX),
-                       pr(le(VocabId(0)), varX));
+  evalAndEqualityCheck(strStartsSprql(varX, L("\"de\"")),
+                       pr(ge(LVE("\"de\"")), varX));
+  evalAndEqualityCheck(strStartsSprql(L("\"\""), varX),
+                       pr(le(LVE("\"\"")), varX));
+  evalAndEqualityCheck(strStartsSprql(varX, IntId(33)));
+  evalAndEqualityCheck(strStartsSprql(DoubleId(0.001), varY));
   evalAndEqualityCheck(strStartsSprql(varX, varY));
   evalAndEqualityCheck(strStartsSprql(VocabId(0), VocabId(10)));
 }

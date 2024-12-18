@@ -11,6 +11,7 @@
 #include "engine/CheckUsePatternTrick.h"
 #include "engine/QueryExecutionTree.h"
 #include "parser/GraphPattern.h"
+#include "parser/GraphPatternOperation.h"
 #include "parser/ParsedQuery.h"
 
 class QueryPlanner {
@@ -347,6 +348,12 @@ class QueryPlanner {
       const SubtreePlan& a, const SubtreePlan& b,
       const std::vector<std::array<ColumnIndex, 2>>& jcs);
 
+  // Helper that returns `true` for each of the subtree plans `a` and `b` iff
+  // the subtree plan is a spatial join and it is not yet fully constructed
+  // (it does not have both children set)
+  [[nodiscard]] static std::pair<bool, bool> checkSpatialJoin(
+      const SubtreePlan& a, const SubtreePlan& b);
+
   // if one of the inputs is a spatial join which is compatible with the other
   // input, then add that other input to the spatial join as a child instead of
   // creating a normal join.
@@ -532,8 +539,10 @@ class QueryPlanner {
     void visitBind(const parsedQuery::Bind& bind);
     void visitTransitivePath(parsedQuery::TransPath& transitivePath);
     void visitPathSearch(parsedQuery::PathQuery& config);
+    void visitSpatialSearch(parsedQuery::SpatialQuery& config);
     void visitUnion(parsedQuery::Union& un);
     void visitSubquery(parsedQuery::Subquery& subquery);
+    void visitDescribe(parsedQuery::Describe& describe);
 
     // This function is called for groups, optional, or minus clauses.
     // The `candidates` are the result of planning the pattern inside the

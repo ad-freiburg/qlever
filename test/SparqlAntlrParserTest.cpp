@@ -1,9 +1,8 @@
 // Copyright 2021 - 2024, University of Freiburg
 // Chair of Algorithms and Data Structures
-// Authors:
-//   2021 -    Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
-//   2022 -    Julian Mundhahs <mundhahj@cs.uni-freiburg.de>
-//   2022 -    Hannah Bast <bast@cs.uni-freiburg.de>
+// Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//          Julian Mundhahs <mundhahj@cs.uni-freiburg.de>
+//          Hannah Bast <bast@cs.uni-freiburg.de>
 
 #include <gtest/gtest.h>
 
@@ -1367,8 +1366,52 @@ TEST(SparqlParser, Query) {
                          {Var{"?s"}, Var{"?p"}, Var{"?o"}}, "{ ?s ?p ?o }",
                          "PREFIX doof: <http://doof.org/>"))));
 
-  // DESCRIBE queries are not yet supported.
-  expectQueryFails("DESCRIBE *");
+  // Tests around DESCRIBE.
+  {
+    // The tested DESCRIBE queries all describe `<x>`, `?y`, and `<z>`.
+    using Resources = std::vector<parsedQuery::Describe::VarOrIri>;
+    auto Iri = [](const auto& x) {
+      return TripleComponent::Iri::fromIriref(x);
+    };
+    Resources xyz{Iri("<x>"), Var{"?y"}, Iri("<z>")};
+
+    // A matcher for `?y <is-a> ?v`.
+    auto graphPatternMatcher =
+        m::GraphPattern(m::Triples({{Var{"?y"}, "<is-a>", Var{"?v"}}}));
+
+    // A matcher for the subquery `SELECT ?y { ?y <is-a> ?v }`, which we will
+    // use to compute the values for `?y` that are to be described.
+    auto selectQueryMatcher1 =
+        m::SelectQuery(m::Select({Var{"?y"}}), graphPatternMatcher);
+
+    // DESCRIBE with neither FROM nor FROM NAMED clauses.
+    expectQuery("DESCRIBE <x> ?y <z> { ?y <is-a> ?v }",
+                m::DescribeQuery(m::Describe(xyz, {}, selectQueryMatcher1)));
+
+    // `DESCRIBE *` query that is equivalent to `DESCRIBE <x> ?y <z> { ... }`.
+    auto selectQueryMatcher2 =
+        m::SelectQuery(m::Select({Var{"?y"}, Var{"?v"}}), graphPatternMatcher);
+    Resources yv{Var{"?y"}, Var{"?v"}};
+    expectQuery("DESCRIBE * { ?y <is-a> ?v }",
+                m::DescribeQuery(m::Describe(yv, {}, selectQueryMatcher2)));
+
+    // DESCRIBE with FROM and FROM NAMED clauses.
+    //
+    // NOTE: The clauses are relevant *both* for the retrieval of the resources
+    // to describe (the `Id`s matching `?y`), as well as for computing the
+    // triples for each of these resources.
+    using Graphs = ScanSpecificationAsTripleComponent::Graphs;
+    Graphs expectedDefaultGraphs;
+    Graphs expectedNamedGraphs;
+    expectedDefaultGraphs.emplace({Iri("<default-graph>")});
+    expectedNamedGraphs.emplace({Iri("<named-graph>")});
+    parsedQuery::DatasetClauses expectedClauses{expectedDefaultGraphs,
+                                                expectedNamedGraphs};
+    expectQuery(
+        "DESCRIBE <x> ?y <z> FROM <default-graph> FROM NAMED <named-graph>",
+        m::DescribeQuery(m::Describe(xyz, expectedClauses, ::testing::_),
+                         expectedDefaultGraphs, expectedNamedGraphs));
+  }
 
   // Test the various places where warnings are added in a query.
   expectQuery("SELECT ?x {} GROUP BY ?x ORDER BY ?y",

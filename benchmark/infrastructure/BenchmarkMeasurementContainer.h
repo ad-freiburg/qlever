@@ -375,7 +375,7 @@ class ResultGroup : public BenchmarkMetadataGetter {
 
  private:
   // The implementation for the general deletion of entries.
-  template <ad_utility::SameAsAny<ResultEntry, ResultTable> T>
+  template <typename T>
   void deleteEntryImpl(T& entry);
 };
 

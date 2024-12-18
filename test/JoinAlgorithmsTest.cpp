@@ -72,7 +72,7 @@ void testJoin(const NestedBlock& a, const NestedBlock& b, JoinResult expected,
     zipperJoinForBlocksWithoutUndef(a, b, compare, adder);
   }
   // The result must be sorted on the first column
-  EXPECT_TRUE(std::ranges::is_sorted(result, std::less<>{}, ad_utility::first));
+  EXPECT_TRUE(ql::ranges::is_sorted(result, std::less<>{}, ad_utility::first));
   // The exact order of the elements with the same first column is not important
   // and depends on implementation details. We therefore do not enforce it here.
   EXPECT_THAT(result, ::testing::UnorderedElementsAreArray(expected));
@@ -89,7 +89,7 @@ void testJoin(const NestedBlock& a, const NestedBlock& b, JoinResult expected,
     auto adder = makeRowAdder(result);
     zipperJoinForBlocksWithoutUndef(b, a, compare, adder);
     EXPECT_TRUE(
-        std::ranges::is_sorted(result, std::less<>{}, ad_utility::first));
+        ql::ranges::is_sorted(result, std::less<>{}, ad_utility::first));
     EXPECT_THAT(result, ::testing::UnorderedElementsAreArray(expected));
   }
 }

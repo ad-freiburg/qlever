@@ -14,6 +14,7 @@
 
 #include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
 #include "../benchmark/infrastructure/BenchmarkMetadata.h"
+#include "backports/concepts.h"
 #include "util/ConfigManager/ConfigManager.h"
 #include "util/CopyableUniquePtr.h"
 #include "util/Exception.h"
@@ -67,8 +68,8 @@ class BenchmarkResults {
   @param constructorArgs Arguments to pass to the constructor of the object,
   that the new `CopyableUniquePtr` will own.
   */
-  template <
-      ad_utility::SameAsAny<ResultTable, ResultEntry, ResultGroup> EntryType>
+  template <QL_CONCEPT_OR_TYPENAME(
+      ad_utility::SameAsAny<ResultTable, ResultEntry, ResultGroup>) EntryType>
   static EntryType& addEntryToContainerVector(
       PointerVector<EntryType>& targetVector, auto&&... constructorArgs) {
     targetVector.push_back(ad_utility::make_copyable_unique<EntryType>(

@@ -100,32 +100,6 @@ constexpr inline std::string_view MATCHINGWORD_VARIABLE_PREFIX =
 constexpr inline std::string_view LANGUAGE_PREDICATE =
     makeQleverInternalIriConst<"langtag">();
 
-// this predicate is one of the supported identifiers for the SpatialJoin class.
-// It joins the two objects, if their distance is smaller or equal to the
-// maximum distance, which needs to be given in the predicate as well. The
-// syntax for the predicate needs to be like this:
-// <max-distance-in-meters:XXXX>, where XXXX needs to be replaced by an integer
-// number.
-static const std::string MAX_DIST_IN_METERS = "<max-distance-in-meters:";
-static constexpr auto MAX_DIST_IN_METERS_REGEX =
-    ctll::fixed_string{"<max-distance-in-meters:(?<dist>[0-9]+)>"};
-
-// The spatial join operation without a limit on the maximum number of results
-// can, in the worst case have a square number of results, but usually this is
-// not the case. 1 divided by this constant is the damping factor for the
-// estimated number of results.
-static const size_t SPATIAL_JOIN_MAX_DIST_SIZE_ESTIMATE = 1000;
-
-// This predicate is one of the supported identifiers for the SpatialJoin class.
-// For a given triple of the form ?a <nearest-neighbors:XXXX:YYYY> ?b, it will
-// produce for each value of ?a the nearest neighbors ?b to ?a. The number of
-// nearest neighbors must be limited by replacing the XXXX with an integer.
-// Optionally the search range can be limited by giving YYYY as an integer
-// representing meters.
-static const std::string NEAREST_NEIGHBORS = "<nearest-neighbors:";
-static constexpr auto NEAREST_NEIGHBORS_REGEX = ctll::fixed_string{
-    "<nearest-neighbors:(?<results>[0-9]+)(:(?<dist>[0-9]+))?>"};
-
 // TODO<joka921> Move them to their own file, make them strings, remove
 // duplications, etc.
 constexpr inline char XSD_STRING[] = "http://www.w3.org/2001/XMLSchema#string";
