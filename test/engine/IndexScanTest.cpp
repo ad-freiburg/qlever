@@ -25,6 +25,13 @@ using LazyResult = Result::LazyResult;
 
 using IndexPair = std::pair<size_t, size_t>;
 
+// TODO<joka921> Comment
+Permutation::IdTableGenerator convertGenerator(Result::LazyResult gen) {
+  for (auto& [idTable, localVocab] : gen) {
+    co_yield idTable;
+  }
+}
+
 // NOTE: All the following helper functions always use the `PSO` permutation to
 // set up index scans unless explicitly stated otherwise.
 
@@ -104,20 +111,29 @@ void testLazyScanForJoinOfTwoScans(
   std::vector<LimitOffsetClause> limits{{}, {12, 3}, {2, 3}};
   for (const auto& limit : limits) {
     auto qec = getQec(kgTurtle, true, true, true, blocksizePermutations);
+    qec->getQueryTreeCache().clearAll();
     IndexScan s1{qec, Permutation::PSO, tripleLeft};
+    IndexScan s1Copy{qec, Permutation::PSO, tripleLeft};
     s1.setLimit(limit);
     IndexScan s2{qec, Permutation::PSO, tripleRight};
-    auto implForSwitch = [](IndexScan& l, IndexScan& r, const auto& expectedL,
-                            const auto& expectedR,
-                            const LimitOffsetClause& limitL,
-                            const LimitOffsetClause& limitR) {
-      auto [scan1, scan2] = (IndexScan::lazyScanForJoinOfTwoScans(l, r));
+    IndexScan s2Copy{qec, Permutation::PSO, tripleLeft};
 
-      testLazyScan(std::move(scan1), l, expectedL, limitL);
-      testLazyScan(std::move(scan2), r, expectedR, limitR);
-    };
-    implForSwitch(s1, s2, leftRows, rightRows, limit, {});
-    implForSwitch(s2, s1, rightRows, leftRows, {}, limit);
+    IndexScan::setBlocksForJoinOfIndexScans(&s1, &s2);
+
+    // TODO<joka921> also switch the left and right inputs for the test
+    auto implForSwitch =
+        [](IndexScan& l, IndexScan& l2, IndexScan& r, IndexScan& r2,
+           const auto& expectedL, const auto& expectedR,
+           const LimitOffsetClause& limitL, const LimitOffsetClause& limitR) {
+          auto res1 = l.computeResultOnlyForTesting(true);
+          auto res2 = r.computeResultOnlyForTesting(true);
+          testLazyScan(convertGenerator(std::move(res1.idTables())), l2,
+                       expectedL, limitL);
+          testLazyScan(convertGenerator(std::move(res2.idTables())), r2,
+                       expectedR, limitR);
+        };
+    implForSwitch(s1, s1Copy, s2, s2Copy, leftRows, rightRows, limit, {});
+    implForSwitch(s2, s2Copy, s1, s1Copy, rightRows, leftRows, {}, limit);
   }
 }
 
