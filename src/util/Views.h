@@ -343,7 +343,8 @@ CPP_template(typename Range, typename ElementType)(
     generator<std::span<ElementType>> reChunkAtSeparator(
         Range generator, ElementType separator) {
   std::vector<ElementType> buffer;
-  for (QL_OPT_CONCEPT(ql::ranges::input_range) auto const& chunk : generator) {
+  for (QL_CONCEPT_OR_NOTHING(ql::ranges::input_range) auto const& chunk :
+       generator) {
     for (ElementType c : chunk) {
       if (c == separator) {
         co_yield std::span{buffer.data(), buffer.size()};

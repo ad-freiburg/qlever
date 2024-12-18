@@ -2,13 +2,13 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#ifndef QLEVER_ITERATORS_H
-#define QLEVER_ITERATORS_H
+#pragma once
 
 #include <cstdint>
 #include <iterator>
 #include <type_traits>
 
+#include "backports/algorithm.h"
 #include "util/Enums.h"
 #include "util/TypeTraits.h"
 
@@ -399,5 +399,3 @@ class InputRangeTypeErased {
   using iterator = typename InputRangeFromGet<ValueType>::Iterator;
 };
 }  // namespace ad_utility
-
-#endif  // QLEVER_ITERATORS_H

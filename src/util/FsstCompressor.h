@@ -13,6 +13,7 @@
 #include <string>
 #include <vector>
 
+#include "util/Concepts.h"
 #include "util/Exception.h"
 #include "util/Log.h"
 #include "util/TypeTraits.h"
@@ -22,12 +23,16 @@ namespace detail {
 // `const unsigned char*` which is used below because FSST always works on
 // unsigned character types. Note that this is one of the few cases where a
 // `reinterpret_cast` is safe.
-constexpr auto castToUnsignedPtr =
-    []<ad_utility::SameAsAny<char*, const char*> T>(T ptr) {
-      using Res = std::conditional_t<std::same_as<T, const char*>,
-                                     const unsigned char*, unsigned char*>;
-      return reinterpret_cast<Res>(ptr);
-    };
+struct CastToUnsignedPtr {
+  CPP_template(typename T)(
+      requires ad_utility::SameAsAny<T, char*, const char*>) auto
+  operator()(T ptr) const {
+    using Res = std::conditional_t<std::same_as<T, const char*>,
+                                   const unsigned char*, unsigned char*>;
+    return reinterpret_cast<Res>(ptr);
+  };
+};
+constexpr CastToUnsignedPtr castToUnsignedPtr{};
 }  // namespace detail
 
 // A simple C++ wrapper around the C-API of the `FSST` library. It consists of
