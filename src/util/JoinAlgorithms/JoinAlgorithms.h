@@ -801,6 +801,9 @@ struct BlockZipperJoinImpl {
     for (size_t numBlocksRead = 0; it != end && numBlocksRead < 3;
          ++it, ++numBlocksRead) {
       if (ql::ranges::empty(*it)) {
+        // We haven't read a block, so we have to adapt the counter.
+        // NOTE: The possible underflow for `size_t` is safe.
+        --numBlocksRead;
         continue;
       }
       if (!eq((*it)[0], currentEl)) {
