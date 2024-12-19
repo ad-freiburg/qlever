@@ -4,7 +4,13 @@ project(QLever C CXX)
 # C/C++ Versions
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_STANDARD 20)
+
+if (${USE_CPP_17_BACKPORTS})
+    set(CMAKE_CXX_STANDARD 17)
+else()
+    set(CMAKE_CXX_STANDARD 20)
+endif()
+
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
@@ -25,15 +31,33 @@ add_definitions("-DBOOST_ASIO_DISABLE_AWAITABLE_FRAME_RECYCLING")
 # Coroutines require an additional compiler flag that is called differently
 # on clang and g++
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-    if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "11.0.0")
-        MESSAGE(FATAL_ERROR "G++ versions older than 11.0 are not supported by QLever")
-    else ()
-        add_compile_options(-fcoroutines)
+
+    set(GCC_REQUIRED_VERSION "11.0.0")
+
+    if (${USE_CPP_17_BACKPORTS})
+        set(GCC_REQUIRED_VERSION "9.4.0")
     endif ()
 
-elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-    if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "16.0.0")
-        MESSAGE(FATAL_ERROR "Clang++ versions older than 16.0 are not supported by QLever")
+
+    if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS ${GCC_REQUIRED_VERSION})
+        MESSAGE(FATAL_ERROR "G++ version ${CMAKE_CXX_COMPILER_VERSION} older than ${GCC_REQUIRED_VERSION} is not supported by QLever")
+    else ()
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -MD -MF")
+
+        if (${USE_CPP_17_BACKPORTS})
+            add_compile_options(-fconcepts) # this is needed to get templated lambdas and auto parameters
+        endif()
+    endif ()
+
+    elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+        set(CLANG_REQUIRED_VERSION "16.0.0")
+
+        if (${USE_CPP_17_BACKPORTS})
+            set(GCC_REQUIRED_VERSION "15.0.0")
+        endif ()
+
+    if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS ${CLANG_REQUIRED_VERSION})
+        MESSAGE(FATAL_ERROR "Clang++ version ${CMAKE_CXX_COMPILER_VERSION} older than ${CLANG_REQUIRED_VERSION} is not supported by QLever")
     endif ()
 else ()
     MESSAGE(FATAL_ERROR "QLever currently only supports the G++ or LLVM-Clang++ compilers. Found ${CMAKE_CXX_COMPILER_ID}")
