@@ -7,18 +7,24 @@
 #include "engine/ExportQueryExecutionTrees.h"
 
 // _____________________________________________________________________________
-void ExecuteUpdate::executeUpdate(
+UpdateMetadata ExecuteUpdate::executeUpdate(
     const Index& index, const ParsedQuery& query, const QueryExecutionTree& qet,
     DeltaTriples& deltaTriples, const CancellationHandle& cancellationHandle) {
+  UpdateMetadata metadata{};
   auto [toInsert, toDelete] =
-      computeGraphUpdateQuads(index, query, qet, cancellationHandle);
+      computeGraphUpdateQuads(index, query, qet, cancellationHandle, metadata);
 
   // "The deletion of the triples happens before the insertion." (SPARQL 1.1
   // Update 3.1.3)
+  ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
   deltaTriples.deleteTriples(cancellationHandle,
                              std::move(toDelete.idTriples_));
+  metadata.deletionTime_ = timer.msecs();
+  timer.reset();
   deltaTriples.insertTriples(cancellationHandle,
                              std::move(toInsert.idTriples_));
+  metadata.insertionTime_ = timer.msecs();
+  return metadata;
 }
 
 // _____________________________________________________________________________
@@ -120,7 +126,7 @@ std::pair<ExecuteUpdate::IdTriplesAndLocalVocab,
           ExecuteUpdate::IdTriplesAndLocalVocab>
 ExecuteUpdate::computeGraphUpdateQuads(
     const Index& index, const ParsedQuery& query, const QueryExecutionTree& qet,
-    const CancellationHandle& cancellationHandle) {
+    const CancellationHandle& cancellationHandle, UpdateMetadata& metadata) {
   AD_CONTRACT_CHECK(query.hasUpdateClause());
   auto updateClause = query.updateClause();
   if (!std::holds_alternative<updateClause::GraphUpdate>(updateClause.op_)) {
@@ -132,6 +138,8 @@ ExecuteUpdate::computeGraphUpdateQuads(
   // update.
   auto result = qet.getResult(false);
 
+  // Start the timer once the where clause has been evaluated.
+  ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
   const auto& vocab = index.getVocab();
 
   auto prepareTemplateAndResultContainer =
@@ -168,6 +176,7 @@ ExecuteUpdate::computeGraphUpdateQuads(
       cancellationHandle->throwIfCancelled();
     }
   }
+  metadata.triplePreparationTime_ = timer.msecs();
 
   return {
       IdTriplesAndLocalVocab{std::move(toInsert), std::move(localVocabInsert)},

@@ -119,7 +119,9 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
     auto pq = SparqlParser::parseQuery(update);
     QueryPlanner qp{qec, sharedHandle};
     const auto qet = qp.createExecutionTree(pq);
-    return ExecuteUpdate::computeGraphUpdateQuads(index, pq, qet, sharedHandle);
+    UpdateMetadata metadata;
+    return ExecuteUpdate::computeGraphUpdateQuads(index, pq, qet, sharedHandle,
+                                                  metadata);
   };
   auto expectComputeGraphUpdateQuads =
       [&executeComputeGraphUpdateQuads](

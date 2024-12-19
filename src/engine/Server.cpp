@@ -15,6 +15,7 @@
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/QueryPlanner.h"
 #include "global/RuntimeParameters.h"
+#include "index/IndexImpl.h"
 #include "util/AsioHelpers.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
@@ -884,7 +885,7 @@ Awaitable<void> Server::processQuery(
 }
 
 // ____________________________________________________________________________
-void Server::processUpdateImpl(
+json Server::processUpdateImpl(
     const ad_utility::url_parser::ParamValueMap& params, const string& update,
     ad_utility::Timer& requestTimer, TimeLimit timeLimit, auto& messageSender,
     ad_utility::SharedCancellationHandle cancellationHandle,
@@ -907,8 +908,11 @@ void Server::processUpdateImpl(
                      "following query was sent instead of an update: ",
                      plannedQuery.parsedQuery_._originalString));
   }
-  ExecuteUpdate::executeUpdate(index_, plannedQuery.parsedQuery_, qet,
-                               deltaTriples, cancellationHandle);
+
+  DeltaTriplesCount countBefore = deltaTriples.getCounts();
+  UpdateMetadata updateMetadata = ExecuteUpdate::executeUpdate(
+      index_, plannedQuery.parsedQuery_, qet, deltaTriples, cancellationHandle);
+  DeltaTriplesCount countAfter = deltaTriples.getCounts();
 
   LOG(INFO) << "Done processing update"
             << ", total time was " << requestTimer.msecs().count() << " ms"
@@ -920,6 +924,53 @@ void Server::processUpdateImpl(
   // update anyway (The index of the located triples snapshot is part of the
   // cache key).
   cache_.clearAll();
+
+  json response;
+  response["update"] = plannedQuery.parsedQuery_._originalString;
+  response["status"] = "OK";
+  auto warnings = qet.collectWarnings();
+  warnings.emplace(warnings.begin(),
+                   "SPARQL 1.1 Update for QLever is highly experimental.");
+  response["warnings"] = warnings;
+  RuntimeInformationWholeQuery& runtimeInfoWholeOp =
+      qet.getRootOperation()->getRuntimeInfoWholeQuery();
+  RuntimeInformation& runtimeInfo = qet.getRootOperation()->runtimeInfo();
+  response["runtimeInformation"]["meta"] =
+      nlohmann::ordered_json(runtimeInfoWholeOp);
+  response["runtimeInformation"]["query_execution_tree"] =
+      nlohmann::ordered_json(runtimeInfo);
+  response["delta-triples"]["before"] = nlohmann::json(countBefore);
+  response["delta-triples"]["after"] = nlohmann::json(countAfter);
+  response["delta-triples"]["difference"] =
+      nlohmann::json(countAfter - countBefore);
+  response["time"]["planing"] =
+      absl::StrCat(runtimeInfoWholeOp.timeQueryPlanning.count(), "ms");
+  response["time"]["where"] =
+      absl::StrCat(runtimeInfo.totalTime_.count() / 1000, "ms");
+  json updateTime{
+      {"total", absl::StrCat(updateMetadata.triplePreparationTime_.count() +
+                                 updateMetadata.deletionTime_.count() +
+                                 updateMetadata.insertionTime_.count(),
+                             "ms")},
+      {"triplePreparation",
+       absl::StrCat(updateMetadata.triplePreparationTime_.count(), "ms")},
+      {"deletion", absl::StrCat(updateMetadata.deletionTime_.count(), "ms")},
+      {"insertion", absl::StrCat(updateMetadata.insertionTime_.count(), "ms")}};
+  response["time"]["update"] = updateTime;
+  response["time"]["total"] = absl::StrCat(requestTimer.msecs().count(), "ms");
+  for (auto permutation : Permutation::ALL) {
+    response["located-triples"][Permutation::toString(
+        permutation)]["blocks-affected"] =
+        deltaTriples.getLocatedTriplesForPermutation(permutation).numBlocks();
+    auto numBlocks = index_.getPimpl()
+                         .getPermutation(permutation)
+                         .metaData()
+                         .blockData()
+                         .size();
+    response["located-triples"][Permutation::toString(permutation)]
+            ["blocks-total"] = numBlocks;
+  }
+  return response;
 }
 
 // ____________________________________________________________________________
@@ -933,32 +984,33 @@ Awaitable<void> Server::processUpdate(
   auto [cancellationHandle, cancelTimeoutOnDestruction] =
       setupCancellationHandle(messageSender.getQueryId(), timeLimit);
 
-  // Update the delta triples.
-
   // Note: We don't directly `co_await` because of lifetime issues (probably
   // bugs in GCC or Boost) that occur in the Conan build.
   auto coroutine = computeInNewThread(
       updateThreadPool_,
       [this, &params, &update, &requestTimer, &timeLimit, &messageSender,
        &cancellationHandle] {
+        std::optional<nlohmann::json> response;
+        // Update the delta triples.
         index_.deltaTriplesManager().modify(
             [this, &params, &update, &requestTimer, &timeLimit, &messageSender,
-             &cancellationHandle](auto& deltaTriples) {
+             &cancellationHandle, &response](auto& deltaTriples) {
               // Use `this` explicitly to silence false-positive errors on
               // captured `this` being unused.
-              this->processUpdateImpl(params, update, requestTimer, timeLimit,
-                                      messageSender, cancellationHandle,
-                                      deltaTriples);
+              response = this->processUpdateImpl(
+                  params, update, requestTimer, timeLimit, messageSender,
+                  cancellationHandle, deltaTriples);
             });
+        return response;
       },
       cancellationHandle);
-  co_await std::move(coroutine);
+  auto response = co_await std::move(coroutine);
 
-  // TODO<qup42> send a proper response
   // SPARQL 1.1 Protocol 2.2.4 Successful Responses: "The response body of a
   // successful update request is implementation defined."
-  co_await send(ad_utility::httpUtils::createOkResponse(
-      "Update successful", request, MediaType::textPlain));
+  AD_CORRECTNESS_CHECK(response.has_value());
+  co_await send(ad_utility::httpUtils::createJsonResponse(
+      std::move(response.value()), request));
   co_return;
 }
 
