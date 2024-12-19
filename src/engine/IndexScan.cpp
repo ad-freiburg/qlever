@@ -206,15 +206,37 @@ std::shared_ptr<QueryExecutionTree> IndexScan::makeCopyWithAddedPrefilters(
 }
 
 // _____________________________________________________________________________
-Result::Generator IndexScan::chunkedIndexScan() const {
-  auto optBlockSpan = getBlockMetadata();
-  if (!optBlockSpan.has_value()) {
+Result::Generator IndexScan::chunkedIndexScan() {
+  auto optBlocks =
+      [this]() -> std::optional<std::vector<CompressedBlockMetadata>> {
+    if (getLimit().isUnconstrained() && prefilteredBlocks_.has_value()) {
+      return prefilteredBlocks_;
+    }
+    auto optAllBlocks = getBlockMetadata();
+    if (!optAllBlocks.has_value()) {
+      return std::nullopt;
+    }
+    const auto& allBlocks = optAllBlocks.value();
+    return std::vector<CompressedBlockMetadata>{allBlocks.begin(),
+                                                allBlocks.end()};
+  }();
+  if (!optBlocks.has_value()) {
     co_return;
   }
-  const auto& blockSpan = optBlockSpan.value();
+  auto& blocks = optBlocks.value();
+  size_t numBlocksAll = blocks.size();
   // Note: Given a `PrefilterIndexPair` is available, the corresponding
   // prefiltering will be applied in `getLazyScan`.
-  for (IdTable& idTable : getLazyScan({blockSpan.begin(), blockSpan.end()})) {
+  auto innerGenerator = getLazyScan(std::move(blocks));
+  auto setDetails = ad_utility::makeOnDestructionDontThrowDuringStackUnwinding(
+      [
+
+          this, numBlocksAll, &innerGenerator]() {
+        auto details = innerGenerator.details();
+        details.numBlocksAll_ = numBlocksAll;
+        updateRuntimeInfoForLazyScan(details);
+      });
+  for (IdTable& idTable : innerGenerator) {
     co_yield {std::move(idTable), LocalVocab{}};
   }
 }
@@ -342,14 +364,28 @@ IndexScan::getBlockMetadata() const {
 std::optional<std::vector<CompressedBlockMetadata>>
 IndexScan::getBlockMetadataOptionallyPrefiltered() const {
   // The code after this is expensive because it always copies the complete
-  // block metadata, so we do an early return of `nullopt` (which means "use all
-  // the blocks") if no prefilter is specified.
-  if (!prefilter_.has_value()) {
+  // block metadata, so we do an early return of `nullopt` (which means "use
+  // all the blocks") if no prefilter is specified.
+  if ((!prefilter_.has_value() && !prefilteredBlocks_.has_value()) ||
+      !getLimit().isUnconstrained()) {
     return std::nullopt;
   }
-  auto optBlockSpan = getBlockMetadata();
+
+  auto optBlockSpan =
+      [&]() -> std::optional<std::span<const CompressedBlockMetadata>> {
+    if (prefilteredBlocks_.has_value()) {
+      return prefilteredBlocks_.value();
+    } else {
+      return getBlockMetadata();
+    }
+  }();
   if (!optBlockSpan.has_value()) {
     return std::nullopt;
+  }
+  if (!prefilter_.has_value()) {
+    // TODO<joka921> We can avoid this copy here by better interfaces.
+    return std::vector<CompressedBlockMetadata>{optBlockSpan.value().begin(),
+                                                optBlockSpan.value().end()};
   }
   return applyPrefilter(optBlockSpan.value());
 }
@@ -367,17 +403,18 @@ std::vector<CompressedBlockMetadata> IndexScan::applyPrefilter(
 Permutation::IdTableGenerator IndexScan::getLazyScan(
     std::vector<CompressedBlockMetadata> blocks) const {
   // If there is a LIMIT or OFFSET clause that constrains the scan
-  // (which can happen with an explicit subquery), we cannot use the prefiltered
-  // blocks, as we currently have no mechanism to include limits and offsets
-  // into the prefiltering (`std::nullopt` means `scan all blocks`).
+  // (which can happen with an explicit subquery), we cannot use the
+  // prefiltered blocks, as we currently have no mechanism to include limits
+  // and offsets into the prefiltering (`std::nullopt` means `scan all
+  // blocks`).
   auto filteredBlocks = getLimit().isUnconstrained()
                             ? std::optional(std::move(blocks))
                             : std::nullopt;
   if (filteredBlocks.has_value() && prefilter_.has_value()) {
     // Note: The prefilter expression applied with applyPrefilterIfPossible()
-    // is not related to the prefilter procedure mentioned in the comment above.
-    // If this IndexScan owns a <PrefilterExpression, ColumnIdx> pair, it can
-    // be applied.
+    // is not related to the prefilter procedure mentioned in the comment
+    // above. If this IndexScan owns a <PrefilterExpression, ColumnIdx> pair,
+    // it can be applied.
     filteredBlocks = applyPrefilter(filteredBlocks.value());
   }
   return getScanPermutation().lazyScan(getScanSpecification(), filteredBlocks,
@@ -393,14 +430,15 @@ std::optional<Permutation::MetadataAndBlocks> IndexScan::getMetadataForScan()
 };
 
 // _____________________________________________________________________________
+// TODO<joka921> This can be removed now.
 std::array<Permutation::IdTableGenerator, 2>
 IndexScan::lazyScanForJoinOfTwoScans(const IndexScan& s1, const IndexScan& s2) {
   AD_CONTRACT_CHECK(s1.numVariables_ <= 3 && s2.numVariables_ <= 3);
   AD_CONTRACT_CHECK(s1.numVariables_ >= 1 && s2.numVariables_ >= 1);
 
-  // This function only works for single column joins. This means that the first
-  // variable of both scans must be equal, but all other variables of the scans
-  // (if present) must be different.
+  // This function only works for single column joins. This means that the
+  // first variable of both scans must be equal, but all other variables of
+  // the scans (if present) must be different.
   const auto& getFirstVariable = [](const IndexScan& scan) {
     auto numVars = scan.numVariables();
     AD_CORRECTNESS_CHECK(numVars <= 3);
@@ -485,12 +523,13 @@ void IndexScan::updateRuntimeInfoForLazyScan(const LazyScanMetadata& metadata) {
   updateIfPositive(metadata.numBlocksWithUpdate_, "num-blocks-with-update");
 }
 
-// Store a Generator and its corresponding iterator as well as unconsumed values
-// resulting from the generator.
+// Store a Generator and its corresponding iterator as well as unconsumed
+// values resulting from the generator.
 struct IndexScan::SharedGeneratorState {
   // The generator that yields the tables to be joined with the index scan.
   Result::LazyResult generator_;
-  // The column index of the join column in the tables yielded by the generator.
+  // The column index of the join column in the tables yielded by the
+  // generator.
   ColumnIndex joinColumn_;
   // Metadata and blocks of this index scan.
   Permutation::MetadataAndBlocks metaBlocks_;
@@ -503,16 +542,17 @@ struct IndexScan::SharedGeneratorState {
   PrefetchStorage prefetchedValues_{};
   // Metadata of blocks that still need to be read.
   std::vector<CompressedBlockMetadata> pendingBlocks_{};
-  // The index of the last matching block that was found using the join column.
+  // The index of the last matching block that was found using the join
+  // column.
   std::optional<size_t> lastBlockIndex_ = std::nullopt;
   // Indicates if the generator has yielded any undefined values.
   bool hasUndef_ = false;
   // Indicates if the generator has been fully consumed.
   bool doneFetching_ = false;
 
-  // Advance the `iterator` to the next non-empty table. Set `hasUndef_` to true
-  // if the first table is undefined. Also set `doneFetching_` if the generator
-  // has been fully consumed.
+  // Advance the `iterator` to the next non-empty table. Set `hasUndef_` to
+  // true if the first table is undefined. Also set `doneFetching_` if the
+  // generator has been fully consumed.
   void advanceInputToNextNonEmptyTable() {
     bool firstStep = !iterator_.has_value();
     if (iterator_.has_value()) {
@@ -535,10 +575,10 @@ struct IndexScan::SharedGeneratorState {
     }
   }
 
-  // Consume the next non-empty table from the generator and calculate the next
-  // matching blocks from the index scan. This function guarantees that after
-  // it returns, both `prefetchedValues` and `pendingBlocks` contain at least
-  // one element.
+  // Consume the next non-empty table from the generator and calculate the
+  // next matching blocks from the index scan. This function guarantees that
+  // after it returns, both `prefetchedValues` and `pendingBlocks` contain at
+  // least one element.
   void fetch() {
     while (prefetchedValues_.empty() || pendingBlocks_.empty()) {
       advanceInputToNextNonEmptyTable();
@@ -557,8 +597,8 @@ struct IndexScan::SharedGeneratorState {
       auto newBlocks =
           CompressedRelationReader::getBlocksForJoin(joinColumn, metaBlocks_);
       if (newBlocks.empty()) {
-        // The current input table matches no blocks, so we don't have to yield
-        // it.
+        // The current input table matches no blocks, so we don't have to
+        // yield it.
         continue;
       }
       prefetchedValues_.push_back(std::move(*iterator_.value()));
@@ -575,8 +615,9 @@ struct IndexScan::SharedGeneratorState {
     }
   }
 
-  // Check if there are any undefined values yielded by the original generator.
-  // If the generator hasn't been started to get consumed, this will start it.
+  // Check if there are any undefined values yielded by the original
+  // generator. If the generator hasn't been started to get consumed, this
+  // will start it.
   bool hasUndef() {
     if (!iterator_.has_value()) {
       fetch();
@@ -609,7 +650,8 @@ Result::Generator IndexScan::createPrefilteredJoinSide(
     // Make a defensive copy of the values to avoid modification during
     // iteration when yielding.
     auto copy = std::move(prefetchedValues);
-    // Moving out does not necessarily clear the values, so we do it explicitly.
+    // Moving out does not necessarily clear the values, so we do it
+    // explicitly.
     prefetchedValues.clear();
     for (auto& value : copy) {
       co_yield value;
@@ -659,4 +701,79 @@ std::pair<Result::Generator, Result::Generator> IndexScan::prefilterTables(
       std::move(input), joinColumn, std::move(metaBlocks.value()));
   return {createPrefilteredJoinSide(state),
           createPrefilteredIndexScanSide(state)};
+}
+
+// _____________________________________________________________________________
+void IndexScan::setBlocksForJoinOfIndexScans(Operation* left,
+                                             Operation* right) {
+  auto& leftScan = dynamic_cast<IndexScan&>(*left);
+  auto& rightScan = dynamic_cast<IndexScan&>(*right);
+
+  auto getBlocks = [](IndexScan& scan) {
+    auto metaBlocks = scan.getMetadataForScan();
+    if (!metaBlocks.has_value()) {
+      return metaBlocks;
+    }
+    if (scan.prefilteredBlocks_.has_value()) {
+      metaBlocks.value().blockMetadata_ = scan.prefilteredBlocks_.value();
+    }
+    return metaBlocks;
+  };
+
+  auto metaBlocks1 = getBlocks(leftScan);
+  auto metaBlocks2 = getBlocks(rightScan);
+
+  // If one of the relations doesn't even exist and therefore has no blocks,
+  // we know that the join result is empty and can thus inform the other scan;
+
+  if (!metaBlocks1.has_value() || !metaBlocks2.has_value()) {
+    leftScan.prefilteredBlocks_.emplace();
+    rightScan.prefilteredBlocks_.emplace();
+    return;
+  }
+  LOG(INFO) << "Original num blocks: " << metaBlocks1->blockMetadata_.size()
+            << " " << metaBlocks2->blockMetadata_.size() << std::endl;
+  auto [blocks1, blocks2] = CompressedRelationReader::getBlocksForJoin(
+      metaBlocks1.value(), metaBlocks2.value());
+  LOG(INFO) << "Num blocks after filtering: " << blocks1.size() << " "
+            << blocks2.size() << std::endl;
+  leftScan.prefilteredBlocks_ = std::move(blocks1);
+  rightScan.prefilteredBlocks_ = std::move(blocks2);
+}
+
+// _____________________________________________________________________________
+bool IndexScan::hasIndexScansForJoinPrefiltering(
+    std::span<const Variable> joinVariables) const {
+  const auto& sorted = resultSortedOn();
+  if (resultSortedOn().size() < joinVariables.size()) {
+    return false;
+  }
+  const auto& varColMap = getExternallyVisibleVariableColumns();
+  for (size_t i = 0; i < joinVariables.size(); ++i) {
+    auto it = varColMap.find(joinVariables[i]);
+    if (it == varColMap.end() ||
+        it->second.columnIndex_ != resultSortedOn().at(i)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+// _____________________________________________________________________________
+std::vector<Operation*>
+IndexScan::getIndexScansForJoinPrefilteringAndDisableCaching(
+    std::span<const Variable> variables) {
+  if (hasIndexScansForJoinPrefiltering(variables)) {
+    return {this};
+  } else {
+    return {};
+  }
+}
+
+// _____________________________________________________________________________
+void IndexScan::setPrefilteredBlocks(
+    std::vector<CompressedBlockMetadata> prefilteredBlocks) {
+  prefilteredBlocks_ = std::move(prefilteredBlocks);
+  // TODO<joka921> once the other PR is merged we have to assert that the
+  // result is never cached AD_CORRECTNESS_CHECK(!canBeStoredInCache());
 }
