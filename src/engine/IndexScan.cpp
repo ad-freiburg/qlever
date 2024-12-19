@@ -209,7 +209,7 @@ std::shared_ptr<QueryExecutionTree> IndexScan::makeCopyWithAddedPrefilters(
 Result::Generator IndexScan::chunkedIndexScan() {
   auto optBlocks =
       [this]() -> std::optional<std::vector<CompressedBlockMetadata>> {
-    if (prefilteredBlocks_.has_value()) {
+    if (getLimit().isUnconstrained() && prefilteredBlocks_.has_value()) {
       return prefilteredBlocks_;
     }
     auto optAllBlocks = getBlockMetadata();
@@ -366,7 +366,8 @@ IndexScan::getBlockMetadataOptionallyPrefiltered() const {
   // The code after this is expensive because it always copies the complete
   // block metadata, so we do an early return of `nullopt` (which means "use
   // all the blocks") if no prefilter is specified.
-  if (!prefilter_.has_value() && !prefilteredBlocks_.has_value()) {
+  if ((!prefilter_.has_value() && !prefilteredBlocks_.has_value()) ||
+      !getLimit().isUnconstrained()) {
     return std::nullopt;
   }
 
@@ -721,7 +722,13 @@ void IndexScan::setBlocksForJoinOfIndexScans(Operation* left,
 
   auto metaBlocks1 = getBlocks(leftScan);
   auto metaBlocks2 = getBlocks(rightScan);
+
+  // If one of the relations doesn't even exist and therefore has no blocks,
+  // we know that the join result is empty and can thus inform the other scan;
+
   if (!metaBlocks1.has_value() || !metaBlocks2.has_value()) {
+    leftScan.prefilteredBlocks_.emplace();
+    rightScan.prefilteredBlocks_.emplace();
     return;
   }
   LOG(INFO) << "Original num blocks: " << metaBlocks1->blockMetadata_.size()
