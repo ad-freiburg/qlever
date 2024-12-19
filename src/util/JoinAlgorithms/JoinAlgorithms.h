@@ -9,6 +9,7 @@
 #include <ranges>
 
 #include "backports/algorithm.h"
+#include "backports/concepts.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "util/Generator.h"
@@ -762,8 +763,8 @@ struct BlockZipperJoinImpl {
 #if defined(Side) || defined(Blocks)
 #error Side or Blocks are already defined
 #endif
-#define Side SameAsAny<LeftSide, RightSide> auto
-#define Blocks SameAsAny<LeftBlocks, RightBlocks> auto
+#define Side QL_CONCEPT_OR_NOTHING(SameAsAny<LeftSide, RightSide>) auto
+#define Blocks QL_CONCEPT_OR_NOTHING(SameAsAny<LeftBlocks, RightBlocks>) auto
 
   // Type alias for the result of the projection. Elements from the left and
   // right input must be projected to the same type.

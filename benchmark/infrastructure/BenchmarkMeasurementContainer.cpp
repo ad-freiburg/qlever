@@ -371,7 +371,7 @@ std::ostream& operator<<(std::ostream& os, const ResultGroup& resultGroup) {
 }
 
 // ____________________________________________________________________________
-template <ad_utility::SameAsAny<ResultEntry, ResultTable> T>
+template <typename T>
 void ResultGroup::deleteEntryImpl(T& entry) {
   // The vector, that holds our entries.
   auto& vec = [this]() -> auto& {

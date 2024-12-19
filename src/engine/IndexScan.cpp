@@ -489,13 +489,13 @@ void IndexScan::updateRuntimeInfoForLazyScan(const LazyScanMetadata& metadata) {
 // resulting from the generator.
 struct IndexScan::SharedGeneratorState {
   // The generator that yields the tables to be joined with the index scan.
-  Result::Generator generator_;
+  Result::LazyResult generator_;
   // The column index of the join column in the tables yielded by the generator.
   ColumnIndex joinColumn_;
   // Metadata and blocks of this index scan.
   Permutation::MetadataAndBlocks metaBlocks_;
   // The iterator of the generator that is currently being consumed.
-  std::optional<Result::Generator::iterator> iterator_ = std::nullopt;
+  std::optional<Result::LazyResult::iterator> iterator_ = std::nullopt;
   // Values returned by the generator that have not been re-yielded yet.
   // Typically we expect only 3 or less values to be prefetched (this is an
   // implementation detail of `BlockZipperJoinImpl`).
@@ -648,7 +648,7 @@ Result::Generator IndexScan::createPrefilteredIndexScanSide(
 
 // _____________________________________________________________________________
 std::pair<Result::Generator, Result::Generator> IndexScan::prefilterTables(
-    Result::Generator input, ColumnIndex joinColumn) {
+    Result::LazyResult input, ColumnIndex joinColumn) {
   AD_CORRECTNESS_CHECK(numVariables_ <= 3 && numVariables_ > 0);
   auto metaBlocks = getMetadataForScan();
 

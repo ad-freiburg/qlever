@@ -1128,6 +1128,7 @@ void IndexImpl::readConfiguration() {
   loadDataMember("num-subjects", numSubjects_, NumNormalAndInternal{});
   loadDataMember("num-objects", numObjects_, NumNormalAndInternal{});
   loadDataMember("num-triples", numTriples_, NumNormalAndInternal{});
+  loadDataMember("num-non-literals-text-index", nofNonLiteralsInTextIndex_, 0);
 
   // Initialize BlankNodeManager
   uint64_t numBlankNodesTotal;

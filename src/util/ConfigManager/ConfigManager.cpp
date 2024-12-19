@@ -23,6 +23,7 @@
 #include <variant>
 
 #include "backports/algorithm.h"
+#include "backports/concepts.h"
 #include "util/Algorithm.h"
 #include "util/ComparisonWithNan.h"
 #include "util/ConfigManager/ConfigExceptions.h"
@@ -254,7 +255,8 @@ requires std::is_object_v<HashMapType> auto ConfigManager::allHashMapEntries(
 }
 
 // ____________________________________________________________________________
-template <SameAsAny<ConfigOption&, const ConfigOption&> ReturnReference>
+template <QL_CONCEPT_OR_TYPENAME(SameAsAny<ConfigOption&, const ConfigOption&>)
+              ReturnReference>
 std::vector<std::pair<std::string, ReturnReference>>
 ConfigManager::configurationOptionsImpl(
     SimilarTo<ad_utility::HashMap<std::string, HashMapEntry>> auto&
@@ -855,7 +857,7 @@ bool ConfigManager::containsOption(const ConfigOption& opt) const {
 }
 
 // ____________________________________________________________________________
-template <ConfigOptionOrManager T>
+template <QL_CONCEPT_OR_TYPENAME(ConfigOptionOrManager) T>
 void ConfigManager::ConfigurationDocValidatorAssignment::addEntryUnderKey(
     const T& key, const ConfigOptionValidatorManager& manager) {
   getHashMapBasedOnType<T>()[&key].push_back(&manager);
@@ -869,7 +871,7 @@ template void ConfigManager::ConfigurationDocValidatorAssignment::
                                     const ConfigOptionValidatorManager&);
 
 // ____________________________________________________________________________
-template <ConfigOptionOrManager T>
+template <QL_CONCEPT_OR_TYPENAME(ConfigOptionOrManager) T>
 auto ConfigManager::ConfigurationDocValidatorAssignment::getEntriesUnderKey(
     const T& key) const -> ValueGetterReturnType {
   // The concerned hash map.

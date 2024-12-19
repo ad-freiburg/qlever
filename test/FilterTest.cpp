@@ -21,7 +21,7 @@ namespace {
 ValueId asBool(bool value) { return Id::makeFromBool(value); }
 
 // Convert a generator to a vector for easier comparison in assertions
-std::vector<IdTable> toVector(Result::Generator generator) {
+std::vector<IdTable> toVector(Result::LazyResult generator) {
   std::vector<IdTable> result;
   for (auto& pair : generator) {
     // IMPORTANT: The `LocalVocab` contained in the pair will be destroyed at
