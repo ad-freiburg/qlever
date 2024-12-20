@@ -33,16 +33,23 @@ class Result {
         : idTable_{std::move(idTable)}, localVocab_{std::move(localVocab)} {}
   };
 
+  // The current implementation of (most of the) lazy results. Will be replaced
+  // in the future to make QLever compatible with C++17 again.
   using Generator = cppcoro::generator<IdTableVocabPair>;
+  // The lazy result type that is actually stored. It is type-erased and allows
+  // explicit conversion from the `Generator` above.
+  using LazyResult = ad_utility::InputRangeTypeErased<IdTableVocabPair>;
 
  private:
   // Needs to be mutable in order to be consumable from a const result.
   struct GenContainer {
-    mutable Generator generator_;
+    mutable LazyResult generator_;
     mutable std::unique_ptr<std::atomic_bool> consumed_ =
         std::make_unique<std::atomic_bool>(false);
-    explicit GenContainer(Generator generator)
+    explicit GenContainer(LazyResult generator)
         : generator_{std::move(generator)} {}
+    explicit GenContainer(Generator generator)
+        : generator_{Generator{std::move(generator)}} {}
   };
 
   using LocalVocabPtr = std::shared_ptr<const LocalVocab>;
@@ -119,9 +126,9 @@ class Result {
   Result& operator=(Result&& other) = default;
 
   // Wrap the generator stored in `data_` within a new generator that calls
-  // `onNewChunk` every time a new `IdTable` is yielded by the original
-  // generator and passed this new `IdTable` along with microsecond precision
-  // timing information on how long it took to compute this new chunk.
+  // `onNewChunk` every time a new `IdTableVocabPair` is yielded by the original
+  // generator and passed this new `IdTableVocabPair` along with microsecond
+  // precision timing information on how long it took to compute this new chunk.
   // `onGeneratorFinished` is guaranteed to be called eventually as long as the
   // generator is consumed at least partially, with `true` if an exception
   // occurred during consumption or with `false` when the generator is done
@@ -130,7 +137,8 @@ class Result {
   // Throw an `ad_utility::Exception` if the underlying `data_` member holds the
   // wrong variant.
   void runOnNewChunkComputed(
-      std::function<void(const IdTable&, std::chrono::microseconds)> onNewChunk,
+      std::function<void(const IdTableVocabPair&, std::chrono::microseconds)>
+          onNewChunk,
       std::function<void(bool)> onGeneratorFinished);
 
   // Wrap the generator stored in `data_` within a new generator that aggregates
@@ -154,7 +162,7 @@ class Result {
 
   // Access to the underlying `IdTable`s. Throw an `ad_utility::Exception`
   // if the underlying `data_` member holds the wrong variant.
-  Generator& idTables() const;
+  LazyResult& idTables() const;
 
   // Const access to the columns by which the `idTable()` is sorted.
   const std::vector<ColumnIndex>& sortedBy() const { return sortedBy_; }

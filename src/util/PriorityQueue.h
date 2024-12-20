@@ -16,7 +16,6 @@
 
 #pragma once
 
-#include <algorithm>
 #include <memory>
 #include <queue>
 #include <set>
@@ -25,6 +24,7 @@
 #include "./Exception.h"
 #include "./HashMap.h"
 #include "./Log.h"
+#include "backports/algorithm.h"
 
 namespace ad_utility {
 using std::make_shared;

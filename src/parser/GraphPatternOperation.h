@@ -9,8 +9,12 @@
 #include <memory>
 
 #include "engine/PathSearch.h"
+#include "engine/SpatialJoin.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
+#include "parser/DatasetClauses.h"
 #include "parser/GraphPattern.h"
+#include "parser/PathQuery.h"
+#include "parser/SpatialQuery.h"
 #include "parser/TripleComponent.h"
 #include "parser/data/Variable.h"
 #include "util/Algorithm.h"
@@ -117,18 +121,32 @@ class Subquery {
  public:
   // TODO<joka921> Make this an abstraction `TypeErasingPimpl`.
 
-  // Deliberately not explicit, because semantically those are copy/move
-  // constructors.
+  // NOTE: The first two constructors are deliberately not `explicit` because
+  // we want to used them like copy/move constructors (semantically, a
+  // `Subquery` is like a `ParsedQuery`, just with an own type).
   Subquery(const ParsedQuery&);
-  Subquery(ParsedQuery&&);
+  Subquery(ParsedQuery&&) noexcept;
   Subquery();
   ~Subquery();
   Subquery(const Subquery&);
-  Subquery(Subquery&&);
+  Subquery(Subquery&&) noexcept;
   Subquery& operator=(const Subquery&);
-  Subquery& operator=(Subquery&&);
+  Subquery& operator=(Subquery&&) noexcept;
   ParsedQuery& get();
   const ParsedQuery& get() const;
+};
+
+// A SPARQL `DESCRIBE` query.
+struct Describe {
+  using VarOrIri = std::variant<TripleComponent::Iri, Variable>;
+  // The resources (variables or IRIs) that are to be described, for example
+  // `?x` and `<y>` in `DESCRIBE ?x <y>`.
+  std::vector<VarOrIri> resources_;
+  // The FROM clauses of the DESCRIBE query
+  DatasetClauses datasetClauses_;
+  // The WHERE clause of the DESCRIBE query. It is used to compute the values
+  // for the variables in the DESCRIBE clause.
+  Subquery whereClause_;
 };
 
 struct TransPath {
@@ -142,92 +160,6 @@ struct TransPath {
   size_t _min = 0;
   size_t _max = 0;
   GraphPattern _childGraphPattern;
-};
-
-class PathSearchException : public std::exception {
-  std::string message_;
-
- public:
-  explicit PathSearchException(const std::string& message)
-      : message_(message) {}
-  const char* what() const noexcept override { return message_.data(); }
-};
-
-// The PathQuery object holds intermediate information for the PathSearch.
-// The PathSearchConfiguration requires concrete Ids. The vocabulary from the
-// QueryPlanner is needed to translate the TripleComponents to ValueIds.
-// Also, the members of the PathQuery have defaults and can be set after
-// the object creation, simplifying the parsing process. If a required
-// value has not been set during parsing, the method 'toPathSearchConfiguration'
-// will throw an exception.
-// All the error handling for the PathSearch happens in the PathQuery object.
-// Thus, if a PathSearchConfiguration can be constructed, it is valid.
-struct PathQuery {
-  std::vector<TripleComponent> sources_;
-  std::vector<TripleComponent> targets_;
-  std::optional<Variable> start_;
-  std::optional<Variable> end_;
-  std::optional<Variable> pathColumn_;
-  std::optional<Variable> edgeColumn_;
-  std::vector<Variable> edgeProperties_;
-  PathSearchAlgorithm algorithm_;
-
-  GraphPattern childGraphPattern_;
-  bool cartesian_ = true;
-  std::optional<uint64_t> numPathsPerTarget_ = std::nullopt;
-
-  /**
-   * @brief Add a parameter to the PathQuery from the given triple.
-   * The predicate of the triple determines the parameter name and the object
-   * of the triple determines the parameter value. The subject is ignored.
-   * Throws a PathSearchException if an unsupported algorithm is given or if the
-   * predicate contains an unknown parameter name.
-   *
-   * @param triple A SparqlTriple that contains the parameter info
-   */
-  void addParameter(const SparqlTriple& triple);
-
-  /**
-   * @brief Add the parameters from a BasicGraphPattern to the PathQuery
-   *
-   * @param pattern
-   */
-  void addBasicPattern(const BasicGraphPattern& pattern);
-
-  /**
-   * @brief Add a GraphPatternOperation to the PathQuery. The pattern specifies
-   * the edges of the graph that is used by the path search
-   *
-   * @param childGraphPattern
-   */
-  void addGraph(const GraphPatternOperation& childGraphPattern);
-
-  /**
-   * @brief Convert the vector of triple components into a SearchSide
-   * The SeachSide can either be a variable or a list of Ids.
-   * A PathSearchException is thrown if more than one variable is given.
-   *
-   * @param side A vector of TripleComponents, containing either exactly one
-   *             Variable or zero or more ValueIds
-   * @param vocab A Vocabulary containing the Ids of the TripleComponents.
-   *              The Vocab is only used if the given vector contains IRIs.
-   */
-  std::variant<Variable, std::vector<Id>> toSearchSide(
-      std::vector<TripleComponent> side, const Index::Vocab& vocab) const;
-
-  /**
-   * @brief Convert this PathQuery into a PathSearchConfiguration object.
-   * This method checks if all required parameters are set and converts
-   * the PathSearch sources and targets into SearchSides.
-   * A PathSearchException is thrown if required parameters are missing.
-   * The required parameters are start, end, pathColumn and edgeColumn.
-   *
-   * @param vocab A vocab containing the Ids of the IRIs in
-   *              sources_ and targets_
-   * @return A valid PathSearchConfiguration
-   */
-  PathSearchConfiguration toPathSearchConfiguration(
-      const Index::Vocab& vocab) const;
 };
 
 // A SPARQL Bind construct.
@@ -246,7 +178,8 @@ struct Bind {
 // class actually becomes `using GraphPatternOperation = std::variant<...>`
 using GraphPatternOperationVariant =
     std::variant<Optional, Union, Subquery, TransPath, Bind, BasicGraphPattern,
-                 Values, Service, PathQuery, Minus, GroupGraphPattern>;
+                 Values, Service, PathQuery, SpatialQuery, Minus,
+                 GroupGraphPattern, Describe>;
 struct GraphPatternOperation
     : public GraphPatternOperationVariant,
       public VisitMixin<GraphPatternOperation, GraphPatternOperationVariant> {
@@ -259,4 +192,5 @@ struct GraphPatternOperation
     return std::get<BasicGraphPattern>(*this);
   }
 };
+
 }  // namespace parsedQuery

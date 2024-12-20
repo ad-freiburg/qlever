@@ -26,6 +26,8 @@ using LocatedTriplesPerBlockAllPermutations =
 struct LocatedTriplesSnapshot {
   LocatedTriplesPerBlockAllPermutations locatedTriplesPerBlock_;
   LocalVocab localVocab_;
+  // A unique index for this snapshot that is used in the query cache.
+  size_t index_;
   // Get `TripleWithPosition` objects for given permutation.
   const LocatedTriplesPerBlock& getLocatedTriplesForPermutation(
       Permutation::Enum permutation) const;
@@ -63,6 +65,7 @@ class DeltaTriples {
  private:
   // The index to which these triples are added.
   const IndexImpl& index_;
+  size_t nextSnapshotIndex_ = 0;
 
   // The located triples for all the 6 permutations.
   LocatedTriplesPerBlockAllPermutations locatedTriples_;
@@ -140,7 +143,12 @@ class DeltaTriples {
   // Return a deep copy of the `LocatedTriples` and the corresponding
   // `LocalVocab` which form a snapshot of the current status of this
   // `DeltaTriples` object.
-  SharedLocatedTriplesSnapshot getSnapshot() const;
+  SharedLocatedTriplesSnapshot getSnapshot();
+
+  // Register the original `metadata` for the given `permutation`. This has to
+  // be called before any updates are processed.
+  void setOriginalMetadata(Permutation::Enum permutation,
+                           std::vector<CompressedBlockMetadata> metadata);
 
  private:
   // Find the position of the given triple in the given permutation and add it
@@ -196,10 +204,15 @@ class DeltaTriplesManager {
   FRIEND_TEST(DeltaTriplesTest, DeltaTriplesManager);
 
   // Modify the underlying `DeltaTriples` by applying `function` and then update
-  // the current snapshot. Concurrent calls to `modify` will be serialized, and
-  // each call to `getCurrentSnapshot` will either return the snapshot before or
-  // after a modification, but never one of an ongoing modification.
+  // the current snapshot. Concurrent calls to `modify` and `clear` will be
+  // serialized, and each call to `getCurrentSnapshot` will either return the
+  // snapshot before or after a modification, but never one of an ongoing
+  // modification.
   void modify(const std::function<void(DeltaTriples&)>& function);
+
+  // Reset the updates represented by the underlying `DeltaTriples` and then
+  // update the current snapshot.
+  void clear();
 
   // Return a shared pointer to a deep copy of the current snapshot. This can
   // be safely used to execute a query without interfering with future updates.

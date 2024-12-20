@@ -69,8 +69,9 @@ class Permutation {
                ColumnIndicesRef additionalColumns,
                const CancellationHandle& cancellationHandle,
                const LocatedTriplesSnapshot& locatedTriplesSnapshot,
-               const LimitOffsetClause& limitOffset = {}) const;
-
+               const LimitOffsetClause& limitOffset = {},
+               std::optional<std::vector<CompressedBlockMetadata>> blocks =
+                   std::nullopt) const;
   // For a given relation, determine the `col1Id`s and their counts. This is
   // used for `computeGroupByObjectWithCount`. The `col0Id` must have metadata
   // in `meta_`.
@@ -118,11 +119,23 @@ class Permutation {
       const ScanSpecification& scanSpec,
       const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
 
-  /// Similar to the previous `scan` function, but only get the size of the
-  /// result
+  // Get the exact size of the result of a scan, taking into account the
+  // given located triples. This requires an exact location of the delta triples
+  // within the respective blocks.
   size_t getResultSizeOfScan(
       const ScanSpecification& scanSpec,
-      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
+      const LocatedTriplesSnapshot& locatedTriplesSnapshot,
+      std::optional<std::vector<CompressedBlockMetadata>> blocks =
+          std::nullopt) const;
+
+  // Get a lower and upper bound for the size of the result of a scan, taking
+  // into account the given `deltaTriples`. For this call, it is enough that
+  // each delta triple know to which block it belongs.
+  std::pair<size_t, size_t> getSizeEstimateForScan(
+      const ScanSpecification& scanSpec,
+      const LocatedTriplesSnapshot& locatedTriplesSnapshot,
+      std::optional<std::vector<CompressedBlockMetadata>> blocks =
+          std::nullopt) const;
 
   // _______________________________________________________
   void setKbName(const string& name) { meta_.setName(name); }
@@ -153,7 +166,15 @@ class Permutation {
   const LocatedTriplesPerBlock& getLocatedTriplesForPermutation(
       const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
 
+  // From the given snapshot, get the augmented block metadata for this
+  // permutation.
+  const std::vector<CompressedBlockMetadata>&
+  getAugmentedMetadataForPermutation(
+      const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
+
   const CompressedRelationReader& reader() const { return reader_.value(); }
+
+  Enum permutation() const { return permutation_; }
 
  private:
   // Readable name for this permutation, e.g., `POS`.
@@ -177,4 +198,6 @@ class Permutation {
   std::unique_ptr<Permutation> internalPermutation_ = nullptr;
 
   std::function<bool(Id)> isInternalId_;
+
+  bool isInternalPermutation_ = false;
 };

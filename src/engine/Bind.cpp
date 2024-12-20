@@ -86,8 +86,8 @@ IdTable Bind::cloneSubView(const IdTable& idTable,
                            const std::pair<size_t, size_t>& subrange) {
   IdTable result(idTable.numColumns(), idTable.getAllocator());
   result.resize(subrange.second - subrange.first);
-  std::ranges::copy(idTable.begin() + subrange.first,
-                    idTable.begin() + subrange.second, result.begin());
+  ql::ranges::copy(idTable.begin() + subrange.first,
+                   idTable.begin() + subrange.second, result.begin());
   return result;
 }
 

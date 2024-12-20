@@ -61,9 +61,9 @@ void testOrderBy(IdTable input, const IdTable& expected,
     // Apply the current permutation of the `sortColumns` to `expected` and
     // `input`.
     for (size_t i = 0; i < sortColumns.size(); ++i) {
-      std::ranges::copy(input.getColumn(i),
-                        permutedInput.getColumn(sortColumns[i].first).begin());
-      std::ranges::copy(
+      ql::ranges::copy(input.getColumn(i),
+                       permutedInput.getColumn(sortColumns[i].first).begin());
+      ql::ranges::copy(
           expected.getColumn(i),
           permutedExpected.getColumn(sortColumns[i].first).begin());
       // Also put the information which columns are descending into the correct
@@ -192,7 +192,7 @@ TEST(OrderBy, mixedDatatypes) {
   testOrderBy(makeIdTableFromVector(input), makeIdTableFromVector(expected),
               {false});
 
-  std::ranges::reverse(expected);
+  ql::ranges::reverse(expected);
   testOrderBy(makeIdTableFromVector(input), makeIdTableFromVector(expected),
               {true});
 }

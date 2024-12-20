@@ -4,13 +4,10 @@
 
 #pragma once
 
-#include <absl/strings/str_cat.h>
-
 #include <variant>
 
 #include "parser/Iri.h"
 #include "parser/Literal.h"
-#include "util/Exception.h"
 
 namespace ad_utility::triple_component {
 static constexpr char literalPrefixChar = '"';

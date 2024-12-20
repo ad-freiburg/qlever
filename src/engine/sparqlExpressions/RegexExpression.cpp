@@ -210,7 +210,11 @@ ExpressionResult RegexExpression::evaluatePrefixRegex(
   // of binary searches and the result is a set of intervals.
   std::vector<ad_utility::SetOfIntervals> resultSetOfIntervals;
   if (context->isResultSortedBy(variable)) {
-    auto column = context->getColumnIndexForVariable(variable);
+    auto optColumn = context->getColumnIndexForVariable(variable);
+    AD_CORRECTNESS_CHECK(optColumn.has_value(),
+                         "We have previously asserted that the input is sorted "
+                         "by the variable, so we expect it to exist");
+    const auto& column = optColumn.value();
     for (auto [lowerId, upperId] : lowerAndUpperIds) {
       // Two binary searches to find the lower and upper bounds of the range.
       auto lower = std::lower_bound(
@@ -243,7 +247,7 @@ ExpressionResult RegexExpression::evaluatePrefixRegex(
   result.reserve(resultSize);
   for (auto id : detail::makeGenerator(variable, resultSize, context)) {
     result.push_back(Id::makeFromBool(
-        std::ranges::any_of(lowerAndUpperIds, [&](const auto& lowerUpper) {
+        ql::ranges::any_of(lowerAndUpperIds, [&](const auto& lowerUpper) {
           return !valueIdComparators::compareByBits(id, lowerUpper.first) &&
                  valueIdComparators::compareByBits(id, lowerUpper.second);
         })));
@@ -266,7 +270,7 @@ ExpressionResult RegexExpression::evaluateGeneralCase(
   // `std::nullopt` for a row, the result is `UNDEF`. Otherwise, we have a
   // string and evaluate the regex on it.
   auto computeResult = [&]<typename ValueGetter>(const ValueGetter& getter) {
-    std::ranges::for_each(
+    ql::ranges::for_each(
         detail::makeGenerator(AD_FWD(input), resultSize, context),
         [&getter, &context, &result, this](const auto& id) {
           auto str = getter(id, context);

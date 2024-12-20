@@ -96,9 +96,13 @@ ad_utility::SetOfIntervals evaluateWithBinarySearch(
   // Set up iterators into the `IdTable` that only access the column where the
   // `variable` is stored.
   auto columnIndex = context->getColumnIndexForVariable(variable);
+  AD_CORRECTNESS_CHECK(
+      columnIndex.has_value(),
+      "The input must be sorted to evaluate a relational expression using "
+      "binary search. This should never happen for unbound variables");
 
   auto getIdFromColumn = ad_utility::makeAssignableLambda(
-      [columnIndex](const auto& idTable, auto i) {
+      [columnIndex = columnIndex.value()](const auto& idTable, auto i) {
         return idTable(i, columnIndex);
       });
 
@@ -338,15 +342,15 @@ SparqlExpression::Estimates getEstimatesForFilterExpressionImpl(
   // filtering on the `LocalVocab`.
   // Check iff all the pairs `(children[0], someOtherChild)` can be evaluated
   // using binary search.
-  if (std::ranges::all_of(children | std::views::drop(1),
-                          [&lhs = children.at(0),
-                           &canBeEvaluatedWithBinarySearch](const auto& child) {
-                            // The implementation automatically chooses the
-                            // cheaper direction, so we can do the same when
-                            // estimating the cost.
-                            return canBeEvaluatedWithBinarySearch(lhs, child) ||
-                                   canBeEvaluatedWithBinarySearch(child, lhs);
-                          })) {
+  if (ql::ranges::all_of(children | ql::views::drop(1),
+                         [&lhs = children.at(0),
+                          &canBeEvaluatedWithBinarySearch](const auto& child) {
+                           // The implementation automatically chooses the
+                           // cheaper direction, so we can do the same when
+                           // estimating the cost.
+                           return canBeEvaluatedWithBinarySearch(lhs, child) ||
+                                  canBeEvaluatedWithBinarySearch(child, lhs);
+                         })) {
     // When evaluating via binary search, the only significant cost that occurs
     // is that of writing the output.
     costEstimate = sizeEstimate;
@@ -381,7 +385,7 @@ ExpressionResult InExpression::evaluate(
   auto lhs = children_.at(0)->evaluate(context);
   ExpressionResult result{ad_utility::SetOfIntervals{}};
   bool firstChild = true;
-  for (const auto& child : children_ | std::views::drop(1)) {
+  for (const auto& child : children_ | ql::views::drop(1)) {
     auto rhs = child->evaluate(context);
     auto evaluateEqualsExpression = [context](const auto& a,
                                               auto b) -> ExpressionResult {
@@ -407,6 +411,53 @@ ExpressionResult InExpression::evaluate(
                  ->evaluate(context);
   }
   return result;
+}
+
+// _____________________________________________________________________________
+template <Comparison comp>
+std::vector<PrefilterExprVariablePair>
+RelationalExpression<comp>::getPrefilterExpressionForMetadata(
+    [[maybe_unused]] bool isNegated) const {
+  AD_CORRECTNESS_CHECK(children_.size() == 2);
+  const SparqlExpression* child0 = children_.at(0).get();
+  const SparqlExpression* child1 = children_.at(1).get();
+
+  const auto tryGetPrefilterExprVariablePairVec =
+      [](const SparqlExpression* child0, const SparqlExpression* child1,
+         bool reversed) -> std::vector<PrefilterExprVariablePair> {
+    const auto* variableExpr = dynamic_cast<const VariableExpression*>(child0);
+    if (!variableExpr) {
+      return {};
+    }
+
+    const auto& optReferenceValue =
+        detail::getIdOrLocalVocabEntryFromLiteralExpression(child1);
+    if (!optReferenceValue.has_value()) {
+      return {};
+    }
+    return prefilterExpressions::detail::makePrefilterExpressionVec<comp>(
+        optReferenceValue.value(), variableExpr->value(), reversed);
+  };
+  // Option 1:
+  // RelationalExpression containing a VariableExpression as the first child
+  // and an IdExpression, IdExpression or IriExpression as the second child.
+  // E.g. for ?x >= 10 (RelationalExpression Sparql), we obtain the following
+  // pair with PrefilterExpression and Variable: <(>= 10), ?x>
+  auto resVec = tryGetPrefilterExprVariablePairVec(child0, child1, false);
+  if (!resVec.empty()) {
+    return resVec;
+  }
+  // Option 2:
+  // RelationalExpression containing an IdExpression, LiteralExpression or
+  // IriExpression as the first child and a VariableExpression as the second
+  // child. (1) 10 >= ?x (RelationalExpression Sparql), we obtain the following
+  // pair with PrefilterExpression and Variable: <(<= 10), ?x>
+  // (2) 10 != ?x (RelationalExpression Sparql), we obtain the following
+  // pair with PrefilterExpression and Variable: <(!= 10), ?x>;
+  // Option 3:
+  // If no PrefilterExpressions could be constructed for this
+  // RelationalExpression, just return the empty vector.
+  return tryGetPrefilterExprVariablePairVec(child1, child0, true);
 }
 
 // _____________________________________________________________________________
