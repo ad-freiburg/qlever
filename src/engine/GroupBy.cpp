@@ -379,8 +379,9 @@ ProtoResult GroupBy::computeResult(bool requestLaziness) {
     if (subresult->isFullyMaterialized()) {
       // `computeWithHashMap` takes a range, so we artificially create one with
       // a single input.
-      return computeWithHashMap(std::array{std::pair{
-          std::ref(subresult->idTable()), subresult->getCopyOfLocalVocab()}});
+      return computeWithHashMap(
+          std::array{std::pair{std::cref(subresult->idTable()),
+                               std::cref(subresult->localVocab())}});
     } else {
       return computeWithHashMap(std::move(subresult->idTables()));
     }
@@ -1512,8 +1513,11 @@ Result GroupBy::computeGroupByForHashMapOptimization(
 
   ad_utility::Timer lookupTimer{ad_utility::Timer::Stopped};
   ad_utility::Timer aggregationTimer{ad_utility::Timer::Stopped};
-  for (const auto& [inputTableRef, inputLocalVocab] : subresults) {
+  for (const auto& [inputTableRef, inputLocalVocabRef] : subresults) {
+    // Also support `std::reference_wrapper` as the input.
     const IdTable& inputTable = inputTableRef;
+    const LocalVocab& inputLocalVocab = inputLocalVocabRef;
+
     localVocab.mergeWith(std::span{&inputLocalVocab, 1});
     // Initialize evaluation context
     sparqlExpression::EvaluationContext evaluationContext(
