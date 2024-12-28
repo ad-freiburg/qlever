@@ -35,6 +35,16 @@ struct LiteralsTokenizationDelimiter {
   }
 };
 
+cppcoro::generator<std::string> tokenizeAndNormalizeTextLine(
+    std::string_view lineView, LocaleManager localeManager) {
+  // Currently it is not possible to use std::views or std::ranges with the
+  // splitter object returned by absl::StrSplit. Every solution I have seen
+  // will remove the lazy nature of StrSplit and views/ranges. (2024-12-28)
+  for (auto word : absl::StrSplit(lineView, LiteralsTokenizationDelimiter{},
+                                  absl::SkipEmpty{})) {
+    co_yield localeManager.getLowercaseUtf8(word);
+  }
+}
 }  // namespace
 
 // _____________________________________________________________________________
@@ -69,10 +79,8 @@ cppcoro::generator<WordsFileLine> IndexImpl::wordsInTextRecords(
       std::string_view textView = text;
       textView = textView.substr(0, textView.rfind('"'));
       textView.remove_prefix(1);
-      for (auto word : absl::StrSplit(textView, LiteralsTokenizationDelimiter{},
-                                      absl::SkipEmpty{})) {
-        auto wordNormalized = localeManager.getLowercaseUtf8(word);
-        WordsFileLine wordLine{wordNormalized, false, contextId, 1};
+      for (auto word : tokenizeAndNormalizeTextLine(textView, localeManager)) {
+        WordsFileLine wordLine{word, false, contextId, 1};
         co_yield wordLine;
       }
       contextId = contextId.incremented();
