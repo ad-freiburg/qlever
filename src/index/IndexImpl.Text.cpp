@@ -21,7 +21,7 @@
 #include "util/Conversions.h"
 #include "util/Simple8bCode.h"
 
-namespace {
+namespace ql_utility {
 
 // Custom delimiter class for tokenization of literals using `absl::StrSplit`.
 // The `Find` function returns the next delimiter in `text` after the given
@@ -45,7 +45,7 @@ cppcoro::generator<std::string> tokenizeAndNormalizeTextLine(
     co_yield localeManager.getLowercaseUtf8(word);
   }
 }
-}  // namespace
+}  // namespace ql_utility
 
 // _____________________________________________________________________________
 cppcoro::generator<WordsFileLine> IndexImpl::wordsInTextRecords(
@@ -79,7 +79,8 @@ cppcoro::generator<WordsFileLine> IndexImpl::wordsInTextRecords(
       std::string_view textView = text;
       textView = textView.substr(0, textView.rfind('"'));
       textView.remove_prefix(1);
-      for (auto word : tokenizeAndNormalizeTextLine(textView, localeManager)) {
+      for (auto word :
+           ql_utility::tokenizeAndNormalizeTextLine(textView, localeManager)) {
         WordsFileLine wordLine{word, false, contextId, 1};
         co_yield wordLine;
       }
