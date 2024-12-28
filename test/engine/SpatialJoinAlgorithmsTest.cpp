@@ -1249,7 +1249,7 @@ std::string createAreaTestDataset() {
               std::string area) {
     kg += absl::StrCat("<node_", number, "> <name> ", name, " . \n",
         "<node_", number, "> <hasGeometry> <geometry", number, "> .\n",
-        "<geometry_", number, "> <asWKT> ", area, " .\n" );
+        "<geometry", number, "> <asWKT> ", area, " .\n" );
   };
 
   std::string kg;
