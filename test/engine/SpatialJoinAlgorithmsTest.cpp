@@ -1274,7 +1274,7 @@ QueryExecutionContext* buildAreaTestQEC() {
   std::string kg = createAreaTestDataset();
   ad_utility::MemorySize blocksizePermutations = 16_MB;
   auto qec = ad_utility::testing::getQec(kg, true, true, false, blocksizePermutations,
-            false);
+            false, true, std::nullopt, 10000);
   return qec;
 }
 
@@ -1330,8 +1330,8 @@ TEST(SpatialJoin, development) {
                    {"?obj1", std::string{"<envelope>"}, "?area"}, "?obj1", "?obj1"); */
   auto firstChild = buildMediumChild(qec, 
                    {"?obj1", std::string{"<name>"}, "?name1"},
-                   {"?obj1", std::string{"<hasGeometry>"}, "?highway"},
-                   {"?obj1", std::string{"<asWKT>"}, "?area"}, "?obj1", "?obj1");
+                   {"?obj1", std::string{"<hasGeometry>"}, "?geo1"},
+                   {"?geo1", std::string{"<asWKT>"}, "?area"}, "?obj1", "?geo1");
   auto result = firstChild->getResult();
   std::cerr << "========= printing result ===========" << std::endl;
   std::cerr << "result size: " << result->idTable().numRows() << std::endl;
