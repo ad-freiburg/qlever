@@ -29,9 +29,9 @@
 #include "index/TextMetaData.h"
 #include "index/Vocabulary.h"
 #include "index/VocabularyMerger.h"
-#include "parser/ContextFileParser.h"
 #include "parser/RdfParser.h"
 #include "parser/TripleComponent.h"
+#include "parser/WordsAndDocsFileParser.h"
 #include "util/BufferedVector.h"
 #include "util/CancellationHandle.h"
 #include "util/File.h"
@@ -515,7 +515,7 @@ class IndexImpl {
   // TODO: So far, this is limited to the internal vocabulary (still in the
   // testing phase, once it works, it should be easy to include the IRIs and
   // literals from the external vocabulary as well).
-  cppcoro::generator<ContextFileParser::Line> wordsInTextRecords(
+  cppcoro::generator<WordsFileLine> wordsInTextRecords(
       const std::string& contextFile, bool addWordsFromLiterals);
 
   size_t processWordsForVocabulary(const string& contextFile,
