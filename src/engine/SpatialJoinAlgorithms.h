@@ -74,9 +74,14 @@ class SpatialJoinAlgorithms {
   // mapping is the top and bottom edge of the rectangular mapping) then the
   // single box gets split into multiple boxes (i.e. one on the left and one on
   // the right, which when seen on the sphere look like a single box, but on the
-  // map and in the internal representation it looks like two/more boxes)
+  // map and in the internal representation it looks like two/more boxes). The
+  // additionalDist gets added on the max distance to compensate for areas being
+  // bigger than points. AdditionalDist must be the max distance from the
+  // midpoint of the bounding box of the area to any point inside the method.
+  // The function getMaxDistFromMidpointToAnyPointInsideTheBox() can be used to
+  // calculate it.
   std::vector<BoostGeometryNamespace::Box> computeBoundingBox(
-      const BoostGeometryNamespace::Point& startPoint) const;
+      const BoostGeometryNamespace::Point& startPoint, double additionalDist = 0) const;
 
   // This helper function calculates the bounding boxes based on a box, where
   // definitely no match can occur. This means every element in the anti

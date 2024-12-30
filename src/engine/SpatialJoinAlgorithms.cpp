@@ -241,7 +241,7 @@ Result SpatialJoinAlgorithms::S2geometryAlgorithm() {
 
 // ____________________________________________________________________________
 std::vector<Box> SpatialJoinAlgorithms::computeBoundingBox(
-    const Point& startPoint) const {
+    const Point& startPoint, double additionalDist) const {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
               rightJoinCol, rightSelectedCols, numColumns, maxDist,
               maxResults] = params_;
@@ -254,7 +254,7 @@ std::vector<Box> SpatialJoinAlgorithms::computeBoundingBox(
   auto archaversine = [](double theta) { return std::acos(1 - 2 * theta); };
 
   // safety buffer for numerical inaccuracies
-  double maxDistInMetersBuffer;
+  double maxDistInMetersBuffer = maxDist.value() + additionalDist;
   if (maxDist.value() < 10) {
     maxDistInMetersBuffer = 10;
   } else if (static_cast<double>(maxDist.value()) <

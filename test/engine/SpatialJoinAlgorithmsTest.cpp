@@ -1212,8 +1212,20 @@ namespace development {
 using BoostGeometryNamespace::Box;
 using BoostGeometryNamespace::Point;
 using BoostGeometryNamespace::Value;
+using ValueArea = std::pair<BoostGeometryNamespace::Box, size_t>;
 // move this to BoostGeometryNamespace
 typedef boost::geometry::model::polygon<boost::geometry::model::d2::point_xy<double>> Polygon;
+
+
+// copy of a function, with slight changes, additionalDist for the area with
+// the upper bound from midpoint. update description
+std::vector<Box> computeBoundingBox(
+    const Point& startPoint, double additionalDist = 0) {
+  // hard coded to test the general algorithm
+  return {Box(Point(7, -90),
+              Point(180, 90))};
+}
+
 
 // helper function in debugging for outputting stuff
 void print_vecs(std::vector<std::vector<std::string>> vec) {
@@ -1252,6 +1264,19 @@ std::string createAreaTestDataset() {
         "<geometry", number, "> <asWKT> ", area, " .\n" );
   };
 
+  auto addPoint = [](std::string& kg, std::string number, std::string name,
+                     std::string point) {
+    kg += absl::StrCat("<node_", number, "> <name> ", name, " .<node_", number,
+                       "> <hasGeometry> <geometry", number, "> .<geometry",
+                       number, "> <asWKT> ", point, " .");
+  };
+  auto p = makePointLiteral;
+
+  // TODO: remove this lambda, it's already at the beginning of the file
+  auto makePointLiteral = [](std::string_view c1, std::string_view c2) {
+    return absl::StrCat(" \"POINT(", c1, " ", c2, ")\"^^<", GEO_WKT_LITERAL, ">");
+  };
+
   std::string kg;
   // note that i removed all prefixes
   // addArea(kg, "1", "\"zebra\"", "\"POLYGON((9.33 47.41, 9.31 47.45, 9.32 47.48, 9.35 47.42, 9.33 47.41))\"^^<https://www.invented.de/a#wktLiteral>");
@@ -1262,6 +1287,11 @@ std::string createAreaTestDataset() {
   addArea(kg, "3", "\"London Eye\"", "\"POLYGON((-0.1198608 51.5027451,-0.1197395 51.5027354,-0.1194922 51.5039381,-0.1196135 51.5039478,-0.1198608 51.5027451))\"^^<https://www.invented.de/a#wktLiteral>");
   addArea(kg, "4", "\"Statue of liberty\"", "\"POLYGON((-74.0451069 40.6893455,-74.045004 40.6892215,-74.0451023 40.6891073,-74.0449107 40.6890721,-74.0449537 40.6889343,-74.0447746 40.6889506,-74.0446495 40.6888049,-74.0445067 40.6889076,-74.0442008 40.6888563,-74.0441463 40.6890663,-74.0441411 40.6890854,-74.0441339 40.6890874,-74.0441198 40.6890912,-74.0439637 40.6891376,-74.0440941 40.6892849,-74.0440057 40.6894071,-74.0441949 40.6894309,-74.0441638 40.6895702,-74.0443261 40.6895495,-74.0443498 40.6895782,-74.0443989 40.6896372,-74.0444277 40.6896741,-74.0445955 40.6895939,-74.0447392 40.6896561,-74.0447498 40.6896615,-74.0447718 40.6895577,-74.0447983 40.6895442,-74.0448287 40.6895279,-74.0449638 40.6895497,-74.0449628 40.6895443,-74.044961 40.6895356,-74.0449576 40.6895192,-74.044935 40.689421,-74.0451069 40.6893455))\"^^<https://www.invented.de/a#wktLiteral>");
   addArea(kg, "5", "\"eiffel tower\"", "\"POLYGON((2.2933119 48.858248,2.2935432 48.8581003,2.2935574 48.8581099,2.2935712 48.8581004,2.2936112 48.8581232,2.2936086 48.8581249,2.293611 48.8581262,2.2936415 48.8581385,2.293672 48.8581477,2.2937035 48.8581504,2.293734 48.858149,2.2937827 48.8581439,2.2938856 48.8581182,2.2939778 48.8580882,2.2940648 48.8580483,2.2941435 48.8579991,2.2941937 48.8579588,2.2942364 48.8579197,2.2942775 48.8578753,2.2943096 48.8578312,2.2943307 48.8577908,2.2943447 48.857745,2.2943478 48.8577118,2.2943394 48.8576885,2.2943306 48.8576773,2.2943205 48.8576677,2.2943158 48.8576707,2.2942802 48.8576465,2.2942977 48.8576355,2.2942817 48.8576248,2.2942926 48.8576181,2.2944653 48.8575069,2.2945144 48.8574753,2.2947414 48.8576291,2.294725 48.8576392,2.2947426 48.857651,2.294706 48.8576751,2.294698 48.8576696,2.2946846 48.8576782,2.2946744 48.8576865,2.2946881 48.8576957,2.2946548 48.857717,2.2946554 48.8577213,2.2946713 48.8577905,2.2946982 48.8578393,2.2947088 48.8578585,2.2947529 48.8579196,2.2948133 48.8579803,2.2948836 48.85803,2.2949462 48.8580637,2.2950051 48.8580923,2.2950719 48.85812,2.2951347 48.8581406,2.2951996 48.8581564,2.2952689 48.8581663,2.295334 48.8581699,2.2953613 48.8581518,2.2953739 48.8581604,2.2953965 48.8581497,2.2954016 48.8581464,2.2953933 48.8581409,2.2954304 48.8581172,2.2954473 48.8581285,2.2954631 48.8581182,2.2956897 48.8582718,2.295653 48.8582954,2.2955837 48.85834,2.2954575 48.8584212,2.2954416 48.858411,2.2954238 48.8584227,2.2953878 48.8583981,2.2953925 48.858395,2.2953701 48.8583857,2.2953419 48.8583779,2.2953057 48.8583737,2.2952111 48.8583776,2.2951081 48.858403,2.2950157 48.8584326,2.2949284 48.8584723,2.2948889 48.8584961,2.2947988 48.8585613,2.2947558 48.8586003,2.2947144 48.8586446,2.294682 48.8586886,2.2946605 48.8587289,2.2946462 48.8587747,2.294644 48.8587962,2.2946462 48.8588051,2.2946486 48.8588068,2.2946938 48.8588377,2.2946607 48.8588587,2.294663 48.8588603,2.294681 48.858849,2.2947169 48.8588737,2.2946988 48.858885,2.2947154 48.8588961,2.2944834 48.8590453,2.2943809 48.8589771,2.2943708 48.8589703,2.2942571 48.8588932,2.2942741 48.8588824,2.2942567 48.8588708,2.2942893 48.8588493,2.294306 48.8588605,2.2943103 48.8588577,2.2942883 48.8588426,2.2943122 48.8588275,2.2943227 48.8588209,2.2943283 48.8588173,2.2943315 48.8588125,2.2943333 48.8588018,2.2943166 48.8587327,2.294301 48.8586978,2.2942783 48.8586648,2.2942406 48.8586191,2.2942064 48.858577,2.2941734 48.8585464,2.2941015 48.8584943,2.2940384 48.8584609,2.2939792 48.8584325,2.293912 48.8584052,2.2938415 48.8583828,2.293784 48.8583695,2.2937145 48.8583599,2.2936514 48.8583593,2.2936122 48.8583846,2.293606 48.8583807,2.2935688 48.8584044,2.2935515 48.8583929,2.293536 48.8584028,2.2933119 48.858248))\"^^<https://www.invented.de/a#wktLiteral>");
+  addPoint(kg, "1", "\"Uni Freiburg TF\"", p("7.83505", "48.01267"));
+  addPoint(kg, "2", "\"Minster Freiburg\"", p("7.85298", "47.99557"));
+  addPoint(kg, "3", "\"London Eye\"", p("-0.11957", "51.50333"));
+  addPoint(kg, "4", "\"Statue of liberty\"", p("-74.04454", "40.68925"));
+  addPoint(kg, "5", "\"eiffel tower\"", p("2.29451", "48.85825"));
   std::cerr << std::fixed << std::setprecision(10) << kg << std::endl;
   return kg;
 }
@@ -1331,16 +1361,78 @@ TEST(SpatialJoin, development) {
   auto firstChild = buildMediumChild(qec, 
                    {"?obj1", std::string{"<name>"}, "?name1"},
                    {"?obj1", std::string{"<hasGeometry>"}, "?geo1"},
-                   {"?geo1", std::string{"<asWKT>"}, "?area"}, "?obj1", "?geo1");
-  auto result = firstChild->getResult();
+                   {"?geo1", std::string{"<asWKT>"}, "?area1"}, "?obj1", "?geo1");
+  auto result1 = firstChild->getResult();
   std::cerr << "========= printing result ===========" << std::endl;
-  std::cerr << "result size: " << result->idTable().numRows() << std::endl;
-  print_vec(printTable(qec, result.get()));
+  std::cerr << "result size: " << result1->idTable().numRows() << std::endl;
+  // print_vec(printTable(qec, result.get()));
+  auto secondChild = buildMediumChild(qec, 
+                   {"?obj2", std::string{"<name>"}, "?name2"},
+                   {"?obj2", std::string{"<hasGeometry>"}, "?geo2"},
+                   {"?geo2", std::string{"<asWKT>"}, "?area2"}, "?obj2", "?geo2");
+  auto result2 = secondChild->getResult();
   // if the object in the kg has both a point and a polygon representation, then
   // the point representation should be used by default. Add this case to the
   // test kg to test this behaviour
 
   // next step: create bounding box for the area of the polygon
+
+  // insert the bounding boxes in the rtree
+  auto betweenQuotes = [] (std::string extractFrom) {
+    // returns everything between the first two quotes. If the string does not
+    // contain two quotes, the string is returned as a whole
+    //
+    size_t pos1 = extractFrom.find("\"", 0);
+    size_t pos2 = extractFrom.find("\"", pos1 + 1);
+    if (pos1 != std::string::npos && pos2 != std::string::npos) {
+      return extractFrom.substr(pos1 + 1, pos2-pos1-1);
+    } else {
+      return extractFrom;
+    }
+  };
+
+  // TODO überall boost::geometry::index durch bgi ersetzen
+  boost::geometry::index::rtree<ValueArea, boost::geometry::index::quadratic<16>, boost::geometry::index::indexable<ValueArea>,
+             boost::geometry::index::equal_to<ValueArea>, ad_utility::AllocatorWithLimit<ValueArea>>
+      rtree(boost::geometry::index::quadratic<16>{}, boost::geometry::index::indexable<ValueArea>{},
+            boost::geometry::index::equal_to<ValueArea>{}, qec->getAllocator());
+  for (size_t i = 0; i < result1->idTable().numRows(); i++) {
+    // get bounding box
+    size_t joincol = 3; // TODO: replace by smallerResJoinCol or otherResJoinCol
+    hier weitermachen mit der Unterscheidung zwischen point und area
+    std::string areastring = betweenQuotes(ExportQueryExecutionTrees::idToStringAndType(
+            qec->getIndex(),
+            result1->idTable().at(i, joincol), {}).value().first);
+    auto bbox = calculateBoundingBoxOfArea(areastring);
+    rtree.insert(std::make_pair(std::move(bbox), i));
+  }
+  std::vector<ValueArea, ad_utility::AllocatorWithLimit<ValueArea>> results{
+      qec->getAllocator()};
+  for (size_t i = 0; i < result2->idTable().numRows(); i++) {
+    size_t joincol = 3; // TODO: replace by smallerResJoinCol or otherResJoinCol
+    std::string areastring = betweenQuotes(ExportQueryExecutionTrees::idToStringAndType(
+            qec->getIndex(),
+            result2->idTable().at(i, joincol), {}).value().first);
+    auto areaBox = calculateBoundingBoxOfArea(areastring);
+    auto midpoint = calculateMidpointOfBox(areaBox);
+    auto bbox = computeBoundingBox(midpoint, getMaxDistFromMidpointToAnyPointInsideTheBox(areaBox, midpoint));
+    results.clear();
+
+    ql::ranges::for_each(bbox, [&](const Box& bbox) {
+      rtree.query(boost::geometry::index::intersects(bbox), std::back_inserter(results));
+    });
+
+    ql::ranges::for_each(results, [&](const ValueArea& res) {
+      size_t row1 = res.second;
+      size_t row2 = i;
+      std::cerr << "test results" << std::endl;
+      std::cerr << ExportQueryExecutionTrees::idToStringAndType(qec->getIndex(),
+                    result1->idTable().at(row1, 2), {}).value().first
+                << ExportQueryExecutionTrees::idToStringAndType(qec->getIndex(),
+                    result2->idTable().at(row2, 2), {}).value().first
+                << std::endl;
+    });
+  }
 }
 
 void testBoundingBoxOfAreaOrMidpointOfBox(bool testArea=true) {
