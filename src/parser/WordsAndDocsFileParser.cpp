@@ -10,6 +10,25 @@
 #include "../util/StringUtils.h"
 
 // _____________________________________________________________________________
+void TokenizeAndNormalizeText::start() {
+  if (current_ != end_) {
+    currentValue_ = normalizeToken(*current_);
+  } else {
+    currentValue_ = std::nullopt;
+  }
+}
+
+// _____________________________________________________________________________
+void TokenizeAndNormalizeText::next() {
+  ++current_;
+  if (current_ != end_) {
+    currentValue_ = normalizeToken(*current_);
+  } else {
+    currentValue_ = std::nullopt;
+  }
+}
+
+// _____________________________________________________________________________
 WordsAndDocsFileParser::WordsAndDocsFileParser(const string& wordsOrDocsFile,
                                                LocaleManager localeManager)
     : in_(wordsOrDocsFile), localeManager_(std::move(localeManager)) {}
