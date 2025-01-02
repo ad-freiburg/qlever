@@ -21,32 +21,6 @@
 #include "util/Conversions.h"
 #include "util/Simple8bCode.h"
 
-namespace {
-
-// Custom delimiter class for tokenization of literals using `absl::StrSplit`.
-// The `Find` function returns the next delimiter in `text` after the given
-// `pos` or an empty substring if there is no next delimiter.
-struct LiteralsTokenizationDelimiter {
-  absl::string_view Find(absl::string_view text, size_t pos) {
-    auto isWordChar = [](char c) -> bool { return std::isalnum(c); };
-    auto found = std::find_if_not(text.begin() + pos, text.end(), isWordChar);
-    if (found == text.end()) return text.substr(text.size());
-    return {found, found + 1};
-  }
-};
-
-cppcoro::generator<std::string> tokenizeAndNormalizeTextLine(
-    std::string_view lineView, LocaleManager localeManager) {
-  // Currently it is not possible to use std::views or std::ranges with the
-  // splitter object returned by absl::StrSplit. Every solution I have seen
-  // will remove the lazy nature of StrSplit and views/ranges. (2024-12-28)
-  for (auto word : absl::StrSplit(lineView, LiteralsTokenizationDelimiter{},
-                                  absl::SkipEmpty{})) {
-    co_yield localeManager.getLowercaseUtf8(word);
-  }
-}
-}  // namespace
-
 // _____________________________________________________________________________
 cppcoro::generator<WordsFileLine> IndexImpl::wordsInTextRecords(
     const std::string& contextFile, bool addWordsFromLiterals) {
@@ -79,7 +53,8 @@ cppcoro::generator<WordsFileLine> IndexImpl::wordsInTextRecords(
       std::string_view textView = text;
       textView = textView.substr(0, textView.rfind('"'));
       textView.remove_prefix(1);
-      for (auto word : tokenizeAndNormalizeTextLine(textView, localeManager)) {
+      TokenizeAndNormalizeText normalizedWords(textView, localeManager);
+      for (auto word : normalizedWords) {
         WordsFileLine wordLine{word, false, contextId, 1};
         co_yield wordLine;
       }
