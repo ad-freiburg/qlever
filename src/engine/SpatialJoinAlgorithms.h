@@ -20,7 +20,9 @@ namespace bgi = boost::geometry::index;
 
 using Point = bg::model::point<double, 2, bg::cs::cartesian>;
 using Box = bg::model::box<Point>;
-using Value = std::pair<Point, size_t>;
+// using Value = std::pair<Point, size_t>;  // TODO: remove this line, it's legacy, when areas were not yet possible
+using Value = std::pair<Box, size_t>;
+using Polygon = boost::geometry::model::polygon<boost::geometry::model::d2::point_xy<double>>;
 }  // namespace BoostGeometryNamespace
 
 class SpatialJoinAlgorithms {
@@ -51,6 +53,10 @@ class SpatialJoinAlgorithms {
   // represents a GeoPoint
   std::optional<GeoPoint> getPoint(const IdTable* restable, size_t row,
                                    ColumnIndex col) const;
+
+  // returns everything between the first two quotes. If the string does not
+  // contain two quotes, the string is returned as a whole
+  std::string betweenQuotes(std::string extractFrom) const;
 
   // Helper function, which computes the distance of two points, where each
   // point comes from a different result table
@@ -100,10 +106,29 @@ class SpatialJoinAlgorithms {
       const std::vector<BoostGeometryNamespace::Box>& boundingBox,
       BoostGeometryNamespace::Point point) const;
 
+  // this function calculates the bounding box of a polygon geometry.
+  // This is different to the query box, which is a box, which contains the area
+  // where all results are contained in
+  BoostGeometryNamespace::Box calculateBoundingBoxOfArea(const std::string& wktString) const;
+
+  // calculates the midpoint of the given Box
+  BoostGeometryNamespace::Point calculateMidpointOfBox(const BoostGeometryNamespace::Box& box) const;
+
+  // this function calculates the maximum distance from the midpoint of the box
+  // to any other point, which is contained in the box. If the midpoint has already
+  // been calculated, because it is needed in other places as well, it can be given
+  // to the function, otherwise the function calculates the midpoint itself
+  double getMaxDistFromMidpointToAnyPointInsideTheBox(
+              const BoostGeometryNamespace::Box& box, std::optional<BoostGeometryNamespace::Point> midpoint = std::nullopt) const;
+
   QueryExecutionContext* qec_;
   PreparedSpatialJoinParams params_;
   SpatialJoinConfiguration config_;
   std::optional<SpatialJoin*> spatialJoin_;
+
+  // if the distance calculation should be approximated, by the midpoint of
+  // the area
+  bool useMidpointForAreas = true;
 
   // circumference in meters at the equator (max) and the pole (min) (as the
   // earth is not exactly a sphere the circumference is different. Note that
