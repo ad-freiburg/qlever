@@ -13,6 +13,7 @@
 #include "index/InputFileSpecification.h"
 #include "index/Permutation.h"
 #include "index/StringSortComparator.h"
+#include "index/TextScoringTypeDefs.h"
 #include "index/Vocabulary.h"
 #include "parser/TripleComponent.h"
 #include "util/CancellationHandle.h"
@@ -65,8 +66,6 @@ class Index {
     // Now scores BM25 scores for all words that are in the voacabulary
     vector<Score> scores_;
   };
-
-  enum class ScoringMetric { COUNT, TFIDF, BM25 };
 
   using Filetype = qlever::Filetype;
   using InputFileSpecification = qlever::InputFileSpecification;
@@ -207,9 +206,9 @@ class Index {
 
   void setNumTriplesPerBatch(uint64_t numTriplesPerBatch);
 
-  void setScoringMetricsUsed(ScoringMetric scoringMetric);
+  void setScoringMetricsUsedInSettings(ScoringMetric scoringMetric);
 
-  void setBM25Parmeters(float b, float k);
+  void setBM25ParmetersUsedInSettings(float b, float k);
 
   const std::string& getTextName() const;
 

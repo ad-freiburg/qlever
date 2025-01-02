@@ -142,7 +142,7 @@ Index makeTestIndex(const std::string& indexBasename,
                     bool createTextIndex, bool addWordsFromLiterals,
                     std::optional<std::pair<std::string, std::string>>
                         contentsOfWordsFileAndDocsFile,
-                    std::optional<Index::ScoringMetric> scoringMetric,
+                    std::optional<ScoringMetric> scoringMetric,
                     std::optional<pair<float, float>> bAndKParam) {
   // Ignore the (irrelevant) log output of the index building and loading during
   // these tests.
@@ -171,7 +171,16 @@ Index makeTestIndex(const std::string& indexBasename,
     if (!createTextIndex) {
       settingsJson["prefixes-external"] = std::vector<std::string>{""};
       settingsJson["languages-internal"] = std::vector<std::string>{""};
-    }
+    }  // else {
+    //   if (scoringMetric.has_value()) {
+    //     settingsJson["text-scoring-metric"] = scoringMetric.value();
+    //   }
+    //   if (bAndKParam.has_value()) {
+    //     settingsJson["b-and-k-parameter-for-text-scoring"] =
+    //     std::make_pair(bAndKParam.value().first, bAndKParam.value().second);
+    //   }
+    // }
+
     settingsFile << settingsJson.dump();
   }
   {
@@ -192,11 +201,11 @@ Index makeTestIndex(const std::string& indexBasename,
     index.createFromFiles({spec});
     if (createTextIndex) {
       if (scoringMetric.has_value()) {
-        index.setScoringMetricsUsed(scoringMetric.value());
+        index.setScoringMetricsUsedInSettings(scoringMetric.value());
       }
       if (bAndKParam.has_value()) {
-        index.setBM25Parmeters(bAndKParam.value().first,
-                               bAndKParam.value().second);
+        index.setBM25ParmetersUsedInSettings(bAndKParam.value().first,
+                                             bAndKParam.value().second);
       }
       if (contentsOfWordsFileAndDocsFile.has_value()) {
         // Create and write to words- and docsfile to later build a full text
@@ -265,7 +274,7 @@ QueryExecutionContext* getQec(
     bool addWordsFromLiterals,
     std::optional<std::pair<std::string, std::string>>
         contentsOfWordsFileAndDocsFile,
-    std::optional<Index::ScoringMetric> scoringMetric,
+    std::optional<ScoringMetric> scoringMetric,
     std::optional<std::pair<float, float>> bAndKParam) {
   // Similar to `absl::Cleanup`. Calls the `callback_` in the destructor, but
   // the callback is stored as a `std::function`, which allows to store
@@ -302,11 +311,10 @@ QueryExecutionContext* getQec(
             SortPerformanceEstimator{});
   };
 
-  using Key = std::tuple<std::optional<string>, bool, bool, bool,
-                         ad_utility::MemorySize,
-                         std::optional<std::pair<std::string, std::string>>,
-                         std::optional<Index::ScoringMetric>,
-                         std::optional<std::pair<float, float>>>;
+  using Key = std::tuple<
+      std::optional<string>, bool, bool, bool, ad_utility::MemorySize,
+      std::optional<std::pair<std::string, std::string>>,
+      std::optional<ScoringMetric>, std::optional<std::pair<float, float>>>;
   static ad_utility::HashMap<Key, Context> contextMap;
 
   auto key = Key{turtleInput,           loadAllPermutations,

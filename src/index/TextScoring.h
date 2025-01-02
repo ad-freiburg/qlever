@@ -4,23 +4,13 @@
 
 #pragma once
 
-#include "global/Id.h"
-#include "global/IndexTypes.h"
 #include "index/Index.h"
 #include "parser/WordsAndDocsFileParser.h"
-#include "util/HashMap.h"
-
-// Inverted index mapping WordIndex to a list of pairs of TextRecordIndex, and
-// a TermFrequency
-using TermFrequency = uint32_t;
-using InnerMap = ad_utility::HashMap<DocumentIndex, TermFrequency>;
-using InvertedIndex = ad_utility::HashMap<WordIndex, InnerMap>;
-using DocLengthMap = ad_utility::HashMap<DocumentIndex, size_t>;
-
-enum class ScoringMetric { COUNT, TFIDF, BM25 };
 
 class ScoreData {
  public:
+  ScoreData() : scoringMetric_(ScoringMetric::COUNT), b_(0.75), k_(1.75){};
+
   ScoreData(LocaleManager localeManager)
       : scoringMetric_(ScoringMetric::COUNT),
         b_(0.75),

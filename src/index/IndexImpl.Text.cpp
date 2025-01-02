@@ -98,13 +98,15 @@ void IndexImpl::buildTextIndexFile(
   readConfiguration();
   vocab_.readFromFile(onDiskBase_ + VOCAB_SUFFIX);
 
+  scoreData_ = {vocab_.getLocaleManager(), textScoringMetric_,
+                bAndKParamForTextScoring_};
+
   // Build the text vocabulary (first scan over the text records).
   size_t nofLines =
       processWordsForVocabulary(wordsAndDocsFile.first, addWordsFromLiterals);
   // Calculate the score data for the words
-  if (scoreData_.scoringMetric != Index::ScoringMetric::COUNT) {
-    calculateScoreData(wordsAndDocsFile.second, addWordsFromLiterals);
-  }
+  scoreData_.calculateScoreData(wordsAndDocsFile.second, addWordsFromLiterals,
+                                textVocab_, vocab_);
   // Build the half-inverted lists (second scan over the text records).
   LOG(INFO) << "Building the half-inverted index lists ..." << std::endl;
   calculateBlockBoundaries();
@@ -117,184 +119,6 @@ void IndexImpl::buildTextIndexFile(
   LOG(DEBUG) << "Sort done" << std::endl;
   createTextIndex(indexFilename, v);
   openTextFileHandle();
-}
-
-// _____________________________________________________________________________
-void IndexImpl::calculateScoreData(const string& docsFileName,
-                                   bool addWordsFromLiterals) {
-  scoreData_.invertedIndex.reserve(textVocab_.size());
-  // Initialize localemanager which is used when parsing the docTexts and
-  // iterator contextId
-  auto localeManager = textVocab_.getLocaleManager();
-  uint64_t contextId = 0;
-
-  // Parse the docsfile first if it exists
-  if (!docsFileName.empty()) {
-    std::ifstream docsFile{docsFileName};
-    string line;
-    line.reserve(BUFFER_SIZE_DOCSFILE_LINE);
-    while (std::getline(docsFile, line)) {
-      scoreData_.isDocEmpty = true;
-      std::string_view lineView = line;
-      size_t tab = lineView.find('\t');
-      // Get contextId from line
-      std::from_chars(lineView.data(), lineView.data() + tab, contextId);
-      // Set lineView to the docText
-      lineView = lineView.substr(tab + 1);
-
-      // Parse docText for invertedIndex
-      // Here it's possible to add another tokenizer to parse words in doc
-      for (auto word : absl::StrSplit(lineView, LiteralsTokenizationDelimiter{},
-                                      absl::SkipEmpty{})) {
-        auto wordNormalized = localeManager.getLowercaseUtf8(word);
-        // Check if word exists and retrieve wordId
-        if (!addWordToScoreDataInvertedIndex(
-                wordNormalized, TextRecordIndex::make(contextId))) {
-          continue;
-        }
-      }
-
-      if (!scoreData_.isDocEmpty) {
-        ++scoreData_.nofDocuments;
-        scoreData_.docIdSet.insert(TextRecordIndex::make(contextId));
-      }
-    }
-    scoreData_.calculateAVDL();
-  }
-
-  // Parse literals if added
-  if (!addWordsFromLiterals) {
-    return;
-  }
-  for (VocabIndex index = VocabIndex::make(0); index.get() < vocab_.size();
-       index = index.incremented()) {
-    auto text = vocab_[index];
-    if (!isLiteral(text)) {
-      continue;
-    }
-    // Reset parameters for loop
-    ++contextId;
-    scoreData_.isDocEmpty = true;
-    std::string_view textView = text;
-
-    // Parse words in literal
-    for (auto word : absl::StrSplit(textView, LiteralsTokenizationDelimiter{},
-                                    absl::SkipEmpty{})) {
-      auto wordNormalized = localeManager.getLowercaseUtf8(word);
-      // Check if word exists and retrieve wordId
-      if (!addWordToScoreDataInvertedIndex(wordNormalized,
-                                           TextRecordIndex::make(contextId))) {
-        continue;
-      }
-    }
-
-    if (!scoreData_.isDocEmpty) {
-      ++scoreData_.nofDocuments;
-      scoreData_.docIdSet.insert(TextRecordIndex::make(contextId));
-    }
-  }
-  scoreData_.calculateAVDL();
-}
-
-// _____________________________________________________________________________
-bool IndexImpl::addWordToScoreDataInvertedIndex(std::string_view word,
-                                                TextRecordIndex currentDocId) {
-  WordVocabIndex wvi;
-  // Check if word exists and retrieve wordId
-  WordIndex currentWordId;
-  if (!textVocab_.getRawId(word, &wvi, currentWordId)) {
-    return false;
-  }
-  scoreData_.isDocEmpty = false;
-  // Emplaces or increases the docLengthMap
-  if (scoreData_.docLengthMap.contains(currentDocId)) {
-    ++scoreData_.docLengthMap[currentDocId];
-  } else {
-    scoreData_.docLengthMap[currentDocId] = 1;
-  }
-  ++scoreData_.totalDocumentLength;
-  // Check if wordId already is a key in the InvertedIndex
-  if (scoreData_.invertedIndex.contains(currentWordId)) {
-    // Check if the word is seen in a new context or not
-    InnerMap& innerMap = scoreData_.invertedIndex.find(currentWordId)->second;
-    auto ret = innerMap.find(currentDocId);
-    // Seen in new context
-    if (ret == innerMap.end()) {
-      innerMap.emplace(currentDocId, 1);
-      // Seen in known context
-    } else {
-      ret->second += 1;
-    }
-  } else {
-    scoreData_.invertedIndex.emplace(currentWordId,
-                                     InnerMap{{currentDocId, 1}});
-  }
-  return true;
-}
-
-// _____________________________________________________________________________
-float IndexImpl::calculateBM25OrTFIDF(WordIndex wordIndex,
-                                      TextRecordIndex contextId,
-                                      bool calcBM25) {
-  // Retrieve inner map
-  if (!scoreData_.invertedIndex.contains(wordIndex)) {
-    LOG(DEBUG) << "Didn't find word in Inverted Scoring Index. WordId: "
-               << wordIndex
-               << " Word: " << indexToString(WordVocabIndex::make(wordIndex))
-               << std::endl;
-    return 0;
-  }
-  InnerMap& innerMap = scoreData_.invertedIndex.find(wordIndex)->second;
-  size_t df = innerMap.size();
-  float idf = std::log2f(scoreData_.nofDocuments / df);
-
-  // Retrieve the matching docId for contextId. Since contextId are continuous
-  // or at least increased in smaller steps than the docIds but the
-  // InvertedIndex uses the docIds one has to find the next biggest docId
-  // or the matching docId
-  TextRecordIndex docId;
-  if (scoreData_.docIdSet.contains(contextId)) {
-    docId = contextId;
-  } else {
-    auto it = scoreData_.docIdSet.upper_bound(contextId);
-    if (it == scoreData_.docIdSet.end()) {
-      if (scoreData_.docIdSet.empty()) {
-        AD_THROW("docIdSet is empty and shouldn't be");
-      }
-      LOG(DEBUG) << "Requesting a contextId that is bigger than the largest "
-                    "docId. contextId: "
-                 << contextId.get()
-                 << " Largest docId: " << *scoreData_.docIdSet.rbegin()
-                 << std::endl;
-      return 0;
-    } else {
-      docId = *it;
-    }
-  }
-  auto ret1 = innerMap.find(docId);
-  if (ret1 == innerMap.end()) {
-    LOG(DEBUG) << "The calculated docId doesn't exist in the inner Map. docId: "
-               << docId << std::endl;
-    return 0;
-  }
-  TermFrequency tf = ret1->second;
-
-  if (!calcBM25) {
-    return tf * idf;
-  }
-
-  auto ret2 = scoreData_.docLengthMap.find(docId);
-  if (ret2 == scoreData_.docLengthMap.end()) {
-    LOG(DEBUG)
-        << "The calculated docId doesn't exist in the dochLengthMap. docId: "
-        << docId << std::endl;
-    return 0;
-  }
-  size_t dl = ret2->second;
-  float alpha = (1 - scoreData_.b +
-                 scoreData_.b * (dl / scoreData_.averageDocumentLength));
-  float tf_star = (tf * (scoreData_.k + 1)) / (scoreData_.k * alpha + tf);
-  return tf_star * idf;
 }
 
 // _____________________________________________________________________________
@@ -358,20 +182,6 @@ void IndexImpl::addTextFromOnDiskIndex() {
   serializer >> textMeta_;
   textIndexFile_ = std::move(serializer).file();
   LOG(INFO) << "Registered text index: " << textMeta_.statistics() << std::endl;
-  switch (textMeta_.getScoringType()) {
-    case 0:
-      scoreData_.scoringMetric = Index::ScoringMetric::COUNT;
-      break;
-    case 1:
-      scoreData_.scoringMetric = Index::ScoringMetric::TFIDF;
-      break;
-    case 2:
-      scoreData_.scoringMetric = Index::ScoringMetric::BM25;
-      break;
-    default:
-      scoreData_.scoringMetric = Index::ScoringMetric::COUNT;
-      break;
-  }
   // Initialize the text records file aka docsDB. NOTE: The search also works
   // without this, but then there is no content to show when a text record
   // matches. This is perfectly fine when the text records come from IRIs or
@@ -469,18 +279,10 @@ void IndexImpl::processWordsForInvertedLists(const string& contextFile,
                    << "not found in textVocab. Terminating\n";
         AD_FAIL();
       }
-      switch (scoreData_.scoringMetric) {
-        case Index::ScoringMetric::COUNT:
-          wordsInContext[wid] += line.score_;
-          break;
-        case Index::ScoringMetric::TFIDF:
-          wordsInContext[wid] =
-              calculateBM25OrTFIDF(wid, line.contextId_, false);
-          break;
-        case Index::ScoringMetric::BM25:
-          wordsInContext[wid] =
-              calculateBM25OrTFIDF(wid, line.contextId_, true);
-          break;
+      if (scoreData_.getScoringMetric() == ScoringMetric::COUNT) {
+        wordsInContext[wid] += line.score_;
+      } else {
+        wordsInContext[wid] = scoreData_.getScore(wid, line.contextId_);
       }
     }
   }
@@ -1203,4 +1005,22 @@ auto IndexImpl::getTextBlockMetadataForWordOrPrefix(const std::string& word)
                          !(tbmd._firstWordId == idRange.first().get() &&
                            tbmd._lastWordId == idRange.last().get());
   return TextBlockMetadataAndWordInfo{tbmd, hasToBeFiltered, idRange};
+}
+
+// _____________________________________________________________________________
+void IndexImpl::setScoringMetricsUsedInSettings(ScoringMetric scoringMetric) {
+  configurationJson_["text-scoring-metric"] = scoringMetric;
+  writeConfiguration();
+}
+
+// _____________________________________________________________________________
+void IndexImpl::setBM25ParametersInSettings(float b, float k) {
+  if (0 <= b && b <= 1 && 0 <= k) {
+    configurationJson_["b-and-k-parameter-for-text-scoring"] =
+        std::make_pair(b, k);
+  } else {
+    configurationJson_["b-and-k-parameter-for-text-scoring"] =
+        std::make_pair(0.75, 1.75);
+  }
+  writeConfiguration();
 }

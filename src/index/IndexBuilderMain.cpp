@@ -344,23 +344,23 @@ int main(int argc, char** argv) {
     }
 
     if ((!wordsfile.empty() && !docsfile.empty()) || addWordsFromLiterals) {
-      Index::ScoringMetric scoring;
+      ScoringMetric scoring;
       switch (scoringMetric) {
         case 0:
-          scoring = Index::ScoringMetric::COUNT;
+          scoring = ScoringMetric::COUNT;
           break;
         case 1:
-          scoring = Index::ScoringMetric::TFIDF;
+          scoring = ScoringMetric::TFIDF;
           break;
         case 2:
-          scoring = Index::ScoringMetric::BM25;
+          scoring = ScoringMetric::BM25;
           break;
         default:
-          scoring = Index::ScoringMetric::COUNT;
+          scoring = ScoringMetric::COUNT;
           break;
       }
-      index.setScoringMetricsUsed(scoring);
-      index.setBM25Parmeters(bScoringParam, kScoringParam);
+      index.setScoringMetricsUsedInSettings(scoring);
+      index.setBM25ParmetersUsedInSettings(bScoringParam, kScoringParam);
       index.buildTextIndexFile(
           std::pair<std::string, std::string>{wordsfile, docsfile},
           addWordsFromLiterals);

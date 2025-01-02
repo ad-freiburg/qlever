@@ -165,7 +165,7 @@ TEST(TextIndexScanForWord, WordScanPrefix) {
   // Tests if the correct scores are retrieved from the non literal texts for
   // Count
   qec = getQec(kg, true, true, true, 16_B, true, true,
-               contentsOfWordsFileAndDocsFile, Index::ScoringMetric::COUNT);
+               contentsOfWordsFileAndDocsFile, ScoringMetric::COUNT);
 
   TextIndexScanForWord score1{qec, Variable{"?t1"}, "astronom*"};
   auto scoreResultCount = score1.computeResultOnlyForTesting();
@@ -181,7 +181,7 @@ TEST(TextIndexScanForWord, WordScanPrefix) {
   // Tests if the correct scores are retrieved from the non literal texts for
   // TFIDF
   qec = getQec(kg, true, true, true, 16_B, true, true,
-               contentsOfWordsFileAndDocsFile, Index::ScoringMetric::TFIDF);
+               contentsOfWordsFileAndDocsFile, ScoringMetric::TFIDF);
   TextIndexScanForWord score2{qec, Variable{"?t1"}, "astronom*"};
   auto scoreResultTFIDF = score2.computeResultOnlyForTesting();
   float tfidfWord1Doc4 = h::calculateTFIDFFromParameters(1, 2, 6);
@@ -207,7 +207,7 @@ TEST(TextIndexScanForWord, WordScanPrefix) {
   // Tests if the correct scores are retrieved from the non literal texts for
   // BM25
   qec = getQec(kg, true, true, true, 16_B, true, true,
-               contentsOfWordsFileAndDocsFile, Index::ScoringMetric::BM25);
+               contentsOfWordsFileAndDocsFile, ScoringMetric::BM25);
   TextIndexScanForWord score3{qec, Variable{"?t1"}, "astronom*"};
   auto scoreResultBM25 = score3.computeResultOnlyForTesting();
   float bm25Word1Doc4 =

@@ -207,13 +207,13 @@ void Index::setNumTriplesPerBatch(uint64_t numTriplesPerBatch) {
 }
 
 // ____________________________________________________________________________
-void Index::setScoringMetricsUsed(ScoringMetric scoringMetric) {
-  return pimpl_->setScoringMetricsUsed(scoringMetric);
+void Index::setScoringMetricsUsedInSettings(ScoringMetric scoringMetric) {
+  return pimpl_->setScoringMetricsUsedInSettings(scoringMetric);
 }
 
 // ____________________________________________________________________________
-void Index::setBM25Parmeters(float b, float k) {
-  return pimpl_->setBM25Parameters(b, k);
+void Index::setBM25ParmetersUsedInSettings(float b, float k) {
+  return pimpl_->setBM25ParametersInSettings(b, k);
 }
 
 // ____________________________________________________________________________
