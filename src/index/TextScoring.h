@@ -9,21 +9,21 @@
 
 class ScoreData {
  public:
-  ScoreData() : scoringMetric_(ScoringMetric::COUNT), b_(0.75), k_(1.75){};
+  ScoreData() : scoringMetric_(TextScoringMetric::COUNT), b_(0.75), k_(1.75){};
 
   ScoreData(LocaleManager localeManager)
-      : scoringMetric_(ScoringMetric::COUNT),
+      : scoringMetric_(TextScoringMetric::COUNT),
         b_(0.75),
         k_(1.75),
         localeManager_(localeManager){};
 
-  ScoreData(LocaleManager localeManager, ScoringMetric scoringMetric)
+  ScoreData(LocaleManager localeManager, TextScoringMetric scoringMetric)
       : scoringMetric_(scoringMetric),
         b_(0.75),
         k_(1.75),
         localeManager_(localeManager){};
 
-  ScoreData(LocaleManager localeManager, ScoringMetric scoringMetric,
+  ScoreData(LocaleManager localeManager, TextScoringMetric scoringMetric,
             std::pair<float, float> bAndKParam)
       : scoringMetric_(scoringMetric),
         b_(bAndKParam.first),
@@ -31,22 +31,18 @@ class ScoreData {
         localeManager_(localeManager){};
 
   // Getters
-  ScoringMetric getScoringMetric() { return scoringMetric_; }
+  TextScoringMetric getScoringMetric() { return scoringMetric_; }
 
   // Functions
   void calculateScoreData(const string& docsFileName, bool addWordsFromLiterals,
                           const Index::TextVocab& textVocab,
                           const Index::Vocab& vocab);
 
-  void addWordToScoreDataInvertedIndex(std::string_view word,
-                                       DocumentIndex docId,
-                                       const Index::TextVocab& textVocab);
-
   float getScore(WordIndex wordIndex, TextRecordIndex contextId);
 
  private:
   //
-  ScoringMetric scoringMetric_;
+  TextScoringMetric scoringMetric_;
   float b_;
   float k_;
 
@@ -64,6 +60,10 @@ class ScoreData {
   float averageDocumentLength_;
 
   //
+  void addDocumentOrLiteralToScoreDataInvertedIndex(
+      std::string_view text, DocumentIndex docId,
+      const Index::TextVocab& textVocab);
+
   void calculateAVDL() {
     averageDocumentLength_ =
         nofDocuments_ ? (totalDocumentLength_ / nofDocuments_) : 0;

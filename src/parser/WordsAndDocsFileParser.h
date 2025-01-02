@@ -41,12 +41,12 @@ struct LiteralsTokenizationDelimiter {
   }
 };
 
-class TokenizeAndNormalizeText
-    : public ad_utility::InputRangeMixin<TokenizeAndNormalizeText> {
+class TextTokenizerAndNormalizer
+    : public ad_utility::InputRangeMixin<TextTokenizerAndNormalizer> {
  public:
   using StorageType = std::string;
-  explicit TokenizeAndNormalizeText(std::string_view text,
-                                    LocaleManager localeManager)
+  explicit TextTokenizerAndNormalizer(std::string_view text,
+                                      LocaleManager localeManager)
       : splitter_{absl::StrSplit(text, LiteralsTokenizationDelimiter{},
                                  absl::SkipEmpty{})},
         current_{splitter_.begin()},
@@ -54,9 +54,10 @@ class TokenizeAndNormalizeText
         localeManager_(localeManager){};
 
   // Delete unsafe constructors
-  TokenizeAndNormalizeText() = delete;
-  TokenizeAndNormalizeText(const TokenizeAndNormalizeText&) = delete;
-  TokenizeAndNormalizeText& operator=(const TokenizeAndNormalizeText&) = delete;
+  TextTokenizerAndNormalizer() = delete;
+  TextTokenizerAndNormalizer(const TextTokenizerAndNormalizer&) = delete;
+  TextTokenizerAndNormalizer& operator=(const TextTokenizerAndNormalizer&) =
+      delete;
 
  private:
   using Splitter = decltype(absl::StrSplit(

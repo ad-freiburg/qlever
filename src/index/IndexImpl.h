@@ -165,7 +165,7 @@ class IndexImpl {
   // wordsFile.tsv starts with contextId 1 and is continuous.
   size_t nofNonLiteralsInTextIndex_;
 
-  ScoringMetric textScoringMetric_;
+  TextScoringMetric textScoringMetric_;
   std::pair<float, float> bAndKParamForTextScoring_;
 
   // Global static pointers to the currently active index and comparator.
@@ -428,7 +428,7 @@ class IndexImpl {
     numTriplesPerBatch_ = numTriplesPerBatch;
   }
 
-  void setScoringMetricsUsedInSettings(ScoringMetric scoringMetric);
+  void setScoringMetricsUsedInSettings(TextScoringMetric scoringMetric);
 
   void setBM25ParametersInSettings(float b, float k);
 

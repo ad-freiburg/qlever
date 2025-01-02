@@ -13,7 +13,7 @@
 #include "index/InputFileSpecification.h"
 #include "index/Permutation.h"
 #include "index/StringSortComparator.h"
-#include "index/TextScoringTypeDefs.h"
+#include "index/TextScoringEnum.h"
 #include "index/Vocabulary.h"
 #include "parser/TripleComponent.h"
 #include "util/CancellationHandle.h"
@@ -206,7 +206,7 @@ class Index {
 
   void setNumTriplesPerBatch(uint64_t numTriplesPerBatch);
 
-  void setScoringMetricsUsedInSettings(ScoringMetric scoringMetric);
+  void setScoringMetricsUsedInSettings(TextScoringMetric scoringMetric);
 
   void setBM25ParmetersUsedInSettings(float b, float k);
 

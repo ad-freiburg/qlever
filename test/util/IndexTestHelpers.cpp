@@ -142,7 +142,7 @@ Index makeTestIndex(const std::string& indexBasename,
                     bool createTextIndex, bool addWordsFromLiterals,
                     std::optional<std::pair<std::string, std::string>>
                         contentsOfWordsFileAndDocsFile,
-                    std::optional<ScoringMetric> scoringMetric,
+                    std::optional<TextScoringMetric> scoringMetric,
                     std::optional<pair<float, float>> bAndKParam) {
   // Ignore the (irrelevant) log output of the index building and loading during
   // these tests.
@@ -274,7 +274,7 @@ QueryExecutionContext* getQec(
     bool addWordsFromLiterals,
     std::optional<std::pair<std::string, std::string>>
         contentsOfWordsFileAndDocsFile,
-    std::optional<ScoringMetric> scoringMetric,
+    std::optional<TextScoringMetric> scoringMetric,
     std::optional<std::pair<float, float>> bAndKParam) {
   // Similar to `absl::Cleanup`. Calls the `callback_` in the destructor, but
   // the callback is stored as a `std::function`, which allows to store
@@ -314,7 +314,7 @@ QueryExecutionContext* getQec(
   using Key = std::tuple<
       std::optional<string>, bool, bool, bool, ad_utility::MemorySize,
       std::optional<std::pair<std::string, std::string>>,
-      std::optional<ScoringMetric>, std::optional<std::pair<float, float>>>;
+      std::optional<TextScoringMetric>, std::optional<std::pair<float, float>>>;
   static ad_utility::HashMap<Key, Context> contextMap;
 
   auto key = Key{turtleInput,           loadAllPermutations,

@@ -10,7 +10,7 @@
 #include "../util/StringUtils.h"
 
 // _____________________________________________________________________________
-void TokenizeAndNormalizeText::start() {
+void TextTokenizerAndNormalizer::start() {
   if (current_ != end_) {
     currentValue_ = normalizeToken(*current_);
   } else {
@@ -19,7 +19,7 @@ void TokenizeAndNormalizeText::start() {
 }
 
 // _____________________________________________________________________________
-void TokenizeAndNormalizeText::next() {
+void TextTokenizerAndNormalizer::next() {
   ++current_;
   if (current_ != end_) {
     currentValue_ = normalizeToken(*current_);

@@ -12,7 +12,7 @@ void ScoreData::calculateScoreData(const string& docsFileName,
                                    const Index::TextVocab& textVocab,
                                    const Index::Vocab& vocab) {
   // Skip calculation if scoring mode is set to count
-  if (scoringMetric_ == ScoringMetric::COUNT) {
+  if (scoringMetric_ == TextScoringMetric::COUNT) {
     return;
   }
 
@@ -25,15 +25,9 @@ void ScoreData::calculateScoreData(const string& docsFileName,
     // Set docId
     docId = line.docId_;
     // Parse docText for invertedIndex
-    TokenizeAndNormalizeText docTextWordsNormalized(line.docContent_,
-                                                    localeManager_);
-    for (auto word : docTextWordsNormalized) {
-      addWordToScoreDataInvertedIndex(word, docId, textVocab);
-    }
-    ++nofDocuments_;
-    docIdSet_.insert(docId);
+    addDocumentOrLiteralToScoreDataInvertedIndex(line.docContent_, docId,
+                                                 textVocab);
   }
-  calculateAVDL();
 
   // Parse literals if added
   if (!addWordsFromLiterals) {
@@ -50,50 +44,48 @@ void ScoreData::calculateScoreData(const string& docsFileName,
     std::string_view textView = text;
 
     // Parse words in literal
-    TokenizeAndNormalizeText literalsTextWordsNormalized(textView,
-                                                         localeManager_);
-    for (auto word : literalsTextWordsNormalized) {
-      // Check if word exists and retrieve wordId
-      addWordToScoreDataInvertedIndex(word, docId, textVocab);
-    }
-    ++nofDocuments_;
-    docIdSet_.insert(docId);
+    addDocumentOrLiteralToScoreDataInvertedIndex(textView, docId, textVocab);
   }
-  calculateAVDL();
 }
 
 // ____________________________________________________________________________
-void ScoreData::addWordToScoreDataInvertedIndex(
-    std::string_view word, DocumentIndex docId,
+void ScoreData::addDocumentOrLiteralToScoreDataInvertedIndex(
+    std::string_view text, DocumentIndex docId,
     const Index::TextVocab& textVocab) {
+  TextTokenizerAndNormalizer normalizedWords(text, localeManager_);
   WordVocabIndex wvi;
-  // Check if word exists and retrieve wordId
-  WordIndex currentWordId;
-  if (!textVocab.getRawId(word, &wvi, currentWordId)) {
-    return;
-  }
-  // Emplaces or increases the docLengthMap
-  if (docLengthMap_.contains(docId)) {
-    ++docLengthMap_[docId];
-  } else {
-    docLengthMap_[docId] = 1;
-  }
-  ++totalDocumentLength_;
-  // Check if wordId already is a key in the InvertedIndex
-  if (invertedIndex_.contains(currentWordId)) {
-    // Check if the word is seen in a new context or not
-    InnerMap& innerMap = invertedIndex_.find(currentWordId)->second;
-    auto ret = innerMap.find(docId);
-    // Seen in new context
-    if (ret == innerMap.end()) {
-      innerMap.emplace(docId, 1);
-      // Seen in known context
-    } else {
-      ret->second += 1;
+  for (auto word : normalizedWords) {
+    // Check if word exists and retrieve wordId
+    WordIndex currentWordId;
+    if (!textVocab.getRawId(word, &wvi, currentWordId)) {
+      continue;
     }
-  } else {
-    invertedIndex_.emplace(currentWordId, InnerMap{{docId, 1}});
+    // Emplaces or increases the docLengthMap
+    if (docLengthMap_.contains(docId)) {
+      ++docLengthMap_[docId];
+    } else {
+      docLengthMap_[docId] = 1;
+    }
+    ++totalDocumentLength_;
+    // Check if wordId already is a key in the InvertedIndex
+    if (invertedIndex_.contains(currentWordId)) {
+      // Check if the word is seen in a new context or not
+      InnerMap& innerMap = invertedIndex_.find(currentWordId)->second;
+      auto ret = innerMap.find(docId);
+      // Seen in new context
+      if (ret == innerMap.end()) {
+        innerMap.emplace(docId, 1);
+        // Seen in known context
+      } else {
+        ret->second += 1;
+      }
+      // New word never seen before
+    } else {
+      invertedIndex_.emplace(currentWordId, InnerMap{{docId, 1}});
+    }
   }
+  ++nofDocuments_;
+  docIdSet_.insert(docId);
 }
 
 // ____________________________________________________________________________
@@ -104,6 +96,7 @@ float ScoreData::getScore(WordIndex wordIndex, TextRecordIndex contextId) {
                << wordIndex << std::endl;
     return 0;
   }
+  calculateAVDL();
   InnerMap& innerMap = invertedIndex_.find(wordIndex)->second;
   size_t df = innerMap.size();
   float idf = std::log2f(nofDocuments_ / df);
@@ -139,7 +132,7 @@ float ScoreData::getScore(WordIndex wordIndex, TextRecordIndex contextId) {
   }
   TermFrequency tf = ret1->second;
 
-  if (scoringMetric_ == ScoringMetric::TFIDF) {
+  if (scoringMetric_ == TextScoringMetric::TFIDF) {
     return tf * idf;
   }
 

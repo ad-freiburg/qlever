@@ -207,7 +207,7 @@ void Index::setNumTriplesPerBatch(uint64_t numTriplesPerBatch) {
 }
 
 // ____________________________________________________________________________
-void Index::setScoringMetricsUsedInSettings(ScoringMetric scoringMetric) {
+void Index::setScoringMetricsUsedInSettings(TextScoringMetric scoringMetric) {
   return pimpl_->setScoringMetricsUsedInSettings(scoringMetric);
 }
 

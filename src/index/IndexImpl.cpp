@@ -1130,7 +1130,7 @@ void IndexImpl::readConfiguration() {
   loadDataMember("num-triples", numTriples_, NumNormalAndInternal{});
   loadDataMember("num-non-literals-text-index", nofNonLiteralsInTextIndex_, 0);
   loadDataMember("text-scoring-metric", textScoringMetric_,
-                 ScoringMetric::COUNT);
+                 TextScoringMetric::COUNT);
   loadDataMember("b-and-k-parameter-for-text-scoring",
                  bAndKParamForTextScoring_, std::make_pair(0.75, 1.75));
 

@@ -48,7 +48,7 @@ Index makeTestIndex(
     bool createTextIndex = false, bool addWordsFromLiterals = true,
     std::optional<std::pair<std::string, std::string>>
         contentsOfWordsFileAndDocsfile = std::nullopt,
-    std::optional<ScoringMetric> scoringMetric = std::nullopt,
+    std::optional<TextScoringMetric> scoringMetric = std::nullopt,
     std::optional<std::pair<float, float>> bAndKParam = std::nullopt);
 
 // Return a static  `QueryExecutionContext` that refers to an index that was
@@ -63,7 +63,7 @@ QueryExecutionContext* getQec(
     bool createTextIndex = false, bool addWordsFromLiterals = true,
     std::optional<std::pair<std::string, std::string>>
         contentsOfWordsFileAndDocsfile = std::nullopt,
-    std::optional<ScoringMetric> scoringMetric = std::nullopt,
+    std::optional<TextScoringMetric> scoringMetric = std::nullopt,
     std::optional<std::pair<float, float>> bAndKParam = std::nullopt);
 
 // Return a lambda that takes a string and converts it into an ID by looking

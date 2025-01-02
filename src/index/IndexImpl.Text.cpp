@@ -53,7 +53,7 @@ cppcoro::generator<WordsFileLine> IndexImpl::wordsInTextRecords(
       std::string_view textView = text;
       textView = textView.substr(0, textView.rfind('"'));
       textView.remove_prefix(1);
-      TokenizeAndNormalizeText normalizedWords(textView, localeManager);
+      TextTokenizerAndNormalizer normalizedWords(textView, localeManager);
       for (auto word : normalizedWords) {
         WordsFileLine wordLine{word, false, contextId, 1};
         co_yield wordLine;
@@ -279,7 +279,7 @@ void IndexImpl::processWordsForInvertedLists(const string& contextFile,
                    << "not found in textVocab. Terminating\n";
         AD_FAIL();
       }
-      if (scoreData_.getScoringMetric() == ScoringMetric::COUNT) {
+      if (scoreData_.getScoringMetric() == TextScoringMetric::COUNT) {
         wordsInContext[wid] += line.score_;
       } else {
         wordsInContext[wid] = scoreData_.getScore(wid, line.contextId_);
@@ -1008,7 +1008,8 @@ auto IndexImpl::getTextBlockMetadataForWordOrPrefix(const std::string& word)
 }
 
 // _____________________________________________________________________________
-void IndexImpl::setScoringMetricsUsedInSettings(ScoringMetric scoringMetric) {
+void IndexImpl::setScoringMetricsUsedInSettings(
+    TextScoringMetric scoringMetric) {
   configurationJson_["text-scoring-metric"] = scoringMetric;
   writeConfiguration();
 }

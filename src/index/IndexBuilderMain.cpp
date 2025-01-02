@@ -155,6 +155,7 @@ int main(int argc, char** argv) {
   string textIndexName;
   string kbIndexName;
   string settingsFile;
+  string scoringMetric = "count";
   std::vector<string> filetype;
   std::vector<string> inputFile;
   std::vector<string> defaultGraphs;
@@ -166,7 +167,6 @@ int main(int argc, char** argv) {
   bool addWordsFromLiterals = false;
   float bScoringParam = 0.75;
   float kScoringParam = 1.75;
-  size_t scoringMetric = 0;
   std::optional<ad_utility::MemorySize> stxxlMemory;
   optind = 1;
 
@@ -223,8 +223,9 @@ int main(int argc, char** argv) {
       "Sets the k param in the BM25 scoring metric. This has to be greater "
       "than or equal to 0. The default is 1.75.");
   add("set-scoring-metric,S", po::value(&scoringMetric),
-      "Sets the scoring metric used. Options are 0 for count, 1 for tf idf "
-      "and 2 for bm25. The default is 0 (count).");
+      "Sets the scoring metric used. Options are \"count\" for count, "
+      "\"tf-idf\" for tf idf "
+      "and \"bm25\" for bm25. The default is count.");
 
   // Options for the knowledge graph index.
   add("settings-file,s", po::value(&settingsFile),
@@ -344,22 +345,8 @@ int main(int argc, char** argv) {
     }
 
     if ((!wordsfile.empty() && !docsfile.empty()) || addWordsFromLiterals) {
-      ScoringMetric scoring;
-      switch (scoringMetric) {
-        case 0:
-          scoring = ScoringMetric::COUNT;
-          break;
-        case 1:
-          scoring = ScoringMetric::TFIDF;
-          break;
-        case 2:
-          scoring = ScoringMetric::BM25;
-          break;
-        default:
-          scoring = ScoringMetric::COUNT;
-          break;
-      }
-      index.setScoringMetricsUsedInSettings(scoring);
+      index.setScoringMetricsUsedInSettings(
+          getTextScoringMetricFromString(scoringMetric));
       index.setBM25ParmetersUsedInSettings(bScoringParam, kScoringParam);
       index.buildTextIndexFile(
           std::pair<std::string, std::string>{wordsfile, docsfile},
