@@ -158,11 +158,6 @@ class Vocabulary {
   //! Return value signals if something was found at all.
   bool getId(std::string_view word, IndexType* idx) const;
 
-  // Same as getId but returns the underlying numerical id implicitly with the
-  // returnValue parameter
-  bool getRawId(std::string_view word, IndexType* idx,
-                uint64_t& returnValue) const;
-
   // Get the index range for the given prefix or `std::nullopt` if no word with
   // the given prefix exists in the vocabulary.
   //

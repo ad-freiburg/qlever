@@ -56,10 +56,10 @@ void ScoreData::addDocumentOrLiteralToScoreDataInvertedIndex(
   WordVocabIndex wvi;
   for (auto word : normalizedWords) {
     // Check if word exists and retrieve wordId
-    WordIndex currentWordId;
-    if (!textVocab.getRawId(word, &wvi, currentWordId)) {
+    if (!textVocab.getId(word, &wvi)) {
       continue;
     }
+    WordIndex currentWordId = wvi.get();
     // Emplaces or increases the docLengthMap
     if (docLengthMap_.contains(docId)) {
       ++docLengthMap_[docId];
