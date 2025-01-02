@@ -17,6 +17,7 @@
 #include "backports/algorithm.h"
 #include "engine/CallFixedSize.h"
 #include "index/FTSAlgorithms.h"
+#include "index/TextIndexWriteRead.h"
 #include "parser/ContextFileParser.h"
 #include "util/Conversions.h"
 #include "util/Simple8bCode.h"
@@ -353,8 +354,10 @@ void IndexImpl::createTextIndex(const string& filename,
     if (std::get<0>(*reader) != currentBlockIndex) {
       AD_CONTRACT_CHECK(!classicPostings.empty());
 
-      ContextListMetaData classic = writePostings(out, classicPostings, true);
-      ContextListMetaData entity = writePostings(out, entityPostings, false);
+      ContextListMetaData classic = TextIndexWriteRead::writePostings(
+          out, classicPostings, true, currenttOffset_);
+      ContextListMetaData entity = TextIndexWriteRead::writePostings(
+          out, entityPostings, false, currenttOffset_);
       textMeta_.addBlock(TextBlockMetaData(
           currentMinWordIndex, currentMaxWordIndex, classic, entity));
       classicPostings.clear();
@@ -380,8 +383,10 @@ void IndexImpl::createTextIndex(const string& filename,
   }
   // Write the last block
   AD_CONTRACT_CHECK(!classicPostings.empty());
-  ContextListMetaData classic = writePostings(out, classicPostings, true);
-  ContextListMetaData entity = writePostings(out, entityPostings, false);
+  ContextListMetaData classic = TextIndexWriteRead::writePostings(
+      out, classicPostings, true, currenttOffset_);
+  ContextListMetaData entity = TextIndexWriteRead::writePostings(
+      out, entityPostings, false, currenttOffset_);
   textMeta_.addBlock(TextBlockMetaData(currentMinWordIndex, currentMaxWordIndex,
                                        classic, entity));
   classicPostings.clear();
@@ -398,89 +403,6 @@ void IndexImpl::createTextIndex(const string& filename,
   out.write(&startOfMeta, sizeof(startOfMeta));
   out.close();
   LOG(INFO) << "Text index build completed" << std::endl;
-}
-
-// _____________________________________________________________________________
-ContextListMetaData IndexImpl::writePostings(ad_utility::File& out,
-                                             const vector<Posting>& postings,
-                                             bool skipWordlistIfAllTheSame) {
-  ContextListMetaData meta;
-  meta._nofElements = postings.size();
-  if (meta._nofElements == 0) {
-    meta._startContextlist = currenttOffset_;
-    meta._startWordlist = currenttOffset_;
-    meta._startScorelist = currenttOffset_;
-    meta._lastByte = currenttOffset_ - 1;
-    return meta;
-  }
-
-  // Collect the individual lists
-  // Context lists are gap encoded, word and score lists frequency encoded.
-  // TODO<joka921> these are gap encoded contextIds, maybe also create a type
-  // for this.
-  auto contextList = new uint64_t[meta._nofElements];
-  WordIndex* wordList = new WordIndex[meta._nofElements];
-  Score* scoreList = new Score[meta._nofElements];
-
-  size_t n = 0;
-
-  WordCodeMap wordCodeMap;
-  WordCodebook wordCodebook;
-  ScoreCodeMap scoreCodeMap;
-  ScoreCodebook scoreCodebook;
-
-  createCodebooks(postings, wordCodeMap, wordCodebook, scoreCodeMap,
-                  scoreCodebook);
-
-  TextRecordIndex lastContext = std::get<0>(postings[0]);
-  contextList[n] = lastContext.get();
-  wordList[n] = wordCodeMap[std::get<1>(postings[0])];
-  scoreList[n] = scoreCodeMap[std::get<2>(postings[0])];
-  ++n;
-
-  for (auto it = postings.begin() + 1; it < postings.end(); ++it) {
-    uint64_t gap = std::get<0>(*it).get() - lastContext.get();
-    contextList[n] = gap;
-    lastContext = std::get<0>(*it);
-    wordList[n] = wordCodeMap[std::get<1>(*it)];
-    scoreList[n] = scoreCodeMap[std::get<2>(*it)];
-    ++n;
-  }
-
-  AD_CONTRACT_CHECK(meta._nofElements == n);
-
-  // Do the actual writing:
-  size_t bytes = 0;
-
-  // Write context list:
-  meta._startContextlist = currenttOffset_;
-  bytes = writeList(contextList, meta._nofElements, out);
-  currenttOffset_ += bytes;
-
-  // Write word list:
-  // This can be skipped if we're writing classic lists and there
-  // is only one distinct wordId in the block, since this Id is already
-  // stored in the meta data.
-  meta._startWordlist = currenttOffset_;
-  if (!skipWordlistIfAllTheSame || wordCodebook.size() > 1) {
-    currenttOffset_ += writeCodebook(wordCodebook, out);
-    bytes = writeList(wordList, meta._nofElements, out);
-    currenttOffset_ += bytes;
-  }
-
-  // Write scores
-  meta._startScorelist = currenttOffset_;
-  currenttOffset_ += writeCodebook(scoreCodebook, out);
-  bytes = writeList(scoreList, meta._nofElements, out);
-  currenttOffset_ += bytes;
-
-  meta._lastByte = currenttOffset_ - 1;
-
-  delete[] contextList;
-  delete[] wordList;
-  delete[] scoreList;
-
-  return meta;
 }
 
 /// yields  aaaa, aaab, ..., zzzz
@@ -635,82 +557,6 @@ TextBlockIndex IndexImpl::getWordBlockId(WordIndex wordIndex) const {
   return std::lower_bound(blockBoundaries_.begin(), blockBoundaries_.end(),
                           wordIndex) -
          blockBoundaries_.begin();
-}
-
-// _____________________________________________________________________________
-template <typename Numeric>
-size_t IndexImpl::writeList(Numeric* data, size_t nofElements,
-                            ad_utility::File& file) const {
-  if (nofElements > 0) {
-    uint64_t* encoded = new uint64_t[nofElements];
-    size_t size = ad_utility::Simple8bCode::encode(data, nofElements, encoded);
-    size_t ret = file.write(encoded, size);
-    AD_CONTRACT_CHECK(size == ret);
-    delete[] encoded;
-    return size;
-  } else {
-    return 0;
-  }
-}
-
-// _____________________________________________________________________________
-void IndexImpl::createCodebooks(const vector<IndexImpl::Posting>& postings,
-                                IndexImpl::WordCodeMap& wordCodemap,
-                                IndexImpl::WordCodebook& wordCodebook,
-                                IndexImpl::ScoreCodeMap& scoreCodemap,
-                                IndexImpl::ScoreCodebook& scoreCodebook) const {
-  // There should be a more efficient way to do this (Felix Meisen)
-  ad_utility::HashMap<WordIndex, size_t> wfMap;
-  ad_utility::HashMap<Score, size_t> sfMap;
-  for (const auto& p : postings) {
-    wfMap[std::get<1>(p)] = 0;
-    sfMap[std::get<2>(p)] = 0;
-  }
-  for (const auto& p : postings) {
-    ++wfMap[std::get<1>(p)];
-    ++sfMap[std::get<2>(p)];
-  }
-  vector<std::pair<WordIndex, size_t>> wfVec;
-  wfVec.resize(wfMap.size());
-  size_t i = 0;
-  for (auto it = wfMap.begin(); it != wfMap.end(); ++it) {
-    wfVec[i].first = it->first;
-    wfVec[i].second = it->second;
-    ++i;
-  }
-  vector<std::pair<Score, size_t>> sfVec;
-  sfVec.resize(sfMap.size());
-  i = 0;
-  for (auto it = sfMap.begin(); it != sfMap.end(); ++it) {
-    sfVec[i].first = it->first;
-    sfVec[i].second = it->second;
-    ++i;
-  }
-  std::sort(wfVec.begin(), wfVec.end(),
-            [](const auto& a, const auto& b) { return a.second > b.second; });
-  std::sort(
-      sfVec.begin(), sfVec.end(),
-      [](const std::pair<Score, size_t>& a, const std::pair<Score, size_t>& b) {
-        return a.second > b.second;
-      });
-  for (size_t j = 0; j < wfVec.size(); ++j) {
-    wordCodebook.push_back(wfVec[j].first);
-    wordCodemap[wfVec[j].first] = j;
-  }
-  for (size_t j = 0; j < sfVec.size(); ++j) {
-    scoreCodebook.push_back(sfVec[j].first);
-    scoreCodemap[sfVec[j].first] = static_cast<Score>(j);
-  }
-}
-
-// _____________________________________________________________________________
-template <class T>
-size_t IndexImpl::writeCodebook(const vector<T>& codebook,
-                                ad_utility::File& file) const {
-  size_t byteSizeOfCodebook = sizeof(T) * codebook.size();
-  file.write(&byteSizeOfCodebook, sizeof(byteSizeOfCodebook));
-  file.write(codebook.data(), byteSizeOfCodebook);
-  return byteSizeOfCodebook + sizeof(byteSizeOfCodebook);
 }
 
 // _____________________________________________________________________________
