@@ -987,9 +987,10 @@ TEST(RdfParserTest, exceptionPropagationFileBufferReading) {
     }
     AD_EXPECT_THROW_WITH_MESSAGE(
         (parseFromFile<Parser>(filename, useBatchInterface, bufferSize)),
-        ::testing::AllOf(::testing::HasSubstr("end of a statement was not found"),
-                         ::testing::HasSubstr("use `--parser-buffer-size`"),
-                         ::testing::HasSubstr("use `--parse-parallel false`")));
+        ::testing::AllOf(
+            ::testing::HasSubstr("end of a statement was not found"),
+            ::testing::HasSubstr("use `--parser-buffer-size`"),
+            ::testing::HasSubstr("use `--parse-parallel false`")));
     ad_utility::deleteFile(filename);
   };
   // Input, where the first triple fits into a 40_B buffer, but the second
