@@ -525,6 +525,9 @@ TEST(IndexTest, trivialGettersAndSetters) {
   index.memoryLimitIndexBuilding() = 7_kB;
   EXPECT_EQ(index.memoryLimitIndexBuilding(), 7_kB);
   EXPECT_EQ(std::as_const(index).memoryLimitIndexBuilding(), 7_kB);
+  index.parserBufferSize() = 8_kB;
+  EXPECT_EQ(index.parserBufferSize(), 8_kB);
+  EXPECT_EQ(std::as_const(index).parserBufferSize(), 8_kB);
 }
 
 TEST(IndexTest, updateInputFileSpecificationsAndLog) {
