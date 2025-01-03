@@ -102,11 +102,14 @@ ParallelBufferWithEndRegex::getNextBlock() {
   if (!endPosition) {
     if (rawBuffer_.getNextBlock()) {
       throw std::runtime_error(absl::StrCat(
-          "The regex \"", endRegexAsString_,
-          "\" which marks the end of a statement was not found in the current "
-          "input batch (that was not the last one). Possible fixes are: "
+          "The regex ", endRegexAsString_,
+          " which marks the end of a statement was not found in the current "
+          "input batch (that was not the last one) of size ",
+          ad_utility::insertThousandSeparator(std::to_string(rawInput->size()),
+                                              ','),
+          "; possible fixes are: "
           "use `--parser-buffer-size` to increase the buffer size or "
-          "use `--parse-parallel false` to disable parallel parsing."));
+          "use `--parse-parallel false` to disable parallel parsing"));
     }
     endPosition = rawInput->size();
     exhausted_ = true;
