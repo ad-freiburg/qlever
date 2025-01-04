@@ -48,7 +48,7 @@ Index makeTestIndex(const std::string& indexBasename,
                     bool addWordsFromLiterals = true,
                     std::optional<std::pair<std::string, std::string>>
                         contentsOfWordsFileAndDocsfile = std::nullopt,
-                        unsigned long FILE_BUFFER_SIZE_ = 1000);
+                    unsigned long FILE_BUFFER_SIZE_ = 1000);
 
 // Return a static  `QueryExecutionContext` that refers to an index that was
 // build using `makeTestIndex` (see above). The index (most notably its
@@ -62,7 +62,7 @@ QueryExecutionContext* getQec(
     bool createTextIndex = false, bool addWordsFromLiterals = true,
     std::optional<std::pair<std::string, std::string>>
         contentsOfWordsFileAndDocsfile = std::nullopt,
-        unsigned long FILE_BUFFER_SIZE_ = 1000);
+    unsigned long FILE_BUFFER_SIZE_ = 1000);
 
 // Return a lambda that takes a string and converts it into an ID by looking
 // it up in the vocabulary of `index`. An `AD_CONTRACT_CHECK` will fail if the

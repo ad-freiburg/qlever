@@ -20,9 +20,11 @@ namespace bgi = boost::geometry::index;
 
 using Point = bg::model::point<double, 2, bg::cs::cartesian>;
 using Box = bg::model::box<Point>;
-// using Value = std::pair<Point, size_t>;  // TODO: remove this line, it's legacy, when areas were not yet possible
+// using Value = std::pair<Point, size_t>;  // TODO: remove this line, it's
+// legacy, when areas were not yet possible
 using Value = std::pair<Box, size_t>;
-using Polygon = boost::geometry::model::polygon<boost::geometry::model::d2::point_xy<double>>;
+using Polygon = boost::geometry::model::polygon<
+    boost::geometry::model::d2::point_xy<double>>;
 }  // namespace BoostGeometryNamespace
 
 class SpatialJoinAlgorithms {
@@ -46,6 +48,23 @@ class SpatialJoinAlgorithms {
       const std::vector<BoostGeometryNamespace::Box>& boundingBox,
       const BoostGeometryNamespace::Point& point) const {
     return isContainedInBoundingBoxes(boundingBox, point);
+  }
+
+  BoostGeometryNamespace::Box OnlyForTestingWrapperCalculateBoundingBoxOfArea(
+      const std::string& wktString) const {
+    return calculateBoundingBoxOfArea(wktString);
+  }
+
+  BoostGeometryNamespace::Point OnlyForTestingWrapperCalculateMidpointOfBox(
+      const BoostGeometryNamespace::Box& box) const {
+    return calculateMidpointOfBox(box);
+  }
+
+  double OnlyForTestingWrapperGetMaxDistFromMidpointToAnyPointInsideTheBox(
+      const BoostGeometryNamespace::Box& box,
+      std::optional<BoostGeometryNamespace::Point> midpoint =
+          std::nullopt) const {
+    return getMaxDistFromMidpointToAnyPointInsideTheBox(box, midpoint);
   }
 
  private:
@@ -87,7 +106,8 @@ class SpatialJoinAlgorithms {
   // The function getMaxDistFromMidpointToAnyPointInsideTheBox() can be used to
   // calculate it.
   std::vector<BoostGeometryNamespace::Box> computeBoundingBox(
-      const BoostGeometryNamespace::Point& startPoint, double additionalDist = 0) const;
+      const BoostGeometryNamespace::Point& startPoint,
+      double additionalDist = 0) const;
 
   // This helper function calculates the bounding boxes based on a box, where
   // definitely no match can occur. This means every element in the anti
@@ -109,17 +129,22 @@ class SpatialJoinAlgorithms {
   // this function calculates the bounding box of a polygon geometry.
   // This is different to the query box, which is a box, which contains the area
   // where all results are contained in
-  BoostGeometryNamespace::Box calculateBoundingBoxOfArea(const std::string& wktString) const;
+  BoostGeometryNamespace::Box calculateBoundingBoxOfArea(
+      const std::string& wktString) const;
 
   // calculates the midpoint of the given Box
-  BoostGeometryNamespace::Point calculateMidpointOfBox(const BoostGeometryNamespace::Box& box) const;
+  BoostGeometryNamespace::Point calculateMidpointOfBox(
+      const BoostGeometryNamespace::Box& box) const;
 
   // this function calculates the maximum distance from the midpoint of the box
-  // to any other point, which is contained in the box. If the midpoint has already
-  // been calculated, because it is needed in other places as well, it can be given
-  // to the function, otherwise the function calculates the midpoint itself
+  // to any other point, which is contained in the box. If the midpoint has
+  // already been calculated, because it is needed in other places as well, it
+  // can be given to the function, otherwise the function calculates the
+  // midpoint itself
   double getMaxDistFromMidpointToAnyPointInsideTheBox(
-              const BoostGeometryNamespace::Box& box, std::optional<BoostGeometryNamespace::Point> midpoint = std::nullopt) const;
+      const BoostGeometryNamespace::Box& box,
+      std::optional<BoostGeometryNamespace::Point> midpoint =
+          std::nullopt) const;
 
   QueryExecutionContext* qec_;
   PreparedSpatialJoinParams params_;

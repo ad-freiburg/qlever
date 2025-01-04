@@ -4,7 +4,6 @@
 //  Author: Christoph Ullinger <ullingec@informatik.uni-freiburg.de>
 
 #include "engine/SpatialJoinAlgorithms.h"
-#include "engine/ExportQueryExecutionTrees.h"
 
 #include <s2/s2closest_point_query.h>
 #include <s2/s2earth.h>
@@ -14,6 +13,7 @@
 
 #include <cmath>
 
+#include "engine/ExportQueryExecutionTrees.h"
 #include "engine/SpatialJoin.h"
 #include "util/GeoSparqlHelpers.h"
 
@@ -39,11 +39,12 @@ std::optional<GeoPoint> SpatialJoinAlgorithms::getPoint(const IdTable* restable,
 };
 
 // ____________________________________________________________________________
-std::string SpatialJoinAlgorithms::betweenQuotes(std::string extractFrom) const {
+std::string SpatialJoinAlgorithms::betweenQuotes(
+    std::string extractFrom) const {
   size_t pos1 = extractFrom.find("\"", 0);
   size_t pos2 = extractFrom.find("\"", pos1 + 1);
   if (pos1 != std::string::npos && pos2 != std::string::npos) {
-    return extractFrom.substr(pos1 + 1, pos2-pos1-1);
+    return extractFrom.substr(pos1 + 1, pos2 - pos1 - 1);
   } else {
     return extractFrom;
   }
@@ -55,26 +56,29 @@ Id SpatialJoinAlgorithms::computeDist(const IdTable* idTableLeft,
                                       size_t rowLeft, size_t rowRight,
                                       ColumnIndex leftPointCol,
                                       ColumnIndex rightPointCol) const {
-  auto getAreaPoint = [&](const IdTable* idtable, size_t row, size_t col) -> std::optional<GeoPoint> {
-    std::string areastring = betweenQuotes(ExportQueryExecutionTrees::idToStringAndType(
-            qec_->getIndex(),
-            idtable->at(row, col), {}).value().first);
+  auto getAreaPoint = [&](const IdTable* idtable, size_t row,
+                          size_t col) -> std::optional<GeoPoint> {
+    std::string areastring =
+        betweenQuotes(ExportQueryExecutionTrees::idToStringAndType(
+                          qec_->getIndex(), idtable->at(row, col), {})
+                          .value()
+                          .first);
     Box areaBox;
     try {
       areaBox = calculateBoundingBoxOfArea(areastring);
-    } catch(...) {
+    } catch (...) {
       // nothing to do. When parsing a point or an area fails, a warning message
       // gets printed at another place and the point/area just gets skipped
       return std::nullopt;
     }
     if (useMidpointForAreas) {
-        Point p = calculateMidpointOfBox(areaBox);
-        return GeoPoint(p.get<1>(), p.get<0>());
-      } else {
-        AD_FAIL();  // TODO not yet implemented
-      }
+      Point p = calculateMidpointOfBox(areaBox);
+      return GeoPoint(p.get<1>(), p.get<0>());
+    } else {
+      AD_FAIL();  // TODO not yet implemented
+    }
   };
-  
+
   auto point1 = getPoint(idTableLeft, rowLeft, leftPointCol);
   if (!point1) {
     point1 = getAreaPoint(idTableLeft, rowLeft, leftPointCol);
@@ -483,7 +487,8 @@ std::array<bool, 2> SpatialJoinAlgorithms::isAPoleTouched(
 }
 
 // ____________________________________________________________________________
-Box SpatialJoinAlgorithms::calculateBoundingBoxOfArea(const std::string& wktString) const {
+Box SpatialJoinAlgorithms::calculateBoundingBoxOfArea(
+    const std::string& wktString) const {
   Polygon polygon;
   boost::geometry::read_wkt(wktString, polygon);
   double minLng = std::numeric_limits<double>::infinity();
@@ -493,10 +498,18 @@ Box SpatialJoinAlgorithms::calculateBoundingBoxOfArea(const std::string& wktStri
   for (const auto& point : polygon.outer()) {
     double lng = boost::geometry::get<0>(point);
     double lat = boost::geometry::get<1>(point);
-    if (lng < minLng){ minLng = lng; }
-    if (lng > maxLng){ maxLng = lng; }
-    if (lat < minLat){ minLat = lat; }
-    if (lat > maxLat){ maxLat = lat; }
+    if (lng < minLng) {
+      minLng = lng;
+    }
+    if (lng > maxLng) {
+      maxLng = lng;
+    }
+    if (lat < minLat) {
+      minLat = lat;
+    }
+    if (lat > maxLat) {
+      maxLat = lat;
+    }
   }
   return Box(Point(minLng, minLat), Point(maxLng, maxLat));
 }
@@ -510,12 +523,14 @@ Point SpatialJoinAlgorithms::calculateMidpointOfBox(const Box& box) const {
 
 // ____________________________________________________________________________
 double SpatialJoinAlgorithms::getMaxDistFromMidpointToAnyPointInsideTheBox(
-              const Box& box, std::optional<Point> midpoint) const {
+    const Box& box, std::optional<Point> midpoint) const {
   if (!midpoint) {
     midpoint = calculateMidpointOfBox(box);
   }
-  double distLng = std::abs(box.min_corner().get<0>() - midpoint.value().get<0>());
-  double distLat = std::abs(box.min_corner().get<1>() - midpoint.value().get<1>());
+  double distLng =
+      std::abs(box.min_corner().get<0>() - midpoint.value().get<0>());
+  double distLat =
+      std::abs(box.min_corner().get<1>() - midpoint.value().get<1>());
   // convert to meters and return
   return (distLng + distLat) * 40075000 / 360;
 }
@@ -527,7 +542,8 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
     if (!alreadyWarned) {
       std::string warning =
           "The input to a spatial join contained at least one element, "
-          "that is not a point or polygon geometry and is thus skipped. Note that "
+          "that is not a point or polygon geometry and is thus skipped. Note "
+          "that "
           "QLever currently only accepts point or polygon geometries for the "
           "spatial joins";
       AD_LOG_WARN << warning << std::endl;
@@ -568,9 +584,11 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
 
     if (!geopoint) {
       try {
-        std::string areastring = betweenQuotes(ExportQueryExecutionTrees::idToStringAndType(
-              qec_->getIndex(),
-              smallerResult->at(i, smallerResJoinCol), {}).value().first);
+        std::string areastring = betweenQuotes(
+            ExportQueryExecutionTrees::idToStringAndType(
+                qec_->getIndex(), smallerResult->at(i, smallerResJoinCol), {})
+                .value()
+                .first);
         bbox = calculateBoundingBoxOfArea(areastring);
       } catch (...) {
         printWarning();
@@ -596,18 +614,23 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
 
     if (!geopoint) {
       try {
-        std::string areastring = betweenQuotes(ExportQueryExecutionTrees::idToStringAndType(
-            qec_->getIndex(),
-            otherResult->at(i, otherResJoinCol), {}).value().first);
+        std::string areastring = betweenQuotes(
+            ExportQueryExecutionTrees::idToStringAndType(
+                qec_->getIndex(), otherResult->at(i, otherResJoinCol), {})
+                .value()
+                .first);
         auto areaBox = calculateBoundingBoxOfArea(areastring);
         auto midpoint = calculateMidpointOfBox(areaBox);
-        bbox = computeBoundingBox(midpoint, getMaxDistFromMidpointToAnyPointInsideTheBox(areaBox, midpoint));
+        bbox = computeBoundingBox(
+            midpoint,
+            getMaxDistFromMidpointToAnyPointInsideTheBox(areaBox, midpoint));
       } catch (...) {
         printWarning();
         continue;
       }
     } else {
-      bbox = computeBoundingBox(Point(geopoint.value().getLng(), geopoint.value().getLat()));
+      bbox = computeBoundingBox(
+          Point(geopoint.value().getLng(), geopoint.value().getLat()));
     }
 
     results.clear();

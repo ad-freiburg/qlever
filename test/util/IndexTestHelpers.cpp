@@ -141,7 +141,8 @@ Index makeTestIndex(const std::string& indexBasename,
                     ad_utility::MemorySize blocksizePermutations,
                     bool createTextIndex, bool addWordsFromLiterals,
                     std::optional<std::pair<std::string, std::string>>
-                        contentsOfWordsFileAndDocsFile, unsigned long FILE_BUFFER_SIZE_) {
+                        contentsOfWordsFileAndDocsFile,
+                    unsigned long FILE_BUFFER_SIZE_) {
   // Ignore the (irrelevant) log output of the index building and loading during
   // these tests.
   static std::ostringstream ignoreLogStream;
@@ -247,7 +248,8 @@ QueryExecutionContext* getQec(std::optional<std::string> turtleInput,
                               ad_utility::MemorySize blocksizePermutations,
                               bool createTextIndex, bool addWordsFromLiterals,
                               std::optional<std::pair<std::string, std::string>>
-                                  contentsOfWordsFileAndDocsFile, unsigned long FILE_BUFFER_SIZE_) {
+                                  contentsOfWordsFileAndDocsFile,
+                              unsigned long FILE_BUFFER_SIZE_) {
   // Similar to `absl::Cleanup`. Calls the `callback_` in the destructor, but
   // the callback is stored as a `std::function`, which allows to store
   // different types of callbacks in the same wrapper type.
@@ -307,7 +309,8 @@ QueryExecutionContext* getQec(std::optional<std::string> turtleInput,
                          testIndexBasename, turtleInput, loadAllPermutations,
                          usePatterns, usePrefixCompression,
                          blocksizePermutations, createTextIndex,
-                         addWordsFromLiterals, contentsOfWordsFileAndDocsFile, FILE_BUFFER_SIZE_ = FILE_BUFFER_SIZE_)),
+                         addWordsFromLiterals, contentsOfWordsFileAndDocsFile,
+                         FILE_BUFFER_SIZE_ = FILE_BUFFER_SIZE_)),
                      std::make_unique<QueryResultCache>()});
   }
   auto* qec = contextMap.at(key).qec_.get();
