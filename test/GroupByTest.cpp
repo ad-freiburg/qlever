@@ -3,6 +3,7 @@
 // Authors: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
 //          Johannes Kalmbach (kalmbach@cs.uni-freiburg.de)
 
+#include <engine/SpatialJoinAlgorithms.h>
 #include <gmock/gmock.h>
 
 #include <cstdio>
@@ -36,6 +37,7 @@ using ::testing::Optional;
 
 namespace {
 auto I = IntId;
+auto D = DoubleId;
 
 // Return a matcher that checks, whether a given `std::optional<IdTable` has a
 // value and that value is equal to `makeIdTableFromVector(table)`.
@@ -745,6 +747,50 @@ TEST_F(GroupByOptimizations, correctResultForHashMapOptimization) {
   // Compare results, using debugString as the result only contains 2 rows
   ASSERT_EQ(resultWithOptimization->asDebugString(),
             resultWithoutOptimization->asDebugString());
+}
+
+// _____________________________________________________________________________
+TEST_F(GroupByOptimizations, hashMapOptimizationLazyAndMaterializedInputs) {
+  /* Setup query:
+  SELECT ?x (AVG(?y) as ?avg) WHERE {
+    # explicitly defined subresult.
+  } GROUP BY ?x
+ */
+  // Setup three unsorted input blocks. The first column will be the grouped
+  // `?x`, and the second column the variable `?y` of which we compute the
+  // average.
+  auto runTest = [this](bool inputIsLazy) {
+    std::vector<IdTable> tables;
+    tables.push_back(makeIdTableFromVector({{3, 6}, {8, 27}, {5, 7}}, I));
+    tables.push_back(makeIdTableFromVector({{8, 27}, {5, 9}}, I));
+    tables.push_back(makeIdTableFromVector({{5, 2}, {3, 4}}, I));
+    // The expected averages are as follows: (3 -> 5.0), (5 -> 6.0), (8
+    // -> 27.0).
+    auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, std::move(tables),
+        std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?y"}});
+    auto& values =
+        dynamic_cast<ValuesForTesting&>(*subtree->getRootOperation());
+    values.forceFullyMaterialized() = !inputIsLazy;
+
+    SparqlExpressionPimpl avgYPimpl = makeAvgPimpl(varY);
+    std::vector<Alias> aliasesAvgY{Alias{avgYPimpl, Variable{"?avg"}}};
+
+    // Calculate result with optimization
+    qec->getQueryTreeCache().clearAll();
+    RuntimeParameters().set<"group-by-hash-map-enabled">(true);
+    GroupBy groupBy{qec, variablesOnlyX, aliasesAvgY, std::move(subtree)};
+    auto result = groupBy.computeResultOnlyForTesting();
+    ASSERT_TRUE(result.isFullyMaterialized());
+    EXPECT_THAT(
+        result.idTable(),
+        matchesIdTableFromVector({{I(3), D(5)}, {I(5), D(6)}, {I(8), D(27)}}));
+  };
+  runTest(true);
+  runTest(false);
+
+  // Disable optimization for following tests
+  RuntimeParameters().set<"group-by-hash-map-enabled">(false);
 }
 
 // _____________________________________________________________________________
