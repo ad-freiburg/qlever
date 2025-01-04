@@ -1,8 +1,7 @@
-// Copyright 2018, University of Freiburg,
+// Copyright 2018 - 2024, University of Freiburg
 // Chair of Algorithms and Data Structures.
-// Author:
-//   2018      Florian Kramer (florian.kramer@mail.uni-freiburg.de)
-//   2020-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
+// Authors: Florian Kramer [2018]
+//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 #pragma once
 
@@ -317,8 +316,7 @@ class GroupBy : public Operation {
   // and subsequently calling `createResultFromHashMap`.
   template <size_t NUM_GROUP_COLUMNS>
   Result computeGroupByForHashMapOptimization(
-      std::vector<HashMapAliasInformation>& aggregateAliases,
-      auto subresults,
+      std::vector<HashMapAliasInformation>& aggregateAliases, auto subresults,
       const std::vector<size_t>& columnIndices) const;
 
   using AggregationData =
