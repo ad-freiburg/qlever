@@ -577,15 +577,6 @@ class IndexImpl {
                           const ad_utility::HashMap<WordIndex, Score>& words,
                           const ad_utility::HashMap<Id, Score>& entities);
 
-  template <typename T, typename MakeFromUint64t>
-  vector<T> readGapComprList(size_t nofElements, off_t from, size_t nofBytes,
-                             MakeFromUint64t makeFromUint64t) const;
-
-  template <typename T, typename MakeFromUint64t = std::identity>
-  vector<T> readFreqComprList(
-      size_t nofElements, off_t from, size_t nofBytes,
-      MakeFromUint64t makeFromUint = MakeFromUint64t{}) const;
-
   // Get the metadata for the block from the text index that contains the
   // `word`. Also works for prefixes that are terminated with `PREFIX_CHAR` like
   // "astro*". Returns `nullopt` if no suitable block was found because no

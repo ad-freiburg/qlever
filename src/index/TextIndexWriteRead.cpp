@@ -7,6 +7,8 @@
 #include "util/Simple8bCode.h"
 
 namespace TextIndexWriteRead {
+
+// ____________________________________________________________________________
 ContextListMetaData writePostings(ad_utility::File& out,
                                   const vector<Posting>& postings,
                                   bool skipWordlistIfAllTheSame,
@@ -174,13 +176,13 @@ GapEncode<T>::GapEncode(const TypedVector& vectorToEncode) {
   if (vectorToEncode.size() == 0) {
     return;
   }
-  gapList_.reserve(vectorToEncode.size());
-  gapList_.push_back(vectorToEncode.at(0));
+  encodedVector_.reserve(vectorToEncode.size());
+  encodedVector_.push_back(vectorToEncode.at(0));
 
   for (auto it1 = vectorToEncode.begin(),
             it2 = std::next(vectorToEncode.begin());
        it2 != vectorToEncode.end(); ++it1, ++it2) {
-    gapList_.push_back(*it2 - *it1);
+    encodedVector_.push_back(*it2 - *it1);
   }
 }
 

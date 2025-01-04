@@ -20,7 +20,6 @@
 #include "index/TextIndexWriteRead.h"
 #include "parser/ContextFileParser.h"
 #include "util/Conversions.h"
-#include "util/Simple8bCode.h"
 
 namespace {
 
@@ -342,6 +341,9 @@ void IndexImpl::createTextIndex(const string& filename,
                                 const IndexImpl::TextVec& vec) {
   ad_utility::File out(filename.c_str(), "w");
   currenttOffset_ = 0;
+  std::vector<std::tuple<TextBlockIndex, TextRecordIndex, WordOrEntityIndex,
+                         Score, bool>>
+      testVec(vec.begin(), vec.end());
   // Detect block boundaries from the main key of the vec.
   // Write the data for each block.
   // First, there's the classic lists, then the additional entity ones.
@@ -575,26 +577,30 @@ IdTable IndexImpl::readWordCl(
     const TextBlockMetaData& tbmd,
     const ad_utility::AllocatorWithLimit<Id>& allocator) const {
   IdTable idTable{3, allocator};
-  vector<TextRecordIndex> cids = readGapComprList<TextRecordIndex>(
-      tbmd._cl._nofElements, tbmd._cl._startContextlist,
-      static_cast<size_t>(tbmd._cl._startWordlist - tbmd._cl._startContextlist),
-      &TextRecordIndex::make);
+  vector<TextRecordIndex> cids =
+      TextIndexWriteRead::readGapComprList<TextRecordIndex>(
+          tbmd._cl._nofElements, tbmd._cl._startContextlist,
+          static_cast<size_t>(tbmd._cl._startWordlist -
+                              tbmd._cl._startContextlist),
+          textIndexFile_, &TextRecordIndex::make);
   idTable.resize(cids.size());
   ql::ranges::transform(cids, idTable.getColumn(0).begin(),
                         &Id::makeFromTextRecordIndex);
   ql::ranges::transform(
-      readFreqComprList<WordIndex>(
+      TextIndexWriteRead::readFreqComprList<WordIndex>(
           tbmd._cl._nofElements, tbmd._cl._startWordlist,
           static_cast<size_t>(tbmd._cl._startScorelist -
-                              tbmd._cl._startWordlist)),
+                              tbmd._cl._startWordlist),
+          textIndexFile_),
       idTable.getColumn(1).begin(), [](WordIndex id) {
         return Id::makeFromWordVocabIndex(WordVocabIndex::make(id));
       });
-  std::ranges::transform(
-      readFreqComprList<Score>(tbmd._cl._nofElements, tbmd._cl._startScorelist,
-                               static_cast<size_t>(tbmd._cl._lastByte + 1 -
-                                                   tbmd._cl._startScorelist)),
-      idTable.getColumn(2).begin(), &Id::makeFromInt);
+  std::ranges::transform(TextIndexWriteRead::readFreqComprList<Score>(
+                             tbmd._cl._nofElements, tbmd._cl._startScorelist,
+                             static_cast<size_t>(tbmd._cl._lastByte + 1 -
+                                                 tbmd._cl._startScorelist),
+                             textIndexFile_),
+                         idTable.getColumn(2).begin(), &Id::makeFromInt);
   return idTable;
 }
 
@@ -603,26 +609,28 @@ IdTable IndexImpl::readWordEntityCl(
     const TextBlockMetaData& tbmd,
     const ad_utility::AllocatorWithLimit<Id>& allocator) const {
   IdTable idTable{3, allocator};
-  vector<TextRecordIndex> cids = readGapComprList<TextRecordIndex>(
-      tbmd._entityCl._nofElements, tbmd._entityCl._startContextlist,
-      static_cast<size_t>(tbmd._entityCl._startWordlist -
-                          tbmd._entityCl._startContextlist),
-      &TextRecordIndex::make);
+  vector<TextRecordIndex> cids =
+      TextIndexWriteRead::readGapComprList<TextRecordIndex>(
+          tbmd._entityCl._nofElements, tbmd._entityCl._startContextlist,
+          static_cast<size_t>(tbmd._entityCl._startWordlist -
+                              tbmd._entityCl._startContextlist),
+          textIndexFile_, &TextRecordIndex::make);
   idTable.resize(cids.size());
   ql::ranges::transform(cids, idTable.getColumn(0).begin(),
                         &Id::makeFromTextRecordIndex);
   ql::ranges::copy(
-      readFreqComprList<Id>(tbmd._entityCl._nofElements,
-                            tbmd._entityCl._startWordlist,
-                            static_cast<size_t>(tbmd._entityCl._startScorelist -
-                                                tbmd._entityCl._startWordlist),
-                            &Id::fromBits),
+      TextIndexWriteRead::readFreqComprList<Id>(
+          tbmd._entityCl._nofElements, tbmd._entityCl._startWordlist,
+          static_cast<size_t>(tbmd._entityCl._startScorelist -
+                              tbmd._entityCl._startWordlist),
+          textIndexFile_, &Id::fromBits),
       idTable.getColumn(1).begin());
   ql::ranges::transform(
-      readFreqComprList<Score>(
+      TextIndexWriteRead::readFreqComprList<Score>(
           tbmd._entityCl._nofElements, tbmd._entityCl._startScorelist,
           static_cast<size_t>(tbmd._entityCl._lastByte + 1 -
-                              tbmd._entityCl._startScorelist)),
+                              tbmd._entityCl._startScorelist),
+          textIndexFile_),
       idTable.getColumn(2).begin(), &Id::makeFromInt);
   return idTable;
 }
@@ -659,92 +667,6 @@ IdTable IndexImpl::getEntityMentionsForWord(
   }
   const auto& tbmd = optTbmd.value().tbmd_;
   return readWordEntityCl(tbmd, allocator);
-}
-
-// _____________________________________________________________________________
-template <typename T, typename MakeFromUint64t>
-vector<T> IndexImpl::readGapComprList(size_t nofElements, off_t from,
-                                      size_t nofBytes,
-                                      MakeFromUint64t makeFromUint64t) const {
-  LOG(DEBUG) << "Reading gap-encoded list from disk...\n";
-  LOG(TRACE) << "NofElements: " << nofElements << ", from: " << from
-             << ", nofBytes: " << nofBytes << '\n';
-  vector<T> result;
-  result.resize(nofElements + 250);
-  uint64_t* encoded = new uint64_t[nofBytes / 8];
-  textIndexFile_.read(encoded, nofBytes, from);
-  LOG(DEBUG) << "Decoding Simple8b code...\n";
-  ad_utility::Simple8bCode::decode(encoded, nofElements, result.data(),
-                                   makeFromUint64t);
-  LOG(DEBUG) << "Reverting gaps to actual IDs...\n";
-
-  // TODO<joka921> make this hack unnecessary, probably by a proper output
-  // iterator.
-  if constexpr (requires { T::make(0); }) {
-    uint64_t id = 0;
-    for (size_t i = 0; i < result.size(); ++i) {
-      id += result[i].get();
-      result[i] = T::make(id);
-    }
-  } else {
-    T id = 0;
-    for (size_t i = 0; i < result.size(); ++i) {
-      id += result[i];
-      result[i] = id;
-    }
-  }
-  result.resize(nofElements);
-  delete[] encoded;
-  LOG(DEBUG) << "Done reading gap-encoded list. Size: " << result.size()
-             << "\n";
-  return result;
-}
-
-// _____________________________________________________________________________
-template <typename T, typename MakeFromUint64t>
-vector<T> IndexImpl::readFreqComprList(size_t nofElements, off_t from,
-                                       size_t nofBytes,
-                                       MakeFromUint64t makeFromUint) const {
-  AD_CONTRACT_CHECK(nofBytes > 0);
-  LOG(DEBUG) << "Reading frequency-encoded list from disk...\n";
-  LOG(TRACE) << "NofElements: " << nofElements << ", from: " << from
-             << ", nofBytes: " << nofBytes << '\n';
-  size_t nofCodebookBytes;
-  vector<T> result;
-  uint64_t* encoded = new uint64_t[nofElements];
-  result.resize(nofElements + 250);
-  off_t current = from;
-  size_t ret = textIndexFile_.read(&nofCodebookBytes, sizeof(off_t), current);
-  LOG(TRACE) << "Nof Codebook Bytes: " << nofCodebookBytes << '\n';
-  AD_CONTRACT_CHECK(sizeof(off_t) == ret);
-  current += ret;
-  T* codebook = new T[nofCodebookBytes / sizeof(T)];
-  ret = textIndexFile_.read(codebook, nofCodebookBytes, current);
-  current += ret;
-  AD_CONTRACT_CHECK(ret == size_t(nofCodebookBytes));
-  ret = textIndexFile_.read(
-      encoded, static_cast<size_t>(nofBytes - (current - from)), current);
-  current += ret;
-  AD_CONTRACT_CHECK(size_t(current - from) == nofBytes);
-  LOG(DEBUG) << "Decoding Simple8b code...\n";
-  ad_utility::Simple8bCode::decode(encoded, nofElements, result.data(),
-                                   makeFromUint);
-  LOG(DEBUG) << "Reverting frequency encoded items to actual IDs...\n";
-  result.resize(nofElements);
-  for (size_t i = 0; i < result.size(); ++i) {
-    // TODO<joka921> handle the strong ID types properly.
-    if constexpr (requires(T t) { t.getBits(); }) {
-      result[i] = Id::makeFromVocabIndex(
-          VocabIndex::make(codebook[result[i].getBits()].getBits()));
-    } else {
-      result[i] = codebook[result[i]];
-    }
-  }
-  delete[] encoded;
-  delete[] codebook;
-  LOG(DEBUG) << "Done reading frequency-encoded list. Size: " << result.size()
-             << "\n";
-  return result;
 }
 
 // _____________________________________________________________________________
