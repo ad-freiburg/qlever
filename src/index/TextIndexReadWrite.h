@@ -11,7 +11,7 @@
 #include "util/HashMap.h"
 #include "util/Simple8bCode.h"
 
-namespace TextIndexWriteRead {
+namespace TextIndexReadWrite {
 ContextListMetaData writePostings(ad_utility::File& out,
                                   const vector<Posting>& postings,
                                   bool skipWordlistIfAllTheSame,
@@ -117,7 +117,7 @@ vector<T> readGapComprList(size_t nofElements, off_t from, size_t nofBytes,
   return result;
 }
 
-}  // namespace TextIndexWriteRead
+}  // namespace TextIndexReadWrite
 
 template <typename T>
 class FrequencyEncode {

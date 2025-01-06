@@ -17,7 +17,7 @@
 #include "backports/algorithm.h"
 #include "engine/CallFixedSize.h"
 #include "index/FTSAlgorithms.h"
-#include "index/TextIndexWriteRead.h"
+#include "index/TextIndexReadWrite.h"
 #include "parser/ContextFileParser.h"
 #include "util/Conversions.h"
 
@@ -356,9 +356,9 @@ void IndexImpl::createTextIndex(const string& filename,
     if (std::get<0>(*reader) != currentBlockIndex) {
       AD_CONTRACT_CHECK(!classicPostings.empty());
 
-      ContextListMetaData classic = TextIndexWriteRead::writePostings(
+      ContextListMetaData classic = TextIndexReadWrite::writePostings(
           out, classicPostings, true, currenttOffset_);
-      ContextListMetaData entity = TextIndexWriteRead::writePostings(
+      ContextListMetaData entity = TextIndexReadWrite::writePostings(
           out, entityPostings, false, currenttOffset_);
       textMeta_.addBlock(TextBlockMetaData(
           currentMinWordIndex, currentMaxWordIndex, classic, entity));
@@ -385,9 +385,9 @@ void IndexImpl::createTextIndex(const string& filename,
   }
   // Write the last block
   AD_CONTRACT_CHECK(!classicPostings.empty());
-  ContextListMetaData classic = TextIndexWriteRead::writePostings(
+  ContextListMetaData classic = TextIndexReadWrite::writePostings(
       out, classicPostings, true, currenttOffset_);
-  ContextListMetaData entity = TextIndexWriteRead::writePostings(
+  ContextListMetaData entity = TextIndexReadWrite::writePostings(
       out, entityPostings, false, currenttOffset_);
   textMeta_.addBlock(TextBlockMetaData(currentMinWordIndex, currentMaxWordIndex,
                                        classic, entity));
@@ -578,7 +578,7 @@ IdTable IndexImpl::readWordCl(
     const ad_utility::AllocatorWithLimit<Id>& allocator) const {
   IdTable idTable{3, allocator};
   vector<TextRecordIndex> cids =
-      TextIndexWriteRead::readGapComprList<TextRecordIndex>(
+      TextIndexReadWrite::readGapComprList<TextRecordIndex>(
           tbmd._cl._nofElements, tbmd._cl._startContextlist,
           static_cast<size_t>(tbmd._cl._startWordlist -
                               tbmd._cl._startContextlist),
@@ -587,7 +587,7 @@ IdTable IndexImpl::readWordCl(
   ql::ranges::transform(cids, idTable.getColumn(0).begin(),
                         &Id::makeFromTextRecordIndex);
   ql::ranges::transform(
-      TextIndexWriteRead::readFreqComprList<WordIndex>(
+      TextIndexReadWrite::readFreqComprList<WordIndex>(
           tbmd._cl._nofElements, tbmd._cl._startWordlist,
           static_cast<size_t>(tbmd._cl._startScorelist -
                               tbmd._cl._startWordlist),
@@ -595,7 +595,7 @@ IdTable IndexImpl::readWordCl(
       idTable.getColumn(1).begin(), [](WordIndex id) {
         return Id::makeFromWordVocabIndex(WordVocabIndex::make(id));
       });
-  std::ranges::transform(TextIndexWriteRead::readFreqComprList<Score>(
+  std::ranges::transform(TextIndexReadWrite::readFreqComprList<Score>(
                              tbmd._cl._nofElements, tbmd._cl._startScorelist,
                              static_cast<size_t>(tbmd._cl._lastByte + 1 -
                                                  tbmd._cl._startScorelist),
@@ -610,7 +610,7 @@ IdTable IndexImpl::readWordEntityCl(
     const ad_utility::AllocatorWithLimit<Id>& allocator) const {
   IdTable idTable{3, allocator};
   vector<TextRecordIndex> cids =
-      TextIndexWriteRead::readGapComprList<TextRecordIndex>(
+      TextIndexReadWrite::readGapComprList<TextRecordIndex>(
           tbmd._entityCl._nofElements, tbmd._entityCl._startContextlist,
           static_cast<size_t>(tbmd._entityCl._startWordlist -
                               tbmd._entityCl._startContextlist),
@@ -619,14 +619,14 @@ IdTable IndexImpl::readWordEntityCl(
   ql::ranges::transform(cids, idTable.getColumn(0).begin(),
                         &Id::makeFromTextRecordIndex);
   ql::ranges::copy(
-      TextIndexWriteRead::readFreqComprList<Id>(
+      TextIndexReadWrite::readFreqComprList<Id>(
           tbmd._entityCl._nofElements, tbmd._entityCl._startWordlist,
           static_cast<size_t>(tbmd._entityCl._startScorelist -
                               tbmd._entityCl._startWordlist),
           textIndexFile_, &Id::fromBits),
       idTable.getColumn(1).begin());
   ql::ranges::transform(
-      TextIndexWriteRead::readFreqComprList<Score>(
+      TextIndexReadWrite::readFreqComprList<Score>(
           tbmd._entityCl._nofElements, tbmd._entityCl._startScorelist,
           static_cast<size_t>(tbmd._entityCl._lastByte + 1 -
                               tbmd._entityCl._startScorelist),

@@ -2,11 +2,11 @@
 // Chair of Algorithms and Data Structures.
 // Author: Felix Meisen (fesemeisen@outlook.de)
 
-#include "index/TextIndexWriteRead.h"
+#include "index/TextIndexReadWrite.h"
 
 #include "util/Simple8bCode.h"
 
-namespace TextIndexWriteRead {
+namespace TextIndexReadWrite {
 
 // ____________________________________________________________________________
 ContextListMetaData writePostings(ad_utility::File& out,
@@ -107,12 +107,12 @@ void writeVectorAndMoveOffset(const std::vector<T>& vectorToWrite,
                               off_t& currentOffset) {
   T* vectorAsList = new T[vectorToWrite.size()];
   std::copy(vectorToWrite.begin(), vectorToWrite.end(), vectorAsList);
-  size_t bytes = TextIndexWriteRead::writeList(vectorAsList, nofElements, file);
+  size_t bytes = TextIndexReadWrite::writeList(vectorAsList, nofElements, file);
   currentOffset += bytes;
   delete[] vectorAsList;
 }
 
-}  // namespace TextIndexWriteRead
+}  // namespace TextIndexReadWrite
 
 // ____________________________________________________________________________
 template <typename T>
@@ -164,8 +164,8 @@ FrequencyEncode<T>::FrequencyEncode(const TypedVector& vectorToEncode) {
 template <typename T>
 void FrequencyEncode<T>::writeToFile(ad_utility::File& out, size_t nofElements,
                                      off_t& currentOffset) {
-  currentOffset += TextIndexWriteRead::writeCodebook(codeBook_, out);
-  TextIndexWriteRead::writeVectorAndMoveOffset(encodedVector_, nofElements, out,
+  currentOffset += TextIndexReadWrite::writeCodebook(codeBook_, out);
+  TextIndexReadWrite::writeVectorAndMoveOffset(encodedVector_, nofElements, out,
                                                currentOffset);
 }
 
@@ -191,6 +191,6 @@ template <typename T>
 requires std::is_arithmetic_v<T>
 void GapEncode<T>::writeToFile(ad_utility::File& out, size_t nofElements,
                                off_t& currentOffset) {
-  TextIndexWriteRead::writeVectorAndMoveOffset(encodedVector_, nofElements, out,
+  TextIndexReadWrite::writeVectorAndMoveOffset(encodedVector_, nofElements, out,
                                                currentOffset);
 }
