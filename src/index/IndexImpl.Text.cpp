@@ -341,9 +341,6 @@ void IndexImpl::createTextIndex(const string& filename,
                                 const IndexImpl::TextVec& vec) {
   ad_utility::File out(filename.c_str(), "w");
   currenttOffset_ = 0;
-  std::vector<std::tuple<TextBlockIndex, TextRecordIndex, WordOrEntityIndex,
-                         Score, bool>>
-      testVec(vec.begin(), vec.end());
   // Detect block boundaries from the main key of the vec.
   // Write the data for each block.
   // First, there's the classic lists, then the additional entity ones.
@@ -586,21 +583,22 @@ IdTable IndexImpl::readWordCl(
   idTable.resize(cids.size());
   ql::ranges::transform(cids, idTable.getColumn(0).begin(),
                         &Id::makeFromTextRecordIndex);
-  ql::ranges::transform(
-      TextIndexReadWrite::readFreqComprList<WordIndex>(
+  ql::ranges::copy(
+      TextIndexReadWrite::readFreqComprList<Id, WordIndex>(
           tbmd._cl._nofElements, tbmd._cl._startWordlist,
           static_cast<size_t>(tbmd._cl._startScorelist -
                               tbmd._cl._startWordlist),
-          textIndexFile_),
-      idTable.getColumn(1).begin(), [](WordIndex id) {
-        return Id::makeFromWordVocabIndex(WordVocabIndex::make(id));
-      });
-  std::ranges::transform(TextIndexReadWrite::readFreqComprList<Score>(
-                             tbmd._cl._nofElements, tbmd._cl._startScorelist,
-                             static_cast<size_t>(tbmd._cl._lastByte + 1 -
-                                                 tbmd._cl._startScorelist),
-                             textIndexFile_),
-                         idTable.getColumn(2).begin(), &Id::makeFromInt);
+          textIndexFile_,
+          [](WordIndex id) {
+            return Id::makeFromWordVocabIndex(WordVocabIndex::make(id));
+          }),
+      idTable.getColumn(1).begin());
+  std::ranges::copy(TextIndexReadWrite::readFreqComprList<Id, Score>(
+                        tbmd._cl._nofElements, tbmd._cl._startScorelist,
+                        static_cast<size_t>(tbmd._cl._lastByte + 1 -
+                                            tbmd._cl._startScorelist),
+                        textIndexFile_, &Id::makeFromInt),
+                    idTable.getColumn(2).begin());
   return idTable;
 }
 
@@ -619,19 +617,22 @@ IdTable IndexImpl::readWordEntityCl(
   ql::ranges::transform(cids, idTable.getColumn(0).begin(),
                         &Id::makeFromTextRecordIndex);
   ql::ranges::copy(
-      TextIndexReadWrite::readFreqComprList<Id>(
+      TextIndexReadWrite::readFreqComprList<Id, WordIndex>(
           tbmd._entityCl._nofElements, tbmd._entityCl._startWordlist,
           static_cast<size_t>(tbmd._entityCl._startScorelist -
                               tbmd._entityCl._startWordlist),
-          textIndexFile_, &Id::fromBits),
+          textIndexFile_,
+          [](uint64_t from) {
+            return Id::makeFromVocabIndex(VocabIndex::make(from));
+          }),
       idTable.getColumn(1).begin());
-  ql::ranges::transform(
-      TextIndexReadWrite::readFreqComprList<Score>(
+  ql::ranges::copy(
+      TextIndexReadWrite::readFreqComprList<Id, Score>(
           tbmd._entityCl._nofElements, tbmd._entityCl._startScorelist,
           static_cast<size_t>(tbmd._entityCl._lastByte + 1 -
                               tbmd._entityCl._startScorelist),
-          textIndexFile_),
-      idTable.getColumn(2).begin(), &Id::makeFromInt);
+          textIndexFile_, &Id::makeFromInt),
+      idTable.getColumn(2).begin());
   return idTable;
 }
 

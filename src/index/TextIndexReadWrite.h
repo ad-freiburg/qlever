@@ -31,26 +31,31 @@ void writeVectorAndMoveOffset(const std::vector<T>& vectorToWrite,
                               size_t nofElements, ad_utility::File& file,
                               off_t& currentOffset);
 
-// The readFreqCompr and readGapCompr methods have to be in the header file
-// because of the constexpr being evaluated at compile time
-template <typename T, typename MakeFromUint64t = std::identity>
-vector<T> readFreqComprList(size_t nofElements, off_t from, size_t nofBytes,
-                            const ad_utility::File& textIndexFile,
-                            MakeFromUint64t makeFromUint = MakeFromUint64t{}) {
+// Read a freqComprList from the textIndexFile. The From specifies the type
+// that was used to create the codebook in the writing step and the To
+// specifies the type to cast that codebook values to. This is done with a
+// static cast if no lambda function to cast is given.
+template <typename To, typename From>
+vector<To> readFreqComprList(
+    size_t nofElements, off_t from, size_t nofBytes,
+    const ad_utility::File& textIndexFile,
+    const std::function<To(From)>& transformer = [](From x) {
+      return static_cast<To>(x);
+    }) {
   AD_CONTRACT_CHECK(nofBytes > 0);
   LOG(DEBUG) << "Reading frequency-encoded list from disk...\n";
   LOG(TRACE) << "NofElements: " << nofElements << ", from: " << from
              << ", nofBytes: " << nofBytes << '\n';
   size_t nofCodebookBytes;
-  vector<T> result;
+  vector<uint64_t> frequencyEncodedResult;
   uint64_t* encoded = new uint64_t[nofElements];
-  result.resize(nofElements + 250);
+  frequencyEncodedResult.resize(nofElements + 250);
   off_t current = from;
   size_t ret = textIndexFile.read(&nofCodebookBytes, sizeof(size_t), current);
   LOG(TRACE) << "Nof Codebook Bytes: " << nofCodebookBytes << '\n';
   AD_CONTRACT_CHECK(sizeof(size_t) == ret);
   current += ret;
-  T* codebook = new T[nofCodebookBytes / sizeof(T)];
+  From* codebook = new From[nofCodebookBytes / sizeof(From)];
   ret = textIndexFile.read(codebook, nofCodebookBytes, current);
   current += ret;
   AD_CONTRACT_CHECK(ret == size_t(nofCodebookBytes));
@@ -59,18 +64,14 @@ vector<T> readFreqComprList(size_t nofElements, off_t from, size_t nofBytes,
   current += ret;
   AD_CONTRACT_CHECK(size_t(current - from) == nofBytes);
   LOG(DEBUG) << "Decoding Simple8b code...\n";
-  ad_utility::Simple8bCode::decode(encoded, nofElements, result.data(),
-                                   makeFromUint);
+  ad_utility::Simple8bCode::decode(encoded, nofElements,
+                                   frequencyEncodedResult.data());
   LOG(DEBUG) << "Reverting frequency encoded items to actual IDs...\n";
-  result.resize(nofElements);
-  for (size_t i = 0; i < result.size(); ++i) {
-    // TODO<joka921> handle the strong ID types properly.
-    if constexpr (requires(T t) { t.getBits(); }) {
-      result[i] = Id::makeFromVocabIndex(
-          VocabIndex::make(codebook[result[i].getBits()].getBits()));
-    } else {
-      result[i] = codebook[result[i]];
-    }
+  frequencyEncodedResult.resize(nofElements);
+  vector<To> result;
+  result.reserve(frequencyEncodedResult.size());
+  for (size_t i = 0; i < frequencyEncodedResult.size(); ++i) {
+    result.push_back(transformer(codebook[frequencyEncodedResult[i]]));
   }
   delete[] encoded;
   delete[] codebook;
