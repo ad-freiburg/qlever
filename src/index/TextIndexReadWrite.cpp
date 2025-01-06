@@ -38,18 +38,6 @@ ContextListMetaData writePostings(ad_utility::File& out,
         return std::get<2>(posting);
       });
 
-  // std::vector<uint64_t> firstElements;
-  // std::vector<WordIndex> secondElements;
-  // std::vector<Score> thirdElements;
-  // firstElements.reserve(postings.size());
-  // secondElements.reserve(postings.size());
-  // thirdElements.reserve(postings.size());
-  // for (const auto& posting : postings) {
-  //   firstElements.push_back(std::get<0>(posting).get());
-  //   secondElements.push_back(std::get<1>(posting));
-  //   thirdElements.push_back(std::get<2>(posting));
-  // }
-
   std::vector<uint64_t> textRecordList(firstElements.begin(),
                                        firstElements.end());
   std::vector<WordIndex> wordIndexList(secondElements.begin(),
