@@ -78,7 +78,7 @@ class ExportQueryExecutionTrees {
   // return 'std::nullopt'. These semantics are useful for the string
   // expressions in StringExpressions.cpp.
   template <bool returnOnlyLiterals = false>
-  static std::optional<LiteralOrIri> idToLiteralOrIri(
+  static std::optional<ad_utility::triple_component::Literal> idToLiteral(
       const Index& index, Id id, const LocalVocab& localVocab,
       bool onlyReturnLiteralsWithXsdString = false);
 
@@ -88,14 +88,14 @@ class ExportQueryExecutionTrees {
   // If `onlyReturnLiteralsWithXsdString` is `true`, returns `std::nullopt`.
   // If `onlyReturnLiteralsWithXsdString` is `false`, removes datatypes from
   // literals (e.g. the integer `42` is converted to the plain literal `"42"`).
-  static std::optional<LiteralOrIri> idToLiteralOrIriForEncodedValue(
-      Id id, bool onlyReturnLiteralsWithXsdString = false);
+  static std::optional<ad_utility::triple_component::Literal>
+  idToLiteralForEncodedValue(Id id,
+                             bool onlyReturnLiteralsWithXsdString = false);
 
   // A helper function for the `idToLiteralOrIri` function. Checks and processes
   // a LiteralOrIri based on the given parameters.
-  static std::optional<LiteralOrIri> handleIriOrLiteral(
-      LiteralOrIri word, bool onlyReturnLiterals,
-      bool onlyReturnLiteralsWithXsdString);
+  static std::optional<ad_utility::triple_component::Literal>
+  handleIriOrLiteral(LiteralOrIri word, bool onlyReturnLiteralsWithXsdString);
 
   // Checks if a LiteralOrIri is either a plain literal (without datatype)
   // or a literal with the `xsd:string` datatype.

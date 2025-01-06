@@ -1649,10 +1649,10 @@ TEST(ExportQueryExecutionTrees, idToLiteralOrIriFunctionality) {
   auto callIdToLiteralOrIri = [&](Id id, bool onlyLiterals,
                                   bool onlyLiteralsWithXsdString = false) {
     if (onlyLiterals) {
-      return ExportQueryExecutionTrees::idToLiteralOrIri<true>(
+      return ExportQueryExecutionTrees::idToLiteral<true>(
           qec->getIndex(), id, LocalVocab{}, onlyLiteralsWithXsdString);
     } else {
-      return ExportQueryExecutionTrees::idToLiteralOrIri<false>(
+      return ExportQueryExecutionTrees::idToLiteral<false>(
           qec->getIndex(), id, LocalVocab{}, onlyLiteralsWithXsdString);
     }
   };

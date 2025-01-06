@@ -143,29 +143,29 @@ struct StringValueGetter : Mixin<StringValueGetter> {
 
 // This class can be used as the `ValueGetter` argument of Expression
 // templates. It produces a LiteralOrIri.
-struct LiteralOrIriValueGetter : Mixin<LiteralOrIriValueGetter> {
-  using Mixin<LiteralOrIriValueGetter>::operator();
+struct LiteralValueGetter : Mixin<LiteralValueGetter> {
+  using Mixin<LiteralValueGetter>::operator();
 
-  std::optional<LiteralOrIri> operator()(ValueId,
-                                         const EvaluationContext*) const;
+  std::optional<ad_utility::triple_component::Literal> operator()(
+      ValueId, const EvaluationContext*) const;
 
-  std::optional<LiteralOrIri> operator()(const LiteralOrIri& s,
-                                         const EvaluationContext*) const {
-    return s;
+  std::optional<ad_utility::triple_component::Literal> operator()(
+      const LiteralOrIri& s, const EvaluationContext*) const {
+    return s.getLiteral();
   }
 };
 
 // Same as above but only literals with 'xsd:string' datatype or no datatype are
 // returned.
-struct LiteralOrIriValueGetterWithXsdStringFilter
-    : Mixin<LiteralOrIriValueGetterWithXsdStringFilter> {
-  using Mixin<LiteralOrIriValueGetterWithXsdStringFilter>::operator();
+struct LiteralValueGetterWithXsdStringFilter
+    : Mixin<LiteralValueGetterWithXsdStringFilter> {
+  using Mixin<LiteralValueGetterWithXsdStringFilter>::operator();
 
-  std::optional<LiteralOrIri> operator()(ValueId,
-                                         const EvaluationContext*) const;
+  std::optional<ad_utility::triple_component::Literal> operator()(
+      ValueId, const EvaluationContext*) const;
 
-  std::optional<LiteralOrIri> operator()(const LiteralOrIri& s,
-                                         const EvaluationContext*) const;
+  std::optional<ad_utility::triple_component::Literal> operator()(
+      const LiteralOrIri& s, const EvaluationContext*) const;
 };
 
 // Value getter for `isBlank`.
