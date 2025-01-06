@@ -575,7 +575,7 @@ IdTable IndexImpl::readWordCl(
     const ad_utility::AllocatorWithLimit<Id>& allocator) const {
   IdTable idTable{3, allocator};
   vector<TextRecordIndex> cids =
-      TextIndexReadWrite::readGapComprList<TextRecordIndex>(
+      TextIndexReadWrite::readGapComprList<TextRecordIndex, uint64_t>(
           tbmd._cl._nofElements, tbmd._cl._startContextlist,
           static_cast<size_t>(tbmd._cl._startWordlist -
                               tbmd._cl._startContextlist),
@@ -608,7 +608,7 @@ IdTable IndexImpl::readWordEntityCl(
     const ad_utility::AllocatorWithLimit<Id>& allocator) const {
   IdTable idTable{3, allocator};
   vector<TextRecordIndex> cids =
-      TextIndexReadWrite::readGapComprList<TextRecordIndex>(
+      TextIndexReadWrite::readGapComprList<TextRecordIndex, uint64_t>(
           tbmd._entityCl._nofElements, tbmd._entityCl._startContextlist,
           static_cast<size_t>(tbmd._entityCl._startWordlist -
                               tbmd._entityCl._startContextlist),

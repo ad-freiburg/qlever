@@ -80,38 +80,34 @@ vector<To> readFreqComprList(
   return result;
 }
 
-template <typename T, typename MakeFromUint64t>
-vector<T> readGapComprList(size_t nofElements, off_t from, size_t nofBytes,
-                           const ad_utility::File& textIndexFile,
-                           MakeFromUint64t makeFromUint64t) {
+template <typename To, typename From>
+vector<To> readGapComprList(
+    size_t nofElements, off_t from, size_t nofBytes,
+    const ad_utility::File& textIndexFile,
+    const std::function<To(From)>& transformer = [](From x) {
+      return static_cast<To>(x);
+    }) {
   LOG(DEBUG) << "Reading gap-encoded list from disk...\n";
   LOG(TRACE) << "NofElements: " << nofElements << ", from: " << from
              << ", nofBytes: " << nofBytes << '\n';
-  vector<T> result;
-  result.resize(nofElements + 250);
+  vector<From> gapEncodedVector;
+  gapEncodedVector.resize(nofElements + 250);
   uint64_t* encoded = new uint64_t[nofBytes / 8];
   textIndexFile.read(encoded, nofBytes, from);
   LOG(DEBUG) << "Decoding Simple8b code...\n";
-  ad_utility::Simple8bCode::decode(encoded, nofElements, result.data(),
-                                   makeFromUint64t);
+  ad_utility::Simple8bCode::decode(encoded, nofElements,
+                                   gapEncodedVector.data());
   LOG(DEBUG) << "Reverting gaps to actual IDs...\n";
+  gapEncodedVector.resize(nofElements);
 
-  // TODO<joka921> make this hack unnecessary, probably by a proper output
-  // iterator.
-  if constexpr (requires { T::make(0); }) {
-    uint64_t id = 0;
-    for (size_t i = 0; i < result.size(); ++i) {
-      id += result[i].get();
-      result[i] = T::make(id);
-    }
-  } else {
-    T id = 0;
-    for (size_t i = 0; i < result.size(); ++i) {
-      id += result[i];
-      result[i] = id;
-    }
+  // Undo gapEncoding
+  vector<To> result;
+  result.reserve(nofElements);
+  From previous = 0;
+  for (size_t i = 0; i < gapEncodedVector.size(); ++i) {
+    previous += gapEncodedVector[i];
+    result.push_back(transformer(previous));
   }
-  result.resize(nofElements);
   delete[] encoded;
   LOG(DEBUG) << "Done reading gap-encoded list. Size: " << result.size()
              << "\n";
