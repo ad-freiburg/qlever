@@ -30,10 +30,15 @@ class ExistsExpression : public SparqlExpression {
   //____________________________________________________________________________
   [[nodiscard]] string getCacheKey(
       const VariableToColumnMap& varColMap) const override {
-    // TODO<joka921> get a proper cache key here
-    AD_CONTRACT_CHECK(varColMap.contains(variable_));
-    return absl::StrCat("EXISTS WITH COL ",
-                        varColMap.at(variable_).columnIndex_);
+    if (varColMap.contains(variable_)) {
+      return absl::StrCat("EXISTS WITH COL ",
+                          varColMap.at(variable_).columnIndex_);
+    } else {
+      // This means that the necessary `ExistsScan` hasn't been set up yet.
+      // It is not possible to cache such incomplete operations, so we return
+      // a random cache key.
+      return std::to_string(ad_utility::FastRandomIntGenerator<size_t>{}());
+    }
   }
 
   // ____________________________________________________________________________

@@ -14,8 +14,8 @@ ExistsScan::ExistsScan(QueryExecutionContext* qec,
     : Operation{qec},
       left_{std::move(left)},
       right_{std::move(right)},
-      existsVariable_{std::move(existsVariable)},
-      joinColumns_{QueryExecutionTree::getJoinColumns(*left_, *right_)} {}
+      joinColumns_{QueryExecutionTree::getJoinColumns(*left_, *right_)},
+      existsVariable_{std::move(existsVariable)} {}
 
 // _____________________________________________________________________________
 string ExistsScan::getCacheKeyImpl() const {
