@@ -444,9 +444,9 @@ class SparqlQleverVisitor {
 
   ExpressionPtr visit(Parser::StrReplaceExpressionContext* ctx);
 
-  [[noreturn]] static void visit(const Parser::ExistsFuncContext* ctx);
+  ExpressionPtr visit(Parser::ExistsFuncContext* ctx);
 
-  [[noreturn]] static void visit(const Parser::NotExistsFuncContext* ctx);
+  ExpressionPtr visit(Parser::NotExistsFuncContext* ctx);
 
   ExpressionPtr visit(Parser::AggregateContext* ctx);
 
