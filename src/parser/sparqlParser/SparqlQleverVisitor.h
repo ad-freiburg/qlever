@@ -444,6 +444,11 @@ class SparqlQleverVisitor {
 
   ExpressionPtr visit(Parser::StrReplaceExpressionContext* ctx);
 
+  // The common implementation of the parsing of `EXISTS` and `NOT EXISTS`.
+  // The second argument is `true` for `NOT EXISTS`.
+  ExpressionPtr visitExists(Parser::GroupGraphPatternContext* pattern,
+                            bool negate);
+
   ExpressionPtr visit(Parser::ExistsFuncContext* ctx);
 
   ExpressionPtr visit(Parser::NotExistsFuncContext* ctx);

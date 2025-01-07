@@ -95,8 +95,10 @@ ProtoResult ExistsScan::computeResult([[maybe_unused]] bool requestLaziness) {
       };
 
   // TODO<joka921> Handle UNDEF values correctly (and efficiently)
-  auto findUndefDispatch = []<typename It>(const auto& row, It begin, auto end,
-                                           bool& outOfOrder) {
+  auto findUndefDispatch = []<typename It>([[maybe_unused]] const auto& row,
+                                           [[maybe_unused]] It begin,
+                                           [[maybe_unused]] auto end,
+                                           [[maybe_unused]] bool& outOfOrder) {
     return std::array<It, 0>{};
   };
 

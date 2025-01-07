@@ -26,6 +26,7 @@
 #include "engine/sparqlExpressions/SampleExpression.h"
 #include "engine/sparqlExpressions/StdevExpression.h"
 #include "engine/sparqlExpressions/UuidExpressions.h"
+#include "generated/SparqlAutomaticParser.h"
 #include "global/Constants.h"
 #include "global/RuntimeParameters.h"
 #include "parser/GraphPatternOperation.h"
@@ -2424,19 +2425,33 @@ SparqlExpression::Ptr Visitor::visit(Parser::StrReplaceExpressionContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-ExpressionPtr Visitor::visit(Parser::ExistsFuncContext* ctx) {
+ExpressionPtr Visitor::visitExists(Parser::GroupGraphPatternContext* pattern,
+                                   bool negate) {
   auto queryBackup = std::exchange(parsedQuery_, ParsedQuery{});
-  auto group = visit(ctx->groupGraphPattern());
+  auto visibleVariablesSoFar = std::move(visibleVariables_);
+  visibleVariables_.clear();
+  auto group = visit(pattern);
   ParsedQuery query = std::exchange(parsedQuery_, std::move(queryBackup));
   query.selectClause().setAsterisk();
   query._rootGraphPattern = std::move(group);
-  return std::make_unique<sparqlExpression::ExistsExpression>(std::move(query));
+  visibleVariables_ = std::move(visibleVariablesSoFar);
+  auto exists =
+      std::make_unique<sparqlExpression::ExistsExpression>(std::move(query));
+  if (negate) {
+    return sparqlExpression::makeUnaryNegateExpression(std::move(exists));
+  } else {
+    return exists;
+  }
+}
+
+// ____________________________________________________________________________________
+ExpressionPtr Visitor::visit(Parser::ExistsFuncContext* ctx) {
+  return visitExists(ctx->groupGraphPattern(), false);
 }
 
 // ____________________________________________________________________________________
 ExpressionPtr Visitor::visit(Parser::NotExistsFuncContext* ctx) {
-  // TODO<joka921> Implement this without duplicating the code for EXISTS.
-  reportNotSupported(ctx, "The NOT EXISTS function is");
+  return visitExists(ctx->groupGraphPattern(), true);
 }
 
 // ____________________________________________________________________________________
