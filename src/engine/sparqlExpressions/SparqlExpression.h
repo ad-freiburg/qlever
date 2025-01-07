@@ -123,6 +123,16 @@ class SparqlExpression {
   // implementation returns `false`.
   virtual bool isStrExpression() const;
 
+  // Returns true iff this expression is an EXISTS(...) expression.  Default
+  // implementation returns `false`.
+  virtual bool isExistsExpression() const;
+
+  // Return non-null pointers to all `EXISTS` expressions in the subtree.
+  // The result is passed in as a reference to simplify the recursive
+  // implementation.
+  virtual void getExistsExpressions(
+      std::vector<SparqlExpression*>& result) final;
+
   // __________________________________________________________________________
   virtual ~SparqlExpression() = default;
 

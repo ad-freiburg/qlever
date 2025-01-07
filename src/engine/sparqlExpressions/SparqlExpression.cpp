@@ -180,4 +180,18 @@ bool SparqlExpression::isInsideAggregate() const {
   }
   return isInsideAggregate_;
 }
+
+// ________________________________________________________________
+bool SparqlExpression::isExistsExpression() const { return false; }
+
+// ________________________________________________________________
+void SparqlExpression::getExistsExpressions(
+    std::vector<SparqlExpression*>& result) {
+  if (isExistsExpression()) {
+    result.push_back(this);
+  }
+  for (auto& child : children()) {
+    child->getExistsExpressions(result);
+  }
+}
 }  // namespace sparqlExpression
