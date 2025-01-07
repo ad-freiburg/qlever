@@ -2354,6 +2354,8 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
     visitDescribe(arg);
   } else if constexpr (std::is_same_v<T, p::SpatialQuery>) {
     visitSpatialSearch(arg);
+  } else if constexpr (std::is_same_v<T, p::TextSearchQuery>) {
+    visitTextSearch(arg);
   } else {
     static_assert(std::is_same_v<T, p::BasicGraphPattern>);
     visitBasicGraphPattern(arg);
@@ -2524,6 +2526,16 @@ void QueryPlanner::GraphPatternPlanner::visitSpatialSearch(
       }
     }
   }
+  visitGroupOptionalOrMinus(std::move(candidatesOut));
+}
+
+// _______________________________________________________________
+void QueryPlanner::GraphPatternPlanner::visitTextSearch(
+    parsedQuery::TextSearchQuery& textSearchQuery) {
+  auto config = textSearchQuery.toTextIndexScanForWordConfiguration();
+  std::vector<SubtreePlan> candidatesOut;
+  auto plan = makeSubtreePlan<TextIndexScanForWord>(qec_, config);
+  candidatesOut.push_back(std::move(plan));
   visitGroupOptionalOrMinus(std::move(candidatesOut));
 }
 

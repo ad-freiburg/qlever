@@ -5,12 +5,27 @@
 #include "engine/TextIndexScanForWord.h"
 
 // _____________________________________________________________________________
+TextIndexScanForWord::TextIndexScanForWord(
+    QueryExecutionContext* qec, TextIndexScanForWordConfiguration config)
+    : Operation(qec),
+      config_(std::move(config)),
+      textRecordVar_(config.varToBindText_),
+      word_(config.word),
+      isPrefix_(word_.ends_with('*')) {
+  setVariableToColumnMap();
+}
+
+// _____________________________________________________________________________
 TextIndexScanForWord::TextIndexScanForWord(QueryExecutionContext* qec,
                                            Variable textRecordVar, string word)
     : Operation(qec),
-      textRecordVar_(std::move(textRecordVar)),
-      word_(std::move(word)),
-      isPrefix_(word_.ends_with('*')) {}
+      config_(TextIndexScanForWordConfiguration{textRecordVar, word,
+                                                std::nullopt, std::nullopt}),
+      textRecordVar_(config_.varToBindText_),
+      word_(config_.word),
+      isPrefix_(word_.ends_with('*')) {
+  setVariableToColumnMap();
+}
 
 // _____________________________________________________________________________
 ProtoResult TextIndexScanForWord::computeResult(
@@ -33,20 +48,33 @@ ProtoResult TextIndexScanForWord::computeResult(
 }
 
 // _____________________________________________________________________________
-VariableToColumnMap TextIndexScanForWord::computeVariableToColumnMap() const {
-  VariableToColumnMap vcmap;
-  auto addDefinedVar = [&vcmap,
-                        index = ColumnIndex{0}](const Variable& var) mutable {
-    vcmap[var] = makeAlwaysDefinedColumn(index);
-    ++index;
-  };
-  addDefinedVar(textRecordVar_);
+void TextIndexScanForWord::setVariableToColumnMap() {
+  ColumnIndex index = ColumnIndex{0};
+  variableColumns_[textRecordVar_] = makeAlwaysDefinedColumn(index);
+  index++;
   if (isPrefix_) {
-    addDefinedVar(textRecordVar_.getMatchingWordVariable(
-        std::string_view(word_).substr(0, word_.size() - 1)));
+    if (config_.varToBindMatch_.has_value()) {
+      variableColumns_[config_.varToBindMatch_.value()] =
+          makeAlwaysDefinedColumn(index);
+    } else {
+      variableColumns_[textRecordVar_.getMatchingWordVariable(
+          std::string_view(word_).substr(0, word_.size() - 1))] =
+          makeAlwaysDefinedColumn(index);
+    }
+    index++;
   }
-  addDefinedVar(textRecordVar_.getWordScoreVariable(word_, isPrefix_));
-  return vcmap;
+  if (config_.varToBindScore_.has_value()) {
+    variableColumns_[config_.varToBindScore_.value()] =
+        makeAlwaysDefinedColumn(index);
+  } else {
+    variableColumns_[textRecordVar_.getWordScoreVariable(word_, isPrefix_)] =
+        makeAlwaysDefinedColumn(index);
+  }
+}
+
+// _____________________________________________________________________________
+VariableToColumnMap TextIndexScanForWord::computeVariableToColumnMap() const {
+  return variableColumns_;
 }
 
 // _____________________________________________________________________________
