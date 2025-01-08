@@ -17,7 +17,7 @@ Bind::Bind(QueryExecutionContext* qec,
            std::shared_ptr<QueryExecutionTree> subtree, parsedQuery::Bind b)
     : Operation(qec), _subtree(std::move(subtree)), _bind(std::move(b)) {
   _subtree = ExistsScan::addExistsScansToSubtree(
-      _bind._expression, std::move(subtree), getExecutionContext(),
+      _bind._expression, std::move(_subtree), getExecutionContext(),
       cancellationHandle_);
 }
 

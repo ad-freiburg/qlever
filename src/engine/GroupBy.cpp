@@ -55,7 +55,7 @@ GroupBy::GroupBy(QueryExecutionContext* qec, vector<Variable> groupByVariables,
   auto sortColumns = computeSortColumns(subtree.get());
 
   for (const auto& alias : _aliases) {
-    _subtree = ExistsScan::addExistsScansToSubtree(
+    subtree = ExistsScan::addExistsScansToSubtree(
         alias._expression, std::move(subtree), getExecutionContext(),
         cancellationHandle_);
   }
