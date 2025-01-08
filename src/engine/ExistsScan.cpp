@@ -96,8 +96,8 @@ ProtoResult ExistsScan::computeResult([[maybe_unused]] bool requestLaziness) {
   // TODO<joka921> There are many other cases where a cheaper implementation can
   // be chosen, but we leave those for another PR, this is the most common case.
   namespace stdr = ql::ranges;
-  size_t numJoinColumns = joinColumnsLeft.size();
-  AD_CORRECTNESS_CHECK(numJoinColumns == joinColumnsRight.size());
+  size_t numJoinColumns = joinColumnsLeft.numColumns();
+  AD_CORRECTNESS_CHECK(numJoinColumns == joinColumnsRight.numColumns());
   bool isCheap = stdr::none_of(
       ad_utility::integerRange(numJoinColumns), [&](const auto& col) {
         return (stdr::any_of(joinColumnsRight.getColumn(col),
