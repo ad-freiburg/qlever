@@ -2917,7 +2917,7 @@ TEST(QueryPlanner, GroupByRedundantParensAndVariables) {
 // ____________________________________________________________________________
 TEST(QueryPlanner, Exists) {
   auto xyz = h::IndexScanFromStrings("?x", "?y", "?z");
-  auto a = h::IndexScanFromStrings("?x", "?y", "?z");
+  auto ab = h::IndexScanFromStrings("?x", "?y", "?z");
   h::expect(
       "SELECT * { ?x ?y ?z FILTER EXISTS {?a ?b ?c}}",
       h::Filter("EXISTS {?a ?b ?c}",
