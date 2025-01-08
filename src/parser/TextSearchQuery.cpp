@@ -17,11 +17,12 @@ void TextSearchQuery::addParameter(const SparqlTriple& triple) {
   auto predString = extractParameterName(predicate, TEXT_SEARCH_IRI);
 
   if (predString == "containsWord") {
-    if (!object.isString()) {
+    if (!object.isLiteral()) {
       throw TextSearchException(
           "The parameter <containsWord> expects a string");
     }
-    word_ = object.getString();
+    std::string literal = object.getLiteral().toStringRepresentation();
+    word_ = literal.substr(1, literal.size() - 2);
   } else if (predString == "bindMatch") {
     setVariable("bindMatch", object, matchVar_);
   } else if (predString == "bindScore") {

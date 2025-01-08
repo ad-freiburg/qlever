@@ -9,8 +9,8 @@ TextIndexScanForWord::TextIndexScanForWord(
     QueryExecutionContext* qec, TextIndexScanForWordConfiguration config)
     : Operation(qec),
       config_(std::move(config)),
-      textRecordVar_(config.varToBindText_),
-      word_(config.word),
+      textRecordVar_(config_.varToBindText_),
+      word_(config_.word),
       isPrefix_(word_.ends_with('*')) {
   setVariableToColumnMap();
 }
