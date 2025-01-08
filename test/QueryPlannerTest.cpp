@@ -2930,17 +2930,13 @@ TEST(QueryPlanner, Exists) {
       h::GroupBy({V{"?x"}}, {"(SAMPLE(EXISTS{?a ?b ?c}) as ?s)"},
                  h::ExistsJoin(xyz, abc)));
 
-  // Test the interaction of FROM [NAMED] with EXISTS.
-
+  // Test the interaction of FROM with EXISTS.
   using H = ad_utility::HashSet<std::string>;
   auto xyzg = h::IndexScanFromStrings("?x", "?y", "?z", {}, H{"<g>"});
   auto abcg = h::IndexScanFromStrings("?a", "?b", "?c", {}, H{"<g>"});
 
   auto existsJoin = h::ExistsJoin(xyzg, abcg);
   auto filter = h::Filter("EXISTS {?a ?b ?c}", existsJoin);
-
-  // Test all different kinds of queries.
-  // TODO<joka921> There is a more elegant way to reduce the code duplication
   // (use a lambda that only changes the beginning of the query).
   h::expect("SELECT * FROM <g> { ?x ?y ?z FILTER EXISTS {?a ?b ?c}}", filter);
   h::expect("ASK FROM <g> { ?x ?y ?z FILTER EXISTS {?a ?b ?c}}", filter);
@@ -2949,4 +2945,16 @@ TEST(QueryPlanner, Exists) {
       filter);
   h::expect("Describe ?x FROM <g> { ?x ?y ?z FILTER EXISTS {?a ?b ?c}}",
             h::Describe(::testing::_, filter));
+
+  // Test the interaction of FROM NAMES with EXISTS
+  auto varG = std::vector{Variable{"?g"}};
+  std::vector<ColumnIndex> graphCol{ADDITIONAL_COLUMN_GRAPH_ID};
+  auto uvcg =
+      h::IndexScanFromStrings("?u", "?v", "?c", {}, H{"<g2>"}, varG, graphCol);
+  existsJoin = h::ExistsJoin(xyzg, h::UnorderedJoins(abcg, uvcg));
+  filter = h::Filter("EXISTS {?a ?b ?c. GRAPH ?g { ?u ?v ?c}}", existsJoin);
+  h::expect(
+      "SELECT * FROM <g> FROM NAMED <g2> { ?x ?y ?z FILTER EXISTS {?a ?b ?c. "
+      "GRAPH ?g { ?u ?v ?c}}}",
+      filter);
 }
