@@ -8,22 +8,22 @@
 
 namespace parsedQuery {
 
-class TextSearchException : public std::runtime_error {
+class WordSearchException : public std::runtime_error {
   using std::runtime_error::runtime_error;
 };
 
-struct TextSearchQuery : MagicServiceQuery {
+struct WordSearchQuery : MagicServiceQuery {
   std::optional<std::string> word_;
   std::optional<Variable> textVar_;
   std::optional<Variable> matchVar_;
   std::optional<Variable> scoreVar_;
 
-  TextSearchQuery() = default;
-  TextSearchQuery(TextSearchQuery&& other) noexcept = default;
-  TextSearchQuery(const TextSearchQuery& other) noexcept = default;
-  TextSearchQuery& operator=(const TextSearchQuery& other) = default;
-  TextSearchQuery& operator=(TextSearchQuery&& a) noexcept = default;
-  ~TextSearchQuery() noexcept override = default;
+  WordSearchQuery() = default;
+  WordSearchQuery(WordSearchQuery&& other) noexcept = default;
+  WordSearchQuery(const WordSearchQuery& other) noexcept = default;
+  WordSearchQuery& operator=(const WordSearchQuery& other) = default;
+  WordSearchQuery& operator=(WordSearchQuery&& a) noexcept = default;
+  ~WordSearchQuery() noexcept override = default;
 
   // See MagicServiceQuery
   void addParameter(const SparqlTriple& triple) override;

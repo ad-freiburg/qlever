@@ -6,12 +6,27 @@
 
 // _____________________________________________________________________________
 TextIndexScanForEntity::TextIndexScanForEntity(
+    QueryExecutionContext* qec, TextIndexScanForEntityConfiguration config)
+    : Operation(qec),
+      config_(std::move(config)),
+      textRecordVar_(config_.varToBindText_),
+      varOrFixed_(qec, config_.entity_),
+      word_(config_.word_) {
+  setVariableToColumnMap();
+}
+
+// _____________________________________________________________________________
+TextIndexScanForEntity::TextIndexScanForEntity(
     QueryExecutionContext* qec, Variable textRecordVar,
     std::variant<Variable, std::string> entity, string word)
     : Operation(qec),
-      textRecordVar_(std::move(textRecordVar)),
-      varOrFixed_(qec, std::move(entity)),
-      word_(std::move(word)) {}
+      config_(TextIndexScanForEntityConfiguration{textRecordVar, entity, word,
+                                                  std::nullopt}),
+      textRecordVar_(config_.varToBindText_),
+      varOrFixed_(qec, config_.entity_),
+      word_(config_.word_) {
+  setVariableToColumnMap();
+}
 
 // _____________________________________________________________________________
 ProtoResult TextIndexScanForEntity::computeResult(
@@ -39,21 +54,34 @@ ProtoResult TextIndexScanForEntity::computeResult(
 }
 
 // _____________________________________________________________________________
-VariableToColumnMap TextIndexScanForEntity::computeVariableToColumnMap() const {
-  VariableToColumnMap vcmap;
-  auto addDefinedVar = [&vcmap,
-                        index = ColumnIndex{0}](const Variable& var) mutable {
-    vcmap[var] = makeAlwaysDefinedColumn(index);
-    ++index;
-  };
-  addDefinedVar(textRecordVar_);
+void TextIndexScanForEntity::setVariableToColumnMap() {
+  ColumnIndex index = ColumnIndex{0};
+  variableColumns_[textRecordVar_] = makeAlwaysDefinedColumn(index);
+  index++;
   if (hasFixedEntity()) {
-    addDefinedVar(textRecordVar_.getEntityScoreVariable(fixedEntity()));
+    if (config_.varToBindScore_.has_value()) {
+      variableColumns_[config_.varToBindScore_.value()] =
+          makeAlwaysDefinedColumn(index);
+    } else {
+      variableColumns_[textRecordVar_.getEntityScoreVariable(fixedEntity())] =
+          makeAlwaysDefinedColumn(index);
+    }
   } else {
-    addDefinedVar(entityVariable());
-    addDefinedVar(textRecordVar_.getEntityScoreVariable(entityVariable()));
+    variableColumns_[entityVariable()] = makeAlwaysDefinedColumn(index);
+    index++;
+    if (config_.varToBindScore_.has_value()) {
+      variableColumns_[config_.varToBindScore_.value()] =
+          makeAlwaysDefinedColumn(index);
+    } else {
+      variableColumns_[textRecordVar_.getEntityScoreVariable(
+          entityVariable())] = makeAlwaysDefinedColumn(index);
+    }
   }
-  return vcmap;
+}
+
+// _____________________________________________________________________________
+VariableToColumnMap TextIndexScanForEntity::computeVariableToColumnMap() const {
+  return variableColumns_;
 }
 
 // _____________________________________________________________________________

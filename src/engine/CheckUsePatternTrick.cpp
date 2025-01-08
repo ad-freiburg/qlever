@@ -76,7 +76,8 @@ bool isVariableContainedInGraphPatternOperation(
                     std::is_same_v<T, p::PathQuery> ||
                     std::is_same_v<T, p::Describe> ||
                     std::is_same_v<T, p::SpatialQuery> ||
-                    std::is_same_v<T, p::TextSearchQuery>);
+                    std::is_same_v<T, p::WordSearchQuery> ||
+                    std::is_same_v<T, p::EntitySearchQuery>);
       // The `TransPath` is set up later in the query planning, when this
       // function should not be called anymore.
       AD_FAIL();

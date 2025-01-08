@@ -540,7 +540,8 @@ class QueryPlanner {
     void visitTransitivePath(parsedQuery::TransPath& transitivePath);
     void visitPathSearch(parsedQuery::PathQuery& config);
     void visitSpatialSearch(parsedQuery::SpatialQuery& config);
-    void visitTextSearch(parsedQuery::TextSearchQuery& config);
+    void visitWordSearch(parsedQuery::WordSearchQuery& config);
+    void visitEntitySearch(parsedQuery::EntitySearchQuery& config);
     void visitUnion(parsedQuery::Union& un);
     void visitSubquery(parsedQuery::Subquery& subquery);
     void visitDescribe(parsedQuery::Describe& describe);

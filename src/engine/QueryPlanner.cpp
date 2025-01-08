@@ -2354,8 +2354,10 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
     visitDescribe(arg);
   } else if constexpr (std::is_same_v<T, p::SpatialQuery>) {
     visitSpatialSearch(arg);
-  } else if constexpr (std::is_same_v<T, p::TextSearchQuery>) {
-    visitTextSearch(arg);
+  } else if constexpr (std::is_same_v<T, p::WordSearchQuery>) {
+    visitWordSearch(arg);
+  } else if constexpr (std::is_same_v<T, p::EntitySearchQuery>) {
+    visitEntitySearch(arg);
   } else {
     static_assert(std::is_same_v<T, p::BasicGraphPattern>);
     visitBasicGraphPattern(arg);
@@ -2530,11 +2532,21 @@ void QueryPlanner::GraphPatternPlanner::visitSpatialSearch(
 }
 
 // _______________________________________________________________
-void QueryPlanner::GraphPatternPlanner::visitTextSearch(
-    parsedQuery::TextSearchQuery& textSearchQuery) {
-  auto config = textSearchQuery.toTextIndexScanForWordConfiguration();
+void QueryPlanner::GraphPatternPlanner::visitWordSearch(
+    parsedQuery::WordSearchQuery& wordSearchQuery) {
+  auto config = wordSearchQuery.toTextIndexScanForWordConfiguration();
   std::vector<SubtreePlan> candidatesOut;
   auto plan = makeSubtreePlan<TextIndexScanForWord>(qec_, config);
+  candidatesOut.push_back(std::move(plan));
+  visitGroupOptionalOrMinus(std::move(candidatesOut));
+}
+
+// _______________________________________________________________
+void QueryPlanner::GraphPatternPlanner::visitEntitySearch(
+    parsedQuery::EntitySearchQuery& entitySearchQuery) {
+  auto config = entitySearchQuery.toTextIndexScanForEntityConfiguration();
+  std::vector<SubtreePlan> candidatesOut;
+  auto plan = makeSubtreePlan<TextIndexScanForEntity>(qec_, config);
   candidatesOut.push_back(std::move(plan));
   visitGroupOptionalOrMinus(std::move(candidatesOut));
 }
