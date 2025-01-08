@@ -2917,10 +2917,7 @@ TEST(QueryPlanner, GroupByRedundantParensAndVariables) {
 // ____________________________________________________________________________
 TEST(QueryPlanner, Exists) {
   auto xyz = h::IndexScanFromStrings("?x", "?y", "?z");
-  auto ab = h::IndexScanFromStrings("?x", "?y", "?z");
-  h::expect(
-      "SELECT * { ?x ?y ?z FILTER EXISTS {?a ?b ?c}}",
-      h::Filter("EXISTS {?a ?b ?c}",
-                h::ExistsJoin(h::IndexScanFromStrings("?x", "?y", "?z"),
-                              h::IndexScanFromStrings("?a", "?b", "?c"))));
+  auto abc = h::IndexScanFromStrings("?a", "?b", "?c");
+  h::expect("SELECT * { ?x ?y ?z FILTER EXISTS {?a ?b ?c}}",
+            h::Filter("EXISTS {?a ?b ?c}", h::ExistsJoin(xyz, abc)));
 }
