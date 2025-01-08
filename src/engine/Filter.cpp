@@ -10,7 +10,7 @@
 
 #include "backports/algorithm.h"
 #include "engine/CallFixedSize.h"
-#include "engine/ExistsScan.h"
+#include "engine/ExistsJoin.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/QueryPlanner.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
@@ -31,7 +31,7 @@ Filter::Filter(QueryExecutionContext* qec,
     : Operation(qec),
       _subtree(std::move(subtree)),
       _expression{std::move(expression)} {
-  _subtree = ExistsScan::addExistsScansToSubtree(
+  _subtree = ExistsJoin::addExistsScansToSubtree(
       _expression, std::move(_subtree), getExecutionContext(),
       cancellationHandle_);
   setPrefilterExpressionForChildren();

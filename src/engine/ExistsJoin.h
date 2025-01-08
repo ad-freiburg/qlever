@@ -7,7 +7,7 @@
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 
-class ExistsScan : public Operation {
+class ExistsJoin : public Operation {
  private:
   std::shared_ptr<QueryExecutionTree> left_;
   std::shared_ptr<QueryExecutionTree> right_;
@@ -19,7 +19,7 @@ class ExistsScan : public Operation {
   std::vector<std::array<ColumnIndex, 2>> _matchedColumns;
 
  public:
-  ExistsScan(QueryExecutionContext* qec,
+  ExistsJoin(QueryExecutionContext* qec,
              std::shared_ptr<QueryExecutionTree> left,
              std::shared_ptr<QueryExecutionTree> right,
              Variable existsVariable);

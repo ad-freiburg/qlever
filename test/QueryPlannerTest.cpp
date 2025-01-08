@@ -2906,10 +2906,21 @@ TEST(QueryPlanner, Describe) {
 }
 
 // ____________________________________________________________________________
-TEST(QueryPlanner, GroupByRedundanteParensAndVariables) {
+TEST(QueryPlanner, GroupByRedundantParensAndVariables) {
   auto matcher = h::GroupBy({Variable{"?x"}}, {},
                             h::IndexScanFromStrings("?x", "?y", "?z"));
   h::expect("SELECT ?x { ?x ?y ?z} GROUP BY (?x)", matcher);
   h::expect("SELECT ?x { ?x ?y ?z} GROUP BY ?x ?x", matcher);
   h::expect("SELECT ?x { ?x ?y ?z} GROUP BY ?x ?x (?x)", matcher);
+}
+
+// ____________________________________________________________________________
+TEST(QueryPlanner, Exists) {
+  auto xyz = h::IndexScanFromStrings("?x", "?y", "?z");
+  auto a = h::IndexScanFromStrings("?x", "?y", "?z");
+  h::expect(
+      "SELECT * { ?x ?y ?z FILTER EXISTS {?a ?b ?c}}",
+      h::Filter("EXISTS {?a ?b ?c}",
+                h::ExistsJoin(h::IndexScanFromStrings("?x", "?y", "?z"),
+                              h::IndexScanFromStrings("?a", "?b", "?c"))));
 }

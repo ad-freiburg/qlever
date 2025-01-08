@@ -2,7 +2,7 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#include "engine/ExistsScan.h"
+#include "engine/ExistsJoin.h"
 
 #include "engine/QueryPlanner.h"
 #include "engine/sparqlExpressions/ExistsExpression.h"
@@ -10,7 +10,7 @@
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 
 // _____________________________________________________________________________
-ExistsScan::ExistsScan(QueryExecutionContext* qec,
+ExistsJoin::ExistsJoin(QueryExecutionContext* qec,
                        std::shared_ptr<QueryExecutionTree> left,
                        std::shared_ptr<QueryExecutionTree> right,
                        Variable existsVariable)
@@ -24,16 +24,16 @@ ExistsScan::ExistsScan(QueryExecutionContext* qec,
 }
 
 // _____________________________________________________________________________
-string ExistsScan::getCacheKeyImpl() const {
+string ExistsJoin::getCacheKeyImpl() const {
   return absl::StrCat("EXISTS SCAN left: ", left_->getCacheKey(),
                       " right: ", right_->getCacheKey());
 }
 
 // _____________________________________________________________________________
-string ExistsScan::getDescriptor() const { return "EXISTS scan"; }
+string ExistsJoin::getDescriptor() const { return "EXISTS scan"; }
 
 // ____________________________________________________________________________
-VariableToColumnMap ExistsScan::computeVariableToColumnMap() const {
+VariableToColumnMap ExistsJoin::computeVariableToColumnMap() const {
   auto res = left_->getVariableColumns();
   AD_CONTRACT_CHECK(
       !res.contains(existsVariable_),
@@ -43,18 +43,18 @@ VariableToColumnMap ExistsScan::computeVariableToColumnMap() const {
 }
 
 // ____________________________________________________________________________
-size_t ExistsScan::getResultWidth() const {
+size_t ExistsJoin::getResultWidth() const {
   // We add one column to the input.
   return left_->getResultWidth() + 1;
 }
 
 // ____________________________________________________________________________
-vector<ColumnIndex> ExistsScan::resultSortedOn() const {
+vector<ColumnIndex> ExistsJoin::resultSortedOn() const {
   return left_->resultSortedOn();
 }
 
 // ____________________________________________________________________________
-float ExistsScan::getMultiplicity(size_t col) {
+float ExistsJoin::getMultiplicity(size_t col) {
   if (col < getResultWidth() - 1) {
     return left_->getMultiplicity(col);
   }
@@ -64,18 +64,18 @@ float ExistsScan::getMultiplicity(size_t col) {
 }
 
 // ____________________________________________________________________________
-uint64_t ExistsScan::getSizeEstimateBeforeLimit() {
+uint64_t ExistsJoin::getSizeEstimateBeforeLimit() {
   return left_->getSizeEstimate();
 }
 
 // ____________________________________________________________________________
-size_t ExistsScan::getCostEstimate() {
+size_t ExistsJoin::getCostEstimate() {
   return left_->getCostEstimate() + right_->getCostEstimate() +
          left_->getSizeEstimate() + right_->getSizeEstimate();
 }
 
 // ____________________________________________________________________________
-ProtoResult ExistsScan::computeResult([[maybe_unused]] bool requestLaziness) {
+ProtoResult ExistsJoin::computeResult([[maybe_unused]] bool requestLaziness) {
   auto leftRes = left_->getResult();
   auto rightRes = right_->getResult();
   const auto& left = leftRes->idTable();
@@ -139,7 +139,7 @@ ProtoResult ExistsScan::computeResult([[maybe_unused]] bool requestLaziness) {
 }
 
 // _____________________________________________________________________________
-std::shared_ptr<QueryExecutionTree> ExistsScan::addExistsScansToSubtree(
+std::shared_ptr<QueryExecutionTree> ExistsJoin::addExistsScansToSubtree(
     const sparqlExpression::SparqlExpressionPimpl& expression,
     std::shared_ptr<QueryExecutionTree> subtree, QueryExecutionContext* qec,
     const ad_utility::SharedCancellationHandle& cancellationHandle) {
@@ -158,7 +158,7 @@ std::shared_ptr<QueryExecutionTree> ExistsScan::addExistsScansToSubtree(
     auto pq = exists.argument();
     auto tree =
         std::make_shared<QueryExecutionTree>(qp.createExecutionTree(pq));
-    subtree = ad_utility::makeExecutionTree<ExistsScan>(
+    subtree = ad_utility::makeExecutionTree<ExistsJoin>(
         qec, std::move(subtree), std::move(tree), exists.variable());
   }
   return subtree;

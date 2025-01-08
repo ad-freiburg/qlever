@@ -196,35 +196,4 @@ struct FindSmallerUndefRanges {
   }
 };
 constexpr FindSmallerUndefRanges findSmallerUndefRanges;
-/*
-template <std::random_access_iterator It>
-auto findSmallerUndefRanges(const auto& row, It begin, It end,
-                            bool& resultMightBeUnsorted)
-    -> cppcoro::generator<It> {
-  size_t numLastUndefined = 0;
-  assert(row.size() > 0);
-  auto it = ql::ranges::rbegin(row);
-  auto rend = ql::ranges::rend(row);
-  for (; it < rend; ++it) {
-    if (*it != Id::makeUndefined()) {
-      break;
-    }
-    ++numLastUndefined;
-  }
-
-  for (; it < rend; ++it) {
-    if (*it == Id::makeUndefined()) {
-      return findSmallerUndefRangesArbitrary(row, begin, end,
-                                             resultMightBeUnsorted);
-    }
-  }
-  if (numLastUndefined == 0) {
-    return findSmallerUndefRangesForRowsWithoutUndef(row, begin, end,
-                                                     resultMightBeUnsorted);
-  } else {
-    return findSmallerUndefRangesForRowsWithUndefInLastColumns(
-        row, numLastUndefined, begin, end, resultMightBeUnsorted);
-  }
-}
-*/
 }  // namespace ad_utility

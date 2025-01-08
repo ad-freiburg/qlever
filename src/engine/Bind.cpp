@@ -5,7 +5,7 @@
 #include "Bind.h"
 
 #include "engine/CallFixedSize.h"
-#include "engine/ExistsScan.h"
+#include "engine/ExistsJoin.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
@@ -16,7 +16,7 @@
 Bind::Bind(QueryExecutionContext* qec,
            std::shared_ptr<QueryExecutionTree> subtree, parsedQuery::Bind b)
     : Operation(qec), _subtree(std::move(subtree)), _bind(std::move(b)) {
-  _subtree = ExistsScan::addExistsScansToSubtree(
+  _subtree = ExistsJoin::addExistsScansToSubtree(
       _bind._expression, std::move(_subtree), getExecutionContext(),
       cancellationHandle_);
 }
