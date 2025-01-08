@@ -78,6 +78,7 @@ class SparqlQleverVisitor {
   // query. This may contain duplicates. A variable is added via
   // `addVisibleVariable`.
   std::vector<Variable> visibleVariables_{};
+  ParsedQuery::DatasetClauses activeDatasetClauses_;
   PrefixMap prefixMap_{};
   // We need to remember the prologue (prefix declarations) when we encounter it
   // because we need it when we encounter a SERVICE query. When there is no

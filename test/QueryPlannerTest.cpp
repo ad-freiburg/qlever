@@ -2918,6 +2918,35 @@ TEST(QueryPlanner, GroupByRedundantParensAndVariables) {
 TEST(QueryPlanner, Exists) {
   auto xyz = h::IndexScanFromStrings("?x", "?y", "?z");
   auto abc = h::IndexScanFromStrings("?a", "?b", "?c");
+  using V = Variable;
+  // Simple tests for EXISTS with FILTER, BIND, and GROUP BY.
   h::expect("SELECT * { ?x ?y ?z FILTER EXISTS {?a ?b ?c}}",
             h::Filter("EXISTS {?a ?b ?c}", h::ExistsJoin(xyz, abc)));
+  h::expect("SELECT * { ?x ?y ?z BIND(EXISTS {?a ?b ?c} as ?bound)}",
+            h::Bind(h::ExistsJoin(xyz, abc), "EXISTS {?a ?b ?c}",
+                    Variable("?bound")));
+  h::expect(
+      "SELECT ?x (SAMPLE(EXISTS{?a ?b ?c}) as ?s) { ?x ?y ?z } GROUP BY ?x",
+      h::GroupBy({V{"?x"}}, {"(SAMPLE(EXISTS{?a ?b ?c}) as ?s)"},
+                 h::ExistsJoin(xyz, abc)));
+
+  // Test the interaction of FROM [NAMED] with EXISTS.
+
+  using H = ad_utility::HashSet<std::string>;
+  auto xyzg = h::IndexScanFromStrings("?x", "?y", "?z", {}, H{"<g>"});
+  auto abcg = h::IndexScanFromStrings("?a", "?b", "?c", {}, H{"<g>"});
+
+  auto existsJoin = h::ExistsJoin(xyzg, abcg);
+  auto filter = h::Filter("EXISTS {?a ?b ?c}", existsJoin);
+
+  // Test all different kinds of queries.
+  // TODO<joka921> There is a more elegant way to reduce the code duplication
+  // (use a lambda that only changes the beginning of the query).
+  h::expect("SELECT * FROM <g> { ?x ?y ?z FILTER EXISTS {?a ?b ?c}}", filter);
+  h::expect("ASK FROM <g> { ?x ?y ?z FILTER EXISTS {?a ?b ?c}}", filter);
+  h::expect(
+      "CONSTRUCT {<a> <b> <c>} FROM <g> { ?x ?y ?z FILTER EXISTS {?a ?b ?c}}",
+      filter);
+  h::expect("Describe ?x FROM <g> { ?x ?y ?z FILTER EXISTS {?a ?b ?c}}",
+            h::Describe(::testing::_, filter));
 }
