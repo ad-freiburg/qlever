@@ -168,7 +168,7 @@ auto findSmallerUndefRangesArbitrary(const auto& row, It begin, It end,
 struct FindSmallerUndefRanges {
   template <std::random_access_iterator It>
   auto operator()(const auto& row, It begin, It end,
-                  bool& resultMightBeUnsorted) -> cppcoro::generator<It> {
+                  bool& resultMightBeUnsorted) const -> cppcoro::generator<It> {
     size_t numLastUndefined = 0;
     assert(row.size() > 0);
     auto it = ql::ranges::rbegin(row);
