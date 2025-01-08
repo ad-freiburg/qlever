@@ -16,6 +16,8 @@
 
 using std::string;
 
+// string word_, bool isEntity_, TextRecordIndex contextId_, Score score_,
+// bool isLiteralEntity_
 struct WordsFileLine {
   string word_;
   bool isEntity_;
@@ -24,6 +26,7 @@ struct WordsFileLine {
   bool isLiteralEntity_ = false;
 };
 
+// string docContent_, DocumentIndex docId_
 struct DocsFileLine {
   string docContent_;
   DocumentIndex docId_;
@@ -41,6 +44,13 @@ struct LiteralsTokenizationDelimiter {
   }
 };
 
+// This class constructs an object that can be iterated to get the normalized
+// words of the text given. The text gets split into tokens using the
+// LiteralsTokenizationDelimiter and those tokens get normalized using
+// the localeManager. You can use the constructed object like
+// obj = TokenizeAndNormalizeText{text, localeManager}
+// for (auto normalizedWord : obj) { code }
+// The type of the value returned when iterating is std::string
 class TokenizeAndNormalizeText
     : public ad_utility::InputRangeMixin<TokenizeAndNormalizeText> {
  public:
@@ -51,7 +61,7 @@ class TokenizeAndNormalizeText
                                  absl::SkipEmpty{})},
         current_{splitter_.begin()},
         end_{splitter_.end()},
-        localeManager_(localeManager){};
+        localeManager_(std::move(localeManager)){};
 
   // Delete unsafe constructors
   TokenizeAndNormalizeText() = delete;
@@ -80,6 +90,9 @@ class TokenizeAndNormalizeText
   void next();
 };
 
+// This class is the parent class of WordsFileParser and DocsFileParser and
+// it exists to reduce code duplication since the only difference between the
+// child classes is the line type returned
 class WordsAndDocsFileParser {
  public:
   explicit WordsAndDocsFileParser(const string& wordsOrDocsFile,
@@ -94,6 +107,13 @@ class WordsAndDocsFileParser {
   LocaleManager localeManager_;
 };
 
+// This class takes in the a pathToWordsFile and a localeManager. It then can
+// be used to iterate the wordsFile while already normalizing the words using
+// the localeManager. (If words are entities it doesn't normalize them)
+// An object of this class can be iterated as follows:
+// obj = WordsFileParser{wordsFile, localeManager}
+// for (auto wordsFileLine : obj) { code }
+// The type of the value returned when iterating is WordsFileLine
 class WordsFileParser : public WordsAndDocsFileParser,
                         public ad_utility::InputRangeFromGet<WordsFileLine> {
  public:
@@ -106,7 +126,10 @@ class WordsFileParser : public WordsAndDocsFileParser,
   TextRecordIndex lastCId_ = TextRecordIndex::make(0);
 #endif
 };
-
+// Works similar to WordsFileParser but it instead parses a docsFile and
+// doesn't normalize the text found in docsFile. To parse the returned
+// docContent_ of a DocsFileLine please refer to the TokenizeAndNormalizeText
+// class
 class DocsFileParser : public WordsAndDocsFileParser,
                        public ad_utility::InputRangeFromGet<DocsFileLine> {
  public:
