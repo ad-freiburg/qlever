@@ -9,6 +9,7 @@
 #include <absl/strings/str_join.h>
 
 #include "engine/CallFixedSize.h"
+#include "engine/ExistsScan.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
 #include "engine/LazyGroupBy.h"
@@ -52,6 +53,12 @@ GroupBy::GroupBy(QueryExecutionContext* qec, vector<Variable> groupByVariables,
   ql::ranges::sort(_groupByVariables, std::less<>{}, &Variable::name);
 
   auto sortColumns = computeSortColumns(subtree.get());
+
+  for (const auto& alias : _aliases) {
+    _subtree = ExistsScan::addExistsScansToSubtree(
+        alias._expression, std::move(subtree), getExecutionContext(),
+        cancellationHandle_);
+  }
   _subtree =
       QueryExecutionTree::createSortedTree(std::move(subtree), sortColumns);
 }

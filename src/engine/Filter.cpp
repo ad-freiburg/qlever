@@ -31,21 +31,9 @@ Filter::Filter(QueryExecutionContext* qec,
     : Operation(qec),
       _subtree(std::move(subtree)),
       _expression{std::move(expression)} {
-  std::vector<sparqlExpression::SparqlExpression*> existsExpressions;
-  _expression.getPimpl()->getExistsExpressions(existsExpressions);
-  for (auto* expr : existsExpressions) {
-    const auto& exists =
-        dynamic_cast<const sparqlExpression::ExistsExpression&>(*expr);
-    QueryPlanner qp{getExecutionContext(), cancellationHandle_};
-    // TODO<joka921> This can be done by the expression itself, then it is
-    // automatically duplicated.
-    auto pq = exists.argument();
-    auto tree =
-        std::make_shared<QueryExecutionTree>(qp.createExecutionTree(pq));
-    _subtree = ad_utility::makeExecutionTree<ExistsScan>(
-        getExecutionContext(), std::move(_subtree), std::move(tree),
-        exists.variable());
-  }
+  _subtree = ExistsScan::addExistsScansToSubtree(
+      _expression, std::move(_subtree), getExecutionContext(),
+      cancellationHandle_);
   setPrefilterExpressionForChildren();
 }
 

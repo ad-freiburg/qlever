@@ -4,6 +4,9 @@
 
 #include "engine/ExistsScan.h"
 
+#include "engine/QueryPlanner.h"
+#include "engine/sparqlExpressions/ExistsExpression.h"
+#include "engine/sparqlExpressions/SparqlExpression.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 
 // _____________________________________________________________________________
@@ -15,7 +18,10 @@ ExistsScan::ExistsScan(QueryExecutionContext* qec,
       left_{std::move(left)},
       right_{std::move(right)},
       joinColumns_{QueryExecutionTree::getJoinColumns(*left_, *right_)},
-      existsVariable_{std::move(existsVariable)} {}
+      existsVariable_{std::move(existsVariable)} {
+  std::tie(left_, right_) = QueryExecutionTree::createSortedTrees(
+      std::move(left_), std::move(right_), joinColumns_);
+}
 
 // _____________________________________________________________________________
 string ExistsScan::getCacheKeyImpl() const {
@@ -85,28 +91,41 @@ ProtoResult ExistsScan::computeResult([[maybe_unused]] bool requestLaziness) {
 
   checkCancellation();
 
+  // `isCheap` is true iff there are no UNDEF values in the join columns. In
+  // this case we can use a much cheaper algorithm.
+  // TODO<joka921> There are many other cases where a cheaper implementation can
+  // be chosen, but we leave those for another PR, this is the most common case.
+  namespace stdr = ql::ranges;
+  size_t numJoinColumns = joinColumnsLeft.size();
+  AD_CORRECTNESS_CHECK(numJoinColumns == joinColumnsRight.size());
+  bool isCheap = stdr::none_of(
+      ad_utility::integerRange(numJoinColumns), [&](const auto& col) {
+        return (stdr::any_of(joinColumnsRight.getColumn(col),
+                             &Id::isUndefined)) ||
+               (stdr::any_of(joinColumnsLeft.getColumn(col), &Id::isUndefined));
+      });
+
   auto noopRowAdder = [](auto&&...) {};
 
-  // TODO<joka921> Memory limit.
-  std::vector<size_t> notExistsIndices;
+  std::vector<size_t, ad_utility::AllocatorWithLimit<size_t>> notExistsIndices{
+      allocator()};
   auto actionForNotExisting =
       [&notExistsIndices, begin = joinColumnsLeft.begin()](const auto& itLeft) {
         notExistsIndices.push_back(itLeft - begin);
       };
 
-  // TODO<joka921> Handle UNDEF values correctly (and efficiently)
-  auto findUndefDispatch = []<typename It>([[maybe_unused]] const auto& row,
-                                           [[maybe_unused]] It begin,
-                                           [[maybe_unused]] auto end,
-                                           [[maybe_unused]] bool& outOfOrder) {
-    return std::array<It, 0>{};
-  };
-
   auto checkCancellationLambda = [this] { checkCancellation(); };
-  [[maybe_unused]] auto numOutOfOrder = ad_utility::zipperJoinWithUndef(
-      joinColumnsLeft, joinColumnsRight, ql::ranges::lexicographical_compare,
-      noopRowAdder, findUndefDispatch, findUndefDispatch, actionForNotExisting,
-      checkCancellationLambda);
+  auto runZipperJoin = [&](auto findUndef) {
+    [[maybe_unused]] auto numOutOfOrder = ad_utility::zipperJoinWithUndef(
+        joinColumnsLeft, joinColumnsRight, ql::ranges::lexicographical_compare,
+        noopRowAdder, findUndef, findUndef, actionForNotExisting,
+        checkCancellationLambda);
+  };
+  if (isCheap) {
+    runZipperJoin(ad_utility::noop);
+  } else {
+    runZipperJoin(ad_utility::findSmallerUndefRanges);
+  }
 
   // Set up the result;
   IdTable result = left.clone();
@@ -117,4 +136,30 @@ ProtoResult ExistsScan::computeResult([[maybe_unused]] bool requestLaziness) {
     existsCol[notExistsIndex] = Id::makeFromBool(false);
   }
   return {std::move(result), resultSortedOn(), leftRes->getCopyOfLocalVocab()};
+}
+
+// _____________________________________________________________________________
+std::shared_ptr<QueryExecutionTree> ExistsScan::addExistsScansToSubtree(
+    const sparqlExpression::SparqlExpressionPimpl& expression,
+    std::shared_ptr<QueryExecutionTree> subtree, QueryExecutionContext* qec,
+    const ad_utility::SharedCancellationHandle& cancellationHandle) {
+  std::vector<const sparqlExpression::SparqlExpression*> existsExpressions;
+  expression.getPimpl()->getExistsExpressions(existsExpressions);
+  for (auto* expr : existsExpressions) {
+    const auto& exists =
+        dynamic_cast<const sparqlExpression::ExistsExpression&>(*expr);
+    // Currently some FILTERs are applied multiple times especially when there
+    // are OPTIONAL joins in the query. In these cases we have to make sure that
+    // the `ExistsScan` is added only once.
+    if (subtree->isVariableCovered(exists.variable())) {
+      continue;
+    }
+    QueryPlanner qp{qec, cancellationHandle};
+    auto pq = exists.argument();
+    auto tree =
+        std::make_shared<QueryExecutionTree>(qp.createExecutionTree(pq));
+    subtree = ad_utility::makeExecutionTree<ExistsScan>(
+        qec, std::move(subtree), std::move(tree), exists.variable());
+  }
+  return subtree;
 }

@@ -25,10 +25,7 @@ class QueryExecutionTree {
                      std::shared_ptr<Operation> operation)
       : QueryExecutionTree(qec) {
     rootOperation_ = std::move(operation);
-    // TODO<joka921> This currently fails for EXISTS but it is also unneeded.
-    /*
     readFromCache();
-    */
   }
 
   std::string getCacheKey() const;

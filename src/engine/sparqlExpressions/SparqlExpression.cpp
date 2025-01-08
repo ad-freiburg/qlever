@@ -186,7 +186,7 @@ bool SparqlExpression::isExistsExpression() const { return false; }
 
 // ________________________________________________________________
 void SparqlExpression::getExistsExpressions(
-    std::vector<SparqlExpression*>& result) {
+    std::vector<const SparqlExpression*>& result) const {
   if (isExistsExpression()) {
     result.push_back(this);
   }

@@ -24,6 +24,11 @@ class ExistsScan : public Operation {
              std::shared_ptr<QueryExecutionTree> right,
              Variable existsVariable);
 
+  static std::shared_ptr<QueryExecutionTree> addExistsScansToSubtree(
+      const sparqlExpression::SparqlExpressionPimpl& expression,
+      std::shared_ptr<QueryExecutionTree> subtree, QueryExecutionContext* qec,
+      const ad_utility::SharedCancellationHandle& cancellationHandle);
+
  protected:
   string getCacheKeyImpl() const override;
 

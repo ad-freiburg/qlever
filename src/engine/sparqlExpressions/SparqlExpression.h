@@ -131,7 +131,7 @@ class SparqlExpression {
   // The result is passed in as a reference to simplify the recursive
   // implementation.
   virtual void getExistsExpressions(
-      std::vector<SparqlExpression*>& result) final;
+      std::vector<const SparqlExpression*>& result) const final;
 
   // __________________________________________________________________________
   virtual ~SparqlExpression() = default;
