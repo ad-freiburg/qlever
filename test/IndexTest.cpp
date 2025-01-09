@@ -406,11 +406,11 @@ TEST(IndexTest, TripleToInternalRepresentation) {
         index.tripleToInternalRepresentation(std::move(turtleTriple));
     EXPECT_TRUE(res.langtag_.empty());
     EXPECT_THAT(res.triple_[0],
-                IsPossiblyExternalString(iri("<subject>"), false));
+                IsPossiblyExternalString(iri("<subject>"), true));
     EXPECT_THAT(res.triple_[1],
-                IsPossiblyExternalString(iri("<predicate>"), false));
+                IsPossiblyExternalString(iri("<predicate>"), true));
     EXPECT_THAT(res.triple_[2],
-                IsPossiblyExternalString(lit("\"literal\""), false));
+                IsPossiblyExternalString(lit("\"literal\""), true));
   }
   {
     IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
@@ -525,6 +525,9 @@ TEST(IndexTest, trivialGettersAndSetters) {
   index.memoryLimitIndexBuilding() = 7_kB;
   EXPECT_EQ(index.memoryLimitIndexBuilding(), 7_kB);
   EXPECT_EQ(std::as_const(index).memoryLimitIndexBuilding(), 7_kB);
+  index.parserBufferSize() = 8_kB;
+  EXPECT_EQ(index.parserBufferSize(), 8_kB);
+  EXPECT_EQ(std::as_const(index).parserBufferSize(), 8_kB);
 }
 
 TEST(IndexTest, updateInputFileSpecificationsAndLog) {
