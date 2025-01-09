@@ -11,6 +11,7 @@
 #include <string>
 #include <vector>
 
+#include "GraphStoreProtocol.h"
 #include "engine/ExecuteUpdate.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/QueryPlanner.h"
@@ -732,13 +733,6 @@ Awaitable<void> Server::sendStreamableResponse(
 }
 
 // ____________________________________________________________________________
-class NoSupportedMediatypeError : public std::runtime_error {
- public:
-  explicit NoSupportedMediatypeError(std::string_view msg)
-      : std::runtime_error{std::string{msg}} {}
-};
-
-// ____________________________________________________________________________
 MediaType Server::determineMediaType(
     const ad_utility::url_parser::ParamValueMap& params,
     const ad_utility::httpUtils::HttpRequest auto& request) {
@@ -1000,7 +994,7 @@ Awaitable<void> Server::processQueryOrUpdate(
   } catch (const QueryAlreadyInUseError& e) {
     responseStatus = http::status::conflict;
     exceptionErrorMsg = e.what();
-  } catch (const NoSupportedMediatypeError& e) {
+  } catch (const UnknownMediatypeError& e) {
     responseStatus = http::status::bad_request;
     exceptionErrorMsg = e.what();
   } catch (const ad_utility::CancellationException& e) {

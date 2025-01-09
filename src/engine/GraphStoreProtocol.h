@@ -11,88 +11,103 @@
 #include "util/http/HttpUtils.h"
 #include "util/http/UrlParser.h"
 
+// The mediatype of a request could not be determined.
+class UnknownMediatypeError : public std::runtime_error {
+ public:
+  explicit UnknownMediatypeError(std::string_view msg)
+      : std::runtime_error{std::string{msg}} {}
+};
+
+// The mediatype of a request is not supported.
+class UnsupportedMediatypeError : public std::runtime_error {
+ public:
+  explicit UnsupportedMediatypeError(std::string_view msg)
+      : std::runtime_error{std::string{msg}} {}
+};
+
+// Transform SPARQL Graph Store Protocol requests to their equivalent
+// ParsedQuery (SPARQL Query or Update).
 class GraphStoreProtocol {
  private:
+  // Extract the mediatype from a request.
+  static std::optional<ad_utility::MediaType> extractMediatype(
+      const ad_utility::httpUtils::HttpRequest auto& rawRequest) {
+    std::string contentTypeString;
+    if (rawRequest.find(boost::beast::http::field::content_type) !=
+        rawRequest.end()) {
+      contentTypeString =
+          rawRequest.at(boost::beast::http::field::content_type);
+    }
+    if (contentTypeString.empty()) {
+      // If the mediatype is not given, return an error.
+      // Note: The specs also allow to try to determine the media type from the
+      // content.
+      throw UnknownMediatypeError("Mediatype empty or not set.");
+    }
+    return ad_utility::getMediaTypeFromAcceptHeader(contentTypeString);
+  }
+  FRIEND_TEST(GraphStoreProtocolTest, extractMediatype);
+
+  // The error if a mediatype is not supported.
+  static void throwUnsupportedMediatype(const std::string& mediatype);
+
+  // Parse the triples from the request body according to the content type.
+  static std::vector<TurtleTriple> parseTriples(
+      const std::string& body, const ad_utility::MediaType contentType);
+  FRIEND_TEST(GraphStoreProtocolTest, parseTriples);
+
+  // Transforms the triples from `TurtleTriple` to `SparqlTripleSimpleWithGraph`
+  // and sets the correct graph.
+  static std::vector<SparqlTripleSimpleWithGraph> convertTriples(
+      const GraphOrDefault& graph, std::vector<TurtleTriple> triples);
+  FRIEND_TEST(GraphStoreProtocolTest, convertTriples);
+
+  // Transform a SPARQL Graph Store Protocol POST to an equivalent ParsedQuery
+  // which is an SPARQL Update.
   static ParsedQuery transformPost(
       const ad_utility::httpUtils::HttpRequest auto& rawRequest,
       const GraphOrDefault& graph) {
     using namespace boost::beast::http;
-    using Re2Parser = RdfStringParser<TurtleParser<Tokenizer>>;
-    std::string contentTypeString;
-    if (rawRequest.find(field::content_type) != rawRequest.end()) {
-      contentTypeString = rawRequest.at(field::content_type);
+    auto contentType = extractMediatype(rawRequest);
+    // A media type is set but not one of the supported ones as per the QLever
+    // MediaType code.
+    if (!contentType.has_value()) {
+      throwUnsupportedMediatype(rawRequest.at(field::content_type));
     }
-    if (contentTypeString.empty()) {
-      // ContentType not set or empty; we don't try to guess -> 400 Bad Request
-    }
-    const auto contentType =
-        ad_utility::getMediaTypeFromAcceptHeader(contentTypeString);
-    std::vector<TurtleTriple> triples;
-    switch (contentType.value()) {
-      case ad_utility::MediaType::turtle:
-      case ad_utility::MediaType::ntriples: {
-        auto parser = Re2Parser();
-        parser.setInputStream(rawRequest.body());
-        triples = parser.parseAndReturnAllTriples();
-        break;
-      }
-      default: {
-        // Unsupported media type -> 415 Unsupported Media Type
-        throw std::runtime_error(absl::StrCat(
-            "Mediatype \"", ad_utility::toString(contentType.value()),
-            "\" is not supported for SPARQL Graph Store HTTP "
-            "Protocol in QLever."));
-      }
-    }
+    auto triples = parseTriples(rawRequest.body(), contentType.value());
+    auto convertedTriples = convertTriples(graph, std::move(triples));
+    updateClause::GraphUpdate up{std::move(convertedTriples), {}};
     ParsedQuery res;
-    auto transformTurtleTriple = [&graph](const TurtleTriple& triple) {
-      AD_CORRECTNESS_CHECK(triple.graphIri_.isId() &&
-                           triple.graphIri_.getId() ==
-                               qlever::specialIds().at(DEFAULT_GRAPH_IRI));
-      SparqlTripleSimpleWithGraph::Graph g{std::monostate{}};
-      if (std::holds_alternative<GraphRef>(graph)) {
-        g = Iri(std::get<GraphRef>(graph).toStringRepresentation());
-      }
-      return SparqlTripleSimpleWithGraph(triple.subject_, triple.predicate_,
-                                         triple.object_, g);
-    };
-    updateClause::GraphUpdate up{
-        ad_utility::transform(triples, transformTurtleTriple), {}};
     res._clause = parsedQuery::UpdateClause{up};
     return res;
   }
   FRIEND_TEST(GraphStoreProtocolTest, transformPost);
 
-  static ParsedQuery transformGet(const GraphOrDefault& graph) {
-    ParsedQuery res;
-    res._clause = parsedQuery::ConstructClause(
-        {{Variable("?s"), Variable("?p"), Variable("?o")}});
-    res._rootGraphPattern = {};
-    parsedQuery::GraphPattern selectSPO;
-    selectSPO._graphPatterns.emplace_back(parsedQuery::BasicGraphPattern{
-        {SparqlTriple(Variable("?s"), "?p", Variable("?o"))}});
-    if (std::holds_alternative<ad_utility::triple_component::Iri>(graph)) {
-      parsedQuery::GroupGraphPattern selectSPOWithGraph{
-          std::move(selectSPO),
-          std::get<ad_utility::triple_component::Iri>(graph)};
-      res._rootGraphPattern._graphPatterns.emplace_back(
-          std::move(selectSPOWithGraph));
-    } else {
-      AD_CORRECTNESS_CHECK(std::holds_alternative<DEFAULT>(graph));
-      res._rootGraphPattern = std::move(selectSPO);
-    }
-    return res;
-  }
+  // Transform a SPARQL Graph Store Protocol GET to an equivalent ParsedQuery
+  // which is an SPARQL Query.
+  static ParsedQuery transformGet(const GraphOrDefault& graph);
   FRIEND_TEST(GraphStoreProtocolTest, transformGet);
 
  public:
-  // Every Graph Store Protocol requests has equivalent SPARQL Query or Update.
+  // Every Graph Store Protocol request has equivalent SPARQL Query or Update.
   // Transform the Graph Store Protocol request into it's equivalent Query or
   // Update.
   static ParsedQuery transformGraphStoreProtocol(
       const ad_utility::httpUtils::HttpRequest auto& rawRequest) {
+    // TODO<c++23> mark lambda as [[noreturn]]
+    auto throwUnsupportedOperation = [](const std::string& method) {
+      throw std::runtime_error(absl::StrCat(
+          method,
+          " in the SPARQL Graph Store HTTP Protocol is not yet implemented "
+          "in QLever."));
+    };
+
     ad_utility::url_parser::ParsedUrl parsedUrl =
         ad_utility::url_parser::parseRequestTarget(rawRequest.target());
+    // We only support passing the target graph as a query parameter (`Indirect
+    // Graph Identification`). `Direct Graph Identification` (the URL is the
+    // graph) is not supported. See also
+    // https://www.w3.org/TR/2013/REC-sparql11-http-rdf-update-20130321/#graph-identification.
     GraphOrDefault graph = extractTargetGraph(parsedUrl.parameters_);
 
     using enum boost::beast::http::verb;
@@ -100,23 +115,15 @@ class GraphStoreProtocol {
     if (method == get) {
       return transformGet(graph);
     } else if (method == put) {
-      throw std::runtime_error(
-          "PUT in the SPARQL Graph Store HTTP Protocol is not yet implemented "
-          "in QLever.");
+      throwUnsupportedOperation("PUT");
     } else if (method == delete_) {
-      throw std::runtime_error(
-          "DELETE in the SPARQL Graph Store HTTP Protocol is not yet "
-          "implemented in QLever.");
+      throwUnsupportedOperation("DELETE");
     } else if (method == post) {
       return transformPost(rawRequest, graph);
     } else if (method == head) {
-      throw std::runtime_error(
-          "HEAD in the SPARQL Graph Store HTTP Protocol is not yet implemented "
-          "in QLever.");
+      throwUnsupportedOperation("HEAD");
     } else if (method == patch) {
-      throw std::runtime_error(
-          "PATCH in the SPARQL Graph Store HTTP Protocol is not yet "
-          "implemented in QLever.");
+      throwUnsupportedOperation("PATCH");
     } else {
       throw std::runtime_error(
           absl::StrCat("Unsupported HTTP method \"",
@@ -126,8 +133,9 @@ class GraphStoreProtocol {
   }
 
  private:
-  // Extract the graph to be acted upon using `Indirect Graph
-  // Identification`.
+  // Extract the graph to be acted upon using from the URL query parameters
+  // (`Indirect Graph Identification`). See
+  // https://www.w3.org/TR/2013/REC-sparql11-http-rdf-update-20130321/#indirect-graph-identification
   static GraphOrDefault extractTargetGraph(
       const ad_utility::url_parser::ParamValueMap& params);
   FRIEND_TEST(GraphStoreProtocolTest, extractTargetGraph);

@@ -11,7 +11,7 @@ namespace ad_utility::testing {
 
 namespace http = boost::beast::http;
 
-inline auto MakeRequest(
+inline auto makeRequest(
     const http::verb method = http::verb::get, const std::string& target = "/",
     const ad_utility::HashMap<http::field, std::string>& headers = {},
     const std::optional<std::string>& body = std::nullopt) {
@@ -27,14 +27,14 @@ inline auto MakeRequest(
   return req;
 }
 
-inline auto MakeGetRequest(const std::string& target) {
-  return MakeRequest(http::verb::get, target);
+inline auto makeGetRequest(const std::string& target) {
+  return makeRequest(http::verb::get, target);
 }
 
-inline auto MakePostRequest(const std::string& target,
+inline auto makePostRequest(const std::string& target,
                             const std::string& contentType,
                             const std::string& body) {
-  return MakeRequest(http::verb::post, target,
+  return makeRequest(http::verb::post, target,
                      {{http::field::content_type, contentType}}, body);
 }
 
