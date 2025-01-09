@@ -2918,6 +2918,8 @@ TEST(QueryPlanner, GroupByRedundantParensAndVariables) {
 TEST(QueryPlanner, Exists) {
   auto xyz = h::IndexScanFromStrings("?x", "?y", "?z");
   auto abc = h::IndexScanFromStrings("?a", "?b", "?c");
+  auto def = h::IndexScanFromStrings("?d", "?e", "?f");
+  auto ghi = h::IndexScanFromStrings("?g", "?h", "?i");
   using V = Variable;
   // Simple tests for EXISTS with FILTER, BIND, and GROUP BY.
   h::expect("SELECT * { ?x ?y ?z FILTER EXISTS {?a ?b ?c}}",
@@ -2929,6 +2931,26 @@ TEST(QueryPlanner, Exists) {
       "SELECT ?x (SAMPLE(EXISTS{?a ?b ?c}) as ?s) { ?x ?y ?z } GROUP BY ?x",
       h::GroupBy({V{"?x"}}, {"(SAMPLE(EXISTS{?a ?b ?c}) as ?s)"},
                  h::ExistsJoin(xyz, abc)));
+
+  // Similar tests, but with multiple EXISTS clauses
+  auto existsAbcDef = h::ExistsJoin(h::ExistsJoin(xyz, abc), def);
+  h::expect(
+      "SELECT * { ?x ?y ?z FILTER (EXISTS {?a ?b ?c} || EXISTS {?d ?e ?f})}",
+      h::Filter("EXISTS {?a ?b ?c} || EXISTS {?d ?e ?f}", existsAbcDef));
+  ;
+  h::expect(
+      "SELECT * { ?x ?y ?z BIND(EXISTS {?a ?b ?c} || EXISTS {?d ?e ?f} as "
+      "?bound)}",
+      h::Bind(existsAbcDef, "EXISTS {?a ?b ?c} || EXISTS {?d ?e ?f}",
+              Variable("?bound")));
+
+  h::expect(
+      "SELECT ?x (SAMPLE(EXISTS {?a ?b ?c} || EXISTS {?d ?e ?f}) as ?s) "
+      "(SAMPLE(EXISTS{?g ?h ?i}) as ?t) { ?x ?y ?z } GROUP BY ?x",
+      h::GroupBy({V{"?x"}},
+                 {"(SAMPLE(EXISTS {?a ?b ?c} || EXISTS {?d ?e ?f}) as ?s)",
+                  "(SAMPLE(EXISTS{?g ?h ?i}) as ?t)"},
+                 h::ExistsJoin(existsAbcDef, ghi)));
 
   // Test the interaction of FROM with EXISTS.
   using H = ad_utility::HashSet<std::string>;
