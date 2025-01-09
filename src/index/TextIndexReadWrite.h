@@ -11,7 +11,7 @@
 #include "util/HashMap.h"
 #include "util/Simple8bCode.h"
 
-namespace TextIndexReadWrite {
+namespace textIndexReadWrite {
 /// THIS METHOD HAS BEEN MODIFIED
 /// It basically tries to mimic the old function but with the new classes.
 ContextListMetaData writePostings(ad_utility::File& out,
@@ -140,7 +140,7 @@ vector<To> readGapComprList(
   return result;
 }
 
-}  // namespace TextIndexReadWrite
+}  // namespace textIndexReadWrite
 
 /// THIS IS A NEW CLASS WHICH MAINLY STEMS FROM ONE FUNCTION BEFORE
 /// The FrequencyEncode class basically does the olf createCodebook method

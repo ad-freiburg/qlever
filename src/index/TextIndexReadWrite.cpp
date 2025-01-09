@@ -6,7 +6,7 @@
 
 #include "util/Simple8bCode.h"
 
-namespace TextIndexReadWrite {
+namespace textIndexReadWrite {
 
 // ____________________________________________________________________________
 ContextListMetaData writePostings(ad_utility::File& out,
@@ -24,17 +24,17 @@ ContextListMetaData writePostings(ad_utility::File& out,
   }
 
   auto firstElements =
-      postings | std::ranges::views::transform([](const Posting& posting) {
+      postings | ql::views::transform([](const Posting& posting) {
         return std::get<0>(posting).get();
       });
 
   auto secondElements =
-      postings | std::ranges::views::transform([](const Posting& posting) {
+      postings | ql::views::transform([](const Posting& posting) {
         return std::get<1>(posting);
       });
 
   auto thirdElements =
-      postings | std::ranges::views::transform([](const Posting& posting) {
+      postings | ql::views::transform([](const Posting& posting) {
         return std::get<2>(posting);
       });
 
@@ -95,12 +95,12 @@ void writeVectorAndMoveOffset(const std::vector<T>& vectorToWrite,
                               off_t& currentOffset) {
   T* vectorAsList = new T[vectorToWrite.size()];
   std::copy(vectorToWrite.begin(), vectorToWrite.end(), vectorAsList);
-  size_t bytes = TextIndexReadWrite::writeList(vectorAsList, nofElements, file);
+  size_t bytes = textIndexReadWrite::writeList(vectorAsList, nofElements, file);
   currentOffset += bytes;
   delete[] vectorAsList;
 }
 
-}  // namespace TextIndexReadWrite
+}  // namespace textIndexReadWrite
 
 // ____________________________________________________________________________
 template <typename T>
@@ -152,8 +152,8 @@ FrequencyEncode<T>::FrequencyEncode(const TypedVector& vectorToEncode) {
 template <typename T>
 void FrequencyEncode<T>::writeToFile(ad_utility::File& out, size_t nofElements,
                                      off_t& currentOffset) {
-  currentOffset += TextIndexReadWrite::writeCodebook(codeBook_, out);
-  TextIndexReadWrite::writeVectorAndMoveOffset(encodedVector_, nofElements, out,
+  currentOffset += textIndexReadWrite::writeCodebook(codeBook_, out);
+  textIndexReadWrite::writeVectorAndMoveOffset(encodedVector_, nofElements, out,
                                                currentOffset);
 }
 
@@ -179,6 +179,6 @@ template <typename T>
 requires std::is_arithmetic_v<T>
 void GapEncode<T>::writeToFile(ad_utility::File& out, size_t nofElements,
                                off_t& currentOffset) {
-  TextIndexReadWrite::writeVectorAndMoveOffset(encodedVector_, nofElements, out,
+  textIndexReadWrite::writeVectorAndMoveOffset(encodedVector_, nofElements, out,
                                                currentOffset);
 }
