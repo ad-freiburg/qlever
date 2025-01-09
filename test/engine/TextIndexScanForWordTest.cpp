@@ -27,45 +27,45 @@ std::string kg =
     ". <b> <x2> <x> . <b> <x2> <xb2> . <Astronomer> <is-a> <job> .";
 
 std::string wordsFileContent =
-    createWordsFileLine("astronomer", false, 1, 1) +
-    createWordsFileLine("<Astronomer>", true, 1, 0) +
-    createWordsFileLine("scientist", false, 1, 1) +
-    createWordsFileLine("field", false, 1, 1) +
-    createWordsFileLine("astronomy", false, 1, 1) +
-    createWordsFileLine("astronomer", false, 2, 0) +
-    createWordsFileLine("<Astronomer>", true, 2, 0) +
-    createWordsFileLine(":s:firstsentence", false, 2, 0) +
-    createWordsFileLine("scientist", false, 2, 0) +
-    createWordsFileLine("field", false, 2, 0) +
-    createWordsFileLine("astronomy", false, 2, 0) +
-    createWordsFileLine("astronomy", false, 3, 1) +
-    createWordsFileLine("concentrates", false, 3, 1) +
-    createWordsFileLine("studies", false, 3, 1) +
-    createWordsFileLine("specific", false, 3, 1) +
-    createWordsFileLine("question", false, 3, 1) +
-    createWordsFileLine("outside", false, 3, 1) +
-    createWordsFileLine("scope", false, 3, 1) +
-    createWordsFileLine("earth", false, 3, 1) +
-    createWordsFileLine("astronomy", false, 4, 1) +
-    createWordsFileLine("concentrates", false, 4, 1) +
-    createWordsFileLine("studies", false, 4, 1) +
-    createWordsFileLine("field", false, 4, 1) +
-    createWordsFileLine("outside", false, 4, 1) +
-    createWordsFileLine("scope", false, 4, 1) +
-    createWordsFileLine("earth", false, 4, 1) +
-    createWordsFileLine("tester", false, 5, 1) +
-    createWordsFileLine("rockets", false, 5, 1) +
-    createWordsFileLine("astronomer", false, 5, 1) +
-    createWordsFileLine("<Astronomer>", true, 5, 0) +
-    createWordsFileLine("although", false, 5, 1) +
-    createWordsFileLine("astronomer", false, 6, 0) +
-    createWordsFileLine("<Astronomer>", true, 6, 0) +
-    createWordsFileLine("although", false, 6, 0) +
-    createWordsFileLine("<Astronomer>", true, 6, 0) +
-    createWordsFileLine("space", false, 6, 1) +
-    createWordsFileLine("<Astronomer>", true, 7, 0) +
-    createWordsFileLine("space", false, 7, 0) +
-    createWordsFileLine("earth", false, 7, 1);
+    createWordsFileLineAsString("astronomer", false, 1, 1) +
+    createWordsFileLineAsString("<Astronomer>", true, 1, 0) +
+    createWordsFileLineAsString("scientist", false, 1, 1) +
+    createWordsFileLineAsString("field", false, 1, 1) +
+    createWordsFileLineAsString("astronomy", false, 1, 1) +
+    createWordsFileLineAsString("astronomer", false, 2, 0) +
+    createWordsFileLineAsString("<Astronomer>", true, 2, 0) +
+    createWordsFileLineAsString(":s:firstsentence", false, 2, 0) +
+    createWordsFileLineAsString("scientist", false, 2, 0) +
+    createWordsFileLineAsString("field", false, 2, 0) +
+    createWordsFileLineAsString("astronomy", false, 2, 0) +
+    createWordsFileLineAsString("astronomy", false, 3, 1) +
+    createWordsFileLineAsString("concentrates", false, 3, 1) +
+    createWordsFileLineAsString("studies", false, 3, 1) +
+    createWordsFileLineAsString("specific", false, 3, 1) +
+    createWordsFileLineAsString("question", false, 3, 1) +
+    createWordsFileLineAsString("outside", false, 3, 1) +
+    createWordsFileLineAsString("scope", false, 3, 1) +
+    createWordsFileLineAsString("earth", false, 3, 1) +
+    createWordsFileLineAsString("astronomy", false, 4, 1) +
+    createWordsFileLineAsString("concentrates", false, 4, 1) +
+    createWordsFileLineAsString("studies", false, 4, 1) +
+    createWordsFileLineAsString("field", false, 4, 1) +
+    createWordsFileLineAsString("outside", false, 4, 1) +
+    createWordsFileLineAsString("scope", false, 4, 1) +
+    createWordsFileLineAsString("earth", false, 4, 1) +
+    createWordsFileLineAsString("tester", false, 5, 1) +
+    createWordsFileLineAsString("rockets", false, 5, 1) +
+    createWordsFileLineAsString("astronomer", false, 5, 1) +
+    createWordsFileLineAsString("<Astronomer>", true, 5, 0) +
+    createWordsFileLineAsString("although", false, 5, 1) +
+    createWordsFileLineAsString("astronomer", false, 6, 0) +
+    createWordsFileLineAsString("<Astronomer>", true, 6, 0) +
+    createWordsFileLineAsString("although", false, 6, 0) +
+    createWordsFileLineAsString("<Astronomer>", true, 6, 0) +
+    createWordsFileLineAsString("space", false, 6, 1) +
+    createWordsFileLineAsString("<Astronomer>", true, 7, 0) +
+    createWordsFileLineAsString("space", false, 7, 0) +
+    createWordsFileLineAsString("earth", false, 7, 1);
 
 std::string firstDocText =
     "An astronomer is a scientist in the field of "
@@ -78,8 +78,8 @@ std::string secondDocText =
     "too although they might not be in space but on "
     "earth.";
 
-std::string docsFileContent =
-    createDocsFileLine(4, firstDocText) + createDocsFileLine(7, secondDocText);
+std::string docsFileContent = createDocsFileLineAsString(4, firstDocText) +
+                              createDocsFileLineAsString(7, secondDocText);
 
 std::pair<std::string, std::string> contentsOfWordsFileAndDocsFile = {
     wordsFileContent, docsFileContent};

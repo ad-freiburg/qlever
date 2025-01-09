@@ -4,16 +4,19 @@
 
 #pragma once
 
-inline std::string inlineSeparator = "\t";
-inline std::string lineSeparator = "\n";
+#include <absl/strings/str_cat.h>
 
-inline std::string createWordsFileLine(std::string word, bool isEntity,
-                                       size_t contextId, size_t score) {
-  return word + inlineSeparator + (isEntity ? "1" : "0") + inlineSeparator +
-         std::to_string(contextId) + inlineSeparator + std::to_string(score) +
-         lineSeparator;
+constexpr std::string_view inlineSeparator = "\t";
+constexpr std::string_view lineSeparator = "\n";
+
+inline std::string createWordsFileLineAsString(std::string_view word,
+                                               bool isEntity, size_t contextId,
+                                               size_t score) {
+  return absl::StrCat(word, inlineSeparator, isEntity, inlineSeparator,
+                      contextId, inlineSeparator, score, lineSeparator);
 };
 
-inline std::string createDocsFileLine(size_t docId, std::string docContent) {
-  return std::to_string(docId) + inlineSeparator + docContent + lineSeparator;
+inline std::string createDocsFileLineAsString(size_t docId,
+                                              std::string_view docContent) {
+  return absl::StrCat(docId, inlineSeparator, docContent, lineSeparator);
 };

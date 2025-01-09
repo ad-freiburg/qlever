@@ -31,7 +31,7 @@ cppcoro::generator<WordsFileLine> IndexImpl::wordsInTextRecords(
   if (!contextFile.empty()) {
     WordsFileParser p(contextFile, localeManager);
     ad_utility::HashSet<string> items;
-    for (auto line : p) {
+    for (auto& line : p) {
       contextId = line.contextId_;
       co_yield line;
     }
