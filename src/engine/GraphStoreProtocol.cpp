@@ -42,6 +42,14 @@ void GraphStoreProtocol::throwUnsupportedMediatype(const string& mediatype) {
 }
 
 // ____________________________________________________________________________
+void GraphStoreProtocol::throwUnsupportedHTTPMethod(const std::string& method) {
+  throw std::runtime_error(absl::StrCat(
+      method,
+      " in the SPARQL Graph Store HTTP Protocol is not yet implemented "
+      "in QLever."));
+}
+
+// ____________________________________________________________________________
 std::vector<TurtleTriple> GraphStoreProtocol::parseTriples(
     const string& body, const ad_utility::MediaType contentType) {
   using Re2Parser = RdfStringParser<TurtleParser<Tokenizer>>;

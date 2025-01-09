@@ -48,8 +48,13 @@ class GraphStoreProtocol {
   }
   FRIEND_TEST(GraphStoreProtocolTest, extractMediatype);
 
-  // The error if a mediatype is not supported.
-  static void throwUnsupportedMediatype(const std::string& mediatype);
+  // Throws the error if a mediatype is not supported.
+  [[noreturn]] static void throwUnsupportedMediatype(
+      const std::string& mediatype);
+
+  // Throws the error if an HTTP method is not supported.
+  [[noreturn]] static void throwUnsupportedHTTPMethod(
+      const std::string& method);
 
   // Parse the triples from the request body according to the content type.
   static std::vector<TurtleTriple> parseTriples(
@@ -94,14 +99,6 @@ class GraphStoreProtocol {
   // Update.
   static ParsedQuery transformGraphStoreProtocol(
       const ad_utility::httpUtils::HttpRequest auto& rawRequest) {
-    // TODO<c++23> mark lambda as [[noreturn]]
-    auto throwUnsupportedOperation = [](const std::string& method) {
-      throw std::runtime_error(absl::StrCat(
-          method,
-          " in the SPARQL Graph Store HTTP Protocol is not yet implemented "
-          "in QLever."));
-    };
-
     ad_utility::url_parser::ParsedUrl parsedUrl =
         ad_utility::url_parser::parseRequestTarget(rawRequest.target());
     // We only support passing the target graph as a query parameter (`Indirect
@@ -115,15 +112,15 @@ class GraphStoreProtocol {
     if (method == get) {
       return transformGet(graph);
     } else if (method == put) {
-      throwUnsupportedOperation("PUT");
+      throwUnsupportedHTTPMethod("PUT");
     } else if (method == delete_) {
-      throwUnsupportedOperation("DELETE");
+      throwUnsupportedHTTPMethod("DELETE");
     } else if (method == post) {
       return transformPost(rawRequest, graph);
     } else if (method == head) {
-      throwUnsupportedOperation("HEAD");
+      throwUnsupportedHTTPMethod("HEAD");
     } else if (method == patch) {
-      throwUnsupportedOperation("PATCH");
+      throwUnsupportedHTTPMethod("PATCH");
     } else {
       throw std::runtime_error(
           absl::StrCat("Unsupported HTTP method \"",
