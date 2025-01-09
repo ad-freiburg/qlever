@@ -12,25 +12,46 @@
 #include "util/Simple8bCode.h"
 
 namespace TextIndexReadWrite {
+/// THIS METHOD HAS BEEN MODIFIED
+/// It basically tries to mimic the old function but with the new classes.
 ContextListMetaData writePostings(ad_utility::File& out,
                                   const vector<Posting>& postings,
                                   bool skipWordlistIfAllTheSame,
                                   off_t& currentOffset);
 
+/// NOTHING CHANGED
 template <typename T>
 size_t writeCodebook(const vector<T>& codebook, ad_utility::File& file);
 
+/// NOTHING CHANGED
 //! Writes a list of elements (have to be able to be cast to unit64_t)
 //! to file.
 //! Returns the number of bytes written.
 template <typename Numeric>
 size_t writeList(Numeric* data, size_t nofElements, ad_utility::File& file);
 
+/// THIS METHOD HAS BEEN ADDED
+/// This is just a helper function to remove the code duplication seen in the
+/// deleted lines 457,458 and 467,468 and 474,475 of IndexImpl.Text.cpp
 template <typename T>
 void writeVectorAndMoveOffset(const std::vector<T>& vectorToWrite,
                               size_t nofElements, ad_utility::File& file,
                               off_t& currentOffset);
 
+/// THIS METHOD HAS BEEN MODIFIED
+/// It's hard to explain what has been changed since the original method was
+/// all over the place and confusing. First of all I changed the way the
+/// frequency encoded result gets decoded. Before it was done in the result
+/// vector which was of type T which lead to complicated handling of Ids.
+/// To see this look at the deleted lines 867, 888-896 of IndexImpl.Text.cpp
+/// Also an ongoing confusion is the naming of some variables since there
+/// has to happen two decodings thus we first have on variable each that can
+/// be named encoded.
+/// I tried to also template this function in a way to surpass the inconsistency
+/// between the datatypes written to the file and the datatypes we want to get
+/// out. This problem also stems from the fact that Posting is somewhat
+/// ambiguous since the WordIndex in a posting can refer to an entityId so a
+/// VocabIndex or a word so a WordVocabIndex.
 // Read a freqComprList from the textIndexFile. The From specifies the type
 // that was used to create the codebook in the writing step and the To
 // specifies the type to cast that codebook values to. This is done with a
@@ -80,6 +101,11 @@ vector<To> readFreqComprList(
   return result;
 }
 
+/// THIS METHOD HAS BEEN MODIFIED
+/// I tried to do the same thing as above with the templates since some values
+/// are saved as a different type (that is the From type) and one wants to
+/// retrieve them as another type. This also removed some weird specific Id
+/// handling. Look at the deleted lines 835-849 of IndexImpl.Text.cpp
 template <typename To, typename From>
 vector<To> readGapComprList(
     size_t nofElements, off_t from, size_t nofBytes,
@@ -116,6 +142,13 @@ vector<To> readGapComprList(
 
 }  // namespace TextIndexReadWrite
 
+/// THIS IS A NEW CLASS WHICH MAINLY STEMS FROM ONE FUNCTION BEFORE
+/// The FrequencyEncode class basically does the olf createCodebook method
+/// and encoding in one during the constructor. It can then be used to write
+/// the encoded Vector to file. The improvement is the templating removing the
+/// hard coded method createCodebook.
+/// The writeToFile is just the code from the deleted lines 466-468 and 473-475
+/// of IndexImpl.Text.cpp
 template <typename T>
 class FrequencyEncode {
  public:
