@@ -487,17 +487,17 @@ class LangMatches : public LangMatchesImpl {
   using LangMatchesImpl::LangMatchesImpl;
   std::optional<LangFilterData> getLanguageFilterExpression() const override {
     AD_CORRECTNESS_CHECK(children().size() == 2);
-    auto* var = dynamic_cast<const VariableExpression*>(children()[0].get());
+    auto var = getVariableFromLangExpression(children()[0].get());
     auto* str =
         dynamic_cast<const StringLiteralExpression*>(children()[1].get());
-    if (!(var && str)) {
+    if (!(var.has_value() && str)) {
       return std::nullopt;
     }
     // TODO<joka921> We need to check whether the literal is plain. (no language
     // tag or something else).
     return LangFilterData{
-        var->value(),
-        std::string(asStringViewUnsafe(str->value().getContent())), true};
+        var.value(), std::string(asStringViewUnsafe(str->value().getContent())),
+        true};
   }
 };
 
