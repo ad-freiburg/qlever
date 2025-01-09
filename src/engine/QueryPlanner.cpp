@@ -1346,9 +1346,14 @@ size_t QueryPlanner::countSubgraphs(
   graph.erase(std::ranges::unique(graph, ql::ranges::equal_to{}, getId).begin(),
               graph.end());
 
+  // We also have to consider the `filters`. To make life easy, we temporarily
+  // create simple `SubtreePlans` for them which just have the correct
+  // variables.
   std::vector<QueryPlanner::SubtreePlan> dummyPlansForFilter;
   for (const auto& filter : filters) {
     const auto& vars = filter.expression_.containedVariables();
+    // We use a `VALUES` clause as the dummy because this operation is the
+    // easiest to setup for a number of given variables.
     parsedQuery::SparqlValues values;
     for (auto* var : vars) {
       values._variables.push_back(*var);
@@ -1381,9 +1386,7 @@ size_t QueryPlanner::countSubgraphs(
     g.push_back(v);
   }
 
-  auto result = countConnectedSubgraphs::countSubgraphs(g, budget);
-  LOG(INFO) << "number of subgraphs inside a component " << result << std::endl;
-  return result;
+  return countConnectedSubgraphs::countSubgraphs(g, budget);
 }
 
 // _____________________________________________________________________________

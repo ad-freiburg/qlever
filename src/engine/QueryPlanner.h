@@ -485,6 +485,8 @@ class QueryPlanner {
   // if the number of subgraphs is `> budget`. This is used to analyze the
   // complexity of the query graph and to choose between the DP and the greedy
   // query planner see above.
+  // Note: We also need the added filters, because they behave like additional
+  // graph nodes wrt the performance of the DP based query planner.
   size_t countSubgraphs(std::vector<const SubtreePlan*> graph,
                         const std::vector<SparqlFilter>& filters,
                         size_t budget);
