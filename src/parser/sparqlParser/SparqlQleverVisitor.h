@@ -78,6 +78,9 @@ class SparqlQleverVisitor {
   // query. This may contain duplicates. A variable is added via
   // `addVisibleVariable`.
   std::vector<Variable> visibleVariables_{};
+
+  // The FROM [NAMED] clauses of the query that is currently being parsed.
+  // Those are currently needed when parsing an EXISTS clause inside the query.
   ParsedQuery::DatasetClauses activeDatasetClauses_;
   PrefixMap prefixMap_{};
   // We need to remember the prologue (prefix declarations) when we encounter it

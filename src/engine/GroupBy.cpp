@@ -373,6 +373,8 @@ ProtoResult GroupBy::computeResult(bool requestLaziness) {
   }
 
   if (useHashMapOptimization) {
+    // Helper lambda that calls `computeGroupByForHashMapOptimization` for the
+    // given `subresults`.
     auto computeWithHashMap = [this, &metadataForUnsequentialData,
                                &groupByCols](auto&& subresults) {
       auto doCompute = [&]<int NumCols> {
@@ -383,9 +385,10 @@ ProtoResult GroupBy::computeResult(bool requestLaziness) {
       return ad_utility::callFixedSize(groupByCols.size(), doCompute);
     };
 
+    // Now call `computeWithHashMap` and return the result. It expects a range
+    // of results, so if the result is fully materialized, we create an array
+    // with a single element.
     if (subresult->isFullyMaterialized()) {
-      // `computeWithHashMap` takes a range, so we artificially create one with
-      // a single input.
       return computeWithHashMap(
           std::array{std::pair{std::cref(subresult->idTable()),
                                std::cref(subresult->localVocab())}});
@@ -1513,29 +1516,35 @@ Result GroupBy::computeGroupByForHashMapOptimization(
                        NUM_GROUP_COLUMNS == 0);
   LocalVocab localVocab;
 
-  // Initialize aggregation data
+  // Initialize the data for the aggregates of the GROUP BY operation.
   HashMapAggregationData<NUM_GROUP_COLUMNS> aggregationData(
       getExecutionContext()->getAllocator(), aggregateAliases,
       columnIndices.size());
 
+  // Process the input blocks (pairs of `IdTable` and `LocalVocab`) one after
+  // the other.
   ad_utility::Timer lookupTimer{ad_utility::Timer::Stopped};
   ad_utility::Timer aggregationTimer{ad_utility::Timer::Stopped};
   for (const auto& [inputTableRef, inputLocalVocabRef] : subresults) {
-    // Also support `std::reference_wrapper` as the input.
     const IdTable& inputTable = inputTableRef;
     const LocalVocab& inputLocalVocab = inputLocalVocabRef;
 
+    // Merge the local vocab of each input block.
+    //
+    // NOTE: If the input blocks have very similar or even identical non-empty
+    // local vocabs, no deduplication is performed.
     localVocab.mergeWith(std::span{&inputLocalVocab, 1});
-    // Initialize evaluation context
+    // Setup the `EvaluationContext` for this input block.
     sparqlExpression::EvaluationContext evaluationContext(
         *getExecutionContext(), _subtree->getVariableColumns(), inputTable,
         getExecutionContext()->getAllocator(), localVocab, cancellationHandle_,
         deadline_);
-
     evaluationContext._groupedVariables = ad_utility::HashSet<Variable>{
         _groupByVariables.begin(), _groupByVariables.end()};
     evaluationContext._isPartOfGroupBy = true;
 
+    // Iterate of the rows of this input block. Process (up to)
+    // `GROUP_BY_HASH_MAP_BLOCK_SIZE` rows at a time.
     for (size_t i = 0; i < inputTable.size();
          i += GROUP_BY_HASH_MAP_BLOCK_SIZE) {
       checkCancellation();

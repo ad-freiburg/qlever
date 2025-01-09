@@ -25,7 +25,6 @@
 #include "engine/sparqlExpressions/SampleExpression.h"
 #include "engine/sparqlExpressions/StdevExpression.h"
 #include "engine/sparqlExpressions/UuidExpressions.h"
-#include "generated/SparqlAutomaticParser.h"
 #include "global/Constants.h"
 #include "global/RuntimeParameters.h"
 #include "parser/GraphPatternOperation.h"
@@ -1370,7 +1369,6 @@ SparqlFilter Visitor::visit(Parser::FilterRContext* ctx) {
   // expression contains unbound variables, because the variables of the FILTER
   // might be bound after the filter appears in the query (which is perfectly
   // legal).
-  auto pimpl = visitExpressionPimpl(ctx->constraint());
   return SparqlFilter{visitExpressionPimpl(ctx->constraint())};
 }
 
@@ -2429,17 +2427,25 @@ SparqlExpression::Ptr Visitor::visit(Parser::StrReplaceExpressionContext* ctx) {
 // ____________________________________________________________________________________
 ExpressionPtr Visitor::visitExists(Parser::GroupGraphPatternContext* pattern,
                                    bool negate) {
+  // The argument of the EXISTS is a completely independent GroupGraphPattern
+  // (except for the FROM [NAMED] clauses), so we have to back up and restore
+  // all global  state when parsing EXISTS.
   auto queryBackup = std::exchange(parsedQuery_, ParsedQuery{});
   auto visibleVariablesSoFar = std::move(visibleVariables_);
   visibleVariables_.clear();
+
+  // Parse the argument of EXISTS.
   auto group = visit(pattern);
-  ParsedQuery query = std::exchange(parsedQuery_, std::move(queryBackup));
-  query.selectClause().setAsterisk();
-  query._rootGraphPattern = std::move(group);
-  query.datasetClauses_ = activeDatasetClauses_;
+  ParsedQuery argumentOfExists =
+      std::exchange(parsedQuery_, std::move(queryBackup));
+  argumentOfExists.selectClause().setAsterisk();
+  argumentOfExists._rootGraphPattern = std::move(group);
+
+  // EXISTS inherits the FROM [NAMED] clauses from the outer argumentOfExists.
+  argumentOfExists.datasetClauses_ = activeDatasetClauses_;
   visibleVariables_ = std::move(visibleVariablesSoFar);
-  auto exists =
-      std::make_unique<sparqlExpression::ExistsExpression>(std::move(query));
+  auto exists = std::make_unique<sparqlExpression::ExistsExpression>(
+      std::move(argumentOfExists));
   if (negate) {
     return sparqlExpression::makeUnaryNegateExpression(std::move(exists));
   } else {
