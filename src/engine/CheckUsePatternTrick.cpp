@@ -82,13 +82,94 @@ bool isVariableContainedInGraphPatternOperation(
   });
 }
 
+using ValuesClause = parsedQuery::Values;
+// TODO<joka921> How many possible return values do we need here.
+bool addValuesClauseToPattern(const Variable& variable,
+                              parsedQuery::GraphPatternOperation& operation,
+                              const SparqlTriple* tripleToIgnore,
+                              const ValuesClause& clause);
+
+// __________________________________________________________________________
+bool addValuesClause(const Variable& variable,
+                     ParsedQuery::GraphPattern& graphPattern,
+                     const SparqlTriple* tripleToIgnore,
+                     const ValuesClause& result) {
+  bool containedInFilter = ql::ranges::any_of(
+      graphPattern._filters, [&variable](const SparqlFilter& filter) {
+        return filter.expression_.isVariableContained(variable);
+      });
+  auto check = [&](const parsedQuery::GraphPatternOperation& op) {
+    return addValuesClauseToPattern(variable, op, tripleToIgnore, result);
+  };
+  if (ql::ranges::any_of(graphPattern._graphPatterns, check) ||
+      containedInFilter) {
+    graphPattern._graphPatterns.insert(graphPattern._graphPatterns.begin(),
+                                       result);
+  }
+  // Does this need to return false?
+  return false;
+}
+
+// __________________________________________________________________________
+bool addValuesClauseToPattern(const Variable& variable,
+                              parsedQuery::GraphPatternOperation& operation,
+                              const SparqlTriple* tripleToIgnore,
+                              const ValuesClause& result) {
+  auto check = [&](parsedQuery::GraphPattern& pattern) {
+    return addValuesClause(variable, pattern, tripleToIgnore, result);
+  };
+  return operation.visit([&](auto&& arg) -> bool {
+    using T = std::decay_t<decltype(arg)>;
+    if constexpr (std::is_same_v<T, p::Optional> ||
+                  std::is_same_v<T, p::GroupGraphPattern> ||
+                  std::is_same_v<T, p::Minus>) {
+      return check(arg._child);
+    } else if constexpr (std::is_same_v<T, p::Union>) {
+      return check(arg._child1) || check(arg._child2);
+    } else if constexpr (std::is_same_v<T, p::Subquery>) {
+      // Subqueries always are SELECT clauses.
+      const auto& selectClause = arg.get().selectClause();
+      return ad_utility::contains(selectClause.getSelectedVariables(),
+                                  variable);
+    } else if constexpr (std::is_same_v<T, p::Bind>) {
+      return ad_utility::contains(arg.containedVariables(), variable);
+    } else if constexpr (std::is_same_v<T, p::BasicGraphPattern>) {
+      return ad_utility::contains_if(
+          arg._triples, [&](const SparqlTriple& triple) {
+            if (&triple == tripleToIgnore) {
+              return false;
+            }
+            return (triple.s_ == variable ||
+                    // Complex property paths are not allowed to contain
+                    // variables in SPARQL, so this check is sufficient.
+                    // TODO<joka921> Still make the interface of the
+                    // `PropertyPath` class typesafe.
+                    triple.p_.asString() == variable.name() ||
+                    triple.o_ == variable);
+          });
+    } else if constexpr (std::is_same_v<T, p::Values>) {
+      return (&arg != &result) &&
+             ad_utility::contains(arg._inlineValues._variables, variable);
+    } else if constexpr (std::is_same_v<T, p::Service>) {
+      return ad_utility::contains(arg.visibleVariables_, variable);
+    } else {
+      static_assert(
+          std::is_same_v<T, p::TransPath> || std::is_same_v<T, p::PathQuery> ||
+          std::is_same_v<T, p::Describe> || std::is_same_v<T, p::SpatialQuery>);
+      // The `TransPath` is set up later in the query planning, when this
+      // function should not be called anymore.
+      AD_FAIL();
+    }
+  });
+}
+
 // Internal helper function.
-// Modify the `triples` s.t. the patterns for `subAndPred.subject_` will appear
-// in a column with the variable `subAndPred.predicate_` when evaluating and
-// joining all the triples. This can be either done by retrieving one of the
-// additional columns where the patterns are stored in the PSO and POS
-// permutation or, if no triple suitable for adding this column exists, by
-// adding a triple `?subject ql:has-pattern ?predicate`.
+// Modify the `triples` s.t. the patterns for `subAndPred.subject_` will
+// appear in a column with the variable `subAndPred.predicate_` when
+// evaluating and joining all the triples. This can be either done by
+// retrieving one of the additional columns where the patterns are stored in
+// the PSO and POS permutation or, if no triple suitable for adding this
+// column exists, by adding a triple `?subject ql:has-pattern ?predicate`.
 static void rewriteTriplesForPatternTrick(const PatternTrickTuple& subAndPred,
                                           std::vector<SparqlTriple>& triples) {
   // The following lambda tries to find a triple in the `triples` that has the
@@ -96,8 +177,8 @@ static void rewriteTriplesForPatternTrick(const PatternTrickTuple& subAndPred,
   // either the subject or the object) and a fixed predicate (no variable). If
   // such a triple is found, it is modified s.t. it also scans the
   // `additionalScanColumn` which has to be the index of the column where the
-  // patterns of the `triplePosition` are stored in the POS and PSO permutation.
-  // Return true iff such a triple was found and replaced.
+  // patterns of the `triplePosition` are stored in the POS and PSO
+  // permutation. Return true iff such a triple was found and replaced.
   auto findAndRewriteMatchingTriple = [&subAndPred, &triples](
                                           auto triplePosition,
                                           size_t additionalScanColumn) {
@@ -133,8 +214,9 @@ static void rewriteTriplesForPatternTrick(const PatternTrickTuple& subAndPred,
 // Check if any of the triples in the `graphPattern` has the form `?s
 // ql:has-predicate ?p` or `?s ?p ?o` and that the other conditions for the
 // pattern trick are fulfilled (nameley that the variables `?p` and if present
-// `?o` don't appear elsewhere in the `parsedQuery`. If such a triple is found,
-// the query is modified such that it behaves as if the triple was replace by
+// `?o` don't appear elsewhere in the `parsedQuery`. If such a triple is
+// found, the query is modified such that it behaves as if the triple was
+// replace by
 // `?s ql:has-pattern ?p`. See the documentation of
 // `rewriteTriplesForPatternTrick` above.
 static std::optional<PatternTrickTuple> findPatternTrickTuple(
@@ -183,8 +265,8 @@ std::optional<PatternTrickTuple> checkUsePatternTrick(
   }
 
   // We currently accept the pattern trick triple anywhere in the query.
-  // TODO<joka921> This loop can be made much easier using ranges and view once
-  // they are supported by clang.
+  // TODO<joka921> This loop can be made much easier using ranges and view
+  // once they are supported by clang.
   for (auto& pattern : parsedQuery->children()) {
     auto* curPattern = std::get_if<p::BasicGraphPattern>(&pattern);
     if (!curPattern) {
