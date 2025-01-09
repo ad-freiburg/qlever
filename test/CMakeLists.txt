@@ -7,7 +7,7 @@ add_subdirectory(util)
 # general test utilities and all libraries that are specified as additional
 # arguments.
 function(linkTest basename)
-    qlever_target_link_libraries(${basename} ${ARGN} GTest::gtest GTest::gmock_main testUtil ${CMAKE_THREAD_LIBS_INIT})
+    qlever_target_link_libraries(${basename} ${ARGN} GTest::gtest GTest::gmock_main ${CMAKE_THREAD_LIBS_INIT})
 endfunction()
 
 # Add the executable ${basename} that is compiled from the source file
@@ -47,18 +47,49 @@ else ()
     message(STATUS "The tests are split over multiple binaries")
 
 endif ()
-# Usage: `addAndLinkTest(basename, [additionalLibraries...]`
+
+# The implementation of `addLinkAndDiscoverTest` and `addLinkandDiscoverTestNoLibs` below.
+function(addLinkAndDiscoverTestImpl basename)
+    if (SINGLE_TEST_BINARY)
+        target_sources(QLeverAllUnitTestsMain PUBLIC ${basename}.cpp)
+        qlever_target_link_libraries(QLeverAllUnitTestsMain ${ARGN} )
+    else ()
+        addTest(${basename})
+        linkAndDiscoverTest(${basename} ${ARGN})
+    endif ()
+
+endfunction()
+
+# Usage: `addAndLinkTest[NoLibs](basename, [additionalLibraries...]`
 # Add a GTest/GMock test case that is called `basename` and compiled from a file called
 # `basename.cpp`. All tests are linked against `gmock_main` and the threading library.
 # additional libraries against which the test case has to be linked can be specified as
 # additional arguments after the `basename`
+
+# This function links the test against `testUtil` (basically all of QLever).
 function(addLinkAndDiscoverTest basename)
+    addLinkAndDiscoverTestImpl(${basename} ${ARGN} testUtil)
+endfunction()
+
+# This function links only against Gtest + the explicitly specified libraries.
+# It can be used for tests of standalone utils that don't require the rest of QLever.
+function(addLinkAndDiscoverTestNoLibs basename)
+    addLinkAndDiscoverTestImpl(${basename} ${ARGN})
+endfunction()
+
+
+# Add a GTest/GMock test case that is called `basename` and compiled from a file called
+# `basename.cpp`. All tests are linked against `gmock_main` and the threading library.
+# In contrast to `addLinkAndDiscoverTest` this doesn't let ctest run all subtests individually,
+# but all at once to reduce overhead in the CI pipeline.
+function(addLinkAndRunAsSingleTest basename)
     if (SINGLE_TEST_BINARY)
         target_sources(QLeverAllUnitTestsMain PUBLIC ${basename}.cpp)
         qlever_target_link_libraries(QLeverAllUnitTestsMain ${ARGN})
     else ()
         addTest(${basename})
-        linkAndDiscoverTest(${basename} ${ARGN})
+        linkTest(${basename} testUtil ${ARGN})
+        add_test(NAME ${basename} COMMAND ${basename})
     endif ()
 
 endfunction()
@@ -73,7 +104,7 @@ function(addLinkAndDiscoverTestSerial basename)
         qlever_target_link_libraries(QLeverAllUnitTestsMain ${ARGN})
     else ()
         addTest(${basename})
-        linkAndDiscoverTestSerial(${basename} ${ARGN})
+        linkAndDiscoverTestSerial(${basename} testUtil ${ARGN})
     endif ()
 endfunction()
 
@@ -87,6 +118,7 @@ endfunction()
 add_subdirectory(engine)
 add_subdirectory(parser)
 add_subdirectory(index)
+add_subdirectory(backports)
 
 addLinkAndDiscoverTest(ValueIdComparatorsTest util)
 
@@ -128,7 +160,7 @@ addLinkAndDiscoverTest(TextLimitOperationTest engine)
 
 addLinkAndDiscoverTestSerial(QueryPlannerTest engine)
 
-addLinkAndDiscoverTest(HashMapTest)
+addLinkAndDiscoverTestNoLibs(HashMapTest)
 
 addLinkAndDiscoverTest(HashSetTest)
 
@@ -224,14 +256,14 @@ addLinkAndDiscoverTest(MilestoneIdTest)
 
 addLinkAndDiscoverTest(VocabularyTest index)
 
-addLinkAndDiscoverTest(IteratorTest)
+addLinkAndDiscoverTestNoLibs(IteratorTest)
 
 # Stxxl currently always uses a file ./-stxxl.disk for all indices, which
 # makes it impossible to run the test cases for the Index class in parallel.
 # TODO<qup42, joka921> fix this
 addLinkAndDiscoverTestSerial(BackgroundStxxlSorterTest ${STXXL_LIBRARIES})
 
-addLinkAndDiscoverTest(ViewsTest)
+addLinkAndDiscoverTestNoLibs(ViewsTest)
 
 addLinkAndDiscoverTest(ForwardTest)
 
@@ -291,7 +323,7 @@ addLinkAndDiscoverTest(AlgorithmTest)
 
 addLinkAndDiscoverTestSerial(CompressedRelationsTest index)
 
-addLinkAndDiscoverTestSerial(PrefilterExpressionIndexTest sparqlExpressions index)
+addLinkAndDiscoverTestSerial(PrefilterExpressionIndexTest engine)
 
 addLinkAndDiscoverTestSerial(GetPrefilterExpressionFromSparqlExpressionTest sparqlExpressions index)
 
@@ -405,7 +437,7 @@ addLinkAndDiscoverTest(CopyableSynchronizationTest)
 
 addLinkAndDiscoverTest(LazyJsonParserTest)
 
-addLinkAndDiscoverTest(CacheableGeneratorTest)
+addLinkAndDiscoverTest(GeneratorsTest)
 
 addLinkAndDiscoverTest(FilterTest engine)
 

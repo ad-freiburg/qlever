@@ -23,6 +23,7 @@ Index makeIndexWithTestSettings() {
   BATCH_SIZE_VOCABULARY_MERGE = 2;
   DEFAULT_PROGRESS_BAR_BATCH_SIZE = 2;
   index.memoryLimitIndexBuilding() = 50_MB;
+  index.parserBufferSize() = 1_kB;
   return index;
 }
 
@@ -46,7 +47,12 @@ std::vector<std::string> getAllIndexFilenames(
           indexBasename + ".prefixes",
           indexBasename + ".vocabulary.internal",
           indexBasename + ".vocabulary.external",
-          indexBasename + ".vocabulary.external.offsets"};
+          indexBasename + ".vocabulary.external.offsets",
+          indexBasename + ".wordsfile",
+          indexBasename + ".docsfile",
+          indexBasename + ".text.index",
+          indexBasename + ".text.vocabulary",
+          indexBasename + ".text.docsDB"};
 }
 
 namespace {
@@ -55,7 +61,7 @@ namespace {
 // folded into the permutations as additional columns.
 void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
     const Index& index) {
-  DeltaTriplesManager deltaTriplesManager(index.getImpl());
+  const DeltaTriplesManager& deltaTriplesManager{index.deltaTriplesManager()};
   auto sharedLocatedTriplesSnapshot = deltaTriplesManager.getCurrentSnapshot();
   const auto& locatedTriplesSnapshot = *sharedLocatedTriplesSnapshot;
   static constexpr size_t col0IdTag = 43;
@@ -134,7 +140,9 @@ Index makeTestIndex(const std::string& indexBasename,
                     bool loadAllPermutations, bool usePatterns,
                     [[maybe_unused]] bool usePrefixCompression,
                     ad_utility::MemorySize blocksizePermutations,
-                    bool createTextIndex) {
+                    bool createTextIndex, bool addWordsFromLiterals,
+                    std::optional<std::pair<std::string, std::string>>
+                        contentsOfWordsFileAndDocsFile) {
   // Ignore the (irrelevant) log output of the index building and loading during
   // these tests.
   static std::ostringstream ignoreLogStream;
@@ -148,7 +156,6 @@ Index makeTestIndex(const std::string& indexBasename,
         "\"zz\"@en . <zz> <label> <zz>";
   }
 
-  FILE_BUFFER_SIZE = 1000;
   BUFFER_SIZE_JOIN_PATTERNS_WITH_OSP = 2;
   {
     std::fstream f(inputFilename, std::ios_base::out);
@@ -181,7 +188,29 @@ Index makeTestIndex(const std::string& indexBasename,
                                         std::nullopt};
     index.createFromFiles({spec});
     if (createTextIndex) {
-      index.addTextFromContextFile("", true);
+      if (contentsOfWordsFileAndDocsFile.has_value()) {
+        // Create and write to words- and docsfile to later build a full text
+        // index from them
+        ad_utility::File wordsFile(indexBasename + ".wordsfile", "w");
+        ad_utility::File docsFile(indexBasename + ".docsfile", "w");
+        wordsFile.write(contentsOfWordsFileAndDocsFile.value().first.c_str(),
+                        contentsOfWordsFileAndDocsFile.value().first.size());
+        docsFile.write(contentsOfWordsFileAndDocsFile.value().second.c_str(),
+                       contentsOfWordsFileAndDocsFile.value().second.size());
+        wordsFile.close();
+        docsFile.close();
+        index.setKbName(indexBasename);
+        index.setTextName(indexBasename);
+        index.setOnDiskBase(indexBasename);
+        if (addWordsFromLiterals) {
+          index.addTextFromContextFile(indexBasename + ".wordsfile", true);
+        } else {
+          index.addTextFromContextFile(indexBasename + ".wordsfile", false);
+        }
+        index.buildDocsDB(indexBasename + ".docsfile");
+      } else if (addWordsFromLiterals) {
+        index.addTextFromContextFile("", true);
+      }
     }
   }
   if (!usePatterns || !loadAllPermutations) {
@@ -216,7 +245,9 @@ QueryExecutionContext* getQec(std::optional<std::string> turtleInput,
                               bool loadAllPermutations, bool usePatterns,
                               bool usePrefixCompression,
                               ad_utility::MemorySize blocksizePermutations,
-                              bool createTextIndex) {
+                              bool createTextIndex, bool addWordsFromLiterals,
+                              std::optional<std::pair<std::string, std::string>>
+                                  contentsOfWordsFileAndDocsFile) {
   // Similar to `absl::Cleanup`. Calls the `callback_` in the destructor, but
   // the callback is stored as a `std::function`, which allows to store
   // different types of callbacks in the same wrapper type.
@@ -275,7 +306,8 @@ QueryExecutionContext* getQec(std::optional<std::string> turtleInput,
                      std::make_unique<Index>(makeTestIndex(
                          testIndexBasename, turtleInput, loadAllPermutations,
                          usePatterns, usePrefixCompression,
-                         blocksizePermutations, createTextIndex)),
+                         blocksizePermutations, createTextIndex,
+                         addWordsFromLiterals, contentsOfWordsFileAndDocsFile)),
                      std::make_unique<QueryResultCache>()});
   }
   auto* qec = contextMap.at(key).qec_.get();

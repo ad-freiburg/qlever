@@ -4,12 +4,42 @@
 
 #include "engine/Operation.h"
 
+#include <absl/cleanup/cleanup.h>
+
 #include "engine/QueryExecutionTree.h"
+#include "global/RuntimeParameters.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/TransparentFunctors.h"
 
 using namespace std::chrono_literals;
 
+namespace {
+// Keep track of some statistics about the local vocabs of the results.
+struct LocalVocabTracking {
+  size_t maxSize_ = 0;
+  size_t sizeSum_ = 0;
+  size_t totalVocabs_ = 0;
+  size_t nonEmptyVocabs_ = 0;
+
+  float avgSize() const {
+    return nonEmptyVocabs_ == 0 ? 0
+                                : static_cast<float>(sizeSum_) /
+                                      static_cast<float>(nonEmptyVocabs_);
+  }
+};
+
+// Merge the stats of a single local vocab into the overall stats.
+void mergeStats(LocalVocabTracking& stats, const LocalVocab& vocab) {
+  stats.maxSize_ = std::max(stats.maxSize_, vocab.size());
+  stats.sizeSum_ += vocab.size();
+  ++stats.totalVocabs_;
+  if (!vocab.empty()) {
+    ++stats.nonEmptyVocabs_;
+  }
+}
+}  // namespace
+
+//______________________________________________________________________________
 template <typename F>
 void Operation::forAllDescendants(F f) {
   static_assert(
@@ -22,6 +52,7 @@ void Operation::forAllDescendants(F f) {
   }
 }
 
+//______________________________________________________________________________
 template <typename F>
 void Operation::forAllDescendants(F f) const {
   static_assert(
@@ -34,9 +65,9 @@ void Operation::forAllDescendants(F f) const {
   }
 }
 
-// __________________________________________________________________________________________________________
+// _____________________________________________________________________________
 vector<string> Operation::collectWarnings() const {
-  vector<string> res = getWarnings();
+  vector<string> res{*getWarnings().rlock()};
   for (auto child : getChildren()) {
     if (!child) {
       continue;
@@ -47,6 +78,15 @@ vector<string> Operation::collectWarnings() const {
   }
 
   return res;
+}
+
+// _____________________________________________________________________________
+void Operation::addWarningOrThrow(std::string warning) const {
+  if (RuntimeParameters().get<"throw-on-unbound-variables">()) {
+    throw InvalidSparqlQueryException(std::move(warning));
+  } else {
+    addWarning(std::move(warning));
+  }
 }
 
 // ________________________________________________________________________
@@ -120,19 +160,33 @@ ProtoResult Operation::runComputation(const ad_utility::Timer& timer,
   // correctly because the result was computed, so we can pass `nullopt` as
   // the last argument.
   if (result.isFullyMaterialized()) {
+    size_t vocabSize = result.localVocab().size();
+    if (vocabSize > 1) {
+      runtimeInfo().addDetail("local-vocab-size", vocabSize);
+    }
     updateRuntimeInformationOnSuccess(result.idTable().size(),
                                       ad_utility::CacheStatus::computed,
                                       timer.msecs(), std::nullopt);
   } else {
     runtimeInfo().status_ = RuntimeInformation::lazilyMaterialized;
     result.runOnNewChunkComputed(
-        [this, timeSizeUpdate = 0us](
-            const IdTable& idTable,
+        [this, timeSizeUpdate = 0us, vocabStats = LocalVocabTracking{}](
+            const Result::IdTableVocabPair& pair,
             std::chrono::microseconds duration) mutable {
+          const IdTable& idTable = pair.idTable_;
           updateRuntimeStats(false, idTable.numRows(), idTable.numColumns(),
                              duration);
           LOG(DEBUG) << "Computed partial chunk of size " << idTable.numRows()
                      << " x " << idTable.numColumns() << std::endl;
+          mergeStats(vocabStats, pair.localVocab_);
+          if (vocabStats.sizeSum_ > 0) {
+            runtimeInfo().addDetail(
+                "non-empty-local-vocabs",
+                absl::StrCat(vocabStats.nonEmptyVocabs_, " / ",
+                             vocabStats.totalVocabs_,
+                             ", Ø = ", vocabStats.avgSize(),
+                             ", max = ", vocabStats.maxSize_));
+          }
           timeSizeUpdate += duration;
           if (timeSizeUpdate > 50ms) {
             timeSizeUpdate = 0us;
@@ -172,14 +226,17 @@ ProtoResult Operation::runComputation(const ad_utility::Timer& timer,
 // _____________________________________________________________________________
 CacheValue Operation::runComputationAndPrepareForCache(
     const ad_utility::Timer& timer, ComputationMode computationMode,
-    const std::string& cacheKey, bool pinned) {
+    const QueryCacheKey& cacheKey, bool pinned) {
   auto& cache = _executionContext->getQueryTreeCache();
   auto result = runComputation(timer, computationMode);
-  if (!result.isFullyMaterialized() &&
-      !unlikelyToFitInCache(cache.getMaxSizeSingleEntry())) {
+  auto maxSize =
+      std::min(RuntimeParameters().get<"lazy-result-max-cache-size">(),
+               cache.getMaxSizeSingleEntry());
+  if (canResultBeCached() && !result.isFullyMaterialized() &&
+      !unlikelyToFitInCache(maxSize)) {
     AD_CONTRACT_CHECK(!pinned);
     result.cacheDuringConsumption(
-        [maxSize = cache.getMaxSizeSingleEntry()](
+        [maxSize](
             const std::optional<Result::IdTableVocabPair>& currentIdTablePair,
             const Result::IdTableVocabPair& newIdTable) {
           auto currentSize =
@@ -229,7 +286,8 @@ std::shared_ptr<const Result> Operation::getResult(
     signalQueryUpdate();
   }
   auto& cache = _executionContext->getQueryTreeCache();
-  const string cacheKey = getCacheKey();
+  const QueryCacheKey cacheKey = {
+      getCacheKey(), _executionContext->locatedTriplesSnapshot().index_};
   const bool pinFinalResultButNotSubtrees =
       _executionContext->_pinResult && isRoot;
   const bool pinResult =
@@ -259,11 +317,16 @@ std::shared_ptr<const Result> Operation::getResult(
 
     bool onlyReadFromCache = computationMode == ComputationMode::ONLY_IF_CACHED;
 
-    auto result =
-        pinResult ? cache.computeOncePinned(cacheKey, cacheSetup,
-                                            onlyReadFromCache, suitedForCache)
-                  : cache.computeOnce(cacheKey, cacheSetup, onlyReadFromCache,
-                                      suitedForCache);
+    auto result = [&]() {
+      auto compute = [&](auto&&... args) {
+        if (!canResultBeCached()) {
+          return cache.computeButDontStore(AD_FWD(args)...);
+        }
+        return pinResult ? cache.computeOncePinned(AD_FWD(args)...)
+                         : cache.computeOnce(AD_FWD(args)...);
+      };
+      return compute(cacheKey, cacheSetup, onlyReadFromCache, suitedForCache);
+    }();
 
     if (result._resultPointer == nullptr) {
       AD_CORRECTNESS_CHECK(onlyReadFromCache);
@@ -379,7 +442,7 @@ void Operation::updateRuntimeInformationWhenOptimizedOut(
   // `totalTime_ - #sum of childrens' total time#` in `getOperationTime()`.
   // To set it to zero we thus have to set the `totalTime_` to that sum.
   auto timesOfChildren = _runtimeInfo->children_ |
-                         std::views::transform(&RuntimeInformation::totalTime_);
+                         ql::views::transform(&RuntimeInformation::totalTime_);
   _runtimeInfo->totalTime_ =
       std::reduce(timesOfChildren.begin(), timesOfChildren.end(), 0us);
 
@@ -449,8 +512,8 @@ void Operation::createRuntimeInfoFromEstimates(
   }
   _runtimeInfo->multiplicityEstimates_ = multiplicityEstimates;
 
-  auto cachedResult =
-      _executionContext->getQueryTreeCache().getIfContained(getCacheKey());
+  auto cachedResult = _executionContext->getQueryTreeCache().getIfContained(
+      {getCacheKey(), locatedTriplesSnapshot().index_});
   if (cachedResult.has_value()) {
     const auto& [resultPointer, cacheStatus] = cachedResult.value();
     _runtimeInfo->cacheStatus_ = cacheStatus;
@@ -512,7 +575,7 @@ std::optional<Variable> Operation::getPrimarySortKeyVariable() const {
     return std::nullopt;
   }
 
-  auto it = std::ranges::find(
+  auto it = ql::ranges::find(
       varToColMap, sortedIndices.front(),
       [](const auto& keyValue) { return keyValue.second.columnIndex_; });
   if (it == varToColMap.end()) {
@@ -537,5 +600,26 @@ const vector<ColumnIndex>& Operation::getResultSortedOn() const {
 void Operation::signalQueryUpdate() const {
   if (_executionContext) {
     _executionContext->signalQueryUpdate(*_rootRuntimeInfo);
+  }
+}
+
+// _____________________________________________________________________________
+std::string Operation::getCacheKey() const {
+  auto result = getCacheKeyImpl();
+  if (_limit._limit.has_value()) {
+    absl::StrAppend(&result, " LIMIT ", _limit._limit.value());
+  }
+  if (_limit._offset != 0) {
+    absl::StrAppend(&result, " OFFSET ", _limit._offset);
+  }
+  return result;
+}
+
+// _____________________________________________________________________________
+uint64_t Operation::getSizeEstimate() {
+  if (_limit._limit.has_value()) {
+    return std::min(_limit._limit.value(), getSizeEstimateBeforeLimit());
+  } else {
+    return getSizeEstimateBeforeLimit();
   }
 }

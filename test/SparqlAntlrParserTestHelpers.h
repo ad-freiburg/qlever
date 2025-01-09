@@ -14,6 +14,7 @@
 
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "parser/Alias.h"
+#include "parser/DatasetClauses.h"
 #include "parser/ParsedQuery.h"
 #include "parser/SparqlParserHelpers.h"
 #include "parser/TripleComponent.h"
@@ -676,6 +677,21 @@ inline auto Triples = [](const vector<SparqlTriple>& triples)
                testing::UnorderedElementsAreArray(triples)));
 };
 
+// Match a `Describe` clause.
+inline auto Describe = [](const std::vector<p::Describe::VarOrIri>& resources,
+                          const p::DatasetClauses& datasetClauses,
+                          const Matcher<const ParsedQuery&>& subquery)
+    -> Matcher<const p::GraphPatternOperation&> {
+  using namespace ::testing;
+  auto getSubquery = [](const p::Subquery& subquery) -> const ParsedQuery& {
+    return subquery.get();
+  };
+  return detail::GraphPatternOperation<p::Describe>(AllOf(
+      AD_FIELD(p::Describe, resources_, Eq(resources)),
+      AD_FIELD(p::Describe, datasetClauses_, Eq(datasetClauses)),
+      AD_FIELD(p::Describe, whereClause_, ResultOf(getSubquery, subquery))));
+};
+
 namespace detail {
 inline auto Optional =
     [](auto&& subMatcher) -> Matcher<const p::GraphPatternOperation&> {
@@ -890,6 +906,19 @@ inline auto ConstructQuery(
                            testing::ElementsAreArray(elems))),
       AD_FIELD(ParsedQuery, datasetClauses_, datasetMatcher),
       RootGraphPattern(m));
+}
+
+// A matcher for a `DescribeQuery`
+inline auto DescribeQuery(
+    const Matcher<const p::GraphPatternOperation&>& describeMatcher,
+    const ScanSpecificationAsTripleComponent::Graphs& defaultGraphs =
+        std::nullopt,
+    const ScanSpecificationAsTripleComponent::Graphs& namedGraphs =
+        std::nullopt) {
+  using Var = ::Variable;
+  return ConstructQuery({{Var{"?subject"}, Var{"?predicate"}, Var{"?object"}}},
+                        GraphPattern(describeMatcher), defaultGraphs,
+                        namedGraphs);
 }
 
 // _____________________________________________________________________________

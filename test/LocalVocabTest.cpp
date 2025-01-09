@@ -134,6 +134,14 @@ TEST(LocalVocab, clone) {
   for (size_t i = 0; i < inputWords.size(); ++i) {
     EXPECT_EQ(*indices[i], inputWords[i]);
   }
+
+  // Test that a BlankNodeIndex obtained by a `LocalVocab` is also contained
+  // in the clone.
+  ad_utility::BlankNodeManager bnm;
+  LocalVocab v;
+  auto id = v.getBlankNodeIndex(&bnm);
+  LocalVocab vClone = v.clone();
+  EXPECT_TRUE(vClone.isBlankNodeIndexContained(id));
 }
 // _____________________________________________________________________________
 TEST(LocalVocab, merge) {
@@ -162,6 +170,30 @@ TEST(LocalVocab, merge) {
   EXPECT_EQ(*indices[1], lit("twoA"));
   EXPECT_EQ(*indices[2], lit("oneB"));
   EXPECT_EQ(*indices[3], lit("twoB"));
+
+  // Test that the `LocalBlankNodeManager` of vocabs is merged correctly.
+  ad_utility::BlankNodeManager bnm;
+  LocalVocab localVocabMerged2;
+  BlankNodeIndex id;
+  {
+    LocalVocab vocC, vocD;
+    id = vocC.getBlankNodeIndex(&bnm);
+    auto vocabs2 = std::vector{&std::as_const(vocC), &std::as_const(vocD)};
+    localVocabMerged2 = LocalVocab::merge(vocabs2);
+  }
+  EXPECT_TRUE(localVocabMerged2.isBlankNodeIndexContained(id));
+
+  LocalVocab vocE, vocF;
+  auto id2 = vocE.getBlankNodeIndex(&bnm);
+  auto vocabs3 =
+      std::vector{&std::as_const(localVocabMerged2), &std::as_const(vocF)};
+  vocE.mergeWith(vocabs3 | ql::views::transform(
+                               [](const LocalVocab* l) -> const LocalVocab& {
+                                 return *l;
+                               }));
+  EXPECT_TRUE(vocE.isBlankNodeIndexContained(id));
+  EXPECT_TRUE(localVocabMerged2.isBlankNodeIndexContained(id));
+  EXPECT_TRUE(vocE.isBlankNodeIndexContained(id2));
 }
 
 // _____________________________________________________________________________
@@ -187,8 +219,8 @@ TEST(LocalVocab, propagation) {
         return LiteralOrIri::literalWithoutQuotes(word);
       }
     };
-    std::ranges::transform(expectedWordsAsStrings,
-                           std::back_inserter(expectedWords), toLitOrIri);
+    ql::ranges::transform(expectedWordsAsStrings,
+                          std::back_inserter(expectedWords), toLitOrIri);
     std::shared_ptr<const Result> resultTable = operation.getResult();
     ASSERT_TRUE(resultTable)
         << "Operation: " << operation.getDescriptor() << std::endl;
@@ -196,7 +228,7 @@ TEST(LocalVocab, propagation) {
         resultTable->localVocab().getAllWordsForTesting();
     // We currently allow the local vocab to have multiple IDs for the same
     // word, so we have to deduplicate first.
-    std::ranges::sort(localVocabWords);
+    ql::ranges::sort(localVocabWords);
     localVocabWords.erase(std::ranges::unique(localVocabWords).begin(),
                           localVocabWords.end());
     ASSERT_THAT(localVocabWords,
@@ -377,4 +409,46 @@ TEST(LocalVocab, getBlankNodeIndex) {
   BlankNodeIndex a = v.getBlankNodeIndex(&bnm);
   BlankNodeIndex b = v.getBlankNodeIndex(&bnm);
   EXPECT_NE(a, b);
+}
+
+// _____________________________________________________________________________
+TEST(LocalVocab, otherWordSetIsTransitivelyPropagated) {
+  using ad_utility::triple_component::LiteralOrIri;
+  LocalVocab original;
+  original.getIndexAndAddIfNotContained(
+      LocalVocabEntry{LiteralOrIri::literalWithoutQuotes("test")});
+
+  LocalVocab clone = original.clone();
+  LocalVocab mergeCandidate;
+  mergeCandidate.mergeWith(std::span{&clone, 1});
+
+  EXPECT_EQ(mergeCandidate.size(), 1);
+  EXPECT_THAT(mergeCandidate.getAllWordsForTesting(),
+              ::testing::UnorderedElementsAre(
+                  LiteralOrIri::literalWithoutQuotes("test")));
+}
+
+// _____________________________________________________________________________
+TEST(LocalVocab, sizeIsProperlyUpdatedOnMerge) {
+  using ad_utility::triple_component::LiteralOrIri;
+  using ::testing::UnorderedElementsAre;
+  LocalVocab original;
+  original.getIndexAndAddIfNotContained(
+      LocalVocabEntry{LiteralOrIri::literalWithoutQuotes("test")});
+
+  LocalVocab clone1 = original.clone();
+  LocalVocab clone2 = original.clone();
+  clone2.mergeWith(std::span{&original, 1});
+  original.mergeWith(std::span{&clone1, 1});
+
+  // Implementation detail, merging does add to the "other word set" but does
+  // not deduplicate with the primary word set.
+  EXPECT_EQ(original.size(), 2);
+  EXPECT_THAT(original.getAllWordsForTesting(),
+              UnorderedElementsAre(LiteralOrIri::literalWithoutQuotes("test"),
+                                   LiteralOrIri::literalWithoutQuotes("test")));
+
+  EXPECT_EQ(clone2.size(), 1);
+  EXPECT_THAT(clone2.getAllWordsForTesting(),
+              UnorderedElementsAre(LiteralOrIri::literalWithoutQuotes("test")));
 }

@@ -1,7 +1,8 @@
-// Copyright 2018, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Johannes Kalmbach(joka921) <johannes.kalmbach@gmail.com>
-//
+// Copyright 2018 - 2024, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//          Hannah Bast <bast@cs.uni-freiburg.de>
+
 #include <iostream>
 #include <string>
 
@@ -14,6 +15,7 @@
 #include "parser/RdfParser.h"
 #include "parser/TripleComponent.h"
 #include "util/Conversions.h"
+#include "util/MemorySize/MemorySize.h"
 
 using std::string;
 using namespace std::literals;
@@ -335,6 +337,36 @@ TEST(RdfParserTest, blankNodePropertyList) {
   };
   testPropertyListAsSubject(Re2Parser{});
   testPropertyListAsSubject(CtreParser{});
+}
+
+TEST(RdfParserTest, base) {
+  auto testForGivenParser = [](auto parser) {
+    parser.setInputStream("@base <http://www.example.org/path/> .");
+    ASSERT_TRUE(parser.base());
+    ASSERT_EQ(parser.baseForRelativeIri().toStringRepresentation(),
+              "<http://www.example.org/path/>");
+    ASSERT_EQ(parser.baseForAbsoluteIri().toStringRepresentation(),
+              "<http://www.example.org/>");
+    parser.setInputStream("@base \"no iriref\" .");
+    ASSERT_THROW(parser.base(), TurtleParser<Tokenizer>::ParseException);
+  };
+  testForGivenParser(Re2Parser{});
+  testForGivenParser(CtreParser{});
+}
+
+TEST(RdfParserTest, sparqlBase) {
+  auto testForGivenParser = [](auto parser) {
+    parser.setInputStream("BASE <http://www.example.org/path/> .");
+    ASSERT_TRUE(parser.sparqlBase());
+    ASSERT_EQ(parser.baseForRelativeIri().toStringRepresentation(),
+              "<http://www.example.org/path/>");
+    ASSERT_EQ(parser.baseForAbsoluteIri().toStringRepresentation(),
+              "<http://www.example.org/>");
+    parser.setInputStream("BASE \"no iriref\" .");
+    ASSERT_THROW(parser.sparqlBase(), TurtleParser<Tokenizer>::ParseException);
+  };
+  testForGivenParser(Re2Parser{});
+  testForGivenParser(CtreParser{});
 }
 
 TEST(RdfParserTest, object) {
@@ -764,15 +796,19 @@ TEST(RdfParserTest, iriref) {
 
 // Parse the file at `filename` using a parser of type `Parser` and return the
 // sorted result. Iff `useBatchInterface` then the `getBatch()` function is used
-// for parsing, else `getLine()` is used.
+// for parsing, else `getLine()` is used. The default size for the parse buffer
+// in the following tests is 1 kB (which is much less than the default value
+// `DEFAULT_PARSER_BUFFER_SIZE` defined in `src/global/Constants.h`).
 template <typename Parser>
-std::vector<TurtleTriple> parseFromFile(const std::string& filename,
-                                        bool useBatchInterface) {
+std::vector<TurtleTriple> parseFromFile(
+    const std::string& filename, bool useBatchInterface,
+    ad_utility::MemorySize bufferSize = 1_kB) {
   auto parserChild = [&]() {
     if constexpr (ad_utility::isInstantiation<Parser, RdfMultifileParser>) {
-      return Parser{{{filename, qlever::Filetype::Turtle, std::nullopt}}};
+      return Parser{{{filename, qlever::Filetype::Turtle, std::nullopt}},
+                    bufferSize};
     } else {
-      return Parser{filename};
+      return Parser{filename, bufferSize};
     }
   }();
   RdfParserBase& parser = parserChild;
@@ -839,7 +875,6 @@ TEST(RdfParserTest, TurtleStreamAndParallelParser) {
     }
   }
 
-  FILE_BUFFER_SIZE = 1000;
   auto testWithParser = [&]<typename Parser>(bool useBatchInterface) {
     auto result = parseFromFile<Parser>(filename, useBatchInterface);
     EXPECT_THAT(result, ::testing::UnorderedElementsAreArray(expectedTriples));
@@ -853,7 +888,6 @@ TEST(RdfParserTest, TurtleStreamAndParallelParser) {
 // _______________________________________________________________________
 TEST(RdfParserTest, emptyInput) {
   std::string filename{"turtleParserEmptyInput.dat"};
-  FILE_BUFFER_SIZE = 1000;
   auto testWithParser = [&]<typename Parser>(bool useBatchInterface,
                                              std::string_view input = "") {
     {
@@ -874,7 +908,6 @@ TEST(RdfParserTest, emptyInput) {
 // ________________________________________________________________________
 TEST(RdfParserTest, multilineComments) {
   std::string filename{"turtleParserMultilineComments.dat"};
-  FILE_BUFFER_SIZE = 1000;
   auto testWithParser = [&]<typename Parser>(bool useBatchInterface,
                                              std::string_view input,
                                              const auto& expectedTriples) {
@@ -887,8 +920,8 @@ TEST(RdfParserTest, multilineComments) {
     ad_utility::deleteFile(filename);
   };
 
-  // Test an input with many lines that only comments and whitespace. There
-  // was a bug for this case in a previous version of the parser.
+  // Test an input with many lines that contain only comments and whitespace.
+  // There was a bug for this case in a previous version of the parser.
   std::string input = R"(#Comments
   #at
 ##the beginning
@@ -927,7 +960,6 @@ TEST(RdfParserTest, multilineComments) {
 // actual parsing happens on background threads.
 TEST(RdfParserTest, exceptionPropagation) {
   std::string filename{"turtleParserExceptionPropagation.dat"};
-  FILE_BUFFER_SIZE = 1000;
   auto testWithParser = [&]<typename Parser>(bool useBatchInterface,
                                              std::string_view input) {
     {
@@ -947,22 +979,27 @@ TEST(RdfParserTest, exceptionPropagation) {
 TEST(RdfParserTest, exceptionPropagationFileBufferReading) {
   std::string filename{"turtleParserExceptionPropagationFileBufferReading.dat"};
   auto testWithParser = [&]<typename Parser>(bool useBatchInterface,
+                                             ad_utility::MemorySize bufferSize,
                                              std::string_view input) {
     {
       auto of = ad_utility::makeOfstream(filename);
       of << input;
     }
     AD_EXPECT_THROW_WITH_MESSAGE(
-        (parseFromFile<Parser>(filename, useBatchInterface)),
-        ::testing::ContainsRegex("Please increase the FILE_BUFFER_SIZE"));
+        (parseFromFile<Parser>(filename, useBatchInterface, bufferSize)),
+        ::testing::AllOf(
+            ::testing::HasSubstr("end of a statement was not found"),
+            ::testing::HasSubstr("use `--parser-buffer-size`"),
+            ::testing::HasSubstr("use `--parse-parallel false`")));
     ad_utility::deleteFile(filename);
   };
-  // Deliberately chosen s.t. the first triple fits in a block, but the second
-  // one doesn't.
-  FILE_BUFFER_SIZE = 40;
-  forAllParallelParsers(testWithParser,
-                        "<subject> <predicate> <object> . \n <veryLongSubject> "
-                        "<veryLongPredicate> <veryLongObject> .");
+  // Input, where the first triple fits into a 40_B buffer, but the second
+  // one does not.
+  std::string inputWithLongTriple =
+      "<subject> <predicate> <object> . \n "
+      "<veryLongSubject> <veryLongPredicate> "
+      "<veryLongObject> .";
+  forAllParallelParsers(testWithParser, 40_B, inputWithLongTriple);
 }
 
 // Test that the parallel parser's destructor can be run quickly and without
@@ -984,9 +1021,10 @@ TEST(RdfParserTest, stopParsingOnOutsideFailure) {
     {
       [[maybe_unused]] Parser parserChild = [&]() {
         if constexpr (ad_utility::isInstantiation<Parser, RdfMultifileParser>) {
-          return Parser{{{filename, qlever::Filetype::Turtle, std::nullopt}}};
+          return Parser{{{filename, qlever::Filetype::Turtle, std::nullopt}},
+                        40_B};
         } else {
-          return Parser{filename, 10ms};
+          return Parser{filename, 40_B, 10ms};
         }
       }();
       t.cont();
@@ -1002,7 +1040,6 @@ TEST(RdfParserTest, stopParsingOnOutsideFailure) {
     }
     return longBlock;
   }();
-  FILE_BUFFER_SIZE = 40;
   forAllParallelParsers(testWithParser, input);
   forAllMultifileParsers(testWithParser, input);
 }
@@ -1102,7 +1139,7 @@ TEST(RdfParserTest, multifileParser) {
     Parser p{specs};
     std::vector<TurtleTriple> result;
     while (auto batch = p.getBatch()) {
-      std::ranges::copy(batch.value(), std::back_inserter(result));
+      ql::ranges::copy(batch.value(), std::back_inserter(result));
     }
     EXPECT_THAT(result, ::testing::UnorderedElementsAreArray(expected));
   };

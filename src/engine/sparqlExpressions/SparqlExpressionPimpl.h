@@ -44,7 +44,7 @@ class SparqlExpressionPimpl {
   // COUNT(?x) + ?m returns true if and only if ?m is in `groupedVariables`.
   [[nodiscard]] bool isAggregate(
       const ad_utility::HashSet<Variable>& groupedVariables) const {
-    // TODO<joka921> This can be std::ranges::all_of as soon as libc++ supports
+    // TODO<joka921> This can be ql::ranges::all_of as soon as libc++ supports
     // it, or the combination of clang + libstdc++ + coroutines works.
     auto unaggregatedVariables = getUnaggregatedVariables();
     for (const auto& var : unaggregatedVariables) {
