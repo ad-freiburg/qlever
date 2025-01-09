@@ -1,4 +1,4 @@
-//  Copyright 2023, University of Freiburg,
+//  Copyright 2025, University of Freiburg,
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
@@ -25,12 +25,12 @@ ExistsJoin::ExistsJoin(QueryExecutionContext* qec,
 
 // _____________________________________________________________________________
 string ExistsJoin::getCacheKeyImpl() const {
-  return absl::StrCat("EXISTS SCAN left: ", left_->getCacheKey(),
+  return absl::StrCat("EXISTS JOIN left: ", left_->getCacheKey(),
                       " right: ", right_->getCacheKey());
 }
 
 // _____________________________________________________________________________
-string ExistsJoin::getDescriptor() const { return "EXISTS scan"; }
+string ExistsJoin::getDescriptor() const { return "Exists Join"; }
 
 // ____________________________________________________________________________
 VariableToColumnMap ExistsJoin::computeVariableToColumnMap() const {
@@ -70,6 +70,7 @@ uint64_t ExistsJoin::getSizeEstimateBeforeLimit() {
 
 // ____________________________________________________________________________
 size_t ExistsJoin::getCostEstimate() {
+  // The implementation is a linear zipper join.
   return left_->getCostEstimate() + right_->getCostEstimate() +
          left_->getSizeEstimate() + right_->getSizeEstimate();
 }
@@ -81,9 +82,16 @@ ProtoResult ExistsJoin::computeResult([[maybe_unused]] bool requestLaziness) {
   const auto& left = leftRes->idTable();
   const auto& right = rightRes->idTable();
 
+  // We reuse the generic `zipperJoinWithUndef` utility in the following way:
+  // It has (among others) two callbacks: One for each matching pair of rows
+  // from left and right, and one for rows in the left input that have no
+  // matching counterpart in the right input. The first callback can be a noop,
+  // and the second callback gives us exactly `NOT EXISTS`.
+
+  // Only extract the join columns from both inputs to make the following code
+  // easier.
   ad_utility::JoinColumnMapping joinColumnData{joinColumns_, left.numColumns(),
                                                right.numColumns()};
-
   IdTableView<0> joinColumnsLeft =
       left.asColumnSubsetView(joinColumnData.jcsLeft());
   IdTableView<0> joinColumnsRight =
@@ -105,15 +113,20 @@ ProtoResult ExistsJoin::computeResult([[maybe_unused]] bool requestLaziness) {
                (stdr::any_of(joinColumnsLeft.getColumn(col), &Id::isUndefined));
       });
 
-  auto noopRowAdder = [](auto&&...) {};
+  // Nothing to do for the actual matches.
+  auto noopRowAdder = ad_utility::noop;
 
+  // Store the indices of rows for which `exists` is `false`.
   std::vector<size_t, ad_utility::AllocatorWithLimit<size_t>> notExistsIndices{
       allocator()};
+  // The callback is called with iterators, so we convert them back to indices.
   auto actionForNotExisting =
       [&notExistsIndices, begin = joinColumnsLeft.begin()](const auto& itLeft) {
         notExistsIndices.push_back(itLeft - begin);
       };
 
+  // Run the actual zipper join, with the possible optimization if we know, that
+  // there can be no UNDEF values.
   auto checkCancellationLambda = [this] { checkCancellation(); };
   auto runZipperJoin = [&](auto findUndef) {
     [[maybe_unused]] auto numOutOfOrder = ad_utility::zipperJoinWithUndef(
@@ -135,16 +148,22 @@ ProtoResult ExistsJoin::computeResult([[maybe_unused]] bool requestLaziness) {
   for (size_t notExistsIndex : notExistsIndices) {
     existsCol[notExistsIndex] = Id::makeFromBool(false);
   }
+
+  // The result is a copy of the left input + and additional columns with only
+  // boolean values, so the local vocab of the left input is sufficient.
   return {std::move(result), resultSortedOn(), leftRes->getCopyOfLocalVocab()};
 }
 
 // _____________________________________________________________________________
-std::shared_ptr<QueryExecutionTree> ExistsJoin::addExistsScansToSubtree(
+std::shared_ptr<QueryExecutionTree> ExistsJoin::addExistsJoinsToSubtree(
     const sparqlExpression::SparqlExpressionPimpl& expression,
     std::shared_ptr<QueryExecutionTree> subtree, QueryExecutionContext* qec,
     const ad_utility::SharedCancellationHandle& cancellationHandle) {
+  // First extract all the `EXISTS` functions from the expression.
   std::vector<const sparqlExpression::SparqlExpression*> existsExpressions;
   expression.getPimpl()->getExistsExpressions(existsExpressions);
+
+  // For each of the EXISTS functions add one `ExistsJoin`
   for (auto* expr : existsExpressions) {
     const auto& exists =
         dynamic_cast<const sparqlExpression::ExistsExpression&>(*expr);

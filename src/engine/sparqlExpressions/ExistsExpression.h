@@ -1,6 +1,6 @@
-//
-// Created by kalmbacj on 1/7/25.
-//
+//  Copyright 2025, University of Freiburg,
+//                  Chair of Algorithms and Data Structures.
+//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 #pragma once
 
@@ -9,19 +9,28 @@
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "parser/ParsedQuery.h"
 
+// The expression that corresponds to the `EXISTS` function.
+// The implementation only reads the value of a precomputed variable. The actual
+// computation of EXISTS is done by the `ExistsJoin` class.
 namespace sparqlExpression {
 class ExistsExpression : public SparqlExpression {
  private:
+  // The argument (a group graph pattern) of the EXISTS. This is set during the
+  // parsing and is required and read by the `ExistsJoin` class.
   ParsedQuery argument_;
+
+  // Each `ExistsExpression` has a unique index and a unique variable name that
+  // is used to communicate between the `ExistsExpression` and the `ExistsJoin`.
   static inline std::atomic<size_t> indexCounter_ = 0;
   size_t index_ = ++indexCounter_;
   Variable variable_{absl::StrCat("?ql_internal_exists_", index_)};
 
  public:
+  explicit ExistsExpression(ParsedQuery query) : argument_{std::move(query)} {}
   const auto& argument() const { return argument_; }
   const auto& variable() const { return variable_; }
-  ExistsExpression(ParsedQuery query) : argument_{std::move(query)} {}
 
+  // Evaluate only reads the variable which is written by the `ExistsJoin`.
   ExpressionResult evaluate(EvaluationContext* context) const override {
     AD_CONTRACT_CHECK(context->_variableToColumnMap.contains(variable_));
     return variable_;
@@ -31,17 +40,19 @@ class ExistsExpression : public SparqlExpression {
   [[nodiscard]] string getCacheKey(
       const VariableToColumnMap& varColMap) const override {
     if (varColMap.contains(variable_)) {
-      return absl::StrCat("EXISTS WITH COL ",
+      return absl::StrCat("ExistsExpression col# ",
                           varColMap.at(variable_).columnIndex_);
     } else {
-      // This means that the necessary `ExistsScan` hasn't been set up yet.
-      // It is not possible to cache such incomplete operations, so we return
-      // a random cache key.
+      // This means that the necessary `ExistsJoin` hasn't been set up yet. This
+      // can for example happen if the parsing (which sets up the
+      // `ExistsExpression`) is completed, but the query planning (which sets up
+      // the `ExistsJoin` is still in progress). It is not possible to cache
+      // such incomplete operations, so we return a random cache key.
       return std::to_string(ad_utility::FastRandomIntGenerator<size_t>{}());
     }
   }
 
-  // ____________________________________________________________________________
+  // This is in fact an `ExistsExpression`.
   bool isExistsExpression() const override { return true; }
 
  private:

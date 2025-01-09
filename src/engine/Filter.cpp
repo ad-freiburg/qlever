@@ -12,11 +12,9 @@
 #include "engine/CallFixedSize.h"
 #include "engine/ExistsJoin.h"
 #include "engine/QueryExecutionTree.h"
-#include "engine/QueryPlanner.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
-#include "sparqlExpressions/ExistsExpression.h"
 
 using std::endl;
 using std::string;
@@ -31,7 +29,7 @@ Filter::Filter(QueryExecutionContext* qec,
     : Operation(qec),
       _subtree(std::move(subtree)),
       _expression{std::move(expression)} {
-  _subtree = ExistsJoin::addExistsScansToSubtree(
+  _subtree = ExistsJoin::addExistsJoinsToSubtree(
       _expression, std::move(_subtree), getExecutionContext(),
       cancellationHandle_);
   setPrefilterExpressionForChildren();
