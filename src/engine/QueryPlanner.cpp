@@ -1361,6 +1361,8 @@ size_t QueryPlanner::countSubgraphs(
     dummyPlansForFilter.push_back(
         makeSubtreePlan<Values>(_qec, std::move(values)));
   }
+
+  const size_t numPlansWithoutFilters = graph.size();
   for (const auto& filterPlan : dummyPlansForFilter) {
     graph.push_back(&filterPlan);
   }
@@ -1378,7 +1380,11 @@ size_t QueryPlanner::countSubgraphs(
   for (size_t i = 0; i < graph.size(); ++i) {
     countConnectedSubgraphs::Node v{0};
     for (size_t k = 0; k < graph.size(); ++k) {
+      // Don't connect nodes to themselves, don't connect filters with other
+      // filters, otherwise connect `i` and `k` if they have at least one
+      // variable in common.
       if ((k != i) &&
+          (k < numPlansWithoutFilters || i < numPlansWithoutFilters) &&
           !QueryPlanner::getJoinColumns(*graph.at(k), *graph.at(i)).empty()) {
         v.neighbors_ |= (1ULL << k);
       }
