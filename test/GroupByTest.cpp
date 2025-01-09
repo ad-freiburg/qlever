@@ -51,7 +51,6 @@ auto optionalHasTable = [](const VectorTable& table) {
 class GroupByTest : public ::testing::Test {
  public:
   GroupByTest() {
-    FILE_BUFFER_SIZE = 1000;
     // Create the index. The full index creation is run here to allow for
     // loading a docsDb file, which is not otherwise accessible
     std::string docsFileContent = "0\tExert 1\n1\tExert 2\n2\tExert3";
@@ -81,6 +80,7 @@ class GroupByTest : public ::testing::Test {
     _index.buildDocsDB("group_by_test.documents");
 
     _index.addTextFromOnDiskIndex();
+    _index.parserBufferSize() = 1_kB;
   }
 
   virtual ~GroupByTest() {
