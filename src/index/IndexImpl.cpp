@@ -71,10 +71,11 @@ IndexBuilderDataAsFirstPermutationSorter IndexImpl::createIdTriplesAndVocab(
 std::unique_ptr<RdfParserBase> IndexImpl::makeRdfParser(
     const std::vector<Index::InputFileSpecification>& files) const {
   auto makeRdfParserImpl =
-      [&files]<int useCtre>() -> std::unique_ptr<RdfParserBase> {
+      [this, &files]<int useCtre>() -> std::unique_ptr<RdfParserBase> {
     using TokenizerT =
         std::conditional_t<useCtre == 1, TokenizerCtre, Tokenizer>;
-    return std::make_unique<RdfMultifileParser<TokenizerT>>(files);
+    return std::make_unique<RdfMultifileParser<TokenizerT>>(
+        files, this->parserBufferSize());
   };
 
   // `callFixedSize` litfts runtime integers to compile time integers. We use it

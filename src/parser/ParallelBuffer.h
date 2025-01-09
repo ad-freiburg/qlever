@@ -47,6 +47,9 @@ class ParallelBuffer {
    */
   virtual std::optional<BufferType> getNextBlock() = 0;
 
+  // Get the blocksize of this buffer.
+  size_t getBlocksize() const { return blocksize_; }
+
  protected:
   size_t blocksize_ = 100 * (2 << 20);
 };
