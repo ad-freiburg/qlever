@@ -425,6 +425,18 @@ class Operation {
       RuntimeInformation::Status status =
           RuntimeInformation::Status::optimizedOut);
 
+  // See the functions with the same name in `QueryExecutionTree.h` for
+  // documentation.
+  virtual bool hasIndexScansForJoinPrefiltering(
+      [[maybe_unused]] std::span<const Variable> joinVariables) const {
+    return false;
+  }
+  virtual std::vector<Operation*>
+  getIndexScansForJoinPrefilteringAndDisableCaching(
+      [[maybe_unused]] std::span<const Variable> joinVariables) {
+    return {};
+  }
+
  private:
   // Create the runtime information in case the evaluation of this operation has
   // failed.

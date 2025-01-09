@@ -141,6 +141,11 @@ class Join : public Operation {
   static void hashJoin(const IdTable& dynA, ColumnIndex jc1,
                        const IdTable& dynB, ColumnIndex jc2, IdTable* dynRes);
 
+  bool hasIndexScansForJoinPrefiltering(
+      std::span<const Variable> variables) const override;
+  std::vector<Operation*> getIndexScansForJoinPrefilteringAndDisableCaching(
+      std::span<const Variable> variables) override;
+
  protected:
   virtual string getCacheKeyImpl() const override;
 
@@ -148,11 +153,6 @@ class Join : public Operation {
   ProtoResult computeResult(bool requestLaziness) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
-
-  // A special implementation that is called when both children are
-  // `IndexScan`s. Uses the lazy scans to only retrieve the subset of the
-  // `IndexScan`s that is actually needed without fully materializing them.
-  ProtoResult computeResultForTwoIndexScans(bool requestLaziness) const;
 
   // A special implementation that is called when exactly one of the children is
   // an `IndexScan` and the other one is a fully materialized result. The
