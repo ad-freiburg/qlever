@@ -785,6 +785,7 @@ template <class T>
 bool RdfStreamParser<T>::resetStateAndRead(
     RdfStreamParser::TurtleParserBackupState* bPtr) {
   auto& b = *bPtr;
+  AD_CORRECTNESS_CHECK(fileBuffer_);
   auto nextBytesOpt = fileBuffer_->getNextBlock();
   if (!nextBytesOpt || nextBytesOpt.value().empty()) {
     // there are no more decompressed bytes, just continue with what we've got
@@ -821,7 +822,8 @@ bool RdfStreamParser<T>::resetStateAndRead(
 }
 
 template <class T>
-void RdfStreamParser<T>::initialize(const string& filename) {
+void RdfStreamParser<T>::initialize(const string& filename,
+                                    ad_utility::MemorySize bufferSize) {
   this->clear();
   // Make sure that a block of data ends with a newline. This is important for
   // two reasons:
@@ -834,10 +836,10 @@ void RdfStreamParser<T>::initialize(const string& filename) {
   // The reason is that with a `.` at the end, we cannot decide whether we are
   // in the middle of a `PN_LOCAL` (that continues in the next buffer) or at the
   // end of a statement.
-  fileBuffer_ =
-      std::make_unique<ParallelBufferWithEndRegex>(bufferSize_, "([\\r\\n]+)");
+  fileBuffer_ = std::make_unique<ParallelBufferWithEndRegex>(
+      bufferSize.getBytes(), "([\\r\\n]+)");
   fileBuffer_->open(filename);
-  byteVec_.resize(bufferSize_);
+  byteVec_.resize(bufferSize.getBytes());
   // decompress the first block and initialize Tokenizer
   if (auto res = fileBuffer_->getNextBlock(); res) {
     byteVec_ = std::move(res.value());
@@ -998,7 +1000,7 @@ void RdfParallelParser<Tokenizer_T>::feedBatchesToParser(
         inputBatch = std::move(remainingBatchFromInitialization);
         first = false;
       } else {
-        auto nextOptional = fileBuffer_.getNextBlock();
+        auto nextOptional = fileBuffer_->getNextBlock();
         if (!nextOptional) {
           return;
         }
@@ -1026,10 +1028,13 @@ void RdfParallelParser<Tokenizer_T>::feedBatchesToParser(
 
 // _______________________________________________________________________
 template <typename Tokenizer_T>
-void RdfParallelParser<Tokenizer_T>::initialize(const string& filename) {
+void RdfParallelParser<Tokenizer_T>::initialize(
+    const string& filename, ad_utility::MemorySize bufferSize) {
+  fileBuffer_ = std::make_unique<ParallelBufferWithEndRegex>(
+      bufferSize.getBytes(), "\\.[\\t ]*([\\r\\n]+)");
   ParallelBuffer::BufferType remainingBatchFromInitialization;
-  fileBuffer_.open(filename);
-  if (auto batch = fileBuffer_.getNextBlock(); !batch) {
+  fileBuffer_->open(filename);
+  if (auto batch = fileBuffer_->getNextBlock(); !batch) {
     LOG(WARN) << "Empty input to the TURTLE parser, is this what you intended?"
               << std::endl;
   } else {
@@ -1109,7 +1114,8 @@ RdfParallelParser<T>::~RdfParallelParser() {
 // file is to be parsed in parallel.
 template <typename TokenizerT>
 static std::unique_ptr<RdfParserBase> makeSingleRdfParser(
-    const Index::InputFileSpecification& file) {
+    const Index::InputFileSpecification& file,
+    ad_utility::MemorySize bufferSize) {
   auto graph = [file]() -> TripleComponent {
     if (file.defaultGraph_.has_value()) {
       return TripleComponent::Iri::fromIrirefWithoutBrackets(
@@ -1118,7 +1124,7 @@ static std::unique_ptr<RdfParserBase> makeSingleRdfParser(
       return qlever::specialIds().at(DEFAULT_GRAPH_IRI);
     }
   };
-  auto makeRdfParserImpl = [&filename = file.filename_,
+  auto makeRdfParserImpl = [&filename = file.filename_, &bufferSize,
                             &graph]<int useParallel, int isTurtleInput>()
       -> std::unique_ptr<RdfParserBase> {
     using InnerParser =
@@ -1127,7 +1133,7 @@ static std::unique_ptr<RdfParserBase> makeSingleRdfParser(
     using Parser =
         std::conditional_t<useParallel == 1, RdfParallelParser<InnerParser>,
                            RdfStreamParser<InnerParser>>;
-    return std::make_unique<Parser>(filename, graph());
+    return std::make_unique<Parser>(filename, bufferSize, graph());
   };
 
   // The call to `callFixedSize` lifts runtime integers to compile time
@@ -1142,13 +1148,15 @@ static std::unique_ptr<RdfParserBase> makeSingleRdfParser(
 // ______________________________________________________________
 template <typename T>
 RdfMultifileParser<T>::RdfMultifileParser(
-    const std::vector<qlever::InputFileSpecification>& files) {
+    const std::vector<qlever::InputFileSpecification>& files,
+    ad_utility::MemorySize bufferSize) {
   using namespace qlever;
   // This lambda parses a single file and pushes the results and all occurring
   // exceptions to the `finishedBatchQueue_`.
-  auto parseFile = [this](const InputFileSpecification& file) {
+  auto parseFile = [this](const InputFileSpecification& file,
+                          ad_utility::MemorySize bufferSize) {
     try {
-      auto parser = makeSingleRdfParser<Tokenizer>(file);
+      auto parser = makeSingleRdfParser<Tokenizer>(file, bufferSize);
       while (auto batch = parser->getBatch()) {
         bool active = finishedBatchQueue_.push(std::move(batch.value()));
         if (!active) {
@@ -1169,10 +1177,11 @@ RdfMultifileParser<T>::RdfMultifileParser(
   };
 
   // Feed all the input files to the `parsingQueue_`.
-  auto makeParsers = [files, this, parseFile]() {
+  auto makeParsers = [files, bufferSize, this, parseFile]() {
     for (const auto& file : files) {
       numActiveParsers_++;
-      bool active = parsingQueue_.push(std::bind_front(parseFile, file));
+      bool active =
+          parsingQueue_.push(std::bind_front(parseFile, file, bufferSize));
       if (!active) {
         // The queue was finished prematurely, stop this thread. This is
         // important to avoid deadlocks.

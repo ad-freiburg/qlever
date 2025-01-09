@@ -212,11 +212,16 @@ size_t SpatialJoin::getResultWidth() const {
 
 // ____________________________________________________________________________
 size_t SpatialJoin::getCostEstimate() {
-  if (childLeft_ && childRight_) {
-    size_t inputEstimate =
-        childLeft_->getSizeEstimate() * childRight_->getSizeEstimate();
+  if (!childLeft_ || !childRight_) {
+    return 1;  // dummy return, as the class does not have its children yet
+  }
+
+  size_t spatialJoinCostEst = [this]() {
+    auto n = childLeft_->getSizeEstimate();
+    auto m = childRight_->getSizeEstimate();
+
     if (config_.algo_ == SpatialJoinAlgorithm::BASELINE) {
-      return inputEstimate * inputEstimate;
+      return n * m;
     } else {
       AD_CORRECTNESS_CHECK(
           config_.algo_ == SpatialJoinAlgorithm::S2_GEOMETRY ||
@@ -229,14 +234,14 @@ size_t SpatialJoin::getCostEstimate() {
       // for each item do a lookup on the index for the right table in O(log m).
       // Together we have O(n log(m) + m log(m)), because in general we can't
       // draw conclusions about the relation between the sizes of n and m.
-      auto n = childLeft_->getSizeEstimate();
-      auto m = childRight_->getSizeEstimate();
-      auto logm = static_cast<size_t>(
-          log(static_cast<double>(childRight_->getSizeEstimate())));
+      auto logm = static_cast<size_t>(std::log(static_cast<double>(m)));
       return (n * logm) + (m * logm);
     }
-  }
-  return 1;  // dummy return, as the class does not have its children yet
+  }();
+
+  // The cost to compute the children needs to be taken into account.
+  return spatialJoinCostEst + childLeft_->getCostEstimate() +
+         childRight_->getCostEstimate();
 }
 
 // ____________________________________________________________________________

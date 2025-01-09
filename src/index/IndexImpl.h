@@ -128,6 +128,7 @@ class IndexImpl {
   bool keepTempFiles_ = false;
   ad_utility::MemorySize memoryLimitIndexBuilding_ =
       DEFAULT_MEMORY_LIMIT_INDEX_BUILDING;
+  ad_utility::MemorySize parserBufferSize_ = DEFAULT_PARSER_BUFFER_SIZE;
   ad_utility::MemorySize blocksizePermutationPerColumn_ =
       UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN;
   json configurationJson_;
@@ -404,6 +405,11 @@ class IndexImpl {
   }
   const ad_utility::MemorySize& memoryLimitIndexBuilding() const {
     return memoryLimitIndexBuilding_;
+  }
+
+  ad_utility::MemorySize& parserBufferSize() { return parserBufferSize_; }
+  const ad_utility::MemorySize& parserBufferSize() const {
+    return parserBufferSize_;
   }
 
   ad_utility::MemorySize& blocksizePermutationPerColumn() {
