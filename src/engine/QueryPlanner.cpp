@@ -1338,12 +1338,27 @@ QueryPlanner::runDynamicProgrammingOnConnectedComponent(
 
 // _____________________________________________________________________________
 size_t QueryPlanner::countSubgraphs(
-    std::vector<const QueryPlanner::SubtreePlan*> graph, size_t budget) {
+    std::vector<const QueryPlanner::SubtreePlan*> graph,
+    const std::vector<SparqlFilter>& filters, size_t budget) {
   // Remove duplicate plans from `graph`.
   auto getId = [](const SubtreePlan* v) { return v->_idsOfIncludedNodes; };
   ql::ranges::sort(graph, ql::ranges::less{}, getId);
   graph.erase(std::ranges::unique(graph, ql::ranges::equal_to{}, getId).begin(),
               graph.end());
+
+  std::vector<QueryPlanner::SubtreePlan> dummyPlansForFilter;
+  for (const auto& filter : filters) {
+    const auto& vars = filter.expression_.containedVariables();
+    parsedQuery::SparqlValues values;
+    for (auto* var : vars) {
+      values._variables.push_back(*var);
+    }
+    dummyPlansForFilter.push_back(
+        makeSubtreePlan<Values>(_qec, std::move(values)));
+  }
+  for (const auto& filterPlan : dummyPlansForFilter) {
+    graph.push_back(&filterPlan);
+  }
 
   // Qlever currently limits the number of triples etc. per group to be <= 64
   // anyway, so we can simply assert here.
@@ -1366,7 +1381,9 @@ size_t QueryPlanner::countSubgraphs(
     g.push_back(v);
   }
 
-  return countConnectedSubgraphs::countSubgraphs(g, budget);
+  auto result = countConnectedSubgraphs::countSubgraphs(g, budget);
+  LOG(INFO) << "number of subgraphs inside a component " << result << std::endl;
+  return result;
 }
 
 // _____________________________________________________________________________
@@ -1424,7 +1441,7 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
       g.push_back(&plan);
     }
     const size_t budget = RuntimeParameters().get<"query-planning-budget">();
-    bool useGreedyPlanning = countSubgraphs(g, budget) > budget;
+    bool useGreedyPlanning = countSubgraphs(g, filters, budget) > budget;
     if (useGreedyPlanning) {
       LOG(INFO)
           << "Using the greedy query planner for a large connected component"
