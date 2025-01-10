@@ -57,4 +57,10 @@ bool isVariableContainedInGraphPatternOperation(
     const parsedQuery::GraphPatternOperation& operation,
     const SparqlTriple* tripleToIgnore);
 
+// __________________________________________________________________________
+void addValuesClause(
+    ParsedQuery::GraphPattern& graphPattern,
+    const std::optional<parsedQuery::Values>& values = std::nullopt,
+    bool recurse = true);
+
 }  // namespace checkUsePatternTrick
