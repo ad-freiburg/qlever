@@ -27,7 +27,9 @@ using StringVec = std::vector<std::string>;
 
 /// Lambdas
 
-auto getLocaleManager = []() { return LocaleManager("en", "US", false); };
+auto getLocaleManager = []() -> LocaleManager {
+  return LocaleManager("en", "US", false);
+};
 
 auto wordsFileLineToWordLine =
     [](const WordsFileLine& wordsFileLine) -> WordLine {
@@ -41,8 +43,8 @@ auto wordsFileLineToWordLine =
 auto testWordsFileParser = [](const std::string& wordsFilePath,
                               const WordLineVec& expectedResult) {
   size_t i = 0;
-  for (auto wordsFileLine :
-       WordsFileParser{wordsFilePath, getLocaleManager()}) {
+  LocaleManager localeManager = getLocaleManager();
+  for (auto wordsFileLine : WordsFileParser{wordsFilePath, localeManager}) {
     ASSERT_TRUE(i < expectedResult.size());
     WordLine testLine = wordsFileLineToWordLine(wordsFileLine);
 
@@ -67,7 +69,8 @@ auto docsFileLineToDocLine = [](const DocsFileLine& docsFileLine) -> DocLine {
 auto testDocsFileParser = [](const std::string& docsFilePath,
                              const DocLineVec& expectedResult) {
   size_t i = 0;
-  for (auto docsFileLine : DocsFileParser{docsFilePath, getLocaleManager()}) {
+  LocaleManager localeManager = getLocaleManager();
+  for (auto docsFileLine : DocsFileParser{docsFilePath, localeManager}) {
     ASSERT_TRUE(i < expectedResult.size());
     DocLine testLine = docsFileLineToDocLine(docsFileLine);
 
@@ -85,8 +88,9 @@ auto testDocsFileParser = [](const std::string& docsFilePath,
 auto testTokenizeAndNormalizeText = [](std::string testText,
                                        const StringVec& normalizedTextAsVec) {
   size_t i = 0;
+  LocaleManager localeManager = getLocaleManager();
   for (auto normalizedWord :
-       tokenizeAndNormalizeText(testText, getLocaleManager())) {
+       tokenizeAndNormalizeText(testText, localeManager)) {
     ASSERT_TRUE(i < normalizedTextAsVec.size());
     ASSERT_EQ(normalizedWord, normalizedTextAsVec.at(i));
 
