@@ -1348,18 +1348,27 @@ size_t QueryPlanner::countSubgraphs(
 
   // We also have to consider the `filters`. To make life easy, we temporarily
   // create simple `SubtreePlans` for them which just have the correct
-  // variables.
+  // variables. We only create one subtree plan for each set of variables that
+  // is contained in the `filters`, because this will bring the estimate of this
+  // function closer to the actual behavior of the DP query planner (it always
+  // applies either all possible filters at once, or none of them).
   std::vector<QueryPlanner::SubtreePlan> dummyPlansForFilter;
+  ad_utility::HashSet<ad_utility::HashSet<Variable>>
+      deduplicatedFilterVariables;
   for (const auto& filter : filters) {
     const auto& vars = filter.expression_.containedVariables();
+    ad_utility::HashSet<Variable> varSet;
     // We use a `VALUES` clause as the dummy because this operation is the
     // easiest to setup for a number of given variables.
     parsedQuery::SparqlValues values;
     for (auto* var : vars) {
       values._variables.push_back(*var);
+      varSet.insert(*var);
     }
-    dummyPlansForFilter.push_back(
-        makeSubtreePlan<Values>(_qec, std::move(values)));
+    if (deduplicatedFilterVariables.insert(std::move(varSet)).second) {
+      dummyPlansForFilter.push_back(
+          makeSubtreePlan<Values>(_qec, std::move(values)));
+    }
   }
 
   const size_t numPlansWithoutFilters = graph.size();
