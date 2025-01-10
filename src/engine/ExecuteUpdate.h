@@ -12,10 +12,11 @@
 
 // Metadata about the time spent on different parts of an update.
 struct UpdateMetadata {
-  std::chrono::milliseconds triplePreparationTime_ =
-      std::chrono::milliseconds::zero();
-  std::chrono::milliseconds insertionTime_ = std::chrono::milliseconds::zero();
-  std::chrono::milliseconds deletionTime_ = std::chrono::milliseconds::zero();
+  using Milliseconds = std::chrono::milliseconds;
+  static constexpr Milliseconds Zero = Milliseconds::zero();
+  Milliseconds triplePreparationTime_ = Zero;
+  Milliseconds insertionTime_ = Zero;
+  Milliseconds deletionTime_ = Zero;
 };
 
 class ExecuteUpdate {

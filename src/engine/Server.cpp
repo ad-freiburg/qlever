@@ -11,7 +11,6 @@
 #include <string>
 #include <vector>
 
-#include "engine/ExecuteUpdate.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/QueryPlanner.h"
 #include "global/RuntimeParameters.h"
@@ -884,47 +883,13 @@ Awaitable<void> Server::processQuery(
   co_return;
 }
 
-// ____________________________________________________________________________
-json Server::processUpdateImpl(
-    const ad_utility::url_parser::ParamValueMap& params, const string& update,
-    ad_utility::Timer& requestTimer, TimeLimit timeLimit, auto& messageSender,
-    ad_utility::SharedCancellationHandle cancellationHandle,
-    DeltaTriples& deltaTriples) {
-  auto [pinSubtrees, pinResult] = determineResultPinning(params);
-  LOG(INFO) << "Processing the following SPARQL update:"
-            << (pinResult ? " [pin result]" : "")
-            << (pinSubtrees ? " [pin subresults]" : "") << "\n"
-            << update << std::endl;
-  QueryExecutionContext qec(index_, &cache_, allocator_,
-                            sortPerformanceEstimator_, std::ref(messageSender),
-                            pinSubtrees, pinResult);
-  auto plannedQuery = setupPlannedQuery(params, update, qec, cancellationHandle,
-                                        timeLimit, requestTimer);
-  auto qet = plannedQuery.queryExecutionTree_;
-
-  if (!plannedQuery.parsedQuery_.hasUpdateClause()) {
-    throw std::runtime_error(
-        absl::StrCat("SPARQL UPDATE was request via the HTTP request, but the "
-                     "following query was sent instead of an update: ",
-                     plannedQuery.parsedQuery_._originalString));
-  }
-
-  DeltaTriplesCount countBefore = deltaTriples.getCounts();
-  UpdateMetadata updateMetadata = ExecuteUpdate::executeUpdate(
-      index_, plannedQuery.parsedQuery_, qet, deltaTriples, cancellationHandle);
-  DeltaTriplesCount countAfter = deltaTriples.getCounts();
-
-  LOG(INFO) << "Done processing update"
-            << ", total time was " << requestTimer.msecs().count() << " ms"
-            << std::endl;
-  LOG(DEBUG) << "Runtime Info:\n"
-             << qet.getRootOperation()->runtimeInfo().toString() << std::endl;
-
-  // Clear the cache, because all cache entries have been invalidated by the
-  // update anyway (The index of the located triples snapshot is part of the
-  // cache key).
-  cache_.clearAll();
-
+json Server::createResponseMetadata(const ad_utility::Timer& requestTimer,
+                                    const DeltaTriples& deltaTriples,
+                                    const PlannedQuery& plannedQuery,
+                                    const QueryExecutionTree& qet,
+                                    const DeltaTriplesCount& countBefore,
+                                    const UpdateMetadata& updateMetadata,
+                                    const DeltaTriplesCount& countAfter) const {
   json response;
   response["update"] = plannedQuery.parsedQuery_._originalString;
   response["status"] = "OK";
@@ -970,6 +935,52 @@ json Server::processUpdateImpl(
     response["located-triples"][Permutation::toString(permutation)]
             ["blocks-total"] = numBlocks;
   }
+  return response;
+}
+// ____________________________________________________________________________
+json Server::processUpdateImpl(
+    const ad_utility::url_parser::ParamValueMap& params, const string& update,
+    ad_utility::Timer& requestTimer, TimeLimit timeLimit, auto& messageSender,
+    ad_utility::SharedCancellationHandle cancellationHandle,
+    DeltaTriples& deltaTriples) {
+  auto [pinSubtrees, pinResult] = determineResultPinning(params);
+  LOG(INFO) << "Processing the following SPARQL update:"
+            << (pinResult ? " [pin result]" : "")
+            << (pinSubtrees ? " [pin subresults]" : "") << "\n"
+            << update << std::endl;
+  QueryExecutionContext qec(index_, &cache_, allocator_,
+                            sortPerformanceEstimator_, std::ref(messageSender),
+                            pinSubtrees, pinResult);
+  auto plannedQuery = setupPlannedQuery(params, update, qec, cancellationHandle,
+                                        timeLimit, requestTimer);
+  auto qet = plannedQuery.queryExecutionTree_;
+
+  if (!plannedQuery.parsedQuery_.hasUpdateClause()) {
+    throw std::runtime_error(
+        absl::StrCat("SPARQL UPDATE was request via the HTTP request, but the "
+                     "following query was sent instead of an update: ",
+                     plannedQuery.parsedQuery_._originalString));
+  }
+
+  DeltaTriplesCount countBefore = deltaTriples.getCounts();
+  UpdateMetadata updateMetadata = ExecuteUpdate::executeUpdate(
+      index_, plannedQuery.parsedQuery_, qet, deltaTriples, cancellationHandle);
+  DeltaTriplesCount countAfter = deltaTriples.getCounts();
+
+  LOG(INFO) << "Done processing update"
+            << ", total time was " << requestTimer.msecs().count() << " ms"
+            << std::endl;
+  LOG(DEBUG) << "Runtime Info:\n"
+             << qet.getRootOperation()->runtimeInfo().toString() << std::endl;
+
+  // Clear the cache, because all cache entries have been invalidated by the
+  // update anyway (The index of the located triples snapshot is part of the
+  // cache key).
+  cache_.clearAll();
+
+  auto response =
+      createResponseMetadata(requestTimer, deltaTriples, plannedQuery, qet,
+                             countBefore, updateMetadata, countAfter);
   return response;
 }
 

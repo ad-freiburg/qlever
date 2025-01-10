@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 
+#include "ExecuteUpdate.h"
 #include "engine/Engine.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryExecutionTree.h"
@@ -150,6 +151,15 @@ class Server {
       ad_utility::Timer& requestTimer,
       const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
       TimeLimit timeLimit);
+  // For an executed update create a json with some stats on the update (timing,
+  // number of changed triples, etc.).
+  json createResponseMetadata(const ad_utility::Timer& requestTimer,
+                              const DeltaTriples& deltaTriples,
+                              const PlannedQuery& plannedQuery,
+                              const QueryExecutionTree& qet,
+                              const DeltaTriplesCount& countBefore,
+                              const UpdateMetadata& updateMetadata,
+                              const DeltaTriplesCount& countAfter) const;
   // Do the actual execution of an update.
   Awaitable<void> processUpdate(
       const ad_utility::url_parser::ParamValueMap& params, const string& update,
