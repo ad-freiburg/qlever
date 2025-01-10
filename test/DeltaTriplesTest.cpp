@@ -132,7 +132,7 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
             makeIdTriples(vocab, localVocab, triples)));
   };
   // A matcher that checks the state of a `DeltaTriples`:
-  // - `numInserted()` and `numDeleted()`
+  // - `numInserted()` and `numDeleted()` and the derived `getCounts()`
   // - `numTriples()` for all `LocatedTriplesPerBlock`
   // - the inserted and deleted triples (unordered)
   auto StateIs = [&UnorderedTriplesAre](
