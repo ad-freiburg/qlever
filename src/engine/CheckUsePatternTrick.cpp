@@ -136,6 +136,12 @@ void addValuesClause(ParsedQuery::GraphPattern& graphPattern,
   for (const auto& foundValue : foundClauses) {
     addValuesClause(graphPattern, foundValue, false);
   }
+
+  if (foundClauses.empty()) {
+    for (auto& pattern : graphPattern._graphPatterns) {
+      addValuesClauseToPattern(pattern, std::nullopt);
+    }
+  }
 }
 
 // __________________________________________________________________________
@@ -145,9 +151,9 @@ bool addValuesClauseToPattern(parsedQuery::GraphPatternOperation& operation,
     addValuesClause(pattern, result);
     return false;
   };
-  // TODO<joka921> Don't pass an optional to this function.
-  AD_CORRECTNESS_CHECK(result.has_value());
-  const auto& variables = result.value()._inlineValues._variables;
+  const std::vector<Variable> emptyVars{};
+  const auto& variables =
+      result.has_value() ? result.value()._inlineValues._variables : emptyVars;
   auto anyVar = [&](auto f) { return ql::ranges::any_of(variables, f); };
   return operation.visit([&](auto&& arg) -> bool {
     using T = std::decay_t<decltype(arg)>;
@@ -169,6 +175,9 @@ bool addValuesClauseToPattern(parsedQuery::GraphPatternOperation& operation,
           })) {
         return check(arg.get()._rootGraphPattern);
       } else {
+        // Also recurse into the subquery, but not with the given `VALUES`
+        // clause.
+        addValuesClause(arg.get()._rootGraphPattern, std::nullopt);
         return false;
       }
     } else if constexpr (std::is_same_v<T, p::Bind>) {
@@ -200,9 +209,10 @@ bool addValuesClauseToPattern(parsedQuery::GraphPatternOperation& operation,
       static_assert(
           std::is_same_v<T, p::TransPath> || std::is_same_v<T, p::PathQuery> ||
           std::is_same_v<T, p::Describe> || std::is_same_v<T, p::SpatialQuery>);
-      // The `TransPath` is set up later in the query planning, when this
-      // function should not be called anymore.
-      AD_FAIL();
+      // TODO<joka921> This is just an optimization, so we can always just omit
+      // it, but it would be nice to also apply this optimization for those
+      // types of queries.
+      return false;
     }
   });
 }
