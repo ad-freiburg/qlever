@@ -883,13 +883,11 @@ Awaitable<void> Server::processQuery(
   co_return;
 }
 
-json Server::createResponseMetadata(const ad_utility::Timer& requestTimer,
-                                    const DeltaTriples& deltaTriples,
-                                    const PlannedQuery& plannedQuery,
-                                    const QueryExecutionTree& qet,
-                                    const DeltaTriplesCount& countBefore,
-                                    const UpdateMetadata& updateMetadata,
-                                    const DeltaTriplesCount& countAfter) const {
+json Server::createResponseMetadata(
+    const ad_utility::Timer& requestTimer, const Index& index,
+    const DeltaTriples& deltaTriples, const PlannedQuery& plannedQuery,
+    const QueryExecutionTree& qet, const DeltaTriplesCount& countBefore,
+    const UpdateMetadata& updateMetadata, const DeltaTriplesCount& countAfter) {
   json response;
   response["update"] = plannedQuery.parsedQuery_._originalString;
   response["status"] = "OK";
@@ -927,7 +925,7 @@ json Server::createResponseMetadata(const ad_utility::Timer& requestTimer,
     response["located-triples"][Permutation::toString(
         permutation)]["blocks-affected"] =
         deltaTriples.getLocatedTriplesForPermutation(permutation).numBlocks();
-    auto numBlocks = index_.getPimpl()
+    auto numBlocks = index.getPimpl()
                          .getPermutation(permutation)
                          .metaData()
                          .blockData()
@@ -979,8 +977,8 @@ json Server::processUpdateImpl(
   cache_.clearAll();
 
   auto response =
-      createResponseMetadata(requestTimer, deltaTriples, plannedQuery, qet,
-                             countBefore, updateMetadata, countAfter);
+      createResponseMetadata(requestTimer, index_, deltaTriples, plannedQuery,
+                             qet, countBefore, updateMetadata, countAfter);
   return response;
 }
 

@@ -9,7 +9,7 @@
 #include "index/DeltaTriples.h"
 
 // _____________________________________________________________________________
-TEST(DeltaTriplesTest, toJson) {
+TEST(DeltaTriplesCountTest, toJson) {
   constexpr DeltaTriplesCount count{5, 3};
   const nlohmann::json expected = {
       {"inserted", 5}, {"deleted", 3}, {"total", 8}};
@@ -19,7 +19,7 @@ TEST(DeltaTriplesTest, toJson) {
 }
 
 // _____________________________________________________________________________
-TEST(DeltaTriplesTest, subtractOperator) {
+TEST(DeltaTriplesCountTest, subtractOperator) {
   constexpr DeltaTriplesCount count1{10, 5};
   constexpr DeltaTriplesCount count2{3, 2};
   constexpr DeltaTriplesCount expected{7, 3};
