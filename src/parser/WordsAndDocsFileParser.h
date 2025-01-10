@@ -17,44 +17,50 @@
 #include "util/Views.h"
 
 using std::string;
-// Represents a line from the wordsfile.tsv, which stores everything given in
-// the file line and extra information with isLiteralEntity. Also used to add
-// literals to the text index through emulating wordsfile lines.
-//
-// The Fields are ordered in the same way the values follow in a line.
-// Short field overview: string word_, bool isEntity, TextRecordIndex contextId,
-//                       Score score_, bool isLiteralEntity (not found in
-//                       wordsfile)
-//
-// Fields:
-// - string word_: The string of the word, if it is an entity it will be
-//                 <Entity_Name>. bool isEntity_: True if the given word is an
-//                 entity, false if it's a word.
-// - TextRecordIndex contextId_: When creating the wordsfile docs from the
-//                               docsfile get split into so called contexts.
-//                               Those contexts overlap, meaning words and
-//                               entities are covered multiple times. Each
-//                               contextId corresponds to the next bigger or
-//                               equal docId.
-// - Score score_: Either 1 or 0 if isEntity is false. 0, 1, 100, 150 if
-//                 isEntity is true. (this info is only constructed on the
-//                 scientists.wordsfile.tsv) The score in the wordsfile is only
-//                 relevant for the counting scoring metric. Because of the
-//                 overlap of contexts the score is 1 if the word really has
-//                 been seen for the first time and 0 if not. If a doc contains
-//                 multiple mentions of a word there should be exactly as many
-//                 wordsfile lines of that word with score 1 as there are
-//                 mentions. The score for entities seems rather random and
-//                 since no clear explanation of the creation of wordsfiles
-//                 has been found yet they will stay rather random.
-// - bool isLiteralEntity_: This does not directly stem from the wordsfile.
-//                          When building the text index with literals, for
-//                          every literal there will be WordsFileLines for all
-//                          words in that literal. Additionally the whole
-//                          literal itself will be added as word with isEntity
-//                          being true. The need to count this comes only from
-//                          a trick used in testing right now.  To be specific
-//                          the method getTextRecordFromResultTable
+
+/**
+ * @brief Represents a line in the words file.
+ *
+ * This struct holds information about a word or entity as it appears in the
+ * words file.
+ *
+ * The Fields are ordered in the same way the values follow in a line.
+ * Short field overview: string word_, bool isEntity, TextRecordIndex contextId,
+ *                       Score score_, bool isLiteralEntity (not found in
+ *                       wordsfile)
+ *
+ * @details
+ *
+ * Fields:
+ * - string word_: The string of the word, if it is an entity it will be
+ *                 <Entity_Name>.
+ * - bool isEntity_: True if the given word is an entity, false if it's a word.
+ * - TextRecordIndex contextId_: When creating the wordsfile docs from the
+ *                               docsfile get split into so called contexts.
+ *                               Those contexts overlap, meaning words and
+ *                               entities are covered multiple times. Each
+ *                               contextId corresponds to the next bigger or
+ *                               equal docId.
+ * - Score score_: Either 1 or 0 if isEntity is false. 0, 1, 100, 150 if
+ *                 isEntity is true. (this info is only constructed on the
+ *                 scientists.wordsfile.tsv) The score in the wordsfile is only
+ *                 relevant for the counting scoring metric. Because of the
+ *                 overlap of contexts the score is 1 if the word really has
+ *                 been seen for the first time and 0 if not. If a doc contains
+ *                 multiple mentions of a word there should be exactly as many
+ *                 wordsfile lines of that word with score 1 as there are
+ *                 mentions. The score for entities seems rather random and
+ *                 since no clear explanation of the creation of wordsfiles
+ *                 has been found yet they will stay rather random.
+ * - bool isLiteralEntity_: This does not directly stem from the wordsfile.
+ *                          When building the text index with literals, for
+ *                          every literal there will be WordsFileLines for all
+ *                          words in that literal. Additionally the whole
+ *                          literal itself will be added as word with isEntity
+ *                          being true. The need to count this comes only from
+ *                          a trick used in testing right now.  To be specific
+ *                          the method getTextRecordFromResultTable
+ */
 struct WordsFileLine {
   string word_;
   bool isEntity_;
@@ -63,25 +69,29 @@ struct WordsFileLine {
   bool isLiteralEntity_ = false;
 };
 
-// Represents a line from the docsfile.tsv, which stores everything given in
-// the file line.
-//
-// The Fields are ordered in the same way the values follow in a line.
-// Short field overview: DocumentIndex docId_, string docContent_
-//
-// Fields:
-//
-// - DocumentIndex docId_: The docId is needed to built inverted indices for
-//                         Scoring and building of the docsDB. It is also used
-//                         to return actual texts when searching for a word.
-//                         The word (and entity) search returns a table with
-//                         TextRecordIndex as type of one col. Those get mapped
-//                         to the next bigger or equal docId which is then
-//                         used to extract the text from the docsDB.
-//                         TODO: check if this behaviour is consintently
-//                         implemented
-// - string docContent_: The whole text given after the first tab of a line of
-//                       docsfile.
+/**
+ * @brief Represents a line from the docsfile.tsv.
+ *
+ * This struct stores everything given in a line of the docsfile.tsv.
+ *
+ * The Fields are ordered in the same way the values follow in a line.
+ * Short field overview: DocumentIndex docId_, string docContent_
+ *
+ * @details
+ *
+ * Fields:
+ * - DocumentIndex docId_: The docId is needed to build inverted indices for
+ *                         scoring and building of the docsDB. It is also used
+ *                         to return actual texts when searching for a word.
+ *                         The word (and entity) search returns a table with
+ *                         TextRecordIndex as type of one column. Those get
+ *                         mapped to the next bigger or equal docId which is
+ *                         then used to extract the text from the docsDB.
+ *                         TODO: check if this behaviour is consistently
+ *                         implemented.
+ * - string docContent_: The whole text given after the first tab of a line of
+ *                       docsfile.
+ */
 struct DocsFileLine {
   DocumentIndex docId_;
   string docContent_;
@@ -99,18 +109,17 @@ struct LiteralsTokenizationDelimiter {
   }
 };
 
-// This class constructs an object that can be iterated to get the normalized
-// words of the text given. The text gets split into tokens using the
-// LiteralsTokenizationDelimiter and those tokens get normalized using
-// the localeManager. You can use the constructed object like
-// obj = TokenizeAndNormalizeText{text, localeManager}
-// for (auto normalizedWord : obj) { code }
-// The type of the value returned when iterating is std::string
-// TODO<flixtastic> Adapt the comment (it is now a function, and you call it a
-// little bit differently)
-// TODO<flixtastic> Also comment about the lifetime (the `text` and the
-// `localeManager` have to be kept alive while the tokenizer is being used, the
-// tokenizer only uses references.
+/**
+ * @brief A function that can be used to tokenize and normalize a given text.
+ * @warning Both params are const refs where the original objects have to be
+ * kept alive during the usage of the returned object.
+ * @param text The text to be tokenized and normalized.
+ * @param localeManager The localeManager to be used for normalization.
+ * @details This function can be used in the following way:
+ * for (auto normalizedWord : tokenizeAndNormalizeText(text, localeManager)) {
+ *  code;
+ * }
+ */
 inline auto tokenizeAndNormalizeText(std::string_view text,
                                      const LocaleManager& localeManager) {
   std::vector<std::string_view> split{
@@ -120,15 +129,16 @@ inline auto tokenizeAndNormalizeText(std::string_view text,
                                 return localeManager.getLowercaseUtf8(str);
                               });
 }
-
-// This class is the parent class of WordsFileParser and DocsFileParser and
-// it exists to reduce code duplication since the only difference between the
-// child classes is the line type returned
+/**
+ * @brief This class is the parent class of WordsFileParser and DocsFileParser
+ *
+ * @details It exists to reduce code duplication since the only difference
+ * between the child classes is the line type returned.
+ */
 class WordsAndDocsFileParser {
  public:
   explicit WordsAndDocsFileParser(const string& wordsOrDocsFile,
                                   LocaleManager localeManager);
-  ~WordsAndDocsFileParser() = default;
   explicit WordsAndDocsFileParser(const WordsAndDocsFileParser& other) = delete;
   WordsAndDocsFileParser& operator=(const WordsAndDocsFileParser& other) =
       delete;
@@ -138,13 +148,17 @@ class WordsAndDocsFileParser {
   LocaleManager localeManager_;
 };
 
-// This class takes in the a pathToWordsFile and a localeManager. It then can
-// be used to iterate the wordsFile while already normalizing the words using
-// the localeManager. (If words are entities it doesn't normalize them)
-// An object of this class can be iterated as follows:
-// obj = WordsFileParser{wordsFile, localeManager}
-// for (auto wordsFileLine : obj) { code }
-// The type of the value returned when iterating is WordsFileLine
+/**
+ * @brief This class takes in the a pathToWordsFile and a localeManager. It then
+ * can be used to iterate the wordsFile while already normalizing the words
+ * using the localeManager. (If words are entities it doesn't normalize them)
+ *
+ * @details An object of this class can be iterated as follows:
+ * for (auto wordsFileLine : WordsFileParser{wordsFile, localeManager}) {
+ *  code;
+ * }
+ * The type of the value returned when iterating is WordsFileLine
+ */
 class WordsFileParser : public WordsAndDocsFileParser,
                         public ad_utility::InputRangeFromGet<WordsFileLine> {
  public:
@@ -157,10 +171,17 @@ class WordsFileParser : public WordsAndDocsFileParser,
   TextRecordIndex lastCId_ = TextRecordIndex::make(0);
 #endif
 };
-// Works similar to WordsFileParser but it instead parses a docsFile and
-// doesn't normalize the text found in docsFile. To parse the returned
-// docContent_ of a DocsFileLine please refer to the TokenizeAndNormalizeText
-// class
+
+/**
+ * @brief This class takes in the a pathToDocsFile and a localeManager. It then
+ * can be used to iterate over the docsFile to get the lines.
+ *
+ * @details An object of this class can be iterated as follows:
+ * for (auto docsFileLine : DocsFileParser{docsFile, localeManager}) {
+ *  code;
+ * }
+ * The type of the value returned when iterating is DocsFileLine
+ */
 class DocsFileParser : public WordsAndDocsFileParser,
                        public ad_utility::InputRangeFromGet<DocsFileLine> {
  public:

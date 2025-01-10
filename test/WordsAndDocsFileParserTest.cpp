@@ -29,7 +29,8 @@ using StringVec = std::vector<std::string>;
 
 auto getLocaleManager = []() { return LocaleManager("en", "US", false); };
 
-auto wordsFileLineToWordLine = [](WordsFileLine wordsFileLine) -> WordLine {
+auto wordsFileLineToWordLine =
+    [](const WordsFileLine& wordsFileLine) -> WordLine {
   return std::make_tuple(wordsFileLine.word_, wordsFileLine.isEntity_,
                          static_cast<size_t>(wordsFileLine.contextId_.get()),
                          static_cast<size_t>(wordsFileLine.score_));
@@ -37,11 +38,11 @@ auto wordsFileLineToWordLine = [](WordsFileLine wordsFileLine) -> WordLine {
 
 // Lambda that takes in a path to wordsFile to initialize the Parser and an
 // expectedResult that is compared against the parsers outputs.
-auto testWordsFileParser = [](std::string wordsFilePath,
-                              WordLineVec expectedResult) {
-  WordsFileParser p(wordsFilePath, getLocaleManager());
+auto testWordsFileParser = [](const std::string& wordsFilePath,
+                              const WordLineVec& expectedResult) {
   size_t i = 0;
-  for (auto wordsFileLine : p) {
+  for (auto wordsFileLine :
+       WordsFileParser{wordsFilePath, getLocaleManager()}) {
     ASSERT_TRUE(i < expectedResult.size());
     WordLine testLine = wordsFileLineToWordLine(wordsFileLine);
 
@@ -57,17 +58,16 @@ auto testWordsFileParser = [](std::string wordsFilePath,
   ASSERT_EQ(i, expectedResult.size());
 };
 
-auto docsFileLineToDocLine = [](DocsFileLine docsFileLine) -> DocLine {
+auto docsFileLineToDocLine = [](const DocsFileLine& docsFileLine) -> DocLine {
   return std::make_tuple(static_cast<size_t>(docsFileLine.docId_.get()),
                          docsFileLine.docContent_);
 };
 
 // Same as testWordsFileParser but for docsFile
-auto testDocsFileParser = [](std::string docsFilePath,
-                             DocLineVec expectedResult) {
-  DocsFileParser p(docsFilePath, getLocaleManager());
+auto testDocsFileParser = [](const std::string& docsFilePath,
+                             const DocLineVec& expectedResult) {
   size_t i = 0;
-  for (auto docsFileLine : p) {
+  for (auto docsFileLine : DocsFileParser{docsFilePath, getLocaleManager()}) {
     ASSERT_TRUE(i < expectedResult.size());
     DocLine testLine = docsFileLineToDocLine(docsFileLine);
 
@@ -80,11 +80,13 @@ auto testDocsFileParser = [](std::string docsFilePath,
   }
 };
 
+// Passing the testText as copy to make sure it stays alive during the usage of
+// tokenizer
 auto testTokenizeAndNormalizeText = [](std::string testText,
-                                       StringVec normalizedTextAsVec) {
-  auto testTokenizer = tokenizeAndNormalizeText(testText, getLocaleManager());
+                                       const StringVec& normalizedTextAsVec) {
   size_t i = 0;
-  for (auto normalizedWord : testTokenizer) {
+  for (auto normalizedWord :
+       tokenizeAndNormalizeText(testText, getLocaleManager())) {
     ASSERT_TRUE(i < normalizedTextAsVec.size());
     ASSERT_EQ(normalizedWord, normalizedTextAsVec.at(i));
 
@@ -107,10 +109,11 @@ TEST(WordsAndDocsFileParserTest, wordsFileParserTest) {
     << createWordsFileLineAsString("X", false, 1, 1);
   f.close();
 
-  WordLineVec expected = {
-      std::make_tuple("foo", false, 0, 2), std::make_tuple("foo", false, 0, 2),
-      std::make_tuple("Bär", true, 0, 1), std::make_tuple("äü", false, 0, 1),
-      std::make_tuple("x", false, 1, 1)};
+  WordLineVec expected = {{"foo", false, 0, 2},
+                          {"foo", false, 0, 2},
+                          {"Bär", true, 0, 1},
+                          {"äü", false, 0, 1},
+                          {"x", false, 1, 1}};
 
   testWordsFileParser("_testtmp.contexts.tsv", expected);
   remove("_testtmp.contexts.tsv");
@@ -127,10 +130,10 @@ TEST(WordsAndDocsFileParser, docsFileParserTest) {
     << createDocsFileLineAsString(190293, "Large docId");
   f.close();
 
-  DocLineVec expected = {std::make_pair(4, "This TeSt is OnlyCharcters"),
-                         std::make_pair(7, "Wh4t h4pp3ns t0 num83rs"),
-                         std::make_pair(8, "An( sp@ci*l ch.ar,:act=_er+s"),
-                         std::make_pair(190293, "Large docId")};
+  DocLineVec expected = {{4, "This TeSt is OnlyCharcters"},
+                         {7, "Wh4t h4pp3ns t0 num83rs"},
+                         {8, "An( sp@ci*l ch.ar,:act=_er+s"},
+                         {190293, "Large docId"}};
 
   testDocsFileParser("_testtmp.documents.tsv", expected);
   remove("_testtmp.documents.tsv");
