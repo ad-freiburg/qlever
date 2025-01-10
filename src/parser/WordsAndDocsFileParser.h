@@ -14,6 +14,7 @@
 #include "global/Id.h"
 #include "index/StringSortComparator.h"
 #include "util/Iterators.h"
+#include "util/Views.h"
 
 using std::string;
 // Represents a line from the wordsfile.tsv, which stores everything given in
@@ -105,44 +106,20 @@ struct LiteralsTokenizationDelimiter {
 // obj = TokenizeAndNormalizeText{text, localeManager}
 // for (auto normalizedWord : obj) { code }
 // The type of the value returned when iterating is std::string
-class TokenizeAndNormalizeText
-    : public ad_utility::InputRangeMixin<TokenizeAndNormalizeText> {
- public:
-  using StorageType = std::string;
-  explicit TokenizeAndNormalizeText(std::string_view text,
-                                    LocaleManager localeManager)
-      : splitter_{absl::StrSplit(text, LiteralsTokenizationDelimiter{},
-                                 absl::SkipEmpty{})},
-        current_{splitter_.begin()},
-        end_{splitter_.end()},
-        localeManager_(std::move(localeManager)){};
-
-  // Delete unsafe constructors
-  TokenizeAndNormalizeText() = delete;
-  TokenizeAndNormalizeText(const TokenizeAndNormalizeText&) = delete;
-  TokenizeAndNormalizeText& operator=(const TokenizeAndNormalizeText&) = delete;
-
- private:
-  using Splitter = decltype(absl::StrSplit(
-      std::string_view{}, LiteralsTokenizationDelimiter{}, absl::SkipEmpty{}));
-  Splitter splitter_;
-  Splitter::const_iterator current_;
-  Splitter::const_iterator end_;
-
-  std::optional<StorageType> currentValue_;
-
-  LocaleManager localeManager_;
-
-  std::string normalizeToken(std::string_view token) {
-    return localeManager_.getLowercaseUtf8(token);
-  }
-
- public:
-  void start();
-  bool isFinished() const { return !currentValue_.has_value(); };
-  const StorageType& get() const { return *currentValue_; };
-  void next();
-};
+// TODO<flixtastic> Adapt the comment (it is now a function, and you call it a
+// little bit differently)
+// TODO<flixtastic> Also comment about the lifetime (the `text` and the
+// `localeManager` have to be kept alive while the tokenizer is being used, the
+// tokenizer only uses references.
+inline auto tokenizeAndNormalizeText(std::string_view text,
+                                     const LocaleManager& localeManager) {
+  std::vector<std::string_view> split{
+      absl::StrSplit(text, LiteralsTokenizationDelimiter{}, absl::SkipEmpty{})};
+  return ql::views::transform(ad_utility::OwningView{std::move(split)},
+                              [&localeManager](const auto& str) {
+                                return localeManager.getLowercaseUtf8(str);
+                              });
+}
 
 // This class is the parent class of WordsFileParser and DocsFileParser and
 // it exists to reduce code duplication since the only difference between the

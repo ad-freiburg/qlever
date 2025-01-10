@@ -82,7 +82,7 @@ auto testDocsFileParser = [](std::string docsFilePath,
 
 auto testTokenizeAndNormalizeText = [](std::string testText,
                                        StringVec normalizedTextAsVec) {
-  TokenizeAndNormalizeText testTokenizer(testText, getLocaleManager());
+  auto testTokenizer = tokenizeAndNormalizeText(testText, getLocaleManager());
   size_t i = 0;
   for (auto normalizedWord : testTokenizer) {
     ASSERT_TRUE(i < normalizedTextAsVec.size());
