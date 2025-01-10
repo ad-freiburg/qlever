@@ -23,7 +23,7 @@
 
 // _____________________________________________________________________________
 cppcoro::generator<WordsFileLine> IndexImpl::wordsInTextRecords(
-    const std::string& contextFile, bool addWordsFromLiterals) {
+    const std::string& contextFile, bool addWordsFromLiterals) const {
   auto localeManager = textVocab_.getLocaleManager();
   // ROUND 1: If context file aka wordsfile is not empty, read words from there.
   // Remember the last context id for the (optional) second round.

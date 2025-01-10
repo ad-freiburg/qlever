@@ -101,7 +101,7 @@ struct DocsFileLine {
 // The `Find` function returns the next delimiter in `text` after the given
 // `pos` or an empty substring if there is no next delimiter.
 struct LiteralsTokenizationDelimiter {
-  absl::string_view Find(absl::string_view text, size_t pos) {
+  absl::string_view Find(absl::string_view text, size_t pos) const {
     auto isWordChar = [](char c) -> bool { return std::isalnum(c); };
     auto found = std::find_if_not(text.begin() + pos, text.end(), isWordChar);
     if (found == text.end()) return text.substr(text.size());
@@ -138,12 +138,16 @@ inline auto tokenizeAndNormalizeText(std::string_view text,
 class WordsAndDocsFileParser {
  public:
   explicit WordsAndDocsFileParser(const string& wordsOrDocsFile,
-                                  LocaleManager localeManager);
+                                  const LocaleManager& localeManager);
   explicit WordsAndDocsFileParser(const WordsAndDocsFileParser& other) = delete;
   WordsAndDocsFileParser& operator=(const WordsAndDocsFileParser& other) =
       delete;
 
  protected:
+  std::ifstream& getInputStream() { return in_; }
+  const LocaleManager& getLocaleManager() { return localeManager_; }
+
+ private:
   std::ifstream in_;
   LocaleManager localeManager_;
 };
@@ -165,8 +169,8 @@ class WordsFileParser : public WordsAndDocsFileParser,
   using WordsAndDocsFileParser::WordsAndDocsFileParser;
   Storage get() override;
 
- private:
 #ifndef NDEBUG
+ private:
   // Only used for sanity checks in debug builds
   TextRecordIndex lastCId_ = TextRecordIndex::make(0);
 #endif

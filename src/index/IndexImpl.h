@@ -522,7 +522,7 @@ class IndexImpl {
   // testing phase, once it works, it should be easy to include the IRIs and
   // literals from the external vocabulary as well).
   cppcoro::generator<WordsFileLine> wordsInTextRecords(
-      const std::string& contextFile, bool addWordsFromLiterals);
+      const std::string& contextFile, bool addWordsFromLiterals) const;
 
   size_t processWordsForVocabulary(const string& contextFile,
                                    bool addWordsFromLiterals);
