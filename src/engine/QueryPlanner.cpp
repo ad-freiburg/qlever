@@ -208,6 +208,9 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createExecutionTrees(
 QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq,
                                                      bool isSubquery) {
   try {
+    if (!isSubquery) {
+      checkUsePatternTrick::addValuesClause(pq._rootGraphPattern);
+    }
     auto lastRow = createExecutionTrees(pq, isSubquery);
     auto minInd = findCheapestExecutionTree(lastRow);
     LOG(DEBUG) << "Done creating execution plan" << std::endl;

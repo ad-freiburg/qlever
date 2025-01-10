@@ -82,42 +82,73 @@ bool isVariableContainedInGraphPatternOperation(
   });
 }
 
-using ValuesClause = parsedQuery::Values;
+using ValuesClause = std::optional<parsedQuery::Values>;
 // TODO<joka921> How many possible return values do we need here.
-bool addValuesClauseToPattern(const Variable& variable,
-                              parsedQuery::GraphPatternOperation& operation,
-                              const SparqlTriple* tripleToIgnore,
+bool addValuesClauseToPattern(parsedQuery::GraphPatternOperation& operation,
                               const ValuesClause& clause);
 
 // __________________________________________________________________________
-bool addValuesClause(const Variable& variable,
-                     ParsedQuery::GraphPattern& graphPattern,
-                     const SparqlTriple* tripleToIgnore,
-                     const ValuesClause& result) {
+void addValuesClause(ParsedQuery::GraphPattern& graphPattern,
+                     const ValuesClause& values, bool recurse) {
+  // TODO<joka921> Do we want to do this, or do we only want this if the values
+  // clause hasn't been handled downstream.
+  /*
   bool containedInFilter = ql::ranges::any_of(
-      graphPattern._filters, [&variable](const SparqlFilter& filter) {
-        return filter.expression_.isVariableContained(variable);
+      graphPattern._filters, [&values](const SparqlFilter& filter) {
+        return ql::ranges::any_of(
+            values._inlineValues._variables, [&filter](const Variable& var) {
+              return filter.expression_.isVariableContained(var);
+            });
       });
-  auto check = [&](const parsedQuery::GraphPatternOperation& op) {
-    return addValuesClauseToPattern(variable, op, tripleToIgnore, result);
+      */
+  [[maybe_unused]] const bool containedInFilter = false;
+  auto check = [&](parsedQuery::GraphPatternOperation& op) {
+    return addValuesClauseToPattern(op, values);
   };
-  if (ql::ranges::any_of(graphPattern._graphPatterns, check) ||
-      containedInFilter) {
-    graphPattern._graphPatterns.insert(graphPattern._graphPatterns.begin(),
-                                       result);
+  // TODO<joka921> We have to figure out the correct positioning of the values
+  // clause, s.t. we don't get cartesian products because of optimization
+  // barriers like bind/Optional/Minus etc.
+  std::optional<size_t> insertPosition;
+  if (values.has_value()) {
+    for (const auto& [i, pattern] :
+         ::ranges::views::enumerate(graphPattern._graphPatterns)) {
+      if (check(pattern)) {
+        insertPosition = i;
+      }
+    }
   }
-  // Does this need to return false?
-  return false;
+
+  if (!recurse) {
+    return;
+  }
+  if (insertPosition.has_value()) {
+    graphPattern._graphPatterns.insert(
+        graphPattern._graphPatterns.begin() + insertPosition.value(),
+        values.value());
+  }
+
+  std::vector<ValuesClause> foundClauses;
+  for (const auto& pattern : graphPattern._graphPatterns) {
+    if (auto* foundValues = std::get_if<parsedQuery::Values>(&pattern)) {
+      foundClauses.push_back(*foundValues);
+    }
+  }
+  for (const auto& foundValue : foundClauses) {
+    addValuesClause(graphPattern, foundValue, false);
+  }
 }
 
 // __________________________________________________________________________
-bool addValuesClauseToPattern(const Variable& variable,
-                              parsedQuery::GraphPatternOperation& operation,
-                              const SparqlTriple* tripleToIgnore,
+bool addValuesClauseToPattern(parsedQuery::GraphPatternOperation& operation,
                               const ValuesClause& result) {
   auto check = [&](parsedQuery::GraphPattern& pattern) {
-    return addValuesClause(variable, pattern, tripleToIgnore, result);
+    addValuesClause(pattern, result);
+    return false;
   };
+  // TODO<joka921> Don't pass an optional to this function.
+  AD_CORRECTNESS_CHECK(result.has_value());
+  const auto& variables = result.value()._inlineValues._variables;
+  auto anyVar = [&](auto f) { return ql::ranges::any_of(variables, f); };
   return operation.visit([&](auto&& arg) -> bool {
     using T = std::decay_t<decltype(arg)>;
     if constexpr (std::is_same_v<T, p::Optional> ||
@@ -125,33 +156,46 @@ bool addValuesClauseToPattern(const Variable& variable,
                   std::is_same_v<T, p::Minus>) {
       return check(arg._child);
     } else if constexpr (std::is_same_v<T, p::Union>) {
-      return check(arg._child1) || check(arg._child2);
+      check(arg._child1);
+      check(arg._child2);
+      return false;
     } else if constexpr (std::is_same_v<T, p::Subquery>) {
       // Subqueries always are SELECT clauses.
       const auto& selectClause = arg.get().selectClause();
-      return ad_utility::contains(selectClause.getSelectedVariables(),
-                                  variable);
+
+      if (anyVar([&selectClause](const auto& var) {
+            return ad_utility::contains(selectClause.getSelectedVariables(),
+                                        var);
+          })) {
+        return check(arg.get()._rootGraphPattern);
+      } else {
+        return false;
+      }
     } else if constexpr (std::is_same_v<T, p::Bind>) {
-      return ad_utility::contains(arg.containedVariables(), variable);
+      return ql::ranges::any_of(variables, [&](const auto& variable) {
+        return ad_utility::contains(arg.containedVariables(), variable);
+      });
     } else if constexpr (std::is_same_v<T, p::BasicGraphPattern>) {
       return ad_utility::contains_if(
           arg._triples, [&](const SparqlTriple& triple) {
-            if (&triple == tripleToIgnore) {
-              return false;
-            }
-            return (triple.s_ == variable ||
-                    // Complex property paths are not allowed to contain
-                    // variables in SPARQL, so this check is sufficient.
-                    // TODO<joka921> Still make the interface of the
-                    // `PropertyPath` class typesafe.
-                    triple.p_.asString() == variable.name() ||
-                    triple.o_ == variable);
+            return anyVar([&](const auto& variable) {
+              return (triple.s_ == variable ||
+                      // Complex property paths are not allowed to contain
+                      // variables in SPARQL, so this check is sufficient.
+                      // TODO<joka921> Still make the interface of the
+                      // `PropertyPath` class typesafe.
+                      triple.p_.asString() == variable.name() ||
+                      triple.o_ == variable);
+            });
           });
     } else if constexpr (std::is_same_v<T, p::Values>) {
-      return (&arg != &result) &&
-             ad_utility::contains(arg._inlineValues._variables, variable);
+      return anyVar([&](const auto& variable) {
+        return ad_utility::contains(arg._inlineValues._variables, variable);
+      });
     } else if constexpr (std::is_same_v<T, p::Service>) {
-      return ad_utility::contains(arg.visibleVariables_, variable);
+      return anyVar([&](const auto& variable) {
+        return ad_utility::contains(arg.visibleVariables_, variable);
+      });
     } else {
       static_assert(
           std::is_same_v<T, p::TransPath> || std::is_same_v<T, p::PathQuery> ||
