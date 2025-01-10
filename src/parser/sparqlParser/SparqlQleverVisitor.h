@@ -78,6 +78,10 @@ class SparqlQleverVisitor {
   // query. This may contain duplicates. A variable is added via
   // `addVisibleVariable`.
   std::vector<Variable> visibleVariables_{};
+
+  // The FROM [NAMED] clauses of the query that is currently being parsed.
+  // Those are currently needed when parsing an EXISTS clause inside the query.
+  ParsedQuery::DatasetClauses activeDatasetClauses_;
   PrefixMap prefixMap_{};
   // We need to remember the prologue (prefix declarations) when we encounter it
   // because we need it when we encounter a SERVICE query. When there is no
@@ -444,9 +448,14 @@ class SparqlQleverVisitor {
 
   ExpressionPtr visit(Parser::StrReplaceExpressionContext* ctx);
 
-  [[noreturn]] static void visit(const Parser::ExistsFuncContext* ctx);
+  // The common implementation of the parsing of `EXISTS` and `NOT EXISTS`.
+  // The second argument is `true` for `NOT EXISTS`.
+  ExpressionPtr visitExists(Parser::GroupGraphPatternContext* pattern,
+                            bool negate);
 
-  [[noreturn]] static void visit(const Parser::NotExistsFuncContext* ctx);
+  ExpressionPtr visit(Parser::ExistsFuncContext* ctx);
+
+  ExpressionPtr visit(Parser::NotExistsFuncContext* ctx);
 
   ExpressionPtr visit(Parser::AggregateContext* ctx);
 

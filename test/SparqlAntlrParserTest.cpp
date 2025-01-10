@@ -4,6 +4,7 @@
 //          Julian Mundhahs <mundhahj@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
+#include <engine/sparqlExpressions/ExistsExpression.h>
 #include <gtest/gtest.h>
 
 #include <iostream>
@@ -14,6 +15,7 @@
 #include "./SparqlExpressionTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
+#include "QueryPlannerTestHelpers.h"
 #include "SparqlAntlrParserTestHelpers.h"
 #include "engine/sparqlExpressions/CountStarExpression.h"
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
@@ -1858,6 +1860,43 @@ TEST(SparqlParser, binaryStringExpressions) {
   expectBuiltInCall("CONTAINS(?x, ?y)", makeMatcher(&makeContainsExpression));
   expectBuiltInCall("STRAFTER(?x, ?y)", makeMatcher(&makeStrAfterExpression));
   expectBuiltInCall("STRBEFORE(?x, ?y)", makeMatcher(&makeStrBeforeExpression));
+}
+
+// Matchers for EXISTS and NOT EXISTS functions.
+namespace existsTestHelpers {
+using namespace sparqlExpression;
+using namespace ::testing;
+
+// Match an EXISTS function
+auto existsMatcher(Matcher<const ParsedQuery&> pattern) {
+  return Pointee(WhenDynamicCastTo<const ExistsExpression&>(
+      AD_PROPERTY(ExistsExpression, argument, pattern)));
+}
+// Match a NOT EXISTS function
+auto notExistsMatcher(Matcher<const ParsedQuery&> pattern) {
+  return builtInCallTestHelpers::matchNaryWithChildrenMatchers(
+      &makeUnaryNegateExpression, existsMatcher(pattern));
+}
+}  // namespace existsTestHelpers
+
+// _____________________________________________________________________________
+TEST(SparqlParser, Exists) {
+  using namespace existsTestHelpers;
+  auto expectBuiltInCall = ExpectCompleteParse<&Parser::builtInCall>{};
+  // A matcher that matches the query `SELECT * { ?x <bar> ?foo}`, where the
+  // FROM and FROM NAMED clauses can still be specified via arguments.
+  using Graphs = ScanSpecificationAsTripleComponent::Graphs;
+  auto selectABarFooMatcher = [](Graphs defaultGraphs = std::nullopt,
+                                 Graphs namedGraphs = std::nullopt) {
+    return testing::AllOf(m::SelectQuery(
+        m::AsteriskSelect(),
+        m::GraphPattern(m::Triples({{Var{"?a"}, "<bar>", Var{"?foo"}}})),
+        defaultGraphs, namedGraphs));
+  };
+  expectBuiltInCall("EXISTS {?a <bar> ?foo}",
+                    existsMatcher(selectABarFooMatcher()));
+  expectBuiltInCall("NOT EXISTS {?a <bar> ?foo}",
+                    notExistsMatcher(selectABarFooMatcher()));
 }
 
 namespace aggregateTestHelpers {
