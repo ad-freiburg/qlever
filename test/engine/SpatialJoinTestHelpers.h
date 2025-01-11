@@ -23,108 +23,18 @@ auto makeAreaLiteral = [](std::string_view coordinateList) {
                       ">");
 };
 
-// helper function to create a vector of strings from a result table
-inline std::vector<std::string> printTable(const QueryExecutionContext* qec,
-                                           const Result* table) {
-  std::vector<std::string> output;
-  for (size_t i = 0; i < table->idTable().numRows(); i++) {
-    std::string line = "";
-    for (size_t k = 0; k < table->idTable().numColumns(); k++) {
-      auto test = ExportQueryExecutionTrees::idToStringAndType(
-          qec->getIndex(), table->idTable().at(i, k), {});
-      line += test.value().first;
-      line += " ";
-    }
-    output.push_back(line.substr(0, line.size() - 1));  // ignore last " "
-  }
-  return output;
-}
+const std::string pointUniFreiburg = makePointLiteral("7.83505", "48.01267");
+const std::string pointMinster = makePointLiteral("7.85298", "47.99557");
+const std::string pointLondonEye = makePointLiteral("-0.11957", "51.50333");
+const std::string pointStatueOfLiberty = makePointLiteral("-74.04454", "40.68925");
+const std::string pointEiffelTower = makePointLiteral("2.29451", "48.85825");
 
-// this helper function reorders an input vector according to the variable to
-// column map to make the string array match the order of the result, which
-// should be tested (it uses a vector of vectors (the first vector is containing
-// each column of the result, each column consist of a vector, where each entry
-// is a row of this column))
-inline std::vector<std::vector<std::string>> orderColAccordingToVarColMap(
-    VariableToColumnMap varColMaps,
-    std::vector<std::vector<std::string>> columns,
-    std::vector<std::string> columnNames) {
-  std::vector<std::vector<std::string>> result;
-  auto indVariableMap = copySortedByColumnIndex(varColMaps);
-  for (size_t i = 0; i < indVariableMap.size(); i++) {
-    for (size_t k = 0; k < columnNames.size(); k++) {
-      if (indVariableMap.at(i).first.name() == columnNames.at(k)) {
-        result.push_back(columns.at(k));
-        break;
-      }
-    }
-  }
-  return result;
-}
-
-// helper function to create a vector of strings representing rows, from a
-// vector of strings representing columns. Please make sure, that the order of
-// the columns is already matching the order of the result. If this is not the
-// case call the function orderColAccordingToVarColMap
-inline std::vector<std::string> createRowVectorFromColumnVector(
-    std::vector<std::vector<std::string>> column_vector) {
-  std::vector<std::string> result;
-  if (column_vector.size() > 0) {
-    for (size_t i = 0; i < column_vector.at(0).size(); i++) {
-      std::string str = "";
-      for (size_t k = 0; k < column_vector.size(); k++) {
-        str += column_vector.at(k).at(i);
-        str += " ";
-      }
-      result.push_back(str.substr(0, str.size() - 1));
-    }
-  }
-  return result;
-}
-
-// create a small test dataset, which focuses on points as geometry objects.
-// Note, that some of these objects have a polygon representation, but for
-// testing purposes, they get represented as a point here. I took those
-// points, such that it is obvious, which pair of objects should be included,
-// when the maximum distance is x meters. Please note, that these datapoints
-// are not copied from a real input file. Copying the query will therefore
-// likely not result in the same results as here (also the names, coordinates,
-// etc. might be different in the real datasets). The updated method also
-// supports polygons as areas, which can be added to the knowledge graph using
-// a boolean flag
-inline std::string createSmallDatasetWithPoints(bool addPolygons = false) {
-  auto addPoint = [](std::string& kg, std::string number, std::string name,
-                     std::string point) {
-    kg += absl::StrCat("<node_", number, "> <name> ", name, " .<node_", number,
-                       "> <hasGeometry> <geometry", number, "> .<geometry",
-                       number, "> <asWKT> ", point, " .");
-  };
-
-  auto addArea = [](std::string& kg, std::string number, std::string name,
-                    std::string area) {
-    kg += absl::StrCat("<nodeArea_", number, "> <name> ", name, " . \n",
-                       "<nodeArea_", number, "> <hasGeometry> <geometryArea",
-                       number, "> .\n", "<geometryArea", number, "> <asWKT> ",
-                       area, " .\n");
-  };
-
-  auto p = makePointLiteral;
-  auto a = makeAreaLiteral;
-
-  std::string kg2;
-  addPoint(kg2, "1", "\"Uni Freiburg TF\"", p("7.83505", "48.01267"));
-  addPoint(kg2, "2", "\"Minster Freiburg\"", p("7.85298", "47.99557"));
-  addPoint(kg2, "3", "\"London Eye\"", p("-0.11957", "51.50333"));
-  addPoint(kg2, "4", "\"Statue of liberty\"", p("-74.04454", "40.68925"));
-  addPoint(kg2, "5", "\"eiffel tower\"", p("2.29451", "48.85825"));
-  if (addPolygons) {
-    addArea(kg2, "1", "\"Uni Freiburg TF Area\"",
-            a("7.8346338 48.0126612,7.8348921 48.0123905,7.8349457 "
+const std::string areaUniFreiburg = makeAreaLiteral("7.8346338 48.0126612,7.8348921 48.0123905,7.8349457 "
               "48.0124216,7.8349855 48.0124448,7.8353244 48.0126418,7.8354091 "
               "48.0126911,7.8352246 48.0129047,7.8351668 48.0128798,7.8349471 "
-              "48.0127886,7.8347248 48.0126986,7.8346338 48.0126612"));
-    addArea(kg2, "2", "\"Minster Freiburg Area\"",
-            a("7.8520522 47.9956071,7.8520528 47.9955872,7.8521103 "
+              "48.0127886,7.8347248 48.0126986,7.8346338 48.0126612");
+
+const std::string areaMuenster = makeAreaLiteral("7.8520522 47.9956071,7.8520528 47.9955872,7.8521103 "
               "47.995588,7.8521117 47.9955419,7.852113 47.9954975,7.8520523 "
               "47.9954968,7.8520527 47.995477,7.8521152 47.9954775,7.8521154 "
               "47.9954688,7.8521299 47.995469,7.8521311 47.9954303,7.8521611 "
@@ -208,13 +118,12 @@ inline std::string createSmallDatasetWithPoints(bool addPolygons = false) {
               "47.9956433,7.8522882 47.995635,7.8522723 47.9956351,7.8522611 "
               "47.9956281,7.8522613 47.9956189,7.8521543 47.9956174,7.852153 "
               "47.9956591,7.8521196 47.9956587,7.8521209 47.995617,7.8521109 "
-              "47.9956168,7.8521111 47.9956079,7.8520522 47.9956071"));
-    addArea(kg2, "3", "\"London Eye Area\"",
-            a("-0.1198608 51.5027451,-0.1197395 51.5027354,-0.1194922 "
-              "51.5039381,-0.1196135 51.5039478,-0.1198608 51.5027451"));
-    addArea(
-        kg2, "4", "\"Statue of liberty Area\"",
-        a("-74.0451069 40.6893455,-74.045004 40.6892215,-74.0451023 "
+              "47.9956168,7.8521111 47.9956079,7.8520522 47.9956071");
+
+const std::string areaLondonEye = makeAreaLiteral("-0.1198608 51.5027451,-0.1197395 51.5027354,-0.1194922 "
+              "51.5039381,-0.1196135 51.5039478,-0.1198608 51.5027451");
+
+const std::string areaStatueOfLiberty = makeAreaLiteral("-74.0451069 40.6893455,-74.045004 40.6892215,-74.0451023 "
           "40.6891073,-74.0449107 40.6890721,-74.0449537 "
           "40.6889343,-74.0447746 40.6889506,-74.0446495 "
           "40.6888049,-74.0445067 40.6889076,-74.0442008 "
@@ -229,9 +138,9 @@ inline std::string createSmallDatasetWithPoints(bool addPolygons = false) {
           "40.6896615,-74.0447718 40.6895577,-74.0447983 "
           "40.6895442,-74.0448287 40.6895279,-74.0449638 "
           "40.6895497,-74.0449628 40.6895443,-74.044961 40.6895356,-74.0449576 "
-          "40.6895192,-74.044935 40.689421,-74.0451069 40.6893455"));
-    addArea(kg2, "5", "\"eiffel tower Area\"",
-            a("2.2933119 48.858248,2.2935432 48.8581003,2.2935574 "
+          "40.6895192,-74.044935 40.689421,-74.0451069 40.6893455");
+
+const std::string areaEiffelTower = makeAreaLiteral("2.2933119 48.858248,2.2935432 48.8581003,2.2935574 "
               "48.8581099,2.2935712 48.8581004,2.2936112 48.8581232,2.2936086 "
               "48.8581249,2.293611 48.8581262,2.2936415 48.8581385,2.293672 "
               "48.8581477,2.2937035 48.8581504,2.293734 48.858149,2.2937827 "
@@ -274,7 +183,106 @@ inline std::string createSmallDatasetWithPoints(bool addPolygons = false) {
               "48.8584325,2.293912 48.8584052,2.2938415 48.8583828,2.293784 "
               "48.8583695,2.2937145 48.8583599,2.2936514 48.8583593,2.2936122 "
               "48.8583846,2.293606 48.8583807,2.2935688 48.8584044,2.2935515 "
-              "48.8583929,2.293536 48.8584028,2.2933119 48.858248"));
+              "48.8583929,2.293536 48.8584028,2.2933119 48.858248");
+
+// helper function to create a vector of strings from a result table
+inline std::vector<std::string> printTable(const QueryExecutionContext* qec,
+                                           const Result* table) {
+  std::vector<std::string> output;
+  for (size_t i = 0; i < table->idTable().numRows(); i++) {
+    std::string line = "";
+    for (size_t k = 0; k < table->idTable().numColumns(); k++) {
+      auto test = ExportQueryExecutionTrees::idToStringAndType(
+          qec->getIndex(), table->idTable().at(i, k), {});
+      line += test.value().first;
+      line += " ";
+    }
+    output.push_back(line.substr(0, line.size() - 1));  // ignore last " "
+  }
+  return output;
+}
+
+// this helper function reorders an input vector according to the variable to
+// column map to make the string array match the order of the result, which
+// should be tested (it uses a vector of vectors (the first vector is containing
+// each column of the result, each column consist of a vector, where each entry
+// is a row of this column))
+inline std::vector<std::vector<std::string>> orderColAccordingToVarColMap(
+    VariableToColumnMap varColMaps,
+    std::vector<std::vector<std::string>> columns,
+    std::vector<std::string> columnNames) {
+  std::vector<std::vector<std::string>> result;
+  auto indVariableMap = copySortedByColumnIndex(varColMaps);
+  for (size_t i = 0; i < indVariableMap.size(); i++) {
+    for (size_t k = 0; k < columnNames.size(); k++) {
+      if (indVariableMap.at(i).first.name() == columnNames.at(k)) {
+        result.push_back(columns.at(k));
+        break;
+      }
+    }
+  }
+  return result;
+}
+
+// helper function to create a vector of strings representing rows, from a
+// vector of strings representing columns. Please make sure, that the order of
+// the columns is already matching the order of the result. If this is not the
+// case call the function orderColAccordingToVarColMap
+inline std::vector<std::string> createRowVectorFromColumnVector(
+    std::vector<std::vector<std::string>> column_vector) {
+  std::vector<std::string> result;
+  if (column_vector.size() > 0) {
+    for (size_t i = 0; i < column_vector.at(0).size(); i++) {
+      std::string str = "";
+      for (size_t k = 0; k < column_vector.size(); k++) {
+        str += column_vector.at(k).at(i);
+        str += " ";
+      }
+      result.push_back(str.substr(0, str.size() - 1));
+    }
+  }
+  return result;
+}
+
+// create a small test dataset, which focuses on points as geometry objects.
+// Note, that some of these objects have a polygon representation, but for
+// testing purposes, they get represented as a point here. I took those
+// points, such that it is obvious, which pair of objects should be included,
+// when the maximum distance is x meters. Please note, that these datapoints
+// are not copied from a real input file. Copying the query will therefore
+// likely not result in the same results as here (also the names, coordinates,
+// etc. might be different in the real datasets). The updated method also
+// supports polygons as areas, which can be added to the knowledge graph using
+// a boolean flag
+inline std::string createSmallDatasetWithPoints(bool usePolygons = false) {
+  auto addPoint = [](std::string& kg, std::string number, std::string name,
+                     std::string point) {
+    kg += absl::StrCat("<node_", number, "> <name> ", name, " .<node_", number,
+                       "> <hasGeometry> <geometry", number, "> .<geometry",
+                       number, "> <asWKT> ", point, " .");
+  };
+
+  auto addArea = [](std::string& kg, std::string number, std::string name,
+                    std::string area) {
+    kg += absl::StrCat("<nodeArea_", number, "> <name> ", name, " . \n",
+                       "<nodeArea_", number, "> <hasGeometry> <geometryArea",
+                       number, "> .\n", "<geometryArea", number, "> <asWKT> ",
+                       area, " .\n");
+  };
+
+  std::string kg2;
+  if (usePolygons) {
+    addArea(kg2, "1", "\"Uni Freiburg TF Area\"", areaUniFreiburg);
+    addArea(kg2, "2", "\"Minster Freiburg Area\"", areaMuenster);
+    addArea(kg2, "3", "\"London Eye Area\"", areaLondonEye);
+    addArea(kg2, "4", "\"Statue of liberty Area\"", areaStatueOfLiberty);
+    addArea(kg2, "5", "\"eiffel tower Area\"", areaEiffelTower);
+  } else {
+    addPoint(kg2, "1", "\"Uni Freiburg TF\"", pointUniFreiburg);
+    addPoint(kg2, "2", "\"Minster Freiburg\"", pointMinster);
+    addPoint(kg2, "3", "\"London Eye\"", pointLondonEye);
+    addPoint(kg2, "4", "\"Statue of liberty\"", pointStatueOfLiberty);
+    addPoint(kg2, "5", "\"eiffel tower\"", pointEiffelTower);
   }
   return kg2;
 }
