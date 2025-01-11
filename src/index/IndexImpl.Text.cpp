@@ -62,6 +62,7 @@ cppcoro::generator<WordsFileLine> IndexImpl::wordsInTextRecords(
   }
 }
 
+// LCOV_EXCL_START
 // _____________________________________________________________________________
 void IndexImpl::processEntityCaseDuringInvertedListProcessing(
     const WordsFileLine& line,
@@ -111,6 +112,7 @@ void IndexImpl::logEntityNotFound(const string& word,
     entityNotFoundErrorMsgCount++;
   }
 }
+// LCOV_EXCL_STOP
 
 // _____________________________________________________________________________
 void IndexImpl::addTextFromContextFile(const string& contextFile,
