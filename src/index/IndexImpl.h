@@ -522,7 +522,19 @@ class IndexImpl {
   // testing phase, once it works, it should be easy to include the IRIs and
   // literals from the external vocabulary as well).
   cppcoro::generator<WordsFileLine> wordsInTextRecords(
-      const std::string& contextFile, bool addWordsFromLiterals) const;
+      std::string contextFile, bool addWordsFromLiterals) const;
+
+  void processEntityCaseDuringInvertedListProcessing(
+      const WordsFileLine& line,
+      ad_utility::HashMap<Id, Score>& entitiesInContxt, size_t& nofLiterals,
+      size_t& entityNotFoundErrorMsgCount) const;
+
+  void processWordCaseDuringInvertedListProcessing(
+      const WordsFileLine& line,
+      ad_utility::HashMap<WordIndex, Score>& wordsInContext) const;
+
+  void logEntityNotFound(const string& word,
+                         size_t& entityNotFoundErrorMsgCount) const;
 
   size_t processWordsForVocabulary(const string& contextFile,
                                    bool addWordsFromLiterals);

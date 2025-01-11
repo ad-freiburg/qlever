@@ -23,7 +23,7 @@
 
 // _____________________________________________________________________________
 cppcoro::generator<WordsFileLine> IndexImpl::wordsInTextRecords(
-    const std::string& contextFile, bool addWordsFromLiterals) const {
+    std::string contextFile, bool addWordsFromLiterals) const {
   auto localeManager = textVocab_.getLocaleManager();
   // ROUND 1: If context file aka wordsfile is not empty, read words from there.
   // Remember the last context id for the (optional) second round.
@@ -59,6 +59,56 @@ cppcoro::generator<WordsFileLine> IndexImpl::wordsInTextRecords(
       }
       contextId = contextId.incremented();
     }
+  }
+}
+
+// _____________________________________________________________________________
+void IndexImpl::processEntityCaseDuringInvertedListProcessing(
+    const WordsFileLine& line,
+    ad_utility::HashMap<Id, Score>& entitiesInContext, size_t& nofLiterals,
+    size_t& entityNotFoundErrorMsgCount) const {
+  VocabIndex eid;
+  // TODO<joka921> Currently only IRIs and strings from the vocabulary can
+  // be tagged entities in the text index (no doubles, ints, etc).
+  if (getVocab().getId(line.word_, &eid)) {
+    // Note that `entitiesInContext` is a HashMap, so the `Id`s don't have
+    // to be contiguous.
+    entitiesInContext[Id::makeFromVocabIndex(eid)] += line.score_;
+    if (line.isLiteralEntity_) {
+      ++nofLiterals;
+    }
+  } else {
+    logEntityNotFound(line.word_, entityNotFoundErrorMsgCount);
+  }
+}
+
+// _____________________________________________________________________________
+void IndexImpl::processWordCaseDuringInvertedListProcessing(
+    const WordsFileLine& line,
+    ad_utility::HashMap<WordIndex, Score>& wordsInContext) const {
+  // TODO<joka921> Let the `textVocab_` return a `WordIndex` directly.
+  WordVocabIndex vid;
+  bool ret = textVocab_.getId(line.word_, &vid);
+  WordIndex wid = vid.get();
+  if (!ret) {
+    LOG(ERROR) << "ERROR: word \"" << line.word_ << "\" "
+               << "not found in textVocab. Terminating\n";
+    AD_FAIL();
+  }
+  wordsInContext[wid] += line.score_;
+}
+
+// _____________________________________________________________________________
+void IndexImpl::logEntityNotFound(const string& word,
+                                  size_t& entityNotFoundErrorMsgCount) const {
+  if (entityNotFoundErrorMsgCount < 20) {
+    LOG(WARN) << "Entity from text not in KB: " << word << '\n';
+    if (++entityNotFoundErrorMsgCount == 20) {
+      LOG(WARN) << "There are more entities not in the KB..."
+                << " suppressing further warnings...\n";
+    }
+  } else {
+    entityNotFoundErrorMsgCount++;
   }
 }
 
@@ -234,39 +284,11 @@ void IndexImpl::processWordsForInvertedLists(const string& contextFile,
     }
     if (line.isEntity_) {
       ++nofEntityPostings;
-      // TODO<joka921> Currently only IRIs and strings from the vocabulary can
-      // be tagged entities in the text index (no doubles, ints, etc).
-      VocabIndex eid;
-      if (getVocab().getId(line.word_, &eid)) {
-        // Note that `entitiesInContext` is a HashMap, so the `Id`s don't have
-        // to be contiguous.
-        entitiesInContext[Id::makeFromVocabIndex(eid)] += line.score_;
-        if (line.isLiteralEntity_) {
-          ++nofLiterals;
-        }
-      } else {
-        if (entityNotFoundErrorMsgCount < 20) {
-          LOG(WARN) << "Entity from text not in KB: " << line.word_ << '\n';
-          if (++entityNotFoundErrorMsgCount == 20) {
-            LOG(WARN) << "There are more entities not in the KB..."
-                      << " suppressing further warnings...\n";
-          }
-        } else {
-          entityNotFoundErrorMsgCount++;
-        }
-      }
+      processEntityCaseDuringInvertedListProcessing(
+          line, entitiesInContext, nofLiterals, entityNotFoundErrorMsgCount);
     } else {
       ++nofWordPostings;
-      // TODO<joka921> Let the `textVocab_` return a `WordIndex` directly.
-      WordVocabIndex vid;
-      bool ret = textVocab_.getId(line.word_, &vid);
-      WordIndex wid = vid.get();
-      if (!ret) {
-        LOG(ERROR) << "ERROR: word \"" << line.word_ << "\" "
-                   << "not found in textVocab. Terminating\n";
-        AD_FAIL();
-      }
-      wordsInContext[wid] += line.score_;
+      processWordCaseDuringInvertedListProcessing(line, wordsInContext);
     }
   }
   if (entityNotFoundErrorMsgCount > 0) {

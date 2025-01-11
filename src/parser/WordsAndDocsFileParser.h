@@ -87,8 +87,6 @@ struct WordsFileLine {
  *                         TextRecordIndex as type of one column. Those get
  *                         mapped to the next bigger or equal docId which is
  *                         then used to extract the text from the docsDB.
- *                         TODO: check if this behaviour is consistently
- *                         implemented.
  * - string docContent_: The whole text given after the first tab of a line of
  *                       docsfile.
  */
@@ -145,7 +143,7 @@ class WordsAndDocsFileParser {
 
  protected:
   std::ifstream& getInputStream() { return in_; }
-  const LocaleManager& getLocaleManager() { return localeManager_; }
+  const LocaleManager& getLocaleManager() const { return localeManager_; }
 
  private:
   std::ifstream in_;

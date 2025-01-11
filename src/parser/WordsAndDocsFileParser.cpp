@@ -21,7 +21,7 @@ ad_utility::InputRangeFromGet<WordsFileLine>::Storage WordsFileParser::get() {
   string l;
   if (!std::getline(getInputStream(), l)) {
     return std::nullopt;
-  };
+  }
   std::string_view lineView(l);
   size_t i = lineView.find('\t');
   assert(i != string::npos);
@@ -48,11 +48,11 @@ ad_utility::InputRangeFromGet<WordsFileLine>::Storage WordsFileParser::get() {
 
 // _____________________________________________________________________________
 ad_utility::InputRangeFromGet<DocsFileLine>::Storage DocsFileParser::get() {
-  DocsFileLine line;
   string l;
   if (!std::getline(getInputStream(), l)) {
     return std::nullopt;
-  };
+  }
+  DocsFileLine line;
   size_t i = l.find('\t');
   assert(i != string::npos);
   line.docId_ = DocumentIndex::make(atol(l.substr(0, i).c_str()));
