@@ -106,10 +106,16 @@ class SpatialJoinParamTest
     spatialJoin->selectAlgorithm(std::get<0>(GetParam()));
 
     // At worst quadratic time
-    ASSERT_LE(
-        spatialJoin->getCostEstimate(),
-        std::pow(firstChild->getSizeEstimate() * secondChild->getSizeEstimate(),
-                 2));
+    ASSERT_LE(spatialJoin->getCostEstimate(),
+              (firstChild->getSizeEstimate() * secondChild->getSizeEstimate()) +
+                  firstChild->getCostEstimate() +
+                  secondChild->getCostEstimate() + 1);
+
+    // The cost of the child operations needs to be included in the cost
+    // estimate of the spatial join (which is based on the childrens' size not
+    // cost estimate)
+    ASSERT_GE(spatialJoin->getCostEstimate(),
+              firstChild->getCostEstimate() + secondChild->getCostEstimate());
 
     auto res = spatialJoin->computeResult(false);
     auto vec = printTable(qec, &res);

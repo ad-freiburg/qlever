@@ -23,6 +23,7 @@ Index makeIndexWithTestSettings() {
   BATCH_SIZE_VOCABULARY_MERGE = 2;
   DEFAULT_PROGRESS_BAR_BATCH_SIZE = 2;
   index.memoryLimitIndexBuilding() = 50_MB;
+  index.parserBufferSize() = 1_kB;
   return index;
 }
 
