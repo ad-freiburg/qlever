@@ -56,6 +56,8 @@ Id SpatialJoinAlgorithms::computeDist(const IdTable* idTableLeft,
                                       size_t rowLeft, size_t rowRight,
                                       ColumnIndex leftPointCol,
                                       ColumnIndex rightPointCol) const {
+  // for now we need to get the data from the disk, but in the future, this
+  // information will be stored in an ID, just like GeoPoint
   auto getAreaPoint = [&](const IdTable* idtable, size_t row,
                           size_t col) -> std::optional<GeoPoint> {
     std::string areastring =

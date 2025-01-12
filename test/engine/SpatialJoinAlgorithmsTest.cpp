@@ -245,7 +245,8 @@ class SpatialJoinParamTest
     auto numTriples = qec->getIndex().numTriples().normal;
     ASSERT_EQ(numTriples, 15);
     // ====================== build small input ==============================
-    std::string geometry = std::get<4>(GetParam()) ? "<geometryArea1>" : "<geometry1>";
+    std::string geometry =
+        std::get<4>(GetParam()) ? "<geometryArea1>" : "<geometry1>";
     TripleComponent point1{Variable{"?point1"}};
     TripleComponent subject{
         ad_utility::triple_component::Iri::fromIriref(geometry)};
@@ -322,36 +323,52 @@ class SpatialJoinParamTest
     return result;
   };
 
-
-  std::string name1 = (std::get<4>(GetParam())) ? "\"Uni Freiburg TF Area\"" : "\"Uni Freiburg TF\"";
-  std::string name2 = (std::get<4>(GetParam())) ? "\"Minster Freiburg Area\"" : "\"Minster Freiburg\"";
-  std::string name3 = (std::get<4>(GetParam())) ? "\"London Eye Area\"" : "\"London Eye\"";
-  std::string name4 = (std::get<4>(GetParam())) ? "\"Statue of liberty Area\"" : "\"Statue of liberty\"";
-  std::string name5 = (std::get<4>(GetParam())) ? "\"eiffel tower Area\"" : "\"eiffel tower\"";
+  std::string name1 = (std::get<4>(GetParam())) ? "\"Uni Freiburg TF Area\""
+                                                : "\"Uni Freiburg TF\"";
+  std::string name2 = (std::get<4>(GetParam())) ? "\"Minster Freiburg Area\""
+                                                : "\"Minster Freiburg\"";
+  std::string name3 =
+      (std::get<4>(GetParam())) ? "\"London Eye Area\"" : "\"London Eye\"";
+  std::string name4 = (std::get<4>(GetParam())) ? "\"Statue of liberty Area\""
+                                                : "\"Statue of liberty\"";
+  std::string name5 =
+      (std::get<4>(GetParam())) ? "\"eiffel tower Area\"" : "\"eiffel tower\"";
   std::string node1 = (std::get<4>(GetParam())) ? "<nodeArea_1>" : "<node_1>";
   std::string node2 = (std::get<4>(GetParam())) ? "<nodeArea_2>" : "<node_2>";
   std::string node3 = (std::get<4>(GetParam())) ? "<nodeArea_3>" : "<node_3>";
   std::string node4 = (std::get<4>(GetParam())) ? "<nodeArea_4>" : "<node_4>";
   std::string node5 = (std::get<4>(GetParam())) ? "<nodeArea_5>" : "<node_5>";
-  std::string geometry1 = (std::get<4>(GetParam())) ? "<geometryArea1>" : "<geometry1>";
-  std::string geometry2 = (std::get<4>(GetParam())) ? "<geometryArea2>" : "<geometry2>";
-  std::string geometry3 = (std::get<4>(GetParam())) ? "<geometryArea3>" : "<geometry3>";
-  std::string geometry4 = (std::get<4>(GetParam())) ? "<geometryArea4>" : "<geometry4>";
-  std::string geometry5 = (std::get<4>(GetParam())) ? "<geometryArea5>" : "<geometry5>";
-  std::string wktString1 = (std::get<4>(GetParam())) ? SpatialJoinTestHelpers::areaUniFreiburg : "POINT(7.835050 48.012670)";
-  std::string wktString2 = (std::get<4>(GetParam())) ? SpatialJoinTestHelpers::areaMuenster : "POINT(7.852980 47.995570)";
-  std::string wktString3 = (std::get<4>(GetParam())) ? SpatialJoinTestHelpers::areaLondonEye : "POINT(-0.119570 51.503330)";
-  std::string wktString4 = (std::get<4>(GetParam())) ? SpatialJoinTestHelpers::areaStatueOfLiberty : "POINT(-74.044540 40.689250)";
-  std::string wktString5 = (std::get<4>(GetParam())) ? SpatialJoinTestHelpers::areaEiffelTower : "POINT(2.294510 48.858250)";
-  
+  std::string geometry1 =
+      (std::get<4>(GetParam())) ? "<geometryArea1>" : "<geometry1>";
+  std::string geometry2 =
+      (std::get<4>(GetParam())) ? "<geometryArea2>" : "<geometry2>";
+  std::string geometry3 =
+      (std::get<4>(GetParam())) ? "<geometryArea3>" : "<geometry3>";
+  std::string geometry4 =
+      (std::get<4>(GetParam())) ? "<geometryArea4>" : "<geometry4>";
+  std::string geometry5 =
+      (std::get<4>(GetParam())) ? "<geometryArea5>" : "<geometry5>";
+  std::string wktString1 = (std::get<4>(GetParam()))
+                               ? SpatialJoinTestHelpers::areaUniFreiburg
+                               : "POINT(7.835050 48.012670)";
+  std::string wktString2 = (std::get<4>(GetParam()))
+                               ? SpatialJoinTestHelpers::areaMuenster
+                               : "POINT(7.852980 47.995570)";
+  std::string wktString3 = (std::get<4>(GetParam()))
+                               ? SpatialJoinTestHelpers::areaLondonEye
+                               : "POINT(-0.119570 51.503330)";
+  std::string wktString4 = (std::get<4>(GetParam()))
+                               ? SpatialJoinTestHelpers::areaStatueOfLiberty
+                               : "POINT(-74.044540 40.689250)";
+  std::string wktString5 = (std::get<4>(GetParam()))
+                               ? SpatialJoinTestHelpers::areaEiffelTower
+                               : "POINT(2.294510 48.858250)";
 
-  Rows unordered_rows{
-      {name1, node1, geometry1, wktString1},
-      {name2, node2, geometry2, wktString2},
-      {name3, node3, geometry3, wktString3},
-      {name4, node4, geometry4, wktString4},
-      {name5, node5, geometry5, wktString5}
-  };
+  Rows unordered_rows{{name1, node1, geometry1, wktString1},
+                      {name2, node2, geometry2, wktString2},
+                      {name3, node3, geometry3, wktString3},
+                      {name4, node4, geometry4, wktString4},
+                      {name5, node5, geometry5, wktString5}};
 
   // Shortcuts
   Row TF = unordered_rows.at(0);
@@ -361,10 +378,10 @@ class SpatialJoinParamTest
   Row Eif = unordered_rows.at(4);
 
   Rows unordered_rows_small{{geometry1, wktString1},
-                        {geometry2, wktString2},
-                        {geometry3, wktString3},
-                        {geometry4, wktString4},
-                        {geometry5, wktString5}};
+                            {geometry2, wktString2},
+                            {geometry3, wktString3},
+                            {geometry4, wktString4},
+                            {geometry5, wktString5}};
 
   // Shortcuts
   Row sTF = unordered_rows_small.at(0);
@@ -379,10 +396,9 @@ class SpatialJoinParamTest
   Row expectedDistSelf{"0"};
 
   // helper functions
-  // auto P = [](double x, double y) { return GeoPoint(y, x); };  // TODO: delete this line 
-  GeoPoint P(double x, double y) {
-    return GeoPoint(y, x);
-  }
+  // auto P = [](double x, double y) { return GeoPoint(y, x); };  // TODO:
+  // delete this line
+  GeoPoint P(double x, double y) { return GeoPoint(y, x); }
 
   /* TODO: delete this lambda
   auto expectedDist = [](const GeoPoint& p1, const GeoPoint& p2) {
@@ -451,13 +467,13 @@ class SpatialJoinParamTest
 
   ExpectedRowsMaxDist expectedMaxDistRows = {
       {1,
-      {mergeToRow(TF, TF, expectedDistSelf),
+       {mergeToRow(TF, TF, expectedDistSelf),
         mergeToRow(Mun, Mun, expectedDistSelf),
         mergeToRow(Eye, Eye, expectedDistSelf),
         mergeToRow(Lib, Lib, expectedDistSelf),
         mergeToRow(Eif, Eif, expectedDistSelf)}},
       {5000,
-      {mergeToRow(TF, TF, expectedDistSelf),
+       {mergeToRow(TF, TF, expectedDistSelf),
         mergeToRow(TF, Mun, expectedDistUniMun),
         mergeToRow(Mun, Mun, expectedDistSelf),
         mergeToRow(Mun, TF, expectedDistUniMun),
@@ -465,7 +481,7 @@ class SpatialJoinParamTest
         mergeToRow(Lib, Lib, expectedDistSelf),
         mergeToRow(Eif, Eif, expectedDistSelf)}},
       {500000,
-      {mergeToRow(TF, TF, expectedDistSelf),
+       {mergeToRow(TF, TF, expectedDistSelf),
         mergeToRow(TF, Mun, expectedDistUniMun),
         mergeToRow(TF, Eif, expectedDistUniEif),
         mergeToRow(Mun, Mun, expectedDistSelf),
@@ -479,7 +495,7 @@ class SpatialJoinParamTest
         mergeToRow(Eif, Mun, expectedDistMunEif),
         mergeToRow(Eif, Eye, expectedDistEyeEif)}},
       {1000000,
-      {mergeToRow(TF, TF, expectedDistSelf),
+       {mergeToRow(TF, TF, expectedDistSelf),
         mergeToRow(TF, Mun, expectedDistUniMun),
         mergeToRow(TF, Eif, expectedDistUniEif),
         mergeToRow(TF, Eye, expectedDistUniEye),
@@ -497,7 +513,7 @@ class SpatialJoinParamTest
         mergeToRow(Eif, Mun, expectedDistMunEif),
         mergeToRow(Eif, Eye, expectedDistEyeEif)}},
       {10000000,
-      {mergeToRow(TF, TF, expectedDistSelf),
+       {mergeToRow(TF, TF, expectedDistSelf),
         mergeToRow(TF, Mun, expectedDistUniMun),
         mergeToRow(TF, Eif, expectedDistUniEif),
         mergeToRow(TF, Eye, expectedDistUniEye),
@@ -525,15 +541,15 @@ class SpatialJoinParamTest
 
   ExpectedRowsMaxDist expectedMaxDistRowsSmall = {
       {1,
-      {
-          mergeToRow(sTF, sTF, expectedDistSelf),
-          mergeToRow(sMun, sMun, expectedDistSelf),
-          mergeToRow(sEye, sEye, expectedDistSelf),
-          mergeToRow(sLib, sLib, expectedDistSelf),
-          mergeToRow(sEif, sEif, expectedDistSelf),
-      }},
+       {
+           mergeToRow(sTF, sTF, expectedDistSelf),
+           mergeToRow(sMun, sMun, expectedDistSelf),
+           mergeToRow(sEye, sEye, expectedDistSelf),
+           mergeToRow(sLib, sLib, expectedDistSelf),
+           mergeToRow(sEif, sEif, expectedDistSelf),
+       }},
       {5000,
-      {mergeToRow(sTF, sTF, expectedDistSelf),
+       {mergeToRow(sTF, sTF, expectedDistSelf),
         mergeToRow(sTF, sMun, expectedDistUniMun),
         mergeToRow(sMun, sMun, expectedDistSelf),
         mergeToRow(sMun, sTF, expectedDistUniMun),
@@ -541,7 +557,7 @@ class SpatialJoinParamTest
         mergeToRow(sLib, sLib, expectedDistSelf),
         mergeToRow(sEif, sEif, expectedDistSelf)}},
       {500000,
-      {mergeToRow(sTF, sTF, expectedDistSelf),
+       {mergeToRow(sTF, sTF, expectedDistSelf),
         mergeToRow(sTF, sMun, expectedDistUniMun),
         mergeToRow(sTF, sEif, expectedDistUniEif),
         mergeToRow(sMun, sMun, expectedDistSelf),
@@ -555,7 +571,7 @@ class SpatialJoinParamTest
         mergeToRow(sEif, sMun, expectedDistMunEif),
         mergeToRow(sEif, sEye, expectedDistEyeEif)}},
       {1000000,
-      {mergeToRow(sTF, sTF, expectedDistSelf),
+       {mergeToRow(sTF, sTF, expectedDistSelf),
         mergeToRow(sTF, sMun, expectedDistUniMun),
         mergeToRow(sTF, sEif, expectedDistUniEif),
         mergeToRow(sTF, sEye, expectedDistUniEye),
@@ -573,7 +589,7 @@ class SpatialJoinParamTest
         mergeToRow(sEif, sMun, expectedDistMunEif),
         mergeToRow(sEif, sEye, expectedDistEyeEif)}},
       {10000000,
-      {mergeToRow(sTF, sTF, expectedDistSelf),
+       {mergeToRow(sTF, sTF, expectedDistSelf),
         mergeToRow(sTF, sMun, expectedDistUniMun),
         mergeToRow(sTF, sEif, expectedDistUniEif),
         mergeToRow(sTF, sEye, expectedDistUniEye),
@@ -601,19 +617,19 @@ class SpatialJoinParamTest
 
   ExpectedRowsMaxDist expectedMaxDistRowsSmallWrongPoint = {
       {1,
-      {
-          mergeToRow(sMun, sMun, expectedDistSelf),
-          mergeToRow(sEye, sEye, expectedDistSelf),
-          mergeToRow(sLib, sLib, expectedDistSelf),
-          mergeToRow(sEif, sEif, expectedDistSelf),
-      }},
+       {
+           mergeToRow(sMun, sMun, expectedDistSelf),
+           mergeToRow(sEye, sEye, expectedDistSelf),
+           mergeToRow(sLib, sLib, expectedDistSelf),
+           mergeToRow(sEif, sEif, expectedDistSelf),
+       }},
       {5000,
-      {mergeToRow(sMun, sMun, expectedDistSelf),
+       {mergeToRow(sMun, sMun, expectedDistSelf),
         mergeToRow(sEye, sEye, expectedDistSelf),
         mergeToRow(sLib, sLib, expectedDistSelf),
         mergeToRow(sEif, sEif, expectedDistSelf)}},
       {500000,
-      {mergeToRow(sMun, sMun, expectedDistSelf),
+       {mergeToRow(sMun, sMun, expectedDistSelf),
         mergeToRow(sMun, sEif, expectedDistMunEif),
         mergeToRow(sEye, sEye, expectedDistSelf),
         mergeToRow(sEye, sEif, expectedDistEyeEif),
@@ -622,7 +638,7 @@ class SpatialJoinParamTest
         mergeToRow(sEif, sMun, expectedDistMunEif),
         mergeToRow(sEif, sEye, expectedDistEyeEif)}},
       {1000000,
-      {mergeToRow(sMun, sMun, expectedDistSelf),
+       {mergeToRow(sMun, sMun, expectedDistSelf),
         mergeToRow(sMun, sEif, expectedDistMunEif),
         mergeToRow(sMun, sEye, expectedDistMunEye),
         mergeToRow(sEye, sEye, expectedDistSelf),
@@ -633,7 +649,7 @@ class SpatialJoinParamTest
         mergeToRow(sEif, sMun, expectedDistMunEif),
         mergeToRow(sEif, sEye, expectedDistEyeEif)}},
       {10000000,
-      {mergeToRow(sMun, sMun, expectedDistSelf),
+       {mergeToRow(sMun, sMun, expectedDistSelf),
         mergeToRow(sMun, sEif, expectedDistMunEif),
         mergeToRow(sMun, sEye, expectedDistMunEye),
         mergeToRow(sMun, sLib, expectedDistMunLib),
@@ -652,13 +668,13 @@ class SpatialJoinParamTest
 
   ExpectedRowsMaxDist expectedMaxDistRowsDiff = {
       {1,
-      {mergeToRow(TF, sTF, expectedDistSelf),
+       {mergeToRow(TF, sTF, expectedDistSelf),
         mergeToRow(Mun, sMun, expectedDistSelf),
         mergeToRow(Eye, sEye, expectedDistSelf),
         mergeToRow(Lib, sLib, expectedDistSelf),
         mergeToRow(Eif, sEif, expectedDistSelf)}},
       {5000,
-      {mergeToRow(TF, sTF, expectedDistSelf),
+       {mergeToRow(TF, sTF, expectedDistSelf),
         mergeToRow(TF, sMun, expectedDistUniMun),
         mergeToRow(Mun, sMun, expectedDistSelf),
         mergeToRow(Mun, sTF, expectedDistUniMun),
@@ -666,7 +682,7 @@ class SpatialJoinParamTest
         mergeToRow(Lib, sLib, expectedDistSelf),
         mergeToRow(Eif, sEif, expectedDistSelf)}},
       {500000,
-      {mergeToRow(TF, sTF, expectedDistSelf),
+       {mergeToRow(TF, sTF, expectedDistSelf),
         mergeToRow(TF, sMun, expectedDistUniMun),
         mergeToRow(TF, sEif, expectedDistUniEif),
         mergeToRow(Mun, sMun, expectedDistSelf),
@@ -680,7 +696,7 @@ class SpatialJoinParamTest
         mergeToRow(Eif, sMun, expectedDistMunEif),
         mergeToRow(Eif, sEye, expectedDistEyeEif)}},
       {1000000,
-      {mergeToRow(TF, sTF, expectedDistSelf),
+       {mergeToRow(TF, sTF, expectedDistSelf),
         mergeToRow(TF, sMun, expectedDistUniMun),
         mergeToRow(TF, sEif, expectedDistUniEif),
         mergeToRow(TF, sEye, expectedDistUniEye),
@@ -698,7 +714,7 @@ class SpatialJoinParamTest
         mergeToRow(Eif, sMun, expectedDistMunEif),
         mergeToRow(Eif, sEye, expectedDistEyeEif)}},
       {10000000,
-      {mergeToRow(TF, sTF, expectedDistSelf),
+       {mergeToRow(TF, sTF, expectedDistSelf),
         mergeToRow(TF, sMun, expectedDistUniMun),
         mergeToRow(TF, sEif, expectedDistUniEif),
         mergeToRow(TF, sEye, expectedDistUniEye),
@@ -727,19 +743,19 @@ class SpatialJoinParamTest
   ExpectedRowsMaxDist expectedMaxDistRowsDiffIDTable = {
       {1, {mergeToRow({sTF.at(1)}, sTF, expectedDistSelf)}},
       {5000,
-      {mergeToRow({sTF.at(1)}, sTF, expectedDistSelf),
+       {mergeToRow({sTF.at(1)}, sTF, expectedDistSelf),
         mergeToRow({sTF.at(1)}, sMun, expectedDistUniMun)}},
       {500000,
-      {mergeToRow({sTF.at(1)}, sTF, expectedDistSelf),
+       {mergeToRow({sTF.at(1)}, sTF, expectedDistSelf),
         mergeToRow({sTF.at(1)}, sMun, expectedDistUniMun),
         mergeToRow({sTF.at(1)}, sEif, expectedDistUniEif)}},
       {1000000,
-      {mergeToRow({sTF.at(1)}, sTF, expectedDistSelf),
+       {mergeToRow({sTF.at(1)}, sTF, expectedDistSelf),
         mergeToRow({sTF.at(1)}, sMun, expectedDistUniMun),
         mergeToRow({sTF.at(1)}, sEif, expectedDistUniEif),
         mergeToRow({sTF.at(1)}, sEye, expectedDistUniEye)}},
       {10000000,
-      {mergeToRow({sTF.at(1)}, sTF, expectedDistSelf),
+       {mergeToRow({sTF.at(1)}, sTF, expectedDistSelf),
         mergeToRow({sTF.at(1)}, sMun, expectedDistUniMun),
         mergeToRow({sTF.at(1)}, sEif, expectedDistUniEif),
         mergeToRow({sTF.at(1)}, sEye, expectedDistUniEye),
@@ -755,15 +771,15 @@ class SpatialJoinParamTest
 
   ExpectedRowsNearestNeighbors expectedNearestNeighbors = {
       {1,
-      {{std::nullopt,
-        {mergeToRow(TF, TF, expectedDistSelf),
+       {{std::nullopt,
+         {mergeToRow(TF, TF, expectedDistSelf),
           mergeToRow(Mun, Mun, expectedDistSelf),
           mergeToRow(Eye, Eye, expectedDistSelf),
           mergeToRow(Lib, Lib, expectedDistSelf),
           mergeToRow(Eif, Eif, expectedDistSelf)}}}},
       {2,
-      {{std::nullopt,
-        {mergeToRow(TF, TF, expectedDistSelf),
+       {{std::nullopt,
+         {mergeToRow(TF, TF, expectedDistSelf),
           mergeToRow(Mun, Mun, expectedDistSelf),
           mergeToRow(Eye, Eye, expectedDistSelf),
           mergeToRow(Lib, Lib, expectedDistSelf),
@@ -774,13 +790,13 @@ class SpatialJoinParamTest
           mergeToRow(Lib, Eye, expectedDistEyeLib),
           mergeToRow(Eif, Eye, expectedDistEyeEif)}},
         {40,
-        {mergeToRow(TF, TF, expectedDistSelf),
+         {mergeToRow(TF, TF, expectedDistSelf),
           mergeToRow(Mun, Mun, expectedDistSelf),
           mergeToRow(Eye, Eye, expectedDistSelf),
           mergeToRow(Lib, Lib, expectedDistSelf),
           mergeToRow(Eif, Eif, expectedDistSelf)}},
         {4000,
-        {mergeToRow(TF, TF, expectedDistSelf),
+         {mergeToRow(TF, TF, expectedDistSelf),
           mergeToRow(Mun, Mun, expectedDistSelf),
           mergeToRow(Eye, Eye, expectedDistSelf),
           mergeToRow(Lib, Lib, expectedDistSelf),
@@ -788,7 +804,7 @@ class SpatialJoinParamTest
           mergeToRow(TF, Mun, expectedDistUniMun),
           mergeToRow(Mun, TF, expectedDistUniMun)}},
         {400000,
-        {mergeToRow(TF, TF, expectedDistSelf),
+         {mergeToRow(TF, TF, expectedDistSelf),
           mergeToRow(Mun, Mun, expectedDistSelf),
           mergeToRow(Eye, Eye, expectedDistSelf),
           mergeToRow(Lib, Lib, expectedDistSelf),
@@ -798,8 +814,8 @@ class SpatialJoinParamTest
           mergeToRow(Eye, Eif, expectedDistEyeEif),
           mergeToRow(Eif, Eye, expectedDistEyeEif)}}}},
       {3,
-      {{500000,
-        {mergeToRow(TF, TF, expectedDistSelf),
+       {{500000,
+         {mergeToRow(TF, TF, expectedDistSelf),
           mergeToRow(Mun, Mun, expectedDistSelf),
           mergeToRow(Eye, Eye, expectedDistSelf),
           mergeToRow(Lib, Lib, expectedDistSelf),
@@ -816,10 +832,11 @@ class SpatialJoinParamTest
   // not be tested and are therefore excluded
   bool isInvalidAreaTestConfig(std::optional<MaxDistanceConfig> maxDistConfig) {
     bool isAreaDataset = std::get<4>(GetParam());
-    bool isS2geoAlg = std::get<0>(GetParam()) == SpatialJoinAlgorithm::S2_GEOMETRY;
-    return isAreaDataset && (!maxDistConfig.has_value() || (maxDistConfig.has_value() && isS2geoAlg ));
-}
-
+    bool isS2geoAlg =
+        std::get<0>(GetParam()) == SpatialJoinAlgorithm::S2_GEOMETRY;
+    return isAreaDataset && (!maxDistConfig.has_value() ||
+                             (maxDistConfig.has_value() && isS2geoAlg));
+  }
 };
 
 // test the compute result method on small examples
@@ -977,7 +994,8 @@ INSTANTIATE_TEST_SUITE_P(
                           NearestNeighborsConfig{2, 400000},
                           NearestNeighborsConfig{2, 4000},
                           NearestNeighborsConfig{2, 40},
-                          NearestNeighborsConfig{3, 500000}), ::testing::Bool()));
+                          NearestNeighborsConfig{3, 500000}),
+        ::testing::Bool()));
 
 }  // end of Namespace computeResultTest
 
