@@ -245,9 +245,10 @@ class SpatialJoinParamTest
     auto numTriples = qec->getIndex().numTriples().normal;
     ASSERT_EQ(numTriples, 15);
     // ====================== build small input ==============================
+    std::string geometry = std::get<4>(GetParam()) ? "<geometryArea1>" : "<geometry1>";
     TripleComponent point1{Variable{"?point1"}};
     TripleComponent subject{
-        ad_utility::triple_component::Iri::fromIriref("<geometry1>")};
+        ad_utility::triple_component::Iri::fromIriref(geometry)};
     auto smallChild = ad_utility::makeExecutionTree<IndexScan>(
         qec, Permutation::Enum::PSO,
         SparqlTriple{subject, std::string{"<asWKT>"}, point1});
@@ -310,518 +311,517 @@ class SpatialJoinParamTest
     return std::nullopt;
   }
 
-  std::string wktString1 = (std::get<4>(GetParam())) ? SpatialJoinTestHelpers::areaUniFreiburg : "POINT(7.835050 48.012670)";
-  std::string wktString2 = (std::get<4>(GetParam())) ? SpatialJoinTestHelpers::areaMuenster : "POINT(7.852980 47.995570)";
-  std::string wktString3 = (std::get<4>(GetParam())) ? SpatialJoinTestHelpers::areaLondonEye : "POINT(-0.119570 51.503330)";
-  std::string wktString4 = (std::get<4>(GetParam())) ? SpatialJoinTestHelpers::areaStatueOfLiberty : "POINT(-74.044540 40.689250)";
-  std::string wktString5 = (std::get<4>(GetParam())) ? SpatialJoinTestHelpers::areaEiffelTower : "POINT(2.294510 48.858250)";
+  Row mergeToRow(Row part1, Row part2, Row part3) {
+    Row result = part1;
+    for (size_t i = 0; i < part2.size(); i++) {
+      result.push_back(part2.at(i));
+    }
+    for (size_t i = 0; i < part3.size(); i++) {
+      result.push_back(part3.at(i));
+    }
+    return result;
+  };
+
+
+  std::string name1 = (std::get<4>(GetParam())) ? "\"Uni Freiburg TF Area\"" : "\"Uni Freiburg TF\"";
+  std::string name2 = (std::get<4>(GetParam())) ? "\"Minster Freiburg Area\"" : "\"Minster Freiburg\"";
+  std::string name3 = (std::get<4>(GetParam())) ? "\"London Eye Area\"" : "\"London Eye\"";
+  std::string name4 = (std::get<4>(GetParam())) ? "\"Statue of liberty Area\"" : "\"Statue of liberty\"";
+  std::string name5 = (std::get<4>(GetParam())) ? "\"eiffel tower Area\"" : "\"eiffel tower\"";
+  std::string node1 = (std::get<4>(GetParam())) ? "<nodeArea_1>" : "<node_1>";
+  std::string node2 = (std::get<4>(GetParam())) ? "<nodeArea_2>" : "<node_2>";
+  std::string node3 = (std::get<4>(GetParam())) ? "<nodeArea_3>" : "<node_3>";
+  std::string node4 = (std::get<4>(GetParam())) ? "<nodeArea_4>" : "<node_4>";
+  std::string node5 = (std::get<4>(GetParam())) ? "<nodeArea_5>" : "<node_5>";
   std::string geometry1 = (std::get<4>(GetParam())) ? "<geometryArea1>" : "<geometry1>";
   std::string geometry2 = (std::get<4>(GetParam())) ? "<geometryArea2>" : "<geometry2>";
   std::string geometry3 = (std::get<4>(GetParam())) ? "<geometryArea3>" : "<geometry3>";
   std::string geometry4 = (std::get<4>(GetParam())) ? "<geometryArea4>" : "<geometry4>";
   std::string geometry5 = (std::get<4>(GetParam())) ? "<geometryArea5>" : "<geometry5>";
+  std::string wktString1 = (std::get<4>(GetParam())) ? SpatialJoinTestHelpers::areaUniFreiburg : "POINT(7.835050 48.012670)";
+  std::string wktString2 = (std::get<4>(GetParam())) ? SpatialJoinTestHelpers::areaMuenster : "POINT(7.852980 47.995570)";
+  std::string wktString3 = (std::get<4>(GetParam())) ? SpatialJoinTestHelpers::areaLondonEye : "POINT(-0.119570 51.503330)";
+  std::string wktString4 = (std::get<4>(GetParam())) ? SpatialJoinTestHelpers::areaStatueOfLiberty : "POINT(-74.044540 40.689250)";
+  std::string wktString5 = (std::get<4>(GetParam())) ? SpatialJoinTestHelpers::areaEiffelTower : "POINT(2.294510 48.858250)";
+  
+
+  Rows unordered_rows{
+      {name1, node1, geometry1, wktString1},
+      {name2, node2, geometry2, wktString2},
+      {name3, node3, geometry3, wktString3},
+      {name4, node4, geometry4, wktString4},
+      {name5, node5, geometry5, wktString5}
+  };
+
+  // Shortcuts
+  Row TF = unordered_rows.at(0);
+  Row Mun = unordered_rows.at(1);
+  Row Eye = unordered_rows.at(2);
+  Row Lib = unordered_rows.at(3);
+  Row Eif = unordered_rows.at(4);
+
   Rows unordered_rows_small{{geometry1, wktString1},
                         {geometry2, wktString2},
                         {geometry3, wktString3},
                         {geometry4, wktString4},
                         {geometry5, wktString5}};
 
+  // Shortcuts
+  Row sTF = unordered_rows_small.at(0);
+  Row sMun = unordered_rows_small.at(1);
+  Row sEye = unordered_rows_small.at(2);
+  Row sLib = unordered_rows_small.at(3);
+  Row sEif = unordered_rows_small.at(4);
 
+  // in all calculations below, the factor 1000 is used to convert from km to m
 
-Row mergeToRow(Row part1, Row part2, Row part3) {
-  Row result = part1;
-  for (size_t i = 0; i < part2.size(); i++) {
-    result.push_back(part2.at(i));
+  // distance from the object to itself should be zero
+  Row expectedDistSelf{"0"};
+
+  // helper functions
+  // auto P = [](double x, double y) { return GeoPoint(y, x); };  // TODO: delete this line 
+  GeoPoint P(double x, double y) {
+    return GeoPoint(y, x);
   }
-  for (size_t i = 0; i < part3.size(); i++) {
-    result.push_back(part3.at(i));
+
+  /* TODO: delete this lambda
+  auto expectedDist = [](const GeoPoint& p1, const GeoPoint& p2) {
+    auto p1_ = S2Point{S2LatLng::FromDegrees(p1.getLat(), p1.getLng())};
+    auto p2_ = S2Point{S2LatLng::FromDegrees(p2.getLat(), p2.getLng())};
+
+    return std::to_string(S2Earth::ToKm(S1Angle(p1_, p2_)));
+  };*/
+
+  std::string expectedDist(const GeoPoint& p1, const GeoPoint& p2) {
+    auto p1_ = S2Point{S2LatLng::FromDegrees(p1.getLat(), p1.getLng())};
+    auto p2_ = S2Point{S2LatLng::FromDegrees(p2.getLat(), p2.getLng())};
+
+    return std::to_string(S2Earth::ToKm(S1Angle(p1_, p2_)));
   }
-  return result;
-};
 
-Rows unordered_rows{
-    {"\"Uni Freiburg TF\"", "<node_1>", "<geometry1>",
-     "POINT(7.835050 48.012670)"},
-    {"\"Minster Freiburg\"", "<node_2>", "<geometry2>",
-     "POINT(7.852980 47.995570)"},
-    {"\"London Eye\"", "<node_3>", "<geometry3>", "POINT(-0.119570 51.503330)"},
-    {"\"Statue of liberty\"", "<node_4>", "<geometry4>",
-     "POINT(-74.044540 40.689250)"},
-    {"\"eiffel tower\"", "<node_5>", "<geometry5>",
-     "POINT(2.294510 48.858250)"},
-};
+  // Places for testing
+  GeoPoint PUni = P(7.83505, 48.01267);
+  GeoPoint PMun = P(7.85298, 47.99557);
+  GeoPoint PEif = P(2.29451, 48.85825);
+  GeoPoint PEye = P(-0.11957, 51.50333);
+  GeoPoint PLib = P(-74.04454, 40.68925);
+  std::vector<GeoPoint> testPlaces = std::vector{PUni, PMun, PEif, PEye, PLib};
 
-// Shortcuts
-Row TF = unordered_rows.at(0);
-Row Mun = unordered_rows.at(1);
-Row Eye = unordered_rows.at(2);
-Row Lib = unordered_rows.at(3);
-Row Eif = unordered_rows.at(4);
+  // distance from Uni Freiburg to Freiburger Münster is 2,33 km according to
+  // google maps
+  Row expectedDistUniMun{expectedDist(PUni, PMun)};
 
+  // distance from Uni Freiburg to Eiffel Tower is 419,32 km according to
+  // google maps
+  Row expectedDistUniEif{expectedDist(PUni, PEif)};
 
-/*
-Rows unordered_rows_small{{"<geometry1>", "POINT(7.835050 48.012670)"},
-                          {"<geometry2>", "POINT(7.852980 47.995570)"},
-                          {"<geometry3>", "POINT(-0.119570 51.503330)"},
-                          {"<geometry4>", "POINT(-74.044540 40.689250)"},
-                          {"<geometry5>", "POINT(2.294510 48.858250)"}};
-*/
-/*
-Rows unordered_rows_small{{"<geometryArea1>", SpatialJoinTestHelpers::areaUniFreiburg},
-                          {"<geometryArea2>", SpatialJoinTestHelpers::areaMuenster},
-                          {"<geometryArea3>", SpatialJoinTestHelpers::areaLondonEye},
-                          {"<geometryArea4>", SpatialJoinTestHelpers::areaStatueOfLiberty},
-                          {"<geometryArea5>", SpatialJoinTestHelpers::areaEiffelTower}};
-*/
+  // distance from Minster Freiburg to eiffel tower is 421,09 km according to
+  // google maps
+  Row expectedDistMunEif{expectedDist(PMun, PEif)};
 
-// Shortcuts
-Row sTF = unordered_rows_small.at(0);
-Row sMun = unordered_rows_small.at(1);
-Row sEye = unordered_rows_small.at(2);
-Row sLib = unordered_rows_small.at(3);
-Row sEif = unordered_rows_small.at(4);
+  // distance from london eye to eiffel tower is 340,62 km according to
+  // google maps
+  Row expectedDistEyeEif{expectedDist(PEye, PEif)};
 
-// in all calculations below, the factor 1000 is used to convert from km to m
+  // distance from Uni Freiburg to London Eye is 690,18 km according to
+  // google maps
+  Row expectedDistUniEye{expectedDist(PUni, PEye)};
 
-// distance from the object to itself should be zero
-Row expectedDistSelf{"0"};
+  // distance from Minster Freiburg to London Eye is 692,39 km according to
+  // google maps
+  Row expectedDistMunEye{expectedDist(PMun, PEye)};
 
-// helper functions
-// auto P = [](double x, double y) { return GeoPoint(y, x); };  // TODO: delete this line 
-GeoPoint P(double x, double y) {
-  return GeoPoint(y, x);
-}
+  // distance from Uni Freiburg to Statue of Liberty is 6249,55 km according to
+  // google maps
+  Row expectedDistUniLib{expectedDist(PUni, PLib)};
 
-/* TODO: delete this lambda
-auto expectedDist = [](const GeoPoint& p1, const GeoPoint& p2) {
-  auto p1_ = S2Point{S2LatLng::FromDegrees(p1.getLat(), p1.getLng())};
-  auto p2_ = S2Point{S2LatLng::FromDegrees(p2.getLat(), p2.getLng())};
+  // distance from Minster Freiburg to Statue of Liberty is 6251,58 km
+  // according to google maps
+  Row expectedDistMunLib{expectedDist(PMun, PLib)};
 
-  return std::to_string(S2Earth::ToKm(S1Angle(p1_, p2_)));
-};*/
+  // distance from london eye to statue of liberty is 5575,08 km according to
+  // google maps
+  Row expectedDistEyeLib{expectedDist(PEye, PLib)};
 
-std::string expectedDist(const GeoPoint& p1, const GeoPoint& p2) {
-  auto p1_ = S2Point{S2LatLng::FromDegrees(p1.getLat(), p1.getLng())};
-  auto p2_ = S2Point{S2LatLng::FromDegrees(p2.getLat(), p2.getLng())};
+  // distance from eiffel tower to Statue of liberty is 5837,42 km according to
+  // google maps
+  Row expectedDistEifLib{expectedDist(PEif, PLib)};
 
-  return std::to_string(S2Earth::ToKm(S1Angle(p1_, p2_)));
-}
+  using ExpectedRowsMaxDist = std::unordered_map<size_t, Rows>;
 
-// Places for testing
-GeoPoint PUni = P(7.83505, 48.01267);
-GeoPoint PMun = P(7.85298, 47.99557);
-GeoPoint PEif = P(2.29451, 48.85825);
-GeoPoint PEye = P(-0.11957, 51.50333);
-GeoPoint PLib = P(-74.04454, 40.68925);
-std::vector<GeoPoint> testPlaces = std::vector{PUni, PMun, PEif, PEye, PLib};
-
-// distance from Uni Freiburg to Freiburger Münster is 2,33 km according to
-// google maps
-Row expectedDistUniMun{expectedDist(PUni, PMun)};
-
-// distance from Uni Freiburg to Eiffel Tower is 419,32 km according to
-// google maps
-Row expectedDistUniEif{expectedDist(PUni, PEif)};
-
-// distance from Minster Freiburg to eiffel tower is 421,09 km according to
-// google maps
-Row expectedDistMunEif{expectedDist(PMun, PEif)};
-
-// distance from london eye to eiffel tower is 340,62 km according to
-// google maps
-Row expectedDistEyeEif{expectedDist(PEye, PEif)};
-
-// distance from Uni Freiburg to London Eye is 690,18 km according to
-// google maps
-Row expectedDistUniEye{expectedDist(PUni, PEye)};
-
-// distance from Minster Freiburg to London Eye is 692,39 km according to
-// google maps
-Row expectedDistMunEye{expectedDist(PMun, PEye)};
-
-// distance from Uni Freiburg to Statue of Liberty is 6249,55 km according to
-// google maps
-Row expectedDistUniLib{expectedDist(PUni, PLib)};
-
-// distance from Minster Freiburg to Statue of Liberty is 6251,58 km
-// according to google maps
-Row expectedDistMunLib{expectedDist(PMun, PLib)};
-
-// distance from london eye to statue of liberty is 5575,08 km according to
-// google maps
-Row expectedDistEyeLib{expectedDist(PEye, PLib)};
-
-// distance from eiffel tower to Statue of liberty is 5837,42 km according to
-// google maps
-Row expectedDistEifLib{expectedDist(PEif, PLib)};
-
-using ExpectedRowsMaxDist = std::unordered_map<size_t, Rows>;
-
-ExpectedRowsMaxDist expectedMaxDistRows = {
-    {1,
-     {mergeToRow(TF, TF, expectedDistSelf),
-      mergeToRow(Mun, Mun, expectedDistSelf),
-      mergeToRow(Eye, Eye, expectedDistSelf),
-      mergeToRow(Lib, Lib, expectedDistSelf),
-      mergeToRow(Eif, Eif, expectedDistSelf)}},
-    {5000,
-     {mergeToRow(TF, TF, expectedDistSelf),
-      mergeToRow(TF, Mun, expectedDistUniMun),
-      mergeToRow(Mun, Mun, expectedDistSelf),
-      mergeToRow(Mun, TF, expectedDistUniMun),
-      mergeToRow(Eye, Eye, expectedDistSelf),
-      mergeToRow(Lib, Lib, expectedDistSelf),
-      mergeToRow(Eif, Eif, expectedDistSelf)}},
-    {500000,
-     {mergeToRow(TF, TF, expectedDistSelf),
-      mergeToRow(TF, Mun, expectedDistUniMun),
-      mergeToRow(TF, Eif, expectedDistUniEif),
-      mergeToRow(Mun, Mun, expectedDistSelf),
-      mergeToRow(Mun, TF, expectedDistUniMun),
-      mergeToRow(Mun, Eif, expectedDistMunEif),
-      mergeToRow(Eye, Eye, expectedDistSelf),
-      mergeToRow(Eye, Eif, expectedDistEyeEif),
-      mergeToRow(Lib, Lib, expectedDistSelf),
-      mergeToRow(Eif, Eif, expectedDistSelf),
-      mergeToRow(Eif, TF, expectedDistUniEif),
-      mergeToRow(Eif, Mun, expectedDistMunEif),
-      mergeToRow(Eif, Eye, expectedDistEyeEif)}},
-    {1000000,
-     {mergeToRow(TF, TF, expectedDistSelf),
-      mergeToRow(TF, Mun, expectedDistUniMun),
-      mergeToRow(TF, Eif, expectedDistUniEif),
-      mergeToRow(TF, Eye, expectedDistUniEye),
-      mergeToRow(Mun, Mun, expectedDistSelf),
-      mergeToRow(Mun, TF, expectedDistUniMun),
-      mergeToRow(Mun, Eif, expectedDistMunEif),
-      mergeToRow(Mun, Eye, expectedDistMunEye),
-      mergeToRow(Eye, Eye, expectedDistSelf),
-      mergeToRow(Eye, Eif, expectedDistEyeEif),
-      mergeToRow(Eye, TF, expectedDistUniEye),
-      mergeToRow(Eye, Mun, expectedDistMunEye),
-      mergeToRow(Lib, Lib, expectedDistSelf),
-      mergeToRow(Eif, Eif, expectedDistSelf),
-      mergeToRow(Eif, TF, expectedDistUniEif),
-      mergeToRow(Eif, Mun, expectedDistMunEif),
-      mergeToRow(Eif, Eye, expectedDistEyeEif)}},
-    {10000000,
-     {mergeToRow(TF, TF, expectedDistSelf),
-      mergeToRow(TF, Mun, expectedDistUniMun),
-      mergeToRow(TF, Eif, expectedDistUniEif),
-      mergeToRow(TF, Eye, expectedDistUniEye),
-      mergeToRow(TF, Lib, expectedDistUniLib),
-      mergeToRow(Mun, Mun, expectedDistSelf),
-      mergeToRow(Mun, TF, expectedDistUniMun),
-      mergeToRow(Mun, Eif, expectedDistMunEif),
-      mergeToRow(Mun, Eye, expectedDistMunEye),
-      mergeToRow(Mun, Lib, expectedDistMunLib),
-      mergeToRow(Eye, Eye, expectedDistSelf),
-      mergeToRow(Eye, Eif, expectedDistEyeEif),
-      mergeToRow(Eye, TF, expectedDistUniEye),
-      mergeToRow(Eye, Mun, expectedDistMunEye),
-      mergeToRow(Eye, Lib, expectedDistEyeLib),
-      mergeToRow(Lib, Lib, expectedDistSelf),
-      mergeToRow(Lib, TF, expectedDistUniLib),
-      mergeToRow(Lib, Mun, expectedDistMunLib),
-      mergeToRow(Lib, Eye, expectedDistEyeLib),
-      mergeToRow(Lib, Eif, expectedDistEifLib),
-      mergeToRow(Eif, Eif, expectedDistSelf),
-      mergeToRow(Eif, TF, expectedDistUniEif),
-      mergeToRow(Eif, Mun, expectedDistMunEif),
-      mergeToRow(Eif, Eye, expectedDistEyeEif),
-      mergeToRow(Eif, Lib, expectedDistEifLib)}}};
-
-ExpectedRowsMaxDist expectedMaxDistRowsSmall = {
-    {1,
-     {
-         mergeToRow(sTF, sTF, expectedDistSelf),
-         mergeToRow(sMun, sMun, expectedDistSelf),
-         mergeToRow(sEye, sEye, expectedDistSelf),
-         mergeToRow(sLib, sLib, expectedDistSelf),
-         mergeToRow(sEif, sEif, expectedDistSelf),
-     }},
-    {5000,
-     {mergeToRow(sTF, sTF, expectedDistSelf),
-      mergeToRow(sTF, sMun, expectedDistUniMun),
-      mergeToRow(sMun, sMun, expectedDistSelf),
-      mergeToRow(sMun, sTF, expectedDistUniMun),
-      mergeToRow(sEye, sEye, expectedDistSelf),
-      mergeToRow(sLib, sLib, expectedDistSelf),
-      mergeToRow(sEif, sEif, expectedDistSelf)}},
-    {500000,
-     {mergeToRow(sTF, sTF, expectedDistSelf),
-      mergeToRow(sTF, sMun, expectedDistUniMun),
-      mergeToRow(sTF, sEif, expectedDistUniEif),
-      mergeToRow(sMun, sMun, expectedDistSelf),
-      mergeToRow(sMun, sTF, expectedDistUniMun),
-      mergeToRow(sMun, sEif, expectedDistMunEif),
-      mergeToRow(sEye, sEye, expectedDistSelf),
-      mergeToRow(sEye, sEif, expectedDistEyeEif),
-      mergeToRow(sLib, sLib, expectedDistSelf),
-      mergeToRow(sEif, sEif, expectedDistSelf),
-      mergeToRow(sEif, sTF, expectedDistUniEif),
-      mergeToRow(sEif, sMun, expectedDistMunEif),
-      mergeToRow(sEif, sEye, expectedDistEyeEif)}},
-    {1000000,
-     {mergeToRow(sTF, sTF, expectedDistSelf),
-      mergeToRow(sTF, sMun, expectedDistUniMun),
-      mergeToRow(sTF, sEif, expectedDistUniEif),
-      mergeToRow(sTF, sEye, expectedDistUniEye),
-      mergeToRow(sMun, sMun, expectedDistSelf),
-      mergeToRow(sMun, sTF, expectedDistUniMun),
-      mergeToRow(sMun, sEif, expectedDistMunEif),
-      mergeToRow(sMun, sEye, expectedDistMunEye),
-      mergeToRow(sEye, sEye, expectedDistSelf),
-      mergeToRow(sEye, sEif, expectedDistEyeEif),
-      mergeToRow(sEye, sTF, expectedDistUniEye),
-      mergeToRow(sEye, sMun, expectedDistMunEye),
-      mergeToRow(sLib, sLib, expectedDistSelf),
-      mergeToRow(sEif, sEif, expectedDistSelf),
-      mergeToRow(sEif, sTF, expectedDistUniEif),
-      mergeToRow(sEif, sMun, expectedDistMunEif),
-      mergeToRow(sEif, sEye, expectedDistEyeEif)}},
-    {10000000,
-     {mergeToRow(sTF, sTF, expectedDistSelf),
-      mergeToRow(sTF, sMun, expectedDistUniMun),
-      mergeToRow(sTF, sEif, expectedDistUniEif),
-      mergeToRow(sTF, sEye, expectedDistUniEye),
-      mergeToRow(sTF, sLib, expectedDistUniLib),
-      mergeToRow(sMun, sMun, expectedDistSelf),
-      mergeToRow(sMun, sTF, expectedDistUniMun),
-      mergeToRow(sMun, sEif, expectedDistMunEif),
-      mergeToRow(sMun, sEye, expectedDistMunEye),
-      mergeToRow(sMun, sLib, expectedDistMunLib),
-      mergeToRow(sEye, sEye, expectedDistSelf),
-      mergeToRow(sEye, sEif, expectedDistEyeEif),
-      mergeToRow(sEye, sTF, expectedDistUniEye),
-      mergeToRow(sEye, sMun, expectedDistMunEye),
-      mergeToRow(sEye, sLib, expectedDistEyeLib),
-      mergeToRow(sLib, sLib, expectedDistSelf),
-      mergeToRow(sLib, sTF, expectedDistUniLib),
-      mergeToRow(sLib, sMun, expectedDistMunLib),
-      mergeToRow(sLib, sEye, expectedDistEyeLib),
-      mergeToRow(sLib, sEif, expectedDistEifLib),
-      mergeToRow(sEif, sEif, expectedDistSelf),
-      mergeToRow(sEif, sTF, expectedDistUniEif),
-      mergeToRow(sEif, sMun, expectedDistMunEif),
-      mergeToRow(sEif, sEye, expectedDistEyeEif),
-      mergeToRow(sEif, sLib, expectedDistEifLib)}}};
-
-ExpectedRowsMaxDist expectedMaxDistRowsSmallWrongPoint = {
-    {1,
-     {
-         mergeToRow(sMun, sMun, expectedDistSelf),
-         mergeToRow(sEye, sEye, expectedDistSelf),
-         mergeToRow(sLib, sLib, expectedDistSelf),
-         mergeToRow(sEif, sEif, expectedDistSelf),
-     }},
-    {5000,
-     {mergeToRow(sMun, sMun, expectedDistSelf),
-      mergeToRow(sEye, sEye, expectedDistSelf),
-      mergeToRow(sLib, sLib, expectedDistSelf),
-      mergeToRow(sEif, sEif, expectedDistSelf)}},
-    {500000,
-     {mergeToRow(sMun, sMun, expectedDistSelf),
-      mergeToRow(sMun, sEif, expectedDistMunEif),
-      mergeToRow(sEye, sEye, expectedDistSelf),
-      mergeToRow(sEye, sEif, expectedDistEyeEif),
-      mergeToRow(sLib, sLib, expectedDistSelf),
-      mergeToRow(sEif, sEif, expectedDistSelf),
-      mergeToRow(sEif, sMun, expectedDistMunEif),
-      mergeToRow(sEif, sEye, expectedDistEyeEif)}},
-    {1000000,
-     {mergeToRow(sMun, sMun, expectedDistSelf),
-      mergeToRow(sMun, sEif, expectedDistMunEif),
-      mergeToRow(sMun, sEye, expectedDistMunEye),
-      mergeToRow(sEye, sEye, expectedDistSelf),
-      mergeToRow(sEye, sEif, expectedDistEyeEif),
-      mergeToRow(sEye, sMun, expectedDistMunEye),
-      mergeToRow(sLib, sLib, expectedDistSelf),
-      mergeToRow(sEif, sEif, expectedDistSelf),
-      mergeToRow(sEif, sMun, expectedDistMunEif),
-      mergeToRow(sEif, sEye, expectedDistEyeEif)}},
-    {10000000,
-     {mergeToRow(sMun, sMun, expectedDistSelf),
-      mergeToRow(sMun, sEif, expectedDistMunEif),
-      mergeToRow(sMun, sEye, expectedDistMunEye),
-      mergeToRow(sMun, sLib, expectedDistMunLib),
-      mergeToRow(sEye, sEye, expectedDistSelf),
-      mergeToRow(sEye, sEif, expectedDistEyeEif),
-      mergeToRow(sEye, sMun, expectedDistMunEye),
-      mergeToRow(sEye, sLib, expectedDistEyeLib),
-      mergeToRow(sLib, sLib, expectedDistSelf),
-      mergeToRow(sLib, sMun, expectedDistMunLib),
-      mergeToRow(sLib, sEye, expectedDistEyeLib),
-      mergeToRow(sLib, sEif, expectedDistEifLib),
-      mergeToRow(sEif, sEif, expectedDistSelf),
-      mergeToRow(sEif, sMun, expectedDistMunEif),
-      mergeToRow(sEif, sEye, expectedDistEyeEif),
-      mergeToRow(sEif, sLib, expectedDistEifLib)}}};
-
-ExpectedRowsMaxDist expectedMaxDistRowsDiff = {
-    {1,
-     {mergeToRow(TF, sTF, expectedDistSelf),
-      mergeToRow(Mun, sMun, expectedDistSelf),
-      mergeToRow(Eye, sEye, expectedDistSelf),
-      mergeToRow(Lib, sLib, expectedDistSelf),
-      mergeToRow(Eif, sEif, expectedDistSelf)}},
-    {5000,
-     {mergeToRow(TF, sTF, expectedDistSelf),
-      mergeToRow(TF, sMun, expectedDistUniMun),
-      mergeToRow(Mun, sMun, expectedDistSelf),
-      mergeToRow(Mun, sTF, expectedDistUniMun),
-      mergeToRow(Eye, sEye, expectedDistSelf),
-      mergeToRow(Lib, sLib, expectedDistSelf),
-      mergeToRow(Eif, sEif, expectedDistSelf)}},
-    {500000,
-     {mergeToRow(TF, sTF, expectedDistSelf),
-      mergeToRow(TF, sMun, expectedDistUniMun),
-      mergeToRow(TF, sEif, expectedDistUniEif),
-      mergeToRow(Mun, sMun, expectedDistSelf),
-      mergeToRow(Mun, sTF, expectedDistUniMun),
-      mergeToRow(Mun, sEif, expectedDistMunEif),
-      mergeToRow(Eye, sEye, expectedDistSelf),
-      mergeToRow(Eye, sEif, expectedDistEyeEif),
-      mergeToRow(Lib, sLib, expectedDistSelf),
-      mergeToRow(Eif, sEif, expectedDistSelf),
-      mergeToRow(Eif, sTF, expectedDistUniEif),
-      mergeToRow(Eif, sMun, expectedDistMunEif),
-      mergeToRow(Eif, sEye, expectedDistEyeEif)}},
-    {1000000,
-     {mergeToRow(TF, sTF, expectedDistSelf),
-      mergeToRow(TF, sMun, expectedDistUniMun),
-      mergeToRow(TF, sEif, expectedDistUniEif),
-      mergeToRow(TF, sEye, expectedDistUniEye),
-      mergeToRow(Mun, sMun, expectedDistSelf),
-      mergeToRow(Mun, sTF, expectedDistUniMun),
-      mergeToRow(Mun, sEif, expectedDistMunEif),
-      mergeToRow(Mun, sEye, expectedDistMunEye),
-      mergeToRow(Eye, sEye, expectedDistSelf),
-      mergeToRow(Eye, sEif, expectedDistEyeEif),
-      mergeToRow(Eye, sTF, expectedDistUniEye),
-      mergeToRow(Eye, sMun, expectedDistMunEye),
-      mergeToRow(Lib, sLib, expectedDistSelf),
-      mergeToRow(Eif, sEif, expectedDistSelf),
-      mergeToRow(Eif, sTF, expectedDistUniEif),
-      mergeToRow(Eif, sMun, expectedDistMunEif),
-      mergeToRow(Eif, sEye, expectedDistEyeEif)}},
-    {10000000,
-     {mergeToRow(TF, sTF, expectedDistSelf),
-      mergeToRow(TF, sMun, expectedDistUniMun),
-      mergeToRow(TF, sEif, expectedDistUniEif),
-      mergeToRow(TF, sEye, expectedDistUniEye),
-      mergeToRow(TF, sLib, expectedDistUniLib),
-      mergeToRow(Mun, sMun, expectedDistSelf),
-      mergeToRow(Mun, sTF, expectedDistUniMun),
-      mergeToRow(Mun, sEif, expectedDistMunEif),
-      mergeToRow(Mun, sEye, expectedDistMunEye),
-      mergeToRow(Mun, sLib, expectedDistMunLib),
-      mergeToRow(Eye, sEye, expectedDistSelf),
-      mergeToRow(Eye, sEif, expectedDistEyeEif),
-      mergeToRow(Eye, sTF, expectedDistUniEye),
-      mergeToRow(Eye, sMun, expectedDistMunEye),
-      mergeToRow(Eye, sLib, expectedDistEyeLib),
-      mergeToRow(Lib, sLib, expectedDistSelf),
-      mergeToRow(Lib, sTF, expectedDistUniLib),
-      mergeToRow(Lib, sMun, expectedDistMunLib),
-      mergeToRow(Lib, sEye, expectedDistEyeLib),
-      mergeToRow(Lib, sEif, expectedDistEifLib),
-      mergeToRow(Eif, sEif, expectedDistSelf),
-      mergeToRow(Eif, sTF, expectedDistUniEif),
-      mergeToRow(Eif, sMun, expectedDistMunEif),
-      mergeToRow(Eif, sEye, expectedDistEyeEif),
-      mergeToRow(Eif, sLib, expectedDistEifLib)}}};
-
-ExpectedRowsMaxDist expectedMaxDistRowsDiffIDTable = {
-    {1, {mergeToRow({sTF.at(1)}, sTF, expectedDistSelf)}},
-    {5000,
-     {mergeToRow({sTF.at(1)}, sTF, expectedDistSelf),
-      mergeToRow({sTF.at(1)}, sMun, expectedDistUniMun)}},
-    {500000,
-     {mergeToRow({sTF.at(1)}, sTF, expectedDistSelf),
-      mergeToRow({sTF.at(1)}, sMun, expectedDistUniMun),
-      mergeToRow({sTF.at(1)}, sEif, expectedDistUniEif)}},
-    {1000000,
-     {mergeToRow({sTF.at(1)}, sTF, expectedDistSelf),
-      mergeToRow({sTF.at(1)}, sMun, expectedDistUniMun),
-      mergeToRow({sTF.at(1)}, sEif, expectedDistUniEif),
-      mergeToRow({sTF.at(1)}, sEye, expectedDistUniEye)}},
-    {10000000,
-     {mergeToRow({sTF.at(1)}, sTF, expectedDistSelf),
-      mergeToRow({sTF.at(1)}, sMun, expectedDistUniMun),
-      mergeToRow({sTF.at(1)}, sEif, expectedDistUniEif),
-      mergeToRow({sTF.at(1)}, sEye, expectedDistUniEye),
-      mergeToRow({sTF.at(1)}, sLib, expectedDistUniLib)}}};
-
-// The expected values for nearest nneighbors are stored in a nested map. The
-// key in the outer map is the maximum number of results and the key in the
-// inner map is the maximum distance or std::nullopt.
-using ExpectedRowsNearestNeighborsMaxDist =
-    std::unordered_map<std::optional<size_t>, Rows>;
-using ExpectedRowsNearestNeighbors =
-    std::unordered_map<size_t, ExpectedRowsNearestNeighborsMaxDist>;
-
-ExpectedRowsNearestNeighbors expectedNearestNeighbors = {
-    {1,
-     {{std::nullopt,
-       {mergeToRow(TF, TF, expectedDistSelf),
-        mergeToRow(Mun, Mun, expectedDistSelf),
-        mergeToRow(Eye, Eye, expectedDistSelf),
-        mergeToRow(Lib, Lib, expectedDistSelf),
-        mergeToRow(Eif, Eif, expectedDistSelf)}}}},
-    {2,
-     {{std::nullopt,
-       {mergeToRow(TF, TF, expectedDistSelf),
-        mergeToRow(Mun, Mun, expectedDistSelf),
-        mergeToRow(Eye, Eye, expectedDistSelf),
-        mergeToRow(Lib, Lib, expectedDistSelf),
-        mergeToRow(Eif, Eif, expectedDistSelf),
-        mergeToRow(TF, Mun, expectedDistUniMun),
-        mergeToRow(Mun, TF, expectedDistUniMun),
-        mergeToRow(Eye, Eif, expectedDistEyeEif),
-        mergeToRow(Lib, Eye, expectedDistEyeLib),
-        mergeToRow(Eif, Eye, expectedDistEyeEif)}},
-      {40,
-       {mergeToRow(TF, TF, expectedDistSelf),
+  ExpectedRowsMaxDist expectedMaxDistRows = {
+      {1,
+      {mergeToRow(TF, TF, expectedDistSelf),
         mergeToRow(Mun, Mun, expectedDistSelf),
         mergeToRow(Eye, Eye, expectedDistSelf),
         mergeToRow(Lib, Lib, expectedDistSelf),
         mergeToRow(Eif, Eif, expectedDistSelf)}},
-      {4000,
-       {mergeToRow(TF, TF, expectedDistSelf),
-        mergeToRow(Mun, Mun, expectedDistSelf),
-        mergeToRow(Eye, Eye, expectedDistSelf),
-        mergeToRow(Lib, Lib, expectedDistSelf),
-        mergeToRow(Eif, Eif, expectedDistSelf),
+      {5000,
+      {mergeToRow(TF, TF, expectedDistSelf),
         mergeToRow(TF, Mun, expectedDistUniMun),
-        mergeToRow(Mun, TF, expectedDistUniMun)}},
-      {400000,
-       {mergeToRow(TF, TF, expectedDistSelf),
         mergeToRow(Mun, Mun, expectedDistSelf),
-        mergeToRow(Eye, Eye, expectedDistSelf),
-        mergeToRow(Lib, Lib, expectedDistSelf),
-        mergeToRow(Eif, Eif, expectedDistSelf),
-        mergeToRow(TF, Mun, expectedDistUniMun),
         mergeToRow(Mun, TF, expectedDistUniMun),
-        mergeToRow(Eye, Eif, expectedDistEyeEif),
-        mergeToRow(Eif, Eye, expectedDistEyeEif)}}}},
-    {3,
-     {{500000,
-       {mergeToRow(TF, TF, expectedDistSelf),
-        mergeToRow(Mun, Mun, expectedDistSelf),
         mergeToRow(Eye, Eye, expectedDistSelf),
         mergeToRow(Lib, Lib, expectedDistSelf),
-        mergeToRow(Eif, Eif, expectedDistSelf),
+        mergeToRow(Eif, Eif, expectedDistSelf)}},
+      {500000,
+      {mergeToRow(TF, TF, expectedDistSelf),
         mergeToRow(TF, Mun, expectedDistUniMun),
+        mergeToRow(TF, Eif, expectedDistUniEif),
+        mergeToRow(Mun, Mun, expectedDistSelf),
         mergeToRow(Mun, TF, expectedDistUniMun),
         mergeToRow(Mun, Eif, expectedDistMunEif),
-        mergeToRow(TF, Eif, expectedDistUniEif),
+        mergeToRow(Eye, Eye, expectedDistSelf),
         mergeToRow(Eye, Eif, expectedDistEyeEif),
+        mergeToRow(Lib, Lib, expectedDistSelf),
+        mergeToRow(Eif, Eif, expectedDistSelf),
+        mergeToRow(Eif, TF, expectedDistUniEif),
+        mergeToRow(Eif, Mun, expectedDistMunEif),
+        mergeToRow(Eif, Eye, expectedDistEyeEif)}},
+      {1000000,
+      {mergeToRow(TF, TF, expectedDistSelf),
+        mergeToRow(TF, Mun, expectedDistUniMun),
+        mergeToRow(TF, Eif, expectedDistUniEif),
+        mergeToRow(TF, Eye, expectedDistUniEye),
+        mergeToRow(Mun, Mun, expectedDistSelf),
+        mergeToRow(Mun, TF, expectedDistUniMun),
+        mergeToRow(Mun, Eif, expectedDistMunEif),
+        mergeToRow(Mun, Eye, expectedDistMunEye),
+        mergeToRow(Eye, Eye, expectedDistSelf),
+        mergeToRow(Eye, Eif, expectedDistEyeEif),
+        mergeToRow(Eye, TF, expectedDistUniEye),
+        mergeToRow(Eye, Mun, expectedDistMunEye),
+        mergeToRow(Lib, Lib, expectedDistSelf),
+        mergeToRow(Eif, Eif, expectedDistSelf),
+        mergeToRow(Eif, TF, expectedDistUniEif),
+        mergeToRow(Eif, Mun, expectedDistMunEif),
+        mergeToRow(Eif, Eye, expectedDistEyeEif)}},
+      {10000000,
+      {mergeToRow(TF, TF, expectedDistSelf),
+        mergeToRow(TF, Mun, expectedDistUniMun),
+        mergeToRow(TF, Eif, expectedDistUniEif),
+        mergeToRow(TF, Eye, expectedDistUniEye),
+        mergeToRow(TF, Lib, expectedDistUniLib),
+        mergeToRow(Mun, Mun, expectedDistSelf),
+        mergeToRow(Mun, TF, expectedDistUniMun),
+        mergeToRow(Mun, Eif, expectedDistMunEif),
+        mergeToRow(Mun, Eye, expectedDistMunEye),
+        mergeToRow(Mun, Lib, expectedDistMunLib),
+        mergeToRow(Eye, Eye, expectedDistSelf),
+        mergeToRow(Eye, Eif, expectedDistEyeEif),
+        mergeToRow(Eye, TF, expectedDistUniEye),
+        mergeToRow(Eye, Mun, expectedDistMunEye),
+        mergeToRow(Eye, Lib, expectedDistEyeLib),
+        mergeToRow(Lib, Lib, expectedDistSelf),
+        mergeToRow(Lib, TF, expectedDistUniLib),
+        mergeToRow(Lib, Mun, expectedDistMunLib),
+        mergeToRow(Lib, Eye, expectedDistEyeLib),
+        mergeToRow(Lib, Eif, expectedDistEifLib),
+        mergeToRow(Eif, Eif, expectedDistSelf),
+        mergeToRow(Eif, TF, expectedDistUniEif),
+        mergeToRow(Eif, Mun, expectedDistMunEif),
         mergeToRow(Eif, Eye, expectedDistEyeEif),
-        mergeToRow(Eif, TF, expectedDistUniEif)}}}}};
+        mergeToRow(Eif, Lib, expectedDistEifLib)}}};
+
+  ExpectedRowsMaxDist expectedMaxDistRowsSmall = {
+      {1,
+      {
+          mergeToRow(sTF, sTF, expectedDistSelf),
+          mergeToRow(sMun, sMun, expectedDistSelf),
+          mergeToRow(sEye, sEye, expectedDistSelf),
+          mergeToRow(sLib, sLib, expectedDistSelf),
+          mergeToRow(sEif, sEif, expectedDistSelf),
+      }},
+      {5000,
+      {mergeToRow(sTF, sTF, expectedDistSelf),
+        mergeToRow(sTF, sMun, expectedDistUniMun),
+        mergeToRow(sMun, sMun, expectedDistSelf),
+        mergeToRow(sMun, sTF, expectedDistUniMun),
+        mergeToRow(sEye, sEye, expectedDistSelf),
+        mergeToRow(sLib, sLib, expectedDistSelf),
+        mergeToRow(sEif, sEif, expectedDistSelf)}},
+      {500000,
+      {mergeToRow(sTF, sTF, expectedDistSelf),
+        mergeToRow(sTF, sMun, expectedDistUniMun),
+        mergeToRow(sTF, sEif, expectedDistUniEif),
+        mergeToRow(sMun, sMun, expectedDistSelf),
+        mergeToRow(sMun, sTF, expectedDistUniMun),
+        mergeToRow(sMun, sEif, expectedDistMunEif),
+        mergeToRow(sEye, sEye, expectedDistSelf),
+        mergeToRow(sEye, sEif, expectedDistEyeEif),
+        mergeToRow(sLib, sLib, expectedDistSelf),
+        mergeToRow(sEif, sEif, expectedDistSelf),
+        mergeToRow(sEif, sTF, expectedDistUniEif),
+        mergeToRow(sEif, sMun, expectedDistMunEif),
+        mergeToRow(sEif, sEye, expectedDistEyeEif)}},
+      {1000000,
+      {mergeToRow(sTF, sTF, expectedDistSelf),
+        mergeToRow(sTF, sMun, expectedDistUniMun),
+        mergeToRow(sTF, sEif, expectedDistUniEif),
+        mergeToRow(sTF, sEye, expectedDistUniEye),
+        mergeToRow(sMun, sMun, expectedDistSelf),
+        mergeToRow(sMun, sTF, expectedDistUniMun),
+        mergeToRow(sMun, sEif, expectedDistMunEif),
+        mergeToRow(sMun, sEye, expectedDistMunEye),
+        mergeToRow(sEye, sEye, expectedDistSelf),
+        mergeToRow(sEye, sEif, expectedDistEyeEif),
+        mergeToRow(sEye, sTF, expectedDistUniEye),
+        mergeToRow(sEye, sMun, expectedDistMunEye),
+        mergeToRow(sLib, sLib, expectedDistSelf),
+        mergeToRow(sEif, sEif, expectedDistSelf),
+        mergeToRow(sEif, sTF, expectedDistUniEif),
+        mergeToRow(sEif, sMun, expectedDistMunEif),
+        mergeToRow(sEif, sEye, expectedDistEyeEif)}},
+      {10000000,
+      {mergeToRow(sTF, sTF, expectedDistSelf),
+        mergeToRow(sTF, sMun, expectedDistUniMun),
+        mergeToRow(sTF, sEif, expectedDistUniEif),
+        mergeToRow(sTF, sEye, expectedDistUniEye),
+        mergeToRow(sTF, sLib, expectedDistUniLib),
+        mergeToRow(sMun, sMun, expectedDistSelf),
+        mergeToRow(sMun, sTF, expectedDistUniMun),
+        mergeToRow(sMun, sEif, expectedDistMunEif),
+        mergeToRow(sMun, sEye, expectedDistMunEye),
+        mergeToRow(sMun, sLib, expectedDistMunLib),
+        mergeToRow(sEye, sEye, expectedDistSelf),
+        mergeToRow(sEye, sEif, expectedDistEyeEif),
+        mergeToRow(sEye, sTF, expectedDistUniEye),
+        mergeToRow(sEye, sMun, expectedDistMunEye),
+        mergeToRow(sEye, sLib, expectedDistEyeLib),
+        mergeToRow(sLib, sLib, expectedDistSelf),
+        mergeToRow(sLib, sTF, expectedDistUniLib),
+        mergeToRow(sLib, sMun, expectedDistMunLib),
+        mergeToRow(sLib, sEye, expectedDistEyeLib),
+        mergeToRow(sLib, sEif, expectedDistEifLib),
+        mergeToRow(sEif, sEif, expectedDistSelf),
+        mergeToRow(sEif, sTF, expectedDistUniEif),
+        mergeToRow(sEif, sMun, expectedDistMunEif),
+        mergeToRow(sEif, sEye, expectedDistEyeEif),
+        mergeToRow(sEif, sLib, expectedDistEifLib)}}};
+
+  ExpectedRowsMaxDist expectedMaxDistRowsSmallWrongPoint = {
+      {1,
+      {
+          mergeToRow(sMun, sMun, expectedDistSelf),
+          mergeToRow(sEye, sEye, expectedDistSelf),
+          mergeToRow(sLib, sLib, expectedDistSelf),
+          mergeToRow(sEif, sEif, expectedDistSelf),
+      }},
+      {5000,
+      {mergeToRow(sMun, sMun, expectedDistSelf),
+        mergeToRow(sEye, sEye, expectedDistSelf),
+        mergeToRow(sLib, sLib, expectedDistSelf),
+        mergeToRow(sEif, sEif, expectedDistSelf)}},
+      {500000,
+      {mergeToRow(sMun, sMun, expectedDistSelf),
+        mergeToRow(sMun, sEif, expectedDistMunEif),
+        mergeToRow(sEye, sEye, expectedDistSelf),
+        mergeToRow(sEye, sEif, expectedDistEyeEif),
+        mergeToRow(sLib, sLib, expectedDistSelf),
+        mergeToRow(sEif, sEif, expectedDistSelf),
+        mergeToRow(sEif, sMun, expectedDistMunEif),
+        mergeToRow(sEif, sEye, expectedDistEyeEif)}},
+      {1000000,
+      {mergeToRow(sMun, sMun, expectedDistSelf),
+        mergeToRow(sMun, sEif, expectedDistMunEif),
+        mergeToRow(sMun, sEye, expectedDistMunEye),
+        mergeToRow(sEye, sEye, expectedDistSelf),
+        mergeToRow(sEye, sEif, expectedDistEyeEif),
+        mergeToRow(sEye, sMun, expectedDistMunEye),
+        mergeToRow(sLib, sLib, expectedDistSelf),
+        mergeToRow(sEif, sEif, expectedDistSelf),
+        mergeToRow(sEif, sMun, expectedDistMunEif),
+        mergeToRow(sEif, sEye, expectedDistEyeEif)}},
+      {10000000,
+      {mergeToRow(sMun, sMun, expectedDistSelf),
+        mergeToRow(sMun, sEif, expectedDistMunEif),
+        mergeToRow(sMun, sEye, expectedDistMunEye),
+        mergeToRow(sMun, sLib, expectedDistMunLib),
+        mergeToRow(sEye, sEye, expectedDistSelf),
+        mergeToRow(sEye, sEif, expectedDistEyeEif),
+        mergeToRow(sEye, sMun, expectedDistMunEye),
+        mergeToRow(sEye, sLib, expectedDistEyeLib),
+        mergeToRow(sLib, sLib, expectedDistSelf),
+        mergeToRow(sLib, sMun, expectedDistMunLib),
+        mergeToRow(sLib, sEye, expectedDistEyeLib),
+        mergeToRow(sLib, sEif, expectedDistEifLib),
+        mergeToRow(sEif, sEif, expectedDistSelf),
+        mergeToRow(sEif, sMun, expectedDistMunEif),
+        mergeToRow(sEif, sEye, expectedDistEyeEif),
+        mergeToRow(sEif, sLib, expectedDistEifLib)}}};
+
+  ExpectedRowsMaxDist expectedMaxDistRowsDiff = {
+      {1,
+      {mergeToRow(TF, sTF, expectedDistSelf),
+        mergeToRow(Mun, sMun, expectedDistSelf),
+        mergeToRow(Eye, sEye, expectedDistSelf),
+        mergeToRow(Lib, sLib, expectedDistSelf),
+        mergeToRow(Eif, sEif, expectedDistSelf)}},
+      {5000,
+      {mergeToRow(TF, sTF, expectedDistSelf),
+        mergeToRow(TF, sMun, expectedDistUniMun),
+        mergeToRow(Mun, sMun, expectedDistSelf),
+        mergeToRow(Mun, sTF, expectedDistUniMun),
+        mergeToRow(Eye, sEye, expectedDistSelf),
+        mergeToRow(Lib, sLib, expectedDistSelf),
+        mergeToRow(Eif, sEif, expectedDistSelf)}},
+      {500000,
+      {mergeToRow(TF, sTF, expectedDistSelf),
+        mergeToRow(TF, sMun, expectedDistUniMun),
+        mergeToRow(TF, sEif, expectedDistUniEif),
+        mergeToRow(Mun, sMun, expectedDistSelf),
+        mergeToRow(Mun, sTF, expectedDistUniMun),
+        mergeToRow(Mun, sEif, expectedDistMunEif),
+        mergeToRow(Eye, sEye, expectedDistSelf),
+        mergeToRow(Eye, sEif, expectedDistEyeEif),
+        mergeToRow(Lib, sLib, expectedDistSelf),
+        mergeToRow(Eif, sEif, expectedDistSelf),
+        mergeToRow(Eif, sTF, expectedDistUniEif),
+        mergeToRow(Eif, sMun, expectedDistMunEif),
+        mergeToRow(Eif, sEye, expectedDistEyeEif)}},
+      {1000000,
+      {mergeToRow(TF, sTF, expectedDistSelf),
+        mergeToRow(TF, sMun, expectedDistUniMun),
+        mergeToRow(TF, sEif, expectedDistUniEif),
+        mergeToRow(TF, sEye, expectedDistUniEye),
+        mergeToRow(Mun, sMun, expectedDistSelf),
+        mergeToRow(Mun, sTF, expectedDistUniMun),
+        mergeToRow(Mun, sEif, expectedDistMunEif),
+        mergeToRow(Mun, sEye, expectedDistMunEye),
+        mergeToRow(Eye, sEye, expectedDistSelf),
+        mergeToRow(Eye, sEif, expectedDistEyeEif),
+        mergeToRow(Eye, sTF, expectedDistUniEye),
+        mergeToRow(Eye, sMun, expectedDistMunEye),
+        mergeToRow(Lib, sLib, expectedDistSelf),
+        mergeToRow(Eif, sEif, expectedDistSelf),
+        mergeToRow(Eif, sTF, expectedDistUniEif),
+        mergeToRow(Eif, sMun, expectedDistMunEif),
+        mergeToRow(Eif, sEye, expectedDistEyeEif)}},
+      {10000000,
+      {mergeToRow(TF, sTF, expectedDistSelf),
+        mergeToRow(TF, sMun, expectedDistUniMun),
+        mergeToRow(TF, sEif, expectedDistUniEif),
+        mergeToRow(TF, sEye, expectedDistUniEye),
+        mergeToRow(TF, sLib, expectedDistUniLib),
+        mergeToRow(Mun, sMun, expectedDistSelf),
+        mergeToRow(Mun, sTF, expectedDistUniMun),
+        mergeToRow(Mun, sEif, expectedDistMunEif),
+        mergeToRow(Mun, sEye, expectedDistMunEye),
+        mergeToRow(Mun, sLib, expectedDistMunLib),
+        mergeToRow(Eye, sEye, expectedDistSelf),
+        mergeToRow(Eye, sEif, expectedDistEyeEif),
+        mergeToRow(Eye, sTF, expectedDistUniEye),
+        mergeToRow(Eye, sMun, expectedDistMunEye),
+        mergeToRow(Eye, sLib, expectedDistEyeLib),
+        mergeToRow(Lib, sLib, expectedDistSelf),
+        mergeToRow(Lib, sTF, expectedDistUniLib),
+        mergeToRow(Lib, sMun, expectedDistMunLib),
+        mergeToRow(Lib, sEye, expectedDistEyeLib),
+        mergeToRow(Lib, sEif, expectedDistEifLib),
+        mergeToRow(Eif, sEif, expectedDistSelf),
+        mergeToRow(Eif, sTF, expectedDistUniEif),
+        mergeToRow(Eif, sMun, expectedDistMunEif),
+        mergeToRow(Eif, sEye, expectedDistEyeEif),
+        mergeToRow(Eif, sLib, expectedDistEifLib)}}};
+
+  ExpectedRowsMaxDist expectedMaxDistRowsDiffIDTable = {
+      {1, {mergeToRow({sTF.at(1)}, sTF, expectedDistSelf)}},
+      {5000,
+      {mergeToRow({sTF.at(1)}, sTF, expectedDistSelf),
+        mergeToRow({sTF.at(1)}, sMun, expectedDistUniMun)}},
+      {500000,
+      {mergeToRow({sTF.at(1)}, sTF, expectedDistSelf),
+        mergeToRow({sTF.at(1)}, sMun, expectedDistUniMun),
+        mergeToRow({sTF.at(1)}, sEif, expectedDistUniEif)}},
+      {1000000,
+      {mergeToRow({sTF.at(1)}, sTF, expectedDistSelf),
+        mergeToRow({sTF.at(1)}, sMun, expectedDistUniMun),
+        mergeToRow({sTF.at(1)}, sEif, expectedDistUniEif),
+        mergeToRow({sTF.at(1)}, sEye, expectedDistUniEye)}},
+      {10000000,
+      {mergeToRow({sTF.at(1)}, sTF, expectedDistSelf),
+        mergeToRow({sTF.at(1)}, sMun, expectedDistUniMun),
+        mergeToRow({sTF.at(1)}, sEif, expectedDistUniEif),
+        mergeToRow({sTF.at(1)}, sEye, expectedDistUniEye),
+        mergeToRow({sTF.at(1)}, sLib, expectedDistUniLib)}}};
+
+  // The expected values for nearest nneighbors are stored in a nested map. The
+  // key in the outer map is the maximum number of results and the key in the
+  // inner map is the maximum distance or std::nullopt.
+  using ExpectedRowsNearestNeighborsMaxDist =
+      std::unordered_map<std::optional<size_t>, Rows>;
+  using ExpectedRowsNearestNeighbors =
+      std::unordered_map<size_t, ExpectedRowsNearestNeighborsMaxDist>;
+
+  ExpectedRowsNearestNeighbors expectedNearestNeighbors = {
+      {1,
+      {{std::nullopt,
+        {mergeToRow(TF, TF, expectedDistSelf),
+          mergeToRow(Mun, Mun, expectedDistSelf),
+          mergeToRow(Eye, Eye, expectedDistSelf),
+          mergeToRow(Lib, Lib, expectedDistSelf),
+          mergeToRow(Eif, Eif, expectedDistSelf)}}}},
+      {2,
+      {{std::nullopt,
+        {mergeToRow(TF, TF, expectedDistSelf),
+          mergeToRow(Mun, Mun, expectedDistSelf),
+          mergeToRow(Eye, Eye, expectedDistSelf),
+          mergeToRow(Lib, Lib, expectedDistSelf),
+          mergeToRow(Eif, Eif, expectedDistSelf),
+          mergeToRow(TF, Mun, expectedDistUniMun),
+          mergeToRow(Mun, TF, expectedDistUniMun),
+          mergeToRow(Eye, Eif, expectedDistEyeEif),
+          mergeToRow(Lib, Eye, expectedDistEyeLib),
+          mergeToRow(Eif, Eye, expectedDistEyeEif)}},
+        {40,
+        {mergeToRow(TF, TF, expectedDistSelf),
+          mergeToRow(Mun, Mun, expectedDistSelf),
+          mergeToRow(Eye, Eye, expectedDistSelf),
+          mergeToRow(Lib, Lib, expectedDistSelf),
+          mergeToRow(Eif, Eif, expectedDistSelf)}},
+        {4000,
+        {mergeToRow(TF, TF, expectedDistSelf),
+          mergeToRow(Mun, Mun, expectedDistSelf),
+          mergeToRow(Eye, Eye, expectedDistSelf),
+          mergeToRow(Lib, Lib, expectedDistSelf),
+          mergeToRow(Eif, Eif, expectedDistSelf),
+          mergeToRow(TF, Mun, expectedDistUniMun),
+          mergeToRow(Mun, TF, expectedDistUniMun)}},
+        {400000,
+        {mergeToRow(TF, TF, expectedDistSelf),
+          mergeToRow(Mun, Mun, expectedDistSelf),
+          mergeToRow(Eye, Eye, expectedDistSelf),
+          mergeToRow(Lib, Lib, expectedDistSelf),
+          mergeToRow(Eif, Eif, expectedDistSelf),
+          mergeToRow(TF, Mun, expectedDistUniMun),
+          mergeToRow(Mun, TF, expectedDistUniMun),
+          mergeToRow(Eye, Eif, expectedDistEyeEif),
+          mergeToRow(Eif, Eye, expectedDistEyeEif)}}}},
+      {3,
+      {{500000,
+        {mergeToRow(TF, TF, expectedDistSelf),
+          mergeToRow(Mun, Mun, expectedDistSelf),
+          mergeToRow(Eye, Eye, expectedDistSelf),
+          mergeToRow(Lib, Lib, expectedDistSelf),
+          mergeToRow(Eif, Eif, expectedDistSelf),
+          mergeToRow(TF, Mun, expectedDistUniMun),
+          mergeToRow(Mun, TF, expectedDistUniMun),
+          mergeToRow(Mun, Eif, expectedDistMunEif),
+          mergeToRow(TF, Eif, expectedDistUniEif),
+          mergeToRow(Eye, Eif, expectedDistEyeEif),
+          mergeToRow(Eif, Eye, expectedDistEyeEif),
+          mergeToRow(Eif, TF, expectedDistUniEif)}}}}};
+
+  // some combinations of the gtest parameters are invalid. Those cases should
+  // not be tested and are therefore excluded
+  bool isInvalidAreaTestConfig(std::optional<MaxDistanceConfig> maxDistConfig) {
+    bool isAreaDataset = std::get<4>(GetParam());
+    bool isS2geoAlg = std::get<0>(GetParam()) == SpatialJoinAlgorithm::S2_GEOMETRY;
+    return isAreaDataset && (!maxDistConfig.has_value() || (maxDistConfig.has_value() && isS2geoAlg ));
+}
 
 };
-/* TODO: activate all the other tests again and make them compatible with the area test
+
 // test the compute result method on small examples
 TEST_P(SpatialJoinParamTest, computeResultSmallDatasetLargeChildren) {
   Row columnNames = {
@@ -832,11 +832,15 @@ TEST_P(SpatialJoinParamTest, computeResultSmallDatasetLargeChildren) {
 
   auto nearestNeighborsTask = getNearestNeighbors();
   auto maxDistTask = getMaxDist();
+  if (isInvalidAreaTestConfig(maxDistTask)) {
+    return;
+  }
+
   if (maxDistTask.has_value()) {
     buildAndTestSmallTestSetLargeChildren(
         maxDistTask.value(), addLeftChildFirst,
         expectedMaxDistRows[maxDistTask.value().maxDist_], columnNames);
-  } else if (nearestNeighborsTask.has_value() and !std::get<4>(GetParam())) {
+  } else if (nearestNeighborsTask.has_value()) {
     buildAndTestSmallTestSetLargeChildren(
         nearestNeighborsTask.value(), addLeftChildFirst,
         expectedNearestNeighbors[nearestNeighborsTask.value().maxResults_]
@@ -846,23 +850,23 @@ TEST_P(SpatialJoinParamTest, computeResultSmallDatasetLargeChildren) {
     AD_THROW("Invalid config");
   }
 }
-*/
 
 TEST_P(SpatialJoinParamTest, computeResultSmallDatasetSmallChildren) {
   Row columnNames{"?obj1", "?point1", "?obj2", "?point2",
                   "?distOfTheTwoObjectsAddedInternally"};
   bool addLeftChildFirst = std::get<1>(GetParam());
-  bool s2geoAlg = std::get<0>(GetParam()) == SpatialJoinAlgorithm::S2_GEOMETRY;
-  bool areaDataset = std::get<4>(GetParam());
 
   auto maxDistTask = getMaxDist();
-  if (maxDistTask.has_value() && !(s2geoAlg && areaDataset)) {
+  if (isInvalidAreaTestConfig(maxDistTask)) {
+    return;
+  }
+  if (maxDistTask.has_value()) {
     buildAndTestSmallTestSetSmallChildren(
         maxDistTask.value(), addLeftChildFirst,
         expectedMaxDistRowsSmall[maxDistTask.value().maxDist_], columnNames);
   }
 }
-/*
+
 TEST_P(SpatialJoinParamTest, computeResultSmallDatasetDifferentSizeChildren) {
   Row columnNames{"?name1",
                   "?obj1",
@@ -875,6 +879,9 @@ TEST_P(SpatialJoinParamTest, computeResultSmallDatasetDifferentSizeChildren) {
   bool bigChildLeft = std::get<2>(GetParam());
 
   auto maxDistTask = getMaxDist();
+  if (isInvalidAreaTestConfig(maxDistTask)) {
+    return;
+  }
   if (maxDistTask.has_value()) {
     buildAndTestSmallTestSetDiffSizeChildren(
         maxDistTask.value(), addLeftChildFirst,
@@ -887,6 +894,10 @@ TEST_P(SpatialJoinParamTest, maxSizeMaxDistanceTest) {
   auto maxDist = std::numeric_limits<size_t>::max();
   MaxDistanceConfig maxDistConf{maxDist};
   bool addLeftChildFirst = std::get<1>(GetParam());
+
+  if (isInvalidAreaTestConfig(maxDistConf)) {
+    return;
+  }
 
   // test small children
   Row columnNames{"?obj1", "?point1", "?obj2", "?point2",
@@ -923,6 +934,9 @@ TEST_P(SpatialJoinParamTest, diffSizeIdTables) {
   bool bigChildLeft = std::get<2>(GetParam());
 
   auto maxDistTask = getMaxDist();
+  if (isInvalidAreaTestConfig(maxDistTask)) {
+    return;
+  }
   if (maxDistTask.has_value()) {
     testDiffSizeIdTables(
         maxDistTask.value(), addLeftChildFirst,
@@ -938,6 +952,9 @@ TEST_P(SpatialJoinParamTest, wrongPointInInput) {
   bool addLeftChildFirst = std::get<1>(GetParam());
 
   auto maxDistTask = getMaxDist();
+  if (isInvalidAreaTestConfig(maxDistTask)) {
+    return;
+  }
   if (maxDistTask.has_value() and !std::get<4>(GetParam())) {
     testWrongPointInInput(
         maxDistTask.value(), addLeftChildFirst,
@@ -945,7 +962,7 @@ TEST_P(SpatialJoinParamTest, wrongPointInInput) {
         columnNames);
   }
 }
-*/
+
 INSTANTIATE_TEST_SUITE_P(
     SpatialJoin, SpatialJoinParamTest,
     ::testing::Combine(
@@ -1480,322 +1497,5 @@ TEST(SpatialJoin, getMaxDistFromMidpointToAnyPointInsideTheBox) {
 }
 
 }  // namespace boundingBox
-
-// ===================================== DEV starting =========================
-namespace development {
-
-// using BoostGeometryNamespace::Box;
-// using BoostGeometryNamespace::Point;
-// using BoostGeometryNamespace::Value;
-// using ValueArea = std::pair<BoostGeometryNamespace::Box, size_t>;
-// // move this to BoostGeometryNamespace
-// typedef
-// boost::geometry::model::polygon<boost::geometry::model::d2::point_xy<double>>
-// Polygon;
-
-// // copy of a function, reduced to a minimum for development
-// std::vector<Box> computeBoundingBox(
-//     const Point& startPoint, double additionalDist = 0) {
-//   // hard coded to test the general algorithm
-//   return {Box(Point(7, -90),
-//               Point(180, 90))};
-// }
-
-// // copy of a function,
-// std::optional<GeoPoint> getPoint(const IdTable* restable, size_t row,
-// ColumnIndex col) {
-//   auto id = restable->at(row, col);
-//   return id.getDatatype() == Datatype::GeoPoint
-//              ? std::optional{id.getGeoPoint()}
-//              : std::nullopt;
-// };
-
-// // helper function in debugging for outputting stuff
-// void print_vecs(std::vector<std::vector<std::string>> vec) {
-//   for (size_t i = 0; i < vec.size(); i++) {
-//     for (size_t k = 0; k < vec.at(i).size(); k++) {
-//       std::cerr << vec.at(i).at(k) << " ";
-//     }
-//     std::cerr << std::endl;
-//   }
-// }
-
-// // helper function in debugging for outputting stuff
-// void print_vec(std::vector<std::string> vec) {
-//   for (size_t i = 0; i < vec.size(); i++) {
-//     std::cerr << vec.at(i) << std::endl;
-//   }
-// }
-
-// void print_box(Box box) {
-//   std::cerr << box.min_corner().get<0>() << " " << box.min_corner().get<1>()
-//   << "  "
-//   << box.max_corner().get<0>() << " " << box.max_corner().get<1>() <<
-//   std::endl;
-// }
-
-// move to SpatialJoinTestHelpers, see comment of buildAreaTestQEC
-// std::string createAreaTestDataset() {
-// auto addArea = [](std::string& kg, std::string number, std::string name,
-//             std::string area) {
-//   kg += absl::StrCat("<nodeArea_", number, "> <name> ", name, " . \n",
-//       "<nodeArea_", number, "> <hasGeometry> <geometryArea", number, "> .\n",
-//       "<geometryArea", number, "> <asWKT> ", area, " .\n" );
-// };
-
-// auto addPoint = [](std::string& kg, std::string number, std::string name,
-//                    std::string point) {
-//   kg += absl::StrCat("<node_", number, "> <name> ", name, " .<node_", number,
-//                      "> <hasGeometry> <geometry", number, "> .<geometry",
-//                      number, "> <asWKT> ", point, " .");
-// };
-
-// auto makeAreaLiteral = [](std::string_view coordinateList) {
-//   return absl::StrCat("\"POLYGON((", coordinateList, "))\"^^<",
-//   GEO_WKT_LITERAL,">");
-// };
-
-// auto a = makeAreaLiteral;
-
-// auto p = makePointLiteral;
-
-// std::string kg;
-// addArea(kg, "1", "\"Uni Freiburg TF Area\"",
-// a("7.8346338 48.0126612,7.8348921 48.0123905,7.8349457 48.0124216,7.8349855 48.0124448,7.8353244
-// 48.0126418,7.8354091 48.0126911,7.8352246 48.0129047,7.8351668 48.0128798,7.8349471
-// 48.0127886,7.8347248 48.0126986,7.8346338 48.0126612")); addArea(kg, "2",
-// "\"Minster Freiburg Area\"",
-// a("7.8520522 47.9956071,7.8520528 47.9955872,7.8521103 47.995588,7.8521117 47.9955419,7.852113
-// 47.9954975,7.8520523 47.9954968,7.8520527 47.995477,7.8521152 47.9954775,7.8521154
-// 47.9954688,7.8521299 47.995469,7.8521311 47.9954303,7.8521611 47.9954307,7.8521587
-// 47.9954718,7.8522674 47.9954741,7.8522681 47.9954676,7.8522746 47.9954643,7.8522832
-// 47.9954599,7.8522976 47.99546,7.8523031 47.995455,7.8523048 47.9954217,7.8522781
-// 47.9954213,7.8522786 47.9954058,7.8523123 47.9954065,7.852314 47.9953744,7.8523383
-// 47.9953748,7.8523373 47.9954062,7.8524164 47.995408,7.8524176 47.9953858,7.852441
-// 47.9953865,7.8524398 47.9954085,7.8525077 47.9954101,7.8525088 47.9953886,7.8525316
-// 47.9953892,7.8525305 47.9954106,7.8526031 47.9954123,7.8526042 47.9953915,7.8526276
-// 47.9953922,7.8526265 47.9954128,7.8526944 47.9954144,7.8526954 47.9953943,7.8527183
-// 47.9953949,7.8527173 47.9954149,7.8527892 47.9954165,7.8527903 47.9953974,7.8528131
-// 47.9953979,7.8528122 47.9954171,7.852871 47.9954182,7.8528712 47.995416,7.8528791
-// 47.9954112,7.85289 47.9954113,7.8528971 47.9954158,7.8528974 47.9954052,7.8528925
-// 47.9954052,7.8528928 47.9953971,7.8529015 47.9953972,7.8529024 47.9953702,7.852897
-// 47.9953701,7.8528972 47.9953645,7.8529037 47.9953645,7.8529038 47.9953613,7.8529069
-// 47.9953614,7.8529071 47.9953541,7.8529151 47.9953542,7.8529149 47.9953581,7.8529218
-// 47.9953582,7.8529217 47.9953631,7.8529621 47.9953637,7.8529623 47.9953572,7.8529719
-// 47.9953573,7.8529716 47.9953642,7.8530114 47.9953648,7.8530116 47.9953587,7.8530192
-// 47.9953589,7.853019 47.995365,7.8530635 47.9953657,7.8530637 47.9953607,7.8530716
-// 47.9953608,7.8530715 47.9953657,7.8530758 47.9953657,7.8530757 47.9953688,7.8530817
-// 47.9953689,7.8530815 47.9953742,7.8530747 47.9953741,7.8530737 47.9954052,7.8530794
-// 47.9954053,7.8530792 47.995413,7.8530717 47.9954129,7.8530708 47.9954199,7.8531165
-// 47.9954207,7.8531229 47.9954131,7.8531292 47.9954209,7.8531444 47.9954211,7.8531444
-// 47.9954238,7.8531569 47.995424,7.8531661 47.9954152,7.853171 47.9954201,7.853183
-// 47.9954203,7.8531829 47.9954234,7.8531973 47.9954236,7.8531977 47.9954138,7.8532142
-// 47.9954141,7.8532141 47.9954253,7.8532425 47.9954355,7.8532514 47.9954298,7.8532593
-// 47.9954353,7.8532915 47.9954255,7.8532923 47.9954155,7.8533067 47.995416,7.8533055
-// 47.9954261,7.8533304 47.9954368,7.8533399 47.995431,7.85335 47.9954372,7.8533758
-// 47.9954288,7.853377 47.9954188,7.8533932 47.9954192,7.8533924 47.9954298,7.8534151
-// 47.9954395,7.8534278 47.9954345,7.8534373 47.995441,7.8534664 47.995432,7.8534672
-// 47.9954209,7.8534832 47.9954211,7.8534828 47.9954322,7.8535077 47.9954449,7.8535224
-// 47.9954375,7.8535325 47.995448,7.8535644 47.9954403,7.8535717 47.9954305,7.8535866
-// 47.9954356,7.8535796 47.9954443,7.8536079 47.9954674,7.8536221 47.9954629,7.8536221
-// 47.9954735,7.8536573 47.9954801,7.8536707 47.9954728,7.8536813 47.9954812,7.8536686
-// 47.9954876,7.8536776 47.9955168,7.8536958 47.9955192,7.8536876 47.9955286,7.8537133
-// 47.9955444,7.85373 47.9955428,7.8537318 47.9955528,7.8537154 47.9955545,7.8537069
-// 47.9955819,7.8537168 47.995588,7.8537044 47.9955948,7.8537086 47.9956193,7.8537263
-// 47.9956245,7.8537206 47.9956347,7.8537069 47.9956317,7.8536802 47.9956473,7.8536819
-// 47.9956577,7.8536667 47.9956604,7.8536506 47.9956817,7.8536639 47.9956902,7.8536543
-// 47.9956981,7.8536394 47.9956887,7.8536331 47.9956931,7.853609 47.9956954,7.8536024
-// 47.9957048,7.8535868 47.9957028,7.8535591 47.9957206,7.8535642 47.9957285,7.8535487
-// 47.9957327,7.8535423 47.9957215,7.853508 47.9957131,7.8534942 47.9957215,7.8534818
-// 47.9957186,7.8534587 47.9957284,7.853458 47.9957389,7.8534421 47.9957388,7.8534424
-// 47.9957273,7.853418 47.995714,7.8534099 47.9957194,7.8534021 47.995713,7.8533721
-// 47.9957242,7.8533712 47.9957359,7.8533558 47.9957351,7.8533565 47.9957247,7.8533269
-// 47.9957094,7.8533171 47.9957165,7.8533073 47.9957088,7.8532874 47.9957186,7.8532866
-// 47.9957296,7.8532698 47.9957295,7.8532698 47.9957189,7.8532466 47.9957048,7.8532372
-// 47.9957131,7.8532277 47.995705,7.8532014 47.9957171,7.8532009 47.9957284,7.8531844
-// 47.9957281,7.8531847 47.9957174,7.8531778 47.9957102,7.853163 47.9957245,7.8530549
-// 47.9957225,7.8530552 47.9957161,7.8529541 47.9957138,7.8529535 47.9957236,7.8529578
-// 47.9957237,7.8529577 47.9957269,7.852953 47.9957268,7.8529529 47.9957308,7.8529477
-// 47.9957307,7.8529478 47.9957271,7.8528964 47.9957256,7.8528963 47.9957288,7.8528915
-// 47.9957287,7.8528916 47.9957256,7.8528876 47.9957255,7.8528875 47.9957223,7.8528912
-// 47.9957224,7.8528908 47.9957195,7.8528811 47.9957194,7.8527983 47.9957162,7.8527981
-// 47.9957192,7.8527723 47.9957185,7.8527732 47.9957016,7.852703 47.9957003,7.8527021
-// 47.9957175,7.8526791 47.9957171,7.8526788 47.9957225,7.8526097 47.9957225,7.8526099
-// 47.995718,7.8525863 47.9957183,7.8525874 47.9956981,7.8525155 47.9956967,7.8525144
-// 47.995718,7.8524916 47.9957174,7.8524927 47.9956963,7.8524241 47.995695,7.852423
-// 47.9957153,7.8523996 47.9957148,7.8524007 47.9956946,7.8523226 47.9956931,7.8523217
-// 47.9957212,7.8522948 47.9957208,7.8522957 47.9956927,7.8522663 47.9956923,7.8522667
-// 47.9956784,7.8522926 47.9956787,7.8522937 47.9956433,7.8522882 47.995635,7.8522723
-// 47.9956351,7.8522611 47.9956281,7.8522613 47.9956189,7.8521543 47.9956174,7.852153
-// 47.9956591,7.8521196 47.9956587,7.8521209 47.995617,7.8521109 47.9956168,7.8521111
-// 47.9956079,7.8520522 47.9956071")); addArea(kg, "3", "\"London Eye Area\"",
-// a("-0.1198608 51.5027451,-0.1197395 51.5027354,-0.1194922 51.5039381,-0.1196135
-// 51.5039478,-0.1198608 51.5027451")); addArea(kg, "4", "\"Statue of liberty
-// Area\"",
-// a("-74.0451069 40.6893455,-74.045004 40.6892215,-74.0451023 40.6891073,-74.0449107
-// 40.6890721,-74.0449537 40.6889343,-74.0447746 40.6889506,-74.0446495 40.6888049,-74.0445067
-// 40.6889076,-74.0442008 40.6888563,-74.0441463 40.6890663,-74.0441411 40.6890854,-74.0441339
-// 40.6890874,-74.0441198 40.6890912,-74.0439637 40.6891376,-74.0440941 40.6892849,-74.0440057
-// 40.6894071,-74.0441949 40.6894309,-74.0441638 40.6895702,-74.0443261 40.6895495,-74.0443498
-// 40.6895782,-74.0443989 40.6896372,-74.0444277 40.6896741,-74.0445955 40.6895939,-74.0447392
-// 40.6896561,-74.0447498 40.6896615,-74.0447718 40.6895577,-74.0447983 40.6895442,-74.0448287
-// 40.6895279,-74.0449638 40.6895497,-74.0449628 40.6895443,-74.044961 40.6895356,-74.0449576
-// 40.6895192,-74.044935 40.689421,-74.0451069 40.6893455")); addArea(kg, "5",
-// "\"eiffel tower Area\"",
-// a("2.2933119 48.858248,2.2935432 48.8581003,2.2935574 48.8581099,2.2935712 48.8581004,2.2936112
-// 48.8581232,2.2936086 48.8581249,2.293611 48.8581262,2.2936415 48.8581385,2.293672
-// 48.8581477,2.2937035 48.8581504,2.293734 48.858149,2.2937827 48.8581439,2.2938856
-// 48.8581182,2.2939778 48.8580882,2.2940648 48.8580483,2.2941435 48.8579991,2.2941937
-// 48.8579588,2.2942364 48.8579197,2.2942775 48.8578753,2.2943096 48.8578312,2.2943307
-// 48.8577908,2.2943447 48.857745,2.2943478 48.8577118,2.2943394 48.8576885,2.2943306
-// 48.8576773,2.2943205 48.8576677,2.2943158 48.8576707,2.2942802 48.8576465,2.2942977
-// 48.8576355,2.2942817 48.8576248,2.2942926 48.8576181,2.2944653 48.8575069,2.2945144
-// 48.8574753,2.2947414 48.8576291,2.294725 48.8576392,2.2947426 48.857651,2.294706
-// 48.8576751,2.294698 48.8576696,2.2946846 48.8576782,2.2946744 48.8576865,2.2946881
-// 48.8576957,2.2946548 48.857717,2.2946554 48.8577213,2.2946713 48.8577905,2.2946982
-// 48.8578393,2.2947088 48.8578585,2.2947529 48.8579196,2.2948133 48.8579803,2.2948836
-// 48.85803,2.2949462 48.8580637,2.2950051 48.8580923,2.2950719 48.85812,2.2951347
-// 48.8581406,2.2951996 48.8581564,2.2952689 48.8581663,2.295334 48.8581699,2.2953613
-// 48.8581518,2.2953739 48.8581604,2.2953965 48.8581497,2.2954016 48.8581464,2.2953933
-// 48.8581409,2.2954304 48.8581172,2.2954473 48.8581285,2.2954631 48.8581182,2.2956897
-// 48.8582718,2.295653 48.8582954,2.2955837 48.85834,2.2954575 48.8584212,2.2954416
-// 48.858411,2.2954238 48.8584227,2.2953878 48.8583981,2.2953925 48.858395,2.2953701
-// 48.8583857,2.2953419 48.8583779,2.2953057 48.8583737,2.2952111 48.8583776,2.2951081
-// 48.858403,2.2950157 48.8584326,2.2949284 48.8584723,2.2948889 48.8584961,2.2947988
-// 48.8585613,2.2947558 48.8586003,2.2947144 48.8586446,2.294682 48.8586886,2.2946605
-// 48.8587289,2.2946462 48.8587747,2.294644 48.8587962,2.2946462 48.8588051,2.2946486
-// 48.8588068,2.2946938 48.8588377,2.2946607 48.8588587,2.294663 48.8588603,2.294681
-// 48.858849,2.2947169 48.8588737,2.2946988 48.858885,2.2947154 48.8588961,2.2944834
-// 48.8590453,2.2943809 48.8589771,2.2943708 48.8589703,2.2942571 48.8588932,2.2942741
-// 48.8588824,2.2942567 48.8588708,2.2942893 48.8588493,2.294306 48.8588605,2.2943103
-// 48.8588577,2.2942883 48.8588426,2.2943122 48.8588275,2.2943227 48.8588209,2.2943283
-// 48.8588173,2.2943315 48.8588125,2.2943333 48.8588018,2.2943166 48.8587327,2.294301
-// 48.8586978,2.2942783 48.8586648,2.2942406 48.8586191,2.2942064 48.858577,2.2941734
-// 48.8585464,2.2941015 48.8584943,2.2940384 48.8584609,2.2939792 48.8584325,2.293912
-// 48.8584052,2.2938415 48.8583828,2.293784 48.8583695,2.2937145 48.8583599,2.2936514
-// 48.8583593,2.2936122 48.8583846,2.293606 48.8583807,2.2935688 48.8584044,2.2935515
-// 48.8583929,2.293536 48.8584028,2.2933119 48.858248")); addPoint(kg, "1",
-// "\"Uni Freiburg TF\"", p("7.83505", "48.01267")); addPoint(kg, "2",
-// "\"Minster Freiburg\"", p("7.85298", "47.99557")); addPoint(kg, "3",
-// "\"London Eye\"", p("-0.11957", "51.50333")); addPoint(kg, "4", "\"Statue of
-// liberty\"", p("-74.04454", "40.68925")); addPoint(kg, "5", "\"eiffel
-// tower\"", p("2.29451", "48.85825"));
-
-// return kg;
-// }
-
-// move to SpatialJoinTestHelpers, but adapt the existing buildTestQEC method by
-// adding a parameter bool usePointDataset, which when set to false calls the
-// createAreaDataset method or give this parameter to the existing createDataset
-// method, which has an if(usePointDataset)... else ...
-// QueryExecutionContext* buildAreaTestQEC() {
-//   std::string kg = createAreaTestDataset();
-//   ad_utility::MemorySize blocksizePermutations = 16_MB;
-//   auto qec = ad_utility::testing::getQec(kg, true, true, false,
-//   blocksizePermutations,
-//             false, true, std::nullopt, 10000);
-//   return qec;
-// }
-
-TEST(SpatialJoin, development) {
-  // auto qec = buildAreaTestQEC();
-  auto qec = ad_utility::testing::getQec();
-  /*auto firstChild = buildMediumChild(qec,
-                   {"?obj1", std::string{"<name>"}, "?name1"},
-                   {"?obj1", std::string{"<highway>"}, "?highway"},
-                   {"?obj1", std::string{"<envelope>"}, "?area"}, "?obj1",
-     "?obj1"); */
-  auto firstChild = buildMediumChild(
-      qec, {"?obj1", std::string{"<name>"}, "?name1"},
-      {"?obj1", std::string{"<hasGeometry>"}, "?geo1"},
-      {"?geo1", std::string{"<asWKT>"}, "?wkt1"}, "?obj1", "?geo1");
-  auto result1 = firstChild->getResult();
-  std::cerr << "========= printing result ===========" << std::endl;
-  std::cerr << "result size: " << result1->idTable().numRows() << std::endl;
-  // print_vec(printTable(qec, result.get()));
-  auto secondChild = buildMediumChild(
-      qec, {"?obj2", std::string{"<name>"}, "?name2"},
-      {"?obj2", std::string{"<hasGeometry>"}, "?geo2"},
-      {"?geo2", std::string{"<asWKT>"}, "?wkt2"}, "?obj2", "?geo2");
-  auto result2 = secondChild->getResult();
-  // if the object in the kg has both a point and a polygon representation, then
-  // the point representation should be used by default. Add this case to the
-  // test kg to test this behaviour
-
-  // next step: create bounding box for the area of the polygon
-
-  // insert the bounding boxes in the rtree
-
-  // TODO überall boost::geometry::index durch bgi ersetzen
-
-  // for (size_t i = 0; i < result1->idTable().numRows(); i++) {
-  //   // get bounding box
-  //   size_t joincol = 3; // TODO: replace by smallerResJoinCol or
-  //   otherResJoinCol auto geopoint = getPoint(&(result1->idTable()), i,
-  //   joincol); Box bbox;
-
-  //   if (!geopoint) {
-  //     std::string areastring =
-  //     betweenQuotes(ExportQueryExecutionTrees::idToStringAndType(
-  //             qec->getIndex(),
-  //             result1->idTable().at(i, joincol), {}).value().first);
-  //     bbox = calculateBoundingBoxOfArea(areastring);
-  //   } else {
-  //     // create a box with a side length of at most 1mm to approximate the
-  //     point bbox = Box(Point(geopoint.value().getLng(),
-  //     geopoint.value().getLat()),
-  //                Point(geopoint.value().getLng() + 0.00000001,
-  //                geopoint.value().getLat() + 0.00000001));
-  //   }
-  //   rtree.insert(std::make_pair(std::move(bbox), i));
-  // }
-  // std::cerr << "rtree build" << std::endl;
-
-  // std::vector<ValueArea, ad_utility::AllocatorWithLimit<ValueArea>> results{
-  //     qec->getAllocator()};
-  // for (size_t i = 0; i < result2->idTable().numRows(); i++) {
-  //   size_t joincol = 3; // TODO: replace by smallerResJoinCol or
-  //   otherResJoinCol auto geopoint = getPoint(&(result2->idTable()), i,
-  //   joincol); std::vector<Box> bbox;
-
-  //   if (!geopoint) {
-  //     std::string areastring =
-  //     betweenQuotes(ExportQueryExecutionTrees::idToStringAndType(
-  //           qec->getIndex(),
-  //           result2->idTable().at(i, joincol), {}).value().first);
-  //     auto areaBox = calculateBoundingBoxOfArea(areastring);
-  //     auto midpoint = calculateMidpointOfBox(areaBox);
-  //     bbox = computeBoundingBox(midpoint,
-  //     getMaxDistFromMidpointToAnyPointInsideTheBox(areaBox, midpoint));
-  //   } else {
-  //     bbox = computeBoundingBox(Point(geopoint.value().getLng(),
-  //     geopoint.value().getLat()));
-  //   }
-
-  //   results.clear();
-
-  // ql::ranges::for_each(bbox, [&](const Box& bbox) {
-  //   rtree.query(boost::geometry::index::intersects(bbox),
-  //   std::back_inserter(results));
-  // });
-
-  // ql::ranges::for_each(results, [&](const ValueArea& res) {
-  //   size_t row1 = res.second;
-  //   size_t row2 = i;
-  //   std::cerr << "test results" << std::endl;
-  //   std::cerr <<
-  //   ExportQueryExecutionTrees::idToStringAndType(qec->getIndex(),
-  //                 result1->idTable().at(row1, 2), {}).value().first
-  //             <<
-  //             ExportQueryExecutionTrees::idToStringAndType(qec->getIndex(),
-  //                 result2->idTable().at(row2, 2), {}).value().first
-  //             << std::endl;
-  // });
-  // }
-}
-
-}  // namespace development
-
-// ===================================== DEV ending ===========================
 
 }  // namespace
