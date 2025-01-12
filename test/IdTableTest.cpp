@@ -164,7 +164,7 @@ TEST(IdTable, rowIterators) {
     ASSERT_FALSE(
         std::is_sorted(std::as_const(row).begin(), std::as_const(row).end()));
 
-    std::ranges::sort(row.begin(), row.end());
+    ql::ranges::sort(row.begin(), row.end());
     ASSERT_EQ(-1, row[0]);
     ASSERT_EQ(0, row[1]);
     ASSERT_EQ(1, row[2]);
@@ -203,8 +203,8 @@ TEST(IdTable, rowIterators) {
     std::sort(std::move(row).begin(), std::move(row).end());
     // The following calls all would not compile:
     // std::sort(row.begin(), row.end());
-    // std::ranges::sort(row);
-    // std::ranges::sort(std::move(row));
+    // ql::ranges::sort(row);
+    // ql::ranges::sort(std::move(row));
     ASSERT_EQ(-1, row[0]);
     ASSERT_EQ(0, row[1]);
     ASSERT_EQ(1, row[2]);
@@ -570,8 +570,7 @@ TEST(IdTable, sortTest) {
 
   // Now try the actual sort
   test = orig.clone();
-  std::ranges::sort(test, std::less<>{},
-                    [](const auto& row) { return row[0]; });
+  ql::ranges::sort(test, std::less<>{}, [](const auto& row) { return row[0]; });
 
   // The sorted order of the orig tables should be:
   // 3, 2, 0, 4, 5, 1
@@ -1100,8 +1099,8 @@ TEST(IdTable, shrinkToFit) {
 TEST(IdTable, staticAsserts) {
   static_assert(std::is_trivially_copyable_v<IdTableStatic<1>::iterator>);
   static_assert(std::is_trivially_copyable_v<IdTableStatic<1>::const_iterator>);
-  static_assert(std::ranges::random_access_range<IdTable>);
-  static_assert(std::ranges::random_access_range<IdTableStatic<1>>);
+  static_assert(ql::ranges::random_access_range<IdTable>);
+  static_assert(ql::ranges::random_access_range<IdTableStatic<1>>);
 }
 
 TEST(IdTable, constructorsAreSfinaeFriendly) {

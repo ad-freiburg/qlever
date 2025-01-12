@@ -7,10 +7,10 @@
 
 #include <absl/strings/str_cat.h>
 
-#include <algorithm>
 #include <future>
 #include <ranges>
 
+#include "backports/algorithm.h"
 #include "engine/CallFixedSize.h"
 #include "engine/idTable/IdTable.h"
 #include "util/AsyncStream.h"
@@ -116,12 +116,12 @@ class CompressedExternalIdTableWriter {
     // fine-grained) but only once we have a reasonable abstraction for
     // parallelism.
     std::vector<std::future<void>> compressColumFutures;
-    for (auto i : std::views::iota(0u, numColumns())) {
+    for (auto i : ql::views::iota(0u, numColumns())) {
       compressColumFutures.push_back(
           std::async(std::launch::async, [this, i, blockSize, &table]() {
             auto& blockMetadata = blocksPerColumn_.at(i);
             decltype(auto) column = table.getColumn(i);
-            // TODO<C++23> Use `std::views::chunk`
+            // TODO<C++23> Use `ql::views::chunkd`
             for (size_t lower = 0; lower < column.size(); lower += blockSize) {
               size_t upper = std::min(lower + blockSize, column.size());
               auto thisBlockSizeUncompressed = (upper - lower) * sizeof(Id);
@@ -151,7 +151,7 @@ class CompressedExternalIdTableWriter {
     file_.wlock()->flush();
     std::vector<cppcoro::generator<const IdTableStatic<N>>> result;
     result.reserve(startOfSingleIdTables_.size());
-    for (auto i : std::views::iota(0u, startOfSingleIdTables_.size())) {
+    for (auto i : ql::views::iota(0u, startOfSingleIdTables_.size())) {
       result.push_back(makeGeneratorForIdTable<N>(i));
     }
     return result;
@@ -164,7 +164,7 @@ class CompressedExternalIdTableWriter {
     file_.wlock()->flush();
     std::vector<decltype(makeGeneratorForRows<N>(0))> result;
     result.reserve(startOfSingleIdTables_.size());
-    for (auto i : std::views::iota(0u, startOfSingleIdTables_.size())) {
+    for (auto i : ql::views::iota(0u, startOfSingleIdTables_.size())) {
       result.push_back(makeGeneratorForRows<N>(i));
     }
     return result;
@@ -173,8 +173,9 @@ class CompressedExternalIdTableWriter {
   template <size_t N = 0>
   auto getGeneratorForAllRows() {
     // Note: As soon as we drop the support for GCC11 this can be
-    // `return getAllRowGenerators<N>() | std::views::join;
-    return std::views::join(ad_utility::OwningView{getAllRowGenerators<N>()});
+    // `return getAllRowGenerators<N>() | ql::views::join;
+    return ql::views::join(
+        ad_utility::OwningViewNoConst{getAllRowGenerators<N>()});
   }
 
   // Clear the underlying file and completely reset the data structure s.t. it
@@ -189,7 +190,7 @@ class CompressedExternalIdTableWriter {
     file_.wlock()->close();
     ad_utility::deleteFile(filename_);
     file_.wlock()->open(filename_, "w+");
-    std::ranges::for_each(blocksPerColumn_, [](auto& block) { block.clear(); });
+    ql::ranges::for_each(blocksPerColumn_, [](auto& block) { block.clear(); });
     startOfSingleIdTables_.clear();
   }
 
@@ -197,7 +198,7 @@ class CompressedExternalIdTableWriter {
   // Get the row generator for a single IdTable, specified by the `index`.
   template <size_t N = 0>
   auto makeGeneratorForRows(size_t index) {
-    return std::views::join(
+    return ql::views::join(
         ad_utility::OwningView{makeGeneratorForIdTable<N>(index)});
   }
   // Get the block generator for a single IdTable, specified by the `index`.
@@ -255,7 +256,7 @@ class CompressedExternalIdTableWriter {
         blocksPerColumn_.at(0).at(blockIdx).uncompressedSize_ / sizeof(Id);
     block.resize(blockSize);
     std::vector<std::future<void>> readColumnFutures;
-    for (auto i : std::views::iota(0u, numColumns())) {
+    for (auto i : ql::views::iota(0u, numColumns())) {
       readColumnFutures.push_back(
           std::async(std::launch::async, [&block, this, i, blockIdx]() {
             decltype(auto) col = block.getColumn(i);
@@ -478,10 +479,10 @@ class CompressedExternalIdTable
         co_yield block;
       }(this->currentBlock_);
       auto rowView =
-          std::views::join(ad_utility::OwningView{std::move(generator)});
+          ql::views::join(ad_utility::OwningView{std::move(generator)});
       std::vector<decltype(rowView)> vec;
       vec.push_back(std::move(rowView));
-      return std::views::join(ad_utility::OwningView(std::move(vec)));
+      return ql::views::join(ad_utility::OwningViewNoConst(std::move(vec)));
     }
     this->pushBlock(std::move(this->currentBlock_));
     this->resetCurrentBlock(false);
@@ -534,7 +535,7 @@ struct BlockSorter {
 #ifdef _PARALLEL_SORT
     ad_utility::parallel_sort(std::begin(block), std::end(block), comparator_);
 #else
-    std::ranges::sort(block, comparator_);
+    ql::ranges::sort(block, comparator_);
 #endif
   }
 };
@@ -612,7 +613,7 @@ class CompressedExternalIdTableSorter
   // one. Either this function or the following function must be called exactly
   // once.
   auto sortedView() {
-    return std::views::join(ad_utility::OwningView{getSortedBlocks()});
+    return ql::views::join(ad_utility::OwningView{getSortedBlocks()});
   }
 
   // Similar to `sortedView` (see above), but the elements are yielded in
@@ -642,8 +643,8 @@ class CompressedExternalIdTableSorter
   // once.
   void pushBlock(const IdTableStatic<0>& block) override {
     AD_CONTRACT_CHECK(block.numColumns() == this->numColumns_);
-    std::ranges::for_each(block,
-                          [ptr = this](const auto& row) { ptr->push(row); });
+    ql::ranges::for_each(block,
+                         [ptr = this](const auto& row) { ptr->push(row); });
   }
 
   // The implementation of the type-erased interface. Get the sorted blocks as
@@ -680,7 +681,7 @@ class CompressedExternalIdTableSorter
           co_yield blockAsStatic;
         }
       } else {
-        // TODO<C++23> Use `std::views::chunk`.
+        // TODO<C++23> Use `ql::views::chunkd`.
         for (size_t i = 0; i < block.numRows(); i += blocksizeOutput) {
           size_t upper = std::min(i + blocksizeOutput, block.numRows());
           auto curBlock = IdTableStatic<NumStaticCols>(
@@ -749,7 +750,7 @@ class CompressedExternalIdTableSorter
 #ifdef _PARALLEL_SORT
     ad_utility::parallel_sort(block.begin(), block.end(), comparator_);
 #else
-    std::ranges::sort(block, comparator_);
+    ql::ranges::sort(block, comparator_);
 #endif
   }
 

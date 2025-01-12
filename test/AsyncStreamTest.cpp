@@ -49,6 +49,6 @@ TEST(AsyncStream, EnsureBuffersArePassedCorrectly) {
   const std::vector<std::string> testData{"Abc", "Def", "Ghi"};
   auto generator = runStreamAsync(testData, 2);
 
-  ASSERT_TRUE(std::ranges::equal(testData.begin(), testData.end(),
-                                 generator.begin(), generator.end()));
+  ASSERT_TRUE(ql::ranges::equal(testData.begin(), testData.end(),
+                                generator.begin(), generator.end()));
 }

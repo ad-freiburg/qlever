@@ -21,7 +21,7 @@ struct SortTriple {
     }
     constexpr auto compare = &Id::compareWithoutLocalVocab;
     // TODO<joka921> The manual invoking is ugly, probably we could use
-    // `std::ranges::lexicographical_compare`, but we have to carefully measure
+    // `ql::ranges::lexicographical_compare`, but we have to carefully measure
     // that this change doesn't slow down the index build.
     auto c1 = std::invoke(compare, a[i0], b[i0]);
     if (c1 != 0) {

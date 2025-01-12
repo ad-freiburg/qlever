@@ -55,7 +55,7 @@ std::vector<Result::Generator> getAllSubSplits(const IdTable& idTable) {
 }
 
 // _____________________________________________________________________________
-void consumeGenerator(Result::Generator& generator) {
+void consumeGenerator(Result::LazyResult& generator) {
   for ([[maybe_unused]] IdTableVocabPair& _ : generator) {
   }
 }

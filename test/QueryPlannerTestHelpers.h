@@ -14,6 +14,7 @@
 #include "engine/Bind.h"
 #include "engine/CartesianProductJoin.h"
 #include "engine/CountAvailablePredicates.h"
+#include "engine/Describe.h"
 #include "engine/Filter.h"
 #include "engine/GroupBy.h"
 #include "engine/IndexScan.h"
@@ -130,7 +131,7 @@ constexpr auto TextIndexScanForWord = [](Variable textRecordVar,
                                          string word) -> QetMatcher {
   return RootOperation<::TextIndexScanForWord>(AllOf(
       AD_PROPERTY(::TextIndexScanForWord, getResultWidth,
-                  Eq(1 + word.ends_with('*'))),
+                  Eq(2 + word.ends_with('*'))),
       AD_PROPERTY(::TextIndexScanForWord, textRecordVar, Eq(textRecordVar)),
       AD_PROPERTY(::TextIndexScanForWord, word, word)));
 };
@@ -357,8 +358,8 @@ static constexpr auto GroupBy =
   // TODO<joka921> Also test the aliases.
   auto aliasesToStrings = [](const std::vector<Alias>& aliases) {
     std::vector<std::string> result;
-    std::ranges::transform(aliases, std::back_inserter(result),
-                           &Alias::getDescriptor);
+    ql::ranges::transform(aliases, std::back_inserter(result),
+                          &Alias::getDescriptor);
     return result;
   };
 
@@ -395,10 +396,19 @@ constexpr auto OrderBy = [](const ::OrderBy::SortedVariables& sortedVariables,
 // Match a `UNION` operation.
 constexpr auto Union = MatchTypeAndOrderedChildren<::Union>;
 
+// Match a `DESCRIBE` operation
+inline QetMatcher Describe(
+    const Matcher<const parsedQuery::Describe&>& describeMatcher,
+    const QetMatcher& childMatcher) {
+  return RootOperation<::Describe>(
+      AllOf(children(childMatcher),
+            AD_PROPERTY(::Describe, getDescribe, describeMatcher)));
+}
+
 //
 inline QetMatcher QetWithWarnings(
     const std::vector<std::string>& warningSubstrings,
-    QetMatcher actualMatcher) {
+    const QetMatcher& actualMatcher) {
   auto warningMatchers = ad_utility::transform(
       warningSubstrings,
       [](const std::string& s) { return ::testing::HasSubstr(s); });

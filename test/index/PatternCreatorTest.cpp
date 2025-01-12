@@ -106,7 +106,7 @@ auto createExamplePatterns(PatternCreator& creator) {
   push({V(3), V(11), V(29)}, false, 0);
   push({V(3), V(11), V(45)}, false, 0);
 
-  std::ranges::sort(expected, SortByOSP{});
+  ql::ranges::sort(expected, SortByOSP{});
   auto tripleOutputs = std::move(creator).getTripleSorter();
   auto& triples = *tripleOutputs.triplesWithSubjectPatternsSortedByOsp_;
   static constexpr size_t numCols = NumColumnsIndexBuilding + 1;
@@ -160,7 +160,7 @@ void assertPatternContents(const std::string& filename,
   expectedTriples.push_back(std::array{V(0), pat, I(0)});
   expectedTriples.push_back(std::array{V(1), pat, I(1)});
   expectedTriples.push_back(std::array{V(3), pat, I(0)});
-  std::ranges::sort(expectedTriples, SortByPSO{});
+  ql::ranges::sort(expectedTriples, SortByPSO{});
   EXPECT_THAT(addedTriples, ::testing::ElementsAreArray(expectedTriples));
 }
 

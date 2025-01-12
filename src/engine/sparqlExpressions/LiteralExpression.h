@@ -40,11 +40,10 @@ class LiteralExpression : public SparqlExpression {
   // Evaluating just returns the constant/literal value.
   ExpressionResult evaluate(EvaluationContext* context) const override {
     // Common code for the `Literal` and `Iri` case.
-    auto getIdOrString =
-        [this,
-         &context](const ad_utility::SameAsAny<TripleComponent::Literal,
-                                               TripleComponent::Iri> auto& s)
-        -> ExpressionResult {
+    auto getIdOrString = [this, &context]<typename U>(const U& s)
+        -> CPP_ret(ExpressionResult)(
+            requires ad_utility::SameAsAny<U, TripleComponent::Literal,
+                                           TripleComponent::Iri>) {
       if (auto ptr = cachedResult_.load(std::memory_order_relaxed)) {
         return *ptr;
       }
@@ -171,11 +170,11 @@ class LiteralExpression : public SparqlExpression {
     if (context->_groupedVariables.contains(variable) && !isInsideAggregate()) {
       const auto& table = context->_inputTable;
       auto constantValue = table.at(context->_beginIndex, column.value());
-      AD_EXPENSIVE_CHECK((std::ranges::all_of(
-          table.begin() + context->_beginIndex,
-          table.begin() + context->_endIndex, [&](const auto& row) {
-            return row[column.value()] == constantValue;
-          })));
+      AD_EXPENSIVE_CHECK((
+          std::all_of(table.begin() + context->_beginIndex,
+                      table.begin() + context->_endIndex, [&](const auto& row) {
+                        return row[column.value()] == constantValue;
+                      })));
       return constantValue;
     } else {
       return variable;

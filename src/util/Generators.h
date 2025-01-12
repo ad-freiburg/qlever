@@ -19,9 +19,10 @@ namespace ad_utility {
 // returns false. If the `aggregator` returns false, the cached value is
 // discarded. If the cached value is still present once the generator is fully
 // consumed, `onFullyCached` is called with the cached value.
-template <typename T>
+template <typename InputRange,
+          typename T = std::ranges::range_value_t<InputRange>>
 cppcoro::generator<T> wrapGeneratorWithCache(
-    cppcoro::generator<T> generator,
+    InputRange generator,
     InvocableWithExactReturnType<bool, std::optional<T>&, const T&> auto
         aggregator,
     InvocableWithExactReturnType<void, T> auto onFullyCached) {

@@ -106,7 +106,7 @@ class IndexScan final : public Operation {
   // there are undef values, the second generator represents the full index
   // scan.
   std::pair<Result::Generator, Result::Generator> prefilterTables(
-      Result::Generator input, ColumnIndex joinColumn);
+      Result::LazyResult input, ColumnIndex joinColumn);
 
  private:
   // Implementation detail that allows to consume a generator from two other
@@ -223,11 +223,10 @@ class IndexScan final : public Operation {
   std::optional<std::vector<CompressedBlockMetadata>>
   getBlockMetadataOptionallyPrefiltered() const;
 
-  // If `isUnconstrained()` yields true, return the blocks as given or the
-  // prefiltered blocks (if `prefilter_` has value). If `isUnconstrained()` is
-  // false, return `std::nullopt`.
-  void applyPrefilterIfPossible(
-      std::vector<CompressedBlockMetadata>& blocks) const;
+  // Apply the `prefilter_` to the `blocks`. May only be called if the limit is
+  // unconstrained, and a `prefilter_` exists.
+  std::vector<CompressedBlockMetadata> applyPrefilter(
+      std::span<const CompressedBlockMetadata> blocks) const;
 
   // Helper functions for the public `getLazyScanFor...` methods and
   // `chunkedIndexScan` (see above).

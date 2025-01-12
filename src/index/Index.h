@@ -195,6 +195,9 @@ class Index {
   ad_utility::MemorySize& memoryLimitIndexBuilding();
   const ad_utility::MemorySize& memoryLimitIndexBuilding() const;
 
+  ad_utility::MemorySize& parserBufferSize();
+  const ad_utility::MemorySize& parserBufferSize() const;
+
   ad_utility::MemorySize& blocksizePermutationsPerColumn();
 
   void setOnDiskBase(const std::string& onDiskBase);
@@ -214,6 +217,7 @@ class Index {
   size_t getNofTextRecords() const;
   size_t getNofWordPostings() const;
   size_t getNofEntityPostings() const;
+  size_t getNofNonLiteralsInTextIndex() const;
 
   NumNormalAndInternal numDistinctSubjects() const;
   NumNormalAndInternal numDistinctObjects() const;

@@ -1,7 +1,6 @@
-// Copyright 2023, University of Freiburg,
+// Copyright 2023 - 2025, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-//
-// Authors: Björn Buchhold <buchhold@gmail.com>
+// Authors: Björn Buchhold <buchhold@gmail.com> [2014 - 2017]
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
@@ -22,6 +21,7 @@ using namespace ad_utility::memory_literals;
 constexpr inline ad_utility::MemorySize DEFAULT_MEMORY_LIMIT_INDEX_BUILDING =
     5_GB;
 constexpr inline ad_utility::MemorySize STXXL_DISK_SIZE_INDEX_BUILDER = 1_GB;
+constexpr inline ad_utility::MemorySize DEFAULT_PARSER_BUFFER_SIZE = 10_MB;
 
 constexpr inline ad_utility::MemorySize DEFAULT_MEM_FOR_QUERIES = 4_GB;
 

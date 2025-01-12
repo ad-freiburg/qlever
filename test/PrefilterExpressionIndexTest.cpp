@@ -218,7 +218,7 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
     std::vector<BlockMetadata> expectedAdjusted;
     // This is for convenience, we automatically insert all mixed and possibly
     // incomplete blocks which must be always returned.
-    std::ranges::set_union(
+    ql::ranges::set_union(
         expected, useBlocksIncomplete ? mixedAndIncompleteBlocks : mixedBlocks,
         std::back_inserter(expectedAdjusted),
         [](const BlockMetadata& b1, const BlockMetadata& b2) {

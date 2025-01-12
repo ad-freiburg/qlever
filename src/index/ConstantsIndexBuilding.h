@@ -29,10 +29,6 @@ constexpr inline size_t PARSER_BATCH_SIZE = 1'000'000;
 // streams faster.
 constexpr inline size_t PARSER_MIN_TRIPLES_AT_ONCE = 10'000;
 
-// When reading from a file, Chunks of this size will
-// be fed to the parser at once (10 MiB).
-constinit inline std::atomic<size_t> FILE_BUFFER_SIZE = 10 * (1ul << 20);
-
 constinit inline std::atomic<size_t> BUFFER_SIZE_JOIN_PATTERNS_WITH_OSP =
     50'000;
 
