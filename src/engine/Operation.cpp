@@ -598,6 +598,7 @@ const vector<ColumnIndex>& Operation::getResultSortedOn() const {
 // _____________________________________________________________________________
 
 void Operation::signalQueryUpdate() const {
+  return;
   if (_executionContext) {
     _executionContext->signalQueryUpdate(*_rootRuntimeInfo);
   }
