@@ -231,11 +231,13 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
     ParsedQuery::GraphPattern* rootPattern) {
   QueryPlanner::GraphPatternPlanner optimizer{*this, rootPattern};
   for (auto& child : rootPattern->_graphPatterns) {
+    optimizer.candidatesForUnion.push_back(child);
     child.visit([&optimizer](auto& arg) {
       return optimizer.graphPatternOperationVisitor(arg);
     });
     checkCancellation();
   }
+
   // one last pass in case the last one was not an optional
   // if the last child was not an optional clause we still have unjoined
   // candidates. Do one last pass over them.
@@ -2329,7 +2331,8 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
     }
     planner_.activeGraphVariable_ = std::move(graphVariableBackup);
   } else if constexpr (std::is_same_v<T, p::Union>) {
-    visitUnion(arg);
+    candidateUnions_.push_back(arg);
+    // visitUnion(arg);
   } else if constexpr (std::is_same_v<T, p::Subquery>) {
     visitSubquery(arg);
   } else if constexpr (std::is_same_v<T, p::TransPath>) {
@@ -2580,11 +2583,19 @@ void QueryPlanner::GraphPatternPlanner::visitSubquery(
 
 // _______________________________________________________________
 void QueryPlanner::GraphPatternPlanner::optimizeCommutatively() {
+  if (candidateUnions_.size() != 1) {
+    for (auto& parsedUnion : candidateUnions_) {
+      visitUnion(parsedUnion);
+    }
+  }
   auto tg = planner_.createTripleGraph(&candidateTriples_);
   auto lastRow = planner_
                      .fillDpTab(tg, rootPattern_->_filters,
                                 rootPattern_->textLimits_, candidatePlans_)
                      .back();
+  if (candidateUnions_.size() == 1) {
+    visitUnion()
+  }
   candidateTriples_._triples.clear();
   candidatePlans_.clear();
   candidatePlans_.push_back(std::move(lastRow));
