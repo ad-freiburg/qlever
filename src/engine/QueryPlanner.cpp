@@ -2331,8 +2331,7 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
     }
     planner_.activeGraphVariable_ = std::move(graphVariableBackup);
   } else if constexpr (std::is_same_v<T, p::Union>) {
-    candidateUnions_.push_back(arg);
-    // visitUnion(arg);
+    visitUnion(arg);
   } else if constexpr (std::is_same_v<T, p::Subquery>) {
     visitSubquery(arg);
   } else if constexpr (std::is_same_v<T, p::TransPath>) {
@@ -2590,8 +2589,9 @@ void QueryPlanner::GraphPatternPlanner::optimizeCommutatively() {
   auto beg = ql::ranges::lower_bound(candidatesForUnion, true,
                                      ql::ranges::less{}, isUnion);
   AD_CORRECTNESS_CHECK(beg > candidatesForUnion.begin() ||
-                       candidatesForUnion.empty());
+                       ql::ranges::all_of(candidatesForUnion, isUnion));
   size_t numUnions = candidatesForUnion.end() - beg;
+  size_t numNonUnions = candidatesForUnion.size() - numUnions;
 
   auto tg = planner_.createTripleGraph(&candidateTriples_);
   auto lastRow = planner_
@@ -2600,15 +2600,27 @@ void QueryPlanner::GraphPatternPlanner::optimizeCommutatively() {
                      .back();
   candidateTriples_._triples.clear();
   candidatePlans_.clear();
-  if (numUnions == 1) {
+  if (numUnions == 1 && numNonUnions > 0) {
     auto parsedUnion =
         std::move(std::get<parsedQuery::Union>(candidatesForUnion.back()));
     candidatesForUnion.pop_back();
     for (auto& op : candidatesForUnion) {
       parsedUnion._child1._graphPatterns.push_back(op);
-      parsedUnion._child2._graphPatterns.push_back(sop);
+      parsedUnion._child2._graphPatterns.push_back(op);
     }
+    ql::ranges::copy(rootPattern_->_filters,
+                     std::back_inserter(parsedUnion._child1._filters));
+    ql::ranges::copy(rootPattern_->_filters,
+                     std::back_inserter(parsedUnion._child2._filters));
+
+    candidatesForUnion.clear();
+    visitUnion(parsedUnion);
+    planner_.checkCancellation();
+    AD_CORRECTNESS_CHECK(candidatePlans_.size() == 1);
+    ql::ranges::move(candidatePlans_.back(), std::back_inserter(lastRow));
+    candidatePlans_.clear();
   }
+  candidatesForUnion.clear();
   candidatePlans_.push_back(std::move(lastRow));
   planner_.checkCancellation();
 }
