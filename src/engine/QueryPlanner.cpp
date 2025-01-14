@@ -2580,10 +2580,21 @@ void QueryPlanner::GraphPatternPlanner::visitSubquery(
 }
 // _______________________________________________________________
 
+namespace {
+template <typename T>
+auto is(const auto& gp) {
+  return std::holds_alternative<T>(gp);
+}
+}  // namespace
+namespace pq = parsedQuery;
 // _______________________________________________________________
 void QueryPlanner::GraphPatternPlanner::optimizeCommutatively() {
+  auto isOptimizationBarrier = [](const parsedQuery::GraphPatternOperation& g) {
+    return is<pq::Optional>(g) || is<pq::Minus>(g) || is<pq::Bind>(g);
+  };
+  std::erase_if(candidatesForUnion, isOptimizationBarrier);
   auto isUnion = [](const parsedQuery::GraphPatternOperation& gp) {
-    return std::holds_alternative<parsedQuery::Union>(gp);
+    return is<parsedQuery::Union>(gp);
   };
   ql::ranges::sort(candidatesForUnion, {}, isUnion);
   auto beg = ql::ranges::lower_bound(candidatesForUnion, true,
@@ -2601,6 +2612,7 @@ void QueryPlanner::GraphPatternPlanner::optimizeCommutatively() {
   candidateTriples_._triples.clear();
   candidatePlans_.clear();
   if (numUnions == 1 && numNonUnions > 0) {
+    LOG(INFO) << "Recursing for union optimization" << std::endl;
     auto parsedUnion =
         std::move(std::get<parsedQuery::Union>(candidatesForUnion.back()));
     candidatesForUnion.pop_back();
