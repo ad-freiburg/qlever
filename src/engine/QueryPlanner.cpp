@@ -2583,21 +2583,32 @@ void QueryPlanner::GraphPatternPlanner::visitSubquery(
 
 // _______________________________________________________________
 void QueryPlanner::GraphPatternPlanner::optimizeCommutatively() {
-  if (candidateUnions_.size() != 1) {
-    for (auto& parsedUnion : candidateUnions_) {
-      visitUnion(parsedUnion);
-    }
-  }
+  auto isUnion = [](const parsedQuery::GraphPatternOperation& gp) {
+    return std::holds_alternative<parsedQuery::Union>(gp);
+  };
+  ql::ranges::sort(candidatesForUnion, {}, isUnion);
+  auto beg = ql::ranges::lower_bound(candidatesForUnion, true,
+                                     ql::ranges::less{}, isUnion);
+  AD_CORRECTNESS_CHECK(beg > candidatesForUnion.begin() ||
+                       candidatesForUnion.empty());
+  size_t numUnions = candidatesForUnion.end() - beg;
+
   auto tg = planner_.createTripleGraph(&candidateTriples_);
   auto lastRow = planner_
                      .fillDpTab(tg, rootPattern_->_filters,
                                 rootPattern_->textLimits_, candidatePlans_)
                      .back();
-  if (candidateUnions_.size() == 1) {
-    visitUnion()
-  }
   candidateTriples_._triples.clear();
   candidatePlans_.clear();
+  if (numUnions == 1) {
+    auto parsedUnion =
+        std::move(std::get<parsedQuery::Union>(candidatesForUnion.back()));
+    candidatesForUnion.pop_back();
+    for (auto& op : candidatesForUnion) {
+      parsedUnion._child1._graphPatterns.push_back(op);
+      parsedUnion._child2._graphPatterns.push_back(sop);
+    }
+  }
   candidatePlans_.push_back(std::move(lastRow));
   planner_.checkCancellation();
 }
