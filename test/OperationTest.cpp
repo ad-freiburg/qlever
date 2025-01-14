@@ -556,7 +556,7 @@ TEST(Operation, ensureLazyOperationIsCachedIfSmallEnough) {
 
   auto cacheValue = valuesForTesting.runComputationAndPrepareForCache(
       timer, ComputationMode::LAZY_IF_SUPPORTED, makeQueryCacheKey("test"),
-      false);
+      false, false);
   EXPECT_FALSE(
       qec->getQueryTreeCache().cacheContains(makeQueryCacheKey("test")));
 
@@ -614,7 +614,7 @@ TEST(Operation, checkLazyOperationIsNotCachedIfTooLarge) {
 
     cacheValue = valuesForTesting.runComputationAndPrepareForCache(
         timer, ComputationMode::LAZY_IF_SUPPORTED, makeQueryCacheKey("test"),
-        false);
+        false, false);
     EXPECT_FALSE(
         qec->getQueryTreeCache().cacheContains(makeQueryCacheKey("test")));
   }
@@ -641,7 +641,7 @@ TEST(Operation, checkLazyOperationIsNotCachedIfUnlikelyToFitInCache) {
 
   auto cacheValue = valuesForTesting.runComputationAndPrepareForCache(
       timer, ComputationMode::LAZY_IF_SUPPORTED, makeQueryCacheKey("test"),
-      false);
+      false, false);
   EXPECT_FALSE(
       qec->getQueryTreeCache().cacheContains(makeQueryCacheKey("test")));
 

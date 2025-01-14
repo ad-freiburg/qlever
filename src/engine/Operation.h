@@ -384,7 +384,7 @@ class Operation {
   CacheValue runComputationAndPrepareForCache(const ad_utility::Timer& timer,
                                               ComputationMode computationMode,
                                               const QueryCacheKey& cacheKey,
-                                              bool pinned);
+                                              bool pinned, bool isRoot);
 
   // Create and store the complete runtime information for this operation after
   // it has either been successfully computed or read from the cache.
