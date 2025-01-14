@@ -93,7 +93,7 @@ net::awaitable<void> WebSocketSession::acceptAndWait(
     // https://www.boost.org/doc/libs/1_81_0/doc/html/boost_asio/overview/composition/cpp20_coroutines.html
     // for more information
     // TODO<joka921> Debug the aborts in the websocket module...
-    // co_await (waitForServerEvents() && handleClientCommands());
+    co_await (waitForServerEvents() && handleClientCommands());
   } catch (boost::system::system_error& error) {
     if (cancelOnClose_) {
       tryToCancelQuery();
