@@ -54,7 +54,7 @@ cppcoro::generator<WordsFileLine> IndexImpl::wordsInTextRecords(
       textView = textView.substr(0, textView.rfind('"'));
       textView.remove_prefix(1);
       for (auto word : tokenizeAndNormalizeText(textView, localeManager)) {
-        WordsFileLine wordLine{word, false, contextId, 1};
+        WordsFileLine wordLine{std::move(word), false, contextId, 1};
         co_yield wordLine;
       }
       contextId = contextId.incremented();
