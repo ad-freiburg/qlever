@@ -280,6 +280,18 @@ TEST(OptionalJoin, specialOptionalJoinTwoColumns) {
 
     testOptionalJoin(a, b, jcls, expectedResult);
   }
+  {
+    // Test a corner case that previously contained a bug.
+    IdTable a{makeIdTableFromVector({{4, U, 2}})};
+    IdTable b{makeIdTableFromVector({{3, 3, 1}})};
+    // Join a and b on the column pairs 1,2 and 2,1 (entries from columns 1 of
+    // a have to equal those of column 2 of b and vice versa).
+    JoinColumns jcls{{1, 2}, {2, 1}};
+
+    IdTable expectedResult = makeIdTableFromVector({{4, U, 2, U}});
+
+    testOptionalJoin(a, b, jcls, expectedResult);
+  }
 }
 
 TEST(OptionalJoin, gallopingJoin) {
