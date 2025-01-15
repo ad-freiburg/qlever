@@ -143,19 +143,19 @@ class Server {
       const ad_utility::url_parser::ParamValueMap& params,
       const string& queryOrUpdate, ad_utility::Timer& requestTimer,
       const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
-      TimeLimit timeLimit);
+      TimeLimit timeLimit, std::optional<std::string> tag = std::nullopt);
   // Do the actual execution of a query.
   Awaitable<void> processQuery(
       const ad_utility::url_parser::ParamValueMap& params, const string& query,
       ad_utility::Timer& requestTimer,
       const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
-      TimeLimit timeLimit);
+      TimeLimit timeLimit, std::optional<std::string> tag = std::nullopt);
   // Do the actual execution of an update.
   Awaitable<void> processUpdate(
       const ad_utility::url_parser::ParamValueMap& params, const string& update,
       ad_utility::Timer& requestTimer,
       const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
-      TimeLimit timeLimit);
+      TimeLimit timeLimit, std::optional<std::string> tag = std::nullopt);
 
   // Determine the media type to be used for the result. The media type is
   // determined (in this order) by the current action (e.g.,

@@ -461,6 +461,12 @@ Awaitable<void> Server::process(
     response = createJsonResponse(composeStatsJson(), request);
   }
 
+  // Check if the request is tagged.
+  std::optional<std::string> tag;
+  if (tag = checkParameter("tag", std::nullopt)) {
+    LOG(INFO) << "Request tagged with: \"" << tag.value() << "\"" << std::endl;
+  }
+
   // Set one or several of the runtime parameters.
   for (auto key : RuntimeParameters().getKeys()) {
     if (auto value = checkParameter(key, std::nullopt)) {
@@ -473,7 +479,7 @@ Awaitable<void> Server::process(
   }
 
   auto visitQuery = [&checkParameter, &accessTokenOk, &request, &send,
-                     &parameters, &requestTimer,
+                     &parameters, &requestTimer, &tag,
                      this](ad_utility::url_parser::sparqlOperation::Query query)
       -> Awaitable<void> {
     if (auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
@@ -481,7 +487,7 @@ Awaitable<void> Server::process(
             send)) {
       co_return co_await processQueryOrUpdate<OperationType::Query>(
           parameters, query.query_, requestTimer, std::move(request), send,
-          timeLimit.value());
+          timeLimit.value(), tag);
     } else {
       // If the optional is empty, this indicates an error response has been
       // sent to the client already. We can stop here.
@@ -490,7 +496,7 @@ Awaitable<void> Server::process(
   };
   auto visitUpdate =
       [&checkParameter, &accessTokenOk, &request, &send, &parameters,
-       &requestTimer, this, &requireValidAccessToken](
+       &requestTimer, &tag, this, &requireValidAccessToken](
           const ad_utility::url_parser::sparqlOperation::Update& update)
       -> Awaitable<void> {
     requireValidAccessToken("SPARQL Update");
@@ -499,7 +505,7 @@ Awaitable<void> Server::process(
             send)) {
       co_return co_await processQueryOrUpdate<OperationType::Update>(
           parameters, update.update_, requestTimer, std::move(request), send,
-          timeLimit.value());
+          timeLimit.value(), tag);
     } else {
       // If the optional is empty, this indicates an error response has been
       // sent to the client already. We can stop here.
@@ -789,7 +795,7 @@ Awaitable<void> Server::processQuery(
     const ad_utility::url_parser::ParamValueMap& params, const string& query,
     ad_utility::Timer& requestTimer,
     const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
-    TimeLimit timeLimit) {
+    TimeLimit timeLimit, std::optional<std::string> tag) {
   MediaType mediaType = determineMediaType(params, request);
   LOG(INFO) << "Requested media type of result is \""
             << ad_utility::toString(mediaType) << "\"" << std::endl;
@@ -803,6 +809,7 @@ Awaitable<void> Server::processQuery(
   // then be used to process the query.
   auto [pinSubtrees, pinResult] = determineResultPinning(params);
   LOG(INFO) << "Processing the following SPARQL query:"
+            << (tag.has_value() ? " [tag: " + tag.value() + "]" : "")
             << (pinResult ? " [pin result]" : "")
             << (pinSubtrees ? " [pin subresults]" : "") << "\n"
             << query << std::endl;
@@ -927,7 +934,7 @@ Awaitable<void> Server::processUpdate(
     const ad_utility::url_parser::ParamValueMap& params, const string& update,
     ad_utility::Timer& requestTimer,
     const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
-    TimeLimit timeLimit) {
+    TimeLimit timeLimit, std::optional<std::string> tag) {
   auto messageSender = createMessageSender(queryHub_, request, update);
 
   auto [cancellationHandle, cancelTimeoutOnDestruction] =
@@ -957,8 +964,12 @@ Awaitable<void> Server::processUpdate(
   // TODO<qup42> send a proper response
   // SPARQL 1.1 Protocol 2.2.4 Successful Responses: "The response body of a
   // successful update request is implementation defined."
-  co_await send(ad_utility::httpUtils::createOkResponse(
-      "Update successful", request, MediaType::textPlain));
+  auto message =
+      tag.has_value()
+          ? absl::StrCat("Update successful [tag: ", tag.value(), "]")
+          : "Update successful";
+  co_await send(ad_utility::httpUtils::createOkResponse(message, request,
+                                                        MediaType::textPlain));
   co_return;
 }
 
@@ -968,7 +979,7 @@ Awaitable<void> Server::processQueryOrUpdate(
     const ad_utility::url_parser::ParamValueMap& params,
     const string& queryOrUpdate, ad_utility::Timer& requestTimer,
     const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
-    TimeLimit timeLimit) {
+    TimeLimit timeLimit, std::optional<std::string> tag) {
   using namespace ad_utility::httpUtils;
 
   http::status responseStatus = http::status::ok;
@@ -985,10 +996,10 @@ Awaitable<void> Server::processQueryOrUpdate(
   try {
     if constexpr (type == OperationType::Query) {
       co_await processQuery(params, queryOrUpdate, requestTimer, request, send,
-                            timeLimit);
+                            timeLimit, tag);
     } else {
       co_await processUpdate(params, queryOrUpdate, requestTimer, request, send,
-                             timeLimit);
+                             timeLimit, tag);
     }
   } catch (const ParseException& e) {
     responseStatus = http::status::bad_request;
