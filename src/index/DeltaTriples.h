@@ -18,18 +18,20 @@
 // permutations.
 using LocatedTriplesPerBlockAllPermutations =
     std::array<LocatedTriplesPerBlock, Permutation::ALL.size()>;
+using LocatedTriplesPerBlockAllPermutationsReadOnly =
+    std::array<LocatedTriplesPerBlockReadOnly, Permutation::ALL.size()>;
 
 // The locations of a set of delta triples (triples that were inserted or
 // deleted since the index was built) in each of the six permutations, and a
 // local vocab. This is all the information that is required to perform a query
 // that correctly respects these delta triples, hence the name.
 struct LocatedTriplesSnapshot {
-  LocatedTriplesPerBlockAllPermutations locatedTriplesPerBlock_;
+  LocatedTriplesPerBlockAllPermutationsReadOnly locatedTriplesPerBlock_;
   LocalVocab localVocab_;
   // A unique index for this snapshot that is used in the query cache.
   size_t index_;
   // Get `TripleWithPosition` objects for given permutation.
-  const LocatedTriplesPerBlock& getLocatedTriplesForPermutation(
+  const LocatedTriplesPerBlockReadOnly& getLocatedTriplesForPermutation(
       Permutation::Enum permutation) const;
 };
 
@@ -121,7 +123,7 @@ class DeltaTriples {
  public:
   const LocalVocab& localVocab() const { return localVocab_; }
 
-  const LocatedTriplesPerBlock& getLocatedTriplesForPermutation(
+  const LocatedTriplesPerBlockReadOnly& getLocatedTriplesForPermutation(
       Permutation::Enum permutation) const {
     return locatedTriples_.at(static_cast<size_t>(permutation));
   }

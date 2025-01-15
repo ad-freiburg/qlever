@@ -249,7 +249,8 @@ const Permutation& Permutation::getActualPermutation(Id id) const {
 // `DeltaTriples` class.
 
 // ______________________________________________________________________
-const LocatedTriplesPerBlock& Permutation::getLocatedTriplesForPermutation(
+const LocatedTriplesPerBlockReadOnly&
+Permutation::getLocatedTriplesForPermutation(
     const LocatedTriplesSnapshot& locatedTriplesSnapshot) const {
   static const LocatedTriplesSnapshot emptySnapshot{{}, {}, 0};
   const auto& actualSnapshot =

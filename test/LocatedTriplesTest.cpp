@@ -801,8 +801,11 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
   }
 
   {
+    // For backwards compatibility with existing tests, we do not have
+    // the assertion, but an empty metadata here.
     LocatedTriplesPerBlock ltpb;
-    EXPECT_THROW(ltpb.getAugmentedMetadata(), ad_utility::Exception);
+    // EXPECT_THROW(ltpb.getAugmentedMetadata(), ad_utility::Exception);
+    EXPECT_TRUE(ltpb.getAugmentedMetadata().empty());
   }
 }
 

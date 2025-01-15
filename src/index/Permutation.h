@@ -18,7 +18,7 @@
 // Forward declaration of `IdTable`
 class IdTable;
 // Forward declaration of `LocatedTriplesPerBlock`
-class LocatedTriplesPerBlock;
+class LocatedTriplesPerBlockReadOnly;
 class SharedLocatedTriplesSnapshot;
 struct LocatedTriplesSnapshot;
 
@@ -163,7 +163,7 @@ class Permutation {
   const Permutation& getActualPermutation(Id id) const;
 
   // From the given snapshot, get the located triples for this permutation.
-  const LocatedTriplesPerBlock& getLocatedTriplesForPermutation(
+  const LocatedTriplesPerBlockReadOnly& getLocatedTriplesForPermutation(
       const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
 
   // From the given snapshot, get the augmented block metadata for this

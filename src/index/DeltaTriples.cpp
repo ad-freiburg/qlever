@@ -170,7 +170,7 @@ void DeltaTriples::modifyTriplesImpl(CancellationHandle cancellationHandle,
 }
 
 // ____________________________________________________________________________
-const LocatedTriplesPerBlock&
+const LocatedTriplesPerBlockReadOnly&
 LocatedTriplesSnapshot::getLocatedTriplesForPermutation(
     Permutation::Enum permutation) const {
   return locatedTriplesPerBlock_[static_cast<int>(permutation)];
@@ -183,8 +183,13 @@ SharedLocatedTriplesSnapshot DeltaTriples::getSnapshot() {
   // copies), hence the explicit `clone`.
   auto snapshotIndex = nextSnapshotIndex_;
   ++nextSnapshotIndex_;
+  auto makeReadOnly = [this]() {
+    LocatedTriplesPerBlockAllPermutationsReadOnly res;
+    ql::ranges::copy(locatedTriples(), res.begin());
+    return res;
+  };
   return SharedLocatedTriplesSnapshot{std::make_shared<LocatedTriplesSnapshot>(
-      locatedTriples(), localVocab_.clone(), snapshotIndex)};
+      makeReadOnly(), localVocab_.clone(), snapshotIndex)};
 }
 
 // ____________________________________________________________________________

@@ -40,12 +40,13 @@ std::vector<LocatedTriple> LocatedTriple::locateTriplesInPermutation(
 }
 
 // ____________________________________________________________________________
-bool LocatedTriplesPerBlock::hasUpdates(size_t blockIndex) const {
+bool LocatedTriplesPerBlockReadOnly::hasUpdates(size_t blockIndex) const {
   return map_.contains(blockIndex);
 }
 
 // ____________________________________________________________________________
-NumAddedAndDeleted LocatedTriplesPerBlock::numTriples(size_t blockIndex) const {
+NumAddedAndDeleted LocatedTriplesPerBlockReadOnly::numTriples(
+    size_t blockIndex) const {
   // If no located triples for `blockIndex_` exist, there is no entry in `map_`.
   if (!hasUpdates(blockIndex)) {
     return {0, 0};
@@ -99,8 +100,8 @@ auto tieLocatedTriple(auto& lt) {
 
 // ____________________________________________________________________________
 template <size_t numIndexColumns, bool includeGraphColumn>
-IdTable LocatedTriplesPerBlock::mergeTriplesImpl(size_t blockIndex,
-                                                 const IdTable& block) const {
+IdTable LocatedTriplesPerBlockReadOnly::mergeTriplesImpl(
+    size_t blockIndex, const IdTable& block) const {
   // This method should only be called if there are located triples in the
   // specified block.
   AD_CONTRACT_CHECK(map_.contains(blockIndex));
@@ -185,10 +186,9 @@ IdTable LocatedTriplesPerBlock::mergeTriplesImpl(size_t blockIndex,
 }
 
 // ____________________________________________________________________________
-IdTable LocatedTriplesPerBlock::mergeTriples(size_t blockIndex,
-                                             const IdTable& block,
-                                             size_t numIndexColumns,
-                                             bool includeGraphColumn) const {
+IdTable LocatedTriplesPerBlockReadOnly::mergeTriples(
+    size_t blockIndex, const IdTable& block, size_t numIndexColumns,
+    bool includeGraphColumn) const {
   // The following code does nothing more than turn `numIndexColumns` and
   // `includeGraphColumn` into template parameters of `mergeTriplesImpl`.
   auto mergeTriplesImplHelper = [numIndexColumns, blockIndex, &block,
@@ -246,8 +246,8 @@ void LocatedTriplesPerBlock::erase(size_t blockIndex,
 // ____________________________________________________________________________
 void LocatedTriplesPerBlock::setOriginalMetadata(
     std::vector<CompressedBlockMetadata> metadata) {
-  originalMetadata_ = std::move(metadata);
-  updateAugmentedMetadata();
+  augmentedMetadata_ = std::move(metadata);
+  originalMetadata_.reset();
 }
 
 // Update the `blockMetadata`, such that its graph info is consistent with the
@@ -297,7 +297,12 @@ void LocatedTriplesPerBlock::updateAugmentedMetadata() {
   // TODO<C++23> use view::enumerate
   size_t blockIndex = 0;
   // Copy to preserve originalMetadata_.
-  augmentedMetadata_ = originalMetadata_;
+  AD_CONTRACT_CHECK(augmentedMetadata_.has_value());
+  if (!originalMetadata_.has_value()) {
+    originalMetadata_ = augmentedMetadata_;
+  } else {
+    augmentedMetadata_ = originalMetadata_;
+  }
   for (auto& blockMetadata : augmentedMetadata_.value()) {
     if (hasUpdates(blockIndex)) {
       const auto& blockUpdates = map_.at(blockIndex);
@@ -352,8 +357,8 @@ std::ostream& operator<<(std::ostream& os, const std::vector<IdTriple<0>>& v) {
 }
 
 // ____________________________________________________________________________
-bool LocatedTriplesPerBlock::isLocatedTriple(const IdTriple<0>& triple,
-                                             bool isInsertion) const {
+bool LocatedTriplesPerBlockReadOnly::isLocatedTriple(const IdTriple<0>& triple,
+                                                     bool isInsertion) const {
   auto blockContains = [&triple, isInsertion](const LocatedTriples& lt,
                                               size_t blockIndex) {
     LocatedTriple locatedTriple{blockIndex, triple, isInsertion};
