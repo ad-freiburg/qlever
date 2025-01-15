@@ -16,4 +16,4 @@ add_library(engine
         CountConnectedSubgraphs.cpp SpatialJoinAlgorithms.cpp PathSearch.cpp ExecuteUpdate.cpp
         Describe.cpp)
 qlever_target_link_libraries(engine util index parser sparqlExpressions http SortPerformanceEstimator Boost::iostreams s2)
-target_compile_options(engine PRIVATE  -pg)
+#target_compile_options(engine PRIVATE  -pg)
