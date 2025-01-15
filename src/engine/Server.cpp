@@ -552,6 +552,7 @@ Server::PlannedQuery Server::setupPlannedQuery(
   auto queryDatasets = ad_utility::url_parser::parseDatasetClauses(params);
   PlannedQuery plannedQuery =
       parseAndPlan(operation, queryDatasets, qec, handle, timeLimit);
+  // std::exit(0);
   auto& qet = plannedQuery.queryExecutionTree_;
   qet.isRoot() = true;  // allow pinning of the final result
   auto timeForQueryPlanning = requestTimer.msecs();

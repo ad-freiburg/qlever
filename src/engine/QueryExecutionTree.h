@@ -58,7 +58,12 @@ class QueryExecutionTree {
   std::optional<size_t> getVariableColumnOrNullopt(
       const Variable& variable) const;
 
-  size_t getResultWidth() const { return rootOperation_->getResultWidth(); }
+  size_t getResultWidth() const {
+    if (!resultWidth_.has_value()) {
+      resultWidth_.emplace(rootOperation_->getResultWidth());
+    }
+    return *resultWidth_;
+  }
 
   std::shared_ptr<const Result> getResult(bool requestLaziness = false) const {
     return rootOperation_->getResult(
@@ -208,6 +213,8 @@ class QueryExecutionTree {
   std::shared_ptr<Operation> rootOperation_ =
       nullptr;  // Owned child. Will be deleted at deconstruction.
   std::optional<size_t> sizeEstimate_ = std::nullopt;
+  // TODO<joka921> make this threadsafe etc.
+  mutable std::optional<size_t> resultWidth_ = std::nullopt;
   bool isRoot_ = false;  // used to distinguish the root from child
                          // operations/subtrees when pinning only the result.
 
