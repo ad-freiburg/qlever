@@ -44,9 +44,9 @@ ContextListMetaData writePostings(ad_utility::File& out,
                                        secondElements.end());
   std::vector<Score> scoreList(thirdElements.begin(), thirdElements.end());
 
-  GapEncode<uint64_t> textRecordEncoder(textRecordList);
-  FrequencyEncode<WordIndex> wordIndexEncoder(wordIndexList);
-  FrequencyEncode<Score> scoreEncoder(scoreList);
+  GapEncode textRecordEncoder(textRecordList);
+  FrequencyEncode wordIndexEncoder(wordIndexList);
+  FrequencyEncode scoreEncoder(scoreList);
 
   meta._startContextlist = currentOffset;
   textRecordEncoder.writeToFile(out, meta._nofElements, currentOffset);
@@ -75,13 +75,15 @@ size_t writeCodebook(const vector<T>& codebook, ad_utility::File& file) {
 
 // ____________________________________________________________________________
 template <typename Numeric>
-size_t writeList(Numeric* data, size_t nofElements, ad_utility::File& file) {
+size_t writeList(const std::vector<Numeric> data, size_t nofElements,
+                 ad_utility::File& file) {
   if (nofElements > 0) {
-    uint64_t* encoded = new uint64_t[nofElements];
-    size_t size = ad_utility::Simple8bCode::encode(data, nofElements, encoded);
-    size_t ret = file.write(encoded, size);
+    std::vector<uint64_t> encoded;
+    encoded.resize(nofElements);
+    size_t size = ad_utility::Simple8bCode::encode(data.data(), nofElements,
+                                                   encoded.data());
+    size_t ret = file.write(encoded.data(), size);
     AD_CONTRACT_CHECK(size == ret);
-    delete[] encoded;
     return size;
   } else {
     return 0;
@@ -93,11 +95,9 @@ template <typename T>
 void writeVectorAndMoveOffset(const std::vector<T>& vectorToWrite,
                               size_t nofElements, ad_utility::File& file,
                               off_t& currentOffset) {
-  T* vectorAsList = new T[vectorToWrite.size()];
-  std::copy(vectorToWrite.begin(), vectorToWrite.end(), vectorAsList);
-  size_t bytes = textIndexReadWrite::writeList(vectorAsList, nofElements, file);
+  size_t bytes =
+      textIndexReadWrite::writeList(vectorToWrite, nofElements, file);
   currentOffset += bytes;
-  delete[] vectorAsList;
 }
 
 }  // namespace textIndexReadWrite
@@ -121,11 +121,12 @@ FrequencyEncode<T>::FrequencyEncode(const TypedVector& vectorToEncode) {
   // Convert the hashmap to a vector to sort it by most frequent first
   std::vector<std::pair<T, size_t>> frequencyVector;
   frequencyVector.reserve(frequencyMap.size());
-  std::transform(frequencyMap.begin(), frequencyMap.end(),
-                 std::back_inserter(frequencyVector),
-                 [](const auto& kv) { return kv; });
-  std::sort(frequencyVector.begin(), frequencyVector.end(),
-            [](const auto& a, const auto& b) { return a.second > b.second; });
+  ql::ranges::transform(frequencyMap.begin(), frequencyMap.end(),
+                        std::back_inserter(frequencyVector),
+                        [](const auto& kv) { return kv; });
+  ql::ranges::sort(
+      frequencyVector.begin(), frequencyVector.end(),
+      [](const auto& a, const auto& b) { return a.second > b.second; });
 
   // Write the codeBook and codeMap
   // codeBook contains all values of type T exactly ones, sorted by frequency

@@ -28,7 +28,8 @@ size_t writeCodebook(const vector<T>& codebook, ad_utility::File& file);
 //! to file.
 //! Returns the number of bytes written.
 template <typename Numeric>
-size_t writeList(Numeric* data, size_t nofElements, ad_utility::File& file);
+size_t writeList(std::vector<Numeric> data, size_t nofElements,
+                 ad_utility::File& file);
 
 /// THIS METHOD HAS BEEN ADDED
 /// This is just a helper function to remove the code duplication seen in the
@@ -69,33 +70,33 @@ vector<To> readFreqComprList(
              << ", nofBytes: " << nofBytes << '\n';
   size_t nofCodebookBytes;
   vector<uint64_t> frequencyEncodedResult;
-  uint64_t* encoded = new uint64_t[nofElements];
   frequencyEncodedResult.resize(nofElements + 250);
   off_t current = from;
   size_t ret = textIndexFile.read(&nofCodebookBytes, sizeof(size_t), current);
   LOG(TRACE) << "Nof Codebook Bytes: " << nofCodebookBytes << '\n';
   AD_CONTRACT_CHECK(sizeof(size_t) == ret);
   current += ret;
-  From* codebook = new From[nofCodebookBytes / sizeof(From)];
-  ret = textIndexFile.read(codebook, nofCodebookBytes, current);
+  std::vector<From> codebook;
+  codebook.resize(nofCodebookBytes / sizeof(From));
+  ret = textIndexFile.read(codebook.data(), nofCodebookBytes, current);
   current += ret;
   AD_CONTRACT_CHECK(ret == size_t(nofCodebookBytes));
-  ret = textIndexFile.read(
-      encoded, static_cast<size_t>(nofBytes - (current - from)), current);
+  std::vector<uint64_t> simple8bEncoded;
+  simple8bEncoded.resize(nofElements);
+  ret = textIndexFile.read(simple8bEncoded.data(), nofBytes - (current - from),
+                           current);
   current += ret;
   AD_CONTRACT_CHECK(size_t(current - from) == nofBytes);
   LOG(DEBUG) << "Decoding Simple8b code...\n";
-  ad_utility::Simple8bCode::decode(encoded, nofElements,
+  ad_utility::Simple8bCode::decode(simple8bEncoded.data(), nofElements,
                                    frequencyEncodedResult.data());
   LOG(DEBUG) << "Reverting frequency encoded items to actual IDs...\n";
   frequencyEncodedResult.resize(nofElements);
   vector<To> result;
   result.reserve(frequencyEncodedResult.size());
-  for (size_t i = 0; i < frequencyEncodedResult.size(); ++i) {
-    result.push_back(transformer(codebook[frequencyEncodedResult[i]]));
-  }
-  delete[] encoded;
-  delete[] codebook;
+  ql::ranges::for_each(frequencyEncodedResult, [&](const auto& encoded) {
+    result.push_back(transformer(codebook.at(encoded)));
+  });
   LOG(DEBUG) << "Done reading frequency-encoded list. Size: " << result.size()
              << "\n";
   return result;
@@ -118,10 +119,11 @@ vector<To> readGapComprList(
              << ", nofBytes: " << nofBytes << '\n';
   vector<From> gapEncodedVector;
   gapEncodedVector.resize(nofElements + 250);
-  uint64_t* encoded = new uint64_t[nofBytes / 8];
-  textIndexFile.read(encoded, nofBytes, from);
+  std::vector<uint64_t> simple8bEncoded;
+  simple8bEncoded.resize(nofBytes / 8);
+  textIndexFile.read(simple8bEncoded.data(), nofBytes, from);
   LOG(DEBUG) << "Decoding Simple8b code...\n";
-  ad_utility::Simple8bCode::decode(encoded, nofElements,
+  ad_utility::Simple8bCode::decode(simple8bEncoded.data(), nofElements,
                                    gapEncodedVector.data());
   LOG(DEBUG) << "Reverting gaps to actual IDs...\n";
   gapEncodedVector.resize(nofElements);
@@ -134,7 +136,6 @@ vector<To> readGapComprList(
     previous += gapEncodedVector[i];
     result.push_back(transformer(previous));
   }
-  delete[] encoded;
   LOG(DEBUG) << "Done reading gap-encoded list. Size: " << result.size()
              << "\n";
   return result;
@@ -162,9 +163,9 @@ class FrequencyEncode {
   void writeToFile(ad_utility::File& out, size_t nofElements,
                    off_t& currentOffset);
 
-  const TypedVector getEncodedVector() { return encodedVector_; }
-  const CodeMap& getCodeMap() { return codeMap_; }
-  const CodeBook& getCodeBook() { return codeBook_; }
+  TypedVector getEncodedVector() { return encodedVector_; }
+  const CodeMap& getCodeMap() const { return codeMap_; }
+  const CodeBook& getCodeBook() const { return codeBook_; }
 
  private:
   std::vector<size_t> encodedVector_;
@@ -182,7 +183,7 @@ requires std::is_arithmetic_v<T> class GapEncode {
   void writeToFile(ad_utility::File& out, size_t nofElements,
                    off_t& currentOffset);
 
-  const TypedVector& getEncodedVector() { return encodedVector_; }
+  const TypedVector& getEncodedVector() const { return encodedVector_; }
 
  private:
   TypedVector encodedVector_;
