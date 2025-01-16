@@ -25,6 +25,7 @@ class QueryExecutionTree {
                      std::shared_ptr<Operation> operation)
       : QueryExecutionTree(qec) {
     rootOperation_ = std::move(operation);
+    cacheKey_ = rootOperation_->getCacheKey();
     readFromCache();
   }
 
@@ -213,6 +214,7 @@ class QueryExecutionTree {
   std::shared_ptr<Operation> rootOperation_ =
       nullptr;  // Owned child. Will be deleted at deconstruction.
   std::optional<size_t> sizeEstimate_ = std::nullopt;
+  std::optional<std::string> cacheKey_ = std::nullopt;
   // TODO<joka921> make this threadsafe etc.
   mutable std::optional<size_t> resultWidth_ = std::nullopt;
   bool isRoot_ = false;  // used to distinguish the root from child
