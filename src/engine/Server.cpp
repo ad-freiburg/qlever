@@ -283,12 +283,12 @@ ad_utility::url_parser::ParsedRequest Server::parseHttpRequest(
       return parsedRequest;
     }
     if (contentType.starts_with(contentTypeSparqlQuery)) {
-      parsedRequest.operation_ = Query{request.body()};
+      parsedRequest.operation_ = Query{request.body(), {}};
       addDatasetClauses();
       return parsedRequest;
     }
     if (contentType.starts_with(contentTypeSparqlUpdate)) {
-      parsedRequest.operation_ = Update{request.body()};
+      parsedRequest.operation_ = Update{request.body(), {}};
       addDatasetClauses();
       return parsedRequest;
     }
