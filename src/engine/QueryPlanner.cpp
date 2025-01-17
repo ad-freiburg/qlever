@@ -1379,8 +1379,80 @@ QueryPlanner::runGreedyPlanningOnConnectedComponent(
   applyFiltersIfPossible<true>(result, filters);
   applyTextLimitsIfPossible(result, textLimits, true);
   size_t numSeeds = findUniqueNodeIds(result);
+  using Plans = std::vector<SubtreePlan>;
+  using Ptr = Plans*;
+  Plans precomputedCache;
+  Plans nextResult;
 
+  auto greedyFirstStep = [this, tg, filters, textLimits](Ptr input, Ptr cache,
+                                                         Ptr nextResult) {
+    checkCancellation();
+    *cache = merge(*input, *input, tg);
+    applyFiltersIfPossible<true>(*cache, filters);
+    applyTextLimitsIfPossible(*cache, textLimits, true);
+    AD_CORRECTNESS_CHECK(!cache->empty());
+    auto smallestIdxNew = findSmallestExecutionTree(*cache);
+    auto& cheapestNewTree = cache->at(smallestIdxNew);
+    // size_t oldSize = result.size();
+    std::erase_if(*input, [&cheapestNewTree](const auto& plan) {
+      // TODO<joka921> We can also assert some other invariants here.
+      return (cheapestNewTree._idsOfIncludedNodes & plan._idsOfIncludedNodes) !=
+             0;
+    });
+    // TODO<joka921> We could avoid the copy.
+    (*nextResult) = std::vector{cheapestNewTree};
+
+    // TODO<joka921> Verify whether this is correct etc.
+    std::erase_if(*cache,
+                  [&cheapestNewTree = nextResult->front()](const auto& plan) {
+                    // TODO<joka921> We can also assert some other invariants
+                    // here.
+                    return (cheapestNewTree._idsOfIncludedNodes &
+                            plan._idsOfIncludedNodes) != 0;
+                  });
+  };
+
+  auto greedyStep = [this, tg, filters, textLimits](Ptr input, Ptr cache,
+                                                    Ptr nextResult) {
+    checkCancellation();
+    auto newPlans = merge(*input, *nextResult, tg);
+    applyFiltersIfPossible<true>(newPlans, filters);
+    applyTextLimitsIfPossible(newPlans, textLimits, true);
+    AD_CORRECTNESS_CHECK(!newPlans.empty());
+    ql::ranges::move(newPlans, std::back_inserter(*cache));
+    ql::ranges::move(*nextResult, std::back_inserter(*input));
+    auto smallestIdxNew = findSmallestExecutionTree(*cache);
+    auto& cheapestNewTree = cache->at(smallestIdxNew);
+    // size_t oldSize = result.size();
+    std::erase_if(*input, [&cheapestNewTree](const auto& plan) {
+      // TODO<joka921> We can also assert some other invariants here.
+      return (cheapestNewTree._idsOfIncludedNodes & plan._idsOfIncludedNodes) !=
+             0;
+    });
+    // TODO<joka921> We could avoid the copy.
+    (*nextResult) = std::vector{cheapestNewTree};
+
+    // TODO<joka921> Verify whether this is correct etc.
+    std::erase_if(*cache,
+                  [&cheapestNewTree = nextResult->front()](const auto& plan) {
+                    // TODO<joka921> We can also assert some other invariants
+                    // here.
+                    return (cheapestNewTree._idsOfIncludedNodes &
+                            plan._idsOfIncludedNodes) != 0;
+                  });
+  };
+
+  bool first = true;
+  if (numSeeds <= 1) {
+    return std::move(result);
+  }
   while (numSeeds > 1) {
+    if (std::exchange(first, false)) {
+      greedyFirstStep(&result, &precomputedCache, &nextResult);
+    } else {
+      greedyStep(&result, &precomputedCache, &nextResult);
+    }
+    /*
     checkCancellation();
     auto newPlans = merge(result, result, tg);
     applyFiltersIfPossible<true>(newPlans, filters);
@@ -1395,10 +1467,12 @@ QueryPlanner::runGreedyPlanningOnConnectedComponent(
     });
     result.push_back(std::move(cheapestNewTree));
     AD_CORRECTNESS_CHECK(result.size() < oldSize);
+    */
     numSeeds--;
   }
   // TODO<joka921> Assert that all seeds are covered by the result.
-  return std::move(result);
+  // return std::move(result);
+  return nextResult;
 }
 
 // _____________________________________________________________________________
@@ -1439,8 +1513,8 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
   }
   size_t numConnectedComponents = lastDpRowFromComponents.size();
   if (numConnectedComponents == 0) {
-    // This happens for example if there is a BIND right at the beginning of the
-    // query
+    // This happens for example if there is a BIND right at the beginning of
+    // the query
     lastDpRowFromComponents.emplace_back();
     return lastDpRowFromComponents;
   }
@@ -1818,18 +1892,19 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
   }
 
   // If both sides are spatial joins that are still missing children, return
-  // immediately to prevent a regular join on the variables, which would lead to
-  // the spatial join never having children.
+  // immediately to prevent a regular join on the variables, which would lead
+  // to the spatial join never having children.
   if (checkSpatialJoin(a, b) == std::pair<bool, bool>{true, true}) {
     return candidates;
   }
 
-  // if one of the inputs is the spatial join and the other input is compatible
-  // with the SpatialJoin, add it as a child to the spatialJoin. As unbound
-  // SpatialJoin operations are incompatible with normal join operations, we
-  // return immediately instead of creating a normal join below as well.
-  // Note, that this if statement should be evaluated first, such that no other
-  // join options get considered, when one of the candidates is a SpatialJoin.
+  // if one of the inputs is the spatial join and the other input is
+  // compatible with the SpatialJoin, add it as a child to the spatialJoin. As
+  // unbound SpatialJoin operations are incompatible with normal join
+  // operations, we return immediately instead of creating a normal join below
+  // as well. Note, that this if statement should be evaluated first, such
+  // that no other join options get considered, when one of the candidates is
+  // a SpatialJoin.
   if (auto opt = createSpatialJoin(a, b, jcs)) {
     candidates.push_back(std::move(opt.value()));
     return candidates;
@@ -2242,8 +2317,8 @@ void QueryPlanner::GraphPatternPlanner::visitGroupOptionalOrMinus(
   ql::ranges::for_each(
       variables, [this](const Variable& var) { boundVariables_.insert(var); });
 
-  // If our input is not OPTIONAL and not a MINUS, this means that we can still
-  // arbitrarily optimize among our candidates and just append our new
+  // If our input is not OPTIONAL and not a MINUS, this means that we can
+  // still arbitrarily optimize among our candidates and just append our new
   // candidates.
   if (candidates[0].type == SubtreePlan::BASIC) {
     candidatePlans_.push_back(std::move(candidates));
@@ -2268,8 +2343,8 @@ void QueryPlanner::GraphPatternPlanner::visitGroupOptionalOrMinus(
     }
   }
 
-  // Keep the best found candidate, which can then be combined with potentially
-  // following children, until we hit the next OPTIONAL or MINUS.
+  // Keep the best found candidate, which can then be combined with
+  // potentially following children, until we hit the next OPTIONAL or MINUS.
   // TODO<joka921> Also keep one candidate per ordering to make even
   // better plans at this step
   AD_CORRECTNESS_CHECK(
@@ -2288,9 +2363,9 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
   using SubtreePlan = QueryPlanner::SubtreePlan;
   if constexpr (std::is_same_v<T, p::Optional> ||
                 std::is_same_v<T, p::GroupGraphPattern>) {
-    // If this is a `GRAPH <graph> {...}` clause, then we have to overwrite the
-    // default graphs while planning this clause, and reset them when leaving
-    // the clause.
+    // If this is a `GRAPH <graph> {...}` clause, then we have to overwrite
+    // the default graphs while planning this clause, and reset them when
+    // leaving the clause.
     std::optional<ParsedQuery::DatasetClauses> datasetBackup;
     std::optional<Variable> graphVariableBackup = planner_.activeGraphVariable_;
     if constexpr (std::is_same_v<T, p::GroupGraphPattern>) {
@@ -2303,7 +2378,8 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
         if (checkUsePatternTrick::isVariableContainedInGraphPattern(
                 graphVar, arg._child, nullptr)) {
           throw std::runtime_error(
-              "A variable that is used as the graph specifier of a `GRAPH ?var "
+              "A variable that is used as the graph specifier of a `GRAPH "
+              "?var "
               "{...}` clause may not appear in the body of that clause");
         }
         datasetBackup = planner_.activeDatasetClauses_;
@@ -2487,7 +2563,8 @@ void QueryPlanner::GraphPatternPlanner::visitSpatialSearch(
     parsedQuery::SpatialQuery& spatialQuery) {
   auto config = spatialQuery.toSpatialJoinConfiguration();
 
-  // If there is no child graph pattern, we need to construct a neutral element
+  // If there is no child graph pattern, we need to construct a neutral
+  // element
   std::vector<SubtreePlan> candidatesIn;
   if (spatialQuery.childGraphPattern_.has_value()) {
     candidatesIn = planner_.optimize(&spatialQuery.childGraphPattern_.value());
@@ -2497,11 +2574,11 @@ void QueryPlanner::GraphPatternPlanner::visitSpatialSearch(
   std::vector<SubtreePlan> candidatesOut;
 
   for (auto& sub : candidatesIn) {
-    // This helper function adds a subtree plan to the output candidates, which
-    // either has the child graph pattern as a right child or no child at all.
-    // If it has no child at all, the query planner may look for the right child
-    // of the SpatialJoin outside of the SERVICE. This is only allowed for max
-    // distance joins.
+    // This helper function adds a subtree plan to the output candidates,
+    // which either has the child graph pattern as a right child or no child
+    // at all. If it has no child at all, the query planner may look for the
+    // right child of the SpatialJoin outside of the SERVICE. This is only
+    // allowed for max distance joins.
     auto addCandidateSpatialJoin = [this, &sub, &config,
                                     &candidatesOut](bool rightVarOutside) {
       std::optional<std::shared_ptr<QueryExecutionTree>> right = std::nullopt;
