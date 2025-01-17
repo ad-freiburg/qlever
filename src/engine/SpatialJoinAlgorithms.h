@@ -20,8 +20,6 @@ namespace bgi = boost::geometry::index;
 
 using Point = bg::model::point<double, 2, bg::cs::cartesian>;
 using Box = bg::model::box<Point>;
-// using Value = std::pair<Point, size_t>;  // TODO: remove this line, it's
-// legacy, when areas were not yet possible
 using Value = std::pair<Box, size_t>;
 using Polygon = boost::geometry::model::polygon<
     boost::geometry::model::d2::point_xy<double>>;
@@ -102,7 +100,7 @@ class SpatialJoinAlgorithms {
   // map and in the internal representation it looks like two/more boxes). The
   // additionalDist gets added on the max distance to compensate for areas being
   // bigger than points. AdditionalDist must be the max distance from the
-  // midpoint of the bounding box of the area to any point inside the method.
+  // midpoint of the bounding box of the area to any point inside the area.
   // The function getMaxDistFromMidpointToAnyPointInsideTheBox() can be used to
   // calculate it.
   std::vector<BoostGeometryNamespace::Box> computeBoundingBox(

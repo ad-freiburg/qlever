@@ -31,7 +31,8 @@ using SJ = std::variant<NearestNeighborsConfig, MaxDistanceConfig>;
 namespace computeResultTest {
 
 // Represents from left to right: the algorithm, addLeftChildFirst,
-// bigChildLeft, a spatial join task and if areas or points should be used
+// bigChildLeft, a spatial join task and if areas (=true) or points (=false)
+// should be used
 using SpatialJoinTestParam =
     std::tuple<SpatialJoinAlgorithm, bool, bool, SpatialJoinTask, bool>;
 
@@ -277,7 +278,7 @@ class SpatialJoinParamTest
 
   void testWrongPointInInput(SJ task, bool addLeftChildFirst,
                              Rows expectedOutput, Row columnNames) {
-    auto kg = createSmallDatasetWithPoints();
+    auto kg = createSmallDataset();
     // make first point wrong:
     auto pos = kg.find("POINT(");
     kg = kg.insert(pos + 7, "wrongStuff");
@@ -339,11 +340,13 @@ class SpatialJoinParamTest
                                                 : "\"Statue of liberty\"";
   std::string name5 =
       (std::get<4>(GetParam())) ? "\"eiffel tower Area\"" : "\"eiffel tower\"";
+
   std::string node1 = (std::get<4>(GetParam())) ? "<nodeArea_1>" : "<node_1>";
   std::string node2 = (std::get<4>(GetParam())) ? "<nodeArea_2>" : "<node_2>";
   std::string node3 = (std::get<4>(GetParam())) ? "<nodeArea_3>" : "<node_3>";
   std::string node4 = (std::get<4>(GetParam())) ? "<nodeArea_4>" : "<node_4>";
   std::string node5 = (std::get<4>(GetParam())) ? "<nodeArea_5>" : "<node_5>";
+
   std::string geometry1 =
       (std::get<4>(GetParam())) ? "<geometryArea1>" : "<geometry1>";
   std::string geometry2 =
@@ -354,6 +357,7 @@ class SpatialJoinParamTest
       (std::get<4>(GetParam())) ? "<geometryArea4>" : "<geometry4>";
   std::string geometry5 =
       (std::get<4>(GetParam())) ? "<geometryArea5>" : "<geometry5>";
+
   std::string wktString1 = (std::get<4>(GetParam()))
                                ? SpatialJoinTestHelpers::areaUniFreiburg
                                : "POINT(7.835050 48.012670)";
@@ -402,17 +406,7 @@ class SpatialJoinParamTest
   Row expectedDistSelf{"0"};
 
   // helper functions
-  // auto P = [](double x, double y) { return GeoPoint(y, x); };  // TODO:
-  // delete this line
   GeoPoint P(double x, double y) { return GeoPoint(y, x); }
-
-  /* TODO: delete this lambda
-  auto expectedDist = [](const GeoPoint& p1, const GeoPoint& p2) {
-    auto p1_ = S2Point{S2LatLng::FromDegrees(p1.getLat(), p1.getLng())};
-    auto p2_ = S2Point{S2LatLng::FromDegrees(p2.getLat(), p2.getLng())};
-
-    return std::to_string(S2Earth::ToKm(S1Angle(p1_, p2_)));
-  };*/
 
   std::string expectedDist(const GeoPoint& p1, const GeoPoint& p2) {
     auto p1_ = S2Point{S2LatLng::FromDegrees(p1.getLat(), p1.getLng())};

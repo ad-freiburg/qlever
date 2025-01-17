@@ -301,7 +301,7 @@ std::vector<Box> SpatialJoinAlgorithms::computeBoundingBox(
 
   // safety buffer for numerical inaccuracies
   double maxDistInMetersBuffer = maxDist.value() + additionalDist;
-  if (maxDist.value() < 10) {
+  if (maxDistInMetersBuffer < 10) {
     maxDistInMetersBuffer = 10;
   } else if (static_cast<double>(maxDist.value()) <
              static_cast<double>(std::numeric_limits<long long>::max()) /

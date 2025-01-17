@@ -57,7 +57,9 @@ Index makeTestIndex(const std::string& indexBasename,
 // Return a static  `QueryExecutionContext` that refers to an index that was
 // build using `makeTestIndex` (see above). The index (most notably its
 // vocabulary) is the only part of the `QueryExecutionContext` that is actually
-// relevant for these tests, so the other members are defaulted.
+// relevant for these tests, so the other members are defaulted. Using
+// the parameter parserBufferSize the buffer size can be increased, when needed
+// for larger tests (like polygon testing in Spatial Joins).
 QueryExecutionContext* getQec(
     std::optional<std::string> turtleInput = std::nullopt,
     bool loadAllPermutations = true, bool usePatterns = true,

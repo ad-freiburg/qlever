@@ -250,17 +250,17 @@ inline std::vector<std::string> createRowVectorFromColumnVector(
   return result;
 }
 
-// create a small test dataset, which focuses on points as geometry objects.
-// Note, that some of these objects have a polygon representation, but for
-// testing purposes, they get represented as a point here. I took those
+// create a small test dataset, which focuses on points or polygons as geometry
+// objects. Note, that some of these objects have a polygon representation, but
+// when choosing points, they get represented a single point. I took those
 // points, such that it is obvious, which pair of objects should be included,
 // when the maximum distance is x meters. Please note, that these datapoints
-// are not copied from a real input file. Copying the query will therefore
-// likely not result in the same results as here (also the names, coordinates,
-// etc. might be different in the real datasets). The updated method also
-// supports polygons as areas, which can be added to the knowledge graph using
-// a boolean flag
-inline std::string createSmallDatasetWithPoints(bool usePolygons = false) {
+// are only partially copied from a real input file. Copying the query will
+// therefore likely not result in the same results as here (the names,
+// coordinates, etc. might be different in the real datasets). If usePolygons is
+// set to false, all objects are represented by a point, otherwise all objects
+// are represented by their area.
+inline std::string createSmallDataset(bool usePolygons = false) {
   auto addPoint = [](std::string& kg, std::string number, std::string name,
                      std::string point) {
     kg += absl::StrCat("<node_", number, "> <name> ", name, " .<node_", number,
@@ -294,7 +294,7 @@ inline std::string createSmallDatasetWithPoints(bool usePolygons = false) {
 }
 
 inline QueryExecutionContext* buildTestQEC(bool useAreas = false) {
-  std::string kg = createSmallDatasetWithPoints(useAreas);
+  std::string kg = createSmallDataset(useAreas);
   ad_utility::MemorySize blocksizePermutations = 16_MB;
   auto qec =
       ad_utility::testing::getQec(kg, true, true, false, blocksizePermutations,

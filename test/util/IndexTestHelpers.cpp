@@ -25,7 +25,7 @@ Index makeIndexWithTestSettings(ad_utility::MemorySize parserBufferSize) {
   index.memoryLimitIndexBuilding() = 50_MB;
   index.parserBufferSize() =
       parserBufferSize;  // Note that the default value remains unchanged, but
-                         // some test (i.e. polygon testing in Spatial Joins)
+                         // some tests (i.e. polygon testing in Spatial Joins)
                          // require a larger buffer size
   return index;
 }
