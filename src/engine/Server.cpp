@@ -23,6 +23,7 @@
 #include "util/http/websocket/MessageSender.h"
 
 using namespace std::string_literals;
+using namespace ad_utility::url_parser::sparqlOperation;
 
 template <typename T>
 using Awaitable = Server::Awaitable<T>;
@@ -169,7 +170,6 @@ ad_utility::url_parser::ParsedRequest Server::parseHttpRequest(
     const ad_utility::httpUtils::HttpRequest auto& request) {
   // For an HTTP request, `request.target()` yields the HTTP Request-URI.
   // This is a concatenation of the URL path and the query strings.
-  using namespace ad_utility::url_parser::sparqlOperation;
   auto parsedUrl = ad_utility::url_parser::parseRequestTarget(request.target());
   ad_utility::url_parser::ParsedRequest parsedRequest{
       std::move(parsedUrl.path_), std::move(parsedUrl.parameters_), None{}};
@@ -487,8 +487,7 @@ Awaitable<void> Server::process(
 
   auto visitQuery = [&checkParameter, &accessTokenOk, &request, &send,
                      &parameters, &requestTimer,
-                     this](ad_utility::url_parser::sparqlOperation::Query query)
-      -> Awaitable<void> {
+                     this](Query query) -> Awaitable<void> {
     if (auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
             checkParameter("timeout", std::nullopt), accessTokenOk, request,
             send)) {
@@ -503,9 +502,8 @@ Awaitable<void> Server::process(
   };
   auto visitUpdate =
       [&checkParameter, &accessTokenOk, &request, &send, &parameters,
-       &requestTimer, this, &requireValidAccessToken](
-          const ad_utility::url_parser::sparqlOperation::Update& update)
-      -> Awaitable<void> {
+       &requestTimer, this,
+       &requireValidAccessToken](const Update& update) -> Awaitable<void> {
     requireValidAccessToken("SPARQL Update");
     if (auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
             checkParameter("timeout", std::nullopt), accessTokenOk, request,
@@ -519,9 +517,7 @@ Awaitable<void> Server::process(
       co_return;
     }
   };
-  auto visitNone =
-      [&response, &send, &request](
-          ad_utility::url_parser::sparqlOperation::None) -> Awaitable<void> {
+  auto visitNone = [&response, &send, &request](None) -> Awaitable<void> {
     // If there was no "query", but any of the URL parameters processed before
     // produced a `response`, send that now. Note that if multiple URL
     // parameters were processed, only the `response` from the last one is sent.
@@ -798,8 +794,7 @@ ad_utility::websocket::MessageSender Server::createMessageSender(
 
 // ____________________________________________________________________________
 Awaitable<void> Server::processQuery(
-    const ad_utility::url_parser::ParamValueMap& params,
-    const ad_utility::url_parser::sparqlOperation::Query& query,
+    const ad_utility::url_parser::ParamValueMap& params, const Query& query,
     ad_utility::Timer& requestTimer,
     const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
     TimeLimit timeLimit) {
@@ -898,8 +893,7 @@ Awaitable<void> Server::processQuery(
 
 // ____________________________________________________________________________
 void Server::processUpdateImpl(
-    const ad_utility::url_parser::ParamValueMap& params,
-    const ad_utility::url_parser::sparqlOperation::Update& update,
+    const ad_utility::url_parser::ParamValueMap& params, const Update& update,
     ad_utility::Timer& requestTimer, TimeLimit timeLimit, auto& messageSender,
     ad_utility::SharedCancellationHandle cancellationHandle,
     DeltaTriples& deltaTriples) {
@@ -939,8 +933,7 @@ void Server::processUpdateImpl(
 
 // ____________________________________________________________________________
 Awaitable<void> Server::processUpdate(
-    const ad_utility::url_parser::ParamValueMap& params,
-    const ad_utility::url_parser::sparqlOperation::Update& update,
+    const ad_utility::url_parser::ParamValueMap& params, const Update& update,
     ad_utility::Timer& requestTimer,
     const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
     TimeLimit timeLimit) {
@@ -999,14 +992,10 @@ Awaitable<void> Server::processQueryOrUpdate(
   // access to the runtimeInformation in the case of an error.
   std::optional<PlannedQuery> plannedQuery;
   try {
-    if constexpr (std::is_same_v<
-                      Operation,
-                      ad_utility::url_parser::sparqlOperation::Query>) {
+    if constexpr (std::is_same_v<Operation, Query>) {
       co_await processQuery(params, operation, requestTimer, request, send,
                             timeLimit);
-    } else if constexpr (std::is_same_v<
-                             Operation,
-                             ad_utility::url_parser::sparqlOperation::Update>) {
+    } else if constexpr (std::is_same_v<Operation, Update>) {
       co_await processUpdate(params, operation, requestTimer, request, send,
                              timeLimit);
     } else {
@@ -1051,13 +1040,9 @@ Awaitable<void> Server::processQueryOrUpdate(
       }
     }
     std::string operationStr = [&operation] {
-      if constexpr (std::is_same_v<
-                        Operation,
-                        ad_utility::url_parser::sparqlOperation::Query>) {
+      if constexpr (std::is_same_v<Operation, Query>) {
         return operation.query_;
-      } else if constexpr (std::is_same_v<Operation,
-                                          ad_utility::url_parser::
-                                              sparqlOperation::Update>) {
+      } else if constexpr (std::is_same_v<Operation, Update>) {
         return operation.update_;
       } else {
         AD_FAIL();
