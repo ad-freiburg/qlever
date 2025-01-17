@@ -2629,6 +2629,9 @@ void QueryPlanner::GraphPatternPlanner::optimizeCommutatively() {
     visitUnion(parsedUnion);
     planner_.checkCancellation();
     AD_CORRECTNESS_CHECK(candidatePlans_.size() == 1);
+    if (RuntimeParameters().get<"always-multiply-unions">()) {
+      lastRow.clear();
+    }
     ql::ranges::move(candidatePlans_.back(), std::back_inserter(lastRow));
     candidatePlans_.clear();
   }
