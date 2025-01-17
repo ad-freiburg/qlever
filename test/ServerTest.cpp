@@ -122,10 +122,10 @@ TEST(ServerTest, parseHttpRequest) {
   EXPECT_THAT(parse(MakePostRequest("/", URLENCODED, "cmd=clear-cache")),
               ParsedRequestIs("/", {{"cmd", {"clear-cache"}}}, None{}));
   EXPECT_THAT(parse(MakePostRequest("/", QUERY, "SELECT * WHERE {}")),
-              ParsedRequestIs("/", {}, Query{"SELECT * WHERE {}"}));
-  EXPECT_THAT(
-      parse(MakePostRequest("/?send=100", QUERY, "SELECT * WHERE {}")),
-      ParsedRequestIs("/", {{"send", {"100"}}}, Query{"SELECT * WHERE {}"}));
+              ParsedRequestIs("/", {}, Query{"SELECT * WHERE {}", {}}));
+  EXPECT_THAT(parse(MakePostRequest("/?send=100", QUERY, "SELECT * WHERE {}")),
+              ParsedRequestIs("/", {{"send", {"100"}}},
+                              Query{"SELECT * WHERE {}", {}}));
   AD_EXPECT_THROW_WITH_MESSAGE(
       parse(MakeBasicRequest(http::verb::patch, "/")),
       testing::StrEq(

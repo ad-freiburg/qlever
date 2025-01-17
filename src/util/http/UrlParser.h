@@ -42,7 +42,7 @@ namespace sparqlOperation {
 // A SPARQL 1.1 Query
 struct Query {
   std::string query_;
-  std::vector<DatasetClause> datasetClauses_{};
+  std::vector<DatasetClause> datasetClauses_;
 
   bool operator==(const Query& rhs) const = default;
 };
@@ -50,7 +50,7 @@ struct Query {
 // A SPARQL 1.1 Update
 struct Update {
   std::string update_;
-  std::vector<DatasetClause> datasetClauses_{};
+  std::vector<DatasetClause> datasetClauses_;
 
   bool operator==(const Update& rhs) const = default;
 };
