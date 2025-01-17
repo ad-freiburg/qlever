@@ -182,13 +182,34 @@ ad_utility::url_parser::ParsedRequest Server::parseHttpRequest(
         auto operation = ad_utility::url_parser::getParameterCheckAtMostOnce(
             parsedRequest.parameters_, paramName);
         if (operation.has_value()) {
-          parsedRequest.operation_ = Operation{operation.value()};
+          parsedRequest.operation_ = Operation{operation.value(), {}};
           parsedRequest.parameters_.erase(paramName);
         }
       };
+  auto addToDatasetClausesIfOperationIs = [&parsedRequest]<typename Operation>(
+                                              const std::string& key,
+                                              bool isNamed) {
+    if (Operation* op = std::get_if<Operation>(&parsedRequest.operation_)) {
+      ad_utility::appendVector(op->datasetClauses_,
+                               ad_utility::url_parser::parseDatasetClausesFrom(
+                                   parsedRequest.parameters_, key, isNamed));
+    }
+  };
+  auto addDatasetClauses = [&addToDatasetClausesIfOperationIs] {
+    addToDatasetClausesIfOperationIs.template operator()<Query>(
+        "default-graph-uri", false);
+    addToDatasetClausesIfOperationIs.template operator()<Query>(
+        "named-graph-uri", true);
+    addToDatasetClausesIfOperationIs.template operator()<Update>(
+        "using-graph-uri", false);
+    addToDatasetClausesIfOperationIs.template operator()<Update>(
+        "using-named-graph-uri", true);
+  };
 
   if (request.method() == http::verb::get) {
     setOperationIfSpecifiedInParams.template operator()<Query>("query");
+    addDatasetClauses();
+
     if (parsedRequest.parameters_.contains("update")) {
       throw std::runtime_error("SPARQL Update is not allowed as GET request.");
     }
@@ -258,15 +279,17 @@ ad_utility::url_parser::ParsedRequest Server::parseHttpRequest(
       }
       setOperationIfSpecifiedInParams.template operator()<Query>("query");
       setOperationIfSpecifiedInParams.template operator()<Update>("update");
-
+      addDatasetClauses();
       return parsedRequest;
     }
     if (contentType.starts_with(contentTypeSparqlQuery)) {
       parsedRequest.operation_ = Query{request.body()};
+      addDatasetClauses();
       return parsedRequest;
     }
     if (contentType.starts_with(contentTypeSparqlUpdate)) {
       parsedRequest.operation_ = Update{request.body()};
+      addDatasetClauses();
       return parsedRequest;
     }
     throw std::runtime_error(absl::StrCat(
@@ -334,16 +357,6 @@ Awaitable<void> Server::process(
   // standard, see method `getUrlPathAndParameters`.
   const auto parsedHttpRequest = parseHttpRequest(request);
   const auto& parameters = parsedHttpRequest.parameters_;
-
-  auto checkParameterNotPresent = [&parameters](
-                                      const std::string& parameterName) {
-    if (parameters.contains(parameterName)) {
-      throw NotSupportedException(absl::StrCat(
-          parameterName, " parameter is currently not supported by QLever."));
-    }
-  };
-  checkParameterNotPresent("default-graph-uri");
-  checkParameterNotPresent("named-graph-uri");
 
   // We always want to call `Server::checkParameter` with the same first
   // parameter.
@@ -479,9 +492,9 @@ Awaitable<void> Server::process(
     if (auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
             checkParameter("timeout", std::nullopt), accessTokenOk, request,
             send)) {
-      co_return co_await processQueryOrUpdate<OperationType::Query>(
-          parameters, query.query_, requestTimer, std::move(request), send,
-          timeLimit.value());
+      co_return co_await processQueryOrUpdate(parameters, query, requestTimer,
+                                              std::move(request), send,
+                                              timeLimit.value());
     } else {
       // If the optional is empty, this indicates an error response has been
       // sent to the client already. We can stop here.
@@ -497,9 +510,9 @@ Awaitable<void> Server::process(
     if (auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
             checkParameter("timeout", std::nullopt), accessTokenOk, request,
             send)) {
-      co_return co_await processQueryOrUpdate<OperationType::Update>(
-          parameters, update.update_, requestTimer, std::move(request), send,
-          timeLimit.value());
+      co_return co_await processQueryOrUpdate(parameters, update, requestTimer,
+                                              std::move(request), send,
+                                              timeLimit.value());
     } else {
       // If the optional is empty, this indicates an error response has been
       // sent to the client already. We can stop here.
@@ -545,11 +558,10 @@ std::pair<bool, bool> Server::determineResultPinning(
 
 // ____________________________________________________________________________
 Server::PlannedQuery Server::setupPlannedQuery(
-    const ad_utility::url_parser::ParamValueMap& params,
+    const std::vector<DatasetClause>& queryDatasets,
     const std::string& operation, QueryExecutionContext& qec,
     SharedCancellationHandle handle, TimeLimit timeLimit,
     const ad_utility::Timer& requestTimer) const {
-  auto queryDatasets = ad_utility::url_parser::parseDatasetClauses(params);
   PlannedQuery plannedQuery =
       parseAndPlan(operation, queryDatasets, qec, handle, timeLimit);
   auto& qet = plannedQuery.queryExecutionTree_;
@@ -786,7 +798,8 @@ ad_utility::websocket::MessageSender Server::createMessageSender(
 
 // ____________________________________________________________________________
 Awaitable<void> Server::processQuery(
-    const ad_utility::url_parser::ParamValueMap& params, const string& query,
+    const ad_utility::url_parser::ParamValueMap& params,
+    const ad_utility::url_parser::sparqlOperation::Query& query,
     ad_utility::Timer& requestTimer,
     const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
     TimeLimit timeLimit) {
@@ -795,7 +808,7 @@ Awaitable<void> Server::processQuery(
             << ad_utility::toString(mediaType) << "\"" << std::endl;
 
   ad_utility::websocket::MessageSender messageSender =
-      createMessageSender(queryHub_, request, query);
+      createMessageSender(queryHub_, request, query.query_);
   auto [cancellationHandle, cancelTimeoutOnDestruction] =
       setupCancellationHandle(messageSender.getQueryId(), timeLimit);
 
@@ -805,7 +818,7 @@ Awaitable<void> Server::processQuery(
   LOG(INFO) << "Processing the following SPARQL query:"
             << (pinResult ? " [pin result]" : "")
             << (pinSubtrees ? " [pin subresults]" : "") << "\n"
-            << query << std::endl;
+            << query.query_ << std::endl;
   QueryExecutionContext qec(index_, &cache_, allocator_,
                             sortPerformanceEstimator_, std::ref(messageSender),
                             pinSubtrees, pinResult);
@@ -819,10 +832,10 @@ Awaitable<void> Server::processQuery(
   // an explicit variable instead of directly `co_await`-ing it.
   auto coroutine = computeInNewThread(
       queryThreadPool_,
-      [this, &params, &query, &qec, cancellationHandle, &timeLimit,
+      [this, &query, &qec, cancellationHandle, &timeLimit,
        &requestTimer]() -> std::optional<PlannedQuery> {
-        return setupPlannedQuery(params, query, qec, cancellationHandle,
-                                 timeLimit, requestTimer);
+        return setupPlannedQuery(query.datasetClauses_, query.query_, qec,
+                                 cancellationHandle, timeLimit, requestTimer);
       },
       cancellationHandle);
   auto plannedQueryOpt = co_await std::move(coroutine);
@@ -885,7 +898,8 @@ Awaitable<void> Server::processQuery(
 
 // ____________________________________________________________________________
 void Server::processUpdateImpl(
-    const ad_utility::url_parser::ParamValueMap& params, const string& update,
+    const ad_utility::url_parser::ParamValueMap& params,
+    const ad_utility::url_parser::sparqlOperation::Update& update,
     ad_utility::Timer& requestTimer, TimeLimit timeLimit, auto& messageSender,
     ad_utility::SharedCancellationHandle cancellationHandle,
     DeltaTriples& deltaTriples) {
@@ -893,12 +907,13 @@ void Server::processUpdateImpl(
   LOG(INFO) << "Processing the following SPARQL update:"
             << (pinResult ? " [pin result]" : "")
             << (pinSubtrees ? " [pin subresults]" : "") << "\n"
-            << update << std::endl;
+            << update.update_ << std::endl;
   QueryExecutionContext qec(index_, &cache_, allocator_,
                             sortPerformanceEstimator_, std::ref(messageSender),
                             pinSubtrees, pinResult);
-  auto plannedQuery = setupPlannedQuery(params, update, qec, cancellationHandle,
-                                        timeLimit, requestTimer);
+  auto plannedQuery =
+      setupPlannedQuery(update.datasetClauses_, update.update_, qec,
+                        cancellationHandle, timeLimit, requestTimer);
   auto qet = plannedQuery.queryExecutionTree_;
 
   if (!plannedQuery.parsedQuery_.hasUpdateClause()) {
@@ -924,11 +939,12 @@ void Server::processUpdateImpl(
 
 // ____________________________________________________________________________
 Awaitable<void> Server::processUpdate(
-    const ad_utility::url_parser::ParamValueMap& params, const string& update,
+    const ad_utility::url_parser::ParamValueMap& params,
+    const ad_utility::url_parser::sparqlOperation::Update& update,
     ad_utility::Timer& requestTimer,
     const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
     TimeLimit timeLimit) {
-  auto messageSender = createMessageSender(queryHub_, request, update);
+  auto messageSender = createMessageSender(queryHub_, request, update.update_);
 
   auto [cancellationHandle, cancelTimeoutOnDestruction] =
       setupCancellationHandle(messageSender.getQueryId(), timeLimit);
@@ -963,10 +979,10 @@ Awaitable<void> Server::processUpdate(
 }
 
 // ____________________________________________________________________________
-template <Server::OperationType type>
+template <typename Operation>
 Awaitable<void> Server::processQueryOrUpdate(
     const ad_utility::url_parser::ParamValueMap& params,
-    const string& queryOrUpdate, ad_utility::Timer& requestTimer,
+    const Operation& operation, ad_utility::Timer& requestTimer,
     const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
     TimeLimit timeLimit) {
   using namespace ad_utility::httpUtils;
@@ -983,12 +999,18 @@ Awaitable<void> Server::processQueryOrUpdate(
   // access to the runtimeInformation in the case of an error.
   std::optional<PlannedQuery> plannedQuery;
   try {
-    if constexpr (type == OperationType::Query) {
-      co_await processQuery(params, queryOrUpdate, requestTimer, request, send,
+    if constexpr (std::is_same_v<
+                      Operation,
+                      ad_utility::url_parser::sparqlOperation::Query>) {
+      co_await processQuery(params, operation, requestTimer, request, send,
                             timeLimit);
-    } else {
-      co_await processUpdate(params, queryOrUpdate, requestTimer, request, send,
+    } else if constexpr (std::is_same_v<
+                             Operation,
+                             ad_utility::url_parser::sparqlOperation::Update>) {
+      co_await processUpdate(params, operation, requestTimer, request, send,
                              timeLimit);
+    } else {
+      AD_FAIL();
     }
   } catch (const ParseException& e) {
     responseStatus = http::status::bad_request;
@@ -1028,8 +1050,21 @@ Awaitable<void> Server::processQueryOrUpdate(
         LOG(ERROR) << metadata.value().query_ << std::endl;
       }
     }
+    std::string operationStr = [&operation] {
+      if constexpr (std::is_same_v<
+                        Operation,
+                        ad_utility::url_parser::sparqlOperation::Query>) {
+        return operation.query_;
+      } else if constexpr (std::is_same_v<Operation,
+                                          ad_utility::url_parser::
+                                              sparqlOperation::Update>) {
+        return operation.update_;
+      } else {
+        AD_FAIL();
+      }
+    }();
     auto errorResponseJson = composeErrorResponseJson(
-        queryOrUpdate, exceptionErrorMsg.value(), requestTimer, metadata);
+        operationStr, exceptionErrorMsg.value(), requestTimer, metadata);
     if (plannedQuery.has_value()) {
       errorResponseJson["runtimeInformation"] =
           nlohmann::ordered_json(plannedQuery.value()

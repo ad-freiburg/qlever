@@ -42,6 +42,7 @@ namespace sparqlOperation {
 // A SPARQL 1.1 Query
 struct Query {
   std::string query_;
+  std::vector<DatasetClause> datasetClauses_{};
 
   bool operator==(const Query& rhs) const = default;
 };
@@ -49,6 +50,7 @@ struct Query {
 // A SPARQL 1.1 Update
 struct Update {
   std::string update_;
+  std::vector<DatasetClause> datasetClauses_{};
 
   bool operator==(const Update& rhs) const = default;
 };
@@ -79,8 +81,11 @@ ParsedUrl parseRequestTarget(std::string_view target);
 // string to vectors of strings).
 ParamValueMap paramsToMap(boost::urls::params_view params);
 
-// Parse default and named graphs URIs from the parameters.
-std::vector<DatasetClause> parseDatasetClauses(const ParamValueMap& params);
+// Parse the dataset clauses from the given key in the parameters.
+std::vector<DatasetClause> parseDatasetClausesFrom(const ParamValueMap& params,
+                                                   const std::string& key,
+                                                   bool isNamed);
+
 }  // namespace ad_utility::url_parser
 
 #endif  // QLEVER_URLPARSER_H
