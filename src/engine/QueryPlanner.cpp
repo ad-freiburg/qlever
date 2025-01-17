@@ -513,8 +513,8 @@ QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
                          tg);
     numNodesInTripleGraph++;
   }
-  if (numNodesInTripleGraph > 64) {
-    AD_THROW("At most 64 triples allowed at the moment.");
+  if (numNodesInTripleGraph > 128) {
+    AD_THROW("At most 128 triples allowed at the moment.");
   }
   return tg;
 }
@@ -715,16 +715,17 @@ auto QueryPlanner::seedWithScansAndText(
   vector<SubtreePlan>& seeds = result.plans_;
   // add all child plans as seeds
   uint64_t idShift = tg._nodeMap.size();
+  LOG(WARN) << "idShift is " << idShift << std::endl;
   for (const auto& vec : children) {
     AD_CONTRACT_CHECK(
-        idShift < 64,
+        idShift < 128,
         absl::StrCat("Group graph pattern too large: QLever currently supports "
-                     "at most 64 elements (like triples), but found ",
+                     "at most 128 elements (like triples), but found ",
                      idShift));
     for (const SubtreePlan& plan : vec) {
       SubtreePlan newIdPlan = plan;
       // give the plan a unique id bit
-      newIdPlan._idsOfIncludedNodes = uint64_t(1) << idShift;
+      newIdPlan._idsOfIncludedNodes = __int128_t(1) << idShift;
       newIdPlan._idsOfIncludedFilters = 0;
       newIdPlan.idsOfIncludedTextLimits_ = 0;
       seeds.emplace_back(newIdPlan);
@@ -736,7 +737,7 @@ auto QueryPlanner::seedWithScansAndText(
     const TripleGraph::Node& node = *tg._nodeMap.find(i)->second;
 
     auto pushPlan = [&seeds, i](SubtreePlan plan) {
-      plan._idsOfIncludedNodes = (uint64_t(1) << i);
+      plan._idsOfIncludedNodes = (__int128(1) << i);
       seeds.push_back(std::move(plan));
     };
 
@@ -1165,7 +1166,8 @@ string QueryPlanner::getPruningKey(
     }
   }
 
-  os << ' ' << plan._idsOfIncludedNodes;
+  os << ' ' << size_t(plan._idsOfIncludedNodes)
+     << size_t(plan._idsOfIncludedNodes >> 64);
   os << " f: ";
   os << ' ' << plan._idsOfIncludedFilters;
   os << " t: ";
@@ -1292,7 +1294,7 @@ void QueryPlanner::applyTextLimitsIfPossible(
 // _____________________________________________________________________________
 size_t QueryPlanner::findUniqueNodeIds(
     const std::vector<SubtreePlan>& connectedComponent) {
-  ad_utility::HashSet<uint64_t> uniqueNodeIds;
+  ad_utility::HashSet<__int128> uniqueNodeIds;
   auto nodeIds = connectedComponent |
                  ql::views::transform(&SubtreePlan::_idsOfIncludedNodes);
   // Check that all the `_idsOfIncludedNodes` are one-hot encodings of a single
@@ -1342,11 +1344,16 @@ size_t QueryPlanner::countSubgraphs(
   // Remove duplicate plans from `graph`.
   auto getId = [](const SubtreePlan* v) { return v->_idsOfIncludedNodes; };
   ql::ranges::sort(graph, ql::ranges::less{}, getId);
+  LOG(INFO) << "graph size before pruning" << graph.size() << std::endl;
   graph.erase(std::ranges::unique(graph, ql::ranges::equal_to{}, getId).begin(),
               graph.end());
+  LOG(INFO) << "graph size after pruning" << graph.size() << std::endl;
 
   // Qlever currently limits the number of triples etc. per group to be <= 64
   // anyway, so we can simply assert here.
+  if (graph.size() > 64) {
+    return budget + 1;
+  }
   AD_CORRECTNESS_CHECK(graph.size() <= 64,
                        "Should qlever ever support more than 64 elements per "
                        "group graph pattern, then the `countSubgraphs` "
@@ -1454,6 +1461,7 @@ QueryPlanner::runGreedyPlanningOnConnectedComponent(
     }
     /*
     checkCancellation();
+    numConsidered += (result.size() * result.size());
     auto newPlans = merge(result, result, tg);
     applyFiltersIfPossible<true>(newPlans, filters);
     applyTextLimitsIfPossible(newPlans, textLimits, true);

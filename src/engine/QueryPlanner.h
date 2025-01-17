@@ -144,7 +144,7 @@ class QueryPlanner {
 
     std::shared_ptr<QueryExecutionTree> _qet;
     std::shared_ptr<Result> _cachedResult;
-    uint64_t _idsOfIncludedNodes = 0;
+    unsigned __int128 _idsOfIncludedNodes = 0;
     uint64_t _idsOfIncludedFilters = 0;
     uint64_t idsOfIncludedTextLimits_ = 0;
     Type type = Type::BASIC;
