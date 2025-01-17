@@ -350,14 +350,14 @@ TEST_F(DeltaTriplesTest, DeltaTriplesManager) {
           {"<A> <C> <E>", absl::StrCat("<A> <B> <E", threadIdx, ">"),
            absl::StrCat("<A> <B> <F", threadIdx, ">")});
       // Insert the `triplesToInsert`.
-      deltaTriplesManager.modify([&](DeltaTriples& deltaTriples) {
+      deltaTriplesManager.modify<void>([&](DeltaTriples& deltaTriples) {
         deltaTriples.insertTriples(cancellationHandle, triplesToInsert);
       });
       // We should have successfully completed an update, so the snapshot
       // pointer should have changed.
       EXPECT_NE(beforeUpdate, deltaTriplesManager.getCurrentSnapshot());
       // Delete the `triplesToDelete`.
-      deltaTriplesManager.modify([&](DeltaTriples& deltaTriples) {
+      deltaTriplesManager.modify<void>([&](DeltaTriples& deltaTriples) {
         deltaTriples.deleteTriples(cancellationHandle, triplesToDelete);
       });
 
