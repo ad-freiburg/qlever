@@ -298,7 +298,7 @@ inline QueryExecutionContext* buildTestQEC(bool useAreas = false) {
   ad_utility::MemorySize blocksizePermutations = 16_MB;
   auto qec =
       ad_utility::testing::getQec(kg, true, true, false, blocksizePermutations,
-                                  false, true, std::nullopt, 10000);
+                                  false, true, std::nullopt);
   return qec;
 }
 
