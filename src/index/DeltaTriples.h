@@ -224,7 +224,8 @@ class DeltaTriplesManager {
   // serialized, and each call to `getCurrentSnapshot` will either return the
   // snapshot before or after a modification, but never one of an ongoing
   // modification.
-  void modify(const std::function<void(DeltaTriples&)>& function);
+  template <typename ReturnType>
+  ReturnType modify(const std::function<ReturnType(DeltaTriples&)>& function);
 
   // Reset the updates represented by the underlying `DeltaTriples` and then
   // update the current snapshot.

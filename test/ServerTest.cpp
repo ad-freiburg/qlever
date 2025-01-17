@@ -310,7 +310,7 @@ TEST(ServerTest, createResponseMetadata) {
   DeltaTriplesCount countAfter = deltaTriples.getCounts();
 
   // Assertions
-  json metadata = Server::createResponseMetadata(
+  json metadata = Server::createResponseMetadataForUpdate(
       requestTimer, index, deltaTriples, plannedQuery,
       plannedQuery.queryExecutionTree_, countBefore, updateMetadata,
       countAfter);

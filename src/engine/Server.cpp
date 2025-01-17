@@ -883,11 +883,15 @@ Awaitable<void> Server::processQuery(
   co_return;
 }
 
-json Server::createResponseMetadata(
+json Server::createResponseMetadataForUpdate(
     const ad_utility::Timer& requestTimer, const Index& index,
     const DeltaTriples& deltaTriples, const PlannedQuery& plannedQuery,
     const QueryExecutionTree& qet, const DeltaTriplesCount& countBefore,
     const UpdateMetadata& updateMetadata, const DeltaTriplesCount& countAfter) {
+  auto formatTime = [](std::chrono::milliseconds time) {
+    return absl::StrCat(time.count(), "ms");
+  };
+
   json response;
   response["update"] = plannedQuery.parsedQuery_._originalString;
   response["status"] = "OK";
@@ -907,20 +911,19 @@ json Server::createResponseMetadata(
   response["delta-triples"]["difference"] =
       nlohmann::json(countAfter - countBefore);
   response["time"]["planing"] =
-      absl::StrCat(runtimeInfoWholeOp.timeQueryPlanning.count(), "ms");
+      formatTime(runtimeInfoWholeOp.timeQueryPlanning);
   response["time"]["where"] =
-      absl::StrCat(runtimeInfo.totalTime_.count() / 1000, "ms");
+      formatTime(std::chrono::duration_cast<std::chrono::milliseconds>(
+          runtimeInfo.totalTime_));
   json updateTime{
-      {"total", absl::StrCat(updateMetadata.triplePreparationTime_.count() +
-                                 updateMetadata.deletionTime_.count() +
-                                 updateMetadata.insertionTime_.count(),
-                             "ms")},
-      {"triplePreparation",
-       absl::StrCat(updateMetadata.triplePreparationTime_.count(), "ms")},
-      {"deletion", absl::StrCat(updateMetadata.deletionTime_.count(), "ms")},
-      {"insertion", absl::StrCat(updateMetadata.insertionTime_.count(), "ms")}};
+      {"total", formatTime(updateMetadata.triplePreparationTime_ +
+                           updateMetadata.deletionTime_ +
+                           updateMetadata.insertionTime_)},
+      {"triplePreparation", formatTime(updateMetadata.triplePreparationTime_)},
+      {"deletion", formatTime(updateMetadata.deletionTime_)},
+      {"insertion", formatTime(updateMetadata.insertionTime_)}};
   response["time"]["update"] = updateTime;
-  response["time"]["total"] = absl::StrCat(requestTimer.msecs().count(), "ms");
+  response["time"]["total"] = formatTime(requestTimer.msecs());
   for (auto permutation : Permutation::ALL) {
     response["located-triples"][Permutation::toString(
         permutation)]["blocks-affected"] =
@@ -976,10 +979,9 @@ json Server::processUpdateImpl(
   // cache key).
   cache_.clearAll();
 
-  auto response =
-      createResponseMetadata(requestTimer, index_, deltaTriples, plannedQuery,
-                             qet, countBefore, updateMetadata, countAfter);
-  return response;
+  return createResponseMetadataForUpdate(requestTimer, index_, deltaTriples,
+                                         plannedQuery, qet, countBefore,
+                                         updateMetadata, countAfter);
 }
 
 // ____________________________________________________________________________
@@ -999,27 +1001,24 @@ Awaitable<void> Server::processUpdate(
       updateThreadPool_,
       [this, &params, &update, &requestTimer, &timeLimit, &messageSender,
        &cancellationHandle] {
-        std::optional<nlohmann::json> response;
         // Update the delta triples.
-        index_.deltaTriplesManager().modify(
+        return index_.deltaTriplesManager().modify<nlohmann::json>(
             [this, &params, &update, &requestTimer, &timeLimit, &messageSender,
-             &cancellationHandle, &response](auto& deltaTriples) {
+             &cancellationHandle](auto& deltaTriples) {
               // Use `this` explicitly to silence false-positive errors on
               // captured `this` being unused.
-              response = this->processUpdateImpl(
-                  params, update, requestTimer, timeLimit, messageSender,
-                  cancellationHandle, deltaTriples);
+              return this->processUpdateImpl(params, update, requestTimer,
+                                             timeLimit, messageSender,
+                                             cancellationHandle, deltaTriples);
             });
-        return response;
       },
       cancellationHandle);
   auto response = co_await std::move(coroutine);
 
   // SPARQL 1.1 Protocol 2.2.4 Successful Responses: "The response body of a
   // successful update request is implementation defined."
-  AD_CORRECTNESS_CHECK(response.has_value());
-  co_await send(ad_utility::httpUtils::createJsonResponse(
-      std::move(response.value()), request));
+  co_await send(
+      ad_utility::httpUtils::createJsonResponse(std::move(response), request));
   co_return;
 }
 

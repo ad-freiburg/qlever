@@ -153,14 +153,12 @@ class Server {
       TimeLimit timeLimit);
   // For an executed update create a json with some stats on the update (timing,
   // number of changed triples, etc.).
-  static json createResponseMetadata(const ad_utility::Timer& requestTimer,
-                                     const Index& index,
-                                     const DeltaTriples& deltaTriples,
-                                     const PlannedQuery& plannedQuery,
-                                     const QueryExecutionTree& qet,
-                                     const DeltaTriplesCount& countBefore,
-                                     const UpdateMetadata& updateMetadata,
-                                     const DeltaTriplesCount& countAfter);
+  static json createResponseMetadataForUpdate(
+      const ad_utility::Timer& requestTimer, const Index& index,
+      const DeltaTriples& deltaTriples, const PlannedQuery& plannedQuery,
+      const QueryExecutionTree& qet, const DeltaTriplesCount& countBefore,
+      const UpdateMetadata& updateMetadata,
+      const DeltaTriplesCount& countAfter);
   FRIEND_TEST(ServerTest, createResponseMetadata);
   // Do the actual execution of an update.
   Awaitable<void> processUpdate(

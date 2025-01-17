@@ -4,7 +4,6 @@
 //    2025 Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
 
 #include <gmock/gmock.h>
-#include <gtest/gtest.h>
 
 #include "index/DeltaTriples.h"
 
