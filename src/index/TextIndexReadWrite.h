@@ -128,8 +128,8 @@ vector<To> readGapComprList(size_t nofElements, off_t from, size_t nofBytes,
   vector<To> result;
   result.reserve(nofElements);
   From previous = 0;
-  for (size_t i = 0; i < gapEncodedVector.size(); ++i) {
-    previous += gapEncodedVector[i];
+  for (auto gap : gapEncodedVector) {
+    previous += gap;
     result.push_back(transformer(previous));
   }
   LOG(DEBUG) << "Done reading gap-encoded list. Size: " << result.size()

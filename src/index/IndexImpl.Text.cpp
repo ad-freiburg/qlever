@@ -574,15 +574,14 @@ IdTable IndexImpl::readWordCl(
     const TextBlockMetaData& tbmd,
     const ad_utility::AllocatorWithLimit<Id>& allocator) const {
   IdTable idTable{3, allocator};
-  vector<TextRecordIndex> cids =
-      textIndexReadWrite::readGapComprList<TextRecordIndex, uint64_t>(
-          tbmd._cl._nofElements, tbmd._cl._startContextlist,
-          static_cast<size_t>(tbmd._cl._startWordlist -
-                              tbmd._cl._startContextlist),
-          textIndexFile_, &TextRecordIndex::make);
+  vector<Id> cids = textIndexReadWrite::readGapComprList<Id, uint64_t>(
+      tbmd._cl._nofElements, tbmd._cl._startContextlist,
+      static_cast<size_t>(tbmd._cl._startWordlist - tbmd._cl._startContextlist),
+      textIndexFile_, [](uint64_t id) {
+        return Id::makeFromTextRecordIndex(TextRecordIndex::make(id));
+      });
   idTable.resize(cids.size());
-  ql::ranges::transform(cids, idTable.getColumn(0).begin(),
-                        &Id::makeFromTextRecordIndex);
+  ql::ranges::copy(cids, idTable.getColumn(0).begin());
   ql::ranges::copy(
       textIndexReadWrite::readFreqComprList<Id, WordIndex>(
           tbmd._cl._nofElements, tbmd._cl._startWordlist,
@@ -607,15 +606,15 @@ IdTable IndexImpl::readWordEntityCl(
     const TextBlockMetaData& tbmd,
     const ad_utility::AllocatorWithLimit<Id>& allocator) const {
   IdTable idTable{3, allocator};
-  vector<TextRecordIndex> cids =
-      textIndexReadWrite::readGapComprList<TextRecordIndex, uint64_t>(
-          tbmd._entityCl._nofElements, tbmd._entityCl._startContextlist,
-          static_cast<size_t>(tbmd._entityCl._startWordlist -
-                              tbmd._entityCl._startContextlist),
-          textIndexFile_, &TextRecordIndex::make);
+  vector<Id> cids = textIndexReadWrite::readGapComprList<Id, uint64_t>(
+      tbmd._entityCl._nofElements, tbmd._entityCl._startContextlist,
+      static_cast<size_t>(tbmd._entityCl._startWordlist -
+                          tbmd._entityCl._startContextlist),
+      textIndexFile_, [](uint64_t id) {
+        return Id::makeFromTextRecordIndex(TextRecordIndex::make(id));
+      });
   idTable.resize(cids.size());
-  ql::ranges::transform(cids, idTable.getColumn(0).begin(),
-                        &Id::makeFromTextRecordIndex);
+  ql::ranges::copy(cids, idTable.getColumn(0).begin());
   ql::ranges::copy(
       textIndexReadWrite::readFreqComprList<Id, WordIndex>(
           tbmd._entityCl._nofElements, tbmd._entityCl._startWordlist,
