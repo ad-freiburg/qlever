@@ -10,6 +10,7 @@
 #include "index/TextMetaData.h"
 #include "util/HashMap.h"
 #include "util/Simple8bCode.h"
+#include "util/TransparentFunctors.h"
 
 namespace textIndexReadWrite {
 /// THIS METHOD HAS BEEN MODIFIED
@@ -23,21 +24,20 @@ ContextListMetaData writePostings(ad_utility::File& out,
 template <typename T>
 size_t writeCodebook(const vector<T>& codebook, ad_utility::File& file);
 
-/// NOTHING CHANGED
+/// THIS METHOD HAS BEEN MODIFIED
+/// The only difference is that it takes in a span and not an array.
 //! Writes a list of elements (have to be able to be cast to unit64_t)
 //! to file.
 //! Returns the number of bytes written.
 template <typename Numeric>
-size_t writeList(std::vector<Numeric> data, size_t nofElements,
-                 ad_utility::File& file);
+size_t writeList(std::span<const Numeric> data, ad_utility::File& file);
 
 /// THIS METHOD HAS BEEN ADDED
 /// This is just a helper function to remove the code duplication seen in the
 /// deleted lines 457,458 and 467,468 and 474,475 of IndexImpl.Text.cpp
 template <typename T>
-void writeVectorAndMoveOffset(const std::vector<T>& vectorToWrite,
-                              size_t nofElements, ad_utility::File& file,
-                              off_t& currentOffset);
+void writeVectorAndMoveOffset(std::span<const T> vectorToWrite,
+                              ad_utility::File& file, off_t& currentOffset);
 
 /// THIS METHOD HAS BEEN MODIFIED
 /// It's hard to explain what has been changed since the original method was
@@ -57,13 +57,11 @@ void writeVectorAndMoveOffset(const std::vector<T>& vectorToWrite,
 // that was used to create the codebook in the writing step and the To
 // specifies the type to cast that codebook values to. This is done with a
 // static cast if no lambda function to cast is given.
-template <typename To, typename From>
-vector<To> readFreqComprList(
-    size_t nofElements, off_t from, size_t nofBytes,
-    const ad_utility::File& textIndexFile,
-    const std::function<To(From)>& transformer = [](From x) {
-      return static_cast<To>(x);
-    }) {
+template <typename To, typename From,
+          typename Transformer = decltype(ad_utility::staticCast<To>)>
+vector<To> readFreqComprList(size_t nofElements, off_t from, size_t nofBytes,
+                             const ad_utility::File& textIndexFile,
+                             Transformer transformer = {}) {
   AD_CONTRACT_CHECK(nofBytes > 0);
   LOG(DEBUG) << "Reading frequency-encoded list from disk...\n";
   LOG(TRACE) << "NofElements: " << nofElements << ", from: " << from
@@ -107,13 +105,11 @@ vector<To> readFreqComprList(
 /// are saved as a different type (that is the From type) and one wants to
 /// retrieve them as another type. This also removed some weird specific Id
 /// handling. Look at the deleted lines 835-849 of IndexImpl.Text.cpp
-template <typename To, typename From>
-vector<To> readGapComprList(
-    size_t nofElements, off_t from, size_t nofBytes,
-    const ad_utility::File& textIndexFile,
-    const std::function<To(From)>& transformer = [](From x) {
-      return static_cast<To>(x);
-    }) {
+template <typename To, typename From,
+          typename Transformer = decltype(ad_utility::staticCast<To>)>
+vector<To> readGapComprList(size_t nofElements, off_t from, size_t nofBytes,
+                            const ad_utility::File& textIndexFile,
+                            Transformer transformer = {}) {
   LOG(DEBUG) << "Reading gap-encoded list from disk...\n";
   LOG(TRACE) << "NofElements: " << nofElements << ", from: " << from
              << ", nofBytes: " << nofBytes << '\n';
@@ -158,12 +154,11 @@ class FrequencyEncode {
   using CodeMap = TypedMap;
   using CodeBook = TypedVector;
 
-  explicit FrequencyEncode(const TypedVector& vectorToEncode);
+  explicit FrequencyEncode(ql::ranges::viewable_range auto&& view);
 
-  void writeToFile(ad_utility::File& out, size_t nofElements,
-                   off_t& currentOffset);
+  void writeToFile(ad_utility::File& out, off_t& currentOffset);
 
-  TypedVector getEncodedVector() { return encodedVector_; }
+  const std::vector<size_t>& getEncodedVector() { return encodedVector_; }
   const CodeMap& getCodeMap() const { return codeMap_; }
   const CodeBook& getCodeBook() const { return codeBook_; }
 
@@ -172,16 +167,14 @@ class FrequencyEncode {
   CodeMap codeMap_;
   CodeBook codeBook_;
 };
-
 template <typename T>
 requires std::is_arithmetic_v<T> class GapEncode {
  public:
   using TypedVector = std::vector<T>;
 
-  explicit GapEncode(const TypedVector& vectorToEncode);
+  explicit GapEncode(ql::ranges::viewable_range auto&& view);
 
-  void writeToFile(ad_utility::File& out, size_t nofElements,
-                   off_t& currentOffset);
+  void writeToFile(ad_utility::File& out, off_t& currentOffset);
 
   const TypedVector& getEncodedVector() const { return encodedVector_; }
 

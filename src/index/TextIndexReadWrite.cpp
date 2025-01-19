@@ -4,8 +4,6 @@
 
 #include "index/TextIndexReadWrite.h"
 
-#include "util/Simple8bCode.h"
-
 namespace textIndexReadWrite {
 
 // ____________________________________________________________________________
@@ -23,41 +21,29 @@ ContextListMetaData writePostings(ad_utility::File& out,
     return meta;
   }
 
-  auto firstElements =
+  GapEncode<uint64_t> textRecordEncoder(
       postings | ql::views::transform([](const Posting& posting) {
         return std::get<0>(posting).get();
-      });
-
-  auto secondElements =
+      }));
+  FrequencyEncode<WordIndex> wordIndexEncoder(
       postings | ql::views::transform([](const Posting& posting) {
         return std::get<1>(posting);
-      });
-
-  auto thirdElements =
+      }));
+  FrequencyEncode<Score> scoreEncoder(
       postings | ql::views::transform([](const Posting& posting) {
         return std::get<2>(posting);
-      });
-
-  std::vector<uint64_t> textRecordList(firstElements.begin(),
-                                       firstElements.end());
-  std::vector<WordIndex> wordIndexList(secondElements.begin(),
-                                       secondElements.end());
-  std::vector<Score> scoreList(thirdElements.begin(), thirdElements.end());
-
-  GapEncode textRecordEncoder(textRecordList);
-  FrequencyEncode wordIndexEncoder(wordIndexList);
-  FrequencyEncode scoreEncoder(scoreList);
+      }));
 
   meta._startContextlist = currentOffset;
-  textRecordEncoder.writeToFile(out, meta._nofElements, currentOffset);
+  textRecordEncoder.writeToFile(out, currentOffset);
 
   meta._startWordlist = currentOffset;
   if (!skipWordlistIfAllTheSame || wordIndexEncoder.getCodeBook().size() > 1) {
-    wordIndexEncoder.writeToFile(out, meta._nofElements, currentOffset);
+    wordIndexEncoder.writeToFile(out, currentOffset);
   }
 
   meta._startScorelist = currentOffset;
-  scoreEncoder.writeToFile(out, meta._nofElements, currentOffset);
+  scoreEncoder.writeToFile(out, currentOffset);
 
   meta._lastByte = currentOffset - 1;
 
@@ -75,12 +61,11 @@ size_t writeCodebook(const vector<T>& codebook, ad_utility::File& file) {
 
 // ____________________________________________________________________________
 template <typename Numeric>
-size_t writeList(const std::vector<Numeric> data, size_t nofElements,
-                 ad_utility::File& file) {
-  if (nofElements > 0) {
+size_t writeList(std::span<const Numeric> data, ad_utility::File& file) {
+  if (data.size() > 0) {
     std::vector<uint64_t> encoded;
-    encoded.resize(nofElements);
-    size_t size = ad_utility::Simple8bCode::encode(data.data(), nofElements,
+    encoded.resize(data.size());
+    size_t size = ad_utility::Simple8bCode::encode(data.data(), data.size(),
                                                    encoded.data());
     size_t ret = file.write(encoded.data(), size);
     AD_CONTRACT_CHECK(size == ret);
@@ -92,11 +77,9 @@ size_t writeList(const std::vector<Numeric> data, size_t nofElements,
 
 // ____________________________________________________________________________
 template <typename T>
-void writeVectorAndMoveOffset(const std::vector<T>& vectorToWrite,
-                              size_t nofElements, ad_utility::File& file,
-                              off_t& currentOffset) {
-  size_t bytes =
-      textIndexReadWrite::writeList(vectorToWrite, nofElements, file);
+void writeVectorAndMoveOffset(std::span<const T> vectorToWrite,
+                              ad_utility::File& file, off_t& currentOffset) {
+  size_t bytes = textIndexReadWrite::writeList(vectorToWrite, file);
   currentOffset += bytes;
 }
 
@@ -104,29 +87,27 @@ void writeVectorAndMoveOffset(const std::vector<T>& vectorToWrite,
 
 // ____________________________________________________________________________
 template <typename T>
-FrequencyEncode<T>::FrequencyEncode(const TypedVector& vectorToEncode) {
-  if (vectorToEncode.size() == 0) {
+FrequencyEncode<T>::FrequencyEncode(ql::ranges::viewable_range auto&& view) {
+  if (ql::ranges::empty(view)) {
     return;
   }
   // Create the frequency map to count how often a certain value of type T
   // appears in the vector
   TypedMap frequencyMap;
-  for (const auto& value : vectorToEncode) {
+  for (const auto& value : view) {
     frequencyMap[value] = 0;
   }
-  for (const auto& value : vectorToEncode) {
+  for (const auto& value : view) {
     ++frequencyMap[value];
   }
 
   // Convert the hashmap to a vector to sort it by most frequent first
   std::vector<std::pair<T, size_t>> frequencyVector;
   frequencyVector.reserve(frequencyMap.size());
-  ql::ranges::transform(frequencyMap.begin(), frequencyMap.end(),
-                        std::back_inserter(frequencyVector),
-                        [](const auto& kv) { return kv; });
-  ql::ranges::sort(
-      frequencyVector.begin(), frequencyVector.end(),
-      [](const auto& a, const auto& b) { return a.second > b.second; });
+  ql::ranges::copy(frequencyMap, std::back_inserter(frequencyVector));
+  ql::ranges::sort(frequencyVector, [](const auto& a, const auto& b) {
+    return a.second > b.second;
+  });
 
   // Write the codeBook and codeMap
   // codeBook contains all values of type T exactly ones, sorted by frequency
@@ -143,34 +124,34 @@ FrequencyEncode<T>::FrequencyEncode(const TypedVector& vectorToEncode) {
   }
 
   // Finally encode the vector
-  encodedVector_.reserve(vectorToEncode.size());
-  for (const auto& value : vectorToEncode) {
+  encodedVector_.reserve(ql::ranges::distance(view));
+  for (const auto& value : view) {
     encodedVector_.push_back(codeMap_[value]);
   }
 }
 
 // ____________________________________________________________________________
 template <typename T>
-void FrequencyEncode<T>::writeToFile(ad_utility::File& out, size_t nofElements,
+void FrequencyEncode<T>::writeToFile(ad_utility::File& out,
                                      off_t& currentOffset) {
   currentOffset += textIndexReadWrite::writeCodebook(codeBook_, out);
-  textIndexReadWrite::writeVectorAndMoveOffset(encodedVector_, nofElements, out,
-                                               currentOffset);
+  textIndexReadWrite::writeVectorAndMoveOffset(
+      std::span<const size_t>(encodedVector_), out, currentOffset);
 }
 
 // ____________________________________________________________________________
 template <typename T>
 requires std::is_arithmetic_v<T>
-GapEncode<T>::GapEncode(const TypedVector& vectorToEncode) {
-  if (vectorToEncode.size() == 0) {
+GapEncode<T>::GapEncode(ql::ranges::viewable_range auto&& view) {
+  if (ql::ranges::empty(view)) {
     return;
   }
-  encodedVector_.reserve(vectorToEncode.size());
-  encodedVector_.push_back(vectorToEncode.at(0));
+  encodedVector_.reserve(ql::ranges::distance(view));
+  encodedVector_.push_back(*ql::ranges::begin(view));
 
-  for (auto it1 = vectorToEncode.begin(),
-            it2 = std::next(vectorToEncode.begin());
-       it2 != vectorToEncode.end(); ++it1, ++it2) {
+  for (auto it1 = ql::ranges::begin(view),
+            it2 = std::next(ql::ranges::begin(view));
+       it2 != ql::ranges::end(view); ++it1, ++it2) {
     encodedVector_.push_back(*it2 - *it1);
   }
 }
@@ -178,8 +159,7 @@ GapEncode<T>::GapEncode(const TypedVector& vectorToEncode) {
 // ____________________________________________________________________________
 template <typename T>
 requires std::is_arithmetic_v<T>
-void GapEncode<T>::writeToFile(ad_utility::File& out, size_t nofElements,
-                               off_t& currentOffset) {
-  textIndexReadWrite::writeVectorAndMoveOffset(encodedVector_, nofElements, out,
-                                               currentOffset);
+void GapEncode<T>::writeToFile(ad_utility::File& out, off_t& currentOffset) {
+  textIndexReadWrite::writeVectorAndMoveOffset(
+      std::span<const T>(encodedVector_), out, currentOffset);
 }
