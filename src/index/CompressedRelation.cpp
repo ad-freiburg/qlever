@@ -29,6 +29,36 @@ static auto getBeginAndEnd(auto& range) {
   return std::pair{ql::ranges::begin(range), ql::ranges::end(range)};
 }
 
+// The first and the last block might be incomplete (that is, only
+// a part of these blocks is actually part of the result,
+// set up a lambda which allows us to read these blocks, and returns
+// the size of the result.
+static auto tripleInSpec =
+    [](const auto& scanSpec, const CompressedBlockMetadata::PermutedTriple& t) {
+      // TODO<joka921> Make this a free function, make this simpler
+      if (!scanSpec.col0Id().has_value()) {
+        return true;
+      }
+      if (scanSpec.col0Id().value() != t.col0Id_) {
+        return false;
+      }
+      if (!scanSpec.col1Id().has_value()) {
+        return true;
+      }
+      if (scanSpec.col1Id().value() != t.col1Id_) {
+        return false;
+      }
+      if (!scanSpec.col2Id().has_value()) {
+        return true;
+      }
+      if (scanSpec.col2Id().value() != t.col2Id_) {
+        return false;
+      }
+      // The unlikely case that there only is a single triple in the block and
+      // we query for this triple.
+      return true;
+    };
+
 // modify the `block` according to the `limitOffset`. Also modify the
 // `limitOffset` to reflect the parts of the LIMIT and OFFSET that have been
 // performed by pruning this `block`.
@@ -1111,6 +1141,11 @@ auto CompressedRelationReader::getFirstAndLastTriple(
     return {row[0], row[1], row[2], row[ADDITIONAL_COLUMN_GRAPH_ID]};
   };
 
+  if (tripleInSpec(scanSpec, relevantBlocks.front().firstTriple_) &&
+      tripleInSpec(scanSpec, relevantBlocks.back().lastTriple_)) {
+    return ScanSpecAndBlocksAndBounds::FirstAndLastTriple{
+        relevantBlocks.front().firstTriple_, relevantBlocks.back().lastTriple_};
+  }
   auto firstBlock = scanBlock(relevantBlocks.front());
   auto lastBlock = scanBlock(relevantBlocks.back());
   if (firstBlock.empty()) {

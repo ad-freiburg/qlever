@@ -715,7 +715,6 @@ auto QueryPlanner::seedWithScansAndText(
   vector<SubtreePlan>& seeds = result.plans_;
   // add all child plans as seeds
   uint64_t idShift = tg._nodeMap.size();
-  LOG(WARN) << "idShift is " << idShift << std::endl;
   for (const auto& vec : children) {
     AD_CONTRACT_CHECK(
         idShift < 128,
@@ -1344,10 +1343,8 @@ size_t QueryPlanner::countSubgraphs(
   // Remove duplicate plans from `graph`.
   auto getId = [](const SubtreePlan* v) { return v->_idsOfIncludedNodes; };
   ql::ranges::sort(graph, ql::ranges::less{}, getId);
-  LOG(INFO) << "graph size before pruning" << graph.size() << std::endl;
   graph.erase(std::ranges::unique(graph, ql::ranges::equal_to{}, getId).begin(),
               graph.end());
-  LOG(INFO) << "graph size after pruning" << graph.size() << std::endl;
 
   // Qlever currently limits the number of triples etc. per group to be <= 64
   // anyway, so we can simply assert here.
