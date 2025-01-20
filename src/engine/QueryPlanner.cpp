@@ -1380,16 +1380,17 @@ QueryPlanner::runGreedyPlanningOnConnectedComponent(
     std::vector<SubtreePlan> connectedComponent,
     const vector<SparqlFilter>& filters, const TextLimitVec& textLimits,
     const TripleGraph& tg) const {
-  auto& result = connectedComponent;
-  applyFiltersIfPossible<true>(result, filters);
-  applyTextLimitsIfPossible(result, textLimits, true);
-  const size_t numSeeds = findUniqueNodeIds(result);
+  applyFiltersIfPossible<true>(connectedComponent, filters);
+  applyTextLimitsIfPossible(connectedComponent, textLimits, true);
+  const size_t numSeeds = findUniqueNodeIds(connectedComponent);
+  if (numSeeds <= 1) {
+    // Only 0 or 1 nodes in the input, nothing to plan.
+    return connectedComponent;
+  }
 
   // Intermediate variables that will be filled by the `greedyStep` lambda
   // below.
   using Plans = std::vector<SubtreePlan>;
-  Plans precomputedCache;
-  Plans nextResult;
 
   // Perform a single step of greedy query planning.
   // `nextResult` contains the result of the last step of greedy query planning.
@@ -1401,48 +1402,47 @@ QueryPlanner::runGreedyPlanningOnConnectedComponent(
   // above pre-/postconditions. Exception: if `isFirstStep` then `cache` and
   // `nextResult` must be empty, and the first step of greedy planning is
   // performed, which also establishes the pre-/postconditions.
-  auto greedyStep = [this, &tg, &filters, &textLimits](
-                        Plans* input, Plans* cache, Plans* nextResult,
-                        bool isFirstStep) {
+  auto greedyStep = [this, &tg, &filters, &textLimits,
+                     input = std::move(connectedComponent), cache = Plans{}](
+                        Plans& nextBestPlan, bool isFirstStep) mutable {
     checkCancellation();
-    // We already have all combinations of two nodes in `input` in the cache, so
-    // we only have to add the combinations between `input` and `nextResult`. In
-    // the first step, we initially fill the cache.
-    auto newPlans = isFirstStep ? merge(*input, *input, tg)
-                                : merge(*input, *nextResult, tg);
+    // Normally, we already have all combinations of two nodes in `input` in the
+    // cache, so we only have to add the combinations between `input` and
+    // `nextResult`. In the first step, we need to initially compute all
+    // possible combinations.
+    auto newPlans =
+        isFirstStep ? merge(input, input, tg) : merge(input, nextBestPlan, tg);
     applyFiltersIfPossible<true>(newPlans, filters);
     applyTextLimitsIfPossible(newPlans, textLimits, true);
     AD_CORRECTNESS_CHECK(!newPlans.empty());
-    ql::ranges::move(newPlans, std::back_inserter(*cache));
-    ql::ranges::move(*nextResult, std::back_inserter(*input));
+    ql::ranges::move(newPlans, std::back_inserter(cache));
+    ql::ranges::move(nextBestPlan, std::back_inserter(input));
+
     // All candidates for the next greedy step are in the `cache`, choose the
     // cheapest one, remove it from the cache and make it the `nextResult`
     {
-      auto smallestIdxNew = findSmallestExecutionTree(*cache);
-      auto& cheapestNewTree = cache->at(smallestIdxNew);
-      std::swap(cheapestNewTree, cache->back());
-      nextResult->clear();
-      nextResult->push_back(std::move(cache->back()));
-      cache->pop_back();
+      auto smallestIdxNew = findSmallestExecutionTree(cache);
+      auto& cheapestNewTree = cache.at(smallestIdxNew);
+      std::swap(cheapestNewTree, cache.back());
+      nextBestPlan.clear();
+      nextBestPlan.push_back(std::move(cache.back()));
+      cache.pop_back();
     }
-    // All plans which are not disjoint with the newly chosen plan have to be
+
+    // All plans which have a node in common with the chosen plan have to be
     // deleted from the `input` and therefore also from the `cache`.
-    auto shouldBeErased = [&nextTree = nextResult->front()](const auto& plan) {
+    auto shouldBeErased = [&nextTree = nextBestPlan.front()](const auto& plan) {
       return (nextTree._idsOfIncludedNodes & plan._idsOfIncludedNodes) != 0;
     };
-    std::erase_if(*input, shouldBeErased);
-    std::erase_if(*cache, shouldBeErased);
+    std::erase_if(input, shouldBeErased);
+    std::erase_if(cache, shouldBeErased);
   };
 
   bool first = true;
-  if (numSeeds <= 1) {
-    // Only 0 or 1 nodes in the input, nothing to plan.
-    return std::move(result);
-  }
-
+  Plans nextResult;
   for ([[maybe_unused]] size_t i : ad_utility::integerRange(numSeeds - 1)) {
-    bool isFirstStep = std::exchange(first, false);
-    greedyStep(&result, &precomputedCache, &nextResult, isFirstStep);
+    greedyStep(nextResult, first);
+    first = false;
   }
   // TODO<joka921> Assert that all seeds are covered by the result.
   return nextResult;
