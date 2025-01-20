@@ -1393,30 +1393,31 @@ QueryPlanner::runGreedyPlanningOnConnectedComponent(
   using Plans = std::vector<SubtreePlan>;
 
   // Perform a single step of greedy query planning.
-  // `nextResult` contains the result of the last step of greedy query planning.
-  // `input` contains all plans that have been chosen/combined so far (which
-  // might still be the initial start plans), except for the most recently
-  // chosen plan, which is stored in `nextResult`. `cache` contains all the
-  // plans that can be obtained by combining two plans in `input`. The function
-  // then performs one additional step of greedy planning and reinforces the
-  // above pre-/postconditions. Exception: if `isFirstStep` then `cache` and
-  // `nextResult` must be empty, and the first step of greedy planning is
-  // performed, which also establishes the pre-/postconditions.
+  // `nextBestPlan` contains the result of the last step of greedy query
+  // planning. `currentPlans` contains all plans that have been chosen/combined
+  // so far (which might still be the initial start plans), except for the most
+  // recently chosen plan, which is stored in `nextResult`. `cache` contains all
+  // the plans that can be obtained by combining two plans in `input`. The
+  // function then performs one additional step of greedy planning and
+  // reinforces the above pre-/postconditions. Exception: if `isFirstStep` then
+  // `cache` and `nextResult` must be empty, and the first step of greedy
+  // planning is performed, which also establishes the pre-/postconditions.
   auto greedyStep = [this, &tg, &filters, &textLimits,
-                     input = std::move(connectedComponent), cache = Plans{}](
-                        Plans& nextBestPlan, bool isFirstStep) mutable {
+                     currentPlans = std::move(connectedComponent),
+                     cache = Plans{}](Plans& nextBestPlan,
+                                      bool isFirstStep) mutable {
     checkCancellation();
-    // Normally, we already have all combinations of two nodes in `input` in the
-    // cache, so we only have to add the combinations between `input` and
-    // `nextResult`. In the first step, we need to initially compute all
-    // possible combinations.
-    auto newPlans =
-        isFirstStep ? merge(input, input, tg) : merge(input, nextBestPlan, tg);
+    // Normally, we already have all combinations of two nodes in `currentPlans`
+    // in the cache, so we only have to add the combinations between
+    // `currentPlans` and `nextResult`. In the first step, we need to initially
+    // compute all possible combinations.
+    auto newPlans = isFirstStep ? merge(currentPlans, currentPlans, tg)
+                                : merge(currentPlans, nextBestPlan, tg);
     applyFiltersIfPossible<true>(newPlans, filters);
     applyTextLimitsIfPossible(newPlans, textLimits, true);
     AD_CORRECTNESS_CHECK(!newPlans.empty());
     ql::ranges::move(newPlans, std::back_inserter(cache));
-    ql::ranges::move(nextBestPlan, std::back_inserter(input));
+    ql::ranges::move(nextBestPlan, std::back_inserter(currentPlans));
 
     // All candidates for the next greedy step are in the `cache`, choose the
     // cheapest one, remove it from the cache and make it the `nextResult`
@@ -1430,22 +1431,22 @@ QueryPlanner::runGreedyPlanningOnConnectedComponent(
     }
 
     // All plans which have a node in common with the chosen plan have to be
-    // deleted from the `input` and therefore also from the `cache`.
+    // deleted from the `currentPlans` and therefore also from the `cache`.
     auto shouldBeErased = [&nextTree = nextBestPlan.front()](const auto& plan) {
       return (nextTree._idsOfIncludedNodes & plan._idsOfIncludedNodes) != 0;
     };
-    std::erase_if(input, shouldBeErased);
+    std::erase_if(currentPlans, shouldBeErased);
     std::erase_if(cache, shouldBeErased);
   };
 
   bool first = true;
-  Plans nextResult;
+  Plans result;
   for ([[maybe_unused]] size_t i : ad_utility::integerRange(numSeeds - 1)) {
-    greedyStep(nextResult, first);
+    greedyStep(result, first);
     first = false;
   }
   // TODO<joka921> Assert that all seeds are covered by the result.
-  return nextResult;
+  return result;
 }
 
 // _____________________________________________________________________________
