@@ -29,6 +29,36 @@ static auto getBeginAndEnd(auto& range) {
   return std::pair{ql::ranges::begin(range), ql::ranges::end(range)};
 }
 
+// The first and the last block might be incomplete (that is, only
+// a part of these blocks is actually part of the result,
+// set up a lambda which allows us to read these blocks, and returns
+// the size of the result.
+static auto tripleInSpec =
+    [](const auto& scanSpec, const CompressedBlockMetadata::PermutedTriple& t) {
+      // TODO<joka921> Make this a free function, make this simpler
+      if (!scanSpec.col0Id().has_value()) {
+        return true;
+      }
+      if (scanSpec.col0Id().value() != t.col0Id_) {
+        return false;
+      }
+      if (!scanSpec.col1Id().has_value()) {
+        return true;
+      }
+      if (scanSpec.col1Id().value() != t.col1Id_) {
+        return false;
+      }
+      if (!scanSpec.col2Id().has_value()) {
+        return true;
+      }
+      if (scanSpec.col2Id().value() != t.col2Id_) {
+        return false;
+      }
+      // The unlikely case that there only is a single triple in the block and
+      // we query for this triple.
+      return true;
+    };
+
 // modify the `block` according to the `limitOffset`. Also modify the
 // `limitOffset` to reflect the parts of the LIMIT and OFFSET that have been
 // performed by pruning this `block`.
@@ -631,11 +661,50 @@ std::pair<size_t, size_t> CompressedRelationReader::getResultSizeImpl(
   // a part of these blocks is actually part of the result,
   // set up a lambda which allows us to read these blocks, and returns
   // the size of the result.
-  auto readSizeOfPossiblyIncompleteBlock = [&](const auto& block) {
-    return readPossiblyIncompleteBlock(scanSpec, config, block, std::nullopt,
-                                       locatedTriplesPerBlock)
-        .numRows();
-  };
+  auto tripleInSpec =
+      [&scanSpec](const CompressedBlockMetadata::PermutedTriple& t) {
+        // TODO<joka921> Make this a free function, make this simpler
+        if (!scanSpec.col0Id().has_value()) {
+          return true;
+        }
+        if (scanSpec.col0Id().value() != t.col0Id_) {
+          return false;
+        }
+        if (!scanSpec.col1Id().has_value()) {
+          return true;
+        }
+        if (scanSpec.col1Id().value() != t.col1Id_) {
+          return false;
+        }
+        if (!scanSpec.col2Id().has_value()) {
+          return true;
+        }
+        if (scanSpec.col2Id().value() != t.col2Id_) {
+          return false;
+        }
+        // The unlikely case that there only is a single triple in the block and
+        // we query for this triple.
+        return true;
+      };
+  auto readSizeOfPossiblyIncompleteBlock =
+      [&](const CompressedBlockMetadata& block) {
+        if (!exactSize && tripleInSpec(block.firstTriple_) &&
+            tripleInSpec(block.lastTriple_)) {
+          // TODO<joka921> This currently ignores the updates for the size
+          // estimate of the first block.
+          // TODO<joka921> can be deduplicated with the below code.
+          return block.numRows_;
+        } else if (!exactSize && scanSpec.col0Id().has_value() &&
+                   !scanSpec.col1Id().has_value()) {
+          // TODO<joka921> This is wildly inaccurate. We need to cache the
+          // predicate sizes for the query planning. We just keep it for now
+          // s.t. we can measure the time impact.
+          return block.numRows_ / 5;
+        }
+        return readPossiblyIncompleteBlock(scanSpec, config, block,
+                                           std::nullopt, locatedTriplesPerBlock)
+            .numRows();
+      };
 
   size_t numResults = 0;
   // The first and the last block might be incomplete, compute
@@ -1072,6 +1141,11 @@ auto CompressedRelationReader::getFirstAndLastTriple(
     return {row[0], row[1], row[2], row[ADDITIONAL_COLUMN_GRAPH_ID]};
   };
 
+  if (tripleInSpec(scanSpec, relevantBlocks.front().firstTriple_) &&
+      tripleInSpec(scanSpec, relevantBlocks.back().lastTriple_)) {
+    return ScanSpecAndBlocksAndBounds::FirstAndLastTriple{
+        relevantBlocks.front().firstTriple_, relevantBlocks.back().lastTriple_};
+  }
   auto firstBlock = scanBlock(relevantBlocks.front());
   auto lastBlock = scanBlock(relevantBlocks.back());
   if (firstBlock.empty()) {

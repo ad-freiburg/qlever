@@ -193,7 +193,7 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}  -Wall -Wextra")
 # Enable the specification of additional compiler flags manually from the commandline
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${ADDITIONAL_COMPILER_FLAGS}")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${ADDITIONAL_COMPILER_FLAGS} -pg")
 
 # Enable the manual usage of the C++ 17 backports (currently `range-v3` instead
 # of `std::ranges` and the `std::enable_if_t` based expansion of the concept

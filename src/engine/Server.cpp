@@ -560,6 +560,7 @@ Server::PlannedQuery Server::setupPlannedQuery(
   runtimeInfoWholeQuery.timeQueryPlanning = timeForQueryPlanning;
   LOG(INFO) << "Query planning done in " << timeForQueryPlanning.count()
             << " ms" << std::endl;
+  // std::exit(0);
   LOG(TRACE) << qet.getCacheKey() << std::endl;
 
   return plannedQuery;
@@ -1075,7 +1076,10 @@ Server::PlannedQuery Server::parseAndPlan(
     const std::string& query, const vector<DatasetClause>& queryDatasets,
     QueryExecutionContext& qec, SharedCancellationHandle handle,
     TimeLimit timeLimit) const {
+  ad_utility::Timer parseTimer{ad_utility::Timer::Started};
   auto pq = SparqlParser::parseQuery(query);
+  LOG(INFO) << "time for parsing : " << parseTimer.msecs().count() << "ms"
+            << std::endl;
   handle->throwIfCancelled();
   // SPARQL Protocol 2.1.4 specifies that the dataset from the query
   // parameters overrides the dataset from the query itself.
