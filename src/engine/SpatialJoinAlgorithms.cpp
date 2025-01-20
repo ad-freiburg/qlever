@@ -73,7 +73,7 @@ Id SpatialJoinAlgorithms::computeDist(const IdTable* idTableLeft,
       // gets printed at another place and the point/area just gets skipped
       return std::nullopt;
     }
-    if (useMidpointForAreas) {
+    if (useMidpointForAreas_) {
       Point p = calculateMidpointOfBox(areaBox);
       return GeoPoint(p.get<1>(), p.get<0>());
     } else {
@@ -300,7 +300,8 @@ std::vector<Box> SpatialJoinAlgorithms::computeBoundingBox(
   auto archaversine = [](double theta) { return std::acos(1 - 2 * theta); };
 
   // safety buffer for numerical inaccuracies
-  double maxDistInMetersBuffer = maxDist.value() + additionalDist;
+  double maxDistInMetersBuffer =
+      static_cast<double>(maxDist.value()) + additionalDist;
   if (maxDistInMetersBuffer < 10) {
     maxDistInMetersBuffer = 10;
   } else if (static_cast<double>(maxDist.value()) <
@@ -545,9 +546,8 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
       std::string warning =
           "The input to a spatial join contained at least one element, "
           "that is not a point or polygon geometry and is thus skipped. Note "
-          "that "
-          "QLever currently only accepts point or polygon geometries for the "
-          "spatial joins";
+          "that QLever currently only accepts point or polygon geometries for "
+          "the spatial joins";
       AD_LOG_WARN << warning << std::endl;
       alreadyWarned = true;
       if (spatialJoin.has_value()) {

@@ -151,7 +151,7 @@ class SpatialJoinAlgorithms {
 
   // if the distance calculation should be approximated, by the midpoint of
   // the area
-  bool useMidpointForAreas = true;
+  bool useMidpointForAreas_ = true;
 
   // circumference in meters at the equator (max) and the pole (min) (as the
   // earth is not exactly a sphere the circumference is different. Note that
