@@ -30,13 +30,13 @@ class UnsupportedMediatypeError : public std::runtime_error {
 class GraphStoreProtocol {
  private:
   // Extract the mediatype from a request.
-  static std::optional<ad_utility::MediaType> extractMediatype(
+  static ad_utility::MediaType extractMediatype(
       const ad_utility::httpUtils::HttpRequest auto& rawRequest) {
-    std::string contentTypeString;
-    if (rawRequest.find(boost::beast::http::field::content_type) !=
-        rawRequest.end()) {
-      contentTypeString =
-          rawRequest.at(boost::beast::http::field::content_type);
+    using namespace boost::beast::http;
+
+    std::string_view contentTypeString;
+    if (rawRequest.find(field::content_type) != rawRequest.end()) {
+      contentTypeString = rawRequest.at(field::content_type);
     }
     if (contentTypeString.empty()) {
       // If the mediatype is not given, return an error.
@@ -44,17 +44,24 @@ class GraphStoreProtocol {
       // content.
       throw UnknownMediatypeError("Mediatype empty or not set.");
     }
-    return ad_utility::getMediaTypeFromAcceptHeader(contentTypeString);
+    const auto mediatype =
+        ad_utility::getMediaTypeFromAcceptHeader(contentTypeString);
+    // A media type is set but not one of the supported ones as per the QLever
+    // MediaType code.
+    if (!mediatype.has_value()) {
+      throwUnsupportedMediatype(rawRequest.at(field::content_type));
+    }
+    return mediatype.value();
   }
   FRIEND_TEST(GraphStoreProtocolTest, extractMediatype);
 
   // Throws the error if a mediatype is not supported.
   [[noreturn]] static void throwUnsupportedMediatype(
-      const std::string& mediatype);
+      const std::string_view& mediatype);
 
   // Throws the error if an HTTP method is not supported.
   [[noreturn]] static void throwUnsupportedHTTPMethod(
-      const std::string& method);
+      const std::string_view& method);
 
   // Parse the triples from the request body according to the content type.
   static std::vector<TurtleTriple> parseTriples(
@@ -72,18 +79,12 @@ class GraphStoreProtocol {
   static ParsedQuery transformPost(
       const ad_utility::httpUtils::HttpRequest auto& rawRequest,
       const GraphOrDefault& graph) {
-    using namespace boost::beast::http;
-    auto contentType = extractMediatype(rawRequest);
-    // A media type is set but not one of the supported ones as per the QLever
-    // MediaType code.
-    if (!contentType.has_value()) {
-      throwUnsupportedMediatype(rawRequest.at(field::content_type));
-    }
-    auto triples = parseTriples(rawRequest.body(), contentType.value());
+    auto triples =
+        parseTriples(rawRequest.body(), extractMediatype(rawRequest));
     auto convertedTriples = convertTriples(graph, std::move(triples));
     updateClause::GraphUpdate up{std::move(convertedTriples), {}};
     ParsedQuery res;
-    res._clause = parsedQuery::UpdateClause{up};
+    res._clause = parsedQuery::UpdateClause{std::move(up)};
     return res;
   }
   FRIEND_TEST(GraphStoreProtocolTest, transformPost);

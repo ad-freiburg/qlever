@@ -18,6 +18,7 @@ using namespace ad_utility::testing;
 using Var = Variable;
 using TC = TripleComponent;
 
+// _____________________________________________________________________________________________
 TEST(GraphStoreProtocolTest, extractTargetGraph) {
   // Equivalent to `/?default`
   EXPECT_THAT(GraphStoreProtocol::extractTargetGraph({{"default", {""}}}),
@@ -30,22 +31,25 @@ TEST(GraphStoreProtocolTest, extractTargetGraph) {
       GraphStoreProtocol::extractTargetGraph({{"graph", {"foo", "bar"}}}),
       testing::HasSubstr(
           "Parameter \"graph\" must be given exactly once. Is: 2"));
+  const std::string eitherDefaultOrGraphErrorMsg =
+      "Exactly one of the query parameters default or graph must be set to "
+      "identify the graph for the graph store protocol request.";
   // Equivalent to `/` or `/?`
   AD_EXPECT_THROW_WITH_MESSAGE(
       GraphStoreProtocol::extractTargetGraph({}),
-      testing::HasSubstr("No graph IRI specified in the request."));
+      testing::HasSubstr(eitherDefaultOrGraphErrorMsg));
   // Equivalent to `/?unrelated=a&unrelated=b`
   AD_EXPECT_THROW_WITH_MESSAGE(
       GraphStoreProtocol::extractTargetGraph({{"unrelated", {"a", "b"}}}),
-      testing::HasSubstr("No graph IRI specified in the request."));
+      testing::HasSubstr(eitherDefaultOrGraphErrorMsg));
   // Equivalent to `/?default&graph=foo`
   AD_EXPECT_THROW_WITH_MESSAGE(
       GraphStoreProtocol::extractTargetGraph(
           {{"default", {""}}, {"graph", {"foo"}}}),
-      testing::HasSubstr("Only one of `default` and `graph` may be used for "
-                         "graph identification."));
+      testing::HasSubstr(eitherDefaultOrGraphErrorMsg));
 }
 
+// _____________________________________________________________________________________________
 TEST(GraphStoreProtocolTest, transformPost) {
   auto expectTransformPost =
       [](const ad_utility::httpUtils::HttpRequest auto& request,
@@ -105,6 +109,7 @@ TEST(GraphStoreProtocolTest, transformPost) {
                          "detected in \"application/unknown\"."));
 }
 
+// _____________________________________________________________________________________________
 TEST(GraphStoreProtocolTest, transformGet) {
   auto expectTransformGet =
       [](const ad_utility::httpUtils::HttpRequest auto& request,
@@ -132,6 +137,7 @@ TEST(GraphStoreProtocolTest, transformGet) {
                                 TC(Var{"?s"}), "?p", TC(Var{"?o"}))})))));
 }
 
+// _____________________________________________________________________________________________
 TEST(GraphStoreProtocolTest, transformGraphStoreProtocol) {
   EXPECT_THAT(GraphStoreProtocol::transformGraphStoreProtocol(
                   ad_utility::testing::makeGetRequest("/?default")),
@@ -169,6 +175,7 @@ TEST(GraphStoreProtocolTest, transformGraphStoreProtocol) {
       testing::HasSubstr("Unsupported HTTP method \"CONNECT\""));
 }
 
+// _____________________________________________________________________________________________
 TEST(GraphStoreProtocolTest, extractMediatype) {
   using enum http::field;
   auto makeRequest =
@@ -184,14 +191,17 @@ TEST(GraphStoreProtocolTest, extractMediatype) {
   EXPECT_THAT(GraphStoreProtocol::extractMediatype(
                   makeRequest({{content_type, "text/csv"}})),
               testing::Eq(ad_utility::MediaType::csv));
-  EXPECT_THAT(GraphStoreProtocol::extractMediatype(
-                  makeRequest({{content_type, "text/plain"}})),
-              testing::Eq(std::nullopt));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      GraphStoreProtocol::extractMediatype(
+          makeRequest({{content_type, "text/plain"}})),
+      testing::HasSubstr("Mediatype \"text/plain\" is not supported for SPARQL "
+                         "Graph Store HTTP Protocol in QLever."));
   EXPECT_THAT(GraphStoreProtocol::extractMediatype(
                   makeRequest({{content_type, "application/n-triples"}})),
               testing::Eq(ad_utility::MediaType::ntriples));
 }
 
+// _____________________________________________________________________________________________
 TEST(GraphStoreProtocolTest, parseTriples) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       GraphStoreProtocol::parseTriples("<a> <b> <c>",
@@ -216,6 +226,7 @@ TEST(GraphStoreProtocolTest, parseTriples) {
       testing::HasSubstr(" Parse error at byte position 7"));
 }
 
+// _____________________________________________________________________________________________
 TEST(GraphStoreProtocolTest, convertTriples) {
   auto expectConvert =
       [](const GraphOrDefault& graph, std::vector<TurtleTriple> triples,
