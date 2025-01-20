@@ -1401,9 +1401,9 @@ QueryPlanner::runGreedyPlanningOnConnectedComponent(
   // above pre-/postconditions. Exception: if `isFirstStep` then `cache` and
   // `nextResult` must be empty, and the first step of greedy planning is
   // performed, which also establishes the pre-/postconditions.
-  auto greedyStep = [this, tg, filters, textLimits](Plans* input, Plans* cache,
-                                                    Plans* nextResult,
-                                                    bool isFirstStep) {
+  auto greedyStep = [this, &tg, &filters, &textLimits](
+                        Plans* input, Plans* cache, Plans* nextResult,
+                        bool isFirstStep) {
     checkCancellation();
     // We already have all combinations of two nodes in `input` in the cache, so
     // we only have to add the combinations between `input` and `nextResult`. In
