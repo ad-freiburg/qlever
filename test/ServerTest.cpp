@@ -17,11 +17,14 @@ using namespace ad_utility::url_parser::sparqlOperation;
 
 namespace {
 auto ParsedRequestIs = [](const std::string& path,
+                          const std::optional<std::string>& accessToken,
                           const ParamValueMap& parameters,
                           const std::variant<Query, Update, None>& operation)
     -> testing::Matcher<const ParsedRequest> {
   return testing::AllOf(
       AD_FIELD(ad_utility::url_parser::ParsedRequest, path_, testing::Eq(path)),
+      AD_FIELD(ad_utility::url_parser::ParsedRequest, accessToken_,
+               testing::Eq(accessToken)),
       AD_FIELD(ad_utility::url_parser::ParsedRequest, parameters_,
                testing::ContainerEq(parameters)),
       AD_FIELD(ad_utility::url_parser::ParsedRequest, operation_,
@@ -55,19 +58,21 @@ TEST(ServerTest, parseHttpRequest) {
       "application/x-www-form-urlencoded;charset=UTF-8";
   const std::string QUERY = "application/sparql-query";
   const std::string UPDATE = "application/sparql-update";
-  EXPECT_THAT(parse(MakeGetRequest("/")), ParsedRequestIs("/", {}, None{}));
+  EXPECT_THAT(parse(MakeGetRequest("/")),
+              ParsedRequestIs("/", std::nullopt, {}, None{}));
   EXPECT_THAT(parse(MakeGetRequest("/ping")),
-              ParsedRequestIs("/ping", {}, None{}));
+              ParsedRequestIs("/ping", std::nullopt, {}, None{}));
   EXPECT_THAT(parse(MakeGetRequest("/?cmd=stats")),
-              ParsedRequestIs("/", {{"cmd", {"stats"}}}, None{}));
+              ParsedRequestIs("/", std::nullopt, {{"cmd", {"stats"}}}, None{}));
   EXPECT_THAT(parse(MakeGetRequest(
                   "/?query=SELECT+%2A%20WHERE%20%7B%7D&action=csv_export")),
-              ParsedRequestIs("/", {{"action", {"csv_export"}}},
+              ParsedRequestIs("/", std::nullopt, {{"action", {"csv_export"}}},
                               Query{"SELECT * WHERE {}"}));
   EXPECT_THAT(
       parse(MakePostRequest("/", URLENCODED,
                             "query=SELECT+%2A%20WHERE%20%7B%7D&send=100")),
-      ParsedRequestIs("/", {{"send", {"100"}}}, Query{"SELECT * WHERE {}"}));
+      ParsedRequestIs("/", std::nullopt, {{"send", {"100"}}},
+                      Query{"SELECT * WHERE {}"}));
   AD_EXPECT_THROW_WITH_MESSAGE(
       parse(MakePostRequest("/", URLENCODED,
                             "ääär y=SELECT+%2A%20WHERE%20%7B%7D&send=100")),
@@ -92,10 +97,12 @@ TEST(ServerTest, parseHttpRequest) {
   EXPECT_THAT(
       parse(MakePostRequest("/", "application/x-www-form-urlencoded",
                             "query=SELECT%20%2A%20WHERE%20%7B%7D&send=100")),
-      ParsedRequestIs("/", {{"send", {"100"}}}, Query{"SELECT * WHERE {}"}));
-  EXPECT_THAT(parse(MakePostRequest("/", URLENCODED,
-                                    "query=SELECT%20%2A%20WHERE%20%7B%7D")),
-              ParsedRequestIs("/", {}, Query{"SELECT * WHERE {}"}));
+      ParsedRequestIs("/", std::nullopt, {{"send", {"100"}}},
+                      Query{"SELECT * WHERE {}"}));
+  EXPECT_THAT(
+      parse(MakePostRequest("/", URLENCODED,
+                            "query=SELECT%20%2A%20WHERE%20%7B%7D")),
+      ParsedRequestIs("/", std::nullopt, {}, Query{"SELECT * WHERE {}"}));
   EXPECT_THAT(
       parse(MakePostRequest(
           "/", URLENCODED,
@@ -103,7 +110,7 @@ TEST(ServerTest, parseHttpRequest) {
           "2Fw3.org%2Fdefault&named-graph-uri=https%3A%2F%2Fw3.org%2F1&named-"
           "graph-uri=https%3A%2F%2Fw3.org%2F2")),
       ParsedRequestIs(
-          "/",
+          "/", std::nullopt,
           {{"default-graph-uri", {"https://w3.org/default"}},
            {"named-graph-uri", {"https://w3.org/1", "https://w3.org/2"}}},
           Query{"SELECT * WHERE {}"}));
@@ -112,13 +119,15 @@ TEST(ServerTest, parseHttpRequest) {
                             "query=SELECT%20%2A%20WHERE%20%7B%7D")),
       testing::StrEq("URL-encoded POST requests must not contain query "
                      "parameters in the URL."));
-  EXPECT_THAT(parse(MakePostRequest("/", URLENCODED, "cmd=clear-cache")),
-              ParsedRequestIs("/", {{"cmd", {"clear-cache"}}}, None{}));
-  EXPECT_THAT(parse(MakePostRequest("/", QUERY, "SELECT * WHERE {}")),
-              ParsedRequestIs("/", {}, Query{"SELECT * WHERE {}"}));
   EXPECT_THAT(
-      parse(MakePostRequest("/?send=100", QUERY, "SELECT * WHERE {}")),
-      ParsedRequestIs("/", {{"send", {"100"}}}, Query{"SELECT * WHERE {}"}));
+      parse(MakePostRequest("/", URLENCODED, "cmd=clear-cache")),
+      ParsedRequestIs("/", std::nullopt, {{"cmd", {"clear-cache"}}}, None{}));
+  EXPECT_THAT(
+      parse(MakePostRequest("/", QUERY, "SELECT * WHERE {}")),
+      ParsedRequestIs("/", std::nullopt, {}, Query{"SELECT * WHERE {}"}));
+  EXPECT_THAT(parse(MakePostRequest("/?send=100", QUERY, "SELECT * WHERE {}")),
+              ParsedRequestIs("/", std::nullopt, {{"send", {"100"}}},
+                              Query{"SELECT * WHERE {}"}));
   AD_EXPECT_THROW_WITH_MESSAGE(
       parse(MakeBasicRequest(http::verb::patch, "/")),
       testing::StrEq(
@@ -132,14 +141,35 @@ TEST(ServerTest, parseHttpRequest) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       parse(MakeGetRequest("/?update=DELETE%20%2A%20WHERE%20%7B%7D")),
       testing::StrEq("SPARQL Update is not allowed as GET request."));
-  EXPECT_THAT(parse(MakePostRequest("/", UPDATE, "DELETE * WHERE {}")),
-              ParsedRequestIs("/", {}, Update{"DELETE * WHERE {}"}));
-  EXPECT_THAT(parse(MakePostRequest("/", URLENCODED,
-                                    "update=DELETE%20%2A%20WHERE%20%7B%7D")),
-              ParsedRequestIs("/", {}, Update{"DELETE * WHERE {}"}));
-  EXPECT_THAT(parse(MakePostRequest("/", URLENCODED,
-                                    "update=DELETE+%2A+WHERE%20%7B%7D")),
-              ParsedRequestIs("/", {}, Update{"DELETE * WHERE {}"}));
+  EXPECT_THAT(
+      parse(MakePostRequest("/", UPDATE, "DELETE * WHERE {}")),
+      ParsedRequestIs("/", std::nullopt, {}, Update{"DELETE * WHERE {}"}));
+  EXPECT_THAT(
+      parse(MakePostRequest("/", URLENCODED,
+                            "update=DELETE%20%2A%20WHERE%20%7B%7D")),
+      ParsedRequestIs("/", std::nullopt, {}, Update{"DELETE * WHERE {}"}));
+  EXPECT_THAT(
+      parse(
+          MakePostRequest("/", URLENCODED, "update=DELETE+%2A+WHERE%20%7B%7D")),
+      ParsedRequestIs("/", std::nullopt, {}, Update{"DELETE * WHERE {}"}));
+  // TODO<qup42>: there could be some more here, but i'll wait until #1668
+  EXPECT_THAT(
+      parse(MakeGetRequest("/?query=a&access-token=foo")),
+      ParsedRequestIs("/", "foo", {{"access-token", {"foo"}}}, Query{"a"}));
+  EXPECT_THAT(
+      parse(MakePostRequest("/", URLENCODED,
+                            "update=DELETE%20WHERE%20%7B%7D&access-token=foo")),
+      ParsedRequestIs("/", "foo", {{"access-token", {"foo"}}},
+                      Update{"DELETE WHERE {}"}));
+  EXPECT_THAT(parse(MakePostRequest(
+                  "/", URLENCODED,
+                  "query=SELECT%20%2A%20WHERE%20%7B%7D&access-token=foo")),
+              ParsedRequestIs("/", "foo", {{"access-token", {"foo"}}},
+                              Query{"SELECT * WHERE {}"}));
+  EXPECT_THAT(
+      parse(MakePostRequest("/?access-token=foo", UPDATE, "DELETE * WHERE {}")),
+      ParsedRequestIs("/", "foo", {{"access-token", {"foo"}}},
+                      Update{"DELETE * WHERE {}"}));
 }
 
 TEST(ServerTest, checkParameter) {
@@ -283,4 +313,58 @@ TEST(ServerTest, createMessageSender) {
       server.createMessageSender(server.queryHub_, req,
                                  "SELECT * WHERE { ?a ?b ?c }"),
       testing::HasSubstr("Assertion `queryHubLock` failed."));
+}
+
+TEST(ServerTest, extractAccessToken) {
+  auto extract = [](const ad_utility::httpUtils::HttpRequest auto& request) {
+    auto parsedUrl = parseRequestTarget(request.target());
+    return Server::extractAccessToken(request, parsedUrl.parameters_);
+  };
+  // TODO<qup42>: replace once #1668 is merged
+  auto makeRequest =
+      [](const http::verb method = http::verb::get,
+         const std::string& target = "/",
+         const ad_utility::HashMap<http::field, std::string>& headers = {},
+         const std::optional<std::string>& body = std::nullopt) {
+        // version 11 stands for HTTP/1.1
+        auto req = http::request<http::string_body>{method, target, 11};
+        for (const auto& [key, value] : headers) {
+          req.set(key, value);
+        }
+        if (body.has_value()) {
+          req.body() = body.value();
+          req.prepare_payload();
+        }
+        return req;
+      };
+  EXPECT_THAT(extract(MakeGetRequest("/")), testing::Eq(std::nullopt));
+  EXPECT_THAT(extract(MakeGetRequest("/?access-token=foo")),
+              testing::Optional(testing::Eq("foo")));
+  EXPECT_THAT(
+      extract(makeRequest(http::verb::get, "/",
+                          {{http::field::authorization, "Bearer foo"}})),
+      testing::Optional(testing::Eq("foo")));
+  // The header takes precedence over the query parameter.
+  EXPECT_THAT(
+      extract(makeRequest(http::verb::get, "/?access-token=bar",
+                          {{http::field::authorization, "Bearer foo"}})),
+      testing::Optional(testing::Eq("foo")));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      extract(makeRequest(http::verb::get, "/",
+                          {{http::field::authorization, "foo"}})),
+      testing::HasSubstr(
+          "Authorization header must start with \"Bearer \". Got: \"foo\"."));
+  EXPECT_THAT(extract(MakePostRequest("/", "text/turtle", "")),
+              testing::Eq(std::nullopt));
+  EXPECT_THAT(extract(MakePostRequest("/?access-token=foo", "text/turtle", "")),
+              testing::Optional(testing::Eq("foo")));
+  EXPECT_THAT(
+      extract(makeRequest(http::verb::post, "/?access-token=bar",
+                          {{http::field::authorization, "Bearer foo"}})),
+      testing::Optional(testing::Eq("foo")));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      extract(makeRequest(http::verb::post, "/?access-token=bar",
+                          {{http::field::authorization, "foo"}})),
+      testing::HasSubstr(
+          "Authorization header must start with \"Bearer \". Got: \"foo\"."));
 }

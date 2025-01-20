@@ -164,6 +164,27 @@ void Server::run(const string& indexBaseName, bool useText, bool usePatterns,
   httpServer.run();
 }
 
+std::optional<std::string> Server::extractAccessToken(
+    const ad_utility::httpUtils::HttpRequest auto& request,
+    const ad_utility::url_parser::ParamValueMap& params) {
+  if (request.find(http::field::authorization) != request.end()) {
+    string_view authorization = request[http::field::authorization];
+    const std::string prefix = "Bearer ";
+    if (!authorization.starts_with(prefix)) {
+      throw std::runtime_error(absl::StrCat(
+          "Authorization header must start with \"Bearer \". Got: \"",
+          authorization, "\"."));
+    }
+    authorization.remove_prefix(prefix.length());
+    return std::string(authorization);
+  }
+  if (params.contains("access-token")) {
+    return ad_utility::url_parser::getParameterCheckAtMostOnce(params,
+                                                               "access-token");
+  }
+  return std::nullopt;
+}
+
 // _____________________________________________________________________________
 ad_utility::url_parser::ParsedRequest Server::parseHttpRequest(
     const ad_utility::httpUtils::HttpRequest auto& request) {
@@ -172,7 +193,8 @@ ad_utility::url_parser::ParsedRequest Server::parseHttpRequest(
   using namespace ad_utility::url_parser::sparqlOperation;
   auto parsedUrl = ad_utility::url_parser::parseRequestTarget(request.target());
   ad_utility::url_parser::ParsedRequest parsedRequest{
-      std::move(parsedUrl.path_), std::move(parsedUrl.parameters_), None{}};
+      std::move(parsedUrl.path_), std::nullopt,
+      std::move(parsedUrl.parameters_), None{}};
 
   // Some valid requests (e.g. QLever's custom commands like retrieving index
   // statistics) don't have a query. So an empty operation is not necessarily an
@@ -186,9 +208,14 @@ ad_utility::url_parser::ParsedRequest Server::parseHttpRequest(
           parsedRequest.parameters_.erase(paramName);
         }
       };
+  auto extractAccessTokenFromRequest = [&parsedRequest, &request]() {
+    parsedRequest.accessToken_ =
+        extractAccessToken(request, parsedRequest.parameters_);
+  };
 
   if (request.method() == http::verb::get) {
     setOperationIfSpecifiedInParams.template operator()<Query>("query");
+    extractAccessTokenFromRequest();
     if (parsedRequest.parameters_.contains("update")) {
       throw std::runtime_error("SPARQL Update is not allowed as GET request.");
     }
@@ -258,15 +285,18 @@ ad_utility::url_parser::ParsedRequest Server::parseHttpRequest(
       }
       setOperationIfSpecifiedInParams.template operator()<Query>("query");
       setOperationIfSpecifiedInParams.template operator()<Update>("update");
+      extractAccessTokenFromRequest();
 
       return parsedRequest;
     }
     if (contentType.starts_with(contentTypeSparqlQuery)) {
       parsedRequest.operation_ = Query{request.body()};
+      extractAccessTokenFromRequest();
       return parsedRequest;
     }
     if (contentType.starts_with(contentTypeSparqlUpdate)) {
       parsedRequest.operation_ = Update{request.body()};
+      extractAccessTokenFromRequest();
       return parsedRequest;
     }
     throw std::runtime_error(absl::StrCat(
@@ -353,8 +383,7 @@ Awaitable<void> Server::process(
   // Check the access token. If an access token is provided and the check fails,
   // throw an exception and do not process any part of the query (even if the
   // processing had been allowed without access token).
-  bool accessTokenOk =
-      checkAccessToken(checkParameter("access-token", std::nullopt));
+  bool accessTokenOk = checkAccessToken(parsedHttpRequest.accessToken_);
   auto requireValidAccessToken = [&accessTokenOk](
                                      const std::string& actionName) {
     if (!accessTokenOk) {
