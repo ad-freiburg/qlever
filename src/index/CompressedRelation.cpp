@@ -29,6 +29,34 @@ static auto getBeginAndEnd(auto& range) {
   return std::pair{ql::ranges::begin(range), ql::ranges::end(range)};
 }
 
+// Return true iff the `triple` is contained in the `scanSpec`. For example, the
+// triple ` 42 0 3 ` is contained in the specs `U U U`, `42 U U` and `42 0 U` ,
+// but not in `42 2 U` where `U` means "scan for all possible values".
+static auto isTripleInSpecification =
+    [](const ScanSpecification& scanSpec,
+       const CompressedBlockMetadata::PermutedTriple& triple) {
+      // TODO<joka921> Make this a free function, make this simpler
+      auto checkElement = [](const auto& optId, Id id) -> std::optional<bool> {
+        if (!optId.has_value()) {
+          return true;
+        } else if (optId.value() != id) {
+          return false;
+        } else {
+          return std::nullopt;
+        }
+      };
+      auto result = checkElement(scanSpec.col0Id(), triple.col0Id_);
+      if (!result.has_value()) {
+        result = checkElement(scanSpec.col1Id(), triple.col1Id_);
+      }
+      if (!result.has_value()) {
+        result = checkElement(scanSpec.col2Id(), triple.col2Id_);
+      }
+      // The explicit `true` handles the unlikely case that there only is a
+      // single triple in the block, which is scanned for explicitly.
+      return result.value_or(true);
+    };
+
 // modify the `block` according to the `limitOffset`. Also modify the
 // `limitOffset` to reflect the parts of the LIMIT and OFFSET that have been
 // performed by pruning this `block`.
@@ -631,21 +659,39 @@ std::pair<size_t, size_t> CompressedRelationReader::getResultSizeImpl(
   // a part of these blocks is actually part of the result,
   // set up a lambda which allows us to read these blocks, and returns
   // the size of the result.
+  size_t numResults = 0;
+  // Determine the total size of the result.
+  // First accumulate the complete blocks in the "middle"
+  std::size_t inserted = 0;
+  std::size_t deleted = 0;
+
   auto readSizeOfPossiblyIncompleteBlock = [&](const auto& block) {
-    return readPossiblyIncompleteBlock(scanSpec, config, block, std::nullopt,
-                                       locatedTriplesPerBlock)
-        .numRows();
+    if (exactSize) {
+      numResults +=
+          readPossiblyIncompleteBlock(scanSpec, config, block, std::nullopt,
+                                      locatedTriplesPerBlock)
+              .numRows();
+    } else {
+      bool isComplete = isTripleInSpecification(scanSpec, block.firstTriple_) &&
+                        isTripleInSpecification(scanSpec, block.lastTriple_);
+      // TODO<joka921> Make this a constant somewhere.
+      size_t divisor = isComplete ? 1 : 5;
+      const auto [ins, del] =
+          locatedTriplesPerBlock.numTriples(block.blockIndex_);
+      inserted += ins / divisor;
+      deleted += del / divisor;
+      numResults += block.numRows_ / divisor;
+    }
   };
 
-  size_t numResults = 0;
   // The first and the last block might be incomplete, compute
   // and store the partial results from them.
   if (beginBlock < endBlock) {
-    numResults += readSizeOfPossiblyIncompleteBlock(*beginBlock);
+    readSizeOfPossiblyIncompleteBlock(*beginBlock);
     ++beginBlock;
   }
   if (beginBlock < endBlock) {
-    numResults += readSizeOfPossiblyIncompleteBlock(*(endBlock - 1));
+    readSizeOfPossiblyIncompleteBlock(*(endBlock - 1));
     --endBlock;
   }
 
@@ -653,10 +699,6 @@ std::pair<size_t, size_t> CompressedRelationReader::getResultSizeImpl(
     return {numResults, numResults};
   }
 
-  // Determine the total size of the result.
-  // First accumulate the complete blocks in the "middle"
-  std::size_t inserted = 0;
-  std::size_t deleted = 0;
   ql::ranges::for_each(
       ql::ranges::subrange{beginBlock, endBlock}, [&](const auto& block) {
         const auto [ins, del] =
@@ -666,8 +708,8 @@ std::pair<size_t, size_t> CompressedRelationReader::getResultSizeImpl(
           deleted += del;
           numResults += block.numRows_;
         } else {
-          // TODO<joka921> We could cache the exact size as soon as we have
-          // merged the block once since the last update.
+          // TODO<joka921> We could cache the exact size as soon as we
+          // have merged the block once since the last update.
           auto b = readAndDecompressBlock(block, config);
           numResults += b.has_value() ? b.value().block_.numRows() : 0u;
         }
@@ -1366,10 +1408,10 @@ auto CompressedRelationWriter::createPermutationPair(
         // relation as its overhead is far too high for small relations.
         relation.swapColumns(c1Idx, c2Idx);
 
-        // We only need to sort by the columns of the triple + the graph column,
-        // not the additional payload. Note: We could also use
-        // `compareWithoutLocalVocab` to compare the IDs cheaper, but this sort
-        // is far from being a performance bottleneck.
+        // We only need to sort by the columns of the triple + the graph
+        // column, not the additional payload. Note: We could also use
+        // `compareWithoutLocalVocab` to compare the IDs cheaper, but this
+        // sort is far from being a performance bottleneck.
         auto compare = [](const auto& a, const auto& b) {
           return std::tie(a[0], a[1], a[2], a[3]) <
                  std::tie(b[0], b[1], b[2], b[3]);
