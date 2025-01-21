@@ -9,6 +9,10 @@
 
 // _____________________________________________________________________________
 TEST(Variable, legalAndIllegalNames) {
+  if constexpr (!ad_utility::areExpensiveChecksEnabled) {
+    GTEST_SKIP()
+        << "legality of variable names is only checked with expensive checks";
+  }
   EXPECT_NO_THROW(Variable("?x", true));
   EXPECT_NO_THROW(Variable("$x", true));
   EXPECT_NO_THROW(Variable("?ql_matching_word_thür", true));

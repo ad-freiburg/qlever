@@ -198,6 +198,10 @@ TEST(SparqlDataTypesTest, VariableNormalizesDollarSign) {
 }
 
 TEST(SparqlDataTypesTest, VariableInvalidNamesThrowException) {
+  if constexpr (!ad_utility::areExpensiveChecksEnabled) {
+    GTEST_SKIP()
+        << "legality of variable names is only checked with expensive checks";
+  }
   EXPECT_THROW(Variable("no_leading_var_or_dollar", true),
                ad_utility::Exception);
   EXPECT_THROW(Variable("", true), ad_utility::Exception);

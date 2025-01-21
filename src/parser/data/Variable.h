@@ -24,7 +24,7 @@ class Variable {
   // or $). If `checkName` is set, then the variable name will be validated by
   // the SPARQL parser and an `AD_CONTRACT_CHECK` will fail if the name is not
   // valid.
-  explicit Variable(std::string name, bool checkName = false);
+  explicit Variable(std::string name, bool checkName = true);
 
   // TODO<joka921> There are several similar variants of this function across
   // the codebase. Unify them!
