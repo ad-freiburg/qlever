@@ -678,9 +678,12 @@ std::pair<size_t, size_t> CompressedRelationReader::getResultSizeImpl(
       size_t divisor = isComplete ? 1 : 5;
       const auto [ins, del] =
           locatedTriplesPerBlock.numTriples(block.blockIndex_);
-      inserted += ins / divisor;
-      deleted += del / divisor;
-      numResults += block.numRows_ / divisor;
+      auto trunc = [divisor](size_t num) {
+        return std::max(std::min(num, 1ul), num / divisor);
+      };
+      inserted += trunc(ins);
+      deleted += trunc(del);
+      numResults += trunc(block.numRows_);
     }
   };
 
