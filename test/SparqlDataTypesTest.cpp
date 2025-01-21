@@ -198,11 +198,12 @@ TEST(SparqlDataTypesTest, VariableNormalizesDollarSign) {
 }
 
 TEST(SparqlDataTypesTest, VariableInvalidNamesThrowException) {
-  EXPECT_THROW(Variable{"no_leading_var_or_dollar"}, ad_utility::Exception);
-  EXPECT_THROW(Variable{""}, ad_utility::Exception);
-  EXPECT_THROW(Variable{"? var with space"}, ad_utility::Exception);
-  EXPECT_THROW(Variable{"?"}, ad_utility::Exception);
-  EXPECT_THROW(Variable{"$"}, ad_utility::Exception);
+  EXPECT_THROW(Variable("no_leading_var_or_dollar", true),
+               ad_utility::Exception);
+  EXPECT_THROW(Variable("", true), ad_utility::Exception);
+  EXPECT_THROW(Variable("? var with space", true), ad_utility::Exception);
+  EXPECT_THROW(Variable("?", true), ad_utility::Exception);
+  EXPECT_THROW(Variable("$", true), ad_utility::Exception);
 }
 
 TEST(SparqlDataTypesTest, VariableEvaluatesCorrectlyBasedOnContext) {
