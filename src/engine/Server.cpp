@@ -897,7 +897,7 @@ json Server::createResponseMetadataForUpdate(
   response["status"] = "OK";
   auto warnings = qet.collectWarnings();
   warnings.emplace(warnings.begin(),
-                   "SPARQL 1.1 Update for QLever is highly experimental.");
+                   "SPARQL 1.1 Update for QLever is experimental.");
   response["warnings"] = warnings;
   RuntimeInformationWholeQuery& runtimeInfoWholeOp =
       qet.getRootOperation()->getRuntimeInfoWholeQuery();
@@ -910,7 +910,7 @@ json Server::createResponseMetadataForUpdate(
   response["delta-triples"]["after"] = nlohmann::json(countAfter);
   response["delta-triples"]["difference"] =
       nlohmann::json(countAfter - countBefore);
-  response["time"]["planing"] =
+  response["time"]["planning"] =
       formatTime(runtimeInfoWholeOp.timeQueryPlanning);
   response["time"]["where"] =
       formatTime(std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -919,9 +919,9 @@ json Server::createResponseMetadataForUpdate(
       {"total", formatTime(updateMetadata.triplePreparationTime_ +
                            updateMetadata.deletionTime_ +
                            updateMetadata.insertionTime_)},
-      {"triplePreparation", formatTime(updateMetadata.triplePreparationTime_)},
-      {"deletion", formatTime(updateMetadata.deletionTime_)},
-      {"insertion", formatTime(updateMetadata.insertionTime_)}};
+      {"preparation", formatTime(updateMetadata.triplePreparationTime_)},
+      {"delete", formatTime(updateMetadata.deletionTime_)},
+      {"insert", formatTime(updateMetadata.insertionTime_)}};
   response["time"]["update"] = updateTime;
   response["time"]["total"] = formatTime(requestTimer.msecs());
   for (auto permutation : Permutation::ALL) {
