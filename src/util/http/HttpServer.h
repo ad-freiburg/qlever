@@ -233,11 +233,15 @@ class HttpServer {
       try {
         // Set the timeout for reading the next request.
         stream.expires_after(std::chrono::seconds(30));
-        http::request<http::string_body> req;
 
-        // Read a request
-        co_await http::async_read(stream, buffer, req,
+        // Read a request. Use a parser so that we can control the limit of the
+        // request size.
+        beast::http::request_parser<boost::beast::http::string_body>
+            requestParser;
+        requestParser.body_limit(100'000'000);  // 100 MB
+        co_await http::async_read(stream, buffer, requestParser,
                                   boost::asio::use_awaitable);
+        http::request<http::string_body> req = requestParser.get();
 
         // Let request be handled by `WebSocketSession` if the HTTP
         // request is a WebSocket handshake
