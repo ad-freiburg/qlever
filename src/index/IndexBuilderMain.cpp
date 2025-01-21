@@ -1,8 +1,8 @@
-// Copyright 2014, University of Freiburg,
+// Copyright 2014 - 2025 University of Freiburg
 // Chair of Algorithms and Data Structures.
-// Author:
-//   2014-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
-//   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
+// Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de> [2014 - 2017]
+//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//          Hannah Bast <bast@cs.uni-freiburg.de>
 
 #include <boost/program_options.hpp>
 #include <cstdlib>
@@ -165,6 +165,7 @@ int main(int argc, char** argv) {
   bool onlyPsoAndPos = false;
   bool addWordsFromLiterals = false;
   std::optional<ad_utility::MemorySize> stxxlMemory;
+  std::optional<ad_utility::MemorySize> parserBufferSize;
   optind = 1;
 
   Index index{ad_utility::makeUnlimitedAllocator<Id>()};
@@ -228,6 +229,9 @@ int main(int argc, char** argv) {
   add("stxxl-memory,m", po::value(&stxxlMemory),
       "The amount of memory in to use for sorting during the index build. "
       "Decrease if the index builder runs out of memory.");
+  add("parser-buffer-size,b", po::value(&parserBufferSize),
+      "The size of the buffer used for parsing the input files. This must be "
+      "large enough to hold a single input triple. Default: 10 MB.");
   add("keep-temporary-files,k", po::bool_switch(&keepTemporaryFiles),
       "Do not delete temporary files from index creation for debugging.");
 
@@ -248,6 +252,9 @@ int main(int argc, char** argv) {
   }
   if (stxxlMemory.has_value()) {
     index.memoryLimitIndexBuilding() = stxxlMemory.value();
+  }
+  if (parserBufferSize.has_value()) {
+    index.parserBufferSize() = parserBufferSize.value();
   }
 
   // If no text index name was specified, take the part of the wordsfile after

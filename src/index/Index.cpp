@@ -181,13 +181,23 @@ ad_utility::MemorySize& Index::memoryLimitIndexBuilding() {
 }
 
 // ____________________________________________________________________________
-ad_utility::MemorySize& Index::blocksizePermutationsPerColumn() {
-  return pimpl_->blocksizePermutationPerColumn();
+const ad_utility::MemorySize& Index::memoryLimitIndexBuilding() const {
+  return std::as_const(*pimpl_).memoryLimitIndexBuilding();
 }
 
 // ____________________________________________________________________________
-const ad_utility::MemorySize& Index::memoryLimitIndexBuilding() const {
-  return std::as_const(*pimpl_).memoryLimitIndexBuilding();
+ad_utility::MemorySize& Index::parserBufferSize() {
+  return pimpl_->parserBufferSize();
+}
+
+// ____________________________________________________________________________
+const ad_utility::MemorySize& Index::parserBufferSize() const {
+  return std::as_const(*pimpl_).parserBufferSize();
+}
+
+// ____________________________________________________________________________
+ad_utility::MemorySize& Index::blocksizePermutationsPerColumn() {
+  return pimpl_->blocksizePermutationPerColumn();
 }
 
 // ____________________________________________________________________________
