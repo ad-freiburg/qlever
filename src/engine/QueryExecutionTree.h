@@ -205,6 +205,18 @@ class QueryExecutionTree {
     s << tree.getRootOperation()->getDescriptor();
   }
 
+  bool supportsLimit() const { return getRootOperation()->supportsLimit(); }
+
+  // Set the value of the `LIMIT` clause that will be applied to the result of
+  // this operation.
+  void setLimit(const LimitOffsetClause& limitOffsetClause) {
+    getRootOperation()->setLimit(limitOffsetClause);
+    // Setting the limit invalidates the `cacheKey` as well as the
+    // `sizeEstimate`.
+    cacheKey_ = getRootOperation()->getCacheKey();
+    sizeEstimate_ = getRootOperation()->getSizeEstimate();
+  }
+
  private:
   QueryExecutionContext* qec_;  // No ownership
   std::shared_ptr<Operation> rootOperation_ =
