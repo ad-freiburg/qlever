@@ -561,7 +561,6 @@ Server::PlannedQuery Server::setupPlannedQuery(
   LOG(INFO) << "Query planning done in " << timeForQueryPlanning.count()
             << " ms" << std::endl;
   LOG(TRACE) << qet.getCacheKey() << std::endl;
-  std::exit(0);
 
   return plannedQuery;
 }
