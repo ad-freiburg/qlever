@@ -20,6 +20,7 @@ inline auto& RuntimeParameters() {
   // clearly misunderstand something about static initialization.
   static ad_utility::Parameters params = []() {
     using namespace std::chrono_literals;
+    using namespace ad_utility::memory_literals;
     auto ensureStrictPositivity = [](auto&& parameter) {
       parameter.setParameterConstraint(
           [](std::chrono::seconds value, std::string_view parameterName) {
