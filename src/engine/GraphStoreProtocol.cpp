@@ -91,15 +91,11 @@ ParsedQuery GraphStoreProtocol::transformGet(const GraphOrDefault& graph) {
   parsedQuery::GraphPattern selectSPO;
   selectSPO._graphPatterns.emplace_back(parsedQuery::BasicGraphPattern{
       {SparqlTriple(Variable("?s"), "?p", Variable("?o"))}});
-  if (std::holds_alternative<ad_utility::triple_component::Iri>(graph)) {
-    parsedQuery::GroupGraphPattern selectSPOWithGraph{
-        std::move(selectSPO),
-        std::get<ad_utility::triple_component::Iri>(graph)};
-    res._rootGraphPattern._graphPatterns.emplace_back(
-        std::move(selectSPOWithGraph));
-  } else {
-    AD_CORRECTNESS_CHECK(std::holds_alternative<DEFAULT>(graph));
-    res._rootGraphPattern = std::move(selectSPO);
+  if (const auto* iri =
+          std::get_if<ad_utility::triple_component::Iri>(&graph)) {
+    res.datasetClauses_ =
+        parsedQuery::DatasetClauses::fromClauses({DatasetClause{*iri, false}});
   }
+  res._rootGraphPattern = std::move(selectSPO);
   return res;
 }

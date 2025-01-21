@@ -131,10 +131,10 @@ TEST(GraphStoreProtocolTest, transformGet) {
   expectTransformGet(
       makeGetRequest("/?graph=foo"),
       m::ConstructQuery({{Var{"?s"}, Var{"?p"}, Var{"?o"}}},
-                        m::GraphPattern(m::GroupGraphPatternWithGraph(
-                            {}, iri("<foo>"),
-                            matchers::Triples({SparqlTriple(
-                                TC(Var{"?s"}), "?p", TC(Var{"?o"}))})))));
+                        m::GraphPattern(matchers::Triples({SparqlTriple(
+                            TC(Var{"?s"}), "?p", TC(Var{"?o"}))})),
+                        ScanSpecificationAsTripleComponent::Graphs{
+                            {TripleComponent(iri("<foo>"))}}));
 }
 
 // _____________________________________________________________________________________________
