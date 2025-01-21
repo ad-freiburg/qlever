@@ -348,7 +348,7 @@ inline std::shared_ptr<QueryExecutionTree> buildSmallChild(
 // defaulted as nullpointer or std::nullopt. The maxDist is necessary, because
 // one of the wrapper classes needs a proper maxDistance, otherwise the wrapper
 // can't be used to test the function
-SpatialJoinAlgorithms getDummySpatialJoinAlgsForWrapperTesting(
+inline SpatialJoinAlgorithms getDummySpatialJoinAlgsForWrapperTesting(
     size_t maxDist = 1000) {
   auto qec = buildTestQEC();
   MaxDistanceConfig task{maxDist};
