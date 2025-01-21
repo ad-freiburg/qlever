@@ -674,8 +674,10 @@ std::pair<size_t, size_t> CompressedRelationReader::getResultSizeImpl(
     } else {
       bool isComplete = isTripleInSpecification(scanSpec, block.firstTriple_) &&
                         isTripleInSpecification(scanSpec, block.lastTriple_);
-      // TODO<joka921> Make this a constant somewhere.
-      size_t divisor = isComplete ? 1 : 5;
+      size_t divisor =
+          isComplete ? 1
+                     : RuntimeParameters()
+                           .get<"small-index-scan-size-estimate-divisor">();
       const auto [ins, del] =
           locatedTriplesPerBlock.numTriples(block.blockIndex_);
       auto trunc = [divisor](size_t num) {

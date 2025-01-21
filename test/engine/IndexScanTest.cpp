@@ -498,7 +498,8 @@ TEST(IndexScan, getResultSizeOfScan) {
     SparqlTripleSimple scanTriple{I::fromIriref("<x2>"), I::fromIriref("<p>"),
                                   I::fromIriref("<s1>")};
     IndexScan scan{qec, Permutation::Enum::POS, scanTriple};
-    EXPECT_EQ(scan.getSizeEstimate(), 0);
+    EXPECT_EQ(scan.getSizeEstimate(), 1);
+    EXPECT_EQ(scan.getExactSize(), 0);
   }
   {
     SparqlTripleSimple scanTriple{I::fromIriref("<x>"), I::fromIriref("<p>"),
