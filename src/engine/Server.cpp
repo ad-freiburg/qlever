@@ -1038,7 +1038,7 @@ Awaitable<void> Server::processQueryOrUpdate(
         LOG(ERROR) << metadata.value().query_ << std::endl;
       }
     }
-    std::string operationStr = [&operation] {
+    const std::string operationStr = [&operation] {
       if constexpr (std::is_same_v<Operation, Query>) {
         return operation.query_;
       } else {
