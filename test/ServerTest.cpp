@@ -136,43 +136,107 @@ TEST(ServerTest, parseHttpRequest) {
       parse(
           makePostRequest("/", URLENCODED, "update=DELETE+%2A+WHERE%20%7B%7D")),
       ParsedRequestIs("/", std::nullopt, {}, Update{"DELETE * WHERE {}"}));
-  EXPECT_THAT(
-      parse(makeGetRequest("/?query=a&access-token=foo")),
-      ParsedRequestIs("/", "foo", {{"access-token", {"foo"}}}, Query{"a"}));
-  EXPECT_THAT(
-      parse(makeRequest(http::verb::get, "/?query=a",
-                        {{http::field::authorization, {"Bearer bar"}}})),
-      ParsedRequestIs("/", "bar", {}, Query{"a"}));
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      parse(makeRequest(http::verb::get, "/?query=a&access-token=foo",
-                        {{http::field::authorization, {"Bearer bar"}}})),
-      testing::HasSubstr(
-          "Access token is specified both in the `Authorization` Header and "
-          "the parameters, but they aren't the same."));
-  EXPECT_THAT(
-      parse(makePostRequest("/", URLENCODED,
-                            "update=DELETE%20WHERE%20%7B%7D&access-token=baz")),
-      ParsedRequestIs("/", "baz", {{"access-token", {"baz"}}},
-                      Update{"DELETE WHERE {}"}));
-  EXPECT_THAT(parse(makeRequest(http::verb::post, "/",
-                                {{http::field::content_type, {URLENCODED}},
-                                 {http::field::authorization, {"Bearer bar"}}},
-                                "update=DELETE%20WHERE%20%7B%7D")),
-              ParsedRequestIs("/", "bar", {{"access-token", {"bar"}}},
-                              Update{"DELETE WHERE {}"}));
-  EXPECT_THAT(parse(makePostRequest(
-                  "/", URLENCODED,
-                  "query=SELECT%20%2A%20WHERE%20%7B%7D&access-token=baz")),
-              ParsedRequestIs("/", "baz", {{"access-token", {"baz"}}},
-                              Query{"SELECT * WHERE {}"}));
-  EXPECT_THAT(
-      parse(makePostRequest("/?access-token=foo", UPDATE, "DELETE WHERE {}")),
-      ParsedRequestIs("/", "foo", {{"access-token", {"foo"}}},
-                      Update{"DELETE WHERE {}"}));
-  EXPECT_THAT(
-      parse(makePostRequest("/?access-token=foo", QUERY, "SELECT * WHERE {}")),
-      ParsedRequestIs("/", "foo", {{"access-token", {"foo"}}},
-                      Update{"SELECT * WHERE {}"}));
+  auto testAccessTokenCombinations =
+      [&](const http::verb& method, std::string_view pathBase,
+          const std::variant<Query, Update, None>& expectedOperation,
+          const ad_utility::HashMap<http::field, std::string>& headers = {},
+          const std::optional<std::string>& body = std::nullopt,
+          ad_utility::source_location l =
+              ad_utility::source_location::current()) {
+        auto t = generateLocationTrace(l);
+        // Test the cases:
+        // 1. No Access token
+        // 2. Access token in query
+        // 3. Access token in Authorization header
+        // 4. Different Access tokens
+        // 5. Same Access token
+        boost::urls::url pathWithAccessToken{pathBase};
+        pathWithAccessToken.params().append({"access-token", "foo"});
+        ad_utility::HashMap<http::field, std::string>
+            headersWithDifferentAccessToken{headers};
+        headersWithDifferentAccessToken.insert(
+            {http::field::authorization, "Bearer bar"});
+        ad_utility::HashMap<http::field, std::string>
+            headersWithSameAccessToken{headers};
+        headersWithSameAccessToken.insert(
+            {http::field::authorization, "Bearer foo"});
+        EXPECT_THAT(parse(makeRequest(method, pathBase, headers, body)),
+                    ParsedRequestIs("/", std::nullopt, {}, expectedOperation));
+        EXPECT_THAT(parse(makeRequest(method, pathWithAccessToken.buffer(),
+                                      headers, body)),
+                    ParsedRequestIs("/", "foo", {{"access-token", {"foo"}}},
+                                    expectedOperation));
+        EXPECT_THAT(parse(makeRequest(method, pathBase,
+                                      headersWithDifferentAccessToken, body)),
+                    ParsedRequestIs("/", "bar", {}, expectedOperation));
+        EXPECT_THAT(parse(makeRequest(method, pathWithAccessToken.buffer(),
+                                      headersWithSameAccessToken, body)),
+                    ParsedRequestIs("/", "foo", {{"access-token", {"foo"}}},
+                                    expectedOperation));
+        AD_EXPECT_THROW_WITH_MESSAGE(
+            parse(makeRequest(method, pathWithAccessToken.buffer(),
+                              headersWithDifferentAccessToken, body)),
+            testing::HasSubstr("Access token is specified both in the "
+                               "`Authorization` Header and "
+                               "the parameters, but they aren't the same."));
+      };
+  testAccessTokenCombinations(http::verb::get, "/?query=a", Query{"a"});
+  testAccessTokenCombinations(http::verb::post, "/", Query{"a"},
+                              {{http::field::content_type, QUERY}}, "a");
+  testAccessTokenCombinations(http::verb::post, "/", Update{"a"},
+                              {{http::field::content_type, UPDATE}}, "a");
+  auto testAccessTokenCombinationsUrlEncoded =
+      [&](const std::string& bodyBase,
+          const std::variant<Query, Update, None>& expectedOperation,
+          ad_utility::source_location l =
+              ad_utility::source_location::current()) {
+        auto t = generateLocationTrace(l);
+        // Test the cases:
+        // 1. No Access token
+        // 2. Access token in query
+        // 3. Access token in Authorization header
+        // 4. Different Access tokens
+        // 5. Same Access token
+        boost::urls::url paramsWithAccessToken{absl::StrCat("/?", bodyBase)};
+        paramsWithAccessToken.params().append({"access-token", "foo"});
+        std::string bodyWithAccessToken{
+            paramsWithAccessToken.encoded_params().buffer()};
+        ad_utility::HashMap<http::field, std::string> headers{
+            {http::field::content_type, {URLENCODED}}};
+        ad_utility::HashMap<http::field, std::string>
+            headersWithDifferentAccessToken{
+                {http::field::content_type, {URLENCODED}},
+                {http::field::authorization, "Bearer bar"}};
+        ad_utility::HashMap<http::field, std::string>
+            headersWithSameAccessToken{
+                {http::field::content_type, {URLENCODED}},
+                {http::field::authorization, "Bearer foo"}};
+        EXPECT_THAT(
+            parse(makeRequest(http::verb::post, "/", headers, bodyBase)),
+            ParsedRequestIs("/", std::nullopt, {}, expectedOperation));
+        EXPECT_THAT(parse(makeRequest(http::verb::post, "/", headers,
+                                      bodyWithAccessToken)),
+                    ParsedRequestIs("/", "foo", {{"access-token", {"foo"}}},
+                                    expectedOperation));
+        EXPECT_THAT(
+            parse(makeRequest(http::verb::post, "/",
+                              headersWithDifferentAccessToken, bodyBase)),
+            ParsedRequestIs("/", "bar", {}, expectedOperation));
+        EXPECT_THAT(parse(makeRequest(http::verb::post, "/",
+                                      headersWithSameAccessToken, bodyBase)),
+                    ParsedRequestIs("/", "foo", {}, expectedOperation));
+        AD_EXPECT_THROW_WITH_MESSAGE(
+            parse(makeRequest(http::verb::post, "/",
+                              headersWithDifferentAccessToken,
+                              bodyWithAccessToken)),
+            testing::HasSubstr("Access token is specified both in the "
+                               "`Authorization` Header and "
+                               "the parameters, but they aren't the same."));
+      };
+  testAccessTokenCombinationsUrlEncoded("query=SELECT%20%2A%20WHERE%20%7B%7D",
+                                        Query{"SELECT * WHERE {}"});
+  testAccessTokenCombinationsUrlEncoded("update=DELETE%20WHERE%20%7B%7D",
+                                        Update{"DELETE WHERE {}"});
 }
 
 TEST(ServerTest, determineResultPinning) {
