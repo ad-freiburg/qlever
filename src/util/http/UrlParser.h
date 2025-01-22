@@ -29,6 +29,13 @@ using ParamValueMap = ad_utility::HashMap<string, std::vector<string>>;
 std::optional<std::string> getParameterCheckAtMostOnce(const ParamValueMap& map,
                                                        string_view key);
 
+// Checks if a parameter exists, and it matches the
+// expected `value`. If yes, return the value, otherwise return
+// `std::nullopt`.
+std::optional<std::string> checkParameter(const ParamValueMap& parameters,
+                                          std::string_view key,
+                                          std::optional<std::string> value);
+
 // A parsed URL.
 // - `path_` is the URL path
 // - `parameters_` is a map of the HTTP Query parameters

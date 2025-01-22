@@ -52,9 +52,8 @@ void ScoreData::calculateScoreData(const string& docsFileName,
 void ScoreData::addDocumentOrLiteralToScoreDataInvertedIndex(
     std::string_view text, DocumentIndex docId,
     const Index::TextVocab& textVocab) {
-  TextTokenizerAndNormalizer normalizedWords(text, localeManager_);
   WordVocabIndex wvi;
-  for (auto word : normalizedWords) {
+  for (auto word : tokenizeAndNormalizeText(text, localeManager_)) {
     // Check if word exists and retrieve wordId
     if (!textVocab.getId(word, &wvi)) {
       continue;
