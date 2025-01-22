@@ -87,7 +87,8 @@ void writeVectorAndMoveOffset(std::span<const T> vectorToWrite,
 
 // ____________________________________________________________________________
 template <typename T>
-FrequencyEncode<T>::FrequencyEncode(ql::ranges::viewable_range auto&& view) {
+template <typename View>
+FrequencyEncode<T>::FrequencyEncode(View&& view) {
   if (ql::ranges::empty(view)) {
     return;
   }
@@ -124,7 +125,7 @@ FrequencyEncode<T>::FrequencyEncode(ql::ranges::viewable_range auto&& view) {
   }
 
   // Finally encode the vector
-  encodedVector_.reserve(ql::ranges::distance(view));
+  encodedVector_.reserve(ql::ranges::size(view));
   for (const auto& value : view) {
     encodedVector_.push_back(codeMap_[value]);
   }
@@ -141,12 +142,12 @@ void FrequencyEncode<T>::writeToFile(ad_utility::File& out,
 
 // ____________________________________________________________________________
 template <typename T>
-requires std::is_arithmetic_v<T>
-GapEncode<T>::GapEncode(ql::ranges::viewable_range auto&& view) {
+requires std::is_arithmetic_v<T> template <typename View>
+GapEncode<T>::GapEncode(View&& view) {
   if (ql::ranges::empty(view)) {
     return;
   }
-  encodedVector_.reserve(ql::ranges::distance(view));
+  encodedVector_.reserve(ql::ranges::size(view));
   encodedVector_.push_back(*ql::ranges::begin(view));
 
   for (auto it1 = ql::ranges::begin(view),

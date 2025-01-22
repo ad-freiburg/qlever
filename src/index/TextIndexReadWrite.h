@@ -154,7 +154,9 @@ class FrequencyEncode {
   using CodeMap = TypedMap;
   using CodeBook = TypedVector;
 
-  explicit FrequencyEncode(ql::ranges::viewable_range auto&& view);
+  // View must be an input range with value type `T`.
+  template <typename View>
+  explicit FrequencyEncode(View&& view);
 
   void writeToFile(ad_utility::File& out, off_t& currentOffset);
 
@@ -172,7 +174,9 @@ requires std::is_arithmetic_v<T> class GapEncode {
  public:
   using TypedVector = std::vector<T>;
 
-  explicit GapEncode(ql::ranges::viewable_range auto&& view);
+  // View must be an input range with value type `T`.
+  template <typename View>
+  explicit GapEncode(View&& view);
 
   void writeToFile(ad_utility::File& out, off_t& currentOffset);
 
