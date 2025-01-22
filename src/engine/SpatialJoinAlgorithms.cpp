@@ -5,6 +5,7 @@
 
 #include "engine/SpatialJoinAlgorithms.h"
 
+#include <s2/s2closest_edge_query.h>
 #include <s2/s2closest_point_query.h>
 #include <s2/s2earth.h>
 #include <s2/s2point.h>
@@ -13,6 +14,8 @@
 
 #include <cmath>
 
+#include "../../cmake-build-clang-16-relwithdeb-asan/_deps/s2-src/src/s2/s2polyline.h"
+#include "ExportQueryExecutionTrees.h"
 #include "engine/SpatialJoin.h"
 #include "util/GeoSparqlHelpers.h"
 
@@ -35,6 +38,27 @@ std::optional<GeoPoint> SpatialJoinAlgorithms::getPoint(const IdTable* restable,
   return id.getDatatype() == Datatype::GeoPoint
              ? std::optional{id.getGeoPoint()}
              : std::nullopt;
+};
+
+// ____________________________________________________________________________
+std::optional<S2Polyline> SpatialJoinAlgorithms::getPolyline(
+    const IdTable* restable, size_t row, ColumnIndex col) const {
+  auto id = restable->at(row, col);
+  auto str = ExportQueryExecutionTrees::idToStringAndType(
+      spatialJoin_.value()->getIndex(), id, {});
+  if (!str.has_value()) {
+    return std::nullopt;
+  }
+  auto res = ctre::range<
+      "(?<lat>[0-9]+\\.[0-9]+),(?<lng>[0-9]+\\.[0-9]+),(?<lng>[0-9]+\\.[0-9]+"
+      ")">(str.value().first);
+  std::vector<S2LatLng> points;
+  for (const auto& match : res) {
+    auto lat = std::strtod(match.get<"lat">().data(), nullptr);
+    auto lng = std::strtod(match.get<"lng">().data(), nullptr);
+    points.push_back(S2LatLng::FromDegrees(lat, lng));
+  }
+  return S2Polyline{points};
 };
 
 // ____________________________________________________________________________
@@ -228,6 +252,85 @@ Result SpatialJoinAlgorithms::S2geometryAlgorithm() {
       auto indexRow = neighbor.data();
       auto dist = S2Earth::ToKm(neighbor.distance());
 
+      auto rowLeft = indexOfRight ? searchRow : indexRow;
+      auto rowRight = indexOfRight ? indexRow : searchRow;
+      addResultTableEntry(&result, idTableLeft, idTableRight, rowLeft, rowRight,
+                          Id::makeFromDouble(dist));
+    }
+  }
+
+  return Result(std::move(result), std::vector<ColumnIndex>{},
+                Result::getMergedLocalVocab(*resultLeft, *resultRight));
+}
+
+// ____________________________________________________________________________
+Result SpatialJoinAlgorithms::S2PointPolylineAlgorithm() {
+  const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
+              rightJoinCol, rightSelectedCols, numColumns, maxDist,
+              maxResults] = params_;
+  IdTable result{numColumns, qec_->getAllocator()};
+
+  // Helper function to convert `GeoPoint` to `S2Point`
+  S2ShapeIndex<size_t> s2index;
+
+  bool indexOfRight = true;
+  auto indexTable = indexOfRight ? idTableRight : idTableLeft;
+  auto indexJoinCol = indexOfRight ? rightJoinCol : leftJoinCol;
+
+  ad_utility::HashMap<size_t, size_t> shapeIndexToRow;
+
+  // Populate the index
+  for (size_t row = 0; row < indexTable->size(); row++) {
+    auto p = getPolyline(indexTable, row, indexJoinCol);
+    if (p.has_value()) {
+      shapeIndexToRow[shapeIndexToRow.size()] = row;
+      s2index.Add(p.value());
+    }
+  }
+
+  // Performs a nearest neighbor search on the index and returns the closest
+  // points that satisfy the criteria given by `maxDist_` and `maxResults_`.
+
+  // Construct a query object with the given constraints
+  auto s2query = S2ClosestEdgeQuery{&s2index};
+
+  if (maxResults.has_value()) {
+    AD_FAIL();
+    s2query.mutable_options()->set_max_results(
+        static_cast<int>(maxResults.value()));
+  }
+  if (maxDist.has_value()) {
+    s2query.mutable_options()->set_inclusive_max_distance(S2Earth::ToAngle(
+        util::units::Meters(static_cast<float>(maxDist.value()))));
+  }
+
+  auto searchTable = indexOfRight ? idTableLeft : idTableRight;
+  auto searchJoinCol = indexOfRight ? leftJoinCol : rightJoinCol;
+
+  // Use the index to lookup the points of the other table
+  for (size_t searchRow = 0; searchRow < searchTable->size(); searchRow++) {
+    auto p = getPoint(searchTable, searchRow, searchJoinCol);
+    if (!p.has_value()) {
+      continue;
+    }
+    // Helper function to convert `GeoPoint` to `S2Point`
+    auto constexpr toS2Point = [](const GeoPoint& p) {
+      auto lat = p.getLat();
+      auto lng = p.getLng();
+      auto latlng = S2LatLng::FromDegrees(lat, lng);
+      return S2Point{latlng};
+    };
+    auto s2target = S2ClosestEdgeQuery::PointTarget{toS2Point(p.value())};
+
+    ad_utility::HashMap<size_t, double> deduplicatedSet{};
+    for (const auto& neighbor : s2query.FindClosestEdges(&s2target)) {
+      // In this loop we only receive points that already satisfy the given
+      // criteria
+      auto indexRow = shapeIndexToRow.at(neighbor.shape_id());
+      auto dist = S2Earth::ToKm(neighbor.distance());
+      deduplicatedSet.insert(indexRow, dist);
+    }
+    for (auto [indexRow, dist] : deduplicatedSet) {
       auto rowLeft = indexOfRight ? searchRow : indexRow;
       auto rowRight = indexOfRight ? indexRow : searchRow;
       addResultTableEntry(&result, idTableLeft, idTableRight, rowLeft, rowRight,

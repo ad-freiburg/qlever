@@ -5,6 +5,8 @@
 
 #pragma once
 
+#include <s2/s2polyline.h>
+
 #include <boost/foreach.hpp>
 #include <boost/geometry.hpp>
 #include <boost/geometry/geometries/box.hpp>
@@ -32,6 +34,7 @@ class SpatialJoinAlgorithms {
                         std::optional<SpatialJoin*> spatialJoin = std::nullopt);
   Result BaselineAlgorithm();
   Result S2geometryAlgorithm();
+  Result S2PointPolylineAlgorithm();
   Result BoundingBoxAlgorithm();
 
   std::vector<BoostGeometryNamespace::Box>
@@ -51,6 +54,8 @@ class SpatialJoinAlgorithms {
   // represents a GeoPoint
   std::optional<GeoPoint> getPoint(const IdTable* restable, size_t row,
                                    ColumnIndex col) const;
+  std::optional<S2Polyline> getPolyline(const IdTable* restable, size_t row,
+                                        ColumnIndex col) const;
 
   // Helper function, which computes the distance of two points, where each
   // point comes from a different result table
