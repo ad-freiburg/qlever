@@ -11,6 +11,7 @@
 #include <string>
 #include <vector>
 
+#include "GraphStoreProtocol.h"
 #include "engine/ExecuteUpdate.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/QueryPlanner.h"
@@ -347,8 +348,8 @@ Awaitable<void> Server::process(
 
   // We always want to call `Server::checkParameter` with the same first
   // parameter.
-  auto checkParameter =
-      std::bind_front(&Server::checkParameter, std::cref(parameters));
+  auto checkParameter = std::bind_front(&ad_utility::url_parser::checkParameter,
+                                        std::cref(parameters));
 
   // Check the access token. If an access token is provided and the check fails,
   // throw an exception and do not process any part of the query (even if the
@@ -537,9 +538,11 @@ Awaitable<void> Server::process(
 std::pair<bool, bool> Server::determineResultPinning(
     const ad_utility::url_parser::ParamValueMap& params) {
   const bool pinSubtrees =
-      checkParameter(params, "pinsubtrees", "true").has_value();
+      ad_utility::url_parser::checkParameter(params, "pinsubtrees", "true")
+          .has_value();
   const bool pinResult =
-      checkParameter(params, "pinresult", "true").has_value();
+      ad_utility::url_parser::checkParameter(params, "pinresult", "true")
+          .has_value();
   return {pinSubtrees, pinResult};
 }
 
@@ -730,16 +733,10 @@ Awaitable<void> Server::sendStreamableResponse(
 }
 
 // ____________________________________________________________________________
-class NoSupportedMediatypeError : public std::runtime_error {
- public:
-  explicit NoSupportedMediatypeError(std::string_view msg)
-      : std::runtime_error{std::string{msg}} {}
-};
-
-// ____________________________________________________________________________
 MediaType Server::determineMediaType(
     const ad_utility::url_parser::ParamValueMap& params,
     const ad_utility::httpUtils::HttpRequest auto& request) {
+  using namespace ad_utility::url_parser;
   // The following code block determines the media type to be used for the
   // result. The media type is either determined by the "Accept:" header of
   // the request or by the URL parameter "action=..." (for TSV and CSV export,
@@ -997,7 +994,7 @@ Awaitable<void> Server::processQueryOrUpdate(
   } catch (const QueryAlreadyInUseError& e) {
     responseStatus = http::status::conflict;
     exceptionErrorMsg = e.what();
-  } catch (const NoSupportedMediatypeError& e) {
+  } catch (const UnknownMediatypeError& e) {
     responseStatus = http::status::bad_request;
     exceptionErrorMsg = e.what();
   } catch (const ad_utility::CancellationException& e) {
@@ -1117,25 +1114,4 @@ bool Server::checkAccessToken(
     LOG(DEBUG) << accessTokenProvidedMsg << " and correct" << std::endl;
     return true;
   }
-}
-
-// _____________________________________________________________________________
-std::optional<std::string> Server::checkParameter(
-    const ad_utility::url_parser::ParamValueMap& parameters,
-    std::string_view key, std::optional<std::string> value) {
-  auto param =
-      ad_utility::url_parser::getParameterCheckAtMostOnce(parameters, key);
-  if (!param.has_value()) {
-    return std::nullopt;
-  }
-  std::string parameterValue = param.value();
-
-  // If value is given, but not equal to param value, return std::nullopt. If
-  // no value is given, set it to param value.
-  if (value == std::nullopt) {
-    value = parameterValue;
-  } else if (value != parameterValue) {
-    return std::nullopt;
-  }
-  return value;
 }
