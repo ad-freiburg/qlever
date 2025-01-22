@@ -305,11 +305,12 @@ TEST(ServerTest, extractAccessToken) {
       extract(makeRequest(http::verb::get, "/",
                           {{http::field::authorization, "Bearer foo"}})),
       testing::Optional(testing::Eq("foo")));
-  // The header takes precedence over the query parameter.
-  EXPECT_THAT(
+  AD_EXPECT_THROW_WITH_MESSAGE(
       extract(makeRequest(http::verb::get, "/?access-token=bar",
                           {{http::field::authorization, "Bearer foo"}})),
-      testing::Optional(testing::Eq("foo")));
+      testing::HasSubstr(
+          "Access token is specified both in the `Authorization` Header and "
+          "the parameters, but they aren't the same."));
   AD_EXPECT_THROW_WITH_MESSAGE(
       extract(makeRequest(http::verb::get, "/",
                           {{http::field::authorization, "foo"}})),
@@ -319,10 +320,12 @@ TEST(ServerTest, extractAccessToken) {
               testing::Eq(std::nullopt));
   EXPECT_THAT(extract(makePostRequest("/?access-token=foo", "text/turtle", "")),
               testing::Optional(testing::Eq("foo")));
-  EXPECT_THAT(
+  AD_EXPECT_THROW_WITH_MESSAGE(
       extract(makeRequest(http::verb::post, "/?access-token=bar",
                           {{http::field::authorization, "Bearer foo"}})),
-      testing::Optional(testing::Eq("foo")));
+      testing::HasSubstr(
+          "Access token is specified both in the `Authorization` Header and "
+          "the parameters, but they aren't the same."));
   AD_EXPECT_THROW_WITH_MESSAGE(
       extract(makeRequest(http::verb::post, "/?access-token=bar",
                           {{http::field::authorization, "foo"}})),

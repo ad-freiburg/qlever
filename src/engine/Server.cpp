@@ -168,6 +168,8 @@ void Server::run(const string& indexBaseName, bool useText, bool usePatterns,
 std::optional<std::string> Server::extractAccessToken(
     const ad_utility::httpUtils::HttpRequest auto& request,
     const ad_utility::url_parser::ParamValueMap& params) {
+  std::optional<std::string> tokenFromAuthorizationHeader;
+  std::optional<std::string> tokenFromParameter;
   if (request.find(http::field::authorization) != request.end()) {
     string_view authorization = request[http::field::authorization];
     const std::string prefix = "Bearer ";
@@ -176,13 +178,22 @@ std::optional<std::string> Server::extractAccessToken(
           absl::StrCat("Authorization header doesn't start with \"Bearer \"."));
     }
     authorization.remove_prefix(prefix.length());
-    return std::string(authorization);
+    tokenFromAuthorizationHeader = std::string(authorization);
   }
   if (params.contains("access-token")) {
-    return ad_utility::url_parser::getParameterCheckAtMostOnce(params,
-                                                               "access-token");
+    tokenFromParameter = ad_utility::url_parser::getParameterCheckAtMostOnce(
+        params, "access-token");
   }
-  return std::nullopt;
+  // If both are specified, they must be equal. This way there is no hidden
+  // precedence.
+  if (tokenFromAuthorizationHeader && tokenFromParameter &&
+      tokenFromAuthorizationHeader != tokenFromParameter) {
+    throw std::runtime_error(
+        "Access token is specified both in the `Authorization` Header and the "
+        "parameters, but they aren't the same.");
+  }
+  return tokenFromAuthorizationHeader ? std::move(tokenFromAuthorizationHeader)
+                                      : std::move(tokenFromParameter);
 }
 
 // _____________________________________________________________________________
