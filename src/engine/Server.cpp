@@ -296,6 +296,8 @@ ad_utility::url_parser::ParsedRequest Server::parseHttpRequest(
       }
       setOperationIfSpecifiedInParams.template operator()<Query>("query");
       setOperationIfSpecifiedInParams.template operator()<Update>("update");
+      // We parse the access token from the url-encoded parameters in the body.
+      // The URL parameters must be empty for URL-encoded POST (see above).
       extractAccessTokenFromRequest();
 
       return parsedRequest;

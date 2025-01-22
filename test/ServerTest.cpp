@@ -136,24 +136,43 @@ TEST(ServerTest, parseHttpRequest) {
       parse(
           makePostRequest("/", URLENCODED, "update=DELETE+%2A+WHERE%20%7B%7D")),
       ParsedRequestIs("/", std::nullopt, {}, Update{"DELETE * WHERE {}"}));
-  // TODO<qup42>: there could be some more here, but i'll wait until #1668
   EXPECT_THAT(
       parse(makeGetRequest("/?query=a&access-token=foo")),
       ParsedRequestIs("/", "foo", {{"access-token", {"foo"}}}, Query{"a"}));
   EXPECT_THAT(
+      parse(makeRequest(http::verb::get, "/?query=a",
+                        {{http::field::authorization, {"Bearer bar"}}})),
+      ParsedRequestIs("/", "bar", {}, Query{"a"}));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      parse(makeRequest(http::verb::get, "/?query=a&access-token=foo",
+                        {{http::field::authorization, {"Bearer bar"}}})),
+      testing::HasSubstr(
+          "Access token is specified both in the `Authorization` Header and "
+          "the parameters, but they aren't the same."));
+  EXPECT_THAT(
       parse(makePostRequest("/", URLENCODED,
-                            "update=DELETE%20WHERE%20%7B%7D&access-token=foo")),
-      ParsedRequestIs("/", "foo", {{"access-token", {"foo"}}},
+                            "update=DELETE%20WHERE%20%7B%7D&access-token=baz")),
+      ParsedRequestIs("/", "baz", {{"access-token", {"baz"}}},
                       Update{"DELETE WHERE {}"}));
+  EXPECT_THAT(parse(makeRequest(http::verb::post, "/",
+                                {{http::field::content_type, {URLENCODED}},
+                                 {http::field::authorization, {"Bearer bar"}}},
+                                "update=DELETE%20WHERE%20%7B%7D")),
+              ParsedRequestIs("/", "bar", {{"access-token", {"bar"}}},
+                              Update{"DELETE WHERE {}"}));
   EXPECT_THAT(parse(makePostRequest(
                   "/", URLENCODED,
-                  "query=SELECT%20%2A%20WHERE%20%7B%7D&access-token=foo")),
-              ParsedRequestIs("/", "foo", {{"access-token", {"foo"}}},
+                  "query=SELECT%20%2A%20WHERE%20%7B%7D&access-token=baz")),
+              ParsedRequestIs("/", "baz", {{"access-token", {"baz"}}},
                               Query{"SELECT * WHERE {}"}));
   EXPECT_THAT(
-      parse(makePostRequest("/?access-token=foo", UPDATE, "DELETE * WHERE {}")),
+      parse(makePostRequest("/?access-token=foo", UPDATE, "DELETE WHERE {}")),
       ParsedRequestIs("/", "foo", {{"access-token", {"foo"}}},
-                      Update{"DELETE * WHERE {}"}));
+                      Update{"DELETE WHERE {}"}));
+  EXPECT_THAT(
+      parse(makePostRequest("/?access-token=foo", QUERY, "SELECT * WHERE {}")),
+      ParsedRequestIs("/", "foo", {{"access-token", {"foo"}}},
+                      Update{"SELECT * WHERE {}"}));
 }
 
 TEST(ServerTest, determineResultPinning) {
@@ -281,28 +300,15 @@ TEST(ServerTest, extractAccessToken) {
     auto parsedUrl = parseRequestTarget(request.target());
     return Server::extractAccessToken(request, parsedUrl.parameters_);
   };
-  // TODO<qup42>: replace once #1668 is merged
-  auto makeRequest =
-      [](const http::verb method = http::verb::get,
-         const std::string& target = "/",
-         const ad_utility::HashMap<http::field, std::string>& headers = {},
-         const std::optional<std::string>& body = std::nullopt) {
-        // version 11 stands for HTTP/1.1
-        auto req = http::request<http::string_body>{method, target, 11};
-        for (const auto& [key, value] : headers) {
-          req.set(key, value);
-        }
-        if (body.has_value()) {
-          req.body() = body.value();
-          req.prepare_payload();
-        }
-        return req;
-      };
   EXPECT_THAT(extract(makeGetRequest("/")), testing::Eq(std::nullopt));
   EXPECT_THAT(extract(makeGetRequest("/?access-token=foo")),
               testing::Optional(testing::Eq("foo")));
   EXPECT_THAT(
       extract(makeRequest(http::verb::get, "/",
+                          {{http::field::authorization, "Bearer foo"}})),
+      testing::Optional(testing::Eq("foo")));
+  EXPECT_THAT(
+      extract(makeRequest(http::verb::get, "/?access-token=foo",
                           {{http::field::authorization, "Bearer foo"}})),
       testing::Optional(testing::Eq("foo")));
   AD_EXPECT_THROW_WITH_MESSAGE(
