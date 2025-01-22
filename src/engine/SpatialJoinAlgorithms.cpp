@@ -271,7 +271,7 @@ Result SpatialJoinAlgorithms::S2PointPolylineAlgorithm() {
   IdTable result{numColumns, qec_->getAllocator()};
 
   // Helper function to convert `GeoPoint` to `S2Point`
-  S2ShapeIndex<size_t> s2index;
+  MutableS2ShapeIndex s2index;
 
   bool indexOfRight = true;
   auto indexTable = indexOfRight ? idTableRight : idTableLeft;
@@ -280,12 +280,16 @@ Result SpatialJoinAlgorithms::S2PointPolylineAlgorithm() {
   ad_utility::HashMap<size_t, size_t> shapeIndexToRow;
 
   // Populate the index
+  std::vector<std::pair<S2Polyline, size_t>> lines;
   for (size_t row = 0; row < indexTable->size(); row++) {
     auto p = getPolyline(indexTable, row, indexJoinCol);
     if (p.has_value()) {
-      shapeIndexToRow[shapeIndexToRow.size()] = row;
-      s2index.Add(p.value());
+      lines.emplace_back(std::move(p.value()), row);
     }
+  }
+  for (auto& [line, row] : lines) {
+    shapeIndexToRow[shapeIndexToRow.size()] = row;
+    s2index.Add(std::make_unique<S2Polyline::Shape>(&line));
   }
 
   // Performs a nearest neighbor search on the index and returns the closest
@@ -328,7 +332,7 @@ Result SpatialJoinAlgorithms::S2PointPolylineAlgorithm() {
       // criteria
       auto indexRow = shapeIndexToRow.at(neighbor.shape_id());
       auto dist = S2Earth::ToKm(neighbor.distance());
-      deduplicatedSet.insert(indexRow, dist);
+      deduplicatedSet[indexRow] = dist;
     }
     for (auto [indexRow, dist] : deduplicatedSet) {
       auto rowLeft = indexOfRight ? searchRow : indexRow;
