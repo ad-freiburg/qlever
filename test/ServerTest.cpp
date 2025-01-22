@@ -314,7 +314,7 @@ TEST(ServerTest, extractAccessToken) {
       extract(makeRequest(http::verb::get, "/",
                           {{http::field::authorization, "foo"}})),
       testing::HasSubstr(
-          "Authorization header must start with \"Bearer \". Got: \"foo\"."));
+          "Authorization header doesn't start with \"Bearer \"."));
   EXPECT_THAT(extract(makePostRequest("/", "text/turtle", "")),
               testing::Eq(std::nullopt));
   EXPECT_THAT(extract(makePostRequest("/?access-token=foo", "text/turtle", "")),
@@ -327,5 +327,5 @@ TEST(ServerTest, extractAccessToken) {
       extract(makeRequest(http::verb::post, "/?access-token=bar",
                           {{http::field::authorization, "foo"}})),
       testing::HasSubstr(
-          "Authorization header must start with \"Bearer \". Got: \"foo\"."));
+          "Authorization header doesn't start with \"Bearer \"."));
 }

@@ -172,9 +172,8 @@ std::optional<std::string> Server::extractAccessToken(
     string_view authorization = request[http::field::authorization];
     const std::string prefix = "Bearer ";
     if (!authorization.starts_with(prefix)) {
-      throw std::runtime_error(absl::StrCat(
-          "Authorization header must start with \"Bearer \". Got: \"",
-          authorization, "\"."));
+      throw std::runtime_error(
+          absl::StrCat("Authorization header doesn't start with \"Bearer \"."));
     }
     authorization.remove_prefix(prefix.length());
     return std::string(authorization);
@@ -1128,8 +1127,7 @@ bool Server::checkAccessToken(
   if (!accessToken) {
     return false;
   }
-  auto accessTokenProvidedMsg = absl::StrCat(
-      "Access token \"access-token=", accessToken.value(), "\" provided");
+  auto accessTokenProvidedMsg = absl::StrCat("Access token was provided");
   auto requestIgnoredMsg = ", request is ignored";
   if (accessToken_.empty()) {
     throw std::runtime_error(absl::StrCat(
@@ -1138,7 +1136,7 @@ bool Server::checkAccessToken(
   } else if (!ad_utility::constantTimeEquals(accessToken.value(),
                                              accessToken_)) {
     throw std::runtime_error(absl::StrCat(
-        accessTokenProvidedMsg, " but not correct", requestIgnoredMsg));
+        accessTokenProvidedMsg, " but it was invalid", requestIgnoredMsg));
   } else {
     LOG(DEBUG) << accessTokenProvidedMsg << " and correct" << std::endl;
     return true;
