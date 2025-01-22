@@ -329,7 +329,7 @@ TEST(ServerTest, createResponseMetadata) {
   EXPECT_THAT(metadata["status"], testing::Eq("OK"));
   EXPECT_THAT(metadata["warnings"],
               testing::Eq(std::vector<std::string>{
-                  "SPARQL 1.1 Update for QLever is highly experimental."}));
+                  "SPARQL 1.1 Update for QLever is experimental."}));
   EXPECT_THAT(metadata["delta-triples"], testing::Eq(deltaTriplesJson));
   EXPECT_THAT(metadata["located-triples"], testing::Eq(locatedTriplesJson));
 }
