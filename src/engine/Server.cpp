@@ -980,6 +980,9 @@ Awaitable<void> Server::processQueryOrUpdate(
     TimeLimit timeLimit) {
   using namespace ad_utility::httpUtils;
 
+  static_assert(std::is_same_v<Operation, Query> ||
+                std::is_same_v<Operation, Update>);
+
   http::status responseStatus = http::status::ok;
 
   // Put the whole query processing in a try-catch block. If any exception
@@ -995,11 +998,10 @@ Awaitable<void> Server::processQueryOrUpdate(
     if constexpr (std::is_same_v<Operation, Query>) {
       co_await processQuery(params, operation, requestTimer, request, send,
                             timeLimit);
-    } else if constexpr (std::is_same_v<Operation, Update>) {
+    } else {
+      static_assert(std::is_same_v<Operation, Update>);
       co_await processUpdate(params, operation, requestTimer, request, send,
                              timeLimit);
-    } else {
-      AD_FAIL();
     }
   } catch (const ParseException& e) {
     responseStatus = http::status::bad_request;
@@ -1042,10 +1044,9 @@ Awaitable<void> Server::processQueryOrUpdate(
     std::string operationStr = [&operation] {
       if constexpr (std::is_same_v<Operation, Query>) {
         return operation.query_;
-      } else if constexpr (std::is_same_v<Operation, Update>) {
-        return operation.update_;
       } else {
-        AD_FAIL();
+        static_assert(std::is_same_v<Operation, Update>);
+        return operation.update_;
       }
     }();
     auto errorResponseJson = composeErrorResponseJson(
