@@ -1303,7 +1303,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
         ColumnNumWithType<float>{toUnderlying(TimeForMergeGallopingJoin)});
 
     // Calculate, how much of a speedup the hash join algorithm has in
-    // comparison to the merge/galloping join algrithm.
+    // comparison to the merge/galloping join algorithm.
     calculateSpeedupOfColumn(
         table, {toUnderlying(JoinAlgorithmSpeedup)},
         {toUnderlying(TimeForHashJoin)},
