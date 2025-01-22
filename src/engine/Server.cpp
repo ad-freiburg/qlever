@@ -19,6 +19,7 @@
 #include "util/MemorySize/MemorySize.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/ParseableDuration.h"
+#include "util/TypeIdentity.h"
 #include "util/http/HttpUtils.h"
 #include "util/http/websocket/MessageSender.h"
 
@@ -168,6 +169,7 @@ void Server::run(const string& indexBaseName, bool useText, bool usePatterns,
 // _____________________________________________________________________________
 ad_utility::url_parser::ParsedRequest Server::parseHttpRequest(
     const ad_utility::httpUtils::HttpRequest auto& request) {
+  using namespace ad_utility::use_type_identity;
   // For an HTTP request, `request.target()` yields the HTTP Request-URI.
   // This is a concatenation of the URL path and the query strings.
   auto parsedUrl = ad_utility::url_parser::parseRequestTarget(request.target());
@@ -177,16 +179,18 @@ ad_utility::url_parser::ParsedRequest Server::parseHttpRequest(
   // Some valid requests (e.g. QLever's custom commands like retrieving index
   // statistics) don't have a query. So an empty operation is not necessarily an
   // error.
-  auto setOperationIfSpecifiedInParams =
-      [&parsedRequest]<typename Operation>(string_view paramName) {
-        auto operation = ad_utility::url_parser::getParameterCheckAtMostOnce(
-            parsedRequest.parameters_, paramName);
-        if (operation.has_value()) {
-          parsedRequest.operation_ = Operation{operation.value(), {}};
-          parsedRequest.parameters_.erase(paramName);
-        }
-      };
+  auto setOperationIfSpecifiedInParams = [&parsedRequest]<typename Operation>(
+                                             TI<Operation>,
+                                             string_view paramName) {
+    auto operation = ad_utility::url_parser::getParameterCheckAtMostOnce(
+        parsedRequest.parameters_, paramName);
+    if (operation.has_value()) {
+      parsedRequest.operation_ = Operation{operation.value(), {}};
+      parsedRequest.parameters_.erase(paramName);
+    }
+  };
   auto addToDatasetClausesIfOperationIs = [&parsedRequest]<typename Operation>(
+                                              TI<Operation>,
                                               const std::string& key,
                                               bool isNamed) {
     if (Operation* op = std::get_if<Operation>(&parsedRequest.operation_)) {
@@ -196,18 +200,14 @@ ad_utility::url_parser::ParsedRequest Server::parseHttpRequest(
     }
   };
   auto addDatasetClauses = [&addToDatasetClausesIfOperationIs] {
-    addToDatasetClausesIfOperationIs.template operator()<Query>(
-        "default-graph-uri", false);
-    addToDatasetClausesIfOperationIs.template operator()<Query>(
-        "named-graph-uri", true);
-    addToDatasetClausesIfOperationIs.template operator()<Update>(
-        "using-graph-uri", false);
-    addToDatasetClausesIfOperationIs.template operator()<Update>(
-        "using-named-graph-uri", true);
+    addToDatasetClausesIfOperationIs(ti<Query>, "default-graph-uri", false);
+    addToDatasetClausesIfOperationIs(ti<Query>, "named-graph-uri", true);
+    addToDatasetClausesIfOperationIs(ti<Update>, "using-graph-uri", false);
+    addToDatasetClausesIfOperationIs(ti<Update>, "using-named-graph-uri", true);
   };
 
   if (request.method() == http::verb::get) {
-    setOperationIfSpecifiedInParams.template operator()<Query>("query");
+    setOperationIfSpecifiedInParams(ti<Query>, "query");
     addDatasetClauses();
 
     if (parsedRequest.parameters_.contains("update")) {
@@ -277,8 +277,8 @@ ad_utility::url_parser::ParsedRequest Server::parseHttpRequest(
         throw std::runtime_error(
             R"(Request must only contain one of "query" and "update".)");
       }
-      setOperationIfSpecifiedInParams.template operator()<Query>("query");
-      setOperationIfSpecifiedInParams.template operator()<Update>("update");
+      setOperationIfSpecifiedInParams(ti<Query>, "query");
+      setOperationIfSpecifiedInParams(ti<Update>, "update");
       addDatasetClauses();
       return parsedRequest;
     }
