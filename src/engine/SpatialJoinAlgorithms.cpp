@@ -50,13 +50,16 @@ std::optional<S2Polyline> SpatialJoinAlgorithms::getPolyline(
     return std::nullopt;
   }
   auto res = ctre::range<
-      "(?<lat>[0-9]+\\.[0-9]+),(?<lng>[0-9]+\\.[0-9]+),(?<lng>[0-9]+\\.[0-9]+"
+      "(?<lng>[0-9]+\\.[0-9]+),(?<lng>[0-9]+\\.[0-9]+),(?<lat>[0-9]+\\.[0-9]+"
       ")">(str.value().first);
   std::vector<S2LatLng> points;
   for (const auto& match : res) {
     auto lat = std::strtod(match.get<"lat">().data(), nullptr);
     auto lng = std::strtod(match.get<"lng">().data(), nullptr);
     points.push_back(S2LatLng::FromDegrees(lat, lng));
+  }
+  if (points.empty()) {
+    return std::nullopt;
   }
   return S2Polyline{points};
 };

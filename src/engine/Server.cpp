@@ -1075,7 +1075,9 @@ Server::PlannedQuery Server::parseAndPlan(
     const std::string& query, const vector<DatasetClause>& queryDatasets,
     QueryExecutionContext& qec, SharedCancellationHandle handle,
     TimeLimit timeLimit) const {
+  LOG(INFO) << "begin parsing" << std::endl;
   auto pq = SparqlParser::parseQuery(query);
+  LOG(INFO) << "done parsing" << std::endl;
   handle->throwIfCancelled();
   // SPARQL Protocol 2.1.4 specifies that the dataset from the query
   // parameters overrides the dataset from the query itself.
@@ -1086,6 +1088,7 @@ Server::PlannedQuery Server::parseAndPlan(
   QueryPlanner qp(&qec, handle);
   qp.setEnablePatternTrick(enablePatternTrick_);
   auto qet = qp.createExecutionTree(pq);
+  LOG(INFO) << "done planniing" << std::endl;
   handle->throwIfCancelled();
   PlannedQuery plannedQuery{std::move(pq), std::move(qet)};
 
