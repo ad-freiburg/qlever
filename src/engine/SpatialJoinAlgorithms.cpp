@@ -292,10 +292,13 @@ Result SpatialJoinAlgorithms::S2PointPolylineAlgorithm() {
   }
   spatialJoin_.value()->runtimeInfo().addDetail("time for reading polylines",
                                                 t.msecs().count());
+  t.reset();
   for (auto& [line, row] : lines) {
     shapeIndexToRow[shapeIndexToRow.size()] = row;
     s2index.Add(std::make_unique<S2Polyline::Shape>(&line));
   }
+  spatialJoin_.value()->runtimeInfo().addDetail("time for s2 index building",
+                                                t.msecs().count());
 
   // Performs a nearest neighbor search on the index and returns the closest
   // points that satisfy the criteria given by `maxDist_` and `maxResults_`.
@@ -316,6 +319,7 @@ Result SpatialJoinAlgorithms::S2PointPolylineAlgorithm() {
   auto searchTable = indexOfRight ? idTableLeft : idTableRight;
   auto searchJoinCol = indexOfRight ? leftJoinCol : rightJoinCol;
 
+  t.reset();
   // Use the index to lookup the points of the other table
   for (size_t searchRow = 0; searchRow < searchTable->size(); searchRow++) {
     auto p = getPoint(searchTable, searchRow, searchJoinCol);
