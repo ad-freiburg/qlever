@@ -313,7 +313,7 @@ class LocaleManager {
    * different steps in icu. */
   std::unique_ptr<icu::Collator> _collator[6];
   UColAttributeValue _ignorePunctuationStatus =
-      UCOL_NON_IGNORABLE;  // how to sort punctuations etc.
+      UCOL_NON_IGNORABLE;  // how to sort punctuation etc.
 
   const icu::Normalizer2* _normalizer =
       nullptr;  // actually locale-independent but useful to be placed here
