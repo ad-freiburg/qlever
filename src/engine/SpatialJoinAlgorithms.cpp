@@ -340,7 +340,9 @@ Result SpatialJoinAlgorithms::S2PointPolylineAlgorithm() {
 
     ad_utility::HashMap<size_t, double> deduplicatedSet{};
     t.cont();
-    for (const auto& neighbor : s2query.FindClosestEdges(&s2target)) {
+    auto res = s2query.FindClosestEdges(&s2target);
+    t.stop();
+    for (const auto& neighbor : res) {
       // In this loop we only receive points that already satisfy the given
       // criteria
       auto indexRow = shapeIndexToRow.at(neighbor.shape_id());
