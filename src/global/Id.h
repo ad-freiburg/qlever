@@ -12,7 +12,7 @@
 #include "util/Exception.h"
 
 using Id = ValueId;
-typedef uint16_t Score;
+using Score = float;
 
 // TODO<joka921> Make the following ID and index types strong.
 using ColumnIndex = uint64_t;

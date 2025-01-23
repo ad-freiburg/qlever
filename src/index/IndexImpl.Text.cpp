@@ -63,6 +63,7 @@ cppcoro::generator<WordsFileLine> IndexImpl::wordsInTextRecords(
 }
 
 // _____________________________________________________________________________
+
 void IndexImpl::processEntityCaseDuringInvertedListProcessing(
     const WordsFileLine& line,
     ad_utility::HashMap<Id, Score>& entitiesInContext, size_t& nofLiterals,
@@ -85,7 +86,8 @@ void IndexImpl::processEntityCaseDuringInvertedListProcessing(
 // _____________________________________________________________________________
 void IndexImpl::processWordCaseDuringInvertedListProcessing(
     const WordsFileLine& line,
-    ad_utility::HashMap<WordIndex, Score>& wordsInContext) const {
+    ad_utility::HashMap<WordIndex, Score>& wordsInContext,
+    ScoreData& scoreData) const {
   // TODO<joka921> Let the `textVocab_` return a `WordIndex` directly.
   WordVocabIndex vid;
   bool ret = textVocab_.getId(line.word_, &vid);
@@ -95,7 +97,11 @@ void IndexImpl::processWordCaseDuringInvertedListProcessing(
                << "not found in textVocab. Terminating\n";
     AD_FAIL();
   }
-  wordsInContext[wid] += line.score_;
+  if (scoreData.getScoringMetric() == TextScoringMetric::COUNT) {
+    wordsInContext[wid] += line.score_;
+  } else {
+    wordsInContext[wid] = scoreData.getScore(wid, line.contextId_);
+  }
 }
 
 // _____________________________________________________________________________
@@ -113,18 +119,25 @@ void IndexImpl::logEntityNotFound(const string& word,
 }
 
 // _____________________________________________________________________________
-void IndexImpl::addTextFromContextFile(const string& contextFile,
-                                       bool addWordsFromLiterals) {
+void IndexImpl::buildTextIndexFile(
+    const std::pair<string, string>& wordsAndDocsFile,
+    bool addWordsFromLiterals) {
   LOG(INFO) << std::endl;
   LOG(INFO) << "Adding text index ..." << std::endl;
   string indexFilename = onDiskBase_ + ".text.index";
-  // Either read words from given file or consider each literal as text record
+  // Either read words from given files or consider each literal as text record
   // or both (but at least one of them, otherwise this function is not called).
-  if (!contextFile.empty()) {
-    LOG(INFO) << "Reading words from \"" << contextFile << "\"" << std::endl;
+  if (!(wordsAndDocsFile.first.empty() && wordsAndDocsFile.second.empty())) {
+    LOG(INFO) << "Reading words from wordsfile \"" << wordsAndDocsFile.first
+              << "\""
+              << " and from docsFile \"" << wordsAndDocsFile.second << "\""
+              << std::endl;
   }
   if (addWordsFromLiterals) {
-    LOG(INFO) << (contextFile.empty() ? "C" : "Additionally c")
+    LOG(INFO) << ((wordsAndDocsFile.first.empty() &&
+                   wordsAndDocsFile.second.empty())
+                      ? "C"
+                      : "Additionally c")
               << "onsidering each literal as a text record" << std::endl;
   }
   // We have deleted the vocabulary during the index creation to save RAM, so
@@ -140,17 +153,21 @@ void IndexImpl::addTextFromContextFile(const string& contextFile,
   readConfiguration();
   vocab_.readFromFile(onDiskBase_ + VOCAB_SUFFIX);
 
-  // Build the text vocabulary (first scan over the text records).
-  LOG(INFO) << "Building text vocabulary ..." << std::endl;
-  size_t nofLines =
-      processWordsForVocabulary(contextFile, addWordsFromLiterals);
+  scoreData_ = {vocab_.getLocaleManager(), textScoringMetric_,
+                bAndKParamForTextScoring_};
 
+  // Build the text vocabulary (first scan over the text records).
+  size_t nofLines =
+      processWordsForVocabulary(wordsAndDocsFile.first, addWordsFromLiterals);
+  // Calculate the score data for the words
+  scoreData_.calculateScoreData(wordsAndDocsFile.second, addWordsFromLiterals,
+                                textVocab_, vocab_);
   // Build the half-inverted lists (second scan over the text records).
   LOG(INFO) << "Building the half-inverted index lists ..." << std::endl;
   calculateBlockBoundaries();
   TextVec v;
   v.reserve(nofLines);
-  processWordsForInvertedLists(contextFile, addWordsFromLiterals, v);
+  processWordsForInvertedLists(wordsAndDocsFile.first, addWordsFromLiterals, v);
   LOG(DEBUG) << "Sorting text index, #elements = " << v.size() << std::endl;
   stxxl::sort(begin(v), end(v), SortText(),
               memoryLimitIndexBuilding().getBytes() / 3);
@@ -175,7 +192,9 @@ void IndexImpl::buildDocsDB(const string& docsFileName) const {
     std::string_view lineView = line;
     size_t tab = lineView.find('\t');
     uint64_t contextId = 0;
+    // Get contextId from line
     std::from_chars(lineView.data(), lineView.data() + tab, contextId);
+    // Set lineView to the docText
     lineView = lineView.substr(tab + 1);
     ofs << lineView;
     while (currentContextId < contextId) {
@@ -218,7 +237,6 @@ void IndexImpl::addTextFromOnDiskIndex() {
   serializer >> textMeta_;
   textIndexFile_ = std::move(serializer).file();
   LOG(INFO) << "Registered text index: " << textMeta_.statistics() << std::endl;
-
   // Initialize the text records file aka docsDB. NOTE: The search also works
   // without this, but then there is no content to show when a text record
   // matches. This is perfectly fine when the text records come from IRIs or
@@ -288,7 +306,8 @@ void IndexImpl::processWordsForInvertedLists(const string& contextFile,
           line, entitiesInContext, nofLiterals, entityNotFoundErrorMsgCount);
     } else {
       ++nofWordPostings;
-      processWordCaseDuringInvertedListProcessing(line, wordsInContext);
+      processWordCaseDuringInvertedListProcessing(line, wordsInContext,
+                                                  scoreData_);
     }
   }
   if (entityNotFoundErrorMsgCount > 0) {
@@ -421,6 +440,7 @@ ContextListMetaData IndexImpl::writePostings(ad_utility::File& out,
   // Context lists are gap encoded, word and score lists frequency encoded.
   // TODO<joka921> these are gap encoded contextIds, maybe also create a type
   // for this.
+  // For now the scores aren't encoded since they are floats
   auto contextList = new uint64_t[meta._nofElements];
   WordIndex* wordList = new WordIndex[meta._nofElements];
   Score* scoreList = new Score[meta._nofElements];
@@ -429,24 +449,21 @@ ContextListMetaData IndexImpl::writePostings(ad_utility::File& out,
 
   WordCodeMap wordCodeMap;
   WordCodebook wordCodebook;
-  ScoreCodeMap scoreCodeMap;
-  ScoreCodebook scoreCodebook;
 
-  createCodebooks(postings, wordCodeMap, wordCodebook, scoreCodeMap,
-                  scoreCodebook);
+  createCodebooks(postings, wordCodeMap, wordCodebook);
 
   TextRecordIndex lastContext = std::get<0>(postings[0]);
   contextList[n] = lastContext.get();
   wordList[n] = wordCodeMap[std::get<1>(postings[0])];
-  scoreList[n] = scoreCodeMap[std::get<2>(postings[0])];
+  scoreList[n] = std::get<2>(postings[0]);
   ++n;
 
   for (auto it = postings.begin() + 1; it < postings.end(); ++it) {
-    uint64_t gap = std::get<0>(*it).get() - lastContext.get();
-    contextList[n] = gap;
+    uint64_t contextGap = std::get<0>(*it).get() - lastContext.get();
+    contextList[n] = contextGap;
     lastContext = std::get<0>(*it);
     wordList[n] = wordCodeMap[std::get<1>(*it)];
-    scoreList[n] = scoreCodeMap[std::get<2>(*it)];
+    scoreList[n] = std::get<2>(*it);
     ++n;
   }
 
@@ -473,8 +490,7 @@ ContextListMetaData IndexImpl::writePostings(ad_utility::File& out,
 
   // Write scores
   meta._startScorelist = currenttOffset_;
-  currenttOffset_ += writeCodebook(scoreCodebook, out);
-  bytes = writeList(scoreList, meta._nofElements, out);
+  bytes = writeUncomprList(scoreList, meta._nofElements, out);
   currenttOffset_ += bytes;
 
   meta._lastByte = currenttOffset_ - 1;
@@ -657,21 +673,28 @@ size_t IndexImpl::writeList(Numeric* data, size_t nofElements,
 }
 
 // _____________________________________________________________________________
+template <typename T>
+size_t IndexImpl::writeUncomprList(T* data, size_t nofElements,
+                                   ad_utility::File& file) const {
+  if (nofElements > 0) {
+    size_t size = sizeof(T) * nofElements;
+    size_t ret = file.write(data, size);
+    AD_CONTRACT_CHECK(size == ret);
+    return size;
+  }
+  return 0;
+}
+
+// _____________________________________________________________________________
 void IndexImpl::createCodebooks(const vector<IndexImpl::Posting>& postings,
                                 IndexImpl::WordCodeMap& wordCodemap,
-                                IndexImpl::WordCodebook& wordCodebook,
-                                IndexImpl::ScoreCodeMap& scoreCodemap,
-                                IndexImpl::ScoreCodebook& scoreCodebook) const {
-  // There should be a more efficient way to do this (Felix Meisen)
+                                IndexImpl::WordCodebook& wordCodebook) const {
   ad_utility::HashMap<WordIndex, size_t> wfMap;
-  ad_utility::HashMap<Score, size_t> sfMap;
   for (const auto& p : postings) {
     wfMap[std::get<1>(p)] = 0;
-    sfMap[std::get<2>(p)] = 0;
   }
   for (const auto& p : postings) {
     ++wfMap[std::get<1>(p)];
-    ++sfMap[std::get<2>(p)];
   }
   vector<std::pair<WordIndex, size_t>> wfVec;
   wfVec.resize(wfMap.size());
@@ -681,28 +704,11 @@ void IndexImpl::createCodebooks(const vector<IndexImpl::Posting>& postings,
     wfVec[i].second = it->second;
     ++i;
   }
-  vector<std::pair<Score, size_t>> sfVec;
-  sfVec.resize(sfMap.size());
-  i = 0;
-  for (auto it = sfMap.begin(); it != sfMap.end(); ++it) {
-    sfVec[i].first = it->first;
-    sfVec[i].second = it->second;
-    ++i;
-  }
   std::sort(wfVec.begin(), wfVec.end(),
             [](const auto& a, const auto& b) { return a.second > b.second; });
-  std::sort(
-      sfVec.begin(), sfVec.end(),
-      [](const std::pair<Score, size_t>& a, const std::pair<Score, size_t>& b) {
-        return a.second > b.second;
-      });
   for (size_t j = 0; j < wfVec.size(); ++j) {
     wordCodebook.push_back(wfVec[j].first);
     wordCodemap[wfVec[j].first] = j;
-  }
-  for (size_t j = 0; j < sfVec.size(); ++j) {
-    scoreCodebook.push_back(sfVec[j].first);
-    scoreCodemap[sfVec[j].first] = static_cast<Score>(j);
   }
 }
 
@@ -748,10 +754,10 @@ IdTable IndexImpl::readWordCl(
         return Id::makeFromWordVocabIndex(WordVocabIndex::make(id));
       });
   std::ranges::transform(
-      readFreqComprList<Score>(tbmd._cl._nofElements, tbmd._cl._startScorelist,
-                               static_cast<size_t>(tbmd._cl._lastByte + 1 -
-                                                   tbmd._cl._startScorelist)),
-      idTable.getColumn(2).begin(), &Id::makeFromInt);
+      readUncomprList<Score>(tbmd._cl._nofElements, tbmd._cl._startScorelist),
+      idTable.getColumn(2).begin(), [](float score) {
+        return Id::makeFromDouble(static_cast<double>(score));
+      });
   return idTable;
 }
 
@@ -775,12 +781,12 @@ IdTable IndexImpl::readWordEntityCl(
                                                 tbmd._entityCl._startWordlist),
                             &Id::fromBits),
       idTable.getColumn(1).begin());
-  ql::ranges::transform(
-      readFreqComprList<Score>(
-          tbmd._entityCl._nofElements, tbmd._entityCl._startScorelist,
-          static_cast<size_t>(tbmd._entityCl._lastByte + 1 -
-                              tbmd._entityCl._startScorelist)),
-      idTable.getColumn(2).begin(), &Id::makeFromInt);
+  std::ranges::transform(
+      readUncomprList<Score>(tbmd._entityCl._nofElements,
+                             tbmd._entityCl._startScorelist),
+      idTable.getColumn(2).begin(), [](float score) {
+        return Id::makeFromDouble(static_cast<double>(score));
+      });
   return idTable;
 }
 
@@ -905,6 +911,18 @@ vector<T> IndexImpl::readFreqComprList(size_t nofElements, off_t from,
 }
 
 // _____________________________________________________________________________
+template <typename T>
+vector<T> IndexImpl::readUncomprList(size_t nofElements, off_t from) const {
+  LOG(DEBUG) << "Reading uncompressed list from disk...\n";
+  LOG(TRACE) << "NofElements: " << nofElements << ", from: " << from;
+  T* list = new T[nofElements];
+  textIndexFile_.read(list, sizeof(T) * nofElements, from);
+  vector<T> output(list, list + nofElements);
+  delete[] list;
+  return output;
+}
+
+// _____________________________________________________________________________
 size_t IndexImpl::getIndexOfBestSuitedElTerm(
     const vector<string>& terms) const {
   // It is beneficial to choose a term where no filtering by regular word id
@@ -1011,4 +1029,23 @@ auto IndexImpl::getTextBlockMetadataForWordOrPrefix(const std::string& word)
                          !(tbmd._firstWordId == idRange.first().get() &&
                            tbmd._lastWordId == idRange.last().get());
   return TextBlockMetadataAndWordInfo{tbmd, hasToBeFiltered, idRange};
+}
+
+// _____________________________________________________________________________
+void IndexImpl::setScoringMetricsUsedInSettings(
+    TextScoringMetric scoringMetric) {
+  configurationJson_["text-scoring-metric"] = scoringMetric;
+  writeConfiguration();
+}
+
+// _____________________________________________________________________________
+void IndexImpl::setBM25ParametersInSettings(float b, float k) {
+  if (0 <= b && b <= 1 && 0 <= k) {
+    configurationJson_["b-and-k-parameter-for-text-scoring"] =
+        std::make_pair(b, k);
+  } else {
+    configurationJson_["b-and-k-parameter-for-text-scoring"] =
+        std::make_pair(0.75, 1.75);
+  }
+  writeConfiguration();
 }
