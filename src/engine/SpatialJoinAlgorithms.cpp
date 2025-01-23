@@ -341,9 +341,8 @@ Result SpatialJoinAlgorithms::S2PointPolylineAlgorithm() {
     t.cont();
     auto res = s2query.FindClosestEdges(&s2target);
     for (size_t i = 0; i < 1000; ++i) {
-      p.value() = GeoPoint{p.value().getLat() + 0.000001,
-                           p.value().getLng() + 0.0000001};
-      auto s2target = S2ClosestEdgeQuery::PointTarget{toS2Point(p.value())};
+      p.value() = GeoPoint{p.value().getLat() + 0.1, p.value().getLng() + 0.1};
+      s2target = S2ClosestEdgeQuery::PointTarget{toS2Point(p.value())};
       auto res3 = s2query.FindClosestEdges(&s2target);
       ql::ranges::move(res3, std::back_inserter(res));
     }
