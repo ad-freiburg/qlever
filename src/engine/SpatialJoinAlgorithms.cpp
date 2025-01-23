@@ -283,7 +283,7 @@ Result SpatialJoinAlgorithms::S2PointPolylineAlgorithm() {
 
   // Populate the index
   std::vector<std::pair<S2Polyline, size_t>> lines;
-  ad_utility::Timer t { ad_utility::Timer::Started }
+  ad_utility::Timer t{ad_utility::Timer::Started};
   for (size_t row = 0; row < indexTable->size(); row++) {
     auto p = getPolyline(indexTable, row, indexJoinCol);
     if (p.has_value()) {
