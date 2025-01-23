@@ -284,7 +284,7 @@ Result SpatialJoinAlgorithms::S2PointPolylineAlgorithm() {
   // Populate the index
   std::vector<std::pair<S2Polyline, size_t>> lines;
   ad_utility::Timer t{ad_utility::Timer::Started};
-  ad_utility::Timer t{ad_utility::Timer::Started};
+  ad_utility::Timer t2{ad_utility::Timer::Started};
 
   for (size_t row = 0; row < indexTable->size(); row++) {
     auto p = getPolyline(indexTable, row, indexJoinCol);
@@ -322,8 +322,10 @@ Result SpatialJoinAlgorithms::S2PointPolylineAlgorithm() {
   auto searchJoinCol = indexOfRight ? leftJoinCol : rightJoinCol;
 
   t.reset();
+  t2.reset();
   // Use the index to lookup the points of the other table
   for (size_t searchRow = 0; searchRow < searchTable->size(); searchRow++) {
+    t.cont();
     auto p = getPoint(searchTable, searchRow, searchJoinCol);
     if (!p.has_value()) {
       continue;
@@ -345,13 +347,20 @@ Result SpatialJoinAlgorithms::S2PointPolylineAlgorithm() {
       auto dist = S2Earth::ToKm(neighbor.distance());
       deduplicatedSet[indexRow] = dist;
     }
+    t.stop();
+    t2.cont();
     for (auto [indexRow, dist] : deduplicatedSet) {
       auto rowLeft = indexOfRight ? searchRow : indexRow;
       auto rowRight = indexOfRight ? indexRow : searchRow;
       addResultTableEntry(&result, idTableLeft, idTableRight, rowLeft, rowRight,
                           Id::makeFromDouble(dist));
     }
+    t2.stop();
   }
+  spatialJoin_.value()->runtimeInfo().addDetail("time for s2 queries",
+                                                t.msecs().count());
+  spatialJoin_.value()->runtimeInfo().addDetail("time for result writing",
+                                                t2.msecs().count());
 
   return Result(std::move(result), std::vector<ColumnIndex>{},
                 Result::getMergedLocalVocab(*resultLeft, *resultRight));
