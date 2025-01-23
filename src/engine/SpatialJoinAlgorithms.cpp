@@ -315,6 +315,7 @@ Result SpatialJoinAlgorithms::S2PointPolylineAlgorithm() {
   };
 
   t.reset();
+  t.cont();
   {
     auto s2target = S2ClosestEdgeQuery::PointTarget{toS2Point(GeoPoint(0, 0))};
     auto dummyRes = s2query.FindClosestEdges(&s2target);
