@@ -325,7 +325,6 @@ Result SpatialJoinAlgorithms::S2PointPolylineAlgorithm() {
   t2.reset();
   // Use the index to lookup the points of the other table
   for (size_t searchRow = 0; searchRow < searchTable->size(); searchRow++) {
-    t.cont();
     auto p = getPoint(searchTable, searchRow, searchJoinCol);
     if (!p.has_value()) {
       continue;
@@ -340,6 +339,7 @@ Result SpatialJoinAlgorithms::S2PointPolylineAlgorithm() {
     auto s2target = S2ClosestEdgeQuery::PointTarget{toS2Point(p.value())};
 
     ad_utility::HashMap<size_t, double> deduplicatedSet{};
+    t.cont();
     for (const auto& neighbor : s2query.FindClosestEdges(&s2target)) {
       // In this loop we only receive points that already satisfy the given
       // criteria
