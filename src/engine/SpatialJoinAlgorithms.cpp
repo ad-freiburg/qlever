@@ -57,6 +57,7 @@ std::optional<S2Polyline> SpatialJoinAlgorithms::getPolyline(
   */
   const auto& s = str.value().first;
   if (!s.starts_with("LINESTRING")) {
+    LOG(INFO) << "Not a linestring " << s << std::endl;
     return std::nullopt;
   }
   auto res = ctre::range<
