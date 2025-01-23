@@ -491,6 +491,9 @@ void specialOptionalJoin(
       elFromFirstNotFoundAction(it);
     }
     it1 = next1;
+    if (it1 == end1) {
+      break;
+    }
 
     checkCancellation();
 
