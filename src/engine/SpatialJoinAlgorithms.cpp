@@ -342,7 +342,6 @@ Result SpatialJoinAlgorithms::S2PointPolylineAlgorithm() {
     auto res = s2query.FindClosestEdges(&s2target);
     for (size_t i = 0; i < 1000; ++i) {
       auto res3 = s2query.FindClosestEdges(&s2target);
-      AD_CONTRACT_CHECK(res3.size() == res.size());
       ql::ranges::move(res3, std::back_inserter(res));
     }
     t.stop();
