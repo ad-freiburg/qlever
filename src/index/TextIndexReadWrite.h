@@ -277,7 +277,7 @@ class FrequencyEncode {
 
   void writeToFile(ad_utility::File& out, off_t& currentOffset);
 
-  const std::vector<size_t>& getEncodedVector() { return encodedVector_; }
+  const std::vector<size_t>& getEncodedVector() const { return encodedVector_; }
   const CodeMap& getCodeMap() const { return codeMap_; }
   const CodeBook& getCodeBook() const { return codeBook_; }
 
