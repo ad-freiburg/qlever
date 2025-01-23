@@ -255,13 +255,14 @@ CartesianProductJoin::calculateSubResults(bool requestLaziness) {
   auto children = childView();
   AD_CORRECTNESS_CHECK(!ql::ranges::empty(children));
   // Get all child results (possibly with limit, see above).
-  for (Operation& child : children) {
-    if (limitIfPresent.has_value() && child.supportsLimit()) {
-      child.setLimit(limitIfPresent.value());
+  for (std::shared_ptr<QueryExecutionTree>& childTree : children_) {
+    if (limitIfPresent.has_value() && childTree->supportsLimit()) {
+      childTree->setLimit(limitIfPresent.value());
     }
+    auto& child = *childTree->getRootOperation();
     // To preserve order of the columns we can only consume the first child
     // lazily. In the future this restriction may be lifted by permutating the
-    // columns afterwards.
+    // columns afterward.
     bool isLast = &child == &children.back();
     bool requestLazy = requestLaziness && isLast;
     auto result = child.getResult(
