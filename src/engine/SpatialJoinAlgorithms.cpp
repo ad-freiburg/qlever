@@ -48,9 +48,20 @@ std::optional<S2Polyline> SpatialJoinAlgorithms::getPolyline(
   if (!str.has_value()) {
     return std::nullopt;
   }
+  // This is the mode for the original BMW data...
   auto res = ctre::range<
-      "(?<lng>[0-9]+\\.[0-9]+),(?<lng>[0-9]+\\.[0-9]+),(?<lat>[0-9]+\\.[0-9]+"
+      "(?<lng>[0-9]+\\.[0-9]+),(?<lat>[0-9]+\\.[0-9]+),([0-9]+\\.[0-9]+"
       ")">(str.value().first);
+  // This is for "official" LINESTRINGS.
+  /*
+  const auto& s = str.value().first;
+  if (!s.starts_with("LINESTRING")) {
+    return std::nullopt;
+  }
+  auto res = ctre::range<
+      "(?<lng>[0-9]+\\.[0-9]+) (?<lat>[0-9]+\\.[0-9]+"
+      ")">(str.value().first);
+  */
   std::vector<S2LatLng> points;
   for (const auto& match : res) {
     auto lat = std::strtod(match.get<"lat">().data(), nullptr);
@@ -316,13 +327,6 @@ Result SpatialJoinAlgorithms::S2PointPolylineAlgorithm() {
 
   t.reset();
   t.cont();
-  {
-    auto s2target = S2ClosestEdgeQuery::PointTarget{toS2Point(GeoPoint(0, 0))};
-    auto dummyRes = s2query.FindClosestEdges(&s2target);
-    LOG(INFO) << "dummyRes " << dummyRes.size() << std::endl;
-  }
-  spatialJoin_.value()->runtimeInfo().addDetail("time for dummy query",
-                                                t.msecs().count());
 
   if (maxResults.has_value()) {
     AD_FAIL();
@@ -376,10 +380,12 @@ Result SpatialJoinAlgorithms::S2PointPolylineAlgorithm() {
     }
     t2.stop();
   }
+  /*
   spatialJoin_.value()->runtimeInfo().addDetail("time for s2 queries",
                                                 t.msecs().count());
   spatialJoin_.value()->runtimeInfo().addDetail("time for result writing",
                                                 t2.msecs().count());
+                                                */
 
   return Result(std::move(result), std::vector<ColumnIndex>{},
                 Result::getMergedLocalVocab(*resultLeft, *resultRight));
