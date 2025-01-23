@@ -52,9 +52,9 @@ static auto isTripleInSpecification =
       if (result == M::MustCheckNextElement) {
         result = checkElement(scanSpec.col2Id(), triple.col2Id_);
       }
-      // The case `result == M::MustCheckNextElement` handles the unlikely case
-      // that there only is a single triple in the block, which is scanned for
-      // explicitly.
+      // The case `result == M::MustCheckNextElement` can happen in the unlikely
+      // case that there only is a single triple in the block, which is scanned
+      // for explicitly.
       return result != M::Mismatch;
     };
 
