@@ -14,7 +14,6 @@
 
 #include <cmath>
 
-#include "../../cmake-build-clang-16-relwithdeb-asan/_deps/s2-src/src/s2/s2polyline.h"
 #include "ExportQueryExecutionTrees.h"
 #include "engine/SpatialJoin.h"
 #include "util/GeoSparqlHelpers.h"
