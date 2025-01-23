@@ -12,87 +12,158 @@
 #include "util/Simple8bCode.h"
 #include "util/TransparentFunctors.h"
 
-namespace textIndexReadWrite {
-/// THIS METHOD HAS BEEN MODIFIED
-/// It basically tries to mimic the old function but with the new classes.
-ContextListMetaData writePostings(ad_utility::File& out,
-                                  const vector<Posting>& postings,
-                                  bool skipWordlistIfAllTheSame,
-                                  off_t& currentOffset);
+namespace {
 
-/// NOTHING CHANGED
-template <typename T>
-size_t writeCodebook(const vector<T>& codebook, ad_utility::File& file);
-
-/// THIS METHOD HAS BEEN MODIFIED
-/// The only difference is that it takes in a span and not an array.
-//! Writes a list of elements (have to be able to be cast to unit64_t)
-//! to file.
-//! Returns the number of bytes written.
-template <typename Numeric>
-size_t writeList(std::span<const Numeric> data, ad_utility::File& file);
-
-/// THIS METHOD HAS BEEN ADDED
-/// This is just a helper function to remove the code duplication seen in the
-/// deleted lines 457,458 and 467,468 and 474,475 of IndexImpl.Text.cpp
-template <typename T>
-void writeVectorAndMoveOffset(std::span<const T> vectorToWrite,
-                              ad_utility::File& file, off_t& currentOffset);
-
-/// THIS METHOD HAS BEEN MODIFIED
-/// It's hard to explain what has been changed since the original method was
-/// all over the place and confusing. First of all I changed the way the
-/// frequency encoded result gets decoded. Before it was done in the result
-/// vector which was of type T which lead to complicated handling of Ids.
-/// To see this look at the deleted lines 867, 888-896 of IndexImpl.Text.cpp
-/// Also an ongoing confusion is the naming of some variables since there
-/// has to happen two decodings thus we first have on variable each that can
-/// be named encoded.
-/// I tried to also template this function in a way to surpass the inconsistency
-/// between the datatypes written to the file and the datatypes we want to get
-/// out. This problem also stems from the fact that Posting is somewhat
-/// ambiguous since the WordIndex in a posting can refer to an entityId so a
-/// VocabIndex or a word so a WordVocabIndex.
-// Read a freqComprList from the textIndexFile. The From specifies the type
-// that was used to create the codebook in the writing step and the To
-// specifies the type to cast that codebook values to. This is done with a
-// static cast if no lambda function to cast is given.
-template <typename To, typename From,
-          typename Transformer = decltype(ad_utility::staticCast<To>)>
-vector<To> readFreqComprList(size_t nofElements, off_t from, size_t nofBytes,
+// This function contains the actual frequency compressed list reading and does
+// the following steps:
+// - Read codebook size
+// - Read codebook
+// - return the read codebook through reference
+// - Read list from disk which is simple8b and frequency encoded
+// - simple8b decode the list
+// - return the still frequency encoded vector through reference
+template <typename From>
+void readFreqComprListHelper(size_t nofElements, off_t from, size_t nofBytes,
                              const ad_utility::File& textIndexFile,
-                             Transformer transformer = {}) {
+                             vector<uint64_t>& frequencyEncodedVector,
+                             std::vector<From>& codebook) {
   AD_CONTRACT_CHECK(nofBytes > 0);
   LOG(DEBUG) << "Reading frequency-encoded list from disk...\n";
   LOG(TRACE) << "NofElements: " << nofElements << ", from: " << from
              << ", nofBytes: " << nofBytes << '\n';
+
+  // Read codebook size and advance pointer (current)
   size_t nofCodebookBytes;
-  vector<uint64_t> frequencyEncodedResult;
-  frequencyEncodedResult.resize(nofElements + 250);
   off_t current = from;
   size_t ret = textIndexFile.read(&nofCodebookBytes, sizeof(size_t), current);
   LOG(TRACE) << "Nof Codebook Bytes: " << nofCodebookBytes << '\n';
   AD_CONTRACT_CHECK(sizeof(size_t) == ret);
   current += ret;
-  std::vector<From> codebook;
+
+  // Set correct size of codebook, read codebook, advance pointer (current)
   codebook.resize(nofCodebookBytes / sizeof(From));
   ret = textIndexFile.read(codebook.data(), nofCodebookBytes, current);
-  current += ret;
   AD_CONTRACT_CHECK(ret == size_t(nofCodebookBytes));
+  current += ret;
+
+  // Create vector that is simple8b and frequency encoded, read encoded vector
+  // from file, advance pointer (current)
   std::vector<uint64_t> simple8bEncoded;
   simple8bEncoded.resize(nofElements);
   ret = textIndexFile.read(simple8bEncoded.data(), nofBytes - (current - from),
                            current);
   current += ret;
+
   AD_CONTRACT_CHECK(size_t(current - from) == nofBytes);
+
+  // simple8b decode the list which is then directly passed to
+  // frequencyEncodedVector. The resizing with overhead is necessary for
+  // simple8b
   LOG(DEBUG) << "Decoding Simple8b code...\n";
+  frequencyEncodedVector.resize(nofElements + 250);
   ad_utility::Simple8bCode::decode(simple8bEncoded.data(), nofElements,
-                                   frequencyEncodedResult.data());
+                                   frequencyEncodedVector.data());
   LOG(DEBUG) << "Reverting frequency encoded items to actual IDs...\n";
-  frequencyEncodedResult.resize(nofElements);
+  frequencyEncodedVector.resize(nofElements);
+}
+
+// This function contains the actual gap compressed list reading and does the
+// following steps:
+// - Read list from disk which is simple8b and gap encoded
+// - simple8b decode the list
+// - return the still gap encoded vector through reference
+template <typename From>
+void readGapComprListHelper(size_t nofElements, off_t from, size_t nofBytes,
+                            const ad_utility::File& textIndexFile,
+                            vector<From>& gapEncodedVector) {
+  LOG(DEBUG) << "Reading gap-encoded list from disk...\n";
+  LOG(TRACE) << "NofElements: " << nofElements << ", from: " << from
+             << ", nofBytes: " << nofBytes << '\n';
+
+  // Create vector that is simple8b and gap encoded, read encoded vector from
+  // file
+  std::vector<uint64_t> simple8bEncoded;
+  simple8bEncoded.resize(nofBytes / 8);
+  textIndexFile.read(simple8bEncoded.data(), nofBytes, from);
+
+  // simple8b decode the list which is then directly passed to
+  // gapEncodedVector. The resizing with overhead is necessary for simple8b
+  LOG(DEBUG) << "Decoding Simple8b code...\n";
+  gapEncodedVector.resize(nofElements + 250);
+  ad_utility::Simple8bCode::decode(simple8bEncoded.data(), nofElements,
+                                   gapEncodedVector.data());
+  LOG(DEBUG) << "Reverting gaps to actual IDs...\n";
+  gapEncodedVector.resize(nofElements);
+}
+
+}  // namespace
+namespace textIndexReadWrite {
+
+/**
+ * @brief Writes posting to given file. It splits the vector of postings into
+ *        the lists for each respetive tuple element of postings.
+ *        The TextRecordIndex list gets gap encoded and then simple8b encoded
+ *        before being written to file. The WordIndex and Score lists get
+ *        frequency encoded and then simple8b encoded before being written to
+ *        file.
+ * @param out The file to write to.
+ * @param postings The vector of postings to write.
+ * @param skipWordlistIfAllTheSame If true, the wordlist is not written to file.
+ *                                 This can be done because the WordIndex for
+ *                                 the first and last word in a block are saved
+ *                                 in the TextBlockMetaData. Always should be
+ *                                 false for the entity postings.
+ * @param currentOffset The current offset in the file which gets passed by
+ *                      reference because it gets updated.
+ *
+ */
+ContextListMetaData writePostings(ad_utility::File& out,
+                                  const vector<Posting>& postings,
+                                  bool skipWordlistIfAllTheSame,
+                                  off_t& currentOffset);
+
+template <typename T>
+size_t writeCodebook(const vector<T>& codebook, ad_utility::File& file);
+
+/**
+ * @brief Encodes a span of elements and writes the encoded list to file.
+ *        Advances the currentOffset by number of bytes written.
+ * @param spanToWrite The span of elements to encode and write.
+ * @param file The file to write the encoded list to.
+ * @param currentOffset The offset that's advanced.
+ * @warning The elements of the list have to be able to be cast to uint64_t.
+ */
+template <typename T>
+void encodeAndWriteSpanAndMoveOffset(std::span<const T> spanToWrite,
+                                     ad_utility::File& file,
+                                     off_t& currentOffset);
+
+/**
+ * @brief Reads a frequency encoded list from the given file and casts its
+ *        elements to the To type using the given transformer. The From type
+ *        specifies the type that was used to create the codebook in the writing
+ *        step.
+ * @return The decoded list as vector<To>.
+ * @param nofElements The number of elements in the list.
+ * @param from The offset in the file to start reading from.
+ * @param nofBytes The number of bytes to read which can't be deduced from the
+ *                 number of elements since the list is simple8b compressed.
+ * @param textIndexFile The file to read from.
+ * @param transformer The transformer to cast the decoded values to the To type.
+ *                    If no transformer is given, a static cast is used.
+ */
+template <typename To, typename From,
+          typename Transformer = decltype(ad_utility::staticCast<To>)>
+vector<To> readFreqComprList(size_t nofElements, off_t from, size_t nofBytes,
+                             const ad_utility::File& textIndexFile,
+                             Transformer transformer = {}) {
+  vector<uint64_t> frequencyEncodedVector;
+  vector<From> codebook;
+  readFreqComprListHelper(nofElements, from, nofBytes, textIndexFile,
+                          frequencyEncodedVector, codebook);
   vector<To> result;
-  result.reserve(frequencyEncodedResult.size());
-  ql::ranges::for_each(frequencyEncodedResult, [&](const auto& encoded) {
+  result.reserve(frequencyEncodedVector.size());
+  ql::ranges::for_each(frequencyEncodedVector, [&](const auto& encoded) {
     result.push_back(transformer(codebook.at(encoded)));
   });
   LOG(DEBUG) << "Done reading frequency-encoded list. Size: " << result.size()
@@ -100,29 +171,49 @@ vector<To> readFreqComprList(size_t nofElements, off_t from, size_t nofBytes,
   return result;
 }
 
-/// THIS METHOD HAS BEEN MODIFIED
-/// I tried to do the same thing as above with the templates since some values
-/// are saved as a different type (that is the From type) and one wants to
-/// retrieve them as another type. This also removed some weird specific Id
-/// handling. Look at the deleted lines 835-849 of IndexImpl.Text.cpp
+/**
+ * @brief Does the same as the other readFreqComprList but writes the decoded
+ *        list to the given iterator instead of returning it.
+ * @warning The iterator has to be big enough to be increased nofElements times.
+ *          (it is increased once more but not written to and then discarded)
+ */
+template <typename To, typename From, typename OutputIterator,
+          typename Transformer = decltype(ad_utility::staticCast<To>)>
+void readFreqComprList(OutputIterator iterator, size_t nofElements, off_t from,
+                       size_t nofBytes, const ad_utility::File& textIndexFile,
+                       Transformer transformer = {}) {
+  vector<uint64_t> frequencyEncodedVector;
+  vector<From> codebook;
+  readFreqComprListHelper(nofElements, from, nofBytes, textIndexFile,
+                          frequencyEncodedVector, codebook);
+  ql::ranges::for_each(frequencyEncodedVector, [&](const auto& encoded) {
+    *iterator = transformer(codebook.at(encoded));
+    ++iterator;
+  });
+  LOG(DEBUG) << "Done reading frequency-encoded list.";
+}
+
+/**
+ * @brief Reads a gap encoded list from the given file and casts its elements to
+ *        the To type using the given transformer. The From type specifies the
+ *        type that was used to calculate the gaps in the writing step.
+ * @return The decoded list as vector<To>.
+ * @param nofElements The number of elements in the list.
+ * @param from The offset in the file to start reading from.
+ * @param nofBytes The number of bytes to read which can't be deduced from the
+ *                 number of elements since the list is simple8b compressed.
+ * @param textIndexFile The file to read from.
+ * @param transformer The transformer to cast the decoded values to the To type.
+ *                    If no transformer is given, a static cast is used.
+ */
 template <typename To, typename From,
           typename Transformer = decltype(ad_utility::staticCast<To>)>
 vector<To> readGapComprList(size_t nofElements, off_t from, size_t nofBytes,
                             const ad_utility::File& textIndexFile,
                             Transformer transformer = {}) {
-  LOG(DEBUG) << "Reading gap-encoded list from disk...\n";
-  LOG(TRACE) << "NofElements: " << nofElements << ", from: " << from
-             << ", nofBytes: " << nofBytes << '\n';
   vector<From> gapEncodedVector;
-  gapEncodedVector.resize(nofElements + 250);
-  std::vector<uint64_t> simple8bEncoded;
-  simple8bEncoded.resize(nofBytes / 8);
-  textIndexFile.read(simple8bEncoded.data(), nofBytes, from);
-  LOG(DEBUG) << "Decoding Simple8b code...\n";
-  ad_utility::Simple8bCode::decode(simple8bEncoded.data(), nofElements,
-                                   gapEncodedVector.data());
-  LOG(DEBUG) << "Reverting gaps to actual IDs...\n";
-  gapEncodedVector.resize(nofElements);
+  readGapComprListHelper(nofElements, from, nofBytes, textIndexFile,
+                         gapEncodedVector);
 
   // Undo gapEncoding
   vector<To> result;
@@ -137,15 +228,41 @@ vector<To> readGapComprList(size_t nofElements, off_t from, size_t nofBytes,
   return result;
 }
 
+/**
+ * @brief Does the same as the other readGapComprList but writes the decoded
+ *        list to the given iterator instead of returning it.
+ * @warning The iterator has to be big enough to be increased nofElements times.
+ *          (it is increased once more but not written to and  then discarded)
+ */
+template <typename To, typename From, typename OutputIterator,
+          typename Transformer = decltype(ad_utility::staticCast<To>)>
+void readGapComprList(OutputIterator iterator, size_t nofElements, off_t from,
+                      size_t nofBytes, const ad_utility::File& textIndexFile,
+                      Transformer transformer = {}) {
+  vector<From> gapEncodedVector;
+  readGapComprListHelper(nofElements, from, nofBytes, textIndexFile,
+                         gapEncodedVector);
+
+  // Undo gapEncoding
+  From previous = 0;
+  for (auto gap : gapEncodedVector) {
+    previous += gap;
+    *iterator = transformer(previous);
+    ++iterator;
+  }
+  LOG(DEBUG) << "Done reading gap-encoded list.";
+}
+
 }  // namespace textIndexReadWrite
 
-/// THIS IS A NEW CLASS WHICH MAINLY STEMS FROM ONE FUNCTION BEFORE
-/// The FrequencyEncode class basically does the olf createCodebook method
-/// and encoding in one during the constructor. It can then be used to write
-/// the encoded Vector to file. The improvement is the templating removing the
-/// hard coded method createCodebook.
-/// The writeToFile is just the code from the deleted lines 466-468 and 473-475
-/// of IndexImpl.Text.cpp
+/**
+ * @brief A class used to encode a view of elements by frequency encoding them.
+ *        It does this during the construction of the object and stores the
+ *        encoded vector, the codebook and the code map. It also has a method
+ *        to write the encoded vector to a file.
+ * @warning Cannot deduce type of T from view, so it has to be given as
+ *          template.
+ */
 template <typename T>
 class FrequencyEncode {
  public:
@@ -169,6 +286,15 @@ class FrequencyEncode {
   CodeMap codeMap_;
   CodeBook codeBook_;
 };
+
+/**
+ * @brief A class used to encode a view of elements by gap encoding them.
+ *        It does this during the construction of the object and stores the
+ *        encoded vector. It also has a method to write the encoded vector to
+ *        a file.
+ * @warning Cannot deduce type of T from view, so it has to be given as
+ *          template.
+ */
 template <typename T>
 requires std::is_arithmetic_v<T> class GapEncode {
  public:

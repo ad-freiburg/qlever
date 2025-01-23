@@ -60,26 +60,19 @@ size_t writeCodebook(const vector<T>& codebook, ad_utility::File& file) {
 }
 
 // ____________________________________________________________________________
-template <typename Numeric>
-size_t writeList(std::span<const Numeric> data, ad_utility::File& file) {
-  if (data.size() > 0) {
-    std::vector<uint64_t> encoded;
-    encoded.resize(data.size());
-    size_t size = ad_utility::Simple8bCode::encode(data.data(), data.size(),
-                                                   encoded.data());
-    size_t ret = file.write(encoded.data(), size);
-    AD_CONTRACT_CHECK(size == ret);
-    return size;
-  } else {
-    return 0;
-  }
-}
-
-// ____________________________________________________________________________
 template <typename T>
-void writeVectorAndMoveOffset(std::span<const T> vectorToWrite,
-                              ad_utility::File& file, off_t& currentOffset) {
-  size_t bytes = textIndexReadWrite::writeList(vectorToWrite, file);
+void encodeAndWriteSpanAndMoveOffset(std::span<const T> spanToWrite,
+                                     ad_utility::File& file,
+                                     off_t& currentOffset) {
+  size_t bytes = 0;
+  if (spanToWrite.size() > 0) {
+    std::vector<uint64_t> encoded;
+    encoded.resize(spanToWrite.size());
+    bytes = ad_utility::Simple8bCode::encode(
+        spanToWrite.data(), spanToWrite.size(), encoded.data());
+    size_t ret = file.write(encoded.data(), bytes);
+    AD_CONTRACT_CHECK(bytes == ret);
+  }
   currentOffset += bytes;
 }
 
@@ -133,8 +126,8 @@ template <typename T>
 void FrequencyEncode<T>::writeToFile(ad_utility::File& out,
                                      off_t& currentOffset) {
   currentOffset += textIndexReadWrite::writeCodebook(codeBook_, out);
-  textIndexReadWrite::writeVectorAndMoveOffset<size_t>(encodedVector_, out,
-                                                       currentOffset);
+  textIndexReadWrite::encodeAndWriteSpanAndMoveOffset<size_t>(
+      encodedVector_, out, currentOffset);
 }
 
 // ____________________________________________________________________________
@@ -153,6 +146,6 @@ GapEncode<T>::GapEncode(View&& view) {
 template <typename T>
 requires std::is_arithmetic_v<T>
 void GapEncode<T>::writeToFile(ad_utility::File& out, off_t& currentOffset) {
-  textIndexReadWrite::writeVectorAndMoveOffset<T>(encodedVector_, out,
-                                                  currentOffset);
+  textIndexReadWrite::encodeAndWriteSpanAndMoveOffset<T>(encodedVector_, out,
+                                                         currentOffset);
 }

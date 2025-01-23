@@ -577,30 +577,28 @@ IdTable IndexImpl::readWordCl(
     const TextBlockMetaData& tbmd,
     const ad_utility::AllocatorWithLimit<Id>& allocator) const {
   IdTable idTable{3, allocator};
-  vector<Id> cids = textIndexReadWrite::readGapComprList<Id, uint64_t>(
-      tbmd._cl._nofElements, tbmd._cl._startContextlist,
+  idTable.resize(tbmd._cl._nofElements);
+  textIndexReadWrite::readGapComprList<Id, uint64_t>(
+      idTable.getColumn(0).begin(), tbmd._cl._nofElements,
+      tbmd._cl._startContextlist,
       static_cast<size_t>(tbmd._cl._startWordlist - tbmd._cl._startContextlist),
       textIndexFile_, [](uint64_t id) {
         return Id::makeFromTextRecordIndex(TextRecordIndex::make(id));
       });
-  idTable.resize(cids.size());
-  ql::ranges::copy(cids, idTable.getColumn(0).begin());
-  ql::ranges::copy(
-      textIndexReadWrite::readFreqComprList<Id, WordIndex>(
-          tbmd._cl._nofElements, tbmd._cl._startWordlist,
-          static_cast<size_t>(tbmd._cl._startScorelist -
-                              tbmd._cl._startWordlist),
-          textIndexFile_,
-          [](WordIndex id) {
-            return Id::makeFromWordVocabIndex(WordVocabIndex::make(id));
-          }),
-      idTable.getColumn(1).begin());
-  std::ranges::copy(textIndexReadWrite::readFreqComprList<Id, Score>(
-                        tbmd._cl._nofElements, tbmd._cl._startScorelist,
-                        static_cast<size_t>(tbmd._cl._lastByte + 1 -
-                                            tbmd._cl._startScorelist),
-                        textIndexFile_, &Id::makeFromInt),
-                    idTable.getColumn(2).begin());
+
+  textIndexReadWrite::readFreqComprList<Id, WordIndex>(
+      idTable.getColumn(1).begin(), tbmd._cl._nofElements,
+      tbmd._cl._startWordlist,
+      static_cast<size_t>(tbmd._cl._startScorelist - tbmd._cl._startWordlist),
+      textIndexFile_, [](WordIndex id) {
+        return Id::makeFromWordVocabIndex(WordVocabIndex::make(id));
+      });
+
+  textIndexReadWrite::readFreqComprList<Id, Score>(
+      idTable.getColumn(2).begin(), tbmd._cl._nofElements,
+      tbmd._cl._startScorelist,
+      static_cast<size_t>(tbmd._cl._lastByte + 1 - tbmd._cl._startScorelist),
+      textIndexFile_, &Id::makeFromInt);
   return idTable;
 }
 
@@ -609,32 +607,31 @@ IdTable IndexImpl::readWordEntityCl(
     const TextBlockMetaData& tbmd,
     const ad_utility::AllocatorWithLimit<Id>& allocator) const {
   IdTable idTable{3, allocator};
-  vector<Id> cids = textIndexReadWrite::readGapComprList<Id, uint64_t>(
-      tbmd._entityCl._nofElements, tbmd._entityCl._startContextlist,
+  idTable.resize(tbmd._entityCl._nofElements);
+  textIndexReadWrite::readGapComprList<Id, uint64_t>(
+      idTable.getColumn(0).begin(), tbmd._entityCl._nofElements,
+      tbmd._entityCl._startContextlist,
       static_cast<size_t>(tbmd._entityCl._startWordlist -
                           tbmd._entityCl._startContextlist),
       textIndexFile_, [](uint64_t id) {
         return Id::makeFromTextRecordIndex(TextRecordIndex::make(id));
       });
-  idTable.resize(cids.size());
-  ql::ranges::copy(cids, idTable.getColumn(0).begin());
-  ql::ranges::copy(
-      textIndexReadWrite::readFreqComprList<Id, WordIndex>(
-          tbmd._entityCl._nofElements, tbmd._entityCl._startWordlist,
-          static_cast<size_t>(tbmd._entityCl._startScorelist -
-                              tbmd._entityCl._startWordlist),
-          textIndexFile_,
-          [](uint64_t from) {
-            return Id::makeFromVocabIndex(VocabIndex::make(from));
-          }),
-      idTable.getColumn(1).begin());
-  ql::ranges::copy(
-      textIndexReadWrite::readFreqComprList<Id, Score>(
-          tbmd._entityCl._nofElements, tbmd._entityCl._startScorelist,
-          static_cast<size_t>(tbmd._entityCl._lastByte + 1 -
-                              tbmd._entityCl._startScorelist),
-          textIndexFile_, &Id::makeFromInt),
-      idTable.getColumn(2).begin());
+
+  textIndexReadWrite::readFreqComprList<Id, WordIndex>(
+      idTable.getColumn(1).begin(), tbmd._entityCl._nofElements,
+      tbmd._entityCl._startWordlist,
+      static_cast<size_t>(tbmd._entityCl._startScorelist -
+                          tbmd._entityCl._startWordlist),
+      textIndexFile_, [](uint64_t from) {
+        return Id::makeFromVocabIndex(VocabIndex::make(from));
+      });
+
+  textIndexReadWrite::readFreqComprList<Id, Score>(
+      idTable.getColumn(2).begin(), tbmd._entityCl._nofElements,
+      tbmd._entityCl._startScorelist,
+      static_cast<size_t>(tbmd._entityCl._lastByte + 1 -
+                          tbmd._entityCl._startScorelist),
+      textIndexFile_, &Id::makeFromInt);
   return idTable;
 }
 
