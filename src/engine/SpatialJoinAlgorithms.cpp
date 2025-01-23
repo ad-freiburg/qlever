@@ -220,7 +220,6 @@ Result SpatialJoinAlgorithms::S2geometryAlgorithm() {
       s2index.Add(toS2Point(p.value()), row);
     }
   }
-
   // Performs a nearest neighbor search on the index and returns the closest
   // points that satisfy the criteria given by `maxDist_` and `maxResults_`.
 
@@ -238,7 +237,6 @@ Result SpatialJoinAlgorithms::S2geometryAlgorithm() {
 
   auto searchTable = indexOfRight ? idTableLeft : idTableRight;
   auto searchJoinCol = indexOfRight ? leftJoinCol : rightJoinCol;
-
   // Use the index to lookup the points of the other table
   for (size_t searchRow = 0; searchRow < searchTable->size(); searchRow++) {
     auto p = getPoint(searchTable, searchRow, searchJoinCol);
@@ -273,6 +271,7 @@ Result SpatialJoinAlgorithms::S2PointPolylineAlgorithm() {
   IdTable result{numColumns, qec_->getAllocator()};
 
   // Helper function to convert `GeoPoint` to `S2Point`
+  static std::optional<MutableS2ShapeIndex> cachedIndex;
   MutableS2ShapeIndex s2index;
 
   bool indexOfRight = true;
@@ -307,6 +306,23 @@ Result SpatialJoinAlgorithms::S2PointPolylineAlgorithm() {
   // Construct a query object with the given constraints
   auto s2query = S2ClosestEdgeQuery{&s2index};
 
+  // Helper function to convert `GeoPoint` to `S2Point`
+  auto constexpr toS2Point = [](const GeoPoint& p) {
+    auto lat = p.getLat();
+    auto lng = p.getLng();
+    auto latlng = S2LatLng::FromDegrees(lat, lng);
+    return S2Point{latlng};
+  };
+
+  t.reset();
+  {
+    auto s2target = S2ClosestEdgeQuery::PointTarget{toS2Point(GeoPoint(0, 0))};
+    auto dummyRes = s2query.FindClosestEdges(&s2target);
+    LOG(INFO) << "dummyRes " << dummyRes.size() << std::endl;
+  }
+  spatialJoin_.value()->runtimeInfo().addDetail("time for dummy query",
+                                                t.msecs().count());
+
   if (maxResults.has_value()) {
     AD_FAIL();
     s2query.mutable_options()->set_max_results(
@@ -328,13 +344,6 @@ Result SpatialJoinAlgorithms::S2PointPolylineAlgorithm() {
     if (!p.has_value()) {
       continue;
     }
-    // Helper function to convert `GeoPoint` to `S2Point`
-    auto constexpr toS2Point = [](const GeoPoint& p) {
-      auto lat = p.getLat();
-      auto lng = p.getLng();
-      auto latlng = S2LatLng::FromDegrees(lat, lng);
-      return S2Point{latlng};
-    };
     auto s2target = S2ClosestEdgeQuery::PointTarget{toS2Point(p.value())};
 
     ad_utility::HashMap<size_t, double> deduplicatedSet{};
