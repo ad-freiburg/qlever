@@ -18,9 +18,9 @@ using namespace ad_utility::url_parser::sparqlOperation;
 using namespace ad_utility::testing;
 
 namespace {
-auto ParsedRequestIs = [](const std::string& path,
-                          const ParamValueMap& parameters,
-                          const std::variant<Query, Update, None>& operation)
+auto ParsedRequestIs =
+    [](const std::string& path, const ParamValueMap& parameters,
+       const std::variant<Query, Update, GraphStoreOperation, None>& operation)
     -> testing::Matcher<const ParsedRequest> {
   return testing::AllOf(
       AD_FIELD(ad_utility::url_parser::ParsedRequest, path_, testing::Eq(path)),
@@ -39,6 +39,7 @@ TEST(ServerTest, parseHttpRequest) {
       "application/x-www-form-urlencoded;charset=UTF-8";
   const std::string QUERY = "application/sparql-query";
   const std::string UPDATE = "application/sparql-update";
+  const std::string TURTLE = "text/turtle";
   EXPECT_THAT(parse(makeGetRequest("/")), ParsedRequestIs("/", {}, None{}));
   EXPECT_THAT(parse(makeGetRequest("/ping")),
               ParsedRequestIs("/ping", {}, None{}));
@@ -48,6 +49,19 @@ TEST(ServerTest, parseHttpRequest) {
                   "/?query=SELECT+%2A%20WHERE%20%7B%7D&action=csv_export")),
               ParsedRequestIs("/", {{"action", {"csv_export"}}},
                               Query{"SELECT * WHERE {}"}));
+  EXPECT_THAT(
+      parse(makeGetRequest("/?graph=%3Cfoo%3E")),
+      ParsedRequestIs("/", {{"graph", {"<foo>"}}}, GraphStoreOperation{}));
+  EXPECT_THAT(parse(makeGetRequest("/?default")),
+              ParsedRequestIs("/", {{"default", {""}}}, GraphStoreOperation{}));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      parse(makeGetRequest("/?default&default")),
+      testing::HasSubstr("Parameter \"default\" must be "
+                         "given exactly once. Is: 2"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      parse(makeGetRequest("/?graph=%3Cfoo%3E&graph=%3Cbar%3E")),
+      testing::HasSubstr("Parameter \"graph\" must be "
+                         "given exactly once. Is: 2"));
   EXPECT_THAT(
       parse(makePostRequest("/", URLENCODED,
                             "query=SELECT+%2A%20WHERE%20%7B%7D&send=100")),
@@ -124,6 +138,13 @@ TEST(ServerTest, parseHttpRequest) {
   EXPECT_THAT(parse(makePostRequest("/", URLENCODED,
                                     "update=DELETE+%2A+WHERE%20%7B%7D")),
               ParsedRequestIs("/", {}, Update{"DELETE * WHERE {}"}));
+  EXPECT_THAT(
+      parse(makePostRequest("/?default", TURTLE, "<foo> <bar> <baz> .")),
+      ParsedRequestIs("/", {{"default", {""}}}, GraphStoreOperation{}));
+  EXPECT_THAT(
+      parse(
+          makePostRequest("/?graph=%3Cfoo%3E", TURTLE, "<foo> <bar> <baz> .")),
+      ParsedRequestIs("/", {{"graph", {"<foo>"}}}, GraphStoreOperation{}));
 }
 
 TEST(ServerTest, determineResultPinning) {
