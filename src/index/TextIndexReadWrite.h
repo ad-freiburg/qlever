@@ -275,6 +275,12 @@ class FrequencyEncode {
   template <typename View>
   explicit FrequencyEncode(View&& view);
 
+  FrequencyEncode() = delete;
+  FrequencyEncode(const FrequencyEncode&) = delete;
+  FrequencyEncode& operator=(const FrequencyEncode&) = delete;
+  FrequencyEncode(FrequencyEncode&&) = delete;
+  FrequencyEncode& operator=(FrequencyEncode&&) = delete;
+
   void writeToFile(ad_utility::File& out, off_t& currentOffset);
 
   const std::vector<size_t>& getEncodedVector() const { return encodedVector_; }
@@ -303,6 +309,12 @@ requires std::is_arithmetic_v<T> class GapEncode {
   // View must be an input range with value type `T`.
   template <typename View>
   explicit GapEncode(View&& view);
+
+  GapEncode() = delete;
+  GapEncode(const GapEncode&) = delete;
+  GapEncode& operator=(const GapEncode&) = delete;
+  GapEncode(GapEncode&&) = delete;
+  GapEncode& operator=(GapEncode&&) = delete;
 
   void writeToFile(ad_utility::File& out, off_t& currentOffset);
 
