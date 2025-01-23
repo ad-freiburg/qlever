@@ -185,7 +185,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createExecutionTrees(
 
   for (auto& plan : lastRow) {
     if (plan._qet->getRootOperation()->supportsLimit()) {
-      plan._qet->getRootOperation()->setLimit(pq._limitOffset);
+      plan._qet->setLimit(pq._limitOffset);
     }
   }
 
@@ -1793,7 +1793,7 @@ size_t QueryPlanner::findSmallestExecutionTree(
 // _____________________________________________________________________________
 std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
     const SubtreePlan& ain, const SubtreePlan& bin,
-    std::optional<TripleGraph> tg) const {
+    boost::optional<const TripleGraph&> tg) const {
   bool swapForTesting = isInTestMode() && bin.type != SubtreePlan::OPTIONAL &&
                         ain._qet->getCacheKey() < bin._qet->getCacheKey();
   const auto& a = !swapForTesting ? ain : bin;
@@ -2261,7 +2261,7 @@ void QueryPlanner::GraphPatternPlanner::visitGroupOptionalOrMinus(
   // whether `b` is from an OPTIONAL or MINUS.
   for (const auto& a : candidatePlans_.at(0)) {
     for (const auto& b : candidates) {
-      auto vec = planner_.createJoinCandidates(a, b, std::nullopt);
+      auto vec = planner_.createJoinCandidates(a, b, boost::none);
       nextCandidates.insert(nextCandidates.end(),
                             std::make_move_iterator(vec.begin()),
                             std::make_move_iterator(vec.end()));
@@ -2572,7 +2572,7 @@ void QueryPlanner::GraphPatternPlanner::visitSubquery(
   ql::ranges::for_each(candidatesForSubquery, setSelectedVariables);
   // A subquery must also respect LIMIT and OFFSET clauses
   ql::ranges::for_each(candidatesForSubquery, [&](SubtreePlan& plan) {
-    plan._qet->getRootOperation()->setLimit(arg.get()._limitOffset);
+    plan._qet->setLimit(arg.get()._limitOffset);
   });
   visitGroupOptionalOrMinus(std::move(candidatesForSubquery));
 }
