@@ -684,10 +684,11 @@ auto IndexImpl::convertPartialToGlobalIds(
       for (Buffer::row_reference triple : *triples) {
         transformTriple(triple, *idMap);
       }
-      auto [beginInternal, endInternal] = std::ranges::partition(
-          *triples, [&isQLeverInternalTriple](const auto& row) {
-            return !isQLeverInternalTriple(row);
-          });
+      auto beginInternal =
+          std::partition(triples->begin(), triples->end(),
+                         [&isQLeverInternalTriple](const auto& row) {
+                           return !isQLeverInternalTriple(row);
+                         });
       IdTableStatic<NumColumnsIndexBuilding> internalTriples(
           triples->getAllocator());
       // TODO<joka921> We could leave the partitioned complete block as is,
@@ -695,7 +696,7 @@ auto IndexImpl::convertPartialToGlobalIds(
       // push only a part of a block. We then would safe the copy of the
       // internal triples here, but I am not sure whether this is worth it.
       internalTriples.insertAtEnd(*triples, beginInternal - triples->begin(),
-                                  endInternal - triples->begin());
+                                  triples->end() - triples->begin());
       triples->resize(beginInternal - triples->begin());
 
       Buffers buffers{std::move(*triples), std::move(internalTriples)};

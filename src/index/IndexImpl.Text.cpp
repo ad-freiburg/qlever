@@ -747,7 +747,7 @@ IdTable IndexImpl::readWordCl(
       idTable.getColumn(1).begin(), [](WordIndex id) {
         return Id::makeFromWordVocabIndex(WordVocabIndex::make(id));
       });
-  std::ranges::transform(
+  ql::ranges::transform(
       readFreqComprList<Score>(tbmd._cl._nofElements, tbmd._cl._startScorelist,
                                static_cast<size_t>(tbmd._cl._lastByte + 1 -
                                                    tbmd._cl._startScorelist)),

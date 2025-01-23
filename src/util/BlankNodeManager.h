@@ -90,7 +90,8 @@ class BlankNodeManager {
 
     // Merge passed `LocalBlankNodeManager`s to keep alive their reserved
     // BlankNodeIndex blocks.
-    template <std::ranges::range R>
+    template <typename R>
+    requires(ql::ranges::range<R>)
     void mergeWith(const R& localBlankNodeManagers) {
       auto inserter = std::back_inserter(otherBlocks_);
       for (const auto& l : localBlankNodeManagers) {

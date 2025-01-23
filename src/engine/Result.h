@@ -197,8 +197,9 @@ class Result {
                                                      const Result& result2);
 
   // Overload for more than two `Results`
-  template <std::ranges::forward_range R>
-  requires std::convertible_to<std::ranges::range_value_t<R>, const Result&>
+  template <typename R>
+  requires(ql::ranges::forward_range<R> &&
+           std::convertible_to<ql::ranges::range_value_t<R>, const Result&>)
   static SharedLocalVocabWrapper getMergedLocalVocab(R&& subResults) {
     std::vector<const LocalVocab*> vocabs;
     for (const Result& table : subResults) {

@@ -178,9 +178,13 @@ bool CompressedRelationReader::FilterDuplicatesAndGraphs::
     };
   };
   if (needsFilteringByGraph) {
-    auto [beginOfRemoved, _] = std::ranges::remove_if(
+    auto removedRange = ql::ranges::remove_if(
         block, std::not_fn(isDesiredGraphId()), graphIdFromRow);
-    block.erase(beginOfRemoved, block.end());
+#ifdef QLEVER_CPP_17
+    block.erase(removedRange, block.end());
+#else
+    block.erase(removedRange.begin(), block.end());
+#endif
   } else {
     AD_EXPENSIVE_CHECK(
         !desiredGraphs_.has_value() ||
@@ -194,10 +198,10 @@ bool CompressedRelationReader::FilterDuplicatesAndGraphs::
     filterDuplicatesIfNecessary(IdTable& block,
                                 const CompressedBlockMetadata& blockMetadata) {
   if (!blockMetadata.containsDuplicatesWithDifferentGraphs_) {
-    AD_EXPENSIVE_CHECK(std::ranges::unique(block).begin() == block.end());
+    AD_EXPENSIVE_CHECK(std::unique(block.begin(), block.end()) == block.end());
     return false;
   }
-  auto [endUnique, _] = std::ranges::unique(block);
+  auto endUnique = std::unique(block.begin(), block.end());
   block.erase(endUnique, block.end());
   return true;
 }
@@ -400,7 +404,7 @@ std::vector<CompressedBlockMetadata> CompressedRelationReader::getBlocksForJoin(
   };
 
   // `blockLessThanBlock` (a dummy) and `std::less<Id>` are only needed to
-  // fulfill a concept for the `std::ranges` algorithms.
+  // fulfill a concept for the `ql::ranges` algorithms.
   auto blockLessThanBlock =
       []<typename T = void>(const CompressedBlockMetadata&,
                             const CompressedBlockMetadata&)
@@ -422,7 +426,8 @@ std::vector<CompressedBlockMetadata> CompressedRelationReader::getBlocksForJoin(
   ql::ranges::copy(relevantBlocks | ql::views::filter(blockIsNeeded),
                    std::back_inserter(result));
   // The following check is cheap as there are only few blocks.
-  AD_CORRECTNESS_CHECK(std::ranges::unique(result).empty());
+  AD_CORRECTNESS_CHECK(std::unique(result.begin(), result.end()) ==
+                       result.end());
   return result;
 }
 
@@ -482,7 +487,8 @@ CompressedRelationReader::getBlocksForJoin(
       }
     }
     // The following check isn't expensive as there are only few blocks.
-    AD_CORRECTNESS_CHECK(std::ranges::unique(result).begin() == result.end());
+    AD_CORRECTNESS_CHECK(std::unique(result.begin(), result.end()) ==
+                         result.end());
     return result;
   };
 
@@ -948,7 +954,7 @@ static std::pair<bool, std::optional<std::vector<Id>>> getGraphInfo(
     ql::ranges::copy(block->getColumn(ADDITIONAL_COLUMN_GRAPH_ID),
                      std::back_inserter(graphColumn));
     ql::ranges::sort(graphColumn);
-    auto [endOfUnique, _] = std::ranges::unique(graphColumn);
+    auto endOfUnique = std::unique(graphColumn.begin(), graphColumn.end());
     size_t numGraphs = endOfUnique - graphColumn.begin();
     if (numGraphs > MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA) {
       return std::nullopt;
@@ -1522,9 +1528,10 @@ CompressedRelationReader::getMetadataForSmallRelation(
   }
 
   // The `col1` is sorted, so we compute the multiplicity using
-  // `std::ranges::unique`.
-  auto endOfUnique = std::ranges::unique(block.getColumn(0));
-  size_t numDistinct = endOfUnique.begin() - block.getColumn(0).begin();
+  // `std::unique`.
+  const auto& blockCol = block.getColumn(0);
+  auto endOfUnique = std::unique(blockCol.begin(), blockCol.end());
+  size_t numDistinct = endOfUnique - blockCol.begin();
   metadata.numRows_ = block.size();
   metadata.multiplicityCol1_ =
       CompressedRelationWriter::computeMultiplicity(block.size(), numDistinct);

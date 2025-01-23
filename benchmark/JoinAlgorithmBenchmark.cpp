@@ -115,7 +115,7 @@ struct SetOfIdTableColumnElements {
   */
   explicit SetOfIdTableColumnElements(
       const std::span<const ValueId>& idTableColumnRef) {
-    std::ranges::for_each(idTableColumnRef, [this](const ValueId& id) {
+    ql::ranges::for_each(idTableColumnRef, [this](const ValueId& id) {
       if (auto numOccurrencesIterator = numOccurrences_.find(id);
           numOccurrencesIterator != numOccurrences_.end()) {
         (numOccurrencesIterator->second)++;
@@ -190,7 +190,7 @@ static size_t createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
   // Create the overlap.
   ad_utility::HashMap<ValueId, std::reference_wrapper<const ValueId>>
       smallerTableElementToNewElement{};
-  std::ranges::for_each(
+  ql::ranges::for_each(
       smallerTableJoinColumnRef,
       [&randomDouble, &probabilityToCreateOverlap,
        &smallerTableElementToNewElement, &randomBiggerTableElement,
@@ -295,7 +295,7 @@ static size_t createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
   size_t newOverlapMatches{0};
   ad_utility::HashMap<ValueId, std::reference_wrapper<const ValueId>>
       smallerTableElementToNewElement{};
-  std::ranges::for_each(
+  ql::ranges::for_each(
       smallerTableJoinColumnSet.uniqueElements_,
       [&randomBiggerTableElement, &wantedNumNewOverlapMatches,
        &newOverlapMatches, &smallerTableElementToNewElement,
@@ -326,7 +326,7 @@ static size_t createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
       });
 
   // Overwrite the designated values in the smaller table.
-  std::ranges::for_each(
+  ql::ranges::for_each(
       smallerTableJoinColumnRef, [&smallerTableElementToNewElement](auto& id) {
         if (auto newValueIterator = smallerTableElementToNewElement.find(id);
             newValueIterator != smallerTableElementToNewElement.end()) {
@@ -465,17 +465,17 @@ static std::vector<T> mergeSortedVectors(
   std::vector<T> mergedVector{};
 
   // Merge.
-  std::ranges::for_each(intervals, [&mergedVector](std::vector<T> elements) {
+  ql::ranges::for_each(intervals, [&mergedVector](std::vector<T> elements) {
     if (mergedVector.empty() || elements.empty()) {
-      std::ranges::copy(elements, std::back_inserter(mergedVector));
+      ql::ranges::copy(elements, std::back_inserter(mergedVector));
       return;
     }
     const size_t idxOldLastElem = mergedVector.size() - 1;
-    std::ranges::copy(elements, std::back_inserter(mergedVector));
+    ql::ranges::copy(elements, std::back_inserter(mergedVector));
     if (mergedVector.at(idxOldLastElem) > mergedVector.at(idxOldLastElem + 1)) {
-      std::ranges::inplace_merge(
+      ql::ranges::inplace_merge(
           mergedVector,
-          std::ranges::next(mergedVector.begin(), idxOldLastElem + 1));
+          ql::ranges::next(mergedVector.begin(), idxOldLastElem + 1));
     }
   });
 
@@ -935,7 +935,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
             "' must be bigger than, or equal to, 0.")};
     config.addValidator(
         [](const benchmarkSampleSizeRatiosValueType& vec) {
-          return std::ranges::all_of(
+          return ql::ranges::all_of(
               vec,
               [](const benchmarkSampleSizeRatiosValueType::value_type ratio) {
                 return ratio >= 0.f;
@@ -961,7 +961,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
             ".")};
     config.addValidator(
         [](const benchmarkSampleSizeRatiosValueType& vec) {
-          return std::ranges::max(vec) <=
+          return ql::ranges::max(vec) <=
                  getMaxValue<benchmarkSampleSizeRatiosValueType::value_type>() -
                      1.f;
         },
@@ -1056,9 +1056,9 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
               },
               descriptor, descriptor, option);
         };
-    std::ranges::for_each(std::vector{minBiggerTableRows, maxBiggerTableRows,
-                                      minSmallerTableRows},
-                          addCastableValidator);
+    ql::ranges::for_each(std::vector{minBiggerTableRows, maxBiggerTableRows,
+                                     minSmallerTableRows},
+                         addCastableValidator);
   }
 
   /*
@@ -1684,7 +1684,7 @@ class BmOnlyBiggerTableSizeChanges final
               static_cast<double>(getConfigVariables().minBiggerTableRows_) /
               static_cast<double>(smallerTableNumRows)))};
           auto growthFunction = createDefaultGrowthLambda<float>(
-              10.f, std::ranges::max(minRatio, 10.f),
+              10.f, ql::ranges::max(minRatio, 10.f),
               generateNaturalNumberSequenceInterval(minRatio, 9.f));
           ResultTable& table = makeGrowingBenchmarkTable(
               &results, tableName, "Row ratio", alwaysFalse,
@@ -1742,8 +1742,8 @@ class BmOnlySmallerTableSizeChanges final
         for (const float ratioRows : mergeSortedVectors<float>(
                  {generateNaturalNumberSequenceInterval(
                       getConfigVariables().minRatioRows_,
-                      std::ranges::min(getConfigVariables().maxRatioRows_,
-                                       10.f)),
+                      ql::ranges::min(getConfigVariables().maxRatioRows_,
+                                      10.f)),
                   generateExponentInterval(
                       10.f, getConfigVariables().minRatioRows_,
                       getConfigVariables().maxRatioRows_)})) {
@@ -1755,7 +1755,7 @@ class BmOnlySmallerTableSizeChanges final
           // Returns the amount of rows in the smaller `IdTable`, used for the
           // measurements in a given row.
           auto growthFunction = createDefaultGrowthLambda(
-              10UL, std::ranges::max(
+              10UL, ql::ranges::max(
                         static_cast<size_t>(
                             static_cast<double>(
                                 getConfigVariables().minBiggerTableRows_) /
@@ -1867,7 +1867,7 @@ class BmSampleSizeRatio final : public GeneralInterfaceImplementation {
   BenchmarkResults runAllBenchmarks() override {
     BenchmarkResults results{};
     const auto& ratios{getConfigVariables().benchmarkSampleSizeRatios_};
-    const float maxSampleSizeRatio{std::ranges::max(ratios)};
+    const float maxSampleSizeRatio{ql::ranges::max(ratios)};
 
     /*
     We work with the biggest possible smaller and bigger table. That should make
@@ -2097,17 +2097,17 @@ class BmSmallerTableGrowsBiggerTableRemainsSameSize final
               static_cast<double>(biggerTableNumRows) /
               static_cast<double>(getConfigVariables().minSmallerTableRows_))};
           std::vector<size_t> smallerTableRows;
-          std::ranges::transform(
+          ql::ranges::transform(
               mergeSortedVectors<float>(
                   {generateNaturalNumberSequenceInterval(
-                       1.f, std::ranges::min(10.f, biggestRowRatio)),
+                       1.f, ql::ranges::min(10.f, biggestRowRatio)),
                    generateExponentInterval(10.f, 10.f, biggestRowRatio)}),
               std::back_inserter(smallerTableRows),
               [&biggerTableNumRows](const float ratio) {
                 return static_cast<size_t>(
                     static_cast<double>(biggerTableNumRows) / ratio);
               });
-          std::ranges::reverse(smallerTableRows);
+          ql::ranges::reverse(smallerTableRows);
           const size_t lastSmallerTableRow{smallerTableRows.back()};
           auto growthFunction = createDefaultGrowthLambda(
               10UL, lastSmallerTableRow + 1UL, std::move(smallerTableRows));

@@ -35,15 +35,15 @@ constexpr auto pushSingleElement =
 // This concept is fulfilled if `Range` is a range that stores values of type
 // `T`.
 template <typename Range, typename T>
-concept RangeWithValue = std::ranges::range<Range> &&
-                         std::same_as<std::ranges::range_value_t<Range>, T>;
+concept RangeWithValue = ql::ranges::range<Range> &&
+                         std::same_as<ql::ranges::range_value_t<Range>, T>;
 
 // Fulfilled if `Range` is a random access range the elements of which are
 // ranges of elements of type `T`, e.g. `std::vector<std::generator<T>>`.
 template <typename Range, typename T>
 concept RandomAccessRangeOfRanges =
-    std::ranges::random_access_range<Range> &&
-    RangeWithValue<std::ranges::range_value_t<Range>, T>;
+    ql::ranges::random_access_range<Range> &&
+    RangeWithValue<ql::ranges::range_value_t<Range>, T>;
 
 // Merge the elements from the presorted ranges `range1` and `range2` according
 // to the `comparator`. The result of the merging will be yielded in blocks of

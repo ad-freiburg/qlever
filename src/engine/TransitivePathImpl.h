@@ -248,9 +248,11 @@ class TransitivePathImpl : public TransitivePathBase {
    * LocalVocab is a no-op).
    * @return Map Maps each Id to its connected Ids in the transitive hull
    */
+  template <typename Node>
+  requires(ql::ranges::range<Node>)
   NodeGenerator transitiveHull(const T& edges, LocalVocab edgesVocab,
-                               std::ranges::range auto startNodes,
-                               std::optional<Id> target, bool yieldOnce) const {
+                               Node startNodes, std::optional<Id> target,
+                               bool yieldOnce) const {
     ad_utility::Timer timer{ad_utility::Timer::Stopped};
     for (auto&& tableColumn : startNodes) {
       timer.cont();
