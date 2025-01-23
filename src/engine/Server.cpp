@@ -11,10 +11,12 @@
 #include <string>
 #include <vector>
 
+#include "GraphStoreProtocol.h"
 #include "engine/ExecuteUpdate.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/QueryPlanner.h"
 #include "global/RuntimeParameters.h"
+#include "index/IndexImpl.h"
 #include "util/AsioHelpers.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
@@ -347,8 +349,8 @@ Awaitable<void> Server::process(
 
   // We always want to call `Server::checkParameter` with the same first
   // parameter.
-  auto checkParameter =
-      std::bind_front(&Server::checkParameter, std::cref(parameters));
+  auto checkParameter = std::bind_front(&ad_utility::url_parser::checkParameter,
+                                        std::cref(parameters));
 
   // Check the access token. If an access token is provided and the check fails,
   // throw an exception and do not process any part of the query (even if the
@@ -537,9 +539,11 @@ Awaitable<void> Server::process(
 std::pair<bool, bool> Server::determineResultPinning(
     const ad_utility::url_parser::ParamValueMap& params) {
   const bool pinSubtrees =
-      checkParameter(params, "pinsubtrees", "true").has_value();
+      ad_utility::url_parser::checkParameter(params, "pinsubtrees", "true")
+          .has_value();
   const bool pinResult =
-      checkParameter(params, "pinresult", "true").has_value();
+      ad_utility::url_parser::checkParameter(params, "pinresult", "true")
+          .has_value();
   return {pinSubtrees, pinResult};
 }
 
@@ -730,16 +734,10 @@ Awaitable<void> Server::sendStreamableResponse(
 }
 
 // ____________________________________________________________________________
-class NoSupportedMediatypeError : public std::runtime_error {
- public:
-  explicit NoSupportedMediatypeError(std::string_view msg)
-      : std::runtime_error{std::string{msg}} {}
-};
-
-// ____________________________________________________________________________
 MediaType Server::determineMediaType(
     const ad_utility::url_parser::ParamValueMap& params,
     const ad_utility::httpUtils::HttpRequest auto& request) {
+  using namespace ad_utility::url_parser;
   // The following code block determines the media type to be used for the
   // result. The media type is either determined by the "Accept:" header of
   // the request or by the URL parameter "action=..." (for TSV and CSV export,
@@ -883,8 +881,63 @@ Awaitable<void> Server::processQuery(
   co_return;
 }
 
+json Server::createResponseMetadataForUpdate(
+    const ad_utility::Timer& requestTimer, const Index& index,
+    const DeltaTriples& deltaTriples, const PlannedQuery& plannedQuery,
+    const QueryExecutionTree& qet, const DeltaTriplesCount& countBefore,
+    const UpdateMetadata& updateMetadata, const DeltaTriplesCount& countAfter) {
+  auto formatTime = [](std::chrono::milliseconds time) {
+    return absl::StrCat(time.count(), "ms");
+  };
+
+  json response;
+  response["update"] = plannedQuery.parsedQuery_._originalString;
+  response["status"] = "OK";
+  auto warnings = qet.collectWarnings();
+  warnings.emplace(warnings.begin(),
+                   "SPARQL 1.1 Update for QLever is experimental.");
+  response["warnings"] = warnings;
+  RuntimeInformationWholeQuery& runtimeInfoWholeOp =
+      qet.getRootOperation()->getRuntimeInfoWholeQuery();
+  RuntimeInformation& runtimeInfo = qet.getRootOperation()->runtimeInfo();
+  response["runtimeInformation"]["meta"] =
+      nlohmann::ordered_json(runtimeInfoWholeOp);
+  response["runtimeInformation"]["query_execution_tree"] =
+      nlohmann::ordered_json(runtimeInfo);
+  response["delta-triples"]["before"] = nlohmann::json(countBefore);
+  response["delta-triples"]["after"] = nlohmann::json(countAfter);
+  response["delta-triples"]["difference"] =
+      nlohmann::json(countAfter - countBefore);
+  response["time"]["planning"] =
+      formatTime(runtimeInfoWholeOp.timeQueryPlanning);
+  response["time"]["where"] =
+      formatTime(std::chrono::duration_cast<std::chrono::milliseconds>(
+          runtimeInfo.totalTime_));
+  json updateTime{
+      {"total", formatTime(updateMetadata.triplePreparationTime_ +
+                           updateMetadata.deletionTime_ +
+                           updateMetadata.insertionTime_)},
+      {"preparation", formatTime(updateMetadata.triplePreparationTime_)},
+      {"delete", formatTime(updateMetadata.deletionTime_)},
+      {"insert", formatTime(updateMetadata.insertionTime_)}};
+  response["time"]["update"] = updateTime;
+  response["time"]["total"] = formatTime(requestTimer.msecs());
+  for (auto permutation : Permutation::ALL) {
+    response["located-triples"][Permutation::toString(
+        permutation)]["blocks-affected"] =
+        deltaTriples.getLocatedTriplesForPermutation(permutation).numBlocks();
+    auto numBlocks = index.getPimpl()
+                         .getPermutation(permutation)
+                         .metaData()
+                         .blockData()
+                         .size();
+    response["located-triples"][Permutation::toString(permutation)]
+            ["blocks-total"] = numBlocks;
+  }
+  return response;
+}
 // ____________________________________________________________________________
-void Server::processUpdateImpl(
+json Server::processUpdateImpl(
     const ad_utility::url_parser::ParamValueMap& params, const string& update,
     ad_utility::Timer& requestTimer, TimeLimit timeLimit, auto& messageSender,
     ad_utility::SharedCancellationHandle cancellationHandle,
@@ -907,8 +960,11 @@ void Server::processUpdateImpl(
                      "following query was sent instead of an update: ",
                      plannedQuery.parsedQuery_._originalString));
   }
-  ExecuteUpdate::executeUpdate(index_, plannedQuery.parsedQuery_, qet,
-                               deltaTriples, cancellationHandle);
+
+  DeltaTriplesCount countBefore = deltaTriples.getCounts();
+  UpdateMetadata updateMetadata = ExecuteUpdate::executeUpdate(
+      index_, plannedQuery.parsedQuery_, qet, deltaTriples, cancellationHandle);
+  DeltaTriplesCount countAfter = deltaTriples.getCounts();
 
   LOG(INFO) << "Done processing update"
             << ", total time was " << requestTimer.msecs().count() << " ms"
@@ -920,6 +976,10 @@ void Server::processUpdateImpl(
   // update anyway (The index of the located triples snapshot is part of the
   // cache key).
   cache_.clearAll();
+
+  return createResponseMetadataForUpdate(requestTimer, index_, deltaTriples,
+                                         plannedQuery, qet, countBefore,
+                                         updateMetadata, countAfter);
 }
 
 // ____________________________________________________________________________
@@ -933,32 +993,30 @@ Awaitable<void> Server::processUpdate(
   auto [cancellationHandle, cancelTimeoutOnDestruction] =
       setupCancellationHandle(messageSender.getQueryId(), timeLimit);
 
-  // Update the delta triples.
-
   // Note: We don't directly `co_await` because of lifetime issues (probably
   // bugs in GCC or Boost) that occur in the Conan build.
   auto coroutine = computeInNewThread(
       updateThreadPool_,
       [this, &params, &update, &requestTimer, &timeLimit, &messageSender,
        &cancellationHandle] {
-        index_.deltaTriplesManager().modify(
+        // Update the delta triples.
+        return index_.deltaTriplesManager().modify<nlohmann::json>(
             [this, &params, &update, &requestTimer, &timeLimit, &messageSender,
              &cancellationHandle](auto& deltaTriples) {
               // Use `this` explicitly to silence false-positive errors on
               // captured `this` being unused.
-              this->processUpdateImpl(params, update, requestTimer, timeLimit,
-                                      messageSender, cancellationHandle,
-                                      deltaTriples);
+              return this->processUpdateImpl(params, update, requestTimer,
+                                             timeLimit, messageSender,
+                                             cancellationHandle, deltaTriples);
             });
       },
       cancellationHandle);
-  co_await std::move(coroutine);
+  auto response = co_await std::move(coroutine);
 
-  // TODO<qup42> send a proper response
   // SPARQL 1.1 Protocol 2.2.4 Successful Responses: "The response body of a
   // successful update request is implementation defined."
-  co_await send(ad_utility::httpUtils::createOkResponse(
-      "Update successful", request, MediaType::textPlain));
+  co_await send(
+      ad_utility::httpUtils::createJsonResponse(std::move(response), request));
   co_return;
 }
 
@@ -997,7 +1055,7 @@ Awaitable<void> Server::processQueryOrUpdate(
   } catch (const QueryAlreadyInUseError& e) {
     responseStatus = http::status::conflict;
     exceptionErrorMsg = e.what();
-  } catch (const NoSupportedMediatypeError& e) {
+  } catch (const UnknownMediatypeError& e) {
     responseStatus = http::status::bad_request;
     exceptionErrorMsg = e.what();
   } catch (const ad_utility::CancellationException& e) {
@@ -1117,25 +1175,4 @@ bool Server::checkAccessToken(
     LOG(DEBUG) << accessTokenProvidedMsg << " and correct" << std::endl;
     return true;
   }
-}
-
-// _____________________________________________________________________________
-std::optional<std::string> Server::checkParameter(
-    const ad_utility::url_parser::ParamValueMap& parameters,
-    std::string_view key, std::optional<std::string> value) {
-  auto param =
-      ad_utility::url_parser::getParameterCheckAtMostOnce(parameters, key);
-  if (!param.has_value()) {
-    return std::nullopt;
-  }
-  std::string parameterValue = param.value();
-
-  // If value is given, but not equal to param value, return std::nullopt. If
-  // no value is given, set it to param value.
-  if (value == std::nullopt) {
-    value = parameterValue;
-  } else if (value != parameterValue) {
-    return std::nullopt;
-  }
-  return value;
 }

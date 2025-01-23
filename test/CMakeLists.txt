@@ -137,7 +137,7 @@ addLinkAndDiscoverTestSerial(FileTest)
 
 addLinkAndDiscoverTest(Simple8bTest)
 
-addLinkAndDiscoverTest(ContextFileParserTest parser)
+addLinkAndDiscoverTest(WordsAndDocsFileParserTest parser)
 
 addLinkAndDiscoverTest(IndexMetaDataTest index)
 
@@ -151,6 +151,8 @@ addLinkAndDiscoverTest(LocatedTriplesTest index)
 addLinkAndDiscoverTestSerial(IdTripleTest index)
 
 addLinkAndDiscoverTestSerial(DeltaTriplesTest index)
+
+addLinkAndDiscoverTest(DeltaTriplesCountTest index)
 
 addLinkAndDiscoverTest(EngineTest engine)
 
@@ -452,3 +454,5 @@ addLinkAndDiscoverTest(UrlParserTest)
 addLinkAndDiscoverTest(ServerTest engine)
 
 addLinkAndDiscoverTest(ExecuteUpdateTest engine)
+
+addLinkAndDiscoverTest(GraphStoreProtocolTest engine)

@@ -17,39 +17,22 @@
 #include "backports/algorithm.h"
 #include "engine/CallFixedSize.h"
 #include "index/FTSAlgorithms.h"
-#include "parser/ContextFileParser.h"
+#include "parser/WordsAndDocsFileParser.h"
 #include "util/Conversions.h"
 #include "util/Simple8bCode.h"
 
-namespace {
-
-// Custom delimiter class for tokenization of literals using `absl::StrSplit`.
-// The `Find` function returns the next delimiter in `text` after the given
-// `pos` or an empty substring if there is no next delimiter.
-struct LiteralsTokenizationDelimiter {
-  absl::string_view Find(absl::string_view text, size_t pos) {
-    auto isWordChar = [](char c) -> bool { return std::isalnum(c); };
-    auto found = std::find_if_not(text.begin() + pos, text.end(), isWordChar);
-    if (found == text.end()) return text.substr(text.size());
-    return {found, found + 1};
-  }
-};
-
-}  // namespace
-
 // _____________________________________________________________________________
-cppcoro::generator<ContextFileParser::Line> IndexImpl::wordsInTextRecords(
-    const std::string& contextFile, bool addWordsFromLiterals) {
+cppcoro::generator<WordsFileLine> IndexImpl::wordsInTextRecords(
+    std::string contextFile, bool addWordsFromLiterals) const {
   auto localeManager = textVocab_.getLocaleManager();
   // ROUND 1: If context file aka wordsfile is not empty, read words from there.
   // Remember the last context id for the (optional) second round.
   TextRecordIndex contextId = TextRecordIndex::make(0);
   if (!contextFile.empty()) {
-    ContextFileParser::Line line;
-    ContextFileParser p(contextFile, localeManager);
+    WordsFileParser p(contextFile, localeManager);
     ad_utility::HashSet<string> items;
-    while (p.getLine(line)) {
-      contextId = line._contextId;
+    for (auto& line : p) {
+      contextId = line.contextId_;
       co_yield line;
     }
     if (contextId > TextRecordIndex::make(0)) {
@@ -65,19 +48,67 @@ cppcoro::generator<ContextFileParser::Line> IndexImpl::wordsInTextRecords(
       if (!isLiteral(text)) {
         continue;
       }
-      ContextFileParser::Line entityLine{text, true, contextId, 1, true};
+      WordsFileLine entityLine{text, true, contextId, 1, true};
       co_yield entityLine;
       std::string_view textView = text;
       textView = textView.substr(0, textView.rfind('"'));
       textView.remove_prefix(1);
-      for (auto word : absl::StrSplit(textView, LiteralsTokenizationDelimiter{},
-                                      absl::SkipEmpty{})) {
-        auto wordNormalized = localeManager.getLowercaseUtf8(word);
-        ContextFileParser::Line wordLine{wordNormalized, false, contextId, 1};
+      for (auto word : tokenizeAndNormalizeText(textView, localeManager)) {
+        WordsFileLine wordLine{std::move(word), false, contextId, 1};
         co_yield wordLine;
       }
       contextId = contextId.incremented();
     }
+  }
+}
+
+// _____________________________________________________________________________
+void IndexImpl::processEntityCaseDuringInvertedListProcessing(
+    const WordsFileLine& line,
+    ad_utility::HashMap<Id, Score>& entitiesInContext, size_t& nofLiterals,
+    size_t& entityNotFoundErrorMsgCount) const {
+  VocabIndex eid;
+  // TODO<joka921> Currently only IRIs and strings from the vocabulary can
+  // be tagged entities in the text index (no doubles, ints, etc).
+  if (getVocab().getId(line.word_, &eid)) {
+    // Note that `entitiesInContext` is a HashMap, so the `Id`s don't have
+    // to be contiguous.
+    entitiesInContext[Id::makeFromVocabIndex(eid)] += line.score_;
+    if (line.isLiteralEntity_) {
+      ++nofLiterals;
+    }
+  } else {
+    logEntityNotFound(line.word_, entityNotFoundErrorMsgCount);
+  }
+}
+
+// _____________________________________________________________________________
+void IndexImpl::processWordCaseDuringInvertedListProcessing(
+    const WordsFileLine& line,
+    ad_utility::HashMap<WordIndex, Score>& wordsInContext) const {
+  // TODO<joka921> Let the `textVocab_` return a `WordIndex` directly.
+  WordVocabIndex vid;
+  bool ret = textVocab_.getId(line.word_, &vid);
+  WordIndex wid = vid.get();
+  if (!ret) {
+    LOG(ERROR) << "ERROR: word \"" << line.word_ << "\" "
+               << "not found in textVocab. Terminating\n";
+    AD_FAIL();
+  }
+  wordsInContext[wid] += line.score_;
+}
+
+// _____________________________________________________________________________
+void IndexImpl::logEntityNotFound(const string& word,
+                                  size_t& entityNotFoundErrorMsgCount) const {
+  if (entityNotFoundErrorMsgCount < 20) {
+    LOG(WARN) << "Entity from text not in KB: " << word << '\n';
+    if (++entityNotFoundErrorMsgCount == 20) {
+      LOG(WARN) << "There are more entities not in the KB..."
+                << " suppressing further warnings...\n";
+    }
+  } else {
+    entityNotFoundErrorMsgCount++;
   }
 }
 
@@ -214,12 +245,12 @@ size_t IndexImpl::processWordsForVocabulary(string const& contextFile,
   for (auto line : wordsInTextRecords(contextFile, addWordsFromLiterals)) {
     ++numLines;
     // LOG(INFO) << "LINE: "
-    //           << std::setw(50) << line._word << "   "
-    //           << line._isEntity << "\t"
-    //           << line._contextId.get() << "\t"
-    //           << line._score << std::endl;
-    if (!line._isEntity) {
-      distinctWords.insert(line._word);
+    //           << std::setw(50) << line.word_ << "   "
+    //           << line.isEntity_ << "\t"
+    //           << line.contextId_.get() << "\t"
+    //           << line.score_ << std::endl;
+    if (!line.isEntity_) {
+      distinctWords.insert(line.word_);
     }
   }
   textVocab_.createFromSet(distinctWords, onDiskBase_ + ".text.vocabulary");
@@ -243,49 +274,21 @@ void IndexImpl::processWordsForInvertedLists(const string& contextFile,
   size_t nofLiterals = 0;
 
   for (auto line : wordsInTextRecords(contextFile, addWordsFromLiterals)) {
-    if (line._contextId != currentContext) {
+    if (line.contextId_ != currentContext) {
       ++nofContexts;
       addContextToVector(writer, currentContext, wordsInContext,
                          entitiesInContext);
-      currentContext = line._contextId;
+      currentContext = line.contextId_;
       wordsInContext.clear();
       entitiesInContext.clear();
     }
-    if (line._isEntity) {
+    if (line.isEntity_) {
       ++nofEntityPostings;
-      // TODO<joka921> Currently only IRIs and strings from the vocabulary can
-      // be tagged entities in the text index (no doubles, ints, etc).
-      VocabIndex eid;
-      if (getVocab().getId(line._word, &eid)) {
-        // Note that `entitiesInContext` is a HashMap, so the `Id`s don't have
-        // to be contiguous.
-        entitiesInContext[Id::makeFromVocabIndex(eid)] += line._score;
-        if (line._isLiteralEntity) {
-          ++nofLiterals;
-        }
-      } else {
-        if (entityNotFoundErrorMsgCount < 20) {
-          LOG(WARN) << "Entity from text not in KB: " << line._word << '\n';
-          if (++entityNotFoundErrorMsgCount == 20) {
-            LOG(WARN) << "There are more entities not in the KB..."
-                      << " suppressing further warnings...\n";
-          }
-        } else {
-          entityNotFoundErrorMsgCount++;
-        }
-      }
+      processEntityCaseDuringInvertedListProcessing(
+          line, entitiesInContext, nofLiterals, entityNotFoundErrorMsgCount);
     } else {
       ++nofWordPostings;
-      // TODO<joka921> Let the `textVocab_` return a `WordIndex` directly.
-      WordVocabIndex vid;
-      bool ret = textVocab_.getId(line._word, &vid);
-      WordIndex wid = vid.get();
-      if (!ret) {
-        LOG(ERROR) << "ERROR: word \"" << line._word << "\" "
-                   << "not found in textVocab. Terminating\n";
-        AD_FAIL();
-      }
-      wordsInContext[wid] += line._score;
+      processWordCaseDuringInvertedListProcessing(line, wordsInContext);
     }
   }
   if (entityNotFoundErrorMsgCount > 0) {

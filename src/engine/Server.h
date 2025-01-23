@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 
+#include "ExecuteUpdate.h"
 #include "engine/Engine.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryExecutionTree.h"
@@ -150,6 +151,15 @@ class Server {
       ad_utility::Timer& requestTimer,
       const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
       TimeLimit timeLimit);
+  // For an executed update create a json with some stats on the update (timing,
+  // number of changed triples, etc.).
+  static json createResponseMetadataForUpdate(
+      const ad_utility::Timer& requestTimer, const Index& index,
+      const DeltaTriples& deltaTriples, const PlannedQuery& plannedQuery,
+      const QueryExecutionTree& qet, const DeltaTriplesCount& countBefore,
+      const UpdateMetadata& updateMetadata,
+      const DeltaTriplesCount& countAfter);
+  FRIEND_TEST(ServerTest, createResponseMetadata);
   // Do the actual execution of an update.
   Awaitable<void> processUpdate(
       const ad_utility::url_parser::ParamValueMap& params, const string& update,
@@ -181,7 +191,7 @@ class Server {
       const string& operation);
   // Execute an update operation. The function must have exclusive access to the
   // DeltaTriples object.
-  void processUpdateImpl(
+  json processUpdateImpl(
       const ad_utility::url_parser::ParamValueMap& params, const string& update,
       ad_utility::Timer& requestTimer, TimeLimit timeLimit, auto& messageSender,
       ad_utility::SharedCancellationHandle cancellationHandle,
@@ -255,18 +265,6 @@ class Server {
   /// formulated towards end users, it can be sent directly as the text of an
   /// HTTP error response.
   bool checkAccessToken(std::optional<std::string_view> accessToken) const;
-
-  /// Checks if a URL parameter exists in the request, and it matches the
-  /// expected `value`. If yes, return the value, otherwise return
-  /// `std::nullopt`. If `value` is `std::nullopt`, only check if the key
-  /// exists. We need this because we have parameters like "cmd=stats", where a
-  /// fixed combination of the key and value determines the kind of action, as
-  /// well as parameters like "index-decription=...", where the key determines
-  /// the kind of action. If the key is not found, always return `std::nullopt`.
-  static std::optional<std::string> checkParameter(
-      const ad_utility::url_parser::ParamValueMap& parameters,
-      std::string_view key, std::optional<std::string> value);
-  FRIEND_TEST(ServerTest, checkParameter);
 
   /// Check if user-provided timeout is authorized with a valid access-token or
   /// lower than the server default. Return an empty optional and send a 403
