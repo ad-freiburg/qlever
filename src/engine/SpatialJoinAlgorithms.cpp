@@ -69,6 +69,7 @@ std::optional<S2Polyline> SpatialJoinAlgorithms::getPolyline(
     points.push_back(S2LatLng::FromDegrees(lat, lng));
   }
   if (points.empty()) {
+    LOG(INFO) << "Invalid linestring: " << s << std::endl;
     return std::nullopt;
   }
   return S2Polyline{points};
