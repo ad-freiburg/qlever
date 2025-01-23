@@ -301,7 +301,6 @@ Result SpatialJoinAlgorithms::S2PointPolylineAlgorithm() {
   }
   spatialJoin_.value()->runtimeInfo().addDetail("time for s2 index building",
                                                 t.msecs().count());
-
   // Performs a nearest neighbor search on the index and returns the closest
   // points that satisfy the criteria given by `maxDist_` and `maxResults_`.
 
@@ -341,6 +340,9 @@ Result SpatialJoinAlgorithms::S2PointPolylineAlgorithm() {
     ad_utility::HashMap<size_t, double> deduplicatedSet{};
     t.cont();
     auto res = s2query.FindClosestEdges(&s2target);
+    for (size_t i = 0; i < 1000; ++i) {
+      res = s2query.FindClosestEdges(&s2target);
+    }
     t.stop();
     LOG(INFO) << "numNearEdgesInRes " << res.size() << std::endl;
     for (const auto& neighbor : res) {
