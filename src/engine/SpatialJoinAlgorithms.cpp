@@ -56,7 +56,7 @@ std::optional<S2Polyline> SpatialJoinAlgorithms::getPolyline(
   // This is for "official" LINESTRINGS.
   */
   const auto& s = str.value().first;
-  if (!s.starts_with("LINESTRING")) {
+  if (!s.starts_with("\"LINESTRING")) {
     LOG(INFO) << "Not a linestring " << s << std::endl;
     return std::nullopt;
   }
