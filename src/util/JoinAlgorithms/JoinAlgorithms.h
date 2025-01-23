@@ -81,20 +81,20 @@ concept BinaryIteratorFunction =
  * described cases leads to two sorted ranges in the output, this can possibly
  * be exploited to fix the result in a cheaper way than a full sort.
  */
-template <typename Range1, typename Range2, typename LessThan,
-          typename FindSmallerUndefRangesLeft,
-          typename FindSmallerUndefRangesRight,
-          typename ElFromFirstNotFoundAction = decltype(noop),
-          typename CheckCancellation = decltype(noop)>
-requires(ql::ranges::random_access_range<Range1> &&
-         ql::ranges::random_access_range<Range2>)
-[[nodiscard]] auto zipperJoinWithUndef(
-    const Range1& left, const Range2& right, const LessThan& lessThan,
-    const auto& compatibleRowAction,
-    const FindSmallerUndefRangesLeft& findSmallerUndefRangesLeft,
-    const FindSmallerUndefRangesRight& findSmallerUndefRangesRight,
-    ElFromFirstNotFoundAction elFromFirstNotFoundAction = {},
-    CheckCancellation checkCancellation = {}) {
+CPP_template(typename Range1, typename Range2, typename LessThan,
+             typename FindSmallerUndefRangesLeft,
+             typename FindSmallerUndefRangesRight,
+             typename ElFromFirstNotFoundAction = decltype(noop),
+             typename CheckCancellation = decltype(noop))(
+    requires ql::ranges::random_access_range<Range1> CPP_and
+        ql::ranges::random_access_range<Range2>)
+    [[nodiscard]] auto zipperJoinWithUndef(
+        const Range1& left, const Range2& right, const LessThan& lessThan,
+        const auto& compatibleRowAction,
+        const FindSmallerUndefRangesLeft& findSmallerUndefRangesLeft,
+        const FindSmallerUndefRangesRight& findSmallerUndefRangesRight,
+        ElFromFirstNotFoundAction elFromFirstNotFoundAction = {},
+        CheckCancellation checkCancellation = {}) {
   // If this is not an OPTIONAL join or a MINUS we can apply several
   // optimizations, so we store this information.
   static constexpr bool hasNotFoundAction =
@@ -321,16 +321,20 @@ requires(ql::ranges::random_access_range<Range1> &&
  * a proper exception. Typically implementations will just
  * CancellationHandle::throwIfCancelled().
  */
-template <typename RangeSmaller, typename RangeLarger,
-          typename ElementFromSmallerNotFoundAction = Noop,
-          typename CheckCancellation = Noop>
-requires(ql::ranges::random_access_range<RangeSmaller> &&
-         ql::ranges::random_access_range<RangeLarger>)
-void gallopingJoin(
-    const RangeSmaller& smaller, const RangeLarger& larger,
-    auto const& lessThan, auto const& action,
-    ElementFromSmallerNotFoundAction elementFromSmallerNotFoundAction = {},
-    CheckCancellation checkCancellation = {}) {
+CPP_template(typename RangeSmaller, typename RangeLarger,
+             typename ElementFromSmallerNotFoundAction = Noop,
+             typename CheckCancellation = Noop)(
+    requires ql::ranges::random_access_range<RangeSmaller> CPP_and
+        ql::ranges::random_access_range<
+            RangeLarger>) void gallopingJoin(const RangeSmaller& smaller,
+                                             const RangeLarger& larger,
+                                             auto const& lessThan,
+                                             auto const& action,
+                                             ElementFromSmallerNotFoundAction
+                                                 elementFromSmallerNotFoundAction =
+                                                     {},
+                                             CheckCancellation
+                                                 checkCancellation = {}) {
   auto itSmall = std::begin(smaller);
   auto endSmall = std::end(smaller);
   auto itLarge = std::begin(larger);

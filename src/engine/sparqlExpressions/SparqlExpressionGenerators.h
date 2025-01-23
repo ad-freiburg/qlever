@@ -50,9 +50,9 @@ cppcoro::generator<const std::decay_t<std::invoke_result_t<Transformation, T>>> 
   }
 }
 
-template <typename T, typename Transformation = std::identity>
-requires(ql::ranges::input_range<T>)
-auto resultGenerator(T&& vector, size_t numItems, Transformation transformation = {}) {
+CPP_template(typename T, typename Transformation = std::identity)(
+    requires ql::ranges::input_range<T>) auto resultGenerator(T&& vector, size_t numItems,
+                                                              Transformation transformation = {}) {
   AD_CONTRACT_CHECK(numItems == vector.size());
   return ad_utility::allView(AD_FWD(vector)) | ql::views::transform(std::move(transformation));
 }
