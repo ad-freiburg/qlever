@@ -65,6 +65,11 @@ void DeltaTriples::eraseTripleInAllPermutations(LocatedTripleHandles& handles) {
 }
 
 // ____________________________________________________________________________
+DeltaTriplesCount DeltaTriples::getCounts() const {
+  return {numInserted(), numDeleted()};
+}
+
+// ____________________________________________________________________________
 void DeltaTriples::insertTriples(CancellationHandle cancellationHandle,
                                  Triples triples) {
   LOG(DEBUG) << "Inserting"
@@ -188,6 +193,20 @@ SharedLocatedTriplesSnapshot DeltaTriples::getSnapshot() {
 }
 
 // ____________________________________________________________________________
+void to_json(nlohmann::json& j, const DeltaTriplesCount& count) {
+  j = nlohmann::json{{"inserted", count.triplesInserted_},
+                     {"deleted", count.triplesDeleted_},
+                     {"total", count.triplesInserted_ + count.triplesDeleted_}};
+}
+
+// ____________________________________________________________________________
+DeltaTriplesCount operator-(const DeltaTriplesCount& lhs,
+                            const DeltaTriplesCount& rhs) {
+  return {lhs.triplesInserted_ - rhs.triplesInserted_,
+          lhs.triplesDeleted_ - rhs.triplesDeleted_};
+}
+
+// ____________________________________________________________________________
 DeltaTriples::DeltaTriples(const Index& index)
     : DeltaTriples(index.getImpl()) {}
 
@@ -197,24 +216,41 @@ DeltaTriplesManager::DeltaTriplesManager(const IndexImpl& index)
       currentLocatedTriplesSnapshot_{deltaTriples_.wlock()->getSnapshot()} {}
 
 // _____________________________________________________________________________
-void DeltaTriplesManager::modify(
-    const std::function<void(DeltaTriples&)>& function) {
+template <typename ReturnType>
+ReturnType DeltaTriplesManager::modify(
+    const std::function<ReturnType(DeltaTriples&)>& function) {
   // While holding the lock for the underlying `DeltaTriples`, perform the
   // actual `function` (typically some combination of insert and delete
   // operations) and (while still holding the lock) update the
   // `currentLocatedTriplesSnapshot_`.
-  deltaTriples_.withWriteLock([this, &function](DeltaTriples& deltaTriples) {
-    function(deltaTriples);
-    auto newSnapshot = deltaTriples.getSnapshot();
-    currentLocatedTriplesSnapshot_.withWriteLock(
-        [&newSnapshot](auto& currentSnapshot) {
-          currentSnapshot = std::move(newSnapshot);
-        });
-  });
+  return deltaTriples_.withWriteLock(
+      [this, &function](DeltaTriples& deltaTriples) {
+        auto updateSnapshot = [this, &deltaTriples] {
+          auto newSnapshot = deltaTriples.getSnapshot();
+          currentLocatedTriplesSnapshot_.withWriteLock(
+              [&newSnapshot](auto& currentSnapshot) {
+                currentSnapshot = std::move(newSnapshot);
+              });
+        };
+
+        if constexpr (std::is_void_v<ReturnType>) {
+          function(deltaTriples);
+          updateSnapshot();
+        } else {
+          ReturnType returnValue = function(deltaTriples);
+          updateSnapshot();
+          return returnValue;
+        }
+      });
 }
+// Explicit instantions
+template void DeltaTriplesManager::modify<void>(
+    std::function<void(DeltaTriples&)> const&);
+template nlohmann::json DeltaTriplesManager::modify<nlohmann::json>(
+    const std::function<nlohmann::json(DeltaTriples&)>&);
 
 // _____________________________________________________________________________
-void DeltaTriplesManager::clear() { modify(&DeltaTriples::clear); }
+void DeltaTriplesManager::clear() { modify<void>(&DeltaTriples::clear); }
 
 // _____________________________________________________________________________
 SharedLocatedTriplesSnapshot DeltaTriplesManager::getCurrentSnapshot() const {

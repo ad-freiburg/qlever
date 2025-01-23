@@ -133,7 +133,7 @@ inline net::awaitable<T> interruptible(
     running->clear();
     net::dispatch(strand, [timer = std::move(timer)]() { timer->cancel(); });
   };
-  // Provide callback to outer world in order to cancel the timer pre-emptively.
+  // Provide callback to outer world in order to cancel the timer preemptively.
   cancelCallback.set_value(cancelTimer);
 
   auto timerLoop = [](std::shared_ptr<net::steady_timer> timer,

@@ -2,6 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Julian Mundhahs (mundhahj@tf.uni-freiburg.de)
 
+#include <engine/QueryPlanner.h>
 #include <engine/Server.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -10,6 +11,7 @@
 
 #include "util/GTestHelpers.h"
 #include "util/HttpRequestHelpers.h"
+#include "util/IndexTestHelpers.h"
 #include "util/http/HttpUtils.h"
 #include "util/http/UrlParser.h"
 
@@ -244,4 +246,51 @@ TEST(ServerTest, createMessageSender) {
       server.createMessageSender(server.queryHub_, req,
                                  "SELECT * WHERE { ?a ?b ?c }"),
       testing::HasSubstr("Assertion `queryHubLock` failed."));
+}
+
+TEST(ServerTest, createResponseMetadata) {
+  // Setup the datastructures
+  const ad_utility::SharedCancellationHandle handle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+  const ad_utility::Timer requestTimer{
+      ad_utility::Timer::InitialStatus::Stopped};
+  QueryExecutionContext* qec = ad_utility::testing::getQec("<a> <b> <c>");
+  const Index& index = qec->getIndex();
+  DeltaTriples deltaTriples{index};
+  const std::string update = "INSERT DATA { <b> <c> <d> }";
+  ParsedQuery pq = SparqlParser::parseQuery(update);
+  QueryPlanner qp(qec, handle);
+  QueryExecutionTree qet = qp.createExecutionTree(pq);
+  const Server::PlannedQuery plannedQuery{std::move(pq), std::move(qet)};
+
+  // Execute the update
+  DeltaTriplesCount countBefore = deltaTriples.getCounts();
+  UpdateMetadata updateMetadata = ExecuteUpdate::executeUpdate(
+      index, plannedQuery.parsedQuery_, plannedQuery.queryExecutionTree_,
+      deltaTriples, handle);
+  DeltaTriplesCount countAfter = deltaTriples.getCounts();
+
+  // Assertions
+  json metadata = Server::createResponseMetadataForUpdate(
+      requestTimer, index, deltaTriples, plannedQuery,
+      plannedQuery.queryExecutionTree_, countBefore, updateMetadata,
+      countAfter);
+  json deltaTriplesJson{
+      {"before", {{"inserted", 0}, {"deleted", 0}, {"total", 0}}},
+      {"after", {{"inserted", 1}, {"deleted", 0}, {"total", 1}}},
+      {"difference", {{"inserted", 1}, {"deleted", 0}, {"total", 1}}}};
+  json locatedTriplesJson{
+      {"SPO", {{"blocks-affected", 1}, {"blocks-total", 1}}},
+      {"POS", {{"blocks-affected", 1}, {"blocks-total", 1}}},
+      {"OSP", {{"blocks-affected", 1}, {"blocks-total", 1}}},
+      {"SOP", {{"blocks-affected", 1}, {"blocks-total", 1}}},
+      {"PSO", {{"blocks-affected", 1}, {"blocks-total", 1}}},
+      {"OPS", {{"blocks-affected", 1}, {"blocks-total", 1}}}};
+  EXPECT_THAT(metadata["update"], testing::Eq(update));
+  EXPECT_THAT(metadata["status"], testing::Eq("OK"));
+  EXPECT_THAT(metadata["warnings"],
+              testing::Eq(std::vector<std::string>{
+                  "SPARQL 1.1 Update for QLever is experimental."}));
+  EXPECT_THAT(metadata["delta-triples"], testing::Eq(deltaTriplesJson));
+  EXPECT_THAT(metadata["located-triples"], testing::Eq(locatedTriplesJson));
 }
