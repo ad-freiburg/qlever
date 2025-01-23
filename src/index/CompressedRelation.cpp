@@ -35,26 +35,27 @@ static auto getBeginAndEnd(auto& range) {
 static auto isTripleInSpecification =
     [](const ScanSpecification& scanSpec,
        const CompressedBlockMetadata::PermutedTriple& triple) {
-      // TODO<joka921> Make this a free function, make this simpler
-      auto checkElement = [](const auto& optId, Id id) -> std::optional<bool> {
+      enum struct M { GuaranteedMatch, Mismatch, MustCheckNextElement };
+      auto checkElement = [](const auto& optId, Id id) {
         if (!optId.has_value()) {
-          return true;
+          return M::GuaranteedMatch;
         } else if (optId.value() != id) {
-          return false;
+          return M::Mismatch;
         } else {
-          return std::nullopt;
+          return M::MustCheckNextElement;
         }
       };
       auto result = checkElement(scanSpec.col0Id(), triple.col0Id_);
-      if (!result.has_value()) {
+      if (result == M::MustCheckNextElement) {
         result = checkElement(scanSpec.col1Id(), triple.col1Id_);
       }
-      if (!result.has_value()) {
+      if (result == M::MustCheckNextElement) {
         result = checkElement(scanSpec.col2Id(), triple.col2Id_);
       }
-      // The explicit `true` handles the unlikely case that there only is a
-      // single triple in the block, which is scanned for explicitly.
-      return result.value_or(true);
+      // The case `result == M::MustCheckNextElement` handles the unlikely case
+      // that there only is a single triple in the block, which is scanned for
+      // explicitly.
+      return result != M::Mismatch;
     };
 
 // modify the `block` according to the `limitOffset`. Also modify the
@@ -672,6 +673,8 @@ std::pair<size_t, size_t> CompressedRelationReader::getResultSizeImpl(
                                       locatedTriplesPerBlock)
               .numRows();
     } else {
+      // If the first and last triple of the block match, then we know that the
+      // whole block belongs to the result.
       bool isComplete = isTripleInSpecification(scanSpec, block.firstTriple_) &&
                         isTripleInSpecification(scanSpec, block.lastTriple_);
       size_t divisor =
