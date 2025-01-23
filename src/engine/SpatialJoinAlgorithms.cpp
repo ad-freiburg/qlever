@@ -48,12 +48,13 @@ std::optional<S2Polyline> SpatialJoinAlgorithms::getPolyline(
   if (!str.has_value()) {
     return std::nullopt;
   }
-  // This is the mode for the original BMW data...
+  /*
+  // This is the mode for the original xxx data...
   auto res = ctre::range<
       "(?<lng>[0-9]+\\.[0-9]+),(?<lat>[0-9]+\\.[0-9]+),([0-9]+\\.[0-9]+"
       ")">(str.value().first);
   // This is for "official" LINESTRINGS.
-  /*
+  */
   const auto& s = str.value().first;
   if (!s.starts_with("LINESTRING")) {
     return std::nullopt;
@@ -61,7 +62,6 @@ std::optional<S2Polyline> SpatialJoinAlgorithms::getPolyline(
   auto res = ctre::range<
       "(?<lng>[0-9]+\\.[0-9]+) (?<lat>[0-9]+\\.[0-9]+"
       ")">(str.value().first);
-  */
   std::vector<S2LatLng> points;
   for (const auto& match : res) {
     auto lat = std::strtod(match.get<"lat">().data(), nullptr);
