@@ -96,9 +96,6 @@ FrequencyEncode<T>::FrequencyEncode(View&& view) {
   // appears in the vector
   TypedMap frequencyMap;
   for (const auto& value : view) {
-    frequencyMap[value] = 0;
-  }
-  for (const auto& value : view) {
     ++frequencyMap[value];
   }
 
@@ -136,8 +133,8 @@ template <typename T>
 void FrequencyEncode<T>::writeToFile(ad_utility::File& out,
                                      off_t& currentOffset) {
   currentOffset += textIndexReadWrite::writeCodebook(codeBook_, out);
-  textIndexReadWrite::writeVectorAndMoveOffset(
-      std::span<const size_t>(encodedVector_), out, currentOffset);
+  textIndexReadWrite::writeVectorAndMoveOffset<size_t>(encodedVector_, out,
+                                                       currentOffset);
 }
 
 // ____________________________________________________________________________
@@ -148,19 +145,14 @@ GapEncode<T>::GapEncode(View&& view) {
     return;
   }
   encodedVector_.reserve(ql::ranges::size(view));
-  encodedVector_.push_back(*ql::ranges::begin(view));
-
-  for (auto it1 = ql::ranges::begin(view),
-            it2 = std::next(ql::ranges::begin(view));
-       it2 != ql::ranges::end(view); ++it1, ++it2) {
-    encodedVector_.push_back(*it2 - *it1);
-  }
+  std::adjacent_difference(ql::ranges::begin(view), ql::ranges::end(view),
+                           std::back_inserter(encodedVector_));
 }
 
 // ____________________________________________________________________________
 template <typename T>
 requires std::is_arithmetic_v<T>
 void GapEncode<T>::writeToFile(ad_utility::File& out, off_t& currentOffset) {
-  textIndexReadWrite::writeVectorAndMoveOffset(
-      std::span<const T>(encodedVector_), out, currentOffset);
+  textIndexReadWrite::writeVectorAndMoveOffset<T>(encodedVector_, out,
+                                                  currentOffset);
 }
