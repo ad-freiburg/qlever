@@ -342,6 +342,7 @@ Result SpatialJoinAlgorithms::S2PointPolylineAlgorithm() {
     t.cont();
     auto res = s2query.FindClosestEdges(&s2target);
     t.stop();
+    LOG(INFO) << "numNearEdgesInRes " << res.size() << std::endl;
     for (const auto& neighbor : res) {
       // In this loop we only receive points that already satisfy the given
       // criteria
