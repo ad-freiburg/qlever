@@ -10,6 +10,7 @@
 #include <s2/s2earth.h>
 #include <s2/s2point.h>
 #include <s2/s2point_index.h>
+#include <s2/s2polyline.h>
 #include <s2/util/units/length-units.h>
 
 #include <cmath>
@@ -40,11 +41,10 @@ std::optional<GeoPoint> SpatialJoinAlgorithms::getPoint(const IdTable* restable,
 };
 
 // ____________________________________________________________________________
-std::optional<S2Polyline> SpatialJoinAlgorithms::getPolyline(
-    const IdTable* restable, size_t row, ColumnIndex col) const {
+std::optional<S2Polyline> getPolyline(const IdTable* restable, size_t row,
+                                      ColumnIndex col, const Index& index) {
   auto id = restable->at(row, col);
-  auto str = ExportQueryExecutionTrees::idToStringAndType(
-      spatialJoin_.value()->getIndex(), id, {});
+  auto str = ExportQueryExecutionTrees::idToStringAndType(index, id, {});
   if (!str.has_value()) {
     return std::nullopt;
   }
@@ -57,7 +57,6 @@ std::optional<S2Polyline> SpatialJoinAlgorithms::getPolyline(
   */
   const auto& s = str.value().first;
   if (!s.starts_with("\"LINESTRING")) {
-    LOG(INFO) << "Not a linestring " << s << std::endl;
     return std::nullopt;
   }
   auto res = ctre::range<
@@ -70,7 +69,6 @@ std::optional<S2Polyline> SpatialJoinAlgorithms::getPolyline(
     points.push_back(S2LatLng::FromDegrees(lat, lng));
   }
   if (points.empty()) {
-    LOG(INFO) << "Invalid linestring: " << s << std::endl;
     return std::nullopt;
   }
   return S2Polyline{points};
@@ -299,7 +297,8 @@ Result SpatialJoinAlgorithms::S2PointPolylineAlgorithm() {
   ad_utility::Timer t2{ad_utility::Timer::Started};
 
   for (size_t row = 0; row < indexTable->size(); row++) {
-    auto p = getPolyline(indexTable, row, indexJoinCol);
+    auto p = getPolyline(indexTable, row, indexJoinCol,
+                         spatialJoin_.value()->getIndex());
     if (p.has_value()) {
       lines.emplace_back(std::move(p.value()), row);
     }
@@ -364,7 +363,7 @@ Result SpatialJoinAlgorithms::S2PointPolylineAlgorithm() {
       ql::ranges::move(res3, std::back_inserter(res));
     }
     t.stop();
-    LOG(INFO) << "numNearEdgesInRes " << res.size() << std::endl;
+    AD_LOG_DEBUG << "numNearEdgesInRes " << res.size() << std::endl;
     for (const auto& neighbor : res) {
       // In this loop we only receive points that already satisfy the given
       // criteria
