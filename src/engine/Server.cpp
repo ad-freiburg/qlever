@@ -405,8 +405,7 @@ Awaitable<void> Server::process(
     if (!accessTokenOk) {
       throw std::runtime_error(absl::StrCat(
           actionName,
-          " requires a valid access token. No valid access token is present.",
-          "Processing of request aborted."));
+          " requires a valid access token but no access token was provided"));
     }
   };
 
@@ -1204,15 +1203,14 @@ bool Server::checkAccessToken(
     return false;
   }
   const auto accessTokenProvidedMsg = "Access token was provided";
-  const auto requestIgnoredMsg = ", request is ignored";
   if (accessToken_.empty()) {
-    throw std::runtime_error(absl::StrCat(
-        accessTokenProvidedMsg,
-        " but server was started without --access-token", requestIgnoredMsg));
+    throw std::runtime_error(
+        absl::StrCat(accessTokenProvidedMsg,
+                     " but server was started without --access-token"));
   } else if (!ad_utility::constantTimeEquals(accessToken.value(),
                                              accessToken_)) {
-    throw std::runtime_error(absl::StrCat(
-        accessTokenProvidedMsg, " but it was invalid", requestIgnoredMsg));
+    throw std::runtime_error(
+        absl::StrCat(accessTokenProvidedMsg, " but it was invalid"));
   } else {
     LOG(DEBUG) << accessTokenProvidedMsg << " and correct" << std::endl;
     return true;
