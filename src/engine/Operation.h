@@ -454,4 +454,5 @@ class Operation {
   FRIEND_TEST(Operation, ensureLazyOperationIsCachedIfSmallEnough);
   FRIEND_TEST(Operation, checkLazyOperationIsNotCachedIfTooLarge);
   FRIEND_TEST(Operation, checkLazyOperationIsNotCachedIfUnlikelyToFitInCache);
+  FRIEND_TEST(Operation, checkMaxCacheSizeIsComputedCorrectly);
 };
