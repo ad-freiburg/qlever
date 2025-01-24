@@ -124,9 +124,9 @@ static auto getSetUnion(const std::vector<BlockMetadata>& blocks1,
     return b1.blockIndex_ < b2.blockIndex_;
   };
   // Given that we have vectors with sorted (BlockMedata) values, we can
-  // use std::ranges::set_union. Thus the complexity is O(n + m).
-  std::ranges::set_union(blocks1, blocks2, std::back_inserter(mergedVectors),
-                         blockLessThanBlock);
+  // use ql::ranges::set_union. Thus the complexity is O(n + m).
+  ql::ranges::set_union(blocks1, blocks2, std::back_inserter(mergedVectors),
+                        blockLessThanBlock);
   mergedVectors.shrink_to_fit();
   return mergedVectors;
 }

@@ -182,9 +182,9 @@ VariableToColumnMap CartesianProductJoin::computeVariableToColumnMap() const {
 }
 
 // _____________________________________________________________________________
-IdTable CartesianProductJoin::writeAllColumns(
-    std::ranges::random_access_range auto idTables, size_t offset, size_t limit,
-    size_t lastTableOffset) const {
+CPP_template_def(typename R)(requires ql::ranges::random_access_range<R>)
+    IdTable CartesianProductJoin::writeAllColumns(
+        R idTables, size_t offset, size_t limit, size_t lastTableOffset) const {
   AD_CORRECTNESS_CHECK(offset >= lastTableOffset);
   IdTable result{getResultWidth(), getExecutionContext()->getAllocator()};
   // TODO<joka921> Find a solution to cheaply handle the case, that only a
@@ -303,12 +303,14 @@ CartesianProductJoin::calculateSubResults(bool requestLaziness) {
 }
 
 // _____________________________________________________________________________
-Result::Generator CartesianProductJoin::produceTablesLazily(
-    LocalVocab mergedVocab, std::ranges::range auto idTables, size_t offset,
-    size_t limit, size_t lastTableOffset) const {
+CPP_template_def(typename R)(requires ql::ranges::range<R>) Result::Generator
+    CartesianProductJoin::produceTablesLazily(LocalVocab mergedVocab,
+                                              R idTables, size_t offset,
+                                              size_t limit,
+                                              size_t lastTableOffset) const {
   while (limit > 0) {
     uint64_t limitWithChunkSize = std::min(limit, chunkSize_);
-    IdTable idTable = writeAllColumns(std::ranges::ref_view(idTables), offset,
+    IdTable idTable = writeAllColumns(ql::ranges::ref_view(idTables), offset,
                                       limitWithChunkSize, lastTableOffset);
     size_t tableSize = idTable.size();
     AD_CORRECTNESS_CHECK(tableSize <= limit);

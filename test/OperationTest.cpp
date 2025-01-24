@@ -24,7 +24,7 @@ using Status = RuntimeInformation::Status;
 
 namespace {
 // Helper function to perform actions at various stages of a generator
-template <typename Range, typename T = std::ranges::range_value_t<Range>>
+template <typename Range, typename T = ql::ranges::range_value_t<Range>>
 auto expectAtEachStageOfGenerator(
     Range generator, std::vector<std::function<void()>> functions,
     ad_utility::source_location l = ad_utility::source_location::current()) {
