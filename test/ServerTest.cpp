@@ -147,11 +147,11 @@ TEST(ServerTest, parseHttpRequest) {
               ad_utility::source_location::current()) {
         auto t = generateLocationTrace(l);
         // Test the cases:
-        // 1. No Access token
+        // 1. No access token
         // 2. Access token in query
-        // 3. Access token in Authorization header
-        // 4. Different Access tokens
-        // 5. Same Access token
+        // 3. Access token in `Authorization` header
+        // 4. Different access tokens
+        // 5. Same access token
         boost::urls::url pathWithAccessToken{pathBase};
         pathWithAccessToken.params().append({"access-token", "foo"});
         ad_utility::HashMap<http::field, std::string>
@@ -178,9 +178,10 @@ TEST(ServerTest, parseHttpRequest) {
         AD_EXPECT_THROW_WITH_MESSAGE(
             parse(makeRequest(method, pathWithAccessToken.buffer(),
                               headersWithDifferentAccessToken, body)),
-            testing::HasSubstr("Access token is specified both in the "
-                               "`Authorization` Header and the `access-token` "
-                               "parameter, but they aren't the same."));
+            testing::HasSubstr(
+                "Access token is specified both in the "
+                "`Authorization` header and by the `access-token` "
+                "parameter, but they aren't the same."));
       };
   testAccessTokenCombinations(http::verb::get, "/?query=a", Query{"a"});
   testAccessTokenCombinations(http::verb::post, "/", Query{"a"},
@@ -194,11 +195,11 @@ TEST(ServerTest, parseHttpRequest) {
               ad_utility::source_location::current()) {
         auto t = generateLocationTrace(l);
         // Test the cases:
-        // 1. No Access token
+        // 1. No access token
         // 2. Access token in query
-        // 3. Access token in Authorization header
-        // 4. Different Access tokens
-        // 5. Same Access token
+        // 3. Access token in `Authorization` header
+        // 4. Different access tokens
+        // 5. Same access token
         boost::urls::url paramsWithAccessToken{absl::StrCat("/?", bodyBase)};
         paramsWithAccessToken.params().append({"access-token", "foo"});
         std::string bodyWithAccessToken{
@@ -231,9 +232,10 @@ TEST(ServerTest, parseHttpRequest) {
             parse(makeRequest(http::verb::post, "/",
                               headersWithDifferentAccessToken,
                               bodyWithAccessToken)),
-            testing::HasSubstr("Access token is specified both in the "
-                               "`Authorization` Header and the `access-token` "
-                               "parameter, but they aren't the same."));
+            testing::HasSubstr(
+                "Access token is specified both in the "
+                "`Authorization` header and by the `access-token` "
+                "parameter, but they aren't the same."));
       };
   testAccessTokenCombinationsUrlEncoded("query=SELECT%20%2A%20WHERE%20%7B%7D",
                                         Query{"SELECT * WHERE {}"});
@@ -428,7 +430,7 @@ TEST(ServerTest, extractAccessToken) {
       extract(makeRequest(http::verb::get, "/?access-token=bar",
                           {{http::field::authorization, "Bearer foo"}})),
       testing::HasSubstr(
-          "Access token is specified both in the `Authorization` Header and "
+          "Access token is specified both in the `Authorization` header and by"
           "the `access-token` parameter, but they aren't the same."));
   AD_EXPECT_THROW_WITH_MESSAGE(
       extract(makeRequest(http::verb::get, "/",
@@ -443,7 +445,7 @@ TEST(ServerTest, extractAccessToken) {
       extract(makeRequest(http::verb::post, "/?access-token=bar",
                           {{http::field::authorization, "Bearer foo"}})),
       testing::HasSubstr(
-          "Access token is specified both in the `Authorization` Header and "
+          "Access token is specified both in the `Authorization` header and by"
           "the `access-token` parameter, but they aren't the same."));
   AD_EXPECT_THROW_WITH_MESSAGE(
       extract(makeRequest(http::verb::post, "/?access-token=bar",

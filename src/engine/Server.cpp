@@ -173,10 +173,11 @@ std::optional<std::string> Server::extractAccessToken(
   std::optional<std::string> tokenFromParameter;
   if (request.find(http::field::authorization) != request.end()) {
     string_view authorization = request[http::field::authorization];
+    // TODO: bearer is wrong, probably `Basic`.
     const std::string prefix = "Bearer ";
     if (!authorization.starts_with(prefix)) {
-      throw std::runtime_error(
-          absl::StrCat("Authorization header doesn't start with \"Bearer \"."));
+      throw std::runtime_error(absl::StrCat(
+          "Authorization header doesn't start with \"", prefix, "\"."));
     }
     authorization.remove_prefix(prefix.length());
     tokenFromAuthorizationHeader = std::string(authorization);
@@ -190,7 +191,8 @@ std::optional<std::string> Server::extractAccessToken(
   if (tokenFromAuthorizationHeader && tokenFromParameter &&
       tokenFromAuthorizationHeader != tokenFromParameter) {
     throw std::runtime_error(
-        "Access token is specified both in the `Authorization` Header and the "
+        "Access token is specified both in the `Authorization` header and by "
+        "the "
         "`access-token` parameter, but they aren't the same.");
   }
   return tokenFromAuthorizationHeader ? std::move(tokenFromAuthorizationHeader)
