@@ -21,6 +21,7 @@
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/ParseableDuration.h"
 #include "util/TypeIdentity.h"
+#include "util/TypeTraits.h"
 #include "util/http/HttpUtils.h"
 #include "util/http/websocket/MessageSender.h"
 
@@ -977,8 +978,7 @@ Awaitable<void> Server::processQueryOrUpdate(
     TimeLimit timeLimit) {
   using namespace ad_utility::httpUtils;
 
-  static_assert(std::is_same_v<Operation, Query> ||
-                std::is_same_v<Operation, Update>);
+  static_assert(ad_utility::SameAsAny<Operation, Query, Update>);
 
   http::status responseStatus = http::status::ok;
 
@@ -1038,7 +1038,7 @@ Awaitable<void> Server::processQueryOrUpdate(
         LOG(ERROR) << metadata.value().query_ << std::endl;
       }
     }
-    const std::string operationStr = [&operation] {
+    const std::string& operationStr = [&operation]() -> const std::string& {
       if constexpr (std::is_same_v<Operation, Query>) {
         return operation.query_;
       } else {
