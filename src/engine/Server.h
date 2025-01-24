@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 
+#include "ExecuteUpdate.h"
 #include "engine/Engine.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryExecutionTree.h"
@@ -148,6 +149,15 @@ class Server {
       ad_utility::Timer& requestTimer,
       const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
       TimeLimit timeLimit);
+  // For an executed update create a json with some stats on the update (timing,
+  // number of changed triples, etc.).
+  static json createResponseMetadataForUpdate(
+      const ad_utility::Timer& requestTimer, const Index& index,
+      const DeltaTriples& deltaTriples, const PlannedQuery& plannedQuery,
+      const QueryExecutionTree& qet, const DeltaTriplesCount& countBefore,
+      const UpdateMetadata& updateMetadata,
+      const DeltaTriplesCount& countAfter);
+  FRIEND_TEST(ServerTest, createResponseMetadata);
   // Do the actual execution of an update.
   Awaitable<void> processUpdate(
       const ad_utility::url_parser::ParamValueMap& params,
@@ -180,7 +190,7 @@ class Server {
       const string& operation);
   // Execute an update operation. The function must have exclusive access to the
   // DeltaTriples object.
-  void processUpdateImpl(
+  json processUpdateImpl(
       const ad_utility::url_parser::ParamValueMap& params,
       const ad_utility::url_parser::sparqlOperation::Update& update,
       ad_utility::Timer& requestTimer, TimeLimit timeLimit, auto& messageSender,

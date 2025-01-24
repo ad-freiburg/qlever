@@ -14,7 +14,7 @@
 
 // ___________________________________________________________________________
 Variable::Variable(std::string name, bool checkName) : _name{std::move(name)} {
-  if (checkName) {
+  if (checkName && ad_utility::areExpensiveChecksEnabled) {
     AD_CONTRACT_CHECK(isValidVariableName(_name), [this]() {
       return absl::StrCat("\"", _name, "\" is not a valid SPARQL variable");
     });
