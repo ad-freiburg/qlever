@@ -132,7 +132,7 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
             makeIdTriples(vocab, localVocab, triples)));
   };
   // A matcher that checks the state of a `DeltaTriples`:
-  // - `numInserted()` and `numDeleted()`
+  // - `numInserted()` and `numDeleted()` and the derived `getCounts()`
   // - `numTriples()` for all `LocatedTriplesPerBlock`
   // - the inserted and deleted triples (unordered)
   auto StateIs = [&UnorderedTriplesAre](
@@ -350,14 +350,14 @@ TEST_F(DeltaTriplesTest, DeltaTriplesManager) {
           {"<A> <C> <E>", absl::StrCat("<A> <B> <E", threadIdx, ">"),
            absl::StrCat("<A> <B> <F", threadIdx, ">")});
       // Insert the `triplesToInsert`.
-      deltaTriplesManager.modify([&](DeltaTriples& deltaTriples) {
+      deltaTriplesManager.modify<void>([&](DeltaTriples& deltaTriples) {
         deltaTriples.insertTriples(cancellationHandle, triplesToInsert);
       });
       // We should have successfully completed an update, so the snapshot
       // pointer should have changed.
       EXPECT_NE(beforeUpdate, deltaTriplesManager.getCurrentSnapshot());
       // Delete the `triplesToDelete`.
-      deltaTriplesManager.modify([&](DeltaTriples& deltaTriples) {
+      deltaTriplesManager.modify<void>([&](DeltaTriples& deltaTriples) {
         deltaTriples.deleteTriples(cancellationHandle, triplesToDelete);
       });
 

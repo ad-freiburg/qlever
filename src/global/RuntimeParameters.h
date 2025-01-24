@@ -53,7 +53,12 @@ inline auto& RuntimeParameters() {
         Bool<"throw-on-unbound-variables">{false},
         // Control up until which size lazy results should be cached. Caching
         // does cause significant overhead for this case.
-        MemorySizeParameter<"lazy-result-max-cache-size">{5_MB}};
+        MemorySizeParameter<"lazy-result-max-cache-size">{5_MB},
+        // When the result of an index scan is smaller than a single block, then
+        // its size estimate will be the size of the block divided by this
+        // value.
+        SizeT<"small-index-scan-size-estimate-divisor">{5},
+    };
   }();
   return params;
 }

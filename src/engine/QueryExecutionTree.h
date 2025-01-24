@@ -25,6 +25,8 @@ class QueryExecutionTree {
                      std::shared_ptr<Operation> operation)
       : QueryExecutionTree(qec) {
     rootOperation_ = std::move(operation);
+    resultWidth_ = rootOperation_->getResultWidth();
+    cacheKey_ = rootOperation_->getCacheKey();
     readFromCache();
   }
 
@@ -58,7 +60,7 @@ class QueryExecutionTree {
   std::optional<size_t> getVariableColumnOrNullopt(
       const Variable& variable) const;
 
-  size_t getResultWidth() const { return rootOperation_->getResultWidth(); }
+  size_t getResultWidth() const { return resultWidth_.value(); }
 
   std::shared_ptr<const Result> getResult(bool requestLaziness = false) const {
     return rootOperation_->getResult(
@@ -203,11 +205,25 @@ class QueryExecutionTree {
     s << tree.getRootOperation()->getDescriptor();
   }
 
+  bool supportsLimit() const { return getRootOperation()->supportsLimit(); }
+
+  // Set the value of the `LIMIT` clause that will be applied to the result of
+  // this operation.
+  void setLimit(const LimitOffsetClause& limitOffsetClause) {
+    getRootOperation()->setLimit(limitOffsetClause);
+    // Setting the limit invalidates the `cacheKey` as well as the
+    // `sizeEstimate`.
+    cacheKey_ = getRootOperation()->getCacheKey();
+    sizeEstimate_ = getRootOperation()->getSizeEstimate();
+  }
+
  private:
   QueryExecutionContext* qec_;  // No ownership
   std::shared_ptr<Operation> rootOperation_ =
       nullptr;  // Owned child. Will be deleted at deconstruction.
   std::optional<size_t> sizeEstimate_ = std::nullopt;
+  std::optional<std::string> cacheKey_ = std::nullopt;
+  std::optional<size_t> resultWidth_ = std::nullopt;
   bool isRoot_ = false;  // used to distinguish the root from child
                          // operations/subtrees when pinning only the result.
 

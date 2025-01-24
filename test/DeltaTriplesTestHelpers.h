@@ -37,14 +37,17 @@ inline auto NumTriplesInAllPermutations =
   return InAllPermutations(AD_PROPERTY(LocatedTriplesPerBlock, numTriples,
                                        testing::Eq(expectedNumTriples)));
 };
-// A matcher that checks `numInserted()` and `numDeleted()` of a `DeltaTriples`
-// and `numTriples()` for all `LocatedTriplesPerBlock` of the `DeltaTriples`.
+// A matcher that checks `numInserted()`, `numDeleted()` and the derived
+// `getCounts()` of a `DeltaTriples` and `numTriples()` for all
+// `LocatedTriplesPerBlock` of the `DeltaTriples`.
 inline auto NumTriples =
     [](size_t inserted, size_t deleted,
        size_t inAllPermutations) -> testing::Matcher<const DeltaTriples&> {
   return testing::AllOf(
       AD_PROPERTY(DeltaTriples, numInserted, testing::Eq(inserted)),
       AD_PROPERTY(DeltaTriples, numDeleted, testing::Eq(deleted)),
+      AD_PROPERTY(DeltaTriples, getCounts,
+                  testing::Eq(DeltaTriplesCount{inserted, deleted})),
       NumTriplesInAllPermutations(inAllPermutations));
 };
 

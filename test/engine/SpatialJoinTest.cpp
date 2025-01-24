@@ -926,22 +926,22 @@ class SpatialJoinMultiplicityAndSizeEstimateTest
         spatialJoin = static_cast<SpatialJoin*>(spJoin2.get());
         auto varColsMap = spatialJoin->getExternallyVisibleVariableColumns();
 
-        assertMultiplicity(subj1.getVariable(), 9.8, spatialJoin, varColsMap);
-        assertMultiplicity(obj1.getVariable(), 7.0, spatialJoin, varColsMap);
-        assertMultiplicity(subj2.getVariable(), 9.8, spatialJoin, varColsMap);
-        assertMultiplicity(obj2.getVariable(), 7.0, spatialJoin, varColsMap);
+        assertMultiplicity(subj1.getVariable(), 4.2, spatialJoin, varColsMap);
+        assertMultiplicity(obj1.getVariable(), 3.0, spatialJoin, varColsMap);
+        assertMultiplicity(subj2.getVariable(), 4.2, spatialJoin, varColsMap);
+        assertMultiplicity(obj2.getVariable(), 3.0, spatialJoin, varColsMap);
         ASSERT_TRUE(
             spatialJoin->onlyForTestingGetDistanceVariable().has_value());
         assertMultiplicity(Variable{"?distanceForTesting"}, 1, spatialJoin,
                            varColsMap);
       } else {
-        ASSERT_EQ(leftChild->getSizeEstimate(), 7);
-        ASSERT_EQ(rightChild->getSizeEstimate(), 7);
+        auto leftEstimate = leftChild->getSizeEstimate();
+        auto rightEstimate = rightChild->getSizeEstimate();
         auto spJoin1 = spatialJoin->addChild(firstChild, firstVariable);
         spatialJoin = static_cast<SpatialJoin*>(spJoin1.get());
         auto spJoin2 = spatialJoin->addChild(secondChild, secondVariable);
         spatialJoin = static_cast<SpatialJoin*>(spJoin2.get());
-        ASSERT_LE(spatialJoin->getSizeEstimate(), 49);
+        ASSERT_LE(spatialJoin->getSizeEstimate(), leftEstimate * rightEstimate);
       }
     }
   }

@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <boost/optional.hpp>
 #include <vector>
 
 #include "engine/CheckUsePatternTrick.h"
@@ -324,7 +325,7 @@ class QueryPlanner {
 
   [[nodiscard]] std::vector<QueryPlanner::SubtreePlan> createJoinCandidates(
       const SubtreePlan& a, const SubtreePlan& b,
-      std::optional<TripleGraph> tg) const;
+      boost::optional<const TripleGraph&> tg) const;
 
   // Used internally by `createJoinCandidates`. If `a` or `b` is a transitive
   // path operation and the other input can be bound to this transitive path

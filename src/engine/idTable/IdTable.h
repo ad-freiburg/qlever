@@ -364,7 +364,7 @@ class IdTable {
   }
 
   // The usual `front` and `back` functions to make the interface similar to
-  // `std::vector` aand other containers.
+  // `std::vector` and other containers.
   // TODO<C++23, joka921> Remove the duplicates via explicit object parameters
   // ("deducing this").
   row_reference_restricted front() requires(!isView) { return (*this)[0]; }

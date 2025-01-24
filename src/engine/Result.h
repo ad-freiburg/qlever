@@ -173,8 +173,8 @@ class Result {
   // the name of the function called with the local vocab as argument):
   //
   // ExportQueryExecutionTrees::idTableToQLeverJSONArray (idToStringAndType)
-  // ExportQueryExecutionTrees::selectQueryResultToSparqlJSON (dito)
-  // ExportQueryExecutionTrees::selectQueryResultToStream (dito)
+  // ExportQueryExecutionTrees::selectQueryResultToSparqlJSON (ditto)
+  // ExportQueryExecutionTrees::selectQueryResultToStream (ditto)
   // Filter::computeFilterImpl (evaluationContext)
   // Variable::evaluate (idToStringAndType)
   //

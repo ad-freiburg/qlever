@@ -10,6 +10,15 @@
 #include "parser/ParsedQuery.h"
 #include "util/CancellationHandle.h"
 
+// Metadata about the time spent on different parts of an update.
+struct UpdateMetadata {
+  using Milliseconds = std::chrono::milliseconds;
+  static constexpr Milliseconds Zero = Milliseconds::zero();
+  Milliseconds triplePreparationTime_ = Zero;
+  Milliseconds insertionTime_ = Zero;
+  Milliseconds deletionTime_ = Zero;
+};
+
 class ExecuteUpdate {
  public:
   using CancellationHandle = ad_utility::SharedCancellationHandle;
@@ -18,10 +27,10 @@ class ExecuteUpdate {
 
   // Execute an update. This function is comparable to
   // `ExportQueryExecutionTrees::computeResult` for queries.
-  static void executeUpdate(const Index& index, const ParsedQuery& query,
-                            const QueryExecutionTree& qet,
-                            DeltaTriples& deltaTriples,
-                            const CancellationHandle& cancellationHandle);
+  static UpdateMetadata executeUpdate(
+      const Index& index, const ParsedQuery& query,
+      const QueryExecutionTree& qet, DeltaTriples& deltaTriples,
+      const CancellationHandle& cancellationHandle);
 
  private:
   // Resolve all `TripleComponent`s and `Graph`s in a vector of
@@ -59,6 +68,7 @@ class ExecuteUpdate {
   static std::pair<IdTriplesAndLocalVocab, IdTriplesAndLocalVocab>
   computeGraphUpdateQuads(const Index& index, const ParsedQuery& query,
                           const QueryExecutionTree& qet,
-                          const CancellationHandle& cancellationHandle);
+                          const CancellationHandle& cancellationHandle,
+                          UpdateMetadata& metadata);
   FRIEND_TEST(ExecuteUpdate, computeGraphUpdateQuads);
 };

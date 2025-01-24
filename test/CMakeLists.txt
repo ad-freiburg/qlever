@@ -152,6 +152,8 @@ addLinkAndDiscoverTestSerial(IdTripleTest index)
 
 addLinkAndDiscoverTestSerial(DeltaTriplesTest index)
 
+addLinkAndDiscoverTest(DeltaTriplesCountTest index)
+
 addLinkAndDiscoverTest(EngineTest engine)
 
 addLinkAndDiscoverTest(JoinTest engine)

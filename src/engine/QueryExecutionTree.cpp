@@ -24,7 +24,7 @@ QueryExecutionTree::QueryExecutionTree(QueryExecutionContext* const qec)
 
 // _____________________________________________________________________________
 std::string QueryExecutionTree::getCacheKey() const {
-  return rootOperation_->getCacheKey();
+  return cacheKey_.value();
 }
 
 // _____________________________________________________________________________
