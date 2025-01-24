@@ -28,12 +28,12 @@ class IdTableCompressedWriterBenchmark : public BenchmarkInterface {
                ad_utility::integerRange(numInputRows)) {
             res.push_back(gen());
           }
-          std::ranges::sort(res);
+          ql::ranges::sort(res);
           return res;
         };
     std::vector<std::vector<size_t>> inputs;
     inputs.resize(numInputs);
-    std::ranges::generate(inputs, generateRandomVec);
+    ql::ranges::generate(inputs, generateRandomVec);
 
     auto run = [&inputs]() {
       auto merger = ad_utility::parallelMultiwayMerge<size_t, false>(

@@ -12,9 +12,9 @@
 #include "backports/concepts.h"
 
 // The following defines namespaces `ql::ranges` and `ql::views` that are almost
-// drop-in replacements for `std::ranges` and `std::views`. In C++20 mode (when
+// drop-in replacements for `ql::ranges` and `std::views`. In C++20 mode (when
 // the `QLEVER_CPP_17` macro is not used), these namespaces are simply aliases
-// for `std::ranges` and `std::views`. In C++17 mode they contain the ranges and
+// for `ql::ranges` and `std::views`. In C++17 mode they contain the ranges and
 // views from Erice Niebler's `range-v3` library. NOTE: `ql::ranges::unique`
 // currently doesn't work, because the interface to this function is different
 // in both implementations. NOTE: There might be other caveats which we are
