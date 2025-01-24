@@ -3,7 +3,7 @@
 // Author: Johannes Kalmbach(joka921) <johannes.kalmbach@gmail.com>
 //
 
-#include <gtest/gtest.h>
+#include <gmock/gmock.h>
 
 #include "./util/IdTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
@@ -225,3 +225,16 @@ TEST(TripleComponent, invalidDatatypeForLiteral) {
   // Something that is invalid because it is none of the above
   ASSERT_ANY_THROW(lit("\"alpha\"", "fr-ca"));
 }
+
+/*
+TEST(TripleComponent, toString) {
+  using Tc = TripleComponent;
+  auto match = [](const std::string& s) {
+    .. Todo...
+
+  }
+  EXPECT_EQ({GeoPoint{13, 14}};
+  EXPECT_EQ()
+
+}
+*/
