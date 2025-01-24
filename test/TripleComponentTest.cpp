@@ -226,15 +226,27 @@ TEST(TripleComponent, invalidDatatypeForLiteral) {
   ASSERT_ANY_THROW(lit("\"alpha\"", "fr-ca"));
 }
 
-/*
+// _____________________________________________________________________________1
 TEST(TripleComponent, toString) {
+  using namespace ::testing;
+  auto match = [](const auto& matcher) {
+    auto makeTcAndToString = [](auto&& val) {
+      return TripleComponent{AD_FWD(val)}.toString();
+    };
+    return ResultOf(makeTcAndToString, matcher);
+  };
+
+  EXPECT_THAT(GeoPoint(13, 14), match(StartsWith("G:POINT(14.")));
+  EXPECT_THAT("hello", match("hello"));
+  EXPECT_THAT(12, match("12"));
+  EXPECT_THAT(12.3, match("12.3"));
   using Tc = TripleComponent;
-  auto match = [](const std::string& s) {
-    .. Todo...
-
-  }
-  EXPECT_EQ({GeoPoint{13, 14}};
-  EXPECT_EQ()
-
+  EXPECT_THAT(Tc::UNDEF{}, match("UNDEF"));
+  EXPECT_THAT(Variable("?x"), match("?x"));
+  EXPECT_THAT(Tc::Literal::literalWithoutQuotes("hallo"), match("\"hallo\""));
+  EXPECT_THAT(Tc::Iri::fromIrirefWithoutBrackets("blim"), match("<blim>"));
+  EXPECT_THAT(DateYearOrDuration(Date(2000, 1, 1)), match("DATE: 2000-01-01"));
+  EXPECT_THAT(true, match("true"));
+  EXPECT_THAT(false, match("false"));
+  EXPECT_THAT(Id::makeFromInt(42), match("I:42"));
 }
-*/
