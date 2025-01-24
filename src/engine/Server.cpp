@@ -592,24 +592,26 @@ Awaitable<void> Server::process(
 
       if (parsedQuery.hasUpdateClause()) {
         requireValidAccessToken("SPARQL Update");
+        // TODO: reduce duplication here with the execution of SPARQL Update
         auto coroutine = computeInNewThread(
             updateThreadPool_,
             [this, &pq, &requestTimer, &cancellationHandle] {
-              index_.deltaTriplesManager().modify(
+              return index_.deltaTriplesManager().modify<nlohmann::json>(
                   [this, &pq, &requestTimer,
                    &cancellationHandle](auto& deltaTriples) {
                     // Use `this` explicitly to silence false-positive errors on
                     // captured `this` being unused.
-                    this->processUpdateImpl(pq, requestTimer,
-                                            cancellationHandle, deltaTriples);
+                    return this->processUpdateImpl(
+                        pq, requestTimer, cancellationHandle, deltaTriples);
                   });
             },
             cancellationHandle);
-        co_await std::move(coroutine);
+        auto response = co_await std::move(coroutine);
 
-        // TODO<qup42> send some metadata in the response, see #1675
-        co_await send(ad_utility::httpUtils::createOkResponse(
-            "Update successful", request, MediaType::textPlain));
+        // SPARQL 1.1 Protocol 2.2.4 Successful Responses: "The response body of
+        // a successful update request is implementation defined."
+        co_await send(ad_utility::httpUtils::createJsonResponse(
+            std::move(response), request));
         co_return;
       } else {
         MediaType mediaType = determineMediaType(parameters, request);
