@@ -191,7 +191,7 @@ std::optional<std::string> Server::extractAccessToken(
       tokenFromAuthorizationHeader != tokenFromParameter) {
     throw std::runtime_error(
         "Access token is specified both in the `Authorization` Header and the "
-        "parameters, but they aren't the same.");
+        "`access-token` parameter, but they aren't the same.");
   }
   return tokenFromAuthorizationHeader ? std::move(tokenFromAuthorizationHeader)
                                       : std::move(tokenFromParameter);
@@ -1201,8 +1201,8 @@ bool Server::checkAccessToken(
   if (!accessToken) {
     return false;
   }
-  auto accessTokenProvidedMsg = absl::StrCat("Access token was provided");
-  auto requestIgnoredMsg = ", request is ignored";
+  const auto accessTokenProvidedMsg = "Access token was provided";
+  const auto requestIgnoredMsg = ", request is ignored";
   if (accessToken_.empty()) {
     throw std::runtime_error(absl::StrCat(
         accessTokenProvidedMsg,
