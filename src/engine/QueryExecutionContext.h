@@ -5,6 +5,8 @@
 
 #pragma once
 
+#include <global/RuntimeParameters.h>
+
 #include <memory>
 #include <string>
 
@@ -143,6 +145,12 @@ class QueryExecutionContext {
   bool _pinSubtrees;
   bool _pinResult;
 
+  // If false, then no updates of the runtime information should be sent via the
+  // websocket connection for performance reasons.
+  bool areWebsocketUpdatesEnabled() const {
+    return areWebsocketUpdatesEnabled_;
+  }
+
  private:
   const Index& _index;
 
@@ -158,4 +166,8 @@ class QueryExecutionContext {
   QueryPlanningCostFactors _costFactors;
   SortPerformanceEstimator _sortPerformanceEstimator;
   std::function<void(std::string)> updateCallback_;
+  // Cache the state of that runtime parameter to reduce the contention of the
+  // mutex.
+  bool areWebsocketUpdatesEnabled_ =
+      RuntimeParameters().get<"websocket-updates-enabled">();
 };

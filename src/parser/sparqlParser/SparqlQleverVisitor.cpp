@@ -311,8 +311,8 @@ ParsedQuery Visitor::visit(Parser::DescribeQueryContext* ctx) {
   if (describedResources.empty()) {
     const auto& visibleVariables =
         parsedQuery_.selectClause().getVisibleVariables();
-    std::ranges::copy(visibleVariables,
-                      std::back_inserter(describeClause.resources_));
+    ql::ranges::copy(visibleVariables,
+                     std::back_inserter(describeClause.resources_));
     describedVariables = visibleVariables;
   }
   auto& selectClause = parsedQuery_.selectClause();
