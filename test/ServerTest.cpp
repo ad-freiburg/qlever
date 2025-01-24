@@ -430,7 +430,7 @@ TEST(ServerTest, extractAccessToken) {
       extract(makeRequest(http::verb::get, "/?access-token=bar",
                           {{http::field::authorization, "Bearer foo"}})),
       testing::HasSubstr(
-          "Access token is specified both in the `Authorization` header and by"
+          "Access token is specified both in the `Authorization` header and by "
           "the `access-token` parameter, but they aren't the same."));
   AD_EXPECT_THROW_WITH_MESSAGE(
       extract(makeRequest(http::verb::get, "/",
@@ -445,7 +445,7 @@ TEST(ServerTest, extractAccessToken) {
       extract(makeRequest(http::verb::post, "/?access-token=bar",
                           {{http::field::authorization, "Bearer foo"}})),
       testing::HasSubstr(
-          "Access token is specified both in the `Authorization` header and by"
+          "Access token is specified both in the `Authorization` header and by "
           "the `access-token` parameter, but they aren't the same."));
   AD_EXPECT_THROW_WITH_MESSAGE(
       extract(makeRequest(http::verb::post, "/?access-token=bar",
