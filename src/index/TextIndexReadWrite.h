@@ -12,7 +12,7 @@
 #include "util/Simple8bCode.h"
 #include "util/TransparentFunctors.h"
 
-namespace {
+namespace textIndexReadWrite::detail {
 
 // This function contains the actual frequency compressed list reading and does
 // the following steps:
@@ -96,7 +96,7 @@ void readGapComprListHelper(size_t nofElements, off_t from, size_t nofBytes,
   gapEncodedVector.resize(nofElements);
 }
 
-}  // namespace
+}  // namespace textIndexReadWrite::detail
 namespace textIndexReadWrite {
 
 /**
@@ -159,8 +159,8 @@ vector<To> readFreqComprList(size_t nofElements, off_t from, size_t nofBytes,
                              Transformer transformer = {}) {
   vector<uint64_t> frequencyEncodedVector;
   vector<From> codebook;
-  readFreqComprListHelper(nofElements, from, nofBytes, textIndexFile,
-                          frequencyEncodedVector, codebook);
+  detail::readFreqComprListHelper(nofElements, from, nofBytes, textIndexFile,
+                                  frequencyEncodedVector, codebook);
   vector<To> result;
   result.reserve(frequencyEncodedVector.size());
   ql::ranges::for_each(frequencyEncodedVector, [&](const auto& encoded) {
@@ -184,8 +184,8 @@ void readFreqComprList(OutputIterator iterator, size_t nofElements, off_t from,
                        Transformer transformer = {}) {
   vector<uint64_t> frequencyEncodedVector;
   vector<From> codebook;
-  readFreqComprListHelper(nofElements, from, nofBytes, textIndexFile,
-                          frequencyEncodedVector, codebook);
+  detail::readFreqComprListHelper(nofElements, from, nofBytes, textIndexFile,
+                                  frequencyEncodedVector, codebook);
   ql::ranges::for_each(frequencyEncodedVector, [&](const auto& encoded) {
     *iterator = transformer(codebook.at(encoded));
     ++iterator;
@@ -212,8 +212,8 @@ vector<To> readGapComprList(size_t nofElements, off_t from, size_t nofBytes,
                             const ad_utility::File& textIndexFile,
                             Transformer transformer = {}) {
   vector<From> gapEncodedVector;
-  readGapComprListHelper(nofElements, from, nofBytes, textIndexFile,
-                         gapEncodedVector);
+  detail::readGapComprListHelper(nofElements, from, nofBytes, textIndexFile,
+                                 gapEncodedVector);
 
   // Undo gapEncoding
   vector<To> result;
@@ -240,8 +240,8 @@ void readGapComprList(OutputIterator iterator, size_t nofElements, off_t from,
                       size_t nofBytes, const ad_utility::File& textIndexFile,
                       Transformer transformer = {}) {
   vector<From> gapEncodedVector;
-  readGapComprListHelper(nofElements, from, nofBytes, textIndexFile,
-                         gapEncodedVector);
+  detail::readGapComprListHelper(nofElements, from, nofBytes, textIndexFile,
+                                 gapEncodedVector);
 
   // Undo gapEncoding
   From previous = 0;
@@ -260,8 +260,6 @@ void readGapComprList(OutputIterator iterator, size_t nofElements, off_t from,
  *        It does this during the construction of the object and stores the
  *        encoded vector, the codebook and the code map. It also has a method
  *        to write the encoded vector to a file.
- * @warning Cannot deduce type of T from view, so it has to be given as
- *          template.
  */
 template <typename T>
 class FrequencyEncode {
@@ -273,7 +271,47 @@ class FrequencyEncode {
 
   // View must be an input range with value type `T`.
   template <typename View>
-  explicit FrequencyEncode(View&& view);
+  requires(!std::same_as<FrequencyEncode, std::remove_cvref_t<View>>)
+  explicit FrequencyEncode(View&& inputView) {
+    auto view = std::forward<View>(inputView);
+    if (ql::ranges::empty(view)) {
+      return;
+    }
+    // Create the frequency map to count how often a certain value of type T
+    // appears in the vector
+    TypedMap frequencyMap;
+    for (const auto& value : view) {
+      ++frequencyMap[value];
+    }
+
+    // Convert the hashmap to a vector to sort it by most frequent first
+    std::vector<std::pair<T, size_t>> frequencyVector;
+    frequencyVector.reserve(frequencyMap.size());
+    ql::ranges::copy(frequencyMap, std::back_inserter(frequencyVector));
+    ql::ranges::sort(frequencyVector, [](const auto& a, const auto& b) {
+      return a.second > b.second;
+    });
+
+    // Write the codeBook and codeMap
+    // codeBook contains all values of type T exactly ones, sorted by frequency
+    // descending
+    // codeMap maps all values of type T that where in the vector to their
+    // position in the codeBook
+    codeBook_.reserve(frequencyVector.size());
+    codeMap_.reserve(frequencyVector.size());
+    size_t i = 0;
+    for (const auto& frequencyPair : frequencyVector) {
+      codeBook_.push_back(frequencyPair.first);
+      codeMap_[frequencyPair.first] = i;
+      ++i;
+    }
+
+    // Finally encode the vector
+    encodedVector_.reserve(ql::ranges::size(view));
+    for (const auto& value : view) {
+      encodedVector_.push_back(codeMap_[value]);
+    }
+  };
 
   FrequencyEncode() = delete;
   FrequencyEncode(const FrequencyEncode&) = delete;
@@ -293,13 +331,15 @@ class FrequencyEncode {
   CodeBook codeBook_;
 };
 
+template <typename View>
+FrequencyEncode(View&& view)
+    -> FrequencyEncode<ql::ranges::range_value_t<std::decay_t<View>>>;
+
 /**
  * @brief A class used to encode a view of elements by gap encoding them.
  *        It does this during the construction of the object and stores the
  *        encoded vector. It also has a method to write the encoded vector to
  *        a file.
- * @warning Cannot deduce type of T from view, so it has to be given as
- *          template.
  */
 template <typename T>
 requires std::is_arithmetic_v<T> class GapEncode {
@@ -308,7 +348,16 @@ requires std::is_arithmetic_v<T> class GapEncode {
 
   // View must be an input range with value type `T`.
   template <typename View>
-  explicit GapEncode(View&& view);
+  requires(!std::same_as<GapEncode, std::remove_cvref_t<View>>)
+  explicit GapEncode(View&& inputView) {
+    auto view = std::forward<View>(inputView);
+    if (ql::ranges::empty(view)) {
+      return;
+    }
+    encodedVector_.reserve(ql::ranges::size(view));
+    std::adjacent_difference(ql::ranges::begin(view), ql::ranges::end(view),
+                             std::back_inserter(encodedVector_));
+  };
 
   GapEncode() = delete;
   GapEncode(const GapEncode&) = delete;
@@ -323,3 +372,7 @@ requires std::is_arithmetic_v<T> class GapEncode {
  private:
   TypedVector encodedVector_;
 };
+
+template <typename View>
+GapEncode(View&& view)
+    -> GapEncode<ql::ranges::range_value_t<std::decay_t<View>>>;
