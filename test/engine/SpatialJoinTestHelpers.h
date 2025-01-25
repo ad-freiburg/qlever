@@ -349,12 +349,15 @@ inline std::shared_ptr<QueryExecutionTree> buildSmallChild(
 // one of the wrapper classes needs a proper maxDistance, otherwise the wrapper
 // can't be used to test the function
 inline SpatialJoinAlgorithms getDummySpatialJoinAlgsForWrapperTesting(
-    size_t maxDist = 1000) {
-  auto qec = buildTestQEC();
+    size_t maxDist = 1000,
+    std::optional<QueryExecutionContext*> qec = std::nullopt) {
+  if (!qec) {
+    qec = buildTestQEC();
+  }
   MaxDistanceConfig task{maxDist};
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
       ad_utility::makeExecutionTree<SpatialJoin>(
-          qec,
+          qec.value(),
           SpatialJoinConfiguration{task, Variable{"?point1"},
                                    Variable{"?point2"}},
           std::nullopt, std::nullopt);
@@ -373,7 +376,7 @@ inline SpatialJoinAlgorithms getDummySpatialJoinAlgsForWrapperTesting(
                                    spatialJoin->getMaxDist(),
                                    std::nullopt};
 
-  return {qec, params, spatialJoin->onlyForTestingGetConfig()};
+  return {qec.value(), params, spatialJoin->onlyForTestingGetConfig()};
 }
 
 }  // namespace SpatialJoinTestHelpers

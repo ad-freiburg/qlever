@@ -23,6 +23,12 @@ using Box = bg::model::box<Point>;
 using Value = std::pair<Box, size_t>;
 using Polygon = boost::geometry::model::polygon<
     boost::geometry::model::d2::point_xy<double>>;
+using Linestring = bg::model::linestring<Point>;
+using MultiPoint = bg::model::multi_point<Point>;
+using MultiLinestring = bg::model::multi_linestring<Linestring>;
+using MultiPolygon = bg::model::multi_polygon<Polygon>;
+using AnyGeometry = boost::variant<Point, Linestring, Polygon, MultiPoint,
+                                   MultiLinestring, MultiPolygon>;
 }  // namespace BoostGeometryNamespace
 
 class SpatialJoinAlgorithms {
@@ -56,6 +62,19 @@ class SpatialJoinAlgorithms {
   BoostGeometryNamespace::Point OnlyForTestingWrapperCalculateMidpointOfBox(
       const BoostGeometryNamespace::Box& box) const {
     return calculateMidpointOfBox(box);
+  }
+
+  void setUseMidpointForAreas_(bool useMidpointForAreas) {
+    useMidpointForAreas_ = useMidpointForAreas;
+  }
+
+  Id OnlyForTestingWrapperComputeDist(const IdTable* idTableLeft,
+                                      const IdTable* idTableRight,
+                                      size_t rowLeft, size_t rowRight,
+                                      ColumnIndex leftPointCol,
+                                      ColumnIndex rightPointCol) const {
+    return computeDist(idTableLeft, idTableRight, rowLeft, rowRight,
+                       leftPointCol, rightPointCol);
   }
 
   double OnlyForTestingWrapperGetMaxDistFromMidpointToAnyPointInsideTheBox(

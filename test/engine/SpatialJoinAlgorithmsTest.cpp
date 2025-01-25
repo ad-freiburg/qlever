@@ -1514,6 +1514,120 @@ TEST(SpatialJoin, getMaxDistFromMidpointToAnyPointInsideTheBox) {
           area_statue, midpoint_statue));
 }
 
+QueryExecutionContext* getAllGeometriesQEC() {
+  auto addRow = [](std::string& kg, std::string nr, std::string wktStr) {
+    kg += absl::StrCat("<geometry" + nr + "> <asWKT> \"", wktStr, "\".\n");
+  };
+  // each object (except for the point) has its leftmost coordinate at an
+  // integer number and its rightmost coordinate 0.5 units further right. The
+  // y coordinate will be 0 for those case. All other points are inbetween these
+  // two points with different y coordinates. The reason for that is, that it
+  // is very easy to calculate the shortest distance between two geometries.
+  std::string point = "POINT(1.5 0)";
+  std::string linestring = "LINESTRING(2.0 0, 2.2 1, 2.5 0)";
+  std::string polygon = "POLYGON((3.0 0, 3.1 1, 3.2 2, 3.5 0))";
+  std::string multiPoint = "MULTIPOINT((4.0 0), (4.2 1), (4.5 0))";
+  std::string multiLinestring =
+      "MULTILINESTRING((5.0 0, 5.2 1, 5.5 1), (5.1 3, 5.5 0))";
+  std::string multiPolygon =
+      "MULTIPOLYGON(((6.0 0, 6.1 1, 6.3 5, 6.4 2)), ((6.2 1, 6.3 4, 6.4 3, 6.5 "
+      "0)))";
+
+  std::string kg = "";  // tiny test knowledge graph for all geometries
+  addRow(kg, "1", point);
+  addRow(kg, "2", linestring);
+  addRow(kg, "3", polygon);
+  addRow(kg, "4", multiPoint);
+  addRow(kg, "5", multiLinestring);
+  addRow(kg, "6", multiPolygon);
+
+  auto qec = ad_utility::testing::getQec(kg, true, true, false, 16_MB, false,
+                                         true, std::nullopt, 10_kB);
+  return qec;
+}
+
+TEST(SpatialJoin, areaFormat) {
+  auto qec = getAllGeometriesQEC();
+  auto leftChild =
+      buildIndexScan(qec, {"?geo1", std::string{"<asWKT>"}, "?obj1"});
+  auto rightChild =
+      buildIndexScan(qec, {"?geo2", std::string{"<asWKT>"}, "?obj2"});
+
+  std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
+      ad_utility::makeExecutionTree<SpatialJoin>(
+          qec,
+          SpatialJoinConfiguration{MaxDistanceConfig(100000000),
+                                   Variable{"?obj1"}, Variable{"?obj2"}},
+          leftChild, rightChild);
+
+  std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
+  SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
+  spatialJoin->selectAlgorithm(SpatialJoinAlgorithm::BOUNDING_BOX);
+  auto res = spatialJoin->getResult();
+  // if all rows can be parsed correctly, the result should be the cross
+  // product. (Lines which can't be parsed will be ignored (and a warning gets
+  // printed) and therefore the cross product of all parsed lines would be
+  // smaller then 36)
+  ASSERT_EQ(res->idTable().numRows(), 36);
+}
+
+TEST(SpatialJoin, trueAreaDistance) {
+  auto testDist = [](QueryExecutionContext* qec, std::string nr1,
+                     std::string nr2, double distance) {
+    auto makeIndexScan = [&](std::string nr) {
+      auto subject = absl::StrCat("<geometry", nr, ">");
+      auto objStr = absl::StrCat("?obj", nr);
+      TripleComponent object{Variable{objStr}};
+      return ad_utility::makeExecutionTree<IndexScan>(
+          qec, Permutation::Enum::PSO,
+          SparqlTriple{TripleComponent::Iri::fromIriref(subject), "<asWKT>",
+                       object});
+    };
+    auto scan1 = makeIndexScan(nr1);
+    auto scan2 = makeIndexScan(nr2);
+    auto var1 = absl::StrCat("?obj", nr1);
+    auto var2 = absl::StrCat("?obj", nr2);
+
+    std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
+        ad_utility::makeExecutionTree<SpatialJoin>(
+            qec,
+            SpatialJoinConfiguration{MaxDistanceConfig(100000000),
+                                     Variable{var1}, Variable{var2}},
+            scan1, scan2);
+
+    std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
+    SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
+    spatialJoin->selectAlgorithm(SpatialJoinAlgorithm::BOUNDING_BOX);
+    PreparedSpatialJoinParams params =
+        spatialJoin->onlyForTestingGetPrepareJoin();
+    SpatialJoinAlgorithms algorithms{
+        qec, params, spatialJoin->onlyForTestingGetConfig(), std::nullopt};
+    algorithms.setUseMidpointForAreas_(false);
+    auto distID = algorithms.OnlyForTestingWrapperComputeDist(
+        params.idTableLeft_, params.idTableRight_, 0, 0, params.leftJoinCol_,
+        params.rightJoinCol_);
+    ASSERT_EQ(distID.getDatatype(), Datatype::Double);
+    ASSERT_DOUBLE_EQ(distID.getDouble(), distance);
+  };
+  auto qec = getAllGeometriesQEC();
+  double conversionFactor = 78630;  // convert to meters
+  testDist(qec, "1", "2", 0.5 * conversionFactor);
+  testDist(qec, "1", "3", 1.5 * conversionFactor);
+  testDist(qec, "1", "4", 2.5 * conversionFactor);
+  testDist(qec, "1", "5", 3.5 * conversionFactor);
+  testDist(qec, "1", "6", 4.5 * conversionFactor);
+  testDist(qec, "2", "3", 0.5 * conversionFactor);
+  testDist(qec, "2", "4", 1.5 * conversionFactor);
+  testDist(qec, "2", "5", 2.5 * conversionFactor);
+  testDist(qec, "2", "6", 3.5 * conversionFactor);
+  testDist(qec, "3", "4", 0.5 * conversionFactor);
+  testDist(qec, "3", "5", 1.5 * conversionFactor);
+  testDist(qec, "3", "6", 2.5 * conversionFactor);
+  testDist(qec, "4", "5", 0.5 * conversionFactor);
+  testDist(qec, "4", "6", 1.5 * conversionFactor);
+  testDist(qec, "5", "6", 0.5 * conversionFactor);
+}
+
 }  // namespace boundingBox
 
 }  // namespace

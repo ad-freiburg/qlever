@@ -50,21 +50,48 @@ std::string SpatialJoinAlgorithms::betweenQuotes(
   }
 }
 
+struct DistanceVisitor : public boost::static_visitor<double> {
+  template <typename Geometry1, typename Geometry2>
+  double operator()(const Geometry1& geom1, const Geometry2& geom2) const {
+    return bg::distance(geom1, geom2);
+  }
+};
+
 // ____________________________________________________________________________
 Id SpatialJoinAlgorithms::computeDist(const IdTable* idTableLeft,
                                       const IdTable* idTableRight,
                                       size_t rowLeft, size_t rowRight,
                                       ColumnIndex leftPointCol,
                                       ColumnIndex rightPointCol) const {
+  auto getAreaString = [&](const IdTable* idtable, size_t row, size_t col) {
+    return betweenQuotes(ExportQueryExecutionTrees::idToStringAndType(
+                             qec_->getIndex(), idtable->at(row, col), {})
+                             .value()
+                             .first);
+  };
+
+  auto getAreaOrPointGeometry =
+      [&](const IdTable* idtable, size_t row, size_t col,
+          std::optional<GeoPoint> point) -> std::optional<AnyGeometry> {
+    AnyGeometry geometry;
+    try {
+      if (!point) {
+        boost::geometry::read_wkt(getAreaString(idtable, row, col), geometry);
+      } else {
+        geometry = Point(point.value().getLng(), point.value().getLat());
+      }
+    } catch (...) {
+      return std::nullopt;
+    }
+    return geometry;
+  };
+
   // for now we need to get the data from the disk, but in the future, this
   // information will be stored in an ID, just like GeoPoint
   auto getAreaPoint = [&](const IdTable* idtable, size_t row,
                           size_t col) -> std::optional<GeoPoint> {
-    std::string areastring =
-        betweenQuotes(ExportQueryExecutionTrees::idToStringAndType(
-                          qec_->getIndex(), idtable->at(row, col), {})
-                          .value()
-                          .first);
+    std::string areastring = getAreaString(idtable, row, col);
+
     Box areaBox;
     try {
       areaBox = calculateBoundingBoxOfArea(areastring);
@@ -73,29 +100,41 @@ Id SpatialJoinAlgorithms::computeDist(const IdTable* idTableLeft,
       // gets printed at another place and the point/area just gets skipped
       return std::nullopt;
     }
-    if (useMidpointForAreas_) {
-      Point p = calculateMidpointOfBox(areaBox);
-      return GeoPoint(p.get<1>(), p.get<0>());
-    } else {
-      AD_FAIL();  // TODO not yet implemented
-    }
+    Point p = calculateMidpointOfBox(areaBox);
+    return GeoPoint(p.get<1>(), p.get<0>());
   };
 
   auto point1 = getPoint(idTableLeft, rowLeft, leftPointCol);
-  if (!point1) {
-    point1 = getAreaPoint(idTableLeft, rowLeft, leftPointCol);
-  }
-
   auto point2 = getPoint(idTableRight, rowRight, rightPointCol);
-  if (!point2) {
-    point2 = getAreaPoint(idTableRight, rowRight, rightPointCol);
-  }
+  if (useMidpointForAreas_) {
+    if (!point1) {
+      point1 = getAreaPoint(idTableLeft, rowLeft, leftPointCol);
+    }
 
-  if (!point1.has_value() || !point2.has_value()) {
-    return Id::makeUndefined();
+    if (!point2) {
+      point2 = getAreaPoint(idTableRight, rowRight, rightPointCol);
+    }
+
+    if (!point1.has_value() || !point2.has_value()) {
+      return Id::makeUndefined();
+    }
+    return Id::makeFromDouble(
+        ad_utility::detail::wktDistImpl(point1.value(), point2.value()));
+  } else {
+    auto geometry1 =
+        getAreaOrPointGeometry(idTableLeft, rowLeft, leftPointCol, point1);
+    auto geometry2 =
+        getAreaOrPointGeometry(idTableRight, rowRight, rightPointCol, point2);
+    if (!geometry1.has_value() || !geometry2.has_value()) {
+      return Id::makeUndefined();
+    }
+    // convert to m and return. Note that the 78630 is an approximation, which
+    // does not provide accurate results for the poles.
+    return Id::makeFromDouble(boost::apply_visitor(DistanceVisitor(),
+                                                   geometry1.value(),
+                                                   geometry2.value()) *
+                              78630);
   }
-  return Id::makeFromDouble(
-      ad_utility::detail::wktDistImpl(point1.value(), point2.value()));
 }
 
 // ____________________________________________________________________________
@@ -489,32 +528,21 @@ std::array<bool, 2> SpatialJoinAlgorithms::isAPoleTouched(
   return std::array{northPoleReached, southPoleReached};
 }
 
+struct BoundingBoxVisitor : public boost::static_visitor<Box> {
+  template <typename Geometry>
+  Box operator()(const Geometry& geometry) const {
+    Box box;
+    bg::envelope(geometry, box);
+    return box;
+  }
+};
+
 // ____________________________________________________________________________
 Box SpatialJoinAlgorithms::calculateBoundingBoxOfArea(
     const std::string& wktString) const {
-  Polygon polygon;
-  boost::geometry::read_wkt(wktString, polygon);
-  double minLng = std::numeric_limits<double>::infinity();
-  double maxLng = -std::numeric_limits<double>::infinity();
-  double minLat = std::numeric_limits<double>::infinity();
-  double maxLat = -std::numeric_limits<double>::infinity();
-  for (const auto& point : polygon.outer()) {
-    double lng = boost::geometry::get<0>(point);
-    double lat = boost::geometry::get<1>(point);
-    if (lng < minLng) {
-      minLng = lng;
-    }
-    if (lng > maxLng) {
-      maxLng = lng;
-    }
-    if (lat < minLat) {
-      minLat = lat;
-    }
-    if (lat > maxLat) {
-      maxLat = lat;
-    }
-  }
-  return Box(Point(minLng, minLat), Point(maxLng, maxLat));
+  AnyGeometry geometry;
+  boost::geometry::read_wkt(wktString, geometry);
+  return boost::apply_visitor(BoundingBoxVisitor(), geometry);
 }
 
 // ____________________________________________________________________________
