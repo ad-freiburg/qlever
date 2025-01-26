@@ -270,10 +270,10 @@ class FrequencyEncode {
   using CodeBook = TypedVector;
 
   // View must be an input range with value type `T`.
-  template <typename View>
-  requires(!std::same_as<FrequencyEncode, std::remove_cvref_t<View>>)
-  explicit FrequencyEncode(View&& inputView) {
-    auto view = std::forward<View>(inputView);
+  CPP_template(typename View)(requires(
+      !std::same_as<
+          FrequencyEncode,
+          std::remove_cvref_t<View>>)) explicit FrequencyEncode(View&& view) {
     if (ql::ranges::empty(view)) {
       return;
     }
@@ -347,10 +347,10 @@ requires std::is_arithmetic_v<T> class GapEncode {
   using TypedVector = std::vector<T>;
 
   // View must be an input range with value type `T`.
-  template <typename View>
-  requires(!std::same_as<GapEncode, std::remove_cvref_t<View>>)
-  explicit GapEncode(View&& inputView) {
-    auto view = std::forward<View>(inputView);
+  CPP_template(typename View)(requires(
+      !std::same_as<GapEncode,
+                    std::remove_cvref_t<View>>)) explicit GapEncode(View&&
+                                                                        view) {
     if (ql::ranges::empty(view)) {
       return;
     }
