@@ -100,7 +100,7 @@ TEST(UrlParserTest, parseRequestTarget) {
       ::testing::StrEq("Failed to parse URL: \"file://more-than-target\"."));
 }
 
-TEST(UrlParserTest, parseDatasetClauses) {
+TEST(UrlParserTest, parseDatasetClausesFrom) {
   using namespace ad_utility::url_parser;
 
   // Construct the vector from an initializer list without specifying the type.
@@ -109,23 +109,29 @@ TEST(UrlParserTest, parseDatasetClauses) {
     return ::testing::ContainerEq(datasetClauses);
   };
 
-  EXPECT_THAT(parseDatasetClauses({}), IsDatasets({}));
+  EXPECT_THAT(parseDatasetClausesFrom({}, "default-grpah-uri", false),
+              IsDatasets({}));
   EXPECT_THAT(
-      parseDatasetClauses({{"default-graph-uri", {"https://w3.org/1"}}}),
+      parseDatasetClausesFrom({{"default-graph-uri", {"https://w3.org/1"}}},
+                              "default-graph-uri", false),
       IsDatasets({{iri("<https://w3.org/1>"), false}}));
-  EXPECT_THAT(parseDatasetClauses({{"named-graph-uri", {"https://w3.org/1"}}}),
-              IsDatasets({{iri("<https://w3.org/1>"), true}}));
-  EXPECT_THAT(parseDatasetClauses({{"default-graph-uri", {"https://w3.org/1"}},
-                                   {"named-graph-uri", {"https://w3.org/2"}}}),
-              IsDatasets({{iri("<https://w3.org/1>"), false},
-                          {iri("<https://w3.org/2>"), true}}));
   EXPECT_THAT(
-      parseDatasetClauses(
+      parseDatasetClausesFrom({{"named-graph-uri", {"https://w3.org/1"}}},
+                              "named-graph-uri", true),
+      IsDatasets({{iri("<https://w3.org/1>"), true}}));
+  EXPECT_THAT(
+      parseDatasetClausesFrom({{"default-graph-uri", {"https://w3.org/1"}},
+                               {"named-graph-uri", {"https://w3.org/2"}}},
+                              "default-graph-uri", false),
+      IsDatasets({
+          {iri("<https://w3.org/1>"), false},
+      }));
+  EXPECT_THAT(
+      parseDatasetClausesFrom(
           {{"default-graph-uri", {"https://w3.org/1", "https://w3.org/2"}},
-           {"named-graph-uri", {"https://w3.org/3", "https://w3.org/4"}}}),
-      IsDatasets({{iri("<https://w3.org/1>"), false},
-                  {iri("<https://w3.org/2>"), false},
-                  {iri("<https://w3.org/3>"), true},
+           {"named-graph-uri", {"https://w3.org/3", "https://w3.org/4"}}},
+          "named-graph-uri", true),
+      IsDatasets({{iri("<https://w3.org/3>"), true},
                   {iri("<https://w3.org/4>"), true}}));
 }
 
