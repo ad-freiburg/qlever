@@ -184,6 +184,8 @@ ad_utility::url_parser::ParsedRequest Server::parseHttpRequest(
         auto operation = ad_utility::url_parser::getParameterCheckAtMostOnce(
             parsedRequest.parameters_, paramName);
         if (operation.has_value()) {
+          AD_CORRECTNESS_CHECK(
+              std::holds_alternative<None>(parsedRequest.operation_));
           parsedRequest.operation_ = Operation{operation.value()};
           parsedRequest.parameters_.erase(paramName);
         }
@@ -193,18 +195,51 @@ ad_utility::url_parser::ParsedRequest Server::parseHttpRequest(
                parsedRequest.parameters_, key)
         .has_value();
   };
+  auto checkAndSetGraphStoreOperation = [&parsedRequest,
+                                         &isContainedExactlyOnce] {
+    // SPARQL Graph Store HTTP Protocol with indirect graph identification
+    if (isContainedExactlyOnce("graph") && isContainedExactlyOnce("default")) {
+      throw std::runtime_error(
+          "Parameters \"graph\" and \"default\" must "
+          "not be set at the same time.");
+    }
+    AD_CORRECTNESS_CHECK(
+        std::holds_alternative<None>(parsedRequest.operation_));
+    parsedRequest.operation_ = GraphStoreOperation{};
+  };
+  auto isGraphStoreOperation = [&isContainedExactlyOnce] {
+    return isContainedExactlyOnce("graph") || isContainedExactlyOnce("default");
+  };
+  // Check that requests don't both have these content types and are Graph
+  // Store operations.
+  auto checkUnsupportedGraphStoreContentType =
+      [&isGraphStoreOperation](std::string_view contentType,
+                               std::string_view unsupportedType) {
+        if (isGraphStoreOperation()) {
+          if (contentType.starts_with(unsupportedType)) {
+            throw std::runtime_error(
+                absl::StrCat("Unsupported Content type \"", contentType,
+                             "\" for Graph Store protocol."));
+          }
+        }
+      };
 
   if (request.method() == http::verb::get) {
-    if (isContainedExactlyOnce("graph") || isContainedExactlyOnce("default")) {
+    if (parsedRequest.parameters_.contains("update")) {
+      throw std::runtime_error("SPARQL Update is not allowed as GET request.");
+    }
+    if (isGraphStoreOperation() &&
+        parsedRequest.parameters_.contains("query")) {
+      throw std::runtime_error(
+          R"(Request contains parameters for both a SPARQL Query ("query") and a Graph Store Protocol operation ("graph" or "default").)");
+    }
+    if (isGraphStoreOperation()) {
       // SPARQL Graph Store HTTP Protocol with indirect graph identification
-      parsedRequest.operation_ = GraphStoreOperation{};
+      checkAndSetGraphStoreOperation();
     }
     if (isContainedExactlyOnce("query")) {
       // SPARQL Query
       setOperationIfSpecifiedInParams.template operator()<Query>("query");
-    }
-    if (parsedRequest.parameters_.contains("update")) {
-      throw std::runtime_error("SPARQL Update is not allowed as GET request.");
     }
     return parsedRequest;
   }
@@ -264,32 +299,37 @@ ad_utility::url_parser::ParsedRequest Server::parseHttpRequest(
       }
       parsedRequest.parameters_ =
           ad_utility::url_parser::paramsToMap(query->params());
-
+      checkUnsupportedGraphStoreContentType(contentType, contentTypeUrlEncoded);
       if (parsedRequest.parameters_.contains("query") &&
           parsedRequest.parameters_.contains("update")) {
         throw std::runtime_error(
             R"(Request must only contain one of "query" and "update".)");
       }
+
       setOperationIfSpecifiedInParams.template operator()<Query>("query");
       setOperationIfSpecifiedInParams.template operator()<Update>("update");
 
       return parsedRequest;
     }
     if (contentType.starts_with(contentTypeSparqlQuery)) {
+      checkUnsupportedGraphStoreContentType(contentType,
+                                            contentTypeSparqlQuery);
       parsedRequest.operation_ = Query{request.body()};
       return parsedRequest;
     }
     if (contentType.starts_with(contentTypeSparqlUpdate)) {
+      checkUnsupportedGraphStoreContentType(contentType,
+                                            contentTypeSparqlUpdate);
       parsedRequest.operation_ = Update{request.body()};
       return parsedRequest;
     }
     // Checking if the content type is supported by the Graph Store
     // HTTP Protocol implementation is done later.
-    if (isContainedExactlyOnce("graph") || isContainedExactlyOnce("default")) {
-      // SPARQL Graph Store HTTP Protocol with indirect graph identification
-      parsedRequest.operation_ = GraphStoreOperation{};
+    if (isGraphStoreOperation()) {
+      checkAndSetGraphStoreOperation();
       return parsedRequest;
     }
+
     throw std::runtime_error(absl::StrCat(
         "POST request with content type \"", contentType,
         "\" not supported (must be \"", contentTypeUrlEncoded, "\", \"",
