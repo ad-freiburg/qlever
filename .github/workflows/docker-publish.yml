@@ -37,7 +37,6 @@ jobs:
         id: pr
         run: echo "pr_num=$(git log --format=%s -n 1 | sed -nr 's/.*\(\#([0-9]+)\)/\1/p')" >> $GITHUB_OUTPUT
       - name: Build X-86-64
-        if: false
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -57,7 +56,6 @@ jobs:
           tags: adfreiburg/qlever:test
 
       - name: E2E in Docker
-        if: false
         run: | 
           sudo mkdir ${{github.workspace}}/e2e_data
           sudo chmod a+rwx ${{github.workspace}}/e2e_data
@@ -70,7 +68,7 @@ jobs:
         # future, then we can set this to `true`. Then the ARM64 image will also
         # be built on pull requests which allows for debugging without changing
         # the master branch.
-        if: true
+        if: false
         uses: docker/build-push-action@v6
         with:
           context: .
