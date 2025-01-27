@@ -166,6 +166,13 @@ class Server {
       ad_utility::Timer& requestTimer,
       const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
       TimeLimit timeLimit);
+  // Execute the planned query and send the result to the client.
+  Awaitable<void> executePlannedQuery(
+      const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
+      const ad_utility::url_parser::ParamValueMap& parameters,
+      ad_utility::Timer& requestTimer, PlannedQuery& pq,
+      const ad_utility::MediaType& mediaType,
+      ad_utility::SharedCancellationHandle cancellationHandle);
 
   // Determine the media type to be used for the result. The media type is
   // determined (in this order) by the current action (e.g.,
@@ -179,11 +186,9 @@ class Server {
       const ad_utility::url_parser::ParamValueMap& params);
   FRIEND_TEST(ServerTest, determineResultPinning);
   // Sets up the PlannedQuery s.t. it is ready to be executed.
-  PlannedQuery setupPlannedQuery(
-      const ad_utility::url_parser::ParamValueMap& params,
-      const std::string& operation, QueryExecutionContext& qec,
-      SharedCancellationHandle handle, TimeLimit timeLimit,
-      const ad_utility::Timer& requestTimer) const;
+  PlannedQuery finishPlannedQuery(PlannedQuery plannedQuery,
+                                  const ad_utility::Timer& requestTimer) const;
+
   // Creates a `MessageSender` for the given operation.
   ad_utility::websocket::MessageSender createMessageSender(
       const std::weak_ptr<ad_utility::websocket::QueryHub>& queryHub,
@@ -192,8 +197,7 @@ class Server {
   // Execute an update operation. The function must have exclusive access to the
   // DeltaTriples object.
   json processUpdateImpl(
-      const ad_utility::url_parser::ParamValueMap& params, const string& update,
-      ad_utility::Timer& requestTimer, TimeLimit timeLimit, auto& messageSender,
+      const PlannedQuery& plannedQuery, ad_utility::Timer& requestTimer,
       ad_utility::SharedCancellationHandle cancellationHandle,
       DeltaTriples& deltaTriples);
 
@@ -240,13 +244,17 @@ class Server {
       TimeLimit timeLimit)
       -> ad_utility::InvocableWithExactReturnType<void> auto;
 
-  /// Run the SPARQL parser and then the query planner on the `query`. All
-  /// computation is performed on the `threadPool_`.
+  /// Run the SPARQL parser and then the query planner on the `query`.
   PlannedQuery parseAndPlan(const std::string& query,
                             const vector<DatasetClause>& queryDatasets,
                             QueryExecutionContext& qec,
                             SharedCancellationHandle handle,
                             TimeLimit timeLimit) const;
+
+  /// Run the query planner on the parsed query.
+  PlannedQuery planQuery(ParsedQuery pq, QueryExecutionContext& qec,
+                         SharedCancellationHandle handle,
+                         TimeLimit timeLimit) const;
 
   /// Acquire the `CancellationHandle` for the given `QueryId`, start the
   /// watchdog and call `cancelAfterDeadline` to set the timeout after
@@ -265,6 +273,13 @@ class Server {
   /// formulated towards end users, it can be sent directly as the text of an
   /// HTTP error response.
   bool checkAccessToken(std::optional<std::string_view> accessToken) const;
+
+  // Create a `QueryExecutionContext` that will be used to process the query or
+  // update.
+  QueryExecutionContext createQueryExecutionContext(
+      const ad_utility::url_parser::ParamValueMap& params,
+      const std::string& what,
+      ad_utility::websocket::MessageSender& messageSender);
 
   /// Check if user-provided timeout is authorized with a valid access-token or
   /// lower than the server default. Return an empty optional and send a 403

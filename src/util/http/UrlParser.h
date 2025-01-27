@@ -60,6 +60,11 @@ struct Update {
   bool operator==(const Update& rhs) const = default;
 };
 
+// A Graph Store HTTP Protocol operation
+struct GraphStoreOperation {
+  bool operator==(const GraphStoreOperation& rhs) const = default;
+};
+
 // No operation. This can happen for QLever's custom operations (e.g.
 // `cache-stats`). These requests have no operation but are still valid.
 struct None {
@@ -75,7 +80,7 @@ struct ParsedRequest {
   std::string path_;
   ParamValueMap parameters_;
   std::variant<sparqlOperation::Query, sparqlOperation::Update,
-               sparqlOperation::None>
+               sparqlOperation::GraphStoreOperation, sparqlOperation::None>
       operation_;
 };
 
