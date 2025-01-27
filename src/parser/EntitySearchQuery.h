@@ -19,18 +19,10 @@ struct EntitySearchQuery : MagicServiceQuery {
   std::optional<Variable> entityVar_;
   std::optional<Variable> scoreVar_;
 
-  EntitySearchQuery() = default;
-  EntitySearchQuery(EntitySearchQuery&& other) noexcept = default;
-  EntitySearchQuery(const EntitySearchQuery& other) noexcept = default;
-  EntitySearchQuery& operator=(const EntitySearchQuery& other) = default;
-  EntitySearchQuery& operator=(EntitySearchQuery&& a) noexcept = default;
-  ~EntitySearchQuery() noexcept override = default;
-
   // See MagicServiceQuery
   void addParameter(const SparqlTriple& triple) override;
 
-  TextIndexScanForEntityConfiguration toTextIndexScanForEntityConfiguration()
-      const;
+  TextIndexScanForEntityConfiguration toConfig() const;
 };
 
 }  // namespace parsedQuery

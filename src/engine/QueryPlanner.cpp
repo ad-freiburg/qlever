@@ -2537,8 +2537,8 @@ void QueryPlanner::GraphPatternPlanner::visitSpatialSearch(
 
 // _______________________________________________________________
 void QueryPlanner::GraphPatternPlanner::visitWordSearch(
-    parsedQuery::WordSearchQuery& wordSearchQuery) {
-  auto config = wordSearchQuery.toTextIndexScanForWordConfiguration();
+    const parsedQuery::WordSearchQuery& wordSearchQuery) {
+  auto config = wordSearchQuery.toConfig();
   std::vector<SubtreePlan> candidatesOut;
   auto plan = makeSubtreePlan<TextIndexScanForWord>(qec_, config);
   candidatesOut.push_back(std::move(plan));
@@ -2547,8 +2547,8 @@ void QueryPlanner::GraphPatternPlanner::visitWordSearch(
 
 // _______________________________________________________________
 void QueryPlanner::GraphPatternPlanner::visitEntitySearch(
-    parsedQuery::EntitySearchQuery& entitySearchQuery) {
-  auto config = entitySearchQuery.toTextIndexScanForEntityConfiguration();
+    const parsedQuery::EntitySearchQuery& entitySearchQuery) {
+  auto config = entitySearchQuery.toConfig();
   std::vector<SubtreePlan> candidatesOut;
   auto plan = makeSubtreePlan<TextIndexScanForEntity>(qec_, config);
   candidatesOut.push_back(std::move(plan));

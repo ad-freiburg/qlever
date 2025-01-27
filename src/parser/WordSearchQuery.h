@@ -18,17 +18,10 @@ struct WordSearchQuery : MagicServiceQuery {
   std::optional<Variable> matchVar_;
   std::optional<Variable> scoreVar_;
 
-  WordSearchQuery() = default;
-  WordSearchQuery(WordSearchQuery&& other) noexcept = default;
-  WordSearchQuery(const WordSearchQuery& other) noexcept = default;
-  WordSearchQuery& operator=(const WordSearchQuery& other) = default;
-  WordSearchQuery& operator=(WordSearchQuery&& a) noexcept = default;
-  ~WordSearchQuery() noexcept override = default;
-
   // See MagicServiceQuery
   void addParameter(const SparqlTriple& triple) override;
 
-  TextIndexScanForWordConfiguration toTextIndexScanForWordConfiguration() const;
+  TextIndexScanForWordConfiguration toConfig() const;
 };
 
 }  // namespace parsedQuery

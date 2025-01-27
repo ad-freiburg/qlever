@@ -33,8 +33,7 @@ void WordSearchQuery::addParameter(const SparqlTriple& triple) {
 }
 
 // ____________________________________________________________________________
-TextIndexScanForWordConfiguration
-WordSearchQuery::toTextIndexScanForWordConfiguration() const {
+TextIndexScanForWordConfiguration WordSearchQuery::toConfig() const {
   if (!word_.has_value()) {
     throw WordSearchException(
         "Missing parameter <containsWord> in text search.");

@@ -45,8 +45,7 @@ void EntitySearchQuery::addParameter(const SparqlTriple& triple) {
 }
 
 // ____________________________________________________________________________
-TextIndexScanForEntityConfiguration
-EntitySearchQuery::toTextIndexScanForEntityConfiguration() const {
+TextIndexScanForEntityConfiguration EntitySearchQuery::toConfig() const {
   if (!word_.has_value()) {
     throw EntitySearchException(
         "Missing parameter <containedWithWord> in entity search.");
