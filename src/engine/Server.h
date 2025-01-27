@@ -35,6 +35,7 @@ class Server {
   FRIEND_TEST(ServerTest, parseHttpRequest);
   FRIEND_TEST(ServerTest, getQueryId);
   FRIEND_TEST(ServerTest, createMessageSender);
+  FRIEND_TEST(ServerTest, decodeBasicAuthorization);
   FRIEND_TEST(ServerTest, extractAccessToken);
 
  public:
@@ -115,6 +116,11 @@ class Server {
   /// GET and POST request according to the SPARQL 1.1 standard.
   static ad_utility::url_parser::ParsedRequest parseHttpRequest(
       const ad_utility::httpUtils::HttpRequest auto& request);
+
+  /// Extract the username and password from an authorization header with the
+  /// `Basic` scheme.
+  static std::pair<std::string, std::string> decodeBasicAuthorization(
+      std::string_view authorizationHeader);
 
   /// Extract the Access token for that request from the `Authorization` header
   /// or the URL query parameters.

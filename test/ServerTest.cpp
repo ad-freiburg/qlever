@@ -157,11 +157,11 @@ TEST(ServerTest, parseHttpRequest) {
         ad_utility::HashMap<http::field, std::string>
             headersWithDifferentAccessToken{headers};
         headersWithDifferentAccessToken.insert(
-            {http::field::authorization, "Bearer bar"});
+            {http::field::authorization, "Basic OmJhcg=="});
         ad_utility::HashMap<http::field, std::string>
             headersWithSameAccessToken{headers};
         headersWithSameAccessToken.insert(
-            {http::field::authorization, "Bearer foo"});
+            {http::field::authorization, "Basic OmZvbw=="});
         EXPECT_THAT(parse(makeRequest(method, pathBase, headers, body)),
                     ParsedRequestIs("/", std::nullopt, {}, expectedOperation));
         EXPECT_THAT(parse(makeRequest(method, pathWithAccessToken.buffer(),
@@ -209,11 +209,11 @@ TEST(ServerTest, parseHttpRequest) {
         ad_utility::HashMap<http::field, std::string>
             headersWithDifferentAccessToken{
                 {http::field::content_type, {URLENCODED}},
-                {http::field::authorization, "Bearer bar"}};
+                {http::field::authorization, "Basic OmJhcg=="}};
         ad_utility::HashMap<http::field, std::string>
             headersWithSameAccessToken{
                 {http::field::content_type, {URLENCODED}},
-                {http::field::authorization, "Bearer foo"}};
+                {http::field::authorization, "Basic OmZvbw=="}};
         EXPECT_THAT(
             parse(makeRequest(http::verb::post, "/", headers, bodyBase)),
             ParsedRequestIs("/", std::nullopt, {}, expectedOperation));
@@ -410,6 +410,34 @@ TEST(ServerTest, createResponseMetadata) {
   EXPECT_THAT(metadata["located-triples"], testing::Eq(locatedTriplesJson));
 }
 
+TEST(ServerTest, decodeBasicAuthorization) {
+  const auto decode = Server::decodeBasicAuthorization;
+  const std::string wrongBeginning =
+      "Authorization header doesn't start with \"Basic \".";
+  const std::string failedToDecode =
+      "Failed to decode the Authorization header.";
+  AD_EXPECT_THROW_WITH_MESSAGE(decode(""), testing::HasSubstr(wrongBeginning));
+  AD_EXPECT_THROW_WITH_MESSAGE(decode("Bearer foo"),
+                               testing::HasSubstr(wrongBeginning));
+  AD_EXPECT_THROW_WITH_MESSAGE(decode("Bearer"),
+                               testing::HasSubstr(wrongBeginning));
+  // Not base64
+  AD_EXPECT_THROW_WITH_MESSAGE(decode("Basic foo"),
+                               testing::HasSubstr(failedToDecode));
+  // Stripped 1 padding `=` at the end
+  AD_EXPECT_THROW_WITH_MESSAGE(decode("Basic OmZvbw="),
+                               testing::HasSubstr(failedToDecode));
+  // No colon
+  AD_EXPECT_THROW_WITH_MESSAGE(decode("Basic Zm9vYmFy"),
+                               testing::HasSubstr(failedToDecode));
+  EXPECT_THAT(decode("Basic YTpi"), testing::Eq(std::pair("a", "b")));
+  EXPECT_THAT(decode("Basic OmZvbzpiYXI="),
+              testing::Eq(std::pair("", "foo:bar")));
+  EXPECT_THAT(decode("Basic e31fJSQ6YWJjZGVmZw=="),
+              testing::Eq(std::pair("{}_%$", "abcdefg")));
+  EXPECT_THAT(decode("Basic OmZvbw=="), testing::Eq(std::pair("", "foo")));
+}
+
 TEST(ServerTest, extractAccessToken) {
   auto extract = [](const ad_utility::httpUtils::HttpRequest auto& request) {
     auto parsedUrl = parseRequestTarget(request.target());
@@ -420,15 +448,15 @@ TEST(ServerTest, extractAccessToken) {
               testing::Optional(testing::Eq("foo")));
   EXPECT_THAT(
       extract(makeRequest(http::verb::get, "/",
-                          {{http::field::authorization, "Bearer foo"}})),
+                          {{http::field::authorization, "Basic OmZvbw=="}})),
       testing::Optional(testing::Eq("foo")));
   EXPECT_THAT(
       extract(makeRequest(http::verb::get, "/?access-token=foo",
-                          {{http::field::authorization, "Bearer foo"}})),
+                          {{http::field::authorization, "Basic OmZvbw=="}})),
       testing::Optional(testing::Eq("foo")));
   AD_EXPECT_THROW_WITH_MESSAGE(
       extract(makeRequest(http::verb::get, "/?access-token=bar",
-                          {{http::field::authorization, "Bearer foo"}})),
+                          {{http::field::authorization, "Basic OmZvbw=="}})),
       testing::HasSubstr(
           "Access token is specified both in the `Authorization` header and by "
           "the `access-token` parameter, but they aren't the same."));
@@ -436,14 +464,14 @@ TEST(ServerTest, extractAccessToken) {
       extract(makeRequest(http::verb::get, "/",
                           {{http::field::authorization, "foo"}})),
       testing::HasSubstr(
-          "Authorization header doesn't start with \"Bearer \"."));
+          "Authorization header doesn't start with \"Basic \"."));
   EXPECT_THAT(extract(makePostRequest("/", "text/turtle", "")),
               testing::Eq(std::nullopt));
   EXPECT_THAT(extract(makePostRequest("/?access-token=foo", "text/turtle", "")),
               testing::Optional(testing::Eq("foo")));
   AD_EXPECT_THROW_WITH_MESSAGE(
       extract(makeRequest(http::verb::post, "/?access-token=bar",
-                          {{http::field::authorization, "Bearer foo"}})),
+                          {{http::field::authorization, "Basic OmZvbw=="}})),
       testing::HasSubstr(
           "Access token is specified both in the `Authorization` header and by "
           "the `access-token` parameter, but they aren't the same."));
@@ -451,5 +479,5 @@ TEST(ServerTest, extractAccessToken) {
       extract(makeRequest(http::verb::post, "/?access-token=bar",
                           {{http::field::authorization, "foo"}})),
       testing::HasSubstr(
-          "Authorization header doesn't start with \"Bearer \"."));
+          "Authorization header doesn't start with \"Basic \"."));
 }
