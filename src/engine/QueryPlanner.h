@@ -18,6 +18,8 @@
 class QueryPlanner {
   using TextLimitMap =
       ad_utility::HashMap<Variable, parsedQuery::TextLimitMetaObject>;
+  using TextLimitVec =
+      std::vector<std::pair<Variable, parsedQuery::TextLimitMetaObject>>;
   using CancellationHandle = ad_utility::SharedCancellationHandle;
   template <typename T>
   using vector = std::vector<T>;
@@ -401,7 +403,7 @@ class QueryPlanner {
   // 1) There is no text operation for the text record column left.
   // 2) The text limit has not already been applied to the plan.
   void applyTextLimitsIfPossible(std::vector<SubtreePlan>& row,
-                                 const TextLimitMap& textLimits,
+                                 const TextLimitVec& textLimits,
                                  bool replaceInsteadOfAddPlans) const;
 
   /**
@@ -471,7 +473,7 @@ class QueryPlanner {
   std::vector<QueryPlanner::SubtreePlan>
   runDynamicProgrammingOnConnectedComponent(
       std::vector<SubtreePlan> connectedComponent,
-      const vector<SparqlFilter>& filters, const TextLimitMap& textLimits,
+      const vector<SparqlFilter>& filters, const TextLimitVec& textLimits,
       const TripleGraph& tg) const;
 
   // Same as `runDynamicProgrammingOnConnectedComponent`, but uses a greedy
@@ -479,7 +481,7 @@ class QueryPlanner {
   // join operations using the "Greedy Operator Ordering (GOO)" algorithm.
   std::vector<QueryPlanner::SubtreePlan> runGreedyPlanningOnConnectedComponent(
       std::vector<SubtreePlan> connectedComponent,
-      const vector<SparqlFilter>& filters, const TextLimitMap& textLimits,
+      const vector<SparqlFilter>& filters, const TextLimitVec& textLimits,
       const TripleGraph& tg) const;
 
   // Return the number of connected subgraphs is the `graph`, or `budget + 1`,
