@@ -430,12 +430,14 @@ TEST(ServerTest, decodeBasicAuthorization) {
   // No colon
   AD_EXPECT_THROW_WITH_MESSAGE(decode("Basic Zm9vYmFy"),
                                testing::HasSubstr(failedToDecode));
-  EXPECT_THAT(decode("Basic YTpi"), testing::Eq(std::pair("a", "b")));
+  EXPECT_THAT(decode("Basic YTpi"),
+              testing::Pair(testing::Eq("a"), testing::Eq("b")));
   EXPECT_THAT(decode("Basic OmZvbzpiYXI="),
-              testing::Eq(std::pair("", "foo:bar")));
+              testing::Pair(testing::Eq(""), testing::Eq("foo:bar")));
   EXPECT_THAT(decode("Basic e31fJSQ6YWJjZGVmZw=="),
-              testing::Eq(std::pair("{}_%$", "abcdefg")));
-  EXPECT_THAT(decode("Basic OmZvbw=="), testing::Eq(std::pair("", "foo")));
+              testing::Pair(testing::Eq("{}_%$"), testing::Eq("abcdefg")));
+  EXPECT_THAT(decode("Basic OmZvbw=="),
+              testing::Pair(testing::Eq(""), testing::Eq("foo")));
 }
 
 TEST(ServerTest, extractAccessToken) {
