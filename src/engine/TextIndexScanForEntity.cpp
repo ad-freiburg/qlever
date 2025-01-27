@@ -9,9 +9,7 @@ TextIndexScanForEntity::TextIndexScanForEntity(
     QueryExecutionContext* qec, TextIndexScanForEntityConfiguration config)
     : Operation(qec),
       config_(std::move(config)),
-      textRecordVar_(config_.varToBindText_),
-      varOrFixed_(qec, config_.entity_),
-      word_(config_.word_) {
+      varOrFixed_(qec, config_.entity_) {
   setVariableToColumnMap();
 }
 
@@ -22,9 +20,7 @@ TextIndexScanForEntity::TextIndexScanForEntity(
     : Operation(qec),
       config_(TextIndexScanForEntityConfiguration{textRecordVar, entity, word,
                                                   std::nullopt}),
-      textRecordVar_(config_.varToBindText_),
-      varOrFixed_(qec, config_.entity_),
-      word_(config_.word_) {
+      varOrFixed_(qec, config_.entity_) {
   setVariableToColumnMap();
 }
 
@@ -32,7 +28,7 @@ TextIndexScanForEntity::TextIndexScanForEntity(
 ProtoResult TextIndexScanForEntity::computeResult(
     [[maybe_unused]] bool requestLaziness) {
   IdTable idTable = getExecutionContext()->getIndex().getEntityMentionsForWord(
-      word_, getExecutionContext()->getAllocator());
+      config_.word_, getExecutionContext()->getAllocator());
 
   if (hasFixedEntity()) {
     auto beginErase = ql::ranges::remove_if(idTable, [this](const auto& row) {
@@ -52,7 +48,7 @@ ProtoResult TextIndexScanForEntity::computeResult(
   } else {
     runtimeInfo().addDetail("entity var: ", entityVariable().name());
   }
-  runtimeInfo().addDetail("word: ", word_);
+  runtimeInfo().addDetail("word: ", config_.word_);
 
   return {std::move(idTable), resultSortedOn(), LocalVocab{}};
 }
@@ -60,15 +56,15 @@ ProtoResult TextIndexScanForEntity::computeResult(
 // _____________________________________________________________________________
 void TextIndexScanForEntity::setVariableToColumnMap() {
   ColumnIndex index = ColumnIndex{0};
-  variableColumns_[textRecordVar_] = makeAlwaysDefinedColumn(index);
+  variableColumns_[config_.varToBindText_] = makeAlwaysDefinedColumn(index);
   index++;
   if (hasFixedEntity()) {
     if (config_.varToBindScore_.has_value()) {
       variableColumns_[config_.varToBindScore_.value()] =
           makeAlwaysDefinedColumn(index);
     } else {
-      variableColumns_[textRecordVar_.getEntityScoreVariable(fixedEntity())] =
-          makeAlwaysDefinedColumn(index);
+      variableColumns_[config_.varToBindText_.getEntityScoreVariable(
+          fixedEntity())] = makeAlwaysDefinedColumn(index);
     }
   } else {
     variableColumns_[entityVariable()] = makeAlwaysDefinedColumn(index);
@@ -77,7 +73,7 @@ void TextIndexScanForEntity::setVariableToColumnMap() {
       variableColumns_[config_.varToBindScore_.value()] =
           makeAlwaysDefinedColumn(index);
     } else {
-      variableColumns_[textRecordVar_.getEntityScoreVariable(
+      variableColumns_[config_.varToBindText_.getEntityScoreVariable(
           entityVariable())] = makeAlwaysDefinedColumn(index);
     }
   }
@@ -99,10 +95,10 @@ size_t TextIndexScanForEntity::getCostEstimate() {
     // We currently have to first materialize and then filter the complete list
     // for the fixed entity
     return 2 * getExecutionContext()->getIndex().getSizeOfTextBlockForEntities(
-                   word_);
+                   config_.word_);
   } else {
     return getExecutionContext()->getIndex().getSizeOfTextBlockForEntities(
-        word_);
+        config_.word_);
   }
 }
 
@@ -113,14 +109,14 @@ uint64_t TextIndexScanForEntity::getSizeEstimateBeforeLimit() {
         getExecutionContext()->getIndex().getAverageNofEntityContexts());
   } else {
     return getExecutionContext()->getIndex().getSizeOfTextBlockForEntities(
-        word_);
+        config_.word_);
   }
 }
 
 // _____________________________________________________________________________
 bool TextIndexScanForEntity::knownEmptyResult() {
   return getExecutionContext()->getIndex().getSizeOfTextBlockForEntities(
-             word_) == 0;
+             config_.word_) == 0;
 }
 
 // _____________________________________________________________________________
@@ -130,14 +126,15 @@ vector<ColumnIndex> TextIndexScanForEntity::resultSortedOn() const {
 
 // _____________________________________________________________________________
 string TextIndexScanForEntity::getDescriptor() const {
-  return absl::StrCat("TextIndexScanForEntity on ", textRecordVar_.name());
+  return absl::StrCat("TextIndexScanForEntity on ",
+                      config_.varToBindText_.name());
 }
 
 // _____________________________________________________________________________
 string TextIndexScanForEntity::getCacheKeyImpl() const {
   std::ostringstream os;
   os << "ENTITY INDEX SCAN FOR WORD: "
-     << " with word: \"" << word_ << "\" and fixed-entity: \""
+     << " with word: \"" << config_.word_ << "\" and fixed-entity: \""
      << (hasFixedEntity() ? fixedEntity() : "no fixed-entity") << " \"";
   return std::move(os).str();
 }

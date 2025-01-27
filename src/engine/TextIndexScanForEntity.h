@@ -58,9 +58,7 @@ class TextIndexScanForEntity : public Operation {
 
   TextIndexScanForEntityConfiguration config_;
   VariableToColumnMap variableColumns_;
-  Variable textRecordVar_;
   VarOrFixedEntity varOrFixed_;
-  string word_;
 
  public:
   TextIndexScanForEntity(QueryExecutionContext* qec,
@@ -83,9 +81,9 @@ class TextIndexScanForEntity : public Operation {
     return std::get<Variable>(varOrFixed_.entity_);
   }
 
-  const Variable& textRecordVar() const { return textRecordVar_; }
+  const Variable& textRecordVar() const { return config_.varToBindText_; }
 
-  const std::string& word() const { return word_; }
+  const std::string& word() const { return config_.word_; }
 
   string getCacheKeyImpl() const override;
 

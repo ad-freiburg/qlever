@@ -11,9 +11,10 @@
 
 struct TextIndexScanForWordConfiguration {
   Variable varToBindText_;
-  string word;
+  string word_;
   std::optional<Variable> varToBindMatch_;
   std::optional<Variable> varToBindScore_;
+  bool isPrefix_ = false;
 };
 
 // This operation retrieves all text records from the fulltext index that
@@ -22,9 +23,6 @@ class TextIndexScanForWord : public Operation {
  private:
   TextIndexScanForWordConfiguration config_;
   VariableToColumnMap variableColumns_;
-  Variable textRecordVar_;
-  string word_;
-  bool isPrefix_ = false;
 
  public:
   TextIndexScanForWord(QueryExecutionContext* qec,
@@ -35,9 +33,9 @@ class TextIndexScanForWord : public Operation {
 
   ~TextIndexScanForWord() override = default;
 
-  const Variable& textRecordVar() const { return textRecordVar_; }
+  const Variable& textRecordVar() const { return config_.varToBindText_; }
 
-  const std::string& word() const { return word_; }
+  const std::string& word() const { return config_.word_; }
 
   string getCacheKeyImpl() const override;
 
