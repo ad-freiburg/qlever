@@ -18,8 +18,9 @@ TextIndexScanForEntity::TextIndexScanForEntity(
     QueryExecutionContext* qec, Variable textRecordVar,
     std::variant<Variable, std::string> entity, string word)
     : Operation(qec),
-      config_(TextIndexScanForEntityConfiguration{textRecordVar, entity, word,
-                                                  std::nullopt}),
+      config_(TextIndexScanForEntityConfiguration{
+          textRecordVar, entity, word,
+          textRecordVar.getEntityScoreVariable(entity)}),
       varOrFixed_(qec, config_.entity_) {
   setVariableToColumnMap();
 }
@@ -39,7 +40,15 @@ ProtoResult TextIndexScanForEntity::computeResult(
 #else
     idTable.erase(beginErase.begin(), idTable.end());
 #endif
-    idTable.setColumnSubset(std::vector<ColumnIndex>{0, 2});
+    if (config_.varToBindScore_.has_value()) {
+      idTable.setColumnSubset(std::vector<ColumnIndex>{0, 2});
+    } else {
+      idTable.setColumnSubset(std::vector<ColumnIndex>{0});
+    }
+  } else {
+    if (!config_.varToBindScore_.has_value()) {
+      idTable.setColumnSubset(std::vector<ColumnIndex>{0, 1});
+    }
   }
 
   // Add details to the runtimeInfo. This is has no effect on the result.
@@ -58,24 +67,13 @@ void TextIndexScanForEntity::setVariableToColumnMap() {
   ColumnIndex index = ColumnIndex{0};
   variableColumns_[config_.varToBindText_] = makeAlwaysDefinedColumn(index);
   index++;
-  if (hasFixedEntity()) {
-    if (config_.varToBindScore_.has_value()) {
-      variableColumns_[config_.varToBindScore_.value()] =
-          makeAlwaysDefinedColumn(index);
-    } else {
-      variableColumns_[config_.varToBindText_.getEntityScoreVariable(
-          fixedEntity())] = makeAlwaysDefinedColumn(index);
-    }
-  } else {
+  if (!hasFixedEntity()) {
     variableColumns_[entityVariable()] = makeAlwaysDefinedColumn(index);
     index++;
-    if (config_.varToBindScore_.has_value()) {
-      variableColumns_[config_.varToBindScore_.value()] =
-          makeAlwaysDefinedColumn(index);
-    } else {
-      variableColumns_[config_.varToBindText_.getEntityScoreVariable(
-          entityVariable())] = makeAlwaysDefinedColumn(index);
-    }
+  }
+  if (config_.varToBindScore_.has_value()) {
+    variableColumns_[config_.varToBindScore_.value()] =
+        makeAlwaysDefinedColumn(index);
   }
 }
 
@@ -86,7 +84,8 @@ VariableToColumnMap TextIndexScanForEntity::computeVariableToColumnMap() const {
 
 // _____________________________________________________________________________
 size_t TextIndexScanForEntity::getResultWidth() const {
-  return 2 + (hasFixedEntity() ? 0 : 1);
+  return 1 + (hasFixedEntity() ? 0 : 1) +
+         (config_.varToBindScore_.has_value() ? 1 : 0);
 }
 
 // _____________________________________________________________________________

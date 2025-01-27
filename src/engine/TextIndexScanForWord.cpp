@@ -17,8 +17,10 @@ TextIndexScanForWord::TextIndexScanForWord(QueryExecutionContext* qec,
                                            Variable textRecordVar, string word)
     : Operation(qec),
       config_(TextIndexScanForWordConfiguration{textRecordVar, word,
-                                                std::nullopt, std::nullopt}) {
-  config_.isPrefix_ = config_.word_.ends_with('*');
+                                                std::nullopt, std::nullopt,
+                                                word.ends_with('*')}) {
+  config_.varToBindScore_ = config_.varToBindText_.getWordScoreVariable(
+      config_.word_, config_.isPrefix_);
   setVariableToColumnMap();
 }
 
@@ -30,10 +32,17 @@ ProtoResult TextIndexScanForWord::computeResult(
 
   // This filters out the word column. When the searchword is a prefix this
   // column shows the word the prefix got extended to
+  using CI = ColumnIndex;
   if (!config_.isPrefix_) {
-    using CI = ColumnIndex;
-    idTable.setColumnSubset(std::array{CI{0}, CI{2}});
+    if (config_.varToBindScore_.has_value()) {
+      idTable.setColumnSubset(std::array{CI{0}, CI{2}});
+    } else {
+      idTable.setColumnSubset(std::array{CI{0}});
+    }
     return {std::move(idTable), resultSortedOn(), LocalVocab{}};
+  }
+  if (!config_.varToBindScore_.has_value()) {
+    idTable.setColumnSubset(std::array{CI{0}, CI{1}});
   }
 
   // Add details to the runtimeInfo. This is has no effect on the result.
@@ -48,23 +57,17 @@ void TextIndexScanForWord::setVariableToColumnMap() {
   variableColumns_[config_.varToBindText_] = makeAlwaysDefinedColumn(index);
   index++;
   if (config_.isPrefix_) {
-    if (config_.varToBindMatch_.has_value()) {
-      variableColumns_[config_.varToBindMatch_.value()] =
-          makeAlwaysDefinedColumn(index);
-    } else {
-      variableColumns_[config_.varToBindText_.getMatchingWordVariable(
-          std::string_view(config_.word_)
-              .substr(0, config_.word_.size() - 1))] =
-          makeAlwaysDefinedColumn(index);
+    if (!config_.varToBindMatch_.has_value()) {
+      config_.varToBindMatch_ = config_.varToBindText_.getMatchingWordVariable(
+          std::string_view(config_.word_).substr(0, config_.word_.size() - 1));
     }
+    variableColumns_[config_.varToBindMatch_.value()] =
+        makeAlwaysDefinedColumn(index);
     index++;
   }
   if (config_.varToBindScore_.has_value()) {
     variableColumns_[config_.varToBindScore_.value()] =
         makeAlwaysDefinedColumn(index);
-  } else {
-    variableColumns_[config_.varToBindText_.getWordScoreVariable(
-        config_.word_, config_.isPrefix_)] = makeAlwaysDefinedColumn(index);
   }
 }
 
@@ -75,7 +78,7 @@ VariableToColumnMap TextIndexScanForWord::computeVariableToColumnMap() const {
 
 // _____________________________________________________________________________
 size_t TextIndexScanForWord::getResultWidth() const {
-  return 2 + (config_.isPrefix_ ? 1 : 0);
+  return 1 + config_.isPrefix_ + config_.varToBindScore_.has_value();
 }
 
 // _____________________________________________________________________________
