@@ -49,11 +49,12 @@ TEST(ServerTest, parseHttpRequest) {
   EXPECT_THAT(parse(makeGetRequest(
                   "/?query=SELECT+%2A%20WHERE%20%7B%7D&action=csv_export")),
               ParsedRequestIs("/", {{"action", {"csv_export"}}},
-                              Query{"SELECT * WHERE {}"}));
+                              Query{"SELECT * WHERE {}", {}}));
   EXPECT_THAT(
       parse(makePostRequest("/", URLENCODED,
                             "query=SELECT+%2A%20WHERE%20%7B%7D&send=100")),
-      ParsedRequestIs("/", {{"send", {"100"}}}, Query{"SELECT * WHERE {}"}));
+      ParsedRequestIs("/", {{"send", {"100"}}},
+                      Query{"SELECT * WHERE {}", {}}));
   AD_EXPECT_THROW_WITH_MESSAGE(
       parse(makePostRequest("/", URLENCODED,
                             "ääär y=SELECT+%2A%20WHERE%20%7B%7D&send=100")),
@@ -78,10 +79,12 @@ TEST(ServerTest, parseHttpRequest) {
   EXPECT_THAT(
       parse(makePostRequest("/", "application/x-www-form-urlencoded",
                             "query=SELECT%20%2A%20WHERE%20%7B%7D&send=100")),
-      ParsedRequestIs("/", {{"send", {"100"}}}, Query{"SELECT * WHERE {}"}));
+      ParsedRequestIs("/", {{"send", {"100"}}},
+                      Query{"SELECT * WHERE {}", {}}));
   EXPECT_THAT(parse(makePostRequest("/", URLENCODED,
                                     "query=SELECT%20%2A%20WHERE%20%7B%7D")),
-              ParsedRequestIs("/", {}, Query{"SELECT * WHERE {}"}));
+              ParsedRequestIs("/", {}, Query{"SELECT * WHERE {}", {}}));
+  auto Iri = ad_utility::triple_component::Iri::fromIriref;
   EXPECT_THAT(
       parse(makePostRequest(
           "/", URLENCODED,
@@ -92,7 +95,11 @@ TEST(ServerTest, parseHttpRequest) {
           "/",
           {{"default-graph-uri", {"https://w3.org/default"}},
            {"named-graph-uri", {"https://w3.org/1", "https://w3.org/2"}}},
-          Query{"SELECT * WHERE {}"}));
+          Query{"SELECT * WHERE {}",
+                {DatasetClause{Iri("<https://w3.org/default>"), false},
+                 DatasetClause{Iri("<https://w3.org/1>"), true},
+                 DatasetClause{Iri("<https://w3.org/2>"), true}}}));
+  ;
   AD_EXPECT_THROW_WITH_MESSAGE(
       parse(makePostRequest("/?send=100", URLENCODED,
                             "query=SELECT%20%2A%20WHERE%20%7B%7D")),
@@ -101,10 +108,10 @@ TEST(ServerTest, parseHttpRequest) {
   EXPECT_THAT(parse(makePostRequest("/", URLENCODED, "cmd=clear-cache")),
               ParsedRequestIs("/", {{"cmd", {"clear-cache"}}}, None{}));
   EXPECT_THAT(parse(makePostRequest("/", QUERY, "SELECT * WHERE {}")),
-              ParsedRequestIs("/", {}, Query{"SELECT * WHERE {}"}));
-  EXPECT_THAT(
-      parse(makePostRequest("/?send=100", QUERY, "SELECT * WHERE {}")),
-      ParsedRequestIs("/", {{"send", {"100"}}}, Query{"SELECT * WHERE {}"}));
+              ParsedRequestIs("/", {}, Query{"SELECT * WHERE {}", {}}));
+  EXPECT_THAT(parse(makePostRequest("/?send=100", QUERY, "SELECT * WHERE {}")),
+              ParsedRequestIs("/", {{"send", {"100"}}},
+                              Query{"SELECT * WHERE {}", {}}));
   AD_EXPECT_THROW_WITH_MESSAGE(
       parse(makeRequest(http::verb::patch, "/")),
       testing::StrEq(
@@ -119,13 +126,82 @@ TEST(ServerTest, parseHttpRequest) {
       parse(makeGetRequest("/?update=DELETE%20%2A%20WHERE%20%7B%7D")),
       testing::StrEq("SPARQL Update is not allowed as GET request."));
   EXPECT_THAT(parse(makePostRequest("/", UPDATE, "DELETE * WHERE {}")),
-              ParsedRequestIs("/", {}, Update{"DELETE * WHERE {}"}));
+              ParsedRequestIs("/", {}, Update{"DELETE * WHERE {}", {}}));
   EXPECT_THAT(parse(makePostRequest("/", URLENCODED,
                                     "update=DELETE%20%2A%20WHERE%20%7B%7D")),
-              ParsedRequestIs("/", {}, Update{"DELETE * WHERE {}"}));
+              ParsedRequestIs("/", {}, Update{"DELETE * WHERE {}", {}}));
   EXPECT_THAT(parse(makePostRequest("/", URLENCODED,
                                     "update=DELETE+%2A+WHERE%20%7B%7D")),
-              ParsedRequestIs("/", {}, Update{"DELETE * WHERE {}"}));
+              ParsedRequestIs("/", {}, Update{"DELETE * WHERE {}", {}}));
+  // Check that the correct datasets for the method (GET or POST) are added
+  EXPECT_THAT(
+      parse(makeGetRequest("/?query=SELECT%20%2A%20WHERE%20%7B%7D&default-"
+                           "graph-uri=foo&named-graph-uri=bar&using-graph-uri="
+                           "baz&using-named-graph-uri=cat")),
+      ParsedRequestIs("/",
+                      {{"default-graph-uri", {"foo"}},
+                       {"named-graph-uri", {"bar"}},
+                       {"using-graph-uri", {"baz"}},
+                       {"using-named-graph-uri", {"cat"}}},
+                      Query{"SELECT * WHERE {}",
+                            {DatasetClause{Iri("<foo>"), false},
+                             DatasetClause{Iri("<bar>"), true}}}));
+  EXPECT_THAT(
+      parse(makePostRequest("/?default-"
+                            "graph-uri=foo&named-graph-uri=bar&using-graph-uri="
+                            "baz&using-named-graph-uri=cat",
+                            QUERY, "SELECT * WHERE {}")),
+      ParsedRequestIs("/",
+                      {{"default-graph-uri", {"foo"}},
+                       {"named-graph-uri", {"bar"}},
+                       {"using-graph-uri", {"baz"}},
+                       {"using-named-graph-uri", {"cat"}}},
+                      Query{"SELECT * WHERE {}",
+                            {DatasetClause{Iri("<foo>"), false},
+                             DatasetClause{Iri("<bar>"), true}}}));
+  EXPECT_THAT(
+      parse(makePostRequest("/", URLENCODED,
+                            "query=SELECT%20%2A%20WHERE%20%7B%7D&default-graph-"
+                            "uri=foo&named-graph-uri=bar&using-graph-uri=baz&"
+                            "using-named-graph-uri=cat")),
+      ParsedRequestIs("/",
+                      {{"default-graph-uri", {"foo"}},
+                       {"named-graph-uri", {"bar"}},
+                       {"using-graph-uri", {"baz"}},
+                       {"using-named-graph-uri", {"cat"}}},
+                      Query{"SELECT * WHERE {}",
+                            {DatasetClause{Iri("<foo>"), false},
+                             DatasetClause{Iri("<bar>"), true}}}));
+  EXPECT_THAT(
+      parse(makePostRequest("/", URLENCODED,
+                            "update=INSERT%20DATA%20%7B%7D&default-graph-uri="
+                            "foo&named-graph-uri=bar&using-graph-uri=baz&"
+                            "using-named-graph-uri=cat")),
+      ParsedRequestIs("/",
+                      {
+                          {"default-graph-uri", {"foo"}},
+                          {"named-graph-uri", {"bar"}},
+                          {"using-graph-uri", {"baz"}},
+                          {"using-named-graph-uri", {"cat"}},
+                      },
+                      Update{"INSERT DATA {}",
+                             {DatasetClause{Iri("<baz>"), false},
+                              DatasetClause{Iri("<cat>"), true}}}));
+  EXPECT_THAT(
+      parse(makePostRequest(
+          "/?default-graph-uri=foo&named-graph-uri=bar&using-graph-uri=baz&"
+          "using-named-graph-uri=cat",
+          UPDATE, "INSERT DATA {}")),
+      ParsedRequestIs("/",
+                      {
+                          {"default-graph-uri", {"foo"}},
+                          {"named-graph-uri", {"bar"}},
+                          {"using-graph-uri", {"baz"}},
+                          {"using-named-graph-uri", {"cat"}},
+                      },
+                      Update{"INSERT DATA {}",
+                             {DatasetClause{Iri("<baz>"), false},
+                              DatasetClause{Iri("<cat>"), true}}}));
 }
 
 TEST(ServerTest, determineResultPinning) {
