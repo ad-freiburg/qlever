@@ -23,6 +23,11 @@ jobs:
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
         with:
+          # As of Jan, 28, 2025 the default value here (`binfmt:latest`)
+          # downloads a QEMU version that leads to segfaults in the compiler.
+          # We therefore fix a working version
+          # TODO<joka921> GitHub actions now has ARM runners,
+          # avoid cross-compilation completely
           image : 'tonistiigi/binfmt:desktop-v8.1.5-44'
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -39,7 +44,6 @@ jobs:
         id: pr
         run: echo "pr_num=$(git log --format=%s -n 1 | sed -nr 's/.*\(\#([0-9]+)\)/\1/p')" >> $GITHUB_OUTPUT
       - name: Build X-86-64
-        if: false
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -59,8 +63,7 @@ jobs:
           tags: adfreiburg/qlever:test
 
       - name: E2E in Docker
-        if: false
-        run: | 
+        run: |
           sudo mkdir ${{github.workspace}}/e2e_data
           sudo chmod a+rwx ${{github.workspace}}/e2e_data
           sudo docker run -i --rm -v "${{github.workspace}}/e2e_data:/app/e2e_data/" --entrypoint e2e/e2e.sh adfreiburg/qlever:test
@@ -72,7 +75,7 @@ jobs:
         # future, then we can set this to `true`. Then the ARM64 image will also
         # be built on pull requests which allows for debugging without changing
         # the master branch.
-        if: true
+        if: false
         uses: docker/build-push-action@v6
         with:
           context: .
