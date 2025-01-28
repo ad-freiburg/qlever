@@ -22,6 +22,13 @@ jobs:
           submodules: 'recursive'
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
+        with:
+          # As of Jan, 28, 2025 the default value here (`binfmt:latest`)
+          # downloads a QEMU version that leads to segfaults in the compiler.
+          # We therefore fix a working version
+          # TODO<joka921> GitHub actions now has ARM runners,
+          # avoid cross-compilation completely
+          image : 'tonistiigi/binfmt:desktop-v8.1.5-44'
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
       - name: Login to Docker Hub
@@ -56,7 +63,7 @@ jobs:
           tags: adfreiburg/qlever:test
 
       - name: E2E in Docker
-        run: | 
+        run: |
           sudo mkdir ${{github.workspace}}/e2e_data
           sudo chmod a+rwx ${{github.workspace}}/e2e_data
           sudo docker run -i --rm -v "${{github.workspace}}/e2e_data:/app/e2e_data/" --entrypoint e2e/e2e.sh adfreiburg/qlever:test
