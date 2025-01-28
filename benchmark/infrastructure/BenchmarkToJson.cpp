@@ -46,8 +46,8 @@ static nlohmann::json transformIntoJsonArray(
   */
   nlohmann::ordered_json jsonArray = nlohmann::ordered_json::array();
 
-  std::ranges::transform(vec, std::back_inserter(jsonArray),
-                         translationFunction);
+  ql::ranges::transform(vec, std::back_inserter(jsonArray),
+                        translationFunction);
 
   return jsonArray;
 }

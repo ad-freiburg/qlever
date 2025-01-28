@@ -151,8 +151,8 @@ void DeltaTriples::modifyTriplesImpl(CancellationHandle cancellationHandle,
                                      TriplesToHandlesMap& inverseMap) {
   rewriteLocalVocabEntriesAndBlankNodes(triples);
   ql::ranges::sort(triples);
-  auto [first, last] = std::ranges::unique(triples);
-  triples.erase(first, last);
+  auto first = std::unique(triples.begin(), triples.end());
+  triples.erase(first, triples.end());
   std::erase_if(triples, [&targetMap](const IdTriple<0>& triple) {
     return targetMap.contains(triple);
   });

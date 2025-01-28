@@ -33,7 +33,7 @@ std::optional<std::string_view> VocabularyInMemoryBinSearch::operator[](
 
 // _____________________________________________________________________________
 WordAndIndex VocabularyInMemoryBinSearch::iteratorToWordAndIndex(
-    std::ranges::iterator_t<Words> it) const {
+    ql::ranges::iterator_t<Words> it) const {
   if (it == words_.end()) {
     return WordAndIndex::end();
   }

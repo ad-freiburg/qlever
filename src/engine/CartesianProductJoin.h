@@ -94,9 +94,9 @@ class CartesianProductJoin : public Operation {
   // rows to write at most. `lastTableOffset` is the offset of the last table,
   // to account for cases where the last table does not cover the whole result
   // and so index 0 of a table does not correspond to row 0 of the result.
-  IdTable writeAllColumns(std::ranges::random_access_range auto idTables,
-                          size_t offset, size_t limit,
-                          size_t lastTableOffset = 0) const;
+  CPP_template(typename R)(requires ql::ranges::random_access_range<R>) IdTable
+      writeAllColumns(R idTables, size_t offset, size_t limit,
+                      size_t lastTableOffset = 0) const;
 
   // Calculate the subresults of the children and store them into a vector. If
   // the rightmost child can produce a lazy result, it will be stored outside of
@@ -114,10 +114,9 @@ class CartesianProductJoin : public Operation {
   // `lastTableOffset` is the offset of the last table in the range. This is
   // used to handle `IdTable`s yielded by generators where the range of indices
   // they represent do not cover the whole result.
-  Result::Generator produceTablesLazily(LocalVocab mergedVocab,
-                                        std::ranges::range auto idTables,
-                                        size_t offset, size_t limit,
-                                        size_t lastTableOffset = 0) const;
+  CPP_template(typename R)(requires ql::ranges::range<R>) Result::Generator
+      produceTablesLazily(LocalVocab mergedVocab, R idTables, size_t offset,
+                          size_t limit, size_t lastTableOffset = 0) const;
 
   // Similar to `produceTablesLazily` but can handle a single lazy result.
   Result::Generator createLazyConsumer(

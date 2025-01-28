@@ -13,6 +13,7 @@
 #include <variant>
 #include <vector>
 
+#include "backports/algorithm.h"
 #include "engine/idTable/IdTableRow.h"
 #include "engine/idTable/VectorWithElementwiseMove.h"
 #include "global/Id.h"
@@ -203,8 +204,8 @@ class IdTable {
   // fails. Additional columns (if `columns.size() > numColumns`) are deleted.
   // This behavior is useful for unit tests Where we can just generically pass
   // in more columns than are needed in any test.
-  IdTable(size_t numColumns, std::ranges::forward_range auto columns)
-      requires(!isView)
+  CPP_template(typename ColT)(requires ql::ranges::forward_range<ColT>)
+      IdTable(size_t numColumns, ColT columns) requires(!isView)
       : data_{std::make_move_iterator(columns.begin()),
               std::make_move_iterator(columns.end())},
         numColumns_{numColumns} {
@@ -430,9 +431,11 @@ class IdTable {
   // otherwise the behavior is undefined (in Release mode) or an assertion will
   // fail (in Debug mode). The `newRow` can be any random access range that
   // stores the right type and has the right size.
-  template <std::ranges::random_access_range RowLike>
-  requires std::same_as<std::ranges::range_value_t<RowLike>, T>
-  void push_back(const RowLike& newRow) requires(!isView) {
+  CPP_template(typename RowLike)(
+      requires ql::ranges::random_access_range<RowLike> CPP_and
+          std::same_as<ql::ranges::range_value_t<RowLike>,
+                       T>) void push_back(const RowLike& newRow)
+      requires(!isView) {
     AD_EXPENSIVE_CHECK(newRow.size() == numColumns());
     ++numRows_;
     ql::ranges::for_each(ad_utility::integerRange(numColumns()),
@@ -442,7 +445,7 @@ class IdTable {
   }
 
   void push_back(const std::initializer_list<T>& newRow) requires(!isView) {
-    push_back(std::ranges::ref_view{newRow});
+    push_back(ql::ranges::ref_view{newRow});
   }
 
   // True iff we can make a copy (via the `clone` function below), because the

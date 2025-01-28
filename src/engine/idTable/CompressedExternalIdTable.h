@@ -714,20 +714,20 @@ class CompressedExternalIdTableSorter
     for (auto& gen : rowGenerators) {
       pq.emplace_back(gen.begin(), gen.end());
     }
-    std::ranges::make_heap(pq, comp);
+    ql::ranges::make_heap(pq, comp);
     IdTableStatic<NumStaticCols> result(this->writer_.numColumns(),
                                         this->writer_.allocator());
     result.reserve(blockSizeOutput);
     size_t numPopped = 0;
     while (!pq.empty()) {
-      std::ranges::pop_heap(pq, comp);
+      ql::ranges::pop_heap(pq, comp);
       auto& min = pq.back();
       result.push_back(*min.first);
       ++(min.first);
       if (min.first == min.second) {
         pq.pop_back();
       } else {
-        std::ranges::push_heap(pq, comp);
+        ql::ranges::push_heap(pq, comp);
       }
       if (result.size() >= blockSizeOutput) {
         numPopped += result.numRows();
