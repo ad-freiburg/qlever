@@ -38,6 +38,21 @@ struct LocatedTriplesSnapshot {
 class SharedLocatedTriplesSnapshot
     : public std::shared_ptr<const LocatedTriplesSnapshot> {};
 
+// A class for keeping track of the number of triples of the `DeltaTriples`.
+struct DeltaTriplesCount {
+  size_t triplesInserted_;
+  size_t triplesDeleted_;
+
+  /// Output as json. The signature of this function is mandated by the json
+  /// library to allow for implicit conversion.
+  friend void to_json(nlohmann::json& j, const DeltaTriplesCount& count);
+
+  friend DeltaTriplesCount operator-(const DeltaTriplesCount& lhs,
+                                     const DeltaTriplesCount& rhs);
+
+  bool operator==(const DeltaTriplesCount& other) const = default;
+};
+
 // A class for maintaining triples that are inserted or deleted after index
 // building, we call these delta triples. How it works in principle:
 //
@@ -133,6 +148,7 @@ class DeltaTriples {
   // The number of delta triples added and subtracted.
   size_t numInserted() const { return triplesInserted_.size(); }
   size_t numDeleted() const { return triplesDeleted_.size(); }
+  DeltaTriplesCount getCounts() const;
 
   // Insert triples.
   void insertTriples(CancellationHandle cancellationHandle, Triples triples);
@@ -208,7 +224,8 @@ class DeltaTriplesManager {
   // serialized, and each call to `getCurrentSnapshot` will either return the
   // snapshot before or after a modification, but never one of an ongoing
   // modification.
-  void modify(const std::function<void(DeltaTriples&)>& function);
+  template <typename ReturnType>
+  ReturnType modify(const std::function<ReturnType(DeltaTriples&)>& function);
 
   // Reset the updates represented by the underlying `DeltaTriples` and then
   // update the current snapshot.

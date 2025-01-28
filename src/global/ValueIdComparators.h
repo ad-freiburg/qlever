@@ -361,7 +361,7 @@ inline auto simplifyRanges =
         return input;
       }
       // Merge directly adjacent ranges.
-      // TODO<joka921, C++20> use `std::ranges`
+      // TODO<joka921, C++20> use `ql::ranges`
       decltype(input) result;
       result.push_back(input.front());
       for (auto it = input.begin() + 1; it != input.end(); ++it) {

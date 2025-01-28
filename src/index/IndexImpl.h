@@ -29,9 +29,9 @@
 #include "index/TextMetaData.h"
 #include "index/Vocabulary.h"
 #include "index/VocabularyMerger.h"
-#include "parser/ContextFileParser.h"
 #include "parser/RdfParser.h"
 #include "parser/TripleComponent.h"
+#include "parser/WordsAndDocsFileParser.h"
 #include "util/BufferedVector.h"
 #include "util/CancellationHandle.h"
 #include "util/File.h"
@@ -521,8 +521,20 @@ class IndexImpl {
   // TODO: So far, this is limited to the internal vocabulary (still in the
   // testing phase, once it works, it should be easy to include the IRIs and
   // literals from the external vocabulary as well).
-  cppcoro::generator<ContextFileParser::Line> wordsInTextRecords(
-      const std::string& contextFile, bool addWordsFromLiterals);
+  cppcoro::generator<WordsFileLine> wordsInTextRecords(
+      std::string contextFile, bool addWordsFromLiterals) const;
+
+  void processEntityCaseDuringInvertedListProcessing(
+      const WordsFileLine& line,
+      ad_utility::HashMap<Id, Score>& entitiesInContxt, size_t& nofLiterals,
+      size_t& entityNotFoundErrorMsgCount) const;
+
+  void processWordCaseDuringInvertedListProcessing(
+      const WordsFileLine& line,
+      ad_utility::HashMap<WordIndex, Score>& wordsInContext) const;
+
+  void logEntityNotFound(const string& word,
+                         size_t& entityNotFoundErrorMsgCount) const;
 
   size_t processWordsForVocabulary(const string& contextFile,
                                    bool addWordsFromLiterals);

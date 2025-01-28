@@ -2,6 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Julian Mundhahs (mundhahj@tf.uni-freiburg.de)
 
+#include <engine/QueryPlanner.h>
 #include <engine/Server.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -9,11 +10,14 @@
 #include <boost/beast/http.hpp>
 
 #include "util/GTestHelpers.h"
+#include "util/HttpRequestHelpers.h"
+#include "util/IndexTestHelpers.h"
 #include "util/http/HttpUtils.h"
 #include "util/http/UrlParser.h"
 
 using namespace ad_utility::url_parser;
 using namespace ad_utility::url_parser::sparqlOperation;
+using namespace ad_utility::testing;
 
 namespace {
 auto ParsedRequestIs = [](const std::string& path,
@@ -27,27 +31,9 @@ auto ParsedRequestIs = [](const std::string& path,
       AD_FIELD(ad_utility::url_parser::ParsedRequest, operation_,
                testing::Eq(operation)));
 };
-auto MakeBasicRequest = [](http::verb method, const std::string& target) {
-  // version 11 stands for HTTP/1.1
-  return http::request<http::string_body>{method, target, 11};
-};
-auto MakeGetRequest = [](const std::string& target) {
-  return MakeBasicRequest(http::verb::get, target);
-};
-auto MakePostRequest = [](const std::string& target,
-                          const std::string& contentType,
-                          const std::string& body) {
-  auto req = MakeBasicRequest(http::verb::post, target);
-  req.set(http::field::content_type, contentType);
-  req.body() = body;
-  req.prepare_payload();
-  return req;
-};
 }  // namespace
 
 TEST(ServerTest, parseHttpRequest) {
-  namespace http = boost::beast::http;
-
   auto parse = [](const ad_utility::httpUtils::HttpRequest auto& request) {
     return Server::parseHttpRequest(request);
   };
@@ -55,49 +41,52 @@ TEST(ServerTest, parseHttpRequest) {
       "application/x-www-form-urlencoded;charset=UTF-8";
   const std::string QUERY = "application/sparql-query";
   const std::string UPDATE = "application/sparql-update";
-  EXPECT_THAT(parse(MakeGetRequest("/")), ParsedRequestIs("/", {}, None{}));
-  EXPECT_THAT(parse(MakeGetRequest("/ping")),
+  EXPECT_THAT(parse(makeGetRequest("/")), ParsedRequestIs("/", {}, None{}));
+  EXPECT_THAT(parse(makeGetRequest("/ping")),
               ParsedRequestIs("/ping", {}, None{}));
-  EXPECT_THAT(parse(MakeGetRequest("/?cmd=stats")),
+  EXPECT_THAT(parse(makeGetRequest("/?cmd=stats")),
               ParsedRequestIs("/", {{"cmd", {"stats"}}}, None{}));
-  EXPECT_THAT(parse(MakeGetRequest(
+  EXPECT_THAT(parse(makeGetRequest(
                   "/?query=SELECT+%2A%20WHERE%20%7B%7D&action=csv_export")),
               ParsedRequestIs("/", {{"action", {"csv_export"}}},
-                              Query{"SELECT * WHERE {}"}));
+                              Query{"SELECT * WHERE {}", {}}));
   EXPECT_THAT(
-      parse(MakePostRequest("/", URLENCODED,
+      parse(makePostRequest("/", URLENCODED,
                             "query=SELECT+%2A%20WHERE%20%7B%7D&send=100")),
-      ParsedRequestIs("/", {{"send", {"100"}}}, Query{"SELECT * WHERE {}"}));
+      ParsedRequestIs("/", {{"send", {"100"}}},
+                      Query{"SELECT * WHERE {}", {}}));
   AD_EXPECT_THROW_WITH_MESSAGE(
-      parse(MakePostRequest("/", URLENCODED,
+      parse(makePostRequest("/", URLENCODED,
                             "ääär y=SELECT+%2A%20WHERE%20%7B%7D&send=100")),
       ::testing::HasSubstr("Invalid URL-encoded POST request"));
   AD_EXPECT_THROW_WITH_MESSAGE(
-      parse(MakeGetRequest("/?query=SELECT%20%2A%20WHERE%20%7B%7D&query=SELECT%"
+      parse(makeGetRequest("/?query=SELECT%20%2A%20WHERE%20%7B%7D&query=SELECT%"
                            "20%3Ffoo%20WHERE%20%7B%7D")),
       ::testing::StrEq(
           "Parameter \"query\" must be given exactly once. Is: 2"));
   AD_EXPECT_THROW_WITH_MESSAGE(
-      parse(MakePostRequest("/", URLENCODED,
+      parse(makePostRequest("/", URLENCODED,
                             "query=SELECT%20%2A%20WHERE%20%7B%7D&update=DELETE%"
                             "20%7B%7D%20WHERE%20%7B%7D")),
       ::testing::HasSubstr(
           "Request must only contain one of \"query\" and \"update\"."));
   AD_EXPECT_THROW_WITH_MESSAGE(
-      parse(MakePostRequest("/", URLENCODED,
+      parse(makePostRequest("/", URLENCODED,
                             "update=DELETE%20%7B%7D%20WHERE%20%7B%7D&update="
                             "DELETE%20%7B%7D%20WHERE%20%7B%7D")),
       ::testing::StrEq(
           "Parameter \"update\" must be given exactly once. Is: 2"));
   EXPECT_THAT(
-      parse(MakePostRequest("/", "application/x-www-form-urlencoded",
+      parse(makePostRequest("/", "application/x-www-form-urlencoded",
                             "query=SELECT%20%2A%20WHERE%20%7B%7D&send=100")),
-      ParsedRequestIs("/", {{"send", {"100"}}}, Query{"SELECT * WHERE {}"}));
-  EXPECT_THAT(parse(MakePostRequest("/", URLENCODED,
+      ParsedRequestIs("/", {{"send", {"100"}}},
+                      Query{"SELECT * WHERE {}", {}}));
+  EXPECT_THAT(parse(makePostRequest("/", URLENCODED,
                                     "query=SELECT%20%2A%20WHERE%20%7B%7D")),
-              ParsedRequestIs("/", {}, Query{"SELECT * WHERE {}"}));
+              ParsedRequestIs("/", {}, Query{"SELECT * WHERE {}", {}}));
+  auto Iri = ad_utility::triple_component::Iri::fromIriref;
   EXPECT_THAT(
-      parse(MakePostRequest(
+      parse(makePostRequest(
           "/", URLENCODED,
           "query=SELECT%20%2A%20WHERE%20%7B%7D&default-graph-uri=https%3A%2F%"
           "2Fw3.org%2Fdefault&named-graph-uri=https%3A%2F%2Fw3.org%2F1&named-"
@@ -106,63 +95,113 @@ TEST(ServerTest, parseHttpRequest) {
           "/",
           {{"default-graph-uri", {"https://w3.org/default"}},
            {"named-graph-uri", {"https://w3.org/1", "https://w3.org/2"}}},
-          Query{"SELECT * WHERE {}"}));
+          Query{"SELECT * WHERE {}",
+                {DatasetClause{Iri("<https://w3.org/default>"), false},
+                 DatasetClause{Iri("<https://w3.org/1>"), true},
+                 DatasetClause{Iri("<https://w3.org/2>"), true}}}));
+  ;
   AD_EXPECT_THROW_WITH_MESSAGE(
-      parse(MakePostRequest("/?send=100", URLENCODED,
+      parse(makePostRequest("/?send=100", URLENCODED,
                             "query=SELECT%20%2A%20WHERE%20%7B%7D")),
       testing::StrEq("URL-encoded POST requests must not contain query "
                      "parameters in the URL."));
-  EXPECT_THAT(parse(MakePostRequest("/", URLENCODED, "cmd=clear-cache")),
+  EXPECT_THAT(parse(makePostRequest("/", URLENCODED, "cmd=clear-cache")),
               ParsedRequestIs("/", {{"cmd", {"clear-cache"}}}, None{}));
-  EXPECT_THAT(parse(MakePostRequest("/", QUERY, "SELECT * WHERE {}")),
-              ParsedRequestIs("/", {}, Query{"SELECT * WHERE {}"}));
-  EXPECT_THAT(
-      parse(MakePostRequest("/?send=100", QUERY, "SELECT * WHERE {}")),
-      ParsedRequestIs("/", {{"send", {"100"}}}, Query{"SELECT * WHERE {}"}));
+  EXPECT_THAT(parse(makePostRequest("/", QUERY, "SELECT * WHERE {}")),
+              ParsedRequestIs("/", {}, Query{"SELECT * WHERE {}", {}}));
+  EXPECT_THAT(parse(makePostRequest("/?send=100", QUERY, "SELECT * WHERE {}")),
+              ParsedRequestIs("/", {{"send", {"100"}}},
+                              Query{"SELECT * WHERE {}", {}}));
   AD_EXPECT_THROW_WITH_MESSAGE(
-      parse(MakeBasicRequest(http::verb::patch, "/")),
+      parse(makeRequest(http::verb::patch, "/")),
       testing::StrEq(
           "Request method \"PATCH\" not supported (has to be GET or POST)"));
   AD_EXPECT_THROW_WITH_MESSAGE(
-      parse(MakePostRequest("/", "invalid/content-type", "")),
+      parse(makePostRequest("/", "invalid/content-type", "")),
       testing::StrEq(
           "POST request with content type \"invalid/content-type\" not "
           "supported (must be \"application/x-www-form-urlencoded\", "
           "\"application/sparql-query\" or \"application/sparql-update\")"));
   AD_EXPECT_THROW_WITH_MESSAGE(
-      parse(MakeGetRequest("/?update=DELETE%20%2A%20WHERE%20%7B%7D")),
+      parse(makeGetRequest("/?update=DELETE%20%2A%20WHERE%20%7B%7D")),
       testing::StrEq("SPARQL Update is not allowed as GET request."));
-  EXPECT_THAT(parse(MakePostRequest("/", UPDATE, "DELETE * WHERE {}")),
-              ParsedRequestIs("/", {}, Update{"DELETE * WHERE {}"}));
-  EXPECT_THAT(parse(MakePostRequest("/", URLENCODED,
+  EXPECT_THAT(parse(makePostRequest("/", UPDATE, "DELETE * WHERE {}")),
+              ParsedRequestIs("/", {}, Update{"DELETE * WHERE {}", {}}));
+  EXPECT_THAT(parse(makePostRequest("/", URLENCODED,
                                     "update=DELETE%20%2A%20WHERE%20%7B%7D")),
-              ParsedRequestIs("/", {}, Update{"DELETE * WHERE {}"}));
-  EXPECT_THAT(parse(MakePostRequest("/", URLENCODED,
+              ParsedRequestIs("/", {}, Update{"DELETE * WHERE {}", {}}));
+  EXPECT_THAT(parse(makePostRequest("/", URLENCODED,
                                     "update=DELETE+%2A+WHERE%20%7B%7D")),
-              ParsedRequestIs("/", {}, Update{"DELETE * WHERE {}"}));
-}
-
-TEST(ServerTest, checkParameter) {
-  const ParamValueMap exampleParams = {{"foo", {"bar"}},
-                                       {"baz", {"qux", "quux"}}};
-
-  EXPECT_THAT(Server::checkParameter(exampleParams, "doesNotExist", ""),
-              testing::Eq(std::nullopt));
-  EXPECT_THAT(Server::checkParameter(exampleParams, "foo", "baz"),
-              testing::Eq(std::nullopt));
-  EXPECT_THAT(Server::checkParameter(exampleParams, "foo", "bar"),
-              testing::Optional(testing::StrEq("bar")));
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      Server::checkParameter(exampleParams, "baz", "qux"),
-      testing::StrEq("Parameter \"baz\" must be given exactly once. Is: 2"));
-  EXPECT_THAT(Server::checkParameter(exampleParams, "foo", std::nullopt),
-              testing::Optional(testing::StrEq("bar")));
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      Server::checkParameter(exampleParams, "baz", std::nullopt),
-      testing::StrEq("Parameter \"baz\" must be given exactly once. Is: 2"));
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      Server::checkParameter(exampleParams, "baz", std::nullopt),
-      testing::StrEq("Parameter \"baz\" must be given exactly once. Is: 2"));
+              ParsedRequestIs("/", {}, Update{"DELETE * WHERE {}", {}}));
+  // Check that the correct datasets for the method (GET or POST) are added
+  EXPECT_THAT(
+      parse(makeGetRequest("/?query=SELECT%20%2A%20WHERE%20%7B%7D&default-"
+                           "graph-uri=foo&named-graph-uri=bar&using-graph-uri="
+                           "baz&using-named-graph-uri=cat")),
+      ParsedRequestIs("/",
+                      {{"default-graph-uri", {"foo"}},
+                       {"named-graph-uri", {"bar"}},
+                       {"using-graph-uri", {"baz"}},
+                       {"using-named-graph-uri", {"cat"}}},
+                      Query{"SELECT * WHERE {}",
+                            {DatasetClause{Iri("<foo>"), false},
+                             DatasetClause{Iri("<bar>"), true}}}));
+  EXPECT_THAT(
+      parse(makePostRequest("/?default-"
+                            "graph-uri=foo&named-graph-uri=bar&using-graph-uri="
+                            "baz&using-named-graph-uri=cat",
+                            QUERY, "SELECT * WHERE {}")),
+      ParsedRequestIs("/",
+                      {{"default-graph-uri", {"foo"}},
+                       {"named-graph-uri", {"bar"}},
+                       {"using-graph-uri", {"baz"}},
+                       {"using-named-graph-uri", {"cat"}}},
+                      Query{"SELECT * WHERE {}",
+                            {DatasetClause{Iri("<foo>"), false},
+                             DatasetClause{Iri("<bar>"), true}}}));
+  EXPECT_THAT(
+      parse(makePostRequest("/", URLENCODED,
+                            "query=SELECT%20%2A%20WHERE%20%7B%7D&default-graph-"
+                            "uri=foo&named-graph-uri=bar&using-graph-uri=baz&"
+                            "using-named-graph-uri=cat")),
+      ParsedRequestIs("/",
+                      {{"default-graph-uri", {"foo"}},
+                       {"named-graph-uri", {"bar"}},
+                       {"using-graph-uri", {"baz"}},
+                       {"using-named-graph-uri", {"cat"}}},
+                      Query{"SELECT * WHERE {}",
+                            {DatasetClause{Iri("<foo>"), false},
+                             DatasetClause{Iri("<bar>"), true}}}));
+  EXPECT_THAT(
+      parse(makePostRequest("/", URLENCODED,
+                            "update=INSERT%20DATA%20%7B%7D&default-graph-uri="
+                            "foo&named-graph-uri=bar&using-graph-uri=baz&"
+                            "using-named-graph-uri=cat")),
+      ParsedRequestIs("/",
+                      {
+                          {"default-graph-uri", {"foo"}},
+                          {"named-graph-uri", {"bar"}},
+                          {"using-graph-uri", {"baz"}},
+                          {"using-named-graph-uri", {"cat"}},
+                      },
+                      Update{"INSERT DATA {}",
+                             {DatasetClause{Iri("<baz>"), false},
+                              DatasetClause{Iri("<cat>"), true}}}));
+  EXPECT_THAT(
+      parse(makePostRequest(
+          "/?default-graph-uri=foo&named-graph-uri=bar&using-graph-uri=baz&"
+          "using-named-graph-uri=cat",
+          UPDATE, "INSERT DATA {}")),
+      ParsedRequestIs("/",
+                      {
+                          {"default-graph-uri", {"foo"}},
+                          {"named-graph-uri", {"bar"}},
+                          {"using-graph-uri", {"baz"}},
+                          {"using-named-graph-uri", {"cat"}},
+                      },
+                      Update{"INSERT DATA {}",
+                             {DatasetClause{Iri("<baz>"), false},
+                              DatasetClause{Iri("<cat>"), true}}}));
 }
 
 TEST(ServerTest, determineResultPinning) {
@@ -226,9 +265,9 @@ TEST(ServerTest, determineMediaType) {
 TEST(ServerTest, getQueryId) {
   using namespace ad_utility::websocket;
   Server server{9999, 1, ad_utility::MemorySize::megabytes(1), "accessToken"};
-  auto reqWithExplicitQueryId = MakeGetRequest("/");
+  auto reqWithExplicitQueryId = makeGetRequest("/");
   reqWithExplicitQueryId.set("Query-Id", "100");
-  const auto req = MakeGetRequest("/");
+  const auto req = makeGetRequest("/");
   {
     // A request with a custom query id.
     auto queryId1 = server.getQueryId(reqWithExplicitQueryId,
@@ -250,10 +289,10 @@ TEST(ServerTest, getQueryId) {
 
 TEST(ServerTest, createMessageSender) {
   Server server{9999, 1, ad_utility::MemorySize::megabytes(1), "accessToken"};
-  auto reqWithExplicitQueryId = MakeGetRequest("/");
+  auto reqWithExplicitQueryId = makeGetRequest("/");
   std::string customQueryId = "100";
   reqWithExplicitQueryId.set("Query-Id", customQueryId);
-  const auto req = MakeGetRequest("/");
+  const auto req = makeGetRequest("/");
   // The query hub is only valid once, the server has been started.
   AD_EXPECT_THROW_WITH_MESSAGE(
       server.createMessageSender(server.queryHub_, req,
@@ -283,4 +322,51 @@ TEST(ServerTest, createMessageSender) {
       server.createMessageSender(server.queryHub_, req,
                                  "SELECT * WHERE { ?a ?b ?c }"),
       testing::HasSubstr("Assertion `queryHubLock` failed."));
+}
+
+TEST(ServerTest, createResponseMetadata) {
+  // Setup the datastructures
+  const ad_utility::SharedCancellationHandle handle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+  const ad_utility::Timer requestTimer{
+      ad_utility::Timer::InitialStatus::Stopped};
+  QueryExecutionContext* qec = ad_utility::testing::getQec("<a> <b> <c>");
+  const Index& index = qec->getIndex();
+  DeltaTriples deltaTriples{index};
+  const std::string update = "INSERT DATA { <b> <c> <d> }";
+  ParsedQuery pq = SparqlParser::parseQuery(update);
+  QueryPlanner qp(qec, handle);
+  QueryExecutionTree qet = qp.createExecutionTree(pq);
+  const Server::PlannedQuery plannedQuery{std::move(pq), std::move(qet)};
+
+  // Execute the update
+  DeltaTriplesCount countBefore = deltaTriples.getCounts();
+  UpdateMetadata updateMetadata = ExecuteUpdate::executeUpdate(
+      index, plannedQuery.parsedQuery_, plannedQuery.queryExecutionTree_,
+      deltaTriples, handle);
+  DeltaTriplesCount countAfter = deltaTriples.getCounts();
+
+  // Assertions
+  json metadata = Server::createResponseMetadataForUpdate(
+      requestTimer, index, deltaTriples, plannedQuery,
+      plannedQuery.queryExecutionTree_, countBefore, updateMetadata,
+      countAfter);
+  json deltaTriplesJson{
+      {"before", {{"inserted", 0}, {"deleted", 0}, {"total", 0}}},
+      {"after", {{"inserted", 1}, {"deleted", 0}, {"total", 1}}},
+      {"difference", {{"inserted", 1}, {"deleted", 0}, {"total", 1}}}};
+  json locatedTriplesJson{
+      {"SPO", {{"blocks-affected", 1}, {"blocks-total", 1}}},
+      {"POS", {{"blocks-affected", 1}, {"blocks-total", 1}}},
+      {"OSP", {{"blocks-affected", 1}, {"blocks-total", 1}}},
+      {"SOP", {{"blocks-affected", 1}, {"blocks-total", 1}}},
+      {"PSO", {{"blocks-affected", 1}, {"blocks-total", 1}}},
+      {"OPS", {{"blocks-affected", 1}, {"blocks-total", 1}}}};
+  EXPECT_THAT(metadata["update"], testing::Eq(update));
+  EXPECT_THAT(metadata["status"], testing::Eq("OK"));
+  EXPECT_THAT(metadata["warnings"],
+              testing::Eq(std::vector<std::string>{
+                  "SPARQL 1.1 Update for QLever is experimental."}));
+  EXPECT_THAT(metadata["delta-triples"], testing::Eq(deltaTriplesJson));
+  EXPECT_THAT(metadata["located-triples"], testing::Eq(locatedTriplesJson));
 }

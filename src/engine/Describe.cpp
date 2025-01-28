@@ -53,10 +53,9 @@ string Describe::getCacheKeyImpl() const {
   const auto& defaultGraphs = describe_.datasetClauses_.defaultGraphs_;
   if (defaultGraphs.has_value()) {
     std::vector<std::string> graphIdVec;
-    std::ranges::transform(defaultGraphs.value(),
-                           std::back_inserter(graphIdVec),
-                           &TripleComponent::toRdfLiteral);
-    std::ranges::sort(graphIdVec);
+    ql::ranges::transform(defaultGraphs.value(), std::back_inserter(graphIdVec),
+                          &TripleComponent::toRdfLiteral);
+    ql::ranges::sort(graphIdVec);
     absl::StrAppend(&result,
                     "\nFiltered by Graphs:", absl::StrJoin(graphIdVec, " "));
   }
@@ -218,7 +217,7 @@ IdTable Describe::getIdsToDescribe(const Result& result,
   // Copy the `Id`s from the hash set to an `IdTable`.
   IdTable idsAsTable{1, allocator()};
   idsAsTable.resize(idsToDescribe.size());
-  std::ranges::copy(idsToDescribe, idsAsTable.getColumn(0).begin());
+  ql::ranges::copy(idsToDescribe, idsAsTable.getColumn(0).begin());
   return idsAsTable;
 }
 

@@ -182,9 +182,9 @@ VariableToColumnMap CartesianProductJoin::computeVariableToColumnMap() const {
 }
 
 // _____________________________________________________________________________
-IdTable CartesianProductJoin::writeAllColumns(
-    std::ranges::random_access_range auto idTables, size_t offset, size_t limit,
-    size_t lastTableOffset) const {
+CPP_template_def(typename R)(requires ql::ranges::random_access_range<R>)
+    IdTable CartesianProductJoin::writeAllColumns(
+        R idTables, size_t offset, size_t limit, size_t lastTableOffset) const {
   AD_CORRECTNESS_CHECK(offset >= lastTableOffset);
   IdTable result{getResultWidth(), getExecutionContext()->getAllocator()};
   // TODO<joka921> Find a solution to cheaply handle the case, that only a
@@ -255,13 +255,14 @@ CartesianProductJoin::calculateSubResults(bool requestLaziness) {
   auto children = childView();
   AD_CORRECTNESS_CHECK(!ql::ranges::empty(children));
   // Get all child results (possibly with limit, see above).
-  for (Operation& child : children) {
-    if (limitIfPresent.has_value() && child.supportsLimit()) {
-      child.setLimit(limitIfPresent.value());
+  for (std::shared_ptr<QueryExecutionTree>& childTree : children_) {
+    if (limitIfPresent.has_value() && childTree->supportsLimit()) {
+      childTree->setLimit(limitIfPresent.value());
     }
+    auto& child = *childTree->getRootOperation();
     // To preserve order of the columns we can only consume the first child
     // lazily. In the future this restriction may be lifted by permutating the
-    // columns afterwards.
+    // columns afterward.
     bool isLast = &child == &children.back();
     bool requestLazy = requestLaziness && isLast;
     auto result = child.getResult(
@@ -302,12 +303,14 @@ CartesianProductJoin::calculateSubResults(bool requestLaziness) {
 }
 
 // _____________________________________________________________________________
-Result::Generator CartesianProductJoin::produceTablesLazily(
-    LocalVocab mergedVocab, std::ranges::range auto idTables, size_t offset,
-    size_t limit, size_t lastTableOffset) const {
+CPP_template_def(typename R)(requires ql::ranges::range<R>) Result::Generator
+    CartesianProductJoin::produceTablesLazily(LocalVocab mergedVocab,
+                                              R idTables, size_t offset,
+                                              size_t limit,
+                                              size_t lastTableOffset) const {
   while (limit > 0) {
     uint64_t limitWithChunkSize = std::min(limit, chunkSize_);
-    IdTable idTable = writeAllColumns(std::ranges::ref_view(idTables), offset,
+    IdTable idTable = writeAllColumns(ql::ranges::ref_view(idTables), offset,
                                       limitWithChunkSize, lastTableOffset);
     size_t tableSize = idTable.size();
     AD_CORRECTNESS_CHECK(tableSize <= limit);
