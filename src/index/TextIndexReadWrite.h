@@ -270,47 +270,17 @@ class FrequencyEncode {
   using CodeBook = TypedVector;
 
   // View must be an input range with value type `T`.
+  // The constructor forwards the view to the initialize function. This is
+  // necessary because of a clang 16 bug. This bug causes the declaration
+  // of a method in the .h file to not be connected to its definition in the
+  // .cpp file when using this specific requires clause. To circumvent this the
+  // requires clause is kept only in the .h file and the constructor calls the
+  // initialize function which has no direct requires clause.
   CPP_template(typename View)(requires(
       !std::same_as<
           FrequencyEncode,
           std::remove_cvref_t<View>>)) explicit FrequencyEncode(View&& view) {
-    if (ql::ranges::empty(view)) {
-      return;
-    }
-    // Create the frequency map to count how often a certain value of type T
-    // appears in the vector
-    TypedMap frequencyMap;
-    for (const auto& value : view) {
-      ++frequencyMap[value];
-    }
-
-    // Convert the hashmap to a vector to sort it by most frequent first
-    std::vector<std::pair<T, size_t>> frequencyVector;
-    frequencyVector.reserve(frequencyMap.size());
-    ql::ranges::copy(frequencyMap, std::back_inserter(frequencyVector));
-    ql::ranges::sort(frequencyVector, [](const auto& a, const auto& b) {
-      return a.second > b.second;
-    });
-
-    // Write the codeBook and codeMap
-    // codeBook contains all values of type T exactly ones, sorted by frequency
-    // descending
-    // codeMap maps all values of type T that where in the vector to their
-    // position in the codeBook
-    codeBook_.reserve(frequencyVector.size());
-    codeMap_.reserve(frequencyVector.size());
-    size_t i = 0;
-    for (const auto& frequencyPair : frequencyVector) {
-      codeBook_.push_back(frequencyPair.first);
-      codeMap_[frequencyPair.first] = i;
-      ++i;
-    }
-
-    // Finally encode the vector
-    encodedVector_.reserve(ql::ranges::size(view));
-    for (const auto& value : view) {
-      encodedVector_.push_back(codeMap_[value]);
-    }
+    initialize(std::forward<View>(view));
   };
 
   FrequencyEncode() = delete;
@@ -326,6 +296,11 @@ class FrequencyEncode {
   const CodeBook& getCodeBook() const { return codeBook_; }
 
  private:
+  // This method implements the constructor. The reason is explained in the
+  // comment above the constructor.
+  template <typename View>
+  void initialize(View&& view);
+
   std::vector<size_t> encodedVector_;
   CodeMap codeMap_;
   CodeBook codeBook_;
@@ -347,16 +322,17 @@ requires std::is_arithmetic_v<T> class GapEncode {
   using TypedVector = std::vector<T>;
 
   // View must be an input range with value type `T`.
+  // The constructor forwards the view to the initialize function. This is
+  // necessary because of a clang 16 bug. This bug causes the declaration
+  // of a method in the .h file to not be connected to its definition in the
+  // .cpp file when using this specific requires clause. To circumvent this the
+  // requires clause is kept only in the .h file and the constructor calls the
+  // initialize function which has no direct requires clause.
   CPP_template(typename View)(requires(
       !std::same_as<GapEncode,
                     std::remove_cvref_t<View>>)) explicit GapEncode(View&&
                                                                         view) {
-    if (ql::ranges::empty(view)) {
-      return;
-    }
-    encodedVector_.reserve(ql::ranges::size(view));
-    std::adjacent_difference(ql::ranges::begin(view), ql::ranges::end(view),
-                             std::back_inserter(encodedVector_));
+    initialize(std::forward<View>(view));
   };
 
   GapEncode() = delete;
@@ -370,6 +346,11 @@ requires std::is_arithmetic_v<T> class GapEncode {
   const TypedVector& getEncodedVector() const { return encodedVector_; }
 
  private:
+  // This method implements the constructor. The reason is explained in the
+  // comment above the constructor.
+  template <typename View>
+  void initialize(View&& view);
+
   TypedVector encodedVector_;
 };
 

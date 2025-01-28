@@ -80,11 +80,66 @@ void encodeAndWriteSpanAndMoveOffset(std::span<const T> spanToWrite,
 
 // ____________________________________________________________________________
 template <typename T>
+template <typename View>
+void FrequencyEncode<T>::initialize(View&& view) {
+  if (ql::ranges::empty(view)) {
+    return;
+  }
+  // Create the frequency map to count how often a certain value of type T
+  // appears in the vector
+  TypedMap frequencyMap;
+  for (const auto& value : view) {
+    ++frequencyMap[value];
+  }
+
+  // Convert the hashmap to a vector to sort it by most frequent first
+  std::vector<std::pair<T, size_t>> frequencyVector;
+  frequencyVector.reserve(frequencyMap.size());
+  ql::ranges::copy(frequencyMap, std::back_inserter(frequencyVector));
+  ql::ranges::sort(frequencyVector, [](const auto& a, const auto& b) {
+    return a.second > b.second;
+  });
+
+  // Write the codeBook and codeMap
+  // codeBook contains all values of type T exactly ones, sorted by frequency
+  // descending
+  // codeMap maps all values of type T that where in the vector to their
+  // position in the codeBook
+  codeBook_.reserve(frequencyVector.size());
+  codeMap_.reserve(frequencyVector.size());
+  size_t i = 0;
+  for (const auto& frequencyPair : frequencyVector) {
+    codeBook_.push_back(frequencyPair.first);
+    codeMap_[frequencyPair.first] = i;
+    ++i;
+  }
+
+  // Finally encode the vector
+  encodedVector_.reserve(ql::ranges::size(view));
+  for (const auto& value : view) {
+    encodedVector_.push_back(codeMap_[value]);
+  }
+}
+
+// ____________________________________________________________________________
+template <typename T>
 void FrequencyEncode<T>::writeToFile(ad_utility::File& out,
                                      off_t& currentOffset) {
   currentOffset += textIndexReadWrite::writeCodebook(codeBook_, out);
   textIndexReadWrite::encodeAndWriteSpanAndMoveOffset<size_t>(
       encodedVector_, out, currentOffset);
+}
+
+// ____________________________________________________________________________
+template <typename T>
+requires std::is_arithmetic_v<T> template <typename View>
+void GapEncode<T>::initialize(View&& view) {
+  if (ql::ranges::empty(view)) {
+    return;
+  }
+  encodedVector_.reserve(ql::ranges::size(view));
+  std::adjacent_difference(ql::ranges::begin(view), ql::ranges::end(view),
+                           std::back_inserter(encodedVector_));
 }
 
 // ____________________________________________________________________________
