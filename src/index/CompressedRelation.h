@@ -25,7 +25,7 @@
 // Forward declarations
 class IdTable;
 
-class LocatedTriplesPerBlock;
+class LocatedTriplesPerBlockReadOnly;
 
 // This type is used to buffer small relations that will be stored in the same
 // block.
@@ -459,7 +459,7 @@ class CompressedRelationReader {
   struct ScanImplConfig {
     ColumnIndices scanColumns_;
     FilterDuplicatesAndGraphs graphFilter_;
-    const LocatedTriplesPerBlock& locatedTriples_;
+    const LocatedTriplesPerBlockReadOnly& locatedTriples_;
   };
 
   // The specification of scan, together with the blocks on which this scan is
@@ -577,7 +577,7 @@ class CompressedRelationReader {
                std::span<const CompressedBlockMetadata> blocks,
                ColumnIndicesRef additionalColumns,
                const CancellationHandle& cancellationHandle,
-               const LocatedTriplesPerBlock& locatedTriplesPerBlock,
+               const LocatedTriplesPerBlockReadOnly& locatedTriplesPerBlock,
                const LimitOffsetClause& limitOffset = {}) const;
 
   // Similar to `scan` (directly above), but the result of the scan is lazily
@@ -587,7 +587,7 @@ class CompressedRelationReader {
       ScanSpecification scanSpec,
       std::vector<CompressedBlockMetadata> blockMetadata,
       ColumnIndices additionalColumns, CancellationHandle cancellationHandle,
-      const LocatedTriplesPerBlock& locatedTriplesPerBlock,
+      const LocatedTriplesPerBlockReadOnly& locatedTriplesPerBlock,
       LimitOffsetClause limitOffset = {}) const;
 
   // Get the exact size of the result of the scan, taking the given located
@@ -596,15 +596,15 @@ class CompressedRelationReader {
   size_t getResultSizeOfScan(
       const ScanSpecification& scanSpec,
       const vector<CompressedBlockMetadata>& blocks,
-      const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
+      const LocatedTriplesPerBlockReadOnly& locatedTriplesPerBlock) const;
 
   // Get a lower and an upper bound for the size of the result of the scan. For
   // this call, it is enough that each located triple knows the block to which
-  // it belongs (which is the case for `LocatedTriplesPerBlock`).
+  // it belongs (which is the case for `LocatedTriplesPerBlockReadOnly`).
   std::pair<size_t, size_t> getSizeEstimateForScan(
       const ScanSpecification& scanSpec,
       const vector<CompressedBlockMetadata>& blocks,
-      const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
+      const LocatedTriplesPerBlockReadOnly& locatedTriplesPerBlock) const;
 
  private:
   // Common implementation of `getResultSizeOfScan` and `getSizeEstimateForScan`
@@ -613,8 +613,8 @@ class CompressedRelationReader {
   std::pair<size_t, size_t> getResultSizeImpl(
       const ScanSpecification& scanSpec,
       const vector<CompressedBlockMetadata>& blocks,
-      [[maybe_unused]] const LocatedTriplesPerBlock& locatedTriplesPerBlock)
-      const;
+      [[maybe_unused]] const LocatedTriplesPerBlockReadOnly&
+          locatedTriplesPerBlock) const;
 
  public:
   // For a given relation, determine the `col1Id`s and their counts. This is
@@ -622,18 +622,18 @@ class CompressedRelationReader {
   IdTable getDistinctCol1IdsAndCounts(
       Id col0Id, const std::vector<CompressedBlockMetadata>& allBlocksMetadata,
       const CancellationHandle& cancellationHandle,
-      const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
+      const LocatedTriplesPerBlockReadOnly& locatedTriplesPerBlock) const;
 
   // For all `col0Ids` determine their counts. This is
   // used for `computeGroupByForFullScan`.
   IdTable getDistinctCol0IdsAndCounts(
       const std::vector<CompressedBlockMetadata>& allBlocksMetadata,
       const CancellationHandle& cancellationHandle,
-      const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
+      const LocatedTriplesPerBlockReadOnly& locatedTriplesPerBlock) const;
 
   std::optional<CompressedRelationMetadata> getMetadataForSmallRelation(
       const std::vector<CompressedBlockMetadata>& allBlocksMetadata, Id col0Id,
-      const LocatedTriplesPerBlock&) const;
+      const LocatedTriplesPerBlockReadOnly&) const;
 
   // Get the contiguous subrange of the given `blockB` for the blocks
   // that contain the triples that have the relationId/col0Id that was specified
@@ -656,7 +656,7 @@ class CompressedRelationReader {
   std::optional<ScanSpecAndBlocksAndBounds::FirstAndLastTriple>
   getFirstAndLastTriple(
       const ScanSpecAndBlocks& metadataAndBlocks,
-      const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
+      const LocatedTriplesPerBlockReadOnly& locatedTriplesPerBlock) const;
 
   // Get access to the underlying allocator
   const Allocator& allocator() const { return allocator_; }
@@ -709,7 +709,7 @@ class CompressedRelationReader {
       const ScanSpecification& scanSpec, const ScanImplConfig& scanConfig,
       const CompressedBlockMetadata& blockMetadata,
       std::optional<std::reference_wrapper<LazyScanMetadata>> scanMetadata,
-      const LocatedTriplesPerBlock&) const;
+      const LocatedTriplesPerBlockReadOnly&) const;
 
   // Yield all the blocks in the range `[beginBlock, endBlock)`. If the
   // `columnIndices` are set, only the specified columns from the blocks
@@ -742,7 +742,7 @@ class CompressedRelationReader {
 
   static ScanImplConfig getScanConfig(
       const ScanSpecification& scanSpec, ColumnIndicesRef additionalColumns,
-      const LocatedTriplesPerBlock& locatedTriples);
+      const LocatedTriplesPerBlockReadOnly& locatedTriples);
 
   // The common implementation for `getDistinctCol0IdsAndCounts` and
   // `getCol1IdsAndCounts`.
@@ -752,7 +752,7 @@ class CompressedRelationReader {
       const ScanSpecification& scanSpec,
       const std::vector<CompressedBlockMetadata>& allBlocksMetadata,
       const CancellationHandle& cancellationHandle,
-      const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
+      const LocatedTriplesPerBlockReadOnly& locatedTriplesPerBlock) const;
 };
 
 // TODO<joka921>

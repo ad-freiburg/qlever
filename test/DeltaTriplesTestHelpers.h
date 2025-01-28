@@ -17,7 +17,7 @@ namespace deltaTriplesTestHelpers {
 // A matcher that applies `InnerMatcher` to all `LocatedTriplesPerBlock` of a
 // `DeltaTriples`.
 inline auto InAllPermutations =
-    [](testing::Matcher<const LocatedTriplesPerBlock&> InnerMatcher)
+    [](testing::Matcher<const LocatedTriplesPerBlockReadOnly&> InnerMatcher)
     -> testing::Matcher<const DeltaTriples&> {
   return testing::AllOfArray(ad_utility::transform(
       Permutation::ALL, [&InnerMatcher](const Permutation::Enum& perm) {

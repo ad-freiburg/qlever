@@ -70,8 +70,8 @@ std::ostream& operator<<(std::ostream& os, const LocatedTriples& lts);
 
 // Sorted sets of located triples, grouped by block. We use this to store all
 // located triples for a permutation.
-class LocatedTriplesPerBlock {
- private:
+class LocatedTriplesPerBlockReadOnly {
+ protected:
   // The total number of `LocatedTriple` objects stored (for all blocks).
   size_t numTriples_ = 0;
 
@@ -88,11 +88,10 @@ class LocatedTriplesPerBlock {
 
   // Stores the block metadata where the block borders have been adjusted for
   // the updated triples.
-  std::optional<std::vector<CompressedBlockMetadata>> augmentedMetadata_;
-  std::vector<CompressedBlockMetadata> originalMetadata_;
-
- public:
-  void updateAugmentedMetadata();
+  // TODO<joka921> we currently can't set it to `nullopt` because some tests
+  // don't have the call for `setOriginalMetadata`.
+  std::optional<std::vector<CompressedBlockMetadata>> augmentedMetadata_{
+      std::vector<CompressedBlockMetadata>{}};
 
  public:
   // Get upper limits for the number of located triples for the given block. The
@@ -135,6 +134,38 @@ class LocatedTriplesPerBlock {
     return map_.contains(blockIndex);
   }
 
+  // Get the total number of `LocatedTriple`s (for all blocks).
+  size_t numTriples() const { return numTriples_; }
+
+  // Get the number of blocks with a non-empty set of located triples.
+  size_t numBlocks() const { return map_.size(); }
+
+  // Returns the block metadata where the block borders have been updated to
+  // account for the update triples. All triples (both insert and delete) will
+  // enlarge the block borders.
+  const std::vector<CompressedBlockMetadata>& getAugmentedMetadata() const {
+    AD_CONTRACT_CHECK(augmentedMetadata_.has_value());
+    return augmentedMetadata_.value();
+  };
+
+  // Return `true` iff the given triple is one of the located triples with the
+  // given status (inserted or deleted).
+  //
+  // NOTE: Only used for testing.
+  bool isLocatedTriple(const IdTriple<0>& triple, bool isInsertion) const;
+};
+
+// Sorted sets of located triples, grouped by block. We use this to store all
+// located triples for a permutation.
+class LocatedTriplesPerBlock : public LocatedTriplesPerBlockReadOnly {
+ private:
+  FRIEND_TEST(LocatedTriplesTest, numTriplesInBlock);
+
+  std::optional<std::vector<CompressedBlockMetadata>> originalMetadata_;
+
+ public:
+  void updateAugmentedMetadata();
+
   // Add `locatedTriples` to the `LocatedTriplesPerBlock` and return handles to
   // where they were added (`LocatedTriples` is a sorted set, see above). Using
   // these handles, we can easily remove the `locatedTriples` from the set again
@@ -147,24 +178,10 @@ class LocatedTriplesPerBlock {
 
   void erase(size_t blockIndex, LocatedTriples::iterator iter);
 
-  // Get the total number of `LocatedTriple`s (for all blocks).
-  size_t numTriples() const { return numTriples_; }
-
-  // Get the number of blocks with a non-empty set of located triples.
-  size_t numBlocks() const { return map_.size(); }
-
   // Must be called initially before using the `LocatedTriplesPerBlock` to
   // initialize the original block metadata that is augmented for updated
   // triples. This is currently done in `Permutation::loadFromDisk`.
   void setOriginalMetadata(std::vector<CompressedBlockMetadata> metadata);
-
-  // Returns the block metadata where the block borders have been updated to
-  // account for the update triples. All triples (both insert and delete) will
-  // enlarge the block borders.
-  const std::vector<CompressedBlockMetadata>& getAugmentedMetadata() const {
-    AD_CONTRACT_CHECK(augmentedMetadata_.has_value());
-    return augmentedMetadata_.value();
-  };
 
   // Remove all located triples.
   void clear() {
@@ -172,12 +189,6 @@ class LocatedTriplesPerBlock {
     numTriples_ = 0;
     augmentedMetadata_ = originalMetadata_;
   }
-
-  // Return `true` iff the given triple is one of the located triples with the
-  // given status (inserted or deleted).
-  //
-  // NOTE: Only used for testing.
-  bool isLocatedTriple(const IdTriple<0>& triple, bool isInsertion) const;
 
   // This operator is only for debugging and testing. It returns a
   // human-readable representation.
