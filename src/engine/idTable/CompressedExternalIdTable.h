@@ -22,7 +22,14 @@
 
 namespace ad_utility {
 
+template <typename B, typename R>
+CPP_requires(HasPushBack, requires(B& b, const R& r)(b.push_back(r)));
+
+template <typename B, typename R>
+CPP_concept HasPushBackConcept = CPP_requires_ref(HasPushBack, B, R);
+
 using namespace ad_utility::memory_literals;
+
 
 // The default size for compressed blocks in the following classes.
 static constexpr ad_utility::MemorySize DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE =
@@ -338,7 +345,9 @@ class CompressedExternalIdTableBase {
   }
   // Add a single row to the input. The type of `row` needs to be something that
   // can be `push_back`ed to a `IdTable`.
-  void push(const auto& row) requires requires { currentBlock_.push_back(row); }
+  CPP_template_def(typename R)(requires HasPushBackConcept<IdTableStatic<NumStaticCols>, R>)
+  void push(const R& row)
+  // void push(const auto& row) requires requires { currentBlock_.push_back(row); }
   {
     ++numElementsPushed_;
     currentBlock_.push_back(row);
@@ -456,11 +465,14 @@ class CompressedExternalIdTable
 
   // When we have a static number of columns, then the `numCols` argument to the
   // constructor is redundant.
-  explicit CompressedExternalIdTable(
-      std::string filename, ad_utility::MemorySize memory,
-      ad_utility::AllocatorWithLimit<Id> allocator,
-      MemorySize blocksizeCompression = DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE)
-      requires(NumStaticCols > 0)
+  CPP_template(size_t Size = NumStaticCols)(requires(
+      Size >
+      0)) explicit CompressedExternalIdTable(std::string filename,
+                                             ad_utility::MemorySize memory,
+                                             ad_utility::AllocatorWithLimit<Id>
+                                                 allocator,
+                                             MemorySize blocksizeCompression =
+                                                 DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE)
       : CompressedExternalIdTable(std::move(filename), NumStaticCols, memory,
                                   std::move(allocator), blocksizeCompression) {}
 
@@ -583,11 +595,12 @@ class CompressedExternalIdTableSorter
 
   // When we have a static number of columns, then the `numCols` argument to the
   // constructor is redundant.
-  CompressedExternalIdTableSorter(
-      std::string filename, ad_utility::MemorySize memory,
-      ad_utility::AllocatorWithLimit<Id> allocator,
-      MemorySize blocksizeCompression = DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE,
-      Comparator comp = {}) requires(NumStaticCols > 0)
+  CPP_template(size_t Size = NumStaticCols)(requires(NumStaticCols > 0))
+      CompressedExternalIdTableSorter(
+          std::string filename, ad_utility::MemorySize memory,
+          ad_utility::AllocatorWithLimit<Id> allocator,
+          MemorySize blocksizeCompression = DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE,
+          Comparator comp = {})
       : CompressedExternalIdTableSorter(std::move(filename), NumStaticCols,
                                         memory, std::move(allocator),
                                         blocksizeCompression, comp) {}
