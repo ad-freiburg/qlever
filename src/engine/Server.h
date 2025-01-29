@@ -139,14 +139,15 @@ class Server {
   template <typename Operation>
   Awaitable<void> processQueryOrUpdate(
       const ad_utility::url_parser::ParamValueMap& params,
-      const Operation& operation, ad_utility::Timer& requestTimer,
+      Operation&& operation, ad_utility::Timer& requestTimer,
       const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
       TimeLimit timeLimit);
   // Do the actual execution of a query.
   Awaitable<void> processQuery(
-      const ad_utility::url_parser::ParamValueMap& params,
-      const ad_utility::url_parser::sparqlOperation::Query& query,
+      const ad_utility::url_parser::ParamValueMap& params, ParsedQuery&& query,
       ad_utility::Timer& requestTimer,
+      ad_utility::SharedCancellationHandle cancellationHandle,
+      QueryExecutionContext& qec,
       const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
       TimeLimit timeLimit);
   // For an executed update create a json with some stats on the update (timing,
@@ -160,9 +161,9 @@ class Server {
   FRIEND_TEST(ServerTest, createResponseMetadata);
   // Do the actual execution of an update.
   Awaitable<void> processUpdate(
-      const ad_utility::url_parser::ParamValueMap& params,
-      const ad_utility::url_parser::sparqlOperation::Update& update,
-      ad_utility::Timer& requestTimer,
+      ParsedQuery&& update, ad_utility::Timer& requestTimer,
+      ad_utility::SharedCancellationHandle cancellationHandle,
+      QueryExecutionContext& qec,
       const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
       TimeLimit timeLimit);
 
@@ -178,11 +179,11 @@ class Server {
       const ad_utility::url_parser::ParamValueMap& params);
   FRIEND_TEST(ServerTest, determineResultPinning);
   // Sets up the PlannedQuery s.t. it is ready to be executed.
-  PlannedQuery setupPlannedQuery(
-      const std::vector<DatasetClause>& queryDatasets,
-      const std::string& operation, QueryExecutionContext& qec,
-      SharedCancellationHandle handle, TimeLimit timeLimit,
-      const ad_utility::Timer& requestTimer) const;
+  PlannedQuery setupPlannedQuery(ParsedQuery&& operation,
+                                 QueryExecutionContext& qec,
+                                 SharedCancellationHandle handle,
+                                 TimeLimit timeLimit,
+                                 const ad_utility::Timer& requestTimer) const;
   // Creates a `MessageSender` for the given operation.
   ad_utility::websocket::MessageSender createMessageSender(
       const std::weak_ptr<ad_utility::websocket::QueryHub>& queryHub,
@@ -191,11 +192,10 @@ class Server {
   // Execute an update operation. The function must have exclusive access to the
   // DeltaTriples object.
   json processUpdateImpl(
-      const ad_utility::url_parser::ParamValueMap& params,
-      const ad_utility::url_parser::sparqlOperation::Update& update,
-      ad_utility::Timer& requestTimer, TimeLimit timeLimit, auto& messageSender,
+      ParsedQuery&& update, ad_utility::Timer& requestTimer,
+      TimeLimit timeLimit,
       ad_utility::SharedCancellationHandle cancellationHandle,
-      DeltaTriples& deltaTriples);
+      QueryExecutionContext& qec, DeltaTriples& deltaTriples);
 
   static json composeErrorResponseJson(
       const string& query, const std::string& errorMsg,
@@ -242,11 +242,9 @@ class Server {
 
   /// Run the SPARQL parser and then the query planner on the `query`. All
   /// computation is performed on the `threadPool_`.
-  PlannedQuery parseAndPlan(const std::string& query,
-                            const vector<DatasetClause>& queryDatasets,
-                            QueryExecutionContext& qec,
-                            SharedCancellationHandle handle,
-                            TimeLimit timeLimit) const;
+  PlannedQuery planOperation(ParsedQuery&& query, QueryExecutionContext& qec,
+                             SharedCancellationHandle handle,
+                             TimeLimit timeLimit) const;
 
   /// Acquire the `CancellationHandle` for the given `QueryId`, start the
   /// watchdog and call `cancelAfterDeadline` to set the timeout after
