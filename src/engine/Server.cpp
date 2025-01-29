@@ -12,7 +12,6 @@
 #include <vector>
 
 #include "GraphStoreProtocol.h"
-#include "absl/strings/escaping.h"
 #include "engine/ExecuteUpdate.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/QueryPlanner.h"
@@ -170,26 +169,6 @@ void Server::run(const string& indexBaseName, bool useText, bool usePatterns,
   httpServer.run();
 }
 
-std::pair<std::string, std::string> Server::decodeBasicAuthorization(
-    std::string_view authorizationHeader) {
-  const std::string prefix = "Basic ";
-  if (!authorizationHeader.starts_with(prefix)) {
-    throw std::runtime_error(absl::StrCat(
-        "Authorization header doesn't start with \"", prefix, "\"."));
-  }
-  authorizationHeader.remove_prefix(prefix.length());
-  std::string decoded;
-  if (!absl::Base64Unescape(authorizationHeader, &decoded)) {
-    throw std::runtime_error("Failed to decode the Authorization header.");
-  }
-  // Everything after the first `:` is the password. (See RFC 7617 Sec. 2)
-  const auto separatorPos = decoded.find(":");
-  if (separatorPos == string::npos) {
-    throw std::runtime_error("Failed to decode the Authorization header.");
-  }
-  return {decoded.substr(0, separatorPos), decoded.substr(separatorPos + 1)};
-}
-
 std::optional<std::string> Server::extractAccessToken(
     const ad_utility::httpUtils::HttpRequest auto& request,
     const ad_utility::url_parser::ParamValueMap& params) {
@@ -197,9 +176,13 @@ std::optional<std::string> Server::extractAccessToken(
   std::optional<std::string> tokenFromParameter;
   if (request.find(http::field::authorization) != request.end()) {
     string_view authorization = request[http::field::authorization];
-    auto [username, password] = decodeBasicAuthorization(authorization);
-    // TODO: what to do with the username?
-    tokenFromAuthorizationHeader = std::move(password);
+    const std::string prefix = "Bearer ";
+    if (!authorization.starts_with(prefix)) {
+      throw std::runtime_error(absl::StrCat(
+          "Authorization header doesn't start with \"", prefix, "\"."));
+    }
+    authorization.remove_prefix(prefix.length());
+    tokenFromAuthorizationHeader = std::string(authorization);
   }
   if (params.contains("access-token")) {
     tokenFromParameter = ad_utility::url_parser::getParameterCheckAtMostOnce(
