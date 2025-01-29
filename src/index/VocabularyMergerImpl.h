@@ -13,6 +13,7 @@
 #include <utility>
 #include <vector>
 
+#include "backports/algorithm.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/Vocabulary.h"
 #include "index/VocabularyMerger.h"
@@ -30,9 +31,10 @@
 
 namespace ad_utility::vocabulary_merger {
 // _________________________________________________________________
+template <QL_CONCEPT_OR_TYPENAME(WordComparator) W,
+          QL_CONCEPT_OR_TYPENAME(WordCallback) C>
 VocabularyMetaData mergeVocabulary(const std::string& basename, size_t numFiles,
-                                   WordComparator auto comparator,
-                                   WordCallback auto& internalWordCallback,
+                                   W comparator, C& internalWordCallback,
                                    ad_utility::MemorySize memoryToUse) {
   VocabularyMerger merger;
   return merger.mergeVocabulary(basename, numFiles, std::move(comparator),
@@ -40,10 +42,11 @@ VocabularyMetaData mergeVocabulary(const std::string& basename, size_t numFiles,
 }
 
 // _________________________________________________________________
+template <QL_CONCEPT_OR_TYPENAME(WordComparator) W,
+          QL_CONCEPT_OR_TYPENAME(WordCallback) C>
 auto VocabularyMerger::mergeVocabulary(const std::string& basename,
-                                       size_t numFiles,
-                                       WordComparator auto comparator,
-                                       WordCallback auto& wordCallback,
+                                       size_t numFiles, W comparator,
+                                       C& wordCallback,
                                        ad_utility::MemorySize memoryToUse)
     -> VocabularyMetaData {
   // Return true iff p1 >= p2 according to the lexicographic order of the IRI
@@ -139,11 +142,12 @@ auto VocabularyMerger::mergeVocabulary(const std::string& basename,
 }
 
 // ________________________________________________________________________________
-void VocabularyMerger::writeQueueWordsToIdVec(
-    const std::vector<QueueWord>& buffer, WordCallback auto& wordCallback,
-    std::predicate<TripleComponentWithIndex,
-                   TripleComponentWithIndex> auto const& lessThan,
-    ad_utility::ProgressBar& progressBar) {
+CPP_template_def(typename C)(requires WordCallback<C>) void VocabularyMerger::
+    writeQueueWordsToIdVec(
+        const std::vector<QueueWord>& buffer, C& wordCallback,
+        std::predicate<TripleComponentWithIndex,
+                       TripleComponentWithIndex> auto const& lessThan,
+        ad_utility::ProgressBar& progressBar) {
   LOG(TIMING) << "Start writing a batch of merged words\n";
 
   // Smaller grained buffer for the actual inner write.
