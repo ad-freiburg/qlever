@@ -999,7 +999,7 @@ json Server::createResponseMetadataForUpdate(
 }
 // ____________________________________________________________________________
 json Server::processUpdateImpl(
-    PlannedQuery& plannedUpdate, ad_utility::Timer& requestTimer,
+    const PlannedQuery& plannedUpdate, ad_utility::Timer& requestTimer,
     ad_utility::SharedCancellationHandle cancellationHandle,
     DeltaTriples& deltaTriples) {
   auto qet = plannedUpdate.queryExecutionTree_;
@@ -1046,11 +1046,11 @@ Awaitable<void> Server::processUpdate(
   auto coroutine = computeInNewThread(
       updateThreadPool_,
       [this, &requestTimer, &timeLimit, &cancellationHandle, &qec,
-       &plannedQuery]() mutable {
+       &plannedQuery]() {
         // Update the delta triples.
         return index_.deltaTriplesManager().modify<nlohmann::json>(
             [this, &requestTimer, &timeLimit, &cancellationHandle, &qec,
-             &plannedQuery](auto& deltaTriples) mutable {
+             &plannedQuery](auto& deltaTriples) {
               // Use `this` explicitly to silence false-positive errors on
               // captured `this` being unused.
               return this->processUpdateImpl(plannedQuery, requestTimer,

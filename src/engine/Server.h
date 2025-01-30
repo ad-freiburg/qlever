@@ -204,7 +204,7 @@ class Server {
   // Execute an update operation. The function must have exclusive access to the
   // DeltaTriples object.
   json processUpdateImpl(
-      PlannedQuery& plannedUpdate, ad_utility::Timer& requestTimer,
+      const PlannedQuery& plannedUpdate, ad_utility::Timer& requestTimer,
       ad_utility::SharedCancellationHandle cancellationHandle,
       DeltaTriples& deltaTriples);
 
