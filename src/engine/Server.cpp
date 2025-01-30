@@ -560,12 +560,13 @@ std::pair<bool, bool> Server::determineResultPinning(
 
 // ____________________________________________________________________________
 Server::PlannedQuery Server::setupPlannedQuery(
-    ParsedQuery&& operation, QueryExecutionContext& qec,
-    SharedCancellationHandle handle, TimeLimit timeLimit,
-    const ad_utility::Timer& requestTimer) const {
-  PlannedQuery plannedQuery =
-      planOperation(std::move(operation), qec, handle, timeLimit);
-  auto& qet = plannedQuery.queryExecutionTree_;
+    PlannedQuery& plannedOperation, SharedCancellationHandle handle,
+    TimeLimit timeLimit, const ad_utility::Timer& requestTimer) {
+  plannedOperation.queryExecutionTree_.getRootOperation()
+      ->recursivelySetCancellationHandle(std::move(handle));
+  plannedOperation.queryExecutionTree_.getRootOperation()
+      ->recursivelySetTimeConstraint(timeLimit);
+  auto& qet = plannedOperation.queryExecutionTree_;
   qet.isRoot() = true;  // allow pinning of the final result
   auto timeForQueryPlanning = requestTimer.msecs();
   auto& runtimeInfoWholeQuery =
@@ -575,8 +576,35 @@ Server::PlannedQuery Server::setupPlannedQuery(
             << " ms" << std::endl;
   LOG(TRACE) << qet.getCacheKey() << std::endl;
 
-  return plannedQuery;
+  return plannedOperation;
 }
+
+Awaitable<Server::PlannedQuery> Server::planQuery(
+    net::static_thread_pool& threadPool, ParsedQuery&& operation,
+    ad_utility::Timer& requestTimer, TimeLimit timeLimit,
+    QueryExecutionContext& qec, ad_utility::SharedCancellationHandle handle) {
+  // The usage of an `optional` here is required because of a limitation in
+  // Boost::Asio which forces us to use default-constructible result types with
+  // `computeInNewThread`. We also can't unwrap the optional directly in this
+  // function, because then the conan build fails in a very strange way,
+  // probably related to issues in GCC's coroutine implementation.
+  // For the same reason (crashes in the conanbuild) we store the coroutine in
+  // an explicit variable instead of directly `co_await`-ing it.
+  auto coroutine = computeInNewThread(
+      threadPool,
+      [this, &operation, &qec, &handle]() -> std::optional<QueryExecutionTree> {
+        QueryPlanner qp(&qec, handle);
+        auto qet = qp.createExecutionTree(operation);
+        handle->throwIfCancelled();
+        return qet;
+      },
+      handle);
+  auto qetOpt = co_await std::move(coroutine);
+  PlannedQuery plannedQuery{std::move(operation), std::move(qetOpt).value()};
+  setupPlannedQuery(plannedQuery, handle, timeLimit, requestTimer);
+  co_return plannedQuery;
+}
+
 // _____________________________________________________________________________
 json Server::composeErrorResponseJson(
     const string& query, const std::string& errorMsg,
@@ -803,25 +831,9 @@ Awaitable<void> Server::processQuery(
   LOG(INFO) << "Requested media type of result is \""
             << ad_utility::toString(mediaType) << "\"" << std::endl;
 
-  // The usage of an `optional` here is required because of a limitation in
-  // Boost::Asio which forces us to use default-constructible result types with
-  // `computeInNewThread`. We also can't unwrap the optional directly in this
-  // function, because then the conan build fails in a very strange way,
-  // probably related to issues in GCC's coroutine implementation.
-  // For the same reason (crashes in the conanbuild) we store the coroutine in
-  // an explicit variable instead of directly `co_await`-ing it.
-  auto coroutine = computeInNewThread(
-      queryThreadPool_,
-      [&qec, cancellationHandle, &timeLimit, &requestTimer,
-       query = std::move(query),
-       this]() mutable -> std::optional<PlannedQuery> {
-        return setupPlannedQuery(std::move(query), qec, cancellationHandle,
-                                 timeLimit, requestTimer);
-      },
-      cancellationHandle);
-  auto plannedQueryOpt = co_await std::move(coroutine);
-  AD_CORRECTNESS_CHECK(plannedQueryOpt.has_value());
-  auto plannedQuery = std::move(plannedQueryOpt).value();
+  PlannedQuery plannedQuery =
+      co_await planQuery(queryThreadPool_, std::move(query), requestTimer,
+                         timeLimit, qec, cancellationHandle);
   auto qet = plannedQuery.queryExecutionTree_;
 
   if (plannedQuery.parsedQuery_.hasUpdateClause()) {
@@ -934,23 +946,22 @@ json Server::createResponseMetadataForUpdate(
 }
 // ____________________________________________________________________________
 json Server::processUpdateImpl(
-    ParsedQuery&& update, ad_utility::Timer& requestTimer, TimeLimit timeLimit,
+    PlannedQuery& plannedUpdate, ad_utility::Timer& requestTimer,
     ad_utility::SharedCancellationHandle cancellationHandle,
-    QueryExecutionContext& qec, DeltaTriples& deltaTriples) {
-  auto plannedQuery = setupPlannedQuery(
-      std::move(update), qec, cancellationHandle, timeLimit, requestTimer);
-  auto qet = plannedQuery.queryExecutionTree_;
+    DeltaTriples& deltaTriples) {
+  auto qet = plannedUpdate.queryExecutionTree_;
 
-  if (!plannedQuery.parsedQuery_.hasUpdateClause()) {
+  if (!plannedUpdate.parsedQuery_.hasUpdateClause()) {
     throw std::runtime_error(
         absl::StrCat("SPARQL UPDATE was request via the HTTP request, but the "
                      "following query was sent instead of an update: ",
-                     plannedQuery.parsedQuery_._originalString));
+                     plannedUpdate.parsedQuery_._originalString));
   }
 
   DeltaTriplesCount countBefore = deltaTriples.getCounts();
-  UpdateMetadata updateMetadata = ExecuteUpdate::executeUpdate(
-      index_, plannedQuery.parsedQuery_, qet, deltaTriples, cancellationHandle);
+  UpdateMetadata updateMetadata =
+      ExecuteUpdate::executeUpdate(index_, plannedUpdate.parsedQuery_, qet,
+                                   deltaTriples, cancellationHandle);
   DeltaTriplesCount countAfter = deltaTriples.getCounts();
 
   LOG(INFO) << "Done processing update"
@@ -965,7 +976,7 @@ json Server::processUpdateImpl(
   cache_.clearAll();
 
   return createResponseMetadataForUpdate(requestTimer, index_, deltaTriples,
-                                         plannedQuery, qet, countBefore,
+                                         plannedUpdate, qet, countBefore,
                                          updateMetadata, countAfter);
 }
 
@@ -976,21 +987,21 @@ Awaitable<void> Server::processUpdate(
     QueryExecutionContext& qec,
     const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
     TimeLimit timeLimit) {
-  // Note: We don't directly `co_await` because of lifetime issues (probably
-  // bugs in GCC or Boost) that occur in the Conan build.
+  PlannedQuery plannedQuery =
+      co_await planQuery(updateThreadPool_, std::move(update), requestTimer,
+                         timeLimit, qec, cancellationHandle);
   auto coroutine = computeInNewThread(
       updateThreadPool_,
-      [this, &requestTimer, &timeLimit, &cancellationHandle,
-       update = std::move(update), &qec]() mutable {
+      [this, &requestTimer, &timeLimit, &cancellationHandle, &qec,
+       &plannedQuery]() mutable {
         // Update the delta triples.
         return index_.deltaTriplesManager().modify<nlohmann::json>(
-            [this, &requestTimer, &timeLimit, &cancellationHandle,
-             update = std::move(update), &qec](auto& deltaTriples) mutable {
+            [this, &requestTimer, &timeLimit, &cancellationHandle, &qec,
+             &plannedQuery](auto& deltaTriples) mutable {
               // Use `this` explicitly to silence false-positive errors on
               // captured `this` being unused.
-              return this->processUpdateImpl(std::move(update), requestTimer,
-                                             timeLimit, cancellationHandle, qec,
-                                             deltaTriples);
+              return this->processUpdateImpl(plannedQuery, requestTimer,
+                                             cancellationHandle, deltaTriples);
             });
       },
       cancellationHandle);

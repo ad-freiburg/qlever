@@ -179,11 +179,16 @@ class Server {
       const ad_utility::url_parser::ParamValueMap& params);
   FRIEND_TEST(ServerTest, determineResultPinning);
   // Sets up the PlannedQuery s.t. it is ready to be executed.
-  PlannedQuery setupPlannedQuery(ParsedQuery&& operation,
-                                 QueryExecutionContext& qec,
-                                 SharedCancellationHandle handle,
-                                 TimeLimit timeLimit,
-                                 const ad_utility::Timer& requestTimer) const;
+  static PlannedQuery setupPlannedQuery(PlannedQuery& plannedOperation,
+                                        SharedCancellationHandle handle,
+                                        TimeLimit timeLimit,
+                                        const ad_utility::Timer& requestTimer);
+  Awaitable<PlannedQuery> planQuery(net::static_thread_pool& thread_pool,
+                                    ParsedQuery&& operation,
+                                    ad_utility::Timer& requestTimer,
+                                    TimeLimit timeLimit,
+                                    QueryExecutionContext& qec,
+                                    SharedCancellationHandle handle);
   // Creates a `MessageSender` for the given operation.
   ad_utility::websocket::MessageSender createMessageSender(
       const std::weak_ptr<ad_utility::websocket::QueryHub>& queryHub,
@@ -192,10 +197,9 @@ class Server {
   // Execute an update operation. The function must have exclusive access to the
   // DeltaTriples object.
   json processUpdateImpl(
-      ParsedQuery&& update, ad_utility::Timer& requestTimer,
-      TimeLimit timeLimit,
+      PlannedQuery& plannedUpdate, ad_utility::Timer& requestTimer,
       ad_utility::SharedCancellationHandle cancellationHandle,
-      QueryExecutionContext& qec, DeltaTriples& deltaTriples);
+      DeltaTriples& deltaTriples);
 
   static json composeErrorResponseJson(
       const string& query, const std::string& errorMsg,
