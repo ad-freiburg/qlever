@@ -255,7 +255,7 @@ TEST(ServerTest, parseHttpRequest) {
             testing::HasSubstr(
                 "Access token is specified both in the "
                 "`Authorization` header and by the `access-token` "
-                "parameter, but they aren't the same."));
+                "parameter, but they are not the same"));
       };
   testAccessTokenCombinations(http::verb::get, "/?query=a", Query{"a", {}});
   testAccessTokenCombinations(http::verb::post, "/", Query{"a", {}},
@@ -309,7 +309,7 @@ TEST(ServerTest, parseHttpRequest) {
             testing::HasSubstr(
                 "Access token is specified both in the "
                 "`Authorization` header and by the `access-token` "
-                "parameter, but they aren't the same."));
+                "parameter, but they are not the same"));
       };
   testAccessTokenCombinationsUrlEncoded("query=SELECT%20%2A%20WHERE%20%7B%7D",
                                         Query{"SELECT * WHERE {}", {}});
@@ -505,7 +505,7 @@ TEST(ServerTest, extractAccessToken) {
                           {{http::field::authorization, "Bearer foo"}})),
       testing::HasSubstr(
           "Access token is specified both in the `Authorization` header and by "
-          "the `access-token` parameter, but they aren't the same."));
+          "the `access-token` parameter, but they are not the same"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       extract(makeRequest(http::verb::get, "/",
                           {{http::field::authorization, "foo"}})),
@@ -520,7 +520,7 @@ TEST(ServerTest, extractAccessToken) {
                           {{http::field::authorization, "Bearer foo"}})),
       testing::HasSubstr(
           "Access token is specified both in the `Authorization` header and by "
-          "the `access-token` parameter, but they aren't the same."));
+          "the `access-token` parameter, but they are not the same"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       extract(makeRequest(http::verb::post, "/?access-token=bar",
                           {{http::field::authorization, "foo"}})),
