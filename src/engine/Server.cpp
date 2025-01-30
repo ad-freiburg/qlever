@@ -361,6 +361,11 @@ Awaitable<void> Server::process(
   const auto parsedHttpRequest = parseHttpRequest(request);
   const auto& parameters = parsedHttpRequest.parameters_;
 
+  LOG(INFO) << "Logging all the parameters" << std::endl;
+  for (const auto& [key, value] : parameters) {
+    LOG(INFO) << key << ":" << value.at(0) << std::endl;
+  }
+
   // We always want to call `Server::checkParameter` with the same first
   // parameter.
   auto checkParameter = std::bind_front(&ad_utility::url_parser::checkParameter,
@@ -809,9 +814,17 @@ Awaitable<void> Server::processQuery(
   // Do the query planning. This creates a `QueryExecutionTree`, which will
   // then be used to process the query.
   auto [pinSubtrees, pinResult] = determineResultPinning(params);
+  for (auto [key, value] : params) {
+    LOG(INFO) << "key : " << key << ": " << value.at(0) << std::endl;
+  }
+  std::optional<std::string> pinNamed =
+      ad_utility::url_parser::checkParameter(params, "pin-named-query", {});
   LOG(INFO) << "Processing the following SPARQL query:"
             << (pinResult ? " [pin result]" : "")
             << (pinSubtrees ? " [pin subresults]" : "") << "\n"
+            << (pinNamed ? absl::StrCat(" [pin named as ]", pinNamed.value())
+                         : "")
+            << "\n"
             << query.query_ << std::endl;
   QueryExecutionContext qec(index_, &cache_, allocator_,
                             sortPerformanceEstimator_, &namedQueryCache_,
@@ -866,10 +879,23 @@ Awaitable<void> Server::processQuery(
                        qet.getRootOperation()->getLimit()._offset);
   limitOffset._offset -= qet.getRootOperation()->getLimit()._offset;
 
-  // This actually processes the query and sends the result in the requested
-  // format.
-  co_await sendStreamableResponse(request, send, mediaType, plannedQuery, qet,
-                                  requestTimer, cancellationHandle);
+  if (pinNamed.has_value()) {
+    auto result = qet.getResult(false);
+    auto t =
+        NamedQueryCache::Value(result->idTable().clone(),
+                               qet.getVariableColumns(), result->sortedBy());
+    qec.namedQueryCache().store(pinNamed.value(), std::move(t));
+
+    auto response = ad_utility::httpUtils::createOkResponse(
+        "successfully pinned the query result", request,
+        ad_utility::MediaType::textPlain);
+    co_await send(response);
+  } else {
+    // This actually processes the query and sends the result in the requested
+    // format.
+    co_await sendStreamableResponse(request, send, mediaType, plannedQuery, qet,
+                                    requestTimer, cancellationHandle);
+  }
 
   // Print the runtime info. This needs to be done after the query
   // was computed.

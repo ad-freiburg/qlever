@@ -264,6 +264,9 @@ class SparqlQleverVisitor {
   GraphPatternOperation visitSpatialQuery(
       Parser::ServiceGraphPatternContext* ctx);
 
+  GraphPatternOperation visitNamedCachedQuery(
+      Parser::ServiceGraphPatternContext* ctx);
+
   parsedQuery::GraphPatternOperation visit(Parser::BindContext* ctx);
 
   parsedQuery::GraphPatternOperation visit(Parser::InlineDataContext* ctx);
@@ -343,10 +346,10 @@ class SparqlQleverVisitor {
 
   PropertyPath visit(Parser::PathEltOrInverseContext* ctx);
 
-  // NOTE: The `visit` overloads marked `[[noreturn]]` always throw an exception
-  // because the corresponding feature is not (yet) supported by QLever. Most
-  // of them have a return type of `void`. Some of the don't, in order to make
-  // the usage of abstractions like `visitAlternative` easier.
+  // NOTE: The `visit` overloads marked `[[noreturn]]` always throw an
+  // exception because the corresponding feature is not (yet) supported by
+  // QLever. Most of them have a return type of `void`. Some of the don't, in
+  // order to make the usage of abstractions like `visitAlternative` easier.
 
   [[noreturn]] static void visit(Parser::PathModContext* ctx);
 
@@ -485,8 +488,8 @@ class SparqlQleverVisitor {
   static std::string currentTimeAsXsdString();
 
   // Member starTime_ is needed for the NOW expression. All calls within
-  // the query execution reference it. The underlying date time format is e.g.:
-  // 2011-01-10T14:45:13.815-05:00
+  // the query execution reference it. The underlying date time format is
+  // e.g.: 2011-01-10T14:45:13.815-05:00
   std::string startTime_ = currentTimeAsXsdString();
 
   template <typename Visitor, typename Ctx>
@@ -503,15 +506,16 @@ class SparqlQleverVisitor {
 
   // Get the part of the original input string that pertains to the given
   // context. This is necessary because ANTLR's `getText()` only provides that
-  // part with *all* whitespace removed. Preserving the whitespace is important
-  // for readability (for example, in an error message), and even more so when
-  // using such parts for further processing (like the body of a SERVICE query,
-  // which is not valid SPARQL anymore when you remove all whitespace).
+  // part with *all* whitespace removed. Preserving the whitespace is
+  // important for readability (for example, in an error message), and even
+  // more so when using such parts for further processing (like the body of a
+  // SERVICE query, which is not valid SPARQL anymore when you remove all
+  // whitespace).
   static std::string getOriginalInputForContext(
       const antlr4::ParserRuleContext* context);
 
-  // Process an IRI function call. This is used in both `visitFunctionCall` and
-  // `visitIriOrFunction`.
+  // Process an IRI function call. This is used in both `visitFunctionCall`
+  // and `visitIriOrFunction`.
   static ExpressionPtr processIriFunctionCall(
       const TripleComponent::Iri& iri, std::vector<ExpressionPtr> argList,
       const antlr4::ParserRuleContext*);
@@ -555,13 +559,14 @@ class SparqlQleverVisitor {
   template <typename Ctx>
   auto visitOptional(Ctx* ctx) -> std::optional<decltype(visit(ctx))>;
 
-  /// If `ctx` is not `nullptr`, visit it, convert the result to `Intermediate`
-  /// and assign it to `*target`. The case where `Intermediate!=Target` is
-  /// useful, when the result of `visit(ctx)` cannot be converted to `Target`,
-  /// but the conversion chain `VisitResult -> Intermediate -> Target` is valid.
-  /// For example when `visit(ctx)` yields `A`, `A` is explicitly convertible to
-  /// `B` and `Target` is `optional<B>`, then `B` has to be specified as
-  /// `Intermediate` (see for example the implementation of `visitAlternative`).
+  /// If `ctx` is not `nullptr`, visit it, convert the result to
+  /// `Intermediate` and assign it to `*target`. The case where
+  /// `Intermediate!=Target` is useful, when the result of `visit(ctx)` cannot
+  /// be converted to `Target`, but the conversion chain `VisitResult ->
+  /// Intermediate -> Target` is valid. For example when `visit(ctx)` yields
+  /// `A`, `A` is explicitly convertible to `B` and `Target` is `optional<B>`,
+  /// then `B` has to be specified as `Intermediate` (see for example the
+  /// implementation of `visitAlternative`).
   template <typename Target, typename Intermediate = Target, typename Ctx>
   void visitIf(Target* target, Ctx* ctx);
 
@@ -581,8 +586,8 @@ class SparqlQleverVisitor {
   template <typename Context>
   Triples parseTriplesConstruction(Context* ctx);
 
-  // If the triple is a special triple for the text index (i.e. its predicate is
-  // either `ql:contains-word` or `ql:contains-entity`, register the magic
+  // If the triple is a special triple for the text index (i.e. its predicate
+  // is either `ql:contains-word` or `ql:contains-entity`, register the magic
   // variables for the matching word and the score that will be created when
   // processing those triples in the query body, s.t. they can be selected as
   // part of the query result.
@@ -593,8 +598,8 @@ class SparqlQleverVisitor {
   static TripleComponent visitGraphTerm(const GraphTerm& graphTerm);
 
   // If any of the variables used in `expression` did not appear previously in
-  // the query, add a warning or throw an exception (depending on the setting of
-  // the corresponding `RuntimeParameter`).
+  // the query, add a warning or throw an exception (depending on the setting
+  // of the corresponding `RuntimeParameter`).
   void warnOrThrowIfUnboundVariables(auto* ctx,
                                      const SparqlExpressionPimpl& expression,
                                      std::string_view clauseName);

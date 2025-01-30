@@ -30,6 +30,7 @@
 #include "parser/GraphPatternOperation.h"
 #include "parser/MagicServiceIriConstants.h"
 #include "parser/MagicServiceQuery.h"
+#include "parser/NamedCachedQuery.h"
 #include "parser/RdfParser.h"
 #include "parser/SparqlParser.h"
 #include "parser/SpatialQuery.h"
@@ -891,6 +892,40 @@ GraphPatternOperation Visitor::visitPathQuery(
   return pathQuery;
 }
 
+// _____________________________________________________________________________
+GraphPatternOperation Visitor::visitNamedCachedQuery(
+    Parser::ServiceGraphPatternContext* ctx) {
+  auto parseContent = [ctx](parsedQuery::NamedCachedQuery& namedQuery,
+                            const parsedQuery::GraphPatternOperation& op) {
+    if (std::holds_alternative<parsedQuery::BasicGraphPattern>(op)) {
+      namedQuery.addBasicPattern(std::get<parsedQuery::BasicGraphPattern>(op));
+    } else if (std::holds_alternative<parsedQuery::GroupGraphPattern>(op)) {
+      namedQuery.addGraph(op);
+    } else {
+      reportError(ctx,
+                  "Unsupported element in named cached query."
+                  "A named cached query currently must have an empty body");
+    }
+  };
+
+  auto iri = std::get<Iri>(visit(ctx->varOrIri()));
+  auto s = iri.toSparql();
+  AD_CORRECTNESS_CHECK(s.starts_with(NAMED_CACHED_QUERY_PREFIX));
+  auto view = std::string_view{s};
+  // Remove the prefix and the trailing ">"
+  view.remove_prefix(NAMED_CACHED_QUERY_PREFIX.size());
+  view.remove_suffix(1);
+
+  parsedQuery::GraphPattern graphPattern = visit(ctx->groupGraphPattern());
+  parsedQuery::NamedCachedQuery namedQuery{std::string{view}};
+  for (const auto& op : graphPattern._graphPatterns) {
+    parseContent(namedQuery, op);
+  }
+  [[maybe_unused]] const auto& validated =
+      namedQuery.validateAndGetIdentifier();
+  return namedQuery;
+}
+
 GraphPatternOperation Visitor::visitSpatialQuery(
     Parser::ServiceGraphPatternContext* ctx) {
   auto parseSpatialQuery = [ctx](parsedQuery::SpatialQuery& spatialQuery,
@@ -951,6 +986,9 @@ GraphPatternOperation Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
     return visitPathQuery(ctx);
   } else if (serviceIri.toStringRepresentation() == SPATIAL_SEARCH_IRI) {
     return visitSpatialQuery(ctx);
+  } else if (serviceIri.toStringRepresentation().starts_with(
+                 NAMED_CACHED_QUERY_PREFIX)) {
+    return visitNamedCachedQuery(ctx);
   }
   // Parse the body of the SERVICE query. Add the visible variables from the
   // SERVICE clause to the visible variables so far, but also remember them
