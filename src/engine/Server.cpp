@@ -494,9 +494,12 @@ Awaitable<void> Server::process(
     if (auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
             checkParameter("timeout", std::nullopt), accessTokenOk, request,
             send)) {
-      co_return co_await processQueryOrUpdate(parameters, std::move(query),
-                                              requestTimer, std::move(request),
-                                              send, timeLimit.value());
+      auto [parsedQuery, qec, cancellationHandle, cancelTimeoutOnDestruction] =
+          parseOperation(parameters, std::move(query), request,
+                         timeLimit.value());
+      co_return co_await processQueryOrUpdate<Query>(
+          parameters, std::move(parsedQuery), cancellationHandle, qec,
+          requestTimer, std::move(request), send, timeLimit.value());
     } else {
       // If the optional is empty, this indicates an error response has been
       // sent to the client already. We can stop here.
@@ -512,9 +515,12 @@ Awaitable<void> Server::process(
     if (auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
             checkParameter("timeout", std::nullopt), accessTokenOk, request,
             send)) {
-      co_return co_await processQueryOrUpdate(parameters, std::move(update),
-                                              requestTimer, std::move(request),
-                                              send, timeLimit.value());
+      auto [parsedUpdate, qec, cancellationHandle, cancelTimeoutOnDestruction] =
+          parseOperation(parameters, std::move(update), request,
+                         timeLimit.value());
+      co_return co_await processQueryOrUpdate<Update>(
+          parameters, std::move(parsedUpdate), cancellationHandle, qec,
+          requestTimer, std::move(request), send, timeLimit.value());
     } else {
       // If the optional is empty, this indicates an error response has been
       // sent to the client already. We can stop here.
@@ -543,7 +549,7 @@ Awaitable<void> Server::process(
 
   co_return co_await std::visit(
       ad_utility::OverloadCallOperator{visitQuery, visitUpdate, visitNone},
-      parsedHttpRequest.operation_);
+      std::move(parsedHttpRequest.operation_));
 }
 
 // ____________________________________________________________________________
@@ -556,6 +562,53 @@ std::pair<bool, bool> Server::determineResultPinning(
       ad_utility::url_parser::checkParameter(params, "pinresult", "true")
           .has_value();
   return {pinSubtrees, pinResult};
+}
+
+// ____________________________________________________________________________
+template <typename Operation>
+auto Server::parseOperation(
+    const ad_utility::url_parser::ParamValueMap& params, Operation&& operation,
+    const ad_utility::httpUtils::HttpRequest auto& request,
+    TimeLimit timeLimit) {
+  static_assert(ad_utility::SameAsAny<Operation, Query, Update>);
+  std::string_view operationName;
+  std::string operationSPARQL;
+  if constexpr (std::is_same_v<Operation, Query>) {
+    operationName = "SPARQL Query";
+    operationSPARQL = std::move(operation.query_);
+  } else {
+    static_assert(std::is_same_v<Operation, Update>);
+    operationName = "SPARQL Update";
+    operationSPARQL = std::move(operation.update_);
+  }
+
+  ad_utility::websocket::MessageSender messageSender =
+      createMessageSender(queryHub_, request, operationSPARQL);
+  auto [cancellationHandle, cancelTimeoutOnDestruction] =
+      setupCancellationHandle(messageSender.getQueryId(), timeLimit);
+
+  // Do the query planning. This creates a `QueryExecutionTree`, which will
+  // then be used to process the query.
+  auto [pinSubtrees, pinResult] = determineResultPinning(params);
+  LOG(INFO) << "Processing the following " << operationName << ":"
+            << (pinResult ? " [pin result]" : "")
+            << (pinSubtrees ? " [pin subresults]" : "") << "\n"
+            << operationSPARQL << std::endl;
+  QueryExecutionContext qec(index_, &cache_, allocator_,
+                            sortPerformanceEstimator_, std::ref(messageSender),
+                            pinSubtrees, pinResult);
+  ParsedQuery parsedQuery =
+      SparqlParser::parseQuery(std::move(operationSPARQL));
+  // SPARQL Protocol 2.1.4 specifies that the dataset from the query
+  // parameters overrides the dataset from the query itself.
+  if (!operation.datasetClauses_.empty()) {
+    parsedQuery.datasetClauses_ =
+        parsedQuery::DatasetClauses::fromClauses(operation.datasetClauses_);
+  }
+
+  return std::tuple{std::move(parsedQuery), std::move(qec),
+                    std::move(cancellationHandle),
+                    std::move(cancelTimeoutOnDestruction)};
 }
 
 // ____________________________________________________________________________
@@ -1017,8 +1070,9 @@ Awaitable<void> Server::processUpdate(
 // ____________________________________________________________________________
 template <typename Operation>
 Awaitable<void> Server::processQueryOrUpdate(
-    const ad_utility::url_parser::ParamValueMap& params, Operation&& operation,
-    ad_utility::Timer& requestTimer,
+    const ad_utility::url_parser::ParamValueMap& params,
+    ParsedQuery&& parsedOperation, SharedCancellationHandle cancellationHandle,
+    QueryExecutionContext qec, ad_utility::Timer& requestTimer,
     const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
     TimeLimit timeLimit) {
   using namespace ad_utility::httpUtils;
@@ -1035,57 +1089,15 @@ Awaitable<void> Server::processQueryOrUpdate(
   std::optional<ExceptionMetadata> metadata;
   // Also store the QueryExecutionTree outside the try-catch block to gain
   // access to the runtimeInformation in the case of an error.
+  // TODO: broken
   std::optional<PlannedQuery> plannedQuery;
-  auto setDatasetsFrom = [&operation](ParsedQuery& parsedQuery) {
-    // SPARQL Protocol 2.1.4 specifies that the dataset from the query
-    // parameters overrides the dataset from the query itself.
-    if (!operation.datasetClauses_.empty()) {
-      parsedQuery.datasetClauses_ =
-          parsedQuery::DatasetClauses::fromClauses(operation.datasetClauses_);
-    }
-  };
   try {
     if constexpr (std::is_same_v<Operation, Query>) {
-      ad_utility::websocket::MessageSender messageSender =
-          createMessageSender(queryHub_, request, operation.query_);
-      auto [cancellationHandle, cancelTimeoutOnDestruction] =
-          setupCancellationHandle(messageSender.getQueryId(), timeLimit);
-
-      // Do the query planning. This creates a `QueryExecutionTree`, which will
-      // then be used to process the query.
-      auto [pinSubtrees, pinResult] = determineResultPinning(params);
-      LOG(INFO) << "Processing the following SPARQL query:"
-                << (pinResult ? " [pin result]" : "")
-                << (pinSubtrees ? " [pin subresults]" : "") << "\n"
-                << operation.query_ << std::endl;
-      QueryExecutionContext qec(
-          index_, &cache_, allocator_, sortPerformanceEstimator_,
-          std::ref(messageSender), pinSubtrees, pinResult);
-      ParsedQuery parsedQuery = SparqlParser::parseQuery(operation.query_);
-      setDatasetsFrom(parsedQuery);
-
-      co_await processQuery(params, std::move(parsedQuery), requestTimer,
+      co_await processQuery(params, std::move(parsedOperation), requestTimer,
                             cancellationHandle, qec, request, send, timeLimit);
     } else {
       static_assert(std::is_same_v<Operation, Update>);
-      ad_utility::websocket::MessageSender messageSender =
-          createMessageSender(queryHub_, request, operation.update_);
-      auto [cancellationHandle, cancelTimeoutOnDestruction] =
-          setupCancellationHandle(messageSender.getQueryId(), timeLimit);
-      // Do the query planning. This creates a `QueryExecutionTree`, which will
-      // then be used to process the query.
-      auto [pinSubtrees, pinResult] = determineResultPinning(params);
-      LOG(INFO) << "Processing the following SPARQL update:"
-                << (pinResult ? " [pin result]" : "")
-                << (pinSubtrees ? " [pin subresults]" : "") << "\n"
-                << operation.update_ << std::endl;
-      QueryExecutionContext qec(
-          index_, &cache_, allocator_, sortPerformanceEstimator_,
-          std::ref(messageSender), pinSubtrees, pinResult);
-      ParsedQuery parsedQuery = SparqlParser::parseQuery(operation.update_);
-      setDatasetsFrom(parsedQuery);
-
-      co_await processUpdate(std::move(parsedQuery), requestTimer,
+      co_await processUpdate(std::move(parsedOperation), requestTimer,
                              cancellationHandle, qec, request, send, timeLimit);
     }
   } catch (const ParseException& e) {
@@ -1126,16 +1138,9 @@ Awaitable<void> Server::processQueryOrUpdate(
         LOG(ERROR) << metadata.value().query_ << std::endl;
       }
     }
-    const std::string& operationStr = [&operation]() -> const std::string& {
-      if constexpr (std::is_same_v<Operation, Query>) {
-        return operation.query_;
-      } else {
-        static_assert(std::is_same_v<Operation, Update>);
-        return operation.update_;
-      }
-    }();
     auto errorResponseJson = composeErrorResponseJson(
-        operationStr, exceptionErrorMsg.value(), requestTimer, metadata);
+        parsedOperation._originalString, exceptionErrorMsg.value(),
+        requestTimer, metadata);
     if (plannedQuery.has_value()) {
       errorResponseJson["runtimeInformation"] =
           nlohmann::ordered_json(plannedQuery.value()
@@ -1174,24 +1179,6 @@ Awaitable<T> Server::computeInNewThread(net::static_thread_pool& threadPool,
       ad_utility::runFunctionOnExecutor(threadPool.get_executor(),
                                         std::move(inner), net::use_awaitable),
       std::move(handle), std::move(cancelTimerPromise));
-}
-
-// _____________________________________________________________________________
-Server::PlannedQuery Server::planOperation(ParsedQuery&& query,
-                                           QueryExecutionContext& qec,
-                                           SharedCancellationHandle handle,
-                                           TimeLimit timeLimit) const {
-  QueryPlanner qp(&qec, handle);
-  qp.setEnablePatternTrick(enablePatternTrick_);
-  auto qet = qp.createExecutionTree(query);
-  handle->throwIfCancelled();
-  PlannedQuery plannedQuery{std::move(query), std::move(qet)};
-
-  plannedQuery.queryExecutionTree_.getRootOperation()
-      ->recursivelySetCancellationHandle(std::move(handle));
-  plannedQuery.queryExecutionTree_.getRootOperation()
-      ->recursivelySetTimeConstraint(timeLimit);
-  return plannedQuery;
 }
 
 // _____________________________________________________________________________

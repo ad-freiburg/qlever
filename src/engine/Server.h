@@ -139,7 +139,9 @@ class Server {
   template <typename Operation>
   Awaitable<void> processQueryOrUpdate(
       const ad_utility::url_parser::ParamValueMap& params,
-      Operation&& operation, ad_utility::Timer& requestTimer,
+      ParsedQuery&& parsedOperation,
+      SharedCancellationHandle cancellationHandle, QueryExecutionContext qec,
+      ad_utility::Timer& requestTimer,
       const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
       TimeLimit timeLimit);
   // Do the actual execution of a query.
@@ -178,6 +180,11 @@ class Server {
   static std::pair<bool, bool> determineResultPinning(
       const ad_utility::url_parser::ParamValueMap& params);
   FRIEND_TEST(ServerTest, determineResultPinning);
+  template <typename Operation>
+  auto parseOperation(const ad_utility::url_parser::ParamValueMap& params,
+                      Operation&& operation,
+                      const ad_utility::httpUtils::HttpRequest auto& request,
+                      TimeLimit timeLimit);
   // Sets up the PlannedQuery s.t. it is ready to be executed.
   static PlannedQuery setupPlannedQuery(PlannedQuery& plannedOperation,
                                         SharedCancellationHandle handle,
@@ -243,12 +250,6 @@ class Server {
       std::weak_ptr<ad_utility::CancellationHandle<>> cancellationHandle,
       TimeLimit timeLimit)
       -> ad_utility::InvocableWithExactReturnType<void> auto;
-
-  /// Run the SPARQL parser and then the query planner on the `query`. All
-  /// computation is performed on the `threadPool_`.
-  PlannedQuery planOperation(ParsedQuery&& query, QueryExecutionContext& qec,
-                             SharedCancellationHandle handle,
-                             TimeLimit timeLimit) const;
 
   /// Acquire the `CancellationHandle` for the given `QueryId`, start the
   /// watchdog and call `cancelAfterDeadline` to set the timeout after
