@@ -20,6 +20,3 @@ QueryExecutionContext::QueryExecutionContext(
       _sortPerformanceEstimator(sortPerformanceEstimator),
       updateCallback_(std::move(updateCallback)),
       namedQueryCache_{namedCache} {}
-
-// _____________________________________________________________________________
-QueryExecutionContext::~QueryExecutionContext() = default;

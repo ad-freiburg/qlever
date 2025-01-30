@@ -74,8 +74,11 @@ constexpr inline std::string_view DEFAULT_GRAPH_IRI =
 constexpr inline std::string_view QLEVER_INTERNAL_GRAPH_IRI =
     makeQleverInternalIriConst<"internal-graph">();
 
+// The prefix of a SERVICE IRI that refers to a query that has been pinned with
+// an explicit name. The format currently is `ql:named-cached-query-$query-id$`.
+// NOTE: This constant does not include the leading '<'.
 constexpr inline std::string_view NAMED_CACHED_QUERY_PREFIX =
-    ad_utility::constexprStrCat<"<", QLEVER_INTERNAL_PREFIX_URL,
+    ad_utility::constexprStrCat<QLEVER_INTERNAL_PREFIX_URL,
                                 "named-cached-query-">();
 
 constexpr inline std::pair<std::string_view, std::string_view> GEOF_PREFIX = {

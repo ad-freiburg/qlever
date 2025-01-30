@@ -361,11 +361,6 @@ Awaitable<void> Server::process(
   const auto parsedHttpRequest = parseHttpRequest(request);
   const auto& parameters = parsedHttpRequest.parameters_;
 
-  LOG(INFO) << "Logging all the parameters" << std::endl;
-  for (const auto& [key, value] : parameters) {
-    LOG(INFO) << key << ":" << value.at(0) << std::endl;
-  }
-
   // We always want to call `Server::checkParameter` with the same first
   // parameter.
   auto checkParameter = std::bind_front(&ad_utility::url_parser::checkParameter,
@@ -811,12 +806,9 @@ Awaitable<void> Server::processQuery(
   auto [cancellationHandle, cancelTimeoutOnDestruction] =
       setupCancellationHandle(messageSender.getQueryId(), timeLimit);
 
-  // Do the query planning. This creates a `QueryExecutionTree`, which will
-  // then be used to process the query.
+  // Figure out, whether the query is to be pinned in the cache (either
+  // implicitly, or explicitly as a named query).
   auto [pinSubtrees, pinResult] = determineResultPinning(params);
-  for (auto [key, value] : params) {
-    LOG(INFO) << "key : " << key << ": " << value.at(0) << std::endl;
-  }
   std::optional<std::string> pinNamed =
       ad_utility::url_parser::checkParameter(params, "pin-named-query", {});
   LOG(INFO) << "Processing the following SPARQL query:"
@@ -880,6 +872,8 @@ Awaitable<void> Server::processQuery(
   limitOffset._offset -= qet.getRootOperation()->getLimit()._offset;
 
   if (pinNamed.has_value()) {
+    // The query is to be pinned in the named cache. In this case we don't
+    // return the result, but only pin it.
     auto result = qet.getResult(false);
     auto t =
         NamedQueryCache::Value(result->idTable().clone(),
@@ -887,7 +881,7 @@ Awaitable<void> Server::processQuery(
     qec.namedQueryCache().store(pinNamed.value(), std::move(t));
 
     auto response = ad_utility::httpUtils::createOkResponse(
-        "successfully pinned the query result", request,
+        "Successfully pinned the query result", request,
         ad_utility::MediaType::textPlain);
     co_await send(response);
   } else {

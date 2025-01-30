@@ -107,7 +107,6 @@ class QueryExecutionContext {
       std::function<void(std::string)> updateCallback =
           [](std::string) { /* No-op by default for testing */ },
       bool pinSubtrees = false, bool pinResult = false);
-  ~QueryExecutionContext();
 
   QueryResultCache& getQueryTreeCache() { return *_subtreeCache; }
 

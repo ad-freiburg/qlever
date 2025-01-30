@@ -894,6 +894,7 @@ GraphPatternOperation Visitor::visitPathQuery(
 
 // _____________________________________________________________________________
 GraphPatternOperation Visitor::visitNamedCachedQuery(
+    const TripleComponent::Iri& target,
     Parser::ServiceGraphPatternContext* ctx) {
   auto parseContent = [ctx](parsedQuery::NamedCachedQuery& namedQuery,
                             const parsedQuery::GraphPatternOperation& op) {
@@ -908,13 +909,10 @@ GraphPatternOperation Visitor::visitNamedCachedQuery(
     }
   };
 
-  auto iri = std::get<Iri>(visit(ctx->varOrIri()));
-  auto s = iri.toSparql();
-  AD_CORRECTNESS_CHECK(s.starts_with(NAMED_CACHED_QUERY_PREFIX));
-  auto view = std::string_view{s};
-  // Remove the prefix and the trailing ">"
+  auto view = asStringViewUnsafe(target.getContent());
+  AD_CORRECTNESS_CHECK(view.starts_with(NAMED_CACHED_QUERY_PREFIX));
+  // Remove the prefix
   view.remove_prefix(NAMED_CACHED_QUERY_PREFIX.size());
-  view.remove_suffix(1);
 
   parsedQuery::GraphPattern graphPattern = visit(ctx->groupGraphPattern());
   parsedQuery::NamedCachedQuery namedQuery{std::string{view}};
@@ -986,9 +984,9 @@ GraphPatternOperation Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
     return visitPathQuery(ctx);
   } else if (serviceIri.toStringRepresentation() == SPATIAL_SEARCH_IRI) {
     return visitSpatialQuery(ctx);
-  } else if (serviceIri.toStringRepresentation().starts_with(
-                 NAMED_CACHED_QUERY_PREFIX)) {
-    return visitNamedCachedQuery(ctx);
+  } else if (asStringViewUnsafe(serviceIri.getContent())
+                 .starts_with(NAMED_CACHED_QUERY_PREFIX)) {
+    return visitNamedCachedQuery(serviceIri, ctx);
   }
   // Parse the body of the SERVICE query. Add the visible variables from the
   // SERVICE clause to the visible variables so far, but also remember them
