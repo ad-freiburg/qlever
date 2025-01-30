@@ -133,7 +133,7 @@ class OperationTestFixture : public testing::Test {
       &namedCache,
       [&](std::string json) { jsonHistory.emplace_back(std::move(json)); }};
   IdTable table = makeIdTableFromVector({{}, {}, {}});
-  ValuesForTesting operation{&qec, std::move(table), {}};
+  ValuesForTesting operation{&qec, std::move(table), VariableToColumnMap{}};
 };
 
 // _____________________________________________________________________________
@@ -288,7 +288,8 @@ TEST(Operation, updateRuntimeStatsWorksCorrectly) {
   auto qec = getQec();
   auto idTable = makeIdTableFromVector({{3, 4}, {7, 8}, {9, 123}});
   ValuesForTesting valuesForTesting{
-      qec, std::move(idTable), {Variable{"?x"}, Variable{"?y"}}};
+      qec, std::move(idTable),
+      ValuesForTesting::VarVector{Variable{"?x"}, Variable{"?y"}}};
 
   auto& rti = valuesForTesting.runtimeInfo();
 

@@ -14,6 +14,9 @@
 // unit testing purposes when we need to specify the subtrees of another
 // operation.
 class ValuesForTesting : public Operation {
+ public:
+  using VarVector = std::vector<std::optional<Variable>>;
+
  private:
   std::vector<IdTable> tables_;
   VariableToColumnMap variables_;
@@ -27,13 +30,13 @@ class ValuesForTesting : public Operation {
   // Create an operation that has as its result the given `table` and the given
   // `variables`. The number of variables must be equal to the number
   // of columns in the table.
-  explicit ValuesForTesting(
-      QueryExecutionContext* ctx, IdTable table,
-      const std::vector<std::optional<Variable>>& variables,
-      bool supportsLimit = false, std::vector<ColumnIndex> sortedColumns = {},
-      LocalVocab localVocab = LocalVocab{},
-      std::optional<float> multiplicity = std::nullopt,
-      bool forceFullyMaterialized = false)
+  explicit ValuesForTesting(QueryExecutionContext* ctx, IdTable table,
+                            const VarVector& variables,
+                            bool supportsLimit = false,
+                            std::vector<ColumnIndex> sortedColumns = {},
+                            LocalVocab localVocab = LocalVocab{},
+                            std::optional<float> multiplicity = std::nullopt,
+                            bool forceFullyMaterialized = false)
       : Operation{ctx},
         supportsLimit_{supportsLimit},
         sizeEstimate_{table.numRows()},
@@ -63,8 +66,7 @@ class ValuesForTesting : public Operation {
     tables_.push_back(std::move(table));
   }
   explicit ValuesForTesting(QueryExecutionContext* ctx,
-                            std::vector<IdTable> tables,
-                            std::vector<std::optional<Variable>> variables,
+                            std::vector<IdTable> tables, VarVector variables,
                             bool unlikelyToFitInCache = false,
                             std::vector<ColumnIndex> sortedColumns = {},
                             LocalVocab localVocab = LocalVocab{})
@@ -199,8 +201,7 @@ class ValuesForTesting : public Operation {
   }
 
  private:
-  VariableToColumnMap computeVarMapFromVector(
-      const std::vector<std::optional<Variable>>& vars) const {
+  VariableToColumnMap computeVarMapFromVector(const VarVector& vars) const {
     VariableToColumnMap m;
     for (auto i = ColumnIndex{0}; i < vars.size(); ++i) {
       if (!vars.at(i).has_value()) {
