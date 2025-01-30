@@ -814,8 +814,8 @@ Awaitable<void> Server::processQuery(
             << (pinSubtrees ? " [pin subresults]" : "") << "\n"
             << query.query_ << std::endl;
   QueryExecutionContext qec(index_, &cache_, allocator_,
-                            sortPerformanceEstimator_, std::ref(messageSender),
-                            pinSubtrees, pinResult);
+                            sortPerformanceEstimator_, &namedQueryCache_,
+                            std::ref(messageSender), pinSubtrees, pinResult);
 
   // The usage of an `optional` here is required because of a limitation in
   // Boost::Asio which forces us to use default-constructible result types with
@@ -957,8 +957,8 @@ json Server::processUpdateImpl(
             << (pinSubtrees ? " [pin subresults]" : "") << "\n"
             << update.update_ << std::endl;
   QueryExecutionContext qec(index_, &cache_, allocator_,
-                            sortPerformanceEstimator_, std::ref(messageSender),
-                            pinSubtrees, pinResult);
+                            sortPerformanceEstimator_, &namedQueryCache_,
+                            std::ref(messageSender), pinSubtrees, pinResult);
   auto plannedQuery =
       setupPlannedQuery(update.datasetClauses_, update.update_, qec,
                         cancellationHandle, timeLimit, requestTimer);

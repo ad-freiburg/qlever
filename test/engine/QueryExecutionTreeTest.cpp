@@ -6,8 +6,8 @@
 
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
-#include "./ValuesForTesting.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/ValuesForTesting.h"
 
 using namespace ad_utility::testing;
 

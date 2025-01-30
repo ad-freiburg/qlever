@@ -6,8 +6,8 @@
 
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
-#include "./ValuesForTesting.h"
 #include "engine/Bind.h"
+#include "engine/ValuesForTesting.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 
 using namespace sparqlExpression;

@@ -6,6 +6,7 @@
 
 #include "./GTestHelpers.h"
 #include "./TripleComponentTestHelpers.h"
+#include "engine/NamedQueryCache.h"
 #include "global/SpecialIds.h"
 #include "index/IndexImpl.h"
 #include "util/ProgressBar.h"
@@ -277,10 +278,11 @@ QueryExecutionContext* getQec(std::optional<std::string> turtleInput,
     TypeErasedCleanup cleanup_;
     std::unique_ptr<Index> index_;
     std::unique_ptr<QueryResultCache> cache_;
+    std::unique_ptr<NamedQueryCache> namedCache_;
     std::unique_ptr<QueryExecutionContext> qec_ =
         std::make_unique<QueryExecutionContext>(
             *index_, cache_.get(), makeAllocator(MemorySize::megabytes(100)),
-            SortPerformanceEstimator{});
+            SortPerformanceEstimator{}, namedCache_.get());
   };
 
   using Key = std::tuple<std::optional<string>, bool, bool, bool,
@@ -308,7 +310,8 @@ QueryExecutionContext* getQec(std::optional<std::string> turtleInput,
                          usePatterns, usePrefixCompression,
                          blocksizePermutations, createTextIndex,
                          addWordsFromLiterals, contentsOfWordsFileAndDocsFile)),
-                     std::make_unique<QueryResultCache>()});
+                     std::make_unique<QueryResultCache>(),
+                     std::make_unique<NamedQueryCache>()});
   }
   auto* qec = contextMap.at(key).qec_.get();
   qec->getIndex().getImpl().setGlobalIndexAndComparatorOnlyForTesting();

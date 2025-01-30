@@ -12,6 +12,7 @@
 
 #include "ExecuteUpdate.h"
 #include "engine/Engine.h"
+#include "engine/NamedQueryCache.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/SortPerformanceEstimator.h"
@@ -68,6 +69,7 @@ class Server {
   unsigned short port_;
   std::string accessToken_;
   QueryResultCache cache_;
+  NamedQueryCache namedQueryCache_;
   ad_utility::AllocatorWithLimit<Id> allocator_;
   SortPerformanceEstimator sortPerformanceEstimator_;
   Index index_;

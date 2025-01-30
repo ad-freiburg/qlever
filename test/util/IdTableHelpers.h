@@ -13,7 +13,6 @@
 #include <stdexcept>
 #include <tuple>
 
-#include "../engine/ValuesForTesting.h"
 #include "./AllocatorTestHelpers.h"
 #include "./GTestHelpers.h"
 #include "./IdTestHelpers.h"
@@ -22,6 +21,7 @@
 #include "engine/Join.h"
 #include "engine/OptionalJoin.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/ValuesForTesting.h"
 #include "engine/idTable/IdTable.h"
 #include "global/ValueId.h"
 #include "util/Algorithm.h"
