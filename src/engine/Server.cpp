@@ -194,7 +194,7 @@ std::optional<std::string> Server::extractAccessToken(
       tokenFromAuthorizationHeader != tokenFromParameter) {
     throw std::runtime_error(
         "Access token is specified both in the `Authorization` header and by "
-        "the `access-token` parameter, but they aren't the same.");
+        "the `access-token` parameter, but they are not the same");
   }
   return tokenFromAuthorizationHeader ? std::move(tokenFromAuthorizationHeader)
                                       : std::move(tokenFromParameter);
