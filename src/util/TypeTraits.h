@@ -34,7 +34,7 @@ the 'call' `IsInstantiationOf<A>::Instantiation<B<int>>::value` and
 template <template <typename...> typename Template>
 struct IsInstantiationOf {
   template <typename T>
-  struct Instantiation;
+  struct Instantiation : std::false_type {};
 
   template <typename... Ts>
   struct Instantiation<Template<Ts...>> : std::true_type {};

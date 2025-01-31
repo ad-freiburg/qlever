@@ -35,9 +35,11 @@
 #ifdef QLEVER_CPP_17
 #define QL_CONCEPT_OR_NOTHING(...)
 #define QL_CONCEPT_OR_TYPENAME(...) typename
+#define CPP_and_def CPP_and_sfinae_def
 #else
 #define QL_CONCEPT_OR_NOTHING(...) __VA_ARGS__
 #define QL_CONCEPT_OR_TYPENAME(...) __VA_ARGS__
+#define CPP_and_def CPP_and
 #endif
 
 // The namespace `ql::concepts` includes concepts that are contained in the
