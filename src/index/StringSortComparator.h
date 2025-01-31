@@ -619,7 +619,6 @@ class TripleComponentComparator {
     return compare(spA, spB, level) < 0;
   }
 
-  // TODO<joka921> Unify these three functions.
   bool operator()(const SplitVal& spA, std::string_view b,
                   const Level level) const {
     auto spB = extractAndTransformComparable(b, level, false);

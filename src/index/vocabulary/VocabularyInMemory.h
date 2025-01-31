@@ -68,12 +68,18 @@ class VocabularyInMemory
   struct WordWriter {
     typename Words::Writer writer_;
     explicit WordWriter(const std::string& filename) : writer_{filename} {}
+
+    // Write a word. The `isExternalDummy` is only there to have a consistent
+    // interface with the `VocabularyInternalExternal`.
     void operator()(std::string_view str,
                     [[maybe_unused]] bool isExternalDummy = false) {
       writer_.push(str.data(), str.size());
     }
 
     void finish() { writer_.finish(); }
+
+    // The `readableName()` function is only there to have a consistent
+    // interface with the `VocabularyInternalExternal`.
     std::string readableNameDummy_;
     std::string& readableName() { return readableNameDummy_; }
   };

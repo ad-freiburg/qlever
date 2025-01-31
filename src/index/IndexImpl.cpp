@@ -1522,13 +1522,13 @@ size_t IndexImpl::getCardinality(
 }
 
 // ___________________________________________________________________________
-// TODO<joka921> Make this the return type of the vocabulary.
-std::string IndexImpl::indexToString(VocabIndex id) const {
-  return std::string{vocab_[id]};
+RdfsVocabulary::AccessReturnType IndexImpl::indexToString(VocabIndex id) const {
+  return vocab_[id];
 }
 
 // ___________________________________________________________________________
-std::string_view IndexImpl::indexToString(WordVocabIndex id) const {
+TextVocabulary::AccessReturnType IndexImpl::indexToString(
+    WordVocabIndex id) const {
   return textVocab_[id];
 }
 

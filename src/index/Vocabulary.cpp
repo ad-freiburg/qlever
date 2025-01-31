@@ -39,20 +39,8 @@ bool Vocabulary<StringType, ComparatorType, IndexT>::PrefixRanges::contain(
 // _____________________________________________________________________________
 template <class S, class C, typename I>
 void Vocabulary<S, C, I>::readFromFile(const string& fileName) {
-  LOG(INFO) << "Reading vocabulary from file " << fileName << " ..."
-            << std::endl;
   vocabulary_.close();
   vocabulary_.open(fileName);
-  if constexpr (isCompressed_ && false) {
-    const auto& internalExternalVocab =
-        vocabulary_.getUnderlyingVocabulary().getUnderlyingVocabulary();
-    LOG(INFO) << "Done, number of words: "
-              << internalExternalVocab.internalVocab().size() << std::endl;
-    LOG(INFO) << "Number of words in external vocabulary: "
-              << internalExternalVocab.externalVocab().size() << std::endl;
-  } else {
-    LOG(INFO) << "Done, number of words: " << vocabulary_.size() << std::endl;
-  }
 
   // Precomputing ranges for IRIs, blank nodes, and literals, for faster
   // processing of the `isIrI` and `isLiteral` functions.
@@ -88,19 +76,12 @@ bool Vocabulary<S, C, I>::stringIsLiteral(std::string_view s) {
 // _____________________________________________________________________________
 template <class S, class C, class I>
 bool Vocabulary<S, C, I>::shouldBeExternalized(string_view s) const {
-  // TODO<joka921> Completely refactor the Vocabulary on the different
-  // Types, it is a mess.
-
-  // If the string is not compressed, this means that this is a text vocabulary
-  // and thus doesn't support externalization.
-  if constexpr (std::is_same_v<S, CompressedString>) {
-    if (!stringIsLiteral(s)) {
-      return shouldEntityBeExternalized(s);
-    } else {
-      return shouldLiteralBeExternalized(s);
-    }
+  // TODO<joka921> We should have a completely separate layer that handles the
+  // externalization, not the Vocab.
+  if (!stringIsLiteral(s)) {
+    return shouldEntityBeExternalized(s);
   } else {
-    return false;
+    return shouldLiteralBeExternalized(s);
   }
 }
 
@@ -264,17 +245,18 @@ auto Vocabulary<S, C, I>::prefixRanges(std::string_view prefix) const
 }
 
 // _____________________________________________________________________________
-template <typename S, typename C, typename I>
-auto Vocabulary<S, C, I>::operator[](IndexType idx) const
-    -> AccessReturnType_t<S> {
+template <typename UnderlyingVocabulary, typename C, typename I>
+auto Vocabulary<UnderlyingVocabulary, C, I>::operator[](IndexType idx) const
+    -> AccessReturnType {
   AD_CONTRACT_CHECK(idx.get() < size());
   return vocabulary_[idx.get()];
 }
 
 // Explicit template instantiations
-template class Vocabulary<CompressedString, TripleComponentComparator,
-                          VocabIndex>;
-template class Vocabulary<std::string, SimpleStringComparator, WordVocabIndex>;
+template class Vocabulary<detail::UnderlyingVocabRdfsVocabulary,
+                          TripleComponentComparator, VocabIndex>;
+template class Vocabulary<detail::UnderlyingVocabTextVocabulary,
+                          SimpleStringComparator, WordVocabIndex>;
 
 template void RdfsVocabulary::initializeInternalizedLangs<nlohmann::json>(
     const nlohmann::json&);
