@@ -264,6 +264,10 @@ class SparqlQleverVisitor {
   GraphPatternOperation visitSpatialQuery(
       Parser::ServiceGraphPatternContext* ctx);
 
+  GraphPatternOperation visitNamedCachedQuery(
+      const TripleComponent::Iri& target,
+      Parser::ServiceGraphPatternContext* ctx);
+
   parsedQuery::GraphPatternOperation visit(Parser::BindContext* ctx);
 
   parsedQuery::GraphPatternOperation visit(Parser::InlineDataContext* ctx);

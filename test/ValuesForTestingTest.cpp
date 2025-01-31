@@ -16,7 +16,8 @@ TEST(ValuesForTesting, valuesForTesting) {
       (ValuesForTesting{getQec(), table.clone(), {Variable{"?x"}}}));
 
   ValuesForTesting v{
-      getQec(), table.clone(), {Variable{"?x"}, {Variable{"?y"}}}};
+      getQec(), table.clone(),
+      ValuesForTesting::VarVector{Variable{"?x"}, {Variable{"?y"}}}};
   // The following line has no effect. TODO<joka921> provide default
   // implementations for such boilerplate methods in the `Operation` base class.
   ASSERT_EQ(v.getResultWidth(), 2u);
@@ -42,7 +43,7 @@ TEST(ValuesForTesting, cornerCasesCacheKey) {
   auto empty = makeIdTableFromVector({});
   auto neutral = makeIdTableFromVector({{}});
 
-  ValuesForTesting vEmpty{getQec(), empty.clone(), {}};
-  ValuesForTesting vNeutral{getQec(), neutral.clone(), {}};
+  ValuesForTesting vEmpty{getQec(), empty.clone(), VariableToColumnMap{}};
+  ValuesForTesting vNeutral{getQec(), neutral.clone(), VariableToColumnMap{}};
   EXPECT_NE(vEmpty.getCacheKey(), vNeutral.getCacheKey());
 }
