@@ -69,8 +69,8 @@ class generator_promise {
   }
 
   // Don't allow any use of 'co_await' inside the generator coroutine.
-  template <typename U>
-  std::suspend_never await_transform(U&& value) = delete;
+  CPP_template(typename U)(requires(!ad_utility::SimilarTo<GetDetails, U>))
+      std::suspend_never await_transform(U&& value) = delete;
 
   void rethrow_if_exception() const {
     if (m_exception) {
@@ -87,8 +87,9 @@ class generator_promise {
     Details& await_resume() noexcept { return promise_.details(); }
   };
 
-  DetailAwaiter await_transform(
-      [[maybe_unused]] ad_utility::SimilarTo<GetDetails> auto&& detail) {
+  CPP_template(typename DetailT)(
+      requires ad_utility::SimilarTo<GetDetails, DetailT>) DetailAwaiter
+      await_transform([[maybe_unused]] DetailT&& detail) {
     return {*this};
   }
 

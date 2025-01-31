@@ -275,11 +275,14 @@ auto integerRange(Int upperBound) {
 
 // The implementation of `inPlaceTransformView`, see below for details.
 namespace detail {
-template <typename Range, ad_utility::InvocableWithExactReturnType<
-                              void, ql::ranges::range_reference_t<Range>>
-                              Transformation>
-requires(ql::ranges::view<Range> && ql::ranges::input_range<Range>)
-auto inPlaceTransformViewImpl(Range range, Transformation transformation) {
+CPP_template(typename Range, typename Transformation)(
+    requires ad_utility::InvocableWithExactReturnType<
+        Transformation, void, ql::ranges::range_reference_t<Range>>
+        CPP_and ql::ranges::view<Range>
+            CPP_and ql::ranges::input_range<
+                Range>) auto inPlaceTransformViewImpl(Range range,
+                                                      Transformation
+                                                          transformation) {
   // Take a range and yield pairs of [pointerToElementOfRange,
   // boolThatIsInitiallyFalse]. The bool is yielded as a reference and if its
   // value is changed, that change will be stored until the next element is
