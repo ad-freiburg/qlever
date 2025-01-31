@@ -357,7 +357,7 @@ Awaitable<void> Server::process(
       ad_utility::websocket::MessageSender messageSender =
           createMessageSender(queryHub_, request, query.query_);
       auto [parsedQuery, qec, cancellationHandle, cancelTimeoutOnDestruction] =
-          parseOperation(messageSender, parameters, std::move(query), request,
+          parseOperation(messageSender, parameters, std::move(query),
                          timeLimit.value());
       co_return co_await processQueryOrUpdate<Query>(
           parameters, std::move(parsedQuery), cancellationHandle, qec,
@@ -379,7 +379,7 @@ Awaitable<void> Server::process(
       ad_utility::websocket::MessageSender messageSender =
           createMessageSender(queryHub_, request, update.update_);
       auto [parsedUpdate, qec, cancellationHandle, cancelTimeoutOnDestruction] =
-          parseOperation(messageSender, parameters, std::move(update), request,
+          parseOperation(messageSender, parameters, std::move(update),
                          timeLimit.value());
       co_return co_await processQueryOrUpdate<Update>(
           parameters, std::move(parsedUpdate), cancellationHandle, qec,
@@ -460,12 +460,9 @@ auto Server::setupCancellationHandle(
 
 // ____________________________________________________________________________
 template <typename Operation>
-auto Server::parseOperation(
-    ad_utility::websocket::MessageSender& messageSender,
-    const ad_utility::url_parser::ParamValueMap& params,
-    const Operation& operation,
-    const ad_utility::httpUtils::HttpRequest auto& request,
-    TimeLimit timeLimit) {
+auto Server::parseOperation(ad_utility::websocket::MessageSender& messageSender,
+                            const ad_utility::url_parser::ParamValueMap& params,
+                            const Operation& operation, TimeLimit timeLimit) {
   static_assert(ad_utility::SameAsAny<Operation, Query, Update>);
   std::string_view operationName;
   // The operation string was to be copied, do it here at the beginning.

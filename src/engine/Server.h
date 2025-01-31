@@ -180,9 +180,7 @@ class Server {
   // Parse an operation (Query or Update).
   auto parseOperation(ad_utility::websocket::MessageSender& messageSender,
                       const ad_utility::url_parser::ParamValueMap& params,
-                      const Operation& operation,
-                      const ad_utility::httpUtils::HttpRequest auto& request,
-                      TimeLimit timeLimit);
+                      const Operation& operation, TimeLimit timeLimit);
   // Sets up the PlannedQuery s.t. it is ready to be executed.
   static PlannedQuery setupPlannedQuery(PlannedQuery& plannedOperation,
                                         SharedCancellationHandle handle,
