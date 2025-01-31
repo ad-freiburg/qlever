@@ -11,6 +11,8 @@
 #include <boost/geometry/geometries/point.hpp>
 #include <memory>
 
+#include <spatialjoin/Sweeper.h>
+
 #include "engine/Result.h"
 #include "engine/SpatialJoin.h"
 
@@ -33,6 +35,7 @@ class SpatialJoinAlgorithms {
   Result BaselineAlgorithm();
   Result S2geometryAlgorithm();
   Result BoundingBoxAlgorithm();
+  Result LibspatialjoinAlgorithm();
 
   std::vector<BoostGeometryNamespace::Box>
   OnlyForTestingWrapperComputeBoundingBox(
@@ -51,6 +54,12 @@ class SpatialJoinAlgorithms {
   // represents a GeoPoint
   std::optional<GeoPoint> getPoint(const IdTable* restable, size_t row,
                                    ColumnIndex col) const;
+
+  void libspatialjoinParse(bool side, const IdTable* restable,
+                                                        size_t row,
+                                                        ColumnIndex col, sj::Sweeper& sweeper, std::vector<sj::WriteBatch>& parseBatches, size_t t) const;
+
+	::util::geo::I32Point sjTransform(const GeoPoint& loc) const;
 
   // Helper function, which computes the distance of two points, where each
   // point comes from a different result table

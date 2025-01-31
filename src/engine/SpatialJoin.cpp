@@ -74,7 +74,11 @@ bool SpatialJoin::isConstructed() const { return childLeft_ && childRight_; }
 // ____________________________________________________________________________
 std::optional<size_t> SpatialJoin::getMaxDist() const {
   auto visitor = []<typename T>(const T& config) -> std::optional<size_t> {
-    return config.maxDist_;
+		if constexpr (std::is_same_v<T, SJConfig>) {
+			return std::nullopt;
+		} else {
+			return config.maxDist_;
+	}
   };
   return std::visit(visitor, config_.task_);
 }
@@ -83,6 +87,8 @@ std::optional<size_t> SpatialJoin::getMaxDist() const {
 std::optional<size_t> SpatialJoin::getMaxResults() const {
   auto visitor = []<typename T>(const T& config) -> std::optional<size_t> {
     if constexpr (std::is_same_v<T, MaxDistanceConfig>) {
+      return std::nullopt;
+    } else if constexpr (std::is_same_v<T, SJConfig>) {
       return std::nullopt;
     } else {
       static_assert(std::is_same_v<T, NearestNeighborsConfig>);
@@ -130,6 +136,12 @@ string SpatialJoin::getCacheKeyImpl() const {
     }
 
     // Uses distance variable?
+    auto algo = getAlgorithm();
+    if (algo == SpatialJoinAlgorithm::LIBSPATIALJOIN) {
+      os << "libspatialjoin on: " << (int)config_.joinType_ << "\n";
+    }
+
+    // Uses distance variable?
     if (config_.distanceVariable_.has_value()) {
       os << "withDistanceVariable\n";
     }
@@ -163,6 +175,9 @@ string SpatialJoin::getDescriptor() const {
     if constexpr (std::is_same_v<T, MaxDistanceConfig>) {
       return absl::StrCat("MaxDistJoin ", left, " to ", right, " of ",
                           config.maxDist_, " meter(s)");
+    } else if constexpr (std::is_same_v<T, SJConfig>) {
+      return absl::StrCat("Spatial Join ", left, " to ", right,
+                          " of type ", config.joinType_);
     } else {
       static_assert(std::is_same_v<T, NearestNeighborsConfig>);
       return absl::StrCat("NearestNeighborsJoin ", left, " to ", right,
@@ -220,7 +235,8 @@ size_t SpatialJoin::getCostEstimate() {
     } else {
       AD_CORRECTNESS_CHECK(
           config_.algo_ == SpatialJoinAlgorithm::S2_GEOMETRY ||
-              config_.algo_ == SpatialJoinAlgorithm::BOUNDING_BOX,
+              config_.algo_ == SpatialJoinAlgorithm::BOUNDING_BOX ||
+              config_.algo_ == SpatialJoinAlgorithm::LIBSPATIALJOIN,
           "Unknown SpatialJoin Algorithm.");
 
       // Let n be the size of the left table and m the size of the right table.
@@ -365,6 +381,7 @@ PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
   ColumnIndex leftJoinCol = childLeft_->getVariableColumn(config_.left_);
   ColumnIndex rightJoinCol = childRight_->getVariableColumn(config_.right_);
 
+
   // Payload cols and join col
   auto varsAndColInfo = copySortedByColumnIndex(getVarColMapPayloadVars());
   std::vector<ColumnIndex> rightSelectedCols;
@@ -378,7 +395,7 @@ PreparedSpatialJoinParams SpatialJoin::prepareJoin() const {
                                    idTableRight,      std::move(resultRight),
                                    leftJoinCol,       rightJoinCol,
                                    rightSelectedCols, numColumns,
-                                   getMaxDist(),      getMaxResults()};
+                                   getMaxDist(),      getMaxResults(), config_.joinType_};
 }
 
 // ____________________________________________________________________________
@@ -392,6 +409,8 @@ Result SpatialJoin::computeResult([[maybe_unused]] bool requestLaziness) {
     return algorithms.BaselineAlgorithm();
   } else if (config_.algo_ == SpatialJoinAlgorithm::S2_GEOMETRY) {
     return algorithms.S2geometryAlgorithm();
+  } else if (config_.algo_ == SpatialJoinAlgorithm::LIBSPATIALJOIN) {
+    return algorithms.LibspatialjoinAlgorithm();
   } else {
     AD_CORRECTNESS_CHECK(config_.algo_ == SpatialJoinAlgorithm::BOUNDING_BOX,
                          "Unknown SpatialJoin Algorithm.");

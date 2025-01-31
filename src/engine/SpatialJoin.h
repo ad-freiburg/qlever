@@ -14,6 +14,9 @@
 #include "parser/PayloadVariables.h"
 #include "parser/data/Variable.h"
 
+// Selection of a SpatialJoin join type
+enum class SpatialJoinJoinType { INTERSECTS, CONTAINS, COVERS, CROSSES, TOUCHES, EQUALS, OVERLAPS };
+
 // A nearest neighbor search with optionally a maximum distance.
 struct NearestNeighborsConfig {
   size_t maxResults_;
@@ -25,11 +28,16 @@ struct MaxDistanceConfig {
   size_t maxDist_;
 };
 
+// Full spatial join on selected join type
+struct SJConfig {
+  SpatialJoinJoinType joinType_;
+};
+
 // Configuration to restrict the results provided by the SpatialJoin
-using SpatialJoinTask = std::variant<NearestNeighborsConfig, MaxDistanceConfig>;
+using SpatialJoinTask = std::variant<NearestNeighborsConfig, MaxDistanceConfig, SJConfig>;
 
 // Selection of a SpatialJoin algorithm
-enum class SpatialJoinAlgorithm { BASELINE, S2_GEOMETRY, BOUNDING_BOX };
+enum class SpatialJoinAlgorithm { BASELINE, S2_GEOMETRY, BOUNDING_BOX, LIBSPATIALJOIN };
 const SpatialJoinAlgorithm SPATIAL_JOIN_DEFAULT_ALGORITHM =
     SpatialJoinAlgorithm::S2_GEOMETRY;
 
@@ -54,6 +62,8 @@ struct SpatialJoinConfiguration {
   // Choice of algorithm. Both algorithms have equal results, but different
   // runtime characteristics.
   SpatialJoinAlgorithm algo_ = SPATIAL_JOIN_DEFAULT_ALGORITHM;
+
+  SpatialJoinJoinType joinType_ = SpatialJoinJoinType::INTERSECTS;
 };
 
 // helper struct to improve readability in prepareJoin()
@@ -68,6 +78,7 @@ struct PreparedSpatialJoinParams {
   size_t numColumns_;
   std::optional<size_t> maxDist_;
   std::optional<size_t> maxResults_;
+  std::optional<SpatialJoinJoinType> joinType_;
 };
 
 // The spatial join operation without a limit on the maximum number of results
