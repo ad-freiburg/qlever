@@ -266,6 +266,32 @@ template <typename Func, typename R, typename... ArgTypes>
 CPP_concept InvocableWithConvertibleReturnType =
     std::is_invocable_r_v<R, Func, ArgTypes...>;
 
+// The implementation of `InvokeResultSfienaeFriendly`
+namespace invokeResultSfinaeFriendly::detail {
+template <typename T, typename... Args>
+struct InvalidInvokeResult {
+  InvalidInvokeResult() = delete;
+  ~InvalidInvokeResult() = delete;
+};
+template <typename T, typename... Args>
+auto getInvokeResultImpl() {
+  if constexpr (std::is_invocable_v<T, Args...>) {
+    return std::type_identity<std::invoke_result_t<T, Args...>>{};
+  } else {
+    return std::type_identity<InvalidInvokeResult<T, Args...>>{};
+  }
+}
+}  // namespace invokeResultSfinaeFriendly::detail
+
+// If `std::is_invocable_v<T, Args...>`, then this is `std::invoke_result_t<T ,
+// Args...>` , otherwise it is an internal type that can be neither constructed
+// nor destructed. This is useful in SFINAE-contexts, where
+// `std::invoke_result_t` leads to hard compiler errors if it doesn't exist.
+template <typename T, typename... Args>
+using InvokeResultSfinaeFriendly =
+    typename decltype(invokeResultSfinaeFriendly::detail::getInvokeResultImpl<
+                      T, Args...>())::type;
+
 /*
 The following concepts are similar to `std::is_invocable_r_v` with the following
 difference: `std::is_invocable_r_v` only checks that the return type of a
@@ -282,7 +308,7 @@ are the same when ignoring `const`, `volatile`, and reference qualifiers.
 template <typename Fn, typename Ret, typename... Args>
 CPP_concept InvocableWithSimilarReturnType =
     std::invocable<Fn, Args...> &&
-    isSimilar<std::invoke_result_t<Fn, Args...>, Ret>;
+    isSimilar<InvokeResultSfinaeFriendly<Fn, Args...>, Ret>;
 
 /*
 @brief Require `Fn` to be invocable with `Args...` and the return type to be
@@ -291,7 +317,7 @@ CPP_concept InvocableWithSimilarReturnType =
 template <typename Fn, typename Ret, typename... Args>
 CPP_concept InvocableWithExactReturnType =
     std::invocable<Fn, Args...> &&
-    std::same_as<std::invoke_result_t<Fn, Args...>, Ret>;
+    std::same_as<InvokeResultSfinaeFriendly<Fn, Args...>, Ret>;
 
 /*
 @brief Require `Fn` to be regular invocable with `Args...` and the return type
@@ -305,7 +331,7 @@ For more information see: https://en.cppreference.com/w/cpp/concepts/invocable
 template <typename Fn, typename Ret, typename... Args>
 CPP_concept RegularInvocableWithSimilarReturnType =
     std::regular_invocable<Fn, Args...> &&
-    isSimilar<std::invoke_result_t<Fn, Args...>, Ret>;
+    isSimilar<InvokeResultSfinaeFriendly<Fn, Args...>, Ret>;
 
 /*
 @brief Require `Fn` to be regular invocable with `Args...` and the return type
@@ -319,7 +345,7 @@ For more information see: https://en.cppreference.com/w/cpp/concepts/invocable
 template <typename Fn, typename Ret, typename... Args>
 CPP_concept RegularInvocableWithExactReturnType =
     std::regular_invocable<Fn, Args...> &&
-    std::same_as<std::invoke_result_t<Fn, Args...>, Ret>;
+    std::same_as<InvokeResultSfinaeFriendly<Fn, Args...>, Ret>;
 
 // True iff `T` is a value type or an rvalue reference. Can be used to force
 // rvalue references for templated functions: For example: void f(auto&& x) //

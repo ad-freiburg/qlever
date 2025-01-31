@@ -68,9 +68,9 @@ bool ConfigManager::HashMapEntry::holdsSubManager() const {
 // ____________________________________________________________________________
 CPP_template_def(typename ReturnType, typename InstanceType)(
     requires SimilarToAnyTypeIn<ReturnType, ConfigManager::HashMapEntry::Data>
-        CPP_and std::is_object_v<ReturnType>
-            CPP_and ad_utility::SimilarTo<ConfigManager::HashMapEntry,
-                                          InstanceType>)
+        CPP_and_def std::is_object_v<ReturnType>
+            CPP_and_def ad_utility::SimilarTo<ConfigManager::HashMapEntry,
+                                              InstanceType>)
     std::optional<ReturnType*> ConfigManager::HashMapEntry::
         getConfigOptionOrSubManager(InstanceType& instance) {
   using DecayReturnType = std::decay_t<ReturnType>;
@@ -110,13 +110,13 @@ std::optional<const ConfigManager*> ConfigManager::HashMapEntry::getSubManager()
 
 // ____________________________________________________________________________
 CPP_template_def(typename Visitor)(
-    requires std::invocable<Visitor, ConfigOption&> CPP_and
+    requires std::invocable<Visitor, ConfigOption&> CPP_and_def
         std::invocable<Visitor, ConfigManager&>) decltype(auto)
     ConfigManager::HashMapEntry::visit(Visitor&& vis) {
   return visitImpl(AD_FWD(vis), data_);
 }
 CPP_template_def(typename Visitor)(
-    requires std::invocable<Visitor, ConfigOption&> CPP_and
+    requires std::invocable<Visitor, ConfigOption&> CPP_and_def
         std::invocable<Visitor, ConfigManager&>) decltype(auto)
     ConfigManager::HashMapEntry::visit(Visitor&& vis) const {
   return visitImpl(AD_FWD(vis), data_);
@@ -126,10 +126,10 @@ CPP_template_def(typename Visitor)(
 CPP_template_def(typename Visitor, typename PointerType)(
     requires ad_utility::SimilarTo<
         std::unique_ptr<ConfigManager::HashMapEntry::Data>, PointerType>
-        CPP_and std::invocable<
+        CPP_and_def std::invocable<
             Visitor, std::conditional_t<std::is_const_v<PointerType>,
                                         const ConfigOption&, ConfigOption&>>
-            CPP_and std::invocable<
+            CPP_and_def std::invocable<
                 Visitor, std::conditional_t<std::is_const_v<PointerType>,
                                             const ConfigManager&,
                                             ConfigManager&>>) decltype(auto)
@@ -157,7 +157,7 @@ void ConfigManager::verifyHashMapEntry(std::string_view jsonPathToEntry,
 CPP_template_def(typename Visitor)(
     requires ad_utility::InvocableWithExactReturnType<
         Visitor, void, std::string_view, ConfigManager&>
-        CPP_and ad_utility::InvocableWithExactReturnType<
+        CPP_and_def ad_utility::InvocableWithExactReturnType<
             Visitor, void, std::string_view,
             ConfigOption&>) void ConfigManager::
     visitHashMapEntries(Visitor&& vis, bool sortByCreationOrder,
@@ -197,7 +197,7 @@ CPP_template_def(typename HashMapType, typename Callable)(
     requires SimilarTo<
         ad_utility::HashMap<std::string, ConfigManager::HashMapEntry>,
         HashMapType>
-        CPP_and std::is_object_v<HashMapType>) auto ConfigManager::
+        CPP_and_def std::is_object_v<HashMapType>) auto ConfigManager::
     allHashMapEntries(HashMapType& hashMap, std::string_view pathPrefix,
                       const Callable& predicate)
         -> std::conditional_t<
@@ -263,7 +263,7 @@ CPP_template_def(typename HashMapType, typename Callable)(
 // ____________________________________________________________________________
 CPP_template_def(typename ConfigOptions, typename ReturnReference)(
     requires SameAsAny<ReturnReference, ConfigOption&, const ConfigOption&>
-        CPP_and SimilarTo<
+        CPP_and_def SimilarTo<
             ad_utility::HashMap<std::string, ConfigManager::HashMapEntry>,
             ConfigOptions>)
     std::vector<std::pair<std::string, ReturnReference>> ConfigManager::
@@ -881,7 +881,8 @@ template void ConfigManager::ConfigurationDocValidatorAssignment::
                                     const ConfigOptionValidatorManager&);
 
 // ____________________________________________________________________________
-CPP_template(typename T)(requires ConfigOptionOrManager<T>) auto ConfigManager::
+CPP_template_def(typename T)(
+    requires ConfigOptionOrManager<T>) auto ConfigManager::
     ConfigurationDocValidatorAssignment::getEntriesUnderKey(const T& key) const
     -> ValueGetterReturnType {
   // The concerned hash map.
