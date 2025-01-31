@@ -894,7 +894,7 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
   auto setMetadata = [this](const Permutation& p) {
     deltaTriplesManager().modify<void>([&p](DeltaTriples& deltaTriples) {
       deltaTriples.setOriginalMetadata(p.permutation(),
-                                       p.metaData().blockData());
+                                       p.metaData().blockDataShared());
     });
   };
 

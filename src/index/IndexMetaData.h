@@ -89,7 +89,7 @@ class IndexMetaData {
   // For each relation, its meta data.
   MapType data_;
   // For each compressed block, its meta data.
-  BlocksType blockData_;
+  std::shared_ptr<BlocksType> blockData_ = std::make_shared<BlocksType>();
 
   size_t totalElements_ = 0;
   size_t numDistinctCol0_ = 0;
@@ -175,8 +175,11 @@ class IndexMetaData {
 
   const MapType& data() const { return data_; }
 
-  BlocksType& blockData() { return blockData_; }
-  const BlocksType& blockData() const { return blockData_; }
+  BlocksType& blockData() { return *blockData_; }
+  const BlocksType& blockData() const { return *blockData_; }
+  std::shared_ptr<const BlocksType> blockDataShared() const {
+    return blockData_;
+  }
 
   // Symmetric serialization function for the ad_utility::serialization module.
   AD_SERIALIZE_FRIEND_FUNCTION(IndexMetaData) {
@@ -207,7 +210,7 @@ class IndexMetaData {
     // Serialize the rest of the data members
     serializer | arg.name_;
     serializer | arg.data_;
-    serializer | arg.blockData_;
+    serializer | arg.blockData();
     serializer | arg.offsetAfter_;
     serializer | arg.totalElements_;
     serializer | arg.numDistinctCol0_;

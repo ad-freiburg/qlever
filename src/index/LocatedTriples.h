@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include <boost/optional.hpp>
+
 #include "engine/idTable/IdTable.h"
 #include "global/IdTriple.h"
 #include "index/CompressedRelation.h"
@@ -89,7 +91,8 @@ class LocatedTriplesPerBlock {
   // Stores the block metadata where the block borders have been adjusted for
   // the updated triples.
   std::optional<std::vector<CompressedBlockMetadata>> augmentedMetadata_;
-  std::vector<CompressedBlockMetadata> originalMetadata_;
+  std::optional<std::shared_ptr<const std::vector<CompressedBlockMetadata>>>
+      originalMetadata_;
 
  public:
   void updateAugmentedMetadata();
@@ -156,21 +159,30 @@ class LocatedTriplesPerBlock {
   // Must be called initially before using the `LocatedTriplesPerBlock` to
   // initialize the original block metadata that is augmented for updated
   // triples. This is currently done in `Permutation::loadFromDisk`.
-  void setOriginalMetadata(std::vector<CompressedBlockMetadata> metadata);
+  void setOriginalMetadata(
+      std::shared_ptr<const std::vector<CompressedBlockMetadata>> metadata);
+  void setOriginalMetadata(std::vector<CompressedBlockMetadata> metadata) {
+    setOriginalMetadata(
+        std::make_shared<const std::vector<CompressedBlockMetadata>>(
+            std::move(metadata)));
+  }
 
   // Returns the block metadata where the block borders have been updated to
   // account for the update triples. All triples (both insert and delete) will
   // enlarge the block borders.
   const std::vector<CompressedBlockMetadata>& getAugmentedMetadata() const {
-    AD_CONTRACT_CHECK(augmentedMetadata_.has_value());
-    return augmentedMetadata_.value();
+    if (augmentedMetadata_.has_value()) {
+      return augmentedMetadata_.value();
+    }
+    AD_CONTRACT_CHECK(originalMetadata_.has_value());
+    return *originalMetadata_.value();
   };
 
   // Remove all located triples.
   void clear() {
     map_.clear();
     numTriples_ = 0;
-    augmentedMetadata_ = originalMetadata_;
+    augmentedMetadata_.reset();
   }
 
   // Return `true` iff the given triple is one of the located triples with the
