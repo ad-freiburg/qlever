@@ -185,7 +185,7 @@ class Server {
   template <typename Operation>
   // Parse an operation (Query or Update).
   auto parseOperation(const ad_utility::url_parser::ParamValueMap& params,
-                      Operation&& operation,
+                      const Operation& operation,
                       const ad_utility::httpUtils::HttpRequest auto& request,
                       TimeLimit timeLimit);
   // Sets up the PlannedQuery s.t. it is ready to be executed.

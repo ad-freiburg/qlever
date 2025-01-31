@@ -490,7 +490,7 @@ Awaitable<void> Server::process(
 
   auto visitQuery = [&checkParameter, &accessTokenOk, &request, &send,
                      &parameters, &requestTimer,
-                     this](Query query) -> Awaitable<void> {
+                     this](const Query& query) -> Awaitable<void> {
     if (auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
             checkParameter("timeout", std::nullopt), accessTokenOk, request,
             send)) {
@@ -509,8 +509,7 @@ Awaitable<void> Server::process(
   auto visitUpdate =
       [&checkParameter, &accessTokenOk, &request, &send, &parameters,
        &requestTimer, this,
-       // TODO: should move, was const& before for that reason
-       &requireValidAccessToken](Update update) -> Awaitable<void> {
+       &requireValidAccessToken](const Update& update) -> Awaitable<void> {
     requireValidAccessToken("SPARQL Update");
     if (auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
             checkParameter("timeout", std::nullopt), accessTokenOk, request,
@@ -527,7 +526,8 @@ Awaitable<void> Server::process(
       co_return;
     }
   };
-  auto visitNone = [&response, &send, &request](None) -> Awaitable<void> {
+  auto visitNone = [&response, &send,
+                    &request](const None&) -> Awaitable<void> {
     // If there was no "query", but any of the URL parameters processed before
     // produced a `response`, send that now. Note that if multiple URL
     // parameters were processed, only the `response` from the last one is sent.
@@ -567,19 +567,21 @@ std::pair<bool, bool> Server::determineResultPinning(
 // ____________________________________________________________________________
 template <typename Operation>
 auto Server::parseOperation(
-    const ad_utility::url_parser::ParamValueMap& params, Operation&& operation,
+    const ad_utility::url_parser::ParamValueMap& params,
+    const Operation& operation,
     const ad_utility::httpUtils::HttpRequest auto& request,
     TimeLimit timeLimit) {
   static_assert(ad_utility::SameAsAny<Operation, Query, Update>);
   std::string_view operationName;
+  // The operation string was to be copied, do it here at the beginning.
   std::string operationSPARQL;
   if constexpr (std::is_same_v<Operation, Query>) {
     operationName = "SPARQL Query";
-    operationSPARQL = std::move(operation.query_);
+    operationSPARQL = operation.query_;
   } else {
     static_assert(std::is_same_v<Operation, Update>);
     operationName = "SPARQL Update";
-    operationSPARQL = std::move(operation.update_);
+    operationSPARQL = operation.update_;
   }
 
   ad_utility::websocket::MessageSender messageSender =
