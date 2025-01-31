@@ -8,7 +8,6 @@
 
 #include <absl/cleanup/cleanup.h>
 
-#include "../../cmake-build-clang-16-debug-backports/_deps/range-v3-src/include/range/v3/experimental/view/shared.hpp"
 #include "util/Exception.h"
 #include "util/Generators.h"
 #include "util/Log.h"
