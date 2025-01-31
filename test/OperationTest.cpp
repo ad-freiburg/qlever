@@ -242,12 +242,12 @@ TEST(OperationTest, estimatesForCachedResults) {
     [[maybe_unused]] auto res = qet->getResult();
   }
   // The result is now cached inside the static execution context, if we create
-  // the same operation again, the cost estimate is 0 and the size estimate is
-  // exact (3 rows).
+  // the same operation again, the cost estimate is 0. The size estimate doesn't
+  // change (see the `getCostEstimate` function for details on why).
   {
     auto qet = makeQet();
     EXPECT_EQ(qet->getCacheKey(), qet->getRootOperation()->getCacheKey());
-    EXPECT_EQ(qet->getSizeEstimate(), 3u);
+    EXPECT_EQ(qet->getSizeEstimate(), 24u);
     EXPECT_EQ(qet->getCostEstimate(), 0u);
   }
 }
