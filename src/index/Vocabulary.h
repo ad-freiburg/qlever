@@ -37,9 +37,11 @@ using std::string;
 using std::vector;
 
 template <class StringType>
-using AccessReturnType_t =
+using AccessReturnType_t = std::string_view;
+/*
     std::conditional_t<std::is_same_v<StringType, CompressedString>,
                        std::string, std::string_view>;
+                       */
 
 template <typename IndexT = WordVocabIndex>
 class IdRange {
@@ -114,10 +116,13 @@ class Vocabulary {
   vector<std::string> internalizedLangs_;
   vector<std::string> externalizedPrefixes_{""};
 
+  using UnderlyingVocabulary = VocabularyInMemory;
+  /*
   using UnderlyingVocabulary =
       std::conditional_t<isCompressed_,
                          CompressedVocabulary<VocabularyInternalExternal>,
                          VocabularyInMemory>;
+      */
   using VocabularyWithUnicodeComparator =
       UnicodeVocabulary<UnderlyingVocabulary, ComparatorType>;
 

@@ -974,7 +974,7 @@ size_t IndexImpl::getNumDistinctSubjectPredicatePairs() const {
 }
 
 // _____________________________________________________________________________
-bool IndexImpl::isLiteral(const string& object) const {
+bool IndexImpl::isLiteral(std::string_view object) const {
   return decltype(vocab_)::stringIsLiteral(object);
 }
 
@@ -1522,7 +1522,10 @@ size_t IndexImpl::getCardinality(
 }
 
 // ___________________________________________________________________________
-std::string IndexImpl::indexToString(VocabIndex id) const { return vocab_[id]; }
+// TODO<joka921> Make this the return type of the vocabulary.
+std::string IndexImpl::indexToString(VocabIndex id) const {
+  return std::string{vocab_[id]};
+}
 
 // ___________________________________________________________________________
 std::string_view IndexImpl::indexToString(WordVocabIndex id) const {

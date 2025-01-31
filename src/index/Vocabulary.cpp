@@ -43,7 +43,7 @@ void Vocabulary<S, C, I>::readFromFile(const string& fileName) {
             << std::endl;
   vocabulary_.close();
   vocabulary_.open(fileName);
-  if constexpr (isCompressed_) {
+  if constexpr (isCompressed_ && false) {
     const auto& internalExternalVocab =
         vocabulary_.getUnderlyingVocabulary().getUnderlyingVocabulary();
     LOG(INFO) << "Done, number of words: "

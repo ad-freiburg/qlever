@@ -68,11 +68,14 @@ class VocabularyInMemory
   struct WordWriter {
     typename Words::Writer writer_;
     explicit WordWriter(const std::string& filename) : writer_{filename} {}
-    void operator()(std::string_view str) {
+    void operator()(std::string_view str,
+                    [[maybe_unused]] bool isExternalDummy = false) {
       writer_.push(str.data(), str.size());
     }
 
     void finish() { writer_.finish(); }
+    std::string readableNameDummy_;
+    std::string& readableName() { return readableNameDummy_; }
   };
 
   // Return a `WordWriter` that directly writes the words to the given

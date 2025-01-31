@@ -634,7 +634,7 @@ class IndexImpl {
   friend class IndexTest_createFromOnDiskIndexTest_Test;
   friend class CreatePatternsFixture_createPatterns_Test;
 
-  bool isLiteral(const string& object) const;
+  bool isLiteral(std::string_view object) const;
 
  public:
   LangtagAndTriple tripleToInternalRepresentation(TurtleTriple&& triple) const;
