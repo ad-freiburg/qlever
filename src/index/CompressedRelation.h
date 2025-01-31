@@ -746,13 +746,14 @@ class CompressedRelationReader {
 
   // The common implementation for `getDistinctCol0IdsAndCounts` and
   // `getCol1IdsAndCounts`.
-  IdTable getDistinctColIdsAndCountsImpl(
-      ad_utility::InvocableWithConvertibleReturnType<
-          Id, const CompressedBlockMetadata::PermutedTriple&> auto idGetter,
-      const ScanSpecification& scanSpec,
-      const std::vector<CompressedBlockMetadata>& allBlocksMetadata,
-      const CancellationHandle& cancellationHandle,
-      const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
+  CPP_template(typename IdGetter)(
+      requires ad_utility::InvocableWithConvertibleReturnType<
+          IdGetter, Id, const CompressedBlockMetadata::PermutedTriple&>) IdTable
+      getDistinctColIdsAndCountsImpl(
+          IdGetter idGetter, const ScanSpecification& scanSpec,
+          const std::vector<CompressedBlockMetadata>& allBlocksMetadata,
+          const CancellationHandle& cancellationHandle,
+          const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
 };
 
 // TODO<joka921>
