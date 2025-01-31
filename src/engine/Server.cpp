@@ -424,6 +424,36 @@ std::pair<bool, bool> Server::determineResultPinning(
   return {pinSubtrees, pinResult};
 }
 
+// _____________________________________________________________________________
+auto Server::cancelAfterDeadline(
+    std::weak_ptr<ad_utility::CancellationHandle<>> cancellationHandle,
+    TimeLimit timeLimit)
+    -> ad_utility::InvocableWithExactReturnType<void> auto {
+  net::steady_timer timer{timerExecutor_, timeLimit};
+
+  timer.async_wait([cancellationHandle = std::move(cancellationHandle)](
+                       const boost::system::error_code&) {
+    if (auto pointer = cancellationHandle.lock()) {
+      pointer->cancel(ad_utility::CancellationState::TIMEOUT);
+    }
+  });
+  return [timer = std::move(timer)]() mutable { timer.cancel(); };
+}
+
+// _____________________________________________________________________________
+auto Server::setupCancellationHandle(
+    const ad_utility::websocket::QueryId& queryId, TimeLimit timeLimit)
+    -> ad_utility::isInstantiation<
+        CancellationHandleAndTimeoutTimerCancel> auto {
+  auto cancellationHandle = queryRegistry_.getCancellationHandle(queryId);
+  AD_CORRECTNESS_CHECK(cancellationHandle);
+  cancellationHandle->startWatchDog();
+  absl::Cleanup cancelCancellationHandle{
+      cancelAfterDeadline(cancellationHandle, timeLimit)};
+  return CancellationHandleAndTimeoutTimerCancel{
+      std::move(cancellationHandle), std::move(cancelCancellationHandle)};
+}
+
 // ____________________________________________________________________________
 template <typename Operation>
 auto Server::parseOperation(
@@ -507,7 +537,7 @@ Awaitable<Server::PlannedQuery> Server::planQuery(
   // an explicit variable instead of directly `co_await`-ing it.
   auto coroutine = computeInNewThread(
       threadPool,
-      [this, &operation, &qec, &handle]() -> std::optional<QueryExecutionTree> {
+      [&operation, &qec, &handle]() -> std::optional<QueryExecutionTree> {
         QueryPlanner qp(&qec, handle);
         auto qet = qp.createExecutionTree(operation);
         handle->throwIfCancelled();
@@ -611,36 +641,6 @@ ad_utility::websocket::OwningQueryId Server::getQueryId(
     throw QueryAlreadyInUseError{queryIdHeader};
   }
   return std::move(queryId.value());
-}
-
-// _____________________________________________________________________________
-auto Server::cancelAfterDeadline(
-    std::weak_ptr<ad_utility::CancellationHandle<>> cancellationHandle,
-    TimeLimit timeLimit)
-    -> ad_utility::InvocableWithExactReturnType<void> auto {
-  net::steady_timer timer{timerExecutor_, timeLimit};
-
-  timer.async_wait([cancellationHandle = std::move(cancellationHandle)](
-                       const boost::system::error_code&) {
-    if (auto pointer = cancellationHandle.lock()) {
-      pointer->cancel(ad_utility::CancellationState::TIMEOUT);
-    }
-  });
-  return [timer = std::move(timer)]() mutable { timer.cancel(); };
-}
-
-// _____________________________________________________________________________
-auto Server::setupCancellationHandle(
-    const ad_utility::websocket::QueryId& queryId, TimeLimit timeLimit)
-    -> ad_utility::isInstantiation<
-        CancellationHandleAndTimeoutTimerCancel> auto {
-  auto cancellationHandle = queryRegistry_.getCancellationHandle(queryId);
-  AD_CORRECTNESS_CHECK(cancellationHandle);
-  cancellationHandle->startWatchDog();
-  absl::Cleanup cancelCancellationHandle{
-      cancelAfterDeadline(cancellationHandle, timeLimit)};
-  return CancellationHandleAndTimeoutTimerCancel{
-      std::move(cancellationHandle), std::move(cancelCancellationHandle)};
 }
 
 // _____________________________________________________________________________
@@ -907,11 +907,10 @@ Awaitable<void> Server::processUpdate(
                          timeLimit, qec, cancellationHandle);
   auto coroutine = computeInNewThread(
       updateThreadPool_,
-      [this, &requestTimer, &timeLimit, &cancellationHandle, &qec,
-       &plannedQuery]() {
+      [this, &requestTimer, &cancellationHandle, &plannedQuery]() {
         // Update the delta triples.
         return index_.deltaTriplesManager().modify<nlohmann::json>(
-            [this, &requestTimer, &timeLimit, &cancellationHandle, &qec,
+            [this, &requestTimer, &cancellationHandle,
              &plannedQuery](auto& deltaTriples) {
               // Use `this` explicitly to silence false-positive errors on
               // captured `this` being unused.
