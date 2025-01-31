@@ -1255,15 +1255,20 @@ void testBoundingBoxOfAreaOrMidpointOfBox(bool testArea = true) {
 
   SpatialJoinAlgorithms sja = getDummySpatialJoinAlgsForWrapperTesting();
 
-  auto a = sja.calculateBoundingBoxOfArea(
-      "POLYGON((9.33 47.41, 9.31 47.45, 9.32 47.48, 9.35 47.42, 9.33 "
-      "47.41))");  // closed polygon
-  auto b = sja.calculateBoundingBoxOfArea(
-      "POLYGON((-4.1 10.0, -9.9 10.0, -9.9 -1.0, -4.1 -1.0))");  // not closed
-                                                                 // polygon
-  auto c = sja.calculateBoundingBoxOfArea(
-      "POLYGON((0.0 0.0, 1.1 0.0, 1.1 1.1, 0.0 1.1, 0.0 0.0))");  // closed
-                                                                  // polygon
+  BoostGeometryNamespace::AnyGeometry geometryA;
+  std::string wktA = "POLYGON((9.33 47.41, 9.31 47.45, 9.32 47.48, 9.35 47.42, 9.33 47.41))";  // closed polygon
+  boost::geometry::read_wkt(wktA, geometryA);
+  Box a = boost::apply_visitor(BoostGeometryNamespace::BoundingBoxVisitor(), geometryA);
+  
+  BoostGeometryNamespace::AnyGeometry geometryB;
+  std::string wktB = "POLYGON((-4.1 10.0, -9.9 10.0, -9.9 -1.0, -4.1 -1.0))";  // not closed polygon
+  boost::geometry::read_wkt(wktB, geometryB);
+  Box b = boost::apply_visitor(BoostGeometryNamespace::BoundingBoxVisitor(), geometryB);
+  
+  BoostGeometryNamespace::AnyGeometry geometryC;
+  std::string wktC = "POLYGON((0.0 0.0, 1.1 0.0, 1.1 1.1, 0.0 1.1, 0.0 0.0))";  // closed polygon
+  boost::geometry::read_wkt(wktC, geometryC);
+  Box c = boost::apply_visitor(BoostGeometryNamespace::BoundingBoxVisitor(), geometryC);
 
   if (testArea) {
     checkBoundingBox(a, 9.31, 47.41, 9.35, 47.48);
@@ -1284,8 +1289,10 @@ TEST(SpatialJoin, MidpointOfBoundingBox) {
 
 TEST(SpatialJoin, getMaxDistFromMidpointToAnyPointInsideTheBox) {
   SpatialJoinAlgorithms sja = getDummySpatialJoinAlgsForWrapperTesting();
+  
   // the following polygon is from the eiffel tower
-  auto area_eiffel = sja.calculateBoundingBoxOfArea(
+  BoostGeometryNamespace::AnyGeometry geometryEiffel;
+  std::string wktEiffel =
       "POLYGON((2.2933119 48.858248,2.2935432 48.8581003,2.2935574 "
       "48.8581099,2.2935712 48.8581004,2.2936112 48.8581232,2.2936086 "
       "48.8581249,2.293611 48.8581262,2.2936415 48.8581385,2.293672 "
@@ -1329,8 +1336,10 @@ TEST(SpatialJoin, getMaxDistFromMidpointToAnyPointInsideTheBox) {
       "48.8584325,2.293912 48.8584052,2.2938415 48.8583828,2.293784 "
       "48.8583695,2.2937145 48.8583599,2.2936514 48.8583593,2.2936122 "
       "48.8583846,2.293606 48.8583807,2.2935688 48.8584044,2.2935515 "
-      "48.8583929,2.293536 48.8584028,2.2933119 48.858248))");
-  auto midpoint_eiffel = sja.calculateMidpointOfBox(area_eiffel);
+      "48.8583929,2.293536 48.8584028,2.2933119 48.858248))";
+  boost::geometry::read_wkt(wktEiffel, geometryEiffel);
+  Box boxEiffel = boost::apply_visitor(BoostGeometryNamespace::BoundingBoxVisitor(), geometryEiffel);
+  auto midpoint_eiffel = sja.calculateMidpointOfBox(boxEiffel);
 
   // call the function without the precalculated midpoint, the upper bound max
   // distance needs to be bigger than 130 (the tower has a square base of length
@@ -1339,16 +1348,14 @@ TEST(SpatialJoin, getMaxDistFromMidpointToAnyPointInsideTheBox) {
   // near to the equator and the square base has a worst case alignment to the
   // longitude and latitude lines (45 degrees tilted), the distance estimate
   // gets a little more than 125m (it's upper bound estimate is 219m)
-  ASSERT_GE(
-      sja.getMaxDistFromMidpointToAnyPointInsideTheBox(area_eiffel),
-      125);
-  ASSERT_DOUBLE_EQ(sja.getMaxDistFromMidpointToAnyPointInsideTheBox(
-          area_eiffel),
+  ASSERT_GE(sja.getMaxDistFromMidpointToAnyPointInsideTheBox(boxEiffel), 125);
+  ASSERT_DOUBLE_EQ(sja.getMaxDistFromMidpointToAnyPointInsideTheBox(boxEiffel),
       sja.getMaxDistFromMidpointToAnyPointInsideTheBox(
-          area_eiffel, midpoint_eiffel));
+          boxEiffel, midpoint_eiffel));
 
   // the following polygon is from the Minster of Freiburg
-  auto area_minster = sja.calculateBoundingBoxOfArea(
+  BoostGeometryNamespace::AnyGeometry geometryMinster;
+  std::string wktMinster =
       "POLYGON((7.8520522 47.9956071,7.8520528 47.9955872,7.8521103 "
       "47.995588,7.8521117 47.9955419,7.852113 47.9954975,7.8520523 "
       "47.9954968,7.8520527 47.995477,7.8521152 47.9954775,7.8521154 "
@@ -1433,43 +1440,45 @@ TEST(SpatialJoin, getMaxDistFromMidpointToAnyPointInsideTheBox) {
       "47.9956433,7.8522882 47.995635,7.8522723 47.9956351,7.8522611 "
       "47.9956281,7.8522613 47.9956189,7.8521543 47.9956174,7.852153 "
       "47.9956591,7.8521196 47.9956587,7.8521209 47.995617,7.8521109 "
-      "47.9956168,7.8521111 47.9956079,7.8520522 47.9956071))");
-  auto midpoint_minster =
-      sja.calculateMidpointOfBox(area_minster);
-  ASSERT_GE(
-      sja.getMaxDistFromMidpointToAnyPointInsideTheBox(area_minster),
-      80);
+      "47.9956168,7.8521111 47.9956079,7.8520522 47.9956071))";
+  boost::geometry::read_wkt(wktMinster, geometryMinster);
+  Box boxMinster = boost::apply_visitor(BoostGeometryNamespace::BoundingBoxVisitor(), geometryMinster);
+  auto midpointMinster = sja.calculateMidpointOfBox(boxMinster);
+  ASSERT_GE(sja.getMaxDistFromMidpointToAnyPointInsideTheBox(boxMinster), 80);
   ASSERT_DOUBLE_EQ(sja.getMaxDistFromMidpointToAnyPointInsideTheBox(
-          area_minster), sja.getMaxDistFromMidpointToAnyPointInsideTheBox(
-          area_minster, midpoint_minster));
+          boxMinster), sja.getMaxDistFromMidpointToAnyPointInsideTheBox(
+          boxMinster, midpointMinster));
 
   // the following polygon is from the university building 101 in freiburg
-  auto area_uni = sja.calculateBoundingBoxOfArea(
+  BoostGeometryNamespace::AnyGeometry geometryUni;
+  std::string wktUni =
       "POLYGON((7.8346338 48.0126612,7.8348921 48.0123905,7.8349457 "
       "48.0124216,7.8349855 48.0124448,7.8353244 48.0126418,7.8354091 "
       "48.0126911,7.8352246 48.0129047,7.8351668 48.0128798,7.8349471 "
-      "48.0127886,7.8347248 48.0126986,7.8346338 48.0126612))");
-  auto midpoint_uni = sja.calculateMidpointOfBox(area_uni);
-  ASSERT_GE(
-      sja.getMaxDistFromMidpointToAnyPointInsideTheBox(area_uni),
-      40);
-  ASSERT_DOUBLE_EQ(sja.getMaxDistFromMidpointToAnyPointInsideTheBox(area_uni),
+      "48.0127886,7.8347248 48.0126986,7.8346338 48.0126612))";
+  boost::geometry::read_wkt(wktUni, geometryUni);
+  Box boxUni = boost::apply_visitor(BoostGeometryNamespace::BoundingBoxVisitor(), geometryUni);
+  auto midpointUni = sja.calculateMidpointOfBox(boxUni);
+  ASSERT_GE(sja.getMaxDistFromMidpointToAnyPointInsideTheBox(boxUni), 40);
+  ASSERT_DOUBLE_EQ(sja.getMaxDistFromMidpointToAnyPointInsideTheBox(boxUni),
       sja.getMaxDistFromMidpointToAnyPointInsideTheBox(
-          area_uni, midpoint_uni));
+          boxUni, midpointUni));
 
   // the following polygon is from the London Eye
-  auto area_eye = sja.calculateBoundingBoxOfArea(
+  BoostGeometryNamespace::AnyGeometry geometryEye;
+  std::string wktEye =
       "POLYGON((-0.1198608 51.5027451,-0.1197395 51.5027354,-0.1194922 "
-      "51.5039381,-0.1196135 51.5039478,-0.1198608 51.5027451))");
-  auto midpoint_eye = sja.calculateMidpointOfBox(area_eye);
-  ASSERT_GE(
-      sja.getMaxDistFromMidpointToAnyPointInsideTheBox(area_eye), 70);
-  ASSERT_DOUBLE_EQ(
-      sja.getMaxDistFromMidpointToAnyPointInsideTheBox(area_eye),
-      sja.getMaxDistFromMidpointToAnyPointInsideTheBox(area_eye, midpoint_eye));
+      "51.5039381,-0.1196135 51.5039478,-0.1198608 51.5027451))";
+  boost::geometry::read_wkt(wktEye, geometryEye);
+  Box boxEye = boost::apply_visitor(BoostGeometryNamespace::BoundingBoxVisitor(), geometryEye);
+  auto midpointEye = sja.calculateMidpointOfBox(boxEye);
+  ASSERT_GE(sja.getMaxDistFromMidpointToAnyPointInsideTheBox(boxEye), 70);
+  ASSERT_DOUBLE_EQ(sja.getMaxDistFromMidpointToAnyPointInsideTheBox(boxEye),
+      sja.getMaxDistFromMidpointToAnyPointInsideTheBox(boxEye, midpointEye));
 
   // the following polygon is from the Statue of liberty
-  auto area_statue = sja.calculateBoundingBoxOfArea(
+  BoostGeometryNamespace::AnyGeometry geometryStatue;
+  std::string wktStatue =
       "POLYGON((-74.0451069 40.6893455,-74.045004 40.6892215,-74.0451023 "
       "40.6891073,-74.0449107 40.6890721,-74.0449537 40.6889343,-74.0447746 "
       "40.6889506,-74.0446495 40.6888049,-74.0445067 40.6889076,-74.0442008 "
@@ -1481,15 +1490,13 @@ TEST(SpatialJoin, getMaxDistFromMidpointToAnyPointInsideTheBox) {
       "40.6896561,-74.0447498 40.6896615,-74.0447718 40.6895577,-74.0447983 "
       "40.6895442,-74.0448287 40.6895279,-74.0449638 40.6895497,-74.0449628 "
       "40.6895443,-74.044961 40.6895356,-74.0449576 40.6895192,-74.044935 "
-      "40.689421,-74.0451069 40.6893455))");
-  auto midpoint_statue =
-      sja.calculateMidpointOfBox(area_statue);
-  ASSERT_GE(
-      sja.getMaxDistFromMidpointToAnyPointInsideTheBox(area_statue), 100);
-  ASSERT_DOUBLE_EQ(
-      sja.getMaxDistFromMidpointToAnyPointInsideTheBox(area_statue),
-      sja.getMaxDistFromMidpointToAnyPointInsideTheBox(
-          area_statue, midpoint_statue));
+      "40.689421,-74.0451069 40.6893455))";
+  boost::geometry::read_wkt(wktStatue, geometryStatue);
+  Box boxStatue = boost::apply_visitor(BoostGeometryNamespace::BoundingBoxVisitor(), geometryStatue);
+  auto midpointStatue = sja.calculateMidpointOfBox(boxStatue);
+  ASSERT_GE(sja.getMaxDistFromMidpointToAnyPointInsideTheBox(boxStatue), 100);
+  ASSERT_DOUBLE_EQ(sja.getMaxDistFromMidpointToAnyPointInsideTheBox(boxStatue),
+      sja.getMaxDistFromMidpointToAnyPointInsideTheBox(boxStatue, midpointStatue));
 }
 
 QueryExecutionContext* getAllGeometriesQEC() {

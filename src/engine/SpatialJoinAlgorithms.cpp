@@ -50,19 +50,36 @@ std::string_view SpatialJoinAlgorithms::betweenQuotes(
   }
 }
 
-struct DistanceVisitor : public boost::static_visitor<double> {
-  template <typename Geometry1, typename Geometry2>
-  double operator()(const Geometry1& geom1, const Geometry2& geom2) const {
-    return bg::distance(geom1, geom2);
-  }
-};
+bool SpatialJoinAlgorithms::getAnyGeometry(const IdTable* idtable, size_t row,
+                                  size_t col, AnyGeometry& geometry) const {
+  auto printWarning = [alreadyWarned = false,
+                       &spatialJoin = spatialJoin_]() mutable {
+    if (!alreadyWarned) {
+      std::string warning =
+          "The input to a spatial join contained at least one element, "
+          "that is not a point or polygon geometry and is thus skipped. Note "
+          "that QLever currently only accepts point or polygon geometries for "
+          "the spatial joins";
+      AD_LOG_WARN << warning << std::endl;
+      alreadyWarned = true;
+      if (spatialJoin.has_value()) {
+        AD_CORRECTNESS_CHECK(spatialJoin.value() != nullptr);
+        spatialJoin.value()->addWarning(warning);
+      }
+    }
+  };
 
-std::string SpatialJoinAlgorithms::getAreaString(const IdTable* idtable, size_t row, size_t col) const {
   std::string str(betweenQuotes(ExportQueryExecutionTrees::idToStringAndType(
                              qec_->getIndex(), idtable->at(row, col), {})
                              .value()
                              .first));
-  return str;
+  try {
+    bg::read_wkt(str, geometry);
+  } catch (...) {
+    printWarning();
+    return false;
+  }
+  return true;
 }
 
 // ____________________________________________________________________________
@@ -75,16 +92,15 @@ Id SpatialJoinAlgorithms::computeDist(const IdTable* idTableLeft,
       [&](const IdTable* idtable, size_t row, size_t col,
           std::optional<GeoPoint> point) -> std::optional<AnyGeometry> {
     AnyGeometry geometry;
-    try {
-      if (!point) {
-        // std::string areastring(getAreaString(idtable, row, col));
-        boost::geometry::read_wkt(getAreaString(idtable, row, col), geometry);
-      } else {
-        geometry = Point(point.value().getLng(), point.value().getLat());
+    
+    if (!point) {
+      if (!getAnyGeometry(idtable, row, col, geometry)) {
+        return std::nullopt;
       }
-    } catch (...) {
-      return std::nullopt;
+    } else {
+      geometry = Point(point.value().getLng(), point.value().getLat());
     }
+    
     return geometry;
   };
 
@@ -92,16 +108,15 @@ Id SpatialJoinAlgorithms::computeDist(const IdTable* idTableLeft,
   // information will be stored in an ID, just like GeoPoint
   auto getAreaPoint = [&](const IdTable* idtable, size_t row,
                           size_t col) -> std::optional<GeoPoint> {
-    std::string areastring = getAreaString(idtable, row, col);
-
-    Box areaBox;
-    try {
-      areaBox = calculateBoundingBoxOfArea(areastring);
-    } catch (...) {
+    AnyGeometry geometry;
+    if (!getAnyGeometry(idtable, row, col, geometry)) {
       // nothing to do. When parsing a point or an area fails, a warning message
       // gets printed at another place and the point/area just gets skipped
       return std::nullopt;
     }
+
+    Box areaBox = boost::apply_visitor(BoundingBoxVisitor(), geometry);
+    
     Point p = calculateMidpointOfBox(areaBox);
     return GeoPoint(p.get<1>(), p.get<0>());
   };
@@ -530,23 +545,6 @@ std::array<bool, 2> SpatialJoinAlgorithms::isAPoleTouched(
   return std::array{northPoleReached, southPoleReached};
 }
 
-struct BoundingBoxVisitor : public boost::static_visitor<Box> {
-  template <typename Geometry>
-  Box operator()(const Geometry& geometry) const {
-    Box box;
-    bg::envelope(geometry, box);
-    return box;
-  }
-};
-
-// ____________________________________________________________________________
-Box SpatialJoinAlgorithms::calculateBoundingBoxOfArea(
-    const std::string& wktString) const {
-  AnyGeometry geometry;
-  boost::geometry::read_wkt(wktString, geometry);
-  return boost::apply_visitor(BoundingBoxVisitor(), geometry);
-}
-
 // ____________________________________________________________________________
 Point SpatialJoinAlgorithms::calculateMidpointOfBox(const Box& box) const {
   double lng = (box.min_corner().get<0>() + box.max_corner().get<0>()) / 2.0;
@@ -570,23 +568,6 @@ double SpatialJoinAlgorithms::getMaxDistFromMidpointToAnyPointInsideTheBox(
 
 // ____________________________________________________________________________
 Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
-  auto printWarning = [alreadyWarned = false,
-                       &spatialJoin = spatialJoin_]() mutable {
-    if (!alreadyWarned) {
-      std::string warning =
-          "The input to a spatial join contained at least one element, "
-          "that is not a point or polygon geometry and is thus skipped. Note "
-          "that QLever currently only accepts point or polygon geometries for "
-          "the spatial joins";
-      AD_LOG_WARN << warning << std::endl;
-      alreadyWarned = true;
-      if (spatialJoin.has_value()) {
-        AD_CORRECTNESS_CHECK(spatialJoin.value() != nullptr);
-        spatialJoin.value()->addWarning(warning);
-      }
-    }
-  };
-
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
               rightJoinCol, rightSelectedCols, numColumns, maxDist,
               maxResults] = params_;
@@ -615,13 +596,13 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
     Box bbox;
 
     if (!geopoint) {
-      try {
-        std::string areastring = getAreaString(smallerResult, i, smallerResJoinCol);
-        bbox = calculateBoundingBoxOfArea(areastring);
-      } catch (...) {
-        printWarning();
+      
+      AnyGeometry geometry;
+      if (!getAnyGeometry(smallerResult, i, smallerResJoinCol, geometry)) {
         continue;
       }
+      bbox = boost::apply_visitor(BoundingBoxVisitor(), geometry);
+      
     } else {
       // create a box with a side length of at most 1mm to approximate the point
       bbox = Box(Point(geopoint.value().getLng(), geopoint.value().getLat()),
@@ -641,17 +622,17 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
     std::vector<Box> bbox;
 
     if (!geopoint) {
-      try {
-        std::string areastring = getAreaString(otherResult, i, otherResJoinCol);
-        auto areaBox = calculateBoundingBoxOfArea(areastring);
-        auto midpoint = calculateMidpointOfBox(areaBox);
-        bbox = computeBoundingBox(
-            midpoint,
-            getMaxDistFromMidpointToAnyPointInsideTheBox(areaBox, midpoint));
-      } catch (...) {
-        printWarning();
+      
+      AnyGeometry geometry;
+      if (!getAnyGeometry(otherResult, i, otherResJoinCol, geometry)) {
         continue;
       }
+      auto areaBox = boost::apply_visitor(BoundingBoxVisitor(), geometry);
+      auto midpoint = calculateMidpointOfBox(areaBox);
+      bbox = computeBoundingBox(
+          midpoint,
+          getMaxDistFromMidpointToAnyPointInsideTheBox(areaBox, midpoint));
+      
     } else {
       bbox = computeBoundingBox(
           Point(geopoint.value().getLng(), geopoint.value().getLat()));
