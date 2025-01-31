@@ -231,11 +231,13 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
     ParsedQuery::GraphPattern* rootPattern) {
   QueryPlanner::GraphPatternPlanner optimizer{*this, rootPattern};
   for (auto& child : rootPattern->_graphPatterns) {
+    optimizer.candidatesForUnion.push_back(child);
     child.visit([&optimizer](auto& arg) {
       return optimizer.graphPatternOperationVisitor(arg);
     });
     checkCancellation();
   }
+
   // one last pass in case the last one was not an optional
   // if the last child was not an optional clause we still have unjoined
   // candidates. Do one last pass over them.
@@ -2632,8 +2634,30 @@ void QueryPlanner::GraphPatternPlanner::visitSubquery(
 }
 // _______________________________________________________________
 
+namespace {
+template <typename T>
+auto is(const auto& gp) {
+  return std::holds_alternative<T>(gp);
+}
+}  // namespace
+namespace pq = parsedQuery;
 // _______________________________________________________________
 void QueryPlanner::GraphPatternPlanner::optimizeCommutatively() {
+  auto isOptimizationBarrier = [](const parsedQuery::GraphPatternOperation& g) {
+    return is<pq::Optional>(g) || is<pq::Minus>(g) || is<pq::Bind>(g);
+  };
+  std::erase_if(candidatesForUnion, isOptimizationBarrier);
+  auto isUnion = [](const parsedQuery::GraphPatternOperation& gp) {
+    return is<parsedQuery::Union>(gp);
+  };
+  ql::ranges::sort(candidatesForUnion, {}, isUnion);
+  auto beg = ql::ranges::lower_bound(candidatesForUnion, true,
+                                     ql::ranges::less{}, isUnion);
+  AD_CORRECTNESS_CHECK(beg > candidatesForUnion.begin() ||
+                       ql::ranges::all_of(candidatesForUnion, isUnion));
+  size_t numUnions = candidatesForUnion.end() - beg;
+  size_t numNonUnions = candidatesForUnion.size() - numUnions;
+
   auto tg = planner_.createTripleGraph(&candidateTriples_);
   auto lastRow = planner_
                      .fillDpTab(tg, rootPattern_->_filters,
@@ -2641,6 +2665,31 @@ void QueryPlanner::GraphPatternPlanner::optimizeCommutatively() {
                      .back();
   candidateTriples_._triples.clear();
   candidatePlans_.clear();
+  if (numUnions == 1 && numNonUnions > 0) {
+    LOG(INFO) << "Recursing for union optimization" << std::endl;
+    auto parsedUnion =
+        std::move(std::get<parsedQuery::Union>(candidatesForUnion.back()));
+    candidatesForUnion.pop_back();
+    for (auto& op : candidatesForUnion) {
+      parsedUnion._child1._graphPatterns.push_back(op);
+      parsedUnion._child2._graphPatterns.push_back(op);
+    }
+    ql::ranges::copy(rootPattern_->_filters,
+                     std::back_inserter(parsedUnion._child1._filters));
+    ql::ranges::copy(rootPattern_->_filters,
+                     std::back_inserter(parsedUnion._child2._filters));
+
+    candidatesForUnion.clear();
+    visitUnion(parsedUnion);
+    planner_.checkCancellation();
+    AD_CORRECTNESS_CHECK(candidatePlans_.size() == 1);
+    if (RuntimeParameters().get<"always-multiply-unions">()) {
+      lastRow.clear();
+    }
+    ql::ranges::move(candidatePlans_.back(), std::back_inserter(lastRow));
+    candidatePlans_.clear();
+  }
+  candidatesForUnion.clear();
   candidatePlans_.push_back(std::move(lastRow));
   planner_.checkCancellation();
 }

@@ -512,6 +512,9 @@ class QueryPlanner {
     // pattern, and plans from different rows can be joined in an arbitrary
     // order.
     std::vector<std::vector<SubtreePlan>> candidatePlans_{};
+    // TODO<joka921> Comment
+    std::vector<parsedQuery::GraphPatternOperation> candidatesForUnion{};
+    std::vector<SparqlFilter> filtersForUnion{};
 
     // Triples from BasicGraphPatterns that can be joined arbitrarily
     // with each other and with the contents of  `candidatePlans_`
