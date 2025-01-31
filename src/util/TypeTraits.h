@@ -85,7 +85,7 @@ struct FirstWrapper : public std::type_identity<T> {};
 /// isInstantiation<std::vector<int>, std::vector> == true;
 /// isInstantiation<const std::vector<int>&, std::vector> == false;
 template <typename T, template <typename...> typename TemplatedType>
-concept isInstantiation =
+CPP_concept isInstantiation =
     detail::IsInstantiationOf<TemplatedType>::template Instantiation<T>::value;
 
 /// The concept is fulfilled iff `T` is `ad_utility::SimilarTo` an
@@ -94,8 +94,17 @@ concept isInstantiation =
 /// similarToInstantiation<std::vector, std::vector<int>> == true;
 /// similarToInstantiation<std::vector, const std::vector<int>&> == true;
 template <typename T, template <typename...> typename TemplatedType>
-concept similarToInstantiation =
+CPP_concept similarToInstantiation =
     isInstantiation<std::decay_t<T>, TemplatedType>;
+
+/// @brief The concept is fulfilled if `T` is an instantiation of any
+/// of the types passed in ...Ts
+///
+/// similarToAnyInstantiationOf<std::vector, std::vector<int>,
+/// std::vector<char>> == true
+template <typename T, template <typename...> typename... Ts>
+CPP_concept similarToAnyInstantiationOf =
+    (... || similarToInstantiation<T, Ts>);
 
 /// isVector<T> is true if and only if T is an instantiation of std::vector
 template <typename T>
@@ -118,7 +127,7 @@ constexpr static bool isArray<std::array<T, N>> = true;
 
 // `SimilarToArray` is also true for `std::array<...>&`, etc.
 template <typename T>
-concept SimilarToArray = isArray<std::decay_t<T>>;
+CPP_concept SimilarToArray = isArray<std::decay_t<T>>;
 
 /// Two types are similar, if they are the same when we remove all cv (const or
 /// volatile) qualifiers and all references
@@ -128,11 +137,11 @@ constexpr static bool isSimilar =
 
 /// A concept for similarity
 template <typename T, typename U>
-concept SimilarTo = isSimilar<T, U>;
+CPP_concept SimilarTo = isSimilar<T, U>;
 
 /// True iff `T` is similar (see above) to any of the `Ts...`.
 template <typename T, typename... Ts>
-concept SimilarToAny = (... || isSimilar<T, Ts>);
+CPP_concept SimilarToAny = (... || isSimilar<T, Ts>);
 
 /// True iff `T` is the same as any of the `Ts...`.
 template <typename T, typename... Ts>
@@ -165,14 +174,15 @@ or `std::variant`). and `T` is `isSimilar` (see above) to any of the type
 parameters.
 */
 template <typename T, typename Template>
-concept SimilarToAnyTypeIn = detail::SimilarToAnyTypeInImpl<T, Template>::value;
+CPP_concept SimilarToAnyTypeIn =
+    detail::SimilarToAnyTypeInImpl<T, Template>::value;
 
 /*
 Equivalent to `SimilarToAnyTypeIn` (see above), but checks for exactly matching
 types via `std::same_as`.
 */
 template <typename T, typename Template>
-concept SameAsAnyTypeIn = detail::SameAsAnyTypeInImpl<T, Template>::value;
+CPP_concept SameAsAnyTypeIn = detail::SameAsAnyTypeInImpl<T, Template>::value;
 
 /// A templated bool that is always false,
 /// independent of the template parameter.
@@ -253,7 +263,7 @@ using First = typename detail::FirstWrapper<Ts...>::type;
 
 /// Concept for `std::is_invocable_r_v`.
 template <typename Func, typename R, typename... ArgTypes>
-concept InvocableWithConvertibleReturnType =
+CPP_concept InvocableWithConvertibleReturnType =
     std::is_invocable_r_v<R, Func, ArgTypes...>;
 
 /*
@@ -270,7 +280,7 @@ are the same when ignoring `const`, `volatile`, and reference qualifiers.
 `isSimilar` to `Ret`.
 */
 template <typename Fn, typename Ret, typename... Args>
-concept InvocableWithSimilarReturnType =
+CPP_concept InvocableWithSimilarReturnType =
     std::invocable<Fn, Args...> &&
     isSimilar<std::invoke_result_t<Fn, Args...>, Ret>;
 
@@ -279,7 +289,7 @@ concept InvocableWithSimilarReturnType =
  `Ret`.
 */
 template <typename Fn, typename Ret, typename... Args>
-concept InvocableWithExactReturnType =
+CPP_concept InvocableWithExactReturnType =
     std::invocable<Fn, Args...> &&
     std::same_as<std::invoke_result_t<Fn, Args...>, Ret>;
 
@@ -293,7 +303,7 @@ invocable type is regular invocable, or not.
 For more information see: https://en.cppreference.com/w/cpp/concepts/invocable
 */
 template <typename Fn, typename Ret, typename... Args>
-concept RegularInvocableWithSimilarReturnType =
+CPP_concept RegularInvocableWithSimilarReturnType =
     std::regular_invocable<Fn, Args...> &&
     isSimilar<std::invoke_result_t<Fn, Args...>, Ret>;
 
@@ -307,7 +317,7 @@ invocable type is regular invocable, or not.
 For more information see: https://en.cppreference.com/w/cpp/concepts/invocable
 */
 template <typename Fn, typename Ret, typename... Args>
-concept RegularInvocableWithExactReturnType =
+CPP_concept RegularInvocableWithExactReturnType =
     std::regular_invocable<Fn, Args...> &&
     std::same_as<std::invoke_result_t<Fn, Args...>, Ret>;
 
@@ -316,5 +326,5 @@ concept RegularInvocableWithExactReturnType =
 // might be lvalue, because the && denotes a forwarding reference. void f(Rvalue
 // auto&& x) // guaranteed rvalue reference, can safely be moved.
 template <typename T>
-concept Rvalue = std::is_rvalue_reference_v<T&&>;
+CPP_concept Rvalue = std::is_rvalue_reference_v<T&&>;
 }  // namespace ad_utility
