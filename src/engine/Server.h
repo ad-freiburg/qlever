@@ -128,7 +128,9 @@ class Server {
   /// This is only a wrapper for `processQuery` and `processUpdate` which
   /// does the error handling.
   /// \param params The key-value-pairs  sent in the HTTP GET request.
-  /// \param operation Must be Query or Update.
+  /// \param parsedOperation The parsed query or update to process.
+  /// \param cancellationHandle The cancellation handle that is used to cancel.
+  /// \param qec The query execution context to use for the processing.
   /// \param requestTimer Timer that measure the total processing
   ///                     time of this request.
   /// \param request The HTTP request.
@@ -181,6 +183,7 @@ class Server {
       const ad_utility::url_parser::ParamValueMap& params);
   FRIEND_TEST(ServerTest, determineResultPinning);
   template <typename Operation>
+  // Parse an operation (Query or Update).
   auto parseOperation(const ad_utility::url_parser::ParamValueMap& params,
                       Operation&& operation,
                       const ad_utility::httpUtils::HttpRequest auto& request,
@@ -190,6 +193,7 @@ class Server {
                                         SharedCancellationHandle handle,
                                         TimeLimit timeLimit,
                                         const ad_utility::Timer& requestTimer);
+  // Plan a parsed query.
   Awaitable<PlannedQuery> planQuery(net::static_thread_pool& thread_pool,
                                     ParsedQuery&& operation,
                                     ad_utility::Timer& requestTimer,
