@@ -8,6 +8,7 @@
 
 #include <absl/cleanup/cleanup.h>
 
+#include "../../cmake-build-clang-16-debug-backports/_deps/range-v3-src/include/range/v3/experimental/view/shared.hpp"
 #include "util/Exception.h"
 #include "util/Generators.h"
 #include "util/Log.h"
@@ -53,6 +54,18 @@ Result::Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
                SharedLocalVocabWrapper localVocab)
     : data_{IdTableSharedLocalVocabPair{std::move(idTable),
                                         std::move(localVocab.localVocab_)}},
+      sortedBy_{std::move(sortedBy)} {
+  AD_CONTRACT_CHECK(std::get<IdTableSharedLocalVocabPair>(data_).localVocab_ !=
+                    nullptr);
+  assertSortOrderIsRespected(this->idTable(), sortedBy_);
+}
+
+// _____________________________________________________________________________
+Result::Result(std::shared_ptr<const IdTable> idTablePtr,
+               std::vector<ColumnIndex> sortedBy, LocalVocab&& localVocab)
+    : data_{IdTableSharedLocalVocabPair{
+          std::move(idTablePtr),
+          std::make_shared<const LocalVocab>(std::move(localVocab))}},
       sortedBy_{std::move(sortedBy)} {
   AD_CONTRACT_CHECK(std::get<IdTableSharedLocalVocabPair>(data_).localVocab_ !=
                     nullptr);
@@ -120,8 +133,13 @@ void Result::applyLimitOffset(
   }
   if (isFullyMaterialized()) {
     ad_utility::timer::Timer limitTimer{ad_utility::timer::Timer::Started};
-    resizeIdTable(std::get<IdTableSharedLocalVocabPair>(data_).idTable_,
-                  limitOffset);
+
+    auto& tableOrPtr = std::get<IdTableSharedLocalVocabPair>(data_).idTable_;
+    if (auto sharedTable =
+            std::get_if<std::shared_ptr<const IdTable>>(&tableOrPtr)) {
+      tableOrPtr = (**sharedTable).clone();
+    }
+    resizeIdTable(std::get<IdTable>(tableOrPtr), limitOffset);
     limitTimeCallback(limitTimer.msecs(), idTable());
   } else {
     auto generator = [](LazyResult original, LimitOffsetClause limitOffset,
@@ -177,7 +195,7 @@ void Result::assertThatLimitWasRespected(const LimitOffsetClause& limitOffset) {
 
 // _____________________________________________________________________________
 void Result::checkDefinedness(const VariableToColumnMap& varColMap) {
-  auto performCheck = [](const auto& map, IdTable& idTable) {
+  auto performCheck = [](const auto& map, const IdTable& idTable) {
     return ql::ranges::all_of(map, [&](const auto& varAndCol) {
       const auto& [columnIndex, mightContainUndef] = varAndCol.second;
       if (mightContainUndef == ColumnIndexAndTypeInfo::AlwaysDefined) {
@@ -189,8 +207,7 @@ void Result::checkDefinedness(const VariableToColumnMap& varColMap) {
     });
   };
   if (isFullyMaterialized()) {
-    AD_EXPENSIVE_CHECK(performCheck(
-        varColMap, std::get<IdTableSharedLocalVocabPair>(data_).idTable_));
+    AD_EXPENSIVE_CHECK(performCheck(varColMap, idTable()));
   } else {
     auto generator = [](LazyResult original,
                         [[maybe_unused]] VariableToColumnMap varColMap,
@@ -250,7 +267,17 @@ void Result::assertSortOrderIsRespected(
 // _____________________________________________________________________________
 const IdTable& Result::idTable() const {
   AD_CONTRACT_CHECK(isFullyMaterialized());
-  return std::get<IdTableSharedLocalVocabPair>(data_).idTable_;
+  auto visitor = []<typename T>(const T& arg) -> const IdTable& {
+    if constexpr (std::is_same_v<T, IdTable>) {
+      return arg;
+    } else {
+      static_assert(std::is_same_v<T, std::shared_ptr<const IdTable>>);
+      AD_CORRECTNESS_CHECK(arg != nullptr);
+      return *arg;
+    }
+  };
+  return std::visit(visitor,
+                    std::get<IdTableSharedLocalVocabPair>(data_).idTable_);
 }
 
 // _____________________________________________________________________________

@@ -9,16 +9,22 @@
 #include "engine/Result.h"
 #include "util/Algorithm.h"
 #include "util/Random.h"
+#include "util/TransparentFunctors.h"
 
 // An operation that yields a given `IdTable` as its result. It is used for
 // unit testing purposes when we need to specify the subtrees of another
 // operation.
+namespace detail {
+auto getTables(const auto& tables) {
+  return ql::views::transform(tables, ad_utility::dereference);
+}
+}  // namespace detail
 class ValuesForTesting : public Operation {
  public:
   using VarVector = std::vector<std::optional<Variable>>;
 
  private:
-  std::vector<IdTable> tables_;
+  std::vector<std::shared_ptr<const IdTable>> tables_;
   VariableToColumnMap variables_;
   bool supportsLimit_;
   // Those can be manually overwritten for testing using the respective getters.
@@ -46,7 +52,7 @@ class ValuesForTesting : public Operation {
         multiplicity_{multiplicity},
         forceFullyMaterialized_{forceFullyMaterialized} {
     AD_CONTRACT_CHECK(variables.size() == table.numColumns());
-    tables_.push_back(std::move(table));
+    tables_.push_back(std::make_shared<const IdTable>(std::move(table)));
     variables_ = computeVarMapFromVector(variables);
   }
 
@@ -63,7 +69,7 @@ class ValuesForTesting : public Operation {
         localVocab_{std::move(localVocab)},
         multiplicity_{},
         forceFullyMaterialized_{false} {
-    tables_.push_back(std::move(table));
+    tables_.push_back(std::make_shared<const IdTable>(std::move(table)));
   }
   explicit ValuesForTesting(QueryExecutionContext* ctx,
                             std::vector<IdTable> tables, VarVector variables,
@@ -71,7 +77,7 @@ class ValuesForTesting : public Operation {
                             std::vector<ColumnIndex> sortedColumns = {},
                             LocalVocab localVocab = LocalVocab{})
       : Operation{ctx},
-        tables_{std::move(tables)},
+        tables_{},
         supportsLimit_{false},
         sizeEstimate_{0},
         costEstimate_{0},
@@ -79,12 +85,16 @@ class ValuesForTesting : public Operation {
         resultSortedColumns_{std::move(sortedColumns)},
         localVocab_{std::move(localVocab)},
         multiplicity_{std::nullopt} {
-    AD_CONTRACT_CHECK(
-        ql::ranges::all_of(tables_, [&variables](const IdTable& table) {
+    tables_.reserve(tables.size());
+    for (auto& table : tables) {
+      tables_.push_back(std::make_shared<const IdTable>(std::move(table)));
+    }
+    AD_CONTRACT_CHECK(ql::ranges::all_of(
+        detail::getTables(tables_), [&variables](const IdTable& table) {
           return variables.size() == table.numColumns();
         }));
     size_t totalRows = 0;
-    for (const IdTable& idTable : tables_) {
+    for (const IdTable& idTable : detail::getTables(tables_)) {
       totalRows += idTable.numRows();
     }
     sizeEstimate_ = totalRows;
@@ -98,12 +108,12 @@ class ValuesForTesting : public Operation {
 
   // ___________________________________________________________________________
   ProtoResult computeResult(bool requestLaziness) override {
-    if (requestLaziness && !forceFullyMaterialized_) {
+    if (requestLaziness && !forceFullyMaterialized_ && tables_.size() != 1) {
       // Not implemented yet
       AD_CORRECTNESS_CHECK(!supportsLimit_);
       std::vector<IdTable> clones;
       clones.reserve(tables_.size());
-      for (const IdTable& idTable : tables_) {
+      for (const IdTable& idTable : detail::getTables(tables_)) {
         clones.push_back(idTable.clone());
       }
       auto generator = [](auto idTables,
@@ -114,17 +124,21 @@ class ValuesForTesting : public Operation {
       }(std::move(clones), localVocab_.clone());
       return {std::move(generator), resultSortedOn()};
     }
+
+    if (tables_.size() == 1 && getLimit().isUnconstrained()) {
+      return {tables_.at(0), resultSortedOn(), localVocab_.clone()};
+    }
     std::optional<IdTable> optionalTable;
-    if (tables_.size() > 1) {
-      IdTable aggregateTable{tables_.at(0).numColumns(),
-                             tables_.at(0).getAllocator()};
-      for (const IdTable& idTable : tables_) {
+    if (detail::getTables(tables_).size() > 1) {
+      IdTable aggregateTable{tables_.at(0)->numColumns(),
+                             tables_.at(0)->getAllocator()};
+      for (const IdTable& idTable : detail::getTables(tables_)) {
         aggregateTable.insertAtEnd(idTable);
       }
       optionalTable = std::move(aggregateTable);
     }
     auto table = optionalTable.has_value() ? std::move(optionalTable).value()
-                                           : tables_.at(0).clone();
+                                           : tables_.at(0)->clone();
     if (supportsLimit_) {
       table.erase(table.begin() + getLimit().upperBound(table.size()),
                   table.end());
@@ -144,15 +158,16 @@ class ValuesForTesting : public Operation {
   // ___________________________________________________________________________
   string getCacheKeyImpl() const override {
     std::stringstream str;
-    auto numRowsView = tables_ | ql::views::transform(&IdTable::numRows);
+    auto numRowsView =
+        detail::getTables(tables_) | ql::views::transform(&IdTable::numRows);
     auto totalNumRows = std::reduce(numRowsView.begin(), numRowsView.end(), 0);
-    auto numCols = tables_.empty() ? 0 : tables_.at(0).numColumns();
+    auto numCols = tables_.empty() ? 0 : tables_.at(0)->numColumns();
     str << "Values for testing with " << numCols << " columns and "
         << totalNumRows << " rows. ";
     if (totalNumRows > 1000) {
       str << ad_utility::FastRandomIntGenerator<int64_t>{}();
     } else {
-      for (const IdTable& idTable : tables_) {
+      for (const IdTable& idTable : detail::getTables(tables_)) {
         for (size_t i = 0; i < idTable.numColumns(); ++i) {
           for (Id entry : idTable.getColumn(i)) {
             str << entry << ' ';
@@ -172,7 +187,7 @@ class ValuesForTesting : public Operation {
   size_t getResultWidth() const override {
     // Assume a width of 1 if we have no tables and no other information to base
     // it on because 0 would otherwise cause stuff to break.
-    return tables_.empty() ? 1 : tables_.at(0).numColumns();
+    return tables_.empty() ? 1 : tables_.at(0)->numColumns();
   }
 
   vector<ColumnIndex> resultSortedOn() const override {
@@ -197,7 +212,8 @@ class ValuesForTesting : public Operation {
 
   bool knownEmptyResult() override {
     return ql::ranges::all_of(
-        tables_, [](const IdTable& table) { return table.empty(); });
+        detail::getTables(tables_),
+        [](const IdTable& table) { return table.empty(); });
   }
 
  private:
@@ -207,8 +223,8 @@ class ValuesForTesting : public Operation {
       if (!vars.at(i).has_value()) {
         continue;
       }
-      bool containsUndef =
-          ql::ranges::any_of(tables_, [&i](const IdTable& table) {
+      bool containsUndef = ql::ranges::any_of(
+          detail::getTables(tables_), [&i](const IdTable& table) {
             return ql::ranges::any_of(table.getColumn(i),
                                       [](Id id) { return id.isUndefined(); });
           });

@@ -10,7 +10,7 @@ std::shared_ptr<ValuesForTesting> NamedQueryCache ::getOperation(
   const auto& [table, map, sortedOn] = get(key);
   // TODO<joka921> we should get rid of the copies for the IdTable (and
   // probably the other members) especially for larger results).
-  return std::make_shared<ValuesForTesting>(ctx, table.clone(), map);
+  return std::make_shared<ValuesForTesting>(ctx, table.clone(), map, sortedOn);
 }
 
 // _____________________________________________________________________________
