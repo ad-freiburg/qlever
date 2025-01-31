@@ -203,6 +203,16 @@ if (${USE_CPP_17_BACKPORTS})
     add_definitions("-DQLEVER_CPP_17 -DCPP_CXX_CONCEPTS=0")
 endif()
 
+set(VOCAB_IN_MEMORY OFF CACHE BOOL "Store QLever's vocabulary completely in RAM")
+if (${VOCAB_IN_MEMORY})
+    add_definitions("-D_QLEVER_VOCAB_IN_MEMORY")
+endif ()
+
+set(ENABLE_VOCAB_COMPRESSION ON CACHE BOOL "Compress the vocabulary")
+if (${ENABLE_VOCAB_COMPRESSION})
+    add_definitions("-D_QLEVER_ENABLE_VOCAB_COMPRESSION")
+endif ()
+
 # Enable the specification of additional linker flags manually from the commandline
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${ADDITIONAL_LINKER_FLAGS}")
 set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${ADDITIONAL_LINKER_FLAGS}")

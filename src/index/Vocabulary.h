@@ -236,7 +236,23 @@ class Vocabulary {
 };
 
 namespace detail {
-using UnderlyingVocabRdfsVocabulary = VocabularyInMemory;
+// The two mactors `_QLEVER_VOCAB_IN_MEMORY` and
+// `_QLEVER_ENABLE_VOCAB_COMPRESSION` can be used to disable the external vocab
+// and the compression of the vocab at compile time. NOTE: These change the
+// binary format of QLever's index, so changing them requires rebuilding of the
+// indices.
+#ifdef _QLEVER_VOCAB_IN_MEMORY
+using VocabStorage = VocabularyInMemory;
+#else
+using VocabStorage = VocabularyInternalExternal;
+#endif
+
+#ifndef _QLEVER_ENABLE_VOCAB_COMPRESSION
+using UnderlyingVocabRdfsVocabulary = VocabStorage;
+#else
+using UnderlyingVocabRdfsVocabulary = CompressedVocabulary<VocabStorage>;
+#endif
+
 using UnderlyingVocabTextVocabulary = VocabularyInMemory;
 }  // namespace detail
 
