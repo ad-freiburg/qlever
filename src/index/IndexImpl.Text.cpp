@@ -48,7 +48,7 @@ cppcoro::generator<WordsFileLine> IndexImpl::wordsInTextRecords(
       if (!isLiteral(text)) {
         continue;
       }
-      WordsFileLine entityLine{text, true, contextId, 1, true};
+      WordsFileLine entityLine{std::string{text}, true, contextId, 1, true};
       co_yield entityLine;
       std::string_view textView = text;
       textView = textView.substr(0, textView.rfind('"'));

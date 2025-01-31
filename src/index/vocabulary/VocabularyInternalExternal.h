@@ -40,10 +40,7 @@ class VocabularyInternalExternal {
 
   // Read the vocabulary from a file. The file must have been created using a
   // `WordWriter`.
-  void open(const string& filename) {
-    internalVocab_.open(filename + ".internal");
-    externalVocab_.open(filename + ".external");
-  }
+  void open(const string& filename);
 
   // Return the total number of words
   [[nodiscard]] size_t size() const { return externalVocab_.size(); }
