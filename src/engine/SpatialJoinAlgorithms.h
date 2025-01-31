@@ -32,6 +32,8 @@ using AnyGeometry = boost::variant<Point, Linestring, Polygon, MultiPoint,
 }  // namespace BoostGeometryNamespace
 
 class SpatialJoinAlgorithms {
+  using Point = BoostGeometryNamespace::Point;
+  using Box = BoostGeometryNamespace::Box;
  public:
   // initialize the Algorithm with the needed parameters
   SpatialJoinAlgorithms(QueryExecutionContext* qec,
@@ -41,71 +43,6 @@ class SpatialJoinAlgorithms {
   Result BaselineAlgorithm();
   Result S2geometryAlgorithm();
   Result BoundingBoxAlgorithm();
-
-  std::vector<BoostGeometryNamespace::Box>
-  OnlyForTestingWrapperComputeBoundingBox(
-      const BoostGeometryNamespace::Point& startPoint) const {
-    return computeBoundingBox(startPoint);
-  }
-
-  bool OnlyForTestingWrapperContainedInBoundingBoxes(
-      const std::vector<BoostGeometryNamespace::Box>& boundingBox,
-      const BoostGeometryNamespace::Point& point) const {
-    return isContainedInBoundingBoxes(boundingBox, point);
-  }
-
-  BoostGeometryNamespace::Box OnlyForTestingWrapperCalculateBoundingBoxOfArea(
-      const std::string& wktString) const {
-    return calculateBoundingBoxOfArea(wktString);
-  }
-
-  BoostGeometryNamespace::Point OnlyForTestingWrapperCalculateMidpointOfBox(
-      const BoostGeometryNamespace::Box& box) const {
-    return calculateMidpointOfBox(box);
-  }
-
-  void setUseMidpointForAreas_(bool useMidpointForAreas) {
-    useMidpointForAreas_ = useMidpointForAreas;
-  }
-
-  Id OnlyForTestingWrapperComputeDist(const IdTable* idTableLeft,
-                                      const IdTable* idTableRight,
-                                      size_t rowLeft, size_t rowRight,
-                                      ColumnIndex leftPointCol,
-                                      ColumnIndex rightPointCol) const {
-    return computeDist(idTableLeft, idTableRight, rowLeft, rowRight,
-                       leftPointCol, rightPointCol);
-  }
-
-  double OnlyForTestingWrapperGetMaxDistFromMidpointToAnyPointInsideTheBox(
-      const BoostGeometryNamespace::Box& box,
-      std::optional<BoostGeometryNamespace::Point> midpoint =
-          std::nullopt) const {
-    return getMaxDistFromMidpointToAnyPointInsideTheBox(box, midpoint);
-  }
-
- private:
-  // Helper function which returns a GeoPoint if the element of the given table
-  // represents a GeoPoint
-  std::optional<GeoPoint> getPoint(const IdTable* restable, size_t row,
-                                   ColumnIndex col) const;
-
-  // returns everything between the first two quotes. If the string does not
-  // contain two quotes, the string is returned as a whole
-  std::string betweenQuotes(std::string extractFrom) const;
-
-  // Helper function, which computes the distance of two points, where each
-  // point comes from a different result table
-  Id computeDist(const IdTable* resLeft, const IdTable* resRight,
-                 size_t rowLeft, size_t rowRight, ColumnIndex leftPointCol,
-                 ColumnIndex rightPointCol) const;
-
-  // Helper function, which adds a row, which belongs to the result to the
-  // result table. As inputs it uses a row of the left and a row of the right
-  // child result table.
-  void addResultTableEntry(IdTable* result, const IdTable* resultLeft,
-                           const IdTable* resultRight, size_t rowLeft,
-                           size_t rowRight, Id distance) const;
 
   // This function computes the bounding box(es) which represent all points,
   // which are in reach of the starting point with a distance of at most
@@ -122,9 +59,56 @@ class SpatialJoinAlgorithms {
   // midpoint of the bounding box of the area to any point inside the area.
   // The function getMaxDistFromMidpointToAnyPointInsideTheBox() can be used to
   // calculate it.
-  std::vector<BoostGeometryNamespace::Box> computeBoundingBox(
-      const BoostGeometryNamespace::Point& startPoint,
+  std::vector<Box> computeBoundingBox(const Point& startPoint,
       double additionalDist = 0) const;
+
+  // This function returns true, iff the given point is contained in any of the
+  // bounding boxes
+  bool isContainedInBoundingBoxes(const std::vector<Box>& boundingBox,
+      Point point) const;
+
+  // this function calculates the bounding box of a polygon geometry.
+  // This is different to the query box, which is a box, which contains the area
+  // where all results are contained in
+  Box calculateBoundingBoxOfArea(const std::string& wktString) const;
+
+  // calculates the midpoint of the given Box
+  Point calculateMidpointOfBox(const Box& box) const;
+
+  void setUseMidpointForAreas_(bool useMidpointForAreas) {
+    useMidpointForAreas_ = useMidpointForAreas;
+  }
+
+  // Helper function, which computes the distance of two points, where each
+  // point comes from a different result table
+  Id computeDist(const IdTable* resLeft, const IdTable* resRight,
+                 size_t rowLeft, size_t rowRight, ColumnIndex leftPointCol,
+                 ColumnIndex rightPointCol) const;
+
+  // this function calculates the maximum distance from the midpoint of the box
+  // to any other point, which is contained in the box. If the midpoint has
+  // already been calculated, because it is needed in other places as well, it
+  // can be given to the function, otherwise the function calculates the
+  // midpoint itself
+  double getMaxDistFromMidpointToAnyPointInsideTheBox(
+      const Box& box, std::optional<Point> midpoint = std::nullopt) const;
+
+ private:
+  // Helper function which returns a GeoPoint if the element of the given table
+  // represents a GeoPoint
+  std::optional<GeoPoint> getPoint(const IdTable* restable, size_t row,
+                                   ColumnIndex col) const;
+
+  // returns everything between the first two quotes. If the string does not
+  // contain two quotes, the string is returned as a whole
+  std::string_view betweenQuotes(std::string_view extractFrom) const;
+
+  // Helper function, which adds a row, which belongs to the result to the
+  // result table. As inputs it uses a row of the left and a row of the right
+  // child result table.
+  void addResultTableEntry(IdTable* result, const IdTable* resultLeft,
+                           const IdTable* resultRight, size_t rowLeft,
+                           size_t rowRight, Id distance) const;
 
   // This helper function calculates the bounding boxes based on a box, where
   // definitely no match can occur. This means every element in the anti
@@ -134,35 +118,12 @@ class SpatialJoinAlgorithms {
   // gets used, when the usual procedure, would just result in taking a big
   // bounding box, which covers the whole planet (so for extremely large max
   // distances)
-  std::vector<BoostGeometryNamespace::Box> computeBoundingBoxForLargeDistances(
-      const BoostGeometryNamespace::Point& startPoint) const;
+  std::vector<Box> computeBoundingBoxForLargeDistances(
+      const Point& startPoint) const;
 
-  // This function returns true, iff the given point is contained in any of the
-  // bounding boxes
-  bool isContainedInBoundingBoxes(
-      const std::vector<BoostGeometryNamespace::Box>& boundingBox,
-      BoostGeometryNamespace::Point point) const;
-
-  // this function calculates the bounding box of a polygon geometry.
-  // This is different to the query box, which is a box, which contains the area
-  // where all results are contained in
-  BoostGeometryNamespace::Box calculateBoundingBoxOfArea(
-      const std::string& wktString) const;
-
-  // calculates the midpoint of the given Box
-  BoostGeometryNamespace::Point calculateMidpointOfBox(
-      const BoostGeometryNamespace::Box& box) const;
-
-  // this function calculates the maximum distance from the midpoint of the box
-  // to any other point, which is contained in the box. If the midpoint has
-  // already been calculated, because it is needed in other places as well, it
-  // can be given to the function, otherwise the function calculates the
-  // midpoint itself
-  double getMaxDistFromMidpointToAnyPointInsideTheBox(
-      const BoostGeometryNamespace::Box& box,
-      std::optional<BoostGeometryNamespace::Point> midpoint =
-          std::nullopt) const;
-
+  // this function gets the string which represents the area from the idtable.
+  std::string getAreaString(const IdTable* idtable, size_t row, size_t col) const;
+  
   QueryExecutionContext* qec_;
   PreparedSpatialJoinParams params_;
   SpatialJoinConfiguration config_;
@@ -183,7 +144,7 @@ class SpatialJoinAlgorithms {
   static constexpr double radius_ = 6'378'000;
 
   // convert coordinates to the usual ranges (-180 to 180 and -90 to 90)
-  void convertToNormalCoordinates(BoostGeometryNamespace::Point& point) const;
+  void convertToNormalCoordinates(Point& point) const;
 
   // return whether one of the poles is being touched
   std::array<bool, 2> isAPoleTouched(const double& latitude) const;

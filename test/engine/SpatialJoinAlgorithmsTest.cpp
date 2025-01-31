@@ -1054,7 +1054,7 @@ void testBoundingBox(const size_t& maxDistInMeters, const Point& startPoint) {
                           const std::vector<Box>& bbox,
                           SpatialJoinAlgorithms* spatialJoinAlg) {
     // check if the point is contained in any bounding box
-    bool within = spatialJoinAlg->OnlyForTestingWrapperContainedInBoundingBoxes(
+    bool within = spatialJoinAlg->isContainedInBoundingBoxes(
         bbox, point1);
     if (!within) {
       GeoPoint geo1{point1.get<1>(), point1.get<0>()};
@@ -1067,8 +1067,7 @@ void testBoundingBox(const size_t& maxDistInMeters, const Point& startPoint) {
   SpatialJoinAlgorithms spatialJoinAlgs =
       getDummySpatialJoinAlgsForWrapperTesting(maxDistInMeters);
 
-  std::vector<Box> bbox =
-      spatialJoinAlgs.OnlyForTestingWrapperComputeBoundingBox(startPoint);
+  std::vector<Box> bbox = spatialJoinAlgs.computeBoundingBox(startPoint);
   // broad grid test
   for (int lon = -180; lon < 180; lon += 20) {
     for (int lat = -90; lat < 90; lat += 20) {
@@ -1219,8 +1218,7 @@ TEST(SpatialJoin, isContainedInBoundingBoxes) {
               for (size_t i = 0; i < shouldBeContained.size(); i++) {
                 for (size_t k = 0; k < shouldBeContained.at(i).size(); k++) {
                   ASSERT_TRUE(
-                      spatialJoinAlgs
-                          .OnlyForTestingWrapperContainedInBoundingBoxes(
+                      spatialJoinAlgs.isContainedInBoundingBoxes(
                               toTest, shouldBeContained.at(i).at(k)));
                 }
               }
@@ -1229,8 +1227,7 @@ TEST(SpatialJoin, isContainedInBoundingBoxes) {
               for (size_t i = 0; i < shouldNotBeContained.size(); i++) {
                 for (size_t k = 0; k < shouldNotBeContained.at(i).size(); k++) {
                   ASSERT_FALSE(
-                      spatialJoinAlgs
-                          .OnlyForTestingWrapperContainedInBoundingBoxes(
+                      spatialJoinAlgs.isContainedInBoundingBoxes(
                               toTest, shouldNotBeContained.at(i).at(k)));
                 }
               }
@@ -1258,13 +1255,13 @@ void testBoundingBoxOfAreaOrMidpointOfBox(bool testArea = true) {
 
   SpatialJoinAlgorithms sja = getDummySpatialJoinAlgsForWrapperTesting();
 
-  auto a = sja.OnlyForTestingWrapperCalculateBoundingBoxOfArea(
+  auto a = sja.calculateBoundingBoxOfArea(
       "POLYGON((9.33 47.41, 9.31 47.45, 9.32 47.48, 9.35 47.42, 9.33 "
       "47.41))");  // closed polygon
-  auto b = sja.OnlyForTestingWrapperCalculateBoundingBoxOfArea(
+  auto b = sja.calculateBoundingBoxOfArea(
       "POLYGON((-4.1 10.0, -9.9 10.0, -9.9 -1.0, -4.1 -1.0))");  // not closed
                                                                  // polygon
-  auto c = sja.OnlyForTestingWrapperCalculateBoundingBoxOfArea(
+  auto c = sja.calculateBoundingBoxOfArea(
       "POLYGON((0.0 0.0, 1.1 0.0, 1.1 1.1, 0.0 1.1, 0.0 0.0))");  // closed
                                                                   // polygon
 
@@ -1273,12 +1270,9 @@ void testBoundingBoxOfAreaOrMidpointOfBox(bool testArea = true) {
     checkBoundingBox(b, -9.9, -1.0, -4.1, 10.0);
     checkBoundingBox(c, 0.0, 0.0, 1.1, 1.1);
   } else {
-    checkMidpoint(sja.OnlyForTestingWrapperCalculateMidpointOfBox(a), 9.33,
-                  47.445);
-    checkMidpoint(sja.OnlyForTestingWrapperCalculateMidpointOfBox(b), -7.0,
-                  4.5);
-    checkMidpoint(sja.OnlyForTestingWrapperCalculateMidpointOfBox(c), 0.55,
-                  0.55);
+    checkMidpoint(sja.calculateMidpointOfBox(a), 9.33, 47.445);
+    checkMidpoint(sja.calculateMidpointOfBox(b), -7.0, 4.5);
+    checkMidpoint(sja.calculateMidpointOfBox(c), 0.55, 0.55);
   }
 }
 
@@ -1291,7 +1285,7 @@ TEST(SpatialJoin, MidpointOfBoundingBox) {
 TEST(SpatialJoin, getMaxDistFromMidpointToAnyPointInsideTheBox) {
   SpatialJoinAlgorithms sja = getDummySpatialJoinAlgsForWrapperTesting();
   // the following polygon is from the eiffel tower
-  auto area_eiffel = sja.OnlyForTestingWrapperCalculateBoundingBoxOfArea(
+  auto area_eiffel = sja.calculateBoundingBoxOfArea(
       "POLYGON((2.2933119 48.858248,2.2935432 48.8581003,2.2935574 "
       "48.8581099,2.2935712 48.8581004,2.2936112 48.8581232,2.2936086 "
       "48.8581249,2.293611 48.8581262,2.2936415 48.8581385,2.293672 "
@@ -1336,8 +1330,7 @@ TEST(SpatialJoin, getMaxDistFromMidpointToAnyPointInsideTheBox) {
       "48.8583695,2.2937145 48.8583599,2.2936514 48.8583593,2.2936122 "
       "48.8583846,2.293606 48.8583807,2.2935688 48.8584044,2.2935515 "
       "48.8583929,2.293536 48.8584028,2.2933119 48.858248))");
-  auto midpoint_eiffel =
-      sja.OnlyForTestingWrapperCalculateMidpointOfBox(area_eiffel);
+  auto midpoint_eiffel = sja.calculateMidpointOfBox(area_eiffel);
 
   // call the function without the precalculated midpoint, the upper bound max
   // distance needs to be bigger than 130 (the tower has a square base of length
@@ -1347,17 +1340,15 @@ TEST(SpatialJoin, getMaxDistFromMidpointToAnyPointInsideTheBox) {
   // longitude and latitude lines (45 degrees tilted), the distance estimate
   // gets a little more than 125m (it's upper bound estimate is 219m)
   ASSERT_GE(
-      sja.OnlyForTestingWrapperGetMaxDistFromMidpointToAnyPointInsideTheBox(
-          area_eiffel),
+      sja.getMaxDistFromMidpointToAnyPointInsideTheBox(area_eiffel),
       125);
-  ASSERT_DOUBLE_EQ(
-      sja.OnlyForTestingWrapperGetMaxDistFromMidpointToAnyPointInsideTheBox(
+  ASSERT_DOUBLE_EQ(sja.getMaxDistFromMidpointToAnyPointInsideTheBox(
           area_eiffel),
-      sja.OnlyForTestingWrapperGetMaxDistFromMidpointToAnyPointInsideTheBox(
+      sja.getMaxDistFromMidpointToAnyPointInsideTheBox(
           area_eiffel, midpoint_eiffel));
 
   // the following polygon is from the Minster of Freiburg
-  auto area_minster = sja.OnlyForTestingWrapperCalculateBoundingBoxOfArea(
+  auto area_minster = sja.calculateBoundingBoxOfArea(
       "POLYGON((7.8520522 47.9956071,7.8520528 47.9955872,7.8521103 "
       "47.995588,7.8521117 47.9955419,7.852113 47.9954975,7.8520523 "
       "47.9954968,7.8520527 47.995477,7.8521152 47.9954775,7.8521154 "
@@ -1444,51 +1435,41 @@ TEST(SpatialJoin, getMaxDistFromMidpointToAnyPointInsideTheBox) {
       "47.9956591,7.8521196 47.9956587,7.8521209 47.995617,7.8521109 "
       "47.9956168,7.8521111 47.9956079,7.8520522 47.9956071))");
   auto midpoint_minster =
-      sja.OnlyForTestingWrapperCalculateMidpointOfBox(area_minster);
+      sja.calculateMidpointOfBox(area_minster);
   ASSERT_GE(
-      sja.OnlyForTestingWrapperGetMaxDistFromMidpointToAnyPointInsideTheBox(
-          area_minster),
+      sja.getMaxDistFromMidpointToAnyPointInsideTheBox(area_minster),
       80);
-  ASSERT_DOUBLE_EQ(
-      sja.OnlyForTestingWrapperGetMaxDistFromMidpointToAnyPointInsideTheBox(
-          area_minster),
-      sja.OnlyForTestingWrapperGetMaxDistFromMidpointToAnyPointInsideTheBox(
+  ASSERT_DOUBLE_EQ(sja.getMaxDistFromMidpointToAnyPointInsideTheBox(
+          area_minster), sja.getMaxDistFromMidpointToAnyPointInsideTheBox(
           area_minster, midpoint_minster));
 
   // the following polygon is from the university building 101 in freiburg
-  auto area_uni = sja.OnlyForTestingWrapperCalculateBoundingBoxOfArea(
+  auto area_uni = sja.calculateBoundingBoxOfArea(
       "POLYGON((7.8346338 48.0126612,7.8348921 48.0123905,7.8349457 "
       "48.0124216,7.8349855 48.0124448,7.8353244 48.0126418,7.8354091 "
       "48.0126911,7.8352246 48.0129047,7.8351668 48.0128798,7.8349471 "
       "48.0127886,7.8347248 48.0126986,7.8346338 48.0126612))");
-  auto midpoint_uni = sja.OnlyForTestingWrapperCalculateMidpointOfBox(area_uni);
+  auto midpoint_uni = sja.calculateMidpointOfBox(area_uni);
   ASSERT_GE(
-      sja.OnlyForTestingWrapperGetMaxDistFromMidpointToAnyPointInsideTheBox(
-          area_uni),
+      sja.getMaxDistFromMidpointToAnyPointInsideTheBox(area_uni),
       40);
-  ASSERT_DOUBLE_EQ(
-      sja.OnlyForTestingWrapperGetMaxDistFromMidpointToAnyPointInsideTheBox(
-          area_uni),
-      sja.OnlyForTestingWrapperGetMaxDistFromMidpointToAnyPointInsideTheBox(
+  ASSERT_DOUBLE_EQ(sja.getMaxDistFromMidpointToAnyPointInsideTheBox(area_uni),
+      sja.getMaxDistFromMidpointToAnyPointInsideTheBox(
           area_uni, midpoint_uni));
 
   // the following polygon is from the London Eye
-  auto area_eye = sja.OnlyForTestingWrapperCalculateBoundingBoxOfArea(
+  auto area_eye = sja.calculateBoundingBoxOfArea(
       "POLYGON((-0.1198608 51.5027451,-0.1197395 51.5027354,-0.1194922 "
       "51.5039381,-0.1196135 51.5039478,-0.1198608 51.5027451))");
-  auto midpoint_eye = sja.OnlyForTestingWrapperCalculateMidpointOfBox(area_eye);
+  auto midpoint_eye = sja.calculateMidpointOfBox(area_eye);
   ASSERT_GE(
-      sja.OnlyForTestingWrapperGetMaxDistFromMidpointToAnyPointInsideTheBox(
-          area_eye),
-      70);
+      sja.getMaxDistFromMidpointToAnyPointInsideTheBox(area_eye), 70);
   ASSERT_DOUBLE_EQ(
-      sja.OnlyForTestingWrapperGetMaxDistFromMidpointToAnyPointInsideTheBox(
-          area_eye),
-      sja.OnlyForTestingWrapperGetMaxDistFromMidpointToAnyPointInsideTheBox(
-          area_eye, midpoint_eye));
+      sja.getMaxDistFromMidpointToAnyPointInsideTheBox(area_eye),
+      sja.getMaxDistFromMidpointToAnyPointInsideTheBox(area_eye, midpoint_eye));
 
   // the following polygon is from the Statue of liberty
-  auto area_statue = sja.OnlyForTestingWrapperCalculateBoundingBoxOfArea(
+  auto area_statue = sja.calculateBoundingBoxOfArea(
       "POLYGON((-74.0451069 40.6893455,-74.045004 40.6892215,-74.0451023 "
       "40.6891073,-74.0449107 40.6890721,-74.0449537 40.6889343,-74.0447746 "
       "40.6889506,-74.0446495 40.6888049,-74.0445067 40.6889076,-74.0442008 "
@@ -1502,15 +1483,12 @@ TEST(SpatialJoin, getMaxDistFromMidpointToAnyPointInsideTheBox) {
       "40.6895443,-74.044961 40.6895356,-74.0449576 40.6895192,-74.044935 "
       "40.689421,-74.0451069 40.6893455))");
   auto midpoint_statue =
-      sja.OnlyForTestingWrapperCalculateMidpointOfBox(area_statue);
+      sja.calculateMidpointOfBox(area_statue);
   ASSERT_GE(
-      sja.OnlyForTestingWrapperGetMaxDistFromMidpointToAnyPointInsideTheBox(
-          area_statue),
-      100);
+      sja.getMaxDistFromMidpointToAnyPointInsideTheBox(area_statue), 100);
   ASSERT_DOUBLE_EQ(
-      sja.OnlyForTestingWrapperGetMaxDistFromMidpointToAnyPointInsideTheBox(
-          area_statue),
-      sja.OnlyForTestingWrapperGetMaxDistFromMidpointToAnyPointInsideTheBox(
+      sja.getMaxDistFromMidpointToAnyPointInsideTheBox(area_statue),
+      sja.getMaxDistFromMidpointToAnyPointInsideTheBox(
           area_statue, midpoint_statue));
 }
 
@@ -1603,9 +1581,8 @@ TEST(SpatialJoin, trueAreaDistance) {
     SpatialJoinAlgorithms algorithms{
         qec, params, spatialJoin->onlyForTestingGetConfig(), std::nullopt};
     algorithms.setUseMidpointForAreas_(false);
-    auto distID = algorithms.OnlyForTestingWrapperComputeDist(
-        params.idTableLeft_, params.idTableRight_, 0, 0, params.leftJoinCol_,
-        params.rightJoinCol_);
+    auto distID = algorithms.computeDist(params.idTableLeft_,
+        params.idTableRight_, 0, 0, params.leftJoinCol_, params.rightJoinCol_);
     ASSERT_EQ(distID.getDatatype(), Datatype::Double);
     ASSERT_DOUBLE_EQ(distID.getDouble(), distance);
   };

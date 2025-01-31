@@ -39,8 +39,8 @@ std::optional<GeoPoint> SpatialJoinAlgorithms::getPoint(const IdTable* restable,
 };
 
 // ____________________________________________________________________________
-std::string SpatialJoinAlgorithms::betweenQuotes(
-    std::string extractFrom) const {
+std::string_view SpatialJoinAlgorithms::betweenQuotes(
+    std::string_view extractFrom) const {
   size_t pos1 = extractFrom.find("\"", 0);
   size_t pos2 = extractFrom.find("\"", pos1 + 1);
   if (pos1 != std::string::npos && pos2 != std::string::npos) {
@@ -57,25 +57,27 @@ struct DistanceVisitor : public boost::static_visitor<double> {
   }
 };
 
+std::string SpatialJoinAlgorithms::getAreaString(const IdTable* idtable, size_t row, size_t col) const {
+  std::string str(betweenQuotes(ExportQueryExecutionTrees::idToStringAndType(
+                             qec_->getIndex(), idtable->at(row, col), {})
+                             .value()
+                             .first));
+  return str;
+}
+
 // ____________________________________________________________________________
 Id SpatialJoinAlgorithms::computeDist(const IdTable* idTableLeft,
                                       const IdTable* idTableRight,
                                       size_t rowLeft, size_t rowRight,
                                       ColumnIndex leftPointCol,
                                       ColumnIndex rightPointCol) const {
-  auto getAreaString = [&](const IdTable* idtable, size_t row, size_t col) {
-    return betweenQuotes(ExportQueryExecutionTrees::idToStringAndType(
-                             qec_->getIndex(), idtable->at(row, col), {})
-                             .value()
-                             .first);
-  };
-
   auto getAreaOrPointGeometry =
       [&](const IdTable* idtable, size_t row, size_t col,
           std::optional<GeoPoint> point) -> std::optional<AnyGeometry> {
     AnyGeometry geometry;
     try {
       if (!point) {
+        // std::string areastring(getAreaString(idtable, row, col));
         boost::geometry::read_wkt(getAreaString(idtable, row, col), geometry);
       } else {
         geometry = Point(point.value().getLng(), point.value().getLat());
@@ -614,11 +616,7 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
 
     if (!geopoint) {
       try {
-        std::string areastring = betweenQuotes(
-            ExportQueryExecutionTrees::idToStringAndType(
-                qec_->getIndex(), smallerResult->at(i, smallerResJoinCol), {})
-                .value()
-                .first);
+        std::string areastring = getAreaString(smallerResult, i, smallerResJoinCol);
         bbox = calculateBoundingBoxOfArea(areastring);
       } catch (...) {
         printWarning();
@@ -644,11 +642,7 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
 
     if (!geopoint) {
       try {
-        std::string areastring = betweenQuotes(
-            ExportQueryExecutionTrees::idToStringAndType(
-                qec_->getIndex(), otherResult->at(i, otherResJoinCol), {})
-                .value()
-                .first);
+        std::string areastring = getAreaString(otherResult, i, otherResJoinCol);
         auto areaBox = calculateBoundingBoxOfArea(areastring);
         auto midpoint = calculateMidpointOfBox(areaBox);
         bbox = computeBoundingBox(
