@@ -5,6 +5,7 @@
 #include <gtest/gtest.h>
 
 #include "VocabularyTestHelpers.h"
+#include "backports/algorithm.h"
 #include "index/VocabularyOnDisk.h"
 #include "index/vocabulary/CompressedVocabulary.h"
 #include "index/vocabulary/PrefixCompressor.h"
@@ -84,8 +85,9 @@ using Compressors =
                      PrefixCompressionWrapper, DummyCompressionWrapper>;
 
 // _________________________________________________________________________
-template <ad_utility::vocabulary::CompressionWrapper Compressor>
-struct CompressedVocabularyF : public testing::Test {
+CPP_template(typename Compressor)(
+    requires ad_utility::vocabulary::CompressionWrapper<
+        Compressor>) struct CompressedVocabularyF : public testing::Test {
   // Tests for the FSST-compressed vocabulary. These use the generic testing
   // framework that was set up for all the other vocabularies.
   static constexpr auto createCompressedVocabulary(

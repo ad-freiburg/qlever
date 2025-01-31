@@ -1622,8 +1622,7 @@ constexpr auto makeNumDistinctIdsCounter = [](size_t& numDistinctIds) {
 }  // namespace
 
 // _____________________________________________________________________________
-template <typename... NextSorter>
-requires(sizeof...(NextSorter) <= 1)
+CPP_template_def(typename... NextSorter)(requires(sizeof...(NextSorter) <= 1))
 void IndexImpl::createPSOAndPOSImpl(size_t numColumns,
                                     BlocksOfTriples sortedTriples,
                                     bool doWriteConfiguration,
@@ -1654,8 +1653,7 @@ void IndexImpl::createPSOAndPOSImpl(size_t numColumns,
 };
 
 // _____________________________________________________________________________
-template <typename... NextSorter>
-requires(sizeof...(NextSorter) <= 1)
+CPP_template_def(typename... NextSorter)(requires(sizeof...(NextSorter) <= 1))
 void IndexImpl::createPSOAndPOS(size_t numColumns,
                                 BlocksOfTriples sortedTriples,
                                 NextSorter&&... nextSorter) {
@@ -1664,8 +1662,7 @@ void IndexImpl::createPSOAndPOS(size_t numColumns,
 }
 
 // _____________________________________________________________________________
-template <typename... NextSorter>
-requires(sizeof...(NextSorter) <= 1)
+CPP_template_def(typename... NextSorter)(requires(sizeof...(NextSorter) <= 1))
 std::optional<PatternCreator::TripleSorter> IndexImpl::createSPOAndSOP(
     size_t numColumns, BlocksOfTriples sortedTriples,
     NextSorter&&... nextSorter) {
@@ -1716,8 +1713,7 @@ std::optional<PatternCreator::TripleSorter> IndexImpl::createSPOAndSOP(
 };
 
 // _____________________________________________________________________________
-template <typename... NextSorter>
-requires(sizeof...(NextSorter) <= 1)
+CPP_template_def(typename... NextSorter)(requires(sizeof...(NextSorter) <= 1))
 void IndexImpl::createOSPAndOPS(size_t numColumns,
                                 BlocksOfTriples sortedTriples,
                                 NextSorter&&... nextSorter) {

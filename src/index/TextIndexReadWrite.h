@@ -316,8 +316,8 @@ FrequencyEncode(View&& view)
  *        encoded vector. It also has a method to write the encoded vector to
  *        a file.
  */
-template <typename T>
-requires std::is_arithmetic_v<T> class GapEncode {
+CPP_template(typename T)(requires std::is_arithmetic_v<T>)
+class GapEncode {
  public:
   using TypedVector = std::vector<T>;
 
@@ -341,7 +341,10 @@ requires std::is_arithmetic_v<T> class GapEncode {
   GapEncode(GapEncode&&) = delete;
   GapEncode& operator=(GapEncode&&) = delete;
 
-  void writeToFile(ad_utility::File& out, off_t& currentOffset);
+  void writeToFile(ad_utility::File& out, off_t& currentOffset) {
+    textIndexReadWrite::encodeAndWriteSpanAndMoveOffset<T>(encodedVector_, out,
+                                                         currentOffset);
+  }
 
   const TypedVector& getEncodedVector() const { return encodedVector_; }
 
@@ -349,7 +352,14 @@ requires std::is_arithmetic_v<T> class GapEncode {
   // This method implements the constructor. The reason is explained in the
   // comment above the constructor.
   template <typename View>
-  void initialize(View&& view);
+  void initialize(View&& view) {
+    if (ql::ranges::empty(view)) {
+    return;
+  }
+  encodedVector_.reserve(ql::ranges::size(view));
+  std::adjacent_difference(ql::ranges::begin(view), ql::ranges::end(view),
+                           std::back_inserter(encodedVector_));
+  }
 
   TypedVector encodedVector_;
 };
