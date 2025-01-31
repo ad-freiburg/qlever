@@ -178,7 +178,8 @@ class Server {
   FRIEND_TEST(ServerTest, determineResultPinning);
   template <typename Operation>
   // Parse an operation (Query or Update).
-  auto parseOperation(const ad_utility::url_parser::ParamValueMap& params,
+  auto parseOperation(ad_utility::websocket::MessageSender& messageSender,
+                      const ad_utility::url_parser::ParamValueMap& params,
                       const Operation& operation,
                       const ad_utility::httpUtils::HttpRequest auto& request,
                       TimeLimit timeLimit);

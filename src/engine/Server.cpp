@@ -354,8 +354,10 @@ Awaitable<void> Server::process(
     if (auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
             checkParameter("timeout", std::nullopt), accessTokenOk, request,
             send)) {
+      ad_utility::websocket::MessageSender messageSender =
+          createMessageSender(queryHub_, request, query.query_);
       auto [parsedQuery, qec, cancellationHandle, cancelTimeoutOnDestruction] =
-          parseOperation(parameters, std::move(query), request,
+          parseOperation(messageSender, parameters, std::move(query), request,
                          timeLimit.value());
       co_return co_await processQueryOrUpdate<Query>(
           parameters, std::move(parsedQuery), cancellationHandle, qec,
@@ -374,8 +376,10 @@ Awaitable<void> Server::process(
     if (auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
             checkParameter("timeout", std::nullopt), accessTokenOk, request,
             send)) {
+      ad_utility::websocket::MessageSender messageSender =
+          createMessageSender(queryHub_, request, update.update_);
       auto [parsedUpdate, qec, cancellationHandle, cancelTimeoutOnDestruction] =
-          parseOperation(parameters, std::move(update), request,
+          parseOperation(messageSender, parameters, std::move(update), request,
                          timeLimit.value());
       co_return co_await processQueryOrUpdate<Update>(
           parameters, std::move(parsedUpdate), cancellationHandle, qec,
@@ -457,6 +461,7 @@ auto Server::setupCancellationHandle(
 // ____________________________________________________________________________
 template <typename Operation>
 auto Server::parseOperation(
+    ad_utility::websocket::MessageSender& messageSender,
     const ad_utility::url_parser::ParamValueMap& params,
     const Operation& operation,
     const ad_utility::httpUtils::HttpRequest auto& request,
@@ -474,8 +479,6 @@ auto Server::parseOperation(
     operationSPARQL = operation.update_;
   }
 
-  ad_utility::websocket::MessageSender messageSender =
-      createMessageSender(queryHub_, request, operationSPARQL);
   auto [cancellationHandle, cancelTimeoutOnDestruction] =
       setupCancellationHandle(messageSender.getQueryId(), timeLimit);
 
