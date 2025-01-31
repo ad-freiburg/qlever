@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "global/Id.h"
+#include "backports/concepts.h"
 #include "util/ExceptionHandling.h"
 #include "util/File.h"
 #include "util/Generator.h"
@@ -71,6 +72,27 @@ struct CompactStringVectorWriter;
 
 }
 
+#ifdef QLEVER_CPP_17
+template <typename T, typename = void>
+struct IsIteratorOfIterator : std::false_type {};
+
+template <typename T>
+struct IsIteratorOfIterator<
+    T, std::void_t<decltype(*(T::iterator::value_type::begin()))>>
+    : std::true_type {};
+
+template <typename T, typename DataType>
+CPP_concept IteratorOfIterator = 
+    (IsIteratorOfIterator<T>::value &&
+     ad_utility::SimilarTo<decltype(*(T::iterator::value_type::begin())),
+                           DataType>);
+#else
+template <typename T, typename DataType>
+concept IteratorOfIterator = requires(T t) {
+  { *(t.begin()->begin()) } -> ad_utility::SimilarTo<DataType>;
+};
+#endif
+
 /**
  * @brief Stores a list of variable length data of a single type (e.g.
  *        c-style strings). The data is stored in a single contiguous block
@@ -102,10 +124,8 @@ class CompactVectorOfStrings {
    * @brief Fills this CompactVectorOfStrings with input.
    * @param The input from which to build the vector.
    */
-  template <typename T>
-  requires requires(T t) {
-    { *(t.begin()->begin()) } -> ad_utility::SimilarTo<data_type>;
-  } void build(const T& input) {
+  CPP_template(typename T)(
+      requires IteratorOfIterator<T, data_type>) void build(const T& input) {
     // Also make room for the end offset of the last element.
     _offsets.reserve(input.size() + 1);
     size_t dataSize = 0;

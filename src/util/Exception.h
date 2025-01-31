@@ -92,12 +92,13 @@ namespace ad_utility::detail {
 // builtin numeric types) [first overload]
 // * A callbable that takes no arguments and returns a string [second overload]
 template <typename S>
-requires requires(S&& s) { absl::StrCat(AD_FWD(s)); }
+QL_CONCEPT_OR_NOTHING(requires requires(S&& s) { absl::StrCat(AD_FWD(s)); })
 std::string getMessageImpl(S&& s) {
   return absl::StrCat(AD_FWD(s));
 }
-std::string getMessageImpl(
-    ad_utility::InvocableWithConvertibleReturnType<std::string> auto&& f) {
+CPP_template(typename T)(
+    requires ad_utility::InvocableWithConvertibleReturnType<T, std::string>)
+    std::string getMessageImpl(T&& f) {
   return std::invoke(f);
 }
 

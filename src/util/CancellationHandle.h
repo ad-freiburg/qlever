@@ -156,10 +156,14 @@ class CancellationHandle {
   /// in the console that would otherwise be triggered by the watchdog.
   /// NOTE: The parameter state is expected to be one of `CHECK_WINDOW_MISSED`
   /// or `WAITING_FOR_CHECK`, otherwise it will violate the correctness check.
-  void pleaseWatchDog(CancellationState state,
-                      ad_utility::source_location location,
-                      const ad_utility::InvocableWithConvertibleReturnType<
-                          std::string_view> auto& stageInvocable)
+  CPP_template(typename StateFunc)(
+      requires ad_utility::InvocableWithConvertibleReturnType<
+          StateFunc,
+          std::string_view>) void pleaseWatchDog(CancellationState state,
+                                                 ad_utility::source_location
+                                                     location,
+                                                 const StateFunc&
+                                                     stageInvocable)
       requires WatchDogEnabled {
     using DurationType =
         std::remove_const_t<decltype(DESIRED_CANCELLATION_CHECK_INTERVAL)>;
@@ -215,12 +219,13 @@ class CancellationHandle {
   /// nothing otherwise. If `WatchDogEnabled` is true, this will log a warning
   /// if this check is not called frequently enough. It will contain the
   /// filename and line of the caller of this method.
-  template <ad_utility::InvocableWithConvertibleReturnType<std::string_view>
-                Func = decltype(detail::printNothing)>
-  AD_ALWAYS_INLINE void throwIfCancelled(
-      [[maybe_unused]] ad_utility::source_location location =
-          ad_utility::source_location::current(),
-      const Func& stageInvocable = detail::printNothing) {
+  CPP_template(typename Func = decltype(detail::printNothing))(
+      requires ad_utility::InvocableWithConvertibleReturnType<Func,
+                                                              std::string_view>)
+      AD_ALWAYS_INLINE void throwIfCancelled(
+          [[maybe_unused]] ad_utility::source_location location =
+              ad_utility::source_location::current(),
+          const Func& stageInvocable = detail::printNothing) {
     if constexpr (CancellationEnabled) {
       auto state = cancellationState_.load(std::memory_order_relaxed);
       if (state == CancellationState::NOT_CANCELLED) [[likely]] {

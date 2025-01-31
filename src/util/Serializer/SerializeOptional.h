@@ -11,7 +11,7 @@
 // Serialization for `std::optional<T>`
 namespace ad_utility::serialization {
 AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
-    (ad_utility::similarToInstantiation<T, std::optional> &&
+    (ad_utility::similarToInstantiation<T, std::optional> CPP_and
      !std::is_trivially_copyable_v<std::decay_t<T>>)) {
   if constexpr (ReadSerializer<S>) {
     bool hasValue;

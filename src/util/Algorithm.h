@@ -58,8 +58,10 @@ bool contains_if(const Container& container, const Predicate& predicate) {
  * @param destination Vector& to which to append
  * @param source Vector&& to append
  */
-template <typename T, ad_utility::SimilarTo<std::vector<T>> U>
-void appendVector(std::vector<T>& destination, U&& source) {
+CPP_template(typename T, typename U)(
+    requires ad_utility::SimilarTo<
+        std::vector<T>, U>) void appendVector(std::vector<T>& destination,
+                                              U&& source) {
   destination.insert(destination.end(),
                      ad_utility::makeForwardingIterator<U>(source.begin()),
                      ad_utility::makeForwardingIterator<U>(source.end()));
