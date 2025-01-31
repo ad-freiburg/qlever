@@ -590,8 +590,11 @@ ExportQueryExecutionTrees::selectQueryResultToStream(
             co_yield optionalStringAndType.value().first;
           }
         }
-        co_yield j + 1 < selectedColumnIndices.size() ? separator : '\n';
+        if (j + 1 < selectedColumnIndices.size()) {
+          co_yield separator;
+        }
       }
+      co_yield '\n';
       cancellationHandle->throwIfCancelled();
     }
   }
