@@ -75,7 +75,7 @@ bool SpatialJoinAlgorithms::getAnyGeometry(const IdTable* idtable, size_t row,
                              .first));
   try {
     bg::read_wkt(str, geometry);
-  } catch (...) {
+  } catch (const std::exception& e) {
     printWarning();
     return false;
   }
@@ -95,6 +95,8 @@ Id SpatialJoinAlgorithms::computeDist(const IdTable* idTableLeft,
     
     if (!point) {
       if (!getAnyGeometry(idtable, row, col, geometry)) {
+        // nothing to do. When parsing a point or an area fails, a warning message
+        // gets printed at another place and the point/area just gets skipped
         return std::nullopt;
       }
     } else {
@@ -599,6 +601,8 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
       
       AnyGeometry geometry;
       if (!getAnyGeometry(smallerResult, i, smallerResJoinCol, geometry)) {
+        // nothing to do. When parsing a point or an area fails, a warning message
+        // gets printed at another place and the point/area just gets skipped
         continue;
       }
       bbox = boost::apply_visitor(BoundingBoxVisitor(), geometry);
@@ -625,6 +629,8 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
       
       AnyGeometry geometry;
       if (!getAnyGeometry(otherResult, i, otherResJoinCol, geometry)) {
+        // nothing to do. When parsing a point or an area fails, a warning message
+        // gets printed at another place and the point/area just gets skipped
         continue;
       }
       auto areaBox = boost::apply_visitor(BoundingBoxVisitor(), geometry);
