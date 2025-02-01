@@ -189,7 +189,7 @@ class Server {
   // Plan a parsed query.
   Awaitable<PlannedQuery> planQuery(net::static_thread_pool& thread_pool,
                                     ParsedQuery&& operation,
-                                    ad_utility::Timer& requestTimer,
+                                    const ad_utility::Timer& requestTimer,
                                     TimeLimit timeLimit,
                                     QueryExecutionContext& qec,
                                     SharedCancellationHandle handle);
@@ -201,7 +201,7 @@ class Server {
   // Execute an update operation. The function must have exclusive access to the
   // DeltaTriples object.
   json processUpdateImpl(
-      const PlannedQuery& plannedUpdate, ad_utility::Timer& requestTimer,
+      const PlannedQuery& plannedUpdate, const ad_utility::Timer& requestTimer,
       ad_utility::SharedCancellationHandle cancellationHandle,
       DeltaTriples& deltaTriples);
 

@@ -357,8 +357,7 @@ Awaitable<void> Server::process(
       ad_utility::websocket::MessageSender messageSender =
           createMessageSender(queryHub_, request, query.query_);
       auto [parsedQuery, qec, cancellationHandle, cancelTimeoutOnDestruction] =
-          parseOperation(messageSender, parameters, std::move(query),
-                         timeLimit.value());
+          parseOperation(messageSender, parameters, query, timeLimit.value());
       co_return co_await processQueryOrUpdate<Query>(
           parameters, std::move(parsedQuery), cancellationHandle, qec,
           requestTimer, std::move(request), send, timeLimit.value());
@@ -379,8 +378,7 @@ Awaitable<void> Server::process(
       ad_utility::websocket::MessageSender messageSender =
           createMessageSender(queryHub_, request, update.update_);
       auto [parsedUpdate, qec, cancellationHandle, cancelTimeoutOnDestruction] =
-          parseOperation(messageSender, parameters, std::move(update),
-                         timeLimit.value());
+          parseOperation(messageSender, parameters, update, timeLimit.value());
       co_return co_await processQueryOrUpdate<Update>(
           parameters, std::move(parsedUpdate), cancellationHandle, qec,
           requestTimer, std::move(request), send, timeLimit.value());
@@ -526,7 +524,7 @@ Server::PlannedQuery Server::setupPlannedQuery(
 
 Awaitable<Server::PlannedQuery> Server::planQuery(
     net::static_thread_pool& threadPool, ParsedQuery&& operation,
-    ad_utility::Timer& requestTimer, TimeLimit timeLimit,
+    const ad_utility::Timer& requestTimer, TimeLimit timeLimit,
     QueryExecutionContext& qec, ad_utility::SharedCancellationHandle handle) {
   // The usage of an `optional` here is required because of a limitation in
   // Boost::Asio which forces us to use default-constructible result types with
@@ -861,10 +859,10 @@ json Server::createResponseMetadataForUpdate(
 }
 // ____________________________________________________________________________
 json Server::processUpdateImpl(
-    const PlannedQuery& plannedUpdate, ad_utility::Timer& requestTimer,
+    const PlannedQuery& plannedUpdate, const ad_utility::Timer& requestTimer,
     ad_utility::SharedCancellationHandle cancellationHandle,
     DeltaTriples& deltaTriples) {
-  auto qet = plannedUpdate.queryExecutionTree_;
+  const auto& qet = plannedUpdate.queryExecutionTree_;
 
   if (!plannedUpdate.parsedQuery_.hasUpdateClause()) {
     throw std::runtime_error(
