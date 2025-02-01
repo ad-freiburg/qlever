@@ -2185,6 +2185,23 @@ TEST(SparqlParser, Update) {
   expectUpdate("COPY DEFAULT TO GRAPH <foo>",
                m::UpdateClause(m::Copy(false, DEFAULT{}, Iri("<foo>")),
                                m::GraphPattern()));
+  auto expectParsesAsSingleUpdate = [&expectUpdate, &noGraph,
+                                     &Iri](const std::string& query) {
+    expectUpdate(
+        query,
+        m::UpdateClause(
+            m::GraphUpdate({}, {{Iri("<a>"), Iri("<b>"), Iri("<c>"), noGraph}},
+                           std::nullopt),
+            m::GraphPattern()));
+  };
+  expectParsesAsSingleUpdate("INSERT DATA { <a> <b> <c> }");
+  expectParsesAsSingleUpdate("INSERT DATA { <a> <b> <c> };");
+  expectParsesAsSingleUpdate("INSERT DATA { <a> <b> <c> }; BASE <foo>");
+  expectParsesAsSingleUpdate("INSERT DATA { <a> <b> <c> }; PREFIX foo: <bar>");
+  expectUpdateFails(
+      "INSERT DATA { <a> <b> <c> }; INSERT DATA { <d> <e> <f> }",
+      testing::HasSubstr("Not supported: Multiple updates in one query are "
+                         "currently not supported by QLever"));
 }
 
 TEST(SparqlParser, QueryOrUpdate) {
