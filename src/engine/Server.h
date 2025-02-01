@@ -32,10 +32,8 @@ using std::vector;
 
 //! The HTTP Server used.
 class Server {
-  FRIEND_TEST(ServerTest, parseHttpRequest);
   FRIEND_TEST(ServerTest, getQueryId);
   FRIEND_TEST(ServerTest, createMessageSender);
-  FRIEND_TEST(ServerTest, extractAccessToken);
 
  public:
   explicit Server(unsigned short port, size_t numThreads,
@@ -111,17 +109,6 @@ class Server {
       -> CancellationHandleAndTimeoutTimerCancel<CancelTimeout>;
 #endif
 
-  /// Parse the path and URL parameters from the given request. Supports both
-  /// GET and POST request according to the SPARQL 1.1 standard.
-  static ad_utility::url_parser::ParsedRequest parseHttpRequest(
-      const ad_utility::httpUtils::HttpRequest auto& request);
-
-  /// Extract the Access token for that request from the `Authorization` header
-  /// or the URL query parameters.
-  static std::optional<std::string> extractAccessToken(
-      const ad_utility::httpUtils::HttpRequest auto& request,
-      const ad_utility::url_parser::ParamValueMap& params);
-
   /// Handle a single HTTP request. Check whether a file request or a query was
   /// sent, and dispatch to functions handling these cases. This function
   /// requires the constraints for the `HttpHandler` in `HttpServer.h`.
@@ -135,7 +122,9 @@ class Server {
   /// This is only a wrapper for `processQuery` and `processUpdate` which
   /// does the error handling.
   /// \param params The key-value-pairs  sent in the HTTP GET request.
-  /// \param operation Must be Query or Update.
+  /// \param parsedOperation The parsed query or update to process.
+  /// \param cancellationHandle The cancellation handle that is used to cancel.
+  /// \param qec The query execution context to use for the processing.
   /// \param requestTimer Timer that measure the total processing
   ///                     time of this request.
   /// \param request The HTTP request.
@@ -146,14 +135,17 @@ class Server {
   template <typename Operation>
   Awaitable<void> processQueryOrUpdate(
       const ad_utility::url_parser::ParamValueMap& params,
-      const Operation& operation, ad_utility::Timer& requestTimer,
+      ParsedQuery&& parsedOperation,
+      SharedCancellationHandle cancellationHandle, QueryExecutionContext qec,
+      ad_utility::Timer& requestTimer,
       const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
       TimeLimit timeLimit);
   // Do the actual execution of a query.
   Awaitable<void> processQuery(
-      const ad_utility::url_parser::ParamValueMap& params,
-      const ad_utility::url_parser::sparqlOperation::Query& query,
+      const ad_utility::url_parser::ParamValueMap& params, ParsedQuery&& query,
       ad_utility::Timer& requestTimer,
+      ad_utility::SharedCancellationHandle cancellationHandle,
+      QueryExecutionContext& qec,
       const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
       TimeLimit timeLimit);
   // For an executed update create a json with some stats on the update (timing,
@@ -167,9 +159,9 @@ class Server {
   FRIEND_TEST(ServerTest, createResponseMetadata);
   // Do the actual execution of an update.
   Awaitable<void> processUpdate(
-      const ad_utility::url_parser::ParamValueMap& params,
-      const ad_utility::url_parser::sparqlOperation::Update& update,
-      ad_utility::Timer& requestTimer,
+      ParsedQuery&& update, ad_utility::Timer& requestTimer,
+      ad_utility::SharedCancellationHandle cancellationHandle,
+      QueryExecutionContext& qec,
       const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
       TimeLimit timeLimit);
 
@@ -184,12 +176,23 @@ class Server {
   static std::pair<bool, bool> determineResultPinning(
       const ad_utility::url_parser::ParamValueMap& params);
   FRIEND_TEST(ServerTest, determineResultPinning);
+  template <typename Operation>
+  // Parse an operation (Query or Update).
+  auto parseOperation(ad_utility::websocket::MessageSender& messageSender,
+                      const ad_utility::url_parser::ParamValueMap& params,
+                      const Operation& operation, TimeLimit timeLimit);
   // Sets up the PlannedQuery s.t. it is ready to be executed.
-  PlannedQuery setupPlannedQuery(
-      const std::vector<DatasetClause>& queryDatasets,
-      const std::string& operation, QueryExecutionContext& qec,
-      SharedCancellationHandle handle, TimeLimit timeLimit,
-      const ad_utility::Timer& requestTimer) const;
+  static PlannedQuery setupPlannedQuery(PlannedQuery& plannedOperation,
+                                        SharedCancellationHandle handle,
+                                        TimeLimit timeLimit,
+                                        const ad_utility::Timer& requestTimer);
+  // Plan a parsed query.
+  Awaitable<PlannedQuery> planQuery(net::static_thread_pool& thread_pool,
+                                    ParsedQuery&& operation,
+                                    const ad_utility::Timer& requestTimer,
+                                    TimeLimit timeLimit,
+                                    QueryExecutionContext& qec,
+                                    SharedCancellationHandle handle);
   // Creates a `MessageSender` for the given operation.
   ad_utility::websocket::MessageSender createMessageSender(
       const std::weak_ptr<ad_utility::websocket::QueryHub>& queryHub,
@@ -198,9 +201,7 @@ class Server {
   // Execute an update operation. The function must have exclusive access to the
   // DeltaTriples object.
   json processUpdateImpl(
-      const ad_utility::url_parser::ParamValueMap& params,
-      const ad_utility::url_parser::sparqlOperation::Update& update,
-      ad_utility::Timer& requestTimer, TimeLimit timeLimit, auto& messageSender,
+      const PlannedQuery& plannedUpdate, const ad_utility::Timer& requestTimer,
       ad_utility::SharedCancellationHandle cancellationHandle,
       DeltaTriples& deltaTriples);
 
@@ -246,14 +247,6 @@ class Server {
       std::weak_ptr<ad_utility::CancellationHandle<>> cancellationHandle,
       TimeLimit timeLimit)
       -> ad_utility::InvocableWithExactReturnType<void> auto;
-
-  /// Run the SPARQL parser and then the query planner on the `query`. All
-  /// computation is performed on the `threadPool_`.
-  PlannedQuery parseAndPlan(const std::string& query,
-                            const vector<DatasetClause>& queryDatasets,
-                            QueryExecutionContext& qec,
-                            SharedCancellationHandle handle,
-                            TimeLimit timeLimit) const;
 
   /// Acquire the `CancellationHandle` for the given `QueryId`, start the
   /// watchdog and call `cancelAfterDeadline` to set the timeout after
