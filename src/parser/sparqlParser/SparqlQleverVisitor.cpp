@@ -447,8 +447,7 @@ ParsedQuery Visitor::visit(Parser::UpdateContext* ctx) {
   auto update = visit(ctx->update1());
 
   // Relaxed rules for when multiple updates are present until we properly
-  // support them. A `;` and an additional prologue is allowed but no update
-  // body.
+  // support them. A `;` is allowed but no update body.
   if (ctx->update() && !ctx->update()->getText().empty()) {
     parsedQuery_ = ParsedQuery{};
     reportNotSupported(ctx->update(), "Multiple updates in one query are");
