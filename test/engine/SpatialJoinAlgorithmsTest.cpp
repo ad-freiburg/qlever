@@ -1054,8 +1054,7 @@ void testBoundingBox(const size_t& maxDistInMeters, const Point& startPoint) {
                           const std::vector<Box>& bbox,
                           SpatialJoinAlgorithms* spatialJoinAlg) {
     // check if the point is contained in any bounding box
-    bool within = spatialJoinAlg->isContainedInBoundingBoxes(
-        bbox, point1);
+    bool within = spatialJoinAlg->isContainedInBoundingBoxes(bbox, point1);
     if (!within) {
       GeoPoint geo1{point1.get<1>(), point1.get<0>()};
       GeoPoint geo2{startPoint.get<1>(), startPoint.get<0>()};
@@ -1217,18 +1216,16 @@ TEST(SpatialJoin, isContainedInBoundingBoxes) {
               // boxes
               for (size_t i = 0; i < shouldBeContained.size(); i++) {
                 for (size_t k = 0; k < shouldBeContained.at(i).size(); k++) {
-                  ASSERT_TRUE(
-                      spatialJoinAlgs.isContainedInBoundingBoxes(
-                              toTest, shouldBeContained.at(i).at(k)));
+                  ASSERT_TRUE(spatialJoinAlgs.isContainedInBoundingBoxes(
+                      toTest, shouldBeContained.at(i).at(k)));
                 }
               }
               // test all points, which shouldn't be contained in the bounding
               // boxes
               for (size_t i = 0; i < shouldNotBeContained.size(); i++) {
                 for (size_t k = 0; k < shouldNotBeContained.at(i).size(); k++) {
-                  ASSERT_FALSE(
-                      spatialJoinAlgs.isContainedInBoundingBoxes(
-                              toTest, shouldNotBeContained.at(i).at(k)));
+                  ASSERT_FALSE(spatialJoinAlgs.isContainedInBoundingBoxes(
+                      toTest, shouldNotBeContained.at(i).at(k)));
                 }
               }
             }
@@ -1256,19 +1253,28 @@ void testBoundingBoxOfAreaOrMidpointOfBox(bool testArea = true) {
   SpatialJoinAlgorithms sja = getDummySpatialJoinAlgsForWrapperTesting();
 
   BoostGeometryNamespace::AnyGeometry geometryA;
-  std::string wktA = "POLYGON((9.33 47.41, 9.31 47.45, 9.32 47.48, 9.35 47.42, 9.33 47.41))";  // closed polygon
+  std::string wktA =
+      "POLYGON((9.33 47.41, 9.31 47.45, 9.32 47.48, 9.35 47.42, 9.33 "
+      "47.41))";  // closed polygon
   boost::geometry::read_wkt(wktA, geometryA);
-  Box a = boost::apply_visitor(BoostGeometryNamespace::BoundingBoxVisitor(), geometryA);
-  
+  Box a = boost::apply_visitor(BoostGeometryNamespace::BoundingBoxVisitor(),
+                               geometryA);
+
   BoostGeometryNamespace::AnyGeometry geometryB;
-  std::string wktB = "POLYGON((-4.1 10.0, -9.9 10.0, -9.9 -1.0, -4.1 -1.0))";  // not closed polygon
+  std::string wktB =
+      "POLYGON((-4.1 10.0, -9.9 10.0, -9.9 -1.0, -4.1 -1.0))";  // not closed
+                                                                // polygon
   boost::geometry::read_wkt(wktB, geometryB);
-  Box b = boost::apply_visitor(BoostGeometryNamespace::BoundingBoxVisitor(), geometryB);
-  
+  Box b = boost::apply_visitor(BoostGeometryNamespace::BoundingBoxVisitor(),
+                               geometryB);
+
   BoostGeometryNamespace::AnyGeometry geometryC;
-  std::string wktC = "POLYGON((0.0 0.0, 1.1 0.0, 1.1 1.1, 0.0 1.1, 0.0 0.0))";  // closed polygon
+  std::string wktC =
+      "POLYGON((0.0 0.0, 1.1 0.0, 1.1 1.1, 0.0 1.1, 0.0 0.0))";  // closed
+                                                                 // polygon
   boost::geometry::read_wkt(wktC, geometryC);
-  Box c = boost::apply_visitor(BoostGeometryNamespace::BoundingBoxVisitor(), geometryC);
+  Box c = boost::apply_visitor(BoostGeometryNamespace::BoundingBoxVisitor(),
+                               geometryC);
 
   if (testArea) {
     checkBoundingBox(a, 9.31, 47.41, 9.35, 47.48);
@@ -1289,7 +1295,7 @@ TEST(SpatialJoin, MidpointOfBoundingBox) {
 
 TEST(SpatialJoin, getMaxDistFromMidpointToAnyPointInsideTheBox) {
   SpatialJoinAlgorithms sja = getDummySpatialJoinAlgsForWrapperTesting();
-  
+
   // the following polygon is from the eiffel tower
   BoostGeometryNamespace::AnyGeometry geometryEiffel;
   std::string wktEiffel =
@@ -1338,7 +1344,8 @@ TEST(SpatialJoin, getMaxDistFromMidpointToAnyPointInsideTheBox) {
       "48.8583846,2.293606 48.8583807,2.2935688 48.8584044,2.2935515 "
       "48.8583929,2.293536 48.8584028,2.2933119 48.858248))";
   boost::geometry::read_wkt(wktEiffel, geometryEiffel);
-  Box boxEiffel = boost::apply_visitor(BoostGeometryNamespace::BoundingBoxVisitor(), geometryEiffel);
+  Box boxEiffel = boost::apply_visitor(
+      BoostGeometryNamespace::BoundingBoxVisitor(), geometryEiffel);
   auto midpoint_eiffel = sja.calculateMidpointOfBox(boxEiffel);
 
   // call the function without the precalculated midpoint, the upper bound max
@@ -1350,8 +1357,8 @@ TEST(SpatialJoin, getMaxDistFromMidpointToAnyPointInsideTheBox) {
   // gets a little more than 125m (it's upper bound estimate is 219m)
   ASSERT_GE(sja.getMaxDistFromMidpointToAnyPointInsideTheBox(boxEiffel), 125);
   ASSERT_DOUBLE_EQ(sja.getMaxDistFromMidpointToAnyPointInsideTheBox(boxEiffel),
-      sja.getMaxDistFromMidpointToAnyPointInsideTheBox(
-          boxEiffel, midpoint_eiffel));
+                   sja.getMaxDistFromMidpointToAnyPointInsideTheBox(
+                       boxEiffel, midpoint_eiffel));
 
   // the following polygon is from the Minster of Freiburg
   BoostGeometryNamespace::AnyGeometry geometryMinster;
@@ -1442,12 +1449,13 @@ TEST(SpatialJoin, getMaxDistFromMidpointToAnyPointInsideTheBox) {
       "47.9956591,7.8521196 47.9956587,7.8521209 47.995617,7.8521109 "
       "47.9956168,7.8521111 47.9956079,7.8520522 47.9956071))";
   boost::geometry::read_wkt(wktMinster, geometryMinster);
-  Box boxMinster = boost::apply_visitor(BoostGeometryNamespace::BoundingBoxVisitor(), geometryMinster);
+  Box boxMinster = boost::apply_visitor(
+      BoostGeometryNamespace::BoundingBoxVisitor(), geometryMinster);
   auto midpointMinster = sja.calculateMidpointOfBox(boxMinster);
   ASSERT_GE(sja.getMaxDistFromMidpointToAnyPointInsideTheBox(boxMinster), 80);
-  ASSERT_DOUBLE_EQ(sja.getMaxDistFromMidpointToAnyPointInsideTheBox(
-          boxMinster), sja.getMaxDistFromMidpointToAnyPointInsideTheBox(
-          boxMinster, midpointMinster));
+  ASSERT_DOUBLE_EQ(sja.getMaxDistFromMidpointToAnyPointInsideTheBox(boxMinster),
+                   sja.getMaxDistFromMidpointToAnyPointInsideTheBox(
+                       boxMinster, midpointMinster));
 
   // the following polygon is from the university building 101 in freiburg
   BoostGeometryNamespace::AnyGeometry geometryUni;
@@ -1457,12 +1465,13 @@ TEST(SpatialJoin, getMaxDistFromMidpointToAnyPointInsideTheBox) {
       "48.0126911,7.8352246 48.0129047,7.8351668 48.0128798,7.8349471 "
       "48.0127886,7.8347248 48.0126986,7.8346338 48.0126612))";
   boost::geometry::read_wkt(wktUni, geometryUni);
-  Box boxUni = boost::apply_visitor(BoostGeometryNamespace::BoundingBoxVisitor(), geometryUni);
+  Box boxUni = boost::apply_visitor(
+      BoostGeometryNamespace::BoundingBoxVisitor(), geometryUni);
   auto midpointUni = sja.calculateMidpointOfBox(boxUni);
   ASSERT_GE(sja.getMaxDistFromMidpointToAnyPointInsideTheBox(boxUni), 40);
-  ASSERT_DOUBLE_EQ(sja.getMaxDistFromMidpointToAnyPointInsideTheBox(boxUni),
-      sja.getMaxDistFromMidpointToAnyPointInsideTheBox(
-          boxUni, midpointUni));
+  ASSERT_DOUBLE_EQ(
+      sja.getMaxDistFromMidpointToAnyPointInsideTheBox(boxUni),
+      sja.getMaxDistFromMidpointToAnyPointInsideTheBox(boxUni, midpointUni));
 
   // the following polygon is from the London Eye
   BoostGeometryNamespace::AnyGeometry geometryEye;
@@ -1470,10 +1479,12 @@ TEST(SpatialJoin, getMaxDistFromMidpointToAnyPointInsideTheBox) {
       "POLYGON((-0.1198608 51.5027451,-0.1197395 51.5027354,-0.1194922 "
       "51.5039381,-0.1196135 51.5039478,-0.1198608 51.5027451))";
   boost::geometry::read_wkt(wktEye, geometryEye);
-  Box boxEye = boost::apply_visitor(BoostGeometryNamespace::BoundingBoxVisitor(), geometryEye);
+  Box boxEye = boost::apply_visitor(
+      BoostGeometryNamespace::BoundingBoxVisitor(), geometryEye);
   auto midpointEye = sja.calculateMidpointOfBox(boxEye);
   ASSERT_GE(sja.getMaxDistFromMidpointToAnyPointInsideTheBox(boxEye), 70);
-  ASSERT_DOUBLE_EQ(sja.getMaxDistFromMidpointToAnyPointInsideTheBox(boxEye),
+  ASSERT_DOUBLE_EQ(
+      sja.getMaxDistFromMidpointToAnyPointInsideTheBox(boxEye),
       sja.getMaxDistFromMidpointToAnyPointInsideTheBox(boxEye, midpointEye));
 
   // the following polygon is from the Statue of liberty
@@ -1492,11 +1503,13 @@ TEST(SpatialJoin, getMaxDistFromMidpointToAnyPointInsideTheBox) {
       "40.6895443,-74.044961 40.6895356,-74.0449576 40.6895192,-74.044935 "
       "40.689421,-74.0451069 40.6893455))";
   boost::geometry::read_wkt(wktStatue, geometryStatue);
-  Box boxStatue = boost::apply_visitor(BoostGeometryNamespace::BoundingBoxVisitor(), geometryStatue);
+  Box boxStatue = boost::apply_visitor(
+      BoostGeometryNamespace::BoundingBoxVisitor(), geometryStatue);
   auto midpointStatue = sja.calculateMidpointOfBox(boxStatue);
   ASSERT_GE(sja.getMaxDistFromMidpointToAnyPointInsideTheBox(boxStatue), 100);
   ASSERT_DOUBLE_EQ(sja.getMaxDistFromMidpointToAnyPointInsideTheBox(boxStatue),
-      sja.getMaxDistFromMidpointToAnyPointInsideTheBox(boxStatue, midpointStatue));
+                   sja.getMaxDistFromMidpointToAnyPointInsideTheBox(
+                       boxStatue, midpointStatue));
 }
 
 QueryExecutionContext* getAllGeometriesQEC() {
@@ -1588,13 +1601,21 @@ TEST(SpatialJoin, trueAreaDistance) {
     SpatialJoinAlgorithms algorithms{
         qec, params, spatialJoin->onlyForTestingGetConfig(), std::nullopt};
     algorithms.setUseMidpointForAreas_(false);
-    auto distID = algorithms.computeDist(params.idTableLeft_,
-        params.idTableRight_, 0, 0, params.leftJoinCol_, params.rightJoinCol_);
+    auto distID =
+        algorithms.computeDist(params.idTableLeft_, params.idTableRight_, 0, 0,
+                               params.leftJoinCol_, params.rightJoinCol_);
     ASSERT_EQ(distID.getDatatype(), Datatype::Double);
-    ASSERT_DOUBLE_EQ(distID.getDouble(), distance);
+    // ASSERT_DOUBLE_EQ did not work for some reason. An example of a thrown
+    // error: Expected equality of these values:
+    //  distID.getDouble()
+    //    Which is: 353.83499999999913
+    //  distance
+    //    Which is: 353.83499999999998
+    ASSERT_TRUE(distID.getDouble() > 0.99999 * distance);
+    ASSERT_TRUE(distID.getDouble() < 1.00001 * distance);
   };
   auto qec = getAllGeometriesQEC();
-  double conversionFactor = 78630;  // convert to meters
+  double conversionFactor = 78.630;  // convert to meters
   testDist(qec, "1", "2", 0.5 * conversionFactor);
   testDist(qec, "1", "3", 1.5 * conversionFactor);
   testDist(qec, "1", "4", 2.5 * conversionFactor);

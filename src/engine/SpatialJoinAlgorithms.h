@@ -21,7 +21,7 @@ namespace bgi = boost::geometry::index;
 
 using Point = bg::model::point<double, 2, bg::cs::cartesian>;
 using Box = bg::model::box<Point>;
-using Value = std::pair<Box, size_t>;
+// using Value = std::pair<Box, size_t>;
 using Polygon = boost::geometry::model::polygon<
     boost::geometry::model::d2::point_xy<double>>;
 using Linestring = bg::model::linestring<Point>;
@@ -30,6 +30,7 @@ using MultiLinestring = bg::model::multi_linestring<Linestring>;
 using MultiPolygon = bg::model::multi_polygon<Polygon>;
 using AnyGeometry = boost::variant<Point, Linestring, Polygon, MultiPoint,
                                    MultiLinestring, MultiPolygon>;
+
 // this struct is used to get the bounding box of an arbitrary geometry type.
 struct BoundingBoxVisitor : public boost::static_visitor<Box> {
   template <typename Geometry>
@@ -48,12 +49,23 @@ struct DistanceVisitor : public boost::static_visitor<double> {
   }
 };
 
+struct rtreeEntry {
+  size_t row;
+  std::optional<AnyGeometry> geometry;
+  std::optional<GeoPoint> geoPoint;
+  std::optional<Box> boundingBox;
+};
+
+using Value = std::pair<Box, rtreeEntry>;
+
 }  // namespace BoostGeometryNamespace
 
 class SpatialJoinAlgorithms {
   using Point = BoostGeometryNamespace::Point;
   using Box = BoostGeometryNamespace::Box;
   using AnyGeometry = BoostGeometryNamespace::AnyGeometry;
+  using rtreeEntry = BoostGeometryNamespace::rtreeEntry;
+
  public:
   // initialize the Algorithm with the needed parameters
   SpatialJoinAlgorithms(QueryExecutionContext* qec,
@@ -80,12 +92,12 @@ class SpatialJoinAlgorithms {
   // The function getMaxDistFromMidpointToAnyPointInsideTheBox() can be used to
   // calculate it.
   std::vector<Box> computeBoundingBox(const Point& startPoint,
-      double additionalDist = 0) const;
+                                      double additionalDist = 0) const;
 
   // This function returns true, iff the given point is contained in any of the
   // bounding boxes
   bool isContainedInBoundingBoxes(const std::vector<Box>& boundingBox,
-      Point point) const;
+                                  Point point) const;
 
   // calculates the midpoint of the given Box
   Point calculateMidpointOfBox(const Box& box) const;
@@ -94,11 +106,15 @@ class SpatialJoinAlgorithms {
     useMidpointForAreas_ = useMidpointForAreas;
   }
 
-  // Helper function, which computes the distance of two points, where each
-  // point comes from a different result table
+  // Helper function, which computes the distance of two geometries, where each
+  // geometrie comes from a different result table
   Id computeDist(const IdTable* resLeft, const IdTable* resRight,
                  size_t rowLeft, size_t rowRight, ColumnIndex leftPointCol,
                  ColumnIndex rightPointCol) const;
+
+  // Helper function, which computes the distance of two geometries, where each
+  // geometrie has already been parsed and is available as an rtreeEntry
+  Id computeDist(const rtreeEntry& geo1, const rtreeEntry& geo2) const;
 
   // this function calculates the maximum distance from the midpoint of the box
   // to any other point, which is contained in the box. If the midpoint has
@@ -109,7 +125,8 @@ class SpatialJoinAlgorithms {
       const Box& box, std::optional<Point> midpoint = std::nullopt) const;
 
   // this function gets the string which represents the area from the idtable.
-  bool getAnyGeometry(const IdTable* idtable, size_t row, size_t col, AnyGeometry& geometry) const;
+  bool getAnyGeometry(const IdTable* idtable, size_t row, size_t col,
+                      AnyGeometry& geometry) const;
 
  private:
   // Helper function which returns a GeoPoint if the element of the given table
@@ -138,7 +155,20 @@ class SpatialJoinAlgorithms {
   // distances)
   std::vector<Box> computeBoundingBoxForLargeDistances(
       const Point& startPoint) const;
-  
+
+  // this helper function approximates a conversion of the distance between two
+  // objects from degrees to meters. Here we assume, that the conversion from
+  // degrees to meters is constant, which is however only true for the latitude
+  // values. For the longitude values this is not true. Therefore a value which
+  // works very good for almost all longitudes and latitudes has been chosen.
+  // Only for the poles, the conversion will be way to large (for the longitude
+  // difference).
+  double convertDegreesToMeters(AnyGeometry geometry1,
+                                AnyGeometry geometry2) const;
+
+  // this helper function converts a GeoPoint into a boost geometry Point
+  Point convertGeoPointToPoint(GeoPoint point) const;
+
   QueryExecutionContext* qec_;
   PreparedSpatialJoinParams params_;
   SpatialJoinConfiguration config_;
