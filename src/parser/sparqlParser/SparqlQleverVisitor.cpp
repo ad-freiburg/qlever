@@ -438,7 +438,7 @@ std::optional<Values> Visitor::visit(Parser::ValuesClauseContext* ctx) {
   return visitOptional(ctx->dataBlock());
 }
 
-// ____________________________________________________________________________________
+// ____________________________________________________________________________
 ParsedQuery Visitor::visit(Parser::UpdateContext* ctx) {
   // The prologue (BASE and PREFIX declarations)  only affects the internal
   // state of the visitor.
@@ -446,7 +446,9 @@ ParsedQuery Visitor::visit(Parser::UpdateContext* ctx) {
 
   auto update = visit(ctx->update1());
 
-  if (ctx->update()) {
+  // More than one operation in a single update request is not yet supported,
+  // but a semicolon after a single update is allowed.
+  if (ctx->update() && !ctx->update()->getText().empty()) {
     parsedQuery_ = ParsedQuery{};
     reportNotSupported(ctx->update(), "Multiple updates in one query are");
   }

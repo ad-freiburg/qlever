@@ -2050,10 +2050,12 @@ TEST(SparqlParser, QuadData) {
 TEST(SparqlParser, Update) {
   auto expectUpdate_ = ExpectCompleteParse<&Parser::update>{defaultPrefixMap};
   // Automatically test all updates for their `_originalString`.
-  auto expectUpdate = [&expectUpdate_](const std::string& query,
-                                       auto&& expected) {
-    expectUpdate_(query,
-                  testing::AllOf(expected, m::pq::OriginalString(query)));
+  auto expectUpdate = [&expectUpdate_](
+                          const std::string& query, auto&& expected,
+                          ad_utility::source_location l =
+                              ad_utility::source_location::current()) {
+    expectUpdate_(query, testing::AllOf(expected, m::pq::OriginalString(query)),
+                  l);
   };
   auto expectUpdateFails = ExpectParseFails<&Parser::update>{};
   auto Iri = [](std::string_view stringWithBrackets) {
@@ -2185,6 +2187,21 @@ TEST(SparqlParser, Update) {
   expectUpdate("COPY DEFAULT TO GRAPH <foo>",
                m::UpdateClause(m::Copy(false, DEFAULT{}, Iri("<foo>")),
                                m::GraphPattern()));
+  const auto simpleInsertMatcher = m::UpdateClause(
+      m::GraphUpdate({}, {{Iri("<a>"), Iri("<b>"), Iri("<c>"), noGraph}},
+                     std::nullopt),
+      m::GraphPattern());
+  expectUpdate("INSERT DATA { <a> <b> <c> }", simpleInsertMatcher);
+  expectUpdate("INSERT DATA { <a> <b> <c> };", simpleInsertMatcher);
+  const auto multipleUpdatesError = testing::HasSubstr(
+      "Not supported: Multiple updates in one query are "
+      "currently not supported by QLever");
+  expectUpdateFails("INSERT DATA { <a> <b> <c> }; PREFIX foo: <foo>",
+                    multipleUpdatesError);
+  expectUpdateFails("INSERT DATA { <a> <b> <c> }; BASE <bar>",
+                    multipleUpdatesError);
+  expectUpdateFails("INSERT DATA { <a> <b> <c> }; INSERT DATA { <d> <e> <f> }",
+                    multipleUpdatesError);
 }
 
 TEST(SparqlParser, QueryOrUpdate) {
