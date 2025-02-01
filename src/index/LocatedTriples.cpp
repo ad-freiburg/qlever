@@ -245,9 +245,8 @@ void LocatedTriplesPerBlock::erase(size_t blockIndex,
 
 // ____________________________________________________________________________
 void LocatedTriplesPerBlock::setOriginalMetadata(
-    std::vector<CompressedBlockMetadata> metadata) {
+    std::shared_ptr<const std::vector<CompressedBlockMetadata>> metadata) {
   originalMetadata_ = std::move(metadata);
-  updateAugmentedMetadata();
 }
 
 // Update the `blockMetadata`, such that its graph info is consistent with the
@@ -297,7 +296,13 @@ void LocatedTriplesPerBlock::updateAugmentedMetadata() {
   // TODO<C++23> use view::enumerate
   size_t blockIndex = 0;
   // Copy to preserve originalMetadata_.
-  augmentedMetadata_ = originalMetadata_;
+  if (!originalMetadata_.has_value()) {
+    AD_LOG_WARN << "The original metadata has not been set, but updates are "
+                   "being performed. This should only happen in unit tests\n";
+    augmentedMetadata_.emplace();
+  } else {
+    augmentedMetadata_ = *originalMetadata_.value();
+  }
   for (auto& blockMetadata : augmentedMetadata_.value()) {
     if (hasUpdates(blockIndex)) {
       const auto& blockUpdates = map_.at(blockIndex);

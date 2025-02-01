@@ -163,8 +163,9 @@ class DeltaTriples {
 
   // Register the original `metadata` for the given `permutation`. This has to
   // be called before any updates are processed.
-  void setOriginalMetadata(Permutation::Enum permutation,
-                           std::vector<CompressedBlockMetadata> metadata);
+  void setOriginalMetadata(
+      Permutation::Enum permutation,
+      std::shared_ptr<const std::vector<CompressedBlockMetadata>> metadata);
 
  private:
   // Find the position of the given triple in the given permutation and add it
