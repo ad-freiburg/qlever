@@ -107,13 +107,13 @@ class SpatialJoinAlgorithms {
   }
 
   // Helper function, which computes the distance of two geometries, where each
-  // geometrie comes from a different result table
+  // geometry comes from a different result table
   Id computeDist(const IdTable* resLeft, const IdTable* resRight,
                  size_t rowLeft, size_t rowRight, ColumnIndex leftPointCol,
                  ColumnIndex rightPointCol) const;
 
   // Helper function, which computes the distance of two geometries, where each
-  // geometrie has already been parsed and is available as an rtreeEntry
+  // geometry has already been parsed and is available as an rtreeEntry
   Id computeDist(const rtreeEntry& geo1, const rtreeEntry& geo2) const;
 
   // this function calculates the maximum distance from the midpoint of the box
