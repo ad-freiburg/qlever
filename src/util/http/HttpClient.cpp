@@ -102,6 +102,7 @@ HttpOrHttpsResponse HttpClientImpl<StreamType>::sendRequest(
   request.set(http::field::accept, acceptHeader);
   request.set(http::field::content_type, contentTypeHeader);
   request.set(http::field::content_length, std::to_string(requestBody.size()));
+  request.set("Query-Id", "1234069183");
   request.body() = requestBody;
 
   auto wait = [&client, &handle]<typename T>(

@@ -55,6 +55,7 @@ inline auto& RuntimeParameters() {
         // Control up until which size lazy results should be cached. Caching
         // does cause significant overhead for this case.
         MemorySizeParameter<"lazy-result-max-cache-size">{5_MB},
+        Bool<"always-multiply-unions">{false},
         Bool<"websocket-updates-enabled">{true},
         // When the result of an index scan is smaller than a single block, then
         // its size estimate will be the size of the block divided by this
