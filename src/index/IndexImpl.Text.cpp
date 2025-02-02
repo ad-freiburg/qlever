@@ -617,7 +617,9 @@ IdTable IndexImpl::readWordCl(
       idTable.getColumn(2).begin(), tbmd._cl._nofElements,
       tbmd._cl._startScorelist,
       static_cast<size_t>(tbmd._cl._lastByte + 1 - tbmd._cl._startScorelist),
-      textIndexFile_, &Id::makeFromInt);
+      textIndexFile_, [](Score score) {
+        return Id::makeFromDouble(static_cast<double>(score));
+      });
   return idTable;
 }
 

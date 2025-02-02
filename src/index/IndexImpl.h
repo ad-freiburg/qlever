@@ -644,37 +644,6 @@ class IndexImpl {
 
   TextBlockIndex getWordBlockId(WordIndex wordIndex) const;
 
-<<<<<<< HEAD
-  //! Writes a list of elements (have to be able to be cast to unit64_t)
-  //! to file.
-  //! Returns the number of bytes written.
-  template <class Numeric>
-  size_t writeList(Numeric* data, size_t nofElements,
-                   ad_utility::File& file) const;
-
-  // Does the same as writeList but for floats (currently they are not being
-  // compressed)
-  template <typename T>
-  size_t writeUncomprList(T* data, size_t nofElements,
-                          ad_utility::File& file) const;
-
-  // TODO<joka921> understand what the "codes" are, are they better just ints?
-  // After using createCodebooks on these types, the lowest codes refer to the
-  // most frequent WordIndex/Score. The maps are mapping those codes to their
-  // respective frequency.
-  typedef ad_utility::HashMap<WordIndex, CompressionCode> WordCodeMap;
-  typedef vector<CompressionCode> WordCodebook;
-
-  //! Creates codebooks for lists that are supposed to be entropy encoded.
-  void createCodebooks(const vector<Posting>& postings,
-                       WordCodeMap& wordCodemap,
-                       WordCodebook& wordCodebook) const;
-
-  template <class T>
-  size_t writeCodebook(const vector<T>& codebook, ad_utility::File& file) const;
-
-=======
->>>>>>> upstream/master
   // FRIEND TESTS
   friend class IndexTest_createFromTsvTest_Test;
   friend class IndexTest_createFromOnDiskIndexTest_Test;
