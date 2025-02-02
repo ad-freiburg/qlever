@@ -169,6 +169,37 @@ void Server::run(const string& indexBaseName, bool useText, bool usePatterns,
   httpServer.run();
 }
 
+std::optional<std::string> Server::extractAccessToken(
+    const ad_utility::httpUtils::HttpRequest auto& request,
+    const ad_utility::url_parser::ParamValueMap& params) {
+  std::optional<std::string> tokenFromAuthorizationHeader;
+  std::optional<std::string> tokenFromParameter;
+  if (request.find(http::field::authorization) != request.end()) {
+    string_view authorization = request[http::field::authorization];
+    const std::string prefix = "Bearer ";
+    if (!authorization.starts_with(prefix)) {
+      throw std::runtime_error(absl::StrCat(
+          "Authorization header doesn't start with \"", prefix, "\"."));
+    }
+    authorization.remove_prefix(prefix.length());
+    tokenFromAuthorizationHeader = std::string(authorization);
+  }
+  if (params.contains("access-token")) {
+    tokenFromParameter = ad_utility::url_parser::getParameterCheckAtMostOnce(
+        params, "access-token");
+  }
+  // If both are specified, they must be equal. This way there is no hidden
+  // precedence.
+  if (tokenFromAuthorizationHeader && tokenFromParameter &&
+      tokenFromAuthorizationHeader != tokenFromParameter) {
+    throw std::runtime_error(
+        "Access token is specified both in the `Authorization` header and by "
+        "the `access-token` parameter, but they are not the same");
+  }
+  return tokenFromAuthorizationHeader ? std::move(tokenFromAuthorizationHeader)
+                                      : std::move(tokenFromParameter);
+}
+
 // _____________________________________________________________________________
 ad_utility::url_parser::ParsedRequest Server::parseHttpRequest(
     const ad_utility::httpUtils::HttpRequest auto& request) {
@@ -177,7 +208,8 @@ ad_utility::url_parser::ParsedRequest Server::parseHttpRequest(
   // This is a concatenation of the URL path and the query strings.
   auto parsedUrl = ad_utility::url_parser::parseRequestTarget(request.target());
   ad_utility::url_parser::ParsedRequest parsedRequest{
-      std::move(parsedUrl.path_), std::move(parsedUrl.parameters_), None{}};
+      std::move(parsedUrl.path_), std::nullopt,
+      std::move(parsedUrl.parameters_), None{}};
 
   // Some valid requests (e.g. QLever's custom commands like retrieving index
   // statistics) don't have a query. So an empty operation is not necessarily an
@@ -208,10 +240,15 @@ ad_utility::url_parser::ParsedRequest Server::parseHttpRequest(
     addToDatasetClausesIfOperationIs(ti<Update>, "using-graph-uri", false);
     addToDatasetClausesIfOperationIs(ti<Update>, "using-named-graph-uri", true);
   };
+  auto extractAccessTokenFromRequest = [&parsedRequest, &request]() {
+    parsedRequest.accessToken_ =
+        extractAccessToken(request, parsedRequest.parameters_);
+  };
 
   if (request.method() == http::verb::get) {
     setOperationIfSpecifiedInParams(ti<Query>, "query");
     addDatasetClauses();
+    extractAccessTokenFromRequest();
 
     if (parsedRequest.parameters_.contains("update")) {
       throw std::runtime_error("SPARQL Update is not allowed as GET request.");
@@ -283,16 +320,22 @@ ad_utility::url_parser::ParsedRequest Server::parseHttpRequest(
       setOperationIfSpecifiedInParams(ti<Query>, "query");
       setOperationIfSpecifiedInParams(ti<Update>, "update");
       addDatasetClauses();
+      // We parse the access token from the url-encoded parameters in the body.
+      // The URL parameters must be empty for URL-encoded POST (see above).
+      extractAccessTokenFromRequest();
+
       return parsedRequest;
     }
     if (contentType.starts_with(contentTypeSparqlQuery)) {
       parsedRequest.operation_ = Query{request.body(), {}};
       addDatasetClauses();
+      extractAccessTokenFromRequest();
       return parsedRequest;
     }
     if (contentType.starts_with(contentTypeSparqlUpdate)) {
       parsedRequest.operation_ = Update{request.body(), {}};
       addDatasetClauses();
+      extractAccessTokenFromRequest();
       return parsedRequest;
     }
     throw std::runtime_error(absl::StrCat(
@@ -369,15 +412,13 @@ Awaitable<void> Server::process(
   // Check the access token. If an access token is provided and the check fails,
   // throw an exception and do not process any part of the query (even if the
   // processing had been allowed without access token).
-  bool accessTokenOk =
-      checkAccessToken(checkParameter("access-token", std::nullopt));
+  bool accessTokenOk = checkAccessToken(parsedHttpRequest.accessToken_);
   auto requireValidAccessToken = [&accessTokenOk](
                                      const std::string& actionName) {
     if (!accessTokenOk) {
       throw std::runtime_error(absl::StrCat(
           actionName,
-          " requires a valid access token. No valid access token is present.",
-          "Processing of request aborted."));
+          " requires a valid access token but no access token was provided"));
     }
   };
 
@@ -1181,17 +1222,15 @@ bool Server::checkAccessToken(
   if (!accessToken) {
     return false;
   }
-  auto accessTokenProvidedMsg = absl::StrCat(
-      "Access token \"access-token=", accessToken.value(), "\" provided");
-  auto requestIgnoredMsg = ", request is ignored";
+  const auto accessTokenProvidedMsg = "Access token was provided";
   if (accessToken_.empty()) {
-    throw std::runtime_error(absl::StrCat(
-        accessTokenProvidedMsg,
-        " but server was started without --access-token", requestIgnoredMsg));
+    throw std::runtime_error(
+        absl::StrCat(accessTokenProvidedMsg,
+                     " but server was started without --access-token"));
   } else if (!ad_utility::constantTimeEquals(accessToken.value(),
                                              accessToken_)) {
-    throw std::runtime_error(absl::StrCat(
-        accessTokenProvidedMsg, " but not correct", requestIgnoredMsg));
+    throw std::runtime_error(
+        absl::StrCat(accessTokenProvidedMsg, " but it was invalid"));
   } else {
     LOG(DEBUG) << accessTokenProvidedMsg << " and correct" << std::endl;
     return true;

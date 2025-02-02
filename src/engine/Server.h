@@ -35,6 +35,7 @@ class Server {
   FRIEND_TEST(ServerTest, parseHttpRequest);
   FRIEND_TEST(ServerTest, getQueryId);
   FRIEND_TEST(ServerTest, createMessageSender);
+  FRIEND_TEST(ServerTest, extractAccessToken);
 
  public:
   explicit Server(unsigned short port, size_t numThreads,
@@ -114,6 +115,12 @@ class Server {
   /// GET and POST request according to the SPARQL 1.1 standard.
   static ad_utility::url_parser::ParsedRequest parseHttpRequest(
       const ad_utility::httpUtils::HttpRequest auto& request);
+
+  /// Extract the Access token for that request from the `Authorization` header
+  /// or the URL query parameters.
+  static std::optional<std::string> extractAccessToken(
+      const ad_utility::httpUtils::HttpRequest auto& request,
+      const ad_utility::url_parser::ParamValueMap& params);
 
   /// Handle a single HTTP request. Check whether a file request or a query was
   /// sent, and dispatch to functions handling these cases. This function
