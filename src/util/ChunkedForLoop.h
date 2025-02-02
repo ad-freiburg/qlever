@@ -68,22 +68,22 @@ inline void chunkedForLoop(std::size_t start, std::size_t end,
 // Helper concept that combines the sized range and input range concepts.
 template <typename R>
 concept SizedInputRange =
-    std::ranges::sized_range<R> && std::ranges::input_range<R>;
+    ql::ranges::sized_range<R> && ql::ranges::input_range<R>;
 
 // Similar to `ql::ranges::copy`, but invokes `chunkOperation` every
 // `chunkSize` elements. (Round up to the next chunk size if the range size is
 // not a multiple of `chunkSize`.)
 template <SizedInputRange R, std::weakly_incrementable O>
 inline void chunkedCopy(R&& inputRange, O result,
-                        std::ranges::range_difference_t<R> chunkSize,
+                        ql::ranges::range_difference_t<R> chunkSize,
                         const std::invocable auto& chunkOperation)
-    requires std::indirectly_copyable<std::ranges::iterator_t<R>, O> {
+    requires std::indirectly_copyable<ql::ranges::iterator_t<R>, O> {
   auto begin = ql::ranges::begin(inputRange);
   auto end = ql::ranges::end(inputRange);
   auto target = result;
   while (ql::ranges::distance(begin, end) >= chunkSize) {
     auto start = begin;
-    std::ranges::advance(begin, chunkSize);
+    ql::ranges::advance(begin, chunkSize);
     target = ql::ranges::copy(start, begin, target).out;
     chunkOperation();
   }
@@ -94,20 +94,20 @@ inline void chunkedCopy(R&& inputRange, O result,
 // Helper concept that combines the sized range and output range concepts.
 template <typename R, typename T>
 concept SizedOutputRange =
-    std::ranges::sized_range<R> && std::ranges::output_range<R, T>;
+    ql::ranges::sized_range<R> && ql::ranges::output_range<R, T>;
 
 // Similar to `ql::ranges::fill`, but invokes `chunkOperation` every
 // `chunkSize` elements. (Round up to the next chunk size if the range size is
 // not a multiple of `chunkSize`.)
 template <typename T, SizedOutputRange<T> R>
 inline void chunkedFill(R&& outputRange, const T& value,
-                        std::ranges::range_difference_t<R> chunkSize,
+                        ql::ranges::range_difference_t<R> chunkSize,
                         const std::invocable auto& chunkOperation) {
   auto begin = ql::ranges::begin(outputRange);
   auto end = ql::ranges::end(outputRange);
   while (ql::ranges::distance(begin, end) >= chunkSize) {
     auto start = begin;
-    std::ranges::advance(begin, chunkSize);
+    ql::ranges::advance(begin, chunkSize);
     ql::ranges::fill(start, begin, value);
     chunkOperation();
   }

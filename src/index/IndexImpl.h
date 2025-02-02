@@ -25,6 +25,7 @@
 #include "index/IndexMetaData.h"
 #include "index/PatternCreator.h"
 #include "index/Permutation.h"
+#include "index/Postings.h"
 #include "index/StxxlSortFunctors.h"
 #include "index/TextMetaData.h"
 #include "index/TextScoring.h"
@@ -107,7 +108,6 @@ class IndexImpl {
   // Block Id, Context Id, Word Id, Score, entity
   using TextVec = stxxl::vector<
       tuple<TextBlockIndex, TextRecordIndex, WordOrEntityIndex, Score, bool>>;
-  using Posting = std::tuple<TextRecordIndex, WordIndex, Score>;
 
   struct IndexMetaDataMmapDispatcher {
     using WriteType = IndexMetaDataMmap;
@@ -603,28 +603,12 @@ class IndexImpl {
 
   void createTextIndex(const string& filename, const TextVec& vec);
 
-  ContextListMetaData writePostings(ad_utility::File& out,
-                                    const vector<Posting>& postings,
-                                    bool skipWordlistIfAllTheSame);
-
   void openTextFileHandle();
 
   void addContextToVector(TextVec::bufwriter_type& writer,
                           TextRecordIndex context,
                           const ad_utility::HashMap<WordIndex, Score>& words,
                           const ad_utility::HashMap<Id, Score>& entities);
-
-  template <typename T, typename MakeFromUint64t>
-  vector<T> readGapComprList(size_t nofElements, off_t from, size_t nofBytes,
-                             MakeFromUint64t makeFromUint64t) const;
-
-  template <typename T, typename MakeFromUint64t = std::identity>
-  vector<T> readFreqComprList(
-      size_t nofElements, off_t from, size_t nofBytes,
-      MakeFromUint64t makeFromUint = MakeFromUint64t{}) const;
-
-  template <typename T>
-  vector<T> readUncomprList(size_t nofElements, off_t from) const;
 
   // Get the metadata for the block from the text index that contains the
   // `word`. Also works for prefixes that are terminated with `PREFIX_CHAR` like
@@ -660,6 +644,7 @@ class IndexImpl {
 
   TextBlockIndex getWordBlockId(WordIndex wordIndex) const;
 
+<<<<<<< HEAD
   //! Writes a list of elements (have to be able to be cast to unit64_t)
   //! to file.
   //! Returns the number of bytes written.
@@ -688,6 +673,8 @@ class IndexImpl {
   template <class T>
   size_t writeCodebook(const vector<T>& codebook, ad_utility::File& file) const;
 
+=======
+>>>>>>> upstream/master
   // FRIEND TESTS
   friend class IndexTest_createFromTsvTest_Test;
   friend class IndexTest_createFromOnDiskIndexTest_Test;
