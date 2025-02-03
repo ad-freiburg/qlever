@@ -25,7 +25,7 @@ class ToNumericImpl {
       }
     } else {
       // Abseil doesn't match leading + signs, so we skip them.
-      if (!str.empty() && str.at(0) == '+') {
+      if (str.starts_with('+')) {
         strStart++;
       }
       auto conv = absl::from_chars(strStart, strEnd, resT,
