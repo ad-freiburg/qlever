@@ -847,16 +847,21 @@ Awaitable<void> Server::processQuery(
   auto [cancellationHandle, cancelTimeoutOnDestruction] =
       setupCancellationHandle(messageSender.getQueryId(), timeLimit);
 
-  // Do the query planning. This creates a `QueryExecutionTree`, which will
-  // then be used to process the query.
+  // Figure out, whether the query is to be pinned in the cache (either
+  // implicitly, or explicitly as a named query).
   auto [pinSubtrees, pinResult] = determineResultPinning(params);
+  std::optional<std::string> pinNamed =
+      ad_utility::url_parser::checkParameter(params, "pin-named-query", {});
   LOG(INFO) << "Processing the following SPARQL query:"
             << (pinResult ? " [pin result]" : "")
             << (pinSubtrees ? " [pin subresults]" : "") << "\n"
+            << (pinNamed ? absl::StrCat(" [pin named as ]", pinNamed.value())
+                         : "")
+            << "\n"
             << query.query_ << std::endl;
   QueryExecutionContext qec(index_, &cache_, allocator_,
-                            sortPerformanceEstimator_, std::ref(messageSender),
-                            pinSubtrees, pinResult);
+                            sortPerformanceEstimator_, &namedQueryCache_,
+                            std::ref(messageSender), pinSubtrees, pinResult);
 
   // The usage of an `optional` here is required because of a limitation in
   // Boost::Asio which forces us to use default-constructible result types with
@@ -907,10 +912,25 @@ Awaitable<void> Server::processQuery(
                        qet.getRootOperation()->getLimit()._offset);
   limitOffset._offset -= qet.getRootOperation()->getLimit()._offset;
 
-  // This actually processes the query and sends the result in the requested
-  // format.
-  co_await sendStreamableResponse(request, send, mediaType, plannedQuery, qet,
-                                  requestTimer, cancellationHandle);
+  if (pinNamed.has_value()) {
+    // The query is to be pinned in the named cache. In this case we don't
+    // return the result, but only pin it.
+    auto result = qet.getResult(false);
+    auto t =
+        NamedQueryCache::Value(result->idTable().clone(),
+                               qet.getVariableColumns(), result->sortedBy());
+    qec.namedQueryCache().store(pinNamed.value(), std::move(t));
+
+    auto response = ad_utility::httpUtils::createOkResponse(
+        "Successfully pinned the query result", request,
+        ad_utility::MediaType::textPlain);
+    co_await send(response);
+  } else {
+    // This actually processes the query and sends the result in the requested
+    // format.
+    co_await sendStreamableResponse(request, send, mediaType, plannedQuery, qet,
+                                    requestTimer, cancellationHandle);
+  }
 
   // Print the runtime info. This needs to be done after the query
   // was computed.
@@ -998,8 +1018,8 @@ json Server::processUpdateImpl(
             << (pinSubtrees ? " [pin subresults]" : "") << "\n"
             << update.update_ << std::endl;
   QueryExecutionContext qec(index_, &cache_, allocator_,
-                            sortPerformanceEstimator_, std::ref(messageSender),
-                            pinSubtrees, pinResult);
+                            sortPerformanceEstimator_, &namedQueryCache_,
+                            std::ref(messageSender), pinSubtrees, pinResult);
   auto plannedQuery =
       setupPlannedQuery(update.datasetClauses_, update.update_, qec,
                         cancellationHandle, timeLimit, requestTimer);
