@@ -14,6 +14,8 @@
 #include "util/ConstexprUtils.h"
 #include "util/http/MediaTypes.h"
 
+using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
+
 // Return true iff the `result` is nonempty.
 bool getResultForAsk(const std::shared_ptr<const Result>& result) {
   if (result->isFullyMaterialized()) {
@@ -348,10 +350,54 @@ ExportQueryExecutionTrees::idToStringAndTypeForEncodedValue(Id id) {
 }
 
 // _____________________________________________________________________________
+std::optional<ad_utility::triple_component::Literal>
+ExportQueryExecutionTrees::idToLiteralForEncodedValue(
+    Id id, bool onlyReturnLiteralsWithXsdString) {
+  if (onlyReturnLiteralsWithXsdString) {
+    return std::nullopt;
+  }
+  auto optionalStringAndType = idToStringAndTypeForEncodedValue(id);
+  if (!optionalStringAndType) {
+    return std::nullopt;
+  }
+
+  return ad_utility::triple_component::Literal::literalWithoutQuotes(
+      optionalStringAndType->first);
+}
+
+// _____________________________________________________________________________
+bool ExportQueryExecutionTrees::isPlainLiteralOrLiteralWithXsdString(
+    const LiteralOrIri& word) {
+  return !word.hasDatatype() ||
+         asStringViewUnsafe(word.getDatatype()) == XSD_STRING;
+}
+
+// _____________________________________________________________________________
+std::optional<ad_utility::triple_component::Literal>
+ExportQueryExecutionTrees::handleIriOrLiteral(
+    LiteralOrIri word, bool onlyReturnLiteralsWithXsdString) {
+  if (!word.isLiteral()) {
+    AD_THROW("The input is an IRI, but only literals are allowed.");
+    return std::nullopt;
+  }
+
+  if (onlyReturnLiteralsWithXsdString) {
+    if (isPlainLiteralOrLiteralWithXsdString(word)) {
+      return word.getLiteral();
+    }
+    return std::nullopt;
+  }
+
+  if (word.hasDatatype() && !isPlainLiteralOrLiteralWithXsdString(word)) {
+    word.getLiteral().removeDatatype();
+  }
+  return word.getLiteral();
+}
+
+// _____________________________________________________________________________
 ad_utility::triple_component::LiteralOrIri
 ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
     const Index& index, Id id, const LocalVocab& localVocab) {
-  using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
   switch (id.getDatatype()) {
     case Datatype::LocalVocabIndex:
       return localVocab.getWord(id.getLocalVocabIndex()).asLiteralOrIri();
@@ -412,6 +458,39 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
       return idToStringAndTypeForEncodedValue(id);
   }
 }
+
+// _____________________________________________________________________________
+template <bool onlyReturnLiterals>
+std::optional<ad_utility::triple_component::Literal>
+ExportQueryExecutionTrees::idToLiteral(const Index& index, Id id,
+                                       const LocalVocab& localVocab,
+                                       bool onlyReturnLiteralsWithXsdString) {
+  using enum Datatype;
+  auto datatype = id.getDatatype();
+
+  if constexpr (onlyReturnLiterals) {
+    if (!(datatype == VocabIndex || datatype == LocalVocabIndex)) {
+      return std::nullopt;
+    }
+  }
+
+  switch (datatype) {
+    case WordVocabIndex:
+      return ad_utility::triple_component::Literal::literalWithoutQuotes(
+          index.indexToString(id.getWordVocabIndex()));
+    case VocabIndex:
+    case LocalVocabIndex:
+      return handleIriOrLiteral(
+          getLiteralOrIriFromVocabIndex(index, id, localVocab),
+          onlyReturnLiteralsWithXsdString);
+    case TextRecordIndex:
+      AD_THROW("TextRecordIndex case is not implemented.");
+      return std::nullopt;
+    default:
+      return idToLiteralForEncodedValue(id, onlyReturnLiteralsWithXsdString);
+  }
+}
+
 // ___________________________________________________________________________
 template std::optional<std::pair<std::string, const char*>>
 ExportQueryExecutionTrees::idToStringAndType<true, false, std::identity>(
@@ -432,6 +511,18 @@ template std::optional<std::pair<std::string, const char*>>
 ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
                                              const LocalVocab& localVocab,
                                              std::identity&& escapeFunction);
+
+// ___________________________________________________________________________
+template std::optional<ad_utility::triple_component::Literal>
+ExportQueryExecutionTrees::idToLiteral<false>(
+    const Index& index, Id id, const LocalVocab& localVocab,
+    bool onlyReturnLiteralsWithXsdString);
+
+// ___________________________________________________________________________
+template std::optional<ad_utility::triple_component::Literal>
+ExportQueryExecutionTrees::idToLiteral<true>(
+    const Index& index, Id id, const LocalVocab& localVocab,
+    bool onlyReturnLiteralsWithXsdString);
 
 // Convert a stringvalue and optional type to JSON binding.
 static nlohmann::json stringAndTypeToBinding(std::string_view entitystr,

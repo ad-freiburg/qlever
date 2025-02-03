@@ -91,6 +91,32 @@ std::optional<std::string> StringValueGetter::operator()(
 }
 
 // ____________________________________________________________________________
+std::optional<ad_utility::triple_component::Literal>
+LiteralValueGetter::operator()(Id id, const EvaluationContext* context) const {
+  return ExportQueryExecutionTrees::idToLiteral(context->_qec.getIndex(), id,
+                                                context->_localVocab);
+}
+
+// ____________________________________________________________________________
+std::optional<ad_utility::triple_component::Literal>
+LiteralValueGetterWithXsdStringFilter::operator()(
+    Id id, const EvaluationContext* context) const {
+  return ExportQueryExecutionTrees::idToLiteral(context->_qec.getIndex(), id,
+                                                context->_localVocab, true);
+}
+
+// ____________________________________________________________________________
+std::optional<ad_utility::triple_component::Literal>
+LiteralValueGetterWithXsdStringFilter::operator()(
+    const LiteralOrIri& s, const EvaluationContext*) const {
+  if (ExportQueryExecutionTrees::isPlainLiteralOrLiteralWithXsdString(s)) {
+    return s.getLiteral();
+  }
+  AD_THROW("Input is not a plain string or xsd:string.");
+  return std::nullopt;
+}
+
+// ____________________________________________________________________________
 template <auto isSomethingFunction, auto prefix>
 Id IsSomethingValueGetter<isSomethingFunction, prefix>::operator()(
     ValueId id, const EvaluationContext* context) const {

@@ -21,6 +21,7 @@ class ExportQueryExecutionTrees {
  public:
   using MediaType = ad_utility::MediaType;
   using CancellationHandle = ad_utility::SharedCancellationHandle;
+  using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
 
   // Compute the result of the given `parsedQuery` (created by the
   // `SparqlParser`) for which the `QueryExecutionTree` has been previously
@@ -68,6 +69,37 @@ class ExportQueryExecutionTrees {
   // thrown.
   static std::optional<std::pair<std::string, const char*>>
   idToStringAndTypeForEncodedValue(Id id);
+
+  // Convert the `id` to a 'LiteralOrIri. Datatypes are always stripped unless
+  // they are 'xsd:string', so for literals with non-'xsd:string' datatypes
+  // (this includes IDs that directly store their value, like Doubles) the
+  // datatype is always empty. If 'onlyReturnLiteralsWithXsdString' is true, all
+  // IRIs and literals with non'-xsd:string' datatypes (including encoded IDs)
+  // return 'std::nullopt'. These semantics are useful for the string
+  // expressions in StringExpressions.cpp.
+  template <bool returnOnlyLiterals = false>
+  static std::optional<ad_utility::triple_component::Literal> idToLiteral(
+      const Index& index, Id id, const LocalVocab& localVocab,
+      bool onlyReturnLiteralsWithXsdString = false);
+
+  // Same as the previous function, but only handles the datatypes for which the
+  // value is encoded directly in the ID. For other datatypes an exception is
+  // thrown.
+  // If `onlyReturnLiteralsWithXsdString` is `true`, returns `std::nullopt`.
+  // If `onlyReturnLiteralsWithXsdString` is `false`, removes datatypes from
+  // literals (e.g. the integer `42` is converted to the plain literal `"42"`).
+  static std::optional<ad_utility::triple_component::Literal>
+  idToLiteralForEncodedValue(Id id,
+                             bool onlyReturnLiteralsWithXsdString = false);
+
+  // A helper function for the `idToLiteralOrIri` function. Checks and processes
+  // a LiteralOrIri based on the given parameters.
+  static std::optional<ad_utility::triple_component::Literal>
+  handleIriOrLiteral(LiteralOrIri word, bool onlyReturnLiteralsWithXsdString);
+
+  // Checks if a LiteralOrIri is either a plain literal (without datatype)
+  // or a literal with the `xsd:string` datatype.
+  static bool isPlainLiteralOrLiteralWithXsdString(const LiteralOrIri& word);
 
   // Acts as a helper to retrieve an LiteralOrIri object
   // from an Id, where the Id is of type `VocabIndex` or `LocalVocabIndex`.
