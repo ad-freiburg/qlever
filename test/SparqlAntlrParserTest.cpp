@@ -1799,7 +1799,7 @@ TEST(SparqlParser, FunctionCall) {
   expectFunctionCall(absl::StrCat(xsd, "double>(?x)"),
                      matchUnary(&makeConvertToDoubleExpression));
   expectFunctionCall(absl::StrCat(xsd, "decimal>(?x)"),
-                     matchUnary(&makeConvertToDoubleExpression));
+                     matchUnary(&makeConvertToDecimalExpression));
 
   // Wrong number of arguments.
   expectFunctionCallFails(absl::StrCat(geof, "distance>(?a)"));
