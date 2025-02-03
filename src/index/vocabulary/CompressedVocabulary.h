@@ -293,10 +293,10 @@ CPP_template(typename UnderlyingVocabulary,
 
   // Decompress the word that `it` points to. `it` is an iterator into the
   // underlying vocabulary.
-  auto decompressFromIterator(auto it) const {
+  template <typename It>
+  auto decompressFromIterator(It it) const {
     auto idx = [&]() {
-      if constexpr (detail::IterableVocabulary<UnderlyingVocabulary,
-                                               decltype(it)>) {
+      if constexpr (detail::IterableVocabulary<UnderlyingVocabulary, It>) {
         return it - underlyingVocabulary_.begin();
       } else {
         return underlyingVocabulary_.iteratorToIndex(it);

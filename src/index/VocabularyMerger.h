@@ -143,11 +143,11 @@ struct VocabularyMetaData {
 // strings (case-sensitive or not). Argument `wordCallback`
 // is called for each merged word in the vocabulary in the order of their
 // appearance.
-template <QL_CONCEPT_OR_TYPENAME(WordComparator) W,
-          QL_CONCEPT_OR_TYPENAME(WordCallback) C>
-VocabularyMetaData mergeVocabulary(const std::string& basename, size_t numFiles,
-                                   W comparator, C& wordCallback,
-                                   ad_utility::MemorySize memoryToUse);
+template <typename W, typename C>
+auto mergeVocabulary(const std::string& basename, size_t numFiles, W comparator,
+                     C& wordCallback, ad_utility::MemorySize memoryToUse)
+    -> CPP_ret(VocabularyMetaData)(
+        requires WordComparator<W>&& WordCallback<C>);
 
 // A helper class that implements the `mergeVocabulary` function (see
 // above). Everything in this class is private and only the
@@ -165,23 +165,23 @@ class VocabularyMerger {
   const size_t bufferSize_ = BATCH_SIZE_VOCABULARY_MERGE;
 
   // Friend declaration for the publicly available function.
-  template <QL_CONCEPT_OR_TYPENAME(WordComparator) W,
-            QL_CONCEPT_OR_TYPENAME(WordCallback) C>
-  friend VocabularyMetaData mergeVocabulary(const std::string& basename,
-                                            size_t numFiles, W comparator,
-                                            C& wordCallback,
-                                            ad_utility::MemorySize memoryToUse);
+  template <typename W, typename C>
+  friend auto mergeVocabulary(const std::string& basename, size_t numFiles,
+                              W comparator, C& wordCallback,
+                              ad_utility::MemorySize memoryToUse)
+      -> CPP_ret(VocabularyMetaData)(
+          requires WordComparator<W>&& WordCallback<C>);
   VocabularyMerger() = default;
 
   // _______________________________________________________________
   // The function that performs the actual merge. See the static global
   // `mergeVocabulary` function for details.
-  template <QL_CONCEPT_OR_TYPENAME(WordComparator) W,
-            QL_CONCEPT_OR_TYPENAME(WordCallback) C>
-  VocabularyMetaData mergeVocabulary(const std::string& basename,
-                                     size_t numFiles, W comparator,
-                                     C& wordCallback,
-                                     ad_utility::MemorySize memoryToUse);
+  template <typename W, typename C>
+  auto mergeVocabulary(const std::string& basename, size_t numFiles,
+                       W comparator, C& wordCallback,
+                       ad_utility::MemorySize memoryToUse)
+      -> CPP_ret(VocabularyMetaData)(
+          requires WordComparator<W>&& WordCallback<C>);
 
   // Helper `struct` for a word from a partial vocabulary.
   struct QueueWord {
@@ -210,19 +210,15 @@ class VocabularyMerger {
   // Write the queue words in the buffer to their corresponding `idPairVecs`.
   // The `QueueWord`s must be passed in alphabetical order wrt `lessThan` (also
   // across multiple calls).
+  // clang-format off
   CPP_template(typename C, typename L)(
       requires WordCallback<C> CPP_and ranges::predicate<
           L, TripleComponentWithIndex,
-          TripleComponentWithIndex>) void writeQueueWordsToIdVec(const std::
-                                                                     vector<
-                                                                         QueueWord>&
-                                                                         buffer,
-                                                                 C& wordCallback,
-                                                                 const L&
-                                                                     lessThan,
-                                                                 ad_utility::
-                                                                     ProgressBar&
-                                                                         progressBar);
+          TripleComponentWithIndex>)
+      // clang-format on
+      void writeQueueWordsToIdVec(const std::vector<QueueWord>& buffer,
+                                  C& wordCallback, const L& lessThan,
+                                  ad_utility::ProgressBar& progressBar);
 
   // Close all associated files and MmapVectors and reset all internal
   // variables.

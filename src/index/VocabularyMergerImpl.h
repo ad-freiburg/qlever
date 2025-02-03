@@ -31,24 +31,25 @@
 
 namespace ad_utility::vocabulary_merger {
 // _________________________________________________________________
-template <QL_CONCEPT_OR_TYPENAME(WordComparator) W,
-          QL_CONCEPT_OR_TYPENAME(WordCallback) C>
-VocabularyMetaData mergeVocabulary(const std::string& basename, size_t numFiles,
-                                   W comparator, C& internalWordCallback,
-                                   ad_utility::MemorySize memoryToUse) {
+template <typename W, typename C>
+auto mergeVocabulary(const std::string& basename, size_t numFiles, W comparator,
+                     C& internalWordCallback,
+                     ad_utility::MemorySize memoryToUse)
+    -> CPP_ret(VocabularyMetaData)(
+        requires WordComparator<W>&& WordCallback<C>) {
   VocabularyMerger merger;
   return merger.mergeVocabulary(basename, numFiles, std::move(comparator),
                                 internalWordCallback, memoryToUse);
 }
 
 // _________________________________________________________________
-template <QL_CONCEPT_OR_TYPENAME(WordComparator) W,
-          QL_CONCEPT_OR_TYPENAME(WordCallback) C>
+template <typename W, typename C>
 auto VocabularyMerger::mergeVocabulary(const std::string& basename,
                                        size_t numFiles, W comparator,
                                        C& wordCallback,
                                        ad_utility::MemorySize memoryToUse)
-    -> VocabularyMetaData {
+    -> CPP_ret(VocabularyMetaData)(
+        requires WordComparator<W>&& WordCallback<C>) {
   // Return true iff p1 >= p2 according to the lexicographic order of the IRI
   // or literal.
   auto lessThan = [&comparator](const TripleComponentWithIndex& t1,
@@ -87,8 +88,8 @@ auto VocabularyMerger::mergeVocabulary(const std::string& basename,
 
   std::future<void> writeFuture;
 
-  // Some memory (that is hard to measure exactly) is used for the writing of a
-  // batch of merged words, so we only give 80% of the total memory to the
+  // Some memory (that is hard to measure exactly) is used for the writing of
+  // a batch of merged words, so we only give 80% of the total memory to the
   // merging. This is very approximate and should be investigated in more
   // detail.
   auto mergedWords =
@@ -114,8 +115,8 @@ auto VocabularyMerger::mergeVocabulary(const std::string& basename,
       // wait for the last batch
 
       LOG(TIMING) << "A new batch of words is ready" << std::endl;
-      // First wait for the last batch to finish, that way there will be no race
-      // conditions.
+      // First wait for the last batch to finish, that way there will be no
+      // race conditions.
       if (writeFuture.valid()) {
         writeFuture.get();
       }

@@ -11,6 +11,12 @@
 
 namespace ad_utility::vocabulary {
 
+// A helper concept for the compression wrappers below.
+// A `BulkResultForDecoder` is a tuple of 3 elements, the first of which is an
+// implementation detail (e.g. a buffer that stores the data for the second
+// argument ), the second of which is a `vector<string_view>` or
+// `vector<string>` that stores compressed strings and the third of which is a
+// `Decoder`.
 template <typename T, typename Decoder>
 CPP_requires(
     BulkResultForDecoder_,
@@ -19,13 +25,6 @@ CPP_requires(
                                            std::vector<std::string_view>,
                                            std::vector<std::string>>,
                   ad_utility::SimilarTo<decltype(std::get<2>(t)), Decoder>));
-
-// A helper concept for the compression wrappers below.
-// A `BulkResultForDecoder` is a tuple of 3 elements, the first of which is an
-// implementation detail (e.g. a buffer that stores the data for the second
-// argument ), the second of which is a `vector<string_view>` or
-// `vector<string>` that stores compressed strings and the third of which is a
-// `Decoder`.
 template <typename T, typename Decoder>
 CPP_concept BulkResultForDecoder =
     CPP_requires_ref(BulkResultForDecoder_, T, Decoder);
