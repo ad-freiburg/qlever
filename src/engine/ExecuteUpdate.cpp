@@ -121,6 +121,63 @@ void ExecuteUpdate::computeAndAddQuadsForResultRow(
   }
 }
 
+bool ExecuteUpdate::deletedTriplesExistInIndex(const ParsedQuery& query) {
+  AD_CORRECTNESS_CHECK(query.hasUpdateClause());
+  const auto& updateClause = query.updateClause();
+  if (!std::holds_alternative<updateClause::GraphUpdate>(updateClause.op_)) {
+    return false;
+  }
+  const auto& graphUpdate =
+      std::get<updateClause::GraphUpdate>(updateClause.op_);
+  vector<SparqlTripleSimpleWithGraph> triplesGraphUpdate =
+      graphUpdate.toDelete_;
+  // Triples with non-default graph are represented in graph patterns in a way
+  // that we do not detect.
+  if (std::ranges::any_of(
+          triplesGraphUpdate, [](const SparqlTripleSimpleWithGraph& triple) {
+            return !std::holds_alternative<std::monostate>(triple.g_);
+          })) {
+    return false;
+  }
+  // The triples all have the default graph as graph, we can treat them as a
+  // `SparqlTripleSimple`.
+  if (query._rootGraphPattern._graphPatterns.size() != 1) {
+    return false;
+  }
+  const parsedQuery::GraphPatternOperation rootOperation =
+      query._rootGraphPattern._graphPatterns[0];
+  if (!std::holds_alternative<parsedQuery::BasicGraphPattern>(rootOperation)) {
+    return false;
+  }
+  const parsedQuery::BasicGraphPattern& rootGraphPattern =
+      rootOperation.getBasic();
+  vector<SparqlTriple> triplesGraphPattern = rootGraphPattern._triples;
+  // If any of the predicates is a non-trivial (meaning not just an Iri)
+  // property path then we cannot determine whether the triples exist in the
+  // index.
+  if (std::ranges::any_of(triplesGraphPattern, [](const SparqlTriple& triple) {
+        return !triple.p_.isIri();
+      })) {
+    return false;
+  }
+  // The `SparqlTriple` are now all simple.
+  if (triplesGraphPattern.size() < triplesGraphUpdate.size()) {
+    return false;
+  }
+  vector<SparqlTripleSimple> triplesGraphPatternSimple =
+      ad_utility::transform(triplesGraphPattern, &SparqlTriple::getSimple);
+  // Return whether the triples in the Graph Pattern are a subset of the triples
+  // in the Delete clause.
+  return triplesGraphUpdate.empty() ||
+         ql::ranges::all_of(triplesGraphUpdate,
+                            [&triplesGraphPatternSimple](
+                                const SparqlTripleSimpleWithGraph& triple) {
+                              return std::ranges::find(
+                                         triplesGraphPatternSimple, triple) !=
+                                     triplesGraphPatternSimple.end();
+                            });
+}
+
 // _____________________________________________________________________________
 std::pair<ExecuteUpdate::IdTriplesAndLocalVocab,
           ExecuteUpdate::IdTriplesAndLocalVocab>
@@ -134,6 +191,7 @@ ExecuteUpdate::computeGraphUpdateQuads(
         "Only INSERT/DELETE update operations are currently supported.");
   }
   auto graphUpdate = std::get<updateClause::GraphUpdate>(updateClause.op_);
+  bool deletedTriplesExist = deletedTriplesExistInIndex(query);
   // Fully materialize the result for now. This makes it easier to execute the
   // update.
   auto result = qet.getResult(false);
@@ -176,6 +234,35 @@ ExecuteUpdate::computeGraphUpdateQuads(
       cancellationHandle->throwIfCancelled();
     }
   }
+  auto sortAndRemoveDuplicates = [](auto& vec) {
+    ql::ranges::sort(vec);
+    auto first = ql::ranges::unique(vec).begin();
+    vec.erase(first, vec.end());
+  };
+  // We could also do this once directly one the triple templates. But they'd
+  // need to have an ordering for that.
+  auto setMinus = []<typename T>(std::vector<T>& left, std::vector<T>& right) {
+    vector<T> optimisedLeft;
+    vector<T> optimisedRight;
+    ql::ranges::set_difference(left, right, std::back_inserter(optimisedLeft));
+    ql::ranges::set_difference(right, left, std::back_inserter(optimisedRight));
+    left = std::move(optimisedLeft);
+    right = std::move(optimisedRight);
+  };
+  sortAndRemoveDuplicates(toInsert);
+  sortAndRemoveDuplicates(toDelete);
+  // The following observations allows us to optimise the number of triples we
+  // store for updates:
+  // Assume the update `DELETE { <A'> } INSERT { <B> } WHERE { <A''> }`.
+  // - if A' <= A'' then all triples that will be deleted by this query are in
+  // the index
+  // - if all triples that are being deleted we can omit triples that are both
+  // deleted and inserted by this query
+  // We only have to delete the triples A'\B and insert B\A'.
+  if (deletedTriplesExist) {
+    setMinus(toInsert, toDelete);
+  }
+
   metadata.triplePreparationTime_ = timer.msecs();
 
   return {

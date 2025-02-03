@@ -71,4 +71,10 @@ class ExecuteUpdate {
                           const CancellationHandle& cancellationHandle,
                           UpdateMetadata& metadata);
   FRIEND_TEST(ExecuteUpdate, computeGraphUpdateQuads);
+
+  // Determines whether the triples that will be deleted by this update have
+  // existed in the original Index. This information is relevant for some
+  // optimisations.
+  static bool deletedTriplesExistInIndex(const ParsedQuery& query);
+  FRIEND_TEST(ExecuteUpdate, deletedTriplesExistInIndex);
 };
