@@ -249,8 +249,8 @@ class RowReferenceImpl {
    public:
     // Swap two `RowReference`s, but only if they are temporaries (rvalues).
     // This modifies the underlying table.
-    // TODO: <ccoecontrol> what about this?
-    friend void swap(This&& a, This&& b) requires(!isConst) {
+    CPP_template(typename = void)(requires CPP_NOT(isConst)) friend void swap(
+        This&& a, This&& b) {
       return swapImpl(a, b);
     }
 

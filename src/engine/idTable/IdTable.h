@@ -502,11 +502,14 @@ class IdTable {
   // `auto newTable = AD_FWD(oldTable).moveOrClone()` which is equivalent to the
   // pattern `auto newX = AD_FWD(oldX)` where the type is copy-constructible
   // (which `IdTable` is not.).
-  // TODO: <ccoecontrol> what with this one?
-  // reimplementing it with CPP_template macro causes template redefinition
-  // errors
-  auto moveOrClone() const& requires isCloneable { return clone(); }
-  IdTable&& moveOrClone() && requires isCloneable { return std::move(*this); }
+  CPP_template(typename = void)(
+      requires(isCloneable)) auto moveOrClone() const& {
+    return clone();
+  }
+  CPP_template(typename = void)(
+      requires(isCloneable)) IdTable&& moveOrClone() && {
+    return std::move(*this);
+  }
 
   // Overload of `clone` for `Storage` types that are not copy constructible.
   // It requires a preconstructed but empty argument of type `Storage` that
