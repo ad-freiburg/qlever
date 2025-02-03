@@ -16,13 +16,7 @@
 #include "util/Serializer/SerializePair.h"
 #include "util/TaskQueue.h"
 
-template <typename Writer, typename Word>
-CPP_requires(WriterWithTwoArgs_,
-             requires(Writer& writer, Word& word)(writer(word, false)));
-
-template <typename Writer, typename Word>
-CPP_concept WriterWithTwoArgs =
-    CPP_requires_ref(WriterWithTwoArgs_, Writer, Word);
+namespace detail {
 
 template <typename Vocabulary, typename Iterator>
 CPP_requires(IterableVocabulary_,
@@ -32,6 +26,8 @@ CPP_requires(IterableVocabulary_,
 template <typename Vocabulary, typename Iterator>
 CPP_concept IterableVocabulary =
     CPP_requires_ref(IterableVocabulary_, Vocabulary, Iterator);
+
+}  // namespace detail
 
 // A vocabulary in which compression is performed using a customizable
 // compression algorithm, with one dictionary per `NumWordsPerBlock` many words
@@ -244,9 +240,8 @@ CPP_template(typename UnderlyingVocabulary,
                   static_cast<size_t>(compressedSize > uncompressedSize);
               size_t i = 0;
               for (auto& word : views) {
-                if constexpr (WriterWithTwoArgs<
-                                  typename UnderlyingVocabulary::WordWriter,
-                                  decltype(word)>) {
+                if constexpr (std::is_invocable_v<decltype(underlyingWriter_),
+                                                  decltype(word), bool>) {
                   underlyingWriter_(word, isExternalBuffer.at(i));
                   ++i;
                 } else {
@@ -300,7 +295,8 @@ CPP_template(typename UnderlyingVocabulary,
   // underlying vocabulary.
   auto decompressFromIterator(auto it) const {
     auto idx = [&]() {
-      if constexpr (IterableVocabulary<UnderlyingVocabulary, decltype(it)>) {
+      if constexpr (detail::IterableVocabulary<UnderlyingVocabulary,
+                                               decltype(it)>) {
         return it - underlyingVocabulary_.begin();
       } else {
         return underlyingVocabulary_.iteratorToIndex(it);

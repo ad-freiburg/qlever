@@ -142,12 +142,13 @@ auto VocabularyMerger::mergeVocabulary(const std::string& basename,
 }
 
 // ________________________________________________________________________________
-CPP_template_def(typename C)(requires WordCallback<C>) void VocabularyMerger::
-    writeQueueWordsToIdVec(
-        const std::vector<QueueWord>& buffer, C& wordCallback,
-        std::predicate<TripleComponentWithIndex,
-                       TripleComponentWithIndex> auto const& lessThan,
-        ad_utility::ProgressBar& progressBar) {
+CPP_template_def(typename C, typename L)(
+    requires WordCallback<C> CPP_and
+        ranges::predicate<L, TripleComponentWithIndex,
+                          TripleComponentWithIndex>) void VocabularyMerger::
+    writeQueueWordsToIdVec(const std::vector<QueueWord>& buffer,
+                           C& wordCallback, const L& lessThan,
+                           ad_utility::ProgressBar& progressBar) {
   LOG(TIMING) << "Start writing a batch of merged words\n";
 
   // Smaller grained buffer for the actual inner write.

@@ -210,11 +210,19 @@ class VocabularyMerger {
   // Write the queue words in the buffer to their corresponding `idPairVecs`.
   // The `QueueWord`s must be passed in alphabetical order wrt `lessThan` (also
   // across multiple calls).
-  CPP_template(typename C)(requires WordCallback<C>) void writeQueueWordsToIdVec(
-      const std::vector<QueueWord>& buffer, C& wordCallback,
-      std::predicate<TripleComponentWithIndex,
-                     TripleComponentWithIndex> auto const& lessThan,
-      ad_utility::ProgressBar& progressBar);
+  CPP_template(typename C, typename L)(
+      requires WordCallback<C> CPP_and ranges::predicate<
+          L, TripleComponentWithIndex,
+          TripleComponentWithIndex>) void writeQueueWordsToIdVec(const std::
+                                                                     vector<
+                                                                         QueueWord>&
+                                                                         buffer,
+                                                                 C& wordCallback,
+                                                                 const L&
+                                                                     lessThan,
+                                                                 ad_utility::
+                                                                     ProgressBar&
+                                                                         progressBar);
 
   // Close all associated files and MmapVectors and reset all internal
   // variables.
