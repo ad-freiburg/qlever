@@ -30,7 +30,6 @@ CPP_concept HasPushBackConcept = CPP_requires_ref(HasPushBack, B, R);
 
 using namespace ad_utility::memory_literals;
 
-
 // The default size for compressed blocks in the following classes.
 static constexpr ad_utility::MemorySize DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE =
     500_kB;
@@ -345,9 +344,11 @@ class CompressedExternalIdTableBase {
   }
   // Add a single row to the input. The type of `row` needs to be something that
   // can be `push_back`ed to a `IdTable`.
-  CPP_template_def(typename R)(requires HasPushBackConcept<IdTableStatic<NumStaticCols>, R>)
-  void push(const R& row)
-  // void push(const auto& row) requires requires { currentBlock_.push_back(row); }
+  CPP_template(typename R)(
+      requires HasPushBackConcept<IdTableStatic<NumStaticCols>,
+                                  R>) void push(const R& row)
+  // void push(const auto& row) requires requires {
+  // currentBlock_.push_back(row); }
   {
     ++numElementsPushed_;
     currentBlock_.push_back(row);

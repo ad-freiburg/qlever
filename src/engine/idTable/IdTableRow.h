@@ -172,9 +172,11 @@ class RowReferenceImpl {
 
    protected:
     // The actual implementation of operator[].
-    CPP_template_def(typename SelfType)(requires(
-        !std::is_const_v<std::remove_reference_t<SelfType>> CPP_and
-        !isConst)) static T& operatorBracketImpl(SelfType& self, size_t i) {
+    CPP_template(typename SelfType)(
+        requires CPP_NOT(std::is_const_v<std::remove_reference_t<SelfType>>)
+            CPP_and CPP_NOT(
+                isConst)) static T& operatorBracketImpl(SelfType& self,
+                                                        size_t i) {
       return (*self.table_)(self.row_, i);
     }
     static const T& operatorBracketImpl(const auto& self, size_t i) {
@@ -186,7 +188,8 @@ class RowReferenceImpl {
     // and for rvalues.
     T& operator[](size_t i) && requires(!isConst) {
       return operatorBracketImpl(*this, i);
-    } const T& operator[](size_t i) const& {
+    }
+    const T& operator[](size_t i) const& {
       return operatorBracketImpl(*this, i);
     }
     const T& operator[](size_t i) const&& {
@@ -231,7 +234,7 @@ class RowReferenceImpl {
    protected:
     // The implementation of swapping two `RowReference`s (passed either by
     // value or by reference).
-    CPP_template_def(typename AType, typename BType)(
+    CPP_template(typename AType, typename BType)(
         requires(!isConst)) static void swapImpl(AType&& a, BType&& b) {
       for (size_t i = 0; i < a.numColumns(); ++i) {
         std::swap(operatorBracketImpl(a, i), operatorBracketImpl(b, i));
@@ -246,15 +249,15 @@ class RowReferenceImpl {
    public:
     // Swap two `RowReference`s, but only if they are temporaries (rvalues).
     // This modifies the underlying table.
-    //TODO: <ccoecontrol> what about this?
+    // TODO: <ccoecontrol> what about this?
     friend void swap(This&& a, This&& b) requires(!isConst) {
       return swapImpl(a, b);
     }
 
     // Equality comparison. Works between two `RowReference`s, but also between
     // a `RowReference` and a `Row` if the number of columns match.
-    CPP_template_def(typename U)(requires(numStaticColumns ==
-                                          U::numStaticColumns)) bool
+    CPP_template(typename U)(requires(numStaticColumns ==
+                                      U::numStaticColumns)) bool
     operator==(const U& other) const {
       if constexpr (numStaticColumns == 0) {
         if (numColumns() != other.numColumns()) {
@@ -280,7 +283,7 @@ class RowReferenceImpl {
     }
 
     // Convert from a static `RowReference` to a `std::array` (makes a copy).
-    CPP_template_def(typename = void)(requires(numStaticColumns != 0)) explicit
+    CPP_template(typename = void)(requires(numStaticColumns != 0)) explicit
     operator std::array<T, numStaticColumns>() const {
       std::array<T, numStaticColumns> result;
       ql::ranges::copy(*this, result.begin());
@@ -314,15 +317,17 @@ class RowReferenceImpl {
     // Assignment from a `const` RowReference to a `mutable` RowReference
     This& operator=(const RowReferenceWithRestrictedAccess<
                     Table, ad_utility::IsConst::True>& other) &&
-        requires(!isConst) { return assignmentImpl(*this, other); }
+        requires(!isConst) {
+      return assignmentImpl(*this, other);
+    }
 
-        // This strange overload needs to be declared to make `Row` a
-        // `std::random_access_range` that can be used e.g. with
-        // `ql::ranges::sort`. There is no need to define it, as it is only
-        // needed to fulfill the concept `std::indirectly_writable`. For more
-        // details on this "esoteric" overload see the notes at the end of
-        // `https://en.cppreference.com/w/cpp/iterator/indirectly_writable`
-        This& operator=(const Row<T, numStaticColumns>& other) const&&;
+    // This strange overload needs to be declared to make `Row` a
+    // `std::random_access_range` that can be used e.g. with
+    // `ql::ranges::sort`. There is no need to define it, as it is only
+    // needed to fulfill the concept `std::indirectly_writable`. For more
+    // details on this "esoteric" overload see the notes at the end of
+    // `https://en.cppreference.com/w/cpp/iterator/indirectly_writable`
+    This& operator=(const Row<T, numStaticColumns>& other) const&&;
 
     // No need to copy this internal type, but the implementation of the
     // `RowReference` class and the `input_range` concept from `range-v3`
