@@ -5,9 +5,6 @@
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 
 namespace sparqlExpression {
-namespace detail::string_expressions {
-class StrExpressionImpl;
-}
 namespace detail::to_numeric {
 
 // class that converts an input `int64_t`, `double` or `std::string`
