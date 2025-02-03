@@ -1091,15 +1091,16 @@ TEST(SparqlExpression, testToNumericExpression) {
   auto checkGetInt = testUnaryExpression<&makeConvertToIntExpression>;
   auto checkGetDouble = testUnaryExpression<&makeConvertToDoubleExpression>;
 
-  checkGetInt(idOrLitOrStringVec({U, "  -1275", "5.97", "-78.97", "-5BoB6",
-                                  "FreBurg1", "", " .", " 42\n", " 0.01 ", "",
-                                  "@", "@?+1", "1", G}),
-              Ids{U, I(-1275), U, U, U, U, U, U, I(42), U, U, U, U, I(1), U});
-  checkGetDouble(
-      idOrLitOrStringVec({U, "-122.2", "19,96", " 128789334.345 ", "-0.f",
-                          "  0.007 ", " -14.75 ", "Q", "@!+?", "1", G}),
-      Ids{U, D(-122.2), U, D(128789334.345), U, D(0.007), D(-14.75), U, U,
-          D(1.00), U});
+  checkGetInt(
+      idOrLitOrStringVec({U, "  -1275", "5.97", "-78.97", "-5BoB6", "FreBurg1",
+                          "", " .", " 42\n", " 0.01 ", "", "@", "@?+1", "1", G,
+                          "+42"}),
+      Ids{U, I(-1275), U, U, U, U, U, U, I(42), U, U, U, U, I(1), U, U});
+  checkGetDouble(idOrLitOrStringVec({U, "-122.2", "19,96", " 128789334.345 ",
+                                     "-0.f", "  0.007 ", " -14.75 ", "Q",
+                                     "@!+?", "1", G, "+42.0"}),
+                 Ids{U, D(-122.2), U, D(128789334.345), U, D(0.007), D(-14.75),
+                     U, U, D(1.00), U, D(42)});
   checkGetInt(idOrLitOrStringVec(
                   {U, I(-12475), I(42), I(0), D(-14.57), D(33.0), D(0.00001)}),
               Ids{U, I(-12475), I(42), I(0), I(-14), I(33), I(0)});
@@ -1113,6 +1114,32 @@ TEST(SparqlExpression, testToNumericExpression) {
   checkGetInt(IdOrLiteralOrIriVec{lit("."), lit("-12.745"), T, F, lit(".03"),
                                   lit("1"), lit("-33")},
               Ids{U, U, I(1), I(0), U, I(1), I(-33)});
+}
+
+// ____________________________________________________________________________
+TEST(SparqlExpression, testToBooleanExpression) {
+  Id T = Id::makeFromBool(true);
+  Id F = Id::makeFromBool(false);
+  auto checkGetBoolean = testUnaryExpression<&makeConvertToBooleanExpression>;
+
+  checkGetBoolean(
+      IdOrLiteralOrIriVec(
+          {sparqlExpression::detail::LiteralOrIri{
+               iri("<http://example.org/z>")},
+           lit("string"), lit("-10.2E3"), lit("+33.3300"), lit("0.0"), lit("0"),
+           lit("0E1"), lit("1.5"), lit("1"), lit("1E0"), lit("13"),
+           lit("2002-10-10T17:00:00Z"), lit("false"), lit("true"), T, F,
+           lit("0", absl::StrCat("^^<", XSD_PREFIX.second, "boolean>")), I(0),
+           I(1), I(-1), D(0.0), D(1.0), D(-1.0),
+           // These test cases should technically not result in undefined, but
+           // they are parsed into actual float values, so the corresponding
+           // SPARQL compliance test cases pass regardless.
+           lit("0E1", absl::StrCat("^^<", XSD_PREFIX.second, "float>")),
+           lit("1E0", absl::StrCat("^^<", XSD_PREFIX.second, "float>")),
+           lit("1.25", absl::StrCat("^^<", XSD_PREFIX.second, "float>")),
+           lit("-7.875", absl::StrCat("^^<", XSD_PREFIX.second, "float>"))}),
+      Ids{U, U, U, U, U, F, U, U, T, U, U, U, F, T,
+          T, F, F, F, T, T, F, T, T, U, U, U, U});
 }
 
 // ____________________________________________________________________________
