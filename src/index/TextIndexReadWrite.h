@@ -316,8 +316,10 @@ FrequencyEncode(View&& view)
  *        encoded vector. It also has a method to write the encoded vector to
  *        a file.
  */
-CPP_template(typename T)(requires std::is_arithmetic_v<T>)
+template <typename T>
 class GapEncode {
+  static_assert(std::is_arithmetic_v<T>);
+
  public:
   using TypedVector = std::vector<T>;
 
@@ -343,7 +345,7 @@ class GapEncode {
 
   void writeToFile(ad_utility::File& out, off_t& currentOffset) {
     textIndexReadWrite::encodeAndWriteSpanAndMoveOffset<T>(encodedVector_, out,
-                                                         currentOffset);
+                                                           currentOffset);
   }
 
   const TypedVector& getEncodedVector() const { return encodedVector_; }
@@ -354,11 +356,11 @@ class GapEncode {
   template <typename View>
   void initialize(View&& view) {
     if (ql::ranges::empty(view)) {
-    return;
-  }
-  encodedVector_.reserve(ql::ranges::size(view));
-  std::adjacent_difference(ql::ranges::begin(view), ql::ranges::end(view),
-                           std::back_inserter(encodedVector_));
+      return;
+    }
+    encodedVector_.reserve(ql::ranges::size(view));
+    std::adjacent_difference(ql::ranges::begin(view), ql::ranges::end(view),
+                             std::back_inserter(encodedVector_));
   }
 
   TypedVector encodedVector_;
