@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "backports/algorithm.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/PrefixHeuristic.h"
 #include "index/vocabulary/CompressionWrappers.h"
@@ -15,14 +16,28 @@
 #include "util/Serializer/SerializePair.h"
 #include "util/TaskQueue.h"
 
+namespace detail {
+
+template <typename Vocabulary, typename Iterator>
+CPP_requires(IterableVocabulary_,
+             requires(const Vocabulary& vocabulary,
+                      const Iterator& it)(it - vocabulary.begin()));
+
+template <typename Vocabulary, typename Iterator>
+CPP_concept IterableVocabulary =
+    CPP_requires_ref(IterableVocabulary_, Vocabulary, Iterator);
+
+}  // namespace detail
+
 // A vocabulary in which compression is performed using a customizable
 // compression algorithm, with one dictionary per `NumWordsPerBlock` many words
 // (default 1 million).
-template <typename UnderlyingVocabulary,
-          ad_utility::vocabulary::CompressionWrapper CompressionWrapper =
-              ad_utility::vocabulary::FsstSquaredCompressionWrapper,
-          size_t NumWordsPerBlock = 1UL << 20>
-class CompressedVocabulary {
+CPP_template(typename UnderlyingVocabulary,
+             typename CompressionWrapper =
+                 ad_utility::vocabulary::FsstSquaredCompressionWrapper,
+             size_t NumWordsPerBlock = 1UL << 20)(
+    requires ad_utility::vocabulary::CompressionWrapper<
+        CompressionWrapper>) class CompressedVocabulary {
  private:
   UnderlyingVocabulary underlyingVocabulary_;
   CompressionWrapper compressionWrapper_;
@@ -225,7 +240,8 @@ class CompressedVocabulary {
                   static_cast<size_t>(compressedSize > uncompressedSize);
               size_t i = 0;
               for (auto& word : views) {
-                if constexpr (requires() { underlyingWriter_(word, false); }) {
+                if constexpr (std::is_invocable_v<decltype(underlyingWriter_),
+                                                  decltype(word), bool>) {
                   underlyingWriter_(word, isExternalBuffer.at(i));
                   ++i;
                 } else {
@@ -277,9 +293,10 @@ class CompressedVocabulary {
 
   // Decompress the word that `it` points to. `it` is an iterator into the
   // underlying vocabulary.
-  auto decompressFromIterator(auto it) const {
+  template <typename It>
+  auto decompressFromIterator(It it) const {
     auto idx = [&]() {
-      if constexpr (requires() { it - underlyingVocabulary_.begin(); }) {
+      if constexpr (detail::IterableVocabulary<UnderlyingVocabulary, It>) {
         return it - underlyingVocabulary_.begin();
       } else {
         return underlyingVocabulary_.iteratorToIndex(it);

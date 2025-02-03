@@ -317,7 +317,9 @@ FrequencyEncode(View&& view)
  *        a file.
  */
 template <typename T>
-requires std::is_arithmetic_v<T> class GapEncode {
+class GapEncode {
+  static_assert(std::is_arithmetic_v<T>);
+
  public:
   using TypedVector = std::vector<T>;
 
