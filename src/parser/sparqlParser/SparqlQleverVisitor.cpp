@@ -262,6 +262,52 @@ Alias Visitor::visit(Parser::AliasWithoutBracketsContext* ctx) {
 }
 
 // ____________________________________________________________________________________
+parsedQuery::BasicGraphPattern Visitor::toGraphPattern(
+    const ad_utility::sparql_types::Triples& triples) {
+  parsedQuery::BasicGraphPattern pattern{};
+  pattern._triples.reserve(triples.size());
+  for (const auto& triple : triples) {
+    auto toTripleComponent = []<typename T>(T&& item) {
+      namespace tc = ad_utility::triple_component;
+      if constexpr (ad_utility::isSimilar<T, Variable>) {
+        return TripleComponent{item};
+      } else if constexpr (ad_utility::isSimilar<T, Literal>) {
+        return TripleComponent{
+            tc::Literal::fromStringRepresentation(item.toSparql())};
+      } else if constexpr (ad_utility::isSimilar<T, Iri>) {
+        return TripleComponent{
+            tc::Iri::fromStringRepresentation(item.toSparql())};
+      } else if constexpr (ad_utility::isSimilar<T, BlankNode>) {
+        return TripleComponent{
+            ParsedQuery::blankNodeToInternalVariable(item.toSparql())};
+      } else {
+        static_assert(ad_utility::alwaysFalse<T>);
+      }
+    };
+    auto subject = std::visit(toTripleComponent, triple.at(0));
+    auto predicate = std::visit(
+        []<typename T>(T&& item) -> PropertyPath {
+          if constexpr (ad_utility::isSimilar<T, Variable>) {
+            return PropertyPath::fromVariable(item);
+          } else if constexpr (ad_utility::isSimilar<T, Iri>) {
+            return PropertyPath::fromIri(item.toSparql());
+          } else if constexpr (ad_utility::isSimilar<T, BlankNode>) {
+            return PropertyPath::fromVariable(
+                ParsedQuery::blankNodeToInternalVariable(item.toSparql()));
+          } else {
+            static_assert(ad_utility::isSimilar<T, Literal>);
+            AD_THROW("Converting a literal to a property path is not allowed.");
+          }
+        },
+        triple.at(1));
+    auto object = std::visit(toTripleComponent, triple.at(2));
+    pattern._triples.push_back(SparqlTriple{
+        std::move(subject), std::move(predicate), std::move(object)});
+  }
+  return pattern;
+}
+
+// ____________________________________________________________________________________
 ParsedQuery Visitor::visit(Parser::ConstructQueryContext* ctx) {
   ParsedQuery query;
   query.datasetClauses_ = parsedQuery::DatasetClauses::fromClauses(
@@ -273,6 +319,8 @@ ParsedQuery Visitor::visit(Parser::ConstructQueryContext* ctx) {
   } else {
     query._clause = parsedQuery::ConstructClause{
         visitOptional(ctx->triplesTemplate()).value_or(Triples{})};
+    query._rootGraphPattern._graphPatterns.emplace_back(
+        toGraphPattern(query.constructClause().triples_));
   }
   query.addSolutionModifiers(visit(ctx->solutionModifier()));
 

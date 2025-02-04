@@ -598,4 +598,9 @@ class SparqlQleverVisitor {
   void warnOrThrowIfUnboundVariables(auto* ctx,
                                      const SparqlExpressionPimpl& expression,
                                      std::string_view clauseName);
+
+  // Convert an instance of `Triples` to a `BasicGraphPattern` so it can be used
+  // just like a WHERE clause.
+  static parsedQuery::BasicGraphPattern toGraphPattern(
+      const ad_utility::sparql_types::Triples& triples);
 };
