@@ -124,7 +124,8 @@ class SpatialJoinAlgorithms {
       const Box& box, std::optional<Point> midpoint = std::nullopt) const;
 
   // this function gets the string which represents the area from the idtable.
-  std::optional<AnyGeometry> getAnyGeometry(const IdTable* idtable, size_t row, size_t col) const;
+  std::optional<AnyGeometry> getAnyGeometry(const IdTable* idtable, size_t row,
+                                            size_t col) const;
 
  private:
   // Helper function which returns a GeoPoint if the element of the given table
