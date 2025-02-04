@@ -124,8 +124,7 @@ class SpatialJoinAlgorithms {
       const Box& box, std::optional<Point> midpoint = std::nullopt) const;
 
   // this function gets the string which represents the area from the idtable.
-  bool getAnyGeometry(const IdTable* idtable, size_t row, size_t col,
-                      AnyGeometry& geometry) const;
+  std::optional<AnyGeometry> getAnyGeometry(const IdTable* idtable, size_t row, size_t col) const;
 
  private:
   // Helper function which returns a GeoPoint if the element of the given table
@@ -162,8 +161,8 @@ class SpatialJoinAlgorithms {
   // works very good for almost all longitudes and latitudes has been chosen.
   // Only for the poles, the conversion will be way to large (for the longitude
   // difference).
-  double convertDegreesToMeters(AnyGeometry geometry1,
-                                AnyGeometry geometry2) const;
+  double convertDegreesToMeters(const AnyGeometry& geometry1,
+                                const AnyGeometry& geometry2) const;
 
   // this helper function converts a GeoPoint into a boost geometry Point
   Point convertGeoPointToPoint(GeoPoint point) const;

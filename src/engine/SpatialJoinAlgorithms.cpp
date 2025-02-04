@@ -50,16 +50,16 @@ std::string_view SpatialJoinAlgorithms::betweenQuotes(
   }
 }
 
-bool SpatialJoinAlgorithms::getAnyGeometry(const IdTable* idtable, size_t row,
-                                           size_t col,
-                                           AnyGeometry& geometry) const {
+std::optional<AnyGeometry> SpatialJoinAlgorithms::getAnyGeometry(const IdTable* idtable, size_t row,
+                                           size_t col) const {
   auto printWarning = [alreadyWarned = false,
                        &spatialJoin = spatialJoin_]() mutable {
     if (!alreadyWarned) {
       std::string warning =
           "The input to a spatial join contained at least one element, "
-          "that is not a point or polygon geometry and is thus skipped. Note "
-          "that QLever currently only accepts point or polygon geometries for "
+          "that is not a Point, Linestring, Polygon, MultiPoint, "
+          "MultiLinestring or MultiPolygon geometry and is thus skipped. Note "
+          "that QLever currently only accepts those geometries for "
           "the spatial joins";
       AD_LOG_WARN << warning << std::endl;
       alreadyWarned = true;
@@ -70,22 +70,28 @@ bool SpatialJoinAlgorithms::getAnyGeometry(const IdTable* idtable, size_t row,
     }
   };
 
+  // unfortunately, the current implementation requires the fully materialized
+  // string. In the future this might get changed. When only the bounding box
+  // is needed, one could store it in an ID similar to GeoPoint (but with less
+  // precision), and then the full geometry would only need to be read, when
+  // the exact distance is wanted
   std::string str(betweenQuotes(ExportQueryExecutionTrees::idToStringAndType(
                                     qec_->getIndex(), idtable->at(row, col), {})
                                     .value()
                                     .first));
+  AnyGeometry geometry;
   try {
     bg::read_wkt(str, geometry);
   } catch (const std::exception& e) {
     printWarning();
-    return false;
+    return std::nullopt;
   }
-  return true;
+  return geometry;
 }
 
 // ____________________________________________________________________________
 double SpatialJoinAlgorithms::convertDegreesToMeters(
-    AnyGeometry geometry1, AnyGeometry geometry2) const {
+    const AnyGeometry& geometry1, const AnyGeometry& geometry2) const {
   return boost::apply_visitor(DistanceVisitor(), geometry1, geometry2) * 78.630;
 };
 
@@ -97,7 +103,7 @@ Point SpatialJoinAlgorithms::convertGeoPointToPoint(GeoPoint point) const {
 // ____________________________________________________________________________
 Id SpatialJoinAlgorithms::computeDist(const rtreeEntry& geo1,
                                       const rtreeEntry& geo2) const {
-  auto convertPoint = [&](AnyGeometry geometry, std::optional<Box> bbox) {
+  auto convertPoint = [&](const AnyGeometry& geometry, std::optional<Box> bbox) {
     Box areaBox;
     areaBox = bbox.value_or(boost::apply_visitor(BoundingBoxVisitor(), geometry));
     Point p = calculateMidpointOfBox(areaBox);
@@ -148,15 +154,13 @@ Id SpatialJoinAlgorithms::computeDist(const IdTable* idTableLeft,
   auto getAreaOrPointGeometry =
       [&](const IdTable* idtable, size_t row, size_t col,
           std::optional<GeoPoint> point) -> std::optional<AnyGeometry> {
-    AnyGeometry geometry;
+    std::optional<AnyGeometry> geometry;
 
     if (!point) {
-      if (!getAnyGeometry(idtable, row, col, geometry)) {
-        // nothing to do. When parsing a point or an area fails, a warning
-        // message gets printed at another place and the point/area just gets
-        // skipped
-        return std::nullopt;
-      }
+      // nothing to do. When parsing a point or an area fails, a warning
+      // message gets printed at another place and the point/area just gets
+      // skipped
+      geometry = getAnyGeometry(idtable, row, col);
     } else {
       geometry = convertGeoPointToPoint(point.value());
     }
@@ -168,14 +172,14 @@ Id SpatialJoinAlgorithms::computeDist(const IdTable* idTableLeft,
   // information will be stored in an ID, just like GeoPoint
   auto getAreaPoint = [&](const IdTable* idtable, size_t row,
                           size_t col) -> std::optional<GeoPoint> {
-    AnyGeometry geometry;
-    if (!getAnyGeometry(idtable, row, col, geometry)) {
+    std::optional<AnyGeometry> geometry = getAnyGeometry(idtable, row, col);
+    if (!geometry.has_value()) {
       // nothing to do. When parsing a point or an area fails, a warning message
-      // gets printed at another place and the point/area just gets skipped
+      // gets printed at another place and the point/area just gets skipped  
       return std::nullopt;
     }
 
-    Box areaBox = boost::apply_visitor(BoundingBoxVisitor(), geometry);
+    Box areaBox = boost::apply_visitor(BoundingBoxVisitor(), geometry.value());
 
     Point p = calculateMidpointOfBox(areaBox);
     return GeoPoint(p.get<1>(), p.get<0>());
@@ -651,18 +655,19 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
     // get point of row i
     auto geopoint = getPoint(smallerResult, i, smallerResJoinCol);
     Box bbox;
-    AnyGeometry geometry;
+    std::optional<AnyGeometry> geometry;
     rtreeEntry entry{i, std::nullopt, std::nullopt, std::nullopt};
 
     if (!geopoint) {
-      if (!getAnyGeometry(smallerResult, i, smallerResJoinCol, geometry)) {
+      geometry = getAnyGeometry(smallerResult, i, smallerResJoinCol);
+      if (!geometry.has_value()) {
         // nothing to do. When parsing a point or an area fails, a warning
         // message gets printed at another place and the point/area just gets
         // skipped
         continue;
       }
-      bbox = boost::apply_visitor(BoundingBoxVisitor(), geometry);
-      entry.geometry_ = std::move(geometry);
+      bbox = boost::apply_visitor(BoundingBoxVisitor(), geometry.value());
+      entry.geometry_ = std::move(geometry.value());
       entry.boundingBox_ = bbox;
 
     } else {
@@ -687,15 +692,16 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
     entry.row_ = i;
 
     if (!geopoint) {
-      AnyGeometry geometry;
-      if (!getAnyGeometry(otherResult, i, otherResJoinCol, geometry)) {
+      std::optional<AnyGeometry> geometry;
+      geometry = getAnyGeometry(otherResult, i, otherResJoinCol);
+      if (!geometry.has_value()) {
         // nothing to do. When parsing a point or an area fails, a warning
         // message gets printed at another place and the point/area just gets
         // skipped
         continue;
       }
-      auto areaBox = boost::apply_visitor(BoundingBoxVisitor(), geometry);
-      entry.geometry_ = std::move(geometry);
+      auto areaBox = boost::apply_visitor(BoundingBoxVisitor(), geometry.value());
+      entry.geometry_ = std::move(geometry.value());
       auto midpoint = calculateMidpointOfBox(areaBox);
       bbox = computeBoundingBox(
           midpoint,

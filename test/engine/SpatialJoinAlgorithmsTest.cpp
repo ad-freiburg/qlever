@@ -132,10 +132,10 @@ class SpatialJoinParamTest
       bool containsWrongPointWarning = false;
       std::string warningMessage =
           "The input to a spatial join contained at least one element, "
-          "that is not a point or polygon geometry and is thus skipped. Note "
-          "that "
-          "QLever currently only accepts point or polygon geometries for the "
-          "spatial joins";
+          "that is not a Point, Linestring, Polygon, MultiPoint, "
+          "MultiLinestring or MultiPolygon geometry and is thus skipped. Note "
+          "that QLever currently only accepts those geometries for "
+          "the spatial joins";
       for (const auto& warning : warnings) {
         if (warning == warningMessage) {
           containsWrongPointWarning = true;
