@@ -1249,6 +1249,11 @@ TEST(SparqlExpression, ReplaceExpression) {
                  IdOrLiteralOrIri{lit("([A-Z]+)")},
                  IdOrLiteralOrIri{lit("\"$$1 \\\\2 $1 \\\\\"")}});
 
+  checkReplace(idOrLitOrStringVec({"truebc", "truef"}),
+               std::tuple{idOrLitOrStringVec({"Abc", "DEf"}),
+                          IdOrLiteralOrIri{lit("([A-Z]+)")},
+                          IdOrLiteralOrIri{Id::makeFromBool(true)}});
+
   // Case-insensitive matching using the hack for google regex:
   checkReplace(idOrLitOrStringVec({"null", "xxns", "zwxx", "drxx"}),
                std::tuple{idOrLitOrStringVec({"null", "eIns", "zwEi", "drei"}),
