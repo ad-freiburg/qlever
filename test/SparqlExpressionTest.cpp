@@ -1247,7 +1247,7 @@ TEST(SparqlExpression, ReplaceExpression) {
       idOrLitOrStringVec({"\"$1 \\\\2 A \\\\bc\"", "\"$1 \\\\2 DE \\\\f\""}),
       std::tuple{idOrLitOrStringVec({"Abc", "DEf"}),
                  IdOrLiteralOrIri{lit("([A-Z]+)")},
-                 IdOrLiteralOrIri{lit("\"$$1 \\\\2 $1 \\\\\"")}});
+                 IdOrLiteralOrIri{lit("\"\\\\$1 \\\\2 $1 \\\\\"")}});
 
   checkReplace(idOrLitOrStringVec({"truebc", "truef"}),
                std::tuple{idOrLitOrStringVec({"Abc", "DEf"}),

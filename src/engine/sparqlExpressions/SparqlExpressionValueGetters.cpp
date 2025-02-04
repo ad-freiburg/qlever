@@ -117,19 +117,19 @@ std::string ReplacementStringGetter::convertToReplacementString(
     char c = view.at(i);
     switch (c) {
       case '$':
-        // "$$" is unescaped to "$"
-        if (i + 1 < view.size() && view.at(i + 1) == '$') {
-          result.push_back(c);
-          i++;
-        } else {
-          // Re2 used \1, \2, ... for backreferences, so we change $ to \.
-          result.push_back('\\');
-        }
+        // Re2 used \1, \2, ... for backreferences, so we change $ to \.
+        result.push_back('\\');
         break;
       case '\\':
-        // Escape existing backslashes.
-        result.push_back(c);
-        result.push_back(c);
+        // "\$" is unescaped to "$"
+        if (i + 1 < view.size() && view.at(i + 1) == '$') {
+          result.push_back('$');
+          i++;
+        } else {
+          // Escape existing backslashes.
+          result.push_back(c);
+          result.push_back(c);
+        }
         break;
       default:
         result.push_back(c);
