@@ -291,12 +291,10 @@ parsedQuery::BasicGraphPattern Visitor::toGraphPattern(
             return PropertyPath::fromVariable(item);
           } else if constexpr (ad_utility::isSimilar<T, Iri>) {
             return PropertyPath::fromIri(item.toSparql());
-          } else if constexpr (ad_utility::isSimilar<T, BlankNode>) {
-            return PropertyPath::fromVariable(
-                ParsedQuery::blankNodeToInternalVariable(item.toSparql()));
           } else {
-            static_assert(ad_utility::isSimilar<T, Literal>);
-            AD_THROW("Converting a literal to a property path is not allowed.");
+            static_assert(ad_utility::isSimilar<T, Literal> ||
+                          ad_utility::isSimilar<T, BlankNode>);
+            AD_THROW("Literals or blank nodes are not valid predicates.");
           }
         },
         triple.at(1));

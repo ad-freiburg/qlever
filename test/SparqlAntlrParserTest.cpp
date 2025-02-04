@@ -1220,6 +1220,25 @@ TEST(SparqlParser, ConstructQuery) {
       m::ConstructQuery(
           {{Var{"?a"}, Iri{"<foo>"}, Var{"?b"}}},
           m::GraphPattern(m::Triples({{Var{"?a"}, "<foo>", Var{"?b"}}}))));
+
+  // Blank nodes turn into variables inside WHERE.
+  expectConstructQuery(
+      "CONSTRUCT WHERE { [] <foo> ?b }",
+      m::ConstructQuery(
+          {{BlankNode{true, "0"}, Iri{"<foo>"}, Var{"?b"}}},
+          m::GraphPattern(m::Triples(
+              {{Var{absl::StrCat(QLEVER_INTERNAL_BLANKNODE_VARIABLE_PREFIX,
+                                 "g_0")},
+                "<foo>", Var{"?b"}}}))));
+
+  // Test another variant to cover all cases.
+  expectConstructQuery(
+      "CONSTRUCT WHERE { <bar> ?foo \"Abc\" }",
+      m::ConstructQuery(
+          {{Iri{"<bar>"}, Var{"?foo"}, Literal{"\"Abc\""}}},
+          m::GraphPattern(m::Triples(
+              {{iri("<bar>"), PropertyPath::fromVariable(Var{"?foo"}),
+                lit("\"Abc\"")}}))));
   // CONSTRUCT with datasets.
   expectConstructQuery(
       "CONSTRUCT { } FROM <foo> FROM NAMED <foo2> FROM NAMED <foo3> WHERE { }",
