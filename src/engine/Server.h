@@ -187,11 +187,7 @@ class Server {
   auto parseOperation(ad_utility::websocket::MessageSender& messageSender,
                       const ad_utility::url_parser::ParamValueMap& params,
                       const Operation& operation, TimeLimit timeLimit);
-  // Sets up the PlannedQuery s.t. it is ready to be executed.
-  static void setupPlannedQuery(PlannedQuery& plannedOperation,
-                                SharedCancellationHandle handle,
-                                TimeLimit timeLimit,
-                                const ad_utility::Timer& requestTimer);
+
   // Plan a parsed query.
   Awaitable<PlannedQuery> planQuery(net::static_thread_pool& thread_pool,
                                     ParsedQuery&& operation,

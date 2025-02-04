@@ -503,25 +503,6 @@ auto Server::parseOperation(ad_utility::websocket::MessageSender& messageSender,
 }
 
 // ____________________________________________________________________________
-void Server::setupPlannedQuery(PlannedQuery& plannedOperation,
-                               SharedCancellationHandle handle,
-                               TimeLimit timeLimit,
-                               const ad_utility::Timer& requestTimer) {
-  plannedOperation.queryExecutionTree_.getRootOperation()
-      ->recursivelySetCancellationHandle(std::move(handle));
-  plannedOperation.queryExecutionTree_.getRootOperation()
-      ->recursivelySetTimeConstraint(timeLimit);
-  auto& qet = plannedOperation.queryExecutionTree_;
-  qet.isRoot() = true;  // allow pinning of the final result
-  auto timeForQueryPlanning = requestTimer.msecs();
-  auto& runtimeInfoWholeQuery =
-      qet.getRootOperation()->getRuntimeInfoWholeQuery();
-  runtimeInfoWholeQuery.timeQueryPlanning = timeForQueryPlanning;
-  LOG(INFO) << "Query planning done in " << timeForQueryPlanning.count()
-            << " ms" << std::endl;
-  LOG(TRACE) << qet.getCacheKey() << std::endl;
-}
-
 Awaitable<Server::PlannedQuery> Server::planQuery(
     net::static_thread_pool& threadPool, ParsedQuery&& operation,
     const ad_utility::Timer& requestTimer, TimeLimit timeLimit,
@@ -544,7 +525,20 @@ Awaitable<Server::PlannedQuery> Server::planQuery(
       handle);
   auto qetOpt = co_await std::move(coroutine);
   PlannedQuery plannedQuery{std::move(operation), std::move(qetOpt).value()};
-  setupPlannedQuery(plannedQuery, handle, timeLimit, requestTimer);
+  // Set some additional attributes on the `PlannedQuery`.
+  plannedQuery.queryExecutionTree_.getRootOperation()
+      ->recursivelySetCancellationHandle(std::move(handle));
+  plannedQuery.queryExecutionTree_.getRootOperation()
+      ->recursivelySetTimeConstraint(timeLimit);
+  auto& qet = plannedQuery.queryExecutionTree_;
+  qet.isRoot() = true;  // allow pinning of the final result
+  auto timeForQueryPlanning = requestTimer.msecs();
+  auto& runtimeInfoWholeQuery =
+      qet.getRootOperation()->getRuntimeInfoWholeQuery();
+  runtimeInfoWholeQuery.timeQueryPlanning = timeForQueryPlanning;
+  LOG(INFO) << "Query planning done in " << timeForQueryPlanning.count()
+            << " ms" << std::endl;
+  LOG(TRACE) << qet.getCacheKey() << std::endl;
   co_return plannedQuery;
 }
 
