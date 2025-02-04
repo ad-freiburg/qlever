@@ -150,9 +150,8 @@ Id SpatialJoinAlgorithms::computeDist(const IdTable* idTableLeft,
                                       size_t rowLeft, size_t rowRight,
                                       ColumnIndex leftPointCol,
                                       ColumnIndex rightPointCol) const {
-  auto getAreaOrPointGeometry =
-      [&](const IdTable* idtable, size_t row, size_t col,
-          std::optional<GeoPoint> point) {
+  auto getAreaOrPointGeometry = [&](const IdTable* idtable, size_t row,
+                                    size_t col, std::optional<GeoPoint> point) {
     std::optional<AnyGeometry> geometry;
 
     if (!point) {
