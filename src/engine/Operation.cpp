@@ -598,7 +598,7 @@ const vector<ColumnIndex>& Operation::getResultSortedOn() const {
 // _____________________________________________________________________________
 
 void Operation::signalQueryUpdate() const {
-  if (_executionContext) {
+  if (_executionContext && _executionContext->areWebsocketUpdatesEnabled()) {
     _executionContext->signalQueryUpdate(*_rootRuntimeInfo);
   }
 }

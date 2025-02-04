@@ -3,7 +3,7 @@
 // Author: Johannes Kalmbach(joka921) <johannes.kalmbach@gmail.com>
 //
 
-#include <gtest/gtest.h>
+#include <gmock/gmock.h>
 
 #include "./util/IdTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
@@ -67,6 +67,24 @@ TEST(TripleComponent, setAndGetVariable) {
   ASSERT_FALSE(tc.isInt());
   ASSERT_EQ(tc, Variable{"?x"});
   ASSERT_EQ(tc.getVariable(), Variable{"?x"});
+}
+
+TEST(TripleComponent, setAndGetId) {
+  Id id = Id::makeFromVocabIndex(VocabIndex::make(1));
+  TripleComponent tc{id};
+  ASSERT_TRUE(tc.isId());
+  ASSERT_FALSE(tc.isVariable());
+  ASSERT_FALSE(tc.isString());
+  ASSERT_FALSE(tc.isDouble());
+  ASSERT_FALSE(tc.isInt());
+  ASSERT_FALSE(tc.isBool());
+  ASSERT_FALSE(tc.isIri());
+  ASSERT_FALSE(tc.isLiteral());
+  ASSERT_FALSE(tc.isUndef());
+  ASSERT_EQ(tc, id);
+  ASSERT_EQ(tc.getId(), id);
+  const TripleComponent tcConst = std::move(tc);
+  ASSERT_EQ(tcConst.getId(), id);
 }
 
 TEST(TripleComponent, assignmentOperator) {
@@ -206,4 +224,29 @@ TEST(TripleComponent, invalidDatatypeForLiteral) {
 
   // Something that is invalid because it is none of the above
   ASSERT_ANY_THROW(lit("\"alpha\"", "fr-ca"));
+}
+
+// _____________________________________________________________________________1
+TEST(TripleComponent, toString) {
+  using namespace ::testing;
+  auto match = [](const auto& matcher) {
+    auto makeTcAndToString = [](auto&& val) {
+      return TripleComponent{AD_FWD(val)}.toString();
+    };
+    return ResultOf(makeTcAndToString, matcher);
+  };
+
+  EXPECT_THAT(GeoPoint(13, 14), match(StartsWith("G:POINT(14.")));
+  EXPECT_THAT("hello", match("hello"));
+  EXPECT_THAT(12, match("12"));
+  EXPECT_THAT(12.3, match("12.3"));
+  using Tc = TripleComponent;
+  EXPECT_THAT(Tc::UNDEF{}, match("UNDEF"));
+  EXPECT_THAT(Variable("?x"), match("?x"));
+  EXPECT_THAT(Tc::Literal::literalWithoutQuotes("hallo"), match("\"hallo\""));
+  EXPECT_THAT(Tc::Iri::fromIrirefWithoutBrackets("blim"), match("<blim>"));
+  EXPECT_THAT(DateYearOrDuration(Date(2000, 1, 1)), match("DATE: 2000-01-01"));
+  EXPECT_THAT(true, match("true"));
+  EXPECT_THAT(false, match("false"));
+  EXPECT_THAT(Id::makeFromInt(42), match("I:42"));
 }

@@ -20,7 +20,7 @@ namespace ad_utility {
 // discarded. If the cached value is still present once the generator is fully
 // consumed, `onFullyCached` is called with the cached value.
 template <typename InputRange,
-          typename T = std::ranges::range_value_t<InputRange>>
+          typename T = ql::ranges::range_value_t<InputRange>>
 cppcoro::generator<T> wrapGeneratorWithCache(
     InputRange generator,
     InvocableWithExactReturnType<bool, std::optional<T>&, const T&> auto
