@@ -13,6 +13,7 @@ concurrency:
 
 jobs:
   build:
+  
     # The CMake configure and build commands are platform-agnostic and should work equally
     # well on Windows or Mac.  You can convert this to a matrix build if you need
     # cross-platform coverage.
@@ -21,12 +22,14 @@ jobs:
       fail-fast: false
       matrix:
         compiler: [gcc, clang]
-        compiler-version: [11, 12, 13, 16, 17, 18]
+        compiler-version: [11, 12, 13, 15, 16, 17, 18]
         warnings: [  "-Wall -Wextra -Werror " ]
         build-type: [Release]
         expensive-tests: [true]
         additional-cmake-options: [""]
         exclude:
+          - compiler: gcc
+            compiler-version: 15
           - compiler: gcc
             compiler-version: 16
           - compiler: gcc
@@ -44,6 +47,13 @@ jobs:
             compiler-version: 11
             additional-cmake-options: "-DUSE_CPP_17_BACKPORTS=ON"
             build-type: Release
+          - compiler: clang
+            compiler-version: 15
+            additional-cmake-options: "-DUSE_CPP_17_BACKPORTS=ON -DCMAKE_CXX_STANDARD=17 -DCMAKE_CXX_FLAGS='-ferror-limit=0'"
+            build-type: Debug
+            expensive-tests: false
+            continue-on-error: true
+            use-keep-going: true
           - compiler: clang
             compiler-version: 16
             asan-flags: "-fsanitize=address -fno-omit-frame-pointer"
@@ -89,7 +99,13 @@ jobs:
 
       - name: Build
         # Build your program with the given configuration
-        run: cmake --build ${{github.workspace}}/build --config ${{matrix.build-type}} -- -j $(nproc)
+        
+        run: |
+          KEEP_GOING=""
+          if [[ "${{ matrix.use-keep-going }}" == "true" ]]; then
+            KEEP_GOING="-k"
+          fi
+          cmake --build ${{github.workspace}}/build --config ${{matrix.build-type}} -- $KEEP_GOING -j $(nproc)
 
       - name: Test
         working-directory: ${{github.workspace}}/build/test
