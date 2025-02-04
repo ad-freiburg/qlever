@@ -350,8 +350,8 @@ Awaitable<void> Server::process(
 
   auto visitOperation =
       [&checkParameter, &accessTokenOk, &request, &send, &parameters,
-       &requestTimer,
-       this]<QueryOrUpdate Operation, string Operation::*opFieldString>(
+       &requestTimer, this]<QL_CONCEPT_OR_TYPENAME(QueryOrUpdate) Operation,
+                            string Operation::*opFieldString>(
           const Operation& op, std::function<bool(const ParsedQuery&)> pred,
           std::string_view msg) -> Awaitable<void> {
     if (auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
@@ -460,7 +460,7 @@ auto Server::setupCancellationHandle(
 }
 
 // ____________________________________________________________________________
-template <QueryOrUpdate Operation>
+template <QL_CONCEPT_OR_TYPENAME(QueryOrUpdate) Operation>
 auto Server::parseOperation(ad_utility::websocket::MessageSender& messageSender,
                             const ad_utility::url_parser::ParamValueMap& params,
                             const Operation& operation, TimeLimit timeLimit) {
@@ -908,7 +908,7 @@ Awaitable<void> Server::processUpdate(
 }
 
 // ____________________________________________________________________________
-template <QueryOrUpdate Operation>
+template <QL_CONCEPT_OR_TYPENAME(QueryOrUpdate) Operation>
 Awaitable<void> Server::processQueryOrUpdate(
     const ad_utility::url_parser::ParamValueMap& params,
     ParsedQuery&& parsedOperation, SharedCancellationHandle cancellationHandle,

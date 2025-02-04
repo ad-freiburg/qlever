@@ -138,7 +138,7 @@ class Server {
   ///             `HttpServer.h` for documentation).
   /// \param timeLimit Duration in seconds after which the query will be
   ///                  cancelled.
-  template <QueryOrUpdate Operation>
+  template <QL_CONCEPT_OR_TYPENAME(QueryOrUpdate) Operation>
   Awaitable<void> processQueryOrUpdate(
       const ad_utility::url_parser::ParamValueMap& params,
       ParsedQuery&& parsedOperation,
@@ -183,7 +183,7 @@ class Server {
       const ad_utility::url_parser::ParamValueMap& params);
   FRIEND_TEST(ServerTest, determineResultPinning);
   //  Parse an operation
-  template <QueryOrUpdate Operation>
+  template <QL_CONCEPT_OR_TYPENAME(QueryOrUpdate) Operation>
   auto parseOperation(ad_utility::websocket::MessageSender& messageSender,
                       const ad_utility::url_parser::ParamValueMap& params,
                       const Operation& operation, TimeLimit timeLimit);
