@@ -348,18 +348,26 @@ Awaitable<void> Server::process(
     }
   }
 
-  auto visitQuery = [&checkParameter, &accessTokenOk, &request, &send,
-                     &parameters, &requestTimer,
-                     this](const Query& query) -> Awaitable<void> {
+  auto visitOperation =
+      [&checkParameter, &accessTokenOk, &request, &send, &parameters,
+       &requestTimer,
+       this]<QueryOrUpdate Operation, string Operation::*opFieldString>(
+          const Operation& op, std::function<bool(const ParsedQuery&)> pred,
+          std::string_view msg) -> Awaitable<void> {
     if (auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
             checkParameter("timeout", std::nullopt), accessTokenOk, request,
             send)) {
       ad_utility::websocket::MessageSender messageSender =
-          createMessageSender(queryHub_, request, query.query_);
-      auto [parsedQuery, qec, cancellationHandle, cancelTimeoutOnDestruction] =
-          parseOperation(messageSender, parameters, query, timeLimit.value());
-      co_return co_await processQueryOrUpdate<Query>(
-          parameters, std::move(parsedQuery), cancellationHandle, qec,
+          createMessageSender(queryHub_, request, op.*opFieldString);
+      auto [parsedOperation, qec, cancellationHandle,
+            cancelTimeoutOnDestruction] =
+          parseOperation(messageSender, parameters, op, timeLimit.value());
+      if (pred(parsedOperation)) {
+        throw std::runtime_error(
+            absl::StrCat(msg, parsedOperation._originalString));
+      }
+      co_return co_await processQueryOrUpdate<Operation>(
+          parameters, std::move(parsedOperation), cancellationHandle, qec,
           requestTimer, std::move(request), send, timeLimit.value());
     } else {
       // If the optional is empty, this indicates an error response has been
@@ -367,26 +375,21 @@ Awaitable<void> Server::process(
       co_return;
     }
   };
-  auto visitUpdate =
-      [&checkParameter, &accessTokenOk, &request, &send, &parameters,
-       &requestTimer, this,
-       &requireValidAccessToken](const Update& update) -> Awaitable<void> {
+  auto visitQuery = [&visitOperation](const Query& query) -> Awaitable<void> {
+    co_return co_await visitOperation
+        .template operator()<Query, &Query::query_>(
+            query, &ParsedQuery::hasUpdateClause,
+            "SPARQL QUERY was request via the HTTP request, but the "
+            "following update was sent instead of an query: ");
+  };
+  auto visitUpdate = [&visitOperation, &requireValidAccessToken](
+                         const Update& update) -> Awaitable<void> {
     requireValidAccessToken("SPARQL Update");
-    if (auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
-            checkParameter("timeout", std::nullopt), accessTokenOk, request,
-            send)) {
-      ad_utility::websocket::MessageSender messageSender =
-          createMessageSender(queryHub_, request, update.update_);
-      auto [parsedUpdate, qec, cancellationHandle, cancelTimeoutOnDestruction] =
-          parseOperation(messageSender, parameters, update, timeLimit.value());
-      co_return co_await processQueryOrUpdate<Update>(
-          parameters, std::move(parsedUpdate), cancellationHandle, qec,
-          requestTimer, std::move(request), send, timeLimit.value());
-    } else {
-      // If the optional is empty, this indicates an error response has been
-      // sent to the client already. We can stop here.
-      co_return;
-    }
+    co_return co_await visitOperation
+        .template operator()<Update, &Update::update_>(
+            update, std::not_fn(&ParsedQuery::hasUpdateClause),
+            "SPARQL UPDATE was request via the HTTP request, but the "
+            "following query was sent instead of an update: ");
   };
   auto visitNone = [&response, &send,
                     &request](const None&) -> Awaitable<void> {
@@ -457,22 +460,20 @@ auto Server::setupCancellationHandle(
 }
 
 // ____________________________________________________________________________
-template <typename Operation>
+template <QueryOrUpdate Operation>
 auto Server::parseOperation(ad_utility::websocket::MessageSender& messageSender,
                             const ad_utility::url_parser::ParamValueMap& params,
                             const Operation& operation, TimeLimit timeLimit) {
-  static_assert(ad_utility::SameAsAny<Operation, Query, Update>);
-  std::string_view operationName;
   // The operation string was to be copied, do it here at the beginning.
-  std::string operationSPARQL;
-  if constexpr (std::is_same_v<Operation, Query>) {
-    operationName = "SPARQL Query";
-    operationSPARQL = operation.query_;
-  } else {
-    static_assert(std::is_same_v<Operation, Update>);
-    operationName = "SPARQL Update";
-    operationSPARQL = operation.update_;
-  }
+  const auto [operationName, operationSPARQL] =
+      [&operation]() -> std::pair<std::string_view, std::string> {
+    if constexpr (std::is_same_v<Operation, Query>) {
+      return {"SPARQL Query", operation.query_};
+    } else {
+      static_assert(std::is_same_v<Operation, Update>);
+      return {"SPARQL Update", operation.update_};
+    }
+  }();
 
   auto [cancellationHandle, cancelTimeoutOnDestruction] =
       setupCancellationHandle(messageSender.getQueryId(), timeLimit);
@@ -502,9 +503,10 @@ auto Server::parseOperation(ad_utility::websocket::MessageSender& messageSender,
 }
 
 // ____________________________________________________________________________
-Server::PlannedQuery Server::setupPlannedQuery(
-    PlannedQuery& plannedOperation, SharedCancellationHandle handle,
-    TimeLimit timeLimit, const ad_utility::Timer& requestTimer) {
+void Server::setupPlannedQuery(PlannedQuery& plannedOperation,
+                               SharedCancellationHandle handle,
+                               TimeLimit timeLimit,
+                               const ad_utility::Timer& requestTimer) {
   plannedOperation.queryExecutionTree_.getRootOperation()
       ->recursivelySetCancellationHandle(std::move(handle));
   plannedOperation.queryExecutionTree_.getRootOperation()
@@ -518,8 +520,6 @@ Server::PlannedQuery Server::setupPlannedQuery(
   LOG(INFO) << "Query planning done in " << timeForQueryPlanning.count()
             << " ms" << std::endl;
   LOG(TRACE) << qet.getCacheKey() << std::endl;
-
-  return plannedOperation;
 }
 
 Awaitable<Server::PlannedQuery> Server::planQuery(
@@ -740,6 +740,8 @@ Awaitable<void> Server::processQuery(
     QueryExecutionContext& qec,
     const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
     TimeLimit timeLimit) {
+  AD_CORRECTNESS_CHECK(!query.hasUpdateClause());
+
   MediaType mediaType = determineMediaType(params, request);
   LOG(INFO) << "Requested media type of result is \""
             << ad_utility::toString(mediaType) << "\"" << std::endl;
@@ -748,16 +750,6 @@ Awaitable<void> Server::processQuery(
       co_await planQuery(queryThreadPool_, std::move(query), requestTimer,
                          timeLimit, qec, cancellationHandle);
   auto qet = plannedQuery.queryExecutionTree_;
-
-  if (plannedQuery.parsedQuery_.hasUpdateClause()) {
-    // This may be caused by a bug (the code is not yet tested well) or by an
-    // attack which tries to circumvent (not yet existing) access controls for
-    // Update.
-    throw std::runtime_error(
-        absl::StrCat("SPARQL QUERY was request via the HTTP request, but the "
-                     "following update was sent instead of an update: ",
-                     plannedQuery.parsedQuery_._originalString));
-  }
 
   // Read the export limit from the send` parameter (historical name). This
   // limits the number of bindings exported in `ExportQueryExecutionTrees`.
@@ -863,13 +855,7 @@ json Server::processUpdateImpl(
     ad_utility::SharedCancellationHandle cancellationHandle,
     DeltaTriples& deltaTriples) {
   const auto& qet = plannedUpdate.queryExecutionTree_;
-
-  if (!plannedUpdate.parsedQuery_.hasUpdateClause()) {
-    throw std::runtime_error(
-        absl::StrCat("SPARQL UPDATE was request via the HTTP request, but the "
-                     "following query was sent instead of an update: ",
-                     plannedUpdate.parsedQuery_._originalString));
-  }
+  AD_CORRECTNESS_CHECK(plannedUpdate.parsedQuery_.hasUpdateClause());
 
   DeltaTriplesCount countBefore = deltaTriples.getCounts();
   UpdateMetadata updateMetadata =
@@ -900,6 +886,7 @@ Awaitable<void> Server::processUpdate(
     QueryExecutionContext& qec,
     const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
     TimeLimit timeLimit) {
+  AD_CORRECTNESS_CHECK(update.hasUpdateClause());
   PlannedQuery plannedQuery =
       co_await planQuery(updateThreadPool_, std::move(update), requestTimer,
                          timeLimit, qec, cancellationHandle);
@@ -927,7 +914,7 @@ Awaitable<void> Server::processUpdate(
 }
 
 // ____________________________________________________________________________
-template <typename Operation>
+template <QueryOrUpdate Operation>
 Awaitable<void> Server::processQueryOrUpdate(
     const ad_utility::url_parser::ParamValueMap& params,
     ParsedQuery&& parsedOperation, SharedCancellationHandle cancellationHandle,
@@ -935,9 +922,6 @@ Awaitable<void> Server::processQueryOrUpdate(
     const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
     TimeLimit timeLimit) {
   using namespace ad_utility::httpUtils;
-
-  static_assert(ad_utility::SameAsAny<Operation, Query, Update>);
-
   http::status responseStatus = http::status::ok;
 
   // Put the whole query processing in a try-catch block. If any exception
@@ -948,7 +932,8 @@ Awaitable<void> Server::processQueryOrUpdate(
   std::optional<ExceptionMetadata> metadata;
   // Also store the QueryExecutionTree outside the try-catch block to gain
   // access to the runtimeInformation in the case of an error.
-  // TODO: broken
+  // TODO: the storing of the PlannedQuery outside the try-catch block in case
+  // of an error has been broken for some time
   std::optional<PlannedQuery> plannedQuery;
   try {
     if constexpr (std::is_same_v<Operation, Query>) {

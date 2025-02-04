@@ -30,6 +30,12 @@ using nlohmann::json;
 using std::string;
 using std::vector;
 
+template <typename Operation>
+CPP_concept QueryOrUpdate =
+    ad_utility::SameAsAny<Operation,
+                          ad_utility::url_parser::sparqlOperation::Query,
+                          ad_utility::url_parser::sparqlOperation::Update>;
+
 //! The HTTP Server used.
 class Server {
   FRIEND_TEST(ServerTest, getQueryId);
@@ -132,7 +138,7 @@ class Server {
   ///             `HttpServer.h` for documentation).
   /// \param timeLimit Duration in seconds after which the query will be
   ///                  cancelled.
-  template <typename Operation>
+  template <QueryOrUpdate Operation>
   Awaitable<void> processQueryOrUpdate(
       const ad_utility::url_parser::ParamValueMap& params,
       ParsedQuery&& parsedOperation,
@@ -176,16 +182,16 @@ class Server {
   static std::pair<bool, bool> determineResultPinning(
       const ad_utility::url_parser::ParamValueMap& params);
   FRIEND_TEST(ServerTest, determineResultPinning);
-  template <typename Operation>
-  // Parse an operation (Query or Update).
+  //  Parse an operation
+  template <QueryOrUpdate Operation>
   auto parseOperation(ad_utility::websocket::MessageSender& messageSender,
                       const ad_utility::url_parser::ParamValueMap& params,
                       const Operation& operation, TimeLimit timeLimit);
   // Sets up the PlannedQuery s.t. it is ready to be executed.
-  static PlannedQuery setupPlannedQuery(PlannedQuery& plannedOperation,
-                                        SharedCancellationHandle handle,
-                                        TimeLimit timeLimit,
-                                        const ad_utility::Timer& requestTimer);
+  static void setupPlannedQuery(PlannedQuery& plannedOperation,
+                                SharedCancellationHandle handle,
+                                TimeLimit timeLimit,
+                                const ad_utility::Timer& requestTimer);
   // Plan a parsed query.
   Awaitable<PlannedQuery> planQuery(net::static_thread_pool& thread_pool,
                                     ParsedQuery&& operation,
