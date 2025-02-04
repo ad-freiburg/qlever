@@ -15,6 +15,11 @@ class ToNumericImpl {
  private:
   Id getFromString(const std::string& input) const {
     auto str = absl::StripAsciiWhitespace(input);
+    // Abseil and the standard library don't match leading + signs, so we skip
+    // them.
+    if (str.starts_with('+')) {
+      str.remove_prefix(1);
+    }
     auto strEnd = str.data() + str.size();
     auto strStart = str.data();
     T resT{};
@@ -24,10 +29,6 @@ class ToNumericImpl {
         return Id::makeFromInt(resT);
       }
     } else {
-      // Abseil doesn't match leading + signs, so we skip them.
-      if (str.starts_with('+')) {
-        strStart++;
-      }
       auto conv = absl::from_chars(strStart, strEnd, resT,
                                    AllowExponentialNotation
                                        ? absl::chars_format::general
