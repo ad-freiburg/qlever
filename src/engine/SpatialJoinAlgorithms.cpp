@@ -182,33 +182,32 @@ Id SpatialJoinAlgorithms::computeDist(const IdTable* idTableLeft,
     return GeoPoint(p.get<1>(), p.get<0>());
   };
 
-  // if the geometries have not been read already, get them first
-  auto point1 = getPoint(idTableLeft, rowLeft, leftPointCol);
-  auto point2 = getPoint(idTableRight, rowRight, rightPointCol);
-  if (useMidpointForAreas_) {
-    if (!point1) {
-      point1 = getAreaPoint(idTableLeft, rowLeft, leftPointCol);
+  rtreeEntry entryLeft{rowLeft, std::nullopt, std::nullopt, std::nullopt};
+  rtreeEntry entryRight{rowRight, std::nullopt, std::nullopt, std::nullopt};
+  entryLeft.geoPoint_ = getPoint(idTableLeft, rowLeft, leftPointCol);
+  entryRight.geoPoint_ = getPoint(idTableRight, rowRight, rightPointCol);
+  if (entryLeft.geoPoint_ && entryRight.geoPoint_) {
+    return computeDist(entryLeft, entryRight);
+  } else if (useMidpointForAreas_) {
+    if (!entryLeft.geoPoint_) {
+      entryLeft.geoPoint_ = getAreaPoint(idTableLeft, rowLeft, leftPointCol);
     }
-
-    if (!point2) {
-      point2 = getAreaPoint(idTableRight, rowRight, rightPointCol);
+    if (!entryRight.geoPoint_) {
+      entryRight.geoPoint_ = getAreaPoint(idTableRight, rowRight, rightPointCol);
     }
-
-    if (!point1.has_value() || !point2.has_value()) {
+    if (entryLeft.geoPoint_ && entryRight.geoPoint_) {
+      return computeDist(entryLeft, entryRight);
+    } else {
       return Id::makeUndefined();
     }
-    return Id::makeFromDouble(
-        ad_utility::detail::wktDistImpl(point1.value(), point2.value()));
   } else {
-    auto geometry1 =
-        getAreaOrPointGeometry(idTableLeft, rowLeft, leftPointCol, point1);
-    auto geometry2 =
-        getAreaOrPointGeometry(idTableRight, rowRight, rightPointCol, point2);
-    if (!geometry1.has_value() || !geometry2.has_value()) {
+    entryLeft.geometry_ = getAreaOrPointGeometry(idTableLeft, rowLeft, leftPointCol, entryLeft.geoPoint_);
+    entryRight.geometry_ = getAreaOrPointGeometry(idTableRight, rowRight, rightPointCol, entryRight.geoPoint_);
+    if (entryLeft.geometry_ && entryRight.geometry_) {
+      return computeDist(entryLeft, entryRight);
+    } else {
       return Id::makeUndefined();
     }
-    return Id::makeFromDouble(
-        computeDist(geometry1.value(), geometry2.value()));
   }
 }
 
