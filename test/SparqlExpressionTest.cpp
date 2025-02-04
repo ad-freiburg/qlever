@@ -1243,11 +1243,10 @@ TEST(SparqlExpression, ReplaceExpression) {
       std::tuple{idOrLitOrStringVec({"null", "eins", "zwei", "drei", U, U}),
                  IdOrLiteralOrIri{lit("e.[a-z]")}, IdOrLiteralOrIri{lit("X")}});
   // A regex with replacement with substitutions
-  checkReplace(
-      idOrLitOrStringVec({"\"$1 \\\\2 A \\\\bc\"", "\"$1 \\\\2 DE \\\\f\""}),
-      std::tuple{idOrLitOrStringVec({"Abc", "DEf"}),
-                 IdOrLiteralOrIri{lit("([A-Z]+)")},
-                 IdOrLiteralOrIri{lit("\"\\\\$1 \\\\2 $1 \\\\\"")}});
+  checkReplace(idOrLitOrStringVec({R"("$1 \\2 A \\bc")", R"("$1 \\2 DE \\f")"}),
+               std::tuple{idOrLitOrStringVec({"Abc", "DEf"}),
+                          IdOrLiteralOrIri{lit("([A-Z]+)")},
+                          IdOrLiteralOrIri{lit(R"("\\$1 \\2 $1 \\")")}});
 
   checkReplace(idOrLitOrStringVec({"truebc", "truef"}),
                std::tuple{idOrLitOrStringVec({"Abc", "DEf"}),
