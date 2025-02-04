@@ -1246,6 +1246,16 @@ TEST(SparqlParser, ConstructQuery) {
                         m::Graphs{iri("<foo2>"), iri("<foo3>")}));
 }
 
+// _____________________________________________________________________________
+TEST(SparqlParser, ensureExceptionOnInvalidGraphTerm) {
+  EXPECT_THROW(SparqlQleverVisitor::toGraphPattern(
+                   {{Var{"?a"}, BlankNode{true, "0"}, Var{"?b"}}}),
+               ad_utility::Exception);
+  EXPECT_THROW(SparqlQleverVisitor::toGraphPattern(
+                   {{Var{"?a"}, Literal{"\"Abc\""}, Var{"?b"}}}),
+               ad_utility::Exception);
+}
+
 // Test that ASK queries are parsed as they should.
 TEST(SparqlParser, AskQuery) {
   // Some helper functions and abbreviations.
