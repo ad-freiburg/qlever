@@ -1215,9 +1215,11 @@ TEST(SparqlParser, ConstructQuery) {
           m::pq::LimitOffset({10}), m::pq::OrderKeys({{Var{"?a"}, false}})));
   // This case of the grammar is not useful without Datasets, but we still
   // support it.
-  expectConstructQuery("CONSTRUCT WHERE { ?a <foo> ?b }",
-                       m::ConstructQuery({{Var{"?a"}, Iri{"<foo>"}, Var{"?b"}}},
-                                         m::GraphPattern()));
+  expectConstructQuery(
+      "CONSTRUCT WHERE { ?a <foo> ?b }",
+      m::ConstructQuery(
+          {{Var{"?a"}, Iri{"<foo>"}, Var{"?b"}}},
+          m::GraphPattern(m::Triples({{Var{"?a"}, "<foo>", Var{"?b"}}}))));
   // CONSTRUCT with datasets.
   expectConstructQuery(
       "CONSTRUCT { } FROM <foo> FROM NAMED <foo2> FROM NAMED <foo3> WHERE { }",
