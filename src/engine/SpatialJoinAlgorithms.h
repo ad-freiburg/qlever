@@ -21,7 +21,6 @@ namespace bgi = boost::geometry::index;
 
 using Point = bg::model::point<double, 2, bg::cs::cartesian>;
 using Box = bg::model::box<Point>;
-// using Value = std::pair<Box, size_t>;
 using Polygon = boost::geometry::model::polygon<
     boost::geometry::model::d2::point_xy<double>>;
 using Linestring = bg::model::linestring<Point>;
@@ -50,10 +49,10 @@ struct DistanceVisitor : public boost::static_visitor<double> {
 };
 
 struct rtreeEntry {
-  size_t row;
-  std::optional<AnyGeometry> geometry;
-  std::optional<GeoPoint> geoPoint;
-  std::optional<Box> boundingBox;
+  size_t row_;
+  std::optional<AnyGeometry> geometry_;
+  std::optional<GeoPoint> geoPoint_;
+  std::optional<Box> boundingBox_;
 };
 
 using Value = std::pair<Box, rtreeEntry>;
