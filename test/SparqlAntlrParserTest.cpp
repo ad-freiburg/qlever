@@ -1798,8 +1798,15 @@ TEST(SparqlParser, FunctionCall) {
                      matchUnary(&makeConvertToIntExpression));
   expectFunctionCall(absl::StrCat(xsd, "double>(?x)"),
                      matchUnary(&makeConvertToDoubleExpression));
-  expectFunctionCall(absl::StrCat(xsd, "decimal>(?x)"),
+  expectFunctionCall(absl::StrCat(xsd, "float>(?x)"),
                      matchUnary(&makeConvertToDoubleExpression));
+  expectFunctionCall(absl::StrCat(xsd, "decimal>(?x)"),
+                     matchUnary(&makeConvertToDecimalExpression));
+  expectFunctionCall(absl::StrCat(xsd, "boolean>(?x)"),
+                     matchUnary(&makeConvertToBooleanExpression));
+
+  expectFunctionCall(absl::StrCat(xsd, "string>(?x)"),
+                     matchUnary(&makeConvertToStringExpression));
 
   // Wrong number of arguments.
   expectFunctionCallFails(absl::StrCat(geof, "distance>(?a)"));
