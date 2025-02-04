@@ -82,7 +82,7 @@ std::optional<AnyGeometry> SpatialJoinAlgorithms::getAnyGeometry(
   AnyGeometry geometry;
   try {
     bg::read_wkt(str, geometry);
-  } catch (const std::exception& e) {
+  } catch (...) {
     printWarning();
     return std::nullopt;
   }
@@ -104,7 +104,7 @@ Point SpatialJoinAlgorithms::convertGeoPointToPoint(GeoPoint point) const {
 Id SpatialJoinAlgorithms::computeDist(const rtreeEntry& geo1,
                                       const rtreeEntry& geo2) const {
   auto convertPoint = [&](const AnyGeometry& geometry,
-                          std::optional<Box> bbox) {
+                          const std::optional<Box>& bbox) {
     Box areaBox;
     areaBox =
         bbox.value_or(boost::apply_visitor(BoundingBoxVisitor(), geometry));
@@ -152,7 +152,7 @@ Id SpatialJoinAlgorithms::computeDist(const IdTable* idTableLeft,
                                       ColumnIndex rightPointCol) const {
   auto getAreaOrPointGeometry =
       [&](const IdTable* idtable, size_t row, size_t col,
-          std::optional<GeoPoint> point) -> std::optional<AnyGeometry> {
+          std::optional<GeoPoint> point) {
     std::optional<AnyGeometry> geometry;
 
     if (!point) {
