@@ -140,8 +140,10 @@ struct StringValueGetter : Mixin<StringValueGetter> {
     return std::string(asStringViewUnsafe(s.getContent()));
   }
 };
-// Similar to `StringValueGetter`, but correctly escapes and unescapes string
-// sequences.
+// Similar to `StringValueGetter`, but correctly preprocesses strings so that
+// they can be used by re2 as replacement strings. So '$1 \abc \$' becomes
+// '\1 \\abc $', where the former variant is valid in the SPARQL standard and
+// the latter represents the format that re2 expects.
 struct ReplacementStringGetter : StringValueGetter,
                                  Mixin<ReplacementStringGetter> {
   using Mixin<ReplacementStringGetter>::operator();
