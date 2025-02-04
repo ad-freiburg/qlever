@@ -611,7 +611,7 @@ TEST(Operation, checkLazyOperationIsNotCachedIfTooLarge) {
     // generator to additionally assert sure it is not re-read on every
     // iteration.
     auto cleanup =
-        setRuntimeParameterForTest<"lazy-result-max-cache-size">(1_B);
+        setRuntimeParameterForTest<"cache-max-size-lazy-result">(1_B);
 
     cacheValue = valuesForTesting.runComputationAndPrepareForCache(
         timer, ComputationMode::LAZY_IF_SUPPORTED, makeQueryCacheKey("test"),
@@ -678,7 +678,7 @@ TEST(Operation, checkMaxCacheSizeIsComputedCorrectly) {
         }};
     qec->getQueryTreeCache().setMaxSizeSingleEntry(cacheLimit);
 
-    auto cleanup = setRuntimeParameterForTest<"lazy-result-max-cache-size">(
+    auto cleanup = setRuntimeParameterForTest<"cache-max-size-lazy-result">(
         runtimeParameterLimit);
 
     ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};

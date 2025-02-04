@@ -231,7 +231,7 @@ CacheValue Operation::runComputationAndPrepareForCache(
   auto result = runComputation(timer, computationMode);
   auto maxSize =
       isRoot ? cache.getMaxSizeSingleEntry()
-             : std::min(RuntimeParameters().get<"lazy-result-max-cache-size">(),
+             : std::min(RuntimeParameters().get<"cache-max-size-lazy-result">(),
                         cache.getMaxSizeSingleEntry());
   if (canResultBeCached() && !result.isFullyMaterialized() &&
       !unlikelyToFitInCache(maxSize)) {
