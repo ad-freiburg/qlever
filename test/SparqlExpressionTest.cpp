@@ -1242,6 +1242,12 @@ TEST(SparqlExpression, ReplaceExpression) {
       idOrLitOrStringVec({"null", "Xs", "zwei", "drei", U, U}),
       std::tuple{idOrLitOrStringVec({"null", "eins", "zwei", "drei", U, U}),
                  IdOrLiteralOrIri{lit("e.[a-z]")}, IdOrLiteralOrIri{lit("X")}});
+  // A regex with replacement with substitutions
+  checkReplace(
+      idOrLitOrStringVec({"\"$1 \\\\2 A \\\\bc\"", "\"$1 \\\\2 DE \\\\f\""}),
+      std::tuple{idOrLitOrStringVec({"Abc", "DEf"}),
+                 IdOrLiteralOrIri{lit("([A-Z]+)")},
+                 IdOrLiteralOrIri{lit("\"$$1 \\\\2 $1 \\\\\"")}});
 
   // Case-insensitive matching using the hack for google regex:
   checkReplace(idOrLitOrStringVec({"null", "xxns", "zwxx", "drxx"}),

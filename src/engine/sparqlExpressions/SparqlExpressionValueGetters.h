@@ -140,6 +140,20 @@ struct StringValueGetter : Mixin<StringValueGetter> {
     return std::string(asStringViewUnsafe(s.getContent()));
   }
 };
+// Similar to `StringValueGetter`, but correctly escapes and unescapes string
+// sequences.
+struct ReplacementStringGetter : StringValueGetter,
+                                 Mixin<ReplacementStringGetter> {
+  using Mixin<ReplacementStringGetter>::operator();
+  std::optional<std::string> operator()(ValueId,
+                                        const EvaluationContext*) const;
+
+  std::optional<std::string> operator()(const LiteralOrIri& s,
+                                        const EvaluationContext*) const;
+
+ private:
+  static std::string convertToReplacementString(std::string_view view);
+};
 
 // Boolean value getter that checks whether the given `Id` is a `ValueId` of the
 // given `datatype`.
