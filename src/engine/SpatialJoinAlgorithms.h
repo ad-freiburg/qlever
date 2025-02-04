@@ -160,9 +160,10 @@ class SpatialJoinAlgorithms {
   // values. For the longitude values this is not true. Therefore a value which
   // works very good for almost all longitudes and latitudes has been chosen.
   // Only for the poles, the conversion will be way to large (for the longitude
-  // difference).
-  double convertDegreesToMeters(const AnyGeometry& geometry1,
-                                const AnyGeometry& geometry2) const;
+  // difference). Note, that this function is expensive and should only be
+  // called when needed
+  double computeDist(const AnyGeometry& geometry1,
+                     const AnyGeometry& geometry2) const;
 
   // this helper function converts a GeoPoint into a boost geometry Point
   Point convertGeoPointToPoint(GeoPoint point) const;

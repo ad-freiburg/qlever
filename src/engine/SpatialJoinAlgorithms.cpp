@@ -90,7 +90,7 @@ std::optional<AnyGeometry> SpatialJoinAlgorithms::getAnyGeometry(const IdTable* 
 }
 
 // ____________________________________________________________________________
-double SpatialJoinAlgorithms::convertDegreesToMeters(
+double SpatialJoinAlgorithms::computeDist(
     const AnyGeometry& geometry1, const AnyGeometry& geometry2) const {
   return boost::apply_visitor(DistanceVisitor(), geometry1, geometry2) * 78.630;
 };
@@ -119,9 +119,6 @@ Id SpatialJoinAlgorithms::computeDist(const rtreeEntry& geo1,
     if (!point2) {
       point2 = convertPoint(geo2.geometry_.value(), geo2.boundingBox_);
     }
-    if (!point1.has_value() || !point2.has_value()) {
-      return Id::makeUndefined();
-    }
     return Id::makeFromDouble(
         ad_utility::detail::wktDistImpl(point1.value(), point2.value()));
   } else {
@@ -130,17 +127,17 @@ Id SpatialJoinAlgorithms::computeDist(const rtreeEntry& geo1,
           geo1.geoPoint_.value(), geo2.geoPoint_.value()));
     } else if (geo1.geometry_.has_value() && geo2.geometry_.has_value()) {
       return Id::makeFromDouble(
-          convertDegreesToMeters(geo1.geometry_.value(), geo2.geometry_.value()));
+        computeDist(geo1.geometry_.value(), geo2.geometry_.value()));
     } else {
       // one point and one area
-      AnyGeometry geom1 = geo1.geometry_.value();
-      AnyGeometry geom2 = geo2.geometry_.value();
+      std::optional<AnyGeometry> geom1 = geo1.geometry_;
+      std::optional<AnyGeometry> geom2 = geo2.geometry_;
       if (geo1.geoPoint_.has_value()) {
         geom1 = convertGeoPointToPoint(geo1.geoPoint_.value());
       } else if (geo2.geoPoint_.has_value()) {
         geom2 = convertGeoPointToPoint(geo2.geoPoint_.value());
       }
-      return Id::makeFromDouble(convertDegreesToMeters(geom1, geom2));
+      return Id::makeFromDouble(computeDist(geom1.value(), geom2.value()));
     }
   }
 }
@@ -211,7 +208,7 @@ Id SpatialJoinAlgorithms::computeDist(const IdTable* idTableLeft,
       return Id::makeUndefined();
     }
     return Id::makeFromDouble(
-        convertDegreesToMeters(geometry1.value(), geometry2.value()));
+        computeDist(geometry1.value(), geometry2.value()));
   }
 }
 
