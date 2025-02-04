@@ -28,11 +28,11 @@ namespace ad_utility::vocabulary_merger {
 // If the `bool` is true, then the word is to be stored in the external
 // vocabulary else in the internal vocabulary.
 template <typename T>
-CPP_concept WordCallback = std::invocable<T, std::string_view, bool>;
+CPP_concept WordCallback = ranges::invocable<T, std::string_view, bool>;
 // Concept for a callable that compares to `string_view`s.
 template <typename T>
 CPP_concept WordComparator =
-    std::predicate<T, std::string_view, std::string_view>;
+    ranges::predicate<T, std::string_view, std::string_view>;
 
 // The result of a call to `mergeVocabulary` (see below).
 struct VocabularyMetaData {
