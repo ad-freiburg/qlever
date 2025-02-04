@@ -267,7 +267,7 @@ parsedQuery::BasicGraphPattern Visitor::toGraphPattern(
   parsedQuery::BasicGraphPattern pattern{};
   pattern._triples.reserve(triples.size());
   for (const auto& triple : triples) {
-    auto toTripleComponent = []<typename T>(T&& item) {
+    auto toTripleComponent = []<typename T>(const T& item) {
       namespace tc = ad_utility::triple_component;
       if constexpr (ad_utility::isSimilar<T, Variable>) {
         return TripleComponent{item};
@@ -286,7 +286,7 @@ parsedQuery::BasicGraphPattern Visitor::toGraphPattern(
     };
     auto subject = std::visit(toTripleComponent, triple.at(0));
     auto predicate = std::visit(
-        []<typename T>(T&& item) -> PropertyPath {
+        []<typename T>(const T& item) -> PropertyPath {
           if constexpr (ad_utility::isSimilar<T, Variable>) {
             return PropertyPath::fromVariable(item);
           } else if constexpr (ad_utility::isSimilar<T, Iri>) {
@@ -301,8 +301,8 @@ parsedQuery::BasicGraphPattern Visitor::toGraphPattern(
         },
         triple.at(1));
     auto object = std::visit(toTripleComponent, triple.at(2));
-    pattern._triples.push_back(SparqlTriple{
-        std::move(subject), std::move(predicate), std::move(object)});
+    pattern._triples.emplace_back(std::move(subject), std::move(predicate),
+                                  std::move(object));
   }
   return pattern;
 }
