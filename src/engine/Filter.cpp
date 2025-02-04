@@ -79,7 +79,9 @@ ProtoResult Filter::computeResult(bool requestLaziness) {
               for (auto& [idTable, localVocab] : subRes->idTables()) {
                 IdTable result = self->filterIdTable(subRes->sortedBy(),
                                                      idTable, localVocab);
-                co_yield {std::move(result), std::move(localVocab)};
+                if (!result.empty()) {
+                  co_yield {std::move(result), std::move(localVocab)};
+                }
               }
             }(std::move(subRes), this),
             resultSortedOn()};
