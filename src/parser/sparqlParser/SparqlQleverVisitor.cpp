@@ -317,6 +317,9 @@ ParsedQuery Visitor::visit(Parser::ConstructQueryContext* ctx) {
                         .value_or(parsedQuery::ConstructClause{});
     visitWhereClause(ctx->whereClause(), query);
   } else {
+    isInsideConstructTriples_ = true;
+    auto cleanup =
+        absl::Cleanup{[this]() { isInsideConstructTriples_ = false; }};
     query._clause = parsedQuery::ConstructClause{
         visitOptional(ctx->triplesTemplate()).value_or(Triples{})};
     query._rootGraphPattern._graphPatterns.emplace_back(
