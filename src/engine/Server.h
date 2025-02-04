@@ -35,6 +35,7 @@ class Server {
   FRIEND_TEST(ServerTest, parseHttpRequest);
   FRIEND_TEST(ServerTest, getQueryId);
   FRIEND_TEST(ServerTest, createMessageSender);
+  FRIEND_TEST(ServerTest, extractAccessToken);
 
  public:
   explicit Server(unsigned short port, size_t numThreads,
@@ -115,6 +116,12 @@ class Server {
   static ad_utility::url_parser::ParsedRequest parseHttpRequest(
       const ad_utility::httpUtils::HttpRequest auto& request);
 
+  /// Extract the Access token for that request from the `Authorization` header
+  /// or the URL query parameters.
+  static std::optional<std::string> extractAccessToken(
+      const ad_utility::httpUtils::HttpRequest auto& request,
+      const ad_utility::url_parser::ParamValueMap& params);
+
   /// Handle a single HTTP request. Check whether a file request or a query was
   /// sent, and dispatch to functions handling these cases. This function
   /// requires the constraints for the `HttpHandler` in `HttpServer.h`.
@@ -124,14 +131,11 @@ class Server {
   Awaitable<void> process(
       const ad_utility::httpUtils::HttpRequest auto& request, auto&& send);
 
-  // Indicates which type of operation is being processed.
-  enum class OperationType { Query, Update };
-
   /// Handle a http request that asks for the processing of an query or update.
   /// This is only a wrapper for `processQuery` and `processUpdate` which
   /// does the error handling.
   /// \param params The key-value-pairs  sent in the HTTP GET request.
-  /// \param queryOrUpdate The query or update.
+  /// \param operation Must be Query or Update.
   /// \param requestTimer Timer that measure the total processing
   ///                     time of this request.
   /// \param request The HTTP request.
@@ -139,15 +143,16 @@ class Server {
   ///             `HttpServer.h` for documentation).
   /// \param timeLimit Duration in seconds after which the query will be
   ///                  cancelled.
-  template <OperationType type>
+  template <typename Operation>
   Awaitable<void> processQueryOrUpdate(
       const ad_utility::url_parser::ParamValueMap& params,
-      const string& queryOrUpdate, ad_utility::Timer& requestTimer,
+      const Operation& operation, ad_utility::Timer& requestTimer,
       const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
       TimeLimit timeLimit);
   // Do the actual execution of a query.
   Awaitable<void> processQuery(
-      const ad_utility::url_parser::ParamValueMap& params, const string& query,
+      const ad_utility::url_parser::ParamValueMap& params,
+      const ad_utility::url_parser::sparqlOperation::Query& query,
       ad_utility::Timer& requestTimer,
       const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
       TimeLimit timeLimit);
@@ -162,7 +167,8 @@ class Server {
   FRIEND_TEST(ServerTest, createResponseMetadata);
   // Do the actual execution of an update.
   Awaitable<void> processUpdate(
-      const ad_utility::url_parser::ParamValueMap& params, const string& update,
+      const ad_utility::url_parser::ParamValueMap& params,
+      const ad_utility::url_parser::sparqlOperation::Update& update,
       ad_utility::Timer& requestTimer,
       const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
       TimeLimit timeLimit);
@@ -180,7 +186,7 @@ class Server {
   FRIEND_TEST(ServerTest, determineResultPinning);
   // Sets up the PlannedQuery s.t. it is ready to be executed.
   PlannedQuery setupPlannedQuery(
-      const ad_utility::url_parser::ParamValueMap& params,
+      const std::vector<DatasetClause>& queryDatasets,
       const std::string& operation, QueryExecutionContext& qec,
       SharedCancellationHandle handle, TimeLimit timeLimit,
       const ad_utility::Timer& requestTimer) const;
@@ -192,7 +198,8 @@ class Server {
   // Execute an update operation. The function must have exclusive access to the
   // DeltaTriples object.
   json processUpdateImpl(
-      const ad_utility::url_parser::ParamValueMap& params, const string& update,
+      const ad_utility::url_parser::ParamValueMap& params,
+      const ad_utility::url_parser::sparqlOperation::Update& update,
       ad_utility::Timer& requestTimer, TimeLimit timeLimit, auto& messageSender,
       ad_utility::SharedCancellationHandle cancellationHandle,
       DeltaTriples& deltaTriples);
