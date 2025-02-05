@@ -198,6 +198,19 @@ Server::verifyUserSubmittedQueryTimeout(
       decltype(defaultTimeout)::DurationType{defaultTimeout});
 }
 
+// _____________________________________________
+/// Special type of std::runtime_error used to indicate that there has been
+/// a collision of query ids. This will happen when a HTTP client chooses an
+/// explicit id that is currently already in use. In this case the server
+/// will respond with HTTP status 409 Conflict and the client is encouraged
+/// to re-submit their request with a different query id.
+class QueryAlreadyInUseError : public std::runtime_error {
+ public:
+  explicit QueryAlreadyInUseError(std::string_view proposedQueryId)
+      : std::runtime_error{"Query id '"s + proposedQueryId +
+                           "' is already in use!"} {}
+};
+
 // _____________________________________________________________________________
 Awaitable<void> Server::process(
     const ad_utility::httpUtils::HttpRequest auto& request, auto&& send) {
@@ -348,6 +361,15 @@ Awaitable<void> Server::process(
     }
   }
 
+  auto operationString = [&parsedHttpRequest] {
+    if (auto* q = std::get_if<Query>(&parsedHttpRequest.operation_)) {
+      return q->query_;
+    }
+    if (auto* u = std::get_if<Update>(&parsedHttpRequest.operation_)) {
+      return u->update_;
+    }
+    return std::string("No operation string available.");
+  }();
   auto visitOperation =
       [&checkParameter, &accessTokenOk, &request, &send, &parameters,
        &requestTimer, this]<QL_CONCEPT_OR_TYPENAME(QueryOrUpdate) Operation,
@@ -412,9 +434,73 @@ Awaitable<void> Server::process(
         createNotFoundResponse("Unknown path", std::move(request)));
   };
 
-  co_return co_await std::visit(
-      ad_utility::OverloadCallOperator{visitQuery, visitUpdate, visitNone},
-      std::move(parsedHttpRequest.operation_));
+  using namespace ad_utility::httpUtils;
+  http::status responseStatus = http::status::ok;
+
+  // Put the whole query processing in a try-catch block. If any exception
+  // occurs, log the error message and send a JSON response with all the details
+  // to the client. Note that the C++ standard forbids co_await in the catch
+  // block, hence the workaround with the optional `exceptionErrorMsg`.
+  std::optional<std::string> exceptionErrorMsg;
+  std::optional<ExceptionMetadata> metadata;
+  // Also store the QueryExecutionTree outside the try-catch block to gain
+  // access to the runtimeInformation in the case of an error.
+  // TODO: the storing of the PlannedQuery outside the try-catch block in case
+  // of an error has been broken for some time
+  std::optional<PlannedQuery> plannedQuery;
+  try {
+    co_return co_await std::visit(
+        ad_utility::OverloadCallOperator{visitQuery, visitUpdate, visitNone},
+        std::move(parsedHttpRequest.operation_));
+  } catch (const ParseException& e) {
+    responseStatus = http::status::bad_request;
+    exceptionErrorMsg = e.errorMessageWithoutPositionalInfo();
+    metadata = e.metadata();
+  } catch (const QueryAlreadyInUseError& e) {
+    responseStatus = http::status::conflict;
+    exceptionErrorMsg = e.what();
+  } catch (const UnknownMediatypeError& e) {
+    responseStatus = http::status::bad_request;
+    exceptionErrorMsg = e.what();
+  } catch (const ad_utility::CancellationException& e) {
+    // Send 429 status code to indicate that the time limit was reached
+    // or the query was cancelled because of some other reason.
+    responseStatus = http::status::too_many_requests;
+    exceptionErrorMsg = e.what();
+  } catch (const std::exception& e) {
+    responseStatus = http::status::internal_server_error;
+    exceptionErrorMsg = e.what();
+  }
+  // TODO<qup42> at this stage should probably have a wrapper that takes
+  //  optional<errorMsg> and optional<metadata> and does this logic
+  if (exceptionErrorMsg) {
+    LOG(ERROR) << exceptionErrorMsg.value() << std::endl;
+    if (metadata) {
+      // The `coloredError()` message might fail because of the different
+      // Unicode handling of QLever and ANTLR. Make sure to detect this case so
+      // that we can fix it if it happens.
+      try {
+        LOG(ERROR) << metadata.value().coloredError() << std::endl;
+      } catch (const std::exception& e) {
+        exceptionErrorMsg.value().append(absl::StrCat(
+            " Highlighting an error for the command line log failed: ",
+            e.what()));
+        LOG(ERROR) << "Failed to highlight error in operation. " << e.what()
+                   << std::endl;
+        LOG(ERROR) << metadata.value().query_ << std::endl;
+      }
+    }
+    auto errorResponseJson = composeErrorResponseJson(
+        operationString, exceptionErrorMsg.value(), requestTimer, metadata);
+    if (plannedQuery.has_value()) {
+      errorResponseJson["runtimeInformation"] =
+          nlohmann::ordered_json(plannedQuery.value()
+                                     .queryExecutionTree_.getRootOperation()
+                                     ->runtimeInfo());
+    }
+    co_return co_await send(
+        createJsonResponse(errorResponseJson, request, responseStatus));
+  }
 }
 
 // ____________________________________________________________________________
@@ -603,20 +689,6 @@ nlohmann::json Server::composeCacheStatsJson() const {
   result["pinned-size"] = cache_.pinnedSize().getBytes();
   return result;
 }
-
-// _____________________________________________
-
-/// Special type of std::runtime_error used to indicate that there has been
-/// a collision of query ids. This will happen when a HTTP client chooses an
-/// explicit id that is currently already in use. In this case the server
-/// will respond with HTTP status 409 Conflict and the client is encouraged
-/// to re-submit their request with a different query id.
-class QueryAlreadyInUseError : public std::runtime_error {
- public:
-  explicit QueryAlreadyInUseError(std::string_view proposedQueryId)
-      : std::runtime_error{"Query id '"s + proposedQueryId +
-                           "' is already in use!"} {}
-};
 
 // _____________________________________________
 ad_utility::websocket::OwningQueryId Server::getQueryId(
