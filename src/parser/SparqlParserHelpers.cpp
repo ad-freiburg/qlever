@@ -58,6 +58,10 @@ std::string ParserAndVisitor::unescapeUnicodeSequences(std::string input) {
         startPointer + 2, startPointer + hexValue.size(), codePoint, 16);
     AD_CORRECTNESS_CHECK(result.ec == std::errc{});
 
+    AD_CORRECTNESS_CHECK(codePoint < 0xD800 || codePoint > 0xDFFF,
+                         "High or low surrogate escape sequence detected, "
+                         "please use a valid Unicode code point instead.");
+
     icu::UnicodeString helper{codePoint};
     helper.toUTF8String(output);
   }
