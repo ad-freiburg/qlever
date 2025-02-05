@@ -126,8 +126,9 @@ class MemorySize {
   CPP_template(typename T)(requires Arithmetic<T>) constexpr MemorySize
   operator*(const T c) const;
 
-  CPP_template(typename T)(requires Arithmetic<T>) friend constexpr MemorySize
-  operator*(const T c, const MemorySize m);
+  template <typename T>
+  friend constexpr auto operator*(const T c, const MemorySize m)
+      -> CPP_ret(MemorySize)(requires Arithmetic<T>);
 
   CPP_template(typename T)(requires Arithmetic<T>) constexpr MemorySize&
   operator*=(const T c);
@@ -410,8 +411,9 @@ CPP_template_def(typename T)(requires Arithmetic<T>) constexpr MemorySize
 }
 
 // _____________________________________________________________________________
-CPP_template_def(typename T)(requires Arithmetic<T>) constexpr MemorySize
-operator*(const T c, const MemorySize m) {
+template <typename T>
+constexpr auto operator*(const T c, const MemorySize m)
+    -> CPP_ret(MemorySize)(requires Arithmetic<T>) {
   return m * c;
 }
 

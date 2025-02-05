@@ -150,11 +150,11 @@ CPP_template(typename Range)(requires ql::ranges::forward_range<
 
 // Return a new `std::input` that is obtained by applying the `function` to each
 // of the elements of the `input`.
-CPP_template(typename Array, typename Function)(requires(
-    ad_utility::isArray<std::decay_t<Array>> CPP_and std::invocable<
+CPP_template(typename Array, typename Function)(
+    requires ad_utility::isArray<std::decay_t<Array>> CPP_and std::invocable<
         Function,
-        typename Array::value_type>)) auto transformArray(Array&& input,
-                                                          Function function) {
+        typename Array::value_type>) auto transformArray(Array&& input,
+                                                         Function function) {
   return std::apply(
       [&function](auto&&... vals) {
         return std::array{std::invoke(function, AD_FWD(vals))...};

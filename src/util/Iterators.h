@@ -24,8 +24,7 @@ inline auto accessViaBracketOperator = [](auto&& randomAccessContainer,
 using AccessViaBracketOperator = decltype(accessViaBracketOperator);
 
 template <typename A, typename P>
-CPP_requires(has_valid_accessor_,
-             requires(A& a, P& p, uint64_t i)({&a(*p, i)}));
+CPP_requires(has_valid_accessor_, requires(A& a, P& p, uint64_t i)(&a(*p, i)));
 
 template <typename A, typename P>
 CPP_concept HasValidAccessor = CPP_requires_ref(has_valid_accessor_, A, P);
@@ -392,12 +391,12 @@ class InputRangeTypeErased {
   // Constructor for all other ranges. We first pass them through the
   // `InputRangeToOptional` class from above to make it compatible with the base
   // class.
-  CPP_template(typename Range)(requires(
-      !std::is_base_of_v<InputRangeFromGet<ValueType>, Range> CPP_and
+  CPP_template(typename Range)(
+      requires !std::is_base_of_v<InputRangeFromGet<ValueType>, Range> CPP_and
           ql::ranges::range<Range>
               CPP_and std::same_as<
                   ql::ranges::range_value_t<Range>,
-                  ValueType>)) explicit InputRangeTypeErased(Range range)
+                  ValueType>) explicit InputRangeTypeErased(Range range)
       : impl_{std::make_unique<RangeToInputRangeFromGet<Range>>(
             std::move(range))} {}
 

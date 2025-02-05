@@ -50,15 +50,17 @@ void ConstexprForLoop(const std::index_sequence<ForLoopIndexes...>&,
   ((loopBody.template operator()<ForLoopIndexes>()), ...);
 }
 
-template <typename Func, auto Case, typename... ArgTypes>
-CPP_requires(is_invocable_with_case_,
-             requires(Func&& f, ArgTypes&&... args)(
-                 AD_FWD(f).template operator()<Case>(AD_FWD(args)...)));
+template <typename Func, typename CaseConstant, typename... ArgTypes>
+CPP_requires(
+    is_invocable_with_case_,
+    requires(Func&& f, ArgTypes&&... args)(
+        AD_FWD(f).template operator()<CaseConstant::value>(AD_FWD(args)...)));
 
 // Concept that checks if a function can be called with the given arguments
 template <typename Func, auto Case, typename... ArgTypes>
 CPP_concept InvocableWithCase =
-    CPP_requires_ref(is_invocable_with_case_, Func, Case, ArgTypes...);
+    CPP_requires_ref(is_invocable_with_case_, Func,
+                     std::integral_constant<decltype(Case), Case>, ArgTypes...);
 
 // A `constexpr` switch statement. Chooses the `MatchingCase` in `FirstCase,
 // Cases...` that is equal to `value` and then calls
@@ -66,11 +68,12 @@ CPP_concept InvocableWithCase =
 // First, ensure you have the necessary concepts available.
 // For example, we assume that ad_utility::SameAsAny and InvocableWithCase are
 // defined.
-CPP_template(auto FirstCase, auto... Cases)(
+template <auto FirstCase, auto... Cases>
+QL_CONCEPT_OR_NOTHING(
     requires((sizeof...(Cases) == 0) ||
-             ad_utility::SameAsAny<decltype(FirstCase), decltype(Cases)...>)
-        CPP_and std::equality_comparable_with<
-            decltype(FirstCase), decltype(FirstCase)>) struct ConstexprSwitch {
+             ad_utility::SameAsAny<decltype(FirstCase), decltype(Cases)...>) &&
+    std::equality_comparable_with<decltype(FirstCase), decltype(FirstCase)>)
+struct ConstexprSwitch {
   CPP_template(typename FuncType, typename ValueType, typename... Args)(
       requires InvocableWithCase<FuncType, FirstCase, Args...> CPP_and(
           InvocableWithCase<FuncType, Cases, Args...>&&...)) constexpr auto

@@ -101,7 +101,8 @@ CPP_template(typename UnderlyingRange, bool supportConst = true)(
   UnderlyingRange underlyingRange_ = UnderlyingRange();
 
  public:
-  OwningView() QL_CONCEPT_OR_NOTHING(requires std::default_initializable<UnderlyingRange>) = default;
+  OwningView() QL_CONCEPT_OR_NOTHING(
+      requires std::default_initializable<UnderlyingRange>) = default;
 
   constexpr explicit OwningView(UnderlyingRange&& underlyingRange) noexcept(
       std::is_nothrow_move_constructible_v<UnderlyingRange>)
@@ -132,10 +133,9 @@ CPP_template(typename UnderlyingRange, bool supportConst = true)(
     return ql::ranges::end(underlyingRange_);
   }
 
-  CPP_template(typename = void)(
-      requires supportConst CPP_and
-          ql::ranges::range<const UnderlyingRange>) constexpr auto begin()
-      const {
+  constexpr auto begin() const
+      -> CPP_ret(ql::ranges::iterator_t<const UnderlyingRange>)(
+          requires supportConst&& ql::ranges::range<const UnderlyingRange>) {
     return ql::ranges::begin(underlyingRange_);
   }
 

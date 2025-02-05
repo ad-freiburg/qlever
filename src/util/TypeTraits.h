@@ -112,7 +112,7 @@ constexpr static bool isVector = isInstantiation<T, std::vector>;
 
 /// isTuple<T> is true if and only if T is an instantiation of std::tuple
 template <typename T>
-constexpr static bool isTuple = isInstantiation<T, std::tuple>;
+CPP_concept isTuple = isInstantiation<T, std::tuple>;
 
 /// isVariant<T> is true if and only if T is an instantiation of std::variant
 template <typename T>
@@ -211,9 +211,8 @@ CPP_template(typename Tuple)(requires isTuple<Tuple>) using TupleToVariant =
 /// From the types X = std::tuple<A, ... , B>, , Y = std::tuple<C, ..., D>...
 /// makes the type TupleCat<X, Y> = std::tuple<A, ..., B, C, ..., D, ...> (works
 /// for an arbitrary number of tuples as template parameters.
-CPP_template(typename... Tuples)(
-    requires(...&& isTuple<Tuples>)) using TupleCat =
-    decltype(std::tuple_cat(std::declval<Tuples&>()...));
+template <QL_CONCEPT_OR_TYPENAME(isTuple)... Tuples>
+using TupleCat = decltype(std::tuple_cat(std::declval<Tuples&>()...));
 
 /// A generalized version of std::visit that also supports non-variant
 /// parameters. Each `parameterOrVariant` of type T that is not a std::variant
@@ -254,12 +253,14 @@ auto applyFunctionToEachElementOfTuple(Function&& f, Tuple&& tuple) {
 }
 
 // Return the last type of variadic template arguments.
-CPP_template(typename... Ts)(requires(sizeof...(Ts) > 0)) using Last =
-    typename detail::LastT<Ts...>::type;
+template <typename... Ts>
+QL_CONCEPT_OR_NOTHING(requires(sizeof...(Ts) > 0))
+using Last = typename detail::LastT<Ts...>::type;
 
 // Return the first type of variadic template arguments.
-CPP_template(typename... Ts)(requires(sizeof...(Ts) > 0)) using First =
-    typename detail::FirstWrapper<Ts...>::type;
+template <typename... Ts>
+QL_CONCEPT_OR_NOTHING(requires(sizeof...(Ts) > 0))
+using First = typename detail::FirstWrapper<Ts...>::type;
 
 /// Concept for `std::is_invocable_r_v`.
 template <typename Func, typename R, typename... ArgTypes>

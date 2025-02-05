@@ -225,8 +225,9 @@ The serialized format for `std::variant<Type0, Type1, ...>` is a json string
 with the json object literal keys `index` and `value`.
 */
 namespace nlohmann {
-CPP_template(typename T)(requires std::is_copy_constructible_v<
-                         T>) struct adl_serializer<std::unique_ptr<T>> {
+template <typename T>
+QL_CONCEPT_OR_NOTHING(requires std::is_copy_constructible_v<T>)
+struct adl_serializer<std::unique_ptr<T>> {
   CPP_template(typename S)(
       requires OrderedOrUnorderedJson<
           S>) static void to_json(S& j, const std::unique_ptr<T>& ptr) {
