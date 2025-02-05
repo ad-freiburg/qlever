@@ -191,28 +191,29 @@ constexpr static bool alwaysFalse = false;
 
 /// From the type Tuple (std::tuple<A, B, C....>) creates the type
 /// std::tuple<TypeLifter<A>, TypeLifter<B>,...>
-template <typename Tuple, template <typename> typename TypeLifter>
-requires isTuple<Tuple> using LiftedTuple = typename detail::LiftInnerTypes<
-    std::tuple, TypeLifter>::template TypeToLift<Tuple>::LiftedType;
+CPP_template(typename Tuple,
+             template <typename>
+             typename TypeLifter)(requires isTuple<Tuple>) using LiftedTuple =
+    typename detail::LiftInnerTypes<
+        std::tuple, TypeLifter>::template TypeToLift<Tuple>::LiftedType;
 
 /// From the type Variant (std::variant<A, B, C....>) creates the type
 /// std::variant<TypeLifter<A>, TypeLifter<B>,...>
-template <typename Variant, template <typename> typename TypeLifter>
-requires isVariant<Variant>
-using LiftedVariant = typename detail::LiftInnerTypes<
-    std::variant, TypeLifter>::template TypeToLift<Variant>::LiftedType;
+CPP_template(typename Variant, template <typename> typename TypeLifter)(
+    requires isVariant<Variant>) using LiftedVariant =
+    typename detail::LiftInnerTypes<
+        std::variant, TypeLifter>::template TypeToLift<Variant>::LiftedType;
 
 /// From the type std::tuple<A, B, ...> makes the type std::variant<A, B, ...>
-template <typename Tuple>
-requires isTuple<Tuple>
-using TupleToVariant = typename detail::TupleToVariantImpl<Tuple>::type;
+CPP_template(typename Tuple)(requires isTuple<Tuple>) using TupleToVariant =
+    typename detail::TupleToVariantImpl<Tuple>::type;
 
 /// From the types X = std::tuple<A, ... , B>, , Y = std::tuple<C, ..., D>...
 /// makes the type TupleCat<X, Y> = std::tuple<A, ..., B, C, ..., D, ...> (works
 /// for an arbitrary number of tuples as template parameters.
-template <typename... Tuples>
-requires(... && isTuple<Tuples>)
-using TupleCat = decltype(std::tuple_cat(std::declval<Tuples&>()...));
+CPP_template(typename... Tuples)(
+    requires(...&& isTuple<Tuples>)) using TupleCat =
+    decltype(std::tuple_cat(std::declval<Tuples&>()...));
 
 /// A generalized version of std::visit that also supports non-variant
 /// parameters. Each `parameterOrVariant` of type T that is not a std::variant
@@ -253,13 +254,12 @@ auto applyFunctionToEachElementOfTuple(Function&& f, Tuple&& tuple) {
 }
 
 // Return the last type of variadic template arguments.
-template <typename... Ts>
-requires(sizeof...(Ts) > 0) using Last = typename detail::LastT<Ts...>::type;
+CPP_template(typename... Ts)(requires(sizeof...(Ts) > 0)) using Last =
+    typename detail::LastT<Ts...>::type;
 
 // Return the first type of variadic template arguments.
-template <typename... Ts>
-requires(sizeof...(Ts) > 0)
-using First = typename detail::FirstWrapper<Ts...>::type;
+CPP_template(typename... Ts)(requires(sizeof...(Ts) > 0)) using First =
+    typename detail::FirstWrapper<Ts...>::type;
 
 /// Concept for `std::is_invocable_r_v`.
 template <typename Func, typename R, typename... ArgTypes>

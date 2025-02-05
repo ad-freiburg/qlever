@@ -12,8 +12,8 @@
 #include <string>
 #include <vector>
 
-#include "global/Id.h"
 #include "backports/concepts.h"
+#include "global/Id.h"
 #include "util/ExceptionHandling.h"
 #include "util/File.h"
 #include "util/Generator.h"
@@ -82,7 +82,7 @@ struct IsIteratorOfIterator<
     : std::true_type {};
 
 template <typename T, typename DataType>
-CPP_concept IteratorOfIterator = 
+CPP_concept IteratorOfIterator =
     (IsIteratorOfIterator<T>::value &&
      ad_utility::SimilarTo<decltype(*(T::iterator::value_type::begin())),
                            DataType>);

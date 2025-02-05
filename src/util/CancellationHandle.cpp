@@ -21,8 +21,9 @@ void CancellationHandle<Mode>::cancel(
 
 // _____________________________________________________________________________
 template <CancellationMode Mode>
-void CancellationHandle<Mode>::startWatchDogInternal() requires WatchDogEnabled
-{
+template <typename U>
+std::enable_if_t<CancellationHandle<Mode>::WatchDogEnabled, U>
+CancellationHandle<Mode>::startWatchDogInternal() {
   using enum CancellationState;
   std::unique_lock lock{watchDogState_.mutex_};
   // This function is only supposed to be run once.
@@ -64,8 +65,9 @@ void CancellationHandle<Mode>::startWatchDog() {
 
 // _____________________________________________________________________________
 template <CancellationMode Mode>
-void CancellationHandle<Mode>::setStatePreservingCancel(
-    CancellationState newState) requires CancellationEnabled {
+template <typename U>
+std::enable_if_t<CancellationHandle<Mode>::CancellationEnabled, U>
+CancellationHandle<Mode>::setStatePreservingCancel(CancellationState newState) {
   CancellationState state = cancellationState_.load(std::memory_order_relaxed);
   while (!detail::isCancelled(state)) {
     if (cancellationState_.compare_exchange_weak(state, newState,

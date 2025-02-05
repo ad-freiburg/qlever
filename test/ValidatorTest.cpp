@@ -441,7 +441,8 @@ TEST(ValidatorConceptTest, TransformValidatorIntoExceptionValidator) {
 
     // Transform and check.
     auto transformedFunc =
-        transformValidatorIntoExceptionValidator<ValidatorFunc, ParameterTypes...>(func,
+        transformValidatorIntoExceptionValidator<ValidatorFunc,
+                                                 ParameterTypes...>(func,
                                                                     "test");
     static_assert(ExceptionValidatorFunction<decltype(transformedFunc),
                                              ParameterTypes...>);

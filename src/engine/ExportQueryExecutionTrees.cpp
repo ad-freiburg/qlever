@@ -898,7 +898,7 @@ cppcoro::generator<std::string> ExportQueryExecutionTrees::computeResult(
 
   auto inner =
       ad_utility::ConstexprSwitch<csv, tsv, octetStream, turtle, sparqlXml,
-                                  sparqlJson, qleverJson>(compute, mediaType);
+                                  sparqlJson, qleverJson>{}(compute, mediaType);
   return convertStreamGeneratorForChunkedTransfer(std::move(inner));
 }
 

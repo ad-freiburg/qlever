@@ -23,6 +23,13 @@ inline auto accessViaBracketOperator = [](auto&& randomAccessContainer,
 
 using AccessViaBracketOperator = decltype(accessViaBracketOperator);
 
+template <typename A, typename P>
+CPP_requires(has_valid_accessor_,
+             requires(A& a, P& p, uint64_t i)({&a(*p, i)}));
+
+template <typename A, typename P>
+CPP_concept HasValidAccessor = CPP_requires_ref(has_valid_accessor_, A, P);
+
 /**
  * @brief Provide random access iterators for a random access container that
  * allows direct access to the `i-th` element in the structure.
@@ -73,8 +80,8 @@ class IteratorForAccessOperator {
   Accessor _accessor{};
 
  public:
-  IteratorForAccessOperator() requires std::is_default_constructible_v<Accessor>
-  = default;
+  IteratorForAccessOperator() QL_CONCEPT_OR_NOTHING(
+      requires std::is_default_constructible_v<Accessor>) = default;
   IteratorForAccessOperator(RandomAccessContainerPtr vec, index_type index,
                             Accessor accessor = Accessor{})
       : _vector{vec}, _index{index}, _accessor{std::move(accessor)} {}
@@ -145,21 +152,19 @@ class IteratorForAccessOperator {
   }
 
   decltype(auto) operator*() const { return _accessor(*_vector, _index); }
-  decltype(auto) operator*() requires(!isConst) {
+  CPP_template(typename = void)(requires(!isConst)) decltype(auto) operator*() {
     return _accessor(*_vector, _index);
   }
 
   // Only allowed, if `RandomAccessContainer` yields references and not values
-  template <typename A = Accessor, typename P = RandomAccessContainerPtr>
-  requires requires(A a, P p, uint64_t i) {
-    { &a(*p, i) };
-  } auto operator->() requires(!isConst) {
+  CPP_template(typename A = Accessor, typename P = RandomAccessContainerPtr)(
+      requires HasValidAccessor<A, P> CPP_and(!isConst)) auto
+  operator->() {
     return &(*(*this));
   }
-  template <typename A = Accessor, typename P = RandomAccessContainerPtr>
-  requires requires(A a, P p, uint64_t i) {
-    { &a(*p, i) };
-  } auto operator->() const {
+  CPP_template(typename A = Accessor, typename P = RandomAccessContainerPtr)(
+      requires HasValidAccessor<A, P>) auto
+  operator->() const {
     return &(*(*this));
   }
 
@@ -378,19 +383,21 @@ class InputRangeTypeErased {
  public:
   // Constructor for ranges that directly inherit from
   // `InputRangeOptionalMixin`.
-  template <typename Range>
-  requires std::is_base_of_v<InputRangeFromGet<ValueType>, Range>
-  explicit InputRangeTypeErased(Range range)
+  CPP_template(typename Range)(
+      requires std::is_base_of_v<
+          InputRangeFromGet<ValueType>,
+          Range>) explicit InputRangeTypeErased(Range range)
       : impl_{std::make_unique<Range>(std::move(range))} {}
 
   // Constructor for all other ranges. We first pass them through the
   // `InputRangeToOptional` class from above to make it compatible with the base
   // class.
-  template <typename Range>
-  requires(!std::is_base_of_v<InputRangeFromGet<ValueType>, Range> &&
-           ql::ranges::range<Range> &&
-           std::same_as<ql::ranges::range_value_t<Range>, ValueType>)
-  explicit InputRangeTypeErased(Range range)
+  CPP_template(typename Range)(requires(
+      !std::is_base_of_v<InputRangeFromGet<ValueType>, Range> CPP_and
+          ql::ranges::range<Range>
+              CPP_and std::same_as<
+                  ql::ranges::range_value_t<Range>,
+                  ValueType>)) explicit InputRangeTypeErased(Range range)
       : impl_{std::make_unique<RangeToInputRangeFromGet<Range>>(
             std::move(range))} {}
 

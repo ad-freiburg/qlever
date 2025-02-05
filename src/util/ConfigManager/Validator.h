@@ -198,14 +198,15 @@ class ConfigOptionValidatorManager {
   */
   CPP_template(typename TranslationFunction, typename ValidatorFunc,
                typename... ValidatorParameterTypes)(
-      requires(
-          ... &&
-          (std::invocable<TranslationFunction, const ValidatorParameterTypes>))
-          CPP_and(ValidatorFunction<
-                  ValidatorFunc,
-                  std::invoke_result_t<TranslationFunction,
-                                       const ValidatorParameterTypes>...>)
-              CPP_and(sizeof...(ValidatorParameterTypes) > 0))
+      requires(...&& isInstantiation<ValidatorParameterTypes,
+                                     ConstConfigOptionProxy>)
+          CPP_and(... && (std::invocable<TranslationFunction,
+                                         const ValidatorParameterTypes>))
+              CPP_and(ValidatorFunction<
+                      ValidatorFunc,
+                      std::invoke_result_t<TranslationFunction,
+                                           const ValidatorParameterTypes>...>)
+                  CPP_and(sizeof...(ValidatorParameterTypes) > 0))
       ConfigOptionValidatorManager(
           ValidatorFunc validatorFunction, std::string errorMessage,
           std::string descriptor, TranslationFunction translationFunction,

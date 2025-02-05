@@ -33,10 +33,13 @@ namespace ad_utility {
 // is the number of matching elements.
 // TODO<joka921> This can be optimized when we also know which columns of
 // `[begin, end)` can possibly contain UNDEF values.
-template <std::random_access_iterator It>
-auto findSmallerUndefRangesForRowsWithoutUndef(
-    const auto& row, It begin, It end,
-    [[maybe_unused]] bool& resultMightBeUnsorted) -> cppcoro::generator<It> {
+CPP_template(typename It)(
+    requires std::random_access_iterator<
+        It>) auto findSmallerUndefRangesForRowsWithoutUndef(const auto& row,
+                                                            It begin, It end,
+                                                            [[maybe_unused]] bool&
+                                                                resultMightBeUnsorted)
+    -> cppcoro::generator<It> {
   using Row = typename std::iterator_traits<It>::value_type;
   assert(row.size() == (*begin).size());
   assert(
@@ -71,10 +74,17 @@ auto findSmallerUndefRangesForRowsWithoutUndef(
 
 // TODO<joka921> We could also implement a version that is optimized on the
 // [begin, end] range not having UNDEF values in some of the columns
-template <std::random_access_iterator It>
-auto findSmallerUndefRangesForRowsWithUndefInLastColumns(
-    const auto& row, const size_t numLastUndefined, It begin, It end,
-    bool& resultMightBeUnsorted) -> cppcoro::generator<It> {
+CPP_template(typename It)(
+    requires std::random_access_iterator<
+        It>) auto findSmallerUndefRangesForRowsWithUndefInLastColumns(const auto&
+                                                                          row,
+                                                                      const size_t
+                                                                          numLastUndefined,
+                                                                      It begin,
+                                                                      It end,
+                                                                      bool&
+                                                                          resultMightBeUnsorted)
+    -> cppcoro::generator<It> {
   using Row = typename std::iterator_traits<It>::value_type;
   const size_t numJoinColumns = row.size();
   assert(row.size() == (*begin).size());
@@ -121,9 +131,11 @@ auto findSmallerUndefRangesForRowsWithUndefInLastColumns(
 
 // This function has no additional preconditions, but runs in `O((end - begin) *
 // numColumns)`.
-template <std::random_access_iterator It>
-auto findSmallerUndefRangesArbitrary(const auto& row, It begin, It end,
-                                     bool& resultMightBeUnsorted)
+CPP_template(typename It)(
+    requires std::random_access_iterator<
+        It>) auto findSmallerUndefRangesArbitrary(const auto& row, It begin,
+                                                  It end,
+                                                  bool& resultMightBeUnsorted)
     -> cppcoro::generator<It> {
   assert(row.size() == (*begin).size());
   assert(
@@ -165,9 +177,10 @@ auto findSmallerUndefRangesArbitrary(const auto& row, It begin, It end,
 // have additional information about the input (most notably which of the join
 // columns contain no UNDEF at all) and therefore a more specialized routine
 // should be chosen.
-template <std::random_access_iterator It>
-auto findSmallerUndefRanges(const auto& row, It begin, It end,
-                            bool& resultMightBeUnsorted)
+CPP_template(typename It)(
+    requires std::random_access_iterator<
+        It>) auto findSmallerUndefRanges(const auto& row, It begin, It end,
+                                         bool& resultMightBeUnsorted)
     -> cppcoro::generator<It> {
   size_t numLastUndefined = 0;
   assert(row.size() > 0);

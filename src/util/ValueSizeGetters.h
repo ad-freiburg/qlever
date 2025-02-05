@@ -18,7 +18,7 @@ Concept for `ValueSizeGetter`. Must be default- initializable, regular invocable
 with the given value type as const l-value reference and return a `MemorySize`.
 */
 template <typename T, typename ValueType>
-concept ValueSizeGetter =
+CPP_concept ValueSizeGetter =
     std::default_initializable<T> &&
     RegularInvocableWithSimilarReturnType<T, MemorySize, const ValueType&>;
 
@@ -29,8 +29,8 @@ struct DefaultValueSizeGetter;
 
 // Trivially copyable types do not own heap memory (otherwise they are
 // incorred), so we just use sizeof.
-template <typename T>
-requires std::is_trivially_copyable_v<T> struct DefaultValueSizeGetter<T> {
+CPP_template(typename T)(
+    requires std::is_trivially_copyable_v<T>) struct DefaultValueSizeGetter<T> {
   constexpr MemorySize operator()(const T&) const {
     return MemorySize::bytes(sizeof(T));
   }

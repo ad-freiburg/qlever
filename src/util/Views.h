@@ -15,6 +15,15 @@
 
 namespace ad_utility {
 
+namespace detail {
+template <typename R>
+CPP_requires(is_empty_range_,
+             requires(const R& range)(ql::ranges::empty(range)));
+
+template <typename R>
+CPP_concept IsEmptyRange = CPP_requires_ref(is_empty_range_, R);
+}  // namespace detail
+
 /// Takes a view and yields the elements of the same view, but skips over
 /// consecutive duplicates.
 template <typename SortedView,
@@ -92,7 +101,7 @@ CPP_template(typename UnderlyingRange, bool supportConst = true)(
   UnderlyingRange underlyingRange_ = UnderlyingRange();
 
  public:
-  OwningView() requires std::default_initializable<UnderlyingRange> = default;
+  OwningView() QL_CONCEPT_OR_NOTHING(requires std::default_initializable<UnderlyingRange>) = default;
 
   constexpr explicit OwningView(UnderlyingRange&& underlyingRange) noexcept(
       std::is_nothrow_move_constructible_v<UnderlyingRange>)
@@ -123,41 +132,49 @@ CPP_template(typename UnderlyingRange, bool supportConst = true)(
     return ql::ranges::end(underlyingRange_);
   }
 
-  constexpr auto begin() const
-      requires(supportConst && ql::ranges::range<const UnderlyingRange>) {
+  CPP_template(typename = void)(
+      requires supportConst CPP_and
+          ql::ranges::range<const UnderlyingRange>) constexpr auto begin()
+      const {
     return ql::ranges::begin(underlyingRange_);
   }
 
-  constexpr auto end() const
-      requires(supportConst && ql::ranges::range<const UnderlyingRange>) {
+  CPP_template(typename = void)(
+      requires supportConst CPP_and
+          ql::ranges::range<const UnderlyingRange>) constexpr auto end() const {
     return ql::ranges::end(underlyingRange_);
   }
 
-  constexpr bool empty()
-      requires requires { ql::ranges::empty(underlyingRange_); } {
+  CPP_template(typename = void)(
+      requires detail::IsEmptyRange<UnderlyingRange>) constexpr bool empty() {
     return ql::ranges::empty(underlyingRange_);
   }
 
-  constexpr bool empty() const
-      requires requires { ql::ranges::empty(underlyingRange_); } {
+  CPP_template(typename = void)(
+      requires detail::IsEmptyRange<UnderlyingRange>) constexpr bool empty()
+      const {
     return ql::ranges::empty(underlyingRange_);
   }
 
-  constexpr auto size() requires ql::ranges::sized_range<UnderlyingRange> {
+  CPP_template(typename = void)(
+      requires ql::ranges::sized_range<UnderlyingRange>) constexpr auto size() {
     return ql::ranges::size(underlyingRange_);
   }
 
-  constexpr auto size() const
-      requires ql::ranges::sized_range<const UnderlyingRange> {
+  CPP_template(typename = void)(
+      requires ql::ranges::sized_range<
+          const UnderlyingRange>) constexpr auto size() const {
     return ql::ranges::size(underlyingRange_);
   }
 
-  constexpr auto data() requires ql::ranges::contiguous_range<UnderlyingRange> {
+  CPP_template(typename = void)(requires ql::ranges::contiguous_range<
+                                UnderlyingRange>) constexpr auto data() {
     return ql::ranges::data(underlyingRange_);
   }
 
-  constexpr auto data() const
-      requires ql::ranges::contiguous_range<const UnderlyingRange> {
+  CPP_template(typename = void)(
+      requires ql::ranges::contiguous_range<
+          const UnderlyingRange>) constexpr auto data() const {
     return ql::ranges::data(underlyingRange_);
   }
 };

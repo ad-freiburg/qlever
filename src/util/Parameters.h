@@ -36,12 +36,12 @@ struct ParameterBase {
 
 // Concepts for the template types of `Parameter`.
 template <typename FunctionType, typename ToType>
-concept ParameterFromStringType =
+CPP_concept ParameterFromStringType =
     std::default_initializable<FunctionType> &&
     InvocableWithSimilarReturnType<FunctionType, ToType, const std::string&>;
 
 template <typename FunctionType, typename FromType>
-concept ParameterToStringType =
+CPP_concept ParameterToStringType =
     std::default_initializable<FunctionType> &&
     InvocableWithSimilarReturnType<FunctionType, std::string, FromType>;
 
@@ -54,9 +54,12 @@ concept ParameterToStringType =
 ///         a std::string representation.
 /// \tparam Name The Name of the parameter (there are typically a lot of
 ///         parameters with the same `Type`).
-template <std::semiregular Type, ParameterFromStringType<Type> FromString,
-          ParameterToStringType<Type> ToString, ParameterName Name>
-struct Parameter : public ParameterBase {
+CPP_template(typename Type, typename FromString, typename ToString,
+             QL_CONCEPT_OR_TYPENAME(ParameterName) Name)(
+    requires std::semiregular<Type> CPP_and
+        ParameterFromStringType<FromString, Type>
+            CPP_and ParameterToStringType<ToString, Type>) struct Parameter
+    : public ParameterBase {
   constexpr static ParameterName name = Name;
 
  private:
@@ -132,14 +135,19 @@ namespace detail::parameterConceptImpl {
 template <typename T>
 struct ParameterConceptImpl : std::false_type {};
 
-template <std::semiregular Type, ParameterFromStringType<Type> FromString,
-          ParameterToStringType<Type> ToString, ParameterName Name>
-struct ParameterConceptImpl<Parameter<Type, FromString, ToString, Name>>
+CPP_template(typename Type, typename FromString, typename ToString,
+             QL_CONCEPT_OR_TYPENAME(ParameterName) Name)(
+    requires std::semiregular<Type> CPP_and
+        ParameterFromStringType<FromString, Type>
+            CPP_and ParameterToStringType<
+                ToString,
+                Type>) struct ParameterConceptImpl<Parameter<Type, FromString,
+                                                             ToString, Name>>
     : std::true_type {};
 }  // namespace detail::parameterConceptImpl
 
 template <typename T>
-concept IsParameter =
+CPP_concept IsParameter =
     detail::parameterConceptImpl::ParameterConceptImpl<T>::value;
 
 namespace detail::parameterShortNames {
@@ -199,26 +207,26 @@ struct MemorySizeFromString {
 
 /// Partial template specialization for Parameters with common types (numeric
 /// types and strings)
-template <ParameterName Name>
+template <QL_CONCEPT_OR_TYPENAME(ParameterName) Name>
 using Float = Parameter<float, fl, toString, Name>;
 
-template <ParameterName Name>
+template <QL_CONCEPT_OR_TYPENAME(ParameterName) Name>
 using Double = Parameter<double, dbl, toString, Name>;
 
-template <ParameterName Name>
+template <QL_CONCEPT_OR_TYPENAME(ParameterName) Name>
 using SizeT = Parameter<size_t, szt, toString, Name>;
 
-template <ParameterName Name>
+template <QL_CONCEPT_OR_TYPENAME(ParameterName) Name>
 using String = Parameter<std::string, std::identity, std::identity, Name>;
 
-template <ParameterName Name>
+template <QL_CONCEPT_OR_TYPENAME(ParameterName) Name>
 using Bool = Parameter<bool, bl, boolToString, Name>;
 
-template <ParameterName Name>
+template <QL_CONCEPT_OR_TYPENAME(ParameterName) Name>
 using MemorySizeParameter =
     Parameter<MemorySize, MemorySizeFromString, MemorySizeToString, Name>;
 
-template <typename DurationType, ParameterName Name>
+template <typename DurationType, QL_CONCEPT_OR_TYPENAME(ParameterName) Name>
 using DurationParameter = Parameter<ad_utility::ParseableDuration<DurationType>,
                                     durationFromString<DurationType>,
                                     durationToString<DurationType>, Name>;
@@ -278,14 +286,14 @@ class Parameters {
   //  Note that we deliberately do not have an overload of
   // `get()` where the `Name` can be specified at runtime, because we want to
   // check the existence of a parameter at compile time.
-  template <ParameterName Name>
+  template <QL_CONCEPT_OR_TYPENAME(ParameterName) Name>
   auto get() const {
     constexpr auto index = _nameToIndex.at(Name);
     return std::get<index>(_parameters).rlock()->get();
   }
 
   // Set value for parameter `Name` known at compile time.
-  template <ParameterName Name, typename Value>
+  template <QL_CONCEPT_OR_TYPENAME(ParameterName) Name, typename Value>
   void set(Value newValue) {
     constexpr auto index = _nameToIndex.at(Name);
     return std::get<index>(_parameters).wlock()->set(std::move(newValue));
@@ -293,9 +301,9 @@ class Parameters {
 
   // For the parameter with name `Name` specify the function that is to be
   // called, when this parameter value changes.
-  template <ParameterName name, typename OnUpdateAction>
+  template <QL_CONCEPT_OR_TYPENAME(ParameterName) Name, typename OnUpdateAction>
   auto setOnUpdateAction(OnUpdateAction onUpdateAction) {
-    constexpr auto index = _nameToIndex.at(name);
+    constexpr auto index = _nameToIndex.at(Name);
     std::get<index>(_parameters)
         .wlock()
         ->setOnUpdateAction(std::move(onUpdateAction));

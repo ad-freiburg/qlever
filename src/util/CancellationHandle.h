@@ -157,14 +157,14 @@ class CancellationHandle {
   /// NOTE: The parameter state is expected to be one of `CHECK_WINDOW_MISSED`
   /// or `WAITING_FOR_CHECK`, otherwise it will violate the correctness check.
   CPP_template(typename StateFunc)(
-      requires ad_utility::InvocableWithConvertibleReturnType<
-          StateFunc,
-          std::string_view>) void pleaseWatchDog(CancellationState state,
-                                                 ad_utility::source_location
-                                                     location,
-                                                 const StateFunc&
-                                                     stageInvocable)
-      requires WatchDogEnabled {
+      requires WatchDogEnabled CPP_and
+          ad_utility::InvocableWithConvertibleReturnType<
+              StateFunc,
+              std::string_view>) void pleaseWatchDog(CancellationState state,
+                                                     ad_utility::source_location
+                                                         location,
+                                                     const StateFunc&
+                                                         stageInvocable) {
     using DurationType =
         std::remove_const_t<decltype(DESIRED_CANCELLATION_CHECK_INTERVAL)>;
     AD_CORRECTNESS_CHECK(!detail::isCancelled(state) &&
@@ -203,12 +203,14 @@ class CancellationHandle {
   /// Internal function that starts the watch dog. It will set this
   /// `CancellationHandle` instance into a state that will log a warning in the
   /// console if `throwIfCancelled` is not called frequently enough.
-  void startWatchDogInternal() requires WatchDogEnabled;
+  template <typename U = void>
+  std::enable_if_t<WatchDogEnabled, U> startWatchDogInternal();
 
   /// Helper function that sets the internal state atomically given that it has
   /// not been cancelled yet. Otherwise no-op.
-  void setStatePreservingCancel(CancellationState newState)
-      requires CancellationEnabled;
+  template <typename U = void>
+  std::enable_if_t<CancellationEnabled, U> setStatePreservingCancel(
+      CancellationState newState);
 
  public:
   /// Sets the cancellation flag so the next call to throwIfCancelled will
