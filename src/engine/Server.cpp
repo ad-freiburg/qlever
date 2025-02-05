@@ -498,8 +498,9 @@ Awaitable<void> Server::process(
                                      .queryExecutionTree_.getRootOperation()
                                      ->runtimeInfo());
     }
-    co_return co_await send(
-        createJsonResponse(errorResponseJson, request, responseStatus));
+    auto errResponse =
+        createJsonResponse(errorResponseJson, request, responseStatus);
+    co_return co_await send(std::move(errResponse));
   }
 }
 
