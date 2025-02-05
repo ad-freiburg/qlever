@@ -357,7 +357,7 @@ using StrBeforeExpression =
 
 using ReplaceExpression =
     StringExpressionImpl<3, decltype(replaceImpl), RegexValueGetter,
-                         StringValueGetter>;
+                         ReplacementStringGetter>;
 
 // CONCAT
 class ConcatExpression : public detail::VariadicExpression {
