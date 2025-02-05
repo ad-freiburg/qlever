@@ -79,6 +79,9 @@ class VocabularyInMemoryBinSearch
     // Finish writing and dump all contents that still reside in buffers to
     // disk.
     void finish();
+
+    WordWriter(WordWriter&&) = default;
+    WordWriter& operator=(WordWriter&&) = default;
   };
 
   // Clear the vocabulary.

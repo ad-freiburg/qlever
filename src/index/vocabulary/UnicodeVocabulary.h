@@ -102,6 +102,12 @@ class UnicodeVocabulary {
   void close() { _underlyingVocabulary.close(); }
 
   void build(const std::vector<std::string>& v, const std::string& filename) {
-    _underlyingVocabulary.build(v, filename);
+    // TODO<joka921> This is really hacky, we should get rid of it and make the
+    // building consistent for all the vocabularies.
+    if constexpr (requires { _underlyingVocabulary.build(v, filename); }) {
+      _underlyingVocabulary.build(v, filename);
+    } else {
+      AD_FAIL();
+    }
   }
 };

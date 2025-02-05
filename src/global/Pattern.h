@@ -194,6 +194,9 @@ struct CompactStringVectorWriter {
     commonInitialization();
   }
 
+  CompactStringVectorWriter(CompactStringVectorWriter&&) = default;
+  CompactStringVectorWriter& operator=(CompactStringVectorWriter&&) = default;
+
   void push(const data_type* data, size_t elementSize) {
     AD_CONTRACT_CHECK(!_finished);
     _offsets.push_back(_nextOffset);

@@ -27,6 +27,7 @@
 #include "index/vocabulary/UnicodeVocabulary.h"
 #include "index/vocabulary/VocabularyInMemory.h"
 #include "index/vocabulary/VocabularyInternalExternal.h"
+#include "index/vocabulary/VocabularyVariant.h"
 #include "util/Exception.h"
 #include "util/HashMap.h"
 #include "util/HashSet.h"
@@ -233,6 +234,13 @@ class Vocabulary {
       const std::string& filename) const {
     return vocabulary_.getUnderlyingVocabulary().makeDiskWriter(filename);
   }
+
+  // TODO<joka921> Comment.
+  void resetToType(VocabularyEnum type) {
+    if constexpr (std::is_same_v<UnderlyingVocabulary, VocabularyVariant>) {
+      vocabulary_.getUnderlyingVocabulary().resetToType(type);
+    }
+  }
 };
 
 namespace detail {
@@ -241,18 +249,24 @@ namespace detail {
 // and the compression of the vocab at compile time. NOTE: These change the
 // binary format of QLever's index, so changing them requires rebuilding of the
 // indices.
+/*
 #ifdef _QLEVER_VOCAB_IN_MEMORY
 using VocabStorage = VocabularyInMemory;
 #else
 using VocabStorage = VocabularyInternalExternal;
 #endif
+*/
 
+/*
 #ifndef _QLEVER_ENABLE_VOCAB_COMPRESSION
 using UnderlyingVocabRdfsVocabulary = VocabStorage;
 #else
 using UnderlyingVocabRdfsVocabulary = CompressedVocabulary<VocabStorage>;
 #endif
+*/
 
+// TODO<joka921> Change this place.
+using UnderlyingVocabRdfsVocabulary = VocabularyVariant;
 using UnderlyingVocabTextVocabulary = VocabularyInMemory;
 }  // namespace detail
 

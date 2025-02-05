@@ -82,13 +82,19 @@ class VocabularyInMemory
     // interface with the `VocabularyInternalExternal`.
     std::string readableNameDummy_;
     std::string& readableName() { return readableNameDummy_; }
+    WordWriter(WordWriter&&) = default;
+    WordWriter& operator=(WordWriter&&) = default;
   };
 
   // Return a `WordWriter` that directly writes the words to the given
   // `filename`. The words are not materialized in RAM, but the vocabulary later
-  // has to be explicitly initizlied via `open(filename)`.
-  WordWriter makeDiskWriter(const std::string& filename) const {
+  // has to be explicitly initialized via `open(filename)`.
+  static WordWriter makeDiskWriter(const std::string& filename) {
     return WordWriter{filename};
+  }
+  static std::unique_ptr<WordWriter> makeDiskWriterPtr(
+      const std::string& filename) {
+    return std::make_unique<WordWriter>(filename);
   }
 
   /// Clear the vocabulary.

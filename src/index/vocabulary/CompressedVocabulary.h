@@ -193,6 +193,10 @@ class CompressedVocabulary {
         delete;
     DiskWriterFromUncompressedWords& operator=(
         const DiskWriterFromUncompressedWords&) = delete;
+    DiskWriterFromUncompressedWords(DiskWriterFromUncompressedWords&&) =
+        default;
+    DiskWriterFromUncompressedWords& operator=(
+        DiskWriterFromUncompressedWords&&) = default;
 
    private:
     // Compress a complete block and write it to the underlying vocabulary.
@@ -243,12 +247,20 @@ class CompressedVocabulary {
   using WordWriter = DiskWriterFromUncompressedWords;
 
   // Return a `DiskWriter` that can be used to create the vocabulary.
-  DiskWriterFromUncompressedWords makeDiskWriter(
-      const std::string& filename) const {
+  static DiskWriterFromUncompressedWords makeDiskWriter(
+      const std::string& filename) {
     return DiskWriterFromUncompressedWords{
         absl::StrCat(filename, wordsSuffix),
         absl::StrCat(filename, decodersSuffix)};
   }
+
+  static std::unique_ptr<DiskWriterFromUncompressedWords> makeDiskWriterPtr(
+      const std::string& filename) {
+    return std::make_unique<DiskWriterFromUncompressedWords>(
+        absl::StrCat(filename, wordsSuffix),
+        absl::StrCat(filename, decodersSuffix));
+  }
+
   /// Initialize the vocabulary from the given `words`.
   // TODO<joka921> This can be a generic Mixin...
   void build(const std::vector<std::string>& words,

@@ -341,6 +341,8 @@ void IndexImpl::createFromFiles(
         "The patterns can only be built when all 6 permutations are created"};
   }
 
+  vocab_.resetToType(vocabularyTypeForIndexBuilding_);
+
   readIndexBuilderSettingsFromFile();
 
   updateInputFileSpecificationsAndLog(files, useParallelParser_);
@@ -560,7 +562,7 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
       return (*cmp)(a, b, decltype(vocab_)::SortLevel::TOTAL);
     };
     auto wordCallback = vocab_.makeWordWriter(onDiskBase_ + VOCAB_SUFFIX);
-    wordCallback.readableName() = "internal vocabulary";
+    // wordCallback.readableName() = "internal vocabulary";
     return ad_utility::vocabulary_merger::mergeVocabulary(
         onDiskBase_, numFiles, sortPred, wordCallback,
         memoryLimitIndexBuilding());
@@ -1131,6 +1133,12 @@ void IndexImpl::readConfiguration() {
   loadDataMember("num-objects", numObjects_, NumNormalAndInternal{});
   loadDataMember("num-triples", numTriples_, NumNormalAndInternal{});
   loadDataMember("num-non-literals-text-index", nofNonLiteralsInTextIndex_, 0);
+
+  // TODO<joka921> Comment and also write the configuration.
+  // The default value is the one the used to be the only.
+  VocabularyEnum vocabType(VocabularyEnum::Enum::CompressedOnDisk);
+  loadDataMember("vocabulary-type", vocabType, vocabType);
+  vocab_.resetToType(vocabType);
 
   // Initialize BlankNodeManager
   uint64_t numBlankNodesTotal;

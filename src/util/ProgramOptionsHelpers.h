@@ -11,6 +11,8 @@
 #include "util/Concepts.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/Parameters.h"
+// TODO<joka921> only include the enum.
+#include "index/vocabulary/VocabularyVariant.h"
 namespace ad_utility {
 
 // An implicit wrapper that can be implicitly converted to and from `size_t`.
@@ -45,20 +47,6 @@ inline void validate(boost::any& v, const std::vector<std::string>& values,
   }
 
   v = NonNegative{boost::lexical_cast<size_t>(s)};
-}
-
-// This function is required  to use `std::optional` in
-// `boost::program_options`.
-template <typename T>
-void validate(boost::any& v, const std::vector<std::string>& values,
-              std::optional<T>*, int) {
-  // First parse as a T
-  T* dummy = nullptr;
-  validate(v, values, dummy, 0);
-
-  // Wrap the T inside std::optional
-  AD_CONTRACT_CHECK(!v.empty());
-  v = std::optional<T>(boost::any_cast<T>(v));
 }
 
 // This function is required  to use `MemorySize` in `boost::program_options`.
@@ -119,5 +107,41 @@ class ParameterToProgramOptionFactory {
 };
 
 }  // namespace ad_utility
+
+// This function is required  to use `VocabularyEnum` in
+// `boost::program_options`.
+inline void validate(boost::any& v, const std::vector<std::string>& values,
+                     VocabularyEnum*, int) {
+  using namespace boost::program_options;
+
+  // Make sure no previous assignment to 'v' was made.
+  validators::check_first_occurrence(v);
+  // Extract the first string from 'values'. If there is more than
+  // one string, it's an error, and exception will be thrown.
+  const string& s = validators::get_single_string(values);
+
+  // Convert the string to `MemorySize` and put it into the option.
+  v = VocabularyEnum::fromString(s);
+}
+
+// This function is required  to use `std::optional` in
+// `boost::program_options`.
+// TODO<joka921> We should find a solution that doesn't require  opening
+// namespace `std`, for example we could put all types + this function into the
+// `ad_utility`namespace.
+namespace std {
+template <typename T>
+void validate(boost::any& v, const std::vector<std::string>& values,
+              std::optional<T>*, int) {
+  // First parse as a T
+  T* dummy = nullptr;
+  // using namespace boost::program_options;
+  validate(v, values, dummy, 0);
+
+  // Wrap the T inside std::optional
+  AD_CONTRACT_CHECK(!v.empty());
+  v = std::optional<T>(boost::any_cast<T>(v));
+}
+}  // namespace std
 
 #endif  // QLEVER_PROGRAMOPTIONSHELPERS_H
