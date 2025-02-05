@@ -20,7 +20,6 @@
 #include "global/Constants.h"
 #include "global/Id.h"
 #include "global/Pattern.h"
-#include "index/CompressedString.h"
 #include "index/StringSortComparator.h"
 #include "index/VocabularyOnDisk.h"
 #include "index/vocabulary/CompressedVocabulary.h"
@@ -60,9 +59,7 @@ inline std::ostream& operator<<(std::ostream& stream,
 }
 
 // A vocabulary. Wraps a vector of strings and provides additional methods for
-// retrieval. Template parameters that are supported are:
-// std::string -> no compression is applied
-// CompressedString -> prefix compression is applied
+// retrieval.
 template <typename UnderlyingVocabulary, typename ComparatorType,
           typename IndexT>
 class Vocabulary {
@@ -105,19 +102,6 @@ class Vocabulary {
   vector<std::string> internalizedLangs_;
   vector<std::string> externalizedPrefixes_{""};
 
-  //  using UnderlyingVocabulary = VocabularyInMemory;
-  /*
-  using UnderlyingVocabulary =
-      std::conditional_t<isCompressed_,
-                         CompressedVocabulary<VocabularyInternalExternal>,
-                         VocabularyInMemory>;
-      */
-  /*
-  using UnderlyingVocabulary =
-      std::conditional_t<isCompressed_,
-                         CompressedVocabulary<VocabularyInMemory>,
-                         VocabularyInMemory>;
-                         */
   using VocabularyWithUnicodeComparator =
       UnicodeVocabulary<UnderlyingVocabulary, ComparatorType>;
 

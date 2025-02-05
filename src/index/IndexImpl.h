@@ -193,7 +193,6 @@ class IndexImpl {
   std::optional<Id> idOfInternalGraphDuringIndexBuilding_;
 
   // The vocabulary type that is used (only relevant during index building).
-  // The default is chosen s.t. the compatibility to old index builds.
   ad_utility::VocabularyType vocabularyTypeForIndexBuilding_{
       ad_utility::VocabularyType::Enum::CompressedOnDisk};
 
@@ -280,6 +279,8 @@ class IndexImpl {
     return deltaTriples_.value();
   }
 
+  // See the documentation of the `vocabularyTypeForIndexBuilding_` member for
+  // details.
   void setVocabularyTypeForIndexBuilding(ad_utility::VocabularyType type) {
     vocabularyTypeForIndexBuilding_ = type;
     configurationJson_["vocabulary-type"] = type;
