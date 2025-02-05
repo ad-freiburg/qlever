@@ -1331,8 +1331,8 @@ class SparqlAutomaticParser : public antlr4::Parser {
                           size_t invokingState);
     virtual size_t getRuleIndex() const override;
     antlr4::tree::TerminalNode* DEFAULT();
-    antlr4::tree::TerminalNode* GRAPH();
     IriContext* iri();
+    antlr4::tree::TerminalNode* GRAPH();
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
