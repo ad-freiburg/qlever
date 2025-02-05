@@ -293,8 +293,7 @@ parsedQuery::BasicGraphPattern Visitor::toGraphPattern(
       return TripleComponent{
           ParsedQuery::blankNodeToInternalVariable(item.toSparql())};
     } else {
-      static_assert(ad_utility::isSimilar<T, Literal> ||
-                    ad_utility::isSimilar<T, Iri>);
+      static_assert(ad_utility::SimilarToAny<T, Literal, Iri>);
       return RdfStringParser<TurtleParser<Tokenizer>>::parseTripleObject(
           item.toSparql());
     }
@@ -305,8 +304,7 @@ parsedQuery::BasicGraphPattern Visitor::toGraphPattern(
     } else if constexpr (ad_utility::isSimilar<T, Iri>) {
       return PropertyPath::fromIri(item.toSparql());
     } else {
-      static_assert(ad_utility::isSimilar<T, Literal> ||
-                    ad_utility::isSimilar<T, BlankNode>);
+      static_assert(ad_utility::SimilarToAny<T, Literal, BlankNode>);
       // This case can only happen if there's a bug in the SPARQL parser.
       AD_THROW("Literals or blank nodes are not valid predicates.");
     }
