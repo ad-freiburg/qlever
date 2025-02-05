@@ -562,7 +562,6 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
       return (*cmp)(a, b, decltype(vocab_)::SortLevel::TOTAL);
     };
     auto wordCallback = vocab_.makeWordWriter(onDiskBase_ + VOCAB_SUFFIX);
-    // wordCallback.readableName() = "internal vocabulary";
     return ad_utility::vocabulary_merger::mergeVocabulary(
         onDiskBase_, numFiles, sortPred, wordCallback,
         memoryLimitIndexBuilding());
@@ -1136,7 +1135,8 @@ void IndexImpl::readConfiguration() {
 
   // TODO<joka921> Comment and also write the configuration.
   // The default value is the one the used to be the only.
-  VocabularyEnum vocabType(VocabularyEnum::Enum::CompressedOnDisk);
+  ad_utility::VocabularyEnum vocabType(
+      ad_utility::VocabularyEnum::Enum::CompressedOnDisk);
   loadDataMember("vocabulary-type", vocabType, vocabType);
   vocab_.resetToType(vocabType);
 

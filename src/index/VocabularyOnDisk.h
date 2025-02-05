@@ -58,8 +58,6 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
     void finish();
     // Destructor. Implicitly calls `finish` if it hasn't been called before.
     ~WordWriter();
-    WordWriter(WordWriter&&) = default;
-    WordWriter& operator=(WordWriter&&) = default;
   };
 
   /// Build from a vector of pairs of `(string, id)`. This requires the IDs to

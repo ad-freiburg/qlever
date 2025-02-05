@@ -112,10 +112,16 @@ class VocabularyInternalExternal {
 
     // Finish writing.
     void finish();
-
-    WordWriter(WordWriter&&) = default;
-    WordWriter& operator=(WordWriter&&) = default;
   };
+
+  // Return a `WordWriter` or (in the second function) a
+  // `unique_ptr<WordWriter>` for the given filename.
+  static WordWriter makeDiskWriter(const std::string& filename) {
+    return WordWriter{filename};
+  }
+  static auto makeDiskWriterPtr(const std::string& filename) {
+    return std::make_unique<WordWriter>(filename);
+  }
 
   /// Clear the vocabulary.
   void close() { internalVocab_.close(); }
@@ -150,14 +156,5 @@ class VocabularyInternalExternal {
     }
     return boundFunction(externalVocab_, word, comparator,
                          boundFromInternalVocab.previousIndex(), upperBound);
-  }
-
- public:
-  // TODO<joka921> Clean up positions
-  static WordWriter makeDiskWriter(const std::string& filename) {
-    return WordWriter{filename};
-  }
-  static auto makeDiskWriterPtr(const std::string& filename) {
-    return std::make_unique<WordWriter>(filename);
   }
 };

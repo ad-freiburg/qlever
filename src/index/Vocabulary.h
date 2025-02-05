@@ -236,7 +236,7 @@ class Vocabulary {
   }
 
   // TODO<joka921> Comment.
-  void resetToType(VocabularyEnum type) {
+  void resetToType(ad_utility::VocabularyEnum type) {
     if constexpr (std::is_same_v<UnderlyingVocabulary, VocabularyVariant>) {
       vocabulary_.getUnderlyingVocabulary().resetToType(type);
     }

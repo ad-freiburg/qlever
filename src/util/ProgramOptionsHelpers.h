@@ -49,6 +49,21 @@ inline void validate(boost::any& v, const std::vector<std::string>& values,
   v = NonNegative{boost::lexical_cast<size_t>(s)};
 }
 
+// This function is required  to use `std::optional` in
+// `boost::program_options`.
+template <typename T>
+void validate(boost::any& v, const std::vector<std::string>& values,
+              std::optional<T>*, int) {
+  // First parse as a T
+  T* dummy = nullptr;
+  // using namespace boost::program_options;
+  validate(v, values, dummy, 0);
+
+  // Wrap the T inside std::optional
+  AD_CONTRACT_CHECK(!v.empty());
+  v = std::optional<T>(boost::any_cast<T>(v));
+}
+
 // This function is required  to use `MemorySize` in `boost::program_options`.
 inline void validate(boost::any& v, const std::vector<std::string>& values,
                      MemorySize*, int) {
@@ -106,8 +121,6 @@ class ParameterToProgramOptionFactory {
   }
 };
 
-}  // namespace ad_utility
-
 // This function is required  to use `VocabularyEnum` in
 // `boost::program_options`.
 inline void validate(boost::any& v, const std::vector<std::string>& values,
@@ -124,24 +137,6 @@ inline void validate(boost::any& v, const std::vector<std::string>& values,
   v = VocabularyEnum::fromString(s);
 }
 
-// This function is required  to use `std::optional` in
-// `boost::program_options`.
-// TODO<joka921> We should find a solution that doesn't require  opening
-// namespace `std`, for example we could put all types + this function into the
-// `ad_utility`namespace.
-namespace std {
-template <typename T>
-void validate(boost::any& v, const std::vector<std::string>& values,
-              std::optional<T>*, int) {
-  // First parse as a T
-  T* dummy = nullptr;
-  // using namespace boost::program_options;
-  validate(v, values, dummy, 0);
-
-  // Wrap the T inside std::optional
-  AD_CONTRACT_CHECK(!v.empty());
-  v = std::optional<T>(boost::any_cast<T>(v));
-}
-}  // namespace std
+}  // namespace ad_utility
 
 #endif  // QLEVER_PROGRAMOPTIONSHELPERS_H

@@ -10,7 +10,7 @@ void VocabularyVariant::open(const std::string& filename) {
   std::visit([&filename](auto& vocab) { vocab.open(filename); }, vocab_);
 }
 
-void VocabularyVariant::open(const std::string& filename, VocabularyEnum type) {
+void VocabularyVariant::open(const std::string& filename, VocabularyType type) {
   resetToType(type);
   open(filename);
 }
@@ -49,25 +49,25 @@ auto VocabularyVariant::makeDiskWriter(const std::string& filename) const
 }
 
 VocabularyVariant::WordWriter VocabularyVariant::makeDiskWriter(
-    const std::string& filename, VocabularyEnum type) {
+    const std::string& filename, VocabularyType type) {
   VocabularyVariant dummyVocab;
   dummyVocab.resetToType(type);
   return dummyVocab.makeDiskWriter(filename);
 }
 
-void VocabularyVariant::resetToType(VocabularyEnum type) {
+void VocabularyVariant::resetToType(VocabularyType type) {
   close();
   switch (type.value()) {
-    case VocabularyEnum::Enum::InMemory:
+    case VocabularyType::Enum::InMemory:
       vocab_.emplace<InMemory>();
       break;
-    case VocabularyEnum::Enum::OnDisk:
+    case VocabularyType::Enum::OnDisk:
       vocab_.emplace<External>();
       break;
-    case VocabularyEnum::Enum::CompressedInMemory:
+    case VocabularyType::Enum::CompressedInMemory:
       vocab_.emplace<CompressedInMemory>();
       break;
-    case VocabularyEnum::Enum::CompressedOnDisk:
+    case VocabularyType::Enum::CompressedOnDisk:
       vocab_.emplace<CompressedExternal>();
       break;
     default:

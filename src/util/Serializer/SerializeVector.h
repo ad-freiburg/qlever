@@ -75,9 +75,6 @@ class VectorIncrementalSerializer {
   }
 
   ~VectorIncrementalSerializer() { finish(); }
-  VectorIncrementalSerializer(VectorIncrementalSerializer&&) = default;
-  VectorIncrementalSerializer& operator=(VectorIncrementalSerializer&&) =
-      default;
 };
 
 }  // namespace ad_utility::serialization

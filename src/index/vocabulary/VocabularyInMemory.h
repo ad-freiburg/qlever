@@ -77,13 +77,6 @@ class VocabularyInMemory
     }
 
     void finish() { writer_.finish(); }
-
-    // The `readableName()` function is only there to have a consistent
-    // interface with the `VocabularyInternalExternal`.
-    std::string readableNameDummy_;
-    std::string& readableName() { return readableNameDummy_; }
-    WordWriter(WordWriter&&) = default;
-    WordWriter& operator=(WordWriter&&) = default;
   };
 
   // Return a `WordWriter` that directly writes the words to the given
@@ -92,6 +85,9 @@ class VocabularyInMemory
   static WordWriter makeDiskWriter(const std::string& filename) {
     return WordWriter{filename};
   }
+
+  // Same as `makeDiskWriter` above, but the result is returned via
+  // `unique_ptr`.
   static std::unique_ptr<WordWriter> makeDiskWriterPtr(
       const std::string& filename) {
     return std::make_unique<WordWriter>(filename);
@@ -99,17 +95,6 @@ class VocabularyInMemory
 
   /// Clear the vocabulary.
   void close() { _words.clear(); }
-
-  /// Initialize the vocabulary from the given `words`.
-  void build(const std::vector<std::string>& words,
-             const std::string& filename) {
-    WordWriter writer = makeDiskWriter(filename);
-    for (const auto& word : words) {
-      writer(word);
-    }
-    writer.finish();
-    open(filename);
-  }
 
   // Const access to the underlying words.
   auto begin() const { return _words.begin(); }
