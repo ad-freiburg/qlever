@@ -32,10 +32,13 @@ class VocabularyType {
           absl::StrCat("\"", description,
                        "\" is not a valid vocabulary type. The currently "
                        "supported vocabulary types are ",
-                       absl::StrJoin(descriptions, ", "))};
-      ;
+                       getListOfSupportedValues())};
     }
     return VocabularyType{static_cast<Enum>(it - descriptions.begin())};
+  }
+
+  static std::string getListOfSupportedValues() {
+    return absl::StrJoin(descriptions, ", ");
   }
   std::string_view toString() const {
     return descriptions.at(static_cast<size_t>(value_));

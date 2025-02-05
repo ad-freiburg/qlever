@@ -1133,8 +1133,6 @@ void IndexImpl::readConfiguration() {
   loadDataMember("num-triples", numTriples_, NumNormalAndInternal{});
   loadDataMember("num-non-literals-text-index", nofNonLiteralsInTextIndex_, 0);
 
-  // TODO<joka921> Comment and also write the configuration.
-  // The default value is the one the used to be the only.
   ad_utility::VocabularyType vocabType(
       ad_utility::VocabularyType::Enum::CompressedOnDisk);
   loadDataMember("vocabulary-type", vocabType, vocabType);

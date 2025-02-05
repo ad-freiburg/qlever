@@ -192,6 +192,8 @@ class IndexImpl {
   std::optional<Id> idOfHasPatternDuringIndexBuilding_;
   std::optional<Id> idOfInternalGraphDuringIndexBuilding_;
 
+  // The vocabulary type that is used (only relevant during index building).
+  // The default is chosen s.t. the compatibility to old index builds.
   ad_utility::VocabularyType vocabularyTypeForIndexBuilding_{
       ad_utility::VocabularyType::Enum::CompressedOnDisk};
 
