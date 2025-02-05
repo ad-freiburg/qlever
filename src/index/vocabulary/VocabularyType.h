@@ -10,7 +10,7 @@
 #include "util/json.h"
 
 namespace ad_utility {
-class VocabularyEnum {
+class VocabularyType {
  public:
   enum struct Enum { InMemory, OnDisk, CompressedInMemory, CompressedOnDisk };
 
@@ -22,10 +22,10 @@ class VocabularyEnum {
       "on-disk-compressed"};
 
  public:
-  VocabularyEnum() = default;
-  explicit VocabularyEnum(Enum value) : value_{value} {}
+  VocabularyType() = default;
+  explicit VocabularyType(Enum value) : value_{value} {}
 
-  static VocabularyEnum fromString(std::string_view description) {
+  static VocabularyType fromString(std::string_view description) {
     auto it = ql::ranges::find(descriptions, description);
     if (it == descriptions.end()) {
       throw std::runtime_error{
@@ -35,7 +35,7 @@ class VocabularyEnum {
                        absl::StrJoin(descriptions, ", "))};
       ;
     }
-    return VocabularyEnum{static_cast<Enum>(it - descriptions.begin())};
+    return VocabularyType{static_cast<Enum>(it - descriptions.begin())};
   }
   std::string_view toString() const {
     return descriptions.at(static_cast<size_t>(value_));
@@ -44,13 +44,13 @@ class VocabularyEnum {
   Enum value() const { return value_; }
 
   // Conversion To JSON.
-  friend void to_json(nlohmann::json& j, const VocabularyEnum& vocabEnum) {
+  friend void to_json(nlohmann::json& j, const VocabularyType& vocabEnum) {
     j = vocabEnum.toString();
   }
 
   // Conversion from JSON.
-  friend void from_json(const nlohmann::json& j, VocabularyEnum& vocabEnum) {
-    vocabEnum = VocabularyEnum::fromString(static_cast<std::string>(j));
+  friend void from_json(const nlohmann::json& j, VocabularyType& vocabEnum) {
+    vocabEnum = VocabularyType::fromString(static_cast<std::string>(j));
   }
 };
 }  // namespace ad_utility

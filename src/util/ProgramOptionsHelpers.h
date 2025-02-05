@@ -8,11 +8,10 @@
 #include <boost/program_options.hpp>
 #include <vector>
 
+#include "index/vocabulary/VocabularyType.h"
 #include "util/Concepts.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/Parameters.h"
-// TODO<joka921> only include the enum.
-#include "index/vocabulary/VocabularyVariant.h"
 namespace ad_utility {
 
 // An implicit wrapper that can be implicitly converted to and from `size_t`.
@@ -124,7 +123,7 @@ class ParameterToProgramOptionFactory {
 // This function is required  to use `VocabularyEnum` in
 // `boost::program_options`.
 inline void validate(boost::any& v, const std::vector<std::string>& values,
-                     VocabularyEnum*, int) {
+                     VocabularyType*, int) {
   using namespace boost::program_options;
 
   // Make sure no previous assignment to 'v' was made.
@@ -134,7 +133,7 @@ inline void validate(boost::any& v, const std::vector<std::string>& values,
   const string& s = validators::get_single_string(values);
 
   // Convert the string to `MemorySize` and put it into the option.
-  v = VocabularyEnum::fromString(s);
+  v = VocabularyType::fromString(s);
 }
 
 }  // namespace ad_utility

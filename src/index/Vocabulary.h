@@ -24,10 +24,10 @@
 #include "index/StringSortComparator.h"
 #include "index/VocabularyOnDisk.h"
 #include "index/vocabulary/CompressedVocabulary.h"
+#include "index/vocabulary/PolymorphicVocabulary.h"
 #include "index/vocabulary/UnicodeVocabulary.h"
 #include "index/vocabulary/VocabularyInMemory.h"
 #include "index/vocabulary/VocabularyInternalExternal.h"
-#include "index/vocabulary/VocabularyVariant.h"
 #include "util/Exception.h"
 #include "util/HashMap.h"
 #include "util/HashSet.h"
@@ -236,8 +236,8 @@ class Vocabulary {
   }
 
   // TODO<joka921> Comment.
-  void resetToType(ad_utility::VocabularyEnum type) {
-    if constexpr (std::is_same_v<UnderlyingVocabulary, VocabularyVariant>) {
+  void resetToType(ad_utility::VocabularyType type) {
+    if constexpr (std::is_same_v<UnderlyingVocabulary, PolymorphicVocabulary>) {
       vocabulary_.getUnderlyingVocabulary().resetToType(type);
     }
   }
@@ -266,7 +266,7 @@ using UnderlyingVocabRdfsVocabulary = CompressedVocabulary<VocabStorage>;
 */
 
 // TODO<joka921> Change this place.
-using UnderlyingVocabRdfsVocabulary = VocabularyVariant;
+using UnderlyingVocabRdfsVocabulary = PolymorphicVocabulary;
 using UnderlyingVocabTextVocabulary = VocabularyInMemory;
 }  // namespace detail
 

@@ -1135,8 +1135,8 @@ void IndexImpl::readConfiguration() {
 
   // TODO<joka921> Comment and also write the configuration.
   // The default value is the one the used to be the only.
-  ad_utility::VocabularyEnum vocabType(
-      ad_utility::VocabularyEnum::Enum::CompressedOnDisk);
+  ad_utility::VocabularyType vocabType(
+      ad_utility::VocabularyType::Enum::CompressedOnDisk);
   loadDataMember("vocabulary-type", vocabType, vocabType);
   vocab_.resetToType(vocabType);
 

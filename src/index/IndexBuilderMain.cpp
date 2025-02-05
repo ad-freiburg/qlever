@@ -167,7 +167,7 @@ int main(int argc, char** argv) {
   bool addWordsFromLiterals = false;
   std::optional<ad_utility::MemorySize> stxxlMemory;
   std::optional<ad_utility::MemorySize> parserBufferSize;
-  std::optional<ad_utility::VocabularyEnum> vocabType;
+  std::optional<ad_utility::VocabularyType> vocabType;
   // VocabularyEnum vocabType;
   optind = 1;
 
