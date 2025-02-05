@@ -55,7 +55,7 @@ class ExistsExpression : public SparqlExpression {
     }
   }
 
-  // This is the one expresssion, where this function should return `true`.
+  // This is the one expression, where this function should return `true`.
   // Used to extract `EXISTS` expressions from a general expression tree.
   bool isExistsExpression() const override { return true; }
 
