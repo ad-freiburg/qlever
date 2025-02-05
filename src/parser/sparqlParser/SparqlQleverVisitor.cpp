@@ -288,6 +288,8 @@ parsedQuery::BasicGraphPattern Visitor::toGraphPattern(
     if constexpr (ad_utility::isSimilar<T, Variable>) {
       return TripleComponent{item};
     } else if constexpr (ad_utility::isSimilar<T, BlankNode>) {
+      // Blank Nodes in the pattern are to be treated as internal variables
+      // inside WHERE.
       return TripleComponent{
           ParsedQuery::blankNodeToInternalVariable(item.toSparql())};
     } else {
@@ -305,6 +307,7 @@ parsedQuery::BasicGraphPattern Visitor::toGraphPattern(
     } else {
       static_assert(ad_utility::isSimilar<T, Literal> ||
                     ad_utility::isSimilar<T, BlankNode>);
+      // This case can only happen if there's a bug in the SPARQL parser.
       AD_THROW("Literals or blank nodes are not valid predicates.");
     }
   };
@@ -328,6 +331,9 @@ ParsedQuery Visitor::visit(Parser::ConstructQueryContext* ctx) {
                         .value_or(parsedQuery::ConstructClause{});
     visitWhereClause(ctx->whereClause(), query);
   } else {
+    // For `CONTRUCT WHERE`, the CONSTRUCT template and the WHERE clause are
+    // syntactically the same, so we set the flag to true to keep the blank
+    // nodes, and convert them into variables during `toGraphPattern`.
     isInsideConstructTriples_ = true;
     auto cleanup =
         absl::Cleanup{[this]() { isInsideConstructTriples_ = false; }};

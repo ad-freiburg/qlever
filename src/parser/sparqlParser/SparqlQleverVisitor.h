@@ -601,7 +601,10 @@ class SparqlQleverVisitor {
                                      std::string_view clauseName);
 
   // Convert an instance of `Triples` to a `BasicGraphPattern` so it can be used
-  // just like a WHERE clause.
+  // just like a WHERE clause. Most of the time this just changes the type and
+  // stays semantically the same, but for blank nodes, this step converts them
+  // into internal variables so they are interpreted correctly by the query
+  // planner.
   static parsedQuery::BasicGraphPattern toGraphPattern(
       const ad_utility::sparql_types::Triples& triples);
 
