@@ -1233,12 +1233,12 @@ TEST(SparqlParser, ConstructQuery) {
 
   // Test another variant to cover all cases.
   expectConstructQuery(
-      "CONSTRUCT WHERE { <bar> ?foo \"Abc\" }",
+      "CONSTRUCT WHERE { <bar> ?foo \"Abc\"@en }",
       m::ConstructQuery(
-          {{Iri{"<bar>"}, Var{"?foo"}, Literal{"\"Abc\""}}},
+          {{Iri{"<bar>"}, Var{"?foo"}, Literal{"\"Abc\"@en"}}},
           m::GraphPattern(m::Triples(
               {{iri("<bar>"), PropertyPath::fromVariable(Var{"?foo"}),
-                lit("\"Abc\"")}}))));
+                lit("\"Abc\"", "@en")}}))));
   // CONSTRUCT with datasets.
   expectConstructQuery(
       "CONSTRUCT { } FROM <foo> FROM NAMED <foo2> FROM NAMED <foo3> WHERE { }",
