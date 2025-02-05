@@ -287,17 +287,14 @@ parsedQuery::BasicGraphPattern Visitor::toGraphPattern(
     namespace tc = ad_utility::triple_component;
     if constexpr (ad_utility::isSimilar<T, Variable>) {
       return TripleComponent{item};
-    } else if constexpr (ad_utility::isSimilar<T, Literal>) {
-      return TripleComponent{
-          tc::Literal::fromStringRepresentation(item.toSparql())};
-    } else if constexpr (ad_utility::isSimilar<T, Iri>) {
-      return TripleComponent{
-          tc::Iri::fromStringRepresentation(item.toSparql())};
     } else if constexpr (ad_utility::isSimilar<T, BlankNode>) {
       return TripleComponent{
           ParsedQuery::blankNodeToInternalVariable(item.toSparql())};
     } else {
-      static_assert(ad_utility::alwaysFalse<T>);
+      static_assert(ad_utility::isSimilar<T, Literal> ||
+                    ad_utility::isSimilar<T, Iri>);
+      return RdfStringParser<TurtleParser<Tokenizer>>::parseTripleObject(
+          item.toSparql());
     }
   };
   auto toPropertyPath = []<typename T>(const T& item) -> PropertyPath {
