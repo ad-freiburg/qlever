@@ -9,6 +9,7 @@
 #include "engine/NeutralElementOperation.h"
 #include "engine/ValuesForTesting.h"
 #include "global/RuntimeParameters.h"
+#include "util/GTestHelpers.h"
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
@@ -556,7 +557,7 @@ TEST(Operation, ensureLazyOperationIsCachedIfSmallEnough) {
 
   auto cacheValue = valuesForTesting.runComputationAndPrepareForCache(
       timer, ComputationMode::LAZY_IF_SUPPORTED, makeQueryCacheKey("test"),
-      false);
+      false, false);
   EXPECT_FALSE(
       qec->getQueryTreeCache().cacheContains(makeQueryCacheKey("test")));
 
@@ -610,11 +611,11 @@ TEST(Operation, checkLazyOperationIsNotCachedIfTooLarge) {
     // generator to additionally assert sure it is not re-read on every
     // iteration.
     auto cleanup =
-        setRuntimeParameterForTest<"lazy-result-max-cache-size">(1_B);
+        setRuntimeParameterForTest<"cache-max-size-lazy-result">(1_B);
 
     cacheValue = valuesForTesting.runComputationAndPrepareForCache(
         timer, ComputationMode::LAZY_IF_SUPPORTED, makeQueryCacheKey("test"),
-        false);
+        false, false);
     EXPECT_FALSE(
         qec->getQueryTreeCache().cacheContains(makeQueryCacheKey("test")));
   }
@@ -641,7 +642,7 @@ TEST(Operation, checkLazyOperationIsNotCachedIfUnlikelyToFitInCache) {
 
   auto cacheValue = valuesForTesting.runComputationAndPrepareForCache(
       timer, ComputationMode::LAZY_IF_SUPPORTED, makeQueryCacheKey("test"),
-      false);
+      false, false);
   EXPECT_FALSE(
       qec->getQueryTreeCache().cacheContains(makeQueryCacheKey("test")));
 
@@ -653,6 +654,51 @@ TEST(Operation, checkLazyOperationIsNotCachedIfUnlikelyToFitInCache) {
       qec->getQueryTreeCache().cacheContains(makeQueryCacheKey("test")));
 }
 
+// _____________________________________________________________________________
+TEST(Operation, checkMaxCacheSizeIsComputedCorrectly) {
+  auto runTest = [](ad_utility::MemorySize cacheLimit,
+                    ad_utility::MemorySize runtimeParameterLimit, bool isRoot,
+                    ad_utility::MemorySize expectedSize,
+                    ad_utility::source_location sourceLocation =
+                        ad_utility::source_location::current()) {
+    auto loc = generateLocationTrace(sourceLocation);
+    auto qec = getQec();
+    qec->getQueryTreeCache().clearAll();
+    std::vector<IdTable> idTablesVector{};
+    idTablesVector.push_back(makeIdTableFromVector({{3, 4}}));
+    ValuesForTesting valuesForTesting{
+        qec, std::move(idTablesVector), {Variable{"?x"}, Variable{"?y"}}, true};
+
+    ad_utility::MemorySize actualCacheSize;
+    valuesForTesting.setCacheSizeStorage(&actualCacheSize);
+
+    absl::Cleanup restoreOriginalSize{
+        [qec, original = qec->getQueryTreeCache().getMaxSizeSingleEntry()]() {
+          qec->getQueryTreeCache().setMaxSizeSingleEntry(original);
+        }};
+    qec->getQueryTreeCache().setMaxSizeSingleEntry(cacheLimit);
+
+    auto cleanup = setRuntimeParameterForTest<"cache-max-size-lazy-result">(
+        runtimeParameterLimit);
+
+    ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
+
+    auto cacheValue = valuesForTesting.runComputationAndPrepareForCache(
+        timer, ComputationMode::LAZY_IF_SUPPORTED, makeQueryCacheKey("test"),
+        false, isRoot);
+
+    EXPECT_EQ(actualCacheSize, expectedSize);
+  };
+
+  runTest(10_B, 10_B, true, 10_B);
+  runTest(10_B, 10_B, false, 10_B);
+  runTest(10_B, 1_B, false, 1_B);
+  runTest(1_B, 10_B, false, 1_B);
+  runTest(10_B, 1_B, true, 10_B);
+  runTest(1_B, 10_B, true, 1_B);
+}
+
+// _____________________________________________________________________________
 TEST(OperationTest, disableCaching) {
   auto qec = getQec();
   qec->getQueryTreeCache().clearAll();

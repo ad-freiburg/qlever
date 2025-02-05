@@ -158,9 +158,26 @@ ExpressionPtr Visitor::processIriFunctionCall(
       checkNumArgs(1);
       return sparqlExpression::makeConvertToIntExpression(
           std::move(argList[0]));
-    } else if (functionName == "double" || functionName == "decimal") {
+    }
+    if (functionName == "decimal") {
+      checkNumArgs(1);
+      return sparqlExpression::makeConvertToDecimalExpression(
+          std::move(argList[0]));
+    }
+    // We currently don't have a float type, so we just convert to double.
+    if (functionName == "double" || functionName == "float") {
       checkNumArgs(1);
       return sparqlExpression::makeConvertToDoubleExpression(
+          std::move(argList[0]));
+    }
+    if (functionName == "boolean") {
+      checkNumArgs(1);
+      return sparqlExpression::makeConvertToBooleanExpression(
+          std::move(argList[0]));
+    }
+    if (functionName == "string") {
+      checkNumArgs(1);
+      return sparqlExpression::makeConvertToStringExpression(
           std::move(argList[0]));
     }
   }

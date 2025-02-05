@@ -140,6 +140,22 @@ struct StringValueGetter : Mixin<StringValueGetter> {
     return std::string(asStringViewUnsafe(s.getContent()));
   }
 };
+// Similar to `StringValueGetter`, but correctly preprocesses strings so that
+// they can be used by re2 as replacement strings. So '$1 \abc \$' becomes
+// '\1 \\abc $', where the former variant is valid in the SPARQL standard and
+// the latter represents the format that re2 expects.
+struct ReplacementStringGetter : StringValueGetter,
+                                 Mixin<ReplacementStringGetter> {
+  using Mixin<ReplacementStringGetter>::operator();
+  std::optional<std::string> operator()(ValueId,
+                                        const EvaluationContext*) const;
+
+  std::optional<std::string> operator()(const LiteralOrIri& s,
+                                        const EvaluationContext*) const;
+
+ private:
+  static std::string convertToReplacementString(std::string_view view);
+};
 
 // Boolean value getter that checks whether the given `Id` is a `ValueId` of the
 // given `datatype`.
