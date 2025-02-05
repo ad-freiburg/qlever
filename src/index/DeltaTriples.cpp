@@ -260,7 +260,7 @@ SharedLocatedTriplesSnapshot DeltaTriplesManager::getCurrentSnapshot() const {
 // _____________________________________________________________________________
 void DeltaTriples::setOriginalMetadata(
     Permutation::Enum permutation,
-    std::vector<CompressedBlockMetadata> metadata) {
+    std::shared_ptr<const std::vector<CompressedBlockMetadata>> metadata) {
   locatedTriples()
       .at(static_cast<size_t>(permutation))
       .setOriginalMetadata(std::move(metadata));

@@ -4,8 +4,7 @@
 
 #pragma once
 
-#include <concepts>
-
+#include "backports/algorithm.h"
 #include "index/PrefixHeuristic.h"
 #include "index/vocabulary/PrefixCompressor.h"
 #include "util/FsstCompressor.h"
@@ -19,32 +18,38 @@ namespace ad_utility::vocabulary {
 // `vector<string>` that stores compressed strings and the third of which is a
 // `Decoder`.
 template <typename T, typename Decoder>
-concept BulkResultForDecoder = requires(T t) {
-  requires(std::tuple_size_v<T> == 3);
-  {
-    std::get<1>(t)
-  } -> ad_utility::SimilarToAny<std::vector<std::string_view>,
-                                std::vector<std::string>>;
-  { std::get<2>(t) } -> ad_utility::SimilarTo<Decoder>;
-};
+CPP_requires(
+    BulkResultForDecoder_,
+    requires(T t)(std::tuple_size_v<T> == 3,
+                  ad_utility::SimilarToAny<decltype(std::get<1>(t)),
+                                           std::vector<std::string_view>,
+                                           std::vector<std::string>>,
+                  ad_utility::SimilarTo<decltype(std::get<2>(t)), Decoder>));
+template <typename T, typename Decoder>
+CPP_concept BulkResultForDecoder =
+    CPP_requires_ref(BulkResultForDecoder_, T, Decoder);
+
+template <typename T>
+CPP_requires(
+    CompressionWrapper_,
+    requires(const T& t)(
+        // Return the number of decoders that are stored.
+        concepts::same_as<decltype(t.numDecoders()), size_t>,
+        // Decompress the given string, use the Decoder specified by the second
+        // argument.
+        concepts::same_as<decltype(t.decompress(std::string_view{}, size_t{0})),
+                          std::string>,
+        // Compress all the strings and return the strings together with a
+        // `Decoder` that can be used to decompress the strings again.
+        BulkResultForDecoder<
+            decltype(T::compressAll(std::vector<std::string>{})),
+            typename T::Decoder>,
+        concepts::constructible_from<T, std::vector<typename T::Decoder>>));
 
 // A concept for the `CompressionWrappers` that can be passed as template
 // arguments to the compressed vocabulary to specify the compression algorithm.
 template <typename T>
-concept CompressionWrapper = requires(const T& t) {
-  typename T::Decoder;
-  // Return the number of decoders that are stored.
-  { t.numDecoders() } -> std::same_as<size_t>;
-  // Decompress the given string, use the Decoder specified by the second
-  // argument.
-  { t.decompress(std::string_view{}, size_t{0}) } -> std::same_as<std::string>;
-  // Compress all the strings and return the strings together with a `Decoder`
-  // that can be used to decompress the strings again.
-  {
-    T::compressAll(std::vector<std::string>{})
-  } -> BulkResultForDecoder<typename T::Decoder>;
-  requires(std::constructible_from<T, std::vector<typename T::Decoder>>);
-};
+CPP_concept CompressionWrapper = CPP_requires_ref(CompressionWrapper_, T);
 
 namespace detail {
 // A class that holds a `vector<DecoderT>` and implements the
