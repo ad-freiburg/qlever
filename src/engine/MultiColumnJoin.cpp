@@ -1,6 +1,7 @@
-// Copyright 2018, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Florian Kramer (florian.kramer@netpun.uni-freiburg.de)
+// Copyright 2018 - 2025, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Authors: Florian Kramer [2018 - 2020]
+//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 #include "MultiColumnJoin.h"
 
@@ -237,15 +238,16 @@ void MultiColumnJoin::computeMultiColumnJoin(
     rowAdder.addRow(itLeft - beginLeft, itRight - beginRight);
   };
 
-  // `isCheap` is true iff there are no UNDEF values in the join columns. In
-  // this case we can use a much cheaper algorithm.
-  // TODO<joka921> There are many other cases where a cheaper implementation can
-  // be chosen, but we leave those for another PR, this is the most common case.
-  namespace stdr = ql::ranges;
-  bool isCheap = stdr::none_of(joinColumns, [&](const auto& jcs) {
+  // Compute `isCheap`, which is true iff there are no UNDEF values in the join
+  // columns (in which case we can use a simpler and cheaper join algorithm).
+  //
+  // TODO<joka921> This is the most common case. There are many other cases
+  // where the generic `zipperJoinWithUndef` can be optimized. We will those
+  // for a later PR.
+  bool isCheap = ql::ranges::none_of(joinColumns, [&](const auto& jcs) {
     auto [leftCol, rightCol] = jcs;
-    return (stdr::any_of(right.getColumn(rightCol), &Id::isUndefined)) ||
-           (stdr::any_of(left.getColumn(leftCol), &Id::isUndefined));
+    return (ql::ranges::any_of(right.getColumn(rightCol), &Id::isUndefined)) ||
+           (ql::ranges::any_of(left.getColumn(leftCol), &Id::isUndefined));
   });
 
   auto checkCancellationLambda = [this] { checkCancellation(); };

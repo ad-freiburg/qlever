@@ -93,9 +93,6 @@ ProtoResult ExistsJoin::computeResult([[maybe_unused]] bool requestLaziness) {
   // right input. The first callback can be a noop, and the second callback
   // gives us exactly those rows, where the value in the to-be-added result
   // column should be `false`.
-  //
-  // the inverse of the value needed for the added Boolean
-  // column.
 
   // Extract the join columns from both inputs to make the following code
   // easier.
@@ -110,16 +107,17 @@ ProtoResult ExistsJoin::computeResult([[maybe_unused]] bool requestLaziness) {
   // Compute `isCheap`, which is true iff there are no UNDEF values in the join
   // columns (in which case we can use a simpler and cheaper join algorithm).
   //
-  // TODO<joka921> There are many other cases where a cheaper implementation can
-  // be chosen, but we leave those for another PR, this is the most common case.
-  namespace stdr = ql::ranges;
+  // TODO<joka921> This is the most common case. There are many other cases
+  // where the generic `zipperJoinWithUndef` can be optimized. We will those
+  // for a later PR.
   size_t numJoinColumns = joinColumnsLeft.numColumns();
   AD_CORRECTNESS_CHECK(numJoinColumns == joinColumnsRight.numColumns());
-  bool isCheap = stdr::none_of(
+  bool isCheap = ql::ranges::none_of(
       ad_utility::integerRange(numJoinColumns), [&](const auto& col) {
-        return (stdr::any_of(joinColumnsRight.getColumn(col),
-                             &Id::isUndefined)) ||
-               (stdr::any_of(joinColumnsLeft.getColumn(col), &Id::isUndefined));
+        return (ql::ranges::any_of(joinColumnsRight.getColumn(col),
+                                   &Id::isUndefined)) ||
+               (ql::ranges::any_of(joinColumnsLeft.getColumn(col),
+                                   &Id::isUndefined));
       });
 
   // Nothing to do for the actual matches.
@@ -179,15 +177,14 @@ std::shared_ptr<QueryExecutionTree> ExistsJoin::addExistsJoinsToSubtree(
   for (auto* expr : existsExpressions) {
     const auto& exists =
         dynamic_cast<const sparqlExpression::ExistsExpression&>(*expr);
-    // Currently some FILTERs are applied multiple times (in particular, this
-    // happens when there are OPTIONAL joins in the query). In these cases we
-    // have to make sure that the `ExistsJoin` is added only once.
-    //
-    // TODO(question from Hannah's review): Why does the following implement
-    // what the preceding comment says?
+    // If we have already considered this `EXIST` (which we can detect by its
+    // variable), skip it. This can happen because some `FILTER`s (which may
+    // contain `EXISTS` functions) are applied multiple times (for example,
+    // when there are OPTIONAL joins in the query).
     if (subtree->isVariableCovered(exists.variable())) {
       continue;
     }
+
     QueryPlanner qp{qec, cancellationHandle};
     auto pq = exists.argument();
     auto tree =

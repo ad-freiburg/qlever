@@ -1,4 +1,4 @@
-// Copyright 2021 - 2024, University of Freiburg
+// Copyright 2021 - 2025, University of Freiburg
 // Chair of Algorithms and Data Structures
 // Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Julian Mundhahs <mundhahj@cs.uni-freiburg.de>
@@ -1890,8 +1890,9 @@ auto notExistsMatcher(Matcher<const ParsedQuery&> pattern) {
 TEST(SparqlParser, Exists) {
   using namespace existsTestHelpers;
   auto expectBuiltInCall = ExpectCompleteParse<&Parser::builtInCall>{};
-  // A matcher that matches the query `SELECT * { ?x <bar> ?foo}`, where the
-  // FROM and FROM NAMED clauses can still be specified via arguments.
+
+  // A matcher that matches the query `SELECT * { ?x <bar> ?foo }`, where the
+  // FROM and FROM NAMED clauses can be specified as arguments.
   using Graphs = ScanSpecificationAsTripleComponent::Graphs;
   auto selectABarFooMatcher = [](Graphs defaultGraphs = std::nullopt,
                                  Graphs namedGraphs = std::nullopt) {
@@ -1900,6 +1901,7 @@ TEST(SparqlParser, Exists) {
         m::GraphPattern(m::Triples({{Var{"?a"}, "<bar>", Var{"?foo"}}})),
         defaultGraphs, namedGraphs));
   };
+
   expectBuiltInCall("EXISTS {?a <bar> ?foo}",
                     existsMatcher(selectABarFooMatcher()));
   expectBuiltInCall("NOT EXISTS {?a <bar> ?foo}",

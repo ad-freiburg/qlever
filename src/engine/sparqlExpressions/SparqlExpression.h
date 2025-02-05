@@ -127,7 +127,7 @@ class SparqlExpression {
   // implementation returns `false`.
   virtual bool isExistsExpression() const;
 
-  // Return non-null pointers to all `EXISTS` expressions in the subtree.
+  // Return non-null pointers to all `EXISTS` expressions in expression tree.
   // The result is passed in as a reference to simplify the recursive
   // implementation.
   virtual void getExistsExpressions(
