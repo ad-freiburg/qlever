@@ -227,6 +227,9 @@ struct CompactStringVectorWriter {
     }
   }
 
+  CompactStringVectorWriter(CompactStringVectorWriter&&) = default;
+  CompactStringVectorWriter& operator=(CompactStringVectorWriter&&) = default;
+
  private:
   // Has to be run by all the constructors
   void commonInitialization() {
