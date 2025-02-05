@@ -14,7 +14,8 @@ namespace http = boost::beast::http;
 // Construct a boost::beast request with the HTTP method, target path, headers
 // and body.
 inline auto makeRequest(
-    const http::verb method = http::verb::get, const std::string& target = "/",
+    const http::verb method = http::verb::get,
+    const std::string_view target = "/",
     const ad_utility::HashMap<http::field, std::string>& headers = {},
     const std::optional<std::string>& body = std::nullopt) {
   // version 11 stands for HTTP/1.1

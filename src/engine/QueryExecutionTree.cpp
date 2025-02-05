@@ -91,15 +91,11 @@ size_t QueryExecutionTree::getCostEstimate() {
 // _____________________________________________________________________________
 size_t QueryExecutionTree::getSizeEstimate() {
   if (!sizeEstimate_.has_value()) {
-    if (cachedResult_) {
-      AD_CORRECTNESS_CHECK(cachedResult_->isFullyMaterialized());
-      sizeEstimate_ = cachedResult_->idTable().size();
-    } else {
-      // if we are in a unit test setting and there is no QueryExecutionContest
-      // specified it is the rootOperation_'s obligation to handle this case
-      // correctly
-      sizeEstimate_ = rootOperation_->getSizeEstimate();
-    }
+    // Note: Previously we used the exact size instead of the estimate for
+    // results that were already in the cache. This however often lead to poor
+    // planning, because the query planner compared exact sizes with estimates,
+    // which lead to worse plans than just conistently choosing the estimate.
+    sizeEstimate_ = rootOperation_->getSizeEstimate();
   }
   return sizeEstimate_.value();
 }

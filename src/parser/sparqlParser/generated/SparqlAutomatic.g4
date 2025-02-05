@@ -181,7 +181,7 @@ insertClause: INSERT quadPattern ;
 
 usingClause: USING (iri | NAMED iri) ;
 
-graphOrDefault: DEFAULT | GRAPH iri ;
+graphOrDefault: DEFAULT | GRAPH? iri ;
 
 graphRef: GRAPH iri ;
 
