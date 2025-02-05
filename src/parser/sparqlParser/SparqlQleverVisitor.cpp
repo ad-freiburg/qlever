@@ -331,7 +331,7 @@ ParsedQuery Visitor::visit(Parser::ConstructQueryContext* ctx) {
                         .value_or(parsedQuery::ConstructClause{});
     visitWhereClause(ctx->whereClause(), query);
   } else {
-    // For `CONTRUCT WHERE`, the CONSTRUCT template and the WHERE clause are
+    // For `CONSTRUCT WHERE`, the CONSTRUCT template and the WHERE clause are
     // syntactically the same, so we set the flag to true to keep the blank
     // nodes, and convert them into variables during `toGraphPattern`.
     isInsideConstructTriples_ = true;
