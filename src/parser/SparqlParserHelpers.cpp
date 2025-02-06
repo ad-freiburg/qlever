@@ -33,8 +33,7 @@ ParserAndVisitor::ParserAndVisitor(
 ParserAndVisitor::ParserAndVisitor(
     std::string input, SparqlQleverVisitor::PrefixMap prefixes,
     SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks)
-    : ParserAndVisitor{unescapeUnicodeSequences(std::move(input)),
-                       disableSomeChecks} {
+    : ParserAndVisitor{std::move(input), disableSomeChecks} {
   visitor_.setPrefixMapManually(std::move(prefixes));
 }
 
