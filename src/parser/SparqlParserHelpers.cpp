@@ -39,39 +39,34 @@ ParserAndVisitor::ParserAndVisitor(
 
 // _____________________________________________________________________________
 std::string ParserAndVisitor::unescapeUnicodeSequences(std::string input) {
-  std::u8string_view utf8View{std::bit_cast<char8_t*>(input.data()),
-                              input.size()};
+  std::string_view view{input};
   std::string output;
   size_t lastPos = 0;
   UChar32 highSurrogate = 0;
 
-  auto throwError = [](bool condition, const std::string& message) {
+  auto throwError = [](bool condition, std::string_view message) {
     if (!condition) {
       throw InvalidSparqlQueryException{
           absl::StrCat("Error in unicode escape sequence. ", message)};
     }
   };
 
-  constexpr size_t prefixLength = std::string_view{"\\U"}.size();
-
   for (auto match :
-       ctre::search_all<R"(\\U[0-9A-Fa-f]{8}|\\u[0-9A-Fa-f]{4})">(utf8View)) {
-    output += input.substr(lastPos, match.data() - (utf8View.data() + lastPos));
-    lastPos = match.data() + match.size() - utf8View.data();
+       ctre::search_all<R"(\\U[0-9A-Fa-f]{8}|\\u[0-9A-Fa-f]{4})">(view)) {
+    output += view.substr(lastPos, match.data() - (view.data() + lastPos));
+    lastPos = match.data() + match.size() - view.data();
 
     auto hexValue = match.to_view();
+    hexValue.remove_prefix(std::string_view{"\\U"}.size());
 
     UChar32 codePoint;
-    auto* startPointer = std::bit_cast<const char*>(hexValue.data());
-    auto result =
-        std::from_chars(startPointer + prefixLength,
-                        startPointer + hexValue.size(), codePoint, 16);
+    auto result = std::from_chars(
+        hexValue.data(), hexValue.data() + hexValue.size(), codePoint, 16);
     AD_CORRECTNESS_CHECK(result.ec == std::errc{});
 
-    bool isFullCodePoint = hexValue.size() == 10;
+    bool isFullCodePoint = hexValue.size() == 8;
     AD_CORRECTNESS_CHECK(
-        hexValue.size() == 8 + prefixLength ||
-            hexValue.size() == 4 + prefixLength,
+        hexValue.size() == 8 || hexValue.size() == 4,
         "Unicode escape sequences must be either 8 or 4 characters long.");
 
     if (U16_IS_LEAD(codePoint)) {
@@ -102,7 +97,7 @@ std::string ParserAndVisitor::unescapeUnicodeSequences(std::string input) {
   throwError(highSurrogate == 0,
              "A high surrogate must be followed by a low surrogate.");
 
-  output += input.substr(lastPos);
+  output += view.substr(lastPos);
   return output;
 }
 }  // namespace sparqlParserHelpers
