@@ -50,8 +50,9 @@ CPP_template(typename T, typename Deleter = std::default_delete<T>)(
   CopyableUniquePtr& operator=(CopyableUniquePtr&& ptr) = default;
 
   // Json serialization.
-  friend void to_json(OrderedOrUnorderedJson auto& j,
-                      const CopyableUniquePtr& p) {
+  template <typename S>
+  friend typename std::enable_if_t<OrderedOrUnorderedJson<S>> to_json(
+      S& j, const CopyableUniquePtr& p) {
     /*
     The serialization of `CopyableUniquePtr` would have identical code to the
     serialization of a normal unique pointer, so we just re-cast it, to save on

@@ -226,8 +226,8 @@ with the json object literal keys `index` and `value`.
 */
 namespace nlohmann {
 template <typename T>
-QL_CONCEPT_OR_NOTHING(requires std::is_copy_constructible_v<T>)
-struct adl_serializer<std::unique_ptr<T>> {
+struct adl_serializer<std::unique_ptr<T>,
+                      std::enable_if_t<std::is_copy_constructible_v<T>>> {
   CPP_template(typename S)(
       requires OrderedOrUnorderedJson<
           S>) static void to_json(S& j, const std::unique_ptr<T>& ptr) {

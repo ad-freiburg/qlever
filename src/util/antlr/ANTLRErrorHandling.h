@@ -9,11 +9,11 @@
 #include <concepts>
 #include <string>
 
-#include "backports/concepts.h"
 #include "BaseErrorListener.h"
 #include "Recognizer.h"
 #include "Token.h"
 #include "absl/strings/str_cat.h"
+#include "backports/concepts.h"
 #include "util/ParseException.h"
 #include "util/antlr/GenerateAntlrExceptionMetadata.h"
 

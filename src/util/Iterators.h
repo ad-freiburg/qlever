@@ -255,7 +255,12 @@ class InputRangeMixin {
     derived().start();
     return Iterator{this};
   }
-  Sentinel end() const { return {}; };
+  Sentinel end() const { return {}; }
+
+  Iterator begin() const {
+    derived().start();
+    return Iterator{this};
+  }
 };
 
 // A similar mixin to the above, with slightly different characteristics:
@@ -392,8 +397,8 @@ class InputRangeTypeErased {
   // `InputRangeToOptional` class from above to make it compatible with the base
   // class.
   CPP_template(typename Range)(
-      requires !std::is_base_of_v<InputRangeFromGet<ValueType>, Range> CPP_and
-          ql::ranges::range<Range>
+      requires CPP_NOT(std::is_base_of_v<InputRangeFromGet<ValueType>, Range>)
+          CPP_and ql::ranges::range<Range>
               CPP_and std::same_as<
                   ql::ranges::range_value_t<Range>,
                   ValueType>) explicit InputRangeTypeErased(Range range)

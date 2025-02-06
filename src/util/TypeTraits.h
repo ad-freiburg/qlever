@@ -211,8 +211,11 @@ CPP_template(typename Tuple)(requires isTuple<Tuple>) using TupleToVariant =
 /// From the types X = std::tuple<A, ... , B>, , Y = std::tuple<C, ..., D>...
 /// makes the type TupleCat<X, Y> = std::tuple<A, ..., B, C, ..., D, ...> (works
 /// for an arbitrary number of tuples as template parameters.
-template <QL_CONCEPT_OR_TYPENAME(isTuple)... Tuples>
-using TupleCat = decltype(std::tuple_cat(std::declval<Tuples&>()...));
+template <typename... Tuples>
+using TupleCat =
+    typename std::enable_if<(isTuple<Tuples> && ...),
+                            decltype(std::tuple_cat(
+                                std::declval<Tuples&>()...))>::type;
 
 /// A generalized version of std::visit that also supports non-variant
 /// parameters. Each `parameterOrVariant` of type T that is not a std::variant
@@ -254,13 +257,14 @@ auto applyFunctionToEachElementOfTuple(Function&& f, Tuple&& tuple) {
 
 // Return the last type of variadic template arguments.
 template <typename... Ts>
-QL_CONCEPT_OR_NOTHING(requires(sizeof...(Ts) > 0))
-using Last = typename detail::LastT<Ts...>::type;
+using Last = typename std::enable_if_t<(sizeof...(Ts) > 0),
+                                       typename detail::LastT<Ts...>::type>;
 
 // Return the first type of variadic template arguments.
 template <typename... Ts>
-QL_CONCEPT_OR_NOTHING(requires(sizeof...(Ts) > 0))
-using First = typename detail::FirstWrapper<Ts...>::type;
+using First =
+    typename std::enable_if_t<(sizeof...(Ts) > 0),
+                              typename detail::FirstWrapper<Ts...>::type>;
 
 /// Concept for `std::is_invocable_r_v`.
 template <typename Func, typename R, typename... ArgTypes>

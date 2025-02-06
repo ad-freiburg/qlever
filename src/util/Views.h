@@ -125,56 +125,49 @@ CPP_template(typename UnderlyingRange, bool supportConst = true)(
     return std::move(underlyingRange_);
   }
 
-  constexpr ql::ranges::iterator_t<UnderlyingRange> begin() {
+  constexpr auto begin() { return ql::ranges::begin(underlyingRange_); }
+
+  constexpr auto end() { return ql::ranges::end(underlyingRange_); }
+
+  constexpr auto begin() const -> CPP_ret(
+      ql::ranges::iterator_t<const UnderlyingRange>)(
+      requires supportConst CPP_and ql::ranges::range<const UnderlyingRange>) {
     return ql::ranges::begin(underlyingRange_);
   }
 
-  constexpr ql::ranges::sentinel_t<UnderlyingRange> end() {
+  constexpr auto end() const -> CPP_ret(
+      ql::ranges::iterator_t<const UnderlyingRange>)(
+      requires supportConst CPP_and ql::ranges::range<const UnderlyingRange>) {
     return ql::ranges::end(underlyingRange_);
   }
 
-  constexpr auto begin() const
-      -> CPP_ret(ql::ranges::iterator_t<const UnderlyingRange>)(
-          requires supportConst&& ql::ranges::range<const UnderlyingRange>) {
-    return ql::ranges::begin(underlyingRange_);
-  }
-
-  CPP_template(typename = void)(
-      requires supportConst CPP_and
-          ql::ranges::range<const UnderlyingRange>) constexpr auto end() const {
-    return ql::ranges::end(underlyingRange_);
-  }
-
-  CPP_template(typename = void)(
-      requires detail::IsEmptyRange<UnderlyingRange>) constexpr bool empty() {
+  constexpr auto empty() -> CPP_ret(bool)(
+      requires ad_utility::detail::IsEmptyRange<UnderlyingRange>) {
     return ql::ranges::empty(underlyingRange_);
   }
 
-  CPP_template(typename = void)(
-      requires detail::IsEmptyRange<UnderlyingRange>) constexpr bool empty()
-      const {
+  constexpr auto empty() const -> CPP_ret(bool)(
+      requires ad_utility::detail::IsEmptyRange<const UnderlyingRange>) {
     return ql::ranges::empty(underlyingRange_);
   }
 
-  CPP_template(typename = void)(
-      requires ql::ranges::sized_range<UnderlyingRange>) constexpr auto size() {
+  constexpr auto size()
+      -> CPP_ret(size_t)(requires ql::ranges::sized_range<UnderlyingRange>) {
     return ql::ranges::size(underlyingRange_);
   }
 
-  CPP_template(typename = void)(
-      requires ql::ranges::sized_range<
-          const UnderlyingRange>) constexpr auto size() const {
+  constexpr auto size() const -> CPP_ret(size_t)(
+      requires ql::ranges::sized_range<const UnderlyingRange>) {
     return ql::ranges::size(underlyingRange_);
   }
 
-  CPP_template(typename = void)(requires ql::ranges::contiguous_range<
-                                UnderlyingRange>) constexpr auto data() {
+  constexpr auto data() -> CPP_ret(UnderlyingRange*)(
+      requires ql::ranges::contiguous_range<UnderlyingRange>) {
     return ql::ranges::data(underlyingRange_);
   }
 
-  CPP_template(typename = void)(
-      requires ql::ranges::contiguous_range<
-          const UnderlyingRange>) constexpr auto data() const {
+  constexpr auto data() const -> CPP_ret(const UnderlyingRange*)(
+      requires ql::ranges::contiguous_range<const UnderlyingRange>) {
     return ql::ranges::data(underlyingRange_);
   }
 };
@@ -223,20 +216,20 @@ template <typename View>
 struct BufferedAsyncView : InputRangeMixin<BufferedAsyncView<View>> {
   View view_;
   uint64_t blockSize_;
-  bool finished_ = false;
+  mutable bool finished_ = false;
 
-  explicit BufferedAsyncView(View view, uint64_t blockSize)
+  explicit BufferedAsyncView(View&& view, uint64_t blockSize)
       : view_{std::move(view)}, blockSize_{blockSize} {
     AD_CONTRACT_CHECK(blockSize_ > 0);
   }
 
-  ql::ranges::iterator_t<View> it_;
+  mutable ql::ranges::iterator_t<View> it_;
   ql::ranges::sentinel_t<View> end_ = ql::ranges::end(view_);
   using value_type = ql::ranges::range_value_t<View>;
-  std::future<std::vector<value_type>> future_;
+  mutable std::future<std::vector<value_type>> future_;
 
-  std::vector<value_type> buffer_;
-  std::vector<value_type> getNextBlock() {
+  mutable std::vector<value_type> buffer_;
+  std::vector<value_type> getNextBlock() const {
     std::vector<value_type> buffer;
     buffer.reserve(blockSize_);
     size_t i = 0;
@@ -248,7 +241,7 @@ struct BufferedAsyncView : InputRangeMixin<BufferedAsyncView<View>> {
     return buffer;
   };
 
-  void start() {
+  void start() const {
     it_ = view_.begin();
     buffer_ = getNextBlock();
     finished_ = buffer_.empty();
@@ -259,7 +252,7 @@ struct BufferedAsyncView : InputRangeMixin<BufferedAsyncView<View>> {
   auto& get() { return buffer_; }
   const auto& get() const { return buffer_; }
 
-  void next() {
+  void next() const {
     buffer_ = future_.get();
     finished_ = buffer_.empty();
     future_ =
@@ -285,8 +278,8 @@ auto bufferedAsyncView(View view, uint64_t blockSize) {
 // `ql::views::iota(0, size_t(INT_MAX) + 1)` leads to undefined behavior
 // because of an integer overflow, but `ad_utility::integerRange(size_t(INT_MAX)
 // + 1)` is perfectly safe and behaves as expected.
-template <std::unsigned_integral Int>
-auto integerRange(Int upperBound) {
+CPP_template(typename Int)(
+    requires std::unsigned_integral<Int>) auto integerRange(Int upperBound) {
   return ql::views::iota(Int{0}, upperBound);
 }
 
