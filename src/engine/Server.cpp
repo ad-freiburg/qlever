@@ -233,7 +233,7 @@ Awaitable<void> Server::process(
   // Parse the path and the URL parameters from the given request. Works for GET
   // requests as well as the two kinds of POST requests allowed by the SPARQL
   // standard, see method `getUrlPathAndParameters`.
-  const auto parsedHttpRequest = SPARQLProtocol::parseHttpRequest(request);
+  auto parsedHttpRequest = SPARQLProtocol::parseHttpRequest(request);
   const auto& parameters = parsedHttpRequest.parameters_;
 
   // We always want to call `Server::checkParameter` with the same first
@@ -361,26 +361,17 @@ Awaitable<void> Server::process(
     }
   }
 
-  auto operationString = [&parsedHttpRequest] {
-    if (auto* q = std::get_if<Query>(&parsedHttpRequest.operation_)) {
-      return q->query_;
-    }
-    if (auto* u = std::get_if<Update>(&parsedHttpRequest.operation_)) {
-      return u->update_;
-    }
-    return std::string("No operation string available.");
-  }();
-  auto visitOperation =
-      [&checkParameter, &accessTokenOk, &request, &send, &parameters,
-       &requestTimer, this]<QL_CONCEPT_OR_TYPENAME(QueryOrUpdate) Operation,
-                            string Operation::*opFieldString>(
-          const Operation& op, std::function<bool(const ParsedQuery&)> pred,
-          std::string_view msg) -> Awaitable<void> {
+  auto visitOperation = [&checkParameter, &accessTokenOk, &request, &send,
+                         &parameters, &requestTimer,
+                         this]<QL_CONCEPT_OR_TYPENAME(QueryOrUpdate) Operation>(
+                            const Operation& op, auto opFieldString,
+                            std::function<bool(const ParsedQuery&)> pred,
+                            std::string_view msg) -> Awaitable<void> {
     if (auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
             checkParameter("timeout", std::nullopt), accessTokenOk, request,
             send)) {
-      ad_utility::websocket::MessageSender messageSender =
-          createMessageSender(queryHub_, request, op.*opFieldString);
+      ad_utility::websocket::MessageSender messageSender = createMessageSender(
+          queryHub_, request, std::invoke(opFieldString, op));
       auto [parsedOperation, qec, cancellationHandle,
             cancelTimeoutOnDestruction] =
           parseOperation(messageSender, parameters, op, timeLimit.value());
@@ -388,9 +379,17 @@ Awaitable<void> Server::process(
         throw std::runtime_error(
             absl::StrCat(msg, parsedOperation._originalString));
       }
-      co_return co_await processQueryOrUpdate<Operation>(
-          parameters, std::move(parsedOperation), cancellationHandle, qec,
-          requestTimer, std::move(request), send, timeLimit.value());
+      if constexpr (std::is_same_v<Operation, Query>) {
+        co_return co_await processQuery(parameters, std::move(parsedOperation),
+                                        requestTimer, cancellationHandle, qec,
+                                        std::move(request), send,
+                                        timeLimit.value());
+      } else {
+        static_assert(std::is_same_v<Operation, Update>);
+        co_return co_await processUpdate(
+            std::move(parsedOperation), requestTimer, cancellationHandle, qec,
+            std::move(request), send, timeLimit.value());
+      }
     } else {
       // If the optional is empty, this indicates an error response has been
       // sent to the client already. We can stop here.
@@ -398,20 +397,18 @@ Awaitable<void> Server::process(
     }
   };
   auto visitQuery = [&visitOperation](const Query& query) -> Awaitable<void> {
-    co_return co_await visitOperation
-        .template operator()<Query, &Query::query_>(
-            query, &ParsedQuery::hasUpdateClause,
-            "SPARQL QUERY was request via the HTTP request, but the "
-            "following update was sent instead of an query: ");
+    return visitOperation(
+        query, &Query::query_, &ParsedQuery::hasUpdateClause,
+        "SPARQL QUERY was request via the HTTP request, but the "
+        "following update was sent instead of an query: ");
   };
   auto visitUpdate = [&visitOperation, &requireValidAccessToken](
                          const Update& update) -> Awaitable<void> {
     requireValidAccessToken("SPARQL Update");
-    co_return co_await visitOperation
-        .template operator()<Update, &Update::update_>(
-            update, std::not_fn(&ParsedQuery::hasUpdateClause),
-            "SPARQL UPDATE was request via the HTTP request, but the "
-            "following query was sent instead of an update: ");
+    return visitOperation(
+        update, &Update::update_, std::not_fn(&ParsedQuery::hasUpdateClause),
+        "SPARQL UPDATE was request via the HTTP request, but the "
+        "following query was sent instead of an update: ");
   };
   auto visitNone = [&response, &send,
                     &request](const None&) -> Awaitable<void> {
@@ -434,74 +431,10 @@ Awaitable<void> Server::process(
         createNotFoundResponse("Unknown path", std::move(request)));
   };
 
-  using namespace ad_utility::httpUtils;
-  http::status responseStatus = http::status::ok;
-
-  // Put the whole query processing in a try-catch block. If any exception
-  // occurs, log the error message and send a JSON response with all the details
-  // to the client. Note that the C++ standard forbids co_await in the catch
-  // block, hence the workaround with the optional `exceptionErrorMsg`.
-  std::optional<std::string> exceptionErrorMsg;
-  std::optional<ExceptionMetadata> metadata;
-  // Also store the QueryExecutionTree outside the try-catch block to gain
-  // access to the runtimeInformation in the case of an error.
-  // TODO: the storing of the PlannedQuery outside the try-catch block in case
-  // of an error has been broken for some time
-  std::optional<PlannedQuery> plannedQuery;
-  try {
-    co_return co_await std::visit(
-        ad_utility::OverloadCallOperator{visitQuery, visitUpdate, visitNone},
-        std::move(parsedHttpRequest.operation_));
-  } catch (const ParseException& e) {
-    responseStatus = http::status::bad_request;
-    exceptionErrorMsg = e.errorMessageWithoutPositionalInfo();
-    metadata = e.metadata();
-  } catch (const QueryAlreadyInUseError& e) {
-    responseStatus = http::status::conflict;
-    exceptionErrorMsg = e.what();
-  } catch (const UnknownMediatypeError& e) {
-    responseStatus = http::status::bad_request;
-    exceptionErrorMsg = e.what();
-  } catch (const ad_utility::CancellationException& e) {
-    // Send 429 status code to indicate that the time limit was reached
-    // or the query was cancelled because of some other reason.
-    responseStatus = http::status::too_many_requests;
-    exceptionErrorMsg = e.what();
-  } catch (const std::exception& e) {
-    responseStatus = http::status::internal_server_error;
-    exceptionErrorMsg = e.what();
-  }
-  // TODO<qup42> at this stage should probably have a wrapper that takes
-  //  optional<errorMsg> and optional<metadata> and does this logic
-  if (exceptionErrorMsg) {
-    LOG(ERROR) << exceptionErrorMsg.value() << std::endl;
-    if (metadata) {
-      // The `coloredError()` message might fail because of the different
-      // Unicode handling of QLever and ANTLR. Make sure to detect this case so
-      // that we can fix it if it happens.
-      try {
-        LOG(ERROR) << metadata.value().coloredError() << std::endl;
-      } catch (const std::exception& e) {
-        exceptionErrorMsg.value().append(absl::StrCat(
-            " Highlighting an error for the command line log failed: ",
-            e.what()));
-        LOG(ERROR) << "Failed to highlight error in operation. " << e.what()
-                   << std::endl;
-        LOG(ERROR) << metadata.value().query_ << std::endl;
-      }
-    }
-    auto errorResponseJson = composeErrorResponseJson(
-        operationString, exceptionErrorMsg.value(), requestTimer, metadata);
-    if (plannedQuery.has_value()) {
-      errorResponseJson["runtimeInformation"] =
-          nlohmann::ordered_json(plannedQuery.value()
-                                     .queryExecutionTree_.getRootOperation()
-                                     ->runtimeInfo());
-    }
-    auto errResponse =
-        createJsonResponse(errorResponseJson, request, responseStatus);
-    co_return co_await send(std::move(errResponse));
-  }
+  co_return co_await processOperation(
+      std::move(parsedHttpRequest.operation_),
+      ad_utility::OverloadCallOperator{visitQuery, visitUpdate, visitNone},
+      requestTimer, request, send);
 }
 
 // ____________________________________________________________________________
@@ -981,13 +914,18 @@ Awaitable<void> Server::processUpdate(
 }
 
 // ____________________________________________________________________________
-template <QL_CONCEPT_OR_TYPENAME(QueryOrUpdate) Operation>
-Awaitable<void> Server::processQueryOrUpdate(
-    const ad_utility::url_parser::ParamValueMap& params,
-    ParsedQuery&& parsedOperation, SharedCancellationHandle cancellationHandle,
-    QueryExecutionContext qec, const ad_utility::Timer& requestTimer,
-    const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
-    TimeLimit timeLimit) {
+Awaitable<void> Server::processOperation(
+    auto&& operation, auto visitor, const ad_utility::Timer& requestTimer,
+    const ad_utility::httpUtils::HttpRequest auto& request, auto&& send) {
+  auto operationString = [&operation] {
+    if (auto* q = std::get_if<Query>(&operation)) {
+      return q->query_;
+    }
+    if (auto* u = std::get_if<Update>(&operation)) {
+      return u->update_;
+    }
+    return std::string("No operation string available.");
+  }();
   using namespace ad_utility::httpUtils;
   http::status responseStatus = http::status::ok;
 
@@ -1003,14 +941,7 @@ Awaitable<void> Server::processQueryOrUpdate(
   // of an error has been broken for some time
   std::optional<PlannedQuery> plannedQuery;
   try {
-    if constexpr (std::is_same_v<Operation, Query>) {
-      co_await processQuery(params, std::move(parsedOperation), requestTimer,
-                            cancellationHandle, qec, request, send, timeLimit);
-    } else {
-      static_assert(std::is_same_v<Operation, Update>);
-      co_await processUpdate(std::move(parsedOperation), requestTimer,
-                             cancellationHandle, qec, request, send, timeLimit);
-    }
+    co_return co_await std::visit(visitor, std::move(operation));
   } catch (const ParseException& e) {
     responseStatus = http::status::bad_request;
     exceptionErrorMsg = e.errorMessageWithoutPositionalInfo();
@@ -1050,17 +981,16 @@ Awaitable<void> Server::processQueryOrUpdate(
       }
     }
     auto errorResponseJson = composeErrorResponseJson(
-        parsedOperation._originalString, exceptionErrorMsg.value(),
-        requestTimer, metadata);
+        operationString, exceptionErrorMsg.value(), requestTimer, metadata);
     if (plannedQuery.has_value()) {
       errorResponseJson["runtimeInformation"] =
           nlohmann::ordered_json(plannedQuery.value()
                                      .queryExecutionTree_.getRootOperation()
                                      ->runtimeInfo());
     }
-    auto response =
+    auto errResponse =
         createJsonResponse(errorResponseJson, request, responseStatus);
-    co_return co_await send(std::move(response));
+    co_return co_await send(std::move(errResponse));
   }
 }
 

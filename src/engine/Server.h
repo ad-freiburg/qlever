@@ -124,28 +124,11 @@ class Server {
   Awaitable<void> process(
       const ad_utility::httpUtils::HttpRequest auto& request, auto&& send);
 
-  /// Handle a http request that asks for the processing of an query or update.
-  /// This is only a wrapper for `processQuery` and `processUpdate` which
-  /// does the error handling.
-  /// \param params The key-value-pairs  sent in the HTTP GET request.
-  /// \param parsedOperation The parsed query or update to process.
-  /// \param cancellationHandle The cancellation handle that is used to cancel.
-  /// \param qec The query execution context to use for the processing.
-  /// \param requestTimer Timer that measure the total processing
-  ///                     time of this request.
-  /// \param request The HTTP request.
-  /// \param send The action that sends a http:response (see the
-  ///             `HttpServer.h` for documentation).
-  /// \param timeLimit Duration in seconds after which the query will be
-  ///                  cancelled.
-  template <QL_CONCEPT_OR_TYPENAME(QueryOrUpdate) Operation>
-  Awaitable<void> processQueryOrUpdate(
-      const ad_utility::url_parser::ParamValueMap& params,
-      ParsedQuery&& parsedOperation,
-      SharedCancellationHandle cancellationHandle, QueryExecutionContext qec,
-      const ad_utility::Timer& requestTimer,
-      const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
-      TimeLimit timeLimit);
+  // Wraps the error handling around the processing of operations. Calls the
+  // visitor on the given operation.
+  Awaitable<void> processOperation(
+      auto&& operation, auto visitor, const ad_utility::Timer& requestTimer,
+      const ad_utility::httpUtils::HttpRequest auto& request, auto&& send);
   // Do the actual execution of a query.
   Awaitable<void> processQuery(
       const ad_utility::url_parser::ParamValueMap& params, ParsedQuery&& query,
