@@ -3,16 +3,11 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 #pragma once
 
-#include <iomanip>
 #include <type_traits>
 #include <vector>
 
-#include "backports/algorithm.h"
-#include "engine/IndexSequence.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Constants.h"
-#include "global/Id.h"
-#include "util/Exception.h"
 #include "util/Log.h"
 
 class Engine {
