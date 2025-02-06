@@ -39,7 +39,7 @@ ParserAndVisitor::ParserAndVisitor(
 
 // _____________________________________________________________________________
 std::string ParserAndVisitor::unescapeUnicodeSequences(std::string input) {
-  std::u8string_view utf8View{reinterpret_cast<char8_t*>(input.data()),
+  std::u8string_view utf8View{std::bit_cast<char8_t*>(input.data()),
                               input.size()};
   std::string output;
   size_t lastPos = 0;
@@ -52,6 +52,8 @@ std::string ParserAndVisitor::unescapeUnicodeSequences(std::string input) {
     }
   };
 
+  constexpr size_t prefixLength = std::string_view{"\\U"}.size();
+
   for (auto match :
        ctre::search_all<R"(\\U[0-9A-Fa-f]{8}|\\u[0-9A-Fa-f]{4})">(utf8View)) {
     output += input.substr(lastPos, match.data() - (utf8View.data() + lastPos));
@@ -60,14 +62,16 @@ std::string ParserAndVisitor::unescapeUnicodeSequences(std::string input) {
     auto hexValue = match.to_view();
 
     UChar32 codePoint;
-    const char* startPointer = reinterpret_cast<const char*>(hexValue.data());
-    auto result = std::from_chars(
-        startPointer + 2, startPointer + hexValue.size(), codePoint, 16);
+    auto* startPointer = std::bit_cast<const char*>(hexValue.data());
+    auto result =
+        std::from_chars(startPointer + prefixLength,
+                        startPointer + hexValue.size(), codePoint, 16);
     AD_CORRECTNESS_CHECK(result.ec == std::errc{});
 
     bool isFullCodePoint = hexValue.size() == 10;
     AD_CORRECTNESS_CHECK(
-        hexValue.size() == 10 || hexValue.size() == 6,
+        hexValue.size() == 8 + prefixLength ||
+            hexValue.size() == 4 + prefixLength,
         "Unicode escape sequences must be either 8 or 4 characters long.");
 
     if (U16_IS_LEAD(codePoint)) {
