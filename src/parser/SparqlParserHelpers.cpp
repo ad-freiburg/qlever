@@ -41,6 +41,7 @@ ParserAndVisitor::ParserAndVisitor(
 std::string ParserAndVisitor::unescapeUnicodeSequences(std::string input) {
   std::string_view view{input};
   std::string output;
+  bool noEscapeSequenceFound = true;
   size_t lastPos = 0;
   UChar32 highSurrogate = 0;
 
@@ -51,9 +52,20 @@ std::string ParserAndVisitor::unescapeUnicodeSequences(std::string input) {
     }
   };
 
-  for (auto match :
+  for (const auto& match :
        ctre::search_all<R"(\\U[0-9A-Fa-f]{8}|\\u[0-9A-Fa-f]{4})">(view)) {
-    output += view.substr(lastPos, match.data() - (view.data() + lastPos));
+    if (noEscapeSequenceFound) {
+      output.reserve(input.size());
+      noEscapeSequenceFound = false;
+    }
+    auto inBetweenPart =
+        view.substr(lastPos, match.data() - (view.data() + lastPos));
+
+    throwError(
+        inBetweenPart.empty() || highSurrogate == 0,
+        "A high surrogate must be directly followed by a low surrogate.");
+
+    output += inBetweenPart;
     lastPos = match.data() + match.size() - view.data();
 
     auto hexValue = match.to_view();
@@ -63,12 +75,14 @@ std::string ParserAndVisitor::unescapeUnicodeSequences(std::string input) {
     auto result = std::from_chars(
         hexValue.data(), hexValue.data() + hexValue.size(), codePoint, 16);
     AD_CORRECTNESS_CHECK(result.ec == std::errc{});
-
-    bool isFullCodePoint = hexValue.size() == 8;
     AD_CORRECTNESS_CHECK(
         hexValue.size() == 8 || hexValue.size() == 4,
         "Unicode escape sequences must be either 8 or 4 characters long.");
 
+    bool isFullCodePoint = hexValue.size() == 8;
+
+    // See https://symbl.cc/en/unicode/blocks/high-surrogates/ for more
+    // information.
     if (U16_IS_LEAD(codePoint)) {
       throwError(!isFullCodePoint,
                  "Surrogates should not be encoded as full code points.");
@@ -92,6 +106,11 @@ std::string ParserAndVisitor::unescapeUnicodeSequences(std::string input) {
 
     icu::UnicodeString helper{codePoint};
     helper.toUTF8String(output);
+  }
+
+  // Avoid redundant copy if no escape sequences were found.
+  if (noEscapeSequenceFound) {
+    return input;
   }
 
   throwError(highSurrogate == 0,
