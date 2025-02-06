@@ -345,7 +345,7 @@ class CompressedExternalIdTableBase {
   // Add a single row to the input. The type of `row` needs to be something that
   // can be `push_back`ed to a `IdTable`.
   CPP_template(typename R)(
-      requires HasPushBackConcept<IdTableStatic<NumStaticCols>,
+      requires HasPushBackConcept<decltype(currentBlock_),
                                   R>) void push(const R& row)
   // void push(const auto& row) requires requires {
   // currentBlock_.push_back(row); }
