@@ -25,7 +25,7 @@ void PolymorphicVocabulary::close() {
 
 // _____________________________________________________________________________
 size_t PolymorphicVocabulary::size() const {
-  return std::visit([](auto& vocab) { return vocab.size(); }, vocab_);
+  return std::visit([](auto& vocab) -> size_t { return vocab.size(); }, vocab_);
 }
 
 // _____________________________________________________________________________
