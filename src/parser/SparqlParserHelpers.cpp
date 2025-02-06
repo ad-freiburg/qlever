@@ -44,7 +44,7 @@ std::string ParserAndVisitor::unescapeUnicodeSequences(std::string input) {
                               input.size()};
   std::string output;
   size_t lastPos = 0;
-  UChar32 highSurrogate = '\0';
+  UChar32 highSurrogate = 0;
 
   auto throwError = [](bool condition, const std::string& message) {
     if (!condition) {
@@ -75,20 +75,20 @@ std::string ParserAndVisitor::unescapeUnicodeSequences(std::string input) {
       throwError(!isFullCodePoint,
                  "Surrogates should not be encoded as full code points.");
       throwError(
-          highSurrogate == '\0',
+          highSurrogate == 0,
           "A high surrogate cannot be followed by another high surrogate.");
       highSurrogate = codePoint;
       continue;
     } else if (U16_IS_TRAIL(codePoint)) {
       throwError(!isFullCodePoint,
                  "Surrogates should not be encoded as full code points.");
-      throwError(highSurrogate != '\0',
+      throwError(highSurrogate != 0,
                  "A low surrogate cannot be the first surrogate.");
       codePoint = U16_GET_SUPPLEMENTARY(highSurrogate, codePoint);
-      highSurrogate = '\0';
+      highSurrogate = 0;
     } else {
       throwError(
-          highSurrogate == '\0',
+          highSurrogate == 0,
           "A high surrogate cannot be followed by a regular code point.");
     }
 
@@ -96,7 +96,7 @@ std::string ParserAndVisitor::unescapeUnicodeSequences(std::string input) {
     helper.toUTF8String(output);
   }
 
-  throwError(highSurrogate == '\0',
+  throwError(highSurrogate == 0,
              "A high surrogate must be followed by a low surrogate.");
 
   output += input.substr(lastPos);
