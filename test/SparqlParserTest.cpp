@@ -1246,3 +1246,82 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
         triples[2]);
   }
 }
+
+namespace {
+std::string getFirstTriple(const ParsedQuery& q) {
+  return q._rootGraphPattern._graphPatterns.at(0)
+      .getBasic()
+      ._triples.at(0)
+      .asString();
+}
+}  // namespace
+
+TEST(ParserTest, HandlesBasicUnicodeEscapeSequences) {
+  ParsedQuery q1 = SparqlParser::parseQuery(
+      R"(SELECT * WHERE { ?s <http://a.example/p1> '\u0080\u07FF\u0800\u0FFF\u1000\uCFFF\uD000\uD7FF\uE000\uFFFD\U00010000\U0003FFFD\U00040000\U000FFFFD\U00100000\U0010FFFD'})");
+  EXPECT_EQ(getFirstTriple(q1),
+            "{s: ?s, p: <http://a.example/p1>, o: "
+            "\"\u0080\u07FF\u0800\u0FFF\u1000\uCFFF\uD000\uD7FF\uE000\uFFFD"
+            "\U00010000\U0003FFFD\U00040000\U000FFFFD\U00100000\U0010FFFD\"}");
+
+  ParsedQuery q2 =
+      SparqlParser::parseQuery(R"(SELECT * WHERE { ?s ?p "\U0001f46a" . })");
+  EXPECT_EQ(getFirstTriple(q2), "{s: ?s, p: ?p, o: \"\U0001f46a\"}");
+
+  ParsedQuery q3 = SparqlParser::parseQuery(
+      R"(PREFIX \u03B1: <http://example.com/\u00E9fg> SELECT * WHERE { ?s ?p α\u003Aba . })");
+  EXPECT_EQ(getFirstTriple(q3),
+            "{s: ?s, p: ?p, o: <http://example.com/éfgba>}");
+
+  ParsedQuery q4 = SparqlParser::parseQuery(
+      R"(SELECT * WHERE { <http://example.com/\U0001F937\U0001F3FD\u200D\U00002642\ufe0F> ?p\u00201. })");
+  EXPECT_EQ(getFirstTriple(q4),
+            "{s: <http://example.com/🤷🏽‍♂️>, p: ?p, o: 1}");
+}
+
+TEST(ParserTest, HandlesSurrogatesCorrectly) {
+  using SP = SparqlParser;
+  using ::testing::HasSubstr;
+  ParsedQuery q = SP::parseQuery(
+      R"(SELECT * WHERE { "\uD83E\udD37\uD83C\uDFFD\u200D\u2642\uFE0F" ?p 1. })");
+  EXPECT_EQ(getFirstTriple(q), "{s: \"🤷🏽‍♂️\", p: ?p, o: 1}");
+
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      SP::parseQuery(R"(SELECT * WHERE { ?s ?p '\uD800' })"),
+      HasSubstr("A high surrogate must be followed by a low surrogate."),
+      InvalidSparqlQueryException);
+
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      SP::parseQuery(R"(SELECT * WHERE { ?s ?p '\U0000D800' })"),
+      HasSubstr("Surrogates should not be encoded as full code points."),
+      InvalidSparqlQueryException);
+
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      SP::parseQuery(R"(SELECT * WHERE { ?s ?p '\uD800\uD800' })"),
+      HasSubstr(
+          "A high surrogate cannot be followed by another high surrogate."),
+      InvalidSparqlQueryException);
+
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      SP::parseQuery(R"(SELECT * WHERE { ?s ?p '\U0000DFFD' })"),
+      HasSubstr("Surrogates should not be encoded as full code points."),
+      InvalidSparqlQueryException);
+
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      SP::parseQuery(R"(SELECT * WHERE { ?s ?p '\uDFFD' })"),
+      HasSubstr("A low surrogate cannot be the first surrogate."),
+      InvalidSparqlQueryException);
+
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      SP::parseQuery(R"(SELECT * WHERE { ?s ?p '\uD800\u0020' })"),
+      HasSubstr("A high surrogate cannot be followed by a regular code point."),
+      InvalidSparqlQueryException);
+
+  // Note: We don't allow mixing escaped and unescape surrogates, that's just
+  // weird and the C++ compiler rightfully won't compile strings like these:
+  // SELECT * WHERE { ?s ?p '\\uD83C\uDFFD' }
+  // SELECT * WHERE { ?s ?p '\uD83C\\uDFFD' }
+
+  // So writing unit tests for these cases is not possible without creating
+  // semi-invalid UTF-8 strings.
+}

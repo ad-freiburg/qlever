@@ -43,23 +43,19 @@ std::string ParserAndVisitor::unescapeUnicodeSequences(std::string input) {
   std::u8string_view utf8View{reinterpret_cast<char8_t*>(input.data()),
                               input.size()};
   std::string output;
-  size_t currentPos = 0;
   size_t lastPos = 0;
   UChar32 highSurrogate = '\0';
 
-  auto throwError = [&input, &currentPos](bool condition,
-                                          const std::string& message) {
+  auto throwError = [](bool condition, const std::string& message) {
     if (!condition) {
       throw InvalidSparqlQueryException{
-          absl::StrCat("Error in unicode escape sequence in input: ", input,
-                       " at position ", currentPos, ": ", message)};
+          absl::StrCat("Error in unicode escape sequence. ", message)};
     }
   };
 
   for (auto match :
        ctre::search_all<R"(\\U[0-9A-Fa-f]{8}|\\u[0-9A-Fa-f]{4})">(utf8View)) {
     output += input.substr(lastPos, match.data() - (utf8View.data() + lastPos));
-    currentPos = match.data() - utf8View.data();
     lastPos = match.data() + match.size() - utf8View.data();
 
     auto hexValue = match.to_view();
@@ -71,9 +67,9 @@ std::string ParserAndVisitor::unescapeUnicodeSequences(std::string input) {
     AD_CORRECTNESS_CHECK(result.ec == std::errc{});
 
     bool isFullCodePoint = hexValue.size() == 10;
-    throwError(
+    AD_CORRECTNESS_CHECK(
         hexValue.size() == 10 || hexValue.size() == 6,
-        "Unicode escape sequences must be either 8 or 4  characters long.");
+        "Unicode escape sequences must be either 8 or 4 characters long.");
 
     if (U16_IS_LEAD(codePoint)) {
       throwError(!isFullCodePoint,
@@ -91,15 +87,15 @@ std::string ParserAndVisitor::unescapeUnicodeSequences(std::string input) {
       codePoint = U16_GET_SUPPLEMENTARY(highSurrogate, codePoint);
       highSurrogate = '\0';
     } else {
-      throwError(highSurrogate == '\0',
-                 "A high surrogate cannot be followed by a code point.");
+      throwError(
+          highSurrogate == '\0',
+          "A high surrogate cannot be followed by a regular code point.");
     }
 
     icu::UnicodeString helper{codePoint};
     helper.toUTF8String(output);
   }
 
-  currentPos = lastPos;
   throwError(highSurrogate == '\0',
              "A high surrogate must be followed by a low surrogate.");
 
