@@ -32,8 +32,10 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     endif ()
 
 elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-    if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "15.0.0")
-        MESSAGE(FATAL_ERROR "Clang++ versions older than 15.0 are not supported by QLever")
+    option(COMPILER_VERSION_CHECK_DEACTIVATED "Disable compiler version check" OFF)
+
+    if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "16.0.0" AND NOT COMPILER_VERSION_CHECK_DEACTIVATED)
+        MESSAGE(FATAL_ERROR "Clang++ versions older than 16.0 are not supported by QLever")
     endif ()
 else ()
     MESSAGE(FATAL_ERROR "QLever currently only supports the G++ or LLVM-Clang++ compilers. Found ${CMAKE_CXX_COMPILER_ID}")

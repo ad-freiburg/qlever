@@ -49,7 +49,7 @@ jobs:
             build-type: Release
           - compiler: clang
             compiler-version: 15
-            additional-cmake-options: "-DUSE_CPP_17_BACKPORTS=ON -DCMAKE_CXX_STANDARD=17 -DCMAKE_CXX_FLAGS='-ferror-limit=0'"
+            additional-cmake-options: "-DUSE_CPP_17_BACKPORTS=ON -DCMAKE_CXX_STANDARD=17 -DCMAKE_CXX_FLAGS='-ferror-limit=0' -DCOMPILER_VERSION_CHECK_DEACTIVATED=ON"
             build-type: Debug
             expensive-tests: false
             continue-on-error: true
