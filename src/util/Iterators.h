@@ -256,11 +256,6 @@ class InputRangeMixin {
     return Iterator{this};
   }
   Sentinel end() const { return {}; }
-
-  Iterator begin() const {
-    derived().start();
-    return Iterator{this};
-  }
 };
 
 // A similar mixin to the above, with slightly different characteristics:

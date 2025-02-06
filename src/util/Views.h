@@ -129,45 +129,49 @@ CPP_template(typename UnderlyingRange, bool supportConst = true)(
 
   constexpr auto end() { return ql::ranges::end(underlyingRange_); }
 
-  constexpr auto begin() const -> CPP_ret(
-      ql::ranges::iterator_t<const UnderlyingRange>)(
-      requires supportConst CPP_and ql::ranges::range<const UnderlyingRange>) {
+  template <bool b = true,
+            std::enable_if_t<b && supportConst &&
+                                 ql::ranges::range<const UnderlyingRange>,
+                             int> = 0>
+  constexpr auto begin() const -> auto {
     return ql::ranges::begin(underlyingRange_);
   }
 
-  constexpr auto end() const -> CPP_ret(
-      ql::ranges::iterator_t<const UnderlyingRange>)(
-      requires supportConst CPP_and ql::ranges::range<const UnderlyingRange>) {
+  template <bool b = true,
+            std::enable_if_t<b && supportConst &&
+                                 ql::ranges::range<const UnderlyingRange>,
+                             int> = 0>
+  constexpr auto end() const -> auto {
     return ql::ranges::end(underlyingRange_);
   }
 
-  constexpr auto empty() -> CPP_ret(bool)(
-      requires ad_utility::detail::IsEmptyRange<UnderlyingRange>) {
+  template <typename U = UnderlyingRange>
+  constexpr auto empty() const
+      -> CPP_ret(bool)(requires ad_utility::detail::IsEmptyRange<const U>) {
     return ql::ranges::empty(underlyingRange_);
   }
 
-  constexpr auto empty() const -> CPP_ret(bool)(
-      requires ad_utility::detail::IsEmptyRange<const UnderlyingRange>) {
-    return ql::ranges::empty(underlyingRange_);
-  }
-
+  template <typename U = UnderlyingRange>
   constexpr auto size()
-      -> CPP_ret(size_t)(requires ql::ranges::sized_range<UnderlyingRange>) {
+      -> CPP_ret(size_t)(requires ql::ranges::sized_range<U>) {
     return ql::ranges::size(underlyingRange_);
   }
 
-  constexpr auto size() const -> CPP_ret(size_t)(
-      requires ql::ranges::sized_range<const UnderlyingRange>) {
+  template <typename U = UnderlyingRange>
+  constexpr auto size() const
+      -> CPP_ret(size_t)(requires ql::ranges::sized_range<const U>) {
     return ql::ranges::size(underlyingRange_);
   }
 
-  constexpr auto data() -> CPP_ret(UnderlyingRange*)(
-      requires ql::ranges::contiguous_range<UnderlyingRange>) {
+  template <typename U = UnderlyingRange>
+  constexpr auto data()
+      -> CPP_ret(U*)(requires ql::ranges::contiguous_range<U>) {
     return ql::ranges::data(underlyingRange_);
   }
 
-  constexpr auto data() const -> CPP_ret(const UnderlyingRange*)(
-      requires ql::ranges::contiguous_range<const UnderlyingRange>) {
+  template <typename U = UnderlyingRange>
+  constexpr auto data() const
+      -> CPP_ret(const U*)(requires ql::ranges::contiguous_range<const U>) {
     return ql::ranges::data(underlyingRange_);
   }
 };
@@ -241,7 +245,7 @@ struct BufferedAsyncView : InputRangeMixin<BufferedAsyncView<View>> {
     return buffer;
   };
 
-  void start() const {
+  void start() {
     it_ = view_.begin();
     buffer_ = getNextBlock();
     finished_ = buffer_.empty();
@@ -252,7 +256,7 @@ struct BufferedAsyncView : InputRangeMixin<BufferedAsyncView<View>> {
   auto& get() { return buffer_; }
   const auto& get() const { return buffer_; }
 
-  void next() const {
+  void next() {
     buffer_ = future_.get();
     finished_ = buffer_.empty();
     future_ =
