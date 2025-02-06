@@ -22,11 +22,13 @@
 
 namespace ad_utility {
 
+namespace {
 template <typename B, typename R>
-CPP_requires(HasPushBack, requires(B& b, const R& r)(b.push_back(r)));
+CPP_requires(HasPushBackRequires, requires(B& b, const R& r)(b.push_back(r)));
 
 template <typename B, typename R>
-CPP_concept HasPushBackConcept = CPP_requires_ref(HasPushBack, B, R);
+CPP_concept HasPushBack = CPP_requires_ref(HasPushBackRequires, B, R);
+}
 
 using namespace ad_utility::memory_literals;
 
@@ -345,10 +347,8 @@ class CompressedExternalIdTableBase {
   // Add a single row to the input. The type of `row` needs to be something that
   // can be `push_back`ed to a `IdTable`.
   CPP_template(typename R)(
-      requires HasPushBackConcept<decltype(currentBlock_),
+      requires HasPushBack<decltype(currentBlock_),
                                   R>) void push(const R& row)
-  // void push(const auto& row) requires requires {
-  // currentBlock_.push_back(row); }
   {
     ++numElementsPushed_;
     currentBlock_.push_back(row);
