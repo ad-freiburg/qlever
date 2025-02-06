@@ -155,6 +155,9 @@ class QueryExecutionContext {
     return *namedQueryCache_;
   }
 
+  auto& pinWithExplicitName() { return pinWithExplicitName_; }
+  const auto& pinWithExplicitName() const { return pinWithExplicitName_; }
+
  private:
   const Index& _index;
 
@@ -176,4 +179,6 @@ class QueryExecutionContext {
       RuntimeParameters().get<"websocket-updates-enabled">();
 
   NamedQueryCache* namedQueryCache_ = nullptr;
+
+  std::optional<std::string> pinWithExplicitName_ = std::nullopt;
 };

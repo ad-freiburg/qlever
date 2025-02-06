@@ -19,7 +19,6 @@
 #include "index/IndexImpl.h"
 #include "util/AsioHelpers.h"
 #include "util/MemorySize/MemorySize.h"
-#include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/ParseableDuration.h"
 #include "util/TypeIdentity.h"
 #include "util/TypeTraits.h"
@@ -872,25 +871,14 @@ Awaitable<void> Server::processQuery(
   limitOffset._offset -= qet.getRootOperation()->getLimit()._offset;
 
   if (pinNamed.has_value()) {
-    // The query is to be pinned in the named cache. In this case we don't
-    // return the result, but only pin it.
-    auto result = qet.getResult(false);
-    auto t =
-        NamedQueryCache::Value(result->idTable().clone(),
-                               qet.getVariableColumns(), result->sortedBy());
-    qec.namedQueryCache().store(pinNamed.value(), std::move(t));
-
-    auto response = ad_utility::httpUtils::createOkResponse(
-        "Successfully pinned the query result", request,
-        ad_utility::MediaType::textPlain);
-    co_await send(response);
-  } else {
-    // This actually processes the query and sends the result in the requested
-    // format.
-    co_await sendStreamableResponse(request, send, mediaType, plannedQuery, qet,
-                                    requestTimer, cancellationHandle);
+    // TODO<joka921>  1. Make this require a valid access token. 2. also allow
+    // for clearing the cache.
+    qec.pinWithExplicitName() = pinNamed.value();
   }
-
+  // This actually processes the query and sends the result in the requested
+  // format.
+  co_await sendStreamableResponse(request, send, mediaType, plannedQuery, qet,
+                                  requestTimer, cancellationHandle);
   // Print the runtime info. This needs to be done after the query
   // was computed.
   LOG(INFO) << "Done processing query and sending result"
