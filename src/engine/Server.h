@@ -143,13 +143,13 @@ class Server {
       const ad_utility::url_parser::ParamValueMap& params,
       ParsedQuery&& parsedOperation,
       SharedCancellationHandle cancellationHandle, QueryExecutionContext qec,
-      ad_utility::Timer& requestTimer,
+      const ad_utility::Timer& requestTimer,
       const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
       TimeLimit timeLimit);
   // Do the actual execution of a query.
   Awaitable<void> processQuery(
       const ad_utility::url_parser::ParamValueMap& params, ParsedQuery&& query,
-      ad_utility::Timer& requestTimer,
+      const ad_utility::Timer& requestTimer,
       ad_utility::SharedCancellationHandle cancellationHandle,
       QueryExecutionContext& qec,
       const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
@@ -165,7 +165,7 @@ class Server {
   FRIEND_TEST(ServerTest, createResponseMetadata);
   // Do the actual execution of an update.
   Awaitable<void> processUpdate(
-      ParsedQuery&& update, ad_utility::Timer& requestTimer,
+      ParsedQuery&& update, const ad_utility::Timer& requestTimer,
       ad_utility::SharedCancellationHandle cancellationHandle,
       QueryExecutionContext& qec,
       const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
@@ -209,7 +209,7 @@ class Server {
 
   static json composeErrorResponseJson(
       const string& query, const std::string& errorMsg,
-      ad_utility::Timer& requestTimer,
+      const ad_utility::Timer& requestTimer,
       const std::optional<ExceptionMetadata>& metadata = std::nullopt);
 
   json composeStatsJson() const;
@@ -282,6 +282,6 @@ class Server {
   Awaitable<void> sendStreamableResponse(
       const ad_utility::httpUtils::HttpRequest auto& request, auto& send,
       ad_utility::MediaType mediaType, const PlannedQuery& plannedQuery,
-      const QueryExecutionTree& qet, ad_utility::Timer& requestTimer,
+      const QueryExecutionTree& qet, const ad_utility::Timer& requestTimer,
       SharedCancellationHandle cancellationHandle) const;
 };

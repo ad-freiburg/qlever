@@ -632,7 +632,7 @@ Awaitable<Server::PlannedQuery> Server::planQuery(
 // _____________________________________________________________________________
 json Server::composeErrorResponseJson(
     const string& query, const std::string& errorMsg,
-    ad_utility::Timer& requestTimer,
+    const ad_utility::Timer& requestTimer,
     const std::optional<ExceptionMetadata>& metadata) {
   json j;
   using ad_utility::Timer;
@@ -712,7 +712,7 @@ ad_utility::websocket::OwningQueryId Server::getQueryId(
 Awaitable<void> Server::sendStreamableResponse(
     const ad_utility::httpUtils::HttpRequest auto& request, auto& send,
     MediaType mediaType, const PlannedQuery& plannedQuery,
-    const QueryExecutionTree& qet, ad_utility::Timer& requestTimer,
+    const QueryExecutionTree& qet, const ad_utility::Timer& requestTimer,
     SharedCancellationHandle cancellationHandle) const {
   auto responseGenerator = ExportQueryExecutionTrees::computeResult(
       plannedQuery.parsedQuery_, qet, mediaType, requestTimer,
@@ -802,7 +802,7 @@ ad_utility::websocket::MessageSender Server::createMessageSender(
 // ____________________________________________________________________________
 Awaitable<void> Server::processQuery(
     const ad_utility::url_parser::ParamValueMap& params, ParsedQuery&& query,
-    ad_utility::Timer& requestTimer,
+    const ad_utility::Timer& requestTimer,
     ad_utility::SharedCancellationHandle cancellationHandle,
     QueryExecutionContext& qec,
     const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
@@ -948,7 +948,7 @@ json Server::processUpdateImpl(
 
 // ____________________________________________________________________________
 Awaitable<void> Server::processUpdate(
-    ParsedQuery&& update, ad_utility::Timer& requestTimer,
+    ParsedQuery&& update, const ad_utility::Timer& requestTimer,
     ad_utility::SharedCancellationHandle cancellationHandle,
     QueryExecutionContext& qec,
     const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
@@ -985,7 +985,7 @@ template <QL_CONCEPT_OR_TYPENAME(QueryOrUpdate) Operation>
 Awaitable<void> Server::processQueryOrUpdate(
     const ad_utility::url_parser::ParamValueMap& params,
     ParsedQuery&& parsedOperation, SharedCancellationHandle cancellationHandle,
-    QueryExecutionContext qec, ad_utility::Timer& requestTimer,
+    QueryExecutionContext qec, const ad_utility::Timer& requestTimer,
     const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
     TimeLimit timeLimit) {
   using namespace ad_utility::httpUtils;
