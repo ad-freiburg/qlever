@@ -9,6 +9,8 @@
 using ad_utility::VocabularyType;
 
 namespace {
+
+// Test a `PolymorphicVocabulary` with a given `vocabType`.
 void testForVocabType(VocabularyType::Enum vocabType) {
   VocabularyType type{vocabType};
   std::string filename =
@@ -37,6 +39,15 @@ void testForVocabType(VocabularyType::Enum vocabType) {
 }
 }  // namespace
 
+// Test the general functionality of the `PolymorphicVocabulary` for all the
+// possible `VocabularyType`s.
 TEST(PolymorphicVocabulary, basicTests) {
   ql::ranges::for_each(VocabularyType::all(), &testForVocabType);
+}
+
+// Test a corner case in a `switch` statement.
+TEST(PolymorphicVocabulary, invalidVocabularyType) {
+  PolymorphicVocabulary vocab;
+  auto invalidType = VocabularyType{static_cast<VocabularyType::Enum>(23401)};
+  EXPECT_ANY_THROW(vocab.resetToType(invalidType));
 }
