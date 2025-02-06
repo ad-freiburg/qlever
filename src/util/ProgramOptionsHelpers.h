@@ -55,7 +55,7 @@ void validate(boost::any& v, const std::vector<std::string>& values,
               std::optional<T>*, int) {
   // First parse as a T
   T* dummy = nullptr;
-  // using namespace boost::program_options;
+  using namespace boost::program_options;
   validate(v, values, dummy, 0);
 
   // Wrap the T inside std::optional

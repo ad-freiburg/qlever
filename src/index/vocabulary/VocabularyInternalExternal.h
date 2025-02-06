@@ -8,8 +8,8 @@
 #include <string>
 #include <string_view>
 
-#include "index/VocabularyOnDisk.h"
 #include "index/vocabulary/VocabularyInMemoryBinSearch.h"
+#include "index/vocabulary/VocabularyOnDisk.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "util/Exception.h"
 

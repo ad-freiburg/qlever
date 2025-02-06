@@ -186,6 +186,8 @@ Index makeTestIndex(const std::string& indexBasename,
     index.loadAllPermutations() = loadAllPermutations;
     qlever::InputFileSpecification spec{inputFilename, qlever::Filetype::Turtle,
                                         std::nullopt};
+    // randomly choose one of the vocabulary implementations
+    index.getImpl().setVocabularyTypeForIndexBuilding(VocabularyType::random());
     index.createFromFiles({spec});
     if (createTextIndex) {
       if (contentsOfWordsFileAndDocsFile.has_value()) {

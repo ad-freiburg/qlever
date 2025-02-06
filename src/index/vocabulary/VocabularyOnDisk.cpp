@@ -2,7 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach <johannes.kalmbach@gmail.com>
 
-#include "index/VocabularyOnDisk.h"
+#include "index/vocabulary/VocabularyOnDisk.h"
 
 #include <fstream>
 

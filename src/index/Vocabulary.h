@@ -21,12 +21,9 @@
 #include "global/Id.h"
 #include "global/Pattern.h"
 #include "index/StringSortComparator.h"
-#include "index/VocabularyOnDisk.h"
-#include "index/vocabulary/CompressedVocabulary.h"
 #include "index/vocabulary/PolymorphicVocabulary.h"
 #include "index/vocabulary/UnicodeVocabulary.h"
 #include "index/vocabulary/VocabularyInMemory.h"
-#include "index/vocabulary/VocabularyInternalExternal.h"
 #include "util/Exception.h"
 #include "util/HashMap.h"
 #include "util/HashSet.h"
@@ -216,10 +213,16 @@ class Vocabulary {
   // vocabulary.
   UnderlyingVocabulary::WordWriter makeWordWriter(
       const std::string& filename) const {
+    // Note: In GCC this triggers a move construction of the created
+    // `DiskWriter`, although mandatory copy elision should kick in here
+    // according to our understanding (and does in clang). We could investigate
+    // whether this is a bug in GCC or whether we are missing something.
     return vocabulary_.getUnderlyingVocabulary().makeDiskWriter(filename);
   }
 
-  // TODO<joka921> Comment.
+  // If the `UnderlyingVocabulary` is a `PolymorphicVocabulary`, close the
+  // vocabulary and set the type of the vocabulary according to the `type`
+  // argument (see the `PolymorphicVocabulary` class for details).
   void resetToType(ad_utility::VocabularyType type) {
     if constexpr (std::is_same_v<UnderlyingVocabulary, PolymorphicVocabulary>) {
       vocabulary_.getUnderlyingVocabulary().resetToType(type);
@@ -228,29 +231,17 @@ class Vocabulary {
 };
 
 namespace detail {
-// The two mactors `_QLEVER_VOCAB_IN_MEMORY` and
-// `_QLEVER_ENABLE_VOCAB_COMPRESSION` can be used to disable the external vocab
-// and the compression of the vocab at compile time. NOTE: These change the
-// binary format of QLever's index, so changing them requires rebuilding of the
-// indices.
-/*
-#ifdef _QLEVER_VOCAB_IN_MEMORY
-using VocabStorage = VocabularyInMemory;
-#else
-using VocabStorage = VocabularyInternalExternal;
-#endif
-*/
+// Thecompile-time definitions `_QLEVER_VOCAB_UNCOMPRESSED_IN_MEMORY` can be
+// used to disable the external vocab and the compression of the vocab at
+// compile time. NOTE: These change the binary format of QLever's index, so
+// changing them requires rebuilding of the indices.
 
-/*
-#ifndef _QLEVER_ENABLE_VOCAB_COMPRESSION
-using UnderlyingVocabRdfsVocabulary = VocabStorage;
+#ifdef _QLEVER_VOCAB_UNCOMPRESSED_IN_MEMORY
+using UnderlyingVocabRdfsVocabulary = VocabularyInMemory;
 #else
-using UnderlyingVocabRdfsVocabulary = CompressedVocabulary<VocabStorage>;
-#endif
-*/
-
-// TODO<joka921> Change this place.
 using UnderlyingVocabRdfsVocabulary = PolymorphicVocabulary;
+#endif
+
 using UnderlyingVocabTextVocabulary = VocabularyInMemory;
 }  // namespace detail
 

@@ -17,6 +17,7 @@
 #include "util/File.h"
 #include "util/Generator.h"
 #include "util/Iterators.h"
+#include "util/ResetWhenMoved.h"
 #include "util/Serializer/FileSerializer.h"
 #include "util/Serializer/SerializeVector.h"
 #include "util/TypeTraits.h"
@@ -181,7 +182,9 @@ struct CompactStringVectorWriter {
   off_t _startOfFile;
   using offset_type = typename CompactVectorOfStrings<data_type>::offset_type;
   std::vector<offset_type> _offsets;
-  bool _finished = false;
+  // A `CompactStringVectorWriter` that has been moved from may not call
+  // `finish()` any more in its destructor.
+  ad_utility::ResetWhenMoved<bool, true> _finished = false;
   offset_type _nextOffset = 0;
 
   explicit CompactStringVectorWriter(const std::string& filename)

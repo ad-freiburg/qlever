@@ -7,44 +7,71 @@
 #include <array>
 #include <string_view>
 
+#include "util/Random.h"
 #include "util/json.h"
 
 namespace ad_utility {
+
+// A lightweight enum for the different implementation strategies of the
+// `PolymorphicVocabulary`. Also includes operations for conversion to and from
+// string.
+// TODO<joka921> Implement a generic mixin that can also be used for other
+// enums, especially such used in command-line interfaces.
 class VocabularyType {
  public:
+  // The different vocabulary implementations;
   enum struct Enum { InMemory, OnDisk, CompressedInMemory, CompressedOnDisk };
 
  private:
   Enum value_ = Enum::InMemory;
 
-  static constexpr std::array<std::string_view, 4> descriptions{
+  static constexpr size_t numValues_ = 4;
+  // All possible values.
+  static constexpr std::array<Enum, numValues_> all_{
+      Enum::InMemory, Enum::OnDisk, Enum::CompressedInMemory,
+      Enum::CompressedOnDisk};
+
+  // The string representations of the enum values.
+  static constexpr std::array<std::string_view, numValues_> descriptions_{
       "in-memory-uncompressed", "on-disk-uncompressed", "in-memory-compressed",
       "on-disk-compressed"};
 
+  static_assert(all_.size() == descriptions_.size());
+
  public:
+  // Constructors
   VocabularyType() = default;
   explicit VocabularyType(Enum value) : value_{value} {}
 
+  // Create from a string. The string must be one of the `descriptions_`,
+  // otherwise a `runtime_error_` is thrown.
   static VocabularyType fromString(std::string_view description) {
-    auto it = ql::ranges::find(descriptions, description);
-    if (it == descriptions.end()) {
+    auto it = ql::ranges::find(descriptions_, description);
+    if (it == descriptions_.end()) {
       throw std::runtime_error{
           absl::StrCat("\"", description,
                        "\" is not a valid vocabulary type. The currently "
                        "supported vocabulary types are ",
                        getListOfSupportedValues())};
     }
-    return VocabularyType{static_cast<Enum>(it - descriptions.begin())};
+    return VocabularyType{all().at(it - descriptions_.begin())};
   }
 
+  // Return all the possible enum values as a comma-separated single string.
   static std::string getListOfSupportedValues() {
-    return absl::StrJoin(descriptions, ", ");
-  }
-  std::string_view toString() const {
-    return descriptions.at(static_cast<size_t>(value_));
+    return absl::StrJoin(descriptions_, ", ");
   }
 
+  // Convert the enum to the corresponding string.
+  std::string_view toString() const {
+    return descriptions_.at(static_cast<size_t>(value_));
+  }
+
+  // Return the actual enum value.
   Enum value() const { return value_; }
+
+  // Return a list of all the enum values.
+  static constexpr const std::array<Enum, 4>& all() { return all_; }
 
   // Conversion To JSON.
   friend void to_json(nlohmann::json& j, const VocabularyType& vocabEnum) {
@@ -54,6 +81,12 @@ class VocabularyType {
   // Conversion from JSON.
   friend void from_json(const nlohmann::json& j, VocabularyType& vocabEnum) {
     vocabEnum = VocabularyType::fromString(static_cast<std::string>(j));
+  }
+
+  // Get a random value, useful for fuzz testing.
+  static VocabularyType random() {
+    ad_utility::FastRandomIntGenerator<size_t> r;
+    return VocabularyType{static_cast<Enum>(r() % numValues_)};
   }
 };
 }  // namespace ad_utility

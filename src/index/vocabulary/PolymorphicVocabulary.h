@@ -83,33 +83,12 @@ class PolymorphicVocabulary {
         vocab_);
   }
 
-  // Same as `lower_bound` above, but the comparator compares a `word` and an
-  // `iterator` instead of two words.
-  template <typename String, typename Comp>
-  WordAndIndex lower_bound_iterator(const String& word, Comp comp) const {
-    return std::visit(
-        [&word, &comp](auto& vocab) {
-          return vocab.lower_bound_iterator(word, std::move(comp));
-        },
-        vocab_);
-  }
-
   // Analogous to `lower_bound` (see above).
   template <typename String, typename Comp>
   WordAndIndex upper_bound(const String& word, Comp comp) const {
     return std::visit(
         [&word, &comp](auto& vocab) {
           return vocab.upper_bound(word, std::move(comp));
-        },
-        vocab_);
-  }
-
-  // Analogous to `lower_bound_iterator` (see above).
-  template <typename String, typename Comp>
-  WordAndIndex upper_bound_iterator(const String& word, Comp comp) const {
-    return std::visit(
-        [&word, &comp](auto& vocab) {
-          return vocab.upper_bound_iterator(word, std::move(comp));
         },
         vocab_);
   }
