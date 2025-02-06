@@ -247,15 +247,15 @@ class IdTable {
       const IdTable&) requires(!isView)
   = delete;
 
+#ifndef QLEVER_CPP_17
   //  Views are copyable, as they are cheap to copy.
-  // TODO: <ccoecontrol> what about these? template cannot be defaulted
-  // possible solution: implement defaulted ones by hand
   IdTable(const IdTable&) requires isView = default;
   IdTable& operator=(const IdTable&) requires isView = default;
 
   // `IdTable`s are movable
   IdTable(IdTable&& other) noexcept requires(!isView) = default;
   IdTable& operator=(IdTable&& other) noexcept requires(!isView) = default;
+#endif
 
  private:
   // Make the other instantiations of `IdTable` friends to allow for conversion
