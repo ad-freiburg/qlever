@@ -226,12 +226,13 @@ ProtoResult Operation::runComputation(const ad_utility::Timer& timer,
 // _____________________________________________________________________________
 CacheValue Operation::runComputationAndPrepareForCache(
     const ad_utility::Timer& timer, ComputationMode computationMode,
-    const QueryCacheKey& cacheKey, bool pinned) {
+    const QueryCacheKey& cacheKey, bool pinned, bool isRoot) {
   auto& cache = _executionContext->getQueryTreeCache();
   auto result = runComputation(timer, computationMode);
   auto maxSize =
-      std::min(RuntimeParameters().get<"lazy-result-max-cache-size">(),
-               cache.getMaxSizeSingleEntry());
+      isRoot ? cache.getMaxSizeSingleEntry()
+             : std::min(RuntimeParameters().get<"cache-max-size-lazy-result">(),
+                        cache.getMaxSizeSingleEntry());
   if (canResultBeCached() && !result.isFullyMaterialized() &&
       !unlikelyToFitInCache(maxSize)) {
     AD_CONTRACT_CHECK(!pinned);
@@ -306,9 +307,10 @@ std::shared_ptr<const Result> Operation::getResult(
                 updateRuntimeInformationOnFailure(timer.msecs());
               }
             });
-    auto cacheSetup = [this, &timer, computationMode, &cacheKey, pinResult]() {
+    auto cacheSetup = [this, &timer, computationMode, &cacheKey, pinResult,
+                       isRoot]() {
       return runComputationAndPrepareForCache(timer, computationMode, cacheKey,
-                                              pinResult);
+                                              pinResult, isRoot);
     };
 
     auto suitedForCache = [](const CacheValue& cacheValue) {

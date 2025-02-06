@@ -158,9 +158,26 @@ ExpressionPtr Visitor::processIriFunctionCall(
       checkNumArgs(1);
       return sparqlExpression::makeConvertToIntExpression(
           std::move(argList[0]));
-    } else if (functionName == "double" || functionName == "decimal") {
+    }
+    if (functionName == "decimal") {
+      checkNumArgs(1);
+      return sparqlExpression::makeConvertToDecimalExpression(
+          std::move(argList[0]));
+    }
+    // We currently don't have a float type, so we just convert to double.
+    if (functionName == "double" || functionName == "float") {
       checkNumArgs(1);
       return sparqlExpression::makeConvertToDoubleExpression(
+          std::move(argList[0]));
+    }
+    if (functionName == "boolean") {
+      checkNumArgs(1);
+      return sparqlExpression::makeConvertToBooleanExpression(
+          std::move(argList[0]));
+    }
+    if (functionName == "string") {
+      checkNumArgs(1);
+      return sparqlExpression::makeConvertToStringExpression(
           std::move(argList[0]));
     }
   }
@@ -262,6 +279,47 @@ Alias Visitor::visit(Parser::AliasWithoutBracketsContext* ctx) {
 }
 
 // ____________________________________________________________________________________
+parsedQuery::BasicGraphPattern Visitor::toGraphPattern(
+    const ad_utility::sparql_types::Triples& triples) {
+  parsedQuery::BasicGraphPattern pattern{};
+  pattern._triples.reserve(triples.size());
+  auto toTripleComponent = []<typename T>(const T& item) {
+    namespace tc = ad_utility::triple_component;
+    if constexpr (ad_utility::isSimilar<T, Variable>) {
+      return TripleComponent{item};
+    } else if constexpr (ad_utility::isSimilar<T, BlankNode>) {
+      // Blank Nodes in the pattern are to be treated as internal variables
+      // inside WHERE.
+      return TripleComponent{
+          ParsedQuery::blankNodeToInternalVariable(item.toSparql())};
+    } else {
+      static_assert(ad_utility::SimilarToAny<T, Literal, Iri>);
+      return RdfStringParser<TurtleParser<Tokenizer>>::parseTripleObject(
+          item.toSparql());
+    }
+  };
+  auto toPropertyPath = []<typename T>(const T& item) -> PropertyPath {
+    if constexpr (ad_utility::isSimilar<T, Variable>) {
+      return PropertyPath::fromVariable(item);
+    } else if constexpr (ad_utility::isSimilar<T, Iri>) {
+      return PropertyPath::fromIri(item.toSparql());
+    } else {
+      static_assert(ad_utility::SimilarToAny<T, Literal, BlankNode>);
+      // This case can only happen if there's a bug in the SPARQL parser.
+      AD_THROW("Literals or blank nodes are not valid predicates.");
+    }
+  };
+  for (const auto& triple : triples) {
+    auto subject = std::visit(toTripleComponent, triple.at(0));
+    auto predicate = std::visit(toPropertyPath, triple.at(1));
+    auto object = std::visit(toTripleComponent, triple.at(2));
+    pattern._triples.emplace_back(std::move(subject), std::move(predicate),
+                                  std::move(object));
+  }
+  return pattern;
+}
+
+// ____________________________________________________________________________________
 ParsedQuery Visitor::visit(Parser::ConstructQueryContext* ctx) {
   ParsedQuery query;
   query.datasetClauses_ = parsedQuery::DatasetClauses::fromClauses(
@@ -271,8 +329,16 @@ ParsedQuery Visitor::visit(Parser::ConstructQueryContext* ctx) {
                         .value_or(parsedQuery::ConstructClause{});
     visitWhereClause(ctx->whereClause(), query);
   } else {
+    // For `CONSTRUCT WHERE`, the CONSTRUCT template and the WHERE clause are
+    // syntactically the same, so we set the flag to true to keep the blank
+    // nodes, and convert them into variables during `toGraphPattern`.
+    isInsideConstructTriples_ = true;
+    auto cleanup =
+        absl::Cleanup{[this]() { isInsideConstructTriples_ = false; }};
     query._clause = parsedQuery::ConstructClause{
         visitOptional(ctx->triplesTemplate()).value_or(Triples{})};
+    query._rootGraphPattern._graphPatterns.emplace_back(
+        toGraphPattern(query.constructClause().triples_));
   }
   query.addSolutionModifiers(visit(ctx->solutionModifier()));
 
@@ -438,7 +504,7 @@ std::optional<Values> Visitor::visit(Parser::ValuesClauseContext* ctx) {
   return visitOptional(ctx->dataBlock());
 }
 
-// ____________________________________________________________________________________
+// ____________________________________________________________________________
 ParsedQuery Visitor::visit(Parser::UpdateContext* ctx) {
   // The prologue (BASE and PREFIX declarations)  only affects the internal
   // state of the visitor.
@@ -446,7 +512,9 @@ ParsedQuery Visitor::visit(Parser::UpdateContext* ctx) {
 
   auto update = visit(ctx->update1());
 
-  if (ctx->update()) {
+  // More than one operation in a single update request is not yet supported,
+  // but a semicolon after a single update is allowed.
+  if (ctx->update() && !ctx->update()->getText().empty()) {
     parsedQuery_ = ParsedQuery{};
     reportNotSupported(ctx->update(), "Multiple updates in one query are");
   }
