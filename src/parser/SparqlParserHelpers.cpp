@@ -44,6 +44,7 @@ std::string ParserAndVisitor::unescapeUnicodeSequences(std::string input) {
                               input.size()};
   std::string output;
   size_t lastPos = 0;
+  UChar32 highSurrogate = '\0';
 
   for (auto match :
        ctre::search_all<R"(\\U[0-9A-Fa-f]{8}|\\u[0-9A-Fa-f]{4})">(utf8View)) {
@@ -58,13 +59,39 @@ std::string ParserAndVisitor::unescapeUnicodeSequences(std::string input) {
         startPointer + 2, startPointer + hexValue.size(), codePoint, 16);
     AD_CORRECTNESS_CHECK(result.ec == std::errc{});
 
-    AD_CORRECTNESS_CHECK(codePoint < 0xD800 || codePoint > 0xDFFF,
-                         "High or low surrogate escape sequence detected, "
-                         "please use a valid Unicode code point instead.");
+    bool isFullCodePoint = hexValue.size() == 10;
+
+    if (U16_IS_LEAD(codePoint)) {
+      AD_CORRECTNESS_CHECK(!isFullCodePoint,
+                           "Surrogates should not be encoded "
+                           "as full code points.");
+      AD_CORRECTNESS_CHECK(highSurrogate == '\0',
+                           "A high surrogate cannot be "
+                           "followed by another high "
+                           "surrogate.");
+      highSurrogate = codePoint;
+      continue;
+    } else if (U16_IS_TRAIL(codePoint)) {
+      AD_CORRECTNESS_CHECK(!isFullCodePoint,
+                           "Surrogates should not be encoded "
+                           "as full code points.");
+      AD_CORRECTNESS_CHECK(highSurrogate != '\0',
+                           "A low surrogate cannot "
+                           "be the first surrogate.");
+      codePoint = U16_GET_SUPPLEMENTARY(highSurrogate, codePoint);
+      highSurrogate = '\0';
+    } else {
+      AD_CORRECTNESS_CHECK(highSurrogate == '\0',
+                           "A high surrogate cannot be "
+                           "followed by a code point.");
+    }
 
     icu::UnicodeString helper{codePoint};
     helper.toUTF8String(output);
   }
+
+  AD_CORRECTNESS_CHECK(highSurrogate == '\0',
+                       "A high surrogate must be followed by a low surrogate.");
 
   output += input.substr(lastPos);
   return output;
