@@ -46,49 +46,65 @@ util::geo::I32Box SpatialJoinAlgorithms::lsjParse(
     const auto wkt = qec_->getIndex().indexToString(id.getVocabIndex());
 
     if (wkt.size() > 6 && memcmp(wkt.c_str(), "\"POINT", 6) == 0) {
-      const auto& point = parsePoint(wkt.c_str() + 1);
+      const auto& point = parsePoint(wkt.c_str() + 6);
       ret = util::geo::getBoundingBox(point);
 
       if (util::geo::intersects(point, filterBox)) {
         sweeper.add(point, strId, side, parseBatches[t]);
       }
-    }
-
-    if (wkt.size() > 11 && memcmp(wkt.c_str(), "\"MULTIPOINT", 11) == 0) {
+    } else if (wkt.size() > 11 &&
+               memcmp(wkt.c_str(), "\"MULTIPOINT", 11) == 0) {
       const auto& mp =
-          util::geo::I32MultiPoint(parseLineString(wkt.c_str() + 1, 0));
+          util::geo::I32MultiPoint(parseLineString(wkt.c_str() + 11, 0));
       ret = util::geo::getBoundingBox(mp);
       if (mp.size() != 0 && util::geo::intersects(mp, filterBox))
         sweeper.add(mp, strId, side, parseBatches[t]);
-    }
-
-    if (wkt.size() > 11 && memcmp(wkt.c_str(), "\"LINESTRING", 11) == 0) {
-      const auto& line = parseLineString(wkt.c_str() + 1, 0);
+    } else if (wkt.size() > 11 &&
+               memcmp(wkt.c_str(), "\"LINESTRING", 11) == 0) {
+      const auto& line = parseLineString(wkt.c_str() + 11, 0);
       ret = util::geo::getBoundingBox(line);
       if (line.size() > 1 && util::geo::intersects(line, filterBox))
         sweeper.add(line, strId, side, parseBatches[t]);
-    }
-
-    if (wkt.size() > 16 && memcmp(wkt.c_str(), "\"MULTILINESTRING", 16) == 0) {
-      const auto& ml = parseMultiLineString(wkt.c_str() + 1, 0);
+    } else if (wkt.size() > 16 &&
+               memcmp(wkt.c_str(), "\"MULTILINESTRING", 16) == 0) {
+      const auto& ml = parseMultiLineString(wkt.c_str() + 16, 0);
       ret = util::geo::getBoundingBox(ml);
       if (util::geo::intersects(ml, filterBox)) {
         sweeper.add(ml, strId, side, parseBatches[t]);
       }
-    }
-
-    if (wkt.size() > 8 && memcmp(wkt.c_str(), "\"POLYGON", 8) == 0) {
-      const auto& poly = parsePolygon(wkt.c_str() + 1, 0);
+    } else if (wkt.size() > 8 && memcmp(wkt.c_str(), "\"POLYGON", 8) == 0) {
+      const auto& poly = parsePolygon(wkt.c_str() + 8, 0);
       ret = util::geo::getBoundingBox(poly);
       if (poly.getOuter().size() > 1 && util::geo::intersects(poly, filterBox))
         sweeper.add(poly, strId, side, parseBatches[t]);
-    }
-
-    if (wkt.size() > 13 && memcmp(wkt.c_str(), "\"MULTIPOLYGON", 13) == 0) {
-      const auto& mp = parseMultiPolygon(wkt.c_str() + 1, 0);
+    } else if (wkt.size() > 13 &&
+               memcmp(wkt.c_str(), "\"MULTIPOLYGON", 13) == 0) {
+      const auto& mp = parseMultiPolygon(wkt.c_str() + 13, 0);
       ret = util::geo::getBoundingBox(mp);
       if (mp.size() && util::geo::intersects(mp, filterBox))
         sweeper.add(mp, strId, side, parseBatches[t]);
+    } else if (wkt.size() > 19 &&
+               memcmp(wkt.c_str(), "\"GEOMETRYCOLLECTION", 19) == 0) {
+      const auto& p = parseGeometryCollection(wkt.c_str() + 19);
+      const auto& col = p.first;
+
+      size_t subId = p.second > 1 ? 1 : 0;
+
+      for (const auto& a : col) {
+        if (a.getType() == 0)
+          sweeper.add(a.getPoint(), strId, subId, side, parseBatches[t]);
+        if (a.getType() == 1)
+          sweeper.add(a.getLine(), strId, subId, side, parseBatches[t]);
+        if (a.getType() == 2)
+          sweeper.add(a.getPolygon(), strId, subId, side, parseBatches[t]);
+        if (a.getType() == 3)
+          sweeper.add(a.getMultiLine(), strId, subId, side, parseBatches[t]);
+        if (a.getType() == 4)
+          sweeper.add(a.getMultiPolygon(), strId, subId, side, parseBatches[t]);
+        if (a.getType() == 6)
+          sweeper.add(a.getMultiPoint(), strId, subId, side, parseBatches[t]);
+        subId++;
+      }
     }
   } else if (id.getDatatype() == Datatype::GeoPoint) {
     const auto& p = lsjTransform(id.getGeoPoint());
