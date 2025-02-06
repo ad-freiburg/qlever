@@ -30,6 +30,12 @@ auto relExpr = [](const IdOrLocalVocabEntry& referenceId)
   return std::make_unique<RelExpr>(referenceId);
 };
 
+// Make IsDatatypeExpression
+template <typename IsDtypeExpr>
+auto isDtypeExpr = []() -> std::unique_ptr<PrefilterExpression> {
+  return std::make_unique<IsDtypeExpr>();
+};
+
 // Make AndExpression or OrExpression
 template <typename LogExpr>
 auto logExpr = [](std::unique_ptr<PrefilterExpression> child1,
@@ -60,6 +66,14 @@ constexpr auto gt = relExpr<GreaterThanExpression>;
 constexpr auto eq = relExpr<EqualExpression>;
 // NOT EQUAL (`!=`)
 constexpr auto neq = relExpr<NotEqualExpression>;
+// IS IRI
+constexpr auto isIri = isDtypeExpr<IsIriExpression>;
+// IS LITERAL
+constexpr auto isLit = isDtypeExpr<IsLiteralExpression>;
+// IS NUMERIC
+constexpr auto isNum = isDtypeExpr<IsNumericExpression>;
+// IS BLANK
+constexpr auto isBlank = isDtypeExpr<IsBlankExpression>;
 // AND (`&&`)
 constexpr auto andExpr = logExpr<AndExpression>;
 // OR (`||`)
