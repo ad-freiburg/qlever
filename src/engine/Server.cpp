@@ -366,7 +366,7 @@ Awaitable<void> Server::process(
                          this]<QL_CONCEPT_OR_TYPENAME(QueryOrUpdate) Operation>(
                             const Operation& op, auto opFieldString,
                             std::function<bool(const ParsedQuery&)> pred,
-                            std::string_view msg) -> Awaitable<void> {
+                            std::string msg) -> Awaitable<void> {
     if (auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
             checkParameter("timeout", std::nullopt), accessTokenOk, request,
             send)) {
@@ -916,7 +916,7 @@ Awaitable<void> Server::processUpdate(
 // ____________________________________________________________________________
 Awaitable<void> Server::processOperation(
     auto&& operation, auto visitor, const ad_utility::Timer& requestTimer,
-    const ad_utility::httpUtils::HttpRequest auto& request, auto&& send) {
+    const ad_utility::httpUtils::HttpRequest auto& request, auto& send) {
   auto operationString = [&operation] {
     if (auto* q = std::get_if<Query>(&operation)) {
       return q->query_;
@@ -941,7 +941,8 @@ Awaitable<void> Server::processOperation(
   // of an error has been broken for some time
   std::optional<PlannedQuery> plannedQuery;
   try {
-    co_return co_await std::visit(visitor, std::move(operation));
+    co_return co_await std::visit(visitor,
+                                  std::forward<decltype(operation)>(operation));
   } catch (const ParseException& e) {
     responseStatus = http::status::bad_request;
     exceptionErrorMsg = e.errorMessageWithoutPositionalInfo();

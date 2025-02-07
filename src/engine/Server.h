@@ -128,7 +128,7 @@ class Server {
   // visitor on the given operation.
   Awaitable<void> processOperation(
       auto&& operation, auto visitor, const ad_utility::Timer& requestTimer,
-      const ad_utility::httpUtils::HttpRequest auto& request, auto&& send);
+      const ad_utility::httpUtils::HttpRequest auto& request, auto& send);
   // Do the actual execution of a query.
   Awaitable<void> processQuery(
       const ad_utility::url_parser::ParamValueMap& params, ParsedQuery&& query,
