@@ -101,7 +101,7 @@ double SpatialJoinAlgorithms::computeDist(
 
 // ____________________________________________________________________________
 size_t SpatialJoinAlgorithms::convertGeoPointToPoint(GeoPoint point) {
-  geometries_.push_back(Point(point.getLng(), point.getLat()));
+  geometries_.emplace_back(Point(point.getLng(), point.getLat()));
   return geometries_.size() - 1;  // index of the last element
 };
 
