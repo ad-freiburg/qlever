@@ -77,6 +77,6 @@ class ExecuteUpdate {
   // optimisations.
   static bool templatedTriplesExist(
       const vector<SparqlTripleSimpleWithGraph>& templates,
-      const ParsedQuery& query);
-  FRIEND_TEST(ExecuteUpdate, deletedTriplesExistInIndex);
+      const parsedQuery::GraphPattern& query);
+  FRIEND_TEST(ExecuteUpdate, templatedTriplesExist);
 };

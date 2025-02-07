@@ -123,7 +123,7 @@ void ExecuteUpdate::computeAndAddQuadsForResultRow(
 
 bool ExecuteUpdate::templatedTriplesExist(
     const vector<SparqlTripleSimpleWithGraph>& templates,
-    const ParsedQuery& query) {
+    const parsedQuery::GraphPattern& graphPattern) {
   // Triples with non-default graph are represented in graph patterns in a way
   // that we do not detect.
   if (std::ranges::any_of(
@@ -134,11 +134,11 @@ bool ExecuteUpdate::templatedTriplesExist(
   }
   // The triples all have the default graph as graph, we can treat them as a
   // `SparqlTripleSimple`.
-  if (query._rootGraphPattern._graphPatterns.size() != 1) {
+  if (graphPattern._graphPatterns.size() != 1) {
     return false;
   }
   const parsedQuery::GraphPatternOperation rootOperation =
-      query._rootGraphPattern._graphPatterns[0];
+      graphPattern._graphPatterns[0];
   if (!std::holds_alternative<parsedQuery::BasicGraphPattern>(rootOperation)) {
     return false;
   }
@@ -208,6 +208,10 @@ ExecuteUpdate::computeGraphUpdateQuads(
                           std::move(updateTriples), std::move(localVocab)};
       };
 
+  auto exist = std::bind(templatedTriplesExist, std::placeholders::_1,
+                         query._rootGraphPattern);
+  bool allDeleteExist = exist(graphUpdate.toDelete_);
+  bool allInsertExist = exist(graphUpdate.toInsert_);
   auto [toInsertTemplates, toInsert, localVocabInsert] =
       prepareTemplateAndResultContainer(std::move(graphUpdate.toInsert_));
   auto [toDeleteTemplates, toDelete, localVocabDelete] =
@@ -254,12 +258,12 @@ ExecuteUpdate::computeGraphUpdateQuads(
   // We only have to delete the triples A'\B and insert B\A'.
   sortAndRemoveDuplicates(toInsert);
   sortAndRemoveDuplicates(toDelete);
-  if (templatedTriplesExist(graphUpdate.toInsert_, query)) {
+  if (allInsertExist) {
     // If all triples to be inserted already exist, we can remove them from the
     // deletion and then can insert nothing.
     toDelete = setMinus(toDelete, toInsert);
     toInsert.clear();
-  } else if (templatedTriplesExist(graphUpdate.toDelete_, query)) {
+  } else if (allDeleteExist) {
     // If all triples to be deleted exist, we only have to insert/delete the
     // triples that are not in the other set.
     pairwiseSetMinus(toInsert, toDelete);

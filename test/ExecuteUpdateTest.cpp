@@ -4,6 +4,7 @@
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
+#include <parser/SparqlParserHelpers.h>
 
 #include "DeltaTriplesTestHelpers.h"
 #include "QueryPlannerTestHelpers.h"
@@ -385,32 +386,30 @@ TEST(ExecuteUpdate, computeAndAddQuadsForResultRow) {
                                        IdTriple{{V(0), V(1), V(2), V(3)}}}));
 }
 
-TEST(ExecuteUpdate, deletedTriplesExistInIndex) {
-  auto expectExistInIndex =
-      [](std::string query, const bool expectedExistInIndex,
-         source_location sourceLocation = source_location::current()) {
-        auto l = generateLocationTrace(sourceLocation);
-        const auto parsedQuery = SparqlParser::parseQuery(std::move(query));
-        EXPECT_THAT(ExecuteUpdate::deletedTriplesExistInIndex(parsedQuery),
-                    testing::Eq(expectedExistInIndex));
-      };
-  expectExistInIndex("DELETE { ?a <b> <c> } WHERE { ?a <b> <c> }", true);
-  expectExistInIndex(
-      "DELETE { ?a <b> <c> } INSERT { <a> <b> <c> } WHERE { ?a <b> <c> }",
-      true);
-  expectExistInIndex("DELETE { ?a <b> <d> } WHERE { ?a <b> <c> }", false);
+TEST(ExecuteUpdate, templatedTriplesExist) {
+  auto expectExistInIndex = [](const std::string& where,
+                               const std::string& templates,
+                               const bool expectedExist,
+                               source_location sourceLocation =
+                                   source_location::current()) {
+    auto l = generateLocationTrace(sourceLocation);
+    const auto graphPattern =
+        sparqlParserHelpers::parse<&SparqlAutomaticParser::groupGraphPattern>(
+            absl::StrCat("{", where, "}"))
+            .resultOfParse_;
+    const auto templateQuads =
+        sparqlParserHelpers::parse<&SparqlAutomaticParser::quads>(templates)
+            .resultOfParse_;
+    EXPECT_THAT(
+        ExecuteUpdate::templatedTriplesExist(templateQuads, graphPattern),
+        testing::Eq(expectedExist));
+  };
+  expectExistInIndex("?a <b> <c>", "?a <b> <c>", true);
+  expectExistInIndex("?a <b> <c>", "<a> <b> <c>", false);
+  expectExistInIndex("?a <b> <c>", "?a <b> <d>", false);
   // We can not sort the triples and thus not eliminate duplicates.
-  expectExistInIndex("DELETE { ?a <b> <c> . ?a <b> <c> } WHERE { ?a <b> <c> }",
-                     false);
-  expectExistInIndex("DELETE { ?a <b> <c> . ?a <c> <d> } WHERE { ?a <b> <c> }",
-                     false);
-  expectExistInIndex(
-      "DELETE { ?a <b> <c> } INSERT { <a> <b> <c> } WHERE { ?a <b> <c> . ?a "
-      "<d> ?e }",
-      true);
-  expectExistInIndex("DELETE WHERE { ?a <b> <c> }", true);
-  expectExistInIndex("DELETE WHERE { ?a <b> <c> . ?a <d> ?e }", true);
-  expectExistInIndex("DELETE DATA { <a> <b> <c> }", false);
-  expectExistInIndex("INSERT DATA { <a> <b> <c> }", false);
-  expectExistInIndex("INSERT { ?a <b> <d> } WHERE { ?a <b> <c> }", true);
+  expectExistInIndex("?a <b> <c>", "?a <b> <c> . ?a <b> <c>", false);
+  expectExistInIndex("?a <b> <c> . ?a <d> ?e", "?a <b> <c>", true);
+  expectExistInIndex("", "<a> <b> <c>", false);
+  expectExistInIndex("", "<a> <b> <c>", false);
 }

@@ -59,6 +59,18 @@ struct ParserAndVisitor {
                                          std::string{remainingString}};
   }
 };
+
+template <auto F, bool testInsideConstructTemplate = false>
+auto parse =
+    [](const string& input, SparqlQleverVisitor::PrefixMap prefixes = {},
+       SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks =
+           SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::False) {
+      ParserAndVisitor p{input, std::move(prefixes), disableSomeChecks};
+      if (testInsideConstructTemplate) {
+        p.visitor_.setParseModeToInsideConstructTemplateForTesting();
+      }
+      return p.parseTypesafe(F);
+    };
 }  // namespace sparqlParserHelpers
 
 #endif  // QLEVER_SPARQLPARSERHELPERS_H
