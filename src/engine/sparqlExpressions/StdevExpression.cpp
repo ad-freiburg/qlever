@@ -56,8 +56,9 @@ ExpressionResult DeviationExpression::evaluate(
   };
 
   // Visitor for child expression result
-  auto impl = [context,
-               devImpl](SingleExpressionResult auto&& el) -> ExpressionResult {
+  auto impl = [context, devImpl](auto&& el)
+      -> CPP_ret(ExpressionResult)(
+          requires SingleExpressionResult<decltype(el)>) {
     // Prepare space for result
     VectorWithMemoryLimit<IdOrLiteralOrIri> exprResult{context->_allocator};
     exprResult.resize(context->size());

@@ -208,8 +208,8 @@ void GroupBy::processGroup(
   evaluationContext._previousResultsFromSameGroup.at(resultColumn) =
       sparqlExpression::copyExpressionResult(expressionResult);
 
-  auto visitor = [&]<sparqlExpression::SingleExpressionResult T>(
-                     T&& singleResult) mutable {
+  auto visitor = [&]<typename T>(T&& singleResult) mutable {
+    CPP_assert(sparqlExpression::SingleExpressionResult<T>);
     constexpr static bool isStrongId = std::is_same_v<T, Id>;
     AD_CONTRACT_CHECK(sparqlExpression::isConstantResult<T>);
     if constexpr (isStrongId) {
@@ -1098,8 +1098,8 @@ void GroupBy::extractValues(
     sparqlExpression::EvaluationContext& evaluationContext,
     IdTable* resultTable, LocalVocab* localVocab, size_t outCol) {
   auto visitor = [&evaluationContext, &resultTable, &localVocab,
-                  &outCol]<sparqlExpression::SingleExpressionResult T>(
-                     T&& singleResult) mutable {
+                  &outCol]<typename T>(T&& singleResult) mutable {
+    CPP_assert(sparqlExpression::SingleExpressionResult<T>);
     auto generator = sparqlExpression::detail::makeGenerator(
         std::forward<T>(singleResult), evaluationContext.size(),
         &evaluationContext);
@@ -1480,24 +1480,25 @@ static constexpr auto makeProcessGroupsVisitor =
     [](size_t blockSize,
        const sparqlExpression::EvaluationContext* evaluationContext,
        const std::vector<size_t>& hashEntries) {
-      return [blockSize, evaluationContext,
-              &hashEntries]<sparqlExpression::SingleExpressionResult T,
-                            VectorOfAggregationData A>(
-                 T&& singleResult, A& aggregationDataVector) {
-        auto generator = sparqlExpression::detail::makeGenerator(
-            std::forward<T>(singleResult), blockSize, evaluationContext);
+      return
+          [blockSize, evaluationContext, &hashEntries]<typename T, typename A>(
+              T&& singleResult, A& aggregationDataVector) {
+            CPP_assert(sparqlExpression::SingleExpressionResult<T> &&
+                       VectorOfAggregationData<A>);
+            auto generator = sparqlExpression::detail::makeGenerator(
+                std::forward<T>(singleResult), blockSize, evaluationContext);
 
-        auto hashEntryIndex = 0;
+            auto hashEntryIndex = 0;
 
-        for (const auto& val : generator) {
-          auto vectorOffset = hashEntries[hashEntryIndex];
-          auto& aggregateData = aggregationDataVector.at(vectorOffset);
+            for (const auto& val : generator) {
+              auto vectorOffset = hashEntries[hashEntryIndex];
+              auto& aggregateData = aggregationDataVector.at(vectorOffset);
 
-          aggregateData.addValue(val, evaluationContext);
+              aggregateData.addValue(val, evaluationContext);
 
-          ++hashEntryIndex;
-        }
-      };
+              ++hashEntryIndex;
+            }
+          };
     };
 
 // _____________________________________________________________________________

@@ -99,11 +99,11 @@ concept VectorOrExpressionResult =
 
 // Convert a `VectorOrExpressionResult` (see above) to a type that is supported
 // by the expression module.
-template <VectorOrExpressionResult T>
-SingleExpressionResult auto toExpressionResult(T vec) {
+CPP_template(typename T)(
+    requires VectorOrExpressionResult<T>) auto toExpressionResult(T vec) {
   if constexpr (SingleExpressionResult<T>) {
     return vec;
-  } else if constexpr (std::convertible_to<T, std::string_view>) {
+  } else if constexpr (ranges::convertible_to<T, std::string_view>) {
     // TODO<joka921> Make a generic testing utility for the string case...
     return IdOrLiteralOrIri{lit(vec)};
   } else {
@@ -157,7 +157,8 @@ requires(!isVectorResult<T>) auto nonVectorResultMatcher(const T& expected) {
 // storing `Ids` which have to be handled using the `matchId` matcher (see
 // above) are all handled correctly.
 auto sparqlExpressionResultMatcher =
-    []<SingleExpressionResult Expected>(const Expected& expected) {
+    []<typename Expected>(const Expected& expected) {
+      CPP_assert(SingleExpressionResult<Expected>);
       if constexpr (isVectorResult<Expected>) {
         auto matcherVec =
             ad_utility::transform(expected, [](const auto& singleExpected) {
@@ -181,49 +182,50 @@ auto clone = [](const auto& x) {
 };
 
 // The implementation of `testNaryExpression` directly below.
-auto testNaryExpressionImpl =
-    [](auto&& makeExpression, SingleExpressionResult auto const& expected,
-       SingleExpressionResult auto const&... operands) {
-      ad_utility::AllocatorWithLimit<Id> alloc{
-          ad_utility::testing::makeAllocator()};
-      VariableToColumnMap map;
-      LocalVocab localVocab;
-      IdTable table{alloc};
+auto testNaryExpressionImpl = [](auto&& makeExpression, auto const& expected,
+                                 auto const&... operands) {
+  CPP_assert(SingleExpressionResult<decltype(expected)> &&
+             (SingleExpressionResult<decltype(operands)> && ...));
+  ad_utility::AllocatorWithLimit<Id> alloc{
+      ad_utility::testing::makeAllocator()};
+  VariableToColumnMap map;
+  LocalVocab localVocab;
+  IdTable table{alloc};
 
-      // Get the size of `operand`: size for a vector, 1 otherwise.
-      auto getResultSize = []<typename T>(const T& operand) -> size_t {
-        if constexpr (isVectorResult<T>) {
-          return operand.size();
-        }
-        return 1;
-      };
+  // Get the size of `operand`: size for a vector, 1 otherwise.
+  auto getResultSize = []<typename T>(const T& operand) -> size_t {
+    if constexpr (isVectorResult<T>) {
+      return operand.size();
+    }
+    return 1;
+  };
 
-      const auto resultSize = [&operands..., &getResultSize]() {
-        if constexpr (sizeof...(operands) == 0) {
-          (void)getResultSize;
-          return 0ul;
-        } else {
-          return std::max({getResultSize(operands)...});
-        }
-      }();
+  const auto resultSize = [&operands..., &getResultSize]() {
+    if constexpr (sizeof...(operands) == 0) {
+      (void)getResultSize;
+      return 0ul;
+    } else {
+      return std::max({getResultSize(operands)...});
+    }
+  }();
 
-      TestContext outerContext;
-      sparqlExpression::EvaluationContext& context = outerContext.context;
-      context._endIndex = resultSize;
+  TestContext outerContext;
+  sparqlExpression::EvaluationContext& context = outerContext.context;
+  context._endIndex = resultSize;
 
-      std::array<SparqlExpression::Ptr, sizeof...(operands)> children{
-          std::make_unique<SingleUseExpression>(
-              ExpressionResult{clone(operands)})...};
+  std::array<SparqlExpression::Ptr, sizeof...(operands)> children{
+      std::make_unique<SingleUseExpression>(
+          ExpressionResult{clone(operands)})...};
 
-      auto expressionPtr = std::apply(makeExpression, std::move(children));
-      auto& expression = *expressionPtr;
+  auto expressionPtr = std::apply(makeExpression, std::move(children));
+  auto& expression = *expressionPtr;
 
-      ExpressionResult result = expression.evaluate(&context);
+  ExpressionResult result = expression.evaluate(&context);
 
-      using ExpectedType = std::decay_t<decltype(expected)>;
-      ASSERT_THAT(result, ::testing::VariantWith<ExpectedType>(
-                              sparqlExpressionResultMatcher(expected)));
-    };
+  using ExpectedType = std::decay_t<decltype(expected)>;
+  ASSERT_THAT(result, ::testing::VariantWith<ExpectedType>(
+                          sparqlExpressionResultMatcher(expected)));
+};
 
 // Assert that the given `NaryExpression` with the given `operands` has the
 // `expected` result.
@@ -239,10 +241,11 @@ auto testNaryExpression = [](auto&& makeExpression,
 // in both orders of the operands `op1` and `op2`.
 template <auto makeFunction>
 auto testBinaryExpressionCommutative =
-    [](const SingleExpressionResult auto& expected,
-       const SingleExpressionResult auto& op1,
-       const SingleExpressionResult auto& op2,
+    [](const auto& expected, const auto& op1, const auto& op2,
        source_location l = source_location::current()) {
+      CPP_assert(SingleExpressionResult<decltype(expected)> &&
+                 SingleExpressionResult<decltype(op1)> &&
+                 SingleExpressionResult<decltype(op2)>);
       auto t = generateLocationTrace(l);
       testNaryExpression(makeFunction, expected, op1, op2);
       testNaryExpression(makeFunction, expected, op2, op1);
