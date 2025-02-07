@@ -22,6 +22,7 @@ class ValuesForTesting : public Operation {
   size_t sizeEstimate_;
   size_t costEstimate_;
   bool unlikelyToFitInCache_ = false;
+  ad_utility::MemorySize* cacheSizeStorage_ = nullptr;
 
  public:
   // Create an operation that has as its result the given `table` and the given
@@ -63,10 +64,9 @@ class ValuesForTesting : public Operation {
         resultSortedColumns_{std::move(sortedColumns)},
         localVocab_{std::move(localVocab)},
         multiplicity_{std::nullopt} {
-    AD_CONTRACT_CHECK(
-        std::ranges::all_of(tables_, [this](const IdTable& table) {
-          return variables_.size() == table.numColumns();
-        }));
+    AD_CONTRACT_CHECK(ql::ranges::all_of(tables_, [this](const IdTable& table) {
+      return variables_.size() == table.numColumns();
+    }));
     size_t totalRows = 0;
     for (const IdTable& idTable : tables_) {
       totalRows += idTable.numRows();
@@ -116,16 +116,26 @@ class ValuesForTesting : public Operation {
     }
     return {std::move(table), resultSortedOn(), localVocab_.clone()};
   }
-  bool unlikelyToFitInCache(ad_utility::MemorySize) const override {
+  bool unlikelyToFitInCache(ad_utility::MemorySize cacheSize) const override {
+    if (cacheSizeStorage_ != nullptr) {
+      *cacheSizeStorage_ = cacheSize;
+    }
     return unlikelyToFitInCache_;
   }
+
+  void setCacheSizeStorage(ad_utility::MemorySize* cacheSizeStorage) {
+    cacheSizeStorage_ = cacheSizeStorage;
+  }
+
   bool supportsLimit() const override { return supportsLimit_; }
+
+  bool& forceFullyMaterialized() { return forceFullyMaterialized_; }
 
  private:
   // ___________________________________________________________________________
   string getCacheKeyImpl() const override {
     std::stringstream str;
-    auto numRowsView = tables_ | std::views::transform(&IdTable::numRows);
+    auto numRowsView = tables_ | ql::views::transform(&IdTable::numRows);
     auto totalNumRows = std::reduce(numRowsView.begin(), numRowsView.end(), 0);
     auto numCols = tables_.empty() ? 0 : tables_.at(0).numColumns();
     str << "Values for testing with " << numCols << " columns and "
@@ -177,7 +187,7 @@ class ValuesForTesting : public Operation {
   vector<QueryExecutionTree*> getChildren() override { return {}; }
 
   bool knownEmptyResult() override {
-    return std::ranges::all_of(
+    return ql::ranges::all_of(
         tables_, [](const IdTable& table) { return table.empty(); });
   }
 
@@ -189,9 +199,9 @@ class ValuesForTesting : public Operation {
         continue;
       }
       bool containsUndef =
-          std::ranges::any_of(tables_, [&i](const IdTable& table) {
-            return std::ranges::any_of(table.getColumn(i),
-                                       [](Id id) { return id.isUndefined(); });
+          ql::ranges::any_of(tables_, [&i](const IdTable& table) {
+            return ql::ranges::any_of(table.getColumn(i),
+                                      [](Id id) { return id.isUndefined(); });
           });
       using enum ColumnIndexAndTypeInfo::UndefStatus;
       m[variables_.at(i).value()] = ColumnIndexAndTypeInfo{

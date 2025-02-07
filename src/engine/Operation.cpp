@@ -226,13 +226,15 @@ ProtoResult Operation::runComputation(const ad_utility::Timer& timer,
 // _____________________________________________________________________________
 CacheValue Operation::runComputationAndPrepareForCache(
     const ad_utility::Timer& timer, ComputationMode computationMode,
-    const QueryCacheKey& cacheKey, bool pinned) {
+    const QueryCacheKey& cacheKey, bool pinned, bool isRoot) {
   auto& cache = _executionContext->getQueryTreeCache();
   auto result = runComputation(timer, computationMode);
   auto maxSize =
-      std::min(RuntimeParameters().get<"lazy-result-max-cache-size">(),
-               cache.getMaxSizeSingleEntry());
-  if (!result.isFullyMaterialized() && !unlikelyToFitInCache(maxSize)) {
+      isRoot ? cache.getMaxSizeSingleEntry()
+             : std::min(RuntimeParameters().get<"cache-max-size-lazy-result">(),
+                        cache.getMaxSizeSingleEntry());
+  if (canResultBeCached() && !result.isFullyMaterialized() &&
+      !unlikelyToFitInCache(maxSize)) {
     AD_CONTRACT_CHECK(!pinned);
     result.cacheDuringConsumption(
         [maxSize](
@@ -305,9 +307,10 @@ std::shared_ptr<const Result> Operation::getResult(
                 updateRuntimeInformationOnFailure(timer.msecs());
               }
             });
-    auto cacheSetup = [this, &timer, computationMode, &cacheKey, pinResult]() {
+    auto cacheSetup = [this, &timer, computationMode, &cacheKey, pinResult,
+                       isRoot]() {
       return runComputationAndPrepareForCache(timer, computationMode, cacheKey,
-                                              pinResult);
+                                              pinResult, isRoot);
     };
 
     auto suitedForCache = [](const CacheValue& cacheValue) {
@@ -316,11 +319,16 @@ std::shared_ptr<const Result> Operation::getResult(
 
     bool onlyReadFromCache = computationMode == ComputationMode::ONLY_IF_CACHED;
 
-    auto result =
-        pinResult ? cache.computeOncePinned(cacheKey, cacheSetup,
-                                            onlyReadFromCache, suitedForCache)
-                  : cache.computeOnce(cacheKey, cacheSetup, onlyReadFromCache,
-                                      suitedForCache);
+    auto result = [&]() {
+      auto compute = [&](auto&&... args) {
+        if (!canResultBeCached()) {
+          return cache.computeButDontStore(AD_FWD(args)...);
+        }
+        return pinResult ? cache.computeOncePinned(AD_FWD(args)...)
+                         : cache.computeOnce(AD_FWD(args)...);
+      };
+      return compute(cacheKey, cacheSetup, onlyReadFromCache, suitedForCache);
+    }();
 
     if (result._resultPointer == nullptr) {
       AD_CORRECTNESS_CHECK(onlyReadFromCache);
@@ -436,7 +444,7 @@ void Operation::updateRuntimeInformationWhenOptimizedOut(
   // `totalTime_ - #sum of childrens' total time#` in `getOperationTime()`.
   // To set it to zero we thus have to set the `totalTime_` to that sum.
   auto timesOfChildren = _runtimeInfo->children_ |
-                         std::views::transform(&RuntimeInformation::totalTime_);
+                         ql::views::transform(&RuntimeInformation::totalTime_);
   _runtimeInfo->totalTime_ =
       std::reduce(timesOfChildren.begin(), timesOfChildren.end(), 0us);
 
@@ -569,7 +577,7 @@ std::optional<Variable> Operation::getPrimarySortKeyVariable() const {
     return std::nullopt;
   }
 
-  auto it = std::ranges::find(
+  auto it = ql::ranges::find(
       varToColMap, sortedIndices.front(),
       [](const auto& keyValue) { return keyValue.second.columnIndex_; });
   if (it == varToColMap.end()) {
@@ -592,7 +600,28 @@ const vector<ColumnIndex>& Operation::getResultSortedOn() const {
 // _____________________________________________________________________________
 
 void Operation::signalQueryUpdate() const {
-  if (_executionContext) {
+  if (_executionContext && _executionContext->areWebsocketUpdatesEnabled()) {
     _executionContext->signalQueryUpdate(*_rootRuntimeInfo);
+  }
+}
+
+// _____________________________________________________________________________
+std::string Operation::getCacheKey() const {
+  auto result = getCacheKeyImpl();
+  if (_limit._limit.has_value()) {
+    absl::StrAppend(&result, " LIMIT ", _limit._limit.value());
+  }
+  if (_limit._offset != 0) {
+    absl::StrAppend(&result, " OFFSET ", _limit._offset);
+  }
+  return result;
+}
+
+// _____________________________________________________________________________
+uint64_t Operation::getSizeEstimate() {
+  if (_limit._limit.has_value()) {
+    return std::min(_limit._limit.value(), getSizeEstimateBeforeLimit());
+  } else {
+    return getSizeEstimateBeforeLimit();
   }
 }

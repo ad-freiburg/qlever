@@ -21,6 +21,7 @@ using ad_utility::source_location;
 namespace {
 using Tc = TripleComponent;
 using Var = Variable;
+using LazyResult = Result::LazyResult;
 
 using IndexPair = std::pair<size_t, size_t>;
 
@@ -64,7 +65,7 @@ void testLazyScan(Permutation::IdTableGenerator partialLazyScanResult,
 
   if (limitOffset.isUnconstrained()) {
     for (auto [lower, upper] : expectedRows) {
-      for (auto index : std::views::iota(lower, upper)) {
+      for (auto index : ql::views::iota(lower, upper)) {
         expected.push_back(resFullScan.at(index));
       }
     }
@@ -497,7 +498,8 @@ TEST(IndexScan, getResultSizeOfScan) {
     SparqlTripleSimple scanTriple{I::fromIriref("<x2>"), I::fromIriref("<p>"),
                                   I::fromIriref("<s1>")};
     IndexScan scan{qec, Permutation::Enum::POS, scanTriple};
-    EXPECT_EQ(scan.getSizeEstimate(), 0);
+    EXPECT_EQ(scan.getSizeEstimate(), 1);
+    EXPECT_EQ(scan.getExactSize(), 0);
   }
   {
     SparqlTripleSimple scanTriple{I::fromIriref("<x>"), I::fromIriref("<p>"),
@@ -866,8 +868,8 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesFilterCorrectly) {
     co_yield p3;
   };
 
-  auto [joinSideResults, scanResults] =
-      consumeGenerators(scan.prefilterTables(makeJoinSide(this), 0));
+  auto [joinSideResults, scanResults] = consumeGenerators(
+      scan.prefilterTables(LazyResult{makeJoinSide(this)}, 0));
 
   ASSERT_EQ(scanResults.size(), 2);
   ASSERT_EQ(joinSideResults.size(), 3);
@@ -910,8 +912,8 @@ TEST_P(IndexScanWithLazyJoin,
     co_yield p2;
   };
 
-  auto [joinSideResults, scanResults] =
-      consumeGenerators(scan.prefilterTables(makeJoinSide(this), 0));
+  auto [joinSideResults, scanResults] = consumeGenerators(
+      scan.prefilterTables(LazyResult{makeJoinSide(this)}, 0));
 
   ASSERT_EQ(scanResults.size(), 1);
   ASSERT_EQ(joinSideResults.size(), 2);
@@ -944,7 +946,7 @@ TEST_P(IndexScanWithLazyJoin,
   };
 
   auto [joinSideResults, scanResults] =
-      consumeGenerators(scan.prefilterTables(makeJoinSide(), 0));
+      consumeGenerators(scan.prefilterTables(LazyResult{makeJoinSide()}, 0));
 
   ASSERT_EQ(scanResults.size(), 0);
   ASSERT_EQ(joinSideResults.size(), 0);
@@ -973,8 +975,8 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesNotFilterOnUndefined) {
     co_yield p7;
   };
 
-  auto [_, scanResults] =
-      consumeGenerators(scan.prefilterTables(makeJoinSide(this), 0));
+  auto [_, scanResults] = consumeGenerators(
+      scan.prefilterTables(LazyResult{makeJoinSide(this)}, 0));
 
   ASSERT_EQ(scanResults.size(), 3);
   EXPECT_TRUE(scanResults.at(0).localVocab_.empty());
@@ -1005,7 +1007,7 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesDoesNotFilterWithSingleUndefined) {
   };
 
   auto [_, scanResults] =
-      consumeGenerators(scan.prefilterTables(makeJoinSide(), 0));
+      consumeGenerators(scan.prefilterTables(LazyResult{makeJoinSide()}, 0));
 
   ASSERT_EQ(scanResults.size(), 3);
   EXPECT_TRUE(scanResults.at(0).localVocab_.empty());
@@ -1036,7 +1038,7 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesWorksWithSingleEmptyTable) {
   };
 
   auto [_, scanResults] =
-      consumeGenerators(scan.prefilterTables(makeJoinSide(), 0));
+      consumeGenerators(scan.prefilterTables(LazyResult{makeJoinSide()}, 0));
 
   ASSERT_EQ(scanResults.size(), 0);
 }
@@ -1048,7 +1050,7 @@ TEST_P(IndexScanWithLazyJoin, prefilterTablesWorksWithEmptyGenerator) {
   auto makeJoinSide = []() -> Result::Generator { co_return; };
 
   auto [_, scanResults] =
-      consumeGenerators(scan.prefilterTables(makeJoinSide(), 0));
+      consumeGenerators(scan.prefilterTables(LazyResult{makeJoinSide()}, 0));
 
   ASSERT_EQ(scanResults.size(), 0);
 }
@@ -1075,7 +1077,7 @@ TEST(IndexScan, prefilterTablesWithEmptyIndexScanReturnsEmptyGenerators) {
   };
 
   auto [leftGenerator, rightGenerator] =
-      scan.prefilterTables(makeJoinSide(), 0);
+      scan.prefilterTables(Result::LazyResult{makeJoinSide()}, 0);
 
   EXPECT_EQ(leftGenerator.begin(), leftGenerator.end());
   EXPECT_EQ(rightGenerator.begin(), rightGenerator.end());

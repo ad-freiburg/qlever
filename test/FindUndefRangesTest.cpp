@@ -65,7 +65,7 @@ void testSmallerUndefRangesForRowsWithoutUndef(
     const std::vector<size_t>& positions,
     source_location l = source_location::current()) {
   auto t = generateLocationTrace(l);
-  ASSERT_TRUE(std::ranges::is_sorted(range));
+  ASSERT_TRUE(ql::ranges::is_sorted(range));
   std::vector<int64_t> foundPositions;
   // TODO<joka921> also actually test the bool;
   [[maybe_unused]] bool outOfOrder;
@@ -112,7 +112,7 @@ void testSmallerUndefRangesForRowsWithUndefInLastColumns(
     const std::vector<size_t>& positions,
     source_location l = source_location::current()) {
   auto t = generateLocationTrace(l);
-  ASSERT_TRUE(std::ranges::is_sorted(range));
+  ASSERT_TRUE(ql::ranges::is_sorted(range));
   std::vector<int64_t> foundPositions;
   // TODO<joka921> also actually test the bool;
   [[maybe_unused]] bool outOfOrder;

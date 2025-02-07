@@ -29,10 +29,6 @@ constexpr inline size_t PARSER_BATCH_SIZE = 1'000'000;
 // streams faster.
 constexpr inline size_t PARSER_MIN_TRIPLES_AT_ONCE = 10'000;
 
-// When reading from a file, Chunks of this size will
-// be fed to the parser at once (10 MiB).
-constinit inline std::atomic<size_t> FILE_BUFFER_SIZE = 10 * (1ul << 20);
-
 constinit inline std::atomic<size_t> BUFFER_SIZE_JOIN_PATTERNS_WITH_OSP =
     50'000;
 
@@ -103,7 +99,8 @@ constinit inline std::atomic<size_t> BUFFER_SIZE_PARTIAL_TO_GLOBAL_ID_MAPPINGS =
 // the overhead of the metadata that has to be stored per block becomes
 // infeasible. 250K seems to be a reasonable tradeoff here.
 constexpr inline ad_utility::MemorySize
-    UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN = 250_kB;
+    UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN =
+        ad_utility::MemorySize::kilobytes(250);
 
 constexpr inline size_t NumColumnsIndexBuilding = 4;
 

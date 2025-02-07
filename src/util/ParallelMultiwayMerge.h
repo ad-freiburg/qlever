@@ -35,15 +35,15 @@ constexpr auto pushSingleElement =
 // This concept is fulfilled if `Range` is a range that stores values of type
 // `T`.
 template <typename Range, typename T>
-concept RangeWithValue = std::ranges::range<Range> &&
-                         std::same_as<std::ranges::range_value_t<Range>, T>;
+concept RangeWithValue = ql::ranges::range<Range> &&
+                         std::same_as<ql::ranges::range_value_t<Range>, T>;
 
 // Fulfilled if `Range` is a random access range the elements of which are
 // ranges of elements of type `T`, e.g. `std::vector<std::generator<T>>`.
 template <typename Range, typename T>
 concept RandomAccessRangeOfRanges =
-    std::ranges::random_access_range<Range> &&
-    RangeWithValue<std::ranges::range_value_t<Range>, T>;
+    ql::ranges::random_access_range<Range> &&
+    RangeWithValue<ql::ranges::range_value_t<Range>, T>;
 
 // Merge the elements from the presorted ranges `range1` and `range2` according
 // to the `comparator`. The result of the merging will be yielded in blocks of
@@ -71,7 +71,7 @@ cppcoro::generator<std::vector<T>> lazyBinaryMerge(
 
   // Turn the ranges into `(iterator, end)` pairs.
   auto makeItPair = [](auto& range) {
-    return std::pair{std::ranges::begin(range), std::ranges::end(range)};
+    return std::pair{ql::ranges::begin(range), ql::ranges::end(range)};
   };
 
   auto it1 = makeItPair(range1);
@@ -126,7 +126,7 @@ cppcoro::generator<std::vector<T>> lazyBinaryMerge(
   auto yieldRemainder =
       [&buffer, &isBufferLargeEnough, &clearBuffer,
        &pushToBuffer](auto& itPair) -> cppcoro::generator<std::vector<T>> {
-    for (auto& el : std::ranges::subrange(itPair.first, itPair.second)) {
+    for (auto& el : ql::ranges::subrange(itPair.first, itPair.second)) {
       pushToBuffer(el);
       if (isBufferLargeEnough()) {
         co_yield buffer;
@@ -194,20 +194,19 @@ cppcoro::generator<std::vector<T>> parallelMultiwayMergeImpl(
         maxMemPerNode, blocksize, moveIf(rangeOfRanges[0]),
         moveIf(rangeOfRanges[1]), comparison);
   } else {
-    size_t size = std::ranges::size(rangeOfRanges);
+    size_t size = ql::ranges::size(rangeOfRanges);
     size_t split = size / 2;
     auto beg = rangeOfRanges.begin();
     auto splitIt = beg + split;
     auto end = rangeOfRanges.end();
     auto join = [](auto&& view) {
-      return std::views::join(ad_utility::OwningView{AD_FWD(view)});
+      return ql::views::join(ad_utility::OwningView{AD_FWD(view)});
     };
 
     auto parallelMerge = [join, blocksize, comparison, maxMemPerNode](
                              auto it, auto end) {
       return join(parallelMultiwayMergeImpl<T, moveElements, SizeGetter>(
-          maxMemPerNode, blocksize, std::ranges::subrange{it, end},
-          comparison));
+          maxMemPerNode, blocksize, ql::ranges::subrange{it, end}, comparison));
     };
 
     return ad_utility::streams::runStreamAsync(
@@ -233,7 +232,7 @@ cppcoro::generator<std::vector<T>> parallelMultiwayMerge(
     size_t blocksize = 100) {
   // There is one suboperation per input in the recursion tree, so we have to
   // divide the memory limit.
-  auto maxMemPerNode = memoryLimit / std::ranges::size(rangeOfRanges);
+  auto maxMemPerNode = memoryLimit / ql::ranges::size(rangeOfRanges);
   return detail::parallelMultiwayMergeImpl<T, moveElements, SizeGetter>(
       maxMemPerNode, blocksize, AD_FWD(rangeOfRanges), std::move(comparison));
 }

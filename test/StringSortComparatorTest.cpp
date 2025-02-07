@@ -125,6 +125,11 @@ TEST(StringSortComparatorTest, TripleComponentComparatorTotal) {
     auto bSplit = comparator.extractAndTransformComparable(
         b, TripleComponentComparator::Level::TOTAL);
     EXPECT_EQ(ab, comp(aSplit, bSplit));
+    EXPECT_EQ(ab, comp(a, bSplit));
+    EXPECT_EQ(ab, comp(aSplit, b));
+
+    EXPECT_EQ(ba, comp(b, aSplit));
+    EXPECT_EQ(ba, comp(bSplit, a));
     EXPECT_EQ(ba, comp(bSplit, aSplit));
   };
 

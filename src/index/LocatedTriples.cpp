@@ -6,9 +6,8 @@
 
 #include "index/LocatedTriples.h"
 
-#include <algorithm>
-
 #include "absl/strings/str_join.h"
+#include "backports/algorithm.h"
 #include "index/CompressedRelation.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "util/ChunkedForLoop.h"
@@ -29,9 +28,9 @@ std::vector<LocatedTriple> LocatedTriple::locateTriplesInPermutation(
         // that larger than or equal to the triple. See `LocatedTriples.h` for a
         // discussion of the corner cases.
         size_t blockIndex =
-            std::ranges::lower_bound(blockMetadata, triple.toPermutedTriple(),
-                                     std::less<>{},
-                                     &CompressedBlockMetadata::lastTriple_) -
+            ql::ranges::lower_bound(blockMetadata, triple.toPermutedTriple(),
+                                    std::less<>{},
+                                    &CompressedBlockMetadata::lastTriple_) -
             blockMetadata.begin();
         out.emplace_back(blockIndex, triple, shouldExist);
       },
@@ -53,7 +52,7 @@ NumAddedAndDeleted LocatedTriplesPerBlock::numTriples(size_t blockIndex) const {
   }
 
   auto blockUpdateTriples = map_.at(blockIndex);
-  size_t countInserts = std::ranges::count_if(
+  size_t countInserts = ql::ranges::count_if(
       blockUpdateTriples, &LocatedTriple::shouldTripleExist_);
   return {countInserts, blockUpdateTriples.size() - countInserts};
 }
@@ -62,9 +61,9 @@ NumAddedAndDeleted LocatedTriplesPerBlock::numTriples(size_t blockIndex) const {
 // `numIndexColumns` and `includeGraphColumn`. For example, if `numIndexColumns`
 // is `2` and `includeGraphColumn` is `true`, the function returns
 // `std::tie(row[0], row[1], row[2])`.
-template <size_t numIndexColumns, bool includeGraphColumn>
-requires(numIndexColumns >= 1 && numIndexColumns <= 3)
-auto tieIdTableRow(auto& row) {
+CPP_template(size_t numIndexColumns, bool includeGraphColumn)(
+    requires(numIndexColumns >= 1 &&
+             numIndexColumns <= 3)) auto tieIdTableRow(auto& row) {
   return [&row]<size_t... I>(std::index_sequence<I...>) {
     return std::tie(row[I]...);
   }(std::make_index_sequence<numIndexColumns +
@@ -76,9 +75,9 @@ auto tieIdTableRow(auto& row) {
 // `numIndexColumns` is `2` and `includeGraphColumn` is `true`, the function
 // returns `std::tie(ids_[1], ids_[2], ids_[3])`, where `ids_` is from
 // `lt->triple_`.
-template <size_t numIndexColumns, bool includeGraphColumn>
-requires(numIndexColumns >= 1 && numIndexColumns <= 3)
-auto tieLocatedTriple(auto& lt) {
+CPP_template(size_t numIndexColumns, bool includeGraphColumn)(
+    requires(numIndexColumns >= 1 &&
+             numIndexColumns <= 3)) auto tieLocatedTriple(auto& lt) {
   constexpr auto indices = []() {
     std::array<size_t,
                numIndexColumns + static_cast<size_t>(includeGraphColumn)>
@@ -169,9 +168,9 @@ IdTable LocatedTriplesPerBlock::mergeTriplesImpl(size_t blockIndex,
 
   if (locatedTripleIt != locatedTriples.end()) {
     AD_CORRECTNESS_CHECK(rowIt == block.end());
-    std::ranges::for_each(
-        std::ranges::subrange(locatedTripleIt, locatedTriples.end()) |
-            std::views::filter(&LocatedTriple::shouldTripleExist_),
+    ql::ranges::for_each(
+        ql::ranges::subrange(locatedTripleIt, locatedTriples.end()) |
+            ql::views::filter(&LocatedTriple::shouldTripleExist_),
         writeLocatedTripleToResult);
   }
   if (rowIt != block.end()) {
@@ -246,9 +245,8 @@ void LocatedTriplesPerBlock::erase(size_t blockIndex,
 
 // ____________________________________________________________________________
 void LocatedTriplesPerBlock::setOriginalMetadata(
-    std::vector<CompressedBlockMetadata> metadata) {
+    std::shared_ptr<const std::vector<CompressedBlockMetadata>> metadata) {
   originalMetadata_ = std::move(metadata);
-  updateAugmentedMetadata();
 }
 
 // Update the `blockMetadata`, such that its graph info is consistent with the
@@ -290,7 +288,7 @@ static auto updateGraphMetadata(CompressedBlockMetadata& blockMetadata,
 
   // Sort the stored graphs. Note: this is currently not expected by the code
   // that uses the graph info, but makes testing much easier.
-  std::ranges::sort(graphs.value());
+  ql::ranges::sort(graphs.value());
 }
 
 // ____________________________________________________________________________
@@ -298,7 +296,13 @@ void LocatedTriplesPerBlock::updateAugmentedMetadata() {
   // TODO<C++23> use view::enumerate
   size_t blockIndex = 0;
   // Copy to preserve originalMetadata_.
-  augmentedMetadata_ = originalMetadata_;
+  if (!originalMetadata_.has_value()) {
+    AD_LOG_WARN << "The original metadata has not been set, but updates are "
+                   "being performed. This should only happen in unit tests\n";
+    augmentedMetadata_.emplace();
+  } else {
+    augmentedMetadata_ = *originalMetadata_.value();
+  }
   for (auto& blockMetadata : augmentedMetadata_.value()) {
     if (hasUpdates(blockIndex)) {
       const auto& blockUpdates = map_.at(blockIndex);
@@ -341,14 +345,14 @@ void LocatedTriplesPerBlock::updateAugmentedMetadata() {
 // ____________________________________________________________________________
 std::ostream& operator<<(std::ostream& os, const LocatedTriples& lts) {
   os << "{ ";
-  std::ranges::copy(lts, std::ostream_iterator<LocatedTriple>(os, " "));
+  ql::ranges::copy(lts, std::ostream_iterator<LocatedTriple>(os, " "));
   os << "}";
   return os;
 }
 
 // ____________________________________________________________________________
 std::ostream& operator<<(std::ostream& os, const std::vector<IdTriple<0>>& v) {
-  std::ranges::copy(v, std::ostream_iterator<IdTriple<0>>(os, ", "));
+  ql::ranges::copy(v, std::ostream_iterator<IdTriple<0>>(os, ", "));
   return os;
 }
 
@@ -362,7 +366,7 @@ bool LocatedTriplesPerBlock::isLocatedTriple(const IdTriple<0>& triple,
     return ad_utility::contains(lt, locatedTriple);
   };
 
-  return std::ranges::any_of(map_, [&blockContains](auto& indexAndBlock) {
+  return ql::ranges::any_of(map_, [&blockContains](auto& indexAndBlock) {
     const auto& [index, block] = indexAndBlock;
     return blockContains(block, index);
   });

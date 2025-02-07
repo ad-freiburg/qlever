@@ -17,6 +17,7 @@
 #include <memory>
 #include <memory_resource>
 
+#include "backports/algorithm.h"
 #include "global/Constants.h"
 #include "util/Exception.h"
 #include "util/StringUtils.h"
@@ -177,9 +178,12 @@ class LocaleManager {
    * @return A weight string s.t. compare(s, t, level) ==
    * std::strcmp(getSortKey(s, level), getSortKey(t, level)
    */
-  void getSortKey(
-      std::string_view s, const Level level,
-      std::invocable<const uint8_t*, size_t> auto resultFunction) const {
+  // clang-format off
+  CPP_template(typename F)(
+    requires ranges::invocable<F, const uint8_t*, size_t>)
+      // clang-format on
+      void getSortKey(std::string_view s, const Level level,
+                      F resultFunction) const {
     // TODO<joka921> This function is one of the bottlenecks of the first pass
     // of the IndexBuilder One possible improvement is to reuse the memory
     // allocations for the `sortKeyBuffer`.
@@ -313,7 +317,7 @@ class LocaleManager {
    * different steps in icu. */
   std::unique_ptr<icu::Collator> _collator[6];
   UColAttributeValue _ignorePunctuationStatus =
-      UCOL_NON_IGNORABLE;  // how to sort punctuations etc.
+      UCOL_NON_IGNORABLE;  // how to sort punctuation etc.
 
   const icu::Normalizer2* _normalizer =
       nullptr;  // actually locale-independent but useful to be placed here
@@ -619,6 +623,12 @@ class TripleComponentComparator {
     return compare(spA, spB, level) < 0;
   }
 
+  bool operator()(const SplitVal& spA, std::string_view b,
+                  const Level level) const {
+    auto spB = extractAndTransformComparable(b, level, false);
+    return compare(spA, spB, level) < 0;
+  }
+
   template <typename A, typename B, typename C>
   bool operator()(const SplitValBase<A, B, C>& a,
                   const SplitValBase<A, B, C>& b, const Level level) const {
@@ -797,7 +807,7 @@ class TripleComponentComparator {
         auto alloc =
             std::pmr::polymorphic_allocator<Char>(allocator->resource());
         auto ptr = alloc.allocate(s.size());
-        std::ranges::copy(s, ptr);
+        ql::ranges::copy(s, ptr);
         return {ptr, ptr + s.size()};
       };
       LocaleManager::SortKeyView sortKey;

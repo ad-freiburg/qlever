@@ -34,11 +34,11 @@ ProtoResult TextLimit::computeResult([[maybe_unused]] bool requestLaziness) {
   auto compareScores = [this](const auto& lhs, const auto& rhs) {
     size_t lhsScore = 0;
     size_t rhsScore = 0;
-    std::ranges::for_each(scoreColumns_,
-                          [&lhs, &rhs, &lhsScore, &rhsScore](const auto& col) {
-                            lhsScore += lhs[col].getInt();
-                            rhsScore += rhs[col].getInt();
-                          });
+    ql::ranges::for_each(scoreColumns_,
+                         [&lhs, &rhs, &lhsScore, &rhsScore](const auto& col) {
+                           lhsScore += lhs[col].getInt();
+                           rhsScore += rhs[col].getInt();
+                         });
     if (lhsScore > rhsScore) {
       return 1;
     } else if (lhsScore < rhsScore) {
@@ -49,7 +49,7 @@ ProtoResult TextLimit::computeResult([[maybe_unused]] bool requestLaziness) {
 
   auto compareEntities = [this](const auto& lhs, const auto& rhs) {
     auto it =
-        std::ranges::find_if(entityColumns_, [&lhs, &rhs](const auto& col) {
+        ql::ranges::find_if(entityColumns_, [&lhs, &rhs](const auto& col) {
           return lhs[col] < rhs[col] || lhs[col] > rhs[col];
         });
 
@@ -64,8 +64,8 @@ ProtoResult TextLimit::computeResult([[maybe_unused]] bool requestLaziness) {
     return 0;
   };
 
-  std::ranges::sort(idTable, [this, compareScores, compareEntities](
-                                 const auto& lhs, const auto& rhs) {
+  ql::ranges::sort(idTable, [this, compareScores, compareEntities](
+                                const auto& lhs, const auto& rhs) {
     return compareEntities(lhs, rhs) == 1 ||
            (compareEntities(lhs, rhs) == 0 &&
             (compareScores(lhs, rhs) == 1 ||

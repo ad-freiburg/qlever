@@ -69,7 +69,7 @@ static void checkEvalRequirements(std::span<const BlockMetadata> input,
     throw std::runtime_error(errorMessage);
   };
   // Check for duplicates.
-  if (auto it = std::ranges::adjacent_find(input); it != input.end()) {
+  if (auto it = ql::ranges::adjacent_find(input); it != input.end()) {
     throwRuntimeError("The provided data blocks must be unique.");
   }
   // Helper to check for fully sorted blocks. Return `true` if `b1 < b2` is
@@ -91,7 +91,7 @@ static void checkEvalRequirements(std::span<const BlockMetadata> input,
     }
     return false;
   };
-  if (!std::ranges::is_sorted(input, checkOrder)) {
+  if (!ql::ranges::is_sorted(input, checkOrder)) {
     throwRuntimeError("The blocks must be provided in sorted order.");
   }
   // Helper to check for column consistency. Returns `true` if the columns for
@@ -103,7 +103,7 @@ static void checkEvalRequirements(std::span<const BlockMetadata> input,
                    getMaskedTriple(b2.firstTriple_, evaluationColumn) ||
                checkBlockIsInconsistent(b2, evaluationColumn);
       };
-  if (auto it = std::ranges::adjacent_find(input, checkColumnConsistency);
+  if (auto it = ql::ranges::adjacent_find(input, checkColumnConsistency);
       it != input.end()) {
     throwRuntimeError(
         "The values in the columns up to the evaluation column must be "
@@ -124,9 +124,9 @@ static auto getSetUnion(const std::vector<BlockMetadata>& blocks1,
     return b1.blockIndex_ < b2.blockIndex_;
   };
   // Given that we have vectors with sorted (BlockMedata) values, we can
-  // use std::ranges::set_union. Thus the complexity is O(n + m).
-  std::ranges::set_union(blocks1, blocks2, std::back_inserter(mergedVectors),
-                         blockLessThanBlock);
+  // use ql::ranges::set_union. Thus the complexity is O(n + m).
+  ql::ranges::set_union(blocks1, blocks2, std::back_inserter(mergedVectors),
+                        blockLessThanBlock);
   mergedVectors.shrink_to_fit();
   return mergedVectors;
 }
@@ -498,14 +498,14 @@ static std::unique_ptr<PrefilterExpression> makeMirroredExpression(
 //______________________________________________________________________________
 void checkPropertiesForPrefilterConstruction(
     const std::vector<PrefilterExprVariablePair>& vec) {
-  auto viewVariable = vec | std::views::values;
-  if (!std::ranges::is_sorted(viewVariable, std::less<>{})) {
+  auto viewVariable = vec | ql::views::values;
+  if (!ql::ranges::is_sorted(viewVariable, std::less<>{})) {
     throw std::runtime_error(
         "The vector must contain the <PrefilterExpression, Variable> pairs in "
         "sorted order w.r.t. Variable value.");
   }
-  if (auto it = std::ranges::adjacent_find(viewVariable);
-      it != std::ranges::end(viewVariable)) {
+  if (auto it = ql::ranges::adjacent_find(viewVariable);
+      it != ql::ranges::end(viewVariable)) {
     throw std::runtime_error(
         "For each relevant Variable must exist exactly one "
         "<PrefilterExpression, Variable> pair.");

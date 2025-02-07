@@ -1,8 +1,7 @@
-// Copyright 2015, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author:
-//   2015-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
-//   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
+// Copyright 2015 - 2024, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de>    [2015 - 2017]
+//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de> [2018 - 2024]
 
 #pragma once
 
@@ -90,6 +89,9 @@ class Operation {
   // limit/offset is applied post computation.
   bool externalLimitApplied_ = false;
 
+  // See the documentation of the getter function below.
+  bool canResultBeCached_ = true;
+
  public:
   // Holds a `PrefilterExpression` with its corresponding `Variable`.
   using PrefilterVariablePair = sparqlExpression::PrefilterExprVariablePair;
@@ -162,20 +164,23 @@ class Operation {
   // Get a unique, not ambiguous string representation for a subtree.
   // This should act like an ID for each subtree.
   // Calls  `getCacheKeyImpl` and adds the information about the `LIMIT` clause.
-  virtual string getCacheKey() const final {
-    auto result = getCacheKeyImpl();
-    if (_limit._limit.has_value()) {
-      absl::StrAppend(&result, " LIMIT ", _limit._limit.value());
-    }
-    if (_limit._offset != 0) {
-      absl::StrAppend(&result, " OFFSET ", _limit._offset);
-    }
-    return result;
-  }
+  virtual std::string getCacheKey() const final;
+
+  // If this function returns `false`, then the result of this `Operation` will
+  // never be stored in the cache. It might however be read from the cache.
+  // This can be used, if the operation actually only returns a subset of the
+  // actual result because it has been constrained by a parent operation (e.g.
+  // an IndexScan that has been prefiltered by another operation which it is
+  // joined with).
+  virtual bool canResultBeCached() const { return canResultBeCached_; }
+
+  // After calling this function, `canResultBeCached()` will return `false` (see
+  // above for details).
+  virtual void disableStoringInCache() final { canResultBeCached_ = false; }
 
  private:
-  // The individual implementation of `getCacheKey` (see above) that has to be
-  // customized by every child class.
+  // The individual implementation of `getCacheKey` (see above) that has to
+  // be customized by every child class.
   virtual string getCacheKeyImpl() const = 0;
 
  public:
@@ -186,13 +191,7 @@ class Operation {
 
   virtual size_t getCostEstimate() = 0;
 
-  virtual uint64_t getSizeEstimate() final {
-    if (_limit._limit.has_value()) {
-      return std::min(_limit._limit.value(), getSizeEstimateBeforeLimit());
-    } else {
-      return getSizeEstimateBeforeLimit();
-    }
-  }
+  virtual uint64_t getSizeEstimate() final;
 
  private:
   virtual uint64_t getSizeEstimateBeforeLimit() = 0;
@@ -385,7 +384,7 @@ class Operation {
   CacheValue runComputationAndPrepareForCache(const ad_utility::Timer& timer,
                                               ComputationMode computationMode,
                                               const QueryCacheKey& cacheKey,
-                                              bool pinned);
+                                              bool pinned, bool isRoot);
 
   // Create and store the complete runtime information for this operation after
   // it has either been successfully computed or read from the cache.
@@ -455,4 +454,5 @@ class Operation {
   FRIEND_TEST(Operation, ensureLazyOperationIsCachedIfSmallEnough);
   FRIEND_TEST(Operation, checkLazyOperationIsNotCachedIfTooLarge);
   FRIEND_TEST(Operation, checkLazyOperationIsNotCachedIfUnlikelyToFitInCache);
+  FRIEND_TEST(Operation, checkMaxCacheSizeIsComputedCorrectly);
 };

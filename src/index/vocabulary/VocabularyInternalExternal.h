@@ -8,8 +8,8 @@
 #include <string>
 #include <string_view>
 
-#include "index/VocabularyOnDisk.h"
 #include "index/vocabulary/VocabularyInMemoryBinSearch.h"
+#include "index/vocabulary/VocabularyOnDisk.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "util/Exception.h"
 
@@ -40,10 +40,7 @@ class VocabularyInternalExternal {
 
   // Read the vocabulary from a file. The file must have been created using a
   // `WordWriter`.
-  void open(const string& filename) {
-    internalVocab_.open(filename + ".internal");
-    externalVocab_.open(filename + ".external");
-  }
+  void open(const string& filename);
 
   // Return the total number of words
   [[nodiscard]] size_t size() const { return externalVocab_.size(); }
@@ -117,17 +114,26 @@ class VocabularyInternalExternal {
     void finish();
   };
 
+  // Return a `WordWriter` or (in the second function) a
+  // `unique_ptr<WordWriter>` for the given filename.
+  static WordWriter makeDiskWriter(const std::string& filename) {
+    return WordWriter{filename};
+  }
+  static auto makeDiskWriterPtr(const std::string& filename) {
+    return std::make_unique<WordWriter>(filename);
+  }
+
   /// Clear the vocabulary.
   void close() { internalVocab_.close(); }
 
   // Convert an iterator (which can be an iterator to the external or internal
   // vocabulary) into the corresponding index by (logically) subtracting
   // `begin()`.
-  uint64_t iteratorToIndex(std::ranges::iterator_t<VocabularyOnDisk> it) const {
+  uint64_t iteratorToIndex(ql::ranges::iterator_t<VocabularyOnDisk> it) const {
     return it - externalVocab_.begin();
   }
   uint64_t iteratorToIndex(
-      std::ranges::iterator_t<VocabularyInMemoryBinSearch> it) const {
+      ql::ranges::iterator_t<VocabularyInMemoryBinSearch> it) const {
     return internalVocab_.indices().at(it - internalVocab_.begin());
   }
 

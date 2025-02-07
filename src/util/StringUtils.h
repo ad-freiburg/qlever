@@ -9,7 +9,7 @@
 
 #include <string_view>
 
-#include "util/Algorithm.h"
+#include "backports/algorithm.h"
 #include "util/Concepts.h"
 #include "util/ConstexprSmallString.h"
 #include "util/CtreHelpers.h"
@@ -105,17 +105,18 @@ streams.
 @param separator Will be put between each of the string representations
 of the range elements.
 */
-template <std::ranges::input_range Range>
-requires ad_utility::Streamable<
-    std::iter_reference_t<std::ranges::iterator_t<Range>>>
-void lazyStrJoin(std::ostream* stream, Range&& r, std::string_view separator);
+CPP_template(typename Range)(
+    requires ql::ranges::input_range<Range> CPP_and
+        ad_utility::Streamable<std::iter_reference_t<ql::ranges::iterator_t<
+            Range>>>) void lazyStrJoin(std::ostream* stream, Range&& r,
+                                       std::string_view separator);
 
 // Similar to the overload of `lazyStrJoin` above, but the result is returned as
 // a string.
-template <std::ranges::input_range Range>
-requires ad_utility::Streamable<
-    std::iter_reference_t<std::ranges::iterator_t<Range>>>
-std::string lazyStrJoin(Range&& r, std::string_view separator);
+CPP_template(typename Range)(
+    requires ql::ranges::input_range<Range> CPP_and ad_utility::Streamable<
+        std::iter_reference_t<ql::ranges::iterator_t<Range>>>) std::string
+    lazyStrJoin(Range&& r, std::string_view separator);
 
 /*
 @brief Adds indentation before the given string and directly after new line
@@ -137,6 +138,12 @@ number.
 
 @param str The input string.
 @param separatorSymbol What symbol to put between groups of thousands.
+
+Note: To avoid cyclic dependencies, this function is defined in a separate file
+`StringUtilsImpl.h`. This file is then included in the `StringUtils.cpp` with an
+explicit instantiation for the default template argument `.`. The tests include
+the impl file directly to exhaustively test the behavior for other template
+arguments.
 */
 template <const char floatingPointSignifier = '.'>
 std::string insertThousandSeparator(const std::string_view str,
@@ -184,10 +191,11 @@ constexpr bool constantTimeEquals(std::string_view view1,
 }
 
 // _________________________________________________________________________
-template <std::ranges::input_range Range>
-requires ad_utility::Streamable<
-    std::iter_reference_t<std::ranges::iterator_t<Range>>>
-void lazyStrJoin(std::ostream* stream, Range&& r, std::string_view separator) {
+CPP_template(typename Range)(
+    requires ql::ranges::input_range<Range> CPP_and
+        ad_utility::Streamable<std::iter_reference_t<ql::ranges::iterator_t<
+            Range>>>) void lazyStrJoin(std::ostream* stream, Range&& r,
+                                       std::string_view separator) {
   auto begin = std::begin(r);
   auto end = std::end(r);
 
@@ -201,103 +209,21 @@ void lazyStrJoin(std::ostream* stream, Range&& r, std::string_view separator) {
 
   // Add the remaining entries.
   ++begin;
-  std::ranges::for_each(begin, end,
-                        [&stream, &separator](const auto& listItem) {
-                          *stream << separator << listItem;
-                        },
-                        {});
+  ql::ranges::for_each(begin, end,
+                       [&stream, &separator](const auto& listItem) {
+                         *stream << separator << listItem;
+                       },
+                       {});
 }
 
 // _________________________________________________________________________
-template <std::ranges::input_range Range>
-requires ad_utility::Streamable<
-    std::iter_reference_t<std::ranges::iterator_t<Range>>>
-std::string lazyStrJoin(Range&& r, std::string_view separator) {
+CPP_template(typename Range)(
+    requires ql::ranges::input_range<Range> CPP_and ad_utility::Streamable<
+        std::iter_reference_t<ql::ranges::iterator_t<Range>>>) std::string
+    lazyStrJoin(Range&& r, std::string_view separator) {
   std::ostringstream stream;
   lazyStrJoin(&stream, AD_FWD(r), separator);
   return std::move(stream).str();
-}
-
-// ___________________________________________________________________________
-template <const char floatingPointSignifier>
-std::string insertThousandSeparator(const std::string_view str,
-                                    const char separatorSymbol) {
-  static const auto isDigit = [](const char c) {
-    // `char` is ASCII. So the number symbols are the codes from 48 to 57.
-    return '0' <= c && c <= '9';
-  };
-  AD_CONTRACT_CHECK(!isDigit(separatorSymbol) &&
-                    !isDigit(floatingPointSignifier));
-
-  /*
-  Create a `ctll::fixed_string` of `floatingPointSignifier`, that can be used
-  inside regex character classes, without being confused with one of the
-  reserved characters.
-  */
-  static constexpr auto adjustFloatingPointSignifierForRegex = []() {
-    constexpr ctll::fixed_string floatingPointSignifierAsFixedString(
-        {floatingPointSignifier, '\0'});
-
-    // Inside a regex character class are fewer reserved character.
-    if constexpr (contains(R"--(^-[]\)--", floatingPointSignifier)) {
-      return "\\" + floatingPointSignifierAsFixedString;
-    } else {
-      return floatingPointSignifierAsFixedString;
-    }
-  };
-
-  /*
-  As string view doesn't support the option to insert new values between old
-  values, so we create a new string in the wanted format.
-  */
-  std::ostringstream ostream;
-
-  /*
-  Insert separator into the given string and add it into the `ostream`. Ignores
-  content of the given string, just works based on length.
-  */
-  auto insertSeparator = [&separatorSymbol,
-                          &ostream](const std::string_view s) {
-    // Nothing to do, if the string is to short.
-    AD_CORRECTNESS_CHECK(s.length() > 3);
-
-    /*
-    For walking over the string view.
-    Our initialization value skips the leading digits, so that only the digits
-    remain, where we have to put the separator in front of every three chars.
-    */
-    size_t currentIdx{s.length() % 3 == 0 ? 3 : s.length() % 3};
-    ostream << s.substr(0, currentIdx);
-    for (; currentIdx < s.length(); currentIdx += 3) {
-      ostream << separatorSymbol << s.substr(currentIdx, 3);
-    }
-  };
-
-  /*
-  The pattern finds any digit sequence, that is long enough for inserting
-  thousand separators and is not the fractual part of a floating point.
-  */
-  static constexpr ctll::fixed_string regexPatDigitSequence{
-      "(?:^|[^\\d" + adjustFloatingPointSignifierForRegex() +
-      "])(?<digit>\\d{4,})"};
-  auto parseIterator = std::begin(str);
-  std::ranges::for_each(
-      ctre::range<regexPatDigitSequence>(str),
-      [&parseIterator, &ostream, &insertSeparator](const auto& match) {
-        /*
-        The digit sequence, that must be transformed. Note: The string view
-        iterators point to entries in the `str` string.
-        */
-        const std::string_view& digitSequence{match.template get<"digit">()};
-
-        // Insert the transformed digit sequence, and the string between it and
-        // the `parseIterator`, into the stream.
-        ostream << std::string_view(parseIterator, std::begin(digitSequence));
-        insertSeparator(digitSequence);
-        parseIterator = std::end(digitSequence);
-      });
-  ostream << std::string_view(std::move(parseIterator), std::end(str));
-  return ostream.str();
 }
 
 // The implementation of `constexprStrCat` below.
@@ -308,8 +234,8 @@ namespace detail::constexpr_str_cat_impl {
 // more complicated.
 using ConstexprString = ad_utility::ConstexprSmallString<100>;
 
-// Concatenate the elements of `arr` into a single array with an additional zero
-// byte at the end. `sz` must be the sum of the sizes in `arr`, else the
+// Concatenate the elements of `arr` into a single array with an additional
+// zero byte at the end. `sz` must be the sum of the sizes in `arr`, else the
 // behavior is undefined.
 template <size_t sz, size_t numStrings>
 constexpr std::array<char, sz + 1> catImpl(
@@ -324,8 +250,8 @@ constexpr std::array<char, sz + 1> catImpl(
   }
   return buf;
 };
-// Concatenate the `strings` into a single `std::array<char>` with an additional
-// zero byte at the end.
+// Concatenate the `strings` into a single `std::array<char>` with an
+// additional zero byte at the end.
 template <ConstexprString... strings>
 constexpr auto constexprStrCatBufferImpl() {
   constexpr size_t sz = (size_t{0} + ... + strings.size());
@@ -344,8 +270,8 @@ constexpr inline auto constexprStrCatBufferVar =
 
 // Return the concatenation of the `strings` as a `string_view`. Can be
 // evaluated at compile time. The buffer that backs the returned `string_view`
-// will be zero-terminated, so it is safe to pass pointers into the result into
-// legacy C-APIs.
+// will be zero-terminated, so it is safe to pass pointers into the result
+// into legacy C-APIs.
 template <detail::constexpr_str_cat_impl::ConstexprString... strings>
 constexpr std::string_view constexprStrCat() {
   const auto& b =

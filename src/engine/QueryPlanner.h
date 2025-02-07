@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <boost/optional.hpp>
 #include <vector>
 
 #include "engine/CheckUsePatternTrick.h"
@@ -17,6 +18,8 @@
 class QueryPlanner {
   using TextLimitMap =
       ad_utility::HashMap<Variable, parsedQuery::TextLimitMetaObject>;
+  using TextLimitVec =
+      std::vector<std::pair<Variable, parsedQuery::TextLimitMetaObject>>;
   using CancellationHandle = ad_utility::SharedCancellationHandle;
   template <typename T>
   using vector = std::vector<T>;
@@ -324,7 +327,7 @@ class QueryPlanner {
 
   [[nodiscard]] std::vector<QueryPlanner::SubtreePlan> createJoinCandidates(
       const SubtreePlan& a, const SubtreePlan& b,
-      std::optional<TripleGraph> tg) const;
+      boost::optional<const TripleGraph&> tg) const;
 
   // Used internally by `createJoinCandidates`. If `a` or `b` is a transitive
   // path operation and the other input can be bound to this transitive path
@@ -400,7 +403,7 @@ class QueryPlanner {
   // 1) There is no text operation for the text record column left.
   // 2) The text limit has not already been applied to the plan.
   void applyTextLimitsIfPossible(std::vector<SubtreePlan>& row,
-                                 const TextLimitMap& textLimits,
+                                 const TextLimitVec& textLimits,
                                  bool replaceInsteadOfAddPlans) const;
 
   /**
@@ -470,7 +473,7 @@ class QueryPlanner {
   std::vector<QueryPlanner::SubtreePlan>
   runDynamicProgrammingOnConnectedComponent(
       std::vector<SubtreePlan> connectedComponent,
-      const vector<SparqlFilter>& filters, const TextLimitMap& textLimits,
+      const vector<SparqlFilter>& filters, const TextLimitVec& textLimits,
       const TripleGraph& tg) const;
 
   // Same as `runDynamicProgrammingOnConnectedComponent`, but uses a greedy
@@ -478,15 +481,18 @@ class QueryPlanner {
   // join operations using the "Greedy Operator Ordering (GOO)" algorithm.
   std::vector<QueryPlanner::SubtreePlan> runGreedyPlanningOnConnectedComponent(
       std::vector<SubtreePlan> connectedComponent,
-      const vector<SparqlFilter>& filters, const TextLimitMap& textLimits,
+      const vector<SparqlFilter>& filters, const TextLimitVec& textLimits,
       const TripleGraph& tg) const;
 
   // Return the number of connected subgraphs is the `graph`, or `budget + 1`,
   // if the number of subgraphs is `> budget`. This is used to analyze the
   // complexity of the query graph and to choose between the DP and the greedy
   // query planner see above.
-  static size_t countSubgraphs(std::vector<const SubtreePlan*> graph,
-                               size_t budget);
+  // Note: We also need the added filters, because they behave like additional
+  // graph nodes wrt the performance of the DP based query planner.
+  size_t countSubgraphs(std::vector<const SubtreePlan*> graph,
+                        const std::vector<SparqlFilter>& filters,
+                        size_t budget);
 
   // Creates a SubtreePlan for the given text leaf node in the triple graph.
   // While doing this the TextLimitMetaObjects are created and updated according
@@ -542,6 +548,7 @@ class QueryPlanner {
     void visitSpatialSearch(parsedQuery::SpatialQuery& config);
     void visitUnion(parsedQuery::Union& un);
     void visitSubquery(parsedQuery::Subquery& subquery);
+    void visitDescribe(parsedQuery::Describe& describe);
 
     // This function is called for groups, optional, or minus clauses.
     // The `candidates` are the result of planning the pattern inside the

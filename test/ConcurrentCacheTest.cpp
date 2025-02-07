@@ -530,3 +530,39 @@ TEST(ConcurrentCache, testTryInsertIfNotPresentDoesWorkCorrectly) {
 
   expectContainsSingleElementAtKey0(true, "jkl");
 }
+
+TEST(ConcurrentCache, computeButDontStore) {
+  SimpleConcurrentLruCache cache{};
+
+  // The last argument of `computeOnce...`: For the sake of this test, all
+  // results are suitable for the cache. Note: In the `computeButDontStore`
+  // function this argument is ignored, because the results are never stored in
+  // the cache.
+  auto alwaysSuitable = [](auto&&) { return true; };
+  // Store the element in the cache.
+  cache.computeOnce(
+      42, []() { return "42"; }, false, alwaysSuitable);
+
+  // The result is read from the cache, so we get "42", not "blubb".
+  auto res = cache.computeButDontStore(
+      42, []() { return "blubb"; }, false, alwaysSuitable);
+  EXPECT_EQ(*res._resultPointer, "42");
+
+  // The same with `onlyReadFromCache` == true;
+  res = cache.computeButDontStore(
+      42, []() { return "blubb"; }, true, alwaysSuitable);
+  EXPECT_EQ(*res._resultPointer, "42");
+
+  cache.clearAll();
+
+  // Compute, but don't store.
+  res = cache.computeButDontStore(
+      42, []() { return "blubb"; }, false, alwaysSuitable);
+  EXPECT_EQ(*res._resultPointer, "blubb");
+
+  // Nothing is stored in the cache, so we cannot read it.
+  EXPECT_FALSE(cache.getIfContained(42).has_value());
+  res = cache.computeButDontStore(
+      42, []() { return "blubb"; }, true, alwaysSuitable);
+  EXPECT_EQ(res._resultPointer, nullptr);
+}

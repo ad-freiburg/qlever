@@ -72,7 +72,7 @@ void testJoin(const NestedBlock& a, const NestedBlock& b, JoinResult expected,
     zipperJoinForBlocksWithoutUndef(a, b, compare, adder);
   }
   // The result must be sorted on the first column
-  EXPECT_TRUE(std::ranges::is_sorted(result, std::less<>{}, ad_utility::first));
+  EXPECT_TRUE(ql::ranges::is_sorted(result, std::less<>{}, ad_utility::first));
   // The exact order of the elements with the same first column is not important
   // and depends on implementation details. We therefore do not enforce it here.
   EXPECT_THAT(result, ::testing::UnorderedElementsAreArray(expected));
@@ -89,7 +89,7 @@ void testJoin(const NestedBlock& a, const NestedBlock& b, JoinResult expected,
     auto adder = makeRowAdder(result);
     zipperJoinForBlocksWithoutUndef(b, a, compare, adder);
     EXPECT_TRUE(
-        std::ranges::is_sorted(result, std::less<>{}, ad_utility::first));
+        ql::ranges::is_sorted(result, std::less<>{}, ad_utility::first));
     EXPECT_THAT(result, ::testing::UnorderedElementsAreArray(expected));
   }
 }
@@ -179,6 +179,18 @@ TEST(JoinAlgorithms, JoinWithBlocksExactlyFourBlocksPerElement) {
   NestedBlock b{{{42, 12}, {67, 13}}};
   JoinResult expectedResult{
       {42, 0, 12}, {42, 1, 12}, {42, 2, 12}, {42, 3, 12}, {67, 0, 13}};
+  testJoin(a, b, expectedResult);
+}
+
+// Test the handling of many empty blocks.
+TEST(JoinAlgorithms, JoinWithEmptyBlocks) {
+  NestedBlock a{{{42, 1}, {42, 2}}, {{42, 3}}};
+  // The join has to handle all the entries with `42` in the first column at
+  // once. In `b` there are more than 3 empty blocks between blocks with this
+  // entry. There was previously a bug in this case.
+  NestedBlock b{{{42, 16}}, {}, {}, {}, {}, {}, {}, {}, {}, {{42, 23}}};
+  JoinResult expectedResult{{42, 1, 16}, {42, 1, 23}, {42, 2, 16},
+                            {42, 2, 23}, {42, 3, 16}, {42, 3, 23}};
   testJoin(a, b, expectedResult);
 }
 

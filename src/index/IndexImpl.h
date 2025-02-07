@@ -12,6 +12,7 @@
 #include <stxxl/vector>
 #include <vector>
 
+#include "backports/algorithm.h"
 #include "engine/Result.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "global/Pattern.h"
@@ -25,13 +26,14 @@
 #include "index/IndexMetaData.h"
 #include "index/PatternCreator.h"
 #include "index/Permutation.h"
+#include "index/Postings.h"
 #include "index/StxxlSortFunctors.h"
 #include "index/TextMetaData.h"
 #include "index/Vocabulary.h"
 #include "index/VocabularyMerger.h"
-#include "parser/ContextFileParser.h"
 #include "parser/RdfParser.h"
 #include "parser/TripleComponent.h"
+#include "parser/WordsAndDocsFileParser.h"
 #include "util/BufferedVector.h"
 #include "util/CancellationHandle.h"
 #include "util/File.h"
@@ -106,7 +108,6 @@ class IndexImpl {
   // Block Id, Context Id, Word Id, Score, entity
   using TextVec = stxxl::vector<
       tuple<TextBlockIndex, TextRecordIndex, WordOrEntityIndex, Score, bool>>;
-  using Posting = std::tuple<TextRecordIndex, WordIndex, Score>;
 
   struct IndexMetaDataMmapDispatcher {
     using WriteType = IndexMetaDataMmap;
@@ -128,6 +129,7 @@ class IndexImpl {
   bool keepTempFiles_ = false;
   ad_utility::MemorySize memoryLimitIndexBuilding_ =
       DEFAULT_MEMORY_LIMIT_INDEX_BUILDING;
+  ad_utility::MemorySize parserBufferSize_ = DEFAULT_PARSER_BUFFER_SIZE;
   ad_utility::MemorySize blocksizePermutationPerColumn_ =
       UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN;
   json configurationJson_;
@@ -158,6 +160,11 @@ class IndexImpl {
   NumNormalAndInternal numTriples_;
   string indexId_;
 
+  // Keeps track of the number of nonLiteral contexts in the index this is used
+  // in the test retrieval of the texts. This only works reliably if the
+  // wordsFile.tsv starts with contextId 1 and is continuous.
+  size_t nofNonLiteralsInTextIndex_;
+
   // Global static pointers to the currently active index and comparator.
   // Those are used to compare LocalVocab entries with each other as well as
   // with Vocab entries.
@@ -185,6 +192,10 @@ class IndexImpl {
   // after the creation of the vocabulary is finished.
   std::optional<Id> idOfHasPatternDuringIndexBuilding_;
   std::optional<Id> idOfInternalGraphDuringIndexBuilding_;
+
+  // The vocabulary type that is used (only relevant during index building).
+  ad_utility::VocabularyType vocabularyTypeForIndexBuilding_{
+      ad_utility::VocabularyType::Enum::CompressedOnDisk};
 
   // BlankNodeManager, initialized during `readConfiguration`
   std::unique_ptr<ad_utility::BlankNodeManager> blankNodeManager_{nullptr};
@@ -269,6 +280,13 @@ class IndexImpl {
     return deltaTriples_.value();
   }
 
+  // See the documentation of the `vocabularyTypeForIndexBuilding_` member for
+  // details.
+  void setVocabularyTypeForIndexBuilding(ad_utility::VocabularyType type) {
+    vocabularyTypeForIndexBuilding_ = type;
+    configurationJson_["vocabulary-type"] = type;
+  }
+
   // --------------------------------------------------------------------------
   //  -- RETRIEVAL ---
   // --------------------------------------------------------------------------
@@ -299,10 +317,10 @@ class IndexImpl {
       const LocatedTriplesSnapshot& locatedTriplesSnapshot) const;
 
   // ___________________________________________________________________________
-  std::string indexToString(VocabIndex id) const;
+  RdfsVocabulary::AccessReturnType indexToString(VocabIndex id) const;
 
   // ___________________________________________________________________________
-  std::string_view indexToString(WordVocabIndex id) const;
+  TextVocabulary::AccessReturnType indexToString(WordVocabIndex id) const;
 
  public:
   // ___________________________________________________________________________
@@ -401,6 +419,11 @@ class IndexImpl {
     return memoryLimitIndexBuilding_;
   }
 
+  ad_utility::MemorySize& parserBufferSize() { return parserBufferSize_; }
+  const ad_utility::MemorySize& parserBufferSize() const {
+    return parserBufferSize_;
+  }
+
   ad_utility::MemorySize& blocksizePermutationPerColumn() {
     return blocksizePermutationPerColumn_;
   }
@@ -423,6 +446,9 @@ class IndexImpl {
   size_t getNofWordPostings() const { return textMeta_.getNofWordPostings(); }
   size_t getNofEntityPostings() const {
     return textMeta_.getNofEntityPostings();
+  }
+  size_t getNofNonLiteralsInTextIndex() const {
+    return nofNonLiteralsInTextIndex_;
   }
 
   bool hasAllPermutations() const { return SPO().isLoaded(); }
@@ -507,8 +533,20 @@ class IndexImpl {
   // TODO: So far, this is limited to the internal vocabulary (still in the
   // testing phase, once it works, it should be easy to include the IRIs and
   // literals from the external vocabulary as well).
-  cppcoro::generator<ContextFileParser::Line> wordsInTextRecords(
-      const std::string& contextFile, bool addWordsFromLiterals);
+  cppcoro::generator<WordsFileLine> wordsInTextRecords(
+      std::string contextFile, bool addWordsFromLiterals) const;
+
+  void processEntityCaseDuringInvertedListProcessing(
+      const WordsFileLine& line,
+      ad_utility::HashMap<Id, Score>& entitiesInContxt, size_t& nofLiterals,
+      size_t& entityNotFoundErrorMsgCount) const;
+
+  void processWordCaseDuringInvertedListProcessing(
+      const WordsFileLine& line,
+      ad_utility::HashMap<WordIndex, Score>& wordsInContext) const;
+
+  void logEntityNotFound(const string& word,
+                         size_t& entityNotFoundErrorMsgCount) const;
 
   size_t processWordsForVocabulary(const string& contextFile,
                                    bool addWordsFromLiterals);
@@ -562,25 +600,12 @@ class IndexImpl {
 
   void createTextIndex(const string& filename, const TextVec& vec);
 
-  ContextListMetaData writePostings(ad_utility::File& out,
-                                    const vector<Posting>& postings,
-                                    bool skipWordlistIfAllTheSame);
-
   void openTextFileHandle();
 
   void addContextToVector(TextVec::bufwriter_type& writer,
                           TextRecordIndex context,
                           const ad_utility::HashMap<WordIndex, Score>& words,
                           const ad_utility::HashMap<Id, Score>& entities);
-
-  template <typename T, typename MakeFromUint64t>
-  vector<T> readGapComprList(size_t nofElements, off_t from, size_t nofBytes,
-                             MakeFromUint64t makeFromUint64t) const;
-
-  template <typename T, typename MakeFromUint64t = std::identity>
-  vector<T> readFreqComprList(
-      size_t nofElements, off_t from, size_t nofBytes,
-      MakeFromUint64t makeFromUint = MakeFromUint64t{}) const;
 
   // Get the metadata for the block from the text index that contains the
   // `word`. Also works for prefixes that are terminated with `PREFIX_CHAR` like
@@ -616,34 +641,12 @@ class IndexImpl {
 
   TextBlockIndex getWordBlockId(WordIndex wordIndex) const;
 
-  //! Writes a list of elements (have to be able to be cast to unit64_t)
-  //! to file.
-  //! Returns the number of bytes written.
-  template <class Numeric>
-  size_t writeList(Numeric* data, size_t nofElements,
-                   ad_utility::File& file) const;
-
-  // TODO<joka921> understand what the "codes" are, are they better just ints?
-  typedef ad_utility::HashMap<WordIndex, CompressionCode> WordToCodeMap;
-  typedef ad_utility::HashMap<Score, Score> ScoreCodeMap;
-  typedef vector<CompressionCode> WordCodebook;
-  typedef vector<Score> ScoreCodebook;
-
-  //! Creates codebooks for lists that are supposed to be entropy encoded.
-  void createCodebooks(const vector<Posting>& postings,
-                       WordToCodeMap& wordCodemap, WordCodebook& wordCodebook,
-                       ScoreCodeMap& scoreCodemap,
-                       ScoreCodebook& scoreCodebook) const;
-
-  template <class T>
-  size_t writeCodebook(const vector<T>& codebook, ad_utility::File& file) const;
-
   // FRIEND TESTS
   friend class IndexTest_createFromTsvTest_Test;
   friend class IndexTest_createFromOnDiskIndexTest_Test;
   friend class CreatePatternsFixture_createPatterns_Test;
 
-  bool isLiteral(const string& object) const;
+  bool isLiteral(std::string_view object) const;
 
  public:
   LangtagAndTriple tripleToInternalRepresentation(TurtleTriple&& triple) const;
@@ -687,34 +690,34 @@ class IndexImpl {
   // Create the SPO and SOP permutations. Additionally, count the number of
   // distinct actual (not internal) subjects in the input and write it to the
   // metadata. Also builds the patterns if specified.
-  template <typename... NextSorter>
-  requires(sizeof...(NextSorter) <= 1)
-  std::optional<PatternCreator::TripleSorter> createSPOAndSOP(
-      size_t numColumns, BlocksOfTriples sortedTriples,
-      NextSorter&&... nextSorter);
+  CPP_template(typename... NextSorter)(requires(sizeof...(NextSorter) <= 1))
+      std::optional<PatternCreator::TripleSorter> createSPOAndSOP(
+          size_t numColumns, BlocksOfTriples sortedTriples,
+          NextSorter&&... nextSorter);
   // Create the OSP and OPS permutations. Additionally, count the number of
   // distinct objects and write it to the metadata.
-  template <typename... NextSorter>
-  requires(sizeof...(NextSorter) <= 1)
-  void createOSPAndOPS(size_t numColumns, BlocksOfTriples sortedTriples,
-                       NextSorter&&... nextSorter);
+  CPP_template(typename... NextSorter)(requires(
+      sizeof...(NextSorter) <=
+      1)) void createOSPAndOPS(size_t numColumns, BlocksOfTriples sortedTriples,
+                               NextSorter&&... nextSorter);
 
   // Create the PSO and POS permutations. Additionally, count the number of
   // distinct predicates and the number of actual triples and write them to the
   // metadata. The meta-data JSON file for the index statistics will only be
   // written iff `doWriteConfiguration` is true. That parameter is set to
   // `false` when building the additional permutations for the internal triples.
-  template <typename... NextSorter>
-  requires(sizeof...(NextSorter) <= 1)
-  void createPSOAndPOSImpl(size_t numColumns, BlocksOfTriples sortedTriples,
-                           bool doWriteConfiguration,
-                           NextSorter&&... nextSorter);
+  CPP_template(typename... NextSorter)(
+      requires(sizeof...(NextSorter) <=
+               1)) void createPSOAndPOSImpl(size_t numColumns,
+                                            BlocksOfTriples sortedTriples,
+                                            bool doWriteConfiguration,
+                                            NextSorter&&... nextSorter);
   // Call `createPSOAndPOSImpl` with the given arguments and with
   // `doWriteConfiguration` set to `true` (see above).
-  template <typename... NextSorter>
-  requires(sizeof...(NextSorter) <= 1)
-  void createPSOAndPOS(size_t numColumns, BlocksOfTriples sortedTriples,
-                       NextSorter&&... nextSorter);
+  CPP_template(typename... NextSorter)(requires(
+      sizeof...(NextSorter) <=
+      1)) void createPSOAndPOS(size_t numColumns, BlocksOfTriples sortedTriples,
+                               NextSorter&&... nextSorter);
 
   // Create the internal PSO and POS permutations from the sorted internal
   // triples. Return `(numInternalTriples, numInternalPredicates)`.

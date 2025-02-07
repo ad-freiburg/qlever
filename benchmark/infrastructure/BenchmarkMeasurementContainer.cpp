@@ -129,7 +129,7 @@ void ResultTable::init(const std::string& descriptor,
   descriptorForLog_ = std::move(descriptorForLog);
   columnNames_ = columnNames;
   entries_.resize(rowNames.size());
-  std::ranges::fill(entries_, std::vector<EntryType>(columnNames.size()));
+  ql::ranges::fill(entries_, std::vector<EntryType>(columnNames.size()));
 
   // Setting the row names.
   for (size_t row = 0; row < rowNames.size(); row++) {
@@ -287,10 +287,10 @@ ResultTable::operator std::string() const {
         });
 
     // Which of the entries is the longest?
-    columnMaxStringWidth.at(column) = std::ranges::max(stringWidthOfRow);
+    columnMaxStringWidth.at(column) = ql::ranges::max(stringWidthOfRow);
 
     // Is the name of the column bigger?
-    columnMaxStringWidth.at(column) = std::ranges::max(
+    columnMaxStringWidth.at(column) = ql::ranges::max(
         columnMaxStringWidth.at(column), columnNames_.at(column).length());
   }
 
@@ -371,7 +371,7 @@ std::ostream& operator<<(std::ostream& os, const ResultGroup& resultGroup) {
 }
 
 // ____________________________________________________________________________
-template <ad_utility::SameAsAny<ResultEntry, ResultTable> T>
+template <typename T>
 void ResultGroup::deleteEntryImpl(T& entry) {
   // The vector, that holds our entries.
   auto& vec = [this]() -> auto& {
@@ -384,7 +384,7 @@ void ResultGroup::deleteEntryImpl(T& entry) {
   }();
 
   // Delete `entry`.
-  auto entryIterator{std::ranges::find(
+  auto entryIterator{ql::ranges::find(
       vec, &entry, [](const ad_utility::CopyableUniquePtr<T>& pointer) {
         return pointer.get();
       })};

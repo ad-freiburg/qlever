@@ -274,7 +274,7 @@ cppcoro::generator<typename Queue::value_type> queueManager(size_t queueSize,
   std::vector<ad_utility::JThread> threads;
   std::atomic<int64_t> numUnfinishedThreads{static_cast<int64_t>(numThreads)};
   absl::Cleanup queueFinisher{[&queue] { queue.finish(); }};
-  for ([[maybe_unused]] auto i : std::views::iota(0u, numThreads)) {
+  for ([[maybe_unused]] auto i : ql::views::iota(0u, numThreads)) {
     threads.emplace_back(
         detail::makeQueueTask(queue, producer, numUnfinishedThreads));
   }

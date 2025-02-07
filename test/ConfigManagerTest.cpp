@@ -435,7 +435,7 @@ TEST(ConfigManagerTest, ParseConfigWithSubManager) {
          const std::vector<std::pair<int*, int>>& wantedValues) {
         m.parseConfig(j);
 
-        std::ranges::for_each(
+        ql::ranges::for_each(
             wantedValues, [](const std::pair<int*, int>& wantedValue) -> void {
               ASSERT_EQ(*wantedValue.first, wantedValue.second);
             });
@@ -2131,7 +2131,7 @@ TEST(ConfigManagerTest, ContainsOption) {
   auto checkContainmentStatus =
       [](const ConfigManager& m,
          const ContainmentStatusVector& optionsAndWantedStatus) {
-        std::ranges::for_each(
+        ql::ranges::for_each(
             optionsAndWantedStatus,
             [&m](const ContainmentStatusVector::value_type& p) {
               if (p.second) {
@@ -2308,7 +2308,7 @@ TEST(ConfigManagerTest, ValidatorsSorting) {
     // For generating better messages, when failing a test.
     auto trace{generateLocationTrace(l, "checkOrder")};
 
-    ASSERT_TRUE(std::ranges::equal(
+    ASSERT_TRUE(ql::ranges::equal(
         manager.validators(true), order.validators_, {},
         [](const ConfigOptionValidatorManager& validatorManager) {
           return validatorManager.getDescription();
@@ -2434,9 +2434,9 @@ TEST(ConfigManagerTest, ConfigurationDocValidatorAssignment) {
               std::pair<T, std::vector<ConfigOptionValidatorManager>>>&
               pairVector) {
         // Simply insert all the entries.
-        std::ranges::for_each(pairVector, [&assignment](const auto& pair) {
+        ql::ranges::for_each(pairVector, [&assignment](const auto& pair) {
           const auto& [key, validatorVector] = pair;
-          std::ranges::for_each(
+          ql::ranges::for_each(
               validatorVector,
               [&assignment,
                &key](const ConfigOptionValidatorManager& validator) {
@@ -2460,16 +2460,16 @@ TEST(ConfigManagerTest, ConfigurationDocValidatorAssignment) {
               ad_utility::source_location::current()) {
         // For generating better messages, when failing a test.
         auto trace{generateLocationTrace(l, "testPairVector")};
-        std::ranges::for_each(pairVector, [&assignment](const auto& pair) {
+        ql::ranges::for_each(pairVector, [&assignment](const auto& pair) {
           const auto& [key, expectedValidatorVector] = pair;
 
           // Are the entries under `key` the objects in the expected vector?
           auto toPointer = [](const ConfigOptionValidatorManager& x) {
             return &x;
           };
-          ASSERT_TRUE(std::ranges::equal(assignment.getEntriesUnderKey(key),
-                                         expectedValidatorVector, {}, toPointer,
-                                         toPointer));
+          ASSERT_TRUE(ql::ranges::equal(assignment.getEntriesUnderKey(key),
+                                        expectedValidatorVector, {}, toPointer,
+                                        toPointer));
         });
       };
 

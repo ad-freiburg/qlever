@@ -21,7 +21,7 @@ namespace {
 ValueId asBool(bool value) { return Id::makeFromBool(value); }
 
 // Convert a generator to a vector for easier comparison in assertions
-std::vector<IdTable> toVector(Result::Generator generator) {
+std::vector<IdTable> toVector(Result::LazyResult generator) {
   std::vector<IdTable> result;
   for (auto& pair : generator) {
     // IMPORTANT: The `LocalVocab` contained in the pair will be destroyed at
@@ -87,13 +87,11 @@ TEST(Filter, verifyPredicateIsAppliedCorrectlyOnLazyEvaluation) {
   auto referenceTable1 =
       makeIdTableFromVector({{true}, {true}, {true}}, asBool);
   auto referenceTable2 = makeIdTableFromVector({{true}}, asBool);
-  IdTable referenceTable3{0, ad_utility::makeUnlimitedAllocator<Id>()};
 
   auto m = matchesIdTable;
   EXPECT_THAT(
       toVector(std::move(generator)),
-      ElementsAre(m(referenceTable1), m(referenceTable2), m(referenceTable3),
-                  m(referenceTable3), m(referenceTable2)));
+      ElementsAre(m(referenceTable1), m(referenceTable2), m(referenceTable2)));
 }
 
 // _____________________________________________________________________________

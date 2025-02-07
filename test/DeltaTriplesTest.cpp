@@ -47,7 +47,7 @@ class DeltaTriplesTest : public ::testing::Test {
   std::vector<TurtleTriple> makeTurtleTriples(
       const std::vector<std::string>& turtles) {
     RdfStringParser<TurtleParser<Tokenizer>> parser;
-    std::ranges::for_each(turtles, [&parser](const std::string& turtle) {
+    ql::ranges::for_each(turtles, [&parser](const std::string& turtle) {
       parser.parseUtf8String(turtle);
     });
     AD_CONTRACT_CHECK(parser.getTriples().size() == turtles.size());
@@ -132,7 +132,7 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
             makeIdTriples(vocab, localVocab, triples)));
   };
   // A matcher that checks the state of a `DeltaTriples`:
-  // - `numInserted()` and `numDeleted()`
+  // - `numInserted()` and `numDeleted()` and the derived `getCounts()`
   // - `numTriples()` for all `LocatedTriplesPerBlock`
   // - the inserted and deleted triples (unordered)
   auto StateIs = [&UnorderedTriplesAre](
@@ -350,14 +350,14 @@ TEST_F(DeltaTriplesTest, DeltaTriplesManager) {
           {"<A> <C> <E>", absl::StrCat("<A> <B> <E", threadIdx, ">"),
            absl::StrCat("<A> <B> <F", threadIdx, ">")});
       // Insert the `triplesToInsert`.
-      deltaTriplesManager.modify([&](DeltaTriples& deltaTriples) {
+      deltaTriplesManager.modify<void>([&](DeltaTriples& deltaTriples) {
         deltaTriples.insertTriples(cancellationHandle, triplesToInsert);
       });
       // We should have successfully completed an update, so the snapshot
       // pointer should have changed.
       EXPECT_NE(beforeUpdate, deltaTriplesManager.getCurrentSnapshot());
       // Delete the `triplesToDelete`.
-      deltaTriplesManager.modify([&](DeltaTriples& deltaTriples) {
+      deltaTriplesManager.modify<void>([&](DeltaTriples& deltaTriples) {
         deltaTriples.deleteTriples(cancellationHandle, triplesToDelete);
       });
 

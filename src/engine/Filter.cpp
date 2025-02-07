@@ -6,9 +6,9 @@
 
 #include "./Filter.h"
 
-#include <algorithm>
 #include <sstream>
 
+#include "backports/algorithm.h"
 #include "engine/CallFixedSize.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
@@ -75,7 +75,9 @@ ProtoResult Filter::computeResult(bool requestLaziness) {
               for (auto& [idTable, localVocab] : subRes->idTables()) {
                 IdTable result = self->filterIdTable(subRes->sortedBy(),
                                                      idTable, localVocab);
-                co_yield {std::move(result), std::move(localVocab)};
+                if (!result.empty()) {
+                  co_yield {std::move(result), std::move(localVocab)};
+                }
               }
             }(std::move(subRes), this),
             resultSortedOn()};

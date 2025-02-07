@@ -21,7 +21,7 @@ LocatedTriples::iterator& DeltaTriples::LocatedTripleHandles::forPermutation(
 void DeltaTriples::clear() {
   triplesInserted_.clear();
   triplesDeleted_.clear();
-  std::ranges::for_each(locatedTriples(), &LocatedTriplesPerBlock::clear);
+  ql::ranges::for_each(locatedTriples(), &LocatedTriplesPerBlock::clear);
 }
 
 // ____________________________________________________________________________
@@ -62,6 +62,11 @@ void DeltaTriples::eraseTripleInAllPermutations(LocatedTripleHandles& handles) {
     locatedTriples()[static_cast<int>(permutation)].erase(ltIter->blockIndex_,
                                                           ltIter);
   }
+}
+
+// ____________________________________________________________________________
+DeltaTriplesCount DeltaTriples::getCounts() const {
+  return {numInserted(), numDeleted()};
 }
 
 // ____________________________________________________________________________
@@ -133,9 +138,9 @@ void DeltaTriples::rewriteLocalVocabEntriesAndBlankNodes(Triples& triples) {
   };
 
   // Convert all local vocab and blank node `Id`s in all `triples`.
-  std::ranges::for_each(triples, [&convertId](IdTriple<0>& triple) {
-    std::ranges::for_each(triple.ids_, convertId);
-    std::ranges::for_each(triple.payload_, convertId);
+  ql::ranges::for_each(triples, [&convertId](IdTriple<0>& triple) {
+    ql::ranges::for_each(triple.ids_, convertId);
+    ql::ranges::for_each(triple.payload_, convertId);
   });
 }
 
@@ -145,26 +150,25 @@ void DeltaTriples::modifyTriplesImpl(CancellationHandle cancellationHandle,
                                      TriplesToHandlesMap& targetMap,
                                      TriplesToHandlesMap& inverseMap) {
   rewriteLocalVocabEntriesAndBlankNodes(triples);
-  std::ranges::sort(triples);
-  auto [first, last] = std::ranges::unique(triples);
-  triples.erase(first, last);
+  ql::ranges::sort(triples);
+  auto first = std::unique(triples.begin(), triples.end());
+  triples.erase(first, triples.end());
   std::erase_if(triples, [&targetMap](const IdTriple<0>& triple) {
     return targetMap.contains(triple);
   });
-  std::ranges::for_each(triples,
-                        [this, &inverseMap](const IdTriple<0>& triple) {
-                          auto handle = inverseMap.find(triple);
-                          if (handle != inverseMap.end()) {
-                            eraseTripleInAllPermutations(handle->second);
-                            inverseMap.erase(triple);
-                          }
-                        });
+  ql::ranges::for_each(triples, [this, &inverseMap](const IdTriple<0>& triple) {
+    auto handle = inverseMap.find(triple);
+    if (handle != inverseMap.end()) {
+      eraseTripleInAllPermutations(handle->second);
+      inverseMap.erase(triple);
+    }
+  });
 
   std::vector<LocatedTripleHandles> handles =
       locateAndAddTriples(std::move(cancellationHandle), triples, shouldExist);
 
   AD_CORRECTNESS_CHECK(triples.size() == handles.size());
-  // TODO<qup42>: replace with std::views::zip in C++23
+  // TODO<qup42>: replace with ql::views::zip in C++23
   for (size_t i = 0; i < triples.size(); i++) {
     targetMap.insert({triples[i], handles[i]});
   }
@@ -189,6 +193,20 @@ SharedLocatedTriplesSnapshot DeltaTriples::getSnapshot() {
 }
 
 // ____________________________________________________________________________
+void to_json(nlohmann::json& j, const DeltaTriplesCount& count) {
+  j = nlohmann::json{{"inserted", count.triplesInserted_},
+                     {"deleted", count.triplesDeleted_},
+                     {"total", count.triplesInserted_ + count.triplesDeleted_}};
+}
+
+// ____________________________________________________________________________
+DeltaTriplesCount operator-(const DeltaTriplesCount& lhs,
+                            const DeltaTriplesCount& rhs) {
+  return {lhs.triplesInserted_ - rhs.triplesInserted_,
+          lhs.triplesDeleted_ - rhs.triplesDeleted_};
+}
+
+// ____________________________________________________________________________
 DeltaTriples::DeltaTriples(const Index& index)
     : DeltaTriples(index.getImpl()) {}
 
@@ -198,24 +216,41 @@ DeltaTriplesManager::DeltaTriplesManager(const IndexImpl& index)
       currentLocatedTriplesSnapshot_{deltaTriples_.wlock()->getSnapshot()} {}
 
 // _____________________________________________________________________________
-void DeltaTriplesManager::modify(
-    const std::function<void(DeltaTriples&)>& function) {
+template <typename ReturnType>
+ReturnType DeltaTriplesManager::modify(
+    const std::function<ReturnType(DeltaTriples&)>& function) {
   // While holding the lock for the underlying `DeltaTriples`, perform the
   // actual `function` (typically some combination of insert and delete
   // operations) and (while still holding the lock) update the
   // `currentLocatedTriplesSnapshot_`.
-  deltaTriples_.withWriteLock([this, &function](DeltaTriples& deltaTriples) {
-    function(deltaTriples);
-    auto newSnapshot = deltaTriples.getSnapshot();
-    currentLocatedTriplesSnapshot_.withWriteLock(
-        [&newSnapshot](auto& currentSnapshot) {
-          currentSnapshot = std::move(newSnapshot);
-        });
-  });
+  return deltaTriples_.withWriteLock(
+      [this, &function](DeltaTriples& deltaTriples) {
+        auto updateSnapshot = [this, &deltaTriples] {
+          auto newSnapshot = deltaTriples.getSnapshot();
+          currentLocatedTriplesSnapshot_.withWriteLock(
+              [&newSnapshot](auto& currentSnapshot) {
+                currentSnapshot = std::move(newSnapshot);
+              });
+        };
+
+        if constexpr (std::is_void_v<ReturnType>) {
+          function(deltaTriples);
+          updateSnapshot();
+        } else {
+          ReturnType returnValue = function(deltaTriples);
+          updateSnapshot();
+          return returnValue;
+        }
+      });
 }
+// Explicit instantions
+template void DeltaTriplesManager::modify<void>(
+    std::function<void(DeltaTriples&)> const&);
+template nlohmann::json DeltaTriplesManager::modify<nlohmann::json>(
+    const std::function<nlohmann::json(DeltaTriples&)>&);
 
 // _____________________________________________________________________________
-void DeltaTriplesManager::clear() { modify(&DeltaTriples::clear); }
+void DeltaTriplesManager::clear() { modify<void>(&DeltaTriples::clear); }
 
 // _____________________________________________________________________________
 SharedLocatedTriplesSnapshot DeltaTriplesManager::getCurrentSnapshot() const {
@@ -225,7 +260,7 @@ SharedLocatedTriplesSnapshot DeltaTriplesManager::getCurrentSnapshot() const {
 // _____________________________________________________________________________
 void DeltaTriples::setOriginalMetadata(
     Permutation::Enum permutation,
-    std::vector<CompressedBlockMetadata> metadata) {
+    std::shared_ptr<const std::vector<CompressedBlockMetadata>> metadata) {
   locatedTriples()
       .at(static_cast<size_t>(permutation))
       .setOriginalMetadata(std::move(metadata));

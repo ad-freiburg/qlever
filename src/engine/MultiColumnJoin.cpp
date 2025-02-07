@@ -247,7 +247,7 @@ void MultiColumnJoin::computeMultiColumnJoin(
   // this case we can use a much cheaper algorithm.
   // TODO<joka921> There are many other cases where a cheaper implementation can
   // be chosen, but we leave those for another PR, this is the most common case.
-  namespace stdr = std::ranges;
+  namespace stdr = ql::ranges;
   bool isCheap = stdr::none_of(joinColumns, [&](const auto& jcs) {
     auto [leftCol, rightCol] = jcs;
     return (stdr::any_of(right.getColumn(rightCol), &Id::isUndefined)) ||
@@ -260,12 +260,12 @@ void MultiColumnJoin::computeMultiColumnJoin(
     if (isCheap) {
       return ad_utility::zipperJoinWithUndef(
           leftJoinColumns, rightJoinColumns,
-          std::ranges::lexicographical_compare, addRow, ad_utility::noop,
+          ql::ranges::lexicographical_compare, addRow, ad_utility::noop,
           ad_utility::noop, ad_utility::noop, checkCancellationLambda);
     } else {
       return ad_utility::zipperJoinWithUndef(
           leftJoinColumns, rightJoinColumns,
-          std::ranges::lexicographical_compare, addRow, findUndef, findUndef,
+          ql::ranges::lexicographical_compare, addRow, findUndef, findUndef,
           ad_utility::noop, checkCancellationLambda);
     }
   }();

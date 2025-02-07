@@ -17,6 +17,7 @@
 #include "util/File.h"
 #include "util/Generator.h"
 #include "util/Iterators.h"
+#include "util/ResetWhenMoved.h"
 #include "util/Serializer/FileSerializer.h"
 #include "util/Serializer/SerializeVector.h"
 #include "util/TypeTraits.h"
@@ -181,7 +182,10 @@ struct CompactStringVectorWriter {
   off_t _startOfFile;
   using offset_type = typename CompactVectorOfStrings<data_type>::offset_type;
   std::vector<offset_type> _offsets;
-  bool _finished = false;
+
+  // A `CompactStringVectorWriter` that has been moved from may not call
+  // `finish()` any more in its destructor.
+  ad_utility::ResetWhenMoved<bool, true> _finished = false;
   offset_type _nextOffset = 0;
 
   explicit CompactStringVectorWriter(const std::string& filename)
@@ -227,16 +231,33 @@ struct CompactStringVectorWriter {
     }
   }
 
+  // The copy operations would be deleted implicitly (because `File` is not
+  // copyable.
+  CompactStringVectorWriter(const CompactStringVectorWriter&) = delete;
+  CompactStringVectorWriter& operator=(const CompactStringVectorWriter&) =
+      delete;
+
+  // The move operations have to be explicitly defaulted, because we have a
+  // manually defined destructor.
+  // Note: The defaulted move operations behave correctly because of the usage
+  // of `ResetWhenMoved` with the `_finished` member.
+  CompactStringVectorWriter(CompactStringVectorWriter&&) = default;
+  CompactStringVectorWriter& operator=(CompactStringVectorWriter&&) = default;
+
  private:
   // Has to be run by all the constructors
   void commonInitialization() {
     AD_CONTRACT_CHECK(_file.isOpen());
-    // We don't known the data size yet.
+    // We don't know the data size yet.
     _startOfFile = _file.tell();
     size_t dataSizeDummy = 0;
     _file.write(&dataSizeDummy, sizeof(dataSizeDummy));
   }
 };
+static_assert(
+    std::is_nothrow_move_assignable_v<CompactStringVectorWriter<char>>);
+static_assert(
+    std::is_nothrow_move_constructible_v<CompactStringVectorWriter<char>>);
 }  // namespace detail
 
 // Forward iterator for a `CompactVectorOfStrings` that reads directly from

@@ -71,12 +71,13 @@ size_t Index::getCardinality(
 }
 
 // ____________________________________________________________________________
-std::string Index::indexToString(VocabIndex id) const {
+auto Index::indexToString(VocabIndex id) const -> Vocab::AccessReturnType {
   return pimpl_->indexToString(id);
 }
 
 // ____________________________________________________________________________
-std::string_view Index::indexToString(WordVocabIndex id) const {
+auto Index::indexToString(WordVocabIndex id) const
+    -> TextVocabulary::AccessReturnType {
   return pimpl_->indexToString(id);
 }
 
@@ -181,13 +182,23 @@ ad_utility::MemorySize& Index::memoryLimitIndexBuilding() {
 }
 
 // ____________________________________________________________________________
-ad_utility::MemorySize& Index::blocksizePermutationsPerColumn() {
-  return pimpl_->blocksizePermutationPerColumn();
+const ad_utility::MemorySize& Index::memoryLimitIndexBuilding() const {
+  return std::as_const(*pimpl_).memoryLimitIndexBuilding();
 }
 
 // ____________________________________________________________________________
-const ad_utility::MemorySize& Index::memoryLimitIndexBuilding() const {
-  return std::as_const(*pimpl_).memoryLimitIndexBuilding();
+ad_utility::MemorySize& Index::parserBufferSize() {
+  return pimpl_->parserBufferSize();
+}
+
+// ____________________________________________________________________________
+const ad_utility::MemorySize& Index::parserBufferSize() const {
+  return std::as_const(*pimpl_).parserBufferSize();
+}
+
+// ____________________________________________________________________________
+ad_utility::MemorySize& Index::blocksizePermutationsPerColumn() {
+  return pimpl_->blocksizePermutationPerColumn();
 }
 
 // ____________________________________________________________________________
@@ -230,6 +241,11 @@ size_t Index::getNofWordPostings() const {
 // ____________________________________________________________________________
 size_t Index::getNofEntityPostings() const {
   return pimpl_->getNofEntityPostings();
+}
+
+// ____________________________________________________________________________
+size_t Index::getNofNonLiteralsInTextIndex() const {
+  return pimpl_->getNofNonLiteralsInTextIndex();
 }
 
 // ____________________________________________________________________________

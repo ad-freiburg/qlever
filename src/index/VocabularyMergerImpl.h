@@ -13,6 +13,7 @@
 #include <utility>
 #include <vector>
 
+#include "backports/algorithm.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/Vocabulary.h"
 #include "index/VocabularyMerger.h"
@@ -30,22 +31,25 @@
 
 namespace ad_utility::vocabulary_merger {
 // _________________________________________________________________
-VocabularyMetaData mergeVocabulary(const std::string& basename, size_t numFiles,
-                                   WordComparator auto comparator,
-                                   WordCallback auto& internalWordCallback,
-                                   ad_utility::MemorySize memoryToUse) {
+template <typename W, typename C>
+auto mergeVocabulary(const std::string& basename, size_t numFiles, W comparator,
+                     C& internalWordCallback,
+                     ad_utility::MemorySize memoryToUse)
+    -> CPP_ret(VocabularyMetaData)(
+        requires WordComparator<W>&& WordCallback<C>) {
   VocabularyMerger merger;
   return merger.mergeVocabulary(basename, numFiles, std::move(comparator),
                                 internalWordCallback, memoryToUse);
 }
 
 // _________________________________________________________________
+template <typename W, typename C>
 auto VocabularyMerger::mergeVocabulary(const std::string& basename,
-                                       size_t numFiles,
-                                       WordComparator auto comparator,
-                                       WordCallback auto& wordCallback,
+                                       size_t numFiles, W comparator,
+                                       C& wordCallback,
                                        ad_utility::MemorySize memoryToUse)
-    -> VocabularyMetaData {
+    -> CPP_ret(VocabularyMetaData)(
+        requires WordComparator<W>&& WordCallback<C>) {
   // Return true iff p1 >= p2 according to the lexicographic order of the IRI
   // or literal.
   auto lessThan = [&comparator](const TripleComponentWithIndex& t1,
@@ -84,8 +88,8 @@ auto VocabularyMerger::mergeVocabulary(const std::string& basename,
 
   std::future<void> writeFuture;
 
-  // Some memory (that is hard to measure exactly) is used for the writing of a
-  // batch of merged words, so we only give 80% of the total memory to the
+  // Some memory (that is hard to measure exactly) is used for the writing of
+  // a batch of merged words, so we only give 80% of the total memory to the
   // merging. This is very approximate and should be investigated in more
   // detail.
   auto mergedWords =
@@ -94,7 +98,7 @@ auto VocabularyMerger::mergeVocabulary(const std::string& basename,
           0.8 * memoryToUse, generators, lessThanForQueue);
   ad_utility::ProgressBar progressBar{metaData_.numWordsTotal(),
                                       "Words merged: "};
-  for (QueueWord& currentWord : std::views::join(mergedWords)) {
+  for (QueueWord& currentWord : ql::views::join(mergedWords)) {
     // Accumulate the globally ordered queue words in a buffer.
     sortedBuffer.push_back(std::move(currentWord));
 
@@ -111,8 +115,8 @@ auto VocabularyMerger::mergeVocabulary(const std::string& basename,
       // wait for the last batch
 
       LOG(TIMING) << "A new batch of words is ready" << std::endl;
-      // First wait for the last batch to finish, that way there will be no race
-      // conditions.
+      // First wait for the last batch to finish, that way there will be no
+      // race conditions.
       if (writeFuture.valid()) {
         writeFuture.get();
       }
@@ -139,11 +143,13 @@ auto VocabularyMerger::mergeVocabulary(const std::string& basename,
 }
 
 // ________________________________________________________________________________
-void VocabularyMerger::writeQueueWordsToIdVec(
-    const std::vector<QueueWord>& buffer, WordCallback auto& wordCallback,
-    std::predicate<TripleComponentWithIndex,
-                   TripleComponentWithIndex> auto const& lessThan,
-    ad_utility::ProgressBar& progressBar) {
+CPP_template_def(typename C, typename L)(
+    requires WordCallback<C> CPP_and
+        ranges::predicate<L, TripleComponentWithIndex,
+                          TripleComponentWithIndex>) void VocabularyMerger::
+    writeQueueWordsToIdVec(const std::vector<QueueWord>& buffer,
+                           C& wordCallback, const L& lessThan,
+                           ad_utility::ProgressBar& progressBar) {
   LOG(TIMING) << "Start writing a batch of merged words\n";
 
   // Smaller grained buffer for the actual inner write.
@@ -318,10 +324,10 @@ inline ItemVec vocabMapsToVector(ItemMapArray& map) {
     futures.push_back(
         std::async(std::launch::async, [&singleMap, &els, &offsets, i] {
           using T = ItemVec::value_type;
-          std::ranges::transform(singleMap.map_, els.begin() + offsets[i],
-                                 [](auto& el) -> T {
-                                   return {el.first, std::move(el.second)};
-                                 });
+          ql::ranges::transform(singleMap.map_, els.begin() + offsets[i],
+                                [](auto& el) -> T {
+                                  return {el.first, std::move(el.second)};
+                                });
         }));
     ++i;
   }
@@ -339,13 +345,13 @@ void sortVocabVector(ItemVec* vecPtr, StringSortComparator comp,
   auto& els = *vecPtr;
   if constexpr (USE_PARALLEL_SORT) {
     if (doParallelSort) {
-      ad_utility::parallel_sort(std::ranges::begin(els), std::ranges::end(els),
+      ad_utility::parallel_sort(ql::ranges::begin(els), ql::ranges::end(els),
                                 comp, ad_utility::parallel_tag(10));
     } else {
-      std::ranges::sort(els, comp);
+      ql::ranges::sort(els, comp);
     }
   } else {
-    std::ranges::sort(els, comp);
+    ql::ranges::sort(els, comp);
     (void)doParallelSort;  // avoid compiler warning for unused value.
   }
 }

@@ -72,7 +72,7 @@ void PatternCreator::finishSubject(Id subject, const Pattern& pattern) {
   // Note: This has to be done for all triples, including those where the
   // subject has no pattern.
   auto curSubject = currentSubject_.value();
-  std::ranges::for_each(
+  ql::ranges::for_each(
       tripleBuffer_, [this, patternId, &curSubject](const auto& t) {
         static_assert(NumColumnsIndexBuilding == 4,
                       "The following lines have to be changed when additional "
@@ -109,11 +109,11 @@ void PatternCreator::finish() {
   // TODO<C++23> Use `ranges::to<vector>`.
   std::vector<std::pair<Pattern, PatternIdAndCount>> orderedPatterns{
       patternToIdAndCount_.begin(), patternToIdAndCount_.end()};
-  std::ranges::sort(orderedPatterns, std::less<>{},
-                    [](const auto& a) { return a.second.patternId_; });
+  ql::ranges::sort(orderedPatterns, std::less<>{},
+                   [](const auto& a) { return a.second.patternId_; });
   CompactVectorOfStrings<Pattern::value_type>::Writer patternWriter{
       std::move(patternSerializer_).file()};
-  for (const auto& pattern : orderedPatterns | std::views::keys) {
+  for (const auto& pattern : orderedPatterns | ql::views::keys) {
     patternWriter.push(pattern.data(), pattern.size());
   }
   patternWriter.finish();

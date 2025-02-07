@@ -4,11 +4,12 @@
 
 #pragma once
 
-#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <ranges>
 
+#include "backports/algorithm.h"
+#include "backports/concepts.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "util/Generator.h"
@@ -25,14 +26,14 @@ namespace ad_utility {
 // single argument of the `Range`'s iterator type (NOT value type).
 template <typename F, typename Range>
 concept UnaryIteratorFunction =
-    std::invocable<F, std::ranges::iterator_t<Range>>;
+    std::invocable<F, ql::ranges::iterator_t<Range>>;
 
 // A  function `F` fulfills `BinaryIteratorFunction` if it can be called with
 // two arguments of the `Range`'s iterator type (NOT value type).
 template <typename F, typename Range>
 concept BinaryIteratorFunction =
-    std::invocable<F, std::ranges::iterator_t<Range>,
-                   std::ranges::iterator_t<Range>>;
+    std::invocable<F, ql::ranges::iterator_t<Range>,
+                   ql::ranges::iterator_t<Range>>;
 
 // Note: In the following functions, two rows of IDs are called `compatible` if
 // for each position they are equal, or at least one of them is UNDEF. This is
@@ -80,19 +81,20 @@ concept BinaryIteratorFunction =
  * described cases leads to two sorted ranges in the output, this can possibly
  * be exploited to fix the result in a cheaper way than a full sort.
  */
-template <std::ranges::random_access_range Range1,
-          std::ranges::random_access_range Range2, typename LessThan,
-          typename FindSmallerUndefRangesLeft,
-          typename FindSmallerUndefRangesRight,
-          typename ElFromFirstNotFoundAction = decltype(noop),
-          typename CheckCancellation = decltype(noop)>
-[[nodiscard]] auto zipperJoinWithUndef(
-    const Range1& left, const Range2& right, const LessThan& lessThan,
-    const auto& compatibleRowAction,
-    const FindSmallerUndefRangesLeft& findSmallerUndefRangesLeft,
-    const FindSmallerUndefRangesRight& findSmallerUndefRangesRight,
-    ElFromFirstNotFoundAction elFromFirstNotFoundAction = {},
-    CheckCancellation checkCancellation = {}) {
+CPP_template(typename Range1, typename Range2, typename LessThan,
+             typename FindSmallerUndefRangesLeft,
+             typename FindSmallerUndefRangesRight,
+             typename ElFromFirstNotFoundAction = decltype(noop),
+             typename CheckCancellation = decltype(noop))(
+    requires ql::ranges::random_access_range<Range1> CPP_and
+        ql::ranges::random_access_range<Range2>)
+    [[nodiscard]] auto zipperJoinWithUndef(
+        const Range1& left, const Range2& right, const LessThan& lessThan,
+        const auto& compatibleRowAction,
+        const FindSmallerUndefRangesLeft& findSmallerUndefRangesLeft,
+        const FindSmallerUndefRangesRight& findSmallerUndefRangesRight,
+        ElFromFirstNotFoundAction elFromFirstNotFoundAction = {},
+        CheckCancellation checkCancellation = {}) {
   // If this is not an OPTIONAL join or a MINUS we can apply several
   // optimizations, so we store this information.
   static constexpr bool hasNotFoundAction =
@@ -160,7 +162,7 @@ template <std::ranges::random_access_range Range1,
     } else if constexpr (std::is_convertible_v<T, Id>) {
       return row != Id::makeUndefined();
     } else {
-      return (std::ranges::none_of(
+      return (ql::ranges::none_of(
           row, [](Id id) { return id == Id::makeUndefined(); }));
     }
   };
@@ -319,15 +321,20 @@ template <std::ranges::random_access_range Range1,
  * a proper exception. Typically implementations will just
  * CancellationHandle::throwIfCancelled().
  */
-template <std::ranges::random_access_range RangeSmaller,
-          std::ranges::random_access_range RangeLarger,
-          typename ElementFromSmallerNotFoundAction = Noop,
-          typename CheckCancellation = Noop>
-void gallopingJoin(
-    const RangeSmaller& smaller, const RangeLarger& larger,
-    auto const& lessThan, auto const& action,
-    ElementFromSmallerNotFoundAction elementFromSmallerNotFoundAction = {},
-    CheckCancellation checkCancellation = {}) {
+CPP_template(typename RangeSmaller, typename RangeLarger,
+             typename ElementFromSmallerNotFoundAction = Noop,
+             typename CheckCancellation = Noop)(
+    requires ql::ranges::random_access_range<RangeSmaller> CPP_and
+        ql::ranges::random_access_range<
+            RangeLarger>) void gallopingJoin(const RangeSmaller& smaller,
+                                             const RangeLarger& larger,
+                                             auto const& lessThan,
+                                             auto const& action,
+                                             ElementFromSmallerNotFoundAction
+                                                 elementFromSmallerNotFoundAction =
+                                                     {},
+                                             CheckCancellation
+                                                 checkCancellation = {}) {
   auto itSmall = std::begin(smaller);
   auto endSmall = std::end(smaller);
   auto itLarge = std::begin(larger);
@@ -490,6 +497,9 @@ void specialOptionalJoin(
       elFromFirstNotFoundAction(it);
     }
     it1 = next1;
+    if (it1 == end1) {
+      break;
+    }
 
     checkCancellation();
 
@@ -525,7 +535,7 @@ void specialOptionalJoin(
     // TODO<joka921> We could probably also apply this optimization if both
     // inputs contain UNDEF values only in the last column, and possibly
     // also not only for `OPTIONAL` joins.
-    auto endOfUndef = std::ranges::find_if_not(leftSub, &Id::isUndefined);
+    auto endOfUndef = ql::ranges::find_if_not(leftSub, &Id::isUndefined);
     auto findSmallerUndefRangeLeft =
         [leftSub,
          endOfUndef](auto&&...) -> cppcoro::generator<decltype(endOfUndef)> {
@@ -596,22 +606,22 @@ class BlockAndSubrange {
 
   bool empty() const { return subrange_.second == subrange_.first; }
 
-  // Return the currently specified subrange as a `std::ranges::subrange`
+  // Return the currently specified subrange as a `ql::ranges::subrange`
   // object.
   auto subrange() {
-    return std::ranges::subrange{fullBlock().begin() + subrange_.first,
-                                 fullBlock().begin() + subrange_.second};
+    return ql::ranges::subrange{fullBlock().begin() + subrange_.first,
+                                fullBlock().begin() + subrange_.second};
   }
 
   // The const overload of the `subrange` method (see above).
   auto subrange() const {
-    return std::ranges::subrange{fullBlock().begin() + subrange_.first,
-                                 fullBlock().begin() + subrange_.second};
+    return ql::ranges::subrange{fullBlock().begin() + subrange_.first,
+                                fullBlock().begin() + subrange_.second};
   }
 
   // Get a view that iterates over all the indices that belong to the subrange.
   auto getIndexRange() const {
-    return std::views::iota(subrange_.first, subrange_.second);
+    return ql::views::iota(subrange_.first, subrange_.second);
   }
 
   Range getIndices() const { return subrange_; }
@@ -649,7 +659,7 @@ class BlockAndSubrange {
   // Overload of `setSubrange` for an actual subrange object.
   template <typename Subrange>
   void setSubrange(const Subrange& subrange) {
-    setSubrange(std::ranges::begin(subrange), std::ranges::end(subrange));
+    setSubrange(ql::ranges::begin(subrange), ql::ranges::end(subrange));
   }
 };
 
@@ -668,7 +678,7 @@ struct JoinSide {
   CurrentBlocks undefBlocks_{};
 
   // Type aliases for a single element from a block from the left/right input.
-  using value_type = std::ranges::range_value_t<std::iter_value_t<Iterator>>;
+  using value_type = ql::ranges::range_value_t<std::iter_value_t<Iterator>>;
   // Type alias for the result of the projection.
   using ProjectedEl =
       std::decay_t<std::invoke_result_t<const Projection&, value_type>>;
@@ -683,7 +693,7 @@ JoinSide(It, End, const Projection&) -> JoinSide<It, End, Projection>;
 // keeping them valid until the join is completed.
 template <typename Blocks>
 auto makeJoinSide(Blocks& blocks, const auto& projection) {
-  return JoinSide{std::ranges::begin(blocks), std::ranges::end(blocks),
+  return JoinSide{ql::ranges::begin(blocks), ql::ranges::end(blocks),
                   projection};
 }
 
@@ -762,8 +772,8 @@ struct BlockZipperJoinImpl {
 #if defined(Side) || defined(Blocks)
 #error Side or Blocks are already defined
 #endif
-#define Side SameAsAny<LeftSide, RightSide> auto
-#define Blocks SameAsAny<LeftBlocks, RightBlocks> auto
+#define Side QL_CONCEPT_OR_NOTHING(SameAsAny<LeftSide, RightSide>) auto
+#define Blocks QL_CONCEPT_OR_NOTHING(SameAsAny<LeftBlocks, RightBlocks>) auto
 
   // Type alias for the result of the projection. Elements from the left and
   // right input must be projected to the same type.
@@ -799,14 +809,18 @@ struct BlockZipperJoinImpl {
     auto& end = side.end_;
     for (size_t numBlocksRead = 0; it != end && numBlocksRead < 3;
          ++it, ++numBlocksRead) {
-      if (std::ranges::empty(*it)) {
+      if (ql::ranges::empty(*it)) {
+        // We haven't read a block, so we have to adapt the counter.
+        // NOTE: If `numBlocksRead == 0`, the underflow is no problem because
+        // the next operation is `++`.
+        --numBlocksRead;
         continue;
       }
       if (!eq((*it)[0], currentEl)) {
         AD_CORRECTNESS_CHECK(lessThan_(currentEl, (*it)[0]));
         return true;
       }
-      AD_CORRECTNESS_CHECK(std::ranges::is_sorted(*it, lessThan_));
+      AD_CORRECTNESS_CHECK(ql::ranges::is_sorted(*it, lessThan_));
       side.currentBlocks_.emplace_back(std::move(*it));
     }
     return it == end;
@@ -850,7 +864,7 @@ struct BlockZipperJoinImpl {
 
     // Delete the part from the last block that is `<= lastProcessedElement`.
     decltype(auto) remainingBlock = blocks.at(0).subrange();
-    auto beginningOfUnjoined = std::ranges::upper_bound(
+    auto beginningOfUnjoined = ql::ranges::upper_bound(
         remainingBlock, lastProcessedElement, lessThan_);
     blocks.at(0).setSubrange(beginningOfUnjoined, remainingBlock.end());
     if (blocks.at(0).empty()) {
@@ -867,7 +881,9 @@ struct BlockZipperJoinImpl {
                      const ProjectedEl& currentEl) {
     AD_CORRECTNESS_CHECK(!currentBlocks.empty());
     const auto& first = currentBlocks.at(0);
-    auto it = std::ranges::lower_bound(first.subrange(), currentEl, lessThan_);
+    // TODO<joka921> ql::ranges::lower_bound doesn't work here.
+    auto it = std::lower_bound(first.subrange().begin(), first.subrange().end(),
+                               currentEl, lessThan_);
     return std::tuple{std::ref(first.fullBlock()), first.subrange(), it};
   }
 
@@ -883,7 +899,7 @@ struct BlockZipperJoinImpl {
   // blocks on the right and add them to the result.
   void addCartesianProduct(const LeftBlocks& blocksLeft,
                            const RightBlocks& blocksRight) {
-    // TODO<C++23> use `std::views::cartesian_product`.
+    // TODO<C++23> use `ql::views::cartesian_product`.
     for (const auto& lBlock : blocksLeft) {
       for (const auto& rBlock : blocksRight) {
         compatibleRowAction_.setInput(lBlock.fullBlock(), rBlock.fullBlock());
@@ -903,10 +919,10 @@ struct BlockZipperJoinImpl {
       const LeftBlocks& blocksLeft, const RightBlocks& blocksRight) {
     if constexpr (DoOptionalJoin) {
       if (!hasUndef(rightSide_) &&
-          std::ranges::all_of(
-              blocksRight | std::views::transform(
+          ql::ranges::all_of(
+              blocksRight | ql::views::transform(
                                 [](const auto& inp) { return inp.subrange(); }),
-              std::ranges::empty)) {
+              ql::ranges::empty)) {
         for (const auto& lBlock : blocksLeft) {
           compatibleRowAction_.setOnlyLeftInputForOptionalJoin(
               lBlock.fullBlock());
@@ -938,8 +954,11 @@ struct BlockZipperJoinImpl {
       return result;
     }
     auto& last = result.back();
-    last.setSubrange(
-        std::ranges::equal_range(last.subrange(), currentEl, lessThan_));
+    // TODO<joka921> `ql::ranges::equal_range` doesn't work here for some
+    // reason.
+    auto [begin, end] = std::equal_range(
+        last.subrange().begin(), last.subrange().end(), currentEl, lessThan_);
+    last.setSubrange(begin, end);
     return result;
   }
 
@@ -1035,16 +1054,16 @@ struct BlockZipperJoinImpl {
     // yields iterators to the individual undefined values.
     if constexpr (potentiallyHasUndef) {
       [[maybe_unused]] auto res = zipperJoinWithUndef(
-          std::ranges::subrange{subrangeLeft.begin(), currentElItL},
-          std::ranges::subrange{subrangeRight.begin(), currentElItR}, lessThan_,
+          ql::ranges::subrange{subrangeLeft.begin(), currentElItL},
+          ql::ranges::subrange{subrangeRight.begin(), currentElItR}, lessThan_,
           addRowIndex,
           findUndefValues<true>(fullBlockLeft, fullBlockRight, begL, begR),
           findUndefValues<false>(fullBlockLeft, fullBlockRight, begL, begR),
           addNotFoundRowIndex);
     } else {
       [[maybe_unused]] auto res = zipperJoinWithUndef(
-          std::ranges::subrange{subrangeLeft.begin(), currentElItL},
-          std::ranges::subrange{subrangeRight.begin(), currentElItR}, lessThan_,
+          ql::ranges::subrange{subrangeLeft.begin(), currentElItL},
+          ql::ranges::subrange{subrangeRight.begin(), currentElItR}, lessThan_,
           addRowIndex, noop, noop, addNotFoundRowIndex);
     }
     compatibleRowAction_.flush();
@@ -1063,7 +1082,7 @@ struct BlockZipperJoinImpl {
     while (targetBuffer.empty() && it != end) {
       auto& el = *it;
       if (!el.empty()) {
-        AD_CORRECTNESS_CHECK(std::ranges::is_sorted(el, lessThan_));
+        AD_CORRECTNESS_CHECK(ql::ranges::is_sorted(el, lessThan_));
         targetBuffer.emplace_back(std::move(el));
       }
       ++it;
@@ -1245,7 +1264,7 @@ struct BlockZipperJoinImpl {
     // The reference of `it` is there on purpose.
     for (auto& it = side.it_; it != side.end_; ++it) {
       auto& el = *it;
-      if (std::ranges::empty(el) || !isUndefined_(el.front())) {
+      if (ql::ranges::empty(el) || !isUndefined_(el.front())) {
         return;
       }
       bool endIsUndefined = isUndefined_(el.back());
@@ -1253,11 +1272,12 @@ struct BlockZipperJoinImpl {
       if (!endIsUndefined) {
         auto& lastUndefinedBlock = side.undefBlocks_.back();
         side.currentBlocks_.push_back(lastUndefinedBlock);
-        auto subrange = std::ranges::equal_range(
-            lastUndefinedBlock.subrange(),
-            lastUndefinedBlock.subrange().front(), lessThan_);
-        size_t undefCount = std::ranges::size(subrange);
-        lastUndefinedBlock.setSubrange(std::move(subrange));
+        // TODO<joka921> ql::ranges::equal_range doesn't work for some reason.
+        decltype(auto) subrange = lastUndefinedBlock.subrange();
+        auto [begin, end] = std::equal_range(subrange.begin(), subrange.end(),
+                                             subrange.front(), lessThan_);
+        size_t undefCount = std::distance(begin, end);
+        lastUndefinedBlock.setSubrange(begin, end);
         auto& firstDefinedBlock = side.currentBlocks_.back();
         firstDefinedBlock.setSubrange(
             firstDefinedBlock.fullBlock().begin() + undefCount,
