@@ -50,7 +50,7 @@ struct DistanceVisitor : public boost::static_visitor<double> {
 
 struct rtreeEntry {
   size_t row_;
-  AnyGeometry* geometry_;
+  int geometryIndex_ = -1; // -1 encodes not being a valid index
   std::optional<GeoPoint> geoPoint_;
   std::optional<Box> boundingBox_;
 };
@@ -124,7 +124,7 @@ class SpatialJoinAlgorithms {
       const Box& box, std::optional<Point> midpoint = std::nullopt) const;
 
   // this function gets the string which represents the area from the idtable.
-  AnyGeometry* getAnyGeometry(const IdTable* idtable, size_t row,
+  int getAnyGeometry(const IdTable* idtable, size_t row,
                                             size_t col);
 
  private:
@@ -163,8 +163,8 @@ class SpatialJoinAlgorithms {
   // Only for the poles, the conversion will be way to large (for the longitude
   // difference). Note, that this function is expensive and should only be
   // called when needed
-  double computeDist(const AnyGeometry* geometry1,
-                     const AnyGeometry* geometry2) const;
+  double computeDist(const int geometryIndex1,
+                     const int geometryIndex2) const;
 
   // this helper function takes an idtable, a row and a column. It then tries
   // to parse a geometry or a geoPoint of that cell in the idtable. If it
@@ -173,7 +173,7 @@ class SpatialJoinAlgorithms {
                            const ColumnIndex col);
   
   // this helper function converts a GeoPoint into a boost geometry Point
-  AnyGeometry* convertGeoPointToPoint(GeoPoint point);
+  int convertGeoPointToPoint(GeoPoint point);
 
   QueryExecutionContext* qec_;
   PreparedSpatialJoinParams params_;
