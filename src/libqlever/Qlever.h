@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <index/vocabulary/VocabularyType.h>
 #include <util/MemorySize/MemorySize.h>
 
 #include <optional>
@@ -17,6 +18,7 @@
 #include "global/RuntimeParameters.h"
 #include "index/Index.h"
 #include "index/InputFileSpecification.h"
+#include "index/vocabulary/VocabularyType.h"
 #include "parser/SparqlParser.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/http/MediaTypes.h"
@@ -55,6 +57,11 @@ struct QleverConfig {
   // TODO<joka921> Document these additional settings.
   std::string settingsFile;
 
+  // Specify whether the vocabulary is stored on disk or in RAM, compressed or
+  // uncompressed.
+  ad_utility::VocabularyType vocabularyType_{
+      ad_utility::VocabularyType::Enum::CompressedOnDisk};
+
   // The following members are only required if QLever's full-text search
   // extension is to be used, see `IndexBuilderMain.cpp` for additional details.
   bool addWordsFromLiterals = false;
@@ -92,6 +99,10 @@ class Qlever {
   // TODO<joka921> Support other formats + CONSTRUCT queries, support
   // cancellation, time limits, and observable queries.
   std::string query(std::string query);
+
+  // Pin a query to the named query cache. In a subsequent query, this cache can
+  // be accessed via `SERVICE ql:
+  void pinNamed(std::string query, std::string name);
 
   // TODO<joka921> Give access to the RuntimeParameters() which allow for
   // further tweaking of the qlever instance.
