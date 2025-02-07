@@ -412,4 +412,7 @@ TEST(ExecuteUpdate, templatedTriplesExist) {
   expectExistInIndex("?a <b> <c> . ?a <d> ?e", "?a <b> <c>", true);
   expectExistInIndex("", "<a> <b> <c>", false);
   expectExistInIndex("", "<a> <b> <c>", false);
+  expectExistInIndex("<a> <b> <c>", "GRAPH <foo> { <a> <b> <c> }", false);
+  expectExistInIndex("OPTIONAL { <a> <b> <c> }", "<a> <b> <c>", false);
+  expectExistInIndex("<a> <b>/<f> <c>", "<a> <b> <c>", false);
 }
