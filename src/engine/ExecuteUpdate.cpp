@@ -121,21 +121,13 @@ void ExecuteUpdate::computeAndAddQuadsForResultRow(
   }
 }
 
-bool ExecuteUpdate::deletedTriplesExistInIndex(const ParsedQuery& query) {
-  AD_CORRECTNESS_CHECK(query.hasUpdateClause());
-  const auto& updateClause = query.updateClause();
-  if (!std::holds_alternative<updateClause::GraphUpdate>(updateClause.op_)) {
-    return false;
-  }
-  const auto& graphUpdate =
-      std::get<updateClause::GraphUpdate>(updateClause.op_);
-  // TODO: generalize to take vector<...>&
-  vector<SparqlTripleSimpleWithGraph> triplesGraphUpdate =
-      graphUpdate.toDelete_;
+bool ExecuteUpdate::templatedTriplesExist(
+    const vector<SparqlTripleSimpleWithGraph>& templates,
+    const ParsedQuery& query) {
   // Triples with non-default graph are represented in graph patterns in a way
   // that we do not detect.
   if (std::ranges::any_of(
-          triplesGraphUpdate, [](const SparqlTripleSimpleWithGraph& triple) {
+          templates, [](const SparqlTripleSimpleWithGraph& triple) {
             return !std::holds_alternative<std::monostate>(triple.g_);
           })) {
     return false;
@@ -162,21 +154,20 @@ bool ExecuteUpdate::deletedTriplesExistInIndex(const ParsedQuery& query) {
     return false;
   }
   // The `SparqlTriple` are now all simple.
-  if (triplesGraphPattern.size() < triplesGraphUpdate.size()) {
+  if (triplesGraphPattern.size() < templates.size()) {
     return false;
   }
   vector<SparqlTripleSimple> triplesGraphPatternSimple =
       ad_utility::transform(triplesGraphPattern, &SparqlTriple::getSimple);
   // Return whether the triples in the Graph Pattern are a subset of the triples
   // in the Delete clause.
-  return triplesGraphUpdate.empty() ||
-         ql::ranges::all_of(triplesGraphUpdate,
-                            [&triplesGraphPatternSimple](
-                                const SparqlTripleSimpleWithGraph& triple) {
-                              return std::ranges::find(
-                                         triplesGraphPatternSimple, triple) !=
-                                     triplesGraphPatternSimple.end();
-                            });
+  return templates.empty() ||
+         ql::ranges::all_of(
+             templates, [&triplesGraphPatternSimple](
+                            const SparqlTripleSimpleWithGraph& triple) {
+               return std::ranges::find(triplesGraphPatternSimple, triple) !=
+                      triplesGraphPatternSimple.end();
+             });
 }
 
 // _____________________________________________________________________________
@@ -192,7 +183,6 @@ ExecuteUpdate::computeGraphUpdateQuads(
         "Only INSERT/DELETE update operations are currently supported.");
   }
   auto graphUpdate = std::get<updateClause::GraphUpdate>(updateClause.op_);
-  bool deletedTriplesExist = deletedTriplesExistInIndex(query);
   // Fully materialize the result for now. This makes it easier to execute the
   // update.
   auto result = qet.getResult(false);
@@ -244,9 +234,13 @@ ExecuteUpdate::computeGraphUpdateQuads(
   // an ordering.
   auto setMinus = []<typename T>(std::vector<T>& left, std::vector<T>& right) {
     vector<T> optimisedLeft;
-    vector<T> optimisedRight;
     ql::ranges::set_difference(left, right, std::back_inserter(optimisedLeft));
-    ql::ranges::set_difference(right, left, std::back_inserter(optimisedRight));
+    return optimisedLeft;
+  };
+  auto pairwiseSetMinus = [&setMinus]<typename T>(std::vector<T>& left,
+                                                  std::vector<T>& right) {
+    vector<T> optimisedLeft = setMinus(left, right);
+    vector<T> optimisedRight = setMinus(right, left);
     left = std::move(optimisedLeft);
     right = std::move(optimisedRight);
   };
@@ -260,8 +254,15 @@ ExecuteUpdate::computeGraphUpdateQuads(
   // We only have to delete the triples A'\B and insert B\A'.
   sortAndRemoveDuplicates(toInsert);
   sortAndRemoveDuplicates(toDelete);
-  if (deletedTriplesExist) {
-    setMinus(toInsert, toDelete);
+  if (templatedTriplesExist(graphUpdate.toInsert_, query)) {
+    // If all triples to be inserted already exist, we can remove them from the
+    // deletion and then can insert nothing.
+    toDelete = setMinus(toDelete, toInsert);
+    toInsert.clear();
+  } else if (templatedTriplesExist(graphUpdate.toDelete_, query)) {
+    // If all triples to be deleted exist, we only have to insert/delete the
+    // triples that are not in the other set.
+    pairwiseSetMinus(toInsert, toDelete);
   }
 
   metadata.triplePreparationTime_ = timer.msecs();
