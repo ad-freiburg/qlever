@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "engine/ExportQueryExecutionTrees.h"
+#include "engine/NamedQueryCache.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/QueryPlanner.h"
 #include "global/RuntimeParameters.h"
@@ -84,6 +85,7 @@ class Qlever {
   ad_utility::AllocatorWithLimit<Id> allocator_;
   SortPerformanceEstimator sortPerformanceEstimator_;
   Index index_;
+  NamedQueryCache namedQueryCache_;
   bool enablePatternTrick_;
   static inline std::ostringstream ignoreLogStream;
 

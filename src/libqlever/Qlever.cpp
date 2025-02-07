@@ -4,6 +4,8 @@
 
 #include "libqlever/Qlever.h"
 
+#include "index/IndexImpl.h"
+
 namespace qlever {
 static std::string getStxxlConfigFileName(const string& location) {
   return absl::StrCat(location, ".stxxl");
@@ -50,6 +52,8 @@ Qlever::Qlever(const QleverConfig& config)
   index_.usePatterns() = !config.noPatterns;
   enablePatternTrick_ = !config.noPatterns;
   index_.loadAllPermutations() = !config.onlyPsoAndPos;
+
+  index_.getImpl().setVocabularyTypeForIndexBuilding(config.vocabularyType_);
 
   // Init the index.
   index_.createFromOnDiskIndex(config.baseName);
@@ -121,7 +125,7 @@ void Qlever::buildIndex(QleverConfig config) {
 // ___________________________________________________________________________
 std::string Qlever::query(std::string query) {
   QueryExecutionContext qec{index_, &cache_, allocator_,
-                            sortPerformanceEstimator_};
+                            sortPerformanceEstimator_, &namedQueryCache_};
   auto parsedQuery = SparqlParser::parseQuery(query);
   auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
   QueryPlanner qp{&qec, handle};
@@ -155,5 +159,44 @@ std::string Qlever::query(std::string query) {
     result += batch;
   }
   return result;
+}
+// ___________________________________________________________________________
+// TODO<joka921> A lot of code duplication here.
+void Qlever::pinNamed(std::string query, std::string name) {
+  QueryExecutionContext qec{index_, &cache_, allocator_,
+                            sortPerformanceEstimator_, &namedQueryCache_};
+  qec.pinWithExplicitName() = std::move(name);
+  auto parsedQuery = SparqlParser::parseQuery(query);
+  auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+  QueryPlanner qp{&qec, handle};
+  qp.setEnablePatternTrick(enablePatternTrick_);
+  auto qet = qp.createExecutionTree(parsedQuery);
+  qet.isRoot() = true;
+  auto& limitOffset = parsedQuery._limitOffset;
+
+  // TODO<joka921> For cancellation we have to call
+  // `recursivelySetCancellationHandle` (see `Server::parseAndPlan`).
+
+  // TODO<joka921> The following interface looks fishy and should be
+  // incorporated directly in the query planner or somewhere else.
+  // (it is used identically in `Server.cpp`.
+
+  // Make sure that the offset is not applied again when exporting the result
+  // (it is already applied by the root operation in the query execution
+  // tree). Note that we don't need this for the limit because applying a
+  // fixed limit is idempotent.
+  AD_CORRECTNESS_CHECK(limitOffset._offset >=
+                       qet.getRootOperation()->getLimit()._offset);
+  limitOffset._offset -= qet.getRootOperation()->getLimit()._offset;
+
+  ad_utility::Timer timer{ad_utility::Timer::Started};
+  auto responseGenerator = ExportQueryExecutionTrees::computeResult(
+      parsedQuery, qet, ad_utility::MediaType::sparqlJson, timer,
+      std::move(handle));
+  std::string result;
+  std::cout << "Writing the result:" << std::endl;
+  for (const auto& batch : responseGenerator) {
+    result += batch;
+  }
 }
 }  // namespace qlever
