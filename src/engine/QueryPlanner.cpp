@@ -1935,13 +1935,17 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
   // further into the query that optional should be resolved by now.
   AD_CONTRACT_CHECK(a.type != SubtreePlan::OPTIONAL);
   if (b.type == SubtreePlan::MINUS) {
-    return {makeSubtreePlan<Minus>(_qec, a._qet, b._qet)};
+    SubtreePlan plan = makeSubtreePlan<Minus>(_qec, a._qet, b._qet);
+    mergeSubtreePlanIds(plan, a, b);
+    return {plan};
   }
 
   // OPTIONAL JOINS are not symmetric!
   if (b.type == SubtreePlan::OPTIONAL) {
     // Join the two optional columns using an optional join
-    return {makeSubtreePlan<OptionalJoin>(_qec, a._qet, b._qet)};
+    SubtreePlan plan = makeSubtreePlan<OptionalJoin>(_qec, a._qet, b._qet);
+    mergeSubtreePlanIds(plan, a, b);
+    return {plan};
   }
 
   if (auto opt = createJoinWithPathSearch(a, b, jcs)) {
