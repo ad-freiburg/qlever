@@ -50,10 +50,9 @@ std::string_view SpatialJoinAlgorithms::betweenQuotes(
   }
 }
 
-int SpatialJoinAlgorithms::getAnyGeometry(
+std::optional<size_t> SpatialJoinAlgorithms::getAnyGeometry(
     const IdTable* idtable, size_t row, size_t col) {
-  auto printWarning = [this,
-                       &spatialJoin = spatialJoin_]() mutable {
+  auto printWarning = [this, &spatialJoin = spatialJoin_]() mutable {
     if (this->nrOfFailedParsedGeometries_ == 0) {
       std::string warning =
           "The input to a spatial join contained at least one element, "
@@ -82,40 +81,36 @@ int SpatialJoinAlgorithms::getAnyGeometry(
   AnyGeometry geometry;
   try {
     bg::read_wkt(str, geometry);
-    if (geometries_.size() > 0) {
-      std::cerr << "size before " << geometries_.size() << std::endl;
-    }
     geometries_.push_back(std::move(geometry));
-    std::cerr << str << std::endl;
-    auto test = &geometries_.back();
-    std::cerr << "ptr " << test << std::endl;
-    std::cerr << "size after " << geometries_.size() << std::endl;
   } catch (...) {
     printWarning();
-    return -1;
+    return std::nullopt;
   }
   return geometries_.size() - 1;  // index of the last element
 }
 
 // ____________________________________________________________________________
-double SpatialJoinAlgorithms::computeDist(int geometryIndex1,
-                                          int geometryIndex2) const {
-  return boost::apply_visitor(DistanceVisitor(), geometries_.at(geometryIndex1), geometries_.at(geometryIndex2)) * 78.630;
+double SpatialJoinAlgorithms::computeDist(
+    const std::optional<size_t> geometryIndex1,
+    const std::optional<size_t> geometryIndex2) const {
+  return boost::apply_visitor(DistanceVisitor(),
+                              geometries_.at(geometryIndex1.value()),
+                              geometries_.at(geometryIndex2.value())) *
+         78.630;
 };
 
 // ____________________________________________________________________________
-int SpatialJoinAlgorithms::convertGeoPointToPoint(GeoPoint point) {
+size_t SpatialJoinAlgorithms::convertGeoPointToPoint(GeoPoint point) {
   geometries_.push_back(Point(point.getLng(), point.getLat()));
   return geometries_.size() - 1;  // index of the last element
 };
 
 // ____________________________________________________________________________
-Id SpatialJoinAlgorithms::computeDist(rtreeEntry& geo1,
-                                      rtreeEntry& geo2) {
-  auto convertPoint = [&](int geometryIndex,
-                          std::optional<Box> bbox) {
+Id SpatialJoinAlgorithms::computeDist(rtreeEntry& geo1, rtreeEntry& geo2) {
+  auto convertPoint = [&](size_t geometryIndex, std::optional<Box> bbox) {
     if (!bbox.has_value()) {
-      bbox = boost::apply_visitor(BoundingBoxVisitor(), geometries_.at(geometryIndex));
+      bbox = boost::apply_visitor(BoundingBoxVisitor(),
+                                  geometries_.at(geometryIndex));
     }
     const auto& areaBox = bbox.value();
     Point p = calculateMidpointOfBox(areaBox);
@@ -126,10 +121,12 @@ Id SpatialJoinAlgorithms::computeDist(rtreeEntry& geo1,
     auto point1 = geo1.geoPoint_;
     auto point2 = geo2.geoPoint_;
     if (!point1) {
-      point1 = convertPoint(geo1.geometryIndex_, geo1.boundingBox_);
+      point1 =
+          convertPoint(geo1.geometryIndex_.value(), geo1.boundingBox_.value());
     }
     if (!point2) {
-      point2 = convertPoint(geo2.geometryIndex_, geo2.boundingBox_);
+      point2 =
+          convertPoint(geo2.geometryIndex_.value(), geo2.boundingBox_.value());
     }
     return Id::makeFromDouble(
         ad_utility::detail::wktDistImpl(point1.value(), point2.value()));
@@ -137,17 +134,19 @@ Id SpatialJoinAlgorithms::computeDist(rtreeEntry& geo1,
     if (geo1.geoPoint_.has_value() && geo2.geoPoint_.has_value()) {
       return Id::makeFromDouble(ad_utility::detail::wktDistImpl(
           geo1.geoPoint_.value(), geo2.geoPoint_.value()));
-    } else if (geo1.geometryIndex_ != -1 && geo2.geometryIndex_ != -1) {
+    } else if (geo1.geometryIndex_.has_value() &&
+               geo2.geometryIndex_.has_value()) {
       return Id::makeFromDouble(
           computeDist(geo1.geometryIndex_, geo2.geometryIndex_));
     } else {
       // one point and one area
-      if (geo1.geometryIndex_ == -1) {
+      if (!geo1.geometryIndex_) {
         geo1.geometryIndex_ = convertGeoPointToPoint(geo1.geoPoint_.value());
-      } else if (geo2.geometryIndex_ == -1) {
+      } else if (!geo2.geometryIndex_) {
         geo2.geometryIndex_ = convertGeoPointToPoint(geo2.geoPoint_.value());
       }
-      return Id::makeFromDouble(computeDist(geo1.geometryIndex_, geo2.geometryIndex_));
+      return Id::makeFromDouble(
+          computeDist(geo1.geometryIndex_, geo2.geometryIndex_));
     }
   }
 }
@@ -158,8 +157,9 @@ Id SpatialJoinAlgorithms::computeDist(const IdTable* idTableLeft,
                                       size_t rowLeft, size_t rowRight,
                                       ColumnIndex leftPointCol,
                                       ColumnIndex rightPointCol) {
-  auto getAreaOrPointGeometry = [&](const IdTable* idtable, size_t row,
-                                    size_t col, std::optional<GeoPoint> point) -> int {
+  auto getAreaOrPointGeometry =
+      [&](const IdTable* idtable, size_t row, size_t col,
+          std::optional<GeoPoint> point) -> std::optional<size_t> {
     if (!point) {
       // nothing to do. When parsing a point or an area fails, a warning
       // message gets printed at another place and the point/area just gets
@@ -173,21 +173,22 @@ Id SpatialJoinAlgorithms::computeDist(const IdTable* idTableLeft,
   // information will be stored in an ID, just like GeoPoint
   auto getAreaPoint = [&](const IdTable* idtable, size_t row,
                           size_t col) -> std::optional<GeoPoint> {
-    int geometryIndex = getAnyGeometry(idtable, row, col);
-    if (geometryIndex == -1) {
+    std::optional<size_t> geometryIndex = getAnyGeometry(idtable, row, col);
+    if (!geometryIndex) {
       // nothing to do. When parsing a point or an area fails, a warning message
       // gets printed at another place and the point/area just gets skipped
       return std::nullopt;
     }
 
-    Box areaBox = boost::apply_visitor(BoundingBoxVisitor(), geometries_.at(geometryIndex));
+    Box areaBox = boost::apply_visitor(BoundingBoxVisitor(),
+                                       geometries_.at(geometryIndex.value()));
 
     Point p = calculateMidpointOfBox(areaBox);
     return GeoPoint(p.get<1>(), p.get<0>());
   };
 
-  rtreeEntry entryLeft{rowLeft, -1, std::nullopt, std::nullopt};
-  rtreeEntry entryRight{rowRight, -1, std::nullopt, std::nullopt};
+  rtreeEntry entryLeft{rowLeft, std::nullopt, std::nullopt, std::nullopt};
+  rtreeEntry entryRight{rowRight, std::nullopt, std::nullopt, std::nullopt};
   entryLeft.geoPoint_ = getPoint(idTableLeft, rowLeft, leftPointCol);
   entryRight.geoPoint_ = getPoint(idTableRight, rowRight, rightPointCol);
   if (entryLeft.geoPoint_ && entryRight.geoPoint_) {
@@ -210,7 +211,8 @@ Id SpatialJoinAlgorithms::computeDist(const IdTable* idTableLeft,
         idTableLeft, rowLeft, leftPointCol, entryLeft.geoPoint_);
     entryRight.geometryIndex_ = getAreaOrPointGeometry(
         idTableRight, rowRight, rightPointCol, entryRight.geoPoint_);
-    if (entryLeft.geometryIndex_ != -1 && entryRight.geometryIndex_ != -1) {
+    if (entryLeft.geometryIndex_.has_value() &&
+        entryRight.geometryIndex_.has_value()) {
       return computeDist(entryLeft, entryRight);
     } else {
       return Id::makeUndefined();
@@ -631,26 +633,40 @@ double SpatialJoinAlgorithms::getMaxDistFromMidpointToAnyPointInsideTheBox(
 }
 
 // ____________________________________________________________________________
-std::optional<rtreeEntry> SpatialJoinAlgorithms::getRtreeEntry(const IdTable* idTable, const size_t row,
-                           const ColumnIndex col) {
-  rtreeEntry entry{row, -1, std::nullopt, std::nullopt};
-    entry.geoPoint_ = getPoint(idTable, row, col);
+std::optional<rtreeEntry> SpatialJoinAlgorithms::getRtreeEntry(
+    const IdTable* idTable, const size_t row, const ColumnIndex col) {
+  rtreeEntry entry{row, std::nullopt, std::nullopt, std::nullopt};
+  entry.geoPoint_ = getPoint(idTable, row, col);
 
-    if (!entry.geoPoint_) {
-      entry.geometryIndex_ = getAnyGeometry(idTable, row, col);
-      if (entry.geometryIndex_ == -1) {
-        return std::nullopt;
-      }
-      entry.boundingBox_ =
-          boost::apply_visitor(BoundingBoxVisitor(), geometries_.at(entry.geometryIndex_));
-    } else {
-      entry.boundingBox_ =
-          Box(Point(entry.geoPoint_.value().getLng(),
-                    entry.geoPoint_.value().getLat()),
-              Point(entry.geoPoint_.value().getLng() + 0.00000001,
-                    entry.geoPoint_.value().getLat() + 0.00000001));
+  if (!entry.geoPoint_) {
+    entry.geometryIndex_ = getAnyGeometry(idTable, row, col);
+    if (!entry.geometryIndex_) {
+      return std::nullopt;
     }
-    return entry;
+    entry.boundingBox_ = boost::apply_visitor(
+        BoundingBoxVisitor(), geometries_.at(entry.geometryIndex_.value()));
+  } else {
+    entry.boundingBox_ =
+        Box(Point(entry.geoPoint_.value().getLng(),
+                  entry.geoPoint_.value().getLat()),
+            Point(entry.geoPoint_.value().getLng() + 0.00000001,
+                  entry.geoPoint_.value().getLat() + 0.00000001));
+  }
+  return entry;
+}
+
+// ____________________________________________________________________________
+std::vector<Box> SpatialJoinAlgorithms::getQueryBox(
+    const std::optional<rtreeEntry>& entry) const {
+  if (!entry.value().geoPoint_) {
+    auto midpoint = calculateMidpointOfBox(entry.value().boundingBox_.value());
+    return computeBoundingBox(
+        midpoint, getMaxDistFromMidpointToAnyPointInsideTheBox(
+                      entry.value().boundingBox_.value(), midpoint));
+  } else {
+    return computeBoundingBox(Point(entry.value().geoPoint_.value().getLng(),
+                                    entry.value().geoPoint_.value().getLat()));
+  }
 }
 
 // ____________________________________________________________________________
@@ -688,7 +704,7 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
       continue;
     }
     rtree.insert(std::pair(entry.value().boundingBox_.value(),
-                                std::move(entry.value())));
+                           std::move(entry.value())));
   }
 
   // query rtree with the other child
@@ -703,18 +719,7 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
       // skipped
       continue;
     }
-    std::vector<Box> queryBox;
-    if (!entry.value().geoPoint_) {
-      auto midpoint =
-          calculateMidpointOfBox(entry.value().boundingBox_.value());
-      queryBox = computeBoundingBox(
-          midpoint, getMaxDistFromMidpointToAnyPointInsideTheBox(
-                        entry.value().boundingBox_.value(), midpoint));
-    } else {
-      queryBox =
-          computeBoundingBox(Point(entry.value().geoPoint_.value().getLng(),
-                                   entry.value().geoPoint_.value().getLat()));
-    }
+    std::vector<Box> queryBox = getQueryBox(entry);
 
     results.clear();
 

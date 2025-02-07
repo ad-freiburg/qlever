@@ -50,7 +50,7 @@ struct DistanceVisitor : public boost::static_visitor<double> {
 
 struct rtreeEntry {
   size_t row_;
-  int geometryIndex_ = -1; // -1 encodes not being a valid index
+  std::optional<size_t> geometryIndex_;
   std::optional<GeoPoint> geoPoint_;
   std::optional<Box> boundingBox_;
 };
@@ -124,8 +124,8 @@ class SpatialJoinAlgorithms {
       const Box& box, std::optional<Point> midpoint = std::nullopt) const;
 
   // this function gets the string which represents the area from the idtable.
-  int getAnyGeometry(const IdTable* idtable, size_t row,
-                                            size_t col);
+  std::optional<size_t> getAnyGeometry(const IdTable* idtable, size_t row,
+                                       size_t col);
 
  private:
   // Helper function which returns a GeoPoint if the element of the given table
@@ -163,17 +163,25 @@ class SpatialJoinAlgorithms {
   // Only for the poles, the conversion will be way to large (for the longitude
   // difference). Note, that this function is expensive and should only be
   // called when needed
-  double computeDist(const int geometryIndex1,
-                     const int geometryIndex2) const;
+  double computeDist(const std::optional<size_t> geometryIndex1,
+                     const std::optional<size_t> geometryIndex2) const;
 
   // this helper function takes an idtable, a row and a column. It then tries
   // to parse a geometry or a geoPoint of that cell in the idtable. If it
   // succeeds, it returns an rtree entry of that geometry/geopoint
-  std::optional<rtreeEntry> getRtreeEntry(const IdTable* idTable, const size_t row,
-                           const ColumnIndex col);
-  
+  std::optional<rtreeEntry> getRtreeEntry(const IdTable* idTable,
+                                          const size_t row,
+                                          const ColumnIndex col);
+
   // this helper function converts a GeoPoint into a boost geometry Point
-  int convertGeoPointToPoint(GeoPoint point);
+  size_t convertGeoPointToPoint(GeoPoint point);
+
+  // this helper function calculates the query box. The query box, is the box,
+  // which contains the area, where all possible candidates of the max distance
+  // query must be contained in. It returns a vector, because if the box crosses
+  // the poles or the -180/180 longitude line, then it is disjoint in the
+  // cartesian coordinates. The boxes themselves are disjoint to each other.
+  std::vector<Box> getQueryBox(const std::optional<rtreeEntry>& entry) const;
 
   QueryExecutionContext* qec_;
   PreparedSpatialJoinParams params_;
