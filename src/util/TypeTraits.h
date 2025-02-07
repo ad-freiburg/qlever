@@ -85,7 +85,7 @@ struct FirstWrapper : public std::type_identity<T> {};
 /// isInstantiation<std::vector<int>, std::vector> == true;
 /// isInstantiation<const std::vector<int>&, std::vector> == false;
 template <typename T, template <typename...> typename TemplatedType>
-CPP_concept isInstantiation =
+concept isInstantiation =
     detail::IsInstantiationOf<TemplatedType>::template Instantiation<T>::value;
 
 /// The concept is fulfilled iff `T` is `ad_utility::SimilarTo` an
@@ -94,7 +94,7 @@ CPP_concept isInstantiation =
 /// similarToInstantiation<std::vector, std::vector<int>> == true;
 /// similarToInstantiation<std::vector, const std::vector<int>&> == true;
 template <typename T, template <typename...> typename TemplatedType>
-CPP_concept similarToInstantiation =
+concept similarToInstantiation =
     isInstantiation<std::decay_t<T>, TemplatedType>;
 
 /// @brief The concept is fulfilled if `T` is an instantiation of any
@@ -103,8 +103,7 @@ CPP_concept similarToInstantiation =
 /// similarToAnyInstantiationOf<std::vector, std::vector<int>,
 /// std::vector<char>> == true
 template <typename T, template <typename...> typename... Ts>
-CPP_concept similarToAnyInstantiationOf =
-    (... || similarToInstantiation<T, Ts>);
+concept similarToAnyInstantiationOf = (... || similarToInstantiation<T, Ts>);
 
 /// isVector<T> is true if and only if T is an instantiation of std::vector
 template <typename T>
@@ -112,7 +111,7 @@ constexpr static bool isVector = isInstantiation<T, std::vector>;
 
 /// isTuple<T> is true if and only if T is an instantiation of std::tuple
 template <typename T>
-CPP_concept isTuple = isInstantiation<T, std::tuple>;
+concept isTuple = isInstantiation<T, std::tuple>;
 
 /// isVariant<T> is true if and only if T is an instantiation of std::variant
 template <typename T>
@@ -127,7 +126,7 @@ constexpr static bool isArray<std::array<T, N>> = true;
 
 // `SimilarToArray` is also true for `std::array<...>&`, etc.
 template <typename T>
-CPP_concept SimilarToArray = isArray<std::decay_t<T>>;
+concept SimilarToArray = isArray<std::decay_t<T>>;
 
 /// Two types are similar, if they are the same when we remove all cv (const or
 /// volatile) qualifiers and all references
@@ -137,15 +136,15 @@ constexpr static bool isSimilar =
 
 /// A concept for similarity
 template <typename T, typename U>
-CPP_concept SimilarTo = isSimilar<T, U>;
+concept SimilarTo = isSimilar<T, U>;
 
 /// True iff `T` is similar (see above) to any of the `Ts...`.
 template <typename T, typename... Ts>
-CPP_concept SimilarToAny = (... || isSimilar<T, Ts>);
+concept SimilarToAny = (... || isSimilar<T, Ts>);
 
 /// True iff `T` is the same as any of the `Ts...`.
 template <typename T, typename... Ts>
-CPP_concept SameAsAny = (... || ql::concepts::same_as<T, Ts>);
+concept SameAsAny = (... || ql::concepts::same_as<T, Ts>);
 
 /*
 The implementation for `SimilarToAnyTypeIn` and `SameAsAnyTypeIn` (see below
@@ -174,15 +173,14 @@ or `std::variant`). and `T` is `isSimilar` (see above) to any of the type
 parameters.
 */
 template <typename T, typename Template>
-CPP_concept SimilarToAnyTypeIn =
-    detail::SimilarToAnyTypeInImpl<T, Template>::value;
+concept SimilarToAnyTypeIn = detail::SimilarToAnyTypeInImpl<T, Template>::value;
 
 /*
 Equivalent to `SimilarToAnyTypeIn` (see above), but checks for exactly matching
 types via `std::same_as`.
 */
 template <typename T, typename Template>
-CPP_concept SameAsAnyTypeIn = detail::SameAsAnyTypeInImpl<T, Template>::value;
+concept SameAsAnyTypeIn = detail::SameAsAnyTypeInImpl<T, Template>::value;
 
 /// A templated bool that is always false,
 /// independent of the template parameter.
@@ -268,10 +266,12 @@ using First =
 
 /// Concept for `std::is_invocable_r_v`.
 template <typename Func, typename R, typename... ArgTypes>
-CPP_concept InvocableWithConvertibleReturnType =
+// TODO<joka921, gpcicciuca> turn back to `concept` and fix the remaining
+// places.
+concept InvocableWithConvertibleReturnType =
     std::is_invocable_r_v<R, Func, ArgTypes...>;
 
-// The implementation of `InvokeResultSfienaeFriendly`
+// The implementation of `InvokeResultSfinaeFriendly`
 namespace invokeResultSfinaeFriendly::detail {
 template <typename T, typename... Args>
 struct InvalidInvokeResult {
@@ -311,7 +311,7 @@ are the same when ignoring `const`, `volatile`, and reference qualifiers.
 `isSimilar` to `Ret`.
 */
 template <typename Fn, typename Ret, typename... Args>
-CPP_concept InvocableWithSimilarReturnType =
+concept InvocableWithSimilarReturnType =
     std::invocable<Fn, Args...> &&
     isSimilar<InvokeResultSfinaeFriendly<Fn, Args...>, Ret>;
 
@@ -319,8 +319,10 @@ CPP_concept InvocableWithSimilarReturnType =
 @brief Require `Fn` to be invocable with `Args...` and the return type to be
  `Ret`.
 */
+// TODO<joka921, gpcicciuca> turn back to `concept` and fix the remaining
+// places.
 template <typename Fn, typename Ret, typename... Args>
-CPP_concept InvocableWithExactReturnType =
+concept InvocableWithExactReturnType =
     std::invocable<Fn, Args...> &&
     std::same_as<InvokeResultSfinaeFriendly<Fn, Args...>, Ret>;
 
@@ -334,7 +336,7 @@ invocable type is regular invocable, or not.
 For more information see: https://en.cppreference.com/w/cpp/concepts/invocable
 */
 template <typename Fn, typename Ret, typename... Args>
-CPP_concept RegularInvocableWithSimilarReturnType =
+concept RegularInvocableWithSimilarReturnType =
     std::regular_invocable<Fn, Args...> &&
     isSimilar<InvokeResultSfinaeFriendly<Fn, Args...>, Ret>;
 
@@ -348,7 +350,7 @@ invocable type is regular invocable, or not.
 For more information see: https://en.cppreference.com/w/cpp/concepts/invocable
 */
 template <typename Fn, typename Ret, typename... Args>
-CPP_concept RegularInvocableWithExactReturnType =
+concept RegularInvocableWithExactReturnType =
     std::regular_invocable<Fn, Args...> &&
     std::same_as<InvokeResultSfinaeFriendly<Fn, Args...>, Ret>;
 
@@ -357,5 +359,5 @@ CPP_concept RegularInvocableWithExactReturnType =
 // might be lvalue, because the && denotes a forwarding reference. void f(Rvalue
 // auto&& x) // guaranteed rvalue reference, can safely be moved.
 template <typename T>
-CPP_concept Rvalue = std::is_rvalue_reference_v<T&&>;
+concept Rvalue = std::is_rvalue_reference_v<T&&>;
 }  // namespace ad_utility

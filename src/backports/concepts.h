@@ -55,3 +55,25 @@ using namespace std;
 
 }  // namespace concepts
 }  // namespace ql
+
+// A template with a requires clause
+/// INTERNAL ONLY
+#define QL_TEMPLATE_NO_DEFAULT_SFINAE_AUX_0(...)                              \
+  , std::enable_if_t<                                                         \
+        CPP_PP_CAT(QL_TEMPLATE_NO_DEFAULT_SFINAE_AUX_3_, __VA_ARGS__), int> = \
+        0 > CPP_PP_IGNORE_CXX2A_COMPAT_END
+
+#define QL_TEMPLATE_NO_DEFAULT_SFINAE_AUX_3_requires
+
+#define QL_TEMPLATE_SFINAE_AUX_WHICH_(FIRST, ...) \
+  CPP_PP_EVAL(CPP_PP_CHECK,                       \
+              CPP_PP_CAT(CPP_TEMPLATE_SFINAE_PROBE_CONCEPT_, FIRST))
+
+#define QL_TEMPLATE_NO_DEFAULT_SFINAE_AUX_(...)            \
+  CPP_PP_CAT(QL_TEMPLATE_NO_DEFAULT_SFINAE_AUX_,           \
+             QL_TEMPLATE_SFINAE_AUX_WHICH_(__VA_ARGS__, )) \
+  (__VA_ARGS__)
+
+#define QL_TEMPLATE_NO_DEFAULT(...) \
+  CPP_PP_IGNORE_CXX2A_COMPAT_BEGIN  \
+  template <__VA_ARGS__ QL_TEMPLATE_NO_DEFAULT_SFINAE_AUX_

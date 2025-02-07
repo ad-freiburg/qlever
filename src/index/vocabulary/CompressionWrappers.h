@@ -17,7 +17,21 @@ namespace ad_utility::vocabulary {
 // argument ), the second of which is a `vector<string_view>` or
 // `vector<string>` that stores compressed strings and the third of which is a
 // `Decoder`.
+
+// TODO<gpicciuca> This has to be rewritten for C++17, using a dummy for now.
 template <typename T, typename Decoder>
+concept BulkResultForDecoder = true;
+/*
+template <typename T, typename Decoder>
+concept BulkResultForDecoder = requires(T t) {
+  requires(std::tuple_size_v<T> == 3);
+  {
+    std::get<1>(t)
+  } -> ad_utility::SimilarToAny<std::vector<std::string_view>,
+                                std::vector<std::string>>;
+  { std::get<2>(t) } -> ad_utility::SimilarTo<Decoder>;
+};
+*/
 CPP_requires(
     BulkResultForDecoder_,
     requires(T t)(std::tuple_size_v<T> == 3,

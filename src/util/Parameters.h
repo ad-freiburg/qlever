@@ -55,7 +55,7 @@ CPP_concept ParameterToStringType =
 /// \tparam Name The Name of the parameter (there are typically a lot of
 ///         parameters with the same `Type`).
 CPP_template(typename Type, typename FromString, typename ToString,
-             QL_CONCEPT_OR_TYPENAME(ParameterName) Name)(
+             ParameterName Name)(
     requires std::semiregular<Type> CPP_and
         ParameterFromStringType<FromString, Type>
             CPP_and ParameterToStringType<ToString, Type>) struct Parameter
@@ -131,12 +131,16 @@ CPP_template(typename Type, typename FromString, typename ToString,
 
 // Concept that checks whether a type is an instantiation of the `Parameter`
 // template.
+
+// TODO<joka921, gpicciuca> We don't yet have a good solution for constrained
+// partial specialization
+/*
 namespace detail::parameterConceptImpl {
 template <typename T>
 struct ParameterConceptImpl : std::false_type {};
 
 CPP_template(typename Type, typename FromString, typename ToString,
-             QL_CONCEPT_OR_TYPENAME(ParameterName) Name)(
+             ParameterName Name)(
     requires std::semiregular<Type> CPP_and
         ParameterFromStringType<FromString, Type>
             CPP_and ParameterToStringType<
@@ -149,6 +153,9 @@ CPP_template(typename Type, typename FromString, typename ToString,
 template <typename T>
 CPP_concept IsParameter =
     detail::parameterConceptImpl::ParameterConceptImpl<T>::value;
+*/
+template <typename T>
+CPP_concept IsParameter = true;
 
 namespace detail::parameterShortNames {
 
@@ -207,26 +214,26 @@ struct MemorySizeFromString {
 
 /// Partial template specialization for Parameters with common types (numeric
 /// types and strings)
-template <QL_CONCEPT_OR_TYPENAME(ParameterName) Name>
+template <ParameterName Name>
 using Float = Parameter<float, fl, toString, Name>;
 
-template <QL_CONCEPT_OR_TYPENAME(ParameterName) Name>
+template <ParameterName Name>
 using Double = Parameter<double, dbl, toString, Name>;
 
-template <QL_CONCEPT_OR_TYPENAME(ParameterName) Name>
+template <ParameterName Name>
 using SizeT = Parameter<size_t, szt, toString, Name>;
 
-template <QL_CONCEPT_OR_TYPENAME(ParameterName) Name>
+template <ParameterName Name>
 using String = Parameter<std::string, std::identity, std::identity, Name>;
 
-template <QL_CONCEPT_OR_TYPENAME(ParameterName) Name>
+template <ParameterName Name>
 using Bool = Parameter<bool, bl, boolToString, Name>;
 
-template <QL_CONCEPT_OR_TYPENAME(ParameterName) Name>
+template <ParameterName Name>
 using MemorySizeParameter =
     Parameter<MemorySize, MemorySizeFromString, MemorySizeToString, Name>;
 
-template <typename DurationType, QL_CONCEPT_OR_TYPENAME(ParameterName) Name>
+template <typename DurationType, ParameterName Name>
 using DurationParameter = Parameter<ad_utility::ParseableDuration<DurationType>,
                                     durationFromString<DurationType>,
                                     durationToString<DurationType>, Name>;
@@ -240,7 +247,7 @@ using DurationParameter = Parameter<ad_utility::ParseableDuration<DurationType>,
 /// "increase the cache size by 20%") nor an atomic update of multiple
 /// parameters at the same time. If needed, this functionality could be added
 /// to the current implementation.
-template <IsParameter... ParameterTypes>
+template <QL_CONCEPT_OR_TYPENAME(IsParameter)... ParameterTypes>
 class Parameters {
  private:
   using Tuple = std::tuple<ad_utility::Synchronized<ParameterTypes>...>;
@@ -286,14 +293,14 @@ class Parameters {
   //  Note that we deliberately do not have an overload of
   // `get()` where the `Name` can be specified at runtime, because we want to
   // check the existence of a parameter at compile time.
-  template <QL_CONCEPT_OR_TYPENAME(ParameterName) Name>
+  template <ParameterName Name>
   auto get() const {
     constexpr auto index = _nameToIndex.at(Name);
     return std::get<index>(_parameters).rlock()->get();
   }
 
   // Set value for parameter `Name` known at compile time.
-  template <QL_CONCEPT_OR_TYPENAME(ParameterName) Name, typename Value>
+  template <ParameterName Name, typename Value>
   void set(Value newValue) {
     constexpr auto index = _nameToIndex.at(Name);
     return std::get<index>(_parameters).wlock()->set(std::move(newValue));
@@ -301,7 +308,7 @@ class Parameters {
 
   // For the parameter with name `Name` specify the function that is to be
   // called, when this parameter value changes.
-  template <QL_CONCEPT_OR_TYPENAME(ParameterName) Name, typename OnUpdateAction>
+  template <ParameterName Name, typename OnUpdateAction>
   auto setOnUpdateAction(OnUpdateAction onUpdateAction) {
     constexpr auto index = _nameToIndex.at(Name);
     std::get<index>(_parameters)

@@ -99,7 +99,7 @@ class ParameterToProgramOptionFactory {
    * value as the default value. When that value is parsed, the parameter is set
    * to the parsed value.
    */
-  template <QL_CONCEPT_OR_TYPENAME(ad_utility::ParameterName) name>
+  template <ad_utility::ParameterName name>
   auto getProgramOption() {
     // Get the current value of the parameter, it will become the default
     // value of the command-line option.

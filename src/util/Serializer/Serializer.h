@@ -167,12 +167,11 @@ CPP_template(typename S, typename T)(
 /// access private members of a class. It is possible to declare the friend
 /// using `AD_SERIALIZE_FRIEND_FUNCTION(Type);` and to define it outside of the
 /// class with `AD_SERIALIZE_FUNCTION(Type){...}`
-#define AD_SERIALIZE_FRIEND_FUNCTION(T)                                      \
-  CPP_template(typename S, typename U)(                                      \
-      requires ad_utility::serialization::Serializer<S> CPP_and              \
-          ad_utility::SimilarTo<U, T>                                        \
-              CPP_and ad_utility::serialization::SerializerMatchesConstness< \
-                  S, U>) friend void                                         \
+#define AD_SERIALIZE_FRIEND_FUNCTION(T)                                    \
+  QL_TEMPLATE_NO_DEFAULT(typename S, typename U)                           \
+  (requires ad_utility::serialization::Serializer<S> &&                    \
+   ad_utility::SimilarTo<U, T> &&                                          \
+   ad_utility::serialization::SerializerMatchesConstness<S, U>)friend void \
   serialize(S& serializer, U&& arg)
 
 /**

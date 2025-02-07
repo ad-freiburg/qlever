@@ -29,8 +29,9 @@ namespace ad_utility {
 */
 
 // A concept, for when a type should be an integral, or a floating point.
+// TODO<joka921, gpicciuca> Turn back to  `CPP_concept`
 template <typename T>
-CPP_concept Arithmetic = (std::integral<T> || std::floating_point<T>);
+concept Arithmetic = (std::integral<T> || std::floating_point<T>);
 
 /*
 An abstract class, that represents an amount of memory.
@@ -290,7 +291,7 @@ CPP_template(typename T, typename Func)(requires Arithmetic<T> CPP_and(
 }  // namespace detail
 
 // _____________________________________________________________________________
-CPP_template(typename T)(requires std::integral<T>) constexpr MemorySize
+CPP_template_def(typename T)(requires std::integral<T>) constexpr MemorySize
     MemorySize::bytes(T numBytes) {
   if constexpr (std::is_signed_v<T>) {
     // Doesn't make much sense to a negative amount of memory.

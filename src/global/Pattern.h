@@ -72,6 +72,10 @@ struct CompactStringVectorWriter;
 
 }
 
+// TODO<joka921, picciuca> : The following doesn't work if there is no `begin()`
+// member in 17 mode. We need a different solution for this, but this is
+// currently only used in tests. Postponing this for now.
+#if false
 #ifdef QLEVER_CPP_17
 template <typename T, typename = void>
 struct IsIteratorOfIterator : std::false_type {};
@@ -92,6 +96,15 @@ concept IteratorOfIterator = requires(T t) {
   { *(t.begin()->begin()) } -> ad_utility::SimilarTo<DataType>;
 };
 #endif
+
+#endif
+
+template <typename T, typename U>
+concept DummySimilar = ad_utility::SimilarTo<T, U>;
+template <typename T, typename DataType>
+concept IteratorOfIterator = requires(T t) {
+  { *(t.begin()->begin()) } -> DummySimilar<DataType>;
+};
 
 /**
  * @brief Stores a list of variable length data of a single type (e.g.

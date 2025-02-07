@@ -24,13 +24,14 @@ CPP_concept ValueSizeGetter =
 
 // A templated default value size getter. Can be specialized for additional
 // custom types.
-template <typename T>
+template <typename T, typename = void>
 struct DefaultValueSizeGetter;
 
 // Trivially copyable types do not own heap memory (otherwise they are
 // incorred), so we just use sizeof.
-CPP_template(typename T)(
-    requires std::is_trivially_copyable_v<T>) struct DefaultValueSizeGetter<T> {
+template <typename T>
+struct DefaultValueSizeGetter<
+    T, std::enable_if_t<std::is_trivially_copyable_v<T>>> {
   constexpr MemorySize operator()(const T&) const {
     return MemorySize::bytes(sizeof(T));
   }

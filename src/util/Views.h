@@ -101,8 +101,10 @@ CPP_template(typename UnderlyingRange, bool supportConst = true)(
   UnderlyingRange underlyingRange_ = UnderlyingRange();
 
  public:
-  OwningView() QL_CONCEPT_OR_NOTHING(
-      requires std::default_initializable<UnderlyingRange>) = default;
+  // TODO<joka921> This also is the problem with the default constructor
+  // constraints, maybe we can get away with that on GCC
+  QL_TEMPLATE_NO_DEFAULT(bool b = true)
+  (requires b&& std::default_initializable<UnderlyingRange>)OwningView() {}
 
   constexpr explicit OwningView(UnderlyingRange&& underlyingRange) noexcept(
       std::is_nothrow_move_constructible_v<UnderlyingRange>)

@@ -130,7 +130,7 @@ addLinkAndDiscoverTest(CryptographicHashUtilsTest util)
 
 addLinkAndDiscoverTest(CacheTest)
 
-addLinkAndDiscoverTest(ConcurrentCacheTest)
+addLinkAndDiscoverTestNoLibs(ConcurrentCacheTest)
 
 # This test also seems to use the same filenames and should be fixed.
 addLinkAndDiscoverTestSerial(FileTest)
@@ -225,7 +225,7 @@ addLinkAndDiscoverTestSerial(SparqlAntlrParserTest parser sparqlExpressions engi
 # TODO<qup42, joka921> fix this
 addLinkAndDiscoverTestSerial(SerializerTest)
 
-addLinkAndDiscoverTest(ParametersTest)
+addLinkAndDiscoverTestNoLibs(ParametersTest)
 
 addLinkAndDiscoverTest(ZstdCompressionTest zstd ${cmake_thread_libs_init})
 
@@ -245,7 +245,7 @@ addLinkAndDiscoverTest(AcceptHeaderTest mediaTypes httpParser)
 
 addLinkAndDiscoverTest(RdfEscapingTest parser)
 
-addLinkAndDiscoverTest(CompactStringVectorTest)
+addLinkAndDiscoverTestNoLibs(CompactStringVectorTest)
 
 addLinkAndDiscoverTest(SparqlDataTypesTest engine)
 

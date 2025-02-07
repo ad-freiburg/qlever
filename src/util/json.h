@@ -37,8 +37,9 @@ Convenience header for Nlohmann::Json that sets the default options. Also
 #include "util/SourceLocation.h"
 
 // For higher flexibility of the custom json helper functions.
+// TODO<joka921, gpicciuca> Make `CPP_concept` again.
 template <typename T>
-CPP_concept OrderedOrUnorderedJson =
+concept OrderedOrUnorderedJson =
     ad_utility::SameAsAny<T, nlohmann::json, nlohmann::ordered_json>;
 
 /*
