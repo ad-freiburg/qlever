@@ -127,7 +127,8 @@ class Server {
   // Wraps the error handling around the processing of operations. Calls the
   // visitor on the given operation.
   Awaitable<void> processOperation(
-      auto&& operation, auto visitor, const ad_utility::Timer& requestTimer,
+      ad_utility::url_parser::sparqlOperation::Operation operation,
+      auto visitor, const ad_utility::Timer& requestTimer,
       const ad_utility::httpUtils::HttpRequest auto& request, auto& send);
   // Do the actual execution of a query.
   Awaitable<void> processQuery(
