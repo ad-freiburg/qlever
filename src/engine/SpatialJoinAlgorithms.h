@@ -50,7 +50,7 @@ struct DistanceVisitor : public boost::static_visitor<double> {
 
 struct rtreeEntry {
   size_t row_;
-  std::optional<AnyGeometry> geometry_;
+  AnyGeometry* geometry_;
   std::optional<GeoPoint> geoPoint_;
   std::optional<Box> boundingBox_;
 };
@@ -109,11 +109,11 @@ class SpatialJoinAlgorithms {
   // geometry comes from a different result table
   Id computeDist(const IdTable* resLeft, const IdTable* resRight,
                  size_t rowLeft, size_t rowRight, ColumnIndex leftPointCol,
-                 ColumnIndex rightPointCol) const;
+                 ColumnIndex rightPointCol);
 
   // Helper function, which computes the distance of two geometries, where each
   // geometry has already been parsed and is available as an rtreeEntry
-  Id computeDist(rtreeEntry& geo1, rtreeEntry& geo2) const;
+  Id computeDist(rtreeEntry& geo1, rtreeEntry& geo2);
 
   // this function calculates the maximum distance from the midpoint of the box
   // to any other point, which is contained in the box. If the midpoint has
@@ -124,8 +124,8 @@ class SpatialJoinAlgorithms {
       const Box& box, std::optional<Point> midpoint = std::nullopt) const;
 
   // this function gets the string which represents the area from the idtable.
-  std::optional<AnyGeometry> getAnyGeometry(const IdTable* idtable, size_t row,
-                                            size_t col) const;
+  AnyGeometry* getAnyGeometry(const IdTable* idtable, size_t row,
+                                            size_t col);
 
  private:
   // Helper function which returns a GeoPoint if the element of the given table
@@ -163,8 +163,8 @@ class SpatialJoinAlgorithms {
   // Only for the poles, the conversion will be way to large (for the longitude
   // difference). Note, that this function is expensive and should only be
   // called when needed
-  double computeDist(const AnyGeometry& geometry1,
-                     const AnyGeometry& geometry2) const;
+  double computeDist(const AnyGeometry* geometry1,
+                     const AnyGeometry* geometry2) const;
 
   // this helper function takes an idtable, a row and a column. It then tries
   // to parse a geometry or a geoPoint of that cell in the idtable. If it
@@ -173,7 +173,7 @@ class SpatialJoinAlgorithms {
                            const ColumnIndex col);
   
   // this helper function converts a GeoPoint into a boost geometry Point
-  Point convertGeoPointToPoint(GeoPoint point) const;
+  AnyGeometry* convertGeoPointToPoint(GeoPoint point);
 
   QueryExecutionContext* qec_;
   PreparedSpatialJoinParams params_;
@@ -205,4 +205,7 @@ class SpatialJoinAlgorithms {
   // geometries failed. It is mutable to let parsing function which are const
   // still modify the the nr of failed parsings.
   mutable size_t nrOfFailedParsedGeometries_ = 0;
+
+  // this vector stores the geometries, which have already been parsed
+  std::vector<AnyGeometry> geometries_;
 };
