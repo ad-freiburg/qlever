@@ -159,11 +159,27 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
       ElementsAreArray({IdTriple(Id("<x>"), Id("<is-a>"), Id("<y>")),
                         IdTriple(Id("<y>"), Id("<is-a>"), Id("<x>"))}));
   expectComputeGraphUpdateQuads(
+      "DELETE { ?s <is-a> ?o } INSERT { <x> <is-a> <y> } WHERE { ?s <is-a> ?o "
+      "}",
+      IsEmpty(),
+      ElementsAreArray({IdTriple(Id("<y>"), Id("<is-a>"), Id("<x>"))}));
+  expectComputeGraphUpdateQuads(
+      "DELETE { ?s <is-a> ?o } INSERT { <x> <is-a> ?o . <y> <is-a> <x> } WHERE "
+      "{ ?s <is-a> ?o "
+      "}",
+      ElementsAreArray({IdTriple(Id("<x>"), Id("<is-a>"), Id("<x>"))}),
+      IsEmpty());
+  expectComputeGraphUpdateQuads(
+      "DELETE { ?s <is-a> ?o } INSERT { ?o <is-a> ?s } WHERE { ?s <is-a> ?o "
+      "}",
+      IsEmpty(), IsEmpty());
+  expectComputeGraphUpdateQuads(
       "DELETE { <s> <p> <o> } INSERT { <s> <p> <o> } WHERE { ?s <is-a> ?o }",
       ElementsAreArray({IdTriple(LVI("<s>"), LVI("<p>"), LVI("<o>"))}),
       ElementsAreArray({IdTriple(LVI("<s>"), LVI("<p>"), LVI("<o>"))}));
   expectComputeGraphUpdateQuads(
       "DELETE { ?s <is-a> ?o } INSERT { ?s <is-a> ?o } WHERE { ?s <is-a> ?o }",
+      // The triples are optimized out
       IsEmpty(), IsEmpty());
   expectComputeGraphUpdateQuads(
       "DELETE WHERE { ?s ?p ?o }", IsEmpty(),

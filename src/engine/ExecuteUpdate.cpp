@@ -129,6 +129,7 @@ bool ExecuteUpdate::deletedTriplesExistInIndex(const ParsedQuery& query) {
   }
   const auto& graphUpdate =
       std::get<updateClause::GraphUpdate>(updateClause.op_);
+  // TODO: generalize to take vector<...>&
   vector<SparqlTripleSimpleWithGraph> triplesGraphUpdate =
       graphUpdate.toDelete_;
   // Triples with non-default graph are represented in graph patterns in a way
@@ -239,8 +240,8 @@ ExecuteUpdate::computeGraphUpdateQuads(
     auto first = ql::ranges::unique(vec).begin();
     vec.erase(first, vec.end());
   };
-  // We could also do this once directly one the triple templates. But they'd
-  // need to have an ordering for that.
+  // We could also do this once directly one the triple templates, if they had
+  // an ordering.
   auto setMinus = []<typename T>(std::vector<T>& left, std::vector<T>& right) {
     vector<T> optimisedLeft;
     vector<T> optimisedRight;
@@ -249,8 +250,6 @@ ExecuteUpdate::computeGraphUpdateQuads(
     left = std::move(optimisedLeft);
     right = std::move(optimisedRight);
   };
-  sortAndRemoveDuplicates(toInsert);
-  sortAndRemoveDuplicates(toDelete);
   // The following observations allows us to optimise the number of triples we
   // store for updates:
   // Assume the update `DELETE { <A'> } INSERT { <B> } WHERE { <A''> }`.
@@ -259,6 +258,8 @@ ExecuteUpdate::computeGraphUpdateQuads(
   // - if all triples that are being deleted we can omit triples that are both
   // deleted and inserted by this query
   // We only have to delete the triples A'\B and insert B\A'.
+  sortAndRemoveDuplicates(toInsert);
+  sortAndRemoveDuplicates(toDelete);
   if (deletedTriplesExist) {
     setMinus(toInsert, toDelete);
   }
