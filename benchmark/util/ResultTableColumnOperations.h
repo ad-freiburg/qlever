@@ -37,8 +37,8 @@ requires(sizeof...(ColumnInputTypes) > 0) void generateColumnWithColumnInput(
   // Using a column more than once is the sign of an error.
   std::array<size_t, sizeof...(ColumnInputTypes)> allColumnNums{
       {inputColumns.columnNum_...}};
-  std::ranges::sort(allColumnNums);
-  AD_CONTRACT_CHECK(std::ranges::adjacent_find(allColumnNums) ==
+  ql::ranges::sort(allColumnNums);
+  AD_CONTRACT_CHECK(ql::ranges::adjacent_find(allColumnNums) ==
                     allColumnNums.end());
 
   // Fill the result column.

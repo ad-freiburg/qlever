@@ -50,9 +50,9 @@ cppcoro::generator<const std::decay_t<std::invoke_result_t<Transformation, T>>> 
   }
 }
 
-template <typename T, typename Transformation = std::identity>
-requires(std::ranges::input_range<T>)
-auto resultGenerator(T&& vector, size_t numItems, Transformation transformation = {}) {
+CPP_template(typename T, typename Transformation = std::identity)(
+    requires ql::ranges::input_range<T>) auto resultGenerator(T&& vector, size_t numItems,
+                                                              Transformation transformation = {}) {
   AD_CONTRACT_CHECK(numItems == vector.size());
   return ad_utility::allView(AD_FWD(vector)) | ql::views::transform(std::move(transformation));
 }
@@ -110,7 +110,7 @@ inline auto valueGetterGenerator = []<typename ValueGetter, SingleExpressionResu
 inline auto applyFunction = []<typename Function, typename... Generators>(
                                 Function&& function, size_t numItems, Generators... generators)
     -> cppcoro::generator<
-        std::invoke_result_t<Function, std::ranges::range_value_t<Generators>...>> {
+        std::invoke_result_t<Function, ql::ranges::range_value_t<Generators>...>> {
   // A tuple holding one iterator to each of the generators.
   std::tuple iterators{generators.begin()...};
 

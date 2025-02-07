@@ -185,7 +185,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createExecutionTrees(
 
   for (auto& plan : lastRow) {
     if (plan._qet->getRootOperation()->supportsLimit()) {
-      plan._qet->getRootOperation()->setLimit(pq._limitOffset);
+      plan._qet->setLimit(pq._limitOffset);
     }
   }
 
@@ -246,7 +246,9 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
   // (it might be, that the last join was optional and introduced new variables)
   if (!candidatePlans.empty()) {
     applyFiltersIfPossible<true>(candidatePlans[0], rootPattern->_filters);
-    applyTextLimitsIfPossible(candidatePlans[0], rootPattern->textLimits_,
+    applyTextLimitsIfPossible(candidatePlans[0],
+                              TextLimitVec{rootPattern->textLimits_.begin(),
+                                           rootPattern->textLimits_.end()},
                               true);
     checkCancellation();
   }
@@ -1232,7 +1234,7 @@ void QueryPlanner::applyFiltersIfPossible(
 
 // _____________________________________________________________________________
 void QueryPlanner::applyTextLimitsIfPossible(
-    vector<QueryPlanner::SubtreePlan>& row, const TextLimitMap& textLimits,
+    vector<QueryPlanner::SubtreePlan>& row, const TextLimitVec& textLimits,
     bool replace) const {
   // Apply text limits if possible.
   // A text limit can be applied to a plan if:
@@ -1307,7 +1309,7 @@ size_t QueryPlanner::findUniqueNodeIds(
 std::vector<QueryPlanner::SubtreePlan>
 QueryPlanner::runDynamicProgrammingOnConnectedComponent(
     std::vector<SubtreePlan> connectedComponent,
-    const vector<SparqlFilter>& filters, const TextLimitMap& textLimits,
+    const vector<SparqlFilter>& filters, const TextLimitVec& textLimits,
     const TripleGraph& tg) const {
   vector<vector<QueryPlanner::SubtreePlan>> dpTab;
   // find the unique number of nodes in the current connected component
@@ -1333,17 +1335,55 @@ QueryPlanner::runDynamicProgrammingOnConnectedComponent(
     // be nonempty.
     AD_CORRECTNESS_CHECK(!dpTab[k - 1].empty());
   }
-  return std::move(dpTab.back());
+  auto& result = dpTab.back();
+  applyFiltersIfPossible<true>(result, filters);
+  applyTextLimitsIfPossible(result, textLimits, true);
+  return std::move(result);
 }
 
 // _____________________________________________________________________________
 size_t QueryPlanner::countSubgraphs(
-    std::vector<const QueryPlanner::SubtreePlan*> graph, size_t budget) {
+    std::vector<const QueryPlanner::SubtreePlan*> graph,
+    const std::vector<SparqlFilter>& filters, size_t budget) {
   // Remove duplicate plans from `graph`.
   auto getId = [](const SubtreePlan* v) { return v->_idsOfIncludedNodes; };
   ql::ranges::sort(graph, ql::ranges::less{}, getId);
-  graph.erase(std::ranges::unique(graph, ql::ranges::equal_to{}, getId).begin(),
-              graph.end());
+  auto uniqueIter = ql::ranges::unique(graph, ql::ranges::equal_to{}, getId);
+#ifdef QLEVER_CPP_17
+  graph.erase(uniqueIter, graph.end());
+#else
+  graph.erase(uniqueIter.begin(), graph.end());
+#endif
+
+  // We also have to consider the `filters`. To make life easy, we temporarily
+  // create simple `SubtreePlans` for them which just have the correct
+  // variables. We only create one subtree plan for each set of variables that
+  // is contained in the `filters`, because this will bring the estimate of this
+  // function closer to the actual behavior of the DP query planner (it always
+  // applies either all possible filters at once, or none of them).
+  std::vector<QueryPlanner::SubtreePlan> dummyPlansForFilter;
+  ad_utility::HashSet<ad_utility::HashSet<Variable>>
+      deduplicatedFilterVariables;
+  for (const auto& filter : filters) {
+    const auto& vars = filter.expression_.containedVariables();
+    ad_utility::HashSet<Variable> varSet;
+    // We use a `VALUES` clause as the dummy because this operation is the
+    // easiest to setup for a number of given variables.
+    parsedQuery::SparqlValues values;
+    for (auto* var : vars) {
+      values._variables.push_back(*var);
+      varSet.insert(*var);
+    }
+    if (deduplicatedFilterVariables.insert(std::move(varSet)).second) {
+      dummyPlansForFilter.push_back(
+          makeSubtreePlan<Values>(_qec, std::move(values)));
+    }
+  }
+
+  const size_t numPlansWithoutFilters = graph.size();
+  for (const auto& filterPlan : dummyPlansForFilter) {
+    graph.push_back(&filterPlan);
+  }
 
   // Qlever currently limits the number of triples etc. per group to be <= 64
   // anyway, so we can simply assert here.
@@ -1358,7 +1398,11 @@ size_t QueryPlanner::countSubgraphs(
   for (size_t i = 0; i < graph.size(); ++i) {
     countConnectedSubgraphs::Node v{0};
     for (size_t k = 0; k < graph.size(); ++k) {
+      // Don't connect nodes to themselves, don't connect filters with other
+      // filters, otherwise connect `i` and `k` if they have at least one
+      // variable in common.
       if ((k != i) &&
+          (k < numPlansWithoutFilters || i < numPlansWithoutFilters) &&
           !QueryPlanner::getJoinColumns(*graph.at(k), *graph.at(i)).empty()) {
         v.neighbors_ |= (1ULL << k);
       }
@@ -1373,32 +1417,75 @@ size_t QueryPlanner::countSubgraphs(
 std::vector<QueryPlanner::SubtreePlan>
 QueryPlanner::runGreedyPlanningOnConnectedComponent(
     std::vector<SubtreePlan> connectedComponent,
-    const vector<SparqlFilter>& filters, const TextLimitMap& textLimits,
+    const vector<SparqlFilter>& filters, const TextLimitVec& textLimits,
     const TripleGraph& tg) const {
-  auto& result = connectedComponent;
-  applyFiltersIfPossible<true>(result, filters);
-  applyTextLimitsIfPossible(result, textLimits, true);
-  size_t numSeeds = findUniqueNodeIds(result);
+  applyFiltersIfPossible<true>(connectedComponent, filters);
+  applyTextLimitsIfPossible(connectedComponent, textLimits, true);
+  const size_t numSeeds = findUniqueNodeIds(connectedComponent);
+  if (numSeeds <= 1) {
+    // Only 0 or 1 nodes in the input, nothing to plan.
+    return connectedComponent;
+  }
 
-  while (numSeeds > 1) {
+  // Intermediate variables that will be filled by the `greedyStep` lambda
+  // below.
+  using Plans = std::vector<SubtreePlan>;
+
+  // Perform a single step of greedy query planning.
+  // `nextBestPlan` contains the result of the last step of greedy query
+  // planning. `currentPlans` contains all plans that have been chosen/combined
+  // so far (which might still be the initial start plans), except for the most
+  // recently chosen plan, which is stored in `nextResult`. `cache` contains all
+  // the plans that can be obtained by combining two plans in `input`. The
+  // function then performs one additional step of greedy planning and
+  // reinforces the above pre-/postconditions. Exception: if `isFirstStep` then
+  // `cache` and `nextResult` must be empty, and the first step of greedy
+  // planning is performed, which also establishes the pre-/postconditions.
+  auto greedyStep = [this, &tg, &filters, &textLimits,
+                     currentPlans = std::move(connectedComponent),
+                     cache = Plans{}](Plans& nextBestPlan,
+                                      bool isFirstStep) mutable {
     checkCancellation();
-    auto newPlans = merge(result, result, tg);
+    // Normally, we already have all combinations of two nodes in `currentPlans`
+    // in the cache, so we only have to add the combinations between
+    // `currentPlans` and `nextResult`. In the first step, we need to initially
+    // compute all possible combinations.
+    auto newPlans = isFirstStep ? merge(currentPlans, currentPlans, tg)
+                                : merge(currentPlans, nextBestPlan, tg);
     applyFiltersIfPossible<true>(newPlans, filters);
     applyTextLimitsIfPossible(newPlans, textLimits, true);
-    auto smallestIdx = findSmallestExecutionTree(newPlans);
-    auto& cheapestNewTree = newPlans.at(smallestIdx);
-    size_t oldSize = result.size();
-    std::erase_if(result, [&cheapestNewTree](const auto& plan) {
-      // TODO<joka921> We can also assert some other invariants here.
-      return (cheapestNewTree._idsOfIncludedNodes & plan._idsOfIncludedNodes) !=
-             0;
-    });
-    result.push_back(std::move(cheapestNewTree));
-    AD_CORRECTNESS_CHECK(result.size() < oldSize);
-    numSeeds--;
+    AD_CORRECTNESS_CHECK(!newPlans.empty());
+    ql::ranges::move(newPlans, std::back_inserter(cache));
+    ql::ranges::move(nextBestPlan, std::back_inserter(currentPlans));
+
+    // All candidates for the next greedy step are in the `cache`, choose the
+    // cheapest one, remove it from the cache and make it the `nextResult`
+    {
+      auto smallestIdxNew = findSmallestExecutionTree(cache);
+      auto& cheapestNewTree = cache.at(smallestIdxNew);
+      std::swap(cheapestNewTree, cache.back());
+      nextBestPlan.clear();
+      nextBestPlan.push_back(std::move(cache.back()));
+      cache.pop_back();
+    }
+
+    // All plans which have a node in common with the chosen plan have to be
+    // deleted from the `currentPlans` and therefore also from the `cache`.
+    auto shouldBeErased = [&nextTree = nextBestPlan.front()](const auto& plan) {
+      return (nextTree._idsOfIncludedNodes & plan._idsOfIncludedNodes) != 0;
+    };
+    std::erase_if(currentPlans, shouldBeErased);
+    std::erase_if(cache, shouldBeErased);
+  };
+
+  bool first = true;
+  Plans result;
+  for ([[maybe_unused]] size_t i : ad_utility::integerRange(numSeeds - 1)) {
+    greedyStep(result, first);
+    first = false;
   }
   // TODO<joka921> Assert that all seeds are covered by the result.
-  return std::move(result);
+  return result;
 }
 
 // _____________________________________________________________________________
@@ -1418,13 +1505,14 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
     components[componentIndices.at(i)].push_back(std::move(initialPlans.at(i)));
   }
   vector<vector<SubtreePlan>> lastDpRowFromComponents;
+  TextLimitVec textLimitVec(textLimits.begin(), textLimits.end());
   for (auto& component : components | ql::views::values) {
     std::vector<const SubtreePlan*> g;
     for (const auto& plan : component) {
       g.push_back(&plan);
     }
     const size_t budget = RuntimeParameters().get<"query-planning-budget">();
-    bool useGreedyPlanning = countSubgraphs(g, budget) > budget;
+    bool useGreedyPlanning = countSubgraphs(g, filters, budget) > budget;
     if (useGreedyPlanning) {
       LOG(INFO)
           << "Using the greedy query planner for a large connected component"
@@ -1433,8 +1521,8 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
     auto impl = useGreedyPlanning
                     ? &QueryPlanner::runGreedyPlanningOnConnectedComponent
                     : &QueryPlanner::runDynamicProgrammingOnConnectedComponent;
-    lastDpRowFromComponents.push_back(
-        std::invoke(impl, this, std::move(component), filters, textLimits, tg));
+    lastDpRowFromComponents.push_back(std::invoke(
+        impl, this, std::move(component), filters, textLimitVec, tg));
     checkCancellation();
   }
   size_t numConnectedComponents = lastDpRowFromComponents.size();
@@ -1447,7 +1535,8 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
   if (numConnectedComponents == 1) {
     // A Cartesian product is not needed if there is only one component.
     applyFiltersIfPossible<true>(lastDpRowFromComponents.back(), filters);
-    applyTextLimitsIfPossible(lastDpRowFromComponents.back(), textLimits, true);
+    applyTextLimitsIfPossible(lastDpRowFromComponents.back(), textLimitVec,
+                              true);
     return lastDpRowFromComponents;
   }
   // More than one connected component, set up a Cartesian product.
@@ -1478,7 +1567,7 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
   plan._idsOfIncludedFilters = filterIds;
   plan.idsOfIncludedTextLimits_ = textLimitIds;
   applyFiltersIfPossible<true>(result.at(0), filters);
-  applyTextLimitsIfPossible(result.at(0), textLimits, true);
+  applyTextLimitsIfPossible(result.at(0), textLimitVec, true);
   return result;
 }
 
@@ -1793,7 +1882,7 @@ size_t QueryPlanner::findSmallestExecutionTree(
 // _____________________________________________________________________________
 std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
     const SubtreePlan& ain, const SubtreePlan& bin,
-    std::optional<TripleGraph> tg) const {
+    boost::optional<const TripleGraph&> tg) const {
   bool swapForTesting = isInTestMode() && bin.type != SubtreePlan::OPTIONAL &&
                         ain._qet->getCacheKey() < bin._qet->getCacheKey();
   const auto& a = !swapForTesting ? ain : bin;
@@ -2261,7 +2350,7 @@ void QueryPlanner::GraphPatternPlanner::visitGroupOptionalOrMinus(
   // whether `b` is from an OPTIONAL or MINUS.
   for (const auto& a : candidatePlans_.at(0)) {
     for (const auto& b : candidates) {
-      auto vec = planner_.createJoinCandidates(a, b, std::nullopt);
+      auto vec = planner_.createJoinCandidates(a, b, boost::none);
       nextCandidates.insert(nextCandidates.end(),
                             std::make_move_iterator(vec.begin()),
                             std::make_move_iterator(vec.end()));
@@ -2572,7 +2661,7 @@ void QueryPlanner::GraphPatternPlanner::visitSubquery(
   ql::ranges::for_each(candidatesForSubquery, setSelectedVariables);
   // A subquery must also respect LIMIT and OFFSET clauses
   ql::ranges::for_each(candidatesForSubquery, [&](SubtreePlan& plan) {
-    plan._qet->getRootOperation()->setLimit(arg.get()._limitOffset);
+    plan._qet->setLimit(arg.get()._limitOffset);
   });
   visitGroupOptionalOrMinus(std::move(candidatesForSubquery));
 }

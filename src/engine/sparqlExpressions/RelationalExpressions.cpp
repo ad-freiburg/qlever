@@ -150,7 +150,7 @@ requires AreComparable<S1, S2> ExpressionResult evaluateRelationalExpression(
     auto impl = [&](const auto& value2) -> std::optional<ExpressionResult> {
       auto columnIndex = context->getColumnIndexForVariable(value1);
       auto valueId = makeValueId(value2, context);
-      // TODO<C++23> Use `std::ranges::starts_with`.
+      // TODO<C++23> Use `ql::ranges::starts_with`.
       if (const auto& cols = context->_columnsByWhichResultIsSorted;
           !cols.empty() && cols[0] == columnIndex) {
         constexpr static bool value2IsString =

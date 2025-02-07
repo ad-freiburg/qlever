@@ -356,7 +356,7 @@ class AddCombinedRowToIdTable {
       // Only merge non-null vocabs.
       auto range = currentVocabs_ | ql::views::filter(toBool) |
                    ql::views::transform(dereference);
-      mergedVocab_.mergeWith(std::ranges::ref_view{range});
+      mergedVocab_.mergeWith(ql::ranges::ref_view{range});
     }
   }
   const IdTableView<0>& inputLeft() const {
