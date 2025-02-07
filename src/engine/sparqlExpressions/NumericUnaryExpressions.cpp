@@ -24,9 +24,9 @@ inline auto unaryNegate = [](TernaryBool a) {
   AD_FAIL();
 };
 
-template <typename NaryOperation>
-requires(isOperation<NaryOperation>)
-class UnaryNegateExpressionImpl : public NaryExpression<NaryOperation> {
+CPP_template(typename NaryOperation)(
+    requires isOperation<NaryOperation>) class UnaryNegateExpressionImpl
+    : public NaryExpression<NaryOperation> {
  public:
   using NaryExpression<NaryOperation>::NaryExpression;
 
@@ -95,7 +95,7 @@ NARY_EXPRESSION(AbsExpression, 1, FV<decltype(abs), NumericValueGetter>);
 
 // Rounding.
 inline const auto roundImpl = []<typename T>(T num) {
-  if constexpr (std::is_floating_point_v<T>) {
+  if constexpr (ad_utility::FloatingPoint<T>) {
     auto res = std::round(num);
     // In SPARQL, negative numbers are rounded towards zero if they lie exactly
     // between two integers.
@@ -110,7 +110,7 @@ NARY_EXPRESSION(RoundExpression, 1, FV<decltype(round), NumericValueGetter>);
 
 // Ceiling.
 inline const auto ceilImpl = []<typename T>(T num) {
-  if constexpr (std::is_floating_point_v<T>) {
+  if constexpr (ad_utility::FloatingPoint<T>) {
     return std::ceil(num);
   } else {
     return num;
@@ -121,7 +121,7 @@ NARY_EXPRESSION(CeilExpression, 1, FV<decltype(ceil), NumericValueGetter>);
 
 // Flooring.
 inline const auto floorImpl = []<typename T>(T num) {
-  if constexpr (std::is_floating_point_v<T>) {
+  if constexpr (ad_utility::FloatingPoint<T>) {
     return std::floor(num);
   } else {
     return num;

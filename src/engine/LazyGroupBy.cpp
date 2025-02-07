@@ -73,9 +73,9 @@ void LazyGroupBy::processBlock(
                                                             evaluationContext);
 
     visitAggregate(
-        [blockSize,
-         &evaluationContext]<sparqlExpression::SingleExpressionResult T>(
+        [blockSize, &evaluationContext]<typename T>(
             VectorOfAggregationData auto& aggregateData, T&& singleResult) {
+          CPP_assert(sparqlExpression::SingleExpressionResult<T>);
           auto generator = sparqlExpression::detail::makeGenerator(
               std::forward<T>(singleResult), blockSize, &evaluationContext);
 

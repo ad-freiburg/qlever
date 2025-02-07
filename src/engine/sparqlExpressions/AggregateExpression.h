@@ -104,7 +104,9 @@ using AGG_EXP = AggregateExpression<
 // with arguments and result of type `NumericValue` (which is a `std::variant`).
 template <typename NumericOperation>
 inline auto makeNumericExpressionForAggregate() {
-  return [](const std::same_as<NumericValue> auto&... args) -> NumericValue {
+  return [](const auto&... args) -> NumericValue {
+    CPP_assert(
+        (concepts::same_as<std::decay_t<decltype(args)>, NumericValue> && ...));
     auto visitor = []<typename... Ts>(const Ts&... t) -> NumericValue {
       if constexpr ((... || std::is_same_v<NotNumeric, Ts>)) {
         return NotNumeric{};
@@ -182,8 +184,8 @@ inline const auto compareIdsOrStrings =
 // Aggregate expression for MIN and MAX.
 template <valueIdComparators::Comparison comparison>
 inline const auto minMaxLambdaForAllTypes =
-    []<SingleExpressionResult T>(const T& a, const T& b,
-                                 const EvaluationContext* ctx) {
+    []<typename T>(const T& a, const T& b, const EvaluationContext* ctx) {
+      CPP_assert(SingleExpressionResult<T>);
       auto actualImpl = [ctx](const auto& x, const auto& y) {
         return compareIdsOrStrings<comparison>(x, y, ctx);
       };
