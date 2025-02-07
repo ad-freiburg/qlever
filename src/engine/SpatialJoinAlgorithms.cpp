@@ -52,9 +52,9 @@ std::string_view SpatialJoinAlgorithms::betweenQuotes(
 
 std::optional<AnyGeometry> SpatialJoinAlgorithms::getAnyGeometry(
     const IdTable* idtable, size_t row, size_t col) const {
-  auto printWarning = [alreadyWarned = false,
+  auto printWarning = [this,
                        &spatialJoin = spatialJoin_]() mutable {
-    if (!alreadyWarned) {
+    if (this->nrOfFailedParsedGeometries_ == 0) {
       std::string warning =
           "The input to a spatial join contained at least one element, "
           "that is not a Point, Linestring, Polygon, MultiPoint, "
@@ -62,7 +62,7 @@ std::optional<AnyGeometry> SpatialJoinAlgorithms::getAnyGeometry(
           "that QLever currently only accepts those geometries for "
           "the spatial joins";
       AD_LOG_WARN << warning << std::endl;
-      alreadyWarned = true;
+      this->nrOfFailedParsedGeometries_ += 1;
       if (spatialJoin.has_value()) {
         AD_CORRECTNESS_CHECK(spatialJoin.value() != nullptr);
         spatialJoin.value()->addWarning(warning);
@@ -101,13 +101,14 @@ Point SpatialJoinAlgorithms::convertGeoPointToPoint(GeoPoint point) const {
 };
 
 // ____________________________________________________________________________
-Id SpatialJoinAlgorithms::computeDist(const rtreeEntry& geo1,
-                                      const rtreeEntry& geo2) const {
+Id SpatialJoinAlgorithms::computeDist(rtreeEntry& geo1,
+                                      rtreeEntry& geo2) const {
   auto convertPoint = [&](const AnyGeometry& geometry,
-                          const std::optional<Box>& bbox) {
-    Box areaBox;
-    areaBox =
-        bbox.value_or(boost::apply_visitor(BoundingBoxVisitor(), geometry));
+                          std::optional<Box> bbox) {
+    if (!bbox.has_value()) {
+      bbox = boost::apply_visitor(BoundingBoxVisitor(), geometry);
+    }
+    const auto& areaBox = bbox.value();
     Point p = calculateMidpointOfBox(areaBox);
     return GeoPoint(p.get<1>(), p.get<0>());
   };
@@ -132,14 +133,12 @@ Id SpatialJoinAlgorithms::computeDist(const rtreeEntry& geo1,
           computeDist(geo1.geometry_.value(), geo2.geometry_.value()));
     } else {
       // one point and one area
-      std::optional<AnyGeometry> geom1 = geo1.geometry_;
-      std::optional<AnyGeometry> geom2 = geo2.geometry_;
-      if (geo1.geoPoint_.has_value()) {
-        geom1 = convertGeoPointToPoint(geo1.geoPoint_.value());
-      } else if (geo2.geoPoint_.has_value()) {
-        geom2 = convertGeoPointToPoint(geo2.geoPoint_.value());
+      if (!geo1.geometry_.has_value()) {
+        geo1.geometry_ = convertGeoPointToPoint(geo1.geoPoint_.value());
+      } else if (!geo2.geometry_.has_value()) {
+        geo2.geometry_ = convertGeoPointToPoint(geo2.geoPoint_.value());
       }
-      return Id::makeFromDouble(computeDist(geom1.value(), geom2.value()));
+      return Id::makeFromDouble(computeDist(geo1.geometry_.value(), geo2.geometry_.value()));
     }
   }
 }
@@ -151,19 +150,14 @@ Id SpatialJoinAlgorithms::computeDist(const IdTable* idTableLeft,
                                       ColumnIndex leftPointCol,
                                       ColumnIndex rightPointCol) const {
   auto getAreaOrPointGeometry = [&](const IdTable* idtable, size_t row,
-                                    size_t col, std::optional<GeoPoint> point) {
-    std::optional<AnyGeometry> geometry;
-
+                                    size_t col, std::optional<GeoPoint> point) -> std::optional<AnyGeometry> {
     if (!point) {
       // nothing to do. When parsing a point or an area fails, a warning
       // message gets printed at another place and the point/area just gets
       // skipped
-      geometry = getAnyGeometry(idtable, row, col);
-    } else {
-      geometry = convertGeoPointToPoint(point.value());
+      return getAnyGeometry(idtable, row, col);
     }
-
-    return geometry;
+    return convertGeoPointToPoint(point.value());
   };
 
   // for now we need to get the data from the disk, but in the future, this
@@ -628,10 +622,9 @@ double SpatialJoinAlgorithms::getMaxDistFromMidpointToAnyPointInsideTheBox(
 }
 
 // ____________________________________________________________________________
-Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
-  auto getRtreeEntry = [&](const IdTable* idTable, const size_t row,
-                           const ColumnIndex col) -> std::optional<rtreeEntry> {
-    rtreeEntry entry{row, std::nullopt, std::nullopt, std::nullopt};
+std::optional<rtreeEntry> SpatialJoinAlgorithms::getRtreeEntry(const IdTable* idTable, const size_t row,
+                           const ColumnIndex col) {
+  rtreeEntry entry{row, std::nullopt, std::nullopt, std::nullopt};
     entry.geoPoint_ = getPoint(idTable, row, col);
 
     if (!entry.geoPoint_) {
@@ -649,8 +642,10 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
                     entry.geoPoint_.value().getLat() + 0.00000001));
     }
     return entry;
-  };
+}
 
+// ____________________________________________________________________________
+Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
               rightJoinCol, rightSelectedCols, numColumns, maxDist,
               maxResults] = params_;
@@ -718,7 +713,7 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
       rtree.query(bgi::intersects(bbox), std::back_inserter(results));
     });
 
-    ql::ranges::for_each(results, [&](const Value& res) {
+    ql::ranges::for_each(results, [&](Value& res) {
       size_t rowLeft = res.second.row_;
       size_t rowRight = i;
       if (!leftResSmaller) {

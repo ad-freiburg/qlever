@@ -113,7 +113,7 @@ class SpatialJoinAlgorithms {
 
   // Helper function, which computes the distance of two geometries, where each
   // geometry has already been parsed and is available as an rtreeEntry
-  Id computeDist(const rtreeEntry& geo1, const rtreeEntry& geo2) const;
+  Id computeDist(rtreeEntry& geo1, rtreeEntry& geo2) const;
 
   // this function calculates the maximum distance from the midpoint of the box
   // to any other point, which is contained in the box. If the midpoint has
@@ -166,6 +166,12 @@ class SpatialJoinAlgorithms {
   double computeDist(const AnyGeometry& geometry1,
                      const AnyGeometry& geometry2) const;
 
+  // this helper function takes an idtable, a row and a column. It then tries
+  // to parse a geometry or a geoPoint of that cell in the idtable. If it
+  // succeeds, it returns an rtree entry of that geometry/geopoint
+  std::optional<rtreeEntry> getRtreeEntry(const IdTable* idTable, const size_t row,
+                           const ColumnIndex col);
+  
   // this helper function converts a GeoPoint into a boost geometry Point
   Point convertGeoPointToPoint(GeoPoint point) const;
 
@@ -193,4 +199,10 @@ class SpatialJoinAlgorithms {
 
   // return whether one of the poles is being touched
   std::array<bool, 2> isAPoleTouched(const double& latitude) const;
+
+  // number of times the parsing of a geometry failed. For now this is only used
+  // to print the warning once, but it could also be used to print how many
+  // geometries failed. It is mutable to let parsing function which are const
+  // still modify the the nr of failed parsings.
+  mutable size_t nrOfFailedParsedGeometries_ = 0;
 };
