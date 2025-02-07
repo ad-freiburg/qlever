@@ -1937,7 +1937,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
   if (b.type == SubtreePlan::MINUS) {
     SubtreePlan plan = makeSubtreePlan<Minus>(_qec, a._qet, b._qet);
     mergeSubtreePlanIds(plan, a, b);
-    return {plan};
+    return {std::move(plan)};
   }
 
   // OPTIONAL JOINS are not symmetric!
@@ -1945,7 +1945,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
     // Join the two optional columns using an optional join
     SubtreePlan plan = makeSubtreePlan<OptionalJoin>(_qec, a._qet, b._qet);
     mergeSubtreePlanIds(plan, a, b);
-    return {plan};
+    return {std::move(plan)};
   }
 
   if (auto opt = createJoinWithPathSearch(a, b, jcs)) {
@@ -1959,7 +1959,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
     try {
       SubtreePlan plan = makeSubtreePlan<MultiColumnJoin>(_qec, a._qet, b._qet);
       mergeSubtreePlanIds(plan, a, b);
-      return {plan};
+      return {std::move(plan)};
     } catch (const std::exception& e) {
       return {};
     }
