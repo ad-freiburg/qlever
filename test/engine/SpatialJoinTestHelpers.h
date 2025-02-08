@@ -250,6 +250,21 @@ inline std::vector<std::string> createRowVectorFromColumnVector(
   return result;
 }
 
+inline void addPoint(std::string& kg, std::string number, std::string name,
+                     std::string point) {
+  kg += absl::StrCat("<node_", number, "> <name> ", name, " .<node_", number,
+                     "> <hasGeometry> <geometry", number, "> .<geometry",
+                     number, "> <asWKT> ", point, " .");
+}
+
+inline void addArea(std::string& kg, std::string number, std::string name,
+                    std::string area) {
+  kg += absl::StrCat("<nodeArea_", number, "> <name> ", name, " . \n",
+                     "<nodeArea_", number, "> <hasGeometry> <geometryArea",
+                     number, "> .\n", "<geometryArea", number, "> <asWKT> ",
+                     area, " .\n");
+}
+
 // create a small test dataset, which focuses on points or polygons as geometry
 // objects. Note, that some of these objects have a polygon representation, but
 // when choosing points, they get represented a single point. I took those
@@ -261,40 +276,44 @@ inline std::vector<std::string> createRowVectorFromColumnVector(
 // set to false, all objects are represented by a point, otherwise all objects
 // are represented by their area.
 inline std::string createSmallDataset(bool usePolygons = false) {
-  auto addPoint = [](std::string& kg, std::string number, std::string name,
-                     std::string point) {
-    kg += absl::StrCat("<node_", number, "> <name> ", name, " .<node_", number,
-                       "> <hasGeometry> <geometry", number, "> .<geometry",
-                       number, "> <asWKT> ", point, " .");
-  };
-
-  auto addArea = [](std::string& kg, std::string number, std::string name,
-                    std::string area) {
-    kg += absl::StrCat("<nodeArea_", number, "> <name> ", name, " . \n",
-                       "<nodeArea_", number, "> <hasGeometry> <geometryArea",
-                       number, "> .\n", "<geometryArea", number, "> <asWKT> ",
-                       area, " .\n");
-  };
-
-  std::string kg2;
+  std::string kg;
   if (usePolygons) {
-    addArea(kg2, "1", "\"Uni Freiburg TF Area\"", areaUniFreiburg);
-    addArea(kg2, "2", "\"Minster Freiburg Area\"", areaMuenster);
-    addArea(kg2, "3", "\"London Eye Area\"", areaLondonEye);
-    addArea(kg2, "4", "\"Statue of liberty Area\"", areaStatueOfLiberty);
-    addArea(kg2, "5", "\"eiffel tower Area\"", areaEiffelTower);
+    addArea(kg, "1", "\"Uni Freiburg TF Area\"", areaUniFreiburg);
+    addArea(kg, "2", "\"Minster Freiburg Area\"", areaMuenster);
+    addArea(kg, "3", "\"London Eye Area\"", areaLondonEye);
+    addArea(kg, "4", "\"Statue of liberty Area\"", areaStatueOfLiberty);
+    addArea(kg, "5", "\"eiffel tower Area\"", areaEiffelTower);
   } else {
-    addPoint(kg2, "1", "\"Uni Freiburg TF\"", pointUniFreiburg);
-    addPoint(kg2, "2", "\"Minster Freiburg\"", pointMinster);
-    addPoint(kg2, "3", "\"London Eye\"", pointLondonEye);
-    addPoint(kg2, "4", "\"Statue of liberty\"", pointStatueOfLiberty);
-    addPoint(kg2, "5", "\"eiffel tower\"", pointEiffelTower);
+    addPoint(kg, "1", "\"Uni Freiburg TF\"", pointUniFreiburg);
+    addPoint(kg, "2", "\"Minster Freiburg\"", pointMinster);
+    addPoint(kg, "3", "\"London Eye\"", pointLondonEye);
+    addPoint(kg, "4", "\"Statue of liberty\"", pointStatueOfLiberty);
+    addPoint(kg, "5", "\"eiffel tower\"", pointEiffelTower);
   }
-  return kg2;
+  return kg;
+}
+
+inline std::string createMixedDataset() {
+  std::string kg;
+  addArea(kg, "1", "\"Uni Freiburg TF Area\"", areaUniFreiburg);
+  addPoint(kg, "2", "\"Minster Freiburg\"", pointMinster);
+  addArea(kg, "3", "\"London Eye Area\"", areaLondonEye);
+  addPoint(kg, "4", "\"Statue of liberty\"", pointStatueOfLiberty);
+  addArea(kg, "5", "\"eiffel tower Area\"", areaEiffelTower);
+  return kg;
 }
 
 inline QueryExecutionContext* buildTestQEC(bool useAreas = false) {
   std::string kg = createSmallDataset(useAreas);
+  ad_utility::MemorySize blocksizePermutations = 16_MB;
+  auto qec =
+      ad_utility::testing::getQec(kg, true, true, false, blocksizePermutations,
+                                  false, true, std::nullopt, 10_kB);
+  return qec;
+}
+
+inline QueryExecutionContext* buildMixedAreaPointQEC() {
+  std::string kg = createMixedDataset();
   ad_utility::MemorySize blocksizePermutations = 16_MB;
   auto qec =
       ad_utility::testing::getQec(kg, true, true, false, blocksizePermutations,

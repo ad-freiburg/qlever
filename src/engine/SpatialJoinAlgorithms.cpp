@@ -660,12 +660,12 @@ std::vector<Box> SpatialJoinAlgorithms::getQueryBox(
     const std::optional<rtreeEntry>& entry) const {
   if (!entry.value().geoPoint_) {
     auto midpoint = calculateMidpointOfBox(entry.value().boundingBox_.value());
-    return computeQueryBox(
-        midpoint, getMaxDistFromMidpointToAnyPointInsideTheBox(
-                      entry.value().boundingBox_.value(), midpoint));
+    return computeQueryBox(midpoint,
+                           getMaxDistFromMidpointToAnyPointInsideTheBox(
+                               entry.value().boundingBox_.value(), midpoint));
   } else {
     return computeQueryBox(Point(entry.value().geoPoint_.value().getLng(),
-                                    entry.value().geoPoint_.value().getLat()));
+                                 entry.value().geoPoint_.value().getLat()));
   }
 }
 

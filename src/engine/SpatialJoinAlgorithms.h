@@ -91,7 +91,7 @@ class SpatialJoinAlgorithms {
   // The function getMaxDistFromMidpointToAnyPointInsideTheBox() can be used to
   // calculate it.
   std::vector<Box> computeQueryBox(const Point& startPoint,
-                                      double additionalDist = 0) const;
+                                   double additionalDist = 0) const;
 
   // This function returns true, iff the given point is contained in any of the
   // bounding boxes

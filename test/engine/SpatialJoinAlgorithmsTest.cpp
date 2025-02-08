@@ -1633,6 +1633,45 @@ TEST(SpatialJoin, trueAreaDistance) {
   testDist(qec, "5", "6", 0.5 * conversionFactor);
 }
 
+TEST(SpatialJoin, mixedDataSet) {
+  auto testDist = [](QueryExecutionContext* qec, size_t maxDist,
+                     size_t nrResultRows) {
+    auto leftChild =
+        buildIndexScan(qec, {"?obj1", std::string{"<asWKT>"}, "?geo1"});
+    auto rightChild =
+        buildIndexScan(qec, {"?obj2", std::string{"<asWKT>"}, "?geo2"});
+
+    std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
+        ad_utility::makeExecutionTree<SpatialJoin>(
+            qec,
+            SpatialJoinConfiguration{MaxDistanceConfig(maxDist),
+                                     Variable{"?geo1"}, Variable{"?geo2"}},
+            leftChild, rightChild);
+
+    std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
+    SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
+    spatialJoin->selectAlgorithm(SpatialJoinAlgorithm::BOUNDING_BOX);
+    PreparedSpatialJoinParams params =
+        spatialJoin->onlyForTestingGetPrepareJoin();
+    SpatialJoinAlgorithms algorithms{
+        qec, params, spatialJoin->onlyForTestingGetConfig(), std::nullopt};
+    algorithms.setUseMidpointForAreas_(false);
+    auto res = algorithms.BoundingBoxAlgorithm();
+    // that the id table contains all the necessary other columns and gets
+    // constructed correctly has already been extensively tested elsewhere.
+    // Here we only test, that the distance between GeoPoints and areas gets
+    // computed correctly. For this purpose it is sufficient to check the number
+    // of rows in the result table
+    ASSERT_EQ(res.idTable().numRows(), nrResultRows);
+  };
+  auto qec = buildMixedAreaPointQEC();
+  testDist(qec, 1, 5);
+  testDist(qec, 5000, 7);
+  testDist(qec, 500000, 13);
+  testDist(qec, 1000000, 17);
+  testDist(qec, 10000000, 25);
+}
+
 }  // namespace boundingBox
 
 }  // namespace
