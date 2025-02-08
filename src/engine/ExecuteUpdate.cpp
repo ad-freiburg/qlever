@@ -182,6 +182,10 @@ ExecuteUpdate::computeGraphUpdateQuads(
   };
   sortAndRemoveDuplicates(toInsert);
   sortAndRemoveDuplicates(toDelete);
+  std::vector<IdTriple<>> reducedToDelete;
+  ql::ranges::set_difference(std::move(toDelete), toInsert,
+                             std::back_inserter(reducedToDelete));
+  toDelete.swap(reducedToDelete);
   metadata.triplePreparationTime_ = timer.msecs();
 
   return {
