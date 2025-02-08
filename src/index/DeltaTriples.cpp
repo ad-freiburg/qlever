@@ -245,6 +245,8 @@ template void DeltaTriplesManager::modify<void>(
     std::function<void(DeltaTriples&)> const&);
 template nlohmann::json DeltaTriplesManager::modify<nlohmann::json>(
     const std::function<nlohmann::json(DeltaTriples&)>&);
+template DeltaTriplesCount DeltaTriplesManager::modify<DeltaTriplesCount>(
+    const std::function<DeltaTriplesCount(DeltaTriples&)>&);
 
 // _____________________________________________________________________________
 void DeltaTriplesManager::clear() { modify<void>(&DeltaTriples::clear); }

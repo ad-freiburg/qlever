@@ -465,12 +465,15 @@ Awaitable<void> Server::process(
         [this] {
           // Use `this` explicitly to silence false-positive errors on the
           // captured `this` being unused.
-          this->index_.deltaTriplesManager().clear();
+          return this->index_.deltaTriplesManager().modify<DeltaTriplesCount>(
+              [](auto& deltaTriples) {
+                deltaTriples.clear();
+                return deltaTriples.getCounts();
+              });
         },
         handle);
-    co_await std::move(coroutine);
-    response = createOkResponse("Delta triples have been cleared", request,
-                                MediaType::textPlain);
+    auto countAfterClear = co_await std::move(coroutine);
+    response = createJsonResponse(nlohmann::json{countAfterClear}, request);
   } else if (auto cmd = checkParameter("cmd", "get-settings")) {
     logCommand(cmd, "get server settings");
     response = createJsonResponse(RuntimeParameters().toMap(), request);
