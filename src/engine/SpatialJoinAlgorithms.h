@@ -14,6 +14,7 @@
 
 #include "engine/Result.h"
 #include "engine/SpatialJoin.h"
+#include "util/GeoSparqlHelpers.h"
 
 namespace BoostGeometryNamespace {
 namespace bg = boost::geometry;
@@ -29,6 +30,7 @@ using MultiLinestring = bg::model::multi_linestring<Linestring>;
 using MultiPolygon = bg::model::multi_polygon<Polygon>;
 using AnyGeometry = boost::variant<Point, Linestring, Polygon, MultiPoint,
                                    MultiLinestring, MultiPolygon>;
+using Segment = boost::geometry::model::segment<Point>;
 
 // this struct is used to get the bounding box of an arbitrary geometry type.
 struct BoundingBoxVisitor : public boost::static_visitor<Box> {
@@ -40,11 +42,20 @@ struct BoundingBoxVisitor : public boost::static_visitor<Box> {
   }
 };
 
-// this struct is used to get the distance between two arbitrary geometry types
-struct DistanceVisitor : public boost::static_visitor<double> {
+// this struct is used to calculate the distance between two arbitraty
+// geometries. It calculates the two closest points (in euclidean geometry),
+// transforms the two closest points, to a GeoPoint and then calculates the
+// distance of the two points on the earth. As the closest points are calculated
+// using euclidean geometry, this is only an approximation. On the sphere two
+// other points might be closer.
+struct ClosestPointVisitor : public boost::static_visitor<double> {
   template <typename Geometry1, typename Geometry2>
-  double operator()(const Geometry1& geom1, const Geometry2& geom2) const {
-    return bg::distance(geom1, geom2);
+  double operator()(const Geometry1& geo1, const Geometry2& geo2) const {
+    Segment seg;
+    bg::closest_points(geo1, geo2, seg);
+    GeoPoint closestPoint1(bg::get<0, 1>(seg), bg::get<0, 0>(seg));
+    GeoPoint closestPoint2(bg::get<1, 1>(seg), bg::get<1, 0>(seg));
+    return ad_utility::detail::wktDistImpl(closestPoint1, closestPoint2);
   }
 };
 

@@ -93,10 +93,9 @@ std::optional<size_t> SpatialJoinAlgorithms::getAnyGeometry(
 double SpatialJoinAlgorithms::computeDist(
     const std::optional<size_t> geometryIndex1,
     const std::optional<size_t> geometryIndex2) const {
-  return boost::apply_visitor(DistanceVisitor(),
+  return boost::apply_visitor(ClosestPointVisitor(),
                               geometries_.at(geometryIndex1.value()),
-                              geometries_.at(geometryIndex2.value())) *
-         78.630;
+                              geometries_.at(geometryIndex2.value()));
 };
 
 // ____________________________________________________________________________

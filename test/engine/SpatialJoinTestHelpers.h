@@ -191,6 +191,23 @@ const std::string areaEiffelTower = makeAreaLiteral(
     "48.8583846,2.293606 48.8583807,2.2935688 48.8584044,2.2935515 "
     "48.8583929,2.293536 48.8584028,2.2933119 48.858248");
 
+// compared to the other areas, this one is not real, because it would be way
+// too large. Here the borders of germany get approximated by just a few points
+// to not make this file too crowded. As this geometry is only needed because
+// the distance from the midpoint to the borders can't be ignored, it's not
+// necessary to insert the complete geometry
+const std::string approximatedAreaGermany = makeAreaLiteral(
+    "7.20369317867016 53.62121249029073, "
+    "9.335040870259194 54.77156944262062, 13.97127141588071 53.7058383745324, "
+    "14.77327338230339 51.01654754091759, 11.916828022441791 "
+    "50.36932046223437, "
+    "13.674640551587391 48.68663848319227, 12.773761630400273 "
+    "47.74969625921073, "
+    "7.720050609106677 47.64617710434852, 8.313312337693318 "
+    "48.997548751390326, "
+    "6.50056816701192 49.535220384133375, 6.0391423781112 51.804566644690524, "
+    "7.20369317867016 53.62121249029073");
+
 // helper function to create a vector of strings from a result table
 inline std::vector<std::string> printTable(const QueryExecutionContext* qec,
                                            const Result* table) {
@@ -303,6 +320,20 @@ inline std::string createMixedDataset() {
   return kg;
 }
 
+// a mixed dataset, which contains points and areas. One of them is the geometry
+// of germeny, where the distance from the midpoint to the borders can not be
+// ignored or approximated as zero
+inline std::string createTrueDistanceDataset() {
+  std::string kg;
+  addPoint(kg, "1", "\"Uni Freiburg TF\"", pointUniFreiburg);
+  addArea(kg, "2", "\"Minster Freiburg Area\"", areaMuenster);
+  addPoint(kg, "3", "\"London Eye\"", pointLondonEye);
+  addArea(kg, "4", "\"Statue of liberty Area\"", areaStatueOfLiberty);
+  addPoint(kg, "5", "\"eiffel tower\"", pointEiffelTower);
+  addArea(kg, "6", "\"Germany\"", approximatedAreaGermany);
+  return kg;
+}
+
 inline QueryExecutionContext* buildTestQEC(bool useAreas = false) {
   std::string kg = createSmallDataset(useAreas);
   ad_utility::MemorySize blocksizePermutations = 16_MB;
@@ -312,8 +343,10 @@ inline QueryExecutionContext* buildTestQEC(bool useAreas = false) {
   return qec;
 }
 
-inline QueryExecutionContext* buildMixedAreaPointQEC() {
-  std::string kg = createMixedDataset();
+inline QueryExecutionContext* buildMixedAreaPointQEC(
+    bool useTrueDistanceDataset = false) {
+  std::string kg = useTrueDistanceDataset ? createTrueDistanceDataset()
+                                          : createMixedDataset();
   ad_utility::MemorySize blocksizePermutations = 16_MB;
   auto qec =
       ad_utility::testing::getQec(kg, true, true, false, blocksizePermutations,

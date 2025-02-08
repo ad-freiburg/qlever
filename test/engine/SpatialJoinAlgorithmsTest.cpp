@@ -1570,8 +1570,8 @@ TEST(SpatialJoin, areaFormat) {
 }
 
 TEST(SpatialJoin, trueAreaDistance) {
-  auto testDist = [](QueryExecutionContext* qec, std::string nr1,
-                     std::string nr2, double distance) {
+  auto getDist = [](QueryExecutionContext* qec, std::string nr1,
+                    std::string nr2, bool useMidpointForAreas) {
     auto makeIndexScan = [&](std::string nr) {
       auto subject = absl::StrCat("<geometry", nr, ">");
       auto objStr = absl::StrCat("?obj", nr);
@@ -1600,37 +1600,30 @@ TEST(SpatialJoin, trueAreaDistance) {
         spatialJoin->onlyForTestingGetPrepareJoin();
     SpatialJoinAlgorithms algorithms{
         qec, params, spatialJoin->onlyForTestingGetConfig(), std::nullopt};
-    algorithms.setUseMidpointForAreas_(false);
+    algorithms.setUseMidpointForAreas_(useMidpointForAreas);
     auto distID =
         algorithms.computeDist(params.idTableLeft_, params.idTableRight_, 0, 0,
                                params.leftJoinCol_, params.rightJoinCol_);
-    ASSERT_EQ(distID.getDatatype(), Datatype::Double);
-    // ASSERT_DOUBLE_EQ did not work for some reason. An example of a thrown
-    // error: Expected equality of these values:
-    //  distID.getDouble()
-    //    Which is: 353.83499999999913
-    //  distance
-    //    Which is: 353.83499999999998
-    ASSERT_TRUE(distID.getDouble() > 0.99999 * distance);
-    ASSERT_TRUE(distID.getDouble() < 1.00001 * distance);
+    return distID.getDouble();
   };
-  auto qec = getAllGeometriesQEC();
-  double conversionFactor = 78.630;  // convert to meters
-  testDist(qec, "1", "2", 0.5 * conversionFactor);
-  testDist(qec, "1", "3", 1.5 * conversionFactor);
-  testDist(qec, "1", "4", 2.5 * conversionFactor);
-  testDist(qec, "1", "5", 3.5 * conversionFactor);
-  testDist(qec, "1", "6", 4.5 * conversionFactor);
-  testDist(qec, "2", "3", 0.5 * conversionFactor);
-  testDist(qec, "2", "4", 1.5 * conversionFactor);
-  testDist(qec, "2", "5", 2.5 * conversionFactor);
-  testDist(qec, "2", "6", 3.5 * conversionFactor);
-  testDist(qec, "3", "4", 0.5 * conversionFactor);
-  testDist(qec, "3", "5", 1.5 * conversionFactor);
-  testDist(qec, "3", "6", 2.5 * conversionFactor);
-  testDist(qec, "4", "5", 0.5 * conversionFactor);
-  testDist(qec, "4", "6", 1.5 * conversionFactor);
-  testDist(qec, "5", "6", 0.5 * conversionFactor);
+  auto qec = buildMixedAreaPointQEC(true);
+
+  // the following tests all calculate the distance from germany to each point.
+  // When the areas get approximated by their midpoint, the distance should
+  // always be larger or at least equally large compared to areas not being
+  // approximated by their midpoint.
+  ASSERT_TRUE(getDist(qec, "Area6", "1", true) >=
+              getDist(qec, "Area6", "1", false));
+  ASSERT_TRUE(getDist(qec, "Area6", "Area2", true) >=
+              getDist(qec, "Area6", "Area2", false));
+  ASSERT_TRUE(getDist(qec, "Area6", "3", true) >=
+              getDist(qec, "Area6", "3", false));
+  ASSERT_TRUE(getDist(qec, "Area6", "Area4", true) >=
+              getDist(qec, "Area6", "Area4", false));
+  ASSERT_TRUE(getDist(qec, "Area6", "5", true) >=
+              getDist(qec, "Area6", "5", false));
+  ASSERT_TRUE(getDist(qec, "Area6", "Area6", true) >=
+              getDist(qec, "Area6", "Area6", false));
 }
 
 TEST(SpatialJoin, mixedDataSet) {
