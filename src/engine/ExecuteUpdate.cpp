@@ -176,6 +176,12 @@ ExecuteUpdate::computeGraphUpdateQuads(
       cancellationHandle->throwIfCancelled();
     }
   }
+  auto sortAndRemoveDuplicates = [](auto& vec) {
+    ql::ranges::sort(vec);
+    vec.erase(std::unique(vec.begin(), vec.end()), vec.end());
+  };
+  sortAndRemoveDuplicates(toInsert);
+  sortAndRemoveDuplicates(toDelete);
   metadata.triplePreparationTime_ = timer.msecs();
 
   return {
