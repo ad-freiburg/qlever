@@ -1066,7 +1066,7 @@ void testBoundingBox(const size_t& maxDistInMeters, const Point& startPoint) {
   SpatialJoinAlgorithms spatialJoinAlgs =
       getDummySpatialJoinAlgsForWrapperTesting(maxDistInMeters);
 
-  std::vector<Box> bbox = spatialJoinAlgs.computeBoundingBox(startPoint);
+  std::vector<Box> bbox = spatialJoinAlgs.computeQueryBox(startPoint);
   // broad grid test
   for (int lon = -180; lon < 180; lon += 20) {
     for (int lat = -90; lat < 90; lat += 20) {

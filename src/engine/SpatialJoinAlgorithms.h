@@ -90,7 +90,7 @@ class SpatialJoinAlgorithms {
   // midpoint of the bounding box of the area to any point inside the area.
   // The function getMaxDistFromMidpointToAnyPointInsideTheBox() can be used to
   // calculate it.
-  std::vector<Box> computeBoundingBox(const Point& startPoint,
+  std::vector<Box> computeQueryBox(const Point& startPoint,
                                       double additionalDist = 0) const;
 
   // This function returns true, iff the given point is contained in any of the
@@ -152,7 +152,7 @@ class SpatialJoinAlgorithms {
   // gets used, when the usual procedure, would just result in taking a big
   // bounding box, which covers the whole planet (so for extremely large max
   // distances)
-  std::vector<Box> computeBoundingBoxForLargeDistances(
+  std::vector<Box> computeQueryBoxForLargeDistances(
       const Point& startPoint) const;
 
   // this helper function approximates a conversion of the distance between two

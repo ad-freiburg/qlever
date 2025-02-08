@@ -408,7 +408,7 @@ Result SpatialJoinAlgorithms::S2geometryAlgorithm() {
 }
 
 // ____________________________________________________________________________
-std::vector<Box> SpatialJoinAlgorithms::computeBoundingBox(
+std::vector<Box> SpatialJoinAlgorithms::computeQueryBox(
     const Point& startPoint, double additionalDist) const {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
               rightJoinCol, rightSelectedCols, numColumns, maxDist,
@@ -439,7 +439,7 @@ std::vector<Box> SpatialJoinAlgorithms::computeBoundingBox(
   // a single bounding box for the whole planet, do an optimized version
   if (static_cast<double>(maxDist.value()) > circumferenceMax_ / 4.0 &&
       static_cast<double>(maxDist.value()) < circumferenceMax_ / 2.01) {
-    return computeBoundingBoxForLargeDistances(startPoint);
+    return computeQueryBoxForLargeDistances(startPoint);
   }
 
   // compute latitude bound
@@ -492,7 +492,7 @@ std::vector<Box> SpatialJoinAlgorithms::computeBoundingBox(
 }
 
 // ____________________________________________________________________________
-std::vector<Box> SpatialJoinAlgorithms::computeBoundingBoxForLargeDistances(
+std::vector<Box> SpatialJoinAlgorithms::computeQueryBoxForLargeDistances(
     const Point& startPoint) const {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
               rightJoinCol, rightSelectedCols, numColumns, maxDist,
@@ -660,11 +660,11 @@ std::vector<Box> SpatialJoinAlgorithms::getQueryBox(
     const std::optional<rtreeEntry>& entry) const {
   if (!entry.value().geoPoint_) {
     auto midpoint = calculateMidpointOfBox(entry.value().boundingBox_.value());
-    return computeBoundingBox(
+    return computeQueryBox(
         midpoint, getMaxDistFromMidpointToAnyPointInsideTheBox(
                       entry.value().boundingBox_.value(), midpoint));
   } else {
-    return computeBoundingBox(Point(entry.value().geoPoint_.value().getLng(),
+    return computeQueryBox(Point(entry.value().geoPoint_.value().getLng(),
                                     entry.value().geoPoint_.value().getLat()));
   }
 }
