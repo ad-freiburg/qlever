@@ -17,6 +17,7 @@ struct UpdateMetadata {
   Milliseconds triplePreparationTime_ = Zero;
   Milliseconds insertionTime_ = Zero;
   Milliseconds deletionTime_ = Zero;
+  std::optional<DeltaTriplesCount> inUpdate;
 };
 
 class ExecuteUpdate {

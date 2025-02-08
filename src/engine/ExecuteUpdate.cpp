@@ -182,6 +182,8 @@ ExecuteUpdate::computeGraphUpdateQuads(
   };
   sortAndRemoveDuplicates(toInsert);
   sortAndRemoveDuplicates(toDelete);
+  metadata.inUpdate = DeltaTriplesCount{static_cast<int64_t>(toInsert.size()),
+                                        static_cast<int64_t>(toDelete.size())};
   std::vector<IdTriple<>> reducedToDelete;
   ql::ranges::set_difference(std::move(toDelete), toInsert,
                              std::back_inserter(reducedToDelete));
