@@ -123,7 +123,7 @@ void Qlever::buildIndex(QleverConfig config) {
 }
 
 // ___________________________________________________________________________
-std::string Qlever::query(std::string query) {
+std::string Qlever::query(std::string query, ad_utility::MediaType mediaType) {
   QueryExecutionContext qec{index_, &cache_, allocator_,
                             sortPerformanceEstimator_, &namedQueryCache_};
   auto parsedQuery = SparqlParser::parseQuery(query);
@@ -151,10 +151,8 @@ std::string Qlever::query(std::string query) {
 
   ad_utility::Timer timer{ad_utility::Timer::Started};
   auto responseGenerator = ExportQueryExecutionTrees::computeResult(
-      parsedQuery, qet, ad_utility::MediaType::sparqlJson, timer,
-      std::move(handle));
+      parsedQuery, qet, mediaType, timer, std::move(handle));
   std::string result;
-  std::cout << "Writing the result:" << std::endl;
   for (const auto& batch : responseGenerator) {
     result += batch;
   }
@@ -162,7 +160,8 @@ std::string Qlever::query(std::string query) {
 }
 // ___________________________________________________________________________
 // TODO<joka921> A lot of code duplication here.
-void Qlever::pinNamed(std::string query, std::string name) {
+std::string Qlever::pinNamed(std::string query, std::string name,
+                             ad_utility::MediaType mediaType) {
   QueryExecutionContext qec{index_, &cache_, allocator_,
                             sortPerformanceEstimator_, &namedQueryCache_};
   qec.pinWithExplicitName() = std::move(name);
@@ -191,12 +190,11 @@ void Qlever::pinNamed(std::string query, std::string name) {
 
   ad_utility::Timer timer{ad_utility::Timer::Started};
   auto responseGenerator = ExportQueryExecutionTrees::computeResult(
-      parsedQuery, qet, ad_utility::MediaType::sparqlJson, timer,
-      std::move(handle));
+      parsedQuery, qet, mediaType, timer, std::move(handle));
   std::string result;
-  std::cout << "Writing the result:" << std::endl;
   for (const auto& batch : responseGenerator) {
     result += batch;
   }
+  return result;
 }
 }  // namespace qlever

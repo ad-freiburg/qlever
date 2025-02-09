@@ -100,11 +100,14 @@ class Qlever {
   // supported, and the result will always be in sparql-results+json format.
   // TODO<joka921> Support other formats + CONSTRUCT queries, support
   // cancellation, time limits, and observable queries.
-  std::string query(std::string query);
+  std::string query(std::string query, ad_utility::MediaType mediaType =
+                                           ad_utility::MediaType::sparqlJson);
 
   // Pin a query to the named query cache. In a subsequent query, this cache can
   // be accessed via `SERVICE ql:
-  void pinNamed(std::string query, std::string name);
+  [[maybe_unused]] std::string pinNamed(
+      std::string query, std::string name,
+      ad_utility::MediaType mediaType = ad_utility::MediaType::sparqlJson);
 
   // TODO<joka921> Give access to the RuntimeParameters() which allow for
   // further tweaking of the qlever instance.
