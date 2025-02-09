@@ -62,7 +62,7 @@ inline auto& RuntimeParameters() {
         SizeT<"small-index-scan-size-estimate-divisor">{5},
         // Determines whether the cost estimate for a cached subtree should be
         // set to zero in query planning.
-        Bool<"zero-cost-for-cached-subtree">{false},
+        Bool<"zero-cost-estimate-for-cached-subtree">{false},
     };
   }();
   return params;

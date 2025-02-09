@@ -77,10 +77,10 @@ QueryExecutionTree::selectedVariablesToColumnIndices(
 
 // _____________________________________________________________________________
 size_t QueryExecutionTree::getCostEstimate() {
-  // If the result is cached and `zero-cost-for-cached-subtrees` is set to
-  // `true`, we set the cost estimate to zero.
+  // If the result is cached and `zero-cost-estimate-for-cached-subtrees` is set
+  // to `true`, we set the cost estimate to zero.
   if (cachedResult_ &&
-      RuntimeParameters().get<"zero-cost-for-cached-subtree">()) {
+      RuntimeParameters().get<"zero-cost-estimate-for-cached-subtree">()) {
     return 0;
   }
 
