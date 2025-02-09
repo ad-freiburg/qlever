@@ -242,14 +242,27 @@ TEST(OperationTest, estimatesForCachedResults) {
 
     [[maybe_unused]] auto res = qet->getResult();
   }
-  // The result is now cached inside the static execution context, if we create
-  // the same operation again, the cost estimate is 0. The size estimate doesn't
+  // The result is now cached inside the static execution context. If we create
+  // the same operation again and `zero-cost-estimate-for-cached-subtrees` is
+  // set to `true`, the cost estimate should be zero. The size estimate does not
   // change (see the `getCostEstimate` function for details on why).
   {
+    auto restoreWhenScopeEnds =
+        setRuntimeParameterForTest<"zero-cost-estimate-for-cached-subtree">(
+            true);
     auto qet = makeQet();
     EXPECT_EQ(qet->getCacheKey(), qet->getRootOperation()->getCacheKey());
     EXPECT_EQ(qet->getSizeEstimate(), 24u);
     EXPECT_EQ(qet->getCostEstimate(), 0u);
+  }
+  {
+    auto restoreWhenScopeEnds =
+        setRuntimeParameterForTest<"zero-cost-estimate-for-cached-subtree">(
+            false);
+    auto qet = makeQet();
+    EXPECT_EQ(qet->getCacheKey(), qet->getRootOperation()->getCacheKey());
+    EXPECT_EQ(qet->getSizeEstimate(), 24u);
+    EXPECT_EQ(qet->getCostEstimate(), 210u);
   }
 }
 
