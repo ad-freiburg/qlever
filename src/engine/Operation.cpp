@@ -4,8 +4,7 @@
 
 #include "engine/Operation.h"
 
-#include <absl/cleanup/cleanup.h>
-
+#include "engine/NamedQueryCache.h"
 #include "engine/QueryExecutionTree.h"
 #include "global/RuntimeParameters.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
@@ -293,6 +292,12 @@ std::shared_ptr<const Result> Operation::getResult(
       _executionContext->_pinResult && isRoot;
   const bool pinResult =
       _executionContext->_pinSubtrees || pinFinalResultButNotSubtrees;
+  const bool pinWithName =
+      _executionContext->pinWithExplicitName().has_value() && isRoot;
+
+  if (pinWithName) {
+    computationMode = ComputationMode::FULLY_MATERIALIZED;
+  }
 
   try {
     // In case of an exception, create the correct runtime info, no matter which
@@ -337,6 +342,20 @@ std::shared_ptr<const Result> Operation::getResult(
 
     if (result._resultPointer->resultTable().isFullyMaterialized()) {
       updateRuntimeInformationOnSuccess(result, timer.msecs());
+    }
+
+    if (pinWithName) {
+      const auto& name = _executionContext->pinWithExplicitName().value();
+      // The query is to be pinned in the named cache. In this case we don't
+      // return the result, but only pin it.
+      const auto& actualResult = result._resultPointer->resultTable();
+      AD_CORRECTNESS_CHECK(actualResult.isFullyMaterialized());
+      auto t = NamedQueryCache::Value(actualResult.idTable().clone(),
+                                      getExternallyVisibleVariableColumns(),
+                                      actualResult.sortedBy());
+      _executionContext->namedQueryCache().store(name, std::move(t));
+
+      runtimeInfo().addDetail("pinned-with-explicit-name", name);
     }
 
     return result._resultPointer->resultTablePtr();

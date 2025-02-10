@@ -19,7 +19,6 @@
 #include "util/HashMap.h"
 #include "util/HashSet.h"
 #include "util/StringUtils.h"
-#include "util/http/HttpUtils.h"
 
 // ____________________________________________________________________________
 Service::Service(QueryExecutionContext* qec,
