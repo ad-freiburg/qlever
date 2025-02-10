@@ -1164,19 +1164,14 @@ TripleComponent::Iri Visitor::visit(Parser::IriContext* ctx) {
 
 // ____________________________________________________________________________________
 string Visitor::visit(Parser::IrirefContext* ctx) const {
-  auto string = ctx->getText();
-  auto removeIriBrackets = [](std::string_view string) {
-    AD_CORRECTNESS_CHECK(string.starts_with('<'));
-    AD_CORRECTNESS_CHECK(string.ends_with('>'));
-    return string.substr(1, string.size() - 2);
-  };
-  // Handle relative IRIs, technically relative IRIs are not allowed when no
-  // BASE declaration is present, but we use them a lot for unit tests.
-  if (!baseIri_.empty() && !isAbsoluteIri(string)) {
-    return absl::StrCat("<", removeIriBrackets(baseIri_),
-                        removeIriBrackets(string), ">");
+  if (baseIri_.empty()) {
+    return ctx->getText();
   }
-  return string;
+  // Handle IRIs with base IRI.
+  return ad_utility::triple_component::Iri::fromIrirefConsiderBase(
+             ctx->getText(), baseIri_.getBaseIri(false),
+             baseIri_.getBaseIri(true))
+      .toStringRepresentation();
 }
 
 // ____________________________________________________________________________________
@@ -1241,17 +1236,15 @@ void Visitor::visit(Parser::PrologueContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-bool Visitor::isAbsoluteIri(std::string_view string) {
-  return ctre::starts_with<"<[A-Za-z]*[A-Za-z0-9+-.]:">(string);
-}
-
-// ____________________________________________________________________________________
 void Visitor::visit(Parser::BaseDeclContext* ctx) {
   auto rawIri = ctx->iriref()->getText();
-  if (!isAbsoluteIri(ctx->iriref()->getText())) {
-    reportError(ctx, "The base IRI must be an absolute IRI, was: " + rawIri);
+  bool hasScheme = ctre::starts_with<"<[A-Za-z]*[A-Za-z0-9+-.]:">(rawIri);
+  if (!hasScheme) {
+    reportError(
+        ctx,
+        "The base IRI must be an absolute IRI with a scheme, was: " + rawIri);
   }
-  baseIri_ = visit(ctx->iriref());
+  baseIri_ = TripleComponent::Iri::fromIriref(visit(ctx->iriref()));
 }
 
 // ____________________________________________________________________________________

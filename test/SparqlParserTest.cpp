@@ -1359,11 +1359,12 @@ TEST(ParserTest, BaseDeclaration) {
             "{s: ?s, p: <http://example.org/p>, o: <http://example.org/test>}");
   // Relative and absolute IRIs mixed
   auto query2 = SparqlParser::parseQuery(
-      "BASE <http://example.org/> "
-      "SELECT * WHERE { ?s <p> <http://other.example.org/p> }");
-  EXPECT_EQ(
-      getFirstTriple(query2),
-      "{s: ?s, p: <http://example.org/p>, o: <http://other.example.org/p>}");
+      "BASE <http://example.org/something> "
+      "SELECT * WHERE { </root> <p> <http://other.example.org/p> }");
+  EXPECT_EQ(getFirstTriple(query2),
+            "{s: <http://example.org/root>,"
+            " p: <http://example.org/something/p>,"
+            " o: <http://other.example.org/p>}");
 
   // Cascading prefixes
   auto query3 = SparqlParser::parseQuery(
