@@ -1045,6 +1045,31 @@ TEST(ExportQueryExecutionTrees, UndefinedValues) {
 }
 
 // ____________________________________________________________________________
+TEST(ExportQueryExecutionTrees, EmptyLines) {
+  std::string kg = "<s> <p> <o>";
+  std::string query = "SELECT * WHERE { <s> <p> <o> }";
+  std::string expectedXml = makeXMLHeader({}) +
+                            R"(
+  <result>
+  </result>)" + xmlTrailer;
+  TestCaseSelectQuery testCase{kg,
+                               query,
+                               1,
+                               "\n\n",
+                               "\n\n",
+                               nlohmann::json{std::vector{std::vector<int>{}}},
+                               []() {
+                                 nlohmann::json j;
+                                 j["head"]["vars"] = nlohmann::json::array();
+                                 j["results"]["bindings"] =
+                                     nlohmann::json::array();
+                                 return j;
+                               }(),
+                               expectedXml};
+  runSelectQueryTestCase(testCase);
+}
+
+// ____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, BlankNode) {
   std::string kg = "<s> <p> _:blank";
   std::string objectQuery = "SELECT ?o WHERE {?s ?p ?o } ORDER BY ?o";

@@ -19,8 +19,6 @@
 #include "./IdTestHelpers.h"
 #include "engine/CallFixedSize.h"
 #include "engine/Engine.h"
-#include "engine/Join.h"
-#include "engine/OptionalJoin.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/idTable/IdTable.h"
 #include "global/ValueId.h"

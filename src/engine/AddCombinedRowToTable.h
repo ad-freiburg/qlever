@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <vector>
 
+#include "backports/concepts.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "util/CancellationHandle.h"
@@ -15,6 +16,16 @@
 #include "util/TransparentFunctors.h"
 
 namespace ad_utility {
+
+namespace detail::concepts {
+template <typename T>
+CPP_requires(HasAsStaticView,
+             requires(T& table)(table.template asStaticView<0>()));
+
+template <typename T>
+CPP_requires(HasGetLocalVocab, requires(T& table)(table.getLocalVocab()));
+}  // namespace detail::concepts
+
 // This class handles the efficient writing of the results of a JOIN operation
 // to a column-based `IdTable`. The underlying assumption is that in both inputs
 // the join columns are the first columns. On each call to `addRow`, we only
@@ -130,7 +141,7 @@ class AddCombinedRowToIdTable {
   // `IdTableView<0>`. Identity for `IdTableView<0>`.
   template <typename T>
   static IdTableView<0> toView(const T& table) {
-    if constexpr (requires { table.template asStaticView<0>(); }) {
+    if constexpr (CPP_requires_ref(detail::concepts::HasAsStaticView, T)) {
       return table.template asStaticView<0>();
     } else {
       return table;
@@ -142,7 +153,7 @@ class AddCombinedRowToIdTable {
   template <typename T>
   void mergeVocab(const T& table, const LocalVocab*& currentVocab) {
     AD_CORRECTNESS_CHECK(currentVocab == nullptr);
-    if constexpr (requires { table.getLocalVocab(); }) {
+    if constexpr (CPP_requires_ref(detail::concepts::HasGetLocalVocab, T)) {
       currentVocab = &table.getLocalVocab();
       mergedVocab_.mergeWith(std::span{&table.getLocalVocab(), 1});
     }
