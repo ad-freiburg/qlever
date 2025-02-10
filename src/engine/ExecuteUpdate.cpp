@@ -176,21 +176,29 @@ ExecuteUpdate::computeGraphUpdateQuads(
       cancellationHandle->throwIfCancelled();
     }
   }
-  auto sortAndRemoveDuplicates = [](auto& vec) {
-    ql::ranges::sort(vec);
-    vec.erase(std::unique(vec.begin(), vec.end()), vec.end());
-  };
   sortAndRemoveDuplicates(toInsert);
   sortAndRemoveDuplicates(toDelete);
-  metadata.inUpdate = DeltaTriplesCount{static_cast<int64_t>(toInsert.size()),
-                                        static_cast<int64_t>(toDelete.size())};
-  std::vector<IdTriple<>> reducedToDelete;
-  ql::ranges::set_difference(std::move(toDelete), toInsert,
-                             std::back_inserter(reducedToDelete));
-  toDelete.swap(reducedToDelete);
+  metadata.inUpdate_ = DeltaTriplesCount{static_cast<int64_t>(toInsert.size()),
+                                         static_cast<int64_t>(toDelete.size())};
+  toDelete = setMinus(toDelete, toInsert);
   metadata.triplePreparationTime_ = timer.msecs();
 
   return {
       IdTriplesAndLocalVocab{std::move(toInsert), std::move(localVocabInsert)},
       IdTriplesAndLocalVocab{std::move(toDelete), std::move(localVocabDelete)}};
+}
+
+void ExecuteUpdate::sortAndRemoveDuplicates(
+    std::vector<IdTriple<>>& container) {
+  ql::ranges::sort(container);
+  container.erase(std::unique(container.begin(), container.end()),
+                  container.end());
+}
+
+std::vector<IdTriple<>> ExecuteUpdate::setMinus(
+    const std::vector<IdTriple<>>& a, const std::vector<IdTriple<>>& b) {
+  std::vector<IdTriple<>> reducedToDelete;
+  ql::ranges::set_difference(std::move(a), b,
+                             std::back_inserter(reducedToDelete));
+  return reducedToDelete;
 }

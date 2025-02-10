@@ -150,6 +150,9 @@ void DeltaTriples::modifyTriplesImpl(CancellationHandle cancellationHandle,
                                      TriplesToHandlesMap& targetMap,
                                      TriplesToHandlesMap& inverseMap) {
   rewriteLocalVocabEntriesAndBlankNodes(triples);
+  AD_EXPENSIVE_CHECK(ql::ranges::is_sorted(triples));
+  AD_EXPENSIVE_CHECK(std::unique(triples.begin(), triples.end()) ==
+                     triples.end());
   std::erase_if(triples, [&targetMap](const IdTriple<0>& triple) {
     return targetMap.contains(triple);
   });

@@ -17,7 +17,7 @@ struct UpdateMetadata {
   Milliseconds triplePreparationTime_ = Zero;
   Milliseconds insertionTime_ = Zero;
   Milliseconds deletionTime_ = Zero;
-  std::optional<DeltaTriplesCount> inUpdate;
+  std::optional<DeltaTriplesCount> inUpdate_;
 };
 
 class ExecuteUpdate {
@@ -72,4 +72,15 @@ class ExecuteUpdate {
                           const CancellationHandle& cancellationHandle,
                           UpdateMetadata& metadata);
   FRIEND_TEST(ExecuteUpdate, computeGraphUpdateQuads);
+
+  // After the operation the vector is sorted and contains no duplicate
+  // elements.
+  static void sortAndRemoveDuplicates(std::vector<IdTriple<>>& container);
+  FRIEND_TEST(ExecuteUpdate, sortAndRemoveDuplicates);
+
+  // For two sorted vectors `A` and `B` return a new vector
+  // that contains the element of `A\B`.
+  static std::vector<IdTriple<>> setMinus(const std::vector<IdTriple<>>& a,
+                                          const std::vector<IdTriple<>>& b);
+  FRIEND_TEST(ExecuteUpdate, setMinus);
 };

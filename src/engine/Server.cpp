@@ -961,9 +961,9 @@ json Server::createResponseMetadataForUpdate(
   response["delta-triples"]["after"] = nlohmann::json(countAfter);
   response["delta-triples"]["difference"] =
       nlohmann::json(countAfter - countBefore);
-  if (updateMetadata.inUpdate.has_value()) {
+  if (updateMetadata.inUpdate_.has_value()) {
     response["delta-triples"]["operation"] =
-        json(updateMetadata.inUpdate.value());
+        json(updateMetadata.inUpdate_.value());
   }
   response["time"]["planning"] =
       formatTime(runtimeInfoWholeOp.timeQueryPlanning);
