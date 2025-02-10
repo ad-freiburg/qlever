@@ -7,6 +7,7 @@
 #include <ANTLRInputStream.h>
 #include <CommonTokenStream.h>
 #include <absl/strings/str_cat.h>
+#include <absl/strings/str_replace.h>
 #include <antlr4-runtime.h>
 
 #include <functional>

@@ -3,7 +3,7 @@
 // Author: Hannah Bast (bast@cs.uni-freiburg.de)
 
 #include <absl/strings/str_cat.h>
-#include <gtest/gtest.h>
+#include <gmock/gmock.h>
 
 #include <thread>
 
@@ -16,6 +16,7 @@
 
 using namespace ad_utility::httpUtils;
 using namespace boost::beast::http;
+using ::testing::HasSubstr;
 
 namespace {
 
