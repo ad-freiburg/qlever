@@ -151,72 +151,6 @@ Id SpatialJoinAlgorithms::computeDist(RtreeEntry& geo1, RtreeEntry& geo2) {
 }
 
 // ____________________________________________________________________________
-Id SpatialJoinAlgorithms::computeDist(const IdTable* idTableLeft,
-                                      const IdTable* idTableRight,
-                                      size_t rowLeft, size_t rowRight,
-                                      ColumnIndex leftPointCol,
-                                      ColumnIndex rightPointCol) {
-  auto getAreaOrPointGeometry =
-      [&](const IdTable* idtable, size_t row, size_t col,
-          std::optional<GeoPoint> point) -> std::optional<size_t> {
-    if (!point) {
-      return getAnyGeometry(idtable, row, col);
-    }
-    return convertGeoPointToPoint(point.value());
-  };
-
-  // for now we need to get the data from the disk, but in the future, this
-  // information will be stored in an ID, just like GeoPoint
-  auto getAreaPoint = [&](const IdTable* idtable, size_t row,
-                          size_t col) -> std::optional<GeoPoint> {
-    std::optional<size_t> geometryIndex = getAnyGeometry(idtable, row, col);
-    if (!geometryIndex) {
-      // nothing to do. When parsing a point or an area fails, a warning message
-      // gets printed at another place and the point/area just gets skipped
-      return std::nullopt;
-    }
-
-    Box areaBox = boost::apply_visitor(BoundingBoxVisitor(),
-                                       geometries_.at(geometryIndex.value()));
-
-    Point p = calculateMidpointOfBox(areaBox);
-    return GeoPoint(p.get<1>(), p.get<0>());
-  };
-
-  RtreeEntry entryLeft{rowLeft, std::nullopt, std::nullopt, std::nullopt};
-  RtreeEntry entryRight{rowRight, std::nullopt, std::nullopt, std::nullopt};
-  entryLeft.geoPoint_ = getPoint(idTableLeft, rowLeft, leftPointCol);
-  entryRight.geoPoint_ = getPoint(idTableRight, rowRight, rightPointCol);
-  if (entryLeft.geoPoint_ && entryRight.geoPoint_) {
-    return computeDist(entryLeft, entryRight);
-  } else if (useMidpointForAreas_) {
-    if (!entryLeft.geoPoint_) {
-      entryLeft.geoPoint_ = getAreaPoint(idTableLeft, rowLeft, leftPointCol);
-    }
-    if (!entryRight.geoPoint_) {
-      entryRight.geoPoint_ =
-          getAreaPoint(idTableRight, rowRight, rightPointCol);
-    }
-    if (entryLeft.geoPoint_ && entryRight.geoPoint_) {
-      return computeDist(entryLeft, entryRight);
-    } else {
-      return Id::makeUndefined();
-    }
-  } else {
-    entryLeft.geometryIndex_ = getAreaOrPointGeometry(
-        idTableLeft, rowLeft, leftPointCol, entryLeft.geoPoint_);
-    entryRight.geometryIndex_ = getAreaOrPointGeometry(
-        idTableRight, rowRight, rightPointCol, entryRight.geoPoint_);
-    if (entryLeft.geometryIndex_.has_value() &&
-        entryRight.geometryIndex_.has_value()) {
-      return computeDist(entryLeft, entryRight);
-    } else {
-      return Id::makeUndefined();
-    }
-  }
-}
-
-// ____________________________________________________________________________
 void SpatialJoinAlgorithms::addResultTableEntry(IdTable* result,
                                                 const IdTable* idTableLeft,
                                                 const IdTable* idTableRight,
@@ -281,11 +215,18 @@ Result SpatialJoinAlgorithms::BaselineAlgorithm() {
                         std::vector<std::pair<size_t, double>>,
                         decltype(compare)>
         intermediate(compare);
-
+    
+    auto entryLeft = getRtreeEntry(idTableLeft, rowLeft, leftJoinCol);
+    
     // Inner loop of cartesian product
     for (size_t rowRight = 0; rowRight < idTableRight->size(); rowRight++) {
-      Id dist = computeDist(idTableLeft, idTableRight, rowLeft, rowRight,
-                            leftJoinCol, rightJoinCol);
+      auto entryRight = getRtreeEntry(idTableRight, rowRight, rightJoinCol);
+
+      if (!entryLeft || !entryRight) {
+        continue;
+      }
+      
+      Id dist = computeDist(entryLeft.value(), entryRight.value());
 
       // Ensure `maxDist_` constraint
       if (dist.getDatatype() != Datatype::Double ||

@@ -117,12 +117,6 @@ class SpatialJoinAlgorithms {
   }
 
   // Helper function, which computes the distance of two geometries, where each
-  // geometry comes from a different result table
-  Id computeDist(const IdTable* resLeft, const IdTable* resRight,
-                 size_t rowLeft, size_t rowRight, ColumnIndex leftPointCol,
-                 ColumnIndex rightPointCol);
-
-  // Helper function, which computes the distance of two geometries, where each
   // geometry has already been parsed and is available as an RtreeEntry
   Id computeDist(RtreeEntry& geo1, RtreeEntry& geo2);
 
@@ -137,6 +131,13 @@ class SpatialJoinAlgorithms {
   // this function gets the string which represents the area from the idtable.
   std::optional<size_t> getAnyGeometry(const IdTable* idtable, size_t row,
                                        size_t col);
+
+  // wrapper to access non const private function for testing
+  std::optional<RtreeEntry> onlyForTestingGetRtreeEntry(const IdTable* idTable,
+                                          const size_t row,
+                                          const ColumnIndex col) {
+    return getRtreeEntry(idTable, row, col);
+  }
 
  private:
   // Helper function which returns a GeoPoint if the element of the given table
@@ -183,7 +184,7 @@ class SpatialJoinAlgorithms {
   std::optional<RtreeEntry> getRtreeEntry(const IdTable* idTable,
                                           const size_t row,
                                           const ColumnIndex col);
-
+  
   // this helper function converts a GeoPoint into a boost geometry Point
   size_t convertGeoPointToPoint(GeoPoint point);
 
