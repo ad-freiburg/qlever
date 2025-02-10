@@ -5,6 +5,8 @@
 #pragma once
 
 #include <concepts/concepts.hpp>
+
+#include "backports/cppTemplate2.h"
 #ifndef QLEVER_CPP_17
 #include <concepts>
 #endif
