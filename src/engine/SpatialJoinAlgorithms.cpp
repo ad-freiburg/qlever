@@ -3,20 +3,25 @@
 //  Author: @Jonathan24680
 //  Author: Christoph Ullinger <ullingec@informatik.uni-freiburg.de>
 
-#include "engine/SpatialJoinAlgorithms.h"
-
 #include <s2/s2closest_point_query.h>
 #include <s2/s2earth.h>
 #include <s2/s2point.h>
 #include <s2/s2point_index.h>
 #include <s2/util/units/length-units.h>
+#include <spatialjoin/BoxIds.h>
+#include <spatialjoin/Sweeper.h>
+#include <spatialjoin/WKTParse.h>
+#include <util/geo/Geo.h>
 
 #include <cmath>
 
 #include "engine/SpatialJoin.h"
+#include "engine/SpatialJoinAlgorithms.h"
 #include "util/GeoSparqlHelpers.h"
 
 using namespace BoostGeometryNamespace;
+
+const static size_t BATCH_SIZE = 10000;
 
 // ____________________________________________________________________________
 SpatialJoinAlgorithms::SpatialJoinAlgorithms(
@@ -26,6 +31,119 @@ SpatialJoinAlgorithms::SpatialJoinAlgorithms(
       params_{std::move(params)},
       config_{std::move(config)},
       spatialJoin_{spatialJoin} {}
+
+// ____________________________________________________________________________
+util::geo::I32Box SpatialJoinAlgorithms::lsjParse(
+    bool side, const IdTable* restable, size_t row, ColumnIndex col,
+    sj::Sweeper& sweeper, std::vector<sj::WriteBatch>& parseBatches, size_t t,
+    const util::geo::I32Box& filterBox) const {
+  auto id = restable->at(row, col);
+  auto strId = std::to_string(row);
+
+  util::geo::I32Box ret;
+
+  if (id.getDatatype() == Datatype::VocabIndex) {
+    const auto wkt = qec_->getIndex().indexToString(id.getVocabIndex());
+
+    if (wkt.size() > 6 && memcmp(wkt.c_str(), "\"POINT", 6) == 0) {
+      const auto& point = parsePoint(wkt.c_str() + 6);
+      ret = util::geo::getBoundingBox(point);
+
+      if (util::geo::intersects(point, filterBox)) {
+        sweeper.add(point, strId, side, parseBatches[t]);
+      }
+    } else if (wkt.size() > 11 &&
+               memcmp(wkt.c_str(), "\"MULTIPOINT", 11) == 0) {
+      const auto& mp =
+          util::geo::I32MultiPoint(parseLineString(wkt.c_str() + 11, 0));
+      ret = util::geo::getBoundingBox(mp);
+      if (mp.size() != 0 && util::geo::intersects(mp, filterBox))
+        sweeper.add(mp, strId, side, parseBatches[t]);
+    } else if (wkt.size() > 11 &&
+               memcmp(wkt.c_str(), "\"LINESTRING", 11) == 0) {
+      const auto& line = parseLineString(wkt.c_str() + 11, 0);
+      ret = util::geo::getBoundingBox(line);
+      if (line.size() > 1 && util::geo::intersects(line, filterBox))
+        sweeper.add(line, strId, side, parseBatches[t]);
+    } else if (wkt.size() > 16 &&
+               memcmp(wkt.c_str(), "\"MULTILINESTRING", 16) == 0) {
+      const auto& ml = parseMultiLineString(wkt.c_str() + 16, 0);
+      ret = util::geo::getBoundingBox(ml);
+      if (util::geo::intersects(ml, filterBox)) {
+        sweeper.add(ml, strId, side, parseBatches[t]);
+      }
+    } else if (wkt.size() > 8 && memcmp(wkt.c_str(), "\"POLYGON", 8) == 0) {
+      const auto& poly = parsePolygon(wkt.c_str() + 8, 0);
+      ret = util::geo::getBoundingBox(poly);
+      if (poly.getOuter().size() > 1 && util::geo::intersects(poly, filterBox))
+        sweeper.add(poly, strId, side, parseBatches[t]);
+    } else if (wkt.size() > 13 &&
+               memcmp(wkt.c_str(), "\"MULTIPOLYGON", 13) == 0) {
+      const auto& mp = parseMultiPolygon(wkt.c_str() + 13, 0);
+      ret = util::geo::getBoundingBox(mp);
+      if (mp.size() && util::geo::intersects(mp, filterBox))
+        sweeper.add(mp, strId, side, parseBatches[t]);
+    } else if (wkt.size() > 19 &&
+               memcmp(wkt.c_str(), "\"GEOMETRYCOLLECTION", 19) == 0) {
+      const auto& p = parseGeometryCollection(wkt.c_str() + 19);
+      const auto& col = p.first;
+
+      size_t subId = p.second > 1 ? 1 : 0;
+
+      for (const auto& a : col) {
+        if (a.getType() == 0)
+          sweeper.add(a.getPoint(), strId, subId, side, parseBatches[t]);
+        if (a.getType() == 1)
+          sweeper.add(a.getLine(), strId, subId, side, parseBatches[t]);
+        if (a.getType() == 2)
+          sweeper.add(a.getPolygon(), strId, subId, side, parseBatches[t]);
+        if (a.getType() == 3)
+          sweeper.add(a.getMultiLine(), strId, subId, side, parseBatches[t]);
+        if (a.getType() == 4)
+          sweeper.add(a.getMultiPolygon(), strId, subId, side, parseBatches[t]);
+        if (a.getType() == 6)
+          sweeper.add(a.getMultiPoint(), strId, subId, side, parseBatches[t]);
+        subId++;
+      }
+    }
+  } else if (id.getDatatype() == Datatype::GeoPoint) {
+    const auto& p = lsjTransform(id.getGeoPoint());
+    ret = util::geo::getBoundingBox(p);
+    if (util::geo::intersects(p, filterBox)) {
+      sweeper.add(p, strId, side, parseBatches[t]);
+    }
+  }
+
+  if (parseBatches[t].size() > BATCH_SIZE) {
+    sweeper.addBatch(parseBatches[t]);
+    parseBatches[t] = {};
+  }
+
+  return ret;
+}
+
+// ____________________________________________________________________________
+util::geo::I32Box SpatialJoinAlgorithms::lsjParse(
+    bool side, const IdTable* restable, ColumnIndex col, sj::Sweeper& sweeper,
+    std::vector<sj::WriteBatch>& parseBatches,
+    const util::geo::I32Box& filterBox) const {
+  util::geo::I32Box retBox;
+  for (size_t row = 0; row < restable->size(); row++) {
+    retBox =
+        util::geo::extendBox(retBox, lsjParse(side, restable, row, col, sweeper,
+                                              parseBatches, 0, filterBox));
+  }
+  return retBox;
+}
+
+// ____________________________________________________________________________
+::util::geo::I32Point SpatialJoinAlgorithms::lsjTransform(
+    const GeoPoint& loc) const {
+  auto point = ::util::geo::latLngToWebMerc(
+      ::util::geo::DPoint(loc.getLng(), loc.getLat()));
+  return ::util::geo::I32Point{static_cast<int>(point.getX() * PREC),
+                               static_cast<int>(point.getY() * PREC)};
+}
 
 // ____________________________________________________________________________
 std::optional<GeoPoint> SpatialJoinAlgorithms::getPoint(const IdTable* restable,
@@ -98,8 +216,8 @@ void SpatialJoinAlgorithms::addResultTableEntry(IdTable* result,
 // ____________________________________________________________________________
 Result SpatialJoinAlgorithms::BaselineAlgorithm() {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
-              rightJoinCol, rightSelectedCols, numColumns, maxDist,
-              maxResults] = params_;
+              rightJoinCol, rightSelectedCols, numColumns, maxDist, maxResults,
+              joinType] = params_;
   IdTable result{numColumns, qec_->getAllocator()};
 
   // cartesian product between the two tables, pairs are restricted according to
@@ -164,10 +282,100 @@ Result SpatialJoinAlgorithms::BaselineAlgorithm() {
 }
 
 // ____________________________________________________________________________
+Result SpatialJoinAlgorithms::LibspatialjoinAlgorithm() {
+  const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
+              rightJoinCol, rightSelectedCols, numColumns, maxDist, maxResults,
+              joinType] = params_;
+  IdTable result{numColumns, qec_->getAllocator()};
+
+  // Helper function to convert `GeoPoint` to `S2Point`
+  auto constexpr toS2Point = [](const GeoPoint& p) {
+    auto lat = p.getLat();
+    auto lng = p.getLng();
+    auto latlng = S2LatLng::FromDegrees(lat, lng);
+    return S2Point{latlng};
+  };
+
+  size_t NUM_THREADS = 16;
+
+  std::vector<std::vector<std::pair<size_t, size_t>>> results(NUM_THREADS);
+
+  sj::Sweeper sweeper(
+      {NUM_THREADS,
+       NUM_THREADS,
+       "",
+       std::string{static_cast<char>(SpatialJoinJoinType::INTERSECTS)},
+       std::string{static_cast<char>(SpatialJoinJoinType::CONTAINS)},
+       std::string{static_cast<char>(SpatialJoinJoinType::COVERS)},
+       std::string{static_cast<char>(SpatialJoinJoinType::TOUCHES)},
+       std::string{static_cast<char>(SpatialJoinJoinType::EQUALS)},
+       std::string{static_cast<char>(SpatialJoinJoinType::OVERLAPS)},
+       std::string{static_cast<char>(SpatialJoinJoinType::CROSSES)},
+       "\n",
+       true,
+       true,
+       true,
+       true,
+       true,
+       true,
+       false,
+       false,
+       [this, &results, joinType](size_t t, const char* a, const char* b,
+                                  const char* pred) {
+         if (pred[0] == static_cast<char>(joinType.value_or(
+                            SpatialJoinJoinType::INTERSECTS))) {
+           results[t].push_back({std::atoi(a), std::atoi(b)});
+         }
+       },
+       {},
+       {},
+       {}},
+      ".", "");
+
+  std::vector<sj::WriteBatch> batches(NUM_THREADS);
+
+  util::geo::I32Box filterBox;
+
+  // Populate the index from the left and right table, but start with the
+  // smaller one and calculate a bbox on the fly to be used as a filter for the
+  // larger one
+  if (idTableLeft->size() < idTableRight->size()) {
+    auto box = lsjParse(false, idTableLeft, leftJoinCol, sweeper, batches);
+    lsjParse(true, idTableRight, rightJoinCol, sweeper, batches, box);
+  } else {
+    auto box = lsjParse(true, idTableRight, rightJoinCol, sweeper, batches);
+    lsjParse(false, idTableLeft, leftJoinCol, sweeper, batches, box);
+  }
+
+  // flush parse batches
+  for (auto& b : batches) {
+    sweeper.addBatch(b);
+    b = {};
+  }
+
+  // flush geometries
+  sweeper.flush();
+
+  // start sweep process, predicates are calculated here
+  sweeper.sweep();
+
+  // collect results and add them to result table
+  for (size_t t = 0; t < NUM_THREADS; t++) {
+    for (const auto& res : results[t]) {
+      addResultTableEntry(&result, idTableLeft, idTableRight, res.first,
+                          res.second, Id::makeFromDouble(0));
+    }
+  }
+
+  return Result(std::move(result), std::vector<ColumnIndex>{},
+                Result::getMergedLocalVocab(*resultLeft, *resultRight));
+}
+
+// ____________________________________________________________________________
 Result SpatialJoinAlgorithms::S2geometryAlgorithm() {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
-              rightJoinCol, rightSelectedCols, numColumns, maxDist,
-              maxResults] = params_;
+              rightJoinCol, rightSelectedCols, numColumns, maxDist, maxResults,
+              joinType] = params_;
   IdTable result{numColumns, qec_->getAllocator()};
 
   // Helper function to convert `GeoPoint` to `S2Point`
@@ -243,8 +451,8 @@ Result SpatialJoinAlgorithms::S2geometryAlgorithm() {
 std::vector<Box> SpatialJoinAlgorithms::computeBoundingBox(
     const Point& startPoint) const {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
-              rightJoinCol, rightSelectedCols, numColumns, maxDist,
-              maxResults] = params_;
+              rightJoinCol, rightSelectedCols, numColumns, maxDist, maxResults,
+              joinType] = params_;
   AD_CORRECTNESS_CHECK(maxDist.has_value(),
                        "Max distance must have a value for this operation");
   // haversine function
@@ -326,8 +534,8 @@ std::vector<Box> SpatialJoinAlgorithms::computeBoundingBox(
 std::vector<Box> SpatialJoinAlgorithms::computeBoundingBoxForLargeDistances(
     const Point& startPoint) const {
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
-              rightJoinCol, rightSelectedCols, numColumns, maxDist,
-              maxResults] = params_;
+              rightJoinCol, rightSelectedCols, numColumns, maxDist, maxResults,
+              joinType] = params_;
   AD_CORRECTNESS_CHECK(maxDist.has_value(),
                        "Max distance must have a value for this operation");
 
@@ -462,8 +670,8 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
   };
 
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
-              rightJoinCol, rightSelectedCols, numColumns, maxDist,
-              maxResults] = params_;
+              rightJoinCol, rightSelectedCols, numColumns, maxDist, maxResults,
+              joinType] = params_;
   IdTable result{numColumns, qec_->getAllocator()};
 
   // create r-tree for smaller result table
