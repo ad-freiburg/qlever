@@ -505,8 +505,8 @@ class IdTable {
   // `auto newTable = AD_FWD(oldTable).moveOrClone()` which is equivalent to the
   // pattern `auto newX = AD_FWD(oldX)` where the type is copy-constructible
   // (which `IdTable` is not.).
-  CPP_member auto moveOrClone() const
-      -> CPP_ret(IdTable)(requires isCloneable) {
+  CPP_member auto moveOrClone() const& -> CPP_ret(IdTable)(
+      requires isCloneable) {
     return clone();
   }
 
@@ -709,8 +709,8 @@ class IdTable {
   // that `begin() <= beginIt <= endIt < end`, else the behavior is undefined.
   // The order of the elements before and after the erased regions remains the
   // same. This behavior is similar to `std::vector::erase`.
-  CPP_member CPP_ret(void)(requires(!isView))
-      erase(const iterator& beginIt, const iterator& endIt) {
+  CPP_member auto erase(const iterator& beginIt, const iterator& endIt)
+      -> CPP_ret(void)(requires(!isView)) {
     AD_EXPENSIVE_CHECK(begin() <= beginIt && beginIt <= endIt &&
                        endIt <= end());
     auto startIndex = beginIt - begin();
@@ -725,7 +725,8 @@ class IdTable {
   // Erase the single row that `it` points to by shifting all the elements
   // after `it` towards the beginning. Requires that `begin() <= it < end()`,
   // otherwise the behavior is undefined.
-  CPP_member CPP_ret(void)(requires(!isView)) erase(const iterator& it) {
+  CPP_member auto erase(const iterator& it)
+      -> CPP_ret(void)(requires(!isView)) {
     erase(it, it + 1);
   }
 
