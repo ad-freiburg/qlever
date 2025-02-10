@@ -254,8 +254,6 @@ addLinkAndDiscoverTest(ContentEncodingHelperTest http)
 
 addLinkAndDiscoverTest(PrefixCompressorTest)
 
-addLinkAndDiscoverTest(MilestoneIdTest)
-
 addLinkAndDiscoverTest(VocabularyTest index)
 
 addLinkAndDiscoverTestNoLibs(IteratorTest)
