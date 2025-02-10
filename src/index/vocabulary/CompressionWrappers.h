@@ -34,7 +34,8 @@ CPP_requires(
 
 template <typename T, typename Decoder>
 CPP_concept BulkResultForDecoder =
-    CPP_requires_ref(BulkResultForDecoder_, T, Decoder);*/
+    CPP_requires_ref(BulkResultForDecoder_, T, Decoder);
+    */
 
 template <typename T>
 CPP_requires(

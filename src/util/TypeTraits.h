@@ -103,7 +103,8 @@ CPP_concept similarToInstantiation =
 /// similarToAnyInstantiationOf<std::vector, std::vector<int>,
 /// std::vector<char>> == true
 template <typename T, template <typename...> typename... Ts>
-CPP_concept similarToAnyInstantiationOf = (... || similarToInstantiation<T, Ts>);
+CPP_concept similarToAnyInstantiationOf =
+    (... || similarToInstantiation<T, Ts>);
 
 /// isVector<T> is true if and only if T is an instantiation of std::vector
 template <typename T>
@@ -126,7 +127,7 @@ constexpr static bool isArray<std::array<T, N>> = true;
 
 // `SimilarToArray` is also true for `std::array<...>&`, etc.
 template <typename T>
-concept SimilarToArray = isArray<std::decay_t<T>>;
+CPP_concept SimilarToArray = isArray<std::decay_t<T>>;
 
 /// Two types are similar, if they are the same when we remove all cv (const or
 /// volatile) qualifiers and all references
@@ -136,15 +137,15 @@ constexpr static bool isSimilar =
 
 /// A concept for similarity
 template <typename T, typename U>
-concept SimilarTo = isSimilar<T, U>;
+CPP_concept SimilarTo = isSimilar<T, U>;
 
 /// True iff `T` is similar (see above) to any of the `Ts...`.
 template <typename T, typename... Ts>
-concept SimilarToAny = (... || isSimilar<T, Ts>);
+CPP_concept SimilarToAny = (... || isSimilar<T, Ts>);
 
 /// True iff `T` is the same as any of the `Ts...`.
 template <typename T, typename... Ts>
-concept SameAsAny = (... || ql::concepts::same_as<T, Ts>);
+CPP_concept SameAsAny = (... || ql::concepts::same_as<T, Ts>);
 
 /*
 The implementation for `SimilarToAnyTypeIn` and `SameAsAnyTypeIn` (see below
@@ -152,14 +153,14 @@ namespace detail).
 */
 namespace detail {
 template <typename T, typename Template>
-struct SimilarToAnyTypeInImpl;
+struct SimilarToAnyTypeInImpl : std::false_type {};
 
 template <typename T, template <typename...> typename Template, typename... Ts>
 struct SimilarToAnyTypeInImpl<T, Template<Ts...>>
     : std::integral_constant<bool, SimilarToAny<T, Ts...>> {};
 
 template <typename T, typename Template>
-struct SameAsAnyTypeInImpl;
+struct SameAsAnyTypeInImpl : std::false_type {};
 
 template <typename T, template <typename...> typename Template, typename... Ts>
 struct SameAsAnyTypeInImpl<T, Template<Ts...>>
@@ -173,14 +174,15 @@ or `std::variant`). and `T` is `isSimilar` (see above) to any of the type
 parameters.
 */
 template <typename T, typename Template>
-concept SimilarToAnyTypeIn = detail::SimilarToAnyTypeInImpl<T, Template>::value;
+CPP_concept SimilarToAnyTypeIn =
+    detail::SimilarToAnyTypeInImpl<T, Template>::value;
 
 /*
 Equivalent to `SimilarToAnyTypeIn` (see above), but checks for exactly matching
 types via `std::same_as`.
 */
 template <typename T, typename Template>
-concept SameAsAnyTypeIn = detail::SameAsAnyTypeInImpl<T, Template>::value;
+CPP_concept SameAsAnyTypeIn = detail::SameAsAnyTypeInImpl<T, Template>::value;
 
 /// A templated bool that is always false,
 /// independent of the template parameter.

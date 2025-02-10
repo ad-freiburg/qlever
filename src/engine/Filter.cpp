@@ -104,7 +104,8 @@ ProtoResult Filter::computeResult(bool requestLaziness) {
 }
 
 // _____________________________________________________________________________
-template <ad_utility::SimilarTo<IdTable> Table>
+template <typename Table,
+          typename = std::enable_if_t<ad_utility::SimilarTo<Table, IdTable>>>
 IdTable Filter::filterIdTable(std::vector<ColumnIndex> sortedBy,
                               Table&& idTable,
                               const LocalVocab& localVocab) const {
@@ -120,7 +121,8 @@ IdTable Filter::filterIdTable(std::vector<ColumnIndex> sortedBy,
 }
 
 // _____________________________________________________________________________
-template <int WIDTH, ad_utility::SimilarTo<IdTable> Table>
+template <int WIDTH, typename Table,
+          typename = std::enable_if_t<ad_utility::SimilarTo<Table, IdTable>>>
 void Filter::computeFilterImpl(IdTable& dynamicResultTable, Table&& inputTable,
                                const LocalVocab& localVocab,
                                std::vector<ColumnIndex> sortedBy) const {
