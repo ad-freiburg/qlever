@@ -115,14 +115,35 @@ struct LiftStringFunction {
 
 // IRI or URI
 //
-// 1. Check for `BASE` URL and if it exists, prepend it.
-// 2. What's the correct behavior for non-strings, like `1` or `true`?
+// 1. What's the correct behavior for non-strings, like `1` or `true`?
 //
-// @1: TODO implement `BASE`
-// @2: Only a `LiteralOrIri` or an `Id` from `Vocab`/`LocalVocab` is in
+// @1: Only a `LiteralOrIri` or an `Id` from `Vocab`/`LocalVocab` is in
 // consideration within the `IriOrUriValueGetter`, hence automatically
 // ignores values like `1`, `true`, `Date` etc.
-using IriOrUriExpression = NARY<1, FV<std::identity, IriOrUriValueGetter>>;
+
+Iri extractIri(const IdOrLiteralOrIri& litOrIri) {
+  AD_CORRECTNESS_CHECK(std::holds_alternative<LocalVocabEntry>(litOrIri));
+  auto baseIriOrUri = std::get<LocalVocabEntry>(litOrIri);
+  AD_CORRECTNESS_CHECK(baseIriOrUri.isIri());
+  return baseIriOrUri.getIri();
+}
+
+[[maybe_unused]] auto mergeIriImpl =
+    [](IdOrLiteralOrIri iri, const IdOrLiteralOrIri& base) -> IdOrLiteralOrIri {
+  if (std::holds_alternative<Id>(iri)) {
+    AD_CORRECTNESS_CHECK(std::get<Id>(iri).isUndefined());
+    return iri;
+  }
+  auto baseIri = extractIri(base);
+  if (baseIri.empty()) {
+    return iri;
+  }
+  return LiteralOrIri{Iri::fromIrirefConsiderBase(
+      extractIri(iri).toStringRepresentation(), baseIri.getBaseIri(false),
+      baseIri.getBaseIri(true))};
+};
+using IriOrUriExpression =
+    NARY<2, FV<decltype(mergeIriImpl), IriOrUriValueGetter>>;
 
 // STRLEN
 [[maybe_unused]] auto strlen = [](std::string_view s) {
@@ -381,8 +402,9 @@ class ConcatExpression : public detail::VariadicExpression {
     // were constants (see above).
     std::variant<std::string, StringVec> result{std::string{""}};
     auto visitSingleExpressionResult =
-        [&ctx, &result ]<SingleExpressionResult T>(T && s)
-            requires std::is_rvalue_reference_v<T&&> {
+        [&ctx, &result]<SingleExpressionResult T>(T&& s)
+            requires std::is_rvalue_reference_v<T&&>
+    {
       if constexpr (isConstantResult<T>) {
         std::string strFromConstant = StringValueGetter{}(s, ctx).value_or("");
         if (std::holds_alternative<std::string>(result)) {
@@ -551,8 +573,9 @@ Expr make(std::same_as<Expr> auto&... children) {
 }
 Expr makeStrExpression(Expr child) { return make<StrExpression>(child); }
 
-Expr makeIriOrUriExpression(Expr child) {
-  return make<IriOrUriExpression>(child);
+Expr makeIriOrUriExpression(Expr child, ad_utility::triple_component::Iri iri) {
+  return std::make_unique<IriOrUriExpression>(
+      std::move(child), std::make_unique<IriExpression>(std::move(iri)));
 }
 
 Expr makeStrlenExpression(Expr child) { return make<StrlenExpression>(child); }

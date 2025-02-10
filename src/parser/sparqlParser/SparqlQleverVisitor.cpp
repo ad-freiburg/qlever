@@ -2350,7 +2350,8 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
   if (functionName == "str") {
     return createUnary(&makeStrExpression);
   } else if (functionName == "iri" || functionName == "uri") {
-    return createUnary(&makeIriOrUriExpression);
+    AD_CORRECTNESS_CHECK(argList.size() == 1, argList.size());
+    return makeIriOrUriExpression(std::move(argList[0]), baseIri_);
   } else if (functionName == "strlang") {
     return createBinary(&makeStrLangTagExpression);
   } else if (functionName == "strdt") {
