@@ -6,6 +6,7 @@
 
 #include <optional>
 
+#include "engine/IndexScan.h"
 #include "engine/NeutralElementOperation.h"
 #include "engine/ValuesForTesting.h"
 #include "global/RuntimeParameters.h"
