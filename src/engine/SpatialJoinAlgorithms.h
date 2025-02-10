@@ -134,8 +134,8 @@ class SpatialJoinAlgorithms {
 
   // wrapper to access non const private function for testing
   std::optional<RtreeEntry> onlyForTestingGetRtreeEntry(const IdTable* idTable,
-                                          const size_t row,
-                                          const ColumnIndex col) {
+                                                        const size_t row,
+                                                        const ColumnIndex col) {
     return getRtreeEntry(idTable, row, col);
   }
 
@@ -184,7 +184,7 @@ class SpatialJoinAlgorithms {
   std::optional<RtreeEntry> getRtreeEntry(const IdTable* idTable,
                                           const size_t row,
                                           const ColumnIndex col);
-  
+
   // this helper function converts a GeoPoint into a boost geometry Point
   size_t convertGeoPointToPoint(GeoPoint point);
 

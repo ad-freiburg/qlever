@@ -1601,10 +1601,11 @@ TEST(SpatialJoin, trueAreaDistance) {
     SpatialJoinAlgorithms algorithms{
         qec, params, spatialJoin->onlyForTestingGetConfig(), std::nullopt};
     algorithms.setUseMidpointForAreas_(useMidpointForAreas);
-    auto entryLeft = algorithms.onlyForTestingGetRtreeEntry(params.idTableLeft_, 0, params.leftJoinCol_);
-    auto entryRight = algorithms.onlyForTestingGetRtreeEntry(params.idTableRight_, 0, params.rightJoinCol_);
-    auto distID =
-        algorithms.computeDist(entryLeft.value(), entryRight.value());
+    auto entryLeft = algorithms.onlyForTestingGetRtreeEntry(
+        params.idTableLeft_, 0, params.leftJoinCol_);
+    auto entryRight = algorithms.onlyForTestingGetRtreeEntry(
+        params.idTableRight_, 0, params.rightJoinCol_);
+    auto distID = algorithms.computeDist(entryLeft.value(), entryRight.value());
     return distID.getDouble();
   };
   auto qec = buildMixedAreaPointQEC(true);

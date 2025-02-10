@@ -91,9 +91,8 @@ std::optional<size_t> SpatialJoinAlgorithms::getAnyGeometry(
 }
 
 // ____________________________________________________________________________
-double SpatialJoinAlgorithms::computeDist(
-    const size_t geometryIndex1,
-    const size_t geometryIndex2) const {
+double SpatialJoinAlgorithms::computeDist(const size_t geometryIndex1,
+                                          const size_t geometryIndex2) const {
   return boost::apply_visitor(ClosestPointVisitor(),
                               geometries_.at(geometryIndex1),
                               geometries_.at(geometryIndex2));
@@ -136,8 +135,8 @@ Id SpatialJoinAlgorithms::computeDist(RtreeEntry& geo1, RtreeEntry& geo2) {
           geo1.geoPoint_.value(), geo2.geoPoint_.value()));
     } else if (geo1.geometryIndex_.has_value() &&
                geo2.geometryIndex_.has_value()) {
-      return Id::makeFromDouble(
-          computeDist(geo1.geometryIndex_.value(), geo2.geometryIndex_.value()));
+      return Id::makeFromDouble(computeDist(geo1.geometryIndex_.value(),
+                                            geo2.geometryIndex_.value()));
     } else {
       // one point and one area
       if (!geo1.geometryIndex_) {
@@ -145,8 +144,8 @@ Id SpatialJoinAlgorithms::computeDist(RtreeEntry& geo1, RtreeEntry& geo2) {
       } else if (!geo2.geometryIndex_) {
         geo2.geometryIndex_ = convertGeoPointToPoint(geo2.geoPoint_.value());
       }
-      return Id::makeFromDouble(
-          computeDist(geo1.geometryIndex_.value(), geo2.geometryIndex_.value()));
+      return Id::makeFromDouble(computeDist(geo1.geometryIndex_.value(),
+                                            geo2.geometryIndex_.value()));
     }
   }
 }
@@ -216,9 +215,9 @@ Result SpatialJoinAlgorithms::BaselineAlgorithm() {
                         std::vector<std::pair<size_t, double>>,
                         decltype(compare)>
         intermediate(compare);
-    
+
     auto entryLeft = getRtreeEntry(idTableLeft, rowLeft, leftJoinCol);
-    
+
     // Inner loop of cartesian product
     for (size_t rowRight = 0; rowRight < idTableRight->size(); rowRight++) {
       auto entryRight = getRtreeEntry(idTableRight, rowRight, rightJoinCol);
@@ -226,7 +225,7 @@ Result SpatialJoinAlgorithms::BaselineAlgorithm() {
       if (!entryLeft || !entryRight) {
         continue;
       }
-      
+
       Id dist = computeDist(entryLeft.value(), entryRight.value());
 
       // Ensure `maxDist_` constraint
@@ -615,10 +614,11 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
     size_t rowRight;
 
     bool operator<(const AddedPair& other) const {
-      return (rowLeft < other.rowLeft) || (rowLeft == other.rowLeft && rowRight < other.rowRight);
+      return (rowLeft < other.rowLeft) ||
+             (rowLeft == other.rowLeft && rowRight < other.rowRight);
     }
   };
-  
+
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
               rightJoinCol, rightSelectedCols, numColumns, maxDist,
               maxResults] = params_;
@@ -690,10 +690,10 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
         // as midpoints, the additional runtime can be saved in that case
         if (useMidpointForAreas_) {
           addResultTableEntry(&result, idTableLeft, idTableRight, rowLeft,
-                            rowRight, distance);
+                              rowRight, distance);
         } else if (pairs.insert(AddedPair(rowLeft, rowRight)).second) {
           addResultTableEntry(&result, idTableLeft, idTableRight, rowLeft,
-                            rowRight, distance);
+                              rowRight, distance);
         }
       }
     });
