@@ -240,22 +240,25 @@ class IdTable {
   // `IdTables` are expensive to copy, so we disable accidental copies as they
   // are most likely bugs. To explicitly copy an `IdTable`, the `clone()` member
   // function (see below) can be used.
-  CPP_template(typename = void)(requires(!isView))
-      IdTable(const IdTable&) = delete;
-
-  CPP_template(typename = void)(requires(!isView)) IdTable& operator=(
-      const IdTable&) requires(!isView)
-  = delete;
-
+  // Note: We currently only disable the copy operations in C++20 mode.
+  // TODO<joka921> implement a facility (probably via inheritance) where we can
+  // also implement the deleted copy operations for C++17
 #ifndef QLEVER_CPP_17
+  IdTable(const IdTable&) requires(!isView) = delete;
+  IdTable& operator=(const IdTable&) requires(!isView) = delete;
+
   //  Views are copyable, as they are cheap to copy.
   IdTable(const IdTable&) requires isView = default;
   IdTable& operator=(const IdTable&) requires isView = default;
 
-  // `IdTable`s are movable
-  IdTable(IdTable&& other) noexcept requires(!isView) = default;
-  IdTable& operator=(IdTable&& other) noexcept requires(!isView) = default;
+#else
+  IdTable(const IdTable&) = default;
+  IdTable& operator=(const IdTable&) = default;
 #endif
+
+  // `IdTable`s are movable
+  IdTable(IdTable&& other) noexcept = default;
+  IdTable& operator=(IdTable&& other) noexcept = default;
 
  private:
   // Make the other instantiations of `IdTable` friends to allow for conversion

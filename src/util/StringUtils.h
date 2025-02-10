@@ -113,7 +113,7 @@ CPP_template(typename Range)(
 
 // Similar to the overload of `lazyStrJoin` above, but the result is returned as
 // a string.
-CPP_template_def(typename Range)(
+CPP_template(typename Range)(
     requires ql::ranges::input_range<Range> CPP_and ad_utility::Streamable<
         std::iter_reference_t<ql::ranges::iterator_t<Range>>>) std::string
     lazyStrJoin(Range&& r, std::string_view separator);
