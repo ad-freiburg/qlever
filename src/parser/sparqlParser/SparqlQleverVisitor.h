@@ -7,6 +7,7 @@
 #pragma once
 
 #include <antlr4-runtime.h>
+#include <gtest/gtest_prod.h>
 
 #include "engine/sparqlExpressions/AggregateExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
@@ -598,4 +599,14 @@ class SparqlQleverVisitor {
   void warnOrThrowIfUnboundVariables(auto* ctx,
                                      const SparqlExpressionPimpl& expression,
                                      std::string_view clauseName);
+
+  // Convert an instance of `Triples` to a `BasicGraphPattern` so it can be used
+  // just like a WHERE clause. Most of the time this just changes the type and
+  // stays semantically the same, but for blank nodes, this step converts them
+  // into internal variables so they are interpreted correctly by the query
+  // planner.
+  static parsedQuery::BasicGraphPattern toGraphPattern(
+      const ad_utility::sparql_types::Triples& triples);
+
+  FRIEND_TEST(SparqlParser, ensureExceptionOnInvalidGraphTerm);
 };

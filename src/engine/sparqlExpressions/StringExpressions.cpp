@@ -357,7 +357,7 @@ using StrBeforeExpression =
 
 using ReplaceExpression =
     StringExpressionImpl<3, decltype(replaceImpl), RegexValueGetter,
-                         StringValueGetter>;
+                         ReplacementStringGetter>;
 
 // CONCAT
 class ConcatExpression : public detail::VariadicExpression {
@@ -618,5 +618,9 @@ Expr makeSHA256Expression(Expr child) { return make<SHA256Expression>(child); }
 Expr makeSHA384Expression(Expr child) { return make<SHA384Expression>(child); }
 
 Expr makeSHA512Expression(Expr child) { return make<SHA512Expression>(child); }
+
+Expr makeConvertToStringExpression(Expr child) {
+  return std::make_unique<StrExpressionImpl>(std::move(child));
+}
 
 }  // namespace sparqlExpression

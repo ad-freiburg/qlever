@@ -132,7 +132,7 @@ void FrequencyEncode<T>::writeToFile(ad_utility::File& out,
 
 // ____________________________________________________________________________
 template <typename T>
-requires std::is_arithmetic_v<T> template <typename View>
+template <typename View>
 void GapEncode<T>::initialize(View&& view) {
   if (ql::ranges::empty(view)) {
     return;
@@ -144,7 +144,6 @@ void GapEncode<T>::initialize(View&& view) {
 
 // ____________________________________________________________________________
 template <typename T>
-requires std::is_arithmetic_v<T>
 void GapEncode<T>::writeToFile(ad_utility::File& out, off_t& currentOffset) {
   textIndexReadWrite::encodeAndWriteSpanAndMoveOffset<T>(encodedVector_, out,
                                                          currentOffset);
