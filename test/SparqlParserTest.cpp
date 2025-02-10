@@ -23,6 +23,7 @@ auto lit = ad_utility::testing::tripleComponentLiteral;
 auto iri = ad_utility::testing::iri;
 }  // namespace
 
+// _____________________________________________________________________________
 TEST(ParserTest, testParse) {
   {
     auto pq = SparqlParser::parseQuery("SELECT ?x WHERE {?x ?y ?z}");
@@ -698,6 +699,7 @@ TEST(ParserTest, testParse) {
   }
 }
 
+// _____________________________________________________________________________
 TEST(ParserTest, testFilterWithoutDot) {
   ParsedQuery pq = SparqlParser::parseQuery(
       "PREFIX fb: <http://rdf.freebase.com/ns/>\n"
@@ -726,6 +728,7 @@ TEST(ParserTest, testFilterWithoutDot) {
   ASSERT_EQ("(?1 != fb:m.018mts)", filters[2].expression_.getDescriptor());
 }
 
+// _____________________________________________________________________________
 TEST(ParserTest, testExpandPrefixes) {
   ParsedQuery pq = SparqlParser::parseQuery(
       "PREFIX : <http://rdf.myprefix.com/>\n"
@@ -754,6 +757,7 @@ TEST(ParserTest, testExpandPrefixes) {
   ASSERT_EQ(0, pq._limitOffset._offset);
 }
 
+// _____________________________________________________________________________
 TEST(ParserTest, testLiterals) {
   ParsedQuery pq = SparqlParser::parseQuery(
       "PREFIX xsd: <http://www.w3.org/2001/XMLSchema#> SELECT * WHERE { "
@@ -772,6 +776,7 @@ TEST(ParserTest, testLiterals) {
   ASSERT_EQ(DateYearOrDuration{Date(2000, 1, 1, -1)}, c._triples[1].o_);
 }
 
+// _____________________________________________________________________________
 TEST(ParserTest, testSolutionModifiers) {
   {
     ParsedQuery pq =
@@ -993,6 +998,7 @@ TEST(ParserTest, testSolutionModifiers) {
   }
 }
 
+// _____________________________________________________________________________
 TEST(ParserTest, testGroupByAndAlias) {
   ParsedQuery pq = SparqlParser::parseQuery(
       "SELECT (COUNT(?a) as ?count) WHERE { ?b <rel> ?a } GROUP BY ?b");
@@ -1008,6 +1014,7 @@ TEST(ParserTest, testGroupByAndAlias) {
   EXPECT_THAT(pq, m::GroupByVariables({Var{"?b"}}));
 }
 
+// _____________________________________________________________________________
 TEST(ParserTest, Bind) {
   ParsedQuery pq =
       SparqlParser::parseQuery("SELECT ?a WHERE { BIND (10 - 5 as ?a) . }");
@@ -1020,6 +1027,7 @@ TEST(ParserTest, Bind) {
   ASSERT_EQ(bind._expression.getDescriptor(), "10 - 5");
 }
 
+// _____________________________________________________________________________
 TEST(ParserTest, Order) {
   {
     ParsedQuery pq =
@@ -1101,6 +1109,7 @@ TEST(ParserTest, Order) {
    */
 }
 
+// _____________________________________________________________________________
 TEST(ParserTest, Group) {
   {
     ParsedQuery pq = SparqlParser::parseQuery(
@@ -1165,6 +1174,7 @@ TEST(ParserTest, Group) {
   }
 }
 
+// _____________________________________________________________________________
 TEST(ParserTest, LanguageFilterPostProcessing) {
   {
     ParsedQuery q = SparqlParser::parseQuery(
@@ -1245,4 +1255,97 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
             iri("<http://qlever.cs.uni-freiburg.de/builtin-functions/@en>")}),
         triples[2]);
   }
+}
+
+// _____________________________________________________________________________
+namespace {
+std::string getFirstTriple(const ParsedQuery& q) {
+  return q._rootGraphPattern._graphPatterns.at(0)
+      .getBasic()
+      ._triples.at(0)
+      .asString();
+}
+}  // namespace
+
+// _____________________________________________________________________________
+TEST(ParserTest, HandlesBasicUnicodeEscapeSequences) {
+  ParsedQuery q1 = SparqlParser::parseQuery(
+      R"(SELECT * WHERE { ?s <http://a.example/p1> '\u0080\u07FF\u0800\u0FFF\u1000\uCFFF\uD000\uD7FF\uE000\uFFFD\U00010000\U0003FFFD\U00040000\U000FFFFD\U00100000\U0010FFFD'})");
+  EXPECT_EQ(getFirstTriple(q1),
+            "{s: ?s, p: <http://a.example/p1>, o: "
+            "\"\u0080\u07FF\u0800\u0FFF\u1000\uCFFF\uD000\uD7FF\uE000\uFFFD"
+            "\U00010000\U0003FFFD\U00040000\U000FFFFD\U00100000\U0010FFFD\"}");
+
+  ParsedQuery q2 =
+      SparqlParser::parseQuery(R"(SELECT * WHERE { ?s ?p "\U0001f46a" . })");
+  EXPECT_EQ(getFirstTriple(q2), "{s: ?s, p: ?p, o: \"\U0001f46a\"}");
+
+  ParsedQuery q3 = SparqlParser::parseQuery(
+      R"(PREFIX \u03B1: <http://example.com/\u00E9fg> SELECT * WHERE { ?s ?p α\u003Aba . })");
+  EXPECT_EQ(getFirstTriple(q3),
+            "{s: ?s, p: ?p, o: <http://example.com/éfgba>}");
+
+  ParsedQuery q4 = SparqlParser::parseQuery(
+      R"(SELECT * WHERE { <http://example.com/\U0001F937\U0001F3FD\u200D\U00002642\ufe0F> ?p\u00201. })");
+  EXPECT_EQ(getFirstTriple(q4),
+            "{s: <http://example.com/🤷🏽‍♂️>, p: ?p, o: 1}");
+
+  // Ensure we don't double-unescape, \u sequences are not allowed in literals
+  EXPECT_THROW(
+      SparqlParser::parseQuery(R"(SELECT * WHERE { "\u005Cu2764" ?p 1. })"),
+      InvalidSparqlQueryException);
+}
+
+// _____________________________________________________________________________
+TEST(ParserTest, HandlesSurrogatesCorrectly) {
+  using SP = SparqlParser;
+  using ::testing::HasSubstr;
+  ParsedQuery q = SP::parseQuery(
+      R"(SELECT * WHERE { "\uD83E\udD37\uD83C\uDFFD\u200D\u2642\uFE0F" ?p 1. })");
+  EXPECT_EQ(getFirstTriple(q), "{s: \"🤷🏽‍♂️\", p: ?p, o: 1}");
+
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      SP::parseQuery(R"(SELECT * WHERE { ?s ?p '\uD83C \uDFFD' })"),
+      HasSubstr(
+          "A high surrogate must be directly followed by a low surrogate."),
+      InvalidSparqlQueryException);
+
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      SP::parseQuery(R"(SELECT * WHERE { ?s ?p '\uD800' })"),
+      HasSubstr("A high surrogate must be followed by a low surrogate."),
+      InvalidSparqlQueryException);
+
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      SP::parseQuery(R"(SELECT * WHERE { ?s ?p '\U0000D800' })"),
+      HasSubstr("Surrogates should not be encoded as full code points."),
+      InvalidSparqlQueryException);
+
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      SP::parseQuery(R"(SELECT * WHERE { ?s ?p '\uD800\uD800' })"),
+      HasSubstr(
+          "A high surrogate cannot be followed by another high surrogate."),
+      InvalidSparqlQueryException);
+
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      SP::parseQuery(R"(SELECT * WHERE { ?s ?p '\U0000DFFD' })"),
+      HasSubstr("Surrogates should not be encoded as full code points."),
+      InvalidSparqlQueryException);
+
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      SP::parseQuery(R"(SELECT * WHERE { ?s ?p '\uDFFD' })"),
+      HasSubstr("A low surrogate cannot be the first surrogate."),
+      InvalidSparqlQueryException);
+
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      SP::parseQuery(R"(SELECT * WHERE { ?s ?p '\uD800\u0020' })"),
+      HasSubstr("A high surrogate cannot be followed by a regular code point."),
+      InvalidSparqlQueryException);
+
+  // Note: We don't allow mixing escaped and unescape surrogates, that's just
+  // weird and the C++ compiler rightfully won't compile strings like these:
+  // SELECT * WHERE { ?s ?p '\\uD83C\uDFFD' }
+  // SELECT * WHERE { ?s ?p '\uD83C\\uDFFD' }
+
+  // So writing unit tests for these cases is not possible without creating
+  // semi-invalid UTF-8 strings.
 }

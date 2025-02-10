@@ -1343,7 +1343,8 @@ QueryPlanner::runDynamicProgrammingOnConnectedComponent(
 
 // _____________________________________________________________________________
 size_t QueryPlanner::countSubgraphs(
-    std::vector<const QueryPlanner::SubtreePlan*> graph, size_t budget) {
+    std::vector<const QueryPlanner::SubtreePlan*> graph,
+    const std::vector<SparqlFilter>& filters, size_t budget) {
   // Remove duplicate plans from `graph`.
   auto getId = [](const SubtreePlan* v) { return v->_idsOfIncludedNodes; };
   ql::ranges::sort(graph, ql::ranges::less{}, getId);
@@ -1353,6 +1354,36 @@ size_t QueryPlanner::countSubgraphs(
 #else
   graph.erase(uniqueIter.begin(), graph.end());
 #endif
+
+  // We also have to consider the `filters`. To make life easy, we temporarily
+  // create simple `SubtreePlans` for them which just have the correct
+  // variables. We only create one subtree plan for each set of variables that
+  // is contained in the `filters`, because this will bring the estimate of this
+  // function closer to the actual behavior of the DP query planner (it always
+  // applies either all possible filters at once, or none of them).
+  std::vector<QueryPlanner::SubtreePlan> dummyPlansForFilter;
+  ad_utility::HashSet<ad_utility::HashSet<Variable>>
+      deduplicatedFilterVariables;
+  for (const auto& filter : filters) {
+    const auto& vars = filter.expression_.containedVariables();
+    ad_utility::HashSet<Variable> varSet;
+    // We use a `VALUES` clause as the dummy because this operation is the
+    // easiest to setup for a number of given variables.
+    parsedQuery::SparqlValues values;
+    for (auto* var : vars) {
+      values._variables.push_back(*var);
+      varSet.insert(*var);
+    }
+    if (deduplicatedFilterVariables.insert(std::move(varSet)).second) {
+      dummyPlansForFilter.push_back(
+          makeSubtreePlan<Values>(_qec, std::move(values)));
+    }
+  }
+
+  const size_t numPlansWithoutFilters = graph.size();
+  for (const auto& filterPlan : dummyPlansForFilter) {
+    graph.push_back(&filterPlan);
+  }
 
   // Qlever currently limits the number of triples etc. per group to be <= 64
   // anyway, so we can simply assert here.
@@ -1367,7 +1398,11 @@ size_t QueryPlanner::countSubgraphs(
   for (size_t i = 0; i < graph.size(); ++i) {
     countConnectedSubgraphs::Node v{0};
     for (size_t k = 0; k < graph.size(); ++k) {
+      // Don't connect nodes to themselves, don't connect filters with other
+      // filters, otherwise connect `i` and `k` if they have at least one
+      // variable in common.
       if ((k != i) &&
+          (k < numPlansWithoutFilters || i < numPlansWithoutFilters) &&
           !QueryPlanner::getJoinColumns(*graph.at(k), *graph.at(i)).empty()) {
         v.neighbors_ |= (1ULL << k);
       }
@@ -1477,7 +1512,7 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
       g.push_back(&plan);
     }
     const size_t budget = RuntimeParameters().get<"query-planning-budget">();
-    bool useGreedyPlanning = countSubgraphs(g, budget) > budget;
+    bool useGreedyPlanning = countSubgraphs(g, filters, budget) > budget;
     if (useGreedyPlanning) {
       LOG(INFO)
           << "Using the greedy query planner for a large connected component"

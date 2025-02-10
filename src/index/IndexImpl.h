@@ -12,6 +12,7 @@
 #include <stxxl/vector>
 #include <vector>
 
+#include "backports/algorithm.h"
 #include "engine/Result.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "global/Pattern.h"
@@ -678,34 +679,34 @@ class IndexImpl {
   // Create the SPO and SOP permutations. Additionally, count the number of
   // distinct actual (not internal) subjects in the input and write it to the
   // metadata. Also builds the patterns if specified.
-  template <typename... NextSorter>
-  requires(sizeof...(NextSorter) <= 1)
-  std::optional<PatternCreator::TripleSorter> createSPOAndSOP(
-      size_t numColumns, BlocksOfTriples sortedTriples,
-      NextSorter&&... nextSorter);
+  CPP_template(typename... NextSorter)(requires(sizeof...(NextSorter) <= 1))
+      std::optional<PatternCreator::TripleSorter> createSPOAndSOP(
+          size_t numColumns, BlocksOfTriples sortedTriples,
+          NextSorter&&... nextSorter);
   // Create the OSP and OPS permutations. Additionally, count the number of
   // distinct objects and write it to the metadata.
-  template <typename... NextSorter>
-  requires(sizeof...(NextSorter) <= 1)
-  void createOSPAndOPS(size_t numColumns, BlocksOfTriples sortedTriples,
-                       NextSorter&&... nextSorter);
+  CPP_template(typename... NextSorter)(requires(
+      sizeof...(NextSorter) <=
+      1)) void createOSPAndOPS(size_t numColumns, BlocksOfTriples sortedTriples,
+                               NextSorter&&... nextSorter);
 
   // Create the PSO and POS permutations. Additionally, count the number of
   // distinct predicates and the number of actual triples and write them to the
   // metadata. The meta-data JSON file for the index statistics will only be
   // written iff `doWriteConfiguration` is true. That parameter is set to
   // `false` when building the additional permutations for the internal triples.
-  template <typename... NextSorter>
-  requires(sizeof...(NextSorter) <= 1)
-  void createPSOAndPOSImpl(size_t numColumns, BlocksOfTriples sortedTriples,
-                           bool doWriteConfiguration,
-                           NextSorter&&... nextSorter);
+  CPP_template(typename... NextSorter)(
+      requires(sizeof...(NextSorter) <=
+               1)) void createPSOAndPOSImpl(size_t numColumns,
+                                            BlocksOfTriples sortedTriples,
+                                            bool doWriteConfiguration,
+                                            NextSorter&&... nextSorter);
   // Call `createPSOAndPOSImpl` with the given arguments and with
   // `doWriteConfiguration` set to `true` (see above).
-  template <typename... NextSorter>
-  requires(sizeof...(NextSorter) <= 1)
-  void createPSOAndPOS(size_t numColumns, BlocksOfTriples sortedTriples,
-                       NextSorter&&... nextSorter);
+  CPP_template(typename... NextSorter)(requires(
+      sizeof...(NextSorter) <=
+      1)) void createPSOAndPOS(size_t numColumns, BlocksOfTriples sortedTriples,
+                               NextSorter&&... nextSorter);
 
   // Create the internal PSO and POS permutations from the sorted internal
   // triples. Return `(numInternalTriples, numInternalPredicates)`.

@@ -77,10 +77,15 @@ QueryExecutionTree::selectedVariablesToColumnIndices(
 
 // _____________________________________________________________________________
 size_t QueryExecutionTree::getCostEstimate() {
-  if (cachedResult_) {
-    // result is pinned in cache. Nothing to compute
+  // If the result is cached and `zero-cost-estimate-for-cached-subtrees` is set
+  // to `true`, we set the cost estimate to zero.
+  if (cachedResult_ &&
+      RuntimeParameters().get<"zero-cost-estimate-for-cached-subtree">()) {
     return 0;
   }
+
+  // Otherwise, we return the cost estimate of the root operation. For index
+  // scans, we assume one unit of work per result row.
   if (getRootOperation()->isIndexScanWithNumVariables(1)) {
     return getSizeEstimate();
   } else {
