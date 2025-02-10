@@ -332,11 +332,12 @@ std::optional<ExpressionResult> evaluateOnSpecializedFunctionsIfPossible(
 // for multiple `ValueGetters` because there can be multiple `ValueGetters` as
 // well as zero or more `SpezializedFunctions`, but there can only be a single
 // parameter pack in C++.
-template <
-    size_t NumOperands,
-    ad_utility::isInstantiation<FunctionAndValueGetters>
-        FunctionAndValueGettersT,
-    ad_utility::isInstantiation<SpecializedFunction>... SpecializedFunctions>
+template <size_t NumOperands,
+          QL_CONCEPT_OR_TYPENAME(
+              ad_utility::isInstantiation<FunctionAndValueGetters>)
+              FunctionAndValueGettersT,
+          QL_CONCEPT_OR_TYPENAME(ad_utility::isInstantiation<
+                                 SpecializedFunction>)... SpecializedFunctions>
 struct Operation {
  private:
   using OriginalValueGetters = typename FunctionAndValueGettersT::ValueGetters;

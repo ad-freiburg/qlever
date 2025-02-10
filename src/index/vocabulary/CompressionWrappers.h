@@ -5,6 +5,7 @@
 #pragma once
 
 #include "backports/algorithm.h"
+#include "backports/concepts.h"
 #include "index/PrefixHeuristic.h"
 #include "index/vocabulary/PrefixCompressor.h"
 #include "util/FsstCompressor.h"
@@ -21,17 +22,8 @@ namespace ad_utility::vocabulary {
 // TODO<gpicciuca> This has to be rewritten for C++17, using a dummy for now.
 template <typename T, typename Decoder>
 concept BulkResultForDecoder = true;
+
 /*
-template <typename T, typename Decoder>
-concept BulkResultForDecoder = requires(T t) {
-  requires(std::tuple_size_v<T> == 3);
-  {
-    std::get<1>(t)
-  } -> ad_utility::SimilarToAny<std::vector<std::string_view>,
-                                std::vector<std::string>>;
-  { std::get<2>(t) } -> ad_utility::SimilarTo<Decoder>;
-};
-*/
 CPP_requires(
     BulkResultForDecoder_,
     requires(T t)(std::tuple_size_v<T> == 3,
@@ -39,9 +31,10 @@ CPP_requires(
                                            std::vector<std::string_view>,
                                            std::vector<std::string>>,
                   ad_utility::SimilarTo<decltype(std::get<2>(t)), Decoder>));
+
 template <typename T, typename Decoder>
 CPP_concept BulkResultForDecoder =
-    CPP_requires_ref(BulkResultForDecoder_, T, Decoder);
+    CPP_requires_ref(BulkResultForDecoder_, T, Decoder);*/
 
 template <typename T>
 CPP_requires(

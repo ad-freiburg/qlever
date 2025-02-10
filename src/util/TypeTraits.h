@@ -85,7 +85,7 @@ struct FirstWrapper : public std::type_identity<T> {};
 /// isInstantiation<std::vector<int>, std::vector> == true;
 /// isInstantiation<const std::vector<int>&, std::vector> == false;
 template <typename T, template <typename...> typename TemplatedType>
-concept isInstantiation =
+CPP_concept isInstantiation =
     detail::IsInstantiationOf<TemplatedType>::template Instantiation<T>::value;
 
 /// The concept is fulfilled iff `T` is `ad_utility::SimilarTo` an
@@ -94,7 +94,7 @@ concept isInstantiation =
 /// similarToInstantiation<std::vector, std::vector<int>> == true;
 /// similarToInstantiation<std::vector, const std::vector<int>&> == true;
 template <typename T, template <typename...> typename TemplatedType>
-concept similarToInstantiation =
+CPP_concept similarToInstantiation =
     isInstantiation<std::decay_t<T>, TemplatedType>;
 
 /// @brief The concept is fulfilled if `T` is an instantiation of any
@@ -103,7 +103,7 @@ concept similarToInstantiation =
 /// similarToAnyInstantiationOf<std::vector, std::vector<int>,
 /// std::vector<char>> == true
 template <typename T, template <typename...> typename... Ts>
-concept similarToAnyInstantiationOf = (... || similarToInstantiation<T, Ts>);
+CPP_concept similarToAnyInstantiationOf = (... || similarToInstantiation<T, Ts>);
 
 /// isVector<T> is true if and only if T is an instantiation of std::vector
 template <typename T>
@@ -111,7 +111,7 @@ constexpr static bool isVector = isInstantiation<T, std::vector>;
 
 /// isTuple<T> is true if and only if T is an instantiation of std::tuple
 template <typename T>
-concept isTuple = isInstantiation<T, std::tuple>;
+CPP_concept isTuple = isInstantiation<T, std::tuple>;
 
 /// isVariant<T> is true if and only if T is an instantiation of std::variant
 template <typename T>
