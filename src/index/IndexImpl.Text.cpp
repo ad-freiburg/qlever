@@ -376,9 +376,11 @@ void IndexImpl::createTextIndex(const string& filename,
       AD_CONTRACT_CHECK(!classicPostings.empty());
 
       ContextListMetaData classic = textIndexReadWrite::writePostings(
-          out, classicPostings, true, currenttOffset_);
+          out, classicPostings, true, currenttOffset_,
+          (textScoringMetric_ == TextScoringMetric::COUNT));
       ContextListMetaData entity = textIndexReadWrite::writePostings(
-          out, entityPostings, false, currenttOffset_);
+          out, entityPostings, false, currenttOffset_,
+          (textScoringMetric_ == TextScoringMetric::COUNT));
       textMeta_.addBlock(TextBlockMetaData(
           currentMinWordIndex, currentMaxWordIndex, classic, entity));
       classicPostings.clear();
@@ -405,9 +407,11 @@ void IndexImpl::createTextIndex(const string& filename,
   // Write the last block
   AD_CONTRACT_CHECK(!classicPostings.empty());
   ContextListMetaData classic = textIndexReadWrite::writePostings(
-      out, classicPostings, true, currenttOffset_);
+      out, classicPostings, true, currenttOffset_,
+      (textScoringMetric_ == TextScoringMetric::COUNT));
   ContextListMetaData entity = textIndexReadWrite::writePostings(
-      out, entityPostings, false, currenttOffset_);
+      out, entityPostings, false, currenttOffset_,
+      (textScoringMetric_ == TextScoringMetric::COUNT));
   textMeta_.addBlock(TextBlockMetaData(currentMinWordIndex, currentMaxWordIndex,
                                        classic, entity));
   classicPostings.clear();
@@ -612,14 +616,23 @@ IdTable IndexImpl::readWordCl(
       textIndexFile_, [](WordIndex id) {
         return Id::makeFromWordVocabIndex(WordVocabIndex::make(id));
       });
-
-  textIndexReadWrite::readFreqComprList<Id, Score>(
-      idTable.getColumn(2).begin(), tbmd._cl._nofElements,
-      tbmd._cl._startScorelist,
-      static_cast<size_t>(tbmd._cl._lastByte + 1 - tbmd._cl._startScorelist),
-      textIndexFile_, [](Score score) {
-        return Id::makeFromDouble(static_cast<double>(score));
-      });
+  if (textScoringMetric_ == TextScoringMetric::COUNT) {
+    textIndexReadWrite::readFreqComprList<Id, uint16_t>(
+        idTable.getColumn(2).begin(), tbmd._cl._nofElements,
+        tbmd._cl._startScorelist,
+        static_cast<size_t>(tbmd._cl._lastByte + 1 - tbmd._cl._startScorelist),
+        textIndexFile_, [](uint16_t score) {
+          return Id::makeFromInt(static_cast<uint64_t>(score));
+        });
+  } else {
+    textIndexReadWrite::readFreqComprList<Id, Score>(
+        idTable.getColumn(2).begin(), tbmd._cl._nofElements,
+        tbmd._cl._startScorelist,
+        static_cast<size_t>(tbmd._cl._lastByte + 1 - tbmd._cl._startScorelist),
+        textIndexFile_, [](Score score) {
+          return Id::makeFromDouble(static_cast<double>(score));
+        });
+  }
   return idTable;
 }
 
@@ -646,13 +659,25 @@ IdTable IndexImpl::readWordEntityCl(
       textIndexFile_, [](uint64_t from) {
         return Id::makeFromVocabIndex(VocabIndex::make(from));
       });
-
-  textIndexReadWrite::readFreqComprList<Id, Score>(
-      idTable.getColumn(2).begin(), tbmd._entityCl._nofElements,
-      tbmd._entityCl._startScorelist,
-      static_cast<size_t>(tbmd._entityCl._lastByte + 1 -
-                          tbmd._entityCl._startScorelist),
-      textIndexFile_, &Id::makeFromInt);
+  if (textScoringMetric_ == TextScoringMetric::COUNT) {
+    textIndexReadWrite::readFreqComprList<Id, uint16_t>(
+        idTable.getColumn(2).begin(), tbmd._entityCl._nofElements,
+        tbmd._entityCl._startScorelist,
+        static_cast<size_t>(tbmd._entityCl._lastByte + 1 -
+                            tbmd._entityCl._startScorelist),
+        textIndexFile_, [](uint16_t score) {
+          return Id::makeFromInt(static_cast<uint64_t>(score));
+        });
+  } else {
+    textIndexReadWrite::readFreqComprList<Id, Score>(
+        idTable.getColumn(2).begin(), tbmd._entityCl._nofElements,
+        tbmd._entityCl._startScorelist,
+        static_cast<size_t>(tbmd._entityCl._lastByte + 1 -
+                            tbmd._entityCl._startScorelist),
+        textIndexFile_, [](Score score) {
+          return Id::makeFromDouble(static_cast<double>(score));
+        });
+  }
   return idTable;
 }
 
