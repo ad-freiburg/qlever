@@ -12,6 +12,7 @@
 #include <s2/util/units/length-units.h>
 
 #include <cmath>
+#include <set>
 
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/SpatialJoin.h"
@@ -608,6 +609,16 @@ std::vector<Box> SpatialJoinAlgorithms::getQueryBox(
 
 // ____________________________________________________________________________
 Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
+  // helper struct to avoid duplicate entries for areas
+  struct AddedPair {
+    size_t rowLeft;
+    size_t rowRight;
+
+    bool operator<(const AddedPair& other) const {
+      return (rowLeft < other.rowLeft) || (rowLeft == other.rowLeft && rowRight < other.rowRight);
+    }
+  };
+  
   const auto [idTableLeft, resultLeft, idTableRight, resultRight, leftJoinCol,
               rightJoinCol, rightSelectedCols, numColumns, maxDist,
               maxResults] = params_;
@@ -664,6 +675,7 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
       rtree.query(bgi::intersects(bbox), std::back_inserter(results));
     });
 
+    std::set<AddedPair> pairs;
     ql::ranges::for_each(results, [&](Value& res) {
       size_t rowLeft = res.second.row_;
       size_t rowRight = i;
@@ -673,8 +685,16 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
       auto distance = computeDist(res.second, entry.value());
       AD_CORRECTNESS_CHECK(distance.getDatatype() == Datatype::Double);
       if (distance.getDouble() * 1000 <= static_cast<double>(maxDist.value())) {
-        addResultTableEntry(&result, idTableLeft, idTableRight, rowLeft,
+        // make sure, that no duplicate elements are inserted in the result
+        // table. As duplicates can only occur, when areas are not approximated
+        // as midpoints, the additional runtime can be saved in that case
+        if (useMidpointForAreas_) {
+          addResultTableEntry(&result, idTableLeft, idTableRight, rowLeft,
                             rowRight, distance);
+        } else if (pairs.insert(AddedPair(rowLeft, rowRight)).second) {
+          addResultTableEntry(&result, idTableLeft, idTableRight, rowLeft,
+                            rowRight, distance);
+        }
       }
     });
   }
