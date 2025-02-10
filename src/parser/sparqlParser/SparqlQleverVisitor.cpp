@@ -995,10 +995,10 @@ GraphPatternOperation Visitor::visitSpatialQuery(
   return spatialQuery;
 }
 
-GraphPatternOperation Visitor::visitWordSearchQuery(
+GraphPatternOperation Visitor::visitTextSearchQuery(
     Parser::ServiceGraphPatternContext* ctx) {
-  auto parseWordSearchQuery =
-      [ctx](parsedQuery::WordSearchQuery& textSearchQuery,
+  auto parseTextSearchQuery =
+      [ctx](parsedQuery::TextSearchQuery& textSearchQuery,
             const parsedQuery::GraphPatternOperation& op) {
         if (std::holds_alternative<parsedQuery::BasicGraphPattern>(op)) {
           textSearchQuery.addBasicPattern(
@@ -1006,44 +1006,18 @@ GraphPatternOperation Visitor::visitWordSearchQuery(
         } else {
           reportError(
               ctx,
-              "Unsupported element in wordSearchQuery."
-              "wordSearchQuery may only consist of triples for configuration");
+              "Unsupported element in textSearchQuery."
+              "textSearchQuery may only consist of triples for configuration");
         }
       };
 
   parsedQuery::GraphPattern graphPattern = visit(ctx->groupGraphPattern());
-  parsedQuery::WordSearchQuery wordSearchQuery;
+  parsedQuery::TextSearchQuery textSearchQuery;
   for (const auto& op : graphPattern._graphPatterns) {
-    parseWordSearchQuery(wordSearchQuery, op);
+    parseTextSearchQuery(textSearchQuery, op);
   }
 
-  return wordSearchQuery;
-}
-
-GraphPatternOperation Visitor::visitEntitySearchQuery(
-    Parser::ServiceGraphPatternContext* ctx) {
-  auto parseEntitySearchQuery = [ctx](parsedQuery::EntitySearchQuery&
-                                          textSearchQuery,
-                                      const parsedQuery::GraphPatternOperation&
-                                          op) {
-    if (std::holds_alternative<parsedQuery::BasicGraphPattern>(op)) {
-      textSearchQuery.addBasicPattern(
-          std::get<parsedQuery::BasicGraphPattern>(op));
-    } else {
-      reportError(
-          ctx,
-          "Unsupported element in entitySearchQuery."
-          "entitySearchQuery may only consist of triples for configuration");
-    }
-  };
-
-  parsedQuery::GraphPattern graphPattern = visit(ctx->groupGraphPattern());
-  parsedQuery::EntitySearchQuery entitySearchQuery;
-  for (const auto& op : graphPattern._graphPatterns) {
-    parseEntitySearchQuery(entitySearchQuery, op);
-  }
-
-  return entitySearchQuery;
+  return textSearchQuery;
 }
 
 // Parsing for the `serviceGraphPattern` rule.
@@ -1070,10 +1044,8 @@ GraphPatternOperation Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
     return visitPathQuery(ctx);
   } else if (serviceIri.toStringRepresentation() == SPATIAL_SEARCH_IRI) {
     return visitSpatialQuery(ctx);
-  } else if (serviceIri.toStringRepresentation() == WORD_SEARCH_IRI) {
-    return visitWordSearchQuery(ctx);
-  } else if (serviceIri.toStringRepresentation() == ENTITY_SEARCH_IRI) {
-    return visitEntitySearchQuery(ctx);
+  } else if (serviceIri.toStringRepresentation() == TEXT_SEARCH_IRI) {
+    return visitTextSearchQuery(ctx);
   }
   // Parse the body of the SERVICE query. Add the visible variables from the
   // SERVICE clause to the visible variables so far, but also remember them

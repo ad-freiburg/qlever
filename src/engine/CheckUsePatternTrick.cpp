@@ -74,8 +74,7 @@ bool isVariableContainedInGraphPatternOperation(
     } else {
       static_assert(
           ad_utility::SameAsAny<T, p::TransPath, p::PathQuery, p::Describe,
-                                p::SpatialQuery, p::WordSearchQuery,
-                                p::EntitySearchQuery>);
+                                p::SpatialQuery, p::TextSearchQuery>);
       // The `TransPath` is set up later in the query planning, when this
       // function should not be called anymore.
       AD_FAIL();
