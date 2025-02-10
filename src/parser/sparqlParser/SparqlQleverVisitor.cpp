@@ -1163,8 +1163,20 @@ TripleComponent::Iri Visitor::visit(Parser::IriContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-string Visitor::visit(Parser::IrirefContext* ctx) {
-  return RdfEscaping::unescapeIriref(ctx->getText());
+string Visitor::visit(Parser::IrirefContext* ctx) const {
+  auto string = ctx->getText();
+  auto removeIriBrackets = [](std::string_view string) {
+    AD_CORRECTNESS_CHECK(string.starts_with('<'));
+    AD_CORRECTNESS_CHECK(string.ends_with('>'));
+    return string.substr(1, string.size() - 2);
+  };
+  // Handle relative IRIs, technically relative IRIs are not allowed when no
+  // BASE declaration is present, but we use them a lot for unit tests.
+  if (!baseIri_.empty() && !isAbsoluteIri(string)) {
+    return absl::StrCat("<", removeIriBrackets(baseIri_),
+                        removeIriBrackets(string), ">");
+  }
+  return string;
 }
 
 // ____________________________________________________________________________________
@@ -1212,8 +1224,15 @@ DatasetClause SparqlQleverVisitor::visit(Parser::UsingClauseContext* ctx) {
 
 // ____________________________________________________________________________________
 void Visitor::visit(Parser::PrologueContext* ctx) {
-  visitVector(ctx->baseDecl());
-  visitVector(ctx->prefixDecl());
+  for (auto* child : ctx->children) {
+    if (auto* baseDecl = dynamic_cast<Parser::BaseDeclContext*>(child)) {
+      visit(baseDecl);
+    } else {
+      auto* prefixDecl = dynamic_cast<Parser::PrefixDeclContext*>(child);
+      AD_CORRECTNESS_CHECK(prefixDecl);
+      visit(prefixDecl);
+    }
+  }
   // Remember the whole prologue (we need this when we encounter a SERVICE
   // clause, see `visit(ServiceGraphPatternContext*)` below.
   if (ctx->getStart() && ctx->getStop()) {
@@ -1222,8 +1241,17 @@ void Visitor::visit(Parser::PrologueContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-void Visitor::visit(const Parser::BaseDeclContext* ctx) {
-  reportNotSupported(ctx, "BASE declarations are");
+bool Visitor::isAbsoluteIri(std::string_view string) {
+  return ctre::starts_with<"<[A-Za-z]*[A-Za-z0-9+-.]:">(string);
+}
+
+// ____________________________________________________________________________________
+void Visitor::visit(Parser::BaseDeclContext* ctx) {
+  auto rawIri = ctx->iriref()->getText();
+  if (!isAbsoluteIri(ctx->iriref()->getText())) {
+    reportError(ctx, "The base IRI must be an absolute IRI, was: " + rawIri);
+  }
+  baseIri_ = visit(ctx->iriref());
 }
 
 // ____________________________________________________________________________________

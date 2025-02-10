@@ -80,6 +80,7 @@ class SparqlQleverVisitor {
   // `addVisibleVariable`.
   std::vector<Variable> visibleVariables_{};
   PrefixMap prefixMap_{};
+  std::string baseIri_ = "";
   // We need to remember the prologue (prefix declarations) when we encounter it
   // because we need it when we encounter a SERVICE query. When there is no
   // prologue, this string simply remains empty.
@@ -121,8 +122,11 @@ class SparqlQleverVisitor {
   // ___________________________________________________________________________
   void visit(Parser::PrologueContext* ctx);
 
+  // Returns true if the given string is an absolute IRI.
+  static bool isAbsoluteIri(std::string_view);
+
   // ___________________________________________________________________________
-  [[noreturn]] static void visit(const Parser::BaseDeclContext* ctx);
+  void visit(Parser::BaseDeclContext* ctx);
 
   // ___________________________________________________________________________
   void visit(Parser::PrefixDeclContext* ctx);
@@ -469,7 +473,7 @@ class SparqlQleverVisitor {
 
   TripleComponent::Iri visit(Parser::IriContext* ctx);
 
-  static string visit(Parser::IrirefContext* ctx);
+  string visit(Parser::IrirefContext* ctx) const;
 
   string visit(Parser::PrefixedNameContext* ctx);
 
