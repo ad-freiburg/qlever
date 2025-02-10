@@ -17,14 +17,14 @@
 
 namespace ad_utility {
 
-namespace {
+namespace detail::concepts {
 template <typename T>
 CPP_requires(HasAsStaticView,
              requires(T& table)(table.template asStaticView<0>()));
 
 template <typename T>
 CPP_requires(HasGetLocalVocab, requires(T& table)(table.getLocalVocab()));
-}  // namespace
+}  // namespace detail::concepts
 
 // This class handles the efficient writing of the results of a JOIN operation
 // to a column-based `IdTable`. The underlying assumption is that in both inputs
@@ -141,7 +141,7 @@ class AddCombinedRowToIdTable {
   // `IdTableView<0>`. Identity for `IdTableView<0>`.
   template <typename T>
   static IdTableView<0> toView(const T& table) {
-    if constexpr (CPP_requires_ref(HasAsStaticView, T)) {
+    if constexpr (CPP_requires_ref(detail::concepts::HasAsStaticView, T)) {
       return table.template asStaticView<0>();
     } else {
       return table;
@@ -153,7 +153,7 @@ class AddCombinedRowToIdTable {
   template <typename T>
   void mergeVocab(const T& table, const LocalVocab*& currentVocab) {
     AD_CORRECTNESS_CHECK(currentVocab == nullptr);
-    if constexpr (CPP_requires_ref(HasGetLocalVocab, T)) {
+    if constexpr (CPP_requires_ref(detail::concepts::HasGetLocalVocab, T)) {
       currentVocab = &table.getLocalVocab();
       mergedVocab_.mergeWith(std::span{&table.getLocalVocab(), 1});
     }
