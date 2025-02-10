@@ -465,8 +465,8 @@ class CompressedExternalIdTable
 
   // When we have a static number of columns, then the `numCols` argument to the
   // constructor is redundant.
-  CPP_template(size_t Size = NumStaticCols)(requires(
-      Size >
+  CPP_template(typename = void)(requires(
+      NumStaticCols >
       0)) explicit CompressedExternalIdTable(std::string filename,
                                              ad_utility::MemorySize memory,
                                              ad_utility::AllocatorWithLimit<Id>
@@ -595,7 +595,7 @@ class CompressedExternalIdTableSorter
 
   // When we have a static number of columns, then the `numCols` argument to the
   // constructor is redundant.
-  CPP_template(size_t Size = NumStaticCols)(requires(NumStaticCols > 0))
+  CPP_template(typename = void)(requires(NumStaticCols > 0))
       CompressedExternalIdTableSorter(
           std::string filename, ad_utility::MemorySize memory,
           ad_utility::AllocatorWithLimit<Id> allocator,
