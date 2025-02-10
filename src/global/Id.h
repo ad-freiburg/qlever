@@ -3,16 +3,12 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 #pragma once
 
-#include <absl/strings/str_cat.h>
-
 #include <cstdint>
-#include <limits>
 
 #include "global/ValueId.h"
-#include "util/Exception.h"
 
 using Id = ValueId;
-typedef uint16_t Score;
+using Score = uint16_t;
 
 // TODO<joka921> Make the following ID and index types strong.
 using ColumnIndex = uint64_t;

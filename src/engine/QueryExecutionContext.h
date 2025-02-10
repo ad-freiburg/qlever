@@ -5,8 +5,6 @@
 
 #pragma once
 
-#include <global/RuntimeParameters.h>
-
 #include <memory>
 #include <string>
 
@@ -15,11 +13,11 @@
 #include "engine/RuntimeInformation.h"
 #include "engine/SortPerformanceEstimator.h"
 #include "global/Id.h"
+#include "global/RuntimeParameters.h"
 #include "index/DeltaTriples.h"
 #include "index/Index.h"
 #include "util/Cache.h"
 #include "util/ConcurrentCache.h"
-#include "util/Synchronized.h"
 
 // The value of the `QueryResultCache` below. It consists of a `Result` together
 // with its `RuntimeInfo`.

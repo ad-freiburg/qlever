@@ -7,7 +7,6 @@
 
 #include <absl/strings/str_cat.h>
 
-#include <atomic>
 #include <functional>
 #include <memory>
 
