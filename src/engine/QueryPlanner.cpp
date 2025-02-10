@@ -727,7 +727,6 @@ auto QueryPlanner::seedWithScansAndText(
       SubtreePlan newIdPlan = plan;
       // give the plan a unique id bit
       newIdPlan._idsOfIncludedNodes = uint64_t(1) << idShift;
-      newIdPlan._idsOfIncludedFilters = 0;
       newIdPlan.idsOfIncludedTextLimits_ = 0;
       seeds.emplace_back(newIdPlan);
     }
