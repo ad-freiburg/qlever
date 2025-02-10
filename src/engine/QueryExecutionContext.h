@@ -13,7 +13,6 @@
 #include "engine/RuntimeInformation.h"
 #include "engine/SortPerformanceEstimator.h"
 #include "global/Id.h"
-#include "global/RuntimeParameters.h"
 #include "index/DeltaTriples.h"
 #include "index/Index.h"
 #include "util/Cache.h"
@@ -150,6 +149,9 @@ class QueryExecutionContext {
   }
 
  private:
+  static bool areWebSocketUpdatesEnabled();
+
+ private:
   const Index& _index;
 
   // When the `QueryExecutionContext` is constructed, get a stable read-only
@@ -166,6 +168,5 @@ class QueryExecutionContext {
   std::function<void(std::string)> updateCallback_;
   // Cache the state of that runtime parameter to reduce the contention of the
   // mutex.
-  bool areWebsocketUpdatesEnabled_ =
-      RuntimeParameters().get<"websocket-updates-enabled">();
+  bool areWebsocketUpdatesEnabled_ = areWebSocketUpdatesEnabled();
 };
