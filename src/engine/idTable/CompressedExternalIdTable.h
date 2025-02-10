@@ -465,14 +465,11 @@ class CompressedExternalIdTable
 
   // When we have a static number of columns, then the `numCols` argument to the
   // constructor is redundant.
-  CPP_template(typename = void)(requires(
-      NumStaticCols >
-      0)) explicit CompressedExternalIdTable(std::string filename,
-                                             ad_utility::MemorySize memory,
-                                             ad_utility::AllocatorWithLimit<Id>
-                                                 allocator,
-                                             MemorySize blocksizeCompression =
-                                                 DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE)
+  CPP_member explicit CPP_ctor(CompressedExternalIdTable)(
+      std::string filename, ad_utility::MemorySize memory,
+      ad_utility::AllocatorWithLimit<Id> allocator,
+      MemorySize blocksizeCompression = DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE)(
+      requires(NumStaticCols > 0))
       : CompressedExternalIdTable(std::move(filename), NumStaticCols, memory,
                                   std::move(allocator), blocksizeCompression) {}
 
@@ -595,12 +592,11 @@ class CompressedExternalIdTableSorter
 
   // When we have a static number of columns, then the `numCols` argument to the
   // constructor is redundant.
-  CPP_template(typename = void)(requires(NumStaticCols > 0))
-      CompressedExternalIdTableSorter(
-          std::string filename, ad_utility::MemorySize memory,
-          ad_utility::AllocatorWithLimit<Id> allocator,
-          MemorySize blocksizeCompression = DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE,
-          Comparator comp = {})
+  CPP_member CPP_ctor(CompressedExternalIdTableSorter)(
+      std::string filename, ad_utility::MemorySize memory,
+      ad_utility::AllocatorWithLimit<Id> allocator,
+      MemorySize blocksizeCompression = DEFAULT_BLOCKSIZE_EXTERNAL_ID_TABLE,
+      Comparator comp = {})(requires(NumStaticCols > 0))
       : CompressedExternalIdTableSorter(std::move(filename), NumStaticCols,
                                         memory, std::move(allocator),
                                         blocksizeCompression, comp) {}

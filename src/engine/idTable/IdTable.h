@@ -709,8 +709,8 @@ class IdTable {
   // that `begin() <= beginIt <= endIt < end`, else the behavior is undefined.
   // The order of the elements before and after the erased regions remains the
   // same. This behavior is similar to `std::vector::erase`.
-  CPP_template(typename = void)(requires(!isView)) void erase(
-      const iterator& beginIt, const iterator& endIt) {
+  CPP_member CPP_ret(void)(requires(!isView))
+      erase(const iterator& beginIt, const iterator& endIt) {
     AD_EXPENSIVE_CHECK(begin() <= beginIt && beginIt <= endIt &&
                        endIt <= end());
     auto startIndex = beginIt - begin();
@@ -725,8 +725,7 @@ class IdTable {
   // Erase the single row that `it` points to by shifting all the elements
   // after `it` towards the beginning. Requires that `begin() <= it < end()`,
   // otherwise the behavior is undefined.
-  CPP_template(typename = void)(requires(!isView)) void erase(
-      const iterator& it) {
+  CPP_member CPP_ret(void)(requires(!isView)) erase(const iterator& it) {
     erase(it, it + 1);
   }
 
