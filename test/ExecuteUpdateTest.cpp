@@ -52,7 +52,9 @@ TEST(ExecuteUpdate, executeUpdate) {
   auto expectExecuteUpdate =
       [&index, &expectExecuteUpdateHelper](
           const std::string& update,
-          const testing::Matcher<const DeltaTriples&>& deltaTriplesMatcher) {
+          const testing::Matcher<const DeltaTriples&>& deltaTriplesMatcher,
+          source_location sourceLocation = source_location::current()) {
+        auto l = generateLocationTrace(sourceLocation);
         DeltaTriples deltaTriples{index};
         expectExecuteUpdateHelper(update, deltaTriples);
         EXPECT_THAT(deltaTriples, deltaTriplesMatcher);
@@ -127,7 +129,9 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
       [&executeComputeGraphUpdateQuads](
           const std::string& update,
           const Matcher<const std::vector<::IdTriple<>>&>& toInsertMatcher,
-          const Matcher<const std::vector<::IdTriple<>>&>& toDeleteMatcher) {
+          const Matcher<const std::vector<::IdTriple<>>&>& toDeleteMatcher,
+          source_location sourceLocation = source_location::current()) {
+        auto l = generateLocationTrace(sourceLocation);
         EXPECT_THAT(executeComputeGraphUpdateQuads(update),
                     Pair(AD_FIELD(ExecuteUpdate::IdTriplesAndLocalVocab,
                                   idTriples_, toInsertMatcher),
@@ -137,7 +141,9 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
   auto expectComputeGraphUpdateQuadsFails =
       [&executeComputeGraphUpdateQuads](
           const std::string& update,
-          const Matcher<const std::string&>& messageMatcher) {
+          const Matcher<const std::string&>& messageMatcher,
+          source_location sourceLocation = source_location::current()) {
+        auto l = generateLocationTrace(sourceLocation);
         AD_EXPECT_THROW_WITH_MESSAGE(executeComputeGraphUpdateQuads(update),
                                      messageMatcher);
       };
@@ -151,22 +157,18 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
       ElementsAreArray({IdTriple(Id("<z>"), Id("<label>"), Id("\"zz\"@en"))}));
   expectComputeGraphUpdateQuads(
       "DELETE { ?s <is-a> ?o } INSERT { <s> <p> <o> } WHERE { ?s <is-a> ?o }",
-      ElementsAreArray({IdTriple(LVI("<s>"), LVI("<p>"), LVI("<o>")),
-                        IdTriple(LVI("<s>"), LVI("<p>"), LVI("<o>"))}),
+      ElementsAreArray({IdTriple(LVI("<s>"), LVI("<p>"), LVI("<o>"))}),
       ElementsAreArray({IdTriple(Id("<x>"), Id("<is-a>"), Id("<y>")),
                         IdTriple(Id("<y>"), Id("<is-a>"), Id("<x>"))}));
   expectComputeGraphUpdateQuads(
       "DELETE { <s> <p> <o> } INSERT { <s> <p> <o> } WHERE { ?s <is-a> ?o }",
-      ElementsAreArray({IdTriple(LVI("<s>"), LVI("<p>"), LVI("<o>")),
-                        IdTriple(LVI("<s>"), LVI("<p>"), LVI("<o>"))}),
-      ElementsAreArray({IdTriple(LVI("<s>"), LVI("<p>"), LVI("<o>")),
-                        IdTriple(LVI("<s>"), LVI("<p>"), LVI("<o>"))}));
+      ElementsAreArray({IdTriple(LVI("<s>"), LVI("<p>"), LVI("<o>"))}),
+      IsEmpty());
   expectComputeGraphUpdateQuads(
       "DELETE { ?s <is-a> ?o } INSERT { ?s <is-a> ?o } WHERE { ?s <is-a> ?o }",
       ElementsAreArray({IdTriple(Id("<x>"), Id("<is-a>"), Id("<y>")),
                         IdTriple(Id("<y>"), Id("<is-a>"), Id("<x>"))}),
-      ElementsAreArray({IdTriple(Id("<x>"), Id("<is-a>"), Id("<y>")),
-                        IdTriple(Id("<y>"), Id("<is-a>"), Id("<x>"))}));
+      IsEmpty());
   expectComputeGraphUpdateQuads(
       "DELETE WHERE { ?s ?p ?o }", IsEmpty(),
       UnorderedElementsAreArray(
