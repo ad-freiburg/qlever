@@ -429,6 +429,7 @@ class TurtleParser : public RdfParserBase {
   FRIEND_TEST(RdfParserTest, booleanLiteralLongForm);
   FRIEND_TEST(RdfParserTest, collection);
   FRIEND_TEST(RdfParserTest, iriref);
+  FRIEND_TEST(RdfParserTest, specialPredicateA);
 };
 
 template <class Tokenizer_T>
