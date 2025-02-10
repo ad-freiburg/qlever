@@ -1,11 +1,13 @@
-//
-// Created by kalmbacj on 2/10/25.
-//
+// Copyright 2024, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 #pragma once
 #include <concepts/concepts.hpp>
-// A template with a requires clause
-/// INTERNAL ONLY
+
+// The internal reimplementation of a `CPP_template_2` and `CPP_and_2` macro
+// that can be used for class members when the outer class has already been
+// constrained using `CPP_template`.
 #define CPP_TEMPLATE_2_SFINAE_AUX_0(...)                                \
   , bool CPP_true_2 = true,                                             \
          std::enable_if_t <                                             \
@@ -24,6 +26,9 @@
              CPP_TEMPLATE_2_SFINAE_AUX_WHICH_(__VA_ARGS__, )) \
   (__VA_ARGS__)
 
-#define CPP_template_2(...)        \
+#define CPP_template_2_SFINAE(...) \
   CPP_PP_IGNORE_CXX2A_COMPAT_BEGIN \
   template <__VA_ARGS__ CPP_TEMPLATE_2_SFINAE_AUX_
+
+/// INTERNAL ONLY
+#define CPP_and_2_sfinae &&CPP_BOOL(CPP_true_2), int > = 0, std::enable_if_t <

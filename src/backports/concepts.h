@@ -34,18 +34,26 @@
 // NOTE: The macros are variadic to allow for commas in the argument, like in
 // the second example above.
 
+// Additionally define the macros `CPP_template_2` and `CPP_and_2` that can
+// be used to constrain member functions of classes where the outer class
+// has already been constrained with `CPP_template`. For a detailed example, see
+// the `test/backports/ConceptsTest.cpp` file.
+
 #ifdef QLEVER_CPP_17
 #define QL_CONCEPT_OR_NOTHING(...)
 #define QL_CONCEPT_OR_TYPENAME(...) typename
+#define CPP_template_2 CPP_template_2_SFINAE
+#define CPP_and_2 CPP_and_2_sfinae
 #else
 #define QL_CONCEPT_OR_NOTHING(...) __VA_ARGS__
 #define QL_CONCEPT_OR_TYPENAME(...) __VA_ARGS__
+#define CPP_template_2 CPP_template
+#define CPP_and_2 CPP_and
 #endif
 
 // The namespace `ql::concepts` includes concepts that are contained in the
 // C++20 standard as well as in `range-v3`.
-namespace ql {
-namespace concepts {
+namespace ql::concepts {
 
 #ifdef QLEVER_CPP_17
 using namespace ::concepts;
@@ -53,5 +61,4 @@ using namespace ::concepts;
 using namespace std;
 #endif
 
-}  // namespace concepts
-}  // namespace ql
+}  // namespace ql::concepts
