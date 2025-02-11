@@ -570,13 +570,25 @@ TEST(SparqlExpression, dateOperators) {
 }
 
 // _____________________________________________________________________________________
+namespace {
 auto checkStrlen = testUnaryExpression<&makeStrlenExpression>;
 auto checkStr = testUnaryExpression<&makeStrExpression>;
-auto checkIriOrUri = testUnaryExpression<&makeIriOrUriExpression>;
-static auto makeStrlenWithStr = [](auto arg) {
+auto makeExpressionWithStandardIri(SparqlExpression::Ptr arg) {
+  return makeIriOrUriExpression(std::move(arg), {});
+}
+auto makeExpressionWithExampleBaseIri(SparqlExpression::Ptr arg) {
+  return makeIriOrUriExpression(
+      std::move(arg),
+      ad_utility::triple_component::Iri::fromIriref("<http://example.com/hi>"));
+}
+auto checkIriOrUri = testUnaryExpression<&makeExpressionWithStandardIri>;
+auto checkIriOrUriWithBase =
+    testUnaryExpression<&makeExpressionWithExampleBaseIri>;
+auto makeStrlenWithStr = [](auto arg) {
   return makeStrlenExpression(makeStrExpression(std::move(arg)));
 };
 auto checkStrlenWithStrChild = testUnaryExpression<makeStrlenWithStr>;
+}  // namespace
 TEST(SparqlExpression, stringOperators) {
   // Test `StrlenExpression` and `StrExpression`.
   checkStrlen(
@@ -635,6 +647,20 @@ TEST(SparqlExpression, stringOperators) {
           iriref("<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>"),
           iriref("<http://example/>"), iriref("<http://\t\t\nexample/>"),
           iriref("<\t\n\r>")});
+
+  // test with base iri
+  checkIriOrUriWithBase(
+      IdOrLiteralOrIriVec{U, lit("bimbim"), iriref("<bambim>"),
+                          lit("https://www.bimbimbam/2001/bamString"),
+                          lit("/hello"), iriref("</hello>")},
+      IdOrLiteralOrIriVec{
+          U,
+          iriref("<http://example.com/hi/bimbim>"),
+          iriref("<http://example.com/hi/bambim>"),
+          iriref("<https://www.bimbimbam/2001/bamString>"),
+          iriref("<http://example.com/hello>"),
+          iriref("<http://example.com/hello>"),
+      });
 
   // A simple test for uniqueness of the cache key.
   auto c1a = makeStrlenExpression(std::make_unique<IriExpression>(iri("<bim>")))
