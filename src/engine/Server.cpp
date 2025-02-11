@@ -410,6 +410,49 @@ Awaitable<void> Server::process(
         "SPARQL UPDATE was request via the HTTP request, but the "
         "following query was sent instead of an update: ");
   };
+  auto visitGraphStore =
+      [&send, &request, &checkParameter, &accessTokenOk, &parameters,
+       &requireValidAccessToken, this,
+       &requestTimer](GraphStoreOperation) -> Awaitable<void> {
+    if (auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
+            checkParameter("timeout", std::nullopt), accessTokenOk, request,
+            send)) {
+      // TODO: verify that an empty string here results in a random id
+      ad_utility::websocket::MessageSender messageSender =
+          createMessageSender(queryHub_, request, "");
+      auto [cancellationHandle, cancelTimeoutOnDestruction] =
+          setupCancellationHandle(messageSender.getQueryId(),
+                                  timeLimit.value());
+      auto [pinSubtrees, pinResult] = determineResultPinning(parameters);
+      LOG(INFO) << "Processing a SPARQL Graph Store HTTP request:"
+                << (pinResult ? " [pin result]" : "")
+                << (pinSubtrees ? " [pin subresults]" : "") << std::endl;
+      QueryExecutionContext qec(
+          index_, &cache_, allocator_, sortPerformanceEstimator_,
+          std::ref(messageSender), pinSubtrees, pinResult);
+      ParsedQuery parsedOperation =
+          GraphStoreProtocol::transformGraphStoreProtocol(request);
+
+      if (parsedOperation.hasUpdateClause()) {
+        requireValidAccessToken("SPARQL Update");
+
+        co_return co_await processUpdate(
+            std::move(parsedOperation), requestTimer, cancellationHandle, qec,
+            std::move(request), send, timeLimit.value());
+
+      } else {
+        co_return co_await processQuery(parameters, std::move(parsedOperation),
+                                        requestTimer, cancellationHandle, qec,
+                                        std::move(request), send,
+                                        timeLimit.value());
+      }
+    } else {
+      // TODO: comment from last PR
+      // If the optional is empty, this indicates an error response has been
+      // sent to the client already. We can stop here.
+      co_return;
+    }
+  };
   auto visitNone = [&response, &send,
                     &request](const None&) -> Awaitable<void> {
     // If there was no "query", but any of the URL parameters processed before
@@ -433,7 +476,8 @@ Awaitable<void> Server::process(
 
   co_return co_await processOperation(
       std::move(parsedHttpRequest.operation_),
-      ad_utility::OverloadCallOperator{visitQuery, visitUpdate, visitNone},
+      ad_utility::OverloadCallOperator{visitQuery, visitUpdate, visitGraphStore,
+                                       visitNone},
       requestTimer, request, send);
 }
 
