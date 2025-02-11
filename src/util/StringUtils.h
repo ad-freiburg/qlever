@@ -4,15 +4,11 @@
 
 #pragma once
 
-#include <absl/strings/str_replace.h>
-#include <gmock/gmock-spec-builders.h>
-
 #include <string_view>
 
 #include "backports/algorithm.h"
 #include "util/Concepts.h"
 #include "util/ConstexprSmallString.h"
-#include "util/CtreHelpers.h"
 
 using std::string;
 using std::string_view;
@@ -191,7 +187,7 @@ constexpr bool constantTimeEquals(std::string_view view1,
 }
 
 // _________________________________________________________________________
-CPP_template(typename Range)(
+CPP_template_def(typename Range)(
     requires ql::ranges::input_range<Range> CPP_and
         ad_utility::Streamable<std::iter_reference_t<ql::ranges::iterator_t<
             Range>>>) void lazyStrJoin(std::ostream* stream, Range&& r,
@@ -217,7 +213,7 @@ CPP_template(typename Range)(
 }
 
 // _________________________________________________________________________
-CPP_template(typename Range)(
+CPP_template_def(typename Range)(
     requires ql::ranges::input_range<Range> CPP_and ad_utility::Streamable<
         std::iter_reference_t<ql::ranges::iterator_t<Range>>>) std::string
     lazyStrJoin(Range&& r, std::string_view separator) {

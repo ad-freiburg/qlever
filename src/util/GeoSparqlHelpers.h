@@ -5,10 +5,9 @@
 #ifndef QLEVER_GEOSPARQLHELPERS_H
 #define QLEVER_GEOSPARQLHELPERS_H
 
-#include <ctre-unicode.hpp>
 #include <limits>
 #include <optional>
-#include <string>
+#include <string_view>
 
 #include "parser/GeoPoint.h"
 

@@ -11,7 +11,6 @@
 #include "engine/VariableToColumnMap.h"
 #include "engine/sparqlExpressions/PrefilterExpressionIndex.h"
 #include "parser/data/Variable.h"
-#include "util/HashMap.h"
 #include "util/HashSet.h"
 
 namespace sparqlExpression {
