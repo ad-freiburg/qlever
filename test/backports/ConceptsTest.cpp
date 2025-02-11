@@ -10,7 +10,8 @@ CPP_concept Something = (... && (sizeof(T) <= 4));
 // Those are rewritten as follows:
 CPP_template(typename T)(requires(Something<T>)) struct C {
   // A constructor that takes an int only exists for certain `T`
-  explicit constexpr CPP_ctor(C)(int i)(requires Something<T>) {}
+  explicit constexpr CPP_ctor(C)([[maybe_unused]] int i)(
+      requires Something<T>) {}
 
   // A member function that is templated and constrained on an independent
   // type `F`.
