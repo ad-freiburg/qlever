@@ -413,7 +413,7 @@ Awaitable<void> Server::process(
   auto visitGraphStore =
       [&send, &request, &checkParameter, &accessTokenOk, &parameters,
        &requireValidAccessToken, this,
-       &requestTimer](GraphStoreOperation) -> Awaitable<void> {
+       &requestTimer](const GraphStoreOperation& operation) -> Awaitable<void> {
     if (auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
             checkParameter("timeout", std::nullopt), accessTokenOk, request,
             send)) {
@@ -431,7 +431,7 @@ Awaitable<void> Server::process(
           index_, &cache_, allocator_, sortPerformanceEstimator_,
           std::ref(messageSender), pinSubtrees, pinResult);
       ParsedQuery parsedOperation =
-          GraphStoreProtocol::transformGraphStoreProtocol(request);
+          GraphStoreProtocol::transformGraphStoreProtocol(operation, request);
 
       if (parsedOperation.hasUpdateClause()) {
         requireValidAccessToken("SPARQL Update");

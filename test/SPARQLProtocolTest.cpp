@@ -34,6 +34,7 @@ auto ParsedRequestIs =
 }  // namespace
 
 TEST(SPARQLProtocolTest, parseHttpRequest) {
+  auto Iri = ad_utility::triple_component::Iri::fromIriref;
   auto parse = [](const ad_utility::httpUtils::HttpRequest auto& request) {
     return SPARQLProtocol::parseHttpRequest(request);
   };
@@ -55,29 +56,29 @@ TEST(SPARQLProtocolTest, parseHttpRequest) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       parse(makeGetRequest("/?update=SELECT+%2A%20WHERE%20%7B%7D")),
       testing::HasSubstr("SPARQL Update is not allowed as GET request."));
-  EXPECT_THAT(parse(makeGetRequest("/?graph=%3Cfoo%3E")),
-              ParsedRequestIs("/", std::nullopt, {{"graph", {"<foo>"}}},
-                              GraphStoreOperation{}));
+  EXPECT_THAT(parse(makeGetRequest("/?graph=foo")),
+              ParsedRequestIs("/", std::nullopt, {{"graph", {"foo"}}},
+                              GraphStoreOperation{Iri("<foo>")}));
   EXPECT_THAT(parse(makeGetRequest("/?default")),
               ParsedRequestIs("/", std::nullopt, {{"default", {""}}},
-                              GraphStoreOperation{}));
+                              GraphStoreOperation{DEFAULT{}}));
   EXPECT_THAT(
       parse(makeGetRequest("/?default&access-token=foo&timeout=120s")),
       ParsedRequestIs(
           "/", "foo",
           {{"access-token", {"foo"}}, {"default", {""}}, {"timeout", {"120s"}}},
-          GraphStoreOperation{}));
+          GraphStoreOperation{DEFAULT{}}));
   EXPECT_THAT(parse(makePostRequest("/?default&access-token=foo", TURTLE,
                                     "<f> <g> <h>")),
               ParsedRequestIs("/", "foo",
                               {{"access-token", {"foo"}}, {"default", {""}}},
-                              GraphStoreOperation{}));
-  EXPECT_THAT(
-      parse(makeRequest(http::verb::post, "/?default",
-                        {{http::field::authorization, {"Bearer foo"}},
-                         {http::field::content_type, {TURTLE}}},
-                        "<f> <g> <h>")),
-      ParsedRequestIs("/", "foo", {{"default", {""}}}, GraphStoreOperation{}));
+                              GraphStoreOperation{DEFAULT{}}));
+  EXPECT_THAT(parse(makeRequest(http::verb::post, "/?default",
+                                {{http::field::authorization, {"Bearer foo"}},
+                                 {http::field::content_type, {TURTLE}}},
+                                "<f> <g> <h>")),
+              ParsedRequestIs("/", "foo", {{"default", {""}}},
+                              GraphStoreOperation{DEFAULT{}}));
   AD_EXPECT_THROW_WITH_MESSAGE(
       parse(makeGetRequest("/?default&default")),
       testing::HasSubstr("Parameter \"default\" must be "
@@ -129,7 +130,6 @@ TEST(SPARQLProtocolTest, parseHttpRequest) {
       parse(makePostRequest("/", URLENCODED,
                             "query=SELECT%20%2A%20WHERE%20%7B%7D")),
       ParsedRequestIs("/", std::nullopt, {}, Query{"SELECT * WHERE {}", {}}));
-  auto Iri = ad_utility::triple_component::Iri::fromIriref;
   EXPECT_THAT(
       parse(makePostRequest(
           "/", URLENCODED,
@@ -197,6 +197,16 @@ TEST(SPARQLProtocolTest, parseHttpRequest) {
   EXPECT_THAT(
       parse(makePostRequest("/", UPDATE, "DELETE * WHERE {}")),
       ParsedRequestIs("/", std::nullopt, {}, Update{"DELETE * WHERE {}", {}}));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      parse(makePostRequest("/?graph=foo", UPDATE, "")),
+      testing::HasSubstr(
+          "Unsupported Content type \"application/sparql-update\" for "
+          "Graph Store protocol."));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      parse(makePostRequest("/?default", UPDATE, "")),
+      testing::HasSubstr(
+          "Unsupported Content type \"application/sparql-update\" for "
+          "Graph Store protocol."));
   EXPECT_THAT(
       parse(makePostRequest("/", URLENCODED,
                             "update=DELETE%20%2A%20WHERE%20%7B%7D")),
@@ -389,11 +399,17 @@ TEST(SPARQLProtocolTest, parseHttpRequest) {
   EXPECT_THAT(
       parse(makePostRequest("/?default", TURTLE, "<foo> <bar> <baz> .")),
       ParsedRequestIs("/", std::nullopt, {{"default", {""}}},
-                      GraphStoreOperation{}));
-  EXPECT_THAT(parse(makePostRequest("/?graph=%3Cfoo%3E", TURTLE,
-                                    "<foo> <bar> <baz> .")),
-              ParsedRequestIs("/", std::nullopt, {{"graph", {"<foo>"}}},
-                              GraphStoreOperation{}));
+                      GraphStoreOperation{DEFAULT{}}));
+  EXPECT_THAT(
+      parse(makePostRequest("/?graph=foo", TURTLE, "<foo> <bar> <baz> .")),
+      ParsedRequestIs("/", std::nullopt, {{"graph", {"foo"}}},
+                      GraphStoreOperation{Iri("<foo>")}));
+  EXPECT_THAT(
+      parse(makePostRequest("/?graph=foo&access-token=secret", TURTLE,
+                            "<foo> <bar> <baz> .")),
+      ParsedRequestIs("/", {"secret"},
+                      {{"graph", {"foo"}}, {"access-token", {"secret"}}},
+                      GraphStoreOperation{Iri("<foo>")}));
 }
 
 TEST(SPARQLProtocolTest, extractAccessToken) {
@@ -438,4 +454,33 @@ TEST(SPARQLProtocolTest, extractAccessToken) {
                           {{http::field::authorization, "foo"}})),
       testing::HasSubstr(
           "Authorization header doesn't start with \"Bearer \"."));
+}
+
+// _____________________________________________________________________________________________
+TEST(SPARQLProtocolTest, extractTargetGraph) {
+  auto Iri = ad_utility::triple_component::Iri::fromIriref;
+  const auto extractTargetGraph = SPARQLProtocol::extractTargetGraph;
+  // Equivalent to `/?default`
+  EXPECT_THAT(extractTargetGraph({{"default", {""}}}), DEFAULT{});
+  // Equivalent to `/?graph=foo`
+  EXPECT_THAT(extractTargetGraph({{"graph", {"foo"}}}), Iri("<foo>"));
+  // Equivalent to `/?graph=foo&graph=bar`
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      extractTargetGraph({{"graph", {"foo", "bar"}}}),
+      testing::HasSubstr(
+          "Parameter \"graph\" must be given exactly once. Is: 2"));
+  const std::string eitherDefaultOrGraphErrorMsg =
+      "Exactly one of the query parameters default or graph must be set to "
+      "identify the graph for the graph store protocol request.";
+  // Equivalent to `/` or `/?`
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      extractTargetGraph({}), testing::HasSubstr(eitherDefaultOrGraphErrorMsg));
+  // Equivalent to `/?unrelated=a&unrelated=b`
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      extractTargetGraph({{"unrelated", {"a", "b"}}}),
+      testing::HasSubstr(eitherDefaultOrGraphErrorMsg));
+  // Equivalent to `/?default&graph=foo`
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      extractTargetGraph({{"default", {""}}, {"graph", {"foo"}}}),
+      testing::HasSubstr(eitherDefaultOrGraphErrorMsg));
 }
