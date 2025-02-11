@@ -107,7 +107,8 @@ class Qlever {
   // be accessed via `SERVICE ql:
   [[maybe_unused]] std::string pinNamed(
       std::string query, std::string name,
-      ad_utility::MediaType mediaType = ad_utility::MediaType::sparqlJson);
+      ad_utility::MediaType mediaType = ad_utility::MediaType::sparqlJson,
+      bool returnResult = true);
 
   // TODO<joka921> Give access to the RuntimeParameters() which allow for
   // further tweaking of the qlever instance.

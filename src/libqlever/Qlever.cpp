@@ -161,7 +161,8 @@ std::string Qlever::query(std::string query, ad_utility::MediaType mediaType) {
 // ___________________________________________________________________________
 // TODO<joka921> A lot of code duplication here.
 std::string Qlever::pinNamed(std::string query, std::string name,
-                             ad_utility::MediaType mediaType) {
+                             ad_utility::MediaType mediaType,
+                             bool returnResult) {
   QueryExecutionContext qec{index_, &cache_, allocator_,
                             sortPerformanceEstimator_, &namedQueryCache_};
   qec.pinWithExplicitName() = std::move(name);
@@ -188,6 +189,10 @@ std::string Qlever::pinNamed(std::string query, std::string name,
                        qet.getRootOperation()->getLimit()._offset);
   limitOffset._offset -= qet.getRootOperation()->getLimit()._offset;
 
+  if (!returnResult) {
+    [[maybe_unused]] auto res = qet.getResult();
+    return "Result was pinned to cache, but not returned";
+  }
   ad_utility::Timer timer{ad_utility::Timer::Started};
   auto responseGenerator = ExportQueryExecutionTrees::computeResult(
       parsedQuery, qet, mediaType, timer, std::move(handle));
