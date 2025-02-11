@@ -123,7 +123,7 @@ struct LiftStringFunction {
 
 Iri extractIri(const IdOrLiteralOrIri& litOrIri) {
   AD_CORRECTNESS_CHECK(std::holds_alternative<LocalVocabEntry>(litOrIri));
-  auto baseIriOrUri = std::get<LocalVocabEntry>(litOrIri);
+  const auto& baseIriOrUri = std::get<LocalVocabEntry>(litOrIri);
   AD_CORRECTNESS_CHECK(baseIriOrUri.isIri());
   return baseIriOrUri.getIri();
 }
