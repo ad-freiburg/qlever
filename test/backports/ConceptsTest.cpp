@@ -38,23 +38,3 @@ CPP_template(typename T)(requires(Something<T>)) struct C {
 // the `CPP_and...` macros won't work here.
 CPP_variadic_template(typename... Ts)(
     requires(Something<Ts...>&& Something<Ts...>)) void f(Ts...) {}
-
-CPP_variadic_helper_undefined(C2, typename... Ts)
-    CPP_variadic_helper_def_aux(Something<Ts...>, Ts...){};
-
-/*
-template <typename Enabler, typename... Ts>
-class C2;
-;
-*/
-
-template <typename... Ts>
-class C2<std::enable_if_t<Something<Ts...>>, Ts...> {};
-
-template <typename... Ts>
-using C3 = C2<void, Ts...>;
-
-TEST(ConceptsTest, playingAround) {
-  static_assert(Something<int, int, int>);
-  [[maybe_unused]] C3<int, int, int> c{};
-}
