@@ -476,8 +476,27 @@ using EncodeForUriExpression =
       }
     };
 
-using LangMatches =
+using LangMatchesImpl =
     StringExpressionImpl<2, decltype(langMatching), StringValueGetter>;
+
+class LangMatches : public LangMatchesImpl {
+ public:
+  using LangMatchesImpl::LangMatchesImpl;
+  std::optional<LangFilterData> getLanguageFilterExpression() const override {
+    AD_CORRECTNESS_CHECK(children().size() == 2);
+    auto var = getVariableFromLangExpression(children()[0].get());
+    auto* str =
+        dynamic_cast<const StringLiteralExpression*>(children()[1].get());
+    if (!(var.has_value() && str)) {
+      return std::nullopt;
+    }
+    // TODO<joka921> We need to check whether the literal is plain. (no language
+    // tag or something else).
+    return LangFilterData{
+        var.value(), std::string(asStringViewUnsafe(str->value().getContent())),
+        true};
+  }
+};
 
 // STRING WITH LANGUAGE TAG
 [[maybe_unused]] inline auto strLangTag =

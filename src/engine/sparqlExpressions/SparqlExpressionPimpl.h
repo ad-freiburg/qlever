@@ -98,6 +98,7 @@ class SparqlExpressionPimpl {
   struct LangFilterData {
     Variable variable_;
     std::string language_;
+    bool isLangmatches_ = false;
   };
   std::optional<LangFilterData> getLanguageFilterExpression() const;
 
