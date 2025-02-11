@@ -574,12 +574,15 @@ namespace {
 auto checkStrlen = testUnaryExpression<&makeStrlenExpression>;
 auto checkStr = testUnaryExpression<&makeStrExpression>;
 auto makeExpressionWithStandardIri(SparqlExpression::Ptr arg) {
-  return makeIriOrUriExpression(std::move(arg), {});
+  return makeIriOrUriExpression(
+      std::move(arg),
+      std::make_unique<IriExpression>(ad_utility::triple_component::Iri{}));
 }
 auto makeExpressionWithExampleBaseIri(SparqlExpression::Ptr arg) {
   return makeIriOrUriExpression(
-      std::move(arg),
-      ad_utility::triple_component::Iri::fromIriref("<http://example.com/hi>"));
+      std::move(arg), std::make_unique<IriExpression>(
+                          ad_utility::triple_component::Iri::fromIriref(
+                              "<http://example.com/hi>")));
 }
 auto checkIriOrUri = testUnaryExpression<&makeExpressionWithStandardIri>;
 auto checkIriOrUriWithBase =

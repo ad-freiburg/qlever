@@ -2351,7 +2351,8 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
     return createUnary(&makeStrExpression);
   } else if (functionName == "iri" || functionName == "uri") {
     AD_CORRECTNESS_CHECK(argList.size() == 1, argList.size());
-    return makeIriOrUriExpression(std::move(argList[0]), baseIri_);
+    return makeIriOrUriExpression(std::move(argList[0]),
+                                  std::make_unique<IriExpression>(baseIri_));
   } else if (functionName == "strlang") {
     return createBinary(&makeStrLangTagExpression);
   } else if (functionName == "strdt") {

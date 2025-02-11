@@ -572,9 +572,8 @@ Expr make(std::same_as<Expr> auto&... children) {
 }
 Expr makeStrExpression(Expr child) { return make<StrExpression>(child); }
 
-Expr makeIriOrUriExpression(Expr child, ad_utility::triple_component::Iri iri) {
-  return std::make_unique<IriOrUriExpression>(
-      std::move(child), std::make_unique<IriExpression>(std::move(iri)));
+Expr makeIriOrUriExpression(Expr child, SparqlExpression::Ptr baseIri) {
+  return make<IriOrUriExpression>(child, baseIri);
 }
 
 Expr makeStrlenExpression(Expr child) { return make<StrlenExpression>(child); }
