@@ -105,19 +105,21 @@ CPP_template(typename Input, typename Transformation = std::identity)(
 
 /// Generate `numItems` many values from the `input` and apply the
 /// `valueGetter` to each of the values.
-inline auto valueGetterGenerator =
-    []<typename ValueGetter, typename Input>(
-        size_t numElements, EvaluationContext* context, Input&& input,
-        ValueGetter&& valueGetter) {
-      CPP_assert(SingleExpressionResult<Input>);
-      auto transformation = [context, valueGetter]<typename I>(I&& i) {
-        CPP_assert(ranges::invocable<ValueGetter, I&&, EvaluationContext*>);
-        context->cancellationHandle_->throwIfCancelled();
-        return valueGetter(AD_FWD(i), context);
-      };
-      return makeGenerator(std::forward<Input>(input), numElements, context,
-                           transformation);
-    };
+inline auto valueGetterGenerator = []<typename ValueGetter, typename Input>(
+                                       size_t numElements,
+                                       EvaluationContext* context,
+                                       Input&& input,
+                                       ValueGetter&& valueGetter) {
+  CPP_assert(SingleExpressionResult<Input>);
+  auto transformation = [context, valueGetter]<typename I>(I&& i)
+      -> CPP_ret(decltype(valueGetter(AD_FWD(i), context)))(
+          requires ranges::invocable<ValueGetter, I&&, EvaluationContext*>) {
+    context->cancellationHandle_->throwIfCancelled();
+    return valueGetter(AD_FWD(i), context);
+  };
+  return makeGenerator(std::forward<Input>(input), numElements, context,
+                       transformation);
+};
 
 /// Do the following `numItems` times: Obtain the next elements e_1, ..., e_n
 /// from the `generators` and yield `function(e_1, ..., e_n)`, also as a
