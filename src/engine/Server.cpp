@@ -457,7 +457,8 @@ std::pair<bool, bool> Server::determineResultPinning(
 auto Server::cancelAfterDeadline(
     std::weak_ptr<ad_utility::CancellationHandle<>> cancellationHandle,
     TimeLimit timeLimit)
-    -> ad_utility::InvocableWithExactReturnType<void> auto {
+    -> QL_CONCEPT_OR_NOTHING(
+        ad_utility::InvocableWithExactReturnType<void>) auto {
   net::steady_timer timer{timerExecutor_, timeLimit};
 
   timer.async_wait([cancellationHandle = std::move(cancellationHandle)](

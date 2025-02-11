@@ -235,7 +235,8 @@ class Server {
   auto cancelAfterDeadline(
       std::weak_ptr<ad_utility::CancellationHandle<>> cancellationHandle,
       TimeLimit timeLimit)
-      -> ad_utility::InvocableWithExactReturnType<void> auto;
+      -> QL_CONCEPT_OR_NOTHING(
+          ad_utility::InvocableWithExactReturnType<void>) auto;
 
   /// Acquire the `CancellationHandle` for the given `QueryId`, start the
   /// watchdog and call `cancelAfterDeadline` to set the timeout after
