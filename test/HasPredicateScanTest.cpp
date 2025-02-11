@@ -13,6 +13,7 @@
 #include "engine/CallFixedSize.h"
 #include "engine/CountAvailablePredicates.h"
 #include "engine/HasPredicateScan.h"
+#include "engine/IndexScan.h"
 #include "engine/ValuesForTesting.h"
 #include "util/IndexTestHelpers.h"
 

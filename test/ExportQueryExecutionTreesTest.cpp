@@ -469,7 +469,14 @@ TEST(ExportQueryExecutionTrees, UnusedVariable) {
       "\n"
       "\n",
       makeExpectedQLeverJSON({std::nullopt, std::nullopt}),
-      makeExpectedSparqlJSON({}), expectedXml};
+      []() {
+        nlohmann::json j;
+        j["head"]["vars"].push_back("o");
+        j["results"]["bindings"].push_back({});
+        j["results"]["bindings"].push_back({});
+        return j;
+      }(),
+      expectedXml};
   runSelectQueryTestCase(testCase);
 
   // The `2` is the number of results including triples with UNDEF values. The
@@ -1061,8 +1068,7 @@ TEST(ExportQueryExecutionTrees, EmptyLines) {
                                []() {
                                  nlohmann::json j;
                                  j["head"]["vars"] = nlohmann::json::array();
-                                 j["results"]["bindings"] =
-                                     nlohmann::json::array();
+                                 j["results"]["bindings"].push_back({});
                                  return j;
                                }(),
                                expectedXml};
@@ -1257,13 +1263,13 @@ TEST(ExportQueryExecutionTrees, CornerCases) {
                                         ad_utility::MediaType::octetStream),
                ad_utility::Exception);
 
-  // A SparqlJSON query where none of the variables is even visible in the
-  // query body is not supported.
+  // If none of the selected variables is defined in the query body, we have an
+  // empty solution mapping per row, but there is no need to materialize any
+  // IRIs or literals.
   std::string queryNoVariablesVisible = "SELECT ?not ?known WHERE {<s> ?p ?o}";
   auto resultNoColumns = runJSONQuery(kg, queryNoVariablesVisible,
                                       ad_utility::MediaType::sparqlJson);
-  ASSERT_TRUE(resultNoColumns["results"]["bindings"].empty());
-
+  ASSERT_EQ(resultNoColumns["results"]["bindings"].size(), 1);
   auto qec = ad_utility::testing::getQec(kg);
   AD_EXPECT_THROW_WITH_MESSAGE(
       ExportQueryExecutionTrees::idToStringAndType(qec->getIndex(), Id::max(),
