@@ -167,11 +167,11 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
   // Inserting unsorted triples works.
   deltaTriples.insertTriples(
       cancellationHandle,
-      makeIdTriples(vocab, localVocab, {"<B> <D> <C>", "<B> <C> <D>"}));
+      makeIdTriples(vocab, localVocab, {"<B> <C> <D>", "<B> <D> <C>"}));
   EXPECT_THAT(deltaTriples,
               StateIs(5, 0, 5,
-                      {"<A> <B> <C>", "<A> <B> <D>", "<B> <D> <C>",
-                       "<B> <C> <D>", "<A> <low> <a>"},
+                      {"<A> <B> <C>", "<A> <B> <D>", "<B> <C> <D>",
+                       "<B> <D> <C>", "<A> <low> <a>"},
                       {}));
 
   // Inserting already inserted triples has no effect.
@@ -215,7 +215,7 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
   // Deleting unsorted triples.
   deltaTriples.deleteTriples(
       cancellationHandle,
-      makeIdTriples(vocab, localVocab, {"<C> <prev> <B>", "<B> <prev> <A>"}));
+      makeIdTriples(vocab, localVocab, {"<B> <prev> <A>", "<C> <prev> <B>"}));
   EXPECT_THAT(
       deltaTriples,
       StateIs(4, 6, 10,
@@ -347,8 +347,8 @@ TEST_F(DeltaTriplesTest, DeltaTriplesManager) {
            absl::StrCat("<A> <B> <E", threadIdx, ">")});
       auto triplesToDelete = makeIdTriples(
           vocab, localVocab,
-          {"<A> <C> <E>", absl::StrCat("<A> <B> <E", threadIdx, ">"),
-           absl::StrCat("<A> <B> <F", threadIdx, ">")});
+          {absl::StrCat("<A> <B> <E", threadIdx, ">"),
+           absl::StrCat("<A> <B> <F", threadIdx, ">"), "<A> <C> <E>"});
       // Insert the `triplesToInsert`.
       deltaTriplesManager.modify<void>([&](DeltaTriples& deltaTriples) {
         deltaTriples.insertTriples(cancellationHandle, triplesToInsert);
