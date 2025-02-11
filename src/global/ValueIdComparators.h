@@ -505,7 +505,13 @@ ComparisonResult compareIdsImpl(ValueId a, ValueId b, auto comparator) {
     return fromBool(std::invoke(comparator, a, b));
   }
 
-  auto visitor = [comparator]<typename A, typename B>(
+  // If both are geo points, compare the raw IDs.
+  if (a.getDatatype() == Datatype::GeoPoint &&
+      b.getDatatype() == Datatype::GeoPoint) {
+    return fromBool(std::invoke(comparator, a.getBits(), b.getBits()));
+  }
+
+  auto visitor = [comparator, &a, &b]<typename A, typename B>(
                      const A& aValue, const B& bValue) -> ComparisonResult {
     if constexpr (std::is_same_v<A, LocalVocabIndex> &&
                   std::is_same_v<B, LocalVocabIndex>) {
@@ -516,6 +522,9 @@ ComparisonResult compareIdsImpl(ValueId a, ValueId b, auto comparator) {
                          }) {
       return fromBool(std::invoke(comparator, aValue, bValue));
     } else {
+      AD_LOG_ERROR << "Comparison not implemented for types "
+                   << toString(a.getDatatype()) << " and "
+                   << toString(b.getDatatype()) << std::endl;
       AD_FAIL();
     }
   };
