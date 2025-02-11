@@ -2,12 +2,14 @@
 // Created by kalmbacj on 2/10/25.
 //
 
+#include <gmock/gmock.h>
+
 #include "backports/concepts.h"
 
 template <typename... T>
 CPP_concept Something = (... && (sizeof(T) <= 4));
 
-// Those are rewritten as follows:
+// A templated class with a variety of members.
 CPP_template(typename T)(requires(Something<T>)) struct C {
   // A constructor that takes an int only exists for certain `T`
   explicit constexpr CPP_ctor(C)([[maybe_unused]] int i)(
@@ -17,8 +19,10 @@ CPP_template(typename T)(requires(Something<T>)) struct C {
   // type `F`.
   CPP_template_2(typename F)(requires Something<F>) void f(F arg) { (void)arg; }
 
-  // Same, but the constraint combines F and T.
-  CPP_template_2(typename F)(requires(Something<F, T>)) auto i() {
+  // Same, but the constraint combines F and T. Note that you have to use
+  // `CPP_and_2` instead of `CPP_and`.
+  CPP_template_2(typename F)(
+      requires Something<F> CPP_and_2 Something<T>) auto i() {
   }  // Additional template parameter + `auto`
 
   // Member function with explicit return type that has no other template
@@ -30,3 +34,8 @@ CPP_template(typename T)(requires(Something<T>)) struct C {
   // arguments but poses additional constraints on `T`.
   CPP_auto_member auto CPP_fun(h)()(requires Something<T>) {}
 };
+
+// A variadic function template.  NOTE: you currently have to use plain `&&`,
+// the `CPP_and...` macros won't work here.
+CPP_variadic_template(typename... Ts)(
+    requires(Something<Ts...>&& Something<Ts...>)) void f(Ts...) {}
