@@ -16,6 +16,9 @@ std::string getTextScoringMetricAsString(TextScoringMetric textScoringMetric) {
     case TextScoringMetric::BM25:
       return "bm25";
       break;
+    default:
+      return "count";
+      break;
   }
 }
 
