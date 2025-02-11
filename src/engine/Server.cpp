@@ -83,8 +83,6 @@ void Server::initialize(const string& indexBaseName, bool useText,
 
   LOG(INFO) << "Access token for restricted API calls is \"" << accessToken_
             << "\"" << std::endl;
-  LOG(INFO) << "The server is ready, listening for requests on port "
-            << std::to_string(port_) << " ..." << std::endl;
 }
 
 // _____________________________________________________________________________
@@ -165,6 +163,9 @@ void Server::run(const string& indexBaseName, bool useText, bool usePatterns,
 
   // Initialize the index
   initialize(indexBaseName, useText, usePatterns, loadAllPermutations);
+
+  LOG(INFO) << "The server is ready, listening for requests on port "
+            << std::to_string(httpServer.getPort()) << " ..." << std::endl;
 
   // Start listening for connections on the server.
   httpServer.run();
