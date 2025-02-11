@@ -8,14 +8,14 @@
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "parser/ParsedQuery.h"
 
-/// BIND operation, currently only supports a very limited subset of expressions
+// BIND operation.
 class Bind : public Operation {
  public:
   static constexpr size_t CHUNK_SIZE = 10'000;
 
+  // ____________________________________________________________________________
   Bind(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> subtree,
-       parsedQuery::Bind b)
-      : Operation(qec), _subtree(std::move(subtree)), _bind(std::move(b)) {}
+       parsedQuery::Bind b);
 
  private:
   std::shared_ptr<QueryExecutionTree> _subtree;
