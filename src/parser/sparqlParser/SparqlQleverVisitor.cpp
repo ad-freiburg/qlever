@@ -1218,13 +1218,13 @@ DatasetClause SparqlQleverVisitor::visit(Parser::UsingClauseContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::PrologueContext* ctx) {
+void Visitor::visit(const Parser::PrologueContext* ctx) {
   for (auto* child : ctx->children) {
     if (auto* baseDecl = dynamic_cast<Parser::BaseDeclContext*>(child)) {
       visit(baseDecl);
     } else {
       auto* prefixDecl = dynamic_cast<Parser::PrefixDeclContext*>(child);
-      AD_CORRECTNESS_CHECK(prefixDecl);
+      AD_CORRECTNESS_CHECK(prefixDecl != nullptr);
       visit(prefixDecl);
     }
   }
