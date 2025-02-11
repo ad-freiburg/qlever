@@ -751,11 +751,11 @@ struct AlwaysFalse {
 // After adding the Cartesian product we start a new round with a new
 // `currentEl` (5 in this example). New blocks are added to one of the buffers
 // if they become empty at one point in the algorithm.
-template <IsJoinSide LeftSide, IsJoinSide RightSide, typename LessThan,
-          typename CompatibleRowAction,
-          InvocableWithExactReturnType<bool, typename LeftSide::ProjectedEl>
-              IsUndef = AlwaysFalse>
-struct BlockZipperJoinImpl {
+CPP_template(IsJoinSide LeftSide, IsJoinSide RightSide, typename LessThan,
+             typename CompatibleRowAction, typename IsUndef = AlwaysFalse)(
+    requires InvocableWithExactReturnType<
+        IsUndef, bool,
+        typename LeftSide::ProjectedEl>) struct BlockZipperJoinImpl {
   // The left and right inputs of the join
   LeftSide leftSide_;
   RightSide rightSide_;

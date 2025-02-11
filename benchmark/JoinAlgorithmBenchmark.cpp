@@ -1165,9 +1165,9 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
   chance to be picked.) This adjusts the number of elements in the sample size
   to `Amount of rows * ratio`, which affects the possibility of duplicates.
    */
-  template <ad_utility::InvocableWithExactReturnType<
-                bool, float, size_t, size_t, size_t, size_t, float, float>
-                StopFunction,
+  template <QL_CONCEPT_OR_TYPENAME(ad_utility::InvocableWithExactReturnType<
+                                   bool, float, size_t, size_t, size_t, size_t,
+                                   float, float>) StopFunction,
             isTypeOrGrowthFunction<float> T1, isTypeOrGrowthFunction<float> T2,
             isTypeOrGrowthFunction<size_t> T3,
             isTypeOrGrowthFunction<size_t> T4,
@@ -1332,9 +1332,9 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
       ResultTable* table,
       const QL_CONCEPT_OR_NOTHING(
           ad_utility::SameAsAny<float, size_t>) auto changingParameterValue,
-      ad_utility::InvocableWithExactReturnType<bool, float, size_t, size_t,
-                                               size_t, size_t, float,
-                                               float> auto stopFunction,
+      QL_CONCEPT_OR_NOTHING(ad_utility::InvocableWithExactReturnType<
+                            bool, float, size_t, size_t, size_t, size_t, float,
+                            float>) auto stopFunction,
       const float overlap, const std::optional<size_t>& resultTableNumRows,
       ad_utility::RandomSeed randomSeed, const bool smallerTableSorted,
       const bool biggerTableSorted, const float& ratioRows,
