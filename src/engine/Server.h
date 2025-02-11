@@ -97,10 +97,10 @@ class Server {
 
   using SharedCancellationHandle = ad_utility::SharedCancellationHandle;
 
-  template <typename CancelTimeout,
-            typename = std::enable_if_t<
-                ad_utility::isInstantiation<CancelTimeout, absl::Cleanup>>>
-  struct CancellationHandleAndTimeoutTimerCancel {
+  CPP_template(typename CancelTimeout)(
+      requires ad_utility::isInstantiation<
+          CancelTimeout,
+          absl::Cleanup>) struct CancellationHandleAndTimeoutTimerCancel {
     SharedCancellationHandle handle_;
     /// Object of type `absl::Cleanup` that when destroyed cancels the timer
     /// that would otherwise invoke the cancellation of the `handle_` via the
@@ -111,12 +111,11 @@ class Server {
   // Clang doesn't seem to be able to automatically deduce the type correctly.
   // and GCC 11 thinks deduction guides are not allowed within classes.
 #ifdef __clang__
-  template <typename CancelTimeout,
-            typename = std::enable_if_t<
-                ad_utility::isInstantiation<CancelTimeout, absl::Cleanup>>>
-  CancellationHandleAndTimeoutTimerCancel(SharedCancellationHandle,
-                                          CancelTimeout)
-      -> CancellationHandleAndTimeoutTimerCancel<CancelTimeout>;
+  CPP_template(typename CancelTimeout)(
+      requires ad_utility::isInstantiation<CancelTimeout, absl::Cleanup>)
+      CancellationHandleAndTimeoutTimerCancel(SharedCancellationHandle,
+                                              CancelTimeout)
+          -> CancellationHandleAndTimeoutTimerCancel<CancelTimeout>;
 #endif
 
   /// Handle a single HTTP request. Check whether a file request or a query was

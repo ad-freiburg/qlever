@@ -115,9 +115,10 @@ concept SingleExpressionResult =
     ad_utility::SimilarToAnyTypeIn<T, ExpressionResult>;
 
 // Copy an expression result.
-template <typename ResultT, typename = std::enable_if_t<ad_utility::SimilarTo<
-                                ResultT, ExpressionResult>>>
-inline ExpressionResult copyExpressionResult(ResultT&& result) {
+CPP_template(typename ResultT)(
+    requires ad_utility::SimilarTo<ResultT,
+                                   ExpressionResult>) inline ExpressionResult
+    copyExpressionResult(ResultT&& result) {
   auto copyIfCopyable =
       []<SingleExpressionResult R>(const R& x) -> ExpressionResult {
     if constexpr (requires { R{AD_FWD(x)}; }) {

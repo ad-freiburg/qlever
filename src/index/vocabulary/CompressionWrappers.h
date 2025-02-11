@@ -18,23 +18,18 @@ namespace ad_utility::vocabulary {
 // argument ), the second of which is a `vector<string_view>` or
 // `vector<string>` that stores compressed strings and the third of which is a
 // `Decoder`.
-template <typename T, typename Decoder, typename = void>
-struct BulkResultForDecoder_SFINAE_t : std::false_type {};
+template <typename T, typename Decoder>
+CPP_requires(
+    BulkResultForDecoder_,
+    requires(T t)(std::tuple_size_v<T> == 3,
+                  ad_utility::SimilarToAny<decltype(std::get<1>(t)),
+                                           std::vector<std::string_view>,
+                                           std::vector<std::string>>,
+                  ad_utility::SimilarTo<decltype(std::get<2>(t)), Decoder>));
 
 template <typename T, typename Decoder>
-struct BulkResultForDecoder_SFINAE_t<
-    T, Decoder,
-    std::void_t<std::enable_if_t<(std::tuple_size<T>::value == 3)>,
-                std::enable_if_t<ad_utility::SimilarToAny<
-                    decltype(std::get<1>(std::declval<T>())),
-                    std::vector<std::string_view>, std::vector<std::string>>>,
-                std::enable_if_t<ad_utility::SimilarTo<
-                    decltype(std::get<2>(std::declval<T>())), Decoder>>>>
-    : std::true_type {};
-
-template <typename T, typename Decoder>
-constexpr bool BulkResultForDecoder =
-    BulkResultForDecoder_SFINAE_t<T, Decoder>::value;
+CPP_concept BulkResultForDecoder =
+    CPP_requires_ref(BulkResultForDecoder_, T, Decoder);
 
 template <typename T>
 CPP_requires(
