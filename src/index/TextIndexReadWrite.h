@@ -120,7 +120,7 @@ namespace textIndexReadWrite {
 ContextListMetaData writePostings(ad_utility::File& out,
                                   const vector<Posting>& postings,
                                   bool skipWordlistIfAllTheSame,
-                                  off_t& currentOffset);
+                                  off_t& currentOffset, bool scoreIsInt);
 
 template <typename T>
 size_t writeCodebook(const vector<T>& codebook, ad_utility::File& file);
