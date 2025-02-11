@@ -550,7 +550,7 @@ Awaitable<void> Server::process(
   auto visitUpdate =
       [&checkParameter, &accessTokenOk, &request, &send, &parameters,
        &requestTimer, this,
-       &requireValidAccessToken](const Update& update) -> Awaitable<void> {
+       &requireValidAccessToken](Update update) -> Awaitable<void> {
     requireValidAccessToken("SPARQL Update");
     if (auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
             checkParameter("timeout", std::nullopt), accessTokenOk, request,
@@ -624,7 +624,7 @@ Server::PlannedQuery Server::setupPlannedQuery(
 // _____________________________________________________________________________
 json Server::composeErrorResponseJson(
     const string& query, const std::string& errorMsg,
-    ad_utility::Timer& requestTimer,
+    const ad_utility::Timer& requestTimer,
     const std::optional<ExceptionMetadata>& metadata) {
   json j;
   using ad_utility::Timer;
@@ -996,7 +996,8 @@ json Server::createResponseMetadataForUpdate(
 // ____________________________________________________________________________
 json Server::processUpdateImpl(
     const ad_utility::url_parser::ParamValueMap& params, const Update& update,
-    ad_utility::Timer& requestTimer, TimeLimit timeLimit, auto& messageSender,
+    const ad_utility::Timer& requestTimer, TimeLimit timeLimit,
+    auto& messageSender,
     ad_utility::SharedCancellationHandle cancellationHandle,
     DeltaTriples& deltaTriples) {
   auto [pinSubtrees, pinResult] = determineResultPinning(params);
@@ -1010,7 +1011,7 @@ json Server::processUpdateImpl(
   auto plannedQuery =
       setupPlannedQuery(update.datasetClauses_, update.update_, qec,
                         cancellationHandle, timeLimit, requestTimer);
-  auto qet = plannedQuery.queryExecutionTree_;
+  const auto& qet = plannedQuery.queryExecutionTree_;
 
   if (!plannedQuery.parsedQuery_.hasUpdateClause()) {
     throw std::runtime_error(

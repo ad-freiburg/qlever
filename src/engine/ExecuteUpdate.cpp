@@ -198,7 +198,6 @@ void ExecuteUpdate::sortAndRemoveDuplicates(
 std::vector<IdTriple<>> ExecuteUpdate::setMinus(
     const std::vector<IdTriple<>>& a, const std::vector<IdTriple<>>& b) {
   std::vector<IdTriple<>> reducedToDelete;
-  ql::ranges::set_difference(std::move(a), b,
-                             std::back_inserter(reducedToDelete));
+  ql::ranges::set_difference(a, b, std::back_inserter(reducedToDelete));
   return reducedToDelete;
 }

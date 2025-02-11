@@ -200,13 +200,14 @@ class Server {
   json processUpdateImpl(
       const ad_utility::url_parser::ParamValueMap& params,
       const ad_utility::url_parser::sparqlOperation::Update& update,
-      ad_utility::Timer& requestTimer, TimeLimit timeLimit, auto& messageSender,
+      const ad_utility::Timer& requestTimer, TimeLimit timeLimit,
+      auto& messageSender,
       ad_utility::SharedCancellationHandle cancellationHandle,
       DeltaTriples& deltaTriples);
 
   static json composeErrorResponseJson(
       const string& query, const std::string& errorMsg,
-      ad_utility::Timer& requestTimer,
+      const ad_utility::Timer& requestTimer,
       const std::optional<ExceptionMetadata>& metadata = std::nullopt);
 
   json composeStatsJson() const;
