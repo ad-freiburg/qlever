@@ -13,6 +13,7 @@
 
 #include "engine/Sort.h"
 #include "parser/RdfEscaping.h"
+#include "util/http/UrlParser.h"
 
 using std::string;
 
@@ -225,4 +226,28 @@ QueryExecutionTree::getVariableAndInfoByColumnIndex(ColumnIndex colIdx) const {
   });
   AD_CONTRACT_CHECK(it != varColMap.end());
   return *it;
+}
+
+// _____________________________________________________________________________
+bool QueryExecutionTree::hasIndexScansForJoinPrefiltering(
+    std::span<const Variable> joinVariables) const {
+  return rootOperation_->hasIndexScansForJoinPrefiltering(joinVariables);
+}
+
+// _____________________________________________________________________________
+std::vector<Operation*>
+QueryExecutionTree::getIndexScansForJoinPrefilteringAndDisableCaching(
+    std::span<const Variable> joinVariables) {
+  auto result =
+      rootOperation_->getIndexScansForJoinPrefilteringAndDisableCaching(
+          joinVariables);
+  if (result.empty()) {
+    return result;
+  }
+  // TODO<joka921> We have to disable the caching as soon as the PR for that is
+  // merged.
+  // rootOperation_->disableCaching();
+  cachedResult_.reset();
+  sizeEstimate_.reset();
+  return result;
 }

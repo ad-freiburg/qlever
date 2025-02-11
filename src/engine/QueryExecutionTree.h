@@ -124,6 +124,23 @@ class QueryExecutionTree {
     return rootOperation_->collectWarnings();
   }
 
+  // The following functions are used if the ExecutionTree is the child or a
+  // descendant of a JOIN operation. They look for IndexScans in the subtree
+  // that are eligible for the block prefiltering of joins because
+  // 1. They are sorted by the `joinVariables`
+  // 2. They are semantically eligible for the join prefiltering (this doesn't
+  // hold for example for the right hand side of a MINUS)
+
+  // This function returns true iff at least on eligible `IndexScan` is
+  // contained In the subtree.
+  bool hasIndexScansForJoinPrefiltering(
+      std::span<const Variable> joinVariables) const;
+
+  // This function returns all eligible `IndexScan`s and disables caching for
+  // them, because they will probably be modified afterward.
+  std::vector<Operation*> getIndexScansForJoinPrefilteringAndDisableCaching(
+      std::span<const Variable> joinVariables);
+
   template <typename F>
   void forAllDescendants(F f) {
     static_assert(
