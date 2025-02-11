@@ -12,11 +12,12 @@
 #include "util/HashMap.h"
 
 struct TextSearchConfig {
+  std::optional<bool> isWordSearch_;
+  std::optional<Variable> textVar_;
   std::optional<std::string> word_;
   std::optional<Variable> varToBindMatch_;
-  std::optional<Variable> varToBindWordScore_;
+  std::optional<Variable> varToBindScore_;
   std::optional<std::variant<Variable, std::string>> entity_;
-  std::optional<Variable> varToBindEntityScore_;
 };
 
 namespace parsedQuery {
@@ -27,14 +28,13 @@ class TextSearchException : public std::runtime_error {
 
 struct TextSearchQuery : MagicServiceQuery {
   ad_utility::HashMap<Variable, TextSearchConfig> configVarToConfigs_;
-  ad_utility::HashMap<Variable, Variable> configVarToTextVar_;
 
   // See MagicServiceQuery
   void addParameter(const SparqlTriple& triple) override;
 
   std::vector<std::variant<TextIndexScanForWordConfiguration,
                            TextIndexScanForEntityConfiguration>>
-  toConfigs() const;
+  toConfigs(QueryExecutionContext* qec) const;
 };
 
 }  // namespace parsedQuery

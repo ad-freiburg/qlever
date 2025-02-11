@@ -2622,7 +2622,7 @@ void QueryPlanner::GraphPatternPlanner::visitSpatialSearch(
 void QueryPlanner::GraphPatternPlanner::visitTextSearch(
     const parsedQuery::TextSearchQuery& textSearchQuery) {
   std::vector<SubtreePlan> candidatesOut;
-  for (auto config : textSearchQuery.toConfigs()) {
+  for (auto config : textSearchQuery.toConfigs(qec_)) {
     if (std::holds_alternative<TextIndexScanForWordConfiguration>(config)) {
       auto plan = makeSubtreePlan<TextIndexScanForWord>(
           qec_, std::get<TextIndexScanForWordConfiguration>(config));

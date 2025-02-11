@@ -4,6 +4,8 @@
 
 #include "parser/TextSearchQuery.h"
 
+#include <absl/strings/str_split.h>
+
 #include "parser/MagicServiceIriConstants.h"
 
 namespace parsedQuery {
@@ -31,22 +33,53 @@ void TextSearchQuery::addParameter(const SparqlTriple& triple) {
           "The predicate <text-search> needs a Variable as subject and one as "
           "object.");
     }
-    configVarToTextVar_.emplace(object.getVariable(), subject.getVariable());
+    if (configVarToConfigs_[object.getVariable()].textVar_.has_value()) {
+      throw TextSearchException(
+          "Each search should be linked to only on text Variable.");
+    }
+    configVarToConfigs_[object.getVariable()].textVar_ = subject.getVariable();
   } else if (predString == "contains-word") {
     if (!(subject.isVariable() && object.isLiteral())) {
       throw TextSearchException(
           "The predicate <contains-word> needs a Variable as subject and a "
           "Literal as object.");
     }
+    if (configVarToConfigs_[subject.getVariable()].isWordSearch_.has_value()) {
+      if (configVarToConfigs_[subject.getVariable()].isWordSearch_.value()) {
+        throw TextSearchException(
+            "One search should only contain one <contains-word>.");
+      } else {
+        throw TextSearchException(
+            "One search should contain either <contains-word> or "
+            "<contains-entity>.");
+      }
+    }
+    configVarToConfigs_[subject.getVariable()].isWordSearch_ = true;
     std::string_view literal = object.getLiteral().toStringRepresentation();
-    configVarToConfigs_[subject.getVariable()].word_ =
-        std::string(literal.substr(1, literal.size() - 2));
+    literal = std::string(literal.substr(1, literal.size() - 2));
+    if (literal.empty()) {
+      throw TextSearchException(
+          "The predicate <contains-word> shouldn't have an empty literal as "
+          "object.");
+    }
+    configVarToConfigs_[subject.getVariable()].word_ = literal;
   } else if (predString == "contains-entity") {
     if (!subject.isVariable()) {
       throw TextSearchException(
           "The predicate <contains-entity> needs a Variable as subject and a "
           "Literal or Variable as object.");
     }
+    if (configVarToConfigs_[subject.getVariable()].isWordSearch_.has_value()) {
+      if (configVarToConfigs_[subject.getVariable()].isWordSearch_.value()) {
+        throw TextSearchException(
+            "One search should contain either <contains-word> or "
+            "<contains-entity>.");
+      } else {
+        throw TextSearchException(
+            "One search should only contain one <contains-entity>.");
+      }
+    }
+    configVarToConfigs_[subject.getVariable()].isWordSearch_ = false;
     if (object.isLiteral()) {
       std::string_view literal = object.getLiteral().toStringRepresentation();
       configVarToConfigs_[subject.getVariable()].entity_ =
@@ -60,15 +93,21 @@ void TextSearchQuery::addParameter(const SparqlTriple& triple) {
     }
   } else if (predString == "bind-match") {
     throwVariableException();
+    if (configVarToConfigs_[subject.getVariable()]
+            .varToBindMatch_.has_value()) {
+      throw TextSearchException(
+          "A text search should only contain one <bind-match>.");
+    }
     configVarToConfigs_[subject.getVariable()].varToBindMatch_ =
         object.getVariable();
-  } else if (predString == "bind-word-score") {
+  } else if (predString == "bind-score") {
     throwVariableException();
-    configVarToConfigs_[subject.getVariable()].varToBindWordScore_ =
-        object.getVariable();
-  } else if (predString == "bind-entity-score") {
-    throwVariableException();
-    configVarToConfigs_[subject.getVariable()].varToBindEntityScore_ =
+    if (configVarToConfigs_[subject.getVariable()]
+            .varToBindScore_.has_value()) {
+      throw TextSearchException(
+          "A text search should only contain one <bind-score>.");
+    }
+    configVarToConfigs_[subject.getVariable()].varToBindScore_ =
         object.getVariable();
   }
 }
@@ -76,40 +115,51 @@ void TextSearchQuery::addParameter(const SparqlTriple& triple) {
 // ____________________________________________________________________________
 std::vector<std::variant<TextIndexScanForWordConfiguration,
                          TextIndexScanForEntityConfiguration>>
-TextSearchQuery::toConfigs() const {
-  auto toWordConf = [](const Variable& textVar,
-                       const TextSearchConfig& config) {
-    if (!config.word_.has_value()) {
-      throw TextSearchException(
-          "Missing parameter <containsWord> in text search.");
-    }
-    return TextIndexScanForWordConfiguration{textVar, config.word_.value(),
-                                             config.varToBindMatch_,
-                                             config.varToBindWordScore_};
-  };
-
-  auto toEntityConf = [](const Variable& textVar,
-                         const TextSearchConfig& config) {
-    return TextIndexScanForEntityConfiguration{textVar, config.entity_.value(),
-                                               config.word_.value(),
-                                               config.varToBindEntityScore_};
-  };
-
+TextSearchQuery::toConfigs(QueryExecutionContext* qec) const {
   std::vector<std::variant<TextIndexScanForWordConfiguration,
                            TextIndexScanForEntityConfiguration>>
       output;
-  for (auto kv : configVarToConfigs_) {
-    auto it = configVarToTextVar_.find(kv.first);
-    if (it == configVarToTextVar_.end()) {
+  // First pass to get all word searches
+  ad_utility::HashMap<Variable, vector<string>> potentialTermsForCvar;
+  for (const auto& [var, conf] : configVarToConfigs_) {
+    if (!conf.isWordSearch_.has_value()) {
       throw TextSearchException(
-          "Missing text Variable in text search service query.");
+          "Text search service needs either <contains-word> or "
+          "<contains-entity>.");
     }
-    output.push_back(toWordConf(it->second, kv.second));
-    if (kv.second.entity_.has_value()) {
-      output.push_back(toEntityConf(it->second, kv.second));
+    if (!conf.textVar_.has_value()) {
+      throw TextSearchException(
+          "Text search service needs a text variable to search.");
+    }
+    if (conf.isWordSearch_.value()) {
+      auto it = potentialTermsForCvar.find(conf.textVar_.value());
+      if (it == potentialTermsForCvar.end()) {
+        potentialTermsForCvar.insert(
+            {conf.textVar_.value(), {conf.word_.value()}});
+      } else {
+        it->second.push_back(conf.word_.value());
+      }
     }
   }
-
+  // Second pass to create all configs
+  for (const auto& [var, conf] : configVarToConfigs_) {
+    if (conf.isWordSearch_.value()) {
+      output.push_back(TextIndexScanForWordConfiguration{
+          conf.textVar_.value(), conf.word_.value(), conf.varToBindMatch_,
+          conf.varToBindScore_});
+    } else {
+      auto it = potentialTermsForCvar.find(conf.textVar_.value());
+      if (it == potentialTermsForCvar.end()) {
+        throw TextSearchException(
+            "Entity search has to happen on a text variable that is also "
+            "contained in a word search.");
+      }
+      output.push_back(TextIndexScanForEntityConfiguration{
+          conf.textVar_.value(), conf.entity_.value(),
+          it->second[qec->getIndex().getIndexOfBestSuitedElTerm(it->second)],
+          conf.varToBindScore_});
+    }
+  }
   return output;
 }
 
