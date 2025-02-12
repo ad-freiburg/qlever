@@ -615,7 +615,8 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
 
     bool operator==(const AddedPair& other) const = default;
     auto operator<=>(const AddedPair& other) const {
-      return (rowLeft_ == other.rowLeft_) ? (rowRight_ <=> other.rowRight_) : (rowLeft_ <=> other.rowLeft_);
+      return (rowLeft_ == other.rowLeft_) ? (rowRight_ <=> other.rowRight_)
+                                          : (rowLeft_ <=> other.rowLeft_);
     }
   };
 
