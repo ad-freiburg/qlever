@@ -12,7 +12,7 @@
 #include <vector>
 
 #include "engine/Sort.h"
-#include "parser/RdfEscaping.h"
+#include "global/RuntimeParameters.h"
 
 using std::string;
 
