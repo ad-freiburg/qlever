@@ -105,20 +105,18 @@ CPP_template(typename Input, typename Transformation = std::identity)(
 
 /// Generate `numItems` many values from the `input` and apply the
 /// `valueGetter` to each of the values.
-inline auto valueGetterGenerator = []<typename ValueGetter, typename Input>(
-                                       size_t numElements,
-                                       EvaluationContext* context,
-                                       Input&& input,
-                                       ValueGetter&& valueGetter) {
-  CPP_assert(SingleExpressionResult<Input>);
-  auto transformation = [context, valueGetter]<typename I>(I&& i)
-      -> CPP_ret(decltype(valueGetter(AD_FWD(i), context)))(
-          requires ranges::invocable<ValueGetter, I&&, EvaluationContext*>) {
+inline auto valueGetterGenerator = CPP_lambda()(
+    size_t numElements, EvaluationContext* context, auto&& input,
+    auto&& valueGetter)(requires SingleExpressionResult<decltype(input)>) {
+  auto transformation = CPP_lambda(context, valueGetter)(auto&& i)(
+      requires ranges::invocable<decltype(valueGetter), decltype(i),
+                                 EvaluationContext*>) {
     context->cancellationHandle_->throwIfCancelled();
     return valueGetter(AD_FWD(i), context);
   };
-  return makeGenerator(std::forward<Input>(input), numElements, context,
-                       transformation);
+
+  return makeGenerator(std::forward<decltype(input)>(input), numElements,
+                       context, transformation);
 };
 
 /// Do the following `numItems` times: Obtain the next elements e_1, ..., e_n
