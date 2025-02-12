@@ -57,8 +57,7 @@ class SPARQLProtocol {
       if (isContainedExactlyOnce("graph") &&
           isContainedExactlyOnce("default")) {
         throw std::runtime_error(
-            "Parameters \"graph\" and \"default\" must "
-            "not be set at the same time.");
+            R"(Parameters "graph" and "default" must not be set at the same time.)");
       }
       AD_CORRECTNESS_CHECK(
           std::holds_alternative<None>(parsedRequest.operation_));
@@ -78,12 +77,11 @@ class SPARQLProtocol {
     auto checkUnsupportedGraphStoreContentType =
         [&isGraphStoreOperation](std::string_view contentType,
                                  std::string_view unsupportedType) {
-          if (isGraphStoreOperation()) {
-            if (contentType.starts_with(unsupportedType)) {
-              throw std::runtime_error(
-                  absl::StrCat("Unsupported Content type \"", contentType,
-                               "\" for Graph Store protocol."));
-            }
+          if (isGraphStoreOperation() &&
+              contentType.starts_with(unsupportedType)) {
+            throw std::runtime_error(
+                absl::StrCat("Unsupported Content type \"", contentType,
+                             "\" for Graph Store protocol."));
           }
         };
     auto addToDatasetClausesIfOperationIs =
