@@ -63,12 +63,12 @@ auto checkParseResult =
   [&]() {
     ASSERT_TRUE(optionalParser.has_value());
     auto& parser = optionalParser.value();
-    ASSERT_EQ(parser.getPosition(), expectedPosition.value_or(input.size()));
+    EXPECT_EQ(parser.getPosition(), expectedPosition.value_or(input.size()));
     if (expectedLastParseResult.has_value()) {
-      ASSERT_EQ(expectedLastParseResult, parser.getLastParseResult());
+      EXPECT_EQ(expectedLastParseResult, parser.getLastParseResult());
     }
     if (expectedTriples.has_value()) {
-      ASSERT_EQ(expectedTriples, parser.getTriples());
+      EXPECT_EQ(expectedTriples, parser.getTriples());
     }
   }();
   return std::move(optionalParser.value());
@@ -1144,4 +1144,35 @@ TEST(RdfParserTest, multifileParser) {
     EXPECT_THAT(result, ::testing::UnorderedElementsAreArray(expected));
   };
   forAllMultifileParsers(impl);
+}
+
+// _____________________________________________________________________________
+
+TEST(RdfParserTest, specialPredicateA) {
+  auto runCommonTests = [](const auto& checker) {
+    checker(
+        "@prefix a: <http://example.org/ontology/> . a:subject a:predicate "
+        "\"object\" .",
+        {}, {},
+        std::vector<TurtleTriple>{
+            {iri("<http://example.org/ontology/subject>"),
+             iri("<http://example.org/ontology/predicate>"),
+             lit("\"object\"")}});
+    checker(
+        "@prefix a: <http://example.org/ontology/> . a:subject a \"object\" .",
+        {}, {},
+        std::vector<TurtleTriple>{
+            {iri("<http://example.org/ontology/subject>"),
+             iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"),
+             lit("\"object\"")}});
+  };
+
+  auto parseTwoStatements = []<typename Parser>(Parser& parser) {
+    return parser.statement() && parser.statement();
+  };
+
+  auto checkRe2 = checkParseResult<Re2Parser, parseTwoStatements>;
+  auto checkCTRE = checkParseResult<CtreParser, parseTwoStatements>;
+  runCommonTests(checkRe2);
+  runCommonTests(checkCTRE);
 }
