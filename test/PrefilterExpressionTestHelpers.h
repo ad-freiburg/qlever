@@ -89,8 +89,10 @@ auto pr =
 // Create a vector containing the provided `<PrefilterExpression, Variable>`
 // pairs.
 auto makePrefilterVec =
-    [](std::convertible_to<
-        sparqlExpression::PrefilterExprVariablePair> auto&&... prefilterArgs) {
+    [](QL_CONCEPT_OR_NOTHING(
+        std::convertible_to<
+            sparqlExpression::
+                PrefilterExprVariablePair>) auto&&... prefilterArgs) {
       std::vector<sparqlExpression::PrefilterExprVariablePair>
           prefilterVarPairs = {};
       if constexpr (sizeof...(prefilterArgs) > 0) {

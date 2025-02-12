@@ -358,5 +358,5 @@ CPP_concept RegularInvocableWithExactReturnType =
 // might be lvalue, because the && denotes a forwarding reference. void f(Rvalue
 // auto&& x) // guaranteed rvalue reference, can safely be moved.
 template <typename T>
-concept Rvalue = std::is_rvalue_reference_v<T&&>;
+CPP_concept Rvalue = std::is_rvalue_reference_v<T&&>;
 }  // namespace ad_utility
