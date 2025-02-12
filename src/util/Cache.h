@@ -481,8 +481,9 @@ CPP_template(typename Key, typename Value, typename ValueSizeGetterT)(
 /// typedef for the simple name LRUCache that is fixed to one of the possible
 /// implementations at compile time
 #ifdef _QLEVER_USE_TREE_BASED_CACHE
-template <typename Key, typename Value, ValueSizeGetter<Value> ValueSizeGetter>
-using LRUCache = TreeBasedLRUCache<Key, Value, ValueSizeGetter>;
+CPP_template(typename Key, typename Value, typename ValueSizeGetterT)(
+    requires ValueSizeGetter<ValueSizeGetter, Value>) using LRUCache =
+    TreeBasedLRUCache<Key, Value, ValueSizeGetterT>;
 #else
 CPP_template(typename Key, typename Value, typename ValueSizeGetterT)(
     requires ValueSizeGetter<ValueSizeGetterT, Value>) using LRUCache =

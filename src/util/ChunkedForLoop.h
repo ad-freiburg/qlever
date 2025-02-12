@@ -46,12 +46,12 @@ CPP_concept IteratorAction =
 /// the next iteration, similar to the break keyword. `chunkOperation` is called
 /// every `CHUNK_SIZE` iteration steps, and at least a single time at the end if
 /// the range is not empty.
-CPP_template(std::size_t CHUNK_SIZE, typename Action)(
-    requires detail::IteratorAction<
-        Action>) inline void chunkedForLoop(std::size_t start, std::size_t end,
-                                            const Action& action,
-                                            const std::invocable auto&
-                                                chunkOperation) {
+CPP_template(std::size_t CHUNK_SIZE, typename Action, typename ChunkOpT)(
+    requires detail::IteratorAction<Action> CPP_and std::invocable<
+        ChunkOpT>) inline void chunkedForLoop(std::size_t start,
+                                              std::size_t end,
+                                              const Action& action,
+                                              const ChunkOpT& chunkOperation) {
   static_assert(CHUNK_SIZE != 0, "Chunk size must be non-zero");
   using std::size_t;
   while (start < end) {
