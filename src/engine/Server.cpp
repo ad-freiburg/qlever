@@ -212,6 +212,36 @@ class QueryAlreadyInUseError : public std::runtime_error {
 };
 
 // _____________________________________________________________________________
+auto Server::cancelAfterDeadline(
+    std::weak_ptr<ad_utility::CancellationHandle<>> cancellationHandle,
+    TimeLimit timeLimit)
+    -> ad_utility::InvocableWithExactReturnType<void> auto {
+  net::steady_timer timer{timerExecutor_, timeLimit};
+
+  timer.async_wait([cancellationHandle = std::move(cancellationHandle)](
+                       const boost::system::error_code&) {
+    if (auto pointer = cancellationHandle.lock()) {
+      pointer->cancel(ad_utility::CancellationState::TIMEOUT);
+    }
+  });
+  return [timer = std::move(timer)]() mutable { timer.cancel(); };
+}
+
+// _____________________________________________________________________________
+auto Server::setupCancellationHandle(
+    const ad_utility::websocket::QueryId& queryId, TimeLimit timeLimit)
+    -> ad_utility::isInstantiation<
+        CancellationHandleAndTimeoutTimerCancel> auto {
+  auto cancellationHandle = queryRegistry_.getCancellationHandle(queryId);
+  AD_CORRECTNESS_CHECK(cancellationHandle);
+  cancellationHandle->startWatchDog();
+  absl::Cleanup cancelCancellationHandle{
+      cancelAfterDeadline(cancellationHandle, timeLimit)};
+  return CancellationHandleAndTimeoutTimerCancel{
+      std::move(cancellationHandle), std::move(cancelCancellationHandle)};
+}
+
+// _____________________________________________________________________________
 Awaitable<void> Server::process(
     const ad_utility::httpUtils::HttpRequest auto& request, auto&& send) {
   using namespace ad_utility::httpUtils;
@@ -367,33 +397,31 @@ Awaitable<void> Server::process(
                             const Operation& op, auto opFieldString,
                             std::function<bool(const ParsedQuery&)> pred,
                             std::string msg) -> Awaitable<void> {
-    if (auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
-            checkParameter("timeout", std::nullopt), accessTokenOk, request,
-            send)) {
-      ad_utility::websocket::MessageSender messageSender = createMessageSender(
-          queryHub_, request, std::invoke(opFieldString, op));
-      auto [parsedOperation, qec, cancellationHandle,
-            cancelTimeoutOnDestruction] =
-          parseOperation(messageSender, parameters, op, timeLimit.value());
-      if (pred(parsedOperation)) {
-        throw std::runtime_error(
-            absl::StrCat(msg, parsedOperation._originalString));
-      }
-      if constexpr (std::is_same_v<Operation, Query>) {
-        co_return co_await processQuery(parameters, std::move(parsedOperation),
-                                        requestTimer, cancellationHandle, qec,
-                                        std::move(request), send,
-                                        timeLimit.value());
-      } else {
-        static_assert(std::is_same_v<Operation, Update>);
-        co_return co_await processUpdate(
-            std::move(parsedOperation), requestTimer, cancellationHandle, qec,
-            std::move(request), send, timeLimit.value());
-      }
-    } else {
+    auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
+        checkParameter("timeout", std::nullopt), accessTokenOk, request, send);
+    if (!timeLimit.has_value()) {
       // If the optional is empty, this indicates an error response has been
       // sent to the client already. We can stop here.
       co_return;
+    }
+    ad_utility::websocket::MessageSender messageSender =
+        createMessageSender(queryHub_, request, std::invoke(opFieldString, op));
+    auto [parsedOperation, qec, cancellationHandle,
+          cancelTimeoutOnDestruction] =
+        parseOperation(messageSender, parameters, op, timeLimit.value());
+    if (pred(parsedOperation)) {
+      throw std::runtime_error(
+          absl::StrCat(msg, parsedOperation._originalString));
+    }
+    if constexpr (std::is_same_v<Operation, Query>) {
+      co_return co_await processQuery(
+          parameters, std::move(parsedOperation), requestTimer,
+          cancellationHandle, qec, std::move(request), send, timeLimit.value());
+    } else {
+      static_assert(std::is_same_v<Operation, Update>);
+      co_return co_await processUpdate(
+          std::move(parsedOperation), requestTimer, cancellationHandle, qec,
+          std::move(request), send, timeLimit.value());
     }
   };
   auto visitQuery = [&visitOperation](const Query& query) -> Awaitable<void> {
@@ -409,6 +437,46 @@ Awaitable<void> Server::process(
         update, &Update::update_, std::not_fn(&ParsedQuery::hasUpdateClause),
         "SPARQL UPDATE was request via the HTTP request, but the "
         "following query was sent instead of an update: ");
+  };
+  auto visitGraphStore =
+      [&send, &request, &checkParameter, &accessTokenOk, &parameters,
+       &requireValidAccessToken, this,
+       &requestTimer](const GraphStoreOperation& operation) -> Awaitable<void> {
+    auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
+        checkParameter("timeout", std::nullopt), accessTokenOk, request, send);
+    if (!timeLimit.has_value()) {
+      // If the optional is empty, this indicates an error response has been
+      // sent to the client already. We can stop here.
+      co_return;
+    }
+
+    // TODO: verify that an empty string here results in a random id
+    ad_utility::websocket::MessageSender messageSender =
+        createMessageSender(queryHub_, request, "");
+    auto [cancellationHandle, cancelTimeoutOnDestruction] =
+        setupCancellationHandle(messageSender.getQueryId(), timeLimit.value());
+    auto [pinSubtrees, pinResult] = determineResultPinning(parameters);
+    LOG(INFO) << "Processing a SPARQL Graph Store HTTP request:"
+              << (pinResult ? " [pin result]" : "")
+              << (pinSubtrees ? " [pin subresults]" : "") << std::endl;
+    QueryExecutionContext qec(index_, &cache_, allocator_,
+                              sortPerformanceEstimator_,
+                              std::ref(messageSender), pinSubtrees, pinResult);
+    ParsedQuery parsedOperation =
+        GraphStoreProtocol::transformGraphStoreProtocol(operation, request);
+
+    if (parsedOperation.hasUpdateClause()) {
+      requireValidAccessToken("SPARQL Update");
+
+      co_return co_await processUpdate(
+          std::move(parsedOperation), requestTimer, cancellationHandle, qec,
+          std::move(request), send, timeLimit.value());
+
+    } else {
+      co_return co_await processQuery(
+          parameters, std::move(parsedOperation), requestTimer,
+          cancellationHandle, qec, std::move(request), send, timeLimit.value());
+    }
   };
   auto visitNone = [&response, &send,
                     &request](const None&) -> Awaitable<void> {
@@ -433,7 +501,8 @@ Awaitable<void> Server::process(
 
   co_return co_await processOperation(
       std::move(parsedHttpRequest.operation_),
-      ad_utility::OverloadCallOperator{visitQuery, visitUpdate, visitNone},
+      ad_utility::OverloadCallOperator{visitQuery, visitUpdate, visitGraphStore,
+                                       visitNone},
       requestTimer, request, send);
 }
 
@@ -447,36 +516,6 @@ std::pair<bool, bool> Server::determineResultPinning(
       ad_utility::url_parser::checkParameter(params, "pinresult", "true")
           .has_value();
   return {pinSubtrees, pinResult};
-}
-
-// _____________________________________________________________________________
-auto Server::cancelAfterDeadline(
-    std::weak_ptr<ad_utility::CancellationHandle<>> cancellationHandle,
-    TimeLimit timeLimit)
-    -> ad_utility::InvocableWithExactReturnType<void> auto {
-  net::steady_timer timer{timerExecutor_, timeLimit};
-
-  timer.async_wait([cancellationHandle = std::move(cancellationHandle)](
-                       const boost::system::error_code&) {
-    if (auto pointer = cancellationHandle.lock()) {
-      pointer->cancel(ad_utility::CancellationState::TIMEOUT);
-    }
-  });
-  return [timer = std::move(timer)]() mutable { timer.cancel(); };
-}
-
-// _____________________________________________________________________________
-auto Server::setupCancellationHandle(
-    const ad_utility::websocket::QueryId& queryId, TimeLimit timeLimit)
-    -> ad_utility::isInstantiation<
-        CancellationHandleAndTimeoutTimerCancel> auto {
-  auto cancellationHandle = queryRegistry_.getCancellationHandle(queryId);
-  AD_CORRECTNESS_CHECK(cancellationHandle);
-  cancellationHandle->startWatchDog();
-  absl::Cleanup cancelCancellationHandle{
-      cancelAfterDeadline(cancellationHandle, timeLimit)};
-  return CancellationHandleAndTimeoutTimerCancel{
-      std::move(cancellationHandle), std::move(cancelCancellationHandle)};
 }
 
 // ____________________________________________________________________________
