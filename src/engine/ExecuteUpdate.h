@@ -71,4 +71,12 @@ class ExecuteUpdate {
                           const CancellationHandle& cancellationHandle,
                           UpdateMetadata& metadata);
   FRIEND_TEST(ExecuteUpdate, computeGraphUpdateQuads);
+
+  // Determines whether the triples that will be deleted by this update have
+  // existed in the original Index. This information is relevant for some
+  // optimisations.
+  static bool templatedTriplesExist(
+      const vector<SparqlTripleSimpleWithGraph>& templates,
+      const parsedQuery::GraphPattern& query);
+  FRIEND_TEST(ExecuteUpdate, templatedTriplesExist);
 };

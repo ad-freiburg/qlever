@@ -4,6 +4,7 @@
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
+#include <parser/SparqlParserHelpers.h>
 
 #include "DeltaTriplesTestHelpers.h"
 #include "QueryPlannerTestHelpers.h"
@@ -52,7 +53,9 @@ TEST(ExecuteUpdate, executeUpdate) {
   auto expectExecuteUpdate =
       [&index, &expectExecuteUpdateHelper](
           const std::string& update,
-          const testing::Matcher<const DeltaTriples&>& deltaTriplesMatcher) {
+          const testing::Matcher<const DeltaTriples&>& deltaTriplesMatcher,
+          source_location sourceLocation = source_location::current()) {
+        auto l = generateLocationTrace(sourceLocation);
         DeltaTriples deltaTriples{index};
         expectExecuteUpdateHelper(update, deltaTriples);
         EXPECT_THAT(deltaTriples, deltaTriplesMatcher);
@@ -78,7 +81,7 @@ TEST(ExecuteUpdate, executeUpdate) {
       NumTriples(1, 0, 1));
   expectExecuteUpdate(
       "DELETE { ?s <is-a> ?o } INSERT { ?s <is-a> ?o } WHERE { ?s <is-a> ?o }",
-      NumTriples(2, 0, 2));
+      NumTriples(0, 0, 0));
   expectExecuteUpdate("DELETE WHERE { ?s ?p ?o }", NumTriples(0, 8, 8));
   expectExecuteUpdateFails(
       "SELECT * WHERE { ?s ?p ?o }",
@@ -127,7 +130,9 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
       [&executeComputeGraphUpdateQuads](
           const std::string& update,
           const Matcher<const std::vector<::IdTriple<>>&>& toInsertMatcher,
-          const Matcher<const std::vector<::IdTriple<>>&>& toDeleteMatcher) {
+          const Matcher<const std::vector<::IdTriple<>>&>& toDeleteMatcher,
+          source_location sourceLocation = source_location::current()) {
+        auto l = generateLocationTrace(sourceLocation);
         EXPECT_THAT(executeComputeGraphUpdateQuads(update),
                     Pair(AD_FIELD(ExecuteUpdate::IdTriplesAndLocalVocab,
                                   idTriples_, toInsertMatcher),
@@ -151,22 +156,32 @@ TEST(ExecuteUpdate, computeGraphUpdateQuads) {
       ElementsAreArray({IdTriple(Id("<z>"), Id("<label>"), Id("\"zz\"@en"))}));
   expectComputeGraphUpdateQuads(
       "DELETE { ?s <is-a> ?o } INSERT { <s> <p> <o> } WHERE { ?s <is-a> ?o }",
-      ElementsAreArray({IdTriple(LVI("<s>"), LVI("<p>"), LVI("<o>")),
-                        IdTriple(LVI("<s>"), LVI("<p>"), LVI("<o>"))}),
+      ElementsAreArray({IdTriple(LVI("<s>"), LVI("<p>"), LVI("<o>"))}),
       ElementsAreArray({IdTriple(Id("<x>"), Id("<is-a>"), Id("<y>")),
                         IdTriple(Id("<y>"), Id("<is-a>"), Id("<x>"))}));
+  expectComputeGraphUpdateQuads(
+      "DELETE { ?s <is-a> ?o } INSERT { <x> <is-a> <y> } WHERE { ?s <is-a> ?o "
+      "}",
+      IsEmpty(),
+      ElementsAreArray({IdTriple(Id("<y>"), Id("<is-a>"), Id("<x>"))}));
+  expectComputeGraphUpdateQuads(
+      "DELETE { ?s <is-a> ?o } INSERT { <x> <is-a> ?o . <y> <is-a> <x> } WHERE "
+      "{ ?s <is-a> ?o "
+      "}",
+      ElementsAreArray({IdTriple(Id("<x>"), Id("<is-a>"), Id("<x>"))}),
+      IsEmpty());
+  expectComputeGraphUpdateQuads(
+      "DELETE { ?s <is-a> ?o } INSERT { ?o <is-a> ?s } WHERE { ?s <is-a> ?o "
+      "}",
+      IsEmpty(), IsEmpty());
   expectComputeGraphUpdateQuads(
       "DELETE { <s> <p> <o> } INSERT { <s> <p> <o> } WHERE { ?s <is-a> ?o }",
-      ElementsAreArray({IdTriple(LVI("<s>"), LVI("<p>"), LVI("<o>")),
-                        IdTriple(LVI("<s>"), LVI("<p>"), LVI("<o>"))}),
-      ElementsAreArray({IdTriple(LVI("<s>"), LVI("<p>"), LVI("<o>")),
-                        IdTriple(LVI("<s>"), LVI("<p>"), LVI("<o>"))}));
+      ElementsAreArray({IdTriple(LVI("<s>"), LVI("<p>"), LVI("<o>"))}),
+      ElementsAreArray({IdTriple(LVI("<s>"), LVI("<p>"), LVI("<o>"))}));
   expectComputeGraphUpdateQuads(
       "DELETE { ?s <is-a> ?o } INSERT { ?s <is-a> ?o } WHERE { ?s <is-a> ?o }",
-      ElementsAreArray({IdTriple(Id("<x>"), Id("<is-a>"), Id("<y>")),
-                        IdTriple(Id("<y>"), Id("<is-a>"), Id("<x>"))}),
-      ElementsAreArray({IdTriple(Id("<x>"), Id("<is-a>"), Id("<y>")),
-                        IdTriple(Id("<y>"), Id("<is-a>"), Id("<x>"))}));
+      // The triples are optimized out
+      IsEmpty(), IsEmpty());
   expectComputeGraphUpdateQuads(
       "DELETE WHERE { ?s ?p ?o }", IsEmpty(),
       UnorderedElementsAreArray(
@@ -369,4 +384,35 @@ TEST(ExecuteUpdate, computeAndAddQuadsForResultRow) {
                      0,
                      ElementsAreArray({IdTriple{{V(0), V(1), V(1), V(3)}},
                                        IdTriple{{V(0), V(1), V(2), V(3)}}}));
+}
+
+TEST(ExecuteUpdate, templatedTriplesExist) {
+  auto expectExistInIndex = [](const std::string& where,
+                               const std::string& templates,
+                               const bool expectedExist,
+                               source_location sourceLocation =
+                                   source_location::current()) {
+    auto l = generateLocationTrace(sourceLocation);
+    const auto graphPattern =
+        sparqlParserHelpers::parse<&SparqlAutomaticParser::groupGraphPattern>(
+            absl::StrCat("{", where, "}"))
+            .resultOfParse_;
+    const auto templateQuads =
+        sparqlParserHelpers::parse<&SparqlAutomaticParser::quads>(templates)
+            .resultOfParse_;
+    EXPECT_THAT(
+        ExecuteUpdate::templatedTriplesExist(templateQuads, graphPattern),
+        testing::Eq(expectedExist));
+  };
+  expectExistInIndex("?a <b> <c>", "?a <b> <c>", true);
+  expectExistInIndex("?a <b> <c>", "<a> <b> <c>", false);
+  expectExistInIndex("?a <b> <c>", "?a <b> <d>", false);
+  // We can not sort the triples and thus not eliminate duplicates.
+  expectExistInIndex("?a <b> <c>", "?a <b> <c> . ?a <b> <c>", false);
+  expectExistInIndex("?a <b> <c> . ?a <d> ?e", "?a <b> <c>", true);
+  expectExistInIndex("", "<a> <b> <c>", false);
+  expectExistInIndex("", "<a> <b> <c>", false);
+  expectExistInIndex("<a> <b> <c>", "GRAPH <foo> { <a> <b> <c> }", false);
+  expectExistInIndex("OPTIONAL { <a> <b> <c> }", "<a> <b> <c>", false);
+  expectExistInIndex("<a> <b>/<f> <c>", "<a> <b> <c>", false);
 }

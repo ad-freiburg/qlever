@@ -47,18 +47,6 @@ const ad_utility::HashMap<std::string, std::string> defaultPrefixMap{
     {std::string{QLEVER_INTERNAL_PREFIX_NAME},
      std::string{QLEVER_INTERNAL_PREFIX_IRI}}};
 
-template <auto F, bool testInsideConstructTemplate = false>
-auto parse =
-    [](const string& input, SparqlQleverVisitor::PrefixMap prefixes = {},
-       SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks =
-           SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::False) {
-      ParserAndVisitor p{input, std::move(prefixes), disableSomeChecks};
-      if (testInsideConstructTemplate) {
-        p.visitor_.setParseModeToInsideConstructTemplateForTesting();
-      }
-      return p.parseTypesafe(F);
-    };
-
 auto parseBlankNode = parse<&Parser::blankNode>;
 auto parseBlankNodeConstruct = parse<&Parser::blankNode, true>;
 auto parseCollection = parse<&Parser::collection>;
