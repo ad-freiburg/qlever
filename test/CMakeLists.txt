@@ -291,7 +291,7 @@ addLinkAndDiscoverTest(TripleComponentTest parser)
 
 addLinkAndDiscoverTest(ValueIdTest util)
 
-addLinkAndDiscoverTest(LambdaHelpersTest)
+addLinkAndDiscoverTestNoLibs(LambdaHelpersTest)
 
 addLinkAndDiscoverTest(ParseExceptionTest parser engine)
 
@@ -417,13 +417,13 @@ addLinkAndDiscoverTest(UpdateFetcherTest http)
 
 addLinkAndDiscoverTest(MessageSenderTest http)
 
-addLinkAndDiscoverTest(CancellationHandleTest util)
+addLinkAndDiscoverTestNoLibs(CancellationHandleTest util)
 
 addLinkAndDiscoverTest(ProgressBarTest util)
 
 addLinkAndDiscoverTest(CachingMemoryResourceTest)
 
-addLinkAndDiscoverTest(ParallelMultiwayMergeTest)
+addLinkAndDiscoverTestNoLibs(ParallelMultiwayMergeTest)
 
 addLinkAndDiscoverTest(ParseableDurationTest)
 

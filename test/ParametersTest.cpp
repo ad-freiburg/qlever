@@ -91,13 +91,8 @@ TEST(Parameters, ParameterConcept) {
       IsParameter<DurationParameter<std::chrono::seconds, "Seconds">>);
 
   // Test some other random types.
-  // TODO<joka921, gpicciuca> This constrained is currently deactivated.
-  static_assert(IsParameter<std::string>);
-  static_assert(IsParameter<ParameterName>);
-  /*
   static_assert(!IsParameter<std::string>);
   static_assert(!IsParameter<ParameterName>);
-  */
 }
 
 // _____________________________________________________________________________

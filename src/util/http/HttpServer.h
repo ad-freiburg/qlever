@@ -71,23 +71,25 @@ CPP_template(typename HttpHandler, typename WebSocketHandler)(
   /// Construct from the `queryRegistry`, port and ip address, on which this
   /// server will listen, as well as the HttpHandler. This constructor only
   /// initializes several member functions
-  // Note: The following code can not be written with a single declaration in
-  // the `std::enable_if_t` world, because of the following bug in GCC 11:
+  ///
+  // Note: The following constraint can not be written with a single declaration
+  // in the `std::enable_if_t` world, because of the following bug in GCC 11:
   // https://gcc.gnu.org/bugzilla/show_bug.cgi?id=105268
-  // TODO<joka921> Figure out whether this is also an issue on older GCC
-  // versions for which we need this port.
   template <typename HandlerSupplier>
-  static constexpr bool isValidConstructorArgument =
+  static constexpr bool isSupplier =
       ad_utility::InvocableWithConvertibleReturnType<
           HandlerSupplier, WebSocketHandler, net::io_context&>;
-  template <
-      typename HandlerSupplier,
-      std::enable_if_t<isValidConstructorArgument<HandlerSupplier>, int> = 0>
-  explicit HttpServer(unsigned short port,
-                      std::string_view ipAddress = "0.0.0.0",
-                      int numServerThreads = 1,
-                      HttpHandler handler = HttpHandler{},
-                      HandlerSupplier webSocketHandlerSupplier = {})
+  CPP_template_2(typename HandlerSupplier)(
+      requires isSupplier<
+          HandlerSupplier>) explicit HttpServer(unsigned short port,
+                                                std::string_view ipAddress =
+                                                    "0.0.0.0",
+                                                int numServerThreads = 1,
+                                                HttpHandler handler =
+                                                    HttpHandler{},
+                                                HandlerSupplier
+                                                    webSocketHandlerSupplier =
+                                                        {})
       : httpHandler_{std::move(handler)},
         // We need at least two threads to avoid blocking.
         // TODO<joka921> why is that?

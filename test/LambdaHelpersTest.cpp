@@ -99,9 +99,7 @@ TEST(MakeAssignableLambda, MoveOnly) {
   auto hallo = makeConstString("hallo");
   ASSERT_EQ("hallo", *hallo());
 
-  // TODO<joka921> This has to be changed, because some concept checks here are
-  // currently disabled.
-  // static_assert(!std::is_copy_assignable_v<decltype(hallo)>);
+  static_assert(!std::is_copy_assignable_v<decltype(hallo)>);
 
   // Create objects of the proper type.
   auto moved = makeConstString("moved");

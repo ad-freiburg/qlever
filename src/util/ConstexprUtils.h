@@ -65,9 +65,6 @@ CPP_concept InvocableWithCase =
 // A `constexpr` switch statement. Chooses the `MatchingCase` in `FirstCase,
 // Cases...` that is equal to `value` and then calls
 // `function.operator()<MatchingCase>(args...)`.
-// First, ensure you have the necessary concepts available.
-// For example, we assume that ad_utility::SameAsAny and InvocableWithCase are
-// defined.
 template <auto FirstCase, auto... Cases>
 struct ConstexprSwitch {
   CPP_template(typename FuncType, typename ValueType, typename... Args)(

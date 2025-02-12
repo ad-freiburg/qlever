@@ -72,10 +72,11 @@ struct CompactStringVectorWriter;
 
 }
 
+#if false
+// TODO<joka921> Throw out this code if it works.
 // TODO<joka921, picciuca> : The following doesn't work if there is no `begin()`
 // member in 17 mode. We need a different solution for this, but this is
 // currently only used in tests. Postponing this for now.
-#if false
 #ifdef QLEVER_CPP_17
 template <typename T, typename = void>
 struct IsIteratorOfIterator : std::false_type {};
@@ -97,14 +98,16 @@ concept IteratorOfIterator = requires(T t) {
 };
 #endif
 
-#endif
 
+/*
 template <typename T, typename U>
 concept DummySimilar = ad_utility::SimilarTo<T, U>;
 template <typename T, typename DataType>
 concept IteratorOfIterator = requires(T t) {
   { *(t.begin()->begin()) } -> DummySimilar<DataType>;
 };
+*/
+#endif
 
 /**
  * @brief Stores a list of variable length data of a single type (e.g.
@@ -136,9 +139,16 @@ class CompactVectorOfStrings {
   /**
    * @brief Fills this CompactVectorOfStrings with input.
    * @param The input from which to build the vector.
+   * // Note: In C++20 mode we use a `requires clause`, in C++17 mode we use a
+   * static assert. Both work, as there is only one overload of `build`.
    */
-  CPP_template(typename T)(
-      requires IteratorOfIterator<T, data_type>) void build(const T& input) {
+  template <typename T>
+  QL_CONCEPT_OR_NOTHING(requires requires(T t) {
+    { *(t.begin()->begin()) } -> ad_utility::SimilarTo<data_type>;
+  })
+  void build(const T& input) {
+    static_assert(
+        ad_utility::SimilarTo<decltype(*(input.begin()->begin())), data_type>);
     // Also make room for the end offset of the last element.
     _offsets.reserve(input.size() + 1);
     size_t dataSize = 0;

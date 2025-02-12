@@ -76,13 +76,10 @@ class IteratorForAccessOperator {
                          RandomAccessContainer*>;
   RandomAccessContainerPtr _vector = nullptr;
   index_type _index{0};
-  Accessor _accessor{};
+  Accessor _accessor;
 
  public:
-  // TODO<joka921> play with a better solution for defaulting constructors.
-  CPP_template(typename X = void)(
-      requires std::is_default_constructible_v<Accessor>)
-      IteratorForAccessOperator() {}
+  IteratorForAccessOperator() = default;
   IteratorForAccessOperator(RandomAccessContainerPtr vec, index_type index,
                             Accessor accessor = Accessor{})
       : _vector{vec}, _index{index}, _accessor{std::move(accessor)} {}

@@ -51,14 +51,14 @@ CPP_concept RandomAccessRangeOfRanges =
 // ranges will be moved.
 // TODO<joka921> Maybe add a `buffering generator` that automatically stores the
 // buffers.
-CPP_template(typename T, bool moveElements, typename Range1, typename Range2,
-             typename ComparisonFuncT, typename SizeGetter)(
+CPP_template(typename T, bool moveElements, typename SizeGetter,
+             typename Range1, typename Range2, typename ComparisonFuncT)(
     requires ValueSizeGetter<SizeGetter, T> CPP_and RangeWithValue<Range1, T>
         CPP_and RangeWithValue<Range2, T>
             CPP_and ad_utility::InvocableWithExactReturnType<
                 ComparisonFuncT, bool, const T&, const T&>)
     cppcoro::generator<std::vector<T>> lazyBinaryMerge(
-        MemorySize maxMem, size_t maxBlockSize, auto range1, auto range2,
+        MemorySize maxMem, size_t maxBlockSize, Range1 range1, Range2 range2,
         ComparisonFuncT comparison) {
   // Set up the buffer as well as a lambda to clear and reserve it.
   std::vector<T> buffer;
@@ -155,7 +155,7 @@ CPP_template(typename T, bool moveElements, typename SizeGetter, typename R)(
     requires ValueSizeGetter<SizeGetter, T> CPP_and RangeWithValue<R, T>)
     cppcoro::generator<std::vector<T>> batchToVector(MemorySize maxMem,
                                                      size_t blocksize,
-                                                     auto range) {
+                                                     R range) {
   std::vector<T> buffer;
   buffer.reserve(blocksize);
   MemorySize curMem = 0_B;
@@ -176,9 +176,8 @@ CPP_template(typename T, bool moveElements, typename SizeGetter, typename R)(
 // The recursive implementation of `parallelMultiwayMerge` (see below). The
 // difference is, that the memory limit in this function is per node in the
 // recursion tree.
-CPP_template(typename T, bool moveElements, typename R,
-             typename ComparisonFuncT,
-             typename SizeGetter = DefaultValueSizeGetter<T>)(
+CPP_template(typename T, bool moveElements, typename SizeGetter, typename R,
+             typename ComparisonFuncT)(
     requires detail::RandomAccessRangeOfRanges<R, T> CPP_and
         ValueSizeGetter<SizeGetter, T>
             CPP_and InvocableWithExactReturnType<ComparisonFuncT, bool,
@@ -195,13 +194,10 @@ CPP_template(typename T, bool moveElements, typename R,
     }
   };
   if (rangeOfRanges.size() == 1) {
-    return detail::batchToVector<T, moveElements, SizeGetter,
-                                 decltype(rangeOfRanges.front())>(
+    return detail::batchToVector<T, moveElements, SizeGetter>(
         maxMemPerNode, blocksize, moveIf(rangeOfRanges.front()));
   } else if (rangeOfRanges.size() == 2) {
-    return detail::lazyBinaryMerge<T, moveElements, decltype(rangeOfRanges[0]),
-                                   decltype(rangeOfRanges[1]),
-                                   decltype(comparison), SizeGetter>(
+    return detail::lazyBinaryMerge<T, moveElements, SizeGetter>(
         maxMemPerNode, blocksize, moveIf(rangeOfRanges[0]),
         moveIf(rangeOfRanges[1]), comparison);
   } else {
@@ -217,8 +213,7 @@ CPP_template(typename T, bool moveElements, typename R,
     auto parallelMerge = [join, blocksize, comparison, maxMemPerNode](
                              auto it, auto end) {
       auto subRange{ql::ranges::subrange{it, end}};
-      return join(parallelMultiwayMergeImpl<T, moveElements, decltype(subRange),
-                                            ComparisonFuncT, SizeGetter>(
+      return join(parallelMultiwayMergeImpl<T, moveElements, SizeGetter>(
           maxMemPerNode, blocksize, std::move(subRange), comparison));
     };
 
@@ -226,11 +221,9 @@ CPP_template(typename T, bool moveElements, typename R,
     auto mergeRange2 = parallelMerge(splitIt, end);
 
     return ad_utility::streams::runStreamAsync(
-        detail::lazyBinaryMerge<T, moveElements, decltype(mergeRange1),
-                                decltype(mergeRange2), decltype(comparison),
-                                SizeGetter>(maxMemPerNode, blocksize,
-                                            std::move(mergeRange1),
-                                            std::move(mergeRange2), comparison),
+        detail::lazyBinaryMerge<T, moveElements, SizeGetter>(
+            maxMemPerNode, blocksize, std::move(mergeRange1),
+            std::move(mergeRange2), comparison),
         2);
   }
 }
@@ -241,23 +234,29 @@ CPP_template(typename T, bool moveElements, typename R,
 // used in addition to limit the size of intermediate blocks in the recursive
 // implementation. It can be tweaked for maximum performance, currently values
 // of at least `50-100` seem to work well.
-CPP_template(typename T, bool moveElements, typename R,
-             typename ComparisonFuncT,
-             typename SizeGetter = DefaultValueSizeGetter<T>)(
-    requires detail::RandomAccessRangeOfRanges<R, T> CPP_and
-        ValueSizeGetter<SizeGetter, T>
-            CPP_and InvocableWithExactReturnType<ComparisonFuncT, bool,
-                                                 const T&, const T&>)
-    cppcoro::generator<std::vector<T>> parallelMultiwayMerge(
-        MemorySize memoryLimit, R&& rangeOfRanges, ComparisonFuncT comparison,
-        size_t blocksize = 100) {
-  // There is one suboperation per input in the recursion tree, so we have to
-  // divide the memory limit.
-  auto maxMemPerNode = memoryLimit / ql::ranges::size(rangeOfRanges);
-  return detail::parallelMultiwayMergeImpl<T, moveElements, R, ComparisonFuncT,
-                                           SizeGetter>(
-      maxMemPerNode, blocksize, AD_FWD(rangeOfRanges), std::move(comparison));
-}
+CPP_template(typename T, bool moveElements,
+             typename SizeGetter)(requires ValueSizeGetter<SizeGetter,
+                                                           T>)  //
+    struct ParallelMultiwayMergeStruct {
+  CPP_template_2(typename R, typename Comp)(
+      requires detail::RandomAccessRangeOfRanges<R, T> CPP_and
+          ValueSizeGetter<SizeGetter, T>
+              CPP_and
+                  InvocableWithExactReturnType<Comp, bool, const T&, const T&>)
+      cppcoro::generator<std::vector<T>>
+      operator()(MemorySize memoryLimit, R&& rangeOfRanges, Comp comparison,
+                 size_t blocksize = 100) const {
+    // There is one suboperation per input in the recursion tree, so we have to
+    // divide the memory limit.
+    auto maxMemPerNode = memoryLimit / ql::ranges::size(rangeOfRanges);
+    return detail::parallelMultiwayMergeImpl<T, moveElements, SizeGetter>(
+        maxMemPerNode, blocksize, AD_FWD(rangeOfRanges), std::move(comparison));
+  }
+};
+// A variable, s.t. we don't have to initiate a struct each time.
+template <typename T, bool moveElements,
+          typename SizeGetter = DefaultValueSizeGetter<T>>
+ParallelMultiwayMergeStruct<T, moveElements, SizeGetter> parallelMultiwayMerge;
 }  // namespace ad_utility
 
 #endif  // QLEVER_PARALLELMULTIWAYMERGE_H

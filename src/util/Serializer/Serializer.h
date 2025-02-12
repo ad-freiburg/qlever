@@ -4,8 +4,7 @@
 
 // Library for symmetric serialization.
 
-#ifndef QLEVER_SERIALIZER_SERIALIZER
-#define QLEVER_SERIALIZER_SERIALIZER
+#pragma once
 
 #include "util/Forward.h"
 #include "util/TypeTraits.h"
@@ -57,68 +56,31 @@ class SerializationException : public std::runtime_error {
 class WriteSerializerTag {};
 class ReadSerializerTag {};
 
-#ifdef QLEVER_CPP_17
+// A `WriteSerializer` can write from a span of bytes to some resource and has
+// a public member type `using SerializerType = WriteSerializerTag`.
 template <typename S>
-using HasWriteSerializerType = typename std::decay_t<S>::SerializerType;
+CPP_requires(writeSerializerRequires,
+             requires(S s, const char* ptr, size_t numBytes)(
+                 s.serializeBytes(ptr, numBytes),
+                 typename std::decay_t<S>::SerializerType{},
+                 concepts::requires_<std::same_as<typename S::SerializerType,
+                                                  WriteSerializerTag>>));
 
 template <typename S>
-using HasWriteSerializeBytes = decltype(std::declval<S>().serializeBytes(
-    std::declval<const char*>(), std::declval<size_t>()));
+concept WriteSerializer = CPP_requires_ref(writeSerializerRequires, S);
 
-template <typename S, typename = void>
-struct IsWriteSerializer : std::false_type {};
-
+// A `ReadSerializer` can read to span of bytes from some resource and has a
+// public alias `using SerializerType = ReadSerializerTag'`.
 template <typename S>
-struct IsWriteSerializer<
-    S, std::enable_if_t<
-           std::is_same_v<HasWriteSerializerType<S>, WriteSerializerTag> &&
-           std::is_same_v<HasWriteSerializeBytes<S>, void>>> : std::true_type {
-};
-
-template <typename S>
-CPP_concept WriteSerializer = IsWriteSerializer<S>::value;
-#else
-/// A `WriteSerializer` can write from a span of bytes to some resource and has
-/// a public member type `using SerializerType = WriteSerializerTag`.
-template <typename S>
-concept WriteSerializer = requires(S s, const char* ptr, size_t numBytes) {
-  {
-    typename std::decay_t<S>::SerializerType{}
-  } -> std::same_as<WriteSerializerTag>;
-  { s.serializeBytes(ptr, numBytes) };
-};
-#endif
-
-#ifdef QLEVER_CPP_17
-template <typename S>
-using HasReadSerializerType = typename std::decay_t<S>::SerializerType;
+CPP_requires(readSerializerRequires,
+             requires(S s, char* ptr, size_t numBytes)(
+                 s.serializeBytes(ptr, numBytes),
+                 typename std::decay_t<S>::SerializerType{},
+                 concepts::requires_<std::same_as<typename S::SerializerType,
+                                                  ReadSerializerTag>>));
 
 template <typename S>
-using HasReadSerializeBytes = decltype(std::declval<S>().serializeBytes(
-    std::declval<char*>(), std::declval<size_t>()));
-
-template <typename S, typename = void>
-struct IsReadSerializer : std::false_type {};
-
-template <typename S>
-struct IsReadSerializer<
-    S, std::enable_if_t<
-           std::is_same_v<HasReadSerializerType<S>, ReadSerializerTag> &&
-           std::is_same_v<HasReadSerializeBytes<S>, void>>> : std::true_type {};
-
-template <typename S>
-CPP_concept ReadSerializer = IsReadSerializer<S>::value;
-#else
-/// A `ReadSerializer` can read to span of bytes from some resource and has a
-/// public alias `using SerializerType = ReadSerializerTag'`.
-template <typename S>
-concept ReadSerializer = requires(S s, char* ptr, size_t numBytes) {
-  {
-    typename std::decay_t<S>::SerializerType{}
-  } -> std::same_as<ReadSerializerTag>;
-  { s.serializeBytes(ptr, numBytes) };
-};
-#endif
+concept ReadSerializer = CPP_requires_ref(readSerializerRequires, S);
 
 /// A `Serializer` is either a `WriteSerializer` or a `ReadSerializer`
 template <typename S>
@@ -167,11 +129,11 @@ CPP_template(typename S, typename T)(
 /// access private members of a class. It is possible to declare the friend
 /// using `AD_SERIALIZE_FRIEND_FUNCTION(Type);` and to define it outside of the
 /// class with `AD_SERIALIZE_FUNCTION(Type){...}`
-#define AD_SERIALIZE_FRIEND_FUNCTION(T)                                    \
-  QL_TEMPLATE_NO_DEFAULT(typename S, typename U)                           \
-  (requires ad_utility::serialization::Serializer<S> &&                    \
-   ad_utility::SimilarTo<U, T> &&                                          \
-   ad_utility::serialization::SerializerMatchesConstness<S, U>)friend void \
+#define AD_SERIALIZE_FRIEND_FUNCTION(T)                                        \
+  CPP_variadic_template(typename S, typename U)(                               \
+      requires ad_utility::serialization::Serializer<S> &&                     \
+      ad_utility::SimilarTo<U, T> &&                                           \
+      ad_utility::serialization::SerializerMatchesConstness<S, U>) friend void \
   serialize(S& serializer, U&& arg)
 
 /**
@@ -266,40 +228,19 @@ struct TrivialSerializationHelperTag {};
  * };
  * void allowTrivialSerialization(std::same_as<Z> auto, auto);
  */
-#ifdef QLEVER_CPP_17
-template <typename T, typename Tag, typename = void>
-struct HasAllowTrivialSerialization : std::false_type {};
-
-template <typename T, typename Tag>
-struct HasAllowTrivialSerialization<
-    T, Tag,
-    std::enable_if_t<
-        !std::is_same_v<decltype(allowTrivialSerialization(
-                            std::declval<T>(), std::declval<Tag>())),
-                        void>>> : std::true_type {};
-
-template <typename T, typename = void>
-struct IsTriviallySerializable : std::false_type {};
+template <typename T>
+CPP_requires(
+    triviallySerializableRequires,
+    requires(T t, TrivialSerializationHelperTag tag)(
+        // The `TrivialSerializationHelperTag` lets the argument-dependent
+        // lookup also find the `allowTrivialSerialization` function if it is
+        // defined in the `ad::serialization` namespace.
+        allowTrivialSerialization(t, tag)));
 
 template <typename T>
-struct IsTriviallySerializable<
-    T, std::enable_if_t<HasAllowTrivialSerialization<
-                            T, TrivialSerializationHelperTag>::value &&
-                        std::is_trivially_copyable_v<std::decay_t<T>>>>
-    : std::true_type {};
-
-template <typename T>
-CPP_concept TriviallySerializable = IsTriviallySerializable<T>::value;
-#else
-template <typename T>
-concept TriviallySerializable =
-    requires(T t, TrivialSerializationHelperTag tag) {
-      // The `TrivialSerializationHelperTag` lets the argument-dependent lookup
-      // also find the `allowTrivialSerialization` function if it is defined in
-      // the `ad::serialization` namespace.
-      allowTrivialSerialization(t, tag);
-    } && std::is_trivially_copyable_v<std::decay_t<T>>;
-#endif
+CPP_concept TriviallySerializable =
+    CPP_requires_ref(triviallySerializableRequires, T) &&
+    std::is_trivially_copyable_v<std::decay_t<T>>;
 
 /// Serialize function for `TriviallySerializable` types that works by simply
 /// serializing the binary object representation.
@@ -323,5 +264,3 @@ CPP_template(typename T,
 }
 
 }  // namespace ad_utility::serialization
-
-#endif  // QLEVER_SERIALIZER_SERIALIZER

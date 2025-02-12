@@ -44,13 +44,19 @@
 #define QL_CONCEPT_OR_TYPENAME(...) typename
 #define CPP_template_2 CPP_template_2_SFINAE
 #define CPP_and_2 CPP_and_2_sfinae
+#define CPP_and_def CPP_and_sfinae_def
+#define CPP_and_2_def CPP_and_2_def_sfinae
 #define CPP_variadic_template CPP_template_NO_DEFAULT_SFINAE
+#define CPP_member_def CPP_member_def_sfinae
 #else
 #define QL_CONCEPT_OR_NOTHING(...) __VA_ARGS__
 #define QL_CONCEPT_OR_TYPENAME(...) __VA_ARGS__
 #define CPP_template_2 CPP_template
 #define CPP_and_2 CPP_and
+#define CPP_and_def CPP_and
+#define CPP_and_2_def CPP_and
 #define CPP_variadic_template CPP_template
+#define CPP_member_def CPP_member
 #endif
 
 // The namespace `ql::concepts` includes concepts that are contained in the

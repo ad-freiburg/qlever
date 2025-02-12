@@ -17,11 +17,10 @@ namespace ad_utility {
 
 namespace detail {
 template <typename R>
-CPP_requires(is_empty_range_,
-             requires(const R& range)(ql::ranges::empty(range)));
+CPP_requires(can_empty_, requires(const R& range)(ql::ranges::empty(range)));
 
 template <typename R>
-CPP_concept IsEmptyRange = CPP_requires_ref(is_empty_range_, R);
+CPP_concept RangeCanEmpty = CPP_requires_ref(can_empty_, R);
 }  // namespace detail
 
 /// Takes a view and yields the elements of the same view, but skips over
@@ -98,13 +97,10 @@ CPP_template(typename UnderlyingRange, bool supportConst = true)(
         ql::concepts::movable<UnderlyingRange>) class OwningView
     : public ql::ranges::view_interface<OwningView<UnderlyingRange>> {
  private:
-  UnderlyingRange underlyingRange_ = UnderlyingRange();
+  UnderlyingRange underlyingRange_;
 
  public:
-  // TODO<joka921> This also is the problem with the default constructor
-  // constraints, maybe we can get away with that on GCC
-  QL_TEMPLATE_NO_DEFAULT(bool b = true)
-  (requires b&& std::default_initializable<UnderlyingRange>)OwningView() {}
+  OwningView() = default;
 
   constexpr explicit OwningView(UnderlyingRange&& underlyingRange) noexcept(
       std::is_nothrow_move_constructible_v<UnderlyingRange>)
@@ -131,49 +127,41 @@ CPP_template(typename UnderlyingRange, bool supportConst = true)(
 
   constexpr auto end() { return ql::ranges::end(underlyingRange_); }
 
-  template <bool b = true,
-            std::enable_if_t<b && supportConst &&
-                                 ql::ranges::range<const UnderlyingRange>,
-                             int> = 0>
-  constexpr auto begin() const -> auto {
+  CPP_auto_member constexpr auto CPP_fun(begin)()(
+      const  //
+      requires(supportConst&& ql::ranges::range<const UnderlyingRange>)) {
     return ql::ranges::begin(underlyingRange_);
   }
 
-  template <bool b = true,
-            std::enable_if_t<b && supportConst &&
-                                 ql::ranges::range<const UnderlyingRange>,
-                             int> = 0>
-  constexpr auto end() const -> auto {
+  CPP_auto_member constexpr auto CPP_fun(end)()(
+      const  //
+      requires(supportConst&& ql::ranges::range<const UnderlyingRange>)) {
     return ql::ranges::end(underlyingRange_);
   }
 
-  template <typename U = UnderlyingRange>
-  constexpr auto empty() const
-      -> CPP_ret(bool)(requires ad_utility::detail::IsEmptyRange<const U>) {
+  CPP_member constexpr auto empty() const
+      -> CPP_ret(bool)(requires detail::RangeCanEmpty<const UnderlyingRange>) {
     return ql::ranges::empty(underlyingRange_);
   }
 
-  template <typename U = UnderlyingRange>
-  constexpr auto size()
-      -> CPP_ret(size_t)(requires ql::ranges::sized_range<U>) {
+  CPP_member constexpr auto size()
+      -> CPP_ret(size_t)(requires ql::ranges::sized_range<UnderlyingRange>) {
     return ql::ranges::size(underlyingRange_);
   }
 
-  template <typename U = UnderlyingRange>
-  constexpr auto size() const
-      -> CPP_ret(size_t)(requires ql::ranges::sized_range<const U>) {
+  CPP_member constexpr auto size() const -> CPP_ret(size_t)(
+      requires ql::ranges::sized_range<const UnderlyingRange>) {
     return ql::ranges::size(underlyingRange_);
   }
 
-  template <typename U = UnderlyingRange>
-  constexpr auto data()
-      -> CPP_ret(U*)(requires ql::ranges::contiguous_range<U>) {
+  CPP_auto_member constexpr auto CPP_fun(data)()(
+      requires ql::ranges::contiguous_range<UnderlyingRange>) {
     return ql::ranges::data(underlyingRange_);
   }
 
-  template <typename U = UnderlyingRange>
-  constexpr auto data() const
-      -> CPP_ret(const U*)(requires ql::ranges::contiguous_range<const U>) {
+  CPP_auto_member constexpr auto CPP_fun(data)()(
+      const  //
+      requires ql::ranges::contiguous_range<const UnderlyingRange>) {
     return ql::ranges::data(underlyingRange_);
   }
 };

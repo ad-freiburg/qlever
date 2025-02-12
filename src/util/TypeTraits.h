@@ -281,7 +281,7 @@ struct InvalidInvokeResult {
   ~InvalidInvokeResult() = delete;
 };
 template <typename T, typename... Args>
-auto getInvokeResultImpl() {
+constexpr auto getInvokeResultImpl() {
   if constexpr (std::is_invocable_v<T, Args...>) {
     return std::type_identity<std::invoke_result_t<T, Args...>>{};
   } else {

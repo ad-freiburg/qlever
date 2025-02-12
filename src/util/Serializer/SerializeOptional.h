@@ -10,11 +10,9 @@
 
 // Serialization for `std::optional<T>`
 namespace ad_utility::serialization {
-template <typename T>
-CPP_concept similarToOptional =
-    ad_utility::similarToInstantiation<T, std::optional>;
-AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(similarToOptional<T> CPP_and CPP_NOT(
-    std::is_trivially_copyable_v<std::decay_t<T>>)) {
+AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
+    (ad_utility::similarToInstantiation<T, std::optional>)
+        CPP_and CPP_NOT(std::is_trivially_copyable_v<std::decay_t<T>>)) {
   if constexpr (ReadSerializer<S>) {
     bool hasValue;
     serializer >> hasValue;

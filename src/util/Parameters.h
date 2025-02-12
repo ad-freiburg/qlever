@@ -131,31 +131,19 @@ CPP_template(typename Type, typename FromString, typename ToString,
 
 // Concept that checks whether a type is an instantiation of the `Parameter`
 // template.
-
-// TODO<joka921, gpicciuca> We don't yet have a good solution for constrained
-// partial specialization
-/*
 namespace detail::parameterConceptImpl {
 template <typename T>
 struct ParameterConceptImpl : std::false_type {};
 
-CPP_template(typename Type, typename FromString, typename ToString,
-             ParameterName Name)(
-    requires std::semiregular<Type> CPP_and
-        ParameterFromStringType<FromString, Type>
-            CPP_and ParameterToStringType<
-                ToString,
-                Type>) struct ParameterConceptImpl<Parameter<Type, FromString,
-                                                             ToString, Name>>
+template <typename Type, typename FromString, typename ToString,
+          ParameterName Name>
+struct ParameterConceptImpl<Parameter<Type, FromString, ToString, Name>>
     : std::true_type {};
 }  // namespace detail::parameterConceptImpl
 
 template <typename T>
 CPP_concept IsParameter =
     detail::parameterConceptImpl::ParameterConceptImpl<T>::value;
-*/
-template <typename T>
-CPP_concept IsParameter = true;
 
 namespace detail::parameterShortNames {
 
@@ -249,6 +237,10 @@ using DurationParameter = Parameter<ad_utility::ParseableDuration<DurationType>,
 /// to the current implementation.
 template <QL_CONCEPT_OR_TYPENAME(IsParameter)... ParameterTypes>
 class Parameters {
+  // In C++17 mode we cannot use SFINAE, but we also currently don't need it,
+  // add a static_assert for safety should this ever change.
+  static_assert((... && IsParameter<ParameterTypes>));
+
  private:
   using Tuple = std::tuple<ad_utility::Synchronized<ParameterTypes>...>;
   Tuple _parameters;

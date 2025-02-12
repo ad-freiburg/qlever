@@ -30,16 +30,14 @@ consteval bool tupleTriviallySerializableImpl() {
       [&result]<typename U>() { result = result && TriviallySerializable<U>; });
   return result;
 }
+template <typename T>
+CPP_concept ArrayOrTuple = ad_utility::isArray<std::decay_t<T>> ||
+                           ad_utility::similarToInstantiation<T, std::tuple>;
 }  // namespace detail
 
-template <typename T>
-CPP_concept either_array_or_instantiation =
-    ad_utility::isArray<std::decay_t<T>> ||
-    ad_utility::similarToInstantiation<T, std::tuple>;
-
 // Serialization function for `std::array` and `std::tuple`.
-AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(either_array_or_instantiation<T> CPP_and
-                                          CPP_NOT(TriviallySerializable<T>)) {
+AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
+    detail::ArrayOrTuple<T> CPP_and CPP_NOT(TriviallySerializable<T>)) {
   using Arr = std::decay_t<T>;
   // Tuples are not technically not trivially copyable, but for the purpose of
   // serialization we still can safely `memcpy`. Note that for `std::array` the

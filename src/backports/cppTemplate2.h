@@ -52,4 +52,9 @@
   template <__VA_ARGS__ CPP_TEMPLATE_2_SFINAE_AUX_
 
 /// INTERNAL ONLY
+#define CPP_and_def_sfinae &&CPP_BOOL(CPP_true), int >, std::enable_if_t <
 #define CPP_and_2_sfinae &&CPP_BOOL(CPP_true_2), int > = 0, std::enable_if_t <
+#define CPP_and_2_def_sfinae &&CPP_BOOL(CPP_true_2), int >, std::enable_if_t <
+
+#define CPP_member_def_sfinae \
+  template <bool (&CPP_true_fn)(::concepts::detail::xNil)>

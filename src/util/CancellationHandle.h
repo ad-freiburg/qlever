@@ -203,14 +203,14 @@ class CancellationHandle {
   /// Internal function that starts the watch dog. It will set this
   /// `CancellationHandle` instance into a state that will log a warning in the
   /// console if `throwIfCancelled` is not called frequently enough.
-  template <typename U = void>
-  std::enable_if_t<WatchDogEnabled, U> startWatchDogInternal();
+  CPP_member auto startWatchDogInternal()
+      -> CPP_ret(void)(requires WatchDogEnabled);
 
   /// Helper function that sets the internal state atomically given that it has
   /// not been cancelled yet. Otherwise no-op.
-  template <typename U = void>
-  std::enable_if_t<CancellationEnabled, U> setStatePreservingCancel(
-      CancellationState newState);
+  /// CPP_member auto
+  CPP_member auto setStatePreservingCancel(CancellationState newState)
+      -> CPP_ret(void)(requires CancellationEnabled);
 
  public:
   /// Sets the cancellation flag so the next call to throwIfCancelled will

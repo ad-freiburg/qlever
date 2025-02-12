@@ -93,8 +93,7 @@ auto VocabularyMerger::mergeVocabulary(const std::string& basename,
   // merging. This is very approximate and should be investigated in more
   // detail.
   auto mergedWords =
-      ad_utility::parallelMultiwayMerge<QueueWord, true, decltype(generators),
-                                        decltype(lessThanForQueue),
+      ad_utility::parallelMultiwayMerge<QueueWord, true,
                                         decltype(sizeOfQueueWord)>(
           0.8 * memoryToUse, std::move(generators), lessThanForQueue);
   ad_utility::ProgressBar progressBar{metaData_.numWordsTotal(),
