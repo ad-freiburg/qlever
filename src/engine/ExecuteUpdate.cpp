@@ -188,6 +188,7 @@ ExecuteUpdate::computeGraphUpdateQuads(
       IdTriplesAndLocalVocab{std::move(toDelete), std::move(localVocabDelete)}};
 }
 
+// _____________________________________________________________________________
 void ExecuteUpdate::sortAndRemoveDuplicates(
     std::vector<IdTriple<>>& container) {
   ql::ranges::sort(container);
@@ -195,9 +196,11 @@ void ExecuteUpdate::sortAndRemoveDuplicates(
                   container.end());
 }
 
+// _____________________________________________________________________________
 std::vector<IdTriple<>> ExecuteUpdate::setMinus(
     const std::vector<IdTriple<>>& a, const std::vector<IdTriple<>>& b) {
   std::vector<IdTriple<>> reducedToDelete;
+  reducedToDelete.reserve(a.size());
   ql::ranges::set_difference(a, b, std::back_inserter(reducedToDelete));
   return reducedToDelete;
 }

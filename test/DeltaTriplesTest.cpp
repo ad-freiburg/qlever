@@ -149,7 +149,7 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
 
   EXPECT_THAT(deltaTriples, StateIs(0, 0, 0, {}, {}));
 
-  // Inserting triples.
+  // Inserting triples. The triples being inserted must be sorted.
   deltaTriples.insertTriples(
       cancellationHandle,
       makeIdTriples(vocab, localVocab, {"<A> <B> <C>", "<A> <B> <D>"}));
@@ -164,7 +164,7 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
       deltaTriples,
       StateIs(3, 0, 3, {"<A> <B> <C>", "<A> <B> <D>", "<A> <low> <a>"}, {}));
 
-  // Inserting unsorted triples works.
+  // Insert more triples.
   deltaTriples.insertTriples(
       cancellationHandle,
       makeIdTriples(vocab, localVocab, {"<B> <C> <D>", "<B> <D> <C>"}));
@@ -212,7 +212,17 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
           {"<A> <B> <C>", "<B> <C> <D>", "<A> <low> <a>", "<B> <D> <C>"},
           {"<A> <B> <D>", "<A> <B> <F>", "<A> <next> <B>", "<B> <next> <C>"}));
 
-  // Deleting unsorted triples.
+  // Unsorted triples are not allowed.
+  if constexpr (ad_utility::areExpensiveChecksEnabled) {
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        deltaTriples.deleteTriples(
+            cancellationHandle,
+            makeIdTriples(vocab, localVocab,
+                          {"<C> <prev> <B>", "<B> <prev> <A>"})),
+        testing::_);
+  }
+
+  // Deleting triples.
   deltaTriples.deleteTriples(
       cancellationHandle,
       makeIdTriples(vocab, localVocab, {"<B> <prev> <A>", "<C> <prev> <B>"}));

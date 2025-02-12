@@ -80,6 +80,7 @@ class ExecuteUpdate {
 
   // For two sorted vectors `A` and `B` return a new vector
   // that contains the element of `A\B`.
+  // Precondition: the inputs must be sorted.
   static std::vector<IdTriple<>> setMinus(const std::vector<IdTriple<>>& a,
                                           const std::vector<IdTriple<>>& b);
   FRIEND_TEST(ExecuteUpdate, setMinus);
