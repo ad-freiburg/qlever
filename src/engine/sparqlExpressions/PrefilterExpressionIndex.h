@@ -202,7 +202,12 @@ enum struct IsDatatype { IRI, BLANK, LITERAL, NUMERIC };
 // pre-filter procedure w.r.t. the datatypes defined with `IsDatatype`.
 template <IsDatatype Datatype>
 class IsDatatypeExpression : public PrefilterExpression {
+ private:
+  bool isNegated_;
+
  public:
+  explicit IsDatatypeExpression(bool isNegated = false)
+      : isNegated_(isNegated){};
   std::unique_ptr<PrefilterExpression> logicalComplement() const override;
   bool operator==(const PrefilterExpression& other) const override;
   std::unique_ptr<PrefilterExpression> clone() const override;

@@ -32,8 +32,9 @@ auto relExpr = [](const IdOrLocalVocabEntry& referenceId)
 
 // Make IsDatatypeExpression
 template <typename IsDtypeExpr>
-auto isDtypeExpr = []() -> std::unique_ptr<PrefilterExpression> {
-  return std::make_unique<IsDtypeExpr>();
+auto isDtypeExpr =
+    [](bool isNegated = false) -> std::unique_ptr<PrefilterExpression> {
+  return std::make_unique<IsDtypeExpr>(isNegated);
 };
 
 // Make AndExpression or OrExpression

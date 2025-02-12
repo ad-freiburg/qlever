@@ -438,15 +438,29 @@ TEST_F(PrefilterExpressionOnMetadataTest, testNotEqualExpression) {
 // Test IsDatatype Expressions
 //______________________________________________________________________________
 TEST_F(PrefilterExpressionOnMetadataTest, testIsDatatypeExpression) {
-  // test isIri
-  // test isLiteral
-  // test isNumeric
+  // Test isIri
+  // Test isLiteral
+  // Currently no pre-filtering for the expressions above is applied. Thus,
+  // those expressions yield all given blocks.
+  makeTest(isIri(), std::vector<BlockMetadata>{blocks}, false, false);
+  makeTest(isLit(), std::vector<BlockMetadata>{blocks}, false, false);
+
+  // Test isNumeric
   makeTest(
       isNum(),
       {b4, b5, b6, b7, b8, b9, b10, b11, b12, b13, b14, b15, b16, b17, b18},
       false, false);
-  // test isBlank
+  // Test isBlank.
   makeTest(isBlank(), {b24}, false, false);
+
+  // Test the negated expressions (should yield the full complement)
+  // Remark: The bounding mixed-datatype blocks must be also contained.
+  makeTest(notExpr(isNum()),
+           {b1, b2, b3, b4, b18, b19, b20, b21, b22, b23, b24}, false, false);
+  makeTest(notExpr(isBlank()),
+           {b1,  b2,  b3,  b4,  b5,  b6,  b7,  b8,  b9,  b10, b11, b12,
+            b13, b14, b15, b16, b17, b18, b19, b20, b21, b22, b23, b24},
+           false, false);
 }
 
 // Test Logical Expressions
@@ -682,6 +696,8 @@ TEST_F(PrefilterExpressionOnMetadataTest, testEqualityOperator) {
   // IsDatatypeExpression
   ASSERT_TRUE(*isBlank() == *isBlank());
   ASSERT_FALSE(*isLit() == *isNum());
+  ASSERT_TRUE(*isIri(true) == *isIri(true));
+  ASSERT_FALSE(*isNum(true) == *isNum(false));
   // NotExpression
   ASSERT_TRUE(*notExpr(eq(IntId(0))) == *notExpr(eq(IntId(0))));
   ASSERT_TRUE(*notExpr(notExpr(ge(VocabId(0)))) ==
@@ -770,11 +786,21 @@ TEST(PrefilterExpressionExpressionOnMetadataTest,
           ".\n}child2 {Prefilter RelationalExpression<NE(!=)>\nreferenceValue_ "
           ": <iri/custom/v66> .\n}\n.\n"));
   EXPECT_THAT(*isIri(), matcher("Prefilter IsDatatypeExpression:\nPrefilter "
-                                "for datatype: Iri.\n.\n"));
-  EXPECT_THAT(*isBlank(), matcher("Prefilter IsDatatypeExpression:\nPrefilter "
-                                  "for datatype: Blank.\n.\n"));
-  EXPECT_THAT(*isLit(), matcher("Prefilter IsDatatypeExpression:\nPrefilter "
-                                "for datatype: Literal.\n.\n"));
-  EXPECT_THAT(*isNum(), matcher("Prefilter IsDatatypeExpression:\nPrefilter "
-                                "for datatype: Numeric.\n.\n"));
+                                "for datatype: Iri\nis negated: false.\n.\n"));
+  EXPECT_THAT(*isBlank(),
+              matcher("Prefilter IsDatatypeExpression:\nPrefilter "
+                      "for datatype: Blank\nis negated: false.\n.\n"));
+  EXPECT_THAT(*isLit(),
+              matcher("Prefilter IsDatatypeExpression:\nPrefilter "
+                      "for datatype: Literal\nis negated: false.\n.\n"));
+  EXPECT_THAT(*isNum(),
+              matcher("Prefilter IsDatatypeExpression:\nPrefilter "
+                      "for datatype: Numeric\nis negated: false.\n.\n"));
+  EXPECT_THAT(*isBlank(true),
+              matcher("Prefilter IsDatatypeExpression:\nPrefilter "
+                      "for datatype: Blank\nis negated: true.\n.\n"));
+  EXPECT_THAT(*notExpr(isNum()),
+              matcher("Prefilter NotExpression:\nchild {Prefilter "
+                      "IsDatatypeExpression:\nPrefilter for datatype: "
+                      "Numeric\nis negated: true.\n}\n.\n"));
 }
