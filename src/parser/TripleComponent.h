@@ -22,6 +22,17 @@
 #include "util/Exception.h"
 #include "util/Forward.h"
 
+namespace ad_utility::detail {
+
+template <typename T, typename U>
+CPP_requires(MoveAssignableWithRequires, requires(T t, U&& u)(t = u));
+
+template <typename T, typename U>
+CPP_concept MoveAssignableWith =
+    CPP_requires_ref(MoveAssignableWithRequires, T, U);
+
+}  // namespace ad_utility::detail
+
 /// A wrapper around a `std::variant` that can hold the different types that the
 /// subject, predicate, or object of a triple can have in the Turtle Parser.
 /// Those currently are `double` (xsd:double and xsd:decimal), `int64_t`
@@ -56,10 +67,11 @@ class TripleComponent {
   TripleComponent() = default;
   /// Construct from anything that is able to construct the underlying
   /// `Variant`.
-  template <typename FirstArg, typename... Args>
-  requires(!std::same_as<std::remove_cvref_t<FirstArg>, TripleComponent> &&
-           std::is_constructible_v<Variant, FirstArg &&, Args && ...>)
-  TripleComponent(FirstArg&& firstArg, Args&&... args)
+  QL_TEMPLATE_NO_DEFAULT(typename FirstArg, typename... Args)
+  (requires CPP_NOT(
+       std::same_as<std::remove_cvref_t<FirstArg>, TripleComponent>) &&
+   std::is_constructible_v<Variant, FirstArg&&, Args&&...>)
+      TripleComponent(FirstArg&& firstArg, Args&&... args)
       : _variant(AD_FWD(firstArg), AD_FWD(args)...) {
     if (isString()) {
       // Storing variables and literals as strings is deprecated. The following
@@ -83,9 +95,10 @@ class TripleComponent {
 
   /// Assignment for types that can be directly assigned to the underlying
   /// variant.
-  template <typename T>
-  requires requires(Variant v, T&& t) { _variant = t; }
-  TripleComponent& operator=(T&& value) {
+  CPP_template(typename T)(
+      requires ad_utility::detail::MoveAssignableWith<Variant, T>)
+      TripleComponent&
+      operator=(T&& value) {
     _variant = AD_FWD(value);
     checkThatStringIsValid();
     return *this;
@@ -103,9 +116,9 @@ class TripleComponent {
   TripleComponent& operator=(TripleComponent&&) = default;
 
   /// Make a `TripleComponent` directly comparable to the underlying types.
-  template <typename T>
-  requires requires(T&& t) { _variant == t; }
-  bool operator==(const T& other) const {
+  CPP_template(typename T)(
+      requires ql::concepts::equality_comparable_with<Variant, T>) bool
+  operator==(const T& other) const {
     return _variant == other;
   }
 
@@ -117,8 +130,9 @@ class TripleComponent {
   /// overload would also be eligible for the contained types that are
   /// implicitly convertible to `TripleComponent` which would lead to strange
   /// bugs.
-  template <typename H>
-  friend H AbslHashValue(H h, const std::same_as<TripleComponent> auto& tc) {
+  CPP_template(typename H,
+               typename TC)(requires std::same_as<TC, TripleComponent>) friend H
+      AbslHashValue(H h, const TC& tc) {
     return H::combine(std::move(h), tc._variant);
   }
 

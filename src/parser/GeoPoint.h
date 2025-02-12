@@ -40,8 +40,8 @@ class GeoPoint {
  public:
   using T = uint64_t;
 
-  template <typename H>
-  friend H AbslHashValue(H h, const std::same_as<GeoPoint> auto& g) {
+  QL_TEMPLATE_NO_DEFAULT(typename H, typename G)
+  (requires std::same_as<G, GeoPoint>)friend H AbslHashValue(H h, const G& g) {
     return H::combine(std::move(h), g.lat_, g.lng_);
   }
 
