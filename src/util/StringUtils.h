@@ -248,6 +248,8 @@ constexpr std::array<char, sz + 1> catImpl(
 };
 // Concatenate the `strings` into a single `std::array<char>` with an
 // additional zero byte at the end.
+// TODO<joka921>: C++17 doesn't support template values. This needs some
+// refactoring
 template <ConstexprString... strings>
 constexpr auto constexprStrCatBufferImpl() {
   constexpr size_t sz = (size_t{0} + ... + strings.size());
