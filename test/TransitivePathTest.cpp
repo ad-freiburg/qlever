@@ -627,28 +627,36 @@ TEST_P(TransitivePathTest, maxLength2ToId) {
 }
 
 // _____________________________________________________________________________
-TEST_P(TransitivePathTest, zeroLengthException) {
+TEST_P(TransitivePathTest, zeroLength) {
   auto sub = makeIdTableFromVector({
       {0, 2},
       {2, 4},
       {4, 7},
       {0, 7},
-      {3, 3},
-      {7, 0},
-      // Disconnected component.
       {10, 11},
   });
+
+  auto expected = makeIdTableFromVector({{0, 0},
+                                         {0, 2},
+                                         {0, 4},
+                                         {0, 7},
+                                         {2, 2},
+                                         {2, 4},
+                                         {2, 7},
+                                         {4, 4},
+                                         {4, 7},
+                                         {10, 10},
+                                         {10, 11},
+                                         {7, 7},
+                                         {11, 11}});
 
   TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
   TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
   auto T =
       makePathUnbound(std::move(sub), {Variable{"?start"}, Variable{"?target"}},
                       left, right, 0, std::numeric_limits<size_t>::max());
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      T->computeResultOnlyForTesting(requestLaziness()),
-      ::testing::ContainsRegex("This query might have to evaluate the empty "
-                               "path, which is currently "
-                               "not supported"));
+  auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+  assertResultMatchesIdTable(resultTable, expected);
 }
 
 // _____________________________________________________________________________
