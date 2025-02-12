@@ -76,7 +76,7 @@ class IteratorForAccessOperator {
                          RandomAccessContainer*>;
   RandomAccessContainerPtr vector_ = nullptr;
   index_type index_{0};
-  [[no_unique_address]] Accessor accessor_;
+  Accessor accessor_;
 
  public:
   IteratorForAccessOperator() = default;
@@ -149,9 +149,9 @@ class IteratorForAccessOperator {
            static_cast<difference_type>(rhs.index_);
   }
 
-  decltype(auto) operator*() const { return _accessor(*vector_, index_); }
+  decltype(auto) operator*() const { return accessor_(*vector_, index_); }
   CPP_template(typename = void)(requires(!isConst)) decltype(auto) operator*() {
-    return _accessor(*vector_, index_);
+    return accessor_(*vector_, index_);
   }
 
   // Only allowed, if `RandomAccessContainer` yields references and not values
@@ -167,7 +167,7 @@ class IteratorForAccessOperator {
   }
 
   decltype(auto) operator[](difference_type n) const {
-    return _accessor(*vector_, index_ + n);
+    return accessor_(*vector_, index_ + n);
   }
 };
 
