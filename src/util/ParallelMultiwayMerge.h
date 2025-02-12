@@ -256,7 +256,8 @@ CPP_template(typename T, bool moveElements,
 // A variable, s.t. we don't have to initiate a struct each time.
 template <typename T, bool moveElements,
           typename SizeGetter = DefaultValueSizeGetter<T>>
-ParallelMultiwayMergeStruct<T, moveElements, SizeGetter> parallelMultiwayMerge;
+constexpr ParallelMultiwayMergeStruct<T, moveElements, SizeGetter>
+    parallelMultiwayMerge;
 }  // namespace ad_utility
 
 #endif  // QLEVER_PARALLELMULTIWAYMERGE_H

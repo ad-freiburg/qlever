@@ -102,7 +102,7 @@ class CompactVectorOfStrings {
   /**
    * @brief Fills this CompactVectorOfStrings with input.
    * @param The input from which to build the vector.
-   * // Note: In C++20 mode we use a `requires clause`, in C++17 mode we use a
+   * Note: In C++20 mode we use a `requires clause`, in C++17 mode we use a
    * static assert. Both work, as there is only one overload of `build`.
    */
   template <typename T>

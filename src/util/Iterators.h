@@ -74,15 +74,15 @@ class IteratorForAccessOperator {
   using RandomAccessContainerPtr =
       std::conditional_t<isConst, const RandomAccessContainer*,
                          RandomAccessContainer*>;
-  RandomAccessContainerPtr _vector = nullptr;
-  index_type _index{0};
-  Accessor _accessor;
+  RandomAccessContainerPtr vector_ = nullptr;
+  index_type index_{0};
+  [[no_unique_address]] Accessor accessor_;
 
  public:
   IteratorForAccessOperator() = default;
   IteratorForAccessOperator(RandomAccessContainerPtr vec, index_type index,
                             Accessor accessor = Accessor{})
-      : _vector{vec}, _index{index}, _accessor{std::move(accessor)} {}
+      : vector_{vec}, index_{index}, accessor_{std::move(accessor)} {}
 
   IteratorForAccessOperator(const IteratorForAccessOperator&) = default;
   IteratorForAccessOperator(IteratorForAccessOperator&&) noexcept = default;
@@ -92,14 +92,14 @@ class IteratorForAccessOperator {
       default;
 
   auto operator<=>(const IteratorForAccessOperator& rhs) const {
-    return (_index <=> rhs._index);
+    return (index_ <=> rhs.index_);
   }
   bool operator==(const IteratorForAccessOperator& rhs) const {
-    return _index == rhs._index;
+    return index_ == rhs.index_;
   }
 
   IteratorForAccessOperator& operator+=(difference_type n) {
-    _index += n;
+    index_ += n;
     return *this;
   }
   IteratorForAccessOperator operator+(difference_type n) const {
@@ -109,22 +109,22 @@ class IteratorForAccessOperator {
   }
 
   IteratorForAccessOperator& operator++() {
-    ++_index;
+    ++index_;
     return *this;
   }
   IteratorForAccessOperator operator++(int) & {
     IteratorForAccessOperator result{*this};
-    ++_index;
+    ++index_;
     return result;
   }
 
   IteratorForAccessOperator& operator--() {
-    --_index;
+    --index_;
     return *this;
   }
   IteratorForAccessOperator operator--(int) & {
     IteratorForAccessOperator result{*this};
-    --_index;
+    --index_;
     return result;
   }
 
@@ -134,7 +134,7 @@ class IteratorForAccessOperator {
   }
 
   IteratorForAccessOperator& operator-=(difference_type n) {
-    _index -= n;
+    index_ -= n;
     return *this;
   }
 
@@ -145,13 +145,13 @@ class IteratorForAccessOperator {
   }
 
   difference_type operator-(const IteratorForAccessOperator& rhs) const {
-    return static_cast<difference_type>(_index) -
-           static_cast<difference_type>(rhs._index);
+    return static_cast<difference_type>(index_) -
+           static_cast<difference_type>(rhs.index_);
   }
 
-  decltype(auto) operator*() const { return _accessor(*_vector, _index); }
+  decltype(auto) operator*() const { return _accessor(*vector_, index_); }
   CPP_template(typename = void)(requires(!isConst)) decltype(auto) operator*() {
-    return _accessor(*_vector, _index);
+    return _accessor(*vector_, index_);
   }
 
   // Only allowed, if `RandomAccessContainer` yields references and not values
@@ -167,7 +167,7 @@ class IteratorForAccessOperator {
   }
 
   decltype(auto) operator[](difference_type n) const {
-    return _accessor(*_vector, _index + n);
+    return _accessor(*vector_, index_ + n);
   }
 };
 
