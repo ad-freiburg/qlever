@@ -347,8 +347,8 @@ TEST_F(DeltaTriplesTest, DeltaTriplesManager) {
            absl::StrCat("<A> <B> <E", threadIdx, ">")});
       auto triplesToDelete = makeIdTriples(
           vocab, localVocab,
-          {absl::StrCat("<A> <B> <E", threadIdx, ">"),
-           absl::StrCat("<A> <B> <F", threadIdx, ">"), "<A> <C> <E>"});
+          {"<A> <A> <E>", absl::StrCat("<A> <B> <E", threadIdx, ">"),
+           absl::StrCat("<A> <B> <F", threadIdx, ">")});
       // Insert the `triplesToInsert`.
       deltaTriplesManager.modify<void>([&](DeltaTriples& deltaTriples) {
         deltaTriples.insertTriples(cancellationHandle, triplesToInsert);
@@ -416,10 +416,8 @@ TEST_F(DeltaTriplesTest, DeltaTriplesManager) {
   // thread-exclusive triple and inserts one thread-exclusive triple that is
   // deleted right after (This triple is stored as deleted in the `DeltaTriples`
   // because it might be contained in the original input). Additionally, there
-  // is one common triple inserted by// all the threads and one common triple
+  // is one common triple inserted by all the threads and one common triple
   // that is deleted by all the threads.
-  //
-
   auto deltaImpl = deltaTriplesManager.deltaTriples_.rlock();
   EXPECT_THAT(*deltaImpl, NumTriples(numThreads + 1, 2 * numThreads + 1,
                                      3 * numThreads + 2));
