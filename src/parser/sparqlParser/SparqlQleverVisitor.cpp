@@ -2308,20 +2308,28 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
   using namespace sparqlExpression;
   // Create the expression using the matching factory function from
   // `NaryExpression.h`.
-  auto createUnary = [&argList]<typename Function>(Function function)
-      requires std::is_invocable_r_v<ExpressionPtr, Function, ExpressionPtr> {
+  auto createUnary =
+      [&argList]<typename Function,
+                 typename = std::enable_if_t<std::is_invocable_r_v<
+                     ExpressionPtr, Function, ExpressionPtr>>>(
+          Function function) {
     AD_CORRECTNESS_CHECK(argList.size() == 1, argList.size());
     return function(std::move(argList[0]));
   };
-  auto createBinary = [&argList]<typename Function>(Function function)
-      requires std::is_invocable_r_v<ExpressionPtr, Function, ExpressionPtr,
-                                     ExpressionPtr> {
+  auto createBinary =
+      [&argList]<typename Function,
+                 typename = std::enable_if_t<std::is_invocable_r_v<
+                     ExpressionPtr, Function, ExpressionPtr, ExpressionPtr>>>(
+          Function function) {
     AD_CORRECTNESS_CHECK(argList.size() == 2);
     return function(std::move(argList[0]), std::move(argList[1]));
   };
-  auto createTernary = [&argList]<typename Function>(Function function)
-      requires std::is_invocable_r_v<ExpressionPtr, Function, ExpressionPtr,
-                                     ExpressionPtr, ExpressionPtr> {
+  auto createTernary = [&
+      argList]<typename Function,
+               typename = std::enable_if_t<
+                   std::is_invocable_r_v<ExpressionPtr, Function, ExpressionPtr,
+                                         ExpressionPtr, ExpressionPtr>>>(
+      Function function) {
     AD_CORRECTNESS_CHECK(argList.size() == 3);
     return function(std::move(argList[0]), std::move(argList[1]),
                     std::move(argList[2]));
@@ -2652,19 +2660,20 @@ GraphTerm Visitor::visit(Parser::BlankNodeContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-template <typename Ctx>
-void Visitor::visitVector(const std::vector<Ctx*>& childContexts)
-    requires voidWhenVisited<Visitor, Ctx> {
+CPP_template_def(typename Ctx)(
+    requires Visitor::voidWhenVisited<Visitor, Ctx>) void Visitor::
+    visitVector(const std::vector<Ctx*>& childContexts) {
   for (const auto& child : childContexts) {
     visit(child);
   }
 }
 
 // ____________________________________________________________________________________
-template <typename Ctx>
-[[nodiscard]] auto Visitor::visitVector(const std::vector<Ctx*>& childContexts)
-    -> std::vector<decltype(visit(childContexts[0]))>
-    requires(!voidWhenVisited<Visitor, Ctx>) {
+CPP_template_def(typename Ctx)(
+    requires CPP_NOT(Visitor::voidWhenVisited<Visitor, Ctx>))
+    [[nodiscard]] auto Visitor::visitVector(
+        const std::vector<Ctx*>& childContexts)
+        -> std::vector<decltype(visit(childContexts[0]))> {
   std::vector<decltype(visit(childContexts[0]))> children;
   for (const auto& child : childContexts) {
     children.emplace_back(visit(child));
@@ -2706,8 +2715,8 @@ void Visitor::visitIf(Target* target, Ctx* ctx) {
 }
 
 // _____________________________________________________________________________
-template <typename Ctx>
-void Visitor::visitIf(Ctx* ctx) requires voidWhenVisited<Visitor, Ctx> {
+CPP_template_def(typename Ctx)(requires Visitor::voidWhenVisited<
+                               Visitor, Ctx>) void Visitor::visitIf(Ctx* ctx) {
   if (ctx) {
     visit(ctx);
   }

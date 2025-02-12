@@ -534,16 +534,18 @@ class SparqlQleverVisitor {
         std::array<ExpressionPtr, sizeof...(children)>{std::move(children)...});
   }
 
-  template <typename Ctx>
-  void visitVector(const std::vector<Ctx*>& childContexts)
-      requires voidWhenVisited<SparqlQleverVisitor, Ctx>;
+  CPP_template(typename Ctx)(
+      requires SparqlQleverVisitor::voidWhenVisited<
+          SparqlQleverVisitor, Ctx>) void visitVector(const std::vector<Ctx*>&
+                                                          childContexts);
 
   // Call `visit` for each of the `childContexts` and return the results of
   // those calls as a `vector`.
-  template <typename Ctx>
-  auto visitVector(const std::vector<Ctx*>& childContexts)
-      -> std::vector<decltype(visit(childContexts[0]))>
-      requires(!voidWhenVisited<SparqlQleverVisitor, Ctx>);
+  CPP_template(typename Ctx)(requires CPP_NOT(
+      SparqlQleverVisitor::voidWhenVisited<
+          SparqlQleverVisitor, Ctx>)) auto visitVector(const std::vector<Ctx*>&
+                                                           childContexts)
+      -> std::vector<decltype(visit(childContexts[0]))>;
 
   // Check that exactly one of the `ctxs` is not `null`, visit that context,
   // cast the result to `Out` and return it. Requires that for all of the
@@ -566,8 +568,8 @@ class SparqlQleverVisitor {
   template <typename Target, typename Intermediate = Target, typename Ctx>
   void visitIf(Target* target, Ctx* ctx);
 
-  template <typename Ctx>
-  void visitIf(Ctx* ctx) requires voidWhenVisited<SparqlQleverVisitor, Ctx>;
+  CPP_template(typename Ctx)(requires SparqlQleverVisitor::voidWhenVisited<
+                             SparqlQleverVisitor, Ctx>) void visitIf(Ctx* ctx);
 
  public:
   [[noreturn]] static void reportError(const antlr4::ParserRuleContext* ctx,
