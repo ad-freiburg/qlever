@@ -56,7 +56,7 @@ class ConfigOptions : public BenchmarkInterface {
     auto numSigns =
         manager.addOption("num-signs", "The number of street signs.",
                           &numberOfStreetSigns_, 10000);
-    manager.addValidator([](const int& num) -> bool { return num >= 0; },
+    manager.addValidator([](const int& num) { return num >= 0; },
                          "The number of street signs must be at least 0!",
                          "Negative numbers, or floating point numbers, are not "
                          "allowed for the configuration option \"num-signs\".",

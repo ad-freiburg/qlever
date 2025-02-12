@@ -72,43 +72,6 @@ struct CompactStringVectorWriter;
 
 }
 
-#if false
-// TODO<joka921> Throw out this code if it works.
-// TODO<joka921, picciuca> : The following doesn't work if there is no `begin()`
-// member in 17 mode. We need a different solution for this, but this is
-// currently only used in tests. Postponing this for now.
-#ifdef QLEVER_CPP_17
-template <typename T, typename = void>
-struct IsIteratorOfIterator : std::false_type {};
-
-template <typename T>
-struct IsIteratorOfIterator<
-    T, std::void_t<decltype(*(T::iterator::value_type::begin()))>>
-    : std::true_type {};
-
-template <typename T, typename DataType>
-CPP_concept IteratorOfIterator =
-    (IsIteratorOfIterator<T>::value &&
-     ad_utility::SimilarTo<decltype(*(T::iterator::value_type::begin())),
-                           DataType>);
-#else
-template <typename T, typename DataType>
-concept IteratorOfIterator = requires(T t) {
-  { *(t.begin()->begin()) } -> ad_utility::SimilarTo<DataType>;
-};
-#endif
-
-
-/*
-template <typename T, typename U>
-concept DummySimilar = ad_utility::SimilarTo<T, U>;
-template <typename T, typename DataType>
-concept IteratorOfIterator = requires(T t) {
-  { *(t.begin()->begin()) } -> DummySimilar<DataType>;
-};
-*/
-#endif
-
 /**
  * @brief Stores a list of variable length data of a single type (e.g.
  *        c-style strings). The data is stored in a single contiguous block

@@ -42,12 +42,7 @@
 
 using namespace std::string_literals;
 
-// TODO<joka921, gpicciuca>, some of those currently don't compile, but we first
-// take care of more important things.
-#if false
-
 namespace ad_utility::ConfigManagerImpl {
-
 
 /*
 @brief Checks, if the given configuration option was set correctly.
@@ -2542,8 +2537,9 @@ TEST(ConfigManagerTest, PrintConfigurationDocComparison) {
   // Add a default validator to the given `ConfigManager`.
   auto addDefaultValidator =
       [](ConfigManager* configManager,
-         const ad_utility::isInstantiation<
-             ConstConfigOptionProxy> auto&... configOptionsToBeChecked) {
+         const QL_CONCEPT_OR_NOTHING(
+             ad_utility::isInstantiation<
+                 ConstConfigOptionProxy>) auto&... configOptionsToBeChecked) {
         const std::string validatorDescription = absl::StrCat(
             "Validator for configuration options ",
             ad_utility::lazyStrJoin(
@@ -2696,5 +2692,3 @@ TEST(ConfigManagerTest, PrintConfigurationDocComparison) {
                     topManager.printConfigurationDoc(true));
 }
 }  // namespace ad_utility::ConfigManagerImpl
-
-#endif

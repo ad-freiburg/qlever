@@ -398,11 +398,11 @@ class ConfigManager {
   */
   CPP_template(typename ValidatorFunc, typename... ConfigOptions)(requires(
       sizeof...(ConfigOptions) >
-      0)) void addOptionValidator(ValidatorFunc validatorFunction,
+      0)) auto addOptionValidator(ValidatorFunc validatorFunction,
                                   std::string errorMessage,
                                   std::string validatorDescriptor,
                                   ConfigOptions&&... configOptionsToBeChecked)
-      QL_CONCEPT_OR_NOTHING(
+      -> CPP_ret(void)(
           requires(ValidatorFunction<
                    ValidatorFunc,
                    decltype(configOptionsToBeChecked.getConfigOption())...>)) {
@@ -435,11 +435,11 @@ class ConfigManager {
   CPP_template(typename ExceptionValidatorT,
                typename... ConfigOptions)(requires(
       sizeof...(ConfigOptions) >
-      0)) void addOptionValidator(ExceptionValidatorT
+      0)) auto addOptionValidator(ExceptionValidatorT
                                       exceptionValidatorFunction,
                                   std::string exceptionValidatorDescriptor,
                                   ConfigOptions&&... configOptionsToBeChecked)
-      QL_CONCEPT_OR_NOTHING(
+      -> CPP_ret(void)(
           requires(ExceptionValidatorFunction<
                    ExceptionValidatorT,
                    decltype(configOptionsToBeChecked.getConfigOption())...>)) {

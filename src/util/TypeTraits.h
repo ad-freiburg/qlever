@@ -213,9 +213,8 @@ CPP_template(typename Tuple)(requires isTuple<Tuple>) using TupleToVariant =
 /// for an arbitrary number of tuples as template parameters.
 template <typename... Tuples>
 using TupleCat =
-    typename std::enable_if<(isTuple<Tuples> && ...),
-                            decltype(std::tuple_cat(
-                                std::declval<Tuples&>()...))>::type;
+    std::enable_if_t<(isTuple<Tuples> && ...),
+                     decltype(std::tuple_cat(std::declval<Tuples&>()...))>;
 
 /// A generalized version of std::visit that also supports non-variant
 /// parameters. Each `parameterOrVariant` of type T that is not a std::variant
