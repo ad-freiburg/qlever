@@ -56,7 +56,7 @@ class QueryPlanner {
           _variables.insert(triple_.s_.getVariable());
         }
         if (isVariable(triple_.p_)) {
-          _variables.insert(Variable{triple_.p_._iri});
+          _variables.insert(Variable{triple_.p_.iri_});
         }
         if (isVariable(triple_.o_)) {
           _variables.insert(triple_.o_.getVariable());
