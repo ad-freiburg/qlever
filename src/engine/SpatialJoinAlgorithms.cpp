@@ -366,7 +366,7 @@ std::vector<Box> SpatialJoinAlgorithms::computeQueryBox(
   } else if (static_cast<double>(maxDist.value()) <
              static_cast<double>(std::numeric_limits<long long>::max()) /
                  1.02) {
-    maxDistInMetersBuffer = 1.01 * static_cast<double>(maxDist.value());
+    maxDistInMetersBuffer = 1.01 * maxDistInMetersBuffer;
   } else {
     maxDistInMetersBuffer =
         static_cast<double>(std::numeric_limits<long long>::max());
@@ -610,12 +610,12 @@ std::vector<Box> SpatialJoinAlgorithms::getQueryBox(
 Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
   // helper struct to avoid duplicate entries for areas
   struct AddedPair {
-    size_t rowLeft;
-    size_t rowRight;
+    size_t rowLeft_;
+    size_t rowRight_;
 
-    bool operator<(const AddedPair& other) const {
-      return (rowLeft < other.rowLeft) ||
-             (rowLeft == other.rowLeft && rowRight < other.rowRight);
+    bool operator==(const AddedPair& other) const = default;
+    auto operator<=>(const AddedPair& other) const {
+      return (rowLeft_ == other.rowLeft_) ? (rowRight_ <=> other.rowRight_) : (rowLeft_ <=> other.rowLeft_);
     }
   };
 
@@ -691,7 +691,7 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
         if (useMidpointForAreas_) {
           addResultTableEntry(&result, idTableLeft, idTableRight, rowLeft,
                               rowRight, distance);
-        } else if (pairs.insert(AddedPair(rowLeft, rowRight)).second) {
+        } else if (pairs.insert(AddedPair{rowLeft, rowRight}).second) {
           addResultTableEntry(&result, idTableLeft, idTableRight, rowLeft,
                               rowRight, distance);
         }
