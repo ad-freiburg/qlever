@@ -157,10 +157,14 @@ class ConcurrentCache {
   using Value = typename Cache::value_type;
   using Key = typename Cache::key_type;
 
-  ConcurrentCache() requires std::default_initializable<Cache> = default;
+  // TODO<joka921>: Default constructor, needs some proper solution
+  ConcurrentCache() QL_CONCEPT_OR_NOTHING(
+      requires std::default_initializable<Cache>) = default;
   /// Constructor: all arguments are forwarded to the underlying cache type.
-  template <typename CacheArg, typename... CacheArgs>
-  requires(!std::same_as<ConcurrentCache, std::remove_cvref_t<CacheArg>>)
+  // TODO<joka921>: Temporary solution until proper macros are made
+  template <typename CacheArg, typename... CacheArgs,
+            typename = std::enable_if_t<
+                !std::same_as<ConcurrentCache, std::remove_cvref_t<CacheArg>>>>
   ConcurrentCache(CacheArg&& cacheArg, CacheArgs&&... cacheArgs)
       : _cacheAndInProgressMap{AD_FWD(cacheArg), AD_FWD(cacheArgs)...} {}
 
@@ -337,8 +341,10 @@ class ConcurrentCache {
     HashMap<Key, std::pair<bool, shared_ptr<ResultInProgress>>> _inProgress;
 
     CacheAndInProgressMap() = default;
-    template <typename Arg, typename... Args>
-    requires(!std::same_as<std::remove_cvref_t<Arg>, CacheAndInProgressMap>)
+    // TODO<joka921>: Temporary solution until proper macros are made
+    template <typename Arg, typename... Args,
+              typename = std::enable_if_t<!std::same_as<
+                  std::remove_cvref_t<Arg>, CacheAndInProgressMap>>>
     CacheAndInProgressMap(Arg&& arg, Args&&... args)
         : _cache{AD_FWD(arg), AD_FWD(args)...} {}
   };
