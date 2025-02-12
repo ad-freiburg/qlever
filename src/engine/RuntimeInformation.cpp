@@ -185,6 +185,29 @@ std::string_view RuntimeInformation::toString(Status status) {
   AD_FAIL();
 }
 
+// __________________________________________________________________________
+RuntimeInformation::Status RuntimeInformation::fromString(
+    std::string_view str) {
+  if (str == "fully materialized") {
+    return fullyMaterialized;
+  } else if (str == "lazily materialized") {
+    return lazilyMaterialized;
+  } else if (str == "in progress") {
+    return inProgress;
+  } else if (str == "not started") {
+    return notStarted;
+  } else if (str == "optimized out") {
+    return optimizedOut;
+  } else if (str == "failed") {
+    return failed;
+  } else if (str == "failed because child failed") {
+    return failedBecauseChildFailed;
+  } else if (str == "cancelled") {
+    return cancelled;
+  }
+  AD_FAIL();
+}
+
 // ________________________________________________________________________________________________________________
 void to_json(nlohmann::ordered_json& j,
              const std::shared_ptr<RuntimeInformation>& rti) {
@@ -218,6 +241,64 @@ void to_json(nlohmann::ordered_json& j,
              const RuntimeInformationWholeQuery& rti) {
   j = nlohmann::ordered_json{
       {"time_query_planning", rti.timeQueryPlanning.count()}};
+}
+
+// __________________________________________________________________________
+void from_json(const nlohmann::json& j, RuntimeInformation& rti) {
+  // Helper lambdas to ignore missing key or invalid value.
+  auto tryGet = [&j]<typename T>(T& dst, std::string_view key) {
+    try {
+      j.at(key).get_to(dst);
+    } catch (const nlohmann::json::exception& e) {
+    }
+  };
+  using namespace std::chrono;
+  auto tryGetTime = [&j](microseconds& dst, std::string_view key) {
+    try {
+      dst =
+          duration_cast<microseconds>(milliseconds(j.at(key).get<uint64_t>()));
+    } catch (const nlohmann::json::exception& e) {
+    }
+  };
+
+  auto cacheStatusFromString = [](std::string_view str) {
+    using ad_utility::CacheStatus;
+    if (str == "cached_not_pinned") {
+      return CacheStatus::cachedNotPinned;
+    } else if (str == "cached_pinned") {
+      return CacheStatus::cachedPinned;
+    } else if (str == "computed") {
+      return CacheStatus::computed;
+    } else if (str == "not_in_cache_not_computed") {
+      return CacheStatus::notInCacheAndNotComputed;
+    } else {
+      throw std::runtime_error(
+          "Unknown string value was encountered in `fromString(CacheStatus)`");
+    }
+  };
+
+  tryGet(rti.descriptor_, "description");
+  tryGet(rti.numRows_, "result_rows");
+  tryGet(rti.numCols_, "result_cols");
+  tryGet(rti.columnNames_, "column_names");
+  tryGetTime(rti.totalTime_, "total_time");
+  tryGetTime(rti.originalTotalTime_, "original_total_time");
+  tryGetTime(rti.originalOperationTime_, "original_operation_time");
+  if (auto it = j.find("cache_status"); it != j.end()) {
+    rti.cacheStatus_ = cacheStatusFromString(it->get<std::string_view>());
+  }
+  tryGet(rti.details_, "details");
+  tryGet(rti.costEstimate_, "estimated_total_cost");
+  tryGet(rti.multiplicityEstimates_, "estimated_column_multiplicities");
+  tryGet(rti.sizeEstimate_, "estimated_size");
+  if (auto it = j.find("status"); it != j.end()) {
+    rti.status_ = RuntimeInformation::fromString(it->get<std::string>());
+  }
+  if (auto it = j.find("children"); it != j.end()) {
+    for (const auto& child : *it) {
+      rti.children_.push_back(std::make_shared<RuntimeInformation>(child));
+    }
+  }
 }
 
 // __________________________________________________________________________
