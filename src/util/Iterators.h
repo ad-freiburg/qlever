@@ -276,6 +276,9 @@ class InputRangeFromGet {
 
  public:
   virtual ~InputRangeFromGet() = default;
+  InputRangeFromGet() = default;
+  InputRangeFromGet(InputRangeFromGet&&) = default;
+  InputRangeFromGet& operator=(InputRangeFromGet&&) = default;
 
   // Get the next value and store it.
   void getNextAndStore() { storage_ = get(); }
