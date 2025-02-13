@@ -35,6 +35,34 @@ struct TextSearchQuery : MagicServiceQuery {
   std::vector<std::variant<TextIndexScanForWordConfiguration,
                            TextIndexScanForEntityConfiguration>>
   toConfigs(QueryExecutionContext* qec) const;
+
+  // Helper functions for addParameter
+
+  // Checks if subject is a variable. If not throws exception.
+  void throwSubjectVariableException(std::string predString,
+                                     const TripleComponent& subject);
+  // Checks if object and subject are variables. If not throws exception.
+  void throwSubjectAndObjectVariableException(std::string predString,
+                                              const TripleComponent& subject,
+                                              const TripleComponent& object);
+  // Checks if query already encountered <contains-word> or <contains-entity>
+  // before this. If yes throws exception.
+  void throwContainsWordOrEntity(const TripleComponent& subject);
+
+  void predStringTextSearch(const Variable& subjectVar,
+                            const Variable& objectVar);
+
+  void predStringContainsWord(const Variable& subjectVar,
+                              const TripleComponent::Literal& objectLiteral);
+
+  void predStringContainsEntity(const TripleComponent& subject,
+                                const TripleComponent& object);
+
+  void predStringBindMatch(const Variable& subjectVar,
+                           const Variable& objectVar);
+
+  void predStringBindScore(const Variable& subjectVar,
+                           const Variable& objectVar);
 };
 
 }  // namespace parsedQuery
