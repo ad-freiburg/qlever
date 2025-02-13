@@ -271,9 +271,9 @@ void ParsedQuery::GraphPattern::addLanguageFilter(const Variable& variable,
            stdv::filter(ad::toBool)) {
     for (auto& triple : basicPattern->_triples) {
       if (triple.o_ == variable &&
-          (triple.p_._operation == PropertyPath::Operation::IRI &&
+          (triple.p_.operation_ == PropertyPath::Operation::IRI &&
            !isVariable(triple.p_)) &&
-          !triple.p_._iri.starts_with(
+          !triple.p_.iri_.starts_with(
               QLEVER_INTERNAL_PREFIX_IRI_WITHOUT_CLOSING_BRACKET)) {
         matchingTriples.push_back(&triple);
       }
@@ -282,8 +282,8 @@ void ParsedQuery::GraphPattern::addLanguageFilter(const Variable& variable,
 
   // Replace all the matching triples.
   for (auto* triplePtr : matchingTriples) {
-    triplePtr->p_._iri = ad_utility::convertToLanguageTaggedPredicate(
-        triplePtr->p_._iri, langTag);
+    triplePtr->p_.iri_ = ad_utility::convertToLanguageTaggedPredicate(
+        triplePtr->p_.iri_, langTag);
   }
 
   // Handle the case, that no suitable triple (see above) was found. In this

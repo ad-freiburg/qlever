@@ -56,7 +56,7 @@ class QueryPlanner {
           _variables.insert(triple_.s_.getVariable());
         }
         if (isVariable(triple_.p_)) {
-          _variables.insert(Variable{triple_.p_._iri});
+          _variables.insert(Variable{triple_.p_.iri_});
         }
         if (isVariable(triple_.o_)) {
           _variables.insert(triple_.o_.getVariable());
@@ -289,23 +289,23 @@ class QueryPlanner {
   /**
    * @brief Returns a parsed query for the property path.
    */
-  [[nodiscard]] std::shared_ptr<ParsedQuery::GraphPattern> seedFromPropertyPath(
+  [[nodiscard]] ParsedQuery::GraphPattern seedFromPropertyPath(
       const TripleComponent& left, const PropertyPath& path,
       const TripleComponent& right);
 
-  [[nodiscard]] std::shared_ptr<ParsedQuery::GraphPattern> seedFromSequence(
+  [[nodiscard]] ParsedQuery::GraphPattern seedFromSequence(
       const TripleComponent& left, const PropertyPath& path,
       const TripleComponent& right);
-  [[nodiscard]] std::shared_ptr<ParsedQuery::GraphPattern> seedFromAlternative(
+  [[nodiscard]] ParsedQuery::GraphPattern seedFromAlternative(
       const TripleComponent& left, const PropertyPath& path,
       const TripleComponent& right);
-  [[nodiscard]] std::shared_ptr<ParsedQuery::GraphPattern> seedFromTransitive(
+  [[nodiscard]] ParsedQuery::GraphPattern seedFromTransitive(
       const TripleComponent& left, const PropertyPath& path,
       const TripleComponent& right, size_t min, size_t max);
-  [[nodiscard]] std::shared_ptr<ParsedQuery::GraphPattern> seedFromInverse(
+  [[nodiscard]] ParsedQuery::GraphPattern seedFromInverse(
       const TripleComponent& left, const PropertyPath& path,
       const TripleComponent& right);
-  [[nodiscard]] std::shared_ptr<ParsedQuery::GraphPattern> seedFromIri(
+  [[nodiscard]] ParsedQuery::GraphPattern seedFromIri(
       const TripleComponent& left, const PropertyPath& path,
       const TripleComponent& right);
 
