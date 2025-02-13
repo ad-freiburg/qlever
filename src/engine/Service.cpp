@@ -24,10 +24,10 @@
 // ____________________________________________________________________________
 Service::Service(QueryExecutionContext* qec,
                  parsedQuery::Service parsedServiceClause,
-                 GetResultFunction getResultFunction)
+                 NetworkFunctions networkFunctions)
     : Operation{qec},
       parsedServiceClause_{std::move(parsedServiceClause)},
-      getResultFunction_{std::move(getResultFunction)} {}
+      networkFunctions_{std::move(networkFunctions)} {}
 
 // ____________________________________________________________________________
 std::string Service::getCacheKeyImpl() const {
@@ -125,6 +125,31 @@ ProtoResult Service::computeResultImpl([[maybe_unused]] bool requestLaziness) {
   ad_utility::httpUtils::Url serviceUrl{
       asStringViewUnsafe(parsedServiceClause_.serviceIri_.getContent())};
 
+  // Receive updates about the RuntimeInformation from the service endpoint.
+  const std::string queryId = ad_utility::UuidGenerator()();
+  auto updateRuntimeInformation = [&]() {
+    try {
+      const std::string target = absl::StrCat("/watch/", queryId);
+      for (const auto& msg :
+           networkFunctions_.getRuntimeInfoFunction_(serviceUrl, target)) {
+        childRuntimeInformation_ =
+            std::make_shared<RuntimeInformation>(nlohmann::json::parse(msg));
+      }
+    } catch (const boost::beast::system_error& se) {
+      // If the endpoint closes the connection we have received all messages
+      // -> ignore the error.
+      if (se.code() != boost::beast::websocket::error::closed) {
+        LOG(ERROR) << "SERVICE Websocket client: " << se.what() << '\n';
+      }
+    } catch (std::exception& e) {
+      LOG(ERROR) << "SERVICE Websocket client: " << e.what() << '\n';
+    }
+  };
+  if (!runtimeInfoThread_) {
+    runtimeInfoThread_ =
+        std::make_unique<std::thread>(updateRuntimeInformation);
+  }
+
   // Construct the query to be sent to the SPARQL endpoint.
   std::string variablesForSelectClause = absl::StrJoin(
       parsedServiceClause_.visibleVariables_, " ", Variable::AbslFormatter);
@@ -138,10 +163,10 @@ ProtoResult Service::computeResultImpl([[maybe_unused]] bool requestLaziness) {
             << ", target: " << serviceUrl.target() << ")" << std::endl
             << serviceQuery << std::endl;
 
-  HttpOrHttpsResponse response = getResultFunction_(
+  HttpOrHttpsResponse response = networkFunctions_.getResultFunction_(
       serviceUrl, cancellationHandle_, boost::beast::http::verb::post,
       serviceQuery, "application/sparql-query",
-      "application/sparql-results+json");
+      "application/sparql-results+json", {{"Query-Id"sv, queryId}});
 
   auto throwErrorWithContext = [this, &response](std::string_view sv) {
     std::string ctx;
