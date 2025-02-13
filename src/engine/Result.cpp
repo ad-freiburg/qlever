@@ -72,6 +72,10 @@ Result::Result(IdTableVocabPair pair, std::vector<ColumnIndex> sortedBy)
 
 // _____________________________________________________________________________
 Result::Result(Generator idTables, std::vector<ColumnIndex> sortedBy)
+    : Result{LazyResult{std::move(idTables)}, std::move(sortedBy)} {}
+
+// _____________________________________________________________________________
+Result::Result(LazyResult idTables, std::vector<ColumnIndex> sortedBy)
     : data_{GenContainer{[](auto idTables, auto sortedBy) -> Generator {
         std::optional<IdTable::row_type> previousId = std::nullopt;
         for (IdTableVocabPair& pair : idTables) {

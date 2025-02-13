@@ -45,9 +45,13 @@ class Bind : public Operation {
  private:
   ProtoResult computeResult(bool requestLaziness) override;
 
+ public:
+  // This function has to be public, as a free struct in the `.cpp` file uses
+  // it.
   static IdTable cloneSubView(const IdTable& idTable,
                               const std::pair<size_t, size_t>& subrange);
 
+ private:
   // Implementation for the binding of arbitrary expressions.
   IdTable computeExpressionBind(
       LocalVocab* localVocab, IdTable idTable,
