@@ -17,8 +17,10 @@ class SPARQLProtocol {
  public:
   /// Parse the path and URL parameters from the given request. Supports both
   /// GET and POST request according to the SPARQL 1.1 standard.
-  static ad_utility::url_parser::ParsedRequest parseHttpRequest(
-      const ad_utility::httpUtils::HttpRequest auto& request) {
+  CPP_template_2(typename RequestT)(
+      requires ad_utility::httpUtils::HttpRequest<
+          RequestT>) static ad_utility::url_parser::ParsedRequest
+      parseHttpRequest(const RequestT& request) {
     using namespace ad_utility::url_parser::sparqlOperation;
     using namespace ad_utility::use_type_identity;
     namespace http = boost::beast::http;
@@ -174,9 +176,11 @@ class SPARQLProtocol {
   };
 
  private:
-  static std::optional<std::string> extractAccessToken(
-      const ad_utility::httpUtils::HttpRequest auto& request,
-      const ad_utility::url_parser::ParamValueMap& params) {
+  CPP_template_2(typename RequestT)(
+      requires ad_utility::httpUtils::HttpRequest<RequestT>) static std::
+      optional<std::string> extractAccessToken(
+          const RequestT& request,
+          const ad_utility::url_parser::ParamValueMap& params) {
     namespace http = boost::beast::http;
     std::optional<std::string> tokenFromAuthorizationHeader;
     std::optional<std::string> tokenFromParameter;

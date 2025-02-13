@@ -66,8 +66,8 @@ QetMatcher RootOperation(auto matcher) {
 }
 
 // Match the `getChildren` method of an `Operation`.
-inline Matcher<const ::Operation&> children(
-    const std::same_as<QetMatcher> auto&... childMatchers) {
+inline Matcher<const ::Operation&> children(const QL_CONCEPT_OR_NOTHING(
+    std::same_as<QetMatcher>) auto&... childMatchers) {
   return Property("getChildren", &Operation::getChildren,
                   ElementsAre(Pointee(childMatchers)...));
 }
@@ -77,7 +77,8 @@ inline Matcher<const ::Operation&> children(
 // `childMatcher`s. Note that the child matchers are not ordered.
 template <typename OperationType>
 inline auto MatchTypeAndUnorderedChildren =
-    [](const std::same_as<QetMatcher> auto&... childMatchers) {
+    [](const QL_CONCEPT_OR_NOTHING(
+        std::same_as<QetMatcher>) auto&... childMatchers) {
       return RootOperation<OperationType>(
           AllOf(Property("getChildren", &Operation::getChildren,
                          UnorderedElementsAre(Pointee(childMatchers)...))));
@@ -87,7 +88,8 @@ inline auto MatchTypeAndUnorderedChildren =
 // appear in exact the correct order.
 template <typename OperationType>
 inline auto MatchTypeAndOrderedChildren =
-    [](const std::same_as<QetMatcher> auto&... childMatchers) {
+    [](const QL_CONCEPT_OR_NOTHING(
+        std::same_as<QetMatcher>) auto&... childMatchers) {
       return RootOperation<OperationType>(AllOf(children(childMatchers...)));
     };
 
@@ -193,7 +195,8 @@ inline auto Bind = [](const QetMatcher& childMatcher,
 inline auto CountAvailablePredicates =
     [](size_t subjectColumnIdx, const Variable& predicateVar,
        const Variable& countVar,
-       const std::same_as<QetMatcher> auto&... childMatchers)
+       const QL_CONCEPT_OR_NOTHING(
+           std::same_as<QetMatcher>) auto&... childMatchers)
         requires(sizeof...(childMatchers) <= 1) {
   return RootOperation<::CountAvailablePredicates>(AllOf(
       AD_PROPERTY(::CountAvailablePredicates, subjectColumnIndex,
@@ -288,7 +291,9 @@ inline auto TransitivePathSideMatcher = [](TransitivePathSide side) {
 // Match a TransitivePath operation
 inline auto TransitivePath =
     [](TransitivePathSide left, TransitivePathSide right, size_t minDist,
-       size_t maxDist, const std::same_as<QetMatcher> auto&... childMatchers) {
+       size_t maxDist,
+       const QL_CONCEPT_OR_NOTHING(
+           std::same_as<QetMatcher>) auto&... childMatchers) {
       return RootOperation<::TransitivePathBase>(
           AllOf(children(childMatchers...),
                 AD_PROPERTY(TransitivePathBase, getMinDist, Eq(minDist)),
@@ -318,7 +323,8 @@ inline auto PathSearchConfigMatcher = [](PathSearchConfiguration config) {
 // Match a PathSearch operation
 inline auto PathSearch =
     [](PathSearchConfiguration config, bool sourceBound, bool targetBound,
-       const std::same_as<QetMatcher> auto&... childMatchers) {
+       const QL_CONCEPT_OR_NOTHING(
+           std::same_as<QetMatcher>) auto&... childMatchers) {
       return RootOperation<::PathSearch>(AllOf(
           children(childMatchers...),
           AD_PROPERTY(PathSearch, getConfig, PathSearchConfigMatcher(config)),
@@ -336,7 +342,8 @@ inline auto SpatialJoin =
     [](size_t maxDist, size_t maxResults, Variable left, Variable right,
        std::optional<Variable> distanceVariable,
        PayloadVariables payloadVariables, SpatialJoinAlgorithm algorithm,
-       const std::same_as<QetMatcher> auto&... childMatchers) {
+       const QL_CONCEPT_OR_NOTHING(
+           std::same_as<QetMatcher>) auto&... childMatchers) {
       return RootOperation<::SpatialJoin>(
           AllOf(children(childMatchers...),
                 AD_PROPERTY(SpatialJoin, onlyForTestingGetTask,

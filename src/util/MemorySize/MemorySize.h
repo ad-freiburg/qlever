@@ -29,9 +29,8 @@ namespace ad_utility {
 */
 
 // A concept, for when a type should be an integral, or a floating point.
-// TODO<joka921, gpicciuca> Turn back to  `CPP_concept`
 template <typename T>
-concept Arithmetic = (std::integral<T> || std::floating_point<T>);
+CPP_concept Arithmetic = (std::integral<T> || std::floating_point<T>);
 
 /*
 An abstract class, that represents an amount of memory.

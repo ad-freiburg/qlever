@@ -67,7 +67,7 @@ CPP_requires(writeSerializerRequires,
                                                   WriteSerializerTag>>));
 
 template <typename S>
-concept WriteSerializer = CPP_requires_ref(writeSerializerRequires, S);
+CPP_concept WriteSerializer = CPP_requires_ref(writeSerializerRequires, S);
 
 // A `ReadSerializer` can read to span of bytes from some resource and has a
 // public alias `using SerializerType = ReadSerializerTag'`.
@@ -80,7 +80,7 @@ CPP_requires(readSerializerRequires,
                                                   ReadSerializerTag>>));
 
 template <typename S>
-concept ReadSerializer = CPP_requires_ref(readSerializerRequires, S);
+CPP_concept ReadSerializer = CPP_requires_ref(readSerializerRequires, S);
 
 /// A `Serializer` is either a `WriteSerializer` or a `ReadSerializer`
 template <typename S>
