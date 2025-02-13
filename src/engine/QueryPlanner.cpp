@@ -837,7 +837,7 @@ auto QueryPlanner::seedWithScansAndText(
 }
 
 // _____________________________________________________________________________
-std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromPropertyPath(
+ParsedQuery::GraphPattern QueryPlanner::seedFromPropertyPath(
     const TripleComponent& left, const PropertyPath& path,
     const TripleComponent& right) {
   switch (path.operation_) {
@@ -862,12 +862,12 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromPropertyPath(
 }
 
 // _____________________________________________________________________________
-std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromSequence(
+ParsedQuery::GraphPattern QueryPlanner::seedFromSequence(
     const TripleComponent& left, const PropertyPath& path,
     const TripleComponent& right) {
   AD_CORRECTNESS_CHECK(path.children_.size() > 1);
 
-  auto joinPattern = ParsedQuery::GraphPattern{};
+  ParsedQuery::GraphPattern joinPattern{};
   TripleComponent innerLeft = left;
   TripleComponent innerRight = generateUniqueVarName();
   for (size_t i = 0; i < path.children_.size(); i++) {
@@ -879,17 +879,17 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromSequence(
 
     auto pattern = seedFromPropertyPath(innerLeft, child, innerRight);
     joinPattern._graphPatterns.insert(joinPattern._graphPatterns.end(),
-                                      pattern->_graphPatterns.begin(),
-                                      pattern->_graphPatterns.end());
+                                      pattern._graphPatterns.begin(),
+                                      pattern._graphPatterns.end());
     innerLeft = innerRight;
     innerRight = generateUniqueVarName();
   }
 
-  return std::make_shared<ParsedQuery::GraphPattern>(joinPattern);
+  return joinPattern;
 }
 
 // _____________________________________________________________________________
-std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromAlternative(
+ParsedQuery::GraphPattern QueryPlanner::seedFromAlternative(
     const TripleComponent& left, const PropertyPath& path,
     const TripleComponent& right) {
   if (path.children_.empty()) {
@@ -903,32 +903,23 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromAlternative(
     return seedFromPropertyPath(left, path, right);
   }
 
-  std::vector<std::shared_ptr<ParsedQuery::GraphPattern>> childPlans;
+  std::vector<ParsedQuery::GraphPattern> childPlans;
   childPlans.reserve(path.children_.size());
   for (const auto& child : path.children_) {
     childPlans.push_back(seedFromPropertyPath(left, child, right));
   }
-  // todo<joka921> refactor this nonsense recursively by getting rid of the
-  // shared_ptrs everywhere
-  std::vector<ParsedQuery::GraphPattern> tmp;
-  for (const auto& el : childPlans) {
-    tmp.push_back(*el);
-  }
-
-  return std::make_shared<ParsedQuery::GraphPattern>(
-      uniteGraphPatterns(std::move(tmp)));
+  return uniteGraphPatterns(std::move(childPlans));
 }
 
 // _____________________________________________________________________________
-std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitive(
+ParsedQuery::GraphPattern QueryPlanner::seedFromTransitive(
     const TripleComponent& left, const PropertyPath& path,
     const TripleComponent& right, size_t min, size_t max) {
   Variable innerLeft = generateUniqueVarName();
   Variable innerRight = generateUniqueVarName();
-  std::shared_ptr<ParsedQuery::GraphPattern> childPlan =
+  ParsedQuery::GraphPattern childPlan =
       seedFromPropertyPath(innerLeft, path.children_[0], innerRight);
-  std::shared_ptr<ParsedQuery::GraphPattern> p =
-      std::make_shared<ParsedQuery::GraphPattern>();
+  ParsedQuery::GraphPattern p{};
   p::TransPath transPath;
   transPath._left = left;
   transPath._right = right;
@@ -936,27 +927,26 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitive(
   transPath._innerRight = innerRight;
   transPath._min = min;
   transPath._max = max;
-  transPath._childGraphPattern = *childPlan;
-  p->_graphPatterns.emplace_back(std::move(transPath));
+  transPath._childGraphPattern = std::move(childPlan);
+  p._graphPatterns.emplace_back(std::move(transPath));
   return p;
 }
 
 // _____________________________________________________________________________
-std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromInverse(
+ParsedQuery::GraphPattern QueryPlanner::seedFromInverse(
     const TripleComponent& left, const PropertyPath& path,
     const TripleComponent& right) {
   return seedFromPropertyPath(right, path.children_[0], left);
 }
 
 // _____________________________________________________________________________
-std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromIri(
+ParsedQuery::GraphPattern QueryPlanner::seedFromIri(
     const TripleComponent& left, const PropertyPath& path,
     const TripleComponent& right) {
-  std::shared_ptr<ParsedQuery::GraphPattern> p =
-      std::make_shared<ParsedQuery::GraphPattern>();
+  ParsedQuery::GraphPattern p{};
   p::BasicGraphPattern basic;
   basic._triples.push_back(SparqlTriple(left, path, right));
-  p->_graphPatterns.emplace_back(std::move(basic));
+  p._graphPatterns.emplace_back(std::move(basic));
 
   return p;
 }
@@ -2474,7 +2464,7 @@ void QueryPlanner::GraphPatternPlanner::visitBasicGraphPattern(
     } else {
       auto children =
           planner_.seedFromPropertyPath(triple.s_, triple.p_, triple.o_);
-      for (auto& child : children->_graphPatterns) {
+      for (auto& child : children._graphPatterns) {
         std::visit([self = this](
                        auto& arg) { self->graphPatternOperationVisitor(arg); },
                    child);
