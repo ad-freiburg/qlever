@@ -65,7 +65,7 @@ class FsstDecoder {
     return output;
   }
   // Allow this type to be trivially serializable,
-  // TODO<joka921, gpicciuca>: Using CPP_template(_def) here breaks the
+  // TODO<joka921, gpicciuca>: Using CPP_template(_def)/_2 here breaks the
   // Serializer build
   friend std::true_type allowTrivialSerialization(
       QL_CONCEPT_OR_NOTHING(std::same_as<FsstDecoder>) auto, auto);
@@ -106,10 +106,9 @@ class FsstRepeatedDecoder {
     return result;
   }
   // Allow this type to be trivially serializable,
-  // TODO<joka921, gpicciuca>: Using CPP_template(_def) here breaks the
-  // Serializer build
-  [[maybe_unused]] friend std::true_type allowTrivialSerialization(
-      QL_CONCEPT_OR_NOTHING(std::same_as<FsstRepeatedDecoder>) auto, auto) {
+  CPP_template_2(typename T,
+                 typename U)(requires std::same_as<T, FsstRepeatedDecoder>)
+      [[maybe_unused]] friend std::true_type allowTrivialSerialization(T, U) {
     return {};
   }
 };
