@@ -6,9 +6,9 @@
 #pragma once
 
 #include <charconv>
-#include <concepts>
 #include <cstdlib>
 
+#include "backports/concepts.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 
 // Factory functions for all kinds of expressions that only have other
@@ -136,12 +136,13 @@ SparqlExpression::Ptr makeBoundExpression(SparqlExpression::Ptr child);
 // `make...` functions for n-ary expressions that have a compile-time known
 // number of children. This makes the testing easier, as we then can use the
 // same test helpers for all expressions.
-template <auto function>
-requires std::is_invocable_r_v<SparqlExpression::Ptr, decltype(function),
-                               std::vector<SparqlExpression::Ptr>>
-constexpr auto variadicExpressionFactory =
-    []<std::derived_from<SparqlExpression>... Exps>(
-        std::unique_ptr<Exps>... children) {
+CPP_template(auto function)(
+    requires std::is_invocable_r_v<
+        SparqlExpression::Ptr, decltype(function),
+        std::vector<
+            SparqlExpression::Ptr>>) constexpr auto variadicExpressionFactory =
+    []<typename... Exps>(std::unique_ptr<Exps>... children) {
+      CPP_assert((ranges::derived_from<Exps, SparqlExpression> && ...));
       std::vector<SparqlExpression::Ptr> vec;
       (..., (vec.push_back(std::move(children))));
       return std::invoke(function, std::move(vec));

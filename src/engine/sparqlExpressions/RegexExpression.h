@@ -60,9 +60,9 @@ class RegexExpression : public SparqlExpression {
       sparqlExpression::EvaluationContext* context) const;
 
   // Evaluate for the general case.
-  template <SingleExpressionResult T>
-  ExpressionResult evaluateGeneralCase(
-      T&& input, sparqlExpression::EvaluationContext* context) const;
+  CPP_template(typename T)(requires SingleExpressionResult<T>) ExpressionResult
+      evaluateGeneralCase(T&& input,
+                          sparqlExpression::EvaluationContext* context) const;
 
   // Check if the `CancellationHandle` of `context` has been cancelled and throw
   // an exception if this is the case.

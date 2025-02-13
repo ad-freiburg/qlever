@@ -286,11 +286,11 @@ OptIri IriValueGetter::operator()(
 }
 
 //______________________________________________________________________________
-template <typename T, typename ValueGetter>
-requires std::same_as<sparqlExpression::IdOrLiteralOrIri, T> ||
-         std::same_as<std::optional<std::string>, T>
-T getValue(ValueId id, const sparqlExpression::EvaluationContext* context,
-           ValueGetter& valueGetter) {
+CPP_template(typename T, typename ValueGetter)(
+    requires(concepts::same_as<sparqlExpression::IdOrLiteralOrIri, T> ||
+             concepts::same_as<std::optional<std::string>, T>)) T
+    getValue(ValueId id, const sparqlExpression::EvaluationContext* context,
+             ValueGetter& valueGetter) {
   using enum Datatype;
   switch (id.getDatatype()) {
     case LocalVocabIndex:

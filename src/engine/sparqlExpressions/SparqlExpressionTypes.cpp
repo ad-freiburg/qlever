@@ -11,7 +11,7 @@ void PrintTo(const IdOrLiteralOrIri& var, std::ostream* os) {
   std::visit(
       [&os]<typename T>(const T& s) {
         auto& stream = *os;
-        if constexpr (std::same_as<T, ValueId>) {
+        if constexpr (concepts::same_as<T, ValueId>) {
           stream << s;
         } else {
           stream << s.toStringRepresentation();

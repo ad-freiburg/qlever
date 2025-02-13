@@ -12,10 +12,11 @@ namespace sparqlExpression {
 namespace detail::conditional_expressions {
 using namespace sparqlExpression::detail;
 [[maybe_unused]] auto ifImpl =
-    []<SingleExpressionResult T, SingleExpressionResult U>(
-        EffectiveBooleanValueGetter::Result condition, T&& i,
-        U&& e) -> IdOrLiteralOrIri requires std::is_rvalue_reference_v<T&&> &&
-                                            std::is_rvalue_reference_v<U&&> {
+    []<typename T, typename U>(EffectiveBooleanValueGetter::Result condition,
+                               T&& i, U&& e)
+    -> CPP_ret(IdOrLiteralOrIri)(
+        requires SingleExpressionResult<T>&& SingleExpressionResult<U>&&
+            std::is_rvalue_reference_v<T&&>&& std::is_rvalue_reference_v<U&&>) {
   if (condition == EffectiveBooleanValueGetter::Result::True) {
     return AD_FWD(i);
   } else {
@@ -64,10 +65,11 @@ class CoalesceExpression : public VariadicExpression {
               std::get<Id>(x) == Id::makeUndefined());
     };
 
-    auto visitConstantExpressionResult =
-        [&nextUnboundIndices, &unboundIndices, &isUnbound, &result,
-         ctx ]<SingleExpressionResult T>(T && childResult)
-            requires isConstantResult<T> {
+    auto visitConstantExpressionResult = CPP_lambda(
+        &nextUnboundIndices, &unboundIndices, &isUnbound, &result,
+        ctx)(auto&& childResult)(
+        requires SingleExpressionResult<std::decay_t<decltype(childResult)>> &&
+        isConstantResult<std::decay_t<decltype(childResult)>>) {
       IdOrLiteralOrIri constantResult{AD_FWD(childResult)};
       if (isUnbound(constantResult)) {
         nextUnboundIndices = std::move(unboundIndices);
@@ -92,10 +94,11 @@ class CoalesceExpression : public VariadicExpression {
     // result so far is unbound, and the child result is bound. While doing so,
     // set up the `nextUnboundIndices` vector  for the next step.
     auto visitVectorExpressionResult =
-        [&result, &unboundIndices, &nextUnboundIndices, &ctx, &
-         isUnbound ]<SingleExpressionResult T>(T && childResult)
-            requires std::is_rvalue_reference_v<T&&> {
-      static_assert(!isConstantResult<T>);
+        CPP_lambda(&result, &unboundIndices, &nextUnboundIndices, &ctx,
+                   &isUnbound)(auto&& childResult)(requires CPP_NOT(
+            isConstantResult<std::decay_t<decltype(childResult)>> &&
+            SingleExpressionResult<std::decay_t<decltype(childResult)>> &&
+            std::is_rvalue_reference_v<decltype(childResult)>)) {
       auto gen = detail::makeGenerator(AD_FWD(childResult), ctx->size(), ctx);
       // Iterator to the next index where the result so far is unbound.
       auto unboundIdxIt = unboundIndices.begin();
@@ -125,14 +128,14 @@ class CoalesceExpression : public VariadicExpression {
           },
           [ctx]() { ctx->cancellationHandle_->throwIfCancelled(); });
     };
-    auto visitExpressionResult =
-        [
-          &visitConstantExpressionResult, &visitVectorExpressionResult
-        ]<SingleExpressionResult T>(T && childResult)
-            requires std::is_rvalue_reference_v<T&&> {
+    auto visitExpressionResult = CPP_lambda(
+        &visitConstantExpressionResult,
+        &visitVectorExpressionResult)(auto&& childResult)(
+        requires SingleExpressionResult<std::decay_t<decltype(childResult)>> &&
+        std::is_rvalue_reference_v<decltype(childResult)>) {
       // If the previous expression result is a constant, we can skip the
       // loop.
-      if constexpr (isConstantResult<T>) {
+      if constexpr (isConstantResult<std::decay_t<decltype(childResult)>>) {
         visitConstantExpressionResult(AD_FWD(childResult));
       } else {
         visitVectorExpressionResult(AD_FWD(childResult));
