@@ -7,6 +7,14 @@
 #include <string>
 
 #include "./Operation.h"
+#include "parser/MagicServiceQuery.h"
+
+struct TextIndexScanForEntityConfiguration {
+  Variable varToBindText_;
+  std::variant<Variable, std::string> entity_;
+  std::string word_;
+  std::optional<Variable> varToBindScore_;
+};
 
 // This operation retrieves all text records and their corresponding
 // entities from the fulltext index that contain a certain word or prefix.
@@ -48,11 +56,14 @@ class TextIndexScanForEntity : public Operation {
     }
   };
 
-  const Variable textRecordVar_;
-  const VarOrFixedEntity varOrFixed_;
-  const string word_;
+  TextIndexScanForEntityConfiguration config_;
+  VariableToColumnMap variableColumns_;
+  VarOrFixedEntity varOrFixed_;
 
  public:
+  TextIndexScanForEntity(QueryExecutionContext* qec,
+                         TextIndexScanForEntityConfiguration config);
+
   TextIndexScanForEntity(QueryExecutionContext* qec, Variable textRecordVar,
                          std::variant<Variable, std::string> entity,
                          string word);
@@ -70,9 +81,9 @@ class TextIndexScanForEntity : public Operation {
     return std::get<Variable>(varOrFixed_.entity_);
   }
 
-  const Variable& textRecordVar() const { return textRecordVar_; }
+  const Variable& textRecordVar() const { return config_.varToBindText_; }
 
-  const std::string& word() const { return word_; }
+  const std::string& word() const { return config_.word_; }
 
   string getCacheKeyImpl() const override;
 
@@ -92,6 +103,8 @@ class TextIndexScanForEntity : public Operation {
   bool knownEmptyResult() override;
 
   vector<ColumnIndex> resultSortedOn() const override;
+
+  void setVariableToColumnMap();
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 

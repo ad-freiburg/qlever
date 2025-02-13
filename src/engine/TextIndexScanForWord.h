@@ -7,24 +7,35 @@
 #include <string>
 
 #include "./Operation.h"
+#include "parser/MagicServiceQuery.h"
+
+struct TextIndexScanForWordConfiguration {
+  Variable varToBindText_;
+  string word_;
+  std::optional<Variable> varToBindMatch_;
+  std::optional<Variable> varToBindScore_;
+  bool isPrefix_ = false;
+};
 
 // This operation retrieves all text records from the fulltext index that
 // contain a certain word or prefix.
 class TextIndexScanForWord : public Operation {
  private:
-  const Variable textRecordVar_;
-  const string word_;
-  bool isPrefix_ = false;
+  TextIndexScanForWordConfiguration config_;
+  VariableToColumnMap variableColumns_;
 
  public:
+  TextIndexScanForWord(QueryExecutionContext* qec,
+                       TextIndexScanForWordConfiguration config);
+
   TextIndexScanForWord(QueryExecutionContext* qec, Variable textRecordVar,
                        string word);
 
   ~TextIndexScanForWord() override = default;
 
-  const Variable& textRecordVar() const { return textRecordVar_; }
+  const Variable& textRecordVar() const { return config_.varToBindText_; }
 
-  const std::string& word() const { return word_; }
+  const std::string& word() const { return config_.word_; }
 
   string getCacheKeyImpl() const override;
 
@@ -44,6 +55,8 @@ class TextIndexScanForWord : public Operation {
   bool knownEmptyResult() override { return getSizeEstimateBeforeLimit() == 0; }
 
   vector<ColumnIndex> resultSortedOn() const override;
+
+  void setVariableToColumnMap();
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 

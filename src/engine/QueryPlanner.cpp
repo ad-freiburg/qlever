@@ -2443,6 +2443,8 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
     visitDescribe(arg);
   } else if constexpr (std::is_same_v<T, p::SpatialQuery>) {
     visitSpatialSearch(arg);
+  } else if constexpr (std::is_same_v<T, p::TextSearchQuery>) {
+    visitTextSearch(arg);
   } else {
     static_assert(std::is_same_v<T, p::BasicGraphPattern>);
     visitBasicGraphPattern(arg);
@@ -2611,6 +2613,24 @@ void QueryPlanner::GraphPatternPlanner::visitSpatialSearch(
       if (std::holds_alternative<MaxDistanceConfig>(config.task_)) {
         addCandidateSpatialJoin(true);
       }
+    }
+  }
+  visitGroupOptionalOrMinus(std::move(candidatesOut));
+}
+
+// _______________________________________________________________
+void QueryPlanner::GraphPatternPlanner::visitTextSearch(
+    const parsedQuery::TextSearchQuery& textSearchQuery) {
+  std::vector<SubtreePlan> candidatesOut;
+  for (auto config : textSearchQuery.toConfigs(qec_)) {
+    if (std::holds_alternative<TextIndexScanForWordConfiguration>(config)) {
+      auto plan = makeSubtreePlan<TextIndexScanForWord>(
+          qec_, std::get<TextIndexScanForWordConfiguration>(config));
+      candidatesOut.push_back(std::move(plan));
+    } else {
+      auto plan = makeSubtreePlan<TextIndexScanForEntity>(
+          qec_, std::get<TextIndexScanForEntityConfiguration>(config));
+      candidatesOut.push_back(std::move(plan));
     }
   }
   visitGroupOptionalOrMinus(std::move(candidatesOut));
