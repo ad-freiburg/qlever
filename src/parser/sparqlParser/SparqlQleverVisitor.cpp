@@ -2308,19 +2308,15 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
   using namespace sparqlExpression;
   // Create the expression using the matching factory function from
   // `NaryExpression.h`.
-  auto createUnary =
-      [&argList]<typename Function,
-                 typename = std::enable_if_t<std::is_invocable_r_v<
-                     ExpressionPtr, Function, ExpressionPtr>>>(
-          Function function) {
+  auto createUnary = CPP_template_lambda(&argList)(typename F)(F function)(
+      requires std::is_invocable_r_v<ExpressionPtr, F, ExpressionPtr>) {
     AD_CORRECTNESS_CHECK(argList.size() == 1, argList.size());
     return function(std::move(argList[0]));
   };
-  auto createBinary =
-      [&argList]<typename Function,
-                 typename = std::enable_if_t<std::is_invocable_r_v<
-                     ExpressionPtr, Function, ExpressionPtr, ExpressionPtr>>>(
-          Function function) {
+
+  auto createBinary = CPP_template_lambda(&argList)(typename F)(F function)(
+      requires std::is_invocable_r_v<ExpressionPtr, F, ExpressionPtr,
+                                     ExpressionPtr>) {
     AD_CORRECTNESS_CHECK(argList.size() == 2);
     return function(std::move(argList[0]), std::move(argList[1]));
   };

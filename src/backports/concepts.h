@@ -24,6 +24,10 @@
 // `CPP_lambda(capture)(arg)(requires ...)`: Expands lambda to use
 //  `requires` in C++20 mode and `std::enable_if_t` in C++17 mode.
 //
+// `CPP_template_lambda(capture)(typenames...)(arg)(requires ...)`: Expands
+// lambda with (C++20) explicit gemplate parameters  to use
+//  `requires` in C++20 mode and `std::enable_if_t` in C++17 mode.
+//
 // Example usages:
 //
 // `QL_CONCEPT_OR_NOTHING(std::view) auto x = someFunction();`
@@ -36,6 +40,9 @@
 //
 // `auto myLambda = CPP_lambda(someCapture)(someArg)(requires
 // ranges::same_as<decltype(someArg), int>) {...}`
+//
+// `auto myLambda2 = CPP_lambda(someCapture)(typename F)(F arg)(requires
+// ranges::same_as<F, int>) {...}`
 //
 // NOTE: The macros are variadic to allow for commas in the argument, like in
 // the second example above.
