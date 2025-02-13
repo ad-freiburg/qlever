@@ -1587,8 +1587,16 @@ TEST(SparqlParser, builtInCall) {
   expectBuiltInCall("ucaSe(?x)", matchUnary(&makeUppercaseExpression));
   expectBuiltInCall("lCase(?x)", matchUnary(&makeLowercaseExpression));
   expectBuiltInCall("StR(?x)", matchUnary(&makeStrExpression));
-  expectBuiltInCall("iRI(?x)", matchUnary(&makeIriOrUriExpression));
-  expectBuiltInCall("uRI(?x)", matchUnary(&makeIriOrUriExpression));
+  expectBuiltInCall(
+      "iRI(?x)",
+      matchNaryWithChildrenMatchers(
+          &makeIriOrUriExpression, variableExpressionMatcher(Variable{"?x"}),
+          matchLiteralExpression(ad_utility::triple_component::Iri{})));
+  expectBuiltInCall(
+      "uRI(?x)",
+      matchNaryWithChildrenMatchers(
+          &makeIriOrUriExpression, variableExpressionMatcher(Variable{"?x"}),
+          matchLiteralExpression(ad_utility::triple_component::Iri{})));
   expectBuiltInCall("year(?x)", matchUnary(&makeYearExpression));
   expectBuiltInCall("month(?x)", matchUnary(&makeMonthExpression));
   expectBuiltInCall("tz(?x)", matchUnary(&makeTimezoneStrExpression));
