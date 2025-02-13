@@ -770,27 +770,29 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
       };
     };
     auto generateBiggerEqualLambdaDesc =
-        [](const ad_utility::isInstantiation<
-               ad_utility::ConstConfigOptionProxy> auto& option,
-           const auto& minimumValue, bool canBeEqual) {
-          return absl::StrCat("'", option.getConfigOption().getIdentifier(),
-                              "' must be bigger than",
-                              canBeEqual ? ", or equal to," : "", " ",
-                              minimumValue, ".");
-        };
+        []<typename OptionType,
+           typename = std::enable_if_t<ad_utility::isInstantiation<
+               OptionType, ad_utility::ConstConfigOptionProxy>>>(
+            const OptionType& option, const auto& minimumValue,
+            bool canBeEqual) {
+      return absl::StrCat("'", option.getConfigOption().getIdentifier(),
+                          "' must be bigger than",
+                          canBeEqual ? ", or equal to," : "", " ", minimumValue,
+                          ".");
+    };
 
     // Object with a `operator()` for the `<=` operator.
     auto lessEqualLambda = std::less_equal<size_t>{};
     auto generateLessEqualLambdaDesc =
-        [](const ad_utility::isInstantiation<
-               ad_utility::ConstConfigOptionProxy> auto& lhs,
-           const ad_utility::isInstantiation<
-               ad_utility::ConstConfigOptionProxy> auto& rhs) {
-          return absl::StrCat("'", lhs.getConfigOption().getIdentifier(),
-                              "' must be smaller than, or equal to, "
-                              "'",
-                              rhs.getConfigOption().getIdentifier(), "'.");
-        };
+        []<typename OptionType,
+           typename = std::enable_if_t<ad_utility::isInstantiation<
+               OptionType, ad_utility::ConstConfigOptionProxy>>>(
+            const OptionType& lhs, const OptionType& rhs) {
+      return absl::StrCat("'", lhs.getConfigOption().getIdentifier(),
+                          "' must be smaller than, or equal to, "
+                          "'",
+                          rhs.getConfigOption().getIdentifier(), "'.");
+    };
 
     // Adding the validators.
 

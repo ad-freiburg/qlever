@@ -188,7 +188,7 @@ constexpr bool constantTimeEquals(std::string_view view1,
 
 // _________________________________________________________________________
 CPP_template_def(typename Range)(
-    requires ql::ranges::input_range<Range> CPP_and
+    requires ql::ranges::input_range<Range> CPP_and_def
         ad_utility::Streamable<std::iter_reference_t<ql::ranges::iterator_t<
             Range>>>) void lazyStrJoin(std::ostream* stream, Range&& r,
                                        std::string_view separator) {
@@ -214,7 +214,7 @@ CPP_template_def(typename Range)(
 
 // _________________________________________________________________________
 CPP_template_def(typename Range)(
-    requires ql::ranges::input_range<Range> CPP_and ad_utility::Streamable<
+    requires ql::ranges::input_range<Range> CPP_and_def ad_utility::Streamable<
         std::iter_reference_t<ql::ranges::iterator_t<Range>>>) std::string
     lazyStrJoin(Range&& r, std::string_view separator) {
   std::ostringstream stream;

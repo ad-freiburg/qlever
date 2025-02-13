@@ -83,8 +83,6 @@ void Server::initialize(const string& indexBaseName, bool useText,
 
   LOG(INFO) << "Access token for restricted API calls is \"" << accessToken_
             << "\"" << std::endl;
-  LOG(INFO) << "The server is ready, listening for requests on port "
-            << std::to_string(port_) << " ..." << std::endl;
 }
 
 // _____________________________________________________________________________
@@ -165,6 +163,9 @@ void Server::run(const string& indexBaseName, bool useText, bool usePatterns,
 
   // Initialize the index
   initialize(indexBaseName, useText, usePatterns, loadAllPermutations);
+
+  LOG(INFO) << "The server is ready, listening for requests on port "
+            << std::to_string(httpServer.getPort()) << " ..." << std::endl;
 
   // Start listening for connections on the server.
   httpServer.run();
@@ -297,12 +298,15 @@ Awaitable<void> Server::process(
         [this] {
           // Use `this` explicitly to silence false-positive errors on the
           // captured `this` being unused.
-          this->index_.deltaTriplesManager().clear();
+          return this->index_.deltaTriplesManager().modify<DeltaTriplesCount>(
+              [](auto& deltaTriples) {
+                deltaTriples.clear();
+                return deltaTriples.getCounts();
+              });
         },
         handle);
-    co_await std::move(coroutine);
-    response = createOkResponse("Delta triples have been cleared", request,
-                                MediaType::textPlain);
+    auto countAfterClear = co_await std::move(coroutine);
+    response = createJsonResponse(nlohmann::json{countAfterClear}, request);
   } else if (auto cmd = checkParameter("cmd", "get-settings")) {
     logCommand(cmd, "get server settings");
     response = createJsonResponse(RuntimeParameters().toMap(), request);
@@ -468,8 +472,8 @@ auto Server::cancelAfterDeadline(
 // _____________________________________________________________________________
 auto Server::setupCancellationHandle(
     const ad_utility::websocket::QueryId& queryId, TimeLimit timeLimit)
-    -> ad_utility::isInstantiation<
-        CancellationHandleAndTimeoutTimerCancel> auto {
+    -> QL_CONCEPT_OR_NOTHING(ad_utility::isInstantiation<
+                             CancellationHandleAndTimeoutTimerCancel>) auto {
   auto cancellationHandle = queryRegistry_.getCancellationHandle(queryId);
   AD_CORRECTNESS_CHECK(cancellationHandle);
   cancellationHandle->startWatchDog();
@@ -821,6 +825,10 @@ json Server::createResponseMetadataForUpdate(
   response["delta-triples"]["after"] = nlohmann::json(countAfter);
   response["delta-triples"]["difference"] =
       nlohmann::json(countAfter - countBefore);
+  if (updateMetadata.inUpdate_.has_value()) {
+    response["delta-triples"]["operation"] =
+        json(updateMetadata.inUpdate_.value());
+  }
   response["time"]["planning"] =
       formatTime(runtimeInfoWholeOp.timeQueryPlanning);
   response["time"]["where"] =

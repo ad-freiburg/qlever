@@ -6,4 +6,8 @@ LineEnding: LF
 InsertNewlineAtEOF: true
 RequiresClausePosition: SingleLine
 IndentRequiresClause: false
+AttributeMacros: [CPP_member, CPP_auto_member, CPP_fun, CPP_auto_fun]
+# TODO<joka921> Update to Clang-format-17 and then we can have much nicer CPP_... macros.
+#Macros:
+#  - CPP_template_2(x)=template<x> requires
 ...

@@ -1727,10 +1727,12 @@ TEST(ConfigManagerTest, AddExceptionValidator) {
                                      std::string validatorExceptionMessage,
                                      ConfigManager& m,
                                      ConstConfigOptionProxy<Ts>... optProxy) {
+    auto exceptionalValidator =
+        generateDummyNonExceptionValidatorFunction<Ts...>(variant);
     m.addValidator(
-        transformValidatorIntoExceptionValidator<Ts...>(
-            generateDummyNonExceptionValidatorFunction<Ts...>(variant),
-            std::move(validatorExceptionMessage)),
+        transformValidatorIntoExceptionValidator<decltype(exceptionalValidator),
+                                                 Ts...>(
+            exceptionalValidator, std::move(validatorExceptionMessage)),
         "", optProxy...);
   });
 }
@@ -1999,16 +2001,17 @@ TEST(ConfigManagerTest, AddOptionNoExceptionValidator) {
 }
 
 TEST(ConfigManagerTest, AddOptionExceptionValidator) {
-  doAddOptionValidatorTest(
-      []<typename... Ts>(auto validatorFunction,
-                         std::string validatorExceptionMessage,
-                         ConfigManager& m, ConstConfigOptionProxy<Ts>... args) {
-        m.addOptionValidator(
-            transformValidatorIntoExceptionValidator<
-                decltype(args.getConfigOption())...>(
-                validatorFunction, std::move(validatorExceptionMessage)),
-            "", args...);
-      });
+  doAddOptionValidatorTest([]<typename... Ts>(
+                               auto validatorFunction,
+                               std::string validatorExceptionMessage,
+                               ConfigManager& m,
+                               ConstConfigOptionProxy<Ts>... args) {
+    m.addOptionValidator(
+        transformValidatorIntoExceptionValidator<
+            decltype(validatorFunction), decltype(args.getConfigOption())...>(
+            validatorFunction, std::move(validatorExceptionMessage)),
+        "", args...);
+  });
 }
 
 /*
@@ -2534,8 +2537,9 @@ TEST(ConfigManagerTest, PrintConfigurationDocComparison) {
   // Add a default validator to the given `ConfigManager`.
   auto addDefaultValidator =
       [](ConfigManager* configManager,
-         const ad_utility::isInstantiation<
-             ConstConfigOptionProxy> auto&... configOptionsToBeChecked) {
+         const QL_CONCEPT_OR_NOTHING(
+             ad_utility::isInstantiation<
+                 ConstConfigOptionProxy>) auto&... configOptionsToBeChecked) {
         const std::string validatorDescription = absl::StrCat(
             "Validator for configuration options ",
             ad_utility::lazyStrJoin(
