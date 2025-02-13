@@ -278,7 +278,7 @@ struct SpecializedFunction {
     if (!areAllOperandsValid<Operands...>(operands...)) {
       return std::nullopt;
     } else {
-      if constexpr (ranges::invocable<Function, Operands...>) {
+      if constexpr (ranges::invocable<Function, Operands&&...>) {
         return Function{}(std::forward<Operands>(operands)...);
       } else {
         AD_FAIL();

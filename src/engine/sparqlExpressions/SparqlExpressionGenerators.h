@@ -116,8 +116,7 @@ inline auto valueGetterGenerator =
     return valueGetter(AD_FWD(i), context);
   };
 
-  return makeGenerator(std::forward<decltype(input)>(input), numElements,
-                       context, transformation);
+  return makeGenerator(AD_FWD(input), numElements, context, transformation);
 };
 
 /// Do the following `numItems` times: Obtain the next elements e_1, ..., e_n

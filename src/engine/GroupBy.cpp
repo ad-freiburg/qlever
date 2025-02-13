@@ -1487,8 +1487,8 @@ static constexpr auto makeProcessGroupsVisitor =
       return
           [blockSize, evaluationContext, &hashEntries]<typename T, typename A>(
               T&& singleResult, A& aggregationDataVector) {
-            CPP_assert(sparqlExpression::SingleExpressionResult<T> &&
-                       VectorOfAggregationData<A>);
+            CPP_assert(sparqlExpression::SingleExpressionResult<T>);
+            CPP_assert(VectorOfAggregationData<A>);
             auto generator = sparqlExpression::detail::makeGenerator(
                 std::forward<T>(singleResult), blockSize, evaluationContext);
 
