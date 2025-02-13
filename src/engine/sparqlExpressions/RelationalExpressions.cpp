@@ -58,8 +58,13 @@ requires isVectorResult<S> auto idGenerator(const S& values, size_t targetSize,
 
 // For the `Variable` and `SetOfIntervals` class, the generator from the
 // `sparqlExpressions` module already yields the `ValueIds`.
-template <ad_utility::SimilarToAny<Variable, ad_utility::SetOfIntervals> S>
-auto idGenerator(S input, size_t targetSize, const EvaluationContext* context) {
+CPP_template(typename S)(
+    requires ad_utility::SimilarToAny<
+        S, Variable,
+        ad_utility::SetOfIntervals>) auto idGenerator(S input,
+                                                      size_t targetSize,
+                                                      const EvaluationContext*
+                                                          context) {
   return sparqlExpression::detail::makeGenerator(std::move(input), targetSize,
                                                  context);
 }

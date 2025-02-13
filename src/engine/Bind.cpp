@@ -27,6 +27,9 @@ size_t Bind::getCostEstimate() {
   return _subtree->getCostEstimate() + _subtree->getSizeEstimate();
 }
 
+// We delegate the limit to the child operation, so we always support it.
+bool Bind::supportsLimit() const { return true; }
+
 float Bind::getMultiplicity(size_t col) {
   // this is the newly added column
   if (col == getResultWidth() - 1) {
@@ -93,6 +96,7 @@ IdTable Bind::cloneSubView(const IdTable& idTable,
 
 // _____________________________________________________________________________
 ProtoResult Bind::computeResult(bool requestLaziness) {
+  _subtree->setLimit(getLimit());
   LOG(DEBUG) << "Get input to BIND operation..." << std::endl;
   std::shared_ptr<const Result> subRes = _subtree->getResult(requestLaziness);
   LOG(DEBUG) << "Got input to Bind operation." << std::endl;

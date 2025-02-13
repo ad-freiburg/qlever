@@ -41,7 +41,7 @@ inline auto NumTriplesInAllPermutations =
 // `getCounts()` of a `DeltaTriples` and `numTriples()` for all
 // `LocatedTriplesPerBlock` of the `DeltaTriples`.
 inline auto NumTriples =
-    [](size_t inserted, size_t deleted,
+    [](int64_t inserted, int64_t deleted,
        size_t inAllPermutations) -> testing::Matcher<const DeltaTriples&> {
   return testing::AllOf(
       AD_PROPERTY(DeltaTriples, numInserted, testing::Eq(inserted)),

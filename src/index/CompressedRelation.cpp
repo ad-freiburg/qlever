@@ -752,13 +752,14 @@ size_t CompressedRelationReader::getResultSizeOfScan(
 }
 
 // ____________________________________________________________________________
-IdTable CompressedRelationReader::getDistinctColIdsAndCountsImpl(
-    ad_utility::InvocableWithConvertibleReturnType<
-        Id, const CompressedBlockMetadata::PermutedTriple&> auto idGetter,
-    const ScanSpecification& scanSpec,
-    const std::vector<CompressedBlockMetadata>& allBlocksMetadata,
-    const CancellationHandle& cancellationHandle,
-    const LocatedTriplesPerBlock& locatedTriplesPerBlock) const {
+CPP_template_def(typename IdGetter)(
+    requires ad_utility::InvocableWithConvertibleReturnType<
+        IdGetter, Id, const CompressedBlockMetadata::PermutedTriple&>) IdTable
+    CompressedRelationReader::getDistinctColIdsAndCountsImpl(
+        IdGetter idGetter, const ScanSpecification& scanSpec,
+        const std::vector<CompressedBlockMetadata>& allBlocksMetadata,
+        const CancellationHandle& cancellationHandle,
+        const LocatedTriplesPerBlock& locatedTriplesPerBlock) const {
   // The result has two columns: one for the distinct `Id`s and one for their
   // counts.
   IdTableStatic<2> table(allocator_);
