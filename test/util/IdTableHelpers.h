@@ -106,7 +106,8 @@ struct MatchesIdTable {
   }
 
   // Overload for lvalue-references (`IdTable`s are not copyable)
-  template <ad_utility::SimilarTo<IdTable> T>
+  template <typename T,
+            typename = std::enable_if_t<ad_utility::SimilarTo<T, IdTable>>>
   auto operator()(T& table) const {
     // Note: We could use `Eq(cref(table))` , but the explicit deep copy
     // gets rid of all possibly lifetime and mutability issues.

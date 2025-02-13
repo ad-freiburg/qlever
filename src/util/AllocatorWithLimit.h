@@ -173,9 +173,8 @@ class AllocatorWithLimit {
   }
   AllocatorWithLimit() = delete;
 
-  template <typename U>
-  requires(!std::same_as<U, T>)
-  AllocatorWithLimit(const AllocatorWithLimit<U>& other)
+  CPP_template(typename U)(requires(!std::same_as<U, T>))
+      AllocatorWithLimit(const AllocatorWithLimit<U>& other)
       : memoryLeft_{other.getMemoryLeft()},
         clearOnAllocation_(other.clearOnAllocation()){};
 

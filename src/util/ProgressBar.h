@@ -66,12 +66,12 @@ class ProgressBar {
   // outside (and be incremented there). That is because the calling code
   // typically has such a variable anyway (also for other purposes) and it
   // would we unnatural to have it originally in this class.
-  template <ad_utility::SimilarTo<size_t> SizeT>
-  ProgressBar(SizeT& numStepsProcessed, std::string displayStringPrefix,
-              size_t statisticsBatchSize = DEFAULT_PROGRESS_BAR_BATCH_SIZE,
-              SpeedDescriptionFunction getSpeedDescription =
-                  DEFAULT_SPEED_DESCRIPTION_FUNCTION,
-              DisplayUpdateOptions displayUpdateOptions = ReuseLine)
+  CPP_template(typename SizeT)(requires ad_utility::SimilarTo<SizeT, size_t>)
+      ProgressBar(SizeT& numStepsProcessed, std::string displayStringPrefix,
+                  size_t statisticsBatchSize = DEFAULT_PROGRESS_BAR_BATCH_SIZE,
+                  SpeedDescriptionFunction getSpeedDescription =
+                      DEFAULT_SPEED_DESCRIPTION_FUNCTION,
+                  DisplayUpdateOptions displayUpdateOptions = ReuseLine)
       : numStepsProcessed_(numStepsProcessed),
         displayStringPrefix_(std::move(displayStringPrefix)),
         statisticsBatchSize_(statisticsBatchSize),

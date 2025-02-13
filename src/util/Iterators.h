@@ -23,6 +23,12 @@ inline auto accessViaBracketOperator = [](auto&& randomAccessContainer,
 
 using AccessViaBracketOperator = decltype(accessViaBracketOperator);
 
+template <typename A, typename P>
+CPP_requires(has_valid_accessor_, requires(A& a, P& p, uint64_t i)(&a(*p, i)));
+
+template <typename A, typename P>
+CPP_concept HasValidAccessor = CPP_requires_ref(has_valid_accessor_, A, P);
+
 /**
  * @brief Provide random access iterators for a random access container that
  * allows direct access to the `i-th` element in the structure.
@@ -68,16 +74,15 @@ class IteratorForAccessOperator {
   using RandomAccessContainerPtr =
       std::conditional_t<isConst, const RandomAccessContainer*,
                          RandomAccessContainer*>;
-  RandomAccessContainerPtr _vector = nullptr;
-  index_type _index{0};
-  Accessor _accessor{};
+  RandomAccessContainerPtr vector_ = nullptr;
+  index_type index_{0};
+  Accessor accessor_;
 
  public:
-  IteratorForAccessOperator() requires std::is_default_constructible_v<Accessor>
-  = default;
+  IteratorForAccessOperator() = default;
   IteratorForAccessOperator(RandomAccessContainerPtr vec, index_type index,
                             Accessor accessor = Accessor{})
-      : _vector{vec}, _index{index}, _accessor{std::move(accessor)} {}
+      : vector_{vec}, index_{index}, accessor_{std::move(accessor)} {}
 
   IteratorForAccessOperator(const IteratorForAccessOperator&) = default;
   IteratorForAccessOperator(IteratorForAccessOperator&&) noexcept = default;
@@ -87,14 +92,14 @@ class IteratorForAccessOperator {
       default;
 
   auto operator<=>(const IteratorForAccessOperator& rhs) const {
-    return (_index <=> rhs._index);
+    return (index_ <=> rhs.index_);
   }
   bool operator==(const IteratorForAccessOperator& rhs) const {
-    return _index == rhs._index;
+    return index_ == rhs.index_;
   }
 
   IteratorForAccessOperator& operator+=(difference_type n) {
-    _index += n;
+    index_ += n;
     return *this;
   }
   IteratorForAccessOperator operator+(difference_type n) const {
@@ -104,22 +109,22 @@ class IteratorForAccessOperator {
   }
 
   IteratorForAccessOperator& operator++() {
-    ++_index;
+    ++index_;
     return *this;
   }
   IteratorForAccessOperator operator++(int) & {
     IteratorForAccessOperator result{*this};
-    ++_index;
+    ++index_;
     return result;
   }
 
   IteratorForAccessOperator& operator--() {
-    --_index;
+    --index_;
     return *this;
   }
   IteratorForAccessOperator operator--(int) & {
     IteratorForAccessOperator result{*this};
-    --_index;
+    --index_;
     return result;
   }
 
@@ -129,7 +134,7 @@ class IteratorForAccessOperator {
   }
 
   IteratorForAccessOperator& operator-=(difference_type n) {
-    _index -= n;
+    index_ -= n;
     return *this;
   }
 
@@ -140,31 +145,29 @@ class IteratorForAccessOperator {
   }
 
   difference_type operator-(const IteratorForAccessOperator& rhs) const {
-    return static_cast<difference_type>(_index) -
-           static_cast<difference_type>(rhs._index);
+    return static_cast<difference_type>(index_) -
+           static_cast<difference_type>(rhs.index_);
   }
 
-  decltype(auto) operator*() const { return _accessor(*_vector, _index); }
-  decltype(auto) operator*() requires(!isConst) {
-    return _accessor(*_vector, _index);
+  decltype(auto) operator*() const { return accessor_(*vector_, index_); }
+  CPP_template(typename = void)(requires(!isConst)) decltype(auto) operator*() {
+    return accessor_(*vector_, index_);
   }
 
   // Only allowed, if `RandomAccessContainer` yields references and not values
-  template <typename A = Accessor, typename P = RandomAccessContainerPtr>
-  requires requires(A a, P p, uint64_t i) {
-    { &a(*p, i) };
-  } auto operator->() requires(!isConst) {
+  CPP_template(typename A = Accessor, typename P = RandomAccessContainerPtr)(
+      requires HasValidAccessor<A, P> CPP_and(!isConst)) auto
+  operator->() {
     return &(*(*this));
   }
-  template <typename A = Accessor, typename P = RandomAccessContainerPtr>
-  requires requires(A a, P p, uint64_t i) {
-    { &a(*p, i) };
-  } auto operator->() const {
+  CPP_template(typename A = Accessor, typename P = RandomAccessContainerPtr)(
+      requires HasValidAccessor<A, P>) auto
+  operator->() const {
     return &(*(*this));
   }
 
   decltype(auto) operator[](difference_type n) const {
-    return _accessor(*_vector, _index + n);
+    return accessor_(*vector_, index_ + n);
   }
 };
 
@@ -251,7 +254,7 @@ class InputRangeMixin {
     derived().start();
     return Iterator{this};
   }
-  Sentinel end() const { return {}; };
+  Sentinel end() const { return {}; }
 };
 
 // A similar mixin to the above, with slightly different characteristics:
@@ -378,19 +381,21 @@ class InputRangeTypeErased {
  public:
   // Constructor for ranges that directly inherit from
   // `InputRangeOptionalMixin`.
-  template <typename Range>
-  requires std::is_base_of_v<InputRangeFromGet<ValueType>, Range>
-  explicit InputRangeTypeErased(Range range)
+  CPP_template(typename Range)(
+      requires std::is_base_of_v<
+          InputRangeFromGet<ValueType>,
+          Range>) explicit InputRangeTypeErased(Range range)
       : impl_{std::make_unique<Range>(std::move(range))} {}
 
   // Constructor for all other ranges. We first pass them through the
   // `InputRangeToOptional` class from above to make it compatible with the base
   // class.
-  template <typename Range>
-  requires(!std::is_base_of_v<InputRangeFromGet<ValueType>, Range> &&
-           ql::ranges::range<Range> &&
-           std::same_as<ql::ranges::range_value_t<Range>, ValueType>)
-  explicit InputRangeTypeErased(Range range)
+  CPP_template(typename Range)(
+      requires CPP_NOT(std::is_base_of_v<InputRangeFromGet<ValueType>, Range>)
+          CPP_and ql::ranges::range<Range>
+              CPP_and std::same_as<
+                  ql::ranges::range_value_t<Range>,
+                  ValueType>) explicit InputRangeTypeErased(Range range)
       : impl_{std::make_unique<RangeToInputRangeFromGet<Range>>(
             std::move(range))} {}
 

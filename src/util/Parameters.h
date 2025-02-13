@@ -36,12 +36,12 @@ struct ParameterBase {
 
 // Concepts for the template types of `Parameter`.
 template <typename FunctionType, typename ToType>
-concept ParameterFromStringType =
+CPP_concept ParameterFromStringType =
     std::default_initializable<FunctionType> &&
     InvocableWithSimilarReturnType<FunctionType, ToType, const std::string&>;
 
 template <typename FunctionType, typename FromType>
-concept ParameterToStringType =
+CPP_concept ParameterToStringType =
     std::default_initializable<FunctionType> &&
     InvocableWithSimilarReturnType<FunctionType, std::string, FromType>;
 
@@ -54,9 +54,12 @@ concept ParameterToStringType =
 ///         a std::string representation.
 /// \tparam Name The Name of the parameter (there are typically a lot of
 ///         parameters with the same `Type`).
-template <std::semiregular Type, ParameterFromStringType<Type> FromString,
-          ParameterToStringType<Type> ToString, ParameterName Name>
-struct Parameter : public ParameterBase {
+CPP_template(typename Type, typename FromString, typename ToString,
+             ParameterName Name)(
+    requires std::semiregular<Type> CPP_and
+        ParameterFromStringType<FromString, Type>
+            CPP_and ParameterToStringType<ToString, Type>) struct Parameter
+    : public ParameterBase {
   constexpr static ParameterName name = Name;
 
  private:
@@ -132,14 +135,14 @@ namespace detail::parameterConceptImpl {
 template <typename T>
 struct ParameterConceptImpl : std::false_type {};
 
-template <std::semiregular Type, ParameterFromStringType<Type> FromString,
-          ParameterToStringType<Type> ToString, ParameterName Name>
+template <typename Type, typename FromString, typename ToString,
+          ParameterName Name>
 struct ParameterConceptImpl<Parameter<Type, FromString, ToString, Name>>
     : std::true_type {};
 }  // namespace detail::parameterConceptImpl
 
 template <typename T>
-concept IsParameter =
+CPP_concept IsParameter =
     detail::parameterConceptImpl::ParameterConceptImpl<T>::value;
 
 namespace detail::parameterShortNames {
@@ -232,8 +235,12 @@ using DurationParameter = Parameter<ad_utility::ParseableDuration<DurationType>,
 /// "increase the cache size by 20%") nor an atomic update of multiple
 /// parameters at the same time. If needed, this functionality could be added
 /// to the current implementation.
-template <IsParameter... ParameterTypes>
+template <QL_CONCEPT_OR_TYPENAME(IsParameter)... ParameterTypes>
 class Parameters {
+  // In C++17 mode we cannot use SFINAE, but we also currently don't need it,
+  // add a static_assert for safety should this ever change.
+  static_assert((... && IsParameter<ParameterTypes>));
+
  private:
   using Tuple = std::tuple<ad_utility::Synchronized<ParameterTypes>...>;
   Tuple _parameters;
@@ -293,9 +300,9 @@ class Parameters {
 
   // For the parameter with name `Name` specify the function that is to be
   // called, when this parameter value changes.
-  template <ParameterName name, typename OnUpdateAction>
+  template <ParameterName Name, typename OnUpdateAction>
   auto setOnUpdateAction(OnUpdateAction onUpdateAction) {
-    constexpr auto index = _nameToIndex.at(name);
+    constexpr auto index = _nameToIndex.at(Name);
     std::get<index>(_parameters)
         .wlock()
         ->setOnUpdateAction(std::move(onUpdateAction));
