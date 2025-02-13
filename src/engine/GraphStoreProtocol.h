@@ -30,8 +30,9 @@ class UnsupportedMediatypeError : public std::runtime_error {
 class GraphStoreProtocol {
  private:
   // Extract the mediatype from a request.
-  static ad_utility::MediaType extractMediatype(
-      const ad_utility::httpUtils::HttpRequest auto& rawRequest) {
+  CPP_template_2(typename RequestT)(requires ad_utility::httpUtils::HttpRequest<
+                                    RequestT>) static ad_utility::MediaType
+      extractMediatype(const RequestT& rawRequest) {
     using namespace boost::beast::http;
 
     std::string_view contentTypeString;
@@ -76,9 +77,9 @@ class GraphStoreProtocol {
 
   // Transform a SPARQL Graph Store Protocol POST to an equivalent ParsedQuery
   // which is an SPARQL Update.
-  static ParsedQuery transformPost(
-      const ad_utility::httpUtils::HttpRequest auto& rawRequest,
-      const GraphOrDefault& graph) {
+  CPP_template_2(typename RequestT)(
+      requires ad_utility::httpUtils::HttpRequest<RequestT>) static ParsedQuery
+      transformPost(const RequestT& rawRequest, const GraphOrDefault& graph) {
     auto triples =
         parseTriples(rawRequest.body(), extractMediatype(rawRequest));
     auto convertedTriples = convertTriples(graph, std::move(triples));
@@ -98,8 +99,9 @@ class GraphStoreProtocol {
   // Every Graph Store Protocol request has equivalent SPARQL Query or Update.
   // Transform the Graph Store Protocol request into it's equivalent Query or
   // Update.
-  static ParsedQuery transformGraphStoreProtocol(
-      const ad_utility::httpUtils::HttpRequest auto& rawRequest) {
+  CPP_template_2(typename RequestT)(
+      requires ad_utility::httpUtils::HttpRequest<RequestT>) static ParsedQuery
+      transformGraphStoreProtocol(const RequestT& rawRequest) {
     ad_utility::url_parser::ParsedUrl parsedUrl =
         ad_utility::url_parser::parseRequestTarget(rawRequest.target());
     // We only support passing the target graph as a query parameter (`Indirect
