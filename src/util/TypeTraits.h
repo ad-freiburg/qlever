@@ -318,8 +318,6 @@ CPP_concept InvocableWithSimilarReturnType =
 @brief Require `Fn` to be invocable with `Args...` and the return type to be
  `Ret`.
 */
-// TODO<joka921, gpcicciuca> turn back to `concept` and fix the remaining
-// places.
 template <typename Fn, typename Ret, typename... Args>
 CPP_concept InvocableWithExactReturnType =
     std::invocable<Fn, Args...> &&
