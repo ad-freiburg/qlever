@@ -67,9 +67,9 @@ class ParserBatcher {
     }
   }
 
-  CPP_template(typename P = Parser)(
-      requires ad_utility::detail::ParserGetBatch<P>)
-      std::optional<std::vector<TurtleTriple>> getBatch() {
+  CPP_member auto getBatch()
+      -> CPP_ret(std::optional<std::vector<TurtleTriple>>)(
+          requires ad_utility::detail::ParserGetBatch<Parser>) {
     if (m_numTriplesAlreadyParsed >= m_maxNumTriples) {
       return std::nullopt;
     }

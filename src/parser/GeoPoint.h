@@ -40,8 +40,8 @@ class GeoPoint {
  public:
   using T = uint64_t;
 
-  CPP_template_2(typename H,
-                 typename G)(requires std::same_as<G, GeoPoint>) friend H
+  CPP_template(typename H,
+               typename G)(requires std::same_as<G, GeoPoint>) friend H
       AbslHashValue(H h, const G& g) {
     return H::combine(std::move(h), g.lat_, g.lng_);
   }

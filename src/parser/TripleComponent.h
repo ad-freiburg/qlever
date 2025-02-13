@@ -67,7 +67,7 @@ class TripleComponent {
   TripleComponent() = default;
   /// Construct from anything that is able to construct the underlying
   /// `Variant`.
-  CPP_template_2(typename FirstArg, typename... Args)(
+  CPP_template(typename FirstArg, typename... Args)(
       requires CPP_NOT(
           std::same_as<std::remove_cvref_t<FirstArg>, TripleComponent>) &&
       std::is_constructible_v<Variant, FirstArg&&, Args&&...>)
@@ -95,8 +95,7 @@ class TripleComponent {
 
   /// Assignment for types that can be directly assigned to the underlying
   /// variant.
-  CPP_template(typename T)(
-      requires ad_utility::detail::MoveAssignableWith<Variant, T>)
+  CPP_template(typename T)(requires std::is_assignable_v<Variant, T&&>)
       TripleComponent&
       operator=(T&& value) {
     _variant = AD_FWD(value);
@@ -116,8 +115,6 @@ class TripleComponent {
   TripleComponent& operator=(TripleComponent&&) = default;
 
   /// Make a `TripleComponent` directly comparable to the underlying types.
-  // TODO<joka921> The constraint is too strict, we probably want
-  // `equalityComparableToExactlyOne`.
   CPP_template(typename T)(
       requires ad_utility::SameAsAnyTypeIn<T, Variant>) bool
   operator==(const T& other) const {

@@ -31,7 +31,7 @@ class Iri {
  public:
   // A default constructed IRI is empty.
   Iri() = default;
-  CPP_template_2(typename H, typename I)(requires std::same_as<I, Iri>) friend H
+  CPP_template(typename H, typename I)(requires std::same_as<I, Iri>) friend H
       AbslHashValue(H h, const I& iri) {
     return H::combine(std::move(h), iri.iri_);
   }
