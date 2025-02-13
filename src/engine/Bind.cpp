@@ -94,6 +94,45 @@ IdTable Bind::cloneSubView(const IdTable& idTable,
   return result;
 }
 
+// Anonymous namespace: This class is not exposed outside this translation unit.
+namespace {
+// An input range that lazily applies a `BIND` operation to a fully materialized
+// subresult by splitting the subresult into chunks of size `chunkSize_`.
+template <typename ApplyBind>
+struct LazyBindForMaterializedInput
+    : ad_utility::InputRangeFromGet<Result::IdTableVocabPair> {
+  ApplyBind applyBind_;
+  std::shared_ptr<const Result> result_;
+  size_t chunkSize_;
+  size_t size_ = result_->idTable().size();
+  size_t offset_ = 0;
+
+  // Constructor. The `ApplyBind` function performs the actual `Bind`.
+  LazyBindForMaterializedInput(ApplyBind applyBind,
+                               std::shared_ptr<const Result> result,
+                               size_t chunkSize_)
+      : applyBind_(std::move(applyBind)),
+        result_{std::move(result)},
+        chunkSize_{chunkSize_} {}
+
+  // The `get` function that is needed for the `InputRangeFromGet`.
+  std::optional<Result::IdTableVocabPair> get() {
+    if (offset_ >= size_) {
+      return std::nullopt;
+    }
+    auto curOffset = offset_;
+    offset_ += chunkSize_;
+    LocalVocab outVocab = result_->getCopyOfLocalVocab();
+    IdTable idTable =
+        applyBind_(Bind::cloneSubView(
+                       result_->idTable(),
+                       {curOffset, std::min(size_, curOffset + chunkSize_)}),
+                   &outVocab);
+    return Result::IdTableVocabPair{std::move(idTable), std::move(outVocab)};
+  }
+};
+}  // namespace
+
 // _____________________________________________________________________________
 ProtoResult Bind::computeResult(bool requestLaziness) {
   _subtree->setLimit(getLimit());
@@ -108,21 +147,13 @@ ProtoResult Bind::computeResult(bool requestLaziness) {
 
   if (subRes->isFullyMaterialized()) {
     if (requestLaziness && subRes->idTable().size() > CHUNK_SIZE) {
-      return {
-          [](auto applyBind,
-             std::shared_ptr<const Result> result) -> Result::Generator {
-            size_t size = result->idTable().size();
-            for (size_t offset = 0; offset < size; offset += CHUNK_SIZE) {
-              LocalVocab outVocab = result->getCopyOfLocalVocab();
-              IdTable idTable = applyBind(
-                  cloneSubView(result->idTable(),
-                               {offset, std::min(size, offset + CHUNK_SIZE)}),
-                  &outVocab);
-              co_yield {std::move(idTable), std::move(outVocab)};
-            }
-          }(std::move(applyBind), std::move(subRes)),
-          resultSortedOn()};
+      // The `LazyBindFor...` is the actual implementation, the `LazyResult`
+      // wraps it in a type-erased way.
+      return {Result::LazyResult{LazyBindForMaterializedInput{
+                  std::move(applyBind), std::move(subRes), CHUNK_SIZE}},
+              resultSortedOn()};
     }
+
     // Make a deep copy of the local vocab from `subRes` and then add to it (in
     // case BIND adds a new word or words).
     //
