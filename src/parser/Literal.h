@@ -42,8 +42,8 @@ class Literal {
   }
 
  public:
-  QL_TEMPLATE_NO_DEFAULT(typename H, typename L)
-  (requires std::same_as<L, Literal>)friend H
+  CPP_template_2(typename H,
+                 typename L)(requires std::same_as<L, Literal>) friend H
       AbslHashValue(H h, const L& literal) {
     return H::combine(std::move(h), literal.content_);
   }

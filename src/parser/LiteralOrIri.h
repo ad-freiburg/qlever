@@ -50,8 +50,8 @@ class alignas(16) LiteralOrIri {
       return LiteralOrIri{Iri::fromStringRepresentation(std::move(internal))};
     }
   }
-  QL_TEMPLATE_NO_DEFAULT(typename H, typename L)
-  (requires std::same_as<L, LiteralOrIri>)friend H
+  CPP_template_2(typename H,
+                 typename L)(requires std::same_as<L, LiteralOrIri>) friend H
       AbslHashValue(H h, const L& literalOrIri) {
     return H::combine(std::move(h), literalOrIri.data_);
   }

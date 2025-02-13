@@ -31,8 +31,8 @@ class Iri {
  public:
   // A default constructed IRI is empty.
   Iri() = default;
-  QL_TEMPLATE_NO_DEFAULT(typename H, typename I)
-  (requires std::same_as<I, Iri>)friend H AbslHashValue(H h, const I& iri) {
+  CPP_template_2(typename H, typename I)(requires std::same_as<I, Iri>) friend H
+      AbslHashValue(H h, const I& iri) {
     return H::combine(std::move(h), iri.iri_);
   }
   bool operator==(const Iri&) const = default;

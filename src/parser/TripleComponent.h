@@ -67,10 +67,10 @@ class TripleComponent {
   TripleComponent() = default;
   /// Construct from anything that is able to construct the underlying
   /// `Variant`.
-  QL_TEMPLATE_NO_DEFAULT(typename FirstArg, typename... Args)
-  (requires CPP_NOT(
-       std::same_as<std::remove_cvref_t<FirstArg>, TripleComponent>) &&
-   std::is_constructible_v<Variant, FirstArg&&, Args&&...>)
+  CPP_template_2(typename FirstArg, typename... Args)(
+      requires CPP_NOT(
+          std::same_as<std::remove_cvref_t<FirstArg>, TripleComponent>) &&
+      std::is_constructible_v<Variant, FirstArg&&, Args&&...>)
       TripleComponent(FirstArg&& firstArg, Args&&... args)
       : _variant(AD_FWD(firstArg), AD_FWD(args)...) {
     if (isString()) {
@@ -116,10 +116,13 @@ class TripleComponent {
   TripleComponent& operator=(TripleComponent&&) = default;
 
   /// Make a `TripleComponent` directly comparable to the underlying types.
+  // TODO<joka921> The constraint is too strict, we probably want
+  // `equalityComparableToExactlyOne`.
   CPP_template(typename T)(
-      requires ql::concepts::equality_comparable_with<Variant, T>) bool
+      requires ad_utility::SameAsAnyTypeIn<T, Variant>) bool
   operator==(const T& other) const {
-    return _variant == other;
+    auto ptr = std::get_if<T>(&_variant);
+    return ptr && *ptr == other;
   }
 
   /// Equality comparison between two `TripleComponent`s.
