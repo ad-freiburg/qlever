@@ -217,9 +217,9 @@ class OrderedThreadSafeQueue {
 
 // A concept for one of the thread-safe queue types above
 template <typename T>
-concept IsThreadsafeQueue =
-    ad_utility::similarToInstantiation<T, ThreadSafeQueue> ||
-    ad_utility::similarToInstantiation<T, OrderedThreadSafeQueue>;
+CPP_concept IsThreadsafeQueue =
+    (ad_utility::similarToInstantiation<T, ThreadSafeQueue> ||
+     ad_utility::similarToInstantiation<T, OrderedThreadSafeQueue>);
 
 namespace detail {
 // A helper function for setting up a producer for one of the threadsafe
@@ -229,9 +229,10 @@ namespace detail {
 // the producer returns `nullopt`, `numThreads` is decremented, and the queue is
 // finished if `numThreads <= 0`. All exceptions that happen during the
 // execution of `producer` are propagated to the queue.
-template <IsThreadsafeQueue Queue, std::invocable Producer>
-auto makeQueueTask(Queue& queue, Producer producer,
-                   std::atomic<int64_t>& numThreads) {
+CPP_template(typename Queue, typename Producer)(
+    requires IsThreadsafeQueue<Queue> CPP_and std::invocable<
+        Producer>) auto makeQueueTask(Queue& queue, Producer producer,
+                                      std::atomic<int64_t>& numThreads) {
   return [&queue, producer = std::move(producer), &numThreads] {
     try {
       while (auto opt = producer()) {

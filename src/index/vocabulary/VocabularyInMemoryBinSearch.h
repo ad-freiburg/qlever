@@ -60,7 +60,7 @@ class VocabularyInMemoryBinSearch
   std::optional<std::string_view> operator[](uint64_t index) const;
 
   // Convert an iterator to a `WordAndIndex`. Required for the mixin.
-  WordAndIndex iteratorToWordAndIndex(std::ranges::iterator_t<Words> it) const;
+  WordAndIndex iteratorToWordAndIndex(ql::ranges::iterator_t<Words> it) const;
 
   // A helper type that can be used to directly write a vocabulary to disk
   // word-by-word, without having to materialize it in RAM first.

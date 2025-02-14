@@ -44,11 +44,10 @@ class ExistsExpression : public SparqlExpression {
                           varColMap.at(variable_).columnIndex_);
     } else {
       // This means that the necessary `ExistsJoin` hasn't been set up yet. This
-      // can for example happen if the parsing (which sets up the
-      // `ExistsExpression`) is completed, but the query planning (which sets up
-      // the `ExistsJoin` is still in progress). It is not possible to cache
-      // such incomplete operations, so we return a random cache key.
-      return std::to_string(ad_utility::FastRandomIntGenerator<size_t>{}());
+      // can for example happen if `getCacheKey` is called during the query
+      // planning.
+      return absl::StrCat("Uninitialized Exists: ",
+                          ad_utility::FastRandomIntGenerator<size_t>{}());
     }
   }
 

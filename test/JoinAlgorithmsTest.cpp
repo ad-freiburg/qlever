@@ -182,6 +182,18 @@ TEST(JoinAlgorithms, JoinWithBlocksExactlyFourBlocksPerElement) {
   testJoin(a, b, expectedResult);
 }
 
+// Test the handling of many empty blocks.
+TEST(JoinAlgorithms, JoinWithEmptyBlocks) {
+  NestedBlock a{{{42, 1}, {42, 2}}, {{42, 3}}};
+  // The join has to handle all the entries with `42` in the first column at
+  // once. In `b` there are more than 3 empty blocks between blocks with this
+  // entry. There was previously a bug in this case.
+  NestedBlock b{{{42, 16}}, {}, {}, {}, {}, {}, {}, {}, {}, {{42, 23}}};
+  JoinResult expectedResult{{42, 1, 16}, {42, 1, 23}, {42, 2, 16},
+                            {42, 2, 23}, {42, 3, 16}, {42, 3, 23}};
+  testJoin(a, b, expectedResult);
+}
+
 // ________________________________________________________________________________________
 TEST(JoinAlgorithms, JoinWithBlocksMultipleBlocksPerElementBothSides) {
   NestedBlock a{{{42, 0}}, {{42, 1}, {42, 2}}, {{42, 3}, {67, 0}}};

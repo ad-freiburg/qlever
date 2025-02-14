@@ -158,9 +158,26 @@ ExpressionPtr Visitor::processIriFunctionCall(
       checkNumArgs(1);
       return sparqlExpression::makeConvertToIntExpression(
           std::move(argList[0]));
-    } else if (functionName == "double" || functionName == "decimal") {
+    }
+    if (functionName == "decimal") {
+      checkNumArgs(1);
+      return sparqlExpression::makeConvertToDecimalExpression(
+          std::move(argList[0]));
+    }
+    // We currently don't have a float type, so we just convert to double.
+    if (functionName == "double" || functionName == "float") {
       checkNumArgs(1);
       return sparqlExpression::makeConvertToDoubleExpression(
+          std::move(argList[0]));
+    }
+    if (functionName == "boolean") {
+      checkNumArgs(1);
+      return sparqlExpression::makeConvertToBooleanExpression(
+          std::move(argList[0]));
+    }
+    if (functionName == "string") {
+      checkNumArgs(1);
+      return sparqlExpression::makeConvertToStringExpression(
           std::move(argList[0]));
     }
   }
@@ -262,6 +279,47 @@ Alias Visitor::visit(Parser::AliasWithoutBracketsContext* ctx) {
 }
 
 // ____________________________________________________________________________________
+parsedQuery::BasicGraphPattern Visitor::toGraphPattern(
+    const ad_utility::sparql_types::Triples& triples) {
+  parsedQuery::BasicGraphPattern pattern{};
+  pattern._triples.reserve(triples.size());
+  auto toTripleComponent = []<typename T>(const T& item) {
+    namespace tc = ad_utility::triple_component;
+    if constexpr (ad_utility::isSimilar<T, Variable>) {
+      return TripleComponent{item};
+    } else if constexpr (ad_utility::isSimilar<T, BlankNode>) {
+      // Blank Nodes in the pattern are to be treated as internal variables
+      // inside WHERE.
+      return TripleComponent{
+          ParsedQuery::blankNodeToInternalVariable(item.toSparql())};
+    } else {
+      static_assert(ad_utility::SimilarToAny<T, Literal, Iri>);
+      return RdfStringParser<TurtleParser<Tokenizer>>::parseTripleObject(
+          item.toSparql());
+    }
+  };
+  auto toPropertyPath = []<typename T>(const T& item) -> PropertyPath {
+    if constexpr (ad_utility::isSimilar<T, Variable>) {
+      return PropertyPath::fromVariable(item);
+    } else if constexpr (ad_utility::isSimilar<T, Iri>) {
+      return PropertyPath::fromIri(item.toSparql());
+    } else {
+      static_assert(ad_utility::SimilarToAny<T, Literal, BlankNode>);
+      // This case can only happen if there's a bug in the SPARQL parser.
+      AD_THROW("Literals or blank nodes are not valid predicates.");
+    }
+  };
+  for (const auto& triple : triples) {
+    auto subject = std::visit(toTripleComponent, triple.at(0));
+    auto predicate = std::visit(toPropertyPath, triple.at(1));
+    auto object = std::visit(toTripleComponent, triple.at(2));
+    pattern._triples.emplace_back(std::move(subject), std::move(predicate),
+                                  std::move(object));
+  }
+  return pattern;
+}
+
+// ____________________________________________________________________________________
 ParsedQuery Visitor::visit(Parser::ConstructQueryContext* ctx) {
   ParsedQuery query;
   query.datasetClauses_ = parsedQuery::DatasetClauses::fromClauses(
@@ -272,8 +330,16 @@ ParsedQuery Visitor::visit(Parser::ConstructQueryContext* ctx) {
                         .value_or(parsedQuery::ConstructClause{});
     visitWhereClause(ctx->whereClause(), query);
   } else {
+    // For `CONSTRUCT WHERE`, the CONSTRUCT template and the WHERE clause are
+    // syntactically the same, so we set the flag to true to keep the blank
+    // nodes, and convert them into variables during `toGraphPattern`.
+    isInsideConstructTriples_ = true;
+    auto cleanup =
+        absl::Cleanup{[this]() { isInsideConstructTriples_ = false; }};
     query._clause = parsedQuery::ConstructClause{
         visitOptional(ctx->triplesTemplate()).value_or(Triples{})};
+    query._rootGraphPattern._graphPatterns.emplace_back(
+        toGraphPattern(query.constructClause().triples_));
   }
   query.addSolutionModifiers(visit(ctx->solutionModifier()));
 
@@ -312,8 +378,8 @@ ParsedQuery Visitor::visit(Parser::DescribeQueryContext* ctx) {
   if (describedResources.empty()) {
     const auto& visibleVariables =
         parsedQuery_.selectClause().getVisibleVariables();
-    std::ranges::copy(visibleVariables,
-                      std::back_inserter(describeClause.resources_));
+    ql::ranges::copy(visibleVariables,
+                     std::back_inserter(describeClause.resources_));
     describedVariables = visibleVariables;
   }
   auto& selectClause = parsedQuery_.selectClause();
@@ -440,7 +506,7 @@ std::optional<Values> Visitor::visit(Parser::ValuesClauseContext* ctx) {
   return visitOptional(ctx->dataBlock());
 }
 
-// ____________________________________________________________________________________
+// ____________________________________________________________________________
 ParsedQuery Visitor::visit(Parser::UpdateContext* ctx) {
   // The prologue (BASE and PREFIX declarations)  only affects the internal
   // state of the visitor.
@@ -448,7 +514,9 @@ ParsedQuery Visitor::visit(Parser::UpdateContext* ctx) {
 
   auto update = visit(ctx->update1());
 
-  if (ctx->update()) {
+  // More than one operation in a single update request is not yet supported,
+  // but a semicolon after a single update is allowed.
+  if (ctx->update() && !ctx->update()->getText().empty()) {
     parsedQuery_ = ParsedQuery{};
     reportNotSupported(ctx->update(), "Multiple updates in one query are");
   }
@@ -2247,20 +2315,22 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
   using namespace sparqlExpression;
   // Create the expression using the matching factory function from
   // `NaryExpression.h`.
-  auto createUnary = [&argList]<typename Function>(Function function)
-      requires std::is_invocable_r_v<ExpressionPtr, Function, ExpressionPtr> {
+  auto createUnary = CPP_template_lambda(&argList)(typename F)(F function)(
+      requires std::is_invocable_r_v<ExpressionPtr, F, ExpressionPtr>) {
     AD_CORRECTNESS_CHECK(argList.size() == 1, argList.size());
     return function(std::move(argList[0]));
   };
-  auto createBinary = [&argList]<typename Function>(Function function)
-      requires std::is_invocable_r_v<ExpressionPtr, Function, ExpressionPtr,
-                                     ExpressionPtr> {
+
+  auto createBinary = CPP_template_lambda(&argList)(typename F)(F function)(
+      requires std::is_invocable_r_v<ExpressionPtr, F, ExpressionPtr,
+                                     ExpressionPtr>) {
     AD_CORRECTNESS_CHECK(argList.size() == 2);
     return function(std::move(argList[0]), std::move(argList[1]));
   };
-  auto createTernary = [&argList]<typename Function>(Function function)
-      requires std::is_invocable_r_v<ExpressionPtr, Function, ExpressionPtr,
-                                     ExpressionPtr, ExpressionPtr> {
+
+  auto createTernary = CPP_template_lambda(&argList)(typename F)(F function)(
+      requires std::is_invocable_r_v<ExpressionPtr, F, ExpressionPtr,
+                                     ExpressionPtr, ExpressionPtr>) {
     AD_CORRECTNESS_CHECK(argList.size() == 3);
     return function(std::move(argList[0]), std::move(argList[1]),
                     std::move(argList[2]));
@@ -2414,9 +2484,11 @@ SparqlExpression::Ptr Visitor::visit(Parser::StrReplaceExpressionContext* ctx) {
     reportError(
         ctx,
         "REPLACE expressions with four arguments (including regex flags) are "
-        "currently not supported by QLever. You can however incorporate flags "
+        "currently not supported by QLever. You can however incorporate "
+        "flags "
         "directly into a regex by prepending `(?<flags>)` to your regex. For "
-        "example `(?i)[ei]` will match the regex `[ei]` in a case-insensitive "
+        "example `(?i)[ei]` will match the regex `[ei]` in a "
+        "case-insensitive "
         "way.");
   }
   return sparqlExpression::makeReplaceExpression(std::move(children.at(0)),
@@ -2503,8 +2575,8 @@ ExpressionPtr Visitor::visit(Parser::AggregateContext* ctx) {
     std::string separator;
     if (ctx->string()) {
       // TODO: The string rule also allow triple quoted strings with different
-      //  escaping rules. These are currently not handled. They should be parsed
-      //  into a typesafe format with a unique representation.
+      //  escaping rules. These are currently not handled. They should be
+      //  parsed into a typesafe format with a unique representation.
       separator = visit(ctx->string()).get();
       // If there was a separator, we have to strip the quotation marks
       AD_CONTRACT_CHECK(separator.size() >= 2);
@@ -2620,19 +2692,20 @@ GraphTerm Visitor::visit(Parser::BlankNodeContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-template <typename Ctx>
-void Visitor::visitVector(const std::vector<Ctx*>& childContexts)
-    requires voidWhenVisited<Visitor, Ctx> {
+CPP_template_def(typename Ctx)(
+    requires Visitor::voidWhenVisited<Visitor, Ctx>) void Visitor::
+    visitVector(const vector<Ctx*>& childContexts) {
   for (const auto& child : childContexts) {
     visit(child);
   }
 }
 
 // ____________________________________________________________________________________
-template <typename Ctx>
-[[nodiscard]] auto Visitor::visitVector(const std::vector<Ctx*>& childContexts)
-    -> std::vector<decltype(visit(childContexts[0]))>
-    requires(!voidWhenVisited<Visitor, Ctx>) {
+CPP_template_def(typename Ctx)(
+    requires CPP_NOT(Visitor::voidWhenVisited<Visitor, Ctx>))
+    [[nodiscard]] auto Visitor::visitVector(
+        const std::vector<Ctx*>& childContexts)
+        -> std::vector<decltype(visit(childContexts[0]))> {
   std::vector<decltype(visit(childContexts[0]))> children;
   for (const auto& child : childContexts) {
     children.emplace_back(visit(child));
@@ -2649,7 +2722,8 @@ Out Visitor::visitAlternative(Contexts*... ctxs) {
     (..., visitIf(ctxs));
   } else {
     std::optional<Out> out;
-    // Visit the one `context` which is not null and write the result to `out`.
+    // Visit the one `context` which is not null and write the result to
+    // `out`.
     (..., visitIf<std::optional<Out>, Out>(&out, ctxs));
     return std::move(out.value());
   }
@@ -2674,8 +2748,8 @@ void Visitor::visitIf(Target* target, Ctx* ctx) {
 }
 
 // _____________________________________________________________________________
-template <typename Ctx>
-void Visitor::visitIf(Ctx* ctx) requires voidWhenVisited<Visitor, Ctx> {
+CPP_template_def(typename Ctx)(requires Visitor::voidWhenVisited<
+                               Visitor, Ctx>) void Visitor::visitIf(Ctx* ctx) {
   if (ctx) {
     visit(ctx);
   }

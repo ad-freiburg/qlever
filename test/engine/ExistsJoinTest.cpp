@@ -15,53 +15,79 @@
 using namespace ad_utility::testing;
 
 namespace {
-void testExists(const VectorTable& leftInput, const VectorTable& rightInput,
-                std::vector<bool> expectedAsBool, size_t numJoinColumns) {
-  AD_CORRECTNESS_CHECK(leftInput.size() == expectedAsBool.size());
-  auto left = makeIdTableFromVector(leftInput);
-  auto right = makeIdTableFromVector(rightInput);
+void testExistsFromIdTable(IdTable left, IdTable right,
+                           std::vector<bool> expectedAsBool,
+                           size_t numJoinColumns) {
+  AD_CORRECTNESS_CHECK(left.numRows() == expectedAsBool.size());
   AD_CORRECTNESS_CHECK(left.numColumns() >= numJoinColumns);
   AD_CORRECTNESS_CHECK(right.numColumns() >= numJoinColumns);
+
+  // Permute the join columns.
+  auto colsLeft = ad_utility::integerRange(left.numColumns());
+  std::vector<size_t> leftPermutation;
+  ql::ranges::copy(colsLeft, std::back_inserter(leftPermutation));
+  left.setColumnSubset(leftPermutation);
+
+  auto colsRight = ad_utility::integerRange(right.numColumns());
+  std::vector<size_t> rightPermutation;
+  ql::ranges::copy(colsRight, std::back_inserter(rightPermutation));
+  right.setColumnSubset(rightPermutation);
+
+  // The expected output depends on the (sorted) input, even if we shuffle it
+  // afterward.
+  IdTable expected = left.clone();
+
+  // Randomly shuffle the inputs, to ensure that the `existsJoin` correctly
+  // pre-sorts its inputs.
+  std::random_device rd;
+  std::mt19937 g(rd());
+  std::shuffle(left.begin(), left.end(), g);
+  std::shuffle(right.begin(), right.end(), g);
 
   auto qec = getQec();
   using V = Variable;
   using Vars = std::vector<std::optional<Variable>>;
-
-  // TODO<joka921> Support more than one join column.
-  // TODO<joka921> also randomly permute the join columns.
 
   auto joinCol = [](size_t i) { return V{absl::StrCat("?joinCol_", i)}; };
   auto nonJoinCol = [i = 0]() mutable {
     return V{absl::StrCat("?nonJoinCol_", i++)};
   };
 
-  auto makeChild = [&](const IdTable& input) {
+  auto makeChild = [&](const IdTable& input, const auto& columnPermutation) {
     Vars vars;
-    for (size_t i : ad_utility::integerRange(numJoinColumns)) {
-      vars.push_back(joinCol(i));
-    };
-    for ([[maybe_unused]] size_t i :
-         ql::views::iota(numJoinColumns, input.numColumns())) {
-      vars.push_back(nonJoinCol());
+    for (auto colIdx : columnPermutation) {
+      if (colIdx < numJoinColumns) {
+        vars.push_back(joinCol(colIdx));
+      } else {
+        vars.push_back(nonJoinCol());
+      }
     }
     return ad_utility::makeExecutionTree<ValuesForTesting>(qec, input.clone(),
                                                            vars);
   };
 
-  auto exists =
-      ExistsJoin{qec, makeChild(left), makeChild(right), V{"?exists"}};
+  auto exists = ExistsJoin{qec, makeChild(left, leftPermutation),
+                           makeChild(right, rightPermutation), V{"?exists"}};
 
   EXPECT_EQ(exists.getResultWidth(), left.numColumns() + 1);
 
   auto res = exists.computeResultOnlyForTesting();
   const auto& table = res.idTable();
   ASSERT_EQ(table.numRows(), left.size());
-  IdTable expected = left.clone();
   expected.addEmptyColumn();
   ql::ranges::transform(expectedAsBool, expected.getColumn(2).begin(),
                         &Id::makeFromBool);
   EXPECT_THAT(table, matchesIdTable(expected));
 }
+
+void testExists(const VectorTable& leftInput, const VectorTable& rightInput,
+                std::vector<bool> expectedAsBool, size_t numJoinColumns) {
+  auto left = makeIdTableFromVector(leftInput);
+  auto right = makeIdTableFromVector(rightInput);
+  testExistsFromIdTable(std::move(left), std::move(right),
+                        std::move(expectedAsBool), numJoinColumns);
+}
+
 }  // namespace
 
 TEST(Exists, computeResult) {
@@ -89,6 +115,10 @@ TEST(Exists, computeResult) {
   testExists({{U, U}}, {{13, 17}}, {true}, 2);
   testExists({{13, 17}, {25, 38}}, {{U, U}}, {true, true}, 2);
 
-  // TODO<joka921> Add tests with unsorted inputs.
-  // TODO<joka921> Test empty inputs on one side.
+  // Empty inputs
+  auto alloc = ad_utility::testing::makeAllocator();
+  testExistsFromIdTable(IdTable(2, alloc),
+                        makeIdTableFromVector({{U, U}, {3, 7}}), {}, 1);
+  testExistsFromIdTable(makeIdTableFromVector({{U, U}, {3, 7}}),
+                        IdTable(2, alloc), {false, false}, 2);
 }

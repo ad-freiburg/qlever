@@ -10,7 +10,7 @@ add_library(parser
         ParsedQuery.cpp
         RdfParser.cpp
         Tokenizer.cpp
-        ContextFileParser.cpp
+        WordsAndDocsFileParser.cpp
         TurtleTokenId.h
         ParallelBuffer.cpp
         SparqlParserHelpers.cpp

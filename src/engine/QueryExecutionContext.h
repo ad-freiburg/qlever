@@ -17,7 +17,6 @@
 #include "index/Index.h"
 #include "util/Cache.h"
 #include "util/ConcurrentCache.h"
-#include "util/Synchronized.h"
 
 // The value of the `QueryResultCache` below. It consists of a `Result` together
 // with its `RuntimeInfo`.
@@ -143,6 +142,15 @@ class QueryExecutionContext {
   bool _pinSubtrees;
   bool _pinResult;
 
+  // If false, then no updates of the runtime information should be sent via the
+  // websocket connection for performance reasons.
+  bool areWebsocketUpdatesEnabled() const {
+    return areWebsocketUpdatesEnabled_;
+  }
+
+ private:
+  static bool areWebSocketUpdatesEnabled();
+
  private:
   const Index& _index;
 
@@ -158,4 +166,7 @@ class QueryExecutionContext {
   QueryPlanningCostFactors _costFactors;
   SortPerformanceEstimator _sortPerformanceEstimator;
   std::function<void(std::string)> updateCallback_;
+  // Cache the state of that runtime parameter to reduce the contention of the
+  // mutex.
+  bool areWebsocketUpdatesEnabled_ = areWebSocketUpdatesEnabled();
 };

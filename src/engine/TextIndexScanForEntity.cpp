@@ -20,10 +20,14 @@ ProtoResult TextIndexScanForEntity::computeResult(
       word_, getExecutionContext()->getAllocator());
 
   if (hasFixedEntity()) {
-    auto beginErase = std::ranges::remove_if(idTable, [this](const auto& row) {
+    auto beginErase = ql::ranges::remove_if(idTable, [this](const auto& row) {
       return row[1].getVocabIndex() != getVocabIndexOfFixedEntity();
     });
+#ifdef QLEVER_CPP_17
+    idTable.erase(beginErase, idTable.end());
+#else
     idTable.erase(beginErase.begin(), idTable.end());
+#endif
     idTable.setColumnSubset(std::vector<ColumnIndex>{0, 2});
   }
 

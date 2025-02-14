@@ -28,7 +28,11 @@ std::ostream& operator<<(std::ostream& stream, const TripleComponent& obj) {
           stream << "DATE: " << value.toStringAndType().first;
         } else if constexpr (std::is_same_v<T, bool>) {
           stream << (value ? "true" : "false");
+        } else if constexpr (std::is_same_v<T, GeoPoint>) {
+          stream << Id::makeFromGeoPoint(value);
         } else {
+          static_assert(
+              ad_utility::SameAsAny<T, Id, double, int64_t, std::string>);
           stream << value;
         }
       },

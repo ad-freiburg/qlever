@@ -58,8 +58,13 @@ requires isVectorResult<S> auto idGenerator(const S& values, size_t targetSize,
 
 // For the `Variable` and `SetOfIntervals` class, the generator from the
 // `sparqlExpressions` module already yields the `ValueIds`.
-template <ad_utility::SimilarToAny<Variable, ad_utility::SetOfIntervals> S>
-auto idGenerator(S input, size_t targetSize, const EvaluationContext* context) {
+CPP_template(typename S)(
+    requires ad_utility::SimilarToAny<
+        S, Variable,
+        ad_utility::SetOfIntervals>) auto idGenerator(S input,
+                                                      size_t targetSize,
+                                                      const EvaluationContext*
+                                                          context) {
   return sparqlExpression::detail::makeGenerator(std::move(input), targetSize,
                                                  context);
 }
@@ -150,7 +155,7 @@ requires AreComparable<S1, S2> ExpressionResult evaluateRelationalExpression(
     auto impl = [&](const auto& value2) -> std::optional<ExpressionResult> {
       auto columnIndex = context->getColumnIndexForVariable(value1);
       auto valueId = makeValueId(value2, context);
-      // TODO<C++23> Use `std::ranges::starts_with`.
+      // TODO<C++23> Use `ql::ranges::starts_with`.
       if (const auto& cols = context->_columnsByWhichResultIsSorted;
           !cols.empty() && cols[0] == columnIndex) {
         constexpr static bool value2IsString =

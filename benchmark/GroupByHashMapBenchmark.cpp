@@ -364,7 +364,7 @@ class GroupByHashMapBenchmark : public BenchmarkInterface {
     } else {
       firstColumn = generateRandomGroupVec(numInputRows, numGroups);
     }
-    std::ranges::transform(
+    ql::ranges::transform(
         firstColumn.begin(), firstColumn.end(), groupValues.begin(),
         [](size_t value) {
           return ValueId::makeFromInt(static_cast<int64_t>(value));
@@ -375,7 +375,7 @@ class GroupByHashMapBenchmark : public BenchmarkInterface {
     auto localVocab = LocalVocab{};
     if (valueTypes != ValueIdType::Strings) {
       auto secondColumn = generateRandomDoubleVec(numInputRows);
-      std::ranges::transform(
+      ql::ranges::transform(
           secondColumn.begin(), secondColumn.end(), otherValues.begin(),
           [&](double value) {
             if (valueTypes == ValueIdType::OnlyDouble)
@@ -396,10 +396,10 @@ class GroupByHashMapBenchmark : public BenchmarkInterface {
           numInputRows, randomStringLength);
       localVocab = std::move(newLocalVocab);
 
-      std::ranges::transform(indices.begin(), indices.end(),
-                             otherValues.begin(), [&](LocalVocabIndex idx) {
-                               return ValueId::makeFromLocalVocabIndex(idx);
-                             });
+      ql::ranges::transform(indices.begin(), indices.end(), otherValues.begin(),
+                            [&](LocalVocabIndex idx) {
+                              return ValueId::makeFromLocalVocabIndex(idx);
+                            });
     }
 
     std::vector<std::optional<Variable>> variables = {Variable{"?a"},

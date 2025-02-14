@@ -29,6 +29,13 @@ using ParamValueMap = ad_utility::HashMap<string, std::vector<string>>;
 std::optional<std::string> getParameterCheckAtMostOnce(const ParamValueMap& map,
                                                        string_view key);
 
+// Checks if a parameter exists, and it matches the
+// expected `value`. If yes, return the value, otherwise return
+// `std::nullopt`.
+std::optional<std::string> checkParameter(const ParamValueMap& parameters,
+                                          std::string_view key,
+                                          std::optional<std::string> value);
+
 // A parsed URL.
 // - `path_` is the URL path
 // - `parameters_` is a map of the HTTP Query parameters
@@ -42,6 +49,7 @@ namespace sparqlOperation {
 // A SPARQL 1.1 Query
 struct Query {
   std::string query_;
+  std::vector<DatasetClause> datasetClauses_;
 
   bool operator==(const Query& rhs) const = default;
 };
@@ -49,6 +57,7 @@ struct Query {
 // A SPARQL 1.1 Update
 struct Update {
   std::string update_;
+  std::vector<DatasetClause> datasetClauses_;
 
   bool operator==(const Update& rhs) const = default;
 };
@@ -58,18 +67,20 @@ struct Update {
 struct None {
   bool operator==(const None& rhs) const = default;
 };
+
+using Operation = std::variant<Query, Update, None>;
 }  // namespace sparqlOperation
 
 // Representation of parsed HTTP request.
 // - `path_` is the URL path
+// - `accessToken_` is the access token for that request
 // - `parameters_` is a hashmap of the parameters
 // - `operation_` the operation that should be performed
 struct ParsedRequest {
   std::string path_;
+  std::optional<std::string> accessToken_;
   ParamValueMap parameters_;
-  std::variant<sparqlOperation::Query, sparqlOperation::Update,
-               sparqlOperation::None>
-      operation_;
+  sparqlOperation::Operation operation_;
 };
 
 // Parse the URL path and the URL query parameters of an HTTP Request target.
@@ -79,8 +90,11 @@ ParsedUrl parseRequestTarget(std::string_view target);
 // string to vectors of strings).
 ParamValueMap paramsToMap(boost::urls::params_view params);
 
-// Parse default and named graphs URIs from the parameters.
-std::vector<DatasetClause> parseDatasetClauses(const ParamValueMap& params);
+// Parse the dataset clauses from the given key in the parameters.
+std::vector<DatasetClause> parseDatasetClausesFrom(const ParamValueMap& params,
+                                                   const std::string& key,
+                                                   bool isNamed);
+
 }  // namespace ad_utility::url_parser
 
 #endif  // QLEVER_URLPARSER_H
