@@ -1349,3 +1349,38 @@ TEST(ParserTest, HandlesSurrogatesCorrectly) {
   // So writing unit tests for these cases is not possible without creating
   // semi-invalid UTF-8 strings.
 }
+
+// _____________________________________________________________________________
+TEST(ParserTest, BaseDeclaration) {
+  // Simple case
+  auto query1 = SparqlParser::parseQuery(
+      "BASE <http://example.org/> SELECT * WHERE { ?s <p> <test> }");
+  EXPECT_EQ(getFirstTriple(query1),
+            "{s: ?s, p: <http://example.org/p>, o: <http://example.org/test>}");
+  // Relative and absolute IRIs mixed
+  auto query2 = SparqlParser::parseQuery(
+      "BASE <http://example.org/something> "
+      "SELECT * WHERE { </root> <p> <http://other.example.org/p> }");
+  EXPECT_EQ(getFirstTriple(query2),
+            "{s: <http://example.org/root>,"
+            " p: <http://example.org/something/p>,"
+            " o: <http://other.example.org/p>}");
+
+  // Cascading prefixes
+  auto query3 = SparqlParser::parseQuery(
+      "BASE <http://example.org/> "
+      "PREFIX ex1: <ex1/> "
+      "BASE <http://other.example.org/> "
+      "PREFIX ex2: <ex2/> "
+      "BASE <http://alternative.example.org/> "
+      "SELECT * WHERE { ex2:hello <world> ex1:test }");
+  EXPECT_EQ(getFirstTriple(query3),
+            "{s: <http://other.example.org/ex2/hello>,"
+            " p: <http://alternative.example.org/world>,"
+            " o: <http://example.org/ex1/test>}");
+
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      SparqlParser::parseQuery("BASE <http://example.com> BASE <relative> "
+                               "SELECT * WHERE { ?s ?p ?o }"),
+      ::testing::HasSubstr("absolute IRI"), InvalidSparqlQueryException);
+}

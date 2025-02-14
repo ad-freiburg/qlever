@@ -573,13 +573,15 @@ TEST(SparqlExpression, dateOperators) {
 }
 
 // _____________________________________________________________________________________
+namespace {
 auto checkStrlen = testUnaryExpression<&makeStrlenExpression>;
 auto checkStr = testUnaryExpression<&makeStrExpression>;
-auto checkIriOrUri = testUnaryExpression<&makeIriOrUriExpression>;
-static auto makeStrlenWithStr = [](auto arg) {
+auto checkIriOrUri = testNaryExpressionVec<&makeIriOrUriExpression>;
+auto makeStrlenWithStr = [](auto arg) {
   return makeStrlenExpression(makeStrExpression(std::move(arg)));
 };
 auto checkStrlenWithStrChild = testUnaryExpression<makeStrlenWithStr>;
+}  // namespace
 TEST(SparqlExpression, stringOperators) {
   // Test `StrlenExpression` and `StrExpression`.
   checkStrlen(
@@ -614,20 +616,13 @@ TEST(SparqlExpression, stringOperators) {
       DateYearOrDuration(11853, DateYearOrDuration::Type::Year));
   // Test `iriOrUriExpression`.
   // test invalid
-  checkIriOrUri(IdOrLiteralOrIriVec{U, IntId(2), DoubleId(12.99), dateDate,
-                                    dateLYear, T, F},
-                IdOrLiteralOrIriVec{U, U, U, U, U, U, U});
+  checkIriOrUri(IdOrLiteralOrIriVec{U, U, U, U, U, U, U},
+                std::tuple{IdOrLiteralOrIriVec{U, IntId(2), DoubleId(12.99),
+                                               dateDate, dateLYear, T, F},
+                           IdOrLiteralOrIri{LocalVocabEntry{
+                               ad_utility::triple_component::Iri{}}}});
   // test valid
   checkIriOrUri(
-      IdOrLiteralOrIriVec{
-          lit("bimbim"), iriref("<bambim>"),
-          lit("https://www.bimbimbam/2001/bamString"),
-          lit("http://www.w3.\torg/2001/\nXMLSchema#\runsignedShort"),
-          lit("http://www.w3.org/2001/XMLSchema#string"),
-          iriref("<http://www.w3.org/2001/XMLSchema#string>"),
-          testContext().notInVocabIri, testContext().notInVocabIriLit,
-          lit("http://example/"), iriref("<http://\t\t\nexample/>"),
-          lit("\t\n\r")},
       IdOrLiteralOrIriVec{
           iriref("<bimbim>"), iriref("<bambim>"),
           iriref("<https://www.bimbimbam/2001/bamString>"),
@@ -637,7 +632,35 @@ TEST(SparqlExpression, stringOperators) {
           iriref("<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>"),
           iriref("<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>"),
           iriref("<http://example/>"), iriref("<http://\t\t\nexample/>"),
-          iriref("<\t\n\r>")});
+          iriref("<\t\n\r>")},
+      std::tuple{
+          IdOrLiteralOrIriVec{
+              lit("bimbim"), iriref("<bambim>"),
+              lit("https://www.bimbimbam/2001/bamString"),
+              lit("http://www.w3.\torg/2001/\nXMLSchema#\runsignedShort"),
+              lit("http://www.w3.org/2001/XMLSchema#string"),
+              iriref("<http://www.w3.org/2001/XMLSchema#string>"),
+              testContext().notInVocabIri, testContext().notInVocabIriLit,
+              lit("http://example/"), iriref("<http://\t\t\nexample/>"),
+              lit("\t\n\r")},
+          IdOrLiteralOrIri{
+              LocalVocabEntry{ad_utility::triple_component::Iri{}}}});
+
+  // test with base iri
+  checkIriOrUri(
+      IdOrLiteralOrIriVec{
+          U,
+          iriref("<http://example.com/hi/bimbim>"),
+          iriref("<http://example.com/hi/bambim>"),
+          iriref("<https://www.bimbimbam/2001/bamString>"),
+          iriref("<http://example.com/hello>"),
+          iriref("<http://example.com/hello>"),
+      },
+      std::tuple{
+          IdOrLiteralOrIriVec{U, lit("bimbim"), iriref("<bambim>"),
+                              lit("https://www.bimbimbam/2001/bamString"),
+                              lit("/hello"), iriref("</hello>")},
+          IdOrLiteralOrIri{iriref("<http://example.com/hi>")}});
 
   // A simple test for uniqueness of the cache key.
   auto c1a = makeStrlenExpression(std::make_unique<IriExpression>(iri("<bim>")))

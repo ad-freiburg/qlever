@@ -65,7 +65,8 @@ SparqlExpression::Ptr makeStrLangTagExpression(SparqlExpression::Ptr child1,
                                                SparqlExpression::Ptr child2);
 
 SparqlExpression::Ptr makeStrExpression(SparqlExpression::Ptr child);
-SparqlExpression::Ptr makeIriOrUriExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeIriOrUriExpression(SparqlExpression::Ptr child,
+                                             SparqlExpression::Ptr baseIri);
 SparqlExpression::Ptr makeStrlenExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeSubstrExpression(SparqlExpression::Ptr string,
                                            SparqlExpression::Ptr start,

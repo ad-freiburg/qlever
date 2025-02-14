@@ -1162,8 +1162,16 @@ TripleComponent::Iri Visitor::visit(Parser::IriContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-string Visitor::visit(Parser::IrirefContext* ctx) {
-  return RdfEscaping::unescapeIriref(ctx->getText());
+string Visitor::visit(Parser::IrirefContext* ctx) const {
+  if (baseIri_.empty()) {
+    return ctx->getText();
+  }
+  // TODO<RobinTF> Avoid unnecessary string copies because of conversion.
+  // Handle IRIs with base IRI.
+  return std::move(
+      ad_utility::triple_component::Iri::fromIrirefConsiderBase(
+          ctx->getText(), baseIri_.getBaseIri(false), baseIri_.getBaseIri(true))
+          .toStringRepresentation());
 }
 
 // ____________________________________________________________________________________
@@ -1211,8 +1219,17 @@ DatasetClause SparqlQleverVisitor::visit(Parser::UsingClauseContext* ctx) {
 
 // ____________________________________________________________________________________
 void Visitor::visit(Parser::PrologueContext* ctx) {
-  visitVector(ctx->baseDecl());
-  visitVector(ctx->prefixDecl());
+  // Process in an interleaved way, so PREFIX statements are processed correctly
+  // to only use the BASE IRIs defined before them, not after them.
+  for (auto* child : ctx->children) {
+    if (auto* baseDecl = dynamic_cast<Parser::BaseDeclContext*>(child)) {
+      visit(baseDecl);
+    } else {
+      auto* prefixDecl = dynamic_cast<Parser::PrefixDeclContext*>(child);
+      AD_CORRECTNESS_CHECK(prefixDecl != nullptr);
+      visit(prefixDecl);
+    }
+  }
   // Remember the whole prologue (we need this when we encounter a SERVICE
   // clause, see `visit(ServiceGraphPatternContext*)` below.
   if (ctx->getStart() && ctx->getStop()) {
@@ -1221,8 +1238,15 @@ void Visitor::visit(Parser::PrologueContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-void Visitor::visit(const Parser::BaseDeclContext* ctx) {
-  reportNotSupported(ctx, "BASE declarations are");
+void Visitor::visit(Parser::BaseDeclContext* ctx) {
+  auto rawIri = ctx->iriref()->getText();
+  bool hasScheme = ctre::starts_with<"<[A-Za-z]*[A-Za-z0-9+-.]:">(rawIri);
+  if (!hasScheme) {
+    reportError(
+        ctx,
+        "The base IRI must be an absolute IRI with a scheme, was: " + rawIri);
+  }
+  baseIri_ = TripleComponent::Iri::fromIriref(visit(ctx->iriref()));
 }
 
 // ____________________________________________________________________________________
@@ -2330,7 +2354,9 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
   if (functionName == "str") {
     return createUnary(&makeStrExpression);
   } else if (functionName == "iri" || functionName == "uri") {
-    return createUnary(&makeIriOrUriExpression);
+    AD_CORRECTNESS_CHECK(argList.size() == 1, argList.size());
+    return makeIriOrUriExpression(std::move(argList[0]),
+                                  std::make_unique<IriExpression>(baseIri_));
   } else if (functionName == "strlang") {
     return createBinary(&makeStrLangTagExpression);
   } else if (functionName == "strdt") {
