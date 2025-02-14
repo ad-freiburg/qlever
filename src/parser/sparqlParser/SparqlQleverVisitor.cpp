@@ -1,9 +1,8 @@
-// Copyright 2021 - 2024, University of Freiburg
+// Copyright 2021 - 2025, University of Freiburg
 // Chair of Algorithms and Data Structures
-// Authors:
-//   2021 -    Hannah Bast <bast@cs.uni-freiburg.de>
-//   2022      Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
-//   2022 -    Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Authors: Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
+//          Hannah Bast <bast@cs.uni-freiburg.de>
+//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
 
@@ -2496,28 +2495,33 @@ SparqlExpression::Ptr Visitor::visit(Parser::StrReplaceExpressionContext* ctx) {
                                                  std::move(children.at(2)));
 }
 
-// ____________________________________________________________________________________
+// ____________________________________________________________________________
 ExpressionPtr Visitor::visitExists(Parser::GroupGraphPatternContext* pattern,
                                    bool negate) {
-  // The argument of the EXISTS is a completely independent GroupGraphPattern
-  // (except for the FROM [NAMED] clauses), so we have to back up and restore
-  // all global  state when parsing EXISTS.
+  // The argument of 'EXISTS` is a `GroupGraphPattern` that is independent from
+  // the rest of the query (except for the `FROM` and `FROM NAMED` clauses,
+  // which also apply to the argument of `EXISTS`). We therefore have to back up
+  // and restore all global state when parsing `EXISTS`.
   auto queryBackup = std::exchange(parsedQuery_, ParsedQuery{});
-  auto visibleVariablesSoFar = std::move(visibleVariables_);
+  auto visibleVariablesBackup = std::move(visibleVariables_);
   visibleVariables_.clear();
 
-  // Parse the argument of EXISTS.
+  // Parse the argument of `EXISTS`.
   auto group = visit(pattern);
   ParsedQuery argumentOfExists =
       std::exchange(parsedQuery_, std::move(queryBackup));
   argumentOfExists.selectClause().setAsterisk();
   argumentOfExists._rootGraphPattern = std::move(group);
 
-  // EXISTS inherits the FROM [NAMED] clauses from the outer argumentOfExists.
+  // The argument of `EXISTS` inherits the `FROM` and `FROM NAMED` clauses from
+  // the outer query.
   argumentOfExists.datasetClauses_ = activeDatasetClauses_;
-  visibleVariables_ = std::move(visibleVariablesSoFar);
+  visibleVariables_ = std::move(visibleVariablesBackup);
   auto exists = std::make_unique<sparqlExpression::ExistsExpression>(
       std::move(argumentOfExists));
+
+  // Handle `NOT EXISTS` (which is syntactically distinct from `! EXISTS`) by
+  // simply negating the `ExistsExpression`.
   if (negate) {
     return sparqlExpression::makeUnaryNegateExpression(std::move(exists));
   } else {

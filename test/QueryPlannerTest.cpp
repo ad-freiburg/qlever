@@ -1,7 +1,7 @@
-// Copyright 2015 - 2024, University of Freiburg
+// Copyright 2015 - 2025, University of Freiburg
 // Chair of Algorithms and Data Structures
 // Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de> [2015 - 2017]
-//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de> [2018 - 2024]
+//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 #include <gmock/gmock.h>
 
@@ -2921,10 +2921,11 @@ TEST(QueryPlanner, Exists) {
   auto def = h::IndexScanFromStrings("?d", "?e", "?f");
   auto ghi = h::IndexScanFromStrings("?g", "?h", "?i");
   using V = Variable;
+
   // Simple tests for EXISTS with FILTER, BIND, and GROUP BY.
-  h::expect("SELECT * { ?x ?y ?z FILTER EXISTS {?a ?b ?c}}",
+  h::expect("SELECT * { ?x ?y ?z FILTER EXISTS {?a ?b ?c} }",
             h::Filter("EXISTS {?a ?b ?c}", h::ExistsJoin(xyz, abc)));
-  h::expect("SELECT * { ?x ?y ?z BIND(EXISTS {?a ?b ?c} as ?bound)}",
+  h::expect("SELECT * { ?x ?y ?z BIND(EXISTS {?a ?b ?c} as ?bound) }",
             h::Bind(h::ExistsJoin(xyz, abc), "EXISTS {?a ?b ?c}",
                     Variable("?bound")));
   h::expect(
@@ -2957,9 +2958,9 @@ TEST(QueryPlanner, Exists) {
   auto xyzg = h::IndexScanFromStrings("?x", "?y", "?z", {}, H{"<g>"});
   auto abcg = h::IndexScanFromStrings("?a", "?b", "?c", {}, H{"<g>"});
 
+  // Various uses of FILTER EXISTS.
   auto existsJoin = h::ExistsJoin(xyzg, abcg);
   auto filter = h::Filter("EXISTS {?a ?b ?c}", existsJoin);
-  // (use a lambda that only changes the beginning of the query).
   h::expect("SELECT * FROM <g> { ?x ?y ?z FILTER EXISTS {?a ?b ?c}}", filter);
   h::expect("ASK FROM <g> { ?x ?y ?z FILTER EXISTS {?a ?b ?c}}", filter);
   h::expect(

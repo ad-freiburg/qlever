@@ -1,6 +1,6 @@
-//  Copyright 2025, University of Freiburg,
-//                  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2025, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 #include "engine/ExistsJoin.h"
 
@@ -19,6 +19,7 @@ ExistsJoin::ExistsJoin(QueryExecutionContext* qec,
       right_{std::move(right)},
       joinColumns_{QueryExecutionTree::getJoinColumns(*left_, *right_)},
       existsVariable_{std::move(existsVariable)} {
+  // Make sure that the left and right input are sorted on the join columns.
   std::tie(left_, right_) = QueryExecutionTree::createSortedTrees(
       std::move(left_), std::move(right_), joinColumns_);
 }
@@ -37,7 +38,7 @@ VariableToColumnMap ExistsJoin::computeVariableToColumnMap() const {
   auto res = left_->getVariableColumns();
   AD_CONTRACT_CHECK(
       !res.contains(existsVariable_),
-      "The target variable of an exists scan must be a new variable");
+      "The target variable of an EXISTS join must be a new variable");
   res[existsVariable_] = makeAlwaysDefinedColumn(getResultWidth() - 1);
   return res;
 }
@@ -50,16 +51,20 @@ size_t ExistsJoin::getResultWidth() const {
 
 // ____________________________________________________________________________
 vector<ColumnIndex> ExistsJoin::resultSortedOn() const {
+  // We add one column to `left_`, but do not change the order of the rows.
   return left_->resultSortedOn();
 }
 
 // ____________________________________________________________________________
 float ExistsJoin::getMultiplicity(size_t col) {
+  // The multiplicities of all columns except the last one are the same as in
+  // `left_`.
   if (col < getResultWidth() - 1) {
     return left_->getMultiplicity(col);
   }
-  // The multiplicity of the boolean column can be a dummy value, as it should
-  // be never used for joins etc.
+  // For the added (Boolean) column we take a dummy value, assuming that it
+  // will not be used for subsequent joins or other operations that make use of
+  // the multiplicities.
   return 1;
 }
 
@@ -82,13 +87,14 @@ ProtoResult ExistsJoin::computeResult([[maybe_unused]] bool requestLaziness) {
   const auto& left = leftRes->idTable();
   const auto& right = rightRes->idTable();
 
-  // We reuse the generic `zipperJoinWithUndef` utility in the following way:
-  // It has (among others) two callbacks: One for each matching pair of rows
-  // from left and right, and one for rows in the left input that have no
-  // matching counterpart in the right input. The first callback can be a noop,
-  // and the second callback gives us exactly `NOT EXISTS`.
+  // We reuse the generic `zipperJoinWithUndef` function, which has two two
+  // callbacks: one for each matching pair of rows from `left` and `right`, and
+  // one for rows in the left input that have no matching counterpart in the
+  // right input. The first callback can be a noop, and the second callback
+  // gives us exactly those rows, where the value in the to-be-added result
+  // column should be `false`.
 
-  // Only extract the join columns from both inputs to make the following code
+  // Extract the join columns from both inputs to make the following code
   // easier.
   ad_utility::JoinColumnMapping joinColumnData{joinColumns_, left.numColumns(),
                                                right.numColumns()};
@@ -96,27 +102,29 @@ ProtoResult ExistsJoin::computeResult([[maybe_unused]] bool requestLaziness) {
       left.asColumnSubsetView(joinColumnData.jcsLeft());
   IdTableView<0> joinColumnsRight =
       right.asColumnSubsetView(joinColumnData.jcsRight());
-
   checkCancellation();
 
-  // `isCheap` is true iff there are no UNDEF values in the join columns. In
-  // this case we can use a much cheaper algorithm.
-  // TODO<joka921> There are many other cases where a cheaper implementation can
-  // be chosen, but we leave those for another PR, this is the most common case.
-  namespace stdr = ql::ranges;
+  // Compute `isCheap`, which is true iff there are no UNDEF values in the join
+  // columns (in which case we can use a simpler and cheaper join algorithm).
+  //
+  // TODO<joka921> This is the most common case. There are many other cases
+  // where the generic `zipperJoinWithUndef` can be optimized. We will those
+  // for a later PR.
   size_t numJoinColumns = joinColumnsLeft.numColumns();
   AD_CORRECTNESS_CHECK(numJoinColumns == joinColumnsRight.numColumns());
-  bool isCheap = stdr::none_of(
+  bool isCheap = ql::ranges::none_of(
       ad_utility::integerRange(numJoinColumns), [&](const auto& col) {
-        return (stdr::any_of(joinColumnsRight.getColumn(col),
-                             &Id::isUndefined)) ||
-               (stdr::any_of(joinColumnsLeft.getColumn(col), &Id::isUndefined));
+        return (ql::ranges::any_of(joinColumnsRight.getColumn(col),
+                                   &Id::isUndefined)) ||
+               (ql::ranges::any_of(joinColumnsLeft.getColumn(col),
+                                   &Id::isUndefined));
       });
 
   // Nothing to do for the actual matches.
   auto noopRowAdder = ad_utility::noop;
 
-  // Store the indices of rows for which `exists` is `false`.
+  // Store the indices of rows for which the value of the `EXISTS` (in the added
+  // Boolean column) should be `false`.
   std::vector<size_t, ad_utility::AllocatorWithLimit<size_t>> notExistsIndices{
       allocator()};
   // The callback is called with iterators, so we convert them back to indices.
@@ -125,8 +133,9 @@ ProtoResult ExistsJoin::computeResult([[maybe_unused]] bool requestLaziness) {
         notExistsIndices.push_back(itLeft - begin);
       };
 
-  // Run the actual zipper join, with the possible optimization if we know, that
-  // there can be no UNDEF values.
+  // Run `zipperJoinWithUndef` with the described callbacks and the mentioned
+  // optimization in case we know that there are no UNDEF values in the join
+  // columns.
   auto checkCancellationLambda = [this] { checkCancellation(); };
   auto runZipperJoin = [&](auto findUndef) {
     [[maybe_unused]] auto numOutOfOrder = ad_utility::zipperJoinWithUndef(
@@ -140,7 +149,8 @@ ProtoResult ExistsJoin::computeResult([[maybe_unused]] bool requestLaziness) {
     runZipperJoin(ad_utility::findSmallerUndefRanges);
   }
 
-  // Set up the result;
+  // Add the result column from the computed `notExistsIndices` (which tell us
+  // where the value should be `false`).
   IdTable result = left.clone();
   result.addEmptyColumn();
   decltype(auto) existsCol = result.getColumn(getResultWidth() - 1);
@@ -149,8 +159,8 @@ ProtoResult ExistsJoin::computeResult([[maybe_unused]] bool requestLaziness) {
     existsCol[notExistsIndex] = Id::makeFromBool(false);
   }
 
-  // The result is a copy of the left input + and additional columns with only
-  // boolean values, so the local vocab of the left input is sufficient.
+  // The added column only contains Boolean values, and adds no new words to the
+  // local vocabulary, so we can simply copy the local vocab from `leftRes`.
   return {std::move(result), resultSortedOn(), leftRes->getCopyOfLocalVocab()};
 }
 
@@ -159,20 +169,22 @@ std::shared_ptr<QueryExecutionTree> ExistsJoin::addExistsJoinsToSubtree(
     const sparqlExpression::SparqlExpressionPimpl& expression,
     std::shared_ptr<QueryExecutionTree> subtree, QueryExecutionContext* qec,
     const ad_utility::SharedCancellationHandle& cancellationHandle) {
-  // First extract all the `EXISTS` functions from the expression.
+  // Extract all `EXISTS` functions from the given `expression`.
   std::vector<const sparqlExpression::SparqlExpression*> existsExpressions;
   expression.getPimpl()->getExistsExpressions(existsExpressions);
 
-  // For each of the EXISTS functions add one `ExistsJoin`
+  // For each `EXISTS` function, add the corresponding `ExistsJoin`.
   for (auto* expr : existsExpressions) {
     const auto& exists =
         dynamic_cast<const sparqlExpression::ExistsExpression&>(*expr);
-    // Currently some FILTERs are applied multiple times especially when there
-    // are OPTIONAL joins in the query. In these cases we have to make sure that
-    // the `ExistsScan` is added only once.
+    // If we have already considered this `EXIST` (which we can detect by its
+    // variable), skip it. This can happen because some `FILTER`s (which may
+    // contain `EXISTS` functions) are applied multiple times (for example,
+    // when there are OPTIONAL joins in the query).
     if (subtree->isVariableCovered(exists.variable())) {
       continue;
     }
+
     QueryPlanner qp{qec, cancellationHandle};
     auto pq = exists.argument();
     auto tree =

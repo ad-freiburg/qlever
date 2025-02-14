@@ -1,4 +1,4 @@
-// Copyright 2024, University of Freiburg
+// Copyright 2024 - 2025, University of Freiburg
 // Chair of Algorithms and Data Structures
 // Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
@@ -48,6 +48,8 @@ void testExistsFromIdTable(IdTable left, IdTable right,
   using V = Variable;
   using Vars = std::vector<std::optional<Variable>>;
 
+  // Helper lambda `makeChild` that turns a `VectorTable` input into a
+  // `QueryExecutionTree` with a `ValuesForTesting` operation.
   auto joinCol = [](size_t i) { return V{absl::StrCat("?joinCol_", i)}; };
   auto nonJoinCol = [i = 0]() mutable {
     return V{absl::StrCat("?nonJoinCol_", i++)};
@@ -66,11 +68,10 @@ void testExistsFromIdTable(IdTable left, IdTable right,
                                                            vars);
   };
 
-  auto exists = ExistsJoin{qec, makeChild(left, leftPermutation),
-                           makeChild(right, rightPermutation), V{"?exists"}};
-
+  // Compute the `ExistsJoin` and check the result.
+  auto exists =
+      ExistsJoin{qec, makeChild(left), makeChild(right), V{"?exists"}};
   EXPECT_EQ(exists.getResultWidth(), left.numColumns() + 1);
-
   auto res = exists.computeResultOnlyForTesting();
   const auto& table = res.idTable();
   ASSERT_EQ(table.numRows(), left.size());
@@ -95,20 +96,20 @@ TEST(Exists, computeResult) {
   testExists({{3, 6}, {4, 7}, {5, 8}}, {{3, 15}, {3, 19}, {5, 37}},
              {true, false, true}, 1);
 
-  // UNDEF matches everything
+  // Single join column with one UNDEF (which always matches).
   auto U = Id::makeUndefined();
   testExists({{U, 13}, {3, 6}, {4, 7}, {5, 8}}, {{3, 15}, {3, 19}, {5, 37}},
              {true, true, false, true}, 1);
   testExists({{3, 6}, {4, 7}, {5, 8}}, {{U, 15}}, {true, true, true}, 1);
 
-  // Two join columns
+  // Two join columns.
   testExists({{3, 6}, {4, 7}, {5, 8}}, {{3, 15}, {3, 19}, {5, 37}},
              {false, false, false}, 2);
   testExists({{3, 6}, {4, 7}, {5, 8}},
              {{3, 6, 11}, {3, 19, 7}, {4, 8, 0}, {5, 8, 37}},
              {true, false, true}, 2);
 
-  // Two join columns with UNDEF
+  // Two join columns with UNDEFs in each column.
   testExists({{2, 2}, {3, U}, {4, 8}, {5, 8}},
              {{U, 8}, {3, 15}, {3, 19}, {5, U}, {5, 37}},
              {false, true, true, true}, 2);
