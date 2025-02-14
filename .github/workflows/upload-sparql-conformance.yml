@@ -2,7 +2,7 @@ name: Upload conformance tests result
 
 on:
   workflow_run:
-    # This has to be the `name:` of the workflow in `code_coverage.yml`.
+    # This has to be the `name:` of the workflow in `sparql-conformance.yml`.
     # Start when this  workflow has finished successfully.
     workflows: [sparql-test-suite]
     types:

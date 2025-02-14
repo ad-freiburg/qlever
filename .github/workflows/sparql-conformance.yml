@@ -1,3 +1,5 @@
+name: sparql-test-suite
+
 on:
   push:
     branches: [ master ]
