@@ -613,7 +613,6 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
     size_t rowLeft_;
     size_t rowRight_;
 
-    bool operator==(const AddedPair& other) const = default;
     auto operator<=>(const AddedPair& other) const {
       return (rowLeft_ == other.rowLeft_) ? (rowRight_ <=> other.rowRight_)
                                           : (rowLeft_ <=> other.rowLeft_);
