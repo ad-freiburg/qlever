@@ -135,7 +135,7 @@ class SparqlQleverVisitor {
   void visit(Parser::PrologueContext* ctx);
 
   // ___________________________________________________________________________
-  [[noreturn]] static void visit(const Parser::BaseDeclContext* ctx);
+  void visit(Parser::BaseDeclContext* ctx);
 
   // ___________________________________________________________________________
   void visit(Parser::PrefixDeclContext* ctx);
@@ -485,7 +485,7 @@ class SparqlQleverVisitor {
 
   TripleComponent::Iri visit(Parser::IriContext* ctx);
 
-  static string visit(Parser::IrirefContext* ctx);
+  string visit(Parser::IrirefContext* ctx) const;
 
   string visit(Parser::PrefixedNameContext* ctx);
 

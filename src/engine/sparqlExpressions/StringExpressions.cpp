@@ -117,14 +117,36 @@ struct LiftStringFunction {
 
 // IRI or URI
 //
-// 1. Check for `BASE` URL and if it exists, prepend it.
-// 2. What's the correct behavior for non-strings, like `1` or `true`?
+// 1. What's the correct behavior for non-strings, like `1` or `true`?
 //
-// @1: TODO implement `BASE`
-// @2: Only a `LiteralOrIri` or an `Id` from `Vocab`/`LocalVocab` is in
+// @1: Only a `LiteralOrIri` or an `Id` from `Vocab`/`LocalVocab` is in
 // consideration within the `IriOrUriValueGetter`, hence automatically
 // ignores values like `1`, `true`, `Date` etc.
-using IriOrUriExpression = NARY<1, FV<std::identity, IriOrUriValueGetter>>;
+
+const Iri& extractIri(const IdOrLiteralOrIri& litOrIri) {
+  AD_CORRECTNESS_CHECK(std::holds_alternative<LocalVocabEntry>(litOrIri));
+  const auto& baseIriOrUri = std::get<LocalVocabEntry>(litOrIri);
+  AD_CORRECTNESS_CHECK(baseIriOrUri.isIri());
+  return baseIriOrUri.getIri();
+}
+
+[[maybe_unused]] auto applyBaseIfPresent =
+    [](IdOrLiteralOrIri iri, const IdOrLiteralOrIri& base) -> IdOrLiteralOrIri {
+  if (std::holds_alternative<Id>(iri)) {
+    AD_CORRECTNESS_CHECK(std::get<Id>(iri).isUndefined());
+    return iri;
+  }
+  const auto& baseIri = extractIri(base);
+  if (baseIri.empty()) {
+    return iri;
+  }
+  // TODO<RobinTF> Avoid unnecessary string copies because of conversion.
+  return LiteralOrIri{Iri::fromIrirefConsiderBase(
+      extractIri(iri).toStringRepresentation(), baseIri.getBaseIri(false),
+      baseIri.getBaseIri(true))};
+};
+using IriOrUriExpression =
+    NARY<2, FV<decltype(applyBaseIfPresent), IriOrUriValueGetter>>;
 
 // STRLEN
 [[maybe_unused]] auto strlen = [](std::string_view s) {
@@ -554,8 +576,8 @@ CPP_template(typename T,
 }
 Expr makeStrExpression(Expr child) { return make<StrExpression>(child); }
 
-Expr makeIriOrUriExpression(Expr child) {
-  return make<IriOrUriExpression>(child);
+Expr makeIriOrUriExpression(Expr child, SparqlExpression::Ptr baseIri) {
+  return make<IriOrUriExpression>(child, baseIri);
 }
 
 Expr makeStrlenExpression(Expr child) { return make<StrlenExpression>(child); }
