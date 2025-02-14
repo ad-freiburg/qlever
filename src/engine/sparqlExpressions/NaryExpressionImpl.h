@@ -6,9 +6,6 @@
 
 #include <ranges>
 
-#include "absl/strings/ascii.h"
-#include "absl/strings/charconv.h"
-#include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "util/CryptographicHashUtils.h"

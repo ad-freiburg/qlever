@@ -48,12 +48,11 @@ using tcp = boost::asio::ip::tcp;  // from <boost/asio/ip/tcp.hpp>
  * a `net::awaitable<void>`. It is only called if the request is a valid
  * websocket upgrade request and the URL represents a valid path.
  */
-template <typename HttpHandler,
-          ad_utility::InvocableWithExactReturnType<
-              net::awaitable<void>, const http::request<http::string_body>&,
-              tcp::socket>
-              WebSocketHandler>
-class HttpServer {
+CPP_template(typename HttpHandler, typename WebSocketHandler)(
+    requires ad_utility::InvocableWithExactReturnType<
+        WebSocketHandler, net::awaitable<void>,
+        const http::request<http::string_body>&,
+        tcp::socket>) class HttpServer {
  private:
   HttpHandler httpHandler_;
   int numServerThreads_;
@@ -72,12 +71,25 @@ class HttpServer {
   /// Construct from the `queryRegistry`, port and ip address, on which this
   /// server will listen, as well as the HttpHandler. This constructor only
   /// initializes several member functions
-  explicit HttpServer(
-      unsigned short port, std::string_view ipAddress = "0.0.0.0",
-      int numServerThreads = 1, HttpHandler handler = HttpHandler{},
-      ad_utility::InvocableWithConvertibleReturnType<WebSocketHandler,
-                                                     net::io_context&> auto
-          webSocketHandlerSupplier = {})
+  ///
+  // Note: The following constraint can not be written with a single declaration
+  // in the `std::enable_if_t` world, because of the following bug in GCC 11:
+  // https://gcc.gnu.org/bugzilla/show_bug.cgi?id=105268
+  template <typename HandlerSupplier>
+  static constexpr bool isSupplier =
+      ad_utility::InvocableWithConvertibleReturnType<
+          HandlerSupplier, WebSocketHandler, net::io_context&>;
+  CPP_template_2(typename HandlerSupplier)(
+      requires isSupplier<
+          HandlerSupplier>) explicit HttpServer(unsigned short port,
+                                                std::string_view ipAddress =
+                                                    "0.0.0.0",
+                                                int numServerThreads = 1,
+                                                HttpHandler handler =
+                                                    HttpHandler{},
+                                                HandlerSupplier
+                                                    webSocketHandlerSupplier =
+                                                        {})
       : httpHandler_{std::move(handler)},
         // We need at least two threads to avoid blocking.
         // TODO<joka921> why is that?

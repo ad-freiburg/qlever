@@ -5,8 +5,6 @@
 
 #pragma once
 
-#include <global/RuntimeParameters.h>
-
 #include <memory>
 #include <string>
 
@@ -19,7 +17,6 @@
 #include "index/Index.h"
 #include "util/Cache.h"
 #include "util/ConcurrentCache.h"
-#include "util/Synchronized.h"
 
 // The value of the `QueryResultCache` below. It consists of a `Result` together
 // with its `RuntimeInfo`.
@@ -152,6 +149,9 @@ class QueryExecutionContext {
   }
 
  private:
+  static bool areWebSocketUpdatesEnabled();
+
+ private:
   const Index& _index;
 
   // When the `QueryExecutionContext` is constructed, get a stable read-only
@@ -168,6 +168,5 @@ class QueryExecutionContext {
   std::function<void(std::string)> updateCallback_;
   // Cache the state of that runtime parameter to reduce the contention of the
   // mutex.
-  bool areWebsocketUpdatesEnabled_ =
-      RuntimeParameters().get<"websocket-updates-enabled">();
+  bool areWebsocketUpdatesEnabled_ = areWebSocketUpdatesEnabled();
 };

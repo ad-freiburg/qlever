@@ -104,10 +104,10 @@ ProtoResult Filter::computeResult(bool requestLaziness) {
 }
 
 // _____________________________________________________________________________
-template <ad_utility::SimilarTo<IdTable> Table>
-IdTable Filter::filterIdTable(std::vector<ColumnIndex> sortedBy,
-                              Table&& idTable,
-                              const LocalVocab& localVocab) const {
+CPP_template_def(typename Table)(requires ad_utility::SimilarTo<Table, IdTable>)
+    IdTable Filter::filterIdTable(std::vector<ColumnIndex> sortedBy,
+                                  Table&& idTable,
+                                  const LocalVocab& localVocab) const {
   size_t width = idTable.numColumns();
   IdTable result{width, getExecutionContext()->getAllocator()};
 
@@ -120,10 +120,11 @@ IdTable Filter::filterIdTable(std::vector<ColumnIndex> sortedBy,
 }
 
 // _____________________________________________________________________________
-template <int WIDTH, ad_utility::SimilarTo<IdTable> Table>
-void Filter::computeFilterImpl(IdTable& dynamicResultTable, Table&& inputTable,
-                               const LocalVocab& localVocab,
-                               std::vector<ColumnIndex> sortedBy) const {
+CPP_template_def(int WIDTH, typename Table)(
+    requires ad_utility::SimilarTo<Table, IdTable>) void Filter::
+    computeFilterImpl(IdTable& dynamicResultTable, Table&& inputTable,
+                      const LocalVocab& localVocab,
+                      std::vector<ColumnIndex> sortedBy) const {
   AD_CONTRACT_CHECK(inputTable.numColumns() == WIDTH || WIDTH == 0);
   IdTableStatic<WIDTH> resultTable =
       std::move(dynamicResultTable).toStatic<static_cast<size_t>(WIDTH)>();

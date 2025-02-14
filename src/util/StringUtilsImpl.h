@@ -5,7 +5,10 @@
 
 #pragma once
 
+#include <ctre-unicode.hpp>
+
 #include "util/Algorithm.h"
+#include "util/CtreHelpers.h"
 #include "util/Exception.h"
 #include "util/StringUtils.h"
 

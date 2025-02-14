@@ -2,6 +2,9 @@
 //                  Chair of Algorithms and Data Structures
 //  Author: Hannes Baumann <baumannh@informatik.uni-freiburg.de>
 
+#include <absl/strings/ascii.h>
+#include <absl/strings/charconv.h>
+
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 
 namespace sparqlExpression {
