@@ -1,5 +1,3 @@
-name: sparql-conformance
-
 on:
   push:
     branches: [ master ]
