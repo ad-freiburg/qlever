@@ -209,6 +209,8 @@ class TransitivePathImpl : public TransitivePathBase {
     Set connectedNodes{getExecutionContext()->getAllocator()};
     stack.emplace_back(startNode, 0);
 
+    bool startNodeFound = false;
+
     while (!stack.empty()) {
       checkCancellation();
       auto [node, steps] = stack.back();
@@ -217,8 +219,7 @@ class TransitivePathImpl : public TransitivePathBase {
       if (steps <= maxDist_ && !marks.contains(node)) {
         if (steps >= minDist_) {
           marks.insert(node);
-          if ((!target.has_value() || node == target.value()) &&
-              (!checkFirstNode || steps > 0)) {
+          if (!target.has_value() || node == target.value()) {
             connectedNodes.insert(node);
           }
         }
@@ -226,16 +227,18 @@ class TransitivePathImpl : public TransitivePathBase {
         const auto& successors = edges.successors(node);
         for (auto successor : successors) {
           stack.emplace_back(successor, steps + 1);
+          if (successor == startNode) {
+            startNodeFound = true;
+          }
         }
       }
     }
 
     // If we need to check the first node separately, we try the cheaper lookup
     // in connected nodes first, and then fallback to the expensive computation.
-    if (minDist_ == 0 && checkFirstNode &&
-        (!target.has_value() || startNode == target.value()) &&
-        !connectedNodes.contains(startNode) && edges.containsNode(startNode)) {
-      connectedNodes.insert(startNode);
+    if (minDist_ == 0 && checkFirstNode && !startNodeFound &&
+        !edges.containsNode(startNode)) {
+      connectedNodes.erase(startNode);
     }
 
     return connectedNodes;
