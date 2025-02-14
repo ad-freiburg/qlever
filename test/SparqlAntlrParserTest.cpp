@@ -1541,8 +1541,9 @@ auto idExpressionMatcher = [](Id id) {
 // (via `dynamic_cast`) to an object of the same type that a call to the
 // `makeFunction` yields. The matcher also checks that the expression's children
 // are the `variables`.
-auto matchNary(auto makeFunction,
-               ad_utility::SimilarTo<Variable> auto&&... variables)
+auto matchNary(
+    auto makeFunction,
+    QL_CONCEPT_OR_NOTHING(ad_utility::SimilarTo<Variable>) auto&&... variables)
     -> ::testing::Matcher<const sparqlExpression::SparqlExpression::Ptr&> {
   using namespace sparqlExpression;
   return matchNaryWithChildrenMatchers(makeFunction,

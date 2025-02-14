@@ -148,8 +148,7 @@ TEST(ConstexprUtils, RuntimeValueToCompileTimeValue) {
 
 // A helper struct for the following test.
 struct F1 {
-  template <int i>
-  requires(i == 0 || i == 1) int operator()() const {
+  CPP_template(int i)(requires(i == 0 || i == 1)) int operator()() const {
     return i + 1;
   }
 };
@@ -158,20 +157,20 @@ TEST(ConstexprUtils, ConstexprSwitch) {
   using namespace ad_utility;
   {
     auto f = []<int i> { return i * 2; };
-    ASSERT_EQ((ConstexprSwitch<1, 2, 3, 5>(f, 2)), 4);
-    ASSERT_EQ((ConstexprSwitch<1, 2, 3, 5>(f, 5)), 10);
-    ASSERT_ANY_THROW((ConstexprSwitch<1, 2, 3, 5>(f, 4)));
+    ASSERT_EQ((ConstexprSwitch<1, 2, 3, 5>{}(f, 2)), 4);
+    ASSERT_EQ((ConstexprSwitch<1, 2, 3, 5>{}(f, 5)), 10);
+    ASSERT_ANY_THROW((ConstexprSwitch<1, 2, 3, 5>{}(f, 4)));
   }
   {
     auto f = []<int i>(int j) { return i * j; };
-    ASSERT_EQ((ConstexprSwitch<1, 2, 3, 5>(f, 2, 7)), 14);
-    ASSERT_EQ((ConstexprSwitch<1, 2, 3, 5>(f, 5, 2)), 10);
-    ASSERT_ANY_THROW((ConstexprSwitch<1, 2, 3, 5>(f, 4, 3)));
+    ASSERT_EQ((ConstexprSwitch<1, 2, 3, 5>{}(f, 2, 7)), 14);
+    ASSERT_EQ((ConstexprSwitch<1, 2, 3, 5>{}(f, 5, 2)), 10);
+    ASSERT_ANY_THROW((ConstexprSwitch<1, 2, 3, 5>{}(f, 4, 3)));
   }
 
   // F1 can only be called with 0 and 1 as template arguments.
-  static_assert(std::invocable<decltype(ConstexprSwitch<0, 1>), F1, int>);
-  static_assert(!std::invocable<decltype(ConstexprSwitch<0, 1, 2>), F1, int>);
+  static_assert(std::invocable<decltype(ConstexprSwitch<0, 1>{}), F1, int>);
+  static_assert(!std::invocable<decltype(ConstexprSwitch<0, 1, 2>{}), F1, int>);
 }
 
 /*

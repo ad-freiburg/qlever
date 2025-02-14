@@ -363,3 +363,22 @@ TEST(TypeTraits, Rvalue) {
   static_assert(!Rvalue<const int&>);
   static_assert(!Rvalue<int&>);
 }
+
+// _____________________________________________________________________________
+TEST(TypeTraits, InvokeResultSfinaeFriendly) {
+  using namespace ad_utility;
+  using namespace ad_utility::invokeResultSfinaeFriendly::detail;
+  [[maybe_unused]] auto x = [](int) -> bool { return false; };
+
+  static_assert(
+      std::is_same_v<InvokeResultSfinaeFriendly<decltype(x), int>, bool>);
+  [[maybe_unused]] auto tp = getInvokeResultImpl<decltype(x), int>();
+  EXPECT_TRUE((std::is_same_v<typename decltype(tp)::type, bool>));
+
+  static_assert(
+      std::is_same_v<InvokeResultSfinaeFriendly<decltype(x), const char*>,
+                     InvalidInvokeResult<decltype(x), const char*>>);
+  [[maybe_unused]] auto tp2 = getInvokeResultImpl<decltype(x), const char*>();
+  EXPECT_TRUE((std::is_same_v<typename decltype(tp2)::type,
+                              InvalidInvokeResult<decltype(x), const char*>>));
+}

@@ -82,6 +82,7 @@ static constexpr bool isHttpRequest = false;
 template <typename Body, typename Fields>
 static constexpr bool isHttpRequest<http::request<Body, Fields>> = true;
 
+// TODO<joka921, gpicciuca> port back
 template <typename T>
 concept HttpRequest = isHttpRequest<T>;
 
@@ -93,9 +94,13 @@ concept HttpRequest = isHttpRequest<T>;
  * @param mediaType The media type of the response.
  * @return A http::response<http::string_body> which is ready to be sent.
  */
-auto createHttpResponseFromString(std::string body, http::status status,
-                                  const HttpRequest auto& request,
-                                  MediaType mediaType) {
+CPP_template(typename RequestType)(
+    requires HttpRequest<
+        RequestType>) auto createHttpResponseFromString(std::string body,
+                                                        http::status status,
+                                                        const RequestType&
+                                                            request,
+                                                        MediaType mediaType) {
   http::response<http::string_body> response{status, request.version()};
   response.set(http::field::content_type, toString(mediaType));
   response.keep_alive(request.keep_alive());
@@ -107,8 +112,11 @@ auto createHttpResponseFromString(std::string body, http::status status,
 
 /// Create a HttpResponse from a string with status 200 OK. Otherwise behaves
 /// the same as createHttpResponseFromString.
-static auto createOkResponse(std::string text, const HttpRequest auto& request,
-                             MediaType mediaType) {
+CPP_template(typename RequestType)(
+    requires HttpRequest<
+        RequestType>) static auto createOkResponse(std::string text,
+                                                   const RequestType& request,
+                                                   MediaType mediaType) {
   return createHttpResponseFromString(std::move(text), http::status::ok,
                                       request, mediaType);
 }
@@ -116,9 +124,13 @@ static auto createOkResponse(std::string text, const HttpRequest auto& request,
 /// Assign the generator to the body of the response. If a supported
 /// compression is specified in the request, this method is applied to the
 /// body and the corresponding response headers are set.
-static void setBody(http::response<streamable_body>& response,
-                    const HttpRequest auto& request,
-                    cppcoro::generator<std::string>&& generator) {
+CPP_template(typename RequestType)(
+    requires HttpRequest<
+        RequestType>) static void setBody(http::response<streamable_body>&
+                                              response,
+                                          const RequestType& request,
+                                          cppcoro::generator<std::string>&&
+                                              generator) {
   using ad_utility::content_encoding::CompressionMethod;
 
   CompressionMethod method =
@@ -135,9 +147,13 @@ static void setBody(http::response<streamable_body>& response,
 }
 
 /// Create a HttpResponse from a generator with status 200 OK.
-static auto createOkResponse(cppcoro::generator<std::string>&& generator,
-                             const HttpRequest auto& request,
-                             MediaType mediaType) {
+CPP_template(typename RequestType)(
+    requires HttpRequest<
+        RequestType>) static auto createOkResponse(cppcoro::
+                                                       generator<std::string>&&
+                                                           generator,
+                                                   const RequestType& request,
+                                                   MediaType mediaType) {
   http::response<streamable_body> response{http::status::ok, request.version()};
   response.set(http::field::content_type, toString(mediaType));
   response.keep_alive(request.keep_alive());
@@ -168,22 +184,33 @@ static auto createJsonResponse(const nlohmann::json& j, const auto& request,
 }
 
 /// Create a HttpResponse with status 404 Not Found.
-static auto createNotFoundResponse(const std::string& errorMsg,
-                                   const HttpRequest auto& request) {
+CPP_template(typename RequestType)(
+    requires HttpRequest<
+        RequestType>) static auto createNotFoundResponse(const std::string&
+                                                             errorMsg,
+                                                         const RequestType&
+                                                             request) {
   return createHttpResponseFromString(errorMsg, http::status::not_found,
                                       request, MediaType::textPlain);
 }
 
 /// Create a HttpResponse with status 403 Forbidden.
-static auto createForbiddenResponse(const std::string& errorMsg,
-                                    const HttpRequest auto& request) {
+CPP_template(typename RequestType)(
+    requires HttpRequest<
+        RequestType>) static auto createForbiddenResponse(const std::string&
+                                                              errorMsg,
+                                                          const RequestType&
+                                                              request) {
   return createHttpResponseFromString(errorMsg, http::status::forbidden,
                                       request, MediaType::textPlain);
 }
 
 /// Create a HttpResponse with status 400 Bad Request.
-static auto createBadRequestResponse(std::string body,
-                                     const HttpRequest auto& request) {
+CPP_template(typename RequestType)(
+    requires HttpRequest<
+        RequestType>) static auto createBadRequestResponse(std::string body,
+                                                           const RequestType&
+                                                               request) {
   return createHttpResponseFromString(std::move(body),
                                       http::status::bad_request, request,
                                       MediaType::textPlain);
