@@ -19,9 +19,13 @@
 // resolution.
 //
 // `QL_CONCEPT_OR_TYPENAME(arg)`: expands to `arg` in C++20 mode, and to
-// `typename` in C++17 mode.
+// `typename` in C++17 mode. Example usage:
 //
 // `CPP_lambda(capture)(arg)(requires ...)`: Expands lambda to use
+//  `requires` in C++20 mode and `std::enable_if_t` in C++17 mode.
+//
+// `CPP_template_lambda(capture)(typenames...)(arg)(requires ...)`: Expands
+// lambda with (C++20) explicit gemplate parameters  to use
 //  `requires` in C++20 mode and `std::enable_if_t` in C++17 mode.
 //
 // Example usages:
@@ -36,6 +40,9 @@
 //
 // `auto myLambda = CPP_lambda(someCapture)(someArg)(requires
 // ranges::same_as<decltype(someArg), int>) {...}`
+//
+// `auto myLambda2 = CPP_lambda(someCapture)(typename F)(F arg)(requires
+// ranges::same_as<F, int>) {...}`
 //
 // NOTE: The macros are variadic to allow for commas in the argument, like in
 // the second example above.
@@ -54,45 +61,9 @@
 #define CPP_and_2_def CPP_and_2_def_sfinae
 #define CPP_variadic_template CPP_template_NO_DEFAULT_SFINAE
 #define CPP_member_def CPP_member_def_sfinae
-
 #define CPP_lambda CPP_lambda_sfinae
-
+#define CPP_template_lambda CPP_template_lambda_sfinae
 #define CPP_lambda_mut CPP_lambda_mut_sfinae
-
-#define CPP_lambda_sfinae(...)     \
-  CPP_PP_IGNORE_CXX2A_COMPAT_BEGIN \
-  [__VA_ARGS__] CPP_LAMBDA_SFINAE_ARGS
-
-#define CPP_lambda_mut_sfinae(...) \
-  CPP_PP_IGNORE_CXX2A_COMPAT_BEGIN \
-  [__VA_ARGS__] CPP_LAMBDA_MUT_SFINAE_ARGS
-
-#define CPP_LAMBDA_SFINAE_ARGS(...) \
-    (__VA_ARGS__ CPP_LAMBDA_SFINAE_AUX_
-
-#define CPP_LAMBDA_MUT_SFINAE_ARGS(...) \
-    (__VA_ARGS__ CPP_LAMBDA_MUT_SFINAE_AUX_
-
-#define CPP_LAMBDA_SFINAE_AUX_WHICH_(FIRST, ...) \
-  CPP_PP_EVAL(CPP_PP_CHECK, FIRST)
-
-#define CPP_LAMBDA_SFINAE_AUX_(...)                       \
-  CPP_PP_CAT(CPP_LAMBDA_SFINAE_AUX_,                      \
-             CPP_LAMBDA_SFINAE_AUX_WHICH_(__VA_ARGS__, )) \
-  (__VA_ARGS__)
-
-#define CPP_LAMBDA_MUT_SFINAE_AUX_(...)                   \
-  CPP_PP_CAT(CPP_LAMBDA_SFINAE_AUX_,                      \
-             CPP_LAMBDA_SFINAE_AUX_WHICH_(__VA_ARGS__, )) \
-  (__VA_ARGS__) mutable
-
-#define CPP_LAMBDA_SFINAE_AUX_0(...) ,                           \
-    std::enable_if_t<                                            \
-        CPP_PP_CAT(CPP_LAMBDA_SFINAE_AUX_3_, __VA_ARGS__)        \
-        >* = nullptr)
-
-#define CPP_LAMBDA_SFINAE_AUX_3_requires
-
 #else
 #define QL_CONCEPT_OR_NOTHING(...) __VA_ARGS__
 #define QL_CONCEPT_OR_TYPENAME(...) __VA_ARGS__
@@ -102,22 +73,9 @@
 #define CPP_and_2_def CPP_and
 #define CPP_variadic_template CPP_template
 #define CPP_member_def CPP_member
-
-#define CPP_lambda(...) [__VA_ARGS__] CPP_LAMBDA_ARGS
-
-#define CPP_lambda_mut(...) [__VA_ARGS__] CPP_LAMBDA_ARGS_MUT
-
-#define CPP_LAMBDA_ARGS(...) (__VA_ARGS__) CPP_LAMBDA_AUX_
-
-#define CPP_LAMBDA_ARGS_MUT(...) (__VA_ARGS__) mutable CPP_LAMBDA_AUX_
-
-#define CPP_LAMBDA_AUX_(...) \
-  CPP_PP_CAT(CPP_LAMBDA_AUX_, CPP_LAMBDA_AUX_WHICH_(__VA_ARGS__, ))(__VA_ARGS__)
-
-#define CPP_LAMBDA_AUX_WHICH_(FIRST, ...) CPP_PP_EVAL(CPP_PP_CHECK, FIRST)
-
-#define CPP_LAMBDA_AUX_0(...) __VA_ARGS__
-
+#define CPP_lambda CPP_LAMBDA_20
+#define CPP_template_lambda CPP_TEMPLATE_LAMBDA_20
+#define CPP_lambda_mut CPP_lambda_mut_20
 #endif
 
 // The namespace `ql::concepts` includes concepts that are contained in the

@@ -68,7 +68,9 @@
 (__VA_ARGS__ CPP_LAMBDA_SFINAE_AUX_
 
 #define CPP_LAMBDA_SFINAE_AUX_WHICH_(FIRST, ...) \
-  CPP_PP_EVAL(CPP_PP_CHECK, CPP_PP_CAT(CPP_LAMBDA_SFINAE_PROBE_CONCEPT_, FIRST))
+  CPP_PP_EVAL(CPP_PP_CHECK, FIRST)
+//  CPP_PP_EVAL(CPP_PP_CHECK, CPP_PP_CAT(CPP_LAMBDA_SFINAE_PROBE_CONCEPT_,
+//  FIRST))
 
 #define CPP_LAMBDA_SFINAE_AUX_(...)                       \
   CPP_PP_CAT(CPP_LAMBDA_SFINAE_AUX_,                      \
@@ -102,3 +104,18 @@ CPP_PP_CAT(CPP_LAMBDA_SFINAE_AUX_3_, __VA_ARGS__)        \
 #define CPP_LAMBDA_AUX_0(...) __VA_ARGS__
 
 #define CPP_TEMPLATE_LAMBDA_ARGS(...) <__VA_ARGS__> CPP_LAMBDA_ARGS
+
+#define CPP_lambda_mut_sfinae(...) \
+  CPP_PP_IGNORE_CXX2A_COMPAT_BEGIN \
+  [__VA_ARGS__] CPP_LAMBDA_MUT_SFINAE_ARGS
+
+#define CPP_LAMBDA_MUT_SFINAE_ARGS(...) \
+(__VA_ARGS__ CPP_LAMBDA_MUT_SFINAE_AUX_
+
+#define CPP_LAMBDA_MUT_SFINAE_AUX_(...)                   \
+  CPP_PP_CAT(CPP_LAMBDA_SFINAE_AUX_,                      \
+             CPP_LAMBDA_SFINAE_AUX_WHICH_(__VA_ARGS__, )) \
+  (__VA_ARGS__) mutable
+
+#define CPP_LAMBDA_ARGS_MUT(...) (__VA_ARGS__) mutable CPP_LAMBDA_AUX_
+#define CPP_lambda_mut_20(...) [__VA_ARGS__] CPP_LAMBDA_ARGS_MUT
