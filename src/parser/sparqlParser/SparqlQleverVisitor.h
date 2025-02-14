@@ -120,6 +120,11 @@ class SparqlQleverVisitor {
     isInsideConstructTriples_ = true;
   }
 
+  void setActiveDatasetClausesForTesting(
+      ParsedQuery::DatasetClauses datasetClauses) {
+    activeDatasetClauses_ = std::move(datasetClauses);
+  }
+
   // ___________________________________________________________________________
   ParsedQuery visit(Parser::QueryOrUpdateContext* ctx);
 

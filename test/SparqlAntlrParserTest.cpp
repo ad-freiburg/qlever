@@ -56,7 +56,7 @@ auto parse =
        SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks =
            SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::False) {
       ParserAndVisitor p{input, std::move(prefixes), disableSomeChecks};
-      // TODO<joka921> also propagate the active dataset clauses.
+      p.visitor_.setActiveDatasetClausesForTesting(std::move(clauses));
       if (testInsideConstructTemplate) {
         p.visitor_.setParseModeToInsideConstructTemplateForTesting();
       }
@@ -113,7 +113,7 @@ struct ExpectCompleteParse {
     EXPECT_NO_THROW({
       return expectCompleteParse(
           parse<Clause, parseInsideConstructTemplate>(
-              input, std::move(prefixMap), disableSomeChecks),
+              input, std::move(prefixMap), {}, disableSomeChecks),
           matcher, l);
     });
   };
@@ -127,7 +127,7 @@ struct ExpectCompleteParse {
     EXPECT_NO_THROW({
       return expectCompleteParse(
           parse<Clause, parseInsideConstructTemplate>(
-              input, std::move(prefixMap), disableSomeChecks),
+              input, {}, std::move(activeDatasetClauses), disableSomeChecks),
           matcher, l);
     });
   };
@@ -152,7 +152,7 @@ struct ExpectParseFails {
       ad_utility::source_location l = ad_utility::source_location::current()) {
     auto trace = generateLocationTrace(l);
     AD_EXPECT_THROW_WITH_MESSAGE(
-        parse<Clause>(input, std::move(prefixMap), disableSomeChecks),
+        parse<Clause>(input, std::move(prefixMap), {}, disableSomeChecks),
         messageMatcher);
   }
 };
@@ -1954,6 +1954,29 @@ TEST(SparqlParser, Exists) {
                     existsMatcher(selectABarFooMatcher()));
   expectBuiltInCall("NOT EXISTS {?a <bar> ?foo}",
                     notExistsMatcher(selectABarFooMatcher()));
+
+  Graphs defaultGraphs{ad_utility::HashSet<TripleComponent>{iri("<blubb>")}};
+  Graphs namedGraphs{ad_utility::HashSet<TripleComponent>{iri("<blabb>")}};
+
+  // Now run the same tests, but with non-empty dataset clauses, that have to be
+  // propagated to the `ParsedQuery` stored inside the `ExistsExpression`.
+  ParsedQuery::DatasetClauses datasetClauses;
+  datasetClauses.defaultGraphs_ = defaultGraphs;
+  datasetClauses.namedGraphs_ = namedGraphs;
+  datasetClauses.defaultGraphs_.value().insert(iri("<blubb>"));
+  expectBuiltInCall("EXISTS {?a <bar> ?foo}",
+                    existsMatcher(selectABarFooMatcher()));
+  expectBuiltInCall("NOT EXISTS {?a <bar> ?foo}",
+                    notExistsMatcher(selectABarFooMatcher()));
+
+  expectBuiltInCall(
+      "EXISTS {?a <bar> ?foo}",
+      existsMatcher(selectABarFooMatcher(defaultGraphs, namedGraphs)),
+      datasetClauses);
+  expectBuiltInCall(
+      "NOT EXISTS {?a <bar> ?foo}",
+      notExistsMatcher(selectABarFooMatcher(defaultGraphs, namedGraphs)),
+      datasetClauses);
 }
 
 namespace aggregateTestHelpers {
