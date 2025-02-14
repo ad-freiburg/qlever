@@ -1168,10 +1168,10 @@ string Visitor::visit(Parser::IrirefContext* ctx) const {
   }
   // TODO<RobinTF> Avoid unnecessary string copies because of conversion.
   // Handle IRIs with base IRI.
-  return ad_utility::triple_component::Iri::fromIrirefConsiderBase(
-             ctx->getText(), baseIri_.getBaseIri(false),
-             baseIri_.getBaseIri(true))
-      .toStringRepresentation();
+  return std::move(
+      ad_utility::triple_component::Iri::fromIrirefConsiderBase(
+          ctx->getText(), baseIri_.getBaseIri(false), baseIri_.getBaseIri(true))
+          .toStringRepresentation());
 }
 
 // ____________________________________________________________________________________
