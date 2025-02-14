@@ -31,6 +31,12 @@ bool TurtleParser<T>::statement() {
 // ______________________________________________________________
 template <class T>
 bool TurtleParser<T>::directive() {
+  if (prefixAndBaseDisabled_) {
+    raise(
+        "@prefix or @base directives need to be at the beginning of the file "
+        "when using the parallel parser. Use '--parse-parallel false' if you "
+        "can't guarantee this.");
+  }
   return prefixID() || base() || sparqlPrefix() || sparqlBase();
 }
 
@@ -948,20 +954,20 @@ bool RdfStreamParser<T>::getLineImpl(TurtleTriple* triple) {
 // `parallelParser_` have been fully processed. After the last batch we will
 // push another call to this lambda to the `parallelParser_` which will then
 // finish the `tripleCollector_` as soon as all batches have been computed.
-template <typename Tokenizer_T>
-void RdfParallelParser<Tokenizer_T>::finishTripleCollectorIfLastBatch() {
+template <typename T>
+void RdfParallelParser<T>::finishTripleCollectorIfLastBatch() {
   if (batchIdx_.fetch_add(1) == numBatchesTotal_) {
     tripleCollector_.finish();
   }
 }
 
 // __________________________________________________________________________________
-template <typename Tokenizer_T>
-void RdfParallelParser<Tokenizer_T>::parseBatch(size_t parsePosition,
-                                                auto batch) {
+template <typename T>
+void RdfParallelParser<T>::parseBatch(size_t parsePosition, auto batch) {
   try {
-    RdfStringParser<Tokenizer_T> parser{defaultGraphIri_};
+    RdfStringParser<T> parser{defaultGraphIri_};
     parser.prefixMap_ = this->prefixMap_;
+    parser.disablePrefixParsing();
     parser.setPositionOffset(parsePosition);
     parser.setInputStream(std::move(batch));
     // TODO: raise error message if a prefix parsing fails;
@@ -978,8 +984,8 @@ void RdfParallelParser<Tokenizer_T>::parseBatch(size_t parsePosition,
 };
 
 // _______________________________________________________________________
-template <typename Tokenizer_T>
-void RdfParallelParser<Tokenizer_T>::feedBatchesToParser(
+template <typename T>
+void RdfParallelParser<T>::feedBatchesToParser(
     auto remainingBatchFromInitialization) {
   bool first = true;
   size_t parsePosition = 0;
@@ -1024,9 +1030,9 @@ void RdfParallelParser<Tokenizer_T>::feedBatchesToParser(
 };
 
 // _______________________________________________________________________
-template <typename Tokenizer_T>
-void RdfParallelParser<Tokenizer_T>::initialize(
-    const string& filename, ad_utility::MemorySize bufferSize) {
+template <typename T>
+void RdfParallelParser<T>::initialize(const string& filename,
+                                      ad_utility::MemorySize bufferSize) {
   fileBuffer_ = std::make_unique<ParallelBufferWithEndRegex>(
       bufferSize.getBytes(), "\\.[\\t ]*([\\r\\n]+)");
   ParallelBuffer::BufferType remainingBatchFromInitialization;
@@ -1035,7 +1041,7 @@ void RdfParallelParser<Tokenizer_T>::initialize(
     LOG(WARN) << "Empty input to the TURTLE parser, is this what you intended?"
               << std::endl;
   } else {
-    RdfStringParser<Tokenizer_T> declarationParser{};
+    RdfStringParser<T> declarationParser{};
     declarationParser.setInputStream(std::move(batch.value()));
     while (declarationParser.parseDirectiveManually()) {
     }

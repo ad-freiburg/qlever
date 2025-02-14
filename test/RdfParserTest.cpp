@@ -1003,6 +1003,36 @@ TEST(RdfParserTest, exceptionPropagationFileBufferReading) {
   forAllParallelParsers(testWithParser, 40_B, inputWithLongTriple);
 }
 
+// Test that in parallel parsing scattered prefixes or base declarations lead to
+// an exception
+TEST(RdfParserTest, exceptionOnScatteredPrefixOrBaseInParallelParser) {
+  std::string filename{"turtleParserExceptionPropagationFileBufferReading.dat"};
+  auto testWithParser = [&]<typename Parser>(bool useBatchInterface,
+                                             ad_utility::MemorySize bufferSize,
+                                             std::string_view input) {
+    {
+      auto of = ad_utility::makeOfstream(filename);
+      of << input;
+    }
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        (parseFromFile<Parser>(filename, useBatchInterface, bufferSize)),
+        ::testing::HasSubstr("'--parse-parallel false'"));
+    ad_utility::deleteFile(filename);
+  };
+  std::string inputWithScatteredPrefix =
+      "@prefix ex: <http://example.org/> . \n"
+      "<subject1> <predicate1> <object1> . \n "
+      "<subject2> <predicate2> <object2> . \n"
+      "@prefix ex: <http://example.org/> . \n";
+  forAllParallelParsers(testWithParser, 40_B, inputWithScatteredPrefix);
+  std::string inputWithScatteredBase =
+      "@base: <http://example.org/> . \n"
+      "<subject1> <predicate1> <object1> . \n "
+      "<subject2> <predicate2> <object2> . \n"
+      "@base <http://example.org/> . \n";
+  forAllParallelParsers(testWithParser, 40_B, inputWithScatteredPrefix);
+}
+
 // Test that the parallel parser's destructor can be run quickly and without
 // blocking, even when there are still lots of blocks in the pipeline that are
 // currently being parsed.

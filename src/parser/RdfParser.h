@@ -216,6 +216,8 @@ class TurtleParser : public RdfParserBase {
   static inline std::atomic<size_t> numParsers_ = 0;
   size_t blankNodePrefix_ = numParsers_.fetch_add(1);
 
+  bool prefixAndBaseDisabled_ = false;
+
  public:
   TurtleParser() = default;
   explicit TurtleParser(TripleComponent defaultGraphIri)
@@ -542,6 +544,9 @@ CPP_template(typename Parser)(
   // can be used to test if the advancing of the tokenizer works
   // as expected
   size_t getPosition() const { return this->tok_.begin() - tmpToParse_.data(); }
+
+  // Disable prefix parsing for turtle parsers during parallel parsing.
+  void disablePrefixParsing() { this->prefixAndBaseDisabled_ = true; }
 
   FRIEND_TEST(RdfParserTest, prefixedName);
   FRIEND_TEST(RdfParserTest, prefixID);
