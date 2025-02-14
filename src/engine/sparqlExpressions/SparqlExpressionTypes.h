@@ -43,13 +43,14 @@ class VectorWithMemoryLimit
   // * the last argument must be `AllocatorWithMemoryLimit` (all constructors to
   // `vector` take the allocator as a last parameter)
   // * there must be a constructor of `Base` for the given arguments.
-  template <typename... Args>
-  requires(sizeof...(Args) > 0 &&
-           !std::derived_from<std::remove_cvref_t<ad_utility::First<Args...>>,
-                              Base> &&
-           std::convertible_to<ad_utility::Last<Args...>, Allocator> &&
-           std::constructible_from<Base, Args && ...>)
-  explicit(sizeof...(Args) == 1) VectorWithMemoryLimit(Args&&... args)
+  CPP_template(typename... Args)(
+      requires(sizeof...(Args) > 0) CPP_and CPP_NOT(
+          concepts::derived_from<
+              std::remove_cvref_t<ad_utility::First<Args...>>, Base>)
+          CPP_and concepts::convertible_to<ad_utility::Last<Args...>, Allocator>
+              CPP_and concepts::constructible_from<
+                  Base, Args&&...>) explicit(sizeof...(Args) == 1)
+      VectorWithMemoryLimit(Args&&... args)
       : Base{AD_FWD(args)...} {}
 
   // We have to explicitly forward the `initializer_list` constructor because it
@@ -111,7 +112,7 @@ using ExpressionResult = ad_utility::TupleToVariant<detail::AllTypesAsTuple>;
 /// Only the different types contained in the variant `ExpressionResult` (above)
 /// match this concept.
 template <typename T>
-concept SingleExpressionResult =
+CPP_concept SingleExpressionResult =
     ad_utility::SimilarToAnyTypeIn<T, ExpressionResult>;
 
 // Copy an expression result.
@@ -120,8 +121,9 @@ CPP_template(typename ResultT)(
                                    ExpressionResult>) inline ExpressionResult
     copyExpressionResult(ResultT&& result) {
   auto copyIfCopyable =
-      []<SingleExpressionResult R>(const R& x) -> ExpressionResult {
-    if constexpr (requires { R{AD_FWD(x)}; }) {
+      []<typename R>(const R& x) -> CPP_ret(ExpressionResult)(
+                                     requires SingleExpressionResult<R>) {
+    if constexpr (std::is_constructible_v<R, decltype(AD_FWD(x))>) {
       return AD_FWD(x);
     } else {
       return x.clone();
@@ -221,9 +223,10 @@ struct EvaluationContext {
 
 namespace detail {
 /// Get Id of constant result of type T.
-template <SingleExpressionResult T, typename LocalVocabT>
-requires isConstantResult<T> && std::is_rvalue_reference_v<T&&>
-Id constantExpressionResultToId(T&& result, LocalVocabT& localVocab) {
+CPP_template(typename T, typename LocalVocabT)(
+    requires SingleExpressionResult<T> CPP_and isConstantResult<T> CPP_and
+        std::is_rvalue_reference_v<T&&>) Id
+    constantExpressionResultToId(T&& result, LocalVocabT& localVocab) {
   if constexpr (ad_utility::isSimilar<T, Id>) {
     return result;
   } else if constexpr (ad_utility::isSimilar<T, IdOrLiteralOrIri>) {
@@ -275,9 +278,7 @@ struct SpecializedFunction {
     if (!areAllOperandsValid<Operands...>(operands...)) {
       return std::nullopt;
     } else {
-      if constexpr (requires {
-                      Function{}(std::forward<Operands>(operands)...);
-                    }) {
+      if constexpr (ranges::invocable<Function, Operands&&...>) {
         return Function{}(std::forward<Operands>(operands)...);
       } else {
         AD_FAIL();
@@ -367,8 +368,8 @@ constexpr bool isOperation<Operation<NumOperations, Ts...>> = true;
 // Return the common logical size of the `SingleExpressionResults`.
 // This is either 1 (in case all the `inputs` are constants) or the
 // size of the `context`.
-template <SingleExpressionResult... Inputs>
-size_t getResultSize(const EvaluationContext& context, const Inputs&...) {
+CPP_template(typename... Inputs)(requires(SingleExpressionResult<Inputs>&&...))
+    size_t getResultSize(const EvaluationContext& context, const Inputs&...) {
   return (... && isConstantResult<Inputs>) ? 1ul : context.size();
 }
 

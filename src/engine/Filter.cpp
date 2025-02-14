@@ -147,70 +147,67 @@ CPP_template_def(int WIDTH, typename Table)(
   // NOTE: the explicit (seemingly redundant) capture of `resultTable` is
   // required to work around a bug in Clang 17, see
   // https://github.com/llvm/llvm-project/issues/61267
-  auto computeResult =
-      [this, &resultTable = resultTable, &input, &inputTable,
-       &dynamicResultTable,
-       &evaluationContext]<sparqlExpression::SingleExpressionResult T>(
-          T&& singleResult) {
-        if constexpr (std::is_same_v<T, ad_utility::SetOfIntervals>) {
-          AD_CONTRACT_CHECK(input.size() == evaluationContext.size());
-          // If the expression result is given as a set of intervals, we copy
-          // the corresponding parts of `input` to `resultTable`.
-          //
-          // NOTE: One of the interval ends may be larger than `input.size()`
-          // (as the result of a negation).
-          auto totalSize = std::accumulate(
-              singleResult._intervals.begin(), singleResult._intervals.end(),
-              resultTable.size(),
-              [&input](const auto& sum, const auto& interval) {
-                size_t intervalBegin = interval.first;
-                size_t intervalEnd = std::min(interval.second, input.size());
-                return sum + (intervalEnd - intervalBegin);
-              });
-          if (resultTable.empty() && totalSize == inputTable.size()) {
-            // The binary filter contains all elements of the input, and we have
-            // no previous results, so we can simply copy or move the complete
-            // table.
-            dynamicResultTable = AD_FWD(inputTable).moveOrClone();
-            return;
-          }
-          checkCancellation();
-          for (auto [intervalBegin, intervalEnd] : singleResult._intervals) {
-            intervalEnd = std::min(intervalEnd, input.size());
-            resultTable.insertAtEnd(inputTable, intervalBegin, intervalEnd);
-            checkCancellation();
-          }
-          AD_CORRECTNESS_CHECK(resultTable.size() == totalSize);
-        } else {
-          // In the general case, we generate all expression results and apply
-          // the `EffectiveBooleanValueGetter` to each.
-          //
-          // NOTE: According to the standard, this means that values like zero,
-          // UNDEF, and empty strings are converted to `false` and hence the
-          // corresponding rows from `input` are filtered out.
-          //
-          // TODO<joka921> Check whether it is feasible to precompute the
-          // number of `true` values and use that to reserve the right
-          // amount of space for `resultTable`, like we do it for the set of
-          // intervals above. This depends on how expensive the evaluation with
-          // the `EffectiveBooleanValueGetter` is.
-          auto resultGenerator = sparqlExpression::detail::makeGenerator(
-              std::forward<T>(singleResult), input.size(), &evaluationContext);
-          size_t i = 0;
+  auto computeResult = CPP_template_lambda(
+      this, &resultTable = resultTable, &input, &inputTable,
+      &dynamicResultTable, &evaluationContext)(typename T)(T && singleResult)(
+      requires sparqlExpression::SingleExpressionResult<T>) {
+    if constexpr (std::is_same_v<T, ad_utility::SetOfIntervals>) {
+      AD_CONTRACT_CHECK(input.size() == evaluationContext.size());
+      // If the expression result is given as a set of intervals, we copy
+      // the corresponding parts of `input` to `resultTable`.
+      //
+      // NOTE: One of the interval ends may be larger than `input.size()`
+      // (as the result of a negation).
+      auto totalSize = std::accumulate(
+          singleResult._intervals.begin(), singleResult._intervals.end(),
+          resultTable.size(), [&input](const auto& sum, const auto& interval) {
+            size_t intervalBegin = interval.first;
+            size_t intervalEnd = std::min(interval.second, input.size());
+            return sum + (intervalEnd - intervalBegin);
+          });
+      if (resultTable.empty() && totalSize == inputTable.size()) {
+        // The binary filter contains all elements of the input, and we have
+        // no previous results, so we can simply copy or move the complete
+        // table.
+        dynamicResultTable = AD_FWD(inputTable).moveOrClone();
+        return;
+      }
+      checkCancellation();
+      for (auto [intervalBegin, intervalEnd] : singleResult._intervals) {
+        intervalEnd = std::min(intervalEnd, input.size());
+        resultTable.insertAtEnd(inputTable, intervalBegin, intervalEnd);
+        checkCancellation();
+      }
+      AD_CORRECTNESS_CHECK(resultTable.size() == totalSize);
+    } else {
+      // In the general case, we generate all expression results and apply
+      // the `EffectiveBooleanValueGetter` to each.
+      //
+      // NOTE: According to the standard, this means that values like zero,
+      // UNDEF, and empty strings are converted to `false` and hence the
+      // corresponding rows from `input` are filtered out.
+      //
+      // TODO<joka921> Check whether it is feasible to precompute the
+      // number of `true` values and use that to reserve the right
+      // amount of space for `resultTable`, like we do it for the set of
+      // intervals above. This depends on how expensive the evaluation with
+      // the `EffectiveBooleanValueGetter` is.
+      auto resultGenerator = sparqlExpression::detail::makeGenerator(
+          AD_FWD(singleResult), input.size(), &evaluationContext);
+      size_t i = 0;
 
-          using ValueGetter =
-              sparqlExpression::detail::EffectiveBooleanValueGetter;
-          ValueGetter valueGetter{};
-          for (auto&& resultValue : resultGenerator) {
-            if (valueGetter(resultValue, &evaluationContext) ==
-                ValueGetter::Result::True) {
-              resultTable.push_back(input[i]);
-            }
-            checkCancellation();
-            ++i;
-          }
+      using ValueGetter = sparqlExpression::detail::EffectiveBooleanValueGetter;
+      ValueGetter valueGetter{};
+      for (auto&& resultValue : resultGenerator) {
+        if (valueGetter(resultValue, &evaluationContext) ==
+            ValueGetter::Result::True) {
+          resultTable.push_back(input[i]);
         }
-      };
+        checkCancellation();
+        ++i;
+      }
+    }
+  };
   std::visit(computeResult, std::move(expressionResult));
 
   // Detect the case that we have directly written the `dynamicResultTable`

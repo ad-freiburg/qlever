@@ -257,9 +257,9 @@ ExpressionResult RegexExpression::evaluatePrefixRegex(
 }
 
 // ___________________________________________________________________________
-template <SingleExpressionResult T>
-ExpressionResult RegexExpression::evaluateGeneralCase(
-    T&& input, sparqlExpression::EvaluationContext* context) const {
+CPP_template_def(typename T)(requires SingleExpressionResult<T>)
+    ExpressionResult RegexExpression::evaluateGeneralCase(
+        T&& input, sparqlExpression::EvaluationContext* context) const {
   // We have one result for each row of the input.
   auto resultSize = context->size();
   VectorWithMemoryLimit<Id> result{context->_allocator};
