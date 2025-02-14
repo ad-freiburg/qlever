@@ -39,3 +39,18 @@ CPP_template(typename T)(requires(Something<T>)) struct C {
 // the `CPP_and...` macros won't work here.
 CPP_variadic_template(typename... Ts)(
     requires(Something<Ts...>&& Something<Ts...>)) void f(Ts...) {}
+
+TEST(ConceptBackports, lambdas) {
+  int i = 3;
+  auto f = CPP_lambda(i)(auto t)(requires std::is_same_v<decltype(t), int>) {
+    return i + t;
+  };
+  auto g = CPP_template_lambda(&i)(typename T)(T t)(
+      requires std::is_same_v<decltype(t), int>) {
+    return (i++) + t;
+  };
+
+  EXPECT_EQ(g(4), 7);
+  EXPECT_EQ(f(5), 8);
+  EXPECT_EQ(i, 4);
+}
