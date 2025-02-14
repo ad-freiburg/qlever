@@ -31,13 +31,14 @@ bool TurtleParser<T>::statement() {
 // ______________________________________________________________
 template <class T>
 bool TurtleParser<T>::directive() {
-  if (prefixAndBaseDisabled_) {
+  bool successfulParse = prefixID() || base() || sparqlPrefix() || sparqlBase();
+  if (successfulParse && prefixAndBaseDisabled_) {
     raise(
         "@prefix or @base directives need to be at the beginning of the file "
         "when using the parallel parser. Use '--parse-parallel false' if you "
         "can't guarantee this.");
   }
-  return prefixID() || base() || sparqlPrefix() || sparqlBase();
+  return successfulParse;
 }
 
 // ________________________________________________________________
