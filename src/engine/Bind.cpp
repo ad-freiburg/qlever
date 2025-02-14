@@ -161,13 +161,10 @@ IdTable Bind::computeExpressionBind(
   idTable.addEmptyColumn();
   auto outputColumn = idTable.getColumn(idTable.numColumns() - 1);
 
-  auto visitor = CPP_lambda_mut(&)(auto&& singleResult)(
-      requires sparqlExpression::SingleExpressionResult<
-          std::decay_t<decltype(singleResult)>>) {
-    constexpr static bool isVariable =
-        std::is_same_v<std::decay_t<decltype(singleResult)>, ::Variable>;
-    constexpr static bool isStrongId =
-        std::is_same_v<std::decay_t<decltype(singleResult)>, Id>;
+  auto visitor = CPP_template_lambda_mut(&)(typename T)(T && singleResult)(
+      requires sparqlExpression::SingleExpressionResult<T>) {
+    constexpr static bool isVariable = std::is_same_v<T, ::Variable>;
+    constexpr static bool isStrongId = std::is_same_v<T, Id>;
 
     if constexpr (isVariable) {
       auto columnIndex =
@@ -180,8 +177,7 @@ IdTable Bind::computeExpressionBind(
       ad_utility::chunkedFill(outputColumn, singleResult, CHUNK_SIZE,
                               [this]() { checkCancellation(); });
     } else {
-      constexpr bool isConstant =
-          sparqlExpression::isConstantResult<decltype(singleResult)>;
+      constexpr bool isConstant = sparqlExpression::isConstantResult<T>;
 
       auto resultGenerator = sparqlExpression::detail::makeGenerator(
           AD_FWD(singleResult), outputColumn.size(), &evaluationContext);

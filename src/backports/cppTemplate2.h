@@ -63,6 +63,9 @@
 
 #define CPP_TEMPLATE_LAMBDA_20(...) [__VA_ARGS__] CPP_TEMPLATE_LAMBDA_ARGS
 
+#define CPP_TEMPLATE_LAMBDA_MUT_20(...) \
+  [__VA_ARGS__] CPP_TEMPLATE_LAMBDA_MUT_ARGS
+
 // The internals of the `CPP_lambda` template
 #define CPP_LAMBDA_SFINAE_ARGS(...) \
 (__VA_ARGS__ CPP_LAMBDA_SFINAE_AUX_
@@ -89,8 +92,14 @@ CPP_PP_CAT(CPP_LAMBDA_SFINAE_AUX_3_, __VA_ARGS__)        \
 #define CPP_TEMPLATE_LAMBDA_ARGS_sfinae(...) \
   <__VA_ARGS__> CPP_LAMBDA_SFINAE_ARGS
 
+#define CPP_TEMPLATE_LAMBDA_MUT_ARGS_sfinae(...) \
+  <__VA_ARGS__> CPP_LAMBDA_MUT_SFINAE_ARGS
+
 #define CPP_template_lambda_sfinae(...) \
   [__VA_ARGS__] CPP_TEMPLATE_LAMBDA_ARGS_sfinae
+
+#define CPP_template_lambda_mut_sfinae(...) \
+  [__VA_ARGS__] CPP_TEMPLATE_LAMBDA_MUT_ARGS_sfinae
 
 #define CPP_LAMBDA_SFINAE_AUX_3_requires
 
@@ -104,6 +113,8 @@ CPP_PP_CAT(CPP_LAMBDA_SFINAE_AUX_3_, __VA_ARGS__)        \
 #define CPP_LAMBDA_AUX_0(...) __VA_ARGS__
 
 #define CPP_TEMPLATE_LAMBDA_ARGS(...) <__VA_ARGS__> CPP_LAMBDA_ARGS
+
+#define CPP_TEMPLATE_LAMBDA_MUT_ARGS(...) <__VA_ARGS__> CPP_LAMBDA_ARGS_MUT
 
 #define CPP_lambda_mut_sfinae(...) \
   CPP_PP_IGNORE_CXX2A_COMPAT_BEGIN \

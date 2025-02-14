@@ -208,17 +208,13 @@ void GroupBy::processGroup(
   evaluationContext._previousResultsFromSameGroup.at(resultColumn) =
       sparqlExpression::copyExpressionResult(expressionResult);
 
-  auto visitor = CPP_lambda_mut(&)(auto&& singleResult)(
-      requires sparqlExpression::SingleExpressionResult<
-          std::decay_t<decltype(singleResult)>>) {
-    constexpr static bool isStrongId =
-        std::is_same_v<std::decay_t<decltype(singleResult)>, Id>;
-    AD_CONTRACT_CHECK(sparqlExpression::isConstantResult<
-                      std::decay_t<decltype(singleResult)>>);
+  auto visitor = CPP_template_lambda_mut(&)(typename T)(T && singleResult)(
+      requires sparqlExpression::SingleExpressionResult<T>) {
+    constexpr static bool isStrongId = std::is_same_v<T, Id>;
+    AD_CONTRACT_CHECK(sparqlExpression::isConstantResult<T>);
     if constexpr (isStrongId) {
       resultEntry = singleResult;
-    } else if constexpr (sparqlExpression::isConstantResult<
-                             std::decay_t<decltype(singleResult)>>) {
+    } else if constexpr (sparqlExpression::isConstantResult<T>) {
       resultEntry = sparqlExpression::detail::constantExpressionResultToId(
           AD_FWD(singleResult), *localVocab);
     } else {
@@ -1101,10 +1097,9 @@ void GroupBy::extractValues(
     sparqlExpression::ExpressionResult&& expressionResult,
     sparqlExpression::EvaluationContext& evaluationContext,
     IdTable* resultTable, LocalVocab* localVocab, size_t outCol) {
-  auto visitor = CPP_lambda_mut(&evaluationContext, &resultTable, &localVocab,
-                                &outCol)(auto&& singleResult)(
-      requires sparqlExpression::SingleExpressionResult<
-          std::decay_t<decltype(singleResult)>>) {
+  auto visitor = CPP_template_lambda_mut(&evaluationContext, &resultTable,
+                                         &localVocab, &outCol)(typename T)(
+      T && singleResult)(requires sparqlExpression::SingleExpressionResult<T>) {
     auto generator = sparqlExpression::detail::makeGenerator(
         AD_FWD(singleResult), evaluationContext.size(), &evaluationContext);
 
@@ -1484,25 +1479,24 @@ static constexpr auto makeProcessGroupsVisitor =
     [](size_t blockSize,
        const sparqlExpression::EvaluationContext* evaluationContext,
        const std::vector<size_t>& hashEntries) {
-      return
-          [blockSize, evaluationContext, &hashEntries]<typename T, typename A>(
-              T&& singleResult, A& aggregationDataVector) {
-            CPP_assert(sparqlExpression::SingleExpressionResult<T>);
-            CPP_assert(VectorOfAggregationData<A>);
-            auto generator = sparqlExpression::detail::makeGenerator(
-                std::forward<T>(singleResult), blockSize, evaluationContext);
+      return CPP_template_lambda(blockSize, evaluationContext, &hashEntries)(
+          typename T, typename A)(T && singleResult, A & aggregationDataVector)(
+          requires sparqlExpression::SingleExpressionResult<T> &&
+          VectorOfAggregationData<A>) {
+        auto generator = sparqlExpression::detail::makeGenerator(
+            std::forward<T>(singleResult), blockSize, evaluationContext);
 
-            auto hashEntryIndex = 0;
+        auto hashEntryIndex = 0;
 
-            for (const auto& val : generator) {
-              auto vectorOffset = hashEntries[hashEntryIndex];
-              auto& aggregateData = aggregationDataVector.at(vectorOffset);
+        for (const auto& val : generator) {
+          auto vectorOffset = hashEntries[hashEntryIndex];
+          auto& aggregateData = aggregationDataVector.at(vectorOffset);
 
-              aggregateData.addValue(val, evaluationContext);
+          aggregateData.addValue(val, evaluationContext);
 
-              ++hashEntryIndex;
-            }
-          };
+          ++hashEntryIndex;
+        }
+      };
     };
 
 // _____________________________________________________________________________

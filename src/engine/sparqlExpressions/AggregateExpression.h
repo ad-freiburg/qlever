@@ -104,10 +104,9 @@ using AGG_EXP = AggregateExpression<
 // with arguments and result of type `NumericValue` (which is a `std::variant`).
 template <typename NumericOperation>
 inline auto makeNumericExpressionForAggregate() {
-  return [](const auto&... args)
+  return []<typename... Args>(const Args&... args)
              -> CPP_ret(NumericValue)(
-                 requires(concepts::same_as<std::decay_t<decltype(args)>,
-                                            NumericValue>&&...)) {
+                 requires(concepts::same_as<Args, NumericValue>&&...)) {
     auto visitor = []<typename... Ts>(const Ts&... t) -> NumericValue {
       if constexpr ((... || std::is_same_v<NotNumeric, Ts>)) {
         return NotNumeric{};
@@ -184,19 +183,19 @@ inline const auto compareIdsOrStrings =
 
 // Aggregate expression for MIN and MAX.
 template <valueIdComparators::Comparison comparison>
-inline const auto minMaxLambdaForAllTypes =
-    []<typename T>(const T& a, const T& b, const EvaluationContext* ctx) {
-      CPP_assert(SingleExpressionResult<T>);
-      auto actualImpl = [ctx](const auto& x, const auto& y) {
-        return compareIdsOrStrings<comparison>(x, y, ctx);
-      };
-      if constexpr (ad_utility::isSimilar<T, Id>) {
-        return std::get<Id>(actualImpl(a, b));
-      } else {
-        // TODO<joka921> We should definitely move strings here.
-        return std::visit(actualImpl, a, b);
-      }
-    };
+inline const auto minMaxLambdaForAllTypes = CPP_template_lambda()(typename T)(
+    const T& a, const T& b,
+    const EvaluationContext* ctx)(requires SingleExpressionResult<T>) {
+  auto actualImpl = [ctx](const auto& x, const auto& y) {
+    return compareIdsOrStrings<comparison>(x, y, ctx);
+  };
+  if constexpr (ad_utility::isSimilar<T, Id>) {
+    return std::get<Id>(actualImpl(a, b));
+  } else {
+    // TODO<joka921> We should definitely move strings here.
+    return std::visit(actualImpl, a, b);
+  }
+};
 constexpr inline auto minLambdaForAllTypes =
     minMaxLambdaForAllTypes<valueIdComparators::Comparison::LT>;
 constexpr inline auto maxLambdaForAllTypes =

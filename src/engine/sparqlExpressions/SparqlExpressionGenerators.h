@@ -106,12 +106,12 @@ CPP_template(typename Input, typename Transformation = std::identity)(
 /// Generate `numItems` many values from the `input` and apply the
 /// `valueGetter` to each of the values.
 inline auto valueGetterGenerator =
-    CPP_lambda()(size_t numElements, EvaluationContext* context, auto&& input,
-                 auto&& valueGetter)(
-        requires SingleExpressionResult<std::decay_t<decltype(input)>>) {
-  auto transformation = CPP_lambda(context, valueGetter)(auto&& i)(
-      requires ranges::invocable<std::decay_t<decltype(valueGetter)>,
-                                 decltype(i), EvaluationContext*>) {
+    CPP_template_lambda()(typename ValueGetter, typename Input)(
+        size_t numElements, EvaluationContext* context, Input&& input,
+        ValueGetter&& valueGetter)(requires SingleExpressionResult<Input>) {
+  auto transformation =
+      CPP_template_lambda(context, valueGetter)(typename I)(I && i)(
+          requires ranges::invocable<ValueGetter, I&&, EvaluationContext*>) {
     context->cancellationHandle_->throwIfCancelled();
     return valueGetter(AD_FWD(i), context);
   };

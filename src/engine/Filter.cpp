@@ -147,13 +147,11 @@ CPP_template_def(int WIDTH, typename Table)(
   // NOTE: the explicit (seemingly redundant) capture of `resultTable` is
   // required to work around a bug in Clang 17, see
   // https://github.com/llvm/llvm-project/issues/61267
-  auto computeResult =
-      CPP_lambda(this, &resultTable = resultTable, &input, &inputTable,
-                 &dynamicResultTable, &evaluationContext)(auto&& singleResult)(
-          requires sparqlExpression::SingleExpressionResult<
-              std::decay_t<decltype(singleResult)>>) {
-    if constexpr (std::is_same_v<std::decay_t<decltype(singleResult)>,
-                                 ad_utility::SetOfIntervals>) {
+  auto computeResult = CPP_template_lambda(
+      this, &resultTable = resultTable, &input, &inputTable,
+      &dynamicResultTable, &evaluationContext)(typename T)(T && singleResult)(
+      requires sparqlExpression::SingleExpressionResult<T>) {
+    if constexpr (std::is_same_v<T, ad_utility::SetOfIntervals>) {
       AD_CONTRACT_CHECK(input.size() == evaluationContext.size());
       // If the expression result is given as a set of intervals, we copy
       // the corresponding parts of `input` to `resultTable`.

@@ -65,11 +65,10 @@ class CoalesceExpression : public VariadicExpression {
               std::get<Id>(x) == Id::makeUndefined());
     };
 
-    auto visitConstantExpressionResult = CPP_lambda(
-        &nextUnboundIndices, &unboundIndices, &isUnbound, &result,
-        ctx)(auto&& childResult)(
-        requires SingleExpressionResult<std::decay_t<decltype(childResult)>> &&
-        isConstantResult<std::decay_t<decltype(childResult)>>) {
+    auto visitConstantExpressionResult =
+        CPP_template_lambda(&nextUnboundIndices, &unboundIndices, &isUnbound,
+                            &result, ctx)(typename T)(T && childResult)(
+            requires SingleExpressionResult<T> && isConstantResult<T>) {
       IdOrLiteralOrIri constantResult{AD_FWD(childResult)};
       if (isUnbound(constantResult)) {
         nextUnboundIndices = std::move(unboundIndices);
@@ -94,11 +93,10 @@ class CoalesceExpression : public VariadicExpression {
     // result so far is unbound, and the child result is bound. While doing so,
     // set up the `nextUnboundIndices` vector  for the next step.
     auto visitVectorExpressionResult =
-        CPP_lambda(&result, &unboundIndices, &nextUnboundIndices, &ctx,
-                   &isUnbound)(auto&& childResult)(requires CPP_NOT(
-            isConstantResult<std::decay_t<decltype(childResult)>> &&
-            SingleExpressionResult<std::decay_t<decltype(childResult)>> &&
-            std::is_rvalue_reference_v<decltype(childResult)>)) {
+        CPP_template_lambda(&result, &unboundIndices, &nextUnboundIndices, &ctx,
+                            &isUnbound)(typename T)(T && childResult)(
+            requires CPP_NOT(isConstantResult<T> && SingleExpressionResult<T> &&
+                             std::is_rvalue_reference_v<T&&>)) {
       auto gen = detail::makeGenerator(AD_FWD(childResult), ctx->size(), ctx);
       // Iterator to the next index where the result so far is unbound.
       auto unboundIdxIt = unboundIndices.begin();
@@ -128,14 +126,13 @@ class CoalesceExpression : public VariadicExpression {
           },
           [ctx]() { ctx->cancellationHandle_->throwIfCancelled(); });
     };
-    auto visitExpressionResult = CPP_lambda(
+    auto visitExpressionResult = CPP_template_lambda(
         &visitConstantExpressionResult,
-        &visitVectorExpressionResult)(auto&& childResult)(
-        requires SingleExpressionResult<std::decay_t<decltype(childResult)>> &&
-        std::is_rvalue_reference_v<decltype(childResult)>) {
+        &visitVectorExpressionResult)(typename T)(T && childResult)(
+        requires SingleExpressionResult<T> && std::is_rvalue_reference_v<T&&>) {
       // If the previous expression result is a constant, we can skip the
       // loop.
-      if constexpr (isConstantResult<std::decay_t<decltype(childResult)>>) {
+      if constexpr (isConstantResult<T>) {
         visitConstantExpressionResult(AD_FWD(childResult));
       } else {
         visitVectorExpressionResult(AD_FWD(childResult));
