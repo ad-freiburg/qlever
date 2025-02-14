@@ -237,7 +237,7 @@ struct SkipWhitespaceAndCommentsMixin {
     auto v = self().view();
     if (v.starts_with('#')) {
       auto pos = v.find('\n');
-      if (pos == string::npos) {
+      if (pos == std::string::npos) {
         // TODO<joka921>: This should rather yield an error.
         LOG(INFO) << "Warning, unfinished comment found while parsing"
                   << std::endl;
