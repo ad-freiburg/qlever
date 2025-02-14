@@ -472,8 +472,8 @@ auto Server::cancelAfterDeadline(
 // _____________________________________________________________________________
 auto Server::setupCancellationHandle(
     const ad_utility::websocket::QueryId& queryId, TimeLimit timeLimit)
-    -> ad_utility::isInstantiation<
-        CancellationHandleAndTimeoutTimerCancel> auto {
+    -> QL_CONCEPT_OR_NOTHING(ad_utility::isInstantiation<
+                             CancellationHandleAndTimeoutTimerCancel>) auto {
   auto cancellationHandle = queryRegistry_.getCancellationHandle(queryId);
   AD_CORRECTNESS_CHECK(cancellationHandle);
   cancellationHandle->startWatchDog();

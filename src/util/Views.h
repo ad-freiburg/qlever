@@ -15,6 +15,14 @@
 
 namespace ad_utility {
 
+namespace detail {
+template <typename R>
+CPP_requires(can_empty_, requires(const R& range)(ql::ranges::empty(range)));
+
+template <typename R>
+CPP_concept RangeCanEmpty = CPP_requires_ref(can_empty_, R);
+}  // namespace detail
+
 /// Takes a view and yields the elements of the same view, but skips over
 /// consecutive duplicates.
 template <typename SortedView,
@@ -89,10 +97,10 @@ CPP_template(typename UnderlyingRange, bool supportConst = true)(
         ql::concepts::movable<UnderlyingRange>) class OwningView
     : public ql::ranges::view_interface<OwningView<UnderlyingRange>> {
  private:
-  UnderlyingRange underlyingRange_ = UnderlyingRange();
+  UnderlyingRange underlyingRange_;
 
  public:
-  OwningView() requires std::default_initializable<UnderlyingRange> = default;
+  OwningView() = default;
 
   constexpr explicit OwningView(UnderlyingRange&& underlyingRange) noexcept(
       std::is_nothrow_move_constructible_v<UnderlyingRange>)
@@ -115,49 +123,45 @@ CPP_template(typename UnderlyingRange, bool supportConst = true)(
     return std::move(underlyingRange_);
   }
 
-  constexpr ql::ranges::iterator_t<UnderlyingRange> begin() {
+  constexpr auto begin() { return ql::ranges::begin(underlyingRange_); }
+
+  constexpr auto end() { return ql::ranges::end(underlyingRange_); }
+
+  CPP_auto_member constexpr auto CPP_fun(begin)()(
+      const  //
+      requires(supportConst&& ql::ranges::range<const UnderlyingRange>)) {
     return ql::ranges::begin(underlyingRange_);
   }
 
-  constexpr ql::ranges::sentinel_t<UnderlyingRange> end() {
+  CPP_auto_member constexpr auto CPP_fun(end)()(
+      const  //
+      requires(supportConst&& ql::ranges::range<const UnderlyingRange>)) {
     return ql::ranges::end(underlyingRange_);
   }
 
-  constexpr auto begin() const
-      requires(supportConst && ql::ranges::range<const UnderlyingRange>) {
-    return ql::ranges::begin(underlyingRange_);
-  }
-
-  constexpr auto end() const
-      requires(supportConst && ql::ranges::range<const UnderlyingRange>) {
-    return ql::ranges::end(underlyingRange_);
-  }
-
-  constexpr bool empty()
-      requires requires { ql::ranges::empty(underlyingRange_); } {
+  CPP_member constexpr auto empty() const
+      -> CPP_ret(bool)(requires detail::RangeCanEmpty<const UnderlyingRange>) {
     return ql::ranges::empty(underlyingRange_);
   }
 
-  constexpr bool empty() const
-      requires requires { ql::ranges::empty(underlyingRange_); } {
-    return ql::ranges::empty(underlyingRange_);
-  }
-
-  constexpr auto size() requires ql::ranges::sized_range<UnderlyingRange> {
+  CPP_member constexpr auto size()
+      -> CPP_ret(size_t)(requires ql::ranges::sized_range<UnderlyingRange>) {
     return ql::ranges::size(underlyingRange_);
   }
 
-  constexpr auto size() const
-      requires ql::ranges::sized_range<const UnderlyingRange> {
+  CPP_member constexpr auto size() const -> CPP_ret(size_t)(
+      requires ql::ranges::sized_range<const UnderlyingRange>) {
     return ql::ranges::size(underlyingRange_);
   }
 
-  constexpr auto data() requires ql::ranges::contiguous_range<UnderlyingRange> {
+  CPP_auto_member constexpr auto CPP_fun(data)()(
+      requires ql::ranges::contiguous_range<UnderlyingRange>) {
     return ql::ranges::data(underlyingRange_);
   }
 
-  constexpr auto data() const
-      requires ql::ranges::contiguous_range<const UnderlyingRange> {
+  CPP_auto_member constexpr auto CPP_fun(data)()(
+      const  //
+      requires ql::ranges::contiguous_range<const UnderlyingRange>) {
     return ql::ranges::data(underlyingRange_);
   }
 };
@@ -206,20 +210,20 @@ template <typename View>
 struct BufferedAsyncView : InputRangeMixin<BufferedAsyncView<View>> {
   View view_;
   uint64_t blockSize_;
-  bool finished_ = false;
+  mutable bool finished_ = false;
 
-  explicit BufferedAsyncView(View view, uint64_t blockSize)
+  explicit BufferedAsyncView(View&& view, uint64_t blockSize)
       : view_{std::move(view)}, blockSize_{blockSize} {
     AD_CONTRACT_CHECK(blockSize_ > 0);
   }
 
-  ql::ranges::iterator_t<View> it_;
+  mutable ql::ranges::iterator_t<View> it_;
   ql::ranges::sentinel_t<View> end_ = ql::ranges::end(view_);
   using value_type = ql::ranges::range_value_t<View>;
-  std::future<std::vector<value_type>> future_;
+  mutable std::future<std::vector<value_type>> future_;
 
-  std::vector<value_type> buffer_;
-  std::vector<value_type> getNextBlock() {
+  mutable std::vector<value_type> buffer_;
+  std::vector<value_type> getNextBlock() const {
     std::vector<value_type> buffer;
     buffer.reserve(blockSize_);
     size_t i = 0;
@@ -268,18 +272,21 @@ auto bufferedAsyncView(View view, uint64_t blockSize) {
 // `ql::views::iota(0, size_t(INT_MAX) + 1)` leads to undefined behavior
 // because of an integer overflow, but `ad_utility::integerRange(size_t(INT_MAX)
 // + 1)` is perfectly safe and behaves as expected.
-template <std::unsigned_integral Int>
-auto integerRange(Int upperBound) {
+CPP_template(typename Int)(
+    requires std::unsigned_integral<Int>) auto integerRange(Int upperBound) {
   return ql::views::iota(Int{0}, upperBound);
 }
 
 // The implementation of `inPlaceTransformView`, see below for details.
 namespace detail {
-template <typename Range, ad_utility::InvocableWithExactReturnType<
-                              void, ql::ranges::range_reference_t<Range>>
-                              Transformation>
-requires(ql::ranges::view<Range> && ql::ranges::input_range<Range>)
-auto inPlaceTransformViewImpl(Range range, Transformation transformation) {
+CPP_template(typename Range, typename Transformation)(
+    requires ad_utility::InvocableWithExactReturnType<
+        Transformation, void, ql::ranges::range_reference_t<Range>>
+        CPP_and ql::ranges::view<Range>
+            CPP_and ql::ranges::input_range<
+                Range>) auto inPlaceTransformViewImpl(Range range,
+                                                      Transformation
+                                                          transformation) {
   // Take a range and yield pairs of [pointerToElementOfRange,
   // boolThatIsInitiallyFalse]. The bool is yielded as a reference and if its
   // value is changed, that change will be stored until the next element is

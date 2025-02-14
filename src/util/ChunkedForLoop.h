@@ -30,12 +30,13 @@ using SetIndexToEndAction =
 /// True if `Func` has a signature of `* func(size_t, const auto&)`
 /// where `*` can be any type. False otherwise.
 template <typename Func>
-concept IteratorWithBreak = std::invocable<Func, size_t, SetIndexToEndAction>;
+CPP_concept IteratorWithBreak =
+    std::invocable<Func, size_t, SetIndexToEndAction>;
 
 /// Helper concept that allows `chunkedForLoop` to offer an action with an
 /// optional second argument in `action`.
 template <typename Func>
-concept IteratorAction =
+CPP_concept IteratorAction =
     std::is_invocable_v<Func, std::size_t> || IteratorWithBreak<Func>;
 }  // namespace detail
 
@@ -45,10 +46,12 @@ concept IteratorAction =
 /// the next iteration, similar to the break keyword. `chunkOperation` is called
 /// every `CHUNK_SIZE` iteration steps, and at least a single time at the end if
 /// the range is not empty.
-template <std::size_t CHUNK_SIZE, detail::IteratorAction Action>
-inline void chunkedForLoop(std::size_t start, std::size_t end,
-                           const Action& action,
-                           const std::invocable auto& chunkOperation) {
+CPP_template(std::size_t CHUNK_SIZE, typename Action)(
+    requires detail::IteratorAction<
+        Action>) inline void chunkedForLoop(std::size_t start, std::size_t end,
+                                            const Action& action,
+                                            const std::invocable auto&
+                                                chunkOperation) {
   static_assert(CHUNK_SIZE != 0, "Chunk size must be non-zero");
   using std::size_t;
   while (start < end) {
@@ -67,17 +70,22 @@ inline void chunkedForLoop(std::size_t start, std::size_t end,
 
 // Helper concept that combines the sized range and input range concepts.
 template <typename R>
-concept SizedInputRange =
+CPP_concept SizedInputRange =
     ql::ranges::sized_range<R> && ql::ranges::input_range<R>;
 
 // Similar to `ql::ranges::copy`, but invokes `chunkOperation` every
 // `chunkSize` elements. (Round up to the next chunk size if the range size is
 // not a multiple of `chunkSize`.)
-template <SizedInputRange R, std::weakly_incrementable O>
-inline void chunkedCopy(R&& inputRange, O result,
-                        ql::ranges::range_difference_t<R> chunkSize,
-                        const std::invocable auto& chunkOperation)
-    requires std::indirectly_copyable<ql::ranges::iterator_t<R>, O> {
+CPP_template(typename R, typename O, typename ChunkOperationFunc)(
+    requires SizedInputRange<R> CPP_and std::weakly_incrementable<O> CPP_and
+        std::invocable<ChunkOperationFunc>
+            CPP_and std::indirectly_copyable<
+                ql::ranges::iterator_t<R>,
+                O>) inline void chunkedCopy(R&& inputRange, O result,
+                                            ql::ranges::range_difference_t<R>
+                                                chunkSize,
+                                            const ChunkOperationFunc&
+                                                chunkOperation) {
   auto begin = ql::ranges::begin(inputRange);
   auto end = ql::ranges::end(inputRange);
   auto target = result;
@@ -93,16 +101,21 @@ inline void chunkedCopy(R&& inputRange, O result,
 
 // Helper concept that combines the sized range and output range concepts.
 template <typename R, typename T>
-concept SizedOutputRange =
+CPP_concept SizedOutputRange =
     ql::ranges::sized_range<R> && ql::ranges::output_range<R, T>;
 
 // Similar to `ql::ranges::fill`, but invokes `chunkOperation` every
 // `chunkSize` elements. (Round up to the next chunk size if the range size is
 // not a multiple of `chunkSize`.)
-template <typename T, SizedOutputRange<T> R>
-inline void chunkedFill(R&& outputRange, const T& value,
-                        ql::ranges::range_difference_t<R> chunkSize,
-                        const std::invocable auto& chunkOperation) {
+CPP_template(typename T, typename R, typename ChunkOperationFunc)(
+    requires SizedOutputRange<R, T> CPP_and std::invocable<
+        ChunkOperationFunc>) inline void chunkedFill(R&& outputRange,
+                                                     const T& value,
+                                                     ql::ranges::
+                                                         range_difference_t<R>
+                                                             chunkSize,
+                                                     const ChunkOperationFunc&
+                                                         chunkOperation) {
   auto begin = ql::ranges::begin(outputRange);
   auto end = ql::ranges::end(outputRange);
   while (ql::ranges::distance(begin, end) >= chunkSize) {
