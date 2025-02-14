@@ -234,8 +234,9 @@ class TransitivePathImpl : public TransitivePathBase {
       }
     }
 
-    // If we need to check the first node separately, we try the cheaper lookup
-    // in connected nodes first, and then fallback to the expensive computation.
+    // If we need to check the first node separately, we check `startNodeFound`
+    // first because its cheaper and then fallback to the expensive computation
+    // that gives the definitive answer.
     if (minDist_ == 0 && checkFirstNode && !startNodeFound &&
         !edges.containsNode(startNode)) {
       connectedNodes.erase(startNode);
