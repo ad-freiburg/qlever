@@ -190,8 +190,8 @@ class ConcurrentCache {
    * @return A `ResultAndCacheStatus` shared_ptr to the computation result.
    *
    */
-  CPP_template(typename ComputeFuncT, typename SuitabilityFuncT)(
-      requires InvocableWithConvertibleReturnType<ComputeFuncT, Value> CPP_and
+  CPP_template_2(typename ComputeFuncT, typename SuitabilityFuncT)(
+      requires InvocableWithConvertibleReturnType<ComputeFuncT, Value> CPP_and_2
           InvocableWithConvertibleReturnType<SuitabilityFuncT, bool,
                                              const Value&>) ResultAndCacheStatus
       computeOnce(const Key& key, const ComputeFuncT& computeFunction,
@@ -203,8 +203,8 @@ class ConcurrentCache {
 
   /// Similar to computeOnce, with the following addition: After the call
   /// completes, the result will be pinned in the underlying cache.
-  CPP_template(typename ComputeFuncT, typename SuitabilityFuncT)(
-      requires InvocableWithConvertibleReturnType<ComputeFuncT, Value> CPP_and
+  CPP_template_2(typename ComputeFuncT, typename SuitabilityFuncT)(
+      requires InvocableWithConvertibleReturnType<ComputeFuncT, Value> CPP_and_2
           InvocableWithConvertibleReturnType<SuitabilityFuncT, bool,
                                              const Value&>) ResultAndCacheStatus
       computeOncePinned(const Key& key, const ComputeFuncT& computeFunction,
@@ -217,8 +217,8 @@ class ConcurrentCache {
   // If the result is contained in the cache, read and return it. Otherwise,
   // compute it, but do not store it in the cache. The interface is the same as
   // for the above two functions, therefore some of the arguments are unused.
-  CPP_template(typename ComputeFuncT, typename SuitabilityFuncT)(
-      requires InvocableWithConvertibleReturnType<ComputeFuncT, Value> CPP_and
+  CPP_template_2(typename ComputeFuncT, typename SuitabilityFuncT)(
+      requires InvocableWithConvertibleReturnType<ComputeFuncT, Value> CPP_and_2
           InvocableWithConvertibleReturnType<SuitabilityFuncT, bool,
                                              const Value&>) ResultAndCacheStatus
       computeButDontStore(
@@ -371,8 +371,8 @@ class ConcurrentCache {
 
  private:
   // implementation for computeOnce (pinned and normal variant).
-  CPP_template(typename ComputeFuncT, typename SuitabilityFuncT)(
-      requires InvocableWithConvertibleReturnType<ComputeFuncT, Value> CPP_and
+  CPP_template_2(typename ComputeFuncT, typename SuitabilityFuncT)(
+      requires InvocableWithConvertibleReturnType<ComputeFuncT, Value> CPP_and_2
           InvocableWithConvertibleReturnType<SuitabilityFuncT, bool,
                                              const Value&>) ResultAndCacheStatus
       computeOnceImpl(bool pinned, const Key& key,

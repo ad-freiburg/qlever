@@ -93,7 +93,7 @@ class Join : public Operation {
   // being passed to the `AddCombinedRowToIdTable` so that the partial results
   // can be yielded during execution. This is achieved by spawning a separate
   // thread.
-  CPP_template(typename ActionT)(
+  CPP_template_2(typename ActionT)(
       requires ad_utility::InvocableWithExactReturnType<
           ActionT, Result::IdTableVocabPair,
           std::function<void(IdTable&, LocalVocab&)>>) Result::Generator
@@ -112,7 +112,7 @@ class Join : public Operation {
   // `action` is a lambda that can be used to send partial chunks to a consumer
   // in addition to returning the remaining result. If laziness is not required
   // it is a no-op.
-  CPP_template(typename ActionT)(
+  CPP_template_2(typename ActionT)(
       requires ad_utility::InvocableWithExactReturnType<
           ActionT, Result::IdTableVocabPair,
           std::function<void(IdTable&, LocalVocab&)>>) ProtoResult

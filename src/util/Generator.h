@@ -69,7 +69,7 @@ class generator_promise {
   }
 
   // Don't allow any use of 'co_await' inside the generator coroutine.
-  CPP_template(typename U)(
+  CPP_template_2(typename U)(
       requires CPP_NOT(ad_utility::SimilarTo<GetDetails, U>)) std::suspend_never
       await_transform(U&& value) = delete;
 

@@ -221,7 +221,7 @@ class Synchronized {
 
   // Return a `Synchronized` that uses a reference to this `Synchronized`'s
   // `_data` and `mutext_`. The reference is a reference of the Base class U.
-  CPP_template(typename U)(requires std::is_base_of_v<U, T>)
+  CPP_template_2(typename U)(requires std::is_base_of_v<U, T>)
       Synchronized<U&, Mutex&> toBaseReference() {
     return {ConstructWithMutex{}, mutex(), data_};
   }
