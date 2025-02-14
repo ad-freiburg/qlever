@@ -91,6 +91,55 @@ std::optional<std::string> StringValueGetter::operator()(
 }
 
 // ____________________________________________________________________________
+std::optional<std::string> ReplacementStringGetter::operator()(
+    Id id, const EvaluationContext* context) const {
+  std::optional<std::string> originalString =
+      StringValueGetter::operator()(id, context);
+  if (!originalString.has_value()) {
+    return originalString;
+  }
+  return convertToReplacementString(originalString.value());
+}
+
+// ____________________________________________________________________________
+std::optional<std::string> ReplacementStringGetter::operator()(
+    const LiteralOrIri& s, const EvaluationContext*) const {
+  return convertToReplacementString(asStringViewUnsafe(s.getContent()));
+}
+
+// ____________________________________________________________________________
+std::string ReplacementStringGetter::convertToReplacementString(
+    std::string_view view) {
+  std::string result;
+  // Rough estimate of the size of the result string.
+  result.reserve(view.size());
+  for (size_t i = 0; i < view.size(); i++) {
+    char c = view.at(i);
+    switch (c) {
+      case '$':
+        // Re2 used \1, \2, ... for backreferences, so we change $ to \.
+        result.push_back('\\');
+        break;
+      case '\\':
+        // "\$" is unescaped to "$"
+        if (i + 1 < view.size() && view.at(i + 1) == '$') {
+          result.push_back('$');
+          i++;
+        } else {
+          // Escape existing backslashes.
+          result.push_back(c);
+          result.push_back(c);
+        }
+        break;
+      default:
+        result.push_back(c);
+        break;
+    }
+  }
+  return result;
+}
+
+// ____________________________________________________________________________
 template <auto isSomethingFunction, auto prefix>
 Id IsSomethingValueGetter<isSomethingFunction, prefix>::operator()(
     ValueId id, const EvaluationContext* context) const {

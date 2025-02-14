@@ -314,7 +314,7 @@ CPP_template(typename UnderlyingVocabulary,
   // _________________________________________________________________
   template <typename T>
   static std::string_view toStringView(const T& el) {
-    if constexpr (std::convertible_to<T, std::string_view>) {
+    if constexpr (ranges::convertible_to<T, std::string_view>) {
       return el;
     } else if constexpr (ad_utility::isInstantiation<T, std::optional>) {
       return toStringView(el.value());

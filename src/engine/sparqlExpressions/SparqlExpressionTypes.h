@@ -10,8 +10,6 @@
 #include "engine/QueryExecutionContext.h"
 #include "engine/sparqlExpressions/SetOfIntervals.h"
 #include "global/Id.h"
-#include "parser/LiteralOrIri.h"
-#include "parser/TripleComponent.h"
 #include "parser/data/Variable.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/HashSet.h"
@@ -117,8 +115,10 @@ concept SingleExpressionResult =
     ad_utility::SimilarToAnyTypeIn<T, ExpressionResult>;
 
 // Copy an expression result.
-inline ExpressionResult copyExpressionResult(
-    ad_utility::SimilarTo<ExpressionResult> auto&& result) {
+CPP_template(typename ResultT)(
+    requires ad_utility::SimilarTo<ResultT,
+                                   ExpressionResult>) inline ExpressionResult
+    copyExpressionResult(ResultT&& result) {
   auto copyIfCopyable =
       []<SingleExpressionResult R>(const R& x) -> ExpressionResult {
     if constexpr (requires { R{AD_FWD(x)}; }) {
@@ -334,11 +334,12 @@ std::optional<ExpressionResult> evaluateOnSpecializedFunctionsIfPossible(
 // for multiple `ValueGetters` because there can be multiple `ValueGetters` as
 // well as zero or more `SpezializedFunctions`, but there can only be a single
 // parameter pack in C++.
-template <
-    size_t NumOperands,
-    ad_utility::isInstantiation<FunctionAndValueGetters>
-        FunctionAndValueGettersT,
-    ad_utility::isInstantiation<SpecializedFunction>... SpecializedFunctions>
+template <size_t NumOperands,
+          QL_CONCEPT_OR_TYPENAME(
+              ad_utility::isInstantiation<FunctionAndValueGetters>)
+              FunctionAndValueGettersT,
+          QL_CONCEPT_OR_TYPENAME(ad_utility::isInstantiation<
+                                 SpecializedFunction>)... SpecializedFunctions>
 struct Operation {
  private:
   using OriginalValueGetters = typename FunctionAndValueGettersT::ValueGetters;

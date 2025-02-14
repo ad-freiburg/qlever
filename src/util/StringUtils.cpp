@@ -6,6 +6,7 @@
 #include "util/StringUtils.h"
 
 #include <absl/strings/str_cat.h>
+#include <absl/strings/str_replace.h>
 #include <unicode/bytestream.h>
 #include <unicode/casemap.h>
 

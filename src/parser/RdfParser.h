@@ -429,6 +429,7 @@ class TurtleParser : public RdfParserBase {
   FRIEND_TEST(RdfParserTest, booleanLiteralLongForm);
   FRIEND_TEST(RdfParserTest, collection);
   FRIEND_TEST(RdfParserTest, iriref);
+  FRIEND_TEST(RdfParserTest, specialPredicateA);
 };
 
 template <class Tokenizer_T>
@@ -458,8 +459,9 @@ class NQuadParser : public TurtleParser<Tokenizer_T> {
  * Parses turtle from std::string. Used to perform unit tests for
  * the different parser rules
  */
-template <std::derived_from<RdfParserBase> Parser>
-class RdfStringParser : public Parser {
+CPP_template(typename Parser)(
+    requires std::derived_from<Parser, RdfParserBase>) class RdfStringParser
+    : public Parser {
  public:
   using Parser::getLine;
   using Parser::prefixMap_;

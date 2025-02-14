@@ -21,7 +21,6 @@ TEST(DeltaTriplesCountTest, toJson) {
 TEST(DeltaTriplesCountTest, subtractOperator) {
   constexpr DeltaTriplesCount count1{10, 5};
   constexpr DeltaTriplesCount count2{3, 2};
-  constexpr DeltaTriplesCount expected{7, 3};
-  const DeltaTriplesCount actual = count1 - count2;
-  EXPECT_THAT(actual, testing::Eq(expected));
+  EXPECT_THAT(count1 - count2, testing::Eq(DeltaTriplesCount{7, 3}));
+  EXPECT_THAT(count2 - count1, testing::Eq(DeltaTriplesCount{-7, -3}));
 }

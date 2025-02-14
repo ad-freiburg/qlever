@@ -149,7 +149,7 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
 
   EXPECT_THAT(deltaTriples, StateIs(0, 0, 0, {}, {}));
 
-  // Inserting triples.
+  // Inserting triples. The triples being inserted must be sorted.
   deltaTriples.insertTriples(
       cancellationHandle,
       makeIdTriples(vocab, localVocab, {"<A> <B> <C>", "<A> <B> <D>"}));
@@ -164,14 +164,14 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
       deltaTriples,
       StateIs(3, 0, 3, {"<A> <B> <C>", "<A> <B> <D>", "<A> <low> <a>"}, {}));
 
-  // Inserting unsorted triples works.
+  // Insert more triples.
   deltaTriples.insertTriples(
       cancellationHandle,
-      makeIdTriples(vocab, localVocab, {"<B> <D> <C>", "<B> <C> <D>"}));
+      makeIdTriples(vocab, localVocab, {"<B> <C> <D>", "<B> <D> <C>"}));
   EXPECT_THAT(deltaTriples,
               StateIs(5, 0, 5,
-                      {"<A> <B> <C>", "<A> <B> <D>", "<B> <D> <C>",
-                       "<B> <C> <D>", "<A> <low> <a>"},
+                      {"<A> <B> <C>", "<A> <B> <D>", "<B> <C> <D>",
+                       "<B> <D> <C>", "<A> <low> <a>"},
                       {}));
 
   // Inserting already inserted triples has no effect.
@@ -212,10 +212,20 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
           {"<A> <B> <C>", "<B> <C> <D>", "<A> <low> <a>", "<B> <D> <C>"},
           {"<A> <B> <D>", "<A> <B> <F>", "<A> <next> <B>", "<B> <next> <C>"}));
 
-  // Deleting unsorted triples.
+  // Unsorted triples are not allowed.
+  if constexpr (ad_utility::areExpensiveChecksEnabled) {
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        deltaTriples.deleteTriples(
+            cancellationHandle,
+            makeIdTriples(vocab, localVocab,
+                          {"<C> <prev> <B>", "<B> <prev> <A>"})),
+        testing::_);
+  }
+
+  // Deleting triples.
   deltaTriples.deleteTriples(
       cancellationHandle,
-      makeIdTriples(vocab, localVocab, {"<C> <prev> <B>", "<B> <prev> <A>"}));
+      makeIdTriples(vocab, localVocab, {"<B> <prev> <A>", "<C> <prev> <B>"}));
   EXPECT_THAT(
       deltaTriples,
       StateIs(4, 6, 10,
@@ -347,7 +357,7 @@ TEST_F(DeltaTriplesTest, DeltaTriplesManager) {
            absl::StrCat("<A> <B> <E", threadIdx, ">")});
       auto triplesToDelete = makeIdTriples(
           vocab, localVocab,
-          {"<A> <C> <E>", absl::StrCat("<A> <B> <E", threadIdx, ">"),
+          {"<A> <A> <E>", absl::StrCat("<A> <B> <E", threadIdx, ">"),
            absl::StrCat("<A> <B> <F", threadIdx, ">")});
       // Insert the `triplesToInsert`.
       deltaTriplesManager.modify<void>([&](DeltaTriples& deltaTriples) {
@@ -416,10 +426,8 @@ TEST_F(DeltaTriplesTest, DeltaTriplesManager) {
   // thread-exclusive triple and inserts one thread-exclusive triple that is
   // deleted right after (This triple is stored as deleted in the `DeltaTriples`
   // because it might be contained in the original input). Additionally, there
-  // is one common triple inserted by// all the threads and one common triple
+  // is one common triple inserted by all the threads and one common triple
   // that is deleted by all the threads.
-  //
-
   auto deltaImpl = deltaTriplesManager.deltaTriples_.rlock();
   EXPECT_THAT(*deltaImpl, NumTriples(numThreads + 1, 2 * numThreads + 1,
                                      3 * numThreads + 2));

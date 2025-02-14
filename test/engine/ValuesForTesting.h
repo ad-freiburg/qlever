@@ -22,6 +22,7 @@ class ValuesForTesting : public Operation {
   size_t sizeEstimate_;
   size_t costEstimate_;
   bool unlikelyToFitInCache_ = false;
+  ad_utility::MemorySize* cacheSizeStorage_ = nullptr;
 
  public:
   // Create an operation that has as its result the given `table` and the given
@@ -115,9 +116,17 @@ class ValuesForTesting : public Operation {
     }
     return {std::move(table), resultSortedOn(), localVocab_.clone()};
   }
-  bool unlikelyToFitInCache(ad_utility::MemorySize) const override {
+  bool unlikelyToFitInCache(ad_utility::MemorySize cacheSize) const override {
+    if (cacheSizeStorage_ != nullptr) {
+      *cacheSizeStorage_ = cacheSize;
+    }
     return unlikelyToFitInCache_;
   }
+
+  void setCacheSizeStorage(ad_utility::MemorySize* cacheSizeStorage) {
+    cacheSizeStorage_ = cacheSizeStorage;
+  }
+
   bool supportsLimit() const override { return supportsLimit_; }
 
   bool& forceFullyMaterialized() { return forceFullyMaterialized_; }

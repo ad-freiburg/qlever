@@ -7,6 +7,7 @@
 #pragma once
 
 #include <antlr4-runtime.h>
+#include <gtest/gtest_prod.h>
 
 #include "engine/sparqlExpressions/AggregateExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
@@ -533,16 +534,18 @@ class SparqlQleverVisitor {
         std::array<ExpressionPtr, sizeof...(children)>{std::move(children)...});
   }
 
-  template <typename Ctx>
-  void visitVector(const std::vector<Ctx*>& childContexts)
-      requires voidWhenVisited<SparqlQleverVisitor, Ctx>;
+  CPP_template(typename Ctx)(
+      requires SparqlQleverVisitor::voidWhenVisited<
+          SparqlQleverVisitor, Ctx>) void visitVector(const std::vector<Ctx*>&
+                                                          childContexts);
 
   // Call `visit` for each of the `childContexts` and return the results of
   // those calls as a `vector`.
-  template <typename Ctx>
-  auto visitVector(const std::vector<Ctx*>& childContexts)
-      -> std::vector<decltype(visit(childContexts[0]))>
-      requires(!voidWhenVisited<SparqlQleverVisitor, Ctx>);
+  CPP_template(typename Ctx)(requires CPP_NOT(
+      SparqlQleverVisitor::voidWhenVisited<
+          SparqlQleverVisitor, Ctx>)) auto visitVector(const std::vector<Ctx*>&
+                                                           childContexts)
+      -> std::vector<decltype(visit(childContexts[0]))>;
 
   // Check that exactly one of the `ctxs` is not `null`, visit that context,
   // cast the result to `Out` and return it. Requires that for all of the
@@ -565,8 +568,8 @@ class SparqlQleverVisitor {
   template <typename Target, typename Intermediate = Target, typename Ctx>
   void visitIf(Target* target, Ctx* ctx);
 
-  template <typename Ctx>
-  void visitIf(Ctx* ctx) requires voidWhenVisited<SparqlQleverVisitor, Ctx>;
+  CPP_template(typename Ctx)(requires SparqlQleverVisitor::voidWhenVisited<
+                             SparqlQleverVisitor, Ctx>) void visitIf(Ctx* ctx);
 
  public:
   [[noreturn]] static void reportError(const antlr4::ParserRuleContext* ctx,
@@ -598,4 +601,14 @@ class SparqlQleverVisitor {
   void warnOrThrowIfUnboundVariables(auto* ctx,
                                      const SparqlExpressionPimpl& expression,
                                      std::string_view clauseName);
+
+  // Convert an instance of `Triples` to a `BasicGraphPattern` so it can be used
+  // just like a WHERE clause. Most of the time this just changes the type and
+  // stays semantically the same, but for blank nodes, this step converts them
+  // into internal variables so they are interpreted correctly by the query
+  // planner.
+  static parsedQuery::BasicGraphPattern toGraphPattern(
+      const ad_utility::sparql_types::Triples& triples);
+
+  FRIEND_TEST(SparqlParser, ensureExceptionOnInvalidGraphTerm);
 };

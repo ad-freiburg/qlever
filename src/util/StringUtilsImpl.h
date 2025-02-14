@@ -5,7 +5,10 @@
 
 #pragma once
 
+#include <ctre-unicode.hpp>
+
 #include "util/Algorithm.h"
+#include "util/CtreHelpers.h"
 #include "util/Exception.h"
 #include "util/StringUtils.h"
 
@@ -74,7 +77,7 @@ std::string insertThousandSeparator(const std::string_view str,
       "])(?<digit>\\d{4,})"};
   auto parseIterator = std::begin(str);
   ql::ranges::for_each(
-      ctre::range<regexPatDigitSequence>(str),
+      ctre::search_all<regexPatDigitSequence>(str),
       [&parseIterator, &ostream, &insertSeparator](const auto& match) {
         /*
         The digit sequence, that must be transformed. Note: The string view

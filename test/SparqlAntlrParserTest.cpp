@@ -1215,14 +1215,45 @@ TEST(SparqlParser, ConstructQuery) {
           m::pq::LimitOffset({10}), m::pq::OrderKeys({{Var{"?a"}, false}})));
   // This case of the grammar is not useful without Datasets, but we still
   // support it.
-  expectConstructQuery("CONSTRUCT WHERE { ?a <foo> ?b }",
-                       m::ConstructQuery({{Var{"?a"}, Iri{"<foo>"}, Var{"?b"}}},
-                                         m::GraphPattern()));
+  expectConstructQuery(
+      "CONSTRUCT WHERE { ?a <foo> ?b }",
+      m::ConstructQuery(
+          {{Var{"?a"}, Iri{"<foo>"}, Var{"?b"}}},
+          m::GraphPattern(m::Triples({{Var{"?a"}, "<foo>", Var{"?b"}}}))));
+
+  // Blank nodes turn into variables inside WHERE.
+  expectConstructQuery(
+      "CONSTRUCT WHERE { [] <foo> ?b }",
+      m::ConstructQuery(
+          {{BlankNode{true, "0"}, Iri{"<foo>"}, Var{"?b"}}},
+          m::GraphPattern(m::Triples(
+              {{Var{absl::StrCat(QLEVER_INTERNAL_BLANKNODE_VARIABLE_PREFIX,
+                                 "g_0")},
+                "<foo>", Var{"?b"}}}))));
+
+  // Test another variant to cover all cases.
+  expectConstructQuery(
+      "CONSTRUCT WHERE { <bar> ?foo \"Abc\"@en }",
+      m::ConstructQuery(
+          {{Iri{"<bar>"}, Var{"?foo"}, Literal{"\"Abc\"@en"}}},
+          m::GraphPattern(m::Triples(
+              {{iri("<bar>"), PropertyPath::fromVariable(Var{"?foo"}),
+                lit("\"Abc\"", "@en")}}))));
   // CONSTRUCT with datasets.
   expectConstructQuery(
       "CONSTRUCT { } FROM <foo> FROM NAMED <foo2> FROM NAMED <foo3> WHERE { }",
       m::ConstructQuery({}, m::GraphPattern(), m::Graphs{iri("<foo>")},
                         m::Graphs{iri("<foo2>"), iri("<foo3>")}));
+}
+
+// _____________________________________________________________________________
+TEST(SparqlParser, ensureExceptionOnInvalidGraphTerm) {
+  EXPECT_THROW(SparqlQleverVisitor::toGraphPattern(
+                   {{Var{"?a"}, BlankNode{true, "0"}, Var{"?b"}}}),
+               ad_utility::Exception);
+  EXPECT_THROW(SparqlQleverVisitor::toGraphPattern(
+                   {{Var{"?a"}, Literal{"\"Abc\""}, Var{"?b"}}}),
+               ad_utility::Exception);
 }
 
 // Test that ASK queries are parsed as they should.
@@ -1510,8 +1541,9 @@ auto idExpressionMatcher = [](Id id) {
 // (via `dynamic_cast`) to an object of the same type that a call to the
 // `makeFunction` yields. The matcher also checks that the expression's children
 // are the `variables`.
-auto matchNary(auto makeFunction,
-               ad_utility::SimilarTo<Variable> auto&&... variables)
+auto matchNary(
+    auto makeFunction,
+    QL_CONCEPT_OR_NOTHING(ad_utility::SimilarTo<Variable>) auto&&... variables)
     -> ::testing::Matcher<const sparqlExpression::SparqlExpression::Ptr&> {
   using namespace sparqlExpression;
   return matchNaryWithChildrenMatchers(makeFunction,
@@ -1798,8 +1830,15 @@ TEST(SparqlParser, FunctionCall) {
                      matchUnary(&makeConvertToIntExpression));
   expectFunctionCall(absl::StrCat(xsd, "double>(?x)"),
                      matchUnary(&makeConvertToDoubleExpression));
-  expectFunctionCall(absl::StrCat(xsd, "decimal>(?x)"),
+  expectFunctionCall(absl::StrCat(xsd, "float>(?x)"),
                      matchUnary(&makeConvertToDoubleExpression));
+  expectFunctionCall(absl::StrCat(xsd, "decimal>(?x)"),
+                     matchUnary(&makeConvertToDecimalExpression));
+  expectFunctionCall(absl::StrCat(xsd, "boolean>(?x)"),
+                     matchUnary(&makeConvertToBooleanExpression));
+
+  expectFunctionCall(absl::StrCat(xsd, "string>(?x)"),
+                     matchUnary(&makeConvertToStringExpression));
 
   // Wrong number of arguments.
   expectFunctionCallFails(absl::StrCat(geof, "distance>(?a)"));

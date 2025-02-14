@@ -277,7 +277,7 @@ class FrequencyEncode {
   // requires clause is kept only in the .h file and the constructor calls the
   // initialize function which has no direct requires clause.
   CPP_template(typename View)(requires(
-      !std::same_as<
+      !ranges::same_as<
           FrequencyEncode,
           std::remove_cvref_t<View>>)) explicit FrequencyEncode(View&& view) {
     initialize(std::forward<View>(view));
@@ -331,9 +331,8 @@ class GapEncode {
   // requires clause is kept only in the .h file and the constructor calls the
   // initialize function which has no direct requires clause.
   CPP_template(typename View)(requires(
-      !std::same_as<GapEncode,
-                    std::remove_cvref_t<View>>)) explicit GapEncode(View&&
-                                                                        view) {
+      !ranges::same_as<GapEncode, std::remove_cvref_t<
+                                      View>>)) explicit GapEncode(View&& view) {
     initialize(std::forward<View>(view));
   };
 
