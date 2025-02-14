@@ -121,29 +121,30 @@ struct LiftStringFunction {
 // consideration within the `IriOrUriValueGetter`, hence automatically
 // ignores values like `1`, `true`, `Date` etc.
 
-Iri extractIri(const IdOrLiteralOrIri& litOrIri) {
+const Iri& extractIri(const IdOrLiteralOrIri& litOrIri) {
   AD_CORRECTNESS_CHECK(std::holds_alternative<LocalVocabEntry>(litOrIri));
   const auto& baseIriOrUri = std::get<LocalVocabEntry>(litOrIri);
   AD_CORRECTNESS_CHECK(baseIriOrUri.isIri());
   return baseIriOrUri.getIri();
 }
 
-[[maybe_unused]] auto mergeIriImpl =
+[[maybe_unused]] auto applyBaseIfPresent =
     [](IdOrLiteralOrIri iri, const IdOrLiteralOrIri& base) -> IdOrLiteralOrIri {
   if (std::holds_alternative<Id>(iri)) {
     AD_CORRECTNESS_CHECK(std::get<Id>(iri).isUndefined());
     return iri;
   }
-  auto baseIri = extractIri(base);
+  const auto& baseIri = extractIri(base);
   if (baseIri.empty()) {
     return iri;
   }
+  // TODO<RobinTF> Avoid unnecessary string copies because of conversion.
   return LiteralOrIri{Iri::fromIrirefConsiderBase(
       extractIri(iri).toStringRepresentation(), baseIri.getBaseIri(false),
       baseIri.getBaseIri(true))};
 };
 using IriOrUriExpression =
-    NARY<2, FV<decltype(mergeIriImpl), IriOrUriValueGetter>>;
+    NARY<2, FV<decltype(applyBaseIfPresent), IriOrUriValueGetter>>;
 
 // STRLEN
 [[maybe_unused]] auto strlen = [](std::string_view s) {

@@ -1167,6 +1167,7 @@ string Visitor::visit(Parser::IrirefContext* ctx) const {
   if (baseIri_.empty()) {
     return ctx->getText();
   }
+  // TODO<RobinTF> Avoid unnecessary string copies because of conversion.
   // Handle IRIs with base IRI.
   return ad_utility::triple_component::Iri::fromIrirefConsiderBase(
              ctx->getText(), baseIri_.getBaseIri(false),
@@ -1218,7 +1219,9 @@ DatasetClause SparqlQleverVisitor::visit(Parser::UsingClauseContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-void Visitor::visit(const Parser::PrologueContext* ctx) {
+void Visitor::visit(Parser::PrologueContext* ctx) {
+  // Process in an interleaved way, so PREFIX statements are processed correctly
+  // to only use the BASE IRIs defined before them, not after them.
   for (auto* child : ctx->children) {
     if (auto* baseDecl = dynamic_cast<Parser::BaseDeclContext*>(child)) {
       visit(baseDecl);

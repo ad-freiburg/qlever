@@ -120,7 +120,7 @@ class SparqlQleverVisitor {
   ParsedQuery visit(Parser::QueryContext* ctx);
 
   // ___________________________________________________________________________
-  void visit(const Parser::PrologueContext* ctx);
+  void visit(Parser::PrologueContext* ctx);
 
   // ___________________________________________________________________________
   void visit(Parser::BaseDeclContext* ctx);
