@@ -7,10 +7,7 @@
 #include <gtest/gtest_prod.h>
 #include <re2/re2.h>
 
-#include <regex>
-
 #include "parser/TurtleTokenId.h"
-#include "util/Exception.h"
 #include "util/Log.h"
 
 using re2::RE2;
@@ -272,6 +269,8 @@ class Tokenizer : public SkipWhitespaceAndCommentsMixin<Tokenizer> {
   // Construct from a std::string_view;
   Tokenizer(std::string_view input)
       : _tokens(), _data(input.data(), input.size()) {}
+
+  static constexpr bool UseRelaxedParsing = false;
 
   // if a prefix of the input stream matches the regex argument,
   // return true and that prefix and move the input stream forward

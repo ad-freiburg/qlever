@@ -15,8 +15,8 @@
 #include "global/Constants.h"
 #include "parser/GeoPoint.h"
 #include "parser/NormalizedString.h"
-#include "parser/RdfEscaping.h"
-#include "util/Conversions.h"
+#include "parser/Tokenizer.h"
+#include "parser/TokenizerCtre.h"
 #include "util/DateYearDuration.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 
@@ -630,7 +630,7 @@ bool TurtleParser<T>::iri() {
 // _____________________________________________________________________
 template <class T>
 bool TurtleParser<T>::prefixedName() {
-  if constexpr (UseRelaxedParsing) {
+  if constexpr (T::UseRelaxedParsing) {
     if (!(pnameLnRelaxed() || pnameNS())) {
       return false;
     }
@@ -745,7 +745,7 @@ bool TurtleParser<T>::iriref() {
   // In relaxed mode, that is all we check. Otherwise, we check if the IRI is
   // standard-compliant. If not, we output a warning and try to parse it in a
   // more relaxed way.
-  if constexpr (UseRelaxedParsing) {
+  if constexpr (T::UseRelaxedParsing) {
     tok_.remove_prefix(endPos + 1);
     lastParseResult_ = TripleComponent::Iri::fromIrirefConsiderBase(
         view.substr(0, endPos + 1), baseForRelativeIri(), baseForAbsoluteIri());

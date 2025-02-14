@@ -13,8 +13,9 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "parser/RdfParser.h"
+#include "parser/Tokenizer.h"
+#include "parser/TokenizerCtre.h"
 #include "parser/TripleComponent.h"
-#include "util/Conversions.h"
 #include "util/MemorySize/MemorySize.h"
 
 using std::string;
