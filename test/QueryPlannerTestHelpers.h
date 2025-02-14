@@ -38,6 +38,7 @@
 #include "global/RuntimeParameters.h"
 #include "parser/SparqlParser.h"
 #include "util/IndexTestHelpers.h"
+#include "util/TypeTraits.h"
 
 using ad_utility::source_location;
 
@@ -66,8 +67,11 @@ QetMatcher RootOperation(auto matcher) {
 }
 
 // Match the `getChildren` method of an `Operation`.
-inline Matcher<const ::Operation&> children(const QL_CONCEPT_OR_NOTHING(
-    std::same_as<QetMatcher>) auto&... childMatchers) {
+CPP_template(typename... ChildArgs)(
+    requires ad_utility::SameAsAny<QetMatcher,
+                                   ChildArgs...>)  //
+    inline Matcher<const ::Operation&> children(
+        const ChildArgs&... childMatchers) {
   return Property("getChildren", &Operation::getChildren,
                   ElementsAre(Pointee(childMatchers)...));
 }
@@ -76,22 +80,22 @@ inline Matcher<const ::Operation&> children(const QL_CONCEPT_OR_NOTHING(
 // `OperationType` operation the children of which match the
 // `childMatcher`s. Note that the child matchers are not ordered.
 template <typename OperationType>
-inline auto MatchTypeAndUnorderedChildren =
-    [](const QL_CONCEPT_OR_NOTHING(
-        std::same_as<QetMatcher>) auto&... childMatchers) {
-      return RootOperation<OperationType>(
-          AllOf(Property("getChildren", &Operation::getChildren,
-                         UnorderedElementsAre(Pointee(childMatchers)...))));
-    };
+inline auto MatchTypeAndUnorderedChildren = CPP_template_lambda()(
+    typename... ChildArgs)(const ChildArgs&... childMatchers)(
+    requires ad_utility::SameAsAny<QetMatcher, ChildArgs...>) {
+  return RootOperation<OperationType>(
+      AllOf(Property("getChildren", &Operation::getChildren,
+                     UnorderedElementsAre(Pointee(childMatchers)...))));
+};
 
 // Similar to `MatchTypeAndUnorderedChildren`, but here the children have to
 // appear in exact the correct order.
 template <typename OperationType>
-inline auto MatchTypeAndOrderedChildren =
-    [](const QL_CONCEPT_OR_NOTHING(
-        std::same_as<QetMatcher>) auto&... childMatchers) {
-      return RootOperation<OperationType>(AllOf(children(childMatchers...)));
-    };
+inline auto MatchTypeAndOrderedChildren = CPP_template_lambda()(
+    typename... ChildArgs)(const ChildArgs&... childMatchers)(
+    requires ad_utility::SameAsAny<QetMatcher, ChildArgs...>) {
+  return RootOperation<OperationType>(AllOf(children(childMatchers...)));
+};
 
 /// Return a matcher that checks that a given `QueryExecutionTree` consists of a
 /// single `IndexScan` with the given `subject`, `predicate`, and `object`, and
@@ -193,11 +197,11 @@ inline auto Bind = [](const QetMatcher& childMatcher,
 // Matcher for a `CountAvailablePredicates` operation. The case of 0 children
 // means that it's a full scan.
 inline auto CountAvailablePredicates =
-    [](size_t subjectColumnIdx, const Variable& predicateVar,
-       const Variable& countVar,
-       const QL_CONCEPT_OR_NOTHING(
-           std::same_as<QetMatcher>) auto&... childMatchers)
-        requires(sizeof...(childMatchers) <= 1) {
+    CPP_template_lambda()(typename... ChildArgs)(
+        size_t subjectColumnIdx, const Variable& predicateVar,
+        const Variable& countVar, const ChildArgs&... childMatchers)(
+        requires(sizeof...(childMatchers) <= 1)
+            CPP_and_2 ad_utility::SameAsAny<QetMatcher, ChildArgs...>) {
   return RootOperation<::CountAvailablePredicates>(AllOf(
       AD_PROPERTY(::CountAvailablePredicates, subjectColumnIndex,
                   Eq(subjectColumnIdx)),
@@ -289,20 +293,18 @@ inline auto TransitivePathSideMatcher = [](TransitivePathSide side) {
 };
 
 // Match a TransitivePath operation
-inline auto TransitivePath =
-    [](TransitivePathSide left, TransitivePathSide right, size_t minDist,
-       size_t maxDist,
-       const QL_CONCEPT_OR_NOTHING(
-           std::same_as<QetMatcher>) auto&... childMatchers) {
-      return RootOperation<::TransitivePathBase>(
-          AllOf(children(childMatchers...),
-                AD_PROPERTY(TransitivePathBase, getMinDist, Eq(minDist)),
-                AD_PROPERTY(TransitivePathBase, getMaxDist, Eq(maxDist)),
-                AD_PROPERTY(TransitivePathBase, getLeft,
-                            TransitivePathSideMatcher(left)),
-                AD_PROPERTY(TransitivePathBase, getRight,
-                            TransitivePathSideMatcher(right))));
-    };
+inline auto TransitivePath = CPP_template_lambda()(typename... ChildArgs)(
+    TransitivePathSide left, TransitivePathSide right, size_t minDist,
+    size_t maxDist, const ChildArgs&... childMatchers)(
+    requires ad_utility::SameAsAny<QetMatcher, ChildArgs...>) {
+  return RootOperation<::TransitivePathBase>(AllOf(
+      children(childMatchers...),
+      AD_PROPERTY(TransitivePathBase, getMinDist, Eq(minDist)),
+      AD_PROPERTY(TransitivePathBase, getMaxDist, Eq(maxDist)),
+      AD_PROPERTY(TransitivePathBase, getLeft, TransitivePathSideMatcher(left)),
+      AD_PROPERTY(TransitivePathBase, getRight,
+                  TransitivePathSideMatcher(right))));
+};
 
 inline auto PathSearchConfigMatcher = [](PathSearchConfiguration config) {
   auto sourceMatcher =
@@ -321,16 +323,16 @@ inline auto PathSearchConfigMatcher = [](PathSearchConfiguration config) {
 };
 
 // Match a PathSearch operation
-inline auto PathSearch =
-    [](PathSearchConfiguration config, bool sourceBound, bool targetBound,
-       const QL_CONCEPT_OR_NOTHING(
-           std::same_as<QetMatcher>) auto&... childMatchers) {
-      return RootOperation<::PathSearch>(AllOf(
-          children(childMatchers...),
-          AD_PROPERTY(PathSearch, getConfig, PathSearchConfigMatcher(config)),
-          AD_PROPERTY(PathSearch, isSourceBound, Eq(sourceBound)),
-          AD_PROPERTY(PathSearch, isTargetBound, Eq(targetBound))));
-    };
+inline auto PathSearch = CPP_template_lambda()(typename... ChildArgs)(
+    PathSearchConfiguration config, bool sourceBound, bool targetBound,
+    const ChildArgs&... childMatchers)(
+    requires ad_utility::SameAsAny<QetMatcher, ChildArgs...>) {
+  return RootOperation<::PathSearch>(
+      AllOf(children(childMatchers...),
+            AD_PROPERTY(PathSearch, getConfig, PathSearchConfigMatcher(config)),
+            AD_PROPERTY(PathSearch, isSourceBound, Eq(sourceBound)),
+            AD_PROPERTY(PathSearch, isTargetBound, Eq(targetBound))));
+};
 
 inline auto ValuesClause = [](string cacheKey) {
   return RootOperation<::Values>(
@@ -338,24 +340,23 @@ inline auto ValuesClause = [](string cacheKey) {
 };
 
 // Match a SpatialJoin operation, set arguments to ignore to -1
-inline auto SpatialJoin =
-    [](size_t maxDist, size_t maxResults, Variable left, Variable right,
-       std::optional<Variable> distanceVariable,
-       PayloadVariables payloadVariables, SpatialJoinAlgorithm algorithm,
-       const QL_CONCEPT_OR_NOTHING(
-           std::same_as<QetMatcher>) auto&... childMatchers) {
-      return RootOperation<::SpatialJoin>(
-          AllOf(children(childMatchers...),
-                AD_PROPERTY(SpatialJoin, onlyForTestingGetTask,
-                            Eq(std::pair(maxDist, maxResults))),
-                AD_PROPERTY(SpatialJoin, onlyForTestingGetVariables,
-                            Eq(std::pair(left, right))),
-                AD_PROPERTY(SpatialJoin, onlyForTestingGetDistanceVariable,
-                            Eq(distanceVariable)),
-                AD_PROPERTY(SpatialJoin, onlyForTestingGetPayloadVariables,
-                            Eq(payloadVariables)),
-                AD_PROPERTY(SpatialJoin, getAlgorithm, Eq(algorithm))));
-    };
+inline auto SpatialJoin = CPP_template_lambda()(typename... ChildArgs)(
+    size_t maxDist, size_t maxResults, Variable left, Variable right,
+    std::optional<Variable> distanceVariable, PayloadVariables payloadVariables,
+    SpatialJoinAlgorithm algorithm, const ChildArgs&... childMatchers)(
+    requires ad_utility::SameAsAny<QetMatcher, ChildArgs...>) {
+  return RootOperation<::SpatialJoin>(
+      AllOf(children(childMatchers...),
+            AD_PROPERTY(SpatialJoin, onlyForTestingGetTask,
+                        Eq(std::pair(maxDist, maxResults))),
+            AD_PROPERTY(SpatialJoin, onlyForTestingGetVariables,
+                        Eq(std::pair(left, right))),
+            AD_PROPERTY(SpatialJoin, onlyForTestingGetDistanceVariable,
+                        Eq(distanceVariable)),
+            AD_PROPERTY(SpatialJoin, onlyForTestingGetPayloadVariables,
+                        Eq(payloadVariables)),
+            AD_PROPERTY(SpatialJoin, getAlgorithm, Eq(algorithm))));
+};
 
 // Match a GroupBy operation
 static constexpr auto GroupBy =

@@ -321,10 +321,8 @@ TEST(SPARQLProtocolTest, parseHttpRequest) {
 
 TEST(SPARQLProtocolTest, extractAccessToken) {
   auto extract =
-      []<typename RequestT,
-         typename =
-             std::enable_if_t<ad_utility::httpUtils::HttpRequest<RequestT>>>(
-          const RequestT& request) {
+      CPP_template_lambda()(typename RequestT)(const RequestT& request)(
+          requires ad_utility::httpUtils::HttpRequest<RequestT>) {
     auto parsedUrl = parseRequestTarget(request.target());
     return SPARQLProtocol::extractAccessToken(request, parsedUrl.parameters_);
   };

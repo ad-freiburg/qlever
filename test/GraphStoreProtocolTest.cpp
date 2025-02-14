@@ -51,14 +51,11 @@ TEST(GraphStoreProtocolTest, extractTargetGraph) {
 
 // _____________________________________________________________________________________________
 TEST(GraphStoreProtocolTest, transformPost) {
-  auto expectTransformPost =
-      []<typename RequestT,
-         typename =
-             std::enable_if_t<ad_utility::httpUtils::HttpRequest<RequestT>>>(
-          const RequestT& request,
-          const testing::Matcher<const ParsedQuery&>& matcher,
-          ad_utility::source_location l =
-              ad_utility::source_location::current()) {
+  auto expectTransformPost = CPP_template_lambda()(typename RequestT)(
+      const RequestT& request,
+      const testing::Matcher<const ParsedQuery&>& matcher,
+      ad_utility::source_location l = ad_utility::source_location::current())(
+      requires ad_utility::httpUtils::HttpRequest<RequestT>) {
     auto trace = generateLocationTrace(l);
     const ad_utility::url_parser::ParsedUrl parsedUrl =
         ad_utility::url_parser::parseRequestTarget(request.target());
@@ -114,14 +111,11 @@ TEST(GraphStoreProtocolTest, transformPost) {
 
 // _____________________________________________________________________________________________
 TEST(GraphStoreProtocolTest, transformGet) {
-  auto expectTransformGet =
-      []<typename RequestT,
-         typename =
-             std::enable_if_t<ad_utility::httpUtils::HttpRequest<RequestT>>>(
-          const RequestT& request,
-          const testing::Matcher<const ParsedQuery&>& matcher,
-          ad_utility::source_location l =
-              ad_utility::source_location::current()) {
+  auto expectTransformGet = CPP_template_lambda()(typename RequestT)(
+      const RequestT& request,
+      const testing::Matcher<const ParsedQuery&>& matcher,
+      ad_utility::source_location l = ad_utility::source_location::current())(
+      requires ad_utility::httpUtils::HttpRequest<RequestT>) {
     auto trace = generateLocationTrace(l);
     const ad_utility::url_parser::ParsedUrl parsedUrl =
         ad_utility::url_parser::parseRequestTarget(request.target());

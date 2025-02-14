@@ -88,21 +88,20 @@ auto pr =
 //______________________________________________________________________________
 // Create a vector containing the provided `<PrefilterExpression, Variable>`
 // pairs.
-auto makePrefilterVec =
-    [](QL_CONCEPT_OR_NOTHING(
-        std::convertible_to<
-            sparqlExpression::
-                PrefilterExprVariablePair>) auto&&... prefilterArgs) {
-      std::vector<sparqlExpression::PrefilterExprVariablePair>
-          prefilterVarPairs = {};
-      if constexpr (sizeof...(prefilterArgs) > 0) {
-        (prefilterVarPairs.emplace_back(
-             std::forward<sparqlExpression::PrefilterExprVariablePair>(
-                 prefilterArgs)),
-         ...);
-      }
-      return prefilterVarPairs;
-    };
+auto makePrefilterVec = CPP_template_lambda()(typename... Args)(
+    Args && ... prefilterArgs)(
+    requires std::convertible_to<Args,
+                                 sparqlExpression::PrefilterExprVariablePair>) {
+  std::vector<sparqlExpression::PrefilterExprVariablePair> prefilterVarPairs =
+      {};
+  if constexpr (sizeof...(prefilterArgs) > 0) {
+    (prefilterVarPairs.emplace_back(
+         std::forward<sparqlExpression::PrefilterExprVariablePair>(
+             prefilterArgs)),
+     ...);
+  }
+  return prefilterVarPairs;
+};
 
 }  // namespace filterHelper
 
