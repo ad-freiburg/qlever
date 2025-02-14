@@ -83,7 +83,7 @@ class TransitivePathImpl : public TransitivePathBase {
                        targetSide.isVariable()
                            ? std::nullopt
                            : std::optional{std::get<Id>(targetSide.value_)},
-                       yieldOnce);
+                       yieldOnce, true);
 
     auto result = fillTableWithHull(
         std::move(hull), startSide.outputCol_, targetSide.outputCol_,
@@ -133,7 +133,7 @@ class TransitivePathImpl : public TransitivePathBase {
         targetSide.isVariable()
             ? std::nullopt
             : std::optional{std::get<Id>(targetSide.value_)},
-        yieldOnce);
+        yieldOnce, false);
 
     auto result = fillTableWithHull(std::move(hull), startSide.outputCol_,
                                     targetSide.outputCol_, yieldOnce);
@@ -196,10 +196,13 @@ class TransitivePathImpl : public TransitivePathBase {
    * @param startNode The node to start the search from.
    * @param target Optional target Id. If supplied, only paths which end in this
    * Id are added to the result.
+   * @param checkFirstNode If true and `minDist_` is 0, the first node is
+   * checked if it is actually found in the graph before being added.
    * @return A set of connected nodes in the graph.
    */
   Set findConnectedNodes(const T& edges, Id startNode,
-                         const std::optional<Id>& target) const {
+                         const std::optional<Id>& target,
+                         bool checkFirstNode) const {
     std::vector<std::pair<Id, size_t>> stack;
     ad_utility::HashSetWithMemoryLimit<Id> marks{
         getExecutionContext()->getAllocator()};
@@ -214,7 +217,8 @@ class TransitivePathImpl : public TransitivePathBase {
       if (steps <= maxDist_ && !marks.contains(node)) {
         if (steps >= minDist_) {
           marks.insert(node);
-          if (!target.has_value() || node == target.value()) {
+          if ((!target.has_value() || node == target.value()) &&
+              (!checkFirstNode || steps > 0)) {
             connectedNodes.insert(node);
           }
         }
@@ -225,6 +229,15 @@ class TransitivePathImpl : public TransitivePathBase {
         }
       }
     }
+
+    // If we need to check the first node separately, we try the cheaper lookup
+    // in connected nodes first, and then fallback to the expensive computation.
+    if (minDist_ == 0 && checkFirstNode &&
+        (!target.has_value() || startNode == target.value()) &&
+        (connectedNodes.contains(startNode) || edges.containsNode(startNode))) {
+      connectedNodes.insert(startNode);
+    }
+
     return connectedNodes;
   }
 
@@ -234,6 +247,7 @@ class TransitivePathImpl : public TransitivePathBase {
    *
    * @param edges Adjacency lists, mapping Ids (nodes) to their connected
    * Ids.
+   * @param edgesVocab The `LocalVocab` holding the vocabulary of the edges.
    * @param startNodes A range that yields an instantiation of
    * `TableColumnWithVocab` that can be consumed to create a transitive hull.
    * @param target Optional target Id. If supplied, only paths which end
@@ -242,11 +256,15 @@ class TransitivePathImpl : public TransitivePathBase {
    * code. When set to true, this will prevent yielding the same LocalVocab over
    * and over again to make merging faster (because merging with an empty
    * LocalVocab is a no-op).
+   * @param checkFirstNode If the start nodes are not a subset of the node
+   * sources, this parameter needs to be set to true so that the first node is
+   * checked if it is actually found in the graph before being added.
    * @return Map Maps each Id to its connected Ids in the transitive hull
    */
   CPP_template(typename Node)(requires ql::ranges::range<Node>) NodeGenerator
       transitiveHull(const T& edges, LocalVocab edgesVocab, Node startNodes,
-                     std::optional<Id> target, bool yieldOnce) const {
+                     std::optional<Id> target, bool yieldOnce,
+                     bool checkFirstNode) const {
     ad_utility::Timer timer{ad_utility::Timer::Stopped};
     for (auto&& tableColumn : startNodes) {
       timer.cont();
@@ -254,7 +272,8 @@ class TransitivePathImpl : public TransitivePathBase {
       mergedVocab.mergeWith(std::span{&edgesVocab, 1});
       size_t currentRow = 0;
       for (Id startNode : tableColumn.column_) {
-        Set connectedNodes = findConnectedNodes(edges, startNode, target);
+        Set connectedNodes =
+            findConnectedNodes(edges, startNode, target, checkFirstNode);
         if (!connectedNodes.empty()) {
           runtimeInfo().addDetail("Hull time", timer.msecs());
           timer.stop();

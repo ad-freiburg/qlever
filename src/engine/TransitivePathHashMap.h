@@ -40,6 +40,14 @@ struct HashMapWrapper {
     }
     return iterator->second;
   }
+
+  // Linear lookup if the node is in the map, either as a key or as a value.
+  bool containsNode(const Id node) const {
+    return map_.contains(node) ||
+           ql::ranges::any_of(map_ | ql::views::values, [node](const Set& set) {
+             return ad_utility::contains(set, node);
+           });
+  }
 };
 
 /**

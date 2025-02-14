@@ -53,6 +53,12 @@ struct BinSearchMap {
 
     return targetIds_.subspan(startIndex, range.size());
   }
+
+  // Linear lookup if the node is in the map, either as a key or as a value.
+  bool containsNode(const Id node) const {
+    return ql::ranges::binary_search(startIds_, node) ||
+           ad_utility::contains(targetIds_, node);
+  }
 };
 
 /**

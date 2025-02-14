@@ -585,6 +585,27 @@ TEST_P(TransitivePathTest, boundForwardValuesOnZeroPath) {
 }
 
 // _____________________________________________________________________________
+TEST_P(TransitivePathTest, unboundValuesOnZeroPath) {
+  auto sub = makeIdTableFromVector({
+      {1, 2},
+      {3, 4},
+  });
+
+  auto leftOpTable = makeIdTableFromVector({
+      {5},
+  });
+
+  TransitivePathSide left(std::nullopt, 0, Variable{"?x"}, 0);
+  TransitivePathSide right(std::nullopt, 1, Variable{"?y"}, 1);
+  auto T =
+      makePathBound(true, sub.clone(), {Variable{"?x"}, Variable{"?y"}},
+                    split(leftOpTable), 0, {Variable{"?x"}}, left, right, 0, 0);
+
+  auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+  assertResultMatchesIdTable(resultTable, IdTable{2, T->allocator()});
+}
+
+// _____________________________________________________________________________
 TEST_P(TransitivePathTest, maxLength2FromVariable) {
   auto sub = makeIdTableFromVector({
       {0, 2},
