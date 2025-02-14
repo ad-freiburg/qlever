@@ -52,9 +52,11 @@ const ad_utility::HashMap<std::string, std::string> defaultPrefixMap{
 template <auto F, bool testInsideConstructTemplate = false>
 auto parse =
     [](const string& input, SparqlQleverVisitor::PrefixMap prefixes = {},
+       ParsedQuery::DatasetClauses clauses = {},
        SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks =
            SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::False) {
       ParserAndVisitor p{input, std::move(prefixes), disableSomeChecks};
+      // TODO<joka921> also propagate the active dataset clauses.
       if (testInsideConstructTemplate) {
         p.visitor_.setParseModeToInsideConstructTemplateForTesting();
       }
@@ -105,6 +107,20 @@ struct ExpectCompleteParse {
   auto operator()(const string& input,
                   const testing::Matcher<const Value&>& matcher,
                   SparqlQleverVisitor::PrefixMap prefixMap,
+                  ad_utility::source_location l =
+                      ad_utility::source_location::current()) const {
+    auto tr = generateLocationTrace(l, "successful parsing was expected here");
+    EXPECT_NO_THROW({
+      return expectCompleteParse(
+          parse<Clause, parseInsideConstructTemplate>(
+              input, std::move(prefixMap), disableSomeChecks),
+          matcher, l);
+    });
+  };
+
+  auto operator()(const string& input,
+                  const testing::Matcher<const Value&>& matcher,
+                  ParsedQuery::DatasetClauses activeDatasetClauses,
                   ad_utility::source_location l =
                       ad_utility::source_location::current()) const {
     auto tr = generateLocationTrace(l, "successful parsing was expected here");

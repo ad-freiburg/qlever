@@ -15,6 +15,12 @@
 using namespace ad_utility::testing;
 
 namespace {
+
+// Helper function that computes an `ExistsJoin` of the given `left` and
+// `right` and checks that the result columns is equal to `expectedAsBool`.
+// The first `numJoinColumns` columns of both `leftInput` and `rightInput` are
+// used as join columns.
+//
 void testExistsFromIdTable(IdTable left, IdTable right,
                            std::vector<bool> expectedAsBool,
                            size_t numJoinColumns) {
@@ -22,27 +28,29 @@ void testExistsFromIdTable(IdTable left, IdTable right,
   AD_CORRECTNESS_CHECK(left.numColumns() >= numJoinColumns);
   AD_CORRECTNESS_CHECK(right.numColumns() >= numJoinColumns);
 
-  // Permute the join columns.
-  auto colsLeft = ad_utility::integerRange(left.numColumns());
-  std::vector<size_t> leftPermutation;
-  ql::ranges::copy(colsLeft, std::back_inserter(leftPermutation));
-  left.setColumnSubset(leftPermutation);
+  // Randomly permute the columns of the `input` and return the permutation that
+  // was applied
+  auto permuteColumns = [](auto& table) {
+    auto colsView = ad_utility::integerRange(table.numColumns());
+    std::vector<size_t> permutation;
+    ql::ranges::copy(colsView, std::back_inserter(permutation));
+    table.setColumnSubset(permutation);
+    return permutation;
+  };
+  // Permute the columns.
+  auto leftPermutation = permuteColumns(left);
+  auto rightPermutation = permuteColumns(right);
 
-  auto colsRight = ad_utility::integerRange(right.numColumns());
-  std::vector<size_t> rightPermutation;
-  ql::ranges::copy(colsRight, std::back_inserter(rightPermutation));
-  right.setColumnSubset(rightPermutation);
-
-  // The expected output depends on the (sorted) input, even if we shuffle it
-  // afterward.
+  // We have to make the deep copy of `left` for the expected result at exactly
+  // this point: The permutation of the columns (above) also affects the
+  // expected result, while the permutation of the rows (which will be applied
+  // below) doesn't affect it, as the `ExistsJoin` internally sorts its inputs.
   IdTable expected = left.clone();
 
   // Randomly shuffle the inputs, to ensure that the `existsJoin` correctly
   // pre-sorts its inputs.
-  std::random_device rd;
-  std::mt19937 g(rd());
-  std::shuffle(left.begin(), left.end(), g);
-  std::shuffle(right.begin(), right.end(), g);
+  ad_utility::randomShuffle(left.begin(), left.end());
+  ad_utility::randomShuffle(right.begin(), right.end());
 
   auto qec = getQec();
   using V = Variable;
@@ -69,8 +77,8 @@ void testExistsFromIdTable(IdTable left, IdTable right,
   };
 
   // Compute the `ExistsJoin` and check the result.
-  auto exists =
-      ExistsJoin{qec, makeChild(left), makeChild(right), V{"?exists"}};
+  auto exists = ExistsJoin{qec, makeChild(left, leftPermutation),
+                           makeChild(right, rightPermutation), V{"?exists"}};
   EXPECT_EQ(exists.getResultWidth(), left.numColumns() + 1);
   auto res = exists.computeResultOnlyForTesting();
   const auto& table = res.idTable();
@@ -81,6 +89,8 @@ void testExistsFromIdTable(IdTable left, IdTable right,
   EXPECT_THAT(table, matchesIdTable(expected));
 }
 
+// Same as the function above, but conveniently takes `VectorTable`s instead of
+// `IdTable`s.
 void testExists(const VectorTable& leftInput, const VectorTable& rightInput,
                 std::vector<bool> expectedAsBool, size_t numJoinColumns) {
   auto left = makeIdTableFromVector(leftInput);

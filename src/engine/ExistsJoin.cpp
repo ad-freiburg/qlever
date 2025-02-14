@@ -4,6 +4,7 @@
 
 #include "engine/ExistsJoin.h"
 
+#include "CallFixedSize.h"
 #include "engine/QueryPlanner.h"
 #include "engine/sparqlExpressions/ExistsExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
@@ -127,27 +128,37 @@ ProtoResult ExistsJoin::computeResult([[maybe_unused]] bool requestLaziness) {
   // Boolean column) should be `false`.
   std::vector<size_t, ad_utility::AllocatorWithLimit<size_t>> notExistsIndices{
       allocator()};
-  // The callback is called with iterators, so we convert them back to indices.
-  auto actionForNotExisting =
-      [&notExistsIndices, begin = joinColumnsLeft.begin()](const auto& itLeft) {
-        notExistsIndices.push_back(itLeft - begin);
-      };
-
-  // Run `zipperJoinWithUndef` with the described callbacks and the mentioned
-  // optimization in case we know that there are no UNDEF values in the join
+  // Run the actual exists join, but use `callFixedSize` for the number of join
   // columns.
-  auto checkCancellationLambda = [this] { checkCancellation(); };
-  auto runZipperJoin = [&](auto findUndef) {
-    [[maybe_unused]] auto numOutOfOrder = ad_utility::zipperJoinWithUndef(
-        joinColumnsLeft, joinColumnsRight, ql::ranges::lexicographical_compare,
-        noopRowAdder, findUndef, findUndef, actionForNotExisting,
-        checkCancellationLambda);
+  auto runForNumJoinCols = [&notExistsIndices, isCheap, &noopRowAdder,
+                            &colsLeftDynamic = joinColumnsLeft,
+                            &colsRightDynamic = joinColumnsRight,
+                            this]<int NumJoinCols>() {
+    // The callback is called with iterators, so we convert them back to
+    // indices.
+    auto joinColumnsLeft = colsLeftDynamic.asStaticView<NumJoinCols>();
+    auto joinColumnsRight = colsRightDynamic.asStaticView<NumJoinCols>();
+    auto actionForNotExisting =
+        [&notExistsIndices, begin = joinColumnsLeft.begin()](
+            const auto& itLeft) { notExistsIndices.push_back(itLeft - begin); };
+
+    // Run `zipperJoinWithUndef` with the described callbacks and the mentioned
+    // optimization in case we know that there are no UNDEF values in the join
+    // columns.
+    auto checkCancellationLambda = [this] { checkCancellation(); };
+    auto runZipperJoin = [&](auto findUndef) {
+      [[maybe_unused]] auto numOutOfOrder = ad_utility::zipperJoinWithUndef(
+          joinColumnsLeft, joinColumnsRight,
+          ql::ranges::lexicographical_compare, noopRowAdder, findUndef,
+          findUndef, actionForNotExisting, checkCancellationLambda);
+    };
+    if (isCheap) {
+      runZipperJoin(ad_utility::noop);
+    } else {
+      runZipperJoin(ad_utility::findSmallerUndefRanges);
+    }
   };
-  if (isCheap) {
-    runZipperJoin(ad_utility::noop);
-  } else {
-    runZipperJoin(ad_utility::findSmallerUndefRanges);
-  }
+  ad_utility::callFixedSize(numJoinColumns, runForNumJoinCols);
 
   // Add the result column from the computed `notExistsIndices` (which tell us
   // where the value should be `false`).
