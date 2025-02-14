@@ -61,6 +61,9 @@ class Union : public Operation {
     return {_subtrees[0].get(), _subtrees[1].get()};
   }
 
+  std::shared_ptr<QueryExecutionTree> leftChild() { return _subtrees[0]; }
+  std::shared_ptr<QueryExecutionTree> rightChild() { return _subtrees[1]; }
+
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
 

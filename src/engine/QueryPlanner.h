@@ -329,13 +329,21 @@ class QueryPlanner {
       const SubtreePlan& a, const SubtreePlan& b,
       boost::optional<const TripleGraph&> tg) const;
 
+  std::vector<QueryPlanner::SubtreePlan> createJoinCandidates(
+      const SubtreePlan& a, const SubtreePlan& b,
+      const std::vector<std::array<ColumnIndex, 2>>& jcs) const;
+
+  std::vector<SubtreePlan> createJoinWithUnitedTransitivePath(
+      SubtreePlan a, SubtreePlan b,
+      const std::vector<std::array<ColumnIndex, 2>>& jcs) const;
+
   // Used internally by `createJoinCandidates`. If `a` or `b` is a transitive
   // path operation and the other input can be bound to this transitive path
   // (see `TransitivePath.cpp` for details), then returns that bound transitive
-  // path. Else returns `std::nullopt`
-  static std::optional<SubtreePlan> createJoinWithTransitivePath(
+  // path. Else returns an empty vector.
+  std::vector<SubtreePlan> createJoinWithTransitivePath(
       SubtreePlan a, SubtreePlan b,
-      const std::vector<std::array<ColumnIndex, 2>>& jcs);
+      const std::vector<std::array<ColumnIndex, 2>>& jcs) const;
 
   // Used internally by `createJoinCandidates`. If  `a` or `b` is a
   // `HasPredicateScan` with a variable as a subject (`?x ql:has-predicate
