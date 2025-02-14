@@ -426,8 +426,9 @@ TEST(ConfigOptionValidatorManagerTest, ValidatorConstructor) {
 TEST(ValidatorConceptTest, TransformValidatorIntoExceptionValidator) {
   // Helper function, that check, if a given validator behaves as
   // wanted, before and after being transformed into an exception validator.
-  auto checkValidator = []<typename... ParameterTypes>(
-                            ValidatorFunction<ParameterTypes...> auto func,
+  auto checkValidator = []<typename ValidatorFunc, typename... ParameterTypes>(
+                            // ValidatorFunction<ParameterTypes...> auto func,
+                            ValidatorFunc func,
                             const std::tuple<ParameterTypes...>& validValues,
                             const std::tuple<ParameterTypes...>& nonValidValues,
                             ad_utility::source_location l =
@@ -440,7 +441,8 @@ TEST(ValidatorConceptTest, TransformValidatorIntoExceptionValidator) {
 
     // Transform and check.
     auto transformedFunc =
-        transformValidatorIntoExceptionValidator<ParameterTypes...>(func,
+        transformValidatorIntoExceptionValidator<ValidatorFunc,
+                                                 ParameterTypes...>(func,
                                                                     "test");
     static_assert(ExceptionValidatorFunction<decltype(transformedFunc),
                                              ParameterTypes...>);

@@ -382,9 +382,10 @@ class ConcatExpression : public detail::VariadicExpression {
     // If the result is a string, then all the previously evaluated children
     // were constants (see above).
     std::variant<std::string, StringVec> result{std::string{""}};
-    auto visitSingleExpressionResult = [&ctx, &result]<typename T>(T&& s) {
-      CPP_assert(SingleExpressionResult<T> && std::is_rvalue_reference_v<T&&>);
-      if constexpr (isConstantResult<T>) {
+    auto visitSingleExpressionResult = CPP_lambda(&ctx, &result)(auto&& s)(
+        requires SingleExpressionResult<std::decay_t<decltype(s)>> &&
+        std::is_rvalue_reference_v<decltype(s)>) {
+      if constexpr (isConstantResult<std::decay_t<decltype(s)>>) {
         std::string strFromConstant = StringValueGetter{}(s, ctx).value_or("");
         if (std::holds_alternative<std::string>(result)) {
           // All previous children were constants, and the current child also is

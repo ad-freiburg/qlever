@@ -34,7 +34,7 @@ the 'call' `IsInstantiationOf<A>::Instantiation<B<int>>::value` and
 template <template <typename...> typename Template>
 struct IsInstantiationOf {
   template <typename T>
-  struct Instantiation;
+  struct Instantiation : std::false_type {};
 
   template <typename... Ts>
   struct Instantiation<Template<Ts...>> : std::true_type {};
@@ -85,7 +85,7 @@ struct FirstWrapper : public std::type_identity<T> {};
 /// isInstantiation<std::vector<int>, std::vector> == true;
 /// isInstantiation<const std::vector<int>&, std::vector> == false;
 template <typename T, template <typename...> typename TemplatedType>
-concept isInstantiation =
+CPP_concept isInstantiation =
     detail::IsInstantiationOf<TemplatedType>::template Instantiation<T>::value;
 
 /// The concept is fulfilled iff `T` is `ad_utility::SimilarTo` an
@@ -94,8 +94,17 @@ concept isInstantiation =
 /// similarToInstantiation<std::vector, std::vector<int>> == true;
 /// similarToInstantiation<std::vector, const std::vector<int>&> == true;
 template <typename T, template <typename...> typename TemplatedType>
-concept similarToInstantiation =
+CPP_concept similarToInstantiation =
     isInstantiation<std::decay_t<T>, TemplatedType>;
+
+/// @brief The concept is fulfilled if `T` is an instantiation of any
+/// of the types passed in ...Ts
+///
+/// similarToAnyInstantiationOf<std::vector, std::vector<int>,
+/// std::vector<char>> == true
+template <typename T, template <typename...> typename... Ts>
+CPP_concept similarToAnyInstantiationOf =
+    (... || similarToInstantiation<T, Ts>);
 
 /// isVector<T> is true if and only if T is an instantiation of std::vector
 template <typename T>
@@ -103,7 +112,7 @@ constexpr static bool isVector = isInstantiation<T, std::vector>;
 
 /// isTuple<T> is true if and only if T is an instantiation of std::tuple
 template <typename T>
-constexpr static bool isTuple = isInstantiation<T, std::tuple>;
+CPP_concept isTuple = isInstantiation<T, std::tuple>;
 
 /// isVariant<T> is true if and only if T is an instantiation of std::variant
 template <typename T>
@@ -118,7 +127,7 @@ constexpr static bool isArray<std::array<T, N>> = true;
 
 // `SimilarToArray` is also true for `std::array<...>&`, etc.
 template <typename T>
-concept SimilarToArray = isArray<std::decay_t<T>>;
+CPP_concept SimilarToArray = isArray<std::decay_t<T>>;
 
 /// Two types are similar, if they are the same when we remove all cv (const or
 /// volatile) qualifiers and all references
@@ -128,11 +137,11 @@ constexpr static bool isSimilar =
 
 /// A concept for similarity
 template <typename T, typename U>
-concept SimilarTo = isSimilar<T, U>;
+CPP_concept SimilarTo = isSimilar<T, U>;
 
 /// True iff `T` is similar (see above) to any of the `Ts...`.
 template <typename T, typename... Ts>
-concept SimilarToAny = (... || isSimilar<T, Ts>);
+CPP_concept SimilarToAny = (... || isSimilar<T, Ts>);
 
 /// True iff `T` is the same as any of the `Ts...`.
 template <typename T, typename... Ts>
@@ -144,14 +153,14 @@ namespace detail).
 */
 namespace detail {
 template <typename T, typename Template>
-struct SimilarToAnyTypeInImpl;
+struct SimilarToAnyTypeInImpl : std::false_type {};
 
 template <typename T, template <typename...> typename Template, typename... Ts>
 struct SimilarToAnyTypeInImpl<T, Template<Ts...>>
     : std::integral_constant<bool, SimilarToAny<T, Ts...>> {};
 
 template <typename T, typename Template>
-struct SameAsAnyTypeInImpl;
+struct SameAsAnyTypeInImpl : std::false_type {};
 
 template <typename T, template <typename...> typename Template, typename... Ts>
 struct SameAsAnyTypeInImpl<T, Template<Ts...>>
@@ -165,14 +174,15 @@ or `std::variant`). and `T` is `isSimilar` (see above) to any of the type
 parameters.
 */
 template <typename T, typename Template>
-concept SimilarToAnyTypeIn = detail::SimilarToAnyTypeInImpl<T, Template>::value;
+CPP_concept SimilarToAnyTypeIn =
+    detail::SimilarToAnyTypeInImpl<T, Template>::value;
 
 /*
 Equivalent to `SimilarToAnyTypeIn` (see above), but checks for exactly matching
 types via `std::same_as`.
 */
 template <typename T, typename Template>
-concept SameAsAnyTypeIn = detail::SameAsAnyTypeInImpl<T, Template>::value;
+CPP_concept SameAsAnyTypeIn = detail::SameAsAnyTypeInImpl<T, Template>::value;
 
 /// A templated bool that is always false,
 /// independent of the template parameter.
@@ -181,28 +191,30 @@ constexpr static bool alwaysFalse = false;
 
 /// From the type Tuple (std::tuple<A, B, C....>) creates the type
 /// std::tuple<TypeLifter<A>, TypeLifter<B>,...>
-template <typename Tuple, template <typename> typename TypeLifter>
-requires isTuple<Tuple> using LiftedTuple = typename detail::LiftInnerTypes<
-    std::tuple, TypeLifter>::template TypeToLift<Tuple>::LiftedType;
+CPP_template(typename Tuple,
+             template <typename>
+             typename TypeLifter)(requires isTuple<Tuple>) using LiftedTuple =
+    typename detail::LiftInnerTypes<
+        std::tuple, TypeLifter>::template TypeToLift<Tuple>::LiftedType;
 
 /// From the type Variant (std::variant<A, B, C....>) creates the type
 /// std::variant<TypeLifter<A>, TypeLifter<B>,...>
-template <typename Variant, template <typename> typename TypeLifter>
-requires isVariant<Variant>
-using LiftedVariant = typename detail::LiftInnerTypes<
-    std::variant, TypeLifter>::template TypeToLift<Variant>::LiftedType;
+CPP_template(typename Variant, template <typename> typename TypeLifter)(
+    requires isVariant<Variant>) using LiftedVariant =
+    typename detail::LiftInnerTypes<
+        std::variant, TypeLifter>::template TypeToLift<Variant>::LiftedType;
 
 /// From the type std::tuple<A, B, ...> makes the type std::variant<A, B, ...>
-template <typename Tuple>
-requires isTuple<Tuple>
-using TupleToVariant = typename detail::TupleToVariantImpl<Tuple>::type;
+CPP_template(typename Tuple)(requires isTuple<Tuple>) using TupleToVariant =
+    typename detail::TupleToVariantImpl<Tuple>::type;
 
 /// From the types X = std::tuple<A, ... , B>, , Y = std::tuple<C, ..., D>...
 /// makes the type TupleCat<X, Y> = std::tuple<A, ..., B, C, ..., D, ...> (works
 /// for an arbitrary number of tuples as template parameters.
 template <typename... Tuples>
-requires(... && isTuple<Tuples>)
-using TupleCat = decltype(std::tuple_cat(std::declval<Tuples&>()...));
+using TupleCat =
+    std::enable_if_t<(isTuple<Tuples> && ...),
+                     decltype(std::tuple_cat(std::declval<Tuples&>()...))>;
 
 /// A generalized version of std::visit that also supports non-variant
 /// parameters. Each `parameterOrVariant` of type T that is not a std::variant
@@ -244,17 +256,47 @@ auto applyFunctionToEachElementOfTuple(Function&& f, Tuple&& tuple) {
 
 // Return the last type of variadic template arguments.
 template <typename... Ts>
-requires(sizeof...(Ts) > 0) using Last = typename detail::LastT<Ts...>::type;
+using Last = typename std::enable_if_t<(sizeof...(Ts) > 0),
+                                       typename detail::LastT<Ts...>::type>;
 
 // Return the first type of variadic template arguments.
 template <typename... Ts>
-requires(sizeof...(Ts) > 0)
-using First = typename detail::FirstWrapper<Ts...>::type;
+using First =
+    typename std::enable_if_t<(sizeof...(Ts) > 0),
+                              typename detail::FirstWrapper<Ts...>::type>;
 
 /// Concept for `std::is_invocable_r_v`.
 template <typename Func, typename R, typename... ArgTypes>
+// TODO<joka921, gpcicciuca> turn back to `concept` and fix the remaining
+// places.
 concept InvocableWithConvertibleReturnType =
     std::is_invocable_r_v<R, Func, ArgTypes...>;
+
+// The implementation of `InvokeResultSfinaeFriendly`
+namespace invokeResultSfinaeFriendly::detail {
+template <typename T, typename... Args>
+struct InvalidInvokeResult {
+  InvalidInvokeResult() = delete;
+  ~InvalidInvokeResult() = delete;
+};
+template <typename T, typename... Args>
+constexpr auto getInvokeResultImpl() {
+  if constexpr (std::is_invocable_v<T, Args...>) {
+    return std::type_identity<std::invoke_result_t<T, Args...>>{};
+  } else {
+    return std::type_identity<InvalidInvokeResult<T, Args...>>{};
+  }
+}
+}  // namespace invokeResultSfinaeFriendly::detail
+
+// If `std::is_invocable_v<T, Args...>`, then this is `std::invoke_result_t<T ,
+// Args...>` , otherwise it is an internal type that can be neither constructed
+// nor destructed. This is useful in SFINAE-contexts, where
+// `std::invoke_result_t` leads to hard compiler errors if it doesn't exist.
+template <typename T, typename... Args>
+using InvokeResultSfinaeFriendly =
+    typename decltype(invokeResultSfinaeFriendly::detail::getInvokeResultImpl<
+                      T, Args...>())::type;
 
 /*
 The following concepts are similar to `std::is_invocable_r_v` with the following
@@ -272,16 +314,18 @@ are the same when ignoring `const`, `volatile`, and reference qualifiers.
 template <typename Fn, typename Ret, typename... Args>
 concept InvocableWithSimilarReturnType =
     std::invocable<Fn, Args...> &&
-    isSimilar<std::invoke_result_t<Fn, Args...>, Ret>;
+    isSimilar<InvokeResultSfinaeFriendly<Fn, Args...>, Ret>;
 
 /*
 @brief Require `Fn` to be invocable with `Args...` and the return type to be
  `Ret`.
 */
+// TODO<joka921, gpcicciuca> turn back to `concept` and fix the remaining
+// places.
 template <typename Fn, typename Ret, typename... Args>
 concept InvocableWithExactReturnType =
     std::invocable<Fn, Args...> &&
-    std::same_as<std::invoke_result_t<Fn, Args...>, Ret>;
+    std::same_as<InvokeResultSfinaeFriendly<Fn, Args...>, Ret>;
 
 /*
 @brief Require `Fn` to be regular invocable with `Args...` and the return type
@@ -295,7 +339,7 @@ For more information see: https://en.cppreference.com/w/cpp/concepts/invocable
 template <typename Fn, typename Ret, typename... Args>
 concept RegularInvocableWithSimilarReturnType =
     std::regular_invocable<Fn, Args...> &&
-    isSimilar<std::invoke_result_t<Fn, Args...>, Ret>;
+    isSimilar<InvokeResultSfinaeFriendly<Fn, Args...>, Ret>;
 
 /*
 @brief Require `Fn` to be regular invocable with `Args...` and the return type
@@ -309,7 +353,7 @@ For more information see: https://en.cppreference.com/w/cpp/concepts/invocable
 template <typename Fn, typename Ret, typename... Args>
 concept RegularInvocableWithExactReturnType =
     std::regular_invocable<Fn, Args...> &&
-    std::same_as<std::invoke_result_t<Fn, Args...>, Ret>;
+    std::same_as<InvokeResultSfinaeFriendly<Fn, Args...>, Ret>;
 
 // True iff `T` is a value type or an rvalue reference. Can be used to force
 // rvalue references for templated functions: For example: void f(auto&& x) //

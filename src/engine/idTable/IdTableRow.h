@@ -385,8 +385,10 @@ class RowReference
   // The `cbegin` and `cend` functions are implicitly inherited from `Base`.
 
   // __________________________________________________________________________
-  template <ad_utility::SimilarTo<RowReference> R>
-  friend void swap(R&& a, R&& b) requires(!isConst) {
+  CPP_template(typename R)(
+      requires ad_utility::SimilarTo<RowReference, R>) friend void swap(R&& a,
+                                                                        R&& b)
+      requires(!isConst) {
     return Base::swapImpl(AD_FWD(a), AD_FWD(b));
   }
 

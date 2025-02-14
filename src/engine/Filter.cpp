@@ -104,10 +104,10 @@ ProtoResult Filter::computeResult(bool requestLaziness) {
 }
 
 // _____________________________________________________________________________
-template <ad_utility::SimilarTo<IdTable> Table>
-IdTable Filter::filterIdTable(std::vector<ColumnIndex> sortedBy,
-                              Table&& idTable,
-                              const LocalVocab& localVocab) const {
+CPP_template_def(typename Table)(requires ad_utility::SimilarTo<Table, IdTable>)
+    IdTable Filter::filterIdTable(std::vector<ColumnIndex> sortedBy,
+                                  Table&& idTable,
+                                  const LocalVocab& localVocab) const {
   size_t width = idTable.numColumns();
   IdTable result{width, getExecutionContext()->getAllocator()};
 
@@ -120,10 +120,11 @@ IdTable Filter::filterIdTable(std::vector<ColumnIndex> sortedBy,
 }
 
 // _____________________________________________________________________________
-template <int WIDTH, ad_utility::SimilarTo<IdTable> Table>
-void Filter::computeFilterImpl(IdTable& dynamicResultTable, Table&& inputTable,
-                               const LocalVocab& localVocab,
-                               std::vector<ColumnIndex> sortedBy) const {
+CPP_template_def(int WIDTH, typename Table)(
+    requires ad_utility::SimilarTo<Table, IdTable>) void Filter::
+    computeFilterImpl(IdTable& dynamicResultTable, Table&& inputTable,
+                      const LocalVocab& localVocab,
+                      std::vector<ColumnIndex> sortedBy) const {
   AD_CONTRACT_CHECK(inputTable.numColumns() == WIDTH || WIDTH == 0);
   IdTableStatic<WIDTH> resultTable =
       std::move(dynamicResultTable).toStatic<static_cast<size_t>(WIDTH)>();
@@ -146,11 +147,13 @@ void Filter::computeFilterImpl(IdTable& dynamicResultTable, Table&& inputTable,
   // NOTE: the explicit (seemingly redundant) capture of `resultTable` is
   // required to work around a bug in Clang 17, see
   // https://github.com/llvm/llvm-project/issues/61267
-  auto computeResult = [this, &resultTable = resultTable, &input, &inputTable,
-                        &dynamicResultTable,
-                        &evaluationContext]<typename T>(T&& singleResult) {
-    CPP_assert(sparqlExpression::SingleExpressionResult<T>);
-    if constexpr (std::is_same_v<T, ad_utility::SetOfIntervals>) {
+  auto computeResult =
+      CPP_lambda(this, &resultTable = resultTable, &input, &inputTable,
+                 &dynamicResultTable, &evaluationContext)(auto&& singleResult)(
+          requires sparqlExpression::SingleExpressionResult<
+              std::decay_t<decltype(singleResult)>>) {
+    if constexpr (std::is_same_v<std::decay_t<decltype(singleResult)>,
+                                 ad_utility::SetOfIntervals>) {
       AD_CONTRACT_CHECK(input.size() == evaluationContext.size());
       // If the expression result is given as a set of intervals, we copy
       // the corresponding parts of `input` to `resultTable`.
@@ -192,7 +195,7 @@ void Filter::computeFilterImpl(IdTable& dynamicResultTable, Table&& inputTable,
       // intervals above. This depends on how expensive the evaluation with
       // the `EffectiveBooleanValueGetter` is.
       auto resultGenerator = sparqlExpression::detail::makeGenerator(
-          std::forward<T>(singleResult), input.size(), &evaluationContext);
+          AD_FWD(singleResult), input.size(), &evaluationContext);
       size_t i = 0;
 
       using ValueGetter = sparqlExpression::detail::EffectiveBooleanValueGetter;

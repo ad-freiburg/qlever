@@ -27,6 +27,9 @@ size_t Bind::getCostEstimate() {
   return _subtree->getCostEstimate() + _subtree->getSizeEstimate();
 }
 
+// We delegate the limit to the child operation, so we always support it.
+bool Bind::supportsLimit() const { return true; }
+
 float Bind::getMultiplicity(size_t col) {
   // this is the newly added column
   if (col == getResultWidth() - 1) {
@@ -93,6 +96,7 @@ IdTable Bind::cloneSubView(const IdTable& idTable,
 
 // _____________________________________________________________________________
 ProtoResult Bind::computeResult(bool requestLaziness) {
+  _subtree->setLimit(getLimit());
   LOG(DEBUG) << "Get input to BIND operation..." << std::endl;
   std::shared_ptr<const Result> subRes = _subtree->getResult(requestLaziness);
   LOG(DEBUG) << "Got input to Bind operation." << std::endl;
@@ -157,10 +161,13 @@ IdTable Bind::computeExpressionBind(
   idTable.addEmptyColumn();
   auto outputColumn = idTable.getColumn(idTable.numColumns() - 1);
 
-  auto visitor = [&]<typename T>(T&& singleResult) mutable {
-    CPP_assert(sparqlExpression::SingleExpressionResult<T>);
-    constexpr static bool isVariable = std::is_same_v<T, ::Variable>;
-    constexpr static bool isStrongId = std::is_same_v<T, Id>;
+  auto visitor = CPP_lambda_mut(&)(auto&& singleResult)(
+      requires sparqlExpression::SingleExpressionResult<
+          std::decay_t<decltype(singleResult)>>) {
+    constexpr static bool isVariable =
+        std::is_same_v<std::decay_t<decltype(singleResult)>, ::Variable>;
+    constexpr static bool isStrongId =
+        std::is_same_v<std::decay_t<decltype(singleResult)>, Id>;
 
     if constexpr (isVariable) {
       auto columnIndex =
@@ -173,11 +180,11 @@ IdTable Bind::computeExpressionBind(
       ad_utility::chunkedFill(outputColumn, singleResult, CHUNK_SIZE,
                               [this]() { checkCancellation(); });
     } else {
-      constexpr bool isConstant = sparqlExpression::isConstantResult<T>;
+      constexpr bool isConstant =
+          sparqlExpression::isConstantResult<decltype(singleResult)>;
 
       auto resultGenerator = sparqlExpression::detail::makeGenerator(
-          std::forward<T>(singleResult), outputColumn.size(),
-          &evaluationContext);
+          AD_FWD(singleResult), outputColumn.size(), &evaluationContext);
 
       if constexpr (isConstant) {
         auto it = resultGenerator.begin();

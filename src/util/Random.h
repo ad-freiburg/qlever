@@ -31,9 +31,8 @@ using RandomSeed = ad_utility::TypedIndex<unsigned int, "Seed">;
  * match (because of the std::enable_if) and there will be a compile-time
  * error.
  */
-template <typename Int>
-requires(std::is_integral_v<Int> && sizeof(Int) <= sizeof(uint64_t))
-class FastRandomIntGenerator {
+CPP_template(typename Int)(requires std::is_integral_v<Int> CPP_and(
+    sizeof(Int) <= sizeof(uint64_t))) class FastRandomIntGenerator {
  public:
   explicit FastRandomIntGenerator(
       RandomSeed seed = RandomSeed::make(std::random_device{}())) {

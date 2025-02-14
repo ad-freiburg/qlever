@@ -21,8 +21,8 @@ using namespace ad_utility::memory_literals;
 // moved. It is necessary to explicitly pass the type `T` stored in the vector
 // to enable the usage of this lambda in combination with `std::bind_front` and
 // `std::ref`.
-template <bool moveElements, typename T, ValueSizeGetter<T> SizeGetter>
-constexpr auto pushSingleElement =
+CPP_template(bool moveElements, typename T, typename SizeGetter)(
+    requires ValueSizeGetter<SizeGetter, T>) constexpr auto pushSingleElement =
     [](std::vector<T>& buffer, MemorySize& sz, auto& el) {
       sz += SizeGetter{}(el);
       if constexpr (moveElements) {
@@ -35,13 +35,13 @@ constexpr auto pushSingleElement =
 // This concept is fulfilled if `Range` is a range that stores values of type
 // `T`.
 template <typename Range, typename T>
-concept RangeWithValue = ql::ranges::range<Range> &&
-                         std::same_as<ql::ranges::range_value_t<Range>, T>;
+CPP_concept RangeWithValue = ql::ranges::range<Range> &&
+                             std::same_as<ql::ranges::range_value_t<Range>, T>;
 
 // Fulfilled if `Range` is a random access range the elements of which are
 // ranges of elements of type `T`, e.g. `std::vector<std::generator<T>>`.
 template <typename Range, typename T>
-concept RandomAccessRangeOfRanges =
+CPP_concept RandomAccessRangeOfRanges =
     ql::ranges::random_access_range<Range> &&
     RangeWithValue<ql::ranges::range_value_t<Range>, T>;
 
@@ -51,12 +51,15 @@ concept RandomAccessRangeOfRanges =
 // ranges will be moved.
 // TODO<joka921> Maybe add a `buffering generator` that automatically stores the
 // buffers.
-template <typename T, bool moveElements, ValueSizeGetter<T> SizeGetter>
-cppcoro::generator<std::vector<T>> lazyBinaryMerge(
-    MemorySize maxMem, size_t maxBlockSize, RangeWithValue<T> auto range1,
-    RangeWithValue<T> auto range2,
-    ad_utility::InvocableWithExactReturnType<bool, const T&, const T&> auto
-        comparison) {
+CPP_template(typename T, bool moveElements, typename SizeGetter,
+             typename Range1, typename Range2, typename ComparisonFuncT)(
+    requires ValueSizeGetter<SizeGetter, T> CPP_and RangeWithValue<Range1, T>
+        CPP_and RangeWithValue<Range2, T>
+            CPP_and ad_utility::InvocableWithExactReturnType<
+                ComparisonFuncT, bool, const T&, const T&>)
+    cppcoro::generator<std::vector<T>> lazyBinaryMerge(
+        MemorySize maxMem, size_t maxBlockSize, Range1 range1, Range2 range2,
+        ComparisonFuncT comparison) {
   // Set up the buffer as well as a lambda to clear and reserve it.
   std::vector<T> buffer;
   MemorySize sizeOfCurrentBlock{};
@@ -148,10 +151,11 @@ cppcoro::generator<std::vector<T>> lazyBinaryMerge(
 
 // Yield the elements of the `range` in blocks of the given `blocksize`.
 // TODO<joka921> This gets much simpler with the buffering generator.
-template <typename T, bool moveElements, ValueSizeGetter<T> SizeGetter>
-cppcoro::generator<std::vector<T>> batchToVector(MemorySize maxMem,
-                                                 size_t blocksize,
-                                                 RangeWithValue<T> auto range) {
+CPP_template(typename T, bool moveElements, typename SizeGetter, typename R)(
+    requires ValueSizeGetter<SizeGetter, T> CPP_and RangeWithValue<R, T>)
+    cppcoro::generator<std::vector<T>> batchToVector(MemorySize maxMem,
+                                                     size_t blocksize,
+                                                     R range) {
   std::vector<T> buffer;
   buffer.reserve(blocksize);
   MemorySize curMem = 0_B;
@@ -172,12 +176,15 @@ cppcoro::generator<std::vector<T>> batchToVector(MemorySize maxMem,
 // The recursive implementation of `parallelMultiwayMerge` (see below). The
 // difference is, that the memory limit in this function is per node in the
 // recursion tree.
-template <typename T, bool moveElements,
-          ValueSizeGetter<T> SizeGetter = DefaultValueSizeGetter<T>>
-cppcoro::generator<std::vector<T>> parallelMultiwayMergeImpl(
-    MemorySize maxMemPerNode, size_t blocksize,
-    detail::RandomAccessRangeOfRanges<T> auto&& rangeOfRanges,
-    InvocableWithExactReturnType<bool, const T&, const T&> auto comparison) {
+CPP_template(typename T, bool moveElements, typename SizeGetter, typename R,
+             typename ComparisonFuncT)(
+    requires detail::RandomAccessRangeOfRanges<R, T> CPP_and
+        ValueSizeGetter<SizeGetter, T>
+            CPP_and InvocableWithExactReturnType<ComparisonFuncT, bool,
+                                                 const T&, const T&>)
+    cppcoro::generator<std::vector<T>> parallelMultiwayMergeImpl(
+        MemorySize maxMemPerNode, size_t blocksize, R&& rangeOfRanges,
+        ComparisonFuncT comparison) {
   AD_CORRECTNESS_CHECK(!rangeOfRanges.empty());
   auto moveIf = [](auto& range) -> decltype(auto) {
     if constexpr (moveElements) {
@@ -205,14 +212,18 @@ cppcoro::generator<std::vector<T>> parallelMultiwayMergeImpl(
 
     auto parallelMerge = [join, blocksize, comparison, maxMemPerNode](
                              auto it, auto end) {
+      auto subRange{ql::ranges::subrange{it, end}};
       return join(parallelMultiwayMergeImpl<T, moveElements, SizeGetter>(
-          maxMemPerNode, blocksize, ql::ranges::subrange{it, end}, comparison));
+          maxMemPerNode, blocksize, std::move(subRange), comparison));
     };
+
+    auto mergeRange1 = parallelMerge(beg, splitIt);
+    auto mergeRange2 = parallelMerge(splitIt, end);
 
     return ad_utility::streams::runStreamAsync(
         detail::lazyBinaryMerge<T, moveElements, SizeGetter>(
-            maxMemPerNode, blocksize, parallelMerge(beg, splitIt),
-            parallelMerge(splitIt, end), comparison),
+            maxMemPerNode, blocksize, std::move(mergeRange1),
+            std::move(mergeRange2), comparison),
         2);
   }
 }
@@ -223,19 +234,30 @@ cppcoro::generator<std::vector<T>> parallelMultiwayMergeImpl(
 // used in addition to limit the size of intermediate blocks in the recursive
 // implementation. It can be tweaked for maximum performance, currently values
 // of at least `50-100` seem to work well.
+CPP_template(typename T, bool moveElements,
+             typename SizeGetter)(requires ValueSizeGetter<SizeGetter,
+                                                           T>)  //
+    struct ParallelMultiwayMergeStruct {
+  CPP_template_2(typename R, typename Comp)(
+      requires detail::RandomAccessRangeOfRanges<R, T> CPP_and
+          ValueSizeGetter<SizeGetter, T>
+              CPP_and
+                  InvocableWithExactReturnType<Comp, bool, const T&, const T&>)
+      cppcoro::generator<std::vector<T>>
+      operator()(MemorySize memoryLimit, R&& rangeOfRanges, Comp comparison,
+                 size_t blocksize = 100) const {
+    // There is one suboperation per input in the recursion tree, so we have to
+    // divide the memory limit.
+    auto maxMemPerNode = memoryLimit / ql::ranges::size(rangeOfRanges);
+    return detail::parallelMultiwayMergeImpl<T, moveElements, SizeGetter>(
+        maxMemPerNode, blocksize, AD_FWD(rangeOfRanges), std::move(comparison));
+  }
+};
+// A variable, s.t. we don't have to initiate a struct each time.
 template <typename T, bool moveElements,
-          ValueSizeGetter<T> SizeGetter = DefaultValueSizeGetter<T>>
-cppcoro::generator<std::vector<T>> parallelMultiwayMerge(
-    MemorySize memoryLimit,
-    detail::RandomAccessRangeOfRanges<T> auto&& rangeOfRanges,
-    InvocableWithExactReturnType<bool, const T&, const T&> auto comparison,
-    size_t blocksize = 100) {
-  // There is one suboperation per input in the recursion tree, so we have to
-  // divide the memory limit.
-  auto maxMemPerNode = memoryLimit / ql::ranges::size(rangeOfRanges);
-  return detail::parallelMultiwayMergeImpl<T, moveElements, SizeGetter>(
-      maxMemPerNode, blocksize, AD_FWD(rangeOfRanges), std::move(comparison));
-}
+          typename SizeGetter = DefaultValueSizeGetter<T>>
+constexpr ParallelMultiwayMergeStruct<T, moveElements, SizeGetter>
+    parallelMultiwayMerge;
 }  // namespace ad_utility
 
 #endif  // QLEVER_PARALLELMULTIWAYMERGE_H

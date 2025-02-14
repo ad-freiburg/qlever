@@ -176,9 +176,31 @@ ExecuteUpdate::computeGraphUpdateQuads(
       cancellationHandle->throwIfCancelled();
     }
   }
+  sortAndRemoveDuplicates(toInsert);
+  sortAndRemoveDuplicates(toDelete);
+  metadata.inUpdate_ = DeltaTriplesCount{static_cast<int64_t>(toInsert.size()),
+                                         static_cast<int64_t>(toDelete.size())};
+  toDelete = setMinus(toDelete, toInsert);
   metadata.triplePreparationTime_ = timer.msecs();
 
   return {
       IdTriplesAndLocalVocab{std::move(toInsert), std::move(localVocabInsert)},
       IdTriplesAndLocalVocab{std::move(toDelete), std::move(localVocabDelete)}};
+}
+
+// _____________________________________________________________________________
+void ExecuteUpdate::sortAndRemoveDuplicates(
+    std::vector<IdTriple<>>& container) {
+  ql::ranges::sort(container);
+  container.erase(std::unique(container.begin(), container.end()),
+                  container.end());
+}
+
+// _____________________________________________________________________________
+std::vector<IdTriple<>> ExecuteUpdate::setMinus(
+    const std::vector<IdTriple<>>& a, const std::vector<IdTriple<>>& b) {
+  std::vector<IdTriple<>> reducedToDelete;
+  reducedToDelete.reserve(a.size());
+  ql::ranges::set_difference(a, b, std::back_inserter(reducedToDelete));
+  return reducedToDelete;
 }

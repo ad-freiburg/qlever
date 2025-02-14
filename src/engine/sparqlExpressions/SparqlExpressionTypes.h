@@ -116,9 +116,10 @@ CPP_concept SingleExpressionResult =
     ad_utility::SimilarToAnyTypeIn<T, ExpressionResult>;
 
 // Copy an expression result.
-CPP_template(typename E)(
-    requires ad_utility::SimilarTo<E, ExpressionResult>) inline ExpressionResult
-    copyExpressionResult(E&& result) {
+CPP_template(typename ResultT)(
+    requires ad_utility::SimilarTo<ResultT,
+                                   ExpressionResult>) inline ExpressionResult
+    copyExpressionResult(ResultT&& result) {
   auto copyIfCopyable =
       []<typename R>(const R& x) -> CPP_ret(ExpressionResult)(
                                      requires SingleExpressionResult<R>) {
@@ -277,7 +278,7 @@ struct SpecializedFunction {
     if (!areAllOperandsValid<Operands...>(operands...)) {
       return std::nullopt;
     } else {
-      if constexpr (ranges::invocable<Function, Operands...>) {
+      if constexpr (ranges::invocable<Function, Operands&&...>) {
         return Function{}(std::forward<Operands>(operands)...);
       } else {
         AD_FAIL();
@@ -334,11 +335,12 @@ std::optional<ExpressionResult> evaluateOnSpecializedFunctionsIfPossible(
 // for multiple `ValueGetters` because there can be multiple `ValueGetters` as
 // well as zero or more `SpezializedFunctions`, but there can only be a single
 // parameter pack in C++.
-template <
-    size_t NumOperands,
-    ad_utility::isInstantiation<FunctionAndValueGetters>
-        FunctionAndValueGettersT,
-    ad_utility::isInstantiation<SpecializedFunction>... SpecializedFunctions>
+template <size_t NumOperands,
+          QL_CONCEPT_OR_TYPENAME(
+              ad_utility::isInstantiation<FunctionAndValueGetters>)
+              FunctionAndValueGettersT,
+          QL_CONCEPT_OR_TYPENAME(ad_utility::isInstantiation<
+                                 SpecializedFunction>)... SpecializedFunctions>
 struct Operation {
  private:
   using OriginalValueGetters = typename FunctionAndValueGettersT::ValueGetters;
