@@ -109,8 +109,8 @@ ProtoResult ExistsJoin::computeResult([[maybe_unused]] bool requestLaziness) {
   // columns (in which case we can use a simpler and cheaper join algorithm).
   //
   // TODO<joka921> This is the most common case. There are many other cases
-  // where the generic `zipperJoinWithUndef` can be optimized. We will those
-  // for a later PR.
+  // where the generic `zipperJoinWithUndef` can be optimized. This is work for
+  // a future PR.
   size_t numJoinColumns = joinColumnsLeft.numColumns();
   AD_CORRECTNESS_CHECK(numJoinColumns == joinColumnsRight.numColumns());
   bool isCheap = ql::ranges::none_of(
@@ -128,14 +128,14 @@ ProtoResult ExistsJoin::computeResult([[maybe_unused]] bool requestLaziness) {
   // Boolean column) should be `false`.
   std::vector<size_t, ad_utility::AllocatorWithLimit<size_t>> notExistsIndices{
       allocator()};
-  // Run the actual exists join, but use `callFixedSize` for the number of join
-  // columns.
+  // Helper lambda for computing the exists join with `callFixedSize`, which
+  // makes the number of join columns a template parameter.
   auto runForNumJoinCols = [&notExistsIndices, isCheap, &noopRowAdder,
                             &colsLeftDynamic = joinColumnsLeft,
                             &colsRightDynamic = joinColumnsRight,
                             this]<int NumJoinCols>() {
-    // The callback is called with iterators, so we convert them back to
-    // indices.
+    // The `actionForNotExisting` callback gets iterators as input, but should
+    // output indices, hence the pointer arithmetic.
     auto joinColumnsLeft = colsLeftDynamic.asStaticView<NumJoinCols>();
     auto joinColumnsRight = colsRightDynamic.asStaticView<NumJoinCols>();
     auto actionForNotExisting =

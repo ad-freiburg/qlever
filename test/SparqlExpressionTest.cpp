@@ -1468,9 +1468,11 @@ TEST(SingleUseExpression, simpleMembersForTestCoverage) {
   EXPECT_ANY_THROW(expression.getCacheKey({}));
 }
 
-// The actual implementation of EXISTS is done in the ExistsJoin, which  is also
-// properly tested.
-TEST(ExistsExpression, dummyTests) {
+// This just tests basic functionality of the `ExistsExpression` class. Since
+// the actual implementation of the `EXISTS` operator is done in the
+// `ExistsJoin` class, most of the testing happens in
+// `test/engine/ExistsJoinTest.cpp`.
+TEST(ExistsExpression, basicFunctionality) {
   ExistsExpression exists{ParsedQuery{}};
   auto var = exists.variable();
   TestContext context;

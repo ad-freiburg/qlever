@@ -51,9 +51,10 @@ class ExistsExpression : public SparqlExpression {
       return absl::StrCat("ExistsExpression col# ",
                           varColMap.at(variable_).columnIndex_);
     } else {
-      // This means that the necessary `ExistsJoin` hasn't been set up yet. This
-      // can for example happen if `getCacheKey` is called during the query
-      // planning.
+      // This means that the necessary `ExistsJoin` hasn't been set up yet. For
+      // example, this can happen if `getCacheKey` is called during query
+      // planning (which is done to avoid redundant evaluation in the case of
+      // identical subtrees in the query plan).
       return absl::StrCat("Uninitialized Exists: ",
                           ad_utility::FastRandomIntGenerator<size_t>{}());
     }
