@@ -216,8 +216,8 @@ void GroupBy::processGroup(
   evaluationContext._previousResultsFromSameGroup.at(resultColumn) =
       sparqlExpression::copyExpressionResult(expressionResult);
 
-  auto visitor = [&]<sparqlExpression::SingleExpressionResult T>(
-                     T&& singleResult) mutable {
+  auto visitor = CPP_template_lambda_mut(&)(typename T)(T && singleResult)(
+      requires sparqlExpression::SingleExpressionResult<T>) {
     constexpr static bool isStrongId = std::is_same_v<T, Id>;
     AD_CONTRACT_CHECK(sparqlExpression::isConstantResult<T>);
     if constexpr (isStrongId) {
@@ -1105,12 +1105,11 @@ void GroupBy::extractValues(
     sparqlExpression::ExpressionResult&& expressionResult,
     sparqlExpression::EvaluationContext& evaluationContext,
     IdTable* resultTable, LocalVocab* localVocab, size_t outCol) {
-  auto visitor = [&evaluationContext, &resultTable, &localVocab,
-                  &outCol]<sparqlExpression::SingleExpressionResult T>(
-                     T&& singleResult) mutable {
+  auto visitor = CPP_template_lambda_mut(&evaluationContext, &resultTable,
+                                         &localVocab, &outCol)(typename T)(
+      T && singleResult)(requires sparqlExpression::SingleExpressionResult<T>) {
     auto generator = sparqlExpression::detail::makeGenerator(
-        std::forward<T>(singleResult), evaluationContext.size(),
-        &evaluationContext);
+        AD_FWD(singleResult), evaluationContext.size(), &evaluationContext);
 
     auto targetIterator =
         resultTable->getColumn(outCol).begin() + evaluationContext._beginIndex;
@@ -1488,10 +1487,10 @@ static constexpr auto makeProcessGroupsVisitor =
     [](size_t blockSize,
        const sparqlExpression::EvaluationContext* evaluationContext,
        const std::vector<size_t>& hashEntries) {
-      return [blockSize, evaluationContext,
-              &hashEntries]<sparqlExpression::SingleExpressionResult T,
-                            VectorOfAggregationData A>(
-                 T&& singleResult, A& aggregationDataVector) {
+      return CPP_template_lambda(blockSize, evaluationContext, &hashEntries)(
+          typename T, typename A)(T && singleResult, A & aggregationDataVector)(
+          requires sparqlExpression::SingleExpressionResult<T> &&
+          VectorOfAggregationData<A>) {
         auto generator = sparqlExpression::detail::makeGenerator(
             std::forward<T>(singleResult), blockSize, evaluationContext);
 

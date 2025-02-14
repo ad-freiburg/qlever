@@ -57,10 +57,11 @@ class StringExpressionImpl : public SparqlExpression {
   SparqlExpression::Ptr impl_;
 
  public:
-  explicit StringExpressionImpl(
-      SparqlExpression::Ptr child,
-      std::same_as<SparqlExpression::Ptr> auto... children)
-      requires(sizeof...(children) + 1 == N) {
+  CPP_template(typename... C)(
+      requires(concepts::same_as<C, SparqlExpression::Ptr>&&...)
+          CPP_and(sizeof...(C) + 1 ==
+                  N)) explicit StringExpressionImpl(SparqlExpression::Ptr child,
+                                                    C... children) {
     AD_CORRECTNESS_CHECK(child != nullptr);
     if (child->isStrExpression()) {
       auto childrenOfStr = std::move(*child).moveChildrenOut();
@@ -95,12 +96,13 @@ class StringExpressionImpl : public SparqlExpression {
 // strings.
 template <typename Function>
 struct LiftStringFunction {
-  template <std::same_as<std::optional<std::string>>... Arguments>
-  auto operator()(Arguments... arguments) const {
+  CPP_template(typename... Arguments)(requires(
+      concepts::same_as<Arguments, std::optional<std::string>>&&...)) auto
+  operator()(Arguments... arguments) const {
     using ResultOfFunction =
         decltype(std::invoke(Function{}, std::move(arguments.value())...));
-    static_assert(std::same_as<ResultOfFunction, Id> ||
-                      std::same_as<ResultOfFunction, LiteralOrIri>,
+    static_assert(concepts::same_as<ResultOfFunction, Id> ||
+                      concepts::same_as<ResultOfFunction, LiteralOrIri>,
                   "Template argument of `LiftStringFunction` must return `Id` "
                   "or `std::string`");
     using Result =
@@ -168,13 +170,13 @@ class SubstrImpl {
   // Round an integer or floating point to the nearest integer according to the
   // SPARQL standard. This means that -1.5 is rounded to -1.
   static constexpr auto round = []<typename T>(const T& value) -> int64_t {
-    if constexpr (std::floating_point<T>) {
+    if constexpr (ad_utility::FloatingPoint<T>) {
       if (value < 0) {
         return static_cast<int64_t>(-std::round(-value));
       } else {
         return static_cast<int64_t>(std::round(value));
       }
-    } else if constexpr (std::integral<T>) {
+    } else if constexpr (concepts::integral<T>) {
       return static_cast<int64_t>(value);
     } else {
       AD_FAIL();
@@ -234,9 +236,9 @@ using SubstrExpression =
 
 namespace {
 
-template <typename NaryOperation>
-requires(isOperation<NaryOperation>)
-class StrStartsExpressionImpl : public NaryExpression<NaryOperation> {
+CPP_template(typename NaryOperation)(
+    requires isOperation<NaryOperation>) class StrStartsExpressionImpl
+    : public NaryExpression<NaryOperation> {
  public:
   using NaryExpression<NaryOperation>::NaryExpression;
   std::vector<PrefilterExprVariablePair> getPrefilterExpressionForMetadata(
@@ -380,9 +382,9 @@ class ConcatExpression : public detail::VariadicExpression {
     // If the result is a string, then all the previously evaluated children
     // were constants (see above).
     std::variant<std::string, StringVec> result{std::string{""}};
-    auto visitSingleExpressionResult =
-        [&ctx, &result ]<SingleExpressionResult T>(T && s)
-            requires std::is_rvalue_reference_v<T&&> {
+    auto visitSingleExpressionResult = CPP_template_lambda(
+        &ctx, &result)(typename T)(T && s)(requires SingleExpressionResult<T> &&
+                                           std::is_rvalue_reference_v<T&&>) {
       if constexpr (isConstantResult<T>) {
         std::string strFromConstant = StringValueGetter{}(s, ctx).value_or("");
         if (std::holds_alternative<std::string>(result)) {
@@ -545,8 +547,9 @@ using std::make_unique;
 using std::move;
 using Expr = SparqlExpression::Ptr;
 
-template <typename T>
-Expr make(std::same_as<Expr> auto&... children) {
+CPP_template(typename T,
+             typename... C)(requires(concepts::same_as<Expr, C>&&...)) Expr
+    make(C&... children) {
   return std::make_unique<T>(std::move(children)...);
 }
 Expr makeStrExpression(Expr child) { return make<StrExpression>(child); }

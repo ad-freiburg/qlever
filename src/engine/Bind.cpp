@@ -171,8 +171,8 @@ IdTable Bind::computeExpressionBind(
   idTable.addEmptyColumn();
   auto outputColumn = idTable.getColumn(idTable.numColumns() - 1);
 
-  auto visitor = [&]<sparqlExpression::SingleExpressionResult T>(
-                     T&& singleResult) mutable {
+  auto visitor = CPP_template_lambda_mut(&)(typename T)(T && singleResult)(
+      requires sparqlExpression::SingleExpressionResult<T>) {
     constexpr static bool isVariable = std::is_same_v<T, ::Variable>;
     constexpr static bool isStrongId = std::is_same_v<T, Id>;
 
@@ -190,8 +190,7 @@ IdTable Bind::computeExpressionBind(
       constexpr bool isConstant = sparqlExpression::isConstantResult<T>;
 
       auto resultGenerator = sparqlExpression::detail::makeGenerator(
-          std::forward<T>(singleResult), outputColumn.size(),
-          &evaluationContext);
+          AD_FWD(singleResult), outputColumn.size(), &evaluationContext);
 
       if constexpr (isConstant) {
         auto it = resultGenerator.begin();

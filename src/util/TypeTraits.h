@@ -361,4 +361,8 @@ concept RegularInvocableWithExactReturnType =
 // auto&& x) // guaranteed rvalue reference, can safely be moved.
 template <typename T>
 concept Rvalue = std::is_rvalue_reference_v<T&&>;
+
+// Ensures that T is a floating-point type.
+template <typename T>
+CPP_concept FloatingPoint = std::is_floating_point_v<T>;
 }  // namespace ad_utility
