@@ -234,7 +234,7 @@ class TransitivePathImpl : public TransitivePathBase {
     // in connected nodes first, and then fallback to the expensive computation.
     if (minDist_ == 0 && checkFirstNode &&
         (!target.has_value() || startNode == target.value()) &&
-        (connectedNodes.contains(startNode) || edges.containsNode(startNode))) {
+        !connectedNodes.contains(startNode) && edges.containsNode(startNode)) {
       connectedNodes.insert(startNode);
     }
 
