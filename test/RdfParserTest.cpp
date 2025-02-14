@@ -1025,11 +1025,23 @@ TEST(RdfParserTest, exceptionOnScatteredPrefixOrBaseInParallelParser) {
       "<subject2> <predicate2> <object2> . \n"
       "@prefix ex: <http://example.org/> . \n";
   forAllParallelParsers(testWithParser, 40_B, inputWithScatteredPrefix);
+  std::string inputWithScatteredSparqlPrefix =
+      "PREFIX ex: <http://example.org/> . \n"
+      "<subject1> <predicate1> <object1> . \n "
+      "<subject2> <predicate2> <object2> . \n"
+      "PREFIX ex: <http://example.org/> . \n";
+  forAllParallelParsers(testWithParser, 40_B, inputWithScatteredPrefix);
   std::string inputWithScatteredBase =
-      "@base: <http://example.org/> . \n"
+      "@base <http://example.org/> . \n"
       "<subject1> <predicate1> <object1> . \n "
       "<subject2> <predicate2> <object2> . \n"
       "@base <http://example.org/> . \n";
+  forAllParallelParsers(testWithParser, 40_B, inputWithScatteredPrefix);
+  std::string inputWithScatteredSparqlBase =
+      "BASE <http://example.org/> . \n"
+      "<subject1> <predicate1> <object1> . \n "
+      "<subject2> <predicate2> <object2> . \n"
+      "BASE <http://example.org/> . \n";
   forAllParallelParsers(testWithParser, 40_B, inputWithScatteredPrefix);
 }
 
