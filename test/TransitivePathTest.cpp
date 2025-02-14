@@ -15,7 +15,6 @@
 #include "engine/ValuesForTesting.h"
 #include "util/GTestHelpers.h"
 #include "util/IdTableHelpers.h"
-#include "util/IndexTestHelpers.h"
 
 using ad_utility::testing::getQec;
 namespace {
@@ -530,6 +529,56 @@ TEST_P(TransitivePathTest, startNodesWithNoMatchesLeftBound) {
       true, sub.clone(), {Variable{"?start"}, Variable{"?target"}},
       split(leftOpTable), 0, {Variable{"?start"}, Variable{"?x"}}, left, right,
       1, std::numeric_limits<size_t>::max());
+
+  auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+  assertResultMatchesIdTable(resultTable, expected);
+}
+
+// _____________________________________________________________________________
+TEST_P(TransitivePathTest, boundReverseConnectedValuesOnZeroPath) {
+  auto sub = makeIdTableFromVector({
+      {1, 2},
+      {3, 4},
+  });
+
+  auto leftOpTable = makeIdTableFromVector({
+      {2},
+  });
+
+  auto expected = makeIdTableFromVector({
+      {2, 2},
+  });
+
+  TransitivePathSide left(std::nullopt, 0, Variable{"?x"}, 0);
+  TransitivePathSide right(std::nullopt, 1, Variable{"?y"}, 1);
+  auto T =
+      makePathBound(true, sub.clone(), {Variable{"?x"}, Variable{"?y"}},
+                    split(leftOpTable), 0, {Variable{"?x"}}, left, right, 0, 0);
+
+  auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+  assertResultMatchesIdTable(resultTable, expected);
+}
+
+// _____________________________________________________________________________
+TEST_P(TransitivePathTest, boundForwardValuesOnZeroPath) {
+  auto sub = makeIdTableFromVector({
+      {1, 2},
+      {3, 4},
+  });
+
+  auto leftOpTable = makeIdTableFromVector({
+      {3},
+  });
+
+  auto expected = makeIdTableFromVector({
+      {3, 3},
+  });
+
+  TransitivePathSide left(std::nullopt, 0, Variable{"?x"}, 0);
+  TransitivePathSide right(std::nullopt, 1, Variable{"?y"}, 1);
+  auto T =
+      makePathBound(true, sub.clone(), {Variable{"?x"}, Variable{"?y"}},
+                    split(leftOpTable), 0, {Variable{"?x"}}, left, right, 0, 0);
 
   auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
   assertResultMatchesIdTable(resultTable, expected);

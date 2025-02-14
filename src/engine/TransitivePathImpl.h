@@ -206,16 +206,12 @@ class TransitivePathImpl : public TransitivePathBase {
     Set connectedNodes{getExecutionContext()->getAllocator()};
     stack.emplace_back(startNode, 0);
 
-    if (minDist_ == 0 && (!target.has_value() || startNode == target.value())) {
-      connectedNodes.insert(startNode);
-    }
-
     while (!stack.empty()) {
       checkCancellation();
       auto [node, steps] = stack.back();
       stack.pop_back();
 
-      if (steps <= maxDist_ && marks.count(node) == 0) {
+      if (steps <= maxDist_ && !marks.contains(node)) {
         if (steps >= minDist_) {
           marks.insert(node);
           if (!target.has_value() || node == target.value()) {
@@ -313,7 +309,8 @@ class TransitivePathImpl : public TransitivePathBase {
    * computation.
    *
    * @param startSide The TransitivePathSide where the edges start
-   * @param startSideTable An IdTable containing the Ids for the startSide
+   * @param startSideResult A `Result` wrapping an `IdTable` containing the Ids
+   * for the startSide
    * @return cppcoro::generator<TableColumnWithVocab> An generator for
    * the transitive hull computation
    */
@@ -335,7 +332,7 @@ class TransitivePathImpl : public TransitivePathBase {
                                       std::move(localVocab)};
       }
     }
-  };
+  }
 
   virtual T setupEdgesMap(const IdTable& dynSub,
                           const TransitivePathSide& startSide,
