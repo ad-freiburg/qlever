@@ -952,7 +952,7 @@ ParsedQuery::GraphPattern QueryPlanner::seedFromIri(
 }
 
 ParsedQuery::GraphPattern QueryPlanner::uniteGraphPatterns(
-    std::vector<ParsedQuery::GraphPattern>&& patterns) const {
+    std::vector<ParsedQuery::GraphPattern>&& patterns) {
   using GraphPattern = ParsedQuery::GraphPattern;
   // Build a tree of union operations
   auto p = GraphPattern{};

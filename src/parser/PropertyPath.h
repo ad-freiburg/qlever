@@ -3,6 +3,7 @@
 // Author: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
 #pragma once
 
+#include <cstdint>
 #include <initializer_list>
 #include <string>
 #include <vector>
@@ -11,7 +12,7 @@
 
 class PropertyPath {
  public:
-  enum class Operation {
+  enum class Operation : std::uint8_t {
     SEQUENCE,
     ALTERNATIVE,
     INVERSE,
@@ -36,15 +37,15 @@ class PropertyPath {
     return p;
   }
 
-  static PropertyPath fromVariable(Variable var) {
+  static PropertyPath fromVariable(const Variable& var) {
     PropertyPath p(Operation::IRI);
-    p.iri_ = std::move(var.name());
+    p.iri_ = var.name();
     return p;
   }
 
   static PropertyPath makeWithChildren(std::vector<PropertyPath> children,
-                                       Operation op) {
-    PropertyPath p(std::move(op));
+                                       const Operation op) {
+    PropertyPath p(op);
     p.children_ = std::move(children);
     return p;
   }
