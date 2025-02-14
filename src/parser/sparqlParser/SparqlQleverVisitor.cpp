@@ -7,7 +7,6 @@
 
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
 
-#include <absl/strings/str_join.h>
 #include <absl/strings/str_split.h>
 
 #include <string>
@@ -2320,12 +2319,10 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
     AD_CORRECTNESS_CHECK(argList.size() == 2);
     return function(std::move(argList[0]), std::move(argList[1]));
   };
-  auto createTernary = [&
-      argList]<typename Function,
-               typename = std::enable_if_t<
-                   std::is_invocable_r_v<ExpressionPtr, Function, ExpressionPtr,
-                                         ExpressionPtr, ExpressionPtr>>>(
-      Function function) {
+
+  auto createTernary = CPP_template_lambda(&argList)(typename F)(F function)(
+      requires std::is_invocable_r_v<ExpressionPtr, F, ExpressionPtr,
+                                     ExpressionPtr, ExpressionPtr>) {
     AD_CORRECTNESS_CHECK(argList.size() == 3);
     return function(std::move(argList[0]), std::move(argList[1]),
                     std::move(argList[2]));
@@ -2479,9 +2476,11 @@ SparqlExpression::Ptr Visitor::visit(Parser::StrReplaceExpressionContext* ctx) {
     reportError(
         ctx,
         "REPLACE expressions with four arguments (including regex flags) are "
-        "currently not supported by QLever. You can however incorporate flags "
+        "currently not supported by QLever. You can however incorporate "
+        "flags "
         "directly into a regex by prepending `(?<flags>)` to your regex. For "
-        "example `(?i)[ei]` will match the regex `[ei]` in a case-insensitive "
+        "example `(?i)[ei]` will match the regex `[ei]` in a "
+        "case-insensitive "
         "way.");
   }
   return sparqlExpression::makeReplaceExpression(std::move(children.at(0)),
@@ -2539,8 +2538,8 @@ ExpressionPtr Visitor::visit(Parser::AggregateContext* ctx) {
     std::string separator;
     if (ctx->string()) {
       // TODO: The string rule also allow triple quoted strings with different
-      //  escaping rules. These are currently not handled. They should be parsed
-      //  into a typesafe format with a unique representation.
+      //  escaping rules. These are currently not handled. They should be
+      //  parsed into a typesafe format with a unique representation.
       separator = visit(ctx->string()).get();
       // If there was a separator, we have to strip the quotation marks
       AD_CONTRACT_CHECK(separator.size() >= 2);
@@ -2658,7 +2657,7 @@ GraphTerm Visitor::visit(Parser::BlankNodeContext* ctx) {
 // ____________________________________________________________________________________
 CPP_template_def(typename Ctx)(
     requires Visitor::voidWhenVisited<Visitor, Ctx>) void Visitor::
-    visitVector(const std::vector<Ctx*>& childContexts) {
+    visitVector(const vector<Ctx*>& childContexts) {
   for (const auto& child : childContexts) {
     visit(child);
   }
@@ -2686,7 +2685,8 @@ Out Visitor::visitAlternative(Contexts*... ctxs) {
     (..., visitIf(ctxs));
   } else {
     std::optional<Out> out;
-    // Visit the one `context` which is not null and write the result to `out`.
+    // Visit the one `context` which is not null and write the result to
+    // `out`.
     (..., visitIf<std::optional<Out>, Out>(&out, ctxs));
     return std::move(out.value());
   }
