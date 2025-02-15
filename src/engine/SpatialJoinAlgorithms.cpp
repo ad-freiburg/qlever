@@ -106,47 +106,33 @@ size_t SpatialJoinAlgorithms::convertGeoPointToPoint(GeoPoint point) {
 
 // ____________________________________________________________________________
 Id SpatialJoinAlgorithms::computeDist(RtreeEntry& geo1, RtreeEntry& geo2) {
-  auto convertPoint = [&](size_t geometryIndex, std::optional<Box> bbox) {
-    if (!bbox.has_value()) {
-      bbox = boost::apply_visitor(BoundingBoxVisitor(),
-                                  geometries_.at(geometryIndex));
+  auto convertPoint = [&](RtreeEntry& entry) {
+    if (entry.geoPoint_) {
+      return entry.geoPoint_.value();
     }
-    const auto& areaBox = bbox.value();
-    Point p = calculateMidpointOfBox(areaBox);
+    if (!entry.boundingBox_.has_value()) {
+      entry.boundingBox_ = boost::apply_visitor(
+          BoundingBoxVisitor(), geometries_.at(entry.geometryIndex_.value()));
+    }
+    Point p = calculateMidpointOfBox(entry.boundingBox_.value());
     return GeoPoint(p.get<1>(), p.get<0>());
   };
+
+  auto getIndex = [&](RtreeEntry& entry) {
+    if (!entry.geometryIndex_) {
+      entry.geometryIndex_ = convertGeoPointToPoint(entry.geoPoint_.value());
+    }
+    return entry.geometryIndex_.value();
+  };
+
   // use the already parsed geometries to calculate the distance
-  if (useMidpointForAreas_) {
-    auto point1 = geo1.geoPoint_;
-    auto point2 = geo2.geoPoint_;
-    if (!point1) {
-      point1 =
-          convertPoint(geo1.geometryIndex_.value(), geo1.boundingBox_.value());
-    }
-    if (!point2) {
-      point2 =
-          convertPoint(geo2.geometryIndex_.value(), geo2.boundingBox_.value());
-    }
-    return Id::makeFromDouble(
-        ad_utility::detail::wktDistImpl(point1.value(), point2.value()));
+  if (useMidpointForAreas_ ||
+      geo1.geoPoint_.has_value() && geo2.geoPoint_.has_value()) {
+    return Id::makeFromDouble(ad_utility::detail::wktDistImpl(
+        convertPoint(geo1), convertPoint(geo2)));
   } else {
-    if (geo1.geoPoint_.has_value() && geo2.geoPoint_.has_value()) {
-      return Id::makeFromDouble(ad_utility::detail::wktDistImpl(
-          geo1.geoPoint_.value(), geo2.geoPoint_.value()));
-    } else if (geo1.geometryIndex_.has_value() &&
-               geo2.geometryIndex_.has_value()) {
-      return Id::makeFromDouble(computeDist(geo1.geometryIndex_.value(),
-                                            geo2.geometryIndex_.value()));
-    } else {
-      // one point and one area
-      if (!geo1.geometryIndex_) {
-        geo1.geometryIndex_ = convertGeoPointToPoint(geo1.geoPoint_.value());
-      } else if (!geo2.geometryIndex_) {
-        geo2.geometryIndex_ = convertGeoPointToPoint(geo2.geoPoint_.value());
-      }
-      return Id::makeFromDouble(computeDist(geo1.geometryIndex_.value(),
-                                            geo2.geometryIndex_.value()));
-    }
+    // at least one area
+    return Id::makeFromDouble(computeDist(getIndex(geo1), getIndex(geo2)));
   }
 }
 
