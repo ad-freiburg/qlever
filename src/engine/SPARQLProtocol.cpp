@@ -14,8 +14,8 @@ GraphOrDefault SPARQLProtocol::extractTargetGraph(
       ad_utility::url_parser::checkParameter(params, "default", "").has_value();
   if (graphIri.has_value() == isDefault) {
     throw std::runtime_error(
-        "Exactly one of the query parameters default or graph must be set to "
-        "identify the graph for the graph store protocol request.");
+        "Exactly one of the query parameters `default` or `graph` must be set "
+        "to identify the graph for the graph store protocol request.");
   }
   if (graphIri.has_value()) {
     return GraphRef::fromIrirefWithoutBrackets(graphIri.value());

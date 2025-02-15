@@ -47,7 +47,7 @@ struct ParsedUrl {
 
 // The different SPARQL operations that a `ParsedRequest` can represent. The
 // operations represent the detected operation type and can contain additional
-// that the operation needs.
+// information that the operation needs.
 namespace sparqlOperation {
 // A SPARQL 1.1 Query
 struct Query {
@@ -65,7 +65,8 @@ struct Update {
   bool operator==(const Update& rhs) const = default;
 };
 
-// A Graph Store HTTP Protocol operation.
+// A Graph Store HTTP Protocol operation. We only store the graph on which the
+// operation acts. The actual operation is extracted later.
 struct GraphStoreOperation {
   GraphOrDefault graph_;
   bool operator==(const GraphStoreOperation& rhs) const = default;

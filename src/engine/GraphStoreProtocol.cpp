@@ -71,7 +71,7 @@ ParsedQuery GraphStoreProtocol::transformGet(const GraphOrDefault& graph) {
   if (const auto* iri =
           std::get_if<ad_utility::triple_component::Iri>(&graph)) {
     query = absl::StrCat("CONSTRUCT { ?s ?p ?o } WHERE { GRAPH ",
-                         (*iri).toStringRepresentation(), " { ?s ?p ?o } }");
+                         iri->toStringRepresentation(), " { ?s ?p ?o } }");
   } else {
     query = "CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o }";
   }
