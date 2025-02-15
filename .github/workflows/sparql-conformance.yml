@@ -1,4 +1,4 @@
-name: sparql-test-suite
+name: sparql-conformance
 
 on:
   push:
