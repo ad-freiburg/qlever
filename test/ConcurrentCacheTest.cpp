@@ -112,6 +112,7 @@ TEST(ConcurrentCache, sequentialComputation) {
   ASSERT_TRUE(a.getStorage().wlock()->_inProgress.empty());
 }
 
+// _____________________________________________________________________________
 TEST(ConcurrentCache, sequentialPinnedComputation) {
   SimpleConcurrentLruCache a{3ul};
   ad_utility::Timer t{ad_utility::Timer::Started};
@@ -143,6 +144,7 @@ TEST(ConcurrentCache, sequentialPinnedComputation) {
   ASSERT_TRUE(a.getStorage().wlock()->_inProgress.empty());
 }
 
+// _____________________________________________________________________________
 TEST(ConcurrentCache, sequentialPinnedUpgradeComputation) {
   SimpleConcurrentLruCache a{3ul};
   ad_utility::Timer t{ad_utility::Timer::Started};
@@ -175,6 +177,7 @@ TEST(ConcurrentCache, sequentialPinnedUpgradeComputation) {
   ASSERT_TRUE(a.getStorage().wlock()->_inProgress.empty());
 }
 
+// _____________________________________________________________________________
 TEST(ConcurrentCache, concurrentComputation) {
   auto a = SimpleConcurrentLruCache(3ul);
   StartStopSignal signal;
@@ -204,6 +207,7 @@ TEST(ConcurrentCache, concurrentComputation) {
   ASSERT_EQ(result2._cacheStatus, ad_utility::CacheStatus::computed);
 }
 
+// _____________________________________________________________________________
 TEST(ConcurrentCache, concurrentPinnedComputation) {
   auto a = SimpleConcurrentLruCache(3ul);
   StartStopSignal signal;
@@ -235,6 +239,7 @@ TEST(ConcurrentCache, concurrentPinnedComputation) {
   ASSERT_EQ(result2._cacheStatus, ad_utility::CacheStatus::computed);
 }
 
+// _____________________________________________________________________________
 TEST(ConcurrentCache, concurrentPinnedUpgradeComputation) {
   auto a = SimpleConcurrentLruCache(3ul);
   StartStopSignal signal;
@@ -267,6 +272,7 @@ TEST(ConcurrentCache, concurrentPinnedUpgradeComputation) {
   ASSERT_EQ(result._cacheStatus, ad_utility::CacheStatus::computed);
 }
 
+// _____________________________________________________________________________
 TEST(ConcurrentCache, abort) {
   auto a = SimpleConcurrentLruCache(3ul);
   StartStopSignal signal;
@@ -293,6 +299,7 @@ TEST(ConcurrentCache, abort) {
   ASSERT_THROW(fut.get(), std::runtime_error);
 }
 
+// _____________________________________________________________________________
 TEST(ConcurrentCache, abortPinned) {
   auto a = SimpleConcurrentLruCache(3ul);
   StartStopSignal signal;
@@ -318,6 +325,7 @@ TEST(ConcurrentCache, abortPinned) {
   ASSERT_THROW(fut.get(), std::runtime_error);
 }
 
+// _____________________________________________________________________________
 TEST(ConcurrentCache, cacheStatusToString) {
   using enum ad_utility::CacheStatus;
   EXPECT_EQ(toString(cachedNotPinned), "cached_not_pinned");
@@ -531,6 +539,7 @@ TEST(ConcurrentCache, testTryInsertIfNotPresentDoesWorkCorrectly) {
   expectContainsSingleElementAtKey0(true, "jkl");
 }
 
+// _____________________________________________________________________________
 TEST(ConcurrentCache, computeButDontStore) {
   SimpleConcurrentLruCache cache{};
 

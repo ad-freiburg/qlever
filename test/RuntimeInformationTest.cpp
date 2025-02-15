@@ -103,6 +103,20 @@ TEST(RuntimeInformation, statusToString) {
 }
 
 // ________________________________________________________________
+TEST(RuntimeInformation, statusFromString) {
+  using enum RuntimeInformation::Status;
+  using R = RuntimeInformation;
+  EXPECT_EQ(R::fromString("fully materialized"), fullyMaterialized);
+  EXPECT_EQ(R::fromString("lazily materialized"), lazilyMaterialized);
+  EXPECT_EQ(R::fromString("not started"), notStarted);
+  EXPECT_EQ(R::fromString("optimized out"), optimizedOut);
+  EXPECT_EQ(R::fromString("failed"), failed);
+  EXPECT_EQ(R::fromString("failed because child failed"),
+            failedBecauseChildFailed);
+  EXPECT_ANY_THROW(R::fromString(""));
+}
+
+// ________________________________________________________________
 TEST(RuntimeInformation, formatDetailValue) {
   std::ostringstream s;
   // Imbue with the same locale as std::cout which uses for example
@@ -133,7 +147,7 @@ TEST(RuntimeInformation, formatDetailValue) {
 }
 
 // ________________________________________________________________
-TEST(RuntimeInformation, toStringAndJson) {
+TEST(RuntimeInformation, stringAndJsonConversion) {
   RuntimeInformation child;
   child.descriptor_ = "child";
   child.numCols_ = 2;
@@ -227,4 +241,36 @@ TEST(RuntimeInformation, toStringAndJson) {
 }
 )";
   ASSERT_EQ(j, nlohmann::ordered_json::parse(expectedJson));
+
+  // Check conversion from JSON to `RuntimeInformation`.
+  auto rtiFieldsCheck = [](const RuntimeInformation& a,
+                           const RuntimeInformation& b) {
+    ASSERT_EQ(a.descriptor_, b.descriptor_);
+    ASSERT_EQ(a.numCols_, b.numCols_);
+    ASSERT_EQ(a.numRows_, b.numRows_);
+    ASSERT_EQ(a.columnNames_, b.columnNames_);
+    ASSERT_EQ(a.totalTime_, b.totalTime_);
+    ASSERT_EQ(a.details_, b.details_);
+    ASSERT_EQ(a.cacheStatus_, b.cacheStatus_);
+    ASSERT_EQ(a.status_, b.status_);
+    ASSERT_EQ(a.children_.size(), b.children_.size());
+  };
+
+  auto rtiEqual = [rtiFieldsCheck](const RuntimeInformation& a,
+                                   const RuntimeInformation& b) {
+    rtiFieldsCheck(a, b);
+    for (size_t i = 0; i < a.children_.size(); ++i) {
+      rtiFieldsCheck(*a.children_[i], *b.children_[i]);
+    }
+  };
+
+  // Check 1: Normal RuntimeInformation.
+  RuntimeInformation rti;
+  from_json(j, rti);
+  rtiEqual(rti, parent);
+
+  // Check 2: Missing keys or values with wrong type -> ignore and use defaults.
+  RuntimeInformation rti2;
+  from_json({"description", 42}, rti2);
+  ASSERT_NO_THROW(rtiEqual(rti2, RuntimeInformation()));
 }
