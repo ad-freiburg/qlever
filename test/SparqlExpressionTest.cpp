@@ -3,6 +3,7 @@
 // Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
+#include <engine/sparqlExpressions/ExistsExpression.h>
 #include <gtest/gtest.h>
 
 #include <string>
@@ -1488,4 +1489,22 @@ TEST(SingleUseExpression, simpleMembersForTestCoverage) {
   EXPECT_THAT(expression.childrenForTesting(), IsEmpty());
   EXPECT_ANY_THROW(expression.getUnaggregatedVariables());
   EXPECT_ANY_THROW(expression.getCacheKey({}));
+}
+
+// This just tests basic functionality of the `ExistsExpression` class. Since
+// the actual implementation of the `EXISTS` operator is done in the
+// `ExistsJoin` class, most of the testing happens in
+// `test/engine/ExistsJoinTest.cpp`.
+TEST(ExistsExpression, basicFunctionality) {
+  ExistsExpression exists{ParsedQuery{}};
+  auto var = exists.variable();
+  TestContext context;
+  EXPECT_ANY_THROW(exists.evaluate(&context.context));
+  using namespace testing;
+  EXPECT_THAT(exists.getCacheKey(context.varToColMap),
+              HasSubstr("Uninitialized Exists"));
+  context.varToColMap[var] = makeAlwaysDefinedColumn(437);
+  EXPECT_THAT(exists.evaluate(&context.context), VariantWith<Variable>(var));
+  EXPECT_THAT(exists.getCacheKey(context.varToColMap),
+              HasSubstr("ExistsExpression col# 437"));
 }

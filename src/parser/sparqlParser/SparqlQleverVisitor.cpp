@@ -1,9 +1,8 @@
-// Copyright 2021 - 2024, University of Freiburg
+// Copyright 2021 - 2025, University of Freiburg
 // Chair of Algorithms and Data Structures
-// Authors:
-//   2021 -    Hannah Bast <bast@cs.uni-freiburg.de>
-//   2022      Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
-//   2022 -    Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Authors: Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
+//          Hannah Bast <bast@cs.uni-freiburg.de>
+//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
 
@@ -14,6 +13,7 @@
 
 #include "absl/time/time.h"
 #include "engine/sparqlExpressions/CountStarExpression.h"
+#include "engine/sparqlExpressions/ExistsExpression.h"
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
@@ -323,6 +323,7 @@ ParsedQuery Visitor::visit(Parser::ConstructQueryContext* ctx) {
   ParsedQuery query;
   query.datasetClauses_ = parsedQuery::DatasetClauses::fromClauses(
       visitVector(ctx->datasetClause()));
+  activeDatasetClauses_ = query.datasetClauses_;
   if (ctx->constructTemplate()) {
     query._clause = visit(ctx->constructTemplate())
                         .value_or(parsedQuery::ConstructClause{});
@@ -366,9 +367,9 @@ ParsedQuery Visitor::visit(Parser::DescribeQueryContext* ctx) {
   }
 
   // Parse the FROM and FROM NAMED clauses.
-  auto datasetClauses = parsedQuery::DatasetClauses::fromClauses(
+  activeDatasetClauses_ = parsedQuery::DatasetClauses::fromClauses(
       visitVector(ctx->datasetClause()));
-  describeClause.datasetClauses_ = datasetClauses;
+  describeClause.datasetClauses_ = activeDatasetClauses_;
 
   // Parse the WHERE clause and construct a SELECT query from it. For `DESCRIBE
   // *`, add each visible variable as a resource to describe.
@@ -399,7 +400,7 @@ ParsedQuery Visitor::visit(Parser::DescribeQueryContext* ctx) {
   parsedQuery_.addSolutionModifiers(visit(ctx->solutionModifier()));
   parsedQuery_._rootGraphPattern._graphPatterns.emplace_back(
       std::move(describeClause));
-  parsedQuery_.datasetClauses_ = datasetClauses;
+  parsedQuery_.datasetClauses_ = activeDatasetClauses_;
   auto constructClause = ParsedQuery::ConstructClause{};
   using G = GraphTerm;
   using V = Variable;
@@ -415,6 +416,7 @@ ParsedQuery Visitor::visit(Parser::AskQueryContext* ctx) {
   parsedQuery_._clause = ParsedQuery::AskClause{};
   parsedQuery_.datasetClauses_ = parsedQuery::DatasetClauses::fromClauses(
       visitVector(ctx->datasetClause()));
+  activeDatasetClauses_ = parsedQuery_.datasetClauses_;
   visitWhereClause(ctx->whereClause(), parsedQuery_);
   // NOTE: It can make sense to have solution modifiers with an ASK query, for
   // example, a GROUP BY with a HAVING.
@@ -660,6 +662,8 @@ ParsedQuery Visitor::visit(Parser::ModifyContext* ctx) {
       };
   AD_CORRECTNESS_CHECK(visibleVariables_.empty());
   auto graphPattern = visit(ctx->groupGraphPattern());
+  parsedQuery_.datasetClauses_ =
+      parsedQuery::DatasetClauses::fromClauses(visitVector(ctx->usingClause()));
   parsedQuery_._rootGraphPattern = std::move(graphPattern);
   parsedQuery_.registerVariablesVisibleInQueryBody(visibleVariables_);
   visibleVariables_.clear();
@@ -670,8 +674,6 @@ ParsedQuery Visitor::visit(Parser::ModifyContext* ctx) {
   checkTriples(op.toDelete_);
   visitIf(&op.with_, ctx->iri());
   parsedQuery_._clause = parsedQuery::UpdateClause{op};
-  parsedQuery_.datasetClauses_ =
-      parsedQuery::DatasetClauses::fromClauses(visitVector(ctx->usingClause()));
 
   return parsedQuery_;
 }
@@ -1263,6 +1265,7 @@ ParsedQuery Visitor::visit(Parser::SelectQueryContext* ctx) {
   parsedQuery_._clause = visit(ctx->selectClause());
   parsedQuery_.datasetClauses_ = parsedQuery::DatasetClauses::fromClauses(
       visitVector(ctx->datasetClause()));
+  activeDatasetClauses_ = parsedQuery_.datasetClauses_;
   visitWhereClause(ctx->whereClause(), parsedQuery_);
   parsedQuery_.addSolutionModifiers(visit(ctx->solutionModifier()));
   return parsedQuery_;
@@ -2320,6 +2323,10 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
     return visit(ctx->substringExpression());
   } else if (ctx->strReplaceExpression()) {
     return visit(ctx->strReplaceExpression());
+  } else if (ctx->existsFunc()) {
+    return visit(ctx->existsFunc());
+  } else if (ctx->notExistsFunc()) {
+    return visit(ctx->notExistsFunc());
   }
   // Get the function name and the arguments. Note that we do not have to check
   // the number of arguments like for `processIriFunctionCall`, since the number
@@ -2514,14 +2521,48 @@ SparqlExpression::Ptr Visitor::visit(Parser::StrReplaceExpressionContext* ctx) {
                                                  std::move(children.at(2)));
 }
 
-// ____________________________________________________________________________________
-void Visitor::visit(const Parser::ExistsFuncContext* ctx) {
-  reportNotSupported(ctx, "The EXISTS function is");
+// ____________________________________________________________________________
+ExpressionPtr Visitor::visitExists(Parser::GroupGraphPatternContext* pattern,
+                                   bool negate) {
+  // The argument of 'EXISTS` is a `GroupGraphPattern` that is independent from
+  // the rest of the query (except for the `FROM` and `FROM NAMED` clauses,
+  // which also apply to the argument of `EXISTS`). We therefore have to back up
+  // and restore all global state when parsing `EXISTS`.
+  auto queryBackup = std::exchange(parsedQuery_, ParsedQuery{});
+  auto visibleVariablesBackup = std::move(visibleVariables_);
+  visibleVariables_.clear();
+
+  // Parse the argument of `EXISTS`.
+  auto group = visit(pattern);
+  ParsedQuery argumentOfExists =
+      std::exchange(parsedQuery_, std::move(queryBackup));
+  argumentOfExists.selectClause().setAsterisk();
+  argumentOfExists._rootGraphPattern = std::move(group);
+
+  // The argument of `EXISTS` inherits the `FROM` and `FROM NAMED` clauses from
+  // the outer query.
+  argumentOfExists.datasetClauses_ = activeDatasetClauses_;
+  visibleVariables_ = std::move(visibleVariablesBackup);
+  auto exists = std::make_unique<sparqlExpression::ExistsExpression>(
+      std::move(argumentOfExists));
+
+  // Handle `NOT EXISTS` (which is syntactically distinct from `! EXISTS`) by
+  // simply negating the `ExistsExpression`.
+  if (negate) {
+    return sparqlExpression::makeUnaryNegateExpression(std::move(exists));
+  } else {
+    return exists;
+  }
 }
 
 // ____________________________________________________________________________________
-void Visitor::visit(const Parser::NotExistsFuncContext* ctx) {
-  reportNotSupported(ctx, "The NOT EXISTS function is");
+ExpressionPtr Visitor::visit(Parser::ExistsFuncContext* ctx) {
+  return visitExists(ctx->groupGraphPattern(), false);
+}
+
+// ____________________________________________________________________________________
+ExpressionPtr Visitor::visit(Parser::NotExistsFuncContext* ctx) {
+  return visitExists(ctx->groupGraphPattern(), true);
 }
 
 // ____________________________________________________________________________________

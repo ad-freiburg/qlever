@@ -1,9 +1,10 @@
-// Copyright 2021 - 2024, University of Freiburg
+// Copyright 2021 - 2025, University of Freiburg
 // Chair of Algorithms and Data Structures
 // Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Julian Mundhahs <mundhahj@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
+#include <engine/sparqlExpressions/ExistsExpression.h>
 #include <gtest/gtest.h>
 
 #include <iostream>
@@ -14,6 +15,7 @@
 #include "./SparqlExpressionTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
+#include "QueryPlannerTestHelpers.h"
 #include "SparqlAntlrParserTestHelpers.h"
 #include "engine/sparqlExpressions/CountStarExpression.h"
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
@@ -50,9 +52,11 @@ const ad_utility::HashMap<std::string, std::string> defaultPrefixMap{
 template <auto F, bool testInsideConstructTemplate = false>
 auto parse =
     [](const string& input, SparqlQleverVisitor::PrefixMap prefixes = {},
+       ParsedQuery::DatasetClauses clauses = {},
        SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks =
            SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::False) {
       ParserAndVisitor p{input, std::move(prefixes), disableSomeChecks};
+      p.visitor_.setActiveDatasetClausesForTesting(std::move(clauses));
       if (testInsideConstructTemplate) {
         p.visitor_.setParseModeToInsideConstructTemplateForTesting();
       }
@@ -109,7 +113,21 @@ struct ExpectCompleteParse {
     EXPECT_NO_THROW({
       return expectCompleteParse(
           parse<Clause, parseInsideConstructTemplate>(
-              input, std::move(prefixMap), disableSomeChecks),
+              input, std::move(prefixMap), {}, disableSomeChecks),
+          matcher, l);
+    });
+  };
+
+  auto operator()(const string& input,
+                  const testing::Matcher<const Value&>& matcher,
+                  ParsedQuery::DatasetClauses activeDatasetClauses,
+                  ad_utility::source_location l =
+                      ad_utility::source_location::current()) const {
+    auto tr = generateLocationTrace(l, "successful parsing was expected here");
+    EXPECT_NO_THROW({
+      return expectCompleteParse(
+          parse<Clause, parseInsideConstructTemplate>(
+              input, {}, std::move(activeDatasetClauses), disableSomeChecks),
           matcher, l);
     });
   };
@@ -134,7 +152,7 @@ struct ExpectParseFails {
       ad_utility::source_location l = ad_utility::source_location::current()) {
     auto trace = generateLocationTrace(l);
     AD_EXPECT_THROW_WITH_MESSAGE(
-        parse<Clause>(input, std::move(prefixMap), disableSomeChecks),
+        parse<Clause>(input, std::move(prefixMap), {}, disableSomeChecks),
         messageMatcher);
   }
 };
@@ -1905,6 +1923,68 @@ TEST(SparqlParser, binaryStringExpressions) {
   expectBuiltInCall("CONTAINS(?x, ?y)", makeMatcher(&makeContainsExpression));
   expectBuiltInCall("STRAFTER(?x, ?y)", makeMatcher(&makeStrAfterExpression));
   expectBuiltInCall("STRBEFORE(?x, ?y)", makeMatcher(&makeStrBeforeExpression));
+}
+
+// Matchers for EXISTS and NOT EXISTS functions.
+namespace existsTestHelpers {
+using namespace sparqlExpression;
+using namespace ::testing;
+
+// Match an EXISTS function
+auto existsMatcher(Matcher<const ParsedQuery&> pattern) {
+  return Pointee(WhenDynamicCastTo<const ExistsExpression&>(
+      AD_PROPERTY(ExistsExpression, argument, pattern)));
+}
+// Match a NOT EXISTS function
+auto notExistsMatcher(Matcher<const ParsedQuery&> pattern) {
+  return builtInCallTestHelpers::matchNaryWithChildrenMatchers(
+      &makeUnaryNegateExpression, existsMatcher(pattern));
+}
+}  // namespace existsTestHelpers
+
+// _____________________________________________________________________________
+TEST(SparqlParser, Exists) {
+  using namespace existsTestHelpers;
+  auto expectBuiltInCall = ExpectCompleteParse<&Parser::builtInCall>{};
+
+  // A matcher that matches the query `SELECT * { ?x <bar> ?foo }`, where the
+  // FROM and FROM NAMED clauses can be specified as arguments.
+  using Graphs = ScanSpecificationAsTripleComponent::Graphs;
+  auto selectABarFooMatcher = [](Graphs defaultGraphs = std::nullopt,
+                                 Graphs namedGraphs = std::nullopt) {
+    return testing::AllOf(m::SelectQuery(
+        m::AsteriskSelect(),
+        m::GraphPattern(m::Triples({{Var{"?a"}, "<bar>", Var{"?foo"}}})),
+        defaultGraphs, namedGraphs));
+  };
+
+  expectBuiltInCall("EXISTS {?a <bar> ?foo}",
+                    existsMatcher(selectABarFooMatcher()));
+  expectBuiltInCall("NOT EXISTS {?a <bar> ?foo}",
+                    notExistsMatcher(selectABarFooMatcher()));
+
+  Graphs defaultGraphs{ad_utility::HashSet<TripleComponent>{iri("<blubb>")}};
+  Graphs namedGraphs{ad_utility::HashSet<TripleComponent>{iri("<blabb>")}};
+
+  // Now run the same tests, but with non-empty dataset clauses, that have to be
+  // propagated to the `ParsedQuery` stored inside the `ExistsExpression`.
+  ParsedQuery::DatasetClauses datasetClauses;
+  datasetClauses.defaultGraphs_ = defaultGraphs;
+  datasetClauses.namedGraphs_ = namedGraphs;
+  datasetClauses.defaultGraphs_.value().insert(iri("<blubb>"));
+  expectBuiltInCall("EXISTS {?a <bar> ?foo}",
+                    existsMatcher(selectABarFooMatcher()));
+  expectBuiltInCall("NOT EXISTS {?a <bar> ?foo}",
+                    notExistsMatcher(selectABarFooMatcher()));
+
+  expectBuiltInCall(
+      "EXISTS {?a <bar> ?foo}",
+      existsMatcher(selectABarFooMatcher(defaultGraphs, namedGraphs)),
+      datasetClauses);
+  expectBuiltInCall(
+      "NOT EXISTS {?a <bar> ?foo}",
+      notExistsMatcher(selectABarFooMatcher(defaultGraphs, namedGraphs)),
+      datasetClauses);
 }
 
 namespace aggregateTestHelpers {
