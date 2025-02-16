@@ -174,6 +174,10 @@ class SpatialJoin : public Operation {
     return childRight_;
   }
 
+  PreparedSpatialJoinParams onlyForTestingGetPrepareJoin() const {
+    return prepareJoin();
+  }
+
  private:
   // helper function to generate a variable to column map from `childRight_`
   // that only contains the columns selected by `config_.payloadVariables_`
