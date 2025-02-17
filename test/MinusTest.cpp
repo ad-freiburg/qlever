@@ -10,7 +10,6 @@
 #include "./util/IdTestHelpers.h"
 #include "engine/CallFixedSize.h"
 #include "engine/Minus.h"
-#include "engine/NeutralElementOperation.h"
 #include "engine/ValuesForTesting.h"
 #include "util/AllocatorTestHelpers.h"
 #include "util/IdTableHelpers.h"
