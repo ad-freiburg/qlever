@@ -109,6 +109,12 @@ struct ParsedRequestBuilder {
 };
 
 class SPARQLProtocol {
+  FRIEND_TEST(SPARQLProtocolTest, parseGET);
+  FRIEND_TEST(SPARQLProtocolTest, parseUrlencodedPOST);
+  FRIEND_TEST(SPARQLProtocolTest, parseQueryPOST);
+  FRIEND_TEST(SPARQLProtocolTest, parseUpdatePOST);
+  FRIEND_TEST(SPARQLProtocolTest, parsePOST);
+
   static constexpr std::string_view contentTypeUrlEncoded =
       "application/x-www-form-urlencoded";
   static constexpr std::string_view contentTypeSparqlQuery =
