@@ -185,8 +185,6 @@ std::string Qlever::pinNamed(QueryOrPlan queryOrPlan, std::string name,
   QueryPlan queryPlan = std::visit(
       [&]<typename T>(T& arg) -> QueryPlan {
         if constexpr (std::is_same_v<T, QueryPlan>) {
-          std::cerr << "tryingBefore" << std::endl;
-          std::get<1>(arg)->locatedTriplesSnapshot();
           return std::move(arg);
         } else {
           return parseAndPlanQuery(std::move(arg));
@@ -196,13 +194,9 @@ std::string Qlever::pinNamed(QueryOrPlan queryOrPlan, std::string name,
   // TODO<joka921> We probably should be allowed to change the pinning info etc
   // without modifying the QueryExecutionTree.
   auto& [qet, qec, parsedQuery] = queryPlan;
-  std::cerr << "tryingAfterBefore" << std::endl;
-  qec->locatedTriplesSnapshot();
   qec->pinWithExplicitName() = std::move(name);
 
-  std::cerr << "calling `getResult`" << std::endl;
   if (!returnResult) {
-    std::cerr << "calling `getResult`" << std::endl;
     [[maybe_unused]] auto res = qet->getResult();
     return "Result was pinned to cache, but not returned";
   }
