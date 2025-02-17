@@ -22,9 +22,9 @@ using OptValue = std::optional<std::string>;
 // usage within the `Filter()`. In addition, `Filter()` requires access to the
 // optional underlying variable, this access is solved over the stand alone
 // function `getVariableFromLangExpression()`.
-template <typename NaryOperation>
-requires(isOperation<NaryOperation>)
-class LangExpressionImpl : public NaryExpression<NaryOperation> {
+CPP_template(typename NaryOperation)(
+    requires isOperation<NaryOperation>) class LangExpressionImpl
+    : public NaryExpression<NaryOperation> {
  public:
   using NaryExpression<NaryOperation>::NaryExpression;
 

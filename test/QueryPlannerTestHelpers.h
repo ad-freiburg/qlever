@@ -15,6 +15,7 @@
 #include "engine/CartesianProductJoin.h"
 #include "engine/CountAvailablePredicates.h"
 #include "engine/Describe.h"
+#include "engine/ExistsJoin.h"
 #include "engine/Filter.h"
 #include "engine/GroupBy.h"
 #include "engine/IndexScan.h"
@@ -403,6 +404,12 @@ inline QetMatcher Describe(
   return RootOperation<::Describe>(
       AllOf(children(childMatcher),
             AD_PROPERTY(::Describe, getDescribe, describeMatcher)));
+}
+
+// Match an `ExistsJoin`
+inline QetMatcher ExistsJoin(const QetMatcher& leftChild,
+                             const QetMatcher& rightChild) {
+  return RootOperation<::ExistsJoin>(AllOf(children(leftChild, rightChild)));
 }
 
 //

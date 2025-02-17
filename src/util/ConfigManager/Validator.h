@@ -26,7 +26,7 @@ types, in the same order and transformed to `const type&`, and returns a
 bool.
 */
 template <typename Func, typename... ParameterTypes>
-concept ValidatorFunction =
+CPP_concept ValidatorFunction =
     RegularInvocableWithSimilarReturnType<Func, bool, const ParameterTypes&...>;
 
 // Simple struct, that holds an error message. For use as the return type of
@@ -49,7 +49,7 @@ parameter types, in the same order and transformed to `const type&`, and returns
 an instance of `std::optional<ErrorMessage>`.
 */
 template <typename Func, typename... ParameterTypes>
-concept ExceptionValidatorFunction =
+CPP_concept ExceptionValidatorFunction =
     RegularInvocableWithSimilarReturnType<Func, std::optional<ErrorMessage>,
                                           const ParameterTypes&...>;
 
@@ -60,10 +60,13 @@ That is, instead of returning `bool`, it now returns
 
 @param errorMessage Content for `ErrorMessage`.
 */
-template <typename... ValidatorParameterTypes>
-inline auto transformValidatorIntoExceptionValidator(
-    ValidatorFunction<ValidatorParameterTypes...> auto validatorFunction,
-    std::string errorMessage) {
+CPP_template(typename ValidatorFunc, typename... ValidatorParameterTypes)(
+    requires ValidatorFunction<
+        ValidatorFunc,
+        ValidatorParameterTypes...>) inline auto transformValidatorIntoExceptionValidator(ValidatorFunc
+                                                                                              validatorFunction,
+                                                                                          std::string
+                                                                                              errorMessage) {
   // The whole 'transformation' is simply a wrapper.
   return [validatorFunction = std::move(validatorFunction),
           errorMessage = ErrorMessage{std::move(errorMessage)}](
@@ -127,22 +130,21 @@ class ConfigOptionValidatorManager {
   will be passed to the exception validator function as function arguments,
   after being transformed. Will keep the same order.
   */
-  template <typename TranslationFunction, typename ExceptionValidatorFunc,
-            isInstantiation<
-                ConstConfigOptionProxy>... ExceptionValidatorParameterTypes>
-  requires(std::invocable<TranslationFunction,
-                          const ExceptionValidatorParameterTypes> &&
-           ...) &&
-              ExceptionValidatorFunction<
+  CPP_template(typename TranslationFunction, typename ExceptionValidatorFunc,
+               typename... ExceptionValidatorParameterTypes)(
+      requires(...&& isInstantiation<ExceptionValidatorParameterTypes,
+                                     ConstConfigOptionProxy>)
+          CPP_and(...&& std::invocable<TranslationFunction,
+                                       const ExceptionValidatorParameterTypes>)
+              CPP_and ExceptionValidatorFunction<
                   ExceptionValidatorFunc,
                   std::invoke_result_t<
                       TranslationFunction,
-                      const ExceptionValidatorParameterTypes>...> &&
-              (sizeof...(ExceptionValidatorParameterTypes) > 0)
-  ConfigOptionValidatorManager(
-      ExceptionValidatorFunc exceptionValidatorFunction, std::string descriptor,
-      TranslationFunction translationFunction,
-      const ExceptionValidatorParameterTypes... configOptionsToBeChecked)
+                      const ExceptionValidatorParameterTypes>...>)
+      ConfigOptionValidatorManager(
+          ExceptionValidatorFunc exceptionValidatorFunction,
+          std::string descriptor, TranslationFunction translationFunction,
+          const ExceptionValidatorParameterTypes... configOptionsToBeChecked)
       : descriptor_{std::move(descriptor)},
         configOptionsToBeChecked_{
             &configOptionsToBeChecked.getConfigOption()...} {
@@ -194,21 +196,26 @@ class ConfigOptionValidatorManager {
   will be passed to the exception validator function as function arguments,
   after being transformed. Will keep the same order.
   */
-  template <typename TranslationFunction, typename ValidatorFunc,
-            isInstantiation<ConstConfigOptionProxy>... ValidatorParameterTypes>
-  requires(std::invocable<TranslationFunction, const ValidatorParameterTypes> &&
-           ...) &&
-          ValidatorFunction<
-              ValidatorFunc,
-              std::invoke_result_t<TranslationFunction,
-                                   const ValidatorParameterTypes>...> &&
-          (sizeof...(ValidatorParameterTypes) > 0) ConfigOptionValidatorManager(
-      ValidatorFunc validatorFunction, std::string errorMessage,
-      std::string descriptor, TranslationFunction translationFunction,
-      const ValidatorParameterTypes... configOptionsToBeChecked)
+  CPP_template(typename TranslationFunction, typename ValidatorFunc,
+               typename... ValidatorParameterTypes)(
+      requires(...&& isInstantiation<ValidatorParameterTypes,
+                                     ConstConfigOptionProxy>)
+          CPP_and(... && (std::invocable<TranslationFunction,
+                                         const ValidatorParameterTypes>))
+              CPP_and(ValidatorFunction<
+                      ValidatorFunc,
+                      std::invoke_result_t<TranslationFunction,
+                                           const ValidatorParameterTypes>...>)
+                  CPP_and(sizeof...(ValidatorParameterTypes) > 0))
+      ConfigOptionValidatorManager(
+          ValidatorFunc validatorFunction, std::string errorMessage,
+          std::string descriptor, TranslationFunction translationFunction,
+          const ValidatorParameterTypes... configOptionsToBeChecked)
       : ConfigOptionValidatorManager(
-            transformValidatorIntoExceptionValidator<std::invoke_result_t<
-                TranslationFunction, const ValidatorParameterTypes>...>(
+            transformValidatorIntoExceptionValidator<
+                ValidatorFunc,
+                std::invoke_result_t<TranslationFunction,
+                                     const ValidatorParameterTypes>...>(
                 std::move(validatorFunction), std::move(errorMessage)),
             std::move(descriptor), std::move(translationFunction),
             configOptionsToBeChecked...) {}

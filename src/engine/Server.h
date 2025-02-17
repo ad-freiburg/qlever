@@ -97,8 +97,10 @@ class Server {
 
   using SharedCancellationHandle = ad_utility::SharedCancellationHandle;
 
-  template <ad_utility::isInstantiation<absl::Cleanup> CancelTimeout>
-  struct CancellationHandleAndTimeoutTimerCancel {
+  CPP_template(typename CancelTimeout)(
+      requires ad_utility::isInstantiation<
+          CancelTimeout,
+          absl::Cleanup>) struct CancellationHandleAndTimeoutTimerCancel {
     SharedCancellationHandle handle_;
     /// Object of type `absl::Cleanup` that when destroyed cancels the timer
     /// that would otherwise invoke the cancellation of the `handle_` via the
@@ -109,10 +111,11 @@ class Server {
   // Clang doesn't seem to be able to automatically deduce the type correctly.
   // and GCC 11 thinks deduction guides are not allowed within classes.
 #ifdef __clang__
-  template <ad_utility::isInstantiation<absl::Cleanup> CancelTimeout>
-  CancellationHandleAndTimeoutTimerCancel(SharedCancellationHandle,
-                                          CancelTimeout)
-      -> CancellationHandleAndTimeoutTimerCancel<CancelTimeout>;
+  CPP_template(typename CancelTimeout)(
+      requires ad_utility::isInstantiation<CancelTimeout, absl::Cleanup>)
+      CancellationHandleAndTimeoutTimerCancel(SharedCancellationHandle,
+                                              CancelTimeout)
+          -> CancellationHandleAndTimeoutTimerCancel<CancelTimeout>;
 #endif
 
   /// Handle a single HTTP request. Check whether a file request or a query was
@@ -241,8 +244,8 @@ class Server {
   /// member can be invoked to cancel the imminent cancellation via timeout.
   auto setupCancellationHandle(const ad_utility::websocket::QueryId& queryId,
                                TimeLimit timeLimit)
-      -> ad_utility::isInstantiation<
-          CancellationHandleAndTimeoutTimerCancel> auto;
+      -> QL_CONCEPT_OR_NOTHING(ad_utility::isInstantiation<
+                               CancellationHandleAndTimeoutTimerCancel>) auto;
 
   /// Check if the access token is valid. Return true if the access token
   /// exists and is valid. Return false if there's no access token passed.

@@ -43,25 +43,29 @@ using OptIri = std::optional<Iri>;
 // general args to a numeric value (-> `int64_t or double`).
 using IntDoubleStr = std::variant<std::monostate, int64_t, double, std::string>;
 
+// Ensures that the T value is convertible to a numeric Id.
+template <typename T>
+CPP_concept ValueAsNumericId =
+    concepts::integral<T> || ad_utility::FloatingPoint<T> ||
+    ad_utility::SimilarToAny<T, Id, NotNumeric, NumericValue>;
+
 // Convert a numeric value (either a plain number, or the `NumericValue` variant
 // from above) into an `ID`. When `NanToUndef` is `true` then floating point NaN
 // values will become `Id::makeUndefined()`.
-template <bool NanToUndef = false, typename T>
-requires std::integral<T> || std::floating_point<T> ||
-         ad_utility::SimilarToAny<T, Id, NotNumeric, NumericValue>
-Id makeNumericId(T t) {
-  if constexpr (std::integral<T>) {
+CPP_template(bool NanToUndef = false,
+             typename T)(requires ValueAsNumericId<T>) Id makeNumericId(T t) {
+  if constexpr (concepts::integral<T>) {
     return Id::makeFromInt(t);
-  } else if constexpr (std::floating_point<T> && NanToUndef) {
+  } else if constexpr (ad_utility::FloatingPoint<T> && NanToUndef) {
     return std::isnan(t) ? Id::makeUndefined() : Id::makeFromDouble(t);
-  } else if constexpr (std::floating_point<T> && !NanToUndef) {
+  } else if constexpr (ad_utility::FloatingPoint<T> && !NanToUndef) {
     return Id::makeFromDouble(t);
-  } else if constexpr (std::same_as<NotNumeric, T>) {
+  } else if constexpr (concepts::same_as<NotNumeric, T>) {
     return Id::makeUndefined();
-  } else if constexpr (std::same_as<NumericValue, T>) {
+  } else if constexpr (concepts::same_as<NumericValue, T>) {
     return std::visit([](const auto& x) { return makeNumericId(x); }, t);
   } else {
-    static_assert(std::same_as<Id, T>);
+    static_assert(concepts::same_as<Id, T>);
     return t;
   }
 }
@@ -266,10 +270,11 @@ struct LiteralFromIdGetter : Mixin<LiteralFromIdGetter> {
 // Convert the input into a `unique_ptr<RE2>`. Return nullptr if the input is
 // not convertible to a string.
 struct RegexValueGetter {
-  template <SingleExpressionResult S>
-  requires std::invocable<StringValueGetter, S&&, const EvaluationContext*>
-  std::unique_ptr<re2::RE2> operator()(S&& input,
-                                       const EvaluationContext* context) const {
+  template <typename S>
+  auto operator()(S&& input, const EvaluationContext* context) const -> CPP_ret(
+      std::unique_ptr<re2::RE2>)(
+      requires SingleExpressionResult<S>&&
+          ranges::invocable<StringValueGetter, S&&, const EvaluationContext*>) {
     auto str = StringValueGetter{}(AD_FWD(input), context);
     if (!str.has_value()) {
       return nullptr;

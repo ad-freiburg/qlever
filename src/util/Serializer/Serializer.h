@@ -4,8 +4,7 @@
 
 // Library for symmetric serialization.
 
-#ifndef QLEVER_SERIALIZER_SERIALIZER
-#define QLEVER_SERIALIZER_SERIALIZER
+#pragma once
 
 #include "util/Forward.h"
 #include "util/TypeTraits.h"
@@ -57,35 +56,41 @@ class SerializationException : public std::runtime_error {
 class WriteSerializerTag {};
 class ReadSerializerTag {};
 
-/// A `WriteSerializer` can write from a span of bytes to some resource and has
-/// a public member type `using SerializerType = WriteSerializerTag`.
+// A `WriteSerializer` can write from a span of bytes to some resource and has
+// a public member type `using SerializerType = WriteSerializerTag`.
 template <typename S>
-concept WriteSerializer = requires(S s, const char* ptr, size_t numBytes) {
-  {
-    typename std::decay_t<S>::SerializerType{}
-  } -> std::same_as<WriteSerializerTag>;
-  { s.serializeBytes(ptr, numBytes) };
-};
+CPP_requires(writeSerializerRequires,
+             requires(S s, const char* ptr, size_t numBytes)(
+                 s.serializeBytes(ptr, numBytes),
+                 typename std::decay_t<S>::SerializerType{},
+                 concepts::requires_<std::same_as<typename S::SerializerType,
+                                                  WriteSerializerTag>>));
 
-/// A `ReadSerializer` can read to span of bytes from some resource and has a
-/// public alias `using SerializerType = ReadSerializerTag'`.
 template <typename S>
-concept ReadSerializer = requires(S s, char* ptr, size_t numBytes) {
-  {
-    typename std::decay_t<S>::SerializerType{}
-  } -> std::same_as<ReadSerializerTag>;
-  { s.serializeBytes(ptr, numBytes) };
-};
+concept WriteSerializer = CPP_requires_ref(writeSerializerRequires, S);
+
+// A `ReadSerializer` can read to span of bytes from some resource and has a
+// public alias `using SerializerType = ReadSerializerTag'`.
+template <typename S>
+CPP_requires(readSerializerRequires,
+             requires(S s, char* ptr, size_t numBytes)(
+                 s.serializeBytes(ptr, numBytes),
+                 typename std::decay_t<S>::SerializerType{},
+                 concepts::requires_<std::same_as<typename S::SerializerType,
+                                                  ReadSerializerTag>>));
+
+template <typename S>
+concept ReadSerializer = CPP_requires_ref(readSerializerRequires, S);
 
 /// A `Serializer` is either a `WriteSerializer` or a `ReadSerializer`
 template <typename S>
-concept Serializer = WriteSerializer<S> || ReadSerializer<S>;
+CPP_concept Serializer = WriteSerializer<S> || ReadSerializer<S>;
 
 /// If we try to serialize from a const object or reference, the serializer must
 /// be a `WriteSerializer`. The following type trait can be used to check this
 /// constraint at compile time.
-template <Serializer S, typename T>
-static constexpr bool SerializerMatchesConstness =
+CPP_template(typename S, typename T)(
+    requires Serializer<S>) static constexpr bool SerializerMatchesConstness =
     WriteSerializer<S> || !std::is_const_v<std::remove_reference_t<T>>;
 
 /**
@@ -112,21 +117,24 @@ static constexpr bool SerializerMatchesConstness =
  * - The second argument to `serialize` is a `T`, `T&`, `const T&`, `T&&` etc.
  * - If the `arg` is const then the serializer is a `WriteSerializer`.
  */
-#define AD_SERIALIZE_FUNCTION(T)                                       \
-  template <ad_utility::serialization::Serializer S,                   \
-            ad_utility::SimilarTo<T> U>                                \
-  requires ad_utility::serialization::SerializerMatchesConstness<S, U> \
-  void serialize(S& serializer, U&& arg)
+#define AD_SERIALIZE_FUNCTION(T)                                             \
+  CPP_template(typename S, typename U)(                                      \
+      requires ad_utility::serialization::Serializer<S> CPP_and              \
+          ad_utility::SimilarTo<U, T>                                        \
+              CPP_and ad_utility::serialization::SerializerMatchesConstness< \
+                  S, U>) void                                                \
+  serialize(S& serializer, U&& arg)
 
 /// Similar to `AD_SERIALIZE_FUNCTION` but defines a `friend` function to also
 /// access private members of a class. It is possible to declare the friend
 /// using `AD_SERIALIZE_FRIEND_FUNCTION(Type);` and to define it outside of the
 /// class with `AD_SERIALIZE_FUNCTION(Type){...}`
-#define AD_SERIALIZE_FRIEND_FUNCTION(T)                                \
-  template <ad_utility::serialization::Serializer S,                   \
-            ad_utility::SimilarTo<T> U>                                \
-  requires ad_utility::serialization::SerializerMatchesConstness<S, U> \
-  friend void serialize(S& serializer, U&& arg)
+#define AD_SERIALIZE_FRIEND_FUNCTION(T)                                        \
+  CPP_variadic_template(typename S, typename U)(                               \
+      requires ad_utility::serialization::Serializer<S> &&                     \
+      ad_utility::SimilarTo<U, T> &&                                           \
+      ad_utility::serialization::SerializerMatchesConstness<S, U>) friend void \
+  serialize(S& serializer, U&& arg)
 
 /**
  * Define `serialize` functions for all types that fulfill the `Constraint`.
@@ -139,21 +147,27 @@ static constexpr bool SerializerMatchesConstness =
  * `Serializer` , `WriteSerializer` and `ReadSerializer` are also true for
  * references to serializers. For an example usage see `SerializePair.h`.
  */
-#define AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(Constraint)        \
-  template <ad_utility::serialization::Serializer S, typename T> \
-  requires(Constraint) void serialize(S& serializer, T&& arg)
+#define AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(Constraint)       \
+  CPP_template(typename S, typename T)(                         \
+      requires ad_utility::serialization::Serializer<S> CPP_and \
+          Constraint) void                                      \
+  serialize(S& serializer, T&& arg)
 
 /// Similar to `AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT` but only for
 /// `WriteSerializer`s. For an example usage see `SerializeVector.h`
-#define AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT_WRITE(Constraint)       \
-  template <ad_utility::serialization::WriteSerializer S, typename T> \
-  requires(Constraint) void serialize(S& serializer, T&& arg)
+#define AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT_WRITE(Constraint)      \
+  CPP_template(typename S, typename T)(                              \
+      requires ad_utility::serialization::WriteSerializer<S> CPP_and \
+          Constraint) void                                           \
+  serialize(S& serializer, T&& arg)
 
 /// Similar to `AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT` but only for
 /// `ReadSerializer`s. For an example usage see `SerializeVector.h`
-#define AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT_READ(Constraint)       \
-  template <ad_utility::serialization::ReadSerializer S, typename T> \
-  requires(Constraint) void serialize(S& serializer, T&& arg)
+#define AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT_READ(Constraint)      \
+  CPP_template(typename S, typename T)(                             \
+      requires ad_utility::serialization::ReadSerializer<S> CPP_and \
+          Constraint) void                                          \
+  serialize(S& serializer, T&& arg)
 
 /**
  * Operator that allows the short hand notation
@@ -161,17 +175,22 @@ static constexpr bool SerializerMatchesConstness =
  * instead of
  * `serialize(serializer, t)`
  */
-void operator|(Serializer auto& serializer, auto&& t) {
+CPP_template(typename S, typename T)(requires Serializer<S>) void operator|(
+    S& serializer, T&& t) {
   serialize(serializer, AD_FWD(t));
 }
 
 /// Serialization operator for explicitly writing to a serializer.
-void operator<<(WriteSerializer auto& serializer, const auto& t) {
+CPP_template(typename S, typename T)(requires WriteSerializer<S>) void
+operator<<(S& serializer, const T& t) {
   serializer | t;
 }
 
 /// Serialization operator for explicitly reading from a serializer.
-void operator>>(ReadSerializer auto& serializer, auto&& t) { serializer | t; }
+CPP_template(typename S, typename T)(requires ReadSerializer<S>) void
+operator>>(S& serializer, T&& t) {
+  serializer | t;
+}
 
 /// An empty struct that isn't needed by the users of this serialization
 /// framework. It is used internally to make argument-dependent lookup work.
@@ -210,18 +229,24 @@ struct TrivialSerializationHelperTag {};
  * void allowTrivialSerialization(std::same_as<Z> auto, auto);
  */
 template <typename T>
-concept TriviallySerializable =
-    requires(T t, TrivialSerializationHelperTag tag) {
-      // The `TrivialSerializationHelperTag` lets the argument-dependent lookup
-      // also find the `allowTrivialSerialization` function if it is defined in
-      // the `ad::serialization` namespace.
-      allowTrivialSerialization(t, tag);
-    } && std::is_trivially_copyable_v<std::decay_t<T>>;
+CPP_requires(
+    triviallySerializableRequires,
+    requires(T t, TrivialSerializationHelperTag tag)(
+        // The `TrivialSerializationHelperTag` lets the argument-dependent
+        // lookup also find the `allowTrivialSerialization` function if it is
+        // defined in the `ad::serialization` namespace.
+        allowTrivialSerialization(t, tag)));
+
+template <typename T>
+CPP_concept TriviallySerializable =
+    CPP_requires_ref(triviallySerializableRequires, T) &&
+    std::is_trivially_copyable_v<std::decay_t<T>>;
 
 /// Serialize function for `TriviallySerializable` types that works by simply
 /// serializing the binary object representation.
-template <Serializer S, TriviallySerializable T>
-void serialize(S& serializer, T&& t) {
+CPP_template(typename S, typename T)(
+    requires Serializer<S> CPP_and
+        TriviallySerializable<T>) void serialize(S& serializer, T&& t) {
   if constexpr (WriteSerializer<S>) {
     serializer.serializeBytes(reinterpret_cast<const char*>(&t), sizeof(t));
   } else {
@@ -232,12 +257,10 @@ void serialize(S& serializer, T&& t) {
 
 /// Arithmetic types (the builtins like int, char, double) can be trivially
 /// serialized.
-template <typename T>
-requires std::is_arithmetic_v<std::decay_t<T>>
-[[maybe_unused]] std::true_type allowTrivialSerialization(T, auto) {
+CPP_template(typename T,
+             typename U)(requires std::is_arithmetic_v<std::decay_t<T>>)
+    [[maybe_unused]] std::true_type allowTrivialSerialization(T, U) {
   return {};
 }
 
 }  // namespace ad_utility::serialization
-
-#endif  // QLEVER_SERIALIZER_SERIALIZER
