@@ -6,3 +6,6 @@ compiler.cppstd=gnu17
 compiler.libcxx=libc++
 compiler.version=16
 os=Macos
+
+[conf]
+tools.build:compiler_executables={ "c": "clang", "cpp": "clang++"}
