@@ -1096,8 +1096,14 @@ TEST(IndexScan, clone) {
     EXPECT_EQ(cloneReference.getDescriptor(), scan.getDescriptor());
   }
   {
-    SparqlTriple xpy{Tc{Var{"?x"}}, "?p", Tc{Var{"?y"}}};
-    IndexScan scan{qec, Permutation::PSO, xpy};
+    using namespace makeFilterExpression;
+    SparqlTriple xpy{Tc{Var{"?x"}}, "<not_p>", Tc{Var{"?y"}}};
+    IndexScan scan{
+        qec,
+        Permutation::PSO,
+        xpy,
+        std::nullopt,
+        {{filterHelper::pr(ge(IntId(10)), Variable{"?price"}).first, 0}}};
 
     auto clone = scan.clone();
     ASSERT_TRUE(clone);
