@@ -19,9 +19,10 @@ namespace ad_utility {
 // returns false. If the `aggregator` returns false, the cached value is
 // discarded. If the cached value is still present once the generator is fully
 // consumed, `onFullyCached` is called with the cached value.
+// NOTE: The `int` is just a dummy value.
 CPP_template(typename InputRange, typename AggregatorT,
-             typename FullyCachedFuncT,
-             typename T = ql::ranges::range_value_t<InputRange>)(
+             typename T = ql::ranges::range_value_t<InputRange>,
+             typename FullyCachedFuncT = int)(
     requires InvocableWithExactReturnType<AggregatorT, bool, std::optional<T>&,
                                           const T&>
         CPP_and InvocableWithExactReturnType<FullyCachedFuncT, void, T>)

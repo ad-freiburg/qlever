@@ -36,10 +36,8 @@ auto ParsedRequestIs = [](const std::string& path,
 
 TEST(SPARQLProtocolTest, parseHttpRequest) {
   auto parse =
-      []<typename RequestT,
-         typename =
-             std::enable_if_t<ad_utility::httpUtils::HttpRequest<RequestT>>>(
-          const RequestT& request) {
+      CPP_template_lambda()(typename RequestT)(const RequestT& request)(
+          requires ad_utility::httpUtils::HttpRequest<RequestT>) {
     return SPARQLProtocol::parseHttpRequest(request);
   };
   const std::string URLENCODED =
