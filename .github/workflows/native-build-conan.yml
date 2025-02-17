@@ -3,8 +3,8 @@ name: Native build with conan
 on:
   push:
     branches: [ master ]
-  pull_request:
-    branches: [ ]
+  #pull_request:
+  #  branches: [ ]
   merge_group:
 
 concurrency:
