@@ -1,14 +1,14 @@
-// Copyright 2018, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author:
-//   2018      Florian Kramer (florian.kramer@mail.uni-freiburg.de)
-//   2020-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
+// Copyright 2018 - 2025, University of Freiburg
+// Chair of Algorithms and Data Structures
+// Authors: Florian Kramer [2018 - 2020]
+//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 #include "engine/GroupBy.h"
 
 #include <absl/strings/str_join.h>
 
 #include "engine/CallFixedSize.h"
+#include "engine/ExistsJoin.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
 #include "engine/LazyGroupBy.h"
@@ -52,6 +52,14 @@ GroupBy::GroupBy(QueryExecutionContext* qec, vector<Variable> groupByVariables,
   ql::ranges::sort(_groupByVariables, std::less<>{}, &Variable::name);
 
   auto sortColumns = computeSortColumns(subtree.get());
+
+  // Aliases are like `BIND`s, which may contain `EXISTS` expressions.
+  for (const auto& alias : _aliases) {
+    subtree = ExistsJoin::addExistsJoinsToSubtree(
+        alias._expression, std::move(subtree), getExecutionContext(),
+        cancellationHandle_);
+  }
+
   _subtree =
       QueryExecutionTree::createSortedTree(std::move(subtree), sortColumns);
 }
@@ -208,8 +216,8 @@ void GroupBy::processGroup(
   evaluationContext._previousResultsFromSameGroup.at(resultColumn) =
       sparqlExpression::copyExpressionResult(expressionResult);
 
-  auto visitor = [&]<sparqlExpression::SingleExpressionResult T>(
-                     T&& singleResult) mutable {
+  auto visitor = CPP_template_lambda_mut(&)(typename T)(T && singleResult)(
+      requires sparqlExpression::SingleExpressionResult<T>) {
     constexpr static bool isStrongId = std::is_same_v<T, Id>;
     AD_CONTRACT_CHECK(sparqlExpression::isConstantResult<T>);
     if constexpr (isStrongId) {
@@ -1097,12 +1105,11 @@ void GroupBy::extractValues(
     sparqlExpression::ExpressionResult&& expressionResult,
     sparqlExpression::EvaluationContext& evaluationContext,
     IdTable* resultTable, LocalVocab* localVocab, size_t outCol) {
-  auto visitor = [&evaluationContext, &resultTable, &localVocab,
-                  &outCol]<sparqlExpression::SingleExpressionResult T>(
-                     T&& singleResult) mutable {
+  auto visitor = CPP_template_lambda_mut(&evaluationContext, &resultTable,
+                                         &localVocab, &outCol)(typename T)(
+      T && singleResult)(requires sparqlExpression::SingleExpressionResult<T>) {
     auto generator = sparqlExpression::detail::makeGenerator(
-        std::forward<T>(singleResult), evaluationContext.size(),
-        &evaluationContext);
+        AD_FWD(singleResult), evaluationContext.size(), &evaluationContext);
 
     auto targetIterator =
         resultTable->getColumn(outCol).begin() + evaluationContext._beginIndex;
@@ -1480,10 +1487,10 @@ static constexpr auto makeProcessGroupsVisitor =
     [](size_t blockSize,
        const sparqlExpression::EvaluationContext* evaluationContext,
        const std::vector<size_t>& hashEntries) {
-      return [blockSize, evaluationContext,
-              &hashEntries]<sparqlExpression::SingleExpressionResult T,
-                            VectorOfAggregationData A>(
-                 T&& singleResult, A& aggregationDataVector) {
+      return CPP_template_lambda(blockSize, evaluationContext, &hashEntries)(
+          typename T, typename A)(T && singleResult, A & aggregationDataVector)(
+          requires sparqlExpression::SingleExpressionResult<T> &&
+          VectorOfAggregationData<A>) {
         auto generator = sparqlExpression::detail::makeGenerator(
             std::forward<T>(singleResult), blockSize, evaluationContext);
 
@@ -1527,7 +1534,6 @@ Result GroupBy::computeGroupByForHashMapOptimization(
     // NOTE: If the input blocks have very similar or even identical non-empty
     // local vocabs, no deduplication is performed.
     localVocab.mergeWith(std::span{&inputLocalVocab, 1});
-
     // Setup the `EvaluationContext` for this input block.
     sparqlExpression::EvaluationContext evaluationContext(
         *getExecutionContext(), _subtree->getVariableColumns(), inputTable,
