@@ -9,8 +9,8 @@
 #include "libqlever/Qlever.h"
 #include "util/Timer.h"
 
-static const std::string warmup1 = "";
-static const std::string warmup2 = "";
+static const std::string warmup1 = "SELECT * { ?s ?p ?o}";
+static const std::string warmup2 = "SELECT * { ?s ?p ?o} ";
 
 static const std::string queryTemplate = R"(
 SELECT *  {
@@ -22,10 +22,11 @@ SELECT *  {
 
 std::vector<std::string> inputs{""};
 
-int main() {
+int main(int argc, char** argv) {
   qlever::QleverConfig config;
   config.baseName = "exampleIndex";
-  config.inputFiles.emplace_back("/dev/stdin", qlever::Filetype::Turtle);
+  AD_CONTRACT_CHECK(argc >= 2);
+  config.inputFiles.emplace_back(argv[1], qlever::Filetype::Turtle);
   config.vocabularyType_ =
       ad_utility::VocabularyType{ad_utility::VocabularyType::Enum::InMemory};
   qlever::Qlever::buildIndex(config);

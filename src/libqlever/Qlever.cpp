@@ -161,19 +161,20 @@ std::string Qlever::query(std::string query, ad_utility::MediaType mediaType) {
 
 // ___________________________________________________________________________
 Qlever::QueryPlan Qlever::parseAndPlanQuery(std::string query) {
-  QueryExecutionContext qec{index_, &cache_, allocator_,
-                            sortPerformanceEstimator_, &namedQueryCache_};
+  auto qecPtr = std::make_shared<QueryExecutionContext>(
+      index_, &cache_, allocator_, sortPerformanceEstimator_,
+      &namedQueryCache_);
   auto parsedQuery = SparqlParser::parseQuery(query);
   auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
-  QueryPlanner qp{&qec, handle};
+  QueryPlanner qp{qecPtr.get(), handle};
   qp.setEnablePatternTrick(enablePatternTrick_);
   auto qet = qp.createExecutionTree(parsedQuery);
   qet.isRoot() = true;
 
+  auto qetPtr = std::make_shared<QueryExecutionTree>(std::move(qet));
   // TODO<joka921> For cancellation we have to call
   // `recursivelySetCancellationHandle` (see `Server::parseAndPlan`).
-  return {std::make_shared<QueryExecutionTree>(std::move(qet)),
-          std::make_shared<QueryExecutionContext>(qec), std::move(parsedQuery)};
+  return {qetPtr, std::move(qecPtr), std::move(parsedQuery)};
 }
 
 // ___________________________________________________________________________
