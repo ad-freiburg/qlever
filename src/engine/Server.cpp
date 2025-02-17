@@ -420,11 +420,10 @@ Awaitable<void> Server::process(
 
   auto visitOperation =
       [&checkParameter, &accessTokenOk, &request, &send, &parameters,
-       &requestTimer, this]<QL_CONCEPT_OR_TYPENAME(QueryOrUpdate) Operation>(
-          ParsedQuery parsedOperation, std::string operationName,
-          ad_utility::use_type_identity::TI<Operation>,
-          std::function<bool(const ParsedQuery&)> expectedOperation,
-          const std::string_view msg) -> Awaitable<void> {
+       &requestTimer,
+       this](ParsedQuery parsedOperation, std::string operationName,
+             std::function<bool(const ParsedQuery&)> expectedOperation,
+             const std::string_view msg) -> Awaitable<void> {
     auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
         checkParameter("timeout", std::nullopt), accessTokenOk, request, send);
     if (!timeLimit.has_value()) {
@@ -442,15 +441,17 @@ Awaitable<void> Server::process(
       throw std::runtime_error(
           absl::StrCat(msg, parsedOperation._originalString));
     }
-    if constexpr (std::is_same_v<Operation, Query>) {
-      co_return co_await processQuery(
-          parameters, std::move(parsedOperation), requestTimer,
-          cancellationHandle, qec, std::move(request), send, timeLimit.value());
-    } else {
-      static_assert(std::is_same_v<Operation, Update>);
+    if (parsedOperation.hasUpdateClause()) {
       co_return co_await processUpdate(
           std::move(parsedOperation), requestTimer, cancellationHandle, qec,
           std::move(request), send, timeLimit.value());
+    } else {
+      AD_CORRECTNESS_CHECK(parsedOperation.hasSelectClause() ||
+                           parsedOperation.hasAskClause() ||
+                           parsedOperation.hasConstructClause());
+      co_return co_await processQuery(
+          parameters, std::move(parsedOperation), requestTimer,
+          cancellationHandle, qec, std::move(request), send, timeLimit.value());
     }
   };
   auto parseAndAddDatasets = [](std::string operation,
@@ -468,8 +469,7 @@ Awaitable<void> Server::process(
                         const Query& query) -> Awaitable<void> {
     auto parsedQuery = parseAndAddDatasets(query.query_, query.datasetClauses_);
     return visitOperation(
-        parsedQuery, "SPARQL Query", ad_utility::use_type_identity::ti<Query>,
-        std::not_fn(&ParsedQuery::hasUpdateClause),
+        parsedQuery, "SPARQL Query", std::not_fn(&ParsedQuery::hasUpdateClause),
         "SPARQL QUERY was request via the HTTP request, but the "
         "following update was sent instead of an query: ");
   };
@@ -480,9 +480,7 @@ Awaitable<void> Server::process(
     auto parsedUpdate =
         parseAndAddDatasets(update.update_, update.datasetClauses_);
     return visitOperation(
-        parsedUpdate, "SPARQL Update",
-        ad_utility::use_type_identity::ti<Update>,
-        &ParsedQuery::hasUpdateClause,
+        parsedUpdate, "SPARQL Update", &ParsedQuery::hasUpdateClause,
         "SPARQL UPDATE was request via the HTTP request, but the "
         "following query was sent instead of an update: ");
   };
@@ -497,14 +495,12 @@ Awaitable<void> Server::process(
     auto trueFunc = [](const ParsedQuery&) { return true; };
     if (parsedOperation.hasUpdateClause()) {
       co_return co_await visitOperation(
-          parsedOperation, "Graph Store (Update)",
-          ad_utility::use_type_identity::ti<Update>, trueFunc,
+          parsedOperation, "Graph Store (Update)", trueFunc,
           "Please contact the developers. Graph Store update operation is not "
           "an update: ");
     } else {
       co_return co_await visitOperation(
-          parsedOperation, "Graph Store (Query)",
-          ad_utility::use_type_identity::ti<Query>, trueFunc,
+          parsedOperation, "Graph Store (Query)", trueFunc,
           "Please contact the developers. Graph Store query operation is not a "
           "query: ");
     }
