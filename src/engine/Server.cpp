@@ -242,6 +242,29 @@ auto Server::setupCancellationHandle(
       std::move(cancellationHandle), std::move(cancelCancellationHandle)};
 }
 
+// ____________________________________________________________________________
+auto Server::prepareOperation(
+    std::string_view operationName, std::string_view operationSPARQL,
+    ad_utility::websocket::MessageSender& messageSender,
+    const ad_utility::url_parser::ParamValueMap& params, TimeLimit timeLimit) {
+  auto [cancellationHandle, cancelTimeoutOnDestruction] =
+      setupCancellationHandle(messageSender.getQueryId(), timeLimit);
+
+  // Do the query planning. This creates a `QueryExecutionTree`, which will
+  // then be used to process the query.
+  auto [pinSubtrees, pinResult] = determineResultPinning(params);
+  LOG(INFO) << "Processing the following " << operationName << ":"
+            << (pinResult ? " [pin result]" : "")
+            << (pinSubtrees ? " [pin subresults]" : "") << "\n"
+            << operationSPARQL << std::endl;
+  QueryExecutionContext qec(index_, &cache_, allocator_,
+                            sortPerformanceEstimator_, std::ref(messageSender),
+                            pinSubtrees, pinResult);
+
+  return std::tuple{std::move(qec), std::move(cancellationHandle),
+                    std::move(cancelTimeoutOnDestruction)};
+}
+
 // _____________________________________________________________________________
 Awaitable<void> Server::process(
     const ad_utility::httpUtils::HttpRequest auto& request, auto&& send) {
@@ -400,7 +423,7 @@ Awaitable<void> Server::process(
        &requestTimer, this]<QL_CONCEPT_OR_TYPENAME(QueryOrUpdate) Operation>(
           ParsedQuery parsedOperation, std::string operationName,
           ad_utility::use_type_identity::TI<Operation>,
-          const std::function<bool(const ParsedQuery&)>& pred,
+          std::function<bool(const ParsedQuery&)> pred,
           const std::string_view msg) -> Awaitable<void> {
     auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
         checkParameter("timeout", std::nullopt), accessTokenOk, request, send);
@@ -523,29 +546,6 @@ std::pair<bool, bool> Server::determineResultPinning(
       ad_utility::url_parser::checkParameter(params, "pinresult", "true")
           .has_value();
   return {pinSubtrees, pinResult};
-}
-
-// ____________________________________________________________________________
-auto Server::prepareOperation(
-    std::string_view operationName, std::string_view operationSPARQL,
-    ad_utility::websocket::MessageSender& messageSender,
-    const ad_utility::url_parser::ParamValueMap& params, TimeLimit timeLimit) {
-  auto [cancellationHandle, cancelTimeoutOnDestruction] =
-      setupCancellationHandle(messageSender.getQueryId(), timeLimit);
-
-  // Do the query planning. This creates a `QueryExecutionTree`, which will
-  // then be used to process the query.
-  auto [pinSubtrees, pinResult] = determineResultPinning(params);
-  LOG(INFO) << "Processing the following " << operationName << ":"
-            << (pinResult ? " [pin result]" : "")
-            << (pinSubtrees ? " [pin subresults]" : "") << "\n"
-            << operationSPARQL << std::endl;
-  QueryExecutionContext qec(index_, &cache_, allocator_,
-                            sortPerformanceEstimator_, std::ref(messageSender),
-                            pinSubtrees, pinResult);
-
-  return std::tuple{std::move(qec), std::move(cancellationHandle),
-                    std::move(cancelTimeoutOnDestruction)};
 }
 
 // ____________________________________________________________________________
