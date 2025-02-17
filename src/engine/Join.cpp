@@ -442,11 +442,12 @@ void Join::join(const IdTable& a, const IdTable& b, IdTable* result) const {
 }
 
 // _____________________________________________________________________________
-Result::Generator Join::runLazyJoinAndConvertToGenerator(
-    ad_utility::InvocableWithExactReturnType<
-        Result::IdTableVocabPair,
-        std::function<void(IdTable&, LocalVocab&)>> auto runLazyJoin,
-    OptionalPermutation permutation) const {
+CPP_template_2(typename ActionT)(
+    requires ad_utility::InvocableWithExactReturnType<
+        ActionT, Result::IdTableVocabPair,
+        std::function<void(IdTable&, LocalVocab&)>>)
+    Result::Generator Join::runLazyJoinAndConvertToGenerator(
+        ActionT runLazyJoin, OptionalPermutation permutation) const {
   return ad_utility::generatorFromActionWithCallback<Result::IdTableVocabPair>(
       [runLazyJoin = std::move(runLazyJoin),
        permutation = std::move(permutation)](
@@ -472,12 +473,13 @@ Result::Generator Join::runLazyJoinAndConvertToGenerator(
 }
 
 // _____________________________________________________________________________
-ProtoResult Join::createResult(
-    bool requestedLaziness,
-    ad_utility::InvocableWithExactReturnType<
-        Result::IdTableVocabPair,
-        std::function<void(IdTable&, LocalVocab&)>> auto action,
-    std::optional<std::vector<ColumnIndex>> permutation) const {
+CPP_template_2(typename ActionT)(
+    requires ad_utility::InvocableWithExactReturnType<
+        ActionT, Result::IdTableVocabPair,
+        std::function<void(IdTable&, LocalVocab&)>>)
+    ProtoResult Join::createResult(
+        bool requestedLaziness, ActionT action,
+        std::optional<std::vector<ColumnIndex>> permutation) const {
   if (requestedLaziness) {
     return {runLazyJoinAndConvertToGenerator(std::move(action),
                                              std::move(permutation)),

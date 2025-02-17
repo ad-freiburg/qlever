@@ -51,18 +51,18 @@ TEST(GraphStoreProtocolTest, extractTargetGraph) {
 
 // _____________________________________________________________________________________________
 TEST(GraphStoreProtocolTest, transformPost) {
-  auto expectTransformPost =
-      [](const ad_utility::httpUtils::HttpRequest auto& request,
-         const testing::Matcher<const ParsedQuery&>& matcher,
-         ad_utility::source_location l =
-             ad_utility::source_location::current()) {
-        auto trace = generateLocationTrace(l);
-        const ad_utility::url_parser::ParsedUrl parsedUrl =
-            ad_utility::url_parser::parseRequestTarget(request.target());
-        const GraphOrDefault graph =
-            GraphStoreProtocol::extractTargetGraph(parsedUrl.parameters_);
-        EXPECT_THAT(GraphStoreProtocol::transformPost(request, graph), matcher);
-      };
+  auto expectTransformPost = CPP_template_lambda()(typename RequestT)(
+      const RequestT& request,
+      const testing::Matcher<const ParsedQuery&>& matcher,
+      ad_utility::source_location l = ad_utility::source_location::current())(
+      requires ad_utility::httpUtils::HttpRequest<RequestT>) {
+    auto trace = generateLocationTrace(l);
+    const ad_utility::url_parser::ParsedUrl parsedUrl =
+        ad_utility::url_parser::parseRequestTarget(request.target());
+    const GraphOrDefault graph =
+        GraphStoreProtocol::extractTargetGraph(parsedUrl.parameters_);
+    EXPECT_THAT(GraphStoreProtocol::transformPost(request, graph), matcher);
+  };
 
   expectTransformPost(
       makePostRequest("/?default", "text/turtle", "<a> <b> <c> ."),
@@ -111,18 +111,18 @@ TEST(GraphStoreProtocolTest, transformPost) {
 
 // _____________________________________________________________________________________________
 TEST(GraphStoreProtocolTest, transformGet) {
-  auto expectTransformGet =
-      [](const ad_utility::httpUtils::HttpRequest auto& request,
-         const testing::Matcher<const ParsedQuery&>& matcher,
-         ad_utility::source_location l =
-             ad_utility::source_location::current()) {
-        auto trace = generateLocationTrace(l);
-        const ad_utility::url_parser::ParsedUrl parsedUrl =
-            ad_utility::url_parser::parseRequestTarget(request.target());
-        const GraphOrDefault graph =
-            GraphStoreProtocol::extractTargetGraph(parsedUrl.parameters_);
-        EXPECT_THAT(GraphStoreProtocol::transformGet(graph), matcher);
-      };
+  auto expectTransformGet = CPP_template_lambda()(typename RequestT)(
+      const RequestT& request,
+      const testing::Matcher<const ParsedQuery&>& matcher,
+      ad_utility::source_location l = ad_utility::source_location::current())(
+      requires ad_utility::httpUtils::HttpRequest<RequestT>) {
+    auto trace = generateLocationTrace(l);
+    const ad_utility::url_parser::ParsedUrl parsedUrl =
+        ad_utility::url_parser::parseRequestTarget(request.target());
+    const GraphOrDefault graph =
+        GraphStoreProtocol::extractTargetGraph(parsedUrl.parameters_);
+    EXPECT_THAT(GraphStoreProtocol::transformGet(graph), matcher);
+  };
   expectTransformGet(
       makeGetRequest("/?default"),
       m::ConstructQuery({{Var{"?s"}, Var{"?p"}, Var{"?o"}}},

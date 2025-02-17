@@ -69,8 +69,9 @@ class generator_promise {
   }
 
   // Don't allow any use of 'co_await' inside the generator coroutine.
-  CPP_template(typename U)(requires(!ad_utility::SimilarTo<GetDetails, U>))
-      std::suspend_never await_transform(U&& value) = delete;
+  CPP_template_2(typename U)(
+      requires CPP_NOT(ad_utility::SimilarTo<GetDetails, U>)) std::suspend_never
+      await_transform(U&& value) = delete;
 
   void rethrow_if_exception() const {
     if (m_exception) {

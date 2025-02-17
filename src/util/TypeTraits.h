@@ -267,9 +267,7 @@ using First =
 
 /// Concept for `std::is_invocable_r_v`.
 template <typename Func, typename R, typename... ArgTypes>
-// TODO<joka921, gpcicciuca> turn back to `concept` and fix the remaining
-// places.
-concept InvocableWithConvertibleReturnType =
+CPP_concept InvocableWithConvertibleReturnType =
     std::is_invocable_r_v<R, Func, ArgTypes...>;
 
 // The implementation of `InvokeResultSfinaeFriendly`
@@ -312,7 +310,7 @@ are the same when ignoring `const`, `volatile`, and reference qualifiers.
 `isSimilar` to `Ret`.
 */
 template <typename Fn, typename Ret, typename... Args>
-concept InvocableWithSimilarReturnType =
+CPP_concept InvocableWithSimilarReturnType =
     std::invocable<Fn, Args...> &&
     isSimilar<InvokeResultSfinaeFriendly<Fn, Args...>, Ret>;
 
@@ -320,10 +318,8 @@ concept InvocableWithSimilarReturnType =
 @brief Require `Fn` to be invocable with `Args...` and the return type to be
  `Ret`.
 */
-// TODO<joka921, gpcicciuca> turn back to `concept` and fix the remaining
-// places.
 template <typename Fn, typename Ret, typename... Args>
-concept InvocableWithExactReturnType =
+CPP_concept InvocableWithExactReturnType =
     std::invocable<Fn, Args...> &&
     std::same_as<InvokeResultSfinaeFriendly<Fn, Args...>, Ret>;
 
@@ -337,7 +333,7 @@ invocable type is regular invocable, or not.
 For more information see: https://en.cppreference.com/w/cpp/concepts/invocable
 */
 template <typename Fn, typename Ret, typename... Args>
-concept RegularInvocableWithSimilarReturnType =
+CPP_concept RegularInvocableWithSimilarReturnType =
     std::regular_invocable<Fn, Args...> &&
     isSimilar<InvokeResultSfinaeFriendly<Fn, Args...>, Ret>;
 
@@ -351,7 +347,7 @@ invocable type is regular invocable, or not.
 For more information see: https://en.cppreference.com/w/cpp/concepts/invocable
 */
 template <typename Fn, typename Ret, typename... Args>
-concept RegularInvocableWithExactReturnType =
+CPP_concept RegularInvocableWithExactReturnType =
     std::regular_invocable<Fn, Args...> &&
     std::same_as<InvokeResultSfinaeFriendly<Fn, Args...>, Ret>;
 
@@ -360,7 +356,7 @@ concept RegularInvocableWithExactReturnType =
 // might be lvalue, because the && denotes a forwarding reference. void f(Rvalue
 // auto&& x) // guaranteed rvalue reference, can safely be moved.
 template <typename T>
-concept Rvalue = std::is_rvalue_reference_v<T&&>;
+CPP_concept Rvalue = std::is_rvalue_reference_v<T&&>;
 
 // Ensures that T is a floating-point type.
 template <typename T>

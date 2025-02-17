@@ -71,8 +71,8 @@ static constexpr bool isValuePreservingCast(const Source& source) {
 /*
 @brief Return biggest possible value for the given arithmetic type.
 */
-template <ad_utility::Arithmetic Type>
-consteval Type getMaxValue() {
+CPP_template(typename Type)(
+    requires ad_utility::Arithmetic<Type>) consteval Type getMaxValue() {
   return std::numeric_limits<Type>::max();
 }
 
@@ -408,10 +408,10 @@ static double calculateNextWholeExponent(const T& base,
 @brief Generate a sorted, inclusive interval of exponents $base^x$, with $x$
 always a natural number.
 */
-template <ad_utility::Arithmetic T>
-requires std::convertible_to<T, double>
-static std::vector<T> generateExponentInterval(T base, T inclusiveLowerBound,
-                                               T inclusiveUpperBound) {
+CPP_template(typename T)(requires ad_utility::Arithmetic<T> CPP_and
+                             std::convertible_to<T, double>) static std::
+    vector<T> generateExponentInterval(T base, T inclusiveLowerBound,
+                                       T inclusiveUpperBound) {
   std::vector<T> elements{};
 
   /*
@@ -440,9 +440,9 @@ static std::vector<T> generateExponentInterval(T base, T inclusiveLowerBound,
 @brief Generate a sorted,inclusive interval of all natural numbers inside
 `[inclusiveLowerBound, inclusiveUpperBound]`.
 */
-template <ad_utility::Arithmetic T>
-static std::vector<T> generateNaturalNumberSequenceInterval(
-    T inclusiveLowerBound, T inclusiveUpperBound) {
+CPP_template(typename T)(requires ad_utility::Arithmetic<T>) static std::vector<
+    T> generateNaturalNumberSequenceInterval(T inclusiveLowerBound,
+                                             T inclusiveUpperBound) {
   if constexpr (std::floating_point<T>) {
     inclusiveLowerBound = std::ceil(inclusiveLowerBound);
     inclusiveUpperBound = std::floor(inclusiveUpperBound);
@@ -459,9 +459,8 @@ static std::vector<T> generateNaturalNumberSequenceInterval(
 
 // Merge multiple sorted vectors into one sorted vector, where every element is
 // unique.
-template <ad_utility::Arithmetic T>
-static std::vector<T> mergeSortedVectors(
-    const std::vector<std::vector<T>>& intervals) {
+CPP_template(typename T)(requires ad_utility::Arithmetic<T>) static std::vector<
+    T> mergeSortedVectors(const std::vector<std::vector<T>>& intervals) {
   std::vector<T> mergedVector{};
 
   // Merge.
@@ -1165,9 +1164,9 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
   chance to be picked.) This adjusts the number of elements in the sample size
   to `Amount of rows * ratio`, which affects the possibility of duplicates.
    */
-  template <ad_utility::InvocableWithExactReturnType<
-                bool, float, size_t, size_t, size_t, size_t, float, float>
-                StopFunction,
+  template <QL_CONCEPT_OR_TYPENAME(ad_utility::InvocableWithExactReturnType<
+                                   bool, float, size_t, size_t, size_t, size_t,
+                                   float, float>) StopFunction,
             isTypeOrGrowthFunction<float> T1, isTypeOrGrowthFunction<float> T2,
             isTypeOrGrowthFunction<size_t> T3,
             isTypeOrGrowthFunction<size_t> T4,
@@ -1332,9 +1331,9 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
       ResultTable* table,
       const QL_CONCEPT_OR_NOTHING(
           ad_utility::SameAsAny<float, size_t>) auto changingParameterValue,
-      ad_utility::InvocableWithExactReturnType<bool, float, size_t, size_t,
-                                               size_t, size_t, float,
-                                               float> auto stopFunction,
+      QL_CONCEPT_OR_NOTHING(ad_utility::InvocableWithExactReturnType<
+                            bool, float, size_t, size_t, size_t, size_t, float,
+                            float>) auto stopFunction,
       const float overlap, const std::optional<size_t>& resultTableNumRows,
       ad_utility::RandomSeed randomSeed, const bool smallerTableSorted,
       const bool biggerTableSorted, const float& ratioRows,

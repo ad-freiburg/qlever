@@ -35,7 +35,9 @@ auto ParsedRequestIs = [](const std::string& path,
 }  // namespace
 
 TEST(SPARQLProtocolTest, parseHttpRequest) {
-  auto parse = [](const ad_utility::httpUtils::HttpRequest auto& request) {
+  auto parse =
+      CPP_template_lambda()(typename RequestT)(const RequestT& request)(
+          requires ad_utility::httpUtils::HttpRequest<RequestT>) {
     return SPARQLProtocol::parseHttpRequest(request);
   };
   const std::string URLENCODED =
@@ -316,7 +318,9 @@ TEST(SPARQLProtocolTest, parseHttpRequest) {
 }
 
 TEST(SPARQLProtocolTest, extractAccessToken) {
-  auto extract = [](const ad_utility::httpUtils::HttpRequest auto& request) {
+  auto extract =
+      CPP_template_lambda()(typename RequestT)(const RequestT& request)(
+          requires ad_utility::httpUtils::HttpRequest<RequestT>) {
     auto parsedUrl = parseRequestTarget(request.target());
     return SPARQLProtocol::extractAccessToken(request, parsedUrl.parameters_);
   };
