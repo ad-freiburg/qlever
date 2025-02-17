@@ -23,7 +23,7 @@ struct HashMapWrapper {
   Set emptySet_;
 
   HashMapWrapper(Map map, ad_utility::AllocatorWithLimit<Id> allocator)
-      : map_(std::move(map)), emptySet_(allocator) {};
+      : map_(std::move(map)), emptySet_(allocator){};
 
   /**
    * @brief Return the successors for the given Id. The successors are all ids,
