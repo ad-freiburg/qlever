@@ -158,44 +158,51 @@ std::string Qlever::query(std::string query, ad_utility::MediaType mediaType) {
   }
   return result;
 }
+
 // ___________________________________________________________________________
-// TODO<joka921> A lot of code duplication here.
-std::string Qlever::pinNamed(std::string query, std::string name,
-                             ad_utility::MediaType mediaType,
-                             bool returnResult) {
+Qlever::QueryPlan Qlever::parseAndPlanQuery(std::string query) {
   QueryExecutionContext qec{index_, &cache_, allocator_,
                             sortPerformanceEstimator_, &namedQueryCache_};
-  qec.pinWithExplicitName() = std::move(name);
   auto parsedQuery = SparqlParser::parseQuery(query);
   auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
   QueryPlanner qp{&qec, handle};
   qp.setEnablePatternTrick(enablePatternTrick_);
   auto qet = qp.createExecutionTree(parsedQuery);
   qet.isRoot() = true;
-  auto& limitOffset = parsedQuery._limitOffset;
 
   // TODO<joka921> For cancellation we have to call
   // `recursivelySetCancellationHandle` (see `Server::parseAndPlan`).
+  return {std::make_shared<QueryExecutionTree>(std::move(qet)),
+          std::make_shared<QueryExecutionContext>(qec), std::move(parsedQuery)};
+}
 
-  // TODO<joka921> The following interface looks fishy and should be
-  // incorporated directly in the query planner or somewhere else.
-  // (it is used identically in `Server.cpp`.
-
-  // Make sure that the offset is not applied again when exporting the result
-  // (it is already applied by the root operation in the query execution
-  // tree). Note that we don't need this for the limit because applying a
-  // fixed limit is idempotent.
-  AD_CORRECTNESS_CHECK(limitOffset._offset >=
-                       qet.getRootOperation()->getLimit()._offset);
-  limitOffset._offset -= qet.getRootOperation()->getLimit()._offset;
+// ___________________________________________________________________________
+// TODO<joka921> A lot of code duplication here.
+std::string Qlever::pinNamed(QueryOrPlan queryOrPlan, std::string name,
+                             ad_utility::MediaType mediaType,
+                             bool returnResult) {
+  QueryPlan queryPlan = std::visit(
+      [&]<typename T>(T& arg) -> QueryPlan {
+        if constexpr (std::is_same_v<T, QueryPlan>) {
+          return std::move(arg);
+        } else {
+          return parseAndPlanQuery(std::move(arg));
+        }
+      },
+      queryOrPlan);
+  // TODO<joka921> We probably should be allowed to change the pinning info etc
+  // without modifying the QueryExecutionTree.
+  auto& [qet, qec, parsedQuery] = queryPlan;
+  qec->pinWithExplicitName() = std::move(name);
 
   if (!returnResult) {
-    [[maybe_unused]] auto res = qet.getResult();
+    [[maybe_unused]] auto res = qet->getResult();
     return "Result was pinned to cache, but not returned";
   }
   ad_utility::Timer timer{ad_utility::Timer::Started};
+  auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
   auto responseGenerator = ExportQueryExecutionTrees::computeResult(
-      parsedQuery, qet, mediaType, timer, std::move(handle));
+      parsedQuery, *qet, mediaType, timer, std::move(handle));
   std::string result;
   for (const auto& batch : responseGenerator) {
     result += batch;

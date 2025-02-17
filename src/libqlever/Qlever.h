@@ -103,14 +103,18 @@ class Qlever {
   std::string query(std::string query, ad_utility::MediaType mediaType =
                                            ad_utility::MediaType::sparqlJson);
 
+  using QueryPlan =
+      std::tuple<std::shared_ptr<QueryExecutionTree>,
+                 std::shared_ptr<QueryExecutionContext>, ParsedQuery>;
+  using QueryOrPlan = std::variant<std::string, QueryPlan>;
+
   // Pin a query to the named query cache. In a subsequent query, this cache can
   // be accessed via `SERVICE ql:
   [[maybe_unused]] std::string pinNamed(
-      std::string query, std::string name,
+      QueryOrPlan query, std::string name,
       ad_utility::MediaType mediaType = ad_utility::MediaType::sparqlJson,
       bool returnResult = true);
 
-  // TODO<joka921> Give access to the RuntimeParameters() which allow for
-  // further tweaking of the qlever instance.
+  QueryPlan parseAndPlanQuery(std::string query);
 };
 }  // namespace qlever
