@@ -132,6 +132,47 @@ static auto getSetUnion(const std::vector<BlockMetadata>& blocks1,
 }
 
 //______________________________________________________________________________
+// Refers to an `ValueId` vector `::iterator` (index).
+using RandomIt = std::vector<ValueId>::iterator;
+// A pair containing the `start` and `end` (iterator) indices for a specified
+// single datatype range over a given `ValueId` vector.
+// For the given cases below, the `ValueId` vector is retrieved from the
+// `BlockMetadata` values. And those `ValueId` values define the bounds of the
+// related `BlockMetadata` values.
+using RandomItPair = std::pair<RandomIt, RandomIt>;
+
+//______________________________________________________________________________
+static std::vector<BlockMetadata> getRelevantBlocksFromIdRanges(
+    const std::vector<RandomItPair>& relevantIdRanges,
+    std::span<const BlockMetadata> input, std::vector<ValueId>& valueIdsInput) {
+  // The vector for relevant BlockMetadata values which contain ValueIds
+  // defined as relevant by relevantIdRanges.
+  std::vector<BlockMetadata> relevantBlocks;
+  // Reserve memory, input.size() is upper bound.
+  relevantBlocks.reserve(input.size());
+
+  // Given the relevant Id ranges, retrieve the corresponding relevant
+  // BlockMetadata values from vector input and add them to the relevantBlocks
+  // vector.
+  auto endValueIdsInput = valueIdsInput.end();
+  for (const auto& [firstId, secondId] : relevantIdRanges) {
+    // Ensures that index is within bounds of index vector.
+    auto secondIdAdjusted =
+        secondId < endValueIdsInput ? secondId + 1 : secondId;
+    relevantBlocks.insert(
+        relevantBlocks.end(),
+        input.begin() + std::distance(valueIdsInput.begin(), firstId) / 2,
+        // Round up, for Ids contained within the bounding Ids of firstTriple
+        // and lastTriple we have to include the respective metadata block
+        // (that block is partially relevant).
+        input.begin() +
+            std::distance(valueIdsInput.begin(), secondIdAdjusted) / 2);
+  }
+  relevantBlocks.shrink_to_fit();
+  return relevantBlocks;
+}
+
+//______________________________________________________________________________
 // Return `CompOp`s as string.
 static std::string getRelationalOpStr(const CompOp relOp) {
   using enum CompOp;
@@ -154,6 +195,24 @@ static std::string getRelationalOpStr(const CompOp relOp) {
 }
 
 //______________________________________________________________________________
+// Return `Datatype`s (for `isDatatype` pre-filter) as string.
+static std::string getDatatypeIsTypeStr(const IsDatatype isDtype) {
+  using enum IsDatatype;
+  switch (isDtype) {
+    case IRI:
+      return "Iri";
+    case BLANK:
+      return "Blank";
+    case LITERAL:
+      return "Literal";
+    case NUMERIC:
+      return "Numeric";
+    default:
+      AD_FAIL();
+  }
+}
+
+//______________________________________________________________________________
 // Return `LogicalOperator`s as string.
 static std::string getLogicalOpStr(const LogicalOperator logOp) {
   using enum LogicalOperator;
@@ -165,6 +224,27 @@ static std::string getLogicalOpStr(const LogicalOperator logOp) {
     default:
       AD_FAIL();
   }
+}
+
+//______________________________________________________________________________
+// Helper to retrieve to complementing ranges.
+static std::vector<RandomItPair> getComplementingRanges(
+    const std::vector<RandomItPair>& relevantRanges, const RandomIt& begin,
+    const RandomIt& end) {
+  std::vector<RandomItPair> rangesComplemented;
+  if (begin < relevantRanges.front().first) {
+    rangesComplemented.push_back(
+        RandomItPair{begin, relevantRanges.front().first});
+  }
+  for (size_t i = 1; i < relevantRanges.size(); ++i) {
+    rangesComplemented.push_back(
+        RandomItPair{relevantRanges[i - 1].second, relevantRanges[i].first});
+  }
+  if (end > relevantRanges.back().second) {
+    rangesComplemented.push_back(
+        RandomItPair{relevantRanges.back().second, end});
+  }
+  return rangesComplemented;
 }
 
 // SECTION PREFILTER EXPRESSION (BASE CLASS)
@@ -253,18 +333,21 @@ std::vector<BlockMetadata> RelationalExpression<Comparison>::evaluateImpl(
   valueIdsInput.reserve(2 * input.size());
   std::vector<BlockMetadata> mixedDatatypeBlocks;
 
-  for (const auto& block : input) {
-    const auto firstId =
-        getIdFromColumnIndex(block.firstTriple_, evaluationColumn);
-    const auto secondId =
-        getIdFromColumnIndex(block.lastTriple_, evaluationColumn);
-    valueIdsInput.push_back(firstId);
-    valueIdsInput.push_back(secondId);
+  ql::ranges::for_each(
+      input, [&evaluationColumn, &valueIdsInput,
+              &mixedDatatypeBlocks](const BlockMetadata& block) {
+        const auto firstId =
+            getIdFromColumnIndex(block.firstTriple_, evaluationColumn);
+        const auto secondId =
+            getIdFromColumnIndex(block.lastTriple_, evaluationColumn);
 
-    if (firstId.getDatatype() != secondId.getDatatype()) {
-      mixedDatatypeBlocks.push_back(block);
-    }
-  }
+        valueIdsInput.push_back(firstId);
+        valueIdsInput.push_back(secondId);
+
+        if (firstId.getDatatype() != secondId.getDatatype()) {
+          mixedDatatypeBlocks.push_back(block);
+        }
+      });
 
   LocalVocab vocab{};
   auto referenceId =
@@ -282,33 +365,9 @@ std::vector<BlockMetadata> RelationalExpression<Comparison>::evaluateImpl(
           : getRangesForId(valueIdsInput.begin(), valueIdsInput.end(),
                            referenceId, Comparison, false);
 
-  // The vector for relevant BlockMetadata values which contain ValueIds
-  // defined as relevant by relevantIdRanges.
-  std::vector<BlockMetadata> relevantBlocks;
-  // Reserve memory, input.size() is upper bound.
-  relevantBlocks.reserve(input.size());
-
-  // Given the relevant Id ranges, retrieve the corresponding relevant
-  // BlockMetadata values from vector input and add them to the relevantBlocks
-  // vector.
-  auto endValueIdsInput = valueIdsInput.end();
-  for (const auto& [firstId, secondId] : relevantIdRanges) {
-    // Ensures that index is within bounds of index vector.
-    auto secondIdAdjusted =
-        secondId < endValueIdsInput ? secondId + 1 : secondId;
-    relevantBlocks.insert(
-        relevantBlocks.end(),
-        input.begin() + std::distance(valueIdsInput.begin(), firstId) / 2,
-        // Round up, for Ids contained within the bounding Ids of firstTriple
-        // and lastTriple we have to include the respective metadata block
-        // (that block is partially relevant).
-        input.begin() +
-            std::distance(valueIdsInput.begin(), secondIdAdjusted) / 2);
-  }
-  relevantBlocks.shrink_to_fit();
-  // Merge mixedDatatypeBlocks into relevantBlocks while maintaining order and
-  // avoiding duplicates.
-  return getSetUnion(relevantBlocks, mixedDatatypeBlocks);
+  return getSetUnion(
+      getRelevantBlocksFromIdRanges(relevantIdRanges, input, valueIdsInput),
+      mixedDatatypeBlocks);
 };
 
 //______________________________________________________________________________
@@ -352,6 +411,109 @@ std::string RelationalExpression<Comparison>::asString(
   referenceValueToString(stream, rightSideReferenceValue_);
   stream << " ." << std::endl;
   return stream.str();
+};
+
+// SECTION ISDATATYPE
+//______________________________________________________________________________
+// Remark: The current `logicalComplement` implementation retrieves the full
+// complement w.r.t. the datatypes defined and represented by the `ValueId`
+// space.
+template <IsDatatype Datatype>
+std::unique_ptr<PrefilterExpression>
+IsDatatypeExpression<Datatype>::logicalComplement() const {
+  return std::make_unique<IsDatatypeExpression<Datatype>>(!isNegated_);
+};
+
+//______________________________________________________________________________
+template <IsDatatype Datatype>
+std::unique_ptr<PrefilterExpression> IsDatatypeExpression<Datatype>::clone()
+    const {
+  return std::make_unique<IsDatatypeExpression<Datatype>>(*this);
+};
+
+//______________________________________________________________________________
+template <IsDatatype Datatype>
+bool IsDatatypeExpression<Datatype>::operator==(
+    const PrefilterExpression& other) const {
+  const auto* otherIsDatatype =
+      dynamic_cast<const IsDatatypeExpression<Datatype>*>(&other);
+  if (!otherIsDatatype) {
+    return false;
+  }
+  return isNegated_ == otherIsDatatype->isNegated_;
+};
+
+//______________________________________________________________________________
+template <IsDatatype Datatype>
+std::string IsDatatypeExpression<Datatype>::asString(
+    [[maybe_unused]] size_t depth) const {
+  return absl::StrCat(
+      "Prefilter IsDatatypeExpression:", "\nPrefilter for datatype: ",
+      getDatatypeIsTypeStr(Datatype),
+      "\nis negated: ", isNegated_ ? "true" : "false", ".\n");
+};
+
+//______________________________________________________________________________
+template <IsDatatype Datatype>
+std::vector<BlockMetadata> IsDatatypeExpression<Datatype>::evaluateImpl(
+    std::span<const BlockMetadata> input, size_t evaluationColumn) const {
+  using enum IsDatatype;
+
+  // Vector for storing bounding ValueIds to the BlockMetadata values.
+  std::vector<ValueId> valueIdsInput;
+  valueIdsInput.reserve(2 * input.size());
+
+  ql::ranges::for_each(
+      input, [&valueIdsInput, evaluationColumn](const BlockMetadata& block) {
+        valueIdsInput.push_back(
+            getIdFromColumnIndex(block.firstTriple_, evaluationColumn));
+        valueIdsInput.push_back(
+            getIdFromColumnIndex(block.lastTriple_, evaluationColumn));
+      });
+
+  auto idsBegin = valueIdsInput.begin();
+  auto idsEnd = valueIdsInput.end();
+  std::vector<RandomItPair> relevantRanges;
+  if constexpr (Datatype == BLANK) {
+    relevantRanges.push_back(valueIdComparators::getRangeForDatatype(
+        idsBegin, idsEnd, Datatype::BlankNodeIndex));
+  } else if constexpr (Datatype == NUMERIC) {
+    const auto& rangeInt = valueIdComparators::getRangeForDatatype(
+        idsBegin, idsEnd, Datatype::Int);
+    const auto& rangeDouble = valueIdComparators::getRangeForDatatype(
+        idsBegin, idsEnd, Datatype::Double);
+    // Differention here regarding the adjacency of Int and Double datatype
+    // values.
+    // This is relevant w.r.t. getRelevantBlocksFromIdRanges(), because we
+    // technically add to .second + 1 for the first datatype range. If we simply
+    // add rangeInt and rangeDouble given that datatype Int and Double are
+    // stored directly next to each other, we potentially add a block twice
+    // (forbidden).
+    // Remark: This is necessary even if simplifyRanges(relevantRanges) is
+    // performed later on.
+    if (rangeInt.second == rangeDouble.first ||
+        rangeDouble.second == rangeInt.first) {
+      relevantRanges.push_back({std::min(rangeInt.first, rangeDouble.first),
+                                std::max(rangeInt.second, rangeDouble.second)});
+    } else {
+      relevantRanges.push_back(rangeInt);
+      relevantRanges.push_back(rangeDouble);
+    }
+  } else {
+    assert(Datatype == IRI || Datatype == LITERAL);
+    // Not implemented yet, i assume the prefiltering can be even more precise
+    // by making use of `transformToFirstPossibleBiggerValue`.
+    return std::vector<BlockMetadata>{input.begin(), input.end()};
+  }
+
+  // Sort and remove overlaps w.r.t. relevant ranges.
+  valueIdComparators::detail::simplifyRanges(relevantRanges);
+  // If this IsDatatypeExpression<Datatype> expression is negated, retrieve the
+  // corresponding complementing ranges.
+  if (isNegated_) {
+    relevantRanges = getComplementingRanges(relevantRanges, idsBegin, idsEnd);
+  }
+  return getRelevantBlocksFromIdRanges(relevantRanges, input, valueIdsInput);
 };
 
 // SECTION LOGICAL OPERATIONS
@@ -472,6 +634,11 @@ template class RelationalExpression<CompOp::GE>;
 template class RelationalExpression<CompOp::GT>;
 template class RelationalExpression<CompOp::EQ>;
 template class RelationalExpression<CompOp::NE>;
+
+template class IsDatatypeExpression<IsDatatype::IRI>;
+template class IsDatatypeExpression<IsDatatype::BLANK>;
+template class IsDatatypeExpression<IsDatatype::LITERAL>;
+template class IsDatatypeExpression<IsDatatype::NUMERIC>;
 
 template class LogicalExpression<LogicalOperator::AND>;
 template class LogicalExpression<LogicalOperator::OR>;
