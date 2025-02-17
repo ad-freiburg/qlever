@@ -753,3 +753,31 @@ TEST(PathSearchTest, sourceAndTargetBound) {
   ASSERT_THAT(resultTable.idTable(),
               ::testing::UnorderedElementsAreArray(expected));
 }
+
+// _____________________________________________________________________________
+TEST(PathSearchTest, clone) {
+  auto sub = makeIdTableFromVector({{0, 1}});
+
+  Vars vars = {Variable{"?start"}, Variable{"?end"}};
+  PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
+                                 Var{"?source"},
+                                 Var{"?target"},
+                                 Var{"?start"},
+                                 Var{"?end"},
+                                 Var{"?edgeIndex"},
+                                 Var{"?pathIndex"},
+                                 {}};
+
+  auto qec = getQec();
+  auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, std::move(sub), vars);
+  PathSearch pathSearch{qec, std::move(subtree), std::move(config)};
+
+  auto clone = pathSearch.clone();
+  ASSERT_TRUE(clone);
+  const auto& cloneReference = *clone;
+  EXPECT_EQ(typeid(pathSearch), typeid(cloneReference));
+  EXPECT_EQ(cloneReference.getDescriptor(), pathSearch.getDescriptor());
+
+  EXPECT_NE(pathSearch.getChildren().at(0), cloneReference.getChildren().at(0));
+}

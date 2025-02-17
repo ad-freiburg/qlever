@@ -368,3 +368,21 @@ TEST(Engine, countDistinct) {
                                  ::testing::HasSubstr("must be sorted"));
   }
 }
+
+// _____________________________________________________________________________
+TEST(OptionalJoin, clone) {
+  auto qec = ad_utility::testing::getQec();
+  auto a = makeIdTableFromVector({{0}});
+  auto left = idTableToExecutionTree(qec, a);
+  auto right = idTableToExecutionTree(qec, a);
+  OptionalJoin opt{qec, left, right};
+
+  auto clone = opt.clone();
+  ASSERT_TRUE(clone);
+  const auto& cloneReference = *clone;
+  EXPECT_EQ(typeid(opt), typeid(cloneReference));
+  EXPECT_EQ(cloneReference.getDescriptor(), opt.getDescriptor());
+
+  EXPECT_NE(opt.getChildren().at(0), cloneReference.getChildren().at(0));
+  EXPECT_NE(opt.getChildren().at(1), cloneReference.getChildren().at(1));
+}

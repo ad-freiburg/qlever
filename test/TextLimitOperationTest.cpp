@@ -502,3 +502,19 @@ TEST(TextLimit, CacheKey) {
   // The input is different.
   ASSERT_NE(textLimit1.getCacheKey(), textLimit7.getCacheKey());
 }
+
+// _____________________________________________________________________________
+TEST(TextLimit, clone) {
+  VectorTable input{{1, 2, 3}, {1, 2, 3}, {1, 2, 3}};
+  IdTable inputTable = makeIdTableFromVector(input, &Id::makeFromInt);
+  TextLimit textLimit = makeTextLimit(inputTable.clone(), 4, 0, {1}, {2});
+
+  auto clone = textLimit.clone();
+  ASSERT_TRUE(clone);
+  const auto& cloneReference = *clone;
+  EXPECT_EQ(typeid(textLimit), typeid(cloneReference));
+  EXPECT_EQ(cloneReference.getDescriptor(), textLimit.getDescriptor());
+
+  EXPECT_NE(static_cast<Operation&>(textLimit).getChildren().at(0),
+            cloneReference.getChildren().at(0));
+}

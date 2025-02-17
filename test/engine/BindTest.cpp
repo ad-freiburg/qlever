@@ -131,3 +131,23 @@ TEST(
     EXPECT_EQ(++iterator, idTables.end());
   }
 }
+
+// _____________________________________________________________________________
+TEST(Bind, clone) {
+  auto* qec = ad_utility::testing::getQec();
+  auto valuesTree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, IdTable{1, qec->getAllocator()}, Vars{Variable{"?a"}}, false,
+      std::vector<ColumnIndex>{}, LocalVocab{}, std::nullopt, true);
+  Bind bind{
+      qec,
+      std::move(valuesTree),
+      {SparqlExpressionPimpl{
+           std::make_unique<IdExpression>(Id::makeFromInt(42)), "42 as ?b"},
+       Variable{"?b"}}};
+
+  auto clone = bind.clone();
+  ASSERT_TRUE(clone);
+  const auto& cloneReference = *clone;
+  EXPECT_EQ(typeid(bind), typeid(cloneReference));
+  EXPECT_EQ(cloneReference.getDescriptor(), bind.getDescriptor());
+}

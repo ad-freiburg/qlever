@@ -4,12 +4,12 @@
 
 #include <gtest/gtest.h>
 
-#include <array>
 #include <vector>
 
 #include "./engine/ValuesForTesting.h"
 #include "./util/IdTableHelpers.h"
 #include "./util/IdTestHelpers.h"
+#include "engine/NeutralElementOperation.h"
 #include "engine/Union.h"
 #include "global/Id.h"
 #include "util/IndexTestHelpers.h"
@@ -180,4 +180,24 @@ TEST(Union, ensurePermutationIsAppliedCorrectly) {
         makeIdTableFromVector({{1, 2, 3, 4, 5}, {V(7), V(6), U, U, V(8)}});
     EXPECT_EQ(resultTable.idTable(), expected);
   }
+}
+
+// _____________________________________________________________________________
+TEST(Union, clone) {
+  auto* qec = ad_utility::testing::getQec();
+
+  Union unionOperation{
+      qec, ad_utility::makeExecutionTree<NeutralElementOperation>(qec),
+      ad_utility::makeExecutionTree<NeutralElementOperation>(qec)};
+
+  auto clone = unionOperation.clone();
+  ASSERT_TRUE(clone);
+  const auto& cloneReference = *clone;
+  EXPECT_EQ(typeid(unionOperation), typeid(cloneReference));
+  EXPECT_EQ(cloneReference.getDescriptor(), unionOperation.getDescriptor());
+
+  EXPECT_NE(unionOperation.getChildren().at(0),
+            cloneReference.getChildren().at(0));
+  EXPECT_NE(unionOperation.getChildren().at(1),
+            cloneReference.getChildren().at(1));
 }

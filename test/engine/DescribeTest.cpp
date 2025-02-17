@@ -178,3 +178,21 @@ TEST(Describe, simpleMembers) {
   EXPECT_THAT(children.at(0)->getRootOperation()->getDescriptor(),
               Eq("NeutralElement"));
 }
+
+// _____________________________________________________________________________
+TEST(Describe, clone) {
+  auto qec = getQec();
+  parsedQuery::Describe parsedDescribe;
+  parsedDescribe.resources_.push_back(TripleComponent::Iri::fromIriref("<s>"));
+  Describe describe{qec,
+                    ad_utility::makeExecutionTree<NeutralElementOperation>(qec),
+                    parsedDescribe};
+
+  auto clone = describe.clone();
+  ASSERT_TRUE(clone);
+  const auto& cloneReference = *clone;
+  EXPECT_EQ(typeid(describe), typeid(cloneReference));
+  EXPECT_EQ(cloneReference.getDescriptor(), describe.getDescriptor());
+
+  EXPECT_NE(describe.getChildren().at(0), cloneReference.getChildren().at(0));
+}

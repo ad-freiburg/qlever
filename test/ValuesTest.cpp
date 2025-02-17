@@ -90,3 +90,17 @@ TEST(Values, illegalInput) {
   ValuesComponents values{{TC{12}, TC{"<x>"}}, {TC::UNDEF{}}};
   ASSERT_ANY_THROW(Values(qec, {{Variable{"?x"}, Variable{"?y"}}, values}));
 }
+
+// _____________________________________________________________________________
+TEST(Values, clone) {
+  auto testQec = ad_utility::testing::getQec("<x> <x> <x> .");
+  ValuesComponents values{{TC{12}, TC{iri("<x>")}},
+                          {TC::UNDEF{}, TC{iri("<y>")}}};
+  Values valuesOperation(testQec, {{Variable{"?x"}, Variable{"?y"}}, values});
+
+  auto clone = valuesOperation.clone();
+  ASSERT_TRUE(clone);
+  const auto& cloneReference = *clone;
+  EXPECT_EQ(typeid(valuesOperation), typeid(cloneReference));
+  EXPECT_EQ(cloneReference.getDescriptor(), valuesOperation.getDescriptor());
+}

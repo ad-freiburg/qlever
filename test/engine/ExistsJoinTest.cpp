@@ -133,3 +133,26 @@ TEST(Exists, computeResult) {
   testExistsFromIdTable(makeIdTableFromVector({{U, U}, {3, 7}}),
                         IdTable(2, alloc), {false, false}, 2);
 }
+
+// _____________________________________________________________________________
+TEST(Exists, clone) {
+  auto* qec = getQec();
+  ExistsJoin existsJoin{
+      qec,
+      ad_utility::makeExecutionTree<ValuesForTesting>(
+          qec, makeIdTableFromVector({{0, 1}}),
+          std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?y"}}),
+      ad_utility::makeExecutionTree<ValuesForTesting>(
+          qec, makeIdTableFromVector({{0, 1}}),
+          std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?y"}}),
+      Variable{"?x"}};
+
+  auto clone = existsJoin.clone();
+  ASSERT_TRUE(clone);
+  const auto& cloneReference = *clone;
+  EXPECT_EQ(typeid(existsJoin), typeid(cloneReference));
+  EXPECT_EQ(cloneReference.getDescriptor(), existsJoin.getDescriptor());
+
+  EXPECT_NE(existsJoin.getChildren().at(0), cloneReference.getChildren().at(0));
+  EXPECT_NE(existsJoin.getChildren().at(1), cloneReference.getChildren().at(1));
+}

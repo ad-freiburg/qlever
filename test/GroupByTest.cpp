@@ -116,6 +116,29 @@ TEST_F(GroupByTest, getDescriptor) {
   ASSERT_EQ(groupBy.getDescriptor(), "GroupBy on ?a");
 }
 
+// _____________________________________________________________________________
+TEST_F(GroupByTest, clone) {
+  auto expr =
+      std::make_unique<sparqlExpression::VariableExpression>(Variable{"?a"});
+  auto alias =
+      Alias{sparqlExpression::SparqlExpressionPimpl{std::move(expr), "?a"},
+            Variable{"?a"}};
+
+  parsedQuery::SparqlValues input;
+  input._variables = {Variable{"?a"}};
+  auto values = ad_utility::makeExecutionTree<Values>(getQec(), input);
+
+  GroupBy groupBy{getQec(), {Variable{"?a"}}, {alias}, values};
+
+  auto clone = groupBy.clone();
+  ASSERT_TRUE(clone);
+  const auto& cloneReference = *clone;
+  EXPECT_EQ(typeid(groupBy), typeid(cloneReference));
+  EXPECT_EQ(cloneReference.getDescriptor(), groupBy.getDescriptor());
+
+  EXPECT_NE(groupBy.getChildren().at(0), cloneReference.getChildren().at(0));
+}
+
 TEST_F(GroupByTest, doGroupBy) {
   using std::string;
   using std::vector;

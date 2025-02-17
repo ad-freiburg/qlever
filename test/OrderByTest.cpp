@@ -257,3 +257,20 @@ TEST(OrderBy, verifyOperationIsPreemptivelyAbortedWithNoRemainingTime) {
       orderBy.getResult(true), ::testing::HasSubstr("time estimate exceeded"),
       ad_utility::CancellationException);
 }
+
+// _____________________________________________________________________________
+TEST(OrderBy, clone) {
+  auto* qec = ad_utility::testing::getQec();
+  IdTable permutedInput{2, qec->getAllocator()};
+
+  OrderBy orderBy =
+      makeOrderBy(permutedInput.clone(), OrderBy::SortIndices{{0, true}});
+
+  auto clone = orderBy.clone();
+  ASSERT_TRUE(clone);
+  const auto& cloneReference = *clone;
+  EXPECT_EQ(typeid(orderBy), typeid(cloneReference));
+  EXPECT_EQ(cloneReference.getDescriptor(), orderBy.getDescriptor());
+
+  EXPECT_NE(orderBy.getChildren().at(0), cloneReference.getChildren().at(0));
+}

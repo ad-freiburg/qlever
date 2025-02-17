@@ -764,3 +764,26 @@ TEST(JoinTest, verifyColumnPermutationsAreAppliedCorrectly) {
     testJoinOperation(join, expectedColumns, false);
   }
 }
+
+// _____________________________________________________________________________
+TEST(JoinTest, clone) {
+  auto qec = ad_utility::testing::getQec();
+  auto leftTree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{I(1), I(1), I(1)}}),
+      Vars{Variable{"?t"}, Variable{"?s"}, Variable{"?u"}}, false,
+      std::vector<ColumnIndex>{1});
+  auto rightTree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{I(1), I(1), I(1)}}),
+      Vars{Variable{"?v"}, Variable{"?w"}, Variable{"?s"}}, false,
+      std::vector<ColumnIndex>{2});
+  Join join{qec, leftTree, rightTree, 1, 2};
+
+  auto clone = join.clone();
+  ASSERT_TRUE(clone);
+  const auto& cloneReference = *clone;
+  EXPECT_EQ(typeid(join), typeid(cloneReference));
+  EXPECT_EQ(cloneReference.getDescriptor(), join.getDescriptor());
+
+  EXPECT_NE(join.getChildren().at(0), cloneReference.getChildren().at(0));
+  EXPECT_NE(join.getChildren().at(1), cloneReference.getChildren().at(1));
+}

@@ -629,3 +629,22 @@ INSTANTIATE_TEST_SUITE_P(
       }
       return std::move(stream).str();
     });
+
+// _____________________________________________________________________________
+TEST(CartesianProductJoin, clone) {
+  auto qec = getQec();
+  std::vector<std::shared_ptr<QueryExecutionTree>> subtrees;
+  using Vars = std::vector<std::optional<Variable>>;
+  subtrees.push_back(ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{3, 4}}),
+      Vars{Variable{"?x"}, std::nullopt}));
+  CartesianProductJoin join{qec, std::move(subtrees)};
+
+  auto clone = join.clone();
+  ASSERT_TRUE(clone);
+  const auto& cloneReference = *clone;
+  EXPECT_EQ(typeid(join), typeid(cloneReference));
+  EXPECT_EQ(cloneReference.getDescriptor(), join.getDescriptor());
+
+  EXPECT_NE(join.getChildren().at(0), cloneReference.getChildren().at(0));
+}

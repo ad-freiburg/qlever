@@ -795,3 +795,26 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
            ->idTables()) {
   }
 }
+
+// ____________________________________________________________________________
+TEST_F(ServiceTest, clone) {
+  Service service{
+      testQec,
+      parsedQuery::Service{
+          {Variable{"?x"}, Variable{"?y"}},
+          TripleComponent::Iri::fromIriref("<http://localhorst/api>"),
+          "PREFIX doof: <http://doof.org>",
+          "{ }",
+          true},
+      getResultFunctionFactory(
+          "http://localhorst:80/api",
+          "PREFIX doof: <http://doof.org> SELECT ?x ?y WHERE { }",
+          genJsonResult({"x", "y"}, {{"a", "b"}}),
+          boost::beast::http::status::ok, "application/sparql-results+json")};
+
+  auto clone = service.clone();
+  ASSERT_TRUE(clone);
+  const auto& cloneReference = *clone;
+  EXPECT_EQ(typeid(service), typeid(cloneReference));
+  EXPECT_EQ(cloneReference.getDescriptor(), service.getDescriptor());
+}

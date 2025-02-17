@@ -652,6 +652,26 @@ TEST_P(TransitivePathTest, zeroLengthException) {
 }
 
 // _____________________________________________________________________________
+TEST_P(TransitivePathTest, clone) {
+  auto sub = makeIdTableFromVector({{0, 2}});
+
+  TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
+  TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
+  auto transitivePath =
+      makePathUnbound(std::move(sub), {Variable{"?start"}, Variable{"?target"}},
+                      left, right, 0, std::numeric_limits<size_t>::max());
+
+  auto clone = transitivePath->clone();
+  ASSERT_TRUE(clone);
+  auto& path = *transitivePath;
+  const auto& cloneReference = *clone;
+  EXPECT_EQ(typeid(path), typeid(cloneReference));
+  EXPECT_EQ(cloneReference.getDescriptor(), path.getDescriptor());
+
+  EXPECT_NE(path.getChildren().at(0), cloneReference.getChildren().at(0));
+}
+
+// _____________________________________________________________________________
 INSTANTIATE_TEST_SUITE_P(
     TransitivePathTestSuite, TransitivePathTest,
     ::testing::Combine(::testing::Bool(), ::testing::Bool()),

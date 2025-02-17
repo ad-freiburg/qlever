@@ -76,3 +76,20 @@ TEST(EngineTest, multiColumnJoinTest) {
   ASSERT_EQ(wantedRes[2], vres[2]);
   ASSERT_EQ(wantedRes[3], vres[3]);
 }
+
+// _____________________________________________________________________________
+TEST(MultiColumnJoin, clone) {
+  auto* qec = ad_utility::testing::getQec();
+  IdTable a = makeIdTableFromVector({{4, 1, 2}});
+  MultiColumnJoin join{qec, idTableToExecutionTree(qec, a),
+                       idTableToExecutionTree(qec, a)};
+
+  auto clone = join.clone();
+  ASSERT_TRUE(clone);
+  const auto& cloneReference = *clone;
+  EXPECT_EQ(typeid(join), typeid(cloneReference));
+  EXPECT_EQ(cloneReference.getDescriptor(), join.getDescriptor());
+
+  EXPECT_NE(join.getChildren().at(0), cloneReference.getChildren().at(0));
+  EXPECT_NE(join.getChildren().at(1), cloneReference.getChildren().at(1));
+}

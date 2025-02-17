@@ -152,4 +152,18 @@ TEST(TextIndexScanForEntity, KnownEmpty) {
   ASSERT_TRUE(!s3.knownEmptyResult());
 }
 
+// _____________________________________________________________________________
+TEST(TextIndexScanForEntity, clone) {
+  auto qec = getQec();
+
+  TextIndexScanForEntity scan{qec, Variable{"?text"}, Variable{"?entityVar"},
+                              "nonExistentWord*"};
+
+  auto clone = scan.clone();
+  ASSERT_TRUE(clone);
+  const auto& cloneReference = *clone;
+  EXPECT_EQ(typeid(scan), typeid(cloneReference));
+  EXPECT_EQ(cloneReference.getDescriptor(), scan.getDescriptor());
+}
+
 }  // namespace

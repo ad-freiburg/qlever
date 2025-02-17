@@ -256,4 +256,17 @@ TEST(TextIndexScanForWord, KnownEmpty) {
   TextIndexScanForWord s5{qec, Variable{"?text1"}, "testing"};
   ASSERT_TRUE(!s5.knownEmptyResult());
 }
+
+// _____________________________________________________________________________
+TEST(TextIndexScanForWord, clone) {
+  auto qec = getQec();
+
+  TextIndexScanForWord scan{qec, Variable{"?text1"}, "nonExistentWord*"};
+
+  auto clone = scan.clone();
+  ASSERT_TRUE(clone);
+  const auto& cloneReference = *clone;
+  EXPECT_EQ(typeid(scan), typeid(cloneReference));
+  EXPECT_EQ(cloneReference.getDescriptor(), scan.getDescriptor());
+}
 }  // namespace

@@ -196,3 +196,16 @@ TEST(Sort, verifyOperationIsPreemptivelyAbortedWithNoRemainingTime) {
       sort.getResult(true), ::testing::HasSubstr("time estimate exceeded"),
       ad_utility::CancellationException);
 }
+
+// _____________________________________________________________________________
+TEST(Sort, clone) {
+  Sort sort = makeSort(makeIdTableFromVector({{0, 0}}), {0});
+
+  auto clone = sort.clone();
+  ASSERT_TRUE(clone);
+  const auto& cloneReference = *clone;
+  EXPECT_EQ(typeid(sort), typeid(cloneReference));
+  EXPECT_EQ(cloneReference.getDescriptor(), sort.getDescriptor());
+
+  EXPECT_NE(sort.getChildren().at(0), cloneReference.getChildren().at(0));
+}
