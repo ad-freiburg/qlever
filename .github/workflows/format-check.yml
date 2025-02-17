@@ -1,10 +1,10 @@
 name: Format check
 
 on:
-  push:
-    branches: [ master ]
-  pull_request:
-    branches: [ master ]
+  #push:
+  #  branches: [ master ]
+  #pull_request:
+  #  branches: [ master ]
   merge_group:
 
 jobs:
