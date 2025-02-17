@@ -526,7 +526,7 @@ namespace {
 // `TripleComponent`, typically the subject, predicate, or object of the triple,
 // hence the name.
 template <typename Function>
-concept TriplePosition =
+CPP_concept TriplePosition =
     ad_utility::InvocableWithExactReturnType<Function, TripleComponent&,
                                              SparqlTripleSimple&>;
 
@@ -544,31 +544,32 @@ SparqlFilter createEqualFilter(const Variable& var1, const Variable& var2) {
 // position of the `scanTriple`, denoted by the `rewritePosition` by a new
 // variable, and add a filter, that checks the old and the new value for
 // equality.
-constexpr auto rewriteSingle =
-    [](TriplePosition auto rewritePosition, SparqlTripleSimple& scanTriple,
-       const auto& addFilter, const auto& generateUniqueVarName) {
-      Variable filterVar = generateUniqueVarName();
-      auto& target = std::invoke(rewritePosition, scanTriple).getVariable();
-      addFilter(createEqualFilter(filterVar, target));
-      target = filterVar;
-    };
+constexpr auto rewriteSingle = CPP_template_lambda()(typename T)(
+    T rewritePosition, SparqlTripleSimple& scanTriple, const auto& addFilter,
+    const auto& generateUniqueVarName)(requires TriplePosition<T>) {
+  Variable filterVar = generateUniqueVarName();
+  auto& target = std::invoke(rewritePosition, scanTriple).getVariable();
+  addFilter(createEqualFilter(filterVar, target));
+  target = filterVar;
+};
 
 // Replace the positions of the `triple` that are specified by the
 // `rewritePositions` with a new variable, and add a filter, which checks the
 // old and the new value for equality for each of these rewrites. Then also
 // add an index scan for the rewritten triple.
 constexpr auto handleRepeatedVariablesImpl =
-    [](const auto& triple, auto& addIndexScan,
-       const auto& generateUniqueVarName, const auto& addFilter,
-       std::span<const Permutation::Enum> permutations,
-       TriplePosition auto... rewritePositions) {
-      auto scanTriple = triple;
-      (..., rewriteSingle(rewritePositions, scanTriple, addFilter,
-                          generateUniqueVarName));
-      for (const auto& permutation : permutations) {
-        addIndexScan(permutation, scanTriple);
-      }
-    };
+    []<typename... T>(const auto& triple, auto& addIndexScan,
+                      const auto& generateUniqueVarName, const auto& addFilter,
+                      std::span<const Permutation::Enum> permutations,
+                      T... rewritePositions)
+    -> CPP_ret(void)(requires(TriplePosition<T>&&...)) {
+  auto scanTriple = triple;
+  (..., rewriteSingle(rewritePositions, scanTriple, addFilter,
+                      generateUniqueVarName));
+  for (const auto& permutation : permutations) {
+    addIndexScan(permutation, scanTriple);
+  }
+};
 
 }  // namespace
 
@@ -601,13 +602,14 @@ void QueryPlanner::indexScanTwoVarsCase(
   // add an index scan for the rewritten triple.
   auto generate = [this]() { return generateUniqueVarName(); };
   auto handleRepeatedVariables =
-      [&triple, &addIndexScan, &addFilter, &generate](
+      [&triple, &addIndexScan, &addFilter, &generate]<typename... T>(
           std::span<const Permutation::Enum> permutations,
-          TriplePosition auto... rewritePositions) {
-        return handleRepeatedVariablesImpl(triple, addIndexScan, generate,
-                                           addFilter, permutations,
-                                           rewritePositions...);
-      };
+          T... rewritePositions)
+      -> CPP_ret(void)(requires(TriplePosition<T>&&...)) {
+    return handleRepeatedVariablesImpl(triple, addIndexScan, generate,
+                                       addFilter, permutations,
+                                       rewritePositions...);
+  };
 
   const auto& [s, p, o, _] = triple;
 
@@ -653,13 +655,14 @@ void QueryPlanner::indexScanThreeVarsCase(
   // old and the new value for equality for this rewrite. Then also
   // add an index scan for the rewritten triple.
   auto handleRepeatedVariables =
-      [&triple, &addIndexScan, &addFilter, &generate](
+      [&triple, &addIndexScan, &addFilter, &generate]<typename... T>(
           std::span<const Permutation::Enum> permutations,
-          TriplePosition auto... rewritePositions) {
-        return handleRepeatedVariablesImpl(triple, addIndexScan, generate,
-                                           addFilter, permutations,
-                                           rewritePositions...);
-      };
+          T... rewritePositions)
+      -> CPP_ret(void)(requires(TriplePosition<T>&&...)) {
+    return handleRepeatedVariablesImpl(triple, addIndexScan, generate,
+                                       addFilter, permutations,
+                                       rewritePositions...);
+  };
 
   using Tr = SparqlTripleSimple;
   const auto& [s, p, o, _] = triple;
