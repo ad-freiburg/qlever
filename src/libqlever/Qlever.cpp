@@ -199,7 +199,9 @@ std::string Qlever::pinNamed(QueryOrPlan queryOrPlan, std::string name,
   qec->locatedTriplesSnapshot();
   qec->pinWithExplicitName() = std::move(name);
 
+  std::cerr << "calling `getResult`" << std::endl;
   if (!returnResult) {
+    std::cerr << "calling `getResult`" << std::endl;
     [[maybe_unused]] auto res = qet->getResult();
     return "Result was pinned to cache, but not returned";
   }
