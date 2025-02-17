@@ -74,6 +74,7 @@ jobs:
         run: |
           which cc
           cc --version
+          conan profile detect
           #conan install .. -pr:b=../conanprofiles/clang-16-macos -pr:h=../conanprofiles/clang-16-macos -of=. --build=missing
           conan install .. -of=. --build=missing
       - name: Configure CMake
