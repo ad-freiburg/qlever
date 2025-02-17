@@ -4,240 +4,76 @@
 
 #pragma once
 
-#include "util/Algorithm.h"
 #include "util/TypeIdentity.h"
-#include "util/TypeTraits.h"
 #include "util/http/HttpUtils.h"
 #include "util/http/UrlParser.h"
 #include "util/http/beast.h"
 
-class SPARQLProtocol {
-  FRIEND_TEST(SPARQLProtocolTest, extractAccessToken);
+struct ParsedRequestBuilder {
   FRIEND_TEST(SPARQLProtocolTest, extractTargetGraph);
+  FRIEND_TEST(SPARQLProtocolTest, extractAccessTokenImpl);
+  FRIEND_TEST(SPARQLProtocolTest, parameterIsContainedExactlyOnce);
 
- public:
-  /// Parse the path and URL parameters from the given request. Supports both
-  /// GET and POST request according to the SPARQL 1.1 standard.
-  static ad_utility::url_parser::ParsedRequest parseHttpRequest(
+  ad_utility::url_parser::ParsedRequest parsedRequest_;
+
+  explicit ParsedRequestBuilder(
       const ad_utility::httpUtils::HttpRequest auto& request) {
     using namespace ad_utility::url_parser::sparqlOperation;
-    using namespace ad_utility::use_type_identity;
-    namespace http = boost::beast::http;
     // For an HTTP request, `request.target()` yields the HTTP Request-URI.
     // This is a concatenation of the URL path and the query strings.
     auto parsedUrl =
         ad_utility::url_parser::parseRequestTarget(request.target());
-    ad_utility::url_parser::ParsedRequest parsedRequest{
-        std::move(parsedUrl.path_), std::nullopt,
-        std::move(parsedUrl.parameters_), None{}};
+    parsedRequest_ = {std::move(parsedUrl.path_), std::nullopt,
+                      std::move(parsedUrl.parameters_), None{}};
+  }
 
-    // Some valid requests (e.g. QLever's custom commands like retrieving index
-    // statistics) don't have a query. So an empty operation is not necessarily
-    // an error.
-    auto setOperationIfSpecifiedInParams = [&parsedRequest]<typename Operation>(
-                                               TI<Operation>,
-                                               string_view paramName) {
-      auto operation = ad_utility::url_parser::getParameterCheckAtMostOnce(
-          parsedRequest.parameters_, paramName);
-      if (operation.has_value()) {
-        AD_CORRECTNESS_CHECK(
-            std::holds_alternative<None>(parsedRequest.operation_));
-        parsedRequest.operation_ = Operation{operation.value(), {}};
-        parsedRequest.parameters_.erase(paramName);
-      }
-    };
-    auto isContainedExactlyOnce = [&parsedRequest](const std::string& key) {
-      return ad_utility::url_parser::getParameterCheckAtMostOnce(
-                 parsedRequest.parameters_, key)
-          .has_value();
-    };
-    auto checkAndSetGraphStoreOperation = [&parsedRequest,
-                                           &isContainedExactlyOnce] {
-      // SPARQL Graph Store HTTP Protocol with indirect graph identification
-      if (isContainedExactlyOnce("graph") &&
-          isContainedExactlyOnce("default")) {
-        throw std::runtime_error(
-            R"(Parameters "graph" and "default" must not be set at the same time.)");
-      }
-      AD_CORRECTNESS_CHECK(
-          std::holds_alternative<None>(parsedRequest.operation_));
-      // We only support passing the target graph as a query parameter
-      // (`Indirect Graph Identification`). `Direct Graph Identification` (the
-      // URL is the graph) is not supported. See also
-      // https://www.w3.org/TR/2013/REC-sparql11-http-rdf-update-20130321/#graph-identification.
-      parsedRequest.operation_ =
-          GraphStoreOperation{extractTargetGraph(parsedRequest.parameters_)};
-    };
-    const bool isGraphStoreOperation = [&isContainedExactlyOnce] {
-      return isContainedExactlyOnce("graph") ||
-             isContainedExactlyOnce("default");
-    };
-    // Check that requests don't both have these content types and are Graph
-    // Store operations.
-    auto checkUnsupportedGraphStoreContentType =
-        [&isGraphStoreOperation](std::string_view contentType,
-                                 std::string_view unsupportedType) {
-          if (isGraphStoreOperation() &&
-              contentType.starts_with(unsupportedType)) {
-            throw std::runtime_error(
-                absl::StrCat("Unsupported Content type \"", contentType,
-                             "\" for Graph Store protocol."));
-          }
-        };
-    auto addToDatasetClausesIfOperationIs =
-        [&parsedRequest]<typename Operation>(
-            TI<Operation>, const std::string& key, bool isNamed) {
-          if (Operation* op =
-                  std::get_if<Operation>(&parsedRequest.operation_)) {
-            ad_utility::appendVector(
-                op->datasetClauses_,
-                ad_utility::url_parser::parseDatasetClausesFrom(
-                    parsedRequest.parameters_, key, isNamed));
-          }
-        };
-    auto addDatasetClauses = [&addToDatasetClausesIfOperationIs] {
-      addToDatasetClausesIfOperationIs(ti<Query>, "default-graph-uri", false);
-      addToDatasetClausesIfOperationIs(ti<Query>, "named-graph-uri", true);
-      addToDatasetClausesIfOperationIs(ti<Update>, "using-graph-uri", false);
-      addToDatasetClausesIfOperationIs(ti<Update>, "using-named-graph-uri",
-                                       true);
-    };
-    auto extractAccessTokenFromRequest = [&parsedRequest, &request]() {
-      parsedRequest.accessToken_ =
-          extractAccessToken(request, parsedRequest.parameters_);
-    };
+  void extractAccessToken(
+      const ad_utility::httpUtils::HttpRequest auto& request) {
+    parsedRequest_.accessToken_ =
+        extractAccessToken(request, parsedRequest_.parameters_);
+  }
 
-    if (request.method() == http::verb::get) {
-      extractAccessTokenFromRequest();
-      bool isQuery = parsedRequest.parameters_.contains("query");
-      if (parsedRequest.parameters_.contains("update")) {
-        throw std::runtime_error(
-            "SPARQL Update is not allowed as GET request.");
-      }
-      if (isGraphStoreOperation()) {
-        if (isQuery) {
-          throw std::runtime_error(
-              R"(Request contains parameters for both a SPARQL Query ("query") and a Graph Store Protocol operation ("graph" or "default").)");
-        }
-        // SPARQL Graph Store HTTP Protocol with indirect graph identification
-        checkAndSetGraphStoreOperation();
-      } else if (isQuery) {
-        // SPARQL Query
-        setOperationIfSpecifiedInParams(ti<Query>, "query");
-        addDatasetClauses();
-      }
-      return parsedRequest;
-    }
-    if (request.method() == http::verb::post) {
-      // For a POST request, the content type *must* be either
-      // "application/x-www-form-urlencoded" (1), "application/sparql-query"
-      // (2) or "application/sparql-update" (3).
-      //
-      // (1) Section 2.1.2: The body of the POST request contains *all*
-      // parameters (including the query or update) in an encoded form (just
-      // like in the part of a GET request after the "?").
-      //
-      // (2) Section 2.1.3: The body of the POST request contains *only* the
-      // unencoded SPARQL query. There may be additional HTTP query parameters.
-      //
-      // (3) Section 2.2.2: The body of the POST request contains *only* the
-      // unencoded SPARQL update. There may be additional HTTP query parameters.
-      //
-      // Reference: https://www.w3.org/TR/2013/REC-sparql11-protocol-20130321
-      std::string_view contentType = request.base()[http::field::content_type];
-      LOG(DEBUG) << "Content-type: \"" << contentType << "\"" << std::endl;
-      static constexpr std::string_view contentTypeUrlEncoded =
-          "application/x-www-form-urlencoded";
-      static constexpr std::string_view contentTypeSparqlQuery =
-          "application/sparql-query";
-      static constexpr std::string_view contentTypeSparqlUpdate =
-          "application/sparql-update";
+  void extractDatasetClauses();
 
-      // Note: For simplicity we only check via `starts_with`. This ignores
-      // additional parameters like `application/sparql-query;charset=utf8`. We
-      // currently always expect UTF-8.
-      // TODO<joka921> Implement more complete parsing that allows the checking
-      // of these parameters.
-      if (contentType.starts_with(contentTypeUrlEncoded)) {
-        // All parameters must be included in the request body for URL-encoded
-        // POST. The HTTP query string parameters must be empty. See SPARQL 1.1
-        // Protocol Sections 2.1.2
-        if (!parsedRequest.parameters_.empty()) {
-          throw std::runtime_error(
-              "URL-encoded POST requests must not contain query parameters in "
-              "the URL.");
-        }
+  // Some valid requests (e.g. QLever's custom commands like retrieving index
+  // statistics) don't have a query. An empty operation is not an error. Setting
+  // multiple operations should not happen. Setting an operation when one is
+  // already set is an error.
+  template <typename Operation>
+  void extractOperationIfSpecified(ad_utility::use_type_identity::TI<Operation>,
+                                   string_view paramName);
 
-        // Set the url-encoded parameters from the request body.
-        // Note: previously we used `boost::urls::parse_query`, but that
-        // function doesn't unescape the `+` which encodes a space character.
-        // The following workaround of making the url-encoded parameters a
-        // complete relative url and parsing this URL seems to work. Note: We
-        // have to bind the result of `StrCat` to an explicit variable, as the
-        // `boost::urls` parsing routines only give back a view, which otherwise
-        // would be dangling.
-        auto bodyAsQuery = absl::StrCat("/?", request.body());
-        auto query = boost::urls::parse_origin_form(bodyAsQuery);
-        if (!query) {
-          throw std::runtime_error(
-              "Invalid URL-encoded POST request, body was: " + request.body());
-        }
-        parsedRequest.parameters_ =
-            ad_utility::url_parser::paramsToMap(query->params());
-        checkUnsupportedGraphStoreContentType(contentType,
-                                              contentTypeUrlEncoded);
-        if (parsedRequest.parameters_.contains("query") &&
-            parsedRequest.parameters_.contains("update")) {
-          throw std::runtime_error(
-              R"(Request must only contain one of "query" and "update".)");
-        }
-        setOperationIfSpecifiedInParams(ti<Query>, "query");
-        setOperationIfSpecifiedInParams(ti<Update>, "update");
-        addDatasetClauses();
-        // We parse the access token from the url-encoded parameters in the
-        // body. The URL parameters must be empty for URL-encoded POST (see
-        // above).
-        extractAccessTokenFromRequest();
+  bool isGraphStoreOperation() const;
 
-        return parsedRequest;
-      }
-      if (contentType.starts_with(contentTypeSparqlQuery)) {
-        checkUnsupportedGraphStoreContentType(contentType,
-                                              contentTypeSparqlQuery);
-        parsedRequest.operation_ = Query{request.body(), {}};
-        addDatasetClauses();
-        extractAccessTokenFromRequest();
-        return parsedRequest;
-      }
-      if (contentType.starts_with(contentTypeSparqlUpdate)) {
-        checkUnsupportedGraphStoreContentType(contentType,
-                                              contentTypeSparqlUpdate);
-        parsedRequest.operation_ = Update{request.body(), {}};
-        addDatasetClauses();
-        extractAccessTokenFromRequest();
-        return parsedRequest;
-      }
-      // Checking if the content type is supported by the Graph Store
-      // HTTP Protocol implementation is done later.
-      if (isGraphStoreOperation()) {
-        checkAndSetGraphStoreOperation();
-        extractAccessTokenFromRequest();
-        return parsedRequest;
-      }
+  void extractGraphStoreOperation();
 
-      throw std::runtime_error(absl::StrCat(
-          "POST request with content type \"", contentType,
-          "\" not supported (must be \"", contentTypeUrlEncoded, "\", \"",
-          contentTypeSparqlQuery, "\" or \"", contentTypeSparqlUpdate, "\")"));
-    }
-    std::ostringstream requestMethodName;
-    requestMethodName << request.method();
-    throw std::runtime_error(
-        absl::StrCat("Request method \"", requestMethodName.str(),
-                     "\" not supported (has to be GET or POST)"));
-  };
+  bool parametersContain(std::string_view param) const;
+
+  // Check that requests don't both have these content types and are Graph
+  // Store operations.
+  void reportUnsupportedContentTypeIfGraphStore(
+      std::string_view contentType) const;
+
+  ad_utility::url_parser::ParsedRequest build() &&;
 
  private:
+  // Adds a dataset clause to the operation if it has the given type. The
+  // dataset clause's IRI is the value of parameter `key`. The `isNamed_` of the
+  // dataset clause is as given.
+  template <typename Operation>
+  void extractDatasetClauseIfOperationIs(
+      ad_utility::use_type_identity::TI<Operation>, const std::string& key,
+      bool isNamed);
+
+  // Check that a parameter is contained exactly once.
+  bool parameterIsContainedExactlyOnce(std::string_view key) const;
+
+  // Extract the graph to be acted upon using from the URL query parameters
+  // (`Indirect Graph Identification`). See
+  // https://www.w3.org/TR/2013/REC-sparql11-http-rdf-update-20130321/#indirect-graph-identification
+  static GraphOrDefault extractTargetGraph(
+      const ad_utility::url_parser::ParamValueMap& params);
+
   static std::optional<std::string> extractAccessToken(
       const ad_utility::httpUtils::HttpRequest auto& request,
       const ad_utility::url_parser::ParamValueMap& params) {
@@ -270,10 +106,183 @@ class SPARQLProtocol {
                ? std::move(tokenFromAuthorizationHeader)
                : std::move(tokenFromParameter);
   }
+};
 
-  // Extract the graph to be acted upon using from the URL query parameters
-  // (`Indirect Graph Identification`). See
-  // https://www.w3.org/TR/2013/REC-sparql11-http-rdf-update-20130321/#indirect-graph-identification
-  static GraphOrDefault extractTargetGraph(
-      const ad_utility::url_parser::ParamValueMap& params);
+class SPARQLProtocol {
+  static constexpr std::string_view contentTypeUrlEncoded =
+      "application/x-www-form-urlencoded";
+  static constexpr std::string_view contentTypeSparqlQuery =
+      "application/sparql-query";
+  static constexpr std::string_view contentTypeSparqlUpdate =
+      "application/sparql-update";
+
+  static ad_utility::url_parser::ParsedRequest parseGET(
+      const ad_utility::httpUtils::HttpRequest auto& request) {
+    using namespace ad_utility::url_parser::sparqlOperation;
+    using namespace ad_utility::use_type_identity;
+    auto parsedRequestBuilder = ParsedRequestBuilder(request);
+    parsedRequestBuilder.extractAccessToken(request);
+
+    const bool isQuery = parsedRequestBuilder.parametersContain("query");
+    if (parsedRequestBuilder.parametersContain("update")) {
+      throw std::runtime_error("SPARQL Update is not allowed as GET request.");
+    }
+    if (parsedRequestBuilder.isGraphStoreOperation()) {
+      if (isQuery) {
+        throw std::runtime_error(
+            R"(Request contains parameters for both a SPARQL Query ("query") and a Graph Store Protocol operation ("graph" or "default").)");
+      }
+      // SPARQL Graph Store HTTP Protocol with indirect graph identification
+      parsedRequestBuilder.extractGraphStoreOperation();
+    } else if (isQuery) {
+      // SPARQL Query
+      parsedRequestBuilder.extractOperationIfSpecified(ti<Query>, "query");
+      parsedRequestBuilder.extractDatasetClauses();
+    }
+    return std::move(parsedRequestBuilder).build();
+  }
+
+  static ad_utility::url_parser::ParsedRequest parseUrlencodedPOST(
+      const ad_utility::httpUtils::HttpRequest auto& request) {
+    using namespace ad_utility::url_parser::sparqlOperation;
+    using namespace ad_utility::use_type_identity;
+    namespace http = boost::beast::http;
+    auto parsedRequestBuilder = ParsedRequestBuilder(request);
+    // All parameters must be included in the request body for URL-encoded
+    // POST. The HTTP query string parameters must be empty. See SPARQL 1.1
+    // Protocol Sections 2.1.2
+    if (!parsedRequestBuilder.parsedRequest_.parameters_.empty()) {
+      throw std::runtime_error(
+          "URL-encoded POST requests must not contain query parameters in "
+          "the URL.");
+    }
+
+    // Set the url-encoded parameters from the request body.
+    // Note: previously we used `boost::urls::parse_query`, but that
+    // function doesn't unescape the `+` which encodes a space character.
+    // The following workaround of making the url-encoded parameters a
+    // complete relative url and parsing this URL seems to work. Note: We
+    // have to bind the result of `StrCat` to an explicit variable, as the
+    // `boost::urls` parsing routines only give back a view, which otherwise
+    // would be dangling.
+    auto bodyAsQuery = absl::StrCat("/?", request.body());
+    auto query = boost::urls::parse_origin_form(bodyAsQuery);
+    if (!query) {
+      throw std::runtime_error("Invalid URL-encoded POST request, body was: " +
+                               request.body());
+    }
+    parsedRequestBuilder.parsedRequest_.parameters_ =
+        ad_utility::url_parser::paramsToMap(query->params());
+    parsedRequestBuilder.reportUnsupportedContentTypeIfGraphStore(
+        contentTypeUrlEncoded);
+    if (parsedRequestBuilder.parametersContain("query") &&
+        parsedRequestBuilder.parametersContain("update")) {
+      throw std::runtime_error(
+          R"(Request must only contain one of "query" and "update".)");
+    }
+    parsedRequestBuilder.extractOperationIfSpecified(ti<Query>, "query");
+    parsedRequestBuilder.extractOperationIfSpecified(ti<Update>, "update");
+    parsedRequestBuilder.extractDatasetClauses();
+    // We parse the access token from the url-encoded parameters in the
+    // body. The URL parameters must be empty for URL-encoded POST (see
+    // above).
+    parsedRequestBuilder.extractAccessToken(request);
+
+    return std::move(parsedRequestBuilder).build();
+  }
+
+  template <typename Operation>
+  static ad_utility::url_parser::ParsedRequest parseSPARQLPOST(
+      const ad_utility::httpUtils::HttpRequest auto& request,
+      std::string_view contentType) {
+    using namespace ad_utility::url_parser::sparqlOperation;
+    auto parsedRequestBuilder = ParsedRequestBuilder(request);
+    parsedRequestBuilder.reportUnsupportedContentTypeIfGraphStore(contentType);
+    parsedRequestBuilder.parsedRequest_.operation_ =
+        Operation{request.body(), {}};
+    parsedRequestBuilder.extractDatasetClauses();
+    parsedRequestBuilder.extractAccessToken(request);
+    return std::move(parsedRequestBuilder).build();
+  }
+
+  static ad_utility::url_parser::ParsedRequest parseQueryPOST(
+      const ad_utility::httpUtils::HttpRequest auto& request) {
+    return parseSPARQLPOST<ad_utility::url_parser::sparqlOperation::Query>(
+        request, contentTypeSparqlQuery);
+  }
+
+  static ad_utility::url_parser::ParsedRequest parseUpdatePOST(
+      const ad_utility::httpUtils::HttpRequest auto& request) {
+    return parseSPARQLPOST<ad_utility::url_parser::sparqlOperation::Update>(
+        request, contentTypeSparqlUpdate);
+  }
+
+  static ad_utility::url_parser::ParsedRequest parsePOST(
+      const ad_utility::httpUtils::HttpRequest auto& request) {
+    // For a POST request, the content type *must* be either
+    // "application/x-www-form-urlencoded" (1), "application/sparql-query"
+    // (2) or "application/sparql-update" (3).
+    //
+    // (1) Section 2.1.2: The body of the POST request contains *all*
+    // parameters (including the query or update) in an encoded form (just
+    // like in the part of a GET request after the "?").
+    //
+    // (2) Section 2.1.3: The body of the POST request contains *only* the
+    // unencoded SPARQL query. There may be additional HTTP query parameters.
+    //
+    // (3) Section 2.2.2: The body of the POST request contains *only* the
+    // unencoded SPARQL update. There may be additional HTTP query parameters.
+    //
+    // Reference: https://www.w3.org/TR/2013/REC-sparql11-protocol-20130321
+    std::string_view contentType =
+        request.base()[boost::beast::http::field::content_type];
+    LOG(DEBUG) << "Content-type: \"" << contentType << "\"" << std::endl;
+
+    // Note: For simplicity we only check via `starts_with`. This ignores
+    // additional parameters like `application/sparql-query;charset=utf8`. We
+    // currently always expect UTF-8.
+    // TODO<joka921> Implement more complete parsing that allows the checking
+    // of these parameters.
+    if (contentType.starts_with(contentTypeUrlEncoded)) {
+      return parseUrlencodedPOST(request);
+    }
+    if (contentType.starts_with(contentTypeSparqlQuery)) {
+      return parseQueryPOST(request);
+    }
+    if (contentType.starts_with(contentTypeSparqlUpdate)) {
+      return parseUpdatePOST(request);
+    }
+    // Checking if the content type is supported by the Graph Store
+    // HTTP Protocol implementation is done later.
+    auto parsedRequestBuilder = ParsedRequestBuilder(request);
+    if (parsedRequestBuilder.isGraphStoreOperation()) {
+      parsedRequestBuilder.extractGraphStoreOperation();
+      parsedRequestBuilder.extractAccessToken(request);
+      return std::move(parsedRequestBuilder).build();
+    }
+
+    throw std::runtime_error(absl::StrCat(
+        "POST request with content type \"", contentType,
+        "\" not supported (must be \"", contentTypeUrlEncoded, "\", \"",
+        contentTypeSparqlQuery, "\" or \"", contentTypeSparqlUpdate, "\")"));
+  }
+
+ public:
+  /// Parse the path and URL parameters from the given request. Supports both
+  /// GET and POST request according to the SPARQL 1.1 standard.
+  static ad_utility::url_parser::ParsedRequest parseHttpRequest(
+      const ad_utility::httpUtils::HttpRequest auto& request) {
+    namespace http = boost::beast::http;
+    if (request.method() == http::verb::get) {
+      return parseGET(request);
+    }
+    if (request.method() == http::verb::post) {
+      return parsePOST(request);
+    }
+    std::ostringstream requestMethodName;
+    requestMethodName << request.method();
+    throw std::runtime_error(
+        absl::StrCat("Request method \"", requestMethodName.str(),
+                     "\" not supported (has to be GET or POST)"));
+  }
 };
