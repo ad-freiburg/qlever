@@ -423,7 +423,7 @@ Awaitable<void> Server::process(
        &requestTimer, this]<QL_CONCEPT_OR_TYPENAME(QueryOrUpdate) Operation>(
           ParsedQuery parsedOperation, std::string operationName,
           ad_utility::use_type_identity::TI<Operation>,
-          std::function<bool(const ParsedQuery&)> pred,
+          std::function<bool(const ParsedQuery&)> expectedOperation,
           const std::string_view msg) -> Awaitable<void> {
     auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
         checkParameter("timeout", std::nullopt), accessTokenOk, request, send);
@@ -438,7 +438,7 @@ Awaitable<void> Server::process(
     auto [qec, cancellationHandle, cancelTimeoutOnDestruction] =
         prepareOperation(operationName, parsedOperation._originalString,
                          messageSender, parameters, timeLimit.value());
-    if (pred(parsedOperation)) {
+    if (!expectedOperation(parsedOperation)) {
       throw std::runtime_error(
           absl::StrCat(msg, parsedOperation._originalString));
     }
@@ -469,7 +469,7 @@ Awaitable<void> Server::process(
     auto parsedQuery = parseAndAddDatasets(query.query_, query.datasetClauses_);
     return visitOperation(
         parsedQuery, "SPARQL Query", ad_utility::use_type_identity::ti<Query>,
-        &ParsedQuery::hasUpdateClause,
+        std::not_fn(&ParsedQuery::hasUpdateClause),
         "SPARQL QUERY was request via the HTTP request, but the "
         "following update was sent instead of an query: ");
   };
@@ -482,7 +482,7 @@ Awaitable<void> Server::process(
     return visitOperation(
         parsedUpdate, "SPARQL Update",
         ad_utility::use_type_identity::ti<Update>,
-        std::not_fn(&ParsedQuery::hasUpdateClause),
+        &ParsedQuery::hasUpdateClause,
         "SPARQL UPDATE was request via the HTTP request, but the "
         "following query was sent instead of an update: ");
   };
@@ -492,20 +492,21 @@ Awaitable<void> Server::process(
     ParsedQuery parsedOperation =
         GraphStoreProtocol::transformGraphStoreProtocol(operation, request);
 
+    // Don't check for the `ParsedQuery`s actual type (Query or Update) here
+    // because graph store operations can result in both.
+    auto trueFunc = [](const ParsedQuery&) { return true; };
     if (parsedOperation.hasUpdateClause()) {
       co_return co_await visitOperation(
           parsedOperation, "Graph Store (Update)",
-          ad_utility::use_type_identity::ti<Update>,
-          std::not_fn(&ParsedQuery::hasUpdateClause),
-          "SPARQL UPDATE was request via the HTTP request, but the "
-          "following query was sent instead of an update: ");
+          ad_utility::use_type_identity::ti<Update>, trueFunc,
+          "Please contact the developers. Graph Store update operation is not "
+          "an update: ");
     } else {
       co_return co_await visitOperation(
           parsedOperation, "Graph Store (Query)",
-          ad_utility::use_type_identity::ti<Query>,
-          &ParsedQuery::hasUpdateClause,
-          "SPARQL QUERY was request via the HTTP request, but the "
-          "following update was sent instead of an query: ");
+          ad_utility::use_type_identity::ti<Query>, trueFunc,
+          "Please contact the developers. Graph Store query operation is not a "
+          "query: ");
     }
   };
   auto visitNone = [&response, &send,
