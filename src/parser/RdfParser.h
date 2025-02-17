@@ -716,6 +716,12 @@ class RdfParallelParser : public Parser {
       QUEUE_SIZE_BEFORE_PARALLEL_PARSING, NUM_PARALLEL_PARSER_THREADS,
       "parallel parser"};
   std::future<void> parseFuture_;
+
+  // Collect error messages in case of multiple failures. The `size_t` is the
+  // start position of the corresponding batch, used to order the errors in case
+  // the batches are finished out of order.
+  ad_utility::Synchronized<std::vector<std::pair<size_t, std::string>>>
+      errorMessages_;
   // The parallel parsers need to know when the last batch has been parsed, s.t.
   // the parser threads can be destroyed. The following two members are needed
   // for keeping track of this condition.

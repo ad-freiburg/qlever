@@ -6,6 +6,7 @@
 #include "parser/RdfParser.h"
 
 #include <absl/strings/charconv.h>
+#include <util/TransparentFunctors.h>
 
 #include <cstring>
 #include <exception>
@@ -36,7 +37,10 @@ bool TurtleParser<T>::directive() {
     raise(
         "@prefix or @base directives need to be at the beginning of the file "
         "when using the parallel parser. Use '--parse-parallel false' if you "
-        "can't guarantee this.");
+        "can't guarantee this. If the reason for this error is that the input "
+        "is a concatenation of Turtle files, each of which has the prefixes at "
+        "the beginning, you should feed the files to QLever separately instead "
+        "of concatenated");
   }
   return successfulParse;
 }
@@ -979,6 +983,7 @@ void RdfParallelParser<T>::parseBatch(size_t parsePosition, auto batch) {
     });
     finishTripleCollectorIfLastBatch();
   } catch (std::exception& e) {
+    errorMessages_.wlock()->emplace_back(parsePosition, e.what());
     tripleCollector_.pushException(std::current_exception());
     parallelParser_.finish();
   }
@@ -1026,6 +1031,7 @@ void RdfParallelParser<T>::feedBatchesToParser(
       }
     }
   } catch (std::exception& e) {
+    errorMessages_.wlock()->emplace_back(parsePosition, e.what());
     tripleCollector_.pushException(std::current_exception());
   }
 };
@@ -1069,7 +1075,20 @@ bool RdfParallelParser<T>::getLineImpl(TurtleTriple* triple) {
   // contains no triples. (Theoretically this might happen, and it is safer this
   // way)
   while (triples_.empty()) {
-    auto optionalTripleTask = tripleCollector_.pop();
+    auto optionalTripleTask = [&]() {
+      try {
+        return tripleCollector_.pop();
+      } catch (const std::exception&) {
+        // In case of multiple errors in parallel batches, we always report the
+        // first error.
+        parallelParser_.waitUntilFinished();
+        auto errors = std::move(*errorMessages_.wlock());
+        const auto& firstError =
+            ql::ranges::min_element(errors, {}, ad_utility::first);
+        AD_CORRECTNESS_CHECK(firstError != errors.end());
+        throw std::runtime_error{firstError->second};
+      }
+    }();
     if (!optionalTripleTask) {
       // Everything has been parsed
       return false;
