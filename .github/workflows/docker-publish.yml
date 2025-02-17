@@ -4,7 +4,7 @@ on:
   push:
     branches: [ master ]
   pull_request:
-    branches: [ master ]
+    branches: [ ]
 
 concurrency:
   # When this is not a pull request, then we want all the docker containers to be pushed, we therefore
