@@ -6,7 +6,6 @@
 #include "parser/RdfParser.h"
 
 #include <absl/strings/charconv.h>
-#include <util/TransparentFunctors.h>
 
 #include <cstring>
 #include <exception>
@@ -20,6 +19,7 @@
 #include "parser/TokenizerCtre.h"
 #include "util/DateYearDuration.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
+#include "util/TransparentFunctors.h"
 
 using namespace std::chrono_literals;
 // _______________________________________________________________
