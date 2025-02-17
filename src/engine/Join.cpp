@@ -837,3 +837,11 @@ ad_utility::AddCombinedRowToIdTable Join::makeRowAdder(
       1, IdTable{getResultWidth(), allocator()}, cancellationHandle_,
       CHUNK_SIZE, std::move(callback)};
 }
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> Join::clone() const {
+  auto copy = std::make_unique<Join>(*this);
+  copy->_left = _left->clone();
+  copy->_right = _right->clone();
+  return copy;
+}

@@ -6,8 +6,8 @@
 #include <array>
 #include <vector>
 
-#include "./Operation.h"
-#include "./QueryExecutionTree.h"
+#include "engine/Operation.h"
+#include "engine/QueryExecutionTree.h"
 
 class Minus : public Operation {
  private:
@@ -25,7 +25,7 @@ class Minus : public Operation {
 
   // Uninitialized Object for testing the computeMinus method
   struct OnlyForTestingTag {};
-  explicit Minus(OnlyForTestingTag){};
+  explicit Minus(OnlyForTestingTag) {};
 
  protected:
   string getCacheKeyImpl() const override;
@@ -61,6 +61,8 @@ class Minus : public Operation {
   void computeMinus(const IdTable& a, const IdTable& b,
                     const vector<std::array<ColumnIndex, 2>>& matchedColumns,
                     IdTable* result) const;
+
+  std::unique_ptr<Operation> clone() const override;
 
  private:
   /**

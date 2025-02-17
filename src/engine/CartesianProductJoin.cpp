@@ -365,3 +365,13 @@ Result::Generator CartesianProductJoin::createLazyConsumer(
     idTables.pop_back();
   }
 }
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> CartesianProductJoin::clone() const {
+  Children copy = children_;
+  for (auto& operation : copy) {
+    operation = operation->clone();
+  }
+  return std::make_unique<CartesianProductJoin>(_executionContext,
+                                                std::move(copy), chunkSize_);
+}

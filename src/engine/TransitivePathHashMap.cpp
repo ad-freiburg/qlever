@@ -44,3 +44,10 @@ HashMapWrapper TransitivePathHashMap::setupEdgesMap(
   }
   return HashMapWrapper{std::move(edges), allocator()};
 }
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> TransitivePathHashMap::clone() const {
+  auto copy = std::make_unique<TransitivePathHashMap>(*this);
+  copy->subtree_ = subtree_->clone();
+  return copy;
+}

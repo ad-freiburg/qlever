@@ -5,7 +5,7 @@
 
 #include <string>
 
-#include "./Operation.h"
+#include "engine/Operation.h"
 #include "util/HashMap.h"
 
 class SparqlTriple;
@@ -160,6 +160,8 @@ class IndexScan final : public Operation {
 
   // An index scan can directly and efficiently support LIMIT and OFFSET
   [[nodiscard]] bool supportsLimit() const override { return true; }
+
+  std::unique_ptr<Operation> clone() const override;
 
   Permutation::Enum permutation() const { return permutation_; }
 

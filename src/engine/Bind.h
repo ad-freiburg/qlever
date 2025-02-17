@@ -31,6 +31,7 @@ class Bind : public Operation {
   std::vector<QueryExecutionTree*> getChildren() override;
   size_t getCostEstimate() override;
   bool supportsLimit() const override;
+  std::unique_ptr<Operation> clone() const override;
 
  private:
   uint64_t getSizeEstimateBeforeLimit() override;

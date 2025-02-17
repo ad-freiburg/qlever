@@ -102,6 +102,8 @@ class Service : public Operation {
                                       std::shared_ptr<Operation> right,
                                       bool rightOnly, bool requestLaziness);
 
+  std::unique_ptr<Operation> clone() const override;
+
  private:
   // The string returned by this function is used as cache key.
   std::string getCacheKeyImpl() const override;

@@ -69,6 +69,8 @@ class CartesianProductJoin : public Operation {
   // The Cartesian product join can efficiently evaluate a limited result.
   [[nodiscard]] bool supportsLimit() const override { return true; }
 
+  std::unique_ptr<Operation> clone() const override;
+
  protected:
   // Don't promise any sorting of the result.
   // TODO<joka921> Depending on the implementation we could propagate sorted

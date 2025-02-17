@@ -252,6 +252,8 @@ class PathSearch : public Operation {
   Result computeResult([[maybe_unused]] bool requestLaziness) override;
   VariableToColumnMap computeVariableToColumnMap() const override;
 
+  std::unique_ptr<Operation> clone() const override;
+
  private:
   std::pair<std::span<const Id>, std::span<const Id>> handleSearchSides() const;
 

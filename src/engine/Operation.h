@@ -316,6 +316,9 @@ class Operation {
 
   const auto& getLimit() const { return _limit; }
 
+  // Create a deep copy of this operation.
+  virtual std::unique_ptr<Operation> clone() const = 0;
+
  protected:
   // The QueryExecutionContext for this particular element.
   // No ownership.

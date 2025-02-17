@@ -141,6 +141,8 @@ class Join : public Operation {
   static void hashJoin(const IdTable& dynA, ColumnIndex jc1,
                        const IdTable& dynB, ColumnIndex jc2, IdTable* dynRes);
 
+  std::unique_ptr<Operation> clone() const override;
+
  protected:
   virtual string getCacheKeyImpl() const override;
 

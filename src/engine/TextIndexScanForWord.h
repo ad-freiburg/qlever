@@ -6,7 +6,7 @@
 
 #include <string>
 
-#include "./Operation.h"
+#include "engine/Operation.h"
 
 // This operation retrieves all text records from the fulltext index that
 // contain a certain word or prefix.
@@ -36,16 +36,15 @@ class TextIndexScanForWord : public Operation {
 
   uint64_t getSizeEstimateBeforeLimit() override;
 
-  float getMultiplicity(size_t col) override {
-    (void)col;
-    return 1;
-  }
+  float getMultiplicity(size_t) override { return 1; }
 
   bool knownEmptyResult() override { return getSizeEstimateBeforeLimit() == 0; }
 
   vector<ColumnIndex> resultSortedOn() const override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
+
+  std::unique_ptr<Operation> clone() const override;
 
  private:
   // Returns a Result containing an IdTable with the columns being

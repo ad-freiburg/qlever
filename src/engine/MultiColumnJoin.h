@@ -62,6 +62,8 @@ class MultiColumnJoin : public Operation {
       const std::vector<std::array<ColumnIndex, 2>>& joinColumns,
       IdTable* resultMightBeUnsorted);
 
+  std::unique_ptr<Operation> clone() const override;
+
  private:
   ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override;
 

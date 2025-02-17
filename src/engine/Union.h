@@ -9,10 +9,9 @@
 #include <utility>
 #include <vector>
 
-#include "../parser/ParsedQuery.h"
-#include "../util/HashMap.h"
-#include "Operation.h"
-#include "QueryExecutionTree.h"
+#include "engine/Operation.h"
+#include "engine/QueryExecutionTree.h"
+#include "util/HashMap.h"
 
 class Union : public Operation {
  private:
@@ -61,6 +60,8 @@ class Union : public Operation {
   vector<QueryExecutionTree*> getChildren() override {
     return {_subtrees[0].get(), _subtrees[1].get()};
   }
+
+  std::unique_ptr<Operation> clone() const override;
 
  private:
   ProtoResult computeResult(bool requestLaziness) override;
