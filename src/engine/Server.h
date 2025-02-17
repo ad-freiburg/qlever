@@ -169,11 +169,12 @@ class Server {
   static std::pair<bool, bool> determineResultPinning(
       const ad_utility::url_parser::ParamValueMap& params);
   FRIEND_TEST(ServerTest, determineResultPinning);
-  //  Parse an operation
-  template <QL_CONCEPT_OR_TYPENAME(QueryOrUpdate) Operation>
-  auto parseOperation(ad_utility::websocket::MessageSender& messageSender,
-                      const ad_utility::url_parser::ParamValueMap& params,
-                      const Operation& operation, TimeLimit timeLimit);
+  //  Prepare the execution of an operation
+  auto prepareOperation(std::string_view operationName,
+                        std::string_view operationSPARQL,
+                        ad_utility::websocket::MessageSender& messageSender,
+                        const ad_utility::url_parser::ParamValueMap& params,
+                        TimeLimit timeLimit);
 
   // Plan a parsed query.
   Awaitable<PlannedQuery> planQuery(net::static_thread_pool& thread_pool,

@@ -85,6 +85,8 @@ class GraphStoreProtocol {
     updateClause::GraphUpdate up{std::move(convertedTriples), {}};
     ParsedQuery res;
     res._clause = parsedQuery::UpdateClause{std::move(up)};
+    res._originalString =
+        "Unavailable for SPARQL Graph Store Protocol POST operation";
     return res;
   }
   FRIEND_TEST(GraphStoreProtocolTest, transformPost);
@@ -99,25 +101,20 @@ class GraphStoreProtocol {
   // Transform the Graph Store Protocol request into it's equivalent Query or
   // Update.
   static ParsedQuery transformGraphStoreProtocol(
+      ad_utility::url_parser::sparqlOperation::GraphStoreOperation operation,
       const ad_utility::httpUtils::HttpRequest auto& rawRequest) {
     ad_utility::url_parser::ParsedUrl parsedUrl =
         ad_utility::url_parser::parseRequestTarget(rawRequest.target());
-    // We only support passing the target graph as a query parameter (`Indirect
-    // Graph Identification`). `Direct Graph Identification` (the URL is the
-    // graph) is not supported. See also
-    // https://www.w3.org/TR/2013/REC-sparql11-http-rdf-update-20130321/#graph-identification.
-    GraphOrDefault graph = extractTargetGraph(parsedUrl.parameters_);
-
     using enum boost::beast::http::verb;
     auto method = rawRequest.method();
     if (method == get) {
-      return transformGet(graph);
+      return transformGet(operation.graph_);
     } else if (method == put) {
       throwUnsupportedHTTPMethod("PUT");
     } else if (method == delete_) {
       throwUnsupportedHTTPMethod("DELETE");
     } else if (method == post) {
-      return transformPost(rawRequest, graph);
+      return transformPost(rawRequest, operation.graph_);
     } else if (method == head) {
       throwUnsupportedHTTPMethod("HEAD");
     } else if (method == patch) {
@@ -129,12 +126,4 @@ class GraphStoreProtocol {
                        "\" for the SPARQL Graph Store HTTP Protocol."));
     }
   }
-
- private:
-  // Extract the graph to be acted upon using from the URL query parameters
-  // (`Indirect Graph Identification`). See
-  // https://www.w3.org/TR/2013/REC-sparql11-http-rdf-update-20130321/#indirect-graph-identification
-  static GraphOrDefault extractTargetGraph(
-      const ad_utility::url_parser::ParamValueMap& params);
-  FRIEND_TEST(GraphStoreProtocolTest, extractTargetGraph);
 };
