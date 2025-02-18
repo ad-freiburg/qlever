@@ -287,7 +287,8 @@ Result::Generator Union::computeResultLazily(
 // _____________________________________________________________________________
 std::unique_ptr<Operation> Union::clone() const {
   auto copy = std::make_unique<Union>(*this);
-  copy->_subtrees.at(0) = _subtrees.at(0)->clone();
-  copy->_subtrees.at(1) = _subtrees.at(1)->clone();
+  for (auto& subtree : copy->_subtrees) {
+    subtree = subtree->clone();
+  }
   return copy;
 }

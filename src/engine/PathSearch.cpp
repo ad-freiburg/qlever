@@ -476,5 +476,14 @@ void PathSearch::pathsToResultTable(IdTable& tableDyn, PathsLimited& paths,
 std::unique_ptr<Operation> PathSearch::clone() const {
   auto copy = std::make_unique<PathSearch>(*this);
   copy->subtree_ = subtree_->clone();
+  if (sourceTree_.has_value()) {
+    copy->sourceTree_ = sourceTree_.value()->clone();
+  }
+  if (targetTree_.has_value()) {
+    copy->targetTree_ = targetTree_.value()->clone();
+  }
+  if (sourceAndTargetTree_.has_value()) {
+    copy->sourceAndTargetTree_ = sourceAndTargetTree_.value()->clone();
+  }
   return copy;
 }
