@@ -465,30 +465,30 @@ Awaitable<void> Server::process(
     }
     return parsedOperation;
   };
-  auto visitQuery = [&visitOperation, &parseAndAddDatasets](
-                        const Query& query) -> Awaitable<void> {
-    auto parsedQuery = parseAndAddDatasets(query.query_, query.datasetClauses_);
+  auto visitQuery = [&visitOperation,
+                     &parseAndAddDatasets](Query query) -> Awaitable<void> {
+    auto parsedQuery =
+        parseAndAddDatasets(std::move(query.query_), query.datasetClauses_);
     return visitOperation(
         parsedQuery, "SPARQL Query", std::not_fn(&ParsedQuery::hasUpdateClause),
         "SPARQL QUERY was request via the HTTP request, but the "
         "following update was sent instead of an query: ");
   };
-  auto visitUpdate =
-      [&visitOperation, &requireValidAccessToken,
-       &parseAndAddDatasets](const Update& update) -> Awaitable<void> {
+  auto visitUpdate = [&visitOperation, &requireValidAccessToken,
+                      &parseAndAddDatasets](Update update) -> Awaitable<void> {
     requireValidAccessToken("SPARQL Update");
     auto parsedUpdate =
-        parseAndAddDatasets(update.update_, update.datasetClauses_);
+        parseAndAddDatasets(std::move(update.update_), update.datasetClauses_);
     return visitOperation(
         parsedUpdate, "SPARQL Update", &ParsedQuery::hasUpdateClause,
         "SPARQL UPDATE was request via the HTTP request, but the "
         "following query was sent instead of an update: ");
   };
-  auto visitGraphStore =
-      [&request, &visitOperation](
-          const GraphStoreOperation& operation) -> Awaitable<void> {
+  auto visitGraphStore = [&request, &visitOperation](
+                             GraphStoreOperation operation) -> Awaitable<void> {
     ParsedQuery parsedOperation =
-        GraphStoreProtocol::transformGraphStoreProtocol(operation, request);
+        GraphStoreProtocol::transformGraphStoreProtocol(std::move(operation),
+                                                        request);
 
     // Don't check for the `ParsedQuery`s actual type (Query or Update) here
     // because graph store operations can result in both.
@@ -505,8 +505,7 @@ Awaitable<void> Server::process(
           "query: ");
     }
   };
-  auto visitNone = [&response, &send,
-                    &request](const None&) -> Awaitable<void> {
+  auto visitNone = [&response, &send, &request](None) -> Awaitable<void> {
     // If there was no "query", but any of the URL parameters processed before
     // produced a `response`, send that now. Note that if multiple URL
     // parameters were processed, only the `response` from the last one is sent.
@@ -945,14 +944,22 @@ Awaitable<void> Server::processOperation(
     ad_utility::url_parser::sparqlOperation::Operation operation, auto visitor,
     const ad_utility::Timer& requestTimer,
     const ad_utility::httpUtils::HttpRequest auto& request, auto& send) {
-  auto operationString = [&operation] {
+  // Copy the operation string for the error case before processing the
+  // operation, because processing moves it.
+  const std::string operationString = [&operation] {
     if (auto* q = std::get_if<Query>(&operation)) {
       return q->query_;
     }
     if (auto* u = std::get_if<Update>(&operation)) {
       return u->update_;
     }
-    return std::string("No operation string available.");
+    if (std::holds_alternative<GraphStoreOperation>(operation)) {
+      return std::string(
+          "No operation string available for Graph Store Operation");
+    }
+    AD_CORRECTNESS_CHECK(std::holds_alternative<None>(operation));
+    return std::string(
+        "No operation string available, because operation type is unknown.");
   }();
   using namespace ad_utility::httpUtils;
   http::status responseStatus = http::status::ok;

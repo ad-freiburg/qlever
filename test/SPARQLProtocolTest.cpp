@@ -412,6 +412,21 @@ TEST(SPARQLProtocolTest, parsePOST) {
     return SPARQLProtocol::parsePOST(request);
   };
 
+  // Query
+  EXPECT_THAT(parse(makePostRequest("/?access-token=foo", QUERY,
+                                    "SELECT * WHERE { ?s ?p ?o }")),
+              ParsedRequestIs("/", "foo", {{"access-token", {"foo"}}},
+                              Query{"SELECT * WHERE { ?s ?p ?o }", {}}));
+  EXPECT_THAT(
+      parse(makePostRequest("/", URLENCODED, "access-token=foo&query=bar")),
+      ParsedRequestIs("/", "foo", {{"access-token", {"foo"}}},
+                      Query{"bar", {}}));
+  // Update
+  EXPECT_THAT(parse(makePostRequest("/?access-token=foo", UPDATE,
+                                    "INSERT DATA { <a> <b> <c> }")),
+              ParsedRequestIs("/", "foo", {{"access-token", {"foo"}}},
+                              Update{"INSERT DATA { <a> <b> <c> }", {}}));
+  // Update
   // Graph Store Operation
   EXPECT_THAT(
       parse(makePostRequest("/?default", TURTLE, "<foo> <bar> <baz> .")),
@@ -453,6 +468,20 @@ TEST(SPARQLProtocolTest, parseHttpRequest) {
     return SPARQLProtocol::parseHttpRequest(request);
   };
 
+  // Query
+  EXPECT_THAT(parse(makeGetRequest("/?query=foo")),
+              ParsedRequestIs("/", std::nullopt, {}, Query{"foo"}));
+  EXPECT_THAT(
+      parse(makePostRequest("/", URLENCODED, "access-token=foo&query=bar")),
+      ParsedRequestIs("/", "foo", {{"access-token", {"foo"}}},
+                      Query{"bar", {}}));
+  // Update
+  EXPECT_THAT(parse(makePostRequest("/?access-token=foo", UPDATE,
+                                    "INSERT DATA { <a> <b> <c> }")),
+              ParsedRequestIs("/", "foo", {{"access-token", {"foo"}}},
+                              Update{"INSERT DATA { <a> <b> <c> }", {}}));
+
+  // Unsupported HTTP Method
   AD_EXPECT_THROW_WITH_MESSAGE(
       parse(makeRequest(http::verb::patch, "/")),
       testing::StrEq(
