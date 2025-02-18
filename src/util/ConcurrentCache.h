@@ -159,7 +159,6 @@ class ConcurrentCache {
 
   ConcurrentCache() = default;
   /// Constructor: all arguments are forwarded to the underlying cache type.
-  // TODO<joka921>: Temporary solution until proper macros are made
   CPP_template(typename CacheArg, typename... CacheArgs)(requires(
       !ql::concepts::same_as<ConcurrentCache, std::remove_cvref_t<CacheArg>>))
       ConcurrentCache(CacheArg&& cacheArg, CacheArgs&&... cacheArgs)
@@ -338,11 +337,11 @@ class ConcurrentCache {
     HashMap<Key, std::pair<bool, shared_ptr<ResultInProgress>>> _inProgress;
 
     CacheAndInProgressMap() = default;
-    // TODO<joka921>: Temporary solution until proper macros are made
-    template <typename Arg, typename... Args,
-              typename = std::enable_if_t<!std::same_as<
-                  std::remove_cvref_t<Arg>, CacheAndInProgressMap>>>
-    CacheAndInProgressMap(Arg&& arg, Args&&... args)
+    CPP_template_2(typename Arg, typename... Args)(
+        requires(!ql::concepts::same_as<
+                 std::remove_cvref_t<Arg>,
+                 CacheAndInProgressMap>)) explicit(sizeof...(Args) > 0)
+        CacheAndInProgressMap(Arg&& arg, Args&&... args)
         : _cache{AD_FWD(arg), AD_FWD(args)...} {}
   };
 
