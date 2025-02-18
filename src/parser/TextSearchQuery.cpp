@@ -7,26 +7,27 @@
 #include <absl/strings/str_split.h>
 
 #include "parser/MagicServiceIriConstants.h"
+#include "util/http/HttpParser/AcceptHeaderQleverVisitor.h"
 
 namespace parsedQuery {
 
 // ____________________________________________________________________________
 void TextSearchQuery::throwSubjectVariableException(
-    std::string predString, const TripleComponent& subject) {
+    std::string_view predString, const TripleComponent& subject) {
   if (!subject.isVariable()) {
     throw TextSearchException(
-        absl::StrCat("The predicate <", std::move(predString),
+        absl::StrCat("The predicate <", predString,
                      "> needs a Variable as Variable as subject."));
   }
 }
 
 // ____________________________________________________________________________
 void TextSearchQuery::throwSubjectAndObjectVariableException(
-    std::string predString, const TripleComponent& subject,
+    std::string_view predString, const TripleComponent& subject,
     const TripleComponent& object) {
   if (!(subject.isVariable() && object.isVariable())) {
     throw TextSearchException(
-        absl::StrCat("The predicate <", std::move(predString),
+        absl::StrCat("The predicate <", predString,
                      "> needs a Variable as subject and one as object."));
   }
 }
@@ -111,7 +112,7 @@ void TextSearchQuery::predStringBindScore(const Variable& subjectVar,
 
 // ____________________________________________________________________________
 void TextSearchQuery::addParameter(const SparqlTriple& triple) {
-  auto simpleTriple = triple.getSimple();
+  const auto& simpleTriple = triple.getSimple();
   const TripleComponent& subject = simpleTriple.s_;
   const TripleComponent& predicate = simpleTriple.p_;
   const TripleComponent& object = simpleTriple.o_;
@@ -145,7 +146,7 @@ void TextSearchQuery::addParameter(const SparqlTriple& triple) {
 // ____________________________________________________________________________
 std::vector<std::variant<TextIndexScanForWordConfiguration,
                          TextIndexScanForEntityConfiguration>>
-TextSearchQuery::toConfigs(QueryExecutionContext* qec) const {
+TextSearchQuery::toConfigs(const QueryExecutionContext* qec) const {
   std::vector<std::variant<TextIndexScanForWordConfiguration,
                            TextIndexScanForEntityConfiguration>>
       output;
@@ -169,7 +170,7 @@ TextSearchQuery::toConfigs(QueryExecutionContext* qec) const {
   // Second pass to create all configs
   for (const auto& [var, conf] : configVarToConfigs_) {
     if (conf.isWordSearch_.value()) {
-      output.push_back(TextIndexScanForWordConfiguration{
+      output.emplace_back(TextIndexScanForWordConfiguration{
           conf.textVar_.value(), conf.word_.value(), conf.varToBindMatch_,
           conf.varToBindScore_});
     } else {
@@ -179,7 +180,7 @@ TextSearchQuery::toConfigs(QueryExecutionContext* qec) const {
             "Entity search has to happen on a text variable that is also "
             "contained in a word search.");
       }
-      output.push_back(TextIndexScanForEntityConfiguration{
+      output.emplace_back(TextIndexScanForEntityConfiguration{
           conf.textVar_.value(), conf.entity_.value(),
           it->second[qec->getIndex().getIndexOfBestSuitedElTerm(it->second)],
           conf.varToBindScore_});

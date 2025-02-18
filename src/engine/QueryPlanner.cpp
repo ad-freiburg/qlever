@@ -2625,15 +2625,18 @@ void QueryPlanner::GraphPatternPlanner::visitTextSearch(
   for (auto config : textSearchQuery.toConfigs(qec_)) {
     if (std::holds_alternative<TextIndexScanForWordConfiguration>(config)) {
       auto plan = makeSubtreePlan<TextIndexScanForWord>(
-          qec_, std::get<TextIndexScanForWordConfiguration>(config));
+          qec_, std::move(std::get<TextIndexScanForWordConfiguration>(config)));
       candidatesOut.push_back(std::move(plan));
     } else {
       auto plan = makeSubtreePlan<TextIndexScanForEntity>(
-          qec_, std::get<TextIndexScanForEntityConfiguration>(config));
+          qec_,
+          std::move(std::get<TextIndexScanForEntityConfiguration>(config)));
       candidatesOut.push_back(std::move(plan));
     }
   }
-  visitGroupOptionalOrMinus(std::move(candidatesOut));
+  for (auto& plan : candidatesOut) {
+    candidatePlans_.push_back(std::vector{std::move(plan)});
+  }
 }
 
 // _______________________________________________________________

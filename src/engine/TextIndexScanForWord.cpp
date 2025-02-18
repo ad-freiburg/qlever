@@ -16,9 +16,9 @@ TextIndexScanForWord::TextIndexScanForWord(
 TextIndexScanForWord::TextIndexScanForWord(QueryExecutionContext* qec,
                                            Variable textRecordVar, string word)
     : Operation(qec),
-      config_(TextIndexScanForWordConfiguration{textRecordVar, word,
-                                                std::nullopt, std::nullopt,
-                                                word.ends_with('*')}) {
+      config_(TextIndexScanForWordConfiguration{std::move(textRecordVar),
+                                                std::move(word)}) {
+  config_.isPrefix_ = config_.word_.ends_with('*');
   config_.varToBindScore_ = config_.varToBindText_.getWordScoreVariable(
       config_.word_, config_.isPrefix_);
   setVariableToColumnMap();
@@ -53,27 +53,29 @@ ProtoResult TextIndexScanForWord::computeResult(
 
 // _____________________________________________________________________________
 void TextIndexScanForWord::setVariableToColumnMap() {
+  config_.variableColumns_ = VariableToColumnMap{};
   ColumnIndex index = ColumnIndex{0};
-  variableColumns_[config_.varToBindText_] = makeAlwaysDefinedColumn(index);
+  config_.variableColumns_.value()[config_.varToBindText_] =
+      makeAlwaysDefinedColumn(index);
   index++;
   if (config_.isPrefix_) {
     if (!config_.varToBindMatch_.has_value()) {
       config_.varToBindMatch_ = config_.varToBindText_.getMatchingWordVariable(
           std::string_view(config_.word_).substr(0, config_.word_.size() - 1));
     }
-    variableColumns_[config_.varToBindMatch_.value()] =
+    config_.variableColumns_.value()[config_.varToBindMatch_.value()] =
         makeAlwaysDefinedColumn(index);
     index++;
   }
   if (config_.varToBindScore_.has_value()) {
-    variableColumns_[config_.varToBindScore_.value()] =
+    config_.variableColumns_.value()[config_.varToBindScore_.value()] =
         makeAlwaysDefinedColumn(index);
   }
 }
 
 // _____________________________________________________________________________
 VariableToColumnMap TextIndexScanForWord::computeVariableToColumnMap() const {
-  return variableColumns_;
+  return config_.variableColumns_.value();
 }
 
 // _____________________________________________________________________________

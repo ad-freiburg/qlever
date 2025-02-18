@@ -7,9 +7,8 @@
 // _____________________________________________________________________________
 TextIndexScanForEntity::TextIndexScanForEntity(
     QueryExecutionContext* qec, TextIndexScanForEntityConfiguration config)
-    : Operation(qec),
-      config_(std::move(config)),
-      varOrFixed_(qec, config_.entity_) {
+    : Operation(qec), config_(std::move(config)) {
+  config_.varOrFixed_ = VarOrFixedEntity(qec, config_.entity_);
   setVariableToColumnMap();
 }
 
@@ -19,9 +18,10 @@ TextIndexScanForEntity::TextIndexScanForEntity(
     std::variant<Variable, std::string> entity, string word)
     : Operation(qec),
       config_(TextIndexScanForEntityConfiguration{
-          textRecordVar, entity, word,
-          textRecordVar.getEntityScoreVariable(entity)}),
-      varOrFixed_(qec, config_.entity_) {
+          std::move(textRecordVar), std::move(entity), std::move(word)}) {
+  config_.varToBindScore_ =
+      config_.varToBindText_.getEntityScoreVariable(config_.entity_);
+  config_.varOrFixed_ = VarOrFixedEntity(qec, config_.entity_);
   setVariableToColumnMap();
 }
 
@@ -64,22 +64,25 @@ ProtoResult TextIndexScanForEntity::computeResult(
 
 // _____________________________________________________________________________
 void TextIndexScanForEntity::setVariableToColumnMap() {
+  config_.variableColumns_ = VariableToColumnMap{};
   ColumnIndex index = ColumnIndex{0};
-  variableColumns_[config_.varToBindText_] = makeAlwaysDefinedColumn(index);
+  config_.variableColumns_.value()[config_.varToBindText_] =
+      makeAlwaysDefinedColumn(index);
   index++;
   if (!hasFixedEntity()) {
-    variableColumns_[entityVariable()] = makeAlwaysDefinedColumn(index);
+    config_.variableColumns_.value()[entityVariable()] =
+        makeAlwaysDefinedColumn(index);
     index++;
   }
   if (config_.varToBindScore_.has_value()) {
-    variableColumns_[config_.varToBindScore_.value()] =
+    config_.variableColumns_.value()[config_.varToBindScore_.value()] =
         makeAlwaysDefinedColumn(index);
   }
 }
 
 // _____________________________________________________________________________
 VariableToColumnMap TextIndexScanForEntity::computeVariableToColumnMap() const {
-  return variableColumns_;
+  return config_.variableColumns_.value();
 }
 
 // _____________________________________________________________________________

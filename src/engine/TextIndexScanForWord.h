@@ -8,21 +8,13 @@
 
 #include "./Operation.h"
 #include "parser/MagicServiceQuery.h"
-
-struct TextIndexScanForWordConfiguration {
-  Variable varToBindText_;
-  string word_;
-  std::optional<Variable> varToBindMatch_;
-  std::optional<Variable> varToBindScore_;
-  bool isPrefix_ = false;
-};
+#include "parser/TextSearchQuery.h"
 
 // This operation retrieves all text records from the fulltext index that
 // contain a certain word or prefix.
 class TextIndexScanForWord : public Operation {
  private:
   TextIndexScanForWordConfiguration config_;
-  VariableToColumnMap variableColumns_;
 
  public:
   TextIndexScanForWord(QueryExecutionContext* qec,

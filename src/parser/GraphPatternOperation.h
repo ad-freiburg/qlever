@@ -10,8 +10,6 @@
 
 #include "engine/PathSearch.h"
 #include "engine/SpatialJoin.h"
-#include "engine/TextIndexScanForEntity.h"
-#include "engine/TextIndexScanForWord.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "parser/DatasetClauses.h"
 #include "parser/GraphPattern.h"
