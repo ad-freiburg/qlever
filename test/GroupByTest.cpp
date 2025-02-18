@@ -263,9 +263,9 @@ TEST_F(GroupByTest, doGroupBy) {
   ASSERT_EQ(123u, outTable._data[1][9]);
   ASSERT_EQ(0u, outTable._data[2][9]);
 
-  ASSERT_EQ(ID_NO_VALUE, outTable._data[0][10]);
-  ASSERT_EQ(ID_NO_VALUE, outTable._data[1][10]);
-  ASSERT_EQ(ID_NO_VALUE, outTable._data[2][10]);
+  ASSERT_EQ(Id::makeUndefined(), outTable._data[0][10]);
+  ASSERT_EQ(Id::makeUndefined(), outTable._data[1][10]);
+  ASSERT_EQ(Id::makeUndefined(), outTable._data[2][10]);
 
   std::memcpy(&buffer, &outTable._data[0][11], sizeof(float));
   ASSERT_FLOAT_EQ(-3, buffer);
@@ -283,9 +283,9 @@ TEST_F(GroupByTest, doGroupBy) {
   ASSERT_EQ(41223u, outTable._data[1][13]);
   ASSERT_EQ(41223u, outTable._data[2][13]);
 
-  ASSERT_EQ(ID_NO_VALUE, outTable._data[0][14]);
-  ASSERT_EQ(ID_NO_VALUE, outTable._data[1][14]);
-  ASSERT_EQ(ID_NO_VALUE, outTable._data[2][14]);
+  ASSERT_EQ(Id::makeUndefined(), outTable._data[0][14]);
+  ASSERT_EQ(Id::makeUndefined(), outTable._data[1][14]);
+  ASSERT_EQ(Id::makeUndefined(), outTable._data[2][14]);
 
   std::memcpy(&buffer, &outTable._data[0][15], sizeof(float));
   ASSERT_FLOAT_EQ(2, buffer);

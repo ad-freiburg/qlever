@@ -154,7 +154,7 @@ SpatialQuery::SpatialQuery(const SparqlTriple& triple) {
   AD_CONTRACT_CHECK(triple.p_.isIri(),
                     "The config triple for SpatialJoin must have a special IRI "
                     "as predicate.");
-  const std::string& input = triple.p_._iri;
+  const std::string& input = triple.p_.iri_;
 
   // Add variables to configuration object
   AD_CONTRACT_CHECK(triple.s_.isVariable() && triple.o_.isVariable(),

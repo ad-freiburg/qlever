@@ -4,6 +4,7 @@
 
 #include "engine/GraphStoreProtocol.h"
 
+#include "parser/Tokenizer.h"
 #include "util/http/beast.h"
 
 // ____________________________________________________________________________

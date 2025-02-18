@@ -74,8 +74,8 @@ class stream_generator_promise {
    * @return Whether or not the coroutine should get suspended (currently based
    * on isBufferLargeEnough()), wrapped inside a suspend_sometimes class.
    */
-  suspend_sometimes yield_value(
-      const ad_utility::Streamable auto& value) noexcept {
+  CPP_template(typename S)(requires ad_utility::Streamable<S>) suspend_sometimes
+      yield_value(const S& value) noexcept {
     // _stream appends its result to _value
     _stream << value;
     return suspend_sometimes{isBufferLargeEnough()};
