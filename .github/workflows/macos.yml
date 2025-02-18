@@ -65,9 +65,10 @@ jobs:
         run: |
           clang++ --version
           echo 'int main() {}' >> test.cpp
-          clang++ test.cpp
-          clang test.cpp
-          cc test.cpp
+          clang++ test.cpp -stdlib=libc++ -v
+          clang test.cpp -stdlib=libc++ -v
+          $CC test.cpp -stdlib=libc++ -v
+          $CXX test.cpp -stdlib=libc++ -v
           c++ test.cpp
 
       - name: Cache for conan
