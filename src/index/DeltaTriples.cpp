@@ -150,9 +150,9 @@ void DeltaTriples::modifyTriplesImpl(CancellationHandle cancellationHandle,
                                      TriplesToHandlesMap& targetMap,
                                      TriplesToHandlesMap& inverseMap) {
   rewriteLocalVocabEntriesAndBlankNodes(triples);
-  ql::ranges::sort(triples);
-  auto first = std::unique(triples.begin(), triples.end());
-  triples.erase(first, triples.end());
+  AD_EXPENSIVE_CHECK(ql::ranges::is_sorted(triples));
+  AD_EXPENSIVE_CHECK(std::unique(triples.begin(), triples.end()) ==
+                     triples.end());
   std::erase_if(triples, [&targetMap](const IdTriple<0>& triple) {
     return targetMap.contains(triple);
   });
@@ -248,6 +248,8 @@ template void DeltaTriplesManager::modify<void>(
     std::function<void(DeltaTriples&)> const&);
 template nlohmann::json DeltaTriplesManager::modify<nlohmann::json>(
     const std::function<nlohmann::json(DeltaTriples&)>&);
+template DeltaTriplesCount DeltaTriplesManager::modify<DeltaTriplesCount>(
+    const std::function<DeltaTriplesCount(DeltaTriples&)>&);
 
 // _____________________________________________________________________________
 void DeltaTriplesManager::clear() { modify<void>(&DeltaTriples::clear); }

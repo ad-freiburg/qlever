@@ -157,11 +157,11 @@ class ConcurrentCache {
   using Value = typename Cache::value_type;
   using Key = typename Cache::key_type;
 
-  ConcurrentCache() requires std::default_initializable<Cache> = default;
+  ConcurrentCache() = default;
   /// Constructor: all arguments are forwarded to the underlying cache type.
-  template <typename CacheArg, typename... CacheArgs>
-  requires(!std::same_as<ConcurrentCache, std::remove_cvref_t<CacheArg>>)
-  ConcurrentCache(CacheArg&& cacheArg, CacheArgs&&... cacheArgs)
+  CPP_template(typename CacheArg, typename... CacheArgs)(requires(
+      !ql::concepts::same_as<ConcurrentCache, std::remove_cvref_t<CacheArg>>))
+      ConcurrentCache(CacheArg&& cacheArg, CacheArgs&&... cacheArgs)
       : _cacheAndInProgressMap{AD_FWD(cacheArg), AD_FWD(cacheArgs)...} {}
 
   struct ResultAndCacheStatus {
@@ -186,24 +186,26 @@ class ConcurrentCache {
    * @return A `ResultAndCacheStatus` shared_ptr to the computation result.
    *
    */
-  ResultAndCacheStatus computeOnce(
-      const Key& key,
-      const InvocableWithConvertibleReturnType<Value> auto& computeFunction,
-      bool onlyReadFromCache,
-      const InvocableWithConvertibleReturnType<bool, const Value&> auto&
-          suitableForCache) {
+  CPP_template_2(typename ComputeFuncT, typename SuitabilityFuncT)(
+      requires InvocableWithConvertibleReturnType<ComputeFuncT, Value> CPP_and_2
+          InvocableWithConvertibleReturnType<SuitabilityFuncT, bool,
+                                             const Value&>) ResultAndCacheStatus
+      computeOnce(const Key& key, const ComputeFuncT& computeFunction,
+                  bool onlyReadFromCache,
+                  const SuitabilityFuncT& suitableForCache) {
     return computeOnceImpl(false, key, computeFunction, onlyReadFromCache,
                            suitableForCache);
   }
 
   /// Similar to computeOnce, with the following addition: After the call
   /// completes, the result will be pinned in the underlying cache.
-  ResultAndCacheStatus computeOncePinned(
-      const Key& key,
-      const InvocableWithConvertibleReturnType<Value> auto& computeFunction,
-      bool onlyReadFromCache,
-      const InvocableWithConvertibleReturnType<bool, const Value&> auto&
-          suitedForCache) {
+  CPP_template_2(typename ComputeFuncT, typename SuitabilityFuncT)(
+      requires InvocableWithConvertibleReturnType<ComputeFuncT, Value> CPP_and_2
+          InvocableWithConvertibleReturnType<SuitabilityFuncT, bool,
+                                             const Value&>) ResultAndCacheStatus
+      computeOncePinned(const Key& key, const ComputeFuncT& computeFunction,
+                        bool onlyReadFromCache,
+                        const SuitabilityFuncT& suitedForCache) {
     return computeOnceImpl(true, key, computeFunction, onlyReadFromCache,
                            suitedForCache);
   }
@@ -211,12 +213,14 @@ class ConcurrentCache {
   // If the result is contained in the cache, read and return it. Otherwise,
   // compute it, but do not store it in the cache. The interface is the same as
   // for the above two functions, therefore some of the arguments are unused.
-  ResultAndCacheStatus computeButDontStore(
-      const Key& key,
-      const InvocableWithConvertibleReturnType<Value> auto& computeFunction,
-      bool onlyReadFromCache,
-      [[maybe_unused]] const InvocableWithConvertibleReturnType<
-          bool, const Value&> auto& suitedForCache) {
+  CPP_template_2(typename ComputeFuncT, typename SuitabilityFuncT)(
+      requires InvocableWithConvertibleReturnType<ComputeFuncT, Value> CPP_and_2
+          InvocableWithConvertibleReturnType<SuitabilityFuncT, bool,
+                                             const Value&>) ResultAndCacheStatus
+      computeButDontStore(
+          const Key& key, const ComputeFuncT& computeFunction,
+          bool onlyReadFromCache,
+          [[maybe_unused]] const SuitabilityFuncT& suitedForCache) {
     {
       auto resultPtr = _cacheAndInProgressMap.wlock()->_cache[key];
       if (resultPtr != nullptr) {
@@ -333,9 +337,11 @@ class ConcurrentCache {
     HashMap<Key, std::pair<bool, shared_ptr<ResultInProgress>>> _inProgress;
 
     CacheAndInProgressMap() = default;
-    template <typename Arg, typename... Args>
-    requires(!std::same_as<std::remove_cvref_t<Arg>, CacheAndInProgressMap>)
-    CacheAndInProgressMap(Arg&& arg, Args&&... args)
+    CPP_template_2(typename Arg, typename... Args)(
+        requires(!ql::concepts::same_as<
+                 std::remove_cvref_t<Arg>,
+                 CacheAndInProgressMap>)) explicit(sizeof...(Args) > 0)
+        CacheAndInProgressMap(Arg&& arg, Args&&... args)
         : _cache{AD_FWD(arg), AD_FWD(args)...} {}
   };
 
@@ -361,12 +367,14 @@ class ConcurrentCache {
 
  private:
   // implementation for computeOnce (pinned and normal variant).
-  ResultAndCacheStatus computeOnceImpl(
-      bool pinned, const Key& key,
-      const InvocableWithConvertibleReturnType<Value> auto& computeFunction,
-      bool onlyReadFromCache,
-      const InvocableWithConvertibleReturnType<bool, const Value&> auto&
-          suitableForCache) {
+  CPP_template_2(typename ComputeFuncT, typename SuitabilityFuncT)(
+      requires InvocableWithConvertibleReturnType<ComputeFuncT, Value> CPP_and_2
+          InvocableWithConvertibleReturnType<SuitabilityFuncT, bool,
+                                             const Value&>) ResultAndCacheStatus
+      computeOnceImpl(bool pinned, const Key& key,
+                      const ComputeFuncT& computeFunction,
+                      bool onlyReadFromCache,
+                      const SuitabilityFuncT& suitableForCache) {
     using std::make_shared;
     bool mustCompute;
     shared_ptr<ResultInProgress> resultInProgress;

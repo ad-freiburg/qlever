@@ -6,22 +6,28 @@
 #define QLEVER_LAMBDAHELPERS_H
 
 #include "./Forward.h"
+#include "backports/concepts.h"
 
 namespace ad_utility {
 
 namespace detail {
 // Helper type for `makeAssignableLambda`.
+template <typename Lambda, bool Movable, bool Copyable>
+struct AssignableLambdaImpl;
+
 template <typename Lambda>
-struct AssignableLambdaImpl {
+struct AssignableLambdaImpl<Lambda, false, false> {
  private:
   Lambda _lambda;
+
+ protected:
+  Lambda& lambda() { return _lambda; }
+  const Lambda& lambda() const { return _lambda; }
 
  public:
   explicit constexpr AssignableLambdaImpl(Lambda lambda)
       : _lambda{std::move(lambda)} {}
-  constexpr AssignableLambdaImpl()
-      requires std::is_default_constructible_v<Lambda>
-      = default;
+  AssignableLambdaImpl() = default;
 
   decltype(auto) operator()(auto&&... args) noexcept(
       noexcept(_lambda(AD_FWD(args)...))) {
@@ -32,20 +38,52 @@ struct AssignableLambdaImpl {
       noexcept(noexcept(_lambda(AD_FWD(args)...))) {
     return _lambda(AD_FWD(args)...);
   }
+};
+
+template <typename Lambda>
+struct AssignableLambdaImpl<Lambda, true, false>
+    : public AssignableLambdaImpl<Lambda, false, false> {
+ private:
+  using Base = AssignableLambdaImpl<Lambda, false, false>;
+
+ public:
+  using Base::Base;
+  using Base::operator();
+
+ protected:
+  using Base::lambda;
+
+ public:
+  AssignableLambdaImpl& operator=(AssignableLambdaImpl&& other) noexcept
+      QL_CONCEPT_OR_NOTHING(requires std::is_move_constructible_v<Lambda>) {
+    std::destroy_at(&lambda());
+    std::construct_at(&lambda(), std::move(other.lambda()));
+    return *this;
+  }
+
+  AssignableLambdaImpl(const AssignableLambdaImpl&) = default;
+  AssignableLambdaImpl(AssignableLambdaImpl&&) noexcept = default;
+};
+
+template <typename Lambda>
+struct AssignableLambdaImpl<Lambda, true, true>
+    : private AssignableLambdaImpl<Lambda, true, false> {
+ private:
+  using Base = AssignableLambdaImpl<Lambda, true, false>;
+  using Base::lambda;
+
+ public:
+  using Base::Base;
+  using Base::operator();
 
   AssignableLambdaImpl& operator=(const AssignableLambdaImpl& other)
-      requires std::is_copy_constructible_v<Lambda> {
-    std::destroy_at(&_lambda);
-    std::construct_at(&_lambda, other._lambda);
+      QL_CONCEPT_OR_NOTHING(requires std::is_copy_constructible_v<Lambda>) {
+    std::destroy_at(&lambda());
+    std::construct_at(&lambda(), other.lambda());
     return *this;
   }
 
-  AssignableLambdaImpl& operator=(AssignableLambdaImpl&& other) noexcept
-      requires std::is_move_constructible_v<Lambda> {
-    std::destroy_at(&_lambda);
-    std::construct_at(&_lambda, std::move(other._lambda));
-    return *this;
-  }
+  AssignableLambdaImpl& operator=(AssignableLambdaImpl&& other) = default;
 
   AssignableLambdaImpl(const AssignableLambdaImpl&) = default;
   AssignableLambdaImpl(AssignableLambdaImpl&&) noexcept = default;
@@ -59,8 +97,12 @@ struct AssignableLambdaImpl {
 /// iterator types that store lambda expressions (see Iterators.h), because many
 /// STL algorithms require iterators to be assignable. The assignment operators
 /// are implemented using `destroy_at` and `construct_at`.
-constexpr auto makeAssignableLambda(auto lambda) {
-  return detail::AssignableLambdaImpl{std::move(lambda)};
+template <typename Lambda>
+constexpr auto makeAssignableLambda(Lambda lambda) {
+  return detail::AssignableLambdaImpl<Lambda,
+                                      std::is_move_constructible_v<Lambda>,
+                                      std::is_copy_constructible_v<Lambda>>{
+      std::move(lambda)};
 }
 }  // namespace ad_utility
 

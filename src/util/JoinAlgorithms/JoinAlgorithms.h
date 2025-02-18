@@ -25,13 +25,13 @@ namespace ad_utility {
 // A  function `F` fulfills `UnaryIteratorFunction` if it can be called with a
 // single argument of the `Range`'s iterator type (NOT value type).
 template <typename F, typename Range>
-concept UnaryIteratorFunction =
+CPP_concept UnaryIteratorFunction =
     std::invocable<F, ql::ranges::iterator_t<Range>>;
 
 // A  function `F` fulfills `BinaryIteratorFunction` if it can be called with
 // two arguments of the `Range`'s iterator type (NOT value type).
 template <typename F, typename Range>
-concept BinaryIteratorFunction =
+CPP_concept BinaryIteratorFunction =
     std::invocable<F, ql::ranges::iterator_t<Range>,
                    ql::ranges::iterator_t<Range>>;
 
@@ -436,11 +436,21 @@ CPP_template(typename RangeSmaller, typename RangeLarger,
  * @param compatibleRowAction Same as in `zipperJoinWithUndef`
  * @param elFromFirstNotFoundAction Same as in `zipperJoinWithUndef`
  */
-void specialOptionalJoin(
-    const IdTableView<0>& left, const IdTableView<0>& right,
-    const BinaryIteratorFunction<IdTableView<0>> auto& compatibleRowAction,
-    const UnaryIteratorFunction<IdTableView<0>> auto& elFromFirstNotFoundAction,
-    const std::invocable<> auto& checkCancellation) {
+CPP_template(typename CompatibleActionT, typename NotFoundActionT,
+             typename CancellationFuncT)(
+    requires BinaryIteratorFunction<CompatibleActionT, IdTableView<0>> CPP_and UnaryIteratorFunction<
+        NotFoundActionT, IdTableView<0>>
+        CPP_and std::invocable<
+            CancellationFuncT>) void specialOptionalJoin(const IdTableView<0>&
+                                                             left,
+                                                         const IdTableView<0>&
+                                                             right,
+                                                         const CompatibleActionT&
+                                                             compatibleRowAction,
+                                                         const NotFoundActionT&
+                                                             elFromFirstNotFoundAction,
+                                                         const CancellationFuncT&
+                                                             checkCancellation) {
   auto it1 = std::begin(left);
   auto end1 = std::end(left);
   auto it2 = std::begin(right);
@@ -699,7 +709,7 @@ auto makeJoinSide(Blocks& blocks, const auto& projection) {
 
 // A concept to identify instantiations of the `JoinSide` template.
 template <typename T>
-concept IsJoinSide = ad_utility::isInstantiation<T, JoinSide>;
+CPP_concept IsJoinSide = ad_utility::isInstantiation<T, JoinSide>;
 
 struct AlwaysFalse {
   bool operator()(const auto&) const { return false; }
@@ -751,11 +761,12 @@ struct AlwaysFalse {
 // After adding the Cartesian product we start a new round with a new
 // `currentEl` (5 in this example). New blocks are added to one of the buffers
 // if they become empty at one point in the algorithm.
-template <IsJoinSide LeftSide, IsJoinSide RightSide, typename LessThan,
-          typename CompatibleRowAction,
-          InvocableWithExactReturnType<bool, typename LeftSide::ProjectedEl>
-              IsUndef = AlwaysFalse>
-struct BlockZipperJoinImpl {
+CPP_template(typename LeftSide, typename RightSide, typename LessThan,
+             typename CompatibleRowAction, typename IsUndef = AlwaysFalse)(
+    requires IsJoinSide<LeftSide> CPP_and IsJoinSide<RightSide> CPP_and
+        InvocableWithExactReturnType<
+            IsUndef, bool,
+            typename LeftSide::ProjectedEl>) struct BlockZipperJoinImpl {
   // The left and right inputs of the join
   LeftSide leftSide_;
   RightSide rightSide_;

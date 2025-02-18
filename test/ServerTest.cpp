@@ -169,7 +169,8 @@ TEST(ServerTest, createResponseMetadata) {
   json deltaTriplesJson{
       {"before", {{"inserted", 0}, {"deleted", 0}, {"total", 0}}},
       {"after", {{"inserted", 1}, {"deleted", 0}, {"total", 1}}},
-      {"difference", {{"inserted", 1}, {"deleted", 0}, {"total", 1}}}};
+      {"difference", {{"inserted", 1}, {"deleted", 0}, {"total", 1}}},
+      {"operation", {{"inserted", 1}, {"deleted", 0}, {"total", 1}}}};
   json locatedTriplesJson{
       {"SPO", {{"blocks-affected", 1}, {"blocks-total", 1}}},
       {"POS", {{"blocks-affected", 1}, {"blocks-total", 1}}},

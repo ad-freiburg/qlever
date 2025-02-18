@@ -5,6 +5,7 @@
 #pragma once
 
 #include "backports/algorithm.h"
+#include "backports/concepts.h"
 #include "index/PrefixHeuristic.h"
 #include "index/vocabulary/PrefixCompressor.h"
 #include "util/FsstCompressor.h"
@@ -25,6 +26,7 @@ CPP_requires(
                                            std::vector<std::string_view>,
                                            std::vector<std::string>>,
                   ad_utility::SimilarTo<decltype(std::get<2>(t)), Decoder>));
+
 template <typename T, typename Decoder>
 CPP_concept BulkResultForDecoder =
     CPP_requires_ref(BulkResultForDecoder_, T, Decoder);
