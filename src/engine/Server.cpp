@@ -423,7 +423,7 @@ Awaitable<void> Server::process(
        &requestTimer,
        this](ParsedQuery parsedOperation, std::string operationName,
              std::function<bool(const ParsedQuery&)> expectedOperation,
-             const std::string_view msg) -> Awaitable<void> {
+             const std::string msg) -> Awaitable<void> {
     auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
         checkParameter("timeout", std::nullopt), accessTokenOk, request, send);
     if (!timeLimit.has_value()) {
