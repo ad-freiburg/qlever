@@ -195,7 +195,8 @@ quads: triplesTemplate? ( quadsNotTriples '.'? triplesTemplate? )* ;
 
 quadsNotTriples: GRAPH varOrIri '{' triplesTemplate? '}' ;
 
-triplesTemplate: triplesSameSubject ( '.' triplesTemplate? )?;
+// triplesTemplate: triplesSameSubject ( '.' triplesTemplate? )?;
+triplesTemplate: triplesSameSubject ( '.' triplesSameSubject )* '.'? ;
 
 
 // Corresponds to GraphPattern.
