@@ -16,6 +16,7 @@
 #include "util/GTestHelpers.h"
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
+#include "util/OperationTestHelpers.h"
 
 using ad_utility::testing::getQec;
 namespace {
@@ -657,18 +658,38 @@ TEST_P(TransitivePathTest, clone) {
 
   TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
   TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
-  auto transitivePath =
-      makePathUnbound(std::move(sub), {Variable{"?start"}, Variable{"?target"}},
-                      left, right, 0, std::numeric_limits<size_t>::max());
+  {
+    auto transitivePath =
+        makePathUnbound(sub.clone(), {Variable{"?start"}, Variable{"?target"}},
+                        left, right, 0, std::numeric_limits<size_t>::max());
 
-  auto clone = transitivePath->clone();
-  ASSERT_TRUE(clone);
-  auto& path = *transitivePath;
-  const auto& cloneReference = *clone;
-  EXPECT_EQ(typeid(path), typeid(cloneReference));
-  EXPECT_EQ(cloneReference.getDescriptor(), path.getDescriptor());
+    auto clone = transitivePath->clone();
+    ASSERT_TRUE(clone);
+    EXPECT_THAT(*transitivePath, IsDeepCopy(*clone));
+    EXPECT_EQ(clone->getDescriptor(), transitivePath->getDescriptor());
+  }
+  {
+    auto transitivePath = makePathBound(
+        false, std::move(sub), {Variable{"?start"}, Variable{"?target"}},
+        sub.clone(), 0, {Variable{"?start"}, Variable{"?other"}}, left, right,
+        0, std::numeric_limits<size_t>::max());
 
-  EXPECT_NE(path.getChildren().at(0), cloneReference.getChildren().at(0));
+    auto clone = transitivePath->clone();
+    ASSERT_TRUE(clone);
+    EXPECT_THAT(*transitivePath, IsDeepCopy(*clone));
+    EXPECT_EQ(clone->getDescriptor(), transitivePath->getDescriptor());
+  }
+  {
+    auto transitivePath = makePathBound(
+        true, std::move(sub), {Variable{"?start"}, Variable{"?target"}},
+        sub.clone(), 0, {Variable{"?target"}, Variable{"?other"}}, left, right,
+        0, std::numeric_limits<size_t>::max());
+
+    auto clone = transitivePath->clone();
+    ASSERT_TRUE(clone);
+    EXPECT_THAT(*transitivePath, IsDeepCopy(*clone));
+    EXPECT_EQ(clone->getDescriptor(), transitivePath->getDescriptor());
+  }
 }
 
 // _____________________________________________________________________________

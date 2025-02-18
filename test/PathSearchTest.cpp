@@ -772,9 +772,18 @@ TEST(PathSearchTest, clone) {
   auto qec = getQec();
   auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, std::move(sub), vars);
-  PathSearch pathSearch{qec, std::move(subtree), std::move(config)};
+  PathSearch pathSearch{qec, subtree, std::move(config)};
 
   auto clone = pathSearch.clone();
+  ASSERT_TRUE(clone);
+  EXPECT_THAT(pathSearch, IsDeepCopy(*clone));
+  EXPECT_EQ(clone->getDescriptor(), pathSearch.getDescriptor());
+
+  pathSearch.bindSourceSide(subtree, 0);
+  pathSearch.bindTargetSide(subtree, 0);
+  pathSearch.bindSourceAndTargetSide(subtree, 0, 0);
+
+  clone = pathSearch.clone();
   ASSERT_TRUE(clone);
   EXPECT_THAT(pathSearch, IsDeepCopy(*clone));
   EXPECT_EQ(clone->getDescriptor(), pathSearch.getDescriptor());
