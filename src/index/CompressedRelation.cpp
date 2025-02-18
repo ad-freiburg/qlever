@@ -1257,10 +1257,9 @@ namespace {
 // Collect elements of type `T` in batches of size 100'000 and apply the
 // `Function` to each batch. For the last batch (which might be smaller)  the
 // function is applied in the destructor.
-template <
-    typename T,
-    ad_utility::InvocableWithExactReturnType<void, std::vector<T>&&> Function>
-struct Batcher {
+CPP_template(typename T, typename Function)(
+    requires ad_utility::InvocableWithExactReturnType<
+        Function, void, std::vector<T>&&>) struct Batcher {
   Function function_;
   size_t blocksize_;
   std::vector<T> vec_;

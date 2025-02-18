@@ -93,11 +93,12 @@ class Join : public Operation {
   // being passed to the `AddCombinedRowToIdTable` so that the partial results
   // can be yielded during execution. This is achieved by spawning a separate
   // thread.
-  Result::Generator runLazyJoinAndConvertToGenerator(
-      ad_utility::InvocableWithExactReturnType<
-          Result::IdTableVocabPair,
-          std::function<void(IdTable&, LocalVocab&)>> auto action,
-      OptionalPermutation permutation) const;
+  CPP_template_2(typename ActionT)(
+      requires ad_utility::InvocableWithExactReturnType<
+          ActionT, Result::IdTableVocabPair,
+          std::function<void(IdTable&, LocalVocab&)>>) Result::Generator
+      runLazyJoinAndConvertToGenerator(ActionT action,
+                                       OptionalPermutation permutation) const;
 
  public:
   // Helper function to compute the result of a join operation and conditionally
@@ -111,12 +112,12 @@ class Join : public Operation {
   // `action` is a lambda that can be used to send partial chunks to a consumer
   // in addition to returning the remaining result. If laziness is not required
   // it is a no-op.
-  ProtoResult createResult(
-      bool requestedLaziness,
-      ad_utility::InvocableWithExactReturnType<
-          Result::IdTableVocabPair,
-          std::function<void(IdTable&, LocalVocab&)>> auto action,
-      OptionalPermutation permutation = {}) const;
+  CPP_template_2(typename ActionT)(
+      requires ad_utility::InvocableWithExactReturnType<
+          ActionT, Result::IdTableVocabPair,
+          std::function<void(IdTable&, LocalVocab&)>>) ProtoResult
+      createResult(bool requestedLaziness, ActionT action,
+                   OptionalPermutation permutation = {}) const;
 
   // Fallback implementation of a join that is used when at least one of the two
   // inputs is not fully materialized. This represents the general case where we
