@@ -31,8 +31,9 @@ CPP_template(typename Type)(
 template <typename ColumnReturnType, typename... ColumnInputTypes>
 requires(sizeof...(ColumnInputTypes) > 0) void generateColumnWithColumnInput(
     ResultTable* const table,
-    ad_utility::InvocableWithSimilarReturnType<
-        ColumnReturnType, const ColumnInputTypes&...> auto&& generator,
+    QL_CONCEPT_OR_NOTHING(
+        ad_utility::InvocableWithSimilarReturnType<
+            ColumnReturnType, const ColumnInputTypes&...>) auto&& generator,
     const ColumnNumWithType<ColumnReturnType>& columnToPutResultIn,
     const ColumnNumWithType<ColumnInputTypes>&... inputColumns) {
   // Using a column more than once is the sign of an error.
