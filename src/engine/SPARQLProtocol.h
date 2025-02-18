@@ -9,13 +9,19 @@
 #include "util/http/UrlParser.h"
 #include "util/http/beast.h"
 
+// Helper for parsing `HttpRequest` into `ParsedRequest`. The parsing has many
+// common patterns but the details are slightly different. This struct
+// stores the partially parsed `ParsedRequest` and methods for common
+// operations used while parsing.
 struct ParsedRequestBuilder {
   FRIEND_TEST(SPARQLProtocolTest, extractTargetGraph);
-  FRIEND_TEST(SPARQLProtocolTest, extractAccessTokenImpl);
+  FRIEND_TEST(SPARQLProtocolTest, determineAccessToken);
   FRIEND_TEST(SPARQLProtocolTest, parameterIsContainedExactlyOnce);
 
   ad_utility::url_parser::ParsedRequest parsedRequest_;
 
+  // Initialize a `ParsedRequestBuilder`, parsing the request target into the
+  // `ParsedRequest`.
   explicit ParsedRequestBuilder(
       const ad_utility::httpUtils::HttpRequest auto& request) {
     using namespace ad_utility::url_parser::sparqlOperation;
@@ -27,26 +33,34 @@ struct ParsedRequestBuilder {
                       std::move(parsedUrl.parameters_), None{}};
   }
 
+  // Extract the access token from the access-token parameter or the
+  // Authorization header and set it for `ParsedRequest`. If both are given,
+  // then they must be the same.
   void extractAccessToken(
       const ad_utility::httpUtils::HttpRequest auto& request) {
     parsedRequest_.accessToken_ =
-        extractAccessToken(request, parsedRequest_.parameters_);
+        determineAccessToken(request, parsedRequest_.parameters_);
   }
 
+  // If applicable extract the dataset clauses from the parameters and set them
+  // on the Query or Update.
   void extractDatasetClauses();
 
-  // Some valid requests (e.g. QLever's custom commands like retrieving index
-  // statistics) don't have a query. An empty operation is not an error. Setting
-  // multiple operations should not happen. Setting an operation when one is
-  // already set is an error.
+  // If the parameter is set, set the operation with the parameter's value as
+  // operation string and empty dataset clauses. Setting an operation when one
+  // is already set is an error. Note: processed parameters are removed from the
+  // parameter map.
   template <typename Operation>
   void extractOperationIfSpecified(ad_utility::use_type_identity::TI<Operation>,
                                    string_view paramName);
 
+  // Returns whether the request is a Graph Store operation.
   bool isGraphStoreOperation() const;
 
+  // Set the operation to the parsed Graph Store operation.
   void extractGraphStoreOperation();
 
+  // Returns whether the parameters contain a parameter with the given key.
   bool parametersContain(std::string_view param) const;
 
   // Check that requests don't both have these content types and are Graph
@@ -54,10 +68,11 @@ struct ParsedRequestBuilder {
   void reportUnsupportedContentTypeIfGraphStore(
       std::string_view contentType) const;
 
+  // Move the `ParsedRequest` out when parsing is finished.
   ad_utility::url_parser::ParsedRequest build() &&;
 
  private:
-  // Adds a dataset clause to the operation if it has the given type. The
+  // Adds a dataset clause to the operation if it is of the given type. The
   // dataset clause's IRI is the value of parameter `key`. The `isNamed_` of the
   // dataset clause is as given.
   template <typename Operation>
@@ -65,7 +80,8 @@ struct ParsedRequestBuilder {
       ad_utility::use_type_identity::TI<Operation>, const std::string& key,
       bool isNamed);
 
-  // Check that a parameter is contained exactly once.
+  // Check that a parameter is contained exactly once. An exception is thrown if
+  // a parameter is contained more than once.
   bool parameterIsContainedExactlyOnce(std::string_view key) const;
 
   // Extract the graph to be acted upon using from the URL query parameters
@@ -74,7 +90,9 @@ struct ParsedRequestBuilder {
   static GraphOrDefault extractTargetGraph(
       const ad_utility::url_parser::ParamValueMap& params);
 
-  static std::optional<std::string> extractAccessToken(
+  // Determine the access token from the parameters and the requests
+  // Authorization header.
+  static std::optional<std::string> determineAccessToken(
       const ad_utility::httpUtils::HttpRequest auto& request,
       const ad_utility::url_parser::ParamValueMap& params) {
     namespace http = boost::beast::http;
@@ -108,6 +126,8 @@ struct ParsedRequestBuilder {
   }
 };
 
+// Parses HTTP requests to `ParsedRequests` (a representation of Query, Update,
+// Graph Store and internal operations) according to the SPARQL specifications.
 class SPARQLProtocol {
   FRIEND_TEST(SPARQLProtocolTest, parseGET);
   FRIEND_TEST(SPARQLProtocolTest, parseUrlencodedPOST);
@@ -122,34 +142,18 @@ class SPARQLProtocol {
   static constexpr std::string_view contentTypeSparqlUpdate =
       "application/sparql-update";
 
+  using RequestType =
+      boost::beast::http::request<boost::beast::http::string_body>;
+
+  // Parse an HTTP GET request into a `ParsedRequest`. The
+  // `ParsedRequestBuilder` must have already extracted the access token.
   static ad_utility::url_parser::ParsedRequest parseGET(
-      const ad_utility::httpUtils::HttpRequest auto& request) {
-    using namespace ad_utility::url_parser::sparqlOperation;
-    using namespace ad_utility::use_type_identity;
-    auto parsedRequestBuilder = ParsedRequestBuilder(request);
-    parsedRequestBuilder.extractAccessToken(request);
+      ParsedRequestBuilder parsedRequestBuilder);
 
-    const bool isQuery = parsedRequestBuilder.parametersContain("query");
-    if (parsedRequestBuilder.parametersContain("update")) {
-      throw std::runtime_error("SPARQL Update is not allowed as GET request.");
-    }
-    if (parsedRequestBuilder.isGraphStoreOperation()) {
-      if (isQuery) {
-        throw std::runtime_error(
-            R"(Request contains parameters for both a SPARQL Query ("query") and a Graph Store Protocol operation ("graph" or "default").)");
-      }
-      // SPARQL Graph Store HTTP Protocol with indirect graph identification
-      parsedRequestBuilder.extractGraphStoreOperation();
-    } else if (isQuery) {
-      // SPARQL Query
-      parsedRequestBuilder.extractOperationIfSpecified(ti<Query>, "query");
-      parsedRequestBuilder.extractDatasetClauses();
-    }
-    return std::move(parsedRequestBuilder).build();
-  }
-
+  // Parse an HTTP POST request with content-type
+  // `application/x-www-form-urlencoded` into a `ParsedRequest`.
   static ad_utility::url_parser::ParsedRequest parseUrlencodedPOST(
-      const ad_utility::httpUtils::HttpRequest auto& request) {
+      const RequestType& request) {
     using namespace ad_utility::url_parser::sparqlOperation;
     using namespace ad_utility::use_type_identity;
     namespace http = boost::beast::http;
@@ -197,10 +201,12 @@ class SPARQLProtocol {
     return std::move(parsedRequestBuilder).build();
   }
 
+  // Parse an HTTP POST request with a SPARQL operation in its body
+  // into a `ParsedRequest`. This is used for the content types
+  // `application/sparql-query` and `application/sparql-update`.
   template <typename Operation>
   static ad_utility::url_parser::ParsedRequest parseSPARQLPOST(
-      const ad_utility::httpUtils::HttpRequest auto& request,
-      std::string_view contentType) {
+      const RequestType& request, std::string_view contentType) {
     using namespace ad_utility::url_parser::sparqlOperation;
     auto parsedRequestBuilder = ParsedRequestBuilder(request);
     parsedRequestBuilder.reportUnsupportedContentTypeIfGraphStore(contentType);
@@ -211,20 +217,25 @@ class SPARQLProtocol {
     return std::move(parsedRequestBuilder).build();
   }
 
+  // Parse an HTTP POST request with content type `application/sparql-query`
+  // into a `ParsedRequest`.
   static ad_utility::url_parser::ParsedRequest parseQueryPOST(
-      const ad_utility::httpUtils::HttpRequest auto& request) {
+      const RequestType& request) {
     return parseSPARQLPOST<ad_utility::url_parser::sparqlOperation::Query>(
         request, contentTypeSparqlQuery);
   }
 
+  // Parse an HTTP POST request with content type `application/sparql-update`
+  // into a `ParsedRequest`.
   static ad_utility::url_parser::ParsedRequest parseUpdatePOST(
-      const ad_utility::httpUtils::HttpRequest auto& request) {
+      const RequestType& request) {
     return parseSPARQLPOST<ad_utility::url_parser::sparqlOperation::Update>(
         request, contentTypeSparqlUpdate);
   }
 
+  // Parse an HTTP POST request into a `ParsedRequest`.
   static ad_utility::url_parser::ParsedRequest parsePOST(
-      const ad_utility::httpUtils::HttpRequest auto& request) {
+      const RequestType& request) {
     // For a POST request, the content type *must* be either
     // "application/x-www-form-urlencoded" (1), "application/sparql-query"
     // (2) or "application/sparql-update" (3).
@@ -274,13 +285,14 @@ class SPARQLProtocol {
   }
 
  public:
-  /// Parse the path and URL parameters from the given request. Supports both
-  /// GET and POST request according to the SPARQL 1.1 standard.
+  // Parse a HTTP request.
   static ad_utility::url_parser::ParsedRequest parseHttpRequest(
-      const ad_utility::httpUtils::HttpRequest auto& request) {
+      const RequestType& request) {
     namespace http = boost::beast::http;
     if (request.method() == http::verb::get) {
-      return parseGET(request);
+      auto parsedRequestBuilder = ParsedRequestBuilder(request);
+      parsedRequestBuilder.extractAccessToken(request);
+      return parseGET(std::move(parsedRequestBuilder));
     }
     if (request.method() == http::verb::post) {
       return parsePOST(request);

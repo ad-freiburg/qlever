@@ -720,11 +720,11 @@ TEST(SPARQLProtocolTest, extractTargetGraph) {
 }
 
 // _____________________________________________________________________________________________
-TEST(SPARQLProtocolTest, extractAccessTokenImpl) {
+TEST(SPARQLProtocolTest, determineAccessToken) {
   auto extract = [](const ad_utility::httpUtils::HttpRequest auto& request) {
     auto parsedUrl = parseRequestTarget(request.target());
-    return ParsedRequestBuilder::extractAccessToken(request,
-                                                    parsedUrl.parameters_);
+    return ParsedRequestBuilder::determineAccessToken(request,
+                                                      parsedUrl.parameters_);
   };
   EXPECT_THAT(extract(makeGetRequest("/")), testing::Eq(std::nullopt));
   EXPECT_THAT(extract(makeGetRequest("/?access-token=foo")),

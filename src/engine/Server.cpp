@@ -493,17 +493,11 @@ Awaitable<void> Server::process(
     // Don't check for the `ParsedQuery`s actual type (Query or Update) here
     // because graph store operations can result in both.
     auto trueFunc = [](const ParsedQuery&) { return true; };
-    if (parsedOperation.hasUpdateClause()) {
-      co_return co_await visitOperation(
-          parsedOperation, "Graph Store (Update)", trueFunc,
-          "Please contact the developers. Graph Store update operation is not "
-          "an update: ");
-    } else {
-      co_return co_await visitOperation(
-          parsedOperation, "Graph Store (Query)", trueFunc,
-          "Please contact the developers. Graph Store query operation is not a "
-          "query: ");
-    }
+    std::string_view queryType =
+        parsedOperation.hasUpdateClause() ? "Update" : "Query";
+    return visitOperation(parsedOperation,
+                          absl::StrCat("Graph Store (", queryType, ")"),
+                          trueFunc, "Unused dummy message");
   };
   auto visitNone = [&response, &send, &request](None) -> Awaitable<void> {
     // If there was no "query", but any of the URL parameters processed before
