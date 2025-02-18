@@ -1500,32 +1500,17 @@ std::vector<ExpressionPtr> Visitor::visit(Parser::ExpressionListContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-template <typename Context>
-Triples Visitor::parseTriplesConstruction(Context* ctx) {
+Triples Visitor::visit(Parser::ConstructTriplesContext* ctx) {
   auto result = visit(ctx->triplesSameSubject());
-  Context* subContext = [](Context* ctx) -> Context* {
-    if constexpr (std::is_same_v<Context, Parser::ConstructTriplesContext>) {
-      return ctx->constructTriples();
-    } else if constexpr (std::is_same_v<Context,
-                                        Parser::TriplesTemplateContext>) {
-      return ctx->triplesTemplate();
-    }
-  }(ctx);
-  if (subContext) {
-    auto newTriples = visit(subContext);
-    ad_utility::appendVector(result, std::move(newTriples));
+  if (ctx->constructTriples()) {
+    ad_utility::appendVector(result, visit(ctx->constructTriples()));
   }
   return result;
 }
 
 // ____________________________________________________________________________________
-Triples Visitor::visit(Parser::ConstructTriplesContext* ctx) {
-  return parseTriplesConstruction(ctx);
-}
-
-// ____________________________________________________________________________________
 Triples Visitor::visit(Parser::TriplesTemplateContext* ctx) {
-  return parseTriplesConstruction(ctx);
+  return ad_utility::flatten(visitVector(ctx->triplesSameSubject()));
 }
 
 // ____________________________________________________________________________________
