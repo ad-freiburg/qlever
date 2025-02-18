@@ -513,15 +513,12 @@ ComparisonResult compareIdsImpl(ValueId a, ValueId b, auto comparator) {
 
   auto visitor = [comparator, &a, &b]<typename A, typename B>(
                      const A& aValue, const B& bValue) -> ComparisonResult {
-    if constexpr (std::is_same_v<A, LocalVocabIndex> &&
-                  std::is_same_v<B, LocalVocabIndex>) {
-      // We have handled this case outside the visitor.
-      AD_FAIL();
-    } else if constexpr (requires() {
-                           std::invoke(comparator, aValue, bValue);
-                         }) {
+    if constexpr (requires() { std::invoke(comparator, aValue, bValue); }) {
       return fromBool(std::invoke(comparator, aValue, bValue));
     } else {
+      static_assert((!std::is_same_v<A, B>) ||
+                    ad_utility::SameAsAny<A, LocalVocabIndex, GeoPoint,
+                                          Id::UndefinedType>);
       AD_LOG_ERROR << "Comparison not implemented for types "
                    << toString(a.getDatatype()) << " and "
                    << toString(b.getDatatype()) << std::endl;
