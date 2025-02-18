@@ -11,6 +11,7 @@
 #include "engine/ValuesForTesting.h"
 #include "global/ValueIdComparators.h"
 #include "util/IndexTestHelpers.h"
+#include "util/OperationTestHelpers.h"
 
 using namespace std::string_literals;
 using namespace std::chrono_literals;
@@ -268,9 +269,6 @@ TEST(OrderBy, clone) {
 
   auto clone = orderBy.clone();
   ASSERT_TRUE(clone);
-  const auto& cloneReference = *clone;
-  EXPECT_EQ(typeid(orderBy), typeid(cloneReference));
-  EXPECT_EQ(cloneReference.getDescriptor(), orderBy.getDescriptor());
-
-  EXPECT_NE(orderBy.getChildren().at(0), cloneReference.getChildren().at(0));
+  EXPECT_THAT(orderBy, IsDeepCopy(*clone));
+  EXPECT_EQ(clone->getDescriptor(), orderBy.getDescriptor());
 }

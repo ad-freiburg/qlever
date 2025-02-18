@@ -19,6 +19,7 @@
 #include "util/IdTableHelpers.h"
 #include "util/IdTestHelpers.h"
 #include "util/IndexTestHelpers.h"
+#include "util/OperationTestHelpers.h"
 
 using ad_utility::testing::makeAllocator;
 using namespace ad_utility::testing;
@@ -379,10 +380,6 @@ TEST(OptionalJoin, clone) {
 
   auto clone = opt.clone();
   ASSERT_TRUE(clone);
-  const auto& cloneReference = *clone;
-  EXPECT_EQ(typeid(opt), typeid(cloneReference));
-  EXPECT_EQ(cloneReference.getDescriptor(), opt.getDescriptor());
-
-  EXPECT_NE(opt.getChildren().at(0), cloneReference.getChildren().at(0));
-  EXPECT_NE(opt.getChildren().at(1), cloneReference.getChildren().at(1));
+  EXPECT_THAT(opt, IsDeepCopy(*clone));
+  EXPECT_EQ(clone->getDescriptor(), opt.getDescriptor());
 }

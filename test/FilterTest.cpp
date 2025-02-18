@@ -13,6 +13,7 @@
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
+#include "util/OperationTestHelpers.h"
 
 using ::testing::ElementsAre;
 using ::testing::Eq;
@@ -242,9 +243,6 @@ TEST(Filter, clone) {
 
   auto clone = filter.clone();
   ASSERT_TRUE(clone);
-  const auto& cloneReference = *clone;
-  EXPECT_EQ(typeid(filter), typeid(cloneReference));
-  EXPECT_EQ(cloneReference.getDescriptor(), filter.getDescriptor());
-
-  EXPECT_NE(filter.getChildren().at(0), cloneReference.getChildren().at(0));
+  EXPECT_THAT(filter, IsDeepCopy(*clone));
+  EXPECT_EQ(clone->getDescriptor(), filter.getDescriptor());
 }

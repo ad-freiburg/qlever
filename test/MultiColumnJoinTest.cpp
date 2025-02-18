@@ -13,6 +13,7 @@
 #include "util/IdTableHelpers.h"
 #include "util/IdTestHelpers.h"
 #include "util/IndexTestHelpers.h"
+#include "util/OperationTestHelpers.h"
 
 using ad_utility::testing::makeAllocator;
 namespace {
@@ -87,12 +88,11 @@ TEST(MultiColumnJoin, clone) {
 
   auto clone = join.clone();
   ASSERT_TRUE(clone);
-  const auto& cloneReference = *clone;
-  EXPECT_EQ(typeid(join), typeid(cloneReference));
+  EXPECT_THAT(join, IsDeepCopy(*clone));
 
   std::string_view prefix = "MultiColumnJoin on ";
   EXPECT_THAT(join.getDescriptor(), ::testing::StartsWith(prefix));
-  EXPECT_THAT(cloneReference.getDescriptor(), ::testing::StartsWith(prefix));
+  EXPECT_THAT(clone->getDescriptor(), ::testing::StartsWith(prefix));
   // Order of join columns is not deterministic.
   auto getVars = [prefix](std::string_view string) {
     string.remove_prefix(prefix.length());
@@ -103,9 +103,5 @@ TEST(MultiColumnJoin, clone) {
     ql::ranges::sort(vars);
     return vars;
   };
-  EXPECT_EQ(getVars(cloneReference.getDescriptor()),
-            getVars(join.getDescriptor()));
-
-  EXPECT_NE(join.getChildren().at(0), cloneReference.getChildren().at(0));
-  EXPECT_NE(join.getChildren().at(1), cloneReference.getChildren().at(1));
+  EXPECT_EQ(getVars(clone->getDescriptor()), getVars(join.getDescriptor()));
 }

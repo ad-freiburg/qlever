@@ -6,6 +6,7 @@
 
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/OperationTestHelpers.h"
 #include "engine/Distinct.h"
 #include "engine/NeutralElementOperation.h"
 
@@ -233,9 +234,6 @@ TEST(Distinct, clone) {
 
   auto clone = distinct.clone();
   ASSERT_TRUE(clone);
-  const auto& cloneReference = *clone;
-  EXPECT_EQ(typeid(distinct), typeid(cloneReference));
-  EXPECT_EQ(cloneReference.getDescriptor(), distinct.getDescriptor());
-
-  EXPECT_NE(distinct.getChildren().at(0), cloneReference.getChildren().at(0));
+  EXPECT_THAT(distinct, IsDeepCopy(*clone));
+  EXPECT_EQ(clone->getDescriptor(), distinct.getDescriptor());
 }

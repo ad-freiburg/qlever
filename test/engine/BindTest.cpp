@@ -6,6 +6,7 @@
 
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/OperationTestHelpers.h"
 #include "./ValuesForTesting.h"
 #include "engine/Bind.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
@@ -147,7 +148,6 @@ TEST(Bind, clone) {
 
   auto clone = bind.clone();
   ASSERT_TRUE(clone);
-  const auto& cloneReference = *clone;
-  EXPECT_EQ(typeid(bind), typeid(cloneReference));
-  EXPECT_EQ(cloneReference.getDescriptor(), bind.getDescriptor());
+  EXPECT_THAT(bind, IsDeepCopy(*clone));
+  EXPECT_EQ(clone->getDescriptor(), bind.getDescriptor());
 }

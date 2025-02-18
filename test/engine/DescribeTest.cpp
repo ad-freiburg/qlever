@@ -6,6 +6,7 @@
 
 #include "../util/GTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/OperationTestHelpers.h"
 #include "engine/Describe.h"
 #include "engine/IndexScan.h"
 #include "engine/NeutralElementOperation.h"
@@ -190,9 +191,6 @@ TEST(Describe, clone) {
 
   auto clone = describe.clone();
   ASSERT_TRUE(clone);
-  const auto& cloneReference = *clone;
-  EXPECT_EQ(typeid(describe), typeid(cloneReference));
-  EXPECT_EQ(cloneReference.getDescriptor(), describe.getDescriptor());
-
-  EXPECT_NE(describe.getChildren().at(0), cloneReference.getChildren().at(0));
+  EXPECT_THAT(describe, IsDeepCopy(*clone));
+  EXPECT_EQ(clone->getDescriptor(), describe.getDescriptor());
 }

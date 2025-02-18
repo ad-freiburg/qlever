@@ -11,6 +11,7 @@
 #include "engine/TextLimit.h"
 #include "engine/ValuesForTesting.h"
 #include "util/IndexTestHelpers.h"
+#include "util/OperationTestHelpers.h"
 
 namespace {
 TextLimit makeTextLimit(IdTable input, const size_t& n,
@@ -511,10 +512,6 @@ TEST(TextLimit, clone) {
 
   auto clone = textLimit.clone();
   ASSERT_TRUE(clone);
-  const auto& cloneReference = *clone;
-  EXPECT_EQ(typeid(textLimit), typeid(cloneReference));
-  EXPECT_EQ(cloneReference.getDescriptor(), textLimit.getDescriptor());
-
-  EXPECT_NE(static_cast<Operation&>(textLimit).getChildren().at(0),
-            cloneReference.getChildren().at(0));
+  EXPECT_THAT(static_cast<Operation&>(textLimit), IsDeepCopy(*clone));
+  EXPECT_EQ(clone->getDescriptor(), textLimit.getDescriptor());
 }

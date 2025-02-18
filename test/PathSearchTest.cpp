@@ -12,6 +12,7 @@
 #include "util/IdTableHelpers.h"
 #include "util/IdTestHelpers.h"
 #include "util/IndexTestHelpers.h"
+#include "util/OperationTestHelpers.h"
 
 using ad_utility::testing::getQec;
 namespace {
@@ -775,9 +776,6 @@ TEST(PathSearchTest, clone) {
 
   auto clone = pathSearch.clone();
   ASSERT_TRUE(clone);
-  const auto& cloneReference = *clone;
-  EXPECT_EQ(typeid(pathSearch), typeid(cloneReference));
-  EXPECT_EQ(cloneReference.getDescriptor(), pathSearch.getDescriptor());
-
-  EXPECT_NE(pathSearch.getChildren().at(0), cloneReference.getChildren().at(0));
+  EXPECT_THAT(pathSearch, IsDeepCopy(*clone));
+  EXPECT_EQ(clone->getDescriptor(), pathSearch.getDescriptor());
 }

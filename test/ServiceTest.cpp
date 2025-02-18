@@ -22,6 +22,7 @@
 #include "util/GTestHelpers.h"
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
+#include "util/OperationTestHelpers.h"
 #include "util/TripleComponentTestHelpers.h"
 #include "util/http/HttpUtils.h"
 
@@ -814,7 +815,6 @@ TEST_F(ServiceTest, clone) {
 
   auto clone = service.clone();
   ASSERT_TRUE(clone);
-  const auto& cloneReference = *clone;
-  EXPECT_EQ(typeid(service), typeid(cloneReference));
-  EXPECT_EQ(cloneReference.getDescriptor(), service.getDescriptor());
+  EXPECT_THAT(service, IsDeepCopy(*clone));
+  EXPECT_EQ(clone->getDescriptor(), service.getDescriptor());
 }

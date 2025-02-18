@@ -176,4 +176,15 @@ class CustomGeneratorOperation : public Operation {
   }
 };
 
+MATCHER_P(SameTypeId, ptr, "has the same type id") {
+  return typeid(*arg) == typeid(*ptr);
+}
+
+inline auto IsDeepCopy(const Operation& other) {
+  using namespace ::testing;
+  return AllOf(Address(SameTypeId(&other)),
+               AD_PROPERTY(Operation, getChildren,
+                           Pointwise(Ne(), other.getChildren())));
+}
+
 #endif  // QLEVER_OPERATIONTESTHELPERS_H

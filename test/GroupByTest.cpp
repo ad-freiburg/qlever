@@ -30,6 +30,7 @@
 #include "index/ConstantsIndexBuilding.h"
 #include "parser/SparqlParser.h"
 #include "util/IndexTestHelpers.h"
+#include "util/OperationTestHelpers.h"
 
 using namespace ad_utility::testing;
 using ::testing::Eq;
@@ -132,11 +133,8 @@ TEST_F(GroupByTest, clone) {
 
   auto clone = groupBy.clone();
   ASSERT_TRUE(clone);
-  const auto& cloneReference = *clone;
-  EXPECT_EQ(typeid(groupBy), typeid(cloneReference));
-  EXPECT_EQ(cloneReference.getDescriptor(), groupBy.getDescriptor());
-
-  EXPECT_NE(groupBy.getChildren().at(0), cloneReference.getChildren().at(0));
+  EXPECT_THAT(groupBy, IsDeepCopy(*clone));
+  EXPECT_EQ(clone->getDescriptor(), groupBy.getDescriptor());
 }
 
 TEST_F(GroupByTest, doGroupBy) {

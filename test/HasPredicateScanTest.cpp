@@ -16,6 +16,7 @@
 #include "engine/IndexScan.h"
 #include "engine/ValuesForTesting.h"
 #include "util/IndexTestHelpers.h"
+#include "util/OperationTestHelpers.h"
 
 namespace {
 using ad_utility::testing::makeAllocator;
@@ -181,12 +182,8 @@ TEST_F(HasPredicateScanTest, cloneCountAvailablePredicates) {
 
   auto clone = patternTrick.clone();
   ASSERT_TRUE(clone);
-  const auto& cloneReference = *clone;
-  EXPECT_EQ(typeid(patternTrick), typeid(cloneReference));
-  EXPECT_EQ(cloneReference.getDescriptor(), patternTrick.getDescriptor());
-
-  EXPECT_NE(patternTrick.getChildren().at(0),
-            cloneReference.getChildren().at(0));
+  EXPECT_THAT(patternTrick, IsDeepCopy(*clone));
+  EXPECT_EQ(clone->getDescriptor(), patternTrick.getDescriptor());
 }
 
 // ____________________________________________________________

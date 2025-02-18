@@ -7,9 +7,9 @@
 #include "../util/GTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/OperationTestHelpers.h"
 #include "engine/ExistsJoin.h"
 #include "engine/IndexScan.h"
-#include "engine/NeutralElementOperation.h"
 #include "engine/QueryExecutionTree.h"
 
 using namespace ad_utility::testing;
@@ -149,10 +149,6 @@ TEST(Exists, clone) {
 
   auto clone = existsJoin.clone();
   ASSERT_TRUE(clone);
-  const auto& cloneReference = *clone;
-  EXPECT_EQ(typeid(existsJoin), typeid(cloneReference));
-  EXPECT_EQ(cloneReference.getDescriptor(), existsJoin.getDescriptor());
-
-  EXPECT_NE(existsJoin.getChildren().at(0), cloneReference.getChildren().at(0));
-  EXPECT_NE(existsJoin.getChildren().at(1), cloneReference.getChildren().at(1));
+  EXPECT_THAT(existsJoin, IsDeepCopy(*clone));
+  EXPECT_EQ(clone->getDescriptor(), existsJoin.getDescriptor());
 }

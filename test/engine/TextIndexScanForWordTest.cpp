@@ -10,6 +10,7 @@
 #include "../util/GTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/OperationTestHelpers.h"
 #include "./TextIndexScanTestHelpers.h"
 #include "engine/IndexScan.h"
 #include "engine/TextIndexScanForWord.h"
@@ -265,8 +266,7 @@ TEST(TextIndexScanForWord, clone) {
 
   auto clone = scan.clone();
   ASSERT_TRUE(clone);
-  const auto& cloneReference = *clone;
-  EXPECT_EQ(typeid(scan), typeid(cloneReference));
-  EXPECT_EQ(cloneReference.getDescriptor(), scan.getDescriptor());
+  EXPECT_THAT(scan, IsDeepCopy(*clone));
+  EXPECT_EQ(clone->getDescriptor(), scan.getDescriptor());
 }
 }  // namespace

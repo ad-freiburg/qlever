@@ -780,10 +780,6 @@ TEST(JoinTest, clone) {
 
   auto clone = join.clone();
   ASSERT_TRUE(clone);
-  const auto& cloneReference = *clone;
-  EXPECT_EQ(typeid(join), typeid(cloneReference));
-  EXPECT_EQ(cloneReference.getDescriptor(), join.getDescriptor());
-
-  EXPECT_NE(join.getChildren().at(0), cloneReference.getChildren().at(0));
-  EXPECT_NE(join.getChildren().at(1), cloneReference.getChildren().at(1));
+  EXPECT_THAT(join, IsDeepCopy(*clone));
+  EXPECT_EQ(clone->getDescriptor(), join.getDescriptor());
 }

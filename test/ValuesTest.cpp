@@ -13,6 +13,7 @@
 #include "engine/Values.h"
 #include "engine/idTable/IdTable.h"
 #include "util/IndexTestHelpers.h"
+#include "util/OperationTestHelpers.h"
 
 using TC = TripleComponent;
 using ValuesComponents = std::vector<std::vector<TripleComponent>>;
@@ -100,7 +101,6 @@ TEST(Values, clone) {
 
   auto clone = valuesOperation.clone();
   ASSERT_TRUE(clone);
-  const auto& cloneReference = *clone;
-  EXPECT_EQ(typeid(valuesOperation), typeid(cloneReference));
-  EXPECT_EQ(cloneReference.getDescriptor(), valuesOperation.getDescriptor());
+  EXPECT_THAT(valuesOperation, IsDeepCopy(*clone));
+  EXPECT_EQ(clone->getDescriptor(), valuesOperation.getDescriptor());
 }

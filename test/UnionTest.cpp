@@ -13,6 +13,7 @@
 #include "engine/Union.h"
 #include "global/Id.h"
 #include "util/IndexTestHelpers.h"
+#include "util/OperationTestHelpers.h"
 
 namespace {
 auto V = ad_utility::testing::VocabId;
@@ -192,12 +193,6 @@ TEST(Union, clone) {
 
   auto clone = unionOperation.clone();
   ASSERT_TRUE(clone);
-  const auto& cloneReference = *clone;
-  EXPECT_EQ(typeid(unionOperation), typeid(cloneReference));
-  EXPECT_EQ(cloneReference.getDescriptor(), unionOperation.getDescriptor());
-
-  EXPECT_NE(unionOperation.getChildren().at(0),
-            cloneReference.getChildren().at(0));
-  EXPECT_NE(unionOperation.getChildren().at(1),
-            cloneReference.getChildren().at(1));
+  EXPECT_THAT(unionOperation, IsDeepCopy(*clone));
+  EXPECT_EQ(clone->getDescriptor(), unionOperation.getDescriptor());
 }
