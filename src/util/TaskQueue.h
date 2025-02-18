@@ -120,6 +120,11 @@ class TaskQueue {
            std::to_string(popTime_) + "ms (pop)";
   }
 
+  // Block the current thread until `finish()` on the queue has been called and
+  // successfully completed. This function may NOT be called from inside a queue
+  // thread, otherwise there will be a deadlock.
+  void waitUntilFinished() const { finishedFinishing_.wait(false); }
+
   ~TaskQueue() {
     if (startedFinishing_.test_and_set()) {
       // Someone has already called `finish`, we have to wait for the finishing
