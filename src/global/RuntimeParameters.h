@@ -60,6 +60,8 @@ inline auto& RuntimeParameters() {
         // its size estimate will be the size of the block divided by this
         // value.
         SizeT<"small-index-scan-size-estimate-divisor">{5},
+        // Maximum size for the body of requests that the server will process.
+        MemorySizeParameter<"request-body-limit">{1_MB},
     };
   }();
   return params;

@@ -10,6 +10,7 @@
 #include <future>
 
 #include "absl/cleanup/cleanup.h"
+#include "global/RuntimeParameters.h"
 #include "util/Exception.h"
 #include "util/Log.h"
 #include "util/http/HttpUtils.h"
@@ -236,9 +237,12 @@ class HttpServer {
 
         // Read a request. Use a parser so that we can control the limit of the
         // request size.
-        beast::http::request_parser<boost::beast::http::string_body>
-            requestParser;
-        requestParser.body_limit(100'000'000);  // 100 MB
+        http::request_parser<http::string_body> requestParser;
+        auto bodyLimit =
+            RuntimeParameters().get<"request-body-limit">().getBytes();
+        requestParser.body_limit(bodyLimit == 0
+                                     ? boost::none
+                                     : boost::optional<uint64_t>(bodyLimit));
         co_await http::async_read(stream, buffer, requestParser,
                                   boost::asio::use_awaitable);
         http::request<http::string_body> req = requestParser.get();
