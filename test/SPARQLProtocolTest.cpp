@@ -135,7 +135,9 @@ auto testAccessTokenCombinationsUrlEncoded =
 
 // _____________________________________________________________________________________________
 TEST(SPARQLProtocolTest, parseGET) {
-  auto parse = [](const ad_utility::httpUtils::HttpRequest auto& request) {
+  auto parse =
+      CPP_template_lambda()(typename RequestT)(const RequestT& request)(
+          requires ad_utility::httpUtils::HttpRequest<RequestT>) {
     auto builder = ParsedRequestBuilder(request);
     builder.extractAccessToken(request);
     return SPARQLProtocol::parseGET(std::move(builder));
@@ -210,7 +212,9 @@ TEST(SPARQLProtocolTest, parseGET) {
 
 // _____________________________________________________________________________________________
 TEST(SPARQLProtocolTest, parseUrlencodedPOST) {
-  auto parse = [](const ad_utility::httpUtils::HttpRequest auto& request) {
+  auto parse =
+      CPP_template_lambda()(typename RequestT)(const RequestT& request)(
+          requires ad_utility::httpUtils::HttpRequest<RequestT>) {
     return SPARQLProtocol::parseUrlencodedPOST(request);
   };
 
@@ -326,7 +330,9 @@ TEST(SPARQLProtocolTest, parseUrlencodedPOST) {
 
 // _____________________________________________________________________________________________
 TEST(SPARQLProtocolTest, parseQueryPOST) {
-  auto parse = [](const ad_utility::httpUtils::HttpRequest auto& request) {
+  auto parse =
+      CPP_template_lambda()(typename RequestT)(const RequestT& request)(
+          requires ad_utility::httpUtils::HttpRequest<RequestT>) {
     return SPARQLProtocol::parseQueryPOST(request);
   };
 
@@ -369,7 +375,9 @@ TEST(SPARQLProtocolTest, parseQueryPOST) {
 
 // _____________________________________________________________________________________________
 TEST(SPARQLProtocolTest, parseUpdatePOST) {
-  auto parse = [](const ad_utility::httpUtils::HttpRequest auto& request) {
+  auto parse =
+      CPP_template_lambda()(typename RequestT)(const RequestT& request)(
+          requires ad_utility::httpUtils::HttpRequest<RequestT>) {
     return SPARQLProtocol::parseUpdatePOST(request);
   };
 
@@ -410,7 +418,9 @@ TEST(SPARQLProtocolTest, parseUpdatePOST) {
 
 // _____________________________________________________________________________________________
 TEST(SPARQLProtocolTest, parsePOST) {
-  auto parse = [](const ad_utility::httpUtils::HttpRequest auto& request) {
+  auto parse =
+      CPP_template_lambda()(typename RequestT)(const RequestT& request)(
+          requires ad_utility::httpUtils::HttpRequest<RequestT>) {
     return SPARQLProtocol::parsePOST(request);
   };
 
@@ -466,7 +476,9 @@ TEST(SPARQLProtocolTest, parsePOST) {
 
 // _____________________________________________________________________________________________
 TEST(SPARQLProtocolTest, parseHttpRequest) {
-  auto parse = [](const ad_utility::httpUtils::HttpRequest auto& request) {
+  auto parse =
+      CPP_template_lambda()(typename RequestT)(const RequestT& request)(
+          requires ad_utility::httpUtils::HttpRequest<RequestT>) {
     return SPARQLProtocol::parseHttpRequest(request);
   };
 

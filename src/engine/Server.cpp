@@ -172,10 +172,12 @@ void Server::run(const string& indexBaseName, bool useText, bool usePatterns,
 }
 
 // _____________________________________________________________________________
-net::awaitable<std::optional<Server::TimeLimit>>
-Server::verifyUserSubmittedQueryTimeout(
-    std::optional<std::string_view> userTimeout, bool accessTokenOk,
-    const ad_utility::httpUtils::HttpRequest auto& request, auto& send) const {
+CPP_template_2(typename RequestT, typename ResponseT)(
+    requires ad_utility::httpUtils::HttpRequest<RequestT>)
+    net::awaitable<std::optional<Server::TimeLimit>> Server::
+        verifyUserSubmittedQueryTimeout(
+            std::optional<std::string_view> userTimeout, bool accessTokenOk,
+            const RequestT& request, ResponseT& send) const {
   auto defaultTimeout = RuntimeParameters().get<"default-query-timeout">();
   // TODO<GCC12> Use the monadic operations for std::optional
   if (userTimeout.has_value()) {
@@ -216,7 +218,8 @@ class QueryAlreadyInUseError : public std::runtime_error {
 auto Server::cancelAfterDeadline(
     std::weak_ptr<ad_utility::CancellationHandle<>> cancellationHandle,
     TimeLimit timeLimit)
-    -> ad_utility::InvocableWithExactReturnType<void> auto {
+    -> QL_CONCEPT_OR_NOTHING(
+        ad_utility::InvocableWithExactReturnType<void>) auto {
   net::steady_timer timer{timerExecutor_, timeLimit};
 
   timer.async_wait([cancellationHandle = std::move(cancellationHandle)](
@@ -266,8 +269,9 @@ auto Server::prepareOperation(
 }
 
 // _____________________________________________________________________________
-Awaitable<void> Server::process(
-    const ad_utility::httpUtils::HttpRequest auto& request, auto&& send) {
+CPP_template_2(typename RequestT, typename ResponseT)(
+    requires ad_utility::httpUtils::HttpRequest<RequestT>)
+    Awaitable<void> Server::process(const RequestT& request, ResponseT&& send) {
   using namespace ad_utility::httpUtils;
 
   // Log some basic information about the request. Start with an empty line so
@@ -641,9 +645,10 @@ nlohmann::json Server::composeCacheStatsJson() const {
 }
 
 // _____________________________________________
-ad_utility::websocket::OwningQueryId Server::getQueryId(
-    const ad_utility::httpUtils::HttpRequest auto& request,
-    std::string_view query) {
+CPP_template_2(typename RequestT)(
+    requires ad_utility::httpUtils::HttpRequest<RequestT>)
+    ad_utility::websocket::OwningQueryId Server::getQueryId(
+        const RequestT& request, std::string_view query) {
   using ad_utility::websocket::OwningQueryId;
   std::string_view queryIdHeader = request.base()["Query-Id"];
   if (queryIdHeader.empty()) {
@@ -658,11 +663,13 @@ ad_utility::websocket::OwningQueryId Server::getQueryId(
 }
 
 // _____________________________________________________________________________
-Awaitable<void> Server::sendStreamableResponse(
-    const ad_utility::httpUtils::HttpRequest auto& request, auto& send,
-    MediaType mediaType, const PlannedQuery& plannedQuery,
-    const QueryExecutionTree& qet, const ad_utility::Timer& requestTimer,
-    SharedCancellationHandle cancellationHandle) const {
+CPP_template_2(typename RequestT, typename ResponseT)(
+    requires ad_utility::httpUtils::HttpRequest<RequestT>)
+    Awaitable<void> Server::sendStreamableResponse(
+        const RequestT& request, ResponseT& send, MediaType mediaType,
+        const PlannedQuery& plannedQuery, const QueryExecutionTree& qet,
+        const ad_utility::Timer& requestTimer,
+        SharedCancellationHandle cancellationHandle) const {
   auto responseGenerator = ExportQueryExecutionTrees::computeResult(
       plannedQuery.parsedQuery_, qet, mediaType, requestTimer,
       std::move(cancellationHandle));
@@ -700,9 +707,11 @@ Awaitable<void> Server::sendStreamableResponse(
 }
 
 // ____________________________________________________________________________
-MediaType Server::determineMediaType(
-    const ad_utility::url_parser::ParamValueMap& params,
-    const ad_utility::httpUtils::HttpRequest auto& request) {
+CPP_template_2(typename RequestT)(
+    requires ad_utility::httpUtils::HttpRequest<RequestT>)
+    MediaType Server::determineMediaType(
+        const ad_utility::url_parser::ParamValueMap& params,
+        const RequestT& request) {
   using namespace ad_utility::url_parser;
   // The following code block determines the media type to be used for the
   // result. The media type is either determined by the "Accept:" header of
@@ -737,10 +746,11 @@ MediaType Server::determineMediaType(
 }
 
 // ____________________________________________________________________________
-ad_utility::websocket::MessageSender Server::createMessageSender(
-    const std::weak_ptr<ad_utility::websocket::QueryHub>& queryHub,
-    const ad_utility::httpUtils::HttpRequest auto& request,
-    const string& operation) {
+CPP_template_2(typename RequestT)(
+    requires ad_utility::httpUtils::HttpRequest<RequestT>)
+    ad_utility::websocket::MessageSender Server::createMessageSender(
+        const std::weak_ptr<ad_utility::websocket::QueryHub>& queryHub,
+        const RequestT& request, const string& operation) {
   auto queryHubLock = queryHub.lock();
   AD_CORRECTNESS_CHECK(queryHubLock);
   ad_utility::websocket::MessageSender messageSender{
@@ -749,13 +759,14 @@ ad_utility::websocket::MessageSender Server::createMessageSender(
 }
 
 // ____________________________________________________________________________
-Awaitable<void> Server::processQuery(
-    const ad_utility::url_parser::ParamValueMap& params, ParsedQuery&& query,
-    const ad_utility::Timer& requestTimer,
-    ad_utility::SharedCancellationHandle cancellationHandle,
-    QueryExecutionContext& qec,
-    const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
-    TimeLimit timeLimit) {
+CPP_template_2(typename RequestT, typename ResponseT)(
+    requires ad_utility::httpUtils::HttpRequest<RequestT>)
+    Awaitable<void> Server::processQuery(
+        const ad_utility::url_parser::ParamValueMap& params,
+        ParsedQuery&& query, const ad_utility::Timer& requestTimer,
+        ad_utility::SharedCancellationHandle cancellationHandle,
+        QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
+        TimeLimit timeLimit) {
   AD_CORRECTNESS_CHECK(!query.hasUpdateClause());
 
   MediaType mediaType = determineMediaType(params, request);
@@ -900,12 +911,13 @@ json Server::processUpdateImpl(
 }
 
 // ____________________________________________________________________________
-Awaitable<void> Server::processUpdate(
-    ParsedQuery&& update, const ad_utility::Timer& requestTimer,
-    ad_utility::SharedCancellationHandle cancellationHandle,
-    QueryExecutionContext& qec,
-    const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
-    TimeLimit timeLimit) {
+CPP_template_2(typename RequestT, typename ResponseT)(
+    requires ad_utility::httpUtils::HttpRequest<RequestT>)
+    Awaitable<void> Server::processUpdate(
+        ParsedQuery&& update, const ad_utility::Timer& requestTimer,
+        ad_utility::SharedCancellationHandle cancellationHandle,
+        QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
+        TimeLimit timeLimit) {
   AD_CORRECTNESS_CHECK(update.hasUpdateClause());
   PlannedQuery plannedQuery =
       co_await planQuery(updateThreadPool_, std::move(update), requestTimer,
@@ -934,10 +946,12 @@ Awaitable<void> Server::processUpdate(
 }
 
 // ____________________________________________________________________________
-Awaitable<void> Server::processOperation(
-    ad_utility::url_parser::sparqlOperation::Operation operation, auto visitor,
-    const ad_utility::Timer& requestTimer,
-    const ad_utility::httpUtils::HttpRequest auto& request, auto& send) {
+CPP_template_2(typename VisitorT, typename RequestT, typename ResponseT)(
+    requires ad_utility::httpUtils::HttpRequest<RequestT>)
+    Awaitable<void> Server::processOperation(
+        ad_utility::url_parser::sparqlOperation::Operation operation,
+        VisitorT visitor, const ad_utility::Timer& requestTimer,
+        const RequestT& request, ResponseT& send) {
   // Copy the operation string for the error case before processing the
   // operation, because processing moves it.
   const std::string operationString = [&operation] {

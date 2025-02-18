@@ -21,15 +21,14 @@ using TC = TripleComponent;
 
 // _____________________________________________________________________________________________
 TEST(GraphStoreProtocolTest, transformPost) {
-  auto expectTransformPost =
-      [](const ad_utility::httpUtils::HttpRequest auto& request,
-         const GraphOrDefault& graph,
-         const testing::Matcher<const ParsedQuery&>& matcher,
-         ad_utility::source_location l =
-             ad_utility::source_location::current()) {
-        auto trace = generateLocationTrace(l);
-        EXPECT_THAT(GraphStoreProtocol::transformPost(request, graph), matcher);
-      };
+  auto expectTransformPost = CPP_template_lambda()(typename RequestT)(
+      const RequestT& request, const GraphOrDefault& graph,
+      const testing::Matcher<const ParsedQuery&>& matcher,
+      ad_utility::source_location l = ad_utility::source_location::current())(
+      requires ad_utility::httpUtils::HttpRequest<RequestT>) {
+    auto trace = generateLocationTrace(l);
+    EXPECT_THAT(GraphStoreProtocol::transformPost(request, graph), matcher);
+  };
 
   expectTransformPost(
       makePostRequest("/?default", "text/turtle", "<a> <b> <c> ."), DEFAULT{},
