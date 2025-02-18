@@ -43,7 +43,7 @@ jobs:
         run: |
           brew install conan@2
       - name: Install dependencies
-        if: false
+        if: true
         run: |
 
           which cc
@@ -58,9 +58,16 @@ jobs:
           echo  CPPFLAGS="/usr/local/opt/llvm@16/include" >> $GITHUB_ENV 
           source ~/.bash_profile
       - name: Print clang version
-        run: clang++ --version
+        run: |
+          clang++ --version
+          echo 'int main() {}' >> test.cpp
+          clang++ test.cpp
+          clang test.cpp
+          cc test.cpp
+          c++ test.cpp
 
       - name: Cache for conan
+        if: false
         uses: actions/cache@v3
         env:
           cache-name: cache-conan-modules
