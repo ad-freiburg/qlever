@@ -56,6 +56,10 @@ jobs:
           echo LDFLAGS="-L/usr/local/opt/llvm@16/lib -L/usr/local/opt/llvm@16/lib/c++ -Wl,-rpath,/usr/local/opt/llvm@16/lib/c++" >> $GITHUB_ENV 
           echo 'export CPPFLAGS="-I/usr/local/opt/llvm@16/include"' >> ~/.bash_profile
           echo  CPPFLAGS="/usr/local/opt/llvm@16/include" >> $GITHUB_ENV 
+          echo 'export CC="-I/usr/local/opt/llvm@16/bin/clang"' >> ~/.bash_profile
+          echo 'export CC="-I/usr/local/opt/llvm@16/bin/clang"' >> $GITHUB_ENV
+          echo 'export CXX="-I/usr/local/opt/llvm@16/bin/clang++"' >> ~/.bash_profile
+          echo 'export CXX="-I/usr/local/opt/llvm@16/bin/clang++"' >> $GITHUB_ENV
           source ~/.bash_profile
       - name: Print clang version
         run: |
