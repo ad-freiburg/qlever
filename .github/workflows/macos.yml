@@ -43,11 +43,7 @@ jobs:
         run: |
           brew install conan@2
       - name: Install dependencies
-        if: true
         run: |
-
-          which cc
-          cc --version
           brew install llvm@16
           brew install conan@2
           echo 'export PATH="/usr/local/opt/llvm@16/bin:$PATH"' >> ~/.bash_profile
@@ -64,20 +60,12 @@ jobs:
           echo CXX="/usr/local/opt/llvm@16/bin/clang++" >> $GITHUB_ENV
           source ~/.bash_profile
       - name: Print clang version
-        run: |
-          clang++ --version
-          echo 'int main() {}' >> test.cpp
-          clang++ test.cpp -stdlib=libc++ -v
-          clang test.cpp -stdlib=libc++ -v
-          $CC test.cpp -stdlib=libc++ -v
-          $CXX test.cpp -stdlib=libc++ -v
-          c++ test.cpp
+        run: clang++ --version
 
       - name: Cache for conan
-        if: false
         uses: actions/cache@v3
         env:
-          cache-name: cache-conan-modules
+          cache-name: cache-conan-modules-macos-13
         with:
           path: ~/.conan2
           key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('conanfile.txt') }}
@@ -86,11 +74,7 @@ jobs:
       - name: Install and run conan
         working-directory: ${{github.workspace}}/build
         run: |
-          which cc
-          cc --version
-          #conan profile detect
           conan install .. -pr:b=../conanprofiles/clang-16-macos -pr:h=../conanprofiles/clang-16-macos -of=. --build=missing
-          #conan install .. -of=. --build=missing --verbose
       - name: Configure CMake
         # For std::ranges::join_view we need the -fexperimental-library flag on libc++16, which on Mac requires to manually tinker with the linking flags.
         run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{matrix.build-type}} -DCMAKE_TOOLCHAIN_FILE="$(pwd)/build/conan_toolchain.cmake" -DUSE_PARALLEL=true -DRUN_EXPENSIVE_TESTS=false -DENABLE_EXPENSIVE_CHECKS=true -DCMAKE_CXX_COMPILER=clang++ -DADDITIONAL_COMPILER_FLAGS="-fexperimental-library" -D_NO_TIMING_TESTS=ON -DADDITIONAL_LINKER_FLAGS="-L$(brew --prefix llvm)/lib/c++"
