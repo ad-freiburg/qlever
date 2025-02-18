@@ -625,3 +625,24 @@ uint64_t Operation::getSizeEstimate() {
     return getSizeEstimateBeforeLimit();
   }
 }
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> Operation::clone() const {
+  auto result = cloneImpl();
+  AD_CORRECTNESS_CHECK(result->_executionContext == _executionContext);
+  auto areChildrenDifferent = [this, &result]() {
+    auto ownChildren = getChildren();
+    auto otherChildren = result->getChildren();
+    if (ownChildren.size() != otherChildren.size()) {
+      return false;
+    }
+    for (size_t i = 0; i < ownChildren.size(); i++) {
+      if (ownChildren.at(i) == otherChildren.at(i)) {
+        return false;
+      }
+    }
+    return true;
+  };
+  AD_CORRECTNESS_CHECK(areChildrenDifferent());
+  return result;
+}

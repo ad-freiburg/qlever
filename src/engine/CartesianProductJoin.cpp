@@ -367,7 +367,7 @@ Result::Generator CartesianProductJoin::createLazyConsumer(
 }
 
 // _____________________________________________________________________________
-std::unique_ptr<Operation> CartesianProductJoin::clone() const {
+std::unique_ptr<Operation> CartesianProductJoin::cloneImpl() const {
   Children copy;
   copy.reserve(children_.size());
   for (const auto& operation : children_) {

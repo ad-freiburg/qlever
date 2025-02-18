@@ -115,6 +115,6 @@ string TextIndexScanForEntity::getCacheKeyImpl() const {
 }
 
 // _____________________________________________________________________________
-std::unique_ptr<Operation> TextIndexScanForEntity::clone() const {
+std::unique_ptr<Operation> TextIndexScanForEntity::cloneImpl() const {
   return std::make_unique<TextIndexScanForEntity>(*this);
 }

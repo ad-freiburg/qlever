@@ -33,7 +33,7 @@ BinSearchMap TransitivePathBinSearch::setupEdgesMap(
 }
 
 // _____________________________________________________________________________
-std::unique_ptr<Operation> TransitivePathBinSearch::clone() const {
+std::unique_ptr<Operation> TransitivePathBinSearch::cloneImpl() const {
   auto copy = std::make_unique<TransitivePathBinSearch>(*this);
   copy->subtree_ = subtree_->clone();
   if (copy->lhs_.treeAndCol_.has_value()) {

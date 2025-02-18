@@ -839,7 +839,7 @@ ad_utility::AddCombinedRowToIdTable Join::makeRowAdder(
 }
 
 // _____________________________________________________________________________
-std::unique_ptr<Operation> Join::clone() const {
+std::unique_ptr<Operation> Join::cloneImpl() const {
   auto copy = std::make_unique<Join>(*this);
   copy->_left = _left->clone();
   copy->_right = _right->clone();

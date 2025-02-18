@@ -25,7 +25,7 @@ class Minus : public Operation {
 
   // Uninitialized Object for testing the computeMinus method
   struct OnlyForTestingTag {};
-  explicit Minus(OnlyForTestingTag){};
+  explicit Minus(OnlyForTestingTag) {};
 
  protected:
   string getCacheKeyImpl() const override;
@@ -62,7 +62,7 @@ class Minus : public Operation {
                     const vector<std::array<ColumnIndex, 2>>& matchedColumns,
                     IdTable* result) const;
 
-  std::unique_ptr<Operation> clone() const override;
+  std::unique_ptr<Operation> cloneImpl() const override;
 
  private:
   /**

@@ -362,7 +362,7 @@ void CountAvailablePredicates::computePatternTrick(
 }
 
 // _____________________________________________________________________________
-std::unique_ptr<Operation> CountAvailablePredicates::clone() const {
+std::unique_ptr<Operation> CountAvailablePredicates::cloneImpl() const {
   return std::make_unique<CountAvailablePredicates>(
       _executionContext, subtree_->clone(), subjectColumnIndex_,
       predicateVariable_, countVariable_);

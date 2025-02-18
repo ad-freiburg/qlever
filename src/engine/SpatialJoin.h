@@ -174,7 +174,7 @@ class SpatialJoin : public Operation {
     return childRight_;
   }
 
-  std::unique_ptr<Operation> clone() const override;
+  std::unique_ptr<Operation> cloneImpl() const override;
 
  private:
   // helper function to generate a variable to column map from `childRight_`

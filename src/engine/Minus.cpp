@@ -222,7 +222,7 @@ Minus::RowComparison Minus::isRowEqSkipFirst(
 }
 
 // _____________________________________________________________________________
-std::unique_ptr<Operation> Minus::clone() const {
+std::unique_ptr<Operation> Minus::cloneImpl() const {
   auto copy = std::make_unique<Minus>(*this);
   copy->_left = _left->clone();
   copy->_right = _right->clone();

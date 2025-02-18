@@ -45,7 +45,7 @@ class StallForeverOperation : public Operation {
   }
 
   // _____________________________________________________________________________
-  std::unique_ptr<Operation> clone() const override {
+  std::unique_ptr<Operation> cloneImpl() const override {
     AD_THROW("Clone not implemented");
   }
 };
@@ -90,7 +90,7 @@ class ShallowParentOperation : public Operation {
   }
 
   // _____________________________________________________________________________
-  std::unique_ptr<Operation> clone() const override {
+  std::unique_ptr<Operation> cloneImpl() const override {
     AD_THROW("Clone not implemented");
   }
 };
@@ -139,7 +139,7 @@ class AlwaysFailOperation : public Operation {
   }
 
   // _____________________________________________________________________________
-  std::unique_ptr<Operation> clone() const override {
+  std::unique_ptr<Operation> cloneImpl() const override {
     AD_THROW("Clone not implemented");
   }
 };
@@ -171,7 +171,7 @@ class CustomGeneratorOperation : public Operation {
   }
 
   // _____________________________________________________________________________
-  std::unique_ptr<Operation> clone() const override {
+  std::unique_ptr<Operation> cloneImpl() const override {
     AD_THROW("Clone not implemented");
   }
 };

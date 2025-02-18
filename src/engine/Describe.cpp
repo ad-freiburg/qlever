@@ -246,7 +246,7 @@ ProtoResult Describe::computeResult([[maybe_unused]] bool requestLaziness) {
 }
 
 // _____________________________________________________________________________
-std::unique_ptr<Operation> Describe::clone() const {
+std::unique_ptr<Operation> Describe::cloneImpl() const {
   return std::make_unique<Describe>(_executionContext, subtree_->clone(),
                                     describe_);
 }

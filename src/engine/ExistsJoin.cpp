@@ -207,7 +207,7 @@ std::shared_ptr<QueryExecutionTree> ExistsJoin::addExistsJoinsToSubtree(
 }
 
 // _____________________________________________________________________________
-std::unique_ptr<Operation> ExistsJoin::clone() const {
+std::unique_ptr<Operation> ExistsJoin::cloneImpl() const {
   auto newJoin = std::make_unique<ExistsJoin>(*this);
   newJoin->left_ = left_->clone();
   newJoin->right_ = right_->clone();

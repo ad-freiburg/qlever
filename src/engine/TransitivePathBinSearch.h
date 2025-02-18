@@ -69,7 +69,7 @@ class TransitivePathBinSearch : public TransitivePathImpl<BinSearchMap> {
                           TransitivePathSide rightSide, size_t minDist,
                           size_t maxDist);
 
-  std::unique_ptr<Operation> clone() const override;
+  std::unique_ptr<Operation> cloneImpl() const override;
 
  private:
   // initialize the map from the subresult

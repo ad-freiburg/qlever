@@ -192,7 +192,7 @@ string TextLimit::getCacheKeyImpl() const {
 }
 
 // _____________________________________________________________________________
-std::unique_ptr<Operation> TextLimit::clone() const {
+std::unique_ptr<Operation> TextLimit::cloneImpl() const {
   return std::make_unique<TextLimit>(_executionContext, limit_, child_->clone(),
                                      textRecordColumn_, entityColumns_,
                                      scoreColumns_);

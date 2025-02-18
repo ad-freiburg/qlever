@@ -141,7 +141,7 @@ OrderBy::SortedVariables OrderBy::getSortedVariables() const {
 }
 
 // _____________________________________________________________________________
-std::unique_ptr<Operation> OrderBy::clone() const {
+std::unique_ptr<Operation> OrderBy::cloneImpl() const {
   return std::make_unique<OrderBy>(_executionContext, subtree_->clone(),
                                    sortIndices_);
 }

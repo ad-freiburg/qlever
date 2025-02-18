@@ -75,7 +75,7 @@ class ExistsJoin : public Operation {
     return {left_.get(), right_.get()};
   }
 
-  std::unique_ptr<Operation> clone() const override;
+  std::unique_ptr<Operation> cloneImpl() const override;
 
  private:
   ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override;

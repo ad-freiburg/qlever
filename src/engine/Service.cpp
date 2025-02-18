@@ -623,7 +623,7 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
 }
 
 // _____________________________________________________________________________
-std::unique_ptr<Operation> Service::clone() const {
+std::unique_ptr<Operation> Service::cloneImpl() const {
   return std::make_unique<Service>(_executionContext, parsedServiceClause_,
                                    getResultFunction_);
 }

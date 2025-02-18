@@ -232,7 +232,7 @@ class ValuesForTesting : public Operation {
 
   ValuesForTesting& operator=(const ValuesForTesting&) = delete;
 
-  std::unique_ptr<Operation> clone() const override {
+  std::unique_ptr<Operation> cloneImpl() const override {
     return std::make_unique<ValuesForTesting>(ValuesForTesting{*this});
   }
 

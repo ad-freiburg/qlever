@@ -48,7 +48,7 @@ class Distinct : public Operation {
     return {subtree_.get()};
   }
 
-  std::unique_ptr<Operation> clone() const override;
+  std::unique_ptr<Operation> cloneImpl() const override;
 
  protected:
   [[nodiscard]] string getCacheKeyImpl() const override;

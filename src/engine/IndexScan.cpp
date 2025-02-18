@@ -661,7 +661,7 @@ std::pair<Result::Generator, Result::Generator> IndexScan::prefilterTables(
 }
 
 // _____________________________________________________________________________
-std::unique_ptr<Operation> IndexScan::clone() const {
+std::unique_ptr<Operation> IndexScan::cloneImpl() const {
   auto prefilter =
       prefilter_.has_value()
           ? std::optional{std::pair{prefilter_.value().first->clone(),

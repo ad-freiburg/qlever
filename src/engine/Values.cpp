@@ -149,6 +149,6 @@ void Values::writeValues(IdTable* idTablePtr, LocalVocab* localVocab) {
 }
 
 // _____________________________________________________________________________
-std::unique_ptr<Operation> Values::clone() const {
+std::unique_ptr<Operation> Values::cloneImpl() const {
   return std::make_unique<Values>(*this);
 }

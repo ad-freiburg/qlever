@@ -76,7 +76,7 @@ ProtoResult Sort::computeResult([[maybe_unused]] bool requestLaziness) {
 }
 
 // _____________________________________________________________________________
-std::unique_ptr<Operation> Sort::clone() const {
+std::unique_ptr<Operation> Sort::cloneImpl() const {
   return std::make_unique<Sort>(_executionContext, subtree_->clone(),
                                 sortColumnIndices_);
 }

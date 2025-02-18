@@ -83,6 +83,6 @@ string TextIndexScanForWord::getCacheKeyImpl() const {
 }
 
 // _____________________________________________________________________________
-std::unique_ptr<Operation> TextIndexScanForWord::clone() const {
+std::unique_ptr<Operation> TextIndexScanForWord::cloneImpl() const {
   return std::make_unique<TextIndexScanForWord>(*this);
 }

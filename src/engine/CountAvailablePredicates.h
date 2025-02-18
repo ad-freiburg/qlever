@@ -72,7 +72,7 @@ class CountAvailablePredicates : public Operation {
   const Variable& predicateVariable() const { return predicateVariable_; }
   const Variable& countVariable() const { return countVariable_; }
 
-  std::unique_ptr<Operation> clone() const override;
+  std::unique_ptr<Operation> cloneImpl() const override;
 
  private:
   /**

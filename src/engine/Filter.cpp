@@ -242,7 +242,7 @@ size_t Filter::getCostEstimate() {
 }
 
 // _____________________________________________________________________________
-std::unique_ptr<Operation> Filter::clone() const {
+std::unique_ptr<Operation> Filter::cloneImpl() const {
   return std::make_unique<Filter>(_executionContext, _subtree->clone(),
                                   _expression);
 }

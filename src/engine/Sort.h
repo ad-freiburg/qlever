@@ -66,7 +66,7 @@ class Sort : public Operation {
     return {subtree_.get()};
   }
 
-  std::unique_ptr<Operation> clone() const override;
+  std::unique_ptr<Operation> cloneImpl() const override;
 
  private:
   virtual ProtoResult computeResult(

@@ -44,7 +44,7 @@ class TextIndexScanForWord : public Operation {
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 
-  std::unique_ptr<Operation> clone() const override;
+  std::unique_ptr<Operation> cloneImpl() const override;
 
  private:
   // Returns a Result containing an IdTable with the columns being

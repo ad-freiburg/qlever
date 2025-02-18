@@ -1626,7 +1626,7 @@ bool GroupBy::isVariableBoundInSubtree(const Variable& variable) const {
 }
 
 // _____________________________________________________________________________
-std::unique_ptr<Operation> GroupBy::clone() const {
+std::unique_ptr<Operation> GroupBy::cloneImpl() const {
   return std::make_unique<GroupBy>(_executionContext, _groupByVariables,
                                    _aliases, _subtree->clone());
 }

@@ -34,7 +34,7 @@ class NeutralElementOperation : public Operation {
   float getMultiplicity(size_t) override { return 0; };
   bool knownEmptyResult() override { return false; };
 
-  std::unique_ptr<Operation> clone() const override {
+  std::unique_ptr<Operation> cloneImpl() const override {
     return std::make_unique<NeutralElementOperation>(_executionContext);
   }
 

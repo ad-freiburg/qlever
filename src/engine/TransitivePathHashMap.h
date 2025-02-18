@@ -23,7 +23,7 @@ struct HashMapWrapper {
   Set emptySet_;
 
   HashMapWrapper(Map map, ad_utility::AllocatorWithLimit<Id> allocator)
-      : map_(std::move(map)), emptySet_(allocator){};
+      : map_(std::move(map)), emptySet_(allocator) {};
 
   /**
    * @brief Return the successors for the given Id. The successors are all ids,
@@ -58,7 +58,7 @@ class TransitivePathHashMap : public TransitivePathImpl<HashMapWrapper> {
                         TransitivePathSide rightSide, size_t minDist,
                         size_t maxDist);
 
-  std::unique_ptr<Operation> clone() const override;
+  std::unique_ptr<Operation> cloneImpl() const override;
 
  private:
   /**

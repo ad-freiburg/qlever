@@ -381,7 +381,7 @@ void OptionalJoin::optionalJoin(
 }
 
 // _____________________________________________________________________________
-std::unique_ptr<Operation> OptionalJoin::clone() const {
+std::unique_ptr<Operation> OptionalJoin::cloneImpl() const {
   auto copy = std::make_unique<OptionalJoin>(*this);
   copy->_left = _left->clone();
   copy->_right = _right->clone();
