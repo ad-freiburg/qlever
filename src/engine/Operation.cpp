@@ -629,6 +629,11 @@ uint64_t Operation::getSizeEstimate() {
 // _____________________________________________________________________________
 std::unique_ptr<Operation> Operation::clone() const {
   auto result = cloneImpl();
+  auto compareTypes = [this, &result]() {
+    const auto& reference = *result;
+    return typeid(*this) == typeid(reference);
+  };
+  AD_CORRECTNESS_CHECK(compareTypes());
   AD_CORRECTNESS_CHECK(result->_executionContext == _executionContext);
   auto areChildrenDifferent = [this, &result]() {
     auto ownChildren = getChildren();
