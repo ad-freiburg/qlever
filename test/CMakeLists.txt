@@ -456,3 +456,5 @@ addLinkAndDiscoverTest(ExecuteUpdateTest engine)
 addLinkAndDiscoverTest(GraphStoreProtocolTest engine)
 
 addLinkAndDiscoverTest(SPARQLProtocolTest engine)
+
+addLinkAndDiscoverTest(ParsedRequestBuilderTest engine)
