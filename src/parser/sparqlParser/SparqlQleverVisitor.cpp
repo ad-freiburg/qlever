@@ -1510,9 +1510,7 @@ Triples Visitor::visit(Parser::ConstructTriplesContext* ctx) {
 
 // ____________________________________________________________________________________
 Triples Visitor::visit(Parser::TriplesTemplateContext* ctx) {
-  return ad_utility::flatten(ad_utility::transform(
-      ctx->triplesSameSubject(),
-      [this](Parser::TriplesSameSubjectContext* ctx) { return visit(ctx); }));
+  return ad_utility::flatten(visitVector(ctx->triplesSameSubject()));
 }
 
 // ____________________________________________________________________________________
