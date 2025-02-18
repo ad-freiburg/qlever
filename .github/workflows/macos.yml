@@ -55,9 +55,9 @@ jobs:
           echo 'export LDFLAGS="-L/usr/local/opt/llvm@16/lib -L/usr/local/opt/llvm@16/lib/c++ -Wl,-rpath,/usr/local/opt/llvm@16/lib/c++"' >> ~/.bash_profile
           echo LDFLAGS="-L/usr/local/opt/llvm@16/lib -L/usr/local/opt/llvm@16/lib/c++ -Wl,-rpath,/usr/local/opt/llvm@16/lib/c++" >> $GITHUB_ENV 
           echo 'export CPPFLAGS="-I/usr/local/opt/llvm@16/include"' >> ~/.bash_profile
-          echo  CPPFLAGS="/usr/local/opt/llvm@16/include" >> $GITHUB_ENV 
+          echo  CPPFLAGS="-I/usr/local/opt/llvm@16/include" >> $GITHUB_ENV
           echo 'export CFLAGS="-I/usr/local/opt/llvm@16/include"' >> ~/.bash_profile
-          echo  CFLAGS="/usr/local/opt/llvm@16/include" >> $GITHUB_ENV
+          echo  CFLAGS="-I/usr/local/opt/llvm@16/include" >> $GITHUB_ENV
           echo 'export CC="/usr/local/opt/llvm@16/bin/clang"' >> ~/.bash_profile
           echo CC="/usr/local/opt/llvm@16/bin/clang" >> $GITHUB_ENV
           echo 'export CXX="/usr/local/opt/llvm@16/bin/clang++"' >> ~/.bash_profile
