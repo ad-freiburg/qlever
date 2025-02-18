@@ -17,29 +17,19 @@ struct ParsedRequestBuilder {
   FRIEND_TEST(ParsedRequestBuilderTest, determineAccessToken);
   FRIEND_TEST(ParsedRequestBuilderTest, parameterIsContainedExactlyOnce);
 
+  using RequestType =
+      boost::beast::http::request<boost::beast::http::string_body>;
+
   ad_utility::url_parser::ParsedRequest parsedRequest_;
 
   // Initialize a `ParsedRequestBuilder`, parsing the request target into the
   // `ParsedRequest`.
-  explicit ParsedRequestBuilder(
-      const ad_utility::httpUtils::HttpRequest auto& request) {
-    using namespace ad_utility::url_parser::sparqlOperation;
-    // For an HTTP request, `request.target()` yields the HTTP Request-URI.
-    // This is a concatenation of the URL path and the query strings.
-    auto parsedUrl =
-        ad_utility::url_parser::parseRequestTarget(request.target());
-    parsedRequest_ = {std::move(parsedUrl.path_), std::nullopt,
-                      std::move(parsedUrl.parameters_), None{}};
-  }
+  explicit ParsedRequestBuilder(const RequestType& request);
 
   // Extract the access token from the access-token parameter or the
   // Authorization header and set it for `ParsedRequest`. If both are given,
   // then they must be the same.
-  void extractAccessToken(
-      const ad_utility::httpUtils::HttpRequest auto& request) {
-    parsedRequest_.accessToken_ =
-        determineAccessToken(request, parsedRequest_.parameters_);
-  }
+  void extractAccessToken(const RequestType& request);
 
   // If applicable extract the dataset clauses from the parameters and set them
   // on the Query or Update.
@@ -92,35 +82,6 @@ struct ParsedRequestBuilder {
   // Determine the access token from the parameters and the requests
   // Authorization header.
   static std::optional<std::string> determineAccessToken(
-      const ad_utility::httpUtils::HttpRequest auto& request,
-      const ad_utility::url_parser::ParamValueMap& params) {
-    namespace http = boost::beast::http;
-    std::optional<std::string> tokenFromAuthorizationHeader;
-    std::optional<std::string> tokenFromParameter;
-    if (request.find(http::field::authorization) != request.end()) {
-      string_view authorization = request[http::field::authorization];
-      const std::string prefix = "Bearer ";
-      if (!authorization.starts_with(prefix)) {
-        throw std::runtime_error(absl::StrCat(
-            "Authorization header doesn't start with \"", prefix, "\"."));
-      }
-      authorization.remove_prefix(prefix.length());
-      tokenFromAuthorizationHeader = std::string(authorization);
-    }
-    if (params.contains("access-token")) {
-      tokenFromParameter = ad_utility::url_parser::getParameterCheckAtMostOnce(
-          params, "access-token");
-    }
-    // If both are specified, they must be equal. This way there is no hidden
-    // precedence.
-    if (tokenFromAuthorizationHeader && tokenFromParameter &&
-        tokenFromAuthorizationHeader != tokenFromParameter) {
-      throw std::runtime_error(
-          "Access token is specified both in the `Authorization` header and by "
-          "the `access-token` parameter, but they are not the same");
-    }
-    return tokenFromAuthorizationHeader
-               ? std::move(tokenFromAuthorizationHeader)
-               : std::move(tokenFromParameter);
-  }
+      const RequestType& request,
+      const ad_utility::url_parser::ParamValueMap& params);
 };

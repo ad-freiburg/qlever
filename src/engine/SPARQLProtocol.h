@@ -25,8 +25,7 @@ class SPARQLProtocol {
   static constexpr std::string_view contentTypeSparqlUpdate =
       "application/sparql-update";
 
-  using RequestType =
-      boost::beast::http::request<boost::beast::http::string_body>;
+  using RequestType = ParsedRequestBuilder::RequestType;
 
   // Parse an HTTP GET request into a `ParsedRequest`. The
   // `ParsedRequestBuilder` must have already extracted the access token.

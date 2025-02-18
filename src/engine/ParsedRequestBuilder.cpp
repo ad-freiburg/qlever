@@ -8,6 +8,22 @@ using namespace ad_utility::use_type_identity;
 using namespace ad_utility::url_parser::sparqlOperation;
 
 // ____________________________________________________________________________
+ParsedRequestBuilder::ParsedRequestBuilder(const RequestType& request) {
+  using namespace ad_utility::url_parser::sparqlOperation;
+  // For an HTTP request, `request.target()` yields the HTTP Request-URI.
+  // This is a concatenation of the URL path and the query strings.
+  auto parsedUrl = ad_utility::url_parser::parseRequestTarget(request.target());
+  parsedRequest_ = {std::move(parsedUrl.path_), std::nullopt,
+                    std::move(parsedUrl.parameters_), None{}};
+}
+
+// ____________________________________________________________________________
+void ParsedRequestBuilder::extractAccessToken(const RequestType& request) {
+  parsedRequest_.accessToken_ =
+      determineAccessToken(request, parsedRequest_.parameters_);
+}
+
+// ____________________________________________________________________________
 void ParsedRequestBuilder::extractDatasetClauses() {
   extractDatasetClauseIfOperationIs(ti<Query>, "default-graph-uri", false);
   extractDatasetClauseIfOperationIs(ti<Query>, "named-graph-uri", true);
@@ -113,4 +129,37 @@ GraphOrDefault ParsedRequestBuilder::extractTargetGraph(
     AD_CORRECTNESS_CHECK(isDefault);
     return DEFAULT{};
   }
+}
+
+// ____________________________________________________________________________
+std::optional<std::string> ParsedRequestBuilder::determineAccessToken(
+    const RequestType& request,
+    const ad_utility::url_parser::ParamValueMap& params) {
+  namespace http = boost::beast::http;
+  std::optional<std::string> tokenFromAuthorizationHeader;
+  std::optional<std::string> tokenFromParameter;
+  if (request.find(http::field::authorization) != request.end()) {
+    string_view authorization = request[http::field::authorization];
+    const std::string prefix = "Bearer ";
+    if (!authorization.starts_with(prefix)) {
+      throw std::runtime_error(absl::StrCat(
+          "Authorization header doesn't start with \"", prefix, "\"."));
+    }
+    authorization.remove_prefix(prefix.length());
+    tokenFromAuthorizationHeader = std::string(authorization);
+  }
+  if (params.contains("access-token")) {
+    tokenFromParameter = ad_utility::url_parser::getParameterCheckAtMostOnce(
+        params, "access-token");
+  }
+  // If both are specified, they must be equal. This way there is no hidden
+  // precedence.
+  if (tokenFromAuthorizationHeader && tokenFromParameter &&
+      tokenFromAuthorizationHeader != tokenFromParameter) {
+    throw std::runtime_error(
+        "Access token is specified both in the `Authorization` header and by "
+        "the `access-token` parameter, but they are not the same");
+  }
+  return tokenFromAuthorizationHeader ? std::move(tokenFromAuthorizationHeader)
+                                      : std::move(tokenFromParameter);
 }
