@@ -245,7 +245,7 @@ class HttpServer {
                                      : boost::optional<uint64_t>(bodyLimit));
         co_await http::async_read(stream, buffer, requestParser,
                                   boost::asio::use_awaitable);
-        http::request<http::string_body> req = requestParser.get();
+        http::request<http::string_body> req = requestParser.release();
 
         // Let request be handled by `WebSocketSession` if the HTTP
         // request is a WebSocket handshake
