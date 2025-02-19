@@ -50,9 +50,9 @@ class alignas(16) LiteralOrIri {
       return LiteralOrIri{Iri::fromStringRepresentation(std::move(internal))};
     }
   }
-  template <typename H>
-  friend H AbslHashValue(H h,
-                         const std::same_as<LiteralOrIri> auto& literalOrIri) {
+  CPP_template(typename H,
+               typename L)(requires std::same_as<L, LiteralOrIri>) friend H
+      AbslHashValue(H h, const L& literalOrIri) {
     return H::combine(std::move(h), literalOrIri.data_);
   }
   bool operator==(const LiteralOrIri&) const = default;

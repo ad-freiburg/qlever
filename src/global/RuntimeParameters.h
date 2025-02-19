@@ -60,6 +60,9 @@ inline auto& RuntimeParameters() {
         // its size estimate will be the size of the block divided by this
         // value.
         SizeT<"small-index-scan-size-estimate-divisor">{5},
+        // Determines whether the cost estimate for a cached subtree should be
+        // set to zero in query planning.
+        Bool<"zero-cost-estimate-for-cached-subtree">{false},
     };
   }();
   return params;

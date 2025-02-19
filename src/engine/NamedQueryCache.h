@@ -4,21 +4,30 @@
 #pragma once
 
 #include "engine/ValuesForTesting.h"
+#include "util/Cache.h"
 #include "util/Synchronized.h"
 
-// A simple threadsafe cache that associates query results with an explicit
+// A simple thread-safe cache that associates query results with an explicit
 // name.
 class NamedQueryCache {
  public:
   // The cache value. It stores all the information required to construct a
   // proper `QueryExecutionTree` later on.
+  // TODO<joka921> We definitely need the local vocab here...
   struct Value {
-    IdTable result_;
+    std::shared_ptr<const IdTable> result_;
     VariableToColumnMap varToColMap_;
     std::vector<ColumnIndex> resultSortedOn_;
   };
+
+  // TODO<joka921> Use a better size getter for better statistics.
+  struct ValueSizeGetter {
+    ad_utility::MemorySize operator()(const Value&) {
+      return ad_utility::MemorySize::bytes(1);
+    }
+  };
   using Key = std::string;
-  using Cache = ad_utility::HashMap<std::string, Value>;
+  using Cache = ad_utility::LRUCache<Key, Value, ValueSizeGetter>;
 
  private:
   ad_utility::Synchronized<Cache> cache_;
@@ -31,16 +40,16 @@ class NamedQueryCache {
   // Clear the cache.
   void clear();
 
+  // Get the number of cached queries.
+  size_t numEntries() const;
+
   // Retrieve the query result that is associated with the `key`.
   // Throw an exception if the `key` doesn't exist.
-  const Value& get(const Key& key) const;
+  std::shared_ptr<const Value> get(const Key& key);
 
   // Retrieve the query result with the given `key` and convert it into an
   // explicit `ValuesForTesting` operation that can be used as part of a
   // `QueryExecutionTree`.
-  // TODO<joka921> This can be done more efficiently if we implement a dedicated
-  // operation for this use case, `ValuesForTesting` currently incurs one
-  // (unneeded) copy per query execution.
-  std::shared_ptr<ValuesForTesting> getOperation(
-      const Key& key, QueryExecutionContext* ctx) const;
+  std::shared_ptr<ValuesForTesting> getOperation(const Key& key,
+                                                 QueryExecutionContext* ctx);
 };

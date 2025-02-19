@@ -1,9 +1,15 @@
-//  Copyright 2025, University of Freiburg,
-//                  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//   Copyright 2025, University of Freiburg,
+//   Chair of Algorithms and Data Structures.
+//   Authors: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
+//            Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 #include "engine/QueryExecutionContext.h"
 
+#include "global/RuntimeParameters.h"
+
+bool QueryExecutionContext::areWebSocketUpdatesEnabled() {
+  return RuntimeParameters().get<"websocket-updates-enabled">();
+}
 // _____________________________________________________________________________
 QueryExecutionContext::QueryExecutionContext(
     const Index& index, QueryResultCache* const cache,
