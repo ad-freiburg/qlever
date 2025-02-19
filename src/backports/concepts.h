@@ -24,9 +24,15 @@
 // `CPP_lambda(capture)(arg)(requires ...)`: Expands lambda to use
 //  `requires` in C++20 mode and `std::enable_if_t` in C++17 mode.
 //
+// `CPP_lambda_mut(capture)(arg)(requires ...)`: Same as
+//   `CPP_lambda` but for mutable lambdas.
+//
 // `CPP_template_lambda(capture)(typenames...)(arg)(requires ...)`: Expands
-// lambda with (C++20) explicit gemplate parameters  to use
+//   lambda with (C++20) explicit template parameters  to use
 //  `requires` in C++20 mode and `std::enable_if_t` in C++17 mode.
+//
+// `CPP_template_lambda_mut(capture)(typenames...)(arg)(requires ...)`: Same as
+//  `CPP_template_lambda` but for mutable lambdas.
 //
 // Example usages:
 //
@@ -63,6 +69,8 @@
 #define CPP_member_def CPP_member_def_sfinae
 #define CPP_lambda CPP_lambda_sfinae
 #define CPP_template_lambda CPP_template_lambda_sfinae
+#define CPP_lambda_mut CPP_lambda_mut_sfinae
+#define CPP_template_lambda_mut CPP_template_lambda_mut_sfinae
 #else
 #define QL_CONCEPT_OR_NOTHING(...) __VA_ARGS__
 #define QL_CONCEPT_OR_TYPENAME(...) __VA_ARGS__
@@ -74,6 +82,8 @@
 #define CPP_member_def CPP_member
 #define CPP_lambda CPP_LAMBDA_20
 #define CPP_template_lambda CPP_TEMPLATE_LAMBDA_20
+#define CPP_lambda_mut CPP_lambda_mut_20
+#define CPP_template_lambda_mut CPP_TEMPLATE_LAMBDA_MUT_20
 #endif
 
 // The namespace `ql::concepts` includes concepts that are contained in the

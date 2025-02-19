@@ -79,7 +79,18 @@ class SparqlQleverVisitor {
   // query. This may contain duplicates. A variable is added via
   // `addVisibleVariable`.
   std::vector<Variable> visibleVariables_{};
+
+  // The `FROM` and `FROM NAMED` clauses of the query that is currently
+  // being parsed. Those are inherited by certain constructs, which are
+  // otherwise independent (in particular, `EXISTS` and `DESCRIBE`).
+  ParsedQuery::DatasetClauses activeDatasetClauses_;
+
+  // The map from prefixes to their full IRIs.
   PrefixMap prefixMap_{};
+
+  // The `BASE` IRI of the query if any.
+  ad_utility::triple_component::Iri baseIri_{};
+
   // We need to remember the prologue (prefix declarations) when we encounter it
   // because we need it when we encounter a SERVICE query. When there is no
   // prologue, this string simply remains empty.
@@ -112,6 +123,11 @@ class SparqlQleverVisitor {
     isInsideConstructTriples_ = true;
   }
 
+  void setActiveDatasetClausesForTesting(
+      ParsedQuery::DatasetClauses datasetClauses) {
+    activeDatasetClauses_ = std::move(datasetClauses);
+  }
+
   // ___________________________________________________________________________
   ParsedQuery visit(Parser::QueryOrUpdateContext* ctx);
 
@@ -122,7 +138,7 @@ class SparqlQleverVisitor {
   void visit(Parser::PrologueContext* ctx);
 
   // ___________________________________________________________________________
-  [[noreturn]] static void visit(const Parser::BaseDeclContext* ctx);
+  void visit(Parser::BaseDeclContext* ctx);
 
   // ___________________________________________________________________________
   void visit(Parser::PrefixDeclContext* ctx);
@@ -445,9 +461,12 @@ class SparqlQleverVisitor {
 
   ExpressionPtr visit(Parser::StrReplaceExpressionContext* ctx);
 
-  [[noreturn]] static void visit(const Parser::ExistsFuncContext* ctx);
+  ExpressionPtr visitExists(Parser::GroupGraphPatternContext* pattern,
+                            bool negate);
 
-  [[noreturn]] static void visit(const Parser::NotExistsFuncContext* ctx);
+  ExpressionPtr visit(Parser::ExistsFuncContext* ctx);
+
+  ExpressionPtr visit(Parser::NotExistsFuncContext* ctx);
 
   ExpressionPtr visit(Parser::AggregateContext* ctx);
 
@@ -469,7 +488,7 @@ class SparqlQleverVisitor {
 
   TripleComponent::Iri visit(Parser::IriContext* ctx);
 
-  static string visit(Parser::IrirefContext* ctx);
+  string visit(Parser::IrirefContext* ctx) const;
 
   string visit(Parser::PrefixedNameContext* ctx);
 

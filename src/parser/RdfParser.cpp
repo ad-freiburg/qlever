@@ -15,10 +15,11 @@
 #include "global/Constants.h"
 #include "parser/GeoPoint.h"
 #include "parser/NormalizedString.h"
-#include "parser/RdfEscaping.h"
-#include "util/Conversions.h"
+#include "parser/Tokenizer.h"
+#include "parser/TokenizerCtre.h"
 #include "util/DateYearDuration.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
+#include "util/TransparentFunctors.h"
 
 using namespace std::chrono_literals;
 // _______________________________________________________________
@@ -31,7 +32,17 @@ bool TurtleParser<T>::statement() {
 // ______________________________________________________________
 template <class T>
 bool TurtleParser<T>::directive() {
-  return prefixID() || base() || sparqlPrefix() || sparqlBase();
+  bool successfulParse = prefixID() || base() || sparqlPrefix() || sparqlBase();
+  if (successfulParse && prefixAndBaseDisabled_) {
+    raise(
+        "@prefix or @base directives need to be at the beginning of the file "
+        "when using the parallel parser. Use '--parse-parallel false' if you "
+        "can't guarantee this. If the reason for this error is that the input "
+        "is a concatenation of Turtle files, each of which has the prefixes at "
+        "the beginning, you should feed the files to QLever separately instead "
+        "of concatenated");
+  }
+  return successfulParse;
 }
 
 // ________________________________________________________________
@@ -630,7 +641,7 @@ bool TurtleParser<T>::iri() {
 // _____________________________________________________________________
 template <class T>
 bool TurtleParser<T>::prefixedName() {
-  if constexpr (UseRelaxedParsing) {
+  if constexpr (T::UseRelaxedParsing) {
     if (!(pnameLnRelaxed() || pnameNS())) {
       return false;
     }
@@ -745,7 +756,7 @@ bool TurtleParser<T>::iriref() {
   // In relaxed mode, that is all we check. Otherwise, we check if the IRI is
   // standard-compliant. If not, we output a warning and try to parse it in a
   // more relaxed way.
-  if constexpr (UseRelaxedParsing) {
+  if constexpr (T::UseRelaxedParsing) {
     tok_.remove_prefix(endPos + 1);
     lastParseResult_ = TripleComponent::Iri::fromIrirefConsiderBase(
         view.substr(0, endPos + 1), baseForRelativeIri(), baseForAbsoluteIri());
@@ -948,20 +959,20 @@ bool RdfStreamParser<T>::getLineImpl(TurtleTriple* triple) {
 // `parallelParser_` have been fully processed. After the last batch we will
 // push another call to this lambda to the `parallelParser_` which will then
 // finish the `tripleCollector_` as soon as all batches have been computed.
-template <typename Tokenizer_T>
-void RdfParallelParser<Tokenizer_T>::finishTripleCollectorIfLastBatch() {
+template <typename T>
+void RdfParallelParser<T>::finishTripleCollectorIfLastBatch() {
   if (batchIdx_.fetch_add(1) == numBatchesTotal_) {
     tripleCollector_.finish();
   }
 }
 
 // __________________________________________________________________________________
-template <typename Tokenizer_T>
-void RdfParallelParser<Tokenizer_T>::parseBatch(size_t parsePosition,
-                                                auto batch) {
+template <typename T>
+void RdfParallelParser<T>::parseBatch(size_t parsePosition, auto batch) {
   try {
-    RdfStringParser<Tokenizer_T> parser{defaultGraphIri_};
+    RdfStringParser<T> parser{defaultGraphIri_};
     parser.prefixMap_ = this->prefixMap_;
+    parser.disablePrefixParsing();
     parser.setPositionOffset(parsePosition);
     parser.setInputStream(std::move(batch));
     // TODO: raise error message if a prefix parsing fails;
@@ -972,14 +983,15 @@ void RdfParallelParser<Tokenizer_T>::parseBatch(size_t parsePosition,
     });
     finishTripleCollectorIfLastBatch();
   } catch (std::exception& e) {
+    errorMessages_.wlock()->emplace_back(parsePosition, e.what());
     tripleCollector_.pushException(std::current_exception());
     parallelParser_.finish();
   }
 };
 
 // _______________________________________________________________________
-template <typename Tokenizer_T>
-void RdfParallelParser<Tokenizer_T>::feedBatchesToParser(
+template <typename T>
+void RdfParallelParser<T>::feedBatchesToParser(
     auto remainingBatchFromInitialization) {
   bool first = true;
   size_t parsePosition = 0;
@@ -1019,14 +1031,15 @@ void RdfParallelParser<Tokenizer_T>::feedBatchesToParser(
       }
     }
   } catch (std::exception& e) {
+    errorMessages_.wlock()->emplace_back(parsePosition, e.what());
     tripleCollector_.pushException(std::current_exception());
   }
 };
 
 // _______________________________________________________________________
-template <typename Tokenizer_T>
-void RdfParallelParser<Tokenizer_T>::initialize(
-    const string& filename, ad_utility::MemorySize bufferSize) {
+template <typename T>
+void RdfParallelParser<T>::initialize(const string& filename,
+                                      ad_utility::MemorySize bufferSize) {
   fileBuffer_ = std::make_unique<ParallelBufferWithEndRegex>(
       bufferSize.getBytes(), "\\.[\\t ]*([\\r\\n]+)");
   ParallelBuffer::BufferType remainingBatchFromInitialization;
@@ -1035,7 +1048,7 @@ void RdfParallelParser<Tokenizer_T>::initialize(
     LOG(WARN) << "Empty input to the TURTLE parser, is this what you intended?"
               << std::endl;
   } else {
-    RdfStringParser<Tokenizer_T> declarationParser{};
+    RdfStringParser<T> declarationParser{};
     declarationParser.setInputStream(std::move(batch.value()));
     while (declarationParser.parseDirectiveManually()) {
     }
@@ -1062,7 +1075,20 @@ bool RdfParallelParser<T>::getLineImpl(TurtleTriple* triple) {
   // contains no triples. (Theoretically this might happen, and it is safer this
   // way)
   while (triples_.empty()) {
-    auto optionalTripleTask = tripleCollector_.pop();
+    auto optionalTripleTask = [&]() {
+      try {
+        return tripleCollector_.pop();
+      } catch (const std::exception&) {
+        // In case of multiple errors in parallel batches, we always report the
+        // first error.
+        parallelParser_.waitUntilFinished();
+        auto errors = std::move(*errorMessages_.wlock());
+        const auto& firstError =
+            ql::ranges::min_element(errors, {}, ad_utility::first);
+        AD_CORRECTNESS_CHECK(firstError != errors.end());
+        throw std::runtime_error{firstError->second};
+      }
+    }();
     if (!optionalTripleTask) {
       // Everything has been parsed
       return false;

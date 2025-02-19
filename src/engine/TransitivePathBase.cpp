@@ -354,13 +354,15 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindLeftOrRightSide(
   // subtrees. This has the effect that the `TransitivePathBinSearch` will
   // never re-sort an index scan (which should not happen because we can just
   // take the appropriate index scan in the first place).
+  bool useBinSearch = dynamic_cast<const TransitivePathBinSearch*>(this);
   std::vector<std::shared_ptr<TransitivePathBase>> candidates;
-  candidates.push_back(TransitivePathBase::makeTransitivePath(
-      getExecutionContext(), subtree_, lhs, rhs, minDist_, maxDist_));
+  candidates.push_back(makeTransitivePath(getExecutionContext(), subtree_, lhs,
+                                          rhs, minDist_, maxDist_,
+                                          useBinSearch));
   for (const auto& alternativeSubtree : alternativeSubtrees()) {
-    candidates.push_back(TransitivePathBase::makeTransitivePath(
-        getExecutionContext(), alternativeSubtree, lhs, rhs, minDist_,
-        maxDist_));
+    candidates.push_back(makeTransitivePath(getExecutionContext(),
+                                            alternativeSubtree, lhs, rhs,
+                                            minDist_, maxDist_, useBinSearch));
   }
 
   auto& p = *ql::ranges::min_element(
