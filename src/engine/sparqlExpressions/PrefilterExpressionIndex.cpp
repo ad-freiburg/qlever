@@ -142,7 +142,7 @@ using RandomIt = std::vector<ValueId>::iterator;
 // related `BlockMetadata` values.
 using RandomItPair = std::pair<RandomIt, RandomIt>;
 
-// Refers to a `BlockMetadata` span `::interator` (index).
+// Refers to a `BlockMetadata` span `::iterator` (index).
 using BlockSpanIt =
     std::span<const prefilterExpressions::BlockMetadata>::iterator;
 
