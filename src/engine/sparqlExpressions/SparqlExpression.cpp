@@ -66,6 +66,12 @@ std::unique_ptr<SparqlExpression> SparqlExpression::replaceChild(
 }
 
 // _____________________________________________________________________________
+std::optional<SparqlExpression*> SparqlExpression::getChildAtIndex(
+    [[maybe_unused]] size_t childIndex) const {
+  return std::nullopt;
+};
+
+// _____________________________________________________________________________
 const string& SparqlExpression::descriptor() const { return _descriptor; }
 
 // _____________________________________________________________________________
@@ -88,6 +94,9 @@ bool SparqlExpression::containsLangExpression() const {
     return child->containsLangExpression();
   });
 }
+
+// _____________________________________________________________________________
+bool SparqlExpression::isYearExpression() const { return false; }
 
 // _____________________________________________________________________________
 using LangFilterData = SparqlExpressionPimpl::LangFilterData;

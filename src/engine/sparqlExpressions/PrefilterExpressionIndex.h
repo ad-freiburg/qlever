@@ -264,7 +264,7 @@ void checkPropertiesForPrefilterConstruction(
 template <CompOp comparison>
 std::vector<PrefilterExprVariablePair> makePrefilterExpressionVec(
     const IdOrLocalVocabEntry& referenceValue, const Variable& variable,
-    bool mirrored);
+    bool mirrored, bool prefilterDate = false);
 
 }  // namespace detail
 }  // namespace prefilterExpressions
