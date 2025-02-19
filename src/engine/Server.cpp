@@ -287,6 +287,11 @@ CPP_template_2(typename RequestT, typename ResponseT)(
     logCommand(cmd, "clear cache completely (including unpinned elements)");
     cache_.clearAll();
     response = createJsonResponse(composeCacheStatsJson(), request);
+  } else if (auto cmd = checkParameter("cmd", "clear-named-cache")) {
+    requireValidAccessToken("clear-named-cache");
+    logCommand(cmd, "clear the cache for named queries");
+    namedQueryCache_.clear();
+    response = createJsonResponse(composeCacheStatsJson(), request);
   } else if (auto cmd = checkParameter("cmd", "clear-delta-triples")) {
     requireValidAccessToken("clear-delta-triples");
     logCommand(cmd, "clear delta triples");
@@ -380,7 +385,8 @@ CPP_template_2(typename RequestT, typename ResponseT)(
           queryHub_, request, std::invoke(opFieldString, op));
       auto [parsedOperation, qec, cancellationHandle,
             cancelTimeoutOnDestruction] =
-          parseOperation(messageSender, parameters, op, timeLimit.value());
+          parseOperation(messageSender, parameters, op, timeLimit.value(),
+                         accessTokenOk);
       if (pred(parsedOperation)) {
         throw std::runtime_error(
             absl::StrCat(msg, parsedOperation._originalString));
@@ -491,7 +497,8 @@ CPP_template_2(typename Operation)(
     requires QueryOrUpdate<Operation>) auto Server::
     parseOperation(ad_utility::websocket::MessageSender& messageSender,
                    const ad_utility::url_parser::ParamValueMap& params,
-                   const Operation& operation, TimeLimit timeLimit) {
+                   const Operation& operation, TimeLimit timeLimit,
+                   bool accessTokenOk) {
   // The operation string was to be copied, do it here at the beginning.
   const auto [operationName, operationSPARQL] =
       [&operation]() -> std::pair<std::string_view, std::string> {
@@ -509,13 +516,24 @@ CPP_template_2(typename Operation)(
   // Do the query planning. This creates a `QueryExecutionTree`, which will
   // then be used to process the query.
   auto [pinSubtrees, pinResult] = determineResultPinning(params);
+  std::optional<std::string> pinNamed =
+      ad_utility::url_parser::checkParameter(params, "pin-named-query", {});
   LOG(INFO) << "Processing the following " << operationName << ":"
             << (pinResult ? " [pin result]" : "")
             << (pinSubtrees ? " [pin subresults]" : "") << "\n"
+            << (pinNamed ? absl::StrCat(" [pin named as ]", pinNamed.value())
+                         : "")
             << operationSPARQL << std::endl;
   QueryExecutionContext qec(index_, &cache_, allocator_,
-                            sortPerformanceEstimator_, std::ref(messageSender),
-                            pinSubtrees, pinResult);
+                            sortPerformanceEstimator_, &namedQueryCache_,
+                            std::ref(messageSender), pinSubtrees, pinResult);
+  if (pinNamed.has_value()) {
+    if (!accessTokenOk) {
+      throw std::runtime_error(
+          "The pinning of named queries requires a valid access token");
+    }
+    qec.pinWithExplicitName() = std::move(pinNamed);
+  }
   ParsedQuery parsedQuery =
       SparqlParser::parseQuery(std::move(operationSPARQL));
   // SPARQL Protocol 2.1.4 specifies that the dataset from the query
@@ -624,6 +642,7 @@ nlohmann::json Server::composeCacheStatsJson() const {
   nlohmann::json result;
   result["num-non-pinned-entries"] = cache_.numNonPinnedEntries();
   result["num-pinned-entries"] = cache_.numPinnedEntries();
+  result["num-named-queries"] = namedQueryCache_.numEntries();
 
   // TODO Get rid of the `getByte()`, once `MemorySize` has it's own json
   // converter.
@@ -764,45 +783,6 @@ CPP_template_2(typename RequestT, typename ResponseT)(
   PlannedQuery plannedQuery =
       co_await planQuery(queryThreadPool_, std::move(query), requestTimer,
                          timeLimit, qec, cancellationHandle);
-  ad_utility::websocket::MessageSender messageSender =
-      createMessageSender(queryHub_, request, query.query_);
-  auto [cancellationHandle, cancelTimeoutOnDestruction] =
-      setupCancellationHandle(messageSender.getQueryId(), timeLimit);
-
-  // Figure out, whether the query is to be pinned in the cache (either
-  // implicitly, or explicitly as a named query).
-  auto [pinSubtrees, pinResult] = determineResultPinning(params);
-  std::optional<std::string> pinNamed =
-      ad_utility::url_parser::checkParameter(params, "pin-named-query", {});
-  LOG(INFO) << "Processing the following SPARQL query:"
-            << (pinResult ? " [pin result]" : "")
-            << (pinSubtrees ? " [pin subresults]" : "") << "\n"
-            << (pinNamed ? absl::StrCat(" [pin named as ]", pinNamed.value())
-                         : "")
-            << "\n"
-            << query.query_ << std::endl;
-  QueryExecutionContext qec(index_, &cache_, allocator_,
-                            sortPerformanceEstimator_, &namedQueryCache_,
-                            std::ref(messageSender), pinSubtrees, pinResult);
-
-  // The usage of an `optional` here is required because of a limitation in
-  // Boost::Asio which forces us to use default-constructible result types with
-  // `computeInNewThread`. We also can't unwrap the optional directly in this
-  // function, because then the conan build fails in a very strange way,
-  // probably related to issues in GCC's coroutine implementation.
-  // For the same reason (crashes in the conanbuild) we store the coroutine in
-  // an explicit variable instead of directly `co_await`-ing it.
-  auto coroutine = computeInNewThread(
-      queryThreadPool_,
-      [this, &query, &qec, cancellationHandle, &timeLimit,
-       &requestTimer]() -> std::optional<PlannedQuery> {
-        return setupPlannedQuery(query.datasetClauses_, query.query_, qec,
-                                 cancellationHandle, timeLimit, requestTimer);
-      },
-      cancellationHandle);
-  auto plannedQueryOpt = co_await std::move(coroutine);
-  AD_CORRECTNESS_CHECK(plannedQueryOpt.has_value());
-  auto plannedQuery = std::move(plannedQueryOpt).value();
   auto qet = plannedQuery.queryExecutionTree_;
 
   // Read the export limit from the send` parameter (historical name). This
@@ -824,11 +804,6 @@ CPP_template_2(typename RequestT, typename ResponseT)(
                        qet.getRootOperation()->getLimit()._offset);
   limitOffset._offset -= qet.getRootOperation()->getLimit()._offset;
 
-  if (pinNamed.has_value()) {
-    // TODO<joka921>  1. Make this require a valid access token. 2. also allow
-    // for clearing the cache.
-    qec.pinWithExplicitName() = pinNamed.value();
-  }
   // This actually processes the query and sends the result in the requested
   // format.
   co_await sendStreamableResponse(request, send, mediaType, plannedQuery, qet,
@@ -935,6 +910,7 @@ json Server::processUpdateImpl(
   // update anyway (The index of the located triples snapshot is part of the
   // cache key).
   cache_.clearAll();
+  namedQueryCache_.clear();
 
   return createResponseMetadataForUpdate(requestTimer, index_, deltaTriples,
                                          plannedUpdate, qet, countBefore,

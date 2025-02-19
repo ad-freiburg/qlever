@@ -185,7 +185,8 @@ class Server {
                                           const ad_utility::url_parser::
                                               ParamValueMap& params,
                                           const Operation& operation,
-                                          TimeLimit timeLimit);
+                                          TimeLimit timeLimit,
+                                          bool accessTokenOk);
 
   // Plan a parsed query.
   Awaitable<PlannedQuery> planQuery(net::static_thread_pool& thread_pool,

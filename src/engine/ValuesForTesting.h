@@ -57,21 +57,31 @@ class ValuesForTesting : public Operation {
     variables_ = computeVarMapFromVector(variables);
   }
 
-  ValuesForTesting(QueryExecutionContext* ctx, IdTable table,
+  ValuesForTesting(QueryExecutionContext* ctx,
+                   std::shared_ptr<const IdTable> table,
                    VariableToColumnMap variables,
                    std::vector<ColumnIndex> sortedColumns = {},
                    LocalVocab localVocab = LocalVocab{})
       : Operation{ctx},
         variables_{std::move(variables)},
         supportsLimit_{false},
-        sizeEstimate_{table.numRows()},
+        sizeEstimate_{table->numRows()},
         costEstimate_{0},
         resultSortedColumns_{std::move(sortedColumns)},
         localVocab_{std::move(localVocab)},
         multiplicity_{},
         forceFullyMaterialized_{false} {
-    tables_.push_back(std::make_shared<const IdTable>(std::move(table)));
+    tables_.push_back(std::move(table));
   }
+
+  ValuesForTesting(QueryExecutionContext* ctx, IdTable table,
+                   VariableToColumnMap variables,
+                   std::vector<ColumnIndex> sortedColumns = {},
+                   LocalVocab localVocab = LocalVocab{})
+      : ValuesForTesting{ctx, std::make_shared<const IdTable>(std::move(table)),
+                         std::move(variables), std::move(sortedColumns),
+                         std::move(localVocab)} {}
+
   explicit ValuesForTesting(QueryExecutionContext* ctx,
                             std::vector<IdTable> tables, VarVector variables,
                             bool unlikelyToFitInCache = false,

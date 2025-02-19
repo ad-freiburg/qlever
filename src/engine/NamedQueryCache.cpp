@@ -6,29 +6,35 @@
 
 // _____________________________________________________________________________
 std::shared_ptr<ValuesForTesting> NamedQueryCache ::getOperation(
-    const Key& key, QueryExecutionContext* ctx) const {
-  const auto& [table, map, sortedOn] = get(key);
-  // TODO<joka921> we should get rid of the copies for the IdTable (and
-  // probably the other members) especially for larger results).
-  return std::make_shared<ValuesForTesting>(ctx, table.clone(), map, sortedOn);
+    const Key& key, QueryExecutionContext* ctx) {
+  const auto& ptr = get(key);
+  const auto& [table, map, sortedOn] = *ptr;
+  // TODO<joka921> Add a local vocab, and consider also passing a shared_ptr for
+  // the local vocab.
+  return std::make_shared<ValuesForTesting>(ctx, table, map, sortedOn);
 }
 
 // _____________________________________________________________________________
-auto NamedQueryCache::get(const Key& key) const -> const Value& {
+auto NamedQueryCache::get(const Key& key) -> std::shared_ptr<const Value> {
   auto l = cache_.wlock();
-  auto it = l->find(key);
-  if (it == l->end()) {
+  if (!l->contains(key)) {
     throw std::runtime_error{
         absl::StrCat("The named query with the name \"", key,
                      "\" was not pinned to the named query cache")};
   }
-  return it->second;
+  return (*l)[key];
 }
 
 // _____________________________________________________________________________
 void NamedQueryCache::store(const Key& key, Value value) {
-  (*cache_.wlock()).insert_or_assign(key, std::move(value));
+  // TODO<joka921> Check the overwrite semantics of the cache class.
+  cache_.wlock()->insert(key, std::move(value));
 }
 
 // _____________________________________________________________________________
-void NamedQueryCache::clear() { cache_.wlock()->clear(); }
+void NamedQueryCache::clear() { cache_.wlock()->clearAll(); }
+
+// _____________________________________________________________________________
+size_t NamedQueryCache::numEntries() const {
+  return cache_.rlock()->numNonPinnedEntries();
+}
