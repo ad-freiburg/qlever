@@ -20,7 +20,6 @@
 #include "index/IndexImpl.h"
 #include "util/AsioHelpers.h"
 #include "util/MemorySize/MemorySize.h"
-#include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/ParseableDuration.h"
 #include "util/TypeIdentity.h"
 #include "util/TypeTraits.h"
@@ -288,6 +287,11 @@ CPP_template_2(typename RequestT, typename ResponseT)(
     logCommand(cmd, "clear cache completely (including unpinned elements)");
     cache_.clearAll();
     response = createJsonResponse(composeCacheStatsJson(), request);
+  } else if (auto cmd = checkParameter("cmd", "clear-named-cache")) {
+    requireValidAccessToken("clear-named-cache");
+    logCommand(cmd, "clear the cache for named queries");
+    namedQueryCache_.clear();
+    response = createJsonResponse(composeCacheStatsJson(), request);
   } else if (auto cmd = checkParameter("cmd", "clear-delta-triples")) {
     requireValidAccessToken("clear-delta-triples");
     logCommand(cmd, "clear delta triples");
@@ -381,7 +385,8 @@ CPP_template_2(typename RequestT, typename ResponseT)(
           queryHub_, request, std::invoke(opFieldString, op));
       auto [parsedOperation, qec, cancellationHandle,
             cancelTimeoutOnDestruction] =
-          parseOperation(messageSender, parameters, op, timeLimit.value());
+          parseOperation(messageSender, parameters, op, timeLimit.value(),
+                         accessTokenOk);
       if (pred(parsedOperation)) {
         throw std::runtime_error(
             absl::StrCat(msg, parsedOperation._originalString));
@@ -492,7 +497,8 @@ CPP_template_2(typename Operation)(
     requires QueryOrUpdate<Operation>) auto Server::
     parseOperation(ad_utility::websocket::MessageSender& messageSender,
                    const ad_utility::url_parser::ParamValueMap& params,
-                   const Operation& operation, TimeLimit timeLimit) {
+                   const Operation& operation, TimeLimit timeLimit,
+                   bool accessTokenOk) {
   // The operation string was to be copied, do it here at the beginning.
   const auto [operationName, operationSPARQL] =
       [&operation]() -> std::pair<std::string_view, std::string> {
@@ -510,13 +516,24 @@ CPP_template_2(typename Operation)(
   // Do the query planning. This creates a `QueryExecutionTree`, which will
   // then be used to process the query.
   auto [pinSubtrees, pinResult] = determineResultPinning(params);
+  std::optional<std::string> pinNamed =
+      ad_utility::url_parser::checkParameter(params, "pin-named-query", {});
   LOG(INFO) << "Processing the following " << operationName << ":"
             << (pinResult ? " [pin result]" : "")
             << (pinSubtrees ? " [pin subresults]" : "") << "\n"
+            << (pinNamed ? absl::StrCat(" [pin named as ]", pinNamed.value())
+                         : "")
             << operationSPARQL << std::endl;
   QueryExecutionContext qec(index_, &cache_, allocator_,
-                            sortPerformanceEstimator_, std::ref(messageSender),
-                            pinSubtrees, pinResult);
+                            sortPerformanceEstimator_, &namedQueryCache_,
+                            std::ref(messageSender), pinSubtrees, pinResult);
+  if (pinNamed.has_value()) {
+    if (!accessTokenOk) {
+      throw std::runtime_error(
+          "The pinning of named queries requires a valid access token");
+    }
+    qec.pinWithExplicitName() = std::move(pinNamed);
+  }
   ParsedQuery parsedQuery =
       SparqlParser::parseQuery(std::move(operationSPARQL));
   // SPARQL Protocol 2.1.4 specifies that the dataset from the query
@@ -625,6 +642,7 @@ nlohmann::json Server::composeCacheStatsJson() const {
   nlohmann::json result;
   result["num-non-pinned-entries"] = cache_.numNonPinnedEntries();
   result["num-pinned-entries"] = cache_.numPinnedEntries();
+  result["num-named-queries"] = namedQueryCache_.numEntries();
 
   // TODO Get rid of the `getByte()`, once `MemorySize` has it's own json
   // converter.
@@ -790,7 +808,6 @@ CPP_template_2(typename RequestT, typename ResponseT)(
   // format.
   co_await sendStreamableResponse(request, send, mediaType, plannedQuery, qet,
                                   requestTimer, cancellationHandle);
-
   // Print the runtime info. This needs to be done after the query
   // was computed.
   LOG(INFO) << "Done processing query and sending result"
@@ -893,6 +910,7 @@ json Server::processUpdateImpl(
   // update anyway (The index of the located triples snapshot is part of the
   // cache key).
   cache_.clearAll();
+  namedQueryCache_.clear();
 
   return createResponseMetadataForUpdate(requestTimer, index_, deltaTriples,
                                          plannedUpdate, qet, countBefore,

@@ -7,7 +7,7 @@
 #include <algorithm>
 #include <utility>
 
-#include "../engine/ValuesForTesting.h"
+#include "engine/ValuesForTesting.h"
 #include "engine/idTable/IdTable.h"
 #include "global/ValueId.h"
 #include "util/Algorithm.h"
