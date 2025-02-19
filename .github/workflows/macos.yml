@@ -29,8 +29,6 @@ jobs:
 
       - name: Install ICU dependency for python (only needed for E2E test)
         run: |
-          which cc
-          cc --version
           df -h
           brew install pkg-config icu4c 
           echo PATH="/usr/local/opt/icu4c/bin:/usr/local/opt/icu4c/sbin:$PATH" >> $GITHUB_ENV

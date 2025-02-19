@@ -1,11 +1,11 @@
 name: sparql-conformance
 
 on:
-  #push:
-   # branches: [ master ]
-  #pull_request:
-  #  branches: [ ]
-  #merge_group:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+  merge_group:
 
 jobs:
   build:
