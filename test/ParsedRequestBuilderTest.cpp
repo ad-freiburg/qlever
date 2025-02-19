@@ -124,10 +124,11 @@ TEST(ParsedRequestBuilderTest, extractOperationIfSpecified) {
 // _____________________________________________________________________________________________
 TEST(ParsedRequestBuilderTest, isGraphStoreOperation) {
   auto isGraphStoreOperation =
-      [](const ad_utility::httpUtils::HttpRequest auto& request) {
-        const auto builder = ParsedRequestBuilder(request);
-        return builder.isGraphStoreOperation();
-      };
+      CPP_template_lambda()(typename RequestT)(const RequestT& request)(
+          requires ad_utility::httpUtils::HttpRequest<RequestT>) {
+    const auto builder = ParsedRequestBuilder(request);
+    return builder.isGraphStoreOperation();
+  };
   EXPECT_THAT(isGraphStoreOperation(makeGetRequest("/")), testing::IsFalse());
   EXPECT_THAT(
       isGraphStoreOperation(makeGetRequest("/?query=foo&access-token=bar")),
@@ -248,7 +249,9 @@ TEST(ParsedRequestBuilderTest, extractTargetGraph) {
 
 // _____________________________________________________________________________________________
 TEST(ParsedRequestBuilderTest, determineAccessToken) {
-  auto extract = [](const ad_utility::httpUtils::HttpRequest auto& request) {
+  auto extract =
+      CPP_template_lambda()(typename RequestT)(const RequestT& request)(
+          requires ad_utility::httpUtils::HttpRequest<RequestT>) {
     auto parsedUrl = parseRequestTarget(request.target());
     return ParsedRequestBuilder::determineAccessToken(request,
                                                       parsedUrl.parameters_);
