@@ -12,6 +12,7 @@
 #include <string>
 #include <vector>
 
+#include "backports/concepts.h"
 #include "global/Id.h"
 #include "util/ExceptionHandling.h"
 #include "util/File.h"
@@ -101,11 +102,16 @@ class CompactVectorOfStrings {
   /**
    * @brief Fills this CompactVectorOfStrings with input.
    * @param The input from which to build the vector.
+   * Note: In C++20 mode we use a `requires clause`, in C++17 mode we use a
+   * static assert. Both work, as there is only one overload of `build`.
    */
   template <typename T>
-  requires requires(T t) {
+  QL_CONCEPT_OR_NOTHING(requires requires(T t) {
     { *(t.begin()->begin()) } -> ad_utility::SimilarTo<data_type>;
-  } void build(const T& input) {
+  })
+  void build(const T& input) {
+    static_assert(
+        ad_utility::SimilarTo<decltype(*(input.begin()->begin())), data_type>);
     // Also make room for the end offset of the last element.
     _offsets.reserve(input.size() + 1);
     size_t dataSize = 0;
