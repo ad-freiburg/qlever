@@ -32,7 +32,7 @@ void testExistsFromIdTable(IdTable left, IdTable right,
   // was applied
   auto permuteColumns = [](auto& table) {
     auto colsView = ad_utility::integerRange(table.numColumns());
-    std::vector<size_t> permutation;
+    std::vector<ColumnIndex> permutation;
     ql::ranges::copy(colsView, std::back_inserter(permutation));
     table.setColumnSubset(permutation);
     return permutation;
