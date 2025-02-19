@@ -551,6 +551,8 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
   AD_LOG_INFO << "Number of triples created (including QLever-internal ones): "
               << (*idTriples.wlock())->size() << " [may contain duplicates]"
               << std::endl;
+  AD_LOG_INFO << "Number of partial vocabularies created: " << numFiles
+              << std::endl;
 
   size_t sizeInternalVocabulary = 0;
   std::vector<std::string> prefixes;
