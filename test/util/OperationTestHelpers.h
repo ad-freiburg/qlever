@@ -182,9 +182,12 @@ MATCHER_P(SameTypeId, ptr, "has the same type id") {
 
 inline auto IsDeepCopy(const Operation& other) {
   using namespace ::testing;
-  return AllOf(Address(SameTypeId(&other)),
-               AD_PROPERTY(Operation, getChildren,
-                           Pointwise(Ne(), other.getChildren())));
+  return AllOf(
+      Address(SameTypeId(&other)),
+      AD_PROPERTY(Operation, getChildren, Pointwise(Ne(), other.getChildren())),
+      AD_PROPERTY(Operation, getCacheKey, Eq(other.getCacheKey())),
+      AD_PROPERTY(Operation, getExternallyVisibleVariableColumns,
+                  Eq(other.getExternallyVisibleVariableColumns())));
 }
 
 #endif  // QLEVER_OPERATIONTESTHELPERS_H

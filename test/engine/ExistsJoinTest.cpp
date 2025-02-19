@@ -145,7 +145,7 @@ TEST(Exists, clone) {
       ad_utility::makeExecutionTree<ValuesForTesting>(
           qec, makeIdTableFromVector({{0, 1}}),
           std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?y"}}),
-      Variable{"?x"}};
+      Variable{"?z"}};
 
   auto clone = existsJoin.clone();
   ASSERT_TRUE(clone);
