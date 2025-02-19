@@ -25,7 +25,7 @@ class Minus : public Operation {
 
   // Uninitialized Object for testing the computeMinus method
   struct OnlyForTestingTag {};
-  explicit Minus(OnlyForTestingTag) {};
+  explicit Minus(OnlyForTestingTag) {}
 
  protected:
   string getCacheKeyImpl() const override;
