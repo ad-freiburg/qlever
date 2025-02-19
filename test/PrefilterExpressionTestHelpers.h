@@ -133,7 +133,7 @@ const auto makeOptLiteralSparqlExpr =
   } else if constexpr (std::is_same_v<T, Iri>) {
     return std::make_unique<IriExpression>(child);
   } else if constexpr (std::is_same_v<T, SparqlPtr>) {
-    return std::move(child);
+    return child;
   } else {
     throw std::runtime_error(
         "Can't create a LiteralExpression from provided (input) type, and a "
