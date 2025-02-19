@@ -52,8 +52,8 @@ class LocaleManager {
   using U8String = std::basic_string<uint8_t>;
   using U8StringView = std::basic_string_view<uint8_t>;
 
-  template <ad_utility::SimilarToAny<U8String, U8StringView> T>
-  class SortKeyImpl {
+  CPP_template(typename T)(requires ad_utility::SimilarToAny<
+                           T, U8String, U8StringView>) class SortKeyImpl {
    public:
     SortKeyImpl() = default;
     explicit SortKeyImpl(U8StringView sortKey) : sortKey_(sortKey) {}

@@ -1101,6 +1101,8 @@ TEST(IdTable, staticAsserts) {
   static_assert(std::is_trivially_copyable_v<IdTableStatic<1>::const_iterator>);
   static_assert(ql::ranges::random_access_range<IdTable>);
   static_assert(ql::ranges::random_access_range<IdTableStatic<1>>);
+
+  static_assert(std::is_copy_constructible_v<IdTableView<1>>);
 }
 
 TEST(IdTable, constructorsAreSfinaeFriendly) {

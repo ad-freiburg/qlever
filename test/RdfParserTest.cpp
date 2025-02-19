@@ -13,8 +13,9 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "parser/RdfParser.h"
+#include "parser/Tokenizer.h"
+#include "parser/TokenizerCtre.h"
 #include "parser/TripleComponent.h"
-#include "util/Conversions.h"
 #include "util/MemorySize/MemorySize.h"
 
 using std::string;
@@ -63,12 +64,12 @@ auto checkParseResult =
   [&]() {
     ASSERT_TRUE(optionalParser.has_value());
     auto& parser = optionalParser.value();
-    ASSERT_EQ(parser.getPosition(), expectedPosition.value_or(input.size()));
+    EXPECT_EQ(parser.getPosition(), expectedPosition.value_or(input.size()));
     if (expectedLastParseResult.has_value()) {
-      ASSERT_EQ(expectedLastParseResult, parser.getLastParseResult());
+      EXPECT_EQ(expectedLastParseResult, parser.getLastParseResult());
     }
     if (expectedTriples.has_value()) {
-      ASSERT_EQ(expectedTriples, parser.getTriples());
+      EXPECT_EQ(expectedTriples, parser.getTriples());
     }
   }();
   return std::move(optionalParser.value());
@@ -1002,6 +1003,48 @@ TEST(RdfParserTest, exceptionPropagationFileBufferReading) {
   forAllParallelParsers(testWithParser, 40_B, inputWithLongTriple);
 }
 
+// Test that in parallel parsing scattered prefixes or base declarations lead to
+// an exception
+TEST(RdfParserTest, exceptionOnScatteredPrefixOrBaseInParallelParser) {
+  std::string filename{"turtleParserExceptionPropagationFileBufferReading.dat"};
+  auto testWithParser = [&]<typename Parser>(bool useBatchInterface,
+                                             ad_utility::MemorySize bufferSize,
+                                             std::string_view input) {
+    {
+      auto of = ad_utility::makeOfstream(filename);
+      of << input;
+    }
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        (parseFromFile<Parser>(filename, useBatchInterface, bufferSize)),
+        ::testing::HasSubstr("'--parse-parallel false'"));
+    ad_utility::deleteFile(filename);
+  };
+  std::string inputWithScatteredPrefix =
+      "@prefix ex: <http://example.org/> . \n"
+      "<subject1> <predicate1> <object1> . \n "
+      "<subject2> <predicate2> <object2> . \n"
+      "@prefix ex: <http://example.org/> . \n";
+  forAllParallelParsers(testWithParser, 40_B, inputWithScatteredPrefix);
+  std::string inputWithScatteredSparqlPrefix =
+      "PREFIX ex: <http://example.org/> . \n"
+      "<subject1> <predicate1> <object1> . \n "
+      "<subject2> <predicate2> <object2> . \n"
+      "PREFIX ex: <http://example.org/> . \n";
+  forAllParallelParsers(testWithParser, 40_B, inputWithScatteredPrefix);
+  std::string inputWithScatteredBase =
+      "@base <http://example.org/> . \n"
+      "<subject1> <predicate1> <object1> . \n "
+      "<subject2> <predicate2> <object2> . \n"
+      "@base <http://example.org/> . \n";
+  forAllParallelParsers(testWithParser, 40_B, inputWithScatteredPrefix);
+  std::string inputWithScatteredSparqlBase =
+      "BASE <http://example.org/> . \n"
+      "<subject1> <predicate1> <object1> . \n "
+      "<subject2> <predicate2> <object2> . \n"
+      "BASE <http://example.org/> . \n";
+  forAllParallelParsers(testWithParser, 40_B, inputWithScatteredPrefix);
+}
+
 // Test that the parallel parser's destructor can be run quickly and without
 // blocking, even when there are still lots of blocks in the pipeline that are
 // currently being parsed.
@@ -1144,4 +1187,35 @@ TEST(RdfParserTest, multifileParser) {
     EXPECT_THAT(result, ::testing::UnorderedElementsAreArray(expected));
   };
   forAllMultifileParsers(impl);
+}
+
+// _____________________________________________________________________________
+
+TEST(RdfParserTest, specialPredicateA) {
+  auto runCommonTests = [](const auto& checker) {
+    checker(
+        "@prefix a: <http://example.org/ontology/> . a:subject a:predicate "
+        "\"object\" .",
+        {}, {},
+        std::vector<TurtleTriple>{
+            {iri("<http://example.org/ontology/subject>"),
+             iri("<http://example.org/ontology/predicate>"),
+             lit("\"object\"")}});
+    checker(
+        "@prefix a: <http://example.org/ontology/> . a:subject a \"object\" .",
+        {}, {},
+        std::vector<TurtleTriple>{
+            {iri("<http://example.org/ontology/subject>"),
+             iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"),
+             lit("\"object\"")}});
+  };
+
+  auto parseTwoStatements = []<typename Parser>(Parser& parser) {
+    return parser.statement() && parser.statement();
+  };
+
+  auto checkRe2 = checkParseResult<Re2Parser, parseTwoStatements>;
+  auto checkCTRE = checkParseResult<CtreParser, parseTwoStatements>;
+  runCommonTests(checkRe2);
+  runCommonTests(checkCTRE);
 }

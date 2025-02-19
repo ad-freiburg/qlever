@@ -30,12 +30,16 @@ using nlohmann::json;
 using std::string;
 using std::vector;
 
+template <typename Operation>
+CPP_concept QueryOrUpdate =
+    ad_utility::SameAsAny<Operation,
+                          ad_utility::url_parser::sparqlOperation::Query,
+                          ad_utility::url_parser::sparqlOperation::Update>;
+
 //! The HTTP Server used.
 class Server {
-  FRIEND_TEST(ServerTest, parseHttpRequest);
   FRIEND_TEST(ServerTest, getQueryId);
   FRIEND_TEST(ServerTest, createMessageSender);
-  FRIEND_TEST(ServerTest, extractAccessToken);
 
  public:
   explicit Server(unsigned short port, size_t numThreads,
@@ -93,8 +97,10 @@ class Server {
 
   using SharedCancellationHandle = ad_utility::SharedCancellationHandle;
 
-  template <ad_utility::isInstantiation<absl::Cleanup> CancelTimeout>
-  struct CancellationHandleAndTimeoutTimerCancel {
+  CPP_template(typename CancelTimeout)(
+      requires ad_utility::isInstantiation<
+          CancelTimeout,
+          absl::Cleanup>) struct CancellationHandleAndTimeoutTimerCancel {
     SharedCancellationHandle handle_;
     /// Object of type `absl::Cleanup` that when destroyed cancels the timer
     /// that would otherwise invoke the cancellation of the `handle_` via the
@@ -105,22 +111,12 @@ class Server {
   // Clang doesn't seem to be able to automatically deduce the type correctly.
   // and GCC 11 thinks deduction guides are not allowed within classes.
 #ifdef __clang__
-  template <ad_utility::isInstantiation<absl::Cleanup> CancelTimeout>
-  CancellationHandleAndTimeoutTimerCancel(SharedCancellationHandle,
-                                          CancelTimeout)
-      -> CancellationHandleAndTimeoutTimerCancel<CancelTimeout>;
+  CPP_template_2(typename CancelTimeout)(
+      requires ad_utility::isInstantiation<CancelTimeout, absl::Cleanup>)
+      CancellationHandleAndTimeoutTimerCancel(SharedCancellationHandle,
+                                              CancelTimeout)
+          -> CancellationHandleAndTimeoutTimerCancel<CancelTimeout>;
 #endif
-
-  /// Parse the path and URL parameters from the given request. Supports both
-  /// GET and POST request according to the SPARQL 1.1 standard.
-  static ad_utility::url_parser::ParsedRequest parseHttpRequest(
-      const ad_utility::httpUtils::HttpRequest auto& request);
-
-  /// Extract the Access token for that request from the `Authorization` header
-  /// or the URL query parameters.
-  static std::optional<std::string> extractAccessToken(
-      const ad_utility::httpUtils::HttpRequest auto& request,
-      const ad_utility::url_parser::ParamValueMap& params);
 
   /// Handle a single HTTP request. Check whether a file request or a query was
   /// sent, and dispatch to functions handling these cases. This function
@@ -128,34 +124,27 @@ class Server {
   /// \param req The HTTP request.
   /// \param send The action that sends a http:response. (see the
   ///             `HttpServer.h` for documentation).
-  Awaitable<void> process(
-      const ad_utility::httpUtils::HttpRequest auto& request, auto&& send);
+  CPP_template_2(typename RequestT, typename ResponseT)(
+      requires ad_utility::httpUtils::HttpRequest<RequestT>)
+      Awaitable<void> process(const RequestT& request, ResponseT&& send);
 
-  /// Handle a http request that asks for the processing of an query or update.
-  /// This is only a wrapper for `processQuery` and `processUpdate` which
-  /// does the error handling.
-  /// \param params The key-value-pairs  sent in the HTTP GET request.
-  /// \param operation Must be Query or Update.
-  /// \param requestTimer Timer that measure the total processing
-  ///                     time of this request.
-  /// \param request The HTTP request.
-  /// \param send The action that sends a http:response (see the
-  ///             `HttpServer.h` for documentation).
-  /// \param timeLimit Duration in seconds after which the query will be
-  ///                  cancelled.
-  template <typename Operation>
-  Awaitable<void> processQueryOrUpdate(
-      const ad_utility::url_parser::ParamValueMap& params,
-      const Operation& operation, ad_utility::Timer& requestTimer,
-      const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
-      TimeLimit timeLimit);
+  // Wraps the error handling around the processing of operations. Calls the
+  // visitor on the given operation.
+  CPP_template_2(typename VisitorT, typename RequestT, typename ResponseT)(
+      requires ad_utility::httpUtils::HttpRequest<RequestT>)
+      Awaitable<void> processOperation(
+          ad_utility::url_parser::sparqlOperation::Operation operation,
+          VisitorT visitor, const ad_utility::Timer& requestTimer,
+          const RequestT& request, ResponseT& send);
   // Do the actual execution of a query.
-  Awaitable<void> processQuery(
-      const ad_utility::url_parser::ParamValueMap& params,
-      const ad_utility::url_parser::sparqlOperation::Query& query,
-      ad_utility::Timer& requestTimer,
-      const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
-      TimeLimit timeLimit);
+  CPP_template_2(typename RequestT, typename ResponseT)(
+      requires ad_utility::httpUtils::HttpRequest<RequestT>)
+      Awaitable<void> processQuery(
+          const ad_utility::url_parser::ParamValueMap& params,
+          ParsedQuery&& query, const ad_utility::Timer& requestTimer,
+          ad_utility::SharedCancellationHandle cancellationHandle,
+          QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
+          TimeLimit timeLimit);
   // For an executed update create a json with some stats on the update (timing,
   // number of changed triples, etc.).
   static json createResponseMetadataForUpdate(
@@ -166,47 +155,59 @@ class Server {
       const DeltaTriplesCount& countAfter);
   FRIEND_TEST(ServerTest, createResponseMetadata);
   // Do the actual execution of an update.
-  Awaitable<void> processUpdate(
-      const ad_utility::url_parser::ParamValueMap& params,
-      const ad_utility::url_parser::sparqlOperation::Update& update,
-      ad_utility::Timer& requestTimer,
-      const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
-      TimeLimit timeLimit);
+  CPP_template_2(typename RequestT, typename ResponseT)(
+      requires ad_utility::httpUtils::HttpRequest<RequestT>)
+      Awaitable<void> processUpdate(
+          ParsedQuery&& update, const ad_utility::Timer& requestTimer,
+          ad_utility::SharedCancellationHandle cancellationHandle,
+          QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
+          TimeLimit timeLimit);
 
   // Determine the media type to be used for the result. The media type is
   // determined (in this order) by the current action (e.g.,
   // "action=csv_export") and by the "Accept" header of the request.
-  static ad_utility::MediaType determineMediaType(
-      const ad_utility::url_parser::ParamValueMap& params,
-      const ad_utility::httpUtils::HttpRequest auto& request);
+  CPP_template_2(typename RequestT)(requires ad_utility::httpUtils::HttpRequest<
+                                    RequestT>) static ad_utility::MediaType
+      determineMediaType(const ad_utility::url_parser::ParamValueMap& params,
+                         const RequestT& request);
   FRIEND_TEST(ServerTest, determineMediaType);
   // Determine whether the subtrees and the result should be pinned.
   static std::pair<bool, bool> determineResultPinning(
       const ad_utility::url_parser::ParamValueMap& params);
   FRIEND_TEST(ServerTest, determineResultPinning);
-  // Sets up the PlannedQuery s.t. it is ready to be executed.
-  PlannedQuery setupPlannedQuery(
-      const std::vector<DatasetClause>& queryDatasets,
-      const std::string& operation, QueryExecutionContext& qec,
-      SharedCancellationHandle handle, TimeLimit timeLimit,
-      const ad_utility::Timer& requestTimer) const;
+  //  Parse an operation
+  CPP_template_2(typename Operation)(
+      requires QueryOrUpdate<
+          Operation>) auto parseOperation(ad_utility::websocket::MessageSender&
+                                              messageSender,
+                                          const ad_utility::url_parser::
+                                              ParamValueMap& params,
+                                          const Operation& operation,
+                                          TimeLimit timeLimit);
+
+  // Plan a parsed query.
+  Awaitable<PlannedQuery> planQuery(net::static_thread_pool& thread_pool,
+                                    ParsedQuery&& operation,
+                                    const ad_utility::Timer& requestTimer,
+                                    TimeLimit timeLimit,
+                                    QueryExecutionContext& qec,
+                                    SharedCancellationHandle handle);
   // Creates a `MessageSender` for the given operation.
-  ad_utility::websocket::MessageSender createMessageSender(
-      const std::weak_ptr<ad_utility::websocket::QueryHub>& queryHub,
-      const ad_utility::httpUtils::HttpRequest auto& request,
-      const string& operation);
+  CPP_template_2(typename RequestT)(
+      requires ad_utility::httpUtils::HttpRequest<RequestT>)
+      ad_utility::websocket::MessageSender createMessageSender(
+          const std::weak_ptr<ad_utility::websocket::QueryHub>& queryHub,
+          const RequestT& request, const string& operation);
   // Execute an update operation. The function must have exclusive access to the
   // DeltaTriples object.
   json processUpdateImpl(
-      const ad_utility::url_parser::ParamValueMap& params,
-      const ad_utility::url_parser::sparqlOperation::Update& update,
-      ad_utility::Timer& requestTimer, TimeLimit timeLimit, auto& messageSender,
+      const PlannedQuery& plannedUpdate, const ad_utility::Timer& requestTimer,
       ad_utility::SharedCancellationHandle cancellationHandle,
       DeltaTriples& deltaTriples);
 
   static json composeErrorResponseJson(
       const string& query, const std::string& errorMsg,
-      ad_utility::Timer& requestTimer,
+      const ad_utility::Timer& requestTimer,
       const std::optional<ExceptionMetadata>& metadata = std::nullopt);
 
   json composeStatsJson() const;
@@ -234,9 +235,10 @@ class Server {
   ///
   /// \return An OwningQueryId object. It removes itself from the registry
   ///         on destruction.
-  ad_utility::websocket::OwningQueryId getQueryId(
-      const ad_utility::httpUtils::HttpRequest auto& request,
-      std::string_view query);
+  CPP_template_2(typename RequestT)(
+      requires ad_utility::httpUtils::HttpRequest<RequestT>)
+      ad_utility::websocket::OwningQueryId
+      getQueryId(const RequestT& request, std::string_view query);
 
   /// Schedule a task to trigger the timeout after the `timeLimit`.
   /// The returned callback can be used to prevent this task from executing
@@ -245,15 +247,8 @@ class Server {
   auto cancelAfterDeadline(
       std::weak_ptr<ad_utility::CancellationHandle<>> cancellationHandle,
       TimeLimit timeLimit)
-      -> ad_utility::InvocableWithExactReturnType<void> auto;
-
-  /// Run the SPARQL parser and then the query planner on the `query`. All
-  /// computation is performed on the `threadPool_`.
-  PlannedQuery parseAndPlan(const std::string& query,
-                            const vector<DatasetClause>& queryDatasets,
-                            QueryExecutionContext& qec,
-                            SharedCancellationHandle handle,
-                            TimeLimit timeLimit) const;
+      -> QL_CONCEPT_OR_NOTHING(
+          ad_utility::InvocableWithExactReturnType<void>) auto;
 
   /// Acquire the `CancellationHandle` for the given `QueryId`, start the
   /// watchdog and call `cancelAfterDeadline` to set the timeout after
@@ -262,8 +257,8 @@ class Server {
   /// member can be invoked to cancel the imminent cancellation via timeout.
   auto setupCancellationHandle(const ad_utility::websocket::QueryId& queryId,
                                TimeLimit timeLimit)
-      -> ad_utility::isInstantiation<
-          CancellationHandleAndTimeoutTimerCancel> auto;
+      -> QL_CONCEPT_OR_NOTHING(ad_utility::isInstantiation<
+                               CancellationHandleAndTimeoutTimerCancel>) auto;
 
   /// Check if the access token is valid. Return true if the access token
   /// exists and is valid. Return false if there's no access token passed.
@@ -277,16 +272,19 @@ class Server {
   /// lower than the server default. Return an empty optional and send a 403
   /// Forbidden HTTP response if the change is not allowed. Return the new
   /// timeout otherwise.
-  net::awaitable<std::optional<Server::TimeLimit>>
-  verifyUserSubmittedQueryTimeout(
-      std::optional<std::string_view> userTimeout, bool accessTokenOk,
-      const ad_utility::httpUtils::HttpRequest auto& request, auto& send) const;
+  CPP_template_2(typename RequestT, typename ResponseT)(
+      requires ad_utility::httpUtils::HttpRequest<RequestT>) net::
+      awaitable<std::optional<Server::TimeLimit>> verifyUserSubmittedQueryTimeout(
+          std::optional<std::string_view> userTimeout, bool accessTokenOk,
+          const RequestT& request, ResponseT& send) const;
 
   /// Send response for the streamable media types (tsv, csv, octet-stream,
   /// turtle, sparqlJson, qleverJson).
-  Awaitable<void> sendStreamableResponse(
-      const ad_utility::httpUtils::HttpRequest auto& request, auto& send,
-      ad_utility::MediaType mediaType, const PlannedQuery& plannedQuery,
-      const QueryExecutionTree& qet, ad_utility::Timer& requestTimer,
-      SharedCancellationHandle cancellationHandle) const;
+  CPP_template_2(typename RequestT, typename ResponseT)(
+      requires ad_utility::httpUtils::HttpRequest<RequestT>)
+      Awaitable<void> sendStreamableResponse(
+          const RequestT& request, ResponseT& send,
+          ad_utility::MediaType mediaType, const PlannedQuery& plannedQuery,
+          const QueryExecutionTree& qet, const ad_utility::Timer& requestTimer,
+          SharedCancellationHandle cancellationHandle) const;
 };
