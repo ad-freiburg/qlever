@@ -195,7 +195,7 @@ class IndexImpl {
 
   // The vocabulary type that is used (only relevant during index building).
   ad_utility::VocabularyType vocabularyTypeForIndexBuilding_{
-      ad_utility::VocabularyType::Enum::CompressedOnDisk};
+      ad_utility::VocabularyType::Enum::OnDiskCompressed};
 
   // BlankNodeManager, initialized during `readConfiguration`
   std::unique_ptr<ad_utility::BlankNodeManager> blankNodeManager_{nullptr};

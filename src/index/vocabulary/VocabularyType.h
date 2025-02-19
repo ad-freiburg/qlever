@@ -20,16 +20,21 @@ namespace ad_utility {
 class VocabularyType {
  public:
   // The different vocabulary implementations;
-  enum struct Enum { InMemory, OnDisk, CompressedInMemory, CompressedOnDisk };
+  enum struct Enum {
+    InMemoryUncompressed,
+    OnDiskUncompressed,
+    InMemoryCompressed,
+    OnDiskCompressed
+  };
 
  private:
-  Enum value_ = Enum::InMemory;
+  Enum value_ = Enum::InMemoryUncompressed;
 
   static constexpr size_t numValues_ = 4;
   // All possible values.
   static constexpr std::array<Enum, numValues_> all_{
-      Enum::InMemory, Enum::OnDisk, Enum::CompressedInMemory,
-      Enum::CompressedOnDisk};
+      Enum::InMemoryUncompressed, Enum::OnDiskUncompressed,
+      Enum::InMemoryCompressed, Enum::OnDiskCompressed};
 
   // The string representations of the enum values.
   static constexpr std::array<std::string_view, numValues_> descriptions_{

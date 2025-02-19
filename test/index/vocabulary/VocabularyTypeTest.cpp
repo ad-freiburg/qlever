@@ -7,21 +7,22 @@
 #include "index/vocabulary/VocabularyType.h"
 
 using namespace ad_utility;
+// Simple tests for the glorified enum `VocabularyType`.
 TEST(VocabularyType, allTests) {
   using E = VocabularyType::Enum;
   using T = VocabularyType;
   T t{};
-  EXPECT_EQ(t.value(), E::InMemory);
+  EXPECT_EQ(t.value(), E::InMemoryUncompressed);
   for (auto e : T::all()) {
     EXPECT_EQ(T{e}.value(), e);
   }
 
   t = T::fromString("on-disk-compressed");
-  EXPECT_EQ(t.value(), E::CompressedOnDisk);
+  EXPECT_EQ(t.value(), E::OnDiskCompressed);
 
   EXPECT_ANY_THROW(T::fromString("kartoffelsalat"));
 
-  EXPECT_EQ(T{E::OnDisk}.toString(), "on-disk-uncompressed");
+  EXPECT_EQ(T{E::OnDiskUncompressed}.toString(), "on-disk-uncompressed");
 
   using namespace ::testing;
   EXPECT_THAT(T::getListOfSupportedValues(),

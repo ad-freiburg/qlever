@@ -1136,7 +1136,7 @@ void IndexImpl::readConfiguration() {
   loadDataMember("num-non-literals-text-index", nofNonLiteralsInTextIndex_, 0);
 
   ad_utility::VocabularyType vocabType(
-      ad_utility::VocabularyType::Enum::CompressedOnDisk);
+      ad_utility::VocabularyType::Enum::OnDiskCompressed);
   loadDataMember("vocabulary-type", vocabType, vocabType);
   vocab_.resetToType(vocabType);
 

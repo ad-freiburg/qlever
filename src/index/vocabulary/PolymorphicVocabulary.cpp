@@ -72,16 +72,16 @@ PolymorphicVocabulary::WordWriter PolymorphicVocabulary::makeDiskWriter(
 void PolymorphicVocabulary::resetToType(VocabularyType type) {
   close();
   switch (type.value()) {
-    case VocabularyType::Enum::InMemory:
+    case VocabularyType::Enum::InMemoryUncompressed:
       vocab_.emplace<InMemory>();
       break;
-    case VocabularyType::Enum::OnDisk:
+    case VocabularyType::Enum::OnDiskUncompressed:
       vocab_.emplace<External>();
       break;
-    case VocabularyType::Enum::CompressedInMemory:
+    case VocabularyType::Enum::InMemoryCompressed:
       vocab_.emplace<CompressedInMemory>();
       break;
-    case VocabularyType::Enum::CompressedOnDisk:
+    case VocabularyType::Enum::OnDiskCompressed:
       vocab_.emplace<CompressedExternal>();
       break;
     default:
