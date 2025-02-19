@@ -55,7 +55,7 @@ class Result {
   using LocalVocabPtr = std::shared_ptr<const LocalVocab>;
 
   struct IdTableSharedLocalVocabPair {
-    IdTable idTable_;
+    std::variant<std::shared_ptr<const IdTable>, IdTable> idTable_;
     // The local vocabulary of the result.
     LocalVocabPtr localVocab_;
   };
@@ -115,6 +115,8 @@ class Result {
          SharedLocalVocabWrapper localVocab);
   Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
          LocalVocab&& localVocab);
+  Result(std::shared_ptr<const IdTable> idTablePtr,
+         std::vector<ColumnIndex> sortedBy, LocalVocab&& localVocab);
   Result(IdTableVocabPair pair, std::vector<ColumnIndex> sortedBy);
   Result(Generator idTables, std::vector<ColumnIndex> sortedBy);
   Result(LazyResult idTables, std::vector<ColumnIndex> sortedBy);
