@@ -7,6 +7,7 @@
 #include "ExportQueryExecutionTrees.h"
 
 #include <absl/strings/str_cat.h>
+#include <absl/strings/str_replace.h>
 
 #include <ranges>
 
@@ -590,8 +591,11 @@ ExportQueryExecutionTrees::selectQueryResultToStream(
             co_yield optionalStringAndType.value().first;
           }
         }
-        co_yield j + 1 < selectedColumnIndices.size() ? separator : '\n';
+        if (j + 1 < selectedColumnIndices.size()) {
+          co_yield separator;
+        }
       }
+      co_yield '\n';
       cancellationHandle->throwIfCancelled();
     }
   }
@@ -745,13 +749,10 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
   co_yield absl::StrCat(R"({"head":{"vars":)", jsonVars.dump(),
                         R"(},"results":{"bindings":[)");
 
+  // Get all columns with defined variables.
   QueryExecutionTree::ColumnIndicesAndTypes columns =
       qet.selectedVariablesToColumnIndices(selectClause, false);
   std::erase(columns, std::nullopt);
-  if (columns.empty()) {
-    co_yield "]}}";
-    co_return;
-  }
 
   auto getBinding = [&](const IdTable& idTable, const uint64_t& i,
                         const LocalVocab& localVocab) {
@@ -769,6 +770,8 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
     return binding.dump();
   };
 
+  // Iterate over the result and yield the bindings. Note that when `columns`
+  // is empty, we have to output an empty set of bindings per row.
   bool isFirstRow = true;
   uint64_t resultSize = 0;
   for (const auto& [pair, range] :
@@ -777,7 +780,11 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
       if (!isFirstRow) [[likely]] {
         co_yield ",";
       }
-      co_yield getBinding(pair.idTable_, i, pair.localVocab_);
+      if (columns.empty()) {
+        co_yield "{}";
+      } else {
+        co_yield getBinding(pair.idTable_, i, pair.localVocab_);
+      }
       cancellationHandle->throwIfCancelled();
       isFirstRow = false;
     }
@@ -894,7 +901,7 @@ cppcoro::generator<std::string> ExportQueryExecutionTrees::computeResult(
 
   auto inner =
       ad_utility::ConstexprSwitch<csv, tsv, octetStream, turtle, sparqlXml,
-                                  sparqlJson, qleverJson>(compute, mediaType);
+                                  sparqlJson, qleverJson>{}(compute, mediaType);
   return convertStreamGeneratorForChunkedTransfer(std::move(inner));
 }
 

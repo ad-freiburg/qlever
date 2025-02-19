@@ -13,6 +13,7 @@
 #include "Recognizer.h"
 #include "Token.h"
 #include "absl/strings/str_cat.h"
+#include "backports/concepts.h"
 #include "util/ParseException.h"
 #include "util/antlr/GenerateAntlrExceptionMetadata.h"
 
@@ -30,11 +31,12 @@ antlr error message are included as exception cause.
 For an example of a valid `GrammarParseException` see
 `InvalidSparqlQueryException`.
 */
-template <typename GrammarParseException>
-requires std::derived_from<GrammarParseException, ParseException> &&
-         std::constructible_from<GrammarParseException, std::string_view,
-                                 std::optional<ExceptionMetadata>>
-struct ThrowingErrorListener : public antlr4::BaseErrorListener {
+CPP_template(typename GrammarParseException)(
+    requires std::derived_from<GrammarParseException, ParseException> CPP_and
+        std::constructible_from<
+            GrammarParseException, std::string_view,
+            std::optional<ExceptionMetadata>>) struct ThrowingErrorListener
+    : public antlr4::BaseErrorListener {
   void syntaxError(antlr4::Recognizer* recognizer,
                    antlr4::Token* offendingSymbol, size_t line,
                    size_t charPositionInLine, const std::string& msg,

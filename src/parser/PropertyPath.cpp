@@ -6,7 +6,7 @@
 // _____________________________________________________________________________
 PropertyPath::PropertyPath(Operation op, std::string iri,
                            std::initializer_list<PropertyPath> children)
-    : _operation(op), _iri(std::move(iri)), _children(children) {}
+    : operation_(op), iri_(std::move(iri)), children_(children) {}
 
 // _____________________________________________________________________________
 PropertyPath PropertyPath::makeModified(PropertyPath child,
@@ -23,17 +23,17 @@ PropertyPath PropertyPath::makeModified(PropertyPath child,
 
 // _____________________________________________________________________________
 void PropertyPath::writeToStream(std::ostream& out) const {
-  switch (_operation) {
+  switch (operation_) {
     case Operation::ALTERNATIVE:
       out << "(";
-      if (!_children.empty()) {
-        _children[0].writeToStream(out);
+      if (!children_.empty()) {
+        children_[0].writeToStream(out);
       } else {
         out << "missing" << std::endl;
       }
       out << ")|(";
-      if (_children.size() > 1) {
-        _children[1].writeToStream(out);
+      if (children_.size() > 1) {
+        children_[1].writeToStream(out);
       } else {
         out << "missing" << std::endl;
       }
@@ -41,26 +41,26 @@ void PropertyPath::writeToStream(std::ostream& out) const {
       break;
     case Operation::INVERSE:
       out << "^(";
-      if (!_children.empty()) {
-        _children[0].writeToStream(out);
+      if (!children_.empty()) {
+        children_[0].writeToStream(out);
       } else {
         out << "missing" << std::endl;
       }
       out << ")";
       break;
     case Operation::IRI:
-      out << _iri;
+      out << iri_;
       break;
     case Operation::SEQUENCE:
       out << "(";
-      if (!_children.empty()) {
-        _children[0].writeToStream(out);
+      if (!children_.empty()) {
+        children_[0].writeToStream(out);
       } else {
         out << "missing" << std::endl;
       }
       out << ")/(";
-      if (_children.size() > 1) {
-        _children[1].writeToStream(out);
+      if (children_.size() > 1) {
+        children_[1].writeToStream(out);
       } else {
         out << "missing" << std::endl;
       }
@@ -68,8 +68,8 @@ void PropertyPath::writeToStream(std::ostream& out) const {
       break;
     case Operation::ZERO_OR_MORE:
       out << "(";
-      if (!_children.empty()) {
-        _children[0].writeToStream(out);
+      if (!children_.empty()) {
+        children_[0].writeToStream(out);
       } else {
         out << "missing" << std::endl;
       }
@@ -77,8 +77,8 @@ void PropertyPath::writeToStream(std::ostream& out) const {
       break;
     case Operation::ONE_OR_MORE:
       out << "(";
-      if (!_children.empty()) {
-        _children[0].writeToStream(out);
+      if (!children_.empty()) {
+        children_[0].writeToStream(out);
       } else {
         out << "missing" << std::endl;
       }
@@ -86,8 +86,8 @@ void PropertyPath::writeToStream(std::ostream& out) const {
       break;
     case Operation::ZERO_OR_ONE:
       out << "(";
-      if (!_children.empty()) {
-        _children[0].writeToStream(out);
+      if (!children_.empty()) {
+        children_[0].writeToStream(out);
       } else {
         out << "missing" << std::endl;
       }
@@ -105,26 +105,26 @@ std::string PropertyPath::asString() const {
 
 // _____________________________________________________________________________
 void PropertyPath::computeCanBeNull() {
-  can_be_null_ = !_children.empty();
-  for (PropertyPath& p : _children) {
+  canBeNull_ = !children_.empty();
+  for (PropertyPath& p : children_) {
     p.computeCanBeNull();
-    can_be_null_ &= p.can_be_null_;
+    canBeNull_ &= p.canBeNull_;
   }
 
-  if (_operation == Operation::ZERO_OR_MORE ||
-      _operation == Operation::ZERO_OR_ONE) {
-    can_be_null_ = true;
+  if (operation_ == Operation::ZERO_OR_MORE ||
+      operation_ == Operation::ZERO_OR_ONE) {
+    canBeNull_ = true;
   }
 }
 
 // _____________________________________________________________________________
 const std::string& PropertyPath::getIri() const {
   AD_CONTRACT_CHECK(isIri());
-  return _iri;
+  return iri_;
 }
 
 // _____________________________________________________________________________
-bool PropertyPath::isIri() const { return _operation == Operation::IRI; }
+bool PropertyPath::isIri() const { return operation_ == Operation::IRI; }
 
 // _____________________________________________________________________________
 std::ostream& operator<<(std::ostream& out, const PropertyPath& p) {

@@ -21,6 +21,8 @@
 #include "index/IndexFormatVersion.h"
 #include "index/VocabularyMerger.h"
 #include "parser/ParallelParseBuffer.h"
+#include "parser/Tokenizer.h"
+#include "parser/TokenizerCtre.h"
 #include "util/BatchedPipeline.h"
 #include "util/CachingMemoryResource.h"
 #include "util/HashMap.h"
@@ -894,7 +896,7 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
   auto setMetadata = [this](const Permutation& p) {
     deltaTriplesManager().modify<void>([&p](DeltaTriples& deltaTriples) {
       deltaTriples.setOriginalMetadata(p.permutation(),
-                                       p.metaData().blockData());
+                                       p.metaData().blockDataShared());
     });
   };
 
@@ -1622,12 +1624,12 @@ constexpr auto makeNumDistinctIdsCounter = [](size_t& numDistinctIds) {
 }  // namespace
 
 // _____________________________________________________________________________
-template <typename... NextSorter>
-requires(sizeof...(NextSorter) <= 1)
-void IndexImpl::createPSOAndPOSImpl(size_t numColumns,
-                                    BlocksOfTriples sortedTriples,
-                                    bool doWriteConfiguration,
-                                    NextSorter&&... nextSorter)
+CPP_template_def(typename... NextSorter)(requires(
+    sizeof...(NextSorter) <=
+    1)) void IndexImpl::createPSOAndPOSImpl(size_t numColumns,
+                                            BlocksOfTriples sortedTriples,
+                                            bool doWriteConfiguration,
+                                            NextSorter&&... nextSorter)
 
 {
   size_t numTriplesNormal = 0;
@@ -1654,21 +1656,20 @@ void IndexImpl::createPSOAndPOSImpl(size_t numColumns,
 };
 
 // _____________________________________________________________________________
-template <typename... NextSorter>
-requires(sizeof...(NextSorter) <= 1)
-void IndexImpl::createPSOAndPOS(size_t numColumns,
-                                BlocksOfTriples sortedTriples,
-                                NextSorter&&... nextSorter) {
+CPP_template_def(typename... NextSorter)(
+    requires(sizeof...(NextSorter) <=
+             1)) void IndexImpl::createPSOAndPOS(size_t numColumns,
+                                                 BlocksOfTriples sortedTriples,
+                                                 NextSorter&&... nextSorter) {
   createPSOAndPOSImpl(numColumns, std::move(sortedTriples), true,
                       AD_FWD(nextSorter)...);
 }
 
 // _____________________________________________________________________________
-template <typename... NextSorter>
-requires(sizeof...(NextSorter) <= 1)
-std::optional<PatternCreator::TripleSorter> IndexImpl::createSPOAndSOP(
-    size_t numColumns, BlocksOfTriples sortedTriples,
-    NextSorter&&... nextSorter) {
+CPP_template_def(typename... NextSorter)(requires(sizeof...(NextSorter) <= 1))
+    std::optional<PatternCreator::TripleSorter> IndexImpl::createSPOAndSOP(
+        size_t numColumns, BlocksOfTriples sortedTriples,
+        NextSorter&&... nextSorter) {
   size_t numSubjectsNormal = 0;
   size_t numSubjectsTotal = 0;
   auto numSubjectCounter = makeNumDistinctIdsCounter<0>(numSubjectsNormal);
@@ -1716,11 +1717,11 @@ std::optional<PatternCreator::TripleSorter> IndexImpl::createSPOAndSOP(
 };
 
 // _____________________________________________________________________________
-template <typename... NextSorter>
-requires(sizeof...(NextSorter) <= 1)
-void IndexImpl::createOSPAndOPS(size_t numColumns,
-                                BlocksOfTriples sortedTriples,
-                                NextSorter&&... nextSorter) {
+CPP_template_def(typename... NextSorter)(
+    requires(sizeof...(NextSorter) <=
+             1)) void IndexImpl::createOSPAndOPS(size_t numColumns,
+                                                 BlocksOfTriples sortedTriples,
+                                                 NextSorter&&... nextSorter) {
   // For the last pair of permutations we don't need a next sorter, so we
   // have no fourth argument.
   size_t numObjectsNormal = 0;

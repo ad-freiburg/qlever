@@ -65,8 +65,11 @@ class FsstDecoder {
     return output;
   }
   // Allow this type to be trivially serializable,
-  friend std::true_type allowTrivialSerialization(
-      std::same_as<FsstDecoder> auto, auto);
+  CPP_template(typename T, typename U)(
+      requires ql::concepts::same_as<T, FsstDecoder>) friend std::true_type
+      allowTrivialSerialization(T, U&&) {
+    return {};
+  }
 };
 
 // A sequence of `N` `FsstDecoder` s that are chained in inverted order (the
@@ -104,8 +107,9 @@ class FsstRepeatedDecoder {
     return result;
   }
   // Allow this type to be trivially serializable,
-  [[maybe_unused]] friend std::true_type allowTrivialSerialization(
-      std::same_as<FsstRepeatedDecoder> auto, auto) {
+  CPP_template_2(typename T,
+                 typename U)(requires std::same_as<T, FsstRepeatedDecoder>)
+      [[maybe_unused]] friend std::true_type allowTrivialSerialization(T, U) {
     return {};
   }
 };

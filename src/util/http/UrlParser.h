@@ -67,18 +67,20 @@ struct Update {
 struct None {
   bool operator==(const None& rhs) const = default;
 };
+
+using Operation = std::variant<Query, Update, None>;
 }  // namespace sparqlOperation
 
 // Representation of parsed HTTP request.
 // - `path_` is the URL path
+// - `accessToken_` is the access token for that request
 // - `parameters_` is a hashmap of the parameters
 // - `operation_` the operation that should be performed
 struct ParsedRequest {
   std::string path_;
+  std::optional<std::string> accessToken_;
   ParamValueMap parameters_;
-  std::variant<sparqlOperation::Query, sparqlOperation::Update,
-               sparqlOperation::None>
-      operation_;
+  sparqlOperation::Operation operation_;
 };
 
 // Parse the URL path and the URL query parameters of an HTTP Request target.

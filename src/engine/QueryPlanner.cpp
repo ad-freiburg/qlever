@@ -479,7 +479,7 @@ QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
   vector<const SparqlTriple*> entityTriples;
   // Add one or more nodes for each triple.
   for (auto& t : pattern->_triples) {
-    if (t.p_._iri == CONTAINS_WORD_PREDICATE) {
+    if (t.p_.iri_ == CONTAINS_WORD_PREDICATE) {
       std::string buffer = t.o_.toString();
       std::string_view sv{buffer};
       // Add one node for each word
@@ -492,7 +492,7 @@ QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
             tg);
         numNodesInTripleGraph++;
       }
-    } else if (t.p_._iri == CONTAINS_ENTITY_PREDICATE) {
+    } else if (t.p_.iri_ == CONTAINS_ENTITY_PREDICATE) {
       entityTriples.push_back(&t);
     } else {
       addNodeToTripleGraph(TripleGraph::Node(tg._nodeStorage.size(), t), tg);
@@ -527,7 +527,7 @@ namespace {
 // `TripleComponent`, typically the subject, predicate, or object of the triple,
 // hence the name.
 template <typename Function>
-concept TriplePosition =
+CPP_concept TriplePosition =
     ad_utility::InvocableWithExactReturnType<Function, TripleComponent&,
                                              SparqlTripleSimple&>;
 
@@ -545,31 +545,32 @@ SparqlFilter createEqualFilter(const Variable& var1, const Variable& var2) {
 // position of the `scanTriple`, denoted by the `rewritePosition` by a new
 // variable, and add a filter, that checks the old and the new value for
 // equality.
-constexpr auto rewriteSingle =
-    [](TriplePosition auto rewritePosition, SparqlTripleSimple& scanTriple,
-       const auto& addFilter, const auto& generateUniqueVarName) {
-      Variable filterVar = generateUniqueVarName();
-      auto& target = std::invoke(rewritePosition, scanTriple).getVariable();
-      addFilter(createEqualFilter(filterVar, target));
-      target = filterVar;
-    };
+constexpr auto rewriteSingle = CPP_template_lambda()(typename T)(
+    T rewritePosition, SparqlTripleSimple& scanTriple, const auto& addFilter,
+    const auto& generateUniqueVarName)(requires TriplePosition<T>) {
+  Variable filterVar = generateUniqueVarName();
+  auto& target = std::invoke(rewritePosition, scanTriple).getVariable();
+  addFilter(createEqualFilter(filterVar, target));
+  target = filterVar;
+};
 
 // Replace the positions of the `triple` that are specified by the
 // `rewritePositions` with a new variable, and add a filter, which checks the
 // old and the new value for equality for each of these rewrites. Then also
 // add an index scan for the rewritten triple.
 constexpr auto handleRepeatedVariablesImpl =
-    [](const auto& triple, auto& addIndexScan,
-       const auto& generateUniqueVarName, const auto& addFilter,
-       std::span<const Permutation::Enum> permutations,
-       TriplePosition auto... rewritePositions) {
-      auto scanTriple = triple;
-      (..., rewriteSingle(rewritePositions, scanTriple, addFilter,
-                          generateUniqueVarName));
-      for (const auto& permutation : permutations) {
-        addIndexScan(permutation, scanTriple);
-      }
-    };
+    []<typename... T>(const auto& triple, auto& addIndexScan,
+                      const auto& generateUniqueVarName, const auto& addFilter,
+                      std::span<const Permutation::Enum> permutations,
+                      T... rewritePositions)
+    -> CPP_ret(void)(requires(TriplePosition<T>&&...)) {
+  auto scanTriple = triple;
+  (..., rewriteSingle(rewritePositions, scanTriple, addFilter,
+                      generateUniqueVarName));
+  for (const auto& permutation : permutations) {
+    addIndexScan(permutation, scanTriple);
+  }
+};
 
 }  // namespace
 
@@ -602,13 +603,14 @@ void QueryPlanner::indexScanTwoVarsCase(
   // add an index scan for the rewritten triple.
   auto generate = [this]() { return generateUniqueVarName(); };
   auto handleRepeatedVariables =
-      [&triple, &addIndexScan, &addFilter, &generate](
+      [&triple, &addIndexScan, &addFilter, &generate]<typename... T>(
           std::span<const Permutation::Enum> permutations,
-          TriplePosition auto... rewritePositions) {
-        return handleRepeatedVariablesImpl(triple, addIndexScan, generate,
-                                           addFilter, permutations,
-                                           rewritePositions...);
-      };
+          T... rewritePositions)
+      -> CPP_ret(void)(requires(TriplePosition<T>&&...)) {
+    return handleRepeatedVariablesImpl(triple, addIndexScan, generate,
+                                       addFilter, permutations,
+                                       rewritePositions...);
+  };
 
   const auto& [s, p, o, _] = triple;
 
@@ -654,13 +656,14 @@ void QueryPlanner::indexScanThreeVarsCase(
   // old and the new value for equality for this rewrite. Then also
   // add an index scan for the rewritten triple.
   auto handleRepeatedVariables =
-      [&triple, &addIndexScan, &addFilter, &generate](
+      [&triple, &addIndexScan, &addFilter, &generate]<typename... T>(
           std::span<const Permutation::Enum> permutations,
-          TriplePosition auto... rewritePositions) {
-        return handleRepeatedVariablesImpl(triple, addIndexScan, generate,
-                                           addFilter, permutations,
-                                           rewritePositions...);
-      };
+          T... rewritePositions)
+      -> CPP_ret(void)(requires(TriplePosition<T>&&...)) {
+    return handleRepeatedVariablesImpl(triple, addIndexScan, generate,
+                                       addFilter, permutations,
+                                       rewritePositions...);
+  };
 
   using Tr = SparqlTripleSimple;
   const auto& [s, p, o, _] = triple;
@@ -751,12 +754,12 @@ auto QueryPlanner::seedWithScansAndText(
     }
 
     // Property paths must have been handled previously.
-    AD_CORRECTNESS_CHECK(node.triple_.p_._operation ==
+    AD_CORRECTNESS_CHECK(node.triple_.p_.operation_ ==
                          PropertyPath::Operation::IRI);
     // At this point, we know that the predicate is a simple IRI or a variable.
 
     if (_qec && !_qec->getIndex().hasAllPermutations() &&
-        isVariable(node.triple_.p_._iri)) {
+        isVariable(node.triple_.p_.iri_)) {
       AD_THROW(
           "The query contains a predicate variable, but only the PSO "
           "and POS permutations were loaded. Rerun the server without "
@@ -765,7 +768,7 @@ auto QueryPlanner::seedWithScansAndText(
     }
 
     // Backward compatibility with spatial search predicates
-    const auto& input = node.triple_.p_._iri;
+    const auto& input = node.triple_.p_.iri_;
     if ((input.starts_with(MAX_DIST_IN_METERS) ||
          input.starts_with(NEAREST_NEIGHBORS)) &&
         input.ends_with('>')) {
@@ -785,7 +788,7 @@ auto QueryPlanner::seedWithScansAndText(
       continue;
     }
 
-    if (node.triple_.p_._iri == HAS_PREDICATE_PREDICATE) {
+    if (node.triple_.p_.iri_ == HAS_PREDICATE_PREDICATE) {
       pushPlan(makeSubtreePlan<HasPredicateScan>(_qec, node.triple_));
       continue;
     }
@@ -838,10 +841,10 @@ auto QueryPlanner::seedWithScansAndText(
 }
 
 // _____________________________________________________________________________
-std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromPropertyPath(
+ParsedQuery::GraphPattern QueryPlanner::seedFromPropertyPath(
     const TripleComponent& left, const PropertyPath& path,
     const TripleComponent& right) {
-  switch (path._operation) {
+  switch (path.operation_) {
     case PropertyPath::Operation::ALTERNATIVE:
       return seedFromAlternative(left, path, right);
     case PropertyPath::Operation::INVERSE:
@@ -863,73 +866,64 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromPropertyPath(
 }
 
 // _____________________________________________________________________________
-std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromSequence(
+ParsedQuery::GraphPattern QueryPlanner::seedFromSequence(
     const TripleComponent& left, const PropertyPath& path,
     const TripleComponent& right) {
-  AD_CORRECTNESS_CHECK(path._children.size() > 1);
+  AD_CORRECTNESS_CHECK(path.children_.size() > 1);
 
-  auto joinPattern = ParsedQuery::GraphPattern{};
+  ParsedQuery::GraphPattern joinPattern{};
   TripleComponent innerLeft = left;
   TripleComponent innerRight = generateUniqueVarName();
-  for (size_t i = 0; i < path._children.size(); i++) {
-    auto child = path._children[i];
+  for (size_t i = 0; i < path.children_.size(); i++) {
+    auto child = path.children_[i];
 
-    if (i == path._children.size() - 1) {
+    if (i == path.children_.size() - 1) {
       innerRight = right;
     }
 
     auto pattern = seedFromPropertyPath(innerLeft, child, innerRight);
     joinPattern._graphPatterns.insert(joinPattern._graphPatterns.end(),
-                                      pattern->_graphPatterns.begin(),
-                                      pattern->_graphPatterns.end());
+                                      pattern._graphPatterns.begin(),
+                                      pattern._graphPatterns.end());
     innerLeft = innerRight;
     innerRight = generateUniqueVarName();
   }
 
-  return std::make_shared<ParsedQuery::GraphPattern>(joinPattern);
+  return joinPattern;
 }
 
 // _____________________________________________________________________________
-std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromAlternative(
+ParsedQuery::GraphPattern QueryPlanner::seedFromAlternative(
     const TripleComponent& left, const PropertyPath& path,
     const TripleComponent& right) {
-  if (path._children.empty()) {
+  if (path.children_.empty()) {
     AD_THROW(
         "Tried processing an alternative property path node without any "
         "children.");
-  } else if (path._children.size() == 1) {
+  } else if (path.children_.size() == 1) {
     LOG(WARN)
         << "Processing an alternative property path that has only one child."
         << std::endl;
     return seedFromPropertyPath(left, path, right);
   }
 
-  std::vector<std::shared_ptr<ParsedQuery::GraphPattern>> childPlans;
-  childPlans.reserve(path._children.size());
-  for (const auto& child : path._children) {
+  std::vector<ParsedQuery::GraphPattern> childPlans;
+  childPlans.reserve(path.children_.size());
+  for (const auto& child : path.children_) {
     childPlans.push_back(seedFromPropertyPath(left, child, right));
   }
-  // todo<joka921> refactor this nonsense recursively by getting rid of the
-  // shared_ptrs everywhere
-  std::vector<ParsedQuery::GraphPattern> tmp;
-  for (const auto& el : childPlans) {
-    tmp.push_back(*el);
-  }
-
-  return std::make_shared<ParsedQuery::GraphPattern>(
-      uniteGraphPatterns(std::move(tmp)));
+  return uniteGraphPatterns(std::move(childPlans));
 }
 
 // _____________________________________________________________________________
-std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitive(
+ParsedQuery::GraphPattern QueryPlanner::seedFromTransitive(
     const TripleComponent& left, const PropertyPath& path,
     const TripleComponent& right, size_t min, size_t max) {
   Variable innerLeft = generateUniqueVarName();
   Variable innerRight = generateUniqueVarName();
-  std::shared_ptr<ParsedQuery::GraphPattern> childPlan =
-      seedFromPropertyPath(innerLeft, path._children[0], innerRight);
-  std::shared_ptr<ParsedQuery::GraphPattern> p =
-      std::make_shared<ParsedQuery::GraphPattern>();
+  ParsedQuery::GraphPattern childPlan =
+      seedFromPropertyPath(innerLeft, path.children_[0], innerRight);
+  ParsedQuery::GraphPattern p{};
   p::TransPath transPath;
   transPath._left = left;
   transPath._right = right;
@@ -937,33 +931,32 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitive(
   transPath._innerRight = innerRight;
   transPath._min = min;
   transPath._max = max;
-  transPath._childGraphPattern = *childPlan;
-  p->_graphPatterns.emplace_back(std::move(transPath));
+  transPath._childGraphPattern = std::move(childPlan);
+  p._graphPatterns.emplace_back(std::move(transPath));
   return p;
 }
 
 // _____________________________________________________________________________
-std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromInverse(
+ParsedQuery::GraphPattern QueryPlanner::seedFromInverse(
     const TripleComponent& left, const PropertyPath& path,
     const TripleComponent& right) {
-  return seedFromPropertyPath(right, path._children[0], left);
+  return seedFromPropertyPath(right, path.children_[0], left);
 }
 
 // _____________________________________________________________________________
-std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromIri(
+ParsedQuery::GraphPattern QueryPlanner::seedFromIri(
     const TripleComponent& left, const PropertyPath& path,
     const TripleComponent& right) {
-  std::shared_ptr<ParsedQuery::GraphPattern> p =
-      std::make_shared<ParsedQuery::GraphPattern>();
+  ParsedQuery::GraphPattern p{};
   p::BasicGraphPattern basic;
   basic._triples.push_back(SparqlTriple(left, path, right));
-  p->_graphPatterns.emplace_back(std::move(basic));
+  p._graphPatterns.emplace_back(std::move(basic));
 
   return p;
 }
 
 ParsedQuery::GraphPattern QueryPlanner::uniteGraphPatterns(
-    std::vector<ParsedQuery::GraphPattern>&& patterns) const {
+    std::vector<ParsedQuery::GraphPattern>&& patterns) {
   using GraphPattern = ParsedQuery::GraphPattern;
   // Build a tree of union operations
   auto p = GraphPattern{};
@@ -996,7 +989,7 @@ QueryPlanner::SubtreePlan QueryPlanner::getTextLeafPlan(
   if (!textLimits.contains(cvar)) {
     textLimits[cvar] = parsedQuery::TextLimitMetaObject{{}, {}, 0};
   }
-  if (node.triple_.p_._iri == CONTAINS_ENTITY_PREDICATE) {
+  if (node.triple_.p_.iri_ == CONTAINS_ENTITY_PREDICATE) {
     if (node._variables.size() == 2) {
       // TODO<joka921>: This is not nice, refactor the whole TripleGraph class
       // to make these checks more explicitly.
@@ -1344,7 +1337,8 @@ QueryPlanner::runDynamicProgrammingOnConnectedComponent(
 
 // _____________________________________________________________________________
 size_t QueryPlanner::countSubgraphs(
-    std::vector<const QueryPlanner::SubtreePlan*> graph, size_t budget) {
+    std::vector<const QueryPlanner::SubtreePlan*> graph,
+    const std::vector<SparqlFilter>& filters, size_t budget) {
   // Remove duplicate plans from `graph`.
   auto getId = [](const SubtreePlan* v) { return v->_idsOfIncludedNodes; };
   ql::ranges::sort(graph, ql::ranges::less{}, getId);
@@ -1354,6 +1348,36 @@ size_t QueryPlanner::countSubgraphs(
 #else
   graph.erase(uniqueIter.begin(), graph.end());
 #endif
+
+  // We also have to consider the `filters`. To make life easy, we temporarily
+  // create simple `SubtreePlans` for them which just have the correct
+  // variables. We only create one subtree plan for each set of variables that
+  // is contained in the `filters`, because this will bring the estimate of this
+  // function closer to the actual behavior of the DP query planner (it always
+  // applies either all possible filters at once, or none of them).
+  std::vector<QueryPlanner::SubtreePlan> dummyPlansForFilter;
+  ad_utility::HashSet<ad_utility::HashSet<Variable>>
+      deduplicatedFilterVariables;
+  for (const auto& filter : filters) {
+    const auto& vars = filter.expression_.containedVariables();
+    ad_utility::HashSet<Variable> varSet;
+    // We use a `VALUES` clause as the dummy because this operation is the
+    // easiest to setup for a number of given variables.
+    parsedQuery::SparqlValues values;
+    for (auto* var : vars) {
+      values._variables.push_back(*var);
+      varSet.insert(*var);
+    }
+    if (deduplicatedFilterVariables.insert(std::move(varSet)).second) {
+      dummyPlansForFilter.push_back(
+          makeSubtreePlan<Values>(_qec, std::move(values)));
+    }
+  }
+
+  const size_t numPlansWithoutFilters = graph.size();
+  for (const auto& filterPlan : dummyPlansForFilter) {
+    graph.push_back(&filterPlan);
+  }
 
   // Qlever currently limits the number of triples etc. per group to be <= 64
   // anyway, so we can simply assert here.
@@ -1368,7 +1392,11 @@ size_t QueryPlanner::countSubgraphs(
   for (size_t i = 0; i < graph.size(); ++i) {
     countConnectedSubgraphs::Node v{0};
     for (size_t k = 0; k < graph.size(); ++k) {
+      // Don't connect nodes to themselves, don't connect filters with other
+      // filters, otherwise connect `i` and `k` if they have at least one
+      // variable in common.
       if ((k != i) &&
+          (k < numPlansWithoutFilters || i < numPlansWithoutFilters) &&
           !QueryPlanner::getJoinColumns(*graph.at(k), *graph.at(i)).empty()) {
         v.neighbors_ |= (1ULL << k);
       }
@@ -1478,7 +1506,7 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
       g.push_back(&plan);
     }
     const size_t budget = RuntimeParameters().get<"query-planning-budget">();
-    bool useGreedyPlanning = countSubgraphs(g, budget) > budget;
+    bool useGreedyPlanning = countSubgraphs(g, filters, budget) > budget;
     if (useGreedyPlanning) {
       LOG(INFO)
           << "Using the greedy query planner for a large connected component"
@@ -1540,9 +1568,9 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
 // _____________________________________________________________________________
 bool QueryPlanner::TripleGraph::isTextNode(size_t i) const {
   return _nodeMap.count(i) > 0 &&
-         (_nodeMap.find(i)->second->triple_.p_._iri ==
+         (_nodeMap.find(i)->second->triple_.p_.iri_ ==
               CONTAINS_ENTITY_PREDICATE ||
-          _nodeMap.find(i)->second->triple_.p_._iri == CONTAINS_WORD_PREDICATE);
+          _nodeMap.find(i)->second->triple_.p_.iri_ == CONTAINS_WORD_PREDICATE);
 }
 
 // _____________________________________________________________________________
@@ -2427,7 +2455,7 @@ void QueryPlanner::GraphPatternPlanner::visitBasicGraphPattern(
       boundVariables_.insert(t.s_.getVariable());
     }
     if (isVariable(t.p_)) {
-      boundVariables_.insert(Variable{t.p_._iri});
+      boundVariables_.insert(Variable{t.p_.iri_});
     }
     if (isVariable(t.o_)) {
       boundVariables_.insert(t.o_.getVariable());
@@ -2437,12 +2465,12 @@ void QueryPlanner::GraphPatternPlanner::visitBasicGraphPattern(
   // Then collect the triples. Transform each triple with a property path to
   // an equivalent form without property path (using `seedFromPropertyPath`).
   for (const auto& triple : v._triples) {
-    if (triple.p_._operation == PropertyPath::Operation::IRI) {
+    if (triple.p_.operation_ == PropertyPath::Operation::IRI) {
       candidateTriples_._triples.push_back(triple);
     } else {
       auto children =
           planner_.seedFromPropertyPath(triple.s_, triple.p_, triple.o_);
-      for (auto& child : children->_graphPatterns) {
+      for (auto& child : children._graphPatterns) {
         std::visit([self = this](
                        auto& arg) { self->graphPatternOperationVisitor(arg); },
                    child);
