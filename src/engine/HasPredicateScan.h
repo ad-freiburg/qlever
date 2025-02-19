@@ -108,9 +108,9 @@ class HasPredicateScan : public Operation {
   ProtoResult computeSubqueryS(IdTable* result,
                                const CompactVectorOfStrings<Id>& patterns);
 
+ private:
   std::unique_ptr<Operation> cloneImpl() const override;
 
- private:
   ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override;
 
   [[nodiscard]] VariableToColumnMap computeVariableToColumnMap() const override;

@@ -64,6 +64,8 @@ class CountAvailablePredicates : public Operation {
  private:
   uint64_t getSizeEstimateBeforeLimit() override;
 
+  std::unique_ptr<Operation> cloneImpl() const override;
+
  public:
   size_t getCostEstimate() override;
 
@@ -71,8 +73,6 @@ class CountAvailablePredicates : public Operation {
   size_t subjectColumnIndex() const { return subjectColumnIndex_; }
   const Variable& predicateVariable() const { return predicateVariable_; }
   const Variable& countVariable() const { return countVariable_; }
-
-  std::unique_ptr<Operation> cloneImpl() const override;
 
  private:
   /**

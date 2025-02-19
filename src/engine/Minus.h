@@ -25,7 +25,7 @@ class Minus : public Operation {
 
   // Uninitialized Object for testing the computeMinus method
   struct OnlyForTestingTag {};
-  explicit Minus(OnlyForTestingTag){};
+  explicit Minus(OnlyForTestingTag) {};
 
  protected:
   string getCacheKeyImpl() const override;
@@ -62,9 +62,9 @@ class Minus : public Operation {
                     const vector<std::array<ColumnIndex, 2>>& matchedColumns,
                     IdTable* result) const;
 
+ private:
   std::unique_ptr<Operation> cloneImpl() const override;
 
- private:
   /**
    * @brief Compares the two rows under the assumption that the first
    * entries of the rows are equal.

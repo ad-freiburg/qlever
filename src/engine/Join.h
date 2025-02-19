@@ -142,12 +142,12 @@ class Join : public Operation {
   static void hashJoin(const IdTable& dynA, ColumnIndex jc1,
                        const IdTable& dynB, ColumnIndex jc2, IdTable* dynRes);
 
-  std::unique_ptr<Operation> cloneImpl() const override;
-
  protected:
   virtual string getCacheKeyImpl() const override;
 
  private:
+  std::unique_ptr<Operation> cloneImpl() const override;
+
   ProtoResult computeResult(bool requestLaziness) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;

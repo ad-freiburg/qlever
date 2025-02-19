@@ -46,9 +46,8 @@ class Describe : public Operation {
   float getMultiplicity(size_t col) override;
   bool knownEmptyResult() override;
 
-  std::unique_ptr<Operation> cloneImpl() const override;
-
  private:
+  std::unique_ptr<Operation> cloneImpl() const override;
   [[nodiscard]] vector<ColumnIndex> resultSortedOn() const override;
   ProtoResult computeResult(bool requestLaziness) override;
   VariableToColumnMap computeVariableToColumnMap() const override;

@@ -77,9 +77,9 @@ class OrderBy : public Operation {
     return {subtree_.get()};
   }
 
+ private:
   std::unique_ptr<Operation> cloneImpl() const override;
 
- private:
   ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override {

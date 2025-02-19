@@ -61,9 +61,9 @@ class TextLimit : public Operation {
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 
+ private:
   std::unique_ptr<Operation> cloneImpl() const override;
 
- private:
   ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override;
 
   vector<QueryExecutionTree*> getChildren() override { return {child_.get()}; }

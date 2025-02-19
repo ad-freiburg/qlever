@@ -53,9 +53,9 @@ class Values : public Operation {
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 
+ private:
   std::unique_ptr<Operation> cloneImpl() const override;
 
- private:
   // Compute the per-column multiplicity of the parsed values.
   void computeMultiplicities();
 

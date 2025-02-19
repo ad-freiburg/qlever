@@ -66,9 +66,9 @@ class OptionalJoin : public Operation {
       IdTable* dynResult,
       Implementation implementation = Implementation::GeneralCase);
 
+ private:
   std::unique_ptr<Operation> cloneImpl() const override;
 
- private:
   void computeSizeEstimateAndMultiplicities();
 
   ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override;

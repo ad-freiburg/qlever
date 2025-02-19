@@ -44,9 +44,9 @@ class TextIndexScanForWord : public Operation {
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 
+ private:
   std::unique_ptr<Operation> cloneImpl() const override;
 
- private:
   // Returns a Result containing an IdTable with the columns being
   // the text variable and the completed word (if it was prefixed)
   ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override;

@@ -66,9 +66,9 @@ class Sort : public Operation {
     return {subtree_.get()};
   }
 
+ private:
   std::unique_ptr<Operation> cloneImpl() const override;
 
- private:
   virtual ProtoResult computeResult(
       [[maybe_unused]] bool requestLaziness) override;
 

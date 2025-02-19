@@ -161,8 +161,6 @@ class IndexScan final : public Operation {
   // An index scan can directly and efficiently support LIMIT and OFFSET
   [[nodiscard]] bool supportsLimit() const override { return true; }
 
-  std::unique_ptr<Operation> cloneImpl() const override;
-
   Permutation::Enum permutation() const { return permutation_; }
 
   // Return the stored triple in the order that corresponds to the
@@ -178,6 +176,8 @@ class IndexScan final : public Operation {
       const CompressedRelationReader::LazyScanMetadata& metadata);
 
  private:
+  std::unique_ptr<Operation> cloneImpl() const override;
+
   ProtoResult computeResult(bool requestLaziness) override;
 
   vector<QueryExecutionTree*> getChildren() override { return {}; }

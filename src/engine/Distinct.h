@@ -48,12 +48,11 @@ class Distinct : public Operation {
     return {subtree_.get()};
   }
 
-  std::unique_ptr<Operation> cloneImpl() const override;
-
  protected:
   [[nodiscard]] string getCacheKeyImpl() const override;
 
  private:
+  std::unique_ptr<Operation> cloneImpl() const override;
   ProtoResult computeResult(bool requestLaziness) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;

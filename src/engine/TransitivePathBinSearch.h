@@ -69,9 +69,9 @@ class TransitivePathBinSearch : public TransitivePathImpl<BinSearchMap> {
                           TransitivePathSide rightSide, size_t minDist,
                           size_t maxDist);
 
+ private:
   std::unique_ptr<Operation> cloneImpl() const override;
 
- private:
   // initialize the map from the subresult
   BinSearchMap setupEdgesMap(
       const IdTable& dynSub, const TransitivePathSide& startSide,

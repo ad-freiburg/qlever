@@ -649,5 +649,7 @@ std::unique_ptr<Operation> Operation::clone() const {
     return true;
   };
   AD_CORRECTNESS_CHECK(areChildrenDifferent());
+  AD_CORRECTNESS_CHECK(variableToColumnMap_ == result->variableToColumnMap_);
+  AD_EXPENSIVE_CHECK(getCacheKey() == result->getCacheKey());
   return result;
 }

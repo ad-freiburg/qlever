@@ -61,6 +61,8 @@ class CartesianProductJoin : public Operation {
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 
+  std::unique_ptr<Operation> cloneImpl() const override;
+
  public:
   float getMultiplicity([[maybe_unused]] size_t col) override;
 
@@ -68,8 +70,6 @@ class CartesianProductJoin : public Operation {
 
   // The Cartesian product join can efficiently evaluate a limited result.
   [[nodiscard]] bool supportsLimit() const override { return true; }
-
-  std::unique_ptr<Operation> cloneImpl() const override;
 
  protected:
   // Don't promise any sorting of the result.

@@ -53,9 +53,9 @@ class Filter : public Operation {
     return _subtree->getMultiplicity(col);
   }
 
+ private:
   std::unique_ptr<Operation> cloneImpl() const override;
 
- private:
   VariableToColumnMap computeVariableToColumnMap() const override {
     return _subtree->getVariableColumns();
   }

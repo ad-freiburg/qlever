@@ -61,9 +61,9 @@ class Union : public Operation {
     return {_subtrees[0].get(), _subtrees[1].get()};
   }
 
+ private:
   std::unique_ptr<Operation> cloneImpl() const override;
 
- private:
   ProtoResult computeResult(bool requestLaziness) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;

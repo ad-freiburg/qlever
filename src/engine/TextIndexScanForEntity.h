@@ -92,9 +92,9 @@ class TextIndexScanForEntity : public Operation {
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 
+ private:
   std::unique_ptr<Operation> cloneImpl() const override;
 
- private:
   const VocabIndex& getVocabIndexOfFixedEntity() const {
     AD_CONTRACT_CHECK(hasFixedEntity());
     return std::get<FixedEntity>(varOrFixed_.entity_).second;
