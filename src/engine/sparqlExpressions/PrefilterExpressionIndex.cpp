@@ -567,7 +567,7 @@ std::vector<PrefilterExprVariablePair> makePrefilterExpressionVec(
   if (mirrored) {
     using P = std::pair<CompOp, CompOp>;
     // Retrieve by map the corresponding mirrored `CompOp` value for the given
-    // `CompOp comparison` template argument. E.g., this proocedure will
+    // `CompOp comparison` template argument. E.g., this procedure will
     // transform the relational expression `referenceValue > ?var` into `?var
     // < referenceValue`.
     constexpr ad_utility::ConstexprMap<CompOp, CompOp, 6> mirrorMap(

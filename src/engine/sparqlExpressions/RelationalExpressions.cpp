@@ -436,7 +436,7 @@ RelationalExpression<comp>::getPrefilterExpressionForMetadata(
 
   const auto getOptVariableAndIsYear = [](const SparqlExpression* child)
       -> std::optional<std::pair<Variable, bool>> {
-    // (1) The direct child alread contains the Variable.
+    // (1) The direct child already contains the Variable.
     if (auto optVariable = child->getVariableOrNullopt(); optVariable) {
       return std::make_pair(optVariable.value(), false);
     }
