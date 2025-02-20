@@ -2057,9 +2057,12 @@ auto QueryPlanner::createJoinWithUnitedTransitivePath(
                                                   bool unionIsLeft) {
     auto* qec = other._qet->getRootOperation()->getExecutionContext();
 
+    // Clone `other` once, to avoid using it twice in the same query plan.
+    SubtreePlan clonedOther = other;
+    clonedOther._qet = other._qet->clone();
     SubtreePlan tmpPlan = other;
     const auto& leftCandidate = unionIsLeft ? tmpPlan : other;
-    const auto& rightCandidate = unionIsLeft ? other : tmpPlan;
+    const auto& rightCandidate = unionIsLeft ? clonedOther : tmpPlan;
 
     tmpPlan._qet = unionOperation.leftChild();
     auto joinedLeft = createJoinCandidates(leftCandidate, rightCandidate, jcs);
