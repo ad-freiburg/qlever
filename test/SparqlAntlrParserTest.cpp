@@ -2181,7 +2181,9 @@ TEST(SparqlParser, Update) {
                           const std::string& query, auto&& expected,
                           ad_utility::source_location l =
                               ad_utility::source_location::current()) {
-    expectUpdate_(query, testing::AllOf(expected, m::pq::OriginalString(query)),
+    expectUpdate_(query,
+                  testing::ElementsAre(
+                      testing::AllOf(expected, m::pq::OriginalString(query))),
                   l);
   };
   auto expectUpdateFails = ExpectParseFails<&Parser::update>{};
@@ -2285,10 +2287,6 @@ TEST(SparqlParser, Update) {
           m::GraphUpdate({{Var("?a"), Iri("<b>"), Iri("<c>"), noGraph}}, {},
                          Iri("<foo>")),
           m::GraphPattern(m::Triples({{Iri("<d>"), "<e>", Var{"?a"}}}))));
-  // Chaining multiple updates into one query is not supported.
-  expectUpdateFails(
-      "INSERT DATA { <a> <b> <c> } ; INSERT { ?a <b> <c> } WHERE { <d> <e> ?a "
-      "}");
   expectUpdate("LOAD <foo>",
                m::UpdateClause(m::Load(false, Iri("<foo>"), std::nullopt),
                                m::GraphPattern()));
@@ -2318,17 +2316,27 @@ TEST(SparqlParser, Update) {
       m::GraphUpdate({}, {{Iri("<a>"), Iri("<b>"), Iri("<c>"), noGraph}},
                      std::nullopt),
       m::GraphPattern());
+  const auto deleteWhereAllMatcher = m::UpdateClause(
+      m::GraphUpdate({{Var("?s"), Var("?p"), Var("?o"), noGraph}}, {},
+                     std::nullopt),
+      m::GraphPattern(m::Triples({{Var("?s"), "?p", Var("?o")}})));
   expectUpdate("INSERT DATA { <a> <b> <c> }", simpleInsertMatcher);
   expectUpdate("INSERT DATA { <a> <b> <c> };", simpleInsertMatcher);
-  const auto multipleUpdatesError = testing::HasSubstr(
-      "Not supported: Multiple updates in one query are "
-      "currently not supported by QLever");
-  expectUpdateFails("INSERT DATA { <a> <b> <c> }; PREFIX foo: <foo>",
-                    multipleUpdatesError);
-  expectUpdateFails("INSERT DATA { <a> <b> <c> }; BASE <bar>",
-                    multipleUpdatesError);
-  expectUpdateFails("INSERT DATA { <a> <b> <c> }; INSERT DATA { <d> <e> <f> }",
-                    multipleUpdatesError);
+  // Multiple Updates
+  // TODO:
+  // - prefix/base spillage between updates
+  // - ending with non empty prologue but empty update body
+  expectUpdate_(
+      "INSERT DATA { <a> <b> <c> };",
+      ElementsAre(AllOf(simpleInsertMatcher,
+                        m::pq::OriginalString("INSERT DATA { <a> <b> <c> }"))));
+
+  expectUpdate_(
+      "INSERT DATA { <a> <b> <c> }; DELETE WHERE { ?s ?p ?o }",
+      ElementsAre(AllOf(simpleInsertMatcher,
+                        m::pq::OriginalString("INSERT DATA { <a> <b> <c> }")),
+                  AllOf(deleteWhereAllMatcher,
+                        m::pq::OriginalString("DELETE WHERE { ?s ?p ?o }"))));
 }
 
 TEST(SparqlParser, QueryOrUpdate) {
@@ -2346,20 +2354,23 @@ TEST(SparqlParser, QueryOrUpdate) {
   expectQueryFails("PREFIX ex: <http://example.org>", emptyMatcher);
   expectQueryFails("### Some comment \n \n #someMoreComments", emptyMatcher);
   // Hit all paths for coverage.
-  expectQuery("SELECT ?a WHERE { ?a <is-a> <b> }",
-              AllOf(m::SelectQuery(m::Select({Var{"?a"}}),
-                                   m::GraphPattern(m::Triples(
-                                       {{Var{"?a"}, "<is-a>", Iri("<b>")}}))),
-                    m::pq::OriginalString("SELECT ?a WHERE { ?a <is-a> <b> }"),
-                    m::VisibleVariables({Var{"?a"}})));
+  expectQuery(
+      "SELECT ?a WHERE { ?a <is-a> <b> }",
+      ElementsAre(AllOf(
+          m::SelectQuery(
+              m::Select({Var{"?a"}}),
+              m::GraphPattern(m::Triples({{Var{"?a"}, "<is-a>", Iri("<b>")}}))),
+          m::pq::OriginalString("SELECT ?a WHERE { ?a <is-a> <b> }"),
+          m::VisibleVariables({Var{"?a"}}))));
   expectQuery(
       "INSERT DATA { <a> <b> <c> }",
-      AllOf(m::UpdateClause(m::GraphUpdate({},
-                                           {{Iri("<a>"), Iri("<b>"), Iri("<c>"),
-                                             std::monostate{}}},
-                                           std::nullopt),
-                            m::GraphPattern()),
-            m::pq::OriginalString("INSERT DATA { <a> <b> <c> }")));
+      ElementsAre(AllOf(
+          m::UpdateClause(
+              m::GraphUpdate(
+                  {}, {{Iri("<a>"), Iri("<b>"), Iri("<c>"), std::monostate{}}},
+                  std::nullopt),
+              m::GraphPattern()),
+          m::pq::OriginalString("INSERT DATA { <a> <b> <c> }"))));
 }
 
 TEST(SparqlParser, GraphOrDefault) {

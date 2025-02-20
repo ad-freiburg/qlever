@@ -231,7 +231,7 @@ ParsedQuery Visitor::visit(Parser::QueryContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-ParsedQuery Visitor::visit(Parser::QueryOrUpdateContext* ctx) {
+std::vector<ParsedQuery> Visitor::visit(Parser::QueryOrUpdateContext* ctx) {
   if (ctx->update() && !ctx->update()->update1()) {
     // An empty query currently matches the `update()` rule. We handle this
     // case manually to get a better error message. If an update query doesn't
@@ -242,7 +242,8 @@ ParsedQuery Visitor::visit(Parser::QueryOrUpdateContext* ctx) {
                 "Empty query (this includes queries that only consist "
                 "of comments or prefix declarations).");
   }
-  return visitAlternative<ParsedQuery>(ctx->query(), ctx->update());
+  return visitAlternative<std::vector<ParsedQuery>>(ctx->query(),
+                                                    ctx->update());
 }
 
 // ____________________________________________________________________________________
@@ -506,23 +507,34 @@ std::optional<Values> Visitor::visit(Parser::ValuesClauseContext* ctx) {
 }
 
 // ____________________________________________________________________________
-ParsedQuery Visitor::visit(Parser::UpdateContext* ctx) {
+std::vector<ParsedQuery> Visitor::visit(Parser::UpdateContext* ctx) {
   // The prologue (BASE and PREFIX declarations)  only affects the internal
   // state of the visitor.
   visit(ctx->prologue());
-
-  auto update = visit(ctx->update1());
-
-  // More than one operation in a single update request is not yet supported,
-  // but a semicolon after a single update is allowed.
-  if (ctx->update() && !ctx->update()->getText().empty()) {
-    parsedQuery_ = ParsedQuery{};
-    reportNotSupported(ctx->update(), "Multiple updates in one query are");
+  if (!ctx->update1()) {
+    return {};
   }
 
-  update._originalString = ctx->getStart()->getInputStream()->toString();
+  auto thisUpdate = visit(ctx->update1());
+  // The string representation of the Update is from the beginning of that
+  // updates prologue to the end of the update. The `;` between queries is
+  // ignored in the string representation.
+  const size_t updateStartPos = ctx->prologue()->getStart()->getStartIndex();
+  const size_t updateEndPos = ctx->update1()->getStop()->getStopIndex();
+  thisUpdate._originalString = std::string{ad_utility::getUTF8Substring(
+      ctx->getStart()->getInputStream()->toString(), updateStartPos,
+      updateEndPos - updateStartPos + 1)};
+  std::vector updates{std::move(thisUpdate)};
 
-  return update;
+  if (ctx->update()) {
+    // This is a new operation, reset the internal `parsedQuery_` including the
+    // prefixes.
+    // TODO: do we want to reset the prefixes between chained updates?
+    parsedQuery_ = {};
+    ad_utility::appendVector(updates, visit(ctx->update()));
+  }
+
+  return updates;
 }
 
 // ____________________________________________________________________________________
@@ -535,7 +547,7 @@ ParsedQuery Visitor::visit(Parser::Update1Context* ctx) {
         ctx->move(), ctx->copy(), ctx->insertData(), ctx->deleteData());
   }
 
-  return parsedQuery_;
+  return std::move(parsedQuery_);
 }
 
 // ____________________________________________________________________________________

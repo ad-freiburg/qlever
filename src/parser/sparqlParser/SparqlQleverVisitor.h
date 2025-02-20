@@ -129,7 +129,7 @@ class SparqlQleverVisitor {
   }
 
   // ___________________________________________________________________________
-  ParsedQuery visit(Parser::QueryOrUpdateContext* ctx);
+  std::vector<ParsedQuery> visit(Parser::QueryOrUpdateContext* ctx);
 
   // ___________________________________________________________________________
   ParsedQuery visit(Parser::QueryContext* ctx);
@@ -201,7 +201,7 @@ class SparqlQleverVisitor {
 
   std::optional<parsedQuery::Values> visit(Parser::ValuesClauseContext* ctx);
 
-  ParsedQuery visit(Parser::UpdateContext* ctx);
+  std::vector<ParsedQuery> visit(Parser::UpdateContext* ctx);
 
   ParsedQuery visit(Parser::Update1Context* ctx);
 
