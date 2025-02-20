@@ -361,7 +361,12 @@ struct DateIdOrLiteralValueGetter : Mixin<DateIdOrLiteralValueGetter> {
   // contain date-related string values.
   OptIdOrString operator()(ValueId id, const EvaluationContext* context) const {
     if (id.getDatatype() == Datatype::Date) {
-      return id;
+      // Additionally check that `DateYearOrDuration` doesn't hold a
+      // `DayTimeDuration` value.
+      if (id.getDate().isDate()) {
+        return id;
+      }
+      return std::nullopt;
     }
     return LiteralFromIdGetter{}(id, context);
   }

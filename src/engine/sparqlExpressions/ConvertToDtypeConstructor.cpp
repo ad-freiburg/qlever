@@ -8,21 +8,19 @@
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 
 /*
-  The SparqlExpressions specified in the following namespace sections enable
-  xsd:datatype casting/mapping for XML-schema-datatype values.
+  The SparqlExpressions specified in the following namespace sections
+  enable datatype casting/mapping for XML-schema-datatype values.
 
   For more details regarding the casting/mapping definition see:
   https://www.w3.org/TR/sparql11-query/#FunctionMapping
 
   EXAMPLES
-  (1) BIND(xsd:dateTime(?var) as ?dateTimeValue) will try to convert the
-  date-time provided (bound to ?var) as an xsd:string value to an actual
-  xsd:dateTime value and bind it to ?dateTimeValue under the condition the
-  string was appropriately formatted.
+  (1) `xsd:dateTime(?var)` attempts to convert the date-time provided in form of
+  a xsd:string value, which is bound to ?var, into an actual xsd:dateTime
+  datatype value. If the conversion fails, the result is `undefined`.
 
-  (2) BIND(xsd:integer(?var) to ?integerValue) attempts to convert ?var to an
-  xsd:integer value and bind it to variable ?integerValue, given the datatype
-  casting can be successfully performed.
+  (2) `xsd:integer(?var)` attempts to convert the value bound to ?var into an
+  xsd:integer. If the conversion fails, the result is `undefined`.
 */
 
 namespace sparqlExpression {
@@ -139,9 +137,9 @@ inline auto convertStringToDateTimeValueId =
   }
   const auto& inputValue = input.value();
 
-  // Remark: If the parsing procedure for datetime / date string values with
-  // parseXsdDatetimeGetOptDate / parseXsdDateGetOptDate fails,
-  // Id::makeUndefined() is returned as well.
+  // Remark: If the parsing procedure for datetime/date string values with
+  // parseXsdDatetimeGetOptDate/parseXsdDateGetOptDate fails,
+  // return Id::makeUndefined().
   const auto retrieveValueId = [](std::optional<DateYearOrDuration> optValue) {
     if (optValue.has_value()) {
       return Id::makeFromDate(optValue.value());
@@ -150,7 +148,7 @@ inline auto convertStringToDateTimeValueId =
   };
 
   if (auto* valueId = std::get_if<ValueId>(&inputValue)) {
-    return valueId->getDate().isDate() ? *valueId : Id::makeUndefined();
+    return *valueId;
   }
 
   auto* str = std::get_if<std::string>(&inputValue);
