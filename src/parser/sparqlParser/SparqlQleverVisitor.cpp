@@ -179,6 +179,16 @@ ExpressionPtr Visitor::processIriFunctionCall(
       return sparqlExpression::makeConvertToStringExpression(
           std::move(argList[0]));
     }
+    if (functionName == "dateTime") {
+      checkNumArgs(1);
+      return sparqlExpression::makeConvertToDateTimeExpression(
+          std::move(argList[0]));
+    }
+    if (functionName == "date") {
+      checkNumArgs(1);
+      return sparqlExpression::makeConvertToDateExpression(
+          std::move(argList[0]));
+    }
   }
 
   // QLever-internal functions.
