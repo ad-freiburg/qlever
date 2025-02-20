@@ -140,6 +140,10 @@ std::array<size_t, 3> Permutation::toKeyOrder(Permutation::Enum permutation) {
       return {2, 1, 0};
     case OSP:
       return {2, 0, 1};
+    // TODO<joka921> Do we need this function for the GPOS and GPOS permutation?
+    // And do we need
+    default:
+      AD_FAIL();
   }
   AD_FAIL();
 }
@@ -160,6 +164,10 @@ std::string_view Permutation::toString(Permutation::Enum permutation) {
       return "OPS";
     case OSP:
       return "OSP";
+    case GPOS:
+      return "GPOS";
+    case GPSO:
+      return "GPSO";
   }
   AD_FAIL();
 }

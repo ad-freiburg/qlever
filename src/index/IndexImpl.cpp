@@ -392,9 +392,11 @@ void IndexImpl::createFromFiles(
     createSecondPermutationPair(NumColumnsIndexBuilding,
                                 secondSorter.getSortedBlocks<0>(), thirdSorter);
     secondSorter.clear();
+    auto fourthSorter = makeSorter<SortByGPSO>("gpos-sorter");
     createThirdPermutationPair(NumColumnsIndexBuilding,
-                               thirdSorter.getSortedBlocks<0>());
+                               thirdSorter.getSortedBlocks<0>(), fourthSorter);
     configurationJson_["has-all-permutations"] = true;
+
   } else {
     // Load all permutations and also load the patterns. In this case the
     // `createFirstPermutationPair` function returns the next sorter, already
@@ -773,7 +775,7 @@ std::tuple<size_t, IndexImpl::IndexMetaDataMmapDispatcher::WriteType,
 IndexImpl::createPermutationPairImpl(size_t numColumns, const string& fileName1,
                                      const string& fileName2,
                                      auto&& sortedTriples,
-                                     std::array<size_t, 3> permutation,
+                                     Permutation::KeyOrder permutation,
                                      auto&&... perTripleCallbacks) {
   using MetaData = IndexMetaDataMmapDispatcher::WriteType;
   MetaData metaData1, metaData2;
@@ -1443,6 +1445,10 @@ Permutation& IndexImpl::getPermutation(Permutation::Enum p) {
       return osp_;
     case OPS:
       return ops_;
+    case GPOS:
+      return gpos_;
+    case GPSO:
+      return gpso_;
   }
   AD_FAIL();
 }
@@ -1655,6 +1661,18 @@ CPP_template_def(typename... NextSorter)(requires(
   if (doWriteConfiguration) {
     writeConfiguration();
   }
+};
+
+// _____________________________________________________________________________
+CPP_template_def(typename... NextSorter)(requires(
+    sizeof...(NextSorter) <=
+    1)) void IndexImpl::createGPSOAndGPOS(size_t numColumns,
+                                          BlocksOfTriples sortedTriples,
+                                          NextSorter&&... nextSorter) {
+  // TODO<joka921> What metadata do we want in the `configurationJson_`?
+  [[maybe_unused]] size_t numSomethingTotal =
+      createPermutationPair(numColumns, AD_FWD(sortedTriples), gpso_, gpos_,
+                            nextSorter.makePushCallback()...);
 };
 
 // _____________________________________________________________________________

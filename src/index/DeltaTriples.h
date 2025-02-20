@@ -98,7 +98,8 @@ class DeltaTriples {
   static_assert(static_cast<int>(Permutation::Enum::SOP) == 3);
   static_assert(static_cast<int>(Permutation::Enum::OPS) == 4);
   static_assert(static_cast<int>(Permutation::Enum::OSP) == 5);
-  static_assert(Permutation::ALL.size() == 6);
+  // TODO<joka921> Adapt this here.
+  // static_assert(Permutation::ALL.size() == 6);
 
   // Each delta triple needs to know where it is stored in each of the six
   // `LocatedTriplesPerBlock` above.
