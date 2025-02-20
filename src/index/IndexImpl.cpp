@@ -392,10 +392,14 @@ void IndexImpl::createFromFiles(
     createSecondPermutationPair(NumColumnsIndexBuilding,
                                 secondSorter.getSortedBlocks<0>(), thirdSorter);
     secondSorter.clear();
-    auto fourthSorter = makeSorter<SortByGPSO>("gpos-sorter");
+    auto fourthSorter =
+        makeSorter<SortByGPSO, NumColumnsIndexBuilding>("gpos-sorter");
     createThirdPermutationPair(NumColumnsIndexBuilding,
                                thirdSorter.getSortedBlocks<0>(), fourthSorter);
     configurationJson_["has-all-permutations"] = true;
+
+    createGPSOAndGPOS(NumColumnsIndexBuilding,
+                      fourthSorter.getSortedBlocks<0>());
 
   } else {
     // Load all permutations and also load the patterns. In this case the
@@ -408,9 +412,14 @@ void IndexImpl::createFromFiles(
         buildOspWithPatterns(std::move(patternOutput.value()),
                              *indexBuilderData.sorter_.internalTriplesPso_);
     createInternalPsoAndPosAndSetMetadata();
+    auto fourthSorter =
+        makeSorter<SortByGPSO, NumColumnsIndexBuilding + 2>("gpos-sorter");
     createThirdPermutationPair(NumColumnsIndexBuilding + 2,
 
-                               thirdSorterPtr->template getSortedBlocks<0>());
+                               thirdSorterPtr->template getSortedBlocks<0>(),
+                               fourthSorter);
+    createGPSOAndGPOS(NumColumnsIndexBuilding + 2,
+                      fourthSorter.getSortedBlocks<0>());
     configurationJson_["has-all-permutations"] = true;
   }
 
@@ -803,10 +812,18 @@ IndexImpl::createPermutationPairImpl(size_t numColumns, const string& fileName1,
   std::vector<std::function<void(const IdTableStatic<0>&)>> perBlockCallbacks{
       liftCallback(perTripleCallbacks)...};
 
-  auto [numDistinctCol0, blockData1, blockData2] =
-      CompressedRelationWriter::createPermutationPair(
+  auto [numDistinctCol0, blockData1, blockData2] = [&]() {
+    if (permutation[0] != ADDITIONAL_COLUMN_GRAPH_ID) {
+      return CompressedRelationWriter::createPermutationPair(
           fileName1, {writer1, callback1}, {writer2, callback2},
           AD_FWD(sortedTriples), permutation, perBlockCallbacks);
+    } else {
+      return CompressedRelationWriter::createPermutationPair<
+          std::array<size_t, 2>{2, 3}>(
+          fileName1, {writer1, callback1}, {writer2, callback2},
+          AD_FWD(sortedTriples), permutation, perBlockCallbacks);
+    }
+  }();
   metaData1.blockData() = std::move(blockData1);
   metaData2.blockData() = std::move(blockData2);
 

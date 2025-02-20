@@ -10,7 +10,6 @@
 #include "backports/algorithm.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
-#include "index/Permutation.h"
 #include "index/ScanSpecification.h"
 #include "parser/data/LimitOffsetClause.h"
 #include "util/CancellationHandle.h"
@@ -287,12 +286,14 @@ class CompressedRelationWriter {
     std::vector<CompressedBlockMetadata> blockMetadataSwitched_;
   };
 
-  template <std::array<size_t, 2> swapIndices = {1, 2}>
+  // TODO<joka921> Include this into a common header.
+  using KeyOrder = std::array<size_t, 4>;
+
+  template <std::array<size_t, 2> swapIndices = std::array<size_t, 2>{1, 2}>
   static PermutationPairResult createPermutationPair(
       const std::string& basename, WriterAndCallback writerAndCallback1,
       WriterAndCallback writerAndCallback2,
-      cppcoro::generator<IdTableStatic<0>> sortedTriples,
-      Permutation::KeyOrder permutation,
+      cppcoro::generator<IdTableStatic<0>> sortedTriples, KeyOrder permutation,
       const std::vector<std::function<void(const IdTableStatic<0>&)>>&
           perBlockCallbacks);
 

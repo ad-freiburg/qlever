@@ -28,7 +28,7 @@ struct LocatedTriplesSnapshot;
 class Permutation {
  public:
   // TODO<joka921> comment.
-  using KeyOrder = std::array<size_t, 3>;
+  using KeyOrder = std::array<size_t, 4>;
   /// Identifiers for the six possible permutations.
   enum struct Enum { PSO, POS, SPO, SOP, OPS, OSP, GPSO, GPOS };
   // Unfortunately there is a bug in GCC that doesn't allow use to simply use

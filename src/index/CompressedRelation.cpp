@@ -1384,6 +1384,9 @@ auto CompressedRelationWriter::createPermutationPair(
   auto compare = [](const auto& a, const auto& b) {
     // TODO<joka921> That is hacky, it should be `everything in the key order
     // after the switch indices`.
+    // TODO<joka921> And it doesn't work, we either have to also compare the
+    // columns before swapIndices[0], or we have to keep the input stable for
+    // combinations of the same GP
     return std::tie(a[swapIndices[0]], a[swapIndices[1]],
                     a[ADDITIONAL_COLUMN_GRAPH_ID]) <
            std::tie(b[swapIndices[0]], b[swapIndices[1]],
@@ -1476,7 +1479,7 @@ auto CompressedRelationWriter::createPermutationPair(
   // the relation.
   std::vector<ColumnIndex> permutedColIndices{permutation.begin(),
                                               permutation.end()};
-  for (size_t colIdx = 3; colIdx < numColumns; ++colIdx) {
+  for (size_t colIdx = permutation.size(); colIdx < numColumns; ++colIdx) {
     permutedColIndices.push_back(colIdx);
   }
   inputWaitTimer.cont();
@@ -1559,6 +1562,24 @@ auto CompressedRelationWriter::createPermutationPair(
   return {numDistinctCol0, std::move(writer1).getFinishedBlocks(),
           std::move(writer2).getFinishedBlocks()};
 }
+// _____________________________________________________________________________
+// template <std::array<size_t, 2> swapIndices>
+template auto
+CompressedRelationWriter::createPermutationPair<std::array<size_t, 2>{1, 2}>(
+    const std::string& basename, WriterAndCallback writerAndCallback1,
+    WriterAndCallback writerAndCallback2,
+    cppcoro::generator<IdTableStatic<0>> sortedTriples,
+    Permutation::KeyOrder permutation,
+    const std::vector<std::function<void(const IdTableStatic<0>&)>>&
+        perBlockCallbacks) -> PermutationPairResult;
+template auto
+CompressedRelationWriter::createPermutationPair<std::array<size_t, 2>{2, 3}>(
+    const std::string& basename, WriterAndCallback writerAndCallback1,
+    WriterAndCallback writerAndCallback2,
+    cppcoro::generator<IdTableStatic<0>> sortedTriples,
+    Permutation::KeyOrder permutation,
+    const std::vector<std::function<void(const IdTableStatic<0>&)>>&
+        perBlockCallbacks) -> PermutationPairResult;
 
 // _____________________________________________________________________________
 std::optional<CompressedRelationMetadata>

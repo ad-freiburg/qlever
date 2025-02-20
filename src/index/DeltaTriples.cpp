@@ -33,10 +33,14 @@ DeltaTriples::locateAndAddTriples(CancellationHandle cancellationHandle,
       intermediateHandles;
   for (auto permutation : Permutation::ALL) {
     auto& perm = index_.getPermutation(permutation);
+    // TODO<joka921> Also make this work correctly for the graph triples etc.
+    auto keyOrder = perm.keyOrder();
+    auto actualKeyOrder = std::array{keyOrder[0], keyOrder[1], keyOrder[2]};
+
     auto locatedTriples = LocatedTriple::locateTriplesInPermutation(
         // TODO<qup42>: replace with `getAugmentedMetadata` once integration
         //  is done
-        idTriples, perm.metaData().blockData(), perm.keyOrder(), shouldExist,
+        idTriples, perm.metaData().blockData(), actualKeyOrder, shouldExist,
         cancellationHandle);
     cancellationHandle->throwIfCancelled();
     intermediateHandles[static_cast<size_t>(permutation)] =

@@ -125,25 +125,25 @@ IdTable Permutation::getDistinctCol0IdsAndCounts(
 }
 
 // _____________________________________________________________________
-std::array<size_t, 3> Permutation::toKeyOrder(Permutation::Enum permutation) {
+auto Permutation::toKeyOrder(Permutation::Enum permutation) -> KeyOrder {
   using enum Permutation::Enum;
   switch (permutation) {
     case POS:
-      return {1, 2, 0};
+      return {1, 2, 0, 3};
     case PSO:
-      return {1, 0, 2};
+      return {1, 0, 2, 3};
     case SOP:
-      return {0, 2, 1};
+      return {0, 2, 1, 3};
     case SPO:
-      return {0, 1, 2};
+      return {0, 1, 2, 3};
     case OPS:
-      return {2, 1, 0};
+      return {2, 1, 0, 3};
     case OSP:
-      return {2, 0, 1};
-    // TODO<joka921> Do we need this function for the GPOS and GPOS permutation?
-    // And do we need
-    default:
-      AD_FAIL();
+      return {2, 0, 1, 3};
+    case GPOS:
+      return {3, 1, 2, 0};
+    case GPSO:
+      return {3, 1, 0, 2};
   }
   AD_FAIL();
 }
