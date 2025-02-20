@@ -240,3 +240,9 @@ size_t Filter::getCostEstimate() {
                  _subtree->getRootOperation()->getPrimarySortKeyVariable())
              .costEstimate;
 }
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> Filter::cloneImpl() const {
+  return std::make_unique<Filter>(_executionContext, _subtree->clone(),
+                                  _expression);
+}

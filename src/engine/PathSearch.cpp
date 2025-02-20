@@ -471,3 +471,18 @@ void PathSearch::pathsToResultTable(IdTable& tableDyn, PathsLimited& paths,
 
   tableDyn = std::move(table).toDynamic();
 }
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> PathSearch::cloneImpl() const {
+  auto copy = std::make_unique<PathSearch>(*this);
+  copy->subtree_ = subtree_->clone();
+  auto cloneIfNonEmpty = [](auto& tree) {
+    if (tree.has_value()) {
+      tree = tree.value()->clone();
+    }
+  };
+  cloneIfNonEmpty(copy->sourceTree_);
+  cloneIfNonEmpty(copy->targetTree_);
+  cloneIfNonEmpty(copy->sourceAndTargetTree_);
+  return copy;
+}

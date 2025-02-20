@@ -8,6 +8,7 @@
 #include "../util/GTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/OperationTestHelpers.h"
 #include "engine/CartesianProductJoin.h"
 #include "engine/QueryExecutionTree.h"
 
@@ -629,3 +630,19 @@ INSTANTIATE_TEST_SUITE_P(
       }
       return std::move(stream).str();
     });
+
+// _____________________________________________________________________________
+TEST(CartesianProductJoin, clone) {
+  auto qec = getQec();
+  std::vector<std::shared_ptr<QueryExecutionTree>> subtrees;
+  using Vars = std::vector<std::optional<Variable>>;
+  subtrees.push_back(ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{3, 4}}),
+      Vars{Variable{"?x"}, std::nullopt}));
+  CartesianProductJoin join{qec, std::move(subtrees)};
+
+  auto clone = join.clone();
+  ASSERT_TRUE(clone);
+  EXPECT_THAT(join, IsDeepCopy(*clone));
+  EXPECT_EQ(clone->getDescriptor(), join.getDescriptor());
+}

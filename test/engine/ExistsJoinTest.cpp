@@ -7,9 +7,9 @@
 #include "../util/GTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/OperationTestHelpers.h"
 #include "engine/ExistsJoin.h"
 #include "engine/IndexScan.h"
-#include "engine/NeutralElementOperation.h"
 #include "engine/QueryExecutionTree.h"
 
 using namespace ad_utility::testing;
@@ -132,4 +132,23 @@ TEST(Exists, computeResult) {
                         makeIdTableFromVector({{U, U}, {3, 7}}), {}, 1);
   testExistsFromIdTable(makeIdTableFromVector({{U, U}, {3, 7}}),
                         IdTable(2, alloc), {false, false}, 2);
+}
+
+// _____________________________________________________________________________
+TEST(Exists, clone) {
+  auto* qec = getQec();
+  ExistsJoin existsJoin{
+      qec,
+      ad_utility::makeExecutionTree<ValuesForTesting>(
+          qec, makeIdTableFromVector({{0, 1}}),
+          std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?y"}}),
+      ad_utility::makeExecutionTree<ValuesForTesting>(
+          qec, makeIdTableFromVector({{0, 1}}),
+          std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?y"}}),
+      Variable{"?z"}};
+
+  auto clone = existsJoin.clone();
+  ASSERT_TRUE(clone);
+  EXPECT_THAT(existsJoin, IsDeepCopy(*clone));
+  EXPECT_EQ(clone->getDescriptor(), existsJoin.getDescriptor());
 }
