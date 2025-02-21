@@ -5,9 +5,6 @@
 #pragma once
 
 #include "engine/ParsedRequestBuilder.h"
-#include "util/TypeIdentity.h"
-#include "util/http/HttpUtils.h"
-#include "util/http/beast.h"
 
 // Parses HTTP requests to `ParsedRequests` (a representation of Query, Update,
 // Graph Store and internal operations) according to the SPARQL specifications.
@@ -30,7 +27,7 @@ class SPARQLProtocol {
   // Parse an HTTP GET request into a `ParsedRequest`. The
   // `ParsedRequestBuilder` must have already extracted the access token.
   static ad_utility::url_parser::ParsedRequest parseGET(
-      ParsedRequestBuilder parsedRequestBuilder);
+      const RequestType& request);
 
   // Parse an HTTP POST request with content-type
   // `application/x-www-form-urlencoded` into a `ParsedRequest`.
@@ -42,26 +39,7 @@ class SPARQLProtocol {
   // `application/sparql-query` and `application/sparql-update`.
   template <typename Operation>
   static ad_utility::url_parser::ParsedRequest parseSPARQLPOST(
-      const RequestType& request, std::string_view contentType) {
-    using namespace ad_utility::url_parser::sparqlOperation;
-    auto parsedRequestBuilder = ParsedRequestBuilder(request);
-    parsedRequestBuilder.reportUnsupportedContentTypeIfGraphStore(contentType);
-    parsedRequestBuilder.parsedRequest_.operation_ =
-        Operation{request.body(), {}};
-    parsedRequestBuilder.extractDatasetClauses();
-    parsedRequestBuilder.extractAccessToken(request);
-    return std::move(parsedRequestBuilder).build();
-  }
-
-  // Parse an HTTP POST request with content type `application/sparql-query`
-  // into a `ParsedRequest`.
-  static ad_utility::url_parser::ParsedRequest parseQueryPOST(
-      const RequestType& request);
-
-  // Parse an HTTP POST request with content type `application/sparql-update`
-  // into a `ParsedRequest`.
-  static ad_utility::url_parser::ParsedRequest parseUpdatePOST(
-      const RequestType& request);
+      const RequestType& request, std::string_view contentType);
 
   // Parse an HTTP POST request into a `ParsedRequest`.
   static ad_utility::url_parser::ParsedRequest parsePOST(

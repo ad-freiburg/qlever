@@ -4,7 +4,6 @@
 
 #include "ParsedRequestBuilder.h"
 
-using namespace ad_utility::use_type_identity;
 using namespace ad_utility::url_parser::sparqlOperation;
 
 // ____________________________________________________________________________
@@ -25,10 +24,10 @@ void ParsedRequestBuilder::extractAccessToken(const RequestType& request) {
 
 // ____________________________________________________________________________
 void ParsedRequestBuilder::extractDatasetClauses() {
-  extractDatasetClauseIfOperationIs(ti<Query>, "default-graph-uri", false);
-  extractDatasetClauseIfOperationIs(ti<Query>, "named-graph-uri", true);
-  extractDatasetClauseIfOperationIs(ti<Update>, "using-graph-uri", false);
-  extractDatasetClauseIfOperationIs(ti<Update>, "using-named-graph-uri", true);
+  extractDatasetClauseIfOperationIs<Query>("default-graph-uri", false);
+  extractDatasetClauseIfOperationIs<Query>("named-graph-uri", true);
+  extractDatasetClauseIfOperationIs<Update>("using-graph-uri", false);
+  extractDatasetClauseIfOperationIs<Update>("using-named-graph-uri", true);
 }
 
 // ____________________________________________________________________________
@@ -85,7 +84,7 @@ void ParsedRequestBuilder::reportUnsupportedContentTypeIfGraphStore(
 // ____________________________________________________________________________
 template <typename Operation>
 void ParsedRequestBuilder::extractDatasetClauseIfOperationIs(
-    TI<Operation>, const std::string& key, bool isNamed) {
+    const std::string& key, bool isNamed) {
   if (Operation* op = std::get_if<Operation>(&parsedRequest_.operation_)) {
     ad_utility::appendVector(op->datasetClauses_,
                              ad_utility::url_parser::parseDatasetClausesFrom(
@@ -95,8 +94,7 @@ void ParsedRequestBuilder::extractDatasetClauseIfOperationIs(
 
 // ____________________________________________________________________________
 template <typename Operation>
-void ParsedRequestBuilder::extractOperationIfSpecified(TI<Operation>,
-                                                       string_view paramName) {
+void ParsedRequestBuilder::extractOperationIfSpecified(string_view paramName) {
   auto operation = ad_utility::url_parser::getParameterCheckAtMostOnce(
       parsedRequest_.parameters_, paramName);
   if (operation.has_value()) {
@@ -107,10 +105,10 @@ void ParsedRequestBuilder::extractOperationIfSpecified(TI<Operation>,
   }
 }
 
-template void ParsedRequestBuilder::extractOperationIfSpecified(
-    TI<Query>, string_view paramName);
-template void ParsedRequestBuilder::extractOperationIfSpecified(
-    TI<Update>, string_view paramName);
+template void ParsedRequestBuilder::extractOperationIfSpecified<Query>(
+    string_view paramName);
+template void ParsedRequestBuilder::extractOperationIfSpecified<Update>(
+    string_view paramName);
 
 // ____________________________________________________________________________
 GraphOrDefault ParsedRequestBuilder::extractTargetGraph(

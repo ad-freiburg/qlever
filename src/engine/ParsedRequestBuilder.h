@@ -4,9 +4,8 @@
 
 #pragma once
 
-#include "util/TypeIdentity.h"
-#include "util/http/HttpUtils.h"
 #include "util/http/UrlParser.h"
+#include "util/http/beast.h"
 
 // Helper for parsing `HttpRequest` into `ParsedRequest`. The parsing has many
 // common patterns but the details are slightly different. This struct
@@ -40,8 +39,7 @@ struct ParsedRequestBuilder {
   // is already set is an error. Note: processed parameters are removed from the
   // parameter map.
   template <typename Operation>
-  void extractOperationIfSpecified(ad_utility::use_type_identity::TI<Operation>,
-                                   string_view paramName);
+  void extractOperationIfSpecified(string_view paramName);
 
   // Returns whether the request is a Graph Store operation.
   bool isGraphStoreOperation() const;
@@ -65,9 +63,7 @@ struct ParsedRequestBuilder {
   // dataset clause's IRI is the value of parameter `key`. The `isNamed_` of the
   // dataset clause is as given.
   template <typename Operation>
-  void extractDatasetClauseIfOperationIs(
-      ad_utility::use_type_identity::TI<Operation>, const std::string& key,
-      bool isNamed);
+  void extractDatasetClauseIfOperationIs(const std::string& key, bool isNamed);
 
   // Check that a parameter is contained exactly once. An exception is thrown if
   // a parameter is contained more than once.

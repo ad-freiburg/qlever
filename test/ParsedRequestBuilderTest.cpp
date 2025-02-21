@@ -8,9 +8,11 @@
 
 #include "util/GTestHelpers.h"
 #include "util/HttpRequestHelpers.h"
+#include "util/TypeIdentity.h"
 #include "util/http/HttpUtils.h"
 #include "util/http/UrlParser.h"
 
+using namespace ad_utility::use_type_identity;
 using namespace ad_utility::url_parser;
 using namespace ad_utility::url_parser::sparqlOperation;
 using namespace ad_utility::testing;
@@ -68,7 +70,6 @@ TEST(ParsedRequestBuilderTest, extractAccessToken) {
 
 // _____________________________________________________________________________________________
 TEST(ParsedRequestBuilderTest, extractDatasetClause) {
-  using namespace ad_utility::use_type_identity;
   auto expect = []<typename T>(const auto& request, TI<T>,
                                const std::vector<DatasetClause>& expected,
                                const ad_utility::source_location l =
@@ -99,7 +100,6 @@ TEST(ParsedRequestBuilderTest, extractDatasetClause) {
 
 // _____________________________________________________________________________________________
 TEST(ParsedRequestBuilderTest, extractOperationIfSpecified) {
-  using namespace ad_utility::use_type_identity;
   auto expect = []<typename T>(const auto& request, TI<T>,
                                std::string_view paramName,
                                const Operation& expected,
@@ -110,7 +110,7 @@ TEST(ParsedRequestBuilderTest, extractOperationIfSpecified) {
     EXPECT_THAT(builder.parsedRequest_.operation_,
                 testing::VariantWith<None>(None{}));
     // Initialize an empty operation with no dataset clauses set.
-    builder.extractOperationIfSpecified(ti<T>, paramName);
+    builder.extractOperationIfSpecified<T>(paramName);
     EXPECT_THAT(builder.parsedRequest_.operation_, testing::Eq(expected));
   };
   expect(makeGetRequest("/"), ti<Query>, "query", None{});

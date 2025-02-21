@@ -458,31 +458,19 @@ CPP_template_2(typename RequestT, typename ResponseT)(
           cancellationHandle, qec, std::move(request), send, timeLimit.value());
     }
   };
-  auto parseAndAddDatasets = [](std::string operation,
-                                const std::vector<DatasetClause>& datasets) {
-    auto parsedOperation = SparqlParser::parseQuery(std::move(operation));
-    // SPARQL Protocol 2.1.4 specifies that the dataset from the query
-    // parameters overrides the dataset from the query itself.
-    if (!datasets.empty()) {
-      parsedOperation.datasetClauses_ =
-          parsedQuery::DatasetClauses::fromClauses(datasets);
-    }
-    return parsedOperation;
-  };
-  auto visitQuery = [&visitOperation,
-                     &parseAndAddDatasets](Query query) -> Awaitable<void> {
-    auto parsedQuery =
-        parseAndAddDatasets(std::move(query.query_), query.datasetClauses_);
+  auto visitQuery = [&visitOperation](Query query) -> Awaitable<void> {
+    auto parsedQuery = SparqlParser::parseQuery(std::move(query.query_),
+                                                query.datasetClauses_);
     return visitOperation(
         parsedQuery, "SPARQL Query", std::not_fn(&ParsedQuery::hasUpdateClause),
         "SPARQL QUERY was request via the HTTP request, but the "
         "following update was sent instead of an query: ");
   };
-  auto visitUpdate = [&visitOperation, &requireValidAccessToken,
-                      &parseAndAddDatasets](Update update) -> Awaitable<void> {
+  auto visitUpdate = [&visitOperation, &requireValidAccessToken](
+                         Update update) -> Awaitable<void> {
     requireValidAccessToken("SPARQL Update");
-    auto parsedUpdate =
-        parseAndAddDatasets(std::move(update.update_), update.datasetClauses_);
+    auto parsedUpdate = SparqlParser::parseQuery(std::move(update.update_),
+                                                 update.datasetClauses_);
     return visitOperation(
         parsedUpdate, "SPARQL Update", &ParsedQuery::hasUpdateClause,
         "SPARQL UPDATE was request via the HTTP request, but the "
