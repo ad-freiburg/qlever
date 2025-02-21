@@ -1138,8 +1138,8 @@ bool QueryPlanner::connected(const QueryPlanner::SubtreePlan& a,
 }
 
 // _____________________________________________________________________________
-std::vector<std::array<ColumnIndex, 2>> QueryPlanner::getJoinColumns(
-    const SubtreePlan& a, const SubtreePlan& b) {
+QueryPlanner::JoinColumns QueryPlanner::getJoinColumns(const SubtreePlan& a,
+                                                       const SubtreePlan& b) {
   AD_CORRECTNESS_CHECK(a._qet && b._qet);
   return QueryExecutionTree::getJoinColumns(*a._qet, *b._qet);
 }
@@ -1885,7 +1885,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
   // TODO<joka921> find out, what is ACTUALLY the use case for the triple
   // graph. Is it only meant for (questionable) performance reasons
   // or does it change the meaning.
-  std::vector<std::array<ColumnIndex, 2>> jcs;
+  JoinColumns jcs;
   if (tg) {
     if (connected(a, b, *tg)) {
       jcs = getJoinColumns(a, b);
@@ -1900,7 +1900,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
 // _____________________________________________________________________________
 std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
     const SubtreePlan& ain, const SubtreePlan& bin,
-    const std::vector<std::array<ColumnIndex, 2>>& jcs) const {
+    const JoinColumns& jcs) const {
   bool swapForTesting = isInTestMode() && bin.type != SubtreePlan::OPTIONAL &&
                         ain._qet->getCacheKey() < bin._qet->getCacheKey();
   const auto& a = !swapForTesting ? ain : bin;
@@ -2011,9 +2011,8 @@ std::pair<bool, bool> QueryPlanner::checkSpatialJoin(const SubtreePlan& a,
 }
 
 // _____________________________________________________________________________
-auto QueryPlanner::createSpatialJoin(
-    const SubtreePlan& a, const SubtreePlan& b,
-    const std::vector<std::array<ColumnIndex, 2>>& jcs)
+auto QueryPlanner::createSpatialJoin(const SubtreePlan& a, const SubtreePlan& b,
+                                     const JoinColumns& jcs)
     -> std::optional<SubtreePlan> {
   auto [aIs, bIs] = checkSpatialJoin(a, b);
 
@@ -2049,9 +2048,8 @@ auto QueryPlanner::createSpatialJoin(
 }
 
 // _____________________________________________________________________________________________________________________
-auto QueryPlanner::applyJoinDistributivelyToUnion(
-    SubtreePlan a, SubtreePlan b,
-    const std::vector<std::array<ColumnIndex, 2>>& jcs) const
+auto QueryPlanner::applyJoinDistributivelyToUnion(SubtreePlan a, SubtreePlan b,
+                                                  const JoinColumns& jcs) const
     -> std::vector<SubtreePlan> {
   std::vector<SubtreePlan> candidates{};
   auto findCandidates = [this, &candidates, &jcs](const SubtreePlan& thisPlan,
@@ -2071,9 +2069,9 @@ auto QueryPlanner::applyJoinDistributivelyToUnion(
     const auto& leftCandidate = flipped ? other : tmpPlan;
     const auto& rightCandidate = flipped ? tmpPlan : clonedOther;
 
-    std::vector<array<ColumnIndex, 2>> leftMapping;
+    JoinColumns leftMapping;
     leftMapping.reserve(jcs.size());
-    std::vector<array<ColumnIndex, 2>> rightMapping;
+    JoinColumns rightMapping;
     rightMapping.reserve(jcs.size());
     auto mapColumns = [flipped, &unionOperation](
                           bool isLeft, std::array<ColumnIndex, 2> columns)
@@ -2121,9 +2119,8 @@ auto QueryPlanner::applyJoinDistributivelyToUnion(
 }
 
 // __________________________________________________________________________________________________________________
-auto QueryPlanner::createJoinWithTransitivePath(
-    SubtreePlan a, SubtreePlan b,
-    const std::vector<std::array<ColumnIndex, 2>>& jcs)
+auto QueryPlanner::createJoinWithTransitivePath(SubtreePlan a, SubtreePlan b,
+                                                const JoinColumns& jcs)
     -> std::optional<SubtreePlan> {
   auto aTransPath = std::dynamic_pointer_cast<const TransitivePathBase>(
       a._qet->getRootOperation());
@@ -2166,9 +2163,8 @@ auto QueryPlanner::createJoinWithTransitivePath(
 }
 
 // ______________________________________________________________________________________
-auto QueryPlanner::createJoinWithHasPredicateScan(
-    SubtreePlan a, SubtreePlan b,
-    const std::vector<std::array<ColumnIndex, 2>>& jcs)
+auto QueryPlanner::createJoinWithHasPredicateScan(SubtreePlan a, SubtreePlan b,
+                                                  const JoinColumns& jcs)
     -> std::optional<SubtreePlan> {
   // Check if one of the two operations is a HAS_PREDICATE_SCAN.
   // If the join column corresponds to the has-predicate scan's
@@ -2205,9 +2201,9 @@ auto QueryPlanner::createJoinWithHasPredicateScan(
 }
 
 // _____________________________________________________________________
-auto QueryPlanner::createJoinWithPathSearch(
-    const SubtreePlan& a, const SubtreePlan& b,
-    const std::vector<std::array<ColumnIndex, 2>>& jcs)
+auto QueryPlanner::createJoinWithPathSearch(const SubtreePlan& a,
+                                            const SubtreePlan& b,
+                                            const JoinColumns& jcs)
     -> std::optional<SubtreePlan> {
   auto aRootOp =
       std::dynamic_pointer_cast<PathSearch>(a._qet->getRootOperation());
