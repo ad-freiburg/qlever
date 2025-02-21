@@ -2052,22 +2052,48 @@ auto QueryPlanner::createJoinWithUnitedTransitivePath(
   auto bUnionPath =
       std::dynamic_pointer_cast<Union>(b._qet->getRootOperation());
   std::vector<SubtreePlan> candidates{};
-  auto findCandidates = [this, &candidates, &jcs](Union& unionOperation,
-                                                  const SubtreePlan& other,
-                                                  bool unionIsLeft) {
+  auto findCandidates = [this, &candidates, &jcs](
+                            Union& unionOperation, const SubtreePlan& unionPlan,
+                            const SubtreePlan& other, bool unionIsLeft) {
     auto* qec = other._qet->getRootOperation()->getExecutionContext();
 
     // Clone `other` once, to avoid using it twice in the same query plan.
     SubtreePlan clonedOther = other;
     clonedOther._qet = other._qet->clone();
-    SubtreePlan tmpPlan = other;
+    SubtreePlan tmpPlan = unionPlan;
     const auto& leftCandidate = unionIsLeft ? tmpPlan : other;
     const auto& rightCandidate = unionIsLeft ? clonedOther : tmpPlan;
 
+    std::vector<array<ColumnIndex, 2>> leftMapping;
+    leftMapping.reserve(jcs.size());
+    std::vector<array<ColumnIndex, 2>> rightMapping;
+    rightMapping.reserve(jcs.size());
+    auto mapColumns = [unionIsLeft, &unionOperation](
+                          bool isLeft, std::array<ColumnIndex, 2> columns)
+        -> std::optional<array<ColumnIndex, 2>> {
+      ColumnIndex& column = columns.at(!unionIsLeft);
+      auto tmp = unionOperation.getOriginalColumn(isLeft, column);
+      if (tmp.has_value()) {
+        column = tmp.value();
+        return columns;
+      }
+      return std::nullopt;
+    };
+    for (const auto& joinColumns : jcs) {
+      if (auto mappedColumn = mapColumns(true, joinColumns)) {
+        leftMapping.push_back(mappedColumn.value());
+      }
+      if (auto mappedColumn = mapColumns(false, joinColumns)) {
+        rightMapping.push_back(mappedColumn.value());
+      }
+    }
+
     tmpPlan._qet = unionOperation.leftChild();
-    auto joinedLeft = createJoinCandidates(leftCandidate, rightCandidate, jcs);
+    auto joinedLeft =
+        createJoinCandidates(leftCandidate, rightCandidate, leftMapping);
     tmpPlan._qet = unionOperation.rightChild();
-    auto joinedRight = createJoinCandidates(leftCandidate, rightCandidate, jcs);
+    auto joinedRight =
+        createJoinCandidates(leftCandidate, rightCandidate, rightMapping);
 
     for (const auto& leftPlan : joinedLeft) {
       for (const auto& rightPlan : joinedRight) {
@@ -2079,10 +2105,10 @@ auto QueryPlanner::createJoinWithUnitedTransitivePath(
     }
   };
   if (aUnionPath) {
-    findCandidates(*aUnionPath, b, true);
+    findCandidates(*aUnionPath, a, b, true);
   }
   if (bUnionPath) {
-    findCandidates(*bUnionPath, a, false);
+    findCandidates(*bUnionPath, b, a, false);
   }
   return candidates;
 }
