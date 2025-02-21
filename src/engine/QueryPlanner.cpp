@@ -2053,32 +2053,33 @@ auto QueryPlanner::applyJoinDistributivelyToUnion(
     SubtreePlan a, SubtreePlan b,
     const std::vector<std::array<ColumnIndex, 2>>& jcs) const
     -> std::vector<SubtreePlan> {
-  auto aUnionPath =
-      std::dynamic_pointer_cast<Union>(a._qet->getRootOperation());
-  auto bUnionPath =
-      std::dynamic_pointer_cast<Union>(b._qet->getRootOperation());
   std::vector<SubtreePlan> candidates{};
-  auto findCandidates = [this, &candidates, &jcs](
-                            Union& unionOperation, const SubtreePlan& unionPlan,
-                            const SubtreePlan& other, bool unionIsLeft) {
-    auto* qec = other._qet->getRootOperation()->getExecutionContext();
+  auto findCandidates = [this, &candidates, &jcs](const SubtreePlan& thisPlan,
+                                                  const SubtreePlan& other,
+                                                  bool flipped) {
+    auto unionOperation =
+        std::dynamic_pointer_cast<Union>(thisPlan._qet->getRootOperation());
+    if (!unionOperation) {
+      return;
+    }
+    auto* qec = unionOperation->getExecutionContext();
 
     // Clone `other` once, to avoid using it twice in the same query plan.
     SubtreePlan clonedOther = other;
     clonedOther._qet = other._qet->clone();
-    SubtreePlan tmpPlan = unionPlan;
-    const auto& leftCandidate = unionIsLeft ? tmpPlan : other;
-    const auto& rightCandidate = unionIsLeft ? clonedOther : tmpPlan;
+    SubtreePlan tmpPlan = thisPlan;
+    const auto& leftCandidate = flipped ? other : tmpPlan;
+    const auto& rightCandidate = flipped ? tmpPlan : clonedOther;
 
     std::vector<array<ColumnIndex, 2>> leftMapping;
     leftMapping.reserve(jcs.size());
     std::vector<array<ColumnIndex, 2>> rightMapping;
     rightMapping.reserve(jcs.size());
-    auto mapColumns = [unionIsLeft, &unionOperation](
+    auto mapColumns = [flipped, &unionOperation](
                           bool isLeft, std::array<ColumnIndex, 2> columns)
         -> std::optional<array<ColumnIndex, 2>> {
-      ColumnIndex& column = columns.at(!unionIsLeft);
-      auto tmp = unionOperation.getOriginalColumn(isLeft, column);
+      ColumnIndex& column = columns.at(flipped);
+      auto tmp = unionOperation->getOriginalColumn(isLeft, column);
       if (tmp.has_value()) {
         column = tmp.value();
         return columns;
@@ -2094,10 +2095,10 @@ auto QueryPlanner::applyJoinDistributivelyToUnion(
       }
     }
 
-    tmpPlan._qet = unionOperation.leftChild();
+    tmpPlan._qet = unionOperation->leftChild();
     auto joinedLeft =
         createJoinCandidates(leftCandidate, rightCandidate, leftMapping);
-    tmpPlan._qet = unionOperation.rightChild();
+    tmpPlan._qet = unionOperation->rightChild();
     auto joinedRight =
         createJoinCandidates(leftCandidate, rightCandidate, rightMapping);
 
@@ -2109,13 +2110,13 @@ auto QueryPlanner::applyJoinDistributivelyToUnion(
         candidates.push_back(std::move(candidate));
       }
     }
+    // If exactly one of `joinedLeft` and `joinedRight` is empty and the other
+    // one is not, then would be guaranteed to have a join with a fully
+    // undefined column for the empty side. But we can currently not express
+    // this so we just don't return any candidates in this case.
   };
-  if (aUnionPath) {
-    findCandidates(*aUnionPath, a, b, true);
-  }
-  if (bUnionPath) {
-    findCandidates(*bUnionPath, b, a, false);
-  }
+  findCandidates(a, b, false);
+  findCandidates(b, a, true);
   return candidates;
 }
 
