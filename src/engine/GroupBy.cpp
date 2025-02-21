@@ -1624,3 +1624,9 @@ GroupBy::getVariableForCountOfSingleAlias() const {
 bool GroupBy::isVariableBoundInSubtree(const Variable& variable) const {
   return _subtree->getVariableColumnOrNullopt(variable).has_value();
 }
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> GroupBy::cloneImpl() const {
+  return std::make_unique<GroupBy>(_executionContext, _groupByVariables,
+                                   _aliases, _subtree->clone());
+}

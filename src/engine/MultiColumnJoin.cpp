@@ -288,3 +288,11 @@ void MultiColumnJoin::computeMultiColumnJoin(
   result->setColumnSubset(joinColumnData.permutationResult());
   checkCancellation();
 }
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> MultiColumnJoin::cloneImpl() const {
+  auto copy = std::make_unique<MultiColumnJoin>(*this);
+  copy->_left = _left->clone();
+  copy->_right = _right->clone();
+  return copy;
+}

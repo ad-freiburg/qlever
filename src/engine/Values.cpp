@@ -147,3 +147,8 @@ void Values::writeValues(IdTable* idTablePtr, LocalVocab* localVocab) {
             << absl::StrJoin(numLocalVocabPerColumn, ", ") << std::endl;
   *idTablePtr = std::move(idTable).toDynamic();
 }
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> Values::cloneImpl() const {
+  return std::make_unique<Values>(*this);
+}

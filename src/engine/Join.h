@@ -146,6 +146,8 @@ class Join : public Operation {
   virtual string getCacheKeyImpl() const override;
 
  private:
+  std::unique_ptr<Operation> cloneImpl() const override;
+
   ProtoResult computeResult(bool requestLaziness) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;

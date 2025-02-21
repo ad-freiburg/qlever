@@ -10,7 +10,6 @@
 
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
-#include "parser/ParsedQuery.h"
 
 class Filter : public Operation {
   using PrefilterVariablePair = sparqlExpression::PrefilterExprVariablePair;
@@ -55,6 +54,8 @@ class Filter : public Operation {
   }
 
  private:
+  std::unique_ptr<Operation> cloneImpl() const override;
+
   VariableToColumnMap computeVariableToColumnMap() const override {
     return _subtree->getVariableColumns();
   }

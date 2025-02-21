@@ -5,12 +5,15 @@
 #ifndef QLEVER_RDFESCAPING_H
 #define QLEVER_RDFESCAPING_H
 
+#include <unicode/ustream.h>
+
 #include <sstream>
 #include <string>
 
 #include "global/TypedIndex.h"
 #include "parser/NormalizedString.h"
 #include "util/Exception.h"
+#include "util/HashSet.h"
 #include "util/StringUtils.h"
 
 namespace RdfEscaping {

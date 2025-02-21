@@ -220,3 +220,8 @@ IdTable Bind::computeExpressionBind(
 
   return idTable;
 }
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> Bind::cloneImpl() const {
+  return std::make_unique<Bind>(_executionContext, _subtree->clone(), _bind);
+}
