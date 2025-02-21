@@ -87,13 +87,25 @@ void WebSocketClientImpl<StreamType>::asyncConnect(
   };
 
   net::async_connect(
-      getLowest(), results, [this](beast::error_code ec, tcp::endpoint) {
+      getLowest(), results, [this](beast::error_code ec, tcp::endpoint ep) {
         if (ec) {
           LOG(ERROR) << "WebSocketClient: " << ec.message() << '\n';
         }
         LOG(INFO) << "WebSocketClient connected to " << host_ << ":" << port_
                   << '\n';
         if constexpr (isSSL) {
+          // Set SNI Hostname (many hosts need this to handshake successfully)
+          if (!SSL_set_tlsext_host_name(ws_.next_layer().native_handle(),
+                                        host_.c_str()))
+            throw beast::system_error(
+                beast::error_code(static_cast<int>(::ERR_get_error()),
+                                  net::error::get_ssl_category()),
+                "Failed to set SNI Hostname");
+
+          // Update the host_ string. This will provide the value of the
+          // Host HTTP header during the WebSocket handshake.
+          // See https://tools.ietf.org/html/rfc7230#section-5.4
+          host_ += ':' + std::to_string(ep.port());
           asyncSSLHandshake();
         } else {
           asyncWebsocketHandshake();
@@ -121,7 +133,8 @@ WebSocketClientImpl<StreamType>::asyncSSLHandshake() {
 template <typename StreamType>
 void WebSocketClientImpl<StreamType>::asyncWebsocketHandshake() {
   // TODO<unex>: The WebsocketHandshake currently does not work with SSL.
-  if constexpr (std::is_same_v<StreamType, beast::ssl_stream<tcp::socket>>) {
+  // if constexpr (std::is_same_v<StreamType, beast::ssl_stream<tcp::socket>>) {
+  /*
     ws_.set_option(
         websocket::stream_base::decorator([this](websocket::request_type& req) {
           req.set(beast::http::field::host, host_);
@@ -130,7 +143,10 @@ void WebSocketClientImpl<StreamType>::asyncWebsocketHandshake() {
           req.set(beast::http::field::sec_websocket_version, "13");
           req.set(beast::http::field::sec_websocket_key, "8J+koQ==");
         }));
-  }
+        */
+  //}
+  LOG(INFO) << "Tryint websocket handshake to " << host_ << " " << target_
+            << std::endl;
   ws_.async_handshake(host_, target_, [this](beast::error_code ec) {
     if (ec) {
       LOG(ERROR) << "WebSocket handshake error: " << ec.message() << '\n';
