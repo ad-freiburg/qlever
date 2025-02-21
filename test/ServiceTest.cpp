@@ -67,8 +67,7 @@ class ServiceTest : public ::testing::Test {
                 const boost::beast::http::verb& method,
                 std::string_view postData, std::string_view contentTypeHeader,
                 std::string_view acceptHeader,
-                const std::vector<std::pair<std::string, std::string>>&
-                    customHeaders) {
+                const std::vector<std::pair<std::string, std::string>>&) {
               // Check that the request parameters are as expected.
               //
               // NOTE: The first three are hard-coded in
@@ -832,7 +831,7 @@ TEST_F(ServiceTest, clone) {
           "PREFIX doof: <http://doof.org>",
           "{ }",
           true},
-      getResultFunctionFactory(
+      getNetworkFunctionsFactory(
           "http://localhorst:80/api",
           "PREFIX doof: <http://doof.org> SELECT ?x ?y WHERE { }",
           genJsonResult({"x", "y"}, {{"a", "b"}}),

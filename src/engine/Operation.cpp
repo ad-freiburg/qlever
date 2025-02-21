@@ -632,6 +632,7 @@ Operation::getRuntimeInfoChildren() {
     res.emplace_back(child->getRootOperation()->getRuntimeInfoPointer());
   }
   return res;
+}
 
 // _____________________________________________________________________________
 std::unique_ptr<Operation> Operation::clone() const {
