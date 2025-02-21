@@ -185,6 +185,21 @@ class DateYearOrDuration {
   // Parse `xsd:dayTimeDuration` from a `DateYearOrDuration`.
   static std::optional<DateYearOrDuration> xsdDayTimeDurationFromDate(
       const DateYearOrDuration& dateOrLargeYear);
+
+  // If the provided `DateYearOrDuration` holds an actual `Date` value,
+  // transform it to `xsd:dateTime` by filling the missing date-components with
+  // `0`. If `DateYearOrDuration` holds a `xsd:dayTimeDuration` or `LargeYear`
+  // related value, return std::nullopt.
+  static std::optional<DateYearOrDuration> convertToXsdDatetime(
+      const DateYearOrDuration& dateValue);
+
+  // If the provided `DateYearOrDuration` holds an actual `Date` value,
+  // transform it to `xsd:dateTime` by filling the missing date-components with
+  // `0` or dropping the additional date-components. If `DateYearOrDuration`
+  // holds a `xsd:dayTimeDuration` or `LargeYear` related value, return
+  // std::nullopt.
+  static std::optional<DateYearOrDuration> convertToXsdDate(
+      const DateYearOrDuration& dateValue);
 };
 
 #endif  //  QLEVER_DATES_AND_DURATION_H

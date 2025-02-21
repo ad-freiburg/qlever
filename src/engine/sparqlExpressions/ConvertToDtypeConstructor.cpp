@@ -130,44 +130,36 @@ namespace detail::to_datetime {
 
 // Cast to xsd:dateTime or xsd:date (ValueId)
 template <bool ToJustXsdDate>
-inline auto convertStringToDateTimeValueId =
-    [](OptIdOrString input) -> ValueId {
+inline auto castStringToDateTimeValueId = [](OptIdOrString input) -> ValueId {
   if (!input.has_value()) {
     return Id::makeUndefined();
   }
-  const auto& inputValue = input.value();
-
-  // Remark: If the parsing procedure for datetime/date string values with
-  // parseXsdDatetimeGetOptDate/parseXsdDateGetOptDate fails,
-  // return Id::makeUndefined().
-  const auto retrieveValueId = [](std::optional<DateYearOrDuration> optValue) {
-    if (optValue.has_value()) {
-      return Id::makeFromDate(optValue.value());
-    }
-    return Id::makeUndefined();
-  };
-
-  if (auto* valueId = std::get_if<ValueId>(&inputValue)) {
-    return *valueId;
-  }
-
-  auto* str = std::get_if<std::string>(&inputValue);
-  AD_CORRECTNESS_CHECK(str != nullptr);
-  if constexpr (ToJustXsdDate) {
-    return retrieveValueId(DateYearOrDuration::parseXsdDateGetOptDate(*str));
-  } else {
-    return retrieveValueId(
-        DateYearOrDuration::parseXsdDatetimeGetOptDate(*str));
-  }
+  using DYD = DateYearOrDuration;
+  std::optional<DYD> optValueId = std::visit(
+      [&](const auto& value) {
+        using T = std::decay_t<decltype(value)>;
+        if constexpr (std::is_same_v<T, ValueId>) {
+          return ToJustXsdDate ? DYD::convertToXsdDate(value.getDate())
+                               : DYD::convertToXsdDatetime(value.getDate());
+        } else if constexpr (std::is_same_v<T, std::string>) {
+          return ToJustXsdDate ? DYD::parseXsdDateGetOptDate(value)
+                               : DYD::parseXsdDatetimeGetOptDate(value);
+        } else {
+          throw std::runtime_error(
+              "OptIdOrString variant contains unexpected value type.");
+        }
+      },
+      input.value());
+  return optValueId.has_value() ? Id::makeFromDate(optValueId.value())
+                                : Id::makeUndefined();
 };
 
 NARY_EXPRESSION(ToXsdDateTime, 1,
-                FV<decltype(convertStringToDateTimeValueId<false>),
+                FV<decltype(castStringToDateTimeValueId<false>),
                    DateIdOrLiteralValueGetter>);
 NARY_EXPRESSION(ToXsdDate, 1,
-                FV<decltype(convertStringToDateTimeValueId<true>),
+                FV<decltype(castStringToDateTimeValueId<true>),
                    DateIdOrLiteralValueGetter>);
-
 }  // namespace detail::to_datetime
 
 using namespace detail::to_numeric;

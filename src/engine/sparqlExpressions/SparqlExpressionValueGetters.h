@@ -353,20 +353,15 @@ struct IriOrUriValueGetter : Mixin<IriOrUriValueGetter> {
 // Defines the return type for value-getter `DateIdOrLiteralValueGetter`.
 using OptIdOrString = std::optional<std::variant<ValueId, std::string>>;
 
-// This value-getter returns a `Date` related `ValueId` or `std::string` (from
-// literal).
+// This value-getter returns a `DateYearOrDuration` related `ValueId` or
+// `std::string` (from literal).
 struct DateIdOrLiteralValueGetter : Mixin<DateIdOrLiteralValueGetter> {
   using Mixin<DateIdOrLiteralValueGetter>::operator();
   // Remark: We use only LiteralFromIdGetter because Iri values should never
   // contain date-related string values.
   OptIdOrString operator()(ValueId id, const EvaluationContext* context) const {
     if (id.getDatatype() == Datatype::Date) {
-      // Additionally check that `DateYearOrDuration` doesn't hold a
-      // `DayTimeDuration` value.
-      if (id.getDate().isDate()) {
-        return id;
-      }
-      return std::nullopt;
+      return id;
     }
     return LiteralFromIdGetter{}(id, context);
   }
