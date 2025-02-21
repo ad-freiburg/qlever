@@ -360,3 +360,10 @@ void CountAvailablePredicates::computePatternTrick(
   runtimeInfo.addDetail("costRatio", costRatio * 100);
   *dynResult = std::move(result).toDynamic();
 }
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> CountAvailablePredicates::cloneImpl() const {
+  return std::make_unique<CountAvailablePredicates>(
+      _executionContext, subtree_->clone(), subjectColumnIndex_,
+      predicateVariable_, countVariable_);
+}

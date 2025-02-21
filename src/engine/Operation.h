@@ -316,6 +316,14 @@ class Operation {
 
   const auto& getLimit() const { return _limit; }
 
+ private:
+  // Actual implementation of `clone()` without extra checks.
+  virtual std::unique_ptr<Operation> cloneImpl() const = 0;
+
+ public:
+  // Create a deep copy of this operation.
+  std::unique_ptr<Operation> clone() const;
+
  protected:
   // The QueryExecutionContext for this particular element.
   // No ownership.

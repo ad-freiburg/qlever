@@ -19,6 +19,7 @@
 #include "util/IdTableHelpers.h"
 #include "util/IdTestHelpers.h"
 #include "util/IndexTestHelpers.h"
+#include "util/OperationTestHelpers.h"
 
 using ad_utility::testing::makeAllocator;
 using namespace ad_utility::testing;
@@ -367,4 +368,18 @@ TEST(Engine, countDistinct) {
     AD_EXPECT_THROW_WITH_MESSAGE(Engine::countDistinct(t1, noop),
                                  ::testing::HasSubstr("must be sorted"));
   }
+}
+
+// _____________________________________________________________________________
+TEST(OptionalJoin, clone) {
+  auto qec = ad_utility::testing::getQec();
+  auto a = makeIdTableFromVector({{0}});
+  auto left = idTableToExecutionTree(qec, a);
+  auto right = idTableToExecutionTree(qec, a);
+  OptionalJoin opt{qec, left, right};
+
+  auto clone = opt.clone();
+  ASSERT_TRUE(clone);
+  EXPECT_THAT(opt, IsDeepCopy(*clone));
+  EXPECT_EQ(clone->getDescriptor(), opt.getDescriptor());
 }

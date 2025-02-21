@@ -33,6 +33,7 @@ class Bind : public Operation {
   bool supportsLimit() const override;
 
  private:
+  std::unique_ptr<Operation> cloneImpl() const override;
   uint64_t getSizeEstimateBeforeLimit() override;
 
  public:

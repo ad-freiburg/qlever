@@ -7,7 +7,6 @@
 #include <absl/container/inlined_vector.h>
 #include <absl/strings/str_join.h>
 
-#include <boost/optional.hpp>
 #include <sstream>
 #include <string>
 
@@ -659,4 +658,17 @@ std::pair<Result::Generator, Result::Generator> IndexScan::prefilterTables(
       std::move(input), joinColumn, std::move(metaBlocks.value()));
   return {createPrefilteredJoinSide(state),
           createPrefilteredIndexScanSide(state)};
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> IndexScan::cloneImpl() const {
+  auto prefilter =
+      prefilter_.has_value()
+          ? std::optional{std::pair{prefilter_.value().first->clone(),
+                                    prefilter_.value().second}}
+          : std::nullopt;
+  return std::make_unique<IndexScan>(_executionContext, permutation_, subject_,
+                                     predicate_, object_, additionalColumns_,
+                                     additionalVariables_, graphsToFilter_,
+                                     std::move(prefilter));
 }
