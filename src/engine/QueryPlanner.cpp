@@ -1977,10 +1977,16 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
     candidates.push_back(std::move(opt.value()));
   }
 
+  // Test if one of `a` or `b` is a union whose children can each have the joins
+  // applied individually.
+  for (SubtreePlan& plan : applyJoinDistributivelyToUnion(a, b, jcs)) {
+    candidates.push_back(std::move(plan));
+  }
+
   // Test if one of `a` or `b` is a transitive path to which we can bind the
   // other one.
-  for (SubtreePlan& plan : createJoinWithTransitivePath(a, b, jcs)) {
-    candidates.push_back(std::move(plan));
+  if (auto opt = createJoinWithTransitivePath(a, b, jcs)) {
+    candidates.push_back(std::move(opt.value()));
   }
 
   // "NORMAL" CASE:
@@ -2043,7 +2049,7 @@ auto QueryPlanner::createSpatialJoin(
 }
 
 // _____________________________________________________________________________________________________________________
-auto QueryPlanner::createJoinWithUnitedTransitivePath(
+auto QueryPlanner::applyJoinDistributivelyToUnion(
     SubtreePlan a, SubtreePlan b,
     const std::vector<std::array<ColumnIndex, 2>>& jcs) const
     -> std::vector<SubtreePlan> {
@@ -2116,15 +2122,15 @@ auto QueryPlanner::createJoinWithUnitedTransitivePath(
 // __________________________________________________________________________________________________________________
 auto QueryPlanner::createJoinWithTransitivePath(
     SubtreePlan a, SubtreePlan b,
-    const std::vector<std::array<ColumnIndex, 2>>& jcs) const
-    -> std::vector<SubtreePlan> {
+    const std::vector<std::array<ColumnIndex, 2>>& jcs)
+    -> std::optional<SubtreePlan> {
   auto aTransPath = std::dynamic_pointer_cast<const TransitivePathBase>(
       a._qet->getRootOperation());
   auto bTransPath = std::dynamic_pointer_cast<const TransitivePathBase>(
       b._qet->getRootOperation());
 
   if (!(aTransPath || bTransPath)) {
-    return createJoinWithUnitedTransitivePath(std::move(a), std::move(b), jcs);
+    return std::nullopt;
   }
   std::shared_ptr<QueryExecutionTree> otherTree = aTransPath ? b._qet : a._qet;
   auto transPathOperation = aTransPath ? aTransPath : bTransPath;
@@ -2139,7 +2145,7 @@ auto QueryPlanner::createJoinWithTransitivePath(
   const size_t thisCol = aTransPath ? jcs[0][0] : jcs[0][1];
   // Do not bind the side of a path twice
   if (transPathOperation->isBoundOrId()) {
-    return {};
+    return std::nullopt;
   }
   // An unbound transitive path has at most two columns.
   AD_CONTRACT_CHECK(thisCol <= 1);
@@ -2155,7 +2161,7 @@ auto QueryPlanner::createJoinWithTransitivePath(
     }
   }();
   mergeSubtreePlanIds(plan, a, b);
-  return {std::move(plan)};
+  return plan;
 }
 
 // ______________________________________________________________________________________

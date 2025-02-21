@@ -333,17 +333,17 @@ class QueryPlanner {
       const SubtreePlan& a, const SubtreePlan& b,
       const std::vector<std::array<ColumnIndex, 2>>& jcs) const;
 
-  std::vector<SubtreePlan> createJoinWithUnitedTransitivePath(
+  std::vector<SubtreePlan> applyJoinDistributivelyToUnion(
       SubtreePlan a, SubtreePlan b,
       const std::vector<std::array<ColumnIndex, 2>>& jcs) const;
 
   // Used internally by `createJoinCandidates`. If `a` or `b` is a transitive
   // path operation and the other input can be bound to this transitive path
   // (see `TransitivePath.cpp` for details), then returns that bound transitive
-  // path. Else returns an empty vector.
-  std::vector<SubtreePlan> createJoinWithTransitivePath(
+  // path. Else returns `std::nullopt`.
+  static std::optional<SubtreePlan> createJoinWithTransitivePath(
       SubtreePlan a, SubtreePlan b,
-      const std::vector<std::array<ColumnIndex, 2>>& jcs) const;
+      const std::vector<std::array<ColumnIndex, 2>>& jcs);
 
   // Used internally by `createJoinCandidates`. If  `a` or `b` is a
   // `HasPredicateScan` with a variable as a subject (`?x ql:has-predicate
