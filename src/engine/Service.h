@@ -11,6 +11,7 @@
 #include "parser/ParsedQuery.h"
 #include "util/LazyJsonParser.h"
 #include "util/http/HttpClient.h"
+#include "util/http/websocket/WebSocketClient.h"
 
 // The SERVICE operation. Sends a query to the remote endpoint specified by the
 // service IRI, gets the result as JSON, parses it, and writes it into a result
@@ -35,11 +36,15 @@ class Service : public Operation {
       const ad_utility::httpUtils::Url&, ad_utility::SharedCancellationHandle,
       const boost::beast::http::verb&, std::string_view, std::string_view,
       std::string_view,
-      const std::unordered_map<std::string_view, std::string_view>&)>;
+      const std::vector<std::pair<std::string, std::string>>&)>;
 
   // The type of the function used to obtain the RuntimeInformation.
-  using GetRuntimeInfoFunction = std::function<cppcoro::generator<std::string>(
-      const ad_utility::httpUtils::Url&, std::string_view)>;
+  using WebSocketClientVariant = std::variant<
+      std::unique_ptr<ad_utility::websocket::HttpWebSocketClient>,
+      std::unique_ptr<ad_utility::websocket::HttpsWebSocketClient>>;
+  using GetRuntimeInfoClient = std::function<WebSocketClientVariant(
+      const ad_utility::httpUtils::Url&, const std::string& target,
+      std::function<void(const std::string&)>)>;
 
   // Information on a Sibling operation.
   struct SiblingInfo {
@@ -50,7 +55,7 @@ class Service : public Operation {
 
   struct NetworkFunctions {
     GetResultFunction getResultFunction_;
-    GetRuntimeInfoFunction getRuntimeInfoFunction_;
+    GetRuntimeInfoClient getRuntimeInfoClient_;
   };
 
  private:
@@ -67,10 +72,6 @@ class Service : public Operation {
   // RuntimeInformation of the service-query computation on the endpoint.
   std::shared_ptr<RuntimeInformation> childRuntimeInformation_;
 
-  // Thread for the websocket-client retrieving `childRuntimeInformation_` from
-  // the endpoint.
-  std::unique_ptr<std::thread> runtimeInfoThread_;
-
  public:
   // Construct from parsed Service clause.
   //
@@ -81,13 +82,8 @@ class Service : public Operation {
   Service(QueryExecutionContext* qec, parsedQuery::Service parsedServiceClause,
           NetworkFunctions networkFunctions = {
               .getResultFunction_ = sendHttpOrHttpsRequest,
-              .getRuntimeInfoFunction_ = readHttpOrHttpsWebsocketStream});
-
-  ~Service() {
-    if (runtimeInfoThread_) {
-      runtimeInfoThread_->join();
-    }
-  }
+              .getRuntimeInfoClient_ =
+                  ad_utility::websocket::getRuntimeInfoClient});
 
   // Methods inherited from base class `Operation`.
   std::string getDescriptor() const override;
@@ -108,11 +104,12 @@ class Service : public Operation {
   // A SERVICE clause has no children.
   vector<QueryExecutionTree*> getChildren() override { return {}; }
 
-  cppcoro::generator<std::shared_ptr<RuntimeInformation>>
+  absl::InlinedVector<std::shared_ptr<RuntimeInformation>, 2>
   getRuntimeInfoChildren() final {
     if (childRuntimeInformation_) {
-      co_yield childRuntimeInformation_;
+      return {childRuntimeInformation_};
     }
+    return {};
   }
 
   // Convert the given binding to TripleComponent.

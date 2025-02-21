@@ -413,7 +413,7 @@ void Operation::updateRuntimeInformationOnSuccess(
     // Therefore, for each child of this operation the correct runtime is
     // available.
     _runtimeInfo->children_.clear();
-    for (auto child : getRuntimeInfoChildren()) {
+    for (auto& child : getRuntimeInfoChildren()) {
       _runtimeInfo->children_.push_back(child);
     }
   }
@@ -468,7 +468,7 @@ void Operation::updateRuntimeInformationWhenOptimizedOut(
 // _______________________________________________________________________
 void Operation::updateRuntimeInformationOnFailure(Milliseconds duration) {
   _runtimeInfo->children_.clear();
-  for (auto child : getRuntimeInfoChildren()) {
+  for (auto& child : getRuntimeInfoChildren()) {
     _runtimeInfo->children_.push_back(child);
   }
 
@@ -624,10 +624,13 @@ uint64_t Operation::getSizeEstimate() {
 }
 
 // _____________________________________________________________________________
-cppcoro::generator<std::shared_ptr<RuntimeInformation>>
+// std::vector<std::shared_ptr<RuntimeInformation>>
+absl::InlinedVector<std::shared_ptr<RuntimeInformation>, 2>
 Operation::getRuntimeInfoChildren() {
-  for (auto child : getChildren()) {
+  absl::InlinedVector<std::shared_ptr<RuntimeInformation>, 2> res;
+  for (auto& child : getChildren()) {
     AD_CONTRACT_CHECK(child);
-    co_yield child->getRootOperation()->getRuntimeInfoPointer();
+    res.emplace_back(child->getRootOperation()->getRuntimeInfoPointer());
   }
+  return res;
 }

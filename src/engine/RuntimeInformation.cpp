@@ -9,6 +9,9 @@
 
 #include <ranges>
 
+#include "util/ConcurrentCache.h"
+#include "util/HashMap.h"
+
 using namespace std::chrono_literals;
 
 // __________________________________________________________________________
@@ -188,24 +191,23 @@ std::string_view RuntimeInformation::toString(Status status) {
 // __________________________________________________________________________
 RuntimeInformation::Status RuntimeInformation::fromString(
     std::string_view str) {
-  if (str == "fully materialized") {
-    return fullyMaterialized;
-  } else if (str == "lazily materialized") {
-    return lazilyMaterialized;
-  } else if (str == "in progress") {
-    return inProgress;
-  } else if (str == "not started") {
-    return notStarted;
-  } else if (str == "optimized out") {
-    return optimizedOut;
-  } else if (str == "failed") {
-    return failed;
-  } else if (str == "failed because child failed") {
-    return failedBecauseChildFailed;
-  } else if (str == "cancelled") {
-    return cancelled;
+  static const ad_utility::HashMap<std::string, RuntimeInformation::Status>
+      statusMap = {
+          {"not started", RuntimeInformation::notStarted},
+          {"in progress", RuntimeInformation::inProgress},
+          {"fully materialized", RuntimeInformation::fullyMaterialized},
+          {"lazily materialized", RuntimeInformation::lazilyMaterialized},
+          {"optimized out", RuntimeInformation::optimizedOut},
+          {"failed", RuntimeInformation::failed},
+          {"failed because child failed",
+           RuntimeInformation::failedBecauseChildFailed},
+          {"cancelled", RuntimeInformation::cancelled}};
+
+  auto it = statusMap.find(str);
+  if (it == statusMap.end()) {
+    AD_FAIL();
   }
-  AD_FAIL();
+  return it->second;
 }
 
 // ________________________________________________________________________________________________________________
@@ -261,22 +263,6 @@ void from_json(const nlohmann::json& j, RuntimeInformation& rti) {
     }
   };
 
-  auto cacheStatusFromString = [](std::string_view str) {
-    using ad_utility::CacheStatus;
-    if (str == "cached_not_pinned") {
-      return CacheStatus::cachedNotPinned;
-    } else if (str == "cached_pinned") {
-      return CacheStatus::cachedPinned;
-    } else if (str == "computed") {
-      return CacheStatus::computed;
-    } else if (str == "not_in_cache_not_computed") {
-      return CacheStatus::notInCacheAndNotComputed;
-    } else {
-      throw std::runtime_error(
-          "Unknown string value was encountered in `fromString(CacheStatus)`");
-    }
-  };
-
   tryGet(rti.descriptor_, "description");
   tryGet(rti.numRows_, "result_rows");
   tryGet(rti.numCols_, "result_cols");
@@ -285,7 +271,7 @@ void from_json(const nlohmann::json& j, RuntimeInformation& rti) {
   tryGetTime(rti.originalTotalTime_, "original_total_time");
   tryGetTime(rti.originalOperationTime_, "original_operation_time");
   if (auto it = j.find("cache_status"); it != j.end()) {
-    rti.cacheStatus_ = cacheStatusFromString(it->get<std::string_view>());
+    rti.cacheStatus_ = ad_utility::fromString(it->get<std::string_view>());
   }
   tryGet(rti.details_, "details");
   tryGet(rti.costEstimate_, "estimated_total_cost");

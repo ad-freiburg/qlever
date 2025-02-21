@@ -39,7 +39,6 @@
 #include <boost/asio.hpp>
 #include <boost/asio/ssl/stream.hpp>
 #include <boost/beast.hpp>
-#include <boost/beast/websocket/ssl.hpp>
 
 // For boost versions prior to 1.81 this should be no-op
 #if defined BOOST_BEAST_VERSION && BOOST_BEAST_VERSION < 345

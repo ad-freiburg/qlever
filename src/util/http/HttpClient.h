@@ -59,19 +59,12 @@ class HttpClientImpl {
       std::string_view requestBody = "",
       std::string_view contentTypeHeader = "text/plain",
       std::string_view acceptHeader = "text/plain",
-      const std::unordered_map<std::string_view, std::string_view>&
-          customHeaders = {});
+      std::vector<std::pair<std::string, std::string>> customHeaders = {});
 
   // Simple way to establish a websocket connection
   boost::beast::http::response<boost::beast::http::string_body>
   sendWebSocketHandshake(const boost::beast::http::verb& method,
                          std::string_view host, std::string_view target);
-
-  // Upgrade the client to a websocket connection and return a generator of
-  // messages received from the server.
-  static cppcoro::generator<std::string> readWebSocketStream(
-      std::unique_ptr<HttpClientImpl> client, std::string_view host,
-      std::string_view target);
 
  private:
   // The connection stream and associated objects. See the implementation of
@@ -83,7 +76,6 @@ class HttpClientImpl {
       workGuard_ = boost::asio::make_work_guard(ioContext_);
   std::unique_ptr<boost::asio::ssl::context> ssl_context_;
   std::unique_ptr<StreamType> stream_;
-  std::unique_ptr<boost::beast::websocket::stream<StreamType>> ws_;
 };
 
 // Instantiation for HTTP.
@@ -104,10 +96,4 @@ HttpOrHttpsResponse sendHttpOrHttpsRequest(
     std::string_view postData = "",
     std::string_view contentTypeHeader = "text/plain",
     std::string_view acceptHeader = "text/plain",
-    const std::unordered_map<std::string_view, std::string_view>&
-        customHeaders = {});
-
-// Global convenience function to create a websocket connection to the given URL
-// and return a generator of messages received from the server.
-cppcoro::generator<std::string> readHttpOrHttpsWebsocketStream(
-    const ad_utility::httpUtils::Url& url, std::string_view target);
+    std::vector<std::pair<std::string, std::string>> customHeaders = {});

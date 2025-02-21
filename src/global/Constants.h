@@ -255,3 +255,6 @@ constexpr inline std::string_view EMPH_OFF = "\033[22m";
 // Allowed range for geographical coordinates from WTK Text
 constexpr inline double COORDINATE_LAT_MAX = 90.0;
 constexpr inline double COORDINATE_LNG_MAX = 180.0;
+
+// Websocket path for a specific query (/watch/query-id)
+constexpr inline std::string_view WEBSOCKET_PATH = "/watch/";

@@ -127,28 +127,12 @@ ProtoResult Service::computeResultImpl([[maybe_unused]] bool requestLaziness) {
 
   // Receive updates about the RuntimeInformation from the service endpoint.
   const std::string queryId = ad_utility::UuidGenerator()();
-  auto updateRuntimeInformation = [&]() {
-    try {
-      const std::string target = absl::StrCat("/watch/", queryId);
-      for (const auto& msg :
-           networkFunctions_.getRuntimeInfoFunction_(serviceUrl, target)) {
+  const std::string target = absl::StrCat(WEBSOCKET_PATH, queryId);
+  auto client = networkFunctions_.getRuntimeInfoClient_(
+      serviceUrl, target, [&](const std::string& msg) {
         childRuntimeInformation_ =
             std::make_shared<RuntimeInformation>(nlohmann::json::parse(msg));
-      }
-    } catch (const boost::beast::system_error& se) {
-      // If the endpoint closes the connection we have received all messages
-      // -> ignore the error.
-      if (se.code() != boost::beast::websocket::error::closed) {
-        LOG(ERROR) << "SERVICE Websocket client: " << se.what() << '\n';
-      }
-    } catch (std::exception& e) {
-      LOG(ERROR) << "SERVICE Websocket client: " << e.what() << '\n';
-    }
-  };
-  if (!runtimeInfoThread_) {
-    runtimeInfoThread_ =
-        std::make_unique<std::thread>(updateRuntimeInformation);
-  }
+      });
 
   // Construct the query to be sent to the SPARQL endpoint.
   std::string variablesForSelectClause = absl::StrJoin(
@@ -166,7 +150,7 @@ ProtoResult Service::computeResultImpl([[maybe_unused]] bool requestLaziness) {
   HttpOrHttpsResponse response = networkFunctions_.getResultFunction_(
       serviceUrl, cancellationHandle_, boost::beast::http::verb::post,
       serviceQuery, "application/sparql-query",
-      "application/sparql-results+json", {{"Query-Id"sv, queryId}});
+      "application/sparql-results+json", {{"Query-Id"s, queryId}});
 
   auto throwErrorWithContext = [this, &response](std::string_view sv) {
     std::string ctx;

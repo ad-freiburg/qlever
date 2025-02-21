@@ -62,14 +62,6 @@ HttpClientImpl<StreamType>::HttpClientImpl(std::string_view host,
 // ____________________________________________________________________________
 template <typename StreamType>
 HttpClientImpl<StreamType>::~HttpClientImpl() {
-  // If the stream was upgraded to a websocket connection, try to close it.
-  if (ws_) {
-    if (ws_->is_open()) {
-      ws_->close(beast::websocket::close_code::normal);
-    }
-    return;
-  }
-
   // We are closing the HTTP connection and destroying the client. So it is
   // neither required nor possible in a safe way to report errors from a
   // destructor and we can simply ignore the error codes.
@@ -96,8 +88,7 @@ HttpOrHttpsResponse HttpClientImpl<StreamType>::sendRequest(
     std::string_view target, ad_utility::SharedCancellationHandle handle,
     std::string_view requestBody, std::string_view contentTypeHeader,
     std::string_view acceptHeader,
-    const std::unordered_map<std::string_view, std::string_view>&
-        customHeaders) {
+    const std::vector<std::pair<std::string, std::string>> customHeaders) {
   // Check that the client pointer is valid.
   AD_CORRECTNESS_CHECK(client);
   // Check that we have a stream (created in the constructor).
@@ -112,8 +103,8 @@ HttpOrHttpsResponse HttpClientImpl<StreamType>::sendRequest(
   request.set(http::field::accept, acceptHeader);
   request.set(http::field::content_type, contentTypeHeader);
   request.set(http::field::content_length, std::to_string(requestBody.size()));
-  for (const auto& h : customHeaders) {
-    request.set(h.first, h.second);
+  for (const auto& [key, value] : customHeaders) {
+    request.set(key, value);
   }
 
   request.body() = requestBody;
@@ -212,8 +203,7 @@ HttpOrHttpsResponse sendHttpOrHttpsRequest(
     ad_utility::SharedCancellationHandle handle,
     const boost::beast::http::verb& method, std::string_view requestData,
     std::string_view contentTypeHeader, std::string_view acceptHeader,
-    const std::unordered_map<std::string_view, std::string_view>&
-        customHeaders) {
+    const std::vector<std::pair<std::string, std::string>> customHeaders) {
   auto sendRequest = [&]<typename Client>() -> HttpOrHttpsResponse {
     auto client = std::make_unique<Client>(url.host(), url.port());
     return Client::sendRequest(std::move(client), method, url.host(),
@@ -225,38 +215,5 @@ HttpOrHttpsResponse sendHttpOrHttpsRequest(
   } else {
     AD_CORRECTNESS_CHECK(url.protocol() == Url::Protocol::HTTPS);
     return sendRequest.operator()<HttpsClient>();
-  }
-}
-
-// ____________________________________________________________________________
-template <typename StreamType>
-cppcoro::generator<std::string> HttpClientImpl<StreamType>::readWebSocketStream(
-    std::unique_ptr<HttpClientImpl<StreamType>> client, std::string_view host,
-    std::string_view target) {
-  AD_CORRECTNESS_CHECK(client->stream_);
-  client->ws_ = std::make_unique<boost::beast::websocket::stream<StreamType>>(
-      std::move(*(client->stream_)));
-  client->ws_->handshake(host, target);
-
-  beast::flat_buffer buffer;
-  for (;;) {
-    client->ws_->read(buffer);
-    co_yield beast::buffers_to_string(buffer.data());
-    buffer.consume(buffer.size());
-  }
-}
-
-// ____________________________________________________________________________
-cppcoro::generator<std::string> readHttpOrHttpsWebsocketStream(
-    const ad_utility::httpUtils::Url& url, std::string_view target) {
-  auto listen = [&]<typename Client>() -> cppcoro::generator<std::string> {
-    auto client = std::make_unique<Client>(url.host(), url.port());
-    return Client::readWebSocketStream(std::move(client), url.host(), target);
-  };
-  if (url.protocol() == Url::Protocol::HTTP) {
-    return listen.operator()<HttpClient>();
-  } else {
-    AD_CORRECTNESS_CHECK(url.protocol() == Url::Protocol::HTTPS);
-    return listen.operator()<HttpsClient>();
   }
 }

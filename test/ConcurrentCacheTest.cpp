@@ -339,6 +339,18 @@ TEST(ConcurrentCache, cacheStatusToString) {
 }
 
 // _____________________________________________________________________________
+TEST(ConcurrentCache, stringToCacheStatus) {
+  using enum ad_utility::CacheStatus;
+  EXPECT_EQ(ad_utility::fromString("cached_not_pinned"), cachedNotPinned);
+  EXPECT_EQ(ad_utility::fromString("cached_pinned"), cachedPinned);
+  EXPECT_EQ(ad_utility::fromString("computed"), computed);
+  EXPECT_EQ(ad_utility::fromString("not_in_cache_not_computed"),
+            notInCacheAndNotComputed);
+
+  EXPECT_ANY_THROW(ad_utility::fromString(""));
+}
+
+// _____________________________________________________________________________
 TEST(ConcurrentCache, isNotCachedIfUnsuitable) {
   SimpleConcurrentLruCache cache{};
 

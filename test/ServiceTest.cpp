@@ -66,7 +66,7 @@ class ServiceTest : public ::testing::Test {
                 const boost::beast::http::verb& method,
                 std::string_view postData, std::string_view contentTypeHeader,
                 std::string_view acceptHeader,
-                const std::unordered_map<std::string_view, std::string_view>&
+                const std::vector<std::pair<std::string, std::string>>&
                     customHeaders) {
               // Check that the request parameters are as expected.
               //
@@ -114,12 +114,11 @@ class ServiceTest : public ::testing::Test {
                                            .contentType_ = contentType,
                                            .body_ = body(predefinedResult)};
             },
-        .getRuntimeInfoFunction_ =
-            [=](const ad_utility::httpUtils::Url& url,
-                std::string_view target) -> cppcoro::generator<std::string> {
-          EXPECT_EQ(url.asString(), expectedUrl);
-          co_yield "{}";
-        }};
+        .getRuntimeInfoClient_ =
+            [](const ad_utility::httpUtils::Url&, const std::string&,
+               std::function<void(const std::string&)>) {
+              return Service::WebSocketClientVariant();
+            }};
   };
 
   // The following method generates a JSON result from variables and rows for

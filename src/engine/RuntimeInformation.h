@@ -32,6 +32,7 @@ class RuntimeInformation {
   static constexpr auto ZERO = Milliseconds::zero();
 
   /// The computation status of an operation.
+  /// Note: changes have to be reflected in `toString()`/`fromString()` methods
   enum struct Status {
     notStarted,
     inProgress,
