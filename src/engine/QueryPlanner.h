@@ -333,7 +333,7 @@ class QueryPlanner {
       const SubtreePlan& a, const SubtreePlan& b,
       boost::optional<const TripleGraph&> tg) const;
 
-  // Create `SubtreePlan`s that join `a` and `b` together. The colums are
+  // Create `SubtreePlan`s that join `a` and `b` together. The columns are
   // configured by `jcs`.
   std::vector<SubtreePlan> createJoinCandidates(const SubtreePlan& a,
                                                 const SubtreePlan& b,
