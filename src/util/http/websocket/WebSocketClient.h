@@ -3,8 +3,12 @@
 // Author: Moritz Dom (domm@informatik.uni-freiburg.de)
 
 #pragma once
-
 #include <gtest/gtest_prod.h>
+
+// Fixes an error with boost versions < 1.84,
+// more information: https://github.com/boostorg/beast/issues/2661
+#define BOOST_ASIO_DISABLE_CONCEPTS
+
 #include <util/http/beast.h>
 
 #include <boost/beast/ssl.hpp>
