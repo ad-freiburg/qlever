@@ -2321,22 +2321,45 @@ TEST(SparqlParser, Update) {
                      std::nullopt),
       m::GraphPattern(m::Triples({{Var("?s"), "?p", Var("?o")}})));
   expectUpdate("INSERT DATA { <a> <b> <c> }", simpleInsertMatcher);
-  expectUpdate("INSERT DATA { <a> <b> <c> };", simpleInsertMatcher);
-  // Multiple Updates
-  // TODO:
-  // - prefix/base spillage between updates
-  // - ending with non empty prologue but empty update body
   expectUpdate_(
       "INSERT DATA { <a> <b> <c> };",
       ElementsAre(AllOf(simpleInsertMatcher,
                         m::pq::OriginalString("INSERT DATA { <a> <b> <c> }"))));
-
+  // Multiple Updates
+  expectUpdate_(
+      "INSERT DATA { <a> <b> <c> };",
+      ElementsAre(AllOf(simpleInsertMatcher,
+                        m::pq::OriginalString("INSERT DATA { <a> <b> <c> }"))));
+  expectUpdate_(
+      "INSERT DATA { <a> <b> <c> }; BASE <https://example.org> PREFIX foo: "
+      "<foo>",
+      ElementsAre(AllOf(simpleInsertMatcher,
+                        m::pq::OriginalString("INSERT DATA { <a> <b> <c> }"))));
   expectUpdate_(
       "INSERT DATA { <a> <b> <c> }; DELETE WHERE { ?s ?p ?o }",
       ElementsAre(AllOf(simpleInsertMatcher,
                         m::pq::OriginalString("INSERT DATA { <a> <b> <c> }")),
                   AllOf(deleteWhereAllMatcher,
                         m::pq::OriginalString("DELETE WHERE { ?s ?p ?o }"))));
+  expectUpdateFails(
+      "PREFIX foo: <foo> INSERT DATA { <a> <b> <c> }; INSERT DATA { foo:a "
+      "foo:b foo:c }",
+      testing::HasSubstr("foo"));
+  expectUpdate_(
+      "PREFIX foo: <foo> INSERT DATA { <a> <b> <c> }; PREFIX foo: <bar/> "
+      "INSERT "
+      "DATA { foo:a foo:b foo:c }",
+      ElementsAre(
+          AllOf(simpleInsertMatcher,
+                m::pq::OriginalString(
+                    "PREFIX foo: <foo> INSERT DATA { <a> <b> <c> }")),
+          AllOf(m::UpdateClause(m::GraphUpdate({},
+                                               {{Iri("<bar/a>"), Iri("<bar/b>"),
+                                                 Iri("<bar/c>"), noGraph}},
+                                               std::nullopt),
+                                m::GraphPattern()),
+                m::pq::OriginalString(
+                    "PREFIX foo: <bar/> INSERT DATA { foo:a foo:b foo:c }"))));
 }
 
 TEST(SparqlParser, QueryOrUpdate) {
