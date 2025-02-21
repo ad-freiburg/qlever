@@ -476,11 +476,15 @@ CPP_template_2(typename RequestT, typename ResponseT)(
         "SPARQL UPDATE was request via the HTTP request, but the "
         "following query was sent instead of an update: ");
   };
-  auto visitGraphStore = [&request, &visitOperation](
+  auto visitGraphStore = [&request, &visitOperation, &requireValidAccessToken](
                              GraphStoreOperation operation) -> Awaitable<void> {
     ParsedQuery parsedOperation =
         GraphStoreProtocol::transformGraphStoreProtocol(std::move(operation),
                                                         request);
+
+    if (parsedOperation.hasUpdateClause()) {
+      requireValidAccessToken("Update from Graph Store Protocol");
+    }
 
     // Don't check for the `ParsedQuery`s actual type (Query or Update) here
     // because graph store operations can result in both.
