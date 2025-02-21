@@ -344,14 +344,14 @@ class QueryPlanner {
   // one of the children has an optimized join, which can happen for
   // `TransitivePath` for example.
   std::vector<SubtreePlan> applyJoinDistributivelyToUnion(
-      SubtreePlan a, SubtreePlan b, const JoinColumns& jcs) const;
+      const SubtreePlan& a, const SubtreePlan& b, const JoinColumns& jcs) const;
 
   // Used internally by `createJoinCandidates`. If `a` or `b` is a transitive
   // path operation and the other input can be bound to this transitive path
   // (see `TransitivePath.cpp` for details), then returns that bound transitive
   // path. Else returns `std::nullopt`.
   static std::optional<SubtreePlan> createJoinWithTransitivePath(
-      SubtreePlan a, SubtreePlan b, const JoinColumns& jcs);
+      const SubtreePlan& a, const SubtreePlan& b, const JoinColumns& jcs);
 
   // Used internally by `createJoinCandidates`. If  `a` or `b` is a
   // `HasPredicateScan` with a variable as a subject (`?x ql:has-predicate
@@ -359,7 +359,7 @@ class QueryPlanner {
   // then returns a `HasPredicateScan` that takes the other input as a subtree.
   // Else returns `std::nullopt`.
   static std::optional<SubtreePlan> createJoinWithHasPredicateScan(
-      SubtreePlan a, SubtreePlan b, const JoinColumns& jcs);
+      const SubtreePlan& a, const SubtreePlan& b, const JoinColumns& jcs);
 
   static std::optional<SubtreePlan> createJoinWithPathSearch(
       const SubtreePlan& a, const SubtreePlan& b, const JoinColumns& jcs);

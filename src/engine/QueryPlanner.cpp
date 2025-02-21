@@ -2083,7 +2083,8 @@ mapColumnsInUnion(size_t columnIndex, const Union& unionOperation,
 }  // namespace
 
 // _____________________________________________________________________________________________________________________
-auto QueryPlanner::applyJoinDistributivelyToUnion(SubtreePlan a, SubtreePlan b,
+auto QueryPlanner::applyJoinDistributivelyToUnion(const SubtreePlan& a,
+                                                  const SubtreePlan& b,
                                                   const JoinColumns& jcs) const
     -> std::vector<SubtreePlan> {
   std::vector<SubtreePlan> candidates{};
@@ -2133,7 +2134,8 @@ auto QueryPlanner::applyJoinDistributivelyToUnion(SubtreePlan a, SubtreePlan b,
 }
 
 // __________________________________________________________________________________________________________________
-auto QueryPlanner::createJoinWithTransitivePath(SubtreePlan a, SubtreePlan b,
+auto QueryPlanner::createJoinWithTransitivePath(const SubtreePlan& a,
+                                                const SubtreePlan& b,
                                                 const JoinColumns& jcs)
     -> std::optional<SubtreePlan> {
   auto aTransPath = std::dynamic_pointer_cast<const TransitivePathBase>(
@@ -2177,7 +2179,8 @@ auto QueryPlanner::createJoinWithTransitivePath(SubtreePlan a, SubtreePlan b,
 }
 
 // ______________________________________________________________________________________
-auto QueryPlanner::createJoinWithHasPredicateScan(SubtreePlan a, SubtreePlan b,
+auto QueryPlanner::createJoinWithHasPredicateScan(const SubtreePlan& a,
+                                                  const SubtreePlan& b,
                                                   const JoinColumns& jcs)
     -> std::optional<SubtreePlan> {
   // Check if one of the two operations is a HAS_PREDICATE_SCAN.
