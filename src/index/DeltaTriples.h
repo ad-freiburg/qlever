@@ -40,8 +40,8 @@ class SharedLocatedTriplesSnapshot
 
 // A class for keeping track of the number of triples of the `DeltaTriples`.
 struct DeltaTriplesCount {
-  size_t triplesInserted_;
-  size_t triplesDeleted_;
+  int64_t triplesInserted_;
+  int64_t triplesDeleted_;
 
   /// Output as json. The signature of this function is mandated by the json
   /// library to allow for implicit conversion.
@@ -146,8 +146,12 @@ class DeltaTriples {
   void clear();
 
   // The number of delta triples added and subtracted.
-  size_t numInserted() const { return triplesInserted_.size(); }
-  size_t numDeleted() const { return triplesDeleted_.size(); }
+  int64_t numInserted() const {
+    return static_cast<int64_t>(triplesInserted_.size());
+  }
+  int64_t numDeleted() const {
+    return static_cast<int64_t>(triplesDeleted_.size());
+  }
   DeltaTriplesCount getCounts() const;
 
   // Insert triples.

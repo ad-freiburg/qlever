@@ -68,8 +68,8 @@ struct VocabularyMetaData {
     bool contains(Id id) const { return begin_ <= id && id < end_; }
 
    private:
-    Id begin_ = ID_NO_VALUE;
-    Id end_ = ID_NO_VALUE;
+    Id begin_ = Id::makeUndefined();
+    Id end_ = Id::makeUndefined();
     std::string prefix_;
     bool beginWasSeen_ = false;
   };

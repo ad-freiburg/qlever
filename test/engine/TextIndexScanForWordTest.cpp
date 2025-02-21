@@ -10,6 +10,7 @@
 #include "../util/GTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/OperationTestHelpers.h"
 #include "./TextIndexScanTestHelpers.h"
 #include "engine/IndexScan.h"
 #include "engine/TextIndexScanForWord.h"
@@ -255,5 +256,17 @@ TEST(TextIndexScanForWord, KnownEmpty) {
 
   TextIndexScanForWord s5{qec, Variable{"?text1"}, "testing"};
   ASSERT_TRUE(!s5.knownEmptyResult());
+}
+
+// _____________________________________________________________________________
+TEST(TextIndexScanForWord, clone) {
+  auto qec = getQec();
+
+  TextIndexScanForWord scan{qec, Variable{"?text1"}, "nonExistentWord*"};
+
+  auto clone = scan.clone();
+  ASSERT_TRUE(clone);
+  EXPECT_THAT(scan, IsDeepCopy(*clone));
+  EXPECT_EQ(clone->getDescriptor(), scan.getDescriptor());
 }
 }  // namespace

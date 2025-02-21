@@ -95,7 +95,7 @@ auto VocabularyMerger::mergeVocabulary(const std::string& basename,
   auto mergedWords =
       ad_utility::parallelMultiwayMerge<QueueWord, true,
                                         decltype(sizeOfQueueWord)>(
-          0.8 * memoryToUse, generators, lessThanForQueue);
+          0.8 * memoryToUse, std::move(generators), lessThanForQueue);
   ad_utility::ProgressBar progressBar{metaData_.numWordsTotal(),
                                       "Words merged: "};
   for (QueueWord& currentWord : ql::views::join(mergedWords)) {

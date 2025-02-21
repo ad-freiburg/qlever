@@ -752,13 +752,14 @@ size_t CompressedRelationReader::getResultSizeOfScan(
 }
 
 // ____________________________________________________________________________
-IdTable CompressedRelationReader::getDistinctColIdsAndCountsImpl(
-    ad_utility::InvocableWithConvertibleReturnType<
-        Id, const CompressedBlockMetadata::PermutedTriple&> auto idGetter,
-    const ScanSpecification& scanSpec,
-    const std::vector<CompressedBlockMetadata>& allBlocksMetadata,
-    const CancellationHandle& cancellationHandle,
-    const LocatedTriplesPerBlock& locatedTriplesPerBlock) const {
+CPP_template_def(typename IdGetter)(
+    requires ad_utility::InvocableWithConvertibleReturnType<
+        IdGetter, Id, const CompressedBlockMetadata::PermutedTriple&>) IdTable
+    CompressedRelationReader::getDistinctColIdsAndCountsImpl(
+        IdGetter idGetter, const ScanSpecification& scanSpec,
+        const std::vector<CompressedBlockMetadata>& allBlocksMetadata,
+        const CancellationHandle& cancellationHandle,
+        const LocatedTriplesPerBlock& locatedTriplesPerBlock) const {
   // The result has two columns: one for the distinct `Id`s and one for their
   // counts.
   IdTableStatic<2> table(allocator_);
@@ -1256,10 +1257,9 @@ namespace {
 // Collect elements of type `T` in batches of size 100'000 and apply the
 // `Function` to each batch. For the last batch (which might be smaller)  the
 // function is applied in the destructor.
-template <
-    typename T,
-    ad_utility::InvocableWithExactReturnType<void, std::vector<T>&&> Function>
-struct Batcher {
+CPP_template(typename T, typename Function)(
+    requires ad_utility::InvocableWithExactReturnType<
+        Function, void, std::vector<T>&&>) struct Batcher {
   Function function_;
   size_t blocksize_;
   std::vector<T> vec_;

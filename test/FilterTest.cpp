@@ -13,6 +13,7 @@
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
+#include "util/OperationTestHelpers.h"
 
 using ::testing::ElementsAre;
 using ::testing::Eq;
@@ -222,4 +223,26 @@ TEST(Filter, lazyChildMaterializedResultBinaryFilter) {
 
   EXPECT_EQ(result->idTable(),
             makeIdTableFromVector({{5}, {6}, {7}, {8}, {8}}, I));
+}
+
+// _____________________________________________________________________________
+TEST(Filter, clone) {
+  using namespace makeSparqlExpression;
+  QueryExecutionContext* qec = ad_utility::testing::getQec();
+  std::vector<IdTable> idTables;
+  auto I = ad_utility::testing::IntId;
+  idTables.push_back(makeIdTableFromVector({{1}}, I));
+
+  ValuesForTesting values{
+      qec, std::move(idTables), {Variable{"?x"}}, false, {0}};
+  QueryExecutionTree subTree{
+      qec, std::make_shared<ValuesForTesting>(std::move(values))};
+  Filter filter{qec,
+                std::make_shared<QueryExecutionTree>(std::move(subTree)),
+                {ltSprql(Variable{"?x"}, I(5)), "!?x < 5"}};
+
+  auto clone = filter.clone();
+  ASSERT_TRUE(clone);
+  EXPECT_THAT(filter, IsDeepCopy(*clone));
+  EXPECT_EQ(clone->getDescriptor(), filter.getDescriptor());
 }

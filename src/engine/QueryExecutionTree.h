@@ -243,6 +243,12 @@ class QueryExecutionTree {
           predicate_{std::move(predicate)},
           object_{std::move(object)} {}
   };
+
+  std::shared_ptr<QueryExecutionTree> clone() const {
+    return rootOperation_ ? std::make_shared<QueryExecutionTree>(
+                                qec_, rootOperation_->clone())
+                          : std::make_shared<QueryExecutionTree>(qec_);
+  }
 };
 
 namespace ad_utility {

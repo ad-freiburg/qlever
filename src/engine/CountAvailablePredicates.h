@@ -5,16 +5,11 @@
 
 #include <memory>
 #include <string>
-#include <utility>
 #include <vector>
 
-#include "../global/Pattern.h"
-#include "../parser/ParsedQuery.h"
-#include "./Operation.h"
-#include "./QueryExecutionTree.h"
-
-using std::string;
-using std::vector;
+#include "engine/Operation.h"
+#include "engine/QueryExecutionTree.h"
+#include "global/Pattern.h"
 
 // This Operation takes a Result with at least one column containing ids,
 // and a column index referring to such a column. It then creates a Result
@@ -43,16 +38,16 @@ class CountAvailablePredicates : public Operation {
                            Variable predicateVariable, Variable countVariable);
 
  protected:
-  [[nodiscard]] string getCacheKeyImpl() const override;
+  [[nodiscard]] std::string getCacheKeyImpl() const override;
 
  public:
-  [[nodiscard]] string getDescriptor() const override;
+  [[nodiscard]] std::string getDescriptor() const override;
 
   [[nodiscard]] size_t getResultWidth() const override;
 
-  [[nodiscard]] vector<ColumnIndex> resultSortedOn() const override;
+  [[nodiscard]] std::vector<ColumnIndex> resultSortedOn() const override;
 
-  vector<QueryExecutionTree*> getChildren() override {
+  std::vector<QueryExecutionTree*> getChildren() override {
     using R = vector<QueryExecutionTree*>;
     return subtree_ != nullptr ? R{subtree_.get()} : R{};
   }
@@ -68,6 +63,8 @@ class CountAvailablePredicates : public Operation {
 
  private:
   uint64_t getSizeEstimateBeforeLimit() override;
+
+  std::unique_ptr<Operation> cloneImpl() const override;
 
  public:
   size_t getCostEstimate() override;
