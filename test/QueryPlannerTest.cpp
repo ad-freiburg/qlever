@@ -2995,7 +2995,7 @@ TEST(QueryPlanner, testDistributiveJoinInUnion) {
       "  <Q11629> <P279>/(<P279>*|<P31>*) | <P31>/(<P279>*|<P31>*) ?type .\n"
       "}";
 
-  h::expectWithGivenBudget(
+  h::expectWithGivenBudgets(
       std::move(query),
       h::Union(
           h::Union(
@@ -3028,8 +3028,7 @@ TEST(QueryPlanner, testDistributiveJoinInUnion) {
                   h::IndexScanFromStrings(
                       "?_QLever_internal_variable_qp_11", "<P31>",
                       "?_QLever_internal_variable_qp_12")))),
-      qec, 4);
-  // TODO check for different budgets
+      qec, {4, 16, 64'000'000});
 }
 
 // _____________________________________________________________________________
@@ -3056,7 +3055,7 @@ TEST(QueryPlanner, testDistributiveJoinInUnionRecursive) {
       "  ?type .\n"
       "}";
 
-  h::expectWithGivenBudget(
+  h::expectWithGivenBudgets(
       std::move(query),
       h::Union(h::TransitivePath(
                    left1, right1, 0, std::numeric_limits<size_t>::max(),
@@ -3100,6 +3099,5 @@ TEST(QueryPlanner, testDistributiveJoinInUnionRecursive) {
                            h::IndexScanFromStrings(
                                "?_QLever_internal_variable_qp_17", "<P31>",
                                "?_QLever_internal_variable_qp_18")))))),
-      qec, 4);
-  // TODO check for different budgets
+      qec, {4, 16, 64'000'000});
 }
