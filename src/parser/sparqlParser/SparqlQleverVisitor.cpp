@@ -531,6 +531,7 @@ std::vector<ParsedQuery> Visitor::visit(Parser::UpdateContext* ctx) {
     // prefixes.
     // TODO: do we want to reset the prefixes between chained updates?
     parsedQuery_ = {};
+    baseIri_ = {};
     ad_utility::appendVector(updates, visit(ctx->update()));
   }
 
