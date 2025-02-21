@@ -2048,6 +2048,41 @@ auto QueryPlanner::createSpatialJoin(const SubtreePlan& a, const SubtreePlan& b,
 }
 
 // _____________________________________________________________________________________________________________________
+
+namespace {
+// Helper function that maps the indices from the unions' columns to the
+// children's columns if possible. Otherwise the entry in `jcs` is dropped.
+std::pair<QueryPlanner::JoinColumns, QueryPlanner::JoinColumns>
+mapColumnsInUnion(size_t columnIndex, const Union& unionOperation,
+                  const QueryPlanner::JoinColumns& jcs) {
+  QueryPlanner::JoinColumns leftMapping;
+  leftMapping.reserve(jcs.size());
+  QueryPlanner::JoinColumns rightMapping;
+  rightMapping.reserve(jcs.size());
+  auto mapColumns = [columnIndex, &unionOperation](
+                        bool isLeft, std::array<ColumnIndex, 2> columns)
+      -> std::optional<array<ColumnIndex, 2>> {
+    ColumnIndex& column = columns.at(columnIndex);
+    auto tmp = unionOperation.getOriginalColumn(isLeft, column);
+    if (tmp.has_value()) {
+      column = tmp.value();
+      return columns;
+    }
+    return std::nullopt;
+  };
+  for (const auto& joinColumns : jcs) {
+    if (auto mappedColumn = mapColumns(true, joinColumns)) {
+      leftMapping.push_back(mappedColumn.value());
+    }
+    if (auto mappedColumn = mapColumns(false, joinColumns)) {
+      rightMapping.push_back(mappedColumn.value());
+    }
+  }
+  return {std::move(leftMapping), std::move(rightMapping)};
+}
+}  // namespace
+
+// _____________________________________________________________________________________________________________________
 auto QueryPlanner::applyJoinDistributivelyToUnion(SubtreePlan a, SubtreePlan b,
                                                   const JoinColumns& jcs) const
     -> std::vector<SubtreePlan> {
@@ -2069,29 +2104,8 @@ auto QueryPlanner::applyJoinDistributivelyToUnion(SubtreePlan a, SubtreePlan b,
     const auto& leftCandidate = flipped ? other : tmpPlan;
     const auto& rightCandidate = flipped ? tmpPlan : clonedOther;
 
-    JoinColumns leftMapping;
-    leftMapping.reserve(jcs.size());
-    JoinColumns rightMapping;
-    rightMapping.reserve(jcs.size());
-    auto mapColumns = [flipped, &unionOperation](
-                          bool isLeft, std::array<ColumnIndex, 2> columns)
-        -> std::optional<array<ColumnIndex, 2>> {
-      ColumnIndex& column = columns.at(flipped);
-      auto tmp = unionOperation->getOriginalColumn(isLeft, column);
-      if (tmp.has_value()) {
-        column = tmp.value();
-        return columns;
-      }
-      return std::nullopt;
-    };
-    for (const auto& joinColumns : jcs) {
-      if (auto mappedColumn = mapColumns(true, joinColumns)) {
-        leftMapping.push_back(mappedColumn.value());
-      }
-      if (auto mappedColumn = mapColumns(false, joinColumns)) {
-        rightMapping.push_back(mappedColumn.value());
-      }
-    }
+    auto [leftMapping, rightMapping] =
+        mapColumnsInUnion(flipped, *unionOperation, jcs);
 
     tmpPlan._qet = unionOperation->leftChild();
     auto joinedLeft =

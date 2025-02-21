@@ -23,7 +23,6 @@ class QueryPlanner {
   using CancellationHandle = ad_utility::SharedCancellationHandle;
   template <typename T>
   using vector = std::vector<T>;
-  using JoinColumns = std::vector<std::array<ColumnIndex, 2>>;
 
   ParsedQuery::DatasetClauses activeDatasetClauses_;
   // The variable of the innermost `GRAPH ?var` clause that the planner
@@ -33,6 +32,8 @@ class QueryPlanner {
   std::optional<Variable> activeGraphVariable_;
 
  public:
+  using JoinColumns = std::vector<std::array<ColumnIndex, 2>>;
+
   explicit QueryPlanner(QueryExecutionContext* qec,
                         CancellationHandle cancellationHandle);
 
