@@ -104,13 +104,11 @@ class Index {
   // Read necessary metadata into memory and open file handles.
   void addTextFromOnDiskIndex();
 
-  using Vocab =
-      Vocabulary<CompressedString, TripleComponentComparator, VocabIndex>;
+  using Vocab = RdfsVocabulary;
   [[nodiscard]] const Vocab& getVocab() const;
   Vocab& getNonConstVocabForTesting();
 
-  using TextVocab =
-      Vocabulary<std::string, SimpleStringComparator, WordVocabIndex>;
+  using TextVocab = TextVocabulary;
   [[nodiscard]] const TextVocab& getTextVocab() const;
 
   // Get a (non-owning) pointer to the BlankNodeManager of this Index.
@@ -132,8 +130,8 @@ class Index {
 
   // TODO<joka921> Once we have an overview over the folding this logic should
   // probably not be in the index class.
-  std::string indexToString(VocabIndex id) const;
-  std::string_view indexToString(WordVocabIndex id) const;
+  Vocab::AccessReturnType indexToString(VocabIndex id) const;
+  TextVocab::AccessReturnType indexToString(WordVocabIndex id) const;
 
   [[nodiscard]] Vocab::PrefixRanges prefixRanges(std::string_view prefix) const;
 
