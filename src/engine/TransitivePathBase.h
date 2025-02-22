@@ -55,6 +55,14 @@ struct TransitivePathSide {
     // TODO<C++23> use ql::ranges::starts_with
     return (!sortedOn.empty() && sortedOn[0] == col);
   }
+
+  TransitivePathSide clone() const {
+    TransitivePathSide copy = *this;
+    if (copy.treeAndCol_.has_value()) {
+      copy.treeAndCol_.value().first = copy.treeAndCol_.value().first->clone();
+    }
+    return copy;
+  }
 };
 
 // We deliberately use the `std::` variants of a hash set and hash map because

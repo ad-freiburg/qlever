@@ -621,3 +621,9 @@ void Service::precomputeSiblingResult(std::shared_ptr<Operation> left,
       service->siblingInfo_->precomputedResult_;
   addRuntimeInfo(true);
 }
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> Service::cloneImpl() const {
+  return std::make_unique<Service>(_executionContext, parsedServiceClause_,
+                                   getResultFunction_);
+}

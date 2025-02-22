@@ -15,5 +15,5 @@ add_library(engine
         TextLimit.cpp LazyGroupBy.cpp GroupByHashMapOptimization.cpp SpatialJoin.cpp
         CountConnectedSubgraphs.cpp SpatialJoinAlgorithms.cpp PathSearch.cpp ExecuteUpdate.cpp
         Describe.cpp GraphStoreProtocol.cpp
-        QueryExecutionContext.cpp ExistsJoin.cpp)
+        QueryExecutionContext.cpp ExistsJoin.cpp SPARQLProtocol.cpp ParsedRequestBuilder.cpp)
 qlever_target_link_libraries(engine util index parser sparqlExpressions http SortPerformanceEstimator Boost::iostreams s2)

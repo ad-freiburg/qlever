@@ -22,6 +22,7 @@
 #include "util/GTestHelpers.h"
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
+#include "util/OperationTestHelpers.h"
 #include "util/TripleComponentTestHelpers.h"
 #include "util/http/HttpUtils.h"
 
@@ -794,4 +795,26 @@ TEST_F(ServiceTest, precomputeSiblingResult) {
            .value()
            ->idTables()) {
   }
+}
+
+// ____________________________________________________________________________
+TEST_F(ServiceTest, clone) {
+  Service service{
+      testQec,
+      parsedQuery::Service{
+          {Variable{"?x"}, Variable{"?y"}},
+          TripleComponent::Iri::fromIriref("<http://localhorst/api>"),
+          "PREFIX doof: <http://doof.org>",
+          "{ }",
+          true},
+      getResultFunctionFactory(
+          "http://localhorst:80/api",
+          "PREFIX doof: <http://doof.org> SELECT ?x ?y WHERE { }",
+          genJsonResult({"x", "y"}, {{"a", "b"}}),
+          boost::beast::http::status::ok, "application/sparql-results+json")};
+
+  auto clone = service.clone();
+  ASSERT_TRUE(clone);
+  EXPECT_THAT(service, IsDeepCopy(*clone));
+  EXPECT_EQ(clone->getDescriptor(), service.getDescriptor());
 }
