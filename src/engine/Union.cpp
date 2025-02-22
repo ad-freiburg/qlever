@@ -240,6 +240,13 @@ std::vector<ColumnIndex> Union::computePermutation() const {
 }
 
 // _____________________________________________________________________________
+std::optional<ColumnIndex> Union::getOriginalColumn(
+    bool leftChild, ColumnIndex unionColumn) const {
+  ColumnIndex column = _columnOrigins.at(unionColumn).at(!leftChild);
+  return column == NO_COLUMN ? std::nullopt : std::optional{column};
+}
+
+// _____________________________________________________________________________
 IdTable Union::transformToCorrectColumnFormat(
     IdTable idTable, const std::vector<ColumnIndex>& permutation) const {
   // NOTE: previously the check was for `getResultWidth()`, but that is wrong if
