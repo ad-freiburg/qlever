@@ -21,8 +21,10 @@
 namespace ad_utility::testing {
 // Create an empty `Index` object that has certain default settings overwritten
 // such that very small indices, as they are typically used for unit tests,
-// can be built without a lot of time and memory overhead.
-Index makeIndexWithTestSettings();
+// can be built without a lot of time and memory overhead. Using the parameter
+// parserBufferSize the buffer size can be increased, when needed for larger
+// tests (like polygon testing in Spatial Joins).
+Index makeIndexWithTestSettings(ad_utility::MemorySize parserBufferSize = 1_kB);
 
 // Get names of all index files for a given basename. Needed for cleaning up
 // after tests using a test index.
@@ -38,7 +40,9 @@ std::vector<std::string> getAllIndexFilenames(const std::string& indexBasename);
 // following properties: Its vocabulary contains the literals `"alpha",
 // "älpha", "A", "Beta"`. These vocabulary entries are expected by the tests
 // for the subclasses of `SparqlExpression`.
-// The concrete triple contents are currently used in `GroupByTest.cpp`.
+// The concrete triple contents are currently used in `GroupByTest.cpp`. Using
+// the parameter parserBufferSize the buffer size can be increased, when needed
+// for larger tests (like polygon testing in Spatial Joins).
 Index makeTestIndex(const std::string& indexBasename,
                     std::optional<std::string> turtleInput = std::nullopt,
                     bool loadAllPermutations = true, bool usePatterns = true,
@@ -47,12 +51,15 @@ Index makeTestIndex(const std::string& indexBasename,
                     bool createTextIndex = false,
                     bool addWordsFromLiterals = true,
                     std::optional<std::pair<std::string, std::string>>
-                        contentsOfWordsFileAndDocsfile = std::nullopt);
+                        contentsOfWordsFileAndDocsfile = std::nullopt,
+                    ad_utility::MemorySize parserBufferSize = 1_kB);
 
 // Return a static  `QueryExecutionContext` that refers to an index that was
 // build using `makeTestIndex` (see above). The index (most notably its
 // vocabulary) is the only part of the `QueryExecutionContext` that is actually
-// relevant for these tests, so the other members are defaulted.
+// relevant for these tests, so the other members are defaulted. Using
+// the parameter parserBufferSize the buffer size can be increased, when needed
+// for larger tests (like polygon testing in Spatial Joins).
 QueryExecutionContext* getQec(
     std::optional<std::string> turtleInput = std::nullopt,
     bool loadAllPermutations = true, bool usePatterns = true,
@@ -60,7 +67,8 @@ QueryExecutionContext* getQec(
     ad_utility::MemorySize blocksizePermutations = 16_B,
     bool createTextIndex = false, bool addWordsFromLiterals = true,
     std::optional<std::pair<std::string, std::string>>
-        contentsOfWordsFileAndDocsfile = std::nullopt);
+        contentsOfWordsFileAndDocsfile = std::nullopt,
+    ad_utility::MemorySize parserBufferSize = 1_kB);
 
 // Return a lambda that takes a string and converts it into an ID by looking
 // it up in the vocabulary of `index`. An `AD_CONTRACT_CHECK` will fail if the

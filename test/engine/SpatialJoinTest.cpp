@@ -607,7 +607,7 @@ INSTANTIATE_TEST_SUITE_P(SpatialJoin, SpatialJoinKnownEmptyTest,
 namespace resultSortedOn {
 
 TEST(SpatialJoin, resultSortedOn) {
-  std::string kg = createSmallDatasetWithPoints();
+  std::string kg = createSmallDataset();
 
   ad_utility::MemorySize blocksizePermutations = 16_MB;
   auto qec = getQec(kg, true, true, false, blocksizePermutations, false);
@@ -808,7 +808,7 @@ class SpatialJoinMultiplicityAndSizeEstimateTest
     };
 
     const double doubleBound = 0.00001;
-    std::string kg = createSmallDatasetWithPoints();
+    std::string kg = createSmallDataset();
 
     // add multiplicities to test knowledge graph
     kg += "<node_1> <name> \"testing multiplicity\" .";
@@ -940,7 +940,7 @@ class SpatialJoinMultiplicityAndSizeEstimateTest
       // ================================ here the children are only index
       // scans, as they are perfectly predictable in relation to size and
       // multiplicity estimates
-      std::string kg = createSmallDatasetWithPoints();
+      std::string kg = createSmallDataset();
 
       // add multiplicities to test knowledge graph
       kg += "<geometry1> <asWKT> \"POINT(7.12345 48.12345)\".";

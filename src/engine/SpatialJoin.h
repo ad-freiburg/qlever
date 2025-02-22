@@ -174,6 +174,10 @@ class SpatialJoin : public Operation {
     return childRight_;
   }
 
+  PreparedSpatialJoinParams onlyForTestingGetPrepareJoin() const {
+    return prepareJoin();
+  }
+
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
 
