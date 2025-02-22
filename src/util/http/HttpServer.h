@@ -243,6 +243,11 @@ CPP_template(typename HttpHandler, typename WebSocketHandler)(
 
     // Sessions might be reused for multiple request/response pairs.
     while (true) {
+      // Optional to temporarily store an error response. We can not `co_await`
+      // in a `catch` block and thus can not send the error response directly in
+      // the `catch`.
+      std::optional<http::response<http::string_body>> errorResponse;
+
       try {
         // Set the timeout for reading the next request.
         stream.expires_after(std::chrono::seconds(30));
@@ -292,6 +297,13 @@ CPP_template(typename HttpHandler, typename WebSocketHandler)(
           // The stream has ended, gracefully close the connection.
           beast::error_code ec;
           stream.socket().shutdown(tcp::socket::shutdown_send, ec);
+        } else if (error.code() == http::error::body_limit) {
+          errorResponse = ad_utility::httpUtils::createHttpResponseFromString(
+              absl::StrCat(
+                  R"({"error": "Request body size exceeds the allowed size ()",
+                  RuntimeParameters().get<"request-body-limit">().asString(),
+                  R"(). Send a smaller request or set the allowed size via the "request-body-limit" run-time parameter."})"),
+              http::status::payload_too_large, ad_utility::MediaType::json);
         } else {
           // This is the error "The socket was closed due to a timeout" or if
           // the client stream ended unexpectedly.
@@ -303,8 +315,12 @@ CPP_template(typename HttpHandler, typename WebSocketHandler)(
             logBeastError(error.code(), error.what());
           }
         }
-        // In case of an error, close the session by returning.
-        co_return;
+        // If we have an error response send it outside the `catch` block. (We
+        // can not `co_await` in the `catch` block) Otherwise close the
+        // session by returning.
+        if (!errorResponse) {
+          co_return;
+        }
       } catch (const std::exception& error) {
         LOG(ERROR) << error.what() << std::endl;
         co_return;
@@ -313,6 +329,12 @@ CPP_template(typename HttpHandler, typename WebSocketHandler)(
                       "this shouldn't happen"
                    << std::endl;
         co_return;
+      }
+
+      // If we have an error response, send it and then close the session by
+      // returning.
+      if (errorResponse.has_value()) {
+        co_return co_await sendMessage(std::move(errorResponse).value());
       }
     }
   }
