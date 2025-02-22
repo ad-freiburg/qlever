@@ -104,7 +104,7 @@ SparqlExpression::Ptr makeIfExpression(SparqlExpression::Ptr child1,
                                        SparqlExpression::Ptr child2,
                                        SparqlExpression::Ptr child3);
 
-// Implemented in ConvertToNumeric.cpp
+// Implemented in ConvertToDtypeConstructor.cpp
 SparqlExpression::Ptr makeConvertToIntExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeConvertToDoubleExpression(
     SparqlExpression::Ptr child);
@@ -112,6 +112,9 @@ SparqlExpression::Ptr makeConvertToDecimalExpression(
     SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeConvertToBooleanExpression(
     SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeConvertToDateTimeExpression(
+    SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeConvertToDateExpression(SparqlExpression::Ptr child);
 
 // Implemented in RdfTermExpressions.cpp
 SparqlExpression::Ptr makeDatatypeExpression(SparqlExpression::Ptr child);

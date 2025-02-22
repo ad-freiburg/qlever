@@ -1862,6 +1862,10 @@ TEST(SparqlParser, FunctionCall) {
                      matchUnary(&makeConvertToDecimalExpression));
   expectFunctionCall(absl::StrCat(xsd, "boolean>(?x)"),
                      matchUnary(&makeConvertToBooleanExpression));
+  expectFunctionCall(absl::StrCat(xsd, "date>(?x)"),
+                     matchUnary(&makeConvertToDateExpression));
+  expectFunctionCall(absl::StrCat(xsd, "dateTime>(?x)"),
+                     matchUnary(&makeConvertToDateTimeExpression));
 
   expectFunctionCall(absl::StrCat(xsd, "string>(?x)"),
                      matchUnary(&makeConvertToStringExpression));
@@ -1869,6 +1873,8 @@ TEST(SparqlParser, FunctionCall) {
   // Wrong number of arguments.
   expectFunctionCallFails(absl::StrCat(geof, "distance>(?a)"));
   expectFunctionCallFails(absl::StrCat(geof, "distance>(?a, ?b, ?c)"));
+  expectFunctionCallFails(absl::StrCat(xsd, "date>(?varYear, ?varMonth)"));
+  expectFunctionCallFails(absl::StrCat(xsd, "dateTime>(?varYear, ?varMonth)"));
 
   // Unknown function with `geof:`, `math:`, `xsd:`, or `ql` prefix.
   expectFunctionCallFails(absl::StrCat(geof, "nada>(?x)"));
