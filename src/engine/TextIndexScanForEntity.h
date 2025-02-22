@@ -6,7 +6,7 @@
 
 #include <string>
 
-#include "./Operation.h"
+#include "engine/Operation.h"
 
 // This operation retrieves all text records and their corresponding
 // entities from the fulltext index that contain a certain word or prefix.
@@ -84,10 +84,7 @@ class TextIndexScanForEntity : public Operation {
 
   uint64_t getSizeEstimateBeforeLimit() override;
 
-  float getMultiplicity(size_t col) override {
-    (void)col;
-    return 1;
-  }
+  float getMultiplicity(size_t) override { return 1; }
 
   bool knownEmptyResult() override;
 
@@ -96,6 +93,8 @@ class TextIndexScanForEntity : public Operation {
   VariableToColumnMap computeVariableToColumnMap() const override;
 
  private:
+  std::unique_ptr<Operation> cloneImpl() const override;
+
   const VocabIndex& getVocabIndexOfFixedEntity() const {
     AD_CONTRACT_CHECK(hasFixedEntity());
     return std::get<FixedEntity>(varOrFixed_.entity_).second;

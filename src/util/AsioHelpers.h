@@ -52,9 +52,9 @@ CPP_template(typename Executor, typename Function, typename Handler)(
       // exception_ptr and the return value as the second argument.
       if constexpr (isVoid) {
         function_();
-        callHandler(nullptr);
+        callHandler(std::exception_ptr{});
       } else {
-        callHandler(nullptr, function_());
+        callHandler(std::exception_ptr{}, function_());
       }
     } catch (...) {
       // If `function_()` throws, we propagate the exception to the

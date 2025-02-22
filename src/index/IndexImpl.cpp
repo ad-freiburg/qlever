@@ -21,8 +21,6 @@
 #include "index/IndexFormatVersion.h"
 #include "index/VocabularyMerger.h"
 #include "parser/ParallelParseBuffer.h"
-#include "parser/Tokenizer.h"
-#include "parser/TokenizerCtre.h"
 #include "util/BatchedPipeline.h"
 #include "util/CachingMemoryResource.h"
 #include "util/HashMap.h"
@@ -550,6 +548,8 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
   }
   AD_LOG_INFO << "Number of triples created (including QLever-internal ones): "
               << (*idTriples.wlock())->size() << " [may contain duplicates]"
+              << std::endl;
+  AD_LOG_INFO << "Number of partial vocabularies created: " << numFiles
               << std::endl;
 
   size_t sizeInternalVocabulary = 0;

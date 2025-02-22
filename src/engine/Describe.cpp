@@ -244,3 +244,9 @@ ProtoResult Describe::computeResult([[maybe_unused]] bool requestLaziness) {
 
   return {std::move(resultTable), resultSortedOn(), std::move(localVocab)};
 }
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> Describe::cloneImpl() const {
+  return std::make_unique<Describe>(_executionContext, subtree_->clone(),
+                                    describe_);
+}

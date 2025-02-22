@@ -576,6 +576,9 @@ class GroupBy : public Operation {
   // GROUP BY. This is used by some of the optimizations above.
   bool isVariableBoundInSubtree(const Variable& variable) const;
 
+ private:
+  std::unique_ptr<Operation> cloneImpl() const override;
+
   // TODO<joka921> implement optimization when *additional* Variables are
   // grouped.
 
