@@ -130,18 +130,16 @@ namespace detail::to_datetime {
 
 // Cast to xsd:dateTime or xsd:date (ValueId)
 template <bool ToJustXsdDate>
-inline auto castStringToDateTimeValueId = [](OptIdOrString input) -> ValueId {
-  if (!input.has_value()) {
-    return Id::makeUndefined();
-  }
+inline const auto castStringToDateTimeValueId = [](OptIdOrString input) {
+  if (!input.has_value()) return Id::makeUndefined();
+
   using DYD = DateYearOrDuration;
   std::optional<DYD> optValueId = std::visit(
-      [&](const auto& value) {
-        using T = std::decay_t<decltype(value)>;
-        if constexpr (std::is_same_v<T, ValueId>) {
+      [&]<typename T>(const T& value) {
+        if constexpr (std::is_same_v<std::decay_t<T>, ValueId>) {
           return ToJustXsdDate ? DYD::convertToXsdDate(value.getDate())
                                : DYD::convertToXsdDatetime(value.getDate());
-        } else if constexpr (std::is_same_v<T, std::string>) {
+        } else if constexpr (std::is_same_v<std::decay_t<T>, std::string>) {
           return ToJustXsdDate ? DYD::parseXsdDateGetOptDate(value)
                                : DYD::parseXsdDatetimeGetOptDate(value);
         } else {
