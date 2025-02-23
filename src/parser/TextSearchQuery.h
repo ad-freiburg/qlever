@@ -100,13 +100,17 @@ struct TextSearchQuery : MagicServiceQuery {
   // before this. If yes throws exception.
   void throwContainsWordOrEntity(const TripleComponent& subject);
 
+  // Checks if object is literal. If not throws exception.
+  static void throwObjectLiteralException(std::string_view predString,
+                                          const TripleComponent& object);
+
   void predStringTextSearch(const Variable& subjectVar,
                             const Variable& objectVar);
 
   void predStringContainsWord(const Variable& subjectVar,
                               const TripleComponent::Literal& objectLiteral);
 
-  void predStringContainsEntity(const TripleComponent& subject,
+  void predStringContainsEntity(const Variable& subjectVar,
                                 const TripleComponent& object);
 
   void predStringBindMatch(const Variable& subjectVar,

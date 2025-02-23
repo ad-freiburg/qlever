@@ -17,7 +17,8 @@ void TextSearchQuery::throwSubjectVariableException(
   if (!subject.isVariable()) {
     throw TextSearchException(
         absl::StrCat("The predicate <", predString,
-                     "> needs a Variable as Variable as subject."));
+                     "> needs a Variable as subject. The subject given was: ",
+                     subject.toString()));
   }
 }
 
@@ -26,9 +27,11 @@ void TextSearchQuery::throwSubjectAndObjectVariableException(
     std::string_view predString, const TripleComponent& subject,
     const TripleComponent& object) {
   if (!(subject.isVariable() && object.isVariable())) {
-    throw TextSearchException(
-        absl::StrCat("The predicate <", predString,
-                     "> needs a Variable as subject and one as object."));
+    throw TextSearchException(absl::StrCat(
+        "The predicate <", predString,
+        "> needs a Variable as subject and one as object. The subject given "
+        "was: ",
+        subject.toString(), ". The object given was: ", object.toString()));
   }
 }
 
@@ -43,14 +46,24 @@ void TextSearchQuery::throwContainsWordOrEntity(
 }
 
 // ____________________________________________________________________________
+void TextSearchQuery::throwObjectLiteralException(
+    std::string_view predString, const TripleComponent& object) {
+  if (!object.isLiteral()) {
+    throw TextSearchException(
+        absl::StrCat("The predicate <", predString,
+                     "> needs a Literal as object. The object given was: ",
+                     object.toString()));
+  }
+}
+
+// ____________________________________________________________________________
 void TextSearchQuery::predStringTextSearch(const Variable& subjectVar,
                                            const Variable& objectVar) {
   if (configVarToConfigs_[objectVar].textVar_.has_value()) {
-    throw TextSearchException(
-        absl::StrCat("Each search should only be linked to a single text "
-                     "Variable. The text variable was: ",
-                     configVarToConfigs_[objectVar].textVar_.value().name(),
-                     "The config variable was: ", objectVar.name()));
+    throw TextSearchException(absl::StrCat(
+        "Each search should only be linked to a single text "
+        "Variable. The second text variable given was: ",
+        subjectVar.name(), "The config variable was: ", objectVar.name()));
   }
   configVarToConfigs_[objectVar].textVar_ = subjectVar;
 }
@@ -69,24 +82,22 @@ void TextSearchQuery::predStringContainsWord(
 }
 
 // ____________________________________________________________________________
-void TextSearchQuery::predStringContainsEntity(const TripleComponent& subject,
+void TextSearchQuery::predStringContainsEntity(const Variable& subjectVar,
                                                const TripleComponent& object) {
-  if (!subject.isVariable()) {
-    throw TextSearchException(
-        "The predicate <contains-entity> needs a Variable as subject and a "
-        "Literal or Variable as object.");
-  }
-  throwContainsWordOrEntity(subject);
-  configVarToConfigs_[subject.getVariable()].isWordSearch_ = false;
+  configVarToConfigs_[subjectVar].isWordSearch_ = false;
   if (object.isLiteral()) {
-    configVarToConfigs_[subject.getVariable()].entity_ =
+    configVarToConfigs_[subjectVar].entity_ =
         std::string(asStringViewUnsafe(object.getLiteral().getContent()));
   } else if (object.isVariable()) {
-    configVarToConfigs_[subject.getVariable()].entity_ = object.getVariable();
+    configVarToConfigs_[subjectVar].entity_ = object.getVariable();
+  } else if (object.isIri()) {
+    configVarToConfigs_[subjectVar].entity_ =
+        object.getIri().toStringRepresentation();
   } else {
-    throw TextSearchException(
-        "The predicate <contains-entity> needs a Variable as subject and a "
-        "Literal or Variable as object.");
+    throw TextSearchException(absl::StrCat(
+        "The predicate <contains-entity> needs a Variable as subject and an "
+        "IRI, Literal or Variable as object. The object given was: ",
+        object.toString()));
   }
 }
 
@@ -125,15 +136,12 @@ void TextSearchQuery::addParameter(const SparqlTriple& triple) {
   } else if (predString == "contains-word") {
     throwSubjectVariableException("contains-word", subject);
     throwContainsWordOrEntity(subject);
-    if (!object.isLiteral()) {
-      throw TextSearchException(
-          "The predicate <contains-word> only accepts a literal as object.");
-    }
+    throwObjectLiteralException("contains-word", object);
     predStringContainsWord(subject.getVariable(), object.getLiteral());
   } else if (predString == "contains-entity") {
-    throwSubjectVariableException("contains-word", subject);
+    throwSubjectVariableException("contains-entity", subject);
     throwContainsWordOrEntity(subject);
-    predStringContainsEntity(subject, object);
+    predStringContainsEntity(subject.getVariable(), object);
   } else if (predString == "bind-match") {
     throwSubjectAndObjectVariableException("bind-match", subject, object);
     predStringBindMatch(subject.getVariable(), object.getVariable());
