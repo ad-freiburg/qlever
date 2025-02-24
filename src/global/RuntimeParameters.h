@@ -63,6 +63,8 @@ inline auto& RuntimeParameters() {
         // Determines whether the cost estimate for a cached subtree should be
         // set to zero in query planning.
         Bool<"zero-cost-estimate-for-cached-subtree">{false},
+        // Maximum size for the body of requests that the server will process.
+        MemorySizeParameter<"request-body-limit">{100_MB},
     };
   }();
   return params;
