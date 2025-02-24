@@ -429,7 +429,7 @@ ExpressionResult InExpression::evaluate(
 // (1) the provided `SparqlExpression* child` is a direct `Variable` expression
 // (e.g. `?x`), return `<Variable, false>`.
 // (2) the provided `SparqlExpression* child` is an expression `YEAR` which
-// referes to a `Variable` value (e.g. `YEAR(?x)`), return `<Variable, true>`.
+// refers to a `Variable` value (e.g. `YEAR(?x)`), return `<Variable, true>`.
 // (3) None of the previous expression cases, return default `std::nullopt`.
 // The `bool` flag is relevant later on to differentiate w.r.t. the logic that
 // needs to be applied for the creation of `PrefilterExpression`.

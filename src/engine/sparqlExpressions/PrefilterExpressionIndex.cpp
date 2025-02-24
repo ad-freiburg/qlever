@@ -532,7 +532,7 @@ std::unique_ptr<PrefilterExpression> makePrefilterExpressionYearImpl(
                                 make<GeExpr>(getDateId(year + 1)));
     default:
       throw std::runtime_error(
-          absl::StrCat("Set unkown (relational) comparison operator for "
+          absl::StrCat("Set unknown (relational) comparison operator for "
                        "the creation of PrefilterExpression on date-values: ",
                        getRelationalOpStr(comparison)));
   }
@@ -547,7 +547,7 @@ static std::unique_ptr<PrefilterExpression> makePrefilterExpressionVecImpl(
   if (!prefilterDateByYear) {
     return make<RelationalExpression<comparison>>(referenceValue);
   }
-  // Helper to savely retrieve `ValueId/Id` values from the provided
+  // Helper to safely retrieve `ValueId/Id` values from the provided
   // `IdOrLocalVocabEntry referenceValue` if contained. Given no `ValueId` is
   // contained, a explanatory message per `std::runtime_error` is thrown.
   const auto retrieveValueIdOrThrowErr =

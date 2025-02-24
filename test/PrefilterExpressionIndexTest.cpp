@@ -828,13 +828,13 @@ TEST(PrefilterExpressionExpressionOnMetadataTest,
 }
 
 //______________________________________________________________________________
-// Test PrefilterExpression unkown `CompOp comparison` value detection.
+// Test PrefilterExpression unknown `CompOp comparison` value detection.
 TEST(PrefilterExpressionExpressionOnMetadataTest,
      checkMakePrefilterVecDetectsAndThrowsForInvalidComparisonOp) {
   using namespace prefilterExpressions::detail;
   AD_EXPECT_THROW_WITH_MESSAGE(
       makePrefilterExpressionYearImpl(static_cast<CompOp>(10), 0),
       ::testing::HasSubstr(
-          "Set unkown (relational) comparison operator for the creation of "
+          "Set unknown (relational) comparison operator for the creation of "
           "PrefilterExpression on date-values: Undefined CompOp value: 10."));
 }
