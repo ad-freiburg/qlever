@@ -1,7 +1,7 @@
 // Copyright 2021-2025, University of Freiburg,
 // Chair of Algorithms and Data Structures
 // Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
-//          Julian Mundhahs <mundhahj@t
+//          Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
 
 #ifndef QLEVER_HTTPSERVER_H
 #define QLEVER_HTTPSERVER_H
