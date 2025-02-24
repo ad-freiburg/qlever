@@ -22,11 +22,13 @@ class Union : public Operation {
    */
   std::vector<std::array<size_t, 2>> _columnOrigins;
   std::array<std::shared_ptr<QueryExecutionTree>, 2> _subtrees;
+  std::vector<ColumnIndex> targetOrder_;
 
  public:
   Union(QueryExecutionContext* qec,
         const std::shared_ptr<QueryExecutionTree>& t1,
-        const std::shared_ptr<QueryExecutionTree>& t2);
+        const std::shared_ptr<QueryExecutionTree>& t2,
+        std::vector<ColumnIndex> targetOrder = {});
 
  protected:
   virtual string getCacheKeyImpl() const override;
@@ -61,6 +63,14 @@ class Union : public Operation {
     return {_subtrees[0].get(), _subtrees[1].get()};
   }
 
+  // Create a sorted variant of this operation. This can be more efficient than
+  // stacking a `Sort` operation on top of this one because Union can simply
+  // push the sort down to its children. If one of the children is already
+  // sorted properly then it is way cheaper to sort the other child and then
+  // merge the two sorted results.
+  std::shared_ptr<Operation> createSortedVariant(
+      const vector<ColumnIndex>& sortColumns) const;
+
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
 
@@ -84,5 +94,19 @@ class Union : public Operation {
   // the merged LocalVocab to the given `LocalVocab` object at the end.
   Result::Generator computeResultLazily(
       std::shared_ptr<const Result> result1,
+      std::shared_ptr<const Result> result2) const;
+
+  // Compares two rows with respect to the columns that the result is sorted on.
+  bool isSmaller(const auto& row1, const auto& row2) const;
+
+  // Actual implementation of `computeResultKeepOrder`.
+  Result::Generator computeResultKeepOrderImpl(
+      bool requestLaziness, auto range1, auto range2,
+      std::pair<std::shared_ptr<const Result>, std::shared_ptr<const Result>>
+          lifetimeExtension) const;
+
+  // Similar to `computeResultLazily` but it keeps the order of the results.
+  Result::Generator computeResultKeepOrder(
+      bool requestLaziness, std::shared_ptr<const Result> result1,
       std::shared_ptr<const Result> result2) const;
 };
