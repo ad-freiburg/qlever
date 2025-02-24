@@ -765,10 +765,9 @@ TEST_F(PrefilterExpressionOnMetadataTest, testEqualityOperator) {
 // Test PrefilterExpression content formatting for debugging.
 TEST(PrefilterExpressionExpressionOnMetadataTest,
      checkPrintFormattedPrefilterExpression) {
-  auto exprToString = [](const PrefilterExpression& expr) {
+  auto exprToString = [](const auto& expr) {
     return (std::stringstream{} << expr).str();
   };
-
   auto matcher = [&exprToString](const std::string& substring) {
     return ::testing::ResultOf(exprToString, ::testing::Eq(substring));
   };
@@ -826,4 +825,16 @@ TEST(PrefilterExpressionExpressionOnMetadataTest,
           "RelationalExpression<NE(!=)>\nreferenceValue_ : <iri/custom/v10> "
           ".\n}child2 {Prefilter RelationalExpression<NE(!=)>\nreferenceValue_ "
           ": <iri/custom/v66> .\n}\n.\n"));
+}
+
+//______________________________________________________________________________
+// Test PrefilterExpression unkown `CompOp comparison` value detection.
+TEST(PrefilterExpressionExpressionOnMetadataTest,
+     checkMakePrefilterVecDetectsAndThrowsForInvalidComparisonOp) {
+  using namespace prefilterExpressions::detail;
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      makePrefilterExpressionYearImpl(static_cast<CompOp>(10), 0),
+      ::testing::HasSubstr(
+          "Set unkown (relational) comparison operator for the creation of "
+          "PrefilterExpression on date-values: Undefined CompOp value: 10."));
 }

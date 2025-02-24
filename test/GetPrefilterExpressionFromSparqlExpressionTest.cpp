@@ -523,24 +523,37 @@ TEST(GetPrefilterExpressionFromSparqlExpression, tryGetPrefilterExprForDate) {
   evalAndEqualityCheck(
       eqSprql(yearSprqlExpr(ltSprql(var, IntId(2025))), IntId(2025)));
 
-  auto assertThrowsError = [](std::unique_ptr<SparqlExpression> expr) {
-    try {
-      expr->getPrefilterExpressionForMetadata();
-      FAIL() << "Expected std::runtime_error";
-    } catch (const std::runtime_error& err) {
-      EXPECT_STREQ(err.what(),
-                   "Pre-filtering DATETIME/DATE values over YEAR failed: "
-                   "requires INTEGER reference value.");
-    } catch (...) {
-      FAIL() << "Different error to std::runtime_error was thrown.";
-    }
+  auto assertThrowsError = [](std::unique_ptr<SparqlExpression> expr,
+                              const std::string& runtimeErrorMessage) {
+    AD_EXPECT_THROW_WITH_MESSAGE(expr->getPrefilterExpressionForMetadata(),
+                                 ::testing::Eq(runtimeErrorMessage));
   };
   // Test SparqlExpressions for which we expect that the reference value-type
   // error is thrown.
-  assertThrowsError(eqSprql(yearSprqlExpr(var), I("<iri>")));
-  assertThrowsError(gtSprql(yearSprqlExpr(var), I("<iri>")));
-  assertThrowsError(ltSprql(yearSprqlExpr(var), Id::makeFromBool(false)));
-  assertThrowsError(neqSprql(yearSprqlExpr(var), Id::makeUndefined()));
+  assertThrowsError(
+      eqSprql(yearSprqlExpr(var), I("<iri>")),
+      "Provided Literal or Iri with value: <iri>. This is an invalid reference "
+      "value for filtering date values over expression YEAR. Please provide an "
+      "integer value as reference year.");
+  assertThrowsError(
+      gtSprql(yearSprqlExpr(var), I("<iri>")),
+      "Provided Literal or Iri with value: <iri>. This is an invalid reference "
+      "value for filtering date values over expression YEAR. Please provide an "
+      "integer value as reference year.");
+  assertThrowsError(
+      neqSprql(yearSprqlExpr(var), L("\"lit value\"")),
+      "Provided Literal or Iri with value: \"lit value\". This is an invalid "
+      "reference "
+      "value for filtering date values over expression YEAR. Please provide an "
+      "integer value as reference year.");
+  assertThrowsError(ltSprql(yearSprqlExpr(var), Id::makeFromBool(false)),
+                    "Reference value for filtering date values over expression "
+                    "YEAR is of invalid datatype: Bool.\nPlease provide an "
+                    "integer value as reference year.");
+  assertThrowsError(neqSprql(yearSprqlExpr(var), Id::makeUndefined()),
+                    "Reference value for filtering date values over expression "
+                    "YEAR is of invalid datatype: Undefined.\nPlease provide "
+                    "an integer value as reference year.");
 }
 
 // Test that the conditions required for a correct merge of child

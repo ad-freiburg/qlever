@@ -60,13 +60,6 @@ class SparqlExpression {
   virtual std::unique_ptr<SparqlExpression> replaceChild(
       size_t childIndex, std::unique_ptr<SparqlExpression> newExpression);
 
-  // Returns the child at index `childIndex` for this expression.
-  // By default the implementation of this method returns `std::nullopt`.
-  // If the given `childIndex` is out of bounds for the respective expression,
-  // `std::nullopt` will be returned as well.
-  virtual std::optional<SparqlExpression*> getChildAtIndex(
-      size_t childIndex) const;
-
   // Get a unique identifier for this expression, used as cache key.
   virtual string getCacheKey(const VariableToColumnMap& varColMap) const = 0;
 

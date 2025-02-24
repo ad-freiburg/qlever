@@ -253,18 +253,33 @@ void checkPropertiesForPrefilterConstruction(
     const std::vector<PrefilterExprVariablePair>& vec);
 
 //______________________________________________________________________________
+// Use for testing only. The definition here is necessary to call
+// `makePrefilterYearImpl` with an invalid `CompOp` argument given that it is
+// internally in use over the `CompOp` save template instantiated
+// `makePrefilterExpressionVec`. Use `makePrefilterExpressionVec` to retrieve
+// the actual `PrefilterExpression` (with corresponding `Variable`).
+std::unique_ptr<PrefilterExpression> makePrefilterExpressionYearImpl(
+    CompOp comparison, const int year);
+
+//______________________________________________________________________________
 // Creates a `RelationalExpression<comparison>` prefilter expression based on
-// the templated `CompOp` comparison operation and the reference
+// the specified `CompOp` comparison operation and the reference
 // `IdOrLocalVocabEntry` value. With the next step, the corresponding
 // `<RelationalExpression<comparison>, Variable>` pair is created, and finally
-// returned in a vector. The `mirrored` flag indicates if the given
-// `RelationalExpression<comparison>` should be mirrored. The mirroring
-// procedure changes the (asymmetrical) comparison operations:
-// e.g. `5 < ?x` is changed to `?x > 5`.
+// returned in a vector.
+// The `mirrored` flag indicates if the given `RelationalExpression<comparison>`
+// should be mirrored. The mirroring procedure changes the (asymmetrical)
+// comparison operations: e.g. `5 < ?x` is changed to `?x > 5`.
+// The `prefilterDateByYear` flag indicates that the constructed
+// `PrefilterExpression<comp>` needs to consider `Date`/`DateYearOrDuration`
+// value ranges for the `BlockMetadata` pre-selection (w.r.t. the year provided
+// as an Int-`ValueId` over `referenceValue`). This requires a slightly
+// different logic when constructing the expression, hence set
+// `prefilterDateByYear` as an indicator.
 template <CompOp comparison>
 std::vector<PrefilterExprVariablePair> makePrefilterExpressionVec(
     const IdOrLocalVocabEntry& referenceValue, const Variable& variable,
-    bool mirrored, bool prefilterDate = false);
+    bool mirrored, bool prefilterDateByYear = false);
 
 }  // namespace detail
 }  // namespace prefilterExpressions

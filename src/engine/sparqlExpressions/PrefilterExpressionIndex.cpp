@@ -156,7 +156,8 @@ static std::string getRelationalOpStr(const CompOp relOp) {
     case GT:
       return "GT(>)";
     default:
-      AD_FAIL();
+      return absl::StrCat("Undefined CompOp value: ", static_cast<int>(relOp),
+                          ".");
   }
 }
 
@@ -501,11 +502,15 @@ void checkPropertiesForPrefilterConstruction(
 }
 
 //______________________________________________________________________________
-template <CompOp comparison>
-static std::unique_ptr<PrefilterExpression> makePrefilterExpressionYearImpl(
-    const int year) {
+std::unique_ptr<PrefilterExpression> makePrefilterExpressionYearImpl(
+    CompOp comparison, const int year) {
   using GeExpr = GreaterEqualExpression;
   using LtExpr = LessThanExpression;
+
+  // `getDateId` returns an `Id` containing the smallest possible `Date`
+  // (`xsd::date`) for which `YEAR(Id) == adjustedYear` is valid. This `Id` acts
+  // as a reference bound for the actual `DateYearOrDuration` prefiltering
+  // procedure.
   const auto getDateId = [](const int adjustedYear) {
     return Id::makeFromDate(DateYearOrDuration(Date(adjustedYear, 0, 0)));
   };
@@ -526,42 +531,69 @@ static std::unique_ptr<PrefilterExpression> makePrefilterExpressionYearImpl(
       return make<OrExpression>(make<LtExpr>(getDateId(year)),
                                 make<GeExpr>(getDateId(year + 1)));
     default:
-      AD_FAIL();
+      throw std::runtime_error(
+          absl::StrCat("Set unkown (relational) comparison operator for "
+                       "the creation of PrefilterExpression on date-values: ",
+                       getRelationalOpStr(comparison)));
   }
 };
 
 //______________________________________________________________________________
 template <CompOp comparison>
 static std::unique_ptr<PrefilterExpression> makePrefilterExpressionVecImpl(
-    const IdOrLocalVocabEntry& referenceValue, bool prefilterDate) {
+    const IdOrLocalVocabEntry& referenceValue, bool prefilterDateByYear) {
+  using enum Datatype;
   // Standard pre-filtering procedure.
-  if (!prefilterDate) {
+  if (!prefilterDateByYear) {
     return make<RelationalExpression<comparison>>(referenceValue);
   }
-
+  // Helper to savely retrieve `ValueId/Id` values from the provided
+  // `IdOrLocalVocabEntry referenceValue` if contained. Given no `ValueId` is
+  // contained, a explanatory message per `std::runtime_error` is thrown.
+  const auto retrieveValueIdOrThrowErr =
+      [](const IdOrLocalVocabEntry& referenceValue) {
+        return std::visit(
+            []<typename T>(const T& value) -> ValueId {
+              if constexpr (std::is_same_v<std::decay_t<T>, ValueId>) {
+                return value;
+              } else if constexpr (std::is_same_v<std::decay_t<T>,
+                                                  LocalVocabEntry>) {
+                throw std::runtime_error(absl::StrCat(
+                    "Provided Literal or Iri with value: ",
+                    value.asLiteralOrIri().toStringRepresentation(),
+                    ". This is an invalid reference value for filtering date "
+                    "values over expression YEAR. Please provide an integer "
+                    "value as reference year."));
+              }
+              throw std::runtime_error(
+                  "Reference value IdOrLocalVocabEntry contains unknown type.");
+            },
+            referenceValue);
+      };
   // Handle year extraction and return a date-value adjusted
   // `PrefilterExpression` if possible. Given an unsuitable reference value was
   // provided, throw a std::runtime_error with an explanatory message.
-  const auto retrieveYearIntOrThrowRuntimerErr =
-      [](const IdOrLocalVocabEntry& referenceValue) {
-        using enum Datatype;
-        if (auto* valueId = std::get_if<ValueId>(&referenceValue);
-            valueId && valueId->getDatatype() == Int) {
-          return valueId->getInt();
+  const auto retrieveYearIntOrThrowErr =
+      [&retrieveValueIdOrThrowErr](const IdOrLocalVocabEntry& referenceValue) {
+        const ValueId& valueId = retrieveValueIdOrThrowErr(referenceValue);
+        if (valueId.getDatatype() == Int) {
+          return valueId.getInt();
         }
-        throw std::runtime_error(
-            "Pre-filtering DATETIME/DATE values over YEAR failed: requires "
-            "INTEGER reference value.");
+        throw std::runtime_error(absl::StrCat(
+            "Reference value for filtering date values over "
+            "expression YEAR is of invalid datatype: ",
+            toString(valueId.getDatatype()),
+            ".\nPlease provide an integer value as reference year."));
       };
-  return makePrefilterExpressionYearImpl<comparison>(
-      retrieveYearIntOrThrowRuntimerErr(referenceValue));
+  return makePrefilterExpressionYearImpl(
+      comparison, retrieveYearIntOrThrowErr(referenceValue));
 };
 
 //______________________________________________________________________________
 template <CompOp comparison>
 std::vector<PrefilterExprVariablePair> makePrefilterExpressionVec(
     const IdOrLocalVocabEntry& referenceValue, const Variable& variable,
-    bool mirrored, bool prefilterDate) {
+    bool mirrored, bool prefilterDateByYear) {
   using enum CompOp;
   std::vector<PrefilterExprVariablePair> resVec{};
   if (mirrored) {
@@ -573,12 +605,12 @@ std::vector<PrefilterExprVariablePair> makePrefilterExpressionVec(
     constexpr ad_utility::ConstexprMap<CompOp, CompOp, 6> mirrorMap(
         {P{LT, GT}, P{LE, GE}, P{GE, LE}, P{GT, LT}, P{EQ, EQ}, P{NE, NE}});
     resVec.emplace_back(
-        makePrefilterExpressionVecImpl<mirrorMap.at(comparison)>(referenceValue,
-                                                                 prefilterDate),
+        makePrefilterExpressionVecImpl<mirrorMap.at(comparison)>(
+            referenceValue, prefilterDateByYear),
         variable);
   } else {
     resVec.emplace_back(makePrefilterExpressionVecImpl<comparison>(
-                            referenceValue, prefilterDate),
+                            referenceValue, prefilterDateByYear),
                         variable);
   }
   return resVec;
