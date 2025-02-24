@@ -67,6 +67,10 @@ class TextIndexScanForEntity : public Operation {
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 
+  const TextIndexScanForEntityConfiguration& getConfig() const {
+    return config_;
+  }
+
  private:
   const VocabIndex& getVocabIndexOfFixedEntity() const {
     AD_CONTRACT_CHECK(hasFixedEntity());

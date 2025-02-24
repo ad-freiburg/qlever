@@ -52,6 +52,8 @@ class TextIndexScanForWord : public Operation {
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 
+  const TextIndexScanForWordConfiguration& getConfig() const { return config_; }
+
  private:
   // Returns a Result containing an IdTable with the columns being
   // the text variable and the completed word (if it was prefixed)

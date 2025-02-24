@@ -66,6 +66,10 @@ void TextIndexScanForWord::setVariableToColumnMap() {
     config_.variableColumns_.value()[config_.varToBindMatch_.value()] =
         makeAlwaysDefinedColumn(index);
     index++;
+  } else if (config_.varToBindMatch_.has_value()) {
+    throw parsedQuery::TextSearchException(
+        "Text index scan for word shouldn't have a variable to bind match "
+        "defined when the word is not a prefix.");
   }
   if (config_.varToBindScore_.has_value()) {
     config_.variableColumns_.value()[config_.varToBindScore_.value()] =

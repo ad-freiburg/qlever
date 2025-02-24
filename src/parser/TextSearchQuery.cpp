@@ -40,8 +40,8 @@ void TextSearchQuery::throwContainsWordOrEntity(
     const TripleComponent& subject) {
   if (configVarToConfigs_[subject.getVariable()].isWordSearch_.has_value()) {
     throw TextSearchException(
-        "Each search should have exactly one occurrence of either "
-        "<contains-word> or <contains-entity>");
+        "Each text search config should have exactly one occurrence of either "
+        "<contains-word> or <contains-entity>.");
   }
 }
 
@@ -61,9 +61,9 @@ void TextSearchQuery::predStringTextSearch(const Variable& subjectVar,
                                            const Variable& objectVar) {
   if (configVarToConfigs_[objectVar].textVar_.has_value()) {
     throw TextSearchException(absl::StrCat(
-        "Each search should only be linked to a single text "
+        "Each text search config should only be linked to a single text "
         "Variable. The second text variable given was: ",
-        subjectVar.name(), "The config variable was: ", objectVar.name()));
+        subjectVar.name(), ". The config variable was: ", objectVar.name()));
   }
   configVarToConfigs_[objectVar].textVar_ = subjectVar;
 }
@@ -75,7 +75,7 @@ void TextSearchQuery::predStringContainsWord(
   std::string_view literal = asStringViewUnsafe(objectLiteral.getContent());
   if (literal.empty()) {
     throw TextSearchException(
-        "The predicate <contains-word> shouldn't have an empty literal as "
+        "The predicate <contains-word> shouldn't have an empty Literal as "
         "object.");
   }
   configVarToConfigs_[subjectVar].word_ = literal;
@@ -163,12 +163,12 @@ TextSearchQuery::toConfigs(const QueryExecutionContext* qec) const {
   for (const auto& [var, conf] : configVarToConfigs_) {
     if (!conf.isWordSearch_.has_value()) {
       throw TextSearchException(
-          "Text search service needs either <contains-word> or "
+          "Text search service needs configs with exactly one occurrence of "
+          "either <contains-word> or "
           "<contains-entity>.");
     }
     if (!conf.textVar_.has_value()) {
-      throw TextSearchException(
-          "Text search service needs a text variable to search.");
+      AD_FAIL();
     }
     if (conf.isWordSearch_.value()) {
       potentialTermsForCvar[conf.textVar_.value()].push_back(
@@ -184,9 +184,11 @@ TextSearchQuery::toConfigs(const QueryExecutionContext* qec) const {
     } else {
       auto it = potentialTermsForCvar.find(conf.textVar_.value());
       if (it == potentialTermsForCvar.end()) {
-        throw TextSearchException(
-            "Entity search has to happen on a text variable that is also "
-            "contained in a word search.");
+        throw TextSearchException(absl::StrCat(
+            "Entity search has to happen on a text Variable that is also "
+            "contained in a word search. Text Variable: ",
+            conf.textVar_.value().name(),
+            " is not contained in a word search."));
       }
       output.emplace_back(TextIndexScanForEntityConfiguration{
           conf.textVar_.value(), conf.entity_.value(),

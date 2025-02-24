@@ -60,6 +60,11 @@ struct TextIndexScanForEntityConfiguration {
   std::optional<Variable> varToBindScore_ = std::nullopt;
   std::optional<VariableToColumnMap> variableColumns_ = std::nullopt;
   std::optional<VarOrFixedEntity> varOrFixed_ = std::nullopt;
+
+  bool operator==(const TextIndexScanForEntityConfiguration& other) const {
+    return varToBindText_ == other.varToBindText_ && entity_ == other.entity_ &&
+           word_ == other.word_ && varToBindScore_ == other.varToBindScore_;
+  }
 };
 
 struct TextIndexScanForWordConfiguration {
@@ -69,6 +74,13 @@ struct TextIndexScanForWordConfiguration {
   std::optional<Variable> varToBindScore_ = std::nullopt;
   bool isPrefix_ = false;
   std::optional<VariableToColumnMap> variableColumns_ = std::nullopt;
+
+  bool operator==(const TextIndexScanForWordConfiguration& other) const {
+    return varToBindText_ == other.varToBindText_ && word_ == other.word_ &&
+           varToBindMatch_ == other.varToBindMatch_ &&
+           varToBindScore_ == other.varToBindScore_ &&
+           isPrefix_ == other.isPrefix_;
+  }
 };
 
 namespace parsedQuery {
