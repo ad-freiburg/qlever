@@ -13,7 +13,6 @@
 
 #include <boost/beast/ssl.hpp>
 #include <functional>
-#include <thread>
 
 #include "util/http/HttpUtils.h"
 
@@ -24,23 +23,35 @@ namespace net = boost::asio;
 namespace ssl = net::ssl;
 using tcp = net::ip::tcp;
 
+/*
+ * Class managing a WebSocketClient.
+ */
 template <typename StreamType>
 class WebSocketClientImpl {
- public:
   using MessageHandler = std::function<void(const std::string&)>;
 
-  WebSocketClientImpl(const std::string& host, const std::string& port,
-                      const std::string& target);
+ public:
+  // Constructor with the endpoints url and additional path for the websocket
+  // connection.
+  WebSocketClientImpl(const ad_utility::httpUtils::Url& url,
+                      const std::string& websocketPath);
 
+  // Destructor gracefully closes the connection.
   ~WebSocketClientImpl() { close(); }
 
+  // Start the websocket connection.
   void start();
 
-  void setMessageHandler(MessageHandler handler) { messageHandler_ = handler; }
+  // Setter for the `msgHandler_`.
+  void setMessageHandler(const MessageHandler& handler) {
+    msgHandler_ = handler;
+  }
 
+  // Closes the connection.
   void close();
 
  private:
+  // The following methods are used to setup the websocket-connection.
   void asyncResolve();
 
   void asyncConnect(tcp::resolver::results_type results);
@@ -49,30 +60,37 @@ class WebSocketClientImpl {
   std::enable_if_t<std::is_same_v<T, beast::ssl_stream<tcp::socket>>, void>
   asyncSSLHandshake();
 
-  static ssl::context getSslContext() {
-    ssl::context ctx(ssl::context::sslv23_client);
-    ctx.set_verify_mode(ssl::verify_none);
-    return ctx;
-  }
-
   void asyncWebsocketHandshake();
 
+  // Read incoming messages and handle them with the `msgHandler_`.
   void readMessages();
 
-  net::io_context ioc_;
-  std::thread ioThread_;
+  // Concatenates two url paths, expects both of them to start with a '/'.
+  static std::string concatUrlPaths(const std::string& a,
+                                    const std::string& b) {
+    AD_CONTRACT_CHECK(!a.empty() && !b.empty() && a.at(0) == '/' &&
+                      b.at(0) == '/');
+    return (a.back() == '/' ? a.substr(0, a.size() - 1) : a) + b;
+  }
 
+  // Stream and related objects.
+  net::io_context ioContext_;
   net::ip::tcp::resolver resolver_;
+  std::optional<ssl::context> sslContext_;
+  websocket::stream<StreamType> stream_;
+  JThread ioThread_;
 
-  std::optional<ssl::context> ctx_;
-  websocket::stream<StreamType> ws_;
-
+  // Buffer for incoming messages.
   beast::flat_buffer buffer_;
 
-  std::string host_;
-  std::string port_;
+  // Url (hostname and port) of the endpoint.
+  ad_utility::httpUtils::Url url_;
+
+  // The actual target basepath + websocketpath (the one in `url_` is obsolete)
   std::string target_;
-  MessageHandler messageHandler_;
+
+  // Handler function to handle received messages in `readMessages()`.
+  MessageHandler msgHandler_;
 };
 
 using HttpWebSocketClient = WebSocketClientImpl<tcp::socket>;
@@ -82,7 +100,9 @@ using HttpsWebSocketClient =
 using WebSocketVariant = std::variant<std::unique_ptr<HttpWebSocketClient>,
                                       std::unique_ptr<HttpsWebSocketClient>>;
 
+// Convenience function to get a webSocketClient handling all incoming messages
+// with the given `msgHandler_`.
 WebSocketVariant getRuntimeInfoClient(
     const ad_utility::httpUtils::Url& url, const std::string& target,
-    std::function<void(const std::string&)> msgHandler);
+    const std::function<void(const std::string&)>& msgHandler);
 }  // namespace ad_utility::websocket

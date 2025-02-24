@@ -413,7 +413,7 @@ void Operation::updateRuntimeInformationOnSuccess(
     // Therefore, for each child of this operation the correct runtime is
     // available.
     _runtimeInfo->children_.clear();
-    for (auto& child : getRuntimeInfoChildren()) {
+    for (const auto& child : getRuntimeInfoChildren()) {
       _runtimeInfo->children_.push_back(child);
     }
   }
@@ -468,7 +468,7 @@ void Operation::updateRuntimeInformationWhenOptimizedOut(
 // _______________________________________________________________________
 void Operation::updateRuntimeInformationOnFailure(Milliseconds duration) {
   _runtimeInfo->children_.clear();
-  for (auto& child : getRuntimeInfoChildren()) {
+  for (const auto& child : getRuntimeInfoChildren()) {
     _runtimeInfo->children_.push_back(child);
   }
 

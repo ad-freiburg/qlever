@@ -110,7 +110,7 @@ ProtoResult Service::computeResult([[maybe_unused]] bool requestLaziness) {
   } catch (const ad_utility::detail::AllocationExceedsLimitException&) {
     throw;
   } catch (const std::exception&) {
-    // if the `SILENT` keyword is set in the service clause, catch the error and
+    // If the `SILENT` keyword is set in the service clause, catch the error and
     // return a neutral Element.
     if (parsedServiceClause_.silent_) {
       return makeNeutralElementResultForSilentFail();
@@ -126,10 +126,12 @@ ProtoResult Service::computeResultImpl([[maybe_unused]] bool requestLaziness) {
       asStringViewUnsafe(parsedServiceClause_.serviceIri_.getContent())};
 
   // Receive updates about the RuntimeInformation from the service endpoint.
+  // Note: Regular SPARQL endpoints do not support RTI retrieval using
+  // a websocket connection, this works for QLever endpoints only.
   const std::string queryId = ad_utility::UuidGenerator()();
-  const std::string target = absl::StrCat(WEBSOCKET_PATH, queryId);
-  auto client = networkFunctions_.getRuntimeInfoClient_(
-      serviceUrl, target, [&](const std::string& msg) {
+  const std::string wsTarget = absl::StrCat(WEBSOCKET_PATH, queryId);
+  auto webSocketClient_ = networkFunctions_.getRuntimeInfoClient_(
+      serviceUrl, wsTarget, [this](const std::string& msg) {
         childRuntimeInformation_ =
             std::make_shared<RuntimeInformation>(nlohmann::json::parse(msg));
       });

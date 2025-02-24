@@ -247,11 +247,11 @@ void to_json(nlohmann::ordered_json& j,
 
 // __________________________________________________________________________
 void from_json(const nlohmann::json& j, RuntimeInformation& rti) {
-  // Helper lambdas to ignore missing key or invalid value.
   auto tryGet = [&j]<typename T>(T& dst, std::string_view key) {
     try {
       j.at(key).get_to(dst);
-    } catch (const nlohmann::json::exception& e) {
+    } catch (const nlohmann::json::exception&) {
+      // Ignore missing keys or invalid values.
     }
   };
   using namespace std::chrono;
@@ -259,7 +259,8 @@ void from_json(const nlohmann::json& j, RuntimeInformation& rti) {
     try {
       dst =
           duration_cast<microseconds>(milliseconds(j.at(key).get<uint64_t>()));
-    } catch (const nlohmann::json::exception& e) {
+    } catch (const nlohmann::json::exception&) {
+      // Ignore missing keys or invalid values.
     }
   };
 

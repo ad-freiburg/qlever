@@ -5,12 +5,12 @@
 
 namespace ad_utility {
 CacheStatus fromString(std::string_view str) {
+  using enum ad_utility::CacheStatus;
   static const ad_utility::HashMap<std::string, ad_utility::CacheStatus> m = {
-      {"cached_not_pinned", ad_utility::CacheStatus::cachedNotPinned},
-      {"cached_pinned", ad_utility::CacheStatus::cachedPinned},
-      {"computed", ad_utility::CacheStatus::computed},
-      {"not_in_cache_not_computed",
-       ad_utility::CacheStatus::notInCacheAndNotComputed}};
+      {"cached_not_pinned", cachedNotPinned},
+      {"cached_pinned", cachedPinned},
+      {"computed", computed},
+      {"not_in_cache_not_computed", notInCacheAndNotComputed}};
 
   auto it = m.find(str);
   if (it == m.end()) {
