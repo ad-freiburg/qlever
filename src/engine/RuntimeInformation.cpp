@@ -9,6 +9,9 @@
 
 #include <ranges>
 
+#include "util/ConcurrentCache.h"
+#include "util/HashMap.h"
+
 using namespace std::chrono_literals;
 
 // __________________________________________________________________________
@@ -185,6 +188,28 @@ std::string_view RuntimeInformation::toString(Status status) {
   AD_FAIL();
 }
 
+// __________________________________________________________________________
+RuntimeInformation::Status RuntimeInformation::fromString(
+    std::string_view str) {
+  static const ad_utility::HashMap<std::string, RuntimeInformation::Status>
+      statusMap = {
+          {"not started", RuntimeInformation::notStarted},
+          {"in progress", RuntimeInformation::inProgress},
+          {"fully materialized", RuntimeInformation::fullyMaterialized},
+          {"lazily materialized", RuntimeInformation::lazilyMaterialized},
+          {"optimized out", RuntimeInformation::optimizedOut},
+          {"failed", RuntimeInformation::failed},
+          {"failed because child failed",
+           RuntimeInformation::failedBecauseChildFailed},
+          {"cancelled", RuntimeInformation::cancelled}};
+
+  auto it = statusMap.find(str);
+  if (it == statusMap.end()) {
+    AD_FAIL();
+  }
+  return it->second;
+}
+
 // ________________________________________________________________________________________________________________
 void to_json(nlohmann::ordered_json& j,
              const std::shared_ptr<RuntimeInformation>& rti) {
@@ -218,6 +243,49 @@ void to_json(nlohmann::ordered_json& j,
              const RuntimeInformationWholeQuery& rti) {
   j = nlohmann::ordered_json{
       {"time_query_planning", rti.timeQueryPlanning.count()}};
+}
+
+// __________________________________________________________________________
+void from_json(const nlohmann::json& j, RuntimeInformation& rti) {
+  auto tryGet = [&j]<typename T>(T& dst, std::string_view key) {
+    try {
+      j.at(key).get_to(dst);
+    } catch (const nlohmann::json::exception&) {
+      // Ignore missing keys or invalid values.
+    }
+  };
+  using namespace std::chrono;
+  auto tryGetTime = [&j](microseconds& dst, std::string_view key) {
+    try {
+      dst =
+          duration_cast<microseconds>(milliseconds(j.at(key).get<uint64_t>()));
+    } catch (const nlohmann::json::exception&) {
+      // Ignore missing keys or invalid values.
+    }
+  };
+
+  tryGet(rti.descriptor_, "description");
+  tryGet(rti.numRows_, "result_rows");
+  tryGet(rti.numCols_, "result_cols");
+  tryGet(rti.columnNames_, "column_names");
+  tryGetTime(rti.totalTime_, "total_time");
+  tryGetTime(rti.originalTotalTime_, "original_total_time");
+  tryGetTime(rti.originalOperationTime_, "original_operation_time");
+  if (auto it = j.find("cache_status"); it != j.end()) {
+    rti.cacheStatus_ = ad_utility::fromString(it->get<std::string_view>());
+  }
+  tryGet(rti.details_, "details");
+  tryGet(rti.costEstimate_, "estimated_total_cost");
+  tryGet(rti.multiplicityEstimates_, "estimated_column_multiplicities");
+  tryGet(rti.sizeEstimate_, "estimated_size");
+  if (auto it = j.find("status"); it != j.end()) {
+    rti.status_ = RuntimeInformation::fromString(it->get<std::string>());
+  }
+  if (auto it = j.find("children"); it != j.end()) {
+    for (const auto& child : *it) {
+      rti.children_.push_back(std::make_shared<RuntimeInformation>(child));
+    }
+  }
 }
 
 // __________________________________________________________________________
