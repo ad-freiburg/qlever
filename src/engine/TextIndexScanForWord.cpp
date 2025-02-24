@@ -117,3 +117,8 @@ string TextIndexScanForWord::getCacheKeyImpl() const {
      << " with word: \"" << config_.word_ << "\"";
   return std::move(os).str();
 }
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> TextIndexScanForWord::cloneImpl() const {
+  return std::make_unique<TextIndexScanForWord>(*this);
+}

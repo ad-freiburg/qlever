@@ -6,7 +6,7 @@
 
 #include <string>
 
-#include "./Operation.h"
+#include "engine/Operation.h"
 #include "parser/MagicServiceQuery.h"
 #include "parser/TextSearchQuery.h"
 
@@ -39,10 +39,7 @@ class TextIndexScanForWord : public Operation {
 
   uint64_t getSizeEstimateBeforeLimit() override;
 
-  float getMultiplicity(size_t col) override {
-    (void)col;
-    return 1;
-  }
+  float getMultiplicity(size_t) override { return 1; }
 
   bool knownEmptyResult() override { return getSizeEstimateBeforeLimit() == 0; }
 
@@ -55,6 +52,8 @@ class TextIndexScanForWord : public Operation {
   const TextIndexScanForWordConfiguration& getConfig() const { return config_; }
 
  private:
+  std::unique_ptr<Operation> cloneImpl() const override;
+
   // Returns a Result containing an IdTable with the columns being
   // the text variable and the completed word (if it was prefixed)
   ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override;

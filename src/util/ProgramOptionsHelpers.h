@@ -98,6 +98,8 @@ class ParameterToProgramOptionFactory {
    * @return A `boost::program_options::value` with the parameter's current
    * value as the default value. When that value is parsed, the parameter is set
    * to the parsed value.
+   *
+   * TODO<C++17,joka921>: template-values are not supported in C++17
    */
   template <ad_utility::ParameterName name>
   auto getProgramOption() {

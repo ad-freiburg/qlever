@@ -21,6 +21,19 @@
 // `QL_CONCEPT_OR_TYPENAME(arg)`: expands to `arg` in C++20 mode, and to
 // `typename` in C++17 mode. Example usage:
 //
+// `CPP_lambda(capture)(arg)(requires ...)`: Expands lambda to use
+//  `requires` in C++20 mode and `std::enable_if_t` in C++17 mode.
+//
+// `CPP_lambda_mut(capture)(arg)(requires ...)`: Same as
+//   `CPP_lambda` but for mutable lambdas.
+//
+// `CPP_template_lambda(capture)(typenames...)(arg)(requires ...)`: Expands
+//   lambda with (C++20) explicit template parameters  to use
+//  `requires` in C++20 mode and `std::enable_if_t` in C++17 mode.
+//
+// `CPP_template_lambda_mut(capture)(typenames...)(arg)(requires ...)`: Same as
+//  `CPP_template_lambda` but for mutable lambdas.
+//
 // Example usages:
 //
 // `QL_CONCEPT_OR_NOTHING(std::view) auto x = someFunction();`
@@ -30,6 +43,12 @@
 // `void f(QL_CONCEPT_OR_NOTHING(std::view) auto x) {...}`
 //
 // `template <QL_CONCEPT_OR_TYPENAME(ql::same_as<int>) T> void f(){...}`
+//
+// `auto myLambda = CPP_lambda(someCapture)(someArg)(requires
+// ranges::same_as<decltype(someArg), int>) {...}`
+//
+// `auto myLambda2 = CPP_lambda(someCapture)(typename F)(F arg)(requires
+// ranges::same_as<F, int>) {...}`
 //
 // NOTE: The macros are variadic to allow for commas in the argument, like in
 // the second example above.
@@ -48,6 +67,10 @@
 #define CPP_and_2_def CPP_and_2_def_sfinae
 #define CPP_variadic_template CPP_template_NO_DEFAULT_SFINAE
 #define CPP_member_def CPP_member_def_sfinae
+#define CPP_lambda CPP_lambda_sfinae
+#define CPP_template_lambda CPP_template_lambda_sfinae
+#define CPP_lambda_mut CPP_lambda_mut_sfinae
+#define CPP_template_lambda_mut CPP_template_lambda_mut_sfinae
 #else
 #define QL_CONCEPT_OR_NOTHING(...) __VA_ARGS__
 #define QL_CONCEPT_OR_TYPENAME(...) __VA_ARGS__
@@ -57,6 +80,10 @@
 #define CPP_and_2_def CPP_and
 #define CPP_variadic_template CPP_template
 #define CPP_member_def CPP_member
+#define CPP_lambda CPP_LAMBDA_20
+#define CPP_template_lambda CPP_TEMPLATE_LAMBDA_20
+#define CPP_lambda_mut CPP_lambda_mut_20
+#define CPP_template_lambda_mut CPP_TEMPLATE_LAMBDA_MUT_20
 #endif
 
 // The namespace `ql::concepts` includes concepts that are contained in the

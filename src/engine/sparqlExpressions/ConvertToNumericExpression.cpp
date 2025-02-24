@@ -12,9 +12,9 @@ namespace detail::to_numeric {
 
 // class that converts an input `int64_t`, `double` or `std::string`
 // to a numeric value `int64_t` or `double`
-template <typename T, bool AllowExponentialNotation = true>
-requires std::same_as<int64_t, T> || std::same_as<double, T>
-class ToNumericImpl {
+CPP_template(typename T, bool AllowExponentialNotation = true)(
+    requires(concepts::same_as<int64_t, T> ||
+             concepts::same_as<double, T>)) class ToNumericImpl {
  private:
   Id getFromString(const std::string& input) const {
     auto str = absl::StripAsciiWhitespace(input);
@@ -45,8 +45,9 @@ class ToNumericImpl {
 
   // ___________________________________________________________________________
   template <typename N>
-  requires std::integral<N> || std::floating_point<N>
-  Id getFromNumber(N number) const {
+  auto getFromNumber(N number) const
+      -> CPP_ret(Id)(requires(concepts::integral<N> ||
+                              ad_utility::FloatingPoint<N>)) {
     auto resNumber = static_cast<T>(number);
     if constexpr (std::is_same_v<T, int64_t>) {
       return Id::makeFromInt(resNumber);

@@ -7,6 +7,7 @@
 
 #include <string_view>
 
+#include "backports/concepts.h"
 #include "parser/NormalizedString.h"
 
 namespace ad_utility::triple_component {
@@ -30,8 +31,8 @@ class Iri {
  public:
   // A default constructed IRI is empty.
   Iri() = default;
-  template <typename H>
-  friend H AbslHashValue(H h, const std::same_as<Iri> auto& iri) {
+  CPP_template(typename H, typename I)(requires std::same_as<I, Iri>) friend H
+      AbslHashValue(H h, const I& iri) {
     return H::combine(std::move(h), iri.iri_);
   }
   bool operator==(const Iri&) const = default;

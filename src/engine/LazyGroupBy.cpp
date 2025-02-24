@@ -73,11 +73,12 @@ void LazyGroupBy::processBlock(
                                                             evaluationContext);
 
     visitAggregate(
-        [blockSize,
-         &evaluationContext]<sparqlExpression::SingleExpressionResult T>(
-            VectorOfAggregationData auto& aggregateData, T&& singleResult) {
+        CPP_template_lambda(blockSize, &evaluationContext)(
+            typename A, typename T)(A & aggregateData, T && singleResult)(
+            requires VectorOfAggregationData<A> &&
+            sparqlExpression::SingleExpressionResult<T>) {
           auto generator = sparqlExpression::detail::makeGenerator(
-              std::forward<T>(singleResult), blockSize, &evaluationContext);
+              AD_FWD(singleResult), blockSize, &evaluationContext);
 
           for (const auto& val : generator) {
             aggregateData.at(0).addValue(val, &evaluationContext);

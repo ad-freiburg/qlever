@@ -6,7 +6,7 @@
 
 #include <string>
 
-#include "./Operation.h"
+#include "engine/Operation.h"
 #include "parser/MagicServiceQuery.h"
 #include "parser/TextSearchQuery.h"
 
@@ -54,10 +54,7 @@ class TextIndexScanForEntity : public Operation {
 
   uint64_t getSizeEstimateBeforeLimit() override;
 
-  float getMultiplicity(size_t col) override {
-    (void)col;
-    return 1;
-  }
+  float getMultiplicity(size_t) override { return 1; }
 
   bool knownEmptyResult() override;
 
@@ -72,6 +69,8 @@ class TextIndexScanForEntity : public Operation {
   }
 
  private:
+  std::unique_ptr<Operation> cloneImpl() const override;
+
   const VocabIndex& getVocabIndexOfFixedEntity() const {
     AD_CONTRACT_CHECK(hasFixedEntity());
     return std::get<FixedEntity>(config_.varOrFixed_.value().entity_).second;

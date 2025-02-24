@@ -117,6 +117,8 @@ class Result {
          LocalVocab&& localVocab);
   Result(IdTableVocabPair pair, std::vector<ColumnIndex> sortedBy);
   Result(Generator idTables, std::vector<ColumnIndex> sortedBy);
+  Result(LazyResult idTables, std::vector<ColumnIndex> sortedBy);
+
   // Prevent accidental copying of a result table.
   Result(const Result& other) = delete;
   Result& operator=(const Result& other) = delete;

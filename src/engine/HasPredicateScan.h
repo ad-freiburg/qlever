@@ -109,6 +109,8 @@ class HasPredicateScan : public Operation {
                                const CompactVectorOfStrings<Id>& patterns);
 
  private:
+  std::unique_ptr<Operation> cloneImpl() const override;
+
   ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override;
 
   [[nodiscard]] VariableToColumnMap computeVariableToColumnMap() const override;

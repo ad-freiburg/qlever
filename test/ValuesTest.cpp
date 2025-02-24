@@ -13,6 +13,7 @@
 #include "engine/Values.h"
 #include "engine/idTable/IdTable.h"
 #include "util/IndexTestHelpers.h"
+#include "util/OperationTestHelpers.h"
 
 using TC = TripleComponent;
 using ValuesComponents = std::vector<std::vector<TripleComponent>>;
@@ -89,4 +90,17 @@ TEST(Values, illegalInput) {
   auto qec = ad_utility::testing::getQec();
   ValuesComponents values{{TC{12}, TC{"<x>"}}, {TC::UNDEF{}}};
   ASSERT_ANY_THROW(Values(qec, {{Variable{"?x"}, Variable{"?y"}}, values}));
+}
+
+// _____________________________________________________________________________
+TEST(Values, clone) {
+  auto testQec = ad_utility::testing::getQec("<x> <x> <x> .");
+  ValuesComponents values{{TC{12}, TC{iri("<x>")}},
+                          {TC::UNDEF{}, TC{iri("<y>")}}};
+  Values valuesOperation(testQec, {{Variable{"?x"}, Variable{"?y"}}, values});
+
+  auto clone = valuesOperation.clone();
+  ASSERT_TRUE(clone);
+  EXPECT_THAT(valuesOperation, IsDeepCopy(*clone));
+  EXPECT_EQ(clone->getDescriptor(), valuesOperation.getDescriptor());
 }
