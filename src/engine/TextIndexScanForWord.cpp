@@ -71,6 +71,8 @@ void TextIndexScanForWord::setVariableToColumnMap() {
         "Text index scan for word shouldn't have a variable to bind match "
         "defined when the word is not a prefix.");
   }
+  AD_CORRECTNESS_CHECK(config_.isPrefix_ ||
+                       !config_.varToBindMatch_.has_value());
   if (config_.varToBindScore_.has_value()) {
     config_.variableColumns_.value()[config_.varToBindScore_.value()] =
         makeAlwaysDefinedColumn(index);

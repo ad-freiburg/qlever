@@ -7,7 +7,6 @@
 #include <string>
 
 #include "engine/Operation.h"
-#include "parser/MagicServiceQuery.h"
 #include "parser/TextSearchQuery.h"
 
 // This operation retrieves all text records and their corresponding
@@ -60,8 +59,6 @@ class TextIndexScanForEntity : public Operation {
 
   vector<ColumnIndex> resultSortedOn() const override;
 
-  void setVariableToColumnMap();
-
   VariableToColumnMap computeVariableToColumnMap() const override;
 
   const TextIndexScanForEntityConfiguration& getConfig() const {
@@ -79,4 +76,6 @@ class TextIndexScanForEntity : public Operation {
   ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override;
 
   vector<QueryExecutionTree*> getChildren() override { return {}; }
+
+  void setVariableToColumnMap();
 };

@@ -25,28 +25,11 @@ struct VarOrFixedEntity {
 
   static std::variant<Variable, FixedEntity> makeEntityVariant(
       const QueryExecutionContext* qec,
-      std::variant<Variable, std::string> entity) {
-    if (std::holds_alternative<std::string>(entity)) {
-      VocabIndex index;
-      std::string fixedEntity = std::move(std::get<std::string>(entity));
-      bool success = qec->getIndex().getVocab().getId(fixedEntity, &index);
-      if (!success) {
-        throw std::runtime_error(
-            "The entity " + fixedEntity +
-            " is not part of the underlying knowledge graph and can "
-            "therefore not be used as the object of ql:contains-entity");
-      }
-      return FixedEntity(std::move(fixedEntity), std::move(index));
-    } else {
-      return std::get<Variable>(entity);
-    }
-  };
+      std::variant<Variable, std::string> entity);
 
   VarOrFixedEntity(const QueryExecutionContext* qec,
                    std::variant<Variable, std::string> entity)
       : entity_(makeEntityVariant(qec, std::move(entity))) {}
-
-  ~VarOrFixedEntity() = default;
 
   bool hasFixedEntity() const {
     return std::holds_alternative<FixedEntity>(entity_);

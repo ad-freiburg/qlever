@@ -2592,7 +2592,7 @@ TEST(QueryPlanner, TextSearchService) {
           "}"
           "}"),
       ::testing::HasSubstr(
-          "The predicate <text-search> needs a Variable as subject and one as "
+          "The predicate <text-search> needs a variable as subject and one as "
           "object. The subject given was: ?t. The object given was: \"fail\""));
 
   AD_EXPECT_THROW_WITH_MESSAGE(
@@ -2605,7 +2605,7 @@ TEST(QueryPlanner, TextSearchService) {
           "}"
           "}"),
       ::testing::HasSubstr("Each text search config should only be linked to a "
-                           "single text Variable. The second text variable "
+                           "single text variable. The second text variable "
                            "given was: ?t2. The config variable was: ?conf"));
 
   // Predicate contains-word
@@ -2618,7 +2618,7 @@ TEST(QueryPlanner, TextSearchService) {
           "\"fail\" qlts:contains-word \"test\" ."
           "}"
           "}"),
-      ::testing::HasSubstr("The predicate <contains-word> needs a Variable as "
+      ::testing::HasSubstr("The predicate <contains-word> needs a variable as "
                            "subject. The subject given was: \"fail\""));
 
   AD_EXPECT_THROW_WITH_MESSAGE(
@@ -2644,7 +2644,7 @@ TEST(QueryPlanner, TextSearchService) {
           "?conf qlts:contains-word ?word ."
           "}"
           "}"),
-      ::testing::HasSubstr("The predicate <contains-word> needs a Literal as "
+      ::testing::HasSubstr("The predicate <contains-word> needs a literal as "
                            "object. The object given was: ?word"));
 
   AD_EXPECT_THROW_WITH_MESSAGE(
@@ -2657,7 +2657,7 @@ TEST(QueryPlanner, TextSearchService) {
           "}"
           "}"),
       ::testing::HasSubstr("The predicate <contains-word> shouldn't have an "
-                           "empty Literal as object."));
+                           "empty literal as object."));
 
   // Predicate contains-entity
   AD_EXPECT_THROW_WITH_MESSAGE(
@@ -2669,7 +2669,7 @@ TEST(QueryPlanner, TextSearchService) {
           "\"fail\" qlts:contains-entity ?e ."
           "}"
           "}"),
-      ::testing::HasSubstr("The predicate <contains-entity> needs a Variable "
+      ::testing::HasSubstr("The predicate <contains-entity> needs a variable "
                            "as subject. The subject given was: \"fail\""));
 
   AD_EXPECT_THROW_WITH_MESSAGE(
@@ -2696,12 +2696,75 @@ TEST(QueryPlanner, TextSearchService) {
           "}"
           "}"),
       ::testing::HasSubstr(
-          "The predicate <contains-entity> needs a Variable as subject and an "
-          "IRI, Literal or Variable as object. The object given was: 13"));
+          "The predicate <contains-entity> needs a variable as subject and an "
+          "IRI, literal or variable as object. The object given was: 13"));
 
-  // Predicate bind-match and bind-score not covered.
+  // Predicate bind-match
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      SparqlParser::parseQuery(
+          "PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
+          "SELECT * WHERE {"
+          "SERVICE qlts: {"
+          "?t qlts:text-search ?conf ."
+          "?conf qlts:contains-word \"test\" ."
+          "?conf qlts:bind-match \"fail\" ."
+          "}"
+          "}"),
+      ::testing::HasSubstr(
+          "The predicate <bind-match> needs a variable as subject and one "
+          "as object. The subject given was: ?conf. The object given was: "
+          "\"fail\""));
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      SparqlParser::parseQuery(
+          "PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
+          "SELECT * WHERE {"
+          "SERVICE qlts: {"
+          "?t qlts:text-search ?conf ."
+          "?conf qlts:contains-word \"test\" ."
+          "?conf qlts:bind-match ?match1 ."
+          "?conf qlts:bind-match ?match2 ."
+          "}"
+          "}"),
+      ::testing::HasSubstr(
+          "Each text search config should only contain at most one "
+          "<bind-match>. The second match variable given was: ?match2. The "
+          "config variable was: ?conf"));
+
+  // Predicate bind-score
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      SparqlParser::parseQuery(
+          "PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
+          "SELECT * WHERE {"
+          "SERVICE qlts: {"
+          "?t qlts:text-search ?conf ."
+          "?conf qlts:contains-word \"test\" ."
+          "?conf qlts:bind-score 100 ."
+          "}"
+          "}"),
+      ::testing::HasSubstr(
+          "The predicate <bind-score> needs a variable as subject and one "
+          "as object. The subject given was: ?conf. The object given was: "
+          "100"));
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      SparqlParser::parseQuery(
+          "PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
+          "SELECT * WHERE {"
+          "SERVICE qlts: {"
+          "?t qlts:text-search ?conf ."
+          "?conf qlts:contains-word \"test\" ."
+          "?conf qlts:bind-score ?score1 ."
+          "?conf qlts:bind-score ?score2 ."
+          "}"
+          "}"),
+      ::testing::HasSubstr(
+          "Each text search config should only contain at most one "
+          "<bind-score>. The second match variable given was: ?score2. The "
+          "config variable was: ?conf"));
 
   // toConfigs errors
+  // No contains-word or contains-entity
   ParsedQuery pq = SparqlParser::parseQuery(
       "PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
       "SELECT * WHERE {"
@@ -2716,6 +2779,60 @@ TEST(QueryPlanner, TextSearchService) {
           "Text search service needs configs with exactly one occurrence of "
           "either <contains-word> or <contains-entity>."));
 
+  // No text variable defined
+  pq = SparqlParser::parseQuery(
+      "PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
+      "SELECT * WHERE {"
+      "SERVICE qlts: {"
+      "?t qlts:contains-word \"test\" ."
+      "}"
+      "}");
+  qp = makeQueryPlanner();
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      qp.createExecutionTree(pq),
+      ::testing::HasSubstr(
+          "Text search service needs a text variable that is linked to one or "
+          "multiple text search config variables with the predicate "
+          "<text-search>. \n"
+          "The config variable can then be used with the predicates: "
+          "<contains-word>, <contains-entity>, <bind-match>, <bind-score>. \n"
+          "<contains-word>: This predicate needs a literal as object which has "
+          "one word with optionally a * at the end. This word or prefix is "
+          "then used to search the text index. \n"
+          "<contains-entity>: This predicate needs a variable, IRI or literal "
+          "as object. If a variable is given this variable can be used outside "
+          "of this service. If an IRI or literal is given the entity is fixed. "
+          "The entity given is then used to search the text index. \n"
+          "A config should contain exactly one occurrence of either "
+          "<contains-word> or <contains-entity>. \n"
+          "<bind-match>: This predicate should only be used in a text search "
+          "config with a word that is a prefix. The object should be a "
+          "variable. That variable specifies the column name for the column "
+          "with prefix matches of the word search.\n"
+          "<bind-score>: The object of this predicate should be a variable. "
+          "That variable specifies the column name for the column containing "
+          "the scores of the respective word or entity search. \n"
+          "The config variable was: ?t"));
+
+  // <bind-match> in a word search on a non prefix
+  pq = SparqlParser::parseQuery(
+      "PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
+      "SELECT * WHERE {"
+      "SERVICE qlts: {"
+      "?t qlts:text-search ?conf ."
+      "?conf qlts:contains-word \"test\" ."
+      "?conf qlts:bind-match ?test_match ."
+      "}"
+      "}");
+  qp = makeQueryPlanner();
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      qp.createExecutionTree(pq),
+      ::testing::HasSubstr(
+          "The text search config shouldn't define a variable for the prefix "
+          "match column if the word isn't a prefix. The config variable was: "
+          "?conf. The word was: \"test\". The text variable bound to was: ?t"));
+
+  // Entity search on a text variable that has no word-search
   pq = SparqlParser::parseQuery(
       "PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
       "SELECT * WHERE {"
@@ -2727,11 +2844,11 @@ TEST(QueryPlanner, TextSearchService) {
   qp = makeQueryPlanner();
   AD_EXPECT_THROW_WITH_MESSAGE(
       qp.createExecutionTree(pq),
-      ::testing::HasSubstr("Entity search has to happen on a text Variable "
+      ::testing::HasSubstr("Entity search has to happen on a text variable "
                            "that is also contained in a word search. Text "
-                           "Variable: ?t2 is not contained in a word search."));
+                           "variable: ?t2 is not contained in a word search."));
 
-  // Begin expect tests
+  // Begin checking query execution trees
   auto qec = ad_utility::testing::getQec(
       "<a> <p> \"this text contains some words and is part of the test\" . <a> "
       "<p> <testEntity> . <a> <p> \"picking the right text can be a hard "
