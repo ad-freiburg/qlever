@@ -61,6 +61,8 @@ class CartesianProductJoin : public Operation {
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 
+  std::unique_ptr<Operation> cloneImpl() const override;
+
  public:
   float getMultiplicity([[maybe_unused]] size_t col) override;
 

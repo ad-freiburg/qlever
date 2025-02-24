@@ -74,3 +74,9 @@ ProtoResult Sort::computeResult([[maybe_unused]] bool requestLaziness) {
   LOG(DEBUG) << "Sort result computation done." << endl;
   return {std::move(idTable), resultSortedOn(), subRes->getSharedLocalVocab()};
 }
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> Sort::cloneImpl() const {
+  return std::make_unique<Sort>(_executionContext, subtree_->clone(),
+                                sortColumnIndices_);
+}

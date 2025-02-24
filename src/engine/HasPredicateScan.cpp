@@ -393,3 +393,12 @@ const TripleComponent& HasPredicateScan::getObject() const { return object_; }
 
 // ___________________________________________________________________________
 HasPredicateScan::ScanType HasPredicateScan::getType() const { return type_; }
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> HasPredicateScan::cloneImpl() const {
+  auto copy = std::make_unique<HasPredicateScan>(*this);
+  if (subtree_.has_value()) {
+    copy->subtree_.value().subtree_ = subtree().clone();
+  }
+  return copy;
+}

@@ -7,6 +7,7 @@
 #include "../util/GTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
+#include "../util/OperationTestHelpers.h"
 #include "./TextIndexScanTestHelpers.h"
 #include "engine/IndexScan.h"
 #include "engine/TextIndexScanForEntity.h"
@@ -150,6 +151,19 @@ TEST(TextIndexScanForEntity, KnownEmpty) {
   TextIndexScanForEntity s3{qec, Variable{"?text"}, Variable{"?entityVar"},
                             "test"};
   ASSERT_TRUE(!s3.knownEmptyResult());
+}
+
+// _____________________________________________________________________________
+TEST(TextIndexScanForEntity, clone) {
+  auto qec = getQec();
+
+  TextIndexScanForEntity scan{qec, Variable{"?text"}, Variable{"?entityVar"},
+                              "nonExistentWord*"};
+
+  auto clone = scan.clone();
+  ASSERT_TRUE(clone);
+  EXPECT_THAT(scan, IsDeepCopy(*clone));
+  EXPECT_EQ(clone->getDescriptor(), scan.getDescriptor());
 }
 
 }  // namespace

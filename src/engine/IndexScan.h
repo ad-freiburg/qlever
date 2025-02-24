@@ -5,7 +5,7 @@
 
 #include <string>
 
-#include "./Operation.h"
+#include "engine/Operation.h"
 #include "util/HashMap.h"
 
 class SparqlTriple;
@@ -176,6 +176,8 @@ class IndexScan final : public Operation {
       const CompressedRelationReader::LazyScanMetadata& metadata);
 
  private:
+  std::unique_ptr<Operation> cloneImpl() const override;
+
   ProtoResult computeResult(bool requestLaziness) override;
 
   vector<QueryExecutionTree*> getChildren() override { return {}; }

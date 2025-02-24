@@ -10,7 +10,11 @@
 #include "./util/IdTestHelpers.h"
 #include "engine/CallFixedSize.h"
 #include "engine/Minus.h"
+#include "engine/ValuesForTesting.h"
 #include "util/AllocatorTestHelpers.h"
+#include "util/IdTableHelpers.h"
+#include "util/IndexTestHelpers.h"
+#include "util/OperationTestHelpers.h"
 
 namespace {
 auto table(size_t cols) {
@@ -99,4 +103,23 @@ TEST(EngineTest, minusTest) {
   ASSERT_EQ(wantedRes.numColumns(), vres.numColumns());
 
   ASSERT_EQ(wantedRes[0], vres[0]);
+}
+
+// _____________________________________________________________________________
+TEST(Minus, clone) {
+  auto* qec = ad_utility::testing::getQec();
+  Minus minus{
+      qec,
+      ad_utility::makeExecutionTree<ValuesForTesting>(
+          qec, makeIdTableFromVector({{0, 1}}),
+          std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?y"}}),
+      ad_utility::makeExecutionTree<ValuesForTesting>(
+          qec, makeIdTableFromVector({{0, 1}}),
+          std::vector<std::optional<Variable>>{Variable{"?x"},
+                                               Variable{"?z"}})};
+
+  auto clone = minus.clone();
+  ASSERT_TRUE(clone);
+  EXPECT_THAT(minus, IsDeepCopy(*clone));
+  EXPECT_EQ(clone->getDescriptor(), minus.getDescriptor());
 }
