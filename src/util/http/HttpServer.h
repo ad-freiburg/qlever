@@ -10,7 +10,6 @@
 #include <future>
 
 #include "absl/cleanup/cleanup.h"
-#include "global/RuntimeParameters.h"
 #include "util/Exception.h"
 #include "util/Log.h"
 #include "util/http/HttpUtils.h"
@@ -22,6 +21,10 @@ namespace beast = boost::beast;    // from <boost/beast.hpp>
 namespace http = beast::http;      // from <boost/beast/http.hpp>
 namespace net = boost::asio;       // from <boost/asio.hpp>
 using tcp = boost::asio::ip::tcp;  // from <boost/asio/ip/tcp.hpp>
+
+// Including the `RuntimeParameters` header is expensive. Move functions that
+// require it into an implementation file.
+ad_utility::MemorySize getRequestBodyLimit();
 
 /*
  * \brief A Simple HttpServer, based on Boost::Beast. It can be configured via
@@ -255,8 +258,7 @@ CPP_template(typename HttpHandler, typename WebSocketHandler)(
         // Read a request. Use a parser so that we can control the limit of the
         // request size.
         http::request_parser<http::string_body> requestParser;
-        auto bodyLimit =
-            RuntimeParameters().get<"request-body-limit">().getBytes();
+        auto bodyLimit = getRequestBodyLimit().getBytes();
         requestParser.body_limit(bodyLimit == 0
                                      ? boost::none
                                      : boost::optional<uint64_t>(bodyLimit));
@@ -301,7 +303,7 @@ CPP_template(typename HttpHandler, typename WebSocketHandler)(
           errorResponse = ad_utility::httpUtils::createHttpResponseFromString(
               absl::StrCat(
                   R"({"error": "Request body size exceeds the allowed size ()",
-                  RuntimeParameters().get<"request-body-limit">().asString(),
+                  getRequestBodyLimit().asString(),
                   R"(). Send a smaller request or set the allowed size via the "request-body-limit" run-time parameter."})"),
               http::status::payload_too_large, ad_utility::MediaType::json);
         } else {
