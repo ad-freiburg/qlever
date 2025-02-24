@@ -19,8 +19,8 @@ inline bool isVariable(const TripleComponent& elem) {
 }
 
 inline bool isVariable(const PropertyPath& elem) {
-  return elem._operation == PropertyPath::Operation::IRI &&
-         isVariable(elem._iri);
+  return elem.operation_ == PropertyPath::Operation::IRI &&
+         isVariable(elem.iri_);
 }
 
 // Data container for parsed triples from the where clause.
@@ -88,9 +88,9 @@ class SparqlTriple : public SparqlTripleBase<PropertyPath> {
   SparqlTripleSimple getSimple() const {
     AD_CONTRACT_CHECK(p_.isIri());
     TripleComponent p =
-        isVariable(p_._iri)
-            ? TripleComponent{Variable{p_._iri}}
-            : TripleComponent(TripleComponent::Iri::fromIriref(p_._iri));
+        isVariable(p_.iri_)
+            ? TripleComponent{Variable{p_.iri_}}
+            : TripleComponent(TripleComponent::Iri::fromIriref(p_.iri_));
     return {s_, p, o_, additionalScanColumns_};
   }
 

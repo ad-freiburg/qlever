@@ -75,6 +75,9 @@ class ValuesForTesting : public Operation {
     costEstimate_ = totalRows;
   }
 
+  ValuesForTesting(ValuesForTesting&&) = default;
+  ValuesForTesting& operator=(ValuesForTesting&&) = default;
+
   // Accessors for the estimates for manual testing.
   size_t& sizeEstimate() { return sizeEstimate_; }
   size_t& costEstimate() { return costEstimate_; }
@@ -208,6 +211,29 @@ class ValuesForTesting : public Operation {
           i, containsUndef ? PossiblyUndefined : AlwaysDefined};
     }
     return m;
+  }
+
+  // _____________________________________________________________________________
+  ValuesForTesting(const ValuesForTesting& other)
+      : Operation{other._executionContext},
+        variables_{other.variables_},
+        supportsLimit_{other.supportsLimit_},
+        sizeEstimate_{other.sizeEstimate_},
+        costEstimate_{other.costEstimate_},
+        unlikelyToFitInCache_{other.unlikelyToFitInCache_},
+        resultSortedColumns_{other.resultSortedColumns_},
+        localVocab_{other.localVocab_.clone()},
+        multiplicity_{other.multiplicity_},
+        forceFullyMaterialized_{other.forceFullyMaterialized_} {
+    for (const auto& idTable : other.tables_) {
+      tables_.push_back(idTable.clone());
+    }
+  }
+
+  ValuesForTesting& operator=(const ValuesForTesting&) = delete;
+
+  std::unique_ptr<Operation> cloneImpl() const override {
+    return std::make_unique<ValuesForTesting>(ValuesForTesting{*this});
   }
 
   std::vector<ColumnIndex> resultSortedColumns_;

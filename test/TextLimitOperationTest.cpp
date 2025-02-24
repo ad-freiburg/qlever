@@ -11,6 +11,7 @@
 #include "engine/TextLimit.h"
 #include "engine/ValuesForTesting.h"
 #include "util/IndexTestHelpers.h"
+#include "util/OperationTestHelpers.h"
 
 namespace {
 TextLimit makeTextLimit(IdTable input, const size_t& n,
@@ -501,4 +502,16 @@ TEST(TextLimit, CacheKey) {
   TextLimit textLimit7 = makeTextLimit(inputTable.clone(), 4, 0, {1}, {2});
   // The input is different.
   ASSERT_NE(textLimit1.getCacheKey(), textLimit7.getCacheKey());
+}
+
+// _____________________________________________________________________________
+TEST(TextLimit, clone) {
+  VectorTable input{{1, 2, 3}, {1, 2, 3}, {1, 2, 3}};
+  IdTable inputTable = makeIdTableFromVector(input, &Id::makeFromInt);
+  TextLimit textLimit = makeTextLimit(inputTable.clone(), 4, 0, {1}, {2});
+
+  auto clone = textLimit.clone();
+  ASSERT_TRUE(clone);
+  EXPECT_THAT(static_cast<Operation&>(textLimit), IsDeepCopy(*clone));
+  EXPECT_EQ(clone->getDescriptor(), textLimit.getDescriptor());
 }

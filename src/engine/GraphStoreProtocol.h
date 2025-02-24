@@ -30,8 +30,9 @@ class UnsupportedMediatypeError : public std::runtime_error {
 class GraphStoreProtocol {
  private:
   // Extract the mediatype from a request.
-  static ad_utility::MediaType extractMediatype(
-      const ad_utility::httpUtils::HttpRequest auto& rawRequest) {
+  CPP_template_2(typename RequestT)(requires ad_utility::httpUtils::HttpRequest<
+                                    RequestT>) static ad_utility::MediaType
+      extractMediatype(const RequestT& rawRequest) {
     using namespace boost::beast::http;
 
     std::string_view contentTypeString;
@@ -76,15 +77,19 @@ class GraphStoreProtocol {
 
   // Transform a SPARQL Graph Store Protocol POST to an equivalent ParsedQuery
   // which is an SPARQL Update.
-  static ParsedQuery transformPost(
-      const ad_utility::httpUtils::HttpRequest auto& rawRequest,
-      const GraphOrDefault& graph) {
+  CPP_template_2(typename RequestT)(
+      requires ad_utility::httpUtils::HttpRequest<RequestT>) static ParsedQuery
+      transformPost(const RequestT& rawRequest, const GraphOrDefault& graph) {
     auto triples =
         parseTriples(rawRequest.body(), extractMediatype(rawRequest));
     auto convertedTriples = convertTriples(graph, std::move(triples));
     updateClause::GraphUpdate up{std::move(convertedTriples), {}};
     ParsedQuery res;
     res._clause = parsedQuery::UpdateClause{std::move(up)};
+    // Graph store protocol POST requests might have a very large body. Limit
+    // the length used for the string representation (arbitrarily) to 5000.
+    string_view body = string_view(rawRequest.body()).substr(0, 5000);
+    res._originalString = absl::StrCat("Graph Store POST Operation\n", body);
     return res;
   }
   FRIEND_TEST(GraphStoreProtocolTest, transformPost);
@@ -98,26 +103,24 @@ class GraphStoreProtocol {
   // Every Graph Store Protocol request has equivalent SPARQL Query or Update.
   // Transform the Graph Store Protocol request into it's equivalent Query or
   // Update.
-  static ParsedQuery transformGraphStoreProtocol(
-      const ad_utility::httpUtils::HttpRequest auto& rawRequest) {
+  CPP_template_2(typename RequestT)(
+      requires ad_utility::httpUtils::HttpRequest<RequestT>) static ParsedQuery
+      transformGraphStoreProtocol(
+          ad_utility::url_parser::sparqlOperation::GraphStoreOperation
+              operation,
+          const RequestT& rawRequest) {
     ad_utility::url_parser::ParsedUrl parsedUrl =
         ad_utility::url_parser::parseRequestTarget(rawRequest.target());
-    // We only support passing the target graph as a query parameter (`Indirect
-    // Graph Identification`). `Direct Graph Identification` (the URL is the
-    // graph) is not supported. See also
-    // https://www.w3.org/TR/2013/REC-sparql11-http-rdf-update-20130321/#graph-identification.
-    GraphOrDefault graph = extractTargetGraph(parsedUrl.parameters_);
-
     using enum boost::beast::http::verb;
     auto method = rawRequest.method();
     if (method == get) {
-      return transformGet(graph);
+      return transformGet(operation.graph_);
     } else if (method == put) {
       throwUnsupportedHTTPMethod("PUT");
     } else if (method == delete_) {
       throwUnsupportedHTTPMethod("DELETE");
     } else if (method == post) {
-      return transformPost(rawRequest, graph);
+      return transformPost(rawRequest, operation.graph_);
     } else if (method == head) {
       throwUnsupportedHTTPMethod("HEAD");
     } else if (method == patch) {
@@ -129,12 +132,4 @@ class GraphStoreProtocol {
                        "\" for the SPARQL Graph Store HTTP Protocol."));
     }
   }
-
- private:
-  // Extract the graph to be acted upon using from the URL query parameters
-  // (`Indirect Graph Identification`). See
-  // https://www.w3.org/TR/2013/REC-sparql11-http-rdf-update-20130321/#indirect-graph-identification
-  static GraphOrDefault extractTargetGraph(
-      const ad_utility::url_parser::ParamValueMap& params);
-  FRIEND_TEST(GraphStoreProtocolTest, extractTargetGraph);
 };

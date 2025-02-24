@@ -67,6 +67,8 @@ class Sort : public Operation {
   }
 
  private:
+  std::unique_ptr<Operation> cloneImpl() const override;
+
   virtual ProtoResult computeResult(
       [[maybe_unused]] bool requestLaziness) override;
 

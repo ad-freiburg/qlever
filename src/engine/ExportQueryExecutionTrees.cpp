@@ -14,6 +14,7 @@
 #include "parser/RdfEscaping.h"
 #include "util/ConstexprUtils.h"
 #include "util/http/MediaTypes.h"
+#include "util/json.h"
 
 // Return true iff the `result` is nonempty.
 bool getResultForAsk(const std::shared_ptr<const Result>& result) {
@@ -901,7 +902,7 @@ cppcoro::generator<std::string> ExportQueryExecutionTrees::computeResult(
 
   auto inner =
       ad_utility::ConstexprSwitch<csv, tsv, octetStream, turtle, sparqlXml,
-                                  sparqlJson, qleverJson>(compute, mediaType);
+                                  sparqlJson, qleverJson>{}(compute, mediaType);
   return convertStreamGeneratorForChunkedTransfer(std::move(inner));
 }
 

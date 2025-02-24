@@ -4,15 +4,16 @@
 
 #include <gtest/gtest.h>
 
-#include <array>
 #include <vector>
 
 #include "./engine/ValuesForTesting.h"
 #include "./util/IdTableHelpers.h"
 #include "./util/IdTestHelpers.h"
+#include "engine/NeutralElementOperation.h"
 #include "engine/Union.h"
 #include "global/Id.h"
 #include "util/IndexTestHelpers.h"
+#include "util/OperationTestHelpers.h"
 
 namespace {
 auto V = ad_utility::testing::VocabId;
@@ -180,4 +181,18 @@ TEST(Union, ensurePermutationIsAppliedCorrectly) {
         makeIdTableFromVector({{1, 2, 3, 4, 5}, {V(7), V(6), U, U, V(8)}});
     EXPECT_EQ(resultTable.idTable(), expected);
   }
+}
+
+// _____________________________________________________________________________
+TEST(Union, clone) {
+  auto* qec = ad_utility::testing::getQec();
+
+  Union unionOperation{
+      qec, ad_utility::makeExecutionTree<NeutralElementOperation>(qec),
+      ad_utility::makeExecutionTree<NeutralElementOperation>(qec)};
+
+  auto clone = unionOperation.clone();
+  ASSERT_TRUE(clone);
+  EXPECT_THAT(unionOperation, IsDeepCopy(*clone));
+  EXPECT_EQ(clone->getDescriptor(), unionOperation.getDescriptor());
 }

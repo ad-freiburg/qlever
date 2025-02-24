@@ -11,6 +11,7 @@
 #include "engine/ValuesForTesting.h"
 #include "global/ValueIdComparators.h"
 #include "util/IndexTestHelpers.h"
+#include "util/OperationTestHelpers.h"
 
 using namespace std::string_literals;
 using namespace std::chrono_literals;
@@ -256,4 +257,18 @@ TEST(OrderBy, verifyOperationIsPreemptivelyAbortedWithNoRemainingTime) {
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       orderBy.getResult(true), ::testing::HasSubstr("time estimate exceeded"),
       ad_utility::CancellationException);
+}
+
+// _____________________________________________________________________________
+TEST(OrderBy, clone) {
+  auto* qec = ad_utility::testing::getQec();
+  IdTable permutedInput{2, qec->getAllocator()};
+
+  OrderBy orderBy =
+      makeOrderBy(permutedInput.clone(), OrderBy::SortIndices{{0, true}});
+
+  auto clone = orderBy.clone();
+  ASSERT_TRUE(clone);
+  EXPECT_THAT(orderBy, IsDeepCopy(*clone));
+  EXPECT_EQ(clone->getDescriptor(), orderBy.getDescriptor());
 }
