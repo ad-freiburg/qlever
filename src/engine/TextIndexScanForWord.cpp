@@ -19,7 +19,7 @@ TextIndexScanForWord::TextIndexScanForWord(QueryExecutionContext* qec,
       config_(TextIndexScanForWordConfiguration{std::move(textRecordVar),
                                                 std::move(word)}) {
   config_.isPrefix_ = config_.word_.ends_with('*');
-  config_.varToBindScore_ = config_.varToBindText_.getWordScoreVariable(
+  config_.scoreVar_ = config_.varToBindText_.getWordScoreVariable(
       config_.word_, config_.isPrefix_);
   setVariableToColumnMap();
 }
@@ -36,7 +36,7 @@ ProtoResult TextIndexScanForWord::computeResult(
   if (config_.isPrefix_) {
     cols.push_back({1});
   }
-  if (config_.varToBindScore_.has_value()) {
+  if (config_.scoreVar_.has_value()) {
     cols.push_back({2});
   }
   idTable.setColumnSubset(cols);
@@ -55,22 +55,21 @@ void TextIndexScanForWord::setVariableToColumnMap() {
       makeAlwaysDefinedColumn(index);
   index++;
   if (config_.isPrefix_) {
-    if (!config_.varToBindMatch_.has_value()) {
-      config_.varToBindMatch_ = config_.varToBindText_.getMatchingWordVariable(
+    if (!config_.matchVar_.has_value()) {
+      config_.matchVar_ = config_.varToBindText_.getMatchingWordVariable(
           std::string_view(config_.word_).substr(0, config_.word_.size() - 1));
     }
-    config_.variableColumns_.value()[config_.varToBindMatch_.value()] =
+    config_.variableColumns_.value()[config_.matchVar_.value()] =
         makeAlwaysDefinedColumn(index);
     index++;
-  } else if (config_.varToBindMatch_.has_value()) {
+  } else if (config_.matchVar_.has_value()) {
     throw parsedQuery::TextSearchException(
         "Text index scan for word shouldn't have a variable to bind match "
         "defined when the word is not a prefix.");
   }
-  AD_CORRECTNESS_CHECK(config_.isPrefix_ ||
-                       !config_.varToBindMatch_.has_value());
-  if (config_.varToBindScore_.has_value()) {
-    config_.variableColumns_.value()[config_.varToBindScore_.value()] =
+  AD_CORRECTNESS_CHECK(config_.isPrefix_ || !config_.matchVar_.has_value());
+  if (config_.scoreVar_.has_value()) {
+    config_.variableColumns_.value()[config_.scoreVar_.value()] =
         makeAlwaysDefinedColumn(index);
   }
 }
@@ -82,7 +81,7 @@ VariableToColumnMap TextIndexScanForWord::computeVariableToColumnMap() const {
 
 // _____________________________________________________________________________
 size_t TextIndexScanForWord::getResultWidth() const {
-  return 1 + config_.isPrefix_ + config_.varToBindScore_.has_value();
+  return 1 + config_.isPrefix_ + config_.scoreVar_.has_value();
 }
 
 // _____________________________________________________________________________

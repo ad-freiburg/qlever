@@ -19,7 +19,7 @@ TextIndexScanForEntity::TextIndexScanForEntity(
     : Operation(qec),
       config_(TextIndexScanForEntityConfiguration{
           std::move(textRecordVar), std::move(entity), std::move(word)}) {
-  config_.varToBindScore_ =
+  config_.scoreVar_ =
       config_.varToBindText_.getEntityScoreVariable(config_.entity_);
   config_.varOrFixed_ = VarOrFixedEntity(qec, config_.entity_);
   setVariableToColumnMap();
@@ -44,7 +44,7 @@ ProtoResult TextIndexScanForEntity::computeResult(
   } else {
     cols.push_back({1});
   }
-  if (config_.varToBindScore_.has_value()) {
+  if (config_.scoreVar_.has_value()) {
     cols.push_back({2});
   }
   idTable.setColumnSubset(cols);
@@ -72,8 +72,8 @@ void TextIndexScanForEntity::setVariableToColumnMap() {
         makeAlwaysDefinedColumn(index);
     index++;
   }
-  if (config_.varToBindScore_.has_value()) {
-    config_.variableColumns_.value()[config_.varToBindScore_.value()] =
+  if (config_.scoreVar_.has_value()) {
+    config_.variableColumns_.value()[config_.scoreVar_.value()] =
         makeAlwaysDefinedColumn(index);
   }
 }
@@ -86,7 +86,7 @@ VariableToColumnMap TextIndexScanForEntity::computeVariableToColumnMap() const {
 // _____________________________________________________________________________
 size_t TextIndexScanForEntity::getResultWidth() const {
   return 1 + (hasFixedEntity() ? 0 : 1) +
-         (config_.varToBindScore_.has_value() ? 1 : 0);
+         (config_.scoreVar_.has_value() ? 1 : 0);
 }
 
 // _____________________________________________________________________________

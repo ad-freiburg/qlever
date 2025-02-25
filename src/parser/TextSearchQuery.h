@@ -13,8 +13,8 @@ struct TextSearchConfig {
   std::optional<bool> isWordSearch_;
   std::optional<Variable> textVar_;
   std::optional<std::string> word_;
-  std::optional<Variable> varToBindMatch_;
-  std::optional<Variable> varToBindScore_;
+  std::optional<Variable> matchVar_;
+  std::optional<Variable> scoreVar_;
   std::optional<std::variant<Variable, std::string>> entity_;
 };
 
@@ -40,28 +40,27 @@ struct TextIndexScanForEntityConfiguration {
   Variable varToBindText_;
   std::variant<Variable, std::string> entity_;
   std::string word_;
-  std::optional<Variable> varToBindScore_ = std::nullopt;
+  std::optional<Variable> scoreVar_ = std::nullopt;
   std::optional<VariableToColumnMap> variableColumns_ = std::nullopt;
   std::optional<VarOrFixedEntity> varOrFixed_ = std::nullopt;
 
   bool operator==(const TextIndexScanForEntityConfiguration& other) const {
     return varToBindText_ == other.varToBindText_ && entity_ == other.entity_ &&
-           word_ == other.word_ && varToBindScore_ == other.varToBindScore_;
+           word_ == other.word_ && scoreVar_ == other.scoreVar_;
   }
 };
 
 struct TextIndexScanForWordConfiguration {
   Variable varToBindText_;
   string word_;
-  std::optional<Variable> varToBindMatch_ = std::nullopt;
-  std::optional<Variable> varToBindScore_ = std::nullopt;
+  std::optional<Variable> matchVar_ = std::nullopt;
+  std::optional<Variable> scoreVar_ = std::nullopt;
   bool isPrefix_ = false;
   std::optional<VariableToColumnMap> variableColumns_ = std::nullopt;
 
   bool operator==(const TextIndexScanForWordConfiguration& other) const {
     return varToBindText_ == other.varToBindText_ && word_ == other.word_ &&
-           varToBindMatch_ == other.varToBindMatch_ &&
-           varToBindScore_ == other.varToBindScore_ &&
+           matchVar_ == other.matchVar_ && scoreVar_ == other.scoreVar_ &&
            isPrefix_ == other.isPrefix_;
   }
 };
@@ -85,19 +84,19 @@ struct TextSearchQuery : MagicServiceQuery {
   // Helper functions for addParameter
 
   // Checks if subject is a variable. If not throws exception.
-  static void throwSubjectVariableException(std::string_view predString,
-                                            const TripleComponent& subject);
+  static void checkSubjectIsVariable(std::string_view predString,
+                                     const TripleComponent& subject);
   // Checks if object and subject are variables. If not throws exception.
-  static void throwSubjectAndObjectVariableException(
-      std::string_view predString, const TripleComponent& subject,
-      const TripleComponent& object);
+  static void checkSubjectAndObjectAreVariables(std::string_view predString,
+                                                const TripleComponent& subject,
+                                                const TripleComponent& object);
   // Checks if query already encountered <contains-word> or <contains-entity>
   // before this. If yes throws exception.
-  void throwContainsWordOrEntity(const TripleComponent& subject);
+  void checkOneContainsWordOrEntity(const TripleComponent& subject);
 
   // Checks if object is literal. If not throws exception.
-  static void throwObjectLiteralException(std::string_view predString,
-                                          const TripleComponent& object);
+  static void checkObjectIsLiteral(std::string_view predString,
+                                   const TripleComponent& object);
 
   void predStringTextSearch(const Variable& subjectVar,
                             const Variable& objectVar);

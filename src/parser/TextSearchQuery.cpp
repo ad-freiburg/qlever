@@ -30,8 +30,8 @@ std::variant<Variable, FixedEntity> VarOrFixedEntity::makeEntityVariant(
 namespace parsedQuery {
 
 // ____________________________________________________________________________
-void TextSearchQuery::throwSubjectVariableException(
-    std::string_view predString, const TripleComponent& subject) {
+void TextSearchQuery::checkSubjectIsVariable(std::string_view predString,
+                                             const TripleComponent& subject) {
   if (!subject.isVariable()) {
     throw TextSearchException(
         absl::StrCat("The predicate <", predString,
@@ -41,7 +41,7 @@ void TextSearchQuery::throwSubjectVariableException(
 }
 
 // ____________________________________________________________________________
-void TextSearchQuery::throwSubjectAndObjectVariableException(
+void TextSearchQuery::checkSubjectAndObjectAreVariables(
     std::string_view predString, const TripleComponent& subject,
     const TripleComponent& object) {
   if (!(subject.isVariable() && object.isVariable())) {
@@ -54,7 +54,7 @@ void TextSearchQuery::throwSubjectAndObjectVariableException(
 }
 
 // ____________________________________________________________________________
-void TextSearchQuery::throwContainsWordOrEntity(
+void TextSearchQuery::checkOneContainsWordOrEntity(
     const TripleComponent& subject) {
   if (configVarToConfigs_[subject.getVariable()].isWordSearch_.has_value()) {
     throw TextSearchException(
@@ -64,8 +64,8 @@ void TextSearchQuery::throwContainsWordOrEntity(
 }
 
 // ____________________________________________________________________________
-void TextSearchQuery::throwObjectLiteralException(
-    std::string_view predString, const TripleComponent& object) {
+void TextSearchQuery::checkObjectIsLiteral(std::string_view predString,
+                                           const TripleComponent& object) {
   if (!object.isLiteral()) {
     throw TextSearchException(
         absl::StrCat("The predicate <", predString,
@@ -122,25 +122,25 @@ void TextSearchQuery::predStringContainsEntity(const Variable& subjectVar,
 // ____________________________________________________________________________
 void TextSearchQuery::predStringBindMatch(const Variable& subjectVar,
                                           const Variable& objectVar) {
-  if (configVarToConfigs_[subjectVar].varToBindMatch_.has_value()) {
+  if (configVarToConfigs_[subjectVar].matchVar_.has_value()) {
     throw TextSearchException(absl::StrCat(
         "Each text search config should only contain at most one <bind-match>. "
         "The second match variable given was: ",
         objectVar.name(), ". The config variable was: ", subjectVar.name()));
   }
-  configVarToConfigs_[subjectVar].varToBindMatch_ = objectVar;
+  configVarToConfigs_[subjectVar].matchVar_ = objectVar;
 }
 
 // ____________________________________________________________________________
 void TextSearchQuery::predStringBindScore(const Variable& subjectVar,
                                           const Variable& objectVar) {
-  if (configVarToConfigs_[subjectVar].varToBindScore_.has_value()) {
+  if (configVarToConfigs_[subjectVar].scoreVar_.has_value()) {
     throw TextSearchException(absl::StrCat(
         "Each text search config should only contain at most one <bind-score>. "
         "The second match variable given was: ",
         objectVar.name(), ". The config variable was: ", subjectVar.name()));
   }
-  configVarToConfigs_[subjectVar].varToBindScore_ = objectVar;
+  configVarToConfigs_[subjectVar].scoreVar_ = objectVar;
 }
 
 // ____________________________________________________________________________
@@ -152,22 +152,22 @@ void TextSearchQuery::addParameter(const SparqlTriple& triple) {
 
   auto predString = extractParameterName(predicate, TEXT_SEARCH_IRI);
   if (predString == "text-search") {
-    throwSubjectAndObjectVariableException("text-search", subject, object);
+    checkSubjectAndObjectAreVariables("text-search", subject, object);
     predStringTextSearch(subject.getVariable(), object.getVariable());
   } else if (predString == "contains-word") {
-    throwSubjectVariableException("contains-word", subject);
-    throwContainsWordOrEntity(subject);
-    throwObjectLiteralException("contains-word", object);
+    checkSubjectIsVariable("contains-word", subject);
+    checkOneContainsWordOrEntity(subject);
+    checkObjectIsLiteral("contains-word", object);
     predStringContainsWord(subject.getVariable(), object.getLiteral());
   } else if (predString == "contains-entity") {
-    throwSubjectVariableException("contains-entity", subject);
-    throwContainsWordOrEntity(subject);
+    checkSubjectIsVariable("contains-entity", subject);
+    checkOneContainsWordOrEntity(subject);
     predStringContainsEntity(subject.getVariable(), object);
   } else if (predString == "bind-match") {
-    throwSubjectAndObjectVariableException("bind-match", subject, object);
+    checkSubjectAndObjectAreVariables("bind-match", subject, object);
     predStringBindMatch(subject.getVariable(), object.getVariable());
   } else if (predString == "bind-score") {
-    throwSubjectAndObjectVariableException("bind-score", subject, object);
+    checkSubjectAndObjectAreVariables("bind-score", subject, object);
     predStringBindScore(subject.getVariable(), object.getVariable());
   }
 }
@@ -216,8 +216,7 @@ TextSearchQuery::toConfigs(const QueryExecutionContext* qec) const {
           "The config variable was: ", var.name()));
     }
     if (conf.isWordSearch_.value()) {
-      if (conf.varToBindMatch_.has_value() &&
-          !conf.word_.value().ends_with("*")) {
+      if (conf.matchVar_.has_value() && !conf.word_.value().ends_with("*")) {
         throw TextSearchException(
             absl::StrCat("The text search config shouldn't define a variable "
                          "for the prefix match column if the word isn't a "
@@ -234,8 +233,8 @@ TextSearchQuery::toConfigs(const QueryExecutionContext* qec) const {
   for (const auto& [var, conf] : configVarToConfigs_) {
     if (conf.isWordSearch_.value()) {
       output.emplace_back(TextIndexScanForWordConfiguration{
-          conf.textVar_.value(), conf.word_.value(), conf.varToBindMatch_,
-          conf.varToBindScore_});
+          conf.textVar_.value(), conf.word_.value(), conf.matchVar_,
+          conf.scoreVar_});
     } else {
       auto it = potentialTermsForCvar.find(conf.textVar_.value());
       if (it == potentialTermsForCvar.end()) {
@@ -248,7 +247,7 @@ TextSearchQuery::toConfigs(const QueryExecutionContext* qec) const {
       output.emplace_back(TextIndexScanForEntityConfiguration{
           conf.textVar_.value(), conf.entity_.value(),
           it->second[qec->getIndex().getIndexOfBestSuitedElTerm(it->second)],
-          conf.varToBindScore_});
+          conf.scoreVar_});
     }
   }
   return output;
