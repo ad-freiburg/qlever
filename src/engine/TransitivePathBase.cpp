@@ -11,10 +11,12 @@
 #include <utility>
 
 #include "engine/CallFixedSize.h"
+#include "engine/Distinct.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/IndexScan.h"
 #include "engine/TransitivePathBinSearch.h"
 #include "engine/TransitivePathHashMap.h"
+#include "engine/Union.h"
 #include "global/RuntimeParameters.h"
 #include "util/Exception.h"
 
@@ -39,6 +41,26 @@ TransitivePathBase::TransitivePathBase(
   if (rhs_.isVariable()) {
     variableColumns_[std::get<Variable>(rhs_.value_)] =
         makeAlwaysDefinedColumn(1);
+  }
+  if (minDist_ == 0 && !lhs_.isBoundVariable() && !rhs_.isBoundVariable() &&
+      lhs_.isVariable() && rhs_.isVariable()) {
+    emptyPathBound_ = true;
+    auto allValues = ad_utility::makeExecutionTree<Union>(
+        qec,
+        ad_utility::makeExecutionTree<IndexScan>(
+            qec, Permutation::Enum::SPO,
+            SparqlTriple{TripleComponent{Variable{"?x"}},
+                         PropertyPath::fromVariable(Variable{"?y"}),
+                         TripleComponent{Variable{"?z"}}}),
+        ad_utility::makeExecutionTree<IndexScan>(
+            qec, Permutation::Enum::OPS,
+            SparqlTriple{TripleComponent{Variable{"?z"}},
+                         PropertyPath::fromVariable(Variable{"?y"}),
+                         TripleComponent{Variable{"?x"}}}));
+    auto uniqueValues = ad_utility::makeExecutionTree<Distinct>(
+        qec, QueryExecutionTree::createSortedTree(std::move(allValues), {0}),
+        std::vector<ColumnIndex>{0});
+    lhs_.treeAndCol_.emplace(uniqueValues, 0);
   }
 
   lhs_.outputCol_ = 0;
@@ -347,6 +369,10 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindLeftOrRightSide(
   if (isLeft) {
     lhs.treeAndCol_ = {leftOrRightOp, inputCol};
   } else {
+    // Remove empty path tree if binding actual tree.
+    if (emptyPathBound_) {
+      lhs.treeAndCol_ = std::nullopt;
+    }
     rhs.treeAndCol_ = {leftOrRightOp, inputCol};
   }
 
@@ -389,8 +415,10 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindLeftOrRightSide(
 
 // _____________________________________________________________________________
 bool TransitivePathBase::isBoundOrId() const {
-  return lhs_.isBoundVariable() || rhs_.isBoundVariable() ||
-         !lhs_.isVariable() || !rhs_.isVariable();
+  // Don't make the execution tree for the empty path count as "bound".
+  return !emptyPathBound_ &&
+         (lhs_.isBoundVariable() || rhs_.isBoundVariable() ||
+          !lhs_.isVariable() || !rhs_.isVariable());
 }
 
 // _____________________________________________________________________________
@@ -402,7 +430,9 @@ void TransitivePathBase::copyColumns(const IdTableView<INPUT_WIDTH>& inputTable,
   size_t inCol = 0;
   size_t outCol = 2;
   AD_CORRECTNESS_CHECK(skipCol < inputTable.numColumns());
-  AD_CORRECTNESS_CHECK(inputTable.numColumns() + 1 == outputTable.numColumns());
+  AD_CORRECTNESS_CHECK(inputTable.numColumns() + 1 ==
+                           outputTable.numColumns() ||
+                       emptyPathBound_);
   while (inCol < inputTable.numColumns() && outCol < outputTable.numColumns()) {
     if (skipCol == inCol) {
       inCol++;
