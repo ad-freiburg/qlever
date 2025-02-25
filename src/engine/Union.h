@@ -99,6 +99,14 @@ class Union : public Operation {
   // Compares two rows with respect to the columns that the result is sorted on.
   bool isSmaller(const auto& row1, const auto& row2) const;
 
+  // Helper function for `computeResultKeepOrderImpl` that processes any
+  // remaining elements once one side is exhausted.
+  Result::Generator processRemaining(std::vector<ColumnIndex> permutation,
+                                     auto& it, const auto& end,
+                                     bool requestLaziness, size_t index,
+                                     IdTable& resultTable,
+                                     LocalVocab& localVocab) const;
+
   // Actual implementation of `computeResultKeepOrder`.
   Result::Generator computeResultKeepOrderImpl(
       bool requestLaziness, auto range1, auto range2,

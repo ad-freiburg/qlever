@@ -271,6 +271,39 @@ TEST(Union, sortedMerge) {
 }
 
 // _____________________________________________________________________________
+TEST(Union, sortedMergeWithOneSideNonLazy) {
+  using Var = Variable;
+  auto* qec = ad_utility::testing::getQec();
+
+  auto leftT = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{1}}), Vars{Var{"?a"}}, false,
+      std::vector<ColumnIndex>{0}, LocalVocab{}, std::nullopt, true);
+
+  auto rightT = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{0}, {2}}), Vars{Var{"?a"}}, false,
+      std::vector<ColumnIndex>{0});
+  Union unionOperation{qec, std::move(leftT), std::move(rightT), {0}};
+  auto expected = makeIdTableFromVector({{0}, {1}, {2}});
+  {
+    qec->getQueryTreeCache().clearAll();
+    auto result =
+        unionOperation.getResult(true, ComputationMode::FULLY_MATERIALIZED);
+    EXPECT_EQ(result->idTable(), expected);
+  }
+  {
+    qec->getQueryTreeCache().clearAll();
+    auto result =
+        unionOperation.getResult(true, ComputationMode::LAZY_IF_SUPPORTED);
+    auto& idTables = result->idTables();
+    auto it = idTables.begin();
+    ASSERT_NE(it, idTables.end());
+    EXPECT_EQ(it->idTable_, expected);
+
+    ASSERT_EQ(++it, idTables.end());
+  }
+}
+
+// _____________________________________________________________________________
 TEST(Union, sortedMergeWithLocalVocab) {
   using Var = Variable;
   auto* qec = ad_utility::testing::getQec();

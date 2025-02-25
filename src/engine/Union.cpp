@@ -374,6 +374,40 @@ bool Union::isSmaller(const auto& row1, const auto& row2) const {
 }
 
 // _____________________________________________________________________________
+Result::Generator Union::processRemaining(std::vector<ColumnIndex> permutation,
+                                          auto& it, const auto& end,
+                                          bool requestLaziness, size_t index,
+                                          IdTable& resultTable,
+                                          LocalVocab& localVocab) const {
+  // append the remaining elements
+  while (it != end) {
+    if (requestLaziness) {
+      if (index != 0) {
+        resultTable.insertAtEnd(it->idTable_, index, std::nullopt, permutation,
+                                Id::makeUndefined());
+        localVocab.mergeWith(std::span{&it->localVocab_, 1});
+        co_yield Result::IdTableVocabPair{std::move(resultTable),
+                                          std::move(localVocab)};
+      } else {
+        if (resultTable.size() != 0) {
+          co_yield Result::IdTableVocabPair{std::move(resultTable),
+                                            std::move(localVocab)};
+        }
+        auto&& pair = moveOrCopy(*it);
+        pair.idTable_ = transformToCorrectColumnFormat(std::move(pair.idTable_),
+                                                       permutation);
+        co_yield pair;
+      }
+    } else {
+      resultTable.insertAtEnd(it->idTable_, index, std::nullopt, permutation,
+                              Id::makeUndefined());
+    }
+    index = 0;
+    ++it;
+  }
+}
+
+// _____________________________________________________________________________
 Result::Generator Union::computeResultKeepOrderImpl(
     bool requestLaziness, auto range1, auto range2,
     std::pair<std::shared_ptr<const Result>, std::shared_ptr<const Result>>)
@@ -423,58 +457,19 @@ Result::Generator Union::computeResultKeepOrderImpl(
       index2 = 0;
     }
   }
-  auto leftPermutation = computePermutation<true>();
+
   // append the remaining elements
-  while (it1 != range1.end()) {
-    if (requestLaziness) {
-      if (index1 != 0) {
-        resultTable.insertAtEnd(it1->idTable_, index1, std::nullopt,
-                                leftPermutation, Id::makeUndefined());
-        localVocab.mergeWith(std::span{&it1->localVocab_, 1});
-        co_yield Result::IdTableVocabPair{std::move(resultTable),
-                                          std::move(localVocab)};
-      } else {
-        if (resultTable.size() != 0) {
-          co_yield Result::IdTableVocabPair{std::move(resultTable),
-                                            std::move(localVocab)};
-        }
-        auto&& pair = moveOrCopy(*it1);
-        pair.idTable_ = transformToCorrectColumnFormat(std::move(pair.idTable_),
-                                                       leftPermutation);
-        co_yield pair;
-      }
-    } else {
-      resultTable.insertAtEnd(it1->idTable_, index1, std::nullopt,
-                              leftPermutation, Id::makeUndefined());
-    }
-    index1 = 0;
-    ++it1;
+  for (auto& pair :
+       processRemaining(computePermutation<true>(), it1, range1.end(),
+                        requestLaziness, index1, resultTable, localVocab)) {
+    AD_CORRECTNESS_CHECK(requestLaziness);
+    co_yield pair;
   }
-  auto rightPermutation = computePermutation<false>();
-  while (it2 != range2.end()) {
-    if (requestLaziness) {
-      if (index2 != 0) {
-        resultTable.insertAtEnd(it2->idTable_, index2, std::nullopt,
-                                rightPermutation, Id::makeUndefined());
-        localVocab.mergeWith(std::span{&it2->localVocab_, 1});
-        co_yield Result::IdTableVocabPair{std::move(resultTable),
-                                          std::move(localVocab)};
-      } else {
-        if (resultTable.size() != 0) {
-          co_yield Result::IdTableVocabPair{std::move(resultTable),
-                                            std::move(localVocab)};
-        }
-        auto&& pair = moveOrCopy(*it2);
-        pair.idTable_ = transformToCorrectColumnFormat(std::move(pair.idTable_),
-                                                       rightPermutation);
-        co_yield pair;
-      }
-    } else {
-      resultTable.insertAtEnd(it2->idTable_, index2, std::nullopt,
-                              rightPermutation, Id::makeUndefined());
-    }
-    index2 = 0;
-    ++it2;
+  for (auto& pair :
+       processRemaining(computePermutation<false>(), it2, range2.end(),
+                        requestLaziness, index2, resultTable, localVocab)) {
+    AD_CORRECTNESS_CHECK(requestLaziness);
+    co_yield pair;
   }
   if (!requestLaziness) {
     co_yield Result::IdTableVocabPair{std::move(resultTable),
@@ -486,26 +481,21 @@ Result::Generator Union::computeResultKeepOrderImpl(
 Result::Generator Union::computeResultKeepOrder(
     bool requestLaziness, std::shared_ptr<const Result> result1,
     std::shared_ptr<const Result> result2) const {
-  if (result1->isFullyMaterialized() && result2->isFullyMaterialized()) {
-    return computeResultKeepOrderImpl(
-        requestLaziness,
-        std::array{Wrapper{result1->idTable(), result1->localVocab()}},
-        std::array{Wrapper{result2->idTable(), result2->localVocab()}},
-        std::pair{result1, result2});
-  }
-  if (result1->isFullyMaterialized()) {
-    return computeResultKeepOrderImpl(
-        requestLaziness,
-        std::array{Wrapper{result1->idTable(), result1->localVocab()}},
-        std::move(result2->idTables()), std::pair{result1, result2});
-  }
-  if (result2->isFullyMaterialized()) {
-    return computeResultKeepOrderImpl(
-        requestLaziness, std::move(result1->idTables()),
-        std::array{Wrapper{result2->idTable(), result2->localVocab()}},
-        std::pair{result1, result2});
-  }
-  return computeResultKeepOrderImpl(
-      requestLaziness, std::move(result1->idTables()),
-      std::move(result2->idTables()), std::pair{result1, result2});
+  using Range = std::variant<Result::LazyResult, std::array<Wrapper, 1>>;
+  Range leftRange = result1->isFullyMaterialized()
+                        ? Range{std::array{Wrapper{result1->idTable(),
+                                                   result1->localVocab()}}}
+                        : Range{std::move(result1->idTables())};
+  Range rightRange = result2->isFullyMaterialized()
+                         ? Range{std::array{Wrapper{result2->idTable(),
+                                                    result2->localVocab()}}}
+                         : Range{std::move(result2->idTables())};
+  return std::visit(
+      [this, requestLaziness, &result1, &result2](auto leftRange,
+                                                  auto rightRange) {
+        return computeResultKeepOrderImpl(
+            requestLaziness, std::move(leftRange), std::move(rightRange),
+            std::pair{std::move(result1), std::move(result2)});
+      },
+      std::move(leftRange), std::move(rightRange));
 }
