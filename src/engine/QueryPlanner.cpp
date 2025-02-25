@@ -2614,21 +2614,17 @@ void QueryPlanner::GraphPatternPlanner::visitSpatialSearch(
 // _______________________________________________________________
 void QueryPlanner::GraphPatternPlanner::visitTextSearch(
     const parsedQuery::TextSearchQuery& textSearchQuery) {
-  std::vector<SubtreePlan> candidatesOut;
+  auto visitor = [this]<typename T>(T& arg) -> SubtreePlan {
+    static_assert(
+        ad_utility::SimilarToAny<T, TextIndexScanForEntityConfiguration,
+                                 TextIndexScanForWordConfiguration>);
+    using Op = std::conditional_t<
+        ad_utility::isSimilar<T, TextIndexScanForEntityConfiguration>,
+        TextIndexScanForEntity, TextIndexScanForWord>;
+    return makeSubtreePlan<Op>(this->qec_, std::move(arg));
+  };
   for (auto config : textSearchQuery.toConfigs(qec_)) {
-    if (std::holds_alternative<TextIndexScanForWordConfiguration>(config)) {
-      auto plan = makeSubtreePlan<TextIndexScanForWord>(
-          qec_, std::move(std::get<TextIndexScanForWordConfiguration>(config)));
-      candidatesOut.push_back(std::move(plan));
-    } else {
-      auto plan = makeSubtreePlan<TextIndexScanForEntity>(
-          qec_,
-          std::move(std::get<TextIndexScanForEntityConfiguration>(config)));
-      candidatesOut.push_back(std::move(plan));
-    }
-  }
-  for (auto& plan : candidatesOut) {
-    candidatePlans_.push_back(std::vector{std::move(plan)});
+    candidatePlans_.push_back(std::vector{std::visit(visitor, config)});
   }
 }
 

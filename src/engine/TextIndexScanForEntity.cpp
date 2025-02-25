@@ -31,6 +31,7 @@ ProtoResult TextIndexScanForEntity::computeResult(
   IdTable idTable = getExecutionContext()->getIndex().getEntityMentionsForWord(
       config_.word_, getExecutionContext()->getAllocator());
 
+  std::vector<ColumnIndex> cols{0};
   if (hasFixedEntity()) {
     auto beginErase = ql::ranges::remove_if(idTable, [this](const auto& row) {
       return row[1].getVocabIndex() != getVocabIndexOfFixedEntity();
@@ -40,16 +41,13 @@ ProtoResult TextIndexScanForEntity::computeResult(
 #else
     idTable.erase(beginErase.begin(), idTable.end());
 #endif
-    if (config_.varToBindScore_.has_value()) {
-      idTable.setColumnSubset(std::vector<ColumnIndex>{0, 2});
-    } else {
-      idTable.setColumnSubset(std::vector<ColumnIndex>{0});
-    }
   } else {
-    if (!config_.varToBindScore_.has_value()) {
-      idTable.setColumnSubset(std::vector<ColumnIndex>{0, 1});
-    }
+    cols.push_back({1});
   }
+  if (config_.varToBindScore_.has_value()) {
+    cols.push_back({2});
+  }
+  idTable.setColumnSubset(cols);
 
   // Add details to the runtimeInfo. This is has no effect on the result.
   if (hasFixedEntity()) {

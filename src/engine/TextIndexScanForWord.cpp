@@ -32,18 +32,14 @@ ProtoResult TextIndexScanForWord::computeResult(
 
   // This filters out the word column. When the searchword is a prefix this
   // column shows the word the prefix got extended to
-  using CI = ColumnIndex;
-  if (!config_.isPrefix_) {
-    if (config_.varToBindScore_.has_value()) {
-      idTable.setColumnSubset(std::array{CI{0}, CI{2}});
-    } else {
-      idTable.setColumnSubset(std::array{CI{0}});
-    }
-    return {std::move(idTable), resultSortedOn(), LocalVocab{}};
+  std::vector<ColumnIndex> cols{0};
+  if (config_.isPrefix_) {
+    cols.push_back({1});
   }
-  if (!config_.varToBindScore_.has_value()) {
-    idTable.setColumnSubset(std::array{CI{0}, CI{1}});
+  if (config_.varToBindScore_.has_value()) {
+    cols.push_back({2});
   }
+  idTable.setColumnSubset(cols);
 
   // Add details to the runtimeInfo. This is has no effect on the result.
   runtimeInfo().addDetail("word: ", config_.word_);
