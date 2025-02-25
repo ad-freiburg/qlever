@@ -2344,7 +2344,8 @@ TEST(SparqlParser, Update) {
   expectUpdateFails(
       "PREFIX foo: <foo> INSERT DATA { <a> <b> <c> }; INSERT DATA { foo:a "
       "foo:b foo:c }",
-      testing::HasSubstr("foo"));
+      testing::HasSubstr("Invalid SPARQL query: Prefix foo was not registered "
+                         "using a PREFIX declaration in \"foo:a\""));
   expectUpdate_(
       "PREFIX foo: <foo> INSERT DATA { <a> <b> <c> }; PREFIX foo: <bar/> "
       "INSERT "

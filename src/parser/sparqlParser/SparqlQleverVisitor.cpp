@@ -527,11 +527,12 @@ std::vector<ParsedQuery> Visitor::visit(Parser::UpdateContext* ctx) {
   std::vector updates{std::move(thisUpdate)};
 
   if (ctx->update()) {
-    // This is a new operation, reset the internal `parsedQuery_` including the
-    // prefixes.
-    // TODO: do we want to reset the prefixes between chained updates?
-    parsedQuery_ = {};
+    // This is a new operation, reset the state of the Visitor.
+    activeDatasetClauses_ = {};
+    prefixMap_ = initialPrefixMap_;
     baseIri_ = {};
+    prologueString_ = {};
+    parsedQuery_ = {};
     ad_utility::appendVector(updates, visit(ctx->update()));
   }
 
