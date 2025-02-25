@@ -7,8 +7,8 @@
 // ____________________________________________________________________________
 std::string getTextScoringMetricAsString(TextScoringMetric textScoringMetric) {
   switch (textScoringMetric) {
-    case TextScoringMetric::COUNT:
-      return "count";
+    case TextScoringMetric::EXPLICIT:
+      return "explicit";
       break;
     case TextScoringMetric::TFIDF:
       return "tf-idf";
@@ -30,6 +30,6 @@ TextScoringMetric getTextScoringMetricFromString(
   } else if (textScoringMetricString == "bm25") {
     return TextScoringMetric::BM25;
   } else {
-    return TextScoringMetric::COUNT;
+    return TextScoringMetric::EXPLICIT;
   }
 }

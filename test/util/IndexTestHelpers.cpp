@@ -200,12 +200,10 @@ Index makeTestIndex(const std::string& indexBasename,
 
     index.createFromFiles({spec});
     if (createTextIndex) {
-      if (scoringMetric.has_value()) {
-        index.setScoringMetricsUsedInSettings(scoringMetric.value());
-      }
-      if (bAndKParam.has_value()) {
-        index.setBM25ParmetersUsedInSettings(bAndKParam.value().first,
-                                             bAndKParam.value().second);
+      if (scoringMetric.has_value() && bAndKParam.has_value()) {
+        index.storeTextScoringParamsInConfiguration(scoringMetric.value(),
+                                                    bAndKParam.value().first,
+                                                    bAndKParam.value().second);
       }
       if (contentsOfWordsFileAndDocsFile.has_value()) {
         // Create and write to words- and docsfile to later build a full text
@@ -234,8 +232,7 @@ Index makeTestIndex(const std::string& indexBasename,
         }
         index.buildDocsDB(indexBasename + ".docsfile");
       } else if (addWordsFromLiterals) {
-        index.buildTextIndexFile(std::pair<std::string, std::string>{"", ""},
-                                 true);
+        index.buildTextIndexFile(std::nullopt, true);
       }
     }
   }

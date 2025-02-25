@@ -15,7 +15,7 @@ using InnerMap = ad_utility::HashMap<DocumentIndex, TermFrequency>;
 using InvertedIndex = ad_utility::HashMap<WordIndex, InnerMap>;
 using DocLengthMap = ad_utility::HashMap<DocumentIndex, size_t>;
 
-enum struct TextScoringMetric { COUNT, TFIDF, BM25 };
+enum struct TextScoringMetric { EXPLICIT, TFIDF, BM25 };
 
 std::string getTextScoringMetricAsString(TextScoringMetric textScoringMetric);
 

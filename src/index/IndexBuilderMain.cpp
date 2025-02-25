@@ -155,7 +155,7 @@ int main(int argc, char** argv) {
   string textIndexName;
   string kbIndexName;
   string settingsFile;
-  string scoringMetric = "count";
+  string scoringMetric = "explicit";
   std::vector<string> filetype;
   std::vector<string> inputFile;
   std::vector<string> defaultGraphs;
@@ -217,14 +217,14 @@ int main(int argc, char** argv) {
   add("add-text-index,A", po::bool_switch(&onlyAddTextIndex),
       "Only build the text index. Assumes that a knowledge graph index with "
       "the same `index-basename` already exists.");
-  add("set-bm25-b-param", po::value(&bScoringParam),
-      "Sets the b param in the BM25 scoring metric. This has to be between "
-      "(including) 0 and 1. The default is 0.75.");
-  add("set-bm25-k-param", po::value(&kScoringParam),
-      "Sets the k param in the BM25 scoring metric. This has to be greater "
-      "than or equal to 0. The default is 1.75.");
+  add("bm25-b", po::value(&bScoringParam),
+      "Sets the b param in the BM25 scoring metric for the fulltext index."
+      " This has to be between (including) 0 and 1.");
+  add("bm25-k", po::value(&kScoringParam),
+      "Sets the k param in the BM25 scoring metric for the fulltext index."
+      "This has to be greater than or equal to 0.");
   add("set-scoring-metric,S", po::value(&scoringMetric),
-      "Sets the scoring metric used. Options are \"count\" for count, "
+      "Sets the scoring metric used. Options are \"explicit\" for explicit, "
       "\"tf-idf\" for tf idf "
       "and \"bm25\" for bm25. The default is count.");
 
@@ -350,13 +350,15 @@ int main(int argc, char** argv) {
       AD_CONTRACT_CHECK(!fileSpecifications.empty());
       index.createFromFiles(fileSpecifications);
     }
-
-    if ((!wordsfile.empty() && !docsfile.empty()) || addWordsFromLiterals) {
-      index.setScoringMetricsUsedInSettings(
-          getTextScoringMetricFromString(scoringMetric));
-      index.setBM25ParmetersUsedInSettings(bScoringParam, kScoringParam);
+    bool addFromWordsAndDocsFile = !(wordsfile.empty() || docsfile.empty());
+    if (addFromWordsAndDocsFile || addWordsFromLiterals) {
+      index.storeTextScoringParamsInConfiguration(
+          getTextScoringMetricFromString(scoringMetric), bScoringParam,
+          kScoringParam);
       index.buildTextIndexFile(
-          std::pair<std::string, std::string>{wordsfile, docsfile},
+          addFromWordsAndDocsFile
+              ? std::optional{std::pair{wordsfile, docsfile}}
+              : std::nullopt,
           addWordsFromLiterals);
     }
 

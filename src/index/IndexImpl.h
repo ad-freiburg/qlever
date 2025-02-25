@@ -262,8 +262,9 @@ class IndexImpl {
   // Additionally adds words from literals of the existing KB. Can't be called
   // with only words or only docsfile, but with or without both. Also can't be
   // called with the pair empty and bool false
-  void buildTextIndexFile(const std::pair<string, string>& wordsAndDocsFile,
-                          bool addWordsFromLiterals);
+  void buildTextIndexFile(
+      std::optional<std::pair<string, string>> wordsAndDocsFile,
+      bool addWordsFromLiterals);
 
   // Build docsDB file from given file (one text record per line).
   void buildDocsDB(const string& docsFile) const;
@@ -435,9 +436,8 @@ class IndexImpl {
     numTriplesPerBatch_ = numTriplesPerBatch;
   }
 
-  void setScoringMetricsUsedInSettings(TextScoringMetric scoringMetric);
-
-  void setBM25ParametersInSettings(float b, float k);
+  void storeTextScoringParamsInConfiguration(TextScoringMetric scoringMetric,
+                                             float b, float k);
 
   const string& getTextName() const { return textMeta_.getName(); }
 

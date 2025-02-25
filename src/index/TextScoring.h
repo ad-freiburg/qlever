@@ -9,10 +9,11 @@
 
 class ScoreData {
  public:
-  ScoreData() : scoringMetric_(TextScoringMetric::COUNT), b_(0.75), k_(1.75){};
+  ScoreData()
+      : scoringMetric_(TextScoringMetric::EXPLICIT), b_(0.75), k_(1.75){};
 
   ScoreData(LocaleManager localeManager)
-      : scoringMetric_(TextScoringMetric::COUNT),
+      : scoringMetric_(TextScoringMetric::EXPLICIT),
         b_(0.75),
         k_(1.75),
         localeManager_(localeManager){};

@@ -12,7 +12,7 @@ void ScoreData::calculateScoreData(const string& docsFileName,
                                    const Index::TextVocab& textVocab,
                                    const Index::Vocab& vocab) {
   // Skip calculation if scoring mode is set to count
-  if (scoringMetric_ == TextScoringMetric::COUNT) {
+  if (scoringMetric_ == TextScoringMetric::EXPLICIT) {
     return;
   }
 

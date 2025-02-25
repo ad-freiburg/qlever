@@ -165,9 +165,9 @@ TEST(TextIndexScanForWord, WordScanPrefix) {
   ASSERT_EQ("astronomer", h::getWordFromResultTable(qec, tresult, 7));
 
   // Tests if the correct scores are retrieved from the non literal texts for
-  // Count
+  // Explicit scores
   qec = getQec(kg, true, true, true, 16_B, true, true,
-               contentsOfWordsFileAndDocsFile, TextScoringMetric::COUNT);
+               contentsOfWordsFileAndDocsFile, TextScoringMetric::EXPLICIT);
 
   TextIndexScanForWord score1{qec, Variable{"?t1"}, "astronom*"};
   auto scoreResultCount = score1.computeResultOnlyForTesting();
