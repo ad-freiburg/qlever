@@ -118,6 +118,7 @@ class TransitivePathBase : public Operation {
   size_t minDist_;
   size_t maxDist_;
   VariableToColumnMap variableColumns_;
+  bool emptyPathBound_ = false;
 
  public:
   TransitivePathBase(QueryExecutionContext* qec,
@@ -125,7 +126,7 @@ class TransitivePathBase : public Operation {
                      TransitivePathSide leftSide, TransitivePathSide rightSide,
                      size_t minDist, size_t maxDist);
 
-  virtual ~TransitivePathBase() = 0;
+  ~TransitivePathBase() override = 0;
 
   /**
    * Returns a new TransitivePath operation that uses the fact that leftop
