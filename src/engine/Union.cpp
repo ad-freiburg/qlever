@@ -375,7 +375,7 @@ bool Union::isSmaller(const auto& row1, const auto& row2) const {
 
 // _____________________________________________________________________________
 Result::Generator Union::processRemaining(std::vector<ColumnIndex> permutation,
-                                          auto& it, const auto& end,
+                                          auto& it, auto end,
                                           bool requestLaziness, size_t index,
                                           IdTable& resultTable,
                                           LocalVocab& localVocab) const {

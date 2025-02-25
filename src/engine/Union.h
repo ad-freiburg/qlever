@@ -102,9 +102,8 @@ class Union : public Operation {
   // Helper function for `computeResultKeepOrderImpl` that processes any
   // remaining elements once one side is exhausted.
   Result::Generator processRemaining(std::vector<ColumnIndex> permutation,
-                                     auto& it, const auto& end,
-                                     bool requestLaziness, size_t index,
-                                     IdTable& resultTable,
+                                     auto& it, auto end, bool requestLaziness,
+                                     size_t index, IdTable& resultTable,
                                      LocalVocab& localVocab) const;
 
   // Actual implementation of `computeResultKeepOrder`.
