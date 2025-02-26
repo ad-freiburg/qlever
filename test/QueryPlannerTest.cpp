@@ -2981,3 +2981,32 @@ TEST(QueryPlanner, Exists) {
       "GRAPH ?g { ?u ?v ?c}}}",
       filter);
 }
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, CartesianProductJoinChildrenAreOrdered) {
+  auto qp = makeQueryPlanner();
+  {
+    auto query =
+        SparqlParser::parseQuery("SELECT * { VALUES ?x {1} VALUES ?y {2 3} }");
+    auto qet = qp.createExecutionTree(query);
+    EXPECT_TRUE(std::dynamic_pointer_cast<CartesianProductJoin>(
+        qet.getRootOperation()));
+    ASSERT_EQ(qet.getRootOperation()->getChildren().size(), 2);
+    EXPECT_EQ(qet.getRootOperation()->getChildren().at(0)->getCacheKey(),
+              "VALUES (?x) { (1) }");
+    EXPECT_EQ(qet.getRootOperation()->getChildren().at(1)->getCacheKey(),
+              "VALUES (?y) { (2) (3) }");
+  }
+  {
+    auto query =
+        SparqlParser::parseQuery("SELECT * { VALUES ?y {2 3} VALUES ?x {1} }");
+    auto qet = qp.createExecutionTree(query);
+    EXPECT_TRUE(std::dynamic_pointer_cast<CartesianProductJoin>(
+        qet.getRootOperation()));
+    ASSERT_EQ(qet.getRootOperation()->getChildren().size(), 2);
+    EXPECT_EQ(qet.getRootOperation()->getChildren().at(0)->getCacheKey(),
+              "VALUES (?x) { (1) }");
+    EXPECT_EQ(qet.getRootOperation()->getChildren().at(1)->getCacheKey(),
+              "VALUES (?y) { (2) (3) }");
+  }
+}
