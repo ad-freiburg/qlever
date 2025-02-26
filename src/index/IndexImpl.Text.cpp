@@ -121,6 +121,7 @@ void IndexImpl::logEntityNotFound(const string& word,
 void IndexImpl::buildTextIndexFile(
     std::optional<std::pair<string, string>> wordsAndDocsFile,
     bool addWordsFromLiterals) {
+  AD_CORRECTNESS_CHECK(wordsAndDocsFile.has_value() || addWordsFromLiterals);
   LOG(INFO) << std::endl;
   LOG(INFO) << "Adding text index ..." << std::endl;
   string indexFilename = onDiskBase_ + ".text.index";
@@ -130,6 +131,7 @@ void IndexImpl::buildTextIndexFile(
   // Either read words from given files or consider each literal as text record
   // or both (but at least one of them, otherwise this function is not called)
   if (addFromWordAndDocsFile) {
+    AD_CORRECTNESS_CHECK(!(wordsFile.empty() || docsFile.empty()));
     LOG(INFO) << "Reading words from wordsfile \"" << wordsFile << "\""
               << " and from docsFile \"" << docsFile << "\"" << std::endl;
   }

@@ -21,12 +21,12 @@ void ScoreData::calculateScoreData(const string& docsFileName,
   DocsFileParser docsFileParser(docsFileName, textVocab.getLocaleManager());
 
   // Parse the docsfile first if it exists
-  for (auto line : docsFileParser) {
+  for (auto& line : docsFileParser) {
     // Set docId
     docId = line.docId_;
     // Parse docText for invertedIndex
-    addDocumentOrLiteralToScoreDataInvertedIndex(line.docContent_, docId,
-                                                 textVocab);
+    addDocumentOrLiteralToScoreDataInvertedIndex(std::move(line.docContent_),
+                                                 docId, textVocab);
   }
 
   // Parse literals if added
@@ -53,35 +53,17 @@ void ScoreData::addDocumentOrLiteralToScoreDataInvertedIndex(
     std::string_view text, DocumentIndex docId,
     const Index::TextVocab& textVocab) {
   WordVocabIndex wvi;
-  for (auto word : tokenizeAndNormalizeText(text, localeManager_)) {
+  for (const auto& word : tokenizeAndNormalizeText(text, localeManager_)) {
     // Check if word exists and retrieve wordId
     if (!textVocab.getId(word, &wvi)) {
       continue;
     }
     WordIndex currentWordId = wvi.get();
-    // Emplaces or increases the docLengthMap
-    if (docLengthMap_.contains(docId)) {
-      ++docLengthMap_[docId];
-    } else {
-      docLengthMap_[docId] = 1;
-    }
+    // Increases the docLength of document with is nofWords of a document
+    ++docLengthMap_[docId];
     ++totalDocumentLength_;
-    // Check if wordId already is a key in the InvertedIndex
-    if (invertedIndex_.contains(currentWordId)) {
-      // Check if the word is seen in a new context or not
-      InnerMap& innerMap = invertedIndex_.find(currentWordId)->second;
-      auto ret = innerMap.find(docId);
-      // Seen in new context
-      if (ret == innerMap.end()) {
-        innerMap.emplace(docId, 1);
-        // Seen in known context
-      } else {
-        ret->second += 1;
-      }
-      // New word never seen before
-    } else {
-      invertedIndex_.emplace(currentWordId, InnerMap{{docId, 1}});
-    }
+    // Increase the TermFrequency for a word in the doc
+    ++invertedIndex_[currentWordId][docId];
   }
   ++nofDocuments_;
   docIdSet_.insert(docId);
