@@ -3037,7 +3037,7 @@ TEST(QueryPlanner, testDistributiveJoinInUnion) {
       "SELECT * WHERE { ?s <P31> ?o . { ?s <P279>+ ?y } UNION { VALUES ?x { 1 "
       "} }}",
       h::Union(
-          h::TransitivePath(std::move(left3), std::move(right2), 1,
+          h::TransitivePath(left3, right2, 1,
                             std::numeric_limits<size_t>::max(),
                             h::IndexScanFromStrings("?s", "<P31>", "?o"),
                             h::IndexScanFromStrings(
@@ -3045,6 +3045,20 @@ TEST(QueryPlanner, testDistributiveJoinInUnion) {
                                 "?_QLever_internal_variable_qp_1")),
           h::CartesianProductJoin(h::IndexScanFromStrings("?s", "<P31>", "?o"),
                                   h::ValuesClause("VALUES (?x) { (1) }"))),
+      qec, {4, 16, 64'000'000});
+
+  h::expectWithGivenBudgets(
+      "SELECT * WHERE { { VALUES ?x { 1 } } UNION { ?s <P279>+ ?y } . "
+      "?s <P31> ?o }",
+      h::Union(
+          h::CartesianProductJoin(h::ValuesClause("VALUES (?x) { (1) }"),
+                                  h::IndexScanFromStrings("?s", "<P31>", "?o")),
+          h::TransitivePath(std::move(left3), std::move(right2), 1,
+                            std::numeric_limits<size_t>::max(),
+                            h::IndexScanFromStrings("?s", "<P31>", "?o"),
+                            h::IndexScanFromStrings(
+                                "?_QLever_internal_variable_qp_0", "<P279>",
+                                "?_QLever_internal_variable_qp_1"))),
       qec, {4, 16, 64'000'000});
 }
 
