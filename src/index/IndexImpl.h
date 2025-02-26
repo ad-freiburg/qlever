@@ -384,6 +384,10 @@ class IndexImpl {
 
   size_t getIndexOfBestSuitedElTerm(const vector<string>& terms) const;
 
+  IdTable readContextListHelper(
+      const ad_utility::AllocatorWithLimit<Id>& allocator,
+      const ContextListMetaData& contextList, bool isWordCl) const;
+
   IdTable readWordCl(const TextBlockMetaData& tbmd,
                      const ad_utility::AllocatorWithLimit<Id>& allocator) const;
 
