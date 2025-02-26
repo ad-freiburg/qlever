@@ -2152,7 +2152,7 @@ auto QueryPlanner::applyJoinDistributivelyToUnion(const SubtreePlan& a,
       for (const auto& rightPlan : joinedRight) {
         SubtreePlan candidate =
             makeSubtreePlan<Union>(_qec, leftPlan._qet, rightPlan._qet);
-        mergeSubtreePlanIds(candidate, leftPlan, rightPlan);
+        mergeSubtreePlanIds(candidate, thisPlan, other);
         candidates.push_back(std::move(candidate));
       }
     }
