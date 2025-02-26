@@ -5,6 +5,8 @@
 
 #include "TransitivePathBase.h"
 
+#include <absl/strings/str_cat.h>
+
 #include <limits>
 #include <memory>
 #include <optional>
@@ -24,7 +26,7 @@
 TransitivePathBase::TransitivePathBase(
     QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> child,
     TransitivePathSide leftSide, TransitivePathSide rightSide, size_t minDist,
-    size_t maxDist)
+    size_t maxDist, Graphs activeGraphs)
     : Operation(qec),
       subtree_(child
                    ? QueryExecutionTree::createSortedTree(std::move(child), {0})
@@ -45,18 +47,26 @@ TransitivePathBase::TransitivePathBase(
   if (minDist_ == 0 && !lhs_.isBoundVariable() && !rhs_.isBoundVariable() &&
       lhs_.isVariable() && rhs_.isVariable()) {
     emptyPathBound_ = true;
+    auto makeInternalVariable = [](std::string_view string) {
+      return Variable{
+          absl::StrCat("?internal_property_path_variable_", string)};
+    };
+    // Dummy variables to get a full scan of the index.
+    auto x = makeInternalVariable("x");
+    auto y = makeInternalVariable("y");
+    auto z = makeInternalVariable("z");
     auto allValues = ad_utility::makeExecutionTree<Union>(
         qec,
         ad_utility::makeExecutionTree<IndexScan>(
             qec, Permutation::Enum::SPO,
-            SparqlTriple{TripleComponent{Variable{"?x"}},
-                         PropertyPath::fromVariable(Variable{"?y"}),
-                         TripleComponent{Variable{"?z"}}}),
+            SparqlTriple{TripleComponent{x}, PropertyPath::fromVariable(y),
+                         TripleComponent{z}},
+            activeGraphs),
         ad_utility::makeExecutionTree<IndexScan>(
             qec, Permutation::Enum::OPS,
-            SparqlTriple{TripleComponent{Variable{"?z"}},
-                         PropertyPath::fromVariable(Variable{"?y"}),
-                         TripleComponent{Variable{"?x"}}}));
+            SparqlTriple{TripleComponent{z}, PropertyPath::fromVariable(y),
+                         TripleComponent{x}},
+            activeGraphs));
     auto uniqueValues = ad_utility::makeExecutionTree<Distinct>(
         qec, QueryExecutionTree::createSortedTree(std::move(allValues), {0}),
         std::vector<ColumnIndex>{0});
@@ -299,27 +309,27 @@ size_t TransitivePathBase::getCostEstimate() {
 std::shared_ptr<TransitivePathBase> TransitivePathBase::makeTransitivePath(
     QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> child,
     TransitivePathSide leftSide, TransitivePathSide rightSide, size_t minDist,
-    size_t maxDist) {
+    size_t maxDist, Graphs activeGraphs) {
   bool useBinSearch =
       RuntimeParameters().get<"use-binsearch-transitive-path">();
   return makeTransitivePath(qec, std::move(child), std::move(leftSide),
                             std::move(rightSide), minDist, maxDist,
-                            useBinSearch);
+                            useBinSearch, std::move(activeGraphs));
 }
 
 // _____________________________________________________________________________
 std::shared_ptr<TransitivePathBase> TransitivePathBase::makeTransitivePath(
     QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> child,
     TransitivePathSide leftSide, TransitivePathSide rightSide, size_t minDist,
-    size_t maxDist, bool useBinSearch) {
+    size_t maxDist, bool useBinSearch, Graphs activeGraphs) {
   if (useBinSearch) {
     return std::make_shared<TransitivePathBinSearch>(
         qec, std::move(child), std::move(leftSide), std::move(rightSide),
-        minDist, maxDist);
+        minDist, maxDist, std::move(activeGraphs));
   } else {
     return std::make_shared<TransitivePathHashMap>(
         qec, std::move(child), std::move(leftSide), std::move(rightSide),
-        minDist, maxDist);
+        minDist, maxDist, std::move(activeGraphs));
   }
 }
 
@@ -383,12 +393,12 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindLeftOrRightSide(
   bool useBinSearch = dynamic_cast<const TransitivePathBinSearch*>(this);
   std::vector<std::shared_ptr<TransitivePathBase>> candidates;
   candidates.push_back(makeTransitivePath(getExecutionContext(), subtree_, lhs,
-                                          rhs, minDist_, maxDist_,
-                                          useBinSearch));
+                                          rhs, minDist_, maxDist_, useBinSearch,
+                                          {}));
   for (const auto& alternativeSubtree : alternativeSubtrees()) {
-    candidates.push_back(makeTransitivePath(getExecutionContext(),
-                                            alternativeSubtree, lhs, rhs,
-                                            minDist_, maxDist_, useBinSearch));
+    candidates.push_back(
+        makeTransitivePath(getExecutionContext(), alternativeSubtree, lhs, rhs,
+                           minDist_, maxDist_, useBinSearch, {}));
   }
 
   auto& p = *ql::ranges::min_element(

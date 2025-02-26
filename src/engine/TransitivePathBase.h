@@ -111,6 +111,8 @@ using NodeGenerator = cppcoro::generator<NodeWithTargets>;
  */
 class TransitivePathBase : public Operation {
  protected:
+  using Graphs = ScanSpecificationAsTripleComponent::Graphs;
+
   std::shared_ptr<QueryExecutionTree> subtree_;
   TransitivePathSide lhs_;
   TransitivePathSide rhs_;
@@ -124,7 +126,7 @@ class TransitivePathBase : public Operation {
   TransitivePathBase(QueryExecutionContext* qec,
                      std::shared_ptr<QueryExecutionTree> child,
                      TransitivePathSide leftSide, TransitivePathSide rightSide,
-                     size_t minDist, size_t maxDist);
+                     size_t minDist, size_t maxDist, Graphs activeGraphs);
 
   ~TransitivePathBase() override = 0;
 
@@ -261,11 +263,13 @@ class TransitivePathBase : public Operation {
    * number of nodes)
    * @param useBinSearch If true, the returned object will be a
    * TransitivePathBinSearch. Else it will be a TransitivePathFallback
+   * @param activeGraphs Contains the graphs that are active in the current
+   * context.
    */
   static std::shared_ptr<TransitivePathBase> makeTransitivePath(
       QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> child,
       TransitivePathSide leftSide, TransitivePathSide rightSide, size_t minDist,
-      size_t maxDist, bool useBinSearch);
+      size_t maxDist, bool useBinSearch, Graphs activeGraphs = {});
 
   /**
    * @brief Make a concrete TransitivePath object using the given parameters.
@@ -280,11 +284,13 @@ class TransitivePathBase : public Operation {
    * number of nodes)
    * @param maxDist Maximum distance a resulting path may have (distance =
    * number of nodes)
+   * @param activeGraphs Contains the graphs that are active in the current
+   * context.
    */
   static std::shared_ptr<TransitivePathBase> makeTransitivePath(
       QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> child,
       TransitivePathSide leftSide, TransitivePathSide rightSide, size_t minDist,
-      size_t maxDist);
+      size_t maxDist, Graphs activeGraphs = {});
 
   vector<QueryExecutionTree*> getChildren() override;
 
