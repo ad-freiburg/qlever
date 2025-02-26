@@ -2321,10 +2321,6 @@ TEST(SparqlParser, Update) {
                      std::nullopt),
       m::GraphPattern(m::Triples({{Var("?s"), "?p", Var("?o")}})));
   expectUpdate("INSERT DATA { <a> <b> <c> }", simpleInsertMatcher);
-  expectUpdate_(
-      "INSERT DATA { <a> <b> <c> };",
-      ElementsAre(AllOf(simpleInsertMatcher,
-                        m::pq::OriginalString("INSERT DATA { <a> <b> <c> }"))));
   // Multiple Updates
   expectUpdate_(
       "INSERT DATA { <a> <b> <c> };",
