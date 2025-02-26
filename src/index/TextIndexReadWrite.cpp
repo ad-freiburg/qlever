@@ -10,7 +10,7 @@ namespace textIndexReadWrite {
 ContextListMetaData writePostings(ad_utility::File& out,
                                   const vector<Posting>& postings,
                                   bool skipWordlistIfAllTheSame,
-                                  off_t& currentOffset) {
+                                  off_t& currentOffset, bool scoreIsInt) {
   ContextListMetaData meta;
   meta._nofElements = postings.size();
   if (meta._nofElements == 0) {
@@ -29,10 +29,6 @@ ContextListMetaData writePostings(ad_utility::File& out,
       postings | ql::views::transform([](const Posting& posting) {
         return std::get<1>(posting);
       }));
-  FrequencyEncode scoreEncoder(postings |
-                               ql::views::transform([](const Posting& posting) {
-                                 return std::get<2>(posting);
-                               }));
 
   meta._startContextlist = currentOffset;
   textRecordEncoder.writeToFile(out, currentOffset);
@@ -43,7 +39,19 @@ ContextListMetaData writePostings(ad_utility::File& out,
   }
 
   meta._startScorelist = currentOffset;
-  scoreEncoder.writeToFile(out, currentOffset);
+  if (scoreIsInt) {
+    FrequencyEncode scoreEncoder(
+        postings | ql::views::transform([](const Posting& posting) {
+          return static_cast<uint16_t>(std::get<2>(posting));
+        }));
+    scoreEncoder.writeToFile(out, currentOffset);
+  } else {
+    FrequencyEncode scoreEncoder(
+        postings | ql::views::transform([](const Posting& posting) {
+          return std::get<2>(posting);
+        }));
+    scoreEncoder.writeToFile(out, currentOffset);
+  }
 
   meta._lastByte = currentOffset - 1;
 

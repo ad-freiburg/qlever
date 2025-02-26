@@ -8,7 +8,7 @@
 #include "global/ValueId.h"
 
 using Id = ValueId;
-using Score = uint16_t;
+using Score = float;
 
 // TODO<joka921> Make the following ID and index types strong.
 using ColumnIndex = uint64_t;
