@@ -2097,6 +2097,10 @@ bool hasTransitivePathInTree(const Operation& operation) {
   if (dynamic_cast<const TransitivePathBase*>(&operation)) {
     return true;
   }
+  // Only check `UNION`s for children.
+  if (!dynamic_cast<const Union*>(&operation)) {
+    return false;
+  }
   return ql::ranges::any_of(
       operation.getChildren(), [](const QueryExecutionTree* child) {
         return hasTransitivePathInTree(*child->getRootOperation());
