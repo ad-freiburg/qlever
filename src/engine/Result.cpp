@@ -3,6 +3,7 @@
 // Authors: Björn Buchhold <b.buchhold@gmail.com>
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #include "engine/Result.h"
 
@@ -48,6 +49,57 @@ auto compareRowsBySortColumns(const std::vector<ColumnIndex>& sortedBy) {
   };
 }
 
+namespace {
+// _____________________________________________________________________________
+// Check if sort order promised by `sortedBy` is kept within `idTable`.
+void assertSortOrderIsRespected(const IdTable& idTable,
+                                const std::vector<ColumnIndex>& sortedBy) {
+  AD_CONTRACT_CHECK(
+      ql::ranges::all_of(sortedBy, [&idTable](ColumnIndex colIndex) {
+        return colIndex < idTable.numColumns();
+      }));
+
+  AD_EXPENSIVE_CHECK(
+      ql::ranges::is_sorted(idTable, compareRowsBySortColumns(sortedBy)));
+}
+
+// _____________________________________________________________________________
+struct ResultDataGenerator
+    : ad_utility::InputRangeFromGet<Result::IdTableVocabPair> {
+  Result::LazyResult idTables_;
+  const std::vector<ColumnIndex> sortedBy;
+  std::optional<Result::LazyResult::iterator> idTablesNext_{};
+  std::optional<IdTable::row_type> previousId = std::nullopt;
+
+  ResultDataGenerator(Result::LazyResult idTables,
+                      std::vector<ColumnIndex> sortedBy)
+      : idTables_(std::move(idTables)),
+        sortedBy{std::move(sortedBy)} {}
+
+  std::optional<Result::IdTableVocabPair> get() {
+    if (!idTablesNext_.has_value()) {
+      idTablesNext_ = idTables_.begin();
+    } else if (idTablesNext_.value() != idTables_.end()) {
+      idTablesNext_.value()++;
+    }
+    if (idTablesNext_.value() == idTables_.end()) {
+      return std::nullopt;
+    }
+    Result::IdTableVocabPair& pair = *(idTablesNext_.value());
+    auto& idTable = pair.idTable_;
+    if (!idTable.empty()) {
+      if (previousId.has_value()) {
+        AD_EXPENSIVE_CHECK(!compareRowsBySortColumns(sortedBy)(
+            idTable.at(0), previousId.value()));
+      }
+      previousId = idTable.at(idTable.size() - 1);
+    }
+    assertSortOrderIsRespected(idTable, sortedBy);
+    return std::optional{std::move(pair)};
+  }
+};
+}  // namespace
+
 // _____________________________________________________________________________
 Result::Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
                SharedLocalVocabWrapper localVocab)
@@ -76,21 +128,8 @@ Result::Result(Generator idTables, std::vector<ColumnIndex> sortedBy)
 
 // _____________________________________________________________________________
 Result::Result(LazyResult idTables, std::vector<ColumnIndex> sortedBy)
-    : data_{GenContainer{[](auto idTables, auto sortedBy) -> Generator {
-        std::optional<IdTable::row_type> previousId = std::nullopt;
-        for (IdTableVocabPair& pair : idTables) {
-          auto& idTable = pair.idTable_;
-          if (!idTable.empty()) {
-            if (previousId.has_value()) {
-              AD_EXPENSIVE_CHECK(!compareRowsBySortColumns(sortedBy)(
-                  idTable.at(0), previousId.value()));
-            }
-            previousId = idTable.at(idTable.size() - 1);
-          }
-          assertSortOrderIsRespected(idTable, sortedBy);
-          co_yield pair;
-        }
-      }(std::move(idTables), sortedBy)}},
+    : data_{GenContainer{Result::LazyResult{
+          ResultDataGenerator{std::move(idTables), sortedBy}}}},
       sortedBy_{std::move(sortedBy)} {}
 
 // _____________________________________________________________________________
@@ -237,18 +276,6 @@ void Result::runOnNewChunkComputed(
   }(std::move(idTables()), std::move(onNewChunk),
                                                 std::move(onGeneratorFinished));
   data_.emplace<GenContainer>(std::move(generator));
-}
-
-// _____________________________________________________________________________
-void Result::assertSortOrderIsRespected(
-    const IdTable& idTable, const std::vector<ColumnIndex>& sortedBy) {
-  AD_CONTRACT_CHECK(
-      ql::ranges::all_of(sortedBy, [&idTable](ColumnIndex colIndex) {
-        return colIndex < idTable.numColumns();
-      }));
-
-  AD_EXPENSIVE_CHECK(
-      ql::ranges::is_sorted(idTable, compareRowsBySortColumns(sortedBy)));
 }
 
 // _____________________________________________________________________________

@@ -3,6 +3,7 @@
 // Authors: Björn Buchhold <b.buchhold@gmail.com>
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
+// Copyright 2025, Bayerische Motoren Werke Aktiengesellschaft (BMW AG)
 
 #ifndef QLEVER_SRC_ENGINE_RESULT_H
 #define QLEVER_SRC_ENGINE_RESULT_H
@@ -97,10 +98,6 @@ class Result {
         : localVocab_{
               std::make_shared<const LocalVocab>(std::move(localVocab))} {}
   };
-
-  // Check if sort order promised by `sortedBy` is kept within `idTable`.
-  static void assertSortOrderIsRespected(
-      const IdTable& idTable, const std::vector<ColumnIndex>& sortedBy);
 
  public:
   // Construct from the given arguments (see above) and check the following
