@@ -61,8 +61,10 @@ class Union : public Operation {
     return {_subtrees[0].get(), _subtrees[1].get()};
   }
 
-  std::shared_ptr<QueryExecutionTree> leftChild() const { return _subtrees[0]; }
-  std::shared_ptr<QueryExecutionTree> rightChild() const {
+  const std::shared_ptr<QueryExecutionTree>& leftChild() const {
+    return _subtrees[0];
+  }
+  const std::shared_ptr<QueryExecutionTree>& rightChild() const {
     return _subtrees[1];
   }
 
