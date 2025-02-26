@@ -56,7 +56,7 @@ class TransitivePathHashMap : public TransitivePathImpl<HashMapWrapper> {
                         std::shared_ptr<QueryExecutionTree> child,
                         TransitivePathSide leftSide,
                         TransitivePathSide rightSide, size_t minDist,
-                        size_t maxDist);
+                        size_t maxDist, Graphs activeGraphs);
 
  private:
   std::unique_ptr<Operation> cloneImpl() const override;

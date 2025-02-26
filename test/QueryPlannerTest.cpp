@@ -2981,3 +2981,53 @@ TEST(QueryPlanner, Exists) {
       "GRAPH ?g { ?u ?v ?c}}}",
       filter);
 }
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, PropertyPathWithGraph) {
+  {
+    auto query = SparqlParser::parseQuery(
+        "SELECT * WHERE { GRAPH ?g { 0 a+ 1 } FILTER(?g = <abc>) }");
+    auto qp = makeQueryPlanner();
+    AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+        qp.createExecutionTree(query),
+        ::testing::HasSubstr(
+            "Property paths with graph variables are not supported"),
+        ad_utility::Exception);
+  }
+  TransitivePathSide left{std::nullopt, 0, Variable("?x"), 0};
+  TransitivePathSide right{std::nullopt, 1, Variable("?y"), 1};
+  h::expect(
+      "SELECT * WHERE { GRAPH <abc> { ?x a* ?y } } ",
+      h::TransitivePath(
+          left, right, 0, std::numeric_limits<size_t>::max(),
+          h::Distinct(h::Sort(h::Union(
+              h::IndexScanFromStrings("?internal_property_path_variable_x",
+                                      "?internal_property_path_variable_y",
+                                      "?internal_property_path_variable_z", {},
+                                      {{"<abc>"}}),
+              h::IndexScanFromStrings("?internal_property_path_variable_z",
+                                      "?internal_property_path_variable_y",
+                                      "?internal_property_path_variable_x", {},
+                                      {{"<abc>"}})))),
+          h::IndexScanFromStrings(
+              "?_QLever_internal_variable_qp_0",
+              "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>",
+              "?_QLever_internal_variable_qp_1", {}, {{"<abc>"}})));
+  h::expect(
+      "SELECT * FROM <abc> WHERE { ?x a* ?y } ",
+      h::TransitivePath(
+          left, right, 0, std::numeric_limits<size_t>::max(),
+          h::Distinct(h::Sort(h::Union(
+              h::IndexScanFromStrings("?internal_property_path_variable_x",
+                                      "?internal_property_path_variable_y",
+                                      "?internal_property_path_variable_z", {},
+                                      {{"<abc>"}}),
+              h::IndexScanFromStrings("?internal_property_path_variable_z",
+                                      "?internal_property_path_variable_y",
+                                      "?internal_property_path_variable_x", {},
+                                      {{"<abc>"}})))),
+          h::IndexScanFromStrings(
+              "?_QLever_internal_variable_qp_0",
+              "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>",
+              "?_QLever_internal_variable_qp_1", {}, {{"<abc>"}})));
+}

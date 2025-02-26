@@ -48,9 +48,10 @@ class TransitivePathImpl : public TransitivePathBase {
   TransitivePathImpl(QueryExecutionContext* qec,
                      std::shared_ptr<QueryExecutionTree> child,
                      TransitivePathSide leftSide, TransitivePathSide rightSide,
-                     size_t minDist, size_t maxDist)
+                     size_t minDist, size_t maxDist, Graphs activeGraphs)
       : TransitivePathBase(qec, std::move(child), std::move(leftSide),
-                           std::move(rightSide), minDist, maxDist){};
+                           std::move(rightSide), minDist, maxDist,
+                           std::move(activeGraphs)) {}
 
   /**
    * @brief Compute the transitive hull with a bound side.
@@ -142,7 +143,7 @@ class TransitivePathImpl : public TransitivePathBase {
     for (auto& pair : result) {
       co_yield pair;
     }
-  };
+  }
 
  protected:
   /**
@@ -155,13 +156,6 @@ class TransitivePathImpl : public TransitivePathBase {
    * @return Result The result of the TransitivePath operation
    */
   ProtoResult computeResult(bool requestLaziness) override {
-    if (minDist_ == 0 && !isBoundOrId() && lhs_.isVariable() &&
-        rhs_.isVariable()) {
-      AD_THROW(
-          "This query might have to evaluate the empty path, which is "
-          "currently "
-          "not supported");
-    }
     auto [startSide, targetSide] = decideDirection();
     // In order to traverse the graph represented by this result, we need random
     // access across the whole table, so it doesn't make sense to lazily compute
