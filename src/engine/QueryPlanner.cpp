@@ -2112,6 +2112,15 @@ auto QueryPlanner::applyJoinDistributivelyToUnion(const SubtreePlan& a,
     auto findJoinCandidates = [this, flipped](const SubtreePlan& plan1,
                                               const SubtreePlan& plan2,
                                               const JoinColumns& jcs) {
+      if (jcs.empty()) {
+        std::vector children{plan1._qet, plan2._qet};
+        // Ensure most expensive subtree is on the right side.
+        ql::ranges::sort(children, {}, [](const auto& child) {
+          return child->getSizeEstimate();
+        });
+        return std::vector{
+            makeSubtreePlan<CartesianProductJoin>(_qec, std::move(children))};
+      }
       return createJoinCandidates(flipped ? plan2 : plan1,
                                   flipped ? plan1 : plan2, jcs);
     };
@@ -2129,8 +2138,7 @@ auto QueryPlanner::applyJoinDistributivelyToUnion(const SubtreePlan& a,
     for (const auto& leftPlan : joinedLeft) {
       for (const auto& rightPlan : joinedRight) {
         SubtreePlan candidate =
-            makeSubtreePlan<Union>(unionOperation->getExecutionContext(),
-                                   leftPlan._qet, rightPlan._qet);
+            makeSubtreePlan<Union>(_qec, leftPlan._qet, rightPlan._qet);
         mergeSubtreePlanIds(candidate, leftPlan, rightPlan);
         candidates.push_back(std::move(candidate));
       }
