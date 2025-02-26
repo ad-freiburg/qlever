@@ -3049,6 +3049,31 @@ TEST(QueryPlanner, testDistributiveJoinInUnion) {
 }
 
 // _____________________________________________________________________________
+TEST(QueryPlanner, ensurePlanningIsSkippedWhenNoTransitivePathIsPresent) {
+  auto qp = makeQueryPlanner();
+  {
+    auto query = SparqlParser::parseQuery(
+        "SELECT * WHERE { ?x <P31> ?o ."
+        "{ VALUES ?x { 1 } } UNION { VALUES ?x { 1 } }}");
+    auto plans = qp.createExecutionTrees(query);
+    ASSERT_EQ(plans.size(), 1);
+    EXPECT_TRUE(
+        std::dynamic_pointer_cast<Join>(plans.at(0)._qet->getRootOperation()));
+  }
+  {
+    auto query = SparqlParser::parseQuery(
+        "SELECT * WHERE { ?x <P31> ?o . "
+        "{ { VALUES ?x { 1 } } UNION { VALUES ?x { 1 } } } "
+        "UNION "
+        "{ { VALUES ?x { 1 } } UNION { VALUES ?x { 1 } } } }");
+    auto plans = qp.createExecutionTrees(query);
+    ASSERT_EQ(plans.size(), 1);
+    EXPECT_TRUE(
+        std::dynamic_pointer_cast<Join>(plans.at(0)._qet->getRootOperation()));
+  }
+}
+
+// _____________________________________________________________________________
 TEST(QueryPlanner, testDistributiveJoinInUnionRecursive) {
   auto* qec = ad_utility::testing::getQec(
       "<a> <P279> <b> . <c> <P279> <d> . <e> <P279> <f> . <g> <P279> <h> ."

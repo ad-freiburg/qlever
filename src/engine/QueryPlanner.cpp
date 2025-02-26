@@ -2089,6 +2089,19 @@ QueryPlanner::SubtreePlan cloneWithNewTree(
   newPlan._qet = std::move(newTree);
   return newPlan;
 }
+
+// Check if a transitive path is somewhere in the tree. This is because the
+// optimization with `Union` currently only makes sense if the transitive path
+// is in the tree.
+bool hasTransitivePathInTree(const Operation& operation) {
+  if (dynamic_cast<const TransitivePathBase*>(&operation)) {
+    return true;
+  }
+  return ql::ranges::any_of(
+      operation.getChildren(), [](const QueryExecutionTree* child) {
+        return hasTransitivePathInTree(*child->getRootOperation());
+      });
+}
 }  // namespace
 
 // _____________________________________________________________________________________________________________________
@@ -2105,7 +2118,7 @@ auto QueryPlanner::applyJoinDistributivelyToUnion(const SubtreePlan& a,
                                                   bool flipped) {
     auto unionOperation =
         std::dynamic_pointer_cast<Union>(thisPlan._qet->getRootOperation());
-    if (!unionOperation) {
+    if (!unionOperation || !hasTransitivePathInTree(*unionOperation)) {
       return;
     }
 
