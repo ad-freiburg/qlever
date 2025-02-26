@@ -2080,6 +2080,15 @@ mapColumnsInUnion(size_t columnIndex, const Union& unionOperation,
   }
   return {std::move(leftMapping), std::move(rightMapping)};
 }
+
+// Helper function that clones a SubtreePlan with a new QueryExecutionTree.
+QueryPlanner::SubtreePlan cloneWithNewTree(
+    const QueryPlanner::SubtreePlan& plan,
+    std::shared_ptr<QueryExecutionTree> newTree) {
+  QueryPlanner::SubtreePlan newPlan = plan;
+  newPlan._qet = std::move(newTree);
+  return newPlan;
+}
 }  // namespace
 
 // _____________________________________________________________________________________________________________________
@@ -2087,6 +2096,9 @@ auto QueryPlanner::applyJoinDistributivelyToUnion(const SubtreePlan& a,
                                                   const SubtreePlan& b,
                                                   const JoinColumns& jcs) const
     -> std::vector<SubtreePlan> {
+  AD_CORRECTNESS_CHECK(jcs.size() == 1);
+  AD_CORRECTNESS_CHECK(a.type == SubtreePlan::BASIC &&
+                       b.type == SubtreePlan::BASIC);
   std::vector<SubtreePlan> candidates{};
   auto findCandidates = [this, &candidates, &jcs](const SubtreePlan& thisPlan,
                                                   const SubtreePlan& other,
@@ -2096,37 +2108,33 @@ auto QueryPlanner::applyJoinDistributivelyToUnion(const SubtreePlan& a,
     if (!unionOperation) {
       return;
     }
-    auto* qec = unionOperation->getExecutionContext();
 
-    // Clone `other` once, to avoid using it twice in the same query plan.
-    SubtreePlan clonedOther = other;
-    clonedOther._qet = other._qet->clone();
-    SubtreePlan tmpPlan = thisPlan;
-    const auto& leftCandidate = flipped ? other : tmpPlan;
-    const auto& rightCandidate = flipped ? tmpPlan : clonedOther;
+    auto findJoinCandidates = [this, flipped](const SubtreePlan& plan1,
+                                              const SubtreePlan& plan2,
+                                              const JoinColumns& jcs) {
+      return createJoinCandidates(flipped ? plan2 : plan1,
+                                  flipped ? plan1 : plan2, jcs);
+    };
 
     auto [leftMapping, rightMapping] =
         mapColumnsInUnion(flipped, *unionOperation, jcs);
 
-    tmpPlan._qet = unionOperation->leftChild();
-    auto joinedLeft =
-        createJoinCandidates(leftCandidate, rightCandidate, leftMapping);
-    tmpPlan._qet = unionOperation->rightChild();
-    auto joinedRight =
-        createJoinCandidates(leftCandidate, rightCandidate, rightMapping);
+    auto joinedLeft = findJoinCandidates(
+        cloneWithNewTree(thisPlan, unionOperation->leftChild()), other,
+        leftMapping);
+    auto joinedRight = findJoinCandidates(
+        cloneWithNewTree(thisPlan, unionOperation->rightChild()),
+        cloneWithNewTree(other, other._qet->clone()), rightMapping);
 
     for (const auto& leftPlan : joinedLeft) {
       for (const auto& rightPlan : joinedRight) {
         SubtreePlan candidate =
-            makeSubtreePlan<Union>(qec, leftPlan._qet, rightPlan._qet);
+            makeSubtreePlan<Union>(unionOperation->getExecutionContext(),
+                                   leftPlan._qet, rightPlan._qet);
         mergeSubtreePlanIds(candidate, leftPlan, rightPlan);
         candidates.push_back(std::move(candidate));
       }
     }
-    // If exactly one of `joinedLeft` and `joinedRight` is empty and the other
-    // one is not, then would be guaranteed to have a join with a fully
-    // undefined column for the empty side. But we can currently not express
-    // this so we just don't return any candidates in this case.
   };
   findCandidates(a, b, false);
   findCandidates(b, a, true);
