@@ -1384,3 +1384,26 @@ TEST(ParserTest, BaseDeclaration) {
                                "SELECT * WHERE { ?s ?p ?o }"),
       ::testing::HasSubstr("absolute IRI"), InvalidSparqlQueryException);
 }
+
+TEST(ParserTest, parseWithDatasets) {
+  auto Iri = ad_utility::triple_component::Iri::fromIriref;
+  auto query = "SELECT * WHERE { ?s ?p ?o }";
+  auto queryGraphPatternMatcher =
+      m::GraphPattern(m::Triples({{Var("?s"), "?p", Var("?o")}}));
+  EXPECT_THAT(SparqlParser::parseQuery(query, {}),
+              m::SelectQuery(m::AsteriskSelect(), queryGraphPatternMatcher));
+  EXPECT_THAT(
+      SparqlParser::parseQuery(query, {DatasetClause{Iri("<foo>"), true}}),
+      m::SelectQuery(m::AsteriskSelect(), queryGraphPatternMatcher,
+                     std::nullopt, {{Iri("<foo>")}}));
+  EXPECT_THAT(
+      SparqlParser::parseQuery(query, {DatasetClause{Iri("<bar>"), false}}),
+      m::SelectQuery(m::AsteriskSelect(), queryGraphPatternMatcher,
+                     {{Iri("<bar>")}}, std::nullopt));
+  EXPECT_THAT(
+      SparqlParser::parseQuery(query, {DatasetClause{Iri("<bar>"), false},
+                                       DatasetClause{Iri("<foo>"), true},
+                                       DatasetClause{Iri("<baz>"), false}}),
+      m::SelectQuery(m::AsteriskSelect(), queryGraphPatternMatcher,
+                     {{Iri("<bar>"), Iri("<baz>")}}, {{Iri("<foo>")}}));
+}

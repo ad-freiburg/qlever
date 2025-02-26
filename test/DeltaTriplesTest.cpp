@@ -4,18 +4,17 @@
 //    2023 Hannah Bast <bast@cs.uni-freiburg.de>
 //    2024 Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
 
-#include <absl/strings/str_split.h>
 #include <gtest/gtest.h>
 
 #include "./DeltaTriplesTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "./util/IndexTestHelpers.h"
+#include "absl/strings/str_split.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "index/DeltaTriples.h"
 #include "index/IndexImpl.h"
 #include "index/Permutation.h"
 #include "parser/RdfParser.h"
-#include "parser/Tokenizer.h"
 
 using namespace deltaTriplesTestHelpers;
 
