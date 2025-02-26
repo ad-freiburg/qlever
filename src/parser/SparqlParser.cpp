@@ -24,7 +24,11 @@ ParsedQuery SparqlParser::parseQuery(std::string query) {
   // input. If this is not the case a ParseException should have been thrown at
   // an earlier point.
   AD_CONTRACT_CHECK(resultOfParseAndRemainingText.remainingText_.empty());
-  return std::move(resultOfParseAndRemainingText.resultOfParse_);
+  if (resultOfParseAndRemainingText.resultOfParse_.size() != 1) {
+    throw std::runtime_error(
+        "Multiple Updates in one request are not supported.");
+  }
+  return std::move(resultOfParseAndRemainingText.resultOfParse_[0]);
 }
 
 // _____________________________________________________________________________
