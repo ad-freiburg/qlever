@@ -61,6 +61,16 @@ class Union : public Operation {
     return {_subtrees[0].get(), _subtrees[1].get()};
   }
 
+  const std::shared_ptr<QueryExecutionTree>& leftChild() const {
+    return _subtrees[0];
+  }
+  const std::shared_ptr<QueryExecutionTree>& rightChild() const {
+    return _subtrees[1];
+  }
+
+  std::optional<ColumnIndex> getOriginalColumn(bool leftChild,
+                                               ColumnIndex unionColumn) const;
+
  private:
   std::unique_ptr<Operation> cloneImpl() const override;
 
