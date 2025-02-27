@@ -86,6 +86,7 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
   const BlockMetadata b2 = makeBlock(undef, falseId);
   const BlockMetadata b3 = makeBlock(falseId, falseId);
   const BlockMetadata b4 = makeBlock(trueId, IntId(0));
+  const BlockMetadata b4GapNumeric = makeBlock(trueId, idBerlin);
   const BlockMetadata b4Incomplete = makeBlock(
       trueId, IntId(0), VocabId(10), DoubleId(33), VocabId(11), DoubleId(33));
   const BlockMetadata b5 = makeBlock(IntId(0), IntId(0));
@@ -214,7 +215,13 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
   // Check that the provided expression prefilters the correct blocks.
   auto makeTest(std::unique_ptr<PrefilterExpression> expr,
                 std::vector<BlockMetadata>&& expected,
-                bool useBlocksIncomplete = false, bool addMixedBlocks = true) {
+                bool useBlocksIncomplete = false, bool addMixedBlocks = true,
+                std::vector<BlockMetadata>&& specificInput = {}) {
+    // Simple check if expr returns expected for specificInput.
+    if (!specificInput.empty()) {
+      ASSERT_EQ(expr->evaluate(specificInput, 2), expected);
+      return;  // return, no further tests
+    }
     std::vector<BlockMetadata> expectedAdjusted;
     // This is for convenience, we automatically insert all mixed and possibly
     // incomplete blocks which must be always returned.
@@ -450,6 +457,13 @@ TEST_F(PrefilterExpressionOnMetadataTest, testIsDatatypeExpression) {
       isNum(),
       {b4, b5, b6, b7, b8, b9, b10, b11, b12, b13, b14, b15, b16, b17, b18},
       false, false);
+  makeTest(isNum(), {b4GapNumeric}, false, false,
+           {b1, b2, b3, b4GapNumeric, b22, b23, b24});
+  makeTest(isNum(), {b4GapNumeric}, false, false,
+           {b4GapNumeric, b22, b23, b24});
+  makeTest(isNum(), {b4GapNumeric}, false, false, {b2, b3, b4GapNumeric});
+  makeTest(isNum(), {}, false, false,
+           {b1, b2, b3, b19, b20, b21, b22, b23, b24});
   // Test isBlank.
   makeTest(isBlank(), {b24}, false, false);
 
@@ -457,6 +471,12 @@ TEST_F(PrefilterExpressionOnMetadataTest, testIsDatatypeExpression) {
   // Remark: The bounding mixed-datatype blocks must be also contained.
   makeTest(notExpr(isNum()),
            {b1, b2, b3, b4, b18, b19, b20, b21, b22, b23, b24}, false, false);
+  makeTest(notExpr(isNum()), {b1, b2, b3, b4GapNumeric, b22, b23, b24}, false,
+           false, {b1, b2, b3, b4GapNumeric, b22, b23, b24});
+  makeTest(notExpr(isNum()), {b4GapNumeric, b22, b23, b24}, false, false,
+           {b4GapNumeric, b22, b23, b24});
+  makeTest(notExpr(isNum()), {b1, b2, b3, b4GapNumeric}, false, false,
+           {b1, b2, b3, b4GapNumeric});
   makeTest(notExpr(isBlank()),
            {b1,  b2,  b3,  b4,  b5,  b6,  b7,  b8,  b9,  b10, b11, b12,
             b13, b14, b15, b16, b17, b18, b19, b20, b21, b22, b23, b24},
@@ -666,6 +686,11 @@ TEST_F(PrefilterExpressionOnMetadataTest, testWithFewBlockMetadataValues) {
 TEST_F(PrefilterExpressionOnMetadataTest, testMethodClonePrefilterExpression) {
   makeTestClone(lt(VocabId(10)));
   makeTestClone(gt(referenceDate2));
+  makeTestClone(isLit(false));
+  makeTestClone(isLit(true));
+  makeTestClone(isIri(false));
+  makeTestClone(isNum(false));
+  makeTestClone(isBlank(true));
   makeTestClone(andExpr(lt(VocabId(20)), gt(VocabId(10))));
   makeTestClone(neq(IntId(10)));
   makeTestClone(le(LVE("\"Hello World\"")));

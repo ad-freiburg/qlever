@@ -134,100 +134,206 @@ static auto getSetUnion(const std::vector<BlockMetadata>& blocks1,
 //______________________________________________________________________________
 // Refers to an `ValueId` vector `::iterator` (index).
 using RandomIt = std::vector<ValueId>::iterator;
-
 // A pair containing the `start` and `end` (iterator) indices for a specified
 // single datatype range over a given `ValueId` vector.
 // For the given cases below, the `ValueId` vector is retrieved from the
 // `BlockMetadata` values. And those `ValueId` values define the bounds of the
 // related `BlockMetadata` values.
 using RandomItPair = std::pair<RandomIt, RandomIt>;
-
 // Refers to a `BlockMetadata` span `::iterator` (index).
 using BlockSpanIt =
     std::span<const prefilterExpressions::BlockMetadata>::iterator;
+// A pair containing the `start` and `end` iterator (index) with respect to our
+// `std::span<const BlockMetadata> input` value. This pair of iterators helps us
+// to specify (relevant) `BlockMetadata` value-ranges.
+using BlockSpanItPair = std::pair<BlockSpanIt, BlockSpanIt>;
 
 //______________________________________________________________________________
-static std::pair<BlockSpanIt, BlockSpanIt> getInputAdjustedRangeIndices(
-    const BlockSpanIt& beginInput, const BlockSpanIt& endInput,
-    const RandomIt& valueIdsInputBegin, const RandomIt& firstIt,
-    const RandomIt& lastIt) {
-  return {
-      beginInput + std::distance(valueIdsInputBegin, firstIt) / 2,
-      // Round up, for Ids contained within the bounding Ids of firstTriple
-      // and lastTriple we have to include the respective metadata block
-      // (that block is partially relevant).
-      // Remark: Given lastIt refers to the highest possible input index
-      // (endInput), select endInput to avoid out-of-bound errors later on.
-      std::min(beginInput + (std::distance(valueIdsInputBegin, lastIt) + 1) / 2,
-               endInput)};
+// Helper for adding the relevant ranges to `mappedBlockRangeIts`.
+// `addRangeAndSimplify` ensures that the ranges added are non-overlapping and
+// merged together if adjacent.
+const auto addRangeAndSimplify =
+    [](std::vector<BlockSpanItPair>& mappedBlockRangeIts,
+       const BlockSpanIt& relevantRangeBegin,
+       const BlockSpanIt& relevantRangeEnd) {
+      // Simplify the mapped ranges if adjacent or overlapping.
+      // This simplification procedure also ensures that no `BlockMetadata`
+      // value is retrieved twice later on (no overlapping ::iterator values).
+      if (!mappedBlockRangeIts.empty() &&
+          mappedBlockRangeIts.back().second >= relevantRangeBegin) {
+        // They are adjacent or even overlap: merge/simplify!
+        mappedBlockRangeIts.back().second = relevantRangeEnd;
+      } else {
+        // The new range (specified by `BlockSpanItPair`) is not adjacent and
+        // doesn't overlap.
+        mappedBlockRangeIts.emplace_back(relevantRangeBegin, relevantRangeEnd);
+      }
+    };
+
+//______________________________________________________________________________
+// `WIDER CONTEXT AND EXPLANATION`
+// Relevant for the functions: `mapRandomItBlockSpanIt`,
+// `mapRandomItBlockSpanItComplemented` and `getRelevantBlocksFromIdRanges`
+// (defined below).
+// (1) `input` (type `std::span<const BlockMetadata>`) for
+// `getRelevantBlocksFromIdRanges` contains the original `BlockMetadata` values
+// which we want to pre-filter. We are especially interested in the bounding
+// `ValueId`s of `firstTriple_` and `lastTriple_` given a `BlockMetadata` value.
+//
+// (2)
+// Assume for simplicity that the following construct represents the
+// `BlockMetadata` vector (`input`), with each bracket representing
+// the relevant first and last `ValueId` for a single
+// `BlockMetadata` value. `input`:
+// `{[1021, 1082], [1083, 1115], [1121, 1140], [1140, 1148], [1150, 1158]}`
+//
+// (3)
+// To enable the usage of `valueIdComparators::getRangesForId`, it's necessary
+// to extract those bounding `ValueId`s from `input`. This results in `idVector`
+// (`beginIdVec` refers to its first value):
+// `{1021, 1082, 1083, 1115, 1121, 1140, 1140, 1148, 1150, 1158}`.
+// Remark: This procedure is performed for
+// `IsDatatypeExpression<Datatype>::evaluateImpl` and
+// `RelationalExpression<Comparison>::evaluateImpl`.
+//
+// (4)
+// Now let's assume that the reference `Id`, for which we want to pre-filter
+// the relation `less-than` (`<`), has the value `1123`.
+//
+// (5)
+// When we analyze the retrieved vector `idVector` `{1021, 1082, 1083, 1115,
+// 1121, 1140, 1140, 1148, 1150, 1158}`; it becomes clear that the `Id`s
+// `1021 - 1140` are relevant (pre-filtered values). As a consequence the
+// `Id`s with value `1140 - 1158` should be dropped (filtered out).
+//
+// (6)
+// When `valueIdComparators::getRangesForId` is applied for `idVector`, the
+// `::iterators` representing the range `1021 - 1140` will be retrieved.
+// `valueIdComparators::getRangesForId` is applied for
+// `PrefilterExpression<Comparison>::evaluateImpl`.
+// Remark: the second index should point to the first `Id` that does not
+// satisfy `< 1123` (our pre-filter reference `ValueId`).
+// `valueIdComparators::getRangesForId` returned
+// `{std::pair<::iterator(1021), ::iterator(1140)>}`
+//
+// (7)
+// `mapRandomItToBlockSpanIt` now maps the given `idVector` iterators which
+// define the relevant `Id` sections
+// `{std::pair<::iterator(1021), ::iterator(1140)>}`, back to `input`
+// (`std::span<const BlockMetadata>`) iterators.
+// `input.begin()` is equivalent to `::iterator([1021, 1082])` (see (2)).
+// A specific transformation example for the values used here is given with the
+// commentary for `mapRandomItToBlockSpanIt`. The mapping procedure
+// transforms `std::pair<::iterator(1021), ::iterator(1140)>` to
+// `std::pair<::iterator([1021, 1082]), ::iterator([1140, 1148])>`.
+//
+// (8)
+// Given those to `BlockSpanItPair`s mapped `RandomItPair`s, the function
+// `getRelevantBlocksFromIdRanges` retrieves
+// `{[1021, 1082], [1083, 1115], [1121, 1140]}` (relevant `BlockMetadata`
+// values) from `input`.
+//______________________________________________________________________________
+static std::vector<BlockSpanItPair> mapRandomItToBlockSpanIt(
+    const std::vector<RandomItPair>& relevantIdRangeIndices,
+    const RandomIt& beginIdVec, std::span<const BlockMetadata> inputBlocks) {
+  const BlockSpanIt beginBlocks = inputBlocks.begin();
+  std::vector<BlockSpanItPair> mappedBlockRangeIts;
+  // Helper for adding the relevant ranges to `mappedBlockRangeIts`.
+  const auto addRange = [&mappedBlockRangeIts](const BlockSpanIt& begin,
+                                               const BlockSpanIt& end) {
+    addRangeAndSimplify(mappedBlockRangeIts, begin, end);
+  };
+  // Iterate over the ranges defined by (first) `RandomIt` and (second)
+  // `RandomIt` (`RandomItPair`) and map those values to their corresponding
+  // (first) `BlockSpanIt` and (second) `BlocksSpanIt` (`BlockSpanItPair`).
+  // In addition it is ensured that those ranges defined by `BlockSpanItPair`
+  // are simplified (and don't overlap).
+  for (const auto& [firstIdRangeIt, secondIdRangeIt] : relevantIdRangeIndices) {
+    // Regarding our example with values as defined above follows:
+    // beginBlocks (input above) + dist(beginIdVec, ::iterator(1021))
+    // ::iterator([1021, 1082]) + dist(::iterator(1021), ::iterator(1021)) / 2
+    // Thus, iterator value for our range is ::iterator([1021, 1082]).
+    addRange(
+        beginBlocks + std::distance(beginIdVec, firstIdRangeIt) / 2,
+        // Round up, for Ids contained within the bounding Ids of
+        // firstTriple_ and lastTriple_ (from `BlockMetadata`) we have to
+        // include the respective metadata block (that block is partially
+        // relevant).
+        // Remark: Use `std::min` to ensure that the bounds of inputBlocks
+        // are respected (because we round up).
+
+        // The values for our example:
+        // ::iterator([1021, 1082]) + dist(::iterator(1021), ::iterator(1140) +
+        // 1) / 2
+        //
+        // Remark: We round up (+ 1) to ensure that also partially relevant
+        // BlockMetadata values are contained.
+        //
+        // dist(::iterator(1021), ::iterator(1140) + 1) / 2 is equivalent to
+        // (5 + 1) / 2, hence 3.
+        // As a result, the second iterator value is ::iterator[1140, 1148].
+        std::min(
+            beginBlocks + (std::distance(beginIdVec, secondIdRangeIt) + 1) / 2,
+            inputBlocks.end()));
+  }
+  // `std::pair<::iterator([1021, 1082]), ::iterator([1140, 1148])>` is the
+  // return value regarding our example..
+  return mappedBlockRangeIts;
 }
 
 //______________________________________________________________________________
-// Similar to `getRelevantBlocksFromIdRanges`, but this function retrieves the
-// relevant (and save) complementing `BlockMetadata` values w.r.t. `input` and
-// `relevantIdRanges`.
-static std::vector<BlockMetadata> getComplementBlocksForRelevantIdRanges(
-    const std::vector<RandomItPair>& relevantIdRanges,
-    std::span<const BlockMetadata> input, const RandomIt& valueIdsInputBegin,
-    const RandomIt& valueIdsInputEnd) {
-  // If relevantIdRanges is empty, the complement are simply all `BlockMetadata`
-  // values (input).
-  if (relevantIdRanges.empty()) {
-    return std::vector<BlockMetadata>{input.begin(), input.end()};
+static std::vector<BlockSpanItPair> mapRandomItToBlockSpanItComplemented(
+    const std::vector<RandomItPair>& relevantIdRangeIndices,
+    const RandomIt& beginIdVec, std::span<const BlockMetadata> inputBlocks) {
+  const BlockSpanIt beginBlocks = inputBlocks.begin();
+  std::vector<BlockSpanItPair> mappedBlockRangeIts;
+  // Helper for adding the relevant ranges to `mappedBlockRangeIts`.
+  const auto addRange = [&mappedBlockRangeIts](const BlockSpanIt& begin,
+                                               const BlockSpanIt& end) {
+    addRangeAndSimplify(mappedBlockRangeIts, begin, end);
+  };
+  // The procedure is similar to the one performed in
+  // `mapRandomItToBlockSpanIt`. The difference is that the objective here
+  // is to retrieve the complementing (mapped) `BlockSpanItPairs`s with respect
+  // to relevantIdRangeIndices.
+  // Implictly handle the first complementing section:
+  // inputBlocks[0, firstRelevantSectionBegin]
+  RandomIt lastIdRangeIt = beginIdVec;
+  for (const auto& [firstIdRangeIt, secondIdRangeIt] : relevantIdRangeIndices) {
+    addRange(beginBlocks + std::distance(beginIdVec, lastIdRangeIt) / 2,
+             std::min(beginBlocks +
+                          (std::distance(beginIdVec, firstIdRangeIt) + 1) / 2,
+                      inputBlocks.end()));
+    // Set the start of the next complementing section.
+    lastIdRangeIt = secondIdRangeIt;
   }
-  // Use helper getInputAdjustedRangesIndices (w.r.t. std::span<const
-  // BlockMetadata> input) and bind relevant constant arguments.
-  const auto getInputAdjustedRange = std::bind(
-      getInputAdjustedRangeIndices, input.begin(), input.end(),
-      valueIdsInputBegin, std::placeholders::_1, std::placeholders::_2);
-  // Section retrieve complementing BlockMetadata values.
-  std::vector<BlockMetadata> complementBlocks;
-  complementBlocks.reserve(input.size());
-  // We implicitly handle the first complement range:
-  // input[input.begin(), (first) inputAdjustedBegin]
-  RandomIt currentBegin = valueIdsInputBegin;
-  for (const auto& [firstRelevantIt, lastRelevantIt] : relevantIdRanges) {
-    const auto& [inputAdjustedBegin, inputAdjustedEnd] =
-        getInputAdjustedRange(currentBegin, firstRelevantIt);
-    complementBlocks.insert(complementBlocks.end(), inputAdjustedBegin,
-                            inputAdjustedEnd);
-    currentBegin = lastRelevantIt;
+  // Handle the last complementing section:
+  // inputBlocks[lastRelevantSectionEnd, inputBlocks.size()]
+  const BlockSpanIt& mappedFirstBlockRangeIt =
+      beginBlocks + std::distance(beginIdVec, lastIdRangeIt) / 2;
+  if (mappedFirstBlockRangeIt < inputBlocks.end()) {
+    addRange(mappedFirstBlockRangeIt, inputBlocks.end());
   }
-  // Handle the complementing range:
-  // input[(last) inputAdjustedBegin, input.end()]
-  if (currentBegin < valueIdsInputEnd) {
-    const auto& [inputAdjustedBegin, inputAdjustedEnd] =
-        getInputAdjustedRange(currentBegin, valueIdsInputEnd);
-    complementBlocks.insert(complementBlocks.end(), inputAdjustedBegin,
-                            inputAdjustedEnd);
-  }
-  complementBlocks.shrink_to_fit();
-  return complementBlocks;
+  return mappedBlockRangeIts;
 }
 
 //______________________________________________________________________________
 static std::vector<BlockMetadata> getRelevantBlocksFromIdRanges(
     const std::vector<RandomItPair>& relevantIdRanges,
-    std::span<const BlockMetadata> input, const RandomIt& valueIdsInputBegin) {
-  // The vector for relevant BlockMetadata values which contain ValueIds
-  // defined as relevant by relevantIdRanges.
+    std::span<const BlockMetadata> input, const RandomIt& beginIdVec,
+    bool getComplementRange) {
   std::vector<BlockMetadata> relevantBlocks;
   // Reserve memory, input.size() is upper bound.
   relevantBlocks.reserve(input.size());
+  // Get the mapped `BlockSpanItPair`s for the given `RandomItPair`s.
+  const std::vector<BlockSpanItPair>& relevantRanges =
+      getComplementRange
+          ? mapRandomItToBlockSpanItComplemented(relevantIdRanges, beginIdVec,
+                                                 input)
+          : mapRandomItToBlockSpanIt(relevantIdRanges, beginIdVec, input);
 
-  const auto getInputAdjustedRange = std::bind(
-      getInputAdjustedRangeIndices, input.begin(), input.end(),
-      valueIdsInputBegin, std::placeholders::_1, std::placeholders::_2);
-  // Given the relevant Id ranges, retrieve the corresponding relevant
-  // BlockMetadata values from vector input and add them to the relevantBlocks
-  // vector. The direct Id ranges must be adjusted w.r.t. input by making use
-  // of getInputAdjustedRange.
-  for (const auto& [firstId, secondId] : relevantIdRanges) {
-    const auto& [inputAdjustedBegin, inputAdjustedEnd] =
-        getInputAdjustedRange(firstId, secondId);
-    assert(inputAdjustedEnd >= inputAdjustedBegin);
-    relevantBlocks.insert(relevantBlocks.end(), inputAdjustedBegin,
-                          inputAdjustedEnd);
+  for (const auto& [firstIt, secondIt] : relevantRanges) {
+    relevantBlocks.insert(relevantBlocks.end(), firstIt, secondIt);
   }
   relevantBlocks.shrink_to_fit();
   return relevantBlocks;
@@ -367,22 +473,22 @@ template <CompOp Comparison>
 std::vector<BlockMetadata> RelationalExpression<Comparison>::evaluateImpl(
     std::span<const BlockMetadata> input, size_t evaluationColumn) const {
   using namespace valueIdComparators;
-  std::vector<ValueId> valueIdsInput;
+  std::vector<ValueId> idVector;
   // For each BlockMetadata value in vector input, we have a respective Id for
   // firstTriple and lastTriple
-  valueIdsInput.reserve(2 * input.size());
+  idVector.reserve(2 * input.size());
   std::vector<BlockMetadata> mixedDatatypeBlocks;
 
   ql::ranges::for_each(
-      input, [&evaluationColumn, &valueIdsInput,
+      input, [&evaluationColumn, &idVector,
               &mixedDatatypeBlocks](const BlockMetadata& block) {
         const auto firstId =
             getIdFromColumnIndex(block.firstTriple_, evaluationColumn);
         const auto secondId =
             getIdFromColumnIndex(block.lastTriple_, evaluationColumn);
 
-        valueIdsInput.push_back(firstId);
-        valueIdsInput.push_back(secondId);
+        idVector.push_back(firstId);
+        idVector.push_back(secondId);
 
         if (firstId.getDatatype() != secondId.getDatatype()) {
           mixedDatatypeBlocks.push_back(block);
@@ -398,15 +504,14 @@ std::vector<BlockMetadata> RelationalExpression<Comparison>::evaluateImpl(
   // Reason: The referenceId could be contained within the bounds formed by
   // the IDs of firstTriple_ and lastTriple_ (set false flag to keep
   // empty ranges).
-  auto relevantIdRanges =
-      Comparison != CompOp::EQ
-          ? getRangesForId(valueIdsInput.begin(), valueIdsInput.end(),
-                           referenceId, Comparison)
-          : getRangesForId(valueIdsInput.begin(), valueIdsInput.end(),
-                           referenceId, Comparison, false);
+  auto relevantIdRanges = Comparison != CompOp::EQ
+                              ? getRangesForId(idVector.begin(), idVector.end(),
+                                               referenceId, Comparison)
+                              : getRangesForId(idVector.begin(), idVector.end(),
+                                               referenceId, Comparison, false);
 
   return getSetUnion(getRelevantBlocksFromIdRanges(relevantIdRanges, input,
-                                                   valueIdsInput.begin()),
+                                                   idVector.begin(), false),
                      mixedDatatypeBlocks);
 };
 
@@ -500,19 +605,19 @@ std::vector<BlockMetadata> IsDatatypeExpression<Datatype>::evaluateImpl(
   using enum IsDatatype;
 
   // Vector for storing bounding ValueIds to the BlockMetadata values.
-  std::vector<ValueId> valueIdsInput;
-  valueIdsInput.reserve(2 * input.size());
+  std::vector<ValueId> idVector;
+  idVector.reserve(2 * input.size());
 
   ql::ranges::for_each(
-      input, [&valueIdsInput, evaluationColumn](const BlockMetadata& block) {
-        valueIdsInput.push_back(
+      input, [&idVector, evaluationColumn](const BlockMetadata& block) {
+        idVector.push_back(
             getIdFromColumnIndex(block.firstTriple_, evaluationColumn));
-        valueIdsInput.push_back(
+        idVector.push_back(
             getIdFromColumnIndex(block.lastTriple_, evaluationColumn));
       });
 
-  auto idsBegin = valueIdsInput.begin();
-  auto idsEnd = valueIdsInput.end();
+  auto idsBegin = idVector.begin();
+  auto idsEnd = idVector.end();
   std::vector<RandomItPair> relevantRanges;
   if constexpr (Datatype == BLANK) {
     relevantRanges.push_back(valueIdComparators::getRangeForDatatype(
@@ -556,11 +661,12 @@ std::vector<BlockMetadata> IsDatatypeExpression<Datatype>::evaluateImpl(
   // If this IsDatatypeExpression<Datatype> expression is negated, retrieve the
   // corresponding complementing ranges.
   if (isNegated_) {
-    return getComplementBlocksForRelevantIdRanges(
-        relevantRanges, input, valueIdsInput.begin(), valueIdsInput.end());
+    // Set complement flag `true`
+    return getRelevantBlocksFromIdRanges(relevantRanges, input,
+                                         idVector.begin(), true);
   }
-  return getRelevantBlocksFromIdRanges(relevantRanges, input,
-                                       valueIdsInput.begin());
+  return getRelevantBlocksFromIdRanges(relevantRanges, input, idVector.begin(),
+                                       false);
 };
 
 // SECTION LOGICAL OPERATIONS
