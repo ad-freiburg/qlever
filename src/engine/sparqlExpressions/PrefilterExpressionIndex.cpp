@@ -224,7 +224,7 @@ const auto addRangeAndSimplify =
 // `input.begin()` is equivalent to `::iterator([1021, 1082])` (see (2)).
 // A specific transformation example for the values used here is given with the
 // commentary for `mapRandomItToBlockSpanIt`. The mapping procedure
-// transforms `std::pair<::iterator(1021), ::iterator(1140)>` to
+// transforms `std::pair<::iterator(1021), ::iterator(1140)>` into
 // `std::pair<::iterator([1021, 1082]), ::iterator([1140, 1148])>`.
 //
 // (8)
@@ -252,15 +252,15 @@ static std::vector<BlockSpanItPair> mapRandomItToBlockSpanIt(
     // Regarding our example with values as defined above follows:
     // beginBlocks (input above) + dist(beginIdVec, ::iterator(1021))
     // ::iterator([1021, 1082]) + dist(::iterator(1021), ::iterator(1021)) / 2
-    // Thus, iterator value for our range is ::iterator([1021, 1082]).
+    // Thus, the iterator value for our range is ::iterator([1021, 1082]).
     addRange(
         beginBlocks + std::distance(beginIdVec, firstIdRangeIt) / 2,
         // Round up, for Ids contained within the bounding Ids of
         // firstTriple_ and lastTriple_ (from `BlockMetadata`) we have to
         // include the respective metadata block (that block is partially
         // relevant).
-        // Remark: Use `std::min` to ensure that the bounds of inputBlocks
-        // are respected (because we round up).
+        // Remark: Use `std::min` to ensure that the bounds of input are
+        // respected (with round-up procedure).
 
         // The values for our example:
         // ::iterator([1021, 1082]) + dist(::iterator(1021), ::iterator(1140) +
