@@ -7,7 +7,7 @@
 
 #include "engine/CallFixedSize.h"
 #include "util/ChunkedForLoop.h"
-#include "util/TransparentFunctors.h"
+#include "util/CompilerWarnings.h"
 
 const size_t Union::NO_COLUMN = std::numeric_limits<size_t>::max();
 
@@ -498,6 +498,9 @@ Result::Generator Union::computeResultKeepOrder(
                          ? Range{std::array{Wrapper{result2->idTable(),
                                                     result2->localVocab()}}}
                          : Range{std::move(result2->idTables())};
+
+  // Clang falsely reports that the this capture is unused here.
+  DISABLE_UNUSED_LAMBDA_CAPTURE_WARNINGS
   return std::visit(
       [this, requestLaziness, &result1, &result2](auto leftRange,
                                                   auto rightRange) {
@@ -511,4 +514,5 @@ Result::Generator Union::computeResultKeepOrder(
             });
       },
       std::move(leftRange), std::move(rightRange));
+  ENABLE_UNUSED_LAMBDA_CAPTURE_WARNINGS
 }
