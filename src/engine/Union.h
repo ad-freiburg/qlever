@@ -97,6 +97,7 @@ class Union : public Operation {
       std::shared_ptr<const Result> result2) const;
 
   // Compares two rows with respect to the columns that the result is sorted on.
+  template <size_t SPAN_SIZE>
   bool isSmaller(const auto& row1, const auto& row2) const;
 
   // Helper function for `computeResultKeepOrderImpl` that processes any
@@ -107,6 +108,7 @@ class Union : public Operation {
                                      LocalVocab& localVocab) const;
 
   // Actual implementation of `computeResultKeepOrder`.
+  template <int COMPARATOR_WIDTH>
   Result::Generator computeResultKeepOrderImpl(
       bool requestLaziness, auto range1, auto range2,
       std::pair<std::shared_ptr<const Result>, std::shared_ptr<const Result>>

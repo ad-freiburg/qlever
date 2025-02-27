@@ -356,8 +356,10 @@ Result::IdTableVocabPair moveOrCopy(const Wrapper& element) {
 }  // namespace
 
 // _____________________________________________________________________________
+template <size_t SPAN_SIZE>
 bool Union::isSmaller(const auto& row1, const auto& row2) const {
-  for (auto& col : targetOrder_) {
+  using StaticRange = std::span<const ColumnIndex, SPAN_SIZE>;
+  for (auto& col : StaticRange{targetOrder_}) {
     ColumnIndex index1 = _columnOrigins.at(col).at(0);
     ColumnIndex index2 = _columnOrigins.at(col).at(1);
     if (index1 == NO_COLUMN) {
@@ -408,10 +410,13 @@ Result::Generator Union::processRemaining(std::vector<ColumnIndex> permutation,
 }
 
 // _____________________________________________________________________________
+template <int COMPARATOR_WIDTH>
 Result::Generator Union::computeResultKeepOrderImpl(
     bool requestLaziness, auto range1, auto range2,
     std::pair<std::shared_ptr<const Result>, std::shared_ptr<const Result>>)
     const {
+  constexpr size_t extent =
+      COMPARATOR_WIDTH == 0 ? std::dynamic_extent : COMPARATOR_WIDTH;
   IdTable resultTable{getResultWidth(), allocator()};
   if (requestLaziness) {
     resultTable.reserve(chunkSize);
@@ -433,7 +438,8 @@ Result::Generator Union::computeResultKeepOrderImpl(
     localVocab.mergeWith(std::span{&it1->localVocab_, 1});
     localVocab.mergeWith(std::span{&it2->localVocab_, 1});
     while (index1 < it1->idTable_.size() && index2 < it2->idTable_.size()) {
-      if (isSmaller(it1->idTable_.at(index1), it2->idTable_.at(index2))) {
+      if (isSmaller<extent>(it1->idTable_.at(index1),
+                            it2->idTable_.at(index2))) {
         pushRow(true, it1->idTable_.at(index1));
         index1++;
       } else {
@@ -493,9 +499,14 @@ Result::Generator Union::computeResultKeepOrder(
   return std::visit(
       [this, requestLaziness, &result1, &result2](auto leftRange,
                                                   auto rightRange) {
-        return computeResultKeepOrderImpl(
-            requestLaziness, std::move(leftRange), std::move(rightRange),
-            std::pair{std::move(result1), std::move(result2)});
+        return ad_utility::callFixedSize(
+            targetOrder_.size(),
+            [this, requestLaziness, &result1, &result2, &leftRange,
+             &rightRange]<int COMPARATOR_WIDTH>() {
+              return computeResultKeepOrderImpl<COMPARATOR_WIDTH>(
+                  requestLaziness, std::move(leftRange), std::move(rightRange),
+                  std::pair{std::move(result1), std::move(result2)});
+            });
       },
       std::move(leftRange), std::move(rightRange));
 }
