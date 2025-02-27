@@ -393,7 +393,7 @@ Result::Generator Union::processRemaining(std::vector<ColumnIndex> permutation,
         co_yield Result::IdTableVocabPair{std::move(resultTable),
                                           std::move(localVocab)};
       } else {
-        if (resultTable.size() != 0) {
+        if (!resultTable.empty()) {
           co_yield Result::IdTableVocabPair{std::move(resultTable),
                                             std::move(localVocab)};
         }
