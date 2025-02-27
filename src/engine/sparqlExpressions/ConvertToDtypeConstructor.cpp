@@ -130,21 +130,19 @@ namespace detail::to_datetime {
 
 // Cast to xsd:dateTime or xsd:date (ValueId)
 template <bool ToJustXsdDate>
-inline const auto castStringToDateTimeValueId = [](OptIdOrString input) {
+inline const auto castStringToDateTimeValueId = [](OptStringOrDate input) {
   if (!input.has_value()) return Id::makeUndefined();
 
   using DYD = DateYearOrDuration;
   std::optional<DYD> optValueId = std::visit(
       [&]<typename T>(const T& value) {
-        if constexpr (std::is_same_v<std::decay_t<T>, ValueId>) {
-          return ToJustXsdDate ? DYD::convertToXsdDate(value.getDate())
-                               : DYD::convertToXsdDatetime(value.getDate());
-        } else if constexpr (std::is_same_v<std::decay_t<T>, std::string>) {
+        if constexpr (ad_utility::isSimilar<T, DYD>) {
+          return ToJustXsdDate ? DYD::convertToXsdDate(value)
+                               : DYD::convertToXsdDatetime(value);
+        } else {
+          static_assert(ad_utility::isSimilar<T, std::string>);
           return ToJustXsdDate ? DYD::parseXsdDateGetOptDate(value)
                                : DYD::parseXsdDatetimeGetOptDate(value);
-        } else {
-          throw std::runtime_error(
-              "OptIdOrString variant contains unexpected value type.");
         }
       },
       input.value());
@@ -152,12 +150,12 @@ inline const auto castStringToDateTimeValueId = [](OptIdOrString input) {
                                 : Id::makeUndefined();
 };
 
-NARY_EXPRESSION(ToXsdDateTime, 1,
-                FV<decltype(castStringToDateTimeValueId<false>),
-                   DateIdOrLiteralValueGetter>);
-NARY_EXPRESSION(ToXsdDate, 1,
-                FV<decltype(castStringToDateTimeValueId<true>),
-                   DateIdOrLiteralValueGetter>);
+NARY_EXPRESSION(
+    ToXsdDateTime, 1,
+    FV<decltype(castStringToDateTimeValueId<false>), StringOrDateGetter>);
+NARY_EXPRESSION(
+    ToXsdDate, 1,
+    FV<decltype(castStringToDateTimeValueId<true>), StringOrDateGetter>);
 }  // namespace detail::to_datetime
 
 using namespace detail::to_numeric;

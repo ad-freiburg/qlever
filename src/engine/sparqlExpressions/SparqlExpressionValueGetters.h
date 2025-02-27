@@ -350,23 +350,25 @@ struct IriOrUriValueGetter : Mixin<IriOrUriValueGetter> {
                               const EvaluationContext* context) const;
 };
 
-// Defines the return type for value-getter `DateIdOrLiteralValueGetter`.
-using OptIdOrString = std::optional<std::variant<ValueId, std::string>>;
+// Defines the return type for value-getter `StringOrDateGetter`.
+using OptStringOrDate =
+    std::optional<std::variant<DateYearOrDuration, std::string>>;
 
-// This value-getter returns a `DateYearOrDuration` related `ValueId` or
-// `std::string` (from literal).
-struct DateIdOrLiteralValueGetter : Mixin<DateIdOrLiteralValueGetter> {
-  using Mixin<DateIdOrLiteralValueGetter>::operator();
+// This value-getter retrieves `DateYearOrDuration` or `std::string`
+// (from literal) values.
+struct StringOrDateGetter : Mixin<StringOrDateGetter> {
+  using Mixin<StringOrDateGetter>::operator();
   // Remark: We use only LiteralFromIdGetter because Iri values should never
   // contain date-related string values.
-  OptIdOrString operator()(ValueId id, const EvaluationContext* context) const {
+  OptStringOrDate operator()(ValueId id,
+                             const EvaluationContext* context) const {
     if (id.getDatatype() == Datatype::Date) {
-      return id;
+      return id.getDate();
     }
     return LiteralFromIdGetter{}(id, context);
   }
-  OptIdOrString operator()(const LiteralOrIri& litOrIri,
-                           const EvaluationContext* context) const {
+  OptStringOrDate operator()(const LiteralOrIri& litOrIri,
+                             const EvaluationContext* context) const {
     return LiteralFromIdGetter{}(litOrIri, context);
   }
 };
