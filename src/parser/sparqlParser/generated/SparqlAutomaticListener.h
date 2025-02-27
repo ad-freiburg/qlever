@@ -317,11 +317,17 @@ public:
   virtual void enterPathMod(SparqlAutomaticParser::PathModContext *ctx) = 0;
   virtual void exitPathMod(SparqlAutomaticParser::PathModContext *ctx) = 0;
 
+  virtual void enterMinMax(SparqlAutomaticParser::MinMaxContext *ctx) = 0;
+  virtual void exitMinMax(SparqlAutomaticParser::MinMaxContext *ctx) = 0;
+
   virtual void enterStepsMin(SparqlAutomaticParser::StepsMinContext *ctx) = 0;
   virtual void exitStepsMin(SparqlAutomaticParser::StepsMinContext *ctx) = 0;
 
   virtual void enterStepsMax(SparqlAutomaticParser::StepsMaxContext *ctx) = 0;
   virtual void exitStepsMax(SparqlAutomaticParser::StepsMaxContext *ctx) = 0;
+
+  virtual void enterStepsExact(SparqlAutomaticParser::StepsExactContext *ctx) = 0;
+  virtual void exitStepsExact(SparqlAutomaticParser::StepsExactContext *ctx) = 0;
 
   virtual void enterPathPrimary(SparqlAutomaticParser::PathPrimaryContext *ctx) = 0;
   virtual void exitPathPrimary(SparqlAutomaticParser::PathPrimaryContext *ctx) = 0;

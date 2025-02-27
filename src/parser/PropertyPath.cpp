@@ -23,12 +23,9 @@ PropertyPath PropertyPath::makeModified(PropertyPath child,
 
 // _____________________________________________________________________________
 PropertyPath PropertyPath::makeModified(PropertyPath child,
-                                        std::string_view modifier, 
                                         int64_t stepsMin, 
                                         int64_t stepsMax) {
-  // TODO-Sven: Not sure if AD_CORRECTNESS_CHECK is needed. 
-  //            Should we be doing this with ANTLR4? {int, int} is handled, no?
-  //            But the rules are not set up for stepsMin/Max as INTEGER_POSITIVE.
+  AD_CORRECTNESS_CHECK(stepsMin<=stepsMax);
   return makeWithChildren({std::move(child)}, Operation::MIN_MAX, stepsMin, stepsMax);
 }
 
@@ -96,6 +93,15 @@ void PropertyPath::writeToStream(std::ostream& out) const {
       out << ")+";
       break;
     case Operation::ZERO_OR_ONE:
+      out << "(";
+      if (!children_.empty()) {
+        children_[0].writeToStream(out);
+      } else {
+        out << "missing" << std::endl;
+      }
+      out << ")?";
+      break;
+    case Operation::MIN_MAX:
       out << "(";
       if (!children_.empty()) {
         children_[0].writeToStream(out);

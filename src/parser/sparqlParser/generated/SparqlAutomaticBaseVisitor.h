@@ -419,11 +419,19 @@ public:
     return visitChildren(ctx);
   }
 
+  virtual std::any visitMinMax(SparqlAutomaticParser::MinMaxContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
   virtual std::any visitStepsMin(SparqlAutomaticParser::StepsMinContext *ctx) override {
     return visitChildren(ctx);
   }
 
   virtual std::any visitStepsMax(SparqlAutomaticParser::StepsMaxContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitStepsExact(SparqlAutomaticParser::StepsExactContext *ctx) override {
     return visitChildren(ctx);
   }
 

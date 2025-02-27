@@ -94,7 +94,6 @@ class PropertyPath {
                                    std::string_view modifier);
 
   static PropertyPath makeModified(PropertyPath child,
-                                   std::string_view modifier,
                                    int64_t stepsMin, 
                                    int64_t stepsMax);
 
@@ -123,8 +122,8 @@ class PropertyPath {
   bool isIri() const;
 
   Operation operation_;
-  int min_;
-  int max_;
+  size_t min_;
+  size_t max_;
 
   // In case of an iri
   std::string iri_;

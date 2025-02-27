@@ -76,26 +76,26 @@ public:
     RuleVerbSimple = 89, RuleTupleWithoutPath = 90, RuleTupleWithPath = 91, 
     RuleVerbPathOrSimple = 92, RuleObjectListPath = 93, RuleObjectPath = 94, 
     RulePath = 95, RulePathAlternative = 96, RulePathSequence = 97, RulePathElt = 98, 
-    RulePathEltOrInverse = 99, RulePathMod = 100, RuleStepsMin = 101, RuleStepsMax = 102, 
-    RulePathPrimary = 103, RulePathNegatedPropertySet = 104, RulePathOneInPropertySet = 105, 
-    RuleInteger = 106, RuleTriplesNode = 107, RuleBlankNodePropertyList = 108, 
-    RuleTriplesNodePath = 109, RuleBlankNodePropertyListPath = 110, RuleCollection = 111, 
-    RuleCollectionPath = 112, RuleGraphNode = 113, RuleGraphNodePath = 114, 
-    RuleVarOrTerm = 115, RuleVarOrIri = 116, RuleVar = 117, RuleGraphTerm = 118, 
-    RuleExpression = 119, RuleConditionalOrExpression = 120, RuleConditionalAndExpression = 121, 
-    RuleValueLogical = 122, RuleRelationalExpression = 123, RuleNumericExpression = 124, 
-    RuleAdditiveExpression = 125, RuleMultiplicativeExpressionWithSign = 126, 
-    RulePlusSubexpression = 127, RuleMinusSubexpression = 128, RuleMultiplicativeExpressionWithLeadingSignButNoSpace = 129, 
-    RuleMultiplicativeExpression = 130, RuleMultiplyOrDivideExpression = 131, 
-    RuleMultiplyExpression = 132, RuleDivideExpression = 133, RuleUnaryExpression = 134, 
-    RulePrimaryExpression = 135, RuleBrackettedExpression = 136, RuleBuiltInCall = 137, 
-    RuleRegexExpression = 138, RuleLangExpression = 139, RuleSubstringExpression = 140, 
-    RuleStrReplaceExpression = 141, RuleExistsFunc = 142, RuleNotExistsFunc = 143, 
-    RuleAggregate = 144, RuleIriOrFunction = 145, RuleRdfLiteral = 146, 
-    RuleNumericLiteral = 147, RuleNumericLiteralUnsigned = 148, RuleNumericLiteralPositive = 149, 
-    RuleNumericLiteralNegative = 150, RuleBooleanLiteral = 151, RuleString = 152, 
-    RuleIri = 153, RulePrefixedName = 154, RuleBlankNode = 155, RuleIriref = 156, 
-    RulePnameLn = 157, RulePnameNs = 158
+    RulePathEltOrInverse = 99, RulePathMod = 100, RuleMinMax = 101, RuleStepsMin = 102, 
+    RuleStepsMax = 103, RuleStepsExact = 104, RulePathPrimary = 105, RulePathNegatedPropertySet = 106, 
+    RulePathOneInPropertySet = 107, RuleInteger = 108, RuleTriplesNode = 109, 
+    RuleBlankNodePropertyList = 110, RuleTriplesNodePath = 111, RuleBlankNodePropertyListPath = 112, 
+    RuleCollection = 113, RuleCollectionPath = 114, RuleGraphNode = 115, 
+    RuleGraphNodePath = 116, RuleVarOrTerm = 117, RuleVarOrIri = 118, RuleVar = 119, 
+    RuleGraphTerm = 120, RuleExpression = 121, RuleConditionalOrExpression = 122, 
+    RuleConditionalAndExpression = 123, RuleValueLogical = 124, RuleRelationalExpression = 125, 
+    RuleNumericExpression = 126, RuleAdditiveExpression = 127, RuleMultiplicativeExpressionWithSign = 128, 
+    RulePlusSubexpression = 129, RuleMinusSubexpression = 130, RuleMultiplicativeExpressionWithLeadingSignButNoSpace = 131, 
+    RuleMultiplicativeExpression = 132, RuleMultiplyOrDivideExpression = 133, 
+    RuleMultiplyExpression = 134, RuleDivideExpression = 135, RuleUnaryExpression = 136, 
+    RulePrimaryExpression = 137, RuleBrackettedExpression = 138, RuleBuiltInCall = 139, 
+    RuleRegexExpression = 140, RuleLangExpression = 141, RuleSubstringExpression = 142, 
+    RuleStrReplaceExpression = 143, RuleExistsFunc = 144, RuleNotExistsFunc = 145, 
+    RuleAggregate = 146, RuleIriOrFunction = 147, RuleRdfLiteral = 148, 
+    RuleNumericLiteral = 149, RuleNumericLiteralUnsigned = 150, RuleNumericLiteralPositive = 151, 
+    RuleNumericLiteralNegative = 152, RuleBooleanLiteral = 153, RuleString = 154, 
+    RuleIri = 155, RulePrefixedName = 156, RuleBlankNode = 157, RuleIriref = 158, 
+    RulePnameLn = 159, RulePnameNs = 160
   };
 
   explicit SparqlAutomaticParser(antlr4::TokenStream *input);
@@ -216,8 +216,10 @@ public:
   class PathEltContext;
   class PathEltOrInverseContext;
   class PathModContext;
+  class MinMaxContext;
   class StepsMinContext;
   class StepsMaxContext;
+  class StepsExactContext;
   class PathPrimaryContext;
   class PathNegatedPropertySetContext;
   class PathOneInPropertySetContext;
@@ -1986,8 +1988,7 @@ public:
   public:
     PathModContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
-    StepsMinContext *stepsMin();
-    StepsMaxContext *stepsMax();
+    MinMaxContext *minMax();
 
     virtual void enterRule(antlr4::tree::ParseTreeListener *listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener *listener) override;
@@ -1997,6 +1998,23 @@ public:
   };
 
   PathModContext* pathMod();
+
+  class  MinMaxContext : public antlr4::ParserRuleContext {
+  public:
+    MinMaxContext(antlr4::ParserRuleContext *parent, size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    StepsMinContext *stepsMin();
+    StepsMaxContext *stepsMax();
+    StepsExactContext *stepsExact();
+
+    virtual void enterRule(antlr4::tree::ParseTreeListener *listener) override;
+    virtual void exitRule(antlr4::tree::ParseTreeListener *listener) override;
+
+    virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;
+   
+  };
+
+  MinMaxContext* minMax();
 
   class  StepsMinContext : public antlr4::ParserRuleContext {
   public:
@@ -2027,6 +2045,21 @@ public:
   };
 
   StepsMaxContext* stepsMax();
+
+  class  StepsExactContext : public antlr4::ParserRuleContext {
+  public:
+    StepsExactContext(antlr4::ParserRuleContext *parent, size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    IntegerContext *integer();
+
+    virtual void enterRule(antlr4::tree::ParseTreeListener *listener) override;
+    virtual void exitRule(antlr4::tree::ParseTreeListener *listener) override;
+
+    virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;
+   
+  };
+
+  StepsExactContext* stepsExact();
 
   class  PathPrimaryContext : public antlr4::ParserRuleContext {
   public:

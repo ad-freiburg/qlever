@@ -1841,21 +1841,40 @@ PropertyPath Visitor::visit(Parser::PathSequenceContext* ctx) {
 PropertyPath Visitor::visit(Parser::PathEltContext* ctx) {
   PropertyPath p = visit(ctx->pathPrimary());
 
-  if (ctx->pathMod() && ctx->pathMod()->stepsMax()) {
-    std::string modifier = ctx->pathMod()->getText();
-    int64_t stepsMin = visit(ctx->pathMod()->stepsMin()->integer());
-    int64_t stepsMax = visit(ctx->pathMod()->stepsMax()->integer());
-    p = PropertyPath::makeModified(p, modifier, stepsMin, stepsMax);
-  } else if (ctx->pathMod() && ctx->pathMod()->stepsMin()) {
-    std::string modifier = ctx->pathMod()->getText();
-    int64_t stepsMin = visit(ctx->pathMod()->stepsMin()->integer());
-    int64_t stepsMax = std::numeric_limits<int64_t>::max();
-    p = PropertyPath::makeModified(p, modifier, stepsMin, stepsMax);
-  } else if (ctx->pathMod()) {
-    std::string modifier = ctx->pathMod()->getText();
-    p = PropertyPath::makeModified(p, modifier);
+  auto* mod = ctx->pathMod();
+
+  if (!mod) {
+    return p;
   }
-  return p;
+
+  auto* minMaxCtx = mod->minMax();
+
+  if (!minMaxCtx) {
+    return PropertyPath::makeModified(p, mod->getText());
+  }
+
+  int64_t stepsMin, stepsMax;
+
+  auto* stepsExactCtx = minMaxCtx->stepsExact();
+
+  if (stepsExactCtx) {
+    stepsMin = visit(stepsExactCtx->integer());
+    stepsMax = stepsMin;
+  } else {
+    auto* stepsMinCtx = minMaxCtx->stepsMin();
+    stepsMin = stepsMinCtx ? visit(stepsMinCtx->integer()) 
+                        : 0;
+
+    auto* stepsMaxCtx = minMaxCtx->stepsMax();
+    stepsMax = stepsMaxCtx ? visit(stepsMaxCtx->integer())
+                        : std::numeric_limits<int64_t>::max();
+  }
+
+  if (stepsMax >= stepsMin) {
+    return PropertyPath::makeModified(p, stepsMin, stepsMax);
+  }
+
+  reportError(minMaxCtx, "max may not be less than min.");
 }
 
 // ____________________________________________________________________________________
