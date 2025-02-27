@@ -9,20 +9,12 @@
 
 class ScoreData {
  public:
-  ScoreData()
-      : scoringMetric_(TextScoringMetric::EXPLICIT), b_(0.75), k_(1.75){};
+  ScoreData() = default;
 
-  ScoreData(LocaleManager localeManager)
-      : scoringMetric_(TextScoringMetric::EXPLICIT),
-        b_(0.75),
-        k_(1.75),
-        localeManager_(localeManager){};
+  ScoreData(LocaleManager localeManager) : localeManager_(localeManager){};
 
   ScoreData(LocaleManager localeManager, TextScoringMetric scoringMetric)
-      : scoringMetric_(scoringMetric),
-        b_(0.75),
-        k_(1.75),
-        localeManager_(localeManager){};
+      : scoringMetric_(scoringMetric), localeManager_(localeManager){};
 
   ScoreData(LocaleManager localeManager, TextScoringMetric scoringMetric,
             std::pair<float, float> bAndKParam)
@@ -31,21 +23,19 @@ class ScoreData {
         k_(bAndKParam.second),
         localeManager_(localeManager){};
 
-  // Getters
-  TextScoringMetric getScoringMetric() { return scoringMetric_; }
+  TextScoringMetric getScoringMetric() const { return scoringMetric_; }
 
-  // Functions
+  float getScore(WordIndex wordIndex, TextRecordIndex contextId);
+
   void calculateScoreData(const string& docsFileName, bool addWordsFromLiterals,
                           const Index::TextVocab& textVocab,
                           const Index::Vocab& vocab);
 
-  float getScore(WordIndex wordIndex, TextRecordIndex contextId);
-
  private:
   //
-  TextScoringMetric scoringMetric_;
-  float b_;
-  float k_;
+  TextScoringMetric scoringMetric_ = TextScoringMetric::EXPLICIT;
+  float b_ = 0.75;
+  float k_ = 1.75;
 
   //
   LocaleManager localeManager_;
