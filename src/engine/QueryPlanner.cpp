@@ -262,7 +262,10 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
     if (candidatePlans.at(0).empty()) {
       // This happens if either graph pattern is an empty group,
       // or it only consists of a MINUS clause (which then has no effect).
-      return {makeSubtreePlan<NeutralElementOperation>(_qec)};
+      std::vector neutralPlans{makeSubtreePlan<NeutralElementOperation>(_qec)};
+      // Neutral element can potentially still get filtered out
+      applyFiltersIfPossible<true>(neutralPlans, rootPattern->_filters);
+      return neutralPlans;
     }
     return candidatePlans[0];
   }
