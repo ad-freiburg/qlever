@@ -1159,6 +1159,44 @@ TEST(SparqlExpression, testToNumericExpression) {
 }
 
 // ____________________________________________________________________________
+TEST(SparqlExpression, testToDateOrDateTimeExpression) {
+  using namespace ad_utility::testing;
+  Id T = Id::makeFromBool(true);
+  Id F = Id::makeFromBool(false);
+  Id G = Id::makeFromGeoPoint(GeoPoint(50.0, 50.0));
+  auto parserDate = DateYearOrDuration::parseXsdDate;
+  auto parserDateTime = DateYearOrDuration::parseXsdDatetime;
+  auto parserDuration = DateYearOrDuration::parseXsdDayTimeDuration;
+  auto checkGetDate = testUnaryExpression<&makeConvertToDateExpression>;
+  auto checkGetDateTime = testUnaryExpression<&makeConvertToDateTimeExpression>;
+
+  checkGetDate(
+      idOrLitOrStringVec(
+          {"---", T, F, G, "2025-02", I(10), D(0.01), "-2025-02-20",
+           "2025-02-20", "2025-1-1", DateId(parserDate, "0000-01-01"),
+           DateId(parserDuration, "-PT5H"),
+           DateId(parserDateTime, "1900-12-13T03:12:00.33Z"),
+           DateId(parserDateTime, "2025-02-20T17:12:00.01-05:00")}),
+      Ids{U, U, U, U, U, U, U, DateId(parserDate, "-2025-02-20"),
+          DateId(parserDate, "2025-02-20"), U, DateId(parserDate, "0000-01-01"),
+          U, DateId(parserDate, "1900-12-13"),
+          DateId(parserDate, "2025-02-20")});
+  checkGetDateTime(
+      idOrLitOrStringVec(
+          {"---", T, F, G, "2025-02", I(10), D(0.01), "-2025-02-20",
+           "2025-02-20", "2025-1-1", "1900-12-13T03:12:00.33Z",
+           "-1900-12-13T03:12:00.33Z", "2025-02-20T17:12:00.01-05:00",
+           DateId(parserDateTime, "2025-02-20T17:12:00.01Z"),
+           DateId(parserDuration, "PT1H4M"), DateId(parserDate, "0000-01-01")}),
+      Ids{U, U, U, U, U, U, U, U, U, U,
+          DateId(parserDateTime, "1900-12-13T03:12:00.33Z"),
+          DateId(parserDateTime, "-1900-12-13T03:12:00.33Z"),
+          DateId(parserDateTime, "2025-02-20T17:12:00.01-05:00"),
+          DateId(parserDateTime, "2025-02-20T17:12:00.01Z"), U,
+          DateId(parserDateTime, "0000-01-01T00:00:00.00")});
+}
+
+// ____________________________________________________________________________
 TEST(SparqlExpression, testToBooleanExpression) {
   Id T = Id::makeFromBool(true);
   Id F = Id::makeFromBool(false);

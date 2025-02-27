@@ -130,14 +130,13 @@ static DateYearOrDuration makeDateOrLargeYear(std::string_view fullInput,
 }
 
 // _____________________________________________________________________________
-DateYearOrDuration DateYearOrDuration::parseXsdDatetime(
-    std::string_view dateString) {
+std::optional<DateYearOrDuration>
+DateYearOrDuration::parseXsdDatetimeGetOptDate(std::string_view dateString) {
   constexpr static ctll::fixed_string dateTime =
       dateRegex + "T" + timeRegex + grp(timeZoneRegex) + "?";
   auto match = ctre::match<dateTime>(dateString);
   if (!match) {
-    throw DateParseException{absl::StrCat(
-        "The value ", dateString, " cannot be parsed as an `xsd:dateTime`.")};
+    return std::nullopt;
   }
   int64_t year = match.template get<"year">().to_number<int64_t>();
   int month = match.template get<"month">().to_number();
@@ -150,20 +149,39 @@ DateYearOrDuration DateYearOrDuration::parseXsdDatetime(
 }
 
 // _____________________________________________________________________________
-DateYearOrDuration DateYearOrDuration::parseXsdDate(
+DateYearOrDuration DateYearOrDuration::parseXsdDatetime(
+    std::string_view dateString) {
+  if (auto optDate = parseXsdDatetimeGetOptDate(dateString); optDate) {
+    return optDate.value();
+  }
+  throw DateParseException{absl::StrCat(
+      "The value ", dateString, " cannot be parsed as an `xsd:dateTime`.")};
+}
+
+// _____________________________________________________________________________
+std::optional<DateYearOrDuration> DateYearOrDuration::parseXsdDateGetOptDate(
     std::string_view dateString) {
   constexpr static ctll::fixed_string dateTime =
       dateRegex + grp(timeZoneRegex) + "?";
   auto match = ctre::match<dateTime>(dateString);
   if (!match) {
-    throw DateParseException{absl::StrCat(
-        "The value ", dateString, " cannot be parsed as an `xsd:date`.")};
+    return std::nullopt;
   }
   int64_t year = match.template get<"year">().to_number<int64_t>();
   int month = match.template get<"month">().to_number();
   int day = match.template get<"day">().to_number();
   return makeDateOrLargeYear(dateString, year, month, day, -1, 0, 0.0,
                              parseTimeZone(match));
+}
+
+// _____________________________________________________________________________
+DateYearOrDuration DateYearOrDuration::parseXsdDate(
+    std::string_view dateString) {
+  if (auto optDate = parseXsdDateGetOptDate(dateString); optDate) {
+    return optDate.value();
+  }
+  throw DateParseException{absl::StrCat("The value ", dateString,
+                                        " cannot be parsed as an `xsd:date`.")};
 }
 
 // _____________________________________________________________________________
@@ -277,4 +295,30 @@ std::string DateYearOrDuration::getStrTimezone() const {
   } else {
     return "";
   }
+}
+
+// _____________________________________________________________________________
+std::optional<DateYearOrDuration> DateYearOrDuration::convertToXsdDatetime(
+    const DateYearOrDuration& dateValue) {
+  if (dateValue.isDayTimeDuration() || !dateValue.isDate()) {
+    return std::nullopt;
+  }
+  const Date& date = dateValue.getDate();
+  if (date.hasTime()) {
+    // Is already xsd:dateTime value.
+    return dateValue;
+  }
+  return DateYearOrDuration(
+      Date(date.getYear(), date.getMonth(), date.getDay(), 0, 0, 0.0));
+}
+
+// _____________________________________________________________________________
+std::optional<DateYearOrDuration> DateYearOrDuration::convertToXsdDate(
+    const DateYearOrDuration& dateValue) {
+  if (dateValue.isDayTimeDuration() || !dateValue.isDate()) {
+    return std::nullopt;
+  }
+  const Date& date = dateValue.getDate();
+  return DateYearOrDuration(
+      Date(date.getYear(), date.getMonth(), date.getDay()));
 }

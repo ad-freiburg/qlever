@@ -350,4 +350,27 @@ struct IriOrUriValueGetter : Mixin<IriOrUriValueGetter> {
                               const EvaluationContext* context) const;
 };
 
+// Defines the return type for value-getter `StringOrDateGetter`.
+using OptStringOrDate =
+    std::optional<std::variant<DateYearOrDuration, std::string>>;
+
+// This value-getter retrieves `DateYearOrDuration` or `std::string`
+// (from literal) values.
+struct StringOrDateGetter : Mixin<StringOrDateGetter> {
+  using Mixin<StringOrDateGetter>::operator();
+  // Remark: We use only LiteralFromIdGetter because Iri values should never
+  // contain date-related string values.
+  OptStringOrDate operator()(ValueId id,
+                             const EvaluationContext* context) const {
+    if (id.getDatatype() == Datatype::Date) {
+      return id.getDate();
+    }
+    return LiteralFromIdGetter{}(id, context);
+  }
+  OptStringOrDate operator()(const LiteralOrIri& litOrIri,
+                             const EvaluationContext* context) const {
+    return LiteralFromIdGetter{}(litOrIri, context);
+  }
+};
+
 }  // namespace sparqlExpression::detail
