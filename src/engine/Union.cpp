@@ -356,8 +356,10 @@ Result::IdTableVocabPair moveOrCopy(const Wrapper& element) {
 }  // namespace
 
 // _____________________________________________________________________________
+// Always inline makes makes a huge difference on large datasets.
 template <size_t SPAN_SIZE>
-bool Union::isSmaller(const auto& row1, const auto& row2) const {
+AD_ALWAYS_INLINE bool Union::isSmaller(const auto& row1,
+                                       const auto& row2) const {
   using StaticRange = std::span<const ColumnIndex, SPAN_SIZE>;
   for (auto& col : StaticRange{targetOrder_}) {
     ColumnIndex index1 = _columnOrigins.at(col).at(0);
