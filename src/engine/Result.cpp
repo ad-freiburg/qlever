@@ -63,6 +63,68 @@ void assertSortOrderIsRespected(const IdTable& idTable,
   AD_EXPENSIVE_CHECK(
       ql::ranges::is_sorted(idTable, compareRowsBySortColumns(sortedBy)));
 }
+
+// _____________________________________________________________________________
+// Apply `LimitOffsetClause` to given `IdTable`.
+void resizeIdTable(IdTable& idTable, const LimitOffsetClause& limitOffset) {
+  ql::ranges::for_each(
+      idTable.getColumns(),
+      [offset = limitOffset.actualOffset(idTable.numRows()),
+       upperBound =
+           limitOffset.upperBound(idTable.numRows())](std::span<Id> column) {
+        std::shift_left(column.begin(), column.begin() + upperBound, offset);
+      });
+  // Resize the `IdTable` if necessary.
+  size_t targetSize = limitOffset.actualSize(idTable.numRows());
+  AD_CORRECTNESS_CHECK(targetSize <= idTable.numRows());
+  idTable.resize(targetSize);
+  idTable.shrinkToFit();
+}
+
+template <typename LimitTimeCallback>
+struct ApplyLimitOffsetGenerator
+    : ad_utility::InputRangeFromGet<Result::IdTableVocabPair> {
+  Result::LazyResult original_;
+  LimitOffsetClause limitOffset_;
+  LimitTimeCallback limitTimeCallback_;
+  std::optional<Result::LazyResult::iterator> originalNext_;
+
+  ApplyLimitOffsetGenerator(Result::LazyResult original,
+                            LimitOffsetClause limitOffset,
+                            LimitTimeCallback limitTimeCallback)
+      : original_(std::move(original)),
+        limitOffset_(std::move(limitOffset)),
+        limitTimeCallback_(limitTimeCallback) {}
+
+  std::optional<Result::IdTableVocabPair> get() {
+    while (limitOffset_._limit.value_or(1) != 0) {
+      if (!originalNext_.has_value()) {
+        originalNext_ = original_.begin();
+      } else if (originalNext_.value() != original_.end()) {
+        originalNext_.value()++;
+      }
+      if (originalNext_.value() == original_.end()) {
+        return std::nullopt;
+      }
+      Result::IdTableVocabPair& pair = *(originalNext_.value());
+      auto& idTable = pair.idTable_;
+      ad_utility::timer::Timer limitTimer{ad_utility::timer::Timer::Started};
+      size_t originalSize = idTable.numRows();
+      resizeIdTable(idTable, limitOffset_);
+      uint64_t offsetDelta = limitOffset_.actualOffset(originalSize);
+      limitOffset_._offset -= offsetDelta;
+      if (limitOffset_._limit.has_value()) {
+        limitOffset_._limit.value() -=
+            limitOffset_.actualSize(originalSize - offsetDelta);
+      }
+      limitTimeCallback_(limitTimer.value(), idTable);
+      if (limitOffset_._offset == 0) {
+        return std::optional{std::move(pair)};
+      }
+    }
+    return std::nullopt;
+  }
+};
 }  // namespace
 
 // _____________________________________________________________________________
@@ -111,23 +173,6 @@ Result::Result(LazyResult idTables, std::vector<ColumnIndex> sortedBy)
       sortedBy_{std::move(sortedBy)} {}
 
 // _____________________________________________________________________________
-// Apply `LimitOffsetClause` to given `IdTable`.
-void resizeIdTable(IdTable& idTable, const LimitOffsetClause& limitOffset) {
-  ql::ranges::for_each(
-      idTable.getColumns(),
-      [offset = limitOffset.actualOffset(idTable.numRows()),
-       upperBound =
-           limitOffset.upperBound(idTable.numRows())](std::span<Id> column) {
-        std::shift_left(column.begin(), column.begin() + upperBound, offset);
-      });
-  // Resize the `IdTable` if necessary.
-  size_t targetSize = limitOffset.actualSize(idTable.numRows());
-  AD_CORRECTNESS_CHECK(targetSize <= idTable.numRows());
-  idTable.resize(targetSize);
-  idTable.shrinkToFit();
-}
-
-// _____________________________________________________________________________
 void Result::applyLimitOffset(
     const LimitOffsetClause& limitOffset,
     std::function<void(std::chrono::microseconds, const IdTable&)>
@@ -145,32 +190,9 @@ void Result::applyLimitOffset(
                   limitOffset);
     limitTimeCallback(limitTimer.msecs(), idTable());
   } else {
-    auto generator = [](LazyResult original, LimitOffsetClause limitOffset,
-                        auto limitTimeCallback) -> Generator {
-      if (limitOffset._limit.value_or(1) == 0) {
-        co_return;
-      }
-      for (IdTableVocabPair& pair : original) {
-        auto& idTable = pair.idTable_;
-        ad_utility::timer::Timer limitTimer{ad_utility::timer::Timer::Started};
-        size_t originalSize = idTable.numRows();
-        resizeIdTable(idTable, limitOffset);
-        uint64_t offsetDelta = limitOffset.actualOffset(originalSize);
-        limitOffset._offset -= offsetDelta;
-        if (limitOffset._limit.has_value()) {
-          limitOffset._limit.value() -=
-              limitOffset.actualSize(originalSize - offsetDelta);
-        }
-        limitTimeCallback(limitTimer.value(), idTable);
-        if (limitOffset._offset == 0) {
-          co_yield pair;
-        }
-        if (limitOffset._limit.value_or(1) == 0) {
-          break;
-        }
-      }
-    }(std::move(idTables()), limitOffset, std::move(limitTimeCallback));
-    data_.emplace<GenContainer>(std::move(generator));
+    ApplyLimitOffsetGenerator generator{std::move(idTables()), limitOffset,
+                                        std::move(limitTimeCallback)};
+    data_.emplace<GenContainer>(LazyResult(std::move(generator)));
   }
 }
 
