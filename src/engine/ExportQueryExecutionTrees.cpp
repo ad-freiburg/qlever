@@ -918,8 +918,7 @@ ExportQueryExecutionTrees::computeResultAsQLeverJSON(
 
   nlohmann::json jsonPrefix;
 
-  jsonPrefix["query"] =
-      query._originalString.substr(0, MAX_LENGTH_OPERATION_ECHO);
+  jsonPrefix["query"] = ad_utility::truncateOperation(query._originalString);
   jsonPrefix["status"] = "OK";
   jsonPrefix["warnings"] = qet.collectWarnings();
   if (query.hasSelectClause()) {

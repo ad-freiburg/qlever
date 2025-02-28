@@ -276,6 +276,11 @@ constexpr std::string_view constexprStrCat() {
       detail::constexpr_str_cat_impl::constexprStrCatBufferVar<strings...>;
   return {b.data(), b.size() - 1};
 }
+
+// TODO: make this a general truncate operation
+// Truncates the operation string to a maximum length of
+// `MAX_LENGTH_OPERATION_ECHO`.
+std::string truncateOperation(std::string_view operation);
 }  // namespace ad_utility
 
 // A helper function for the `operator+` overloads below.
