@@ -823,7 +823,8 @@ json Server::createResponseMetadataForUpdate(
   };
 
   json response;
-  response["update"] = plannedQuery.parsedQuery_._originalString;
+  response["update"] = plannedQuery.parsedQuery_._originalString.substr(
+      0, MAX_LENGTH_OPERATION_ECHO);
   response["status"] = "OK";
   auto warnings = qet.collectWarnings();
   warnings.emplace(warnings.begin(),
