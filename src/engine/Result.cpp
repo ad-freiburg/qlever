@@ -63,6 +63,36 @@ void assertSortOrderIsRespected(const IdTable& idTable,
   AD_EXPENSIVE_CHECK(
       ql::ranges::is_sorted(idTable, compareRowsBySortColumns(sortedBy)));
 }
+
+template <typename PerformCheck>
+struct CheckDefinednessGenerator
+    : ad_utility::InputRangeFromGet<Result::IdTableVocabPair> {
+  Result::LazyResult original_;
+  VariableToColumnMap varColMap_;
+  PerformCheck performCheck_;
+  std::optional<Result::LazyResult::iterator> originalNext_;
+
+  CheckDefinednessGenerator(Result::LazyResult original,
+                            VariableToColumnMap varColMap,
+                            PerformCheck performCheck)
+      : original_(std::move(original)),
+        varColMap_(varColMap),
+        performCheck_(std::move(performCheck)) {}
+
+  std::optional<Result::IdTableVocabPair> get() {
+    if (!originalNext_.has_value()) {
+      originalNext_ = original_.begin();
+    } else if (originalNext_.value() != original_.end()) {
+      originalNext_.value()++;
+    }
+    if (originalNext_.value() == original_.end()) {
+      return std::nullopt;
+    }
+    Result::IdTableVocabPair& pair = *(originalNext_.value());
+    AD_EXPENSIVE_CHECK(performCheck_(varColMap_, pair.idTable_));
+    return std::optional{std::move(pair)};
+  }
+};
 }  // namespace
 
 // _____________________________________________________________________________
@@ -214,17 +244,9 @@ void Result::checkDefinedness(const VariableToColumnMap& varColMap) {
     AD_EXPENSIVE_CHECK(performCheck(
         varColMap, std::get<IdTableSharedLocalVocabPair>(data_).idTable_));
   } else {
-    auto generator = [](LazyResult original,
-                        [[maybe_unused]] VariableToColumnMap varColMap,
-                        [[maybe_unused]] auto performCheck) -> Generator {
-      for (IdTableVocabPair& pair : original) {
-        // No need to check subsequent idTables assuming the datatypes
-        // don't change mid result.
-        AD_EXPENSIVE_CHECK(performCheck(varColMap, pair.idTable_));
-        co_yield pair;
-      }
-    }(std::move(idTables()), varColMap, std::move(performCheck));
-    data_.emplace<GenContainer>(std::move(generator));
+    CheckDefinednessGenerator generator{std::move(idTables()), varColMap,
+                                        std::move(performCheck)};
+    data_.emplace<GenContainer>(LazyResult(std::move(generator)));
   }
 }
 
