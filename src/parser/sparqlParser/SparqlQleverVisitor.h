@@ -110,10 +110,12 @@ class SparqlQleverVisitor {
  public:
   SparqlQleverVisitor() = default;
   explicit SparqlQleverVisitor(
-      PrefixMap prefixMap,
+      // TODO: remove the default to make it explicit?
+      PrefixMap prefixMap, ParsedQuery::DatasetClauses datasetClauses = {},
       DisableSomeChecksOnlyForTesting disableSomeChecksOnlyForTesting =
           DisableSomeChecksOnlyForTesting::False)
-      : prefixMap_{std::move(prefixMap)},
+      : activeDatasetClauses_{std::move(datasetClauses)},
+        prefixMap_{std::move(prefixMap)},
         disableSomeChecksOnlyForTesting_{disableSomeChecksOnlyForTesting} {}
 
   const PrefixMap& prefixMap() const { return prefixMap_; }
@@ -628,6 +630,9 @@ class SparqlQleverVisitor {
   // planner.
   static parsedQuery::BasicGraphPattern toGraphPattern(
       const ad_utility::sparql_types::Triples& triples);
+
+  parsedQuery::DatasetClauses setAndGetDatasetClauses(
+      const std::vector<DatasetClause>& clauses);
 
   FRIEND_TEST(SparqlParser, ensureExceptionOnInvalidGraphTerm);
 };

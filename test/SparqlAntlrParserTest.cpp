@@ -55,7 +55,7 @@ auto parse =
        ParsedQuery::DatasetClauses clauses = {},
        SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks =
            SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::False) {
-      ParserAndVisitor p{input, std::move(prefixes), disableSomeChecks};
+      ParserAndVisitor p{input, std::move(prefixes), {}, disableSomeChecks};
       p.visitor_.setActiveDatasetClausesForTesting(std::move(clauses));
       if (testInsideConstructTemplate) {
         p.visitor_.setParseModeToInsideConstructTemplateForTesting();
@@ -2335,6 +2335,7 @@ TEST(SparqlParser, Datasets) {
       m::ConstructQuery(
           {std::array<GraphTerm, 3>{::Iri("<a>"), ::Iri("<b>"), ::Iri("<c>")}},
           filterGraphPattern, datasets));
+  // See comment in visit function for `DescribeQueryContext`.
   expectDescribe(
       "Describe ?x FROM <g> { ?x ?y ?z FILTER EXISTS {?a ?b ?c}}",
       m::DescribeQuery(
