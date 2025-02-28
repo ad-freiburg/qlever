@@ -172,7 +172,7 @@ const auto addRangeAndSimplify =
 
 //______________________________________________________________________________
 // `WIDER CONTEXT AND EXPLANATION`
-// Relevant for the functions: `mapRandomItBlockSpanIt`,
+// Relevant for the functions `mapRandomItBlockSpanIt`,
 // `mapRandomItBlockSpanItComplemented` and `getRelevantBlocksFromIdRanges`
 // (defined below).
 // (1) `input` (type `std::span<const BlockMetadata>`) for
@@ -208,18 +208,18 @@ const auto addRangeAndSimplify =
 //
 // (6)
 // When `valueIdComparators::getRangesForId` is applied for `idVector`, the
-// `::iterators` representing the range `1021 - 1140` will be retrieved.
+// retrieved `::iterator`s (as a `std::pair`) represent the range `1021 - 1140`.
 // `valueIdComparators::getRangesForId` is applied for
 // `PrefilterExpression<Comparison>::evaluateImpl`.
-// Remark: the second index should point to the first `Id` that does not
-// satisfy `< 1123` (our pre-filter reference `ValueId`).
-// `valueIdComparators::getRangesForId` returned
-// `{std::pair<::iterator(1021), ::iterator(1140)>}`
+// Remark: the second `::iterator` should point to the first `Id` that does not
+// satisfy `< 1123` (our reference `Id` for filtering).
+// `valueIdComparators::getRangesForId` will return in case of our example
+// values `{std::pair<::iterator(1021), ::iterator(1140)>}`.
 //
 // (7)
 // `mapRandomItToBlockSpanIt` now maps the given `idVector` iterators which
 // define the relevant `Id` sections
-// `{std::pair<::iterator(1021), ::iterator(1140)>}`, back to `input`
+// (`{std::pair<::iterator(1021), ::iterator(1140)>}`), back to `input`
 // (`std::span<const BlockMetadata>`) iterators.
 // `input.begin()` is equivalent to `::iterator([1021, 1082])` (see (2)).
 // A specific transformation example for the values used here is given with the
@@ -236,7 +236,7 @@ const auto addRangeAndSimplify =
 static std::vector<BlockSpanItPair> mapRandomItToBlockSpanIt(
     const std::vector<RandomItPair>& relevantIdRangeIndices,
     const RandomIt& beginIdVec, std::span<const BlockMetadata> inputBlocks) {
-  const BlockSpanIt beginBlocks = inputBlocks.begin();
+  const auto beginBlocks = inputBlocks.begin();
   std::vector<BlockSpanItPair> mappedBlockRangeIts;
   // Helper for adding the relevant ranges to `mappedBlockRangeIts`.
   const auto addRange = [&mappedBlockRangeIts](const BlockSpanIt& begin,
@@ -285,7 +285,7 @@ static std::vector<BlockSpanItPair> mapRandomItToBlockSpanIt(
 static std::vector<BlockSpanItPair> mapRandomItToBlockSpanItComplemented(
     const std::vector<RandomItPair>& relevantIdRangeIndices,
     const RandomIt& beginIdVec, std::span<const BlockMetadata> inputBlocks) {
-  const BlockSpanIt beginBlocks = inputBlocks.begin();
+  const auto beginBlocks = inputBlocks.begin();
   std::vector<BlockSpanItPair> mappedBlockRangeIts;
   // Helper for adding the relevant ranges to `mappedBlockRangeIts`.
   const auto addRange = [&mappedBlockRangeIts](const BlockSpanIt& begin,
@@ -296,7 +296,7 @@ static std::vector<BlockSpanItPair> mapRandomItToBlockSpanItComplemented(
   // `mapRandomItToBlockSpanIt`. The difference is that the objective here
   // is to retrieve the complementing (mapped) `BlockSpanItPairs`s with respect
   // to relevantIdRangeIndices.
-  // Implictly handle the first complementing section:
+  // Implicitly handle the first complementing section:
   // inputBlocks[0, firstRelevantSectionBegin]
   RandomIt lastIdRangeIt = beginIdVec;
   for (const auto& [firstIdRangeIt, secondIdRangeIt] : relevantIdRangeIndices) {
@@ -650,7 +650,7 @@ std::vector<BlockMetadata> IsDatatypeExpression<Datatype>::evaluateImpl(
       relevantRanges.push_back(rangeDouble);
     }
   } else {
-    assert(Datatype == IRI || Datatype == LITERAL);
+    static_assert(Datatype == IRI || Datatype == LITERAL);
     // Not implemented yet, i assume the prefiltering can be even more precise
     // by making use of `transformToFirstPossibleBiggerValue`.
     return std::vector<BlockMetadata>{input.begin(), input.end()};
