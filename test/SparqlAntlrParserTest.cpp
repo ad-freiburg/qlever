@@ -2298,3 +2298,48 @@ TEST(SparqlParser, SourceSelector) {
   auto expectDefaultGraph = ExpectCompleteParse<&Parser::defaultGraphClause>{};
   expectDefaultGraph("<x>", m::TripleComponentIri("<x>"));
 }
+
+TEST(SparqlParser, Datasets) {
+  auto expectUpdate = ExpectCompleteParse<&Parser::update>{defaultPrefixMap};
+  auto expectQuery = ExpectCompleteParse<&Parser::query>{defaultPrefixMap};
+  auto expectAsk = ExpectCompleteParse<&Parser::askQuery>{defaultPrefixMap};
+  auto expectConstruct =
+      ExpectCompleteParse<&Parser::constructQuery>{defaultPrefixMap};
+  auto expectDescribe =
+      ExpectCompleteParse<&Parser::describeQuery>{defaultPrefixMap};
+  auto Iri = [](std::string_view stringWithBrackets) {
+    return TripleComponent::Iri::fromIriref(stringWithBrackets);
+  };
+  auto noGraph = std::monostate{};
+  ScanSpecificationAsTripleComponent::Graphs datasets{{Iri("<g>")}};
+  // Only checks `_filters` on the GraphPattern. We are not concerned with the
+  // `_graphPatterns` here.
+  auto filterGraphPattern = m::Filters(m::ExistsFilter(
+      m::GraphPattern(m::Triples({{Var("?a"), "?b", Var("?c")}})), datasets));
+  // Check that datasets are propagated correctly into the different types of
+  // operations.
+  expectUpdate(
+      "DELETE { ?x <b> <c> } USING <g> WHERE { ?x ?y ?z FILTER EXISTS {?a ?b "
+      "?c} }",
+      m::UpdateClause(
+          m::GraphUpdate({{Var("?x"), Iri("<b>"), Iri("<c>"), noGraph}}, {},
+                         std::nullopt),
+          filterGraphPattern, m::datasetClausesMatcher(datasets)));
+  expectQuery(
+      "SELECT * FROM <g> WHERE { ?x ?y ?z FILTER EXISTS {?a ?b ?c} }",
+      m::SelectQuery(m::AsteriskSelect(), filterGraphPattern, datasets));
+  expectAsk("ASK FROM <g> { ?x ?y ?z FILTER EXISTS {?a ?b ?c}}",
+            m::AskQuery(filterGraphPattern, datasets));
+  expectConstruct(
+      "CONSTRUCT {<a> <b> <c>} FROM <g> { ?x ?y ?z FILTER EXISTS {?a ?b?c}}",
+      m::ConstructQuery(
+          {std::array<GraphTerm, 3>{::Iri("<a>"), ::Iri("<b>"), ::Iri("<c>")}},
+          filterGraphPattern, datasets));
+  expectDescribe(
+      "Describe ?x FROM <g> { ?x ?y ?z FILTER EXISTS {?a ?b ?c}}",
+      m::DescribeQuery(
+          m::Describe({Var("?x")}, {datasets, {}},
+                      m::SelectQuery(m::VariablesSelect({"?x"}, false, false),
+                                     filterGraphPattern, datasets)),
+          datasets));
+}
