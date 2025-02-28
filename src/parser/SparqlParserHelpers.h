@@ -43,13 +43,11 @@ struct ParserAndVisitor {
   SparqlAutomaticParser parser_{&tokens_};
   SparqlQleverVisitor visitor_;
   explicit ParserAndVisitor(
-      // TODO: remove the default to make it explicit?
       string input, ParsedQuery::DatasetClauses datasetClauses = {},
       SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks =
           SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::False);
   ParserAndVisitor(
       string input, SparqlQleverVisitor::PrefixMap prefixes,
-      // TODO: remove the default to make it explicit?
       ParsedQuery::DatasetClauses datasetClauses = {},
       SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks =
           SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::False);

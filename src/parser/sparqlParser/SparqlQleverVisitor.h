@@ -109,12 +109,14 @@ class SparqlQleverVisitor {
 
  public:
   SparqlQleverVisitor() = default;
+  // If `datasetOverride` contains datasets, then the datasets in
+  // the operation itself are ignored. This is used for the datasets from the
+  // url parameters which override those in the operation.
   explicit SparqlQleverVisitor(
-      // TODO: remove the default to make it explicit?
-      PrefixMap prefixMap, ParsedQuery::DatasetClauses datasetClauses = {},
+      PrefixMap prefixMap, ParsedQuery::DatasetClauses datasetOverride,
       DisableSomeChecksOnlyForTesting disableSomeChecksOnlyForTesting =
           DisableSomeChecksOnlyForTesting::False)
-      : activeDatasetClauses_{std::move(datasetClauses)},
+      : activeDatasetClauses_{std::move(datasetOverride)},
         prefixMap_{std::move(prefixMap)},
         disableSomeChecksOnlyForTesting_{disableSomeChecksOnlyForTesting} {}
 
@@ -631,6 +633,8 @@ class SparqlQleverVisitor {
   static parsedQuery::BasicGraphPattern toGraphPattern(
       const ad_utility::sparql_types::Triples& triples);
 
+  // Set the datasets state of the visitor if no override is defined. Returns
+  // the currently active datasets.
   parsedQuery::DatasetClauses setAndGetDatasetClauses(
       const std::vector<DatasetClause>& clauses);
 

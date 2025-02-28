@@ -55,6 +55,7 @@ auto parse =
        ParsedQuery::DatasetClauses clauses = {},
        SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks =
            SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::False) {
+      // TODO: use dataset clauses directly?
       ParserAndVisitor p{input, std::move(prefixes), {}, disableSomeChecks};
       p.visitor_.setActiveDatasetClausesForTesting(std::move(clauses));
       if (testInsideConstructTemplate) {

@@ -17,9 +17,9 @@ ParsedQuery SparqlParser::parseQuery(
       std::move(query),
       {{S{QLEVER_INTERNAL_PREFIX_NAME}, S{QLEVER_INTERNAL_PREFIX_IRI}}},
       parsedQuery::DatasetClauses::fromClauses(datasets)};
-  // Note: `AntlrParser::query` is a method of `AntlrParser` (which is an alias
-  // for `SparqlAutomaticParser`) that returns the `QueryContext*` for the whole
-  // query.
+  // Note: `AntlrParser::queryOrUpdate` is a method of `AntlrParser` (which is
+  // an alias for `SparqlAutomaticParser`) that returns the
+  // `QueryOrUpdateContext*` for the whole query or update.
   auto resultOfParseAndRemainingText =
       p.parseTypesafe(&AntlrParser::queryOrUpdate);
   // The query rule ends with <EOF> so the parse always has to consume the whole

@@ -13,7 +13,6 @@
 // message is given.
 class SparqlParser {
  public:
-  // TODO: remove the default to make it explicit?
   static ParsedQuery parseQuery(
       std::string operation, const std::vector<DatasetClause>& datasets = {});
 };
