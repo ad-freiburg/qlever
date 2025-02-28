@@ -1386,6 +1386,10 @@ TEST(ParserTest, BaseDeclaration) {
 }
 
 TEST(ParserTest, parseWithDatasets) {
+  // This test tests the correct behaviour and propagation of override datasets
+  // (datasets passed as URL parameters overwrite all datasets in the
+  // operation). `SparqlParser::Datasets` tests that datasets set in the
+  // operation are propagated correctly.
   auto Iri = ad_utility::triple_component::Iri::fromIriref;
   auto query = "SELECT * WHERE { ?s ?p ?o }";
   auto queryGraphPatternMatcher =
@@ -1406,4 +1410,39 @@ TEST(ParserTest, parseWithDatasets) {
                                        DatasetClause{Iri("<baz>"), false}}),
       m::SelectQuery(m::AsteriskSelect(), queryGraphPatternMatcher,
                      {{Iri("<bar>"), Iri("<baz>")}}, {{Iri("<foo>")}}));
+  ScanSpecificationAsTripleComponent::Graphs datasets{{Iri("<h>")}};
+  auto filterGraphPattern = m::Filters(m::ExistsFilter(
+      m::GraphPattern(m::Triples({{Var("?a"), "?b", Var("?c")}})), datasets));
+  EXPECT_THAT(
+      SparqlParser::parseQuery("DELETE { ?x <b> <c> } USING <g> WHERE { ?x ?y "
+                               "?z FILTER EXISTS {?a ?b ?c} }",
+                               {{Iri("<h>"), false}}),
+      m::UpdateClause(m::GraphUpdate({{Var("?x"), Iri("<b>"), Iri("<c>"),
+                                       std::monostate{}}},
+                                     {}, std::nullopt),
+                      filterGraphPattern, m::datasetClausesMatcher(datasets)));
+  EXPECT_THAT(
+      SparqlParser::parseQuery(
+          "SELECT * FROM <g> WHERE { ?x ?y ?z FILTER EXISTS {?a ?b ?c} }",
+          {{Iri("<h>"), false}}),
+      m::SelectQuery(m::AsteriskSelect(), filterGraphPattern, datasets));
+  EXPECT_THAT(SparqlParser::parseQuery(
+                  "ASK FROM <g> { ?x ?y ?z FILTER EXISTS {?a ?b ?c}}",
+                  {{Iri("<h>"), false}}),
+              m::AskQuery(filterGraphPattern, datasets));
+  EXPECT_THAT(SparqlParser::parseQuery("CONSTRUCT {<a> <b> <c>} FROM <g> { ?x "
+                                       "?y ?z FILTER EXISTS {?a ?b?c}}",
+                                       {{Iri("<h>"), false}}),
+              m::ConstructQuery({std::array<GraphTerm, 3>{
+                                    ::Iri("<a>"), ::Iri("<b>"), ::Iri("<c>")}},
+                                filterGraphPattern, datasets));
+  EXPECT_THAT(
+      SparqlParser::parseQuery(
+          "Describe ?x FROM <g> { ?x ?y ?z FILTER EXISTS {?a ?b ?c}}",
+          {{Iri("<h>"), false}}),
+      m::DescribeQuery(
+          m::Describe({Var("?x")}, {datasets, {}},
+                      m::SelectQuery(m::VariablesSelect({"?x"}, false, false),
+                                     filterGraphPattern, datasets)),
+          datasets));
 }
