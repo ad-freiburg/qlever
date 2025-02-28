@@ -661,9 +661,10 @@ ParsedQuery Visitor::visit(Parser::ModifyContext* ctx) {
         }
       };
   AD_CORRECTNESS_CHECK(visibleVariables_.empty());
-  auto graphPattern = visit(ctx->groupGraphPattern());
   parsedQuery_.datasetClauses_ =
       parsedQuery::DatasetClauses::fromClauses(visitVector(ctx->usingClause()));
+  activeDatasetClauses_ = parsedQuery_.datasetClauses_;
+  auto graphPattern = visit(ctx->groupGraphPattern());
   parsedQuery_._rootGraphPattern = std::move(graphPattern);
   parsedQuery_.registerVariablesVisibleInQueryBody(visibleVariables_);
   visibleVariables_.clear();
