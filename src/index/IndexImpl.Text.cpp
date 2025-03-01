@@ -627,18 +627,18 @@ IdTable IndexImpl::readContextListHelper(
     }
   };
 
-  auto readScoreList = [&](auto type) {
-    textIndexReadWrite::readFreqComprList<Id, decltype(type)>(
+  // Read scoreList
+  if (textScoringMetric_ == TextScoringMetric::EXPLICIT) {
+    textIndexReadWrite::readFreqComprList<Id, uint16_t>(
         idTable.getColumn(2).begin(), contextList._nofElements,
         contextList._startScorelist, contextList.getByteLengthScorelist(),
         textIndexFile_, scoreToId);
-  };
-
-  // Read scoreList
-  if (textScoringMetric_ == TextScoringMetric::EXPLICIT) {
-    readScoreList(uint16_t{});
   } else {
-    readScoreList(Score{});
+    auto scores = textIndexReadWrite::readZstdComprList<Score>(
+        contextList._nofElements, contextList._startScorelist,
+        contextList.getByteLengthScorelist(), textIndexFile_);
+    ql::ranges::transform(scores.begin(), scores.end(),
+                          idTable.getColumn(2).begin(), scoreToId);
   }
   return idTable;
 }

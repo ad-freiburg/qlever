@@ -7,6 +7,14 @@
 namespace textIndexReadWrite {
 
 // ____________________________________________________________________________
+void zstdCompressAndWrite(const void* src, size_t numBytes,
+                          ad_utility::File& out, off_t& currentOffset) {
+  auto compressed = ZstdWrapper::compress(src, numBytes);
+  out.write(compressed.data(), compressed.size());
+  currentOffset += compressed.size();
+}
+
+// ____________________________________________________________________________
 ContextListMetaData writePostings(ad_utility::File& out,
                                   const vector<Posting>& postings,
                                   bool skipWordlistIfAllTheSame,
@@ -46,11 +54,13 @@ ContextListMetaData writePostings(ad_utility::File& out,
         }));
     scoreEncoder.writeToFile(out, currentOffset);
   } else {
-    FrequencyEncode scoreEncoder(
-        postings | ql::views::transform([](const Posting& posting) {
-          return std::get<2>(posting);
-        }));
-    scoreEncoder.writeToFile(out, currentOffset);
+    std::vector<float> scores;
+    scores.reserve(postings.size());
+    ql::ranges::transform(
+        postings.begin(), postings.end(), std::back_inserter(scores),
+        [](const auto& posting) { return std::get<2>(posting); });
+    zstdCompressAndWrite(scores.data(), scores.size() * sizeof(Score), out,
+                         currentOffset);
   }
 
   meta._lastByte = currentOffset - 1;
