@@ -63,7 +63,7 @@ ProtoResult TextIndexScanForEntity::computeResult(
 // _____________________________________________________________________________
 void TextIndexScanForEntity::setVariableToColumnMap() {
   config_.variableColumns_ = VariableToColumnMap{};
-  ColumnIndex index = ColumnIndex{0};
+  auto index = ColumnIndex{0};
   config_.variableColumns_.value()[config_.varToBindText_] =
       makeAlwaysDefinedColumn(index);
   index++;

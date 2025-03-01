@@ -50,7 +50,7 @@ ProtoResult TextIndexScanForWord::computeResult(
 // _____________________________________________________________________________
 void TextIndexScanForWord::setVariableToColumnMap() {
   config_.variableColumns_ = VariableToColumnMap{};
-  ColumnIndex index = ColumnIndex{0};
+  auto index = ColumnIndex{0};
   config_.variableColumns_.value()[config_.varToBindText_] =
       makeAlwaysDefinedColumn(index);
   index++;
@@ -81,7 +81,8 @@ VariableToColumnMap TextIndexScanForWord::computeVariableToColumnMap() const {
 
 // _____________________________________________________________________________
 size_t TextIndexScanForWord::getResultWidth() const {
-  return 1 + config_.isPrefix_ + config_.scoreVar_.has_value();
+  return 1 + static_cast<size_t>(config_.isPrefix_) +
+         static_cast<size_t>(config_.scoreVar_.has_value());
 }
 
 // _____________________________________________________________________________
