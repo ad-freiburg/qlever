@@ -63,6 +63,81 @@ void assertSortOrderIsRespected(const IdTable& idTable,
   AD_EXPENSIVE_CHECK(
       ql::ranges::is_sorted(idTable, compareRowsBySortColumns(sortedBy)));
 }
+
+struct RunOnNewChunkComputedGenerator
+    : ad_utility::InputRangeFromGet<Result::IdTableVocabPair> {
+  Result::LazyResult original_;
+  std::function<void(const Result::IdTableVocabPair&,
+                     std::chrono::microseconds)>
+      onNewChunk_;
+  std::function<void(bool)> onGeneratorFinished_;
+  ad_utility::timer::Timer timer_;
+  std::optional<Result::LazyResult::iterator> originalNext_;
+  bool cleanup_ = true;
+
+  RunOnNewChunkComputedGenerator(Result::LazyResult original, auto onNewChunk,
+                                 auto onGeneratorFinished)
+      : original_(std::move(original)),
+        onNewChunk_(std::move(onNewChunk)),
+        onGeneratorFinished_(std::move(onGeneratorFinished)),
+        timer_(ad_utility::timer::Timer::Started) {}
+
+  ~RunOnNewChunkComputedGenerator() { finish(); }
+
+  RunOnNewChunkComputedGenerator(const RunOnNewChunkComputedGenerator&) =
+      delete;
+  RunOnNewChunkComputedGenerator& operator=(
+      const RunOnNewChunkComputedGenerator&) = delete;
+  RunOnNewChunkComputedGenerator(RunOnNewChunkComputedGenerator&& other)
+      : RunOnNewChunkComputedGenerator(std::move(other.original_),
+                                       std::move(other.onNewChunk_),
+                                       std::move(other.onGeneratorFinished_)) {
+    other.cleanup_ = false;
+  }
+  RunOnNewChunkComputedGenerator& operator=(
+      RunOnNewChunkComputedGenerator&& other) {
+    if (this != &other) {
+      ad_utility::InputRangeFromGet<Result::IdTableVocabPair>::operator=(
+          std::move(other));
+      this->original_ = std::move(other.original_);
+      this->onNewChunk_ = std::move(other.onNewChunk_);
+      this->onGeneratorFinished_ = std::move(other.onGeneratorFinished_);
+      this->timer_ =
+          ad_utility::timer::Timer(ad_utility::timer::Timer::Started);
+      other.cleanup_ = false;
+    }
+    return *this;
+  }
+
+  std::optional<Result::IdTableVocabPair> get() {
+    try {
+      if (!originalNext_.has_value()) {
+        originalNext_ = original_.begin();
+      } else if (originalNext_.value() != original_.end()) {
+        originalNext_.value()++;
+      }
+      if (originalNext_.value() == original_.end()) {
+        finish();
+        return std::nullopt;
+      }
+      Result::IdTableVocabPair& pair = *(originalNext_.value());
+      onNewChunk_(pair, timer_.value());
+      timer_.start();
+      return std::optional{std::move(pair)};
+    } catch (...) {
+      cleanup_ = false;
+      onGeneratorFinished_(true);
+      throw;
+    }
+  }
+
+  void finish() {
+    if (cleanup_) {
+      onGeneratorFinished_(false);
+      cleanup_ = false;
+    }
+  }
+};
 }  // namespace
 
 // _____________________________________________________________________________
@@ -229,27 +304,10 @@ void Result::runOnNewChunkComputed(
         onNewChunk,
     std::function<void(bool)> onGeneratorFinished) {
   AD_CONTRACT_CHECK(!isFullyMaterialized());
-  auto generator = [](LazyResult original, auto onNewChunk,
-                      auto onGeneratorFinished) -> Generator {
-    // Call this within destructor to make sure it is also called when an
-    // operation stops iterating before reaching the end.
-    absl::Cleanup cleanup{
-        [&onGeneratorFinished]() { onGeneratorFinished(false); }};
-    try {
-      ad_utility::timer::Timer timer{ad_utility::timer::Timer::Started};
-      for (IdTableVocabPair& pair : original) {
-        onNewChunk(pair, timer.value());
-        co_yield pair;
-        timer.start();
-      }
-    } catch (...) {
-      std::move(cleanup).Cancel();
-      onGeneratorFinished(true);
-      throw;
-    }
-  }(std::move(idTables()), std::move(onNewChunk),
-                                                std::move(onGeneratorFinished));
-  data_.emplace<GenContainer>(std::move(generator));
+  RunOnNewChunkComputedGenerator generator{std::move(idTables()),
+                                           std::move(onNewChunk),
+                                           std::move(onGeneratorFinished)};
+  data_.emplace<GenContainer>(LazyResult(std::move(generator)));
 }
 
 // _____________________________________________________________________________
