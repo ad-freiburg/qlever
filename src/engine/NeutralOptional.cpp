@@ -63,6 +63,41 @@ std::vector<ColumnIndex> NeutralOptional::resultSortedOn() const {
   return tree_->resultSortedOn();
 }
 
+namespace {
+struct WrapperWithEnsuredRow
+    : ad_utility::InputRangeFromGet<Result::IdTableVocabPair> {
+  Result::LazyResult originalRange_;
+  IdTable rowFallback_;
+  std::optional<Result::LazyResult::iterator> iterator_ = std::nullopt;
+  bool hasRows_ = false;
+  bool done_ = false;
+
+  explicit WrapperWithEnsuredRow(Result::LazyResult originalRange,
+                                 IdTable rowFallback)
+      : originalRange_{std::move(originalRange)},
+        rowFallback_{std::move(rowFallback)} {}
+
+  std::optional<Result::IdTableVocabPair> get() {
+    if (done_) {
+      return std::nullopt;
+    }
+    if (iterator_) {
+      ++iterator_.value();
+    } else {
+      iterator_ = originalRange_.begin();
+    }
+    if (*iterator_ == originalRange_.end()) {
+      done_ = true;
+      return hasRows_ ? std::nullopt
+                      : std::optional{Result::IdTableVocabPair{
+                            std::move(rowFallback_), {}}};
+    }
+    hasRows_ |= !iterator_.value()->idTable_.empty();
+    return std::move(*iterator_.value());
+  }
+};
+}  // namespace
+
 // _____________________________________________________________________________
 ProtoResult NeutralOptional::computeResult(bool requestLaziness) {
   const auto& limit = getLimit();
@@ -88,17 +123,9 @@ ProtoResult NeutralOptional::computeResult(bool requestLaziness) {
   if (singleRowCroppedByLimit) {
     return {std::move(childResult->idTables()), childResult->sortedBy()};
   }
-  auto generator = [](auto idTables, auto singleRowTable) -> Result::Generator {
-    size_t counter = 0;
-    for (auto& tableWithVocab : idTables) {
-      counter += tableWithVocab.idTable_.size();
-      co_yield tableWithVocab;
-    }
-    if (counter == 0) {
-      co_yield {std::move(singleRowTable), {}};
-    }
-  }(std::move(childResult->idTables()), std::move(singleRowTable));
-  return {std::move(generator), childResult->sortedBy()};
+  return {Result::LazyResult{WrapperWithEnsuredRow{
+              std::move(childResult->idTables()), std::move(singleRowTable)}},
+          childResult->sortedBy()};
 }
 
 // _____________________________________________________________________________

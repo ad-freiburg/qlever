@@ -6,6 +6,9 @@
 
 #include "engine/Operation.h"
 
+// Implement the case where an `OPTIONAL` clause is joined with the empty
+// pattern. Conceptually this is the same as an optional join with the neutral
+// element, but specialized and more efficient.
 class NeutralOptional : public Operation {
   std::shared_ptr<QueryExecutionTree> tree_;
 
