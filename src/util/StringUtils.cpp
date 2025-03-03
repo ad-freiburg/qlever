@@ -202,7 +202,7 @@ std::string addIndentation(std::string_view str,
 }
 
 // ___________________________________________________________________________
-std::string truncateOperation(std::string_view operation) {
+std::string truncateOperationString(std::string_view operation) {
   static_assert(MAX_LENGTH_OPERATION_ECHO >= 3);
   if (operation.length() <= MAX_LENGTH_OPERATION_ECHO) {
     return std::string{operation};

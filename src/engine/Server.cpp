@@ -259,7 +259,8 @@ auto Server::prepareOperation(
   LOG(INFO) << "Processing the following " << operationName << ":"
             << (pinResult ? " [pin result]" : "")
             << (pinSubtrees ? " [pin subresults]" : "") << "\n"
-            << ad_utility::truncateOperation(operationSPARQL) << std::endl;
+            << ad_utility::truncateOperationString(operationSPARQL)
+            << std::endl;
   QueryExecutionContext qec(index_, &cache_, allocator_,
                             sortPerformanceEstimator_, std::ref(messageSender),
                             pinSubtrees, pinResult);
@@ -581,13 +582,13 @@ json Server::composeErrorResponseJson(
     const std::optional<ExceptionMetadata>& metadata) {
   json j;
   using ad_utility::Timer;
+  j["query"] = ad_utility::truncateOperationString(query);
   j["status"] = "ERROR";
   j["resultsize"] = 0;
   j["time"]["total"] = requestTimer.msecs().count();
   j["time"]["computeResult"] = requestTimer.msecs().count();
   j["exception"] = errorMsg;
 
-  j["query"] = ad_utility::truncateOperation(query);
   // If the error location is truncated don't send it's location.
   if (metadata.has_value() &&
       metadata.value().stopIndex_ < MAX_LENGTH_OPERATION_ECHO) {
@@ -825,8 +826,8 @@ json Server::createResponseMetadataForUpdate(
   };
 
   json response;
-  response["update"] =
-      ad_utility::truncateOperation(plannedQuery.parsedQuery_._originalString);
+  response["update"] = ad_utility::truncateOperationString(
+      plannedQuery.parsedQuery_._originalString);
   response["status"] = "OK";
   auto warnings = qet.collectWarnings();
   warnings.emplace(warnings.begin(),
