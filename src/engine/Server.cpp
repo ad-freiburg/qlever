@@ -444,7 +444,8 @@ CPP_template_2(typename RequestT, typename ResponseT)(
                          messageSender, parameters, timeLimit.value());
     if (!expectedOperation(parsedOperation)) {
       throw std::runtime_error(
-          absl::StrCat(msg, parsedOperation._originalString));
+          absl::StrCat(msg, ad_utility::truncateOperationString(
+                                parsedOperation._originalString)));
     }
     if (parsedOperation.hasUpdateClause()) {
       co_return co_await processUpdate(
