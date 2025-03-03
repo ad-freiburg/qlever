@@ -2983,6 +2983,18 @@ TEST(QueryPlanner, Exists) {
 }
 
 // _____________________________________________________________________________
+TEST(QueryPlanner, FilterOnNeutralElement) {
+  h::expect("SELECT * { FILTER(false) }",
+            h::Filter("false", h::NeutralElement()));
+  h::expect("SELECT * { FILTER(true) }",
+            h::Filter("true", h::NeutralElement()));
+
+  h::expect("SELECT * { { SELECT * WHERE { FILTER(false) } } VALUES ?x { 1 } }",
+            h::CartesianProductJoin(h::Filter("false", h::NeutralElement()),
+                                    h::ValuesClause("VALUES (?x) { (1) }")));
+}
+
+// _____________________________________________________________________________
 TEST(QueryPlanner, CartesianProductJoinChildrenAreOrdered) {
   auto qp = makeQueryPlanner();
   {
