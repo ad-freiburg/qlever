@@ -587,15 +587,15 @@ json Server::composeErrorResponseJson(
   j["time"]["computeResult"] = requestTimer.msecs().count();
   j["exception"] = errorMsg;
 
-  if (metadata.has_value()) {
-    j["query"] = query;
+  j["query"] = ad_utility::truncateOperation(query);
+  // If the error location is truncated don't send it's location.
+  if (metadata.has_value() &&
+      metadata.value().stopIndex_ < MAX_LENGTH_OPERATION_ECHO) {
     auto& value = metadata.value();
     j["metadata"]["startIndex"] = value.startIndex_;
     j["metadata"]["stopIndex"] = value.stopIndex_;
     j["metadata"]["line"] = value.line_;
     j["metadata"]["positionInLine"] = value.charPositionInLine_;
-  } else {
-    j["query"] = ad_utility::truncateOperation(query);
   }
 
   return j;
