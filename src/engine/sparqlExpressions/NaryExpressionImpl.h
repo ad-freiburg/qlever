@@ -41,8 +41,9 @@ class NaryExpression : public SparqlExpression {
       const VariableToColumnMap& varColMap) const override;
 
   // _________________________________________________________________________
-  std::optional<SparqlExpression*> getNthChild(size_t pos) const {
-    return pos < N ? std::make_optional(children_[pos].get()) : std::nullopt;
+  std::optional<SparqlExpression*> getChildAtIndex(size_t childIndex) const {
+    return childIndex < N ? std::make_optional(children_[childIndex].get())
+                          : std::nullopt;
   }
 
  private:
