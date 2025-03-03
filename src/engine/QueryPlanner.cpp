@@ -29,6 +29,7 @@
 #include "engine/Minus.h"
 #include "engine/MultiColumnJoin.h"
 #include "engine/NeutralElementOperation.h"
+#include "engine/NeutralOptional.h"
 #include "engine/OptionalJoin.h"
 #include "engine/OrderBy.h"
 #include "engine/PathSearch.h"
@@ -1873,7 +1874,7 @@ size_t QueryPlanner::findSmallestExecutionTree(
     return tie(a) < tie(b);
   };
   return ql::ranges::min_element(lastRow, compare) - lastRow.begin();
-};
+}
 
 // _____________________________________________________________________________
 std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
@@ -2292,7 +2293,38 @@ void QueryPlanner::checkCancellation(
   cancellationHandle_->throwIfCancelled(location);
 }
 
-// _______________________________________________________________
+// _____________________________________________________________________________
+bool QueryPlanner::GraphPatternPlanner::handleUnconnectedMinusOrOptional(
+    std::vector<SubtreePlan>& candidates, const auto& variables) {
+  using enum SubtreePlan::Type;
+  if (ql::ranges::all_of(variables, [this](const Variable& var) {
+        return !boundVariables_.contains(var);
+      })) {
+    // A MINUS clause that doesn't share any variable with the preceding
+    // patterns behaves as if it isn't there.
+    auto type = candidates[0].type;
+    if (type == MINUS) {
+      return true;
+    }
+    // An OPTIONAL clause that doesn't share any variable with the preceding
+    // patterns behaves as if it is joined with the neutral element.
+    if (type == OPTIONAL) {
+      auto& newPlans = candidatePlans_.emplace_back();
+      ql::ranges::for_each(
+          candidates, [this, &newPlans](const SubtreePlan& plan) {
+            auto joinedPlan = makeSubtreePlan<NeutralOptional>(qec_, plan._qet);
+            joinedPlan._idsOfIncludedFilters = plan._idsOfIncludedFilters;
+            joinedPlan._idsOfIncludedNodes = plan._idsOfIncludedNodes;
+            joinedPlan.idsOfIncludedTextLimits_ = plan.idsOfIncludedTextLimits_;
+            newPlans.push_back(std::move(joinedPlan));
+          });
+      return true;
+    }
+  }
+  return false;
+}
+
+// _____________________________________________________________________________
 void QueryPlanner::GraphPatternPlanner::visitGroupOptionalOrMinus(
     std::vector<SubtreePlan>&& candidates) {
   // Empty group graph patterns should have been handled previously.
@@ -2302,30 +2334,18 @@ void QueryPlanner::GraphPatternPlanner::visitGroupOptionalOrMinus(
   // actually behave like ordinary (Group)GraphPatterns.
   auto variables = candidates[0]._qet->getVariableColumns() | ql::views::keys;
 
-  using enum SubtreePlan::Type;
-  if (auto type = candidates[0].type;
-      (type == OPTIONAL || type == MINUS) &&
-      ql::ranges::all_of(variables, [this](const Variable& var) {
-        return !boundVariables_.contains(var);
-      })) {
-    // A MINUS clause that doesn't share any variable with the preceding
-    // patterns behaves as if it isn't there.
-    if (type == MINUS) {
-      return;
-    }
-
-    // All variables in the OPTIONAL are unbound so far, so this OPTIONAL
-    // actually is not an OPTIONAL.
-    for (auto& vec : candidates) {
-      vec.type = SubtreePlan::BASIC;
-    }
-  }
+  bool specialCaseHandled =
+      handleUnconnectedMinusOrOptional(candidates, variables);
 
   // All variables seen so far are considered bound and cannot appear as the
   // RHS of a BIND operation. This is also true for variables from OPTIONALs
   // and MINUS clauses (this used to be a bug in an old version of the code).
   ql::ranges::for_each(
       variables, [this](const Variable& var) { boundVariables_.insert(var); });
+
+  if (specialCaseHandled) {
+    return;
+  }
 
   // If our input is not OPTIONAL and not a MINUS, this means that we can still
   // arbitrarily optimize among our candidates and just append our new
