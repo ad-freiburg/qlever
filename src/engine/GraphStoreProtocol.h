@@ -88,8 +88,9 @@ class GraphStoreProtocol {
     res._clause = parsedQuery::UpdateClause{std::move(up)};
     // Graph store protocol POST requests might have a very large body. Limit
     // the length used for the string representation.
-    string_view body = ad_utility::truncateOperationString(rawRequest.body());
-    res._originalString = absl::StrCat("Graph Store POST Operation\n", body);
+    res._originalString =
+        absl::StrCat("Graph Store POST Operation\n",
+                     ad_utility::truncateOperationString(rawRequest.body()));
     return res;
   }
   FRIEND_TEST(GraphStoreProtocolTest, transformPost);
