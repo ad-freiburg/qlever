@@ -13,34 +13,25 @@ class NeutralOptional : public Operation {
   std::shared_ptr<QueryExecutionTree> tree_;
 
  public:
-  std::vector<QueryExecutionTree*> getChildren() override;
-
   NeutralOptional(QueryExecutionContext* qec,
                   std::shared_ptr<QueryExecutionTree> tree);
 
  private:
   std::string getCacheKeyImpl() const override;
+  uint64_t getSizeEstimateBeforeLimit() override;
+  std::unique_ptr<Operation> cloneImpl() const override;
+  ProtoResult computeResult(bool requestLaziness) override;
+  VariableToColumnMap computeVariableToColumnMap() const override;
 
  public:
+  std::vector<QueryExecutionTree*> getChildren() override;
   std::string getDescriptor() const override;
   size_t getResultWidth() const override;
   size_t getCostEstimate() override;
-
- private:
-  uint64_t getSizeEstimateBeforeLimit() override;
-
- public:
   float getMultiplicity(size_t col) override;
   bool knownEmptyResult() override;
   bool supportsLimit() const override;
 
- private:
-  std::unique_ptr<Operation> cloneImpl() const override;
-
  protected:
   std::vector<ColumnIndex> resultSortedOn() const override;
-
- private:
-  ProtoResult computeResult(bool requestLaziness) override;
-  VariableToColumnMap computeVariableToColumnMap() const override;
 };
