@@ -425,10 +425,10 @@ CPP_template_2(typename RequestT, typename ResponseT)(
 
   auto visitOperation =
       [&checkParameter, &accessTokenOk, &request, &send, &parameters,
-       &requestTimer,
-       this](ParsedQuery parsedOperation, std::string operationName,
-             std::function<bool(const ParsedQuery&)> expectedOperation,
-             const std::string msg) -> Awaitable<void> {
+       &requestTimer, this](
+          std::vector<ParsedQuery> parsedOperation, std::string operationName,
+          std::function<bool(const ParsedQuery&)> expectedOperation,
+          const std::string msg) -> Awaitable<void> {
     auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
         checkParameter("timeout", std::nullopt), accessTokenOk, request, send);
     if (!timeLimit.has_value()) {
@@ -437,26 +437,38 @@ CPP_template_2(typename RequestT, typename ResponseT)(
       co_return;
     }
     ad_utility::websocket::MessageSender messageSender = createMessageSender(
-        queryHub_, request, parsedOperation._originalString);
+        queryHub_, request, parsedOperation.front()._originalString);
 
     auto [qec, cancellationHandle, cancelTimeoutOnDestruction] =
-        prepareOperation(operationName, parsedOperation._originalString,
+        prepareOperation(operationName, parsedOperation.front()._originalString,
                          messageSender, parameters, timeLimit.value());
-    if (!expectedOperation(parsedOperation)) {
+    if (!ql::ranges::all_of(parsedOperation, expectedOperation)) {
       throw std::runtime_error(
           absl::StrCat(msg, ad_utility::truncateOperationString(
-                                parsedOperation._originalString)));
+                                parsedOperation.front()._originalString)));
     }
-    if (parsedOperation.hasUpdateClause()) {
+    // TODO: extract if it does not exist already
+    auto adapterMemberFunc = [](auto pm) {
+      return [pm](const auto& c) { return std::invoke(pm, c); };
+    };
+    if (ql::ranges::all_of(parsedOperation,
+                           adapterMemberFunc(&ParsedQuery::hasUpdateClause))) {
       co_return co_await processUpdate(
           std::move(parsedOperation), requestTimer, cancellationHandle, qec,
           std::move(request), send, timeLimit.value());
     } else {
-      AD_CORRECTNESS_CHECK(parsedOperation.hasSelectClause() ||
-                           parsedOperation.hasAskClause() ||
-                           parsedOperation.hasConstructClause());
+      AD_CORRECTNESS_CHECK(parsedOperation.size() == 1);
+      AD_CORRECTNESS_CHECK(
+          ql::ranges::all_of(
+              parsedOperation,
+              adapterMemberFunc(&ParsedQuery::hasSelectClause)) ||
+          ql::ranges::all_of(parsedOperation,
+                             adapterMemberFunc(&ParsedQuery::hasAskClause)) ||
+          ql::ranges::all_of(
+              parsedOperation,
+              adapterMemberFunc(&ParsedQuery::hasConstructClause)));
       co_return co_await processQuery(
-          parameters, std::move(parsedOperation), requestTimer,
+          parameters, std::move(parsedOperation[0]), requestTimer,
           cancellationHandle, qec, std::move(request), send, timeLimit.value());
     }
   };
@@ -493,7 +505,7 @@ CPP_template_2(typename RequestT, typename ResponseT)(
     auto trueFunc = [](const ParsedQuery&) { return true; };
     std::string_view queryType =
         parsedOperation.hasUpdateClause() ? "Update" : "Query";
-    return visitOperation(parsedOperation,
+    return visitOperation({parsedOperation},
                           absl::StrCat("Graph Store (", queryType, ")"),
                           trueFunc, "Unused dummy message");
   };
@@ -911,25 +923,35 @@ json Server::processUpdateImpl(
 CPP_template_2(typename RequestT, typename ResponseT)(
     requires ad_utility::httpUtils::HttpRequest<RequestT>)
     Awaitable<void> Server::processUpdate(
-        ParsedQuery&& update, const ad_utility::Timer& requestTimer,
+        std::vector<ParsedQuery>&& updates,
+        const ad_utility::Timer& requestTimer,
         ad_utility::SharedCancellationHandle cancellationHandle,
         QueryExecutionContext& qec, const RequestT& request, ResponseT&& send,
         TimeLimit timeLimit) {
-  AD_CORRECTNESS_CHECK(update.hasUpdateClause());
-  PlannedQuery plannedQuery =
-      co_await planQuery(updateThreadPool_, std::move(update), requestTimer,
-                         timeLimit, qec, cancellationHandle);
+  AD_CORRECTNESS_CHECK(ql::ranges::all_of(
+      updates, [](const ParsedQuery& p) { return p.hasUpdateClause(); }));
+  std::vector<PlannedQuery> plannedUpdates;
+  for (ParsedQuery update : std::move(updates)) {
+    plannedUpdates.push_back(
+        co_await planQuery(updateThreadPool_, std::move(update), requestTimer,
+                           timeLimit, qec, cancellationHandle));
+  }
   auto coroutine = computeInNewThread(
       updateThreadPool_,
-      [this, &requestTimer, &cancellationHandle, &plannedQuery]() {
+      [this, &requestTimer, &cancellationHandle, &plannedUpdates]() {
         // Update the delta triples.
         return index_.deltaTriplesManager().modify<nlohmann::json>(
             [this, &requestTimer, &cancellationHandle,
-             &plannedQuery](auto& deltaTriples) {
-              // Use `this` explicitly to silence false-positive errors on
-              // captured `this` being unused.
-              return this->processUpdateImpl(plannedQuery, requestTimer,
-                                             cancellationHandle, deltaTriples);
+             &plannedUpdates](auto& deltaTriples) {
+              json results = json::array();
+              for (const auto& plannedUpdate : plannedUpdates) {
+                // Use `this` explicitly to silence false-positive errors on
+                // captured `this` being unused.
+                results.push_back(
+                    this->processUpdateImpl(plannedUpdate, requestTimer,
+                                            cancellationHandle, deltaTriples));
+              }
+              return results;
             });
       },
       cancellationHandle);

@@ -9,7 +9,7 @@
 using AntlrParser = SparqlAutomaticParser;
 
 // _____________________________________________________________________________
-ParsedQuery SparqlParser::parseQuery(std::string query) {
+std::vector<ParsedQuery> SparqlParser::parseQuery(std::string query) {
   // The second argument is the `PrefixMap` for QLever's internal IRIs.
   using S = std::string;
   sparqlParserHelpers::ParserAndVisitor p{
@@ -24,17 +24,17 @@ ParsedQuery SparqlParser::parseQuery(std::string query) {
   // input. If this is not the case a ParseException should have been thrown at
   // an earlier point.
   AD_CONTRACT_CHECK(resultOfParseAndRemainingText.remainingText_.empty());
-  return std::move(resultOfParseAndRemainingText.resultOfParse_);
+  return {std::move(resultOfParseAndRemainingText.resultOfParse_)};
 }
 
 // _____________________________________________________________________________
-ParsedQuery SparqlParser::parseQuery(
+std::vector<ParsedQuery> SparqlParser::parseQuery(
     std::string operation, const std::vector<DatasetClause>& datasets) {
   auto parsedOperation = parseQuery(std::move(operation));
   // SPARQL Protocol 2.1.4 specifies that the dataset from the query
   // parameters overrides the dataset from the query itself.
   if (!datasets.empty()) {
-    parsedOperation.datasetClauses_ =
+    parsedOperation[0].datasetClauses_ =
         parsedQuery::DatasetClauses::fromClauses(datasets);
   }
   return parsedOperation;
