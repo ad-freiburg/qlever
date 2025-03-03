@@ -482,6 +482,16 @@ void expectWithGivenBudget(std::string query, auto matcher,
   EXPECT_THAT(qet, matcher);
 }
 
+// Same as `expectWithGivenBudget` but allows multiple budgets to be tested.
+void expectWithGivenBudgets(std::string query, auto matcher,
+                            std::optional<QueryExecutionContext*> optQec,
+                            std::vector<size_t> queryPlanningBudgets,
+                            source_location l = source_location::current()) {
+  for (size_t budget : queryPlanningBudgets) {
+    expectWithGivenBudget(query, matcher, optQec, budget, l);
+  }
+}
+
 // Same as `expectWithGivenBudget` above, but always use the greedy query
 // planner.
 void expectGreedy(std::string query, auto matcher,
@@ -505,13 +515,7 @@ void expectDynamicProgramming(
 void expect(std::string query, auto matcher,
             std::optional<QueryExecutionContext*> optQec = std::nullopt,
             source_location l = source_location::current()) {
-  auto e = [&](size_t budget) {
-    expectWithGivenBudget(query, matcher, optQec, budget, l);
-  };
-  e(0);
-  e(1);
-  e(4);
-  e(16);
-  e(64'000'000);
+  expectWithGivenBudgets(std::move(query), std::move(matcher),
+                         std::move(optQec), {0, 1, 4, 16, 64'000'000}, l);
 }
 }  // namespace queryPlannerTestHelpers
