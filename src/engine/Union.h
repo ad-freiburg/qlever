@@ -22,6 +22,9 @@ class Union : public Operation {
    */
   std::vector<std::array<size_t, 2>> _columnOrigins;
   std::array<std::shared_ptr<QueryExecutionTree>, 2> _subtrees;
+  // Stores the indices of the columns that the result of this operation should
+  // be sorted on. If set, the expensive union with merge implementation has to
+  // be used (which is most likely cheaper than sorting afterwards).
   std::vector<ColumnIndex> targetOrder_;
 
  public:
@@ -96,7 +99,8 @@ class Union : public Operation {
       std::shared_ptr<const Result> result1,
       std::shared_ptr<const Result> result2) const;
 
-  // Compares two rows with respect to the columns that the result is sorted on.
+  // Return is `row1` is smaller than `row2` based on the columns set in
+  // `targetOrder_`.
   template <size_t SPAN_SIZE>
   bool isSmaller(const auto& row1, const auto& row2) const;
 
@@ -107,7 +111,9 @@ class Union : public Operation {
                                      size_t index, IdTable& resultTable,
                                      LocalVocab& localVocab) const;
 
-  // Actual implementation of `computeResultKeepOrder`.
+  // Actual implementation of `computeResultKeepOrder`. The parameter
+  // `lifetimeExtension` is just responsible for keeping the results alive for
+  // the lifetime of the generator.
   template <int COMPARATOR_WIDTH>
   Result::Generator computeResultKeepOrderImpl(
       bool requestLaziness, auto range1, auto range2,
@@ -115,6 +121,9 @@ class Union : public Operation {
           lifetimeExtension) const;
 
   // Similar to `computeResultLazily` but it keeps the order of the results.
+  // This means that instead of just returning the results of the left and right
+  // child one after another, the results are merged in a way that the order of
+  // the results is preserved.
   Result::Generator computeResultKeepOrder(
       bool requestLaziness, std::shared_ptr<const Result> result1,
       std::shared_ptr<const Result> result2) const;

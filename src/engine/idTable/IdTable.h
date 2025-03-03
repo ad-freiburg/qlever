@@ -733,7 +733,12 @@ class IdTable {
   // Add all entries from the `table` at the end of this IdTable.
   // If `beginIdx` and/or `endIdx` are specified, then only the subrange
   // `[beginIdx, endIdx)` from the input is taken.
-  // The input must be some kind of `IdTable`.
+  // The input must be some kind of `IdTable`. The parameter `permutation`
+  // allows the caller to apply a permutation to the columns of the input table
+  // before inserting them into this table. If the permutation is not specified,
+  // the columns are inserted in the order they appear in the input table. If
+  // the permutation contains an index that is out of bounds for the input
+  // table, the corresponding column is filled with the `defaultValue`.
   // TODO<joka921> Can/should we constraint this functions by a concept?
   template <typename Table>
   void insertAtEnd(

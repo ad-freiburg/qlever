@@ -362,8 +362,7 @@ AD_ALWAYS_INLINE bool Union::isSmaller(const auto& row1,
                                        const auto& row2) const {
   using StaticRange = std::span<const ColumnIndex, SPAN_SIZE>;
   for (auto& col : StaticRange{targetOrder_}) {
-    ColumnIndex index1 = _columnOrigins.at(col).at(0);
-    ColumnIndex index2 = _columnOrigins.at(col).at(1);
+    auto [index1, index2] = _columnOrigins.at(col);
     if (index1 == NO_COLUMN) {
       return true;
     }
@@ -437,15 +436,16 @@ Result::Generator Union::computeResultKeepOrderImpl(
     }
   };
   while (it1 != range1.end() && it2 != range2.end()) {
+    auto& idTable1 = it1->idTable_;
+    auto& idTable2 = it2->idTable_;
     localVocab.mergeWith(std::span{&it1->localVocab_, 1});
     localVocab.mergeWith(std::span{&it2->localVocab_, 1});
-    while (index1 < it1->idTable_.size() && index2 < it2->idTable_.size()) {
-      if (isSmaller<extent>(it1->idTable_.at(index1),
-                            it2->idTable_.at(index2))) {
-        pushRow(true, it1->idTable_.at(index1));
+    while (index1 < idTable1.size() && index2 < idTable2.size()) {
+      if (isSmaller<extent>(idTable1.at(index1), idTable2.at(index2))) {
+        pushRow(true, idTable1.at(index1));
         index1++;
       } else {
-        pushRow(false, it2->idTable_.at(index2));
+        pushRow(false, idTable2.at(index2));
         index2++;
       }
       if (requestLaziness && resultTable.size() >= chunkSize) {
@@ -456,11 +456,11 @@ Result::Generator Union::computeResultKeepOrderImpl(
         localVocab = LocalVocab{};
       }
     }
-    if (index1 == it1->idTable_.size()) {
+    if (index1 == idTable1.size()) {
       ++it1;
       index1 = 0;
     }
-    if (index2 == it2->idTable_.size()) {
+    if (index2 == idTable2.size()) {
       ++it2;
       index2 = 0;
     }
@@ -490,17 +490,15 @@ Result::Generator Union::computeResultKeepOrder(
     bool requestLaziness, std::shared_ptr<const Result> result1,
     std::shared_ptr<const Result> result2) const {
   using Range = std::variant<Result::LazyResult, std::array<Wrapper, 1>>;
-  Range leftRange = result1->isFullyMaterialized()
-                        ? Range{std::array{Wrapper{result1->idTable(),
-                                                   result1->localVocab()}}}
-                        : Range{std::move(result1->idTables())};
-  Range rightRange = result2->isFullyMaterialized()
-                         ? Range{std::array{Wrapper{result2->idTable(),
-                                                    result2->localVocab()}}}
-                         : Range{std::move(result2->idTables())};
+  auto toRange = [](const auto& result) {
+    return result->isFullyMaterialized()
+               ? Range{std::array{
+                     Wrapper{result->idTable(), result->localVocab()}}}
+               : Range{std::move(result->idTables())};
+  };
+  Range leftRange = toRange(result1);
+  Range rightRange = toRange(result2);
 
-  // Clang falsely reports that the this capture is unused here.
-  DISABLE_UNUSED_LAMBDA_CAPTURE_WARNINGS
   return std::visit(
       [this, requestLaziness, &result1, &result2](auto leftRange,
                                                   auto rightRange) {
@@ -508,11 +506,10 @@ Result::Generator Union::computeResultKeepOrder(
             targetOrder_.size(),
             [this, requestLaziness, &result1, &result2, &leftRange,
              &rightRange]<int COMPARATOR_WIDTH>() {
-              return computeResultKeepOrderImpl<COMPARATOR_WIDTH>(
+              return this->computeResultKeepOrderImpl<COMPARATOR_WIDTH>(
                   requestLaziness, std::move(leftRange), std::move(rightRange),
                   std::pair{std::move(result1), std::move(result2)});
             });
       },
       std::move(leftRange), std::move(rightRange));
-  ENABLE_UNUSED_LAMBDA_CAPTURE_WARNINGS
 }

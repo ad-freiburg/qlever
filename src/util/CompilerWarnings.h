@@ -18,14 +18,4 @@
 #define ENABLE_UNINITIALIZED_WARNINGS
 #endif
 
-#if defined(__clang__) && (__clang_major__ >= 16 && __clang_major__ <= 18)
-#define DISABLE_UNUSED_LAMBDA_CAPTURE_WARNINGS \
-  _Pragma("clang diagnostic push")             \
-      _Pragma("clang diagnostic ignored \"-Wunused-lambda-capture\"")
-#define ENABLE_UNUSED_LAMBDA_CAPTURE_WARNINGS _Pragma("clang diagnostic pop")
-#else
-#define DISABLE_UNUSED_LAMBDA_CAPTURE_WARNINGS
-#define ENABLE_UNUSED_LAMBDA_CAPTURE_WARNINGS
-#endif
-
 #endif  // QLEVER_COMPILERWARNINGS_H
