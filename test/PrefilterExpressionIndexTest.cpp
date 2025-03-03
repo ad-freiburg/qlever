@@ -86,6 +86,7 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
   const BlockMetadata b2 = makeBlock(undef, falseId);
   const BlockMetadata b3 = makeBlock(falseId, falseId);
   const BlockMetadata b4 = makeBlock(trueId, IntId(0));
+  const BlockMetadata b4GapNumeric = makeBlock(trueId, idBerlin);
   const BlockMetadata b4Incomplete = makeBlock(
       trueId, IntId(0), VocabId(10), DoubleId(33), VocabId(11), DoubleId(33));
   const BlockMetadata b5 = makeBlock(IntId(0), IntId(0));
@@ -214,19 +215,29 @@ class PrefilterExpressionOnMetadataTest : public ::testing::Test {
   // Check that the provided expression prefilters the correct blocks.
   auto makeTest(std::unique_ptr<PrefilterExpression> expr,
                 std::vector<BlockMetadata>&& expected,
-                bool useBlocksIncomplete = false) {
+                bool useBlocksIncomplete = false, bool addMixedBlocks = true,
+                std::vector<BlockMetadata>&& specificInput = {}) {
+    // Simple check if expr returns expected for specificInput.
+    if (!specificInput.empty()) {
+      ASSERT_EQ(expr->evaluate(specificInput, 2), expected);
+      return;  // return, no further tests
+    }
     std::vector<BlockMetadata> expectedAdjusted;
     // This is for convenience, we automatically insert all mixed and possibly
     // incomplete blocks which must be always returned.
-    ql::ranges::set_union(
-        expected, useBlocksIncomplete ? mixedAndIncompleteBlocks : mixedBlocks,
-        std::back_inserter(expectedAdjusted),
-        [](const BlockMetadata& b1, const BlockMetadata& b2) {
-          return b1.blockIndex_ < b2.blockIndex_;
-        });
+    if (addMixedBlocks) {
+      ql::ranges::set_union(
+          expected,
+          useBlocksIncomplete ? mixedAndIncompleteBlocks : mixedBlocks,
+          std::back_inserter(expectedAdjusted),
+          [](const BlockMetadata& b1, const BlockMetadata& b2) {
+            return b1.blockIndex_ < b2.blockIndex_;
+          });
+    }
     std::vector<BlockMetadata> testBlocks =
         useBlocksIncomplete ? blocksIncomplete : blocks;
-    ASSERT_EQ(expr->evaluate(testBlocks, 2), expectedAdjusted);
+    ASSERT_EQ(expr->evaluate(testBlocks, 2),
+              addMixedBlocks ? expectedAdjusted : expected);
   }
 };
 
@@ -429,6 +440,47 @@ TEST_F(PrefilterExpressionOnMetadataTest, testNotEqualExpression) {
   makeTest(neq(falseId), {b4}, true);
   makeTest(neq(referenceDateEqual), {b22, b24});
   makeTest(neq(referenceDate1), {b22, b23, b24});
+}
+
+// Test IsDatatype Expressions
+//______________________________________________________________________________
+TEST_F(PrefilterExpressionOnMetadataTest, testIsDatatypeExpression) {
+  // Test isIri
+  // Test isLiteral
+  // Currently no pre-filtering for the expressions above is applied. Thus,
+  // those expressions yield all given blocks.
+  makeTest(isIri(), std::vector<BlockMetadata>{blocks}, false, false);
+  makeTest(isLit(), std::vector<BlockMetadata>{blocks}, false, false);
+
+  // Test isNumeric
+  makeTest(
+      isNum(),
+      {b4, b5, b6, b7, b8, b9, b10, b11, b12, b13, b14, b15, b16, b17, b18},
+      false, false);
+  makeTest(isNum(), {b4GapNumeric}, false, false,
+           {b1, b2, b3, b4GapNumeric, b22, b23, b24});
+  makeTest(isNum(), {b4GapNumeric}, false, false,
+           {b4GapNumeric, b22, b23, b24});
+  makeTest(isNum(), {b4GapNumeric}, false, false, {b2, b3, b4GapNumeric});
+  makeTest(isNum(), {}, false, false,
+           {b1, b2, b3, b19, b20, b21, b22, b23, b24});
+  // Test isBlank.
+  makeTest(isBlank(), {b24}, false, false);
+
+  // Test the negated expressions (should yield the full complement)
+  // Remark: The bounding mixed-datatype blocks must be also contained.
+  makeTest(notExpr(isNum()),
+           {b1, b2, b3, b4, b18, b19, b20, b21, b22, b23, b24}, false, false);
+  makeTest(notExpr(isNum()), {b1, b2, b3, b4GapNumeric, b22, b23, b24}, false,
+           false, {b1, b2, b3, b4GapNumeric, b22, b23, b24});
+  makeTest(notExpr(isNum()), {b4GapNumeric, b22, b23, b24}, false, false,
+           {b4GapNumeric, b22, b23, b24});
+  makeTest(notExpr(isNum()), {b1, b2, b3, b4GapNumeric}, false, false,
+           {b1, b2, b3, b4GapNumeric});
+  makeTest(notExpr(isBlank()),
+           {b1,  b2,  b3,  b4,  b5,  b6,  b7,  b8,  b9,  b10, b11, b12,
+            b13, b14, b15, b16, b17, b18, b19, b20, b21, b22, b23, b24},
+           false, false);
 }
 
 // Test Logical Expressions
@@ -634,6 +686,11 @@ TEST_F(PrefilterExpressionOnMetadataTest, testWithFewBlockMetadataValues) {
 TEST_F(PrefilterExpressionOnMetadataTest, testMethodClonePrefilterExpression) {
   makeTestClone(lt(VocabId(10)));
   makeTestClone(gt(referenceDate2));
+  makeTestClone(isLit(false));
+  makeTestClone(isLit(true));
+  makeTestClone(isIri(false));
+  makeTestClone(isNum(false));
+  makeTestClone(isBlank(true));
   makeTestClone(andExpr(lt(VocabId(20)), gt(VocabId(10))));
   makeTestClone(neq(IntId(10)));
   makeTestClone(le(LVE("\"Hello World\"")));
@@ -661,6 +718,11 @@ TEST_F(PrefilterExpressionOnMetadataTest, testEqualityOperator) {
   ASSERT_TRUE(*ge(referenceDate1) == *ge(referenceDate1));
   ASSERT_TRUE(*eq(LVE("<iri>")) == *eq(LVE("<iri>")));
   ASSERT_FALSE(*gt(LVE("<iri>")) == *gt(LVE("\"iri\"")));
+  // IsDatatypeExpression
+  ASSERT_TRUE(*isBlank() == *isBlank());
+  ASSERT_FALSE(*isLit() == *isNum());
+  ASSERT_TRUE(*isIri(true) == *isIri(true));
+  ASSERT_FALSE(*isNum(true) == *isNum(false));
   // NotExpression
   ASSERT_TRUE(*notExpr(eq(IntId(0))) == *notExpr(eq(IntId(0))));
   ASSERT_TRUE(*notExpr(notExpr(ge(VocabId(0)))) ==
@@ -672,6 +734,7 @@ TEST_F(PrefilterExpressionOnMetadataTest, testEqualityOperator) {
   // Binary PrefilterExpressions (AND and OR)
   ASSERT_TRUE(*orExpr(eq(IntId(0)), le(IntId(0))) ==
               *orExpr(eq(IntId(0)), le(IntId(0))));
+  ASSERT_TRUE(*orExpr(isIri(), isLit()) == *orExpr(isIri(), isLit()));
   ASSERT_TRUE(*orExpr(lt(LVE("\"L\"")), gt(LVE("\"O\""))) ==
               *orExpr(lt(LVE("\"L\"")), gt(LVE("\"O\""))));
   ASSERT_TRUE(*andExpr(le(VocabId(1)), le(IntId(0))) ==
@@ -747,4 +810,22 @@ TEST(PrefilterExpressionExpressionOnMetadataTest,
           "RelationalExpression<NE(!=)>\nreferenceValue_ : <iri/custom/v10> "
           ".\n}child2 {Prefilter RelationalExpression<NE(!=)>\nreferenceValue_ "
           ": <iri/custom/v66> .\n}\n.\n"));
+  EXPECT_THAT(*isIri(), matcher("Prefilter IsDatatypeExpression:\nPrefilter "
+                                "for datatype: Iri\nis negated: false.\n.\n"));
+  EXPECT_THAT(*isBlank(),
+              matcher("Prefilter IsDatatypeExpression:\nPrefilter "
+                      "for datatype: Blank\nis negated: false.\n.\n"));
+  EXPECT_THAT(*isLit(),
+              matcher("Prefilter IsDatatypeExpression:\nPrefilter "
+                      "for datatype: Literal\nis negated: false.\n.\n"));
+  EXPECT_THAT(*isNum(),
+              matcher("Prefilter IsDatatypeExpression:\nPrefilter "
+                      "for datatype: Numeric\nis negated: false.\n.\n"));
+  EXPECT_THAT(*isBlank(true),
+              matcher("Prefilter IsDatatypeExpression:\nPrefilter "
+                      "for datatype: Blank\nis negated: true.\n.\n"));
+  EXPECT_THAT(*notExpr(isNum()),
+              matcher("Prefilter NotExpression:\nchild {Prefilter "
+                      "IsDatatypeExpression:\nPrefilter for datatype: "
+                      "Numeric\nis negated: true.\n}\n.\n"));
 }
