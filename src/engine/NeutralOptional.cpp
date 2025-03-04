@@ -77,7 +77,7 @@ struct WrapperWithEnsuredRow
       : originalRange_{std::move(originalRange)},
         rowFallback_{std::move(rowFallback)} {}
 
-  std::optional<Result::IdTableVocabPair> get() {
+  std::optional<Result::IdTableVocabPair> get() override {
     if (done_) {
       return std::nullopt;
     }
