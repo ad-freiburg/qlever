@@ -528,12 +528,8 @@ std::vector<ParsedQuery> Visitor::visit(Parser::UpdateContext* ctx) {
 
   if (ctx->update()) {
     // This is a new operation, reset the state of the Visitor.
-    activeDatasetClauses_ = {};
-    prefixMap_ = initialPrefixMap_;
-    baseIri_ = {};
-    prologueString_ = {};
-    parsedQuery_ = {};
-    ad_utility::appendVector(updates, visit(ctx->update()));
+    SparqlQleverVisitor nextVisitor{prefixMap_};
+    ad_utility::appendVector(updates, nextVisitor.visit(ctx->update()));
   }
 
   return updates;

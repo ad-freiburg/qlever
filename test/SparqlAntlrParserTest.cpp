@@ -2318,51 +2318,55 @@ TEST(SparqlParser, Update) {
   expectUpdate("COPY DEFAULT TO GRAPH <foo>",
                m::UpdateClause(m::Copy(false, DEFAULT{}, Iri("<foo>")),
                                m::GraphPattern()));
-  const auto simpleInsertMatcher = m::UpdateClause(
+  const auto insertMatcher = m::UpdateClause(
       m::GraphUpdate({}, {{Iri("<a>"), Iri("<b>"), Iri("<c>"), noGraph}},
                      std::nullopt),
+      m::GraphPattern());
+  const auto fooInsertMatcher = m::UpdateClause(
+      m::GraphUpdate(
+          {}, {{Iri("<foo/a>"), Iri("<foo/b>"), Iri("<foo/c>"), noGraph}},
+          std::nullopt),
       m::GraphPattern());
   const auto deleteWhereAllMatcher = m::UpdateClause(
       m::GraphUpdate({{Var("?s"), Var("?p"), Var("?o"), noGraph}}, {},
                      std::nullopt),
       m::GraphPattern(m::Triples({{Var("?s"), "?p", Var("?o")}})));
-  expectUpdate("INSERT DATA { <a> <b> <c> }", simpleInsertMatcher);
+  expectUpdate("INSERT DATA { <a> <b> <c> }", insertMatcher);
   // Multiple Updates
   expectUpdate_(
       "INSERT DATA { <a> <b> <c> };",
-      ElementsAre(AllOf(simpleInsertMatcher,
+      ElementsAre(AllOf(insertMatcher,
                         m::pq::OriginalString("INSERT DATA { <a> <b> <c> }"))));
   expectUpdate_(
       "INSERT DATA { <a> <b> <c> }; BASE <https://example.org> PREFIX foo: "
       "<foo>",
-      ElementsAre(AllOf(simpleInsertMatcher,
+      ElementsAre(AllOf(insertMatcher,
                         m::pq::OriginalString("INSERT DATA { <a> <b> <c> }"))));
   expectUpdate_(
       "INSERT DATA { <a> <b> <c> }; DELETE WHERE { ?s ?p ?o }",
-      ElementsAre(AllOf(simpleInsertMatcher,
+      ElementsAre(AllOf(insertMatcher,
                         m::pq::OriginalString("INSERT DATA { <a> <b> <c> }")),
                   AllOf(deleteWhereAllMatcher,
                         m::pq::OriginalString("DELETE WHERE { ?s ?p ?o }"))));
-  expectUpdateFails(
-      "PREFIX foo: <foo> INSERT DATA { <a> <b> <c> }; INSERT DATA { foo:a "
-      "foo:b foo:c }",
-      testing::HasSubstr("Invalid SPARQL query: Prefix foo was not registered "
-                         "using a PREFIX declaration in \"foo:a\""));
   expectUpdate_(
-      "PREFIX foo: <foo> INSERT DATA { <a> <b> <c> }; PREFIX foo: <bar/> "
-      "INSERT "
-      "DATA { foo:a foo:b foo:c }",
+      "PREFIX foo: <foo/> INSERT DATA { <a> <b> <c> }; INSERT DATA { foo:a "
+      "foo:b foo:c }",
       ElementsAre(
-          AllOf(simpleInsertMatcher,
+          AllOf(insertMatcher,
                 m::pq::OriginalString(
-                    "PREFIX foo: <foo> INSERT DATA { <a> <b> <c> }")),
-          AllOf(m::UpdateClause(m::GraphUpdate({},
-                                               {{Iri("<bar/a>"), Iri("<bar/b>"),
-                                                 Iri("<bar/c>"), noGraph}},
-                                               std::nullopt),
-                                m::GraphPattern()),
+                    "PREFIX foo: <foo/> INSERT DATA { <a> <b> <c> }")),
+          AllOf(fooInsertMatcher,
+                m::pq::OriginalString("INSERT DATA { foo:a foo:b foo:c }"))));
+  expectUpdate_(
+      "PREFIX foo: <bar/> INSERT DATA { <a> <b> <c> }; PREFIX foo: <foo/> "
+      "INSERT DATA { foo:a foo:b foo:c }",
+      ElementsAre(
+          AllOf(insertMatcher,
                 m::pq::OriginalString(
-                    "PREFIX foo: <bar/> INSERT DATA { foo:a foo:b foo:c }"))));
+                    "PREFIX foo: <bar/> INSERT DATA { <a> <b> <c> }")),
+          AllOf(fooInsertMatcher,
+                m::pq::OriginalString(
+                    "PREFIX foo: <foo/> INSERT DATA { foo:a foo:b foo:c }"))));
 }
 
 TEST(SparqlParser, QueryOrUpdate) {
