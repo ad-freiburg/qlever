@@ -23,6 +23,7 @@
 #include "engine/Minus.h"
 #include "engine/MultiColumnJoin.h"
 #include "engine/NeutralElementOperation.h"
+#include "engine/NeutralOptional.h"
 #include "engine/OptionalJoin.h"
 #include "engine/OrderBy.h"
 #include "engine/PathSearch.h"
@@ -261,6 +262,8 @@ inline auto MultiColumnJoin = MatchTypeAndUnorderedChildren<::MultiColumnJoin>;
 inline auto Join = MatchTypeAndUnorderedChildren<::Join>;
 
 constexpr auto OptionalJoin = MatchTypeAndOrderedChildren<::OptionalJoin>;
+
+constexpr auto NeutralOptional = MatchTypeAndOrderedChildren<::NeutralOptional>;
 
 constexpr auto Minus = MatchTypeAndOrderedChildren<::Minus>;
 
