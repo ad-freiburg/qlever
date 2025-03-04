@@ -1276,9 +1276,7 @@ Visitor::SubQueryAndMaybeValues Visitor::visit(Parser::SubSelectContext* ctx) {
   ParsedQuery& query = parsedQuery_;
   query._clause = visit(ctx->selectClause());
   visitWhereClause(ctx->whereClause(), query);
-  query.setNumInternalVariables(numInternalVariables_);
   query.addSolutionModifiers(visit(ctx->solutionModifier()));
-  numInternalVariables_ = query.getNumInternalVariables();
   auto values = visit(ctx->valuesClause());
   // Variables that are selected in this query are visible in the parent query.
   for (const auto& variable : query.selectClause().getSelectedVariables()) {
