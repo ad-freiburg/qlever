@@ -373,6 +373,7 @@ struct SortedUnionImpl
   std::vector<ColumnIndex> rightPermutation_;
   std::vector<std::array<size_t, 2>> targetOrder_;
   Func applyPermutation_;
+  bool aggregatedTableReturned_ = false;
 
   SortedUnionImpl(std::shared_ptr<const Result> result1,
                   std::shared_ptr<const Result> result2, Range1 range1,
@@ -489,6 +490,9 @@ struct SortedUnionImpl
 
   // ___________________________________________________________________________
   std::optional<Result::IdTableVocabPair> get() override {
+    if (aggregatedTableReturned_) {
+      return std::nullopt;
+    }
     if (!it1_.has_value()) {
       it1_ = range1_.begin();
     }
@@ -533,9 +537,7 @@ struct SortedUnionImpl
     }
     appendRemaining(leftPermutation_, it1_.value(), range1_.end(), index1_);
     appendRemaining(rightPermutation_, it2_.value(), range2_.end(), index2_);
-    if (resultTable_.empty()) {
-      return std::nullopt;
-    }
+    aggregatedTableReturned_ = true;
     return Result::IdTableVocabPair{std::move(resultTable_),
                                     std::move(localVocab_)};
   }
