@@ -10,6 +10,7 @@
 #include <unicode/bytestream.h>
 #include <unicode/casemap.h>
 
+#include "global/Constants.h"
 #include "util/Algorithm.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
@@ -198,5 +199,16 @@ std::string addIndentation(std::string_view str,
       indentationSymbol,
       absl::StrReplaceAll(str,
                           {{"\n", absl::StrCat("\n", indentationSymbol)}}));
+}
+
+// ___________________________________________________________________________
+std::string truncateOperationString(std::string_view operation) {
+  static_assert(MAX_LENGTH_OPERATION_ECHO >= 3);
+  if (operation.length() <= MAX_LENGTH_OPERATION_ECHO) {
+    return std::string{operation};
+  } else {
+    return absl::StrCat(operation.substr(0, MAX_LENGTH_OPERATION_ECHO - 3),
+                        "...");
+  }
 }
 }  // namespace ad_utility
