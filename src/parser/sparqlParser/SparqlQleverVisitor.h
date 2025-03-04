@@ -86,6 +86,10 @@ class SparqlQleverVisitor {
   ParsedQuery::DatasetClauses activeDatasetClauses_;
 
   // The map from prefixes to their full IRIs.
+  // The initial prefixes the visitor was initialised with. Required for chained
+  // updates.
+  PrefixMap initialPrefixMap_{};
+  // Changed during the parsing.
   PrefixMap prefixMap_{};
 
   // The `BASE` IRI of the query if any.
@@ -113,7 +117,8 @@ class SparqlQleverVisitor {
       PrefixMap prefixMap,
       DisableSomeChecksOnlyForTesting disableSomeChecksOnlyForTesting =
           DisableSomeChecksOnlyForTesting::False)
-      : prefixMap_{std::move(prefixMap)},
+      : initialPrefixMap_{prefixMap},
+        prefixMap_{std::move(prefixMap)},
         disableSomeChecksOnlyForTesting_{disableSomeChecksOnlyForTesting} {}
 
   const PrefixMap& prefixMap() const { return prefixMap_; }
@@ -129,7 +134,7 @@ class SparqlQleverVisitor {
   }
 
   // ___________________________________________________________________________
-  ParsedQuery visit(Parser::QueryOrUpdateContext* ctx);
+  std::vector<ParsedQuery> visit(Parser::QueryOrUpdateContext* ctx);
 
   // ___________________________________________________________________________
   ParsedQuery visit(Parser::QueryContext* ctx);
@@ -201,7 +206,7 @@ class SparqlQleverVisitor {
 
   std::optional<parsedQuery::Values> visit(Parser::ValuesClauseContext* ctx);
 
-  ParsedQuery visit(Parser::UpdateContext* ctx);
+  std::vector<ParsedQuery> visit(Parser::UpdateContext* ctx);
 
   ParsedQuery visit(Parser::Update1Context* ctx);
 
