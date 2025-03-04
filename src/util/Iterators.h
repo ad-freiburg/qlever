@@ -408,4 +408,13 @@ class InputRangeTypeErased {
   decltype(auto) end() { return impl_->end(); }
   using iterator = typename InputRangeFromGet<ValueType>::Iterator;
 };
+
+template <typename Range>
+auto getSingleElement(Range g) {
+  auto it = g.begin();
+  AD_CORRECTNESS_CHECK(it != g.end());
+  auto t = std::move(*it);
+  AD_CORRECTNESS_CHECK(++it == g.end());
+  return t;
+}
 }  // namespace ad_utility

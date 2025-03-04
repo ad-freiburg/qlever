@@ -7,14 +7,15 @@
 
 #include "engine/CallFixedSize.h"
 #include "util/ChunkedForLoop.h"
-#include "util/TransparentFunctors.h"
+#include "util/CompilerWarnings.h"
 
 const size_t Union::NO_COLUMN = std::numeric_limits<size_t>::max();
 
 Union::Union(QueryExecutionContext* qec,
              const std::shared_ptr<QueryExecutionTree>& t1,
-             const std::shared_ptr<QueryExecutionTree>& t2)
-    : Operation(qec) {
+             const std::shared_ptr<QueryExecutionTree>& t2,
+             std::vector<ColumnIndex> targetOrder)
+    : Operation(qec), targetOrder_{std::move(targetOrder)} {
   AD_CONTRACT_CHECK(t1 && t2);
   _subtrees[0] = t1;
   _subtrees[1] = t2;
@@ -45,6 +46,31 @@ Union::Union(QueryExecutionContext* qec,
   AD_CORRECTNESS_CHECK(ql::ranges::all_of(_columnOrigins, [](const auto& el) {
     return el[0] != NO_COLUMN || el[1] != NO_COLUMN;
   }));
+
+  if (!targetOrder_.empty()) {
+    auto computeSortOrder = [this](bool left) {
+      vector<ColumnIndex> specificSortOrder;
+      for (ColumnIndex index : targetOrder_) {
+        ColumnIndex realIndex = _columnOrigins.at(index).at(!left);
+        if (realIndex != NO_COLUMN) {
+          specificSortOrder.push_back(realIndex);
+        }
+      }
+      return specificSortOrder;
+    };
+
+    _subtrees[0] = QueryExecutionTree::createSortedTree(std::move(_subtrees[0]),
+                                                        computeSortOrder(true));
+    _subtrees[1] = QueryExecutionTree::createSortedTree(
+        std::move(_subtrees[1]), computeSortOrder(false));
+
+    // Swap children to get cheaper computation
+    if (_columnOrigins.at(targetOrder_.at(0)).at(1) == NO_COLUMN) {
+      std::swap(_subtrees[0], _subtrees[1]);
+      ql::ranges::for_each(_columnOrigins,
+                           [](auto& el) { std::swap(el[0], el[1]); });
+    }
+  }
 }
 
 string Union::getCacheKeyImpl() const {
@@ -52,6 +78,10 @@ string Union::getCacheKeyImpl() const {
   os << _subtrees[0]->getCacheKey() << "\n";
   os << "UNION\n";
   os << _subtrees[1]->getCacheKey() << "\n";
+  os << "sort order: ";
+  for (size_t i : targetOrder_) {
+    os << i << " ";
+  }
   return std::move(os).str();
 }
 
@@ -64,7 +94,7 @@ size_t Union::getResultWidth() const {
   return _columnOrigins.size();
 }
 
-vector<ColumnIndex> Union::resultSortedOn() const { return {}; }
+vector<ColumnIndex> Union::resultSortedOn() const { return targetOrder_; }
 
 // _____________________________________________________________________________
 VariableToColumnMap Union::computeVariableToColumnMap() const {
@@ -164,6 +194,17 @@ ProtoResult Union::computeResult(bool requestLaziness) {
       _subtrees[0]->getResult(requestLaziness);
   std::shared_ptr<const Result> subRes2 =
       _subtrees[1]->getResult(requestLaziness);
+
+  // If first sort column is not present in left child, we can fall back to the
+  // cheap computation because it orders the left child first.
+  if (!targetOrder_.empty() &&
+      _columnOrigins.at(targetOrder_.at(0)).at(0) != NO_COLUMN) {
+    auto generator = computeResultKeepOrder(requestLaziness, std::move(subRes1),
+                                            std::move(subRes2));
+    return requestLaziness ? ProtoResult{std::move(generator), resultSortedOn()}
+                           : ProtoResult{getSingleElement(std::move(generator)),
+                                         resultSortedOn()};
+  }
 
   if (requestLaziness) {
     return {computeResultLazily(std::move(subRes1), std::move(subRes2)),
@@ -291,4 +332,262 @@ std::unique_ptr<Operation> Union::cloneImpl() const {
     subtree = subtree->clone();
   }
   return copy;
+}
+
+// _____________________________________________________________________________
+std::shared_ptr<Operation> Union::createSortedVariant(
+    const vector<ColumnIndex>& sortOrder) const {
+  return std::make_shared<Union>(_executionContext, _subtrees.at(0),
+                                 _subtrees.at(1), sortOrder);
+}
+
+namespace {
+struct Wrapper {
+  const IdTable& idTable_;
+  const LocalVocab& localVocab_;
+};
+Result::IdTableVocabPair moveOrCopy(Result::IdTableVocabPair& element) {
+  return std::move(element);
+}
+Result::IdTableVocabPair moveOrCopy(const Wrapper& element) {
+  return {element.idTable_.clone(), element.localVocab_.clone()};
+}
+
+template <size_t SPAN_SIZE, typename Range1, typename Range2, typename Func>
+struct SortedUnionImpl
+    : ad_utility::InputRangeFromGet<Result::IdTableVocabPair> {
+  std::shared_ptr<const Result> result1_;
+  std::shared_ptr<const Result> result2_;
+  Range1 range1_;
+  std::optional<typename Range1::iterator> it1_ = std::nullopt;
+  size_t index1_ = 0;
+  Range2 range2_;
+  std::optional<typename Range2::iterator> it2_ = std::nullopt;
+  size_t index2_ = 0;
+  IdTable resultTable_;
+  LocalVocab localVocab_{};
+  ad_utility::AllocatorWithLimit<Id> allocator_;
+  bool requestLaziness_;
+  std::vector<std::array<size_t, 2>> columnOrigins_;
+  std::vector<ColumnIndex> leftPermutation_;
+  std::vector<ColumnIndex> rightPermutation_;
+  std::vector<std::array<size_t, 2>> targetOrder_;
+  Func applyPermutation_;
+
+  SortedUnionImpl(std::shared_ptr<const Result> result1,
+                  std::shared_ptr<const Result> result2, Range1 range1,
+                  Range2 range2, bool requestLaziness,
+                  const std::vector<std::array<size_t, 2>>& columnOrigins,
+                  const ad_utility::AllocatorWithLimit<Id>& allocator,
+                  std::vector<ColumnIndex> leftPermutation,
+                  std::vector<ColumnIndex> rightPermutation,
+                  std::span<const ColumnIndex, SPAN_SIZE> comparatorView,
+                  Func applyPermutation)
+      : result1_{std::move(result1)},
+        result2_{std::move(result2)},
+        range1_{std::move(range1)},
+        range2_{std::move(range2)},
+        resultTable_{columnOrigins.size(), allocator},
+        allocator_{allocator},
+        requestLaziness_{requestLaziness},
+        columnOrigins_{columnOrigins},
+        leftPermutation_{std::move(leftPermutation)},
+        rightPermutation_{std::move(rightPermutation)},
+        applyPermutation_{std::move(applyPermutation)} {
+    if (requestLaziness) {
+      resultTable_.reserve(Union::chunkSize);
+    }
+    targetOrder_.reserve(comparatorView.size());
+    for (auto& col : comparatorView) {
+      targetOrder_.push_back(columnOrigins_.at(col));
+    }
+  }
+
+  // _____________________________________________________________________________
+  // Always inline makes makes a huge difference on large datasets.
+  AD_ALWAYS_INLINE bool isSmaller(const auto& row1, const auto& row2) const {
+    using StaticRange = std::span<const std::array<size_t, 2>, SPAN_SIZE>;
+    for (auto [index1, index2] : StaticRange{targetOrder_}) {
+      if (index1 == Union::NO_COLUMN) {
+        return true;
+      }
+      if (index2 == Union::NO_COLUMN) {
+        return false;
+      }
+      if (row1[index1] != row2[index2]) {
+        return row1[index1] < row2[index2];
+      }
+    }
+    return false;
+  }
+
+  // _____________________________________________________________________________
+  std::optional<Result::IdTableVocabPair> passNext(
+      const std::vector<ColumnIndex>& permutation, auto& it, auto end,
+      size_t& index) {
+    if (it != end) {
+      Result::IdTableVocabPair pair = moveOrCopy(*it);
+      pair.idTable_ = applyPermutation_(std::move(pair.idTable_), permutation);
+
+      index = 0;
+      ++it;
+      return pair;
+    }
+    return std::nullopt;
+  }
+
+  // ___________________________________________________________________________
+  void appendCurrent(const std::vector<ColumnIndex>& permutation, auto& it,
+                     size_t& index) {
+    resultTable_.insertAtEnd(it->idTable_, index, std::nullopt, permutation,
+                             Id::makeUndefined());
+    localVocab_.mergeWith(std::span{&it->localVocab_, 1});
+    index = 0;
+    ++it;
+  }
+
+  // ___________________________________________________________________________
+  void appendRemaining(const std::vector<ColumnIndex>& permutation, auto& it,
+                       auto end, size_t& index) {
+    while (it != end) {
+      appendCurrent(permutation, it, index);
+    }
+  }
+
+  // ___________________________________________________________________________
+  void pushRow(bool left, const auto& row) {
+    resultTable_.emplace_back();
+    for (size_t column = 0; column < resultTable_.numColumns(); column++) {
+      ColumnIndex origin = columnOrigins_.at(column).at(!left);
+      resultTable_.at(resultTable_.size() - 1, column) =
+          origin == Union::NO_COLUMN ? Id::makeUndefined() : row[origin];
+    }
+  }
+
+  // ___________________________________________________________________________
+  void advanceRangeIfConsumed() {
+    if (index1_ == it1_.value()->idTable_.size()) {
+      ++it1_.value();
+      index1_ = 0;
+    }
+    if (index2_ == it2_.value()->idTable_.size()) {
+      ++it2_.value();
+      index2_ = 0;
+    }
+  }
+
+  // ___________________________________________________________________________
+  Result::IdTableVocabPair popResult() {
+    auto result = Result::IdTableVocabPair{std::move(resultTable_),
+                                           std::move(localVocab_)};
+    resultTable_ = IdTable{resultTable_.numColumns(), allocator_};
+    resultTable_.reserve(Union::chunkSize);
+    localVocab_ = LocalVocab{};
+    advanceRangeIfConsumed();
+    return result;
+  }
+
+  // ___________________________________________________________________________
+  std::optional<Result::IdTableVocabPair> get() override {
+    if (!it1_.has_value()) {
+      it1_ = range1_.begin();
+    }
+    if (!it2_.has_value()) {
+      it2_ = range2_.begin();
+    }
+    while (it1_ != range1_.end() && it2_ != range2_.end()) {
+      auto& idTable1 = it1_.value()->idTable_;
+      auto& idTable2 = it2_.value()->idTable_;
+      localVocab_.mergeWith(std::span{&it1_.value()->localVocab_, 1});
+      localVocab_.mergeWith(std::span{&it2_.value()->localVocab_, 1});
+      while (index1_ < idTable1.size() && index2_ < idTable2.size()) {
+        if (isSmaller(idTable1.at(index1_), idTable2.at(index2_))) {
+          pushRow(true, idTable1.at(index1_));
+          index1_++;
+        } else {
+          pushRow(false, idTable2.at(index2_));
+          index2_++;
+        }
+        if (requestLaziness_ && resultTable_.size() >= Union::chunkSize) {
+          return popResult();
+        }
+      }
+      advanceRangeIfConsumed();
+    }
+    if (requestLaziness_) {
+      if (index1_ != 0) {
+        appendCurrent(leftPermutation_, it1_.value(), index1_);
+      }
+      if (index2_ != 0) {
+        appendCurrent(rightPermutation_, it2_.value(), index2_);
+      }
+      if (!resultTable_.empty()) {
+        return Result::IdTableVocabPair{std::move(resultTable_),
+                                        std::move(localVocab_)};
+      }
+      auto leftTable =
+          passNext(leftPermutation_, it1_.value(), range1_.end(), index1_);
+      return leftTable.has_value() ? std::move(leftTable)
+                                   : passNext(rightPermutation_, it2_.value(),
+                                              range2_.end(), index2_);
+    }
+    appendRemaining(leftPermutation_, it1_.value(), range1_.end(), index1_);
+    appendRemaining(rightPermutation_, it2_.value(), range2_.end(), index2_);
+    if (resultTable_.empty()) {
+      return std::nullopt;
+    }
+    return Result::IdTableVocabPair{std::move(resultTable_),
+                                    std::move(localVocab_)};
+  }
+};
+}  // namespace
+
+// _____________________________________________________________________________
+Result::LazyResult Union::computeResultKeepOrder(
+    bool requestLaziness, std::shared_ptr<const Result> result1,
+    std::shared_ptr<const Result> result2) const {
+  using Range = std::variant<Result::LazyResult, std::array<Wrapper, 1>>;
+  auto toRange = [](const auto& result) {
+    return result->isFullyMaterialized()
+               ? Range{std::array{
+                     Wrapper{result->idTable(), result->localVocab()}}}
+               : Range{std::move(result->idTables())};
+  };
+  Range leftRange = toRange(result1);
+  Range rightRange = toRange(result2);
+
+  auto end = ql::ranges::find_if(targetOrder_, [this](ColumnIndex index) {
+    const auto& [left, right] = _columnOrigins.at(index);
+    return left == NO_COLUMN || right == NO_COLUMN;
+  });
+  std::span trimmedTargetOrder{targetOrder_.begin(),
+                               end == targetOrder_.end() ? end : end + 1};
+
+  auto applyPermutation = [this](IdTable idTable,
+                                 const std::vector<ColumnIndex>& permutation) {
+    return transformToCorrectColumnFormat(std::move(idTable), permutation);
+  };
+
+  return std::visit(
+      [this, requestLaziness, &result1, &result2, &trimmedTargetOrder,
+       &applyPermutation]<typename LR, typename RR>(
+          LR leftRange, RR rightRange) -> Result::LazyResult {
+        return ad_utility::callFixedSize(
+            trimmedTargetOrder.size(),
+            [this, requestLaziness, &result1, &result2, &leftRange, &rightRange,
+             &trimmedTargetOrder, &applyPermutation]<int COMPARATOR_WIDTH>() {
+              constexpr size_t extent = COMPARATOR_WIDTH == 0
+                                            ? std::dynamic_extent
+                                            : COMPARATOR_WIDTH;
+              return Result::LazyResult{
+                  SortedUnionImpl<extent, LR, RR, decltype(applyPermutation)>(
+                      std::move(result1), std::move(result2),
+                      std::move(leftRange), std::move(rightRange),
+                      requestLaziness, _columnOrigins, allocator(),
+                      computePermutation<true>(), computePermutation<false>(),
+                      std::span<const ColumnIndex, extent>{trimmedTargetOrder},
+                      std::move(applyPermutation))};
+            });
+      },
+      std::move(leftRange), std::move(rightRange));
 }
