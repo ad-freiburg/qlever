@@ -16,7 +16,7 @@ add_library(sparqlExpressions
         ConditionalExpressions.cpp
         SparqlExpressionTypes.cpp
         SparqlExpression.cpp
-        ConvertToNumericExpression.cpp
+        ConvertToDtypeConstructor.cpp
         RdfTermExpressions.cpp
         LangExpression.cpp
         CountStarExpression.cpp
