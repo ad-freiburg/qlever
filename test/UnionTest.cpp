@@ -276,11 +276,11 @@ TEST(Union, sortedMergeWithOneSideNonLazy) {
   auto* qec = ad_utility::testing::getQec();
 
   auto leftT = ad_utility::makeExecutionTree<ValuesForTesting>(
-      qec, makeIdTableFromVector({{1}}), Vars{Var{"?a"}}, false,
+      qec, makeIdTableFromVector({{2}}), Vars{Var{"?a"}}, false,
       std::vector<ColumnIndex>{0}, LocalVocab{}, std::nullopt, true);
 
   auto rightT = ad_utility::makeExecutionTree<ValuesForTesting>(
-      qec, makeIdTableFromVector({{0}, {2}}), Vars{Var{"?a"}}, false,
+      qec, makeIdTableFromVector({{0}, {1}}), Vars{Var{"?a"}}, false,
       std::vector<ColumnIndex>{0});
   Union unionOperation{qec, std::move(leftT), std::move(rightT), {0}};
   auto expected = makeIdTableFromVector({{0}, {1}, {2}});
@@ -297,7 +297,11 @@ TEST(Union, sortedMergeWithOneSideNonLazy) {
     auto& idTables = result->idTables();
     auto it = idTables.begin();
     ASSERT_NE(it, idTables.end());
-    EXPECT_EQ(it->idTable_, expected);
+    EXPECT_EQ(it->idTable_, makeIdTableFromVector({{0}, {1}}));
+
+    ++it;
+    ASSERT_NE(it, idTables.end());
+    EXPECT_EQ(it->idTable_, makeIdTableFromVector({{2}}));
 
     ASSERT_EQ(++it, idTables.end());
   }
