@@ -3157,6 +3157,17 @@ TEST(QueryPlanner, ensurePlanningIsSkippedWhenNoTransitivePathIsPresent) {
 }
 
 // _____________________________________________________________________________
+TEST(QueryPlanner, ensurePlanningIsSkippedWhenTransitivePathIsAlreadyBound) {
+  auto qp = makeQueryPlanner();
+  auto query = SparqlParser::parseQuery(
+      "SELECT * { { VALUES ?x { 1 } } UNION { ?s <P279>+ 1 } . ?s <P31> ?o }");
+  auto plans = qp.createExecutionTrees(query);
+  ASSERT_EQ(plans.size(), 1);
+  EXPECT_TRUE(
+      std::dynamic_pointer_cast<Join>(plans.at(0)._qet->getRootOperation()));
+}
+
+// _____________________________________________________________________________
 TEST(QueryPlanner, testDistributiveJoinInUnionRecursive) {
   auto* qec = ad_utility::testing::getQec(
       "<a> <P279> <b> . <c> <P279> <d> . <e> <P279> <f> . <g> <P279> <h> ."
