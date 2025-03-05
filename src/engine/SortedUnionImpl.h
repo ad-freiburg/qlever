@@ -32,6 +32,7 @@ inline Result::IdTableVocabPair moveOrCopy(const Wrapper& element) {
 template <size_t SPAN_SIZE, typename Range1, typename Range2, typename Func>
 struct SortedUnionImpl
     : ad_utility::InputRangeFromGet<Result::IdTableVocabPair> {
+  // Iterator and range storage.
   std::shared_ptr<const Result> result1_;
   std::shared_ptr<const Result> result2_;
   Range1 range1_;
@@ -40,16 +41,21 @@ struct SortedUnionImpl
   Range2 range2_;
   std::optional<typename Range2::iterator> it2_ = std::nullopt;
   size_t index2_ = 0;
+
+  // Result storage.
   IdTable resultTable_;
   LocalVocab localVocab_{};
+
+  // Metadata
   ad_utility::AllocatorWithLimit<Id> allocator_;
   bool requestLaziness_;
   std::vector<std::array<size_t, 2>> columnOrigins_;
   std::vector<ColumnIndex> leftPermutation_;
   std::vector<ColumnIndex> rightPermutation_;
   std::vector<std::array<size_t, 2>> targetOrder_;
-  Func applyPermutation_;
   bool aggregatedTableReturned_ = false;
+  // Function forwarded from `Union`
+  Func applyPermutation_;
 
   SortedUnionImpl(std::shared_ptr<const Result> result1,
                   std::shared_ptr<const Result> result2, Range1 range1,
@@ -80,7 +86,6 @@ struct SortedUnionImpl
     }
   }
 
-  // _____________________________________________________________________________
   // Always inline makes makes a huge difference on large datasets.
   AD_ALWAYS_INLINE bool isSmaller(const auto& row1, const auto& row2) const {
     using StaticRange = std::span<const std::array<size_t, 2>, SPAN_SIZE>;
@@ -98,7 +103,8 @@ struct SortedUnionImpl
     return false;
   }
 
-  // _____________________________________________________________________________
+  // Fetch the next element from the range, make a copy if it's a `Wrapper`.
+  // Otherwise move it. If the range is exhausted, return `std::nullopt`.
   std::optional<Result::IdTableVocabPair> passNext(
       const std::vector<ColumnIndex>& permutation, auto& it, auto end,
       size_t& index) {
@@ -113,7 +119,8 @@ struct SortedUnionImpl
     return std::nullopt;
   }
 
-  // ___________________________________________________________________________
+  // Append the remainder of the last partially consumed table to the current
+  // result table and merge the local vocabs.
   void appendCurrent(const std::vector<ColumnIndex>& permutation, auto& it,
                      size_t& index) {
     resultTable_.insertAtEnd(it->idTable_, index, std::nullopt, permutation,
@@ -123,7 +130,8 @@ struct SortedUnionImpl
     ++it;
   }
 
-  // ___________________________________________________________________________
+  // For the non-lazy case just append the remaining tables to the aggregated
+  // result table until the range is exhausted.
   void appendRemaining(const std::vector<ColumnIndex>& permutation, auto& it,
                        auto end, size_t& index) {
     while (it != end) {
@@ -131,7 +139,8 @@ struct SortedUnionImpl
     }
   }
 
-  // ___________________________________________________________________________
+  // Write a new row to the result table. The parameter `left` controls which
+  // permutation is used to write the row to the result table.
   void pushRow(bool left, const auto& row) {
     resultTable_.emplace_back();
     for (size_t column = 0; column < resultTable_.numColumns(); column++) {
@@ -141,7 +150,8 @@ struct SortedUnionImpl
     }
   }
 
-  // ___________________________________________________________________________
+  // Increment the iterators if the current id table is fully processed and
+  // reset the index back to zero.
   void advanceRangeIfConsumed() {
     if (index1_ == it1_.value()->idTable_.size()) {
       ++it1_.value();
@@ -153,7 +163,9 @@ struct SortedUnionImpl
     }
   }
 
-  // ___________________________________________________________________________
+  // Retreive the current result from `resultTable_` and `localVocab_` and reset
+  // those members back to their initial value so the next operation can
+  // continue adding values.
   Result::IdTableVocabPair popResult() {
     auto result = Result::IdTableVocabPair{std::move(resultTable_),
                                            std::move(localVocab_)};
