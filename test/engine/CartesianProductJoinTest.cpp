@@ -272,10 +272,17 @@ class CartesianProductJoinLazyTest
   static CartesianProductJoin makeJoin(std::vector<IdTable> tables) {
     AD_CONTRACT_CHECK(tables.size() >= 2);
     auto* qec = ad_utility::testing::getQec();
+    size_t counter = 0;
     CartesianProductJoin::Children children{};
     for (IdTable& table : std::span{tables}.subspan(0, tables.size() - 1)) {
       children.push_back(ad_utility::makeExecutionTree<ValuesForTesting>(
           qec, table.clone(), makeUniqueVariables(table)));
+      // Make sure size estimates are increasing to ensure the order stays the
+      // same.
+      std::dynamic_pointer_cast<ValuesForTesting>(
+          children.back()->getRootOperation())
+          ->sizeEstimate() = counter;
+      counter++;
     }
     if (std::get<0>(GetParam()) == 0) {
       children.push_back(ad_utility::makeExecutionTree<ValuesForTesting>(
@@ -286,6 +293,9 @@ class CartesianProductJoinLazyTest
           qec, splitIntoRandomSubtables(tables.back()),
           makeUniqueVariables(tables.back())));
     }
+    std::dynamic_pointer_cast<ValuesForTesting>(
+        children.back()->getRootOperation())
+        ->sizeEstimate() = counter;
     CartesianProductJoin join{qec, std::move(children), CHUNK_SIZE};
     join.setLimit(LimitOffsetClause{std::get<2>(GetParam()), getOffset()});
     return join;
