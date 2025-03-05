@@ -57,7 +57,7 @@ ContextListMetaData writePostings(ad_utility::File& out,
     std::vector<float> scores;
     scores.reserve(postings.size());
     ql::ranges::transform(
-        postings.begin(), postings.end(), std::back_inserter(scores),
+        postings, std::back_inserter(scores),
         [](const auto& posting) { return std::get<2>(posting); });
     zstdCompressAndWrite(scores.data(), scores.size() * sizeof(Score), out,
                          currentOffset);

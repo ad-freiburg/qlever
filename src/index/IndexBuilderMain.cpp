@@ -224,7 +224,8 @@ int main(int argc, char** argv) {
       "Sets the k param in the BM25 scoring metric for the fulltext index."
       "This has to be greater than or equal to 0.");
   add("set-scoring-metric,S", po::value(&scoringMetric),
-      "Sets the scoring metric used. Options are \"explicit\" for explicit, "
+      "Sets the scoring metric used. Options are \"explicit\" for explicit "
+      "scores that are read from the wordsfile, "
       "\"tf-idf\" for tf idf "
       "and \"bm25\" for bm25. The default is count.");
 
@@ -351,6 +352,13 @@ int main(int argc, char** argv) {
       index.createFromFiles(fileSpecifications);
     }
     bool addFromWordsAndDocsFile = !(wordsfile.empty() || docsfile.empty());
+
+    AD_CONTRACT_CHECK(
+        addFromWordsAndDocsFile || (wordsfile.empty() && docsfile.empty()),
+        "Only specified ", wordsfile.empty() ? "docsfile" : "wordsfile",
+        ". Both or none of docsfile and wordsfile have to be given to build "
+        "text index. If none are given the option to add words from literals "
+        "has to be true. For details see --help.");
     if (addFromWordsAndDocsFile || addWordsFromLiterals) {
       index.storeTextScoringParamsInConfiguration(
           getTextScoringMetricFromString(scoringMetric), bScoringParam,

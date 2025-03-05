@@ -97,14 +97,14 @@ float ScoreData::getScore(WordIndex wordIndex, TextRecordIndex contextId) {
     auto it = docIdSet_.upper_bound(convertedContextId);
     AD_CORRECTNESS_CHECK(!docIdSet_.empty(),
                          "docIdSet is empty and shouldn't be.");
-    AD_CORRECTNESS_CHECK(
-        !(it == docIdSet_.end()),
-        absl::StrCat("Requesting a contextId that is bigger than the largest "
-                     "docId. Requested contextId: ",
-                     contextId.get(),
-                     " Largest docId: ", docIdSet_.rbegin()->get(),
-                     " This hints on faulty input data for wordsfile.tsv and "
-                     "or docsfile.tsv"));
+
+    AD_CORRECTNESS_CHECK(!(it == docIdSet_.end()),
+                         "Requesting a contextId that is bigger than the "
+                         "largest docId. Requested contextId: ",
+                         contextId.get(),
+                         " Largest docId: ", docIdSet_.rbegin()->get(),
+                         " This hints on faulty input data for wordsfile.tsv "
+                         "and or docsfile.tsv");
     docId = *it;
   }
   auto ret1 = innerMap.find(docId);
@@ -122,11 +122,10 @@ float ScoreData::getScore(WordIndex wordIndex, TextRecordIndex contextId) {
   auto ret2 = docLengthMap_.find(docId);
   AD_CORRECTNESS_CHECK(
       !(ret2 == docLengthMap_.end()),
-      absl::StrCat("The calculated docId doesn't exist in the docLengthMap. "
-                   "The requested contextId was: ",
-                   contextId.get(), " The calculated docId was: ", docId.get(),
-                   " This hints on faulty input data for wordsfile.tsv and or "
-                   "docsfile.tsv"));
+      "The calculated docId doesn't exist in the docLengthMap. The requested "
+      "contextId was: ",
+      contextId.get(), " The calculated docId was: ", docId.get(),
+      " This hints on faulty input data for wordsfile.tsv and or docsfile.tsv");
   size_t dl = ret2->second;
   float alpha = (1 - b_ + b_ * (dl / averageDocumentLength_));
   float tf_star = (tf * (k_ + 1)) / (k_ * alpha + tf);
