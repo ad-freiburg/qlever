@@ -51,7 +51,9 @@ class QueryPlanner {
     TripleGraph(const TripleGraph& other, vector<size_t> keepNodes);
 
     struct Node {
-      Node(size_t id, SparqlTriple t) : id_(id), triple_(std::move(t)) {
+      Node(size_t id, SparqlTriple t,
+           std::optional<Variable> graphVariable = std::nullopt)
+          : id_(id), triple_(std::move(t)) {
         if (isVariable(triple_.s_)) {
           _variables.insert(triple_.s_.getVariable());
         }
@@ -60,6 +62,9 @@ class QueryPlanner {
         }
         if (isVariable(triple_.o_)) {
           _variables.insert(triple_.o_.getVariable());
+        }
+        if (graphVariable.has_value()) {
+          _variables.insert(std::move(graphVariable).value());
         }
       }
 
