@@ -23,6 +23,10 @@ class NeutralOptional : public Operation {
   ProtoResult computeResult(bool requestLaziness) override;
   VariableToColumnMap computeVariableToColumnMap() const override;
 
+  // Return true, if `_limit` is configured in a way that will prevent the
+  // neutral element from ever appearing in the result.
+  bool singleRowCroppedByLimit() const;
+
  public:
   std::vector<QueryExecutionTree*> getChildren() override;
   std::string getDescriptor() const override;

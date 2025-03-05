@@ -27,8 +27,10 @@ TEST(NeutralOptional, getCacheKey) {
   auto child = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, IdTable{0, qec->getAllocator()},
       std::vector<std::optional<Variable>>{});
-  NeutralOptional no{qec, std::move(child)};
-  EXPECT_THAT(no.getCacheKey(), ::testing::StartsWith("NeutralOptional#"));
+  NeutralOptional no{qec, child};
+  EXPECT_THAT(no.getCacheKey(),
+              ::testing::AllOf(::testing::StartsWith("NeutralOptional#"),
+                               ::testing::EndsWith(child->getCacheKey())));
 }
 
 // _____________________________________________________________________________
@@ -59,7 +61,7 @@ TEST(NeutralOptional, getCostEstimate) {
         qec, IdTable{0, qec->getAllocator()},
         std::vector<std::optional<Variable>>{});
     NeutralOptional no{qec, std::move(child)};
-    EXPECT_THAT(no.getCostEstimate(), 1);
+    EXPECT_EQ(no.getCostEstimate(), 1);
   }
   {
     IdTable idTable{0, qec->getAllocator()};
@@ -67,7 +69,7 @@ TEST(NeutralOptional, getCostEstimate) {
     auto child = ad_utility::makeExecutionTree<ValuesForTesting>(
         qec, std::move(idTable), std::vector<std::optional<Variable>>{});
     NeutralOptional no{qec, std::move(child)};
-    EXPECT_THAT(no.getCostEstimate(), 42);
+    EXPECT_EQ(no.getCostEstimate(), 42 * 2);
   }
 }
 
@@ -79,7 +81,7 @@ TEST(NeutralOptional, getSizeEstimate) {
         qec, IdTable{0, qec->getAllocator()},
         std::vector<std::optional<Variable>>{});
     NeutralOptional no{qec, std::move(child)};
-    EXPECT_THAT(no.getSizeEstimate(), 1);
+    EXPECT_EQ(no.getSizeEstimate(), 1);
   }
   {
     auto child = ad_utility::makeExecutionTree<ValuesForTesting>(
@@ -87,7 +89,7 @@ TEST(NeutralOptional, getSizeEstimate) {
         std::vector<std::optional<Variable>>{});
     NeutralOptional no{qec, std::move(child)};
     no.setLimit({0, 0});
-    EXPECT_THAT(no.getSizeEstimate(), 0);
+    EXPECT_EQ(no.getSizeEstimate(), 0);
   }
   {
     IdTable idTable{0, qec->getAllocator()};
@@ -96,7 +98,7 @@ TEST(NeutralOptional, getSizeEstimate) {
         qec, std::move(idTable), std::vector<std::optional<Variable>>{});
     NeutralOptional no{qec, std::move(child)};
     no.setLimit({40, 1});
-    EXPECT_THAT(no.getSizeEstimate(), 40);
+    EXPECT_EQ(no.getSizeEstimate(), 40);
   }
   {
     IdTable idTable{0, qec->getAllocator()};
@@ -104,7 +106,7 @@ TEST(NeutralOptional, getSizeEstimate) {
     auto child = ad_utility::makeExecutionTree<ValuesForTesting>(
         qec, std::move(idTable), std::vector<std::optional<Variable>>{});
     NeutralOptional no{qec, std::move(child)};
-    EXPECT_THAT(no.getSizeEstimate(), 42);
+    EXPECT_EQ(no.getSizeEstimate(), 42);
   }
 }
 
@@ -112,12 +114,12 @@ TEST(NeutralOptional, getSizeEstimate) {
 TEST(NeutralOptional, getMultiplicity) {
   auto* qec = ad_utility::testing::getQec();
   auto child = ad_utility::makeExecutionTree<ValuesForTesting>(
-      qec, IdTable{5, qec->getAllocator()},
-      std::vector<std::optional<Variable>>(5, std::nullopt));
-  NeutralOptional no{qec, std::move(child)};
-  EXPECT_EQ(no.getMultiplicity(0), 1);
-  EXPECT_EQ(no.getMultiplicity(1), 1);
-  EXPECT_EQ(no.getMultiplicity(2), 1);
+      qec, IdTable{3, qec->getAllocator()},
+      std::vector<std::optional<Variable>>(3, std::nullopt));
+  NeutralOptional no{qec, child};
+  EXPECT_EQ(no.getMultiplicity(0), child->getMultiplicity(0));
+  EXPECT_EQ(no.getMultiplicity(1), child->getMultiplicity(1));
+  EXPECT_EQ(no.getMultiplicity(2), child->getMultiplicity(2));
 }
 
 // _____________________________________________________________________________

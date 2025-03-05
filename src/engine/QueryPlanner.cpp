@@ -84,6 +84,15 @@ void mergeSubtreePlanIds(QueryPlanner::SubtreePlan& target,
   target.idsOfIncludedTextLimits_ =
       a.idsOfIncludedTextLimits_ | b.idsOfIncludedTextLimits_;
 }
+
+// Helper function that assigns the node, filter and text limit ids from
+// `source` to `target`.
+void assignNodesFilterAndTextLimitIds(QueryPlanner::SubtreePlan& target,
+                                      const QueryPlanner::SubtreePlan& source) {
+  target._idsOfIncludedNodes = source._idsOfIncludedNodes;
+  target._idsOfIncludedFilters = source._idsOfIncludedFilters;
+  target.idsOfIncludedTextLimits_ = source.idsOfIncludedTextLimits_;
+}
 }  // namespace
 
 // _____________________________________________________________________________
@@ -373,9 +382,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getGroupByRow(
     // Create a group by operation to determine on which columns the input
     // needs to be sorted
     SubtreePlan groupByPlan(_qec);
-    groupByPlan._idsOfIncludedNodes = parent._idsOfIncludedNodes;
-    groupByPlan._idsOfIncludedFilters = parent._idsOfIncludedFilters;
-    groupByPlan.idsOfIncludedTextLimits_ = parent.idsOfIncludedTextLimits_;
+    assignNodesFilterAndTextLimitIds(groupByPlan, parent);
     std::vector<Alias> aliases;
     if (pq.hasSelectClause()) {
       aliases = pq.selectClause().getAliases();
@@ -407,9 +414,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getOrderByRow(
   for (const auto& parent : previous) {
     SubtreePlan plan(_qec);
     auto& tree = plan._qet;
-    plan._idsOfIncludedNodes = parent._idsOfIncludedNodes;
-    plan._idsOfIncludedFilters = parent._idsOfIncludedFilters;
-    plan.idsOfIncludedTextLimits_ = parent.idsOfIncludedTextLimits_;
+    assignNodesFilterAndTextLimitIds(plan, parent);
     vector<pair<ColumnIndex, bool>> sortIndices;
     // Collect the variables of the ORDER BY or INTERNAL SORT BY clause. Ignore
     // variables that are not visible in the query body (according to the
@@ -2297,29 +2302,29 @@ void QueryPlanner::checkCancellation(
 bool QueryPlanner::GraphPatternPlanner::handleUnconnectedMinusOrOptional(
     std::vector<SubtreePlan>& candidates, const auto& variables) {
   using enum SubtreePlan::Type;
-  if (ql::ranges::all_of(variables, [this](const Variable& var) {
-        return !boundVariables_.contains(var);
-      })) {
-    // A MINUS clause that doesn't share any variable with the preceding
-    // patterns behaves as if it isn't there.
-    auto type = candidates[0].type;
-    if (type == MINUS) {
-      return true;
-    }
-    // An OPTIONAL clause that doesn't share any variable with the preceding
-    // patterns behaves as if it is joined with the neutral element.
-    if (type == OPTIONAL) {
-      auto& newPlans = candidatePlans_.emplace_back();
-      ql::ranges::for_each(
-          candidates, [this, &newPlans](const SubtreePlan& plan) {
-            auto joinedPlan = makeSubtreePlan<NeutralOptional>(qec_, plan._qet);
-            joinedPlan._idsOfIncludedFilters = plan._idsOfIncludedFilters;
-            joinedPlan._idsOfIncludedNodes = plan._idsOfIncludedNodes;
-            joinedPlan.idsOfIncludedTextLimits_ = plan.idsOfIncludedTextLimits_;
-            newPlans.push_back(std::move(joinedPlan));
-          });
-      return true;
-    }
+  bool areVariablesUnconnected = ql::ranges::all_of(
+      variables,
+      [this](const Variable& var) { return !boundVariables_.contains(var); });
+  if (!areVariablesUnconnected) {
+    return false;
+  }
+  // A MINUS clause that doesn't share any variable with the preceding
+  // patterns behaves as if it isn't there.
+  auto type = candidates[0].type;
+  if (type == MINUS) {
+    return true;
+  }
+  // An OPTIONAL clause that doesn't share any variable with the preceding
+  // patterns behaves as if it is joined with the neutral element.
+  if (type == OPTIONAL) {
+    auto& newPlans = candidatePlans_.emplace_back();
+    ql::ranges::for_each(
+        candidates, [this, &newPlans](const SubtreePlan& plan) {
+          auto joinedPlan = makeSubtreePlan<NeutralOptional>(qec_, plan._qet);
+          assignNodesFilterAndTextLimitIds(joinedPlan, plan);
+          newPlans.push_back(std::move(joinedPlan));
+        });
+    return true;
   }
   return false;
 }

@@ -31,20 +31,18 @@ size_t NeutralOptional::getResultWidth() const {
 size_t NeutralOptional::getCostEstimate() {
   // Cloning is expensive, so we estimate the cost as the cost of the child.
   // Does not apply to the lazy case.
-  return std::max<size_t>(tree_->getCostEstimate(), 1);
+  return std::max<size_t>(tree_->getCostEstimate() * 2, 1);
 }
 
 // _____________________________________________________________________________
 uint64_t NeutralOptional::getSizeEstimateBeforeLimit() {
-  auto originalLimit = tree_->getRootOperation()->getLimit();
-  tree_->setLimit({});
-  absl::Cleanup resetLimit{
-      [this, &originalLimit]() { tree_->setLimit(originalLimit); }};
   return std::max<size_t>(tree_->getSizeEstimate(), 1);
 }
 
 // _____________________________________________________________________________
-float NeutralOptional::getMultiplicity(size_t) { return 1; }
+float NeutralOptional::getMultiplicity(size_t col) {
+  return tree_->getMultiplicity(col);
+}
 
 // _____________________________________________________________________________
 bool NeutralOptional::knownEmptyResult() { return false; }
@@ -64,6 +62,8 @@ std::vector<ColumnIndex> NeutralOptional::resultSortedOn() const {
 }
 
 namespace {
+// State machine that forwards a lazy result and ensures that at least one row
+// is returned when no limit is present.
 struct WrapperWithEnsuredRow
     : ad_utility::InputRangeFromGet<Result::IdTableVocabPair> {
   Result::LazyResult originalRange_;
@@ -99,28 +99,31 @@ struct WrapperWithEnsuredRow
 }  // namespace
 
 // _____________________________________________________________________________
+bool NeutralOptional::singleRowCroppedByLimit() const {
+  const auto& limit = getLimit();
+  return limit._offset > 0 || limit.limitOrDefault() == 0;
+}
+
+// _____________________________________________________________________________
 ProtoResult NeutralOptional::computeResult(bool requestLaziness) {
   const auto& limit = getLimit();
   tree_->setLimit(limit);
 
   auto childResult = tree_->getResult(requestLaziness);
 
-  bool singleRowCroppedByLimit =
-      limit._offset > 0 || limit.limitOrDefault() == 0;
-
   IdTable singleRowTable{getResultWidth(), allocator()};
   singleRowTable.push_back(std::vector(getResultWidth(), Id::makeUndefined()));
   if (childResult->isFullyMaterialized()) {
     if (childResult->idTable().empty()) {
-      return {singleRowCroppedByLimit ? IdTable{getResultWidth(), allocator()}
-                                      : std::move(singleRowTable),
+      return {singleRowCroppedByLimit() ? IdTable{getResultWidth(), allocator()}
+                                        : std::move(singleRowTable),
               resultSortedOn(),
               {}};
     }
     return {childResult->idTable().clone(), childResult->sortedBy(),
             childResult->getSharedLocalVocab()};
   }
-  if (singleRowCroppedByLimit) {
+  if (singleRowCroppedByLimit()) {
     return {std::move(childResult->idTables()), childResult->sortedBy()};
   }
   return {Result::LazyResult{WrapperWithEnsuredRow{
@@ -131,6 +134,9 @@ ProtoResult NeutralOptional::computeResult(bool requestLaziness) {
 // _____________________________________________________________________________
 VariableToColumnMap NeutralOptional::computeVariableToColumnMap() const {
   auto variableColumns = tree_->getVariableColumns();
+  // Because the optional operation might not return any rows, and we add
+  // placeholder undefined rows in that case, we need to mark all columns as
+  // possibly undefined.
   for (ColumnIndexAndTypeInfo& info : variableColumns | ql::views::values) {
     info.mightContainUndef_ = ColumnIndexAndTypeInfo::PossiblyUndefined;
   }
