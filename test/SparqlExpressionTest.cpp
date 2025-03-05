@@ -1419,14 +1419,10 @@ TEST(SparqlExpression, ReplaceExpression) {
 
   using ::testing::HasSubstr;
   // Invalid flags
-  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
-      checkReplaceWithFlags(
-          IdOrLiteralOrIriVec{U},
-          std::tuple{idOrLitOrStringVec({"null"}), IdOrLiteralOrIri{lit("[n]")},
-                     IdOrLiteralOrIri{lit("X")}, IdOrLiteralOrIri{lit("???")}}),
-      ::testing::AllOf(HasSubstr("'i'"), HasSubstr("'m'"), HasSubstr("'s'"),
-                       HasSubstr("'u'"), HasSubstr("?")),
-      std::runtime_error);
+  checkReplaceWithFlags(
+      IdOrLiteralOrIriVec{U},
+      std::tuple{idOrLitOrStringVec({"null"}), IdOrLiteralOrIri{lit("[n]")},
+                 IdOrLiteralOrIri{lit("X")}, IdOrLiteralOrIri{lit("???")}});
 
   // Illegal replacement.
   checkReplace(

@@ -369,12 +369,7 @@ using StrBeforeExpression =
   }
   auto firstInvalidFlag = flags.value().find_first_not_of("imsu");
   if (firstInvalidFlag != std::string::npos) {
-    throw std::runtime_error{absl::StrCat(
-        "Invalid regex flag '",
-        std::string_view{&flags.value()[firstInvalidFlag], 1}, "' found in \"",
-        flags.value(),
-        "\". The only supported flags are 'i', 'm', 's', 'u', and any "
-        "combination of them")};
+    return Id::makeUndefined();
   }
 
   // In Google RE2 the flags are directly part of the regex.
