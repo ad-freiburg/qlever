@@ -34,10 +34,10 @@ ProtoResult TextIndexScanForWord::computeResult(
   // column shows the word the prefix got extended to
   std::vector<ColumnIndex> cols{0};
   if (config_.isPrefix_) {
-    cols.push_back({1});
+    cols.push_back(1);
   }
   if (config_.scoreVar_.has_value()) {
-    cols.push_back({2});
+    cols.push_back(2);
   }
   idTable.setColumnSubset(cols);
 

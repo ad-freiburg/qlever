@@ -42,10 +42,10 @@ ProtoResult TextIndexScanForEntity::computeResult(
     idTable.erase(beginErase.begin(), idTable.end());
 #endif
   } else {
-    cols.push_back({1});
+    cols.push_back(1);
   }
   if (config_.scoreVar_.has_value()) {
-    cols.push_back({2});
+    cols.push_back(2);
   }
   idTable.setColumnSubset(cols);
 
