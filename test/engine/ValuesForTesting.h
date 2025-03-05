@@ -249,4 +249,5 @@ class ValuesForTestingNoKnownEmptyResult : public ValuesForTesting {
  public:
   using ValuesForTesting::ValuesForTesting;
   bool knownEmptyResult() override { return false; }
+  size_t getSizeEstimateBeforeLimit() override { return 1; }
 };

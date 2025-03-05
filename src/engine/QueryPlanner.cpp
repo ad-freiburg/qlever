@@ -1556,9 +1556,6 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
         textLimitIds |= plan.idsOfIncludedTextLimits_;
         subtrees.push_back(std::move(plan._qet));
       });
-  // Ensure estimated largest tree is on the right side.
-  ql::ranges::sort(subtrees, {},
-                   [](const auto& tree) { return tree->getSizeEstimate(); });
   result.at(0).push_back(
       makeSubtreePlan<CartesianProductJoin>(_qec, std::move(subtrees)));
   auto& plan = result.at(0).back();
