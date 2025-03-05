@@ -8,6 +8,7 @@
 #include "global/IndexTypes.h"
 #include "index/Postings.h"
 #include "index/TextMetaData.h"
+#include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/HashMap.h"
 #include "util/Simple8bCode.h"
 #include "util/TransparentFunctors.h"
@@ -99,6 +100,11 @@ void readGapComprListHelper(size_t nofElements, off_t from, size_t nofBytes,
 }  // namespace textIndexReadWrite::detail
 namespace textIndexReadWrite {
 
+// Compress src using zstd and write compressed bytes to file while advancing
+// currentOffset by the nofBytes written
+void zstdCompressAndWrite(const void* src, size_t numBytes,
+                          ad_utility::File& out, off_t& currentOffset);
+
 /**
  * @brief Writes posting to given file. It splits the vector of postings into
  *        the lists for each respetive tuple element of postings.
@@ -120,7 +126,7 @@ namespace textIndexReadWrite {
 ContextListMetaData writePostings(ad_utility::File& out,
                                   const vector<Posting>& postings,
                                   bool skipWordlistIfAllTheSame,
-                                  off_t& currentOffset);
+                                  off_t& currentOffset, bool scoreIsInt);
 
 template <typename T>
 size_t writeCodebook(const vector<T>& codebook, ad_utility::File& file);
@@ -137,6 +143,17 @@ template <typename T>
 void encodeAndWriteSpanAndMoveOffset(std::span<const T> spanToWrite,
                                      ad_utility::File& file,
                                      off_t& currentOffset);
+
+template <typename T>
+vector<T> readZstdComprList(size_t nofElements, off_t from,
+                            size_t nofBytesCompressed,
+                            const ad_utility::File& textIndexFile) {
+  std::vector<char> compressed(nofBytesCompressed);
+  size_t ret = textIndexFile.read(compressed.data(), nofBytesCompressed, from);
+  AD_CONTRACT_CHECK(ret == nofBytesCompressed);
+  return ZstdWrapper::decompress<T>(compressed.data(), nofBytesCompressed,
+                                    nofElements);
+}
 
 /**
  * @brief Reads a frequency encoded list from the given file and casts its
