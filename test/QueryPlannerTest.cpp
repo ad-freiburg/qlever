@@ -2983,6 +2983,16 @@ TEST(QueryPlanner, Exists) {
 }
 
 // _____________________________________________________________________________
+TEST(QueryPlanner, ensureGeneratedInternalVariablesDontClash) {
+  h::expect("SELECT * { SELECT ?s { ?s <a> [] } ORDER BY RAND() }",
+            h::OrderBy({std::pair{Var{"?_QLever_internal_variable_1"},
+                                  OrderBy::AscOrDesc::Asc}},
+                       h::Bind(h::IndexScanFromStrings(
+                                   "?s", "<a>", "?_QLever_internal_variable_0"),
+                               "RAND()", Var{"?_QLever_internal_variable_1"})));
+}
+
+// _____________________________________________________________________________
 TEST(QueryPlanner, FilterOnNeutralElement) {
   h::expect("SELECT * { FILTER(false) }",
             h::Filter("false", h::NeutralElement()));
