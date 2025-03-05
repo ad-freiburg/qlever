@@ -56,7 +56,7 @@ namespace p = parsedQuery;
 namespace {
 
 using ad_utility::makeExecutionTree;
-using QueryPlanner::SubtreePlan;
+using SubtreePlan = QueryPlanner::SubtreePlan;
 
 template <typename Operation>
 SubtreePlan makeSubtreePlan(QueryExecutionContext* qec, auto&&... args) {
@@ -2090,12 +2090,13 @@ SubtreePlan cloneWithNewTree(const SubtreePlan& plan,
   return newPlan;
 }
 
-// Check if a transitive path is somewhere in the tree. This is because the
-// optimization with `Union` currently only makes sense if the transitive path
-// is in the tree.
-bool hasTransitivePathInTree(const Operation& operation) {
-  if (dynamic_cast<const TransitivePathBase*>(&operation)) {
-    return true;
+// Check if an unbound transitive path is somewhere in the tree. This is because
+// the optimization with `Union` currently only makes sense if there is a
+// transitive path in the tree that benefits from directly applying the join.
+bool hasUnboundTransitivePathInTree(const Operation& operation) {
+  if (auto* transitivePath =
+          dynamic_cast<const TransitivePathBase*>(&operation)) {
+    return !transitivePath->isBoundOrId();
   }
   // Only check `UNION`s for children.
   if (!dynamic_cast<const Union*>(&operation)) {
@@ -2103,7 +2104,7 @@ bool hasTransitivePathInTree(const Operation& operation) {
   }
   return ql::ranges::any_of(
       operation.getChildren(), [](const QueryExecutionTree* child) {
-        return hasTransitivePathInTree(*child->getRootOperation());
+        return hasUnboundTransitivePathInTree(*child->getRootOperation());
       });
 }
 }  // namespace
@@ -2122,7 +2123,7 @@ auto QueryPlanner::applyJoinDistributivelyToUnion(const SubtreePlan& a,
                                                   bool flipped) {
     auto unionOperation =
         std::dynamic_pointer_cast<Union>(thisPlan._qet->getRootOperation());
-    if (!unionOperation || !hasTransitivePathInTree(*unionOperation)) {
+    if (!unionOperation || !hasUnboundTransitivePathInTree(*unionOperation)) {
       return;
     }
 
@@ -2130,13 +2131,8 @@ auto QueryPlanner::applyJoinDistributivelyToUnion(const SubtreePlan& a,
                                               const SubtreePlan& plan2,
                                               const JoinColumns& jcs) {
       if (jcs.empty()) {
-        std::vector children{plan1._qet, plan2._qet};
-        // Ensure most expensive subtree is on the right side.
-        ql::ranges::sort(children, {}, [](const auto& child) {
-          return child->getSizeEstimate();
-        });
-        return std::vector{
-            makeSubtreePlan<CartesianProductJoin>(_qec, std::move(children))};
+        return std::vector{makeSubtreePlan<CartesianProductJoin>(
+            _qec, std::vector{plan1._qet, plan2._qet})};
       }
       return createJoinCandidates(flipped ? plan2 : plan1,
                                   flipped ? plan1 : plan2, jcs);
