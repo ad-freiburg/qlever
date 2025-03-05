@@ -59,8 +59,6 @@ struct TextSearchConfig {
   std::optional<std::variant<Variable, std::string>> entity_;
 };
 
-std::ostream& operator<<(std::ostream& os, const TextSearchConfig& conf);
-
 using FixedEntity = std::pair<std::string, VocabIndex>;
 
 struct VarOrFixedEntity {
@@ -120,10 +118,10 @@ struct TextIndexScanForEntityConfiguration {
     return varToBindText_ == other.varToBindText_ && word_ == other.word_ &&
            scoreVar_ == other.scoreVar_ && varOrFixed_ == other.varOrFixed_;
   }
-};
 
-std::ostream& operator<<(std::ostream& os,
-                         const TextIndexScanForEntityConfiguration& conf);
+  friend std::ostream& operator<<(
+      std::ostream& os, const TextIndexScanForEntityConfiguration& conf);
+};
 
 /**
  * @brief This struct holds all information for a TextIndexScanForWord
@@ -165,10 +163,10 @@ struct TextIndexScanForWordConfiguration {
            matchVar_ == other.matchVar_ && scoreVar_ == other.scoreVar_ &&
            isPrefix_ == other.isPrefix_;
   }
-};
 
-std::ostream& operator<<(std::ostream& os,
-                         const TextIndexScanForWordConfiguration& conf);
+  friend std::ostream& operator<<(
+      std::ostream& os, const TextIndexScanForWordConfiguration& conf);
+};
 
 namespace parsedQuery {
 
