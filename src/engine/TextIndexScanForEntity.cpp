@@ -126,8 +126,11 @@ vector<ColumnIndex> TextIndexScanForEntity::resultSortedOn() const {
 
 // _____________________________________________________________________________
 string TextIndexScanForEntity::getDescriptor() const {
+  std::ostringstream oss;
+  oss << config_;
   return absl::StrCat("TextIndexScanForEntity on ",
-                      config_.varToBindText_.name());
+                      config_.varToBindText_.name(),
+                      " With config: ", oss.str());
 }
 
 // _____________________________________________________________________________

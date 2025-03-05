@@ -62,12 +62,10 @@ void TextIndexScanForWord::setVariableToColumnMap() {
     config_.variableColumns_.value()[config_.matchVar_.value()] =
         makeAlwaysDefinedColumn(index);
     index++;
-  } else if (config_.matchVar_.has_value()) {
-    throw parsedQuery::TextSearchException(
-        "Text index scan for word shouldn't have a variable to bind match "
-        "defined when the word is not a prefix.");
   }
-  AD_CORRECTNESS_CHECK(config_.isPrefix_ || !config_.matchVar_.has_value());
+  AD_CORRECTNESS_CHECK(config_.isPrefix_ || !config_.matchVar_.has_value(),
+                       "Text index scan for word shouldn't have a variable to "
+                       "bind match defined when the word is not a prefix.");
   if (config_.scoreVar_.has_value()) {
     config_.variableColumns_.value()[config_.scoreVar_.value()] =
         makeAlwaysDefinedColumn(index);
@@ -104,8 +102,10 @@ vector<ColumnIndex> TextIndexScanForWord::resultSortedOn() const {
 
 // _____________________________________________________________________________
 string TextIndexScanForWord::getDescriptor() const {
-  return absl::StrCat("TextIndexScanForWord on ",
-                      config_.varToBindText_.name());
+  std::ostringstream oss;
+  oss << config_;
+  return absl::StrCat("TextIndexScanForWord on ", config_.varToBindText_.name(),
+                      " With config: ", oss.str());
 }
 
 // _____________________________________________________________________________

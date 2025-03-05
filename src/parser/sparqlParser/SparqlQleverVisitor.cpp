@@ -1007,7 +1007,7 @@ GraphPatternOperation Visitor::visitTextSearchQuery(
         } else {
           reportError(
               ctx,
-              "Unsupported element in textSearchQuery."
+              "Unsupported element in textSearchQuery. "
               "textSearchQuery may only consist of triples for configuration");
         }
       };

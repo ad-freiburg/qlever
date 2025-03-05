@@ -157,7 +157,7 @@ constexpr auto TextIndexScanForWord = [](Variable textRecordVar,
 constexpr auto TextIndexScanForWordConf =
     [](TextIndexScanForWordConfiguration conf) -> QetMatcher {
   return RootOperation<::TextIndexScanForWord>(
-      AllOf(AD_PROPERTY(::TextIndexScanForWord, getConfig, conf)));
+      AD_PROPERTY(::TextIndexScanForWord, getConfig, conf));
 };
 
 // Matcher for the `TextLimit` Operation.
@@ -203,7 +203,7 @@ inline auto TextIndexScanForEntity =
 constexpr auto TextIndexScanForEntityConf =
     [](TextIndexScanForEntityConfiguration conf) -> QetMatcher {
   return RootOperation<::TextIndexScanForEntity>(
-      AllOf(AD_PROPERTY(::TextIndexScanForEntity, getConfig, conf)));
+      AD_PROPERTY(::TextIndexScanForEntity, getConfig, conf));
 };
 
 inline auto Bind = [](const QetMatcher& childMatcher,

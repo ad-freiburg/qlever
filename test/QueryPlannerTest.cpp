@@ -2582,6 +2582,22 @@ TEST(QueryPlanner, TextIndexScanForEntity) {
 
 TEST(QueryPlanner, TextSearchService) {
   // Check query errors
+  // No BasicGraphPattern in SERVICE
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      SparqlParser::parseQuery(
+          "PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
+          "SELECT * WHERE {"
+          "SERVICE qlts: {"
+          "SERVICE qlts: {"
+          "?t qlts:text-search ?fail ."
+          "?fail qlts:contains-word \"fail\" ."
+          "}"
+          "}"
+          "}"),
+      ::testing::HasSubstr(
+          "Unsupported element in textSearchQuery. textSearchQuery may only "
+          "consist of triples for configuration"));
+
   // Predicate text-search
   AD_EXPECT_THROW_WITH_MESSAGE(
       SparqlParser::parseQuery(
@@ -2896,7 +2912,7 @@ TEST(QueryPlanner, TextSearchService) {
           wordScanConf(TextIndexScanForWordConfiguration{Var{"?t"}, "part"})),
       qec);
 
-  // One contains-word and one contains-entity
+  // One contains-word and one contains-entity with variable for entity
   h::expect(
       "PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
       "SELECT * WHERE {"
@@ -2908,7 +2924,52 @@ TEST(QueryPlanner, TextSearchService) {
       h::Join(
           wordScanConf(TextIndexScanForWordConfiguration{Var{"?t"}, "test"}),
           entityScanConf(TextIndexScanForEntityConfiguration{
-              Var{"?t"}, Var{"?e"}, "test"})),
+              Var{"?t"},
+              Var{"?e"},
+              "test",
+              std::nullopt,
+              {},
+              VarOrFixedEntity(qec, Var{"?e"})})),
+      qec);
+
+  // One contains-word and one contains-entity with literal for entity
+  h::expect(
+      "PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
+      "SELECT * WHERE {"
+      "SERVICE qlts: {"
+      "?t qlts:text-search [qlts:contains-word \"test\" ] ."
+      "?t qlts:text-search [qlts:contains-entity \"<a>\" ] ."
+      "}"
+      "}",
+      h::Join(
+          wordScanConf(TextIndexScanForWordConfiguration{Var{"?t"}, "test"}),
+          entityScanConf(TextIndexScanForEntityConfiguration{
+              Var{"?t"},
+              "<a>",
+              "test",
+              std::nullopt,
+              {},
+              VarOrFixedEntity(qec, "<a>")})),
+      qec);
+
+  // One contains-word and one contains-entity with IRI for entity
+  h::expect(
+      "PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
+      "SELECT * WHERE {"
+      "SERVICE qlts: {"
+      "?t qlts:text-search [qlts:contains-word \"test\" ] ."
+      "?t qlts:text-search [qlts:contains-entity <a> ] ."
+      "}"
+      "}",
+      h::Join(
+          wordScanConf(TextIndexScanForWordConfiguration{Var{"?t"}, "test"}),
+          entityScanConf(TextIndexScanForEntityConfiguration{
+              Var{"?t"},
+              "<a>",
+              "test",
+              std::nullopt,
+              {},
+              VarOrFixedEntity(qec, "<a>")})),
       qec);
 
   // Check for three
@@ -2928,28 +2989,33 @@ TEST(QueryPlanner, TextSearchService) {
       qec);
 
   // Check if correct word is chosen with entity scan
-  // h::expect("PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
-  //   "SELECT * WHERE {"
-  //     "SERVICE qlts: {"
-  //       "?t qlts:text-search [qlts:contains-word \"picking*\" ] ."
-  //       "?t qlts:text-search [qlts:contains-entity <testEntity> ] ."
-  //       "?t qlts:text-search [qlts:contains-word \"opti\" ] ."
-  //       "?t qlts:text-search [qlts:contains-word \"testi*\" ] ."
-  //     "}"
-  //   "}",
-  //    h::UnorderedJoins(entityScanConf(TextIndexScanForEntityConfiguration{Var{"?text"},
-  //    "<testEntity>", "opti"}),
-  //                      wordScanConf(TextIndexScanForWordConfiguration{Var{"?text"},
-  //                      "testi*",
-  //                      Var{"?text"}.getMatchingWordVariable("testi"),
-  //                      std::nullopt, true}),
-  //                      wordScanConf(TextIndexScanForWordConfiguration{Var{"?text"},
-  //                      "opti"}),
-  //                      wordScanConf(TextIndexScanForWordConfiguration{Var{"?text"},
-  //                      "picking*",
-  //                      Var{"?text"}.getMatchingWordVariable("picking"),
-  //                      std::nullopt, true})),
-  //   qec);
+  h::expect(
+      "PREFIX qlts: <https://qlever.cs.uni-freiburg.de/textSearch/> "
+      "SELECT * WHERE {"
+      "SERVICE qlts: {"
+      "?t qlts:text-search [qlts:contains-word \"picking*\" ] ."
+      "?t qlts:text-search [qlts:contains-entity <a> ] ."
+      "?t qlts:text-search [qlts:contains-word \"opti\" ] ."
+      "?t qlts:text-search [qlts:contains-word \"testi*\" ] ."
+      "}"
+      "}",
+      h::UnorderedJoins(
+          entityScanConf(TextIndexScanForEntityConfiguration{
+              Var{"?t"},
+              "<a>",
+              "opti",
+              std::nullopt,
+              {},
+              VarOrFixedEntity(qec, "<a>")}),
+          wordScanConf(TextIndexScanForWordConfiguration{
+              Var{"?t"}, "testi*", Var{"?t"}.getMatchingWordVariable("testi"),
+              std::nullopt, true}),
+          wordScanConf(TextIndexScanForWordConfiguration{Var{"?t"}, "opti"}),
+          wordScanConf(TextIndexScanForWordConfiguration{
+              Var{"?t"}, "picking*",
+              Var{"?t"}.getMatchingWordVariable("picking"), std::nullopt,
+              true})),
+      qec);
 
   // Check full contains-word config
   h::expect(
@@ -2977,7 +3043,12 @@ TEST(QueryPlanner, TextSearchService) {
       h::Join(
           wordScanConf(TextIndexScanForWordConfiguration{Var{"?t"}, "test"}),
           entityScanConf(TextIndexScanForEntityConfiguration{
-              Var{"?t"}, Var{"?e"}, "test", Var{"?e_score"}})),
+              Var{"?t"},
+              Var{"?e"},
+              "test",
+              Var{"?e_score"},
+              {},
+              VarOrFixedEntity(qec, Var{"?e"})})),
       qec);
 }
 

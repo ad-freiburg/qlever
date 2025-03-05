@@ -9,6 +9,60 @@
 #include "parser/MagicServiceIriConstants.h"
 #include "util/http/HttpParser/AcceptHeaderQleverVisitor.h"
 
+std::ostream& operator<<(std::ostream& os, const TextSearchConfig& conf) {
+  os << "isWordSearch: "
+     << (conf.isWordSearch_.has_value()
+             ? (conf.isWordSearch_.value() ? "true" : "false")
+             : "not set")
+     << "; textVar_: "
+     << (conf.textVar_.has_value() ? conf.textVar_.value().name() : "not set")
+     << "; word_: " << conf.word_.value_or("not set") << "; matchVar_: "
+     << (conf.matchVar_.has_value() ? conf.matchVar_.value().name() : "not set")
+     << "; scoreVar_: "
+     << (conf.scoreVar_.has_value() ? conf.scoreVar_.value().name() : "not set")
+     << "; entity_: "
+     << (conf.entity_.has_value()
+             ? (std::holds_alternative<Variable>(conf.entity_.value())
+                    ? std::get<Variable>(conf.entity_.value()).name()
+                    : std::get<std::string>(conf.entity_.value()))
+             : "not set");
+  return os;
+}
+
+std::ostream& operator<<(std::ostream& os,
+                         const TextIndexScanForEntityConfiguration& conf) {
+  os << "varToBindText_: " << conf.varToBindText_.name() << "; entity_: "
+     << (std::holds_alternative<Variable>(conf.entity_)
+             ? std::get<Variable>(conf.entity_).name()
+             : std::get<std::string>(conf.entity_))
+     << "; word_: " << conf.word_ << "scoreVar_: "
+     << (conf.scoreVar_.has_value() ? conf.scoreVar_.value().name() : "not set")
+     << "; variableColumns_: "
+     << (conf.variableColumns_.has_value() ? "is set" : "not set")
+     << "; varOrFixed_: "
+     << (conf.varOrFixed_.has_value()
+             ? (conf.varOrFixed_.value().hasFixedEntity()
+                    ? std::get<FixedEntity>(conf.varOrFixed_.value().entity_)
+                          .first
+                    : std::get<Variable>(conf.varOrFixed_.value().entity_)
+                          .name())
+             : "not set");
+  return os;
+}
+
+std::ostream& operator<<(std::ostream& os,
+                         const TextIndexScanForWordConfiguration& conf) {
+  os << "varToBindText_: " << conf.varToBindText_.name()
+     << "; word_: " << conf.word_ << "; matchVar_: "
+     << (conf.matchVar_.has_value() ? conf.matchVar_.value().name() : "not set")
+     << "; scoreVar_: "
+     << (conf.scoreVar_.has_value() ? conf.scoreVar_.value().name() : "not set")
+     << "; isPrefix_: " << (conf.isPrefix_ ? "true" : "false")
+     << "; variableColumns_: "
+     << (conf.variableColumns_.has_value() ? "is set" : "not set");
+  return os;
+}
+
 std::variant<Variable, FixedEntity> VarOrFixedEntity::makeEntityVariant(
     const QueryExecutionContext* qec,
     std::variant<Variable, std::string> entity) {
@@ -180,7 +234,8 @@ TextSearchQuery::toConfigs(const QueryExecutionContext* qec) const {
                            TextIndexScanForEntityConfiguration>>
       output;
   // First pass to get all word searches
-  ad_utility::HashMap<Variable, vector<string>> potentialTermsForCvar;
+  ad_utility::HashMap<Variable, vector<string>> potentialTermsForTextVar;
+  ad_utility::HashMap<Variable, string> optTermForTextVar;
   for (const auto& [var, conf] : configVarToConfigs_) {
     if (!conf.isWordSearch_.has_value()) {
       throw TextSearchException(absl::StrCat(
@@ -225,10 +280,17 @@ TextSearchQuery::toConfigs(const QueryExecutionContext* qec) const {
                          "\". The text variable bound to was: ",
                          conf.textVar_.value().name()));
       }
-      potentialTermsForCvar[conf.textVar_.value()].push_back(
+      potentialTermsForTextVar[conf.textVar_.value()].push_back(
           conf.word_.value());
     }
   }
+  // Get the correct words for entity scans
+  for (const auto& [textVar, potentialTerms] : potentialTermsForTextVar) {
+    optTermForTextVar[textVar] =
+        potentialTerms[qec->getIndex().getIndexOfBestSuitedElTerm(
+            potentialTerms)];
+  }
+
   // Second pass to create all configs
   for (const auto& [var, conf] : configVarToConfigs_) {
     if (conf.isWordSearch_.value()) {
@@ -236,8 +298,7 @@ TextSearchQuery::toConfigs(const QueryExecutionContext* qec) const {
           conf.textVar_.value(), conf.word_.value(), conf.matchVar_,
           conf.scoreVar_});
     } else {
-      auto it = potentialTermsForCvar.find(conf.textVar_.value());
-      if (it == potentialTermsForCvar.end()) {
+      if (!optTermForTextVar.contains(conf.textVar_.value())) {
         throw TextSearchException(absl::StrCat(
             "Entity search has to happen on a text variable that is also "
             "contained in a word search. Text variable: ",
@@ -246,8 +307,7 @@ TextSearchQuery::toConfigs(const QueryExecutionContext* qec) const {
       }
       output.emplace_back(TextIndexScanForEntityConfiguration{
           conf.textVar_.value(), conf.entity_.value(),
-          it->second[qec->getIndex().getIndexOfBestSuitedElTerm(it->second)],
-          conf.scoreVar_});
+          optTermForTextVar[conf.textVar_.value()], conf.scoreVar_});
     }
   }
   return output;

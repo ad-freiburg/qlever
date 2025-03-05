@@ -59,6 +59,8 @@ struct TextSearchConfig {
   std::optional<std::variant<Variable, std::string>> entity_;
 };
 
+std::ostream& operator<<(std::ostream& os, const TextSearchConfig& conf);
+
 using FixedEntity = std::pair<std::string, VocabIndex>;
 
 struct VarOrFixedEntity {
@@ -75,6 +77,10 @@ struct VarOrFixedEntity {
   bool hasFixedEntity() const {
     return std::holds_alternative<FixedEntity>(entity_);
   }
+
+  bool operator==(const VarOrFixedEntity& other) const {
+    return entity_ == other.entity_;
+  }
 };
 
 /**
@@ -87,6 +93,7 @@ struct VarOrFixedEntity {
  *          extended or created in the constructor.
  *          Struct variable information:
  *          - varToBindText_: See details of TextSearchConfig
+ *          - entity_: See details of TextSearchConfig
  *          - word_: See details of TextSearchConfig
  *          - scoreVar_: See details of TextSearchConfig. If not given will be
  *                        constructed during the creation of
@@ -110,10 +117,13 @@ struct TextIndexScanForEntityConfiguration {
   std::optional<VarOrFixedEntity> varOrFixed_ = std::nullopt;
 
   bool operator==(const TextIndexScanForEntityConfiguration& other) const {
-    return varToBindText_ == other.varToBindText_ && entity_ == other.entity_ &&
-           word_ == other.word_ && scoreVar_ == other.scoreVar_;
+    return varToBindText_ == other.varToBindText_ && word_ == other.word_ &&
+           scoreVar_ == other.scoreVar_ && varOrFixed_ == other.varOrFixed_;
   }
 };
+
+std::ostream& operator<<(std::ostream& os,
+                         const TextIndexScanForEntityConfiguration& conf);
 
 /**
  * @brief This struct holds all information for a TextIndexScanForWord
@@ -156,6 +166,9 @@ struct TextIndexScanForWordConfiguration {
            isPrefix_ == other.isPrefix_;
   }
 };
+
+std::ostream& operator<<(std::ostream& os,
+                         const TextIndexScanForWordConfiguration& conf);
 
 namespace parsedQuery {
 
