@@ -163,7 +163,7 @@ struct SortedUnionImpl
     }
   }
 
-  // Retreive the current result from `resultTable_` and `localVocab_` and reset
+  // Retrieve the current result from `resultTable_` and `localVocab_` and reset
   // those members back to their initial value so the next operation can
   // continue adding values.
   Result::IdTableVocabPair popResult() {
