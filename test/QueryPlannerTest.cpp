@@ -3002,15 +3002,17 @@ TEST(QueryPlanner, PropertyPathWithGraphIri) {
       "SELECT * WHERE { GRAPH <abc> { ?x a* ?y } } ",
       h::TransitivePath(
           left, right, 0, std::numeric_limits<size_t>::max(),
-          h::Distinct(h::Sort(h::Union(
-              h::IndexScanFromStrings("?internal_property_path_variable_x",
-                                      "?internal_property_path_variable_y",
-                                      "?internal_property_path_variable_z", {},
-                                      {{"<abc>"}}),
-              h::IndexScanFromStrings("?internal_property_path_variable_z",
-                                      "?internal_property_path_variable_y",
-                                      "?internal_property_path_variable_x", {},
-                                      {{"<abc>"}})))),
+          h::Distinct(
+              {0},
+              h::Sort(h::Union(
+                  h::IndexScanFromStrings("?internal_property_path_variable_x",
+                                          "?internal_property_path_variable_y",
+                                          "?internal_property_path_variable_z",
+                                          {}, {{"<abc>"}}),
+                  h::IndexScanFromStrings("?internal_property_path_variable_z",
+                                          "?internal_property_path_variable_y",
+                                          "?internal_property_path_variable_x",
+                                          {}, {{"<abc>"}})))),
           h::IndexScanFromStrings(
               "?_QLever_internal_variable_qp_0",
               "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>",
@@ -3019,15 +3021,17 @@ TEST(QueryPlanner, PropertyPathWithGraphIri) {
       "SELECT * FROM <abc> WHERE { ?x a* ?y } ",
       h::TransitivePath(
           left, right, 0, std::numeric_limits<size_t>::max(),
-          h::Distinct(h::Sort(h::Union(
-              h::IndexScanFromStrings("?internal_property_path_variable_x",
-                                      "?internal_property_path_variable_y",
-                                      "?internal_property_path_variable_z", {},
-                                      {{"<abc>"}}),
-              h::IndexScanFromStrings("?internal_property_path_variable_z",
-                                      "?internal_property_path_variable_y",
-                                      "?internal_property_path_variable_x", {},
-                                      {{"<abc>"}})))),
+          h::Distinct(
+              {0},
+              h::Sort(h::Union(
+                  h::IndexScanFromStrings("?internal_property_path_variable_x",
+                                          "?internal_property_path_variable_y",
+                                          "?internal_property_path_variable_z",
+                                          {}, {{"<abc>"}}),
+                  h::IndexScanFromStrings("?internal_property_path_variable_z",
+                                          "?internal_property_path_variable_y",
+                                          "?internal_property_path_variable_x",
+                                          {}, {{"<abc>"}})))),
           h::IndexScanFromStrings(
               "?_QLever_internal_variable_qp_0",
               "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>",

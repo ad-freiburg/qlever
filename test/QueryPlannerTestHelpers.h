@@ -422,7 +422,13 @@ constexpr auto OrderBy = [](const ::OrderBy::SortedVariables& sortedVariables,
 constexpr auto Union = MatchTypeAndOrderedChildren<::Union>;
 
 // Match a `DISTINCT` operation.
-constexpr auto Distinct = MatchTypeAndOrderedChildren<::Distinct>;
+constexpr auto Distinct = [](const std::vector<ColumnIndex>& distinctColumns,
+                             const QetMatcher& childMatcher) {
+  return RootOperation<::Distinct>(
+      AllOf(children(childMatcher),
+            AD_PROPERTY(::Distinct, getDistinctColumns,
+                        UnorderedElementsAreArray(distinctColumns))));
+};
 
 // Match a `DESCRIBE` operation
 inline QetMatcher Describe(
