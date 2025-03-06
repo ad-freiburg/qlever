@@ -107,6 +107,10 @@ class SparqlQleverVisitor {
   // meaning of blank and anonymous nodes is different.
   bool isInsideConstructTriples_ = false;
 
+  // Resets the Visitors state between updates. This resets everything except
+  // prefix and base.
+  void resetState();
+
  public:
   SparqlQleverVisitor() = default;
   explicit SparqlQleverVisitor(

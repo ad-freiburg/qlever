@@ -231,6 +231,18 @@ ParsedQuery Visitor::visit(Parser::QueryContext* ctx) {
 }
 
 // ____________________________________________________________________________________
+void SparqlQleverVisitor::resetState() {
+  _blankNodeCounter = 0;
+  numInternalVariables_ = 0;
+  numGraphPatterns_ = 0;
+  visibleVariables_ = {};
+  activeDatasetClauses_ = {};
+  prologueString_ = {};
+  parsedQuery_ = {};
+  isInsideConstructTriples_ = false;
+}
+
+// ____________________________________________________________________________________
 std::vector<ParsedQuery> Visitor::visit(Parser::QueryOrUpdateContext* ctx) {
   if (ctx->update() && ctx->update()->update1().empty()) {
     // An empty query currently matches the `update()` rule. We handle this
@@ -512,9 +524,9 @@ std::vector<ParsedQuery> Visitor::visit(Parser::UpdateContext* ctx) {
 
   AD_CORRECTNESS_CHECK(ctx->prologue().size() >= ctx->update1().size());
   for (size_t i = 0; i < ctx->update1().size(); ++i) {
-    // The prologue (BASE and PREFIX declarations)  only affects the internal
-    // state of the visitor. The standard describes that prefixes are shared
-    // between consecutive queries.
+    // The prologue (BASE and PREFIX declarations) only affects the internal
+    // state of the visitor. The standard mentions that prefixes are shared
+    // between consecutive
     visit(ctx->prologue(i));
     auto thisUpdate = visit(ctx->update1(i));
     // The string representation of the Update is from the beginning of that
@@ -526,6 +538,7 @@ std::vector<ParsedQuery> Visitor::visit(Parser::UpdateContext* ctx) {
         ctx->getStart()->getInputStream()->toString(), updateStartPos,
         updateEndPos - updateStartPos + 1)};
     updates.push_back(std::move(thisUpdate));
+    resetState();
   }
 
   return updates;
