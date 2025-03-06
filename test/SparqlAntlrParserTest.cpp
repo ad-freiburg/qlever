@@ -1649,12 +1649,24 @@ TEST(SparqlParser, builtInCall) {
       "concat(?x, ?y, ?z)",
       matchNary(makeConcatExpressionVariadic, Var{"?x"}, Var{"?y"}, Var{"?z"}));
 
+  auto makeReplaceExpressionThreeArgs = [](auto&& arg0, auto&& arg1,
+                                           auto&& arg2) {
+    return makeReplaceExpression(AD_FWD(arg0), AD_FWD(arg1), AD_FWD(arg2),
+                                 nullptr);
+  };
+
+  expectBuiltInCall("replace(?x, ?y, ?z)",
+                    matchNary(makeReplaceExpressionThreeArgs, Var{"?x"},
+                              Var{"?y"}, Var{"?z"}));
   expectBuiltInCall(
-      "replace(?x, ?y, ?z)",
-      matchNary(&makeReplaceExpression, Var{"?x"}, Var{"?y"}, Var{"?z"}));
-  expectFails("replace(?x, ?y, ?z, \"i\")",
-              ::testing::AllOf(::testing::ContainsRegex("regex"),
-                               ::testing::ContainsRegex("flags")));
+      "replace(?x, ?y, ?z, \"imsu\")",
+      matchNaryWithChildrenMatchers(
+          makeReplaceExpressionThreeArgs, variableExpressionMatcher(Var{"?x"}),
+          matchNaryWithChildrenMatchers(
+              &makeMergeRegexPatternAndFlagsExpression,
+              variableExpressionMatcher(Var{"?y"}),
+              matchLiteralExpression(lit("imsu"))),
+          variableExpressionMatcher(Var{"?z"})));
   expectBuiltInCall("IF(?a, ?h, ?c)", matchNary(&makeIfExpression, Var{"?a"},
                                                 Var{"?h"}, Var{"?c"}));
   expectBuiltInCall("LANG(?x)", matchUnary(&makeLangExpression));

@@ -73,7 +73,6 @@ class SparqlQleverVisitor {
 
  private:
   size_t _blankNodeCounter = 0;
-  int64_t numInternalVariables_ = 0;
   int64_t numGraphPatterns_ = 0;
   // The visible variables in the order in which they are encountered in the
   // query. This may contain duplicates. A variable is added via

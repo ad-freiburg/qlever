@@ -233,7 +233,6 @@ ParsedQuery Visitor::visit(Parser::QueryContext* ctx) {
 // ____________________________________________________________________________________
 void SparqlQleverVisitor::resetState() {
   _blankNodeCounter = 0;
-  numInternalVariables_ = 0;
   numGraphPatterns_ = 0;
   visibleVariables_ = {};
   activeDatasetClauses_ = {};
@@ -1295,9 +1294,7 @@ Visitor::SubQueryAndMaybeValues Visitor::visit(Parser::SubSelectContext* ctx) {
   ParsedQuery& query = parsedQuery_;
   query._clause = visit(ctx->selectClause());
   visitWhereClause(ctx->whereClause(), query);
-  query.setNumInternalVariables(numInternalVariables_);
   query.addSolutionModifiers(visit(ctx->solutionModifier()));
-  numInternalVariables_ = query.getNumInternalVariables();
   auto values = visit(ctx->valuesClause());
   // Variables that are selected in this query are visible in the parent query.
   for (const auto& variable : query.selectClause().getSelectedVariables()) {
@@ -2509,20 +2506,10 @@ SparqlExpression::Ptr Visitor::visit(Parser::SubstringExpressionContext* ctx) {
 SparqlExpression::Ptr Visitor::visit(Parser::StrReplaceExpressionContext* ctx) {
   auto children = visitVector(ctx->expression());
   AD_CORRECTNESS_CHECK(children.size() == 3 || children.size() == 4);
-  if (children.size() == 4) {
-    reportError(
-        ctx,
-        "REPLACE expressions with four arguments (including regex flags) are "
-        "currently not supported by QLever. You can however incorporate "
-        "flags "
-        "directly into a regex by prepending `(?<flags>)` to your regex. For "
-        "example `(?i)[ei]` will match the regex `[ei]` in a "
-        "case-insensitive "
-        "way.");
-  }
-  return sparqlExpression::makeReplaceExpression(std::move(children.at(0)),
-                                                 std::move(children.at(1)),
-                                                 std::move(children.at(2)));
+  return makeReplaceExpression(
+      std::move(children.at(0)), std::move(children.at(1)),
+      std::move(children.at(2)),
+      children.size() == 4 ? std::move(children.at(3)) : nullptr);
 }
 
 // ____________________________________________________________________________
