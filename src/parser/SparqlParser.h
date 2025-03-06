@@ -14,5 +14,6 @@
 class SparqlParser {
  public:
   static ParsedQuery parseQuery(
-      std::string operation, const std::vector<DatasetClause>& datasets = {});
+      std::string operation,
+      std::optional<std::vector<DatasetClause>> datasets = std::nullopt);
 };

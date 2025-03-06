@@ -43,12 +43,13 @@ struct ParserAndVisitor {
   SparqlAutomaticParser parser_{&tokens_};
   SparqlQleverVisitor visitor_;
   explicit ParserAndVisitor(
-      string input, ParsedQuery::DatasetClauses datasetClauses = {},
+      string input,
+      std::optional<ParsedQuery::DatasetClauses> datasetClauses = std::nullopt,
       SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks =
           SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::False);
   ParserAndVisitor(
       string input, SparqlQleverVisitor::PrefixMap prefixes,
-      ParsedQuery::DatasetClauses datasetClauses = {},
+      std::optional<ParsedQuery::DatasetClauses> datasetClauses = std::nullopt,
       SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks =
           SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::False);
 

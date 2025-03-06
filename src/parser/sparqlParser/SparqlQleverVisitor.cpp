@@ -321,10 +321,7 @@ parsedQuery::BasicGraphPattern Visitor::toGraphPattern(
 // ____________________________________________________________________________________
 parsedQuery::DatasetClauses SparqlQleverVisitor::setAndGetDatasetClauses(
     const std::vector<DatasetClause>& clauses) {
-  // TODO: is it a good idea to do this implicitly (the fields are nullopt) or
-  // should this be done explicitly (with a bool flag)?
-  if (!activeDatasetClauses_.defaultGraphs_.has_value() &&
-      !activeDatasetClauses_.namedGraphs_.has_value()) {
+  if (!datasetsAreFixed_) {
     activeDatasetClauses_ = parsedQuery::DatasetClauses::fromClauses(clauses);
   }
   return activeDatasetClauses_;

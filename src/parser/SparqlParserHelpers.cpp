@@ -16,7 +16,8 @@ using std::string;
 
 // _____________________________________________________________________________
 ParserAndVisitor::ParserAndVisitor(
-    std::string input, ParsedQuery::DatasetClauses datasetClauses,
+    std::string input,
+    std::optional<ParsedQuery::DatasetClauses> datasetClauses,
     SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks)
     : input_{unescapeUnicodeSequences(std::move(input))},
       visitor_{{}, std::move(datasetClauses), disableSomeChecks} {
@@ -32,7 +33,7 @@ ParserAndVisitor::ParserAndVisitor(
 // _____________________________________________________________________________
 ParserAndVisitor::ParserAndVisitor(
     std::string input, SparqlQleverVisitor::PrefixMap prefixes,
-    ParsedQuery::DatasetClauses datasetClauses,
+    std::optional<ParsedQuery::DatasetClauses> datasetClauses,
     SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks)
     : ParserAndVisitor{std::move(input), std::move(datasetClauses),
                        disableSomeChecks} {
