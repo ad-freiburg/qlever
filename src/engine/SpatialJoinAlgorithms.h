@@ -227,5 +227,7 @@ class SpatialJoinAlgorithms {
   size_t numFailedParsedGeometries_ = 0;
 
   // this vector stores the geometries, which have already been parsed
-  std::vector<AnyGeometry, ad_utility::AllocatorWithLimit<Value>> geometries_;
+  std::vector<AnyGeometry,
+              ad_utility::AllocatorWithLimit<BoostGeometryNamespace::Value>>
+      geometries_;
 };
