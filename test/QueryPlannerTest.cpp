@@ -2983,17 +2983,19 @@ TEST(QueryPlanner, Exists) {
 }
 
 // _____________________________________________________________________________
-TEST(QueryPlanner, PropertyPathWithGraph) {
-  {
-    auto query = SparqlParser::parseQuery(
-        "SELECT * WHERE { GRAPH ?g { 0 a+ 1 } FILTER(?g = <abc>) }");
-    auto qp = makeQueryPlanner();
-    AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
-        qp.createExecutionTree(query),
-        ::testing::HasSubstr(
-            "Property paths with graph variables are not supported"),
-        ad_utility::Exception);
-  }
+TEST(QueryPlanner, PropertyPathWithGraphVariable) {
+  auto query = SparqlParser::parseQuery(
+      "SELECT * WHERE { GRAPH ?g { 0 a+ 1 } FILTER(?g = <abc>) }");
+  auto qp = makeQueryPlanner();
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      qp.createExecutionTree(query),
+      ::testing::HasSubstr(
+          "Property paths with graph variables are not supported"),
+      ad_utility::Exception);
+}
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, PropertyPathWithGraphIri) {
   TransitivePathSide left{std::nullopt, 0, Variable("?x"), 0};
   TransitivePathSide right{std::nullopt, 1, Variable("?y"), 1};
   h::expect(
