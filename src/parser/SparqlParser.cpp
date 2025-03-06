@@ -9,12 +9,12 @@
 using AntlrParser = SparqlAutomaticParser;
 
 // _____________________________________________________________________________
-ParsedQuery SparqlParser::parseQuery(
-    std::string operation, std::optional<std::vector<DatasetClause>> datasets) {
+ParsedQuery SparqlParser::parseQuery(std::string operation,
+                                     std::vector<DatasetClause> datasets) {
   using S = std::string;
   std::optional<ParsedQuery::DatasetClauses> parsedDatasets = std::nullopt;
-  if (datasets.has_value()) {
-    parsedDatasets = parsedQuery::DatasetClauses::fromClauses(datasets.value());
+  if (!datasets.empty()) {
+    parsedDatasets = parsedQuery::DatasetClauses::fromClauses(datasets);
   }
   // The second argument is the `PrefixMap` for QLever's internal IRIs.
   // The third argument are the datasets from outside the query, which override

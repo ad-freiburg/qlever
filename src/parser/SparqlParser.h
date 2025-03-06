@@ -13,7 +13,8 @@
 // message is given.
 class SparqlParser {
  public:
-  static ParsedQuery parseQuery(
-      std::string operation,
-      std::optional<std::vector<DatasetClause>> datasets = std::nullopt);
+  // `datasets` are the fixed datasets as per the SPARQL protocol. Passing no
+  // datasets means that they are not fixed.
+  static ParsedQuery parseQuery(std::string operation,
+                                std::vector<DatasetClause> datasets = {});
 };
