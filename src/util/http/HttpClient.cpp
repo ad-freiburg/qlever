@@ -119,7 +119,7 @@ HttpOrHttpsResponse HttpClientImpl<StreamType>::sendRequest(
   beast::flat_buffer buffer;
   auto responseParser =
       std::make_unique<http::response_parser<http::buffer_body>>();
-  responseParser->body_limit(std::numeric_limits<std::uint64_t>::max());
+  responseParser->body_limit(boost::none);
   wait(http::async_read_header(*(client->stream_), buffer, *responseParser,
                                net::use_awaitable));
 
