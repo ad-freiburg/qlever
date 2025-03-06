@@ -489,15 +489,23 @@ QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
            absl::StrSplit(sv.substr(1, sv.size() - 2), ' ')) {
         std::string s{ad_utility::utf8ToLower(term)};
         potentialTermsForCvar[t.s_.getVariable()].push_back(s);
+        if (activeGraphVariable_.has_value() ||
+            activeDatasetClauses_.defaultGraphs_.has_value()) {
+          AD_THROW(
+              "contains-word is not allowed inside GRAPH clauses or in queries "
+              "with FROM/FROM NAMED clauses.");
+        }
         addNodeToTripleGraph(
-            TripleGraph::Node(tg._nodeStorage.size(), t.s_.getVariable(), s, t),
+            TripleGraph::Node{tg._nodeStorage.size(), t.s_.getVariable(), s, t},
             tg);
         numNodesInTripleGraph++;
       }
     } else if (t.p_.iri_ == CONTAINS_ENTITY_PREDICATE) {
       entityTriples.push_back(&t);
     } else {
-      addNodeToTripleGraph(TripleGraph::Node(tg._nodeStorage.size(), t), tg);
+      addNodeToTripleGraph(
+          TripleGraph::Node{tg._nodeStorage.size(), t, activeGraphVariable_},
+          tg);
       numNodesInTripleGraph++;
     }
   }

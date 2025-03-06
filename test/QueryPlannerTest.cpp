@@ -2987,6 +2987,16 @@ TEST(QueryPlanner, Exists) {
 }
 
 // _____________________________________________________________________________
+TEST(QueryPlanner, ensureGeneratedInternalVariablesDontClash) {
+  h::expect("SELECT * { SELECT ?s { ?s <a> [] } ORDER BY RAND() }",
+            h::OrderBy({std::pair{Var{"?_QLever_internal_variable_1"},
+                                  OrderBy::AscOrDesc::Asc}},
+                       h::Bind(h::IndexScanFromStrings(
+                                   "?s", "<a>", "?_QLever_internal_variable_0"),
+                               "RAND()", Var{"?_QLever_internal_variable_1"})));
+}
+
+// _____________________________________________________________________________
 TEST(QueryPlanner, FilterOnNeutralElement) {
   h::expect("SELECT * { FILTER(false) }",
             h::Filter("false", h::NeutralElement()));
@@ -2996,4 +3006,61 @@ TEST(QueryPlanner, FilterOnNeutralElement) {
   h::expect("SELECT * { { SELECT * WHERE { FILTER(false) } } VALUES ?x { 1 } }",
             h::CartesianProductJoin(h::Filter("false", h::NeutralElement()),
                                     h::ValuesClause("VALUES (?x) { (1) }")));
+}
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, ContainsWordInGraphClause) {
+  {
+    auto qp = makeQueryPlanner();
+    auto query = SparqlParser::parseQuery(
+        "SELECT * { GRAPH ?g { ?s "
+        "<http://qlever.cs.uni-freiburg.de/builtin-functions/contains-word> "
+        "\"Test\" } }");
+    AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+        qp.createExecutionTree(query),
+        ::testing::HasSubstr(
+            "contains-word is not allowed inside GRAPH clauses "
+            "or in queries with FROM/FROM NAMED clauses."),
+        ad_utility::Exception);
+  }
+  {
+    auto qp = makeQueryPlanner();
+    auto query = SparqlParser::parseQuery(
+        "SELECT * { GRAPH <my-iri> { ?s "
+        "<http://qlever.cs.uni-freiburg.de/builtin-functions/contains-word> "
+        "\"Test\" } }");
+    AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+        qp.createExecutionTree(query),
+        ::testing::HasSubstr(
+            "contains-word is not allowed inside GRAPH clauses "
+            "or in queries with FROM/FROM NAMED clauses."),
+        ad_utility::Exception);
+  }
+  {
+    auto qp = makeQueryPlanner();
+    auto query = SparqlParser::parseQuery(
+        "SELECT * FROM <my-iri> WHERE { ?s "
+        "<http://qlever.cs.uni-freiburg.de/builtin-functions/contains-word> "
+        "\"Test\" }");
+    AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+        qp.createExecutionTree(query),
+        ::testing::HasSubstr(
+            "contains-word is not allowed inside GRAPH clauses "
+            "or in queries with FROM/FROM NAMED clauses."),
+        ad_utility::Exception);
+  }
+}
+
+// _____________________________________________________________________________
+TEST(QueryPlanner, UnconnectedComponentsInGraphClause) {
+  h::expect("SELECT * WHERE { GRAPH ?g { ?s1 ?p1 ?o1 . ?s2 ?p2 ?o2 } }",
+            h::Join(h::Sort(h::IndexScanFromStrings("?s1", "?p1", "?o1", {}, {},
+                                                    {Variable{"?g"}}, {3})),
+                    h::Sort(h::IndexScanFromStrings("?s2", "?p2", "?o2", {}, {},
+                                                    {Variable{"?g"}}, {3}))));
+  // Sanity check case without a GRAPH clause
+  h::expect(
+      "SELECT * WHERE { ?s1 ?p1 ?o1 . ?s2 ?p2 ?o2 }",
+      h::CartesianProductJoin(h::IndexScanFromStrings("?s1", "?p1", "?o1"),
+                              h::IndexScanFromStrings("?s2", "?p2", "?o2")));
 }
