@@ -27,7 +27,10 @@ SpatialJoinAlgorithms::SpatialJoinAlgorithms(
     : qec_{qec},
       params_{std::move(params)},
       config_{std::move(config)},
-      spatialJoin_{spatialJoin} {}
+      spatialJoin_{spatialJoin} {
+  geometries_ = std::vector<AnyGeometry, ad_utility::AllocatorWithLimit<Value>>(
+      qec_->getAllocator());
+}
 
 // ____________________________________________________________________________
 std::optional<GeoPoint> SpatialJoinAlgorithms::getPoint(const IdTable* restable,
@@ -628,6 +631,9 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
       rtree(bgi::quadratic<16>{}, bgi::indexable<Value>{},
             bgi::equal_to<Value>{}, qec_->getAllocator());
   for (size_t i = 0; i < smallerResult->numRows(); i++) {
+    if (spatialJoin_.has_value()) {
+      spatialJoin_.value()->checkCancellationWrapperForSpatialJoinAlgorithms();
+    }
     // add every box together with the additional information into the rtree
     std::optional<RtreeEntry> entry =
         getRtreeEntry(smallerResult, i, smallerResJoinCol);
@@ -645,6 +651,9 @@ Result SpatialJoinAlgorithms::BoundingBoxAlgorithm() {
   std::vector<Value, ad_utility::AllocatorWithLimit<Value>> results{
       qec_->getAllocator()};
   for (size_t i = 0; i < otherResult->numRows(); i++) {
+    if (spatialJoin_.has_value()) {
+      spatialJoin_.value()->checkCancellationWrapperForSpatialJoinAlgorithms();
+    }
     std::optional<RtreeEntry> entry =
         getRtreeEntry(otherResult, i, otherResJoinCol);
     if (!entry) {
