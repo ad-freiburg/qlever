@@ -6,9 +6,7 @@
 
 #include <utility>
 
-#include "engine/CallFixedSize.h"
 #include "engine/TransitivePathBase.h"
-#include "util/Exception.h"
 #include "util/Timer.h"
 
 namespace detail {
@@ -303,9 +301,9 @@ class TransitivePathImpl : public TransitivePathBase {
    * @return cppcoro::generator<TableColumnWithVocab> An generator for
    * the transitive hull computation
    */
-  cppcoro::generator<TableColumnWithVocab> setupNodes(
+  static cppcoro::generator<TableColumnWithVocab> setupNodes(
       const TransitivePathSide& startSide,
-      std::shared_ptr<const Result> startSideResult) const {
+      std::shared_ptr<const Result> startSideResult) {
     if (startSideResult->isFullyMaterialized()) {
       // Bound -> var|id
       std::span<const Id> startNodes = startSideResult->idTable().getColumn(
