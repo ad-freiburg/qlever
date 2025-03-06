@@ -27,11 +27,8 @@ SpatialJoinAlgorithms::SpatialJoinAlgorithms(
     : qec_{qec},
       params_{std::move(params)},
       config_{std::move(config)},
-      spatialJoin_{spatialJoin} {
-  geometries_ =
-      std::vector<AnyGeometry, ad_utility::AllocatorWithLimit<AnyGeometry>>(
-          qec_->getAllocator());
-}
+      spatialJoin_{spatialJoin},
+      geometries_{qec->getAllocator()} {}
 
 // ____________________________________________________________________________
 std::optional<GeoPoint> SpatialJoinAlgorithms::getPoint(const IdTable* restable,
