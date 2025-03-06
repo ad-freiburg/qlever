@@ -232,7 +232,7 @@ ParsedQuery Visitor::visit(Parser::QueryContext* ctx) {
 
 // ____________________________________________________________________________________
 std::vector<ParsedQuery> Visitor::visit(Parser::QueryOrUpdateContext* ctx) {
-  if (ctx->update() && !ctx->update()->update1()) {
+  if (ctx->update() && ctx->update()->update1().empty()) {
     // An empty query currently matches the `update()` rule. We handle this
     // case manually to get a better error message. If an update query doesn't
     // have an `update1()`, then it consists of a (possibly empty) prologue, but
@@ -508,28 +508,24 @@ std::optional<Values> Visitor::visit(Parser::ValuesClauseContext* ctx) {
 
 // ____________________________________________________________________________
 std::vector<ParsedQuery> Visitor::visit(Parser::UpdateContext* ctx) {
-  // The prologue (BASE and PREFIX declarations)  only affects the internal
-  // state of the visitor.
-  visit(ctx->prologue());
-  if (!ctx->update1()) {
-    return {};
-  }
+  std::vector<ParsedQuery> updates{};
 
-  auto thisUpdate = visit(ctx->update1());
-  // The string representation of the Update is from the beginning of that
-  // updates prologue to the end of the update. The `;` between queries is
-  // ignored in the string representation.
-  const size_t updateStartPos = ctx->prologue()->getStart()->getStartIndex();
-  const size_t updateEndPos = ctx->update1()->getStop()->getStopIndex();
-  thisUpdate._originalString = std::string{ad_utility::getUTF8Substring(
-      ctx->getStart()->getInputStream()->toString(), updateStartPos,
-      updateEndPos - updateStartPos + 1)};
-  std::vector updates{std::move(thisUpdate)};
-
-  if (ctx->update()) {
-    // This is a new operation, reset the state of the Visitor.
-    SparqlQleverVisitor nextVisitor{prefixMap_};
-    ad_utility::appendVector(updates, nextVisitor.visit(ctx->update()));
+  AD_CORRECTNESS_CHECK(ctx->prologue().size() >= ctx->update1().size());
+  for (size_t i = 0; i < ctx->update1().size(); ++i) {
+    // The prologue (BASE and PREFIX declarations)  only affects the internal
+    // state of the visitor. The standard describes that prefixes are shared
+    // between consecutive queries.
+    visit(ctx->prologue(i));
+    auto thisUpdate = visit(ctx->update1(i));
+    // The string representation of the Update is from the beginning of that
+    // updates prologue to the end of the update. The `;` between queries is
+    // ignored in the string representation.
+    const size_t updateStartPos = ctx->prologue(i)->getStart()->getStartIndex();
+    const size_t updateEndPos = ctx->update1(i)->getStop()->getStopIndex();
+    thisUpdate._originalString = std::string{ad_utility::getUTF8Substring(
+        ctx->getStart()->getInputStream()->toString(), updateStartPos,
+        updateEndPos - updateStartPos + 1)};
+    updates.push_back(std::move(thisUpdate));
   }
 
   return updates;
