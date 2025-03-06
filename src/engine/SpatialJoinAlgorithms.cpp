@@ -28,7 +28,8 @@ SpatialJoinAlgorithms::SpatialJoinAlgorithms(
       params_{std::move(params)},
       config_{std::move(config)},
       spatialJoin_{spatialJoin} {
-  geometries_ = std::vector<AnyGeometry, ad_utility::AllocatorWithLimit<Value>>(
+  geometries_ = std::vector<AnyGeometry, ad_utility::AllocatorWithLimit<
+                                             BoostGeometryNamespace::Value>>(
       qec_->getAllocator());
 }
 
