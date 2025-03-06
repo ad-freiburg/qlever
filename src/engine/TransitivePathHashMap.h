@@ -52,11 +52,7 @@ struct HashMapWrapper {
  */
 class TransitivePathHashMap : public TransitivePathImpl<HashMapWrapper> {
  public:
-  TransitivePathHashMap(QueryExecutionContext* qec,
-                        std::shared_ptr<QueryExecutionTree> child,
-                        TransitivePathSide leftSide,
-                        TransitivePathSide rightSide, size_t minDist,
-                        size_t maxDist, Graphs activeGraphs);
+  using TransitivePathImpl::TransitivePathImpl;
 
  private:
   std::unique_ptr<Operation> cloneImpl() const override;

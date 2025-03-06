@@ -44,8 +44,7 @@ TransitivePathBase::TransitivePathBase(
     variableColumns_[std::get<Variable>(rhs_.value_)] =
         makeAlwaysDefinedColumn(1);
   }
-  if (minDist_ == 0 && !lhs_.isBoundVariable() && !rhs_.isBoundVariable() &&
-      lhs_.isVariable() && rhs_.isVariable()) {
+  if (minDist_ == 0 && lhs_.isUnboundVariable() && rhs_.isUnboundVariable()) {
     emptyPathBound_ = true;
     auto makeInternalVariable = [](std::string_view string) {
       return Variable{
@@ -427,8 +426,7 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindLeftOrRightSide(
 bool TransitivePathBase::isBoundOrId() const {
   // Don't make the execution tree for the empty path count as "bound".
   return !emptyPathBound_ &&
-         (lhs_.isBoundVariable() || rhs_.isBoundVariable() ||
-          !lhs_.isVariable() || !rhs_.isVariable());
+         (!lhs_.isUnboundVariable() || !rhs_.isUnboundVariable());
 }
 
 // _____________________________________________________________________________

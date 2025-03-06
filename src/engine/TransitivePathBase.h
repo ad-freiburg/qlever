@@ -24,9 +24,11 @@ struct TransitivePathSide {
   // This member is set by the TransitivePath class
   size_t outputCol_ = 0;
 
-  bool isVariable() const { return std::holds_alternative<Variable>(value_); };
+  bool isVariable() const { return std::holds_alternative<Variable>(value_); }
 
-  bool isBoundVariable() const { return treeAndCol_.has_value(); };
+  bool isBoundVariable() const { return treeAndCol_.has_value(); }
+
+  bool isUnboundVariable() const { return isVariable() && !isBoundVariable(); }
 
   std::string getCacheKey() const {
     std::ostringstream os;

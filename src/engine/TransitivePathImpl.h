@@ -45,13 +45,7 @@ class TransitivePathImpl : public TransitivePathBase {
       detail::TableColumnWithVocab<std::span<const Id>>;
 
  public:
-  TransitivePathImpl(QueryExecutionContext* qec,
-                     std::shared_ptr<QueryExecutionTree> child,
-                     TransitivePathSide leftSide, TransitivePathSide rightSide,
-                     size_t minDist, size_t maxDist, Graphs activeGraphs)
-      : TransitivePathBase(qec, std::move(child), std::move(leftSide),
-                           std::move(rightSide), minDist, maxDist,
-                           std::move(activeGraphs)) {}
+  using TransitivePathBase::TransitivePathBase;
 
   /**
    * @brief Compute the transitive hull with a bound side.
