@@ -31,7 +31,8 @@ Distinct makeDistinct(const std::vector<ColumnIndex>& keepIndices) {
   return {qec,
           ad_utility::makeExecutionTree<ValuesForTesting>(
               qec, std::vector<IdTable>{},
-              std::vector<std::optional<Variable>>{Variable{"?x"}}),
+              std::vector<std::optional<Variable>>{Variable{"?x"}}, false,
+              keepIndices),
           keepIndices};
 }
 }  // namespace
@@ -42,10 +43,17 @@ TEST(Distinct, CacheKey) {
   auto qec = ad_utility::testing::getQec();
   auto d = ad_utility::makeExecutionTree<Distinct>(
       ad_utility::testing::getQec(),
-      ad_utility::makeExecutionTree<NeutralElementOperation>(qec),
+      ad_utility::makeExecutionTree<ValuesForTesting>(
+          qec, makeIdTableFromVector({{0, 1}}),
+          std::vector<std::optional<Variable>>(2, std::nullopt), false,
+          std::vector<ColumnIndex>{0, 1}),
       std::vector<ColumnIndex>{0, 1});
   Distinct d2(ad_utility::testing::getQec(),
-              ad_utility::makeExecutionTree<NeutralElementOperation>(qec), {0});
+              ad_utility::makeExecutionTree<ValuesForTesting>(
+                  qec, makeIdTableFromVector({{0}}),
+                  std::vector<std::optional<Variable>>(1, std::nullopt), false,
+                  std::vector<ColumnIndex>{0}),
+              {0});
   Distinct d3(ad_utility::testing::getQec(), d, {0});
 
   EXPECT_NE(d->getCacheKey(), d2.getCacheKey());
@@ -229,7 +237,10 @@ TEST(Distinct, lazyWithLazyInputs) {
 TEST(Distinct, clone) {
   auto qec = ad_utility::testing::getQec();
   Distinct distinct{ad_utility::testing::getQec(),
-                    ad_utility::makeExecutionTree<NeutralElementOperation>(qec),
+                    ad_utility::makeExecutionTree<ValuesForTesting>(
+                        qec, makeIdTableFromVector({{0, 1}}),
+                        std::vector<std::optional<Variable>>(2, std::nullopt),
+                        false, std::vector<ColumnIndex>{0, 1}),
                     std::vector<ColumnIndex>{0, 1}};
 
   auto clone = distinct.clone();
