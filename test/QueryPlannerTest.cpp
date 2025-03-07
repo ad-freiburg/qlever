@@ -3255,8 +3255,8 @@ TEST(QueryPlanner, PropertyPathWithGraphVariable) {
   auto qp = makeQueryPlanner();
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       qp.createExecutionTree(query),
-      ::testing::HasSubstr(
-          "Property paths with graph variables are not supported"),
+      ::testing::HasSubstr("Property paths inside a GRAPH clause with a graph "
+                           "variable are not yet supported."),
       ad_utility::Exception);
 }
 
