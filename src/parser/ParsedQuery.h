@@ -90,6 +90,7 @@ class ParsedQuery {
   vector<Variable> _groupByVariables;
   LimitOffsetClause _limitOffset{};
   string _originalString;
+  std::optional<parsedQuery::Values> postQueryValuesClause_ = std::nullopt;
 
   // Contains warnings about queries that are valid according to the SPARQL
   // standard, but are probably semantically wrong.
