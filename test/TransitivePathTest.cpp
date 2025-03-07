@@ -34,9 +34,10 @@ class TransitivePathTest
   [[nodiscard]] static std::pair<std::shared_ptr<TransitivePathBase>,
                                  QueryExecutionContext*>
   makePath(IdTable input, Vars vars, TransitivePathSide left,
-           TransitivePathSide right, size_t minDist, size_t maxDist) {
+           TransitivePathSide right, size_t minDist, size_t maxDist,
+           std::optional<std::string> turtleInput = std::nullopt) {
     bool useBinSearch = std::get<0>(GetParam());
-    auto qec = getQec();
+    auto qec = getQec(std::move(turtleInput));
     auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
         qec, std::move(input), vars);
     return {TransitivePathBase::makeTransitivePath(
@@ -48,9 +49,11 @@ class TransitivePathTest
   // ___________________________________________________________________________
   [[nodiscard]] static std::shared_ptr<TransitivePathBase> makePathUnbound(
       IdTable input, Vars vars, TransitivePathSide left,
-      TransitivePathSide right, size_t minDist, size_t maxDist) {
-    auto [T, qec] = makePath(std::move(input), vars, std::move(left),
-                             std::move(right), minDist, maxDist);
+      TransitivePathSide right, size_t minDist, size_t maxDist,
+      std::optional<std::string> turtleInput = std::nullopt) {
+    auto [T, qec] =
+        makePath(std::move(input), vars, std::move(left), std::move(right),
+                 minDist, maxDist, std::move(turtleInput));
     return T;
   }
 
@@ -73,8 +76,11 @@ class TransitivePathTest
             : ad_utility::makeExecutionTree<ValuesForTesting>(
                   qec, std::move(std::get<std::vector<IdTable>>(sideTable)),
                   sideVars, false, std::vector<ColumnIndex>{sideTableCol});
-    return isLeft ? T->bindLeftSide(operation, sideTableCol)
-                  : T->bindRightSide(operation, sideTableCol);
+    auto boundPath = isLeft ? T->bindLeftSide(operation, sideTableCol)
+                            : T->bindRightSide(operation, sideTableCol);
+
+    EXPECT_TRUE(boundPath->isBoundOrId());
+    return boundPath;
   }
 
   // ___________________________________________________________________________
@@ -134,6 +140,8 @@ TEST_P(TransitivePathTest, idToId) {
       makePathUnbound(std::move(sub), {Variable{"?start"}, Variable{"?target"}},
                       left, right, 1, std::numeric_limits<size_t>::max());
 
+  EXPECT_TRUE(T->isBoundOrId());
+
   auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
   assertResultMatchesIdTable(resultTable, expected);
 }
@@ -149,6 +157,8 @@ TEST_P(TransitivePathTest, idToVar) {
   auto T =
       makePathUnbound(std::move(sub), {Variable{"?start"}, Variable{"?target"}},
                       left, right, 1, std::numeric_limits<size_t>::max());
+
+  EXPECT_TRUE(T->isBoundOrId());
 
   auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
   assertResultMatchesIdTable(resultTable, expected);
@@ -170,6 +180,8 @@ TEST_P(TransitivePathTest, varToId) {
       makePathUnbound(std::move(sub), {Variable{"?start"}, Variable{"?target"}},
                       left, right, 1, std::numeric_limits<size_t>::max());
 
+  EXPECT_TRUE(T->isBoundOrId());
+
   auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
   assertResultMatchesIdTable(resultTable, expected);
 }
@@ -185,6 +197,8 @@ TEST_P(TransitivePathTest, idToVarMinLengthZero) {
   auto T =
       makePathUnbound(std::move(sub), {Variable{"?start"}, Variable{"?target"}},
                       left, right, 0, std::numeric_limits<size_t>::max());
+
+  EXPECT_TRUE(T->isBoundOrId());
 
   auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
   assertResultMatchesIdTable(resultTable, expected);
@@ -206,6 +220,8 @@ TEST_P(TransitivePathTest, varToIdMinLengthZero) {
   auto T =
       makePathUnbound(std::move(sub), {Variable{"?start"}, Variable{"?target"}},
                       left, right, 0, std::numeric_limits<size_t>::max());
+
+  EXPECT_TRUE(T->isBoundOrId());
 
   auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
   assertResultMatchesIdTable(resultTable, expected);
@@ -234,6 +250,8 @@ TEST_P(TransitivePathTest, varTovar) {
   auto T =
       makePathUnbound(std::move(sub), {Variable{"?start"}, Variable{"?target"}},
                       left, right, 1, std::numeric_limits<size_t>::max());
+
+  EXPECT_FALSE(T->isBoundOrId());
 
   auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
   assertResultMatchesIdTable(resultTable, expected);
@@ -274,6 +292,8 @@ TEST_P(TransitivePathTest, unlimitedMaxLength) {
   auto T =
       makePathUnbound(std::move(sub), {Variable{"?start"}, Variable{"?target"}},
                       left, right, 1, std::numeric_limits<size_t>::max());
+
+  EXPECT_FALSE(T->isBoundOrId());
 
   auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
   assertResultMatchesIdTable(resultTable, expected);
@@ -568,6 +588,8 @@ TEST_P(TransitivePathTest, maxLength2FromVariable) {
   auto T =
       makePathUnbound(std::move(sub), {Variable{"?start"}, Variable{"?target"}},
                       left, right, 1, 2);
+
+  EXPECT_FALSE(T->isBoundOrId());
   auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
   assertResultMatchesIdTable(resultTable, expected);
 }
@@ -596,6 +618,8 @@ TEST_P(TransitivePathTest, maxLength2FromId) {
   auto T =
       makePathUnbound(std::move(sub), {Variable{"?start"}, Variable{"?target"}},
                       left, right, 1, 2);
+
+  EXPECT_TRUE(T->isBoundOrId());
   auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
   assertResultMatchesIdTable(resultTable, expected);
 }
@@ -623,33 +647,58 @@ TEST_P(TransitivePathTest, maxLength2ToId) {
   auto T =
       makePathUnbound(std::move(sub), {Variable{"?start"}, Variable{"?target"}},
                       left, right, 1, 2);
+
+  EXPECT_TRUE(T->isBoundOrId());
   auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
   assertResultMatchesIdTable(resultTable, expected);
 }
 
 // _____________________________________________________________________________
-TEST_P(TransitivePathTest, zeroLengthException) {
-  auto sub = makeIdTableFromVector({
-      {0, 2},
-      {2, 4},
-      {4, 7},
-      {0, 7},
-      {3, 3},
-      {7, 0},
-      // Disconnected component.
-      {10, 11},
-  });
+TEST_P(TransitivePathTest, zeroLength) {
+  std::string index = "<a> a 0 , 1 , 2 , 4 , 7 , 10 , 11 .";
+
+  auto sub = makeIdTableFromVector(
+      {
+          {0, 2},
+          {2, 4},
+          {4, 7},
+          {0, 7},
+          {10, 11},
+      },
+      Id::makeFromInt);
+
+  auto expected = makeIdTableFromVector({{0, 0},
+                                         {0, 2},
+                                         {0, 4},
+                                         {0, 7},
+                                         {1, 1},
+                                         {2, 2},
+                                         {2, 4},
+                                         {2, 7},
+                                         {4, 4},
+                                         {4, 7},
+                                         {10, 10},
+                                         {10, 11},
+                                         {7, 7},
+                                         {11, 11}},
+                                        Id::makeFromInt);
+  // Add missing subject <a> before comparing
+  expected.emplace_back();
+  expected.at(expected.size() - 1, 0) =
+      Id::makeFromVocabIndex(VocabIndex::make(0));
+  expected.at(expected.size() - 1, 1) =
+      Id::makeFromVocabIndex(VocabIndex::make(0));
 
   TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
   TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
-  auto T =
-      makePathUnbound(std::move(sub), {Variable{"?start"}, Variable{"?target"}},
-                      left, right, 0, std::numeric_limits<size_t>::max());
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      T->computeResultOnlyForTesting(requestLaziness()),
-      ::testing::ContainsRegex("This query might have to evaluate the empty "
-                               "path, which is currently "
-                               "not supported"));
+  auto T = makePathUnbound(
+      std::move(sub), {Variable{"?start"}, Variable{"?target"}}, left, right, 0,
+      std::numeric_limits<size_t>::max(), std::move(index));
+
+  EXPECT_FALSE(T->isBoundOrId());
+
+  auto resultTable = T->computeResultOnlyForTesting(requestLaziness());
+  assertResultMatchesIdTable(resultTable, expected);
 }
 
 // _____________________________________________________________________________
@@ -662,6 +711,8 @@ TEST_P(TransitivePathTest, clone) {
     auto transitivePath =
         makePathUnbound(sub.clone(), {Variable{"?start"}, Variable{"?target"}},
                         left, right, 0, std::numeric_limits<size_t>::max());
+
+    EXPECT_FALSE(transitivePath->isBoundOrId());
 
     auto clone = transitivePath->clone();
     ASSERT_TRUE(clone);

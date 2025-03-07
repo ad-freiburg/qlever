@@ -6,9 +6,7 @@
 
 #include <utility>
 
-#include "engine/CallFixedSize.h"
 #include "engine/TransitivePathBase.h"
-#include "util/Exception.h"
 #include "util/Timer.h"
 
 namespace detail {
@@ -45,12 +43,7 @@ class TransitivePathImpl : public TransitivePathBase {
       detail::TableColumnWithVocab<std::span<const Id>>;
 
  public:
-  TransitivePathImpl(QueryExecutionContext* qec,
-                     std::shared_ptr<QueryExecutionTree> child,
-                     TransitivePathSide leftSide, TransitivePathSide rightSide,
-                     size_t minDist, size_t maxDist)
-      : TransitivePathBase(qec, std::move(child), std::move(leftSide),
-                           std::move(rightSide), minDist, maxDist) {}
+  using TransitivePathBase::TransitivePathBase;
 
   /**
    * @brief Compute the transitive hull with a bound side.
@@ -142,7 +135,7 @@ class TransitivePathImpl : public TransitivePathBase {
     for (auto& pair : result) {
       co_yield pair;
     }
-  };
+  }
 
  protected:
   /**
@@ -155,13 +148,6 @@ class TransitivePathImpl : public TransitivePathBase {
    * @return Result The result of the TransitivePath operation
    */
   ProtoResult computeResult(bool requestLaziness) override {
-    if (minDist_ == 0 && !isBoundOrId() && lhs_.isVariable() &&
-        rhs_.isVariable()) {
-      AD_THROW(
-          "This query might have to evaluate the empty path, which is "
-          "currently "
-          "not supported");
-    }
     auto [startSide, targetSide] = decideDirection();
     // In order to traverse the graph represented by this result, we need random
     // access across the whole table, so it doesn't make sense to lazily compute
@@ -315,9 +301,9 @@ class TransitivePathImpl : public TransitivePathBase {
    * @return cppcoro::generator<TableColumnWithVocab> An generator for
    * the transitive hull computation
    */
-  cppcoro::generator<TableColumnWithVocab> setupNodes(
+  static cppcoro::generator<TableColumnWithVocab> setupNodes(
       const TransitivePathSide& startSide,
-      std::shared_ptr<const Result> startSideResult) const {
+      std::shared_ptr<const Result> startSideResult) {
     if (startSideResult->isFullyMaterialized()) {
       // Bound -> var|id
       std::span<const Id> startNodes = startSideResult->idTable().getColumn(

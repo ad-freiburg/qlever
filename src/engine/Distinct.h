@@ -28,6 +28,11 @@ class Distinct : public Operation {
     return subtree_->resultSortedOn();
   }
 
+  // Get all columns that need to be distinct.
+  const std::vector<ColumnIndex>& getDistinctColumns() const {
+    return keepIndices_;
+  }
+
  private:
   uint64_t getSizeEstimateBeforeLimit() override {
     return subtree_->getSizeEstimate();
