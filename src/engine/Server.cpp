@@ -259,7 +259,8 @@ auto Server::prepareOperation(
   LOG(INFO) << "Processing the following " << operationName << ":"
             << (pinResult ? " [pin result]" : "")
             << (pinSubtrees ? " [pin subresults]" : "") << "\n"
-            << operationSPARQL << std::endl;
+            << ad_utility::truncateOperationString(operationSPARQL)
+            << std::endl;
   QueryExecutionContext qec(index_, &cache_, allocator_,
                             sortPerformanceEstimator_, std::ref(messageSender),
                             pinSubtrees, pinResult);
@@ -443,7 +444,8 @@ CPP_template_2(typename RequestT, typename ResponseT)(
                          messageSender, parameters, timeLimit.value());
     if (!expectedOperation(parsedOperation)) {
       throw std::runtime_error(
-          absl::StrCat(msg, parsedOperation._originalString));
+          absl::StrCat(msg, ad_utility::truncateOperationString(
+                                parsedOperation._originalString)));
     }
     if (parsedOperation.hasUpdateClause()) {
       co_return co_await processUpdate(
@@ -581,14 +583,16 @@ json Server::composeErrorResponseJson(
     const std::optional<ExceptionMetadata>& metadata) {
   json j;
   using ad_utility::Timer;
-  j["query"] = query;
+  j["query"] = ad_utility::truncateOperationString(query);
   j["status"] = "ERROR";
   j["resultsize"] = 0;
   j["time"]["total"] = requestTimer.msecs().count();
   j["time"]["computeResult"] = requestTimer.msecs().count();
   j["exception"] = errorMsg;
 
-  if (metadata.has_value()) {
+  // If the error location is truncated don't send it's location.
+  if (metadata.has_value() &&
+      metadata.value().stopIndex_ < MAX_LENGTH_OPERATION_ECHO) {
     auto& value = metadata.value();
     j["metadata"]["startIndex"] = value.startIndex_;
     j["metadata"]["stopIndex"] = value.stopIndex_;
@@ -823,7 +827,8 @@ json Server::createResponseMetadataForUpdate(
   };
 
   json response;
-  response["update"] = plannedQuery.parsedQuery_._originalString;
+  response["update"] = ad_utility::truncateOperationString(
+      plannedQuery.parsedQuery_._originalString);
   response["status"] = "OK";
   auto warnings = qet.collectWarnings();
   warnings.emplace(warnings.begin(),

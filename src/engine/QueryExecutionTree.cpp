@@ -165,6 +165,15 @@ std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
     return qet;
   }
 
+  // Unwrap sort to avoid stacking sorts on top of each other.
+  if (auto sort = std::dynamic_pointer_cast<Sort>(qet->getRootOperation())) {
+    AD_LOG_DEBUG << "Tried to re-sort a subtree that will already be sorted "
+                    "with `Sort` with a different sort order. This is "
+                    "indicates a flaw during query planning."
+                 << std::endl;
+    qet = sort->getSubtree();
+  }
+
   // Push down sort into Union.
   QueryExecutionContext* qec = qet->getRootOperation()->getExecutionContext();
   if (auto unionOperation =

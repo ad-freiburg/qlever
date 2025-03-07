@@ -17,6 +17,9 @@ CartesianProductJoin::CartesianProductJoin(
   AD_CONTRACT_CHECK(!children_.empty());
   AD_CONTRACT_CHECK(ql::ranges::all_of(
       children_, [](auto& child) { return child != nullptr; }));
+  // Ensure estimated largest tree is on the right side.
+  ql::ranges::stable_sort(
+      children_, {}, [](const auto& tree) { return tree->getSizeEstimate(); });
 
   // Check that the variables of the passed in operations are in fact
   // disjoint.
