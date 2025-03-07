@@ -6,7 +6,7 @@
 
 #pragma once
 
-#include <boost/optional.hpp>
+#include <optional>
 #include <vector>
 
 #include "engine/CheckUsePatternTrick.h"
@@ -336,7 +336,7 @@ class QueryPlanner {
   // computed automatically.
   std::vector<SubtreePlan> createJoinCandidates(
       const SubtreePlan& a, const SubtreePlan& b,
-      boost::optional<const TripleGraph&> tg) const;
+      std::optional<const TripleGraph&> tg) const;
 
   // Create `SubtreePlan`s that join `a` and `b` together. The columns are
   // configured by `jcs`.

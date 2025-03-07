@@ -1876,7 +1876,7 @@ size_t QueryPlanner::findSmallestExecutionTree(
 // _____________________________________________________________________________
 std::vector<SubtreePlan> QueryPlanner::createJoinCandidates(
     const SubtreePlan& ain, const SubtreePlan& bin,
-    boost::optional<const TripleGraph&> tg) const {
+    std::optional<const TripleGraph&> tg) const {
   bool swapForTesting = isInTestMode() && bin.type != SubtreePlan::OPTIONAL &&
                         ain._qet->getCacheKey() < bin._qet->getCacheKey();
   const auto& a = !swapForTesting ? ain : bin;
@@ -2476,7 +2476,7 @@ void QueryPlanner::GraphPatternPlanner::visitGroupOptionalOrMinus(
   // whether `b` is from an OPTIONAL or MINUS.
   for (const auto& a : candidatePlans_.at(0)) {
     for (const auto& b : candidates) {
-      auto vec = planner_.createJoinCandidates(a, b, boost::none);
+      auto vec = planner_.createJoinCandidates(a, b, std::nullopt);
       nextCandidates.insert(nextCandidates.end(),
                             std::make_move_iterator(vec.begin()),
                             std::make_move_iterator(vec.end()));
