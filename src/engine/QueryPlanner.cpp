@@ -195,6 +195,16 @@ std::vector<SubtreePlan> QueryPlanner::createExecutionTrees(ParsedQuery& pq,
     }
   }
 
+  if (pq.postQueryValuesClause_.has_value()) {
+    auto values = makeSubtreePlan<::Values>(
+        _qec, std::move(pq.postQueryValuesClause_.value()._inlineValues));
+    std::vector<SubtreePlan> originalLastRow = std::move(lastRow);
+    for (auto& plan : originalLastRow) {
+      ql::ranges::move(createJoinCandidates(plan, values, boost::none),
+                       std::back_inserter(lastRow));
+    }
+  }
+
   checkCancellation();
 
   for (const auto& warning : pq.warnings()) {
