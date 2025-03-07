@@ -3257,7 +3257,7 @@ TEST(QueryPlanner, PropertyPathWithGraphVariable) {
       qp.createExecutionTree(query),
       ::testing::HasSubstr("Property paths inside a GRAPH clause with a graph "
                            "variable are not yet supported."),
-      ad_utility::Exception);
+      std::runtime_error);
 }
 
 // _____________________________________________________________________________
