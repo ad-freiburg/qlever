@@ -113,3 +113,8 @@ string TextIndexScanForEntity::getCacheKeyImpl() const {
      << (hasFixedEntity() ? fixedEntity() : "no fixed-entity") << " \"";
   return std::move(os).str();
 }
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> TextIndexScanForEntity::cloneImpl() const {
+  return std::make_unique<TextIndexScanForEntity>(*this);
+}

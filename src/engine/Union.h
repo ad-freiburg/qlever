@@ -9,10 +9,9 @@
 #include <utility>
 #include <vector>
 
-#include "../parser/ParsedQuery.h"
-#include "../util/HashMap.h"
-#include "Operation.h"
-#include "QueryExecutionTree.h"
+#include "engine/Operation.h"
+#include "engine/QueryExecutionTree.h"
+#include "util/HashMap.h"
 
 class Union : public Operation {
  private:
@@ -62,7 +61,25 @@ class Union : public Operation {
     return {_subtrees[0].get(), _subtrees[1].get()};
   }
 
+  // Provide access the the left child of this union.
+  const std::shared_ptr<QueryExecutionTree>& leftChild() const {
+    return _subtrees[0];
+  }
+
+  // Provide access the the right child of this union.
+  const std::shared_ptr<QueryExecutionTree>& rightChild() const {
+    return _subtrees[1];
+  }
+
+  // Return the original index of the column in the left or right child that the
+  // respective column of this union maps to. If the index does not map to the
+  // respective child, std::nullopt is returned.
+  std::optional<ColumnIndex> getOriginalColumn(bool leftChild,
+                                               ColumnIndex unionColumn) const;
+
  private:
+  std::unique_ptr<Operation> cloneImpl() const override;
+
   ProtoResult computeResult(bool requestLaziness) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;

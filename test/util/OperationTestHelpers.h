@@ -43,6 +43,11 @@ class StallForeverOperation : public Operation {
   std::chrono::milliseconds publicRemainingTime() const {
     return remainingTime();
   }
+
+  // _____________________________________________________________________________
+  std::unique_ptr<Operation> cloneImpl() const override {
+    AD_THROW("Clone not implemented");
+  }
 };
 // _____________________________________________________________________________
 
@@ -82,6 +87,11 @@ class ShallowParentOperation : public Operation {
   // Provide public view of remainingTime for tests
   std::chrono::milliseconds publicRemainingTime() const {
     return remainingTime();
+  }
+
+  // _____________________________________________________________________________
+  std::unique_ptr<Operation> cloneImpl() const override {
+    AD_THROW("Clone not implemented");
   }
 };
 
@@ -127,6 +137,11 @@ class AlwaysFailOperation : public Operation {
             }(),
             resultSortedOn()};
   }
+
+  // _____________________________________________________________________________
+  std::unique_ptr<Operation> cloneImpl() const override {
+    AD_THROW("Clone not implemented");
+  }
 };
 
 // Lazy operation that will yield a result with a custom generator you can
@@ -154,6 +169,25 @@ class CustomGeneratorOperation : public Operation {
     AD_CONTRACT_CHECK(requestLaziness);
     return {std::move(generator_), resultSortedOn()};
   }
+
+  // _____________________________________________________________________________
+  std::unique_ptr<Operation> cloneImpl() const override {
+    AD_THROW("Clone not implemented");
+  }
 };
+
+MATCHER_P(SameTypeId, ptr, "has the same type id") {
+  return typeid(*arg) == typeid(*ptr);
+}
+
+inline auto IsDeepCopy(const Operation& other) {
+  using namespace ::testing;
+  return AllOf(
+      Address(SameTypeId(&other)),
+      AD_PROPERTY(Operation, getChildren, Pointwise(Ne(), other.getChildren())),
+      AD_PROPERTY(Operation, getCacheKey, Eq(other.getCacheKey())),
+      AD_PROPERTY(Operation, getExternallyVisibleVariableColumns,
+                  Eq(other.getExternallyVisibleVariableColumns())));
+}
 
 #endif  // QLEVER_OPERATIONTESTHELPERS_H

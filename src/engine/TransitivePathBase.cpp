@@ -24,14 +24,13 @@ TransitivePathBase::TransitivePathBase(
     TransitivePathSide leftSide, TransitivePathSide rightSide, size_t minDist,
     size_t maxDist)
     : Operation(qec),
-      subtree_(child
-                   ? QueryExecutionTree::createSortedTree(std::move(child), {0})
-                   : nullptr),
+      subtree_(std::move(child)),
       lhs_(std::move(leftSide)),
       rhs_(std::move(rightSide)),
       minDist_(minDist),
       maxDist_(maxDist) {
   AD_CORRECTNESS_CHECK(qec != nullptr);
+  AD_CORRECTNESS_CHECK(subtree_);
   if (lhs_.isVariable()) {
     variableColumns_[std::get<Variable>(lhs_.value_)] =
         makeAlwaysDefinedColumn(0);
@@ -148,7 +147,6 @@ std::string TransitivePathBase::getCacheKeyImpl() const {
   os << "Right side:\n";
   os << rhs_.getCacheKey();
 
-  AD_CORRECTNESS_CHECK(subtree_);
   os << "Subtree:\n" << subtree_->getCacheKey() << '\n';
 
   return std::move(os).str();

@@ -15,7 +15,9 @@ TextLimit::TextLimit(QueryExecutionContext* qec, const size_t limit,
       child_(std::move(child)),
       textRecordColumn_(textRecordColumn),
       entityColumns_(entityColumns),
-      scoreColumns_(scoreColumns) {}
+      scoreColumns_(scoreColumns) {
+  AD_CONTRACT_CHECK(child_);
+}
 
 // _____________________________________________________________________________
 ProtoResult TextLimit::computeResult([[maybe_unused]] bool requestLaziness) {
@@ -187,4 +189,11 @@ string TextLimit::getCacheKeyImpl() const {
   }
   os << "}";
   return std::move(os).str();
+}
+
+// _____________________________________________________________________________
+std::unique_ptr<Operation> TextLimit::cloneImpl() const {
+  return std::make_unique<TextLimit>(_executionContext, limit_, child_->clone(),
+                                     textRecordColumn_, entityColumns_,
+                                     scoreColumns_);
 }

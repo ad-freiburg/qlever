@@ -26,7 +26,7 @@ struct TableColumnWithVocab {
   // See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=103909 for more info.
   TableColumnWithVocab(const IdTable* table, ColumnType column,
                        LocalVocab vocab)
-      : table_{table}, column_{std::move(column)}, vocab_{std::move(vocab)} {};
+      : table_{table}, column_{std::move(column)}, vocab_{std::move(vocab)} {}
 };
 };  // namespace detail
 
@@ -50,7 +50,7 @@ class TransitivePathImpl : public TransitivePathBase {
                      TransitivePathSide leftSide, TransitivePathSide rightSide,
                      size_t minDist, size_t maxDist)
       : TransitivePathBase(qec, std::move(child), std::move(leftSide),
-                           std::move(rightSide), minDist, maxDist){};
+                           std::move(rightSide), minDist, maxDist) {}
 
   /**
    * @brief Compute the transitive hull with a bound side.

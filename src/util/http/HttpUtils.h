@@ -75,16 +75,19 @@ class Url {
   }
 };
 
-// A concept for http::request
+// A concept for `http::request`
+namespace detail {
 template <typename T>
 static constexpr bool isHttpRequest = false;
 
 template <typename Body, typename Fields>
 static constexpr bool isHttpRequest<http::request<Body, Fields>> = true;
+}  // namespace detail
 
-// TODO<joka921, gpicciuca> port back
+// Note: We cannot use `ad_utility::isInstantiation` , because `http::request`
+// is an alias template.
 template <typename T>
-concept HttpRequest = isHttpRequest<T>;
+CPP_concept HttpRequest = detail::isHttpRequest<T>;
 
 /**
  * @brief Create a http::response from a string, which will become the body
