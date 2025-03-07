@@ -20,9 +20,10 @@ Distinct::Distinct(QueryExecutionContext* qec,
     : Operation{qec}, subtree_{std::move(subtree)}, keepIndices_{keepIndices} {
   AD_CORRECTNESS_CHECK(subtree_);
   AD_CORRECTNESS_CHECK(ql::ranges::all_of(
-      keepIndices_,
-      [sortedCols = subtree_->resultSortedOn()](ColumnIndex distinctCol) {
-        return ad_utility::contains(sortedCols, distinctCol);
+      keepIndices_, [sortedCols = subtree_->resultSortedOn(),
+                     size = keepIndices_.size()](ColumnIndex distinctCol) {
+        return ad_utility::contains(std::span{sortedCols}.subspan(0, size),
+                                    distinctCol);
       }));
 }
 
