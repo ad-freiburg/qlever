@@ -24,7 +24,7 @@ struct TableColumnWithVocab {
   // See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=103909 for more info.
   TableColumnWithVocab(const IdTable* table, ColumnType column,
                        LocalVocab vocab)
-      : table_{table}, column_{std::move(column)}, vocab_{std::move(vocab)} {};
+      : table_{table}, column_{std::move(column)}, vocab_{std::move(vocab)} {}
 };
 };  // namespace detail
 
