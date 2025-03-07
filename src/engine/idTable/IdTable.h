@@ -733,25 +733,43 @@ class IdTable {
   // Add all entries from the `table` at the end of this IdTable.
   // If `beginIdx` and/or `endIdx` are specified, then only the subrange
   // `[beginIdx, endIdx)` from the input is taken.
-  // The input must be some kind of `IdTable`.
+  // The input must be some kind of `IdTable`. The parameter `permutation`
+  // allows the caller to apply a permutation to the columns of the input table
+  // before inserting them into this table. If the permutation is not specified,
+  // the columns are inserted in the order they appear in the input table. If
+  // the permutation contains an index that is out of bounds for the input
+  // table, the corresponding column is filled with the `defaultValue`.
   // TODO<joka921> Can/should we constraint this functions by a concept?
   template <typename Table>
-  void insertAtEnd(const Table& table,
-                   std::optional<size_t> beginIdx = std::nullopt,
-                   std::optional<size_t> endIdx = std::nullopt) {
-    AD_CORRECTNESS_CHECK(table.numColumns() == numColumns());
+  void insertAtEnd(
+      const Table& table, std::optional<size_t> beginIdx = std::nullopt,
+      std::optional<size_t> endIdx = std::nullopt,
+      std::optional<std::vector<ColumnIndex>> permutation = std::nullopt,
+      typename Table::single_value_type defaultValue = {}) {
+    AD_CORRECTNESS_CHECK(
+        table.numColumns() == numColumns() ||
+        (permutation.has_value() && numColumns() == permutation->size()));
     auto begin = beginIdx.value_or(0);
     auto end = endIdx.value_or(table.size());
     AD_CORRECTNESS_CHECK(begin <= end && end <= table.size());
     auto numInserted = end - begin;
     auto oldSize = size();
     resize(numRows() + numInserted);
-    ql::ranges::for_each(ad_utility::integerRange(numColumns()),
-                         [this, &table, oldSize, begin, numInserted](size_t i) {
-                           ql::ranges::copy(
-                               table.getColumn(i).subspan(begin, numInserted),
-                               getColumn(i).begin() + oldSize);
-                         });
+    ql::ranges::for_each(
+        ad_utility::integerRange(numColumns()),
+        [this, &table, oldSize, begin, numInserted, &permutation,
+         &defaultValue](size_t i) {
+          size_t mappedIndex =
+              permutation.has_value() ? permutation.value()[i] : i;
+          // Map out of index column indices from the default value.
+          if (mappedIndex >= table.numColumns()) {
+            ql::ranges::fill(getColumn(i).subspan(oldSize), defaultValue);
+            return;
+          }
+          ql::ranges::copy(
+              table.getColumn(mappedIndex).subspan(begin, numInserted),
+              getColumn(i).begin() + oldSize);
+        });
   }
 
   // Check whether two `IdTables` have the same content. Mostly used for unit

@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "engine/Sort.h"
+#include "engine/Union.h"
 #include "global/RuntimeParameters.h"
 
 using std::string;
@@ -173,7 +174,14 @@ std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
     qet = sort->getSubtree();
   }
 
+  // Push down sort into Union.
   QueryExecutionContext* qec = qet->getRootOperation()->getExecutionContext();
+  if (auto unionOperation =
+          std::dynamic_pointer_cast<Union>(qet->getRootOperation())) {
+    return std::make_shared<QueryExecutionTree>(
+        qec, unionOperation->createSortedVariant(sortColumns));
+  }
+
   auto sort = std::make_shared<Sort>(qec, std::move(qet), sortColumns);
   return std::make_shared<QueryExecutionTree>(qec, std::move(sort));
 }

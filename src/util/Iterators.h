@@ -408,4 +408,16 @@ class InputRangeTypeErased {
   decltype(auto) end() { return impl_->end(); }
   using iterator = typename InputRangeFromGet<ValueType>::Iterator;
 };
+
+// Analogous to `cppcoro::getSingleElement`, but generalized for all ranges.
+// Ensure that the range only contains a single element, move it out and return
+// it.
+template <typename Range>
+ql::ranges::range_value_t<Range> getSingleElement(Range&& range) {
+  auto it = range.begin();
+  AD_CORRECTNESS_CHECK(it != range.end());
+  ql::ranges::range_value_t<Range> t = std::move(*it);
+  AD_CORRECTNESS_CHECK(++it == range.end());
+  return t;
+}
 }  // namespace ad_utility
