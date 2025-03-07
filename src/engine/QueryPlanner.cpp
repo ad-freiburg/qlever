@@ -195,13 +195,21 @@ std::vector<SubtreePlan> QueryPlanner::createExecutionTrees(ParsedQuery& pq,
     }
   }
 
-  if (pq.postQueryValuesClause_.has_value()) {
+  auto& postValues = pq.postQueryValuesClause_;
+  if (postValues.has_value() &&
+      !postValues.value()._inlineValues._variables.empty()) {
     auto values = makeSubtreePlan<::Values>(
-        _qec, std::move(pq.postQueryValuesClause_.value()._inlineValues));
+        _qec, std::move(postValues.value()._inlineValues));
     std::vector<SubtreePlan> originalLastRow = std::move(lastRow);
     for (auto& plan : originalLastRow) {
-      ql::ranges::move(createJoinCandidates(plan, values, boost::none),
-                       std::back_inserter(lastRow));
+      JoinColumns jcs = getJoinColumns(plan, values);
+      if (jcs.empty()) {
+        lastRow.push_back(makeSubtreePlan<CartesianProductJoin>(
+            _qec, std::vector{plan._qet, values._qet}));
+      } else {
+        ql::ranges::move(createJoinCandidates(plan, values, jcs),
+                         std::back_inserter(lastRow));
+      }
     }
   }
 
