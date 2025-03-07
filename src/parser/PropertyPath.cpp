@@ -108,7 +108,7 @@ void PropertyPath::writeToStream(std::ostream& out) const {
       } else {
         out << "missing" << std::endl;
       }
-      out << ")?";
+      out << ")";
       break;
   }
 }

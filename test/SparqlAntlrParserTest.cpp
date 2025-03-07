@@ -716,6 +716,7 @@ TEST(SparqlParser, propertyPaths) {
   auto ZeroOrMore = &PropertyPath::makeZeroOrMore;
   auto OneOrMore = &PropertyPath::makeOneOrMore;
   auto ZeroOrOne = &PropertyPath::makeZeroOrOne;
+  auto ModMinMax = static_cast<PropertyPath (*)(PropertyPath, int64_t, int64_t)>(&PropertyPath::makeModified);
   using PrefixMap = SparqlQleverVisitor::PrefixMap;
   // Test all the base cases.
   // "a" is a special case. It is a valid PropertyPath.
@@ -756,6 +757,8 @@ TEST(SparqlParser, propertyPaths) {
     expected.canBeNull_ = true;
     expectPathOrVar("a:a*", expected, {{"a", "<http://www.example.com/>"}});
   }
+  expectPathOrVar("a:a{1,3}", ModMinMax({Iri("<http://www.example.com/a>")},1,3),
+                  {{"a", "<http://www.example.com/>"}});
   // Test a bigger example that contains everything.
   {
     PropertyPath expected =
