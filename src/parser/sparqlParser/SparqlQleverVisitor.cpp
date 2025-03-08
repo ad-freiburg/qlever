@@ -29,6 +29,7 @@
 #include "parser/GraphPatternOperation.h"
 #include "parser/MagicServiceIriConstants.h"
 #include "parser/MagicServiceQuery.h"
+#include "parser/Quads.h"
 #include "parser/RdfParser.h"
 #include "parser/SparqlParser.h"
 #include "parser/SpatialQuery.h"
@@ -599,29 +600,26 @@ ParsedQuery Visitor::visit(Parser::DeleteWhereContext* ctx) {
       addVisibleVariable(component.getVariable());
     }
   };
-  auto transformAndRegisterTriple =
-      [registerIfVariable](const SparqlTripleSimple& triple) {
-        registerIfVariable(triple.s_);
-        registerIfVariable(triple.p_);
-        registerIfVariable(triple.o_);
-
-        // The predicate comes from a rule in the grammar (`verb`) which only
-        // allows variables and IRIs.
-        AD_CORRECTNESS_CHECK(triple.p_.isVariable() || triple.p_.isIri());
-        return SparqlTriple::fromSimple(triple);
-      };
   AD_CORRECTNESS_CHECK(visibleVariables_.empty());
   GraphPattern pattern;
-  auto triples = visit(ctx->quadPattern());
-  pattern._graphPatterns.emplace_back(BasicGraphPattern{
-      ad_utility::transform(triples, transformAndRegisterTriple)});
+  const auto triples = visit(ctx->quadPattern());
+  pattern._graphPatterns = triples.getOperations();
   parsedQuery_._rootGraphPattern = std::move(pattern);
   parsedQuery_.registerVariablesVisibleInQueryBody(visibleVariables_);
   visibleVariables_.clear();
-  // The query body and template are identical. Variables will always be visible
-  // - no need to check that.
+  // The query body and template are identical. No need to check that variables
+  // are visible. But they need to be registered.
+  auto quads = triples.getQuads();
+  for (const auto& quad : quads) {
+    registerIfVariable(quad.s_);
+    registerIfVariable(quad.p_);
+    registerIfVariable(quad.o_);
+    if (std::holds_alternative<Variable>(quad.g_)) {
+      addVisibleVariable(std::get<Variable>(quad.g_));
+    }
+  }
   parsedQuery_._clause =
-      parsedQuery::UpdateClause{GraphUpdate{{}, std::move(triples)}};
+      parsedQuery::UpdateClause{GraphUpdate{{}, std::move(quads)}};
 
   return parsedQuery_;
 }
@@ -681,13 +679,15 @@ ParsedQuery Visitor::visit(Parser::ModifyContext* ctx) {
 // ____________________________________________________________________________________
 vector<SparqlTripleSimpleWithGraph> Visitor::visit(
     Parser::DeleteClauseContext* ctx) {
-  return visit(ctx->quadPattern());
+  // TODO: check variable visibility
+  return visit(ctx->quadPattern()).getQuads();
 }
 
 // ____________________________________________________________________________________
 vector<SparqlTripleSimpleWithGraph> Visitor::visit(
     Parser::InsertClauseContext* ctx) {
-  return visit(ctx->quadPattern());
+  // TODO: check variable visibility
+  return visit(ctx->quadPattern()).getQuads();
 }
 
 // ____________________________________________________________________________________
@@ -720,15 +720,14 @@ GraphRefAll Visitor::visit(Parser::GraphRefAllContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-vector<SparqlTripleSimpleWithGraph> Visitor::visit(
-    Parser::QuadPatternContext* ctx) {
+Quads Visitor::visit(Parser::QuadPatternContext* ctx) {
   return visit(ctx->quads());
 }
 
 // ____________________________________________________________________________________
 vector<SparqlTripleSimpleWithGraph> Visitor::visit(
     Parser::QuadDataContext* ctx) {
-  auto quads = visit(ctx->quads());
+  auto quads = visit(ctx->quads()).getQuads();
   auto checkAndReportVar = [&ctx](const TripleComponent& term) {
     if (term.isVariable()) {
       reportError(ctx->quads(), "Variables (" + term.getVariable().name() +
@@ -762,30 +761,23 @@ vector<SparqlTripleSimpleWithGraph> Visitor::transformTriplesTemplate(
 }
 
 // ____________________________________________________________________________________
-vector<SparqlTripleSimpleWithGraph> Visitor::visit(Parser::QuadsContext* ctx) {
+Quads Visitor::visit(Parser::QuadsContext* ctx) {
   // The ordering of the individual triplesTemplate and quadsNotTriples is not
   // relevant and also not known.
-  auto triplesWithGraph = ad_utility::transform(
-      ctx->triplesTemplate(), [this](Parser::TriplesTemplateContext* ctx) {
-        return transformTriplesTemplate(ctx, std::monostate{});
-      });
-  ql::ranges::move(visitVector(ctx->quadsNotTriples()),
-                   std::back_inserter(triplesWithGraph));
-  return ad_utility::flatten(std::move(triplesWithGraph));
+  Quads quads;
+  quads.addFreeTriples(
+      ad_utility::flatten(visitVector(ctx->triplesTemplate())));
+  for (auto [graph, triples] : visitVector(ctx->quadsNotTriples())) {
+    quads.addGraphTriples(graph, std::move(triples));
+  }
+  return quads;
 }
 
 // ____________________________________________________________________________________
-vector<SparqlTripleSimpleWithGraph> Visitor::visit(
-    Parser::QuadsNotTriplesContext* ctx) {
-  // Short circuit when the triples section is empty
-  if (!ctx->triplesTemplate()) {
-    return {};
-  }
-
+Quads::GraphBlock Visitor::visit(Parser::QuadsNotTriplesContext* ctx) {
   auto graphTerm = visit(ctx->varOrIri());
-  SparqlTripleSimpleWithGraph::Graph graph = graphTerm.visit(
-      [&ctx]<typename T>(
-          const T& element) -> SparqlTripleSimpleWithGraph::Graph {
+  Quads::IriOrVariable graph = graphTerm.visit(
+      [&ctx]<typename T>(const T& element) -> Quads::IriOrVariable {
         if constexpr (std::is_same_v<T, Variable> || std::is_same_v<T, Iri>) {
           return element;
         } else {
@@ -796,7 +788,12 @@ vector<SparqlTripleSimpleWithGraph> Visitor::visit(
         }
       });
 
-  return transformTriplesTemplate(ctx->triplesTemplate(), graph);
+  // Short circuit when the triples section is empty
+  if (!ctx->triplesTemplate()) {
+    return {graph, {}};
+  }
+
+  return {graph, visit(ctx->triplesTemplate())};
 }
 
 // ____________________________________________________________________________________
