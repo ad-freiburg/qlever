@@ -16,7 +16,8 @@
 // or `vector<SparqlTripleSimpleWithGraph>` (Quad Template in many Update
 // Operations).
 struct Quads {
-  using IriOrVariable = std::variant<Iri, Variable>;
+  using IriOrVariable =
+      std::variant<ad_utility::triple_component::Iri, Variable>;
   // A single block of triples wrapped in a `GRAPH ... { ... }`. Corresponds to
   // the `quadsNotTriples` grammar rule.
   using GraphBlock =

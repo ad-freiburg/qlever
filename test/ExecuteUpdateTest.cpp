@@ -347,7 +347,7 @@ TEST(ExecuteUpdate, transformTriplesTemplate) {
   expectTransformTriplesTemplate(
       {},
       {SparqlTripleSimpleWithGraph{Literal("\"foo\""), Iri("<bar>"),
-                                   Literal("\"foo\""), Graph{::Iri("<baz>")}}},
+                                   Literal("\"foo\""), Graph{Iri("<baz>")}}},
       {{Id("\"foo\""), Id("<bar>"), Id("\"foo\""), LocalVocab(Iri("<baz>"))}});
   // A variable in the template (`?f`) is not mapped in the
   // `VariableToColumnMap`.

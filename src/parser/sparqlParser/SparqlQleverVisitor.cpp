@@ -764,8 +764,10 @@ Quads::GraphBlock Visitor::visit(Parser::QuadsNotTriplesContext* ctx) {
   auto graphTerm = visit(ctx->varOrIri());
   Quads::IriOrVariable graph = graphTerm.visit(
       [&ctx]<typename T>(const T& element) -> Quads::IriOrVariable {
-        if constexpr (std::is_same_v<T, Variable> || std::is_same_v<T, Iri>) {
+        if constexpr (std::is_same_v<T, Variable>) {
           return element;
+        } else if constexpr (std::is_same_v<T, Iri>) {
+          return TripleComponent::Iri::fromIriref(element.iri());
         } else {
           static_assert(std::is_same_v<T, BlankNode> ||
                         std::is_same_v<T, Literal>);

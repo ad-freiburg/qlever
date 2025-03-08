@@ -35,24 +35,22 @@ vector<SparqlTripleSimpleWithGraph> transformTriplesTemplate(
   return ad_utility::transform(triples, convertTriple);
 }
 
+// Re-wraps the value into a variant `T` which has additional values.
+template <typename T>
+T expandVariant(const Quads::IriOrVariable& graph) {
+  return std::visit([](const auto& graph) -> T { return graph; }, graph);
+};
+
 // ____________________________________________________________________________________
 std::vector<SparqlTripleSimpleWithGraph> Quads::getQuads() const {
-  // Re-wraps value into the `SparqlTripleSimpleWithGraph::Graph` variant which
-  // also has the monostate member.
-  auto expandVariant = [](const IriOrVariable& graph) {
-    return std::visit(
-        [](const auto& graph) -> SparqlTripleSimpleWithGraph::Graph {
-          return graph;
-        },
-        graph);
-  };
-
   std::vector<SparqlTripleSimpleWithGraph> quads;
   ad_utility::appendVector(
       quads, transformTriplesTemplate(freeTriples_, std::monostate{}));
   for (const auto& [graph, triples] : graphTriples_) {
     ad_utility::appendVector(
-        quads, transformTriplesTemplate(triples, expandVariant(graph)));
+        quads,
+        transformTriplesTemplate(
+            triples, expandVariant<SparqlTripleSimpleWithGraph::Graph>(graph)));
   }
   return quads;
 }
@@ -76,16 +74,8 @@ std::vector<parsedQuery::GraphPatternOperation> Quads::getOperations() const {
     parsedQuery::GraphPattern tripleSubPattern;
     tripleSubPattern._graphPatterns.emplace_back(parsedQuery::BasicGraphPattern{
         ad_utility::transform(triples, toSparqlTriple)});
-    // TODO: this is stupd. make these the same types
-    GraphSpec graphTC = std::visit(
-        ad_utility::OverloadCallOperator{
-            [](const Iri& graph) -> GraphSpec {
-              return TripleComponent::Iri::fromIriref(graph.toSparql());
-            },
-            [](const Variable& graph) -> GraphSpec { return graph; }},
-        graph);
-    operations.emplace_back(
-        parsedQuery::GroupGraphPattern{std::move(tripleSubPattern), graphTC});
+    operations.emplace_back(parsedQuery::GroupGraphPattern{
+        std::move(tripleSubPattern), expandVariant<GraphSpec>(graph)});
   }
   return operations;
 }

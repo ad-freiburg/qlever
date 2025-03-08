@@ -8,16 +8,6 @@
 #include "../util/GTestHelpers.h"
 #include "parser/Quads.h"
 
-namespace matchers {
-inline auto Quads = [](const ad_utility::sparql_types::Triples& freeTriples,
-                       const std::vector<Quads::GraphBlock>& graphs)
-    -> Matcher<const ::Quads&> {
-  return AllOf(
-      AD_FIELD(Quads, freeTriples_, testing::ElementsAreArray(freeTriples)),
-      AD_FIELD(Quads, graphTriples_, testing::ElementsAreArray(graphs)));
-};
-}  // namespace matchers
-
 namespace tc {
 auto Iri = ad_utility::triple_component::Iri::fromIriref;
 }
@@ -44,17 +34,19 @@ TEST(QuadTest, getQuads) {
   expectGetQuads({}, {}, {});
   expectGetQuads({TripleOf(Iri("<a>"))}, {},
                  {QuadOf(tc::Iri("<a>"), std::monostate{})});
-  expectGetQuads({TripleOf(Iri("<a>"))}, {{Iri("<b>"), {TripleOf(Iri("<a>"))}}},
+  expectGetQuads({TripleOf(Iri("<a>"))},
+                 {{tc::Iri("<b>"), {TripleOf(Iri("<a>"))}}},
                  {QuadOf(tc::Iri("<a>"), std::monostate{}),
-                  QuadOf(tc::Iri("<a>"), Iri("<b>"))});
+                  QuadOf(tc::Iri("<a>"), tc::Iri("<b>"))});
   expectGetQuads(
       {TripleOf(Iri("<a>")), TripleOf(Iri("<d>"))},
-      {{Iri("<b>"), {TripleOf(Iri("<a>"))}},
-       {Iri("<b>"), {TripleOf(Iri("<b>")), TripleOf(Iri("<c>"))}}},
+      {{tc::Iri("<b>"), {TripleOf(Iri("<a>"))}},
+       {tc::Iri("<b>"), {TripleOf(Iri("<b>")), TripleOf(Iri("<c>"))}}},
       {QuadOf(tc::Iri("<a>"), std::monostate{}),
        QuadOf(tc::Iri("<d>"), std::monostate{}),
-       QuadOf(tc::Iri("<a>"), Iri("<b>")), QuadOf(tc::Iri("<b>"), Iri("<b>")),
-       QuadOf(tc::Iri("<c>"), Iri("<b>"))});
+       QuadOf(tc::Iri("<a>"), tc::Iri("<b>")),
+       QuadOf(tc::Iri("<b>"), tc::Iri("<b>")),
+       QuadOf(tc::Iri("<c>"), tc::Iri("<b>"))});
 }
 
 TEST(QuadTest, getOperations) {
@@ -85,14 +77,15 @@ TEST(QuadTest, getOperations) {
   expectGetQuads(
       {TripleOf(Iri("<a>"))}, {},
       ElementsAre(matchers::Triples({SparqlTriple(tc::Iri("<a>"))})));
-  expectGetQuads({TripleOf(Iri("<a>"))}, {{Iri("<b>"), {TripleOf(Iri("<a>"))}}},
-                 ElementsAre(matchers::Triples({SparqlTriple(tc::Iri("<a>"))}),
-                             GraphTriples({SparqlTriple(tc::Iri("<a>"))},
-                                          tc::Iri("<b>"))));
+  expectGetQuads(
+      {TripleOf(Iri("<a>"))}, {{tc::Iri("<b>"), {TripleOf(Iri("<a>"))}}},
+      ElementsAre(
+          matchers::Triples({SparqlTriple(tc::Iri("<a>"))}),
+          GraphTriples({SparqlTriple(tc::Iri("<a>"))}, tc::Iri("<b>"))));
   expectGetQuads(
       {TripleOf(Iri("<a>")), TripleOf(Iri("<d>"))},
-      {{Iri("<b>"), {TripleOf(Iri("<a>"))}},
-       {Iri("<b>"), {TripleOf(Iri("<b>")), TripleOf(Iri("<c>"))}}},
+      {{tc::Iri("<b>"), {TripleOf(Iri("<a>"))}},
+       {tc::Iri("<b>"), {TripleOf(Iri("<b>")), TripleOf(Iri("<c>"))}}},
       ElementsAre(matchers::Triples({SparqlTriple(tc::Iri("<a>")),
                                      SparqlTriple(tc::Iri("<d>"))}),
                   GraphTriples({SparqlTriple(tc::Iri("<a>"))}, tc::Iri("<b>")),
