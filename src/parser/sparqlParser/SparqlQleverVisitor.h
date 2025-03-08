@@ -241,11 +241,6 @@ class SparqlQleverVisitor {
 
   vector<SparqlTripleSimpleWithGraph> visit(Parser::QuadDataContext* ctx);
 
-  // Parse the triples and set the graph for all of them.
-  vector<SparqlTripleSimpleWithGraph> transformTriplesTemplate(
-      Parser::TriplesTemplateContext* ctx,
-      const SparqlTripleSimpleWithGraph::Graph& graph);
-
   Quads visit(Parser::QuadsContext* ctx);
 
   Quads::GraphBlock visit(Parser::QuadsNotTriplesContext* ctx);

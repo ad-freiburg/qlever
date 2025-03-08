@@ -748,27 +748,13 @@ vector<SparqlTripleSimpleWithGraph> Visitor::visit(
 }
 
 // ____________________________________________________________________________________
-vector<SparqlTripleSimpleWithGraph> Visitor::transformTriplesTemplate(
-    Parser::TriplesTemplateContext* ctx,
-    const SparqlTripleSimpleWithGraph::Graph& graph) {
-  auto convertTriple = [&graph](const std::array<GraphTerm, 3>& triple)
-      -> SparqlTripleSimpleWithGraph {
-    return {visitGraphTerm(triple[0]), visitGraphTerm(triple[1]),
-            visitGraphTerm(triple[2]), graph};
-  };
-
-  return ad_utility::transform(visit(ctx), convertTriple);
-}
-
-// ____________________________________________________________________________________
 Quads Visitor::visit(Parser::QuadsContext* ctx) {
   // The ordering of the individual triplesTemplate and quadsNotTriples is not
   // relevant and also not known.
   Quads quads;
-  quads.addFreeTriples(
-      ad_utility::flatten(visitVector(ctx->triplesTemplate())));
+  quads.freeTriples_ = ad_utility::flatten(visitVector(ctx->triplesTemplate()));
   for (auto [graph, triples] : visitVector(ctx->quadsNotTriples())) {
-    quads.addGraphTriples(graph, std::move(triples));
+    quads.graphTriples_.emplace_back(std::move(graph), std::move(triples));
   }
   return quads;
 }

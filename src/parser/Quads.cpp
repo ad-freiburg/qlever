@@ -6,19 +6,8 @@
 
 #include "RdfParser.h"
 
-// ____________________________________________________________________________________
-void Quads::addFreeTriples(ad_utility::sparql_types::Triples triples) {
-  ad_utility::appendVector(freeTriples_, std::move(triples));
-}
-
-// ____________________________________________________________________________________
-void Quads::addGraphTriples(IriOrVariable graph,
-                            ad_utility::sparql_types::Triples triples) {
-  graphTriples_.emplace_back(std::move(graph), std::move(triples));
-}
-
 // _____________________________________________________________________________
-// TODO: deduplicate these two
+// TODO: deduplicate this
 TripleComponent visitGraphTerm(const GraphTerm& graphTerm) {
   return graphTerm.visit([]<typename T>(const T& element) -> TripleComponent {
     if constexpr (std::is_same_v<T, Variable>) {
@@ -32,6 +21,8 @@ TripleComponent visitGraphTerm(const GraphTerm& graphTerm) {
   });
 }
 
+// ____________________________________________________________________________________
+// Transform the triples and sets the graph.
 vector<SparqlTripleSimpleWithGraph> transformTriplesTemplate(
     ad_utility::sparql_types::Triples triples,
     const SparqlTripleSimpleWithGraph::Graph& graph) {
@@ -46,46 +37,47 @@ vector<SparqlTripleSimpleWithGraph> transformTriplesTemplate(
 
 // ____________________________________________________________________________________
 std::vector<SparqlTripleSimpleWithGraph> Quads::getQuads() const {
+  // Re-wraps value into the `SparqlTripleSimpleWithGraph::Graph` variant which
+  // also has the monostate member.
+  auto expandVariant = [](const IriOrVariable& graph) {
+    return std::visit(
+        [](const auto& graph) -> SparqlTripleSimpleWithGraph::Graph {
+          return graph;
+        },
+        graph);
+  };
+
   std::vector<SparqlTripleSimpleWithGraph> quads;
   ad_utility::appendVector(
-      quads, transformTriplesTemplate(freeTriples_,
-                                      Iri(std::string{DEFAULT_GRAPH_IRI})));
+      quads, transformTriplesTemplate(freeTriples_, std::monostate{}));
   for (const auto& [graph, triples] : graphTriples_) {
     ad_utility::appendVector(
-        quads,
-        transformTriplesTemplate(
-            triples,
-            std::visit(
-                [](const auto& graph) -> SparqlTripleSimpleWithGraph::Graph {
-                  return graph;
-                },
-                graph)));
+        quads, transformTriplesTemplate(triples, expandVariant(graph)));
   }
   return quads;
 }
 
 // ____________________________________________________________________________________
 std::vector<parsedQuery::GraphPatternOperation> Quads::getOperations() const {
+  auto toSparqlTriple = [](const std::array<GraphTerm, 3>& triple) {
+    return SparqlTriple::fromSimple(
+        SparqlTripleSimple(visitGraphTerm(triple[0]), visitGraphTerm(triple[1]),
+                           visitGraphTerm(triple[2])));
+  };
+
   std::vector<parsedQuery::GraphPatternOperation> operations;
-  // TODO: shorten these. function into simple and then add graph?
-  operations.emplace_back(parsedQuery::BasicGraphPattern{ad_utility::transform(
-      freeTriples_, [](const std::array<GraphTerm, 3>& triple) {
-        return SparqlTriple::fromSimple(SparqlTripleSimple(
-            visitGraphTerm(triple[0]), visitGraphTerm(triple[1]),
-            visitGraphTerm(triple[2])));
-      })});
+  operations.emplace_back(parsedQuery::BasicGraphPattern{
+      ad_utility::transform(freeTriples_, toSparqlTriple)});
 
   using GraphSpec = parsedQuery::GroupGraphPattern::GraphSpec;
   for (const auto& [graph, triples] : graphTriples_) {
-    parsedQuery::GraphPattern child;
-    child._graphPatterns.emplace_back(
-        parsedQuery::BasicGraphPattern{ad_utility::transform(
-            triples, [](const std::array<GraphTerm, 3>& triple) {
-              return SparqlTriple::fromSimple(SparqlTripleSimple(
-                  visitGraphTerm(triple[0]), visitGraphTerm(triple[1]),
-                  visitGraphTerm(triple[2])));
-            })});
-    parsedQuery::GroupGraphPattern::GraphSpec graphTC = std::visit(
+    // We need a `GroupGraphPattern` where the graph is set. This contains the
+    // triples inside another `GraphPattern`.
+    parsedQuery::GraphPattern tripleSubPattern;
+    tripleSubPattern._graphPatterns.emplace_back(parsedQuery::BasicGraphPattern{
+        ad_utility::transform(triples, toSparqlTriple)});
+    // TODO: this is stupd. make these the same types
+    GraphSpec graphTC = std::visit(
         ad_utility::OverloadCallOperator{
             [](const Iri& graph) -> GraphSpec {
               return TripleComponent::Iri::fromIriref(graph.toSparql());
@@ -93,7 +85,7 @@ std::vector<parsedQuery::GraphPatternOperation> Quads::getOperations() const {
             [](const Variable& graph) -> GraphSpec { return graph; }},
         graph);
     operations.emplace_back(
-        parsedQuery::GroupGraphPattern{std::move(child), graphTC});
+        parsedQuery::GroupGraphPattern{std::move(tripleSubPattern), graphTC});
   }
   return operations;
 }
