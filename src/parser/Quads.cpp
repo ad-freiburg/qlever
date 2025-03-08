@@ -22,7 +22,7 @@ TripleComponent visitGraphTerm(const GraphTerm& graphTerm) {
 }
 
 // ____________________________________________________________________________________
-// Transform the triples and sets the graph.
+// Transform the triples and sets the graph on all triples.
 vector<SparqlTripleSimpleWithGraph> transformTriplesTemplate(
     ad_utility::sparql_types::Triples triples,
     const SparqlTripleSimpleWithGraph::Graph& graph) {

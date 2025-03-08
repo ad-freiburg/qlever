@@ -605,8 +605,6 @@ ParsedQuery Visitor::visit(Parser::DeleteWhereContext* ctx) {
   const auto triples = visit(ctx->quadPattern());
   pattern._graphPatterns = triples.getOperations();
   parsedQuery_._rootGraphPattern = std::move(pattern);
-  parsedQuery_.registerVariablesVisibleInQueryBody(visibleVariables_);
-  visibleVariables_.clear();
   // The query body and template are identical. No need to check that variables
   // are visible. But they need to be registered.
   auto quads = triples.getQuads();
@@ -618,6 +616,8 @@ ParsedQuery Visitor::visit(Parser::DeleteWhereContext* ctx) {
       addVisibleVariable(std::get<Variable>(quad.g_));
     }
   }
+  parsedQuery_.registerVariablesVisibleInQueryBody(visibleVariables_);
+  visibleVariables_.clear();
   parsedQuery_._clause =
       parsedQuery::UpdateClause{GraphUpdate{{}, std::move(quads)}};
 
@@ -644,7 +644,7 @@ ParsedQuery Visitor::visit(Parser::ModifyContext* ctx) {
           return true;
         }
       };
-  auto checkTriples =
+  auto checkVariableVisibility =
       [&isVisibleIfVariable, &ctx, &isVisibleIfVariableGraph](
           const std::vector<SparqlTripleSimpleWithGraph>& triples) {
         for (auto& triple : triples) {
@@ -667,9 +667,9 @@ ParsedQuery Visitor::visit(Parser::ModifyContext* ctx) {
   visibleVariables_.clear();
   auto op = GraphUpdate{};
   visitIf(&op.toInsert_, ctx->insertClause());
-  checkTriples(op.toInsert_);
+  checkVariableVisibility(op.toInsert_);
   visitIf(&op.toDelete_, ctx->deleteClause());
-  checkTriples(op.toDelete_);
+  checkVariableVisibility(op.toDelete_);
   visitIf(&op.with_, ctx->iri());
   parsedQuery_._clause = parsedQuery::UpdateClause{op};
 
@@ -679,14 +679,12 @@ ParsedQuery Visitor::visit(Parser::ModifyContext* ctx) {
 // ____________________________________________________________________________________
 vector<SparqlTripleSimpleWithGraph> Visitor::visit(
     Parser::DeleteClauseContext* ctx) {
-  // TODO: check variable visibility
   return visit(ctx->quadPattern()).getQuads();
 }
 
 // ____________________________________________________________________________________
 vector<SparqlTripleSimpleWithGraph> Visitor::visit(
     Parser::InsertClauseContext* ctx) {
-  // TODO: check variable visibility
   return visit(ctx->quadPattern()).getQuads();
 }
 

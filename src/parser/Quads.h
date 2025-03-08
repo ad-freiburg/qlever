@@ -10,10 +10,10 @@
 #include "SparqlTriple.h"
 #include "data/Types.h"
 
-// A class for the intermediate parsing results of `quads`. The Quads/Triples
-// are added and can then be produced in the required formats. The Quads/Triples
-// can be used as `vector<GraphPatternOperation>` (Query Body in `DELETE WHERE`)
-// or `vector<SparqlTripleSimpleWithGraph>` (Quad Template in many Update
+// A class for the intermediate parsing results of `quads`. Provides utilities
+// for converting the quads into the required formats. The Quads/Triples can be
+// used as `vector<GraphPatternOperation>` (Query Body in `DELETE WHERE`) or
+// `vector<SparqlTripleSimpleWithGraph>` (Quad Template in many Update
 // Operations).
 struct Quads {
   using IriOrVariable =
