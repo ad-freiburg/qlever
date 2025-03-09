@@ -643,25 +643,20 @@ template <IsDatatype Datatype>
 requires(Datatype == IsDatatype::IRI || Datatype == IsDatatype::LITERAL)
 static std::unique_ptr<PrefilterExpression> getPrefilterExprForIsIriOrIsLit() {
   using enum IsDatatype;
-  LocalVocab localVocab{};
-  // Retrieve the bound (`LocalVocab`) `ValueId` for the given reference (bound)
-  // `std::string` value over `LocalVocab`.
-  const auto getValueIdForStr = [&localVocab](const std::string& referenceStr) {
-    return PrefilterExpression::getValueIdFromIdOrLocalVocabEntry(
-        LocalVocabEntry::fromStringRepresentation(referenceStr), localVocab);
-  };
+  using LVE = LocalVocabEntry;
 
   // Remark: Ids containing LITERAL values precede IRI related Ids in order.
   return Datatype == IRI
              // The smallest possible IRI is represented by "<>", we use its
-             // corresponding ValueId as a lower bound.
-             ? make<GreaterThanExpression>(getValueIdForStr("<>"))
+             // corresponding ValueId later on as a lower bound.
+             ? make<GreaterThanExpression>(LVE::fromStringRepresentation("<>"))
              // For pre-filtering LITERAL related ValueIds we use the empty
              // literal '""' as a lower bound, and the ValueId that represents
              // the beginning of IRI values as an upper bound.
-             : make<AndExpression>(
-                   make<GreaterEqualExpression>(getValueIdForStr("\"\"")),
-                   make<LessThanExpression>(getValueIdForStr("<")));
+             : make<AndExpression>(make<GreaterEqualExpression>(
+                                       LVE::fromStringRepresentation("\"\"")),
+                                   make<LessThanExpression>(
+                                       LVE::fromStringRepresentation("<")));
 }
 
 // _____________________________________________________________________________
