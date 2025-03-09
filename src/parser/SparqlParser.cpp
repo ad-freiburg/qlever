@@ -9,8 +9,8 @@
 using AntlrParser = SparqlAutomaticParser;
 
 // _____________________________________________________________________________
-ParsedQuery SparqlParser::parseQuery(std::string operation,
-                                     std::vector<DatasetClause> datasets) {
+ParsedQuery SparqlParser::parseQuery(
+    std::string operation, const std::vector<DatasetClause>& datasets) {
   using S = std::string;
   std::optional<ParsedQuery::DatasetClauses> parsedDatasets = std::nullopt;
   if (!datasets.empty()) {

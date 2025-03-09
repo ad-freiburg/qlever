@@ -15,6 +15,6 @@ class SparqlParser {
  public:
   // `datasets` are the fixed datasets as per the SPARQL protocol. Passing no
   // datasets means that they are not fixed.
-  static ParsedQuery parseQuery(std::string operation,
-                                std::vector<DatasetClause> datasets = {});
+  static ParsedQuery parseQuery(
+      std::string operation, const std::vector<DatasetClause>& datasets = {});
 };
